@@ -323,7 +323,20 @@ export function golfBestAt(group, courseId = GOLF_BOARD_COURSE) {
 }
 
 /** Board metrics where a SMALLER number is the better result. */
-export const LOWER_IS_BETTER = new Set(['golf']);
+export const LOWER_IS_BETTER = new Set(['golf', 'minesweeper']);
+
+/** Board metrics that are a DURATION in milliseconds, and so are printed as a clock rather than
+ *  as a bare number. Separate from LOWER_IS_BETTER because the two are not the same question:
+ *  golf's to-par is also lower-is-better and is emphatically not a time. */
+export const TIME_METRIC = new Set(['minesweeper']);
+
+/** A duration in ms as m:ss. Rounded, not floored: a 59.7s clear reading "0:59" while the game's
+ *  own screen said 1:00 is the kind of one-second disagreement between two screens that reads as
+ *  a bug. */
+export function formatTimeMetric(ms) {
+  const total = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 
 /** Does this player have a number on this board at all? For a lower-is-better metric that is
  *  "is there a value", never "is it positive" - see reason 2 in the header. */
@@ -392,6 +405,7 @@ export function compareTierFirst(ta, tb, va, vb, id) {
  *  passed in already translated: this module stays free of i18n. */
 export function formatBoardMetric(value, id, evenLabel = 'E') {
   if (value === null || value === undefined || Number.isNaN(value)) return null;
+  if (TIME_METRIC.has(id)) return formatTimeMetric(value);
   if (!LOWER_IS_BETTER.has(id)) return String(value);
   if (value === 0) return evenLabel;
   return value > 0 ? `+${value}` : String(value);
@@ -401,6 +415,7 @@ export default {
   record, bucketsOf, tierMix, tierRows, wilsonLower, competitiveRating,
   fieldMaxOf, soloRating, ratePlayer, rankPlayers, cmp, PROVISIONAL_PLAYS,
   golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, boardRankTier,
+  LOWER_IS_BETTER, TIME_METRIC, formatTimeMetric,
   formatBoardMetric,
   LOWER_IS_BETTER, GOLF_BOARD_COURSE, GOLF_COURSE_PAR,
 };

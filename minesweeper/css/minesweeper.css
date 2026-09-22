@@ -1,0 +1,614 @@
+/* minesweeper/css/minesweeper.css - every rule descendant-scoped under .ms-root
+ * (docs/BUILDING-A-GAME.md, "Adding a game" item 3). Chrome (buttons, cards, modals) comes from
+ * css/ui.css's .gh-* primitives; only the board, the HUD and the loupe are bespoke here.
+ *
+ * Dark mode is the .gh-dark class override (js/theme.js), never a prefers-color-scheme query:
+ * 'auto' is resolved once in JS so the in-app toggle always wins. */
+
+.ms-root {
+  --ms-bg: #f4f6fb;
+  --ms-surface: #ffffff;
+  --ms-surface-2: #eef2f8;
+  --ms-ink: #16243a;
+  --ms-muted: #5b6b82;
+  --ms-border: rgba(16, 36, 58, .14);
+  --ms-accent: #1769d4;
+  --ms-cell: #e9eef6;
+  --ms-cell-top: #ffffff;
+  --ms-open: #dfe6f0;
+  --ms-grid: rgba(16, 36, 58, .10);
+  --ms-boom: #e0532f;
+  --ms-flag: #e0532f;
+  --ms-flag-ok: #178a7a;
+  /* The digit IS the shape here, so hue is redundant information and nothing depends on telling
+   * one colour from another. 2 and 3 are the classic green/red pair; they are teal and vermilion
+   * instead, which is this repo's own colorblind-safe pair (root CLAUDE.md, accessibility). */
+  --ms-n1: #1f5fa8; --ms-n2: #178a7a; --ms-n3: #e0532f; --ms-n4: #6b4fbb;
+  --ms-n5: #a8720a; --ms-n6: #0e7490; --ms-n7: #16243a; --ms-n8: #5b6b82;
+  --ms-cell-size: 32px;
+  box-sizing: border-box;
+  /* Same reasoning as sudoku/css/sudoku.css: `position: fixed` with top/left/width/height set
+   * INLINE by _positionRoot(), because `inset: 0` fills whichever box happens to be the containing
+   * block, and mounted in the hub that is the wrong box (.hub-game has no defined height), which
+   * puts this screen over the hub's own sticky header. inset: 0 here is only the fallback for the
+   * instant before the inline style lands, in the same render pass. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ms-bg);
+  color: var(--ms-ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  /* Repeated tapping on iOS Safari otherwise starts the text-selection gesture instead of a second
+   * tap (hill-climb/CLAUDE.md). These do not inherit the way you would expect, so the descendant
+   * selector is load-bearing, not tidiness. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ms-root * {
+  /* SCOPED border-box, and it is load-bearing, not tidiness. css/ui.css deliberately does not ship
+   * a global reset, so a cell was content-box: `width: var(--ms-cell-size)` plus its 1px border
+   * rendered 2px larger than its own grid track. Columns survived that (the track is explicit, so
+   * the cell simply overflowed into the gap and the pitch stayed cellSize + gap), but ROWS are
+   * implicit and sized to content, so the vertical pitch was cellSize + 2 + gap while _cellAt
+   * assumed cellSize + gap. The error accumulated one row's worth every eight rows: on a Hard
+   * board, a tap on cell 100 was resolved as cell 112 and a tap on the bottom row missed the board
+   * entirely. Caught by playing it, not by any static check. The PLAY probe in test-visual.mjs now
+   * asserts _cellAt agrees with elementFromPoint at every cell centre. */
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gh-dark .ms-root {
+  --ms-bg: #0f1622;
+  --ms-surface: #18202e;
+  --ms-surface-2: #212b3c;
+  --ms-ink: #e6edf7;
+  --ms-muted: #9fb0c6;
+  --ms-border: rgba(190, 214, 244, .18);
+  --ms-cell: #2a3446;
+  --ms-cell-top: #36425a;
+  --ms-open: #1b2431;
+  --ms-grid: rgba(190, 214, 244, .10);
+  --ms-n1: #6fa8e8; --ms-n2: #3fbfa8; --ms-n3: #ff8a63; --ms-n4: #a98bf0;
+  --ms-n5: #e0a93a; --ms-n6: #46b5ce; --ms-n7: #e6edf7; --ms-n8: #9fb0c6;
+  /* css/ui.css's .gh-* primitives (the buttons on the setup and how-to screens, the result modal)
+   * read --gh-surface/-surface-2/-ink/-muted, which resolve from css/hub.css's --hub-* variables.
+   * A STANDALONE page never loads hub.css, so those fall back to their light literals and every
+   * .gh-btn renders white on a dark screen. Redefining them here is what sudoku/css/sudoku.css
+   * already does for the same reason; mounted in the hub these are simply the same colours. */
+  --gh-bg: #0f1622;
+  --gh-surface: #18202e;
+  --gh-surface-2: #212b3c;
+  --gh-ink: #e6edf7;
+  --gh-muted: #9fb0c6;
+  --gh-border: rgba(190, 214, 244, .18);
+  --gh-border-strong: rgba(190, 214, 244, .34);
+}
+
+/* The ski-slope tier shapes are near-black at tiers 3 and 4 (js/difficulty-tiers.js's TIER_COLOR),
+ * which is invisible on a dark card. css/hub.css carries this same override for the leaderboard;
+ * a standalone page never loads it, so the rule is scoped here too, exactly as ball-run/ and
+ * boggle/ already do. */
+.gh-dark .ms-root .lb-dshape-t3,
+.gh-dark .ms-root .lb-dshape-t4 { fill: #e6e9f0; }
+
+/* A TAPPABLE CONTROL GETS touch-action: manipulation (root CLAUDE.md, scroll and touch rules).
+ * Without it iOS Safari keeps the double-tap-to-zoom gesture alive on these buttons, which costs a
+ * ~300ms delay on every tap and turns a quick second tap into a page zoom instead of a press - so
+ * a control reads as not responding at all. The board is the one surface that gets `none` instead,
+ * because it is a swipe surface. Shipped without this and Matt hit it on the options rows. */
+.ms-root .ms-diff,
+.ms-root .ms-opt,
+.ms-root .ms-face,
+.ms-root .ms-x,
+.ms-root .gh-btn,
+.ms-root .gh-seg__item { touch-action: manipulation; }
+
+/* Every screen lives inside this one scroller-free column. There is no overflow: auto anywhere
+ * in this file on purpose: a screen that does not fit is a layout bug to fix, and `auto` is the
+ * most common way of pretending otherwise (docs/BUILDING-A-GAME.md Part 0). */
+.ms-root .ms-screen {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  gap: 10px;
+}
+
+/* ---------------- setup ---------------- */
+.ms-root .ms-setup { gap: 8px; }
+.ms-root .ms-title {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  margin: 0 0 1px;
+}
+.ms-root .ms-card {
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .08);
+  padding: 12px;
+}
+.ms-root .ms-card h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ms-muted);
+}
+.ms-root .ms-diffs { display: flex; flex-direction: column; gap: 6px; }
+.ms-root .ms-diff {
+  height: 52px;
+  border-radius: 12px;
+  border: 1px solid var(--ms-border);
+  background: var(--ms-surface-2);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 13px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ms-root .ms-diff[aria-pressed="true"] {
+  border-color: var(--ms-accent);
+  border-width: 2px;
+  background: rgba(23, 105, 212, .09);
+  box-shadow: 0 2px 8px rgba(16, 30, 54, .10);
+}
+.ms-root .ms-diff .ms-dshape { width: 26px; flex: 0 0 auto; display: flex; align-items: center; }
+.ms-root .ms-diff .ms-dname { font-size: 17px; font-weight: 700; flex: 1; }
+.ms-root .ms-diff .ms-dmeta {
+  font-size: 13px;
+  color: var(--ms-muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.ms-root .ms-diff .ms-dtick { width: 22px; height: 22px; flex: 0 0 auto; color: var(--ms-accent); opacity: 0; }
+.ms-root .ms-diff[aria-pressed="true"] .ms-dtick { opacity: 1; }
+
+.ms-root .ms-bests { display: flex; gap: 8px; }
+.ms-root .ms-bests > div {
+  flex: 1;
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  border-radius: 12px;
+  padding: 7px 5px;
+  text-align: center;
+}
+.ms-root .ms-bests b {
+  display: block;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.ms-root .ms-bests span { display: block; font-size: 11px; color: var(--ms-muted); margin-top: 3px; font-weight: 600; }
+
+.ms-root .ms-opts { display: flex; flex-direction: column; gap: 6px; }
+.ms-root .ms-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 1px 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.ms-root .ms-opt > span:first-child { flex: 1; min-width: 0; }
+/* Both are BLOCK. As inline spans they ran together on one line ("Safe first tapOpens an area,
+ * never a mine") - passed every automated check, caught by looking at the screenshot. */
+.ms-root .ms-opt .ms-olab { display: block; font-size: 15px; font-weight: 600; }
+.ms-root .ms-opt .ms-osub { display: block; font-size: 12px; color: var(--ms-muted); margin-top: 2px; }
+.ms-root .ms-sw {
+  width: 54px; height: 32px; border-radius: 999px;
+  background: var(--ms-surface-2);
+  border: 1px solid rgba(16, 36, 58, .28);
+  position: relative; flex: 0 0 auto;
+  transition: background 120ms cubic-bezier(.2, .7, .3, 1);
+}
+.ms-root .ms-opt[aria-pressed="true"] .ms-sw { background: var(--ms-accent); border-color: transparent; }
+.ms-root .ms-sw i {
+  position: absolute; top: 3px; left: 3px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--ms-muted);
+  box-shadow: 0 2px 8px rgba(16, 30, 54, .10);
+  transition: transform 120ms cubic-bezier(.2, .7, .3, 1), background 120ms;
+}
+.ms-root .ms-opt[aria-pressed="true"] .ms-sw i { transform: translateX(22px); background: #fff; }
+
+.ms-root .ms-cta { margin-top: auto; }
+.ms-root .ms-linkrow { display: flex; gap: 9px; flex: 0 0 auto; }
+.ms-root .ms-linkrow .gh-btn { flex: 1; }
+
+/* ---------------- game HUD ---------------- */
+.ms-root .ms-hdr { height: 52px; display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.ms-root .ms-readout {
+  flex: 1 1 0;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .08);
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.ms-root .ms-readout svg { width: 17px; height: 17px; flex: 0 0 auto; }
+.ms-root .ms-face {
+  width: 52px; height: 44px; flex: 0 0 auto;
+  border-radius: 12px;
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .08);
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; cursor: pointer;
+}
+.ms-root .ms-face svg { width: 28px; height: 28px; }
+
+/* ---------------- board ---------------- */
+.ms-root .ms-boardwrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.ms-root .ms-board {
+  display: grid;
+  gap: 2px;
+  position: relative;
+  /* A swipe surface: the browser must not try to scroll or zoom from a touch that starts here. */
+  touch-action: none;
+}
+.ms-root .ms-c {
+  width: var(--ms-cell-size);
+  height: var(--ms-cell-size);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-weight: 800;
+  line-height: 1;
+  font-size: calc(var(--ms-cell-size) * .62);
+  background: linear-gradient(180deg, var(--ms-cell-top), var(--ms-cell));
+  border: 1px solid var(--ms-border);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .55) inset;
+}
+.ms-root .ms-c svg { width: 68%; height: 68%; pointer-events: none; }
+.ms-root .ms-c.is-open {
+  background: var(--ms-open);
+  border-color: var(--ms-grid);
+  box-shadow: none;
+}
+.ms-root .ms-c.is-boom { background: var(--ms-boom); border-color: var(--ms-boom); }
+.ms-root .ms-c.n1 { color: var(--ms-n1); } .ms-root .ms-c.n2 { color: var(--ms-n2); }
+.ms-root .ms-c.n3 { color: var(--ms-n3); } .ms-root .ms-c.n4 { color: var(--ms-n4); }
+.ms-root .ms-c.n5 { color: var(--ms-n5); } .ms-root .ms-c.n6 { color: var(--ms-n6); }
+.ms-root .ms-c.n7 { color: var(--ms-n7); } .ms-root .ms-c.n8 { color: var(--ms-n8); }
+.ms-root .ms-c.is-target { outline: 3px solid var(--ms-accent); outline-offset: 1px; z-index: 3; }
+
+/* The loupe. Every cell below Easy's 44px is under Part 0's tap floor, and this is the documented
+ * mitigation: while a finger is down the bubble shows the cell actually targeted, well clear of
+ * the thumb, and the tap commits on RELEASE so a slide can correct it. */
+.ms-root .ms-loupe {
+  position: absolute;
+  width: 96px; height: 96px;
+  border-radius: 16px;
+  background: var(--ms-surface);
+  border: 2px solid var(--ms-accent);
+  box-shadow: 0 16px 44px rgba(16, 30, 54, .22);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 6;
+  pointer-events: none;
+}
+.ms-root .ms-loupe .ms-zc {
+  width: 64px; height: 64px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-weight: 800;
+  font-size: 32px;
+  background: linear-gradient(180deg, var(--ms-cell-top), var(--ms-cell));
+  border: 1px solid var(--ms-border);
+}
+.ms-root .ms-loupe .ms-zc.is-open { background: var(--ms-open); border-color: var(--ms-grid); }
+.ms-root .ms-loupe .ms-zc svg { width: 40px; height: 40px; }
+.ms-root .ms-loupe:after {
+  content: "";
+  position: absolute; bottom: -9px; left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 16px; height: 16px;
+  background: var(--ms-surface);
+  border-right: 2px solid var(--ms-accent);
+  border-bottom: 2px solid var(--ms-accent);
+}
+.ms-root .ms-loupe[hidden] { display: none; }
+
+/* ---------------- bottom bar ---------------- */
+.ms-root .ms-bar { height: 64px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+.ms-root .ms-bar .gh-seg { flex: 1 1 0; height: 48px; }
+.ms-root .ms-bar .gh-seg__item { gap: 7px; font-size: 15px; font-weight: 700; }
+.ms-root .ms-bar .gh-seg__item svg { width: 18px; height: 18px; }
+.ms-root .ms-helpbtn,
+.ms-root .ms-backbtn { width: 48px; height: 48px; flex: 0 0 auto; touch-action: manipulation; }
+.ms-root .ms-backbtn svg { width: 22px; height: 22px; }
+
+/* ---------------- overlay ---------------- */
+.ms-root .ms-ov {
+  position: absolute; inset: 0;
+  background: rgba(9, 15, 26, .55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 22px;
+  z-index: 10;
+}
+.ms-root .ms-modal {
+  width: 100%;
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  border-radius: 16px;
+  box-shadow: 0 16px 44px rgba(16, 30, 54, .22);
+  padding: 22px 18px 18px;
+  position: relative;
+  text-align: center;
+}
+/* Every win/lose popup in this hub gets a close (X) top-right, so it can be dismissed without
+ * being forced into a rematch (root CLAUDE.md, accessibility + copy conventions). */
+.ms-root .ms-x {
+  position: absolute; top: 10px; right: 10px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ms-muted);
+  padding: 0; cursor: pointer;
+}
+.ms-root .ms-x svg { width: 15px; height: 15px; }
+.ms-root .ms-modal .ms-big { font-size: 26px; font-weight: 800; margin: 4px 0 3px; }
+.ms-root .ms-modal .ms-sub { font-size: 14px; color: var(--ms-muted); margin-bottom: 14px; }
+.ms-root .ms-stats { display: flex; gap: 9px; margin-bottom: 14px; }
+.ms-root .ms-stats > div {
+  flex: 1;
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  border-radius: 12px;
+  padding: 11px 6px;
+}
+.ms-root .ms-stats b {
+  display: block;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 21px; font-variant-numeric: tabular-nums;
+}
+.ms-root .ms-stats span { display: block; font-size: 11px; color: var(--ms-muted); margin-top: 3px; font-weight: 600; }
+.ms-root .ms-pb {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(242, 183, 5, .16);
+  border: 1px solid #f2b705;
+  color: var(--ms-ink);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px; font-weight: 800;
+  margin-bottom: 13px;
+}
+.ms-root .ms-pb svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.ms-root .ms-mbtns { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---------------- how to play ---------------- */
+.ms-root .ms-help { gap: 12px; }
+/* The header is a FIXED-HEIGHT flex-none row, so the Back button cannot be pushed off the bottom
+   by content below it. That is exactly how the first version shipped without a reachable way out:
+   the button sat under the diagrams, the diagrams were a little too tall, and it was clipped. */
+.ms-root .ms-hhead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.ms-root .ms-hback { flex: 0 0 auto; min-height: 44px; touch-action: manipulation; }
+.ms-root .ms-htitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+/* The loupe demo needs room for the bubble ABOVE the little board, and the bubble is absolutely
+   positioned, so the box reserves that height itself rather than letting it overlap the caption. */
+.ms-root .ms-loupedemo {
+  position: relative;
+  width: 96px;
+  height: 104px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ms-root .ms-loupe--demo {
+  width: 54px;
+  height: 54px;
+  left: 21px;
+  top: 0;
+}
+.ms-root .ms-loupe--demo .ms-zc { width: 34px; height: 34px; font-size: 17px; }
+.ms-root .ms-lead { font-size: 16px; font-weight: 800; line-height: 1.35; }
+.ms-root .ms-dia {
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .08);
+}
+.ms-root .ms-diarow { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.ms-root .ms-cap { font-size: 13px; color: var(--ms-muted); line-height: 1.45; margin-top: 9px; }
+/* .ms-eg is gone with the two example strips it styled: they were `white-space: nowrap`
+   one-liners that ran off the side of the screen (Matt, 2026-09-21). */
+.ms-root .ms-edge { font-size: 13px; line-height: 1.5; }
+.ms-root .ms-minic { width: 34px; height: 34px; font-size: 20px; }
+
+/* Reduced motion thins the garnish; it never freezes the game. The only motion here IS garnish
+ * (the toggle knob and the reveal fade), so both settle instantly to their final pose rather than
+ * being display: none'd, which would take structural elements out of the layout
+ * (battleship/CLAUDE.md). */
+@media (prefers-reduced-motion: reduce) {
+  .ms-root .ms-sw, .ms-root .ms-sw i { transition: none; }
+  .ms-root .ms-c { animation: none; }
+}
+
+/* The loupe flips below the finger for the top rows, where "above" would be off the board. The
+ * arrow has to follow it or it points at nothing. */
+.ms-root .ms-loupe.is-below:after {
+  bottom: auto;
+  top: -9px;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 2px solid var(--ms-accent);
+  border-top: 2px solid var(--ms-accent);
+}
+
+/* css/ui.css's segmented control marks the active item with a raised surface. Dig/Flag is a MODE,
+ * not a tab, and which one is live has to be readable at a glance mid-game, so this one instance
+ * takes the accent fill instead. Paired with an icon and a label, never colour alone. */
+.ms-root .ms-bar .gh-seg__item[aria-pressed="true"] {
+  background: var(--ms-accent);
+  color: #ffffff;
+}
+
+/* =================================================================================================
+ * THE EXPLOSION (2026-09-21, Matt: "add a huge explosion animation for if someone hits a mine")
+ *
+ * Everything here animates ONLY transform, opacity and filter - never width/height/inset, which
+ * are not compositor-only and jank on a weak phone (docs/BUILDING-A-GAME.md Part 0). The whole
+ * layer is decoration: it is aria-hidden, it carries no information the board does not already
+ * show, and it is REMOVED from the DOM when it finishes rather than left at opacity 0, so nothing
+ * lingers invisible in the accessibility tree.
+ * ============================================================================================== */
+
+.ms-root .ms-blast {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* The white-hot core, at the cell that was hit. Scales up and fades; `filter: blur()` is on the
+   allowed list and is what stops it reading as a hard-edged circle. */
+.ms-root .ms-core {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, #ffe9a8 22%, #f2b705 45%, #e0532f 68%, rgba(224, 83, 47, 0) 78%);
+  filter: blur(2px);
+  opacity: 0;
+  transform: scale(0.2);
+  animation: ms-core 620ms cubic-bezier(.15, .8, .3, 1) forwards;
+}
+@keyframes ms-core {
+  0%   { opacity: 0;   transform: scale(0.15); }
+  12%  { opacity: 1;   transform: scale(1.15); }
+  38%  { opacity: .92; transform: scale(1.6); }
+  100% { opacity: 0;   transform: scale(2.6); }
+}
+
+/* Two shockwave rings, the second offset so the blast reads as a pulse rather than one balloon. */
+.ms-root .ms-shock {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border-radius: 50%;
+  border: 3px solid rgba(242, 183, 5, .85);
+  opacity: 0;
+  transform: scale(0.2);
+  animation: ms-shock 760ms cubic-bezier(.1, .7, .2, 1) forwards;
+}
+.ms-root .ms-shock--2 {
+  border-color: rgba(224, 83, 47, .7);
+  border-width: 2px;
+  animation-delay: 130ms;
+  animation-duration: 820ms;
+}
+@keyframes ms-shock {
+  0%   { opacity: 0;   transform: scale(0.2); }
+  10%  { opacity: 1;   transform: scale(0.9); }
+  100% { opacity: 0;   transform: scale(7); }
+}
+
+/* Debris. Each fragment carries its own vector and spin as custom properties, set in ui.js, so one
+   keyframe serves all of them and nothing is generated per-particle at runtime. */
+.ms-root .ms-frag {
+  position: absolute;
+  width: var(--ms-fs, 9px);
+  height: var(--ms-fs, 9px);
+  margin: calc(var(--ms-fs, 9px) / -2) 0 0 calc(var(--ms-fs, 9px) / -2);
+  border-radius: var(--ms-fr, 2px);
+  background: var(--ms-fc, #f2b705);
+  opacity: 0;
+  transform: translate3d(0, 0, 0);
+  animation: ms-frag var(--ms-fd, 900ms) cubic-bezier(.18, .7, .35, 1) var(--ms-fdelay, 0ms) forwards;
+}
+@keyframes ms-frag {
+  0%   { opacity: 1; transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  /* The 65% stop is the arc: full travel outward, then the last third falls and shrinks, so the
+     debris drops instead of drifting to a halt in mid-air. */
+  65%  { opacity: 1; transform: translate3d(var(--ms-dx), var(--ms-dy), 0) rotate(var(--ms-rot)) scale(.9); }
+  100% { opacity: 0; transform: translate3d(var(--ms-dx), calc(var(--ms-dy) + 46px), 0) rotate(var(--ms-rot)) scale(.5); }
+}
+
+/* The board itself kicks. Small, brief, and on transform only. */
+.ms-root .ms-board.is-blasting { animation: ms-shake 420ms cubic-bezier(.36, .07, .19, .97) both; }
+@keyframes ms-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  10% { transform: translate3d(-6px, 3px, 0); }
+  22% { transform: translate3d(5px, -4px, 0); }
+  36% { transform: translate3d(-5px, -2px, 0); }
+  50% { transform: translate3d(4px, 3px, 0); }
+  64% { transform: translate3d(-3px, 1px, 0); }
+  78% { transform: translate3d(2px, -2px, 0); }
+  90% { transform: translate3d(-1px, 1px, 0); }
+}
+
+/* A mine arriving during the outward cascade pops rather than simply appearing. */
+.ms-root .ms-c.is-revealing { animation: ms-pop 260ms cubic-bezier(.2, .9, .3, 1) both; }
+@keyframes ms-pop {
+  0%   { transform: scale(.55); opacity: .25; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* The cell that was hit keeps burning under the debris. box-shadow is on the allowed list. */
+.ms-root .ms-c.is-boom { animation: ms-boomcell 620ms ease-out both; }
+@keyframes ms-boomcell {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 233, 168, .95); }
+  40%  { box-shadow: 0 0 22px 10px rgba(242, 183, 5, .8); }
+  100% { box-shadow: 0 0 10px 2px rgba(224, 83, 47, .45); }
+}
+
+/* REDUCED MOTION. This whole layer is garnish, not gameplay - the board already says you lost, in
+   text and in shape - so here it is cut rather than merely slowed, and every element settles at
+   its FINAL pose instead of being display:none'd (battleship/CLAUDE.md). ui.js also skips building
+   the layer at all and reveals the mines in one pass, so the result screen arrives promptly. */
+@media (prefers-reduced-motion: reduce) {
+  .ms-root .ms-blast { display: none; }
+  .ms-root .ms-board.is-blasting { animation: none; transform: none; }
+  .ms-root .ms-c.is-revealing { animation: none; transform: none; opacity: 1; }
+  .ms-root .ms-c.is-boom { animation: none; box-shadow: 0 0 10px 2px rgba(224, 83, 47, .45); }
+}

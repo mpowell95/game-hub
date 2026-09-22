@@ -47,7 +47,49 @@ This doc says how the game works. It is not a coding or implementation guide. Lo
 - **[Locked]** Steal button (batting, runner on). Bunt button (batting). Pickoff button (pitching, runner on). All sit in reserved fixed slots that never move.
 - **[Locked]** All three are tap, never hold.
 - **[Locked]** Batter Speed raises steal and bunt success. Pitcher Accuracy improves pickoffs.
-- **[Open]** How each works in play (timing, success odds, what the CPU does).
+- **[Locked, RA]** **How each works in play.** Built as `docs/BASEBALL-3D-BUILD.md` section 9's "RA"
+  stage specifies; the constants are settings.js's own STEAL_*/PICKOFF_*/BUNT_*/CPU_* block and the
+  rules are in game.js (the at-bat loop), swing.js (`buntSwing`), outcomes.js (`resolveBunt`),
+  bases.js (`advanceSacBunt`) and agents.js (the CPU's three decisions). Everything is decided in
+  the engine and emitted as an event; the UI only presents it.
+
+  - **Steal.** Armed between pitches, before READY, when a runner's next base is empty - FIRST AND
+    SECOND ONLY; a steal of home is not modelled (the success formula is not calibrated for a
+    run-scoring play, and at the CPU's own rate a runner on third would walk home most innings).
+    The lead eligible runner (the one closest to home) goes on the next pitch, and the figure takes
+    a 4 ft lead while the well is armed. Resolved after the pitch is flown and after the swing is
+    scored: safe with probability `clamp(0.45 + 0.01 * runner.hitSpd - 0.005 * pitcher.pitchAcc,
+    0.20, 0.90)`. Safe advances him one base; caught is an out and the at-bat continues. **If the
+    batter puts the ball in play the steal is void** - no event, the runner was already moving, and
+    the play resolves exactly as it always did. A caught steal that makes the third out ends the
+    half-inning, and the batter at the plate keeps the lineup pointer: he leads off the next time
+    that side bats. Emitted as `steal {runnerId, from, to, safe}`.
+  - **Bunt.** Armed before READY, always available; the mode row reads BUNT and the batter squares
+    on the `Bunt` clip at the wind-up. Contact is TIMING ONLY, on a window 1.6x the ordinary one -
+    there is no cursor, no mode and no miss: a bunt timed outside that window is a FOUL, and a foul
+    bunt with two strikes is a strikeout (the one exception to "a foul can never be strike 3").
+    A bunt in play is always a grounder, 8 to 40 ft, spraying inside +/-30 deg. With runners on and
+    fewer than two outs it is a **sacrifice**: every runner moves up one (the runner from third
+    scores) and the batter is out, unless he beats the throw - the SAME `MECHANICS.beatOutPerPt` x
+    hitSpd roll an infield grounder already uses - in which case it is a **bunt single** and the
+    runners still move up one. With nobody on (or with two outs) it is a bunt for a hit: that same
+    roll, else a **bunt out**. Bunt mode clears after the pitch, and a take in bunt mode is an
+    ordinary take. Emitted on `atBatEnd` as `outcome: 'bunt-out' | 'bunt-single' | 'sacrifice'`.
+  - **Pickoff.** Offered while pitching, before PITCH, when a runner is on first. Tapping it
+    THROWS NO PITCH: the pitcher turns and throws to first (`Pickoff` clip, 0.5 s, release at
+    0.3 s), the runner is out with probability `clamp(0.06 + 0.01 * pitcher.pitchAcc, 0.06, 0.35)`,
+    and otherwise nothing changes. Either way the count is untouched, the lineup does not advance,
+    the beat is 1.5 s and the same batter is up for the next pitch. A steal armed for that pitch is
+    cancelled by the throw over. A third out from a pickoff ends the half-inning by the same path a
+    strikeout's third out takes. A safety valve caps it at three throws per at-bat - not a rule, a
+    guarantee that the pitch loop terminates. Emitted as `pickoff {runnerId, from, out}`.
+  - **What the CPU does.** Batting: it steals when eligible with probability
+    `0.12 + 0.004 * runner.hitSpd` per pitch, never with two outs and a three-ball count; it bunts
+    with probability 0.06 when a runner is on, there are fewer than two outs, and the batter's
+    hitPow is in the bottom third of his league's cap. Pitching: it throws over with probability
+    0.08 per pitch when a runner is on first. Every one of those draws comes from the game's own
+    seeded stream, and none of them is taken at all when the situation does not arise, so a pitch
+    with the bases empty consumes exactly the randomness it always did.
 
 ## 4. Career
 
@@ -248,12 +290,20 @@ Major League	62%	40 to 52%
 ## 11. Pitches
 
 ### Unlocks
-- **[Locked]**
+- **[Locked, R11]** Quick Play now throws the SAME ladder career does, at every league - RA's own
+  "Quick Play unlocks all eight for both sides" is overruled by Matt, 2026-09-21: "only 'fastballs'
+  should be able to be thrown" at Little League, which the all-eight override directly
+  contradicted. `unlockedPitchesFor(league, wsTitles, { quickPlay: true })` returns the identical
+  list `unlockedPitchesFor(league, wsTitles)` does; the CPU throws from the SAME per-league
+  `pitchMix` career uses. `QUICK_PLAY_PITCH_MIX` is deleted with the override it existed only to
+  serve.
+- **[Locked, R11]** Little League is fastball only. Changeup moves to High School, alongside
+  curveball - it does not vanish, it is simply not the very first thing a brand-new career unlocks.
 
 ```
 When unlocked	Pitch
-Little League	Fastball, Changeup
-High School	Curveball
+Little League	Fastball
+High School	Changeup, Curveball
 College	Slider
 Minor League	Knuckleball
 Major League	Screwball
@@ -262,17 +312,22 @@ World Series Champ x2	Cutter
 ```
 
 ### How they move
-- **[Locked]** Curve and slider break away from the pitcher's throwing arm. Screwball breaks the other way. You control how much and when, never which way.
+- **[Locked]** Curve and slider break away from the pitcher's throwing arm. Screwball breaks the other way. The direction is never yours to choose. R2: the AMOUNT is not either - a break is a fact of the pitch type (`BREAK_OFFSET`, section 14), shown before the ball is thrown by the point cursor, and steering after release is deleted.
 - **[Tested]** Fastball: straight, fastest.
 - **[Tested]** Changeup: straight, much slower. Its job is to wreck the batter's timing.
-- **[Tested]** Curveball: slow, big smooth one-way bend that can start right after release. Steered by the player (see Controls).
+- **[Tested]** Curveball: slow, big smooth one-way bend that starts right after release.
 - **[Tested]** Slider: faster, smaller bend that only starts about halfway to the plate.
 - **[Tested]** Knuckleball: very slow, wobbles on its own. Not steerable.
 - **[Open]** Screwball, Eephus, and Cutter movement and speed.
 
 ### Speed readout
 - **[Locked]** Pitch type and speed are hidden until the ball crosses the plate. This applies when you bat and when you pitch.
-- **[Locked]** The mph shown depends on the league. It is display only; how fast the ball actually travels is a separate tuned value.
+- **[Locked, amended R11]** The mph shown depends on the league. Until R11 it was display only,
+  with travel time a separate tuned value - that was the bug: a Little League 55 mph fastball flew
+  in the same 650 ms as a Majors 95 mph one. `pitch.js`'s `timeToPlateS` now divides by this same
+  readout mph (alongside `PITCH_TRAVEL_MULT` and the pitcher's own skill points, as before), so the
+  number shown and the time the ball actually takes agree with each other - "a slow pitch is slow"
+  (Matt, 2026-09-21).
 - **[Draft]** Readout by league (mph):
 
 ```
@@ -288,26 +343,47 @@ Fastball values are based on published averages (MLB four-seam about 94.7 mph in
 
 ## 12. Controls
 
+Rewritten for R2 (`docs/BASEBALL-3D-BUILD.md` section 9), against the reference game
+(`docs/BASEBALL-REFERENCE-B9.md`). The zone and both cursors are 2-D; there is no pitch meter, no
+steering after release and no charged swing.
+
+### The zone
+- **[Locked]** The strike zone is a rectangle, not a line. A pitch has an `x` and a `y`, both in
+  zone units (1 = the zone's own half width or half height), and a strike is `|x| <= 1 and |y| <= 1`.
+- **[Locked]** The LEFT control is a square 2-D pad in both states. Tapping it without dragging
+  cycles (the pitch type while pitching, the batting mode while batting); dragging moves the cursor.
+  The RIGHT control is one round button: PITCH, then READY, then SWING.
+- **[Tested]** Both cursors are drawn in the world at the plate, through whichever camera is live,
+  never only on the pad.
+
 ### Batting
-- **[Tested]** Left pad: drag to move the bat's sweet spot left or right.
-- **[Tested]** Swing button: tap to swing instantly. Or press and hold before the pitch arrives to charge, then release to swing.
-- **[Tested]** Charged swing: more power and more fly balls, but a smaller timing window.
-- **[Tested]** Early contact pulls the ball. Late contact goes the opposite way.
-- **[Tested]** Centered on the sweet spot: line drive or fly ball. Off-center: grounder toward the bat's end, pop-up toward the handle.
+- **[Locked]** Two modes, cycled on the pad: CONTACT (big circle, ordinary power) and POWER (small
+  circle, x1.12 exit velocity). The trade is the whole choice; it replaces the charged swing.
+- **[Locked]** Tap READY, and the pitcher winds up. Nothing moves before that.
+- **[Locked]** At release, the pitch's TARGET appears on the field as a small marker at the spot the
+  ball appears to be heading for, and SLIDES to where it will really cross as the pitch breaks. You
+  drag your circle onto it.
+- **[Locked]** Swing is ONE tap. No hold, no charge.
+- **[Tested]** A pitch crossing outside your circle is a miss, whatever the timing.
+- **[Tested]** How far from the circle's centre it crossed scales the contact quality.
+- **[Tested]** Early contact pulls the ball. Late contact goes the opposite way. Where you met it
+  horizontally adds to that.
+- **[Tested]** Vertically: the ball above your circle's centre is a fly (further, a pop-up); below
+  it, a grounder; on it, a line drive.
 - **[Tested]** Just outside the timing window = foul. Well outside = miss.
-- **[Tested]** Timing feedback pops above the plate right after contact: "Early", "Late", or "Perfect".
-- **[Open]** Final popup wording. Current: Early / Late / Perfect. Alternative: Fast! / Slow!
+- **[Tested]** Timing feedback pops right after contact: "Early", "Late", or "Perfect".
 
 ### Pitching
-- **[Tested]** Pick a pitch from the pitch buttons.
-- **[Tested]** Left pad: drag to aim.
-- **[Draft]** Throw button:
-  - **Tap:** normal pitch. Lands close to your aim, not exact.
-  - **Hold and release in the Nice zone:** power pitch. Faster, more bend, lands exactly on your aim. "Nice" confirms it.
-  - **Hold too long:** the pitch hangs. Slower, less bend, drifts toward the middle of the plate.
-- **[Draft]** The meter is a ring around the Throw button. It fills clockwise starting at the lower right (under the thumb) and the Nice zone sits near the top where it stays visible. Nice zone edges have white marks, not just color. Where you stopped stays visible for about 1 second.
-- **[Locked]** The throw meter is not a bar above the plate (tried and rejected).
-- **[Tested]** Curve and slider are steered after release: drag the left pad toward the break side. More drag = more bend. Dragging earlier = more bend. Dragging the wrong way does nothing. (Mario-style steering chosen over automatic break.)
+- **[Locked]** Pick a pitch (a strip tile, or tap the pad to cycle).
+- **[Locked]** Tap PITCH once. The wind-up plays and the pad is live through it; drag the control
+  cursor anywhere in or around the zone. At the wind-up's mark (`PITCH_DRAG_MS`, 700 ms) the cursor
+  is sampled, the ball leaves the hand, and that is the pitch. There is no meter and no second tap.
+- **[Locked]** A pitch that breaks shows a second, yellow POINT CURSOR offset from the control
+  cursor: where the ball will END. The ball goes to the point cursor.
+- **[Locked]** Break direction is the pitch type and the pitcher's own throwing arm, never the drag
+  (`BREAK_OFFSET`, settings.js). Curve and slider break away from the arm, screwball the other way.
+- **[Tested]** The pitch lands close to the sampled aim, not exactly on it: Accuracy tightens the
+  scatter, in both axes equally, and a perfect arm still is not a laser.
 
 ## 13. Settings block
 
@@ -328,24 +404,25 @@ Fastball values are based on published averages (MLB four-seam about 94.7 mph in
 
 ```
 Setting	Value	Meaning
-fastballMs	1500	Fastball travel time
-betweenMs	3000	Pause between pitches
-windupMs	1400	CPU pitcher windup
-resultMs	1800	How long a hit result shows
+fastballMs	650	Fastball travel time (R2; was 1500)
+betweenMs	800	Pause between pitches (R2; was 3000)
+windupMs	1000	CPU pitcher windup (R2; was 1400)
+resultMs	1200	How long a hit result shows (R2; was 1800)
 timingWindow	100	Good-contact timing window
 foulMult	1.7	Foul margin (x timing window)
 swingDelay	60	Swing start delay
 inputOffset	0	Input lag offset
-sweetSpot	0.28	Sweet spot size
-batReach	0.8	Bat reach
-chargeTime	300	Hold needed to charge a swing
-chargeWindowMult	0.6	Charged swing timing window (x)
-chargePower	1.22	Charged swing power (x)
-meterTime	1100	Pitch meter fill time
-niceWidth	0.12	Nice zone width
-niceBoost	1.06	Nice pitch speed (x)
-niceBreak	1.3	Nice pitch bend (x)
-aimScatter	0.12	Normal pitch miss from aim
+cursorR.contact	0.55	CONTACT cursor radius, zone units (R2; replaces sweetSpot/batReach)
+cursorR.power	0.35	POWER cursor radius, zone units (R2)
+modeExitMult.power	1.12	POWER exit velocity (x) (R2; replaces chargePower)
+flyOffsetFrac	0.545	Fly ball above this fraction of the cursor radius (R2)
+popupOffsetFrac	0.85	Pop-up above this fraction of it (R2)
+flyCenterDeg	39	Fly ball launch angle, centre (R2)
+flySpreadDeg	9	Fly ball launch angle, spread (R2)
+offsetSprayDeg	18	Spray from meeting the ball off-centre, at the rim (R2)
+placementPenaltyMph	18	Exit velocity lost at the rim (R2; was the 1-D placement penalty)
+PITCH_DRAG_MS	700	Wind-up mark: when the pitching cursor is sampled (R2, ui.js)
+aimScatter	0.12	Normal pitch miss from aim, BOTH axes (R2)
 cpuTimingSigma	55	CPU batter timing error
 cpuSwingIn	0.78	CPU swing rate at strikes
 cpuChase	0.28	CPU chase rate
@@ -363,6 +440,21 @@ Changeup	1.4
 Curveball	1.3
 Slider	1.1
 Knuckleball	1.45
+```
+
+Break at the plate, in zone units (R2; `BREAK_OFFSET`, settings.js). `x` flips with the pitcher's
+throwing arm on every row marked "handed":
+
+```
+Pitch	x	y	Handed
+Fastball	0	0	-
+Changeup	0	-0.25	-
+Curveball	0.45	-0.35	yes
+Slider	0.35	-0.10	yes
+Screwball	-0.35	-0.15	yes
+Cutter	0.18	0	yes
+Knuckleball	+-0.30	+-0.30	random, both axes
+Eephus	0	-0.10	-
 ```
 
 ## 15. Career persistence [Locked]

@@ -21,8 +21,11 @@
 //   * any element inside the game's own root that CAN scroll (`overflow-y: auto|scroll`) and DOES
 //     (`scrollHeight > clientHeight`).
 //
-// An overlay that is opened by a tap - a scorecard, a help sheet - is not on screen here, so what
-// this finds is a LAYOUT that does not fit.
+// A screen reached by a TAP used to be out of scope here, and that hole shipped a real bug: on
+// 2026-09-21 Minesweeper's How to play grew a line too tall, and because the only way off it was a
+// Back button UNDER the content, the button was the thing clipped - leaving the screen a dead end.
+// Both this and test-visual's fit check had only ever looked at a game's DEFAULT screen.
+// `EXTRA_SCREENS` below closes it: a game can name screens to open and have measured too.
 //
 // Needs the dev server up (`node server.mjs`).
 //
@@ -33,12 +36,105 @@ import { chromium } from 'playwright-core';
 import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const BASE = 'http://localhost:8123';
+const BASE = process.env.BB_BASE || 'http://localhost:8123';
 const SIZES = [
   { w: 393, h: 852, why: 'tall' },
   { w: 390, h: 664, why: 'short' },
 ];
 const TOL = 2;      // sub-pixel rounding; the same tolerance test-visual's fit check uses
+
+/** Screens reached by a TAP, measured with the same ruler as the default one.
+ *
+ *  Keyed by game folder. `open(page)` drives to the screen and resolves once it is up; `back` is
+ *  optional and only needed if a later entry has to start from the default screen again.
+ *
+ *  Add a game's how-to, setup or summary screen here when it has one. A screen nobody measures is
+ *  a screen that grows until it breaks - and, if the way OFF it lives at the bottom, breaks
+ *  silently. */
+const EXTRA_SCREENS = {
+  minesweeper: [
+    {
+      name: 'how to play',
+      async open(page) {
+        await page.waitForSelector('[data-act="howto"]', { timeout: 8000 });
+        await page.click('[data-act="howto"]');
+        await page.waitForSelector('[data-act="back"]', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+      // The way OFF this screen must itself be on screen. Measuring only the overflow would have
+      // passed the very bug this entry exists for: the layout "fit" once the button was clipped.
+      async assert(page) {
+        return page.evaluate(() => {
+          const back = document.querySelector('[data-act="back"]');
+          if (!back) return 'no Back button on this screen at all';
+          const r = back.getBoundingClientRect();
+          const root = (document.querySelector('[class$="-root"]') || document.body).getBoundingClientRect();
+          if (r.bottom > root.bottom + 2 || r.top < root.top - 2) return 'the Back button is off screen';
+          if (r.height < 44) return `the Back button is only ${Math.round(r.height)}px tall`;
+          return null;
+        });
+      },
+    },
+  ],
+  // R14 (docs/BASEBALL-3D-BUILD.md section 9): the player screen, reached by tapping the setup
+  // screen's player chip. Six skill rows, a 4x2 preset grid and a hand row on one screen - the
+  // tallest new content this stage adds, and exactly the kind of screen this file exists to catch.
+  baseball: [
+    {
+      name: 'player screen',
+      async open(page) {
+        await page.waitForSelector('[data-act="player"]', { timeout: 8000 });
+        await page.click('[data-act="player"]');
+        await page.waitForSelector('[data-act="done"]', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    // R15-B (docs/BASEBALL-3D-BUILD.md section 9): the two career screens - the setup screen's
+    // Career tab (no career yet, on a fresh profile) and the player screen it opens in ITS OWN
+    // "start a career" flavor (presets/Custom/Randomize/hand, budgeted at Little League - a
+    // different skill-point table than Quick Play's, so it earns its own scroll check).
+    //
+    // Each extra runs on the SAME page as the one before it, in array order (the runner above
+    // never reloads between extras) - so a career extra opening right after "player screen" lands
+    // on the PLAYER SCREEN, not the setup screen the tab bar lives on. `backToSetup` returns there
+    // first (clicking Done, the player screen's own way back, if that screen happens to be up)
+    // before looking for the tab - found the hard way when both career extras first shipped
+    // timing out on a tab selector that was never missing, just on a different screen.
+    {
+      name: 'career tab',
+      async open(page) {
+        await backToSetup(page);
+        await page.waitForSelector('[data-act="tab"][data-tab="career"]', { timeout: 8000 });
+        await page.click('[data-act="tab"][data-tab="career"]');
+        await page.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'career start player screen',
+      async open(page) {
+        await backToSetup(page);
+        await page.waitForSelector('[data-act="tab"][data-tab="career"]', { timeout: 8000 });
+        await page.click('[data-act="tab"][data-tab="career"]');
+        await page.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
+        await page.click('[data-act="start-career"]');
+        await page.waitForSelector('.bb-player-body', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+  ],
+};
+
+/** Baseball-only helper (see the comment above): if the player screen (either mode - Quick Play's
+ *  own or a career one) is currently up from a previous extra, tap its Done button to return to
+ *  the setup screen. A no-op when the setup screen is already showing. */
+async function backToSetup(page) {
+  const doneBtn = await page.$('[data-act="done"]');
+  if (doneBtn) {
+    await doneBtn.click();
+    await page.waitForSelector('[data-act="tab"]', { timeout: 8000 }).catch(() => {});
+  }
+}
 
 /** Every game folder, discovered from disk so a NEW game is covered the day it appears - the same
  *  rule `test-game-conventions.mjs` follows, and for the same reason. */
@@ -139,6 +235,24 @@ for (const game of list) {
             : r.inner > TOL ? `"${r.sel}" scrolls INSIDE itself by ${r.inner}px` : null;
         if (why) { bad.push({ game, label, why }); console.log(`SCROLLS  ${label}: ${why}`); }
         else console.log(`ok       ${label}`);
+
+        for (const extra of (EXTRA_SCREENS[game] || [])) {
+          const xlabel = `${label} > ${extra.name}`;
+          try {
+            await extra.open(page);
+            const xr = await page.evaluate(MEASURE);
+            checks++;
+            const xwhy = xr.page > TOL ? `the PAGE is ${xr.page}px taller than the screen`
+              : xr.wide > TOL ? `the page is ${xr.wide}px too WIDE`
+                : xr.inner > TOL ? `"${xr.sel}" scrolls INSIDE itself by ${xr.inner}px`
+                  : (extra.assert ? await extra.assert(page) : null);
+            if (xwhy) { bad.push({ game, label: xlabel, why: xwhy }); console.log(`SCROLLS  ${xlabel}: ${xwhy}`); }
+            else console.log(`ok       ${xlabel}`);
+          } catch (err) {
+            bad.push({ game, label: xlabel, why: `could not be opened: ${err.message}` });
+            console.log(`SCROLLS  ${xlabel}: could not be opened: ${err.message}`);
+          }
+        }
       } catch (e) {
         console.log(`skip  ${label}: ${String(e).split('\n')[0]}`);
       }

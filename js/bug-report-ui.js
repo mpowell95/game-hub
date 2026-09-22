@@ -379,6 +379,16 @@ export async function openBugInbox() {
   let reports = visibleInInbox(await readBugReports());
   // Opening the inbox IS reading it; the count resets from here even if a report is left open.
   writeSeenAt(Date.now());
+  // ...AND THE LAUNCHER HAS TO HEAR ABOUT IT. The inbox opens in an overlay on top of the hub, so
+  // nothing there would otherwise know the count had changed and the badge would sit there, read
+  // but still lit, until the next reload - which is the bug js/messages.js's announceChange()
+  // already exists to prevent for messages ("The new message badge doesn't go away after I've
+  // already read a message"). Same event, deliberately: js/hub.js repaints BOTH counts from it,
+  // and the string is `MESSAGES_CHANGED` in js/messages-ui.js. Dispatched by hand rather than
+  // imported because importing that module here would pull the whole Messages screen in behind a
+  // one-word constant.
+  try { window.dispatchEvent(new CustomEvent('gamehub:messages')); }
+  catch { /* no window (or no CustomEvent): a badge is not worth throwing over */ }
   // Done reports fold away instead of sitting on top of the ones still needing an answer. This is
   // what "Mark as done" was missing: it stamped a status nothing acted on, so a handled report
   // stayed exactly where it was, just un-bolded.

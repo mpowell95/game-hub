@@ -45,16 +45,43 @@ function layoutSectors(depths, gapDeg) {
   return sectors;
 }
 
+// R5 (docs/BASEBALL-3D-BUILD.md section 9, rule 5's "zones.js's depths if the report says why"):
+// EVERY NUMBER BELOW IS IN FEET, AND UNTIL R5 ALMOST NOTHING EVER REACHED THEM. `carryFt` returned
+// 0 ft for 96% to 99% of balls in play (measured, shipped v865, five leagues), so a batted ball's
+// fate was decided by its SPRAY ANGLE alone - whether it happened to land in one of the `GAP_DEG`
+// dead zones - and these depths were nearly inert. R5 gives the ball a real exit velocity and a
+// real carry (40 to 470 ft), which puts every one of them back in play, and the old numbers are
+// wrong by a factor of two to three against real feet:
+//
+//   - INFIELD toFt 62/68 was "where a grounder is fielded". A grounder now ROLLS 32 to 121 ft
+//     (`GROUND_CARRY_FACTOR`), so at 62 ft every solidly hit grounder was through the infield for a
+//     single. 115/125 (College: 110/119 ft after `outZoneMult`) is where an infielder actually
+//     fields one, and it leaves the hardest grounders getting through: measured, grounders are a
+//     hit 32% of the time at College, against ~24% in the real game.
+//   - OUTFIELD 90..160/180 was shallower than the median fly ball (248 ft at College). Two
+//     consequences, both measured: a 170 ft pop fly landed past the sector and was scored a HIT,
+//     and - because `TRIPLE_DEPTH_FRAC` is 0.80 OF THE WALL (264 ft at College's corners), which is
+//     BELOW any plausible outfielder's reach - every ball that beat a sector was a TRIPLE. 14.8% of
+//     balls in play at College, against about 1% in the real game.
+//
+// So the outfield out-zone is set to REACH THE WALL at every league (College 378 ft in the corners
+// against a 330 to 365 ft fence, 416 ft in the centre against 400). That is the honest reading of
+// "out zones sit where fielders would stand": an outfielder gets to anything that stays in the
+// park, and what beats him is the fence or a gap, not depth. The consequence, and it is worth
+// knowing before changing these: the double/triple depth ladder in `outcomes.js` now only ever
+// decides a ball hit into an angular GAP, because nothing else gets past a manned sector.
+// `fromFt` 150 (College) is the near edge, so the bloop band (`BLOOP_BAND_FT`, 25 ft) is the 125 to
+// 150 ft flare nobody reaches and anything shallower is an infielder's catch.
 const INFIELD_DEPTHS = [
-  { fromFt: 8, toFt: 62 },
-  { fromFt: 8, toFt: 68 },
-  { fromFt: 8, toFt: 68 },
-  { fromFt: 8, toFt: 62 },
+  { fromFt: 8, toFt: 115 },
+  { fromFt: 8, toFt: 125 },
+  { fromFt: 8, toFt: 125 },
+  { fromFt: 8, toFt: 115 },
 ];
 const OUTFIELD_DEPTHS = [
-  { fromFt: 90, toFt: 160 },
-  { fromFt: 90, toFt: 180 },
-  { fromFt: 90, toFt: 160 },
+  { fromFt: 150, toFt: 390 },
+  { fromFt: 150, toFt: 430 },
+  { fromFt: 150, toFt: 390 },
 ];
 
 const BASE_INFIELD_SECTORS = layoutSectors(INFIELD_DEPTHS, GAP_DEG);

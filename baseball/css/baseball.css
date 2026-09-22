@@ -25,7 +25,7 @@
  * (docs/BUILDING-A-GAME.md Part 0). Reduced motion skips the fade (ui.js's own check), landing the
  * swap instantly at the beat's midpoint instead - the transition here is untouched by it because
  * `.bb-fading` is never applied in that path at all. */
-.bb-hud, .bb-strip, .bb-ring-label, .bb-actions, .bb-field-canvas {
+.bb-hud, .bb-strip, .bb-ring-label, .bb-actions, .bb-field-canvas, .bb-actor-canvas {
   transition: opacity var(--gh-dur-mid, 200ms) ease;
 }
 .bb-fading { opacity: 0; }
@@ -36,16 +36,72 @@
 }
 
 /* ---------------------------------------------------------------- setup screen ---- */
+/* R15-B (docs/BASEBALL-3D-BUILD.md section 9): two tabs now sit above whichever body renders, so
+ * this outer wrapper is TOP-ALIGNED (never centered - Career's content varies far more in height
+ * than Quick Play's ever did) with a smaller gap/padding than before this stage, to make room for
+ * the tab row on the short phone height. `.bb-setup-quickplay` carries the OLD centered layout so
+ * Quick Play's own look is unchanged. */
 .bb-setup {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  overflow: hidden;
+  gap: 10px;
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  /* Ship review (R15-B): the tab row must clear the hub's floating back pill. `--bb-top-pad` is
+   * the measured pill clearance in the hub and the safe-area inset standalone (`_fitInsets`);
+   * Quick Play only ever cleared the pill because its body is vertically centred. */
+  padding-top: calc(10px + var(--bb-top-pad, 0px));
+}
+
+.bb-setup-tabs {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 340px;
+  flex: 0 0 auto;
+}
+.bb-tab {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 18px;
-  padding: 24px;
-  padding-top: calc(24px + env(safe-area-inset-top));
-  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  gap: 6px;
+  border-radius: var(--gh-r-md, 10px);
+  border: 2px solid var(--gh-border-strong, rgba(16, 36, 58, .28));
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #1a2233);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+.bb-tab[aria-pressed="true"] { background: #ffce3a; border-color: #1a2233; color: #1a2233; }
+:root.gh-dark .bb-root .bb-tab { background: #1b2434; color: #e9eef6; border-color: rgba(190, 214, 244, .18); }
+:root.gh-dark .bb-root .bb-tab[aria-pressed="true"] { background: #ffce3a; color: #1a2233; border-color: #e9eef6; }
+
+.bb-setup-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bb-setup-quickplay {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  overflow: hidden;
 }
 
 .bb-setup-title {
@@ -97,9 +153,282 @@
 :root.gh-dark .bb-root .bb-league-row { background: #1b2434; color: #e9eef6; }
 :root.gh-dark .bb-root .bb-league-row[aria-pressed="true"] { background: #ffce3a; color: #1a2233; border-color: #e9eef6; }
 
+/* R14 (docs/BASEBALL-3D-BUILD.md section 9): the player chip on the setup screen - hand, preset
+ * name, and the six skill values under their two-letter tags. Tapping it opens the player screen. */
+.bb-playerchip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 340px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--gh-r-md, 12px);
+  border: 1px solid var(--gh-border, rgba(16, 36, 58, .14));
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #1a2233);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.bb-playerchip-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.bb-playerchip-digits {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.bb-pcd { display: flex; flex-direction: column; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bb-pcd b { font-size: 11px; font-weight: 700; opacity: .65; }
+:root.gh-dark .bb-root .bb-playerchip { background: #1b2434; color: #e9eef6; border-color: rgba(190, 214, 244, .18); }
+
+/* ---------------------------------------------------------------- R15-B: career home ---- */
+.bb-career {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+.bb-career--empty { align-items: center; justify-content: center; }
+
+.bb-ladder { display: flex; gap: 4px; width: 100%; flex: 0 0 auto; }
+.bb-ladder-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 30px;
+  border-radius: var(--gh-r-md, 8px);
+  background: var(--gh-surface-2, #eef2f8);
+  color: var(--gh-ink, #1a2233);
+  font-size: 11px;
+  font-weight: 800;
+}
+.bb-ladder-step.is-current { background: #ffce3a; color: #1a2233; }
+.bb-ladder-mark { font-weight: 900; min-height: 11px; line-height: 1; }
+.bb-ladder-label { opacity: .75; }
+.bb-ladder-step.is-current .bb-ladder-label { opacity: 1; }
+
+.bb-career-line { font-size: 13px; font-weight: 700; text-align: center; flex: 0 0 auto; }
+.bb-career-opp { font-weight: 600; opacity: .8; font-size: 12px; }
+
+.bb-standings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+.bb-standings-col { display: flex; flex-direction: column; gap: 2px; }
+.bb-standing-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+.bb-standing-row.is-you { background: #ffce3a; color: #1a2233; font-weight: 800; }
+.bb-standing-rank { width: 13px; opacity: .7; font-variant-numeric: tabular-nums; }
+.bb-standing-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+.bb-standing-rec { font-variant-numeric: tabular-nums; opacity: .85; }
+
+.bb-trophies { display: flex; gap: 10px; justify-content: center; flex: 0 0 auto; }
+.bb-trophy { display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: .4; }
+.bb-trophy.is-won { opacity: 1; }
+.bb-trophy-shape { width: 16px; height: 16px; }
+.bb-trophy-circle { border-radius: 50%; background: #F2B705; }
+.bb-trophy-triangle { background: #1F5FA8; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+.bb-trophy-diamond { background: #E0532F; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+.bb-trophy.is-won .bb-trophy-shape { outline: 2px solid var(--gh-ink, #1a2233); outline-offset: 1px; }
+.bb-trophy-label { font-size: 11px; font-weight: 700; opacity: .85; }
+
+.bb-career-sync { font-size: 11px; text-align: center; min-height: 14px; opacity: .8; flex: 0 0 auto; }
+.bb-sync-glyph { margin-right: 4px; }
+
+.bb-career-actions { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 0 0 auto; }
+.bb-retire-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: .65;
+  font-size: 13px;
+  min-height: 44px;
+  min-width: 88px;
+  touch-action: manipulation;
+}
+
+.bb-points-pill--single { align-self: center; }
+.bb-trophy-big { width: 56px; height: 56px; margin: 6px auto; }
+.bb-trophy-big.bb-trophy-circle { border-radius: 50%; background: #F2B705; }
+.bb-trophy-big.bb-trophy-triangle { background: #1F5FA8; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+.bb-trophy-big.bb-trophy-diamond { background: #E0532F; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+
+:root.gh-dark .bb-root .bb-ladder-step { background: #1b2434; color: #e9eef6; }
+:root.gh-dark .bb-root .bb-ladder-step.is-current { background: #ffce3a; color: #1a2233; }
+:root.gh-dark .bb-root .bb-standing-row.is-you { background: #ffce3a; color: #1a2233; }
+
+/* ---------------------------------------------------------------- player screen ---- */
+.bb-player {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #eaeff7;
+  color: #16210f;
+  overflow: hidden;
+}
+:root.gh-dark .bb-root .bb-player { background: #0d1420; color: #e7edf5; }
+
+/* Clears the hub's floating immersive back pill, same mechanism as `.bb-top-spacer` on the play
+ * screen (measured in `_fitInsets()` - `.bb-root` is `position: fixed` so never receives the
+ * hub's own top padding). Zero in standalone beyond the safe-area probe `_fitInsets` also feeds it. */
+.bb-player-topspacer { flex: 0 0 var(--bb-top-pad, 0px); }
+
+.bb-player-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 14px calc(10px + env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+
+.bb-player-title { margin: 0; font-size: 16px; font-weight: 700; text-align: center; }
+
+.bb-hand-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.bb-hand-btn {
+  min-width: 60px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: var(--gh-r-md, 10px);
+  border: 2px solid var(--gh-border-strong, rgba(16, 36, 58, .28));
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #1a2233);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+.bb-hand-btn[aria-pressed="true"] { background: #ffce3a; border-color: #1a2233; color: #1a2233; }
+.bb-hand-locked {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-radius: var(--gh-r-pill, 999px);
+  background: var(--gh-surface-2, #eef2f8);
+  font-size: 14px;
+  font-weight: 700;
+}
+.bb-check { font-weight: 900; }
+
+.bb-preset-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.bb-preset-chip {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: var(--gh-r-md, 10px);
+  border: 1px solid var(--gh-border, rgba(16, 36, 58, .14));
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #1a2233);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  touch-action: manipulation;
+}
+.bb-preset-chip[aria-pressed="true"] { background: #ffce3a; border-color: #1a2233; color: #1a2233; }
+
+.bb-skill-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 0 0 auto; }
+.bb-skill-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.bb-skill-col-head { font-size: 11px; font-weight: 800; text-transform: uppercase; opacity: .7; text-align: center; }
+.bb-points-pill {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: var(--gh-r-pill, 999px);
+  background: var(--gh-surface-2, #eef2f8);
+}
+.bb-skill-row { display: flex; flex-direction: column; gap: 2px; }
+.bb-skill-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.bb-skill-label { font-size: 12px; font-weight: 700; }
+.bb-skill-num { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bb-skill-row-bar { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.bb-skill-btn {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--gh-r-md, 10px);
+  border: 1px solid var(--gh-border-strong, rgba(16, 36, 58, .28));
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #1a2233);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  touch-action: manipulation;
+}
+.bb-skill-btn[aria-disabled="true"] { opacity: .35; }
+.bb-skill-segbar { flex: 1; display: flex; gap: 1px; height: 16px; min-width: 0; }
+.bb-seg-cell { flex: 1; min-width: 1px; border-radius: 1px; background: var(--gh-border, rgba(16, 36, 58, .16)); }
+.bb-seg-cell.is-filled { background: #ffce3a; }
+
+.bb-player-actions { display: flex; gap: 10px; justify-content: center; padding-top: 2px; }
+
+:root.gh-dark .bb-root .bb-hand-btn,
+:root.gh-dark .bb-root .bb-preset-chip,
+:root.gh-dark .bb-root .bb-skill-btn { background: #1b2434; color: #e9eef6; border-color: rgba(190, 214, 244, .18); }
+:root.gh-dark .bb-root .bb-hand-btn[aria-pressed="true"],
+:root.gh-dark .bb-root .bb-preset-chip[aria-pressed="true"] { background: #ffce3a; color: #1a2233; border-color: #e9eef6; }
+:root.gh-dark .bb-root .bb-hand-locked,
+:root.gh-dark .bb-root .bb-points-pill { background: #1b2434; }
+/* :not(.is-filled) matters: a bare `.bb-seg-cell` selector here outranks the LIGHT-mode
+ * `.bb-seg-cell.is-filled` rule above on specificity (three ancestor classes beat two), so a
+ * filled cell was reading as this unfilled dark colour instead of the accent - found by cropping
+ * a real dark-mode still and comparing pixels, not by eye at full scale. */
+:root.gh-dark .bb-root .bb-seg-cell:not(.is-filled) { background: rgba(190, 214, 244, .18); }
+
 .bb-play-btn {
   min-width: 160px;
   min-height: 44px;
+}
+/* stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the model-loading state. Not HTML `disabled` -
+   see ui.js's own note on the click handler - so this is the only visible sign the tap is being
+   held; opacity + a wait cursor, never color alone (nothing here is a colorblind pairing anyway). */
+.bb-play-btn[aria-disabled="true"] { opacity: 0.6; cursor: wait; }
+
+/* stage 5 (docs/BASEBALL-3D-BUILD.md section 3.6): the load-error screen, shown in place of setup
+   when the model failed to load (boggle/js/ui.js's renderLoadError() pattern) - reuses .bb-setup's
+   centering, just a readable message width above the retry button. */
+.bb-load-error-msg {
+  max-width: 280px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.4;
+  margin: 0;
 }
 
 .bb-tune-open {
@@ -131,74 +460,201 @@
 
 /* Reserves clearance for the hub's own floating immersive back pill (measured in JS, since
  * `.bb-root` is `position: fixed` and so never receives `.hub-main-immersive`'s own top padding -
- * see `_fitInsets()`). Standalone this is 0 and `.bb-hud`'s own safe-area padding below does the
- * whole job. Deliberately OUTSIDE the HUD's own 48px band, which stays a clean fixed height. */
+ * see `_fitInsets()`). Standalone this is 0 and `_fitInsets()`'s own safe-area probe covers a
+ * device's notch/status bar either way. R8: the scoreboard (`.bb-hud`) moved OFF this flex column
+ * entirely (it is an absolutely-positioned card inside `.bb-field-wrap` now, top-left, over the
+ * scene) - this spacer is what still clears the pill, unchanged. */
 .bb-top-spacer {
   flex: 0 0 var(--bb-top-pad, 0px);
   height: var(--bb-top-pad, 0px);
   background: #16240f;
 }
 
+/* R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 4): the scoreboard. Class name kept as
+ * `.bb-hud` (test-baseball-device.mjs's `hud-vs-back` probe reads it by that name), but it is no
+ * longer a flex ROW that reserves its own 48px band - it is a small card, absolutely positioned
+ * top-left INSIDE `.bb-field-wrap`, over the scene, the way the reference's own scoreboard sits.
+ * `.bb-field-wrap` gets the 48px back for the stadium; nothing else in the band moves (the pop,
+ * the diamond widget and HOME RUN all keep their own fixed positions/insets, untouched by this).
+ *
+ * R12 (docs/BASEBALL-3D-BUILD.md, "R12", item 1): Matt, on v871: "the small diamond that shows if
+ * people are on base should be to the right of the count and a little bigger; it can be larger if
+ * it's to the right of the count and not change the size of that whole rectangle. Increase the
+ * font size a little bit." CSS only - the markup (`_paintHud` in ui.js) is unchanged, R10 owns
+ * `ui.js` this hour, and the three existing children (`.bb-sb-top`, `.bb-sb-count`,
+ * `.bb-sb-diamond`) are enough to build a two-column layout from with CSS grid: `.bb-hud` becomes
+ * a 2-column grid, `.bb-sb-top` spans both columns (row 1, unchanged from R8's flex row), and
+ * `.bb-sb-count`/`.bb-sb-diamond` sit side by side in row 2 - grid placement is independent of
+ * source order, so no markup edit was needed to put the diamond AFTER the count in the layout
+ * while it stays BEFORE it in the DOM. The card's own outer width is still bounded by `.bb-sb-top`
+ * (the runs/team/inning row, already the widest row before this change) and `max-width: 62%`
+ * below it, and the two-column row 2 is narrower than that combined - so "the card's outer size
+ * does not grow" holds; only its HEIGHT drops, since the diamond no longer stacks under the count
+ * as a third row. */
 .bb-hud {
-  height: 48px;
-  min-height: 48px;
-  flex: 0 0 48px;
-  position: relative;
-  display: flex;
-  align-items: stretch;
-  min-width: 0;
-  padding: 0;
-  background: repeating-linear-gradient(135deg,
-      rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 5px),
-    rgba(10, 16, 10, 0.62);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.65);
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.55);
-  font-size: 11px;
-  overflow: hidden;
-}
-
-.bb-hud-score, .bb-hud-inning, .bb-hud-count, .bb-hud-bases, .bb-hud-batter {
-  display: flex;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  max-width: 62%;
+  display: grid;
+  grid-template-columns: auto auto;
   align-items: center;
-  min-width: 0;
-  padding: 0 4px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  border-right: 1px solid rgba(255,255,255,0.10);
+  gap: 4px 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(8, 13, 8, 0.68);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  pointer-events: none;
 }
-.bb-hud-batter { border-right: 0; }
-.bb-hud-score { flex: 0 0 36%; gap: 4px; padding: 0 6px; }
-.bb-hud-inning { flex: 0 0 11%; justify-content: center; }
-.bb-hud-count { flex: 0 0 29%; justify-content: center; gap: 5px; }
-.bb-hud-bases { flex: 0 0 12%; justify-content: center; }
-.bb-hud-batter { flex: 0 0 12%; justify-content: flex-end; font-size: 11px; letter-spacing: -0.03em; margin-left: auto; }
 
-.bb-hud-team { font-size: 11px; font-weight: 800; opacity: 0.85; }
-.bb-hud-team.is-you { color: #178A7A; }
-.bb-hud-runs { font-size: 13px; font-weight: 900; }
-.bb-hud-dash { opacity: 0.45; font-weight: 400; font-size: 11px; }
-.bb-hud-inning { font-size: 12px; white-space: nowrap; }
-.bb-hud-count { display: flex; gap: 6px; align-items: center; }
-.bb-dotrow { display: flex; gap: 2px; align-items: center; }
-.bb-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.4); display: inline-block; }
+.bb-sb-top { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; gap: 5px; min-width: 0; }
+.bb-sb-team { font-size: 11px; font-weight: 800; opacity: 0.85; white-space: nowrap; }
+.bb-sb-team.is-you { color: #178A7A; }
+/* Runs: >= 18px, per the spec's own probed floor (`hud-legible`). R12 item 1: "increase the font
+ * size a little bit" - runs, the B/S/O row labels and the inning each go up ~2px. */
+.bb-sb-runs { font-size: 21px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.bb-sb-dash { opacity: 0.45; font-weight: 400; font-size: 13px; }
+.bb-sb-inning { font-size: 14px; font-weight: 700; white-space: nowrap; margin-left: auto; padding-left: 6px; }
+
+.bb-sb-count { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; gap: 2px; }
+.bb-sb-row { display: flex; align-items: center; gap: 5px; }
+.bb-sb-label { font-size: 13px; font-weight: 800; opacity: 0.8; width: 10px; text-align: center; }
+.bb-dotrow { display: flex; gap: 3px; align-items: center; }
+/* Dots: >= 10px, per the spec's own probed floor (`hud-legible`); the label beside each row
+ * carries the meaning too, never colour alone (root CLAUDE.md's colorblind rule). R12 item 1:
+ * Matt, on v871: "the outs should be red dots, that's important." Outs move to the palette's
+ * vermilion (`#E0532F`, root CLAUDE.md's colorblind palette) - the same hex strikes already used,
+ * which balls and strikes KEEP (the spec's own words: "balls and strikes keep their colours").
+ * Strikes and outs now share one hue; that is safe here specifically because each row ALREADY
+ * carries its own letter beside the dots (R8, the colorblind rule's non-colour half), so the two
+ * rows are told apart by their "S"/"O" label, never by which red they happen to share. */
+.bb-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); display: inline-block; }
 .bb-dot.is-on.bb-dot-b { background: #1F5FA8; border-color: rgba(0,0,0,0.5); }
-.bb-dot.is-on.bb-dot-s { background: #E0532F; border-color: rgba(0,0,0,0.5); }
-.bb-dot.is-on.bb-dot-o { background: #e9eef6; border-color: rgba(0,0,0,0.5); }
-.bb-hud-bases { width: 26px; height: 26px; flex: 0 0 26px; }
-.bb-bases-svg { width: 18px; height: 18px; }
+.bb-dot.is-on.bb-dot-s { background: #F2B705; border-color: rgba(0,0,0,0.5); }
+.bb-dot.is-on.bb-dot-o { background: #E0532F; border-color: rgba(0,0,0,0.5); }
+
+/* R12 item 1: the diamond moves beside the count (grid column 2) and grows to ~1.6x (24px -> 38px,
+ * 1.583x - "about 1.6x", the spec's own word). `align-self: center` (was `flex-start`) centres it
+ * against the now-taller count column instead of pinning it to the top, which is what actually
+ * reads as "bigger and to the right" rather than "bigger and floating high". */
+.bb-sb-diamond { grid-column: 2; grid-row: 2; width: 38px; height: 38px; align-self: center; }
+.bb-bases-svg { width: 38px; height: 38px; }
 .bb-bases-svg rect { fill: none; stroke: #fff; stroke-width: 1.2; }
 .bb-bases-svg rect.is-on { fill: #178A7A; stroke: #12181f; }
-.bb-hud-batter { margin-left: auto; font-size: 11px; opacity: 0.85; white-space: nowrap; }
 
 .bb-field-wrap {
   flex: 1 1 auto;
   min-height: calc(28 * var(--bb-fh-unit, 1px));
   position: relative;
   overflow: hidden;
-  background: #3f6b34;
+  /* R1: what shows for the frame or two before the scene's first render - the sky's own horizon
+     over the grass, so the gap reads as the stadium arriving rather than as a green error. */
+  background: linear-gradient(#9cc8ea 0%, #d9ecf8 46%, #3f8f3a 54%, #3f8f3a 100%);
 }
-.bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* R1 (docs/BASEBALL-3D-BUILD.md section 9): the two canvases SWAPPED. The WebGL canvas draws the
+ * whole stadium now, so it is the bottom layer; the 2-D canvas above it carries only the
+ * strike-zone box and the landing-marker label, projected from the world through whichever camera
+ * is live. Before R1 it was the other way round: the 2-D canvas held the painted backdrop and the
+ * WebGL canvas held two figures over it. Neither ever intercepts touch. */
+.bb-actor-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; pointer-events: none; }
+.bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; pointer-events: none; }
+/* R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7", item 6): a frozen copy of the scene's own last
+ * rendered frame (both canvases above, composited together - `_showCrossfadeSnapshot` in ui.js),
+ * painted over them for the half-inning swap instead of letting them fade to `.bb-root`'s own flat
+ * page background (Matt: "a flat green frame... with 'Side retired' over it"). Sits above every
+ * other field-band element (`.bb-pop` 3, `.bb-diamond` 4, `.bb-homerun` 5) so it genuinely covers
+ * the whole scene through the swap, not just the two canvases. Opacity only, `.is-on` toggled by
+ * JS - the CSS transition is what makes ui.js's own hide (once the NEW half has painted) a fade
+ * rather than a cut, the same `var(--gh-dur-mid)` duration the rest of the swap already uses. */
+.bb-crossfade-snap {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  z-index: 6; pointer-events: none; opacity: 0;
+  transition: opacity var(--gh-dur-mid, 200ms) ease;
+}
+.bb-crossfade-snap.is-on { opacity: 1; }
+/* Stage 1 dev-only 3D preview (_open3DCheck, inside the Frames panel): the real backdrop and the
+ * two idle figures, in the panel's own small canvas - never reachable without the dev profile. */
+.bb-dev3d-wrap { position: relative; width: 320px; height: 342px; max-width: 100%; margin: 8px auto; border-radius: 8px; overflow: hidden; background: #1c1c1c; }
+.bb-dev3d-err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; text-align: center; padding: 8px; }
+
+/* R3 (docs/BASEBALL-3D-BUILD.md section 9): THE DIAMOND WIDGET. Fixed geometry, top-right of the
+ * field band, 8px inset - opacity ONLY toggles it (ui.js's `_setDiamondVisible`), never layout, so
+ * it never moves anything else. Four cells (HOME/1B/2B/3B, `basesSvg`'s own left/right convention
+ * carried over - first left, third right, seen from behind the plate) and up to
+ * `DIAMOND_DOT_COUNT` moving dots (a batter plus up to three existing runners, the most one play
+ * ever has in motion at once). */
+.bb-diamond {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 84px;
+  height: 84px;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity var(--gh-dur-mid, 200ms) ease;
+}
+.bb-diamond.is-visible { opacity: 1; }
+/* The cell itself stays UNROTATED - only its own `-shape` child (the diamond look) rotates. A
+ * `position:absolute` child of a ROTATED ancestor is carried along that rotation when painted (it
+ * does not just inherit the ancestor's coordinate system, the whole painted box swings through the
+ * rotation about the ancestor's centre), so a label that rotated along with its cell drifted off
+ * centre - for the rightmost cell (3B) enough to clip a few px past the viewport's own right edge
+ * at this screen's narrowest width (393px). Found by measuring the real getBoundingClientRect, not
+ * by eye. Keeping the cell unrotated and centring the label/number with ordinary flex centring
+ * inside it is what a still screenshot cannot show is correct without that measurement. */
+.bb-diamond-cell {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* R6 (docs/BASEBALL-3D-BUILD.md section 9, "R6"): seen from BEHIND HOME PLATE (looking out at the
+ * mound, the reference game's own view), first base is on the RIGHT and third on the LEFT - this
+ * widget had them swapped from R3 on (Matt's v865 recording, item 4). `DIAMOND_PCT` in ui.js is
+ * the SAME swap, one layer down (the moving dot's own coordinates, not derived from this CSS - see
+ * its own header) - both had to move together or the dot would slide to the wrong corner. */
+.bb-diamond-cell[data-cell="home"] { left: 50%; top: 88%; }
+.bb-diamond-cell[data-cell="1b"]   { left: 88%; top: 50%; }
+.bb-diamond-cell[data-cell="2b"]   { left: 50%; top: 12%; }
+.bb-diamond-cell[data-cell="3b"]   { left: 12%; top: 50%; }
+.bb-diamond-cell-shape {
+  position: absolute;
+  inset: 0;
+  transform: rotate(45deg);
+  background: rgba(10, 16, 10, 0.6);
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
+}
+.bb-diamond-cell.is-on .bb-diamond-cell-shape { background: #ffce3a; border-color: #12181f; }
+.bb-diamond-cell span, .bb-diamond-cell b {
+  position: relative;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+  white-space: nowrap;
+}
+.bb-diamond-cell span { position: absolute; top: -14px; }
+.bb-diamond-cell b[data-role="num"]:empty { display: none; }
+.bb-diamond-cell.is-on span, .bb-diamond-cell.is-on b { color: #12181f; }
+.bb-diamond-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #E0532F;
+  border: 1.5px solid #12181f;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
 .bb-lines {
   position: absolute;
   left: 50%;
@@ -211,37 +667,77 @@
   gap: 4px;
   pointer-events: none;
   text-align: center;
+  /* R7 item 6: an explicit z-index, ABOVE `.bb-crossfade-snap` (6). Before that element existed
+   * this had none and it never mattered - `.bb-field-canvas` (z-index 2) already painted "above"
+   * it by the same stacking rule, but that canvas is mostly `clearRect`-transparent outside its own
+   * drawn zone box, so Line 1's own pixels (down at `bottom: 14%`) were never actually covered.
+   * `.bb-crossfade-snap` is NOT transparent - it is the whole scene, opaque - so without this it
+   * would silently hide "Side retired" for the exact stretch of the swap it has to stay lit through
+   * (`_onEngineEvent`'s 'halfInningEnd' sets it BEFORE `_crossFadeSwap` ever runs, and it is cleared
+   * only AFTER `_crossFadeSwap` resolves - `.bb-lines` is deliberately never in `_crossFadeSwap`'s
+   * own `.bb-fading` list, so it must out-rank whatever covers the scene beneath it). */
+  z-index: 7;
 }
 /* The big word (Early / Late / Perfect / Nice / Hung). One reserved element, empty between
  * beats; rises and fades on transform/opacity only. Matt, 2026-09-15: "They should be big and on
  * the screen, not in tiny text on a line somewhere." Shape rides with the word (chevron, star) so
- * the color is never the only cue. */
+ * the color is never the only cue.
+ * R4 (docs/BASEBALL-3D-BUILD.md section 9): `.bb-pop` is now a small flex column (word + two lines
+ * under it) instead of one text element, and its `left`/`top` are set from JS every time it shows
+ * (`_positionPop`, projected from the batter's head through the live camera) - the 50%/26% below
+ * is only the pre-first-pop fallback, never read once a pitch has crossed. The whole block is
+ * CENTRED on that projected point (`translate(-50%, -50%)`, same rule `.bb-homerun` uses below),
+ * not top-anchored to it - the rise/fall keyframes add their own small offset on top via calc(). */
 .bb-pop {
   position: absolute;
   left: 50%;
   top: 26%;
-  transform: translate(-50%, 0);
-  font-size: 44px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  color: #fff;
-  -webkit-text-stroke: 1.5px #111;
-  text-shadow: 0 3px 0 #111, 0 0 14px rgba(0,0,0,0.55);
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   z-index: 3;
 }
+.bb-pop-word {
+  font-size: 44px;
+  font-weight: 900;
+  font-style: italic;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #fff;
+  -webkit-text-stroke: 1.5px #111;
+  text-shadow: 0 3px 0 #111, 0 0 14px rgba(0,0,0,0.55);
+}
+/* R4: the pitch line (`Fastball 84 mph`) and the swing line (`Swing and a miss`, ...) - the pop's
+ * own two lines, moved out of `.bb-line1`/`.bb-line2` at the band's bottom (those go empty on
+ * every pitch now) so they travel WITH the word wherever `_positionPop` puts it. `:empty` collapses
+ * whichever one a caller left blank (a pickoff's plain Out/Safe pop has neither) so the gap above
+ * does not leave a visible blank line. */
+.bb-pop-line {
+  min-height: 15px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 15px;
+  color: #fff;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 6px rgba(0,0,0,.6);
+}
+.bb-pop-line:empty { display: none; }
 .bb-pop.is-on { animation: bb-pop-rise 1800ms ease-out forwards; }
-.bb-pop.is-perfect, .bb-pop.is-nice { color: #ffce3a; }
-.bb-pop.is-hung { color: #cfd6e2; }
+.bb-pop.is-perfect .bb-pop-word, .bb-pop.is-nice .bb-pop-word { color: #ffce3a; }
+/* STAGE 8 (docs/BASEBALL-3D-BUILD.md section 8, row 6): .bb-pop.is-hung removed - a release past
+ * the meter now pops with kind 'late' (v_hung's own word became "Late"/"Tarde"), which reads in
+ * the same default white as every other non-gold word (the (right-arrow) chevron is the cue, not a
+ * colour); nothing sets kind 'hung' on this element any more. */
 @keyframes bb-pop-rise {
-  0%   { opacity: 0; transform: translate(-50%, 8px) scale(0.85); }
-  12%  { opacity: 1; transform: translate(-50%, 0) scale(1.06); }
-  20%  { transform: translate(-50%, 0) scale(1); }
-  75%  { opacity: 1; transform: translate(-50%, -6px); }
-  100% { opacity: 0; transform: translate(-50%, -12px); }
+  0%   { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.85); }
+  12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+  20%  { transform: translate(-50%, -50%) scale(1); }
+  75%  { opacity: 1; transform: translate(-50%, calc(-50% - 6px)); }
+  100% { opacity: 0; transform: translate(-50%, calc(-50% - 12px)); }
 }
 @keyframes bb-pop-hold { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
@@ -258,6 +754,51 @@
 }
 .bb-line2 { font-size: 11px; font-weight: 700; opacity: 0.92; }
 
+/* R4 (docs/BASEBALL-3D-BUILD.md section 9): HOME RUN. Fixed geometry - a reserved spot centred in
+ * the field band, opacity/transform only, so nothing else in the band ever moves when it shows.
+ * `.is-on` is toggled by `_showHomerun`/`_hideHomerun`; the confetti itself is drawn on the 2-D
+ * overlay canvas (`_drawConfetti`), never here - this element is only ever the word and the strip. */
+.bb-homerun {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 5;
+  white-space: nowrap;
+}
+.bb-homerun.is-on { opacity: 1; }
+.bb-homerun-word {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #ffce3a;
+  -webkit-text-stroke: 1.5px #16240f;
+  text-shadow: 0 3px 0 #16240f, 0 0 18px rgba(0,0,0,0.6);
+  transform: scale(0.6);
+  animation: bb-homerun-scale 300ms ease-out forwards;
+}
+@keyframes bb-homerun-scale {
+  0%   { transform: scale(0.6); }
+  100% { transform: scale(1); }
+}
+.bb-homerun-strip {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 6px rgba(0,0,0,.6);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The word and strip still show - only the scale-in (and the overlay's own confetti/fire
+   * trail/contact burst, gated in JS) are withheld. */
+  .bb-homerun-word { animation: none; transform: scale(1); }
+}
+
 .bb-strip {
   height: 108px;
   min-height: 108px;
@@ -269,6 +810,25 @@
       rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 5px),
     rgba(6,10,6,0.5);
   border-top: 1px solid rgba(0, 0, 0, 0.65);
+  /* Carries the opacity transition the top-of-file `.bb-hud, .bb-strip, ...` rule already set
+     (a later same-specificity rule replaces the whole `transition` shorthand, not just the
+     properties it names, so opacity has to be repeated here or the cross-fade loses it) plus the
+     compact-mode height/flex-basis change, inert during the real swap - see the comment below. */
+  transition: opacity var(--gh-dur-mid, 200ms) ease, flex-basis var(--gh-dur-mid, 200ms) ease, height var(--gh-dur-mid, 200ms) ease;
+}
+/* R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 5): the BATTING strip - Matt's "the type of
+ * pitch is way too prominent" - shrinks from the 108px selector to a 32px row of small chips; the
+ * freed 76px goes to `.bb-field-wrap` (flex:1 auto). This is a DELIBERATE break of BB-3b's "nothing
+ * moves between states" rule for this one band - see `_paintStrip`'s own header for why. Pitching
+ * is untouched (`.bb-strip` alone, no modifier, stays 108px/92px tiles). The `transition` above is
+ * inert during the actual swap (the class flips while the band sits at opacity 0 behind the
+ * crossfade snapshot - `_sizeCanvas` is called synchronously in that same window, never mid-fade
+ * visibly) - it exists only so a stray external re-render cannot make this band SNAP. */
+.bb-strip.bb-strip--compact {
+  height: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  padding: 4px 6px;
 }
 /* BB-3b commit 6: one row of 8 fixed tiles, both states (handoff "Numbers to carry": 44 wide, 92
  * tall, 1px gaps) - `flex:1` rather than a literal 44px so the row always fills the strip's own
@@ -319,6 +879,40 @@
 .bb-pitch-tile.is-ball { border-bottom: 2px solid #1F5FA8; }
 .bb-pitch-tile.is-ball .bb-pitch-mark { color: #1F5FA8; }
 
+/* R8 (item 5): the BATTING strip's own compact chips - one row, code + mph, 11px text (the docs/
+ * BUILDING-A-GAME.md Part 0 floor, not shrunk further). Same 8-across, gap-1px, flex:1 rule as
+ * `.bb-strip-tiles` so a narrower/wider phone still gets 8 equal chips. */
+.bb-strip-chips {
+  display: flex;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+}
+.bb-pitch-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 2px;
+  overflow: hidden;
+}
+.bb-pitch-chip.is-empty { background: rgba(255,255,255,0.03); border-style: dashed; }
+.bb-chip-code { font-size: 11px; font-weight: 900; white-space: nowrap; }
+.bb-chip-mph { font-size: 11px; opacity: 0.8; white-space: nowrap; }
+.bb-chip-mark { font-size: 11px; line-height: 1; }
+/* Colorblind-safe (root CLAUDE.md): hue AND shape both mark ball vs strike - never hue alone. */
+.bb-pitch-chip.is-strike { border-bottom: 2px solid #E0532F; }
+.bb-pitch-chip.is-strike .bb-chip-mark { color: #E0532F; }
+.bb-pitch-chip.is-ball { border-bottom: 2px solid #1F5FA8; }
+.bb-pitch-chip.is-ball .bb-chip-mark { color: #1F5FA8; }
+
 .bb-control {
   height: 172px;
   min-height: 172px;
@@ -346,27 +940,77 @@
   touch-action: none;
   overflow: hidden;
 }
-/* The sweet-spot / strike-zone bar: a horizontal band across the pad's own vertical centre
- * representing the plate's lateral span, so dragging reads as moving a bat/aim point along a
- * real zone rather than pushing a bare dot around an empty square. */
-.bb-pad-zone {
+/* R2 (docs/BASEBALL-3D-BUILD.md section 9): THE 2-D PAD. Same 159px square, same place, same
+ * fixed geometry - what changed is that the marker moves in BOTH axes and the drawn furniture is
+ * a zone SQUARE with a centre crosshair instead of the old lateral bar. `.bb-pad-zone`'s bar,
+ * `.bb-pad-sweet` and `.bb-pad-steerarrow` are deleted with the 1-D aim and the steering they
+ * belonged to. The box is drawn at the fraction of the pad's travel the strike zone actually
+ * occupies (|u| <= 1 of PAD_TRAVEL in ui.js: 1/1.6 laterally, 1/1.4 vertically while pitching -
+ * the batting travel is 1/1.5 both ways), so what the marker is inside on the pad is what the
+ * cursor is inside in the world. */
+.bb-pad-box {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  top: 42%;
-  height: 16%;
+  left: 50%;
+  top: 50%;
+  /* 90% of the pad (the marker's own travel, +-45%) divided by the pitching travel: 0.90/1.6
+   * across and 0.90/1.4 up. `[data-mode="batting"]` below is the batting travel's own 0.90/1.5. */
+  width: 56%;
+  height: 64%;
+  transform: translate(-50%, -50%);
   border: 2px solid rgba(255,255,255,0.5);
   border-radius: 3px;
 }
-.bb-pad-sweet {
+.bb-pad[data-mode="batting"] .bb-pad-box { width: 60%; height: 60%; }
+.bb-pad-cross {
   position: absolute;
-  top: 50%;
   left: 50%;
-  width: 34px;
-  height: 6px;
-  transform: translate(-50%, -50%);
-  background: #178A7A;
-  border-radius: 3px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255,255,255,0.45), rgba(255,255,255,0.45)) center/100% 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.45), rgba(255,255,255,0.45)) center/1px 100% no-repeat;
+}
+/* The head row: two fixed tiles saying what a TAP on the pad cycles (the batting mode, or the
+ * selected pitch). Two tiles either way, always the same height, so neither state reflows the
+ * other - `pointer-events: none` because the whole pad, this row included, is the drag surface. */
+.bb-pad-head {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 24px;
+  display: flex;
+  gap: 1px;
+  pointer-events: none;
+  z-index: 3;
+}
+/* R4 (docs/BASEBALL-3D-BUILD.md section 9): "the batting mode toggle gets the strip's tile
+ * styling" - the same bordered, rounded look `.bb-pitch-tile` (the strip below) already has,
+ * at this row's own unchanged 24px height (fixed geometry - only the SURFACE changed, never the
+ * size or position of anything in this band). */
+.bb-pad-tile {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.bb-pad-tile.is-sel {
+  color: #16240f;
+  background: #ffce3a;
+  border: 2px solid #16240f;
+  font-weight: 900;
 }
 .bb-pad-marker {
   position: absolute;
@@ -378,19 +1022,6 @@
   background: #ffce3a;
   border: 2px solid #16240f;
   z-index: 2;
-}
-/* Break-direction arrow (spec section 8): shown only while a curveball/slider is in flight, from
- * release to plate crossing - see ui.js's _paintSteerArrow. Positioned centered on the pad; JS
- * only ever toggles display and flips it horizontally (scaleX) toward the current steer side. */
-.bb-pad-steerarrow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 22px;
-  color: #ffce3a;
-  z-index: 3;
-  pointer-events: none;
 }
 
 .bb-actions {
@@ -416,6 +1047,25 @@
   padding: 2px;
 }
 .bb-slot.is-empty { background: rgba(255,255,255,0.02); }
+/* RA (docs/BASEBALL-3D-BUILD.md section 9): the three wells are live buttons now. Their SIZE and
+ * POSITION are untouched - fixed geometry, the rule this band exists to hold - and only their
+ * surface changes: a live well is solid-bordered and readable, a disabled one keeps the dashed,
+ * dim placeholder look it has always had. ARMED adds the hub's standing selection accent
+ * (#ffce3a, root CLAUDE.md) AND a filled circle in front of the label (`_paintActionSlots`), so
+ * the armed state is never carried by colour alone. */
+.bb-slot.is-live {
+  border-style: solid;
+  border-color: rgba(255,255,255,0.32);
+  background: rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.92);
+  touch-action: manipulation;
+}
+.bb-slot.is-live:active { background: rgba(255,255,255,0.18); }
+.bb-slot.is-armed {
+  border-color: #ffce3a;
+  color: #ffce3a;
+  background: rgba(255,206,58,0.18);
+}
 
 /* The Swing/Throw control: one canvas draws BOTH the progress ring and the fill button
  * (`ring.js`, ported from the mocks) - never a CSS-colored button overlapping a separate SVG
@@ -480,6 +1130,9 @@
   border-radius: 14px;
   padding: 24px;
   min-width: 240px;
+  max-width: 320px;
+  max-height: 85vh;
+  overflow-y: auto;
   text-align: center;
   position: relative;
 }

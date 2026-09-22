@@ -58,12 +58,23 @@ const SUITES = [
   { file: 'players-agg.test.mjs' },
   { file: 'test-leaderboard-rank.mjs' },
   { file: 'favorites.test.mjs' },
+  { file: 'test-launcher-sort.mjs' },
   { file: 'test-new-badge.mjs' },
   { file: 'test-bug-report.mjs' },
   { file: 'test-admin-config.mjs' },
   { file: 'test-messages.mjs' },
   { file: 'test-career-sync.mjs' },
+  // R15-A: the career loop's own rules (pure, no engine) plus its persistence round trip against
+  // the same fake-boot seam test-career-sync.mjs uses. Node, no browser, a few seconds.
+  { file: 'test-baseball-career.mjs' },
+  { file: 'test-hoops4-mp.mjs' },
   { file: 'baseball/js/test.js' },
+  // R2 (docs/BASEBALL-3D-BUILD.md section 9): `test-baseball-ring.mjs` was DELETED here. It existed
+  // to prove the pitch meter's drawn Nice zone agreed with `flyPitch`'s own `wasNice`, and R2
+  // deleted the meter, the Nice zone and `wasNice` together - there is no mechanic left for it to
+  // check. The button it drew is still pinned at 137px by `test-baseball-device.mjs`.
+  // (Still true and still outside any baseball stage's scope: `test-baseball-actors.mjs` is not
+  // registered here despite root CLAUDE.md's tooling table saying its node half is.)
   { file: 'test-stats-corrections.mjs' },
   { file: 'test-i18n-strings.mjs' },
   { file: 'test-emoji.mjs' },

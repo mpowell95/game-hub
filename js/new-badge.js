@@ -46,16 +46,35 @@ export function daysSinceRelease(released, now = Date.now()) {
   return Math.floor((now - ms) / DAY_MS);
 }
 
+/** WHEN this game was released, in epoch ms, or null when nothing says.
+ *
+ *  Two sources, and the order matters. The registry's own `released` date WINS whenever it is
+ *  present: that is the real release day, written by the person who shipped it.
+ *
+ *  `liveAtMs` is the fallback, and it exists because of a hole this feature shipped with. Since the
+ *  admin control page landed, `devOnly` is only a DEFAULT - Matt can release a game to everyone
+ *  from inside the app, with no commit and therefore with no chance to add a `released` date. Such
+ *  a game would go live for the whole family wearing no New pill at all, which is the one moment
+ *  the pill exists for. `js/admin-config.js` already stamps `at` on every override write, so the
+ *  caller passes that in and a game released from the app announces itself exactly like one
+ *  released by a commit. Still no storage and no clock of its own: this module stays a pure
+ *  read-time transform over values it is handed. */
+export function releaseMsOf(game, liveAtMs = 0) {
+  const coded = parseReleaseDate(typeof game === 'string' ? game : (game && game.released));
+  if (coded !== null) return coded;
+  return Number.isFinite(liveAtMs) && liveAtMs > 0 ? liveAtMs : null;
+}
+
 /** Is this GAMES entry inside its New window? Accepts the whole entry (or a bare date string) so
  *  call sites read as `isNewGame(g)`.
  *
  *  A FUTURE release date counts as new rather than as "not yet": the card only exists in the
  *  launcher at all once the game is registered, and a device whose clock runs slow shouldn't be
  *  the one player who misses the announcement. */
-export function isNewGame(game, now = Date.now()) {
-  const released = typeof game === 'string' ? game : (game && game.released);
-  const days = daysSinceRelease(released, now);
-  return days !== null && days < NEW_DAYS;
+export function isNewGame(game, now = Date.now(), liveAtMs = 0) {
+  const ms = releaseMsOf(game, liveAtMs);
+  if (ms === null) return false;
+  return Math.floor((now - ms) / DAY_MS) < NEW_DAYS;
 }
 
-export default { NEW_DAYS, parseReleaseDate, daysSinceRelease, isNewGame };
+export default { NEW_DAYS, parseReleaseDate, daysSinceRelease, releaseMsOf, isNewGame };

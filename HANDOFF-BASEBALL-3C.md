@@ -1,5 +1,13 @@
 # HANDOFF: Baseball BB-3c, real 3D rigged characters
 
+> **Superseded 2026-09-19 by `docs/BASEBALL-3D-BUILD.md` and by what actually shipped.** This file
+> is the plan written before the build; that one is the record the sub-agent build sessions
+> actually worked from, and it is more detailed and more accurate about the real files (the Kenney
+> pack, the rig map, the pose-authoring loop, the stage-by-stage build). Where the two disagree,
+> `docs/BASEBALL-3D-BUILD.md` wins. The Mixamo route this file's own section 1 sketches was NOT
+> taken. Kept for its rationale and its R1/R2/R3 numbers, which still bind; read the newer file
+> first for anything about the actual code.
+
 Written 2026-09-15 for the build session. Matt chose this over sprite sheets and over a
 2D skeletal rig, in these words: *"C definitely."* The sixteen-frame sprite path shipped in
 BB-3b (v842) is what this replaces.

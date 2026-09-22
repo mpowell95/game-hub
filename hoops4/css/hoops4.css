@@ -1,0 +1,317 @@
+/* hoops4/css/hoops4.css - CONNECT 4 HOOPS.
+ *
+ * EVERY RULE IS DESCENDANT-SCOPED UNDER .h4-root. A prefix alone is not isolation, and a module
+ * stylesheet is never removed once injected - it lives in the shared document.head for the life
+ * of the page, so a collision would be permanent for that session (Mancala's discipline).
+ *
+ * TWO SKINS ON PURPOSE (skeeball's precedent, root CLAUDE.md's admin/setup pattern): the SETUP
+ * screen and the how-to sheet belong to the HUB, not the machine - hub-matching light tokens
+ * (the --h4s-* block below) with a :root.gh-dark override, built on css/ui.css's .gh-* primitives
+ * (.gh-card, .gh-btn, .gh-overlay/.gh-modal). Matt: the old setup screen "looks nothing like the
+ * others. it's not on the theme or on brand of the game hub at all." The PLAY screen keeps its
+ * own warm dark arcade look (the --h4-* block below) in BOTH hub themes, unchanged - that is
+ * in-game art, not hub chrome, exactly like Ball Run/Hill Climb/Pinball/Skeeball's own split.
+ *
+ * NOTHING HERE SCROLLS, and `overflow-y: auto` would not satisfy that rule - it is the most
+ * common way of breaking it, because it makes a screen that does not fit LOOK finished.
+ * `node check-no-scroll.mjs` is the safety net, not a scrollbar.
+ */
+
+.h4-root {
+  /* --- the PLAY screen's own dark arcade look - unchanged, both hub themes ------------------ */
+  --h4-red: #e8463f;
+  --h4-yellow: #ffce3a;
+  --h4-ink: #f3ece1;
+  --h4-dim: #9b8f7e;
+  --h4-panel: #1d1f24;
+  --h4-edge: #33373f;
+  --h4-bg: #15171c;
+
+  /* --- the SETUP/HOW-TO screens' hub skin - light by default, flipped below ----------------- */
+  --h4s-ink: #1d2430;
+  --h4s-muted: #5b6675;
+  --h4s-surface: #ffffff;
+  --h4s-surface-2: #f2f5f9;
+  --h4s-line: #d9e0ea;
+  --h4s-bg: #eef2f7;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1;                 /* under the hub's floating back button, like Pinball/Skeeball */
+  overflow: hidden;
+  background: var(--h4-bg);
+  color: var(--h4-ink);
+  font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Rapid taps on iOS Safari otherwise start a text-selection gesture instead of a second tap.
+     These do NOT inherit the way you would expect, so the * descendant selector is the fix. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+.h4-root * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root.gh-dark .h4-root {
+  --h4s-ink: #e8edf5;
+  --h4s-muted: #9aa7b8;
+  --h4s-surface: #161d28;
+  --h4s-surface-2: #1e2734;
+  --h4s-line: #2c3746;
+  --h4s-bg: #10151d;
+}
+
+/* css/ui.css's --gh-surface/--gh-surface-2/--gh-ink/--gh-muted fall back to --hub-* (defined by
+   css/hub.css, the HUB SHELL only - never loaded by this game's own standalone index.html), so
+   .gh-card/.gh-btn would stay locked to their light fallback on the standalone page even in dark
+   mode. Overriding them here, scoped to the setup screen and its overlays only, points every
+   primitive at the SAME --h4s-* tokens above, so the hub skin flips correctly whether this game
+   is mounted or opened on its own. The dark PLAY screen's own .gh-btn usage (the game-over card)
+   is untouched - it lives outside this scope. */
+.h4-root .h4-setup,
+.h4-root .gh-overlay {
+  --gh-surface: var(--h4s-surface);
+  --gh-surface-2: var(--h4s-surface-2);
+  --gh-ink: var(--h4s-ink);
+  --gh-muted: var(--h4s-muted);
+}
+
+/* --- setup: a HUB SCREEN, built on css/ui.css's .gh-card/.gh-btn --------------------------- */
+.h4-root .h4-setup {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.8vh, 14px);
+  padding: 16px 18px calc(16px + env(safe-area-inset-bottom));
+  background: var(--h4s-bg);
+  color: var(--h4s-ink);
+  text-align: center;
+}
+.h4-root .h4-title {
+  margin: 0;
+  font: 800 clamp(20px, 6vw, 26px)/1.1 ui-sans-serif, system-ui, sans-serif;
+  color: var(--h4s-ink);
+}
+.h4-root .h4-tag { margin: 0; font-size: 13px; color: var(--h4s-muted); max-width: 34ch; }
+
+.h4-root .h4-card {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  /* .gh-card already supplies surface/border/radius/shadow/padding; only the layout of the two
+     rows inside it is local. */
+}
+.h4-root .h4-row { display: flex; flex-direction: column; gap: 8px; }
+.h4-root .h4-row-label {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--h4s-muted);
+}
+.h4-root .h4-opts { display: grid; gap: 8px; }
+.h4-root .h4-opts-4 { grid-template-columns: repeat(2, 1fr); }
+.h4-root .h4-opts-2 { grid-template-columns: repeat(2, 1fr); }
+.h4-root .h4-opt {
+  min-height: 44px;                    /* the UX floor's tap target */
+  padding: 0 var(--gh-sp-2, 8px);
+  font-size: 13px;
+}
+/* The selected option is marked by a BORDER, A WEIGHT AND A CHECKMARK - never colour alone
+   (Matt is red/green colorblind). */
+.h4-root .h4-opt.is-on {
+  border-color: var(--gh-accent, #1769d4);
+  box-shadow: inset 0 0 0 1px var(--gh-accent, #1769d4);
+  font-weight: 800;
+  color: var(--gh-accent, #1769d4);
+}
+.h4-root .h4-opt-check { margin-right: 4px; }
+.h4-root .h4-note { margin: 0; font-size: 11px; line-height: 1.5; color: var(--h4s-muted); }
+
+.h4-root .h4-play { width: min(420px, 100%); min-height: 48px; font-size: 16px; }
+.h4-root .h4-mp { width: min(420px, 100%); }
+.h4-root .h4-howto-link {
+  min-height: 44px;
+  background: none;
+  border: 0;
+  color: var(--h4s-muted);
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+/* --- play -------------------------------------------------------------------------------------- */
+.h4-root .h4-play-wrap {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+}
+/* IN FLOW, deliberately. The stage is flex:1 and the renderer fits the machine to whatever height
+   is left, so a bar above it can never cover the machine at any size - the same reason skeeball's
+   objective bar is in flow. Do not make this absolute. */
+.h4-root .h4-hud {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px 8px 76px;          /* 76px clears the hub's floating back button */
+  min-height: 38px;
+}
+.h4-root .h4-who { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; }
+.h4-root .h4-who.is-red { color: var(--h4-red); }
+.h4-root .h4-who.is-yellow { color: var(--h4-yellow); }
+.h4-root .h4-shots { font-size: 12px; color: var(--h4-dim); font-variant-numeric: tabular-nums; }
+
+.h4-root .h4-stage { position: relative; flex: 1 1 auto; min-height: 0; }
+/* An absolutely positioned canvas is a REPLACED element: inset:0 does NOT stretch it, which is
+   why render.js calls setSize(w, h, true) and sets the CSS size itself. */
+.h4-root .h4-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.h4-root .h4-swipe {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 52%;
+  touch-action: none;                  /* a swipe surface, not a tappable control */
+  background: transparent;
+}
+.h4-root .h4-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(6px);
+  margin: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.h4-root .h4-toast.is-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* --- the how-to sheet: a HUB SCREEN, css/ui.css's .gh-overlay/.gh-modal (skeeball's pause/
+   game-over precedent) - only the body paragraph is local, everything else is the primitive. --- */
+.h4-root .h4-sheet-body {
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--h4s-muted);
+  text-align: left;
+}
+
+/* --- the game-over card: stays on the PLAY screen's own dark arcade skin, both hub themes --- */
+.h4-root .h4-over {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(8, 9, 12, 0.72);
+  overscroll-behavior: contain;
+  z-index: 3;
+}
+.h4-root .h4-over-in {
+  position: relative;
+  width: min(420px, 100%);
+  background: var(--h4-panel);
+  border: 1px solid var(--h4-edge);
+  border-radius: 14px;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+  text-align: center;
+}
+.h4-root .h4-over-in h2 {
+  margin: 0 0 10px;
+  font: 700 19px/1.2 ui-sans-serif, system-ui, sans-serif;
+  color: var(--h4-yellow);
+}
+.h4-root .h4-again, .h4-root .h4-quit { width: 100%; min-height: 46px; margin-top: 8px; }
+.h4-root .h4-acc { margin: 0 0 14px; font-size: 14px; }
+.h4-root .h4-acc span { color: var(--h4-dim); font-size: 12px; }
+/* Every win/lose popup gets a close (X) top-right so it can be dismissed without a forced rematch. */
+.h4-root .h4-x {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 44px; height: 44px;
+  background: none;
+  border: 0;
+  color: var(--h4-dim);
+  font-size: 26px;
+  line-height: 1;
+}
+
+/* Reduced motion thins garnish; it never freezes the game. The ball keeps moving - a machine that
+   does not move is not a machine - and only the toast's slide is dropped. */
+@media (prefers-reduced-motion: reduce) {
+  .h4-root .h4-toast { transition: opacity 120ms linear; transform: translateX(-50%); }
+  .h4-root .h4-toast.is-on { transform: translateX(-50%); }
+}
+
+/* --- "Play a friend": a HUB SCREEN, on css/ui.css's .gh-overlay/.gh-modal ---------------------
+   The sheet lists games, so it is the one screen here that CAN overflow. `overscroll-behavior:
+   contain` on the scroller is not decoration: without it a flick that reaches either end keeps
+   going and pans the launcher underneath, so closing the sheet lands the player somewhere they
+   never chose (root CLAUDE.md's scroll rules). The page itself still never scrolls. */
+.h4-root .h4-mp-sheet { max-width: 420px; }
+.h4-root .h4-mp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 62vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.h4-root .h4-mp-sec h3 {
+  margin: 0;
+  font: 700 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--h4s-muted);
+}
+.h4-root .h4-mp-sub { margin: 4px 0 10px; font-size: 12px; line-height: 1.5; color: var(--h4s-muted); }
+.h4-root .h4-mp-row { display: flex; gap: 8px; }
+.h4-root .h4-mp-row .gh-btn { flex: 1 1 0; min-height: 46px; }
+.h4-root .h4-mp-note { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--h4s-muted); }
+.h4-root .h4-mp-note.is-warn { color: var(--h4s-ink); font-weight: 600; }
+.h4-root .h4-mp-code {
+  margin: 6px 0 10px;
+  font: 800 30px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .18em;
+  text-align: center;
+  color: var(--h4s-ink);
+}
+.h4-root .h4-mp-input { text-transform: uppercase; letter-spacing: .18em; font-weight: 700; }
+.h4-root .h4-mp-games { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.h4-root .h4-mp-game {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--h4s-line);
+  border-radius: 12px;
+  background: var(--h4s-surface-2);
+  color: var(--h4s-ink);
+  font: 600 14px/1.25 ui-sans-serif, system-ui, sans-serif;
+  text-align: left;
+  touch-action: manipulation;
+}
+/* A game waiting on YOU is marked by a bar, a weight and the words "Your move" - never by colour
+   alone (Matt is red/green colourblind, and the accent is only ever a second signal). */
+.h4-root .h4-mp-game.is-yours { border-color: var(--h4-yellow); border-left-width: 5px; }
+.h4-root .h4-mp-game.is-yours .h4-mp-state { font-weight: 800; color: var(--h4s-ink); }
+.h4-root .h4-mp-game.is-over { opacity: .62; }
+.h4-root .h4-mp-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.h4-root .h4-mp-state { font-size: 12px; font-weight: 600; color: var(--h4s-muted); white-space: nowrap; }

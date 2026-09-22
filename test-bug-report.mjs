@@ -254,6 +254,41 @@ ok('a very long reply is clamped, not rejected', bug.normalizeReply('x'.repeat(5
   eq('nothing to show is not an error', bug.visibleInInbox(null).length, 0);
 }
 
+// --- [KNOWN-BUG PROBE] A NEW REPORT BADGES THE LAUNCHER -------------------------------------------
+//
+// Matt, on a report filed 2026-09-09 and read on 2026-09-21: *"There was no notification/icon badge
+// telling me there was a new bug report. THAT's a bug."*
+//
+// It had been true since 2026-09-01. The launcher used to carry a "Bug reports" button wearing its
+// own count (`_paintInboxCount`); that button moved INSIDE the Messages screen and the count went
+// with it, so the count existed but only on a screen you had to already be on. `_paintInboxCount`
+// and its `[data-role="buginbox"]` lookup were left in js/hub.js and quietly paint nothing, which
+// is why reading the code was not enough to notice.
+//
+// THIS IS A TEXT CHECK, AND IT SAYS SO. The DOM halves need a browser (see this file's header), so
+// what is pinned here is the wiring a badge cannot exist without: the launcher's own badge painter
+// asks for the ADMIN count, and opening the inbox announces the change that clears it. A test that
+// can only read the file is still worth more than a convention nobody re-checks.
+{
+  const { readFileSync } = await import('node:fs');
+  const hub = readFileSync(new URL('./js/hub.js', import.meta.url), 'utf8');
+  const badge = hub.slice(hub.indexOf('async _paintReplyBadge('), hub.indexOf('_afterPaint(fn)'));
+  ok('the launcher badge painter reads the admin inbox count', badge.includes('adminUnreadCount'),
+    'js/hub.js _paintReplyBadge no longer asks bug-report-ui for adminUnreadCount');
+  ok('...and puts it on the button that opens the inbox', /badge\([^)]*this\.el\.messages[^;]*inbox/s.test(badge),
+    'the admin count is read but not summed onto the Messages button');
+  ok('...only on an allowlisted device, never on a profile name', badge.includes('isAdminDevice()'),
+    'the bug-report count must be gated on js/admin-config.js\'s allowlist');
+
+  const ui = readFileSync(new URL('./js/bug-report-ui.js', import.meta.url), 'utf8');
+  const open = ui.slice(ui.indexOf('export async function openBugInbox('));
+  const stamp = open.indexOf('writeSeenAt(');
+  ok('opening the inbox stamps it read', stamp > -1);
+  ok('...and announces it, so the badge clears without a reload',
+    stamp > -1 && open.slice(stamp, stamp + 800).includes("'gamehub:messages'"),
+    'openBugInbox stamps seenAt but nothing tells js/hub.js to repaint');
+}
+
 // =================================================================================================
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.log(`  - ${f}`); process.exit(1); }

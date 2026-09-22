@@ -5994,3 +5994,48 @@ deleted, and the rule that replaced it is pinned from BOTH ends so neither half 
 undone: a lob wedge into sand still runs under a yard, a driver into the same sand runs over six,
 the split is at least eightfold, greenside always runs less than fairway sand, both run far less
 than a fairway, and sand still does not bounce the ball.
+
+## The player report "driver not accurate swing" was the spray, and it was already gone (2026-09-21)
+
+One line, from HDJ, Inc. (8FKDC), filed **2026-09-10 01:52 UTC on v763**: *"driver not accurate
+swing."*
+
+**It is a report about the build it was filed on.** v763 still carried `blockSpray` - a random
+4.7-7.1 deg push ADDED to every over-swing no matter how the ball was struck, measured at the time
+at **0 of 4000 max-power drives finishing within 5 yds of the aim line**. Matt swept the same meter
+himself hours later and filed the identical complaint in his own words (*"why are you penalizing
+perfectly aimed shots???? If the dead center of the green aiming bar is hit - it SHOULD NOT be
+offline by 32 yards"*), and "Dead centre is dead straight, and nothing beats it for distance" above
+deleted the spray, its `seed` argument and the signed green-band distance loss the same day. That
+work reached `main` in **v839**; the reporter was on v763, two builds and four days short of it.
+
+**Re-measured on the LIVE engine, not on the working tree.** `golf/js/swing.js`, `clubs.js` and
+`shot.js` were fetched from `mpowell95.github.io/game-hub` (v873) and diffed against `main` first -
+byte-identical - so these are the numbers on the reporter's phone today. Driver, off a tee, no wind:
+
+| needle stop | 100 % power | top of the arc (120.6 %) |
+|---|---|---|
+| dead centre | **0.0 yds offline**, 215.0 carry | **0.0 yds offline**, 231.5 carry (250 total) |
+| a third of the way out of green | 3.4 | 15.8 |
+| the green band's edge | 5.9 | 22.4 |
+| the orange band's edge | 12.5 | 30.9 |
+| the end of the bar | 18.1 | 39.8 |
+
+Dead centre is 0.00 deg and a 1.000 distance multiplier at EVERY power. Nothing random is left in a
+struck ball: same swing, same result, every time.
+
+**What is left is the difficulty, and it is Matt's, deliberately.** The same sweep in frames, which
+is the number nobody had written down: the driver's green band is a **50 ms half-window (3.0 frames
+at 60 fps)** at 100 % power off a clean lie, against a lob wedge's 81 ms (4.8 frames), and it
+shrinks to **18 ms (1.1 frames)** at the top of the arc. So an ordinary 40-60 ms of timing error
+with a driver lands in orange - 6 to 18 yds offline - which is `ZONE_WOODS` (0.62, "Driver off the
+fairway shouldn't be super easy to hit") and `OVER_ZONE_LOSS` (0.64, picked by Matt on a slider)
+doing exactly what he asked them to do. **Neither was touched here.** If he ever wants the driver
+more forgiving those two constants are the lever, and it is his call, not a session's.
+
+**Nothing was changed in the game for this report.** The defect it describes was fixed eleven days
+before it was read, `golf/js/test.js` section 8c already guards it from both ends (*"a perfect
+strike is dead straight at the top of the arc"*, *"nothing beats a dead-centre strike for
+distance"*), and both probes pass. The five failures the golf suite reports on `main` today are all
+course data - Red Mesa's back-nine difficulty ordering, hole 3's rough, one card yardage - and none
+of them touch the swing.

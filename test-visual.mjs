@@ -39,7 +39,7 @@
 // pre-installed there) and stays out of the way on a laptop that hasn't opted in.
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync, rmSync, mkdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, rmSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -262,6 +262,31 @@ const MOTION = {
       await page.click('[data-action="fire-confirm"]');
     },
   },
+  minesweeper: {
+    // The blast is the whole reward for losing, and it is the class of thing a static check cannot
+    // see at all: the board screenshots identically a second later. A fragment is sampled rather
+    // than the fireball, because the fireball scales in place while the debris is the part that has
+    // to actually TRAVEL - the same distinction the cannonball probe above was written for.
+    what: 'debris flying outward when a mine goes off',
+    selector: '.ms-frag',
+    minMs: 500,
+    minTravelPx: 60,
+    async drive(page) {
+      const play = await page.waitForSelector('[data-act="play"]', { timeout: 8000 });
+      await play.click();
+      await page.waitForSelector('.ms-board .ms-c', { timeout: 8000 });
+      // The first tap is safe by design, and it also GENERATES the board - so the mine map only
+      // exists after it. Then hit a mine on purpose, which is the one input this probe is about.
+      await page.click('.ms-c[data-i="0"]');
+      await page.waitForTimeout(220);
+      const mine = await page.evaluate(() => {
+        const s = window.__msTest && window.__msTest.state();
+        return s ? s.mine.findIndex((m, i) => m && s.cell[i] === 0) : -1;
+      });
+      if (mine < 0) throw new Error('no hidden mine to detonate');
+      await page.click(`.ms-c[data-i="${mine}"]`);
+    },
+  },
   mancala: {
     // The sow IS the rule this page teaches - stones travelling one per pit around the board.
     // A still diagram of it is what the sheet this replaced already had, and nobody learned the
@@ -288,6 +313,37 @@ const MOTION = {
       await page.click('[data-action="howto"]');
     },
   },
+  // R4 (docs/BASEBALL-3D-BUILD.md section 9): the verdict pop, now anchored over the batter's head
+  // instead of a fixed band position. Unlike the three probes above, this one is not measuring
+  // TRAVEL (the batter's head barely moves between pitches - the pop is right to stay put over
+  // it) - it is measuring DURATION, the spec's own ask ("visible for at least 600ms"), so
+  // `minTravelPx: 0` keeps the harness's travel check a no-op here. `.bb-pop.is-on` is the exact
+  // class `_showPop`/its own timeout toggle, so the tracker's "element disappeared" stop condition
+  // fires at the real moment the pop actually hides, not a guess.
+  baseball: {
+    what: 'the verdict pop anchored over the batter',
+    selector: '.bb-pop.is-on',
+    minMs: 600,
+    minTravelPx: 0,
+    async drive(page) {
+      await page.click('.bb-play-btn').catch(() => {});
+      await page.waitForSelector('.bb-play', { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(300);
+      // Auto-tap READY the instant it is next offered, never SWING - the same seam
+      // test-baseball-device.mjs's r2-cadence probe uses. Every pitch then resolves as a plain
+      // called take and pops the verdict over the batter within a couple of seconds.
+      await page.evaluate(() => {
+        const inst = document.getElementById('baseball') && document.getElementById('baseball')._bbInstance;
+        if (!inst) return;
+        let handler = inst._onMainDown || null;
+        const fire = (fn) => { if (fn && inst.state && inst.state.actionLabel === 'act_ready') setTimeout(() => { if (handler === fn) fn(); }, 0); };
+        Object.defineProperty(inst, '_onMainDown', {
+          configurable: true, get() { return handler; }, set(fn) { handler = fn; fire(fn); },
+        });
+        fire(handler);
+      });
+    },
+  },
 };
 
 // --- PLAY: can a human actually play this game? ------------------------------------------------
@@ -309,6 +365,192 @@ const MOTION = {
 // A game with no probe is listed at the end of every run under "NEVER PLAYED BY ANYTHING". That
 // list is the honest state of this repo's coverage, and it should shrink.
 const PLAY = {
+  baseball: {
+    what: 'a real at-bat both ways: tap READY then SWING to bat, tap PITCH then drag the pad to pitch',
+    async run(page, cdp, tap) {
+      // baseball/js/ui.js's own dev-only test seam (window.__bbTest / window.__bbForceHalfNext) is
+      // gated behind `window.__bbDevForce`, read ONCE, at construction, by BaseballPlayScreen - the
+      // same flag test-baseball-device.mjs's own probes set. Harmless for every other game (nothing
+      // else reads this global); it only ever matters on this page, this probe.
+      await page.evaluate(() => { window.__bbDevForce = true; });
+
+      // Wires the real engine's own 'count'/'atBatEnd' events and the real `_showPop` call as the
+      // wait signals this probe drives on, rather than fixed sleeps - the same seam
+      // test-baseball-device.mjs's r2-cadence/actions-live probes already use.
+      const wire = () => page.evaluate(() => {
+        const inst = document.getElementById('baseball') && document.getElementById('baseball')._bbInstance;
+        if (!inst || !inst.game) return false;
+        window.__bbPlayEvents = [];
+        window.__bbPlayPops = [];
+        const origEvent = inst.game.onEvent;
+        inst.game.onEvent = (type, pl) => {
+          if (type === 'count' || type === 'atBatEnd') {
+            window.__bbPlayEvents.push({ type, verdict: pl.verdict || null, outcome: pl.outcome || null });
+          }
+          return origEvent(type, pl);
+        };
+        const origPop = inst._showPop.bind(inst);
+        inst._showPop = (word, kind, opts) => { window.__bbPlayPops.push(String(word)); return origPop(word, kind, opts); };
+        return true;
+      });
+      const mainBtnBox = () => page.$('[data-role="mainbtn"]');
+
+      // ---- BATTING: the human is always "away" and away bats the top of the inning first, so a
+      // real Play tap with nothing forced lands on a real batting turn - no seam needed for this half.
+      const play1 = await page.waitForSelector('.bb-play-btn', { timeout: 15000 }).catch(() => null);
+      if (!play1) return { ok: false, why: 'no .bb-play-btn on the setup screen' };
+      await tap(play1);
+      await page.waitForSelector('.bb-play', { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(400);
+      if (!(await wire())) return { ok: false, why: 'no ._bbInstance to drive after tapping Play' };
+
+      const readyUp1 = await page.waitForFunction(() => {
+        const inst = document.getElementById('baseball')._bbInstance;
+        return !!(inst && inst.state && inst.state.mode === 'batting' && inst.state.actionLabel === 'act_ready');
+      }, null, { timeout: 20000 }).then(() => true).catch(() => false);
+      if (!readyUp1) return { ok: false, why: 'never reached the first at-bat offering READY (batting)' };
+
+      // innerHTML, not textContent: the HUD's own ball/strike/out dots (`dots()`, ui.js) are
+      // marked by an `is-on` CLASS on an empty `<span>`, never by any text - a strike landing
+      // changes not one visible character of textContent, which a first draft of this probe
+      // learned the hard way (the count genuinely changed and this check still read "identical").
+      const hudBefore = await page.$eval('[data-role="hud"]', (el) => el.innerHTML).catch(() => '');
+      let mainBtn = await mainBtnBox();
+      if (!mainBtn) return { ok: false, why: 'no [data-role="mainbtn"] to tap READY' };
+      await tap(mainBtn);   // READY
+
+      const swingUp = await page.waitForFunction(() => {
+        const inst = document.getElementById('baseball')._bbInstance;
+        return !!(inst && inst.state && inst.state.actionLabel === 'act_swing');
+      }, null, { timeout: 8000 }).then(() => true).catch(() => false);
+      if (!swingUp) return { ok: false, why: 'tapped READY and the button never offered SWING' };
+
+      // Tapped the instant SWING is offered - miles early against the real pitch flight, so this
+      // is an honest swing-and-a-miss, not a synthetic one. A miss is exactly what the header above
+      // says is fine: the point is a real tap on the real button reaching the engine.
+      mainBtn = await mainBtnBox();
+      if (!mainBtn) return { ok: false, why: '[data-role="mainbtn"] disappeared before SWING could be tapped' };
+      await tap(mainBtn);   // SWING
+
+      const battedVerdict = await page.waitForFunction(() => window.__bbPlayEvents.length > 0, null, { timeout: 8000 }).then(() => true).catch(() => false);
+      if (!battedVerdict) return { ok: false, why: 'tapped SWING and no count/atBatEnd event ever fired from the engine' };
+      await page.waitForTimeout(250);
+      const battingEvent = await page.evaluate(() => window.__bbPlayEvents[0]);
+      const popsAfterBat = await page.evaluate(() => window.__bbPlayPops.length);
+      if (popsAfterBat < 1) return { ok: false, why: 'a verdict fired but _showPop never painted a word over the batter' };
+      const hudAfter = await page.$eval('[data-role="hud"]', (el) => el.innerHTML).catch(() => '');
+      if (hudAfter === hudBefore) return { ok: false, why: "the HUD reads identically before and after a real swing - nothing PLAYING could leave it unchanged" };
+
+      // R6 (baseball/CLAUDE.md): at the NEXT turn, exactly one figure stands in the batter's box -
+      // this at-bat's own batter-runner ('rb') must not still be visible from a play that has
+      // already ended.
+      const readyUp2 = await page.waitForFunction(() => {
+        const inst = document.getElementById('baseball')._bbInstance;
+        return !!(inst && inst.state && (inst.state.actionLabel === 'act_ready' || inst.state.actionLabel === 'act_pitch'));
+      }, null, { timeout: 15000 }).then(() => true).catch(() => false);
+      if (!readyUp2) return { ok: false, why: 'the game never reached the next turn after the swing resolved' };
+      await page.waitForTimeout(300);
+      const oneBatter = await page.evaluate(() => {
+        const inst = document.getElementById('baseball')._bbInstance;
+        const box = inst.actors.actors.batter.pivot.position;
+        const within = [];
+        for (const role of Object.keys(inst.actors.actors)) {
+          const a = inst.actors.actors[role];
+          if (!a || !a.pivot.visible) continue;
+          const d = Math.hypot(a.pivot.position.x - box.x, a.pivot.position.z - box.z);
+          if (d <= 4) within.push({ role, d });
+        }
+        return { within, rbVisible: !!(inst.actors.actors.rb && inst.actors.actors.rb.pivot.visible) };
+      });
+      if (oneBatter.rbVisible) return { ok: false, why: "'rb' is still visible at the next at-bat (R6)" };
+      if (oneBatter.within.length !== 1 || oneBatter.within[0].role !== 'batter') {
+        return { ok: false, why: `${oneBatter.within.length} figure(s) stand in the batter's box at the next at-bat, want exactly 1 (batter): ${oneBatter.within.map((w) => w.role).join(',') || 'none'}` };
+      }
+
+      // ---- PITCHING: a fresh mount, forced to the human's own pitching half through
+      // window.__bbForceHalfNext - read once, synchronously, inside _startGame(), so it has to be
+      // set before Play is tapped the SECOND time, on this fresh document (test-baseball-device.mjs's
+      // own pitch-drag probe uses this exact seam).
+      // BaseballPlayScreen reads `window.__bbDevForce` at CONSTRUCTION - the moment `init()` runs,
+      // during the reloaded page's own module script, well before this probe's next line gets a
+      // turn. A plain `page.evaluate()` after the reload lands too late (the constructor has
+      // already run by then); `addInitScript` is the one thing guaranteed to execute before any
+      // script the page itself runs, on the document this reload is about to create.
+      await page.addInitScript(() => { window.__bbDevForce = true; });
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 });
+      await page.waitForTimeout(300);
+      await page.evaluate(() => { window.__bbForceHalfNext = 'bottom'; });
+      const play2 = await page.waitForSelector('.bb-play-btn', { timeout: 15000 }).catch(() => null);
+      if (!play2) return { ok: false, why: 'no .bb-play-btn on the setup screen (second mount)' };
+      await tap(play2);
+      await page.waitForSelector('.bb-play', { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(400);
+      if (!(await wire())) return { ok: false, why: 'no ._bbInstance to drive after tapping Play (second mount)' };
+
+      const pitchUp = await page.waitForFunction(() => {
+        const inst = document.getElementById('baseball')._bbInstance;
+        return !!(inst && inst.state && inst.state.mode === 'pitching' && inst.state.actionLabel === 'act_pitch');
+      }, null, { timeout: 20000 }).then(() => true).catch(() => false);
+      if (!pitchUp) return { ok: false, why: "never reached the human's own pitching turn (window.__bbForceHalfNext not honored)" };
+
+      const idleThrown = await page.evaluate(() => {
+        const inst = document.getElementById('baseball')._bbInstance;
+        return !!(inst._lastThrow || inst._flightActive);
+      });
+      if (idleThrown) return { ok: false, why: 'a pitch was already in flight before PITCH was ever tapped' };
+
+      mainBtn = await mainBtnBox();
+      if (!mainBtn) return { ok: false, why: 'no [data-role="mainbtn"] to tap PITCH' };
+      await tap(mainBtn);   // PITCH - starts the 700ms wind-up; the pad is live through it
+
+      const pad = await page.$('[data-role="pad"]');
+      if (!pad) return { ok: false, why: 'no [data-role="pad"] to aim the pitch' };
+      const pb = await pad.boundingBox();
+      if (!pb) return { ok: false, why: '[data-role="pad"] has no bounding box' };
+      const sx = pb.x + pb.width * 0.5, sy = pb.y + pb.height * 0.5;
+      const tx = pb.x + pb.width * 0.78, ty = pb.y + pb.height * 0.22;
+      // A real drag, well inside the 700ms wind-up: dispatched as raw touch (cdp), the same way
+      // pool/battleship/skeeball's own PLAY probes drag - never a synthetic event on the instance.
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: sx, y: sy, id: 1 }] });
+      for (let i = 1; i <= 6; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: sx + (tx - sx) * i / 6, y: sy + (ty - sy) * i / 6, id: 1 }] });
+        await page.waitForTimeout(30);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+      const thrown = await page.waitForFunction(() => {
+        const inst = document.getElementById('baseball')._bbInstance;
+        return !!(inst && inst._lastThrow);
+      }, null, { timeout: 5000 }).then(() => true).catch(() => false);
+      if (!thrown) return { ok: false, why: 'tapped PITCH and dragged the pad, and the wind-up never threw a pitch' };
+      const aim = await page.evaluate(() => document.getElementById('baseball')._bbInstance._lastThrow.aim);
+      if (Math.abs(aim.x) < 0.05 && Math.abs(aim.y) < 0.05) {
+        return { ok: false, why: `the drag never moved the pitch's aim off dead centre (${aim.x}, ${aim.y})` };
+      }
+
+      const pitchVerdict = await page.waitForFunction(() => window.__bbPlayEvents.length > 0, null, { timeout: 12000 }).then(() => true).catch(() => false);
+      if (!pitchVerdict) return { ok: false, why: 'the pitch flew and no count/atBatEnd event ever fired from the engine' };
+      await page.waitForTimeout(250);
+      const pitchingEvent = await page.evaluate(() => window.__bbPlayEvents[0]);
+      const popsAfterPitch = await page.evaluate(() => window.__bbPlayPops.length);
+      if (popsAfterPitch < 1) return { ok: false, why: 'a pitch resolved but _showPop never painted a verdict word' };
+
+      // Still mounted and responsive: the instance is alive and the HUD is still on screen.
+      const stillUp = await page.evaluate(() => {
+        const inst = document.getElementById('baseball') && document.getElementById('baseball')._bbInstance;
+        return !!(inst && !inst.destroyed && document.querySelector('[data-role="hud"]'));
+      });
+      if (!stillUp) return { ok: false, why: 'the game is no longer mounted/responsive after the pitching turn' };
+
+      const say = (e) => `${e.type}${e.verdict ? ' ' + e.verdict : ''}${e.outcome ? ' ' + e.outcome : ''}`;
+      return {
+        ok: true,
+        why: `batting: READY then SWING resolved (${say(battingEvent)}), HUD changed, one figure `
+          + `(the batter) in the box at the next turn; pitching: PITCH then a real pad drag reached `
+          + `the engine's own aim (${aim.x.toFixed(2)}, ${aim.y.toFixed(2)}) and resolved (${say(pitchingEvent)})`,
+      };
+    },
+  },
   golf: {
     what: 'tee off, then hole out - the whole three-tap swing, tee to cup',
     async run(page, cdp, tap) {
@@ -826,6 +1068,111 @@ const PLAY = {
       return { ok: true, why: 'aimed, confirmed with FIRE, and the shot announced its result' };
     },
   },
+  minesweeper: {
+    what: 'play a whole board to a win: tap to dig, switch to Flag and flag a mine, then clear every safe cell',
+    async run(page, cdp, tap) {
+      const play = await page.waitForSelector('[data-act="play"]', { timeout: 8000 }).catch(() => null);
+      if (!play) return { ok: false, why: 'no Play button on the setup screen' };
+      await tap(play);
+      await page.waitForSelector('.ms-board .ms-c', { timeout: 8000 }).catch(() => null);
+
+      const read = () => page.evaluate(() => (window.__msTest ? window.__msTest.state() : null));
+      const tapCell = async (i) => {
+        const el = await page.$(`.ms-c[data-i="${i}"]`);
+        if (!el) return false;
+        await tap(el);
+        return true;
+      };
+
+      let st = await read();
+      if (!st) return { ok: false, why: 'the game exposed no state to drive (window.__msTest)' };
+      if (st.generated) return { ok: false, why: 'the board was generated before the first tap' };
+
+      // ---- EVERY CELL'S HIT TEST, the dots-boxes proof. This game's cells are under the 44px tap
+      // floor by design (the loupe is the mitigation), so the one thing that must be exactly right
+      // is WHICH cell a touch resolves to. `_cellAt` does the maths from the board rect and a
+      // pitch; `elementFromPoint` is the browser's own answer. They disagreed for real: the cells
+      // were content-box, so rows (implicit, content-sized) had a 2px larger pitch than the
+      // explicit column tracks, and a tap on the bottom third of a Hard board landed a whole row
+      // off - onto mines. Nothing static caught it.
+      const hit = await page.evaluate(() => {
+        const ui = window.__msTest.ui, s = window.__msTest.state();
+        const rect = (i) => {
+          const el = document.querySelector(`.ms-c[data-i="${i}"]`);
+          return el ? el.getBoundingClientRect() : null;
+        };
+        const c0 = rect(0), cRight = rect(1), cDown = rect(s.w);
+        let bad = 0, first = null;
+        for (let i = 0; i < s.w * s.h; i++) {
+          const r = rect(i);
+          if (!r) { bad++; continue; }
+          const got = ui._cellAt(r.left + r.width / 2, r.top + r.height / 2);
+          if (got !== i) { bad++; if (first === null) first = { i, got }; }
+        }
+        return {
+          cells: s.w * s.h, bad, first,
+          assumed: ui.cellSize + 2,
+          colPitch: c0 && cRight ? Math.round(cRight.left - c0.left) : null,
+          rowPitch: c0 && cDown ? Math.round(cDown.top - c0.top) : null,
+        };
+      });
+      // The PITCH check is the exact one and it fails on ANY board size. The centre sweep below it
+      // only catches a drift once it exceeds half a cell, which on the small Easy board it never
+      // does - so the sweep alone passed against the very bug this exists for.
+      if (hit.colPitch !== hit.assumed || hit.rowPitch !== hit.assumed) {
+        return { ok: false, why: `the board's real pitch is ${hit.colPitch}x${hit.rowPitch}px but _cellAt assumes ${hit.assumed}px, so taps resolve to the wrong cell further down the board` };
+      }
+      if (hit.bad) {
+        return { ok: false, why: `${hit.bad}/${hit.cells} cell centres resolve to the wrong cell (first: tapping ${hit.first.i} would hit ${hit.first.got})` };
+      }
+
+      // ---- DIG. The first tap generates the board around itself and must open an AREA.
+      const openedBefore = st.cell.filter((c) => c === 1).length;
+      if (!(await tapCell(0))) return { ok: false, why: 'no cell 0 in the DOM' };
+      await page.waitForTimeout(200);
+      st = await read();
+      const openedAfter = st.cell.filter((c) => c === 1).length;
+      if (st.dead) return { ok: false, why: 'the FIRST tap hit a mine, which safe-first-tap must make impossible' };
+      if (openedAfter <= openedBefore) return { ok: false, why: 'tapped a cell and nothing opened' };
+      if (openedAfter < 2) return { ok: false, why: `first tap opened only ${openedAfter} cell, so it was not a zero` };
+
+      // ---- FLAG. Switch mode and flag a cell that really holds a mine.
+      const flagBtn = await page.$('[data-mode="flag"]');
+      if (!flagBtn) return { ok: false, why: 'no Flag button in the bottom bar' };
+      await tap(flagBtn);
+      await page.waitForTimeout(80);
+      const mineIdx = st.mine.findIndex((m, i) => m && st.cell[i] === 0);
+      if (mineIdx < 0) return { ok: false, why: 'no hidden mine to flag' };
+      if (!(await tapCell(mineIdx))) return { ok: false, why: 'could not find the mine cell in the DOM' };
+      await page.waitForTimeout(120);
+      st = await read();
+      if (st.cell[mineIdx] !== 2) return { ok: false, why: 'tapped a cell in Flag mode and it did not flag' };
+
+      // ---- WIN. Back to Dig and clear every remaining safe cell, one real tap at a time.
+      const digBtn = await page.$('[data-mode="dig"]');
+      if (!digBtn) return { ok: false, why: 'no Dig button in the bottom bar' };
+      await tap(digBtn);
+      await page.waitForTimeout(80);
+      for (let guard = 0; guard < 200; guard++) {
+        st = await read();
+        if (st.won || st.dead) break;
+        const next = st.cell.findIndex((c, i) => c === 0 && !st.mine[i]);
+        if (next < 0) break;
+        if (!(await tapCell(next))) return { ok: false, why: `cell ${next} vanished from the DOM mid-game` };
+      }
+      st = await read();
+      if (st.dead) return { ok: false, why: 'died while only ever tapping cells with no mine in them' };
+      if (!st.won) return { ok: false, why: 'cleared every safe cell and the game never declared a win' };
+
+      // ---- The result modal is what a player actually sees, so prove it arrived.
+      const modal = await page.waitForSelector('.ms-ov .ms-modal', { timeout: 4000 }).catch(() => null);
+      if (!modal) return { ok: false, why: 'won the board and no result modal appeared' };
+      const closeBtn = await page.$('.ms-ov [data-act="close"]');
+      if (!closeBtn) return { ok: false, why: 'the win modal has no close (X), which every win/lose popup here needs' };
+
+      return { ok: true, why: `cleared an ${st.w}x${st.h} board in ${Math.round(st.elapsedMs / 1000)}s, 1 flag placed, pitch ${hit.colPitch}x${hit.rowPitch}px as assumed, ${hit.cells}/${hit.cells} cell centres hit their own cell` };
+    },
+  },
   sudoku: {
     what: 'start a puzzle, tap an empty cell, tap a digit, and it lands in the cell',
     async run(page, cdp, tap) {
@@ -1257,6 +1604,46 @@ for (const game of GAMES) {
   await checkFit(game);
   if (MOTION[game]) await checkMotion(game, MOTION[game]);
   if (PLAY[game]) await checkPlay(game, PLAY[game]);
+}
+
+// R4 (docs/BASEBALL-3D-BUILD.md section 9), reduced motion: "no trail, no burst, no confetti; the
+// words and strips still show." A pixel probe here is impractical (all three are timing-sensitive
+// additive-blend canvas draws, exactly the shape `MOTION` above exists to sample, not to prove
+// ABSENT), so this is a STRUCTURAL check instead: the shipped source is read (never re-typed) and
+// asserted to gate every one of the three drawing calls behind `_reducedMotion()`, the same
+// function every other R4 effect in `baseball/js/ui.js` already reads through. A gate that moved,
+// or a new call site added outside it, fails this the same way a missing gate would.
+if (GAMES.includes('baseball')) {
+  const src = readFileSync(join(ROOT, 'baseball/js/ui.js'), 'utf8');
+  const RM_CHECKS = [
+    // The fire trail: `_maybeDrawFireTrail` is the ONE call site both flight loops use, and it
+    // must refuse before ever reaching `_drawFireTrail`.
+    { what: 'fire trail (_maybeDrawFireTrail early-returns under reduced motion)',
+      re: /_maybeDrawFireTrail\(pitchResult, frac\)\s*\{[^}]*this\._reducedMotion\(\)/s },
+    // The contact burst: `_contactHold` must never arm `_contactBurstStart` under reduced motion,
+    // which is what keeps `_drawContactBurst` from ever being called with a real elapsed time.
+    { what: 'contact burst (_contactHold never arms _contactBurstStart under reduced motion)',
+      re: /if \(!this\._reducedMotion\(\)[^)]*\)\s*\{\s*this\._contactBurstStart = performance\.now\(\)/s },
+    // HOME RUN confetti, two gates: the particles are never seeded under reduced motion...
+    { what: 'confetti (_triggerHomerun never seeds particles under reduced motion)',
+      re: /_triggerHomerun\(stats\)\s*\{[^}]*if \(!this\._reducedMotion\(\)\) this\._initConfetti\(\)/s },
+    // ...and the per-frame draw call itself is gated a second time, so a stray leftover particle
+    // array from BEFORE a mid-flight reduced-motion toggle still can't paint anything.
+    { what: 'confetti (the per-frame _drawConfetti call is itself gated on reduced motion)',
+      re: /this\._homerActive && !this\._reducedMotion\(\)\)\s*this\._drawConfetti/ },
+  ];
+  for (const c of RM_CHECKS) {
+    if (c.re.test(src)) ok('baseball', 'reduced-motion (structural)', c.what);
+    else fail('baseball', 'reduced-motion (structural)', `NOT FOUND in baseball/js/ui.js: ${c.what}`);
+  }
+  // The word/strip/lines still show under reduced motion - opacity/CSS-only, no JS gate needed,
+  // but the CSS override that withholds ONLY the scale-in animation (never opacity) must exist.
+  const css = readFileSync(join(ROOT, 'baseball/css/baseball.css'), 'utf8');
+  if (/prefers-reduced-motion: reduce\)\s*\{[^}]*\.bb-homerun-word\s*\{\s*animation: none/s.test(css)) {
+    ok('baseball', 'reduced-motion (structural)', 'the HOME RUN word keeps its 0.6->1.0 scale-in withheld (animation: none) under reduced motion, opacity untouched');
+  } else {
+    fail('baseball', 'reduced-motion (structural)', 'NOT FOUND in baseball/css/baseball.css: .bb-homerun-word\'s reduced-motion override');
+  }
 }
 
 await browser.close();

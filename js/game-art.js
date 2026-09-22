@@ -9,6 +9,27 @@
 // stats-id -> hub-id map used to look these up from aggregated player data.
 
 export const GAME_ART = {
+  // Landscape, composed for the 160x90 frame it is given - never a square cropped with
+  // preserveAspectRatio, which bisects shapes at the edge (it cut Connect Four's discs).
+  // A row of hoops over the grid, which is the machine.
+  hoops4: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#15171c"/>
+            <rect x="8" y="30" width="144" height="56" rx="4" fill="#1f5fa8"/>
+            <g fill="#0d2c52">
+              ${[0,1,2,3,4,5,6].map(c=>[0,1,2].map(r=>`<circle cx="${18+c*20.7}" cy="${41+r*17}" r="6.6"/>`).join('')).join('')}
+            </g>
+            <circle cx="18" cy="75" r="6.6" fill="#e8463f"/><circle cx="38.7" cy="75" r="6.6" fill="#ffce3a"/>
+            <circle cx="59.4" cy="75" r="6.6" fill="#e8463f"/><circle cx="80.1" cy="75" r="6.6" fill="#ffce3a"/>
+            <circle cx="100.8" cy="75" r="6.6" fill="#e8463f"/>
+            <circle cx="59.4" cy="58" r="6.6" fill="#e8463f"/><circle cx="80.1" cy="58" r="6.6" fill="#ffce3a"/>
+            <g stroke="#e8541f" stroke-width="3" fill="none">
+              ${[0,1,2,3,4,5,6].map(c=>`<ellipse cx="${18+c*20.7}" cy="20" rx="7.5" ry="2.6"/>`).join('')}
+            </g>
+            <g stroke="#e6e2d8" stroke-width="1" fill="none" opacity=".75">
+              ${[0,1,2,3,4,5,6].map(c=>{const x=18+c*20.7;return `<path d="M${x-6} 21 L${x-3.4} 28 L${x+3.4} 28 L${x+6} 21"/>`;}).join('')}
+            </g>
+            <circle cx="80.1" cy="9" r="4.4" fill="#e8463f"/>
+          </svg>`,
   'connect-four': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#1769d4"/>
             <g fill="#dbe8f8">
@@ -241,6 +262,46 @@ export const GAME_ART = {
   // of filled-in digits so it reads as "a puzzle" rather than "a grid", and one cell outlined in
   // the app's standing selection accent (#ffce3a, root CLAUDE.md) the way the game itself marks a
   // selected cell. Composed FOR 160x90, full-bleed, per checklist item 5.
+  'minesweeper': `<svg viewBox="0 0 160 90" aria-hidden="true">
+    <rect width="160" height="90" fill="#1b2431"/>
+    <g stroke="#31405a" stroke-width="0.8">
+      <path d="M32 10 V80 M50 10 V80 M68 10 V80 M86 10 V80 M104 10 V80 M122 10 V80"/>
+      <path d="M14 24 H146 M14 38 H146 M14 52 H146 M14 66 H146"/>
+    </g>
+    <g fill="#2a3446" stroke="#3d4b64" stroke-width="0.8">
+      <rect x="14.8" y="10.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="86.8" y="10.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="104.8" y="38.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="14.8" y="66.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="122.8" y="66.8" width="16.4" height="12.4" rx="2"/>
+    </g>
+    <g font-family="ui-monospace, monospace" font-size="10" font-weight="800" text-anchor="middle">
+      <text x="41" y="21" fill="#6fa8e8">1</text>
+      <text x="59" y="21" fill="#3fbfa8">2</text>
+      <text x="77" y="35" fill="#ff8a63">3</text>
+      <text x="41" y="49" fill="#6fa8e8">1</text>
+      <text x="95" y="49" fill="#3fbfa8">2</text>
+      <text x="59" y="63" fill="#a98bf0">4</text>
+      <text x="113" y="63" fill="#6fa8e8">1</text>
+      <text x="77" y="77" fill="#3fbfa8">2</text>
+    </g>
+    <g transform="translate(23 17) scale(0.44)" fill="none">
+      <path d="M-9 11V-11" stroke="#e0532f" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M-8.2-9.6 4.6-5.4-8.2-1.2Z" fill="#e0532f"/>
+    </g>
+    <g transform="translate(95 17) scale(0.44)" fill="none">
+      <path d="M-9 11V-11" stroke="#e0532f" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M-8.2-9.6 4.6-5.4-8.2-1.2Z" fill="#e0532f"/>
+    </g>
+    <g transform="translate(131 73) scale(0.5)" fill="#f2b705">
+      <rect x="-1" y="-11" width="2" height="22" rx="1"/>
+      <rect x="-11" y="-1" width="22" height="2" rx="1"/>
+      <rect x="-1" y="-8" width="2" height="16" rx="1" transform="rotate(-45)"/>
+      <rect x="-1" y="-8" width="2" height="16" rx="1" transform="rotate(45)"/>
+      <circle cx="0" cy="0" r="6.2"/>
+      <circle cx="-2.3" cy="-2.3" r="1.5" fill="rgba(255,255,255,.85)"/>
+    </g>
+  </svg>`,
   'sudoku': `<svg viewBox="0 0 160 90" aria-hidden="true">
     <rect width="160" height="90" fill="#2a1440"/>
     <g stroke="#6b3a86" stroke-width="0.75">

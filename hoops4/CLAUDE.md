@@ -1,0 +1,589 @@
+# Connect 4 Hoops — game documentation
+
+> **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. THE LAW
+> and its nine working rules live at the top of the root `CLAUDE.md`, which is always loaded
+> alongside this file. Nothing below overrides them. **Nothing in this folder stores anything
+> earned**: `gamehub.hoops4.v1` holds one preference (the opponent) and nothing else, and the
+> match itself is not persisted at all. Results go through the shared `recordResult('hoops4', …)`
+> like every other game.
+
+Matt's idea, 2026-09-21, from photos of the real Bay Tek **CONNECT 4 HOOPS** cabinet: seven
+basketball hoops in a row over a 7 x 6 Connect 4 board. Sink a hoop and your disc drops down that
+column. Four in a row wins.
+
+## Hub integration
+
+| Thing | Value |
+|---|---|
+| Registry | `module: '../hoops4/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `hoops4` |
+| Stats id | `hoops4` — plain `recordResult(id, difficulty, won)`, **no sub-counter**, so item 7's three-edit rule does not apply |
+| CSS root / prefix | `.h4-root` / `.h4-` |
+| Settings key | `gamehub.hoops4.v1` (two preferences: the opponent, and `shots`: `'until'` \| `'one'`) |
+| Multiplayer | LIVE via `js/net.js` (`rooms/<CODE>`); TURN BY TURN via `hoops4/js/mp.js` (`hoops/games/<id>`, a NEW top-level node) |
+| Outbox key | `gamehub.hoops4.outbox.v1` (turn-by-turn moves waiting on a signal) |
+| Difficulty axis | the CPU skill — `easy` / `medium` / `hard`, plus `'mp'` for a multiplayer match (the repo's own convention — `'mp'` is unmapped in `js/difficulty-tiers.js`, so `tierOf('mp')` is null and it never lands in a difficulty tier). A two-player-on-one-phone match records nothing, because there is no "you" in it |
+| `isInProgress()` | the **no mid-game resume** meaning (Ball Run / Snake / Pinball's class) |
+
+`isInProgress()` returns `true` while a match has at least one disc on the board and is not over.
+Nothing is persisted, so leaving genuinely abandons the match and the hub should confirm. A ball
+mid-flight and a turn mid-shoot-until-you-make-it are not states worth snapshotting — the same
+call Skeeball made when it removed its own mid-rack resume (Matt: *"you either finish or quit"*).
+
+**`devOnly: true` and NO `released` date**, deliberately. Matt asked for it deployed *for
+testing*. `released` is the only input to the launcher's New pill and must announce the day the
+game actually goes live. Releasing it needs no commit — the admin page's live switch overrides
+`devOnly` (root `CLAUDE.md`, "The admin control page").
+
+It **does** have a `GAME_META` row in `js/leaderboard-ui.js` even while admin-only, because
+`players-agg.test.mjs`'s `OFF_THE_BOARD` list is empty and must stay that way. `isGameOnLauncher`
+hides an admin-only game from the board on its own.
+
+## The three things it does NOT own
+
+- **The Connect 4 rules.** `js/game.js` imports `connect-four/js/board.js` — a bitboard already
+  running at exactly 7 x 6, with its own win detection and its own tests. Safe to share in a way
+  a skeeball ENGINE would not be: it is pure rules with no per-game tuning in it.
+- **The solver.** `js/cpu.js` imports `connect-four/js/ai.js`.
+- **three.js and cannon-es.** Imported from `skeeball/js/vendor/`. They are libraries, not engine
+  logic, and `sw.js` already precaches them — a second copy would be ~1 MB for nothing.
+
+## The engine is a COPY of skeeball's BRICK CITY, and that is the rule, not a shortcut
+
+`js/machine.js`, `js/physics.js` and `js/render.js` are this game's own files. They started as
+copies of `skeeball/js/machines/brickcity/` — the most advanced engine in the repo, the one
+carrying the throat, the fixed rimout, the solver-artefact ceiling and the repaired watchdog —
+and they have diverged. **Editing them cannot affect any skeeball machine, and a skeeball change
+does not reach here.** That isolation is the filesystem, and it is the whole point of
+`skeeball/CLAUDE.md`'s "every machine owns its own engine" hard rule.
+
+If you fix something genuinely universal, say in the commit which copies you applied it to and
+which you deliberately did not.
+
+## The cabinet, and why every number is what it is
+
+`js/boarddef.js`. **Every value that differs from HOT SHOT was measured.** Three tools do the
+measuring and all three answer to a change in here:
+
+| tool | what it answers |
+|---|---|
+| `reference/hoops/sweep-speed.mjs` | the launch speed band, against THIS engine (`--scan`, then `--band=min,max`) |
+| `hoops4/js/test.js` | Matt's four requirements, as numbers. Headless, ~2 min |
+| `reference/hoops/check-display.mjs` | the machine as the PLAYER sees it, in a real browser: is the whole display on screen, is anything occluding it, is column N under hoop N, and does a real swipe reach all seven |
+| `reference/hoops/probe-bounce.mjs` | DOES A MISS ACTUALLY BOUNCE? Counts, per throw, every surface the ball touches and every time it goes from falling to rising - which is what found that the rim was lively and everything a miss LANDS on was dead. `--set boardRest=0.3,riserRest=0.4,captureDrop=0.4` measures a candidate without editing `boarddef.js`, the same shape `tune-boggle-es.mjs` uses. Note `captureDrop` measurably does nothing here: on a collared basket the binding rule is "the centre is below the rim inside the mouth", not the kinematic prediction |
+
+`reference/hoops/sweep-hoops-columns.mjs` is the original FEASIBILITY sweep (write-up:
+`reference/hoops/FINDINGS.md`) and is kept for the record only — it predates this folder and
+throws at a synthetic board through HOT SHOT's engine, so it cannot answer anything about the
+cabinet as built.
+
+### The cabinet is ONE STEP, the display is VERTICAL, and it is BELOW the hoops
+
+It has been wrong twice, in opposite directions, and both are worth keeping because the second
+one was a correct piece of arithmetic that still produced an unplayable machine.
+
+**Build 1 — the grid two steps up a staircase.** It reused HOT SHOT's three-tread staircase
+verbatim (the geometry already measured) and hung the Connect 4 screen on the back wall above it.
+Matt: *"WHY did you put the connect 4 board way up on top of stairs? that is a bizarre choice. I
+can't even reach the top of the board by throwing the ball."* Measured, he was describing it
+exactly — the hoops sat at 0.53 m and the screen at **1.13 m, two full steps above them**, on a
+machine whose own mockup and whose real Bay Tek cabinet both put the hoops UP and the grid BELOW.
+
+**Build 2 — the grid raked back at 38 degrees.** Six rows at the column pitch is 7.80X; a panel
+that size standing vertical puts the hoops at 1.335 m, and the sweep says scoring there is
+0.0–1.3% at *every* launch speed up to 8.8 m/s (the ball has to rise 1.14 m in the 0.26 m between
+the ramp crest and the board — a 75-degree launch off a 70-degree ramp). Raking the panel spends
+that size along the cabinet instead of up it and brings the hoops back to 0.90 m. All of that is
+true and none of it helped, because **a raked panel is seen edge on.** Measured through the real
+play camera (`reference/hoops/check-display.mjs`): the display projected to **309 x 159 px** on a
+393 x 852 phone, every round cell an ellipse 1.7 times wider than tall, the whole bottom row
+hidden behind the cabinet's own furniture, and perspective fanning the hoop row 15 px off its own
+columns. **A Connect 4 board you cannot read is not a Connect 4 board.**
+
+**Build 3, what it is now — the size gives, not the angle.** The panel stands VERTICAL and is as
+tall as the gap between the board's lip and the hoop shelf allows: 4.80X, which rises exactly what
+the 7.80X rake rose, so the shelf, the hoop row and every height the sweep measured stay where
+they were. Six rows in 4.80X is a row pitch of 0.80X against a column pitch of 1.30X, so the board
+is WIDE — round cells with more air between columns than between rows, which is what a widescreen
+panel showing a 7 x 6 grid looks like and is the reference cabinet's own shape.
+
+| | |
+|---|---|
+| display | 4.80X, **vertical**, 9.10X wide. Six rows, seven columns, one under each hoop |
+| hoop shelf | 4.0X, tilt 0.10, hoops **0.75X from its BACK edge** |
+| back wall | 1.8X + `backboardH` 0.42 |
+| heights | display 0.52–1.22 m · hoops 1.27 m |
+
+**Three things about that shape are load-bearing, and each was arrived at by getting it wrong
+first:**
+
+- **There is no apron in front of the display.** A 1.0X near-flat tread at the board's bottom edge
+  is a *parking spot* — a throw that fails to clear the face lands on it and waits out the
+  watchdog. **49% of throws parked.** The face now rises straight off the bottom edge and a short
+  throw hits it, drops to the trough and is a clean fast miss.
+- **The hoops sit at the BACK of the shelf, not the front.** This is HOT SHOT's layout and Matt's
+  explicit call on that machine. With them 1.2X from the *front*, 2.0X of bare shelf sat behind
+  the row and **119 of 325 throws flew over the hoops and parked on it**. Shortening the shelf
+  instead put the back wall so close that shots caromed across columns and the middle three
+  columns' mean aims collapsed to −0.03 / 0.00 / +0.06 — aim stopped choosing anything. The shelf
+  must be DEEP (the ball lands in front of the row, and the landing point is what picks the
+  column) *and* the row must be at the BACK (nowhere to park). Both at once is the only thing
+  that satisfies both.
+- **The board stands ABOVE the ramp crest, and the gap in front of it is 0.70 m.** Both numbers
+  are the same defect: the camera could not see the bottom of the display. The crest is 0.464 m up
+  and the lip used to be 0.20 m, a quarter of a metre in front of it — so the ramp stood 0.26 m
+  PROUD of the foot of the display and hid the bottom row, which on a board that FILLS FROM THE
+  BOTTOM is the row that matters. **No camera can solve it**: the sightline from the serve spot's
+  side of the crest only clears it from 3.2 m up, which is a bird's-eye view of a machine whose
+  whole point is that it faces you. Raising the BOARD is skeeball's own fix for its own version of
+  this (`boardLipY` 0.07 → 0.20) and it is how a real cabinet is built. Raising it costs distance,
+  and the trough is what buys that back: at 0.225 m of run a ball off a 70-degree ramp can climb
+  0.62 m at the very best and a board 0.32 m higher needs 0.73 m — impossible at any speed. At
+  0.70 m of run the same shot clears the panel's top edge by 0.29 m and comes down on the shelf.
+
+### The camera, and the ceiling it cannot beat
+
+`reference/hoops/check-display.mjs` is the probe for all of this: it raycasts all 42 cells from
+the real play camera and fails if one is clipped or occluded, checks a column is derived from its
+hoop's own `u`, and checks every hoop still projects nearest to its OWN column.
+
+**Where the camera stands is arithmetic, and the binding constraint is the BALL, not the machine.**
+It has to keep the resting ball in shot (skeeball's rule, measured: a camera in front of the ball
+leaves it off screen for the first 250 ms of every throw), and the ball sits low and very near.
+Close in that is ruinously expensive — 0.62 m behind the ball and 1.35 m above it needs an 86
+degree field, and the cabinet shrinks to a third of the frame. Standing BACK costs the ball almost
+nothing while the machine loses only what distance takes:
+
+| camera | display on a 393 x 852 phone |
+|---|---|
+| 1.15 m back, 1.02 m up | 171 x 90 px (44% of the frame's width) |
+| **3.00 m back, 1.00 m up** | **326 x 172 px (83% of the width)** |
+
+**Past 3.00 m the frame is capped by the cabinet's WIDTH.** 1.52 m of board on a 0.49-aspect phone
+is a 3.09 m tall frame however far back you stand, so a 0.70 m display can never be more than
+**22.6%** of a portrait screen. That is geometry, not tuning — which is why the probe measures the
+display's share of the frame's WIDTH and not of its height. A "quarter of the frame tall" bar is
+unsatisfiable by any camera, and asserting it would be exactly the failure
+`test-runaway-capped.mjs`'s header records.
+
+### A REAL THUMB, not a sweep, throws at all seven columns
+
+The open question this game has carried since it was designed was whether a human gesture has the
+precision seven columns need - every sweep drives `aim` as a number, and a real swipe goes through
+`atan2`, `aimDiv` and `aimCurve` first. `check-display.mjs` now answers it in a real browser:
+seven fresh matches (two-player, so the CPU's turns cannot be mistaken for the player's), a
+scripted touch gesture per column built by INVERTING ui.js's own mapping, and the match's own
+move list read back.
+
+| | col 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| aim asked for | -0.413 | -0.253 | -0.133 | 0.000 | 0.131 | 0.256 | 0.420 |
+| landed (of 4) | 3 | 2 | 3 | 3 | 3 | 3 | 2 |
+| in the column aimed at | 2 | 1 | 2 | 3 | 2 | 2 | 1 |
+
+**19 of 28 swipes scored, 13 of those in the column they asked for, and all 7 columns were hit.**
+It is still a scripted thumb on a SwiftShader canvas and not a person - what it rules out is the
+bad case, a column a real gesture simply cannot reach.
+
+### The speed band answers to the cabinet's DEPTH, and has been re-measured twice
+
+`reference/hoops/sweep-speed.mjs --scan` walks every launch speed and reports what reaches a hoop;
+`--band=min,max` scores a candidate pair over the real power x aim grid. On this cabinet nothing
+scores below 6.00 or above 6.65:
+
+| band | scored | live powers | columns | ordered |
+|---|---|---|---|---|
+| 6.00 / 6.60 | 31.5% | 11 of 11 | 7 of 7 | yes |
+| **6.05 / 6.50** | **39.2%** | **11 of 11** | **7 of 7** | **yes** |
+| 5.95 / 6.65 | 30.6% | 11 of 11 | 7 of 7 | yes |
+
+"Live powers" is the one that would be a spec failure on its own: at HOT SHOT's 2.60/6.60 nothing
+scored below power 0.65, two thirds of the dial dead.
+
+### The width is set by the COLLARS, not by the holes
+
+Two rules, and the first alone is not enough:
+
+```
+holes.spacing    6 gaps x 1.30X + 0.5X margin each side        =  8.800X
+MACHINE-SPEC 12  |u| + collar radius + a 0.78X wall gap        = 10.443X   <- this wins
+```
+
+At 8.800X the outer collars stood **0.041X through the side rails**, because the spacing rule only
+constrains hole CENTRES while a collar is 0.541X in radius and a throat 0.916X. Measured
+consequence: 4 captured balls escaped past the rail where their own throat was cut open by it.
+**The holes did not move** when the cabinet widened — the pitch is still 1.30X and the outer pair
+still at ±3.90X.
+
+### "NOT VERY BOUNCY" WAS NEVER THE RIM (2026-09-22)
+
+Matt asked for bouncier rims when the machine was built, and again after a build whose `ringRest`
+was already 0.62, the highest in the repo: *"they're not very bouncy, like I asked."*
+
+He was right, and the rim was never the problem. `reference/hoops/probe-bounce.mjs` throws the
+real grid and counts, per throw, what the ball TOUCHES and whether it ever goes from falling to
+rising fast enough to see. On the 0.62 build: **47% of misses bounced at all**, 0.60 bounces per
+miss, mean best rebound **0.38 m/s** - a dribble. And here is what a miss actually meets, counted
+over 231 throws:
+
+| surface | throws that touch it | restitution it had |
+|---|---|---|
+| **riser** (the display panel) | 165 | 0.05 |
+| **cupSeg** (the rims) | 115 | 0.62 |
+| **fin / finCap** | 111 | 0.03 |
+| **board** (the hoop shelf) | 51 | 0.05 |
+
+**A lively rim over a beanbag floor feels like a beanbag.** The rim is struck by half the throws
+and the ball then lands on something dead. Three changes, each on a surface the measurement named:
+
+- **The shelf and the display panel got real restitution** (0.58 and 0.70). The riser needed its
+  OWN contact material to get there - it used to share the shelf's, so the most-struck surface on
+  the machine could not be tuned apart from the floor a scored ball lands on. The trough got one
+  too and stays dead on purpose: a bouncy catch pit throws a dead ball back out onto the lane.
+- **The fins and the chamfers are hoop hardware, so they bounce like the rims.** They fell through
+  to `matWall` (0.03) and a near-miss that clipped one simply died. A ball kicking off a fin into
+  the next basket is exactly the unpredictability Matt asked for, and nothing steers it there.
+- **The side rails stay dead** (0.03). That is a measured fix - a live rail made the outer columns
+  catch-alls for every over-aimed ball - and it is not what anyone is looking at when they say the
+  machine does not bounce.
+
+Measured after, same grid: **60% of misses bounce, 1.31 bounces each, mean best rebound 0.72 m/s.**
+
+**The cost, real and accepted: the scoring rate falls**, 37.7% of the grid to 23.7%, because a
+lively machine throws more balls back out. That is the trade Matt asked for, it is well inside
+`test.js`'s own 8-75% band, and under shoot-till-you-make-one a lower rate buys more shots per
+turn rather than a worse game. Parking went DOWN with it, 8.9% to 4.6%.
+
+**He rejected that trade the moment he played it, and he was right to** - see the next section.
+The bounce was kept; the accuracy was bought back by turning the bounce sideways and by taking
+`ringRest` back down from 0.72 to 0.55.
+
+**THE METRIC THAT SHOULD HAVE CAUGHT THIS WAS BROKEN.** `test.js` printed "rattled without scoring
+0 (0.0%)" under Matt's own bounce requirement, on every build ever shipped, for two reasons:
+`events` is an array of OBJECTS and the test asked `ev.includes('rattle')`, and on this machine a
+`rattle` only fires on a ball that WAS captured, so the "without scoring" half can never be true
+anyway. A number that cannot move is worse than no number. It is replaced by a measurement of the
+thing Matt can see - what fraction of misses bounce, and how hard - as two assertions that can go
+red.
+
+### The bounce goes SIDEWAYS, not forwards (2026-09-22)
+
+Matt, on the build the section above shipped: *"The bounce is good. But can we make it so it only
+bounces sideways? Like right now it bounces forward and rolls off the front of the machine a lot.
+I don't want that... I want the bounce just to make it more difficult to play a move where you
+intended. I want the bounce to add some randomness, not make the game measurably more
+difficult/players measurably less accurate."*
+
+Those are two different properties of a bounce and **every number in the section above measures
+only the first one.** How many misses bounced, how many times, how hard - all of them say HOW BIG,
+none of them says WHICH WAY. A bounce across the hoop row changes which column a shot finds, which
+is the randomness he asked for. A bounce toward the player only walks the ball off the shelf's
+front edge, which costs a shot and buys nothing. They look identical on screen and they were
+indistinguishable to the probe, which is how a build shipped that traded 14 points of scoring rate
+for the wrong one.
+
+So `reference/hoops/probe-bounce.mjs` was taught to tell them apart: the lateral/forward split of
+every bounce, and how many misses come back over the shelf's front edge.
+
+**The first thing it found is that the front-edge departure is NOT the bounce.** 89.6% of the
+misses that reach the shelf come off its front - and 89.7% of them did on the dead-shelf build
+too, and 89.7% again with the shelf's restitution set to 0.05. That is the shelf's own 0.10 rad
+**forward tilt**, which is HOT SHOT's and is there so a miss rolls home instead of parking. It is
+not optional: flattening it does raise scoring (32.5%) and does cut front departures (75.9%), but
+**parking goes from 6.1% to 11.7%** - one shot in nine stopping dead and vanishing, which is a far
+worse thing to watch than a ball rolling back to you.
+
+So the tilt stays and the fix is two things:
+
+**1. The sideways redirect** (`bounceSideways` in `boarddef.js`, the rule in `physics.js` section
+0a). When the ball bounces off the shelf or the hoop row's own furniture and comes off moving
+toward the player, its horizontal velocity is **rotated onto the u axis**. It is a rotation, not a
+kick: `hypot(vx, vz)` is identical before and after and the vertical component is never touched,
+so no energy is added and a livelier rim cannot become a ball fired off the machine. At 1.0 the
+whole forward component is turned, which is Matt's sentence literally.
+
+**It is not magnetism** (MACHINE-SPEC section 9). It never reads `G.holes`, never asks where a
+hoop is and never picks a side - the direction is the sign of the sideways drift the ball already
+had, so a ball drifting left comes off further left. That a bounced ball more often finds a basket
+is a consequence of the baskets being in a row along that axis, not of anything steering it.
+`test.js` asserts structurally that the rule reads no hole position, because this is exactly the
+rule a future session would "improve" by nudging the ball at the nearest hoop and no sweep would
+fail if it did. It is also deliberately **forward only**: a ball still travelling into the machine
+needs that momentum to reach the row at all.
+
+**2. `ringRest` back to 0.55 from 0.72.** Of every knob on the machine the rim is the one that
+moves the scoring rate, and the redirect alone is only worth about two points of it. The rest of
+the machine still carries the bounce he can see - the shelf at 0.58 and the display panel at 0.70,
+which is what the previous section was actually about - and 0.55 is still 1.8x HOT SHOT and 3x
+THE CLASSIC.
+
+The sweep, on the 11x21 grid, at the shipped 0.10 shelf tilt:
+
+| K (sideways) | ringRest | scored | parked | lateral:forward | misses bouncing / mean rebound |
+|---|---|---|---|---|---|
+| - | - | **30.7%** | 5.2% | 1.54:1 | 48% / 0.43 m/s | *(v889, before any bounce work)* |
+| 0.00 | 0.72 | **22.9%** | 6.1% | 1.43:1 | 59% / 0.71 m/s | *(v890, the build he played)* |
+| 0.55 | 0.72 | 25.1% | 6.5% | 2.73:1 | 58% / 0.69 m/s |
+| 0.80 | 0.62 | 25.5% | 10.4% | 3.44:1 | 58% / 0.64 m/s |
+| 0.80 | 0.55 | 27.7% | 7.8% | 3.73:1 | 58% / 0.63 m/s |
+| 0.80 | 0.46 | 29.4% | 6.9% | 2.95:1 | 56% / 0.59 m/s |
+| 0.90 | 0.46 | 30.3% | 6.9% | 2.69:1 | 56% / 0.58 m/s |
+| 1.00 | 0.72 | 26.4% | 6.9% | 3.36:1 | 58% / 0.70 m/s |
+| 1.00 | 0.62 | 28.6% | 8.7% | 3.45:1 | 56% / 0.62 m/s |
+| **1.00** | **0.55** | **29.4%** | 7.8% | **4.37:1** | 56% / 0.61 m/s | **<- shipped** |
+
+Forward velocity per bounce fell from 0.29 m/s to 0.10 m/s, lateral held at 0.46, and the scoring
+rate came back to within 1.3 points of the build before any of this started - with the bounce
+itself almost entirely intact (56% of misses bounce against 59%, mean best rebound 0.61 against
+0.71, both far above the 48% / 0.43 of the build he called not bouncy).
+
+**Two things this deliberately does not claim.** Balls still leave over the front edge at about
+the same rate, because the tilt is what sends them there and the tilt is load-bearing; what
+changed is that they leave having first been thrown ACROSS the row rather than straight at the
+player. And the scoring rate is 29.4%, not 30.7% - a bouncy machine costs something, and the
+honest number is printed here rather than rounded up.
+
+On `test.js`'s own bigger grid (861 shots, which is the number to quote): **scored 28.9%, parked
+7.32%, lateral 0.57 m/s against forward 0.14, a 4.00:1 ratio, 56% of misses bouncing at a mean
+best rebound of 0.66 m/s**, and every column still reachable. Parking is up from v890's 4.6% and
+still below the 8.9% of the build before any of the bounce work.
+
+`test.js` carries the bar as section 1b: the lateral:forward ratio must stay at or above 2.0, the
+redirect must be switched on, and it must read no hole position.
+
+### What makes a hoop read as a hoop (2026-09-22)
+
+Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*
+
+They were real wire baskets, ported from HOT SHOT, and they still read as a **wire fence**. Four
+things were wrong at once, and each one is only visible at the size a hoop actually occupies -
+about thirty pixels tall on a 393 px phone:
+
+**Then it was still not HOT SHOT's.** Matt, on the build that followed: *"They're still not the
+same."* The construction had been ADAPTED rather than ported - a threshold changed here, the orange
+moved there - and each small departure made it something else. It is HOT SHOT's `_wireBasket` now,
+at its own proportions and its own tube radii: the orange carries the rim AND the bottom ring AND
+the ten ribs, and the white net gets THREE bands because `collarH > R * 0.9` (the adapted version
+used a threshold that gave this machine ONE band, and one band of strands over an orange frame is
+the wire fence). The backboard is HOT SHOT's cream ARCH with a white box outlined in orange,
+bottomed at the rim so the net hangs clear below it, rather than the flat rectangle that replaced
+it first.
+
+The four readings that came before that are all still true, and are why the port was needed:
+
+- **The rim was PALE and so was the net.** The pale rim came from reading the reference photo, and
+  optimising for it was the wrong call: two greys, one on top of the other, is a mesh band. The
+  rim is **orange** now and the net is **white**, because that pair is what a basketball hoop IS
+  at thirty pixels. The photo reading is recorded in `boarddef.js`'s `look` block next to the
+  value that replaced it.
+- **The ribs and the bottom ring were painted in the RIM's material**, so ten orange verticals
+  hung under an orange ring and the silhouette came out SQUARE. Only the rim ring is orange now;
+  everything below it belongs to the net.
+- **There was no backboard behind any hoop.** There were seven white boards - half a metre ABOVE
+  the row, on the cabinet's header, connected to nothing. A ring with a net is a ring with a net;
+  what makes the eye say "basketball hoop" is the board immediately behind it. `_hoopBackboards()`
+  hangs one on the back riser behind each rim, bottomed just under it so the rim reads as bolted
+  on, width = the column pitch minus a gap (HOT SHOT's own no-overlap rule), **one draw call for
+  all seven** via an `InstancedMesh`. The header strip is what it always actually was: a fascia.
+- **The fins spiked black against the wall.** They are load-bearing physics (nothing else stops a
+  ball balancing across two rims) and they had been pale grey, which made them fence posts, then
+  near-black, which made them silhouettes. They are the RISER'S OWN BLUE now - they stand in front
+  of that wall, so its colour is the only thing that makes them disappear.
+
+Draw calls: 33 before, 34 after (the backboards' one instanced mesh).
+
+**The lesson, and it is the same one `VISUAL-PROCESS.md` keeps teaching:** the construction was
+right and the READING was wrong. Nothing headless can see this, and neither can a crop at 6x zoom
+- it took a phone screenshot at play size. Crop the hoop row at the size it renders and ask what a
+stranger would call it.
+
+### The hoops were drawn 90 degrees wrong, and it shipped
+
+`render.js` rotated each hoop group by `fr.tilt - Math.PI/2`, which maps its local +Y to nearly
+−Z. Every rim therefore stood UP as a vertical ring facing the player with its net trailing
+backwards into the cabinet. Matt: *"You put the baskets backwards."* The group's +Y must be the
+face NORMAL, and `faceToWorld`'s h direction is `(0, cos tilt, sin tilt)` — which is exactly what
+rotating `(0,1,0)` about X by `tilt` gives. **The rotation IS the tilt**, with no offset.
+
+Nothing headless caught this: the physics never knew, because a collar's collision boxes are
+placed by `machine.js` and were always right. Only looking at it catches a render-only bug, which
+is what `VISUAL-PROCESS.md` is for.
+
+### Matt's four requirements, and the number that proves each
+
+| he asked for | how | measured |
+|---|---|---|
+| "rims a little bouncier than other skeeball games", and then "they're not very bouncy, like I asked" | `ringRest` 0.72 (HOT SHOT 0.30, THE CLASSIC 0.18) AND the shelf, the display panel, the fins and the chamfers made live - see "NOT VERY BOUNCY WAS NEVER THE RIM" above | 60% of misses bounce, 1.31 bounces each, mean best rebound 0.72 m/s, all three asserted in `test.js` |
+| "a little bit of unpredictability" | a SEEDED per-throw scatter on the launch only | seeded replays exactly; unseeded is bit-identical to before |
+| "a ball can't get stuck balancing between two rims" | **the fins** — see below | 18 saddle drops, **0** stay |
+| "once it goes into a basket, it goes down that column 100% of the time" | **no rimout**, plus a throat 8 ball-radii tall | **100.00%** (94.07%, then 98.21%) |
+
+### The fins
+
+Rims sit 1.30X apart and are 1.0X across, so the clear gap between two rim walls is 3.2 cm
+against a 10.9 cm ball. The ball cannot fall INTO the gap — it rests ON both rim tops in a stable
+saddle, with a contact either side and no reason to leave. That is a real resting place.
+
+A fin stands in each gap and rises above the rim, capped by a box rotated 45° about the tread's
+own v axis so **the top of the fin is an edge, not a face**. There is no longer a level pair of
+rim tops to sit across. **A fin is narrower than the gap and never overhangs a rim** (`inset`) —
+a mouth's width is Matt's number and nothing may narrow one.
+
+### There is NO rimout on this machine
+
+BRICK CITY's rimout hands the floor and the collar back so a ball that bounces out over the rim
+plays on. Correct there, where a rack is nine independent balls. **Here a capture IS a Connect 4
+move** — the column is chosen, the screen is about to show a disc drop into it, and a ball that
+climbed back out would leave the board and the physics disagreeing about the position.
+
+This costs nothing Matt asked for, because **the bounce happens before capture, not after**. The
+throat runs 2.4 ball-radii ABOVE the rim here (BRICK CITY's stops at the rim) precisely because
+the removed rimout was what used to catch a ball bouncing up out of a basket.
+
+### The rail chamfers
+
+A near-flat tread meeting a vertical rail is the right-angled pocket `MACHINE-SPEC` §12 warns
+about, and it is reachable here in a way it is not elsewhere: the hoops span ±3.90X while the
+cabinet is ±5.22X, so there is 1.3X of bare shelf outside the last hoop for a ball to run onto.
+Measured with square corners: **67 of 231 throws (29%) parked, every one against a rail.**
+Chamfers took it to 12.5%. A tilt/friction sweep then confirmed the current 0.10 / 0.12 pair is
+the best available — **steepening the tread makes parking WORSE** (7.2% → 12.4% at 0.28).
+
+**A parked ball here is not a lost ball.** Under shoot-until-you-make-it the watchdog resolves it
+as an honest miss 0.6 s after it stops, and the player shoots again. That is why `test.js` asserts
+on the MEDIAN TIME TO RESOLVE A SHOT (2.53 s measured, 3.0 s bar) rather than on Skeeball's 2%
+emergency rate — a threshold borrowed from a machine where a watchdog kill burns one of nine would
+mean nothing here, which is the exact trap `test-runaway-capped.mjs`'s header records.
+
+## The rules of a match
+
+- **Two shot rules, and the player picks** (2026-09-22). Matt: *"there should be an option to play
+  shoot til you make one, OR 1 shot and that's it. especially for the multiplayer."*
+  - **Shoot until you sink one** (`shots: 'until'`, the original): a miss costs a shot, not the
+    turn. A turn only ends when a ball goes in.
+  - **One shot only** (`shots: 'one'`): a miss passes the turn.
+
+  **It lives on the `Match`, not in the UI** (`oneShot` in `js/game.js`), and that is the whole
+  reason: under one-shot a miss is a RULE OF THE GAME, and in a multiplayer match both sides have
+  to agree on it or their boards diverge on the very first airball. In a live room the HOST'S
+  setting wins and is carried in the room's `config`; in a turn-by-turn match it is frozen on the
+  match document at creation. A shot into a FULL column takes the same path as a miss, through one
+  shared `_passTurn()`, so the two can never drift apart.
+- **A ball that rims out into the NEXT hoop still counts, in that column.** Nothing steers a ball
+  (`MACHINE-SPEC` §9's standing ban), so the wrong hoop is a real outcome and the best moment the
+  format has.
+- **A shot into a FULL column is a miss** and you shoot again. The only case where going in is not
+  a move, and it is a rule about the board rather than about the shot.
+- **The grid is a SCREEN**, exactly as on the real cabinet — an LCD above the hoops. That is also
+  what makes this buildable: 42 discs are paint on a `CanvasTexture`, not 42 rigid bodies, and the
+  physics only ever has to answer *which hoop did it go through*.
+
+## Multiplayer: TWO protocols, on purpose (2026-09-22)
+
+Matt asked for both halves in one line: *"build the multiplayer (host game live and turn based
+sending to each other like we discussed)"*. They are genuinely different problems and they use
+different layers. `js/mp-ui.js` is the one screen both are reached from ("Play a friend" on the
+setup screen); it is DOM only and lazily imported, so a solo player downloads none of it.
+
+| | LIVE | TURN BY TURN |
+|---|---|---|
+| layer | `js/net.js`, `rooms/<CODE>` | `hoops4/js/mp.js`, `hoops/games/<id>` |
+| addressed by | a five-character room code, typed in | the other person's PLAYER CODE |
+| who is present | both, now | neither has to be |
+| how they find it | the host reads the code out | it is sitting in their list next time they open the hub |
+| ships without a rules change | **yes** | **no — see below** |
+
+**ADDRESSED BY PLAYER CODE, never by deviceId.** Several people here have two phones, and a match
+addressed to a device is playable on one of them and invisible on the other. This is the one thing
+`bugReplies/` gets wrong and `js/messages.js` gets right, and it is why turn-by-turn is built on
+messages' shape rather than on net.js's.
+
+**A MOVE LOG, never a board snapshot.** An async match has no stored position: `replay()` runs the
+log into a fresh `Match`. A log either replays identically on both devices or `validateGame()`
+refused it before anything was drawn — where a snapshot can be subtly wrong and look fine.
+`validateGame` is WHOLE-DOCUMENT REJECTION for the same reason `js/career-store.js` is: one bad
+entry replays into a DIFFERENT position on the two phones, with nothing on either screen saying so.
+
+**The log carries TWO kinds of entry, and it needs both.** A landed shot is `{by, col, shots}` —
+`shots` is how many it took, so a replay can charge the shooter the misses that came first, which
+is what keeps the accuracy line honest. A `{by, miss:true}` entry exists ONLY under one-shot, where
+a miss hands the turn over; under shoot-until-you-make-it a miss changes nothing the other person
+can see and is never sent.
+
+**Nothing is ever deleted.** A finished match keeps its move list and both index rows. Resigning
+writes `over: {winner, why:'resign'}` — it does not remove anything.
+
+**Every write is verified by a fresh re-read before it is reported as sent** (THE LAW rule 6), and
+a move that cannot be sent is QUEUED on the device (`gamehub.hoops4.outbox.v1`) and retried the
+next time the screen opens, rather than lost with an apology.
+
+### `hoops` is a new top-level node, so THE RULES HAVE TO BE PUBLISHED BY HAND
+
+Since the Messages work the database's root is `.read: false / .write: false` with every branch
+enumerated in `database.rules.json` (root `CLAUDE.md`, "Messages"). `hoops` is added to that file
+here — but **no script in this repo deploys it**: it is pasted into the Firebase console (Realtime
+Database → Rules → paste → Publish). Until that happens, turn-by-turn fails SOFTLY and says so:
+`readMyGames()` returns `[]`, `createGame()` returns `{ ok:false, reason:'denied' }`, and a denied
+write is deliberately **not retryable**, so it can never sit in the outbox for ever.
+
+**LIVE multiplayer is unaffected and needs no rules change** — `rooms/` is already enumerated.
+That is why the two halves are separated the way they are: the half that can ship on a push does.
+
+`backups/rtdb-backup.mjs`'s `BRANCHES` list has `hoops` in it too, because that list must stay in
+step with the rules file or a branch is silently missing from every snapshot.
+
+### What is NOT built
+
+- **No push notification.** The badge-on-next-open model is all this repo has; real push needs FCM
+  and a permission prompt, and `js/CLAUDE.md` says so in as many words about Messages.
+- **No launcher badge yet.** `countMyTurns(rows, code)` is exported and tested and is exactly what
+  a badge would count, but nothing on the hub reads it. A badge goes where the thing it counts is
+  reached (`js/CLAUDE.md`), and that is a hub-side change, not a hoops4 one.
+- **No rematch button on a finished async match.** Challenge them again from the picker.
+
+## The CPU's difficulty is SHOT ACCURACY, not search depth
+
+Connect Four's solver already knows which column to play, so that is free. What makes an opponent
+easy or hard here is whether it can hit the hoop it picked — a Beginner knows the right column and
+bricks it. `js/cpu.js`'s `COLUMN_AIM` is the **measured** mean aim each column's baskets actually
+came from; the per-skill `spread` is in those same units, and the gaps between neighbouring
+columns are 0.12 to 0.16, so a Beginner's 0.19 genuinely lands it in the wrong column often.
+
+**It shoots through the same physics the player does.** Nothing places a CPU disc directly.
+
+## The swipe
+
+`aimCurve: 1` and `aimDiv: 1.00`, both departures from Skeeball's defaults and both deliberate.
+Skeeball squares the swipe angle (forgiving near straight, steep at the corners), which is right
+for a machine whose hard shots ARE the corners and wrong for this one — squaring compresses the
+OUTER columns into the narrowest slivers of thumb arc, so columns would get harder to pick the
+further out they are on top of already being smaller targets. BRICK CITY set `aimCurve: 1` for the
+same reason. `aimDiv` spends the whole thumb arc on the aim range that actually exists (±0.41,
+which is about ±24 degrees of swipe end to end).
+
+**`aimDiv` IS THE FIRST NUMBER TO TUNE if Matt finds the columns fiddly.** It is pure input
+shaping and touches no physics.
+
+## Still open
+
+- **The `hoops` rules are not published.** Turn-by-turn cannot write until they are pasted into
+  the Firebase console — see "Multiplayer" above. Live multiplayer works without it.
+- **Whether a human swipe has the precision seven columns need.** `check-display.mjs` (without
+  `--no-swipe`) now drives real touch gestures at each of the seven columns through the real pad,
+  the real swipe maths and the real engine, and reports what lands. It is still a scripted thumb
+  on a SwiftShader canvas, not a person — a playtest is what finally answers this.
+- **The outer columns are easier than the middle**, because everything past the aim needed to
+  reach column 1 still lands in column 1. Arguably the right way round, since Connect 4's centre
+  columns carry the most winning lines — but confirm it reads as skill.
+
+## Testing
+
+- `node hoops4/js/test.js` — the engine probe, headless, ~2 min. `POWERS`/`AIMS` env vars set the
+  grid. It is the file that holds all four of Matt's requirements as numbers.
+- `node test-game-conventions.mjs` — the shared checklist; it discovers game folders from disk.
+- `node check-no-scroll.mjs hoops4` — **no game in this hub may scroll.**
+- `node test-hoops4-mp.mjs` — the PURE halves of turn-by-turn multiplayer: whole-document
+  rejection, the replay (position AND shot counts), the turn rules under both shot modes, the
+  listing's order and the badge count, plus structural checks that every write is verified, a dev
+  origin cannot write, and `hoops` is in both `database.rules.json` and the backup script's branch
+  list. The Firebase write path and `js/mp-ui.js` are NOT covered, and the suite header says so.
+- `node test-visual.mjs hoops4` — the only suite that LOOKS at it.

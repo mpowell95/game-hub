@@ -10,21 +10,34 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as SETTINGS from './engine/settings.js';
-import { ZONE, flyPitch } from './engine/pitch.js';
+import { ZONE, flyPitch, breakOffsetFor } from './engine/pitch.js';
 import { swing, qualityFor, computeSwingTiming } from './engine/swing.js';
-import { resolveContact, carryFt, fenceFtAt } from './engine/outcomes.js';
+import { resolveContact, resolveBunt, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
-import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs } from './engine/agents.js';
+import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, pickMode } from './engine/agents.js';
 import { makeTeam, makeLeague, makePlayerTeam, teamStrength, effectiveCapFor, POSITIONS } from './engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
+import { budgetFor, capFor, scalePreset, clampBuild, randomBuild, adjust, canAdjust } from './build.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.error('FAIL:', msg); } };
+
+/** R5: the exit velocity that carries exactly `ft` feet at `launchAngleDeg`, by inverting the real
+ *  `carryFt` rather than re-deriving its angle factor by hand. Several tests below need "a ball
+ *  that lands exactly here" and every one of them used to inline `sin(2a)`; when R5 moved the
+ *  curve's peak (`CARRY_PEAK_DEG`) those copies silently asked for the wrong distance. Returns
+ *  `null` when the requested distance is under `MIN_IN_PLAY_FT` (no exit velocity produces it). */
+function veloForCarry(ft, launchAngleDeg) {
+  if (ft < SETTINGS.MIN_IN_PLAY_FT) return null;
+  const a = Math.max(0, Math.min(70, launchAngleDeg));
+  const angleFactor = Math.max(SETTINGS.GROUND_CARRY_FACTOR, Math.sin((Math.PI * a) / (2 * SETTINGS.CARRY_PEAK_DEG)));
+  return ft / (SETTINGS.CARRY_SCALE * angleFactor) + SETTINGS.CARRY_ZERO_MPH;
+}
 
 const DETERMINISM_SEED = 424242;
 const RESUME_SEED = 909090;
@@ -90,7 +103,7 @@ ok(SETTINGS.PATTERN_WEIGHTS.length === SETTINGS.PATTERN_WINDOW, 'PATTERN_WEIGHTS
 ok(SETTINGS.PATTERN_WINDOW === 3, 'pattern memory window is the last 3 pitches (doc §8, [Locked])');
 ok(SETTINGS.FEEL.engine.dtS === 1 / 120, 'fixed timestep is 1/120s, matching hill-climb/js/physics.js\'s DT');
 ok(SETTINGS.FEEL.engine.maxSteps === 5, 'catch-up cap matches the repo\'s standing convention (Hill Climb/Pinball)');
-ok(SETTINGS.FEEL.engine.fastballMs === 1500, 'fastballMs matches the doc\'s prototype-tuned value (doc §14)');
+ok(SETTINGS.FEEL.engine.fastballMs === 650, 'fastballMs is R2\'s re-timed flight (docs/BASEBALL-3D-BUILD.md section 9; was the doc\'s 1500)');
 ok(SETTINGS.SEASON.inningsPerGame === 3, 'a game is 3 innings (doc §3, [Locked])');
 ok(SETTINGS.SEASON.playoffTeams === 4 && SETTINGS.SEASON.leagueSize === 9, 'top 4 of 9 make the playoffs (doc §4)');
 ok(SETTINGS.SEASON.playoffRounds.length === 2, 'no quarterfinal - semifinal then championship only (doc §4)');
@@ -208,7 +221,7 @@ console.log('\n-- 5. swing.js --');
   const r2 = mulberry32(99);
   for (let i = 0; i < 300; i++) {
     const pitch = flyPitch('fastball', (r2() - 0.5) * 1.2, 0.6, SETTINGS, r2);
-    const s = swing(pitch, skills, { action: 'swing', aimX: (r2() - 0.5) * 1.2, timingErrorMs: (r2() - 0.5) * 340, power: 0.7 }, SETTINGS, r2);
+    const s = swing(pitch, skills, { action: 'swing', cursor: { x: (r2() - 0.5) * 1.2, y: (r2() - 0.5) * 1.2 }, timingErrorMs: (r2() - 0.5) * 340 }, SETTINGS, r2);
     if (!s.contact) sawWhiff = true;
     else if (s.foul) sawFoul = true;
     else { sawContact = true; if (s.inPlay) sawInPlay = true; }
@@ -222,16 +235,20 @@ console.log('\n-- 5. swing.js --');
     let whiffs = 0, n = 400;
     for (let i = 0; i < n; i++) {
       const pitch = flyPitch('fastball', 0, 1, SETTINGS, r);
-      const s = swing(pitch, { ...skills, hitAcc: 10 }, { action: 'swing', aimX: 0, timingErrorMs, power: 0.6 }, SETTINGS, r);
+      const s = swing(pitch, { ...skills, hitAcc: 10 }, { action: 'swing', cursor: { x: pitch.x, y: pitch.y }, timingErrorMs }, SETTINGS, r);
       if (!s.contact) whiffs++;
     }
     return whiffs / n;
   };
   ok(whiffRate(0) < whiffRate(1000), 'a well-timed swing whiffs less than one wildly outside the foul boundary');
-  // Bat reach: a bat placed far from where the pitch actually crossed is an automatic miss.
-  const wayOff = swing({ x: 0, isStrike: true }, skills,
-    { action: 'swing', aimX: SETTINGS.FEEL.engine.batReach + 0.5, timingErrorMs: 0, power: 0.6 }, SETTINGS, mulberry32(4));
-  ok(wayOff.contact === false, 'a bat placed beyond reach of the pitch is an automatic miss');
+  // R2: the cursor's own circle replaces `batReach` - a pitch that crosses outside it is an
+  // automatic miss, whatever the timing was, in EITHER axis.
+  const wayOff = swing({ x: 0, y: 0, isStrike: true }, skills,
+    { action: 'swing', cursor: { x: 2, y: 0 }, timingErrorMs: 0 }, SETTINGS, mulberry32(4));
+  ok(wayOff.contact === false, 'a pitch crossing outside the batting cursor\'s circle is an automatic miss');
+  const wayHigh = swing({ x: 0, y: 0, isStrike: true }, skills,
+    { action: 'swing', cursor: { x: 0, y: -2 }, timingErrorMs: 0 }, SETTINGS, mulberry32(4));
+  ok(wayHigh.contact === false, 'the same is true VERTICALLY - the cursor is a circle, not a bar (R2)');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -252,7 +269,7 @@ console.log('\n-- 5b. swing.js: contact-quality axis (BB-2a step 2) --');
   const exitVeloAt = (timingErrorMs) => {
     const r = mulberry32(777); // same seed every call -> identical noise draws
     const pitch = { x: 0, isStrike: true };
-    const s = swing(pitch, skills, { action: 'swing', aimX: 0, timingErrorMs, charged: false }, SETTINGS, r);
+    const s = swing(pitch, skills, { action: 'swing', cursor: { x: pitch.x, y: pitch.y }, timingErrorMs }, SETTINGS, r);
     return s;
   };
   const timingSamples = [0, 5, 15, 25, 40, 60, 80, 99];
@@ -273,7 +290,7 @@ console.log('\n-- 5b. swing.js: contact-quality axis (BB-2a step 2) --');
     const r = mulberry32(321);
     const sk = { ...skills, hitPow: hitPowPts, hitAcc: hitAccPtsForWindow };
     const pitch = { x: 0, isStrike: true };
-    return swing(pitch, sk, { action: 'swing', aimX: 0, timingErrorMs, charged: false }, SETTINGS, r).exitVeloMph;
+    return swing(pitch, sk, { action: 'swing', cursor: { x: pitch.x, y: pitch.y }, timingErrorMs }, SETTINGS, r).exitVeloMph;
   };
   const perfectMaxPower = veloForPower(10, 0);
   const edgeMaxPower = veloForPower(10, windowMsFor());
@@ -336,18 +353,23 @@ console.log('\n-- 6. outcomes.js / zones.js (Step 1: out-zone geometry, no error
     // model centers a perfectly-timed swing, per settings.js's `perfectSprayDeg`) is a hit - the
     // doc's own promise ("good timing is not aimed at the worst place on the field") made concrete.
     const zonesM = zonesFor('majors', 0);
-    const centerSector = zonesM.outfield[1];
-    const cornerSector = zonesM.outfield[0];
-    ok(centerSector.toFt > cornerSector.toFt, 'majors\' straightaway-center out-zone reaches deeper than its corners (the geometry this test exercises)');
-    const midDistance = (centerSector.toFt + cornerSector.toFt) / 2; // beyond corner reach, within center reach
+    const fence = SETTINGS.PARKS.default;
+    // R5: this promise is now carried by the FENCE, not by the out-zone's own depth. R5's zone
+    // depths reach the wall at every league (zones.js's own header says why), so a fly ball that
+    // beats a manned sector has already left the park; what still differs between straightaway
+    // centre and the gap a perfectly-timed swing sprays toward is HOW FAR THE WALL IS. A ball that
+    // is a routine fly out to the deepest part is over the fence toward the gap.
+    const gapDeg = SETTINGS.FEEL.engine.perfectSprayDeg;
+    ok(fenceFtAt(0, fence) > fenceFtAt(gapDeg, fence),
+      'the park is deeper dead centre than toward the gap a perfectly-timed swing sprays to (the geometry this test exercises)');
+    const midDistance = (fenceFtAt(0, fence) + fenceFtAt(gapDeg, fence)) / 2; // over one wall, short of the other
     const FLY_ANGLE = 30; // a 'fly' kind (battedBallKind: >=26, <52), clear of the line-through rule
-    const angleFactor = Math.max(0, Math.sin((2 * FLY_ANGLE * Math.PI) / 180));
-    const exitVeloMph = midDistance / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    const exitVeloMph = veloForCarry(midDistance, FLY_ANGLE);
     const deadCenter = resolveContact({ exitVeloMph, launchAngleDeg: FLY_ANGLE, sprayAngleDeg: 0, q: 1 },
-      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(2));
-    const towardGap = resolveContact({ exitVeloMph, launchAngleDeg: FLY_ANGLE, sprayAngleDeg: SETTINGS.FEEL.engine.perfectSprayDeg, q: 1 },
-      zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(2));
-    ok(deadCenter.result === 'out', `a marginal fly ball hit dead center is caught (majors' deepest out-zone), got ${JSON.stringify(deadCenter)}`);
+      zonesM, SETTINGS, fence, 5, mulberry32(2));
+    const towardGap = resolveContact({ exitVeloMph, launchAngleDeg: FLY_ANGLE, sprayAngleDeg: gapDeg, q: 1 },
+      zonesM, SETTINGS, fence, 5, mulberry32(2));
+    ok(deadCenter.result === 'out', `a marginal fly ball hit dead center is caught (majors' deepest part of the park), got ${JSON.stringify(deadCenter)}`);
     ok(towardGap.result === 'hit', `the identical ball hit toward a gap (where a perfectly-timed swing sprays) gets through, got ${JSON.stringify(towardGap)}`);
   }
   {
@@ -356,10 +378,11 @@ console.log('\n-- 6. outcomes.js / zones.js (Step 1: out-zone geometry, no error
     // identical spot stays an out.
     const zonesM = zonesFor('majors', 0);
     const sec2 = zonesM.outfield[1]; // straightaway center
-    const midDepth = (sec2.fromFt + sec2.toFt) / 2;
-    // Reverse-engineer an exit velo/angle combo that carries to midDepth at launchAngleDeg=18.
-    const angleFactor = Math.max(0, Math.sin((2 * 18 * Math.PI) / 180));
-    const exitVeloMph = midDepth / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    // A depth INSIDE the sector's reach and inside LINE_THROUGH_MAX_FT, which is the band the rule
+    // is about. R5's sectors reach the wall, so their own midpoint is far past that cap.
+    const midDepth = Math.min((sec2.fromFt + sec2.toFt) / 2, SETTINGS.LINE_THROUGH_MAX_FT - 20);
+    ok(midDepth > sec2.fromFt, 'the line-through probe depth is inside the sector\'s own reach');
+    const exitVeloMph = veloForCarry(midDepth, 18);
     const highQ = resolveContact({ exitVeloMph, launchAngleDeg: 18, sprayAngleDeg: 0, q: 0.95 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
     const lowQ = resolveContact({ exitVeloMph, launchAngleDeg: 18, sprayAngleDeg: 0, q: 0.1 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
     ok(highQ.result === 'hit' && highQ.kind === 'line-through',
@@ -639,7 +662,7 @@ console.log('\n-- 9. the agent seam --');
 {
   const scripted = new ScriptedAgent(
     [{ type: 'fastball', aim: 0 }],
-    [{ action: 'swing', aimX: 0, timingErrorMs: 0, power: 0.8 }],
+    [{ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0 }],
   );
   scripted.decidePitch().then((d) => ok(d.type === 'fastball', 'ScriptedAgent replays its pitch script in order'));
   scripted.decideSwing().then((d) => ok(d.action === 'swing', 'ScriptedAgent replays its swing script in order'));
@@ -651,7 +674,7 @@ console.log('\n-- 9. the agent seam --');
   const view = { rand01: mulberry32(1) };
   pitcher.decidePitch(view).then((d) => {
     ok(SETTINGS.unlockedPitchesFor('little').includes(d.type), 'CpuPitcher only ever offers an unlocked pitch for its league');
-    ok(typeof d.aim === 'number', 'CpuPitcher aims with a single lateral number, not a 2-D point');
+    ok(d.aim && typeof d.aim.x === 'number' && typeof d.aim.y === 'number', 'CpuPitcher aims at a 2-D point (R2 - the zone has a height now)');
   });
   const batter = new CpuBatter({ league: 'little', skills: cpuTeam.players[0].skills, settings: SETTINGS });
   const pitch = flyPitch('fastball', 0, 1, SETTINGS, mulberry32(2));
@@ -667,7 +690,7 @@ console.log('\n-- 9. the agent seam --');
   const modelPitcher = new ModelPitcher({ league: 'majors', settings: SETTINGS, variety: 0.6, cornerBias: 0.5, pitchMix: SETTINGS.CPU.majors.pitchMix });
   modelPitcher.decidePitch({ rand01: mulberry32(7) }).then((d) => {
     ok(SETTINGS.unlockedPitchesFor('majors').includes(d.type), 'ModelPitcher only ever offers an unlocked pitch for its league');
-    ok(typeof d.aim === 'number', 'ModelPitcher aims with a single lateral number');
+    ok(d.aim && typeof d.aim.x === 'number' && typeof d.aim.y === 'number', 'ModelPitcher aims at a 2-D point too');
   });
 }
 
@@ -736,7 +759,7 @@ await (async () => {
   const r4 = mulberry32(9);
   const p4 = flyPitch('fastball', 0, 1, SETTINGS, r4);
   const dNoHist = await new CpuBatter({ league, skills, settings: SETTINGS }).decideSwing({ rand01: () => 0.001, pitch: p4, pitchHistory: noHist });
-  ok(dLean.aimX > dNoHist.aimX, 'a batter leaning on a consistently-thrown location aims further toward it than one with no history');
+  ok(dLean.cursor.x > dNoHist.cursor.x, 'a batter leaning on a consistently-thrown location aims further toward it than one with no history');
 })();
 
 // ---------------------------------------------------------------------------------------------
@@ -850,16 +873,22 @@ console.log('\n-- 10. rules correctness, played through the real engine --');
     g6.bases = ['runnerOnFirst', null, null];
     g6.outs = 0;
     const alwaysDp = () => 0; // rand01 returning 0 always beats doublePlayChance (> 0)
-    g6._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', alwaysDp);
+    const r6 = g6._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', alwaysDp);
     ok(g6.bases[0] === null && g6.outs === 2, 'a ground-out double play removes the lead runner and records 2 outs');
+    // R3 (docs/BASEBALL-3D-BUILD.md section 9): `runnersOut` is the id of the runner removed
+    // WITHOUT scoring - captured before the removal, so the UI knows exactly who to run to second
+    // and vanish there, rather than guessing from the before/after bases alone.
+    ok(Array.isArray(r6.runnersOut) && r6.runnersOut.length === 1 && r6.runnersOut[0] === 'runnerOnFirst',
+      `a double play's runnersOut names the forced-out runner (R3; got ${JSON.stringify(r6.runnersOut)})`);
   }
   {
     const g7 = playGameOnce('majors', hashSeed('double-play-probe-2'));
     g7.bases = ['runnerOnFirst', null, null];
     g7.outs = 0;
     const neverDp = () => 0.999999; // beats no chance under 1.0
-    g7._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', neverDp);
+    const r7 = g7._resolveBattedBall({ result: 'out', kind: 'groundout', isFoul: false }, 'batterX', 'home', neverDp);
     ok(g7.bases[0] === 'runnerOnFirst' && g7.outs === 1, 'a ground out that does not roll the double play just makes the one out');
+    ok(Array.isArray(r7.runnersOut) && r7.runnersOut.length === 0, 'an ordinary ground out puts nobody else out (runnersOut empty, R3)');
   }
   {
     // 2 outs already: a double play may never be granted regardless of the roll.
@@ -1059,9 +1088,8 @@ console.log('\n-- 15. Locked-statement inventory gap-fill (BB-2a step 8) --');
     // between sectors 1 and 2 under the default GAP_DEG).
     const sprayAngleDeg = (sector.fromDeg + sector.toDeg) / 2;
     const GROUND_ANGLE = 4;
-    const angleFactor = Math.max(0, Math.sin((2 * GROUND_ANGLE * Math.PI) / 180));
     const nearEdgeFt = sector.toFt - SETTINGS.MECHANICS.groundEdgeMarginFt / 2; // well inside the near-edge band
-    const exitVeloMph = nearEdgeFt / (SETTINGS.CARRY_SCALE * angleFactor) + 30;
+    const exitVeloMph = veloForCarry(nearEdgeFt, GROUND_ANGLE);
     const trial = (hitSpd) => resolveContact({ exitVeloMph, launchAngleDeg: GROUND_ANGLE, sprayAngleDeg },
       zonesM, SETTINGS, SETTINGS.PARKS.default, hitSpd, () => 0.0001).result;
     ok(trial(0) === 'out', 'a close grounder with hitSpd=0 is fielded (the beat-out roll never fires with zero chance)');
@@ -1168,13 +1196,12 @@ console.log('\n-- 16. BB-2b commit 3: gaps/bloopers, real fence source, pitch sp
 
     const manned = zonesM.outfield[1]; // straightaway center, a manned sector
     const bloopFt = manned.fromFt - SETTINGS.BLOOP_BAND_FT / 2; // well inside the bloop band
-    const angleFactor18 = Math.max(0, Math.sin((2 * 18 * Math.PI) / 180));
-    const bloopVelo = bloopFt / (SETTINGS.CARRY_SCALE * angleFactor18) + 30;
+    const bloopVelo = veloForCarry(bloopFt, 18);
     const bloop = resolveContact({ exitVeloMph: bloopVelo, launchAngleDeg: 18, sprayAngleDeg: 0 },
       zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
     ok(bloop.result === 'hit' && bloop.kind === 'blooper', `a fly short of a manned sector's near edge, within BLOOP_BAND_FT, is a bloop single, got ${JSON.stringify(bloop)}`);
 
-    const tooShort = resolveContact({ exitVeloMph: bloopFt < 20 ? 35 : (manned.fromFt - SETTINGS.BLOOP_BAND_FT - 10) / (SETTINGS.CARRY_SCALE * angleFactor18) + 30,
+    const tooShort = resolveContact({ exitVeloMph: veloForCarry(manned.fromFt - SETTINGS.BLOOP_BAND_FT - 10, 18),
       launchAngleDeg: 18, sprayAngleDeg: 0 }, zonesM, SETTINGS, SETTINGS.PARKS.default, 5, mulberry32(1));
     ok(tooShort.result === 'out', `a fly shorter than BLOOP_BAND_FT short of a manned sector's near edge is still an out, got ${JSON.stringify(tooShort)}`);
 
@@ -1355,7 +1382,7 @@ console.log('\n-- 17. BB-2c commit 2: the CPU strength contract - doc §8, [Lock
   {
     const fs = await import('node:fs');
     const agentsSrc = fs.readFileSync(new URL('./engine/agents.js', import.meta.url), 'utf8');
-    const baseAimLine = agentsSrc.match(/let aimX = pitch\.x \+ .*/);
+    const baseAimLine = agentsSrc.match(/let aimX = seenX \+ .*/);
     ok(!!baseAimLine && baseAimLine[0].includes('placementNoise') && !baseAimLine[0].includes('guess'),
       `CpuBatter's base aimX line reads cpu.placementNoise, never cpu.guess: "${baseAimLine && baseAimLine[0]}"`);
     ok(agentsSrc.includes('leanWeight') && agentsSrc.includes('cpu.guess'),
@@ -1766,43 +1793,136 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
 }
 
 // ---------------------------------------------------------------------------------------------
-// Section 26 (BB-3 commit 1): the UI input seams - hold/release, steering, swing timing, and the
-// flight path flyPitch now returns.
+// Section 26 (R2, docs/BASEBALL-3D-BUILD.md section 9): THE ZONE AND THE AIM ARE 2-D.
+// Replaces BB-3's hold/Nice/hang and steering block, deleted with the meter and the steer pad.
 (function section26() {
-  // Omitting pitchExtras entirely must reproduce prior output byte-for-byte.
   const rand = mulberry32(777);
-  const r1 = flyPitch('fastball', 0.2, 0.5, SETTINGS, rand, { pitchSpd: 3 });
+  const r1 = flyPitch('fastball', { x: 0.2, y: 0.1 }, 0.5, SETTINGS, rand, { pitchSpd: 3 });
   ok(Array.isArray(r1.path) && r1.path.length > 1, 'flyPitch returns a non-trivial per-step path');
-  ok(r1.path[0].t === 0 && Math.abs(r1.path[r1.path.length - 1].x - r1.x) < 1e-9,
-    'flyPitch path starts at t=0 and ends at the pitch\'s own final x');
-  ok(r1.wasNice === false && r1.wasHang === false, 'omitting pitchExtras never produces a Nice/Hang pitch');
+  ok(r1.path[0].t === 0 && Math.abs(r1.path[r1.path.length - 1].x - r1.x) < 1e-9
+    && Math.abs(r1.path[r1.path.length - 1].y - r1.y) < 1e-9,
+    'flyPitch path starts at t=0 and ends at the pitch\'s own final (x, y)');
+  ok(typeof r1.straightX === 'number' && typeof r1.straightY === 'number',
+    'flyPitch reports where the pitch WOULD have crossed with no break (straightX/straightY - the batting target marker\'s own start)');
 
-  // A release inside the Nice window lands exactly on aim, with no aimScatter at all.
-  const niceMs = SETTINGS.FEEL.engine.meterTime - 1;
-  const rNice = flyPitch('fastball', 0.35, 0.5, SETTINGS, mulberry32(1), {}, { hold: niceMs });
-  ok(rNice.wasNice && rNice.x === 0.35, 'a Nice release lands exactly on the pitcher\'s aim');
-  const rNormal = flyPitch('fastball', 0.35, 0.5, SETTINGS, mulberry32(1), {}, { hold: 50 });
-  ok(!rNormal.wasNice && !rNormal.wasHang, 'a release well before the meter fills is an ordinary pitch');
+  // A plain number is still a lateral-only aim (every pre-R2 caller and fixture).
+  const asNumber = flyPitch('fastball', 0.3, 1, SETTINGS, mulberry32(5));
+  const asObject = flyPitch('fastball', { x: 0.3, y: 0 }, 1, SETTINGS, mulberry32(5));
+  ok(asNumber.x === asObject.x && asNumber.y === asObject.y,
+    'a plain-number aim means {x, y: 0} - a pre-R2 caller keeps working unchanged');
 
-  // A release past the hang threshold is slower and drifts toward center.
-  const hangMs = SETTINGS.FEEL.engine.meterTime * (1 + SETTINGS.HANG_GRACE_FRAC) + 50;
-  const rHang = flyPitch('fastball', 0.8, 0.5, SETTINGS, mulberry32(2), {}, { hold: hangMs });
-  const rBase = flyPitch('fastball', 0.8, 0.5, SETTINGS, mulberry32(2), {}, { hold: 50 });
-  ok(rHang.wasHang, 'a release past the hang threshold is scored a hang');
-  ok(rHang.timeToPlateS > rBase.timeToPlateS, 'a hung pitch travels slower than an ordinary one');
-  ok(Math.abs(rHang.x) < Math.abs(0.8), 'a hung pitch drifts toward the center of the zone');
+  // two-d-strike: the spec's own named probe. A pitch down the middle laterally can be a BALL on
+  // height alone, and a pitch at both corners at once is still a strike.
+  const NO_SCATTER = { scatter: { x: 0.5, y: 0.5, bx: 0.5, by: 0.5 } };
+  const high = flyPitch('fastball', { x: 0, y: 1.2 }, 1, SETTINGS, mulberry32(1), {}, NO_SCATTER);
+  ok(Math.abs(high.y - 1.2) < 1e-9 && high.isStrike === false,
+    'two-d-strike: x=0, y=1.2 is a BALL - above the zone (it would have been a strike in the 1-D engine)');
+  const corner = flyPitch('fastball', { x: 1.0, y: 1.0 }, 1, SETTINGS, mulberry32(1), {}, NO_SCATTER);
+  ok(corner.isStrike === true, 'two-d-strike: x=1.0, y=1.0 is a STRIKE - the zone\'s own top corner is inside it');
+  const low = flyPitch('fastball', { x: 0, y: -1.4 }, 1, SETTINGS, mulberry32(1), {}, NO_SCATTER);
+  ok(low.isStrike === false, 'two-d-strike: y=-1.4 is a ball below the zone');
 
-  // Steering: a curveball honors an early steer sample; a slider ignores one before its own
-  // steerFromFrac (0.5) and only bends once enough of the flight has passed to include later ones.
-  const steerEarly = [{ step: 0, dx: 1 }];
-  const cvNoSteer = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(3), {}, { hold: 50, steer: [] });
-  const cvSteer = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(3), {}, { hold: 50, steer: steerEarly });
-  ok(cvSteer.x !== cvNoSteer.x, 'a curveball steers from an early sample (step 0)');
-  const slNoSteer = flyPitch('slider', 0, 0.5, SETTINGS, mulberry32(4), {}, { hold: 50, steer: [] });
-  const slEarlySteer = flyPitch('slider', 0, 0.5, SETTINGS, mulberry32(4), {}, { hold: 50, steer: steerEarly });
-  ok(slEarlySteer.x === slNoSteer.x, 'a slider ignores a steer sample from before its own halfway point');
+  // The scatter model is the SAME on both axes (the spec's own words), and a mid draw (0.5) is
+  // exactly no scatter at all, which is what lets every probe here aim exactly.
+  {
+    const sk = 0.4;
+    const amt = SETTINGS.FEEL.engine.aimScatter * (1 - sk * 0.67);
+    const hi = flyPitch('fastball', { x: 0, y: 0 }, sk, SETTINGS, mulberry32(1), {}, { scatter: { x: 1, y: 1, bx: 0.5, by: 0.5 } });
+    ok(Math.abs(hi.straightX - amt) < 1e-9 && Math.abs(hi.straightY - amt) < 1e-9,
+      `both axes scatter by the same skill-scaled amount (${amt.toFixed(4)} zone units at skill ${sk})`);
+  }
 
-  // computeSwingTiming: a synthetic tap at the exact crossing time (zero delay/offset) is zero.
+  // BREAK OFFSETS: every type lands exactly where BREAK_OFFSET says, at zero scatter.
+  {
+    let allRight = true, firstBad = '';
+    for (const type of SETTINGS.PITCH_TYPES) {
+      for (const hand of ['R', 'L']) {
+        const row = SETTINGS.BREAK_OFFSET[type];
+        if (row.random) continue; // the knuckleball's own case is below
+        const sign = row.handed ? (hand === 'L' ? -1 : 1) : 1;
+        const r = flyPitch(type, { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { ...NO_SCATTER, pitcherHand: hand });
+        if (Math.abs(r.x - row.x * sign) > 1e-9 || Math.abs(r.y - row.y) > 1e-9) {
+          allRight = false;
+          if (!firstBad) firstBad = `${type}/${hand}: (${r.x.toFixed(3)}, ${r.y.toFixed(3)}) vs (${(row.x * sign).toFixed(3)}, ${row.y.toFixed(3)})`;
+        }
+        if (Math.abs(r.straightX) > 1e-9 || Math.abs(r.straightY) > 1e-9) { allRight = false; if (!firstBad) firstBad = `${type} straight point moved`; }
+      }
+    }
+    ok(allRight, `every pitch type breaks to exactly BREAK_OFFSET[type] (x flipped by the pitcher's hand where handed), from an unscattered aim of (0,0)${firstBad ? ' - ' + firstBad : ''}`);
+  }
+  // doc §11, [Locked]: a screwball breaks the OTHER way from a slider, off the same arm.
+  {
+    const sl = flyPitch('slider', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { ...NO_SCATTER, pitcherHand: 'R' });
+    const sc = flyPitch('screwball', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { ...NO_SCATTER, pitcherHand: 'R' });
+    ok(sl.x > 0 && sc.x < 0, 'a right-hander\'s slider and screwball break opposite ways (doc §11, [Locked])');
+    const slL = flyPitch('slider', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { ...NO_SCATTER, pitcherHand: 'L' });
+    ok(Math.abs(slL.x + sl.x) < 1e-9, 'a left-hander\'s slider is the exact mirror of a right-hander\'s');
+    ok(flyPitch('fastball', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, NO_SCATTER).x === 0,
+      'a fastball does not break at all - it is the baseline the others are measured against');
+  }
+  // The knuckleball reads its own two draws, both axes, and nothing else does.
+  {
+    const kA = flyPitch('knuckleball', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { scatter: { x: 0.5, y: 0.5, bx: 1, by: 0 } });
+    const rnd = SETTINGS.BREAK_OFFSET.knuckleball.random;
+    ok(Math.abs(kA.x - rnd) < 1e-9 && Math.abs(kA.y + rnd) < 1e-9,
+      `a knuckleball's break is +-${rnd} in BOTH axes, drawn from the pitch's own draws`);
+  }
+  // A pitch costs the seeded stream the SAME number of draws whatever type it is - a replayed
+  // game must not diverge because a different pitch came up.
+  {
+    const count = (type) => { let n = 0; flyPitch(type, { x: 0, y: 0 }, 0.5, SETTINGS, () => { n++; return 0.5; }); return n; };
+    const counts = SETTINGS.PITCH_TYPES.map(count);
+    ok(counts.every((c) => c === counts[0]) && counts[0] === 4,
+      `every pitch type draws exactly ${counts[0]} values from the stream (uniform cost, so a seeded replay cannot diverge on pitch choice)`);
+  }
+
+  // THE SWING, IN TWO DIMENSIONS.
+  {
+    const skills = { hitAcc: 0, hitPow: 6, hitSpd: 6 };
+    const at = (px, py, cx, cy, mode) => swing({ x: px, y: py, isStrike: true }, skills,
+      { action: 'swing', cursor: { x: cx, y: cy }, timingErrorMs: 0, mode }, SETTINGS, () => 0.5, 'college');
+    // Quality falls with 2-D distance and reaches zero (a miss) at the circle's own rim.
+    const dead = at(0, 0, 0, 0);
+    const near = at(0.2, 0, 0, 0);
+    const edge = at(0.5, 0, 0, 0);
+    // R5 rule 1 REPLACES R2's "quality falls with distance from the cursor": `q` is TIMING quality
+    // alone now, and placement never subtracts power. What the distance still does is decide
+    // whether there is contact at all, spray the ball, pick the kind, and (in the line-drive band)
+    // widen the launch-angle spread. This assertion was `dead.q > near.q > edge.q` until R5.
+    ok(dead.q === near.q && near.q === edge.q,
+      `the swing's contact quality is TIMING alone - the same timing scores identically dead centre, near and at the rim (${dead.q.toFixed(3)} = ${near.q.toFixed(3)} = ${edge.q.toFixed(3)}), R5 rule 1`);
+    ok(Math.abs(dead.exitVeloMph - edge.exitVeloMph) < 1e-9,
+      `and placement subtracts NO exit velocity: dead centre and the rim are the same mph on the same seed (${dead.exitVeloMph.toFixed(2)} vs ${edge.exitVeloMph.toFixed(2)})`);
+    ok(SETTINGS.FEEL.engine.placementPenaltyMph === undefined,
+      'the flat placement penalty is gone from settings.js, not merely unused (R5 rule 1)');
+    const diag = at(0.2 / Math.SQRT2, 0.2 / Math.SQRT2, 0, 0);
+    ok(Math.abs(diag.sprayAngleDeg - near.sprayAngleDeg) < 1e-9 || diag.contact === near.contact,
+      'distance is the 2-D distance: the same offset taken diagonally still makes contact the same way');
+    ok(at(0, 0.6, 0, 0).contact === false, 'a ball 0.6 units ABOVE the contact cursor\'s centre is outside its 0.55 circle - a miss');
+    // Kind follows the VERTICAL offset, per the spec.
+    const R = SETTINGS.FEEL.engine.cursorR.contact;
+    const flyOffY = R * SETTINGS.FEEL.engine.flyOffsetFrac;
+    const popOffY = R * SETTINGS.FEEL.engine.popupOffsetFrac;
+    ok(Math.abs(flyOffY - 0.3) < 0.01, `the CONTACT cursor's fly threshold is the spec's own 0.3 zone units (${flyOffY.toFixed(3)}), expressed as a fraction of the circle's radius so a pop-up can exist inside it at all`);
+    ok(at(0, flyOffY + 0.02, 0, 0).kind === 'fly', 'the ball crossing above the cursor\'s centre by more than the fly threshold is a FLY ball');
+    ok(at(0, -(flyOffY + 0.02), 0, 0).kind === 'ground', 'below it by the same amount is a GROUNDER');
+    ok(at(0, 0, 0, 0).kind === 'line', 'on it is a LINE DRIVE');
+    ok(at(0, popOffY + 0.02, 0, 0).kind === 'popup', 'further still (past the pop-up threshold, still inside the circle) is a POP-UP');
+    // POWER mode: smaller circle, more exit velocity.
+    const cContact = at(0, 0, 0, 0, 'contact');
+    const cPower = at(0, 0, 0, 0, 'power');
+    const want = SETTINGS.FEEL.engine.modeExitMult.power / SETTINGS.FEEL.engine.modeExitMult.contact;
+    ok(Math.abs(cPower.exitVeloMph / cContact.exitVeloMph - want) < 1e-6,
+      `POWER mode's exit velocity is exactly x${want} of CONTACT's on the same pitch (${cPower.exitVeloMph.toFixed(2)} vs ${cContact.exitVeloMph.toFixed(2)} mph)`);
+    ok(SETTINGS.FEEL.engine.cursorR.power < SETTINGS.FEEL.engine.cursorR.contact, 'and it pays for it with a smaller circle');
+    ok(at(0.45, 0, 0, 0, 'power').contact === false && at(0.45, 0, 0, 0, 'contact').contact === true,
+      'a ball inside the CONTACT circle but outside the POWER one is a miss in POWER mode and contact in CONTACT mode - that trade IS the mode choice');
+    // The horizontal offset sprays.
+    ok(at(0.3, 0, 0, 0).sprayAngleDeg > at(-0.3, 0, 0, 0).sprayAngleDeg,
+      'meeting the ball on one side of the cursor sprays it that way (the R2 statement of aimX\'s own direction rule)');
+  }
+
+  // computeSwingTiming: unchanged by R2, still the one place a raw tap becomes a timing error.
   const t0 = computeSwingTiming({ releaseMs: 1500, timeToPlateS: 1.5, dtS: SETTINGS.FEEL.engine.dtS });
   ok(t0.timingErrorMs === 0, 'a tap at the exact crossing time (no swingDelay/inputOffset) produces zero timing error');
   const tEarly = computeSwingTiming({ releaseMs: 1400, timeToPlateS: 1.5, swingDelayMs: 60, inputOffsetMs: 10, dtS: SETTINGS.FEEL.engine.dtS });
@@ -1816,23 +1936,20 @@ await (async function section27() {
   // A pre-rolled `pitchExtras.scatter` reproduces exactly what flyPitch's own internal rand01()
   // draw would have produced at that point, given the SAME underlying draw.
   const randA = mulberry32(42);
-  const draw = randA(); // the "pre-roll" a human pitcher's UI would take
-  const rWithPreroll = flyPitch('fastball', 0.1, 0.5, SETTINGS, mulberry32(999) /* unused for scatter now */, {}, { hold: 50, scatter: draw });
+  const draws = { x: randA(), y: randA(), bx: randA(), by: randA() }; // the "pre-roll" a human pitcher's UI takes
+  const rWithPreroll = flyPitch('curveball', { x: 0.1, y: 0.2 }, 0.5, SETTINGS, () => { throw new Error('should not draw'); }, {}, { scatter: draws });
   const randB = mulberry32(42);
-  const drawB = randB(); // same seed, same first draw
-  const rWithoutPreroll = flyPitch('fastball', 0.1, 0.5, SETTINGS, () => drawB, {}, { hold: 50 });
-  ok(rWithPreroll.x === rWithoutPreroll.x,
-    'a pre-rolled pitchExtras.scatter produces the identical x as flyPitch drawing the same value itself');
+  const rWithoutPreroll = flyPitch('curveball', { x: 0.1, y: 0.2 }, 0.5, SETTINGS, randB);
+  ok(rWithPreroll.x === rWithoutPreroll.x && rWithPreroll.y === rWithoutPreroll.y,
+    'a pre-rolled pitchExtras.scatter produces the identical (x, y) as flyPitch drawing the same four values itself - what the human pitcher watched IS what the engine scores');
 
   // Omitting pitchExtras.scatter (every existing caller) still calls rand01() exactly once for
   // the scatter term, at the same point in the stream as before this commit - already covered by
   // section 26's "omitting pitchExtras entirely reproduces prior output byte-for-byte" and by
   // every one of this file's other 2500+ assertions staying green after this change; this adds
   // the direct, minimal check.
-  const seq = [];
-  const spy = () => { const v = mulberry32(7)(); seq.push(v); return v; };
   const before = flyPitch('fastball', 0, 0.5, SETTINGS, mulberry32(7));
-  const after = flyPitch('fastball', 0, 0.5, SETTINGS, mulberry32(7), {}, { hold: 50, steer: [] });
+  const after = flyPitch('fastball', 0, 0.5, SETTINGS, mulberry32(7), {}, { scatter: null, pitcherHand: 'R' });
   ok(before.x === after.x, 'a pitchExtras object with no scatter field still draws its own rand01() scatter, byte-identical to omitting pitchExtras');
 
   // The additive `swing` event: fires once per pitch, after decideSwing, with {side, action, charged}.
@@ -1843,46 +1960,1009 @@ await (async function section27() {
   const g = new Game({
     home: homeTeam, away: awayTeam, seed, settings: SETTINGS,
     agents: {
-      home: { decidePitch: async () => ({ type: 'fastball', aim: 0 }), decideSwing: async () => ({ action: 'take' }) },
-      away: { decidePitch: async () => ({ type: 'fastball', aim: 0 }), decideSwing: async () => ({ action: 'swing', aimX: 0, timingErrorMs: 0, charged: false }) },
+      home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+      away: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0 }) },
     },
   });
   g.onEvent = async (type, payload) => { if (type === 'swing') swingEvents.push(payload); };
   g.innings = 1;
   await g.playHalfInning();
   ok(swingEvents.length > 0, 'the swing event fires at least once over a half inning');
-  ok(swingEvents.every((e) => e.side === 'away' && typeof e.action === 'string' && typeof e.charged === 'boolean'),
-    'every swing event carries {side, action, charged} with the expected shapes');
+  ok(swingEvents.every((e) => e.side === 'away' && typeof e.action === 'string'),
+    'every swing event carries {side, action} with the expected shapes');
 })();
 
 // ---------------------------------------------------------------------------------------------
-// Section 28 (BB-3b review fix): the steering direction clamp. Doc §11, [Locked]: "Curve and
-// slider break away from the pitcher's throwing arm... You control how much and when, never
-// which way." A drag the wrong way must produce NO bend, not a smaller or reversed one.
-(function section28() {
-  const rHand = 'R', lHand = 'L';
-  // A right-handed pitcher's curveball: steerDirectionSign('curveball','R') = +1 (armSign itself),
-  // so a positive dx (the correct direction) bends the pitch, a negative one (wrong way) does
-  // nothing - the pitch lands exactly where an empty steer array would leave it.
-  const noSteer = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [], pitcherHand: rHand });
-  const wrongWay = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: -1 }], pitcherHand: rHand });
-  const rightWay = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: 1 }], pitcherHand: rHand });
-  ok(wrongWay.x === noSteer.x, 'a right-handed curveball dragged the wrong way does nothing (lands exactly where no steer would)');
-  ok(rightWay.x !== noSteer.x, 'a right-handed curveball dragged the correct way still bends');
+// Section 28 (R2, docs/BASEBALL-3D-BUILD.md section 9): the agents aim in TWO dimensions, and a
+// CPU batter reads the pitch's STRAIGHT point rather than where it is going to end up. Replaces
+// BB-3b's steering-direction clamp, deleted with steering itself.
+await (async function section28() {
+  const view = (seed) => ({ rand01: mulberry32(seed) });
+  // A CPU pitcher's aim spreads in y, not just in x - a pitcher that always aimed at the belt
+  // would make the whole vertical axis decorative.
+  {
+    const ys = [], xs = [];
+    for (let i = 0; i < 60; i++) {
+      const d = await new CpuPitcher({ league: 'majors', settings: SETTINGS }).decidePitch(view(i + 1));
+      xs.push(d.aim.x); ys.push(d.aim.y);
+    }
+    const spread = (a) => Math.max(...a) - Math.min(...a);
+    ok(spread(ys) > 0.5, `a CPU pitcher's aim HEIGHT spreads across the zone (${spread(ys).toFixed(2)} zone units over 60 pitches)`);
+    ok(spread(xs) > 0.5, `and its aim SIDE still does (${spread(xs).toFixed(2)})`);
+  }
+  // A CPU batter places a 2-D cursor, and it is aimed at the pitch's straight point.
+  {
+    const skills = { hitAcc: 6, hitPow: 6, hitSpd: 6 };
+    const pitch = { type: 'curveball', x: 0.45, y: -0.35, straightX: 0, straightY: 0, isStrike: true, timeToPlateS: 0.65 };
+    let swings = 0, nearStraight = 0;
+    for (let i = 0; i < 200; i++) {
+      const d = await new CpuBatter({ league: 'majors', skills, settings: SETTINGS }).decideSwing({ ...view(i + 900), pitch, pitchHistory: [] });
+      if (d.action !== 'swing') continue;
+      swings++;
+      if (Math.hypot(d.cursor.x - pitch.straightX, d.cursor.y - pitch.straightY)
+        < Math.hypot(d.cursor.x - pitch.x, d.cursor.y - pitch.y)) nearStraight++;
+      if (d.mode !== 'contact' && d.mode !== 'power') { swings = -1; break; }
+    }
+    ok(swings > 20, `a CPU batter swings at a hittable curveball (${swings} of 200)`);
+    ok(nearStraight / Math.max(1, swings) > 0.8,
+      `and puts its cursor nearer the pitch's STRAIGHT point than its broken one ${(100 * nearStraight / Math.max(1, swings)).toFixed(0)}% of the time - the break is exactly what it is fooled by`);
+  }
+  // Every batting agent returns a legal mode, and a strong batter picks POWER more than a weak one.
+  {
+    const rate = (hitPow) => {
+      let power = 0, n = 0;
+      for (let i = 0; i < 400; i++) {
+        const r = mulberry32(i + 1);
+        if (pickMode({ hitPow }, r) === 'power') power++;
+        n++;
+      }
+      return power / n;
+    };
+    const weak = rate(0), strong = rate(8);
+    ok(weak === 0, 'a batter with no power at all never picks POWER mode');
+    ok(strong > weak, `and a strong one picks it ${(strong * 100).toFixed(0)}% of the time (rises with hitPow, capped well under "always")`);
+  }
+  // The 'swing' event carries the MODE now, not `charged`.
+  {
+    const seed = 555;
+    const homeTeam = makeTeam('college', 0, mulberry32(seed));
+    const awayTeam = makeTeam('college', 1, mulberry32(seed + 1));
+    const swingEvents = [];
+    const g = new Game({
+      home: homeTeam, away: awayTeam, seed, settings: SETTINGS,
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }),
+          decideSwing: async () => ({ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'power' }) },
+      },
+    });
+    g.onEvent = async (type, payload) => { if (type === 'swing') swingEvents.push(payload); };
+    g.innings = 1;
+    await g.playHalfInning();
+    ok(swingEvents.length > 0, 'the swing event fires at least once over a half inning');
+    ok(swingEvents.every((e) => e.side === 'away' && typeof e.action === 'string' && (e.mode === 'power' || e.mode === 'contact')),
+      'every swing event carries {side, action, mode} - `charged` is gone with the charged swing');
+  }
+})();
 
-  // A left-handed pitcher's curveball breaks the MIRROR of a right-handed one's - the same dx
-  // that was "correct" for a righty is now the wrong way, and vice versa.
-  const leftyWrongWay = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: 1 }], pitcherHand: lHand });
-  const leftyRightWay = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: -1 }], pitcherHand: lHand });
-  const leftyNoSteer = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [], pitcherHand: lHand });
-  ok(leftyWrongWay.x === leftyNoSteer.x, 'a left-handed curveball mirrors: the righty\'s "correct" drag direction does nothing for a lefty');
-  ok(leftyRightWay.x !== leftyNoSteer.x, 'a left-handed curveball bends on the mirrored (now-correct) drag direction');
+// ---------------------------------------------------------------------------------------------
+// Section 29 (R3, docs/BASEBALL-3D-BUILD.md section 9): `atBatEnd` carries `basesBefore` (the
+// runner array exactly as it stood when the at-bat opened) and `runnersOut` (this play's own
+// removed-without-scoring runners), both additive - the UI runs baserunning off these, never off
+// its own guess.
+await (async function section29() {
+  // A forced walk with a runner already on first: `basesBefore` must be the array from BEFORE the
+  // walk's own `advanceWalk` mutated `this.bases`, and a walk removes nobody (`runnersOut` empty).
+  const seed = 777;
+  const homeTeam = makeTeam('college', 0, mulberry32(seed));
+  const awayTeam = makeTeam('college', 1, mulberry32(seed + 1));
+  const g = new Game({
+    home: homeTeam, away: awayTeam, seed, settings: SETTINGS,
+    agents: {
+      // home pitches (defense) to away (batting, top half): aim far outside the zone every pitch,
+      // well past aimScatter's own spread (0.12), so every pitch is a called ball.
+      home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 5, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+      away: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+    },
+  });
+  g.bases = ['runnerOnFirst', null, null];
+  let payload = null;
+  g.onEvent = async (type, p) => { if (type === 'atBatEnd') payload = p; };
+  await g.playAtBat();
+  ok(!!payload, 'a forced 4-ball at-bat resolved with an atBatEnd event');
+  ok(payload && payload.outcome === 'walk', `the outcome was a walk (got ${payload && payload.outcome})`);
+  ok(payload && Array.isArray(payload.basesBefore) && payload.basesBefore[0] === 'runnerOnFirst'
+    && payload.basesBefore[1] == null && payload.basesBefore[2] == null,
+    'atBatEnd carries basesBefore, the runner array exactly as it stood at the pitch (R3)');
+  ok(payload && Array.isArray(payload.runnersOut) && payload.runnersOut.length === 0,
+    'a walk removes no runner (runnersOut empty, R3)');
+})();
 
-  // Omitting pitcherHand defaults to 'R' - byte-identical to passing it explicitly, so every
-  // pre-existing caller (which never set it) keeps behaving as a right-handed pitcher, exactly as
-  // this repo's teams/players have always defaulted in practice.
-  const noHandField = flyPitch('curveball', 0, 0.5, SETTINGS, mulberry32(11), {}, { hold: 50, steer: [{ step: 0, dx: 1 }] });
-  ok(noHandField.x === rightWay.x, 'omitting pitcherHand defaults to R, identical to passing it explicitly');
+// ---------------------------------------------------------------------------------------------
+// Section 30 (RA, docs/BASEBALL-3D-BUILD.md section 9): STEAL, BUNT, PICKOFF, and Quick Play's own
+// eight pitches. Every rule the spec states, one block each, driven through the REAL engine
+// wherever the rule is about the at-bat loop (a steal's third out, a pickoff throwing no pitch)
+// and through the real pure function where it is about the maths (the two success bands).
+console.log('\n-- 30. RA: steal, bunt, pickoff, and Quick Play\'s eight pitches --');
+await (async function section30() {
+  const RUNNER = 'stealer';
+  const BALL_OUTSIDE = { type: 'fastball', aim: { x: 5, y: 0 } };   // never a strike: past aimScatter's own spread
+
+  /** A two-team fixture with the runner's legs and the pitcher's accuracy pinned, so the steal's
+   *  own formula has exactly one value and an observed rate can be compared against it. */
+  function fixture(league, { runnerHitSpd = 0, pitcherAcc = 0, settings = null } = {}) {
+    const home = makeTeam(league, 0, mulberry32(11));
+    const away = makeTeam(league, 1, mulberry32(12));
+    for (const pl of away.players) pl.skills.hitSpd = runnerHitSpd;
+    const pitcher = home.players.find((pl) => pl.id === home.pitcherId);
+    pitcher.skills.pitchAcc = pitcherAcc;
+    // The man on first, renamed onto the roster so the engine's own skill lookup finds him. The
+    // batting order (and, defensively, the pitcher slot) hold IDS, so both are remapped with him -
+    // renaming the player alone leaves `_currentBatterId` pointing at somebody who no longer exists.
+    const wasId = away.players[3].id;
+    away.players[3].id = RUNNER;
+    away.battingOrder = away.battingOrder.map((id) => (id === wasId ? RUNNER : id));
+    if (away.pitcherId === wasId) away.pitcherId = RUNNER;
+    return { home, away, settings };
+  }
+
+  /** N steal attempts through the real `playAtBat`, counting the engine's own 'steal' events. The
+   *  bases/outs are reset before each at-bat so the sweep never ends a half-inning; every draw
+   *  still comes from the game's own seeded stream. */
+  async function stealTrials(league, opts, want) {
+    const { home, away, settings } = fixture(league, opts);
+    const g = new Game({
+      home, away, seed: 20260920, settings: settings || undefined,
+      agents: {
+        home: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take', steal: true }) },
+      },
+    });
+    let tries = 0, safe = 0;
+    g.onEvent = async (type, pl) => { if (type === 'steal') { tries += 1; if (pl.safe) safe += 1; } };
+    while (tries < want) {
+      g.bases = [RUNNER, null, null];
+      g.outs = 0; g.balls = 0; g.strikes = 0; g._atBatOpen = false;
+      await g.playAtBat();
+    }
+    return { tries, rate: safe / tries };
+  }
+
+  // --- the steal's success band, at zero skill and at the Majors cap -----------------------------
+  {
+    const cap = SETTINGS.CAPS.majors;
+    const perPt = SETTINGS.SKILL_EFFECT.hitSpd.stealSuccessPerPt;
+    const cases = [
+      { label: 'zero skill both sides', runnerHitSpd: 0, pitcherAcc: 0, want: SETTINGS.STEAL_BASE },
+      { label: 'runner at the Majors cap', runnerHitSpd: cap, pitcherAcc: 0, want: SETTINGS.STEAL_BASE + perPt * cap },
+      { label: 'pitcher at the Majors cap', runnerHitSpd: 0, pitcherAcc: cap, want: SETTINGS.STEAL_BASE - SETTINGS.STEAL_PER_ACC * cap },
+    ];
+    for (const c of cases) {
+      const wanted = Math.max(SETTINGS.STEAL_MIN, Math.min(SETTINGS.STEAL_MAX, c.want));
+      const got = await stealTrials('majors', { runnerHitSpd: c.runnerHitSpd, pitcherAcc: c.pitcherAcc }, 10000);
+      ok(Math.abs(got.rate - wanted) <= 0.03,
+        `steal band, ${c.label}: ${got.tries} attempts came back safe ${got.rate.toFixed(3)} of the time against the formula's ${wanted.toFixed(3)} (budget 0.03)`);
+    }
+    // The clamp is a real rule, not decoration: a runner well past any league's cap still tops out.
+    const g = new Game({ ...fixture('majors'), seed: 1, agents: { home: {}, away: {} } });
+    ok(g._stealChance(1000, { skills: { pitchAcc: 0 } }) === SETTINGS.STEAL_MAX, 'the steal chance is clamped at STEAL_MAX');
+    ok(g._stealChance(0, { skills: { pitchAcc: 1000 } }) === SETTINGS.STEAL_MIN, 'the steal chance is clamped at STEAL_MIN');
+  }
+
+  // --- the CPU's own 2-out/3-ball guard ---------------------------------------------------------
+  {
+    const skills = { hitAcc: 5, hitPow: 20, hitSpd: 20 };
+    const batter = new CpuBatter({ league: 'majors', skills, settings: SETTINGS });
+    const view = (outs, balls) => {
+      let seq = 0;
+      return {
+        side: 'away', inning: 1, half: 'top', outs, balls, strikes: 0,
+        bases: ['r', null, null], score: { home: 0, away: 0 }, batterId: 'b',
+        pitch: { type: 'fastball', x: 0, y: 0, isStrike: true, timeToPlateS: 0.5, straightX: 0, straightY: 0 },
+        pitchHistory: [], steal: { runnerId: 'r', from: 0, to: 1, hitSpd: 20 },
+        // a stream that always returns 0, so every probabilistic decision that CAN say yes does
+        rand01: () => { seq += 1; return 0; },
+      };
+    };
+    const guarded = await batter.decideSwing(view(2, 3));
+    ok(guarded.steal === false, 'the CPU never steals with 2 outs and a 3-ball count, even on a draw that would always say yes');
+    const free = await batter.decideSwing(view(1, 3));
+    ok(free.steal === true, 'the same CPU batter DOES steal with 1 out and a 3-ball count (the guard is the two together, not either alone)');
+    const free2 = await batter.decideSwing(view(2, 2));
+    ok(free2.steal === true, 'the same CPU batter DOES steal with 2 outs and a 2-ball count');
+    // ... and the draw is not taken at all when nobody can run, so an empty-bases pitch consumes
+    // exactly the draws it consumed before RA (the determinism note in agents.js).
+    const noRunner = { ...view(0, 0), steal: null, bases: [null, null, null] };
+    let drawsWith = 0, drawsWithout = 0;
+    const counting = (n) => ({ ...view(0, 0), rand01: () => { n.c += 1; return 0.99; } });
+    const a = { c: 0 }, b = { c: 0 };
+    await batter.decideSwing({ ...counting(a) });
+    await batter.decideSwing({ ...counting(b), steal: null, bases: [null, null, null] });
+    drawsWith = a.c; drawsWithout = b.c;
+    ok(drawsWith === drawsWithout + 1,
+      `a steal-eligible pitch costs exactly ONE extra draw (${drawsWith} against ${drawsWithout}) - an empty-bases pitch is untouched`);
+  }
+
+  // --- a caught steal is an out, and its third out ends the half-inning --------------------------
+  {
+    const never = { STEAL_BASE: 0, STEAL_MIN: 0, STEAL_MAX: 0 };
+    const { home, away } = fixture('college');
+    const g = new Game({
+      home, away, seed: 4242, settings: never,
+      agents: {
+        home: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take', steal: true }) },
+      },
+    });
+    g.outs = 2;
+    g.bases = [RUNNER, null, null];
+    g._resumeHalfPending = true;   // keep the outs we just set; this half is "already in progress"
+    const seen = [];
+    const lineupBefore = g.lineupPos.away;
+    g.onEvent = async (type, pl) => { seen.push([type, pl]); };
+    await g.playHalfInning();
+    const steal = seen.find(([t]) => t === 'steal');
+    ok(!!steal && steal[1].safe === false, 'the caught steal was emitted with safe:false');
+    ok(seen.some(([t]) => t === 'halfInningEnd'), 'a caught steal for the third out ends the half-inning through the ordinary path');
+    ok(g.outs >= SETTINGS.MECHANICS.outsPerInning, `the caught steal recorded the third out (outs=${g.outs})`);
+    ok(g.lineupPos.away === lineupBefore,
+      'the lineup pointer stays on the batter who was at the plate - he leads off the next time this side bats');
+    ok(!seen.some(([t, pl]) => t === 'atBatEnd' && pl && pl.outcome === 'walk'),
+      'no walk is converted off the pitch that carried the inning-ending caught steal');
+  }
+
+  // --- a steal is VOID when the batter puts the ball in play -------------------------------------
+  {
+    const { home, away } = fixture('college');
+    const g = new Game({
+      home, away, seed: 99, settings: { STEAL_BASE: 1, STEAL_MIN: 1, STEAL_MAX: 1 },
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: {
+          decidePitch: async () => BALL_OUTSIDE,
+          // A swing with the cursor where the pitch is and perfect timing: contact, in play.
+          decideSwing: async (v) => ({ action: 'swing', steal: true, timingErrorMs: 0,
+            cursor: { x: v.pitch.x, y: v.pitch.y }, mode: 'contact' }),
+        },
+      },
+    });
+    g.bases = [RUNNER, null, null];
+    let stealEvents = 0, ended = null;
+    g.onEvent = async (type, pl) => { if (type === 'steal') stealEvents += 1; if (type === 'atBatEnd') ended = pl; };
+    await g.playAtBat();
+    ok(!!ended, 'the at-bat ended on a ball in play');
+    ok(stealEvents === 0, 'no steal event is emitted on a ball in play - the runner was already moving and the play resolves as normal');
+  }
+
+  // --- the pickoff's success band -----------------------------------------------------------------
+  {
+    const cap = SETTINGS.CAPS.majors;
+    const perPt = SETTINGS.SKILL_EFFECT.pitchAcc.pickoffPerPt;
+    for (const [label, acc, want] of [
+      ['zero accuracy', 0, SETTINGS.PICKOFF_BASE],
+      ['the Majors cap', cap, SETTINGS.PICKOFF_BASE + perPt * cap],
+    ]) {
+      const { home, away } = fixture('majors', { pitcherAcc: acc });
+      const g = new Game({
+        home, away, seed: 7777,
+        agents: {
+          home: { decidePitch: async () => ({ pickoff: true }), decideSwing: async () => ({ action: 'take' }) },
+          away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+        },
+      });
+      let tries = 0, outs = 0;
+      g.onEvent = async (type, pl) => { if (type === 'pickoff') { tries += 1; if (pl.out) outs += 1; } };
+      while (tries < 10000) {
+        g.bases = [RUNNER, null, null];
+        g.outs = 0; g.balls = 0; g.strikes = 0; g._atBatOpen = false;
+        await g.playAtBat();
+      }
+      const wanted = Math.max(SETTINGS.PICKOFF_BASE, Math.min(SETTINGS.PICKOFF_MAX, want));
+      ok(Math.abs(outs / tries - wanted) <= 0.03,
+        `pickoff band, ${label}: ${tries} throws got the runner ${(outs / tries).toFixed(3)} of the time against the formula's ${wanted.toFixed(3)} (budget 0.03)`);
+    }
+    const { home, away } = fixture('majors');
+    const g2 = new Game({ home, away, seed: 1, agents: { home: {}, away: {} } });
+    ok(g2._pickoffChance({ skills: { pitchAcc: 1000 } }) === SETTINGS.PICKOFF_MAX, 'the pickoff chance is clamped at PICKOFF_MAX');
+    ok(g2._pickoffChance({ skills: { pitchAcc: 0 } }) === SETTINGS.PICKOFF_BASE, 'the pickoff chance floors at PICKOFF_BASE');
+  }
+
+  // --- a pickoff throws NO pitch and leaves the count alone ----------------------------------------
+  {
+    const { home, away } = fixture('college');
+    let threwOver = false;
+    const g = new Game({
+      home, away, seed: 31337, settings: { PICKOFF_BASE: 0, PICKOFF_MAX: 0 },  // never gets him
+      agents: {
+        home: {
+          decidePitch: async () => { if (!threwOver) { threwOver = true; return { pickoff: true }; } return BALL_OUTSIDE; },
+          decideSwing: async () => ({ action: 'take' }),
+        },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+      },
+    });
+    g.bases = [RUNNER, null, null];
+    const order = [];
+    const countAt = [];
+    g.onEvent = async (type, pl) => {
+      order.push(type);
+      if (type === 'pickoff') countAt.push({ balls: g.balls, strikes: g.strikes, outs: g.outs, lineup: g.lineupPos.away });
+      if (type === 'count' && pl.balls >= 1) g.abort();   // stop after the first real pitch resolves
+    };
+    await g.playAtBat();
+    const pickIdx = order.indexOf('pickoff');
+    const pitchIdx = order.indexOf('pitch');
+    ok(pickIdx >= 0, 'the pickoff was emitted');
+    ok(pitchIdx === -1 || pickIdx < pitchIdx, 'the pickoff threw no pitch - no pitch event precedes it');
+    ok(countAt[0] && countAt[0].balls === 0 && countAt[0].strikes === 0,
+      `the count is untouched by a pickoff (${countAt[0] && countAt[0].balls}-${countAt[0] && countAt[0].strikes})`);
+    ok(countAt[0] && countAt[0].lineup === 0, 'the lineup does not advance on a pickoff - the same batter is still up');
+    ok(g.bases[0] === RUNNER, 'a pickoff that misses leaves the runner exactly where he was');
+    // The safety valve: an agent that ONLY ever throws over still terminates the at-bat.
+    const g2 = new Game({
+      home, away, seed: 4, settings: { PICKOFF_BASE: 0, PICKOFF_MAX: 0 },
+      agents: {
+        home: { decidePitch: async () => ({ pickoff: true }), decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'take' }) },
+      },
+    });
+    g2.bases = [RUNNER, null, null];
+    let picks = 0, pitches = 0;
+    g2.onEvent = async (type) => { if (type === 'pickoff') picks += 1; if (type === 'pitch') pitches += 1; };
+    await g2.playAtBat();
+    ok(picks === SETTINGS.PICKOFF_MAX_PER_AT_BAT,
+      `PICKOFF_MAX_PER_AT_BAT binds at ${SETTINGS.PICKOFF_MAX_PER_AT_BAT} throws (${picks}), so an all-pickoff agent cannot spin the pitch loop`);
+    ok(pitches > 0, 'and the at-bat goes on to real pitches once the cap binds');
+  }
+
+  // --- the bunt: a foul bunt with two strikes IS strike three --------------------------------------
+  {
+    const skills = { hitAcc: 0, hitPow: 0, hitSpd: 0 };
+    const pitch = { type: 'fastball', x: 0, y: 0, isStrike: true, timeToPlateS: 0.5 };
+    const wide = SETTINGS.FEEL.engine.timingWindow * SETTINGS.BUNT_WINDOW_MULT;
+    const foul = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: wide + 50 }, SETTINGS, () => 0.5, 'college');
+    ok(foul.foul === true && foul.inPlay === false && foul.bunt === true,
+      'a bunt timed outside the widened window is a foul, never a swinging miss');
+    const good = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: 0 }, SETTINGS, () => 0.5, 'college');
+    ok(good.inPlay === true && good.kind === 'ground' && good.bunt === true, 'a well-timed bunt is always a grounder in play');
+    ok(good.distanceFt >= SETTINGS.BUNT_DIST_FT[0] && good.distanceFt <= SETTINGS.BUNT_DIST_FT[1],
+      `a bunt travels inside BUNT_DIST_FT (${good.distanceFt.toFixed(1)} ft)`);
+    ok(Math.abs(good.sprayAngleDeg) <= SETTINGS.BUNT_SPRAY_DEG, 'a bunt sprays inside +/-BUNT_SPRAY_DEG');
+    ok(SETTINGS.BUNT_SPRAY_DEG < SETTINGS.FOUL_LINE_DEG, 'a bunt that makes contact is never in foul ground');
+    // The window really is WIDER than an ordinary swing's, which is the whole reason to bunt.
+    const ordinaryEdge = SETTINGS.FEEL.engine.timingWindow;
+    const stillFair = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: ordinaryEdge + 10 }, SETTINGS, () => 0.5, 'college');
+    ok(stillFair.inPlay === true, 'a bunt still makes contact at a timing error that would have fouled an ordinary swing');
+
+    // End to end: a two-strike foul bunt is a strikeout, through the real at-bat loop.
+    const { home, away } = fixture('college');
+    const g = new Game({
+      home, away, seed: 606,
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: {
+          decidePitch: async () => BALL_OUTSIDE,
+          decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: wide + 500 }),
+        },
+      },
+    });
+    let ended = null; const verdicts = [];
+    g.onEvent = async (type, pl) => { if (type === 'atBatEnd') ended = pl; if (type === 'count') verdicts.push(pl.verdict); };
+    await g.playAtBat();
+    ok(ended && ended.outcome === 'strikeout',
+      `three foul bunts in a row is a strikeout (got ${ended && ended.outcome}, verdicts ${verdicts.join(',')})`);
+    // Three 'count' events, all reading 'foul': game.js emits the count for the third one too,
+    // BEFORE converting it into the strikeout (its own ordering note), so the player sees the pitch
+    // that got him as the foul bunt it was rather than as an unexplained third strike.
+    ok(verdicts.length === 3 && verdicts.every((v) => v === 'foul'),
+      `all three pitches read as fouls on the count (${verdicts.join(',')})`);
+  }
+
+  // --- the bunt: sacrifice, beat-out, and the nobody-on split ---------------------------------------
+  {
+    const batted = { distanceFt: 20, sprayAngleDeg: 10 };
+    const never = () => 1;     // the beat-out roll never succeeds
+    const always = () => 0;    // it always does
+    const sac = resolveBunt(batted, ['r1', null, null], 1, 0, SETTINGS, never);
+    ok(sac.kind === 'sacrifice' && sac.result === 'out', 'a bunt with a runner on and 1 out is a sacrifice');
+    const sacTwoOut = resolveBunt(batted, ['r1', null, null], 2, 0, SETTINGS, never);
+    ok(sacTwoOut.kind === 'bunt-out', 'with 2 outs it is not a sacrifice - it is a bunt for a hit that failed');
+    const beat = resolveBunt(batted, ['r1', null, null], 1, 20, SETTINGS, always);
+    ok(beat.kind === 'bunt-single' && beat.result === 'hit' && beat.bases === 1,
+      'the beat-out roll turns the sacrifice into a bunt single');
+    const alone = resolveBunt(batted, [null, null, null], 0, 20, SETTINGS, always);
+    ok(alone.kind === 'bunt-single', 'nobody on, the roll succeeds: a bunt single');
+    const aloneOut = resolveBunt(batted, [null, null, null], 0, 20, SETTINGS, never);
+    ok(aloneOut.kind === 'bunt-out', 'nobody on, the roll fails: a bunt out');
+    // Split BY SKILL, on the real roll: the beat-out chance is hitSpd x MECHANICS.beatOutPerPt.
+    const rateFor = (hitSpd) => {
+      let hits = 0; const N = 20000; let seed = 1234;
+      const rnd = () => { const r = stepRng(seed); seed = r.next; return r.value; };
+      for (let i = 0; i < N; i++) {
+        if (resolveBunt(batted, [null, null, null], 0, hitSpd, SETTINGS, rnd).kind === 'bunt-single') hits += 1;
+      }
+      return hits / N;
+    };
+    const slow = rateFor(0), quick = rateFor(20);
+    const wantQuick = Math.min(0.5, 20 * SETTINGS.MECHANICS.beatOutPerPt);
+    ok(slow === 0, `a batter with no speed never beats out a bunt (${slow})`);
+    ok(Math.abs(quick - wantQuick) <= 0.02,
+      `a 20-point hitSpd batter beats out ${quick.toFixed(3)} of his bunts against MECHANICS.beatOutPerPt's ${wantQuick.toFixed(3)}`);
+
+    // End to end: the sacrifice actually MOVES the runner and records the out.
+    const { home, away } = fixture('college');
+    const g = new Game({
+      home, away, seed: 808, settings: { MECHANICS: { ...SETTINGS.MECHANICS, beatOutPerPt: 0 } },
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: 0 }) },
+      },
+    });
+    g.bases = [RUNNER, null, null];
+    g.outs = 1;
+    let ended = null;
+    g.onEvent = async (type, pl) => { if (type === 'atBatEnd') ended = pl; };
+    await g.playAtBat();
+    ok(ended && ended.outcome === 'sacrifice', `the at-bat ended as a sacrifice (got ${ended && ended.outcome})`);
+    ok(g.bases[1] === RUNNER && g.bases[0] == null, 'the runner advanced from first to second');
+    ok(g.outs === 2, `the batter is out (outs 1 -> ${g.outs})`);
+    ok(ended && ended.battedKind === 'ground', "atBatEnd carries battedKind 'ground' for a bunt");
+    ok(ended && Array.isArray(ended.basesBefore) && ended.basesBefore[0] === RUNNER,
+      'the sacrifice still carries basesBefore, exactly as every other atBatEnd does (R3)');
+    // A sacrifice with a runner on THIRD scores him.
+    const g2 = new Game({
+      home, away, seed: 909, settings: { MECHANICS: { ...SETTINGS.MECHANICS, beatOutPerPt: 0 } },
+      agents: {
+        home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: 0 }) },
+      },
+    });
+    g2.bases = [null, null, RUNNER];
+    g2.outs = 0;
+    let ended2 = null;
+    g2.onEvent = async (type, pl) => { if (type === 'atBatEnd') ended2 = pl; };
+    await g2.playAtBat();
+    ok(ended2 && ended2.runsScored === 1 && g2.score.away === 1, 'a squeeze scores the runner from third');
+  }
+
+  // --- R11 (docs/BASEBALL-3D-BUILD.md section 9): the all-eight override is GONE - Quick Play and
+  // career throw the SAME ladder, and the CPU throws it from the SAME `pitchMix` career uses.
+  // This block used to prove the opposite (RA's own, now-overruled decision); it proves the new
+  // rule instead. -------------------------------------------------------------------------------
+  {
+    for (const lg of SETTINGS.LEAGUES) {
+      const quickPlay = SETTINGS.unlockedPitchesFor(lg, 0, { quickPlay: true });
+      const career = SETTINGS.unlockedPitchesFor(lg, 0);
+      ok(JSON.stringify(quickPlay) === JSON.stringify(SETTINGS.PITCH_UNLOCKS[lg]),
+        `unlockedPitchesFor('${lg}', 0, {quickPlay:true}) returns the league's own career ladder, not all eight`);
+      ok(JSON.stringify(career) === JSON.stringify(SETTINGS.PITCH_UNLOCKS[lg]),
+        `unlockedPitchesFor('${lg}', 0) with no quickPlay option returns the identical ladder - the option is a no-op now`);
+    }
+    // Little League is FASTBALL ONLY (Matt, 2026-09-21: "only 'fastballs' should be able to be
+    // thrown"); changeup moved to High School, alongside curveball.
+    ok(JSON.stringify(SETTINGS.PITCH_UNLOCKS.little) === JSON.stringify(['fastball']),
+      `Little League's own ladder is fastball only (got ${JSON.stringify(SETTINGS.PITCH_UNLOCKS.little)})`);
+    ok(JSON.stringify(SETTINGS.PITCH_UNLOCKS.highschool) === JSON.stringify(['fastball', 'changeup', 'curveball']),
+      `High School's own ladder picks up changeup and curveball together (got ${JSON.stringify(SETTINGS.PITCH_UNLOCKS.highschool)})`);
+    ok(SETTINGS.QUICK_PLAY_PITCH_MIX === undefined, 'QUICK_PLAY_PITCH_MIX is deleted with the override it existed only to serve');
+    // The CPU actually respects the ladder now: a Little League CPU in Quick Play throws fastball
+    // only, exactly as it does in a career game - there is no longer a second distribution to
+    // diverge from it.
+    const seen = new Set();
+    const pitcher = new CpuPitcher({ league: 'little', settings: SETTINGS });
+    let seed = 5150;
+    const rnd = () => { const r = stepRng(seed); seed = r.next; return r.value; };
+    for (let i = 0; i < 2000; i++) {
+      const d = await pitcher.decidePitch({ quickPlay: true, runnerOnFirst: false, weakZone: null, rand01: rnd });
+      seen.add(d.type);
+    }
+    ok(seen.size === 1 && seen.has('fastball'),
+      `a Little League CPU in Quick Play throws fastball only now (saw ${JSON.stringify([...seen])}) - the career ladder gives it the identical one type`);
+    const careerSeen = new Set();
+    for (let i = 0; i < 2000; i++) {
+      const d = await pitcher.decidePitch({ runnerOnFirst: false, weakZone: null, rand01: rnd });
+      careerSeen.add(d.type);
+    }
+    ok(careerSeen.size === 1 && careerSeen.has('fastball'),
+      'and the same CPU pitcher in a CAREER game (no quickPlay flag) throws the identical one type');
+    // A High School CPU (changeup AND curveball unlocked, doc §11) still throws both in Quick Play.
+    const hsPitcher = new CpuPitcher({ league: 'highschool', settings: SETTINGS });
+    const hsSeen = new Set();
+    let hsSeed = 24601;
+    const hsRnd = () => { const r = stepRng(hsSeed); hsSeed = r.next; return r.value; };
+    for (let i = 0; i < 2000; i++) {
+      const d = await hsPitcher.decidePitch({ quickPlay: true, runnerOnFirst: false, weakZone: null, rand01: hsRnd });
+      hsSeen.add(d.type);
+    }
+    ok(hsSeen.size === 3 && hsSeen.has('fastball') && hsSeen.has('changeup') && hsSeen.has('curveball'),
+      `a High School CPU in Quick Play throws its own three-pitch ladder (saw ${JSON.stringify([...hsSeen])})`);
+  }
+
+  // --- the CPU pitcher's own pickoff rate ------------------------------------------------------------
+  {
+    const pitcher = new CpuPitcher({ league: 'majors', settings: SETTINGS });
+    let seed = 24680;
+    const rnd = () => { const r = stepRng(seed); seed = r.next; return r.value; };
+    let overs = 0; const N = 20000;
+    for (let i = 0; i < N; i++) {
+      const d = await pitcher.decidePitch({ runnerOnFirst: true, weakZone: null, rand01: rnd });
+      if (d.pickoff) overs += 1;
+    }
+    ok(Math.abs(overs / N - SETTINGS.CPU_PICKOFF_RATE) <= 0.01,
+      `the CPU pitcher throws over ${(overs / N).toFixed(3)} of the time against CPU_PICKOFF_RATE's ${SETTINGS.CPU_PICKOFF_RATE}`);
+    let noneWithEmptyBag = 0;
+    for (let i = 0; i < 2000; i++) {
+      const d = await pitcher.decidePitch({ runnerOnFirst: false, weakZone: null, rand01: rnd });
+      if (d.pickoff) noneWithEmptyBag += 1;
+    }
+    ok(noneWithEmptyBag === 0, 'and never throws over with nobody on first');
+  }
+})();
+
+// ---------------------------------------------------------------------------------------------
+// Section 31 (R4, docs/BASEBALL-3D-BUILD.md section 9): `atBatEnd` carries `launchAngleDeg` on a
+// ball in play - additive, straight off `swingResult.launchAngleDeg`, the same discipline as
+// `exitVeloMph`/`sprayAngleDeg` before it. It is what the HOME RUN stats strip's `{deg}` reads.
+console.log('\n-- 31. R4: atBatEnd carries launchAngleDeg --');
+await (async function section31() {
+  const seed = 5150;
+  const homeTeam = makeTeam('majors', 0, mulberry32(seed));
+  const awayTeam = makeTeam('majors', 1, mulberry32(seed + 1));
+  const g = new Game({
+    home: homeTeam, away: awayTeam, seed, settings: SETTINGS,
+    agents: {
+      // A dead-center fastball, swung PERFECT-timed contact/power every time, so this at-bat is
+      // guaranteed to put a ball in play rather than strike out or walk.
+      home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }),
+        decideSwing: async (v) => ({ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'power' }) },
+      away: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }),
+        decideSwing: async (v) => ({ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'power' }) },
+    },
+  });
+  let payload = null;
+  g.onEvent = async (type, p) => { if (type === 'atBatEnd' && payload == null) payload = p; };
+  await g.playAtBat();
+  ok(!!payload, 'a perfect-timed swing at a centered fastball resolved with an atBatEnd event');
+  ok(payload && typeof payload.launchAngleDeg === 'number',
+    `atBatEnd carries a numeric launchAngleDeg on a ball in play (got ${payload && payload.launchAngleDeg})`);
+})();
+
+
+// ---------------------------------------------------------------------------------------------
+// Section 32 (R5, docs/BASEBALL-3D-BUILD.md section 9): CONTACT AND CARRY. The stage's own five
+// deliverables, in order, plus the derivation the numbers in settings.js are written from.
+// Measured before this stage, through the real swing.js/outcomes.js at Quick Play's preset roster
+// and the College park: a perfectly timed dead-centre CONTACT swing carried 0 ft on 27.9% of
+// swings and the same swing 0.2 zone units off centre carried 0 ft on 100% of them. Every
+// assertion below exists so that cannot come back.
+console.log('\n-- 32. R5: contact and carry --');
+await (async function section32() {
+  const F = SETTINGS.FEEL.engine;
+  const presets = Object.values(SETTINGS.PRESETS);
+
+  // (a) 20,000 random in-play swings per league and per mode, none under MIN_IN_PLAY_FT.
+  {
+    let checked = 0, worst = Infinity, worstAt = null, zeroFt = 0;
+    for (const league of SETTINGS.LEAGUES) {
+      for (const mode of ['contact', 'power']) {
+        const zones = zonesFor(league, 0);
+        const fenceFt = SETTINGS.FIELD[league].fenceFt;
+        const r = mulberry32(hashSeed('r5-in-play', league, mode));
+        let swings = 0;
+        while (swings < 20000) {
+          const skills = presets[swings % presets.length];
+          const pitch = flyPitch('fastball', { x: (r() * 2 - 1) * 1.2, y: (r() * 2 - 1) * 1.2 }, 0.6, SETTINGS, r);
+          const decision = { action: 'swing', mode, timingErrorMs: (r() * 2 - 1) * 200,
+            cursor: { x: (r() * 2 - 1) * 1.2, y: (r() * 2 - 1) * 1.2 } };
+          const sr = swing(pitch, skills, decision, SETTINGS, r, league);
+          swings += 1;
+          if (!sr.contact || !sr.inPlay) continue;
+          const oc = resolveContact(sr, zones, SETTINGS, fenceFt, skills.hitSpd, r);
+          if (oc.isFoul) continue; // a foul out never carried anywhere
+          checked += 1;
+          if (oc.distanceFt <= 0) zeroFt += 1;
+          if (oc.distanceFt < worst) { worst = oc.distanceFt; worstAt = `${league}/${mode}`; }
+        }
+      }
+    }
+    ok(checked > 0, `(a) the in-play sweep actually produced balls in play (${checked} of 200000 swings)`);
+    ok(zeroFt === 0, `(a) NO ball in play carries 0 ft, at any league or mode (${zeroFt} of ${checked})`);
+    ok(worst >= SETTINGS.MIN_IN_PLAY_FT - 1e-9,
+      `(a) and none is under MIN_IN_PLAY_FT (shortest ${worst.toFixed(1)} ft at ${worstAt}, floor ${SETTINGS.MIN_IN_PLAY_FT} ft)`);
+  }
+
+  // (b) A perfectly-timed dead-centre swing is never 0 ft, and its exit velocity is inside
+  //     [70, 115] at EVERY league - the broadcast band R4's HOME RUN strip prints.
+  {
+    for (const league of SETTINGS.LEAGUES) {
+      const zones = zonesFor(league, 0);
+      const fenceFt = SETTINGS.FIELD[league].fenceFt;
+      const r = mulberry32(hashSeed('r5-perfect-centre', league));
+      let lo = Infinity, hi = -Infinity, shortest = Infinity, n = 0;
+      for (let i = 0; i < 4000; i++) {
+        const skills = presets[i % presets.length];
+        const pitch = { x: 0, y: 0, isStrike: true };
+        const sr = swing(pitch, skills, { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'contact' }, SETTINGS, r, league);
+        if (!sr.inPlay) continue;
+        n += 1;
+        lo = Math.min(lo, sr.exitVeloMph); hi = Math.max(hi, sr.exitVeloMph);
+        const oc = resolveContact(sr, zones, SETTINGS, fenceFt, skills.hitSpd, r);
+        shortest = Math.min(shortest, oc.distanceFt);
+      }
+      ok(n === 4000, `(b) ${league}: every perfectly-timed dead-centre swing is in play (${n}/4000)`);
+      ok(shortest > 0, `(b) ${league}: and none of them carries 0 ft (shortest ${shortest.toFixed(1)} ft)`);
+      // Little League's own bat is held back by LEAGUE_POWER_SCALE (0.525) on purpose - a 210 ft
+      // park - so its band is its own, below the broadcast band the other four share.
+      const band = league === 'little' ? [45, 75] : [70, 115];
+      ok(lo >= band[0] && hi <= band[1],
+        `(b) ${league}: exit velocity reads like a broadcast number, ${lo.toFixed(1)} to ${hi.toFixed(1)} mph inside [${band[0]}, ${band[1]}]`);
+    }
+  }
+
+  // (c) R5 rule 1: with the same seed, cursor offset 0 and cursor offset 0.3 produce the SAME exit
+  //     velocity. Placement steers the ball; it never subtracts power.
+  {
+    // hitAcc 0, so the circle is exactly `cursorR.contact` (0.55) and 0.3 is genuinely in its
+    // outer half - `contactRadiusInPerPt` widens the circle with the skill, which is what made an
+    // earlier draft of this test measure a 0.3 offset as still "centered".
+    const skills = { hitAcc: 0, hitPow: 6, hitSpd: 5, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const at = (off) => swing({ x: 0, y: 0, isStrike: true }, skills,
+      { action: 'swing', cursor: { x: -off, y: 0 }, timingErrorMs: 0, mode: 'contact' }, SETTINGS, mulberry32(8181), 'college');
+    const centre = at(0), off3 = at(0.3);
+    ok(centre.inPlay && off3.inPlay, '(c) both the dead-centre and the 0.3-off swing are in play');
+    ok(Math.abs(centre.exitVeloMph - off3.exitVeloMph) < 1e-9,
+      `(c) cursor offset 0 and 0.3 produce the same exit velocity on the same seed (${centre.exitVeloMph.toFixed(3)} vs ${off3.exitVeloMph.toFixed(3)} mph)`);
+    ok(centre.q === off3.q, '(c) and the same contact quality - q is timing alone (R5 rule 1)');
+    ok(centre.centered === true && off3.centered === false,
+      '(c) `centered` still means the inner half of the circle, which is what the sim attributes by');
+  }
+
+  // (d) q=1 beats q=0 in exit velocity on the same seed, and by the derivation's own ratio.
+  {
+    const skills = { hitAcc: 0, hitPow: 0, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const at = (timingErrorMs) => swing({ x: 0, y: 0, isStrike: true }, skills,
+      { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs, mode: 'contact' }, SETTINGS, mulberry32(4242), 'college');
+    const perfect = at(0), edge = at(F.timingWindow * 0.999);
+    ok(perfect.exitVeloMph > edge.exitVeloMph,
+      `(d) a q=1 swing beats a q=0 one in exit velocity on the same seed (${perfect.exitVeloMph.toFixed(1)} vs ${edge.exitVeloMph.toFixed(1)} mph)`);
+    // The two named targets rule 2 derives BASE_EXIT_VELO and qualityFloor from, at College
+    // (LEAGUE_POWER_SCALE 1.000), hitPow 0, CONTACT mode. The noise draw is +/- exitVeloNoiseMph.
+    const noise = F.exitVeloNoiseMph;
+    ok(Math.abs(perfect.exitVeloMph - SETTINGS.PERFECT_EXIT_VELO_MPH) <= noise + 1e-9,
+      `(d) a perfectly-timed no-power swing at College reads PERFECT_EXIT_VELO_MPH within the noise (${perfect.exitVeloMph.toFixed(1)} vs ${SETTINGS.PERFECT_EXIT_VELO_MPH} +/- ${noise})`);
+    ok(Math.abs(edge.exitVeloMph - SETTINGS.BARELY_TIMED_EXIT_VELO_MPH) <= noise + 1e-9,
+      `(d) and one at the window's edge reads BARELY_TIMED_EXIT_VELO_MPH within the noise (${edge.exitVeloMph.toFixed(1)} vs ${SETTINGS.BARELY_TIMED_EXIT_VELO_MPH} +/- ${noise})`);
+    // The third target: cap power at College.
+    const capSkills = { ...skills, hitPow: SETTINGS.CAPS.college };
+    const cap = swing({ x: 0, y: 0, isStrike: true }, capSkills,
+      { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'contact' }, SETTINGS, mulberry32(4242), 'college');
+    ok(Math.abs(cap.exitVeloMph - SETTINGS.CAP_POWER_EXIT_VELO_MPH) <= noise + 1e-9,
+      `(d) and a perfectly-timed swing at College's own cap reads CAP_POWER_EXIT_VELO_MPH within the noise (${cap.exitVeloMph.toFixed(1)} vs ${SETTINGS.CAP_POWER_EXIT_VELO_MPH} +/- ${noise})`);
+    // POWER mode is a few mph over CONTACT, not a different swing.
+    const power = swing({ x: 0, y: 0, isStrike: true }, skills,
+      { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0, mode: 'power' }, SETTINGS, mulberry32(4242), 'college');
+    const gain = power.exitVeloMph - perfect.exitVeloMph;
+    ok(gain > 0 && gain <= 8, `(d) POWER mode is a few mph over CONTACT, not a different swing (+${gain.toFixed(1)} mph)`);
+  }
+
+  // (e) A grounder at 1 deg carries at least 40 ft - the defect that put five Perfect swings at
+  //     Matt's feet. `sin(2a)` was ~0 there; GROUND_CARRY_FACTOR is the floor that fixed it.
+  {
+    ok(carryFt(80, 1) >= 40, `(e) a grounder at 1 deg off an 80 mph swing carries at least 40 ft (${carryFt(80, 1).toFixed(1)})`);
+    ok(carryFt(50, 1) >= SETTINGS.MIN_IN_PLAY_FT, `(e) and a 50 mph one clears MIN_IN_PLAY_FT (${carryFt(50, 1).toFixed(1)})`);
+    ok(carryFt(105, 2) >= 100 && carryFt(105, 2) <= 200,
+      `(e) a hard grounder rolls to where a fielder meets it, not to the wall (${carryFt(105, 2).toFixed(1)} ft at 105 mph / 2 deg)`);
+    ok(carryFt(90, 3) > carryFt(60, 3), '(e) a harder grounder still rolls further than a weak one - the floor is on the ANGLE, never on the speed');
+    // The curve's peak moved to CARRY_PEAK_DEG: a line drive now out-carries a lazy fly ball off
+    // the same bat, which is what took the census from 28% triples to 6%.
+    ok(carryFt(90, SETTINGS.CARRY_PEAK_DEG) > carryFt(90, F.flyCenterDeg),
+      `(e) the carry curve peaks at CARRY_PEAK_DEG (${SETTINGS.CARRY_PEAK_DEG} deg beats the fly band's ${F.flyCenterDeg} deg: ${carryFt(90, SETTINGS.CARRY_PEAK_DEG).toFixed(0)} vs ${carryFt(90, F.flyCenterDeg).toFixed(0)} ft)`);
+    ok(carryFt(90, 20) > carryFt(90, 60), '(e) and falls away past it, so a pop-up lands on the infield');
+    // The derivation in settings.js, checked rather than trusted: HR_CARRY_FRAC of the College
+    // centre fence at the centred-contact launch angle, off a q=1 cap-power swing.
+    const capMph = SETTINGS.CAP_POWER_EXIT_VELO_MPH;
+    const want = SETTINGS.HR_CARRY_FRAC * SETTINGS.FIELD.college.fenceFt.center;
+    ok(Math.abs(carryFt(capMph, F.lineDriveCenterDeg) - want) <= 2,
+      `(e) CARRY_SCALE's own derivation holds: ${capMph} mph at ${F.lineDriveCenterDeg} deg carries ${carryFt(capMph, F.lineDriveCenterDeg).toFixed(1)} ft against HR_CARRY_FRAC x ${SETTINGS.FIELD.college.fenceFt.center} = ${want.toFixed(1)}`);
+    // And the per-league table is that same sentence, moved league to league.
+    for (const league of SETTINGS.LEAGUES) {
+      const refMph = SETTINGS.CARRY_ZERO_MPH + SETTINGS.LEAGUE_POWER_SCALE[league]
+        * (SETTINGS.BASE_EXIT_VELO - SETTINGS.CARRY_ZERO_MPH + SETTINGS.MEDIAN_HIT_POW_PTS * SETTINGS.SKILL_EFFECT.hitPow.exitVeloMphPerPt);
+      const frac = carryFt(refMph, F.lineDriveCenterDeg) / SETTINGS.FIELD[league].fenceFt.center;
+      ok(Math.abs(frac - SETTINGS.MEDIAN_CARRY_FRAC) <= 0.02,
+        `(e) ${league}: the reference swing (q=1, 5 hitPow points) carries ${(100 * frac).toFixed(1)}% of its own centre fence, against MEDIAN_CARRY_FRAC ${SETTINGS.MEDIAN_CARRY_FRAC}`);
+    }
+  }
+
+  // The zone depths R5 moved, pinned so a future edit has to face what they are for.
+  {
+    for (const league of SETTINGS.LEAGUES) {
+      const z = zonesFor(league, 0);
+      const wall = SETTINGS.FIELD[league].fenceFt;
+      ok(z.outfield[1].toFt >= wall.center,
+        `${league}: the straightaway outfield out-zone reaches its own centre fence (${z.outfield[1].toFt.toFixed(0)} vs ${wall.center} ft) - past a manned sector IS over the wall`);
+      ok(z.infield[1].toFt > 60 && z.infield[1].toFt < 160,
+        `${league}: the infield out-zone is where a grounder is actually fielded (${z.infield[1].toFt.toFixed(0)} ft)`);
+      ok(z.outfield[0].fromFt > SETTINGS.MIN_IN_PLAY_FT,
+        `${league}: the outfield's near edge is past the in-play floor, so the bloop band is reachable (${z.outfield[0].fromFt.toFixed(0)} ft)`);
+    }
+  }
+})();
+
+// ---------------------------------------------------------------------------------------------
+// Section 33 (R11, docs/BASEBALL-3D-BUILD.md section 9): THE LEAGUE LADDER IS REAL IN QUICK PLAY.
+// Matt, 2026-09-21, on the same recording R10 came from: "you've forgotten to code the
+// difficulties. Little league should be easy and the pitches slow and only 'fastballs' should be
+// able to be thrown." Measured before this stage: `unlockedPitchesFor(league, 0, {quickPlay:true})`
+// returned all eight types at every league; `pitch.js`'s `timeToPlateS` scaled ONLY by the
+// pitcher's skill points off a flat Majors-fastball baseline, so a Little League 55 mph readout
+// flew in the same 650 ms as a Majors 95 mph one; the human's timing window was a flat 100 ms at
+// every league. The four items below are the spec's own four.
+console.log('\n-- 33. R11: the league ladder is real in Quick Play --');
+await (async function section33() {
+  const F = SETTINGS.FEEL.engine;
+
+  // (1) Pitch types follow the league in Quick Play too: Little League unlocks only the fastball,
+  //     Majors its six (fastball/changeup/curveball/slider/knuckleball/screwball - eephus/cutter
+  //     are title-gated, doc §11, and no CPU roster or fresh Quick Play career ever carries a
+  //     title). `unlockedPitchesFor(..., {quickPlay:true})` is now byte-identical to the career
+  //     ladder at every league - the RA override is gone.
+  {
+    ok(JSON.stringify(SETTINGS.unlockedPitchesFor('little', 0, { quickPlay: true })) === JSON.stringify(['fastball']),
+      `(1) Quick Play at Little League unlocks only the fastball (got ${JSON.stringify(SETTINGS.unlockedPitchesFor('little', 0, { quickPlay: true }))})`);
+    const majorsQP = SETTINGS.unlockedPitchesFor('majors', 0, { quickPlay: true });
+    const wantMajors = ['fastball', 'changeup', 'curveball', 'slider', 'knuckleball', 'screwball'];
+    ok(majorsQP.length === 6 && wantMajors.every((t) => majorsQP.includes(t)),
+      `(1) Quick Play at Majors unlocks its six career-ladder types, not all eight (got ${JSON.stringify(majorsQP)})`);
+    ok(!majorsQP.includes('eephus') && !majorsQP.includes('cutter'),
+      '(1) eephus/cutter stay title-gated in Quick Play too - a fresh career/CPU roster never carries a title');
+    for (const lg of SETTINGS.LEAGUES) {
+      ok(JSON.stringify(SETTINGS.unlockedPitchesFor(lg, 0, { quickPlay: true })) === JSON.stringify(SETTINGS.PITCH_UNLOCKS[lg]),
+        `(1) ${lg}: Quick Play's ladder is byte-identical to the career ladder`);
+    }
+    ok(SETTINGS.QUICK_PLAY_PITCH_MIX === undefined,
+      '(1) QUICK_PLAY_PITCH_MIX is deleted - there is no second distribution left to name');
+  }
+
+  // (2) A slow pitch is slow: timeToPlateS now divides by this league's own READOUT mph for the
+  //     type being thrown (alongside PITCH_TRAVEL_MULT and the pitcher's skill points, as
+  //     before). Majors is the fixed reference (95 mph both sides of the ratio at zero skill
+  //     points), so a Majors fastball is untouched; every league below it is proportionally
+  //     slower.
+  {
+    const noSkillFastball = (lg) => flyPitch('fastball', 0, 1, SETTINGS, () => 0.5, {}, null, lg).timeToPlateS;
+    const majorsS = noSkillFastball('majors');
+    ok(Math.abs(majorsS - F.fastballMs / 1000) < 1e-9,
+      `(2) a Majors 95 mph fastball still takes exactly the ${F.fastballMs} ms it took before R11 (measured ${(majorsS * 1000).toFixed(1)} ms)`);
+    const littleS = noSkillFastball('little');
+    ok(littleS > 1.0 && littleS < 1.2,
+      `(2) a Little League 55 mph fastball takes about 1.1 s (measured ${(littleS * 1000).toFixed(1)} ms)`);
+    // Exact derivation, not just "about": fastballMs x travelMult(1.0) x (majorsFastballMph / thisLeagueFastballMph).
+    for (const lg of SETTINGS.LEAGUES) {
+      const want = (F.fastballMs / 1000) * (SETTINGS.READOUT.majors.fastball / SETTINGS.READOUT[lg].fastball);
+      const got = noSkillFastball(lg);
+      ok(Math.abs(got - want) < 1e-9,
+        `(2) ${lg}: fastball travel time matches the derivation exactly (${(got * 1000).toFixed(1)} ms vs ${(want * 1000).toFixed(1)} ms)`);
+    }
+    // Monotone in readout mph: sorted by this league's own fastball readout (ascending mph), the
+    // travel time strictly falls.
+    const byMph = [...SETTINGS.LEAGUES].sort((a, b) => SETTINGS.READOUT[a].fastball - SETTINGS.READOUT[b].fastball);
+    let lastS = Infinity, monotone = true;
+    for (const lg of byMph) {
+      const s = noSkillFastball(lg);
+      if (s >= lastS) monotone = false;
+      lastS = s;
+    }
+    ok(monotone, `(2) travel time is strictly monotone (falling) in readout mph across the ladder (${byMph.map((lg) => `${lg}=${SETTINGS.READOUT[lg].fastball}mph`).join(', ')})`);
+    // The pitcher's own skill points still shorten it, exactly as before R11 (unchanged mechanism,
+    // now layered on top of the league ratio rather than a flat 95 mph baseline).
+    const slow = flyPitch('fastball', 0, 1, SETTINGS, () => 0.5, { pitchSpd: 0 }, null, 'college').timeToPlateS;
+    const fast = flyPitch('fastball', 0, 1, SETTINGS, () => 0.5, { pitchSpd: 10 }, null, 'college').timeToPlateS;
+    ok(fast < slow, `(2) pitchSpd skill points still shorten travel time at a fixed league (${(fast * 1000).toFixed(1)} < ${(slow * 1000).toFixed(1)} ms)`);
+    // A type with no READOUT row of its own (screwball/eephus/cutter, doc §11 Open item 9) falls
+    // back to this SAME league's own fastball readout rather than inventing a per-type mph - the
+    // league still slows it down. The eephus (travelMult 1.9, already the slowest type) at Little
+    // League must not exceed 2.5 s (the spec's own budget).
+    const eephusLittle = flyPitch('eephus', 0, 1, SETTINGS, () => 0.5, {}, null, 'little').timeToPlateS;
+    ok(eephusLittle <= 2.5, `(2) the eephus at Little League does not exceed 2.5 s (measured ${eephusLittle.toFixed(3)} s)`);
+    ok(eephusLittle > flyPitch('eephus', 0, 1, SETTINGS, () => 0.5, {}, null, 'majors').timeToPlateS,
+      '(2) and it is still slower at Little League than at Majors, same as every other type');
+    for (const type of ['screwball', 'eephus', 'cutter']) {
+      const want = (F.fastballMs / 1000) * SETTINGS.PITCH_TRAVEL_MULT[type] * (SETTINGS.READOUT.majors.fastball / SETTINGS.READOUT.little.fastball);
+      const got = flyPitch(type, 0, 1, SETTINGS, () => 0.5, {}, null, 'little').timeToPlateS;
+      ok(Math.abs(got - want) < 1e-9,
+        `(2) ${type} (no READOUT row of its own) falls back to Little League's own fastball readout (${(got * 1000).toFixed(1)} vs ${(want * 1000).toFixed(1)} ms)`);
+    }
+  }
+
+  // (3) Little League is forgiving, Majors is tight: LEAGUE_TIMING_WINDOW_MULT.
+  {
+    const want = { little: 1.6, highschool: 1.3, college: 1.0, minors: 0.9, majors: 0.8 };
+    ok(JSON.stringify(SETTINGS.LEAGUE_TIMING_WINDOW_MULT) === JSON.stringify(want),
+      `(3) LEAGUE_TIMING_WINDOW_MULT matches the spec exactly (got ${JSON.stringify(SETTINGS.LEAGUE_TIMING_WINDOW_MULT)})`);
+    ok(SETTINGS.LEAGUE_TIMING_WINDOW_MULT.college === 1.0,
+      "(3) college is a true no-op - every number this engine's own contact/carry model was derived against stays put");
+    // The multiplier actually reaches the window swing.js scores against: a swing timed 90ms off,
+    // dead-centred on the pitch, is a FOUL at Majors (window 80ms, 90 > 80) but genuine, in-play
+    // contact at Little League (window 160ms, 90 <= 160) - the identical decision, two leagues.
+    const skills = { hitAcc: 0, hitPow: 0, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const pitch = { x: 0, y: 0, isStrike: true };
+    const decisionAt = (absMs) => ({ action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: absMs, mode: 'contact' });
+    const majorsSwing = swing(pitch, skills, decisionAt(90), SETTINGS, mulberry32(1), 'majors');
+    const littleSwing = swing(pitch, skills, decisionAt(90), SETTINGS, mulberry32(1), 'little');
+    ok(majorsSwing.contact === true && majorsSwing.foul === true && majorsSwing.inPlay === false,
+      `(3) a 90ms-off, dead-centred swing at MAJORS (window 80ms) is a foul, not real contact (got ${JSON.stringify(majorsSwing)})`);
+    ok(littleSwing.contact === true && littleSwing.foul === false,
+      `(3) the IDENTICAL swing at LITTLE LEAGUE (window 160ms) is genuine contact, not a foul (got ${JSON.stringify(littleSwing)})`);
+    // The bunt reads the same multiplier (swing.js's OTHER F.timingWindow read, buntSwing).
+    const bunt = (absMs, league) => swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: absMs }, SETTINGS, mulberry32(1), league);
+    // Base bunt window at college (mult 1.0): 100 x BUNT_WINDOW_MULT(1.6) = 160ms.
+    const collegeBunt = bunt(150, 'college');
+    const majorsBunt = bunt(150, 'majors'); // 100 x 0.8 x 1.6 = 128ms - 150 is a miss-turned-foul past it
+    ok(collegeBunt.inPlay === true, `(3) a 150ms-off bunt at COLLEGE (window 160ms) is still in play (got ${JSON.stringify(collegeBunt)})`);
+    ok(majorsBunt.inPlay === false && majorsBunt.foul === true,
+      `(3) the IDENTICAL bunt at MAJORS (window 128ms) is a foul (got ${JSON.stringify(majorsBunt)})`);
+    // The CPU's own timing SIGMA (how far off-centre its swings tend to land) is untouched - a
+    // structural check that R11 never touched the CPU table at all.
+    ok(SETTINGS.CPU.little.timingSigmaMs === 115 && SETTINGS.CPU.majors.timingSigmaMs === 58,
+      '(3) CPU_LEVEL timingSigmaMs is byte-identical to before R11 - only how forgivingly a given error is SCORED changed, never how large a CPU error tends to be');
+  }
+
+  // (4) Structural: LEAGUE_UNLOCK_ADDS moved changeup off Little League without losing it anywhere
+  //     - every one of the eight PITCH_TYPES is reachable by the ladder plus the two title unlocks,
+  //     with no duplicates and nothing dropped.
+  {
+    const allLadder = new Set(SETTINGS.PITCH_UNLOCKS.majors);
+    for (const t of SETTINGS.TITLE_PITCH_UNLOCKS) allLadder.add(t.pitch);
+    ok(SETTINGS.PITCH_TYPES.every((t) => allLadder.has(t)) && allLadder.size === SETTINGS.PITCH_TYPES.length,
+      `(4) every one of the eight PITCH_TYPES is still reachable by the ladder + title unlocks, exactly once (${JSON.stringify([...allLadder])})`);
+  }
+})();
+
+// Section 34 (R14, docs/BASEBALL-3D-BUILD.md section 9): YOUR PLAYER AND THE SKILL POINTS, IN
+// QUICK PLAY. Matt, on v885: "I don't see anything about the skill points we discussed." Then:
+// "Go, build the skill points and career." This stage: the budget itself (build.js, derived from
+// CAPS/START_POINTS_PER_SIDE/START_CAP, never invented), and SKILL_EFFECT.pitchSpin.breakPerPt
+// wired into the handed break (pitch.js).
+console.log('\n-- 34. R14: your player and the skill points, in Quick Play --');
+await (async function section34() {
+  // (1) budgetFor/capFor match the doc's own derivation exactly: 15/10 at Little League, then
+  //     3x the PREVIOUS league's cap per side, at THIS league's own cap.
+  {
+    ok(budgetFor('little') === SETTINGS.START_POINTS_PER_SIDE && capFor('little') === SETTINGS.START_CAP,
+      `(1) Little League: budget ${budgetFor('little')} (want ${SETTINGS.START_POINTS_PER_SIDE}), cap ${capFor('little')} (want ${SETTINGS.START_CAP})`);
+    let prev = 'little';
+    for (const lg of SETTINGS.LEAGUES.slice(1)) {
+      const wantBudget = 3 * SETTINGS.CAPS[prev];
+      ok(budgetFor(lg) === wantBudget, `(1) ${lg}: budget ${budgetFor(lg)} (want 3x ${prev}'s cap = ${wantBudget})`);
+      ok(capFor(lg) === SETTINGS.CAPS[lg], `(1) ${lg}: cap ${capFor(lg)} (want CAPS.${lg} = ${SETTINGS.CAPS[lg]})`);
+      prev = lg;
+    }
+    // Feasibility, the fact every repair/clamp/random function above relies on: the budget never
+    // exceeds 3x the league's OWN cap, so a per-side distribution always has room.
+    for (const lg of SETTINGS.LEAGUES) {
+      ok(budgetFor(lg) < 3 * capFor(lg), `(1) ${lg}: budget ${budgetFor(lg)} stays under 3x its own cap (${3 * capFor(lg)}) - always feasible`);
+    }
+  }
+
+  // (2) Every preset, at every league: scalePreset sums to the budget EXACTLY, per side, and never
+  //     exceeds the cap on any one skill.
+  {
+    let allOk = true, worst = '';
+    for (const presetId of Object.keys(SETTINGS.PRESETS)) {
+      for (const lg of SETTINGS.LEAGUES) {
+        const budget = budgetFor(lg), cap = capFor(lg);
+        const build = scalePreset(SETTINGS.PRESETS[presetId], budget, cap);
+        const hitSum = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + build[id], 0);
+        const pitchSum = SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + build[id], 0);
+        const overCap = SETTINGS.SKILL_IDS.some((id) => build[id] > cap || build[id] < 0);
+        if (hitSum !== budget || pitchSum !== budget || overCap) {
+          allOk = false; worst = `${presetId}@${lg}: hit=${hitSum} pitch=${pitchSum} budget=${budget} cap=${cap} build=${JSON.stringify(build)}`;
+        }
+      }
+    }
+    ok(allOk, `(2) every preset at every league sums to the budget exactly on both sides, never exceeds the cap (first bad: ${worst})`);
+    // Slugger at Majors: Power at the cap (spec's own worked example - "the rest carried over").
+    const majorsSlugger = scalePreset(SETTINGS.PRESETS.slugger, budgetFor('majors'), capFor('majors'));
+    ok(majorsSlugger.hitPow === capFor('majors'),
+      `(2) Slugger at Majors: hitPow is at the cap (${majorsSlugger.hitPow}, cap ${capFor('majors')})`);
+  }
+
+  // (3) randomBuild never exceeds the budget or the cap, at every league, over many draws.
+  {
+    let allOk = true, worst = '';
+    for (const lg of SETTINGS.LEAGUES) {
+      const budget = budgetFor(lg), cap = capFor(lg);
+      for (let i = 0; i < 50; i++) {
+        const rand = mulberry32(1000 + i);
+        const build = randomBuild(budget, cap, rand);
+        const hitSum = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + build[id], 0);
+        const pitchSum = SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + build[id], 0);
+        const overCap = SETTINGS.SKILL_IDS.some((id) => build[id] > cap || build[id] < 0);
+        if (hitSum !== budget || pitchSum !== budget || overCap) {
+          allOk = false; worst = `${lg} draw ${i}: hit=${hitSum} pitch=${pitchSum} budget=${budget} cap=${cap}`;
+        }
+      }
+    }
+    ok(allOk, `(3) randomBuild never exceeds the budget or the cap, any league, 50 draws each (first bad: ${worst})`);
+  }
+
+  // (4) adjust refuses at both edges (the cap, and the side's own budget) and is a genuine no-op
+  //     (same reference back) when it does; canAdjust agrees.
+  {
+    const budget = budgetFor('little'), cap = capFor('little');
+    const atCap = { hitAcc: cap, hitPow: 0, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const capped = adjust(atCap, 'hitAcc', 1, budget, cap);
+    ok(capped === atCap, '(4) a plus tap at the skill\'s own cap is refused (same reference back)');
+    ok(!canAdjust(atCap, 'hitAcc', 1, budget, cap), '(4) canAdjust agrees: false at the cap');
+    const zero = { hitAcc: 0, hitPow: 0, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const under = adjust(zero, 'hitAcc', -1, budget, cap);
+    ok(under === zero, '(4) a minus tap at 0 is refused (same reference back)');
+    ok(!canAdjust(zero, 'hitAcc', -1, budget, cap), '(4) canAdjust agrees: false under 0');
+    // The side's own budget, not just the skill's own cap: hitAcc+hitPow+hitSpd already at budget,
+    // every value still within its own cap - a further plus on any of the three (even one under
+    // its own cap) is refused.
+    const atBudget = { hitAcc: cap, hitPow: budget - cap, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    ok(atBudget.hitPow <= cap, `(4) test fixture sanity: hitPow ${atBudget.hitPow} stays within cap ${cap}`);
+    const overBudget = adjust(atBudget, 'hitSpd', 1, budget, cap);
+    ok(overBudget === atBudget, `(4) a plus tap that would push the HIT side over its own budget (${budget}) is refused, even though hitSpd itself is under cap`);
+    ok(!canAdjust(atBudget, 'hitSpd', 1, budget, cap), '(4) canAdjust agrees: false over budget');
+    // A legal tap DOES return a new object and moves exactly one point.
+    const legal = adjust(atBudget, 'hitAcc', -1, budget, cap);
+    ok(legal !== atBudget && legal.hitAcc === atBudget.hitAcc - 1, '(4) a legal minus tap returns a new build with exactly one point moved');
+    ok(canAdjust(atBudget, 'hitAcc', -1, budget, cap), '(4) canAdjust agrees: true for the legal tap');
+    // The PITCH side is independent of the HIT side's own room.
+    const pitchRoom = adjust(atBudget, 'pitchSpd', 1, budget, cap);
+    ok(pitchRoom !== atBudget && pitchRoom.pitchSpd === 1, '(4) the pitch side has its own budget, untouched by the hit side being full');
+  }
+
+  // (5) clampBuild repairs a build to a NEW budget/cap (a league change on a Custom build), in
+  //     both directions - a bigger league (more room) and a smaller one (less).
+  {
+    const littleBudget = budgetFor('little'), littleCap = capFor('little');
+    const majorsBudget = budgetFor('majors'), majorsCap = capFor('majors');
+    const littleBuild = scalePreset(SETTINGS.PRESETS.twoWayStar, littleBudget, littleCap);
+    const upscaled = clampBuild(littleBuild, majorsBudget, majorsCap);
+    const upHit = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + upscaled[id], 0);
+    ok(upHit === majorsBudget, `(5) clampBuild going UP (Little -> Majors) still sums to the new budget exactly (got ${upHit}, want ${majorsBudget})`);
+    const downscaled = clampBuild(upscaled, littleBudget, littleCap);
+    const downHit = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + downscaled[id], 0);
+    const downOverCap = SETTINGS.SKILL_IDS.some((id) => downscaled[id] > littleCap);
+    ok(downHit === littleBudget && !downOverCap, `(5) clampBuild going DOWN (Majors -> Little) sums to the smaller budget and respects the smaller cap (sum ${downHit}, want ${littleBudget}, over cap: ${downOverCap})`);
+  }
+
+  // (6) SKILL_EFFECT.pitchSpin.breakPerPt is wired into breakOffsetFor: Spin 10 breaks more than
+  //     Spin 0 on a handed type, Spin 0 equals today's (pre-R14) table exactly, and the fastball/
+  //     knuckleball are untouched by spin at all.
+  {
+    const breakPerPt = SETTINGS.SKILL_EFFECT.pitchSpin.breakPerPt;
+    const spin0 = breakOffsetFor('curveball', 'R', 0.5, 0.5, SETTINGS, 0);
+    const spin10 = breakOffsetFor('curveball', 'R', 0.5, 0.5, SETTINGS, 10);
+    const row = SETTINGS.BREAK_OFFSET.curveball;
+    ok(spin0.x === row.x && spin0.y === row.y, `(6) Spin 0 equals today's table exactly (got ${JSON.stringify(spin0)}, table x=${row.x} y=${row.y})`);
+    const wantMult = 1 + 10 * breakPerPt;
+    ok(Math.abs(spin10.x - row.x * wantMult) < 1e-9 && Math.abs(spin10.y - row.y * wantMult) < 1e-9,
+      `(6) Spin 10 multiplies the handed break by 1 + 10*breakPerPt=${wantMult.toFixed(3)} (got ${JSON.stringify(spin10)}, want x=${(row.x * wantMult).toFixed(4)} y=${(row.y * wantMult).toFixed(4)})`);
+    ok(Math.abs(spin10.x) > Math.abs(spin0.x), `(6) Spin 10 breaks MORE than Spin 0 (|${spin10.x}| > |${spin0.x}|)`);
+    // Every one of the four handed types (curveball/slider/screwball/cutter), never the fastball
+    // or the knuckleball's random wobble.
+    for (const type of ['slider', 'screwball', 'cutter']) {
+      const a = breakOffsetFor(type, 'R', 0.5, 0.5, SETTINGS, 0);
+      const b = breakOffsetFor(type, 'R', 0.5, 0.5, SETTINGS, 10);
+      ok(Math.abs(b.x) > Math.abs(a.x) || Math.abs(b.y) > Math.abs(a.y), `(6) ${type} breaks more at Spin 10 than Spin 0`);
+    }
+    const fb0 = breakOffsetFor('fastball', 'R', 0.5, 0.5, SETTINGS, 0);
+    const fb10 = breakOffsetFor('fastball', 'R', 0.5, 0.5, SETTINGS, 10);
+    ok(fb0.x === fb10.x && fb0.y === fb10.y, `(6) the fastball is untouched by spin (zero break either way): ${JSON.stringify(fb0)} vs ${JSON.stringify(fb10)}`);
+    const kn0 = breakOffsetFor('knuckleball', 'R', 0.5, 0.5, SETTINGS, 0);
+    const kn10 = breakOffsetFor('knuckleball', 'R', 0.5, 0.5, SETTINGS, 10);
+    ok(kn0.x === kn10.x && kn0.y === kn10.y, `(6) the knuckleball's own (mid-draw, zero) wobble is untouched by spin: ${JSON.stringify(kn0)} vs ${JSON.stringify(kn10)}`);
+    // flyPitch itself, end to end: a pitcher with 10 pitchSpin points throws a bigger break than
+    // one with 0, same aim, same draws.
+    const noSpinPitch = flyPitch('curveball', 0, 1, SETTINGS, () => 0.5, { pitchSpin: 0 }, null, 'majors');
+    const spunPitch = flyPitch('curveball', 0, 1, SETTINGS, () => 0.5, { pitchSpin: 10 }, null, 'majors');
+    ok(Math.abs(spunPitch.x) > Math.abs(noSpinPitch.x), `(6) flyPitch end to end: 10 pitchSpin points cross further off aim than 0 (${spunPitch.x} vs ${noSpinPitch.x})`);
+  }
 })();
 
 // ---------------------------------------------------------------------------------------------

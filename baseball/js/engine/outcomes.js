@@ -4,21 +4,40 @@
 // is singles/doubles/triples/homers/outs) - phase 1's `error` result is gone.
 
 import { FOUL_LINE_DEG, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, BLOOP_BAND_FT,
-  DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, CARRY_ZERO_MPH } from './settings.js';
+  DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, CARRY_ZERO_MPH, GROUND_CARRY_FACTOR, MIN_IN_PLAY_FT,
+  CARRY_PEAK_DEG } from './settings.js';
 import { angleSector } from './zones.js';
 
 /** Rough carry distance in feet from exit velocity (mph) and launch angle (deg). A simplified,
  *  monotonic model (more speed and a mid-range angle carry further); not aerodynamically real,
  *  and not meant to be - there is no reference to calibrate against, so this stays a plain,
  *  reproducible function of its two inputs rather than a "realistic" model with invented drag
- *  coefficients. Draft [Open item 23]: the exact carry curve; CARRY_SCALE lives in settings.js. */
-export function carryFt(exitVeloMph, launchAngleDeg) {
+ *  coefficients. Draft [Open item 23]: the exact carry curve; CARRY_SCALE lives in settings.js.
+ *
+ *  R5 rule 3: NO BALL IN PLAY EVER CARRIES 0 FT, and both halves of that are here.
+ *   - `GROUND_CARRY_FACTOR` floors the angle factor. The old `sin(2a)` was ~0 at 0 to 3 deg, so a
+ *     topped ball stopped dead at the plate; a topped ball in fact ROLLS, and what this engine
+ *     calls its distance is where a fielder meets it. The floor binds below 4.8 deg and above
+ *     55.2 deg, which are `battedBallKind`'s grounder and pop-up bands, and nothing between.
+ *   - `MIN_IN_PLAY_FT` is the flat floor under the result, whatever the angle.
+ *
+ *  `settings` (optional) lets a sweep measure a candidate CARRY_SCALE/floor without editing
+ *  settings.js - `sim-baseball.mjs --set` passes a settings OBJECT, and this module's own imports
+ *  are module-scope constants that such an override could never reach. `resolveContact` passes its
+ *  own settings through, so the engine and a sweep read the same numbers by construction. */
+export function carryFt(exitVeloMph, launchAngleDeg, settings) {
+  const scale = (settings && settings.CARRY_SCALE != null) ? settings.CARRY_SCALE : CARRY_SCALE;
+  const zeroMph = (settings && settings.CARRY_ZERO_MPH != null) ? settings.CARRY_ZERO_MPH : CARRY_ZERO_MPH;
+  const groundFactor = (settings && settings.GROUND_CARRY_FACTOR != null) ? settings.GROUND_CARRY_FACTOR : GROUND_CARRY_FACTOR;
+  const minFt = (settings && settings.MIN_IN_PLAY_FT != null) ? settings.MIN_IN_PLAY_FT : MIN_IN_PLAY_FT;
+  const peakDeg = (settings && settings.CARRY_PEAK_DEG != null) ? settings.CARRY_PEAK_DEG : CARRY_PEAK_DEG;
   const clampedAngle = Math.max(0, Math.min(70, launchAngleDeg));
-  // sin(2*angle) peaks at 45 degrees, which is where a real batted ball carries furthest for a
-  // given speed - the same shape a real projectile's range curve has, without modeling drag.
-  const angleFactor = Math.max(0, Math.sin((2 * clampedAngle * Math.PI) / 180));
-  const speedFactor = Math.max(0, exitVeloMph - CARRY_ZERO_MPH);
-  return Math.max(0, speedFactor * angleFactor * CARRY_SCALE);
+  // A half-sine that peaks at `CARRY_PEAK_DEG` and is back to zero at twice it. The old form was
+  // `sin(2a)`, the vacuum parabola's own range curve, which peaks at 45 deg - see CARRY_PEAK_DEG
+  // in settings.js for why a real batted ball peaks nearer 30 and why the difference mattered here.
+  const angleFactor = Math.max(groundFactor, Math.sin((Math.PI * clampedAngle) / (2 * peakDeg)));
+  const speedFactor = Math.max(0, exitVeloMph - zeroMph);
+  return Math.max(minFt, speedFactor * angleFactor * scale);
 }
 
 function battedBallKind(launchAngleDeg) {
@@ -63,7 +82,7 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   }
 
   const kind = battedBallKind(batted.launchAngleDeg);
-  const distanceFt = carryFt(batted.exitVeloMph, batted.launchAngleDeg);
+  const distanceFt = carryFt(batted.exitVeloMph, batted.launchAngleDeg, settings);
 
   if (kind === 'popup') {
     // doc §10, [Locked]: "Pop-ups in the infield are outs."
@@ -94,8 +113,15 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
 
   // Line drives and non-homer flies. Check the fence before the out-zone: a ball that clears the
   // wall was never catchable regardless of where the sector's reach ends.
+  //
+  // R5: a LINE DRIVE consults the fence too. This check used to read `kind === 'fly'` only, which
+  // was invisible while `carryFt` returned 0 ft for almost everything; at R5's real distances the
+  // line-drive band (`battedBallKind`, 8 to 26 deg) is where a squared-up swing actually lives, and
+  // the hardest ball in the game - a 470 ft liner off a cap-power q=1 swing - was being scored a
+  // TRIPLE because the fence was never asked. A ball that lands past the wall is over the wall,
+  // whatever angle it left at. A grounder or a pop-up still never reaches this branch.
   const wallFt = fenceFtAt(batted.sprayAngleDeg, fenceFt);
-  if (kind === 'fly' && distanceFt >= wallFt) {
+  if ((kind === 'fly' || kind === 'line') && distanceFt >= wallFt) {
     return { result: 'hit', bases: 4, kind: 'homer', distanceFt, isFoul: false };
   }
 
@@ -123,7 +149,9 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
       // into a sector" (the ordinary case below) stays an out, but a scorched line drive is not a
       // fly ball a fielder settles under; it is through the infielder's reach before an
       // outfielder can close.
-      if (kind === 'line' && (batted.q || 0) >= LINE_THROUGH_Q && distanceFt <= LINE_THROUGH_MAX_FT) {
+      const lineQ = settings.LINE_THROUGH_Q != null ? settings.LINE_THROUGH_Q : LINE_THROUGH_Q;
+      const lineMaxFt = settings.LINE_THROUGH_MAX_FT != null ? settings.LINE_THROUGH_MAX_FT : LINE_THROUGH_MAX_FT;
+      if (kind === 'line' && (batted.q || 0) >= lineQ && distanceFt <= lineMaxFt) {
         return { result: 'hit', bases: 1, kind: 'line-through', distanceFt, isFoul: false };
       }
       return { result: 'out', bases: 0, kind: kind === 'line' ? 'lineout' : 'flyout', distanceFt, isFoul: false };
@@ -141,4 +169,49 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   return { result: 'hit', bases, kind: `${kind}-hit`, distanceFt, isFoul: false };
 }
 
-export default { carryFt, fenceFtAt, resolveContact };
+/** RA (docs/BASEBALL-3D-BUILD.md section 9): A BUNT'S OWN OUTCOME. `resolveContact` above cannot
+ *  answer this one - its whole model is out-zone geometry against a ball that CARRIED, and a bunt
+ *  that dies 20 ft in front of the plate is not in anybody's sector at any depth. So the bunt gets
+ *  its own three-line rule book, exactly as the spec writes it:
+ *
+ *    - Runners on and fewer than 2 outs: it is a SACRIFICE. Every runner moves up one (bases.js's
+ *      `advanceSacBunt`, applied by game.js) and the batter is out - UNLESS he beats the throw,
+ *      in which case it is a `bunt-single` and the runners still move up one, because a single
+ *      advances everybody by one anyway.
+ *    - Nobody on: a bunt for a hit. The same beat-out roll, and nothing else.
+ *    - With runners on and 2 outs it falls through to the second case: a sacrifice with two outs
+ *      trades the inning for a base, which is not a play anyone makes, so the batter is simply
+ *      bunting for a hit with runners aboard.
+ *
+ *  THE BEAT-OUT ROLL IS THE ONE THAT ALREADY EXISTS - `MECHANICS.beatOutPerPt` x the batter's
+ *  hitSpd, capped at 0.5, the identical line an infield grounder at the edge of a sector already
+ *  runs (see `resolveContact`'s `nearEdge` branch). Doc §6, [Locked]: "Batter Speed raises steal
+ *  and bunt success", and a second, differently-calibrated speed roll for the same question would
+ *  be two answers to it.
+ *
+ *  Returns the same shape `resolveContact` does (plus the bunt's own `distanceFt`/`sprayAngleDeg`,
+ *  which came off `swing.js` rather than out of `carryFt`), so `game.js`'s `_resolveBattedBall`
+ *  reads it with no special case beyond the one kind name it has to recognise.
+ *
+ *  @param {{distanceFt:number, sprayAngleDeg:number}} batted - `swing.js`'s bunt result
+ *  @param {Array} bases - `[first, second, third]`, ids or null
+ *  @param {number} outs - outs BEFORE this play
+ *  @param {number} hitSpd - the batter's hitSpd skill points
+ */
+export function resolveBunt(batted, bases, outs, hitSpd, settings, rand01) {
+  const distanceFt = batted.distanceFt || 0;
+  const sprayAngleDeg = batted.sprayAngleDeg || 0;
+  const beatOutChance = Math.min(0.5, Math.max(0, hitSpd || 0) * settings.MECHANICS.beatOutPerPt);
+  const beatOut = rand01() < beatOutChance;
+  const runnersOn = bases.some((b) => b != null);
+  const canSacrifice = runnersOn && outs < settings.MECHANICS.outsPerInning - 1;
+  if (beatOut) {
+    return { result: 'hit', bases: 1, kind: 'bunt-single', distanceFt, sprayAngleDeg, isFoul: false };
+  }
+  if (canSacrifice) {
+    return { result: 'out', bases: 0, kind: 'sacrifice', distanceFt, sprayAngleDeg, isFoul: false };
+  }
+  return { result: 'out', bases: 0, kind: 'bunt-out', distanceFt, sprayAngleDeg, isFoul: false };
+}
+
+export default { carryFt, fenceFtAt, resolveContact, resolveBunt };

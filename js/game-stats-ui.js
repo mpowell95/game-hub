@@ -36,6 +36,8 @@ const TABS = [
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
   { id: 'pipes', labelKey: 'game_title_pipes' },
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
+  { id: 'hoops4', labelKey: 'game_title_hoops4' },
+  { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -92,7 +94,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -332,6 +334,42 @@ function sudokuScreen(rec) {
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_pi_solved')}</th><th scope="col">${t('gs_sd_best_time')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+const MS_LEVELS_UI = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['expert', 'gs_diff_expert']];
+
+/** Minesweeper: a solo puzzle with a real loss state, so unlike Sudoku it DOES show a win/loss
+ *  record. Four lifetime tallies plus a per-level table of played, cleared and best time.
+ *
+ *  `bestTimeMs` uses 0 as its "never set" sentinel and is shown as an em dash rather than "0:00",
+ *  the same zero-glyph convention as the Sudoku screen above. A level you have played but never
+ *  cleared shows its plays and a dash, which is the honest reading: the plays happened. */
+function minesweeperScreen(rec) {
+  const ms = (rec && rec.ms) || {};
+  const tot = (rec && rec.total) || {};
+  const played = tot.played | 0;
+  if (!played) return emptyState('Minesweeper');
+  const cleared = ms.cleared | 0;
+  const byDiff = rec.byDiff || {};
+  const bestTimeMs = ms.bestTimeMs || {};
+  const rate = played > 0 ? Math.round((cleared / played) * 100) : 0;
+  const rows = MS_LEVELS_UI.map(([k, labelKey]) => {
+    const b = byDiff[k] || {};
+    const best = bestTimeMs[k] | 0;
+    return `<tr><th scope="row">${t(labelKey)}</th><td>${b.played | 0}</td><td>${b.won | 0}</td><td>${best > 0 ? fmtMmSs(best) : '&mdash;'}</td></tr>`;
+  }).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${played}</b><span>${t('gs_ms_played')}</span></div>
+      <div class="gs-tally"><b>${cleared}</b><span>${t('gs_ms_cleared')}</span></div>
+      <div class="gs-tally"><b>${rate}%</b><span>${t('gs_ms_rate')}</span></div>
+      <div class="gs-tally"><b>${ms.flagsRight | 0}</b><span>${t('gs_ms_flags')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_ms_played')}</th><th scope="col">${t('gs_ms_cleared')}</th><th scope="col">${t('gs_ms_best_time')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -1110,6 +1148,7 @@ function hasPlays(id, rec) {
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
   if (id === 'sudoku') return !!(rec.sd && rec.sd.solved);
+  if (id === 'minesweeper') return ((rec.total || {}).played | 0) > 0;
   if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
   if (id === 'golf') return !!(rec.gf && rec.gf.rounds);
   if (id === 'baseball') return !!(rec.bb && rec.bb.careersStarted);
@@ -1143,6 +1182,7 @@ function headlineOf(id, rec) {
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'pipes') return { n: (rec.pi && rec.pi.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'sudoku') return { n: (rec.sd && rec.sd.solved) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'minesweeper') return { n: (rec.ms && rec.ms.cleared) | 0, unitKey: unitKeyOf(id) };
   // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
   // stated explicitly rather than left to the generic fallback below, since this list is read as
   // the contract for what each game's headline number means.
@@ -1392,6 +1432,7 @@ function screenFor(id, st) {
   if (id === 'nutsbolts') return nutsBoltsScreen(rec);
   if (id === 'pipes') return pipesScreen(rec);
   if (id === 'sudoku') return sudokuScreen(rec);
+  if (id === 'minesweeper') return minesweeperScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);

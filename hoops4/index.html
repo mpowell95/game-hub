@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Connect 4 Hoops</title>
+<link rel="stylesheet" href="../css/ui.css">
+<link rel="stylesheet" href="css/hoops4.css">
+<style>html,body{margin:0;height:100%;background:#15171c;overflow:hidden}</style>
+</head>
+<body>
+<div id="hoops4"></div>
+<script type="module">
+  // A STANDALONE PAGE IS A DOOR INTO THE HUB LIKE ANY OTHER, so it gates on the name BEFORE it
+  // mounts. The ungated pages are exactly where the leaderboard's permanent "Unnamed player"
+  // rows came from.
+  import { requireName } from '../js/name-gate.js';
+  import { init } from './js/ui.js';
+  await requireName();
+  init(document.getElementById('hoops4'));
+</script>
+</body>
+</html>

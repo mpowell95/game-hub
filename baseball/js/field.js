@@ -1,59 +1,45 @@
-// field.js : the field renderer. TWO cameras, for two different jobs:
+// field.js - THE WORLD. R1, docs/BASEBALL-3D-BUILD.md section 9.
 //
-// 1. The OVERHEAD camera (`project`/`drawField`/`drawBall`/`drawLandingMarker`, unchanged from the
-//    2026-09-14 mocks port below) - a wide, elevated view of the whole infield. Used ONLY for the
-//    cutaway that plays when a ball is put in play: on contact the field band cuts to this view so
-//    the batted ball's flight, the out-zone geometry, and its landing marker are all visible at
-//    once, then cuts back to the plate camera for the next pitch. See "WHAT TO DO ABOUT OUT ZONES"
-//    below and `baseball/CLAUDE.md`'s "The camera was rebuilt to match the reference" for the
-//    decision record (Matt chose this over a soft pull-back or dropping the visual entirely).
+// Until v860 this file was two hand-fitted 2-D cameras over two painted pictures: a calibrated
+// overhead projection for the cutaway and a measured homography over `plate.webp` for the pitch.
+// Matt, with a recording of the reference game (docs/BASEBALL-REFERENCE-B9.md): "Ours should be as
+// close to a clone of this game as possible." The first gap on that file's own list is the one
+// that decides every other: "Theirs is a real 3D stadium with two cameras and a chase camera. Ours
+// is two paintings. A painting cannot follow a ball."
 //
-// 2. The PLATE camera (`projectPlate`/`drawPlateView`/`drawPlateBall`, added 2026-09-14) - a real
-//    over-the-shoulder view, low and close, for the actual pitch: batting looks from behind/above
-//    the batter out toward the pitcher; pitching is the mirror. This is the view live for every
-//    pitch - aiming, the windup, the ball's flight to or from the plate - and is what the whole
-//    rebuild below is about. See its own section header for the camera math and why the overhead
-//    camera's approach (a calibrated but still relatively distant, top-down-ish view) cannot do
-//    this job: a close, low, foreshortened camera and a wide elevated one are not the same camera
-//    at a different zoom - the ground plane, the horizon, and the size falloff all behave
-//    differently close in than they do from above.
+// So this file now holds the real thing:
+//   1. THE WORLD, in FEET. Home plate's rear point is the origin, +x runs toward first base, +y is
+//      up, and -z runs toward the mound and centre field (three.js cameras look down -z, so the
+//      pitcher is straight ahead of a camera standing behind the plate). The engine's batted-ball
+//      (xFt, yFt) - its own plan view, +y toward centre - maps to world (xFt, 0, -yFt) through
+//      `engineToWorld`, which is the ONE place that conversion happens.
+//   2. THE STADIUM, generated in code: grass, the infield skin, the mound, the lines and bags, a
+//      fence ribbon following the league's own five-point `fenceFt` shape, three tiers of stands
+//      and a sky sphere. No image files at all - the grass and crowd textures are drawn on a 256px
+//      canvas at runtime (see `grassTexture`/`crowdTexture`).
+//   3. THE THREE CAMERAS the reference uses: behind the batter, behind the pitcher, and a chase
+//      camera that follows a batted ball. `makeCameras` builds them; `CAMERAS` carries the numbers.
+//   4. `projectToCanvas` + `zoneRectFt`, which are what the 2-D canvas still on top of the scene
+//      uses to draw the strike-zone box and the landing-marker label in exactly the place the 3-D
+//      scene puts them. Nothing else is drawn in 2-D any more.
 //
-// Both cameras take a plain 2D canvas context the caller has already sized (DPR handled by the
-// caller) and share this repo's per-league fence shape (`FIELD[league].fenceFt`).
+// Deleted with the paintings (R1's own list): `plateBallPos`, `zoneRect`, `plateCover`, `anchorPx`,
+// `PLATE_ANCHORS`, `drawPlateView`, `drawPlateBall`, `drawField`, `drawOverheadPicture`,
+// `projectOverhead`, the homography constants, the 2-D `drawBall`/`drawLandingMarker`, and
+// `preloadPlateImages`/`plateReady` (the first wind-up now waits on the scene's first rendered
+// frame instead of on a picture decoding). `baseball/img/` is gone from the repo and from sw.js.
 //
-// ---------------------------------------------------------------- the overhead camera ----
-//
-// `project`/`drawField`/`drawBall`/`drawLandingMarker` below are a direct port of
-// `mocks/baseball/field.js` on `claude/baseball-mocks` (fetched 2026-09-14, after two earlier
-// checks - one at the start of this phase, one during the first real-device bug report - both
-// found that branch absent; it exists now). The phase 3 first cut used a hand-derived camera
-// (camBack 12ft, height 9ft, tilt 16deg) tuned only by eye against a still frame, and a real
-// iPhone screenshot showed it collapsing the whole diamond into a vertical sliver. The mocks'
-// camera is calibrated instead - solved against three framing targets (home plate near the bottom
-// of the band, the mound about a third up, the fence near the top) rather than picked by eye - and
-// its plan-view geometry is built on an exact (s, t) basepath coordinate system (u/v unit vectors
-// along the two foul lines) so the diamond's 45-degree geometry can never drift off a hand-placed
-// pixel the way the first cut's ad hoc polar sampling could.
-//
-// Ported rather than imported verbatim because this module's callers (`baseball/js/ui.js`) need a
-// `project(xFt, yFt, w, h)` -> `{x, y, scale}` function usable for the ball and landing markers
-// independent of a full `drawField` call, and a `drawField(ctx, w, h, league, fenceFt, dark)`
-// signature that takes an already-sized context and this repo's own per-league fence shape
-// (`FIELD[league].fenceFt`, a 5-point named-distance shape) rather than the mocks' single
-// `fenceCenterFt` - the mocks only ever drew the college league. `dark` is accepted for call-site
-// compatibility but unused: like every other camera-view sports field in this repo, the diamond
-// itself has one identity (stadium lights, not a light/dark toggle) - see common.css's fixed
-// `.bb-root` palette, which the mocks establish the same way.
-//
-// This camera was the ONLY one in the build until 2026-09-14's camera rebuild (Matt, with two
-// Mario Superstar Baseball reference screenshots: *"The play screen's camera is fundamentally
-// wrong... this game was always meant to match"* that reference's close, over-the-shoulder view,
-// never a top-down one). It is kept, unmodified, as the cutaway camera - see the PLATE camera
-// section below for what changed and why.
+// The plan-view helpers below (stToXY/polar/diamondPoints/infieldSkinPolygon/...) are kept
+// unchanged from the 2-D era: they were always pure plan geometry in feet, they are exactly what a
+// ground mesh needs, and `planGeometry()` still exports the 45-degree/1.41421 facts so the diamond
+// can be checked without rendering anything.
 
-import { zonesFor } from './engine/zones.js';
+import * as THREE from './vendor/three.module.min.js';
+import { mergeGeometries } from './vendor/BufferGeometryUtils.js';
 import { PARK_GEOMETRY } from './engine/settings.js';
+import { fenceFtAt } from './engine/outcomes.js';
 
+// ------------------------------------------------------------------ plan geometry (feet) ----
 const SQRT1_2 = Math.SQRT1_2; // cos(45deg) == sin(45deg)
 const U = { x: SQRT1_2, y: SQRT1_2 };   // first-base line direction
 const V = { x: -SQRT1_2, y: SQRT1_2 };  // third-base line direction
@@ -61,6 +47,8 @@ const V = { x: -SQRT1_2, y: SQRT1_2 };  // third-base line direction
 function stToXY(s, t) {
   return { x: s * U.x + t * V.x, y: s * U.y + t * V.y };
 }
+/** Engine spray-angle convention: 0 deg is straight to centre, -45 the left-field line, +45 the
+ *  right-field line (outcomes.js's own FOUL_LINE_DEG). Returns the engine's plan (x, y). */
 function polar(angleDeg, r) {
   const a = (angleDeg * Math.PI) / 180;
   return { x: r * Math.sin(a), y: r * Math.cos(a) };
@@ -68,7 +56,7 @@ function polar(angleDeg, r) {
 
 const B = PARK_GEOMETRY.basePathFt;       // 90
 const P = PARK_GEOMETRY.pitcherDistFt;    // 60.5
-const DIRT_RADIUS_REF = PARK_GEOMETRY.infieldDirtRadiusFt; // 95, at B=90
+const DIRT_RADIUS_REF = PARK_GEOMETRY.infieldDirtRadiusFt; // 95
 
 const PLATE_FRONT_W = 17 / 12;
 const PLATE_SIDE = 8.5 / 12;
@@ -82,27 +70,18 @@ function platePolygon() {
     { x: -hw, y: PLATE_SIDE },
   ];
 }
-
 function diamondPoints() {
-  const home = { x: 0, y: 0 };
-  const first = stToXY(B, 0);
-  const third = stToXY(0, B);
-  const second = stToXY(B, B);
-  return { home, first, third, second };
+  return { home: { x: 0, y: 0 }, first: stToXY(B, 0), third: stToXY(0, B), second: stToXY(B, B) };
 }
-
 const BASE_FT = 1.5;
 const MOUND_RADIUS = 9;
 function moundCenterY() { return P - 1.5; }
-
 function infieldGrassSquare() {
   const lo = 3, hi = B - 3;
   return [[lo, lo], [hi, lo], [hi, hi], [lo, hi]].map(([s, t]) => stToXY(s, t));
 }
-
 const HOME_CIRCLE_REF_R = 13;
 function homeCircleRadius() { return HOME_CIRCLE_REF_R * (B / 90); }
-
 function infieldDirtArc(radius) {
   const C = { x: 0, y: P };
   const k = SQRT1_2;
@@ -112,42 +91,21 @@ function infieldDirtArc(radius) {
   const s = (-b + Math.sqrt(disc)) / 2;
   const pFirst = stToXY(s, 0);
   const pThird = stToXY(0, s);
-  const a1 = Math.atan2(pFirst.y - C.y, pFirst.x - C.x);
-  const a2 = Math.atan2(pThird.y - C.y, pThird.x - C.x);
-  return { center: C, radius, a1, a2, s };
+  return { center: C, radius, a1: Math.atan2(pFirst.y - C.y, pFirst.x - C.x), a2: Math.atan2(pThird.y - C.y, pThird.x - C.x), s };
 }
-
 function infieldSkinPolygon(dirt) {
-  const pFirst = stToXY(dirt.s, 0);
-  const pThird = stToXY(0, dirt.s);
-  const pts = [{ x: 0, y: 0 }, pFirst];
+  const pts = [{ x: 0, y: 0 }, stToXY(dirt.s, 0)];
   const N = 24;
   for (let i = 1; i < N; i++) {
     const a = dirt.a1 + (dirt.a2 - dirt.a1) * (i / N);
     pts.push({ x: dirt.center.x + Math.cos(a) * dirt.radius, y: dirt.center.y + Math.sin(a) * dirt.radius });
   }
-  pts.push(pThird);
+  pts.push(stToXY(0, dirt.s));
   return pts;
 }
-
 function baseCenters() {
-  return {
-    first: stToXY(B, BASE_FT / 2),
-    third: stToXY(BASE_FT / 2, B),
-    second: stToXY(B, B),
-  };
+  return { first: stToXY(B, BASE_FT / 2), third: stToXY(BASE_FT / 2, B), second: stToXY(B, B) };
 }
-
-function basepathLanes() {
-  const rectST = (s0, s1, t0, t1) => [[s0, t0], [s1, t0], [s1, t1], [s0, t1]].map(([s, t]) => stToXY(s, t));
-  return {
-    homeFirst: rectST(0, B, -3, 3),
-    homeThird: rectST(-3, 3, 0, B),
-    firstSecond: rectST(B - 3, B + 3, 0, B),
-    secondThird: rectST(0, B, B - 3, B + 3),
-  };
-}
-
 const BOX_W = 4, BOX_L = 6, BOX_GAP = 0.5;
 function batterBoxes() {
   const nearX = PLATE_FRONT_W / 2 + BOX_GAP;
@@ -159,953 +117,1393 @@ function batterBoxes() {
   return { right: mk(nearX), left: mk(-nearX - BOX_W) };
 }
 
-/* ================================================================ CAMERA ==== *
- * Elevated, from behind and above home plate, tilted down toward the field - solved once against
- * three framing targets (home plate near the bottom of the band, the mound about a third up, the
- * fence near the top - `mocks/baseball/field.js`'s own header) rather than eyeballed. Every point
- * below goes through the same transform. */
-const CAM_BACK = 105.75;
-const CAM_HEIGHT = 153.27;
-const CAM_TILT = (35.92 * Math.PI) / 180;
-const CAM_FOCAL = 1.244;
-const CT = Math.cos(CAM_TILT), ST = Math.sin(CAM_TILT);
-
-function projectUV(x, y) {
-  const zCam = (y + CAM_BACK) * CT + CAM_HEIGHT * ST;
-  const yCam = (y + CAM_BACK) * ST - CAM_HEIGHT * CT;
-  const u = 0.5 + (CAM_FOCAL * x) / zCam;
-  const v = 0.5 - (CAM_FOCAL * yCam) / zCam;
-  return { u, v, zCam };
+/** The engine's plan (xFt, yFt) - +y toward centre field - as a world position in feet. The ONE
+ *  place this conversion lives (R1, docs/BASEBALL-3D-BUILD.md section 9). */
+export function engineToWorld(xFt, yFt, heightFt = 0) {
+  return { x: xFt, y: heightFt, z: -yFt };
 }
 
-// Home plate's own camera distance is the scale reference (scale 1 at the plate); anything nearer
-// the camera than that (nothing on this field is) would come out bigger, anything farther, smaller
-// - matches how `drawBall`/`drawLandingMarker`'s callers already read `scale`.
-const HOME_Z = projectUV(0, 0).zCam;
+// ------------------------------------------------------------------ the world's fixed facts ----
+// Every number below is in FEET and every one of them is a real baseball measurement except where
+// the comment says otherwise. R1's own spec fixes them; they are exported because R2 (controls)
+// and R3 (fielders and runners) both position off exactly these and must not re-derive them.
+export const FIGURE_HEIGHT_FT = 6.0;      // every figure, R1 spec. The model's own units are measured at load.
+export const BALL_RADIUS_FT = 0.36;       // ~5x a real baseball, on purpose: the reference draws the ball large
+// R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): a pixel-size floor for the ball on the PITCHER
+// camera only. Measured (node, `zoneRectFt`/`projectToCanvas` against `CAMERAS.pitcher`, the real
+// pitch path): the true sphere draws ~13 px at release (the camera sits close to the rubber) but
+// shrinks to ~2.3 px at the crossing, 72 ft away - the exact defect Matt's recording showed ("no
+// frame... shows it"). Floored to 8 px: comfortably legible on a 393 px phone, still well under
+// what the same ball draws on the BATTER camera at its own crossing (~12.8 px, measured the same
+// way) so the pitcher camera's ball never reads as bigger than the batter's own close-up view.
+export const BALL_MIN_PX = 8;
+// The strike zone, as a vertical rectangle. 17 inches wide (a real plate), the engine's own
+// x in [-1, 1] mapping to its two edges, 1.6 to 3.4 ft off the ground. `z` is where the ball is
+// judged: 0.7 ft on the CATCHER's side of the plate's rear point, which is where a batter standing
+// at BATTER_BOX.z actually meets it. That is the R1 spec's number and it is a gameplay choice, not
+// a rulebook one: the ball has to cross where the swing is, or the zone box and the contact instant
+// disagree on screen (the v843 defect this whole flight rule exists to prevent).
+export const ZONE = { z: 0.7, halfW: 0.708, bottom: 1.6, top: 3.4 };
+// The batter's feet. A right-handed batter stands at -x (the third-base side); a left-handed one
+// mirrors. `z` is 0.4 ft toward the catcher from the plate's rear point, so his stance straddles
+// the zone plane rather than standing behind it.
+export const BATTER_BOX = { x: 2.6, z: 0.4 };
+// How far across the box the batting pad moves him, each way. R1 replaces the old screen-space
+// BATTER_AIM_TRAVEL_FRAC (0.06 of a picture's drawn width) with a real distance: 1.2 ft is about
+// the width of a stance, so the full pad travel moves him from crowding the plate to off the
+// outside corner and never puts a foot outside the painted box (BOX_W is 4 ft).
+export const BATTER_AIM_TRAVEL_FT = 1.2;
+export const RUBBER = { x: 0, y: 0.83, z: -P };   // mound crown 10 inches above the grass
+export const MOUND = { radius: MOUND_RADIUS, height: RUBBER.y, z: -moundCenterY() };
+// The catcher and the umpire. Section 9 puts them at z = 5.5 and z = 8; the catcher moved back a
+// foot, to 6.5, for a measured reason: the batting camera's strike-zone box and his crouched head
+// (top of head measured at 4.35 ft in the shipped Crouch pose) OVERLAPPED at 5.5, and the fix has
+// to be his distance rather than the camera's height, because every camera height that separates
+// them also pushes the batter's own shoes off the bottom of the band. At 6.5 the gap is 9 px and
+// the batter still has his feet. Both distances are inside what a real catcher and umpire use.
+export const CATCHER = { x: 0, z: 7.8 };
+export const UMPIRE = { x: 0.8, z: 10.2 };
+export const FENCE = { height: 8, railHeight: 0.6 };
+// The landing marker's own disc: 14 inches of radius, the stage 8 colours kept exactly (green for
+// a hit, gold for a home run, red for an out) so nothing a player already reads changed meaning.
+export const MARKER = { radiusFt: 14 / 12, hit: 0x2e7d4f, hr: 0xffce3a, out: 0xc0392b };
 
-/** The calibrated-camera projection - kept as the fallback for `project()` below (BB-3b commit 5)
- *  while `overhead.webp` is still loading, and as what `_drawFieldVector` (the same fallback, for
- *  the whole field) draws against. Not used once the picture is available. */
-function _projectVector(xFt, yFt, w, h) {
-  const { u, v, zCam } = projectUV(xFt, yFt);
-  return { x: u * w, y: v * h, scale: Math.max(0.08, HOME_Z / zCam) };
+// ------------------------------------------------------------------ R3: fielders and runners ----
+// docs/BASEBALL-3D-BUILD.md section 9, "R3". The nine fielders' own spots, world feet (`y` is
+// always 0 here - `place()` takes `heightFt` separately, the same convention `CATCHER`/`UMPIRE`
+// already use). The four infielders and the pitcher/catcher never move; the three outfielders are
+// further scaled by the league's own fence distance and rotated about home by the defense's
+// current shift - `outfielderWorld` below does both, so a shifted fielder still stands the SAME
+// distance from home this spec position puts him.
+export const FIELDER_POS = {
+  f1b: { x: 63, z: -63 }, f2b: { x: 30, z: -100 }, fss: { x: -30, z: -100 }, f3b: { x: -63, z: -63 },
+  flf: { x: -150, z: -215 }, fcf: { x: 0, z: -265 }, frf: { x: 150, z: -215 },
+};
+const OUTFIELD_ROLES = ['flf', 'fcf', 'frf'];
+export const OUTFIELD_FENCE_REF_FT = 405; // section 9's own scale reference (minors' own center fence)
+// Every fielder stands facing the plate - the same 0 the pitcher's own facing already is (his own
+// comment: "facingRad=0 already does that", a bind-pose sweep confirmed the model's own front is
+// +z at facingRad 0, and every fielder stands at negative z, so facing the plate IS facing +z).
+export const FIELDER_FACING_RAD = 0;
+
+/** One fielder's real world spot, for this league's fence (`fenceFt`, the same shape `buildStadium`
+ *  draws the wall from) and this at-bat's shift (`game.js`'s own `_shiftDegFor`, carried on the
+ *  'atBatStart' event as `shiftDeg`). Infielders pass straight through unscaled and unrotated - only
+ *  `OUTFIELD_ROLES` are touched at all. The rotation reuses the exact angle convention `polar()`
+ *  above and `zones.js`'s own `shiftDeg` already share (the engine's plan angle: 0 = dead centre,
+ *  negative = left field), converting the fielder's fixed world spot to that plan angle/radius,
+ *  scaling the radius, rotating the angle, then converting back - so "rotate the outfielders' plan
+ *  positions about home by the shift angle" (section 9's own words) is exactly what happens. */
+export function fielderWorld(role, fenceFt, shiftDeg = 0) {
+  const p = FIELDER_POS[role];
+  if (!p) return null;
+  if (!OUTFIELD_ROLES.includes(role)) return { x: p.x, y: 0, z: p.z };
+  const scale = ((fenceFt && fenceFt.center) || OUTFIELD_FENCE_REF_FT) / OUTFIELD_FENCE_REF_FT;
+  const planX = p.x, planY = -p.z;                 // world (x, z) -> the engine's own plan (x, y)
+  const r = Math.hypot(planX, planY) * scale;
+  const deg = (Math.atan2(planX, planY) * 180) / Math.PI + shiftDeg;
+  const rotated = polar(deg, r);
+  return { x: rotated.x, y: 0, z: -rotated.y };
 }
 
-/** Project a point in feet (home plate at the origin, +y toward center field, foul lines at
- *  +/-45deg) onto a canvas of size `w`x`h`. BB-3b commit 5: this is now `projectOverhead` (the
- *  picture-based homography, see its own header below) once `overhead.webp` has loaded, falling
- *  back to the calibrated-camera math above until it has. */
-export function project(xFt, yFt, w, h) {
-  const p = projectOverhead(xFt, yFt, w, h);
-  return p || _projectVector(xFt, yFt, w, h);
+/** Where a RUNNER stands or runs to, world feet - the same bag centers `buildStadium` draws the
+ *  white squares at (`baseCenters()`), converted through `engineToWorld`; `home` is the batter's
+ *  own home plate rear point, the origin. */
+export function basePositions() {
+  const b = baseCenters();
+  return {
+    home: { x: 0, y: 0, z: 0 },
+    first: engineToWorld(b.first.x, b.first.y),
+    second: engineToWorld(b.second.x, b.second.y),
+    third: engineToWorld(b.third.x, b.third.y),
+  };
+}
+/** The ordered waypoints a runner's own BASE INDEX maps into, world feet: index -1 (not on base
+ *  yet - the batter's own start) is `home`, 0/1/2 are first/second/third, and 3 (one past third)
+ *  is `home` again - scored. `runnerPath()[i + 1]` is base index `i`'s own waypoint for `i` from
+ *  -1 to 3, so a runner's whole run is just a slice of this one array between his `from` and `to`
+ *  indices (`ui.js`'s `_animateRunners`). */
+export function runnerPath() {
+  const b = basePositions();
+  return [b.home, b.first, b.second, b.third, b.home];
 }
 
-function toScreen(pt, w, h) { return project(pt.x, pt.y, w, h); }
-
-function pathFor(ctx, pts, w, h) {
-  ctx.beginPath();
-  pts.forEach((pt, i) => {
-    const s = toScreen(pt, w, h);
-    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-  });
-  ctx.closePath();
+/** The strike zone as a rectangle in world feet, in the plane `ZONE.z`. Shared by the overlay that
+ *  strokes it and by the pitch flight that ENDS at its centre, so the two cannot disagree - the
+ *  same single-source rule the old screen-space `zoneRect` held, now in the world. */
+export function zoneRectFt() {
+  return {
+    z: ZONE.z, left: -ZONE.halfW, right: ZONE.halfW, bottom: ZONE.bottom, top: ZONE.top,
+    cx: 0, cy: (ZONE.bottom + ZONE.top) / 2, w: ZONE.halfW * 2, h: ZONE.top - ZONE.bottom,
+  };
+}
+/** The zone's four corners, world feet, clockwise from bottom-left. */
+export function zoneCornersFt() {
+  const z = zoneRectFt();
+  return [
+    { x: z.left, y: z.bottom, z: z.z }, { x: z.left, y: z.top, z: z.z },
+    { x: z.right, y: z.top, z: z.z }, { x: z.right, y: z.bottom, z: z.z },
+  ];
 }
 
-// A "ground widget" (a small, roughly circular dirt feature) is smaller on screen than a naive
-// per-point projection of its true edge would give this close to the camera - see
-// mocks/baseball/field.js's own comment. A single isotropic scale, measured the same way anything
-// else in the picture is measured (home-to-first's own screen length over its own 90ft), keeps a
-// small feature reading at the same scale as its surroundings.
-function groundScale(refA, refB, refFt, w, h) {
-  const a = toScreen(refA, w, h), b = toScreen(refB, w, h);
-  return Math.hypot(b.x - a.x, b.y - a.y) / refFt;
-}
-function drawGroundCircle(ctx, center, radiusFt, scalePxPerFt, w, h) {
-  const c = toScreen(center, w, h);
-  const r = radiusFt * scalePxPerFt;
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-}
-
-// Where a foul line should stop: the true fence intersection sits far outside the frame at this
-// camera's calibrated field of view, so a foul line drawn to that true point would exit through
-// the side of the canvas well past where the fence arc has already left through the top. The fence
-// arc IS the fence as far as this picture can show it, so a foul line stops wherever that arc's own
-// drawn curve leaves the canvas.
-function fenceExitPoint(fenceR, side, w, h) {
-  const N = 400;
-  let prev = null;
-  for (let i = 0; i <= N; i++) {
-    const angle = side * 45 * (i / N);
-    const pt = polar(angle, fenceR);
-    const s = toScreen(pt, w, h);
-    if (s.x < 0 || s.x > w || s.y < 0 || s.y > h) {
-      if (!prev) return s;
-      const target = s.x < 0 ? 0 : s.x > w ? w : (s.y < 0 ? 0 : h);
-      const usesX = s.x < 0 || s.x > w;
-      const t = usesX ? (target - prev.x) / (s.x - prev.x) : (target - prev.y) / (s.y - prev.y);
-      return { x: prev.x + (s.x - prev.x) * t, y: prev.y + (s.y - prev.y) * t };
-    }
-    prev = s;
-  }
-  return prev;
+// ------------------------------------------------------------------ projection ----
+const _pv = new THREE.Vector3();
+/** A world point (feet) through a camera onto a `w` x `h` CSS-pixel canvas. `behind` is true when
+ *  the point is behind the camera, where the projected x/y are meaningless and a caller must skip
+ *  drawing rather than paint a mirrored ghost. This is the ONLY way anything is drawn in 2-D now
+ *  (R1, docs/BASEBALL-3D-BUILD.md section 9: "the 2-D field canvas keeps only the strike-zone-box
+ *  and cursor overlays, drawn by projecting world points through the active camera"). */
+export function projectToCanvas(camera, v, w, h) {
+  _pv.set(v.x, v.y, v.z);
+  camera.updateMatrixWorld();
+  const camZ = _pv.clone().applyMatrix4(camera.matrixWorldInverse).z;
+  _pv.project(camera);
+  return { x: (_pv.x * 0.5 + 0.5) * w, y: (-_pv.y * 0.5 + 0.5) * h, behind: camZ > -camera.near };
 }
 
-let _hatch;
-function hatchPattern(ctx) {
-  if (_hatch) return _hatch;
-  const s = document.createElement('canvas');
-  s.width = 8; s.height = 8;
-  const sc = s.getContext('2d');
-  sc.strokeStyle = 'rgba(255,255,255,0.14)';
-  sc.lineWidth = 2;
-  sc.beginPath();
-  sc.moveTo(-2, 8); sc.lineTo(8, -2);
-  sc.moveTo(0, 10); sc.lineTo(10, 0);
-  sc.stroke();
-  _hatch = ctx.createPattern(s, 'repeat');
-  return _hatch;
+// ------------------------------------------------------------------ the three cameras ----
+// Perspective, fov 50, aspect = the field canvas's own portrait aspect (R1 spec). The numbers were
+// chosen by rendering and measuring, not by eye - `node test-baseball-device.mjs`'s own zone-world
+// probe and the stills under R1's deliverable (a) are what they were checked against.
+//
+// batterCam: the batting view. Behind and above the plate, a touch to the first-base side, looking
+//   out past the mound. Chosen by a numeric sweep (scratchpad) over camera x/y/z and the look
+//   height against four targets, then looked at: a 6 ft batter fills 46% of the band's height, the
+//   pitcher 9% with his feet just under the middle of the frame, the zone box 50 px wide sitting at
+//   46% across and 80% down, and the crouched catcher's head stays BELOW the zone box instead of
+//   covering it. NOTE, and it disagrees with section 9's own prose: a camera that puts the STRIKE
+//   ZONE near the middle of the frame necessarily puts a right-handed batter LEFT of centre (24%),
+//   because he stands at x = -2.6 and the zone is at x = 0; "right of centre" is only true of a
+//   left-handed batter, who mirrors to +2.6 and lands at 68%. The zone is what a player aims at, so
+//   the zone is what is centred.
+//   THE UMPIRE IS NOT DRAWN FROM THIS CAMERA (see Actors._applyCameraVisibility). He stands at
+//   z = 8 and this camera at z = 13.1, so he is 5 ft in front of the lens and would fill the whole
+//   frame; at fov 50 there is no camera position that both frames the batter at ~46% and leaves him
+//   small, since on-screen size is the ratio of distances and he is a quarter of the way to the
+//   batter. The batting camera stands where the umpire's own head is, which is the honest reading:
+//   a camera cannot film the inside of its own operator. He is fully drawn from the other two.
+// pitcherCam: the pitching view. R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 2): Matt's
+//   recording measured the true zone box at 9 px wide - `PITCHING_ZONE_MIN_W_FRAC` in ui.js used
+//   to paper over it by drawing the box 4x its true size over TRUE-size figures, "a huge box over
+//   tiny men". A long lens fixes the actual complaint (box legible without lying about scale):
+//   pulled back to 55.6 ft behind the rubber (was 11.5) and narrowed to fov 10.35 (was 50), on the
+//   SAME mound-to-plate line, a touch higher (y 7.0, was 6.4). Measured (node, this file's own
+//   `projectToCanvas` against the real field band AFTER R8 removes the 48px HUD row - 393x477,
+//   not the old 393x429): pitcher 59.5% of the band's height (own head-to-shoe span), the TRUE
+//   (unscaled) zone box 8.5% of the band's height and 31.9 px wide, the batter 47.8% of the
+//   PITCHER's height and the catcher 44.9%. `PITCHING_ZONE_MIN_W_FRAC`'s floor is deleted with
+//   this - the box is now drawn at this true scale, never stretched. The three numbers the spec
+//   named (pitcher ~50%, batter/catcher ~30-50% of him, box 8-13% of the band) cannot all be hit
+//   at once: box height is a FIXED 0.3 of batter height in the world (1.8 ft / 6 ft), so
+//   `boxFrac = 0.3 x (batter/pitcher ratio) x pitcherFrac` is an identity, and box>=8% at
+//   ratio<=50% forces pitcherFrac>=53%; 59.5% was chosen to keep both the box (>=8%, here 8.5%)
+//   and the ratio (<=50%, here 47.8%) inside their own probed ranges with real margin, not sitting
+//   on either edge. `_zoneMap('pitching')` in ui.js now returns `k=1` unconditionally - see its
+//   own header.
+//   THE PITCHER IS NOT DRAWN FROM THE BATTER CAMERA and vice versa is untouched by this - only the
+//   pitcher camera's own numbers changed; `CAMERAS.batter` and its own fov are exactly R1's.
+//   R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 1): Matt, on v882: "Can you change the
+//   angle a little bit so it's a little easier to see the strike zone you're throwing into?" The
+//   R8 framing above put the box at 8.5% of the band with the pitcher filling 59.5% - legible in
+//   the sense that it was drawn true-scale, but still small next to a pitcher who dominates the
+//   frame. Measured (node, this file's own `projectToCanvas`, the same method R8 used): at R8's
+//   own DISTANCE (55.6 ft back), holding the pitcher at 50% of the band by solving `fov` for it,
+//   the box tops out at 7.16% - moving the camera BACK (not just up) is the only lever that grows
+//   the box relative to the pitcher, because the two are nearly a fixed-ratio "dolly zoom": as the
+//   camera retreats and the lens narrows to compensate, near (pitcher) and far (batter/zone,
+//   nearly 76 ft further along the same line) converge toward their true WORLD size ratio
+//   (6 ft / 1.8 ft = 3.33, i.e. boxFrac -> pitcherFrac / 3.33 as distance -> infinity) instead of
+//   the R8 distance's own, more extreme 0.143 ratio. Solved (bisection on `fov` at several
+//   distances, holding pitcherFrac at 0.50): 180 ft back gives a box of 11.2%, well inside the
+//   spec's own 10-13% - but R13 ALSO has to hold at Little League, whose own fence sits at just
+//   210 ft dead centre (`FIELD.little.fenceFt.center`), and a camera any further back than that
+//   sits AT OR PAST the outfield wall (and the grass berm just past it - item 2, below), rendering
+//   as the camera clipping through that geometry. First tried at 150 ft back (210.5 ft total from
+//   home) - visibly broken (`scratchpad/r13/little-pitcher-BROKEN-150ft.png`): the lens sits
+//   almost exactly on Little League's own fence line, and the frame fills with the inside of the
+//   berm/fence mesh instead of the pitcher. Re-solved with that ceiling respected: 130 ft back
+//   (190.5 ft total) clears Little League's fence by 19.5 ft (real margin, not a hairline) while
+//   still landing the box at 10.2% - inside the band, closer to its floor than 180 ft's own 11.2%
+//   would have been, which is the real trade this stage made (legible box vs. a camera that has to
+//   physically fit inside the SMALLEST league's own outfield). `CAMERAS.pitcher` moved to
+//   `pos: [-2.4, 8.26, -190.5]` (was `[-2.4, 7.0, -116.0]`), `look: [0, 2.53, ZONE.z]` (was
+//   `[0, 3.0, ZONE.z]`), `fov: 5.28` (was 10.35) - a longer lens still, on the same mound-to-plate
+//   line. Measured after: pitcher 50.0% of the band (down from 59.5%, "the pitcher may drop to
+//   about half"), the true box 10.2% tall / 9.7% wide (38.3 x 48.7px, up from 8.5%/8.1%), and the
+//   pitcher's own head projects to y=140.4px against the box's own top at y=215.0px - 74.6px of
+//   clear grass between them, so the head sits ABOVE the box with real margin, never over it. Side
+//   effect, measured and accepted: `batterRatio` (batter/pitcher) rose to 68.1% (was 47.8%, R8's
+//   own 30-50% band) - the SAME dolly-zoom compression that grows the box also brings the batter
+//   closer to the pitcher's own size, since both are now a smaller fraction of the much longer
+//   total camera distance; `pitcher-frame`'s own batter-ratio check raised its ceiling to 80% to
+//   match (see the probe, test-baseball-device.mjs). The ball is INCIDENTALLY easier to see too,
+//   not worse: `BALL_MIN_PX`'s own floor (8px) is barely needed any more - measured 14.1px at
+//   release and 9.7px at the crossing (was ~13px/~2.3px true, with the floor doing the work at
+//   the crossing before). Every other camera and every other constant in this file is untouched by
+//   this - only `CAMERAS.pitcher`'s own five numbers moved.
+//   R13 SHIP-REVIEW FIX (same day): the coordinator, on the stills above - the zone box sat over
+//   the pitcher's own legs, the control cursor landing on his thighs, because `pos.x` was still
+//   -2.4 (on the mound-to-plate line) and at this lens a small `x` barely moves a target 190ft
+//   away. Measured (node, this file's own `projectToCanvas`): at x=-2.4 the box's own left edge
+//   sits only 11.4px from the pitcher's nearest silhouette point (a 238px-tall figure - the box is
+//   effectively touching him); moving the camera SIDEWAYS (never changing `look`, still the plate)
+//   swings the pitcher's own screen position hard while the box barely moves (it is anchored to
+//   the plate, 130ft further from the lens), because at this narrow a fov screen position is far
+//   more sensitive to a lateral camera shift than to the shift's effect on a distant, fixed-look
+//   target. `pos.x` moved to -9.5 (the spec's own 9-12ft band): the box stays over the catcher
+//   (catcher's own x projects 9.2px from the box's own centre, both before and after - the catcher
+//   sits close to the SAME depth the box does, so a lateral camera shift barely separates them),
+//   while the pitcher's own silhouette moves 96.9px, opening a 101.3px gap between his nearest
+//   point and the box's own left edge - 1.7x his own measured on-screen width (59.5px, estimated
+//   at 0.25 of his on-screen height, a person's own rough shoulder/hip fraction), comfortably past
+//   the spec's own "at least half a pitcher's width." Every other number this stage measured moved
+//   by under 0.2 percentage points (box 10.20% was 10.20%, pitcher 49.9% was 50.0%, batter ratio
+//   68.3% was 68.1%) - negligible, so `pitcher-frame`'s own bands did not need re-tuning.
+//   `pop-anchor`/`ball-visible-pitcher`/`chase-start` read the batter/chase cameras or a fixed
+//   world point and do not depend on `CAMERAS.pitcher.pos.x` at all; verified green, unchanged.
+// chaseCam: the ball in play. Sits at a fixed offset from the ball and looks at it, easing toward
+//   that offset by CHASE_LERP each rendered frame so the cut into the chase is a move, not a snap.
+export const CAMERAS = {
+  fov: 50, // batter and chase share this; pitcher carries its own fov (below), a long lens.
+  near: 0.5,
+  far: 4000,
+  // R12 (docs/BASEBALL-3D-BUILD.md, "R12", item 2): Matt, on v871: "I can't see the batter's feet."
+  // Measured (node, `projectToCanvas` against this same camera): the true reason was margin, not a
+  // gross miss - the shoe sole (world y=0) projected to 98.5% of the BATTING band's own height
+  // (544.8 of 553px), a hair inside the frame but with only ~1.5% (8px) of clearance, so a real
+  // device's own rounding, a taller phone's chrome, or a slightly different stance frame put it out
+  // more often than not. Re-aimed by LOOK ALONE (the spec's own preferred lever): `look.y` moved
+  // from 2.3 to -1.0, nothing else. Since vertical FOV (not `look`) sets how much of the world's own
+  // vertical extent a camera shows, this fraction holds at every phone height and in both hosts, not
+  // just the one measured. Measured after: feet 89.2% down (493.2 of 553px, 10.8%/60px of margin),
+  // cap 41.0% down (226.8px) - the batter's own on-screen HEIGHT barely moved (48.0% of the band,
+  // was 49.5%), so this reads as the same shot shifted up, not a re-zoom. The true zone box shifted
+  // up with it (was 405.1-484.1px, now 359.6-435.7px) and moved a hair in size too (64.4x76.2px, was
+  // 65.2x79.0) - the live `zone-scale` probe (device suite) still passes with real margin against
+  // its own 3px drift budget (0.8/2.8px), so no probe baseline needed changing. The mound/pitcher
+  // (background figures only on this camera, not tested by any probe - `pitcher-frame` reads
+  // `CAMERAS.pitcher`, untouched here) moved up too, matching the reference's own composition
+  // (`scratchpad/ref/reference-key-frames.jpg` row 2: plenty of grass/mound above a batter whose own
+  // feet and box lines are fully in frame). Re-verified in the real, mounted game (not just this
+  // node projection) at 393x852: `scratchpad/r12/after-cam-wrap.png` against
+  // `scratchpad/r12/before-batting-wrap.png`.
+  batter: { pos: [0.6, 7.8, 13.1], look: [0, -1.0, -30] },
+  pitcher: { pos: [-9.5, 8.26, -190.5], look: [0, 2.53, ZONE.z], fov: 5.28 },
+  // The chase offset was measured against what it has to SHOW, not chosen: at section 9's own
+  // (0, 12, 28) the ball is 30 ft from the lens and draws 5 px across, which is the same "you
+  // can't see where the ball goes" stage 8 was written to fix. At (0, 10, 22) it is 24 ft out and
+  // draws about 14 px, with the fence and the stands still in frame behind it.
+  chase: { offset: [0, 10, 22] },
+};
+export const CHASE_LERP = 0.15;
+// R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): the chase's own MINIMUM START, used only for the
+// very first snap of a play (`Actors.chaseAt(pos, immediate: true)`), never the steady per-frame
+// offset above. Matt's recording: "on a short ball the first chase frames are the catcher's head
+// filling the foreground."
+//
+// Measured (node, the real contact-hold-to-cut geometry: a grounder's ball position at
+// `preFrac = CONTACT_HOLD_MS / (CONTACT_HOLD_MS + FLIGHT_MS)` of its flight, swept over every
+// distanceFt from MIN_IN_PLAY_FT to 100 ft and every spray angle): at the STEADY offset, the
+// catcher's own projected head height already exceeds the frame at some distance in that range
+// (a near-lens pass, not a gentle close-up) - and it still does at every larger offset tried, since
+// the camera's world z is `ball.z + offset.z` and the ball's own z sweeps continuously through the
+// catcher's fixed z=7.8 for SOME distanceFt no matter what constant is added. No fixed offset can
+// avoid that pass; it only moves which distanceFt it happens at. So this floor is NOT a collision
+// guarantee by itself - what actually closes the defect is `Actors._applyCameraVisibility` hiding
+// the catcher and umpire from the chase camera entirely (the same mechanism the batter camera
+// already uses for the umpire, below). This floor is the second, modest half: a slightly wider
+// start than the steady (10, 22) so a short play's first frame reads a touch more pulled-back,
+// chosen small on purpose - measured worst-case ball size over the same 40-100 ft sweep drops from
+// 6.85 px (steady) to only 6.27 px here, nowhere near the ~5 px CAMERAS.chase's own comment already
+// rejected as illegible. `_stepChase`'s own per-frame CHASE_LERP eases the camera from this start
+// back toward the steady offset over the next several frames, same as any other cut.
+export const CHASE_MIN_HEIGHT_FT = 11;
+export const CHASE_MIN_BACK_FT = 24;
+
+/** The three cameras, already aimed. `setAspect(a)` re-applies the portrait aspect on every
+ *  resize; the chase camera is positioned by `Actors` every frame and only needs its aspect here. */
+export function makeCameras(aspect) {
+  // R8: `def.fov` overrides the shared `CAMERAS.fov` when a camera carries its own (the pitcher's
+  // long lens) - batter and chase have none and keep the shared value.
+  const mk = (def) => {
+    const c = new THREE.PerspectiveCamera((def && def.fov) || CAMERAS.fov, aspect, CAMERAS.near, CAMERAS.far);
+    if (def) { c.position.set(def.pos[0], def.pos[1], def.pos[2]); c.lookAt(def.look[0], def.look[1], def.look[2]); }
+    return c;
+  };
+  const batter = mk(CAMERAS.batter);
+  const pitcher = mk(CAMERAS.pitcher);
+  const chase = mk(null);
+  chase.position.set(CAMERAS.chase.offset[0], CAMERAS.chase.offset[1], CAMERAS.chase.offset[2]);
+  chase.lookAt(0, 0, 0);
+  const setAspect = (a) => {
+    for (const c of [batter, pitcher, chase]) { c.aspect = a; c.updateProjectionMatrix(); }
+  };
+  setAspect(aspect);
+  return { batter, pitcher, chase, setAspect };
 }
 
-function drawSector(ctx, w, h, sector, pattern) {
-  const N = 10;
-  const pts = [];
-  for (let i = 0; i <= N; i++) pts.push(polar(sector.fromDeg + (sector.toDeg - sector.fromDeg) * (i / N), sector.toFt));
-  for (let i = N; i >= 0; i--) pts.push(polar(sector.fromDeg + (sector.toDeg - sector.fromDeg) * (i / N), sector.fromFt));
-  pathFor(ctx, pts, w, h);
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = 'rgba(6,10,6,0.28)';
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = pattern;
-  ctx.fillRect(0, 0, w, h);
-  ctx.restore();
-  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-}
-
-/** Draw the whole overhead view for one league: `overhead.webp` plus the out-zone hatch and the
- *  fence arc, all through `projectOverhead` (BB-3b commit 5) - or, while the picture is still
- *  loading, the old vector-drawn field (`_drawFieldVector`) as a fallback so the cutaway is never
- *  a blank canvas. `ctx` a 2D canvas context already sized to `w`x`h` device pixels (caller
- *  handles DPR). `dark` is accepted for call-site compatibility but unused - see the module
- *  header. */
-export function drawField(ctx, w, h, league, fenceFt, dark) {
-  if (drawOverheadPicture(ctx, w, h, league, fenceFt)) return;
-  _drawFieldVector(ctx, w, h, league, fenceFt, dark);
-}
-
-/** The old calibrated-camera field: grass, dirt, lines, bases, out-zone hatching, all vector-
- *  drawn. Kept only as `drawField`'s fallback while `overhead.webp` loads - see this file's
- *  header and the BB-3b commit 5 section above. */
-function _drawFieldVector(ctx, w, h, league, fenceFt, dark) {
-  const { home, first, third } = diamondPoints();
-  const baseC = baseCenters();
-  const mCY = moundCenterY();
-  const dirt = infieldDirtArc(DIRT_RADIUS_REF * (B / 90));
-  const boxes = batterBoxes();
-  // This repo's fence is a 5-point named-distance shape, not the mocks' single radius; the center
-  // distance is what the mocks calibrated the camera's framing against, so it is the arc radius
-  // used for the fence-exit calculation (where the foul lines stop) and for the fair-territory
-  // tint's own wedge. The visible arc itself is still sampled across the full named shape below.
-  const fenceR = fenceFt.center;
-  const GRASS = '#3f6b34', DIRT = '#a9713f';
-
-  ctx.save();
-  ctx.clearRect(0, 0, w, h);
-
-  ctx.fillStyle = GRASS;
-  ctx.fillRect(0, 0, w, h);
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, w, h);
-  const wedge = [];
-  const N = 24;
-  wedge.push(home);
-  for (let i = 0; i <= N; i++) wedge.push(polar(-45 + 90 * (i / N), fenceR));
-  pathFor(ctx, wedge, w, h);
-  ctx.fillStyle = 'rgba(0,0,0,0.16)';
-  ctx.fill('evenodd');
-  ctx.restore();
-
-  pathFor(ctx, infieldSkinPolygon(dirt), w, h);
-  ctx.fillStyle = DIRT;
-  ctx.fill();
-
-  pathFor(ctx, infieldGrassSquare(), w, h);
-  ctx.fillStyle = GRASS;
-  ctx.fill();
-
-  const lanes = basepathLanes();
-  ctx.fillStyle = DIRT;
-  for (const key of ['homeFirst', 'homeThird', 'firstSecond', 'secondThird']) {
-    pathFor(ctx, lanes[key], w, h);
-    ctx.fill();
-  }
-
-  const scale = groundScale(home, first, B, w, h);
-  ctx.fillStyle = DIRT;
-  drawGroundCircle(ctx, home, homeCircleRadius(), scale, w, h);
-  ctx.fill();
-  drawGroundCircle(ctx, { x: 0, y: mCY }, MOUND_RADIUS, scale, w, h);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-  ctx.lineWidth = 1;
-  drawGroundCircle(ctx, { x: 0, y: mCY }, MOUND_RADIUS, scale, w, h);
-  ctx.stroke();
-
-  // Fence arc: sampled across the real 5-point named shape (left/leftCenter/center/rightCenter/
-  // right), interpolated piecewise - unlike the mocks (which only ever drew one league's single
-  // radius), every league here has its own shape.
-  const fencePts = [];
-  const shapePts = [fenceFt.left, fenceFt.leftCenter, fenceFt.center, fenceFt.rightCenter, fenceFt.right];
-  for (let i = 0; i <= N; i++) {
-    const deg = -45 + 90 * (i / N);
-    const t = (deg + 45) / 90;
-    const segT = t * 4;
-    const seg = Math.min(3, Math.floor(segT));
-    const ft = shapePts[seg] + (shapePts[seg + 1] - shapePts[seg]) * (segT - seg);
-    fencePts.push(polar(deg, ft));
-  }
-  ctx.beginPath();
-  fencePts.forEach((pt, i) => {
-    const s = toScreen(pt, w, h);
-    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-  });
-  ctx.strokeStyle = '#1a2a17';
-  ctx.lineWidth = 6;
-  ctx.stroke();
-
-  // out zones (doc §10: no fielders drawn - out zones sit where fielders would stand)
-  const zones = zonesFor(league, 0);
-  const pattern = hatchPattern(ctx);
-  for (const s of zones.outfield) {
-    drawSector(ctx, w, h, { fromDeg: s.fromDeg, toDeg: s.toDeg, fromFt: s.fromFt, toFt: s.toFt }, pattern);
-  }
-
-  // foul lines: home -> wherever the fence arc itself leaves the frame.
-  const exitL = fenceExitPoint(fenceR, -1, w, h);
-  const exitR = fenceExitPoint(fenceR, 1, w, h);
-  const sHome = toScreen(home, w, h);
-  ctx.beginPath();
-  ctx.moveTo(exitL.x, exitL.y);
-  ctx.lineTo(sHome.x, sHome.y);
-  ctx.lineTo(exitR.x, exitR.y);
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // rubber: 24in x 6in, centered at (0, P)
-  const rubW = 2, rubD = 0.5;
-  pathFor(ctx, [
-    { x: -rubW / 2, y: P - rubD / 2 }, { x: rubW / 2, y: P - rubD / 2 },
-    { x: rubW / 2, y: P + rubD / 2 }, { x: -rubW / 2, y: P + rubD / 2 },
-  ], w, h);
-  ctx.fillStyle = '#f4f6fb';
-  ctx.fill();
-
-  // strike zone, above the plate
-  const zoneHalfW = Math.abs(toScreen({ x: PLATE_FRONT_W / 2 + 0.3, y: 1 }, w, h).x - toScreen({ x: -(PLATE_FRONT_W / 2 + 0.3), y: 1 }, w, h).x) / 2;
-  const zoneTop = toScreen({ x: 0, y: 4.2 }, w, h).y;
-  const zoneBottom = toScreen({ x: 0, y: 1 }, w, h).y;
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(sHome.x - zoneHalfW, zoneTop, zoneHalfW * 2, zoneBottom - zoneTop);
-
-  // batter's boxes
-  ctx.strokeStyle = 'rgba(230,230,230,0.7)';
-  ctx.lineWidth = 1.5;
-  pathFor(ctx, boxes.right, w, h); ctx.stroke();
-  pathFor(ctx, boxes.left, w, h); ctx.stroke();
-
-  // bases: 18in squares, white, drawn at a fixed on-screen size (true-to-scale corners project to
-  // well under a pixel at this camera distance - see the module header's ground-widget note).
-  const BASE_PX = 8;
-  ctx.fillStyle = '#f4f6fb';
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-  ctx.lineWidth = 1;
-  for (const key of ['first', 'third', 'second']) {
-    const s = toScreen(baseC[key], w, h);
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.rotate(Math.PI / 4);
-    ctx.fillRect(-BASE_PX / 2, -BASE_PX / 2, BASE_PX, BASE_PX);
-    ctx.strokeRect(-BASE_PX / 2, -BASE_PX / 2, BASE_PX, BASE_PX);
-    ctx.restore();
-  }
-
-  // home plate pentagon
-  pathFor(ctx, platePolygon(), w, h);
-  ctx.fillStyle = '#f4f6fb';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-/** The ball: a white circle with a dark outline whose radius reflects how close it is to the
- *  viewer (bigger = closer). */
-export function drawBall(ctx, w, h, xFt, yFt, opts = {}) {
-  const p = project(xFt, yFt, w, h);
-  const r = Math.max(2.5, (opts.baseRadius || 6) * p.scale);
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff';
-  ctx.fill();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = '#1a1a1a';
-  ctx.stroke();
-  ctx.restore();
-  return p;
-}
-
-/** A landing marker for a batted ball's result - drawn once the outcome is known. */
-export function drawLandingMarker(ctx, w, h, xFt, yFt, kind, label, dark) {
-  const p = project(xFt, yFt, w, h);
-  ctx.save();
-  if (kind === 'out') {
-    ctx.strokeStyle = '#c0392b';
-    ctx.lineWidth = 3;
-    const s = 9;
-    ctx.beginPath();
-    ctx.moveTo(p.x - s, p.y - s); ctx.lineTo(p.x + s, p.y + s);
-    ctx.moveTo(p.x + s, p.y - s); ctx.lineTo(p.x - s, p.y + s);
-    ctx.stroke();
-  } else if (kind === 'hr') {
-    ctx.fillStyle = '#ffce3a';
-    ctx.font = 'bold 13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('HR', p.x, p.y - 10);
-  } else {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
-    ctx.fillStyle = '#2E7D4F';
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label || '', p.x, p.y);
-  }
-  ctx.restore();
-}
-
-/* ------------------------------------------------------------------------------------------- *
- * BB-3b commit 5: the overhead camera is now `overhead.webp` (ported from
- * `reference/baseball/backdrop-overhead.jpg`), a real painted stadium with the nine fielders
- * baked in - not the calibrated-but-still-procedural camera above, which is kept only as the
- * fallback while the picture loads (`_projectVector`, `_drawFieldVector`). Same reasoning as the
- * plate camera's own rebuild: once the picture exists, the picture IS the camera.
- *
- * The mapping from world feet to picture pixels is a full 2D PROJECTIVE HOMOGRAPHY, not an
- * affine transform - measured (not eyeballed) by locating home plate, first base, second base
- * and third base as their own white-pixel blobs in the shipped `overhead.webp` (a script scan,
- * not a by-eye guess: home plate is occluded by the painted catcher, so it was isolated to its
- * own small crop region first). An affine fit through only three of those four points (home,
- * first, third) was tried first and predicted second base about 46px (2.4% of the picture's own
- * height) off its true measured position - a real, measurable perspective term, not sampling
- * noise, so the extra two degrees of freedom a full homography carries over an affine map are
- * earning their keep here. Solved once via the standard 4-point DLT (exact for exactly 4
- * correspondences, no least squares needed) and stored as the 3x3 matrix below; `projectOverhead`
- * applies it to any world point the rest of this module already computes (out-zone sectors, the
- * fence arc, the ball, the landing marker), so nothing downstream needed to change shape, only
- * which projection function feeds it. */
-const OVERHEAD_HOMOGRAPHY = [
-  [4.23742044e-03, 7.37562798e-04, 4.99416667e-01],
-  [-1.19879752e-05, -1.67176355e-03, 6.70773333e-01],
-  [-2.18117956e-05, 1.47373479e-03, 1],
+// ------------------------------------------------------------------ procedural textures ----
+// No image files (R1's hard rule). Every texture is drawn once on a canvas no larger than 256px on
+// its long side and repeated (R9, docs/BASEBALL-3D-BUILD.md section 9, "R9", item 4, adds
+// `wallTexture` to the R1 pair below, and gives `skyTexture` real width for the first time).
+const PALETTE = {
+  grassA: '#3f8f3a', grassB: '#4aa244', dirt: '#b8743f', dirtDark: '#a5652f',
+  line: '#f2f4f8', fenceSeam: '#154f2a', rail: '#e8c34a',
+  // R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 4): the crowd was a DARK ground
+  // (`#2b3038`) lit only by ambient+one overhead sun - a vertical wall's own normal points
+  // horizontally (toward home, `ribbonGeometry`'s own comment), so a light coming mostly from
+  // ABOVE barely touches it, and the texture read as near-black regardless of its own colours.
+  // `standsFace` moves to a LIGHT ground (the spec's own "dense multicolour specks on a light
+  // ground") AND the face material moves to unlit (`buildStadium`, below) - the same fix the sky
+  // already uses, for the same reason: background scenery that must read correctly regardless of
+  // which way the sun happens to be facing.
+  standsFace: '#c7c2b6', standsAisle: '#a39c8c', standsDeck: '#22262c',
+  skyZenith: '#5b98d6', skyHorizon: '#dcedf9', cloud: '#ffffff',
+  wallPad: '#1d6b3a', towerPole: '#5a5f66', towerHead: '#f2e6a8',
+  scoreboardBody: '#20242c', scoreboardScreen: '#1f8f5c',
+  // R9 fix (2026-09-21): the backstop's own three bands, matching the reference
+  // (scratchpad/ref/reference-key-frames.jpg, top row) instead of the outfield stands' crowd
+  // carried straight up from the ground - see `buildStadium`'s own backstop comment.
+  backstopPad: '#24406a', backstopRail: '#f2f4f8',
+  brickBase: '#9c5a42', brickMortar: '#c9b8a0',
+  backstopCrowdGround: '#a9a49a',
+  // R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 2): the per-league dressing. Aluminium
+  // bleachers (Little League/High School), the chain-link backstop wall behind them, a small
+  // parent-figure palette (spread out, never a wall of specks - the spec's own words), the berm
+  // past a Little League fence, and the press box's own two tones.
+  bleacherAlum: '#9aa0a6', bleacherAlumDark: '#7d838a',
+  chainLink: '#c9cdd2', chainLinkOff: '#e8eaed',
+  parents: ['#c0392b', '#2f6fb0', '#e0a72c', '#3f9e6b', '#8a4fae', '#e07b39'],
+  bermGrassA: '#3a7a36', bermGrassB: '#458040',
+  pressBoxBody: '#3a3f47', pressBoxWindow: '#a9c6e0',
+};
+// R9 item 4: the outfield wall's own ad panels - plain colour blocks with a simple shape, no text
+// (spec's own words). Four panels, cycled along the wall's length.
+const AD_PANELS = [
+  { color: '#d94f3d', shape: 'circle' },
+  { color: '#2f6fb0', shape: 'triangle' },
+  { color: '#e0a72c', shape: 'diamond' },
+  { color: '#3f9e6b', shape: 'square' },
 ];
-
-/** `overhead.webp` fitted to a `w`x`h` canvas the way CSS `background-size: cover;
- *  background-position: center` would - unlike the plate camera's bottom-anchored cover, the
- *  content that matters here (the whole diamond) sits close to the picture's own vertical
- *  middle, not its bottom edge. Returns null while the image is still loading. */
-function overheadCover(w, h) {
-  const im = plateImg('overhead.webp');
-  if (!im) return null;
-  const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
-  if (!iw || !ih) return null;
-  const scale = Math.max(w / iw, h / ih);
-  const drawW = iw * scale, drawH = ih * scale;
-  return { drawW, drawH, offsetX: (w - drawW) / 2, offsetY: (h - drawH) / 2, scale };
+/** Two greens in 12 ft mowing stripes. The stripes run parallel to the bisector of the foul lines
+ *  (straight out to centre field), so the texture repeats across x and is constant along z. */
+function grassTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = PALETTE.grassA; ctx.fillRect(0, 0, 256, 256);
+  ctx.fillStyle = PALETTE.grassB; ctx.fillRect(0, 0, 128, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+/** A crowd: dense multicolour specks on a LIGHT ground, with AISLE GAPS breaking it into sections -
+ *  R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 4). Deliberately not a people-shaped sprite -
+ *  at the distance a stand is ever seen here (200 ft and up) a crowd IS a field of coloured dots,
+ *  and anything more detailed is pixels nobody can resolve. Rewritten from the R1 version, which
+ *  painted the SAME dots on a dark ground (`buildStadium`'s own PALETTE comment has the measured
+ *  "renders near-black" cause: an unlit-looking texture on a material that WAS lit, from a sun that
+ *  barely grazes a vertical face). */
+// `ground` defaults to the outfield stands' own light colour; the backstop (R9 fix, 2026-09-21)
+// passes its own slightly darker `PALETTE.backstopCrowdGround` so the two crowds read as the same
+// KIND of texture (same dots, same aisle rule) without being identical panels pasted twice.
+// R13 (item 2): `density` defaults to R9's own 3400 dots; College's single tier passes a higher
+// count ("a fuller crowd texture on one tier", the spec's own words) since one tier alone would
+// otherwise read thinner than the three- or two-tier bowls it sits beside on the ladder.
+function crowdTexture(ground = PALETTE.standsFace, density = 3400) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = ground; ctx.fillRect(0, 0, 256, 256);
+  // Six aisles, evenly spaced, each a touch darker than the seating so the crowd reads as SECTIONS
+  // rather than one continuous field of dots - the spec's own "with aisle gaps".
+  ctx.fillStyle = PALETTE.standsAisle;
+  const AISLES = 6, aisleW = 7;
+  const aisleX = [];
+  for (let i = 0; i < AISLES; i++) {
+    const x0 = Math.round(((i + 0.5) / AISLES) * 256 - aisleW / 2);
+    aisleX.push(x0);
+    ctx.fillRect(x0, 0, aisleW, 256);
+  }
+  const dots = ['#d94f3d', '#2f6fb0', '#e0a72c', '#3f9e6b', '#8a4fae', '#3a3f47', '#ffffff'];
+  // A fixed, repeatable scatter (not Math.random): the same texture every load means a screenshot
+  // taken today and one taken next week differ only where the game differs.
+  let seed = 20260920;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let i = 0; i < density; i++) {
+    const x = Math.floor(rnd() * 256), y = Math.floor(rnd() * 256);
+    // Skip a dot that would land ON an aisle - the gap has to stay visibly clear, not just darker.
+    if (aisleX.some((ax) => x >= ax - 1 && x < ax + aisleW + 1)) continue;
+    ctx.fillStyle = dots[Math.floor(rnd() * dots.length)];
+    ctx.fillRect(x, y, 3, 3);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+/** The outfield wall: a padded surface (R9 item 4 - "a padded green wall") with vertical pad
+ *  seams and a band of AD PANELS - plain colour blocks with a simple shape, no text, cycling
+ *  `AD_PANELS`. The yellow top-of-wall LINE is the existing rail mesh (`buildStadium`'s own
+ *  `railGeo`/`railMat`, unchanged) - this texture is the wall FACE only. */
+function wallTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 96;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = PALETTE.wallPad; ctx.fillRect(0, 0, 256, 96);
+  const panelW = 256 / AD_PANELS.length;
+  const bandY0 = 26, bandY1 = 74;
+  ctx.strokeStyle = PALETTE.fenceSeam; ctx.lineWidth = 3;
+  for (let i = 0; i <= AD_PANELS.length; i++) {
+    const x = Math.round(i * panelW);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 96); ctx.stroke();   // a pad seam at every panel edge
+  }
+  for (let i = 0; i < AD_PANELS.length; i++) {
+    const x0 = i * panelW;
+    ctx.fillStyle = AD_PANELS[i].color;
+    ctx.fillRect(x0 + 5, bandY0, panelW - 10, bandY1 - bandY0);
+    const cx = x0 + panelW / 2, cy = (bandY0 + bandY1) / 2, r = (bandY1 - bandY0) * 0.32;
+    ctx.fillStyle = '#f5f5f2';
+    ctx.beginPath();
+    if (AD_PANELS[i].shape === 'circle') {
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    } else if (AD_PANELS[i].shape === 'triangle') {
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r * 0.9, cy + r * 0.75); ctx.lineTo(cx - r * 0.9, cy + r * 0.75); ctx.closePath();
+    } else if (AD_PANELS[i].shape === 'diamond') {
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy); ctx.closePath();
+    } else {
+      ctx.rect(cx - r * 0.8, cy - r * 0.8, r * 1.6, r * 1.6);
+    }
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+/** The backstop's brick band (R9 fix, 2026-09-21 - the reference's own backstop, top row of
+ *  `scratchpad/ref/reference-key-frames.jpg`, is padding low and brick above it, never the
+ *  outfield stands' own crowd tier carried straight up from the ground). A running-bond pattern -
+ *  mortar-colour ground, brick rectangles inset a couple of px, alternating half-brick offset every
+ *  other row - 8 rows x 4 columns per tile, `buildStadium`'s own `BACKSTOP_BRICK_REPEAT_*` picks
+ *  how many tiles cover the wall so one brick draws 3 to 6px at the pitcher camera's own lens
+ *  (measured: about 18px per world foot at the backstop's 30ft distance, so a brick close to real
+ *  scale - about 0.2ft tall - already lands in that range; see the constant's own comment). */
+function brickTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = PALETTE.brickMortar; ctx.fillRect(0, 0, 128, 128);
+  const rows = 8, cols = 4;
+  const rowH = 128 / rows, colW = 128 / cols;
+  const mortar = 2;
+  let seed = 20260921;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  // A warm red-brown base with a touch of per-brick shade variation, so the band reads as real
+  // brick rather than a flat repeating tile once it is small on screen.
+  for (let r = 0; r < rows; r++) {
+    const offset = (r % 2) * (colW / 2);
+    for (let cI = -1; cI <= cols; cI++) {
+      const x = cI * colW + offset;
+      const shade = 0.85 + rnd() * 0.3;
+      const base = parseInt(PALETTE.brickBase.slice(1), 16);
+      const rr = Math.min(255, Math.round(((base >> 16) & 255) * shade));
+      const gg = Math.min(255, Math.round(((base >> 8) & 255) * shade));
+      const bb = Math.min(255, Math.round((base & 255) * shade));
+      ctx.fillStyle = `rgb(${rr},${gg},${bb})`;
+      ctx.fillRect(x + mortar / 2, r * rowH + mortar / 2, colW - mortar, rowH - mortar);
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+/** R13 item 2: Little League's own backstop - "a low chain-link backstop... a semi-transparent
+ *  grid texture on a low wall" (the spec's own words), instead of the padded/brick/crowd wall the
+ *  other four leagues keep. A 64px canvas, mostly TRANSPARENT (no fill at all - `clearRect` is the
+ *  canvas default, so the base is alpha 0), with a grid of thin light-grey lines - a chain-link
+ *  fence reads as almost nothing but its own grid at a distance, never a solid panel.
+ *  `tex.transparent = true` on the material is what a caller must set; this only draws the grid.
+ *  R13 SHIP-REVIEW FIX (same day): Matt/the coordinator, on the shipped grid: "make the chain-link
+ *  texture finer and more transparent so it does not read as a grey wall." Alpha 0.55 -> 0.35 and
+ *  lineWidth 1.5 -> 1.0 (a thinner, fainter line reads as mesh rather than panel); STEP 8 -> 6 (more
+ *  grid cells per tile, a finer weave). The call site (`buildStadium`) now also sets a vertical
+ *  `repeat.y` on this texture - see `BACKSTOP_CHAINLINK_H`'s own comment for why: this function's
+ *  UVs are baked to a fixed 30x horizontal repeat by `ribbonGeometry`'s own `uRepeat` argument, but
+ *  vertical repeat is left at the material's default (1x, the whole canvas stretched over whatever
+ *  height the wall is built to) unless the caller corrects it - shrinking `BACKSTOP_CHAINLINK_H`
+ *  without also raising `repeat.y` would stretch every cell taller as the wall got shorter. */
+function chainLinkTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.strokeStyle = PALETTE.chainLink;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 1.0;
+  const STEP = 6;
+  for (let i = -64; i <= 128; i += STEP) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + 64, 64); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i, 64); ctx.lineTo(i + 64, 0); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+/** The sky: a vertical gradient, light at the horizon to blue at the zenith, plus a FEW SOFT CLOUDS
+ *  (R9, docs/BASEBALL-3D-BUILD.md section 9, "R9", item 4 - R1's own spec had said "no clouds";
+ *  Matt's later call is "the stadium backdrop... is bland" and this is the one piece of it that is
+ *  ever actually looked AT rather than past). R1's version was a 2px-wide column stretched around
+ *  the whole sphere - uniform at every longitude by construction, so cloud shapes need real
+ *  horizontal variation, which is why this is now a real 256-wide canvas instead of a 2px gradient
+ *  strip. Five clouds, each a few overlapping soft-edged blobs (radial gradients fading to
+ *  transparent, so they blend into the gradient rather than sitting on top of it as flat discs), a
+ *  fixed seed (the same "today's screenshot matches next week's" rule `crowdTexture` already
+ *  follows) so the sky is reproducible. */
+function skyTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0, PALETTE.skyZenith);
+  g.addColorStop(0.55, PALETTE.skyHorizon);
+  g.addColorStop(1, PALETTE.skyHorizon);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 128);
+  let seed = 20260921;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const blob = (cx, cy, r, alpha) => {
+    const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    rg.addColorStop(0, `rgba(255,255,255,${alpha})`);
+    rg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  };
+  const CLOUDS = 5;
+  for (let i = 0; i < CLOUDS; i++) {
+    const cx = ((i + 0.5) / CLOUDS) * 256 + (rnd() - 0.5) * 30;
+    const cy = 28 + rnd() * 34;   // the upper third, above the horizon band
+    const puffs = 3 + Math.floor(rnd() * 2);
+    for (let p = 0; p < puffs; p++) {
+      blob(cx + (rnd() - 0.5) * 30, cy + (rnd() - 0.5) * 8, 10 + rnd() * 10, 0.68 + rnd() * 0.22);
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
-/** World feet (home plate at the origin, +y toward center field) -> screen px, through the
- *  measured homography and whatever `overheadCover` the current canvas needs. Returns null while
- *  the image is still loading (the caller's fallback, `_projectVector`, takes over) - never
- *  throws, matching the picture-loading contract everywhere else in this file. `scale` is a flat
- *  1: this is a painted picture, not a perspective camera with a real "distance from the lens",
- *  so the ball and landing marker read at one fixed size here, the same way the old vector
- *  camera's bases already did (see `drawGroundCircle`'s own "ground widget" note). */
-function projectOverhead(xFt, yFt, w, h) {
-  const cover = overheadCover(w, h);
-  if (!cover) return null;
-  const [r0, r1, r2] = OVERHEAD_HOMOGRAPHY;
-  const wgt = r2[0] * xFt + r2[1] * yFt + r2[2];
-  const u = (r0[0] * xFt + r0[1] * yFt + r0[2]) / wgt;
-  const v = (r1[0] * xFt + r1[1] * yFt + r1[2]) / wgt;
-  return { x: cover.offsetX + u * cover.drawW, y: cover.offsetY + v * cover.drawH, scale: 1 };
+// ------------------------------------------------------------------ geometry builders ----
+/** A flat plan-view polygon (engine (x, y) feet) as a ground mesh geometry at height `y` feet.
+ *  `holes` are plan polygons cut out of it - the infield grass inside the base paths is one. */
+function groundShape(poly, y, holes = []) {
+  const shape = new THREE.Shape(poly.map((p) => new THREE.Vector2(p.x, p.y)));
+  for (const h of holes) shape.holes.push(new THREE.Path(h.map((p) => new THREE.Vector2(p.x, p.y))));
+  const g = new THREE.ShapeGeometry(shape);
+  // A ShapeGeometry is built in its own XY plane, facing +z. rotateX(-90 degrees) lays it flat AND
+  // sends the engine's +y (toward centre field) to world -z in the same step, with its normal
+  // ending up pointing straight up. The sign matters and was got wrong once: rotateX(+90) puts the
+  // whole infield BEHIND home plate, which renders as a field with no dirt anywhere near the
+  // batter and a mound sitting on bare grass.
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, y, 0);
+  return g;
 }
-
-/** Draw `overhead.webp` cover-fit into the canvas, the translucent out-zone hatch over it (a flat
- *  low alpha, not a solid fill, so the picture's own nine painted fielders read through it - see
- *  the header note on why this can't be true UNDER-fielder z-order with a single flat image), and
- *  the current league's fence as a thin line - everything through `projectOverhead`. Returns
- *  false (does nothing) if the picture has not loaded yet, so the caller can fall back to the old
- *  vector field. */
-function drawOverheadPicture(ctx, w, h, league, fenceFt) {
-  const cover = overheadCover(w, h);
-  const im = plateImg('overhead.webp');
-  if (!cover || !im) return false;
-
-  ctx.save();
-  ctx.clearRect(0, 0, w, h);
-  ctx.drawImage(im, cover.offsetX, cover.offsetY, cover.drawW, cover.drawH);
-
-  const zones = zonesFor(league, 0);
-  const pattern = hatchPattern(ctx);
-  for (const s of zones.outfield) {
-    drawOverheadSector(ctx, w, h, s, pattern);
+/** A vertical ribbon: one quad per sample step, following `pts` (world x/z) from `y0` to `y1`. */
+function ribbonGeometry(pts, y0, y1, uRepeat = 1) {
+  const n = pts.length;
+  const pos = new Float32Array((n - 1) * 6 * 3);
+  const uv = new Float32Array((n - 1) * 6 * 2);
+  const nrm = new Float32Array((n - 1) * 6 * 3);
+  let pi = 0, ui = 0, ni = 0;
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const u0 = (i / (n - 1)) * uRepeat, u1 = ((i + 1) / (n - 1)) * uRepeat;
+    const quad = [[a, y0, u0, 0], [b, y0, u1, 0], [b, y1, u1, 1], [a, y0, u0, 0], [b, y1, u1, 1], [a, y1, u0, 1]];
+    for (const [p, y, u, v] of quad) {
+      pos[pi++] = p.x; pos[pi++] = y; pos[pi++] = p.z;
+      uv[ui++] = u; uv[ui++] = v;
+      // Faces point back toward home plate (the only place any camera ever stands).
+      const len = Math.hypot(p.x, p.z) || 1;
+      nrm[ni++] = -p.x / len; nrm[ni++] = 0; nrm[ni++] = -p.z / len;
+    }
   }
-  for (const s of zones.infield) {
-    drawOverheadSector(ctx, w, h, s, pattern);
-  }
-
-  const shapePts = [fenceFt.left, fenceFt.leftCenter, fenceFt.center, fenceFt.rightCenter, fenceFt.right];
-  const N = 24;
-  ctx.beginPath();
-  for (let i = 0; i <= N; i++) {
-    const deg = -45 + 90 * (i / N);
-    const t = (deg + 45) / 90;
-    const segT = t * 4;
-    const seg = Math.min(3, Math.floor(segT));
-    const ft = shapePts[seg] + (shapePts[seg + 1] - shapePts[seg]) * (segT - seg);
-    const pt = polar(deg, ft);
-    const s = projectOverhead(pt.x, pt.y, w, h);
-    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-  }
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.restore();
-  return true;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  return g;
 }
-
-/** One out-zone sector, projected through `projectOverhead` - the same shape `drawSector` draws
- *  for the vector fallback field, kept as its own function since the two draw against different
- *  projections and `drawSector`'s own `pathFor`/`toScreen` chain is wired to `project()` (which
- *  would recurse back into this same picture path - harmless, but pointless indirection). */
-function drawOverheadSector(ctx, w, h, sector, pattern) {
-  const N = 10;
-  const pts = [];
-  for (let i = 0; i <= N; i++) pts.push(polar(sector.fromDeg + (sector.toDeg - sector.fromDeg) * (i / N), sector.toFt));
-  for (let i = N; i >= 0; i--) pts.push(polar(sector.fromDeg + (sector.toDeg - sector.fromDeg) * (i / N), sector.fromFt));
-  ctx.beginPath();
-  pts.forEach((pt, i) => {
-    const s = projectOverhead(pt.x, pt.y, w, h);
-    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+/** A horizontal ribbon (a deck): `inner` to `outer` at height `y`, same sampling as the faces. */
+function deckGeometry(inner, outer, y) {
+  const n = inner.length;
+  const pos = new Float32Array((n - 1) * 6 * 3);
+  const nrm = new Float32Array((n - 1) * 6 * 3);
+  const uv = new Float32Array((n - 1) * 6 * 2);
+  let pi = 0, ni = 0, ui = 0;
+  for (let i = 0; i < n - 1; i++) {
+    const quad = [inner[i], outer[i], outer[i + 1], inner[i], outer[i + 1], inner[i + 1]];
+    for (const p of quad) {
+      pos[pi++] = p.x; pos[pi++] = y; pos[pi++] = p.z;
+      nrm[ni++] = 0; nrm[ni++] = 1; nrm[ni++] = 0;
+      uv[ui++] = 0; uv[ui++] = 0;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  return g;
+}
+/** R13 item 2: a SLOPED deck, `inner` points at `y0` rising to `outer` points at `y1` - Little
+ *  League's own grass berm past the fence (a raised mound instead of a tiered stand), the one
+ *  piece of stadium geometry in this file that is not flat. Same sampling/winding as
+ *  `deckGeometry`, which this is otherwise identical to. */
+function rampGeometry(inner, outer, y0, y1) {
+  const n = inner.length;
+  const pos = new Float32Array((n - 1) * 6 * 3);
+  const nrm = new Float32Array((n - 1) * 6 * 3);
+  const uv = new Float32Array((n - 1) * 6 * 2);
+  let pi = 0, ni = 0, ui = 0;
+  // The ramp's own up-slope normal: it rises `y1 - y0` over roughly the inner/outer gap, computed
+  // once from the FIRST sample (the berm is a near-constant-width ring, so one normal serves the
+  // whole geometry without a per-quad recompute) and reused for every vertex.
+  const gapFt = Math.hypot(outer[0].x - inner[0].x, outer[0].z - inner[0].z) || 1;
+  const riseFt = y1 - y0;
+  const runLen = Math.hypot(gapFt, riseFt) || 1;
+  for (let i = 0; i < n - 1; i++) {
+    const a = inner[i], b = inner[i + 1], c = outer[i], d = outer[i + 1];
+    const quad = [
+      [a, y0, 0, 0], [c, y1, 1, 0], [d, y1, 1, 1],
+      [a, y0, 0, 0], [d, y1, 1, 1], [b, y0, 0, 1],
+    ];
+    for (const [p, y, u, v] of quad) {
+      pos[pi++] = p.x; pos[pi++] = y; pos[pi++] = p.z;
+      uv[ui++] = u * 4; uv[ui++] = v;
+      // The slope's own INWARD-and-up normal (a ramp that rises as radius grows faces back toward
+      // home and up, the same way a real hillside's visible face angles toward whoever is standing
+      // below it - the outward-and-down tangent along the slope, (run, rise) in the (radial, y)
+      // plane, rotated +90deg gives (-rise, run), an inward horizontal component). Found by
+      // rendering: the first version used the OUTWARD sign here, which pointed the surface's
+      // normal away from the sun for the whole visible face, so `MeshLambertMaterial` shaded it
+      // pure black (`scratchpad/r13/berm-diagnostic-BROKEN-normal.png`) - a real defect, not a
+      // camera-angle limitation, since nothing about this bug depends on which camera looks at it.
+      const len = Math.hypot(p.x, p.z) || 1;
+      nrm[ni++] = -(p.x / len) * (riseFt / runLen); nrm[ni++] = gapFt / runLen; nrm[ni++] = -(p.z / len) * (riseFt / runLen);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  return g;
+}
+/** R13 item 2: one small aluminium bleacher SET, in LOCAL space - `rows` stepped risers, each a
+ *  flat box `widthFt` wide, front edge (the row closest to the field) at local z=0 and rows
+ *  receding in +z as they rise, exactly the real shape a small grandstand has. The caller
+ *  translates/rotates each PLACED instance (`placeBleacher`, `buildStadium`) so local +z (the
+ *  direction the rows recede toward) points AWAY from home - the same "build local, place with a
+ *  translate+rotate" pattern the light towers already use, generalised to something that needs a
+ *  rotation as well as a translation. `seatPoints` returns each row's own seat position (a hair
+ *  forward and below the row's own back riser top, where a figure's feet actually rest) for the
+ *  parent figures to be scattered along. */
+function bleacherUnitParts(widthFt, rows, rowDepthFt, rowHFt) {
+  const parts = [];
+  const seatPoints = [];
+  for (let i = 0; i < rows; i++) {
+    const g = new THREE.BoxGeometry(widthFt, rowHFt, rowDepthFt);
+    g.translate(0, rowHFt * (i + 0.5), rowDepthFt * (i + 0.5));
+    parts.push(g);
+    seatPoints.push({ y: rowHFt * (i + 1), z: rowDepthFt * (i + 0.65), row: i });
+  }
+  return { parts, seatPoints, widthFt };
+}
+/** R13 item 2: place one bleacher-unit's geometry (and its seat points) at a WORLD position,
+ *  rotated so it faces home (local +z, "rows recede away from the field", maps to the OUTWARD
+ *  radial direction from home through `pos`) - `Math.atan2(pos.x, pos.z)` is the same
+ *  facingRad convention `_place()`'s callers already use for a figure standing at this same kind
+ *  of position, just applied to a rotateY on raw geometry instead of a bone hierarchy. */
+function placeBleacher(unit, pos, seedBase, densityHint) {
+  const theta = Math.atan2(pos.x, pos.z);
+  const sin = Math.sin(theta), cos = Math.cos(theta);
+  const rot = (p) => ({ x: p.x * cos + p.z * sin, z: -p.x * sin + p.z * cos });
+  const parts = unit.parts.map((g) => {
+    const c = g.clone();
+    c.rotateY(theta);
+    c.translate(pos.x, 0, pos.z);
+    return c;
   });
-  ctx.closePath();
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = pattern;
-  ctx.globalAlpha = 0.55;
-  ctx.fillRect(0, 0, w, h);
-  ctx.restore();
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = 'rgba(255,255,255,0.30)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  const seats = unit.seatPoints.map((s) => {
+    const local = rot({ x: 0, z: s.z });
+    return { x: pos.x + local.x, y: s.y, z: pos.z + local.z, row: s.row };
+  });
+  return { parts, seats, widthFt: unit.widthFt, theta };
+}
+/** R13 item 2: scatter PARENT FIGURES on a bleacher's own seat rows - simple blocky "coloured
+ *  billboard" people (a single box per figure, the spec's own "simple figures or coloured
+ *  billboards"), never a wall of specks: `count` figures per bleacher set, SPREAD OUT along the
+ *  width and across every row from a seeded RNG (the same "today's screenshot matches next week's"
+ *  rule every other procedural texture in this file follows), grouped by colour into a handful of
+ *  merged meshes so `count` figures across several bleachers still costs only
+ *  `PALETTE.parents.length` draw calls, not one per person. */
+function scatterParents(bleacherPlacements, count, seed0) {
+  let seed = seed0;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const byColor = PALETTE.parents.map(() => []);
+  // R13 SHIP-REVIEW FIX (same day): FIG_H raised 1.5 -> 2.5 alongside BLEACHER_ROW_H_FT's own
+  // increase (see that constant's comment) - a 1.5ft "bust" barely cleared the fence at all; 2.5ft
+  // (a seated fan's own torso-and-head silhouette above the bench, not a full standing height,
+  // since the lower body is what a bleacher row already hides) puts a real, visible slice of colour
+  // above the fence line at the pitcher camera's own lens instead of a sliver.
+  const FIG_W = 0.9, FIG_H = 2.5, FIG_D = 0.6;
+  for (let i = 0; i < count; i++) {
+    const b = bleacherPlacements[Math.floor(rnd() * bleacherPlacements.length)];
+    const seat = b.seats[Math.floor(rnd() * b.seats.length)];
+    const alongFrac = 0.12 + rnd() * 0.76;   // never right at either end - "spread out", not edge-packed
+    const along = (alongFrac - 0.5) * b.widthFt;
+    const sin = Math.sin(b.theta), cos = Math.cos(b.theta);
+    // `along` runs parallel to the bleacher's own local x (its width), rotated the same way the
+    // seat z offset already was in `placeBleacher`.
+    const x = seat.x + along * cos, z = seat.z - along * sin;
+    const colorI = Math.floor(rnd() * PALETTE.parents.length);
+    const g = new THREE.BoxGeometry(FIG_W, FIG_H, FIG_D);
+    g.translate(x, seat.y + FIG_H / 2, z);
+    byColor[colorI].push(g);
+  }
+  return byColor;
 }
 
-// Exported for the geometry self-check (measured in the plan view, before projection) - mirrors
-// mocks/baseball/field.js's own planGeometry, kept here so baseball/js/test.js can assert the
-// 45-degree/1.41421 facts directly rather than trusting the camera math not to have disturbed them.
+/** The fence line, world feet, sampled every `stepDeg` from the left-field line to the right-field
+ *  line straight off the engine's own `fenceFtAt` - so the wall a home run clears and the wall the
+ *  engine scored it against are the same curve by construction, not by a copied table. */
+export function fencePoints(fenceFt, stepDeg = 2) {
+  // Sampled SEGMENT BY SEGMENT, so the five named angles (-45, -22.5, 0, +22.5, +45) are always
+  // sample points. `fenceFtAt` interpolates linearly in ANGLE between them, so the named distance
+  // exists at exactly one angle and nowhere else: a naive even sweep from -45 in 2 degree steps
+  // never lands on 0, and the wall it built came out 1.6 ft short of `fenceFt.center` at Minors -
+  // a sampling error that the fence-shape probe correctly refused to accept as geometry.
+  const perSeg = Math.max(1, Math.round(22.5 / stepDeg));
+  const pts = [];
+  for (let seg = 0; seg < 4; seg++) {
+    const a0 = -45 + seg * 22.5;
+    for (let i = 0; i < perSeg; i++) {
+      const deg = a0 + (22.5 * i) / perSeg;
+      const p = polar(deg, fenceFtAt(deg, fenceFt));
+      pts.push({ x: p.x, z: -p.y });
+    }
+  }
+  const last = polar(45, fenceFtAt(45, fenceFt));
+  pts.push({ x: last.x, z: -last.y });
+  return pts;
+}
+/** Where the STANDS sit, world feet: the fence's own distance plus a walkway out to the poles, then
+ *  drawn in past each pole so the bowl wraps 30 degrees behind them (R1 spec) instead of ending in
+ *  mid-air. The 0.45 at the far edge is a shape choice: it is what makes the bowl read as closing
+ *  around the plate rather than as two straight walls. */
+function standsPoints(fenceFt, extraFt, stepDeg = 2.5) {
+  const pts = [];
+  for (let deg = -75; deg <= 75 + 1e-9; deg += stepDeg) {
+    const inside = Math.min(45, Math.abs(deg));
+    let ft = fenceFtAt(Math.sign(deg) * inside, fenceFt) + extraFt;
+    if (Math.abs(deg) > 45) {
+      const u = (Math.abs(deg) - 45) / 30;
+      ft *= 1 - 0.55 * u;
+    }
+    const p = polar(deg, ft);
+    pts.push({ x: p.x, z: -p.y });
+  }
+  return pts;
+}
+/** R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): the short backstop section BEHIND home plate.
+ *  `standsPoints` above runs -75 to +75 degrees and stops there (R1 spec), leaving the whole rear
+ *  180-ish degrees open - which is exactly what the PITCHER camera looks straight into (Matt's own
+ *  recording: "grass to the horizon behind the batter"; the R1 record already flagged this as
+ *  deferred). `deg` uses the same `polar()` convention as every other angle in this file (0 =
+ *  straight to centre field), so directly behind the plate is 180; sweeping 180 +/- halfSpanDeg
+ *  draws a short convex arc centred there, at a fixed radius from home (no fence to measure off,
+ *  unlike `standsPoints`). */
+function backstopPoints(distFt, halfSpanDeg, stepDeg = 3) {
+  const pts = [];
+  for (let deg = 180 - halfSpanDeg; deg <= 180 + halfSpanDeg + 1e-9; deg += stepDeg) {
+    const p = polar(deg, distFt);
+    pts.push({ x: p.x, z: -p.y });
+  }
+  return pts;
+}
+// R7: measured (node, ray-casting the PITCHER camera's own left/right frustum edges through the
+// z = 30 ft plane, `CAMERAS.pitcher`'s real position/lookAt) - the frame spans about -55 to +54
+// degrees from home at that depth, so 60 is that span plus a few degrees of margin either side.
+// 30 ft is "about 20 ft behind the umpire" (UMPIRE.z = 10.2), rounded.
+const BACKSTOP_DIST_FT = 30;
+const BACKSTOP_HALF_SPAN_DEG = 60;
+// R9 fix (2026-09-21, after R9 shipped): Matt, on `after-pitcher-cam.png`: the backstop (built as
+// two more tiers of the SAME crowd texture the outfield stands use) fills the whole frame behind
+// the plate at this lens and reads as TV static, not a crowd - the reference's own backstop
+// (scratchpad/ref/reference-key-frames.jpg, top row) is a padded wall low, a brick band above it,
+// and a crowd tier only above THAT. Rebuilt as one flat wall, three vertical bands, at the same
+// BACKSTOP_DIST_FT/BACKSTOP_HALF_SPAN_DEG R7 already measured against the pitcher camera's frame:
+// R13 SHIP-REVIEW FIX (same day, after the item-1 camera pull-back): Matt/the coordinator, on
+// `highschool-pitcher.png` and up: "the whole pitching frame behind the plate is now a flat
+// dark-blue wall" - the item-1 camera (130ft behind the rubber, fov 5.28) is a MUCH longer lens
+// than the one these three bands were tuned against (55.6ft/fov 10.35), and at that lens the
+// pitching band's own visible vertical extent at the backstop's distance is far smaller than the
+// old 12+16+12=40ft wall. Measured (node, `projectToCanvas` against the SHIPPED `CAMERAS.pitcher`,
+// x=0, z=-BACKSTOP_DIST_FT): the frame's own top edge, at this distance, sits at world y=10.86ft -
+// above that is off-screen sky, not backstop, whatever height the wall is actually built to. The
+// old BACKSTOP_PAD_H (12ft) alone already exceeded that ceiling, so the WHOLE visible backstop was
+// pad - one flat colour, no texture at all, exactly the report. Re-proportioned so the visible
+// slice (0 to ~10.86ft) actually shows all three bands, not just the first: BACKSTOP_PAD_H 4ft (the
+// coordinator's own number), BACKSTOP_BRICK_H 4ft (a DELIBERATE DEVIATION from the coordinator's
+// literal "about 8ft" - at 8ft the crowd tier would start at pad+brick=12ft, ABOVE the measured
+// 10.86ft ceiling, so it would never be visible at any pitcher-camera framing regardless of how
+// tall it is drawn; 4ft leaves the crowd tier starting at 8ft, with a real ~2.86ft/91px slice of
+// it inside the frame - satisfies the coordinator's own acceptance test, "the stands/crowd tier
+// visible in the top third," which 8ft cannot). BACKSTOP_CROWD_H (10ft) is generous past the
+// visible ceiling on purpose - cheap extra geometry, no visible cost, and margin for a future
+// camera nudge.
+const BACKSTOP_PAD_H = 4;           // ground to 4ft: the solid padded wall
+const BACKSTOP_RAIL_H = 0.4;        // a thin white rail on top of the pad, same convention as FENCE.railHeight
+const BACKSTOP_BRICK_H = 4;         // 4 to 8ft: the brick band (see the deviation note above)
+const BACKSTOP_CROWD_H = 10;        // 8 to 18ft: the crowd (most of it past the frame's own 10.86ft ceiling, harmless)
+// Measured (node, `projectToCanvas` against the SHIPPED `CAMERAS.pitcher`, the same method the
+// deviation note above used): about 32.1px per world foot at BACKSTOP_DIST_FT (was ~18.0px/ft at
+// the pre-ship-review camera - a longer lens, more px per foot). A brick close to its real size
+// (about 0.2ft tall, 0.6ft long, unchanged) still draws inside the spec's own "3 to 6px" for the
+// tall axis (0.2 x 32.1 = 6.4px, right at the edge - the physical brick size was left alone rather
+// than shrunk further, since 6.4px still reads as brick, not noise); the brick canvas is 8 rows x
+// 4 cols per tile (`brickTexture`), so repeat.y = BACKSTOP_BRICK_H / (8 x 0.2) = 4 / 1.6 = 2.5
+// (was 10, at the old BRICK_H=16), and repeat.x = (the wall's own arc length, unchanged by any of
+// this - 2*pi*BACKSTOP_DIST_FT*(2*BACKSTOP_HALF_SPAN_DEG/360) = ~62.8ft) / (4 x 0.6) = ~26,
+// unaffected by the height change (repeat.x depends only on the arc length and the brick's own
+// physical width, never on BACKSTOP_BRICK_H).
+const BACKSTOP_BRICK_REPEAT_X = 26;
+const BACKSTOP_BRICK_REPEAT_Y = 2.5;
+// The crowd tier's own repeat, re-solved for the new 32.1px/ft (was ~18.0): a ~3px speck needs
+// repeat.x = (arc_length x pxPerFt) / 256 (the crowd canvas's own width, each dot 3px of it) =
+// (62.8 x 32.1) / 256 = ~7.9 (was 4.5 at the old camera's lower px/ft - a longer lens needs MORE
+// tiles to keep the same on-screen speck size, not fewer). repeat.y solves the same way against
+// the new, much shorter BACKSTOP_CROWD_H (10, was 12): (10 x 32.1) / 256 = ~1.25 (was 1).
+const BACKSTOP_CROWD_REPEAT_X = 7.9;
+const BACKSTOP_CROWD_REPEAT_Y = 1.25;
+
+// R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 2): Matt, on v882: "For little league it
+// should look like bleachers and stuff with spread out parents in them, then for every league the
+// audience and bleacher/seats should increase." One row per league, everything else in
+// `buildStadium` below reads ONLY this table to decide what to build - so the five dressings stay
+// a single, auditable ladder instead of five copy-pasted branches.
+//   tiers: how many of the outfield bowl's own stepped tiers to build (0-3; Majors is R9's
+//     unchanged 3, Minors 2, College 1, Little League/High School 0 - a concrete bowl reads wrong
+//     at a Little League field, so those two get bleachers instead, below).
+//   backstop: 'chainlink' (Little League only - a low, mostly-see-through wall) or 'padded' (every
+//     other league, R7/R9's own three-band wall, unchanged).
+//   towers: four light towers (R9), from College up - a Little League/High School diamond plays by
+//     daylight in the real sport, and the spec's own words are explicit ("no light towers") for
+//     Little League; High School keeps the same absence rather than inventing a number for it.
+//   scoreboardScale: the centre-field board's own size multiplier - Little League's is "a small
+//     scoreboard" (the spec's own words), everyone else keeps R9's shipped size.
+//   bleachers: `{deg, r}` placements (`polar()`'s own convention, r in feet from home) for small
+//     aluminium bleacher SETS - behind the plate and down each line - built instead of a tiered
+//     bowl. Empty once a league has real tiers.
+//   bleacherWidthFt/bleacherRows: one shared shape per league (High School's own "longer
+//     bleachers" is a wider, taller set, not a different placement rule).
+//   parentsPerBleacher: scattered across EVERY bleacher set that league has, so the printed total
+//     (3 sets) is the spec's own "little about 12, highschool about 40" almost exactly (12 and 39).
+//   berm: Little League only - a grass rise past the fence instead of any stand at all.
+//   pressBox: High School only - a small booth behind the backstop.
+const LEAGUE_STADIUM = {
+  little: {
+    tiers: 0, backstop: 'chainlink', towers: false, scoreboardScale: 0.55,
+    bleachers: [{ deg: 180, r: 34 }, { deg: 50, r: 130 }, { deg: -50, r: 130 }],
+    bleacherWidthFt: 16, bleacherRows: 4, parentsPerBleacher: 4,
+    berm: true, pressBox: false,
+  },
+  highschool: {
+    tiers: 0, backstop: 'padded', towers: false, scoreboardScale: 0.85,
+    bleachers: [{ deg: 180, r: 38 }, { deg: 54, r: 168 }, { deg: -54, r: 168 }],
+    bleacherWidthFt: 26, bleacherRows: 6, parentsPerBleacher: 13,
+    berm: false, pressBox: true,
+  },
+  college: {
+    tiers: 1, backstop: 'padded', towers: true, scoreboardScale: 1,
+    bleachers: [], bleacherWidthFt: 0, bleacherRows: 0, parentsPerBleacher: 0,
+    berm: false, pressBox: false, crowdDensity: 4600,   // "a fuller crowd texture" - R9's own 3400 x 1.35
+  },
+  minors: {
+    tiers: 2, backstop: 'padded', towers: true, scoreboardScale: 1,
+    bleachers: [], bleacherWidthFt: 0, bleacherRows: 0, parentsPerBleacher: 0,
+    berm: false, pressBox: false,
+  },
+  majors: {
+    tiers: 3, backstop: 'padded', towers: true, scoreboardScale: 1,
+    bleachers: [], bleacherWidthFt: 0, bleacherRows: 0, parentsPerBleacher: 0,
+    berm: false, pressBox: false,
+  },
+};
+// R13 SHIP-REVIEW FIX (same day): the original item-2 draft's BLEACHER_ROW_H_FT (1.15) put the
+// TOP riser at 4 x 1.15 = 4.6ft and the tallest seated parent (FIG_H 1.5, below) at only 6.1ft -
+// barely clearing the chain-link fence's own new 6ft height at all, so from the pitcher camera's
+// own extreme telephoto lens (the same measured 10.86ft visible ceiling the padded-backstop bands
+// were re-proportioned against, above) almost none of a parent figure ever cleared the fence line -
+// "bleachers and parents visible above it" was only a sliver at the shipped size. Raised so a
+// parent's own head clears the fence with real margin, verified by rendering (`little-pitcher.png`):
+// riser top 4 x 1.4 = 5.6ft (just under the fence, where a real small bleacher sits), parent heads
+// (below) at 5.6 + 2.5 = 8.1ft - solidly inside the visible ceiling, not a bare sliver.
+const BLEACHER_ROW_DEPTH_FT = 2.4, BLEACHER_ROW_H_FT = 1.4;
+// R13: the berm's own extent past the fence, and the press box's own box, both fixed shapes
+// (neither scales with `fenceFt` - a Little League/High School dressing never sees a fence far
+// enough out for that to matter, the same reasoning R9's towers/scoreboard already rely on).
+const BERM_EXTRA_FT = 18, BERM_RISE_FT = 7;
+const PRESS_BOX_W = 18, PRESS_BOX_H = 6, PRESS_BOX_D = 8, PRESS_BOX_DIST_FT = 34, PRESS_BOX_Y = BACKSTOP_PAD_H + BACKSTOP_BRICK_H + 2;
+
+/** Build the whole stadium into `scene` for one league. Returns a handle with `dispose()` (every
+ *  geometry, material and texture this made), `group`, and `fencePts` so a test can sample the wall
+ *  that actually shipped rather than recompute it.
+ *
+ *  Draw calls are the budget that matters on a phone, so anything sharing a material is merged into
+ *  ONE mesh (all the white lines and bags together; the three stand faces together; the three decks
+ *  together). R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 4) adds four light towers (one
+ *  merged mesh for the four poles, one for the four light banks) and the centre-field scoreboard
+ *  (one mesh for the body, one for its screen) - four more meshes, and since each is one material
+ *  for ALL four towers, still four more draw calls, not sixteen. Measured (a scratch Chromium
+ *  script, `actors.renderStats()` with only the batter and pitcher placed, Little League fence):
+ *  batter camera 18 draw calls / 7793 triangles before R9, 22 / 7993 after; pitcher camera 21/9469
+ *  before, 25/9669 after; chase camera 10/5569 before, 14/5769 after - +4 draw calls on every
+ *  camera, unaffected by which league's fence shape is passed in (none of R9's additions scale
+ *  with `fenceFt`).
+ *
+ *  R9 SHIP-REVIEW FIX (2026-09-21): the backstop moved OUT of the shared `faceGeo`/`deckGeo` merge
+ *  into its own four meshes (padded wall, rail, brick, crowd - see `buildStadium`'s own backstop
+ *  comment). Re-measured, college fence: batter camera 25 calls / 7913 triangles, pitcher camera
+ *  27 / 9645, chase camera 14 / 5449 - a few more draw calls than the number above (the backstop
+ *  is no longer "free" inside the outfield stands' own merge), still well inside a phone's budget.
+ *
+ *  Note on leagues: only the FENCE varies through R9. `FIELD[league].fieldScale` scales the
+ *  named-park distances inside the engine (settings.js's own comment), never the diamond - the
+ *  base paths and the rubber are regulation at every league there, so they are regulation here too.
+ *
+ *  R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 2): the BACKDROP now varies by league too
+ *  - `LEAGUE_STADIUM` (above) is the one table everything below reads. `league` defaults to
+ *  `'majors'` so an old caller (or a test that never passes it) gets R9's own bowl unchanged, byte
+ *  for byte. Draw calls per league, measured (batter/pitcher/chase cameras, each league's own real
+ *  fence shape): see the R13 entry in `baseball/CLAUDE.md` for the numbers - every league stays
+ *  comfortably inside the same phone budget the R9 bowl alone already was. */
+export function buildStadium(scene, { fenceFt, league = 'majors' }) {
+  const cfg = LEAGUE_STADIUM[league] || LEAGUE_STADIUM.majors;
+  const group = new THREE.Group();
+  const geos = [];
+  const mats = [];
+  const texs = [];
+  const track = (g, m) => { if (g) geos.push(g); if (m) mats.push(m); };
+
+  // --- sky: one sphere, inside out, 32x16 (1024 triangles, R1's own budget line).
+  const skyTex = skyTexture(); texs.push(skyTex);
+  const skyGeo = new THREE.SphereGeometry(1800, 32, 16);
+  const skyMat = new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, depthWrite: false });
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  // Drawn LAST among the opaques, not first. It is a full-screen sphere, so drawing it first shades
+  // every pixel of the canvas and then has the whole stadium painted over the top - pure overdraw,
+  // and on a software rasteriser overdraw is the entire bill. Drawn last, with depth testing on and
+  // depth writing off, the depth buffer is already full and the sky only shades where sky shows.
+  sky.renderOrder = 1000;
+  group.add(sky); track(skyGeo, skyMat);
+
+  // --- grass: one 900x900 plane with the mowing stripes repeated every 12 ft.
+  const grassTex = grassTexture(); texs.push(grassTex);
+  grassTex.repeat.set(900 / 24, 900 / 24);   // one full texture = two 12 ft stripes
+  const grassGeo = new THREE.PlaneGeometry(900, 900);
+  grassGeo.rotateX(-Math.PI / 2);
+  grassGeo.translate(0, 0, -200);            // centred on the outfield, not on the plate
+  const grassMat = new THREE.MeshLambertMaterial({ map: grassTex });
+  group.add(new THREE.Mesh(grassGeo, grassMat)); track(grassGeo, grassMat);
+
+  // --- dirt: the infield skin (base paths plus the arc), the home circle, and the mound cone.
+  const dirtMat = new THREE.MeshLambertMaterial({ color: PALETTE.dirt });
+  mats.push(dirtMat);
+  const dirt = infieldDirtArc(DIRT_RADIUS_REF * (B / 90));
+  const skinGeo = groundShape(infieldSkinPolygon(dirt), 0.02, [infieldGrassSquare()]);
+  const homeCircle = [];
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    homeCircle.push({ x: Math.cos(a) * homeCircleRadius(), y: Math.sin(a) * homeCircleRadius() });
+  }
+  const homeGeo = groundShape(homeCircle, 0.025);
+  const moundGeo = new THREE.CylinderGeometry(MOUND.radius * 0.55, MOUND.radius, MOUND.height, 24, 1);
+  moundGeo.translate(0, MOUND.height / 2, MOUND.z);
+  const dirtGeo = mergeGeometries([skinGeo, homeGeo, moundGeo], false);
+  group.add(new THREE.Mesh(dirtGeo, dirtMat));
+  track(dirtGeo, null); skinGeo.dispose(); homeGeo.dispose(); moundGeo.dispose();
+
+  // --- white geometry, 0.02 ft above whatever it sits on: the two foul lines, the plate, the three
+  // bags, the rubber, the batter's boxes. All one material, so all one mesh.
+  const lineMat = new THREE.MeshLambertMaterial({ color: PALETTE.line });
+  mats.push(lineMat);
+  const whiteParts = [];
+  const foulLine = (sign) => {
+    const w = 0.35, len = 340;
+    const d = polar(sign * 45, 1);
+    const n = { x: d.y, y: -d.x };   // perpendicular, in the engine's plan
+    const quad = [
+      { x: n.x * w / 2, y: n.y * w / 2 },
+      { x: d.x * len + n.x * w / 2, y: d.y * len + n.y * w / 2 },
+      { x: d.x * len - n.x * w / 2, y: d.y * len - n.y * w / 2 },
+      { x: -n.x * w / 2, y: -n.y * w / 2 },
+    ];
+    return groundShape(quad, 0.04);
+  };
+  whiteParts.push(foulLine(1), foulLine(-1));
+  whiteParts.push(groundShape(platePolygon(), 0.05));
+  const bags = baseCenters();
+  for (const b of [bags.first, bags.second, bags.third]) {
+    const half = BASE_FT / 2;
+    whiteParts.push(groundShape([
+      { x: b.x - half, y: b.y - half }, { x: b.x + half, y: b.y - half },
+      { x: b.x + half, y: b.y + half }, { x: b.x - half, y: b.y + half },
+    ], 0.06));
+  }
+  whiteParts.push(groundShape([
+    { x: -1, y: moundCenterY() + 1.4 }, { x: 1, y: moundCenterY() + 1.4 },
+    { x: 1, y: moundCenterY() + 1.9 }, { x: -1, y: moundCenterY() + 1.9 },
+  ], MOUND.height + 0.02));
+  const boxes = batterBoxes();
+  const boxOutline = (poly) => {
+    const parts = [];
+    const t = 0.25;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len * t / 2, ny = dx / len * t / 2;
+      parts.push(groundShape([
+        { x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny },
+        { x: b.x - nx, y: b.y - ny }, { x: a.x - nx, y: a.y - ny },
+      ], 0.03));
+    }
+    return parts;
+  };
+  whiteParts.push(...boxOutline(boxes.right), ...boxOutline(boxes.left));
+  const whiteGeo = mergeGeometries(whiteParts, false);
+  group.add(new THREE.Mesh(whiteGeo, lineMat));
+  track(whiteGeo, null);
+  for (const g of whiteParts) g.dispose();
+
+  // --- the fence: ONE ribbon following the league's own shape, padded and carrying a row of ad
+  // panels (R9 item 4 - `wallTexture()`'s own header), with a rail along the top (the spec's own
+  // "yellow line", unchanged from R1).
+  const fencePts = fencePoints(fenceFt, 2);
+  const wallGeo = ribbonGeometry(fencePts, 0, FENCE.height);
+  const wallTex = wallTexture(); texs.push(wallTex);
+  // Repeated along the wall's own length, not stretched to it - `repeat.x` picks how many times
+  // AD_PANELS' own four-panel pattern tiles across the fence's arc, the same convention crowdTex/
+  // grassTex already use (a fixed tile count via `tex.repeat`, not the geometry's own uRepeat).
+  wallTex.repeat.set(7, 1);
+  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, side: THREE.DoubleSide });
+  group.add(new THREE.Mesh(wallGeo, wallMat)); track(wallGeo, wallMat);
+  const railGeo = ribbonGeometry(fencePts, FENCE.height, FENCE.height + FENCE.railHeight);
+  const railMat = new THREE.MeshLambertMaterial({ color: PALETTE.rail, side: THREE.DoubleSide });
+  group.add(new THREE.Mesh(railGeo, railMat)); track(railGeo, railMat);
+
+  // --- the stands: R13 - `cfg.tiers` stepped tiers (0-3, `LEAGUE_STADIUM`'s own table), each 12 ft
+  // deep, rising to 40 ft. Flat boxes, as budgeted: one vertical face and one horizontal deck per
+  // tier, all faces merged and all decks merged. Little League/High School build NONE of this at
+  // all (`cfg.tiers === 0`) - their own dressing is the bleachers/berm/press-box block below.
+  if (cfg.tiers > 0) {
+    const crowdTex = crowdTexture(PALETTE.standsFace, cfg.crowdDensity || 3400); texs.push(crowdTex);
+    // R9 item 4: repeat lowered from the R1/R7 value (60, 1.4) - at that spatial frequency the crowd
+    // aliased into flat grey-brown static up close (the backstop, ~20-30ft from the pitcher camera,
+    // and the chase camera on a deep fly), which read as "renders near-black" for the same reason the
+    // lighting did: neither the colour nor the texture was ever actually resolved at those distances.
+    // Anisotropic filtering (the renderer's own max, the standard fix for a texture viewed at a
+    // shallow angle) is the other half - a flat repeat count change alone still aliased at the
+    // backstop's own steep viewing angle.
+    crowdTex.repeat.set(22, 1.1);
+    crowdTex.anisotropy = 8;
+    const faceParts = [], deckParts = [];
+    const tierBase = [FENCE.height, 16, 28];
+    const tierTop = [16, 28, 40];
+    for (let k = 0; k < cfg.tiers; k++) {
+      const inner = standsPoints(fenceFt, 14 + k * 12);
+      const outer = standsPoints(fenceFt, 14 + (k + 1) * 12);
+      faceParts.push(ribbonGeometry(inner, tierBase[k], tierTop[k], 1));
+      deckParts.push(deckGeometry(inner, outer, tierTop[k]));
+    }
+    const faceGeo = mergeGeometries(faceParts, false);
+    // R9 item 4: UNLIT (MeshBasicMaterial, was MeshLambertMaterial) - the measured cause of "renders
+    // near-black" (this function's own PALETTE.standsFace comment): a vertical face's normal points
+    // horizontally, so the mostly-overhead sun barely lights it regardless of the texture's own
+    // colours. The sky already draws unlit for the identical reason (background scenery that must
+    // read correctly no matter which way the light happens to be facing); the crowd now matches it.
+    const faceMat = new THREE.MeshBasicMaterial({ map: crowdTex, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(faceGeo, faceMat)); track(faceGeo, faceMat);
+    const deckGeo = mergeGeometries(deckParts, false);
+    const deckMat = new THREE.MeshLambertMaterial({ color: PALETTE.standsDeck, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(deckGeo, deckMat)); track(deckGeo, deckMat);
+    for (const g of [...faceParts, ...deckParts]) g.dispose();
+  }
+
+  // --- R13 item 2: Little League's own backstop is a LOW, mostly-see-through chain-link wall
+  // instead of the padded/brick/crowd wall every other league keeps (below). One ribbon,
+  // `BACKSTOP_CHAINLINK_H` tall, the semi-transparent grid texture (`chainLinkTexture`) on BOTH
+  // sides so it reads the same from the pitcher camera as from anywhere else a future camera might
+  // look from. R13 SHIP-REVIEW FIX (same day): Matt/the coordinator's own literal number - "a 6 ft
+  // chain-link" - replaces the original item-2 draft's 10ft (a real Little League backstop height,
+  // but taller than the coordinator's own explicit ask once the camera's real framing was measured
+  // against it - the bleachers/parents behind it need real sky between the fence top and their own
+  // feet to read as "above it," not "on top of it"). `repeat.y` is set here (not inside
+  // `chainLinkTexture` itself, which has no height to read) to keep the grid's own cells close to
+  // SQUARE as the wall gets shorter: `ribbonGeometry`'s own `uRepeat` (30, unchanged) bakes one
+  // horizontal tile every 62.8/30 = ~2.09ft of arc; matching that physical size vertically at the
+  // new 6ft height needs repeat.y = 6 / 2.09 = ~2.87 - left at the material's own default (1x)
+  // would stretch every diamond of the mesh three times taller than it is wide.
+  const backstopPts = backstopPoints(BACKSTOP_DIST_FT, BACKSTOP_HALF_SPAN_DEG);
+  if (cfg.backstop === 'chainlink') {
+    const BACKSTOP_CHAINLINK_H = 6;
+    const clGeo = ribbonGeometry(backstopPts, 0, BACKSTOP_CHAINLINK_H, 30);
+    const clTex = chainLinkTexture(); texs.push(clTex);
+    clTex.repeat.set(1, 2.87);
+    // Rendering this at distance found a FOURTH problem the alpha/lineWidth/STEP changes above
+    // don't touch: WebGL's own mipmap minification averages a fine grid of thin lines, viewed from
+    // far enough away that many texels land under one screen pixel, into a near-solid GRAY HAZE -
+    // the exact "reads as a grey wall" symptom, just from a different cause than the shipped
+    // texture's own alpha/coarseness. A grid pattern is the one shape mipmapping handles worst (a
+    // brick or crowd texture's own solid-fill blocks survive averaging as a colour; a grid of
+    // mostly-transparent lines averages toward a flat, medium-alpha grey no matter how the lines
+    // themselves are drawn). Disabling mipmaps for this one texture - sampled at full resolution
+    // every frame, never blurred toward its own average - is what actually lets the grid read as a
+    // fence with real gaps instead of a haze; `THREE.LinearFilter` on `minFilter` is the standard
+    // fix for exactly this failure mode.
+    clTex.generateMipmaps = false;
+    clTex.minFilter = THREE.LinearFilter;
+    const clMat = new THREE.MeshBasicMaterial({ map: clTex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+    group.add(new THREE.Mesh(clGeo, clMat)); track(clGeo, clMat);
+    // A thin dark top rail (a real chain-link fence's own top pipe) - unlit, the same convention
+    // every other rail-on-a-wall in this file already uses.
+    const clRailGeo = ribbonGeometry(backstopPts, BACKSTOP_CHAINLINK_H, BACKSTOP_CHAINLINK_H + 0.25);
+    const clRailMat = new THREE.MeshLambertMaterial({ color: PALETTE.bleacherAlumDark, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(clRailGeo, clRailMat)); track(clRailGeo, clRailMat);
+  } else {
+    // --- R9 fix (2026-09-21): the backstop, rebuilt to read like the reference instead of the
+    // outfield stands' own crowd tier carried straight up from the ground (this function's own
+    // BACKSTOP_PAD_H/BACKSTOP_BRICK_H/BACKSTOP_CROWD_H comment has the measurement). One flat wall
+    // at BACKSTOP_DIST_FT (R7's own distance, unchanged), three vertical bands - not R7's two radial
+    // tiers, since the reference's own backstop reads as a near-flat wall, not a stepped bowl. Same
+    // camera-visibility fact R7 already established: the batter camera (z = 13.1, looking toward -z)
+    // never reaches z = 30, so nothing here needs a per-camera visibility toggle.
+
+    // Band 1: the padded wall, ground to BACKSTOP_PAD_H - a solid muted dark blue, no texture (the
+    // spec's own "a solid padded wall"), with a thin white rail on top (the same ribbon-on-a-wall
+    // convention the outfield fence's own rail already uses). R13: UNLIT (`MeshBasicMaterial`, was
+    // `MeshLambertMaterial`) - the pitcher camera's own pull-back (item 1) means this band alone
+    // now fills most of the visible backstop (the brick/crowd bands above it sit further out of
+    // frame than before), and under Lambert shading it measured (10,24,38) against its own raw
+    // (36,64,106) - the same "vertical face, mostly-overhead sun" darkening the crowd/sky already
+    // needed fixing for, just newly PROMINENT rather than newly broken.
+    const padGeo = ribbonGeometry(backstopPts, 0, BACKSTOP_PAD_H);
+    const padMat = new THREE.MeshBasicMaterial({ color: PALETTE.backstopPad, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(padGeo, padMat)); track(padGeo, padMat);
+    const backstopRailGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H, BACKSTOP_PAD_H + BACKSTOP_RAIL_H);
+    const backstopRailMat = new THREE.MeshLambertMaterial({ color: PALETTE.backstopRail, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(backstopRailGeo, backstopRailMat)); track(backstopRailGeo, backstopRailMat);
+
+    // Band 2: brick, BACKSTOP_PAD_H to BACKSTOP_PAD_H + BACKSTOP_BRICK_H - the spec's own "a brick
+    // band... tiled so a brick is 3 to 6px at the pitcher camera's lens" (BACKSTOP_BRICK_REPEAT_*'s
+    // own comment has the measurement this repeat is set from).
+    const brickGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H, BACKSTOP_PAD_H + BACKSTOP_BRICK_H);
+    const brickTex = brickTexture(); texs.push(brickTex);
+    brickTex.repeat.set(BACKSTOP_BRICK_REPEAT_X, BACKSTOP_BRICK_REPEAT_Y);
+    brickTex.anisotropy = 8;
+    const brickMat = new THREE.MeshLambertMaterial({ map: brickTex, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(brickGeo, brickMat)); track(brickGeo, brickMat);
+
+    // Band 3: the crowd, ONLY above the brick - a darker ground (`PALETTE.backstopCrowdGround`) and
+    // a MUCH LOWER repeat than the outfield bowl's own (this file's own BACKSTOP_CROWD_REPEAT_*
+    // comment has the measurement), since the backstop sits far closer to the pitcher camera than
+    // the outfield stands ever do. Unlit, same reason the outfield crowd is unlit (a vertical face's
+    // normal points horizontally, so the mostly-overhead sun barely lights it).
+    const backstopCrowdTop = BACKSTOP_PAD_H + BACKSTOP_BRICK_H + BACKSTOP_CROWD_H;
+    const backstopCrowdGeo = ribbonGeometry(backstopPts, BACKSTOP_PAD_H + BACKSTOP_BRICK_H, backstopCrowdTop);
+    const backstopCrowdTex = crowdTexture(PALETTE.backstopCrowdGround); texs.push(backstopCrowdTex);
+    backstopCrowdTex.repeat.set(BACKSTOP_CROWD_REPEAT_X, BACKSTOP_CROWD_REPEAT_Y);
+    backstopCrowdTex.anisotropy = 8;
+    const backstopCrowdMat = new THREE.MeshBasicMaterial({ map: backstopCrowdTex, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(backstopCrowdGeo, backstopCrowdMat)); track(backstopCrowdGeo, backstopCrowdMat);
+  }
+
+  // --- R9 item 4, R13-gated: four light towers, ringing the outfield (the spec's own "four light
+  // towers") - College and up only (`cfg.towers`); Little League/High School play with none, the
+  // spec's own explicit call for Little League, kept for High School too rather than inventing a
+  // number for it. Two merged meshes total (every pole in one, every light bank in the other) - the
+  // same merge-by-material budget discipline the stands already follow, so four towers cost two
+  // draw calls, not eight. Positioned by the SAME `polar()`/fenceFtAt convention every other angle
+  // in this file uses, a fixed distance past the fence so they read as standing just outside the wall.
+  if (cfg.towers) {
+    const TOWER_DEG = [-38, -13, 13, 38];
+    const TOWER_EXTRA_FT = 18;   // past the fence, at this angle
+    const TOWER_POLE_H = 70, TOWER_HEAD_H = 10, TOWER_HEAD_W = 16;
+    const poleParts = [], headParts = [];
+    for (const deg of TOWER_DEG) {
+      const ft = fenceFtAt(deg, fenceFt) + TOWER_EXTRA_FT;
+      const p = polar(deg, ft);
+      const pole = new THREE.CylinderGeometry(0.7, 0.9, TOWER_POLE_H, 8);
+      pole.translate(p.x, TOWER_POLE_H / 2, -p.y);
+      poleParts.push(pole);
+      const head = new THREE.BoxGeometry(TOWER_HEAD_W, TOWER_HEAD_H, 2.4);
+      // Angled down a little toward the infield, the way a real light bank tilts to aim at the field
+      // rather than the sky - a flat box reads as a panel either way, but the tilt is what a real
+      // tower's silhouette has that a vertical one does not.
+      head.rotateX(-0.35);
+      head.translate(p.x, TOWER_POLE_H + TOWER_HEAD_H * 0.4, -p.y);
+      headParts.push(head);
+    }
+    const poleGeo = mergeGeometries(poleParts, false);
+    const poleMat = new THREE.MeshLambertMaterial({ color: PALETTE.towerPole });
+    group.add(new THREE.Mesh(poleGeo, poleMat)); track(poleGeo, poleMat);
+    const headGeo = mergeGeometries(headParts, false);
+    // Unlit, on purpose - a light fixture reading as LIT (a pale, glowing panel) rather than shaded
+    // like an ordinary grey box is what makes it recognisable as a bank of lights from a distance.
+    const headMat = new THREE.MeshBasicMaterial({ color: PALETTE.towerHead });
+    group.add(new THREE.Mesh(headGeo, headMat)); track(headGeo, headMat);
+    for (const g of [...poleParts, ...headParts]) g.dispose();
+  }
+
+  // --- R9 item 4, R13-scaled: the centre-field scoreboard block - a dark body with a lit "screen"
+  // panel set into its face, standing just past the centre-field fence (the spec's own "a
+  // centre-field scoreboard block"). Two meshes (body, screen); the screen shares the tower head's
+  // own unlit treatment for the same reason. `cfg.scoreboardScale` shrinks Little League's own
+  // board (the spec's own "a small scoreboard") without a second, hand-duplicated shape.
+  {
+    const deg = 0;
+    const ft = fenceFtAt(deg, fenceFt) + 22;
+    const p = polar(deg, ft);
+    const sc = cfg.scoreboardScale;
+    const bodyW = 44 * sc, bodyH = 20 * sc, bodyD = 3 * sc;
+    const bodyGeo = new THREE.BoxGeometry(bodyW, bodyH, bodyD);
+    bodyGeo.translate(p.x, bodyH / 2 + 2, -p.y);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: PALETTE.scoreboardBody });
+    group.add(new THREE.Mesh(bodyGeo, bodyMat)); track(bodyGeo, bodyMat);
+    const screenGeo = new THREE.BoxGeometry(bodyW * 0.82, bodyH * 0.6, 0.3);
+    // A hair in front of the body, toward home (the fence runs away from home along +radius, so
+    // "toward home" from the board's own position is back along the SAME polar direction).
+    const inward = polar(deg, ft - bodyD * 0.55 - 0.2);
+    screenGeo.translate(inward.x, bodyH * 0.56 + 2, -inward.y);
+    const screenMat = new THREE.MeshBasicMaterial({ color: PALETTE.scoreboardScreen });
+    group.add(new THREE.Mesh(screenGeo, screenMat)); track(screenGeo, screenMat);
+  }
+
+  // --- R13 item 2: small aluminium bleacher SETS with spread-out parents (Little League/High
+  // School only, `cfg.bleachers`) - behind the plate and down each line, built from
+  // `bleacherUnitParts`/`placeBleacher`/`scatterParents` (this file's own helpers, above). One
+  // merged mesh for every bleacher set's risers (they all share one shape and one material), and
+  // one merged mesh PER PARENT COLOUR (`PALETTE.parents.length` of them) rather than one per person
+  // - `scatterParents`'s own header has the reasoning.
+  if (cfg.bleachers.length) {
+    const unit = bleacherUnitParts(cfg.bleacherWidthFt, cfg.bleacherRows, BLEACHER_ROW_DEPTH_FT, BLEACHER_ROW_H_FT);
+    const placements = cfg.bleachers.map((b) => {
+      const p = polar(b.deg, b.r);
+      return placeBleacher(unit, { x: p.x, z: -p.y }, 0, 0);
+    });
+    const riserParts = placements.flatMap((pl) => pl.parts);
+    const riserGeo = mergeGeometries(riserParts, false);
+    const riserMat = new THREE.MeshLambertMaterial({ color: PALETTE.bleacherAlum, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(riserGeo, riserMat)); track(riserGeo, riserMat);
+    for (const g of riserParts) g.dispose();
+
+    const totalParents = cfg.parentsPerBleacher * cfg.bleachers.length;
+    const byColor = scatterParents(placements, totalParents, 20260922 + cfg.bleacherRows);
+    for (let i = 0; i < byColor.length; i++) {
+      const parts = byColor[i];
+      if (!parts.length) continue;
+      const geo = mergeGeometries(parts, false);
+      const mat = new THREE.MeshLambertMaterial({ color: PALETTE.parents[i] });
+      group.add(new THREE.Mesh(geo, mat)); track(geo, mat);
+      for (const g of parts) g.dispose();
+    }
+  }
+
+  // --- R13 item 2: Little League's own grass berm past the fence (`cfg.berm`) - a raised mound
+  // instead of any stand, textured the same as the infield/outfield grass (a slightly darker green
+  // so it still reads as its own, further-away surface) but on ONE sloped ramp
+  // (`rampGeometry`), not a flat deck - the one non-flat piece of stadium geometry in this file.
+  // Two real defects, both found by rendering and neither visible from the numbers alone:
+  //   1. The ramp's NEAR edge starts at `FENCE.height + FENCE.railHeight` (the wall's own rail
+  //      top), not the ground - starting it lower left most of the slope hidden BEHIND the wall
+  //      itself from every camera (`scratchpad/r13/little-batter-BEFORE-berm-fix.png`), so nothing
+  //      of that hidden run did any visual work; this way the WHOLE rise (`BERM_RISE_FT`) crests
+  //      visibly above the wall.
+  //   2. UNLIT (`MeshBasicMaterial`, was `MeshLambertMaterial`) - the same fix R9's own crowd faces
+  //      already needed, for the identical reason (that PALETTE.standsFace comment, above): a
+  //      near-vertical slope this size gets almost no light from the mostly-overhead sun, and
+  //      `bermGrassA` (#3a7a36, already a dark green) under Lambert shading with that little light
+  //      rendered as a solid BLACK band (`scratchpad/r13/berm-diagnostic-BROKEN-normal.png` - fixing
+  //      the ramp's own vertex normal direction, below, was a real, separate defect but did not fix
+  //      this: three.js's `DoubleSide` shading derives the effective normal from triangle winding
+  //      at the fragment stage, not from a mismatched vertex normal, so no normal sign could have
+  //      fixed a lighting-brightness problem). Background scenery that has to read correctly
+  //      regardless of which way the sun happens to face is unlit everywhere else in this file
+  //      (sky, both crowd tiers); the berm is the same kind of surface and now follows the same rule.
+  // A THIRD defect, also found only by rendering: a `map` (`grassTexture()`) AND a `color` tint
+  // together multiply (three.js's own convention), so `bermGrassA` (already a mid-brightness
+  // green) times the grass texture's own mid-brightness greens compounded into something close to
+  // BLACK all over again (measured: rendered pixel (8,70,6), against `bermGrassA` x `grassA`'s own
+  // predicted (14,68,12) - the match that found it). The mowing-stripe texture does no visual work
+  // at this size and distance anyway, so the fix is to drop it: a flat `bermGrassA` colour, no map.
+  if (cfg.berm) {
+    const bermInner = standsPoints(fenceFt, 1);
+    const bermOuter = standsPoints(fenceFt, 1 + BERM_EXTRA_FT);
+    const bermGeo = rampGeometry(bermInner, bermOuter, FENCE.height + FENCE.railHeight, FENCE.height + FENCE.railHeight + BERM_RISE_FT);
+    const bermMat = new THREE.MeshBasicMaterial({ color: PALETTE.bermGrassA, side: THREE.DoubleSide });
+    group.add(new THREE.Mesh(bermGeo, bermMat)); track(bermGeo, bermMat);
+  }
+
+  // --- R13 item 2: High School's own press box (`cfg.pressBox`) - a small elevated booth behind
+  // the backstop, a dark body with a lighter "window" band across its front (unlit, the same
+  // "reads correctly regardless of the sun" convention every other panel in this file already
+  // follows for a strip that has to read as glass rather than shaded plastic).
+  if (cfg.pressBox) {
+    const p = polar(180, PRESS_BOX_DIST_FT);
+    const pos = { x: p.x, z: -p.y };
+    const bodyGeo = new THREE.BoxGeometry(PRESS_BOX_W, PRESS_BOX_H, PRESS_BOX_D);
+    bodyGeo.translate(pos.x, PRESS_BOX_Y + PRESS_BOX_H / 2, pos.z);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: PALETTE.pressBoxBody });
+    group.add(new THREE.Mesh(bodyGeo, bodyMat)); track(bodyGeo, bodyMat);
+    const winGeo = new THREE.BoxGeometry(PRESS_BOX_W * 0.86, PRESS_BOX_H * 0.4, 0.2);
+    winGeo.translate(pos.x, PRESS_BOX_Y + PRESS_BOX_H * 0.66, pos.z - PRESS_BOX_D / 2 - 0.05);
+    const winMat = new THREE.MeshBasicMaterial({ color: PALETTE.pressBoxWindow });
+    group.add(new THREE.Mesh(winGeo, winMat)); track(winGeo, winMat);
+  }
+
+  scene.add(group);
+  return {
+    group,
+    fencePts,
+    dispose() {
+      scene.remove(group);
+      for (const g of geos) g.dispose();
+      for (const m of mats) m.dispose();
+      for (const t of texs) t.dispose();
+    },
+  };
+}
+
+// Exported for the geometry self-check (measured in the plan view, before any projection) - the
+// 45-degree/1.41421 facts about the diamond, unchanged from the 2-D era.
 export function planGeometry() {
   const { home, first, second, third } = diamondPoints();
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const angleOf = (pnt) => (Math.atan2(pnt.x, pnt.y) * 180) / Math.PI;
   return {
     home, first, second, third,
-    homeToFirst: dist(home, first),
-    homeToSecond: dist(home, second),
+    homeToFirst: dist(home, first), homeToSecond: dist(home, second),
     ratio: dist(home, second) / dist(home, first),
-    firstLineAngle: angleOf(first),
-    thirdLineAngle: angleOf(third),
+    firstLineAngle: angleOf(first), thirdLineAngle: angleOf(third),
     foulAngleSpread: angleOf(first) - angleOf(third),
   };
 }
 
-/* ================================================================================================
- * THE PLATE CAMERA (rebuilt 2026-09-14, BB-3b art pass) - a real painted background
- * (`baseball/img/plate.webp`, ported from `reference/baseball/backdrop-plate.jpg`), not a
- * procedural pinhole projection. The prior round (same day, "camera rebuild") built a real
- * perspective-divide camera from scratch because no approved art existed yet; that math is gone
- * now that it does. See `baseball/CLAUDE.md`'s BB-3b entry for the full record, but the short
- * version: a hand-derived camera can never match a hand-painted picture pixel for pixel, so once
- * the picture exists, the picture IS the camera and everything else positions off six measured
- * points in it (`PLATE_ANCHORS` below), not off a re-derived lens model.
- *
- * ONE FIXED CAMERA, both states - this reverses the prior round's 180-degree pitching mirror
- * (Matt's own earlier call). The handoff's reasoning, carried here rather than re-litigated: the
- * reference art only exists shot from behind the plate (both batters drawn from behind, the
- * pitcher facing the camera), a mirror would need art that does not exist (a front-view batter, a
- * back-view pitcher), and the approved mock is this camera. So the picture never changes between
- * batting and pitching - only WHICH SPRITE stands at each of the two anchored spots does:
- * whichever team is BATTING has its batter at the near box (`batter-home.webp` for you,
- * `batter-away.webp` for the CPU), and whichever team is PITCHING has its pitcher at the mound
- * (always the three `pitcher-*.webp` poses - the art itself carries no team color). This is a
- * fixed spectator's view of the at-bat, not literally the human's own first-person view when
- * pitching - "the two states differ only by which batter sprite stands at the near box and which
- * label the button carries" (the handoff's own framing). NOT YET RATIFIED BY MATT - report this
- * reversal back to him rather than presenting it as settled (see the handoff's own report-back
- * list).
- */
-
-// ---------------------------------------------------------------------- image loading (sync-cacheable) --
-// `drawPlateView`/`drawPlateBall` run inside `requestAnimationFrame` loops and must stay
-// synchronous, so images are loaded once into a plain cache keyed by filename; a draw call before
-// an image has finished loading just falls back to a flat fill (see `drawPlateView`) rather than
-// awaiting anything mid-frame.
-const IMG_BASE = new URL('../img/', import.meta.url);
-const _plateImages = {};
-function _loadImg(name) {
-  if (name in _plateImages) return;
-  // BB-3b commit 5: `project()` now reaches this function (via `projectOverhead`), and
-  // `test-baseball-device.mjs`'s own check 3 (unchanged since the vector-camera round) calls
-  // `project()` from plain Node, with no `Image`/`document` at all - never leave `_plateImages`
-  // populated with a real Image() outside a DOM, just leave the name unresolved so every image
-  // getter's existing `if (!im) return null` fallback takes over exactly like a slow network would.
-  if (typeof Image === 'undefined') return;
-  _plateImages[name] = null;
-  const image = new Image();
-  image.onload = () => { _plateImages[name] = image; };
-  image.onerror = () => { /* leaves it null; drawPlateView's fallback fill covers this */ };
-  image.src = new URL(name, IMG_BASE).href;
-}
-const PLATE_IMAGE_NAMES = [
-  'plate.webp',
-  'overhead.webp',
-  'batter-home-1.webp', 'batter-home-2.webp', 'batter-home-3.webp', 'batter-home-4.webp',
-  'batter-home-5.webp', 'batter-home-6.webp', 'batter-home-7.webp', 'batter-home-8.webp',
-  'batter-away-1.webp', 'batter-away-2.webp', 'batter-away-3.webp', 'batter-away-4.webp',
-  'batter-away-5.webp', 'batter-away-6.webp', 'batter-away-7.webp', 'batter-away-8.webp',
-  'pitcher-home-1.webp', 'pitcher-home-2.webp', 'pitcher-home-3.webp', 'pitcher-home-4.webp',
-  'pitcher-away-1.webp', 'pitcher-away-2.webp', 'pitcher-away-3.webp', 'pitcher-away-4.webp',
-  'ball-sheet.webp',
-];
-/** Kick off loading every plate-view image. Idempotent - call as early as convenient (ui.js calls
- *  it once at construction); a draw before this resolves just shows the flat-fill fallback for a
- *  frame or two, never throws. */
-export function preloadPlateImages() {
-  for (const name of PLATE_IMAGE_NAMES) _loadImg(name);
-}
-function plateImg(name) {
-  if (!(name in _plateImages)) _loadImg(name);
-  return _plateImages[name];
-}
-
-// ---------------------------------------------------------------------- anchors, measured once --
-// Six points, measured directly off `baseball/img/plate.webp` (1200x2062) as fractions of that
-// picture's own width/height - NOT of the canvas, which is a different aspect ratio at every phone
-// height. `plateCover()` below is what turns a fraction into a screen pixel, so re-measuring only
-// ever means editing this table, never touching any drawing code.
-// BB-3b review fix: `plate.webp` was re-cropped (see the commit's own note) to include the stands
-// and sky - the original crop (0,0)-(704,1210) of the source, before this fix, was tall/narrow
-// enough (aspect 1.72) that `plateCover()`'s cover-fit cropped away nearly everything above the
-// infield on any real device band (whose own aspect never exceeds about 1.07 tall, 0.56 short -
-// see SPEC.md section 0's own root-rectangle table), leaving the sky and stands invisible in
-// practice even though the source crop technically included them. Re-cropped to (0,100)-(704,1030)
-// (aspect 1.32, closer to the band's own shape) - trims a modest sky sliver off the very top and
-// the dead dirt below the batter's boxes off the bottom, keeping the floodlight tower, clouds and
-// full stands intact. Every anchor below is re-measured on the NEW crop (a white/cream-pixel scan
-// of the shipped plate.webp, not eyeballed) - this table cannot be edited without doing that again.
-export const PLATE_ANCHORS = {
-  plate: { x: 0.500, y: 0.879 },       // home plate's own center
-  mound: { x: 0.500, y: 0.505 },       // the rubber
-  // Re-measured from the real pitcher-*-3.webp (release pose) throwing hand, not eyeballed: the
-  // hand's own position as a fraction of that frame's trimmed art, projected through the mound
-  // anchor and the pitcher's own runtime scale (MOUND_PITCHER_HEIGHT_FRAC) at the reference root
-  // rectangle (SPEC.md section 0: W 361, field band ~386 tall). Previously an arbitrary small
-  // offset "beside the head" from the old three-cartoon-pose set; this is where the ball actually
-  // leaves the bare (gloveless) hand in the real release frame.
-  release: { x: 0.493, y: 0.454 },
-  strikeZoneWidthFrac: 0.18,           // of the picture's own drawW - see the floor below
-  // The box spans y=1250 (top/back edge) to y~1522 (bottom/front edge) in the 1200x1585 picture;
-  // these sit about 78% of the way down (toward the front edge, where a batter's own feet would
-  // actually plant), not at the box's vertical center an earlier measurement used.
-  nearBoxLeft: { x: 0.250, y: 0.922 },
-  nearBoxRight: { x: 0.750, y: 0.922 },
-};
-// Section 6 of the spec: "The strike zone has a floor of 0.30W wide so the pad's travel never
-// becomes a slider of a few pixels." Applied at render time against the CANVAS width, not the
-// picture's own fraction, so a narrow phone still gets a usable zone even though the picture's own
-// anchor fraction is smaller than that.
-const PLATE_ZONE_FLOOR = 0.30;
-// Sizes as fractions of the field BAND height (not the picture), per the handoff's own measurement
-// off the mock: the near batter fills about half the band, the mound pitcher about a ninth of it.
-const NEAR_BATTER_HEIGHT_FRAC = 0.50;
-const MOUND_PITCHER_HEIGHT_FRAC = 0.11;
-
-/** `plate.webp` fitted to a `w`x`h` canvas the way CSS `background-size: cover; background-position:
- *  bottom center` would: scaled up to cover both dimensions (cropping whichever axis overflows),
- *  anchored at the bottom so the plate itself sits a fixed pixel distance from the band's own
- *  bottom edge at every phone height - see spec section 6, "so a cut between them moves nothing
- *  else on the screen." Returns null while the image is still loading. */
-function plateCover(w, h) {
-  const im = plateImg('plate.webp');
-  if (!im) return null;
-  const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
-  if (!iw || !ih) return null;
-  const scale = Math.max(w / iw, h / ih);
-  const drawW = iw * scale, drawH = ih * scale;
-  return { drawW, drawH, offsetX: (w - drawW) / 2, offsetY: h - drawH, scale };
-}
-/** A `PLATE_ANCHORS`-shaped `{x,y}` fraction of the picture -> screen px, given a `plateCover()`
- *  transform. Every on-screen position in this camera goes through this one function. */
-function anchorPx(frac, cover) {
-  return { x: cover.offsetX + frac.x * cover.drawW, y: cover.offsetY + frac.y * cover.drawH };
-}
-
-// ---------------------------------------------------------------------- figures --
-// BB-3b correction (Matt, after reviewing the bat-over-hands batter): "The bat-on-top-of-hands
-// batter is out. Do not fix it; replace it." Two real 8-frame swing sequences
-// (`batter-home-1..8.webp`, `batter-away-1..8.webp`, ported from `reference/baseball/batter-{home,
-// away}-{1-8}.png`) replace the single static sprite plus a separately-rotated `bat.webp` layer.
-// The bat is drawn IN THE HAND in every frame now - there is no bat layer, no bat rotation, no
-// hand anchor to measure. `bat.webp`/`batter-home.webp`/`batter-away.webp` are unused everywhere.
-
-// Every frame shares one canvas height (937px source, 800px shipped) and one scale, but the
-// artist's own per-frame framing was NOT perfectly ground-locked - a flip-through (built as this
-// repo's dev-only "Frames" check, `_openFrameCheck` in ui.js) showed the follow-through frames
-// visibly rising off the ground line by as much as 37px at the shipped 800px scale. Measured once
-// (lowest non-transparent pixel row per frame, at the shipped 800px height, against each set's own
-// frame-1 baseline) and stored here as a FRACTION of the drawn height, so it scales with
-// `NEAR_BATTER_HEIGHT_FRAC` automatically. Positive = shift the sprite down; negative = up.
-// Re-measure (and re-verify with the Frames check) if these images are ever replaced.
-const FRAME_Y_OFFSET_FRAC = {
-  home: { 1: 0, 2: -0.01175, 3: -0.015, 4: -0.0075, 5: -0.021375, 6: -0.037375, 7: -0.045875, 8: -0.034125 },
-  away: { 1: 0, 2: -0.0085, 3: 0.0405, 4: 0.01175, 5: -0.005375, 6: -0.013875, 7: 0.006375, 8: -0.00425 },
-};
-
-/** The near-box batter: one frame (1-8) of the real swing sequence for `side` ('home' or 'away').
- *  `flip` mirrors the whole sprite - BOTH frame sets are drawn RIGHT-handed (Matt's own
- *  correction, overriding this file's earlier "left-handed as drawn" note), so a LEFT-handed
- *  batter is the flip, not a right-handed one. Anchored at its own FEET
- *  (the frame's own measured ground line, via `FRAME_Y_OFFSET_FRAC`, not just the canvas edge), so
- *  `heightPx` alone fixes its scale and every frame's feet land on the same screen row. */
-function drawBatterFigure(ctx, side, frame, anchor, heightPx, opts = {}) {
-  const f = Math.max(1, Math.min(8, Math.round(frame || 1)));
-  const batterImage = plateImg(`batter-${side}-${f}.webp`);
-  if (!batterImage) return;
-  const iw = batterImage.naturalWidth || batterImage.width, ih = batterImage.naturalHeight || batterImage.height;
-  if (!iw || !ih) return;
-  const scale = heightPx / ih;
-  const dw = iw * scale, dh = ih * scale;
-  const yOffset = (FRAME_Y_OFFSET_FRAC[side]?.[f] || 0) * heightPx;
-  ctx.save();
-  ctx.translate(anchor.x, anchor.y + yOffset);
-  if (opts.flip) ctx.scale(-1, 1);
-  ctx.drawImage(batterImage, -dw / 2, -dh, dw, dh);
-  ctx.restore();
-}
-
-// BB-3b addition: the real 4-frame pitcher sequences (`pitcher-{home,away}-{1-4}.webp`, ported
-// from `reference/baseball/Pitcher-{home,away}-{1-4}.png`) replace the earlier three-pose cartoon
-// set. Naming means UNIFORM, not schedule side, same as the batters: `-home-` is the player's own
-// team (white), `-away-` is the CPU team (navy). Poses: 1 set (idle), 2 wind-up (leg kick),
-// 3 release (stride, throwing hand forward and low - the ball leaves from this hand), 4
-// follow-through (arm across the body, back leg up).
-//
-// Unlike the batter frames, these source canvases are trimmed to a DIFFERENT size per frame (a
-// real consequence of the four poses occupying very different amounts of space - the leg-kick is
-// taller and narrower than the follow-through, which is wider and shorter). So the batter's rule
-// (one canvas height, shared across the whole set) does not transfer as-is. Instead: every frame
-// was trimmed to its own alpha bounding box at ship time (so the shipped canvas edges ARE the
-// bbox - no residual padding to anchor against), and ONE scale factor per set was derived from
-// frame 1's own trimmed height (so frame 1 ships close to the mound figure's usual size); frames
-// 2-4 were resized by that SAME factor, not independently re-normalized to a fixed height - so
-// their real relative sizes (a crouch is legitimately shorter than the stance) are preserved. At
-// RUNTIME this means `drawPitcherFigure` must NOT do `heightPx / thisFrame'sOwnHeight` per frame
-// (which would re-normalize every pose back to an identical height, undoing the ship-time work,
-// exactly the "bounce" the batter frames were built to avoid) - it derives ONE scale from frame 1's
-// own shipped height mapped to `MOUND_PITCHER_HEIGHT_FRAC`, then applies that same multiplier to
-// whichever frame is currently drawn.
-const PITCHER_FRAME_Y_OFFSET_FRAC = {
-  // Populated only if the dev-only Frames check ever measures more than 3px of foot drift between
-  // poses (unlikely by construction: anchoring at each frame's OWN alpha-bbox bottom means the
-  // lowest visible pixel - the planted foot, in every one of these four real delivery poses - IS
-  // the anchor for that frame, not a shared canvas edge with padding around it, which is what
-  // caused real drift in the batter set). Same shape as FRAME_Y_OFFSET_FRAC if ever needed.
-  home: {}, away: {},
-};
-
-/** The mound pitcher: one of four real delivery poses (1-4) for `side` ('home' or 'away' - see
- *  the section header for what the name actually means: uniform color, not who is pitching).
- *  `flip` mirrors the whole sprite - both sets are drawn RIGHT-handed (Matt's correction), so a
- *  LEFT-handed pitcher (teams.js's own `throws`) is the flip, same rule as the batters. Anchored
- *  at each frame's own alpha-bbox bottom-center (the shipped canvas edge, since every frame was
- *  trimmed to its bbox at ship time - see the section header), not a shared canvas edge. */
-function drawPitcherFigure(ctx, side, frame, anchor, heightPx, opts = {}) {
-  const f = Math.max(1, Math.min(4, Math.round(frame || 1)));
-  const frame1 = plateImg(`pitcher-${side}-1.webp`);
-  const im = plateImg(`pitcher-${side}-${f}.webp`);
-  if (!frame1 || !im) return;
-  const ih1 = frame1.naturalHeight || frame1.height;
-  if (!ih1) return;
-  // ONE scale for the whole set (see header) - frame 1's own shipped height maps to heightPx;
-  // every other frame uses that same multiplier against its own (different) shipped size.
-  const scale = heightPx / ih1;
-  const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
-  if (!iw || !ih) return;
-  const dw = iw * scale, dh = ih * scale;
-  const yOffset = (PITCHER_FRAME_Y_OFFSET_FRAC[side]?.[f] || 0) * heightPx;
-  ctx.save();
-  ctx.translate(anchor.x, anchor.y + yOffset);
-  if (opts.flip) ctx.scale(-1, 1);
-  ctx.drawImage(im, -dw / 2, -dh, dw, dh);
-  ctx.restore();
-}
-
-/** The full plate-view scene: the picture, the strike zone, and both figures. `mode` is 'batting'
- *  or 'pitching' - selects which sprite plays the BATTER role (see the section header: the picture
- *  and the anchors never change, only which sprite stands where and the ring/button labels do).
- *  `dark` is accepted for call-site compatibility (every other camera-view field in this repo takes
- *  it) but unused - this picture has one identity, same as the overhead camera above.
- *  `opts`: `pitcherFrame` (1-4, the real delivery sequence), `pitcherFlip` (bool, true for a
- *  LEFT-handed pitcher, same rule as the batters), `batterFrame` (1-8, the real swing sequence -
- *  see ui.js's swing timeline), `batterFlip` (bool, true for a LEFT-handed batter - see the
- *  section header's own note on the correction: both frame sets are drawn RIGHT-handed, so the
- *  DEFAULT is unflipped, standing at the third-base side box (`nearBoxLeft`, screen left from
- *  behind the plate); a left-handed batter is the flipped frame, standing at `nearBoxRight`). */
-export function drawPlateView(ctx, w, h, mode, dark, opts = {}) {
-  ctx.save();
-  ctx.clearRect(0, 0, w, h);
-  const cover = plateCover(w, h);
-  if (!cover) {
-    // Still loading - a flat fill so the band is never a blank/transparent hole for a frame.
-    ctx.fillStyle = '#2f4a22';
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-    return;
-  }
-  const plateImage = plateImg('plate.webp');
-  ctx.drawImage(plateImage, cover.offsetX, cover.offsetY, cover.drawW, cover.drawH);
-
-  const plateXY = anchorPx(PLATE_ANCHORS.plate, cover);
-  const moundXY = anchorPx(PLATE_ANCHORS.mound, cover);
-  // Both frame sets are drawn RIGHT-handed (see the correction note above): unflipped stands at
-  // the LEFT box, flipped (a left-handed batter) at the RIGHT box - never one fixed box for both.
-  const flip = !!opts.batterFlip;
-  const nearXY = anchorPx(flip ? PLATE_ANCHORS.nearBoxRight : PLATE_ANCHORS.nearBoxLeft, cover);
-
-  // Strike zone, above the plate - ONE geometry shared with the ball's own flight (`zoneRect`), so
-  // "the ball is in the zone" on screen and "the ball is at the plate" in the engine cannot drift
-  // apart again (Matt, 2026-09-15: contact only happened once the ball was "almost OUT of the
-  // strike zone").
-  const zone = zoneRect(w, cover);
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(zone.left, zone.top, zone.w, zone.h);
-
-  // Whichever team is BATTING stands at the near box; whichever team is PITCHING stands at the
-  // mound - independent of whether the human is batting or pitching (see the section header).
-  // Naming means uniform, not who's pitching: '-home-' is the player's own team (white),
-  // '-away-' is the CPU's (navy) - so the mound shows 'home' when the human pitches, 'away' when
-  // the human bats (the CPU pitches), the mirror of the batter's own side selection above.
-  const batterSide = mode === 'pitching' ? 'away' : 'home';
-  const pitcherSide = mode === 'pitching' ? 'home' : 'away';
-  // The batter's own stance moves WITH the pad (Matt, 2026-09-15: "The batter should move within
-  // the batter's box as I move this slider - closer to the plate and farther from the plate").
-  // `batterAimX` is the pad's own -1..1 (the swing decision's `aimX`, fraction of plate half-width);
-  // +1 is the right edge of the zone on screen for either hand, so the figure shifts the same way
-  // the pad marker does - toward the plate for a righty (left box), away from it for a lefty.
-  const aimShift = (opts.batterAimX || 0) * BATTER_AIM_TRAVEL_FRAC * cover.drawW;
-  const batterXY = { x: nearXY.x + aimShift, y: nearXY.y };
-  drawBatterFigure(ctx, batterSide, opts.batterFrame || 1, batterXY, h * NEAR_BATTER_HEIGHT_FRAC, { flip });
-  drawPitcherFigure(ctx, pitcherSide, opts.pitcherFrame || 1, moundXY, h * MOUND_PITCHER_HEIGHT_FRAC, { flip: !!opts.pitcherFlip });
-
-  ctx.restore();
-}
-
-// BB-3b commit 4 (handoff section 9, "Numbers to carry"): "Ball radius, plate view: 4 px at the
-// hand to 14 px at the plate" - literal screen pixels, not a fraction of the canvas, matching the
-// handoff's own number exactly rather than the earlier rounds' height-relative guess.
-const PLATE_BALL_RADIUS_NEAR_PX = 14;
-// Where the plate camera stands, in feet behind the crossing point. The ball's screen position
-// and size both follow a real pinhole law in this distance - an object at `y` ft in front of the
-// plate draws at D / (D + y) of its at-the-plate size and offset. 24 ft is the distance the
-// shipped 4 px -> 14 px radius pair already implied (14 x 24 / 84.5 = 4.0), so the ball's size
-// curve is unchanged by construction; what changes is that its POSITION now follows the same
-// curve instead of a straight screen-space lerp. The reason (Matt, 2026-09-15, first report):
-// "it takes .5x to get from the pitcher's hand to entering the strike zone. And it takes .5X to
-// cross the strike zone" - a linear lerp spends screen distance evenly over time, and the zone is
-// the bottom third of the path, so the ball crawled through it. Under the pinhole law the ball
-// hangs small and far for most of the flight and rushes through the zone at the end, which is
-// also what makes the pitch's SPEED legible (his "the speed the ball is thrown at doesn't even
-// really matter"). Measured with `plateBallPos` at 393x380: the ball's center is inside the zone
-// rectangle for the last ~7% of the flight, not ~33%.
-const PLATE_CAMERA_FT = 24;
-// How far the batter's own figure travels across the box for the pad's full -1..1, as a fraction
-// of the picture's drawn width. +/-0.06 keeps both feet inside the painted box at either end.
-const BATTER_AIM_TRAVEL_FRAC = 0.06;
-
-/** The strike zone rectangle, in screen px: floored to 0.30 of the CANVAS width (spec section 6)
- *  so a narrow phone never turns the pad's travel into a slider of a few pixels, standing on the
- *  plate. Shared by `drawPlateView` (which strokes it) and `plateBallPos` (whose flight ENDS at its
- *  center) - one function, so the two can never disagree. */
-export function zoneRect(w, cover) {
-  const plateXY = anchorPx(PLATE_ANCHORS.plate, cover);
-  const zw = Math.max(w * PLATE_ZONE_FLOOR, PLATE_ANCHORS.strikeZoneWidthFrac * cover.drawW);
-  const zh = zw * 0.62;
-  const bottom = plateXY.y - zw * 0.12;
-  return { left: plateXY.x - zw / 2, top: bottom - zh, w: zw, h: zh, cx: plateXY.x, cy: bottom - zh / 2 };
-}
-
-/** The pitch, through the plate camera, as pure geometry: `{x, y, r}` in screen px for a ball
- *  `yFt` feet in front of the plate (60.5 = the release point, 0 = crossing) with lateral offset
- *  `xFt` (the engine's -1..1 x times 8.5, plate half-widths). The flight STARTS at
- *  `PLATE_ANCHORS.release` and ENDS at the strike zone's own center, laterally placed at
- *  `x` zone half-widths - so a pitch that reads x=+1 crosses at the zone's right edge, and the
- *  engine's crossing instant (`timeToPlateS`) is the instant the ball is drawn at the zone's
- *  center, never on the ground at the plate. Position and radius both follow the pinhole law in
- *  `PLATE_CAMERA_FT` (see it). Exported so a test can measure the curve, and so the 3D pass
- *  (HANDOFF-BASEBALL-3C.md, C4) has one function to reproduce rather than a drawing to eyeball. */
-export function plateBallPos(w, h, cover, xFt, yFt) {
-  const zone = zoneRect(w, cover);
-  const releaseXY = anchorPx(PLATE_ANCHORS.release, cover);
-  const y = Math.max(0, Math.min(60.5, yFt));
-  const D = PLATE_CAMERA_FT;
-  const k = D / (D + y);              // 1 at the plate, D/(D+60.5) at release
-  const kFar = D / (D + 60.5);
-  const p = (k - kFar) / (1 - kFar);  // 0 at release, 1 at the zone center
-  const lateral = (xFt / 8.5) * (zone.w / 2) * k;
-  return {
-    x: releaseXY.x + (zone.cx - releaseXY.x) * p + lateral,
-    y: releaseXY.y + (zone.cy - releaseXY.y) * p,
-    r: PLATE_BALL_RADIUS_NEAR_PX * k,
-    depthFrac: y / 60.5,
-  };
-}
-
-/** The ball, through the plate camera. `yFt` is feet of travel from the plate (0) toward the
- *  mound/release point (60.5) - BOTH callers (`_animatePitchFlight` for batting,
- *  `HumanAgent.decidePitch`'s own flight loop for pitching) already count it that way, since this
- *  is one fixed camera in both modes (see the section header). `xFt` is a lateral offset from the
- *  plate's own centerline. Returns `{x, y, scale}` in screen px so a caller can build a trail from
- *  consecutive calls. */
-export function drawPlateBall(ctx, w, h, xFt, yFt, mode, opts = {}) {
-  const cover = plateCover(w, h);
-  if (!cover) return { x: w / 2, y: h / 2, scale: 1 };
-  const pos = plateBallPos(w, h, cover, xFt, yFt);
-  const x = pos.x, y = pos.y;
-  const scale = pos.r / PLATE_BALL_RADIUS_NEAR_PX;
-  const r = opts.radiusPx != null ? opts.radiusPx : pos.r * (opts.sizeMult || 1);
-
-  ctx.save();
-  ctx.globalAlpha = opts.alpha != null ? opts.alpha : 1;
-  const ballSheet = plateImg('ball-sheet.webp');
-  if (ballSheet && (ballSheet.naturalWidth || ballSheet.width)) {
-    const frames = 10;
-    const frameIdx = Math.floor(((opts.spin || 0) % 1 + 1) % 1 * frames) % frames;
-    const fw = (ballSheet.naturalWidth || ballSheet.width) / frames;
-    const fh = ballSheet.naturalHeight || ballSheet.height;
-    ctx.drawImage(ballSheet, frameIdx * fw, 0, fw, fh, x - r, y - r, r * 2, r * 2);
-  } else {
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
-    ctx.lineWidth = Math.max(0.5, 1.2 * scale);
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.stroke();
-  }
-  ctx.restore();
-  return { x, y, scale };
-}
-
-/** The dev-only "Frames" flip-through check (ui.js's `_openFrameCheck`, gated the same way the
- *  Tune panel is). Draws one frame of a swing/delivery sequence on a flat ground line so a
- *  foot-drift regression in a future art replacement is visible immediately, without reasoning
- *  about the offset tables by eye. `kind` is 'batter' (8 frames, `FRAME_Y_OFFSET_FRAC`) or
- *  'pitcher' (4 frames, `PITCHER_FRAME_Y_OFFSET_FRAC`, one shared per-set scale factor - see its
- *  own section header). `useOffset` toggles the correction off so the raw, uncorrected drift can
- *  be compared directly - this is what proved the batter correction was needed (visible floating
- *  on frames 5-8 without it) before the swing timeline was wired at all. `flip` mirrors the frame
- *  and moves it to the OPPOSITE side of a center tick (left for unflipped, right for flipped -
- *  matching `drawPlateView`'s own box/hand choice for both roles) so the hand-flip/anchor
- *  correction can be checked here too, not just reasoned about. */
-export function drawFrameCheck(ctx, w, h, kind, side, frame, useOffset, flip) {
-  ctx.save();
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#1c1c1c';
-  ctx.fillRect(0, 0, w, h);
-  const groundY = h * 0.85;
-  ctx.strokeStyle = '#e0532f';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, groundY);
-  ctx.lineTo(w, groundY);
-  ctx.stroke();
-  // A center tick, so left-of-center vs right-of-center is checkable without a ruler.
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.beginPath();
-  ctx.moveTo(w / 2, 0);
-  ctx.lineTo(w / 2, h);
-  ctx.stroke();
-  const heightPx = h * 0.7;
-  const anchorX = flip ? w * 0.75 : w * 0.25;
-  if (kind === 'pitcher') {
-    const f = Math.max(1, Math.min(4, Math.round(frame || 1)));
-    if (useOffset) {
-      drawPitcherFigure(ctx, side, f, { x: anchorX, y: groundY }, heightPx, { flip: !!flip });
-    } else {
-      // Bypass PITCHER_FRAME_Y_OFFSET_FRAC and the shared-scale rule - draw this ONE frame's own
-      // bbox bottom-anchored at the ground line, at ITS OWN independent scale (heightPx/its own
-      // height), so a real re-normalization bug (the "bounce" the shared-scale rule exists to
-      // avoid) is visible here as a size jump between frames, not just a position jump.
-      const im = plateImg(`pitcher-${side}-${f}.webp`);
-      if (im && (im.naturalWidth || im.width)) {
-        const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
-        const scale = heightPx / ih;
-        const dw = iw * scale, dh = ih * scale;
-        ctx.save();
-        ctx.translate(anchorX, groundY);
-        if (flip) ctx.scale(-1, 1);
-        ctx.drawImage(im, -dw / 2, -dh, dw, dh);
-        ctx.restore();
-      }
-    }
-    ctx.restore();
-    return;
-  }
-  const f = Math.max(1, Math.min(8, Math.round(frame || 1)));
-  if (useOffset) {
-    drawBatterFigure(ctx, side, f, { x: anchorX, y: groundY }, heightPx, { flip: !!flip });
-  } else {
-    // Bypass FRAME_Y_OFFSET_FRAC entirely - draw the raw frame bottom-anchored at the ground line.
-    const im = plateImg(`batter-${side}-${f}.webp`);
-    if (im && (im.naturalWidth || im.width)) {
-      const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
-      const scale = heightPx / ih;
-      const dw = iw * scale, dh = ih * scale;
-      ctx.save();
-      ctx.translate(anchorX, groundY);
-      if (flip) ctx.scale(-1, 1);
-      ctx.drawImage(im, -dw / 2, -dh, dw, dh);
-      ctx.restore();
-    }
-  }
-  ctx.restore();
-}
-
 export default {
-  project, drawField, drawBall, drawLandingMarker, planGeometry,
-  preloadPlateImages, PLATE_ANCHORS, drawPlateView, drawPlateBall, drawFrameCheck, zoneRect, plateBallPos,
+  engineToWorld, zoneRectFt, zoneCornersFt, projectToCanvas, makeCameras, buildStadium,
+  fencePoints, planGeometry, CAMERAS, ZONE, BATTER_BOX, RUBBER, MOUND, CATCHER, UMPIRE, FENCE,
+  MARKER, FIGURE_HEIGHT_FT, BALL_RADIUS_FT, BATTER_AIM_TRAVEL_FT, CHASE_LERP,
+  FIELDER_POS, FIELDER_FACING_RAD, OUTFIELD_FENCE_REF_FT, fielderWorld, basePositions, runnerPath,
 };
