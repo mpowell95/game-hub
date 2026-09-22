@@ -587,11 +587,18 @@ function place(stations, at, side, off) {
  *   greenR / greenRy  green radii; the fringe is greenR + 6
  *   slope             {fall, spine, back} for slopeGrid
  *   bunkers           [{at, side, off, r, ry, kind, seed}]   (`yd` from the tee instead of `at`)
- *   water             [{at, side, off, rx, ry, seed}] or [{poly}]   (`yd` likewise; also trees, sentinels)
+ *   water             [{at, side, off, rx, ry, seed, kind}] or [{poly, kind}]   (`yd` likewise; also
+ *                     trees, sentinels). `kind` is 'water' (default) or 'swamp' - a swamp is laid
+ *                     down at the same layer as a lake and is built exactly the same way; it just
+ *                     plays as a surface you hit out of instead of a penalty (clubs.js LIES.swamp).
+ *   cross             [{yd|at, kind, depth, over}] - a band right across the corridor. `kind` is
+ *                     'water' (default), 'swamp', 'waste' (a fairway bunker) or any bunker kind.
  *   belts             {left, right} each false or {from, to, depth, spacing, type, seed}
  *   trees             hand-placed specimens [{at, side, off, type}] or [{x, y, type}]
  *   treeTypes         the specimen table
- *   decor             art-only polygons, verbatim
+ *   decor             art only, never consulted for anything: either {poly, kind} (a cart path, the
+ *                     default kind) or {at:[x,y], kind:'bench'|'sign'|'flagpole', rot} - a sprite.
+ *                     Carried through verbatim; only the bounds pass reads it.
  */
 export function makeHole(spec) {
   const { stations, length } = spline(spec.path, 4);
@@ -1006,8 +1013,11 @@ export function makeHole(spec) {
     };
     if (at - depth / 2 < stations[0].s || at + depth / 2 > stations[stations.length - 1].s) continue;
     const poly = [...across(0, false), ...across(1, true)];
-    if ((cx.kind || 'water') === 'water') specWater.push({ poly });
-    else specBunkers.push({ poly, kind: cx.kind === 'waste' ? 'fairwayBunker' : cx.kind });
+    const ck = cx.kind || 'water';
+    // A swamp band rides the SAME list as a water band - it is a surface laid at the water layer,
+    // and the only thing that differs is which `kind` the surface carries (2026-09-22).
+    if (ck === 'water' || ck === 'swamp') specWater.push({ poly, ...(ck === 'swamp' ? { kind: 'swamp' } : {}) });
+    else specBunkers.push({ poly, kind: ck === 'waste' ? 'fairwayBunker' : ck });
   }
 
   // ---- SENTINELS: trees too tall to fly ------------------------------------------------------
@@ -1052,9 +1062,13 @@ export function makeHole(spec) {
   // Water. Placed like everything else - "at 0.55 of the way round, 14 yards left" - or handed a
   // polygon outright for a shape a blob cannot be (hole 1's shoreline behind the green).
   for (const [i, w] of specWater.entries()) {
-    if (w.poly) { surfaces.push({ kind: 'water', poly: w.poly }); continue; }
+    // `kind: 'swamp'` (2026-09-22) makes the same shape a swamp instead of a lake. Anything else,
+    // including an absent kind, is water - this list has always been "the water layer" and an
+    // unrecognised value must not quietly invent a new surface for the closed set to reject.
+    const wk = w.kind === 'swamp' ? 'swamp' : 'water';
+    if (w.poly) { surfaces.push({ kind: wk, poly: w.poly }); continue; }
     const [cx, cy] = place(stations, w.at, w.side == null ? 0 : w.side, w.off || 0);
-    surfaces.push({ kind: 'water', poly: blob(cx, cy, w.rx, w.ry == null ? w.rx : w.ry, w.seed || (seed0 + 40 + i), w.n || 12) });
+    surfaces.push({ kind: wk, poly: blob(cx, cy, w.rx, w.ry == null ? w.rx : w.ry, w.seed || (seed0 + 40 + i), w.n || 12) });
   }
 
   // Fairway bunkers go under the fringe; greenside bunkers go over it, so sand still wins where a
@@ -1142,7 +1156,13 @@ export function makeHole(spec) {
   };
   for (const s of surfaces) if (s.poly !== 'green') eat(s.poly);
   eat(green.poly);
-  for (const d of decor) eat(d.poly);
+  // Decor is either a polygon (a cart path) or a SPRITE at a point (a bench, a sign, a flagpole -
+  // 2026-09-22). A sprite is about 4 yds across, so it is eaten as a small box around its point;
+  // without this the bounds pass would throw on `d.poly` being undefined.
+  for (const d of decor) {
+    if (Array.isArray(d.poly)) { eat(d.poly); continue; }
+    if (Array.isArray(d.at)) eat([[d.at[0] - 2, d.at[1] - 2], [d.at[0] + 2, d.at[1] - 2], [d.at[0] + 2, d.at[1] + 2]]);
+  }
   for (const tr of trees) { minX = Math.min(minX, tr.x - 9); maxX = Math.max(maxX, tr.x + 9); minY = Math.min(minY, tr.y - 9); maxY = Math.max(maxY, tr.y + 9); }
   const bounds = {
     minX: Math.floor(minX - 8),

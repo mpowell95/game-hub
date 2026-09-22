@@ -3152,5 +3152,114 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   ok('...and both modules are lazy', /await Promise\.all\(\[\s*import\('\.\/board\.js'\)/.test(ui));
 }
 
+console.log('\n-- 21. SWAMP: a hazard you play OUT OF, not a penalty (2026-09-22) --');
+// docs/HANDOFF-GOLF-OBJECTS.md section 2. Matt asked for "water, swamp, etc." - and the whole
+// design of a swamp is what it is NOT: no penalty stroke, no drop prompt, no water branch. The
+// ball stops dead where it lands and comes out at 55 % power. So most of this section is about
+// a swamp NOT behaving like a lake, because that is the one way the feature could go wrong while
+// still looking finished on screen.
+{
+  const { OBSTACLE_CATALOG } = await import('./obstacles.js');
+
+  ok('swamp is a member of the closed set of surface kinds', SURFACE_KINDS.has('swamp'));
+  ok('...and no shipped hole uses it yet, so nothing existing moved',
+    COURSES.every((c) => c.holes.every((h) => h.base !== 'swamp' && !h.surfaces.some((x) => x.kind === 'swamp'))));
+
+  // THE LIE ROW IS THE WHOLE COST. A lake charges a stroke and hands the ball back somewhere dry;
+  // a swamp charges nothing and makes you hit it.
+  ok('lieOf("swamp") is the spec\'s row: 55 % power, 35 % band, no roll at all',
+    lieOf('swamp').power === 0.55 && lieOf('swamp').zone === 0.35 && lieOf('swamp').roll === 0);
+  ok('it is the harshest power cap in the table - below even greenside sand',
+    LIES.swamp.power < LIES.greensideBunker.power && LIES.swamp.power < LIES.heavyRough.power);
+  ok('...but its accuracy band is NOT the harshest: a swamp is a bad lie, not an unplayable one',
+    LIES.swamp.zone > LIES.greensideBunker.zone && LIES.swamp.zone > LIES.heavyRough.zone);
+  ok('the putter is never offered from a swamp', !mustPutt('swamp') && !canPutt('swamp'));
+  ok('a putt that RUNS into a swamp stops in it', SH.puttDrag('swamp') > SH.puttDrag('heavyRough'));
+
+  // IT PLUGS. `noHop` is what stops the ball bouncing on arrival, exactly as sand does.
+  ok('a ball arriving in a swamp does not hop', SH.groundPoint(0.05, 10, 30, 'swamp').height === 0
+    && SH.groundPoint(0.05, 10, 30, 'fairway').height > 0);
+
+  // A hole built with a swamp lake, a swamp band across the corridor, and one rock from the
+  // catalogue - the whole of section 2's data path in one build.
+  const sw = makeHole({
+    n: 1, par: 4, path: [[0, 5], [0, 400]],
+    fw: [{ at: 0, w: 17 }, { at: 0.5, w: 15 }, { at: 1, w: 13 }],
+    seed: 4242, greenSeed: 9999, hard: 0.4, defend: false,
+    water: [{ yd: 230, side: 0, off: 0, rx: 22, ry: 16, seed: 71, kind: 'swamp' },
+      { yd: 120, side: -1, off: 30, rx: 10, ry: 8, seed: 72 }],
+    cross: [{ yd: 320, kind: 'swamp', depth: 20 }],
+    treeTypes: OBSTACLE_CATALOG,
+    trees: [{ yd: 180, side: 1, off: 26, type: 13 }],
+    belts: { left: false, right: false },
+  });
+  ok('a hole carrying a swamp blob, a swamp cross band and a catalogue rock VALIDATES',
+    validateHole(sw).length === 0, validateHole(sw).join('; '));
+  ok('...and both swamps really are swamp surfaces, not water',
+    sw.surfaces.filter((x) => x.kind === 'swamp').length === 2);
+  ok('...while the plain lake beside them is still water',
+    sw.surfaces.filter((x) => x.kind === 'water').length === 1);
+  ok('...and the catalogue rock is carried through as a tree object with its own type row',
+    sw.trees.length === 1 && sw.treeTypes[sw.trees[0].type].name === 'boulder');
+
+  // Find a point that really is in the swamp, then play a shot that lands there.
+  const mid = sw.surfaces.find((x) => x.kind === 'swamp');
+  let inSwamp = null;
+  for (const pt of mid.poly) {
+    const c = [pt[0] * 0.2, pt[1] * 0.2 + (mid.poly[0][1] * 0.8)];
+    if (surfaceAt(sw, c[0], c[1]) === 'swamp') { inSwamp = c; break; }
+  }
+  ok('the swamp is a real region the lie lookup reports', inSwamp !== null,
+    'no point inside the built swamp polygon reads as swamp');
+  if (inSwamp) {
+    const carry = Math.hypot(inSwamp[0], inSwamp[1] - 5);
+    const club = CLUBS.reduce((a, c) => (Math.abs(c.carry - carry) < Math.abs(a.carry - carry) ? c : a), CLUBS[0]);
+    const r = SH.resolveShot({ hole: sw, from: [0, 5], aimRad: Math.atan2(inSwamp[0], inSwamp[1] - 5),
+      club, power: carry / club.carry, mishitDeg: 0 });
+    if (r.landedOn === 'swamp') {
+      // THE THREE THINGS THAT MAKE IT NOT WATER.
+      ok('a ball landing in a swamp rolls exactly ZERO yards', r.rollYd === 0, `rollYd ${r.rollYd}`);
+      ok('...costs NO penalty stroke', r.penalty === 0, `penalty ${r.penalty}`);
+      ok('...and gets NO drop prompt: the ball stays where it landed',
+        !r.water && r.restOn === 'swamp' && distYd(r.rest, r.landing) < 0.001);
+    } else {
+      ok(`a ball aimed into the swamp landed there (got ${r.landedOn})`, false);
+    }
+    // ...and the NEXT shot really is played from the swamp, at the swamp's cap.
+    const cap = lieOf(surfaceAt(sw, inSwamp[0], inSwamp[1])).power;
+    ok('the shot OUT of a swamp is capped at 55 % of the club', cap === 0.55);
+  }
+
+  // THE HUD CAN NAME IT IN BOTH LANGUAGES. `ui.js` prints t('lie_' + kind), so a missing key is a
+  // raw identifier on screen and nothing at runtime would say so.
+  ok('lie_swamp exists in EN and ES', typeof STRINGS.en.lie_swamp === 'string' && typeof STRINGS.es.lie_swamp === 'string');
+  ok('every surface kind has a lie_ label in both languages',
+    [...SURFACE_KINDS].every((k) => STRINGS.en[`lie_${k}`] && STRINGS.es[`lie_${k}`]),
+    [...SURFACE_KINDS].filter((k) => !STRINGS.en[`lie_${k}`] || !STRINGS.es[`lie_${k}`]).join());
+  // ...and every surface kind has a LIE ROW, which is the other half of "closed set" - a kind with
+  // no row silently falls back to the fairway's and plays as if it were mown.
+  ok('every surface kind has its own row in LIES',
+    [...SURFACE_KINDS].every((k) => LIES[k]), [...SURFACE_KINDS].filter((k) => !LIES[k]).join());
+
+  // THE CATALOGUE ITSELF, from the engine's side: these rows are what validateHole demands of any
+  // treeTypes table, and a course built in the Course Creator ships this array verbatim.
+  ok(`the obstacle catalogue is ${OBSTACLE_CATALOG.length} valid tree types`,
+    OBSTACLE_CATALOG.every((o) => o.trunk > 0 && o.canopy >= o.trunk && o.height > 0),
+    OBSTACLE_CATALOG.filter((o) => !(o.trunk > 0 && o.canopy >= o.trunk && o.height > 0)).map((o) => o.name).join());
+  // A ROCK IS SOLID TO EVERY CLUB, which in this engine means height above the highest apex in the
+  // bag. The 8 iron peaks highest (redmesa.js measured 32.3); assert it against the real bag.
+  {
+    const apexes = CLUBS.map((c) => SH.apexYd(c, c.carry));
+    const highest = Math.max(...apexes);
+    const rocks = OBSTACLE_CATALOG.filter((o) => o.shape === 'rock' || o.shape === 'rocks');
+    ok(`a rock cannot be flown by anything in the bag (highest apex ${highest.toFixed(1)} yd)`,
+      rocks.length === 3 && rocks.every((o) => o.height > highest && o.canopy === o.trunk));
+    // ...and a LOG is the opposite: every club in the bag clears it, which is what makes it a
+    // putting-line obstacle rather than a wall.
+    const log = OBSTACLE_CATALOG.find((o) => o.name === 'log');
+    ok('a fallen log is flown by every club in the bag', log.height < Math.min(...apexes));
+  }
+}
+
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);
 process.exit(fail ? 1 : 0);

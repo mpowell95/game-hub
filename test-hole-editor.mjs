@@ -16,8 +16,13 @@ import {
   smoothPoly, addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject, addBunker, polyCentroid,
   detachGuards, insertSBend, setGreenOutline, clearGreenOutline, setFringe, addPin, movePin, deletePin,
   createEditorState, pushUndo, undo, redo,
-  serialiseDocument, loadDocument,
+  serialiseDocument, loadDocument, migrateDocument, CATALOG_VERSION,
+  addWater, setWaterField, deleteWater, addCross,
+  addDecor, setDecorField, deleteDecor, deleteObject, moveObject, DECOR_KINDS,
 } from './hole-editor/js/model.js';
+import { OBSTACLE_CATALOG, OBSTACLE_INDEX, catalogFor } from './golf/js/obstacles.js';
+import { validateHole as validateHoleTop } from './golf/js/holes.js';
+import { STRINGS as GOLF_STRINGS } from './golf/js/strings.js';
 import { generateSource, generateJSON } from './hole-editor/js/export.js';
 
 let pass = 0; let fail = 0;
@@ -440,14 +445,24 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
     assert.deepEqual(back.course, doc.course, 'name and theme survive a save');
   });
 
-  await test('theme switch swaps the obstacle table on the next build', () => {
+  // SINCE THE CATALOGUE (2026-09-22) BOTH LOOKS CARRY THE SAME `treeTypes`, so a theme switch can
+  // no longer be read off `treeTypes[0]`. What a look now decides is the BELT SPECIES, which is
+  // also the thing a designer actually sees change; this test follows the code rather than being
+  // deleted with the behaviour it used to describe.
+  await test('theme switch swaps the belt species on the next build, not the whole table', () => {
     setCourse(PROFILES.custom, 'parkland');
     const doc = createDocument();
-    assert.equal(buildHole(doc, 'h-01').treeTypes[0].name, 'pine');
+    const speciesOf = (d) => {
+      const h = buildHole(d, 'h-01');
+      return h.treeTypes[h.treeBelts[0].type].name;
+    };
+    assert.equal(speciesOf(doc), 'pine');
+    assert.equal(buildHole(doc, 'h-01').treeTypes.length, OBSTACLE_CATALOG.length);
     doc.course = setCourseMeta(doc, { theme: 'desert' }).course;
     setCourse(PROFILES.custom, 'desert');
     invalidateBuilds(doc);
-    assert.equal(buildHole(doc, 'h-01').treeTypes[0].name, 'saguaro');
+    assert.equal(speciesOf(doc), 'saguaro');
+    assert.equal(buildHole(doc, 'h-01').treeTypes.length, OBSTACLE_CATALOG.length, 'the catalogue is the table on both looks');
   });
 
   await test('add hole appends a fresh starter with an id no other hole holds; delete keeps at least three', () => {
@@ -474,16 +489,278 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
     const src = generateSource(doc, '2026-09-22');
     assert.match(src, /export const KINGSLANDING_COURSE = \{/);
     assert.match(src, /id: 'kingslanding'/);
-    assert.match(src, /name: 'saguaro'/);
+    // THE CATALOGUE IS IMPORTED, NEVER INLINED (docs/HANDOFF-GOLF-OBJECTS.md section 1): an
+    // exported course that carried its own copy of the table would be frozen at the catalogue as
+    // it stood on export day, and a later APPEND would never reach it.
+    assert.match(src, /import \{ OBSTACLE_CATALOG as TREE_TYPES \} from '\.\.\/js\/obstacles\.js';/);
+    assert.doesNotMatch(src, /const TREE_TYPES = \[/, 'the table must not be inlined');
     assert.match(src, /rough: 7,/);
+    assert.match(src, /belts: \{ left: \{ depth: 20, spacing: 14, type: 10 \}/, "the desert look's belts are saguaros by catalogue index");
     assert.doesNotMatch(src, /RED_MESA|Red Mesa/);
     const tmp = new URL('./.cc-export-test.mjs', import.meta.url);
-    writeFileSync(tmp, src.replace("'../js/holegen.js'", "'./golf/js/holegen.js'"));
+    writeFileSync(tmp, src.replace("'../js/holegen.js'", "'./golf/js/holegen.js'").replace("'../js/obstacles.js'", "'./golf/js/obstacles.js'"));
     try {
       const mod = await import(tmp.href + '?t=' + Date.now());
       assert.equal(mod.default.par, 72);
       assert.equal(mod.default.holes.length, 18);
-      assert.equal(mod.default.holes[0].treeTypes[0].name, 'saguaro');
+      assert.equal(mod.default.holes[0].treeTypes.length, OBSTACLE_CATALOG.length);
+      const h1 = mod.default.holes[0];
+      assert.equal(h1.treeTypes[h1.treeBelts[0].type].name, 'saguaro', 'a desert export still lines its holes with saguaros');
+    } finally { unlinkSync(tmp); }
+  });
+
+  // --- the obstacle catalogue, and the migration onto it (2026-09-22) ------------------------
+
+  await test('the catalogue is the shape the engine and the renderer each expect', () => {
+    assert.equal(OBSTACLE_CATALOG.length, 17);
+    const names = OBSTACLE_CATALOG.map((o) => o.name);
+    assert.equal(new Set(names).size, names.length, 'no duplicate names');
+    for (const o of OBSTACLE_CATALOG) {
+      // What validateHole itself demands of a treeTypes row.
+      assert.ok(o.trunk > 0 && o.canopy >= o.trunk && o.height > 0, `${o.name} is not a valid tree type`);
+      assert.equal(typeof o.shape, 'string');
+      assert.ok(Array.isArray(o.looks) && o.looks.length, `${o.name} has no looks`);
+      assert.ok(o.looks.every((l) => l === 'parkland' || l === 'desert'), `${o.name} names a look that does not exist`);
+    }
+    // A rock is solid to every club: canopy === trunk, height 40 (redmesa.js records the 8 iron's
+    // 32.3 yd apex as why 40 and not 30).
+    for (const n of ['boulder', 'smallrock', 'rockpile']) {
+      const o = OBSTACLE_CATALOG[OBSTACLE_INDEX[n]];
+      assert.equal(o.canopy, o.trunk, n);
+      assert.equal(o.height, 40, n);
+    }
+    // THE ORDER IS FROZEN: every saved draft stores an INDEX into it. These three are the ones the
+    // migration and THEME_DEFAULTS name by number, so pin them explicitly.
+    assert.equal(OBSTACLE_INDEX.pine, 0);
+    assert.equal(OBSTACLE_INDEX.saguaro, 10);
+    assert.equal(OBSTACLE_INDEX.boulder, 13);
+  });
+
+  await test('every catalogue entry has an obst_ label in EN and ES', () => {
+    for (const o of OBSTACLE_CATALOG) {
+      assert.equal(typeof GOLF_STRINGS.en[`obst_${o.name}`], 'string', `en obst_${o.name}`);
+      assert.equal(typeof GOLF_STRINGS.es[`obst_${o.name}`], 'string', `es obst_${o.name}`);
+    }
+  });
+
+  await test('catalogFor orders a look first but drops nothing, and keeps the real index', () => {
+    for (const look of ['parkland', 'desert']) {
+      const rows = catalogFor(look);
+      assert.equal(rows.length, OBSTACLE_CATALOG.length, `${look} loses entries`);
+      assert.equal(new Set(rows.map((r) => r.index)).size, rows.length);
+      for (const r of rows) assert.equal(OBSTACLE_CATALOG[r.index], r.entry, 'index must address the catalogue itself');
+      const firstOther = rows.findIndex((r) => !(r.entry.looks || []).includes(look));
+      const lastMine = rows.map((r) => (r.entry.looks || []).includes(look)).lastIndexOf(true);
+      assert.ok(firstOther === -1 || firstOther > lastMine, `${look}: its own species are not all first`);
+    }
+  });
+
+  // A HAND-WRITTEN PRE-CATALOGUE DOCUMENT - exactly the shape the Course Creator wrote before the
+  // catalogue existed (no `catalog` stamp, tree `type` 0-2 into the look's own three-entry table).
+  // Rule 7: the fixture is what the OLD writer actually produced, not a convenient invention.
+  const preCatalogueDoc = (theme) => ({
+    version: 1,
+    courseId: 'custom',
+    course: { name: 'Old Draft', theme },
+    order: ['h-01', 'h-02'],
+    holes: {
+      'h-01': { id: 'h-01', broken: null, spec: {
+        par: 4, nickname: 'Hole 1', path: [[0, 5], [0, 380]],
+        fw: [{ at: 0, w: 17 }, { at: 0.5, w: 14 }, { at: 1, w: 13 }],
+        hard: 0, seed: 1097, greenSeed: 5131, defend: false, slope: 'gentle',
+        trees: [{ yd: 120, side: -1, off: 24, type: 0 }, { yd: 200, side: 1, off: 26, type: 2 }, { yd: 260, side: -1, off: 22, type: 1 }],
+        sentinels: [{ yd: 300, side: 1, off: 30, n: 5, spread: 7, type: 2 }],
+      } },
+      'h-02': { id: 'h-02', broken: null, spec: {
+        par: 3, nickname: 'Hole 2', path: [[0, 5], [0, 165]],
+        fw: [{ at: 0, w: 12 }, { at: 0.5, w: 10 }, { at: 1, w: 13 }],
+        hard: 0.059, seed: 1194, greenSeed: 5262, defend: false, slope: 'crown',
+        belts: { left: { depth: 20, spacing: 14 }, right: false },
+        trees: [{ yd: 90, side: 1, off: 20 }],
+      } },
+    },
+  });
+
+  await test('migration: a PRE-CATALOGUE desert draft keeps every tree it had, by species', () => {
+    const before = preCatalogueDoc('desert');
+    const after = migrateDocument(JSON.parse(JSON.stringify(before)));
+    assert.equal(after.catalog, CATALOG_VERSION, 'stamped');
+    // saguaro / paloverde / boulder were 0 / 1 / 2.
+    const t = after.holes['h-01'].spec.trees;
+    assert.deepEqual(t.map((x) => OBSTACLE_CATALOG[x.type].name), ['saguaro', 'boulder', 'paloverde']);
+    assert.equal(OBSTACLE_CATALOG[after.holes['h-01'].spec.sentinels[0].type].name, 'boulder');
+    // An ABSENT type meant 0, which in the desert meant a saguaro - the case that would silently
+    // have become a pine.
+    assert.equal(OBSTACLE_CATALOG[after.holes['h-02'].spec.trees[0].type].name, 'saguaro');
+    // A belt the designer had touched carried no type at all; it meant 0 too.
+    assert.equal(OBSTACLE_CATALOG[after.holes['h-02'].spec.belts.left.type].name, 'saguaro');
+    assert.equal(after.holes['h-02'].spec.belts.right, false, 'a belt turned off stays off');
+    // Nothing else moved: every placed thing keeps its position, and rule 2 means nothing is lost.
+    for (const id of after.order) {
+      const a = before.holes[id].spec; const b = after.holes[id].spec;
+      assert.equal((b.trees || []).length, (a.trees || []).length);
+      (b.trees || []).forEach((x, i) => { assert.equal(x.yd, a.trees[i].yd); assert.equal(x.off, a.trees[i].off); });
+    }
+  });
+
+  await test('migration: a PRE-CATALOGUE parkland draft is pine/oak/sentinel, unchanged in position', () => {
+    const after = migrateDocument(preCatalogueDoc('parkland'));
+    assert.deepEqual(after.holes['h-01'].spec.trees.map((x) => OBSTACLE_CATALOG[x.type].name),
+      ['pine', 'sentinel', 'oak']);
+    assert.equal(OBSTACLE_CATALOG[after.holes['h-02'].spec.belts.left.type].name, 'pine');
+  });
+
+  await test('migration: it runs ONCE - a second pass is a no-op, and Red Mesa is never touched', () => {
+    const once = migrateDocument(preCatalogueDoc('desert'));
+    const twice = migrateDocument(JSON.parse(JSON.stringify(once)));
+    assert.deepEqual(twice, once, 'the stamp stops a second re-index');
+    assert.equal(migrateDocument(once), once, 'a stamped document is returned as-is');
+    const rm = { version: 1, courseId: 'redmesa', order: ['rm-01'], holes: { 'rm-01': { id: 'rm-01', spec: { trees: [{ yd: 1, type: 2 }] } } } };
+    assert.equal(migrateDocument(rm), rm, 'Red Mesa has its own frozen table and must not be re-indexed');
+  });
+
+  await test('migration: it happens on the way IN, through loadDocument, and survives a save', () => {
+    setCourse(PROFILES.custom, 'desert');
+    const raw = JSON.stringify(preCatalogueDoc('desert'));
+    const loaded = loadDocument(raw);
+    assert.equal(loaded.catalog, CATALOG_VERSION);
+    assert.equal(OBSTACLE_CATALOG[loaded.holes['h-01'].spec.trees[0].type].name, 'saguaro');
+    // ...and the migrated document builds and validates, which is the point of carrying it forward.
+    for (const id of loaded.order) assert.deepEqual(validateHoleTop(buildHole(loaded, id)), [], id);
+    const round = loadDocument(serialiseDocument(loaded));
+    assert.equal(round.catalog, CATALOG_VERSION, 'the stamp is serialised');
+    assert.deepEqual(round.holes['h-01'].spec.trees, loaded.holes['h-01'].spec.trees);
+    setCourse(PROFILES.custom, 'parkland');
+  });
+
+  // --- swamp and decor mutators (docs/HANDOFF-GOLF-OBJECTS.md sections 2 and 4) -----------------
+
+  await test('addWater places a swamp; a lake is still written exactly as it always was', () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    const spec0 = doc.holes['h-01'].spec;
+    const lake = addWater(spec0, { yd: 200, side: -1, off: 24 });
+    assert.equal(lake.water[0].kind, undefined, 'a lake carries no kind at all');
+    const swamp = addWater(lake, { yd: 260, side: 1, off: 22 }, 'swamp');
+    assert.equal(swamp.water[1].kind, 'swamp');
+    assert.notEqual(swamp.water[0].seed, swamp.water[1].seed, 'each blob gets its own seed');
+    doc.holes['h-01'].spec = swamp;
+    const built = buildHole(doc, 'h-01');
+    assert.deepEqual(validateHoleTop(built), []);
+    const kinds = built.surfaces.map((s) => s.kind);
+    assert.ok(kinds.includes('water') && kinds.includes('swamp'), `built ${[...new Set(kinds)].join()}`);
+  });
+
+  await test('setWaterField flips a lake to a swamp and back, and back means NO key', () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    let spec = addWater(doc.holes['h-01'].spec, { yd: 200, side: -1, off: 24 });
+    spec = setWaterField(spec, 0, { kind: 'swamp' });
+    assert.equal(spec.water[0].kind, 'swamp');
+    spec = setWaterField(spec, 0, { kind: 'water' });
+    assert.ok(!('kind' in spec.water[0]), 'turning it back leaves the entry the shape every shipped hole has');
+    spec = deleteWater(spec, 0);
+    assert.equal(spec.water.length, 0);
+  });
+
+  await test('a DRAWN swamp keeps its kind through draw, redraw, translate and scale', () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    const pts = [[-30, 150], [10, 150], [10, 190], [-30, 190]];
+    let spec = addDrawnShape(doc.holes['h-01'].spec, 'water', pts, 'swamp');
+    assert.equal(spec.water[0].kind, 'swamp');
+    assert.ok(spec.water[0].poly.length > 4, 'smoothed');
+    spec = setDrawnPoly(spec, 'water', 0, [[-28, 152], [8, 152], [8, 188], [-28, 188]]);
+    assert.equal(spec.water[0].kind, 'swamp', 'a redraw must not turn a swamp back into a lake');
+    spec = translateDrawn(spec, 'water', 0, 3, 4);
+    assert.equal(spec.water[0].kind, 'swamp');
+    spec = scaleObject(spec, 'water', 0, 1.2, 1.2);
+    assert.equal(spec.water[0].kind, 'swamp');
+    // ...and a drawn LAKE is still a bare {poly}.
+    const lake = addDrawnShape(spec, 'water', pts);
+    assert.ok(!('kind' in lake.water[1]));
+    doc.holes['h-01'].spec = lake;
+    assert.deepEqual(validateHoleTop(buildHole(doc, 'h-01')), []);
+  });
+
+  await test('a swamp CROSS band builds as a swamp right across the corridor', () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    doc.holes['h-01'].spec = addCross(doc.holes['h-01'].spec, { yd: 190, kind: 'swamp', depth: 22 });
+    const built = buildHole(doc, 'h-01');
+    assert.deepEqual(validateHoleTop(built), []);
+    assert.ok(built.surfaces.some((s) => s.kind === 'swamp'), 'no swamp surface was built');
+  });
+
+  await test('decor: add, patch, move, duplicate and delete a sprite; the hole still validates', () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    let spec = addDecor(doc.holes['h-01'].spec, 'bench', 21.44, 140.06);
+    assert.deepEqual(spec.decor[0], { at: [21.4, 140.1], kind: 'bench', rot: 0 });
+    spec = addDecor(spec, 'sign', -18, 60);
+    spec = addDecor(spec, 'flagpole', 12, 330);
+    assert.deepEqual(spec.decor.map((d) => d.kind), ['bench', 'sign', 'flagpole']);
+    assert.ok(DECOR_KINDS.includes('path') && DECOR_KINDS.includes('bench'));
+    spec = setDecorField(spec, 1, { rot: 45 });
+    assert.equal(spec.decor[1].rot, 45);
+    spec = moveObject(spec, 'decor', 1, { x: -20.5, y: 65.5 });
+    assert.deepEqual(spec.decor[1].at, [-20.5, 65.5]);
+    spec = duplicateObject(spec, 'decor', 1);
+    assert.deepEqual(spec.decor[3].at, [-20.5, 77.5], 'a copy sits 12 yd up the hole');
+    // A drawn cart path is the same list, with a poly instead of a point.
+    spec = addDrawnShape(spec, 'decor', [[6, 40], [10, 40], [10, 300], [6, 300]]);
+    assert.ok(Array.isArray(spec.decor[4].poly));
+    doc.holes['h-01'].spec = spec;
+    const built = buildHole(doc, 'h-01');
+    assert.deepEqual(validateHoleTop(built), [], 'sprite decor must validate');
+    assert.equal(built.decor.length, 5, 'decor is carried through verbatim');
+    // The bounds pass has to have SEEN the sprites, or a hole could paint one off the map.
+    assert.ok(built.bounds.maxY >= 330, `bounds stop at ${built.bounds.maxY}`);
+    spec = deleteObject(spec, 'decor', 4);
+    spec = deleteDecor(spec, 0);
+    assert.equal(spec.decor.length, 3);
+    while (spec.decor && spec.decor.length) spec = deleteDecor(spec, 0);
+    assert.equal(spec.decor, undefined, 'the last delete removes the key rather than leaving []');
+  });
+
+  await test('validateHole refuses a sprite off the map, and a malformed one, by name', () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    const built = buildHole(doc, 'h-01');
+    const bad = JSON.parse(JSON.stringify(built));
+    bad.decor = [{ at: [built.bounds.maxX + 50, 100], kind: 'sign', rot: 0 }];
+    assert.ok(validateHoleTop(bad).some((e) => /decor\[0\] sits outside bounds/.test(e)), validateHoleTop(bad).join('; '));
+    bad.decor = [{ at: ['x', 1], kind: 'sign' }];
+    assert.ok(validateHoleTop(bad).some((e) => /decor\[0\] has a malformed point/.test(e)));
+    bad.decor = [{ kind: 'path' }];
+    assert.ok(validateHoleTop(bad).some((e) => /decor\[0\] has fewer than 3 points/.test(e)));
+  });
+
+  await test('export prints swamps and decor, and the generated module builds them', async () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    let spec = addWater(doc.holes['h-01'].spec, { yd: 200, side: -1, off: 24 }, 'swamp');
+    spec = addCross(spec, { yd: 140, kind: 'swamp', depth: 20 });
+    spec = addDecor(spec, 'bench', 20, 150);
+    spec = addDrawnShape(spec, 'decor', [[6, 40], [10, 40], [10, 300], [6, 300]]);
+    doc.holes['h-01'].spec = spec;
+    const src = generateSource(doc, '2026-09-22');
+    assert.match(src, /kind: 'swamp'/);
+    assert.match(src, /decor: \[/);
+    assert.match(src, /\{ at: \[20, 150\], kind: 'bench', rot: 0 \}/);
+    // Copy JSON prints them too - it is the document verbatim, which is what a shared draft is.
+    const json = JSON.parse(generateJSON(doc));
+    assert.equal(json.holes['h-01'].spec.decor.length, 2);
+    assert.equal(json.holes['h-01'].spec.water[0].kind, 'swamp');
+    assert.equal(json.catalog, CATALOG_VERSION);
+    const tmp = new URL('./.cc-swamp-test.mjs', import.meta.url);
+    writeFileSync(tmp, src.replace("'../js/holegen.js'", "'./golf/js/holegen.js'").replace("'../js/obstacles.js'", "'./golf/js/obstacles.js'"));
+    try {
+      const mod = await import(tmp.href + '?t=' + Date.now());
+      const h = mod.default.holes[0];
+      assert.deepEqual(validateHoleTop(h), []);
+      assert.ok(h.surfaces.some((x) => x.kind === 'swamp'), 'the exported course has no swamp');
+      assert.equal(h.decor.length, 2);
     } finally { unlinkSync(tmp); }
   });
 

@@ -13,6 +13,11 @@
 export const SURFACE_KINDS = new Set([
   'tee', 'fairway', 'fringe', 'lightRough', 'heavyRough',
   'fairwayBunker', 'greensideBunker', 'trees', 'green', 'water',
+  // SWAMP IS NOT WATER (2026-09-22, docs/HANDOFF-GOLF-OBJECTS.md section 2). No penalty stroke and
+  // no drop prompt: the ball simply stops dead where it lands and comes out at 55 % power. It is
+  // the hazard that costs you the shot rather than a stroke, and it is the only surface added
+  // since Stage B, so the closed set really is closed - a `kind` not on this list is an error.
+  'swamp',
 ]);
 
 /** Ray-cast point-in-polygon. Winding order is irrelevant, which is why hole data never states
@@ -324,7 +329,7 @@ export function expandBelt(belt, type) {
  *  from. HAND-PLACED `trees` ENTRIES ARE NEVER FILTERED: hole 3's signature oak stands ON THE
  *  FAIRWAY on purpose, and an author who writes a coordinate means it. */
 const NO_BELT_TREE = new Set(['fairway', 'lightRough', 'green', 'fringe', 'tee', 'water',
-  'fairwayBunker', 'greensideBunker']);
+  'fairwayBunker', 'greensideBunker', 'swamp']);
 
 export function treesOf(hole) {
   if (hole._trees) return hole._trees;
@@ -407,7 +412,16 @@ export function validateHole(hole) {
     checkPoly(polyOf(s, hole), `surfaces[${i}] (${s.kind})`);
   }
   checkPoly(hole.green && hole.green.poly, 'green.poly');
-  for (const [i, d] of (hole.decor || []).entries()) checkPoly(d.poly, `decor[${i}]`);
+  // Decor is art only and is consulted by NOTHING at play time, so the only thing worth asserting
+  // is that it is drawable and on the map. Two forms since 2026-09-22: a polygon (a cart path) or
+  // a SPRITE at a point (`{at: [x, y], kind, rot}` - a bench, a sign, a flagpole).
+  for (const [i, d] of (hole.decor || []).entries()) {
+    if (d && Array.isArray(d.at)) {
+      const [dx, dy] = d.at;
+      if (d.at.length !== 2 || !Number.isFinite(dx) || !Number.isFinite(dy)) at(`decor[${i}] has a malformed point ${JSON.stringify(d.at)}`);
+      else if (dx < b.minX || dx > b.maxX || dy < b.minY || dy > b.maxY) at(`decor[${i}] sits outside bounds: ${JSON.stringify(d.at)}`);
+    } else checkPoly(d && d.poly, `decor[${i}]`);
+  }
 
   const sl = hole.green && hole.green.slope;
   if (!sl || !Array.isArray(sl.cells)) at('green.slope.cells is missing');

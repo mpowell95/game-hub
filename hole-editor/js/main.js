@@ -14,6 +14,7 @@ import {
   addWater, setWaterField, rerollWater, deleteWater,
   addTree, setTreeField, deleteTree, addSentinel, setSentinelField, deleteSentinel,
   addCross, setCrossField, deleteCross, deleteObject,
+  addDecor, setDecorField, deleteDecor,
   setBeltField, setGreenField, rerollGreen, toggleGuard,
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
@@ -38,6 +39,7 @@ const MUTATORS = {
   addWater, setWaterField, rerollWater, deleteWater,
   addTree, setTreeField, deleteTree, addSentinel, setSentinelField, deleteSentinel,
   addCross, setCrossField, deleteCross, deleteObject,
+  addDecor, setDecorField, deleteDecor,
   setBeltField, setGreenField, rerollGreen, toggleGuard,
   setSlopePreset, bakeSlopeToCells, setSlopeCell, flattenSlope,
   addDrawnShape, setDrawnPoly, translateDrawn, scaleObject, duplicateObject,
@@ -59,6 +61,9 @@ const TOOLS = [
   ['water', 'H', '≈', 'Water', false],
   ['tree', 'T', '♣', 'Tree', false],
   ['cross', 'C', '✖', 'Across', false],
+  // Decor (2026-09-22): art only, never consulted for anything. Its tiles live in the palette like
+  // every other object, and `toolState.decorKind` says which sprite the next click drops.
+  ['decor', 'K', '⚑', 'Decor', false],
 ];
 
 const root = document.getElementById('he-root');
@@ -140,7 +145,8 @@ let currentId = doc.order[0];
 let currentTool = 'select';
 // Placement-time defaults for tools that need a choice BEFORE a click places anything (Tree's
 // single/stand + type, Cross's kind/depth/over) - never persisted, purely a UI convenience.
-let toolState = { treeMode: 'single', treePlantType: 0, crossKind: 'water', crossDepth: 22, crossOver: 8, slopeMode: 'preset' };
+let toolState = { treeMode: 'single', treePlantType: 0, crossKind: 'water', crossDepth: 22, crossOver: 8, slopeMode: 'preset',
+  waterKind: 'water', decorKind: 'bench' };
 
 let saveTimer = null;
 function saveNow() {
@@ -424,6 +430,10 @@ const editOps = {
   },
   getCrossOver: () => toolState.crossOver,
   getBunkerKind: () => toolState.bunkerKind || 'auto',
+  // 'water' or 'swamp' - the same list, two surfaces (docs/HANDOFF-GOLF-OBJECTS.md section 2).
+  getWaterKind: () => toolState.waterKind || 'water',
+  // 'bench' | 'sign' | 'flagpole' - which sprite the Decor tool drops next.
+  getDecorKind: () => toolState.decorKind || 'bench',
   /** Draw a new bunker/lake outline, or redraw an existing one (Matt: "can i draw shapes?"). */
   startDraw(group, kind, replaceIndex = null) { editorCanvas.startDraw(group, kind, replaceIndex); },
   undoDrawPoint() { editorCanvas.undoDrawPoint(); },
@@ -442,7 +452,7 @@ editorCanvas.ops = editOps;
 
 // Duplicate (ribbon + D): the selected bunker / lake / tree / stand / cross, 12 yd further up the
 // hole, and the copy becomes the selection so it can be dragged straight away.
-const DUPLICABLE = ['bunkers', 'water', 'trees', 'sentinels', 'cross'];
+const DUPLICABLE = ['bunkers', 'water', 'trees', 'sentinels', 'cross', 'decor'];
 function duplicateSelected() {
   const sel = editorCanvas.selection;
   if (!sel || !DUPLICABLE.includes(sel.group)) return;

@@ -7,7 +7,8 @@
 import { makeHole, slopeFrom } from '../../golf/js/holegen.js';
 import { dropLoops } from '../../golf/js/holes.js';
 import { PROFILES, defaultsFor } from './course.js';
-import { starterSpec } from './starter.js';
+import { starterSpec, PARKLAND_TYPES, DESERT_TYPES } from './starter.js';
+import { OBSTACLE_INDEX } from '../../golf/js/obstacles.js';
 
 // THE ACTIVE COURSE (2026-09-22). Red Mesa until setCourse() says otherwise, so every existing
 // caller (and every existing test) sees exactly what it always did. `RM_DEFAULTS` keeps its name
@@ -177,7 +178,9 @@ export function createDocument() {
   }
   const doc = { version: 1, courseId: COURSE_ID, order, holes };
   // A custom course carries its own name, theme and hole count; Red Mesa's are the shipped file's.
-  if (COURSE.custom) doc.course = { name: COURSE.name, theme: COURSE.theme };
+  // `catalog: 1` says "this document's tree indices are already catalogue indices" - see
+  // `migrateDocument`. A document born today has never held the old three-entry indices.
+  if (COURSE.custom) { doc.course = { name: COURSE.name, theme: COURSE.theme }; doc.catalog = CATALOG_VERSION; }
   return doc;
 }
 
@@ -411,15 +414,29 @@ export function rerollBunker(spec, index) {
   return setBunkerField(spec, index, { seed: (b.seed || 0) + 1 });
 }
 
-/** Water tool click (section 6.5). */
-export function addWater(spec, { yd, side, off }) {
+/** Water tool click (section 6.5). `kind` is 'water' (the default) or 'swamp' - both live in the
+ *  same `water` list because holegen.js lays them at the same layer and builds them the same way;
+ *  only the surface kind differs, and with it the whole of how the hole plays there (a lake is a
+ *  penalty drop, a swamp is a lie you hit out of at 55 % power). An absent `kind` is never written,
+ *  so an existing lake's entry is byte-identical to what it was before this option existed. */
+export function addWater(spec, { yd, side, off }, kind) {
   const seed0 = spec.seed;
-  const water = [...(spec.water || []), { yd: +yd, side, off: +off, rx: 12, ry: 9, seed: nextSeed(spec.water, seed0 + 40) }];
+  const entry = { yd: +yd, side, off: +off, rx: 12, ry: 9, seed: nextSeed(spec.water, seed0 + 40) };
+  if (kind === 'swamp') entry.kind = 'swamp';
+  const water = [...(spec.water || []), entry];
   return { ...spec, water };
 }
 
+/** `fields` may carry `kind: 'swamp'` to turn a lake into a swamp, or `kind: 'water'` to turn it
+ *  back - and 'water' DELETES the key rather than writing it, so a lake's entry stays the shape
+ *  every hole in the repo already has (holegen.js reads an absent kind as water). */
 export function setWaterField(spec, index, fields) {
-  const water = spec.water.map((w, i) => (i === index ? { ...w, ...fields } : w));
+  const water = spec.water.map((w, i) => {
+    if (i !== index) return w;
+    const next = { ...w, ...fields };
+    if (next.kind !== 'swamp') delete next.kind;
+    return next;
+  });
   return { ...spec, water };
 }
 
@@ -482,10 +499,12 @@ export function deleteCross(spec, index) {
 /** Select tool drag (section 6.1): move a placed thing (not the tee/waypoints, not guards) to a
  *  new {yd, side, off}. `group` is 'bunkers' | 'water' | 'trees' | 'sentinels' | 'cross'. A DRAWN
  *  object (one with its own `poly`, see `addDrawnShape`) has no yd/side/off: it is translated. */
-export function moveObject(spec, group, index, { yd, side, off }) {
+export function moveObject(spec, group, index, { yd, side, off, x, y }) {
   const list = spec[group].map((o, i) => {
     if (i !== index) return o;
     if (group === 'cross') return { ...o, yd: +yd };
+    // A decor SPRITE is placed in world yards (see "Decor" below), so it is moved by its point.
+    if (Array.isArray(o.at)) return { ...o, at: [+(+x).toFixed(1), +(+y).toFixed(1)] };
     return { ...o, yd: +yd, side, off: +off };
   });
   return { ...spec, [group]: list };
@@ -525,11 +544,15 @@ export function smoothPoly(points, passes = 2) {
   return dropLoops(pts.map((p) => [+p[0].toFixed(1), +p[1].toFixed(1)]));
 }
 
-/** A drawn bunker (`kind` decides fairway/greenside) or lake from clicked points, smoothed. */
+/** A drawn bunker (`kind` decides fairway/greenside), lake or swamp from clicked points, smoothed.
+ *  For the `water` group `kind` is 'water' (or absent) for a lake and 'swamp' for a swamp; a lake
+ *  is still written as a bare `{poly}`, exactly as it always was. */
 export function addDrawnShape(spec, group, points, kind) {
   if (!points || points.length < 3) return spec;
   const poly = smoothPoly(points);
-  const entry = group === 'bunkers' ? { poly, kind: kind || 'greensideBunker' } : { poly };
+  const entry = group === 'bunkers'
+    ? { poly, kind: kind || 'greensideBunker' }
+    : (group === 'water' && kind === 'swamp' ? { poly, kind: 'swamp' } : { poly });
   return { ...spec, [group]: [...(spec[group] || []), entry] };
 }
 
@@ -537,7 +560,9 @@ export function addDrawnShape(spec, group, points, kind) {
 export function setDrawnPoly(spec, group, index, points) {
   if (!points || points.length < 3) return spec;
   const poly = smoothPoly(points);
-  const list = spec[group].map((o, i) => (i === index ? (group === 'bunkers' ? { poly, kind: o.kind || 'greensideBunker' } : { poly }) : o));
+  const list = spec[group].map((o, i) => (i === index
+    ? (group === 'bunkers' ? { poly, kind: o.kind || 'greensideBunker' } : (o.kind ? { poly, kind: o.kind } : { poly }))
+    : o));
   return { ...spec, [group]: list };
 }
 
@@ -680,6 +705,7 @@ export function duplicateObject(spec, group, index) {
   if (!o) return spec;
   let copy;
   if (o.poly) copy = { ...o, poly: o.poly.map((p) => [p[0], +(p[1] + 12).toFixed(1)]) };
+  else if (Array.isArray(o.at)) copy = { ...o, at: [o.at[0], +(o.at[1] + 12).toFixed(1)] };
   else {
     copy = { ...o, yd: +(o.yd + 12).toFixed(1) };
     if (o.seed != null) copy.seed = nextSeed(spec[group], o.seed);
@@ -695,8 +721,48 @@ export function deleteObject(spec, group, index) {
   if (group === 'trees') return deleteTree(spec, index);
   if (group === 'sentinels') return deleteSentinel(spec, index);
   if (group === 'cross') return deleteCross(spec, index);
+  if (group === 'decor') return deleteDecor(spec, index);
   if (group === 'pins') return deletePin(spec, index);
   throw new Error(`hole-editor: unknown object group "${group}"`);
+}
+
+// --- Decor: art only, never consulted for anything (2026-09-22) --------------------------------
+//
+// docs/HANDOFF-GOLF-OBJECTS.md section 4. Two forms, and the difference is the `poly`:
+//
+//   { poly, kind: 'path' }                         a drawn cart path (the existing draw flow,
+//                                                  group 'decor'; `kind` defaults to 'path')
+//   { at: [x, y], kind: 'bench'|'sign'|'flagpole', rot }   a sprite, 3-4 yds across, `rot` degrees
+//
+// DECOR CANNOT AFFECT PLAY, and that is the whole reason it is a separate list rather than a
+// surface or a tree: nothing in shot.js, clubs.js or holes.js reads it, so art can be added to a
+// hole without a physics review. Anything that should stop a ball is a tree object (the catalogue
+// has a log and three rocks for exactly that), never a decor sprite.
+//
+// A sprite is stored in WORLD YARDS like a drawn shape, not as {yd, side, off} - it is placed
+// relative to the ground, not to the corridor, so a route edit must not drag the clubhouse sign
+// sideways with it.
+
+/** The sprite kinds a decor entry may take. 'path' is the drawn polygon; the rest are sprites. */
+export const DECOR_KINDS = ['path', 'bench', 'sign', 'flagpole'];
+
+export function addDecor(spec, kind, x, y) {
+  const k = DECOR_KINDS.includes(kind) && kind !== 'path' ? kind : 'bench';
+  const entry = { at: [+(+x).toFixed(1), +(+y).toFixed(1)], kind: k, rot: 0 };
+  return { ...spec, decor: [...(spec.decor || []), entry] };
+}
+
+/** Patch one decor entry: `{ kind }`, `{ rot }`, or `{ at: [x, y] }` from a drag. */
+export function setDecorField(spec, index, fields) {
+  const decor = (spec.decor || []).map((d, i) => (i === index ? { ...d, ...fields } : d));
+  return { ...spec, decor };
+}
+
+export function deleteDecor(spec, index) {
+  const decor = (spec.decor || []).filter((_, i) => i !== index);
+  const out = { ...spec, decor };
+  if (!decor.length) delete out.decor;
+  return out;
 }
 
 // --- Belts (6.7) -----------------------------------------------------------------------------
@@ -795,7 +861,7 @@ export function redo(state) {
 // --- persistence (section 3.6) --------------------------------------------------------------------
 
 export function serialiseDocument(doc) {
-  return JSON.stringify({ version: doc.version, courseId: doc.courseId, ...(doc.course ? { course: doc.course } : {}), order: doc.order, holes: doc.holes });
+  return JSON.stringify({ version: doc.version, courseId: doc.courseId, ...(doc.course ? { course: doc.course } : {}), ...(doc.catalog ? { catalog: doc.catalog } : {}), order: doc.order, holes: doc.holes });
 }
 
 /** Returns the parsed document, or null if the string is missing/malformed/a different version -
@@ -805,5 +871,70 @@ export function loadDocument(raw) {
   let parsed;
   try { parsed = JSON.parse(raw); } catch { return null; }
   if (!parsed || parsed.version !== 1) return null;
-  return parsed;
+  // EVERY ROUTE INTO THE EDITOR COMES THROUGH HERE - localStorage, an imported .json file, and a
+  // shared draft pulled out of Firebase (main.js) - which is why the catalogue migration lives at
+  // this one door rather than at three.
+  return migrateDocument(parsed);
+}
+
+// --- the obstacle-catalogue migration (2026-09-22) ------------------------------------------------
+//
+// THE LAW rule 3: a saved draft must come back as the course its designer drew, and every tree in
+// it CAN be carried, so every tree in it is carried.
+//
+// Before the catalogue (golf/js/obstacles.js) the Course Creator handed each look a THREE-entry
+// obstacle table and a placed tree stored an index 0-2 into it. The catalogue is one shared
+// seventeen-entry table for both looks, so those indices mean something different now - and a
+// desert draft is the case that would actually break: its 0 meant `saguaro`, and unmigrated it
+// would come back as `pine`. (Parkland's old table happens to be the catalogue's first three
+// entries in the same order, so its numbers survive untouched; the map below states that by NAME
+// rather than relying on it.)
+//
+// It runs EXACTLY ONCE per document. `catalog: 1` is stamped on the way out, so re-opening a
+// migrated draft cannot re-index it a second time - a migration that ran twice would walk every
+// tree further down the catalogue on every load, which is the silent-corruption shape rules 3 and
+// 7 exist for. Red Mesa documents are NEVER touched: that course has its own frozen table.
+export const CATALOG_VERSION = 1;
+
+/** Old three-entry index -> catalogue index, per look. Derived from the pre-catalogue tables kept
+ *  in starter.js, BY NAME, so neither side can be silently renumbered. */
+const CATALOG_REMAP = {
+  parkland: PARKLAND_TYPES.map((t) => OBSTACLE_INDEX[t.name]),
+  desert: DESERT_TYPES.map((t) => OBSTACLE_INDEX[t.name]),
+};
+
+/** Re-index one pre-catalogue tree/stand/belt `type` under a look. An index the old table never
+ *  had is left exactly as it is: carrying it forward wrongly would be worse than leaving a number
+ *  that at least still points somewhere. */
+function remapType(type, look) {
+  const map = CATALOG_REMAP[look] || CATALOG_REMAP.parkland;
+  const i = type == null ? 0 : type;         // absent meant 0 (holegen's own `t.type || 0`)
+  return map[i] == null ? type : map[i];
+}
+
+/** Bring a stored document onto the obstacle catalogue. Returns the SAME object when there is
+ *  nothing to do (a Red Mesa document, or one already stamped), so this is safe to call on
+ *  everything that comes through `loadDocument`. */
+export function migrateDocument(doc) {
+  if (!doc || doc.courseId !== 'custom' || doc.catalog) return doc;
+  const look = (doc.course && doc.course.theme) === 'desert' ? 'desert' : 'parkland';
+  const holes = {};
+  for (const [id, hole] of Object.entries(doc.holes || {})) {
+    const spec = { ...(hole && hole.spec) };
+    for (const group of ['trees', 'sentinels']) {
+      if (!Array.isArray(spec[group])) continue;
+      spec[group] = spec[group].map((o) => ({ ...o, type: remapType(o.type, look) }));
+    }
+    // A belt only carries a `type` once the designer has touched that side; an untouched one takes
+    // the look's default, which is already a catalogue index (starter.js). Both are handled.
+    if (spec.belts && spec.belts !== false) {
+      const belts = { ...spec.belts };
+      for (const side of ['left', 'right']) {
+        if (belts[side] && belts[side] !== false) belts[side] = { ...belts[side], type: remapType(belts[side].type, look) };
+      }
+      spec.belts = belts;
+    }
+    holes[id] = { ...hole, spec };
+  }
+  return { ...doc, holes, catalog: CATALOG_VERSION };
 }

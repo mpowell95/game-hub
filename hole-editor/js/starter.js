@@ -8,33 +8,53 @@
 // each par's range, and a gentle bend on a few so the strip is not eighteen identical sticks.
 //
 // Every spec here must build and validate on BOTH themes (test-hole-editor.mjs checks it): the
-// theme only swaps the obstacle table and the rough collar, never the geometry.
+// theme only swaps the belt species and the rough collar, never the geometry.
 
-/** Parkland's obstacle table, the same three Pine Valley uses (golf/courses/pinevalley.js keeps
- *  its own copy un-exported; these numbers are that file's, copied on purpose so a change there
- *  is a decision to make here too). */
+import { OBSTACLE_CATALOG, OBSTACLE_INDEX } from '../../golf/js/obstacles.js';
+
+/** THE PRE-CATALOGUE TABLES, kept for the migration ONLY (2026-09-22).
+ *
+ *  Until the obstacle catalogue these WERE the Course Creator's two obstacle tables - three entries
+ *  each, copied from Pine Valley and Red Mesa - and every tree a designer placed stored an index
+ *  0-2 into whichever one their theme had selected. `migrateDocument` in model.js re-indexes those
+ *  saved drafts onto the catalogue, and these arrays are the record of what index 0, 1 and 2 meant.
+ *  Nothing builds a hole from them any more. Do not delete them and do not reorder them: they are
+ *  the only statement anywhere of what a pre-catalogue draft's numbers referred to (THE LAW rule 5). */
 export const PARKLAND_TYPES = [
   { name: 'pine', trunk: 0.6, canopy: 4.5, height: 18 },
   { name: 'oak', trunk: 1.0, canopy: 8.0, height: 13 },
   { name: 'sentinel', trunk: 1.2, canopy: 5.0, height: 40 },
 ];
 
-/** Desert's, copied from Red Mesa for the same reason. */
 export const DESERT_TYPES = [
   { name: 'saguaro', trunk: 0.9, canopy: 1.8, height: 15 },
   { name: 'paloverde', trunk: 0.7, canopy: 6.5, height: 8 },
   { name: 'boulder', trunk: 3.2, canopy: 3.2, height: 40 },
 ];
 
+/** BOTH LOOKS NOW DRAW FROM THE WHOLE CATALOGUE (2026-09-22, docs/HANDOFF-GOLF-OBJECTS.md s1).
+ *
+ *  `treeTypes` is the same array on both, so a theme switch no longer re-points every placed tree
+ *  at a different species - it only changes what the BELTS default to and how the palette orders
+ *  its tiles. What the look actually carries is the belt species: pines line a parkland hole,
+ *  saguaros a desert one.
+ *
+ *  `type` sits on each SIDE, not on `belts` itself, because that is where holegen.js reads it
+ *  (`b.type || 0`, one `b` per side). A single `belts.type` would be silently ignored. */
+const BELT = (name) => ({
+  left: { depth: 20, spacing: 14, type: OBSTACLE_INDEX[name] },
+  right: { depth: 20, spacing: 14, type: OBSTACLE_INDEX[name] },
+});
+
 export const THEME_DEFAULTS = {
   parkland: {
-    treeTypes: PARKLAND_TYPES,
-    belts: { left: { depth: 20, spacing: 14 }, right: { depth: 20, spacing: 14 } },
+    treeTypes: OBSTACLE_CATALOG,
+    belts: BELT('pine'),
   },
   desert: {
-    treeTypes: DESERT_TYPES,
+    treeTypes: OBSTACLE_CATALOG,
     rough: 7,
-    belts: { left: { depth: 20, spacing: 14 }, right: { depth: 20, spacing: 14 } },
+    belts: BELT('saguaro'),
   },
 };
 
