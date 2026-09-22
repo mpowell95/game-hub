@@ -165,9 +165,29 @@
   padding: 8px 16px 8px 76px;          /* 76px clears the hub's floating back button */
   min-height: 38px;
 }
-.h4-root .h4-who { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; }
-.h4-root .h4-who.is-red { color: var(--h4-red); }
-.h4-root .h4-who.is-yellow { color: var(--h4-yellow); }
+/* WHOSE SHOT IT IS, as a pill you cannot miss. It was a 14px coloured word, and the colour was
+   the only thing separating "your turn" from "their turn" - unreadable for Matt (red/green
+   colourblind) and too quiet to notice at all, which is why the CPU's turn read as the machine
+   doing nothing until a ball suddenly appeared. The marker is a SHAPE first (disc / triangle). */
+.h4-root .h4-who {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 15px; font-weight: 800; letter-spacing: 0.02em;
+  padding: 5px 12px; border-radius: 999px;
+  border: 2px solid transparent; background: rgba(255, 255, 255, 0.06);
+  max-width: 62vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.h4-root .h4-who .h4-mark { font-size: 13px; line-height: 1; flex: 0 0 auto; }
+.h4-root .h4-who.is-red { color: var(--h4-red); border-color: var(--h4-red); }
+.h4-root .h4-who.is-yellow { color: var(--h4-yellow); border-color: var(--h4-yellow); }
+/* Your own shot is FILLED, theirs is outlined - a second non-colour signal on top of the shape. */
+.h4-root .h4-who.is-mine { background: rgba(255, 255, 255, 0.14); }
+/* Waiting on the other side: the pill breathes, so the pause reads as the opponent thinking
+   rather than as the game having stopped. */
+.h4-root .h4-who.is-waiting { animation: h4-breathe 1.1s ease-in-out infinite; }
+@keyframes h4-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .h4-root .h4-who.is-waiting { animation: none; opacity: 0.8; }
+}
 .h4-root .h4-shots { font-size: 12px; color: var(--h4-dim); font-variant-numeric: tabular-nums; }
 
 .h4-root .h4-stage { position: relative; flex: 1 1 auto; min-height: 0; }

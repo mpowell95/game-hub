@@ -133,14 +133,12 @@ class Hoops4 {
             <div class="h4-opts h4-opts-4">
               ${opt(1, t('cpu1'))}${opt(2, t('cpu2'))}${opt(3, t('cpu3'))}${opt('two', t('twoPlayer'))}
             </div>
-            <p class="h4-note">${t('cpuNote')}</p>
           </div>
           <div class="h4-row">
             <p class="h4-row-label">${t('shotMode')}</p>
             <div class="h4-opts h4-opts-2">
               ${shotOpt('until', t('shotsUntil'))}${shotOpt('one', t('shotsOne'))}
             </div>
-            <p class="h4-note">${t('shotModeNote')}</p>
           </div>
         </div>
         <button type="button" class="gh-btn gh-btn--primary h4-play">${t('play')}</button>
@@ -220,7 +218,9 @@ class Hoops4 {
     await this.start({ vsCpu: false, oneShot: !!game.oneShot, keepMp: true, replay: (m) => MP.replay(m, game) });
     if (this.disposed || !this.match) return;
     if (game.over) { this.finish(); return; }
-    if (!this.isMyShot()) this.toast(t('mpTheirTurn'));
+    // The match is on the server, so leaving really is free - say so rather than leaving the
+    // player to discover it. This is the reassurance half of the isInProgress() fix below.
+    this.toast(this.isMyShot() ? t('leaveKept') : t('mpTheirTurn'));
   }
 
   /** May this device shoot right now? Solo and two-players-on-one-phone: always. Multiplayer:
@@ -368,7 +368,7 @@ class Hoops4 {
     this.root.innerHTML = `
       <div class="h4-play-wrap">
         <div class="h4-hud">
-          <span class="h4-who"></span>
+          <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
         </div>
         <div class="h4-stage">
@@ -381,6 +381,34 @@ class Hoops4 {
     this.bindSwipe();
   }
 
+  /** THE WAY OUT OF A MATCH IS THE HUB'S OWN BACK BUTTON, not one of this game's. Matt, on a
+   *  turn-by-turn challenge: "you should be able to leave the game and play a regular game (or
+   *  any other game) until the opponent plays. Right now there is no back button."
+   *
+   *  There WAS one - the hub's floating "Hub" chip, which this HUD's 76px left padding exists to
+   *  clear. What there was not is a way out that did not first accuse you of abandoning the
+   *  match: `requestLeave()` in js/hub.js confirms whenever the mounted module says
+   *  `isInProgress()`, and this one said yes for a challenge whose move log is on the server and
+   *  cannot be lost. The fix is that answer (see isInProgress at the bottom of this file), not a
+   *  second button - a game inventing its own back chip beside the hub's is exactly the "USE
+   *  WHAT EXISTS" rule in the root CLAUDE.md. */
+
+  /** What to call the other side, for the turn bar. The CPU is named by its DIFFICULTY, which is
+   *  the only name it has; a real opponent by their profile name. */
+  themName() {
+    const mp = this.mp;
+    if (mp && mp.kind === 'live') return (mp.them && (mp.them.name || mp.them)) || t('theirTurn');
+    if (mp && mp.kind === 'async') {
+      const g = mp.game || {};
+      const other = mp.side === 'a' ? g.b : g.a;
+      return (other && (other.name || other.code)) || t('theirTurn');
+    }
+    if (this.match && this.match.vsCpu) {
+      return t('cpu' + (this.settings.opponent === 'two' ? 2 : this.settings.opponent));
+    }
+    return t('theirTurn');
+  }
+
   paintHud() {
     const m = this.match;
     if (!m) return;
@@ -390,11 +418,26 @@ class Hoops4 {
     // In multiplayer "mine" is THIS DEVICE's side, which is YELLOW for a guest - reading it off
     // RED would tell the guest it was their turn on every one of the host's.
     const mine = this.mp ? (m.turn === this.myPlayer) : (m.turn === RED);
-    const label = (m.vsCpu || this.mp)
-      ? (mine ? t('yourTurn') : t('theirTurn'))
-      : (m.turn === RED ? t('red') : t('yellow'));
-    who.textContent = label;
-    who.className = 'h4-who ' + (mine ? 'is-red' : 'is-yellow');
+    // WHOSE COLOUR IS ON THE LANE, which is not the same question as whose turn it is: in two
+    // players on one phone BOTH sides are "mine", and the thing worth showing is red or yellow.
+    const red = m.turn === RED;
+    // COLOUR IS NEVER THE ONLY SIGNAL (Matt is red/green colourblind - root CLAUDE.md). The
+    // marker is a SHAPE as well as a hue: a disc for red, a triangle for yellow, the same pairing
+    // the rest of the hub uses.
+    const mark = red ? '\u25CF' : '\u25B2';
+    const name = (m.vsCpu || this.mp)
+      ? (mine ? t('you') : this.themName())
+      : (red ? t('red') : t('yellow'));
+    // AND IT SAYS IT BEFORE THE SHOT, NOT AFTER. `waiting` is true while the other side is on
+    // the clock - the CPU thinking, or a live opponent yet to swipe - so the bar reads
+    // "Medium is shooting" during the pause rather than going quiet until a ball appears.
+    const waiting = !mine && (m.vsCpu || (this.mp && this.mp.kind === 'live'));
+    who.innerHTML = `<span class="h4-mark" aria-hidden="true">${mark}</span>`
+      + `<span class="h4-who-txt"></span>`;
+    who.querySelector('.h4-who-txt').textContent =
+      mine ? t('yourShot') : `${name} ${waiting ? t('shooting') : ''}`.trim();
+    who.className = 'h4-who ' + (red ? 'is-red' : 'is-yellow') + (mine ? ' is-mine' : ' is-them')
+      + (waiting ? ' is-waiting' : '');
     sh.textContent = m.shotsThisTurn ? `${t('shots')} ${m.shotsThisTurn}` : '';
   }
 
@@ -456,18 +499,30 @@ class Hoops4 {
     // A FRESH SEED PER SHOT is what makes the release imperfect (boarddef's jitter*). Passing a
     // seed is opt-in at the engine, so every headless probe stays exactly deterministic.
     const seed = (Math.random() * 0x7fffffff) | 0;
+    // THE BALL IS THE SHOOTER'S COLOUR. Matt: "the ball needs to be different colors. right now
+    // it's the same color ball that both players throw, then it changes color on the board."
+    // `setBallColor` has existed since the first build and was called EXACTLY ONCE, at match
+    // start, so whoever shot first owned the ball for the whole game. Set per shot, so it is
+    // right for a CPU turn, a remote turn and a pass-and-play turn without three call sites.
+    if (this.rend) {
+      this.rend.setBallColor(this.match.turn === RED ? BOARD.look.red : BOARD.look.yellow);
+    }
     this.throwState = this.engine.phys.startThrow(BOARD, { power, aim, seed });
     this.captured = null;
   }
 
   maybeCpu() {
     if (!this.match || this.match.over || !this.match.isCpuTurn() || this.busy) return;
+    // Repaint FIRST so the bar says "Medium is shooting" for the whole pause. 800ms was too
+    // short to read even once it said something, so the pause is 1100 - long enough to notice,
+    // short enough not to be a wait.
+    this.paintHud();
     this._cpuT = setTimeout(() => {
       if (this.disposed || !this.match || !this.match.isCpuTurn()) return;
       const col = this.cpu.pickColumn(this.match);
       const { aim, power } = this.cpu.aimFor(col);
       this.shoot(power, aim);
-    }, 800);
+    }, 1100);
   }
 
   // --- the loop ------------------------------------------------------------------------------
@@ -644,7 +699,12 @@ export function destroy() {
  *  states worth snapshotting, and skeeball deliberately removed its own mid-rack resume for the
  *  same reason (Matt: "you either finish or quit"). */
 export function isInProgress() {
-  return !!(instance && instance.match && !instance.match.over && instance.match.moves.length > 0);
+  if (!(instance && instance.match && !instance.match.over && instance.match.moves.length > 0)) return false;
+  // EXCEPT A TURN-BY-TURN MATCH, which is not abandoned by leaving: the move log lives in
+  // `hoops/games/<id>` and re-opening replays it. Saying "in progress" there makes the hub warn
+  // about losing something that cannot be lost, which is exactly the friction Matt hit - "you
+  // should be able to leave the game and play a regular game until the opponent plays."
+  return !(instance.mp && instance.mp.kind === 'async');
 }
 
 export default { init, destroy, isInProgress };

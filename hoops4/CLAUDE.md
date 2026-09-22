@@ -350,6 +350,57 @@ still below the 8.9% of the build before any of the bounce work.
 `test.js` carries the bar as section 1b: the lateral:forward ratio must stay at or above 2.0, the
 redirect must be switched on, and it must read no hole position.
 
+### Round 1 of the playtest list (2026-09-22)
+
+Matt, having played the shipped multiplayer. Five things, all small, all shipped together.
+
+**The difficulties were invented here.** `Beginner / Steady / Sharpshooter` existed in this game
+and nowhere else in the repo. Matt: *"you created brand new terminology for the difficulties.
+Don't do that."* They are `Easy / Medium / Hard` now, the hub's own words.
+
+**The setup screen was an essay.** Two explanatory paragraphs (`cpuNote`, `shotModeNote`) under
+controls that need no explanation. Both strings are deleted, not just hidden. The full restructure
+Matt asked for (Play the computer vs Multiplayer Options, with host / pass and play / challenge /
+active games / history underneath) is round 2; this is only the prose coming off.
+
+**The ball was one colour for the whole game.** `setBallColor` has existed in `render.js` since the
+first build and was called EXACTLY ONCE, in `start()`, so whoever shot first owned the ball's
+colour for the rest of the match - then the disc landed on the board in the other colour. Matt:
+*"that's not good. the ball should be the same red and yellow as they appear when on the board as
+a piece."* It is set per SHOT now, in `shoot()`, which covers a CPU turn, a remote turn and a
+pass-and-play turn from one call site. Verified in a real browser: my shot `e8463f`, the CPU's
+`ffce3a`.
+
+**Whose turn it was, said only in colour and only after the fact.** The HUD was a 14px word whose
+hue was the entire signal - which is unreadable for Matt (red/green colourblind, root CLAUDE.md)
+and too quiet to notice anyway, so the CPU's turn looked like the machine doing nothing until a
+ball appeared: *"it's not clear when it's the computers turn. There's no indication until they've
+thrown."* Now a pill with a SHAPE marker (disc for red, triangle for yellow), the opponent's actual
+name, filled for your own shot and outlined for theirs, and it says **"Medium is shooting"** during
+the pause - which is painted BEFORE the timer starts and runs 1100ms rather than 800 so there is
+something to read. Verified in a browser at exactly that moment.
+
+**"There is no back button" - there was, and it was accusing you.** The hub's floating "Hub" chip
+has always been there (this HUD's 76px left padding exists to clear it). What was wrong is
+`isInProgress()`: `js/hub.js`'s `requestLeave()` confirms whenever the mounted module says a game
+is under way, and this one said yes for a TURN-BY-TURN challenge whose move log lives in
+`hoops/games/<id>` and replays on re-entry. Nothing can be lost, so nothing should be warned about.
+`isInProgress()` now returns false for `mp.kind === 'async'` and true for everything else, and
+entering a challenge toasts that the match is saved. **A second back button was built and then
+removed** - a game inventing its own back chip beside the hub's is the root CLAUDE.md's "USE WHAT
+EXISTS" rule, and the duplicate was visible in a screenshot before it went anywhere.
+
+Measured after: `test-game-conventions.mjs` 11/11, `test-visual.mjs hoops4` 13/13,
+`check-no-scroll.mjs hoops4` 4 screens / 0 scroll.
+
+**Still open from that list** (rounds 2-4): the launcher challenge alert and the full-screen
+challenge ceremony; the Multiplayer Options restructure with active games and history; series
+(single / best of 3 / best of 5), a caption with a challenge and quick chat in a match; a visual
+How to Play; a taller board with bigger cells. And the SCORING RATE, which is what Matt actually
+wants from the bounce work - *"i don't care where balls roll off, front or back... I want more
+balls to bounce around, but ultimately go in a basket"* - so the front-edge question is closed and
+the next lever to measure is making the per-hoop backboards SOLID so a shot can be banked in.
+
 ### What makes a hoop read as a hoop (2026-09-22)
 
 Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*

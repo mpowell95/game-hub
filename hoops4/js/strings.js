@@ -5,14 +5,20 @@ export const STRINGS = {
     title: 'Connect 4 Hoops',
     tagline: 'Sink a hoop, drop a disc. Four in a row wins.',
     opponent: 'Opponent',
-    cpu1: 'Beginner', cpu2: 'Steady', cpu3: 'Sharpshooter',
+    // THE HUB'S OWN DIFFICULTY WORDS, not this game's. They were 'Beginner / Steady /
+    // Sharpshooter' - invented here and nowhere else in the repo. Matt: "you created brand new
+    // terminology for the difficulties. Don't do that."
+    cpu1: 'Easy', cpu2: 'Medium', cpu3: 'Hard',
     twoPlayer: 'Two players',
-    cpuNote: 'The computer picks its column well. Whether it hits it is the difficulty.',
     play: 'Play',
     howto: 'How to play',
     howtoBody: 'Swipe up the lane to shoot. How hard you swipe sets the arc, the angle picks the hoop. Sink any hoop and your disc drops down that column. Miss and you simply shoot again, so a turn only ends when a ball goes in. A ball that rims out into the next hoop still counts, in that column.',
     close: 'Close',
     yourTurn: 'Your turn', theirTurn: 'Their turn',
+    // WHOSE SHOT IT IS, said before the shot rather than after it. Matt: "it's not clear when
+    // it's the computers turn. There's no indication until they've thrown."
+    you: 'You', shooting: 'is shooting', yourShot: 'Your shot',
+    leaveKept: 'Your match is saved. Pick it up whenever you like.',
     red: 'Red', yellow: 'Yellow',
     shots: 'Shots', shot: 'Shot',
     swipeHint: 'Swipe up to shoot',
@@ -27,7 +33,6 @@ export const STRINGS = {
     solo: 'On this phone', online: 'Play a friend',
     shotMode: 'Shots per turn',
     shotsUntil: 'Till you make one', shotsOne: 'One shot only',
-    shotModeNote: 'One shot only passes the turn on a miss. Till you make one keeps the turn until a ball goes in.',
     // --- multiplayer ----------------------------------------------------------------------
     mp: 'Play a friend',
     mpLive: 'Live game', mpLiveNote: 'Both of you play now, one after the other.',
@@ -56,14 +61,15 @@ export const STRINGS = {
     title: 'Connect 4 Hoops',
     tagline: 'Encesta y suelta una ficha. Cuatro en raya gana.',
     opponent: 'Rival',
-    cpu1: 'Principiante', cpu2: 'Firme', cpu3: 'Certero',
+    cpu1: 'Fácil', cpu2: 'Normal', cpu3: 'Difícil',
     twoPlayer: 'Dos jugadores',
-    cpuNote: 'La computadora elige bien su columna. La dificultad es si acierta el tiro.',
     play: 'Jugar',
     howto: 'Cómo se juega',
     howtoBody: 'Desliza hacia arriba para tirar. La fuerza marca el arco y el ángulo elige la canasta. Si encestas, tu ficha cae por esa columna. Si fallas, vuelves a tirar, así que el turno solo termina cuando entra una bola. Una bola que rebota y entra en la canasta de al lado también cuenta, en esa columna.',
     close: 'Cerrar',
     yourTurn: 'Tu turno', theirTurn: 'Su turno',
+    you: 'Tú', shooting: 'está tirando', yourShot: 'Tu tiro',
+    leaveKept: 'Tu partida está guardada. Puedes seguir cuando quieras.',
     red: 'Rojo', yellow: 'Amarillo',
     shots: 'Tiros', shot: 'Tiro',
     swipeHint: 'Desliza para tirar',
@@ -78,7 +84,6 @@ export const STRINGS = {
     solo: 'En este telefono', online: 'Jugar con alguien',
     shotMode: 'Tiros por turno',
     shotsUntil: 'Hasta encestar', shotsOne: 'Un solo tiro',
-    shotModeNote: 'Con un solo tiro, fallar pasa el turno. Hasta encestar mantiene el turno hasta que entre una bola.',
     // --- multiplayer ----------------------------------------------------------------------
     mp: 'Jugar con alguien',
     mpLive: 'Partida en vivo', mpLiveNote: 'Los dos juegan ahora, por turnos.',
