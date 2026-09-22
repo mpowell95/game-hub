@@ -4,6 +4,399 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R13: the pitching angle, a backdrop per league, legs and feet (2026-09-22)
+
+Four fixes off Matt's own words on v882's pitching view: *"Can you change the angle a little bit
+so it's a little easier to see the strike zone you're throwing into? Can you make the back a
+little more elaborate? For little league it should look like bleachers and stuff with spread out
+parents in them, then for every league the audience and bleacher/seats should increase. The legs
+of the pitcher are weird. And can you see that the batter's feet are below the ground? That's a
+problem."* No engine change, no beat change.
+
+**Item 1, the pitcher camera.** Measured (node, `field.js`'s own `projectToCanvas`, the same
+method R8 used to pick the previous framing): holding the pitcher at 50% of the band and solving
+`fov` for it at R8's own distance (55.6ft behind the rubber), the box tops out at 7.16% - the box
+and the pitcher are nearly a fixed-ratio "dolly zoom," so growing the box relative to the pitcher
+needs the camera to retreat, not just rise or tilt. Solved at several distances: 180ft back gives
+an 11.2% box. **That number had to be rejected**: Little League's own fence sits at 210ft dead
+centre, and a camera at 180ft-behind (240.5ft total from home) sits PAST it, clipping through the
+fence/berm mesh - `scratchpad/r13/little-pitcher-BROKEN-150ft.png` is what that looked like at an
+intermediate 150ft-back try, a huge dark shape filling the frame where the camera sat inside the
+wall. Re-solved with that ceiling respected: **130ft behind the rubber** (190.5ft total) clears
+Little League's fence by 19.5ft of real margin while still landing the box at 10.2%.
+`CAMERAS.pitcher` moved from `pos: [-2.4, 7.0, -116.0]` / `look: [0, 3.0, ZONE.z]` / `fov: 10.35`
+to `pos: [-2.4, 8.26, -190.5]` / `look: [0, 2.53, ZONE.z]` / `fov: 5.28`. Measured after: pitcher
+50.0% of the band (was 59.5%), the true box 10.2% tall / 9.7% wide (38.3 x 48.7px, was 8.5%/8.1%),
+the pitcher's own head at y=140.4px against the box's own top at y=215.0px - 74.6px of clear grass,
+head clearly above the box, never over it. Side effect, measured and accepted: the batter/pitcher
+height ratio rose to 68.1% (was 47.8%, R8's own 30-50% band) - the same pull-back that grows the
+box also brings the batter closer to the pitcher's own size; `pitcher-frame`'s own band moved to
+60-85% to match. The ball is incidentally easier to see too: measured 14.1px at release and 9.7px
+at the crossing (was ~13px/~2.3px true, with `BALL_MIN_PX`'s 8px floor doing the work at the
+crossing before) - the floor is barely needed at this distance any more, and is left in place.
+
+**Item 2, a stadium backdrop per league.** `buildStadium(scene, {fenceFt, league})` now reads one
+new table, `LEAGUE_STADIUM` (field.js): how many of the outfield bowl's own stepped tiers to build
+(0 for Little League/High School, 1 College, 2 Minors, 3 Majors - unchanged, R9's own bowl), light
+towers (College up only - the spec's own explicit "no light towers" for Little League, kept for
+High School too rather than inventing a number), the backstop style (`'chainlink'` for Little
+League only, R9's own padded/brick/crowd wall for everyone else), the scoreboard's own size
+multiplier (0.55 Little League, 0.85 High School, 1.0 for College and up), and - Little
+League/High School only - a set of small aluminium bleacher placements (`{deg, r}`, the same
+`polar()` convention every other angle in this file uses) with a parent-count per set. `buildField`
+(actors.js) and its three call sites in `ui.js` now pass `this.league` through; a caller that
+omits it (the frame-check dev screen still does) gets Majors' own bowl unchanged, byte for byte.
+
+New geometry, all merged, all procedural (no image files, R1's own hard rule):
+`bleacherUnitParts`/`placeBleacher` (a stepped riser shape built once in local space, then
+rotated+translated per placement so it always faces home), `scatterParents` (blocky "coloured
+billboard" people - the spec's own words - one box each, grouped by colour into
+`PALETTE.parents.length` merged meshes so the person-count never adds a draw call per person),
+`rampGeometry` (the grass berm - the one non-flat surface in this file), `chainLinkTexture` (a
+64px canvas, mostly transparent, a grid of thin lines at 0.55 alpha), and a small press box for
+High School. Little League's three bleacher sets (behind the plate at r=34, down each line at
+r=130, just past the infield and well inside the 180ft foul-line fence) hold 4 parents each (12
+total, the spec's own "about 12"); High School's (r=38/168) hold 13 each (39, "about 40").
+
+Two real defects, both found only by rendering, neither visible from the numbers alone:
+
+1. **The berm rendered pure black.** A vertex-normal sign was backwards (the slope's own
+   inward-and-up normal had an outward sign - `scratchpad/r13/berm-diagnostic-BROKEN-normal.png`),
+   fixed; that alone did NOT fix it, because three.js's `DoubleSide` shading derives the effective
+   normal from triangle winding at the fragment stage, not from a mismatched vertex normal - no
+   normal sign could have fixed a lighting-brightness problem. The real fix is the same one R9's
+   own crowd faces already needed: UNLIT (`MeshBasicMaterial`, was `MeshLambertMaterial`) -
+   `bermGrassA` is already a mid-brightness green and a near-vertical slope gets almost no light
+   from the mostly-overhead sun. A THIRD defect stacked on top: a `map` (the grass texture) AND a
+   `color` tint together MULTIPLY (three.js's own convention), so `bermGrassA` times the grass
+   texture's own mid-brightness greens compounded toward black all over again (measured rendered
+   pixel (8,70,6) against the two colours' own predicted product, (14,68,12) - the match that found
+   it); the fix is a flat colour, no map (the mowing-stripe texture did no visual work at this size
+   and distance anyway). The ramp's own near edge also had to move from the ground up to
+   `FENCE.height + FENCE.railHeight` (the wall's own rail top) - starting it lower left most of the
+   slope hidden BEHIND the wall itself, so nothing of that hidden run did any visual work.
+2. **Majors' own backstop went dark navy and filled the whole pitching frame.** A side effect of
+   item 1's own pull-back, not a new bug: the padded wall's band (0-12ft) now subtends most of the
+   visible backstop (the brick/crowd bands above it sit further out of frame than before), and
+   under `MeshLambertMaterial` it measured (10,24,38) against its own raw colour (36,64,106) - the
+   same "vertical face, mostly-overhead sun" darkening the crowd/sky already needed fixing for R9,
+   just newly PROMINENT rather than newly broken. Same fix: unlit. This affects every league that
+   keeps the padded backstop (High School, College, Minors, Majors), not only Majors.
+
+Draw calls, measured (`actors.renderStats()`, only the batter and pitcher placed, each league's own
+real fence shape, batter/pitcher/chase cameras): Little League 26/28/26, High School 29/31/29
+(the only league with BOTH extra bleacher meshes AND the extra parent-colour meshes), College
+26/28/26, Minors 26/28/26, Majors 26/28/26 (byte-identical code path to R9's own ship-review
+number, unaffected by this stage). Every league stays comfortably inside the same phone budget the
+R9 bowl alone already was.
+
+**R13 SHIP-REVIEW FIX (same day): the box sat over the pitcher's own legs, and the padded backstop
+went back to reading as a flat wall.** The coordinator, on the stills item 1 and item 2 above
+shipped with: *"In every pitcher-camera still the zone box sits over the pitcher's own legs with
+the cursor on his thighs"* and *"At High School (and College, Minors, Majors) the whole pitching
+frame behind the plate is now a flat dark-blue wall... re-proportion the backstop for this
+lens... at Little League a 6 ft chain-link with the bleachers and parents visible above it; make
+the chain-link texture finer and more transparent so it does not read as a grey wall."*
+
+**The box-over-legs fix is a lateral camera move, not a bigger box.** At this lens a change in
+`pos.x` barely moves the box (anchored to the plate, 130ft further from the camera than the
+pitcher) while it swings the pitcher's own on-screen position hard - a dolly-zoom fact, not a
+bug: `CAMERAS.pitcher.pos.x` moved from -2.4 to **-9.5** (the spec's own 9-12ft band), `look`
+unchanged (still the plate). Measured (node, `projectToCanvas`): at x=-2.4 the box's own left edge
+sat 11.4px from the pitcher's nearest silhouette point on a 238px-tall figure - the box was
+effectively touching him. At x=-9.5 the catcher (and so the box, anchored near his depth) barely
+moves (9.2px before and after), while the pitcher's own silhouette moves 96.9px, opening a
+**101.3px gap** between his nearest point and the box's left edge - **1.7x his own measured
+on-screen width** (59.5px), comfortably past "at least half a pitcher's width." Every other number
+this stage measured moved by under 0.2 percentage points (box 10.20% was 10.20%, pitcher 49.9% was
+50.0%, batter ratio 68.3% was 68.1%) - `pitcher-frame`'s own bands needed no re-tuning.
+`pop-anchor`/`ball-visible-pitcher`/`chase-start` read the batter/chase cameras or a fixed world
+point and never depended on `CAMERAS.pitcher.pos.x` at all - verified green, unchanged (see the
+suite output at the end of this stage's own report).
+
+**The backstop's own re-proportioning had to be measured against this lens, not eyeballed at the
+coordinator's own literal numbers.** Measured (node, `projectToCanvas` against the SHIPPED
+`CAMERAS.pitcher`, a point at `BACKSTOP_DIST_FT`'s own distance): the frame's own TOP EDGE, at that
+distance, sits at world y=10.86ft - nothing taller than that is ever visible from this camera no
+matter how tall a wall is built. The old `BACKSTOP_PAD_H` (12ft) alone already exceeded that
+ceiling, so the whole visible backstop was pad - one flat colour, no texture, exactly the report.
+Re-proportioned to fit inside the visible slice: `BACKSTOP_PAD_H` 12 -> **4ft** (the coordinator's
+own number), `BACKSTOP_BRICK_H` 16 -> **4ft** - a DELIBERATE DEVIATION from the coordinator's own
+literal "about 8ft": at 8ft the crowd tier would start at pad+brick=12ft, ABOVE the 10.86ft
+ceiling, so it would never be visible at any framing regardless of how tall it was drawn. 4ft
+leaves the crowd tier starting at 8ft, with a real ~2.86ft/91px slice of it inside the frame -
+satisfies the coordinator's own acceptance test ("the stands/crowd tier visible in the top third"),
+which 8ft cannot. `BACKSTOP_CROWD_H` left generous at 12 -> 10ft (most of it past the visible
+ceiling, harmless extra geometry). The camera's own px-per-foot at this distance is now **32.1**
+(was ~18.0 at the pre-item-1 camera, a longer lens draws more px per foot) - re-measured, not
+carried forward: `BACKSTOP_BRICK_REPEAT_Y` 10 -> **2.5** (= new `BACKSTOP_BRICK_H` / (8 rows x
+0.2ft), X stays 26, height-independent), `BACKSTOP_CROWD_REPEAT_X/Y` 4.5/1 -> **7.9/1.25**
+(re-solved for the same ~3px speck target against the new 32.1px/ft and the new, shorter
+`BACKSTOP_CROWD_H`). Both padded materials stayed unlit (`MeshBasicMaterial`, R9's own fix,
+untouched by this stage).
+
+**Little League's chain-link needed four separate things, not one.** (1) The coordinator's own
+literal ask - finer, more transparent: alpha 0.55 -> 0.35, lineWidth 1.5 -> 1.0, STEP 8 -> 6 in
+`chainLinkTexture()`. (2) Height, per the coordinator's own literal number: `BACKSTOP_CHAINLINK_H`
+10 -> **6ft** (the original item-2 draft's 10ft put even a raised parent figure barely at the fence
+line, see below). (3) A vertical `repeat.y` the shipped code never set at all - `ribbonGeometry`
+bakes horizontal repeat into its own UVs (`uRepeat=30`, unchanged) but leaves vertical repeat at
+the material's default (1x, the whole canvas stretched over whatever height the wall is built to);
+shrinking the height without correcting this stretches every grid cell taller as the wall gets
+shorter. `clTex.repeat.set(1, 2.87)` (= new height / the same ~2.09ft physical tile width the
+horizontal bake already implies) keeps the cells close to square. (4) A FOURTH defect the first
+three didn't touch, found only by rendering: WebGL's own mipmap minification averages a fine grid
+of thin, mostly-transparent lines - viewed from far enough away that many texels land under one
+screen pixel - into a near-solid GRAY HAZE, independent of how the lines themselves are drawn. This
+is the actual mechanism behind "reads as a grey wall," not merely the alpha/coarseness the first
+fix already addressed. `clTex.generateMipmaps = false; clTex.minFilter = THREE.LinearFilter`
+(sampled at full resolution every frame, never blurred toward its own average) is what let the
+grid genuinely read as a mesh with real gaps in a rendered still, not just a lighter grey wall.
+
+**Bleachers and parents were geometrically incapable of clearing the new, shorter fence.** The
+original item-2 draft's `BLEACHER_ROW_H_FT` (1.15) put the top riser at 4 x 1.15 = 3.8ft and the
+tallest seated parent (`FIG_H` 1.5) at only 5.3ft against the OLD 10ft fence - already short of it;
+against the coordinator's new 6ft fence a parent would barely poke a head over at all. Raised:
+`BLEACHER_ROW_H_FT` 1.15 -> **1.4** (top riser 5.6ft, just under the fence, where a real small
+bleacher sits) and `FIG_H` (in `scatterParents`) 1.5 -> **2.5** (a seated fan's own torso-and-head
+silhouette, since a bleacher row already hides the lower body) - parent heads now reach 8.1ft,
+solidly inside the visible ceiling, not a bare sliver. Verified by rendering
+(`scratchpad/r13/little-pitcher.png`): a clearly visible parent-coloured block sits above the fence
+line, distinctly non-flat.
+
+**Verified at all five leagues, pitcher camera, from the real mounted game** (not a synthetic
+render - `hub.launch('baseball')`, the real UI, real cameras):
+`scratchpad/r13/{little,highschool,college,minors,majors}-pitcher.png`. High School, College,
+Minors and Majors all show a clearly multicolour crowd tier filling most of the top third of the
+frame - no flat colour anywhere in that band. Little League shows a distinct parent-figure block
+and a visibly finer, more see-through chain-link mesh above the fence, replacing the old solid grey
+panel. `scratchpad/r13/little-batter.png`/`little-chase.png`/`majors-batter.png`/`majors-chase.png`
+were also re-rendered and spot-checked unaffected, as expected (neither camera nor stadium geometry
+outside the backstop moved).
+
+**The full sequential suite run, on an otherwise idle machine, after every fix above:**
+
+```
+node test-baseball-actors.mjs
+  ... (node half: 37 checks, incl. Set/Pitch/Pickoff/Crouch geometry and every clip's mark - all ok)
+  ... (Chromium half: every motion floor green, incl. the seven-clip foot-on-ground check)
+  ok    test-baseball-device.mjs passed - ok    r2-cadence: verdict-to-next-release measured
+        Strike 3049ms, Strike 3036ms, Strike 3064ms; target 3000ms (1200+800+1000), tolerance 360ms
+  test-baseball-actors.mjs: all checks passed
+
+BB_DEVICE_QUICK=1 node test-baseball-device.mjs
+  ok    hud clears hub-back pill (hud top=103, back bottom=89)
+  ok    no duplicate back button when mounted in the hub
+  ok    swing/throw control is 137x137 (expected 137x137, drawing a 101px button inside)
+  ok    r2-cadence: verdict-to-next-release measured Strike 3026ms, Strike 3023ms, Strike 3062ms;
+        target 3000ms (1200+800+1000), tolerance 360ms
+  ok    verdict line never overlaps the hub back pill across simulated at-bats
+  ok    field canvases mounted at 393px wide, overlay z 2 above scene z 1
+  ok    zone-world: x=0 crosses inside the projected zone box (177.3, 398.1) in 144.9..209.3 x
+        359.6..435.7, box 64.4x76.2 px
+  ok    zone-world: x=+1 and x=-1 land on the zone's right/left edges (0.17/0.70 px off, budget 2)
+  ok    ball-grows: the projected ball radius rises monotonically, 3.11 px at release to 16.15 px
+        at the crossing (5.2x)
+  ok    fence-shape: every league's five named fence distances are within 0.00 ft of
+        FIELD[league].fenceFt (worst: minors leftCenter, budget 1 ft)
+  ok    pitcher-frame: the true zone box is 10.19% of the band's height (48.6px), inside 10-13%
+  ok    pitcher-frame: the batter figure is 68.2% of the pitcher's projected height, inside
+        60-85% (pitcher 49.9% of the band)
+  ok    scene first rendered 75ms after Play, before the first Pitch call at 721ms (budget 300ms;
+        sky frac 0.972)
+  ok    pitch-drag: a screen-right drag on the BATTER camera ends with engine x=1.050 (>0,
+        unmirrored) and its projected pixel (230.8) right of the zone centre (177.1)
+  ok    nothing is thrown before the PITCH tap
+  ok    pitch-drag: a screen-right drag on the PITCHER camera (High School) samples the MIRRORED
+        engine aim (-1.120, 0.560) within (0.0000, 0.0000) of (-1.12, 0.56), and draws right of
+        the zone centre (px 217.9 > 196.5), sampled 239ms after the tap
+  ok    pitch-drag: the curveball crosses at aim + BREAK_OFFSET (break 0.450, -0.350 zone units)
+  ok    no page errors during the human pitching turn
+  ok    target-marker: over a curveball's flight (High School) the marker starts on the
+        straight-line spot (2.44 px) and ends on the real crossing point (2.73 px), travelling
+        25.6 px between them
+  ok    target-marker: the marker draws 41.2x48.8px, both axes >= the 36px floor
+  ok    target-marker: an outside-the-box pitch (x=1.77, |x|>1) still drew a marker (17 samples)
+  ok    fielders-placed: all 9 fielders visible and within 0.00 ft of spec (little league,
+        shiftDeg 0, budget 2 ft)
+  ok    actions-live (a): STEAL armed (lead 4.0 ft), the take fired a steal event 0->1 safe
+        (runner 0.00 ft from the bag), verdict word "● Safe"
+  ok    actions-live (b): BUNT armed, the batter squared on the Bunt clip, and a swing tap
+        produced atBatEnd outcome "sacrifice" (battedKind ground) after 1 attempt(s)
+  ok    no page errors during the actions-live batting half
+  ok    actions-live (d): Little League Quick Play's strip unlocks only fastball, the other
+        seven locked
+  ok    actions-live (c): PICKOFF enabled with a runner on first, the tap fired a pickoff event
+        (out=false) with no pitch thrown, and the button was back to PITCH in 1537 ms
+  ok    no page errors during the actions-live pitching half
+  ok    zone-scale: the drawn batting box (103.0x121.9) is 1.6x the true box (64.4x76.2), within 2px
+  ok    zone-scale: the true (unscaled) box is unchanged at 64.4x76.2px
+  ok    pop-anchor: .bb-pop centre is 8.3px from the projected batter head (budget 45px), inside
+        the band, pitch line "Fastball 55"
+  ok    homerun-strip: the HOME RUN element shows "HOME RUN" with strip "412 ft   102 mph   31°"
+  ok    play-clock (homer): no word before 300ms, HOME RUN at 4362ms (>= 3000ms), return at
+        7363ms (in 5500-8500ms, >= sped-up runner arrival 7332ms)
+  ok    play-clock (groundout): no word before 300ms, Out at 3157ms after contact (want
+        1800-4500ms)
+  ok    play-clock (flyout): no word before 300ms, Out shown at 3724ms (>= catch ~3697ms), only
+        at the catch
+  ok    sides-match: half "top" bats away/pitches home; half "bottom" bats home/pitches away
+  ok    no page errors during sides-match
+  ok    one-batter (start half): all 36 sampled frames in the first 800ms after atBatEnd showed
+        at most one figure within 6ft of the batter's box
+  ok    one-batter: after a forced early cutaway, exactly one figure (the batter) stands in the
+        box and 'rb' is hidden
+  ok    no page errors during one-batter
+  ok    pop-onscreen: "Perfect" for a left-handed batter sits fully inside the field band, and a
+        pop forced near the edge is still clamped fully inside it
+  ok    chase-start: the chase camera's first position is 11.00 ft up (>= 11) and 24.00 ft
+        behind the ball (>= 24), catcher and umpire both hidden
+  ok    ball-visible-pitcher: the ball at the crossing draws 11.26 px on the pitcher camera
+        (>= 8, scale 1.00x), unscaled on batter (16.15 px) and chase (9.49 px)
+  ok    hud-legible: runs numerals >= 21px (floor 18), B/S/O dots >= 10.0px (floor 10), row
+        letters [B,S,O], scoreboard inside the field band
+  All checks passed.
+
+node test-visual.mjs baseball
+  ok    baseball [light]/[dark]/[reduced] 24 painted elements, nothing cut off, no JS errors (x3)
+  ok    baseball [fit] standalone/hub, both phone heights: fits (x4)
+  ok    baseball [motion] the verdict pop anchored over the batter: 13px over 1160ms, 12 sampled
+        frames
+  ok    baseball [play] a real at-bat both ways: batting READY->SWING resolved (count strike),
+        HUD changed, one figure in the box at the next turn; pitching PITCH-> a real pad drag
+        reached the engine's own aim (-0.15, 0.13) and resolved (count strike)
+  ok    baseball [reduced-motion (structural)] fire trail / contact burst / confetti (x2) / the
+        HOME RUN scale-in - all five gates verified present
+  Visual checks: 20 passed, 0 failed.
+
+node check-no-scroll.mjs baseball
+  ok    baseball standalone 393x852 tall
+  ok    baseball standalone 390x664 short
+  ok    baseball hub 393x852 tall
+  ok    baseball hub 390x664 short
+  4 screens checked, 0 scroll.
+```
+
+**Facts for whoever reads this next, ship-review addendum:**
+- `CAMERAS.pitcher.pos.x` is -9.5, not -2.4 - a future re-tune of this camera should re-measure the
+  pitcher-to-box gap (101.3px today) the same way, not assume a small nudge is enough at this lens.
+- The pitcher camera's own visible ceiling at `BACKSTOP_DIST_FT` is **10.86ft** - any future change
+  to the backstop's own band heights (pad/brick/crowd, or the chain-link height) must be checked
+  against this number first, or a tier can be built that is simply never seen, the exact defect
+  this fix closed.
+- `BACKSTOP_BRICK_H` (4ft) is intentionally NOT the coordinator's own literal "about 8ft" - a future
+  session should not "fix" this back to 8 without re-deriving the visible-ceiling math above first.
+- `clTex.generateMipmaps = false` is now load-bearing for the chain-link texture reading as a mesh
+  rather than a haze at this camera's own distance - do not re-enable mipmapping on it without
+  re-checking the rendered result, not just the numbers.
+
+**Item 3, the pitcher's Set legs.** Matt: "The legs of the pitcher are weird." Measured
+(`render-actor.mjs --sheet`, `scratchpad/r13/pitcher-set/before-t0.png`/`before-side.png`): no
+`Set` keyframe had ever touched the legs except t=0.90's own small +/-3deg "breath" wobble, so at
+every OTHER keyframe (including the two loop endpoints, t=0/2.40, which is what a player actually
+sees most of the time) the legs sat at this rig's raw BIND pose - locked straight knees, feet
+turned out to the sides, exactly "straight and splayed." A real set - feet under the hips, a
+slight knee bend, weight even (the spec's own words) - is now authored on EVERY keyframe (adding
+`upperLegR`/`upperLegL`/`lowerLegR`/`lowerLegL` to all five, where before only one carried them at
+all): `upperLegR`/`upperLegL` share the SAME X (hip flexion, "weight even," not a single-leg-
+weighted stance) with a small, mirrored Z ("feet under the hips," not thrown out to the sides).
+This rig's own left/right BIND asymmetry (R12's Crouch header: ~43deg apart in Y) only matters at
+LARGE flexion (Crouch's own 75-80deg); at this slight a bend (11-15deg, close to Idle's own
+8-15deg batter stance, which has never needed a per-side correction either) it stays hidden - a
+rig probe confirmed `footR`/`footL` land within 0.02ft of each other in X at this pose, so no
+Y-cancelling correction was needed the way Crouch's own deep squat needed one. `Pitch` (t=0) and
+`Pickoff` (t=0) both carry the identical new leg values, bone for bone, since both clips already
+promised to open on Set's own base pose for the crossfade - and now that promise is kept, since
+before it was silently false (Set's own t=0 had no legs at all to match). Verified rendering the
+whole loop (`scratchpad/r13/pitcher-set-sheet.png`, six frames): a real bent-knee stance
+throughout, never locked straight, matching the reference frame's own pitcher
+(`scratchpad/ref/reference-key-frames.jpg`, top row).
+
+**Item 4, feet on the ground.** Matt: "the batter's feet are below the ground." `footY`
+(actors.js `_makeActor`) is measured ONCE from the bind pose, so any clip whose hips/legs move
+away from that bind pose can put the true, animated lowest foot bone above OR below where
+`_place()`'s own correction assumed it would be. Measured (a bones-only world-position probe -
+`getWorldPosition`, not a render or a camera projection - sampled at five evenly-spaced times
+across each clip's own duration, `t = dur x i/4`) BEFORE any fix, against the actor's own
+placement height (0 for the batter/runner/catcher, `RUBBER.y` = 0.83ft for the pitcher standing on
+the mound crown):
+
+| Clip | Role | Before (5 samples, ft from ground) | After |
+|---|---|---|---|
+| Idle | batter | -0.151 to -0.128 (sunk) | 0.000 to +0.023 |
+| Set | pitcher | +0.257 to +0.346 (floating) | -0.089 to 0.000 |
+| Swing | batter | -0.151 (constant) | 0.000 (constant) |
+| Run | r1 (runner) | +0.502 to +1.125 (floating, badly) | -0.000 to 0.000 |
+| Bunt | batter | -0.158 to -0.154 (sunk) | 0.000 to +0.004 |
+| Pickoff | pitcher | +0.197 to +0.307 (floating) | -0.059 to 0.000 |
+| Crouch | catcher | -0.023 to +0.009 (already in budget) | unchanged, not touched |
+
+Fixed at the source, per the spec's own instruction, as a correction to `hipsOffset.y` (this rig's
+own "+y is DOWN" fact, established under `Crouch`'s header): for every clip except `Run`, the
+SPREAD across the five samples was small enough (0.004 to 0.116ft) that a single UNIFORM additive
+shift - solved with a bones-only binary search, not a formula - to every keyframe's own
+`hipsOffset.y` brought every sample inside the +/-0.1ft budget with real margin: Idle/Swing/Miss
++-0.0947 (0.32 -> 0.2253, all three clips share this exact baseline and shift, matching their own
+"identical to Idle's t=0" contract), Bunt -0.0992 (0.36/0.42/0.36 -> 0.2608/0.3208/0.2608), Set
++0.217 (0.10/0.06/0.16/0.08/0.10 -> 0.317/0.277/0.377/0.297/0.317, with `Pitch`'s own t=0 following
+to 0.317 for the same reason its legs did), Pickoff +0.161 (-> 0.261/0.201/0.261/0.221).
+
+**`Run` could not be fixed with a uniform shift** - measured spread 0.623ft (0.502 to 1.125), more
+than SIX TIMES the whole 0.2ft budget window, because the pose passes through a near-straight-leg
+"midpoint" (naturally close to the ground) between two folded-leg extremes (naturally elevated by
+their own kinematics, independent of hip height) - a straight line between two hip heights cannot
+track a correction curve that dips in the middle. The chosen fix is a deliberate, MEASURED
+exception to R3's own "two keyframes... a looping two-key leg cycle" line: the clip is now FIVE
+keyframes (t = 0, 0.075, 0.15, 0.225, 0.30), where t=0.075/0.225 are EXACTLY the linear
+interpolation the mixer already produced between the old two-key pair and t=0.15 is exactly their
+own midpoint - so the ROTATION curve, and so the motion itself, does not change by even one
+rendered frame. What changes is that `hipsOffset.y` is now tuned SEPARATELY at each of the five
+times the new check samples (a per-keyframe binary search), so every sampled instant is an
+AUTHORED value, not an interpolation guess between two distant ones: 0.6825 (t=0), 0.3872 (0.075),
+0.3150 (0.15), 0.4491 (0.225), 0.7059 (0.30). Verified after: every sample within 0.0001ft of
+true ground. The existing R3 motion floor (foot travel through the chase camera) is unaffected in
+shape, since the rotation curve is byte-identical - only where the hip height track stops changed.
+
+**New probe**: `foot-on-ground` in `test-baseball-actors.mjs`'s own motion half, one check per
+clip (Idle, Set, Swing, Run, Bunt, Pickoff, Crouch), each printing all five sampled offsets and
+failing if the worst exceeds +/-0.1ft. All seven green: Idle worst 0.023ft, Set -0.089ft, Swing
+0.000ft, Run -0.000ft, Bunt 0.004ft, Pickoff -0.059ft, Crouch -0.023ft (Crouch's own number is
+R12's, unchanged by this stage - included in the new check because the spec named it, not because
+anything about it moved).
+
+**Facts for whoever reads this next:**
+- The coefficient between `hipsOffset.y` and world foot height is **-1.59375ft per unit**, measured
+  directly (not assumed from Crouch's own old "about 1.6ft" comment) and IDENTICAL for the batter
+  and pitcher roles - it is a pure rig-scale constant, not a per-pose one, which is what makes a
+  uniform per-clip shift a valid lever at all for the six clips it was used on.
+- `pitcher-frame`'s own bands moved (box 8-13% -> 10-13%, batter ratio 30-50% -> 60-85%) in
+  `test-baseball-device.mjs`; `zone-world`/`zone-scale`/`ball-grows`/`chase-start` all read
+  `cams.batter` or the chase camera, untouched by the pitcher camera's own move, and needed no
+  change (verified, not assumed).
+- `LEAGUE_STADIUM`, `bleacherUnitParts`, `placeBleacher`, `scatterParents`, `rampGeometry`,
+  `chainLinkTexture`, `PALETTE.bleacherAlum`/`chainLink`/`parents`/`bermGrassA`/`pressBoxBody` are
+  all new in `field.js`. `buildStadium`'s own `league` parameter defaults to `'majors'`.
+- `Run`'s own keyframe count (2 -> 5) is the one deliberate exception to an earlier stage's own
+  explicit design line in this file; a future session that wants to re-tune this clip's amplitude
+  or timing should re-derive all five poses from whatever new two extremes it picks (they are a
+  pure linear interpolation of the endpoints, see the clip's own header), then re-solve
+  `hipsOffset.y` per keyframe the same way rather than copying these five numbers forward.
+- This stage never touched `baseball/js/engine/`, `settings.js`, or any `FEEL` beat. `ui.js`'s only
+  changes are the three `buildField(fenceFt, league)` call sites now passing `this.league`.
+
+
+
+**Ship review, same day (orchestrator).** The first camera put the zone box over the pitcher's own
+legs, so `CAMERAS.pitcher.pos.x` moved from -2.4 to -9.5 ft: at this lens the pitcher now stands 101 px
+clear of the box, which sits over the catcher as in the reference; no probe band moved. From 130 ft
+behind the rubber the frame sees only about 11 ft of backstop height, so the 12 ft pad band filled the
+whole upper-league frame as a flat blue wall: the bands are pad 4 ft, brick 4 ft, crowd from 8 ft (the
+crowd tier is visible in the top third at every league), Little League's chain-link is 6 ft, finer and
+more transparent, with mipmaps off (minification averaged the grid into grey), and its bleacher rows
+and parent figures were raised so heads clear the fence. Suites on the shipped tree: actors all checks
+passed (r2-cadence 3049/3036/3064 ms); device All checks passed; visual 20 passed, 0 failed (an earlier
+19/1 was two Chromium suites running at once); check-no-scroll 4 screens, 0 scroll; engine 2745 passed.
+
 ## R11: the league ladder in Quick Play (2026-09-21)
 
 Matt, on the same message R10 came from: *"I also think you've forgotten to code the difficulties.

@@ -452,13 +452,16 @@ await ctx.close();
     else ok(`fence-shape: every league's five named fence distances are within ${worst.toFixed(2)} ft of FIELD[league].fenceFt (worst: ${worstWhere}, budget 1 ft)`);
   }
 
-  // pitcher-frame: R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 2). Matt's recording: "the
-  // strike zone when pitching is massive" - the true box projected to 9px wide, so `ui.js` floored
-  // it to 13% of the canvas width over TRUE-size figures, "a huge box over tiny men". `CAMERAS.
-  // pitcher` is now a long lens (55.6ft behind the rubber, fov 10.35, see field.js's own header)
-  // chosen so the TRUE box needs no floor at all. Two assertions, straight off `camsPitching.
-  // pitcher` and the PITCHING band (477px) - no live browser needed, the same directness zone-world
-  // and ball-grows above already use for `cams.batter`.
+  // pitcher-frame: R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 2) chose the box's own
+  // 8-13%/30-50% bands; R13 (section 9, "R13", item 1) re-banded both. Matt, on v882: "Can you
+  // change the angle a little bit so it's a little easier to see the strike zone you're throwing
+  // into?" `CAMERAS.pitcher` moved from 55.6ft back (fov 10.35) to 130ft back (fov 5.28, see
+  // field.js's own header for the "dolly zoom" reasoning AND why 150ft/180ft - which measured a
+  // bigger box - had to be rejected: Little League's own fence sits at 210ft, and a camera any
+  // further back than that clips through it) so the box grows relative to the pitcher
+  // without lying about scale. Two assertions, straight off `camsPitching.pitcher` and the
+  // PITCHING band (477px) - no live browser needed, the same directness zone-world and ball-grows
+  // above already use for `cams.batter`.
   {
     const cam = camsPitching.pitcher;
     const z = mod.zoneRectFt();
@@ -466,10 +469,12 @@ await ctx.close();
     const boxBot = mod.projectToCanvas(cam, { x: 0, y: z.bottom, z: z.z }, W, H_PITCHING);
     const boxH = Math.abs(boxTop.y - boxBot.y);
     const boxFrac = boxH / H_PITCHING;
-    if (boxFrac < 0.08 || boxFrac > 0.13) {
-      fail('pitcher-frame', `the true zone box is ${(boxFrac * 100).toFixed(2)}% of the band's height (${boxH.toFixed(1)}px of ${H_PITCHING}px) - want 8-13%`);
+    // R13: was 8-13% (measured 8.5%); now 10-13% (measured 10.2%) - the spec's own "about 10 to
+    // 12%", with the same kind of upper margin the old band kept.
+    if (boxFrac < 0.10 || boxFrac > 0.13) {
+      fail('pitcher-frame', `the true zone box is ${(boxFrac * 100).toFixed(2)}% of the band's height (${boxH.toFixed(1)}px of ${H_PITCHING}px) - want 10-13%`);
     } else {
-      ok(`pitcher-frame: the true zone box is ${(boxFrac * 100).toFixed(2)}% of the band's height (${boxH.toFixed(1)}px), inside 8-13%`);
+      ok(`pitcher-frame: the true zone box is ${(boxFrac * 100).toFixed(2)}% of the band's height (${boxH.toFixed(1)}px), inside 10-13%`);
     }
     const heightPx = (x, zPos, y0, y1) => {
       const a = mod.projectToCanvas(cam, { x, y: y0, z: zPos }, W, H_PITCHING);
@@ -480,10 +485,13 @@ await ctx.close();
     const pitcherH = heightPx(mod.RUBBER.x, mod.RUBBER.z, mod.RUBBER.y, mod.RUBBER.y + FIG);
     const batterH = heightPx(mod.BATTER_BOX.x, mod.BATTER_BOX.z, 0, FIG);
     const ratio = pitcherH > 0 ? batterH / pitcherH : -1;
-    if (ratio < 0.30 || ratio > 0.50) {
-      fail('pitcher-frame', `the batter figure is ${(ratio * 100).toFixed(1)}% of the pitcher's projected height (want 30-50%)`);
+    // R13: was 30-50% (measured 47.8%); the same dolly-zoom pull-back that grows the box also
+    // brings the batter closer to the pitcher's own size (measured 68.1%), so the band moved to
+    // 60-85% - real margin on both sides of the new measurement, same shape as the old band.
+    if (ratio < 0.60 || ratio > 0.85) {
+      fail('pitcher-frame', `the batter figure is ${(ratio * 100).toFixed(1)}% of the pitcher's projected height (want 60-85%)`);
     } else {
-      ok(`pitcher-frame: the batter figure is ${(ratio * 100).toFixed(1)}% of the pitcher's projected height, inside 30-50% (pitcher ${(pitcherH / H_PITCHING * 100).toFixed(1)}% of the band)`);
+      ok(`pitcher-frame: the batter figure is ${(ratio * 100).toFixed(1)}% of the pitcher's projected height, inside 60-85% (pitcher ${(pitcherH / H_PITCHING * 100).toFixed(1)}% of the band)`);
     }
   }
 }
