@@ -74,6 +74,31 @@ export function modeOf(decision) {
   return decision && decision.mode === 'power' ? 'power' : 'contact';
 }
 
+/** R16 (docs/BASEBALL-3D-BUILD.md section 9): A FAST PITCH IS HARDER TO TIME.
+ *
+ *  Until R16 the good-contact window was a flat number of milliseconds: a 95 mph Majors fastball
+ *  and a 55 mph Little League one both gave the batter the same 100 ms, so the pitcher's own Speed
+ *  skill bought NOTHING (measured: +5 points of pitchSpd moved a win rate by -0.9 pp, inside
+ *  noise) and R11's "a slow pitch is slow" only ever changed how long the wait was.
+ *
+ *  The window now scales by the pitch's own time to the plate against `FEEL.engine.referenceFlightS`
+ *  - the College fastball, so College is a true no-op, the same anchor `LEAGUE_TIMING_WINDOW_MULT`
+ *  uses. It is a RATIO of flight times, not a second league table: a pitcher who has bought 22
+ *  points of Speed at the Majors shortens the flight to 0.38 s and the window with it, and an
+ *  eephus lengthens both. A pitch with no `timeToPlateS` at all (an old fixture, a hand-built
+ *  pitchResult) scales by 1 and keeps its exact pre-R16 window.
+ *
+ *  It multiplies the window used for CONTACT QUALITY, and the foul boundary derived from it, on
+ *  both the ordinary swing and the bunt - a bunt is timing alone, so leaving it out would have
+ *  made the bunt the one swing a fast pitch could not punish. */
+export function flightWindowMult(pitchResult, settings) {
+  const t = pitchResult && pitchResult.timeToPlateS;
+  if (!Number.isFinite(t) || t <= 0) return 1;
+  const ref = (settings && settings.FEEL && settings.FEEL.engine && settings.FEEL.engine.referenceFlightS) || 0;
+  if (!Number.isFinite(ref) || ref <= 0) return 1;
+  return t / ref;
+}
+
 /** RA (docs/BASEBALL-3D-BUILD.md section 9): THE BUNT. A different swing entirely, so it is its own
  *  branch rather than a flag threaded through the one above: a bunt has no cursor, no mode, no
  *  spray geometry off the bat and no exit velocity worth modelling - the batter holds the bat out
@@ -93,7 +118,7 @@ export function modeOf(decision) {
  *  `distanceFt`/`sprayAngleDeg` are returned here rather than derived by `outcomes.js`'s `carryFt`
  *  because a bunt has no carry: 8 to 40 ft is the fact, and an exit-velocity-and-launch-angle model
  *  asked to produce it would be arithmetic invented to justify a number already known. */
-function buntSwing(batterSkills, decision, settings, rand01, league) {
+function buntSwing(batterSkills, decision, settings, rand01, league, pitchResult) {
   const F = settings.FEEL.engine;
   const hitAccPts = Math.max(0, batterSkills.hitAcc || 0);
   const effect = settings.SKILL_EFFECT;
@@ -101,7 +126,9 @@ function buntSwing(batterSkills, decision, settings, rand01, league) {
   // here too - a bunt is still timing-only, so it is still "forgiving at Little League, tight at
   // Majors" exactly the same way an ordinary swing is, below.
   const windowMult = (settings.LEAGUE_TIMING_WINDOW_MULT && settings.LEAGUE_TIMING_WINDOW_MULT[league]) || 1;
-  const baseWindowMs = F.timingWindow * windowMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
+  // R16: and the pitch's own flight time (see `flightWindowMult`).
+  const flightMult = flightWindowMult(pitchResult, settings);
+  const baseWindowMs = F.timingWindow * windowMult * flightMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
   const windowMs = baseWindowMs * (settings.BUNT_WINDOW_MULT != null ? settings.BUNT_WINDOW_MULT : 1.6);
   const timingErrorMs = decision.timingErrorMs || 0;
   const absTiming = Math.abs(timingErrorMs);
@@ -123,7 +150,7 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
     return { swung: false, contact: false, foul: false, inPlay: false };
   }
   // RA: a bunt is decided before the pitch and resolved on its own terms (see `buntSwing` above).
-  if (decision.bunt) return buntSwing(batterSkills, decision, settings, rand01, league);
+  if (decision.bunt) return buntSwing(batterSkills, decision, settings, rand01, league, pitchResult);
 
   const F = settings.FEEL.engine;
   const hitAccPts = Math.max(0, batterSkills.hitAcc || 0);
@@ -137,7 +164,10 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   // number this engine was derived against (R5's exit-velocity/carry targets included) stays
   // exactly where it was measured.
   const windowMult = (settings.LEAGUE_TIMING_WINDOW_MULT && settings.LEAGUE_TIMING_WINDOW_MULT[league]) || 1;
-  const timingWindowMs = F.timingWindow * windowMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
+  // R16: THE PITCH'S OWN FLIGHT TIME scales the window too (see `flightWindowMult`) - this is the
+  // whole of what makes pitch Speed a skill rather than a readout.
+  const flightMult = flightWindowMult(pitchResult, settings);
+  const timingWindowMs = F.timingWindow * windowMult * flightMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
   const foulBoundaryMs = timingWindowMs * F.foulMult;
   const timingErrorMs = decision.timingErrorMs || 0;
   const absTiming = Math.abs(timingErrorMs);
@@ -155,7 +185,11 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   const d = Math.hypot(offX, offY);
   // The cursor's own radius widens with hitAcc, the same skill that already widened the 1-D sweet
   // spot ("bigger timing window and bigger sweet spot", doc §6) - the mode sets the base.
-  const cursorR = (F.cursorR[mode] || F.cursorR.contact) * (1 + hitAccPts * (effect.hitAcc.contactRadiusInPerPt || 0));
+  // R16: `LEAGUE_CONTACT_MULT` widens the circle at the two bottom rungs, the same shape
+  // `LEAGUE_TIMING_WINDOW_MULT` has on the timing axis - `FEEL.engine.cursorR` is the College-and-up
+  // circle now, and College's own 1.0 is a true no-op.
+  const contactMult = (settings.LEAGUE_CONTACT_MULT && settings.LEAGUE_CONTACT_MULT[league]) || 1;
+  const cursorR = (F.cursorR[mode] || F.cursorR.contact) * contactMult * (1 + hitAccPts * (effect.hitAcc.contactRadiusInPerPt || 0));
   // The placement half of contact quality. A ball that crosses outside the circle is a MISS,
   // whatever the timing was - the R2 statement of the old `batReach` rule, in two axes.
   const placeQ = Math.max(0, 1 - d / cursorR);
@@ -258,4 +292,4 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   return { swung: true, contact: true, foul: false, inPlay: true, exitVeloMph, launchAngleDeg, sprayAngleDeg, q, centered, kind, mode };
 }
 
-export default { swing, qualityFor, computeSwingTiming, modeOf };
+export default { swing, qualityFor, computeSwingTiming, modeOf, flightWindowMult };

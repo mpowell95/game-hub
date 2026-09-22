@@ -645,3 +645,101 @@ body {
    outside the hub shell. Still applies to the filter dropdown's menu items (.lb-mitem), which
    render the same diffShapeSVG output the old pills did. */
 :root.gh-dark .lb-dshape-t3, :root.gh-dark .lb-dshape-t4 { fill: #e6e9f0; }
+
+/* --- THE CHALLENGE BUBBLE ---------------------------------------------------------------------
+   Matt, on the shipped multiplayer: "to see a challenge, you must go into the hoops connect 4,
+   click play a friend, then it's displayed below 'Challenge'. There is no other notification
+   anywhere. Instead of that, can it be super obvious?" - with a mockup: a chunky speech bubble
+   with a hard black outline and a tail pointing down at the tile.
+
+   TWO STATES, TOLD APART BY THEIR WORDS AS WELL AS THEIR COLOUR. "{who} challenged you!" on
+   purple, "Your Turn!" on blue. Matt is red/green colourblind and the repo's rule is that colour
+   is never the only signal; here the whole sentence differs, which is the strongest form of it.
+
+   It lives inside .hub-cell (position: relative), overlapping the tile it points at, so it moves
+   with the grid instead of floating somewhere the tile is not. */
+.hub-alert {
+  position: absolute;
+  /* WIDER THAN THE TILE, on purpose - Matt's mockup spans most of the screen and overlaps the
+     neighbouring tile. It is anchored to the side of the grid its own tile is on (is-col-left /
+     is-col-right, set in _paintGameAlert from the cell's measured offset) so it always grows
+     INWARD and can never hang off the edge of a phone. */
+  width: min(290px, 74vw);
+  bottom: calc(100% - 30px);          /* sits above the tile, tail overlapping its top edge */
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 34px 12px 14px;       /* right padding clears the X */
+  border: 3px solid #000;
+  border-radius: 14px;
+  box-shadow: 0 4px 0 #000, 0 8px 18px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  cursor: pointer;
+  /* A bubble is decoration over a tile; the tile underneath must still be reachable by the parts
+     the bubble does not cover. */
+  touch-action: manipulation;
+}
+.hub-alert.is-challenge { background: #8b5cf6; }
+.hub-alert.is-turn      { background: #7cc3ef; }
+.hub-alert.is-col-right { right: 6px; left: auto; }
+.hub-alert.is-col-left  { left: 6px; right: auto; }
+/* The tail: a rotated square with the same border, showing only the two sides that face out. It
+   sits over the TILE, which is on the anchored side, so it follows the anchor. */
+.hub-alert::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  width: 16px; height: 16px;
+  background: inherit;
+  border-right: 3px solid #000;
+  border-bottom: 3px solid #000;
+  transform: rotate(45deg);
+  border-bottom-right-radius: 3px;
+}
+.hub-alert.is-col-right::after { right: 46px; }
+.hub-alert.is-col-left::after  { left: 46px; }
+/* NO ROOM ABOVE (the tile is on the top row): flip under it and turn the tail over, rather than
+   drawing the bubble off the top of the page where nobody can read it. */
+.hub-alert.is-below { bottom: auto; top: calc(100% - 30px); }
+.hub-alert.is-below::after {
+  bottom: auto; top: -10px;
+  border-right: 0; border-bottom: 0;
+  border-left: 3px solid #000; border-top: 3px solid #000;
+  border-bottom-right-radius: 0; border-top-left-radius: 3px;
+}
+.hub-alert-head {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 900; letter-spacing: 0.04em;
+  color: #111; text-transform: uppercase;
+}
+.hub-alert-swords { width: 15px; height: 15px; flex: 0 0 auto; }
+.hub-alert-line {
+  font-size: 19px; font-weight: 900; line-height: 1.1;
+  color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+.hub-alert.is-turn .hub-alert-line { color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+.hub-alert-count { font-size: 12px; font-weight: 700; color: #111; }
+.hub-alert-x {
+  position: absolute;
+  top: 0; right: 0;
+  width: 44px; height: 44px;          /* the UX floor's tap target, even though the glyph is small */
+  display: flex; align-items: center; justify-content: center;
+  appearance: none; border: 0; background: none;
+  color: #111; font-size: 22px; font-weight: 900; line-height: 1;
+  cursor: pointer; touch-action: manipulation;
+}
+/* ARRIVES WITH A POP, then holds. transform/opacity only (the UX floor bans animating layout),
+   and it settles on its final pose rather than looping - a bubble that never stops moving is
+   harder to read, and this one has to be read. */
+@keyframes hub-alert-in {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.86); }
+  60%  { opacity: 1; transform: translateY(0) scale(1.04); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.hub-alert { animation: hub-alert-in 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  /* Settled to the final pose, never hidden - docs/BUILDING-A-GAME.md, Part 0. */
+  .hub-alert { animation: none; opacity: 1; transform: none; }
+}

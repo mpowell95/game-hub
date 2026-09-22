@@ -9,6 +9,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { recordResult } from '../../js/game-stats.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
+import { GAME_ART } from '../../js/game-art.js';
 import { BOARD, COLS } from './boarddef.js';
 import { Match, RED, YELLOW } from './game.js';
 import { Cpu } from './cpu.js';
@@ -89,6 +90,114 @@ class Hoops4 {
     if (this.disposed) return;
     this.root.classList.add('h4-root');
     this.renderSetup();
+    this.maybeCeremony();
+  }
+
+  /**
+   * THE FULL-SCREEN CHALLENGE CARD. Matt: "when you click into the game or click on the popup
+   * thing, it goes to a new, full screen popup thing that shows the challengers emoji and your
+   * emoji and it says 'XXXX Has Challenged You to Connect 4 Hoops'. The popup needs to clearly
+   * show that the challengers emoji and your emoji are opponents. and it should have some kind
+   * of animation. Like the key ceremony in Skeeball."
+   *
+   * ARMED, NEVER BACKFILLED - hoops4/js/alert.js holds the handoff, and the launcher arms it when
+   * the player taps the bubble or the tile. An absent entry means no card is owed, so a device
+   * that has never been challenged can never be shown one retroactively.
+   */
+  async maybeCeremony() {
+    let armed = null;
+    try { const A = await import('./alert.js'); armed = A.takeCeremony(); } catch { return; }
+    if (!armed || this.disposed) return;
+    this.showCeremony(armed);
+  }
+
+  /**
+   * THE TIMELINE, in one place, because six animation-delays across five rules are unreadable.
+   * The sheet plays it; this only builds the DOM. (Skeeball's ceremony comment is the model, and
+   * so is its lesson - Matt on the first cut of that one: "you're rushing it... you just
+   * instantly swap what they are". Nothing here switches state; everything arrives.)
+   *
+   *    0.00  the veil darkens whatever is behind                          (ends 0.45)
+   *    0.25  THEIR avatar flies in from the left and overshoots           (ends 1.05)
+   *    0.45  YOUR avatar flies in from the right and overshoots           (ends 1.25)
+   *    1.15  VS lands between them with a flash                           (ends 1.60)
+   *    1.45  the headline rises under the pair                            (ends 2.05)
+   *    1.95  the buttons fade in                                          (ends 2.45)
+   *    then  IT HOLDS until the player taps (no auto-dismiss)
+   *
+   * REDUCED MOTION builds the same DOM and adds `is-still`, which settles every element on its
+   * final pose - never `display: none` on anything structural (docs/BUILDING-A-GAME.md Part 0).
+   */
+  showCeremony(a) {
+    const me = loadProfile() || {};
+    const still = (() => {
+      try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+    })();
+    const who = a.name || t('mpOpponent');
+    const head = a.kind === 'challenge'
+      ? t('cerChallenged', { who }) : t('cerYourTurn', { who });
+    // THE RING COLOURS ARE THE SIDES THEY WILL ACTUALLY PLAY - the challenger is side 'a', which
+    // is RED and shoots first. Paired with the same disc/triangle marker the turn pill uses, so
+    // "who is who" survives being colourblind (root CLAUDE.md).
+    const el = document.createElement('div');
+    el.className = 'h4-cer' + (still ? ' is-still' : '');
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-label', head);
+    el.innerHTML = `
+      <div class="h4-cer-veil" aria-hidden="true"></div>
+      <div class="h4-cer-body">
+        <p class="h4-cer-head">${a.kind === 'challenge' ? t('cerHead') : t('cerHeadTurn')}</p>
+        <div class="h4-cer-pair">
+          <div class="h4-cer-side h4-cer-them">
+            <span class="h4-cer-face" aria-hidden="true">${a.emoji || '🙂'}</span>
+            <span class="h4-cer-name"><span class="h4-cer-mark" aria-hidden="true">&#9679;</span>${who}</span>
+          </div>
+          <span class="h4-cer-vs" aria-hidden="true">${t('cerVs')}</span>
+          <div class="h4-cer-side h4-cer-me">
+            <span class="h4-cer-face" aria-hidden="true">${me.emoji || '🙂'}</span>
+            <span class="h4-cer-name"><span class="h4-cer-mark" aria-hidden="true">&#9650;</span>${me.name || t('you')}</span>
+          </div>
+        </div>
+        <p class="h4-cer-line">${head}</p>
+        <div class="h4-cer-btns">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-cer-go">
+            ${a.kind === 'challenge' ? t('cerGo') : t('cerGoTurn')}</button>
+          <button type="button" class="gh-btn gh-btn--block h4-cer-later">${t('cerLater')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    const close = () => { try { el.remove(); } catch {} };
+    this.on(el.querySelector('.h4-cer-later'), 'click', close);
+    // THE CARD STAYS UP UNTIL THE MATCH IS ACTUALLY OPEN. The first version closed it first and
+    // fell back to `toast()`, which returns silently when `.h4-toast` is not on screen - and it
+    // never is on the setup screen. So a match that had gone would have dropped the player back
+    // with no explanation at all: docs/BUILDING-A-GAME.md Part 0, "if you paint before the data
+    // has arrived, name the path back to the truth". The failure is said HERE, on the card.
+    const go = el.querySelector('.h4-cer-go');
+    this.on(go, 'click', async () => {
+      go.disabled = true;
+      try {
+        const MP = await import('./mp.js');
+        const game = await MP.readGame(a.id);
+        if (this.disposed) return;
+        if (!game) { this._ceremonyFailed(el, go); return; }
+        close();
+        this.startAsync(game);
+      } catch (err) {
+        console.error('[hoops4] could not open the challenge', err);
+        if (!this.disposed) this._ceremonyFailed(el, go);
+      }
+    });
+  }
+
+  /** The challenge could not be opened. Say so on the card rather than closing it. */
+  _ceremonyFailed(el, go) {
+    const line = el.querySelector('.h4-cer-line');
+    if (line) line.textContent = t('cerGone');
+    if (go) go.remove();
+    const later = el.querySelector('.h4-cer-later');
+    if (later) later.textContent = t('close');
   }
 
   // --- listener hygiene: destroy() must leave nothing behind ---------------------------------
@@ -115,36 +224,54 @@ class Hoops4 {
     // The selected option is marked by a BORDER, A WEIGHT AND A CHECKMARK, never colour alone
     // (Matt is red/green colorblind - root CLAUDE.md's accessibility conventions).
     const check = '<span class="h4-opt-check" aria-hidden="true">&check;</span>';
+    // GUARD (THE LAW rule 5): `opponent: 'two'` is a real value in `gamehub.hoops4.v1` on any
+    // device that used the old screen, and it is NOT deleted or rewritten here. The CPU row just
+    // shows its nearest meaning (Medium) until the player picks something; `start()` reads the
+    // same fallback, so a device that never touches this screen keeps behaving sensibly.
+    const cpuPick = s.opponent === 'two' ? 2 : s.opponent;
     const opt = (v, label) => {
-      const on = s.opponent === v;
+      const on = cpuPick === v;
       return `<button type="button" class="gh-btn h4-opt${on ? ' is-on' : ''}" data-opp="${v}" aria-pressed="${on}">${on ? check : ''}${label}</button>`;
     };
     const shotOpt = (v, label) => {
       const on = s.shots === v;
       return `<button type="button" class="gh-btn h4-opt${on ? ' is-on' : ''}" data-shots="${v}" aria-pressed="${on}">${on ? check : ''}${label}</button>`;
     };
+    // ONE CARD IS THE COMPUTER GAME, AND MULTIPLAYER IS A DOOR. Matt: "What is 2 player? There
+    // should be options to play the computer player and 'Multiplayer Options'... The computer
+    // player options should just have the difficulties and the shots per turn option."
+    //
+    // "Two players" is gone from this row - it was pass-and-play wearing a label that read like
+    // a mode of the computer game, which is exactly what made him ask what it was. It is now
+    // "Pass and play" inside the multiplayer sheet, beside the other two ways two people play.
     this.root.innerHTML = `
       <div class="h4-setup">
         <h1 class="h4-title">${t('title')}</h1>
-        <p class="h4-tag">${t('tagline')}</p>
+        <!-- A PICTURE OF THE THING. Matt: the setup screen "looks nothing like the others. it's
+             not on the theme or on brand of the game hub at all" - and what every other machine's
+             setup screen leads with is a picture of the machine (skeeball's gallery is a rendered
+             one per cabinet). This is the SAME art the launcher tile uses, from js/game-art.js,
+             so the screen you tap and the screen you land on are the same picture. It is inline
+             SVG already in the hub's bundle: no WebGL, no readback, no placeholder to correct
+             later, and nothing to go wrong offline. -->
+        <div class="h4-hero" aria-hidden="true">${GAME_ART['hoops4'] || ''}</div>
         <div class="gh-card h4-card">
+          <p class="h4-card-head">${t('vsCpu')}</p>
           <div class="h4-row">
-            <p class="h4-row-label">${t('opponent')}</p>
-            <div class="h4-opts h4-opts-4">
-              ${opt(1, t('cpu1'))}${opt(2, t('cpu2'))}${opt(3, t('cpu3'))}${opt('two', t('twoPlayer'))}
+            <p class="h4-row-label">${t('difficulty')}</p>
+            <div class="h4-opts h4-opts-3">
+              ${opt(1, t('cpu1'))}${opt(2, t('cpu2'))}${opt(3, t('cpu3'))}
             </div>
-            <p class="h4-note">${t('cpuNote')}</p>
           </div>
           <div class="h4-row">
             <p class="h4-row-label">${t('shotMode')}</p>
             <div class="h4-opts h4-opts-2">
               ${shotOpt('until', t('shotsUntil'))}${shotOpt('one', t('shotsOne'))}
             </div>
-            <p class="h4-note">${t('shotModeNote')}</p>
           </div>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-play">${t('play')}</button>
         </div>
-        <button type="button" class="gh-btn gh-btn--primary h4-play">${t('play')}</button>
-        <button type="button" class="gh-btn h4-mp">${t('mp')}</button>
+        <button type="button" class="gh-btn gh-btn--block h4-mp">${t('multiplayer')}</button>
         <button type="button" class="h4-howto-link">${t('howto')}</button>
       </div>`;
     for (const b of this.root.querySelectorAll('[data-opp]')) {
@@ -162,7 +289,9 @@ class Hoops4 {
         this.renderSetup();
       });
     }
-    this.on(this.root.querySelector('.h4-play'), 'click', () => this.start());
+    // Play means play the computer now, whatever `opponent` happens to hold - the row above can
+    // no longer select 'two', so an old stored 'two' must not silently start a pass-and-play game.
+    this.on(this.root.querySelector('.h4-play'), 'click', () => this.start({ vsCpu: true }));
     this.on(this.root.querySelector('.h4-mp'), 'click', () => this.showMultiplayer());
     this.on(this.root.querySelector('.h4-howto-link'), 'click', () => this.showHowto());
   }
@@ -220,7 +349,9 @@ class Hoops4 {
     await this.start({ vsCpu: false, oneShot: !!game.oneShot, keepMp: true, replay: (m) => MP.replay(m, game) });
     if (this.disposed || !this.match) return;
     if (game.over) { this.finish(); return; }
-    if (!this.isMyShot()) this.toast(t('mpTheirTurn'));
+    // The match is on the server, so leaving really is free - say so rather than leaving the
+    // player to discover it. This is the reassurance half of the isInProgress() fix below.
+    this.toast(this.isMyShot() ? t('leaveKept') : t('mpTheirTurn'));
   }
 
   /** May this device shoot right now? Solo and two-players-on-one-phone: always. Multiplayer:
@@ -327,9 +458,10 @@ class Hoops4 {
     if (!opts.keepMp) { this.mp = null; this.myPlayer = RED; this._stopRoom(); }
     const vsCpu = opts.vsCpu === undefined ? this.settings.opponent !== 'two' : !!opts.vsCpu;
     const oneShot = opts.oneShot === undefined ? this.settings.shots === 'one' : !!opts.oneShot;
-    this.match = new Match({ vsCpu, cpuSkill: vsCpu ? this.settings.opponent : 2, oneShot });
+    const skill = this.settings.opponent === 'two' ? 2 : this.settings.opponent;
+    this.match = new Match({ vsCpu, cpuSkill: vsCpu ? skill : 2, oneShot });
     if (typeof opts.replay === 'function') opts.replay(this.match);
-    this.cpu = vsCpu ? new Cpu(this.settings.opponent) : null;
+    this.cpu = vsCpu ? new Cpu(skill) : null;
     this.recorded = false;
     this.renderPlay();
     try {
@@ -368,8 +500,9 @@ class Hoops4 {
     this.root.innerHTML = `
       <div class="h4-play-wrap">
         <div class="h4-hud">
-          <span class="h4-who"></span>
+          <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
+          <button type="button" class="h4-menu" aria-label="${t('menu')}">${t('menu')}</button>
         </div>
         <div class="h4-stage">
           <canvas class="h4-canvas"></canvas>
@@ -379,6 +512,61 @@ class Hoops4 {
       </div>`;
     this.paintHud();
     this.bindSwipe();
+    this.on(this.root.querySelector('.h4-menu'), 'click', () => this.leaveMatch());
+  }
+
+  /** OUT OF A MATCH, BUT NOT OUT OF THE GAME. Matt: "we had the Hub back button. That's more of
+   *  a quit button. There is no back button to go back to the setup screen."
+   *
+   *  THE TWO ARE DIFFERENT DESTINATIONS AND THAT IS WHY THERE ARE TWO BUTTONS. The hub's floating
+   *  chip unmounts the module and lands on the launcher; this one stays inside Connect 4 Hoops
+   *  and goes to its setup screen, so you can switch opponent or shot rule without leaving. The
+   *  first attempt at this shipped as a second chip ALSO labelled "Back", stacked above the hub's
+   *  own - which is why it was pulled, and why this one is labelled by its DESTINATION. "Menu"
+   *  against "Hub" is two words for two places; "Back" against "Back" was one word for two.
+   *
+   *  A TURN-BY-TURN match leaves with no question asked, because there is nothing to lose: the
+   *  move log lives in `hoops/games/<id>` and re-opening replays it, so it goes straight to the
+   *  multiplayer screen where the rest of your matches are. Everything else (solo, two on one
+   *  phone, a live room) really does end when you walk away, so it asks first. */
+  leaveMatch() {
+    const isAsync = !!(this.mp && this.mp.kind === 'async');
+    const midGame = !!(this.match && !this.match.over && this.match.moves.length > 0);
+    const go = () => {
+      this.teardownEngine();
+      if (isAsync) this.showMultiplayer(); else this.renderSetup();
+    };
+    if (isAsync || !midGame) { go(); return; }
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal h4-sheet-in" role="dialog" aria-modal="true" aria-label="${t('leaveQ')}">
+        <h2 class="gh-modal__title">${t('leaveQ')}</h2>
+        <p class="h4-sheet-body">${t('leaveLost')}</p>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--block h4-leave-no">${t('leaveNo')}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-leave-yes">${t('leaveYes')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    this.on(el.querySelector('.h4-leave-no'), 'click', () => el.remove());
+    this.on(el.querySelector('.h4-leave-yes'), 'click', () => { el.remove(); go(); });
+  }
+
+  /** What to call the other side, for the turn bar. The CPU is named by its DIFFICULTY, which is
+   *  the only name it has; a real opponent by their profile name. */
+  themName() {
+    const mp = this.mp;
+    if (mp && mp.kind === 'live') return (mp.them && (mp.them.name || mp.them)) || t('theirTurn');
+    if (mp && mp.kind === 'async') {
+      const g = mp.game || {};
+      const other = mp.side === 'a' ? g.b : g.a;
+      return (other && (other.name || other.code)) || t('theirTurn');
+    }
+    if (this.match && this.match.vsCpu) {
+      return t('cpu' + (this.settings.opponent === 'two' ? 2 : this.settings.opponent));   // see cpuPick
+    }
+    return t('theirTurn');
   }
 
   paintHud() {
@@ -390,11 +578,26 @@ class Hoops4 {
     // In multiplayer "mine" is THIS DEVICE's side, which is YELLOW for a guest - reading it off
     // RED would tell the guest it was their turn on every one of the host's.
     const mine = this.mp ? (m.turn === this.myPlayer) : (m.turn === RED);
-    const label = (m.vsCpu || this.mp)
-      ? (mine ? t('yourTurn') : t('theirTurn'))
-      : (m.turn === RED ? t('red') : t('yellow'));
-    who.textContent = label;
-    who.className = 'h4-who ' + (mine ? 'is-red' : 'is-yellow');
+    // WHOSE COLOUR IS ON THE LANE, which is not the same question as whose turn it is: in two
+    // players on one phone BOTH sides are "mine", and the thing worth showing is red or yellow.
+    const red = m.turn === RED;
+    // COLOUR IS NEVER THE ONLY SIGNAL (Matt is red/green colourblind - root CLAUDE.md). The
+    // marker is a SHAPE as well as a hue: a disc for red, a triangle for yellow, the same pairing
+    // the rest of the hub uses.
+    const mark = red ? '\u25CF' : '\u25B2';
+    const name = (m.vsCpu || this.mp)
+      ? (mine ? t('you') : this.themName())
+      : (red ? t('red') : t('yellow'));
+    // AND IT SAYS IT BEFORE THE SHOT, NOT AFTER. `waiting` is true while the other side is on
+    // the clock - the CPU thinking, or a live opponent yet to swipe - so the bar reads
+    // "Medium is shooting" during the pause rather than going quiet until a ball appears.
+    const waiting = !mine && (m.vsCpu || (this.mp && this.mp.kind === 'live'));
+    who.innerHTML = `<span class="h4-mark" aria-hidden="true">${mark}</span>`
+      + `<span class="h4-who-txt"></span>`;
+    who.querySelector('.h4-who-txt').textContent =
+      mine ? t('yourShot') : `${name} ${waiting ? t('shooting') : ''}`.trim();
+    who.className = 'h4-who ' + (red ? 'is-red' : 'is-yellow') + (mine ? ' is-mine' : ' is-them')
+      + (waiting ? ' is-waiting' : '');
     sh.textContent = m.shotsThisTurn ? `${t('shots')} ${m.shotsThisTurn}` : '';
   }
 
@@ -456,18 +659,30 @@ class Hoops4 {
     // A FRESH SEED PER SHOT is what makes the release imperfect (boarddef's jitter*). Passing a
     // seed is opt-in at the engine, so every headless probe stays exactly deterministic.
     const seed = (Math.random() * 0x7fffffff) | 0;
+    // THE BALL IS THE SHOOTER'S COLOUR. Matt: "the ball needs to be different colors. right now
+    // it's the same color ball that both players throw, then it changes color on the board."
+    // `setBallColor` has existed since the first build and was called EXACTLY ONCE, at match
+    // start, so whoever shot first owned the ball for the whole game. Set per shot, so it is
+    // right for a CPU turn, a remote turn and a pass-and-play turn without three call sites.
+    if (this.rend) {
+      this.rend.setBallColor(this.match.turn === RED ? BOARD.look.red : BOARD.look.yellow);
+    }
     this.throwState = this.engine.phys.startThrow(BOARD, { power, aim, seed });
     this.captured = null;
   }
 
   maybeCpu() {
     if (!this.match || this.match.over || !this.match.isCpuTurn() || this.busy) return;
+    // Repaint FIRST so the bar says "Medium is shooting" for the whole pause. 800ms was too
+    // short to read even once it said something, so the pause is 1100 - long enough to notice,
+    // short enough not to be a wait.
+    this.paintHud();
     this._cpuT = setTimeout(() => {
       if (this.disposed || !this.match || !this.match.isCpuTurn()) return;
       const col = this.cpu.pickColumn(this.match);
       const { aim, power } = this.cpu.aimFor(col);
       this.shoot(power, aim);
-    }, 800);
+    }, 1100);
   }
 
   // --- the loop ------------------------------------------------------------------------------
@@ -644,7 +859,12 @@ export function destroy() {
  *  states worth snapshotting, and skeeball deliberately removed its own mid-rack resume for the
  *  same reason (Matt: "you either finish or quit"). */
 export function isInProgress() {
-  return !!(instance && instance.match && !instance.match.over && instance.match.moves.length > 0);
+  if (!(instance && instance.match && !instance.match.over && instance.match.moves.length > 0)) return false;
+  // EXCEPT A TURN-BY-TURN MATCH, which is not abandoned by leaving: the move log lives in
+  // `hoops/games/<id>` and re-opening replays it. Saying "in progress" there makes the hub warn
+  // about losing something that cannot be lost, which is exactly the friction Matt hit - "you
+  // should be able to leave the game and play a regular game until the opponent plays."
+  return !(instance.mp && instance.mp.kind === 'async');
 }
 
 export default { init, destroy, isInProgress };

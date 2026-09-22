@@ -38,7 +38,8 @@ const CODE = 'BB7KM';
 store.set('gamehub.profile', JSON.stringify({ version: 1, name: 'Bud', playerId: CODE }));
 
 const C = await import('./baseball/js/engine/career.js');
-const { LEAGUES, POINTS, CAPS, START_CAP, SEASON, SKILL_IDS, PRESETS, RULES_V } =
+const { LEAGUES, POINTS, CAPS, START_CAP, SEASON, SKILL_IDS, PRESETS, RULES_V,
+  gamesForLeague, slotsForLeague, playoffFormatFor } =
   await import('./baseball/js/engine/settings.js');
 
 // -----------------------------------------------------------------------------------------------
@@ -50,6 +51,13 @@ const START_BUILD = { ...PRESETS.twoWayStar };   // 5/5/5 and 5/5/5, the doc's o
 function fresh(now = 1000) {
   return C.newCareer({ hand: 'R', presetId: 'twoWayStar', skills: START_BUILD, now, careerId: `${CODE}-${now}-AAAA` });
 }
+/** R16: a career parked on one rung, so a per-league fixture does not have to climb to it. */
+function at(league, extra = {}) {
+  return { ...fresh(), league, cap: C.capForLeague(league), ...extra };
+}
+/** R16: how many regular-season games that league plays. `ALL` wins every one of them. */
+const gamesAt = (league) => gamesForLeague(league);
+const ALL = 99;
 
 /** Play one game with a scripted outcome. `stats` is an optional per-game extras object. */
 function playOne(state, won, stats) {
@@ -66,9 +74,12 @@ function playOne(state, won, stats) {
  */
 function playSeason(state0, wins, playoff = []) {
   let state = C.startSeason(state0);
+  // R16: a season is as long as ITS OWN snapshot says - 3 games at Little League, 14 at the
+  // Majors. `C.seasonGames` is the one reader, and its fallback is the frozen 12.
+  const n = C.seasonGames(state);
   const records = [];
   let trophy = null;
-  for (let i = 0; i < SEASON.gamesPerSeason; i++) {
+  for (let i = 0; i < n; i++) {
     const r = playOne(state, i < wins);
     state = r.state; records.push(r.record);
     if (r.resolved) trophy = r.trophy;
@@ -159,11 +170,41 @@ console.log('\n--- RULES: the season snapshot ---');
   const s = C.startSeason(fresh());
   eq(s.season.n, 1, 'the first season is number 1');
   eq(s.season.league, 'little', 'the season records the league it is played on');
-  eq(s.season.schedule.length, SEASON.gamesPerSeason, 'the schedule is snapshotted at 12 games');
+  eq(s.season.schedule.length, gamesAt('little'), 'the schedule is snapshotted at Little League\'s own 3 games');
   eq(s.season.points, { ...POINTS.little }, 'the point table is snapshotted at season start');
   eq(s.season.cap, START_CAP, 'the cap is snapshotted at season start');
-  eq(s.season.schedule[SEASON.gamesPerSeason - 1].opponentIndex, 7,
-    'game 12 is always against the strongest team (doc section 8, every SCHEDULE_SHAPE)');
+  // R16: three more fields snapshotted at season start, for the same doc section 15 [Locked]
+  // reason the cap and the points are - a tuning deploy applies from the NEXT season.
+  eq(s.season.games, gamesAt('little'), 'R16: the season length is snapshotted');
+  eq(s.season.slots, slotsForLeague('little'), 'R16: so is which makeLeague slots it is played against');
+  eq(s.season.playoffFormat, playoffFormatFor('little'), 'R16: and so is the playoff format');
+  eq(C.seasonGames(s), gamesAt('little'), 'seasonGames reads it back');
+  eq(C.seasonPlayoffFormat(s), 'all', 'Little League is the everyone-in bracket (Matt, 2026-09-22)');
+  eq(s.season.schedule[gamesAt('little') - 1].opponentIndex, slotsForLeague('little').length - 1,
+    'the last game is always against the strongest team in the league (doc section 8, every SCHEDULE_SHAPE)');
+  for (const lg of LEAGUES) {
+    const ls = C.startSeason(at(lg));
+    eq(ls.season.schedule.length, gamesAt(lg), `${lg}: the schedule is its own ${gamesAt(lg)} games`);
+    eq(C.leagueTeams(ls).length, slotsForLeague(lg).length, `${lg}: played against its own ${slotsForLeague(lg).length} CPU teams`);
+  }
+
+  // THE LAW: a season document written BEFORE R16 carries no games/slots/playoffFormat at all, and
+  // must keep playing as the 12-game, all-eight-slots, top-4 season it was generated as.
+  {
+    const { makeSchedule } = await import('./baseball/js/engine/season.js');
+    const legacy = { ...fresh(), season: { n: 1, league: 'little', seed: 123, cap: 10,
+      points: { win: 3, loss: 1, bronze: 3, silver: 5, gold: 8 },
+      schedule: makeSchedule('little', 123, 'repeatMiddle'), results: [], phase: 'regular',
+      playoff: null, trophy: null, perfect: false } };
+    eq(C.validateState(legacy), [], 'a pre-R16 season document still validates');
+    eq(C.seasonGames(legacy), SEASON.gamesPerSeason, '...and is still 12 games long');
+    eq(C.seasonSlots(legacy), [0, 1, 2, 3, 4, 5, 6, 7], '...against all eight slots');
+    eq(C.seasonPlayoffFormat(legacy), 'top4', '...with the top-4 cut it was played under');
+    eq(C.leagueTeams(legacy).length, 8, '...and leagueTeams gives it all eight teams');
+    let st = legacy;
+    for (let i = 0; i < SEASON.gamesPerSeason; i++) st = playOne(st, i < 9).state;
+    eq(st.season.phase, 'semifinal', '...and a 9-3 record in it still reaches the playoffs');
+  }
 
   // A tuning deploy must not rewrite a season in progress: the season pays from its own snapshot.
   const tampered = { ...s, season: { ...s.season, points: { win: 99, loss: 0, bronze: 0, silver: 0, gold: 0 } } };
@@ -178,15 +219,16 @@ console.log('\n--- RULES: nextGame walks the season and stops ---');
 // -----------------------------------------------------------------------------------------------
 {
   let state = C.startSeason(fresh());
+  const n = gamesAt('little');
   const kinds = [];
-  for (let i = 0; i < SEASON.gamesPerSeason; i++) {
+  for (let i = 0; i < n; i++) {
     const m = C.nextGame(state);
     kinds.push(m.kind);
     eq(m.idx, i, `game ${i + 1} reports idx ${i}`);
     state = playOne(state, true).state;
   }
-  eq(new Set(kinds).size, 1, 'all 12 regular-season games report kind "regular"');
-  eq(C.nextGame(state).kind, 'semifinal', 'a 12-0 record goes to the semifinal');
+  eq(new Set(kinds).size, 1, `all ${n} regular-season games report kind "regular"`);
+  eq(C.nextGame(state).kind, 'semifinal', `a ${n}-0 record goes to the semifinal`);
   state = playOne(state, true).state;
   eq(C.nextGame(state).kind, 'championship', 'winning the semifinal goes to the championship');
   state = playOne(state, true).state;
@@ -198,31 +240,40 @@ console.log('\n--- RULES: nextGame walks the season and stops ---');
 console.log('\n--- RULES: the playoff cut, the trophies, and what replays ---');
 // -----------------------------------------------------------------------------------------------
 {
-  // scriptedStandings ('rawWins7') gives the eight CPU teams 0..7 wins and breaks every tie
-  // AGAINST the player (strengthRank -1), so the top-4 cut sits at "more than 4 wins".
-  for (const [wins, expected] of [[3, false], [4, false], [5, true], [9, true], [12, true]]) {
+  // R16, Matt (2026-09-22): "all teams should make the playoffs... just little league." EVERY
+  // Little League record reaches the semifinal, so the tutorial can never end in "missed the
+  // playoffs" - it always ends in a semifinal and, for most, a final.
+  for (let wins = 0; wins <= gamesAt('little'); wins++) {
     const { state } = playSeason(fresh(), wins, []);
     const made = state.season.phase !== 'done' || state.season.trophy !== 0;
-    eq(made, expected, `a ${wins}-${SEASON.gamesPerSeason - wins} record ${expected ? 'makes' : 'misses'} the top 4`);
+    eq(made, true, `Little League: a ${wins}-${gamesAt('little') - wins} record still makes the playoffs`);
+  }
+  // Above it the top-4 cut of 9 stays exactly as designed, and R16 reverses the TIE-BREAK: the
+  // player now wins ties, so the cut is the 4th CPU record rather than one win above it. At High
+  // School's 8 games the scripted CPU records are 0,1,2,3,5,6,7,8, so 5 wins is 4th and 4 is 5th.
+  for (const [wins, expected] of [[3, false], [4, false], [5, true], [8, true]]) {
+    const { state } = playSeason(at('highschool'), wins, []);
+    const made = state.season.phase !== 'done' || state.season.trophy !== 0;
+    eq(made, expected, `High School: a ${wins}-${gamesAt('highschool') - wins} record ${expected ? 'makes' : 'misses'} the top 4`);
   }
   {
-    const { state, trophy } = playSeason(fresh(), 4, []);
+    const { state, trophy } = playSeason(at('highschool'), 4, []);
     eq(trophy, 0, 'missing the playoffs is trophy 0');
-    eq(state.league, 'little', '...and replays the same league (doc section 4)');
+    eq(state.league, 'highschool', '...and replays the same league (doc section 4)');
     eq(state.seasonsPlayed, 1, '...and still counts as a season played');
   }
   {
-    const { state, trophy } = playSeason(fresh(), 9, ['loss']);
+    const { state, trophy } = playSeason(fresh(), ALL, ['loss']);
     eq(trophy, 1, 'losing the semifinal is Bronze');
     eq(state.league, 'little', 'Bronze replays the league');
   }
   {
-    const { state, trophy } = playSeason(fresh(), 9, ['win', 'loss']);
+    const { state, trophy } = playSeason(fresh(), ALL, ['win', 'loss']);
     eq(trophy, 2, 'losing the championship is Silver');
     eq(state.league, 'little', 'Silver replays the league');
   }
   {
-    const { state, trophy } = playSeason(fresh(), 9, ['win', 'win']);
+    const { state, trophy } = playSeason(fresh(), ALL, ['win', 'win']);
     eq(trophy, 3, 'winning the championship is Gold');
     eq(state.league, 'highschool', 'only Gold advances the league');
     eq(state.cap, CAPS.highschool, '...and the cap rises with it');
@@ -239,35 +290,47 @@ console.log('\n--- RULES: the points table at every league (doc section 7) ---')
 // the cap held out of the way so the raw yield is visible. `pointsEarned` is the GROSS the results
 // paid; `unspent` is what survived the cap.
 {
+  // R16: a season is a different LENGTH at every league now, so the fixture is "a sweep" and "one
+  // loss short of a sweep" rather than a flat 9-3 that only ever existed at 12 games.
   const table = [];
   for (const league of LEAGUES) {
-    const row = { league };
-    for (const [label, playoff] of [['miss', null], ['bronze', ['loss']], ['silver', ['win', 'loss']], ['gold', ['win', 'win']]]) {
+    const n = gamesAt(league);
+    const row = { league, n };
+    for (const [label, playoff] of [['bronze', ['loss']], ['silver', ['win', 'loss']], ['gold', ['win', 'win']]]) {
       // A career parked on this league with an ENORMOUS cap, so nothing is clamped.
-      const base = { ...fresh(), league, cap: 1000 };
-      const { state } = playSeason(base, label === 'miss' ? 4 : 9, playoff || []);
+      const { state } = playSeason({ ...fresh(), league, cap: 1000 }, ALL, playoff);
       row[label] = state.pointsEarned;
     }
+    // One short of a sweep, to prove a LOSS pays what the table says (nothing above High School).
+    row.oneLoss = playSeason({ ...fresh(), league, cap: 1000 }, gamesAt(league) - 1, ['win', 'win']).state.pointsEarned;
     table.push(row);
   }
-  console.log('    league      9-3+miss  9-3+bronze  9-3+silver  9-3+gold   (4-8 for miss)');
+  console.log('    league      games   sweep+bronze  sweep+silver  sweep+gold   one-loss+gold');
   for (const r of table) {
-    console.log(`    ${r.league.padEnd(11)} ${String(r.miss).padStart(6)} ${String(r.bronze).padStart(11)} ${String(r.silver).padStart(11)} ${String(r.gold).padStart(9)}`);
+    console.log(`    ${r.league.padEnd(11)} ${String(r.n).padStart(5)} ${String(r.bronze).padStart(13)} ${String(r.silver).padStart(13)} ${String(r.gold).padStart(11)} ${String(r.oneLoss).padStart(15)}`);
   }
   for (const league of LEAGUES) {
     const P = POINTS[league];
+    const n = gamesAt(league);
     const r = table.find((x) => x.league === league);
-    eq(r.miss, 4 * P.win + 8 * P.loss, `${league}: a 4-8 missed-playoff season pays 4 wins and 8 losses exactly`);
-    eq(r.bronze, 9 * P.win + 3 * P.loss + P.bronze, `${league}: 9-3 plus a semifinal LOSS pays the regular season plus Bronze (the playoff loss pays nothing)`);
-    eq(r.silver, 9 * P.win + 3 * P.loss + P.silver, `${league}: 9-3 plus a championship loss pays the regular season plus Silver (the semifinal WIN pays nothing)`);
-    eq(r.gold, 9 * P.win + 3 * P.loss + P.gold, `${league}: 9-3 plus a championship win pays the regular season plus Gold`);
+    eq(r.bronze, n * P.win + P.bronze, `${league}: a sweep plus a semifinal LOSS pays the regular season plus Bronze (the playoff loss pays nothing)`);
+    eq(r.silver, n * P.win + P.silver, `${league}: a sweep plus a championship loss pays the regular season plus Silver (the semifinal WIN pays nothing)`);
+    eq(r.gold, n * P.win + P.gold, `${league}: a sweep plus a championship win pays the regular season plus Gold`);
+    eq(r.oneLoss, (n - 1) * P.win + P.loss + P.gold, `${league}: and one loss short of a sweep pays that league's own loss points`);
   }
-  // The doc's own worked example, section 7: "At 12 games a season with a 9-3 record and Gold...
-  // Little League: cap room 30, yield 38."
-  const gold = playSeason(fresh(), 9, ['win', 'win']);
-  eq(gold.state.pointsEarned, 38, 'doc section 7: a 9-3 Gold season at Little League yields 38 gross');
-  eq(gold.state.unspent, 30, '...of which 30 fit in the cap room');
-  eq(gold.state.pointsLost, 8, '...and 8 were lost to the cap, exactly as the doc says');
+  // A missed-playoff season still pays its own wins and losses, where one is possible at all.
+  {
+    const P = POINTS.highschool;
+    const missed = playSeason({ ...fresh(), league: 'highschool', cap: 1000 }, 4, []);
+    eq(missed.state.pointsEarned, 4 * P.win + 4 * P.loss, 'High School: a 4-4 missed-playoff season pays 4 wins and 4 losses exactly');
+  }
+  // R16's own worked example, replacing the doc's 12-game one: LITTLE LEAGUE IS A 3-GAME SEASON
+  // and a sweep plus Gold pays EXACTLY the cap room. The tutorial ends with every skill at the cap
+  // and nothing lost.
+  const gold = playSeason(fresh(), ALL, ['win', 'win']);
+  eq(gold.state.pointsEarned, 30, 'R16 section 7: a 3-0 Gold season at Little League yields 30 gross (3 x 6 + 12)');
+  eq(gold.state.unspent, 30, '...of which ALL 30 fit in the cap room');
+  eq(gold.state.pointsLost, 0, '...and none is lost to the cap - the tutorial pays exactly what it can hold');
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -304,11 +367,11 @@ console.log('\n--- RULES: caps, cap room and spending ---');
     'a spend with nothing unspent is refused');
 
   // The cap RISES on an advance and HOLDS on a replay.
-  const replay = playSeason(fresh(), 9, ['loss']);
+  const replay = playSeason(fresh(), ALL, ['loss']);
   eq(replay.state.cap, START_CAP, 'a replayed league keeps its cap');
-  const advance = playSeason(fresh(), 9, ['win', 'win']);
+  const advance = playSeason(fresh(), ALL, ['win', 'win']);
   eq(advance.state.cap, CAPS.highschool, 'advancing raises the cap');
-  const second = playSeason(advance.state, 9, ['win', 'win']);
+  const second = playSeason(advance.state, ALL, ['win', 'win']);
   eq(second.state.cap, CAPS.college, '...and again on the next advance');
   ok(second.state.cap > advance.state.cap, 'the cap only ever rises');
 }
@@ -320,7 +383,7 @@ console.log('\n--- RULES: a full career climbs to the Majors ---');
   let state = fresh();
   const climbed = [state.league];
   for (let i = 0; i < 4; i++) {
-    state = playSeason(state, 9, ['win', 'win']).state;
+    state = playSeason(state, ALL, ['win', 'win']).state;
     climbed.push(state.league);
   }
   eq(climbed, ['little', 'highschool', 'college', 'minors', 'majors'], 'four Golds walk the whole ladder');
@@ -330,10 +393,10 @@ console.log('\n--- RULES: a full career climbs to the Majors ---');
   eq(state.wsTitles, 0, 'none of them was a World Series (they were promotions)');
 
   // Majors Gold counts a World Series title and STAYS in the Majors (doc section 4).
-  const ws = playSeason(state, 9, ['win', 'win']);
+  const ws = playSeason(state, gamesAt('majors') - 3, ['win', 'win']);
   eq(ws.state.league, 'majors', 'a Majors Gold stays in the Majors');
   eq(ws.state.wsTitles, 1, '...and counts a World Series title');
-  eq(ws.state.perfectSeasons, 0, '...but a 9-3 season is not a perfect one');
+  eq(ws.state.perfectSeasons, 0, `...but an ${gamesAt('majors') - 3}-3 season is not a perfect one`);
   eq(ws.state.bestTrophyByLeague.majors, 3, '...and records Gold in the Majors');
   const wsRecord = ws.records[ws.records.length - 1];
   eq(wsRecord.extras.wsTitles, 1, 'the title rides on the final game\'s recorder call');
@@ -341,35 +404,38 @@ console.log('\n--- RULES: a full career climbs to the Majors ---');
   eq(wsRecord.extras.trophy, 3, '...as does the trophy');
 
   // Perfect season: every regular AND playoff game won, in the Majors (doc section 5, [Locked]).
-  const perfect = playSeason(ws.state, SEASON.gamesPerSeason, ['win', 'win']);
-  eq(perfect.state.perfectSeasons, 1, 'a 12-0 Majors season with both playoff wins is a Perfect Season');
+  const perfect = playSeason(ws.state, ALL, ['win', 'win']);
+  eq(perfect.state.perfectSeasons, 1, `a ${gamesAt('majors')}-0 Majors season with both playoff wins is a Perfect Season`);
   eq(perfect.state.wsTitles, 2, '...and is also a World Series title');
   eq(perfect.state.season.perfect, true, '...and the season says so');
   eq(perfect.records[perfect.records.length - 1].extras.perfectSeasons, 1, '...and it rides on the final game\'s call');
 
   // A 12-0 season one rung DOWN is not a perfect season.
   let lower = fresh();
-  lower = playSeason(lower, SEASON.gamesPerSeason, ['win', 'win']).state;
-  eq(lower.perfectSeasons, 0, 'a 12-0 Gold below the Majors is not a Perfect Season');
+  lower = playSeason(lower, ALL, ['win', 'win']).state;
+  eq(lower.perfectSeasons, 0, 'a sweep and a Gold below the Majors is not a Perfect Season');
 }
 
 // -----------------------------------------------------------------------------------------------
 console.log('\n--- RULES: one recorder call per game, the season riding on the last one ---');
 // -----------------------------------------------------------------------------------------------
 {
-  const { records } = playSeason(fresh(), 9, ['win', 'win']);
-  eq(records.length, SEASON.gamesPerSeason + 2, 'one recorder call per game, 12 regular plus 2 playoff');
+  const n = gamesAt('little');
+  const { records } = playSeason(fresh(), ALL, ['win', 'win']);
+  eq(records.length, n + 2, `one recorder call per game, ${n} regular plus 2 playoff`);
   eq(records.filter((r) => r.extras.seasons).length, 1, 'exactly ONE of them carries seasons: 1');
   eq(records.filter((r) => r.extras.trophy != null).length, 1, 'exactly ONE of them carries the trophy');
   eq(records[records.length - 1].extras.trophy, 3, 'and it is the last game of the season');
   eq(records.every((r) => r.league === 'little'), true, 'every call names the league the season was played on');
-  eq(records.filter((r) => r.won).length, 11, '9 regular wins plus 2 playoff wins');
+  eq(records.filter((r) => r.won).length, n + 2, `${n} regular wins plus 2 playoff wins`);
 
   // A missed-playoff season resolves on the LAST REGULAR GAME, not on a game that never happens.
-  const missed = playSeason(fresh(), 4, []);
-  eq(missed.records.length, SEASON.gamesPerSeason, 'a missed-playoff season makes exactly 12 calls');
-  eq(missed.records[SEASON.gamesPerSeason - 1].extras.seasons, 1, 'the season rides on game 12');
-  eq(missed.records[SEASON.gamesPerSeason - 1].extras.trophy, 0, '...with trophy 0');
+  // R16: at High School, since nobody misses the playoffs at Little League any more.
+  const hs = gamesAt('highschool');
+  const missed = playSeason(at('highschool'), 4, []);
+  eq(missed.records.length, hs, `a missed-playoff season makes exactly ${hs} calls`);
+  eq(missed.records[hs - 1].extras.seasons, 1, `the season rides on game ${hs}`);
+  eq(missed.records[hs - 1].extras.trophy, 0, '...with trophy 0');
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -391,7 +457,8 @@ console.log('\n--- RULES: a forfeit is a loss ---');
 console.log('\n--- RULES: streaks and bests ---');
 // -----------------------------------------------------------------------------------------------
 {
-  let state = C.startSeason(fresh());
+  // R16: parked at the Majors, which is the league with enough games (14) for a six-game streak.
+  let state = C.startSeason(at('majors'));
   for (const won of [true, true, true, false, true, true]) state = playOne(state, won).state;
   eq(state.stats.streak, 2, 'the live streak is the current run');
   eq(state.stats.bestWinStreak, 3, 'the best streak is the longest run, and only ever rises');
@@ -408,8 +475,8 @@ console.log('\n--- RULES: the frozen history row ---');
 // -----------------------------------------------------------------------------------------------
 {
   let state = fresh(1000);
-  state = playSeason(state, 9, ['win', 'win']).state;      // little Gold -> highschool
-  state = playSeason(state, 9, ['loss']).state;            // highschool Bronze
+  state = playSeason(state, ALL, ['win', 'win']).state;    // little Gold -> highschool
+  state = playSeason(state, ALL, ['loss']).state;          // highschool Bronze
   const row = C.historyRow(state, 55000);
   eq(Object.keys(row).sort(), [
     'bestLeague', 'bestTrophyByLeague', 'careerId', 'endedAt', 'finalLeague', 'forfeits', 'hand',
@@ -425,7 +492,7 @@ console.log('\n--- RULES: the frozen history row ---');
   eq(row.bestTrophyByLeague.little, 3, 'the per-league trophy bests are carried');
   eq(row.bestTrophyByLeague.highschool, 1, '...for every league that earned one');
   eq(row.seasons, 2, 'two seasons resolved');
-  eq(row.played, (SEASON.gamesPerSeason + 2) + (SEASON.gamesPerSeason + 1), 'played counts every game of both seasons');
+  eq(row.played, (gamesAt('little') + 2) + (gamesAt('highschool') + 1), 'played counts every game of both seasons');
   eq(row.won + row.lost, row.played, 'won plus lost is played');
   eq(row.forfeits, 0, 'no forfeits');
   eq(row.rulesV, RULES_V, 'the row carries the rules version');

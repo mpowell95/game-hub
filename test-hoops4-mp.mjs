@@ -201,5 +201,78 @@ check('a player code is normalised and validated',
     /\.h4-mp-body[\s\S]{0,300}overscroll-behavior: contain/.test(css));
 }
 
+// -----------------------------------------------------------------------------------------------
+// THE LAUNCHER ALERT (hoops4/js/alert.js)
+// -----------------------------------------------------------------------------------------------
+// Matt: "to see a challenge, you must go into the hoops connect 4, click play a friend, then it's
+// displayed below 'Challenge'. There is no other notification anywhere." decideAlert is the whole
+// decision behind the launcher's speech bubble, and it is pure - so it is tested here rather than
+// discovered by a screenshot.
+{
+  const A = await import('./hoops4/js/alert.js');
+  const row = (id, o = {}) => ({ id, name: o.name || 'Anita', emoji: '🐱',
+    updated: o.updated == null ? 100 : o.updated, yourTurn: !!o.yourTurn, over: !!o.over });
+
+  const nothingSeen = A.decideAlert([row('g1', { updated: 100 })], {});
+  check('an unseen match is a CHALLENGE, named after the person',
+    nothingSeen && nothingSeen.kind === 'challenge' && nothingSeen.name === 'Anita');
+  check('a match acknowledged at its own stamp says nothing',
+    A.decideAlert([row('g1', { updated: 100 })], { g1: 100 }) === null);
+  const moved = A.decideAlert([row('g1', { updated: 200, yourTurn: true })], { g1: 100 });
+  check('a SEEN match whose turn came back round is a TURN, not a challenge',
+    moved && moved.kind === 'turn');
+  check('a seen match that moved but is NOT your turn says nothing',
+    A.decideAlert([row('g1', { updated: 200, yourTurn: false })], { g1: 100 }) === null);
+  check('a finished match never alerts, however new it is',
+    A.decideAlert([row('g1', { updated: 999, over: true, yourTurn: true })], {}) === null);
+  // A brand new match outranks a turn: it is the bigger event and the one with a name attached.
+  const both = A.decideAlert([
+    row('old', { updated: 300, yourTurn: true, name: 'Ana' }),
+    row('new', { updated: 200, name: 'Bea' }),
+  ], { old: 100 });
+  check('a new challenge outranks an older match whose turn it is',
+    both && both.kind === 'challenge' && both.name === 'Bea');
+  check('the count covers every match wanting attention, not just the one shown',
+    both && both.count === 2);
+  check('a malformed listing cannot throw',
+    A.decideAlert(null, {}) === null && A.decideAlert([null, {}], {}) === null);
+
+  // STRUCTURAL: the hub must not learn what a Connect 4 Hoops challenge is. The registry hands it
+  // a module; js/hub.js only handles the shape that module returns.
+  const hub = readFileSync(new URL('./js/hub.js', import.meta.url), 'utf8');
+  check('the hub reaches the alert module through a registry entry, not by name',
+    /alerts: \(\) => import\('\.\.\/hoops4\/js\/alert\.js'\)/.test(hub)
+    && /typeof g\.alerts !== 'function'/.test(hub));
+  check('the alert check runs AFTER the launcher has painted, never on the critical path',
+    /_afterPaint\(\(\) => this\._checkGameAlerts\(\)\)/.test(hub));
+  check('a game tile cannot break the launcher', /console\.warn\('\[hub\] alert check failed for'/.test(hub));
+
+  // [KNOWN-BUG PROBE] THE BUBBLE THAT WOULD NOT GO AWAY (2026-09-22). Matt, having played the
+  // turn it was pointing at: "it should go away. I just did that and it stayed there even though
+  // it's not my turn." Two faults, and each one alone is enough to bring it back:
+  //   1. _dismissGameAlert took a `paint = false` on the open-the-game path, so the element was
+  //      never removed - and neither launch() nor showLauncher() re-renders the grid, they only
+  //      hide and un-hide it, so the same node came back into view on return.
+  //   2. _checkGameAlerts only assigned this._gameAlert when it FOUND something, so an alert
+  //      that had stopped being true was never cleared.
+  check('[KNOWN-BUG PROBE] dismissing an alert always removes it from the DOM',
+    !/_dismissGameAlert\(false\)/.test(hub)
+    && /_dismissGameAlert\(\) \{[\s\S]{0,600}this\._gameAlert = null;\n    this\._paintGameAlert\(\);/.test(hub));
+  check('[KNOWN-BUG PROBE] the alert check clears a stale alert, not just sets a new one',
+    /this\._gameAlert = found;\n    this\._paintGameAlert\(\);/.test(hub));
+  check('[KNOWN-BUG PROBE] returning to the launcher re-asks who is waiting',
+    /showLauncher\(\)[\s\S]{0,1400}this\._checkGameAlerts\(\);/.test(hub));
+
+  // The two states differ by their WORDS, not only their colour (Matt is red/green colourblind).
+  const strings = readFileSync(new URL('./js/strings.js', import.meta.url), 'utf8');
+  check('the bubble says which state it is in, in words',
+    /hub_alert_challenged/.test(strings) && /hub_alert_your_turn/.test(strings));
+
+  const h4css = readFileSync(new URL('./hoops4/css/hoops4.css', import.meta.url), 'utf8');
+  check('the ceremony settles to its final pose under reduced motion, never hidden',
+    /is-still[\s\S]{0,400}animation: none;[\s\S]{0,120}opacity: 1;/.test(h4css)
+    && !/prefers-reduced-motion[\s\S]{0,400}\.h4-cer[\s\S]{0,200}display: none/.test(h4css));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

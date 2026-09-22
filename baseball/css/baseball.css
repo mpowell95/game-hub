@@ -186,6 +186,10 @@
   text-align: center;
 }
 .bb-pcd { display: flex; flex-direction: column; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* R16 ship review: points waiting to be spent are the whole reward loop, so the career chip says
+ * so on career home instead of only on the player screen behind it. Text carries the meaning; the
+ * accent is emphasis, never the only cue. */
+.bb-playerchip-unspent { background: #ffce3a; color: #1a2233; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 800; }
 .bb-pcd b { font-size: 11px; font-weight: 700; opacity: .65; }
 :root.gh-dark .bb-root .bb-playerchip { background: #1b2434; color: #e9eef6; border-color: rgba(190, 214, 244, .18); }
 
@@ -231,6 +235,8 @@
   font-size: 11px;
   flex: 0 0 auto;
 }
+/* R16: a four-team Little League fits one column - two would leave a column-wide hole. */
+.bb-standings.is-single { grid-template-columns: 1fr; }
 .bb-standings-col { display: flex; flex-direction: column; gap: 2px; }
 .bb-standing-row {
   display: flex;
@@ -246,13 +252,12 @@
 .bb-standing-rec { font-variant-numeric: tabular-nums; opacity: .85; }
 
 .bb-trophies { display: flex; gap: 10px; justify-content: center; flex: 0 0 auto; }
-.bb-trophy { display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: .4; }
-.bb-trophy.is-won { opacity: 1; }
-.bb-trophy-shape { width: 16px; height: 16px; }
-.bb-trophy-circle { border-radius: 50%; background: #F2B705; }
-.bb-trophy-triangle { background: #1F5FA8; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
-.bb-trophy-diamond { background: #E0532F; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
-.bb-trophy.is-won .bb-trophy-shape { outline: 2px solid var(--gh-ink, #1a2233); outline-offset: 1px; }
+/* Ship review 2026-09-22: real trophy cups (inline SVG from ui.js's trophySVG), an unwon one a grey
+ * silhouette, a won one in its metal; the tiers also differ in height and mark, never hue alone. */
+.bb-trophy { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.bb-trophy-shape { width: 30px; height: 30px; display: block; }
+.bb-trophy:not(.is-won) .bb-trophy-shape { filter: grayscale(1); opacity: .35; }
+.bb-trophy:not(.is-won) .bb-trophy-label { opacity: .5; }
 .bb-trophy-label { font-size: 11px; font-weight: 700; opacity: .85; }
 
 .bb-career-sync { font-size: 11px; text-align: center; min-height: 14px; opacity: .8; flex: 0 0 auto; }
@@ -271,10 +276,7 @@
 }
 
 .bb-points-pill--single { align-self: center; }
-.bb-trophy-big { width: 56px; height: 56px; margin: 6px auto; }
-.bb-trophy-big.bb-trophy-circle { border-radius: 50%; background: #F2B705; }
-.bb-trophy-big.bb-trophy-triangle { background: #1F5FA8; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
-.bb-trophy-big.bb-trophy-diamond { background: #E0532F; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+.bb-trophy-big { width: 72px; height: 72px; margin: 4px auto; display: block; }
 
 :root.gh-dark .bb-root .bb-ladder-step { background: #1b2434; color: #e9eef6; }
 :root.gh-dark .bb-root .bb-ladder-step.is-current { background: #ffce3a; color: #1a2233; }

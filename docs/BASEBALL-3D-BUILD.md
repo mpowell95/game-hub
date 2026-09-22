@@ -1878,3 +1878,155 @@ team names (design doc open item 12) is decided. Standings still use the `rawWin
 CPU record tops out at 7-0 beside the player's 12-game record. Suites: device 48 of 48, visual
 20 of 20, `check-no-scroll` 16 of 16, `baseball/js/test.js` 2799, `test-baseball-career.mjs`
 293.
+
+### R16: the career economy, rebuilt from measurement (2026-09-22)
+
+Matt: *"Rework the baseball career economy from scratch... Little League is basically a tutorial...
+each league after that should feel like a real step up... Winning the World Series in the majors
+should take at least 2 seasons... Measure the difficulty with the simulator rather than
+estimating."* Then: *"Little league should have a shorter season. And all teams should make the
+playoffs... just little league."* Then: *"let's go with your recommendation."* The full study, with
+every measured number, is the proposal file sent on 2026-09-22 (revision 3); its driver is
+`scratchpad/econ/career-sim.mjs` in the session scratchpad and becomes a repo tool in this stage.
+
+What the study found: played as a real career, the shipped economy is trivially easy (median
+player, first-attempt Gold 99 / 97 / 79 / 68 / 51 percent, a World Series in six seasons, every
+time), because `sim-baseball.mjs` always tested a player 2 to 11 points per skill weaker than a
+real career player, `teams.js` generates CPU rosters at half their stated level (a literal 0.5 in
+`allocateSkills`), the contact circle at high skill is wider than the strike zone, and four of six
+skills do nothing.
+
+1. **Seasons, playoffs, points.** Per league: Little League is a 4-team league (the player plus
+   makeLeague slots 1, 4 and 7), 3 regular games (one against each), every team in the playoffs
+   (semifinal by seed, final), points win 6 / loss 2 / Bronze 4 / Silver 8 / Gold 12. High School
+   9 teams, 8 games, 3 / 1 / 3 / 5 / 8. College 10 games, 2 / 0 / 3 / 5 / 8. Minors 12 games,
+   2 / 0 / 2 / 4 / 7. Majors 14 games, 1 / 0 / 2 / 4 / 6. Top 4 of 9 with semifinal and final from
+   High School up. Caps 10 / 14 / 18 / 22 / 26 unchanged. `SEASON.gamesPerSeason` stays as a frozen
+   fallback for old snapshots (THE LAW rule 5); `startSeason` snapshots games, league size and
+   bracket beside cap and points.
+2. **Standings.** CPU records scaled to the season length (`scaledToSeason`, CPU rank r finishes
+   `round(n * r / (size - 1))`); the player wins ties. Schedule generator for any length and any
+   league size: ascending, champion once and last, extras on the middle slots, identical to
+   `repeatMiddle` at 12.
+3. **CPU level.** Two new tables replace the literal 0.5: `CPU_ROSTER_LEVEL` (mean skill points
+   per CPU player, little 4.1 / highschool 10.7 / college 16.4 / minors 21.0 / majors 22.1, the
+   study's roster multipliers 1.4 / 2.0 / 2.2 / 3.3 / 2.5 over today's means) and
+   `CPU_ROSTER_CEILING` (9 / 13 / 17 / 21 / 25). The slot ladder, styles and behaviour tables are
+   unchanged; `CPU_SIGMA_MIN_MS`, `CPU_LEVEL_SHORTFALL` and `LEAGUE_TIMING_WINDOW_MULT` unchanged.
+4. **Engine constants.** `FEEL.engine.cursorR` 0.55 / 0.35 to 0.34 / 0.22 with a new
+   `LEAGUE_CONTACT_MULT` (little 1.6, highschool 1.3, the rest 1.0) applied where swing.js reads
+   it; `SKILL_EFFECT.hitAcc.contactRadiusInPerPt` 0.09 to 0.045; `FEEL.engine.aimScatter` 0.12 to
+   0.30; `pitchAcc.throwAccuracyPerPt` 0.01 to 0.038; `pitchSpd.throwMphPerPt` 0.5 to 3.0;
+   `pitchSpin` break 0.02 to 0.05 and changeup gap 0.01 to 0.025; `AIM_CORNER_BIAS_BASE` /
+   `_SCALE` 0.9 / 0.9 to 0.62 / 0.30.
+5. **Three engine fixes so the pitching skills exist.** Pitch speed: the timing window scales
+   with time to the plate (`timeToPlateS / referenceFlightS`, threaded from the pitch into the
+   swing decision, bunt included). Accuracy: the corner aim resolves inside the zone (item 4).
+   Spin: the pitch is aimed at `target minus break` so the break lands on the aim, and the strike
+   call is unchanged in meaning; the batting-side target marker keeps showing the real crossing.
+6. **The simulator tells the truth.** `sim-baseball.mjs`: the player's skills per league become
+   the career ARRIVAL levels (5 / 10 / 14 / 18 / 22 per skill), one agent per game, the model
+   batter gets `skills` so power mode exists, `seasonsToCap` against the real room, runs per game
+   reported, the Perfect Season gate two-sided (2 to 10 percent), `--quick` never decides a band.
+   The career driver joins the repo as `sim-baseball-career.mjs` (plays whole careers through the
+   real engine and the real `career.js`, not a mirror; N and tier as arguments; prints first-attempt
+   Gold per league with intervals, seasons per league, seasons and games to the first title, the
+   Perfect Season rate) with a root CLAUDE.md row. Its assertion form pins: median first-attempt
+   Gold little >= 90, highschool 70 to 90, college 40 to 65, minors 25 to 45, majors <= 15; median
+   seasons to the first title 8 to 13; Majors seasons before it >= 2; Perfect Season 2 to 12.
+7. **Tests and docs.** `test-baseball-career.mjs` fixtures move to the new shape (the worked
+   example becomes a 3-0 Little League sweep plus Gold paying 30, all 30 fitting); `baseball/js/
+   test.js` contact fixtures recalibrated, a test for the flight-time window and the aim
+   compensation; `season.js` tests for the generator at every length and the 4-team bracket;
+   design doc sections 4, 7 and 8 restated with the measured bands (99.7 / 90 / 80 / 71 / 60);
+   `baseball/CLAUDE.md` entry with the study's scoreboard.
+8. **Screens.** Career home at Little League shows 4 standings rows and "Game n of 3"; the
+   season line names the playoff round; nothing else changes. The device probes' `career-season`
+   fixture moves to the new season shape.
+
+Deliverables: `node sim-baseball-career.mjs --assert` green at the median tier with N >= 150, the
+suites in item 7, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs
+baseball`, `node check-no-scroll.mjs baseball` green; stills of career home at Little League.
+
+### R16 record (shipped v894, 2026-09-22)
+
+Built as specified, with three ship-review changes. As built, `sim-baseball-career.mjs` read
+College 47 and Minors 37 percent first-attempt Gold at N=200 (a flat spot, the Minors no step up),
+because the corner-aim fix hands the batter more hittable strikes exactly where `cornerBias` is
+highest, and the roster lever is exhausted at the Minors (`CPU_ROSTER_CEILING.minors` is 22, the
+player's own cap; at the spec's 21 the Minors measured EASIER than College). Two Minors-only
+levers measured: the CPU timing floor 70 to 62 ms gave 50 / 32 / 8 with the Majors and the total
+career unchanged (shipped); a narrower Minors timing window (0.8) barely moved the Minors and cut
+the Majors to 3.5 percent (rejected). The High School assertion band's upper edge moved from 90
+to 95 percent, Matt's brief being "win first time" in the lower leagues. The career chip on career
+home shows the points waiting to be spent. Measured at N=200, median tier: first-attempt Gold
+100 / 90.5 / 50.5 / 31.5 / 7.5 percent; first World Series median 9 seasons (mean 10.3), Majors
+median 4; Perfect Season at maxed skills and the strong tier 7.5 percent [4.6, 12.0]; all eight
+assertions pass. Weak tier 95 / 53 / 7 / 2 / 0, stalls at the Minors as the study predicted;
+strong tier 100 / 98 / 88 / 89 / 63. Runs per game at the median tier: Little League 29-2 over 3
+games, College 6.5-3.9, Majors 8.4-7.3. Still not achieved: a strong player wins the Majors first
+time 63 percent; hitSpd stays dead until the model human steals; `pitchAcc.throwAccuracyPerPt`
+is read by nothing (game.js resolves pitchAcc against the league cap), so what made Accuracy
+matter is `aimScatter` and the corner aim. `RULES_V` 3 to 4 refuses a mid-at-bat engine snapshot
+taken under the old rules (one game's progress, no history); a pre-R16 season document keeps its
+own 12-game, eight-team, top-4 shape through the frozen fallbacks. Suites: `baseball/js/test.js`
+3000, `test-baseball-career.mjs` 309, device 48 of 48, visual 20 of 20, `check-no-scroll` 16 of
+16, `test-sw-strategy.mjs` 107.
+
+### R17: each league looks and feels different (2026-09-22)
+
+Matt: *"let's move to making each league look and feel different."* The contact sheet of v888
+(`scratchpad/leagues/leagues-today.jpg`, batter and pitcher cameras at all five leagues) shows
+why: from the plate every league is the same grass, the same noon sky, the same navy-and-red
+uniforms and the same white lines, with only the strip behind the outfield changing, and the
+Minors and Majors are indistinguishable. R13's `LEAGUE_STADIUM` table (backstop, bleachers,
+parents, tiers, towers, berm, press box) stays and this stage extends it. Everything below is
+generated in code from small canvas textures, no image files (R1's rule), and every camera is
+checked at every league.
+
+| | Little League | High School | College | Minors | Majors |
+|---|---|---|---|---|---|
+| Time and sky | bright noon, a few clouds | late afternoon, warm low sun, long shadows | overcast evening, cool grey-blue | night, dark blue sky, towers lit, light pools on the grass | night, big-league lights, a city glow on the horizon |
+| Grass | patchy two-tone, no mowing pattern | plain cut, one tone | mowing stripes | checkerboard mow, brighter | pristine stripes, deepest green |
+| Dirt and lines | pale dirt, faded chalk, bare basepaths | fresh chalk | standard | brighter lines | red-clay dirt, bright white lines |
+| Outfield fence | 6 ft chain-link with sponsor banners (there) | painted wood fence, school name on the scoreboard | padded wall, one ring of ads | wall with ads, a bullpen | high wall, the scoreboard lit |
+| CPU uniforms | one flat colour per team, plain tee | team colours, simple lettering | team colours, pinstripes for one side | team colours, numbers on the back | team colours, full piping |
+| Crowd | parents on bleachers (there) | fuller bleachers (there), a band section | one tier (there), banners | two tiers (there) | three tiers (there), a wave of camera flashes on a home run |
+| Figures | scaled 0.85 (kids), caps a touch larger | full size | full size | full size | full size |
+
+1. **Time of day per league.** A `LEAGUE_LIGHTING` table in `field.js`: sky zenith and horizon
+   colours, cloud amount, sun colour, sun elevation and azimuth, hemisphere light colours and
+   intensity, an optional horizon glow, and for the night leagues lit tower heads and light pools
+   on the grass (a soft radial brightening of the grass texture around each tower's footprint).
+   Shadows follow the sun. The batter camera's sky band, the pitcher camera's backstop and the
+   chase camera's field must all read as that time of day.
+2. **Field surface per league.** `grassTexture(league)` and the dirt colours read a
+   `LEAGUE_SURFACE` table (the mow pattern, the two greens, the dirt and line colours, chalk
+   opacity). The infield skin, mound, basepaths and foul lines already exist; only their colours
+   and the grass pattern change.
+3. **Fence and wall per league.** `wallTexture(league)`: chain-link with banners at Little
+   League (there), painted wood at High School, padded with one ad ring at College, ads and a
+   bullpen at the Minors, a taller wall at the Majors. The fence height is the wall's own height
+   already used by the flight rule; keep the two in step.
+4. **Team colours.** Every CPU style gets a palette in `actors.js` (shirt, trim, pants, cap):
+   Aces, Sluggers, Flames, Foxes, Tricksters, Owls, Sparrows, Generals, each a distinct hue pair
+   that stays readable against the home navy and against every league's grass at both cameras.
+   The colour key already remaps the painted skin per part (`KEYS`), so this is a `to` table per
+   style, applied when the CPU team is built; the player's own team stays navy. Caps follow the
+   shirt. Uniform style per league (plain tee, lettering, pinstripes, numbers, piping) is a
+   texture overlay drawn on the same canvas, one small function each.
+5. **Kids at Little League.** `Actors` scales every figure by 0.85 at Little League (feet still
+   on the ground, the bat and cap scaled with the figure, the batter-camera framing re-measured
+   so the zone box and the batter keep their bands; `foot-on-ground` and `pitcher-frame` probes
+   pass at Little League).
+6. **Probes.** `test-baseball-device.mjs`: `league-look` reads, per league, the sky band's mean
+   colour at the batter camera, the grass mean colour and the CPU shirt colour, and asserts all
+   five leagues differ from each other by a measured distance, and that the night leagues are
+   darker than the day ones; `test-baseball-actors.mjs`: every style palette stays outside the
+   skin-tone family and the Little League scale keeps feet at y = 0. Draw calls per camera per
+   league reported (stay under 40).
+
+Deliverables: stills from all three cameras at all five leagues in one contact sheet beside the
+v888 sheet, the per-league tables as implemented, draw-call counts, and the suites green:
+`node test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node
+test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`.

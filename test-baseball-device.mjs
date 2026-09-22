@@ -822,18 +822,21 @@ await ctx.close();
               } else {
                 ok(`pitch-drag: a screen-right drag on the PITCHER camera (High School - R11's default Little League only unlocks fastball) samples the MIRRORED engine aim (${got.aim.x.toFixed(3)}, ${got.aim.y.toFixed(3)}) within (${dx.toFixed(4)}, ${dy.toFixed(4)}) of (${WANT.x}, ${WANT.y}), and draws right of the zone centre (px ${got.pxX.toFixed(1)} > ${got.zoneCx.toFixed(1)}), sampled ${got.dragDoneMs.toFixed(0)}ms after the tap`);
               }
-              // With the draws pinned mid-range there is no scatter at all, so the STRAIGHT point is
-              // the aim exactly and the difference between it and the crossing is the type's own
-              // break - the R2 mechanic that replaced steering, measured end to end. Untouched by
-              // the R8 sign fix (this is all in engine units, never screen space).
-              const sdx = Math.abs(got.preview.straightX - got.aim.x), sdy = Math.abs(got.preview.straightY - got.aim.y);
+              // R16 REVERSES WHAT THIS MEASURES. With the draws pinned mid-range there is no
+              // scatter at all, and the pitch is now aimed at `aim - break` - so the CROSSING is
+              // the aim exactly, the STRAIGHT point sits one break away from it, and the
+              // difference between the two is still the type's own BREAK_OFFSET. That is the point
+              // cursor's real promise: the yellow point you drag is where the pitch ENDS. Before
+              // R16 the straight point was the aim and the ball finished a quarter of a zone unit
+              // outside it, which is why paying for Spin bought walks.
+              const cdx = Math.abs(got.preview.x - got.aim.x), cdy = Math.abs(got.preview.y - got.aim.y);
               const bx = got.preview.x - got.preview.straightX, by = got.preview.y - got.preview.straightY;
-              if (sdx > 1e-9 || sdy > 1e-9) {
-                fail('pitch-drag', `with the scatter draws pinned mid-range the straight point should BE the aim; it is off by (${sdx}, ${sdy})`);
+              if (cdx > 1e-9 || cdy > 1e-9) {
+                fail('pitch-drag', `with the scatter draws pinned mid-range the CROSSING should BE the aim (R16 aim compensation); it is off by (${cdx}, ${cdy})`);
               } else if (Math.abs(Math.abs(bx) - consts.curveBreak.x) > 1e-9 || Math.abs(by - consts.curveBreak.y) > 1e-9) {
                 fail('pitch-drag', `the curveball's break at the plate is (${bx.toFixed(3)}, ${by.toFixed(3)}), not BREAK_OFFSET.curveball (+-${consts.curveBreak.x}, ${consts.curveBreak.y})`);
               } else {
-                ok(`pitch-drag: the curveball crosses at aim + BREAK_OFFSET (break ${bx.toFixed(3)}, ${by.toFixed(3)} zone units) - the point cursor's own promise`);
+                ok(`pitch-drag: the curveball CROSSES AT THE AIM and travels BREAK_OFFSET from its straight point (break ${bx.toFixed(3)}, ${by.toFixed(3)} zone units) - the point cursor's own promise, R16`);
               }
             }
           }
@@ -2477,13 +2480,15 @@ function bbProfileInit() {
       });
       if (!res.hasChip) fail('career-home', 'no player chip on career home');
       else if (res.ladderSteps !== 5) fail('career-home', `expected 5 ladder steps, got ${res.ladderSteps}`);
-      else if (res.standingRows !== 9) fail('career-home', `expected 9 standings rows, got ${res.standingRows}`);
+      // R16: Little League is a 4-TEAM league (the player plus makeLeague slots 1, 4 and 7), so
+      // career home shows four standings rows there, not nine.
+      else if (res.standingRows !== 4) fail('career-home', `expected 4 standings rows at Little League, got ${res.standingRows}`);
       else if (res.trophies !== 3) fail('career-home', `expected 3 trophy shapes, got ${res.trophies}`);
       else if (!res.hasPrimary) fail('career-home', 'no primary button');
       else if (!res.hasRetire) fail('career-home', 'no retire/forfeit button');
       else if (res.minControl < 44) fail('career-home', `a control measures ${res.minControl}px, under the 44px floor`);
       else if (res.pageOverflow > 2) fail('career-home', `page overflows by ${res.pageOverflow}px`);
-      else ok(`career-home: chip, 5-step ladder, 9 standings rows, 3 trophies, primary "${res.primaryText}", "${res.retireText}", all controls >= ${res.minControl}px, no scroll`);
+      else ok(`career-home: chip, 5-step ladder, 4 standings rows (Little League), 3 trophies, primary "${res.primaryText}", "${res.retireText}", all controls >= ${res.minControl}px, no scroll`);
     }
   }
   await ctxH.close();
@@ -2647,10 +2652,10 @@ function bbProfileInit() {
       if (!window.__bbTest || !window.__bbTest.newCareerNow || !window.__bbTest.scriptSeason) return { error: 'seams missing' };
       const started = await window.__bbTest.newCareerNow();
       if (!started) return { error: 'newCareerNow failed' };
-      // 9 wins, 3 losses (order does not affect the standings placement, only which of the
-      // scripted opponents they are scored against) - the top-4-of-9 cut per career.js's own
-      // header - then two scripted playoff wins (semifinal, championship) for Gold.
-      const results = [true, true, true, true, true, true, true, true, true, false, false, false, true, true];
+      // R16: Little League is a 3-GAME season against a 4-team league, and every team makes its
+      // playoffs - so three wins, then two scripted playoff wins (semifinal, championship) for
+      // Gold. (It was 9 wins and 3 losses of 12 against the top-4-of-9 cut before R16.)
+      const results = [true, true, true, true, true];
       const state = await window.__bbTest.scriptSeason(results);
       if (!state) return { error: 'scriptSeason failed' };
       return {
@@ -2682,7 +2687,7 @@ function bbProfileInit() {
       } else if (!screen.hasTrophyShape) {
         fail('career-season', 'season modal has no trophy shape');
       } else {
-        ok(`career-season: 9-3 regular season + two scripted playoff wins resolves Gold and advances to High School; season modal shown (${JSON.stringify(screen.titles)})`);
+        ok(`career-season: a 3-0 Little League season + two scripted playoff wins resolves Gold and advances to High School; season modal shown (${JSON.stringify(screen.titles)})`);
       }
     }
   }

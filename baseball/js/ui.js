@@ -48,7 +48,7 @@ import {
 import {
   startSeason, nextGame, startGame as careerStartGame, checkpoint, finishGame, spend,
   gameStatsFromEvents, resumeGame, playerTeamFor, leagueTeams, playerSideFor, seasonRecord,
-  standingsFor,
+  standingsFor, seasonGames,
 } from './engine/career.js';
 import {
   loadCareer, startCareer, saveCheckpoint, saveAtBat, saveGameEnd, saveCareerState,
@@ -395,6 +395,33 @@ const TEAM_STYLE_NAMES = {
   shifters: 'Foxes', flamethrowers: 'Flames', sluggers: 'Sluggers', aces: 'Aces',
 };
 function teamDisplayName(styleId, fallback) { return TEAM_STYLE_NAMES[styleId] || fallback || '?'; }
+
+// Ship review (Matt, 2026-09-22: "use trophies for gold silver and bronze - not just the colors"):
+// one inline SVG cup per tier. The tiers differ in more than hue (root CLAUDE.md, colorblind-safe):
+// Gold is the tallest cup and carries a star, Silver a band, Bronze the smallest plain cup, and every
+// one sits over its own name. An unwon trophy renders as a grey silhouette (CSS), a won one in metal.
+const TROPHY_METAL = {
+  1: { fill: '#c67b3b', dark: '#7a4a1e', light: '#e9a86a' },
+  2: { fill: '#c3c9d2', dark: '#6e7681', light: '#eef1f5' },
+  3: { fill: '#e8b923', dark: '#a67c00', light: '#fff0a6' },
+};
+function trophySVG(tier) {
+  const m = TROPHY_METAL[tier] || TROPHY_METAL[1];
+  const cupTop = tier === 3 ? 8 : tier === 2 ? 12 : 16;      // Gold tallest, Bronze shortest
+  const mark = tier === 3
+    ? `<polygon points="32,15 34.4,20.4 40.2,21 35.9,25 37.1,30.8 32,27.9 26.9,30.8 28.1,25 23.8,21 29.6,20.4" fill="${m.dark}"/>`
+    : tier === 2 ? `<rect x="21" y="21" width="22" height="4" rx="2" fill="${m.dark}"/>` : '';
+  return `<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">
+    <path d="M12 ${cupTop + 6} h-4 a6 6 0 0 0 0 12 h6" fill="none" stroke="${m.dark}" stroke-width="3"/>
+    <path d="M52 ${cupTop + 6} h4 a6 6 0 0 1 0 12 h-6" fill="none" stroke="${m.dark}" stroke-width="3"/>
+    <path d="M18 ${cupTop} h28 v${34 - cupTop} a14 14 0 0 1 -28 0 z" fill="${m.fill}" stroke="${m.dark}" stroke-width="2.5"/>
+    <path d="M22 ${cupTop + 4} v${28 - cupTop} a10 10 0 0 0 4 8" fill="none" stroke="${m.light}" stroke-width="2.5" stroke-linecap="round"/>
+    ${mark}
+    <rect x="29" y="46" width="6" height="7" fill="${m.dark}"/>
+    <rect x="19" y="52" width="26" height="6" rx="2" fill="${m.fill}" stroke="${m.dark}" stroke-width="2"/>
+  </svg>`;
+}
+
 
 class BaseballPlayScreen {
   constructor(container) {
@@ -907,7 +934,7 @@ class BaseballPlayScreen {
   _careerChipInnerHTML(state) {
     const digits = SETTINGS.SKILL_IDS.map((id) => `<span class="bb-pcd"><b>${SKILL_SHORT[id]}</b>${state.player.skills[id] || 0}</span>`).join('');
     return `
-      <div class="bb-playerchip-top"><span>${t('hand_' + state.player.hand.toLowerCase())}</span><span>${t('player_title')}</span></div>
+      <div class="bb-playerchip-top"><span>${t('hand_' + state.player.hand.toLowerCase())}</span>${(state.unspent | 0) > 0 ? `<span class="bb-playerchip-unspent">${t('points_left').replace('{n}', String(state.unspent | 0))}</span>` : ''}<span>${t('player_title')}</span></div>
       <div class="bb-playerchip-digits">${digits}</div>`;
   }
 
@@ -935,7 +962,9 @@ class BaseballPlayScreen {
     const rec = seasonRecord(state);
     const recordText = t('season_record').replace('{w}', rec.wins).replace('{l}', rec.losses);
     let phase;
-    if (s.phase === 'regular') phase = t('season_game').replace('{n}', String(s.results.length + 1)).replace('{of}', String(SETTINGS.SEASON.gamesPerSeason));
+    // R16: the season's OWN length, off its own snapshot - 3 games at Little League, 14 at the
+    // Majors, and the frozen 12 for a season document written before R16 (THE LAW).
+    if (s.phase === 'regular') phase = t('season_game').replace('{n}', String(s.results.length + 1)).replace('{of}', String(seasonGames(state)));
     else if (s.phase === 'semifinal') phase = t('season_semifinal');
     else if (s.phase === 'championship') phase = t('season_championship');
     else phase = t('season_done');
@@ -954,20 +983,29 @@ class BaseballPlayScreen {
     return `${t('vs_team').replace('{team}', opp ? teamDisplayName(opp.styleId, opp.name) : '?')} &middot; ${where}`;
   }
 
-  /** The nine-row standings table, the player's own row marked (never colour alone - a glyph, not
-   *  just the accent fill every row already gets from `.bb-league-row`-style selection). Two
-   *  columns so nine rows fit one screen without scrolling: column 1 gets ranks 1-5, column 2 gets
-   *  ranks 6-9 (never split a tie visually differently - the ranking itself is what the doc calls
-   *  scripted, this just lays out whatever `standingsFor` returns). */
+  /** The standings table, the player's own row marked (never colour alone - a glyph, not just the
+   *  accent fill every row already gets from `.bb-league-row`-style selection). Two columns so
+   *  nine rows fit one screen without scrolling: column 1 gets ranks 1-5, column 2 gets ranks 6-9
+   *  (never split a tie visually differently - the ranking itself is what the doc calls scripted,
+   *  this just lays out whatever `standingsFor` returns).
+   *
+   *  R16: LITTLE LEAGUE IS A FOUR-TEAM LEAGUE, and four rows split 5-and-the-rest is four rows in
+   *  the left column and a column-wide hole beside them. A table short enough to fit one column
+   *  gets ONE column (`.is-single`), so the card reads as a table rather than as a table with a
+   *  gap in it. */
   _careerStandingsHTML(state) {
     if (!state.season) return '';
     const rows = standingsFor(state);
+    const SINGLE_COL_MAX = 5;
     const rowHTML = (r, i) => `
       <div class="bb-standing-row${r.isPlayer ? ' is-you' : ''}">
         <span class="bb-standing-rank">${i + 1}</span>
         <span class="bb-standing-name">${r.isPlayer ? `<span class="bb-check" aria-hidden="true">&#10003;</span>${t('you')}` : teamDisplayName(r.styleId, r.id)}</span>
         <span class="bb-standing-rec">${r.wins}-${r.losses}</span>
       </div>`;
+    if (rows.length <= SINGLE_COL_MAX) {
+      return `<div class="bb-standings is-single"><div class="bb-standings-col">${rows.map((r, i) => rowHTML(r, i)).join('')}</div></div>`;
+    }
     const col1 = rows.slice(0, 5).map((r, i) => rowHTML(r, i)).join('');
     const col2 = rows.slice(5).map((r, i) => rowHTML(r, i + 5)).join('');
     return `<div class="bb-standings"><div class="bb-standings-col">${col1}</div><div class="bb-standings-col">${col2}</div></div>`;
@@ -980,13 +1018,13 @@ class BaseballPlayScreen {
   _careerTrophyHTML(state) {
     const best = Number(state.bestTrophyByLeague[state.league]) || 0;
     const shapes = [
-      { n: 1, cls: 'bronze', shape: 'circle', key: 'trophy_bronze' },
-      { n: 2, cls: 'silver', shape: 'triangle', key: 'trophy_silver' },
-      { n: 3, cls: 'gold', shape: 'diamond', key: 'trophy_gold' },
+      { n: 1, cls: 'bronze', key: 'trophy_bronze' },
+      { n: 2, cls: 'silver', key: 'trophy_silver' },
+      { n: 3, cls: 'gold', key: 'trophy_gold' },
     ];
     return `<div class="bb-trophies">${shapes.map((s) => `
-      <div class="bb-trophy${best >= s.n ? ' is-won' : ''}" title="${t(s.key)}">
-        <span class="bb-trophy-shape bb-trophy-${s.shape}" aria-hidden="true"></span>
+      <div class="bb-trophy bb-trophy--${s.cls}${best >= s.n ? ' is-won' : ''}" title="${t(s.key)}">
+        <span class="bb-trophy-shape" aria-hidden="true">${trophySVG(s.n)}</span>
         <span class="bb-trophy-label">${t(s.key)}</span>
       </div>`).join('')}</div>`;
   }
@@ -4216,7 +4254,7 @@ class BaseballPlayScreen {
     const state = this.career.state;
     const season = state.season; // still 'done', still carrying the league just played
     const advanced = trophy === 3 && season && season.league !== state.league;
-    const shapeCls = trophy === 1 ? 'circle' : trophy === 2 ? 'triangle' : trophy === 3 ? 'diamond' : null;
+
     const titleText = trophy === 1 ? t('trophy_bronze') : trophy === 2 ? t('trophy_silver')
       : trophy === 3 ? t('trophy_gold') : t('season_missed');
     const modal = document.createElement('div');
@@ -4225,7 +4263,7 @@ class BaseballPlayScreen {
       <div class="bb-end-modal">
         <button type="button" class="bb-end-close" data-act="close" aria-label="${t('close')}">&times;</button>
         <div class="bb-end-title">${t('season_over')}</div>
-        ${shapeCls ? `<div class="bb-trophy-big bb-trophy-${shapeCls}" aria-hidden="true"></div>` : ''}
+        ${trophy > 0 ? `<div class="bb-trophy-big" aria-hidden="true">${trophySVG(trophy)}</div>` : ''}
         <div class="bb-end-line">${titleText}</div>
         <div class="bb-end-line">${t('points_earned').replace('{n}', String(result.pointsEarned || 0))}</div>
         ${advanced ? `<div class="bb-end-line">${t('league_advanced').replace('{league}', t('league_' + state.league))}</div>` : ''}

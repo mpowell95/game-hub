@@ -350,6 +350,212 @@ still below the 8.9% of the build before any of the bounce work.
 `test.js` carries the bar as section 1b: the lateral:forward ratio must stay at or above 2.0, the
 redirect must be switched on, and it must read no hole position.
 
+### Round 1 of the playtest list (2026-09-22)
+
+Matt, having played the shipped multiplayer. Five things, all small, all shipped together.
+
+**The difficulties were invented here.** `Beginner / Steady / Sharpshooter` existed in this game
+and nowhere else in the repo. Matt: *"you created brand new terminology for the difficulties.
+Don't do that."* They are `Easy / Medium / Hard` now, the hub's own words.
+
+**The setup screen was an essay.** Two explanatory paragraphs (`cpuNote`, `shotModeNote`) under
+controls that need no explanation. Both strings are deleted, not just hidden. The full restructure
+Matt asked for (Play the computer vs Multiplayer Options, with host / pass and play / challenge /
+active games / history underneath) is round 2; this is only the prose coming off.
+
+**The ball was one colour for the whole game.** `setBallColor` has existed in `render.js` since the
+first build and was called EXACTLY ONCE, in `start()`, so whoever shot first owned the ball's
+colour for the rest of the match - then the disc landed on the board in the other colour. Matt:
+*"that's not good. the ball should be the same red and yellow as they appear when on the board as
+a piece."* It is set per SHOT now, in `shoot()`, which covers a CPU turn, a remote turn and a
+pass-and-play turn from one call site. Verified in a real browser: my shot `e8463f`, the CPU's
+`ffce3a`.
+
+**Whose turn it was, said only in colour and only after the fact.** The HUD was a 14px word whose
+hue was the entire signal - which is unreadable for Matt (red/green colourblind, root CLAUDE.md)
+and too quiet to notice anyway, so the CPU's turn looked like the machine doing nothing until a
+ball appeared: *"it's not clear when it's the computers turn. There's no indication until they've
+thrown."* Now a pill with a SHAPE marker (disc for red, triangle for yellow), the opponent's actual
+name, filled for your own shot and outlined for theirs, and it says **"Medium is shooting"** during
+the pause - which is painted BEFORE the timer starts and runs 1100ms rather than 800 so there is
+something to read. Verified in a browser at exactly that moment.
+
+**"There is no back button" - TWO separate faults, and the first fix only caught one.**
+
+The one it caught: `isInProgress()`. `js/hub.js`'s `requestLeave()` confirms whenever the mounted
+module says a game is under way, and this one said yes for a TURN-BY-TURN challenge whose move log
+lives in `hoops/games/<id>` and replays on re-entry. Nothing can be lost, so nothing should be
+warned about. It now returns false for `mp.kind === 'async'`, true for everything else, and
+entering a challenge toasts that the match is saved.
+
+The one it missed, and the reason a second pass was needed the same day: **the hub's chip is a
+QUIT, not a back.** Matt: *"we had the Hub back button. That's more of a quit button. There is no
+back button to go back to the setup screen."* It unmounts the module and lands on the launcher;
+what was missing is a way to stay inside Connect 4 Hoops and change opponent or shot rule.
+
+So there ARE two buttons, deliberately, and **they are labelled by DESTINATION**. The first
+attempt built the second chip and labelled it "Back", stacked over the hub's own "Back" - two
+words for two places was the fix; one word for two was the bug. It is `.h4-menu`, reading "Menu",
+in the HUD row (y 9-42) while the hub's chip floats at y 54+, measured as non-overlapping. A
+turn-by-turn match leaves it with no question (straight to the multiplayer screen, where the rest
+of your matches are); solo, pass-and-play and a live room ask first, because those really do end.
+
+The HUD's `padding-left` was 76px to clear the hub's chip. That was never needed - the two rows do
+not overlap - and the Menu button now leads the row, so it is a normal 16px gutter.
+
+Measured after: `test-game-conventions.mjs` 11/11, `test-visual.mjs hoops4` 13/13,
+`check-no-scroll.mjs hoops4` 4 screens / 0 scroll.
+
+**Still open from that list** (rounds 2-4): the launcher challenge alert and the full-screen
+challenge ceremony; the Multiplayer Options restructure with active games and history; series
+(single / best of 3 / best of 5), a caption with a challenge and quick chat in a match; a visual
+How to Play; a taller board with bigger cells. And the SCORING RATE, which is what Matt actually
+wants from the bounce work - *"i don't care where balls roll off, front or back... I want more
+balls to bounce around, but ultimately go in a basket"* - so the front-edge question is closed and
+the next lever to measure is making the per-hoop backboards SOLID so a shot can be banked in.
+
+### The challenge has to reach you on the LAUNCHER (2026-09-22)
+
+Matt, having played the shipped multiplayer: *"to see a challenge, you must go into the hoops
+connect 4, click play a friend, then it's displayed below 'Challenge'. There is no other
+notification anywhere. Instead of that, can it be super obvious? at least the first time?"* - with
+mockups: a chunky speech bubble, hard black outline, tail pointing at the tile. Purple for a new
+challenge, blue for your turn.
+
+**Three pieces, and the hub deliberately owns none of the vocabulary.**
+
+**`hoops4/js/alert.js`** decides. `decideAlert(rows, seen)` is pure and tested
+(`test-hoops4-mp.mjs`): a match id this device has never seen is a **challenge**; one it has seen
+whose `updated` has moved past the acknowledged stamp, with the turn back on you, is a **turn**; a
+finished match is neither. A challenge outranks a turn, because it is the bigger event and the one
+with a person's name on it. Matt's rule for when it shows: *"Whenever there's something new... A
+new challenge, or the turn flipping to you, brings it back"* - so the seen map records a STAMP per
+match, not a boolean, and anything newer re-arms it.
+
+**`js/hub.js` knows only that a registry entry may declare an `alerts` module.** The hoops4 entry
+declares one; the hub imports it lazily AFTER the launcher has painted, draws the bubble into that
+game's `.hub-cell`, and scrolls the tile into view once. Everything is guarded - a game tile must
+never be able to break the launcher. Putting it on the critical path would trade a launcher that
+appears in 6 requests for one that waits on a Firebase read.
+
+**WHY alert.js IS IN hoops4/ AND NOT js/.** It writes a `gamehub.*` key, and `test-sw-strategy.mjs`
+has a structural check that no cache-first SHELL module does that. The game's own folder is the
+REST tier, where the rule does not apply.
+
+**The bubble's geometry is measured, not assumed.** It is wider than a tile, so it anchors to
+whichever side of the grid its tile is on (`is-col-left` / `is-col-right`, from the cell's real
+offset) and always grows inward - it can never hang off the edge of a phone. On the top row there
+is nothing above to grow into, so it flips underneath and the tail turns over (`is-below`).
+
+**The two states are told apart by their WORDS, not their colour.** "{who} challenged you!" against
+"Your Turn!". Matt is red/green colourblind and purple-against-blue would be exactly the hue-only
+signal this repo does not ship.
+
+**The ceremony** (`showCeremony` in `ui.js`) is armed by the launcher and taken once on mount -
+skeeball's key-ceremony shape, ARMED and never backfilled, so a device that has never been
+challenged cannot be shown one retroactively. Their emoji flies in from the left, yours from the
+right, VS lands between them: *"The popup needs to clearly show that the challengers emoji and your
+emoji are opponents."* The rings are the sides they will actually play (the challenger is side 'a',
+which is RED and shoots first), each paired with the same disc/triangle marker the in-game turn
+pill uses. The timeline lives in one comment above the DOM it builds, which is skeeball's rule, and
+so is the lesson underneath it - nothing switches state, everything arrives.
+
+**Two things caught by looking rather than by a test.** The veil was `rgba(...,0.92)` and the
+hub-skinned setup card behind it is WHITE in light mode, so its headings read straight through and
+the ceremony sat in a jumble of its own setup screen - skeeball's ceremony comment says exactly
+this about a lit machine, and it had to be rediscovered from a screenshot. And the first version of
+"Let's play" closed the card before reading the match, falling back to `toast()` - which returns
+silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
+gone would have dropped the player back with no explanation at all. The card stays up and says so.
+
+#### Two buttons in one place, and why a measurement said otherwise
+
+Matt, on the build that shipped the Menu button: *"whatever back button you made is hidden behind
+the Hub quit button."*
+
+**The measurement that cleared it was taken in a browser with no notch, which is the wrong
+browser.** `.h4-play-wrap` carries `padding-top: env(safe-area-inset-top)`. In headless Chromium
+that inset is **0**, so the HUD row sat at y 9-42 and the hub's floating chip at 54+, and they read
+as separate rows - which is exactly what was reported at the time, and it was true and useless. On
+a real iPhone the inset is about 59px: the HUD is pushed down by it, the chip's own top is
+`max(inset, 54px)`, and the two land in the SAME BAND with the hub's chrome painting above the
+game.
+
+**So the separation is HORIZONTAL now, because that is the axis a notch cannot move.** The Menu
+button sits at the far right (`margin-left: auto`), the hub's chip is always at the far left, and
+the HUD's `padding-left: 76px` - which this file had and which was removed on the strength of that
+bad measurement, with its own comment saying what it was for - keeps the turn pill clear of the
+chip.
+
+The probe simulates the inset rather than hoping for one, and asks `elementFromPoint` whether the
+Menu button is actually the thing at its own centre. Against the old layout at a 59px inset it
+reports **`Menu tappable false`**, which is Matt's sentence as a number.
+
+**The lesson, since this is the second time on this game**: a headless browser has no safe area, no
+notch and no home indicator. Any claim about two fixed-position elements not colliding has to name
+the inset it assumed, or simulate one.
+
+#### The bubble that would not go away
+
+Matt, on the first build of it: *"the popup looks great as is! and the versus / matchup page and
+everything. The only thing is that once I've clicked on the new challenge popup and gone into the
+matchup and played and stuff, it should go away. I just did that and it stayed there even though
+it's not my turn."*
+
+**Two faults, and either one alone brings it back.**
+
+`_dismissGameAlert` took a `paint = false` on the open-the-game path, reasoning that mounting a
+game was about to replace the view anyway. **It is not: `launch()` only HIDES the grid and
+`showLauncher()` only un-hides it.** Neither re-renders, so the bubble element was still sitting in
+its cell the whole time and simply came back into view on return. And `_checkGameAlerts` assigned
+`this._gameAlert` only when it FOUND something, so an alert that had stopped being true was never
+cleared either.
+
+The decision logic was right all along - `decideAlert` returns null for a match whose stamp you
+have acknowledged and whose turn is not yours. Nothing was wrong with WHAT it decided; the DOM just
+never heard about it. `showLauncher()` now re-asks as well, which also catches the other direction:
+a different match coming back round to you while you were playing something else.
+
+Three `[KNOWN-BUG PROBE]` assertions in `test-hoops4-mp.mjs`, verified born red by reintroducing
+the faults.
+
+### "What is 2 player?" - the setup screen, split (2026-09-22)
+
+Matt: *"What is 2 player? There should be options to play the computer player and 'Multiplayer
+Options'. Then within multiplayer options, there's a Host game option, a pass and play option, a
+challenge option and a Live Challenges section that shows the active games and if it's your turn or
+their turn... The computer player options should just have the difficulties and the shots per turn
+option."*
+
+**The question answers itself: "Two players" was pass-and-play sitting in the OPPONENT row**, next
+to three CPU difficulties, so it read as a fourth difficulty. It is now "Pass and play" in the
+multiplayer sheet, beside the other two ways two people play.
+
+- **The setup screen is one card and one door.** "Play the computer" holds difficulty and shots per
+  turn and nothing else, with Play inside it; **Multiplayer** is a separate button below.
+- **The multiplayer sheet is four rows** - Challenge, Host a game, Join a game, Pass and play -
+  replacing the section headings and paragraphs it used to carry. Then **Active games**, which
+  lists only matches still in play and says whose turn each one is. They shipped with one line of
+  explanation under each name and Matt deleted all four the same day (*"Delete all the subtitles on
+  the Multiplayer screen as well"*), along with the setup screen's tagline: *"DO NOT replace it."*
+  Four buttons whose names say what they are do not need four sentences explaining them.
+- **And it has a picture of the machine now.** Matt, on the old screen: *"it looks nothing like the
+  others."* What every other machine's setup screen leads with is a picture of the machine, and
+  this had none. It reuses `GAME_ART['hoops4']` - the SAME inline SVG the launcher tile draws - so
+  the tile you tap and the screen you land on are the same picture, at no cost: no WebGL, no
+  readback, no placeholder needing correction, nothing to fail offline. A short phone drops the
+  picture rather than a control, because no game in this hub may scroll.
+
+**`opponent: 'two'` IS STILL A REAL VALUE** in `gamehub.hoops4.v1` on any device that used the old
+screen, and it is neither deleted nor rewritten (THE LAW rule 5). The difficulty row shows its
+nearest meaning (Medium) until the player picks again, `start()` and `themName()` read the same
+fallback, and Play now passes `vsCpu: true` explicitly so a stored `'two'` can never silently start
+a pass-and-play game from a button labelled "Play".
+
+**Still to come in this thread**: series (single / best of 3 / best of 5) with the shot rule and an
+optional caption attached to a challenge, shown to whoever accepts it; quick chat inside a match;
+challenge history with records; and the visual How to Play, which is still just words.
+
 ### What makes a hoop read as a hoop (2026-09-22)
 
 Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*

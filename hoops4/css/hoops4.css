@@ -96,7 +96,19 @@
   font: 800 clamp(20px, 6vw, 26px)/1.1 ui-sans-serif, system-ui, sans-serif;
   color: var(--h4s-ink);
 }
-.h4-root .h4-tag { margin: 0; font-size: 13px; color: var(--h4s-muted); max-width: 34ch; }
+/* `.h4-tag` (the tagline) was deleted, not hidden - Matt: "delete... DO NOT replace it." */
+
+/* The cabinet, at the top of its own setup screen. Sized by the space that is actually spare -
+   the card below it is the control and must never be pushed off a short phone, so this shrinks
+   first (see the short-phone rule at the end of this file). */
+.h4-root .h4-hero {
+  width: min(420px, 100%);
+  border-radius: 14px;
+  overflow: hidden;
+  line-height: 0;
+  box-shadow: 0 6px 20px rgba(16, 32, 64, 0.18);
+}
+.h4-root .h4-hero svg { width: 100%; height: auto; display: block; }
 
 .h4-root .h4-card {
   width: min(420px, 100%);
@@ -106,6 +118,13 @@
   text-align: left;
   /* .gh-card already supplies surface/border/radius/shadow/padding; only the layout of the two
      rows inside it is local. */
+}
+/* The card now says what it is for, because it is no longer the whole screen's only control -
+   "Play the computer" against the Multiplayer button below it. */
+.h4-root .h4-card-head {
+  margin: 0;
+  font-size: 15px; font-weight: 800;
+  color: var(--h4s-ink);
 }
 .h4-root .h4-row { display: flex; flex-direction: column; gap: 8px; }
 .h4-root .h4-row-label {
@@ -118,6 +137,9 @@
 }
 .h4-root .h4-opts { display: grid; gap: 8px; }
 .h4-root .h4-opts-4 { grid-template-columns: repeat(2, 1fr); }
+/* Three difficulties across, which fits at a phone width because the words are one each
+   (Easy / Medium / Hard). It was a 2x2 of four when "Two players" shared the row. */
+.h4-root .h4-opts-3 { grid-template-columns: repeat(3, 1fr); }
 .h4-root .h4-opts-2 { grid-template-columns: repeat(2, 1fr); }
 .h4-root .h4-opt {
   min-height: 44px;                    /* the UX floor's tap target */
@@ -162,12 +184,58 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 16px 8px 76px;          /* 76px clears the hub's floating back button */
+  /* 76px ON THE LEFT IS FOR THE HUB'S FLOATING CHIP, and removing it was a mistake this file
+     already knew about - the original comment said exactly what it was for. It was dropped on a
+     measurement taken in a browser with NO NOTCH, where `env(safe-area-inset-top)` is 0: the HUD
+     sat at y 9-42 and the chip at 54+, so they looked like separate rows. On a real iPhone the
+     inset is ~59px, `.h4-play-wrap` pushes this row down by it, and the chip (whose own top is
+     `max(inset, 54px)`) lands in the SAME BAND - with the hub's chrome painting above the game.
+     Matt: "whatever back button you made is hidden behind the Hub quit button."
+     A vertical measurement cannot answer this. Horizontal separation can, so the Menu button
+     sits at the far RIGHT and this reserve keeps the turn pill clear of the chip on the left. */
+  padding: 8px 16px 8px 76px;
   min-height: 38px;
 }
-.h4-root .h4-who { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; }
-.h4-root .h4-who.is-red { color: var(--h4-red); }
-.h4-root .h4-who.is-yellow { color: var(--h4-yellow); }
+/* BACK TO THIS GAME'S OWN SETUP SCREEN - not out to the launcher, which is what the hub's
+   floating "Hub" chip does. Two destinations, so two buttons, so two different words: this one
+   is labelled by where it goes. It sits in the HUD row (y ~8-46); the hub's chip floats at
+   y 54+, so they never overlap - the first attempt failed on the LABEL, not the position. */
+.h4-root .h4-menu {
+  appearance: none; flex: 0 0 auto;
+  margin-left: auto;                   /* the far right, opposite the hub's chip */
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--h4-ink, #fff);
+  font: inherit; font-size: 13px; font-weight: 700;
+  padding: 6px 12px; border-radius: 10px;
+  cursor: pointer; touch-action: manipulation;
+  min-height: 32px;
+}
+.h4-root .h4-menu:active { background: rgba(255, 255, 255, 0.16); }
+
+/* WHOSE SHOT IT IS, as a pill you cannot miss. It was a 14px coloured word, and the colour was
+   the only thing separating "your turn" from "their turn" - unreadable for Matt (red/green
+   colourblind) and too quiet to notice at all, which is why the CPU's turn read as the machine
+   doing nothing until a ball suddenly appeared. The marker is a SHAPE first (disc / triangle). */
+.h4-root .h4-who {
+  display: inline-flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 7px;
+  font-size: 15px; font-weight: 800; letter-spacing: 0.02em;
+  padding: 5px 12px; border-radius: 999px;
+  border: 2px solid transparent; background: rgba(255, 255, 255, 0.06);
+  max-width: 62vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.h4-root .h4-who .h4-mark { font-size: 13px; line-height: 1; flex: 0 0 auto; }
+.h4-root .h4-who.is-red { color: var(--h4-red); border-color: var(--h4-red); }
+.h4-root .h4-who.is-yellow { color: var(--h4-yellow); border-color: var(--h4-yellow); }
+/* Your own shot is FILLED, theirs is outlined - a second non-colour signal on top of the shape. */
+.h4-root .h4-who.is-mine { background: rgba(255, 255, 255, 0.14); }
+/* Waiting on the other side: the pill breathes, so the pause reads as the opponent thinking
+   rather than as the game having stopped. */
+.h4-root .h4-who.is-waiting { animation: h4-breathe 1.1s ease-in-out infinite; }
+@keyframes h4-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .h4-root .h4-who.is-waiting { animation: none; opacity: 0.8; }
+}
 .h4-root .h4-shots { font-size: 12px; color: var(--h4-dim); font-variant-numeric: tabular-nums; }
 
 .h4-root .h4-stage { position: relative; flex: 1 1 auto; min-height: 0; }
@@ -279,6 +347,32 @@
   color: var(--h4s-muted);
 }
 .h4-root .h4-mp-sub { margin: 4px 0 10px; font-size: 12px; line-height: 1.5; color: var(--h4s-muted); }
+/* THE FOUR WAYS TWO PEOPLE PLAY, as four rows that each say what they do. One line of what it
+   is under the name, instead of the section headers and paragraphs this screen used to carry. */
+.h4-root .h4-mp-acts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.h4-root .h4-mp-act {
+  appearance: none;
+  display: flex; align-items: center;
+  width: 100%; min-height: 52px;                 /* past the UX floor's 44px */
+  padding: 10px 14px;
+  border: 1px solid var(--h4s-line, rgba(0, 0, 0, 0.14));
+  border-radius: 12px;
+  background: var(--h4s-surface, #fff);
+  color: var(--h4s-ink);
+  /* GUARD: `font: inherit` is a SHORTHAND and resets weight and size, so it has to come BEFORE
+     them, not after. It was after, and these four names rendered at the page's regular weight
+     while the rule above them said 800. */
+  font: inherit;
+  font-size: 15px; font-weight: 800;
+  text-align: left;
+  cursor: pointer; touch-action: manipulation;
+}
+.h4-root .h4-mp-act.is-primary {
+  border-color: var(--gh-accent, #1f5fa8);
+  border-width: 2px;
+}
+.h4-root .h4-mp-act:active { background: var(--h4s-surface-2, rgba(0, 0, 0, 0.04)); }
+
 .h4-root .h4-mp-row { display: flex; gap: 8px; }
 .h4-root .h4-mp-row .gh-btn { flex: 1 1 0; min-height: 46px; }
 .h4-root .h4-mp-note { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--h4s-muted); }
@@ -315,3 +409,154 @@
 .h4-root .h4-mp-game.is-over { opacity: .62; }
 .h4-root .h4-mp-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .h4-root .h4-mp-state { font-size: 12px; font-weight: 600; color: var(--h4s-muted); white-space: nowrap; }
+
+/* ------------------------------------------------- the challenge ceremony --- */
+/* Matt: "it goes to a new, full screen popup thing that shows the challengers emoji and your
+   emoji... The popup needs to clearly show that the challengers emoji and your emoji are
+   opponents. and it should have some kind of animation. Like the key ceremony in Skeeball."
+
+   THE TIMELINE LIVES IN ui.js's showCeremony() comment, next to the DOM it builds. This sheet
+   plays it. Skeeball's ceremony is the model in two ways: one documented timeline rather than
+   delays scattered across rules, and nothing INSTANTLY SWAPS - every element arrives.
+
+   Everything animated here is transform/opacity only (the UX floor bans animating layout). */
+.h4-root .h4-cer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+.h4-root .h4-cer-veil {
+  position: absolute;
+  inset: 0;
+  /* NEARLY SOLID, and that is skeeball's lesson repeated rather than rediscovered: its own
+     ceremony comment says "WITHOUT THIS THE CEREMONY IS ILLEGIBLE ON A LIT MACHINE". Here the
+     screen behind is the HUB-SKINNED setup card, which is WHITE in light mode - at 0.92 the
+     headings read straight through the veil and the card sat in a jumble of its own setup
+     screen. Measured against a screenshot, not guessed. */
+  background: rgba(5, 8, 16, 0.985);
+  box-shadow: inset 0 0 180px 60px rgba(0, 0, 0, 0.9);
+  animation: h4-cer-veil 0.45s ease-out both;
+}
+@keyframes h4-cer-veil { from { opacity: 0; } to { opacity: 1; } }
+
+.h4-root .h4-cer-body {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.h4-root .h4-cer-head {
+  margin: 0;
+  font-size: 13px; font-weight: 900; letter-spacing: 0.22em;
+  color: #ffce3a;
+  animation: h4-cer-rise 0.6s ease-out 1.45s both;
+}
+
+/* THE PAIR. They arrive from opposite sides and stop facing each other, which is the whole point:
+   "clearly show that the challengers emoji and your emoji are opponents." */
+.h4-root .h4-cer-pair {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; width: 100%;
+}
+.h4-root .h4-cer-side {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  flex: 1 1 0; min-width: 0;
+}
+.h4-root .h4-cer-them { animation: h4-cer-inL 0.8s cubic-bezier(0.22, 1.2, 0.36, 1) 0.25s both; }
+.h4-root .h4-cer-me   { animation: h4-cer-inR 0.8s cubic-bezier(0.22, 1.2, 0.36, 1) 0.45s both; }
+@keyframes h4-cer-inL { from { opacity: 0; transform: translateX(-70px); } to { opacity: 1; transform: none; } }
+@keyframes h4-cer-inR { from { opacity: 0; transform: translateX(70px); }  to { opacity: 1; transform: none; } }
+
+/* THE RING IS THE SIDE THEY WILL PLAY - red for the challenger (side 'a', who shoots first),
+   yellow for the person being challenged. Never colour alone: the name carries the same disc /
+   triangle marker the in-game turn pill uses. */
+.h4-root .h4-cer-face {
+  display: flex; align-items: center; justify-content: center;
+  width: 92px; height: 92px; border-radius: 50%;
+  font-size: 46px; line-height: 1;
+  background: rgba(255, 255, 255, 0.07);
+  border: 4px solid var(--h4-red);
+  box-shadow: 0 0 26px rgba(232, 70, 63, 0.45);
+}
+.h4-root .h4-cer-me .h4-cer-face {
+  border-color: var(--h4-yellow);
+  box-shadow: 0 0 26px rgba(255, 206, 58, 0.45);
+}
+.h4-root .h4-cer-name {
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; font-weight: 800; color: #fff;
+}
+.h4-root .h4-cer-mark { font-size: 11px; color: var(--h4-red); }
+.h4-root .h4-cer-me .h4-cer-mark { color: var(--h4-yellow); }
+
+.h4-root .h4-cer-vs {
+  flex: 0 0 auto;
+  font-size: 22px; font-weight: 900; letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(255, 255, 255, 0.55);
+  animation: h4-cer-vs 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) 1.15s both;
+}
+@keyframes h4-cer-vs {
+  from { opacity: 0; transform: scale(2.4); filter: blur(4px); }
+  to   { opacity: 1; transform: scale(1);  filter: blur(0); }
+}
+
+.h4-root .h4-cer-line {
+  margin: 0;
+  font-size: 19px; font-weight: 800; line-height: 1.25; color: #fff;
+  animation: h4-cer-rise 0.6s ease-out 1.45s both;
+}
+@keyframes h4-cer-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.h4-root .h4-cer-btns {
+  width: 100%; display: flex; flex-direction: column; gap: 8px;
+  animation: h4-cer-rise 0.5s ease-out 1.95s both;
+}
+
+/* REDUCED MOTION: the same DOM, every element settled on its final pose. Nothing is hidden and
+   nothing is display:none - docs/BUILDING-A-GAME.md, Part 0. */
+.h4-root .h4-cer.is-still .h4-cer-veil,
+.h4-root .h4-cer.is-still .h4-cer-head,
+.h4-root .h4-cer.is-still .h4-cer-them,
+.h4-root .h4-cer.is-still .h4-cer-me,
+.h4-root .h4-cer.is-still .h4-cer-vs,
+.h4-root .h4-cer.is-still .h4-cer-line,
+.h4-root .h4-cer.is-still .h4-cer-btns {
+  animation: none;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .h4-root .h4-cer-veil,
+  .h4-root .h4-cer-head,
+  .h4-root .h4-cer-them,
+  .h4-root .h4-cer-me,
+  .h4-root .h4-cer-vs,
+  .h4-root .h4-cer-line,
+  .h4-root .h4-cer-btns {
+    animation: none; opacity: 1; transform: none; filter: none;
+  }
+}
+
+/* A SHORT PHONE still has to fit it - no game in this hub may scroll. */
+@media (max-height: 700px) {
+  .h4-root .h4-cer-face { width: 74px; height: 74px; font-size: 36px; }
+  .h4-root .h4-cer-line { font-size: 17px; }
+  .h4-root .h4-cer-body { gap: 10px; }
+}
+
+/* A SHORT PHONE DROPS THE PICTURE BEFORE IT DROPS A CONTROL. No game in this hub may scroll, and
+   the hero is the one thing on this screen nobody needs in order to start a game. */
+@media (max-height: 700px) {
+  .h4-root .h4-hero { display: none; }
+}

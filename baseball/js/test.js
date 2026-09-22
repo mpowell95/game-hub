@@ -11,13 +11,14 @@ import { fileURLToPath } from 'node:url';
 
 import * as SETTINGS from './engine/settings.js';
 import { ZONE, flyPitch, breakOffsetFor } from './engine/pitch.js';
-import { swing, qualityFor, computeSwingTiming } from './engine/swing.js';
+import { swing, qualityFor, computeSwingTiming, flightWindowMult } from './engine/swing.js';
 import { resolveContact, resolveBunt, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
 import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, pickMode } from './engine/agents.js';
-import { makeTeam, makeLeague, makePlayerTeam, teamStrength, effectiveCapFor, POSITIONS } from './engine/teams.js';
+import { makeTeam, makeLeague, leagueTeamsFor, makePlayerTeam, teamStrength, effectiveCapFor,
+  rosterScaleFor, rosterCeilingFor, POSITIONS } from './engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
 import { budgetFor, capFor, scalePreset, clampBuild, randomBuild, adjust, canAdjust } from './build.js';
@@ -434,10 +435,14 @@ console.log('\n-- 8. teams.js --');
   ok(t1.players.length === 9, 'a team has 9 players by default');
   ok(t1.battingOrder.length === 9, 'the batting order names every player');
   ok(t1.players.find((p) => p.id === t1.pitcherId), 'the pitcher id resolves to a real roster player');
-  const cap1 = effectiveCapFor('little');
+  // R16: the bound on a generated skill is `CPU_ROSTER_CEILING[league]` (one point under the raw
+  // CAP), not `effectiveCapFor` - the roster's LEVEL comes from `CPU_ROSTER_LEVEL` through the
+  // solved scale now, and the ceiling is what nothing may cross. `effectiveCapFor` itself is
+  // unchanged and still asserted below.
+  const cap1 = rosterCeilingFor('little');
   for (const p of t1.players) {
     for (const id of SETTINGS.SKILL_IDS) {
-      ok(p.skills[id] >= 0 && p.skills[id] <= cap1, `#${p.jersey} ${p.pos}'s ${id} is within little league's effective cap`);
+      ok(p.skills[id] >= 0 && p.skills[id] <= cap1, `#${p.jersey} ${p.pos}'s ${id} is within little league's roster ceiling`);
     }
   }
   // doc §9, [Locked]: "Players are shown by jersey number and position... No names" (Step 3).
@@ -654,6 +659,93 @@ console.log('\n-- 8d. season.js: schedule, standings, playoffs (Step 3) --');
     ok(cpu.every((r) => r.wins + r.losses === 12), 'scaledTo12: every CPU row plays a 12-game record, same as the player');
     ok(cpu.every((r, i) => i === 0 || r.wins > cpu[i - 1].wins), 'scaledTo12: CPU win totals strictly rise by strength rank');
     ok(cpu[cpu.length - 1].wins === 12 && cpu[0].wins === 0, 'scaledTo12: the strongest CPU goes 12-0, the weakest 0-12');
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // R16 (docs/BASEBALL-3D-BUILD.md section 9): A SEASON OF ANY LENGTH, OVER A LEAGUE OF ANY SIZE.
+  {
+    // The generator is unchanged at 12 over 8 - the new argument form and the legacy string form
+    // produce byte-identical schedules for all three shapes, which is what keeps every season
+    // document written before R16 replaying exactly as it was generated.
+    for (const shape of ['repeatTop', 'repeatBottom', 'repeatMiddle']) {
+      const legacy = makeSchedule('college', 7, shape);
+      const modern = makeSchedule('college', 7, 12, 8, shape);
+      ok(JSON.stringify(legacy) === JSON.stringify(modern),
+        `makeSchedule at 12 over 8 is identical through the legacy and the R16 argument forms (${shape})`);
+    }
+    for (const lg of SETTINGS.LEAGUES) {
+      const n = SETTINGS.gamesForLeague(lg);
+      const slots = SETTINGS.slotsForLeague(lg);
+      const sched = makeSchedule(lg, 99, n, slots.length, SETTINGS.SCHEDULE_SHAPE);
+      const idx = sched.map((g) => g.opponentIndex);
+      ok(sched.length === n, `${lg}: the schedule is this league's own ${n} games`);
+      ok(idx.every((i) => i >= 0 && i < slots.length), `${lg}: every opponent index is inside the league's own ${slots.length} teams`);
+      ok(idx.every((v, i) => i === 0 || v >= idx[i - 1]), `${lg}: the schedule is ascending, weakest first (doc §8, [Locked])`);
+      ok(idx.filter((i) => i === slots.length - 1).length === 1 && idx[idx.length - 1] === slots.length - 1,
+        `${lg}: the champion is met exactly once, and last (doc §8, [Locked])`);
+      ok(new Set(idx).size === Math.min(n, slots.length), `${lg}: every team in the league is played at least once`);
+      const home = sched.filter((g) => g.home).length;
+      ok(home === Math.ceil(n / 2) && sched.length - home === Math.floor(n / 2),
+        `${lg}: home and away split ${Math.ceil(n / 2)} and ${Math.floor(n / 2)}, shuffled by seed`);
+    }
+    // Little League is the 4-team league: three CPU slots plus the player.
+    const littleTeams = leagueTeamsFor('little');
+    ok(littleTeams.length === 3, 'Little League is played against three CPU teams (SEASON.leagueSlots.little)');
+    ok(JSON.stringify(littleTeams.map((t) => t.name)) === JSON.stringify(makeLeague('little').filter((t, i) => [1, 4, 7].includes(i)).map((t) => t.name)),
+      'and they are makeLeague slots 1, 4 and 7, in that order - a weak, a middle and the champion');
+    ok(makeLeague('little').length === 8, 'makeLeague itself still returns all eight, untouched');
+    for (const lg of ['highschool', 'college', 'minors', 'majors']) {
+      ok(leagueTeamsFor(lg).length === 8, `${lg} is still all eight slots`);
+    }
+
+    // scaledToSeason: the CPU records are scripted onto THIS season's own length.
+    for (const lg of SETTINGS.LEAGUES) {
+      const n = SETTINGS.gamesForLeague(lg);
+      const teams = leagueTeamsFor(lg);
+      const rows = scriptedStandings(teams, { wins: 0, losses: n }, n, 'scaledToSeason', 'player');
+      const cpu = rows.filter((r) => !r.isPlayer).sort((a, b) => a.strengthRank - b.strengthRank);
+      ok(cpu.every((r) => r.wins + r.losses === n), `${lg}: every CPU row plays the same ${n}-game season the player does`);
+      ok(cpu[cpu.length - 1].wins === n && cpu[0].wins === 0, `${lg}: the champion goes ${n}-0 and the weakest 0-${n}`);
+      ok(cpu.every((r, i) => i === 0 || r.wins >= cpu[i - 1].wins), `${lg}: CPU win totals rise with strength rank`);
+    }
+
+    // STANDINGS_TIEBREAK: the player WINS every tie now (they lost every one before R16).
+    {
+      const teams = leagueTeamsFor('college');
+      const n = SETTINGS.gamesForLeague('college');
+      const tied = scriptedStandings(teams, { wins: 6, losses: n - 6 }, n, 'scaledToSeason', 'player');
+      const rank = tied.findIndex((r) => r.isPlayer);
+      const tiedCpu = tied.filter((r) => !r.isPlayer && r.wins === 6);
+      ok(tiedCpu.length > 0 && tied.indexOf(tiedCpu[0]) > rank,
+        'STANDINGS_TIEBREAK=player: a player tied on wins with a CPU team finishes ABOVE it');
+      const old = scriptedStandings(teams, { wins: 6, losses: n - 6 }, n, 'scaledToSeason', 'cpu');
+      ok(old.indexOf(old.filter((r) => !r.isPlayer && r.wins === 6)[0]) < old.findIndex((r) => r.isPlayer),
+        'and the shipped-before-R16 rule is still reachable and still puts them below it');
+    }
+
+    // The 4-team everyone-in bracket: seed 1 v seed 4, seed 2 v seed 3, the CPU-only semifinal
+    // scripted by strength, and the player always in one of them.
+    {
+      const teams = leagueTeamsFor('little');
+      const n = SETTINGS.gamesForLeague('little');
+      for (let wins = 0; wins <= n; wins++) {
+        const rows = scriptedStandings(teams, { wins, losses: n - wins }, n, 'scaledToSeason', 'player');
+        const br = playoffs(rows, SETTINGS.BRACKET_MODEL, 'all');
+        ok(br.seeds.length === 4, `everyone-in bracket at ${wins}-${n - wins}: all four teams are seeded, nobody misses the playoffs`);
+        ok(br.semifinals.length === 2, 'two semifinals');
+        ok(br.semifinals[0][0] === rows[0] && br.semifinals[0][1] === rows[3]
+          && br.semifinals[1][0] === rows[1] && br.semifinals[1][1] === rows[2],
+          'paired by seed: 1 v 4 and 2 v 3');
+        ok(br.semifinals.filter((pair) => pair.some((t) => t.isPlayer)).length === 1,
+          'the player is in exactly one of them');
+        const cpuPair = br.semifinals.find((pair) => !pair.some((t) => t.isPlayer));
+        const i = br.semifinals.indexOf(cpuPair);
+        ok(br.winners[i] === cpuPair[0] && cpuPair[0].strengthRank >= cpuPair[1].strengthRank,
+          'the CPU-only semifinal is scripted, and the stronger team wins it');
+        ok(br.winners[br.semifinals.findIndex((pair) => pair.some((t) => t.isPlayer))] === null,
+          'the player\'s own semifinal is left for the caller to actually play');
+      }
+    }
   }
 }
 
@@ -1411,12 +1503,13 @@ console.log('\n-- 18. BB-2c commit 3: the flavor strength budget (STYLE_STRENGTH
     ok(!!shiftersTeam, 'shifters is still on the majors ladder');
     const slot = shiftersTeam.ladderSlot;
     const offsets = SETTINGS.TEAM_LADDER_OFFSETS.majors[slot];
-    const baseCap = effectiveCapFor('majors');
-    const rawCap = SETTINGS.CAPS.majors;
-    const expectedCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
-    const capInt = Math.floor(expectedCap);
+    // R16: the per-slot cap is gone - every slot draws around its own share of the league's
+    // `CPU_ROSTER_LEVEL` and every value is bounded by the one `CPU_ROSTER_CEILING`. The claim
+    // being made here is unchanged: STYLE_STRENGTH_DELTA plays no part in roster generation.
+    ok(offsets && typeof offsets.skill === 'number', 'the slot still carries its own skill offset');
+    const capInt = rosterCeilingFor('majors');
     ok(shiftersTeam.players.every((p) => SETTINGS.SKILL_IDS.every((id) => p.skills[id] <= capInt)),
-      `shifters' own generated roster never exceeds its skill-offset-only cap (${capInt}) - STYLE_STRENGTH_DELTA plays no part in it`);
+      `shifters' own generated roster never exceeds the majors roster ceiling (${capInt}) - STYLE_STRENGTH_DELTA plays no part in it`);
   }
 
   // LEAGUE_LADDER_STYLES is unchanged from Matt's confirmed order - this commit pays for a style's
@@ -1465,6 +1558,27 @@ console.log('\n-- 19. BB-2c commit 6: Locked-statement inventory (design doc v9,
     ok(cur.chase <= prev.chase, `${SETTINGS.LEAGUES[i]} chases no more than ${SETTINGS.LEAGUES[i - 1]} (${cur.chase} <= ${prev.chase})`);
     ok(cur.patternWeight >= prev.patternWeight, `${SETTINGS.LEAGUES[i]} reads patterns at least as well as ${SETTINGS.LEAGUES[i - 1]} (${cur.patternWeight} >= ${prev.patternWeight})`);
     ok(cur.cornerBias >= prev.cornerBias, `${SETTINGS.LEAGUES[i]} pitches corners at least as often as ${SETTINGS.LEAGUES[i - 1]} (${cur.cornerBias} >= ${prev.cornerBias})`);
+  }
+
+  // R16 (docs/BASEBALL-3D-BUILD.md section 9): A CORNER IS INSIDE THE ZONE. `AIM_CORNER_BIAS_BASE`
+  // + cornerBias x `AIM_CORNER_BIAS_SCALE` used to reach 1.24 zone units at the Majors, so
+  // "working the corners" meant aiming AT A BALL - and the pitcher's own Accuracy skill then made
+  // it worse by hitting that spot more often (measured -1.3 pp per 5 points). The strongest corner
+  // aim any league or any slot can ask for must resolve inside |1.0|, before scatter.
+  {
+    const worstBias = Math.max(...SETTINGS.LEAGUES.map((lg) => {
+      const row = SETTINGS.CPU[lg];
+      const ceiling = SETTINGS.CHAMPION_CEILING && SETTINGS.CHAMPION_CEILING[lg];
+      const mul = Math.max(...(SETTINGS.TEAM_LADDER_OFFSETS[lg] || []).map((o) => (o && o.behaviorMul) || 1));
+      const capped = ceiling && ceiling.cornerBias != null
+        ? Math.min(row.cornerBias * mul, ceiling.cornerBias) : row.cornerBias * mul;
+      return capped;
+    }));
+    const worstAim = SETTINGS.AIM_CORNER_BIAS_BASE + worstBias * SETTINGS.AIM_CORNER_BIAS_SCALE;
+    ok(worstAim < 1.0,
+      `the hardest corner aim in the game resolves at ${worstAim.toFixed(3)} zone units - INSIDE the zone (R16: it was up to 1.24)`);
+    ok(worstAim > SETTINGS.AIM_INZONE_BIAS,
+      'and it is still further off the middle than an ordinary aim, so "works the corners" still means something');
   }
 
   // Per-league win-rate band shape test: SEASON_WINRATE_BAND/SEASONS_TO_GOLD_TARGET live in
@@ -1636,14 +1750,11 @@ console.log('\n-- 22. BB-2d commit 6: Shifters bounded and priced --');
   // TEAM_LADDER_OFFSETS[slot].skill, never on STYLE_STRENGTH_DELTA, at every slot.
   {
     const league = makeLeague('college');
-    const rawCap = SETTINGS.CAPS.college;
-    const baseCap = effectiveCapFor('college');
+    const capInt = rosterCeilingFor('college');   // R16: one ceiling for the league, not one per slot
     for (let slot = 0; slot < 8; slot++) {
       const team = league[slot];
-      const expectedCap = Math.max(1, Math.min(rawCap, baseCap * (1 + SETTINGS.TEAM_LADDER_OFFSETS.college[slot].skill)));
-      const capInt = Math.floor(expectedCap);
       ok(team.players.every((p) => SETTINGS.SKILL_IDS.every((id) => p.skills[id] <= capInt)),
-        `college slot ${slot} (${team.styleId}): no player skill exceeds the STYLE_STRENGTH_DELTA-free slotCap`);
+        `college slot ${slot} (${team.styleId}): no player skill exceeds the STYLE_STRENGTH_DELTA-free roster ceiling`);
     }
   }
 
@@ -1832,7 +1943,9 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
       `both axes scatter by the same skill-scaled amount (${amt.toFixed(4)} zone units at skill ${sk})`);
   }
 
-  // BREAK OFFSETS: every type lands exactly where BREAK_OFFSET says, at zero scatter.
+  // BREAK OFFSETS: every type breaks by exactly BREAK_OFFSET, and R16's aim compensation means
+  // that break is measured between the STRAIGHT point and the crossing - the crossing itself is
+  // the AIM, because the pitch is thrown at `aim - break`.
   {
     let allRight = true, firstBad = '';
     for (const type of SETTINGS.PITCH_TYPES) {
@@ -1841,22 +1954,43 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
         if (row.random) continue; // the knuckleball's own case is below
         const sign = row.handed ? (hand === 'L' ? -1 : 1) : 1;
         const r = flyPitch(type, { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { ...NO_SCATTER, pitcherHand: hand });
-        if (Math.abs(r.x - row.x * sign) > 1e-9 || Math.abs(r.y - row.y) > 1e-9) {
+        const bx = r.x - r.straightX, by = r.y - r.straightY;
+        if (Math.abs(bx - row.x * sign) > 1e-9 || Math.abs(by - row.y) > 1e-9) {
           allRight = false;
-          if (!firstBad) firstBad = `${type}/${hand}: (${r.x.toFixed(3)}, ${r.y.toFixed(3)}) vs (${(row.x * sign).toFixed(3)}, ${row.y.toFixed(3)})`;
+          if (!firstBad) firstBad = `${type}/${hand}: (${bx.toFixed(3)}, ${by.toFixed(3)}) vs (${(row.x * sign).toFixed(3)}, ${row.y.toFixed(3)})`;
         }
-        if (Math.abs(r.straightX) > 1e-9 || Math.abs(r.straightY) > 1e-9) { allRight = false; if (!firstBad) firstBad = `${type} straight point moved`; }
+        if (Math.abs(r.x) > 1e-9 || Math.abs(r.y) > 1e-9) {
+          allRight = false;
+          if (!firstBad) firstBad = `${type}/${hand} crossed at (${r.x.toFixed(3)}, ${r.y.toFixed(3)}), not at the aim`;
+        }
       }
     }
-    ok(allRight, `every pitch type breaks to exactly BREAK_OFFSET[type] (x flipped by the pitcher's hand where handed), from an unscattered aim of (0,0)${firstBad ? ' - ' + firstBad : ''}`);
+    ok(allRight, `every pitch type breaks by exactly BREAK_OFFSET[type] (x flipped by the pitcher's hand where handed) and CROSSES AT ITS AIM, R16's aim compensation${firstBad ? ' - ' + firstBad : ''}`);
+  }
+  // R16: THE CURVEBALL'S CROSSING IS ITS AIM, ON AVERAGE, through the real scatter. Before R16 the
+  // break was added on top of the aim, so a curveball aimed at the middle of the zone finished a
+  // quarter of a zone unit outside it every single time, and the pitchSpin skill made it worse.
+  {
+    const aim = { x: 0.35, y: -0.2 };
+    let r = 987654321 >>> 0;
+    const rand = () => { r = (Math.imul(r, 1103515245) + 12345) >>> 0; return (r >>> 8) / 16777216; };
+    let sx = 0, sy = 0;
+    const N = 6000;
+    for (let i = 0; i < N; i++) {
+      const p = flyPitch('curveball', aim, 1, SETTINGS, rand, { pitchSpin: 8 }, { pitcherHand: 'R' }, 'college');
+      sx += p.x; sy += p.y;
+    }
+    const mx = sx / N, my = sy / N;
+    ok(Math.abs(mx - aim.x) < 0.02 && Math.abs(my - aim.y) < 0.02,
+      `a curveball's mean crossing IS its aim (${mx.toFixed(3)}, ${my.toFixed(3)} against ${aim.x}, ${aim.y}), even with 8 points of pitchSpin bending it - R16's aim compensation`);
   }
   // doc §11, [Locked]: a screwball breaks the OTHER way from a slider, off the same arm.
   {
     const sl = flyPitch('slider', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { ...NO_SCATTER, pitcherHand: 'R' });
     const sc = flyPitch('screwball', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { ...NO_SCATTER, pitcherHand: 'R' });
-    ok(sl.x > 0 && sc.x < 0, 'a right-hander\'s slider and screwball break opposite ways (doc §11, [Locked])');
+    ok((sl.x - sl.straightX) > 0 && (sc.x - sc.straightX) < 0, 'a right-hander\'s slider and screwball break opposite ways (doc §11, [Locked])');
     const slL = flyPitch('slider', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { ...NO_SCATTER, pitcherHand: 'L' });
-    ok(Math.abs(slL.x + sl.x) < 1e-9, 'a left-hander\'s slider is the exact mirror of a right-hander\'s');
+    ok(Math.abs((slL.x - slL.straightX) + (sl.x - sl.straightX)) < 1e-9, 'a left-hander\'s slider is the exact mirror of a right-hander\'s');
     ok(flyPitch('fastball', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, NO_SCATTER).x === 0,
       'a fastball does not break at all - it is the baseline the others are measured against');
   }
@@ -1864,7 +1998,7 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
   {
     const kA = flyPitch('knuckleball', { x: 0, y: 0 }, 1, SETTINGS, mulberry32(1), {}, { scatter: { x: 0.5, y: 0.5, bx: 1, by: 0 } });
     const rnd = SETTINGS.BREAK_OFFSET.knuckleball.random;
-    ok(Math.abs(kA.x - rnd) < 1e-9 && Math.abs(kA.y + rnd) < 1e-9,
+    ok(Math.abs((kA.x - kA.straightX) - rnd) < 1e-9 && Math.abs((kA.y - kA.straightY) + rnd) < 1e-9,
       `a knuckleball's break is +-${rnd} in BOTH axes, drawn from the pitch's own draws`);
   }
   // A pitch costs the seeded stream the SAME number of draws whatever type it is - a replayed
@@ -1883,8 +2017,11 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
       { action: 'swing', cursor: { x: cx, y: cy }, timingErrorMs: 0, mode }, SETTINGS, () => 0.5, 'college');
     // Quality falls with 2-D distance and reaches zero (a miss) at the circle's own rim.
     const dead = at(0, 0, 0, 0);
-    const near = at(0.2, 0, 0, 0);
-    const edge = at(0.5, 0, 0, 0);
+    const near = at(0.12, 0, 0, 0);
+    // R16: the CONTACT circle is 0.34 at College (FEEL.engine.cursorR, x LEAGUE_CONTACT_MULT's own
+    // 1.0 here), not 0.55 - every offset in this block is recalibrated against the circle that
+    // actually exists, and nothing about what is being ASSERTED changed.
+    const edge = at(0.33, 0, 0, 0);
     // R5 rule 1 REPLACES R2's "quality falls with distance from the cursor": `q` is TIMING quality
     // alone now, and placement never subtracts power. What the distance still does is decide
     // whether there is contact at all, spray the ball, pick the kind, and (in the line-drive band)
@@ -1895,15 +2032,58 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
       `and placement subtracts NO exit velocity: dead centre and the rim are the same mph on the same seed (${dead.exitVeloMph.toFixed(2)} vs ${edge.exitVeloMph.toFixed(2)})`);
     ok(SETTINGS.FEEL.engine.placementPenaltyMph === undefined,
       'the flat placement penalty is gone from settings.js, not merely unused (R5 rule 1)');
-    const diag = at(0.2 / Math.SQRT2, 0.2 / Math.SQRT2, 0, 0);
+    const diag = at(0.12 / Math.SQRT2, 0.12 / Math.SQRT2, 0, 0);
     ok(Math.abs(diag.sprayAngleDeg - near.sprayAngleDeg) < 1e-9 || diag.contact === near.contact,
       'distance is the 2-D distance: the same offset taken diagonally still makes contact the same way');
-    ok(at(0, 0.6, 0, 0).contact === false, 'a ball 0.6 units ABOVE the contact cursor\'s centre is outside its 0.55 circle - a miss');
+    ok(at(0, 0.4, 0, 0).contact === false, 'a ball 0.4 units ABOVE the contact cursor\'s centre is outside its 0.34 circle - a miss (R16: was 0.6 against a 0.55 circle)');
+    // R16: LEAGUE_CONTACT_MULT - the SAME ball, the same swing, is a miss at College and contact at
+    // Little League, because the tutorial's bat covers 1.6x the circle. The same shape
+    // LEAGUE_TIMING_WINDOW_MULT has one axis over.
+    {
+      const atLg = (px, lg) => swing({ x: px, y: 0, isStrike: true }, skills,
+        { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: 0 }, SETTINGS, () => 0.5, lg);
+      ok(atLg(0.45, 'college').contact === false && atLg(0.45, 'little').contact === true,
+        'LEAGUE_CONTACT_MULT: a ball 0.45 off the cursor misses at College and is contact at Little League');
+      ok(SETTINGS.LEAGUE_CONTACT_MULT.college === 1 && SETTINGS.LEAGUE_CONTACT_MULT.little > 1
+        && SETTINGS.LEAGUE_CONTACT_MULT.majors === 1,
+        'and College is a true no-op, the same anchor every other league table uses');
+    }
+    // R16: THE FLIGHT-TIME WINDOW. A slow pitch gives a wider window and a fast one a narrower
+    // one - the whole of what makes the pitcher's Speed skill a skill. Measured at the boundary:
+    // the same timing error is a foul-or-better on the slow pitch and a swinging miss on the fast
+    // one, and the College fastball's own flight is the no-op reference.
+    {
+      const F = SETTINGS.FEEL.engine;
+      const swingAt = (timeToPlateS, errMs) => swing({ x: 0, y: 0, isStrike: true, timeToPlateS }, skills,
+        { action: 'swing', cursor: { x: 0, y: 0 }, timingErrorMs: errMs }, SETTINGS, () => 0.5, 'college');
+      const slow = 1.1227, fast = 0.3835;   // the Little League fastball and a 22-point Majors arm
+      const err = F.timingWindow * 1.2;      // outside the reference window, inside the slow one
+      ok(swingAt(slow, err).contact === true && swingAt(fast, err).contact === false,
+        `a ${Math.round(err)} ms error is contact on a ${slow.toFixed(2)} s pitch and a swinging miss on a ${fast.toFixed(2)} s one - R16's flightWindowMult`);
+      ok(Math.abs(flightWindowMult({ timeToPlateS: F.referenceFlightS }, SETTINGS) - 1) < 1e-9,
+        'the College fastball\'s own flight time is the reference: it scales the window by exactly 1');
+      ok(flightWindowMult({ timeToPlateS: slow }, SETTINGS) > 1 && flightWindowMult({ timeToPlateS: fast }, SETTINGS) < 1,
+        'slower than the reference widens the window, faster narrows it');
+      ok(flightWindowMult({}, SETTINGS) === 1 && flightWindowMult(null, SETTINGS) === 1,
+        'and a pitch with no flight time at all (an old fixture) keeps its exact pre-R16 window');
+      // The BUNT is on the same axis - a bunt is timing alone, so leaving it out would have made
+      // the bunt the one swing a fast pitch could not punish.
+      const bunt = (timeToPlateS, errMs) => swing({ x: 0, y: 0, isStrike: true, timeToPlateS }, skills,
+        { action: 'swing', bunt: true, timingErrorMs: errMs }, SETTINGS, () => 0.5, 'college');
+      const bErr = F.timingWindow * (SETTINGS.BUNT_WINDOW_MULT || 1.6) * 1.2;
+      ok(bunt(slow, bErr).foul === false && bunt(fast, bErr).foul === true,
+        'the same is true of a bunt: the slow pitch is still fair, the fast one is fouled off');
+    }
     // Kind follows the VERTICAL offset, per the spec.
     const R = SETTINGS.FEEL.engine.cursorR.contact;
     const flyOffY = R * SETTINGS.FEEL.engine.flyOffsetFrac;
     const popOffY = R * SETTINGS.FEEL.engine.popupOffsetFrac;
-    ok(Math.abs(flyOffY - 0.3) < 0.01, `the CONTACT cursor's fly threshold is the spec's own 0.3 zone units (${flyOffY.toFixed(3)}), expressed as a fraction of the circle's radius so a pop-up can exist inside it at all`);
+    // R16: the thresholds are FRACTIONS of whatever circle the batter actually has, which is the
+    // whole reason they were written as fractions - so the spec's own 0.3 zone units is still the
+    // fly threshold, it just lives at LITTLE LEAGUE now (0.34 x 1.6 x 0.545 = 0.296) rather than
+    // at the flat 0.55 circle every league used to share.
+    const flyOffLittle = R * SETTINGS.LEAGUE_CONTACT_MULT.little * SETTINGS.FEEL.engine.flyOffsetFrac;
+    ok(Math.abs(flyOffLittle - 0.3) < 0.01, `the CONTACT cursor's fly threshold is the spec's own 0.3 zone units at Little League (${flyOffLittle.toFixed(3)}), and a fraction of the circle everywhere else (${flyOffY.toFixed(3)} at College)`);
     ok(at(0, flyOffY + 0.02, 0, 0).kind === 'fly', 'the ball crossing above the cursor\'s centre by more than the fly threshold is a FLY ball');
     ok(at(0, -(flyOffY + 0.02), 0, 0).kind === 'ground', 'below it by the same amount is a GROUNDER');
     ok(at(0, 0, 0, 0).kind === 'line', 'on it is a LINE DRIVE');
@@ -1915,10 +2095,10 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
     ok(Math.abs(cPower.exitVeloMph / cContact.exitVeloMph - want) < 1e-6,
       `POWER mode's exit velocity is exactly x${want} of CONTACT's on the same pitch (${cPower.exitVeloMph.toFixed(2)} vs ${cContact.exitVeloMph.toFixed(2)} mph)`);
     ok(SETTINGS.FEEL.engine.cursorR.power < SETTINGS.FEEL.engine.cursorR.contact, 'and it pays for it with a smaller circle');
-    ok(at(0.45, 0, 0, 0, 'power').contact === false && at(0.45, 0, 0, 0, 'contact').contact === true,
+    ok(at(0.28, 0, 0, 0, 'power').contact === false && at(0.28, 0, 0, 0, 'contact').contact === true,
       'a ball inside the CONTACT circle but outside the POWER one is a miss in POWER mode and contact in CONTACT mode - that trade IS the mode choice');
     // The horizontal offset sprays.
-    ok(at(0.3, 0, 0, 0).sprayAngleDeg > at(-0.3, 0, 0, 0).sprayAngleDeg,
+    ok(at(0.2, 0, 0, 0).sprayAngleDeg > at(-0.2, 0, 0, 0).sprayAngleDeg,
       'meeting the ball on one side of the cursor sprays it that way (the R2 statement of aimX\'s own direction rule)');
   }
 
@@ -2961,7 +3141,16 @@ await (async function section34() {
     // one with 0, same aim, same draws.
     const noSpinPitch = flyPitch('curveball', 0, 1, SETTINGS, () => 0.5, { pitchSpin: 0 }, null, 'majors');
     const spunPitch = flyPitch('curveball', 0, 1, SETTINGS, () => 0.5, { pitchSpin: 10 }, null, 'majors');
-    ok(Math.abs(spunPitch.x) > Math.abs(noSpinPitch.x), `(6) flyPitch end to end: 10 pitchSpin points cross further off aim than 0 (${spunPitch.x} vs ${noSpinPitch.x})`);
+    // R16 REVERSES WHAT THIS MEASURES, deliberately. Until R16 more Spin meant the pitch CROSSED
+    // FURTHER OFF THE AIM, which is why the skill cost win rate instead of buying it (-4.1 pp per
+    // 5 points, the worst of the six): the strike was judged on the post-break position, so paying
+    // for break bought walks. The pitch is aimed at `aim - break` now, so more Spin means a bigger
+    // journey between the straight point and the plate, and the crossing is the aim either way.
+    const spunBreak = Math.abs(spunPitch.x - spunPitch.straightX);
+    const flatBreak = Math.abs(noSpinPitch.x - noSpinPitch.straightX);
+    ok(spunBreak > flatBreak, `(6) flyPitch end to end: 10 pitchSpin points break further from the straight point than 0 (${spunBreak.toFixed(3)} vs ${flatBreak.toFixed(3)})`);
+    ok(Math.abs(spunPitch.x) < 1e-9 && Math.abs(noSpinPitch.x) < 1e-9,
+      '(6) and BOTH still cross at the aim - R16 aim compensation, so spin is an edge rather than a walk');
   }
 })();
 

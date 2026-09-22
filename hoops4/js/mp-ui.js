@@ -78,21 +78,27 @@ export function openMultiplayer(ui) {
       shell(t('mp'), note(t('mpNeedName'), 'warn'));
       return;
     }
-    shell(t('mp'), `
+    // FOUR WAYS TWO PEOPLE PLAY, AS FOUR ROWS THAT SAY WHAT THEY DO. Matt: "within multiplayer
+    // options, there's a Host game option, a pass and play option, a challenge option and a Live
+    // Challenges section that shows the active games and if it's your turn or their turn."
+    //
+    // Each row carries ONE line of what it is - not the two-paragraph section headers this screen
+    // used to have. "Pass and play" has moved here from the setup screen's opponent row, where it
+    // was labelled "Two players" and read as a mode of the computer game.
+    // NAMES ONLY. The one-line hints under each of these went the way of the setup screen's
+    // tagline - Matt: "Delete all the subtitles on the Multiplayer screen as well". Four buttons
+    // whose names say what they are do not need four sentences explaining them.
+    const act = (go, label, primary) => `
+      <button type="button" class="h4-mp-act${primary ? ' is-primary' : ''}" data-go="${go}">${esc(label)}</button>`;
+    shell(t('mpHome'), `
+      <div class="h4-mp-acts">
+        ${act('pick', t('mpChallenge'), true)}
+        ${act('host', t('mpHost'))}
+        ${act('join', t('mpJoin'))}
+        ${act('pass', t('mpPassPlay'))}
+      </div>
       <section class="h4-mp-sec">
-        <h3>${t('mpLive')}</h3>
-        <p class="h4-mp-sub">${t('mpLiveNote')}</p>
-        <div class="h4-mp-row">
-          <button type="button" class="gh-btn gh-btn--primary" data-go="host">${t('mpHost')}</button>
-          <button type="button" class="gh-btn" data-go="join">${t('mpJoin')}</button>
-        </div>
-      </section>
-      <section class="h4-mp-sec">
-        <h3>${t('mpTurns')}</h3>
-        <p class="h4-mp-sub">${t('mpTurnsNote')}</p>
-        <div class="h4-mp-row">
-          <button type="button" class="gh-btn gh-btn--primary" data-go="pick">${t('mpChallenge')}</button>
-        </div>
+        <h3>${t('mpActive')}</h3>
         <div class="h4-mp-games" data-role="games"><p class="h4-mp-sub">${t('mpGames')}...</p></div>
       </section>`);
     for (const b of el.querySelectorAll('[data-go]')) ui.on(b, 'click', () => go(b.dataset.go));
@@ -103,7 +109,11 @@ export function openMultiplayer(ui) {
     const box = el.querySelector('[data-role="games"]');
     if (!box) return;                                   // the sheet closed while the read was out
     state.games = rows;
-    box.innerHTML = rows.length ? rows.map(gameRow).join('') : `<p class="h4-mp-sub">${t('mpNoGames')}</p>`;
+    // ACTIVE means active: a finished match is not something you can take a turn in, and Matt
+    // asked for this list to say "if it's your turn or their turn". Finished ones belong in the
+    // challenge history, which is the next round's work.
+    const live = rows.filter((r) => r && !r.over);
+    box.innerHTML = live.length ? live.map(gameRow).join('') : `<p class="h4-mp-sub">${t('mpNoActive')}</p>`;
     for (const b of box.querySelectorAll('[data-game]')) {
       ui.on(b, 'click', () => openGame(b.dataset.game));
     }
@@ -237,7 +247,15 @@ export function openMultiplayer(ui) {
     if (view === 'host') return viewHost();
     if (view === 'join') return viewJoin();
     if (view === 'pick') return viewPick();
+    if (view === 'pass') return startPassPlay();
     return viewHome();
+  }
+
+  /** TWO PEOPLE, ONE PHONE. No room, no match document, no network - `ui.start()` with vsCpu
+   *  false and no `mp` is exactly the game the setup screen's "Two players" used to start. */
+  function startPassPlay() {
+    el.remove();
+    ui.start({ vsCpu: false });
   }
 
   go('home');
