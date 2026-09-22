@@ -247,7 +247,6 @@ class Hoops4 {
     this.root.innerHTML = `
       <div class="h4-setup">
         <h1 class="h4-title">${t('title')}</h1>
-        <p class="h4-tag">${t('tagline')}</p>
         <!-- A PICTURE OF THE THING. Matt: the setup screen "looks nothing like the others. it's
              not on the theme or on brand of the game hub at all" - and what every other machine's
              setup screen leads with is a picture of the machine (skeeball's gallery is a rendered
@@ -501,11 +500,9 @@ class Hoops4 {
     this.root.innerHTML = `
       <div class="h4-play-wrap">
         <div class="h4-hud">
-          <button type="button" class="h4-menu" aria-label="${t('menu')}">
-            <span aria-hidden="true">&lsaquo;</span> ${t('menu')}
-          </button>
           <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
+          <button type="button" class="h4-menu" aria-label="${t('menu')}">${t('menu')}</button>
         </div>
         <div class="h4-stage">
           <canvas class="h4-canvas"></canvas>

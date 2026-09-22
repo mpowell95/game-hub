@@ -85,17 +85,17 @@ export function openMultiplayer(ui) {
     // Each row carries ONE line of what it is - not the two-paragraph section headers this screen
     // used to have. "Pass and play" has moved here from the setup screen's opponent row, where it
     // was labelled "Two players" and read as a mode of the computer game.
-    const act = (go, label, hint, primary) => `
-      <button type="button" class="h4-mp-act${primary ? ' is-primary' : ''}" data-go="${go}">
-        <span class="h4-mp-act-name">${esc(label)}</span>
-        <span class="h4-mp-act-hint">${esc(hint)}</span>
-      </button>`;
+    // NAMES ONLY. The one-line hints under each of these went the way of the setup screen's
+    // tagline - Matt: "Delete all the subtitles on the Multiplayer screen as well". Four buttons
+    // whose names say what they are do not need four sentences explaining them.
+    const act = (go, label, primary) => `
+      <button type="button" class="h4-mp-act${primary ? ' is-primary' : ''}" data-go="${go}">${esc(label)}</button>`;
     shell(t('mpHome'), `
       <div class="h4-mp-acts">
-        ${act('pick', t('mpChallenge'), t('mpChallengeHint'), true)}
-        ${act('host', t('mpHost'), t('mpLiveHint'))}
-        ${act('join', t('mpJoin'), t('mpLiveHint'))}
-        ${act('pass', t('mpPassPlay'), t('mpPassPlayHint'))}
+        ${act('pick', t('mpChallenge'), true)}
+        ${act('host', t('mpHost'))}
+        ${act('join', t('mpJoin'))}
+        ${act('pass', t('mpPassPlay'))}
       </div>
       <section class="h4-mp-sec">
         <h3>${t('mpActive')}</h3>
