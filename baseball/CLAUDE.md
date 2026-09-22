@@ -4,6 +4,190 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R15-A: the career loop and its persistence (2026-09-22)
+
+Matt: *"Go, build the skill points and career."* R15 is two halves built in parallel
+(`docs/BASEBALL-3D-BUILD.md` section 9, "R15: the career"): A is headless and owns the rules and
+the writes, B is the screens. This is A. Two new files, plus one helper each in
+`js/career-store.js` and `js/game-stats.js`. No DOM, no CSS, no strings.
+
+**`baseball/js/engine/career.js` is pure.** No DOM, no storage, no network, no clock, no
+`Math.random`: every function takes the career `state` and returns a NEW state object, and
+`test-baseball-career.mjs` asserts the argument is byte-identical afterwards for `startSeason`,
+`finishGame`, `earn`, `spend` and `checkpoint`. Every seed is derived through `rng.js`'s
+`hashSeed` from the careerId and the season number, so the same career plays the same games on
+both of a person's phones with nothing persisted but the seeds. That is what lets a whole career
+be played in node with scripted results.
+
+### The state, frozen once shipped
+
+```
+{
+  v, rulesV, careerId, startedAt,
+  player: { hand: 'L'|'R', presetId, skills: { the six SKILL_IDS } },
+  unspent, cap, pointsEarned, pointsLost,
+  league, bestLeague, bestTrophyByLeague: { <leagueId>: 0..3 },
+  seasonsPlayed, wsTitles, perfectSeasons,
+  season: null | {
+    n, league, seed, cap, points,                     // cap + points SNAPSHOTTED at season start
+    schedule: [{ opponentIndex, home }] x12,          // snapshotted at season start
+    results:  [{ idx, opponentIndex, home, won, you, cpu, forfeit }],
+    phase: 'regular'|'semifinal'|'championship'|'done',
+    playoff: null | { seeds, semiOpponentIndex, finalOpponentIndex, semiHome, finalHome,
+                      semi: result|null, final: result|null },
+    trophy: null|0..3, perfect: bool
+  },
+  game: null | { meta: { kind, idx, opponentIndex, home, seed }, snap },
+  stats: { the per-career counters, the same key list as BB_ADDITIVE_KEYS, plus streak
+           and the three best* fields }
+}
+```
+
+Three fields are additive to the spec's own block and each earns its place. **`cap` at the top
+level** is the career's live per-skill cap, Math.max only (doc section 15, [Locked]: "Caps only
+ever rise") - `season.cap` is the snapshot of it, and the spend/earn maths needs a cap BETWEEN
+seasons, when there is no season object to read one from. **`pointsEarned`/`pointsLost`** are the
+gross a career's results paid and what the cap threw away, which is the only way a screen (or the
+test) can say what the cap actually cost: the doc's own Little League row is "yield 38, room 30,
+excess lost", and nothing else in the state records the 8.
+
+The eight CPU teams are NEVER stored. `makeLeague(league)` rebuilds them identically from the
+league id alone, and `season.seed` rebuilds the schedule, so the document stays small and a
+teams.js retune reaches a career in progress through its own settings rather than through a stale
+copy.
+
+### The rules as implemented, with the doc section each comes from
+
+- **The ladder** (section 4, [Locked]): little, highschool, college, minors, majors. Only Gold
+  advances. Bronze, Silver and a missed playoff all replay the same rung, `state.league`
+  untouched. A Majors Gold does NOT advance: it counts `wsTitles` and repeats the Majors season.
+- **Top 4 of 9** (section 4, [Locked]), through `season.js`'s `scriptedStandings` +
+  `playoffs(standings, BRACKET_MODEL)`. **Tie-breakers, which the doc leaves open (section 17 item
+  13): the player loses every tie, to every CPU team.** `scriptedStandings` sorts on wins, then on
+  `strengthRank` descending, and the player's `strengthRank` is -1. Under the shipped
+  `STANDINGS_MODEL` (`rawWins7`) the eight CPU teams finish 0..7 wins, so the cut sits exactly at
+  "more than 4 wins": measured in the test, 3-9 and 4-8 miss, 5-7 makes it fourth, 9-3 and 12-0
+  make it comfortably.
+- **Trophies** (section 4, [Locked]): semifinal loss 1, championship loss 2, championship win 3, no
+  playoff place 0, all via `season.js`'s own `trophyFor`.
+- **Perfect Season** (section 5, [Locked]): a Majors season with every regular AND playoff game
+  won. A 12-0 Gold one rung down is not one, and the test pins that from both sides.
+- **Points** (section 7, [Locked]): a regular-season win pays `points.win`, a loss `points.loss`,
+  **a playoff win pays nothing** and the trophy bonus is the entire playoff reward. Every payment
+  reads the SEASON's own snapshot of `POINTS`, never today's table: the test tampers with a
+  season's snapshot mid-flight and watches the tampered number get paid, which is what proves a
+  tuning deploy cannot rewrite a season in progress (section 15, [Locked]).
+- **Caps** (sections 6 and 7, [Locked]): `earn` clamps `unspent` to `capRoom` and the excess is
+  LOST, no banking. **The ordering is load-bearing**: `resolveSeason` pays the trophy bonus FIRST,
+  against the cap of the league the season was played on, and raises the cap only afterwards, on
+  the advance. Pay the bonus after the raise and a Little League Gold would lose nothing, and the
+  doc's own table would stop being true.
+- **Forfeit** (section 4, [Locked]): a loss, counted in `lost`, broken out in `forfeits`, and it
+  pays the league's loss points like any other loss.
+- **Resume** (sections 4 and 15, [Locked]): `state.game.snap` IS the engine's own `snapshot()`,
+  with no translation layer. `checkpoint(state, snap)` replaces it at every pitch boundary;
+  `resumeGame(state, agents)` is `Game.fromSnapshot`, which rejects a malformed or wrong-`rulesV`
+  snapshot outright rather than resuming a half-real game.
+
+### The points table, as the test measured it
+
+`test-baseball-career.mjs` plays a 9-3 season plus each playoff outcome at every league, with the
+cap held out of the way so the raw yield is visible (the "miss" column is a 4-8 season, since 9-3
+always makes the playoffs). These are GROSS points, before the cap clamp:
+
+```
+league        9-3 + miss*   9-3 + bronze   9-3 + silver   9-3 + gold
+little             20            33             35            38
+highschool         16            23             25            27
+college             4            11             13            15
+minors              4            10             11            13
+majors              4            10             11            12
+                                          (* the miss column is a 4-8 season)
+```
+
+Cap room at the start is 30 (six skills, cap 10, 30 points already spent), so **the doc's own
+worked example lands exactly: a 9-3 Gold at Little League yields 38, 30 fit, 8 are lost.** Caps by
+league: 10, 14, 18, 22, 26.
+
+### What the engine's events cannot count yet
+
+`gameStatsFromEvents(events, { playerSide })` is a pure collector: feed it the `{type, payload}`
+stream from the Game's own `onEvent` hook and it returns every counter `recordBaseball` takes.
+Nothing in the R15-A counter list is fabricated, and everything in it is derivable today. Three
+definitions are narrower than a real scorebook's and are stated in the file header rather than left
+to be rediscovered:
+
+- **A runner PICKED OFF is not charged as `caughtStealing`** (only a caught steal is), and the
+  player's OWN runner being picked off has no counter at all, because none exists in the frozen
+  list.
+- **`perfectGames` additionally requires the game not to have gone to extra innings**, because doc
+  section 3's ghost runner starts an opponent on second without reaching base. A no-hitter is
+  hits-only and is unaffected.
+- **`rbi` is every run that scored on the player's own plate appearance.** The engine models no
+  errors and no fielder's-choice exception, so the two disagree nowhere today.
+
+Two derivations worth knowing, because they look like guesses and are not. **A sac fly is a
+`flyout` that scored a run** - the engine's `_resolveBattedBall` has exactly one out branch that
+scores (the sac-fly branch), so nothing else can produce that pair. **Outs pitched** come from the
+opponent's own at-bat ends (`1 + runnersOut.length`, which is what makes a double play two) plus a
+successful pickoff, since the engine emits no out event of its own.
+
+### `baseball/js/career-io.js`, the one door to the two stores
+
+It is the ONLY file in this game that imports `js/career-store.js` or `js/game-stats.js`, and
+`test-baseball-career.mjs` has a structural assertion for that in both directions (career-io
+imports both; `engine/career.js` imports neither, and carries no `Math.random`, no `localStorage`
+and no DOM). `loadCareer` reads local then `pullCareer` under the store's own 2.5s deadline;
+`saveCheckpoint` is local-only at every pitch boundary; `saveAtBat` is local plus a coalesced push;
+`saveGameEnd` awaits the push and reports what the store's own health said about it; `startCareer`
+mints the careerId, writes `setBaseballHand` once, bumps `careersStarted` and pushes; `retire`
+builds the frozen history row and hands it to `retireCareer`. `installLifecycle()` /
+`uninstallLifecycle()` are what ui.js calls in `init`/`destroy` for the `pagehide` and hidden
+`visibilitychange` pushes. Nothing here throws into a caller and every failure logs loudly (THE LAW
+rule 6); a state today's code cannot validate is rejected WHOLE and **the stored document is left
+exactly where it is** (rules 1 and 5).
+
+**The recorder rule: ONE `recordBaseball(league, won, extras)` per finished game.** `finishGame`
+returns it, already built, as `{ league, won, extras }`, and the season's `seasons: 1`, `trophy`,
+`wsTitles` and `perfectSeasons` ride on the FINAL game of the season rather than a second call that
+could be lost between the two. The test counts the calls: a Gold season makes 14 (12 regular plus 2
+playoff), exactly one of which carries the season.
+
+### Two additions outside this game, both additive
+
+- **`js/career-store.js` gains `newCareerDoc({careerId, state, rulesV, now, code})`** - the
+  `{ v, code, careerId, seq, baseSeq, updatedAt, device, rulesV, state }` wrapper, built where
+  `validateCareer` lives rather than re-spelled by each consumer. `seq`/`baseSeq` start at 0 so the
+  first `saveLocalCareer` takes it to seq 1 against baseSeq 0, which `reconcile` reads as "local has
+  moved" and therefore pushes. Every existing export and behaviour is unchanged.
+- **`js/game-stats.js` gains `recordBaseballCareerStarted()`** - `careersStarted` is in
+  `BB_ADDITIVE_KEYS`, so before this the only way to bump it was to ride extras on a finished
+  GAME's call, and a career is started before its first game is played. Additive and one-way, the
+  mirror of `recordBaseballCareerFinished`. Like that one it is a career lifecycle event rather
+  than a play, so it takes no rate gate, and `test-rate-guard.mjs`'s `EXEMPT` set names both with
+  that reason: gating it on a per-minute play rate could only ever cost a real player a real career
+  record.
+
+### Tests
+
+`test-baseball-career.mjs` (node, no browser, in `run-all-tests.mjs`), **293 assertions**, named
+sections: a new career, immutability, `validateState` rejects a malformed state whole, the season
+snapshot, `nextGame` walks the season and stops, the playoff cut / trophies / what replays, the
+points table at every league, caps and cap room and spending, a full career climbs to the Majors,
+one recorder call per game with the season riding on the last one, a forfeit is a loss, streaks and
+bests, the frozen history row, `gameStatsFromEvents`, a mid-at-bat resume through the REAL engine,
+the career-io round trip against the same `globalThis.__CAREER_TEST_BOOT__` fake seam
+`test-career-sync.mjs` uses, and a structural block pinning career-io as the only door to the
+stores. `newCareerDoc` is exercised through the real `startCareer` in that round trip rather than by
+a mirror of its own.
+
+**`sim-baseball.mjs` was deliberately left alone.** Driving its season loop through `career.js`
+would not be a small change: its `playSeason` takes an `override` tier/skills object no career has,
+seeds each game as `hashSeed('bb-season', league, tier, seasonSeed, i)` where career.js seeds from
+the careerId, and the whole file's recorded scoreboards (the ones pasted into this file's R5 entry)
+are measured against those exact seeds. Re-seeding them would invalidate every number without
+measuring anything new.
+
 ## R13: the pitching angle, a backdrop per league, legs and feet (2026-09-22)
 
 Four fixes off Matt's own words on v882's pitching view: *"Can you change the angle a little bit

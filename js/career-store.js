@@ -112,6 +112,27 @@ export function mintCareerId(code, now, rand) {
   return `${code}-${now}-${out}`;
 }
 
+/** Wrap a game's opaque `state` in a fresh career DOCUMENT. The document shape lives here, with
+ *  `validateCareer` (doc section 15's schema), rather than in each consumer - R15-A's
+ *  `baseball/js/career-io.js` is the first of those and would otherwise have had to re-spell the
+ *  nine fields itself. `seq`/`baseSeq` start at 0 so the very first `saveLocalCareer` takes it to
+ *  seq 1 against baseSeq 0, which `reconcile` reads as "local has moved" and therefore pushes.
+ *  Pure: no storage, no network. `code`/`device` default to this device's own (`myCode()` and
+ *  `deviceId()`), the same two this module's own writes resolve fresh on every call. */
+export function newCareerDoc({ careerId, state, rulesV, now, code, device }) {
+  return {
+    v: CAREER_SCHEMA_V,
+    code: code || myCode() || '',
+    careerId: String(careerId || ''),
+    seq: 0,
+    baseSeq: 0,
+    updatedAt: Number.isFinite(now) ? now : Date.now(),
+    device: device || deviceId(),
+    rulesV: Number.isInteger(rulesV) && rulesV >= 1 ? rulesV : 1,
+    state,
+  };
+}
+
 // --- storage + network --------------------------------------------------------------------------
 
 function readLocalSettings() { return readJSON(CAREER_LOCAL_KEY) || {}; }
@@ -281,6 +302,6 @@ export default {
   CAREER_SCHEMA_V, CAREER_NODE, CAREER_GAME, CAREER_LIVE, CAREER_HISTORY, CAREER_FORKS,
   CAREER_LOCAL_KEY, CAREER_LOCAL_FIELD, CAREER_PULL_TIMEOUT_MS, CAREER_ID_RANDOM_LEN, CAREER_ID_ALPHABET,
   CAREER_HEALTH_KEY, HEALTH_OK, HEALTH_PULLING, HEALTH_OFFLINE_LOCAL, HEALTH_FORK, HEALTH_DENIED,
-  validateCareer, reconcile, mintCareerId, loadLocalCareer, saveLocalCareer,
+  validateCareer, reconcile, mintCareerId, newCareerDoc, loadLocalCareer, saveLocalCareer,
   pullCareer, pushCareer, retireCareer, careerSyncHealth,
 };
