@@ -657,9 +657,17 @@
 /* --- quick chat inside a match (2026-09-22) ---------------------------------------------------
    A 44x44 button in the HUD's band, immediately LEFT of the Menu button: the hub's floating chip
    owns the top left, and horizontal separation is the axis a notch cannot move (see .h4-menu).
-   The HUD row reserves the extra width only in a multiplayer match (`.has-chat`), so a solo
-   game's turn pill keeps its room. Everything here is on the PLAY screen's dark arcade skin. */
-.h4-root .h4-hud.has-chat { padding-right: 116px; }
+   Everything here is on the PLAY screen's dark arcade skin. */
+
+/* THE HUD IS 52px NARROWER in a multiplayer match, so it reserves the width only there
+   (`.has-chat`) and a solo game's turn pill keeps its room. The first screenshot had "Your shot"
+   clipped and "Game 2 of 3" wrapped onto two lines: an empty shot counter no longer spends a flex
+   gap, the gap tightens, and the series leg never wraps. */
+.h4-root .h4-hud .h4-shots:empty { display: none; }
+.h4-root .h4-hud.has-chat { padding-right: 116px; gap: 6px; }
+.h4-root .h4-hud.has-chat .h4-leg { white-space: nowrap; flex: 0 0 auto; font-size: 11px; }
+.h4-root .h4-hud.has-chat .h4-who { padding: 5px 10px; gap: 6px; }
+
 .h4-root .h4-chat-btn {
   appearance: none;
   position: absolute;
@@ -684,6 +692,7 @@
   background: var(--h4-yellow); color: #1d1f24;
   font-size: 11px; font-weight: 800; line-height: 16px; text-align: center;
 }
+
 .h4-root .h4-chat {
   position: absolute;
   top: calc(max(10px, env(safe-area-inset-top, 0px)) + 52px);
@@ -700,7 +709,8 @@
 }
 .h4-root .h4-chat[hidden] { display: none; }
 /* THE LAST FEW LINES, each labelled "You:" or by name in bold and set to its own side - who said
-   what never rests on a colour. Bounded to four lines by the controller, so it never scrolls. */
+   what never rests on a colour. Four lines at most (the controller's CHAT_SHOW), so the panel
+   never scrolls. */
 .h4-root .h4-chat-log { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .h4-root .h4-chat-line {
   margin: 0; max-width: 88%;
@@ -734,20 +744,24 @@
 .h4-root .h4-chat-input { flex: 1 1 auto; min-width: 0; min-height: 40px; font-size: 16px; }
 .h4-root .h4-chat-send { flex: 0 0 auto; min-height: 40px; }
 .h4-root .h4-chat-err { margin: 6px 0 0; font-size: 12px; font-weight: 700; color: var(--h4-ink); }
+
 /* WHAT THEY SAID, as a speech bubble under the HUD, their NAME first in bold. At most three at
-   once, gone after a few seconds; pointer-events off so it never eats a swipe. */
+   once, gone after a few seconds; pointer-events off so it never eats a swipe.
+   THEY HANG FROM THE RIGHT, under the chat button, and keep 96px clear on the left: in the hub the
+   floating "Hub" chip sits at the top left from y 54 (max(inset, 54px)), and the first build's
+   left-aligned bubbles landed behind it. */
 .h4-root .h4-chat-pops {
   position: absolute;
   top: calc(max(10px, env(safe-area-inset-top, 0px)) + 54px);
-  left: 12px; right: 12px;
+  left: 96px; right: 12px;
   z-index: 5;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
   pointer-events: none;
 }
 .h4-root .h4-chat-pop {
   display: inline-flex; align-items: center; gap: 8px;
   max-width: 100%; box-sizing: border-box;
-  padding: 6px 12px; border-radius: 14px 14px 14px 4px;
+  padding: 6px 12px; border-radius: 14px 4px 14px 14px;
   background: rgba(20, 22, 26, 0.92); color: var(--h4-ink);
   border: 1px solid var(--h4-edge);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
@@ -755,7 +769,6 @@
   animation: h4-pop-in 200ms ease-out both;
   transition: opacity 240ms ease;
 }
-.h4-root .h4-chat-pop.is-mine { align-self: flex-end; border-radius: 14px 14px 4px 14px; }
 .h4-root .h4-chat-pop.is-off { opacity: 0; }
 .h4-root .h4-chat-pop.is-emoji .h4-chat-pop-text { font-size: 22px; }
 .h4-root .h4-chat-pop-who { font-size: 12px; font-weight: 800; white-space: nowrap; }
@@ -772,3 +785,6 @@
 .h4-root .h4-hist-game.is-won .h4-hist-res { color: var(--h4s-ink); font-weight: 800; }
 .h4-root .h4-hist-day { font-weight: 500; color: var(--h4s-muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
 .h4-root .h4-hist-line { font-variant-numeric: tabular-nums; color: var(--h4s-ink); }
+/* A record row is a DIV, not a button, so it does not get a button's border-box sizing: without
+   this its padding pushed "W 3 · L 1 · D 0" off its own right edge. */
+.h4-root .h4-hist-rec { box-sizing: border-box; cursor: default; }
