@@ -24,6 +24,7 @@ const LEGEND_ORDER = [
   ['fairwayBunker', 'Fairway bunker'],
   ['greensideBunker', 'Greenside bunker'],
   ['water', 'Water'],
+  ['swamp', 'Swamp'],
   ['trees', 'Scrub floor'],
 ];
 
@@ -403,19 +404,26 @@ function renderBunker(el, ctx) {
 }
 
 function renderWater(el, ctx) {
-  const { spec, selection, ops, refresh } = ctx;
+  const { spec, selection, ops, refresh, toolState, setToolState } = ctx;
   if (ctx.drawing) { drawingHint(el, ctx); return; }
   const target = objTargetFor(spec, selection, ['water']);
   if (!target) {
+    // Swamp (2026-09-22): same tool, same blob/draw machinery as a pond - only `kind` differs, so
+    // it is a toggle here rather than a fourth tool of its own (docs/HANDOFF-GOLF-OBJECTS.md
+    // section 2: "it is not water - no penalty stroke, no drop prompt").
     el.innerHTML = `
-      <div class="he-empty" style="margin-bottom:6px;">Click the hole to place water, or draw a lake:</div>
+      ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp']], toolState.waterKind || 'water')}
+      <div class="he-empty" style="margin:6px 0;">Swamp: the ball just plugs where it lands and comes out at half power. Click the hole to place it, or draw one:</div>
       <button class="gh-btn gh-btn--block" id="he-w-draw">Draw shape</button>`;
-    el.querySelector('#he-w-draw').addEventListener('click', () => ops.startDraw('water'));
+    wireSeg(el, 'kind', (val) => setToolState({ waterKind: val }));
+    el.querySelector('#he-w-draw').addEventListener('click', () => ops.startDraw('water', toolState.waterKind === 'swamp' ? 'swamp' : null));
     return;
   }
   const w = spec.water[target.index];
   const drawn = !!w.poly;
+  const kind = w.kind || 'water';
   el.innerHTML = `
+    ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp']], kind)}
     ${drawn ? '<div class="he-empty">Drawn shape. Drag its white handles to resize, drag inside to move.</div>' : `
       ${slider('he-w-rx', 'rx', 4, 30, 0.5, w.rx)}
       ${slider('he-w-ry', 'ry', 4, 30, 0.5, w.ry == null ? w.rx : w.ry)}
@@ -423,12 +431,13 @@ function renderWater(el, ctx) {
     <button class="gh-btn gh-btn--block" id="he-w-redraw" style="margin-bottom:6px;">${drawn ? 'Redraw shape' : 'Draw its shape instead'}</button>
     <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-w-dup">Duplicate (D)</button>
   `;
+  wireSeg(el, 'kind', (val) => { ops.instant((s) => ops.mutators.setWaterField(s, target.index, { kind: val })); refresh(); });
   if (!drawn) {
     wireSlider(el, 'he-w-rx', ops, (s, v) => ops.mutators.setWaterField(s, target.index, { rx: v }));
     wireSlider(el, 'he-w-ry', ops, (s, v) => ops.mutators.setWaterField(s, target.index, { ry: v }));
     el.querySelector('#he-w-reroll').addEventListener('click', () => { ops.instant((s) => ops.mutators.rerollWater(s, target.index)); refresh(); });
   }
-  el.querySelector('#he-w-redraw').addEventListener('click', () => ops.startDraw('water', null, target.index));
+  el.querySelector('#he-w-redraw').addEventListener('click', () => ops.startDraw('water', kind === 'swamp' ? 'swamp' : null, target.index));
   el.querySelector('#he-w-dup').addEventListener('click', () => document.getElementById('he-duplicate').click());
 }
 
@@ -660,6 +669,49 @@ function renderCross(el, ctx) {
   }
 }
 
+const DECOR_SPRITES = [['bench', 'Bench'], ['sign', 'Sign'], ['flagpole', 'Flagpole']];
+
+/** Decor (2026-09-22): a bench, sign or flagpole sprite, or a drawn cart path. Cosmetic only -
+ *  `holes.js` never reads `decor` for anything, so nothing here can break a hole's play. */
+function renderDecor(el, ctx) {
+  const { spec, selection, ops, refresh, toolState, setToolState } = ctx;
+  if (ctx.drawing) { drawingHint(el, ctx); return; }
+  const target = objTargetFor(spec, selection, ['decor']);
+  if (!target) {
+    el.innerHTML = `
+      ${seg('kind', DECOR_SPRITES, toolState.decorKind || 'bench')}
+      <div class="he-empty" style="margin:6px 0;">Click the hole to place it, or draw a cart path:</div>
+      <button class="gh-btn gh-btn--block" id="he-d-draw">Draw a cart path</button>`;
+    wireSeg(el, 'kind', (val) => setToolState({ decorKind: val }));
+    el.querySelector('#he-d-draw').addEventListener('click', () => ops.startDraw('decor'));
+    return;
+  }
+  const d = spec.decor[target.index];
+  if (d.poly) {
+    el.innerHTML = `
+      <div class="he-empty">Cart path. Drag inside to move.</div>
+      <button class="gh-btn gh-btn--block" id="he-d-redraw" style="margin:6px 0;">Redraw shape</button>`;
+    el.querySelector('#he-d-redraw').addEventListener('click', () => ops.startDraw('decor', null, target.index));
+    return;
+  }
+  // A sprite: which kind it is (write-through, not a NEXT-placement toggle - unlike Tree's
+  // Single/Stand, a bench CAN become a sign in place, it is just a different picture) and rotation.
+  el.innerHTML = `
+    ${seg('kind', DECOR_SPRITES, d.kind || 'bench')}
+    ${slider('he-d-rot', 'Rotation (deg)', 0, 359, 1, d.rot || 0)}
+    <div class="he-empty" style="margin-top:6px;">Drag to move. Delete removes it.</div>
+  `;
+  const setDecor = (fields) => {
+    if (typeof ops.mutators.setDecorField !== 'function') { console.warn('[decor] setDecorField mutator not available yet'); return; }
+    ops.instant((s) => ops.mutators.setDecorField(s, target.index, fields));
+    refresh();
+  };
+  wireSeg(el, 'kind', (val) => setDecor({ kind: val }));
+  wireSlider(el, 'he-d-rot', ops, (s, v) => (
+    typeof ops.mutators.setDecorField === 'function' ? ops.mutators.setDecorField(s, target.index, { rot: Math.round(v) }) : s
+  ));
+}
+
 function renderSelect(el, ctx) {
   const { selection } = ctx;
   if (!selection) { el.innerHTML = '<div class="he-empty">Click an object to select it.</div>'; return; }
@@ -667,7 +719,7 @@ function renderSelect(el, ctx) {
   if (selection.group === 'waypoint') { el.innerHTML = '<div class="he-empty">Waypoint selected. Drag to move (switch to Route for Dogleg/Straighten).</div>'; return; }
   if (selection.group === 'guard') { renderGuardHit(el, ctx); return; }
   if (selection.group === 'pins') { el.innerHTML = `<div class="he-empty">Pin ${selection.index + 1} selected. Drag to move it on the green; Delete removes it. Switch to Green (G) to add more.</div>`; return; }
-  const byGroup = { bunkers: renderBunker, water: renderWater, trees: renderTree, sentinels: renderTree, cross: renderCross };
+  const byGroup = { bunkers: renderBunker, water: renderWater, trees: renderTree, sentinels: renderTree, cross: renderCross, decor: renderDecor };
   const fn = byGroup[selection.group];
   if (fn) fn(el, ctx); else el.innerHTML = '<div class="he-empty">Selected.</div>';
 }
@@ -680,7 +732,7 @@ export function renderContextPanel(el, ctx) {
   const byTool = {
     select: renderSelect, route: renderRoute, width: renderWidth, bunker: renderBunker,
     water: renderWater, tree: renderTree, belts: renderBelts, green: renderGreen,
-    slope: renderSlope, cross: renderCross, ruler: renderRuler,
+    slope: renderSlope, cross: renderCross, ruler: renderRuler, decor: renderDecor,
   };
   const fn = byTool[ctx.tool];
   if (fn) fn(el, ctx); else el.innerHTML = '<span class="he-empty">Tools land in step 4.</span>';

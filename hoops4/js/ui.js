@@ -34,6 +34,23 @@ const readSettings = () => {
 };
 const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
 
+// WHAT THIS DEVICE HAS ALREADY SEEN of each turn-by-turn match's chat: `{ <gameId>: <newest at> }`,
+// so opening a match pops only what the other person said since. A convenience (THE LAW rule 2's
+// carve-out, like the alert's seen-list), never history: losing it re-shows a few lines, nothing
+// more. Bounded to the newest 60 matches.
+const CHAT_SEEN_KEY = 'gamehub.hoops4.chatSeen.v1';
+const readChatSeen = () => {
+  try { const v = JSON.parse(localStorage.getItem(CHAT_SEEN_KEY) || 'null'); return v && typeof v === 'object' ? v : {}; }
+  catch { return {}; }
+};
+const writeChatSeen = (id, at) => {
+  try {
+    const all = { ...readChatSeen(), [id]: at };
+    const keep = Object.entries(all).sort((x, y) => (+y[1] || 0) - (+x[1] || 0)).slice(0, 60);
+    localStorage.setItem(CHAT_SEEN_KEY, JSON.stringify(Object.fromEntries(keep)));
+  } catch { /* a convenience: at worst a line pops twice */ }
+};
+
 /** Inject the shared primitives (css/ui.css) idempotently, THEN this game's own sheet. Module
  *  stylesheets are never removed on destroy() - they live in the shared document.head for the
  *  life of the page (a hub-wide fact), which is why every rule is scoped under .h4-root. Same
@@ -81,6 +98,8 @@ class Hoops4 {
     this.myPlayer = RED;     // which side THIS device plays in a multiplayer match
     this.net = null;
     this._roomStop = null;
+    this._chat = null;       // the in-match quick chat (mp-ui.js createMatchChat), multiplayer only
+    this._chatStop = null;
     this.busy = false;
     this._bound = [];
   }
@@ -361,16 +380,21 @@ class Hoops4 {
 
   /** A TURN-BY-TURN match (hoops4/js/mp.js). The board is REPLAYED from the move log - there is
    *  no stored position, because a log is the thing that cannot silently be subtly wrong. */
-  async startAsync(game) {
+  async startAsync(game, opts = {}) {
     const MP = await import('./mp.js');
     if (this.disposed) return;
     const side = MP.sideOf(game, MP.myCode());
     if (!side) { this.renderSetup(); return; }
-    this.mp = { kind: 'async', id: game.id, side, game, MP, sent: false };
+    // `review` is a FINISHED match opened from the challenge history: a replay with its result
+    // card, READ ONLY. Nobody may shoot in it (isMyShot) and nothing is recorded again - every
+    // write in js/game-stats.js is additive, so re-recording on each look would inflate the
+    // play count by one per visit.
+    const review = !!(opts && opts.review && game.over);
+    this.mp = { kind: 'async', id: game.id, side, game, MP, sent: false, review };
     this.myPlayer = side === 'a' ? RED : YELLOW;
     await this.start({ vsCpu: false, oneShot: !!game.oneShot, keepMp: true, replay: (m) => MP.replay(m, game) });
     if (this.disposed || !this.match) return;
-    if (game.over) { this.finish(); return; }
+    if (game.over) { if (review) this.recorded = true; this.finish(); return; }
     // The match is on the server, so leaving really is free - say so rather than leaving the
     // player to discover it. This is the reassurance half of the isInProgress() fix below.
     this.toast(this.isMyShot() ? t('leaveKept') : t('mpTheirTurn'));
@@ -382,12 +406,17 @@ class Hoops4 {
   isMyShot() {
     if (!this.match || this.match.over) return false;
     if (!this.mp) return true;
+    if (this.mp.review) return false;              // a finished match from the history is read only
     return this.match.turn === this.myPlayer;
   }
 
   /** One entry of the shared move log arrived from the other device. */
   _onRoom(room) {
     if (!room || !this.mp || this.mp.kind !== 'live' || !this.match) return;
+    // QUICK CHAT rides the room's own `reactions` child (net.sendReaction, one slot per seat) -
+    // NEVER the move log, whose entries this loop walks strictly by `seq`. A chat line in `moves`
+    // would stall the lockstep at the first gap it made.
+    if (this._chat) this._chat.onReactions(room.reactions, this.mp.role);
     const log = room.moves || {};
     // STRICTLY IN ORDER, and only once. Out-of-order or duplicated application is how two boards
     // stop being the same board, which is the failure every lockstep invariant in js/CLAUDE.md
@@ -453,6 +482,70 @@ class Hoops4 {
     if (!m.over) { mp.sent = true; this.toast(t('mpSent')); }
   }
 
+  // --- quick chat inside a match (2026-09-22) ------------------------------------------------
+  //
+  // The DOM is `mp-ui.js`'s `createMatchChat`; this is only the wiring to the two transports.
+  //   LIVE          net.sendReaction into `rooms/<CODE>/reactions/<role>` (the hub's existing
+  //                 facility), read back in `_onRoom`. Never the move log.
+  //   TURN BY TURN  MP.sendChat into `hoops/games/<id>/chat`, and MP.watchChat while the match is
+  //                 on screen. What the other person said since this device last looked pops on
+  //                 open, remembered per match in CHAT_SEEN_KEY (a convenience, not history).
+  async _mountChat() {
+    this._unmountChat();
+    const mp = this.mp;
+    if (!mp) return;
+    let mod;
+    try { mod = await import('./mp-ui.js'); } catch { return; }
+    if (this.disposed || this.mp !== mp || this._chat) return;
+    const themLabel = () => {
+      if (mp.kind === 'live') return { name: (mp.them && mp.them.name) || this.themName(), emoji: (mp.them && mp.them.emoji) || '' };
+      const g = mp.game || {};
+      const o = mp.side === 'a' ? g.b : g.a;
+      return { name: (o && (o.name || o.code)) || this.themName(), emoji: (o && o.emoji) || '' };
+    };
+    const failText = (reason) => (reason === 'denied' || reason === 'dev-origin-blocked'
+      ? t('mpUnavailable') : t('chatNotSent'));
+    const chat = mod.createMatchChat({ root: this.root, send: (p) => this._sendChat(p), them: themLabel, failText });
+    this._chat = chat;
+    if (mp.kind !== 'async') return;
+
+    const seen = readChatSeen();
+    const seenAt = seen[mp.id] || 0;
+    const mine = (c) => c.by === mp.side;
+    const feed = (list) => {
+      let newest = 0;
+      for (const c of list || []) {
+        const fresh = !mine(c) && c.at > seenAt;
+        chat.add({ key: c.key, mine: mine(c), t: c.t, v: c.v, at: c.at }, { pop: fresh });
+        if (!mine(c)) newest = Math.max(newest, c.at);
+      }
+      if (newest > (readChatSeen()[mp.id] || 0)) writeChatSeen(mp.id, newest);
+    };
+    feed(mp.game && mp.game.chat);
+    const stop = await mp.MP.watchChat(mp.id, feed);
+    if (this.disposed || this._chat !== chat) { try { stop(); } catch {} return; }
+    this._chatStop = stop;
+  }
+
+  _unmountChat() {
+    if (this._chatStop) { try { this._chatStop(); } catch {} this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch {} this._chat = null; }
+  }
+
+  /** Send one chat line over whichever transport this match uses. Resolves `{ ok, reason, entry }`. */
+  async _sendChat(payload) {
+    const mp = this.mp;
+    if (!mp) return { ok: false, reason: 'no-match' };
+    if (mp.kind === 'live') {
+      if (!this.net) return { ok: false, reason: 'offline' };
+      // net.sendReaction is BEST-EFFORT BY DESIGN (it swallows its own failure, so a dropped
+      // reaction never costs an error in any game). The line shows as sent on this device.
+      await this.net.sendReaction(mp.code, mp.role, payload);
+      return { ok: true };
+    }
+    return mp.MP.sendChat(mp.id, payload);
+  }
+
   showHowto() {
     const el = document.createElement('div');
     el.className = 'gh-overlay';
@@ -460,7 +553,13 @@ class Hoops4 {
       <div class="gh-modal h4-sheet-in" role="dialog" aria-modal="true" aria-label="${t('howto')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <h2 class="gh-modal__title">${t('howto')}</h2>
-        <p class="h4-sheet-body">${t('howtoBody')}</p>
+        <p class="h4-how-goal">${t('howtoGoal')}</p>
+        ${this._howtoDiagram()}
+        <p class="h4-how-cap">${t('howtoCap')}</p>
+        <p class="h4-how-eg">${t('howtoEg')}</p>
+        <p class="h4-how-line">${t('howtoArc')}</p>
+        <p class="h4-how-line">${t('howtoAim')}</p>
+        <p class="h4-how-line">${t('howtoRim')}</p>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-sheet-close">${t('close')}</button>
         </div>
@@ -470,6 +569,53 @@ class Hoops4 {
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
     this.on(el.querySelector('.h4-sheet-close'), 'click', close);
     this.on(el, 'click', (e) => { if (e.target === el) close(); });
+  }
+
+  /**
+   * THE ONE MECHANIC THAT IS NOT OBVIOUS, DRAWN. Seven hoops over a 7x6 grid, the third hoop
+   * taking a ball, and a dashed arrow carrying it down column 3 to a disc at the bottom.
+   *
+   * Everybody already knows Connect 4 and everybody already knows basketball. The thing nobody
+   * can guess is that the two are WIRED TOGETHER - which hoop you sink decides which column your
+   * disc falls down. That is the whole diagram, and the rest of the screen is four short lines.
+   * docs/BUILDING-A-GAME.md, "How-to-play screens": show it rather than describe it.
+   *
+   * COLOURBLIND-SAFE BY CONSTRUCTION: the chosen hoop is marked by a THICKER OUTLINE, a ball
+   * sitting in it and the arrow leaving it - never by its colour (root CLAUDE.md).
+   */
+  _howtoDiagram() {
+    const L = BOARD.look;
+    const cols = 7, rows = 4;                 // four rows is enough to read; six crowds it
+    const x0 = 14, dx = 24, hoopY = 16, gridY = 40, dy = 17, r = 6.2;
+    const cx = (c) => x0 + c * dx;
+    const pick = 2;                           // the third hoop, 0-based
+    let hoops = '', grid = '';
+    for (let c = 0; c < cols; c++) {
+      const on = c === pick;
+      hoops += `<ellipse cx="${cx(c)}" cy="${hoopY}" rx="8.5" ry="3.2" fill="none"
+        stroke="${on ? L.ring : '#7c8797'}" stroke-width="${on ? 3 : 1.6}"/>`;
+      for (let rw = 0; rw < rows; rw++) {
+        const filled = on && rw === rows - 1;
+        grid += `<circle cx="${cx(c)}" cy="${gridY + rw * dy}" r="${r}"
+          fill="${filled ? L.red : '#0e1c30'}" stroke="${filled ? '#8f1f18' : '#2b3b52'}"
+          stroke-width="${filled ? 2 : 1.2}"/>`;
+      }
+    }
+    return `
+      <div class="h4-how-fig" aria-hidden="true">
+        <svg viewBox="0 0 ${x0 * 2 + dx * (cols - 1)} ${gridY + dy * (rows - 1) + 14}" width="100%">
+          <rect x="4" y="${gridY - 12}" width="${x0 * 2 + dx * (cols - 1) - 8}"
+                height="${dy * (rows - 1) + 24}" rx="5" fill="${L.face}" opacity="0.9"/>
+          ${grid}
+          ${hoops}
+          <circle cx="${cx(pick)}" cy="${hoopY - 8}" r="4.4" fill="${L.ring}" stroke="#8f1f18" stroke-width="1"/>
+          <path d="M ${cx(pick)} ${hoopY + 6} V ${gridY + dy * (rows - 1) - 9}"
+                stroke="${L.ring}" stroke-width="2" stroke-dasharray="3 3" fill="none"/>
+          <path d="M ${cx(pick) - 4} ${gridY + dy * (rows - 1) - 13} L ${cx(pick)} ${gridY + dy * (rows - 1) - 8}
+                   L ${cx(pick) + 4} ${gridY + dy * (rows - 1) - 13}"
+                stroke="${L.ring}" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+      </div>`;
   }
 
   // --- the match --------------------------------------------------------------------------------
@@ -485,6 +631,9 @@ class Hoops4 {
     if (typeof opts.replay === 'function') opts.replay(this.match);
     this.cpu = vsCpu ? new Cpu(skill) : null;
     this.recorded = false;
+    // A new match cannot inherit the last one's falling disc, or _whenLanded would hold its first
+    // move for a drop that will never land.
+    this._dropping = false; this._afterDrop = null; this._predicted = null;
     this.renderPlay();
     try {
       const [phys, mach, rend] = await Promise.all([
@@ -523,6 +672,7 @@ class Hoops4 {
     const mp = this.mp;
     if (!mp || mp.kind !== 'async' || !mp.game || !(mp.game.series > 1)) return;
     let MP;
+    const review = !!mp.review;
     try { MP = await import('./mp.js'); } catch { return; }
     if (this.disposed || !card.isConnected) return;
     // The local match knows the result; the stored document may not have caught up yet, so the
@@ -542,7 +692,9 @@ class Hoops4 {
           : st.winner === side ? t('youTakeIt') : t('seriesWon', { who: this.themName() })}`
         : `${t('gameOf', { n: st.no, m: st.len })} \u00B7 ${score}`;
     }
-    if (st.done) return;
+    // A REVIEW never offers the next game: that game may already exist, and a second one would
+    // fork the series. The score line above is still shown.
+    if (st.done || review) return;
     // A LIVE SERIES REPLACES "Play again", which in multiplayer only quits to the setup screen.
     const again = card.querySelector('.h4-again');
     if (!again) return;
@@ -574,11 +726,11 @@ class Hoops4 {
   renderPlay() {
     this.root.innerHTML = `
       <div class="h4-play-wrap">
-        <div class="h4-hud">
+        <div class="h4-hud${this.mp ? ' has-chat' : ''}">
           <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
           <span class="h4-leg" hidden></span>
-          <button type="button" class="h4-menu" aria-label="${t('menu')}">${t('menu')}</button>
+          <button type="button" class="h4-menu" aria-label="${t('menu')}">☰</button>
         </div>
         <div class="h4-stage">
           <canvas class="h4-canvas"></canvas>
@@ -588,7 +740,66 @@ class Hoops4 {
       </div>`;
     this.paintHud();
     this.bindSwipe();
-    this.on(this.root.querySelector('.h4-menu'), 'click', () => this.leaveMatch());
+    this.on(this.root.querySelector('.h4-menu'), 'click', () => this._showPause());
+    if (this.mp) this._mountChat();
+  }
+
+  /**
+   * THE PAUSE SHEET, WHICH IS SKEEBALL'S. Matt: "make the 'menu' button look just like skeeball.
+   * With the same options." So this is `skeeball/js/ui.js`'s `_showPause` ported: the same
+   * `.gh-overlay`/`.gh-modal` primitives, the same X in the corner, the same Resume / New game /
+   * leave stack, and the same 44x44 hamburger opening it.
+   *
+   * **The third option is this game's own destination, not skeeball's.** Skeeball's third button
+   * quits to its machine gallery; this game has no gallery, and the Menu button has always gone
+   * to its setup screen, which is where you change opponent and shot rule. In a turn-by-turn
+   * match it goes to the multiplayer screen instead, because that is where the rest of your
+   * matches are.
+   *
+   * **New game is hidden in any multiplayer match**, and that is a rule rather than tidiness:
+   * there is nobody on the other end of a unilateral restart. In a live room both engines would
+   * be replaying different boards from the next move on, and a turn-by-turn challenge is a shared
+   * document with a move log - a rematch there is a new challenge, which the game-over card
+   * already says.
+   *
+   * **PAUSED MEANS PAUSED.** The loop is stopped while the sheet is up, which is skeeball's own
+   * lesson (2026-08-26) and is if anything more load-bearing here: a ball still in the air when
+   * you tap the button would otherwise go on flying, drop through a hoop, take your turn and hand
+   * the CPU its shot while you sat reading the menu. The canvas keeps showing its last frame.
+   */
+  _showPause() {
+    // NOT ONCE THE MATCH IS OVER - the game-over card is already up or about to be, and it
+    // carries its own Play again / Quit.
+    if (!this.match || this.match.over) return;
+    const isAsync = !!(this.mp && this.mp.kind === 'async');
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal h4-pause" role="dialog" aria-modal="true" aria-label="${t('paused')}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <h2 class="h4-pause-title">${t('paused')}</h2>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
+          ${this.mp ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${t('newGame')}</button>`}
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="leave">${isAsync ? t('backMp') : t('backSetup')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    this.stopLoop();
+    const close = () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      if (!this.disposed) this.startLoop();
+    };
+    this.on(el.querySelector('[data-role="close"]'), 'click', close);
+    this.on(el.querySelector('[data-role="resume"]'), 'click', close);
+    const nw = el.querySelector('[data-role="new"]');
+    // A live ball is abandoned, not banked: nothing is recorded until a match ENDS, so a
+    // restart loses a board and no history (THE LAW rule 2).
+    if (nw) this.on(nw, 'click', () => { if (el.parentNode) el.parentNode.removeChild(el); this.start(); });
+    this.on(el.querySelector('[data-role="leave"]'), 'click', () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      this.leaveMatch();
+    });
   }
 
   /** OUT OF A MATCH, BUT NOT OUT OF THE GAME. Matt: "we had the Hub back button. That's more of
@@ -790,11 +1001,18 @@ class Hoops4 {
   stopLoop() { if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; } }
 
   tick(dt) {
+    // THE DISC FALLING DOWN ITS COLUMN, advanced by the game's own loop. A no-op unless one is
+    // in the air - see render.js's startDrop.
+    if (this.rend) this.rend.stepDrop(dt);
     const st = this.throwState;
     if (st && !st.done) {
       this.engine.phys.step(BOARD, st, dt);
       for (const ev of this.engine.phys.takeEvents(st)) {
-        if (ev.type === 'capture') { this.captured = ev.hole; this.rend && this.rend.flashRim(ev.hole); }
+        if (ev.type === 'capture') {
+          this.captured = ev.hole;
+          this.rend && this.rend.flashRim(ev.hole);
+          this._dropOnCapture(ev.hole);
+        }
       }
     } else if (st && st.done) {
       this.throwState = null;
@@ -817,8 +1035,8 @@ class Hoops4 {
     this._paintShot(res);
     if (this.mp) this._sendShot(res);
 
-    if (m.over) { this.finish(); return; }
-    this.maybeCpu();
+    if (m.over) { this._whenLanded(() => { if (!this.disposed) this.finish(); }); return; }
+    this._whenLanded(() => { if (!this.disposed) this.maybeCpu(); });
   }
 
   /** Everything a settled shot changes on screen. Shared by a local shot and a remote one, so the
@@ -829,10 +1047,77 @@ class Hoops4 {
     else if (res.type === 'full') { this.toast(t('full')); }
     else { this.toast(t('inCol').replace('{n}', String(res.col + 1))); }
     if (this.rend) {
-      this.rend.setGrid(m.cells(), res.type === 'win' ? res.cells : null);
+      const win = res.type === 'win' ? res.cells : null;
+      // A DISC THAT LANDED FALLS DOWN ITS COLUMN. Matt: "Can you show the ball fall down the
+      // columns rather than go into the basket and just appear at the bottom of that column?"
+      // A miss or a full column changes no cell, so there is nothing to drop and it paints at
+      // once. `onDone` is what makes the game-over card wait: a winning disc's card would
+      // otherwise cover the drop that won.
+      // `_predicted` is the cell _dropOnCapture already started falling into, and it is matched
+      // on the PREDICTION rather than on whether a disc is still in the air: a short fall
+      // (0.22 s at the top row) can finish before the throw resolves (0.35 s median), and
+      // restarting on that would replay the whole drop a second time.
+      const pre = this._predicted; this._predicted = null;
+      const landed = Number.isInteger(res.row) && Number.isInteger(res.col);
+      if (pre && landed && pre.c === res.col && pre.r === res.row && pre.who === res.by) {
+        // The disc the player is already watching IS this move. Hand it the real grid rather
+        // than restarting it, or the fall would visibly jump back to the top. Once it has
+        // already landed this is just the authoritative repaint of the same picture.
+        this.rend.commitDrop(m.cells(), win);
+      } else if (pre) {
+        // The prediction did not survive the rules (a full column). Drop it and paint honestly.
+        this._dropping = false; this._afterDrop = null;
+        this.rend.cancelDrop(m.cells(), win);
+      } else if (landed) {
+        this._dropping = true;
+        this.rend.startDrop(m.cells(), win, res.col, res.row, res.by, () => {
+          this._dropping = false;
+          if (this.disposed) return;
+          if (this._afterDrop) { const fn = this._afterDrop; this._afterDrop = null; fn(); }
+        });
+      } else {
+        this.rend.setGrid(m.cells(), win);
+      }
       this.rend.setBallColor(m.turn === RED ? BOARD.look.red : BOARD.look.yellow);
     }
     this.paintHud();
+  }
+
+  /**
+   * THE DISC STARTS FALLING THE MOMENT THE BALL IS IN THE BASKET, not when the throw resolves.
+   * Matt: "There's a tiny lag between when the ball goes into the basket and when it's shown
+   * falling... It should look like it's the same ball that goes in the basket falling down the
+   * column." Measured over the 231-throw grid, resolving takes a further 0.35 s on average and
+   * 0.92 s at worst, because capture COMMITS the score and the ball then falls 0.26 m through the
+   * throat before `finishAt` fires. That whole window was dead time on screen.
+   *
+   * The cell is a PREDICTION and it is safe to make here for one reason only: this machine has no
+   * rimout, so a captured ball scores in that column 100% of the time (hoops4/CLAUDE.md, "There is
+   * NO rimout on this machine"). The prediction is never authoritative - `_paintShot` hands the
+   * real grid to `commitDrop`, or cancels the drop outright if the rules refused the move.
+   */
+  _dropOnCapture(hole) {
+    const m = this.match;
+    const H = hole && BOARD.geom.holes[hole];
+    if (!H || !m || m.over || !this.rend || this._predicted) return;
+    const col = H.value - 1;
+    if (!m.board.canPlay(col)) return;   // a full column is a miss, and no disc falls
+    const row = m.board.heights[col];
+    const who = m.turn;
+    const cells = m.cells();
+    cells[col][row] = who;               // the predicted grid, replaced by commitDrop
+    this._predicted = { c: col, r: row, who };
+    this._dropping = true;
+    this.rend.startDrop(cells, null, col, row, who, () => {
+      this._dropping = false;
+      if (this.disposed) return;
+      if (this._afterDrop) { const fn = this._afterDrop; this._afterDrop = null; fn(); }
+    });
+  }
+
+  /** Run `fn` once the falling disc has landed, or immediately if nothing is falling. */
+  _whenLanded(fn) {
+    if (this._dropping) this._afterDrop = fn; else fn();
   }
 
   finish() {
@@ -853,7 +1138,13 @@ class Hoops4 {
     const r = m.result();
     const acc = r.myShots ? Math.round((100 * r.myDiscs) / r.myShots) : 0;
     let head;
-    if (m.winner === null) head = t('draw');
+    const rv = this.mp && this.mp.review && this.mp.game && this.mp.game.over;
+    if (rv && !m.over) {
+      // A REVIEWED match whose board never ended it - a resignation. The stored result is the
+      // truth; the board alone would read as a draw.
+      const w = rv.winner;
+      head = (w !== 'a' && w !== 'b') ? t('draw') : (w === this.mp.side ? t('youWin') : t('youLose'));
+    } else if (m.winner === null) head = t('draw');
     else if (this.mp) head = m.winner === this.myPlayer ? t('youWin') : t('youLose');
     else if (m.vsCpu) head = m.winner === RED ? t('youWin') : t('youLose');
     else head = m.winner === RED ? t('redWins') : t('yellowWins');
@@ -899,6 +1190,7 @@ class Hoops4 {
   }
 
   teardownEngine() {
+    this._unmountChat();
     this._stopRoom();
     this.mp = null;
     this.myPlayer = RED;

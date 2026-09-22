@@ -97,7 +97,28 @@ export const BOARD_W = Math.max(
 // shelf's DISTANCE - the rake's 0.89 m of horizontal run is gone, so the throw is 0.89 m shorter
 // and `minSpeed`/`maxSpeed` were re-measured for it (see the throw section below).
 const PANEL_RAKE = Math.PI / 2;        // vertical: the display faces the player
-const PANEL_L = 4.80;                  // X, floor to shelf - the height the rake used to rise
+// 7.80X: SQUARE CELLS. Six rows over 7.80X is a row pitch of 1.30X, which is exactly the column
+// pitch - so the grid is square, not the 1.63:1 wide rectangle it was at 4.80X. Matt, comparing it
+// with an old screenshot: "The connect 4 board is shorter than it used to be. It should be a
+// square. Not a short rectangle."
+//
+// IT GROWS BOTH WAYS, and both halves were measured. DOWN to `boardLipY` 0.39, which is as far as
+// the ramp crest lets the camera see (check-display.mjs raycasts all 42 cells and fails if one is
+// hidden). The rest is UP, which moves the hoop row from 1.265 m to about 1.57 m - and Matt's
+// condition on that was "make sure the ball can still reach without a problem".
+//
+// IT REACHES, AND IT SCORES BETTER THAN THE SHORT BOARD DID, but only because the LAUNCH SPEED
+// BAND MOVED WITH THE HOOPS. That is this file's own standing rule - the band answers to the
+// cabinet's geometry - and it is the whole difference between this working and not:
+//
+//   board          band         scored (77-throw grid)   power dial that reaches
+//   4.80X shipped  6.05-6.50          18.2%              all of it
+//   7.80X          6.05-6.50          13.0%              only 0.50 and up
+//   7.80X          6.45-6.95          24.7%              all of it        <- this
+//
+// Left on the old band the bottom half of the swipe simply cannot get there, which would have
+// read as "the game is broken" rather than "the board is taller".
+const PANEL_L = 7.80;                  // X, floor to shelf - square cells, see above
 const PANEL_W = (COLS - 1) * PITCH + PITCH;   // 9.10X - seven columns, edge to edge
 const SHELF = 4.0;                     // X. Deep for control; see HOOP_FROM_BACK below.
 const BACK_RISER = 1.8;                // X
@@ -169,7 +190,10 @@ export const BOARD = {
     // cabinet there IS an open span between where you shoot and the backboard.
     troughLen: 0.70,
     troughDepth: 0.15,
-    boardLipY: 0.52,
+    // 0.39, not 0.52: the board grows DOWNWARD as far as the ramp crest allows the camera to see
+    // (see PANEL_L above). Below this the bottom row starts disappearing behind the crest, which
+    // is the exact defect the vertical rebuild existed to fix.
+    boardLipY: 0.39,
     boardTilt: 0.8726,              // unused while `steps` exists; kept for the spec's readers
     boardW: X * BOARD_W,
     // Sized to stop an overshoot and no more. At HOT SHOT's 0.85 it stood 1.7 m up from a shelf
@@ -210,14 +234,36 @@ export const BOARD = {
     //
     //     band          scored    live powers   columns   ordered
     //     6.00 / 6.60   31.5%     11 of 11      7 of 7    yes
-    //     6.05 / 6.50   39.2%     11 of 11      7 of 7    yes   <- this
+    //     6.05 / 6.50   39.2%     11 of 11      7 of 7    yes
     //     5.95 / 6.65   30.6%     11 of 11      7 of 7    yes
     //
     // "Live powers" is the one that would be a spec failure on its own: at HOT SHOT's 2.60/6.60
-    // nothing scored below power 0.65, two thirds of the dial dead. Every band here lights the
-    // whole dial; this one scores most often and spreads the columns widest.
-    minSpeed: 6.05,
-    maxSpeed: 6.50,
+    // nothing scored below power 0.65, two thirds of the dial dead. Every band above lights the
+    // whole dial.
+    //
+    // RE-MEASURED 2026-09-22 FOR THE SQUARE BOARD (PANEL_L 4.80 -> 7.80). The hoop row rose about
+    // 0.30 m with the shelf, and this is the number that had to move with it - on the old
+    // 6.05/6.50 nothing reached below power 0.50, which is the "two thirds of the dial dead"
+    // failure above, happening again for the same reason:
+    //
+    // GUARD: PICKED ON THE FULL GRID, AND THE COARSE ONE LIED. A 77-throw sweep (7 aim steps)
+    // was used first because it runs in seconds, and it ranked 6.45/6.95 best and said the taller
+    // board outscored the short one outright. The real 231-throw grid (21 aim steps) disagreed on
+    // both counts - aim resolution is exactly what a narrow hoop row is sensitive to. Numbers
+    // below are the 231-throw grid, which is the one every other figure in this file uses:
+    //
+    //     band          scored   parked   lateral:forward
+    //     6.05 / 6.50   (dead below power 0.50 - the old band, now unplayable)
+    //     6.25 / 6.70   24.7%     1.7%        2.82:1
+    //     6.35 / 6.80   28.6%     3.0%        4.10:1   <- this
+    //     6.45 / 6.95   25.5%     1.7%        3.51:1
+    //     6.55 / 7.05   17.7%     1.7%        3.68:1
+    //
+    // Against the 4.80X board on its own band (29.4% scored, 7.8% parked, 4.05:1), the square
+    // board at 6.35/6.80 scores within a point and PARKS LESS THAN HALF AS OFTEN - a ball that
+    // parks vanishes, so that is the half of this worth having.
+    minSpeed: 6.35,
+    maxSpeed: 6.80,
     aimMax: 0.45,
 
     // THE SWIPE MAPS STRAIGHT ONTO AIM HERE (skeeball's default is the SQUARE of it).
@@ -318,8 +364,13 @@ export const BOARD = {
       ringRest: 0.55,
       ring100Fric: 0.06,
       ring100Rest: 0.55,
+      // 0.32 -> 0.50 (2026-09-22, the square board). A FREE improvement, measured: same scoring
+      // rate (28.6%), parking down 3.0% -> 1.7%, and a little of the bounce back. It SATURATES
+      // there - 0.50, 0.62 and 0.75 return byte-identical numbers, so there is nothing above it
+      // to gain. Found by teaching probe-bounce.mjs to PRINT which surfaces a miss touches; the
+      // cup furniture ('keep') takes ~71 of 231 throws and was the deadest thing they land on.
       deadFric: 0.06,
-      deadRest: 0.32,
+      deadRest: 0.50,
       backFric: 0,
       backRest: 0.60,
     },

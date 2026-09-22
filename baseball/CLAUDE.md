@@ -38,6 +38,17 @@ DO NOT explain anything in paragraph prose."* Spec: `docs/BASEBALL-3D-BUILD.md` 
 - **Probes**: `player-screen`, `player-budget`, `first-season-block` in
   `test-baseball-device.mjs`; `check-no-scroll` 16 of 16 in both hosts at both heights.
 
+## How a stage runs (orchestrator + subagent, 2026-09-22)
+
+The orchestrator writes the stage spec into the stage doc first (e.g. `docs/BASEBALL-3D-BUILD.md`
+section 9, committed BEFORE the build), then launches the agent in its own worktree
+(`isolation: "worktree"`) with its own dev server port (`PORT=8124`,
+`BB_BASE=http://localhost:8124` for the Baseball suites). It reviews the result against stills
+and measured numbers: open the stills, re-run the key number on a fresh seed, read the diff of the
+load-bearing lines. Agents commit what is green first so an interruption loses nothing. Past
+picks: **Sonnet** for R6 through R15-B, R17, R18; **Opus** for R5, R15-A, the economy study, R16.
+General rules: root `CLAUDE.md`, "Subagents: save USAGE".
+
 ## R16: the career economy, rebuilt from measurement (2026-09-22)
 
 **Ship review, same day (orchestrator).** Three changes on top of the stage. (1) `CPU_SIGMA_MIN_MS.minors`

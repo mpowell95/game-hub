@@ -412,9 +412,67 @@ rangefinder. Do not "fix" it by deriving one from the other.
 
 ### `decor` never affects play
 
-Art-only polygons: the cart path, a flower bed, a mown pattern. `{kind, poly}`, painted after the
-surfaces, consulted by nothing. A path that changed the lie would have to be a surface with a lie
-row; keeping decor incapable of it means art can be added freely without a physics review.
+Art-only, painted after the surfaces, consulted by nothing. A path that changed the lie would have
+to be a surface with a lie row; keeping decor incapable of it means art can be added freely without
+a physics review. Two forms since 2026-09-22:
+
+- `{kind: 'path', poly}` - the original: a cart path, a flower bed, a mown pattern.
+- `{at: [x, y], kind: 'bench' | 'sign' | 'flagpole', rot}` - a SPRITE, 3-4 yds across, `rot` in
+  degrees (default 0), drawn over the ground and under the trees.
+
+A sprite is stored in **world yards, not `{yd, side, off}`** - it sits on the ground, not on the
+corridor, so editing the route must not drag a clubhouse sign sideways with it. `validateHole`
+checks a sprite's point is inside `bounds` and `makeHole`'s bounds pass eats a small box around it,
+the same as it eats a polygon. **Anything that should STOP a ball is a tree object, never a decor
+sprite** - the obstacle catalogue carries a log and three rocks for exactly that.
+
+### The obstacle catalogue (2026-09-22)
+
+Matt: *"we need more options for objects too. More trees, rocks, power lines, water, swamp, etc.
+lots of stuff."* `golf/js/obstacles.js` exports **`OBSTACLE_CATALOG`**, seventeen entries - nine
+parkland species, five desert, three rocks and a fallen log - and it is what a course built in the
+**Course Creator** uses as its `treeTypes`. The shipped courses are untouched: Pine Valley, Red Mesa
+and Oasis Sands each keep their own three-entry table, because eighteen recipes each have those
+indices baked in.
+
+- **The engine still reads only `{trunk, canopy, height}`**, exactly as above. `shape` is the
+  RENDERER's word and the engine never reads it; an entry whose `shape` the renderer does not know
+  must still build, validate and play (`render.js` falls back to `canopy`). `looks` is the palette's
+  ORDERING hint only - every entry is available on every look, and nothing filters on it.
+- **The UI label is `t('obst_' + name)`** (`golf/js/strings.js`, EN and ES). The catalogue's `name`
+  is an identifier, never a label.
+- **A rock is `canopy === trunk` with `height: 40`** - this engine's way of saying "solid to every
+  club" (the highest apex in the bag is the 8 iron's 32.3 yds; `golf/js/test.js` section 21 pins
+  that against the real bag rather than against the number). **A log is `height: 1.5`** - every club
+  flies it, so it only ever blocks a putt or a thinned shot.
+- **THE ORDER IS FROZEN.** A Course Creator course exports `treeTypes: OBSTACLE_CATALOG` (imported
+  from `obstacles.js`, never inlined, so a later append reaches exported courses too) and every
+  placed tree stores an INDEX into it. **Append only - never reorder, never remove.** The one
+  re-indexing that was ever allowed is `migrateDocument` in `hole-editor/js/model.js`, which carried
+  pre-catalogue drafts across once (parkland 0/1/2 -> pine/oak/sentinel, desert 0/1/2 ->
+  saguaro/paloverde/boulder) and stamps `catalog: 1` so it can never run twice. There must not be a
+  second one.
+
+### Swamp: a hazard you play OUT of (2026-09-22)
+
+A surface kind `'swamp'`, and **it is not water**. No penalty stroke, no drop prompt, no water
+branch in `shot.js` at all (that path is strictly `restOn === 'water'`). The ball stops dead where
+it lands and comes out at half power - the hazard costs you the shot rather than a stroke.
+
+| Where | What it says |
+|---|---|
+| `holes.js` `SURFACE_KINDS` | `'swamp'` is in the closed set (and in `NO_BELT_TREE`, so a belt never scatters trees into one; a hand-placed cypress in a swamp is still a designer's call and is never filtered) |
+| `clubs.js` `LIES.swamp` | `{ power: 0.55, zone: 0.35, roll: 0 }` - the harshest power cap in the table, a band between the two bunkers, and no run-out at all |
+| `shot.js` | `PUTT_DRAG.swamp = 7.00`, and `'swamp'` is in `groundPoint`'s `noHop` list: it plugs, like sand |
+| `clubs.js` `mustPutt`/`canPutt` | unchanged - both name the grass surfaces, so the putter is never offered from a swamp |
+| `holegen.js` | a `water` recipe entry (blob or `poly`) or a `cross` band may carry `kind: 'swamp'`; it becomes a surface of kind `'swamp'` at the same layer as a lake. An absent `kind` is water, as it always was |
+| `strings.js` | `lie_swamp` in EN and ES; the HUD reads `t('lie_' + kind)` and needs nothing else |
+
+`golf/js/test.js` section 21 is the whole of it, and most of it asserts what a swamp does NOT do -
+zero roll, zero penalty, no drop object - because that is the one way this could go wrong while
+looking finished on screen. Two of its checks are structural and cover every future kind as well:
+**every member of `SURFACE_KINDS` must have its own `LIES` row and a `lie_` label in both
+languages.** A kind with no row falls back silently to the fairway's and plays as if it were mown.
 
 ### What the validator asserts
 

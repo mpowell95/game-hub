@@ -195,6 +195,15 @@ export const LIES = {
   // rather than the value, so this can be retuned without the inversion coming back.
   green: { power: 1.00, zone: 1.00, roll: 0.090 },
   water: { power: 1.00, zone: 1.00, roll: 0.00 },   // never actually played from; see Stage C
+  // SWAMP (2026-09-22). A hazard you PLAY OUT OF, which is what makes it different from water:
+  // there is no penalty stroke and no drop, so the whole cost is in this row. 0.55 power is the
+  // harshest cap in the table by a wide margin (greenside sand is 0.75) and `roll: 0` means the
+  // ball stops exactly where it pitches - it plugs, the way `groundPoint`'s `noHop` list says.
+  // `zone: 0.35` sits between the two bunkers: a swamp is a bad lie, not an unplayable one, and a
+  // lie you cannot hit out of at all would just be water wearing a different colour.
+  // Never a putt from here - `canPutt` names the four grass surfaces and this is not one of them,
+  // so no change was needed there.
+  swamp: { power: 0.55, zone: 0.35, roll: 0 },
 };
 
 export function lieOf(kind) { return LIES[kind] || LIES.fairway; }

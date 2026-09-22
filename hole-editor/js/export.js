@@ -4,8 +4,7 @@
 // three blocks copied verbatim (the header comment, DESERT_TYPES, RM_DEFAULTS/rm and RED_MESA).
 
 import { serialiseDocument } from './model.js';
-import { slugOf } from './course.js';
-import { PARKLAND_TYPES, DESERT_TYPES } from './starter.js';
+import { slugOf, defaultsFor } from './course.js';
 
 // --- verbatim blocks (section 8.1/8.2) -----------------------------------------------------------
 // Copied from golf/courses/redmesa.js as shipped. If that file's header, obstacle table or house
@@ -192,19 +191,22 @@ function customMeta(doc) {
 }
 
 function customDefaults(meta) {
-  const types = meta.theme === 'desert' ? DESERT_TYPES : PARKLAND_TYPES;
   const rough = meta.theme === 'desert' ? '\n  rough: 7,' : '';
+  const belts = fmtInline(defaultsFor(meta.theme).belts);
+  // THE CATALOGUE IS IMPORTED, NOT INLINED (2026-09-22). Every placed tree stores an INDEX into
+  // `treeTypes`, so an exported course that carried its own copy of the table would be frozen at
+  // the catalogue as it stood on export day: a later APPEND (the only change the catalogue permits)
+  // would reach the editor and never reach the course. Importing it is also what makes the index a
+  // designer's draft stores and the index their exported course reads the same number for ever.
   return `import { makeHole } from '../js/holegen.js';
+import { OBSTACLE_CATALOG as TREE_TYPES } from '../js/obstacles.js';
 
-/** The obstacle table: the ${meta.theme} set, as the Course Creator shipped it. */
-const TREE_TYPES = [
-${types.map((t) => `  { name: '${t.name}', trunk: ${t.trunk}, canopy: ${t.canopy}, height: ${t.height} },`).join('\n')}
-];
-
-/** Course-level defaults every recipe below is laid on top of. EXPORTED for the hole editor. */
+/** Course-level defaults every recipe below is laid on top of. EXPORTED for the hole editor.
+ *  The obstacle table is the shared catalogue (golf/js/obstacles.js), whose ORDER IS FROZEN -
+ *  every \`trees[].type\` below is an index into it. */
 export const RM_DEFAULTS = {
   treeTypes: TREE_TYPES,${rough}
-  belts: { left: { depth: 20, spacing: 14 }, right: { depth: 20, spacing: 14 } },
+  belts: ${belts},
 };
 const rm = (spec) => makeHole({ ...RM_DEFAULTS, ...spec });`;
 }

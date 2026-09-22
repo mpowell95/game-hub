@@ -195,3 +195,16 @@ collapsibles nested inside a card, and three loose buttons in no card at all.
 
 On why `messages/` carries real security rules while everything else is `auth != null`, Matt:
 *"Only admin should be able to see every thread. Others should only see their own."*
+
+## Subagents: save USAGE (2026-09-22)
+
+Matt, after asking whether the session was using subagents: *"excellent... I'd like you and Opus
+to always delegate to lower model subagents to save context when possible."* His own rules,
+pasted the same day: every subagent re-pays the full CLAUDE.md load before doing real work, so
+fewer, bigger, cheaper calls beat many small expensive ones.
+
+Later the same day he clarified the goal: *"I want to save usage. Not context."* That changed the
+rule. Delegating saves the orchestrator's context but usually ADDS usage (~28k tokens of
+CLAUDE.md per agent); only a cheaper model doing a big job earns that back. The first version of
+the section (~55 lines, context-framed, with Baseball's stage process inline) was rewritten to
+~20 lines around usage, and the stage process moved to `baseball/CLAUDE.md`.

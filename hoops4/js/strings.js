@@ -9,7 +9,16 @@ export const STRINGS = {
     cpu1: 'Easy', cpu2: 'Medium', cpu3: 'Hard',
     play: 'Play',
     howto: 'How to play',
-    howtoBody: 'Swipe up the lane to shoot. How hard you swipe sets the arc, the angle picks the hoop. Sink any hoop and your disc drops down that column. Miss and you simply shoot again, so a turn only ends when a ball goes in. A ball that rims out into the next hoop still counts, in that column.',
+    // THE ONE MECHANIC THAT IS NOT OBVIOUS, drawn rather than described - everybody already knows
+    // Connect 4 and everybody already knows basketball; what they do not know is that the two are
+    // wired together. docs/BUILDING-A-GAME.md, "How-to-play screens". Matt, on the paragraph this
+    // replaces: "The How To Play is even worse. it's JUST words."
+    howtoGoal: 'Four in a row wins.',
+    howtoCap: 'The hoop you sink picks the column.',
+    howtoEg: 'Sink hoop 3 = disc down column 3.',
+    howtoArc: 'Swipe harder for a higher arc.',
+    howtoAim: 'The angle picks the hoop.',
+    howtoRim: 'Rim out into the next hoop? That one counts.',
     close: 'Close',
     yourTurn: 'Your turn', theirTurn: 'Their turn',
     // WHOSE SHOT IT IS, said before the shot rather than after it. Matt: "it's not clear when
@@ -17,6 +26,14 @@ export const STRINGS = {
     you: 'You', shooting: 'is shooting', yourShot: 'Your shot',
     leaveKept: 'Your match is saved. Pick it up whenever you like.',
     menu: 'Menu',
+    // THE PAUSE SHEET. Matt asked for skeeball's button and skeeball's options, so these mirror
+    // its `paused`/`resume`/`new_game` - except the third, which goes where THIS game's menu
+    // button has always gone (its own setup screen), not out to a gallery this game does not have.
+    paused: 'Paused',
+    resume: 'Resume',
+    newGame: 'New game',
+    backSetup: 'Back to setup screen',
+    backMp: 'Back to multiplayer',
     // --- the setup screen, restructured 2026-09-22 ------------------------------------------
     // Matt: "What is 2 player? There should be options to play the computer player and
     // 'Multiplayer Options'... The computer player options should just have the difficulties and
@@ -89,18 +106,38 @@ export const STRINGS = {
     mpNeedName: 'Set up your profile first so they know who is playing.',
     mpOnline: 'online', mpOpponent: 'Opponent',
     mpUnavailable: 'Turn by turn is not switched on yet. Live games still work.',
+    // Quick chat inside a match (2026-09-22). The preset phrases themselves come from the hub's
+    // shared quick-chat palette (js/mp-reactions.js), already translated there.
+    chat: 'Chat', chatPh: 'Say something', chatSend: 'Send', chatYou: 'You',
+    chatNone: 'Nothing said yet.', chatNotSent: 'Message not sent. Try again.',
+    // Challenge history (2026-09-22).
+    mpHistory: 'History', histRecords: 'Records', histGames: 'Finished games',
+    histNone: 'No finished games yet.',
+    histWon: 'Won', histLost: 'Lost', histDraw: 'Draw', histResigned: 'Resigned',
+    histTheyResigned: 'Won, they resigned', histUnknown: 'Finished',
+    histLine: 'W {w} · L {l} · D {d}',
   },
   es: {
     title: 'Connect 4 Hoops',
     cpu1: 'Fácil', cpu2: 'Normal', cpu3: 'Difícil',
     play: 'Jugar',
     howto: 'Cómo se juega',
-    howtoBody: 'Desliza hacia arriba para tirar. La fuerza marca el arco y el ángulo elige la canasta. Si encestas, tu ficha cae por esa columna. Si fallas, vuelves a tirar, así que el turno solo termina cuando entra una bola. Una bola que rebota y entra en la canasta de al lado también cuenta, en esa columna.',
+    howtoGoal: 'Cuatro en raya gana.',
+    howtoCap: 'La canasta que encestas elige la columna.',
+    howtoEg: 'Encesta la 3 = ficha en la columna 3.',
+    howtoArc: 'Desliza más fuerte para un arco más alto.',
+    howtoAim: 'El ángulo elige la canasta.',
+    howtoRim: '¿Rebota a la de al lado? Cuenta esa.',
     close: 'Cerrar',
     yourTurn: 'Tu turno', theirTurn: 'Su turno',
     you: 'Tú', shooting: 'está tirando', yourShot: 'Tu tiro',
     leaveKept: 'Tu partida está guardada. Puedes seguir cuando quieras.',
     menu: 'Menú',
+    paused: 'En pausa',
+    resume: 'Continuar',
+    newGame: 'Partida nueva',
+    backSetup: 'Volver a la pantalla de inicio',
+    backMp: 'Volver a multijugador',
     vsCpu: 'Jugar contra la máquina',
     difficulty: 'Dificultad',
     multiplayer: 'Multijugador',
@@ -163,6 +200,13 @@ export const STRINGS = {
     mpNeedName: 'Configura tu perfil primero para que sepan quien juega.',
     mpOnline: 'en linea', mpOpponent: 'Rival',
     mpUnavailable: 'El modo por turnos todavia no esta activado. Las partidas en vivo si funcionan.',
+    chat: 'Chat', chatPh: 'Di algo', chatSend: 'Enviar', chatYou: 'Tú',
+    chatNone: 'Nadie ha dicho nada.', chatNotSent: 'Mensaje no enviado. Inténtalo otra vez.',
+    mpHistory: 'Historial', histRecords: 'Récords', histGames: 'Partidas terminadas',
+    histNone: 'Aún no hay partidas terminadas.',
+    histWon: 'Ganada', histLost: 'Perdida', histDraw: 'Empate', histResigned: 'Te rendiste',
+    histTheyResigned: 'Ganada, se rindió', histUnknown: 'Terminada',
+    histLine: 'G {w} · P {l} · E {d}',
   },
 };
 export default STRINGS;

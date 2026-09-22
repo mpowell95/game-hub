@@ -87,4 +87,10 @@ console.log(`  misses that bounced ${pc(bouncy, misses)}   bounces per miss ${(t
 console.log(`  per bounce: lateral ${(latSum / (nBounce || 1)).toFixed(2)} m/s   forward ${(fwdSum / (nBounce || 1)).toFixed(2)} m/s   ratio ${(latSum / (fwdSum || 1e-9)).toFixed(2)}:1`);
 console.log(`  bounces with a real sideways kick (>0.20 m/s) ${pc(lateral20, nBounce)}`);
 console.log(`  misses that got onto the shelf ${reachedShelf}, of which came back over the FRONT edge ${offFront} (${pc(offFront, reachedShelf)})`);
+// WHAT A MISS ACTUALLY TOUCHES, which is the only way to know WHICH surface to tune. It was
+// collected from the first version of this probe and never printed, so every restitution
+// decision since has been a guess across three variants instead of one look.
+const top = [...parts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+  .map(([k, n]) => `${k} ${n}`).join('   ');
+console.log(`  surfaces touched (throws): ${top}`);
 }

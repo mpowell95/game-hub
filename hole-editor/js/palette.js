@@ -14,8 +14,13 @@
 //   'guard' - toggles a green-side preset on the CURRENT hole (no map click needed).
 
 import { makeHole } from '../../golf/js/holegen.js';
-import { buildMap } from '../../golf/js/render.js';
+import { buildMap, drawDecorSprite, paletteFor } from '../../golf/js/render.js';
 import { THEME_DEFAULTS } from './starter.js';
+import { makeT } from '../../js/i18n.js';
+import { STRINGS } from '../../golf/js/strings.js';
+import { OBSTACLE_CATALOG } from '../../golf/js/obstacles.js';
+
+const t = makeT(STRINGS);
 
 const TILE_W = 132; const TILE_H = 92;
 const CROP_W = 34; const CROP_H = 24;   // yards shown per tile (same 11:8 as the tile)
@@ -27,21 +32,53 @@ export const GUARD_TOKENS = [
   ['leftTrees', 'Left trees'], ['rightTrees', 'Right trees'],
 ];
 
-const NICE = { saguaro: 'Saguaro', paloverde: 'Palo verde', boulder: 'Boulder', pine: 'Pine', oak: 'Oak', sentinel: 'Sentinel pine' };
-const nice = (name) => NICE[name] || (name.charAt(0).toUpperCase() + name.slice(1));
+// --- the obstacle catalogue (2026-09-22, docs/HANDOFF-GOLF-OBJECTS.md section 1) ----------------
+//
+// The shared table lives in `golf/js/obstacles.js`. Tiles are grouped and ordered by its
+// `shape`/`looks` - directly on the custom course (where `built.treeTypes` IS the catalogue) and,
+// by NAME lookup, for the older per-course tables (Red Mesa, Pine Valley, Oasis Sands), whose own
+// type objects carry no `shape`/`looks` field of their own.
+const catalogByName = new Map(OBSTACLE_CATALOG.map((c) => [c.name, c]));
 
-/** The sections and their items for a built hole's obstacle table. Pure. */
-export function paletteSections(built) {
+const TREE_SHAPES = new Set(['canopy', 'fir', 'willow', 'cypress', 'dead', 'joshua', 'bush', 'palm', 'cactus']);
+
+function shapeOf(ty) { return ty.shape || (catalogByName.get(ty.name) || {}).shape || (ty.name === 'saguaro' ? 'cactus' : 'canopy'); }
+function looksOf(ty) { return ty.looks || (catalogByName.get(ty.name) || {}).looks || []; }
+
+/** A tile's label: `t('obst_' + name)` (golf/js/strings.js). An older course's own type with no
+ *  catalogue entry (Oasis Sands' 'tall palm') falls back to its capitalised name - `makeT`
+ *  returns the KEY ITSELF on a miss, which is how the fallback is detected. */
+function nice(name) {
+  const key = 'obst_' + name;
+  const v = t(key);
+  if (v && v !== key) return v;
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** The sections and their items for a built hole's obstacle table. Pure.
+ *
+ *  `look` orders "Trees" / "Rocks & logs" / "Stands" so the current theme's own species come
+ *  first (section 5: "ordered by looks"); it is a STABLE reorder, so within "matches the look" and
+ *  "does not" each keeps the catalogue's own append-only order. Thirty-four tiles (17 singles +
+ *  17 stands) is a lot for one course table on the custom course - hence three sub-heads, so a
+ *  designer scrolls past what they do not want. */
+export function paletteSections(built, look) {
   const types = built.treeTypes || [];
-  const trees = [];
-  types.forEach((ty, i) => {
-    trees.push({ id: `tree-${i}`, label: nice(ty.name), kind: 'tool', tool: 'tree', state: { treeMode: 'single', treePlantType: i } });
-  });
-  types.forEach((ty, i) => {
-    trees.push({ id: `stand-${i}`, label: `${nice(ty.name)} stand`, kind: 'tool', tool: 'tree', state: { treeMode: 'stand', treePlantType: i } });
-  });
+  const withOrder = types.map((ty, i) => ({ ty, i, first: look && looksOf(ty).includes(look) ? 0 : 1 }));
+  withOrder.sort((a, b) => a.first - b.first);
+  const treeItems = []; const rockItems = []; const standItems = [];
+  for (const { ty, i } of withOrder) {
+    const label = nice(ty.name);
+    const bucket = TREE_SHAPES.has(shapeOf(ty)) ? treeItems : rockItems;
+    bucket.push({ id: `tree-${i}`, label, kind: 'tool', tool: 'tree', state: { treeMode: 'single', treePlantType: i } });
+    standItems.push({ id: `stand-${i}`, label: `${label} stand`, kind: 'tool', tool: 'tree', state: { treeMode: 'stand', treePlantType: i } });
+  }
   return [
-    { title: 'Trees & rocks', items: trees },
+    { title: 'Trees & rocks', subs: [
+      { subtitle: 'Trees', items: treeItems },
+      { subtitle: 'Rocks & logs', items: rockItems },
+      { subtitle: 'Stands', items: standItems },
+    ] },
     { title: 'Sand', items: [
       { id: 'bunker-fairway', label: 'Fairway bunker', kind: 'tool', tool: 'bunker', state: { bunkerKind: 'fairwayBunker' } },
       { id: 'bunker-greenside', label: 'Greenside bunker', kind: 'tool', tool: 'bunker', state: { bunkerKind: 'greensideBunker' } },
@@ -49,12 +86,27 @@ export function paletteSections(built) {
       { id: 'cross-sand', label: 'Sand across', kind: 'tool', tool: 'cross', state: { crossKind: 'fairwayBunker' } },
     ] },
     { title: 'Water & waste', items: [
-      { id: 'water-pond', label: 'Pond', kind: 'tool', tool: 'water', state: {} },
+      { id: 'water-pond', label: 'Pond', kind: 'tool', tool: 'water', state: { waterKind: 'water' } },
       { id: 'water-draw', label: 'Draw a lake', kind: 'draw', group: 'water' },
+      // Swamp (2026-09-22): "it is not water - no penalty stroke, no drop prompt, the ball just
+      // stops dead where it lands and comes out at half power" - same tool as water, only `kind`
+      // differs (see canvas.js's `_place`/`renderWater`).
+      { id: 'water-swamp', label: 'Swamp', kind: 'tool', tool: 'water', state: { waterKind: 'swamp' } },
+      { id: 'water-swamp-draw', label: 'Draw a swamp', kind: 'draw', group: 'water', drawKind: 'swamp' },
       { id: 'cross-water', label: 'Creek across', kind: 'tool', tool: 'cross', state: { crossKind: 'water' } },
       { id: 'cross-waste', label: 'Waste across', kind: 'tool', tool: 'cross', state: { crossKind: 'waste' } },
+      { id: 'cross-swamp', label: 'Swamp across', kind: 'tool', tool: 'cross', state: { crossKind: 'swamp' } },
     ] },
     { title: 'Around the green', items: GUARD_TOKENS.map(([tok, label]) => ({ id: `guard-${tok}`, label, kind: 'guard', token: tok })) },
+    // Decor (2026-09-22): cosmetic only, never consulted for play (golf/CLAUDE.md, "`decor` never
+    // affects play"). A sprite is a `tool` tile like a tree; the cart path is the existing drawn
+    // form, group 'decor', unchanged since 2026-09-16.
+    { title: 'Decor', items: [
+      { id: 'decor-bench', label: 'Bench', kind: 'tool', tool: 'decor', state: { decorKind: 'bench' } },
+      { id: 'decor-sign', label: 'Sign', kind: 'tool', tool: 'decor', state: { decorKind: 'sign' } },
+      { id: 'decor-flagpole', label: 'Flagpole', kind: 'tool', tool: 'decor', state: { decorKind: 'flagpole' } },
+      { id: 'decor-path', label: 'Draw a cart path', kind: 'draw', group: 'decor' },
+    ] },
   ];
 }
 
@@ -76,9 +128,19 @@ function sampler(theme, types) {
   const at = {};
   const trees = []; const sentinels = [];
   let y = 60;
+  // Every row is kept >= 40 yd from the next (section 5: "keep every item >= 40 yds from the next
+  // so crops never overlap") - the tree/stand rows step 44 yd apart already; every OTHER row below
+  // is on its own 50 yd step for the same reason.
+  // A single's tile is a PICTURE of the thing, not a map at true scale: at true scale a saguaro
+  // (1.8 yd canopy), a log or a small rock was a few pixels across on a 34-yd tile and did not read
+  // at all. So every single is drawn at one common size (`s`, the same per-tree size field the
+  // editor's own size control writes) and the STAND tiles keep true relative scale, lightly
+  // lifted for the smallest things, so the size difference between an oak and a bush still shows.
+  const SINGLE_R = 7; const STAND_MIN_R = 3;
   d.treeTypes.forEach((ty, i) => {
-    trees.push({ x: -28, y, type: i }); at[`tree-${i}`] = [-28, y];
-    sentinels.push({ yd: y - 5, side: 1, off: 28, n: 4, spread: 5, type: i }); at[`stand-${i}`] = [28, y];
+    const c = Math.max(0.5, ty.canopy || 1);
+    trees.push({ x: -28, y, type: i, s: +(SINGLE_R / c).toFixed(2) }); at[`tree-${i}`] = [-28, y];
+    sentinels.push({ yd: y - 5, side: 1, off: 28, n: 4, spread: 5, type: i, ...(c < STAND_MIN_R ? { s: +(STAND_MIN_R / c).toFixed(2) } : {}) }); at[`stand-${i}`] = [28, y];
     y += 44;
   });
   const bunkers = [
@@ -86,12 +148,17 @@ function sampler(theme, types) {
     { yd: y - 5, side: 1, off: 26, r: 6, ry: 4.5, kind: 'greensideBunker' },
   ];
   at['bunker-fairway'] = [-26, y]; at['bunker-greenside'] = [26, y]; at['bunker-draw'] = [26, y];
-  y += 44;
-  const water = [{ yd: y - 5, side: -1, off: 26, rx: 13, ry: 8.5, seed: 77 }];
+  y += 50;
+  // The pond ("Pond"/"Draw a lake") and a swamp beside it (`kind: 'swamp'`, holegen.js).
+  const water = [
+    { yd: y - 5, side: -1, off: 26, rx: 13, ry: 8.5, seed: 77 },
+    { yd: y - 5, side: 1, off: 26, rx: 11, ry: 8, seed: 78, kind: 'swamp' },
+  ];
   at['water-pond'] = [-26, y]; at['water-draw'] = [-26, y];
-  y += 44;
+  at['water-swamp'] = [26, y]; at['water-swamp-draw'] = [26, y];
+  y += 50;
   const cross = [];
-  for (const kind of ['water', 'waste', 'fairwayBunker']) {
+  for (const kind of ['water', 'waste', 'fairwayBunker', 'swamp']) {
     cross.push({ yd: y - 5, kind, depth: 14 });
     at[`cross-${kind === 'fairwayBunker' ? 'sand' : kind}`] = [0, y];
     y += 44;
@@ -102,6 +169,11 @@ function sampler(theme, types) {
     fw: [{ at: 0, w: 15 }, { at: 1, w: 15 }], hard: 0.3, seed: 11, greenSeed: 12, defend: false, belts: false, slope: 'gentle',
     trees, sentinels, bunkers, water, cross,
   });
+  // The three sprites are NOT painted into the map: at MAP_PPY a 3-yd bench is eight pixels. The
+  // tile paints ground only and `paintTile` draws the sprite over it at tile resolution.
+  const decorY = y;
+  at['decor-bench'] = [-24, decorY - 10]; at['decor-sign'] = [0, decorY - 10]; at['decor-flagpole'] = [24, decorY - 10];
+  at['decor-path'] = [0, decorY - 10];
   s = { map: buildMap(hole, theme), at };
   _samplers.set(key, s);
   return s;
@@ -142,6 +214,10 @@ export function paintTile(canvas, item, theme, types) {
   const s = sampler(theme, types);
   const [x, y] = s.at[item.id] || [0, 60];
   crop(s.map, x, y, CROP_W, CROP_H, canvas);
+  if (item.tool === 'decor' && item.state && item.state.decorKind) {
+    const ppy = (canvas.width / CROP_W) * 4;
+    drawDecorSprite(canvas.getContext('2d'), item.state.decorKind, canvas.width / 2 - ppy * 0.4, canvas.height / 2, ppy, 0, paletteFor(theme));
+  }
   if (item.kind === 'draw') {
     // A pencil over the picture: this one you outline yourself.
     const ctx = canvas.getContext('2d');
@@ -156,22 +232,26 @@ export function paintTile(canvas, item, theme, types) {
 /** Render the palette. `active` is the item id that matches the current tool + options, if any;
  *  `guardsOn` the current hole's guard tokens. `onPick(item)` handles a click. */
 export function renderPalette(el, { built, theme, active, guardsOn, onPick }) {
-  const sections = paletteSections(built);
+  const sections = paletteSections(built, theme);
   const types = built.treeTypes || [];
+  const tileHTML = (it) => {
+    const on = it.kind === 'guard' ? guardsOn.includes(it.token) : it.id === active;
+    return `<button type="button" class="he-tile${on ? ' is-on' : ''}" data-item="${it.id}" title="${it.label}">
+      <canvas class="he-tile__pic" width="${TILE_W * 2}" height="${TILE_H * 2}"></canvas>
+      <span class="he-tile__label">${it.label}${it.kind === 'guard' ? (on ? ' ✓' : '') : ''}</span>
+    </button>`;
+  };
   el.innerHTML = sections.map((sec) => `
     <div class="he-pal-section">
       <div class="he-pal-title">${sec.title}</div>
-      <div class="he-pal-grid">
-        ${sec.items.map((it) => {
-          const on = it.kind === 'guard' ? guardsOn.includes(it.token) : it.id === active;
-          return `<button type="button" class="he-tile${on ? ' is-on' : ''}" data-item="${it.id}" title="${it.label}">
-            <canvas class="he-tile__pic" width="${TILE_W * 2}" height="${TILE_H * 2}"></canvas>
-            <span class="he-tile__label">${it.label}${it.kind === 'guard' ? (on ? ' ✓' : '') : ''}</span>
-          </button>`;
-        }).join('')}
-      </div>
+      ${sec.subs
+    ? sec.subs.map((sub) => (sub.items.length ? `
+      <div class="he-subhead" style="margin:8px 0 4px;padding-top:0;border-top:none;">${sub.subtitle}</div>
+      <div class="he-pal-grid">${sub.items.map(tileHTML).join('')}</div>` : '')).join('')
+    : `<div class="he-pal-grid">${sec.items.map(tileHTML).join('')}</div>`}
     </div>`).join('');
-  const byId = new Map(sections.flatMap((s) => s.items).map((it) => [it.id, it]));
+  const allItems = sections.flatMap((s) => (s.subs ? s.subs.flatMap((sub) => sub.items) : s.items));
+  const byId = new Map(allItems.map((it) => [it.id, it]));
   for (const btn of el.querySelectorAll('.he-tile')) {
     const item = byId.get(btn.dataset.item);
     try { paintTile(btn.querySelector('canvas'), item, theme, types); } catch (e) { console.warn('[palette] tile failed', item.id, e); }
@@ -181,10 +261,15 @@ export function renderPalette(el, { built, theme, active, guardsOn, onPick }) {
 
 /** Which tile the current tool + options correspond to, so the palette can highlight it. */
 export function activeItemFor(tool, toolState, drawing) {
-  if (drawing) return drawing.group === 'water' ? 'water-draw' : 'bunker-draw';
+  if (drawing) {
+    if (drawing.group === 'water') return drawing.kind === 'swamp' ? 'water-swamp-draw' : 'water-draw';
+    if (drawing.group === 'decor') return 'decor-path';
+    return 'bunker-draw';
+  }
   if (tool === 'tree') return `${toolState.treeMode === 'stand' ? 'stand' : 'tree'}-${toolState.treePlantType || 0}`;
   if (tool === 'bunker') return toolState.bunkerKind === 'fairwayBunker' ? 'bunker-fairway' : 'bunker-greenside';
-  if (tool === 'water') return 'water-pond';
+  if (tool === 'water') return toolState.waterKind === 'swamp' ? 'water-swamp' : 'water-pond';
   if (tool === 'cross') return `cross-${toolState.crossKind === 'fairwayBunker' ? 'sand' : (toolState.crossKind || 'water')}`;
+  if (tool === 'decor') return `decor-${toolState.decorKind || 'bench'}`;
   return null;
 }
