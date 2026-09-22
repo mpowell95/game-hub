@@ -485,7 +485,7 @@ class BaseballPlayScreen {
           // see `Actors.warm()` for the 227 ms this moves off the critical path. The league can
           // still be changed on the setup screen, so `_renderPlay` rebuilds if it has.
           if (this.actors) {
-            this.actors.buildField(this._fenceFt());
+            this.actors.buildField(this._fenceFt(), this.league);
             this._fieldLeague = this.league;
             this.actors.warm();
           }
@@ -818,7 +818,7 @@ class BaseballPlayScreen {
     // inside the engine, never the diamond, so the base paths and the rubber are regulation here
     // at every league exactly as they are there).
     if (this._fieldLeague !== this.league) {
-      this.actors.buildField(this._fenceFt());
+      this.actors.buildField(this._fenceFt(), this.league);
       this._fieldLeague = this.league;
     }
     this.actors.setCamera(this.state.mode === 'pitching' ? 'pitcher' : 'batter');
@@ -3329,7 +3329,7 @@ class BaseballPlayScreen {
       return;
     }
     if (closedOrGoneCheck(this, sheet)) { actors.dispose(); this._devActors = null; return; }
-    actors.buildField(this._fenceFt());
+    actors.buildField(this._fenceFt(), this.league);
     await actors.setBatter({ side: 'home', pos: { x: -BATTER_BOX.x, y: 0, z: BATTER_BOX.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: BATTER_FACING_RAD });
     await actors.setPitcher({ side: 'away', pos: { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: PITCHER_FACING_RAD });
     await actors.setCatcher({ side: 'away', pos: { x: CATCHER.x, y: 0, z: CATCHER.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: CATCHER_FACING_RAD });

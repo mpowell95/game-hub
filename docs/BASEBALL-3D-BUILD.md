@@ -1572,3 +1572,59 @@ takes `league`. Sim drift, not tuned: Minors and Majors Gold went from 4.29 / 7.
 15 / 15 (the narrower window), College unchanged, Little League and High School inside their Gold
 targets. Probes `pitch-drag` and `target-marker` pick High School (the curveball's lowest league)
 and say so; `actions-live (d)` asserts one unlocked well at Little League.
+
+### R13: the pitching angle, a backdrop per league, the pitcher's legs, the batter's feet (2026-09-22)
+
+Matt, on v882's pitching view: *"Can you change the angle a little bit so it's a little easier to
+see the strike zone you're throwing into? Can you make the back a little more elaborate? For
+little league it should look like bleachers and stuff with spread out parents in them, then for
+every league the audience and bleacher/seats should increase. The legs of the pitcher are weird.
+And can you see that the batter's feet are below the ground? That's a problem."*
+
+1. **The zone is easy to see from the mound.** Raise the pitcher camera and tilt it down so the
+   pitcher's head sits clear of the zone box (below or beside it, never over it) and the box reads
+   a little larger (about 10 to 12% of the band); the pitcher may drop to about half the band.
+   `pitcher-frame`'s bands move with it, with the measured numbers written beside `CAMERAS.pitcher`.
+2. **The backdrop grows with the league.** `buildStadium` takes the league and builds one of five
+   dressings, all merged geometry and small textures: Little League is a low chain-link backstop,
+   two or three small aluminium bleacher sets behind the plate and down the lines with a handful
+   of parents scattered on them (simple figures or coloured billboards, spread out, not a wall of
+   specks), a grass berm past the fence, no light towers, a small scoreboard; High School adds
+   longer bleachers, more people, a press box; College is one concrete tier with a fuller crowd
+   and light towers; Minors two tiers and ads; Majors the full three-tier bowl from R9. The crowd
+   density is one number per league. Every camera is checked at every league.
+3. **The pitcher's legs.** The `Set` clip stands the pitcher with locked knees and splayed feet.
+   A real set: feet under the hips, a slight knee bend, weight even, glove up at the chest. Tune
+   with `render-actor.mjs --sheet` against the reference frame's pitcher; the rig's legs are not
+   mirrors of each other past about 35 deg (R12's finding), so probe the foot bones' world
+   positions, never trust symmetric inputs.
+4. **Feet on the ground, every clip.** From the mound the batter's feet are below the grass.
+   `footY` is measured once from the bind pose, so any clip whose hips drop (Idle's stance, Set)
+   pushes the feet under the ground plane. Fix it at the source: measure the lowest foot bone's
+   world y per clip and correct the hips offset (or a per-clip ground offset) so the lowest foot
+   sits on y = 0 within 0.1 ft in Idle, Set, Swing, Run, Bunt, Pickoff, Crouch. Add the check to
+   `test-baseball-actors.mjs` (sample each clip at five times).
+
+Deliverables: stills from all three cameras at Little League and at Majors beside the reference
+frames, the pitcher Set sheet, a foot-height table per clip before and after, the probes above.
+`node test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`,
+`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green.
+
+### R13 record (shipped v885, 2026-09-22)
+
+From the stage's report and the ship review: `CAMERAS.pitcher` is `pos [-9.5, 8.26, -190.5]`, `look
+[0, 2.53, ZONE.z]`, `fov 5.28` (130 ft behind the rubber, 9.5 ft off the axis so the pitcher stands
+101 px clear of the box, which sits over the catcher); measured: pitcher 50% of the band, box 10.2%,
+batter 68% of the pitcher (`pitcher-frame` bands 10 to 13% and 60 to 85%). A camera 150 ft back
+clipped Little League's own 210 ft fence. `buildStadium(scene, {fenceFt, league})` reads a
+`LEAGUE_STADIUM` table: Little League a 6 ft chain-link (mipmaps off, or minification averages the
+grid to grey), small bleachers with about 12 parents placed from a seed, a grass berm, no towers;
+High School longer bleachers, about 39 parents, a press box; College one tier and towers; Minors
+two tiers and ads; Majors the R9 bowl. The berm rendered black from three causes at once (normal
+sign, map x colour, lit material). From 130 ft back the frame sees only 11 ft of backstop height,
+so the bands are pad 4 ft, brick 4 ft, crowd from 8 ft. The `Set` clip's legs were bind pose
+(locked, splayed); they now bend evenly, and `Pitch` and `Pickoff` open on the same stance. Feet:
+`footY` is measured from the bind pose, so Idle, Swing and Bunt sank 0.13 to 0.16 ft and Set,
+Pickoff and Run floated up to 1.1 ft; a measured -1.594 ft per unit `hipsOffset.y` coefficient
+fixes each clip, with Run restated on five keys because no single shift fits it. New actors-suite
+check `foot-on-ground` (seven clips, five samples, 0.1 ft). Draw calls per league 26 to 31.

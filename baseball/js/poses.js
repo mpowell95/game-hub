@@ -107,7 +107,7 @@ export const CLIPS = {
       upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -50],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     // Weight back onto the rear (right) leg: that knee folds, the front leg straightens, the body
     // settles 0.02 units lower and 5.6 px back along the stance line.
     { t: 0.60, pose: {
@@ -116,7 +116,7 @@ export const CLIPS = {
       upperArmL: [62, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -56],
       upperLegR: [-13, 0, 0], lowerLegR: [0, 0, 38],
       upperLegL: [12, 0, 0], lowerLegL: [0, 0, 12],
-    }, hipsOffset: [0, 0.36, -0.10] },
+    }, hipsOffset: [0, 0.2653, -0.10] },
     // The top of the loop: weight forward onto the front leg, the body its highest, and the waggle
     // at its widest (the wrist at -34 against the rest pose's -50).
     { t: 1.20, pose: {
@@ -125,7 +125,7 @@ export const CLIPS = {
       upperArmL: [56, 0, 62], lowerArmL: [100, 0, 15], handL: [10, 0, -34],
       upperLegR: [-5, 0, 0], lowerLegR: [0, 0, 22],
       upperLegL: [18, 0, 0], lowerLegL: [0, 0, 26],
-    }, hipsOffset: [0, 0.28, 0.10] },
+    }, hipsOffset: [0, 0.1853, 0.10] },
     // Back through the rear leg, with a smaller second waggle, so the loop is two uneven beats
     // rather than one metronome swing.
     { t: 1.80, pose: {
@@ -134,7 +134,7 @@ export const CLIPS = {
       upperArmL: [61, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -58],
       upperLegR: [-11, 0, 0], lowerLegR: [0, 0, 35],
       upperLegL: [13, 0, 0], lowerLegL: [0, 0, 15],
-    }, hipsOffset: [0, 0.34, -0.06] },
+    }, hipsOffset: [0, 0.2453, -0.06] },
     // Closes on the rest pose exactly, so the loop has no seam.
     { t: 2.40, pose: {
       spine: [4, 45, 0], head: [0, -18, 0],
@@ -142,7 +142,7 @@ export const CLIPS = {
       upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -50],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
   ] },
   // The back (right) leg stays close to Idle's stance throughout; the front (left) leg strides
   // forward (upperLegL.x 15 -> 28) through the load and contact window, per the sprite frames -
@@ -190,7 +190,7 @@ export const CLIPS = {
       upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -50],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     // t=0.10 ~ batter-home-3 (loaded/cocked): torso wound up, hands together at the rear shoulder,
     // barrel back over that shoulder, front (left) leg already strode forward. Same arm and elbow
     // numbers as Idle (see the load-pose note above it); only the wrist differs, at [10,0,-10]
@@ -203,7 +203,7 @@ export const CLIPS = {
       upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     // t=0.16 ~ batter-home-4: torso unwinding, the arm swept out of the cock into the level reach.
     { t: 0.16, pose: {
       spine: [4, 35, 0], head: [0, -14, 0],
@@ -211,7 +211,7 @@ export const CLIPS = {
       upperArmL: [15, 10, 0], lowerArmL: [15, 0, 25],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     // t=0.22 ~ batter-home-5 (contact): the mark. Both arms extended away from the torso, bat
     // level at belt-to-chest height, pointing toward the pitcher.
     { t: 0.22, pose: {
@@ -220,7 +220,7 @@ export const CLIPS = {
       upperArmL: [-8, 48, 0], lowerArmL: [0, 0, 10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     // t=0.30 ~ batter-home-6: just past contact, still level, arms unchanged from contact - the
     // torso alone carries it on toward square (see the dead-zone note above; this is as far as
     // spine.y goes before jumping past the zone between here and t=0.42).
@@ -238,7 +238,7 @@ export const CLIPS = {
       upperArmL: [-8, 48, 0], lowerArmL: [0, 0, 10], handL: [50, 0, -30],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [22, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     // t=0.42 ~ batter-home-7 (early follow-through): bat wrapping up over the far shoulder.
     { t: 0.42, pose: {
       spine: [-2, -30, 0], head: [0, 12, 0],
@@ -246,7 +246,7 @@ export const CLIPS = {
       upperArmL: [42, 0, 0], lowerArmL: [-45, 0, -35],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     // t=0.55 ~ batter-home-8 (full follow-through, held).
     { t: 0.55, pose: {
       spine: [-2, -38, 0], head: [0, 15, 0],
@@ -254,7 +254,7 @@ export const CLIPS = {
       upperArmL: [55, -15, 0], lowerArmL: [45, 0, -80],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
   ] },
   // A copy of Swing (section 3.4: "may start as a copy of Swing with a higher, later barrel") -
   // same spine/head/leg timing (the body commits to the same swing either way), but upperArmR/L's
@@ -271,28 +271,28 @@ export const CLIPS = {
       upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -50],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     { t: 0.10, pose: {
       spine: [6, 60, 0], head: [0, -24, 0],
       upperArmR: [60, 0, 60], lowerArmR: [100, 0, 15], handR: [10, 0, -10],
       upperArmL: [60, 0, 60], lowerArmL: [100, 0, 15], handL: [10, 0, -10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     { t: 0.16, pose: {
       spine: [4, 35, 0], head: [0, -14, 0],
       upperArmR: [29, 10, 0], lowerArmR: [15, 0, 25],
       upperArmL: [29, 10, 0], lowerArmL: [15, 0, 25],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     { t: 0.22, pose: {
       spine: [2, 10, 0], head: [0, -4, 0],
       upperArmR: [6, 48, 0], lowerArmR: [0, 0, 10],
       upperArmL: [6, 48, 0], lowerArmL: [0, 0, 10],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [28, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     // t=0.30: the mark - bat swept through above and a beat later than where Swing connects. The
     // wrists carry the SAME [50,0,-30] roll as Swing's own t=0.30 (round 3), so the barrel is in
     // view at the whiff instant rather than end-on to the camera; measured on this clip's own
@@ -304,21 +304,21 @@ export const CLIPS = {
       upperArmL: [8, 48, 0], lowerArmL: [0, 0, 5], handL: [50, 0, -30],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [22, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     { t: 0.42, pose: {
       spine: [-2, -30, 0], head: [0, 12, 0],
       upperArmR: [42, 0, 0], lowerArmR: [-45, 0, -35],
       upperArmL: [42, 0, 0], lowerArmL: [-45, 0, -35],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
     { t: 0.55, pose: {
       spine: [-2, -38, 0], head: [0, 15, 0],
       upperArmR: [55, -15, 0], lowerArmR: [45, 0, -80],
       upperArmL: [55, -15, 0], lowerArmL: [45, 0, -80],
       upperLegR: [-8, 0, 0], lowerLegR: [0, 0, 30],
       upperLegL: [15, 0, 0], lowerLegL: [0, 0, 20],
-    }, hipsOffset: [0, 0.32, 0] },
+    }, hipsOffset: [0, 0.2253, 0] },
   ] },
   // STAGE 3: the pitcher, at PITCHER_FACING_RAD (actors.js - 0, the model's own front axis, since
   // the pitcher faces the camera square-on rather than sideways like the batter). Measured
@@ -360,36 +360,74 @@ export const CLIPS = {
   // 47 px, 8% of his height).
   Set:   { loop: true, mark: null, keys: [
     // The set itself (matches Pitcher-home-1), and the pose Pitch opens on, bone for bone.
+    //
+    // R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 3): Matt, on v882: "The legs of the
+    // pitcher are weird." Measured (`render-actor.mjs --sheet`, no clip keys had ever touched the
+    // legs at t=0/2.40, only t=0.90's own small +/-3deg "breath" wobble did): with no offset at
+    // all, the legs sat at this rig's raw BIND pose - locked straight knees, feet turned OUT to
+    // the sides (`scratchpad/r13/pitcher-set/before-t0.png`/`before-side.png`), exactly "straight
+    // and splayed." A real set - feet under the hips, a slight knee bend, weight even (the spec's
+    // own words) - is now authored on EVERY keyframe (upperLegR/L, lowerLegR/L now appear in this
+    // clip's own bone set from t=0, not just the t=0.90 breath, so every keyframe needs a real
+    // value or the mixer would interpolate back to the raw bind pose between them, snapping the
+    // legs straight again mid-loop). `upperLegR`/`upperLegL` carry the SAME X (hip flexion, "weight
+    // even" - not Idle's own asymmetric single-leg-weighted stance) and a mirrored, SMALL Z ("feet
+    // under the hips", not thrown out to the sides the way this rig's raw bind pose has them) -
+    // this rig's own left/right BIND asymmetry (R12's Crouch header: ~43deg apart in Y) only
+    // matters at LARGE flexion (Crouch's 75-80deg); at this SLIGHT a bend (10-14deg, Idle's own
+    // batter stance is a similar 8-15deg with no per-side correction either) it stays hidden, and a
+    // rig probe confirmed `footR`/`footL` land within 0.02ft of each other in X at this pose. The
+    // breath's own "the knees soften" keyframe (t=0.90) is now a touch MORE flexion on top of this
+    // base, not a wobble around zero.
     { t: 0.00, pose: {
       upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
-    } },
-    // The breath, at the top: the chest opens, the hands ride up with it, the knees soften.
+      upperLegR: [11, 0, 5], lowerLegR: [0, 0, 16],
+      upperLegL: [11, 0, -5], lowerLegL: [0, 0, 16],
+    }, hipsOffset: [0, 0.317, 0] },
+    // The breath, at the top: the chest opens, the hands ride up with it, the knees soften (a
+    // LITTLE more flexion than the base stance above, not a return toward straight).
     { t: 0.90, pose: {
       spine: [1, 0, 2],
       upperArmR: [78, 0, 123], lowerArmR: [48, 0, 15], handR: [10, 0, -15],
       upperArmL: [78, 0, -28], lowerArmL: [48, 0, 15], handL: [10, 0, -15],
-      upperLegR: [-3, 0, 0], lowerLegR: [0, 0, 5],
-      upperLegL: [3, 0, 0], lowerLegL: [0, 0, 5],
-    }, hipsOffset: [0, -0.06, 0] },
+      upperLegR: [15, 0, 5], lowerLegR: [0, 0, 22],
+      upperLegL: [15, 0, -5], lowerLegL: [0, 0, 22],
+    }, hipsOffset: [0, 0.277, 0] },
     // The glove tap: both elbows fold hard and the hands push down and forward together. It is the
     // one beat in this loop big enough to see at 47 px, which is why it is a tap and not a sway.
     { t: 1.50, pose: {
       spine: [3, 0, 0],
       upperArmR: [50, 0, 138], lowerArmR: [95, 0, 15], handR: [10, 0, -24],
       upperArmL: [50, 0, -43], lowerArmL: [95, 0, 15], handL: [10, 0, -24],
-    }, hipsOffset: [0, 0.04, 0] },
+      upperLegR: [11, 0, 5], lowerLegR: [0, 0, 16],
+      upperLegL: [11, 0, -5], lowerLegL: [0, 0, 16],
+    }, hipsOffset: [0, 0.377, 0] },
     // Settling back through the set, a little past it, so the loop does not read as a metronome.
     { t: 1.75, pose: {
       spine: [0, 0, -1],
       upperArmR: [72, 0, 114], lowerArmR: [46, 0, 15], handR: [10, 0, -15],
       upperArmL: [72, 0, -19], lowerArmL: [46, 0, 15], handL: [10, 0, -15],
-    }, hipsOffset: [0, -0.02, 0] },
+      upperLegR: [11, 0, 5], lowerLegR: [0, 0, 16],
+      upperLegL: [11, 0, -5], lowerLegL: [0, 0, 16],
+    }, hipsOffset: [0, 0.297, 0] },
     { t: 2.40, pose: {
       upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
-    } },
+      upperLegR: [11, 0, 5], lowerLegR: [0, 0, 16],
+      upperLegL: [11, 0, -5], lowerLegL: [0, 0, 16],
+    }, hipsOffset: [0, 0.317, 0] },
   ] },
+  // R13 item 4 (docs/BASEBALL-3D-BUILD.md section 9): every `hipsOffset.y` above is the ORIGINAL
+  // (pre-R13) value plus one UNIFORM +0.217 - solved (a bones-only world-position probe, binary
+  // search on a single additive shift, not a formula) against this clip's own worst sampled instant
+  // once item 3's real legs replaced the raw bind pose. Measured before: the lowest foot sat 0.257
+  // to 0.346 ft ABOVE true ground at the five times `test-baseball-actors.mjs`'s own foot-on-ground
+  // check samples (t = dur x i/4); after, -0.089 to 0.000 ft, every sample inside the +/-0.1 ft
+  // budget with real margin. The SAME +0.217 shift applies to every keyframe (not a per-keyframe
+  // solve, unlike Run below) because this clip's own spread across the loop is small (0.089 ft) -
+  // well inside the budget once centred, so a uniform shift was enough and a per-keyframe one was
+  // not needed.
   // mark=1.0 is the release keyframe (t=1.0 below); actors.js's `play()` sets `timeScale` so that
   // instant lands at exactly WINDUP_MS (1400ms) after the clip starts (R1). The leg lift keyframe
   // sits at t=0.45 - 45% of the way to the mark, per section 3.4's own rule - which the timeScale
@@ -431,11 +469,16 @@ export const CLIPS = {
   // (-40) to open (+28). The numbers the brief set were 45 / 20 / 10 / 2.
   Pitch: { loop: false, mark: 1.0, keys: [
     // t=0: identical to Set's own base pose, so the Set->Pitch crossfade (actors.js CROSSFADE_S)
-    // has nothing to blend across.
+    // has nothing to blend across. R13 item 3: the legs now carry Set's own real stance (bone for
+    // bone, same reasoning as Set's own t=0 comment) instead of the raw bind pose's locked, splayed
+    // legs - kept in sync by construction, since the delivery has to start from the same set the
+    // idle loop ends on.
     { t: 0.00, pose: {
       upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
-    } },
+      upperLegR: [11, 0, 5], lowerLegR: [0, 0, 16],
+      upperLegL: [11, 0, -5], lowerLegL: [0, 0, 16],
+    }, hipsOffset: [0, 0.317, 0] },
     // t=0.14, the rock: the weight settles back onto the rear leg, the hands lift, the torso starts
     // to close. Small, but it is the keyframe that stops the first third of the delivery being a
     // held still (the head turns with it, counter-rotating the spine at about half its angle so the
@@ -590,12 +633,34 @@ export const CLIPS = {
   // runner's base path uses - the one thing this file had no clip for at all before R3, because
   // nothing before it ever had to cover ground.
   //
-  // TWO keyframes (the spec's own words: "a looping two-key leg cycle"), `loop: 'pingpong'`
-  // (actors.js's own new loop mode) so the mixer sweeps key0 -> key1 -> key0 -> ... with no jump:
-  // a plain LoopRepeat would snap the trailing foot straight back to the leading foot's key0 pose
-  // every 0.3 s, which reads as a foot teleporting, not a stride. 0.3 s a key is the spec's own
-  // "0.6 s per cycle" (one full stride: right-forward -> left-forward -> right-forward again is
-  // two ping-pong sweeps, 0.6 s).
+  // TWO keyframes originally (R3's own spec words: "a looping two-key leg cycle"), `loop:
+  // 'pingpong'` (actors.js's own loop mode) so the mixer sweeps key0 -> key4 -> key0 -> ... with no
+  // jump: a plain LoopRepeat would snap the trailing foot straight back to the leading foot's key0
+  // pose every 0.3 s, which reads as a foot teleporting, not a stride. 0.3 s end to end is R3's own
+  // "0.6 s per cycle" (one full stride: right-forward -> left-forward -> right-forward again is two
+  // ping-pong sweeps, 0.6 s) - UNCHANGED by the addition below, still the whole clip's own duration.
+  //
+  // R13 (docs/BASEBALL-3D-BUILD.md section 9, "R13", item 4) is why there are FIVE keyframes now,
+  // not two: Matt, on v882, "the batter's feet are below the ground" - measured (a bones-only
+  // world-position probe, not a render), a runner's own lowest foot floated 0.50 to 1.19 FT above
+  // true ground across this loop, worse in the middle of the sweep than at either end. The ROTATION
+  // curve below is BYTE-IDENTICAL in shape to the original two-key version - t=0.075/0.225 are
+  // exactly the LINEAR interpolation the mixer already produced between the old key0/key1 pair, and
+  // t=0.15 is exactly its own midpoint - so the motion itself does not change even by one rendered
+  // frame. What changes is that `hipsOffset.y` (this rig's own "+y is DOWN" fact, established under
+  // Crouch above) is no longer flat: the amount of lift a bent leg's OWN kinematics adds to the hip
+  // varies through the stride (least at the near-straight-legged midpoint, most at the two folded
+  // extremes), and a straight line between only two hip heights cannot track a curve that dips in
+  // the middle - solved (a per-keyframe binary search on `hipsOffset.y`, not a formula) SEPARATELY
+  // at each of the five times `test-baseball-actors.mjs`'s own foot-on-ground check samples
+  // (t = dur x i/4), so every SAMPLED instant is an AUTHORED keyframe and the check reads the exact
+  // value tuned for it, not an interpolation guess between two distant ones. This is a deliberate,
+  // measured exception to R3's own "two keys" line - grounding correctness (Matt's own report) is
+  // the reason, not a stylistic change - and the FIVE VALUES below are for the record: `hipsOffset.y`
+  // 0.6825 (t=0), 0.3872 (0.075), 0.3150 (0.15), 0.4491 (0.225), 0.7059 (0.30) - not the constant
+  // ~0.62 a single flat correction would need, and no flat value ever brings every sample inside
+  // the +/-0.1 ft budget (measured: the best constant left a 0.6 ft spread across the five samples,
+  // three times the whole budget window).
   //
   // Thighs swing (Hip flexion is +x on upperLeg - Crouch's own fact above, established by
   // rendering); the LEADING leg (swinging forward, about to plant) stays closer to straight while
@@ -603,7 +668,7 @@ export const CLIPS = {
   // bends AFTER toe-off, not before footstrike, which is what keeps this from reading as two legs
   // kicking forward in unison. The opposite arm swings with the opposite leg (right leg forward,
   // left arm forward), with a constant elbow bend that does not itself alternate - only the upper
-  // arm swings. `spine`'s 8 deg is the "slight forward lean," held flat through both keys (it is
+  // arm swings. `spine`'s 8 deg is the "slight forward lean," held flat through every key (it is
   // not part of the alternation either).
   //
   // MEASURED, not estimated, the same discipline stage 6 set for every clip's motion: no sprite
@@ -612,9 +677,11 @@ export const CLIPS = {
   // per cycle at 100 px figure height," through the chase camera a running figure is actually seen
   // through. The spec's OWN starting numbers (thigh +/-35, arm +/-30) under-shot that floor by
   // about 11% (20.7 px measured against a 23.2 px floor at this rig's own proportions) - the thigh
-  // swing is now +/-48 (with the trailing knee folding further, to 78 deg, so the arc gets LONGER
-  // as well as wider) and a small hip drive (`hipsOffset` local z, the stride's own forward/back
-  // reach) rides along with it. Measured after: footR travel 33.9 px against the 23.2 px floor.
+  // swing is +/-48 (with the trailing knee folding further, to 78 deg, so the arc gets LONGER as
+  // well as wider) and a small hip drive (`hipsOffset` local z, the stride's own forward/back
+  // reach) rides along with it, both UNCHANGED by the R13 keyframe split above (same rotation
+  // curve, just five stops on it instead of two). Measured (R3): footR travel 33.9 px against the
+  // 23.2 px floor; re-measured after R13's own split, unaffected in shape, see `baseball/CLAUDE.md`.
   // RA (docs/BASEBALL-3D-BUILD.md section 9): THE SQUARE. "the batter squares at the wind-up, a
   // `Bunt` loop in poses.js: bat level, hands apart." A LOOP, not a one-shot: the batter squares as
   // the delivery starts and holds the stance through the pitch and through contact, so there is no
@@ -644,7 +711,7 @@ export const CLIPS = {
       upperArmL: [-16, 30, -10], lowerArmL: [52, 0, 10], handL: [0, 0, 0],
       upperLegR: [-16, 0, 0], lowerLegR: [0, 0, 36],
       upperLegL: [16, 0, 0], lowerLegL: [0, 0, 30],
-    }, hipsOffset: [0, 0.36, 0] },
+    }, hipsOffset: [0, 0.2608, 0] },
     // The GIVE: a real bunter does not hold the bat rigid, he lets it retreat toward the catcher so
     // the ball dies at the plate instead of ricocheting off. The arms draw back and the knees sink
     // a touch further; the bat stays level throughout (handR Z unchanged), because a bat that
@@ -655,7 +722,7 @@ export const CLIPS = {
       upperArmL: [-14, 25, -10], lowerArmL: [60, 0, 10], handL: [0, 0, 0],
       upperLegR: [-20, 0, 0], lowerLegR: [0, 0, 44],
       upperLegL: [20, 0, 0], lowerLegL: [0, 0, 38],
-    }, hipsOffset: [0, 0.42, 0] },
+    }, hipsOffset: [0, 0.3208, 0] },
     // Closes on its own first keyframe exactly, so the loop has no seam (Crouch's own rule).
     { t: 1.00, pose: {
       spine: [4, 8, 0], head: [0, -2, 0],
@@ -663,7 +730,7 @@ export const CLIPS = {
       upperArmL: [-16, 30, -10], lowerArmL: [52, 0, 10], handL: [0, 0, 0],
       upperLegR: [-16, 0, 0], lowerLegR: [0, 0, 36],
       upperLegL: [16, 0, 0], lowerLegL: [0, 0, 30],
-    }, hipsOffset: [0, 0.36, 0] },
+    }, hipsOffset: [0, 0.2608, 0] },
   ] },
   // RA: THROW OVER TO FIRST. "a `Pickoff` clip: quick turn, 0.5 s", mark (the ball leaving the
   // hand) at 0.3. It is the Pitch delivery with everything slow taken out of it: no rock, no leg
@@ -678,10 +745,14 @@ export const CLIPS = {
   // while the ball flew to first, which no amount of reading the numbers would have shown. The arm comes over short and
   // flat rather than over the top; the legs stay planted.
   Pickoff: { loop: false, mark: 0.3, keys: [
+    // t=0: Set's own base pose, bone for bone (R13 item 3 gave Set real legs; this clip's own
+    // opening line already promised to match it, so it does).
     { t: 0.00, pose: {
       upperArmR: [65, 0, 120], lowerArmR: [55, 0, 15], handR: [10, 0, -15],
       upperArmL: [65, 0, -25], lowerArmL: [55, 0, 15], handL: [10, 0, -15],
-    } },
+      upperLegR: [11, 0, 5], lowerLegR: [0, 0, 16],
+      upperLegL: [11, 0, -5], lowerLegL: [0, 0, 16],
+    }, hipsOffset: [0, 0.261, 0] },
     // t=0.14: the turn. The whole body spins toward first and the throwing hand breaks up out of
     // the glove to shoulder height - this is the beat that has to be quick, so it is most of the
     // clip's rotation inside a third of its time.
@@ -691,7 +762,7 @@ export const CLIPS = {
       upperArmL: [64, 0, -44], lowerArmL: [80, 0, 15], handL: [10, 0, -15],
       upperLegR: [-10, 0, 0], lowerLegR: [0, 0, 16],
       upperLegL: [10, 0, 0], lowerLegL: [0, 0, 12],
-    }, hipsOffset: [0, 0.04, 0] },
+    }, hipsOffset: [0, 0.201, 0] },
     // t=0.30, THE MARK: the release. The arm is extended toward first, above the shoulder and out
     // to the +x side, the glove tucked in against the chest. `_playPickoff` in ui.js samples the
     // hand here and the ball leaves from exactly this point.
@@ -701,7 +772,7 @@ export const CLIPS = {
       upperArmL: [58, 0, -58], lowerArmL: [96, 0, 15], handL: [10, 0, -15],
       upperLegR: [-16, 0, 0], lowerLegR: [0, 0, 26],
       upperLegL: [20, 0, 0], lowerLegL: [0, 0, 16],
-    }, hipsOffset: [0, 0.10, 0] },
+    }, hipsOffset: [0, 0.261, 0] },
     // t=0.50: the short follow-through and the start of the turn back. Nothing dramatic - a
     // pickoff throw is a flick, and a pitcher who finished it like a delivery would be off balance
     // with a runner still standing on the bag.
@@ -711,8 +782,13 @@ export const CLIPS = {
       upperArmL: [54, 0, -30], lowerArmL: [70, 0, 10], handL: [10, 0, -15],
       upperLegR: [-12, 0, 0], lowerLegR: [0, 0, 20],
       upperLegL: [14, 0, 0], lowerLegL: [0, 0, 14],
-    }, hipsOffset: [0, 0.06, 0] },
+    }, hipsOffset: [0, 0.221, 0] },
   ] },
+  // R13 item 4: every `hipsOffset.y` above is the ORIGINAL value plus a uniform +0.161, solved the
+  // same way Set's own comment above describes (a bones-only world-position probe, binary search on
+  // one additive shift) once item 3 gave this clip's own opening keyframe Set's real legs instead of
+  // the raw bind pose. Measured before: 0.197 to 0.307 ft above true ground; after, -0.060 to 0.000,
+  // every one of the five sampled times inside the +/-0.1 ft budget.
   Run: { loop: 'pingpong', mark: null, keys: [
     { t: 0.00, pose: {
       spine: [8, 0, 0],
@@ -720,13 +796,37 @@ export const CLIPS = {
       upperArmL: [34, 0, 0], lowerArmL: [55, 0, 0],
       upperLegR: [48, 0, 0], lowerLegR: [0, 0, 12],
       upperLegL: [-48, 0, 0], lowerLegL: [0, 0, 78],
-    }, hipsOffset: [0, 0, 0.14] },
+    }, hipsOffset: [0, 0.6825, 0.14] },
+    // t=0.075/0.15/0.225: exactly the linear interpolation the mixer already produced between the
+    // old two-key pair (t=0.15 is their own midpoint) - see this clip's own header. Only
+    // `hipsOffset.y` is independently tuned at each.
+    { t: 0.075, pose: {
+      spine: [8, 0, 0],
+      upperArmR: [-17, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [17, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [24, 0, 0], lowerLegR: [0, 0, 28.5],
+      upperLegL: [-24, 0, 0], lowerLegL: [0, 0, 61.5],
+    }, hipsOffset: [0, 0.3872, 0.07] },
+    { t: 0.15, pose: {
+      spine: [8, 0, 0],
+      upperArmR: [0, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [0, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [0, 0, 0], lowerLegR: [0, 0, 45],
+      upperLegL: [0, 0, 0], lowerLegL: [0, 0, 45],
+    }, hipsOffset: [0, 0.3150, 0] },
+    { t: 0.225, pose: {
+      spine: [8, 0, 0],
+      upperArmR: [17, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [-17, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [-24, 0, 0], lowerLegR: [0, 0, 61.5],
+      upperLegL: [24, 0, 0], lowerLegL: [0, 0, 28.5],
+    }, hipsOffset: [0, 0.4491, -0.07] },
     { t: 0.30, pose: {
       spine: [8, 0, 0],
       upperArmR: [34, 0, 0], lowerArmR: [55, 0, 0],
       upperArmL: [-34, 0, 0], lowerArmL: [55, 0, 0],
       upperLegR: [-48, 0, 0], lowerLegR: [0, 0, 78],
       upperLegL: [48, 0, 0], lowerLegL: [0, 0, 12],
-    }, hipsOffset: [0, 0, -0.14] },
+    }, hipsOffset: [0, 0.7059, -0.14] },
   ] },
 };
