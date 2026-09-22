@@ -4,6 +4,161 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R14: your player and the skill points (2026-09-22)
+
+Matt, on v885: "Also I don't see anything about the skill points we discussed." Then: "Go, build
+the skill points and career." This stage is the player and the points on screen, in Quick Play;
+R15 (the career that earns them) is separate work, not built here.
+
+**The budget, measured, per league (`budgetFor`/`capFor`, `baseball/js/build.js`):**
+
+| League | Budget per side | Cap per skill |
+|---|---|---|
+| Little League | 15 | 10 |
+| High School | 30 | 14 |
+| College | 42 | 18 |
+| Minors | 54 | 22 |
+| Majors | 66 | 26 |
+
+Little League is `START_POINTS_PER_SIDE`/`START_CAP` from `settings.js` directly; every league
+above it is `3 * CAPS[previous league]` for the budget and `CAPS[league]` for the cap (doc's own
+"the build of a player who maxed the league below"). Budget stays under 3x the league's own cap at
+every rung, which is what makes every repair/clamp/random function below always feasible: there is
+always room.
+
+**`baseball/js/build.js` (new, pure, no DOM/storage):** `budgetFor(league)`, `capFor(league)`,
+`scalePreset(preset, budget, cap)` (scales a `PRESETS` row proportionally per side, clamps to cap,
+repairs by largest remainder so each side sums to the budget exactly; Slugger at Majors puts
+`hitPow` at the cap, the rest carried over, per the spec's own worked example), `randomBuild(budget,
+cap, rand)` (a true random split within caps, each side independent), `adjust(build, id, delta,
+budget, cap)` (returns a NEW build when legal, the SAME reference back when it would break the
+skill's own cap or the side's own budget - `canAdjust` is exactly `adjust(...) !== build`), and
+`clampBuild(build, budget, cap)` (repairs an existing build to a new budget/cap in either
+direction - a league change on a Custom build).
+
+**What is stored: `gamehub.baseball.v1`'s `quickPlay` field**, read-modify-write (this key also
+carries `career`, `js/career-store.js`'s field, on the same object - never replaced whole):
+`{ presetId, hand, skills, league, updatedAt }`. `presetId` is one of the seven `PRESETS` keys,
+`'random'` (the most recent Randomize roll), or `'custom'` (a hand-tuned build, including one that
+started as a preset and got a plus/minus tap). It is a PREFERENCE (THE LAW rule 2's carve-out, one
+tap recreates it) and never touches `career` on the same key or `gamehub.stats`.
+
+**Changing the league on the setup screen recomputes the build for the new budget/cap**
+(`_recomputeBuildForLeague` in `ui.js`): a named preset is rescaled from that preset's own row, a
+random build is re-rolled fresh, and a Custom build is clamped in place - trimmed and repaired,
+never re-derived from scratch. This is what keeps "changing the league rescales the current
+preset, or re-rolls a random build, or clamps a Custom build" true from every entry point (initial
+load, and every league tap).
+
+**The hand rule.** While `bb.hand` (`js/game-stats.js`) is null, `L`/`R` is a free choice on the
+player screen. Once a career has recorded it (R15, `setBaseballHand`, once ever), the toggle is
+gone and a single checkmarked pill shows the locked hand instead - `_lockedHand()` reads it,
+`_effectiveHand()` is what `_startGame` actually uses. **Quick Play never calls `setBaseballHand`**
+- it only reads.
+
+**The player screen (`.bb-player`, new).** Title; the hand row (two 44px toggle buttons, or the
+locked pill); a 4x2 grid of the seven presets plus Custom (44px each, the chosen one filled AND
+carrying a check mark glyph, never colour alone); two columns (Hitting/Pitching), each a
+points-left pill and three skill rows (label, a 44px minus, a segmented bar of `cap` cells with
+`value` filled, the number, a 44px plus); Randomize and Done. No helper text anywhere. Reached by
+tapping a new player chip on the setup screen (hand, preset name, the six values under two-letter
+tags identical in both languages - `SKILL_SHORT`, the same convention `sb_b`/`widget_1b` already
+use for a stable code that is not a translated word). Every string is new EN/ES keys in
+`baseball/js/strings.js` (`player_title`, `hand_l`/`hand_r`, `preset_*`, `skill_*`,
+`hitting_col`/`pitching_col`, `points_left`, `randomize`; `done` already existed).
+
+**A real dark-mode bug, found by cropping a still and reading pixels, not by eye at full scale.**
+The segmented bar's filled cells read the SAME muted colour as unfilled ones in dark mode. Cause:
+`:root.gh-dark .bb-root .bb-seg-cell { background: ... }` has three ancestor classes and so
+outranks the light-mode `.bb-seg-cell.is-filled { background: #ffce3a; }` (two classes) on plain
+CSS specificity, in EVERY theme, dark included - a bare `.bb-seg-cell` selector in the dark block
+was never scoped away from `.is-filled` cells. Fixed with `:not(.is-filled)` on the dark selector.
+Verified by re-cropping the same still and reading the pixels again: filled cells are `#ffce3a` in
+both themes now.
+
+**Spin is felt (`SKILL_EFFECT.pitchSpin.breakPerPt`, declared since BB-1a, unused until now).**
+`breakOffsetFor` (`baseball/js/engine/pitch.js`) takes an optional 6th argument, `pitchSpinPts`
+(default 0), and multiplies the HANDED break's `x`/`y` by `1 + pitchSpinPts * breakPerPt` - gated
+on `row.handed`, which is true for exactly the four types the doc names (curveball, slider,
+screwball, cutter) and false for the fastball (no break either way) and the knuckleball (a
+`random` wobble with no fixed direction to widen). `flyPitch` passes the pitcher's own real
+`pitchSpin` skill points through; every existing caller that omits `pitcherSkills` keeps `pitchSpin
+0`, i.e. today's table exactly, so the change is backward compatible by construction. `ui.js`'s own
+point cursor (`_pitchBreakUnits`) reads the human pitcher's real pitchSpin too
+(`_ownPitcherSkills`), so the drawn cursor and the pitch that actually crosses never disagree.
+
+**A pre-existing device probe broke under this, and that is the correct outcome, not a false
+positive.** `test-baseball-device.mjs`'s `pitch-drag` sub-check compared the curveball's OBSERVED
+break at the plate against `BREAK_OFFSET.curveball`'s raw table numbers, which was only ever true
+when pitchSpin was 0 - true by omission before this stage, since nothing wired pitchSpin in yet.
+With a real Quick Play build now in play (nonzero pitchSpin by default), that equality stopped
+holding, exactly as the spin wiring says it should. Fixed by zeroing pitchSpin via the new dev seam
+AFTER the probe's own league click (a league click re-scales the preset and would clobber an
+earlier zero), so the probe still reads the table's raw promise. Re-run clean: `break 0.450, -0.350
+zone units`, matching `BREAK_OFFSET.curveball` exactly.
+
+**The dev seam: `window.__bbTest.setBuild({presetId, hand, skills})`.** Available from the
+CONSTRUCTOR (the setup screen), not only after Play like the game-dependent seam functions
+(`forceHalf`/`noScatter`/`putOnFirst`) - a probe has to be able to pin a build BEFORE starting the
+game. The two are merged onto the same object (`Object.assign`), never one replacing the other, so
+`setBuild` called on the setup screen survives into the started game.
+
+**Sim scoreboard, before and after, `node sim-baseball.mjs --quick --assert`** (before = pitch.js
+reverted to the parent commit; after = this stage's `pitchSpin` wiring; nothing else changed,
+nothing tuned). Both runs fail the SAME promises R5's own record above already documents as
+pre-existing failures (`NUDGE_A_B`, `SLOT_WINRATE_BAND`, `CHAMPION_IS_HARDEST`, `LADDER_MONOTONE`
+within-league); the table below is only the rows that moved:
+
+| Promise | Before | After |
+|---|---|---|
+| SEASON_WINRATE_BAND.college (band 0.57-0.67) | **PASS** 0.636 | **FAIL** 0.675 |
+| SEASONS_TO_GOLD_TARGET.highschool (<= 2.25) | PASS 1.36 | PASS 1.67 |
+| SEASONS_TO_GOLD_TARGET.minors (<= 3.75) | FAIL 15.00 | FAIL 7.50 (closer, still failing) |
+| SEASONS_TO_GOLD_TARGET.majors (<= 5.25) | FAIL 15.00 | FAIL 7.50 (closer, still failing) |
+| CHAMPION_GAME_WIN_MIN_MEDIAN (>= 0.4) | PASS 0.400 | PASS 0.444 |
+| PERFECT_SEASON_REACHABLE, maxed Majors (>= 0.02) | PASS 0.7333 | PASS 0.8333 |
+| NUDGE_A_B.college (>= 0.10) | 0.100 (edge) | -0.150 (flipped negative) |
+
+CPU pitchers now really do throw a bigger break with real pitchSpin points, which is why the
+numbers moved at all - a CPU roster with real skill points behaves measurably differently from one
+whose spin was silently inert. **Per the spec, this is reported, not tuned**: no constant in
+`settings.js` was touched to chase any of these bands. College's win-rate band flipping from a
+comfortable pass to a narrow fail (0.675 against a 0.67 ceiling) is the one number here worth a
+future tuning pass noticing.
+
+**Tests.** `baseball/js/test.js` section 34: budgetFor/capfor's derivation at every league and the
+feasibility invariant (budget always under 3x the league's own cap); every preset at every league
+sums to the budget exactly on both sides and never exceeds the cap (2,783 assertions total in the
+file, up from 2,745 before this section, zero regressions); randomBuild never exceeds budget or cap
+over 50 draws x 5 leagues; adjust/canAdjust refuse at both the skill cap and the side's own budget,
+and agree with each other; clampBuild repairs a build both up-league and down-league; Spin 0 equals
+today's table exactly, Spin 10 breaks more, the fastball and the knuckleball are untouched by spin,
+end to end through `flyPitch`. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`: 44 probe lines,
+all green (`hud clears hub-back pill`, `r2-cadence` Strike 3067/3064/3067ms against target
+3000ms+-360, `zone-world`, `ball-grows`, `fence-shape`, `pitcher-frame`, the fixed
+`pitch-drag` curveball check, `target-marker`, `fielders-placed`, `actions-live` a-d,
+`zone-scale`, `pop-anchor`, `homerun-strip`, `play-clock` x3, `sides-match`, `one-batter` x2,
+`pop-onscreen`, `chase-start`, `ball-visible-pitcher`, `hud-legible`). `node check-no-scroll.mjs
+baseball`: 8/8 clean (standalone/hub x tall/short, default screen and the new player screen,
+registered in `EXTRA_SCREENS.baseball`). `node test-visual.mjs baseball`: 20/20 passed, including
+the PLAY probe (a real at-bat both ways) on the first run, no rerun needed. `node
+test-game-conventions.mjs`: 11/11, no new sub-11px CSS.
+
+**What was rejected.** A dedicated "Random" chip in the 4x2 grid - the grid is the doc's own seven
+presets plus Custom, and a Randomize BUTTON (not a chip) already exists; adding an eighth chip
+would either bump a real preset off the grid or break the 4x2 shape. Showing the build's league
+inline on the player screen - the setup screen's own league list is one tap away and is already
+the single place a league is chosen; repeating it would be exactly the kind of helper text the
+spec rules out. A single shared two-letter code table with the pitch-type abbreviations
+(`pitch_fastball` etc.) - those already differ per language (`FB`/`RE`); the skill codes are new
+and deliberately kept identical in both languages instead, since nothing else in this file ties a
+short code to a translated word's own initials.
+
+`baseball/js/build.js` has no `sw.js` entry yet - it was deliberately not added this stage (the
+hard rule for this stage was: do not touch `sw.js`/`version.json`/CACHE). `validate-sw-assets.mjs`
+will fail loudly on the next deploy until it is added; that failure is the intended guard, not a
+bug to route around.
+
 ## R13: the pitching angle, a backdrop per league, legs and feet (2026-09-22)
 
 Four fixes off Matt's own words on v882's pitching view: *"Can you change the angle a little bit
