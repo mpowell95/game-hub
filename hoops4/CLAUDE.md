@@ -520,6 +520,65 @@ hoop still nearest its own column, worst perspective fan 10.7px), `test-visual.m
 `check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-game-conventions.mjs` 11/11, no page
 errors. Still paint only - not one thing on the marquee or the fascia has a collider.
 
+### The flare was standing in front of the bottom of the screen (2026-09-22)
+
+Matt: *"Why is the bottom left and bottom right of the connect 4 board covered by the black board
+thing?"*
+
+**The flare** - the cabinet's taper from the 0.53 m lane out to the 1.52 m board, spanning the
+trough gap. It was centred on `(crestY + lipY) / 2` with a half-height of `railH / 2 + 0.02`,
+which put its top at **y 0.497 against a board whose bottom edge is at `boardLipY` 0.39**. That is
+107 mm of black cabinet standing in front of the bottom of the screen - and because the flare runs
+DIAGONALLY out to the board's full width, the camera sees it cut across the bottom-left and
+bottom-right corners of the grid. On a board that FILLS FROM THE BOTTOM, those are the cells that
+matter.
+
+**It was always slightly wrong and the square rebuild tripled it.** At the old `boardLipY` 0.52 it
+stood 35 mm proud, which was small enough to read as the cabinet's own edge; dropping the lip to
+0.39 to grow the board downward took it to 107 mm. So this is the square board's bill, arriving
+late.
+
+The top is pinned to the lip now (`flareTop = lipY - 0.002`, a hair under so no seam z-fights) and
+the slab keeps its height by growing DOWNWARD into the trough it spans. A cabinet's side taper
+ending exactly where the screen begins is also what a real one looks like.
+
+**Measured cost in play: none.** 231-throw grid, before and after: scored **28.6%** both, parked
+**1.7%** both. The 107 mm band it gave up is above the trough and below the hoops, and nothing was
+resting on a 30 mm-wide ledge. The bounce figures moved a touch (misses bouncing 42% -> 41%, mean
+best rebound 0.47 -> 0.45 m/s) because slightly fewer misses clip the flare on their way past;
+both sit inside the two gaps `test.js` already owes for the square board, and neither changes a
+pass or a fail. The numbers in "Square, and what it cost" are the pre-flare-fix ones and are left
+as the record of that change.
+
+#### THE PROBE SAID 10/10 THE WHOLE TIME, AND THAT IS THE REAL LESSON
+
+`check-display.mjs` has a raycast occlusion test written for exactly this failure - it exists
+because the first raked build hid the bottom row behind a front apron. It passed throughout,
+because **it raycasts cell CENTRES**, and the bottom row's centres clear the flare even when the
+cells themselves are clipped and both panel corners are gone.
+
+A centre is not a cell. The probe now also raycasts **the panel's own four corners** and **the
+outer lower edge of the bottom row's two end cells** - the exact pixels Matt pointed at. Verified
+born red by restoring the old flare height: four failures, naming both bottom corners and both end
+cells. `check-display.mjs` is 11 checks now.
+
+### The marquee got taller (2026-09-22)
+
+Matt, after the sign was rebuilt: *"the banner can be bigger. It's short. it can be taller."*
+
+`mqH` 0.145 -> **0.20** of the board's width (it was 0.12 before the rebuild, so two thirds
+taller than it shipped). A marquee is the tallest thing on an arcade cabinet and this one was a
+strip.
+
+**`MQH` is now DERIVED from `mqH`, not a constant.** The texture is `MQW * (mqH / (bw * 1.02))`,
+so it always matches the panel's aspect. Left at a fixed 260 it would have squashed every letter
+and every bulb the moment the sign grew, which is the kind of change that looks like a font bug.
+
+**It cost nothing, and that was measured rather than hoped for.** `_marqueeTop` is computed from
+`mqH` and is one of the camera's `_fitPoints`, so a taller sign pulls the camera back - but the
+frame here is already capped by the cabinet's WIDTH (root of the 22.6% ceiling this file records),
+so the display stayed at **326 x 278 px, the same as before**. `check-display.mjs` 11/11.
+
 ### THE SCORING RATE: every lever measured, and Matt's call (2026-09-22)
 
 Matt, after playing the square board: *"I don't understand why you can't make it better than 20
