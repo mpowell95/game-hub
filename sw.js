@@ -328,6 +328,8 @@ const ASSETS = [
   './hoops4/js/render.js',
   './hoops4/js/game.js',
   './hoops4/js/cpu.js',
+  './hoops4/js/mp.js',
+  './hoops4/js/mp-ui.js',
   './hoops4/js/strings.js',
   './skeeball/js/game.js',
   './skeeball/js/goals.js',

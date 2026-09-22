@@ -259,9 +259,15 @@ export const BOARD = {
       // captureDrop above - together they are what turns a shot that is not a swish into a live
       // rattle that can still drop, or can still bounce out.
       ringFric: 0.06,
-      ringRest: 0.46,
+      // BOUNCIER AGAIN, 2026-09-22. Matt, having played it: "i'd like for them to be bouncier."
+      // 0.46 -> 0.62, which is 3.4x THE CLASSIC (0.18) and more than twice HOT SHOT (0.30). What
+      // makes that safe is the THROAT: a captured ball is contained by a wall 8 ball-radii tall,
+      // so a livelier rim cannot cost the "100% of the time" promise the way it did at 2.4 and
+      // 4.0 - and hoops4/js/test.js asserts that promise at exactly 100.00%, so a bounce number
+      // that broke it would go red rather than quietly leak balls into the wrong column.
+      ringRest: 0.62,
       ring100Fric: 0.06,
-      ring100Rest: 0.46,
+      ring100Rest: 0.62,
       deadFric: 0.06,
       deadRest: 0.32,
       backFric: 0,

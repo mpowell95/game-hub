@@ -61,8 +61,8 @@ await page.addInitScript(() => {
   } catch {}
 });
 await page.goto(`${BASE}/hoops4/`, { waitUntil: 'domcontentloaded' });
-await page.waitForSelector('.h4-setup', { timeout: 20000 });
-await page.click('.h4-setup .gh-btn-primary');
+await page.waitForSelector('.h4-play', { timeout: 20000 });
+await page.click('.h4-play');            // the setup screen's one primary action
 await page.waitForFunction(() => window.__h4Test && window.__h4Test.rend, null, { timeout: 30000 });
 await page.waitForTimeout(600);
 
@@ -226,8 +226,8 @@ if (!NO_SWIPE) {
   for (let c = 0; c < 7; c++) {
     // A fresh match per column, so a filling board can never starve the later ones.
     await page.evaluate(() => { const ui = window.__h4Test; ui.renderSetup(); });
-    await page.waitForSelector('.h4-setup .gh-btn-primary', { timeout: 10000 });
-    await page.click('.h4-setup .gh-btn-primary');
+    await page.waitForSelector('.h4-play', { timeout: 10000 });
+    await page.click('.h4-play');
     await page.waitForFunction(() => window.__h4Test && window.__h4Test.rend, null, { timeout: 30000 });
     await page.waitForTimeout(400);
     const pad = await page.locator('.h4-swipe').boundingBox();

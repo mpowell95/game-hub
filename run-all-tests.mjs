@@ -64,6 +64,7 @@ const SUITES = [
   { file: 'test-admin-config.mjs' },
   { file: 'test-messages.mjs' },
   { file: 'test-career-sync.mjs' },
+  { file: 'test-hoops4-mp.mjs' },
   { file: 'baseball/js/test.js' },
   // R2 (docs/BASEBALL-3D-BUILD.md section 9): `test-baseball-ring.mjs` was DELETED here. It existed
   // to prove the pitch meter's drawn Nice zone agreed with `flyPitch`'s own `wasNice`, and R2
