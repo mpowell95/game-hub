@@ -49,7 +49,7 @@ export function renderLayers(el, layers, onChange) {
     ['route', 'Route'],
     ['objects', 'Objects outlines'],
     ['trees', 'Trees'],
-    ['belts', 'Belts'],
+    ['belts', 'Tree lines'],
     ['slope', 'Slope arrows'],
     ['bounds', 'Bounds'],
     ['teePin', 'Tee & pin'],
