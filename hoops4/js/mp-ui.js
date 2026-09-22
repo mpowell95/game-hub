@@ -1,0 +1,247 @@
+// hoops4/js/mp-ui.js - the "Play a friend" screen: the two ways two people play Connect 4 Hoops.
+//
+// DOM ONLY. Every decision and every write is in `hoops4/js/mp.js` (turn by turn) or `js/net.js`
+// (live), the same split `js/messages-ui.js` keeps from `js/messages.js`. It is lazily imported by
+// `ui.js` so a solo player never downloads it.
+//
+// The two modes are genuinely different protocols and that is on purpose:
+//
+//   LIVE        js/net.js, `rooms/<CODE>`. Both people are looking at their phones. One hosts and
+//               reads out a five-character code, the other types it in. A shared, append-only
+//               move log keeps the two boards in lockstep. Needs no rules change to ship.
+//   TURN BY TURN  hoops4/js/mp.js, `hoops/games/<id>`. Addressed by PLAYER CODE, so the match
+//               follows a person to every device they own. You take your turn and hand it over;
+//               they play next time they open the hub. There is no push notification in this repo
+//               (js/CLAUDE.md says so in as many words), so the game waits for them on this list.
+import { makeT } from '../../js/i18n.js';
+import { STRINGS } from './strings.js';
+import { deviceId } from '../../js/game-stats.js';
+import * as MP from './mp.js';
+
+const t = makeT(STRINGS);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/**
+ * Open the sheet. `ui` is the Hoops4 instance; the only things this module calls on it are
+ * `on()` (so every listener is unbound by destroy()), `settings`, `startLive()` and
+ * `startAsync()`.
+ */
+export function openMultiplayer(ui) {
+  const el = document.createElement('div');
+  el.className = 'gh-overlay h4-sheet';
+  ui.root.appendChild(el);
+
+  const state = { view: 'home', busy: false, error: '', games: [], opponents: [], room: null };
+  let stopWatch = null;
+  let closed = false;
+  // ONCE. `shell()` re-renders in place and re-binds the backdrop each time, so by the third view
+  // there are three handlers on the same element - and without this guard a single tap on the
+  // backdrop would call leaveRoom() three times.
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (stopWatch) { try { stopWatch(); } catch {} stopWatch = null; }
+    // A room left on the lobby screen is abandoned rather than left waiting for somebody who
+    // will never arrive. leaveRoom() is safe to call on a room that was never created.
+    if (state.room && state.room.code && !state.room.started) {
+      import('../../js/net.js').then((net) => { try { net.leaveRoom(state.room.code, 'host'); } catch {} });
+    }
+    el.remove();
+  };
+
+  const oneShot = () => ui.settings && ui.settings.shots === 'one';
+
+  function shell(title, body, backTo) {
+    el.innerHTML = `
+      <div class="gh-modal h4-mp-sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+        <button type="button" class="gh-modal__close" data-act="close" aria-label="${t('close')}">&times;</button>
+        <h2 class="gh-modal__title">${esc(title)}</h2>
+        <div class="h4-mp-body">${body}</div>
+        ${backTo ? `<div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--block" data-act="back">${t('close')}</button></div>` : ''}
+      </div>`;
+    const closeBtn = el.querySelector('[data-act="close"]');
+    if (closeBtn) ui.on(closeBtn, 'click', close);
+    const back = el.querySelector('[data-act="back"]');
+    if (back) ui.on(back, 'click', () => go(backTo));
+    ui.on(el, 'click', (e) => { if (e.target === el) close(); });
+  }
+
+  function note(msg, kind) {
+    if (!msg) return '';
+    return `<p class="h4-mp-note${kind ? ' is-' + kind : ''}">${esc(msg)}</p>`;
+  }
+
+  // --- home ---------------------------------------------------------------------------------
+  async function viewHome() {
+    if (!MP.myCode()) {
+      shell(t('mp'), note(t('mpNeedName'), 'warn'));
+      return;
+    }
+    shell(t('mp'), `
+      <section class="h4-mp-sec">
+        <h3>${t('mpLive')}</h3>
+        <p class="h4-mp-sub">${t('mpLiveNote')}</p>
+        <div class="h4-mp-row">
+          <button type="button" class="gh-btn gh-btn--primary" data-go="host">${t('mpHost')}</button>
+          <button type="button" class="gh-btn" data-go="join">${t('mpJoin')}</button>
+        </div>
+      </section>
+      <section class="h4-mp-sec">
+        <h3>${t('mpTurns')}</h3>
+        <p class="h4-mp-sub">${t('mpTurnsNote')}</p>
+        <div class="h4-mp-row">
+          <button type="button" class="gh-btn gh-btn--primary" data-go="pick">${t('mpChallenge')}</button>
+        </div>
+        <div class="h4-mp-games" data-role="games"><p class="h4-mp-sub">${t('mpGames')}...</p></div>
+      </section>`);
+    for (const b of el.querySelectorAll('[data-go]')) ui.on(b, 'click', () => go(b.dataset.go));
+    // The list is filled in behind the painted screen rather than in front of it, the repo's own
+    // rule for a screen that waits on a read: name what replaces it, and when.
+    MP.drainOutbox().catch(() => {});
+    const rows = await MP.readMyGames();
+    const box = el.querySelector('[data-role="games"]');
+    if (!box) return;                                   // the sheet closed while the read was out
+    state.games = rows;
+    box.innerHTML = rows.length ? rows.map(gameRow).join('') : `<p class="h4-mp-sub">${t('mpNoGames')}</p>`;
+    for (const b of box.querySelectorAll('[data-game]')) {
+      ui.on(b, 'click', () => openGame(b.dataset.game));
+    }
+  }
+
+  function gameRow(r) {
+    const status = r.over ? t('mpOver')
+      : r.yourTurn ? t('mpYourMove')
+        : t('mpWaitingOn').replace('{who}', r.name || '?');
+    const cls = r.over ? 'is-over' : r.yourTurn ? 'is-yours' : 'is-theirs';
+    return `<button type="button" class="h4-mp-game ${cls}" data-game="${esc(r.id)}">
+        <span class="h4-mp-who"><span aria-hidden="true">${esc(r.emoji)}</span> ${esc(r.name || '?')}</span>
+        <span class="h4-mp-state">${esc(status)}</span>
+      </button>`;
+  }
+
+  // --- live: host ----------------------------------------------------------------------------
+  async function viewHost() {
+    shell(t('mpHost'), `<p class="h4-mp-sub">${t('mpWaiting')}</p>`, 'home');
+    const net = await import('../../js/net.js');
+    const me = { name: MP.meLabel().name, avatar: MP.meLabel().emoji, emoji: MP.meLabel().emoji, deviceId: deviceId() };
+    const res = await net.createRoom('hoops4', { oneShot: oneShot() }, me);
+    if (res.error || !res.code) { shell(t('mpHost'), note(t('mpLost'), 'warn'), 'home'); return; }
+    state.room = { code: res.code, role: 'host', started: false };
+    shell(t('mpHost'), `
+      <p class="h4-mp-sub">${t('mpCodeHint')}</p>
+      <p class="h4-mp-code" aria-label="${t('mpCode')}">${esc(res.code)}</p>
+      <p class="h4-mp-sub" data-role="status">${t('mpWaiting')}</p>`, 'home');
+    net.heartbeat(res.code, 'host');
+    stopWatch = await net.onRoom(res.code, (room) => {
+      if (!room || state.room.started) return;
+      if (room.guest && room.guest.deviceId) {
+        state.room.started = true;
+        if (stopWatch) { try { stopWatch(); } catch {} stopWatch = null; }
+        el.remove();
+        ui.startLive({
+          code: res.code, role: 'host', oneShot: oneShot(),
+          them: { name: room.guest.name || '', emoji: room.guest.emoji || '🙂' },
+        });
+      }
+    });
+  }
+
+  // --- live: join ----------------------------------------------------------------------------
+  function viewJoin() {
+    shell(t('mpJoin'), `
+      <label class="gh-field">
+        <span class="gh-field__label">${t('mpEnterCode')}</span>
+        <input class="gh-input h4-mp-input" type="text" inputmode="text" autocapitalize="characters"
+               autocomplete="off" spellcheck="false" maxlength="5" data-role="code">
+      </label>
+      <p class="h4-mp-note" data-role="err"></p>
+      <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="join">${t('mpJoinBtn')}</button>`, 'home');
+    const input = el.querySelector('[data-role="code"]');
+    const err = el.querySelector('[data-role="err"]');
+    const tryJoin = async () => {
+      if (state.busy) return;
+      state.busy = true;
+      err.textContent = '';
+      const net = await import('../../js/net.js');
+      const me = { name: MP.meLabel().name, avatar: MP.meLabel().emoji, emoji: MP.meLabel().emoji, deviceId: deviceId() };
+      const res = await net.joinRoom(String(input.value || '').trim().toUpperCase(), me);
+      state.busy = false;
+      if (res.error || !res.room) { err.textContent = t('mpBadCode'); return; }
+      const code = String(input.value || '').trim().toUpperCase();
+      net.heartbeat(code, 'guest');
+      el.remove();
+      ui.startLive({
+        code, role: 'guest',
+        // THE HOST'S CONFIG WINS. Both sides must agree on whether a miss passes the turn, or the
+        // two boards disagree about whose turn it is from the first airball onward.
+        oneShot: !!(res.room.config && res.room.config.oneShot),
+        them: { name: (res.room.host && res.room.host.name) || '', emoji: (res.room.host && res.room.host.emoji) || '🙂' },
+      });
+    };
+    ui.on(el.querySelector('[data-act="join"]'), 'click', tryJoin);
+    ui.on(input, 'keydown', (e) => { if (e.key === 'Enter') tryJoin(); });
+    try { input.focus(); } catch {}
+  }
+
+  // --- turn by turn: who ----------------------------------------------------------------------
+  async function viewPick() {
+    shell(t('mpPick'), `<p class="h4-mp-sub">${t('mpPick')}</p>`, 'home');
+    const list = await MP.readOpponents();
+    state.opponents = list;
+    shell(t('mpPick'), list.length ? `
+      <div class="h4-mp-games">${list.map((o, i) => `
+        <button type="button" class="h4-mp-game" data-who="${i}">
+          <span class="h4-mp-who"><span aria-hidden="true">${esc(o.emoji)}</span> ${esc(o.name)}</span>
+          <span class="h4-mp-state">${esc(o.code)}</span>
+        </button>`).join('')}</div>` : note(t('mpNoOne')), 'home');
+    for (const b of el.querySelectorAll('[data-who]')) {
+      ui.on(b, 'click', async () => {
+        if (state.busy) return;
+        state.busy = true;
+        const them = state.opponents[+b.dataset.who];
+        shell(t('mpChallenge'), `<p class="h4-mp-sub">${esc(them.name)}...</p>`, 'home');
+        const res = await MP.createGame({ them, oneShot: oneShot() });
+        state.busy = false;
+        if (!res.ok) { shell(t('mpChallenge'), note(failure(res.reason), 'warn'), 'home'); return; }
+        el.remove();
+        ui.startAsync(res.game);
+      });
+    }
+  }
+
+  async function openGame(id) {
+    if (state.busy) return;
+    state.busy = true;
+    const game = await MP.readGame(id);
+    state.busy = false;
+    if (!game) { shell(t('mpGames'), note(failure('not-found'), 'warn'), 'home'); return; }
+    el.remove();
+    ui.startAsync(game);
+  }
+
+  /** A denied write means `database.rules.json` has not been published yet. Say what is wrong
+   *  rather than showing a spinner for ever - "no silent write failures" (THE LAW rule 6). */
+  function failure(reason) {
+    // 'denied' means database.rules.json has not been published yet, and 'dev-origin-blocked'
+    // means this is localhost. Neither is "lost the connection", and saying so would send Matt
+    // looking for a network problem that is not there.
+    if (reason === 'denied' || reason === 'dev-origin-blocked') return t('mpUnavailable');
+    if (reason === 'offline' || reason === 'did-not-land') return t('mpOffline');
+    if (reason === 'no-player-code') return t('mpNeedName');
+    return t('mpLost');
+  }
+
+  function go(view) {
+    state.view = view;
+    if (view === 'host') return viewHost();
+    if (view === 'join') return viewJoin();
+    if (view === 'pick') return viewPick();
+    return viewHome();
+  }
+
+  go('home');
+  return { close };
+}
+
+export default { openMultiplayer };

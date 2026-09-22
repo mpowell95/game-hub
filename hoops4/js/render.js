@@ -88,6 +88,136 @@ export class Renderer {
     }
   }
 
+  /** Merge many tube segments (start/end/radius triples) into ONE buffer geometry, so a whole
+   *  netted basket costs one draw call instead of one mesh per strand. Ported verbatim from
+   *  skeeball/js/machines/basketball/render.js's own `_mergedTubes` - its guard is the reason it
+   *  exists: "the old ring-per-tube version was already ~180 draw calls for nine baskets before
+   *  a single strand existed." Seven hoops here, same rule. */
+  _mergedTubes(segs, defR, sides = 5) {
+    const tmpl = new THREE.CylinderGeometry(1, 1, 1, sides, 1, true);
+    const bp = tmpl.attributes.position.array;
+    const bn = tmpl.attributes.normal.array;
+    const bi = tmpl.index.array;
+    const pos = [];
+    const nor = [];
+    const idx = [];
+    const up = new THREE.Vector3(0, 1, 0);
+    const m = new THREE.Matrix4();
+    const nm = new THREE.Matrix3();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    for (const seg of segs) {
+      const a = seg[0];
+      const b = seg[1];
+      const r = seg[2] || defR;
+      const d = new THREE.Vector3().subVectors(b, a);
+      const len = d.length();
+      if (len < 1e-6) continue;
+      q.setFromUnitVectors(up, d.clone().divideScalar(len));
+      m.compose(a.clone().add(b).multiplyScalar(0.5), q, new THREE.Vector3(r, len, r));
+      nm.getNormalMatrix(m);
+      const off = pos.length / 3;
+      for (let i = 0; i < bp.length; i += 3) {
+        v.set(bp[i], bp[i + 1], bp[i + 2]).applyMatrix4(m);
+        pos.push(v.x, v.y, v.z);
+        v.set(bn[i], bn[i + 1], bn[i + 2]).applyMatrix3(nm).normalize();
+        nor.push(v.x, v.y, v.z);
+      }
+      for (let i = 0; i < bi.length; i++) idx.push(bi[i] + off);
+    }
+    tmpl.dispose();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setIndex(idx);
+    return geo;
+  }
+
+  /** One hoop's basket: the wire rim (on the PHYSICS collar radius - `machine.js`'s own `rr`, so
+   *  the wire drawn is the wire the ball rattles), a small bottom ring, tapered ribs, and a
+   *  netted taper of crossing strands. Same recipe as HOT SHOT's `_wireBasket`, adapted to this
+   *  cabinet's own local frame: the group this returns into is already positioned AT the rim
+   *  (see the build loop above - `H.collarH` is baked into the group's own position), so here
+   *  local y=0 IS the rim and the net simply tapers down to y=-depth.
+   *
+   *  PAINT ONLY: no geometry here changes `H.r`, `H.collarH` or any collider - MACHINE-SPEC's
+   *  "never change the width of a basket" rule is untouched; every number below is read from the
+   *  hole's own physics profile, never invented.
+   *
+   *  Two draw calls (`_mergedTubes` per colour), same as the torus-plus-line-cone build this
+   *  replaces - seven hoops stay at fourteen draw calls of hoop dressing either way. */
+  _wireBasket(H) {
+    const G = this.G, L = this.look;
+    // The physics collar's own radius (machine.js: `rr = H.r + G.collarThick / 2`), not the bare
+    // hole radius - so the rim you see is the rim the ball rattles.
+    const R = H.r + G.collarThick / 2;
+    // THE NET NEVER CLOSES TIGHTER THAN THE BALL (HOT SHOT's own fix, 2026-09-05): a taper drawn
+    // as a fixed proportion of the rim can narrow below the ball's own radius and end up drawing
+    // a scored ball passing THROUGH the wires. Floor it at the ball's own size instead.
+    const Rbot = Math.min(R, Math.max(R * 0.55, G.ballR * 1.05));
+    const depth = H.collarH * 1.15;
+    const P = (r, y, phi) => new THREE.Vector3(Math.cos(phi) * r, y, Math.sin(phi) * r);
+
+    const rimMat = new THREE.MeshStandardMaterial({
+      color: COL(L.ring), roughness: 0.45, metalness: 0.35,
+      emissive: COL(L.ring), emissiveIntensity: 0.18,
+    });
+    const wire = [];
+    const NR = this.soft ? 16 : 32;
+    for (let i = 0; i < NR; i++) {
+      const p0 = (i / NR) * Math.PI * 2;
+      const p1 = ((i + 1) / NR) * Math.PI * 2;
+      wire.push([P(R, 0, p0), P(R, 0, p1), 0.0062]);                  // the rim, on the physics profile
+      wire.push([P(Rbot, -depth, p0), P(Rbot, -depth, p1), 0.0034]);  // the small bottom ring
+    }
+    const RIBS = this.soft ? 6 : 10;
+    for (let i = 0; i < RIBS; i++) {                                  // tapered ribs between them
+      const a = (i / RIBS) * Math.PI * 2;
+      wire.push([P(R, 0, a), P(Rbot, -depth, a), 0.0030]);
+    }
+    const rim = new THREE.Mesh(this._mergedTubes(wire, 0.003), rimMat);
+    rim.castShadow = !this.soft;
+
+    // THE NET IS DARKER THAN THE RIM, ON PURPOSE - the reference's rims are PALE (see the `look`
+    // block's own comment), and a pale net on a pale rim is exactly the "fence, not a basket"
+    // failure Matt flagged. Derived from the same `net` token rather than a new colour, so there
+    // is still one place that says what colour the netting is.
+    const netCol = COL(L.net).lerp(new THREE.Color(0x100f0d), 0.75);
+    const netMat = new THREE.MeshStandardMaterial({
+      color: netCol, roughness: 0.9, metalness: 0.02, emissive: netCol, emissiveIntensity: 0.05,
+    });
+    // A basket deeper than its own radius reads knitted with three rings; this one is shallow
+    // enough that two is plenty - same call HOT SHOT's net makes, against this basket's collarH.
+    const rings = H.collarH > R * 1.4
+      ? [{ r: R, y: 0 }, { r: (R + Rbot) / 2, y: -depth * 0.5 }, { r: Rbot * 1.04, y: -depth + 0.004 }]
+      : [{ r: R, y: 0 }, { r: Rbot * 1.04, y: -depth + 0.004 }];
+    const netSegs = [];
+    const S = this.soft ? 6 : 9;
+    for (let b = 0; b < rings.length - 1; b++) {
+      const hi = rings[b], lo = rings[b + 1];
+      for (let i = 0; i < S; i++) {
+        const a = (i / S) * Math.PI * 2 + b * 0.35;
+        for (const dir of [1, -1]) {
+          const a2 = a + dir * ((Math.PI * 2) / S) * 0.6;
+          netSegs.push([P(hi.r, hi.y, a), P(lo.r, lo.y, a2)]);
+        }
+      }
+    }
+    for (let b = 1; b < rings.length - 1; b++) {                      // a ring at every crossing
+      const RS = this.soft ? 16 : 28;
+      for (let i = 0; i < RS; i++) {
+        const p0 = (i / RS) * Math.PI * 2;
+        const p1 = ((i + 1) / RS) * Math.PI * 2;
+        netSegs.push([P(rings[b].r, rings[b].y, p0), P(rings[b].r, rings[b].y, p1)]);
+      }
+    }
+    const net = new THREE.Mesh(this._mergedTubes(netSegs, 0.0027), netMat);
+    net.castShadow = !this.soft;
+
+    this._trash.push(rim.geometry, rimMat, net.geometry, netMat);
+    return { rim, rimMat, net };
+  }
+
   _build() {
     const G = this.G, M = this.M, L = this.look;
 
@@ -160,33 +290,14 @@ export class Renderer {
       // backwards into the cabinet. Matt: "You put the baskets backwards".
       g.rotation.x = fr.tilt;
 
-      const rimGeo = new THREE.TorusGeometry(H.r, 0.008, 8, 28);
-      const rimMat = new THREE.MeshStandardMaterial({
-        color: COL(L.ring), roughness: 0.45, metalness: 0.35,
-        emissive: COL(L.ring), emissiveIntensity: 0.18,
-      });
-      const rim = new THREE.Mesh(rimGeo, rimMat);
-      rim.rotation.x = Math.PI / 2;
+      // A REAL WIRE BASKET, not a bare torus + a cone of lines (Matt: "the baskets are not as
+      // good as hot shot"). Ported from skeeball/js/machines/basketball/render.js's own
+      // `_wireBasket`/`_mergedTubes`: the rim on the physics collar radius, a small bottom ring,
+      // tapered ribs, and a netted taper of crossing strands - the thing that makes a hoop read
+      // as a basket. See `_wireBasket` below for why it stays two draw calls per hoop.
+      const { rim, rimMat, net } = this._wireBasket(H);
       g.add(rim);
-      this._trash.push(rimGeo, rimMat);
-
-      // the net: a cone of line segments, one merged buffer (never a mesh per strand)
-      const pts = [];
-      const N = 12, depth = H.collarH * 1.7;
-      for (let i = 0; i < N; i++) {
-        const a = (i / N) * Math.PI * 2;
-        const a2 = ((i + 1) / N) * Math.PI * 2;
-        const rTop = H.r, rBot = H.r * 0.55;
-        pts.push(rTop * Math.cos(a), 0, rTop * Math.sin(a));
-        pts.push(rBot * Math.cos(a), -depth, rBot * Math.sin(a));
-        pts.push(rBot * Math.cos(a), -depth, rBot * Math.sin(a));
-        pts.push(rBot * Math.cos(a2), -depth, rBot * Math.sin(a2));
-      }
-      const netGeo = new THREE.BufferGeometry();
-      netGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-      const netMat = new THREE.LineBasicMaterial({ color: COL(L.net), transparent: true, opacity: 0.8 });
-      g.add(new THREE.LineSegments(netGeo, netMat));
-      this._trash.push(netGeo, netMat);
+      g.add(net);
 
       this.scene.add(g);
       this.rims[id] = { group: g, rim, mat: rimMat };

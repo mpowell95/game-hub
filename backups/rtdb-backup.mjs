@@ -57,6 +57,9 @@ export const BRANCHES = [
   'players', 'usernames', 'rooms', 'adminConfig', 'admins', 'archive',
   'bugReports', 'bugReportShots', 'bugReplies', 'deviceReports',
   'skeeballThrows', 'challenge', 'flight', 'selfies',
+  // hoops/ (2026-09-22): Connect 4 Hoops' turn-by-turn matches and their per-player index. Same
+  // auth shape as players/ - readable by any signed-in anonymous session.
+  'hoops',
   // careers/ (BB-0-phase-0-handoff.md): Baseball's career sync. Same auth shape as players/ etc -
   // readable by any signed-in anonymous session - so it reads normally here, unlike messages/ below.
   'careers',

@@ -22,15 +22,37 @@ let instance = null;
 const readSettings = () => {
   try {
     const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-    return { opponent: [1, 2, 3, 'two'].includes(raw.opponent) ? raw.opponent : 2 };
-  } catch { return { opponent: 2 }; }
+    return {
+      opponent: [1, 2, 3, 'two'].includes(raw.opponent) ? raw.opponent : 2,
+      // 'until' = shoot until you sink one (the original rule), 'one' = one shot and the turn
+      // passes. Matt asked for both, especially for multiplayer. Anything unrecognised falls
+      // back to 'until' so a bad key can never leave a player unable to end a turn.
+      shots: raw.shots === 'one' ? 'one' : 'until',
+    };
+  } catch { return { opponent: 2, shots: 'until' }; }
 };
 const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
 
-/** Inject the stylesheet once per PAGE. Module stylesheets are never removed on destroy() - they
- *  live in the shared document.head for the life of the page (a hub-wide fact), which is why
- *  every rule is scoped under .h4-root. */
+/** Inject the shared primitives (css/ui.css) idempotently, THEN this game's own sheet. Module
+ *  stylesheets are never removed on destroy() - they live in the shared document.head for the
+ *  life of the page (a hub-wide fact), which is why every rule is scoped under .h4-root. Same
+ *  injection marker skeeball/js/ui.js, pipes/js/ui.js and bug-report-ui.js use, so a page that
+ *  already loaded css/ui.css for another reason never double-loads it. */
 function ensureCSS() {
+  // Matched by RESOLVED HREF as well as by marker attribute: hoops4/index.html links
+  // ../css/ui.css itself for the standalone page, with no marker attribute at all. Marker-only
+  // matching would load a second, identical copy of it there (skeeball/js/ui.js's own guard,
+  // same reason).
+  const uiHref = new URL('../../css/ui.css', import.meta.url).href;
+  const hasUi = document.head.querySelector('link[data-gh-ui-css="1"]')
+    || [...document.head.querySelectorAll('link[rel="stylesheet"]')].some((l) => l.href === uiHref);
+  if (!hasUi) {
+    const ui = document.createElement('link');
+    ui.rel = 'stylesheet';
+    ui.href = uiHref;
+    ui.setAttribute('data-gh-ui-css', '1');
+    document.head.appendChild(ui);
+  }
   if (document.head.querySelector('[' + CSS_MARK + ']')) return Promise.resolve();
   return new Promise((res) => {
     const link = document.createElement('link');
@@ -54,6 +76,10 @@ class Hoops4 {
     this.offViewport = null;
     this.engine = null;
     this.recorded = false;
+    this.mp = null;          // null | {kind:'live',...} | {kind:'async',...}
+    this.myPlayer = RED;     // which side THIS device plays in a multiplayer match
+    this.net = null;
+    this._roomStop = null;
     this.busy = false;
     this._bound = [];
   }
@@ -76,24 +102,49 @@ class Hoops4 {
   }
 
   // --- the setup screen -----------------------------------------------------------------------
+  // Built on css/ui.css's shared primitives (.gh-card, .gh-btn) rather than the bespoke dark
+  // card this screen used to be - Matt: "it looks nothing like the others. it's not on the
+  // theme or on brand of the game hub at all." The setup and how-to screens are HUB-SKINNED
+  // (light --h4s-* tokens on .h4-root, :root.gh-dark override, hoops4.css's own header) exactly
+  // like skeeball's gallery/how-to; the PLAY screen below keeps its own dark arcade look in both
+  // themes, unchanged.
   renderSetup() {
     if (this.disposed) return;
     this.stopLoop();
     const s = this.settings;
-    const opt = (v, label) =>
-      `<button type="button" class="gh-btn h4-opt${s.opponent === v ? ' is-on' : ''}" data-opp="${v}">${label}</button>`;
+    // The selected option is marked by a BORDER, A WEIGHT AND A CHECKMARK, never colour alone
+    // (Matt is red/green colorblind - root CLAUDE.md's accessibility conventions).
+    const check = '<span class="h4-opt-check" aria-hidden="true">&check;</span>';
+    const opt = (v, label) => {
+      const on = s.opponent === v;
+      return `<button type="button" class="gh-btn h4-opt${on ? ' is-on' : ''}" data-opp="${v}" aria-pressed="${on}">${on ? check : ''}${label}</button>`;
+    };
+    const shotOpt = (v, label) => {
+      const on = s.shots === v;
+      return `<button type="button" class="gh-btn h4-opt${on ? ' is-on' : ''}" data-shots="${v}" aria-pressed="${on}">${on ? check : ''}${label}</button>`;
+    };
     this.root.innerHTML = `
       <div class="h4-setup">
         <h1 class="h4-title">${t('title')}</h1>
         <p class="h4-tag">${t('tagline')}</p>
-        <div class="h4-card">
-          <p class="h4-label">${t('opponent')}</p>
-          <div class="h4-opts">
-            ${opt(1, t('cpu1'))}${opt(2, t('cpu2'))}${opt(3, t('cpu3'))}${opt('two', t('twoPlayer'))}
+        <div class="gh-card h4-card">
+          <div class="h4-row">
+            <p class="h4-row-label">${t('opponent')}</p>
+            <div class="h4-opts h4-opts-4">
+              ${opt(1, t('cpu1'))}${opt(2, t('cpu2'))}${opt(3, t('cpu3'))}${opt('two', t('twoPlayer'))}
+            </div>
+            <p class="h4-note">${t('cpuNote')}</p>
           </div>
-          <p class="h4-note">${t('cpuNote')}</p>
+          <div class="h4-row">
+            <p class="h4-row-label">${t('shotMode')}</p>
+            <div class="h4-opts h4-opts-2">
+              ${shotOpt('until', t('shotsUntil'))}${shotOpt('one', t('shotsOne'))}
+            </div>
+            <p class="h4-note">${t('shotModeNote')}</p>
+          </div>
         </div>
-        <button type="button" class="gh-btn gh-btn-primary h4-play">${t('play')}</button>
+        <button type="button" class="gh-btn gh-btn--primary h4-play">${t('play')}</button>
+        <button type="button" class="gh-btn h4-mp">${t('mp')}</button>
         <button type="button" class="h4-howto-link">${t('howto')}</button>
       </div>`;
     for (const b of this.root.querySelectorAll('[data-opp]')) {
@@ -104,25 +155,180 @@ class Hoops4 {
         this.renderSetup();
       });
     }
+    for (const b of this.root.querySelectorAll('[data-shots]')) {
+      this.on(b, 'click', () => {
+        this.settings.shots = b.dataset.shots === 'one' ? 'one' : 'until';
+        writeSettings(this.settings);
+        this.renderSetup();
+      });
+    }
     this.on(this.root.querySelector('.h4-play'), 'click', () => this.start());
+    this.on(this.root.querySelector('.h4-mp'), 'click', () => this.showMultiplayer());
     this.on(this.root.querySelector('.h4-howto-link'), 'click', () => this.showHowto());
+  }
+
+  /** The multiplayer sheet: host or join a live game, or hand a turn-by-turn match over.
+   *  Lazily imported so a solo player never downloads it. */
+  async showMultiplayer() {
+    try {
+      const mod = await import('./mp-ui.js');
+      if (this.disposed) return;
+      mod.openMultiplayer(this);
+    } catch (err) {
+      console.error('[hoops4] could not open multiplayer', err);
+      this.toast(t('mpLost'));
+    }
+  }
+
+  // --- multiplayer: the two ways two people play it -------------------------------------------
+  //
+  // Both end up in the SAME match loop. The only thing `this.mp` changes is who may shoot, and
+  // what happens to a shot once it has settled - see `_sendShot` and `_applyRemote` below. The
+  // rules themselves are `js/game.js`'s, on both devices, driven by the same move list.
+
+  /** A LIVE room (js/net.js). The host is RED and shoots first; the guest is YELLOW. */
+  async startLive({ code, role, oneShot, them }) {
+    try {
+      this.net = await import('../../js/net.js');
+    } catch (err) {
+      console.error('[hoops4] net.js failed to load', err);
+      this.renderSetup();
+      return;
+    }
+    if (this.disposed) return;
+    // `applied` is BOTH the number of log entries this device has consumed and the sequence
+    // number its next append will use. One counter, so a move can never be applied twice or
+    // written over the other person's.
+    this.mp = { kind: 'live', code, role, applied: 0, them: them || null };
+    this.myPlayer = role === 'host' ? RED : YELLOW;
+    await this.start({ vsCpu: false, oneShot: !!oneShot, keepMp: true });
+    if (this.disposed || !this.match) return;
+    if (role === 'host') { try { await this.net.startRound(code, 1, null, 0); } catch { /* the room is already active */ } }
+    try { this._roomStop = await this.net.onRoom(code, (room) => this._onRoom(room)); }
+    catch (err) { console.error('[hoops4] could not watch the room', err); }
+  }
+
+  /** A TURN-BY-TURN match (hoops4/js/mp.js). The board is REPLAYED from the move log - there is
+   *  no stored position, because a log is the thing that cannot silently be subtly wrong. */
+  async startAsync(game) {
+    const MP = await import('./mp.js');
+    if (this.disposed) return;
+    const side = MP.sideOf(game, MP.myCode());
+    if (!side) { this.renderSetup(); return; }
+    this.mp = { kind: 'async', id: game.id, side, game, MP, sent: false };
+    this.myPlayer = side === 'a' ? RED : YELLOW;
+    await this.start({ vsCpu: false, oneShot: !!game.oneShot, keepMp: true, replay: (m) => MP.replay(m, game) });
+    if (this.disposed || !this.match) return;
+    if (game.over) { this.finish(); return; }
+    if (!this.isMyShot()) this.toast(t('mpTheirTurn'));
+  }
+
+  /** May this device shoot right now? Solo and two-players-on-one-phone: always. Multiplayer:
+   *  only on this player's own turn. This is the ONE gate - `shoot()` asks it, so the swipe pad,
+   *  the CPU and any future control all answer to the same rule. */
+  isMyShot() {
+    if (!this.match || this.match.over) return false;
+    if (!this.mp) return true;
+    return this.match.turn === this.myPlayer;
+  }
+
+  /** One entry of the shared move log arrived from the other device. */
+  _onRoom(room) {
+    if (!room || !this.mp || this.mp.kind !== 'live' || !this.match) return;
+    const log = room.moves || {};
+    // STRICTLY IN ORDER, and only once. Out-of-order or duplicated application is how two boards
+    // stop being the same board, which is the failure every lockstep invariant in js/CLAUDE.md
+    // was written for.
+    for (const key of Object.keys(log).sort()) {
+      const entry = log[key];
+      if (!entry || entry.seq !== this.mp.applied) continue;
+      this.mp.applied++;
+      if (entry.by === this.mp.role) continue;        // this device already applied its own shot
+      this._applyRemote(entry.move);
+    }
+    if (room.status === 'ended' && this.match && !this.match.over) this.toast(t('mpLost'));
+  }
+
+  /** Apply the other player's shot to this board, and paint exactly what a local one paints. */
+  _applyRemote(move) {
+    const m = this.match;
+    if (!m || m.over) return;
+    const res = (move && Number.isInteger(move.col)) ? m.land(move.col) : m.miss();
+    this._paintShot(res);
+    if (m.over) this.finish();
+  }
+
+  /** Send this device's settled shot. Live: append to the room's log. Turn by turn: push the move
+   *  and hand the match over. */
+  async _sendShot(res) {
+    const mp = this.mp;
+    if (!mp) return;
+    const landed = res.type === 'move' || res.type === 'win' || res.type === 'draw';
+    const col = landed ? res.col : null;
+
+    if (mp.kind === 'live') {
+      const move = landed ? { col } : { miss: true };
+      try {
+        await this.net.appendMove(mp.code, mp.role, mp.applied, move, 0);
+        mp.applied++;
+      } catch (err) {
+        console.error('[hoops4] could not send the move', err);
+        this.toast(t('mpOffline'));
+      }
+      return;
+    }
+
+    // TURN BY TURN. A miss is only worth sending when it PASSED the turn (one-shot); under
+    // shoot-until-you-make-it it changes nothing the other person can see.
+    const passed = !!res.passed;
+    if (!landed && !passed) return;
+    const m = this.match;
+    const over = m.over
+      ? { winner: m.winner === null ? null : (m.winner === RED ? 'a' : 'b'), why: m.winner === null ? 'full' : 'four' }
+      : null;
+    const payload = { col: landed ? col : null, shots: res.shots || 1, passed, over };
+    const r = await mp.MP.pushMove(mp.id, payload);
+    if (!r.ok) {
+      // KEPT, not lost: a turn somebody actually took is retried on the next open. And the screen
+      // SAYS SO - the first cut toasted "Sent. They play next." on top of the failure message a
+      // line later, which is a silent write failure wearing a confirmation (THE LAW rule 6).
+      if (r.retryable) { mp.MP.queueMove(mp.id, payload); this.toast(t('mpOffline')); }
+      else this.toast(t('mpUnavailable'));
+      return;
+    }
+    mp.game = r.game;
+    if (!m.over) { mp.sent = true; this.toast(t('mpSent')); }
   }
 
   showHowto() {
     const el = document.createElement('div');
-    el.className = 'h4-sheet';
-    el.innerHTML = `<div class="h4-sheet-in" role="dialog" aria-modal="true" aria-label="${t('howto')}">
-        <h2>${t('howto')}</h2><p>${t('howtoBody')}</p>
-        <button type="button" class="gh-btn h4-sheet-x">${t('close')}</button></div>`;
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal h4-sheet-in" role="dialog" aria-modal="true" aria-label="${t('howto')}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <h2 class="gh-modal__title">${t('howto')}</h2>
+        <p class="h4-sheet-body">${t('howtoBody')}</p>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-sheet-close">${t('close')}</button>
+        </div>
+      </div>`;
     this.root.appendChild(el);
-    this.on(el.querySelector('.h4-sheet-x'), 'click', () => el.remove());
-    this.on(el, 'click', (e) => { if (e.target === el) el.remove(); });
+    const close = () => el.remove();
+    this.on(el.querySelector('[data-role="close"]'), 'click', close);
+    this.on(el.querySelector('.h4-sheet-close'), 'click', close);
+    this.on(el, 'click', (e) => { if (e.target === el) close(); });
   }
 
   // --- the match --------------------------------------------------------------------------------
-  async start() {
-    const vsCpu = this.settings.opponent !== 'two';
-    this.match = new Match({ vsCpu, cpuSkill: vsCpu ? this.settings.opponent : 2 });
+  async start(opts = {}) {
+    // A fresh solo match clears any multiplayer state; startLive/startAsync pass keepMp so their
+    // own setup survives. Without that, "Play again" after a live match would silently keep
+    // appending to a room nobody is in.
+    if (!opts.keepMp) { this.mp = null; this.myPlayer = RED; this._stopRoom(); }
+    const vsCpu = opts.vsCpu === undefined ? this.settings.opponent !== 'two' : !!opts.vsCpu;
+    const oneShot = opts.oneShot === undefined ? this.settings.shots === 'one' : !!opts.oneShot;
+    this.match = new Match({ vsCpu, cpuSkill: vsCpu ? this.settings.opponent : 2, oneShot });
+    if (typeof opts.replay === 'function') opts.replay(this.match);
     this.cpu = vsCpu ? new Cpu(this.settings.opponent) : null;
     this.recorded = false;
     this.renderPlay();
@@ -181,8 +387,12 @@ class Hoops4 {
     const who = this.root.querySelector('.h4-who');
     const sh = this.root.querySelector('.h4-shots');
     if (!who || !sh) return;
-    const mine = m.turn === RED;
-    const label = m.vsCpu ? (mine ? t('yourTurn') : t('theirTurn')) : (mine ? t('red') : t('yellow'));
+    // In multiplayer "mine" is THIS DEVICE's side, which is YELLOW for a guest - reading it off
+    // RED would tell the guest it was their turn on every one of the host's.
+    const mine = this.mp ? (m.turn === this.myPlayer) : (m.turn === RED);
+    const label = (m.vsCpu || this.mp)
+      ? (mine ? t('yourTurn') : t('theirTurn'))
+      : (m.turn === RED ? t('red') : t('yellow'));
     who.textContent = label;
     who.className = 'h4-who ' + (mine ? 'is-red' : 'is-yellow');
     sh.textContent = m.shotsThisTurn ? `${t('shots')} ${m.shotsThisTurn}` : '';
@@ -241,6 +451,7 @@ class Hoops4 {
 
   shoot(power, aim) {
     if (this.busy || !this.engine || !this.match || this.match.over) return;
+    if (!this.isMyShot()) return;
     this.busy = true;
     // A FRESH SEED PER SHOT is what makes the release imperfect (boarddef's jitter*). Passing a
     // seed is opt-in at the engine, so every headless probe stays exactly deterministic.
@@ -301,19 +512,25 @@ class Hoops4 {
       res = m.miss();
     }
     this.busy = false;
+    this._paintShot(res);
+    if (this.mp) this._sendShot(res);
 
+    if (m.over) { this.finish(); return; }
+    this.maybeCpu();
+  }
+
+  /** Everything a settled shot changes on screen. Shared by a local shot and a remote one, so the
+   *  two devices in a live match cannot paint different things for the same move. */
+  _paintShot(res) {
+    const m = this.match;
     if (res.type === 'miss') { this.toast(t('miss')); }
     else if (res.type === 'full') { this.toast(t('full')); }
     else { this.toast(t('inCol').replace('{n}', String(res.col + 1))); }
-
     if (this.rend) {
       this.rend.setGrid(m.cells(), res.type === 'win' ? res.cells : null);
       this.rend.setBallColor(m.turn === RED ? BOARD.look.red : BOARD.look.yellow);
     }
     this.paintHud();
-
-    if (m.over) { this.finish(); return; }
-    this.maybeCpu();
   }
 
   finish() {
@@ -324,13 +541,18 @@ class Hoops4 {
       this.recorded = true;
       const r = m.result();
       try {
-        if (m.vsCpu) recordResult('hoops4', ['easy', 'medium', 'hard'][this.settings.opponent - 1] || 'medium', r.won);
+        // 'mp' is the repo's own difficulty for a multiplayer match (js/game-stats.js) - it is
+        // unmapped in js/difficulty-tiers.js, so it never lands in a difficulty tier. A
+        // two-players-on-one-phone match records nothing, because there is no "you" in it.
+        if (this.mp) recordResult('hoops4', 'mp', m.winner === this.myPlayer);
+        else if (m.vsCpu) recordResult('hoops4', ['easy', 'medium', 'hard'][this.settings.opponent - 1] || 'medium', r.won);
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }
     const r = m.result();
     const acc = r.myShots ? Math.round((100 * r.myDiscs) / r.myShots) : 0;
     let head;
     if (m.winner === null) head = t('draw');
+    else if (this.mp) head = m.winner === this.myPlayer ? t('youWin') : t('youLose');
     else if (m.vsCpu) head = m.winner === RED ? t('youWin') : t('youLose');
     else head = m.winner === RED ? t('redWins') : t('yellowWins');
 
@@ -347,7 +569,10 @@ class Hoops4 {
       </div>`;
     this.root.appendChild(card);
     this.on(card.querySelector('.h4-x'), 'click', () => card.remove());
-    this.on(card.querySelector('.h4-again'), 'click', () => { card.remove(); this.start(); });
+    const again = card.querySelector('.h4-again');
+    // "Play again" restarts a SOLO match. In multiplayer there is nobody on the other end of it -
+    // a rematch is a new room or a new challenge - so the button quits to the setup screen.
+    if (again) this.on(again, 'click', () => { card.remove(); if (this.mp) { this.teardownEngine(); this.renderSetup(); } else this.start(); });
     this.on(card.querySelector('.h4-quit'), 'click', () => { card.remove(); this.teardownEngine(); this.renderSetup(); });
   }
 
@@ -358,7 +583,21 @@ class Hoops4 {
     this.rend.resize(Math.max(1, Math.round(r.width)), Math.max(1, Math.round(r.height)));
   }
 
+  /** Detach from a live room, and end it for the other person too. A room nobody is in must not
+   *  sit there looking joinable. */
+  _stopRoom() {
+    if (this._roomStop) { try { this._roomStop(); } catch {} this._roomStop = null; }
+    const mp = this.mp;
+    if (this.net && mp && mp.kind === 'live' && mp.code) {
+      try { this.net.leaveRoom(mp.code, mp.role); } catch {}
+    }
+    if (this.net) { try { this.net.stopHeartbeat(); } catch {} }
+  }
+
   teardownEngine() {
+    this._stopRoom();
+    this.mp = null;
+    this.myPlayer = RED;
     this.stopLoop();
     if (this.offViewport) { try { this.offViewport(); } catch {} this.offViewport = null; }
     if (this._cpuT) { clearTimeout(this._cpuT); this._cpuT = 0; }

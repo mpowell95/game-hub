@@ -577,6 +577,7 @@ working in that folder).
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive, **multiplayer at 2-4 seats** (save key `escoba-save`, MP field) | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
 | Filler | in-hub `module:`, **multiplayer** (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
+| Connect 4 Hoops | in-hub `module:`, immersive, **multiplayer, two protocols** (live rooms via `js/net.js`; turn-by-turn via `hoops/games/<id>`, its own node), **admin only** (`devOnly`) | `.h4-root` / `.h4-` | `gamehub.hoops4.v1` | `recordResult('hoops4', …)` |
 | Hill Climb | in-hub `module:`, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
 | Monopoly Deal | launch-out `href:` (in-repo `business-deal/`, own nested SW) | n/a (own page) | its own keys | `window.__ghStats` → `'business'` |
@@ -714,6 +715,12 @@ Two knock-on effects, because a granted ancestor `.read` cascades and cannot be 
 **The rules are published by hand** (console → Realtime Database → Rules → paste → Publish); no
 script in this repo deploys them. Deploy the app first, the rules second: a device claims itself on
 its next hub load.
+
+**OUTSTANDING, 2026-09-22: `hoops` is in `database.rules.json` and has NOT been published.** It is
+Connect 4 Hoops' turn-by-turn multiplayer (`hoops/games/<id>` plus a per-player index). Until the
+file is pasted into the console, that half of the game fails softly and says so on screen - a
+denied write is deliberately not retryable, so nothing piles up in an outbox. Its LIVE multiplayer
+uses `rooms/`, which is already enumerated, and works without the paste.
 
 ## Deleting a device's history, and the rate gate (2026-09-12)
 

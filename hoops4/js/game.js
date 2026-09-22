@@ -11,12 +11,17 @@ export const RED = PLAYER_ONE;
 export const YELLOW = PLAYER_TWO;
 
 export class Match {
-  /** @param {object} opts  { vsCpu:boolean, cpuSkill:number, first:0|1 } */
+  /** @param {object} opts  { vsCpu:boolean, cpuSkill:number, first:0|1, oneShot:boolean } */
   constructor(opts = {}) {
     this.board = new Board();
     this.vsCpu = !!opts.vsCpu;
     this.cpuSkill = opts.cpuSkill ?? 2;
     this.first = opts.first === 1 ? 1 : 0;
+    // ONE SHOT, OR SHOOT UNTIL YOU MAKE IT. Matt asked for both, "especially for the
+    // multiplayer" - and that is the reason it lives on the MATCH rather than in the UI: under
+    // one-shot a miss PASSES THE TURN, which is a rule of the game, and in a multiplayer match
+    // both sides have to agree on it or their boards diverge on the first airball.
+    this.oneShot = !!opts.oneShot;
     this.turn = this.first;
     this.over = false;
     this.winner = null;         // 0 | 1 | null (null with over=true means a draw)
@@ -31,12 +36,22 @@ export class Match {
 
   isCpuTurn() { return this.vsCpu && this.turn === YELLOW && !this.over; }
 
-  /** A shot was taken and went nowhere. THE TURN DOES NOT PASS. */
+  /** A shot was taken and went nowhere. Under shoot-until-you-make-it the turn does NOT pass;
+   *  under one-shot it does, and that is the whole difference between the two modes. */
   miss() {
     if (this.over) return { type: 'miss' };
     this.shotsThisTurn++;
     this.shots[this.turn]++;
-    return { type: 'miss', shots: this.shotsThisTurn };
+    if (!this.oneShot) return { type: 'miss', shots: this.shotsThisTurn };
+    return { type: 'miss', shots: this.shotsThisTurn, ...this._passTurn() };
+  }
+
+  /** Hand the turn over. Shared by a one-shot miss and a one-shot shot into a full column, so
+   *  the two cannot drift apart. It never ends the match: only a win or a full board does. */
+  _passTurn() {
+    this.turn = this.turn === RED ? YELLOW : RED;
+    this.shotsThisTurn = 0;
+    return { passed: true, next: this.turn };
   }
 
   /**
@@ -52,7 +67,10 @@ export class Match {
     this.shotsThisTurn++;
     this.shots[this.turn]++;
     if (!this.board.canPlay(col)) {
-      return { type: 'full', col, shots: this.shotsThisTurn };
+      // A ball went in, but that column has no room, so there is no move to make. It is scored
+      // as a miss - and under one-shot a miss costs the turn, exactly like an airball does.
+      const full = { type: 'full', col, shots: this.shotsThisTurn };
+      return this.oneShot ? { ...full, ...this._passTurn() } : full;
     }
     const by = this.turn;
     const row = this.board.heights[col];
