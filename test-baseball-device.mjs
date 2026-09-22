@@ -37,7 +37,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const BASE = 'http://localhost:8123';
+const BASE = process.env.BB_BASE || 'http://localhost:8123';
 let failed = 0;
 const ok = (label) => console.log(`ok    ${label}`);
 const fail = (label, why) => { failed++; console.log(`FAIL  ${label}: ${why}`); };
@@ -725,6 +725,12 @@ await ctx.close();
         const root = document.querySelector('.hub-game');
         const hsBtn = root && root.querySelector('[data-league="highschool"]');
         if (hsBtn) hsBtn.click();
+        // R14 (docs/BASEBALL-3D-BUILD.md section 9): the league click above already recomputed the
+        // Quick Play build's pitchSpin for High School's own budget/cap - zero it back out with the
+        // dev seam so the break this probe reads is BREAK_OFFSET's own raw table, not that table
+        // widened by whatever pitchSpin points the current preset happens to carry. AFTER the
+        // league click, never before it (a league change re-scales the preset and would clobber it).
+        if (window.__bbTest && window.__bbTest.setBuild) window.__bbTest.setBuild({ skills: { pitchSpin: 0 } });
         const btn = root && root.querySelector('.bb-play-btn');
         if (btn) btn.click();
         return !!btn;
@@ -2394,6 +2400,293 @@ if (!process.env.BB_DEVICE_QUICK) {
     }
   }
   await p22.close();
+}
+
+// ==================================================================================================
+// R15-B (docs/BASEBALL-3D-BUILD.md section 9, "R15"): the career screens. Every probe here uses the
+// dev-only `window.__bbTest.newCareerNow`/`scriptSeason`/`careerState` seams (ui.js's own R15-B
+// section) so a probe reaches career home, a resumed game or a resolved season without playing a
+// real season by hand. `window.__bbDevForce = true` in `addInitScript` is the same dev-gate override
+// every other probe in this file already uses.
+
+// A career needs a player CODE (`profile.playerId`, minted by the real name gate on a fresh
+// device) - `startCareer` refuses without one (`myCode()`, js/messages.js). Every other probe in
+// this file never needed a career, so none of them set one; these do, one distinct 5-char code
+// per probe (the CODE_ALPHABET js/profile-store.js/js/messages.js's CODE_RE both use).
+//
+// `page.addInitScript` re-runs before EVERY navigation on that page, not just the first - so
+// `career-resume`'s own deliberate second `mountInHub()` call (a fresh `page.goto`, simulating
+// "force close and reopen") re-ran this same script and, on its first cut, wiped
+// `gamehub.baseball.v1` (CAREER_LOCAL_KEY, js/career-store.js) right back out from under the very
+// resume it was trying to prove - a real bug in the harness, not a timing race (the first fix
+// attempt, a longer `waitForSelector` before the click, still failed for this reason: the button
+// never rendered because `this.career` was null again, not because it rendered late). The clear
+// is guarded by a one-time localStorage flag so it fires on the FIRST load of a probe's page
+// (clearing any stale save left by an earlier run of this suite) and never again on that same
+// page's later navigations, which is what a real "force close and reopen" preserves.
+function bbProfileInit() {
+  return ({ name, code }) => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name, playerId: code, emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    if (!localStorage.getItem('__bbTestInitDone')) {
+      for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\.|gamehub\.baseball\.v1|gamehub\.careerSync/.test(k)) localStorage.removeItem(k);
+      localStorage.setItem('__bbTestInitDone', '1');
+    }
+    window.__bbDevForce = true;
+  };
+}
+
+// -------------------------------------------------------------------------------- career-home
+{
+  const ctxH = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageH = await ctxH.newPage();
+  await pageH.addInitScript(bbProfileInit(), { name: 'Career Home Test', code: 'BBHM9' });
+  const mountErrH = await mountInHub(pageH);
+  if (mountErrH) {
+    fail('career-home', `mount failed: ${mountErrH}`);
+  } else {
+    const startErr = await pageH.evaluate(async () => {
+      if (!window.__bbTest || !window.__bbTest.newCareerNow) return 'no __bbTest.newCareerNow seam';
+      const st = await window.__bbTest.newCareerNow();
+      return st ? null : 'newCareerNow returned null';
+    });
+    if (startErr) {
+      fail('career-home', startErr);
+    } else {
+      await pageH.waitForTimeout(300);
+      const res = await pageH.evaluate(() => {
+        const chip = document.querySelector('[data-act="career-player"]');
+        const ladderSteps = document.querySelectorAll('.bb-ladder-step').length;
+        const standingRows = document.querySelectorAll('.bb-standing-row').length;
+        const trophies = document.querySelectorAll('.bb-trophy').length;
+        const primary = document.querySelector('[data-act="career-primary"]');
+        const retire = document.querySelector('[data-act="career-retire"]');
+        const controls = [chip, primary, retire].filter(Boolean).map((el) => {
+          const r = el.getBoundingClientRect();
+          return Math.min(r.width, r.height);
+        });
+        const de = document.documentElement;
+        return {
+          hasChip: !!chip, ladderSteps, standingRows, trophies,
+          hasPrimary: !!primary, primaryText: primary && primary.textContent.trim(),
+          hasRetire: !!retire, retireText: retire && retire.textContent.trim(),
+          minControl: controls.length ? Math.min(...controls) : 0,
+          pageOverflow: de.scrollHeight - window.innerHeight,
+        };
+      });
+      if (!res.hasChip) fail('career-home', 'no player chip on career home');
+      else if (res.ladderSteps !== 5) fail('career-home', `expected 5 ladder steps, got ${res.ladderSteps}`);
+      else if (res.standingRows !== 9) fail('career-home', `expected 9 standings rows, got ${res.standingRows}`);
+      else if (res.trophies !== 3) fail('career-home', `expected 3 trophy shapes, got ${res.trophies}`);
+      else if (!res.hasPrimary) fail('career-home', 'no primary button');
+      else if (!res.hasRetire) fail('career-home', 'no retire/forfeit button');
+      else if (res.minControl < 44) fail('career-home', `a control measures ${res.minControl}px, under the 44px floor`);
+      else if (res.pageOverflow > 2) fail('career-home', `page overflows by ${res.pageOverflow}px`);
+      else ok(`career-home: chip, 5-step ladder, 9 standings rows, 3 trophies, primary "${res.primaryText}", "${res.retireText}", all controls >= ${res.minControl}px, no scroll`);
+    }
+  }
+  await ctxH.close();
+}
+
+// -------------------------------------------------------------------------------- career-resume
+{
+  const ctxR = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageR = await ctxR.newPage();
+  await pageR.addInitScript(bbProfileInit(), { name: 'Career Resume Test', code: 'BBRS2' });
+  const mountErrR = await mountInHub(pageR);
+  if (mountErrR) {
+    fail('career-resume', `mount failed: ${mountErrR}`);
+  } else {
+    const startErr = await pageR.evaluate(async () => {
+      if (!window.__bbTest || !window.__bbTest.newCareerNow) return 'no seam';
+      const st = await window.__bbTest.newCareerNow();
+      return st ? null : 'newCareerNow failed';
+    });
+    if (startErr) {
+      fail('career-resume', startErr);
+    } else {
+      await pageR.waitForTimeout(200);
+      await pageR.evaluate(() => { const b = document.querySelector('[data-act="career-primary"]'); if (b) b.click(); });
+      await pageR.waitForSelector('.bb-play', { timeout: 8000 }).catch(() => {});
+      await pageR.waitForTimeout(300);
+      // Take real pitches (same tap-the-ring-every-500ms pattern the r2-cadence probe above uses)
+      // until the engine has recorded genuine progress - proof this drives a real at-bat, not just
+      // the dev seam's own bookkeeping.
+      let before = null;
+      for (let i = 0; i < 50 && !before; i++) {
+        await pageR.evaluate(() => {
+          const tile = document.querySelector('.bb-pitch-tile');
+          if (tile) tile.click();
+          const main = document.querySelector('.bb-ringwrap');
+          if (main) {
+            main.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            main.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+          }
+        });
+        await pageR.waitForTimeout(500);
+        before = await pageR.evaluate(() => {
+          const root = document.querySelector('.hub-game');
+          const g = root && root._bbInstance && root._bbInstance.game;
+          if (!g || (g.balls + g.strikes) === 0) return null;
+          return { inning: g.inning, half: g.half, outs: g.outs, balls: g.balls, strikes: g.strikes };
+        });
+      }
+      if (!before) {
+        fail('career-resume', 'never observed real pitch progress within the drive budget');
+      } else {
+        // Remount through the hub's own path - `mountInHub` does a fresh `page.goto`, which is the
+        // same "force close and reopen" the doc's own resume promise covers; `addInitScript` reapplies
+        // the profile/dev-force setup on this second navigation automatically.
+        const mountErr2 = await mountInHub(pageR);
+        if (mountErr2) {
+          fail('career-resume', `remount failed: ${mountErr2}`);
+        } else {
+          // loadCareer() on this fresh mount races a real network pull (up to
+          // CAREER_PULL_TIMEOUT_MS = 2500ms) before the career tab auto-switch can fire - a fixed
+          // short wait here raced that and lost. Wait for the real button instead.
+          await pageR.waitForSelector('[data-act="career-primary"]', { timeout: 8000 }).catch(() => {});
+          const resumeErr = await pageR.evaluate(() => {
+            const btn = document.querySelector('[data-act="career-primary"]');
+            if (!btn) return 'no primary button on remount';
+            if (!btn.textContent.trim()) return 'primary button has no label';
+            btn.click();
+            return null;
+          });
+          if (resumeErr) {
+            fail('career-resume', resumeErr);
+          } else {
+            await pageR.waitForSelector('.bb-play', { timeout: 8000 }).catch(() => {});
+            await pageR.waitForTimeout(400);
+            const after = await pageR.evaluate(() => {
+              const root = document.querySelector('.hub-game');
+              const g = root && root._bbInstance && root._bbInstance.game;
+              return g ? { inning: g.inning, half: g.half, outs: g.outs, balls: g.balls, strikes: g.strikes } : null;
+            });
+            if (!after) fail('career-resume', 'no game after tapping Resume');
+            else if (after.inning !== before.inning || after.half !== before.half || after.outs !== before.outs
+              || after.balls !== before.balls || after.strikes !== before.strikes) {
+              fail('career-resume', `count/inning did not survive the remount: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+            } else {
+              ok(`career-resume: inning ${after.inning} ${after.half}, ${after.outs} outs, count ${after.balls}-${after.strikes} survived destroy+init through the hub's own mount`);
+            }
+          }
+        }
+      }
+    }
+  }
+  await ctxR.close();
+}
+
+// -------------------------------------------------------------------------------- career-forfeit
+{
+  const ctxF = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageF = await ctxF.newPage();
+  await pageF.addInitScript(bbProfileInit(), { name: 'Career Forfeit Test', code: 'BBFF3' });
+  await pageF.goto(`${BASE}/baseball/`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+  await pageF.waitForFunction(() => !!(window.__bbTest && window.__bbTest.newCareerNow), null, { timeout: 15000 }).catch(() => {});
+  const startErr = await pageF.evaluate(async () => {
+    if (!window.__bbTest || !window.__bbTest.newCareerNow) return 'no __bbTest seam standalone (dev gate not honored?)';
+    const st = await window.__bbTest.newCareerNow();
+    return st ? null : 'newCareerNow failed';
+  });
+  if (startErr) {
+    fail('career-forfeit', startErr);
+  } else {
+    await pageF.evaluate(() => {
+      const btn = document.querySelector('[data-act="tab"][data-tab="career"]');
+      if (btn) btn.click();
+    });
+    await pageF.waitForTimeout(200);
+    await pageF.evaluate(() => { const b = document.querySelector('[data-act="career-primary"]'); if (b) b.click(); });
+    await pageF.waitForSelector('.bb-play', { timeout: 8000 }).catch(() => {});
+    await pageF.waitForTimeout(400);
+    await pageF.evaluate(() => { const b = document.querySelector('[data-act="back"]'); if (b) b.click(); });
+    await pageF.waitForSelector('.gh-modal', { timeout: 5000 }).catch(() => {});
+    const leaveErr = await pageF.evaluate(() => {
+      const leave = document.querySelector('[data-act="leave"]');
+      if (!leave) return 'no forfeit confirm modal (leave button missing)';
+      leave.click();
+      return null;
+    });
+    if (leaveErr) {
+      fail('career-forfeit', leaveErr);
+    } else {
+      await pageF.waitForTimeout(500);
+      const res = await pageF.evaluate(async () => {
+        const state = window.__bbTest.careerState();
+        const home = document.querySelector('[data-act="career-primary"]');
+        return {
+          onCareerHome: !!document.querySelector('.bb-career'),
+          season: state && state.season,
+          record: state && state.season && state.season.results && state.season.results[0],
+          homeLabel: home && home.textContent.trim(),
+        };
+      });
+      const rec = res.record;
+      if (!res.onCareerHome) fail('career-forfeit', 'did not land on career home after forfeiting');
+      else if (!rec) fail('career-forfeit', 'no season.results[0] after forfeiting the first game');
+      else if (rec.forfeit !== true) fail('career-forfeit', `results[0].forfeit is ${rec.forfeit}, expected true`);
+      else if (rec.won !== false) fail('career-forfeit', `results[0].won is ${rec.won}, expected false (a forfeit is a loss)`);
+      else ok(`career-forfeit: forfeiting mid-play records a loss (results[0]: won=${rec.won}, forfeit=${rec.forfeit}), career home shows it, primary reads "${res.homeLabel}"`);
+    }
+  }
+  await ctxF.close();
+}
+
+// -------------------------------------------------------------------------------- career-season
+{
+  const ctxS = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageS = await ctxS.newPage();
+  await pageS.addInitScript(bbProfileInit(), { name: 'Career Season Test', code: 'BBSN4' });
+  const mountErrS = await mountInHub(pageS);
+  if (mountErrS) {
+    fail('career-season', `mount failed: ${mountErrS}`);
+  } else {
+    const res = await pageS.evaluate(async () => {
+      if (!window.__bbTest || !window.__bbTest.newCareerNow || !window.__bbTest.scriptSeason) return { error: 'seams missing' };
+      const started = await window.__bbTest.newCareerNow();
+      if (!started) return { error: 'newCareerNow failed' };
+      // 9 wins, 3 losses (order does not affect the standings placement, only which of the
+      // scripted opponents they are scored against) - the top-4-of-9 cut per career.js's own
+      // header - then two scripted playoff wins (semifinal, championship) for Gold.
+      const results = [true, true, true, true, true, true, true, true, true, false, false, false, true, true];
+      const state = await window.__bbTest.scriptSeason(results);
+      if (!state) return { error: 'scriptSeason failed' };
+      return {
+        trophy: state.season && state.season.trophy,
+        league: state.league,
+        phase: state.season && state.season.phase,
+        golds: state.stats && state.stats.golds,
+      };
+    });
+    if (res.error) {
+      fail('career-season', res.error);
+    } else if (res.phase !== 'done') {
+      fail('career-season', `expected season.phase "done", got "${res.phase}"`);
+    } else if (res.trophy !== 3) {
+      fail('career-season', `expected trophy 3 (Gold), got ${res.trophy}`);
+    } else if (res.golds !== 1) {
+      fail('career-season', `expected stats.golds 1, got ${res.golds}`);
+    } else if (res.league !== 'highschool') {
+      fail('career-season', `expected the league to read High School after a Little League Gold, got "${res.league}"`);
+    } else {
+      await pageS.waitForTimeout(400);
+      const screen = await pageS.evaluate(() => {
+        const modals = [...document.querySelectorAll('.bb-end-title')];
+        const trophyBig = document.querySelector('.bb-trophy-big');
+        return { titles: modals.map((m) => m.textContent.trim()), hasTrophyShape: !!trophyBig };
+      });
+      if (!screen.titles.some((t) => /gold/i.test(t) || /season/i.test(t))) {
+        fail('career-season', `season modal did not appear (titles seen: ${JSON.stringify(screen.titles)})`);
+      } else if (!screen.hasTrophyShape) {
+        fail('career-season', 'season modal has no trophy shape');
+      } else {
+        ok(`career-season: 9-3 regular season + two scripted playoff wins resolves Gold and advances to High School; season modal shown (${JSON.stringify(screen.titles)})`);
+      }
+    }
+  }
+  await ctxS.close();
 }
 
 await browser.close();

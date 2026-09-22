@@ -1539,6 +1539,27 @@ export function setBaseballHand(hand) {
   return g.bb.hand;
 }
 
+/** Baseball: count one career STARTED. R15-A (docs/BASEBALL-3D-BUILD.md section 9): `careersStarted`
+ *  is in BB_ADDITIVE_KEYS, so before this existed the only way to bump it was to ride an extras
+ *  object on a finished GAME's `recordBaseball` call - and a career is started before its first
+ *  game is played, so that call may never come (a player who starts a career and never finishes a
+ *  game would have shown 0 careers started). Additive and one-way, the mirror image of
+ *  `recordBaseballCareerFinished` below; like it, it is a career lifecycle event rather than a play,
+ *  so it takes no rate gate (test-rate-guard.mjs's EXEMPT set names both, with this reason).
+ *
+ *  IDEMPOTENCY CONTRACT, same as every other recorder here: the caller calls this AT MOST ONCE per
+ *  career, at the moment the career document is minted (`baseball/js/career-io.js`'s
+ *  `startCareer`). */
+export function recordBaseballCareerStarted() {
+  const st = loadStats();
+  const g = st.games.baseball;
+  ensureBb(g);
+  g.bb.careersStarted += 1;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** Baseball: fold one finished career's summary row into `bb.history`, keyed by its careerId, and
  *  bump `careersFinished`. Additive/union only (THE LAW rules 2 and 5): an existing row for the
  *  same careerId is replaced ONLY if the incoming row's `endedAt` is later, so a stale replay can

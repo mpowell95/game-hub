@@ -34,15 +34,27 @@ export function handSign(hand) {
 /** The break one pitch of `type` from a `hand`ed pitcher takes at the plate, in zone units.
  *  `drawX`/`drawY` are [0,1) draws, used only by the knuckleball (whose whole character is that
  *  nobody, the pitcher included, knows which way it goes). Pure; exported so `ui.js` can draw the
- *  point cursor from the SAME function that scores the pitch, never a second copy of the table. */
-export function breakOffsetFor(type, hand, drawX = 0.5, drawY = 0.5, settings = null) {
+ *  point cursor from the SAME function that scores the pitch, never a second copy of the table.
+ *
+ *  R14 (docs/BASEBALL-3D-BUILD.md section 9): `pitchSpinPts` wires `SKILL_EFFECT.pitchSpin.
+ *  breakPerPt` ("more bend on curve/slider/screwball; bigger changeup speed gap" - settings.js's
+ *  own doc citation) into the HANDED break only: `1 + pitchSpinPts * breakPerPt` multiplies both
+ *  axes of `row.x`/`row.y` when `row.handed` is true (curveball, slider, screwball, cutter - the
+ *  BREAK_OFFSET table's own four `handed: true` rows, and no others). It never touches the
+ *  fastball (zero break either way) or the knuckleball's `random` wobble (no `handed` flag, no
+ *  fixed direction for more spin to exaggerate). Default 0 keeps every existing caller (a fixture,
+ *  a CPU/model agent that does not pass skills) at today's table exactly. */
+export function breakOffsetFor(type, hand, drawX = 0.5, drawY = 0.5, settings = null, pitchSpinPts = 0) {
   const table = (settings && settings.BREAK_OFFSET) || BREAK_OFFSET;
   const row = table[type] || table.fastball;
   const sign = row.handed ? handSign(hand) : 1;
   const rnd = row.random || 0;
+  const skillEffect = (settings && settings.SKILL_EFFECT) || SKILL_EFFECT;
+  const breakPerPt = (skillEffect.pitchSpin && skillEffect.pitchSpin.breakPerPt) || 0;
+  const spinMult = row.handed ? 1 + Math.max(0, pitchSpinPts) * breakPerPt : 1;
   return {
-    x: row.x * sign + (rnd ? (drawX * 2 - 1) * rnd : 0),
-    y: row.y + (rnd ? (drawY * 2 - 1) * rnd : 0),
+    x: row.x * sign * spinMult + (rnd ? (drawX * 2 - 1) * rnd : 0),
+    y: row.y * spinMult + (rnd ? (drawY * 2 - 1) * rnd : 0),
   };
 }
 
@@ -115,8 +127,11 @@ export function flyPitch(type, aim, pitchAccSkill01, settings, rand01, pitcherSk
   // THE BREAK (R2): a fact of the type and the pitcher's own hand, applied at the plate. The
   // straight point is what the ball appears to be heading for when it leaves the hand; this is
   // where it actually ends up.
+  // R14: the pitcher's own pitchSpin points widen it (breakOffsetFor's own spinMult, handed
+  // types only).
   const hand = (pitchExtras && pitchExtras.pitcherHand) || 'R';
-  const brk = breakOffsetFor(type, hand, drawBX, drawBY, settings);
+  const pitchSpinPtsForBreak = Math.max(0, (pitcherSkills && pitcherSkills.pitchSpin) || 0);
+  const brk = breakOffsetFor(type, hand, drawBX, drawBY, settings, pitchSpinPtsForBreak);
   const x = straightX + brk.x;
   const y = straightY + brk.y;
 

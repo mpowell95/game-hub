@@ -36,7 +36,7 @@ import { chromium } from 'playwright-core';
 import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const BASE = 'http://localhost:8123';
+const BASE = process.env.BB_BASE || 'http://localhost:8123';
 const SIZES = [
   { w: 393, h: 852, why: 'tall' },
   { w: 390, h: 664, why: 'short' },
@@ -76,7 +76,65 @@ const EXTRA_SCREENS = {
       },
     },
   ],
+  // R14 (docs/BASEBALL-3D-BUILD.md section 9): the player screen, reached by tapping the setup
+  // screen's player chip. Six skill rows, a 4x2 preset grid and a hand row on one screen - the
+  // tallest new content this stage adds, and exactly the kind of screen this file exists to catch.
+  baseball: [
+    {
+      name: 'player screen',
+      async open(page) {
+        await page.waitForSelector('[data-act="player"]', { timeout: 8000 });
+        await page.click('[data-act="player"]');
+        await page.waitForSelector('[data-act="done"]', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    // R15-B (docs/BASEBALL-3D-BUILD.md section 9): the two career screens - the setup screen's
+    // Career tab (no career yet, on a fresh profile) and the player screen it opens in ITS OWN
+    // "start a career" flavor (presets/Custom/Randomize/hand, budgeted at Little League - a
+    // different skill-point table than Quick Play's, so it earns its own scroll check).
+    //
+    // Each extra runs on the SAME page as the one before it, in array order (the runner above
+    // never reloads between extras) - so a career extra opening right after "player screen" lands
+    // on the PLAYER SCREEN, not the setup screen the tab bar lives on. `backToSetup` returns there
+    // first (clicking Done, the player screen's own way back, if that screen happens to be up)
+    // before looking for the tab - found the hard way when both career extras first shipped
+    // timing out on a tab selector that was never missing, just on a different screen.
+    {
+      name: 'career tab',
+      async open(page) {
+        await backToSetup(page);
+        await page.waitForSelector('[data-act="tab"][data-tab="career"]', { timeout: 8000 });
+        await page.click('[data-act="tab"][data-tab="career"]');
+        await page.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'career start player screen',
+      async open(page) {
+        await backToSetup(page);
+        await page.waitForSelector('[data-act="tab"][data-tab="career"]', { timeout: 8000 });
+        await page.click('[data-act="tab"][data-tab="career"]');
+        await page.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
+        await page.click('[data-act="start-career"]');
+        await page.waitForSelector('.bb-player-body', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+  ],
 };
+
+/** Baseball-only helper (see the comment above): if the player screen (either mode - Quick Play's
+ *  own or a career one) is currently up from a previous extra, tap its Done button to return to
+ *  the setup screen. A no-op when the setup screen is already showing. */
+async function backToSetup(page) {
+  const doneBtn = await page.$('[data-act="done"]');
+  if (doneBtn) {
+    await doneBtn.click();
+    await page.waitForSelector('[data-act="tab"]', { timeout: 8000 }).catch(() => {});
+  }
+}
 
 /** Every game folder, discovered from disk so a NEW game is covered the day it appears - the same
  *  rule `test-game-conventions.mjs` follows, and for the same reason. */

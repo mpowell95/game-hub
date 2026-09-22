@@ -2122,6 +2122,21 @@ claim mechanism. `writesAllowed()` (exported from `js/stats-net.js` for this reu
 write the same way it gates `syncMyStats`/`claimUsername` — a dev origin never writes to the
 family database.
 
+**Its FIRST consumer is `baseball/js/career-io.js` (R15-A, 2026-09-22)**, the one file in that game
+that imports this module or `js/game-stats.js`, so the store still has exactly one caller and the
+game's own rules (`baseball/js/engine/career.js`) stay pure and node-testable. career-io wraps a
+career `state` in the document through this module's new `newCareerDoc({careerId, state, rulesV,
+now, code})`: the shape lives here, beside `validateCareer`, rather than being re-spelled by each
+consumer, and `seq`/`baseSeq` start at 0 so the first `saveLocalCareer` lands at seq 1 against
+baseSeq 0, which `reconcile` reads as "local has moved" and therefore pushes. Cadence, from design
+doc section 15: `saveCheckpoint` is `saveLocalCareer` only, at every pitch boundary; `saveAtBat` is
+local plus a coalesced `pushCareer`; `saveGameEnd` awaits the push and reports what
+`careerSyncHealth()` concluded; `pagehide` and a hidden `visibilitychange` push through
+`installLifecycle()`/`uninstallLifecycle()`, which baseball's `ui.js` balances in `init`/`destroy`.
+A stored `state` that fails the game's own `validateState` is rejected WHOLE and the stored
+document is left exactly where it is (THE LAW rules 1 and 5): a career today's code cannot parse is
+not a career to delete. Full contract and the frozen state shape: `baseball/CLAUDE.md`, "R15-A".
+
 **`test-career-sync.mjs`** drives the real `pullCareer`/`pushCareer`/`retireCareer` — not a mirror
 of their logic — against a fake `{db, api}` installed via a test-only
 `globalThis.__CAREER_TEST_BOOT__` seam that `boot()` checks before calling the real
