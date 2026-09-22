@@ -395,5 +395,100 @@ await test('a drawn green outline, a per-side fringe and two pins build, validat
   assert.equal(back.greenOutline, undefined);
 });
 
+
+// --- THE COURSE CREATOR (2026-09-22): the same editor on a blank course ---------------------------
+// These run LAST because setCourse() re-points the whole model; everything above assumes Red Mesa.
+console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
+{
+  const { PROFILES, resolveProfile, slugOf } = await import('./hole-editor/js/course.js');
+  const { STARTER_SPECS, THEME_DEFAULTS } = await import('./hole-editor/js/starter.js');
+  const { setCourse, invalidateBuilds, setCourseMeta, addHole, deleteHole } = await import('./hole-editor/js/model.js');
+  const { validateHole } = await import('./golf/js/holes.js');
+  const { generateSource, exportFileName } = await import('./hole-editor/js/export.js');
+
+  await test('the plain link is Red Mesa; ?course=new is the blank course', () => {
+    assert.equal(resolveProfile('').id, 'redmesa');
+    assert.equal(resolveProfile('?foo=1').id, 'redmesa');
+    assert.equal(resolveProfile('?course=new').id, 'custom');
+    assert.equal(resolveProfile('?course=custom').id, 'custom');
+  });
+
+  await test('every starter hole builds and validates on BOTH looks, par 72', () => {
+    for (const theme of ['parkland', 'desert']) {
+      let par = 0;
+      STARTER_SPECS.forEach((s, i) => {
+        const h = makeHole({ ...THEME_DEFAULTS[theme], ...s, n: i + 1 });
+        assert.deepEqual(validateHole(h), [], `${theme} hole ${i + 1}`);
+        par += h.par;
+      });
+      assert.equal(par, 72, theme);
+    }
+    assert.equal(STARTER_SPECS.length, 18);
+    assert.ok(STARTER_SPECS.every((s) => s.defend === false && !s.bunkers && !s.water && !s.trees && !s.guard), 'starters carry no hazards');
+  });
+
+  await test('a Course Creator document: its own ids, key, name and theme; Red Mesa untouched', () => {
+    setCourse(PROFILES.custom);
+    const doc = createDocument();
+    assert.equal(doc.courseId, 'custom');
+    assert.equal(doc.order[0], 'h-01');
+    assert.deepEqual(doc.course, { name: 'My Course', theme: 'parkland' });
+    assert.equal(PROFILES.custom.storageKey, 'golf.holeEditor.custom.v1');
+    assert.notEqual(PROFILES.custom.storageKey, PROFILES.redmesa.storageKey);
+    for (const id of doc.order) assert.deepEqual(validateHole(buildHole(doc, id)), [], id);
+    const back = loadDocument(serialiseDocument(doc));
+    assert.deepEqual(back.course, doc.course, 'name and theme survive a save');
+  });
+
+  await test('theme switch swaps the obstacle table on the next build', () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    assert.equal(buildHole(doc, 'h-01').treeTypes[0].name, 'pine');
+    doc.course = setCourseMeta(doc, { theme: 'desert' }).course;
+    setCourse(PROFILES.custom, 'desert');
+    invalidateBuilds(doc);
+    assert.equal(buildHole(doc, 'h-01').treeTypes[0].name, 'saguaro');
+  });
+
+  await test('add hole appends a fresh starter with an id no other hole holds; delete keeps at least three', () => {
+    setCourse(PROFILES.custom);
+    let doc = createDocument();
+    doc = addHole(doc);
+    assert.equal(doc.order.length, 19);
+    assert.equal(doc.order[18], 'h-19');
+    assert.deepEqual(validateHole(buildHole(doc, 'h-19')), []);
+    doc = deleteHole(doc, 'h-03');
+    doc = addHole(doc);
+    assert.equal(new Set(doc.order).size, doc.order.length, 'ids stay unique after a delete in the middle');
+    assert.ok(doc.order.every((id) => doc.holes[id]), 'every id in order has a hole');
+    while (doc.order.length > 3) doc = deleteHole(doc, doc.order[0]);
+    assert.equal(deleteHole(doc, doc.order[0]).order.length, 3, 'three is the floor');
+  });
+
+  await test('export names the file after the course and the generated module loads with its own defaults', async () => {
+    setCourse(PROFILES.custom, 'desert');
+    let doc = createDocument();
+    doc.course = setCourseMeta(doc, { name: "King's Landing", theme: 'desert' }).course;
+    assert.equal(exportFileName(doc), 'kingslanding.js');
+    assert.equal(slugOf('  '), 'mycourse');
+    const src = generateSource(doc, '2026-09-22');
+    assert.match(src, /export const KINGSLANDING_COURSE = \{/);
+    assert.match(src, /id: 'kingslanding'/);
+    assert.match(src, /name: 'saguaro'/);
+    assert.match(src, /rough: 7,/);
+    assert.doesNotMatch(src, /RED_MESA|Red Mesa/);
+    const tmp = new URL('./.cc-export-test.mjs', import.meta.url);
+    writeFileSync(tmp, src.replace("'../js/holegen.js'", "'./golf/js/holegen.js'"));
+    try {
+      const mod = await import(tmp.href + '?t=' + Date.now());
+      assert.equal(mod.default.par, 72);
+      assert.equal(mod.default.holes.length, 18);
+      assert.equal(mod.default.holes[0].treeTypes[0].name, 'saguaro');
+    } finally { unlinkSync(tmp); }
+  });
+
+  setCourse(PROFILES.redmesa);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

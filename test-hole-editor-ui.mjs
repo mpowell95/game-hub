@@ -173,6 +173,44 @@ ok('[KNOWN-BUG PROBE] the rough slider writes', (await spec()).rough === 12, Str
 await page.click('#he-h-rough-auto'); await settle(); await page.click('#he-h-wind-auto'); await settle();
 ok('...and auto clears both again', (await spec()).rough === undefined && (await spec()).wind === undefined);
 
+console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
+{
+  const p2 = await b.newPage({ viewport: { width: 1400, height: 900 } });
+  const errs2 = []; p2.on('pageerror', (e) => errs2.push(e.message));
+  p2.on('dialog', (d) => d.accept());
+  await p2.addInitScript(() => { localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'aa King of Games', emoji: '\u{1F451}', color: '#1F5FA8', playerId: 'KNG7Q' })); });
+  await p2.goto(`${URL}?course=new`, { waitUntil: 'networkidle' }); await p2.waitForTimeout(600);
+  const st2 = () => p2.evaluate(() => ({ id: window.__he.currentId, n: window.__he.doc.order.length, course: window.__he.doc.course, courseId: window.__he.doc.courseId, title: document.title }));
+  let s = await st2();
+  ok('opens on the blank course: 18 holes, h-01, its own title', s.courseId === 'custom' && s.n === 18 && s.id === 'h-01' && s.title === 'Course Creator', JSON.stringify(s));
+  ok('the designer is the hub profile', /aa King of Games .* KNG7Q/.test(await p2.$eval('#he-course', (e) => e.textContent.replace(/\s+/g, ' '))));
+  await p2.fill('#he-c-name', "King's Landing"); await p2.keyboard.press('Tab'); await p2.waitForTimeout(200);
+  await p2.click('[data-seg="theme"] [data-val="desert"]'); await p2.waitForTimeout(300);
+  s = await st2();
+  ok('name and Desert are written and the hole rebuilds with saguaros', s.course.name === "King's Landing" && s.course.theme === 'desert'
+    && (await p2.evaluate(() => window.__he.getBuilt(window.__he.currentId).treeTypes[0].name)) === 'saguaro');
+  await p2.click('#he-c-add'); await p2.waitForTimeout(300);
+  ok('+ Add hole appends h-19 and selects it', (await st2()).n === 19 && (await st2()).id === 'h-19');
+  await p2.keyboard.press('Control+z'); await p2.waitForTimeout(300);
+  ok('[KNOWN-BUG PROBE] undo of the add lands on a hole that exists', (await st2()).n === 18 && (await st2()).id === 'h-01');
+  await p2.click('#he-c-del'); await p2.waitForTimeout(300);
+  ok('Delete this hole removes it', (await st2()).n === 17);
+  const dl = p2.waitForEvent('download'); await p2.click('#he-export');
+  ok('Export is named after the course', (await dl).suggestedFilename() === 'kingslanding.js');
+  const pop = p2.waitForEvent('popup'); await p2.click('#he-play'); const gp = await pop;
+  await gp.waitForLoadState('networkidle'); await gp.waitForTimeout(800);
+  const chips = await gp.$$eval('[data-course]', (els) => els.map((e) => e.dataset.course + (e.classList.contains('is-on') ? '*' : '')));
+  ok('Play opens the game with the custom course listed and selected', /editor=custom/.test(gp.url()) && chips.includes('custom*'), chips.join(','));
+  ok('...as 17 holes named by the document, recording off', await gp.evaluate(() => globalThis.__gfCourseOverride.holes.length === 17 && globalThis.__gfCourseOverride.name === "King's Landing" && globalThis.__gfNoRecord === true));
+  await gp.close();
+  // the Red Mesa editor is a different document under a different key
+  await p2.goto(URL, { waitUntil: 'networkidle' }); await p2.waitForTimeout(500);
+  s = await st2();
+  ok('the plain link still opens Red Mesa, untouched by the Course Creator', s.courseId === 'redmesa' && s.n === 18 && s.id === 'rm-01');
+  ok('no page errors in the Course Creator', errs2.length === 0, JSON.stringify(errs2));
+  await p2.close();
+}
+
 console.log('\n-- Green: drawn outline, fringe, pins --');
 await key('g');
 const gc = await page.evaluate(() => window.__he.editorCanvas.built.pin);
