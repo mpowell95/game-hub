@@ -1609,3 +1609,22 @@ Deliverables: stills from all three cameras at Little League and at Majors besid
 frames, the pitcher Set sheet, a foot-height table per clip before and after, the probes above.
 `node test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`,
 `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green.
+
+### R13 record (shipped v885, 2026-09-22)
+
+From the stage's report and the ship review: `CAMERAS.pitcher` is `pos [-9.5, 8.26, -190.5]`, `look
+[0, 2.53, ZONE.z]`, `fov 5.28` (130 ft behind the rubber, 9.5 ft off the axis so the pitcher stands
+101 px clear of the box, which sits over the catcher); measured: pitcher 50% of the band, box 10.2%,
+batter 68% of the pitcher (`pitcher-frame` bands 10 to 13% and 60 to 85%). A camera 150 ft back
+clipped Little League's own 210 ft fence. `buildStadium(scene, {fenceFt, league})` reads a
+`LEAGUE_STADIUM` table: Little League a 6 ft chain-link (mipmaps off, or minification averages the
+grid to grey), small bleachers with about 12 parents placed from a seed, a grass berm, no towers;
+High School longer bleachers, about 39 parents, a press box; College one tier and towers; Minors
+two tiers and ads; Majors the R9 bowl. The berm rendered black from three causes at once (normal
+sign, map x colour, lit material). From 130 ft back the frame sees only 11 ft of backstop height,
+so the bands are pad 4 ft, brick 4 ft, crowd from 8 ft. The `Set` clip's legs were bind pose
+(locked, splayed); they now bend evenly, and `Pitch` and `Pickoff` open on the same stance. Feet:
+`footY` is measured from the bind pose, so Idle, Swing and Bunt sank 0.13 to 0.16 ft and Set,
+Pickoff and Run floated up to 1.1 ft; a measured -1.594 ft per unit `hipsOffset.y` coefficient
+fixes each clip, with Run restated on five keys because no single shift fits it. New actors-suite
+check `foot-on-ground` (seven clips, five samples, 0.1 ft). Draw calls per league 26 to 31.
