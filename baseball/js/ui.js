@@ -8,6 +8,7 @@ import { makeT } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { loadStats } from '../../js/game-stats.js';
 import { STRINGS } from './strings.js';
 
 import * as SETTINGS from './engine/settings.js';
@@ -15,6 +16,9 @@ import { Game } from './engine/game.js';
 import { CpuPitcher, CpuBatter } from './engine/agents.js';
 import { makeLeague, makePlayerTeam } from './engine/teams.js';
 import { flyPitch, breakOffsetFor } from './engine/pitch.js';
+// R14 (docs/BASEBALL-3D-BUILD.md section 9): the Quick Play skill-point budget - see build.js's
+// own header for why this is a separate pure module rather than more code in ui.js.
+import { budgetFor, capFor, scalePreset, clampBuild, randomBuild, adjust, canAdjust } from './build.js';
 import { fenceFtAt } from './engine/outcomes.js';
 import {
   engineToWorld, zoneRectFt, zoneCornersFt, projectToCanvas,
@@ -58,6 +62,37 @@ function ensureCSS() {
     document.head.appendChild(link);
   }
 }
+
+// ---------------------------------------------------------------------------------------------
+// R14 (docs/BASEBALL-3D-BUILD.md section 9): the Quick Play build, stored on `gamehub.baseball.v1`'s
+// own `quickPlay` field - read-modify-write, per root CLAUDE.md's hard rule, since this key's
+// `career` field (js/career-store.js's CAREER_LOCAL_FIELD) is written from elsewhere and must
+// never be clobbered by a whole-key replace.
+const QP_KEY = 'gamehub.baseball.v1';
+const QP_FIELD = 'quickPlay';
+
+function readQPRoot() {
+  try { return JSON.parse(localStorage.getItem(QP_KEY) || 'null') || {}; } catch { return {}; }
+}
+function writeQPField(field) {
+  try {
+    const root = readQPRoot();
+    root[QP_FIELD] = field;
+    localStorage.setItem(QP_KEY, JSON.stringify(root));
+    return true;
+  } catch (err) {
+    console.error('[baseball] could not write the quickPlay build', err);
+    return false;
+  }
+}
+
+// The two-letter tags under the player chip's six digits (setup screen) - identical in both
+// languages on purpose, the same convention `sb_b`/`sb_s`/`sb_o` and `widget_1b`/`2b`/`3b` already
+// use for a stable short code that is not itself a translated word.
+const SKILL_SHORT = { hitAcc: 'HA', hitPow: 'HP', hitSpd: 'HS', pitchSpd: 'PS', pitchAcc: 'PA', pitchSpin: 'PN' };
+// Object.keys() on a plain-string-key literal preserves insertion order (settings.js's own
+// declaration order) - the seven named presets, in the 4x2 grid's own reading order.
+const PRESET_ORDER = Object.keys(SETTINGS.PRESETS);
 
 // ---------------------------------------------------------------------------------------------
 // Fixed geometry (the handoff's own table). Nothing here may move between batting and pitching -
@@ -354,6 +389,38 @@ class BaseballPlayScreen {
     try { profName = (loadProfile()?.name || '').trim(); } catch { /* stay non-dev */ }
     this.dev = isDevProfile(profName) || !!globalThis.__bbDevForce;
 
+    // R14 (docs/BASEBALL-3D-BUILD.md section 9): the Quick Play build - loaded once here, budgeted
+    // for whatever league the setup screen opens on (`this.league`, just set above).
+    this.quickPlay = this._loadQuickPlay();
+    if (this.quickPlay.league !== this.league) this._recomputeBuildForLeague();
+    // Deliberately BEFORE `_startGame`'s own `window.__bbTest` write below, and merged onto it
+    // rather than replacing it - `setBuild` has to exist from the SETUP screen (a probe drives the
+    // build before tapping Play), while `forceHalf`/`noScatter`/`putOnFirst` only make sense once
+    // `this.game` exists.
+    if (this.dev) {
+      window.__bbTest = window.__bbTest || {};
+      window.__bbTest.setBuild = (build) => {
+        if (!build || typeof build !== 'object') return null;
+        const next = Object.assign({}, this.quickPlay);
+        if (build.presetId) next.presetId = build.presetId;
+        if (build.hand === 'L' || build.hand === 'R') next.hand = build.hand;
+        if (build.skills && typeof build.skills === 'object') {
+          const skills = {};
+          for (const id of SETTINGS.SKILL_IDS) {
+            skills[id] = Number.isFinite(build.skills[id]) ? build.skills[id] : (this.quickPlay.skills[id] || 0);
+          }
+          next.skills = skills;
+        }
+        next.league = this.league;
+        next.updatedAt = Date.now();
+        this.quickPlay = next;
+        this._saveQuickPlay();
+        if (this.screen === 'setup') this._paintPlayerChip();
+        else if (this.screen === 'player') this._renderPlayer();
+        return this.quickPlay;
+      };
+    }
+
     // STAGE 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D actor layer starts loading here, at
     // MOUNT (the setup screen), not at _startGame - a player who spends a few seconds picking a
     // league gets that time for free against the model fetch. `this.actors.canvas` lives detached
@@ -611,6 +678,218 @@ class BaseballPlayScreen {
     this.rootEl.style.setProperty('--bb-top-pad', Math.max(0, pad) + 'px');
   }
 
+  // ------------------------------------------------------------ R14: the Quick Play build ----
+  /** `gamehub.baseball.v1`'s `quickPlay` field, sanitized: unrecognized/missing skill ids read as
+   *  0, an unrecognized hand reads as 'R', a missing/malformed record is a fresh default (the
+   *  first named preset, scaled to this screen's own opening league). Never throws on bad data -
+   *  a corrupt quickPlay field must never crash the setup screen (the same "readers try/catch"
+   *  rule the shared profile follows). */
+  _loadQuickPlay() {
+    const stored = readQPRoot()[QP_FIELD];
+    const makeDefault = () => {
+      const presetId = PRESET_ORDER[0];
+      const budget = budgetFor(this.league);
+      const cap = capFor(this.league);
+      return { presetId, hand: 'R', skills: scalePreset(SETTINGS.PRESETS[presetId], budget, cap), league: this.league, updatedAt: Date.now() };
+    };
+    if (!stored || typeof stored !== 'object' || !stored.skills || typeof stored.skills !== 'object') return makeDefault();
+    const skills = {};
+    for (const id of SETTINGS.SKILL_IDS) {
+      const v = stored.skills[id];
+      skills[id] = Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0;
+    }
+    return {
+      presetId: typeof stored.presetId === 'string' ? stored.presetId : PRESET_ORDER[0],
+      hand: stored.hand === 'L' || stored.hand === 'R' ? stored.hand : 'R',
+      skills,
+      league: typeof stored.league === 'string' ? stored.league : this.league,
+      updatedAt: Number.isFinite(stored.updatedAt) ? stored.updatedAt : Date.now(),
+    };
+  }
+
+  _saveQuickPlay() { writeQPField(this.quickPlay); }
+
+  /** Called on the initial load and on every league tap: `presetId === 'random'` re-rolls a fresh
+   *  random build at the new budget/cap; a named preset (`SETTINGS.PRESETS[presetId]`) is rescaled
+   *  from that preset's own row; anything else (`'custom'`, or a hand-tuned build with no exact
+   *  preset name any more) is clamped in place - trimmed and repaired to the new budget/cap, never
+   *  re-derived from scratch. */
+  _recomputeBuildForLeague() {
+    const budget = budgetFor(this.league);
+    const cap = capFor(this.league);
+    const qp = this.quickPlay;
+    let skills;
+    if (qp.presetId === 'random') skills = randomBuild(budget, cap);
+    else if (SETTINGS.PRESETS[qp.presetId]) skills = scalePreset(SETTINGS.PRESETS[qp.presetId], budget, cap);
+    else skills = clampBuild(qp.skills, budget, cap);
+    this.quickPlay = Object.assign({}, qp, { skills, league: this.league, updatedAt: Date.now() });
+    this._saveQuickPlay();
+  }
+
+  /** `bb.hand` from the stats store (`js/game-stats.js`'s `setBaseballHand`, written by a career,
+   *  R15) - `null` while no career has recorded a hand yet. Quick Play only ever READS this; it
+   *  never calls `setBaseballHand` itself (spec's own rule). */
+  _lockedHand() {
+    try {
+      const st = loadStats();
+      const h = st && st.games && st.games.baseball && st.games.baseball.bb && st.games.baseball.bb.hand;
+      return h && (h.v === 'L' || h.v === 'R') ? h.v : null;
+    } catch { return null; }
+  }
+
+  /** The hand this screen actually plays with: the locked career hand once one exists, otherwise
+   *  the player's own free Quick Play choice. */
+  _effectiveHand() { return this._lockedHand() || this.quickPlay.hand || 'R'; }
+
+  /** The setup screen's player chip: hand, preset name, and the six values under their two-letter
+   *  tags (`SKILL_SHORT`). Returns inner HTML only, so both the initial `_renderSetup()` markup and
+   *  a league-tap repaint (`_paintPlayerChip`) build it from the one function. */
+  _playerChipInnerHTML() {
+    const qp = this.quickPlay;
+    const hand = this._effectiveHand();
+    const presetLabel = SETTINGS.PRESETS[qp.presetId] ? t('preset_' + qp.presetId)
+      : qp.presetId === 'random' ? t('preset_random') : t('preset_custom');
+    const digits = SETTINGS.SKILL_IDS.map((id) => `<span class="bb-pcd"><b>${SKILL_SHORT[id]}</b>${qp.skills[id] || 0}</span>`).join('');
+    return `
+      <div class="bb-playerchip-top"><span>${t('hand_' + hand.toLowerCase())}</span><span>${presetLabel}</span></div>
+      <div class="bb-playerchip-digits">${digits}</div>`;
+  }
+
+  _paintPlayerChip() {
+    const el = this.rootEl && this.rootEl.querySelector('[data-act="player"]');
+    if (el) el.innerHTML = this._playerChipInnerHTML();
+  }
+
+  // -------------------------------------------------------------------------- player screen ----
+  /** R14 item 1: hand, the 4x2 preset grid, two skill columns, Randomize and Done. Fits one phone
+   *  screen at both heights in both hosts, nothing scrolls (`.bb-player-topspacer` clears the
+   *  hub's floating back pill the same way `.bb-play`'s own top spacer does). Full re-render on
+   *  every tap - a handful of DOM nodes, no animation, the same pattern `_renderSetup` already
+   *  uses for its league rows. */
+  _renderPlayer() {
+    if (this.destroyed || !this.rootEl) return;
+    this.screen = 'player';
+    const qp = this.quickPlay;
+    const budget = budgetFor(this.league);
+    const cap = capFor(this.league);
+    const lockedHand = this._lockedHand();
+
+    const handHTML = lockedHand
+      ? `<div class="bb-hand-locked"><span class="bb-check" aria-hidden="true">&#10003;</span>${t('hand_' + lockedHand.toLowerCase())}</div>`
+      : ['L', 'R'].map((h) => {
+        const sel = qp.hand === h;
+        return `<button type="button" class="bb-hand-btn" data-act="hand" data-hand="${h}" aria-pressed="${sel}">${sel ? '<span class="bb-check" aria-hidden="true">&#10003;</span>' : ''}${t('hand_' + h.toLowerCase())}</button>`;
+      }).join('');
+
+    const presetChipsHTML = [...PRESET_ORDER, 'custom'].map((pid) => {
+      const sel = qp.presetId === pid || (pid === 'custom' && qp.presetId === 'random');
+      const label = pid === 'custom' ? t('preset_custom') : t('preset_' + pid);
+      return `<button type="button" class="bb-preset-chip" data-act="preset" data-preset="${pid}" aria-pressed="${sel}">${sel ? '<span class="bb-check" aria-hidden="true">&#10003;</span> ' : ''}${label}</button>`;
+    }).join('');
+
+    const skillRowHTML = (id) => {
+      const val = qp.skills[id] || 0;
+      const canMinus = canAdjust(qp.skills, id, -1, budget, cap);
+      const canPlus = canAdjust(qp.skills, id, 1, budget, cap);
+      const cells = Array.from({ length: cap }, (_, i) => `<span class="bb-seg-cell${i < val ? ' is-filled' : ''}"></span>`).join('');
+      const label = t('skill_' + id);
+      return `
+        <div class="bb-skill-row">
+          <div class="bb-skill-row-top"><span class="bb-skill-label">${label}</span><span class="bb-skill-num">${val}</span></div>
+          <div class="bb-skill-row-bar">
+            <button type="button" class="bb-skill-btn" data-act="minus" data-skill="${id}" aria-label="${label} -1"${canMinus ? '' : ' aria-disabled="true"'}>&minus;</button>
+            <div class="bb-skill-segbar" aria-hidden="true">${cells}</div>
+            <button type="button" class="bb-skill-btn" data-act="plus" data-skill="${id}" aria-label="${label} +1"${canPlus ? '' : ' aria-disabled="true"'}>+</button>
+          </div>
+        </div>`;
+    };
+
+    const hitLeft = budget - SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + (qp.skills[id] || 0), 0);
+    const pitchLeft = budget - SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + (qp.skills[id] || 0), 0);
+    const pointsLeft = (n) => t('points_left').replace('{n}', String(n));
+
+    this.rootEl.innerHTML = `
+      <div class="bb-player">
+        <div class="bb-player-topspacer"></div>
+        <div class="bb-player-body">
+          <h2 class="bb-player-title">${t('player_title')}</h2>
+          <div class="bb-hand-row">${handHTML}</div>
+          <div class="bb-preset-grid">${presetChipsHTML}</div>
+          <div class="bb-skill-cols">
+            <div class="bb-skill-col">
+              <div class="bb-skill-col-head">${t('hitting_col')}</div>
+              <div class="bb-points-pill">${pointsLeft(hitLeft)}</div>
+              ${SETTINGS.HIT_SKILL_IDS.map(skillRowHTML).join('')}
+            </div>
+            <div class="bb-skill-col">
+              <div class="bb-skill-col-head">${t('pitching_col')}</div>
+              <div class="bb-points-pill">${pointsLeft(pitchLeft)}</div>
+              ${SETTINGS.PITCH_SKILL_IDS.map(skillRowHTML).join('')}
+            </div>
+          </div>
+          <div class="bb-player-actions">
+            <button type="button" class="gh-btn gh-btn--sm" data-act="randomize">${t('randomize')}</button>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--sm" data-act="done">${t('done')}</button>
+          </div>
+        </div>
+      </div>`;
+
+    this._wirePlayerEvents();
+    this._fit();
+  }
+
+  _wirePlayerEvents() {
+    const root = this.rootEl;
+    root.querySelectorAll('[data-act="hand"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.quickPlay = Object.assign({}, this.quickPlay, { hand: btn.dataset.hand, updatedAt: Date.now() });
+        this._saveQuickPlay();
+        this._renderPlayer();
+      });
+    });
+    root.querySelectorAll('[data-act="preset"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pid = btn.dataset.preset;
+        const budget = budgetFor(this.league);
+        const cap = capFor(this.league);
+        const skills = pid === 'custom' ? this.quickPlay.skills : scalePreset(SETTINGS.PRESETS[pid], budget, cap);
+        this.quickPlay = Object.assign({}, this.quickPlay, { presetId: pid, skills, league: this.league, updatedAt: Date.now() });
+        this._saveQuickPlay();
+        this._renderPlayer();
+      });
+    });
+    root.querySelectorAll('[data-act="minus"], [data-act="plus"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (btn.getAttribute('aria-disabled') === 'true') return;
+        const id = btn.dataset.skill;
+        const delta = btn.dataset.act === 'plus' ? 1 : -1;
+        const budget = budgetFor(this.league);
+        const cap = capFor(this.league);
+        const next = adjust(this.quickPlay.skills, id, delta, budget, cap);
+        if (next === this.quickPlay.skills) return; // refused: no visible change, no write
+        // A manual tweak is no longer an exact preset (unless it happens to land back on one -
+        // not worth detecting; 'custom' is honest either way).
+        this.quickPlay = Object.assign({}, this.quickPlay, { skills: next, presetId: 'custom', league: this.league, updatedAt: Date.now() });
+        this._saveQuickPlay();
+        this._renderPlayer();
+      });
+    });
+    const randBtn = root.querySelector('[data-act="randomize"]');
+    if (randBtn) randBtn.addEventListener('click', () => {
+      const budget = budgetFor(this.league);
+      const cap = capFor(this.league);
+      this.quickPlay = Object.assign({}, this.quickPlay, { presetId: 'random', skills: randomBuild(budget, cap), league: this.league, updatedAt: Date.now() });
+      this._saveQuickPlay();
+      this._renderPlayer();
+    });
+    const doneBtn = root.querySelector('[data-act="done"]');
+    if (doneBtn) doneBtn.addEventListener('click', () => {
+      this.screen = 'setup';
+      this._renderSetup();
+      this._fit();
+    });
+  }
+
   // -------------------------------------------------------------------------------- setup screen
   _renderSetup() {
     this.rootEl.innerHTML = `
@@ -625,6 +904,7 @@ class BaseballPlayScreen {
             </button>
           `).join('')}
         </div>
+        <button type="button" class="bb-playerchip" data-act="player" aria-label="${t('player_title')}">${this._playerChipInnerHTML()}</button>
         <button type="button" class="gh-btn gh-btn--primary bb-play-btn" data-act="play"${this._actorsSettled ? '' : ' aria-disabled="true"'}>${this._actorsSettled ? t('setup_play') : t('load_model')}</button>
         ${this.dev ? `<button type="button" class="bb-tune-open" data-act="tune">${t('tune_open')}</button>` : ''}
         ${this.dev ? `<button type="button" class="bb-tune-open" data-act="frames">Frames</button>` : ''}
@@ -637,8 +917,14 @@ class BaseballPlayScreen {
           x.setAttribute('aria-checked', sel ? 'true' : 'false');
           x.setAttribute('aria-pressed', sel ? 'true' : 'false');
         });
+        // R14: the build's budget/cap is per-league - a league tap rescales the current preset,
+        // re-rolls a random build, or clamps a Custom one, per `_recomputeBuildForLeague`'s header.
+        this._recomputeBuildForLeague();
+        this._paintPlayerChip();
       });
     });
+    const playerChipBtn = this.rootEl.querySelector('[data-act="player"]');
+    if (playerChipBtn) playerChipBtn.addEventListener('click', () => this._renderPlayer());
     // STAGE 4: the button stays a real, always-tappable <button> (never HTML `disabled`) so a
     // tap that lands during the model load isn't silently dropped - it just awaits the same
     // promise the button's own label is already counting down, then starts the game exactly as a
@@ -664,10 +950,11 @@ class BaseballPlayScreen {
     const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
     const cpuLeague = makeLeague(league);
     const cpuTeam = randPick(cpuLeague);
-    const skillIds = SETTINGS.SKILL_IDS;
-    const preset = randPick(Object.values(SETTINGS.PRESETS));
-    const hand = Math.random() < 0.5 ? 'R' : 'L';
-    const playerTeam = makePlayerTeam({ skills: preset, hand });
+    // R14 (docs/BASEBALL-3D-BUILD.md section 9): the player's build is the one set up on the
+    // player screen (or its default), never a random preset and a coin-flip hand.
+    const hand = this._effectiveHand();
+    const skills = { ...this.quickPlay.skills };
+    const playerTeam = makePlayerTeam({ skills, hand });
     playerTeam.league = league;
 
     this.human = new HumanAgent(this, league, playerTeam);
@@ -759,7 +1046,9 @@ class BaseballPlayScreen {
         if (!this._flightActive) this._drawStaticField();
         return id;
       };
-      window.__bbTest = { forceHalf, noScatter: (on) => { this._testNoScatter = on !== false; }, putOnFirst };
+      // R14: merged onto the object the constructor already created (`setBuild`), never replaced -
+      // a probe that called `setBuild` before Play must not lose it the moment the game starts.
+      Object.assign(window.__bbTest, { forceHalf, noScatter: (on) => { this._testNoScatter = on !== false; }, putOnFirst });
     }
 
     this.screen = 'play';
@@ -1063,11 +1352,13 @@ class BaseballPlayScreen {
    *  engine scores it with (`breakOffsetFor`) - never a second copy of the table. A knuckleball's
    *  own randomness is unknowable before the pitch is thrown, so the point cursor shows its
    *  TYPICAL break (both draws at their midpoint, i.e. none) and the ball then goes where it goes,
-   *  which is the pitch's whole character. */
+   *  which is the pitch's whole character. R14: the human's own pitchSpin points ride along too,
+   *  so the drawn point cursor is never a smaller break than the pitch that actually crosses. */
   _pitchBreakUnits() {
     const type = this.state.selectedPitch;
     const hand = this._ownPitcherHand();
-    return breakOffsetFor(type, hand, 0.5, 0.5, SETTINGS);
+    const pitchSpinPts = this._ownPitcherSkills().pitchSpin || 0;
+    return breakOffsetFor(type, hand, 0.5, 0.5, SETTINGS, pitchSpinPts);
   }
 
   /** The human's own pitcher's throwing hand - which way a handed break goes. */
@@ -1075,6 +1366,15 @@ class BaseballPlayScreen {
     const team = this.playerTeam;
     const p = team && team.players.find((x) => x.id === team.pitcherId);
     return (p && p.throws) || 'R';
+  }
+
+  /** The human's own pitcher's raw skill points (R14) - every player is nine copies of the same
+   *  build (`makePlayerTeam`), so any roster slot reads it, but the pitcher slot is the one this
+   *  screen already has a handle on via `_ownPitcherHand`. */
+  _ownPitcherSkills() {
+    const team = this.playerTeam;
+    const p = team && team.players.find((x) => x.id === team.pitcherId);
+    return (p && p.skills) || {};
   }
 
   /** THE CUTAWAY FLAG's only exit (stage 7, section 7, row 6): clears `_cutawayUp`, then puts the

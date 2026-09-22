@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v886';
+const CACHE = 'game-hub-v887';
 
 const ASSETS = [
   './',
@@ -419,6 +419,9 @@ const ASSETS = [
   './baseball/js/engine/teams.js',
   './baseball/js/engine/zones.js',
   './baseball/js/engine/season.js',
+  './baseball/js/engine/career.js',
+  './baseball/js/career-io.js',
+  './baseball/js/build.js',
   './dominoes/',
   './dominoes/index.html',
   './dominoes/css/dominoes.css',
@@ -887,11 +890,11 @@ const REST_MANIFEST = {
   './golf/courses/tutorial.js': '5f72833828',
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
-  './baseball/css/baseball.css': '2b494595e6',
-  './baseball/js/ui.js': '1152fa2516',
+  './baseball/css/baseball.css': '37124aea10',
+  './baseball/js/ui.js': 'a85c3d51dd',
   './baseball/js/field.js': '549d87932f',
   './baseball/js/ring.js': '4786e4ea61',
-  './baseball/js/strings.js': '34bd750a14',
+  './baseball/js/strings.js': 'be4ea8997f',
   './baseball/js/rig.js': '15167015a3',
   './baseball/js/actors.js': '18eaa14aeb',
   './baseball/js/poses.js': 'a8cde6e9fb',
@@ -907,7 +910,7 @@ const REST_MANIFEST = {
   './baseball/models/skins/cyborgFemaleA.png': '321b7ba2d8',
   './baseball/js/engine/rng.js': '8119f3c46a',
   './baseball/js/engine/settings.js': '5eb5634d87',
-  './baseball/js/engine/pitch.js': '8e3959c263',
+  './baseball/js/engine/pitch.js': '9ab8641ba6',
   './baseball/js/engine/swing.js': '1a97031c7f',
   './baseball/js/engine/outcomes.js': '441c7c7345',
   './baseball/js/engine/bases.js': '76c79f21c6',
@@ -916,6 +919,9 @@ const REST_MANIFEST = {
   './baseball/js/engine/teams.js': 'e758dc9237',
   './baseball/js/engine/zones.js': '1bc65ed6ba',
   './baseball/js/engine/season.js': '0aa26c6475',
+  './baseball/js/engine/career.js': '1c0f04a5d5',
+  './baseball/js/career-io.js': '17aad183f4',
+  './baseball/js/build.js': '7506fc4e23',
   './dominoes/': 'f371088b83',
   './dominoes/index.html': 'f371088b83',
   './dominoes/css/dominoes.css': 'b7b65f248d',

@@ -84,9 +84,12 @@ ok('...and still reports nothing after ordinary play', G.rateReport() === null);
 console.log('\n--- every recorder is guarded ---');
 const src = readFileSync('./js/game-stats.js', 'utf8');
 const recorders = [...src.matchAll(/^export function (record[A-Za-z0-9]*)\(/gm)].map((m) => m[1]);
-// recordHeadToHead rides an existing result rather than being one, and recordBaseballCareerFinished
-// is a career summary, not a play - neither is a per-play counter, so neither takes the gate.
-const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerFinished']);
+// recordHeadToHead rides an existing result rather than being one, and the two career lifecycle
+// writers (recordBaseballCareerStarted/Finished) mark a career opening and closing, not a play -
+// none of the three is a per-play counter, so none takes the gate. A career is started and retired
+// by hand, once each; gating them on a per-minute play rate could only ever cost a real player a
+// real career record (THE LAW rule 1), which is the failure this suite exists to avoid.
+const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished']);
 ok('found the recorders', recorders.length >= 18);
 for (const r of recorders) {
   if (EXEMPT.has(r)) continue;

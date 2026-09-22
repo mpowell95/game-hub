@@ -64,6 +64,9 @@ const SUITES = [
   { file: 'test-admin-config.mjs' },
   { file: 'test-messages.mjs' },
   { file: 'test-career-sync.mjs' },
+  // R15-A: the career loop's own rules (pure, no engine) plus its persistence round trip against
+  // the same fake-boot seam test-career-sync.mjs uses. Node, no browser, a few seconds.
+  { file: 'test-baseball-career.mjs' },
   { file: 'test-hoops4-mp.mjs' },
   { file: 'baseball/js/test.js' },
   // R2 (docs/BASEBALL-3D-BUILD.md section 9): `test-baseball-ring.mjs` was DELETED here. It existed

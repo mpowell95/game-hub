@@ -36,7 +36,7 @@ import { chromium } from 'playwright-core';
 import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const BASE = 'http://localhost:8123';
+const BASE = process.env.BB_BASE || 'http://localhost:8123';
 const SIZES = [
   { w: 393, h: 852, why: 'tall' },
   { w: 390, h: 664, why: 'short' },
@@ -73,6 +73,20 @@ const EXTRA_SCREENS = {
           if (r.height < 44) return `the Back button is only ${Math.round(r.height)}px tall`;
           return null;
         });
+      },
+    },
+  ],
+  // R14 (docs/BASEBALL-3D-BUILD.md section 9): the player screen, reached by tapping the setup
+  // screen's player chip. Six skill rows, a 4x2 preset grid and a hand row on one screen - the
+  // tallest new content this stage adds, and exactly the kind of screen this file exists to catch.
+  baseball: [
+    {
+      name: 'player screen',
+      async open(page) {
+        await page.waitForSelector('[data-act="player"]', { timeout: 8000 });
+        await page.click('[data-act="player"]');
+        await page.waitForSelector('[data-act="done"]', { timeout: 8000 });
+        await page.waitForTimeout(250);
       },
     },
   ],

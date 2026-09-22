@@ -37,7 +37,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const BASE = 'http://localhost:8123';
+const BASE = process.env.BB_BASE || 'http://localhost:8123';
 let failed = 0;
 const ok = (label) => console.log(`ok    ${label}`);
 const fail = (label, why) => { failed++; console.log(`FAIL  ${label}: ${why}`); };
@@ -725,6 +725,12 @@ await ctx.close();
         const root = document.querySelector('.hub-game');
         const hsBtn = root && root.querySelector('[data-league="highschool"]');
         if (hsBtn) hsBtn.click();
+        // R14 (docs/BASEBALL-3D-BUILD.md section 9): the league click above already recomputed the
+        // Quick Play build's pitchSpin for High School's own budget/cap - zero it back out with the
+        // dev seam so the break this probe reads is BREAK_OFFSET's own raw table, not that table
+        // widened by whatever pitchSpin points the current preset happens to carry. AFTER the
+        // league click, never before it (a league change re-scales the preset and would clobber it).
+        if (window.__bbTest && window.__bbTest.setBuild) window.__bbTest.setBuild({ skills: { pitchSpin: 0 } });
         const btn = root && root.querySelector('.bb-play-btn');
         if (btn) btn.click();
         return !!btn;

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as SETTINGS from './engine/settings.js';
-import { ZONE, flyPitch } from './engine/pitch.js';
+import { ZONE, flyPitch, breakOffsetFor } from './engine/pitch.js';
 import { swing, qualityFor, computeSwingTiming } from './engine/swing.js';
 import { resolveContact, resolveBunt, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
@@ -20,6 +20,7 @@ import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBas
 import { makeTeam, makeLeague, makePlayerTeam, teamStrength, effectiveCapFor, POSITIONS } from './engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
+import { budgetFor, capFor, scalePreset, clampBuild, randomBuild, adjust, canAdjust } from './build.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2815,6 +2816,152 @@ await (async function section33() {
     for (const t of SETTINGS.TITLE_PITCH_UNLOCKS) allLadder.add(t.pitch);
     ok(SETTINGS.PITCH_TYPES.every((t) => allLadder.has(t)) && allLadder.size === SETTINGS.PITCH_TYPES.length,
       `(4) every one of the eight PITCH_TYPES is still reachable by the ladder + title unlocks, exactly once (${JSON.stringify([...allLadder])})`);
+  }
+})();
+
+// Section 34 (R14, docs/BASEBALL-3D-BUILD.md section 9): YOUR PLAYER AND THE SKILL POINTS, IN
+// QUICK PLAY. Matt, on v885: "I don't see anything about the skill points we discussed." Then:
+// "Go, build the skill points and career." This stage: the budget itself (build.js, derived from
+// CAPS/START_POINTS_PER_SIDE/START_CAP, never invented), and SKILL_EFFECT.pitchSpin.breakPerPt
+// wired into the handed break (pitch.js).
+console.log('\n-- 34. R14: your player and the skill points, in Quick Play --');
+await (async function section34() {
+  // (1) budgetFor/capFor match the doc's own derivation exactly: 15/10 at Little League, then
+  //     3x the PREVIOUS league's cap per side, at THIS league's own cap.
+  {
+    ok(budgetFor('little') === SETTINGS.START_POINTS_PER_SIDE && capFor('little') === SETTINGS.START_CAP,
+      `(1) Little League: budget ${budgetFor('little')} (want ${SETTINGS.START_POINTS_PER_SIDE}), cap ${capFor('little')} (want ${SETTINGS.START_CAP})`);
+    let prev = 'little';
+    for (const lg of SETTINGS.LEAGUES.slice(1)) {
+      const wantBudget = 3 * SETTINGS.CAPS[prev];
+      ok(budgetFor(lg) === wantBudget, `(1) ${lg}: budget ${budgetFor(lg)} (want 3x ${prev}'s cap = ${wantBudget})`);
+      ok(capFor(lg) === SETTINGS.CAPS[lg], `(1) ${lg}: cap ${capFor(lg)} (want CAPS.${lg} = ${SETTINGS.CAPS[lg]})`);
+      prev = lg;
+    }
+    // Feasibility, the fact every repair/clamp/random function above relies on: the budget never
+    // exceeds 3x the league's OWN cap, so a per-side distribution always has room.
+    for (const lg of SETTINGS.LEAGUES) {
+      ok(budgetFor(lg) < 3 * capFor(lg), `(1) ${lg}: budget ${budgetFor(lg)} stays under 3x its own cap (${3 * capFor(lg)}) - always feasible`);
+    }
+  }
+
+  // (2) Every preset, at every league: scalePreset sums to the budget EXACTLY, per side, and never
+  //     exceeds the cap on any one skill.
+  {
+    let allOk = true, worst = '';
+    for (const presetId of Object.keys(SETTINGS.PRESETS)) {
+      for (const lg of SETTINGS.LEAGUES) {
+        const budget = budgetFor(lg), cap = capFor(lg);
+        const build = scalePreset(SETTINGS.PRESETS[presetId], budget, cap);
+        const hitSum = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + build[id], 0);
+        const pitchSum = SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + build[id], 0);
+        const overCap = SETTINGS.SKILL_IDS.some((id) => build[id] > cap || build[id] < 0);
+        if (hitSum !== budget || pitchSum !== budget || overCap) {
+          allOk = false; worst = `${presetId}@${lg}: hit=${hitSum} pitch=${pitchSum} budget=${budget} cap=${cap} build=${JSON.stringify(build)}`;
+        }
+      }
+    }
+    ok(allOk, `(2) every preset at every league sums to the budget exactly on both sides, never exceeds the cap (first bad: ${worst})`);
+    // Slugger at Majors: Power at the cap (spec's own worked example - "the rest carried over").
+    const majorsSlugger = scalePreset(SETTINGS.PRESETS.slugger, budgetFor('majors'), capFor('majors'));
+    ok(majorsSlugger.hitPow === capFor('majors'),
+      `(2) Slugger at Majors: hitPow is at the cap (${majorsSlugger.hitPow}, cap ${capFor('majors')})`);
+  }
+
+  // (3) randomBuild never exceeds the budget or the cap, at every league, over many draws.
+  {
+    let allOk = true, worst = '';
+    for (const lg of SETTINGS.LEAGUES) {
+      const budget = budgetFor(lg), cap = capFor(lg);
+      for (let i = 0; i < 50; i++) {
+        const rand = mulberry32(1000 + i);
+        const build = randomBuild(budget, cap, rand);
+        const hitSum = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + build[id], 0);
+        const pitchSum = SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + build[id], 0);
+        const overCap = SETTINGS.SKILL_IDS.some((id) => build[id] > cap || build[id] < 0);
+        if (hitSum !== budget || pitchSum !== budget || overCap) {
+          allOk = false; worst = `${lg} draw ${i}: hit=${hitSum} pitch=${pitchSum} budget=${budget} cap=${cap}`;
+        }
+      }
+    }
+    ok(allOk, `(3) randomBuild never exceeds the budget or the cap, any league, 50 draws each (first bad: ${worst})`);
+  }
+
+  // (4) adjust refuses at both edges (the cap, and the side's own budget) and is a genuine no-op
+  //     (same reference back) when it does; canAdjust agrees.
+  {
+    const budget = budgetFor('little'), cap = capFor('little');
+    const atCap = { hitAcc: cap, hitPow: 0, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const capped = adjust(atCap, 'hitAcc', 1, budget, cap);
+    ok(capped === atCap, '(4) a plus tap at the skill\'s own cap is refused (same reference back)');
+    ok(!canAdjust(atCap, 'hitAcc', 1, budget, cap), '(4) canAdjust agrees: false at the cap');
+    const zero = { hitAcc: 0, hitPow: 0, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    const under = adjust(zero, 'hitAcc', -1, budget, cap);
+    ok(under === zero, '(4) a minus tap at 0 is refused (same reference back)');
+    ok(!canAdjust(zero, 'hitAcc', -1, budget, cap), '(4) canAdjust agrees: false under 0');
+    // The side's own budget, not just the skill's own cap: hitAcc+hitPow+hitSpd already at budget,
+    // every value still within its own cap - a further plus on any of the three (even one under
+    // its own cap) is refused.
+    const atBudget = { hitAcc: cap, hitPow: budget - cap, hitSpd: 0, pitchSpd: 0, pitchAcc: 0, pitchSpin: 0 };
+    ok(atBudget.hitPow <= cap, `(4) test fixture sanity: hitPow ${atBudget.hitPow} stays within cap ${cap}`);
+    const overBudget = adjust(atBudget, 'hitSpd', 1, budget, cap);
+    ok(overBudget === atBudget, `(4) a plus tap that would push the HIT side over its own budget (${budget}) is refused, even though hitSpd itself is under cap`);
+    ok(!canAdjust(atBudget, 'hitSpd', 1, budget, cap), '(4) canAdjust agrees: false over budget');
+    // A legal tap DOES return a new object and moves exactly one point.
+    const legal = adjust(atBudget, 'hitAcc', -1, budget, cap);
+    ok(legal !== atBudget && legal.hitAcc === atBudget.hitAcc - 1, '(4) a legal minus tap returns a new build with exactly one point moved');
+    ok(canAdjust(atBudget, 'hitAcc', -1, budget, cap), '(4) canAdjust agrees: true for the legal tap');
+    // The PITCH side is independent of the HIT side's own room.
+    const pitchRoom = adjust(atBudget, 'pitchSpd', 1, budget, cap);
+    ok(pitchRoom !== atBudget && pitchRoom.pitchSpd === 1, '(4) the pitch side has its own budget, untouched by the hit side being full');
+  }
+
+  // (5) clampBuild repairs a build to a NEW budget/cap (a league change on a Custom build), in
+  //     both directions - a bigger league (more room) and a smaller one (less).
+  {
+    const littleBudget = budgetFor('little'), littleCap = capFor('little');
+    const majorsBudget = budgetFor('majors'), majorsCap = capFor('majors');
+    const littleBuild = scalePreset(SETTINGS.PRESETS.twoWayStar, littleBudget, littleCap);
+    const upscaled = clampBuild(littleBuild, majorsBudget, majorsCap);
+    const upHit = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + upscaled[id], 0);
+    ok(upHit === majorsBudget, `(5) clampBuild going UP (Little -> Majors) still sums to the new budget exactly (got ${upHit}, want ${majorsBudget})`);
+    const downscaled = clampBuild(upscaled, littleBudget, littleCap);
+    const downHit = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + downscaled[id], 0);
+    const downOverCap = SETTINGS.SKILL_IDS.some((id) => downscaled[id] > littleCap);
+    ok(downHit === littleBudget && !downOverCap, `(5) clampBuild going DOWN (Majors -> Little) sums to the smaller budget and respects the smaller cap (sum ${downHit}, want ${littleBudget}, over cap: ${downOverCap})`);
+  }
+
+  // (6) SKILL_EFFECT.pitchSpin.breakPerPt is wired into breakOffsetFor: Spin 10 breaks more than
+  //     Spin 0 on a handed type, Spin 0 equals today's (pre-R14) table exactly, and the fastball/
+  //     knuckleball are untouched by spin at all.
+  {
+    const breakPerPt = SETTINGS.SKILL_EFFECT.pitchSpin.breakPerPt;
+    const spin0 = breakOffsetFor('curveball', 'R', 0.5, 0.5, SETTINGS, 0);
+    const spin10 = breakOffsetFor('curveball', 'R', 0.5, 0.5, SETTINGS, 10);
+    const row = SETTINGS.BREAK_OFFSET.curveball;
+    ok(spin0.x === row.x && spin0.y === row.y, `(6) Spin 0 equals today's table exactly (got ${JSON.stringify(spin0)}, table x=${row.x} y=${row.y})`);
+    const wantMult = 1 + 10 * breakPerPt;
+    ok(Math.abs(spin10.x - row.x * wantMult) < 1e-9 && Math.abs(spin10.y - row.y * wantMult) < 1e-9,
+      `(6) Spin 10 multiplies the handed break by 1 + 10*breakPerPt=${wantMult.toFixed(3)} (got ${JSON.stringify(spin10)}, want x=${(row.x * wantMult).toFixed(4)} y=${(row.y * wantMult).toFixed(4)})`);
+    ok(Math.abs(spin10.x) > Math.abs(spin0.x), `(6) Spin 10 breaks MORE than Spin 0 (|${spin10.x}| > |${spin0.x}|)`);
+    // Every one of the four handed types (curveball/slider/screwball/cutter), never the fastball
+    // or the knuckleball's random wobble.
+    for (const type of ['slider', 'screwball', 'cutter']) {
+      const a = breakOffsetFor(type, 'R', 0.5, 0.5, SETTINGS, 0);
+      const b = breakOffsetFor(type, 'R', 0.5, 0.5, SETTINGS, 10);
+      ok(Math.abs(b.x) > Math.abs(a.x) || Math.abs(b.y) > Math.abs(a.y), `(6) ${type} breaks more at Spin 10 than Spin 0`);
+    }
+    const fb0 = breakOffsetFor('fastball', 'R', 0.5, 0.5, SETTINGS, 0);
+    const fb10 = breakOffsetFor('fastball', 'R', 0.5, 0.5, SETTINGS, 10);
+    ok(fb0.x === fb10.x && fb0.y === fb10.y, `(6) the fastball is untouched by spin (zero break either way): ${JSON.stringify(fb0)} vs ${JSON.stringify(fb10)}`);
+    const kn0 = breakOffsetFor('knuckleball', 'R', 0.5, 0.5, SETTINGS, 0);
+    const kn10 = breakOffsetFor('knuckleball', 'R', 0.5, 0.5, SETTINGS, 10);
+    ok(kn0.x === kn10.x && kn0.y === kn10.y, `(6) the knuckleball's own (mid-draw, zero) wobble is untouched by spin: ${JSON.stringify(kn0)} vs ${JSON.stringify(kn10)}`);
+    // flyPitch itself, end to end: a pitcher with 10 pitchSpin points throws a bigger break than
+    // one with 0, same aim, same draws.
+    const noSpinPitch = flyPitch('curveball', 0, 1, SETTINGS, () => 0.5, { pitchSpin: 0 }, null, 'majors');
+    const spunPitch = flyPitch('curveball', 0, 1, SETTINGS, () => 0.5, { pitchSpin: 10 }, null, 'majors');
+    ok(Math.abs(spunPitch.x) > Math.abs(noSpinPitch.x), `(6) flyPitch end to end: 10 pitchSpin points cross further off aim than 0 (${spunPitch.x} vs ${noSpinPitch.x})`);
   }
 })();
 
