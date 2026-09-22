@@ -72,7 +72,7 @@ const MODEL_TIERS = {
 const BANDS = {
   firstAttemptGold: {
     little:     [0.90, 1.00],
-    highschool: [0.70, 0.90],
+    highschool: [0.70, 0.95],   // R16 ship review: Matt's brief is "win first time" in the lower leagues; 0.90 was the study's own translation, not his
     college:    [0.40, 0.65],
     minors:     [0.25, 0.45],
     majors:     [0.00, 0.15],

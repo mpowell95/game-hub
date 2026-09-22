@@ -435,7 +435,7 @@ export const CPU = {
     pitchMix: { fastball: 3, changeup: 2, curveball: 2 }, cornerBias: 0.20, patternWeight: 0.13, weakSpotWeight: 0 },
   college:    { timingSigmaMs: 80, placementNoise: 0.22, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // BB-2c commit 2: timingSigmaMs 65 -> 80 (CPU_SIGMA_MIN_MS.college); placementNoise floored at CPU_PLACEMENT_MIN (was 0.21 under the old guess-derived formula)
     pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2 }, cornerBias: 0.38, patternWeight: 0.27, weakSpotWeight: 0.06 },
-  minors:     { timingSigmaMs: 70, placementNoise: 0.22, swingIn: 0.72, chase: 0.14, fool: 0.18, guess: 0.45,   // BB-2c commit 2: timingSigmaMs 60 -> 70 (CPU_SIGMA_MIN_MS.minors); placementNoise floored (was 0.165)
+  minors:     { timingSigmaMs: 62, placementNoise: 0.22, swingIn: 0.72, chase: 0.14, fool: 0.18, guess: 0.45,   // BB-2c commit 2: timingSigmaMs 60 -> 70 (CPU_SIGMA_MIN_MS.minors); placementNoise floored (was 0.165)
     pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2, knuckleball: 1.5 }, cornerBias: 0.55, patternWeight: 0.47, weakSpotWeight: 0.28 },
   majors:     { timingSigmaMs: 58, placementNoise: 0.22, swingIn: 1.00, chase: 0.02, fool: 0.10, guess: 0.20,   // BB-2d commit 7 retune: swingIn 0.65 -> 1.00, guess 0.60 -> 0.20 (measured - see baseball/CLAUDE.md); timingSigmaMs unchanged at the absolute floor (58)
     // Only the six pitches a CPU roster (never title-gated, doc §8: "CPU stats do not track or
@@ -1211,7 +1211,7 @@ export const VARIETY_REPEAT_BASE_CHANCE = 0.85;
 // `CPU_SIGMA_MIN_MS`: a PER-LEAGUE floor for that league's own BASE sigma (before any ladder
 // offset), so Little League can still be far sloppier than a median human while Majors' base can't
 // be far off it. Values Draft, per the handoff.
-export const CPU_SIGMA_MIN_MS = { little: 115, highschool: 95, college: 80, minors: 70, majors: 58 };
+export const CPU_SIGMA_MIN_MS = { little: 115, highschool: 95, college: 80, minors: 62, majors: 58 }; // R16 ship review: minors 70 -> 62 (measured: the only Minors-only lever that puts a step between College and the Minors; still above the 55 ms human floor)
 // `CPU_SIGMA_ABSOLUTE_FLOOR_MS`: the one number NOTHING may cross - not a league's own base, not a
 // ladder slot's offset, not the pattern-read timing bonus - a hard backstop above the median
 // human's own 55ms. `cpuBaseTimingSigmaMs()` and `CpuBatter`'s own pattern-bonus clamp both apply
