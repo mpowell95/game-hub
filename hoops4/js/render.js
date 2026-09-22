@@ -592,12 +592,15 @@ export class Renderer {
     //   - "CONNECT 4" and "HOOPS" are each drawn three times (a dark offset copy for depth, two
     //     glow passes at shrinking blur, then a crisp face on top with a thin dark keyline so it
     //     stays readable small) in the cabinet's own red/orange, never Brick City's palette.
-    // 0.145 rather than 0.12: the two-line wordmark plus the bulb bars plus the frame had no room
-    // to breathe at the old height, and there is dead cabinet above the sign to grow into. The
-    // camera follows it automatically - `_marqueeTop` below is computed from `mqH`.
-    const mqH = bw * 0.145;
-    const MQW = 2040, MQH = 260;   // aspect matched to the panel's own (bw*1.02 / mqH), so the
-                                    // texture is not stretched more than the old one already was
+    // 0.20 rather than the original 0.12. Matt, twice: "the banner can be bigger. It's short. it
+    // can be taller." A marquee is the tallest thing on an arcade cabinet and this one was a
+    // strip. The camera follows on its own - `_marqueeTop` below is computed from `mqH` and is
+    // one of `_fitPoints` - so the only real cost is the frame the machine is fitted into, which
+    // `check-display.mjs` measures as the display's share of the frame width.
+    const mqH = bw * 0.20;
+    // ASPECT MATCHED TO THE PANEL (bw*1.02 / mqH = 5.1:1), so the drawing is not stretched. This
+    // has to move whenever mqH does, or every letter and every bulb is squashed.
+    const MQW = 2040, MQH = Math.round(MQW * (mqH / (bw * 1.02)));
     const roundRectPath = (x, rx, ry, rw, rh, rr) => {
       x.beginPath();
       x.moveTo(rx + rr, ry);
