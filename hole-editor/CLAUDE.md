@@ -660,22 +660,10 @@ gets an 18th entry, `pole` (`trunk: 0.3, canopy: 0.3, height: 40`); a hole's rec
   recipe, so this is not a stand-in and stays this shape even after the merge), in the real
   `{pts, lo, hi}` form. The matching "Power pole" single-tree tile needs no code at all - it falls
   out of the catalogue loop that already builds one tile per `treeTypes` entry.
-- **TEMP, to remove at merge**: `paintTile()`'s `item.id === 'power-line' && s.poleIdx < 0` block.
-  It exists only because this worktree's `obstacles.js` had no `pole` entry while this was built, so
-  the sampler could add no real pole TREES for `buildMap`'s own tree pass to draw (the wire itself
-  needed no stand-in - `drawWire` reads `hole.lines` regardless of the catalogue). Self-obsoleting:
-  once `OBSTACLE_CATALOG` carries `'pole'`, `s.poleIdx >= 0` and the block never fires again: nothing
-  else has to change, but the block is dead code worth deleting rather than leaving as a permanent
-  no-op.
 - **Tests**: `test-hole-editor-ui.mjs`'s "Power line" block (Power line tile + three map clicks +
-  Enter -> `spec.lines` with 3 points; select + Delete removes it) is guarded on
-  `typeof M.addLine === 'function'` from `hole-editor/js/model.js` and SKIPS with a printed reason
-  in this worktree, since the engine half is not merged here. Also updated (forward, to the state
-  true only after merge, per the orchestrator's contract): the catalogue-size assertion is
-  `cat === 18`, which is why that one assertion is currently red in this worktree's own run (17
-  entries locally) and will go green the moment the engine branch is folded in - every other
-  assertion in the suite is green, including the rest of the same test block that does not touch
-  the catalogue count.
+  Enter -> `spec.lines` with 3 points; select + Delete removes it) and the catalogue-size assertion
+  (18 entries, `pole` last). The two halves were built in parallel; at merge the palette's TEMP
+  pole markers (drawn while the catalogue had no `pole`) were deleted.
 - **Still**: `reference/golf/power-line-2026-09-22.png` - a hand-built three-pole line (bypassing
   holegen.js entirely, in the real `{pts, lo, hi}` shape) rendered in both themes at map resolution,
   the palette's own "Power line" tile in both themes, and a 6x nearest-neighbour crop over the

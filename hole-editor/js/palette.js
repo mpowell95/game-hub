@@ -243,24 +243,6 @@ export function paintTile(canvas, item, theme, types) {
     const ppy = (canvas.width / CROP_W) * 4;
     drawDecorSprite(canvas.getContext('2d'), item.state.decorKind, canvas.width / 2 - ppy * 0.4, canvas.height / 2, ppy, 0, paletteFor(theme));
   }
-  if (item.id === 'power-line' && s.poleIdx < 0) {
-    // TEMP until the engine half lands: `golf/js/obstacles.js` has no 'pole' entry yet, so the
-    // sampler above could not add real pole trees for `buildMap`'s own tree pass to draw. The
-    // wire itself needs no stand-in - `drawWire` paints it from `hole.lines` regardless of the
-    // catalogue - only the three pole markers are faked here, at tile resolution, and only while
-    // `s.poleIdx` stays -1. Remove this block once OBSTACLE_CATALOG carries 'pole'.
-    const ctx = canvas.getContext('2d');
-    const ppy = canvas.width / CROP_W;
-    for (const dxYd of [-14, 0, 14]) {
-      const cx = canvas.width / 2 + dxYd * ppy;
-      const cy = canvas.height / 2;
-      const r = 5;
-      ctx.fillStyle = '#9a9a92';
-      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#4f4f48'; ctx.lineWidth = 2; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(cx - r * 1.7, cy); ctx.lineTo(cx + r * 1.7, cy); ctx.stroke();
-    }
-  }
   if (item.kind === 'draw' || item.tool === 'line') {
     // A pencil over the picture: this one you outline (or, for the power line, string pole to
     // pole) yourself.
