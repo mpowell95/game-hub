@@ -601,6 +601,28 @@ glyph the options differed only by tint. And the caption box reused `.h4-mp-inpu
 styled for the five-character ROOM CODE: uppercase, letter-spaced, centred. "First to three, no
 excuses" rendered as spaced capitals running off the end of its own box.
 
+### How to play, drawn (2026-09-22)
+
+Matt: *"The How To Play is even worse. it's JUST words. That goes against everything I've ever
+told you."* It was one paragraph of five sentences.
+
+Rebuilt to `docs/BUILDING-A-GAME.md`'s "How-to-play screens" pattern, which already existed and
+which this screen had simply never followed: one bold sentence, **a diagram of the ONE
+non-obvious mechanic**, a caption, a concrete "X = Y" example, then the edge cases as plain
+single-row lines.
+
+**The one non-obvious mechanic is that the two games are WIRED TOGETHER.** Everybody already
+knows Connect 4 and everybody already knows basketball; nobody can guess that the hoop you sink
+decides which column your disc falls down. So the diagram is seven hoops over a grid with the
+third taking a ball and a dashed arrow carrying it down column 3 to a disc at the bottom. The
+chosen hoop is marked by a **thicker outline, the ball in it and the arrow leaving it** - never by
+its colour (root CLAUDE.md; Matt is red/green colourblind).
+
+**Every line fits on one row, and that was measured rather than eyeballed.** The first build had
+two lines wrapping to two rows at 393px; the fix was shortening both strings in both languages,
+not shrinking the type, which is already 13px against the UX floor's 11px. The probe in
+`reference/` reports wrapped lines, the minimum font size and whether anything scrolls.
+
 ### What makes a hoop read as a hoop (2026-09-22)
 
 Matt, on a phone screenshot of the shipped v886: *"These don't look like real baskets to me."*
