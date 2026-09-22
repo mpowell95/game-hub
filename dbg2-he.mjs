@@ -1,0 +1,14 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox', '--headless=new'] });
+const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+const errors = [];
+page.on('pageerror', (e) => errors.push(e.message));
+page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+await page.addInitScript(() => { try { localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Tester', emoji: '⛳', code: 'ABCDE' })); } catch {} });
+await page.goto('http://localhost:8125/hole-editor/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+await page.evaluate(() => { document.querySelector('#he-palette').scrollTop = 100000; });
+await page.waitForTimeout(300);
+await page.screenshot({ path: 'dbg2-scroll.png' });
+console.log('errors:', errors);
+await browser.close();

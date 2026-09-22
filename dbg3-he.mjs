@@ -1,0 +1,12 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox', '--headless=new'] });
+const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+page.on('pageerror', (e) => console.log('pageerror:', e.message));
+await page.addInitScript(() => { try { localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Tester', emoji: '⛳', code: 'ABCDE' })); } catch {} });
+await page.goto('http://localhost:8125/hole-editor/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+const loc = await page.locator('.he-tile[data-item="water-swamp"]');
+await loc.scrollIntoViewIfNeeded();
+await page.waitForTimeout(300);
+await page.screenshot({ path: 'dbg3-swamp.png' });
+await browser.close();

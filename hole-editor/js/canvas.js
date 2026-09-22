@@ -5,7 +5,10 @@
 // R5: nothing here computes its own fairway polygon, route, bounds or yardage - everything drawn
 // is read off the BUILT hole (`buildHole()` in model.js), the same object the game itself plays.
 
-import { buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC, SHADOW_LEN, SHADOW_DROP, SHADOW_RX, SHADOW_RY, SHADOW_ALPHA } from '../../golf/js/render.js';
+import {
+  buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC,
+  SHADOW_LEN, SHADOW_DROP, SHADOW_RX, SHADOW_RY, SHADOW_ALPHA, treeShapes, TREE_FILL,
+} from '../../golf/js/render.js';
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
 import { blob, routeStations } from '../../golf/js/holegen.js';
 import { polyCentroid } from './model.js';
@@ -36,12 +39,10 @@ export function editorTheme() { return THEME; }
 // than a second opinion about it.
 const SLOPE_FLAT = 0.06;
 const SLOPE_MIN_PX = 3.5;
-// The three desert TREE_FILL values, copied from render.js (also not exported) - section 5.2 step 2.
-const TREE_FILL = {
-  saguaro: ['#3f7a3a', '#22421f'],
-  paloverde: ['#7f9a3f', '#4c6224'],
-  boulder: ['#8b7f72', '#4d453d'],
-};
+// TREE_FILL used to be a 3-entry copy of render.js's own (also-unexported) table; both are now
+// exported from render.js (2026-09-22, docs/HANDOFF-GOLF-OBJECTS.md section 3) so this editor
+// draws the same colours for the whole obstacle catalogue rather than falling back to a generic
+// green/rim for anything past the original three desert specimens.
 
 function shade(hex, f) {
   const n = parseInt(hex.slice(1), 16);
@@ -138,12 +139,15 @@ export function listObjects(spec, stations, length) {
     out.push({ group: 'bunkers', index, kind: b.kind || 'greensideBunker', center: [cx, cy], poly: blob(cx, cy, r, ry, seed, 9) });
   });
   (spec.water || []).forEach((w, index) => {
-    if (w.poly) { out.push({ group: 'water', index, kind: 'water', center: polyCentroid(w.poly), poly: w.poly, drawn: true }); return; }
+    // `kind` is 'water' or 'swamp' (2026-09-22) - a swamp is still authored in the `water` group
+    // (same tool, same blob/draw machinery), only the paint and the lie differ, so it is not a
+    // group of its own.
+    if (w.poly) { out.push({ group: 'water', index, kind: w.kind || 'water', center: polyCentroid(w.poly), poly: w.poly, drawn: true }); return; }
     if (w.yd == null) return;
     const [cx, cy] = placeLocal(stations, w.yd / length, w.side == null ? 0 : w.side, w.off || 0);
     const rx = w.rx; const ry = w.ry == null ? rx : w.ry;
     const seed = w.seed || (spec.seed + 40 + index);
-    out.push({ group: 'water', index, kind: 'water', center: [cx, cy], poly: blob(cx, cy, rx, ry, seed, w.n || 12) });
+    out.push({ group: 'water', index, kind: w.kind || 'water', center: [cx, cy], poly: blob(cx, cy, rx, ry, seed, w.n || 12) });
   });
   (spec.trees || []).forEach((t, index) => {
     let cx; let cy;
@@ -161,6 +165,20 @@ export function listObjects(spec, stations, length) {
   });
   (spec.pins || []).forEach((p, index) => {
     out.push({ group: 'pins', index, kind: 'pin', center: [p[0], p[1]], radius: 2.5 });
+  });
+  // DECOR (2026-09-22): a `{poly}` entry is the existing drawn-path form (a cart path), already
+  // covered by the generic `o.poly` outline/drag code below - nothing new needed for it. A SPRITE
+  // (bench/sign/flagpole) is authored here with plain `{x, y, kind, rot}` fields - the same shape
+  // `moveObject(spec, 'decor', i, {x, y})` writes - and the BUILT hole's own `decor` entries use
+  // `{at:[x,y], kind, rot}` instead (`holegen.js` does that conversion, same as `trees`' `yd/off`
+  // becoming `x/y` - see `render.js`'s decor loop). The object this function returns also carries
+  // `center`/`radius` per section 4's `{group:'decor', index, x, y, r:2}`, so it works with every
+  // other group's generic hit-test/select/drag code unchanged (they all key off `.center`/
+  // `.radius`, never `.x`/`.y`/`.r` directly).
+  (spec.decor || []).forEach((d, index) => {
+    if (d.poly) { out.push({ group: 'decor', index, kind: d.kind || 'path', center: polyCentroid(d.poly), poly: d.poly, drawn: true }); return; }
+    if (d.x == null || d.y == null) return;
+    out.push({ group: 'decor', index, kind: d.kind || 'bench', center: [d.x, d.y], x: d.x, y: d.y, r: 2, radius: 2, rot: d.rot || 0 });
   });
   return out;
 }
@@ -405,7 +423,7 @@ export class EditorCanvas {
       const handle = this._widthHandleAt(wx, wy, tolYd);
       if (handle) return handle;
     }
-    if (this.tool === 'select' || this.tool === 'bunker' || this.tool === 'water' || this.tool === 'tree' || this.tool === 'cross' || this.tool === 'green') {
+    if (this.tool === 'select' || this.tool === 'bunker' || this.tool === 'water' || this.tool === 'tree' || this.tool === 'cross' || this.tool === 'green' || this.tool === 'decor') {
       const objects = listObjects(this.spec, this.stations, this.length);
       // Pins first: they sit on the green and are tiny, so they must win over anything under them.
       for (const o of objects) if (o.group === 'pins' && Math.hypot(o.center[0] - wx, o.center[1] - wy) <= Math.max(tolYd, o.radius)) return o;
@@ -577,12 +595,19 @@ export class EditorCanvas {
       // context panel shows its controls immediately); Select deselects.
       const placeAndSelect = (kind, group) => {
         this.ops.instant((spec) => this._place(spec, kind, w));
-        this.setSelection({ group, index: this.spec[group].length - 1 });
+        // `(this.spec[group] || [])` (2026-09-22): `decor` had no default empty array anywhere in
+        // the document before this batch (no course has ever carried one), and `addDecor` may not
+        // exist yet in a parallel build (`_place` already fails soft for that) - so a placement
+        // that added nothing must not then crash trying to select "the last thing", here or for
+        // any other group whose array turns out to be absent.
+        const list = this.spec[group] || [];
+        this.setSelection(list.length ? { group, index: list.length - 1 } : null);
       };
       if (this.tool === 'bunker') placeAndSelect('bunker', 'bunkers');
       else if (this.tool === 'water') placeAndSelect('water', 'water');
       else if (this.tool === 'tree') placeAndSelect('tree', this.ops.getTreeMode && this.ops.getTreeMode() === 'stand' ? 'sentinels' : 'trees');
       else if (this.tool === 'cross') placeAndSelect('cross', 'cross');
+      else if (this.tool === 'decor') placeAndSelect('decor', 'decor');
       else {
         // A GUARD HAZARD (a bunker, lake or tree the green's `guard` tokens generate) is not an
         // authored object, so it has no entry to select - Matt: *"The greenside bunkers on hole 6
@@ -672,6 +697,19 @@ export class EditorCanvas {
           const dx = w.x - objDrag.lastX; const dy = w.y - objDrag.lastY;
           objDrag.lastX = w.x; objDrag.lastY = w.y;
           this.ops.liveUpdate((spec) => this.ops.mutators.translateDrawn(spec, objDrag.group, objDrag.index, dx, dy));
+        } else if (objDrag.kind === 'object' && objDrag.group === 'decor') {
+          // A sprite has no yd/side/off (it is a plain world point) - dragging it is a translation,
+          // written through the generic `moveObject(spec, 'decor', i, {x, y})`. Fails soft if that
+          // group case has not landed yet.
+          const wx = +w.x.toFixed(1); const wy = +w.y.toFixed(1);
+          this.ops.liveUpdate((spec) => {
+            if (typeof this.ops.mutators.moveObject !== 'function') {
+              console.warn('[decor] moveObject mutator not available yet');
+              return spec;
+            }
+            try { return this.ops.mutators.moveObject(spec, 'decor', objDrag.index, { x: wx, y: wy }); }
+            catch (e) { console.warn('[decor] moveObject has no decor case yet', e); return spec; }
+          });
         } else if (objDrag.kind === 'object') {
           const placement = nearestPlacement(this.stations, this.length, w.x, w.y);
           this.ops.liveUpdate((spec) => {
@@ -784,23 +822,46 @@ export class EditorCanvas {
       return;
     }
     if (replaceIndex != null) {
-      this.ops.instant((spec) => this.ops.mutators.setDrawnPoly(spec, group, replaceIndex, points));
+      this.ops.instant((spec) => {
+        let s2 = this.ops.mutators.setDrawnPoly(spec, group, replaceIndex, points);
+        // "Draw a swamp" replacing a placed swamp: `setDrawnPoly` keeps a bunker's `kind`
+        // (model.js) but a water-group entry has never carried one before this batch, so the
+        // swamp kind is re-stamped the same way `_place` does (see its comment).
+        if (group === 'water' && kind === 'swamp') s2 = this.ops.mutators.setWaterField(s2, replaceIndex, { kind: 'swamp' });
+        return s2;
+      });
       this.setSelection({ group, index: replaceIndex });
     } else {
-      this.ops.instant((spec) => this.ops.mutators.addDrawnShape(spec, group, points, kind));
+      this.ops.instant((spec) => {
+        let s2 = this.ops.mutators.addDrawnShape(spec, group, points, kind);
+        if (group === 'water' && kind === 'swamp') s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind: 'swamp' });
+        return s2;
+      });
       this.setSelection({ group, index: this.spec[group].length - 1 });
     }
     if (this.onDrawChange) this.onDrawChange(null);
   }
 
-  /** Click placement for Bunker/Water/Tree/Cross (sections 6.4-6.6/6.10). `w` is the world point. */
+  /** Click placement for Bunker/Water/Tree/Cross/Decor (sections 6.4-6.6/6.10, section 4). `w` is
+   *  the world point. */
   _place(spec, kind, w) {
     const placement = nearestPlacement(this.stations, this.length, w.x, w.y);
     if (kind === 'bunker') {
       const chosen = this.ops.getBunkerKind ? this.ops.getBunkerKind() : 'auto';
       return this.ops.mutators.addBunker(spec, placement, this.length, chosen === 'auto' ? undefined : chosen);
     }
-    if (kind === 'water') return this.ops.mutators.addWater(spec, placement);
+    if (kind === 'water') {
+      // Swamp (2026-09-22) is authored in the SAME `water` group as a pond - only `kind` differs.
+      // `addWater(spec, placement, kind)` is Opus's mutator, built to take the kind directly; if a
+      // build of this file runs before that lands, `addWater` simply ignores the extra argument
+      // and `setWaterField` (already generic, `{...w, ...fields}`, since before this batch)
+      // stamps it on afterward, so "Swamp" still works either way.
+      const wk = this.ops.getWaterKind ? this.ops.getWaterKind() : 'water';
+      let s2 = this.ops.mutators.addWater(spec, placement, wk === 'swamp' ? 'swamp' : undefined);
+      const last = s2.water && s2.water[s2.water.length - 1];
+      if (wk === 'swamp' && last && last.kind !== 'swamp') s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind: 'swamp' });
+      return s2;
+    }
     if (kind === 'tree') {
       const treeType = this.ops.getTreeMode && this.ops.getTreeMode() === 'stand' ? 'stand' : 'single';
       const type = this.ops.getTreePlantType ? this.ops.getTreePlantType() : 0;
@@ -814,11 +875,35 @@ export class EditorCanvas {
         over: this.ops.getCrossOver ? this.ops.getCrossOver() : undefined,   // was dropped (2026-09-16 review)
       });
     }
+    if (kind === 'decor') {
+      // Bench/sign/flagpole (2026-09-22): a plain world point, not a route-relative placement -
+      // a sprite is not something that follows a redrawn fairway the way a bunker does. `addDecor`
+      // is Opus's mutator (`docs/HANDOFF-GOLF-OBJECTS.md` section 4); it may not exist yet in a
+      // parallel build, so this fails soft with a console warning rather than throwing, exactly as
+      // the handoff's own instruction says.
+      const decorKind = this.ops.getDecorKind ? this.ops.getDecorKind() : 'bench';
+      if (typeof this.ops.mutators.addDecor !== 'function') {
+        console.warn('[decor] addDecor mutator not available yet');
+        return spec;
+      }
+      return this.ops.mutators.addDecor(spec, decorKind, +w.x.toFixed(1), +w.y.toFixed(1));
+    }
     return spec;
   }
 
   _deleteSelected(spec, sel) {
-    return this.ops.mutators.deleteObject(spec, sel.group, sel.index);
+    // decor is just another group through the SAME generic `deleteObject` (model.js), exactly
+    // like every other group here - the try/catch only covers a build of this file running before
+    // that group case has landed, so a placed sprite is never stuck undeletable in the meantime.
+    try {
+      return this.ops.mutators.deleteObject(spec, sel.group, sel.index);
+    } catch (e) {
+      if (sel.group === 'decor') {
+        console.warn('[decor] deleteObject has no decor case yet; removing locally', e);
+        return { ...spec, decor: (spec.decor || []).filter((_, i) => i !== sel.index) };
+      }
+      throw e;
+    }
   }
 
   /** Screen (css px, canvas-relative) -> world. */
@@ -904,27 +989,39 @@ export class EditorCanvas {
       for (let i = 0; i < list.length; i++) {
         const t = list[i];
         const type = types[t.type] || {};
+        const shape = type.shape || (type.name === 'saguaro' ? 'cactus' : 'canopy');
+        if (shape === 'log') continue;   // a log throws no shadow (render.js, section 3)
         if (i >= handCount && L.belts === false) continue;
-        const rr = (type.name === 'saguaro' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * (t.s || 1) * cam.ppy;
+        const rr = (shape === 'cactus' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * (t.s || 1) * cam.ppy;
         const th = t.h != null ? t.h : (type.height || 15);
         ctx.beginPath();
         ctx.ellipse(sx(t.x) - th * SHADOW_LEN * cam.ppy, sy(t.y) + th * SHADOW_DROP * cam.ppy, rr * SHADOW_RX, rr * SHADOW_RY, 0, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
+      // The editor draws a SIMPLIFIED silhouette (treeShapes' circle union, no clumps/accents -
+      // those are buildMap's three-pass wood painter, section 3) rather than the full painted
+      // wood: this loop needs to dim belt-origin trees per-tree (which a baked raster cannot do)
+      // and stay legible at the editor's much wider zoom range, not to reproduce every brushstroke.
       for (let i = 0; i < list.length; i++) {
         const t = list[i];
         const type = types[t.type] || {};
+        const shape = type.shape || (type.name === 'saguaro' ? 'cactus' : 'canopy');
+        const cactus = shape === 'cactus';
         const isBelt = i >= handCount;
         const [fill, rim] = TREE_FILL[type.name] || ['#3f6b34', '#26431f'];
-        const r = (type.canopy || 4) * (t.s || 1) * cam.ppy;
+        const r = (cactus ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * (t.s || 1) * cam.ppy;
         const px = sx(t.x); const py = sy(t.y);
         ctx.globalAlpha = (isBelt && L.belts === false) ? 0 : (isBelt ? 0.6 : 1);
         if (ctx.globalAlpha > 0) {
           ctx.fillStyle = fill;
-          ctx.beginPath(); ctx.arc(px, py, Math.max(1, r), 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = shade(rim, 0.6);
-          ctx.beginPath(); ctx.arc(px, py, Math.max(0.8, (type.trunk || 0.8) * cam.ppy), 0, Math.PI * 2); ctx.fill();
+          for (const [cx, cy, cr] of treeShapes(px, py, Math.max(1, r), shape)) {
+            ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill();
+          }
+          if (!cactus) {
+            ctx.fillStyle = shade(rim, 0.6);
+            ctx.beginPath(); ctx.arc(px, py, Math.max(0.8, (type.trunk || 0.8) * cam.ppy), 0, Math.PI * 2); ctx.fill();
+          }
         }
         ctx.globalAlpha = 1;
       }
@@ -1072,6 +1169,14 @@ export class EditorCanvas {
           if (selected) {
             ctx.beginPath();
             ctx.arc(sx(o.center[0]), sy(o.center[1]), Math.max(4, (o.radius || 4) * cam.ppy + 3), 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        } else if (o.group === 'decor') {
+          // A sprite is baked into the blitted map image already (buildMap draws it, section 4),
+          // so the editor draws nothing for it unselected - only a ring, the same rule trees use.
+          if (selected) {
+            ctx.beginPath();
+            ctx.arc(sx(o.center[0]), sy(o.center[1]), Math.max(6, (o.radius || 2) * cam.ppy + 5), 0, Math.PI * 2);
             ctx.stroke();
           }
         } else if (o.group === 'pins') {

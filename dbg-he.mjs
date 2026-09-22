@@ -1,0 +1,10 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox', '--headless=new'] });
+const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+page.on('pageerror', (e) => console.log('pageerror:', e.message));
+await page.addInitScript(() => { try { localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Tester', emoji: '⛳', code: 'ABCDE' })); } catch {} });
+await page.goto('http://localhost:8125/hole-editor/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+const html = await page.locator('#he-palette').innerHTML();
+console.log(html.slice(0, 3000));
+await browser.close();
