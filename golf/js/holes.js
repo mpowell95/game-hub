@@ -466,6 +466,27 @@ export function validateHole(hole) {
     if (!(t.spacing > 0)) at(`treeBelts[${i}] spacing must be positive`);
     checkPoly(t.poly, `treeBelts[${i}]`);
   }
+  // POWER LINES (2026-09-22): `lines[i] = {pts, lo, hi}`, built by holegen.js from the recipe's
+  // `{pts, h}` with lo = h - 1.0 and hi = h + 0.6, so the recipe's `h` is `lo + 1`. The poles are
+  // trees of the hole's own 'pole' type; without one the wire would hang from nothing.
+  if (hole.lines != null) {
+    if (!Array.isArray(hole.lines)) at('lines is not a list');
+    else {
+      if (hole.lines.length && !types.some((ty) => ty && ty.name === 'pole')) {
+        at("lines needs a 'pole' entry in treeTypes (only a Course Creator course carries one)");
+      }
+      for (const [i, ln] of hole.lines.entries()) {
+        const pts = ln && ln.pts;
+        if (!Array.isArray(pts) || pts.length < 2) { at(`lines[${i}] needs at least 2 points`); continue; }
+        for (const p of pts) {
+          if (!Array.isArray(p) || p.length !== 2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) { at(`lines[${i}] has a malformed point ${JSON.stringify(p)}`); continue; }
+          if (p[0] < b.minX || p[0] > b.maxX || p[1] < b.minY || p[1] > b.maxY) at(`lines[${i}] has a point outside bounds: ${JSON.stringify(p)}`);
+        }
+        const h = ln.lo + 1.0;
+        if (!Number.isFinite(h) || !(ln.hi > ln.lo) || h < 4 - 1e-6 || h > 20 + 1e-6) at(`lines[${i}] wire height ${Number.isFinite(h) ? +h.toFixed(2) : h} is not 4..20`);
+      }
+    }
+  }
   for (const [i, t] of types.entries()) {
     if (!(t.trunk > 0) || !(t.canopy >= t.trunk) || !(t.height > 0)) {
       at(`treeTypes[${i}] (${t.name}) needs trunk > 0, canopy >= trunk, height > 0`);

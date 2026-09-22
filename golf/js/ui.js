@@ -2183,7 +2183,10 @@ class GolfGame {
     // one resting under a crown / against a trunk / inside a stand, gets the same two buttons.
     // ...never on the green or its collar: a putt runs under the branches and nothing stops it, so
     // "in the trees" there is a question with no answer (Matt, Red Mesa 7, after a putt).
-    else if (!mustPutt(this._lie()) && (this._lie() === 'trees' || (a.res && a.res.blocked) || amongTrees(this.hole, this.ball))) this._showDropPrompt();
+    // A POWER LINE (2026-09-22) is not a tree: the ball dropped where it met the wire and is played
+    // from there, so it is named, not offered a drop. Only a TREE block asks the drop question.
+    else if (a.res && a.res.blocked && a.res.blocked.wire != null && !amongTrees(this.hole, this.ball)) this._showBanner(t('blocked_wire'), t('blocked_wire_sub'));
+    else if (!mustPutt(this._lie()) && (this._lie() === 'trees' || (a.res && a.res.blocked && a.res.blocked.tree) || amongTrees(this.hole, this.ball))) this._showDropPrompt();
     // THE BALL IS AT REST HERE, which is the only state worth snapshotting: `this.ball` while
     // `this.anim` runs is a point on a flight path, and a save taken then would restore the ball
     // into mid-air as if it were lying there.

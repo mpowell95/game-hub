@@ -596,6 +596,8 @@ function place(stations, at, side, off) {
  *   belts             {left, right} each false or {from, to, depth, spacing, type, seed}
  *   trees             hand-placed specimens [{at, side, off, type}] or [{x, y, type}]
  *   treeTypes         the specimen table
+ *   lines             power lines [{pts: [[x, y], ...], h}] in world yards, h the wire height
+ *                     (default 10): a pole tree at every point plus `hole.lines[i] = {pts, lo, hi}`
  *   decor             art only, never consulted for anything: either {poly, kind} (a cart path, the
  *                     default kind) or {at:[x,y], kind:'bench'|'sign'|'flagpole', rot} - a sprite.
  *                     Carried through verbatim; only the bounds pass reads it.
@@ -1139,6 +1141,24 @@ export function makeHole(spec) {
     return { x: +x.toFixed(1), y: +y.toFixed(1), type: tr.type || 0, ...own(tr) };
   }).concat(extraTrees);
 
+  // POWER LINES (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md). `lines: [{ pts, h }]` in world
+  // yards, `h` the wire's height (default 10). Two things come out of one entry:
+  //   - a POLE at every point, as an ordinary tree of the hole's own `'pole'` type, so a pole blocks
+  //     and draws exactly like any trunk and nothing downstream needs to know it is a pole;
+  //   - `lines[i] = { pts, lo, hi }`, the BAND of heights the wire occupies. shot.js's `wireHit`
+  //     stops a ball whose height is inside it where it crosses a span; over and under are clear.
+  // A hole whose `treeTypes` has no 'pole' entry gets no poles and is refused by validateHole
+  // (only a Course Creator course carries the catalogue; the shipped courses never get `lines`).
+  const lines = Array.isArray(spec.lines) ? spec.lines.map((ln) => {
+    const h = ln && ln.h != null ? +ln.h : 10;
+    const pts = ((ln && ln.pts) || []).map((p) => [+p[0], +p[1]]);
+    return { pts, lo: +(h - 1.0).toFixed(2), hi: +(h + 0.6).toFixed(2) };
+  }) : null;
+  const poleType = (spec.treeTypes || []).findIndex((ty) => ty && ty.name === 'pole');
+  if (lines && poleType >= 0) {
+    for (const ln of lines) for (const [x, y] of ln.pts) trees.push({ x, y, type: poleType });
+  }
+
   const decor = spec.decor || [];
 
   // BOUNDS ARE MEASURED FROM WHAT WAS ACTUALLY BUILT, then padded - never authored. Every point of
@@ -1217,6 +1237,7 @@ export function makeHole(spec) {
     treeTypes: spec.treeTypes || [],
     trees,
     treeBelts,
+    ...(lines ? { lines } : {}),
     decor,
     // Design intent, carried for the scorecard and the hole-select screen. Never read by any rule.
     nickname: spec.nickname || '',

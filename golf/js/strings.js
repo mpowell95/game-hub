@@ -175,6 +175,7 @@ export const STRINGS = {
     obst_smallrock: 'Small rock',
     obst_rockpile: 'Rock pile',
     obst_log: 'Fallen log',
+    obst_pole: 'Power pole',
     // clubs
     club_driver: 'driver',
     club_3wood: '3 wood',
@@ -204,6 +205,8 @@ export const STRINGS = {
     // only ever shown where the player has a real choice.
     in_water: 'In the water',
     in_trees: 'In the trees',
+    blocked_wire: 'Hit the power line',
+    blocked_wire_sub: 'Played from where it fell',
     penalty_stroke: 'One penalty stroke',
     drop_q: 'Would you like to take a drop or play from your lie?',
     take_drop: 'Take a drop',
@@ -380,6 +383,7 @@ export const STRINGS = {
     obst_smallrock: 'Roca pequeña',
     obst_rockpile: 'Montón de rocas',
     obst_log: 'Tronco caído',
+    obst_pole: 'Poste de luz',
     club_driver: 'driver',
     club_3wood: 'madera 3',
     club_5wood: 'madera 5',
@@ -405,6 +409,8 @@ export const STRINGS = {
     last_shot_lbl: 'último golpe',
     in_water: 'En el agua',
     in_trees: 'Entre los árboles',
+    blocked_wire: 'Golpeó el cable',
+    blocked_wire_sub: 'Juegas desde donde cayó',
     penalty_stroke: 'Un golpe de penalización',
     drop_q: '¿Quieres tomar un drop o jugar la bola como está?',
     take_drop: 'Tomar un drop',

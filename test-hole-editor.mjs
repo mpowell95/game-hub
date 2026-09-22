@@ -19,6 +19,7 @@ import {
   serialiseDocument, loadDocument, migrateDocument, CATALOG_VERSION,
   addWater, setWaterField, deleteWater, addCross,
   addDecor, setDecorField, deleteDecor, deleteObject, moveObject, DECOR_KINDS,
+  addLine, setLineField, moveLinePoint, deleteLine,
 } from './hole-editor/js/model.js';
 import { OBSTACLE_CATALOG, OBSTACLE_INDEX, catalogFor } from './golf/js/obstacles.js';
 import { validateHole as validateHoleTop } from './golf/js/holes.js';
@@ -512,7 +513,7 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
   // --- the obstacle catalogue, and the migration onto it (2026-09-22) ------------------------
 
   await test('the catalogue is the shape the engine and the renderer each expect', () => {
-    assert.equal(OBSTACLE_CATALOG.length, 17);
+    assert.equal(OBSTACLE_CATALOG.length, 18);
     const names = OBSTACLE_CATALOG.map((o) => o.name);
     assert.equal(new Set(names).size, names.length, 'no duplicate names');
     for (const o of OBSTACLE_CATALOG) {
@@ -534,6 +535,7 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
     assert.equal(OBSTACLE_INDEX.pine, 0);
     assert.equal(OBSTACLE_INDEX.saguaro, 10);
     assert.equal(OBSTACLE_INDEX.boulder, 13);
+    assert.equal(OBSTACLE_INDEX.pole, 17, 'the power pole was APPENDED (2026-09-22)');
   });
 
   await test('every catalogue entry has an obst_ label in EN and ES', () => {
@@ -761,6 +763,87 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
       assert.deepEqual(validateHoleTop(h), []);
       assert.ok(h.surfaces.some((x) => x.kind === 'swamp'), 'the exported course has no swamp');
       assert.equal(h.decor.length, 2);
+    } finally { unlinkSync(tmp); }
+  });
+
+  // --- power lines (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 3) -----------------------
+
+  await test('addLine: 2+ points, world yards, h defaults to 10 and is clamped to 4..20', () => {
+    let spec = { n: 1 };
+    assert.equal(addLine(spec, [[0, 100]]), spec, 'one point is not a line');
+    spec = addLine(spec, [[-30.04, 150], [0, 150], [30, 150.06]]);
+    assert.deepEqual(spec.lines, [{ pts: [[-30, 150], [0, 150], [30, 150.1]], h: 10 }]);
+    spec = addLine(spec, [[0, 200], [10, 210]], 25);
+    assert.equal(spec.lines[1].h, 20);
+    assert.equal(addLine({}, [[0, 0], [1, 1]], 1).lines[0].h, 4);
+  });
+
+  await test('setLineField: h (clamped), pts (2+), anything else ignored; never mutates', () => {
+    const spec = addLine({}, [[0, 150], [40, 150]]);
+    const frozen = JSON.stringify(spec);
+    assert.equal(setLineField(spec, 0, 'h', 14).lines[0].h, 14);
+    assert.equal(setLineField(spec, 0, 'h', 99).lines[0].h, 20);
+    assert.equal(setLineField(spec, 0, 'h', 0).lines[0].h, 4);
+    assert.deepEqual(setLineField(spec, 0, 'pts', [[1, 2], [3, 4], [5, 6]]).lines[0].pts, [[1, 2], [3, 4], [5, 6]]);
+    assert.equal(setLineField(spec, 0, 'pts', [[1, 2]]), spec, 'a one-point line is refused');
+    assert.equal(setLineField(spec, 0, 'colour', 'red'), spec);
+    assert.equal(setLineField(spec, 5, 'h', 12), spec, 'no such line');
+    assert.equal(JSON.stringify(spec), frozen);
+  });
+
+  await test('moveLinePoint moves one point of one line; deleteLine removes it (and the key when empty)', () => {
+    let spec = addLine(addLine({}, [[0, 150], [40, 150]]), [[0, 250], [40, 250]]);
+    spec = moveLinePoint(spec, 1, 0, 5.04, 260);
+    assert.deepEqual(spec.lines[1].pts, [[5, 260], [40, 250]]);
+    assert.deepEqual(spec.lines[0].pts, [[0, 150], [40, 150]], 'the other line is untouched');
+    assert.equal(moveLinePoint(spec, 1, 9, 0, 0), spec, 'no such point');
+    spec = deleteLine(spec, 0);
+    assert.equal(spec.lines.length, 1);
+    assert.deepEqual(spec.lines[0].pts, [[5, 260], [40, 250]]);
+    // The canvas's Delete key goes through the generic deleteObject, like every other group.
+    spec = deleteObject(spec, 'lines', 0);
+    assert.equal(spec.lines, undefined, 'the last delete removes the key rather than leaving []');
+  });
+
+  await test('the drawing flow: addDrawnShape(spec, "lines", pts) makes a line (2 points is enough, never smoothed)', () => {
+    const spec = addDrawnShape({}, 'lines', [[0, 100], [20, 130]]);
+    assert.deepEqual(spec.lines, [{ pts: [[0, 100], [20, 130]], h: 10 }]);
+    const moved = translateDrawn(spec, 'lines', 0, 2, -3);
+    assert.deepEqual(moved.lines[0].pts, [[2, 97], [22, 127]]);
+    assert.deepEqual(duplicateObject(spec, 'lines', 0).lines[1].pts, [[0, 112], [20, 142]]);
+  });
+
+  await test('a Course Creator hole with a power line BUILDS AND VALIDATES: poles + band', () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    doc.holes['h-01'].spec = addLine(doc.holes['h-01'].spec, [[-35, 150], [0, 152], [35, 150]], 12);
+    invalidateBuilds(doc);
+    const built = buildHole(doc, 'h-01');
+    assert.deepEqual(validateHoleTop(built), []);
+    assert.deepEqual(built.lines, [{ pts: [[-35, 150], [0, 152], [35, 150]], lo: 11, hi: 12.6 }]);
+    const poles = built.trees.filter((t) => built.treeTypes[t.type].name === 'pole');
+    assert.equal(poles.length, 3, 'a pole at every point');
+    // ...and the Red Mesa table has no pole, so a line there is REFUSED rather than hanging from nothing.
+    const rm = makeHole({ ...RM_DEFAULTS, ...normalise(SPECS[0], 1), n: 1, lines: [{ pts: [[-35, 150], [35, 150]], h: 10 }] });
+    assert.ok(validateHoleTop(rm).some((e) => /'pole'/.test(e)), validateHoleTop(rm).join('; '));
+  });
+
+  await test('export prints lines, and the generated module builds and validates them', async () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    doc.holes['h-01'].spec = addLine(doc.holes['h-01'].spec, [[-35, 150], [35, 150]], 9);
+    const src = generateSource(doc, '2026-09-22');
+    assert.match(src, /lines: \[\n\s+\{ pts: \[\[-35, 150\], \[35, 150\]\], h: 9 \},\n\s+\]/);
+    const json = JSON.parse(generateJSON(doc));
+    assert.deepEqual(json.holes['h-01'].spec.lines, [{ pts: [[-35, 150], [35, 150]], h: 9 }]);
+    const tmp = new URL('./.cc-lines-test.mjs', import.meta.url);
+    writeFileSync(tmp, src.replace("'../js/holegen.js'", "'./golf/js/holegen.js'").replace("'../js/obstacles.js'", "'./golf/js/obstacles.js'"));
+    try {
+      const mod = await import(tmp.href + '?t=' + Date.now());
+      const h = mod.default.holes[0];
+      assert.deepEqual(validateHoleTop(h), []);
+      assert.deepEqual(h.lines, [{ pts: [[-35, 150], [35, 150]], lo: 8, hi: 9.6 }]);
+      assert.equal(h.trees.filter((t) => h.treeTypes[t.type].name === 'pole').length, 2);
     } finally { unlinkSync(tmp); }
   });
 

@@ -50,6 +50,10 @@ export const OBSTACLE_CATALOG = [
   { name: 'smallrock', shape: 'rock', trunk: 1.5, canopy: 1.5, height: 40, looks: ['desert', 'parkland'] },
   { name: 'rockpile', shape: 'rocks', trunk: 4.5, canopy: 4.5, height: 40, looks: ['desert', 'parkland'] },
   { name: 'log', shape: 'log', trunk: 1.2, canopy: 1.2, height: 1.5, looks: ['parkland'] },
+  // A POWER POLE (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md): a thin trunk that blocks at every
+  // height. Placed on its own it is just a post; a hole's `lines` recipe puts one at every point of
+  // a wire, and the WIRE between them is a separate rule (shot.js `wireHit`), not a tree.
+  { name: 'pole', shape: 'pole', trunk: 0.3, canopy: 0.3, height: 40, looks: ['parkland', 'desert'] },
 ];
 
 /** The catalogue index of a named entry, or -1. Use it wherever an index is needed from code, so a

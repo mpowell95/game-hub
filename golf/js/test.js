@@ -3261,5 +3261,125 @@ console.log('\n-- 21. SWAMP: a hazard you play OUT OF, not a penalty (2026-09-22
   }
 }
 
+console.log('\n-- 25. POWER LINES: a wire is a BAND of heights, not a wall (2026-09-22) --');
+// docs/HANDOFF-GOLF-POWER-LINES.md. The poles are ordinary trees; the wire between them stops a
+// ball only while it is between `lo` and `hi`. Over it and under it are both clear, which is the
+// entire difference from a canopy, so most of this section is the two ways a band can be missed.
+{
+  const { OBSTACLE_CATALOG, OBSTACLE_INDEX } = await import('./obstacles.js');
+  ok('the pole is catalogue entry 17, appended (the order is frozen)',
+    OBSTACLE_INDEX.pole === 17 && OBSTACLE_CATALOG.length === 18 && OBSTACLE_CATALOG[16].name === 'log');
+  ok('...a thin post that blocks at every height',
+    OBSTACLE_CATALOG[17].trunk === 0.3 && OBSTACLE_CATALOG[17].canopy === 0.3 && OBSTACLE_CATALOG[17].height === 40);
+  ok('obst_pole and blocked_wire exist in EN and ES',
+    ['obst_pole', 'blocked_wire', 'blocked_wire_sub'].every((k) => typeof STRINGS.en[k] === 'string' && typeof STRINGS.es[k] === 'string'));
+  ok('no shipped course carries a power line', COURSES.every((c) => c.holes.every((h) => !h.lines)));
+
+  const base = {
+    n: 1, par: 4, path: [[0, 5], [0, 400]],
+    fw: [{ at: 0, w: 17 }, { at: 0.5, w: 15 }, { at: 1, w: 13 }],
+    seed: 4242, greenSeed: 9999, hard: 0.4, defend: false,
+    treeTypes: OBSTACLE_CATALOG, belts: { left: false, right: false },
+    wind: { speed: 0, deg: 0 },       // still air, so every resolveShot below flies the line it is aimed on
+  };
+  const WIRE_Y = 150;
+  const pl = makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [0, WIRE_Y], [40, WIRE_Y]], h: 10 }] });
+  ok('a hole with a power line VALIDATES', validateHole(pl).length === 0, validateHole(pl).join('; '));
+  ok('...its built line is the band h-1.0 .. h+0.6',
+    pl.lines.length === 1 && pl.lines[0].lo === 9 && pl.lines[0].hi === 10.6 && pl.lines[0].pts.length === 3);
+  ok('...and a pole tree stands at every point',
+    pl.trees.length === 3 && pl.trees.every((t) => pl.treeTypes[t.type].name === 'pole'));
+  const dflt = makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [40, WIRE_Y]] }] });
+  ok('h defaults to 10', dflt.lines[0].lo === 9 && dflt.lines[0].hi === 10.6);
+
+  // Straight up the hole from [0, 5]: the wire is crossed 145 yds out. With a 200 yd carry that is
+  // p = 0.725, and the ball's height there is apex * 4 p (1 - p) = 0.7975 * apex.
+  const from = [0, 5];
+  const pAt = 145 / 200;
+  const k = 4 * pAt * (1 - pAt);
+  const inBand = SH.wireHit(pl, from, 0, 200, 0, 10 / k);      // 10 yds up at the wire: in the band
+  ok('a shot crossing the wire INSIDE the band is blocked', !!inBand && inBand.wire === 0);
+  ok('...where it crosses the wire',
+    !!inBand && Math.abs(inBand.at[1] - WIRE_Y) < 0.01 && Math.abs(inBand.at[0]) < 0.01 && Math.abs(inBand.p - pAt) < 0.005,
+    inBand && `at ${inBand.at.map((v) => v.toFixed(3))}, p ${inBand.p.toFixed(4)}`);
+  ok('the same line with a HIGH apex is clear (over the wire)', SH.wireHit(pl, from, 0, 200, 0, 30) === null);
+  ok('...and with a LOW one (a runner under it) is clear', SH.wireHit(pl, from, 0, 200, 0, 5) === null);
+  ok('...and just outside either edge of the band is clear',
+    SH.wireHit(pl, from, 0, 200, 0, 8.9 / k) === null && SH.wireHit(pl, from, 0, 200, 0, 10.7 / k) === null);
+  ok('a shot that stops SHORT of the wire is not blocked by it', SH.wireHit(pl, from, 0, 140, 0, 10 / k) === null);
+  ok('a shot running PAST the end of the wire is not blocked by it', SH.wireHit(pl, [60, 5], 0, 200, 0, 10 / k) === null);
+  ok('a chip still climbing passes under it (min apex 2, crossing 5 yds out)',
+    SH.wireHit(pl, [0, WIRE_Y - 5], 0, 30, 0, 2) === null);
+  ok('the ball standing right under the wire can always leave it',
+    SH.wireHit(pl, [0, WIRE_Y], 0, 100, 0, 30) === null && SH.wireHit(pl, [0, WIRE_Y - 0.2], 0, 100, 0, 12) === null);
+
+  // A PUTT NEVER LEAVES THE GROUND, so it rolls under the wire.
+  const putt = SH.simulatePutt({ hole: pl, from: [0, WIRE_Y - 3], aimRad: 0, power: 1, rangeFt: 40 });
+  ok('a putt rolls under the wire', putt.rest[1] > WIRE_Y + 1, `rest ${putt.rest.map((v) => v.toFixed(1))}`);
+
+  // THE FULL SHOT: some real club and power in the bag meets the wire in the band, and resolveShot
+  // drops it at the wire - no penalty, short of the crossing, straight down the line it flew.
+  let wireRes = null;
+  for (const club of CLUBS) {
+    for (let pw = 0.3; pw <= 1.0 && !wireRes; pw += 0.01) {
+      const r = SH.resolveShot({ hole: pl, from, aimRad: 0, club, power: pw, mishitDeg: 0 });
+      if (r.blocked && r.blocked.wire != null) wireRes = r;
+    }
+    if (wireRes) break;
+  }
+  ok('resolveShot: a real club in the bag can be stopped by the wire', !!wireRes);
+  if (wireRes) {
+    ok('...it falls where it met the wire (just short of it), with no penalty and no roll',
+      wireRes.penalty === 0 && wireRes.rollYd === 0 && wireRes.rest[1] < WIRE_Y && wireRes.rest[1] > WIRE_Y - 4,
+      `rest ${wireRes.rest.map((v) => v.toFixed(1))}, penalty ${wireRes.penalty}`);
+    ok('...and the flight is cut at the wire', wireRes.flightMs < SH.flightMs(wireRes.carry));
+  }
+  // The same hole without the wire lets that exact shot through: the block is the wire's doing.
+  {
+    const noWire = makeHole({ ...base, trees: pl.trees.map((t) => ({ x: t.x, y: t.y, type: t.type })) });
+    let through = 0; let blockedByWire = 0;
+    for (const club of CLUBS) {
+      const r = SH.resolveShot({ hole: noWire, from, aimRad: 0, club, power: 0.9, mishitDeg: 0 });
+      const rw = SH.resolveShot({ hole: pl, from, aimRad: 0, club, power: 0.9, mishitDeg: 0 });
+      if (!r.blocked) through++;
+      if (rw.blocked && rw.blocked.wire != null) blockedByWire++;
+    }
+    ok(`...the poles alone block nothing up the middle (${through}/${CLUBS.length} clear)`, through === CLUBS.length);
+    ok(`...and a high club still flies the wire (${CLUBS.length - blockedByWire}/${CLUBS.length} clear of it at 90 %)`, blockedByWire < CLUBS.length);
+  }
+
+  // A POLE TRUNK BLOCKS, at any height - it is an ordinary tree.
+  {
+    const aim = Math.atan2(40, WIRE_Y - 5);
+    const d = Math.hypot(40, WIRE_Y - 5);
+    const th = SH.treeHit(pl, from, aim, d + 30, 0, 30);
+    ok('a pole trunk blocks a shot aimed straight at it, even a high one',
+      !!th && pl.treeTypes[th.tree.type].name === 'pole' && Math.hypot(th.tree.x - 40, th.tree.y - WIRE_Y) < 0.01);
+    const r = SH.resolveShot({ hole: pl, from, aimRad: aim, club: CLUBS[0], power: 1, mishitDeg: 0 });
+    ok('...and resolveShot reports it as a tree block, not a wire one', !!r.blocked && !!r.blocked.tree && r.blocked.wire == null);
+  }
+
+  // THE VALIDATOR REFUSES, and names the problem.
+  const refuse = (label, hole, re) => {
+    const e = validateHole(hole);
+    ok(`validateHole refuses ${label}`, e.some((m) => re.test(m)), e.join('; ') || '(no errors)');
+  };
+  refuse('lines on a hole whose treeTypes has no pole',
+    makeHole({ ...base, treeTypes: OBSTACLE_CATALOG.slice(0, 17), lines: [{ pts: [[-40, WIRE_Y], [40, WIRE_Y]], h: 10 }] }), /'pole'/);
+  refuse('a line of one point', makeHole({ ...base, lines: [{ pts: [[0, WIRE_Y]], h: 10 }] }), /at least 2 points/);
+  refuse('a line with a point off the map',
+    { ...pl, lines: [{ ...pl.lines[0], pts: [[0, WIRE_Y], [pl.bounds.maxX + 50, WIRE_Y]] }] }, /outside bounds/);
+  refuse('a wire lower than 4', makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [40, WIRE_Y]], h: 3 }] }), /not 4\.\.20/);
+  refuse('a wire higher than 20', makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [40, WIRE_Y]], h: 21 }] }), /not 4\.\.20/);
+  ok('...and accepts both ends of 4..20',
+    validateHole(makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [40, WIRE_Y]], h: 4 }] })).length === 0
+    && validateHole(makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [40, WIRE_Y]], h: 20 }] })).length === 0);
+
+  // THE HUD: a wire block is NAMED, and never asked the tree drop question.
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('ui.js banners a wire block', /blocked\.wire != null[^\n]*_showBanner\(t\('blocked_wire'\)/.test(ui));
+  ok('...and only a TREE block opens the drop prompt', /a\.res\.blocked && a\.res\.blocked\.tree\)/.test(ui));
+}
+
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);
 process.exit(fail ? 1 : 0);

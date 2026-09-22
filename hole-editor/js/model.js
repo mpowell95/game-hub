@@ -548,6 +548,9 @@ export function smoothPoly(points, passes = 2) {
  *  For the `water` group `kind` is 'water' (or absent) for a lake and 'swamp' for a swamp; a lake
  *  is still written as a bare `{poly}`, exactly as it always was. */
 export function addDrawnShape(spec, group, points, kind) {
+  // A power line is drawn with the same click-points flow, but it is a polyline, not a closed
+  // outline: never smoothed, and two points are enough.
+  if (group === 'lines') return addLine(spec, points);
   if (!points || points.length < 3) return spec;
   const poly = smoothPoly(points);
   const entry = group === 'bunkers'
@@ -567,7 +570,13 @@ export function setDrawnPoly(spec, group, index, points) {
 }
 
 export function translateDrawn(spec, group, index, dx, dy) {
-  const list = spec[group].map((o, i) => (i === index && o.poly ? { ...o, poly: o.poly.map((p) => [+(p[0] + dx).toFixed(1), +(p[1] + dy).toFixed(1)]) } : o));
+  const shift = (pts) => pts.map((p) => [+(p[0] + dx).toFixed(1), +(p[1] + dy).toFixed(1)]);
+  const list = spec[group].map((o, i) => {
+    if (i !== index) return o;
+    if (o.poly) return { ...o, poly: shift(o.poly) };
+    if (group === 'lines' && Array.isArray(o.pts)) return { ...o, pts: shift(o.pts) };   // a whole power line
+    return o;
+  });
   return { ...spec, [group]: list };
 }
 
@@ -705,6 +714,7 @@ export function duplicateObject(spec, group, index) {
   if (!o) return spec;
   let copy;
   if (o.poly) copy = { ...o, poly: o.poly.map((p) => [p[0], +(p[1] + 12).toFixed(1)]) };
+  else if (group === 'lines') copy = { ...o, pts: o.pts.map((p) => [p[0], +(p[1] + 12).toFixed(1)]) };
   else if (Array.isArray(o.at)) copy = { ...o, at: [o.at[0], +(o.at[1] + 12).toFixed(1)] };
   else {
     copy = { ...o, yd: +(o.yd + 12).toFixed(1) };
@@ -722,6 +732,7 @@ export function deleteObject(spec, group, index) {
   if (group === 'sentinels') return deleteSentinel(spec, index);
   if (group === 'cross') return deleteCross(spec, index);
   if (group === 'decor') return deleteDecor(spec, index);
+  if (group === 'lines') return deleteLine(spec, index);
   if (group === 'pins') return deletePin(spec, index);
   throw new Error(`hole-editor: unknown object group "${group}"`);
 }
@@ -762,6 +773,52 @@ export function deleteDecor(spec, index) {
   const decor = (spec.decor || []).filter((_, i) => i !== index);
   const out = { ...spec, decor };
   if (!decor.length) delete out.decor;
+  return out;
+}
+
+// --- Power lines (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 3) -----------------------
+//
+// `lines: [{ pts: [[x, y], ...], h }]`, in WORLD yards like a drawn shape (a wire is strung
+// between points on the ground, not along the corridor, so a route edit must not drag it). `h` is
+// the wire's height, 4..20, default 10. holegen.js puts a pole tree at every point and turns `h`
+// into the band `{lo: h - 1.0, hi: h + 0.6}` that golf/js/shot.js's `wireHit` reads.
+
+const LINE_H_MIN = 4;
+const LINE_H_MAX = 20;
+const clampLineH = (h) => Math.max(LINE_H_MIN, Math.min(LINE_H_MAX, Number.isFinite(+h) ? +h : 10));
+const linePts = (pts) => (pts || []).map((p) => [+(+p[0]).toFixed(1), +(+p[1]).toFixed(1)]);
+
+/** A new power line through `pts` (2 or more clicked points; fewer is a no-op). */
+export function addLine(spec, pts, h = 10) {
+  if (!Array.isArray(pts) || pts.length < 2) return spec;
+  return { ...spec, lines: [...(spec.lines || []), { pts: linePts(pts), h: clampLineH(h) }] };
+}
+
+/** Patch one field of line `i`: `'h'` (clamped to 4..20) or `'pts'` (2+ points, else no-op). */
+export function setLineField(spec, i, field, value) {
+  const list = spec.lines || [];
+  if (!list[i]) return spec;
+  let patch;
+  if (field === 'h') patch = { h: clampLineH(value) };
+  else if (field === 'pts') {
+    if (!Array.isArray(value) || value.length < 2) return spec;
+    patch = { pts: linePts(value) };
+  } else return spec;
+  return { ...spec, lines: list.map((ln, k) => (k === i ? { ...ln, ...patch } : ln)) };
+}
+
+/** Drag point `k` of line `i` (its pole moves with it: poles are built from these points). */
+export function moveLinePoint(spec, i, k, x, y) {
+  const ln = (spec.lines || [])[i];
+  if (!ln || !ln.pts[k]) return spec;
+  const pts = ln.pts.map((p, j) => (j === k ? [+(+x).toFixed(1), +(+y).toFixed(1)] : p));
+  return { ...spec, lines: spec.lines.map((l, j) => (j === i ? { ...l, pts } : l)) };
+}
+
+export function deleteLine(spec, i) {
+  const lines = (spec.lines || []).filter((_, k) => k !== i);
+  const out = { ...spec, lines };
+  if (!lines.length) delete out.lines;
   return out;
 }
 
