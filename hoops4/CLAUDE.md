@@ -18,8 +18,10 @@ column. Four in a row wins.
 | Registry | `module: '../hoops4/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `hoops4` |
 | Stats id | `hoops4` — plain `recordResult(id, difficulty, won)`, **no sub-counter**, so item 7's three-edit rule does not apply |
 | CSS root / prefix | `.h4-root` / `.h4-` |
-| Settings key | `gamehub.hoops4.v1` (one preference: the opponent) |
-| Difficulty axis | the CPU skill — `easy` / `medium` / `hard`. A two-player match records nothing |
+| Settings key | `gamehub.hoops4.v1` (two preferences: the opponent, and `shots`: `'until'` \| `'one'`) |
+| Multiplayer | LIVE via `js/net.js` (`rooms/<CODE>`); TURN BY TURN via `hoops4/js/mp.js` (`hoops/games/<id>`, a NEW top-level node) |
+| Outbox key | `gamehub.hoops4.outbox.v1` (turn-by-turn moves waiting on a signal) |
+| Difficulty axis | the CPU skill — `easy` / `medium` / `hard`, plus `'mp'` for a multiplayer match (the repo's own convention — `'mp'` is unmapped in `js/difficulty-tiers.js`, so `tierOf('mp')` is null and it never lands in a difficulty tier). A two-player-on-one-phone match records nothing, because there is no "you" in it |
 | `isInProgress()` | the **no mid-game resume** meaning (Ball Run / Snake / Pinball's class) |
 
 `isInProgress()` returns `true` while a match has at least one disc on the board and is not over.
@@ -271,9 +273,18 @@ mean nothing here, which is the exact trap `test-runaway-capped.mjs`'s header re
 
 ## The rules of a match
 
-- **Shoot until you make it.** A miss does not pass the turn; it costs a shot. This is Matt's
-  call and it is what makes the async format below viable at all — a handoff that takes hours must
-  carry a move, or the match dies of dead air.
+- **Two shot rules, and the player picks** (2026-09-22). Matt: *"there should be an option to play
+  shoot til you make one, OR 1 shot and that's it. especially for the multiplayer."*
+  - **Shoot until you sink one** (`shots: 'until'`, the original): a miss costs a shot, not the
+    turn. A turn only ends when a ball goes in.
+  - **One shot only** (`shots: 'one'`): a miss passes the turn.
+
+  **It lives on the `Match`, not in the UI** (`oneShot` in `js/game.js`), and that is the whole
+  reason: under one-shot a miss is a RULE OF THE GAME, and in a multiplayer match both sides have
+  to agree on it or their boards diverge on the very first airball. In a live room the HOST'S
+  setting wins and is carried in the room's `config`; in a turn-by-turn match it is frozen on the
+  match document at creation. A shot into a FULL column takes the same path as a miss, through one
+  shared `_passTurn()`, so the two can never drift apart.
 - **A ball that rims out into the NEXT hoop still counts, in that column.** Nothing steers a ball
   (`MACHINE-SPEC` §9's standing ban), so the wrong hoop is a real outcome and the best moment the
   format has.
@@ -282,6 +293,69 @@ mean nothing here, which is the exact trap `test-runaway-capped.mjs`'s header re
 - **The grid is a SCREEN**, exactly as on the real cabinet — an LCD above the hoops. That is also
   what makes this buildable: 42 discs are paint on a `CanvasTexture`, not 42 rigid bodies, and the
   physics only ever has to answer *which hoop did it go through*.
+
+## Multiplayer: TWO protocols, on purpose (2026-09-22)
+
+Matt asked for both halves in one line: *"build the multiplayer (host game live and turn based
+sending to each other like we discussed)"*. They are genuinely different problems and they use
+different layers. `js/mp-ui.js` is the one screen both are reached from ("Play a friend" on the
+setup screen); it is DOM only and lazily imported, so a solo player downloads none of it.
+
+| | LIVE | TURN BY TURN |
+|---|---|---|
+| layer | `js/net.js`, `rooms/<CODE>` | `hoops4/js/mp.js`, `hoops/games/<id>` |
+| addressed by | a five-character room code, typed in | the other person's PLAYER CODE |
+| who is present | both, now | neither has to be |
+| how they find it | the host reads the code out | it is sitting in their list next time they open the hub |
+| ships without a rules change | **yes** | **no — see below** |
+
+**ADDRESSED BY PLAYER CODE, never by deviceId.** Several people here have two phones, and a match
+addressed to a device is playable on one of them and invisible on the other. This is the one thing
+`bugReplies/` gets wrong and `js/messages.js` gets right, and it is why turn-by-turn is built on
+messages' shape rather than on net.js's.
+
+**A MOVE LOG, never a board snapshot.** An async match has no stored position: `replay()` runs the
+log into a fresh `Match`. A log either replays identically on both devices or `validateGame()`
+refused it before anything was drawn — where a snapshot can be subtly wrong and look fine.
+`validateGame` is WHOLE-DOCUMENT REJECTION for the same reason `js/career-store.js` is: one bad
+entry replays into a DIFFERENT position on the two phones, with nothing on either screen saying so.
+
+**The log carries TWO kinds of entry, and it needs both.** A landed shot is `{by, col, shots}` —
+`shots` is how many it took, so a replay can charge the shooter the misses that came first, which
+is what keeps the accuracy line honest. A `{by, miss:true}` entry exists ONLY under one-shot, where
+a miss hands the turn over; under shoot-until-you-make-it a miss changes nothing the other person
+can see and is never sent.
+
+**Nothing is ever deleted.** A finished match keeps its move list and both index rows. Resigning
+writes `over: {winner, why:'resign'}` — it does not remove anything.
+
+**Every write is verified by a fresh re-read before it is reported as sent** (THE LAW rule 6), and
+a move that cannot be sent is QUEUED on the device (`gamehub.hoops4.outbox.v1`) and retried the
+next time the screen opens, rather than lost with an apology.
+
+### `hoops` is a new top-level node, so THE RULES HAVE TO BE PUBLISHED BY HAND
+
+Since the Messages work the database's root is `.read: false / .write: false` with every branch
+enumerated in `database.rules.json` (root `CLAUDE.md`, "Messages"). `hoops` is added to that file
+here — but **no script in this repo deploys it**: it is pasted into the Firebase console (Realtime
+Database → Rules → paste → Publish). Until that happens, turn-by-turn fails SOFTLY and says so:
+`readMyGames()` returns `[]`, `createGame()` returns `{ ok:false, reason:'denied' }`, and a denied
+write is deliberately **not retryable**, so it can never sit in the outbox for ever.
+
+**LIVE multiplayer is unaffected and needs no rules change** — `rooms/` is already enumerated.
+That is why the two halves are separated the way they are: the half that can ship on a push does.
+
+`backups/rtdb-backup.mjs`'s `BRANCHES` list has `hoops` in it too, because that list must stay in
+step with the rules file or a branch is silently missing from every snapshot.
+
+### What is NOT built
+
+- **No push notification.** The badge-on-next-open model is all this repo has; real push needs FCM
+  and a permission prompt, and `js/CLAUDE.md` says so in as many words about Messages.
+- **No launcher badge yet.** `countMyTurns(rows, code)` is exported and tested and is exactly what
+  a badge would count, but nothing on the hub reads it. A badge goes where the thing it counts is
+  reached (`js/CLAUDE.md`), and that is a hub-side change, not a hoops4 one.
+- **No rematch button on a finished async match.** Challenge them again from the picker.
 
 ## The CPU's difficulty is SHOT ACCURACY, not search depth
 
@@ -308,11 +382,8 @@ shaping and touches no physics.
 
 ## Still open
 
-- **Async multiplayer.** Matt asked for challenge-a-player-and-hand-it-over ("that would be
-  amazing"). Designed but NOT built: it is the shape of `js/messages.js` (addressed by player
-  CODE so a match follows a person to every device), not `js/net.js` (a live room layer with a
-  heartbeat and a TTL). The sketch is `skeeball/mockup-hoops-four.html`. There is no push
-  notification in this repo, so the opponent would find out via a badge on their next hub load.
+- **The `hoops` rules are not published.** Turn-by-turn cannot write until they are pasted into
+  the Firebase console — see "Multiplayer" above. Live multiplayer works without it.
 - **Whether a human swipe has the precision seven columns need.** `check-display.mjs` (without
   `--no-swipe`) now drives real touch gestures at each of the seven columns through the real pad,
   the real swipe maths and the real engine, and reports what lands. It is still a scripted thumb
@@ -327,4 +398,9 @@ shaping and touches no physics.
   grid. It is the file that holds all four of Matt's requirements as numbers.
 - `node test-game-conventions.mjs` — the shared checklist; it discovers game folders from disk.
 - `node check-no-scroll.mjs hoops4` — **no game in this hub may scroll.**
+- `node test-hoops4-mp.mjs` — the PURE halves of turn-by-turn multiplayer: whole-document
+  rejection, the replay (position AND shot counts), the turn rules under both shot modes, the
+  listing's order and the badge count, plus structural checks that every write is verified, a dev
+  origin cannot write, and `hoops` is in both `database.rules.json` and the backup script's branch
+  list. The Firebase write path and `js/mp-ui.js` are NOT covered, and the suite header says so.
 - `node test-visual.mjs hoops4` — the only suite that LOOKS at it.
