@@ -231,6 +231,8 @@
   font-size: 11px;
   flex: 0 0 auto;
 }
+/* R16: a four-team Little League fits one column - two would leave a column-wide hole. */
+.bb-standings.is-single { grid-template-columns: 1fr; }
 .bb-standings-col { display: flex; flex-direction: column; gap: 2px; }
 .bb-standing-row {
   display: flex;
