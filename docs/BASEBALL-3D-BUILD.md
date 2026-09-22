@@ -1972,3 +1972,61 @@ taken under the old rules (one game's progress, no history); a pre-R16 season do
 own 12-game, eight-team, top-4 shape through the frozen fallbacks. Suites: `baseball/js/test.js`
 3000, `test-baseball-career.mjs` 309, device 48 of 48, visual 20 of 20, `check-no-scroll` 16 of
 16, `test-sw-strategy.mjs` 107.
+
+### R17: each league looks and feels different (2026-09-22)
+
+Matt: *"let's move to making each league look and feel different."* The contact sheet of v888
+(`scratchpad/leagues/leagues-today.jpg`, batter and pitcher cameras at all five leagues) shows
+why: from the plate every league is the same grass, the same noon sky, the same navy-and-red
+uniforms and the same white lines, with only the strip behind the outfield changing, and the
+Minors and Majors are indistinguishable. R13's `LEAGUE_STADIUM` table (backstop, bleachers,
+parents, tiers, towers, berm, press box) stays and this stage extends it. Everything below is
+generated in code from small canvas textures, no image files (R1's rule), and every camera is
+checked at every league.
+
+| | Little League | High School | College | Minors | Majors |
+|---|---|---|---|---|---|
+| Time and sky | bright noon, a few clouds | late afternoon, warm low sun, long shadows | overcast evening, cool grey-blue | night, dark blue sky, towers lit, light pools on the grass | night, big-league lights, a city glow on the horizon |
+| Grass | patchy two-tone, no mowing pattern | plain cut, one tone | mowing stripes | checkerboard mow, brighter | pristine stripes, deepest green |
+| Dirt and lines | pale dirt, faded chalk, bare basepaths | fresh chalk | standard | brighter lines | red-clay dirt, bright white lines |
+| Outfield fence | 6 ft chain-link with sponsor banners (there) | painted wood fence, school name on the scoreboard | padded wall, one ring of ads | wall with ads, a bullpen | high wall, the scoreboard lit |
+| CPU uniforms | one flat colour per team, plain tee | team colours, simple lettering | team colours, pinstripes for one side | team colours, numbers on the back | team colours, full piping |
+| Crowd | parents on bleachers (there) | fuller bleachers (there), a band section | one tier (there), banners | two tiers (there) | three tiers (there), a wave of camera flashes on a home run |
+| Figures | scaled 0.85 (kids), caps a touch larger | full size | full size | full size | full size |
+
+1. **Time of day per league.** A `LEAGUE_LIGHTING` table in `field.js`: sky zenith and horizon
+   colours, cloud amount, sun colour, sun elevation and azimuth, hemisphere light colours and
+   intensity, an optional horizon glow, and for the night leagues lit tower heads and light pools
+   on the grass (a soft radial brightening of the grass texture around each tower's footprint).
+   Shadows follow the sun. The batter camera's sky band, the pitcher camera's backstop and the
+   chase camera's field must all read as that time of day.
+2. **Field surface per league.** `grassTexture(league)` and the dirt colours read a
+   `LEAGUE_SURFACE` table (the mow pattern, the two greens, the dirt and line colours, chalk
+   opacity). The infield skin, mound, basepaths and foul lines already exist; only their colours
+   and the grass pattern change.
+3. **Fence and wall per league.** `wallTexture(league)`: chain-link with banners at Little
+   League (there), painted wood at High School, padded with one ad ring at College, ads and a
+   bullpen at the Minors, a taller wall at the Majors. The fence height is the wall's own height
+   already used by the flight rule; keep the two in step.
+4. **Team colours.** Every CPU style gets a palette in `actors.js` (shirt, trim, pants, cap):
+   Aces, Sluggers, Flames, Foxes, Tricksters, Owls, Sparrows, Generals, each a distinct hue pair
+   that stays readable against the home navy and against every league's grass at both cameras.
+   The colour key already remaps the painted skin per part (`KEYS`), so this is a `to` table per
+   style, applied when the CPU team is built; the player's own team stays navy. Caps follow the
+   shirt. Uniform style per league (plain tee, lettering, pinstripes, numbers, piping) is a
+   texture overlay drawn on the same canvas, one small function each.
+5. **Kids at Little League.** `Actors` scales every figure by 0.85 at Little League (feet still
+   on the ground, the bat and cap scaled with the figure, the batter-camera framing re-measured
+   so the zone box and the batter keep their bands; `foot-on-ground` and `pitcher-frame` probes
+   pass at Little League).
+6. **Probes.** `test-baseball-device.mjs`: `league-look` reads, per league, the sky band's mean
+   colour at the batter camera, the grass mean colour and the CPU shirt colour, and asserts all
+   five leagues differ from each other by a measured distance, and that the night leagues are
+   darker than the day ones; `test-baseball-actors.mjs`: every style palette stays outside the
+   skin-tone family and the Little League scale keeps feet at y = 0. Draw calls per camera per
+   league reported (stay under 40).
+
+Deliverables: stills from all three cameras at all five leagues in one contact sheet beside the
+v888 sheet, the per-league tables as implemented, draw-call counts, and the suites green:
+`node test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node
+test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`.
