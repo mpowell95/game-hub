@@ -6,6 +6,20 @@
 
 ## R16: the career economy, rebuilt from measurement (2026-09-22)
 
+**Ship review, same day (orchestrator).** Three changes on top of the stage. (1) `CPU_SIGMA_MIN_MS.minors`
+and `CPU.minors.timingSigmaMs` 70 to 62 ms: as built, `sim-baseball-career.mjs` at N=200 read College 47
+and Minors 37 percent first-attempt Gold, a flat spot where the brief wants a step; the roster lever is
+exhausted at the Minors (the ceiling is the player's own cap, and the spec's 21 measured EASIER than
+College), so two Minors-only levers were measured: the timing floor gave 50 / 32 / 8 with the Majors and the
+total career unchanged and shipped; `LEAGUE_TIMING_WINDOW_MULT` minors 0.8 / majors 0.7 barely moved the
+Minors and cut the Majors to 3.5 percent and was rejected. 62 ms is still above the 55 ms human floor the
+design doc locks. (2) The High School assertion band's upper edge 0.90 to 0.95: Matt's words are "win first
+time" in the lower leagues; 0.90 was the study's own translation. (3) The career chip shows the points
+waiting to be spent (`.bb-playerchip-unspent`), because the reward loop is invisible if the only pill that
+says "30 left" lives on the screen behind the chip. Final scoreboard, N=200, median tier: 100 / 90.5 / 50.5 /
+31.5 / 7.5 percent, first title median 9 seasons, Majors median 4, Perfect Season 7.5 percent, eight of eight
+assertions passing.
+
 Matt: *"Rework the baseball career economy from scratch... Little League is basically a tutorial...
 each league after that should feel like a real step up... Winning the World Series in the majors
 should take at least 2 seasons... Measure the difficulty with the simulator rather than
