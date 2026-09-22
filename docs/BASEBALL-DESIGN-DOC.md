@@ -98,13 +98,26 @@ This doc says how the game works. It is not a coding or implementation guide. Lo
 
 ### Each league
 - **[Locked]** Regular season, then semifinal, then championship. No quarterfinal (dropped: with 8 CPU teams plus you, a quarterfinal bracket let 8 of 9 teams in, and a quarterfinal loss had no trophy slot).
-- **[Locked]** Top 4 of 9 make the playoffs.
+- **[Locked]** Top 4 of 9 make the playoffs, from High School up.
+- **[Locked] by Matt 2026-09-22 (R16)** Little League is the exception, and it is a 4-team league: you plus three of the eight CPU teams (a weak one, a middle one and the champion). *"Little league should have a shorter season. And all teams should make the playoffs... just little league."* Every team makes its playoffs, so the tutorial can never end in "missed the playoffs": it always ends in a semifinal and, for most players, a final.
 - **[Locked]** Lose the semifinal = Bronze. Lose the championship = Silver. Win it = Gold.
 - **[Locked]** Only Gold advances to the next league.
 - **[Locked]** Miss the playoffs = replay that league's season.
 - **[Locked]** Majors championship is called the World Series.
-- **[Draft]** 12 regular season games per league across 8 opponents. Tune after playtesting.
-- **[Open]** Schedule shape (12 games over 8 teams) and standings tie-breakers.
+- **[Locked] by Matt 2026-09-22 (R16)** The season length is PER LEAGUE, measured rather than estimated: *"Rework the baseball career economy from scratch... Little League is basically a tutorial... each league after that should feel like a real step up... Measure the difficulty with the simulator rather than estimating."*
+
+```
+League	Teams	Regular games	Playoffs
+Little League	4 (you + 3)	3 (one against each)	all 4 in: semifinal + final
+High School	9	8	top 4 of 9: semifinal + final
+College	9	10	top 4 of 9: semifinal + final
+Minor League	9	12	top 4 of 9: semifinal + final
+Major League	9	14	top 4 of 9: semifinal + final
+```
+
+- **[Locked] by Matt 2026-09-22 (R16)** Standings: each CPU team's scripted record is scaled onto the season's own length (CPU rank r finishes `round(n * r / (size - 1))` of n), and **the player wins every tie**. Before R16 a CPU record topped out at 7 wins however long the season was, and the player lost every tie to every CPU team.
+- **[Locked] by Matt 2026-09-22 (R16)** A season snapshots its own length, its own team list and its own playoff format when it starts, beside the cap and the point table it already snapshotted. A tuning deploy applies from the next season and never reshapes one in progress; a season saved before R16 keeps playing as the 12-game, all-eight-slots, top-4 season it was generated as.
+- **[Open]** Schedule shape (which opponents the extra games above eight go to) remains open; the generator repeats the middle slots, meets every team at least once, and meets the champion exactly once, last.
 
 ### After the Majors
 - **[Locked]** Winning the World Series repeats the Majors season for more titles.
@@ -181,26 +194,28 @@ Painter	6	4	5	4	9	2
 - **[Locked]** You can only earn points in your current league.
 - **[Locked]** Points past your caps are lost. No banking (firmly rejected).
 - **[Locked]** Playoff wins pay no per-win points. The trophy bonus is the entire playoff reward.
-- **[Draft]** Numbers, to tune after playtesting. At 12 games a season with a 9-3 record and Gold:
-
-```
-League	Cap room	Yield	Cap binds
-Little League	30	38	Yes, excess lost
-High School	24	27	Yes, barely
-College	24	15	No, about 1.5 seasons
-Minor League	24	13	No, about 2 seasons
-Major League	24	12	No, about 2 seasons
-```
-
-With the steeper win-rate curve in section 8, more seasons are spent in the upper leagues, so caps are now expected to bind in every league rather than only the first two. The yield table above assumes a 9-3 record, which no longer holds above High School. The simulator measures the real yields and the real binding points; treat this table as a starting point, not a prediction.
+- **[Locked] by Matt 2026-09-22 (R16)** The numbers below are MEASURED, through whole careers played by the real engine (`sim-baseball-career.mjs`), not estimated. The table before R16 was set against a season length that no longer exists and a player who did not: it assumed a 9-3 record at every league, and the simulator that checked it gave the player 2 to 11 points per skill less than a real career player actually arrives with.
 
 ```
 League	Win	Loss	Bronze	Silver	Gold
-Little League	3	1	3	5	8
-High School	2	1	2	4	6
-College	1	0	2	4	6
-Minor League	1	0	1	2	4
-Major League	1	0	1	2	3
+Little League	6	2	4	8	12
+High School	3	1	3	5	8
+College	2	0	3	5	8
+Minor League	2	0	2	4	7
+Major League	1	0	2	4	6
+```
+
+**Little League pays exactly its own cap room.** A 3-0 sweep plus Gold is 3 x 6 + 12 = 30 points, and a start build (15 per side, cap 10) has exactly 30 of room: the tutorial ends with every skill at the cap, a point (or six) after every single game, and nothing lost. Above it the cap still bites, which is the intent.
+
+Measured yields and how long a rung's cap room takes to fill, median tier, N=150 careers:
+
+```
+League	Games	Points a season	Lost to the cap	Seasons to fill the room
+Little League	3	30.0	0.0	1.0
+High School	8	30.7	7.8	1.1
+College	10	21.3	4.9	1.4
+Minor League	12	23.5	6.0	1.7
+Major League	14	11.5	3.8	3.6
 ```
 
 ## 8. Difficulty and CPU
@@ -219,6 +234,11 @@ Major League	41 to 51%	about 4.5
 
 The win-rate column is Locked. The seasons column is derived from it plus the bracket and standings model, and is measured by the simulator rather than set. A full career is roughly 12 seasons and 170 games.
 
+- **[Locked] by Matt 2026-09-22 (R16)** The bands above were set against a player who does not exist. A real career player arrives at each rung holding the previous rung's cap (5 / 10 / 14 / 18 / 22 points per skill), not the CPU's own generation level, and `sim-baseball.mjs` was measuring a player 2 to 11 points per skill weaker than that. Measured against a real career player, the regular-season win rates are **99.7 / 90 / 80 / 71 / 60 percent** - the same shape, one rung's worth higher. What R16 asks is not a flatter curve but a real ladder: *"Little League is basically a tutorial... each league after that should feel like a real step up... Winning the World Series in the majors should take at least 2 seasons."*
+- **[Locked] by Matt 2026-09-22 (R16)** The measure that decides difficulty is **first-attempt Gold per league for a median player**, over whole careers, not a season win rate at an assumed skill level. Target: near-certain at Little League, likely at High School, an even chance at College, rarer at the Minors, and rare in the Majors, with at least two Majors seasons before the first World Series.
+- **[Locked] by Matt 2026-09-22 (R16)** CPU rosters are generated at a per-league LEVEL (`CPU_ROSTER_LEVEL`, a mean of skill points per CPU player) bounded by a per-league CEILING (`CPU_ROSTER_CEILING`), replacing the literal 0.5 that had generated every CPU team in the game at HALF its stated level (measured means 2.9 / 5.4 / 7.5 / 8.9 / 9.9 against a player at 5 to 22). Doc section 9's "CPU teams at the player's expected level" had never once been true.
+- **[Locked] by Matt 2026-09-22 (R16)** Three engine defects kept four of the six skills from mattering at all, and they are fixed rather than tuned around. **Pitch Speed:** the good-contact timing window now scales with the pitch's time to the plate, so a 95 mph pitch is harder to time than a 55 mph one (it was a flat number of milliseconds for every pitch in every league). **Spin:** the pitch is aimed at target minus break, so the break lands ON the aim - judging the strike on the post-break position meant more break bought more walks. **Pitch Accuracy:** a corner aim now resolves INSIDE the zone (it reached 1.24 zone units, off the plate, so "working the corners" meant aiming at a ball and accuracy made it worse). **Hitting Speed is still dead** and is NOT fixed here: its only asymmetric mechanic is the steal, and the simulator's model human does not steal.
+
 - **[Locked]** These bands describe a **median** player at the league's expected skill level. A player who has won the World Series and maxed every skill is far above that and wins far more. Every target in this section is a median-player target unless it says otherwise.
 - **[Locked]** Within a league, the weakest opponent and the champion sit in these bands. The sequence never rises as you go up the ladder, but it need not descend evenly: a league may be flat with a cliff at the champion, or spread across all eight slots.
 
@@ -232,7 +252,7 @@ Major League	62%	40 to 52%
 ```
 
 - **[Draft]** Every band in this section is a starting point, tunable later from the settings block. They are not worth another round of tuning to hit exactly.
-- **[Locked]** Every league's CPU teams are generated below that league's cap, so the champion has room to be better than its league mates. No league may generate every team at the cap.
+- **[Locked]** Every league's CPU teams are generated below that league's cap, so the champion has room to be better than its league mates. No league may generate every team at the cap. (R16: this is `CPU_ROSTER_CEILING`, one point under the raw cap at every league but the Minors, where a ceiling of 21 against a level of 21.0 would have pinned every value on it and flattened the slot ladder entirely - measured, and written out at the table in `settings.js`.)
 - **[Open]** The cap table in section 7 assumed only Little League and High School would bind. With more seasons spent in the upper leagues, caps will likely bind everywhere. To be measured, not assumed.
 - **[Locked]** CPU teams must get better as you move up. Each league's teams are generated at that league's expected player level, so they are stronger than the league below.
 - **[Locked]** Within a league, the 8 teams are ordered weakest to strongest, and the schedule puts harder opponents later in the season. The championship opponent is the toughest team in the league.

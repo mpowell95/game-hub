@@ -46,7 +46,12 @@
 //                     seed        the season seed (schedule, game seeds, playoff home)
 //                     cap         CAPS snapshot taken at season start
 //                     points      POINTS[league] snapshot taken at season start
-//                     schedule    [{ opponentIndex, home }] x SEASON.gamesPerSeason
+//                     games       R16: how many regular-season games THIS season plays (absent on
+//                                 a document written before R16, which means SEASON.gamesPerSeason)
+//                     slots       R16: which makeLeague slots it is played against (absent means
+//                                 all eight)
+//                     playoffFormat R16: 'all' or 'top4' (absent means 'top4')
+//                     schedule    [{ opponentIndex, home }] x the season's own `games`
 //                     results     [{ idx, opponentIndex, home, won, you, cpu, forfeit }]
 //                     phase       'regular' | 'semifinal' | 'championship' | 'done'
 //                     playoff     null, or { seeds, semiOpponentIndex, finalOpponentIndex,
@@ -77,10 +82,11 @@
 import { hashSeed } from './rng.js';
 import {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_CAP, SKILL_IDS,
-  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, SCHEDULE_SHAPE,
+  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, STANDINGS_TIEBREAK, SCHEDULE_SHAPE,
+  gamesForLeague, slotsForLeague, playoffFormatFor,
 } from './settings.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './season.js';
-import { makeLeague, makePlayerTeam } from './teams.js';
+import { leagueTeamsFor, makePlayerTeam } from './teams.js';
 import { Game } from './game.js';
 
 /** This module's own state schema version, bumped forward-only and never reinterpreted (the same
@@ -151,6 +157,40 @@ export function capRoom(state) {
   let room = 0;
   for (const id of SKILL_IDS) room += Math.max(0, cap - int(state.player.skills[id]));
   return Math.max(0, room - int(state.unspent));
+}
+
+// ---------------------------------------------------------------------------------------------
+// R16 (docs/BASEBALL-3D-BUILD.md section 9): THE SEASON'S OWN SHAPE, read off the season, never off
+// today's settings. `startSeason` snapshots `games`, `slots` and `playoffFormat` beside the `cap`
+// and `points` it already snapshotted, for exactly the reason doc §15 [Locked] gives: "a season
+// snapshots its schedule and point table from the settings block when it starts, so a tuning
+// deploy applies from the next season and never rewrites one in progress."
+//
+// The fallbacks below are THE LAW, not tidiness. A season document written before R16 carries
+// none of the three fields, and it was played as 12 games against all eight slots with a top-4
+// cut - so that is what it must keep being, whatever `SEASON` says today. Reading `SEASON` for the
+// fallback instead would silently reshape a season in progress: a 12-game Little League season
+// would find itself 3 games long with its own results already past the end of it.
+const LEGACY_SLOTS = [0, 1, 2, 3, 4, 5, 6, 7];
+
+/** How many regular-season games this season plays. */
+export function seasonGames(state) {
+  const n = state && state.season && state.season.games;
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : SEASON.gamesPerSeason;
+}
+/** Which `makeLeague` slots this season is played against (0 weakest .. 7 champion). */
+export function seasonSlots(state) {
+  const s = state && state.season && state.season.slots;
+  return Array.isArray(s) && s.length ? s.slice() : LEGACY_SLOTS.slice();
+}
+/** 'all' (everyone in) or 'top4'. */
+export function seasonPlayoffFormat(state) {
+  const f = state && state.season && state.season.playoffFormat;
+  return f === 'all' ? 'all' : 'top4';
+}
+/** How many of the standings make the playoffs, under this season's own format. */
+function playoffCutFor(state, standingsLength) {
+  return seasonPlayoffFormat(state) === 'all' ? standingsLength : SEASON.playoffTeams;
 }
 
 /** doc section 4's own schedule seed, derived rather than stored twice. */
@@ -224,6 +264,13 @@ export function startSeason(state, seed) {
   const league = state.league;
   const seasonSeed = Number.isFinite(seed) ? (seed >>> 0) : defaultSeasonSeed(state.careerId, n);
   const cap = Math.max(int(state.cap), capForLeague(league));
+  // R16: the three new snapshotted fields. `slots` is stored as the SLOT NUMBERS rather than the
+  // teams themselves - `makeLeague(league)` still rebuilds the eight identically from the league
+  // id alone, and a stored slot list is what keeps `opponentIndex` meaning the same team after a
+  // deploy that changes which slots a league uses.
+  const games = gamesForLeague(league);
+  const slots = slotsForLeague(league);
+  const playoffFormat = playoffFormatFor(league);
   return {
     ...state,
     cap,
@@ -232,8 +279,11 @@ export function startSeason(state, seed) {
       league,
       seed: seasonSeed,
       cap,
+      games,
+      slots,
+      playoffFormat,
       points: { ...POINTS[league] },
-      schedule: makeSchedule(league, seasonSeed, SCHEDULE_SHAPE),
+      schedule: makeSchedule(league, seasonSeed, games, slots.length, SCHEDULE_SHAPE),
       results: [],
       phase: 'regular',
       playoff: null,
@@ -254,9 +304,10 @@ export function startSeason(state, seed) {
 export function nextGame(state) {
   const s = state.season;
   if (!s || s.phase === 'done') return null;
+  const games = seasonGames(state);
   if (s.phase === 'regular') {
     const idx = s.results.length;
-    if (idx >= SEASON.gamesPerSeason) return null;   // resolveSeason has not run yet
+    if (idx >= games) return null;   // resolveSeason has not run yet
     const slot = s.schedule[idx];
     return {
       kind: 'regular', idx, opponentIndex: slot.opponentIndex, home: !!slot.home,
@@ -265,13 +316,13 @@ export function nextGame(state) {
   }
   if (s.phase === 'semifinal') {
     return {
-      kind: 'semifinal', idx: SEASON.gamesPerSeason, opponentIndex: s.playoff.semiOpponentIndex,
-      home: !!s.playoff.semiHome, seed: gameSeed(state, 'semifinal', SEASON.gamesPerSeason),
+      kind: 'semifinal', idx: games, opponentIndex: s.playoff.semiOpponentIndex,
+      home: !!s.playoff.semiHome, seed: gameSeed(state, 'semifinal', games),
     };
   }
   return {
-    kind: 'championship', idx: SEASON.gamesPerSeason + 1, opponentIndex: s.playoff.finalOpponentIndex,
-    home: !!s.playoff.finalHome, seed: gameSeed(state, 'championship', SEASON.gamesPerSeason + 1),
+    kind: 'championship', idx: games + 1, opponentIndex: s.playoff.finalOpponentIndex,
+    home: !!s.playoff.finalHome, seed: gameSeed(state, 'championship', games + 1),
   };
 }
 
@@ -283,10 +334,12 @@ export function playerTeamFor(state) {
   return team;
 }
 
-/** The eight CPU teams of the season's league, weakest to strongest (`makeLeague`'s own order).
- *  Rebuilt, never stored. */
+/** The CPU teams of the season's league, weakest to strongest (`makeLeague`'s own order), filtered
+ *  to the SEASON'S OWN slots - all eight above Little League, three of them at it. Rebuilt from the
+ *  league id and the season's frozen slot list, never stored. */
 export function leagueTeams(state) {
-  return makeLeague(state.season ? state.season.league : state.league);
+  const league = state.season ? state.season.league : state.league;
+  return leagueTeamsFor(league, state.season ? seasonSlots(state) : undefined);
 }
 
 /**
@@ -380,26 +433,43 @@ export function seasonRecord(state) {
  * The nine-row table (doc section 4, [Locked]: "Top 4 of 9 make the playoffs"), the player folded
  * in by `scriptedStandings`.
  *
- * TIE-BREAKERS, documented because the doc leaves them open (section 17 item 13): `scriptedStandings`
- * sorts on wins, then on `strengthRank` descending, and the player's `strengthRank` is -1. So the
- * player LOSES every tie, to every CPU team. Under the shipped `STANDINGS_MODEL` ('rawWins7') the
- * eight CPU teams finish 0..7 wins, which makes the top-4 cut exactly "more than 4 wins": five wins
- * places the player fourth (behind the 7, 6 and 5-win teams and ahead of the 4-win one), four wins
- * places the player fifth behind the CPU team it ties.
+ * TIE-BREAKERS, documented because the doc leaves them open (section 17 item 13). R16 REVERSES
+ * THEM: `scriptedStandings` still sorts on wins and then on `strengthRank` descending, but under
+ * `STANDINGS_TIEBREAK` 'player' the player's own rank sits ABOVE every CPU team, so the player now
+ * WINS every tie. (Before R16 it was -1 and they lost every one, which at 12 games put the top-4
+ * cut at "more than 4 wins" rather than at 4.) Under `STANDINGS_MODEL` 'scaledToSeason' the eight
+ * CPU teams' records are scripted onto THIS season's own length, so the cut is a share of the
+ * season rather than a fixed number of wins: at College's 10 games the four CPU records above the
+ * cut are 10, 9, 7 and 6, and the player makes the top 4 with 6 wins of 10.
  */
 export function standingsFor(state) {
-  return scriptedStandings(leagueTeams(state), seasonRecord(state), STANDINGS_MODEL);
+  return scriptedStandings(leagueTeams(state), seasonRecord(state), seasonGames(state),
+    STANDINGS_MODEL, STANDINGS_TIEBREAK);
 }
 
 /** Build the playoff branch when the regular season ends in a top-4 place. Pure. */
 function buildPlayoff(state, standings) {
   const teams = leagueTeams(state);
-  const bracket = playoffs(standings, BRACKET_MODEL);
+  const format = seasonPlayoffFormat(state);
+  const bracket = playoffs(standings, BRACKET_MODEL, format);
   const pair = bracket.semifinals.find((p) => p.some((t) => t.isPlayer));
   const oppRow = pair.find((t) => !t.isPlayer);
   const semiOpponentIndex = Math.max(0, teams.findIndex((t) => t.name === oppRow.id));
   // doc section 8, [Locked]: "the championship opponent is always the toughest team in the league."
-  const finalOpponentIndex = teams.length - 1;
+  // R16: that rule is the TOP-4 bracket's, where the league's strongest team is fed to the final by
+  // `BRACKET_MODEL` 'strongestInFinal'. In the everyone-in bracket the field IS the league and the
+  // other semifinal is a real pairing, so the final opponent is whoever WON it (scripted by
+  // strength in `playoffs`) - which at Little League can be the middle team when the champion is
+  // the one the player already drew.
+  let finalOpponentIndex = teams.length - 1;
+  if (format === 'all') {
+    const otherWinner = bracket.winners.find((w) => w && !w.isPlayer
+      && !bracket.semifinals.find((p) => p.some((t) => t.isPlayer)).includes(w));
+    if (otherWinner) {
+      const idx = teams.findIndex((t) => t.name === otherWinner.id);
+      if (idx >= 0) finalOpponentIndex = idx;
+    }
+  }
   const { wins } = seasonRecord(state);
   const winsOf = (i) => {
     const row = standings.find((r) => r.id === teams[i].name);
@@ -407,7 +477,7 @@ function buildPlayoff(state, standings) {
   };
   const seed = state.season.seed;
   return {
-    seeds: standings.slice(0, SEASON.playoffTeams).map((r) => ({
+    seeds: standings.slice(0, playoffCutFor(state, standings.length)).map((r) => ({
       id: r.id, wins: r.wins, losses: r.losses, isPlayer: !!r.isPlayer, strengthRank: r.strengthRank,
     })),
     semiOpponentIndex,
@@ -556,10 +626,10 @@ export function finishGame(state, result) {
 
   // 3. where the season goes next.
   let resolved = false;
-  if (meta.kind === 'regular' && season.results.length >= SEASON.gamesPerSeason) {
+  if (meta.kind === 'regular' && season.results.length >= seasonGames(next)) {
     const standings = standingsFor(next);
     const rank = standings.findIndex((r) => r.isPlayer);
-    if (rank >= 0 && rank < SEASON.playoffTeams) {
+    if (rank >= 0 && rank < playoffCutFor(next, standings.length)) {
       season.phase = 'semifinal';
       season.playoff = buildPlayoff(next, standings);
       next = { ...next, season };
@@ -674,11 +744,25 @@ export function validateState(state) {
         if (LEAGUES.indexOf(s.league) < 0) errs.push('season.league is not a known ladder id');
         if (!Number.isInteger(s.cap) || s.cap < 1) errs.push('season.cap must be a positive integer');
         if (!s.points || typeof s.points !== 'object') errs.push('season.points missing');
-        if (!Array.isArray(s.schedule) || s.schedule.length !== SEASON.gamesPerSeason) {
-          errs.push(`season.schedule must be ${SEASON.gamesPerSeason} entries`);
+        // R16: a season is as long as IT says it is - `seasonGames` falls back to the frozen
+        // `SEASON.gamesPerSeason` for a document written before the per-league table existed, so a
+        // 12-game season saved under the old shape still validates and still plays out.
+        const games = seasonGames(state);
+        if (s.games !== undefined && !(Number.isInteger(s.games) && s.games > 0)) {
+          errs.push('season.games must be a positive integer when present');
+        }
+        if (s.slots !== undefined && !(Array.isArray(s.slots) && s.slots.length
+          && s.slots.every((i) => Number.isInteger(i) && i >= 0))) {
+          errs.push('season.slots must be an array of slot indexes when present');
+        }
+        if (s.playoffFormat !== undefined && s.playoffFormat !== 'all' && s.playoffFormat !== 'top4') {
+          errs.push('season.playoffFormat must be all or top4 when present');
+        }
+        if (!Array.isArray(s.schedule) || s.schedule.length !== games) {
+          errs.push(`season.schedule must be ${games} entries`);
         }
         if (!Array.isArray(s.results)) errs.push('season.results must be an array');
-        else if (s.results.length > SEASON.gamesPerSeason) errs.push('season.results is longer than the schedule');
+        else if (s.results.length > games) errs.push('season.results is longer than the schedule');
         if (PHASES.indexOf(s.phase) < 0) errs.push('season.phase is not a known phase');
         if (s.trophy !== null && !(Number.isInteger(s.trophy) && s.trophy >= 0 && s.trophy <= 3)) {
           errs.push('season.trophy must be null or 0..3');
@@ -829,4 +913,5 @@ export default {
   newCareer, startSeason, nextGame, startGame, checkpoint, finishGame, resolveSeason,
   earn, spend, validateState, historyRow, gameStatsFromEvents,
   buildGame, resumeGame, playerTeamFor, leagueTeams, playerSideFor, seasonRecord, standingsFor,
+  seasonGames, seasonSlots, seasonPlayoffFormat,
 };

@@ -48,7 +48,7 @@ import {
 import {
   startSeason, nextGame, startGame as careerStartGame, checkpoint, finishGame, spend,
   gameStatsFromEvents, resumeGame, playerTeamFor, leagueTeams, playerSideFor, seasonRecord,
-  standingsFor,
+  standingsFor, seasonGames,
 } from './engine/career.js';
 import {
   loadCareer, startCareer, saveCheckpoint, saveAtBat, saveGameEnd, saveCareerState,
@@ -907,7 +907,7 @@ class BaseballPlayScreen {
   _careerChipInnerHTML(state) {
     const digits = SETTINGS.SKILL_IDS.map((id) => `<span class="bb-pcd"><b>${SKILL_SHORT[id]}</b>${state.player.skills[id] || 0}</span>`).join('');
     return `
-      <div class="bb-playerchip-top"><span>${t('hand_' + state.player.hand.toLowerCase())}</span><span>${t('player_title')}</span></div>
+      <div class="bb-playerchip-top"><span>${t('hand_' + state.player.hand.toLowerCase())}</span>${(state.unspent | 0) > 0 ? `<span class="bb-playerchip-unspent">${t('points_left').replace('{n}', String(state.unspent | 0))}</span>` : ''}<span>${t('player_title')}</span></div>
       <div class="bb-playerchip-digits">${digits}</div>`;
   }
 
@@ -935,7 +935,9 @@ class BaseballPlayScreen {
     const rec = seasonRecord(state);
     const recordText = t('season_record').replace('{w}', rec.wins).replace('{l}', rec.losses);
     let phase;
-    if (s.phase === 'regular') phase = t('season_game').replace('{n}', String(s.results.length + 1)).replace('{of}', String(SETTINGS.SEASON.gamesPerSeason));
+    // R16: the season's OWN length, off its own snapshot - 3 games at Little League, 14 at the
+    // Majors, and the frozen 12 for a season document written before R16 (THE LAW).
+    if (s.phase === 'regular') phase = t('season_game').replace('{n}', String(s.results.length + 1)).replace('{of}', String(seasonGames(state)));
     else if (s.phase === 'semifinal') phase = t('season_semifinal');
     else if (s.phase === 'championship') phase = t('season_championship');
     else phase = t('season_done');
@@ -954,20 +956,29 @@ class BaseballPlayScreen {
     return `${t('vs_team').replace('{team}', opp ? teamDisplayName(opp.styleId, opp.name) : '?')} &middot; ${where}`;
   }
 
-  /** The nine-row standings table, the player's own row marked (never colour alone - a glyph, not
-   *  just the accent fill every row already gets from `.bb-league-row`-style selection). Two
-   *  columns so nine rows fit one screen without scrolling: column 1 gets ranks 1-5, column 2 gets
-   *  ranks 6-9 (never split a tie visually differently - the ranking itself is what the doc calls
-   *  scripted, this just lays out whatever `standingsFor` returns). */
+  /** The standings table, the player's own row marked (never colour alone - a glyph, not just the
+   *  accent fill every row already gets from `.bb-league-row`-style selection). Two columns so
+   *  nine rows fit one screen without scrolling: column 1 gets ranks 1-5, column 2 gets ranks 6-9
+   *  (never split a tie visually differently - the ranking itself is what the doc calls scripted,
+   *  this just lays out whatever `standingsFor` returns).
+   *
+   *  R16: LITTLE LEAGUE IS A FOUR-TEAM LEAGUE, and four rows split 5-and-the-rest is four rows in
+   *  the left column and a column-wide hole beside them. A table short enough to fit one column
+   *  gets ONE column (`.is-single`), so the card reads as a table rather than as a table with a
+   *  gap in it. */
   _careerStandingsHTML(state) {
     if (!state.season) return '';
     const rows = standingsFor(state);
+    const SINGLE_COL_MAX = 5;
     const rowHTML = (r, i) => `
       <div class="bb-standing-row${r.isPlayer ? ' is-you' : ''}">
         <span class="bb-standing-rank">${i + 1}</span>
         <span class="bb-standing-name">${r.isPlayer ? `<span class="bb-check" aria-hidden="true">&#10003;</span>${t('you')}` : teamDisplayName(r.styleId, r.id)}</span>
         <span class="bb-standing-rec">${r.wins}-${r.losses}</span>
       </div>`;
+    if (rows.length <= SINGLE_COL_MAX) {
+      return `<div class="bb-standings is-single"><div class="bb-standings-col">${rows.map((r, i) => rowHTML(r, i)).join('')}</div></div>`;
+    }
     const col1 = rows.slice(0, 5).map((r, i) => rowHTML(r, i)).join('');
     const col2 = rows.slice(5).map((r, i) => rowHTML(r, i + 5)).join('');
     return `<div class="bb-standings"><div class="bb-standings-col">${col1}</div><div class="bb-standings-col">${col2}</div></div>`;

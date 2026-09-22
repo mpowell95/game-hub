@@ -18,7 +18,14 @@
 // number and position... No names") - an old snapshot's roster would carry a field the UI no
 // longer reads and be missing two it needs.
 
-export const RULES_V = 3;
+// Bumped 3 -> 4 for R16 (the career economy, rebuilt from measurement): the season shape itself
+// moved (per-league game counts, a 4-team Little League, per-league playoff formats) and the
+// contact/flight-time constants an in-flight at-bat is scored against moved with it, so a mid-game
+// snapshot taken under RULES_V 3 is not a game this build can finish honestly. THE LAW: the CAREER
+// document is untouched by this - `career.js` reads a season's own snapshotted shape, an old
+// season keeps playing to its own 12 games, and only the mid-AT-BAT engine snapshot is refused
+// (game.js's own [Locked] forward-only rule), which costs one game's progress and no history.
+export const RULES_V = 4;
 
 // ---------------------------------------------------------------------------------------------
 // Leagues (frozen: baseball/CLAUDE.md's ladder order and BB_LEAGUE_MIN/MAX in js/game-stats.js;
@@ -28,7 +35,30 @@ export const LEAGUES = ['little', 'highschool', 'college', 'minors', 'majors'];
 // ---------------------------------------------------------------------------------------------
 // Season/career shape (doc section 4).
 export const SEASON = {
+  // R16, measured (old value: the only season length, 12 everywhere). FROZEN FALLBACK, never
+  // deleted (THE LAW rule 5): a season document written before R16 carries a 12-entry schedule and
+  // no `games` of its own, and `career.js` falls back to this number for it so an in-progress
+  // season still plays to its own end.
   gamesPerSeason: 12,       // [Draft] doc §4 - "12 regular season games per league across 8 opponents"
+  // R16, measured (old value: none - every league played `gamesPerSeason`). Matt, 2026-09-22:
+  // "Little league should have a shorter season." Little League is five games at most (three
+  // regular, a semifinal, a final); the slate lengthens every rung up.
+  gamesPerLeague: { little: 3, highschool: 8, college: 10, minors: 12, majors: 14 },
+  // R16, measured (old value: none - every league was all eight slots of `makeLeague`). Matt:
+  // "And all teams should make the playoffs... just little league." A 4-team Little League is the
+  // player plus makeLeague slots 1, 4 and 7 - a weak, a middle and the champion - so the tutorial
+  // still meets the whole spread in three games. Every other league is all eight.
+  leagueSlots: {
+    little: [1, 4, 7],
+    highschool: [0, 1, 2, 3, 4, 5, 6, 7],
+    college: [0, 1, 2, 3, 4, 5, 6, 7],
+    minors: [0, 1, 2, 3, 4, 5, 6, 7],
+    majors: [0, 1, 2, 3, 4, 5, 6, 7],
+  },
+  // R16, measured (old value: none - every league was 'top4'). 'all' is the everyone-in bracket
+  // (semifinal + final over a 4-team league, so the tutorial can never end in "missed the
+  // playoffs"); 'top4' is doc §4's own "Top 4 of 9 make the playoffs", unchanged above it.
+  playoffFormat: { little: 'all', highschool: 'top4', college: 'top4', minors: 'top4', majors: 'top4' },
   inningsPerGame: 3,        // [Locked] doc §3 - "3 innings" (was invented at 6 in phase 1; corrected)
   cpuTeamsPerLeague: 8,     // [Locked] doc §4/§9 - "8 CPU teams per league"
   leagueSize: 9,            // [Locked] doc §4 - you + 8 CPU teams; "Top 4 of 9 make the playoffs"
@@ -36,17 +66,42 @@ export const SEASON = {
   playoffRounds: ['semifinal', 'championship'], // [Locked] doc §4 - no quarterfinal, dropped by name
 };
 
+/** R16: how many regular-season games a league plays, with `SEASON.gamesPerSeason` as the frozen
+ *  fallback for a league id this table does not name. `career.js` snapshots the answer at
+ *  `startSeason`, so a tuning deploy applies from the NEXT season and never rewrites one in
+ *  progress (doc §15, [Locked]). */
+export function gamesForLeague(league) {
+  const n = SEASON.gamesPerLeague && SEASON.gamesPerLeague[league];
+  return Number.isFinite(n) && n > 0 ? n : SEASON.gamesPerSeason;
+}
+/** R16: which `makeLeague` slots this league's season is played against (0 weakest .. 7 champion).
+ *  All eight for every league but Little League. */
+export function slotsForLeague(league) {
+  const s = SEASON.leagueSlots && SEASON.leagueSlots[league];
+  return Array.isArray(s) && s.length ? s.slice() : [0, 1, 2, 3, 4, 5, 6, 7];
+}
+/** R16: 'all' (everyone in) or 'top4'. */
+export function playoffFormatFor(league) {
+  const f = SEASON.playoffFormat && SEASON.playoffFormat[league];
+  return f === 'all' ? 'all' : 'top4';
+}
+
 // ---------------------------------------------------------------------------------------------
 // Points earned per Career result, by league (doc section 7). NOT a team-generation budget (that
 // concept moved to CAPS/CPU_LEVEL_SHORTFALL below) - this is what a WIN/LOSS/trophy pays toward
 // the player's own skill points. Not consumed by this phase's engine (no career/progression layer
 // exists yet); kept here so a later phase has one source rather than re-deriving the doc's table.
+// R16, measured: the whole table moved, because a season's LENGTH moved under it. Little
+// League's 3-0 sweep plus a Gold pays 6+6+6+12 = 30, which is exactly the 30 of cap room a start
+// build has (6 skills, 15 + 15 spent, cap 10) - the tutorial ends with every skill at the cap and
+// a point after every single game. Every other row is set so a good season roughly fills the rung
+// it opens (the study's "seasons to fill the cap room" column: 1.0 / 1.1 / 1.4 / 1.7 / 3.6).
 export const POINTS = {                 // [Draft] doc §7 - "numbers, to tune after playtesting"
-  little:     { win: 3, loss: 1, bronze: 3, silver: 5, gold: 8 },
-  highschool: { win: 2, loss: 1, bronze: 2, silver: 4, gold: 6 },
-  college:    { win: 1, loss: 0, bronze: 2, silver: 4, gold: 6 },
-  minors:     { win: 1, loss: 0, bronze: 1, silver: 2, gold: 4 },
-  majors:     { win: 1, loss: 0, bronze: 1, silver: 2, gold: 3 },
+  little:     { win: 6, loss: 2, bronze: 4, silver: 8, gold: 12 },  // R16, measured (was 3 / 1 / 3 / 5 / 8)
+  highschool: { win: 3, loss: 1, bronze: 3, silver: 5, gold: 8 },   // R16, measured (was 2 / 1 / 2 / 4 / 6)
+  college:    { win: 2, loss: 0, bronze: 3, silver: 5, gold: 8 },   // R16, measured (was 1 / 0 / 2 / 4 / 6)
+  minors:     { win: 2, loss: 0, bronze: 2, silver: 4, gold: 7 },   // R16, measured (was 1 / 0 / 1 / 2 / 4)
+  majors:     { win: 1, loss: 0, bronze: 2, silver: 4, gold: 6 },   // R16, measured (was 1 / 0 / 1 / 2 / 3)
 };
 // [Locked] doc §7: playoff wins pay no per-win points; the trophy bonus is the entire playoff
 // reward. [Locked]: points past a league's CAPS are lost - no banking. [Locked]: you can only
@@ -203,7 +258,17 @@ export const FEEL = {
     timingWindow: 100,      // [Tested] doc §14 - good-contact timing window, ms
     foulMult: 1.7,          // [Tested] doc §14 - foul margin, x timingWindow
     swingDelay: 60,         // [Tested] doc §14 - swing start delay, ms
-    aimScatter: 0.12,       // [Tested] doc §14 - normal pitch miss from aim, fraction of plate half-width
+    // R16, measured (was 0.12): an aim that lands within an eighth of the plate half-width of
+    // where it was aimed leaves pitch Accuracy nothing to tighten - measured at +5 points on the
+    // skill, pitchAcc moved a win rate by -0.3 pp, inside noise. At 0.30 the skill has room.
+    aimScatter: 0.30,       // [Tested] doc §14 - normal pitch miss from aim, fraction of plate half-width
+    // R16, measured: THE FLIGHT-TIME REFERENCE. `swing.js` scales the good-contact timing window
+    // by `pitchResult.timeToPlateS / referenceFlightS`, so a slow pitch really is easier to time
+    // and a fast one really is harder - until R16 a 95 mph and a 55 mph pitch bought the batter
+    // exactly the same milliseconds, which is why pitch Speed measured -0.9 pp (a skill that did
+    // nothing). This is the COLLEGE fastball's own time to plate today (0.650 s x 95/88), so
+    // College is a true no-op, the same anchor LEAGUE_TIMING_WINDOW_MULT's own 1.0 uses.
+    referenceFlightS: 0.7017,
 
     // ---- R2: the 2-D batting cursor (docs/BASEBALL-3D-BUILD.md section 9) --------------------
     // The batter no longer has a 1-D "sweet spot" on a line (`sweetSpot`/`batReach`, deleted with
@@ -217,7 +282,12 @@ export const FEEL = {
     // it bought 3.8 mph; against R5's broadcast-real base of 80 it would buy 9.6, and R5 rule 2 asks
     // for "POWER mode a few mph over CONTACT". 1.05 buys 4.0 mph at the 80 mph reference and 5.3 at
     // College's cap-power 105. POWER's real cost is unchanged and is the circle, not the mph.
-    cursorR: { contact: 0.55, power: 0.35 },
+    // R16, measured (was 0.55 / 0.35): at 0.55 plus hitAcc's own widening the contact circle at
+    // 22 skill points is 1.64 zone units - WIDER THAN THE STRIKE ZONE, so a maxed bat could not
+    // miss and three-inning games ended 26-1. 0.34 / 0.22 is the College-and-up circle; the two
+    // leagues below get it back through LEAGUE_CONTACT_MULT (below), which is what keeps Little
+    // League a tutorial for a weak player instead of making it the hardest rung.
+    cursorR: { contact: 0.34, power: 0.22 },
     modeExitMult: { contact: 1.0, power: 1.05 },
     // How far off the cursor's centre, VERTICALLY, the ball has to cross before the contact stops
     // being a line drive: past `flyOffsetFrac` above the centre the batter got under it (fly),
@@ -300,6 +370,14 @@ export const FEEL = {
 // human's) is SCORED, not how large it tends to be.
 export const LEAGUE_TIMING_WINDOW_MULT = { little: 1.6, highschool: 1.3, college: 1.0, minors: 0.9, majors: 0.8 };
 
+// R16, measured (new): the SAME shape one axis over. `FEEL.engine.cursorR` is now the College-and-up
+// circle; this multiplies it per league where `swing.js` reads it, so Little League's bat covers
+// 0.544 zone units and High School's 0.442 while College up covers 0.34. It exists for the reason
+// LEAGUE_TIMING_WINDOW_MULT exists - the bottom of the ladder is a tutorial - and it is measured,
+// not assumed: at a flat 0.34 the WEAK tier (85 ms timing) wins Little League first time 93% of
+// the time with it and far less without. College's 1.0 is a true no-op.
+export const LEAGUE_CONTACT_MULT = { little: 1.6, highschool: 1.3, college: 1.0, minors: 1.0, majors: 1.0 };
+
 // Out-zone/field size multipliers (doc §14's outZoneMult/fieldScale). [Tested] as a flat baseline;
 // the actual PER-LEAGUE escalation ("fields get bigger each league... out zones also grow", doc
 // §10) is Open item 7 - see FIELD/PARKS below, which still carry phase 1's invented per-park
@@ -357,7 +435,7 @@ export const CPU = {
     pitchMix: { fastball: 3, changeup: 2, curveball: 2 }, cornerBias: 0.20, patternWeight: 0.13, weakSpotWeight: 0 },
   college:    { timingSigmaMs: 80, placementNoise: 0.22, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // BB-2c commit 2: timingSigmaMs 65 -> 80 (CPU_SIGMA_MIN_MS.college); placementNoise floored at CPU_PLACEMENT_MIN (was 0.21 under the old guess-derived formula)
     pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2 }, cornerBias: 0.38, patternWeight: 0.27, weakSpotWeight: 0.06 },
-  minors:     { timingSigmaMs: 70, placementNoise: 0.22, swingIn: 0.72, chase: 0.14, fool: 0.18, guess: 0.45,   // BB-2c commit 2: timingSigmaMs 60 -> 70 (CPU_SIGMA_MIN_MS.minors); placementNoise floored (was 0.165)
+  minors:     { timingSigmaMs: 62, placementNoise: 0.22, swingIn: 0.72, chase: 0.14, fool: 0.18, guess: 0.45,   // BB-2c commit 2: timingSigmaMs 60 -> 70 (CPU_SIGMA_MIN_MS.minors); placementNoise floored (was 0.165)
     pitchMix: { fastball: 2, changeup: 2, curveball: 2, slider: 2, knuckleball: 1.5 }, cornerBias: 0.55, patternWeight: 0.47, weakSpotWeight: 0.28 },
   majors:     { timingSigmaMs: 58, placementNoise: 0.22, swingIn: 1.00, chase: 0.02, fool: 0.10, guess: 0.20,   // BB-2d commit 7 retune: swingIn 0.65 -> 1.00, guess 0.60 -> 0.20 (measured - see baseball/CLAUDE.md); timingSigmaMs unchanged at the absolute floor (58)
     // Only the six pitches a CPU roster (never title-gated, doc §8: "CPU stats do not track or
@@ -450,6 +528,37 @@ export const WEAKSPOT_WINDOW = 8;
 // shortfall value that would also break `NUDGE_A_B`'s "well-timed low-Power beats sloppy high-
 // Power" contract by leaving every team without enough skill range to express it.
 export const CPU_LEVEL_SHORTFALL = { little: 3, highschool: 1, college: 3, minors: 4, majors: 4 };
+
+// ---------------------------------------------------------------------------------------------
+// R16, measured (new): HOW STRONG A CPU ROSTER ACTUALLY IS, replacing the literal 0.5 that sat in
+// `teams.js`'s `allocateSkills` and generated every CPU team at HALF its stated level. Measured
+// roster means before R16: 2.9 / 5.4 / 7.5 / 8.9 / 9.9, against a career player who arrives
+// holding 5 / 10 / 14 / 18 / 22 per skill - so doc §8's "CPU teams at the player's expected
+// level" had never once been true, and the career was trivially easy (first-attempt Gold
+// 99 / 97 / 79 / 68 / 51 percent at the median tier, a World Series in six seasons, every time).
+//
+// `CPU_ROSTER_LEVEL` is the MEAN skill points per CPU player a league's eight rosters land on, and
+// `teams.js` solves for the per-slot scale that achieves it AFTER the ceiling clamp (the ceiling
+// bites hard at the Minors, where nearly every value sits on it). The slot ladder's own relative
+// offsets (`TEAM_LADDER_OFFSETS`) are preserved exactly, so the champion still sits at the top of
+// each spread and the weakest team is still the weakest.
+//
+// `CPU_ROSTER_CEILING` is the per-skill ceiling: one point under each league's raw CAP, so the
+// champion is never generated AT the player's own ceiling (the study measured Minors' champion at
+// 22 of 22 and this is the "ceiling it at 21 by hand" that answers it).
+//
+// THE MINORS CEILING IS 22, NOT THE 21 THE R16 SPEC NAMED, and this is the one number in the
+// stage that was re-measured rather than transcribed. Two reasons, both measured with
+// `sim-baseball-career.mjs` (N=150, median tier): at 21 the table's own 21.0 mean is ARITHMETICALLY
+// UNREACHABLE (21 is the ceiling, so a mean of 21 needs every drawn value pinned on it, which
+// would flatten TEAM_LADDER_OFFSETS at that league entirely), and the roster it does produce
+// (20.23) made the Minors EASIER than College - first-attempt Gold 52.7% against College's 52.0%,
+// an inversion of the ladder Matt's own brief asks for ("each league after that should feel like a
+// real step up"). At 22, which is what the study's own 3.3x roster multiplier actually clamped
+// against, the realised mean is 20.96 (the table's number), the ladder keeps its shape
+// (18.7 .. 22.0 by slot) and the Minors reads 48.7% against College's 52.0%.
+export const CPU_ROSTER_LEVEL = { little: 4.1, highschool: 10.7, college: 16.4, minors: 21.0, majors: 22.1 };
+export const CPU_ROSTER_CEILING = { little: 9, highschool: 13, college: 17, minors: 22, majors: 25 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,
@@ -674,12 +783,12 @@ export const LEFTY_RATE = 0.25; // [Locked] doc §9 - "About 1 in 4 CPU players 
 // therefore still invented - Draft [Open item 4] - constrained only by the doc's qualitative
 // description of which effect each skill drives, renamed onto the six real skill ids.
 export const SKILL_EFFECT = {                // Draft [Open item 4]
-  hitAcc:    { contactRadiusInPerPt: 0.09, whiffReductionPerPt: 0.006 }, // "bigger timing window and sweet spot" - BB-2a step 6 retune (was 0.15/0.01, reverted-from-phase-2 value) against the NEW contact-quality axis, within `sim-baseball.mjs --contact-grid`'s own constraints; lowers the SKILL_EFFECT sensitivity experiment's win-rate gap
+  hitAcc:    { contactRadiusInPerPt: 0.045, whiffReductionPerPt: 0.006 }, // R16, measured (contactRadiusInPerPt was 0.09): 0.09 saturated the circle - 22 points made it 2.98x its base, so every extra point bought nothing a player could feel. At 0.045 hitAcc measures +5.3 pp per 5 points, the second-most noticeable skill after hitPow. Previously: "bigger timing window and sweet spot" - BB-2a step 6 retune (was 0.15/0.01, reverted-from-phase-2 value) against the NEW contact-quality axis, within `sim-baseball.mjs --contact-grid`'s own constraints; lowers the SKILL_EFFECT sensitivity experiment's win-rate gap
   hitPow:    { exitVeloMphPerPt: 1.3889 },                               // "more distance, stronger charged swings" - R5 (was 0.07, BB-2d commit 4's own value). DERIVED, not swept: rule 2's two broadcast targets, (CAP_POWER_EXIT_VELO_MPH 105 - PERFECT_EXIT_VELO_MPH 80) / CAPS.college 18 = 1.3889 mph per point. BB-2d's 0.07 was the largest value that kept the contact grid's margins against a BASE_EXIT_VELO of 31.39, where power was competing with a 1.4 mph-wide axis; at a base of 80 the same 18 points buy 25 mph and the grid's own "E rises with hitPow, every sigma" check passes for the first time since that retune (it was FAILING before R5, measured: 0.293/0.291/0.302 at sigma=35). It is far above SKILL_EFFECT_MAX_PER_POINT (0.03, a soft ceiling nothing enforces) because that ceiling was written for fractional multipliers, not for a value in mph
   hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - RA wired stealSuccessPerPt (game.js's steal roll, with STEAL_BASE/STEAL_MIN/STEAL_MAX below) and the BUNT reads the same beat-out roll the infield grounder does (MECHANICS.beatOutPerPt, outcomes.js); sprintFtPerSPerPt is still unused (nothing here models a runner's speed over the ground)
-  pitchSpd:  { throwMphPerPt: 0.5 },                                     // "pitch velocity"
-  pitchAcc:  { throwAccuracyPerPt: 0.01, pickoffPerPt: 0.01 },           // "lands closer to aim, bigger Nice zone, better pickoffs" - RA wired pickoffPerPt (game.js's pickoff roll, with PICKOFF_BASE/PICKOFF_MAX below)
-  pitchSpin: { breakPerPt: 0.02, changeupGapPerPt: 0.01 },               // "more bend on curve/slider/screwball; bigger changeup speed gap" - unused this phase, no steering modeled yet
+  pitchSpd:  { throwMphPerPt: 3.0 },                                     // R16, measured (was 0.5): "pitch velocity" - inert until R16's flight-time window (FEEL.engine.referenceFlightS) made travel time matter at all, and 0.5 mph a point is invisible beside a league readout that moves 40 mph. 3.0 buys 66 mph across a Majors cap.
+  pitchAcc:  { throwAccuracyPerPt: 0.038, pickoffPerPt: 0.01 },          // R16, measured (throwAccuracyPerPt was 0.01). HONEST NOTE: nothing reads `throwAccuracyPerPt` today - `game.js`'s `_controlSkillFor` resolves pitchAcc against the league CAP and hands `flyPitch` a 0..1 skill, so what actually made the skill matter in R16 is `FEEL.engine.aimScatter` (0.12 -> 0.30) plus the corner aim landing inside the zone (AIM_CORNER_BIAS_BASE/_SCALE). The value is moved with them so a later session wiring it does not start from a number set against the old scatter. Previously: "lands closer to aim, bigger Nice zone, better pickoffs" - RA wired pickoffPerPt (game.js's pickoff roll, with PICKOFF_BASE/PICKOFF_MAX below)
+  pitchSpin: { breakPerPt: 0.05, changeupGapPerPt: 0.025 },              // R16, measured (was 0.02 / 0.01): more break USED TO COST the pitcher walks, because pitch.js judged the strike on the post-break position - R16 aims at target minus break, so break is an edge again and the numbers can be worth paying for. Previously: "more bend on curve/slider/screwball; bigger changeup speed gap" - unused this phase, no steering modeled yet
 };
 export const SKILL_EFFECT_MAX_PER_POINT = 0.03; // as given by BB-1a's handoff; a soft ceiling for future tuning, not yet enforced anywhere
 
@@ -995,7 +1104,19 @@ export const PLAYOFF_HOME = 'higherSeed'; // Draft [Open item 13]
 // the same reason the original diagnosis named: Gold's bottleneck is compound probability against
 // teams that are already close to a maximum record, and inflating that maximum by scaling makes it
 // worse, not better. `rawWins7` is the default again.
-export const STANDINGS_MODEL = 'rawWins7'; // Draft [Open item 13], BB-2b commit 4
+// R16, measured: 'scaledToSeason' generalises 'scaledTo12' to whatever length the season actually
+// is (CPU rank r finishes `round(n * r / (size - 1))` of n games). 'rawWins7' capped every CPU
+// record at 7 wins however long the season was - meaningless at 3 games and at 14 alike - and
+// 'scaledTo12' hardcoded the one length R16 removed. Both are kept and still work (THE LAW rule 5).
+export const STANDINGS_MODEL = 'scaledToSeason'; // R16, measured (was 'rawWins7'). Draft [Open item 13], BB-2b commit 4
+
+// R16, measured (new): who wins a tie in the standings. 'cpu' is the shipped behaviour - the
+// player's `strengthRank` is -1, so they lose every tie to every CPU team, which at 12 games put
+// the top-4 cut at "more than 4 wins" rather than at 4. 'player' puts them above every CPU team
+// on equal wins, which is the ordinary sports reading of a tie-break and the only one that makes
+// sense at Little League, where a 3-0 player and the champion's scripted 3-0 would otherwise
+// leave the player seeded below a team they never lost to.
+export const STANDINGS_TIEBREAK = 'player'; // Draft [Open item 13]
 
 // BB-2c commit 4: SCHEDULE_SHAPE, doc §4/§13 Open item 13 ("schedule shape... over 8 opponents").
 // `season.js`'s own `OPPONENT_ORDER` used to be a single hardcoded array, its comment claiming it
@@ -1055,8 +1176,13 @@ export const SPEED_SURPRISE_MS_PER_MULT = 60;
 // touch"). Draft, unchanged VALUES from what shipped in BB-2/BB-2a - only their names are new.
 export const AIM_CORNER_CHANCE_MULT = 0.5;   // how much cornerBias raises the chance of an off-middle aim (`1 - cornerBias * this`)
 export const AIM_INZONE_BIAS = 0.4;          // how far off-middle an ordinary (non-corner) aim scatters
-export const AIM_CORNER_BIAS_BASE = 0.9;     // the floor of an aim that DID go for the corner
-export const AIM_CORNER_BIAS_SCALE = 0.9;    // how much further cornerBias itself pushes a corner aim
+// R16, measured (0.9 / 0.9): a corner aim used to resolve as far as 0.9 + 0.9 x cornerBias = up
+// to 1.24 zone units - OFF THE PLATE - so "working the corners" meant aiming at a ball, and the
+// pitcher's own Accuracy skill made it WORSE by hitting that spot more often (measured -1.3 pp
+// per 5 points). 0.62 / 0.30 keeps the hardest corner aim at 0.92, inside the zone with room for
+// the scatter, which is what the phrase was always supposed to mean.
+export const AIM_CORNER_BIAS_BASE = 0.62;    // R16, measured (was 0.9) - the floor of an aim that DID go for the corner
+export const AIM_CORNER_BIAS_SCALE = 0.30;   // R16, measured (was 0.9) - how much further cornerBias itself pushes a corner aim
 export const WEAKSPOT_AIM_SCATTER = 0.15;    // scatter around a remembered weak zone (doc §8: "attacks your weak spots")
 export const SPEED_DELTA_DEADBAND = 0.05;    // travel-multiple delta below which a repeated pitch speed counts as "the same"
 export const FOOL_PENALTY_MS_SCALE = 400;    // ms of extra timing sigma per unit of speed-delta surprise, scaled by patternWeight/fool
@@ -1085,7 +1211,7 @@ export const VARIETY_REPEAT_BASE_CHANCE = 0.85;
 // `CPU_SIGMA_MIN_MS`: a PER-LEAGUE floor for that league's own BASE sigma (before any ladder
 // offset), so Little League can still be far sloppier than a median human while Majors' base can't
 // be far off it. Values Draft, per the handoff.
-export const CPU_SIGMA_MIN_MS = { little: 115, highschool: 95, college: 80, minors: 70, majors: 58 };
+export const CPU_SIGMA_MIN_MS = { little: 115, highschool: 95, college: 80, minors: 62, majors: 58 }; // R16 ship review: minors 70 -> 62 (measured: the only Minors-only lever that puts a step between College and the Minors; still above the 55 ms human floor)
 // `CPU_SIGMA_ABSOLUTE_FLOOR_MS`: the one number NOTHING may cross - not a league's own base, not a
 // ladder slot's offset, not the pattern-read timing bonus - a hard backstop above the median
 // human's own 55ms. `cpuBaseTimingSigmaMs()` and `CpuBatter`'s own pattern-bonus clamp both apply
@@ -1285,10 +1411,12 @@ export const BREAK_OFFSET = {
 };
 
 export default {
-  RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
+  RULES_V, LEAGUES, SEASON, gamesForLeague, slotsForLeague, playoffFormatFor,
+  POINTS, CAPS, START_POINTS_PER_SIDE, START_CAP,
   HIT_SKILL_IDS, PITCH_SKILL_IDS, SKILL_IDS, PRESETS,
   PITCH_TYPES, PITCH_UNLOCKS, TITLE_PITCH_UNLOCKS, unlockedPitchesFor, PITCH_TRAVEL_MULT, READOUT,
-  FEEL, LEAGUE_TIMING_WINDOW_MULT, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL, WEAKSPOT_WINDOW,
+  FEEL, LEAGUE_TIMING_WINDOW_MULT, LEAGUE_CONTACT_MULT, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL,
+  CPU_ROSTER_LEVEL, CPU_ROSTER_CEILING, WEAKSPOT_WINDOW,
   PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, SHIFT_MIN_SAMPLES, PARKS,
   TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, STYLE_STRENGTH_DELTA, SIGMA_MS_PER_WINRATE_PP, CHASE_PER_WINRATE_PP,
   TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
@@ -1302,7 +1430,7 @@ export default {
   STEAL_BASE, STEAL_PER_ACC, STEAL_MIN, STEAL_MAX, PICKOFF_BASE, PICKOFF_MAX, PICKOFF_MAX_PER_AT_BAT,
   BUNT_WINDOW_MULT, BUNT_DIST_FT, BUNT_SPRAY_DEG,
   CPU_STEAL_BASE, CPU_STEAL_PER_SPD, CPU_PICKOFF_RATE, CPU_BUNT_RATE, CPU_BUNT_POW_FRAC,
-  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, SCHEDULE_SHAPE,
+  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, STANDINGS_TIEBREAK, SCHEDULE_SHAPE,
   GAP_DEG, BLOOP_BAND_FT, SPEED_SURPRISE_MS_PER_MULT,
   AIM_CORNER_CHANCE_MULT, AIM_INZONE_BIAS, AIM_CORNER_BIAS_BASE, AIM_CORNER_BIAS_SCALE,
   WEAKSPOT_AIM_SCATTER, SPEED_DELTA_DEADBAND, FOOL_PENALTY_MS_SCALE, FOOL_BONUS_MS_SCALE,

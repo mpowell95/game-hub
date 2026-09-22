@@ -18,7 +18,8 @@
 import { hashSeed, mulberry32, pickWeighted } from './rng.js';
 import { SKILL_IDS, CAPS, TEAM_STYLES, TEAM_STYLE_WEIGHTS, LEFTY_RATE, CPU_LEVEL_SHORTFALL,
   TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES, STYLE_STRENGTH_DELTA, SIGMA_MS_PER_WINRATE_PP, CHASE_PER_WINRATE_PP,
-  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, SLOT_SIGMA_DESCENT } from './settings.js';
+  CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, SLOT_SIGMA_DESCENT,
+  CPU_ROSTER_LEVEL, CPU_ROSTER_CEILING, slotsForLeague } from './settings.js';
 
 // doc §9: "9 distinct batters... lineup shaped like real baseball" - a real defensive alignment,
 // slot 0 always the starting pitcher (unchanged from phase 1).
@@ -41,16 +42,107 @@ export function effectiveCapFor(league) {
  *  College's 16.5) - skill VALUES stay integers regardless, so the bound is floored only for the
  *  clamp, never for the cap itself (which keeps its exact fractional value for the monotonicity
  *  check in `effectiveCapFor`). */
-function allocateSkills(effectiveCap, style, rand01) {
+function allocateSkills(scale, style, rand01, ceiling) {
   const skills = {};
-  const capInt = Math.floor(effectiveCap);
+  const capInt = Math.floor(ceiling);
   const meanWeight = SKILL_IDS.reduce((s, id) => s + (style[id] || 1), 0) / SKILL_IDS.length;
   for (const id of SKILL_IDS) {
     const w = (style[id] || 1) / meanWeight;
-    const raw = effectiveCap * 0.5 * w * (0.7 + rand01() * 0.6);
+    const raw = scale * w * (0.7 + rand01() * 0.6);
     skills[id] = Math.max(0, Math.min(capInt, Math.round(raw)));
   }
   return skills;
+}
+
+// ---------------------------------------------------------------------------------------------
+// R16 (docs/BASEBALL-3D-BUILD.md section 9): THE LITERAL 0.5 IS GONE.
+//
+// `allocateSkills` used to draw each value around `effectiveCap * 0.5` - half the level doc §8
+// says a CPU team is generated at - so every CPU roster in the game sat at half its stated
+// strength (measured league means 2.9 / 5.4 / 7.5 / 8.9 / 9.9 against a career player arriving
+// with 5 / 10 / 14 / 18 / 22 per skill). The scale is now SOLVED from `CPU_ROSTER_LEVEL`, the
+// league's own target mean, so the table in settings.js says what it means.
+//
+// Solved rather than assigned, because the ceiling clamp is not neutral: at the Minors nearly
+// every drawn value lands on `CPU_ROSTER_CEILING`, so a roster drawn AROUND 21 realises about
+// 19.4. `expectedClamped` is the closed form of E[min(m * U, C)] for the same U(0.7, 1.3) draw
+// `allocateSkills` takes, and `rosterScaleFor` bisects the one league-wide scale whose realised
+// mean - over all eight slots and all six of each style's own skill weights - is the table's
+// number. Pure, deterministic, memoized per league; rounding is the only thing it does not model.
+const SCALE_SPREAD_LO = 0.7;
+const SCALE_SPREAD_HI = 1.3;
+
+function expectedClamped(m, ceiling) {
+  if (m <= 0) return 0;
+  if (m * SCALE_SPREAD_HI <= ceiling) return m * (SCALE_SPREAD_LO + SCALE_SPREAD_HI) / 2;
+  if (m * SCALE_SPREAD_LO >= ceiling) return ceiling;
+  const uStar = ceiling / m;
+  const area = m * (uStar * uStar - SCALE_SPREAD_LO * SCALE_SPREAD_LO) / 2
+    + ceiling * (SCALE_SPREAD_HI - uStar);
+  return area / (SCALE_SPREAD_HI - SCALE_SPREAD_LO);
+}
+
+/** The eight slots' relative skill weights, normalized to a mean of 1 - `TEAM_LADDER_OFFSETS`'
+ *  own `skill` offsets, unchanged, so the ladder's shape survives the rescale exactly. */
+function slotSkillWeights(league) {
+  const offsets = TEAM_LADDER_OFFSETS[league] || TEAM_LADDER_OFFSETS.majors;
+  const raw = offsets.map((o) => Math.max(0.05, 1 + ((o && o.skill) || 0)));
+  const mean = raw.reduce((a, b) => a + b, 0) / raw.length;
+  return raw.map((r) => r / mean);
+}
+
+/** Every per-skill style weight in the league, one per (slot, skill) pair - the exact set
+ *  `allocateSkills` will multiply the scale by. */
+function styleWeightsFor(league) {
+  const order = LEAGUE_LADDER_STYLES[league] || LEAGUE_LADDER_STYLES.majors;
+  return order.map((styleId) => {
+    const style = TEAM_STYLES[styleId];
+    const meanWeight = SKILL_IDS.reduce((s2, id) => s2 + (style[id] || 1), 0) / SKILL_IDS.length;
+    return SKILL_IDS.map((id) => (style[id] || 1) / meanWeight);
+  });
+}
+
+const ROSTER_SCALE_CACHE = new Map();
+/** The league-wide draw scale whose realised roster mean is `CPU_ROSTER_LEVEL[league]`. */
+export function rosterScaleFor(league) {
+  if (ROSTER_SCALE_CACHE.has(league)) return ROSTER_SCALE_CACHE.get(league);
+  const target = CPU_ROSTER_LEVEL[league] != null ? CPU_ROSTER_LEVEL[league] : CPU_ROSTER_LEVEL.majors;
+  const ceiling = rosterCeilingFor(league);
+  const slotW = slotSkillWeights(league);
+  const styleW = styleWeightsFor(league);
+  const realised = (scale) => {
+    let sum = 0, n = 0;
+    for (let slot = 0; slot < slotW.length; slot++) {
+      const ws = styleW[slot] || styleW[0];
+      for (const w of ws) { sum += expectedClamped(scale * slotW[slot] * w, ceiling); n += 1; }
+    }
+    return n ? sum / n : 0;
+  };
+  // THE BOUND MATTERS, and it is not a safety net: a target that EQUALS the ceiling (the Minors
+  // row, 21.0 against a ceiling of 21) can only be realised by pinning every single drawn value
+  // on the ceiling, which would flatten `TEAM_LADDER_OFFSETS` at that league entirely - the
+  // champion and the weakest team identical on every skill. `ceiling / SCALE_SPREAD_LO` is the
+  // scale at which a mean-weight draw is certainly at the ceiling; above it the table's number is
+  // simply unreachable, and the ladder is worth more than the last half point of the mean. The
+  // realised means this produces (measured, `node baseball/js/test.js`): 4.16 / 10.76 / 16.43 /
+  // 20.96 / 22.30 - the Minors row is the one the bound binds.
+  let lo = 0, hi = ceiling / SCALE_SPREAD_LO;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    if (realised(mid) < target) lo = mid; else hi = mid;
+  }
+  const scale = (lo + hi) / 2;
+  ROSTER_SCALE_CACHE.set(league, scale);
+  return scale;
+}
+
+/** The per-skill ceiling for a CPU roster (one point under the league's raw cap - see
+ *  `CPU_ROSTER_CEILING`'s own comment in settings.js). */
+export function rosterCeilingFor(league) {
+  const c = CPU_ROSTER_CEILING[league];
+  if (Number.isFinite(c) && c > 0) return c;
+  const cap = CAPS[league] != null ? CAPS[league] : CAPS.majors;
+  return Math.max(1, cap - 1);
 }
 
 /** Shared by `makeTeam` and `makeLeague`: build one full roster (9 players, jersey+position, a
@@ -58,7 +150,7 @@ function allocateSkills(effectiveCap, style, rand01) {
  *  is explicit (BB-2a step 5) rather than always re-derived from `effectiveCapFor(league)` - a
  *  `makeLeague` slot's own ladder-offset cap differs from the league's single "expected level"
  *  number `makeTeam` still uses for an ungraded team. */
-function buildRoster(league, styleId, rand01, opts, effectiveCap) {
+function buildRoster(league, styleId, rand01, opts, scale, ceiling) {
   const size = opts.size || 9;
   const style = TEAM_STYLES[styleId];
 
@@ -72,7 +164,7 @@ function buildRoster(league, styleId, rand01, opts, effectiveCap) {
       pos: POSITIONS[i] || POSITIONS[POSITIONS.length - 1],
       bats,
       throws: throwsArm,
-      skills: allocateSkills(effectiveCap, style, rand01),
+      skills: allocateSkills(scale, style, rand01, ceiling),
     });
   }
 
@@ -107,7 +199,8 @@ export function makeTeam(league, index, opts = {}) {
     const styleIds = Object.keys(styleWeights);
     styleId = pickWeighted(rand01, styleIds, styleIds.map((id) => styleWeights[id]));
   }
-  return buildRoster(league, styleId, rand01, opts, effectiveCapFor(league));
+  // R16: an ungraded team sits at the league's own roster level with no slot offset at all.
+  return buildRoster(league, styleId, rand01, opts, rosterScaleFor(league), rosterCeilingFor(league));
 }
 
 /** doc §9, [Locked]: 8 teams per league, each with a DISTINCT style, "the same players every
@@ -138,8 +231,10 @@ function slotSigmaFloorMs(league, slot) {
 
 export function makeLeague(league) {
   const order = LEAGUE_LADDER_STYLES[league] || LEAGUE_LADDER_STYLES.majors;
-  const baseCap = effectiveCapFor(league);
-  const rawCap = CAPS[league] != null ? CAPS[league] : CAPS.majors;
+  // R16: the ladder's own relative shape, and the league level it is scaled onto.
+  const baseScale = rosterScaleFor(league);
+  const ceiling = rosterCeilingFor(league);
+  const slotW = slotSkillWeights(league);
   const teams = order.map((styleId, slot) => {
     const seed = hashSeed('bb-league', league, styleId);
     // BB-2b commit 3: TEAM_LADDER_OFFSETS entries are now `{ skill, timingSigmaMs, chase }` (BB-2d
@@ -161,8 +256,10 @@ export function makeLeague(league) {
     // Matt set it - a style keeps its slot, and its own measured delta pays for whatever
     // behavioral edge it carries, just on a different axis than before this commit.
     const styleDelta = STYLE_STRENGTH_DELTA[styleId] || 0;
-    const slotCap = Math.max(1, Math.min(rawCap, baseCap * (1 + offsets.skill)));
-    const team = buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotCap);
+    // R16: the slot's own share of the league's level (`slotSkillWeights` is TEAM_LADDER_OFFSETS'
+    // `skill` column normalized to mean 1), and the ceiling that bounds every drawn value.
+    const slotScale = Math.max(0.1, baseScale * (slotW[slot] != null ? slotW[slot] : 1));
+    const team = buildRoster(league, styleId, mulberry32(seed), { name: `${league}-${styleId}` }, slotScale, ceiling);
     team.ladderSlot = slot;
     const styleDeltaPp = styleDelta * 100;
     team.ladderOffset = {
@@ -175,6 +272,25 @@ export function makeLeague(league) {
     return team;
   });
   return teams;
+}
+
+/** R16: the CPU teams a SEASON in `league` is actually played against - `makeLeague`'s eight
+ *  filtered to `SEASON.leagueSlots[league]`, in the same weakest-to-strongest order (so the last
+ *  entry is still the champion, which is what every "the championship opponent is the toughest
+ *  team" rule in this engine indexes). All eight everywhere but Little League, which is a 4-team
+ *  league (the player plus slots 1, 4 and 7). `makeLeague(league)` itself still returns eight and
+ *  is untouched - a caller that wants the whole ladder (the tuner, the style sweeps) keeps it.
+ *  `slots` may be passed explicitly, which is what `career.js` does with a season's own frozen
+ *  snapshot so a deploy never reshapes a season in progress (THE LAW). */
+export function leagueTeamsFor(league, slots) {
+  const teams = makeLeague(league);
+  const pick = Array.isArray(slots) && slots.length ? slots : slotsForLeague(league);
+  const out = [];
+  for (const i of pick) {
+    const t = teams[i];
+    if (t) out.push(t);
+  }
+  return out.length ? out : teams;
 }
 
 /** doc §6, [Locked]: "One player who is all 9: always bats and always pitches." Nine copies of the
@@ -216,4 +332,5 @@ export function teamStrength(team) {
   return { means, overall: sum / SKILL_IDS.length };
 }
 
-export default { makeTeam, makeLeague, makePlayerTeam, teamStrength, effectiveCapFor, POSITIONS };
+export default { makeTeam, makeLeague, leagueTeamsFor, makePlayerTeam, teamStrength, effectiveCapFor,
+  rosterScaleFor, rosterCeilingFor, POSITIONS };

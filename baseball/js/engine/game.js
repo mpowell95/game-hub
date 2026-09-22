@@ -339,6 +339,12 @@ export class Game {
       score: { ...this.score },
       batterId: this._currentBatterId(battingSide),
       pitch: pitchResult,
+      // R16 (docs/BASEBALL-3D-BUILD.md section 9): the pitch's own TIME TO THE PLATE, threaded to
+      // the decision rather than left for an agent to re-derive from the type and the league.
+      // `swing.js` scales the good-contact window by it (`flightWindowMult`), so this is the one
+      // number that says how much of a window this particular pitch is actually worth - a fast
+      // arm's fastball buys the batter almost half of what a Little League one does.
+      timeToPlateS: pitchResult && pitchResult.timeToPlateS,
       pitchHistory: priorPitchHistory,
       // RA (docs/BASEBALL-3D-BUILD.md section 9): WHO COULD STEAL, if this side asked for one -
       // `null` when nobody can. The agent deciding the steal is the BATTING agent, which knows its

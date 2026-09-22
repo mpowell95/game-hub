@@ -121,17 +121,27 @@ export function flyPitch(type, aim, pitchAccSkill01, settings, rand01, pitcherSk
   const drawBX = preObj && typeof preObj.bx === 'number' ? preObj.bx : rand01();
   const drawBY = preObj && typeof preObj.by === 'number' ? preObj.by : rand01();
 
-  const straightX = aimX + (drawX * 2 - 1) * scatter;
-  const straightY = aimY + (drawY * 2 - 1) * scatter;
-
-  // THE BREAK (R2): a fact of the type and the pitcher's own hand, applied at the plate. The
-  // straight point is what the ball appears to be heading for when it leaves the hand; this is
-  // where it actually ends up.
+  // THE BREAK (R2): a fact of the type and the pitcher's own hand, applied at the plate.
   // R14: the pitcher's own pitchSpin points widen it (breakOffsetFor's own spinMult, handed
   // types only).
   const hand = (pitchExtras && pitchExtras.pitcherHand) || 'R';
   const pitchSpinPtsForBreak = Math.max(0, (pitcherSkills && pitcherSkills.pitchSpin) || 0);
   const brk = breakOffsetFor(type, hand, drawBX, drawBY, settings, pitchSpinPtsForBreak);
+
+  // R16 (docs/BASEBALL-3D-BUILD.md section 9): THE PITCH IS AIMED AT `aim - break`, SO THE BREAK
+  // LANDS ON THE AIM. Until R16 the break was added ON TOP of the aim and the strike was judged on
+  // where the ball finished, so a pitcher who bought Spin points did not get a nastier strike - he
+  // got a BALL, every time, further outside the more he had paid for (measured: +5 points of
+  // pitchSpin cost -4.1 pp of win rate, the worst of the six skills). Aiming at the target minus
+  // the break is also what the reference game's own end-point cursor already implies: the yellow
+  // point you drag is where the pitch ENDS, not where it starts.
+  //
+  // Nothing else in the meaning changes. `x`/`y` are still the real crossing and the strike is
+  // still judged on them; `straightX`/`straightY` are still where the pitch APPEARS to be headed
+  // at release (now aim minus break, plus the same scatter), which is exactly what the batting-side
+  // target marker needs to slide FROM so that where it ends up is the truth.
+  const straightX = (aimX - brk.x) + (drawX * 2 - 1) * scatter;
+  const straightY = (aimY - brk.y) + (drawY * 2 - 1) * scatter;
   const x = straightX + brk.x;
   const y = straightY + brk.y;
 
