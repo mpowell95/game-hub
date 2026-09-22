@@ -193,25 +193,46 @@
      Matt: "whatever back button you made is hidden behind the Hub quit button."
      A vertical measurement cannot answer this. Horizontal separation can, so the Menu button
      sits at the far RIGHT and this reserve keeps the turn pill clear of the chip on the left. */
-  padding: 8px 16px 8px 76px;
+  /* 64px ON THE RIGHT is the mirror of the 76px above: the Menu button is absolutely positioned
+     now (top right, skeeball's box), so this row no longer CONTAINS it and the turn pill would
+     otherwise run underneath it. */
+  padding: 8px 64px 8px 76px;
   min-height: 38px;
 }
-/* BACK TO THIS GAME'S OWN SETUP SCREEN - not out to the launcher, which is what the hub's
-   floating "Hub" chip does. Two destinations, so two buttons, so two different words: this one
-   is labelled by where it goes. It sits in the HUD row (y ~8-46); the hub's chip floats at
-   y 54+, so they never overlap - the first attempt failed on the LABEL, not the position. */
+/* SKEEBALL'S BUTTON, IN SKEEBALL'S PLACE. Matt: "make the 'menu' button look just like
+   skeeball. With the same options." So this is `.sk-menu`'s box verbatim - absolute, top right,
+   44x44, a hamburger - and it opens the same pause sheet (ui.js's _showPause).
+
+   TOP RIGHT IS NOT A STYLE CHOICE, it is the fix for a real bug this game already had once. The
+   hub's floating "Hub" chip owns the top LEFT, and a Menu button that shares its band is hidden
+   behind it on a notched phone - which is what happened, and which a headless measurement could
+   not see because `env(safe-area-inset-top)` is 0 there and ~59px on an iPhone. Horizontal
+   separation is the axis a notch cannot move. Skeeball has sat here for a month without
+   colliding.
+
+   44x44 is the floor for a reliable thumb; do not shrink it back to fit a layout. */
 .h4-root .h4-menu {
-  appearance: none; flex: 0 0 auto;
-  margin-left: auto;                   /* the far right, opposite the hub's chip */
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--h4-ink, #fff);
-  font: inherit; font-size: 13px; font-weight: 700;
-  padding: 6px 12px; border-radius: 10px;
+  appearance: none;
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  right: 12px;
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--h4-edge);
+  background: var(--h4-panel);
+  color: var(--h4-dim);
+  font: inherit; font-size: 18px; line-height: 1;
   cursor: pointer; touch-action: manipulation;
-  min-height: 32px;
 }
-.h4-root .h4-menu:active { background: rgba(255, 255, 255, 0.16); }
+.h4-root .h4-menu:active { background: #262a31; color: var(--h4-ink); }
+
+.h4-root .h4-pause { text-align: center; }
+.h4-root .h4-pause-title {
+  margin: 0 0 2px; font-size: 22px; font-weight: 800; color: var(--gh-ink);
+}
 
 /* WHOSE SHOT IT IS, as a pill you cannot miss. It was a 14px coloured word, and the colour was
    the only thing separating "your turn" from "their turn" - unreadable for Matt (red/green

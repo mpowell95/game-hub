@@ -468,6 +468,160 @@ this about a lit machine, and it had to be rediscovered from a screenshot. And t
 silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
 gone would have dropped the player back with no explanation at all. The card stays up and says so.
 
+### The marquee is a SIGN now (2026-09-22)
+
+Matt, with a photo of BRICK CITY's marquee beside this one: *"please improve the game
+banner/header on connect 4. Do not copy brick city's banner, but see how cool it is? Connect 4
+hoops is laaame in comparison."*
+
+It was a flat three-stop orange gradient, a plain dark box, and two lines of default sans-serif.
+No frame, no texture, no depth, and nothing on it said WHICH machine it was.
+
+**Brick city was the quality BAR, not the design.** What was taken from `_paintMarquee()` is the
+construction of a lit sign - a layered frame, a textured panel rather than a flat fill, bulb bars,
+and lettering drawn several times (a dark offset copy for depth, two glow passes at shrinking
+blur, the crisp face, a thin keyline). What was NOT taken is anything you can see: no brick
+coursing, no red-brick palette, no HOT SHOT typography, and no import from `skeeball/` - those
+engine files are a deliberate fork and this drawing code is this game's own.
+
+Everything on it is drawn from `boarddef.js`'s own `look` block, so the sign belongs to the
+cabinet under it:
+
+- **The panel is the board's own lit blue** (`face` -> `faceEdge`), textured with a staggered
+  field of dark punched holes. That is this machine's coursing: the Connect 4 grid, which is the
+  same motif as the screen directly below it.
+- **A basketball on one side, a dropped red-over-yellow chip pair on the other** - the two games
+  this cabinet welds together, one per side, so the sign names both halves without a third word.
+- **Bulb bars top and bottom**, alternating lit and dim, so it reads as electric rather than
+  printed.
+
+**Three things were wrong on the first build and only a screenshot at PLAY SIZE found them** -
+which is `VISUAL-PROCESS.md`'s whole point, and the third time this game has learned it:
+
+- **"HOOPS" was a smudge.** Five characters under a nine-character word, in the rim's orange,
+  which is the lowest-contrast pair on the cabinet, with a glow behind it muddying what was left.
+  Measured on a 393px phone: 45px wide against CONNECT 4's 145. It is **letter-spaced to CONNECT
+  4's own measured width** (`signWord`'s `trackTo`, drawn character by character because
+  `ctx.letterSpacing` is not available everywhere this ships) and **in the bulb yellow**, the one
+  colour that stays crisp on that blue.
+- **The flanking icons were specks.** At `ph * 0.15` on a sign only ~340px wide at play size, an
+  icon is about 9px across and reads as dirt. They are `ph * 0.30` now, and the chip pair's two
+  discs nearly touch so the same height buys bigger chips.
+- **The sign had no room.** `mqH` 0.12 -> 0.145, into dead cabinet that was already above it.
+  `_marqueeTop` is computed from `mqH`, so the camera follows on its own - which
+  `check-display.mjs` then proved rather than assumed.
+
+The fascia below it gained a bright top edge, a centre seam and corner bolts, and is deliberately
+still quiet: it sits between the sign and the hoop row, and nothing there may compete with the
+hoops.
+
+Measured after: `check-display.mjs` **10/10** (all 42 cells on screen, nothing occluded, every
+hoop still nearest its own column, worst perspective fan 10.7px), `test-visual.mjs hoops4` 13/13,
+`check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-game-conventions.mjs` 11/11, no page
+errors. Still paint only - not one thing on the marquee or the fascia has a collider.
+
+### THE SCORING RATE: every lever measured, and Matt's call (2026-09-22)
+
+Matt, after playing the square board: *"I don't understand why you can't make it better than 20
+something % made shots."*
+
+**First, the number he is quoting is the GRID's, not a player's.** `probe-bounce.mjs` and
+`test.js` sweep every power x aim combination evenly, including the ones no thumb would ever
+produce - it is a floor, not an experience. The one measurement of a real gesture
+(`check-display.mjs`'s scripted thumb, seven columns) landed **19 of 28, 68%**. Both numbers are
+honest and they answer different questions; do not quote the grid as what a person shoots.
+
+**Second, it really did fall on purpose, twice.** Making the machine bouncy cost 37.7% -> 23.7%,
+and turning the bounce sideways bought back to 29.4%. Those were Matt's own asks on two different
+days, in two different directions.
+
+Every lever was then swept on the full 231-throw grid, against the shipped build (**28.6% scored,
+1.7% parked, 45.5% of misses bouncing, mean rebound 0.48 m/s**):
+
+| lever | scored | parked | misses bouncing / mean rebound |
+|---|---|---|---|
+| **shipped** | **28.6%** | **1.7%** | 45.5% / 0.48 |
+| **hoop mouth r x1.10** | **31.6%** | **0.9%** | 43.0% / 0.51 |
+| hoop mouth r x1.05 | 26.4% | 0.9% | 44.1% / 0.50 |
+| ringRest 0.30 | 29.9% | 3.5% | 40.1% / 0.38 |
+| ringRest 0.40 / 0.46 / 0.62 / 0.72 | 28.1 / 26.4 / 26.0 / 26.8% | 3.5 / 1.7 / 1.3 / 1.3% | ~45% / 0.44-0.53 |
+| riserRest 0.05 | 31.2% | 5.2% | 41.5% / 0.43 |
+| riserRest 0.30 | 30.3% | 3.5% | 44.1% / 0.46 |
+| speed band 6.45/6.70 | 30.7% | **6.1%** | 45.0% / 0.46 |
+| speed band 6.40/6.85 | 21.6% | 3.5% | 48.1% / 0.50 |
+| boardRest 0.40 / 0.20 / 0.05 | **28.6%, all three** | 1.7% | bounce only falls |
+| deadRest 0.32 / 0.20 / 0.06 | **28.6%, all three** | 3.0 / 1.7 / 1.7% | bounce only falls |
+| jitterAim / jitterSpeed, 0.000 to 0.013 | **28.6%, every value** | 1.7% | unchanged |
+| bounceSideways 0.8 | 28.6% | 1.7% | worse ratio (3.92:1 vs 4.48:1) |
+
+**Four findings worth keeping:**
+
+1. **Only ONE change raises scoring without paying for it: widening the hoop mouth.** +3.0 points
+   AND parked nearly halved AND the bounce intact. Everything else that scores higher does it by
+   tripling the parked rate or by flattening the machine's most-struck surface back toward the
+   "beanbag" it was raised out of.
+2. **The two candidate wins do not stack.** `holeR x1.10` + `ringRest 0.30` measured **28.1%** -
+   worse than the mouth alone and back at baseline. Never assume two levers add.
+3. **Three knobs are NOT scoring levers at all**: `boardRest`, `deadRest` and the jitter pair move
+   the scoring rate by exactly zero at every value tested. Lowering them is pure cost.
+4. **`holeR x1.05` measured WORSE than baseline (26.4%) while x1.10 measured better.** That is a
+   quantisation artefact of 21 discrete aim steps, not a curve - so a midpoint cannot be
+   interpolated from this grid, and a small delta on this instrument means nothing.
+
+**MATT'S CALL, ASKED AND ANSWERED: leave the hoops alone.** He was given the table above and chose
+it, so the rate stays at 28.6% and **this question is closed.** A future session must not widen
+the mouth, deaden the rim, or retune the band to chase a scoring number - `boarddef.js` already
+says `RIM` is never changed without him, root `CLAUDE.md` says a mouth's width is his number, and
+he has now said no to the one change that would have worked. Re-open it only if he does.
+
+#### The Menu button is SKEEBALL'S button, with skeeball's sheet (2026-09-22)
+
+Matt, with a screenshot of each: *"make the 'menu' button look just like skeeball. With the same
+options."*
+
+It was a 13px pill reading "Menu" that QUIT the match on one tap (straight into `leaveMatch`).
+Skeeball's is a 44x44 hamburger that opens a **pause sheet**, and that difference is the point: a
+button that ends a game on a single tap with no way to say you did not mean it is the exact
+complaint skeeball itself got on 2026-08-21.
+
+So `.h4-menu` is now `.sk-menu`'s box verbatim - absolute, `top: max(10px, env(safe-area-inset-top))`,
+`right: 12px`, 44x44, `☰` - and `_showPause()` is `skeeball/js/ui.js`'s `_showPause` ported:
+the same `.gh-overlay`/`.gh-modal` primitives, the same X in the corner, the same
+Resume / New game / leave stack.
+
+**Top right is not a style choice, it is the fix this game already needed once.** The hub's
+floating "Hub" chip owns the top LEFT, and the previous Menu button shared its band on a notched
+phone. The HUD row's `padding-left: 76px` stays for the turn pill and gains a mirrored
+`padding-right: 64px`, because the button is absolutely positioned now and the row no longer
+CONTAINS it.
+
+**Three things differ from skeeball, each for a reason:**
+
+- **The third button is this game's own destination.** Skeeball's quits to its machine gallery;
+  this game has no gallery, and the Menu button has always gone to the setup screen where you
+  change opponent and shot rule. In a turn-by-turn match it reads "Back to multiplayer" instead,
+  because that is where the rest of your matches are.
+- **New game is HIDDEN in any multiplayer match**, and that is a rule rather than tidiness: there
+  is nobody on the other end of a unilateral restart. In a live room both engines would replay
+  different boards from the next move on; a turn-by-turn challenge is a shared move log, and a
+  rematch there is a new challenge.
+- **Leaving still routes through `leaveMatch()`**, so the mid-game confirm and the async
+  "your match is saved" toast are unchanged - the sheet is a new door onto the same behaviour,
+  not a replacement for it.
+
+**PAUSED MEANS PAUSED.** The loop is stopped while the sheet is up (skeeball's 2026-08-26 lesson),
+and it is if anything more load-bearing here: a ball still in the air when you tap would otherwise
+go on flying, drop through a hoop, take your turn and hand the CPU its shot while you read the
+menu. `preserveDrawingBuffer` keeps the last frame on the canvas, so the machine freezes rather
+than going black. `leaveMatch`'s cancel path restarts the loop, or declining the confirm would
+leave a permanently frozen game.
+
+Measured in a browser **with a 59px inset simulated**, since a headless one has none: the button
+is 44x44 at x 337 / y 59 and `elementFromPoint` returns it at its own centre; the sheet reads
+Paused / Resume / New game / Back to setup screen with an X; `raf` is 0 while it is up and
+non-zero after Resume; no page errors. `test-game-conventions.mjs` 11/11, `test-hoops4-mp.mjs`
+77/77, `check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-visual.mjs hoops4` 13/13.
+
 #### Two buttons in one place, and why a measurement said otherwise
 
 Matt, on the build that shipped the Menu button: *"whatever back button you made is hidden behind
