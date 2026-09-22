@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v888';
+const CACHE = 'game-hub-v893';
 
 const ASSETS = [
   './',
@@ -832,17 +832,17 @@ const REST_MANIFEST = {
   './skeeball/js/ui.js': '705d81eba9',
   './skeeball/js/swipe.js': 'c596f565de',
   './hoops4/index.html': 'dce91b13bd',
-  './hoops4/css/hoops4.css': '83ac12912c',
-  './hoops4/js/ui.js': 'e2660d5e24',
-  './hoops4/js/boarddef.js': '0922235cd4',
+  './hoops4/css/hoops4.css': '9ed1aa40ad',
+  './hoops4/js/ui.js': 'ed829e35b0',
+  './hoops4/js/boarddef.js': '608ac16b8c',
   './hoops4/js/machine.js': '55061e44a1',
-  './hoops4/js/physics.js': 'e50d34068a',
-  './hoops4/js/render.js': 'f17627f29e',
+  './hoops4/js/physics.js': 'a354682698',
+  './hoops4/js/render.js': '1e198eaeec',
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/cpu.js': 'f1b8a3e68b',
   './hoops4/js/mp.js': '827003d11a',
   './hoops4/js/mp-ui.js': 'b99999b495',
-  './hoops4/js/strings.js': 'd7b07f98ef',
+  './hoops4/js/strings.js': '7614987260',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/boards.js': '8cf226684b',
@@ -867,11 +867,11 @@ const REST_MANIFEST = {
   './skeeball/js/vendor/three.module.min.js': '86bcee248b',
   './skeeball/js/vendor/three.core.min.js': '05b2609338',
   './skeeball/js/strings.js': '82646c28bd',
-  './golf/': '06973c1bba',
-  './golf/index.html': '06973c1bba',
+  './golf/': 'ca3b3b7acc',
+  './golf/index.html': 'ca3b3b7acc',
   './golf/css/golf.css': '5daf144650',
-  './golf/js/ui.js': '39262f57ea',
-  './golf/js/strings.js': 'e2d1edbdd6',
+  './golf/js/ui.js': '6cec6f4881',
+  './golf/js/strings.js': 'c9648c62c7',
   './golf/js/holes.js': '7f4d8f43b5',
   './golf/js/club-art.js': 'b501cf9342',
   './golf/js/clubs.js': '59eec1b077',
@@ -879,7 +879,7 @@ const REST_MANIFEST = {
   './golf/js/shot.js': '0696eed647',
   './golf/js/render.js': 'a46c904c2f',
   './golf/js/holegen.js': '1eed28c07a',
-  './golf/js/rounds.js': '51ab389131',
+  './golf/js/rounds.js': 'f9e4a66390',
   './golf/js/board.js': 'f6c1612123',
   './golf/js/save.js': '0126d36c18',
   './golf/js/progress.js': 'ac0e7f0d2c',

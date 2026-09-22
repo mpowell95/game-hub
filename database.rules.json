@@ -30,6 +30,13 @@
       }
     },
 
+    "courseDrafts": {
+      ".read": "auth != null",
+      "$code": {
+        ".write": "auth != null && (root.child('msgAuth').child(auth.uid).val() === $code || root.child('admins').child(auth.uid).val() === true)"
+      }
+    },
+
     "msgAuth": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",

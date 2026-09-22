@@ -1070,6 +1070,15 @@ real Firebase from this branch** — the same caveat every MP consumer above car
 
 ---
 
+## Course drafts (2026-09-22)
+
+`courseDrafts/<PLAYER CODE>/<courseId>` - the golf hole editor's document, autosaved by
+`hole-editor/js/drafts.js` so Matt can review a course somebody else designed. One string
+(`docJson`) plus name/theme/holes/by/updatedAt. Rules: read for any signed-in session; write only
+by the device that claimed that code in `msgAuth/<uid>` (the messages claim, reused) or an admin.
+In `backups/rtdb-backup.mjs`'s BRANCHES. Nothing deletes a draft. Full contract:
+`hole-editor/CLAUDE.md`, "The Course Creator".
+
 ## Messages (2026-08-31)
 
 Player-to-player messages, threaded. Two modules, one new Firebase node, one new local key. **THE

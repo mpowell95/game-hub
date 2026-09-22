@@ -125,11 +125,16 @@ export const BOARD = {
     cabinet: '#17181c', cabinetEdge: '#0c0d10',
     cabRed: '#c0392b', cabYellow: '#d9a520',   // the cabinet's player sides, as on the real one
     face: '#1668cf', faceEdge: '#0e4796',     // the lit display blue
-    ring: '#e6e2d8', ringLip: '#cfcabf',      // the reference's rims are PALE, not orange
+    // THE RIMS ARE ORANGE. They were pale (#e6e2d8), read off the reference photo, and Matt -
+    // looking at the machine on his phone - said the baskets "don't look like real baskets to
+    // me". He is right and the photo reading was the wrong thing to optimise: at the size a hoop
+    // occupies on a 393px screen the ONE thing that says "basketball hoop" is an orange ring with
+    // a white net under it, and a pale ring with a pale net under it is a wire fence.
+    ring: '#e8541f', ringLip: '#b83c10',
     value: '#ffffff', pocket: '#08121f',
     marquee: '#243044', marqueeText: '#ffce3a',
     bulb: '#ffce3a', glow: '#ff9d3d',
-    wall: '#15171c', net: '#e6e2d8',
+    wall: '#15171c', net: '#fbfaf7',
     red: '#e8463f', yellow: '#ffce3a',      // the two players, the real cabinet's colours
   },
 
@@ -241,10 +246,45 @@ export const BOARD = {
     jitterAim: 0.013,
     jitterSpeed: 0.012,
 
+    // HOW MUCH OF A FORWARD BOUNCE IS TURNED SIDEWAYS, 0..1. The rule and the reasoning are in
+    // physics.js section 0a; this is the dial, and 1.0 means Matt's words literally: a bounce
+    // comes off SIDEWAYS, never toward the player. Measured over the 11x21 grid
+    // (`reference/hoops/probe-bounce.mjs`), against the two builds before it:
+    //
+    //                                    scored   parked   lat:fwd   misses bouncing / rebound
+    //   v889, before any bounce work      30.7%     5.2%    1.54:1        48%  /  0.43 m/s
+    //   v890, the build Matt played       22.9%     6.1%    1.43:1        59%  /  0.71 m/s
+    //   this: K 1.0, ringRest 0.55        29.4%     7.8%    4.37:1        56%  /  0.61 m/s
+    //
+    // The pair matters, not either number: K alone is worth about two points of scoring, and the
+    // rest of the way back to v889 is `ringRest` coming down from 0.72. The sweep behind both
+    // (every combination of K in 0..1 and ringRest in 0.42..0.72) is in hoops4/CLAUDE.md,
+    // "The bounce goes SIDEWAYS". Re-run the probe after changing either.
+    bounceSideways: 1.0,
+
     // --- bounce and grip ------------------------------------------------------------------------
     mat: {
+      // THE SHELF BOUNCES, AND THIS IS THE HALF OF "BOUNCIER" THAT WAS MISSING. Matt, twice:
+      // "make sure the rims are a little bouncier than other skeeball games... if you don't get a
+      // swish it should bounce", and then, having played the build that raised ringRest to 0.62:
+      // "they're not very bouncy, like I asked."
+      //
+      // He was right and the rims were never the problem. MEASURED over 231 throws
+      // (`probe-bounce.mjs`): only 47% of misses bounced at all, 0.60 bounces per miss, and the
+      // mean best rebound was 0.38 m/s - a dribble. The rim is hit by half the throws, but what a
+      // miss LANDS ON afterwards was dead: the shelf at 0.05, the display wall at 0.05 and the
+      // fins at 0.03. A lively rim over a beanbag floor feels like a beanbag.
       boardFric: 0.12,
-      boardRest: 0.05,
+      boardRest: 0.58,
+      // The vertical display panel is the single most-hit surface on the machine - 165 of 231
+      // throws touch a riser, because a shot that falls short hits the face of the board. It is a
+      // painted steel panel, so it plays like one: a short shot comes BACK at the player.
+      riserFric: 0.10,
+      riserRest: 0.70,
+      // The trough is the catch pit and stays dead, deliberately: a bouncy trough throws a dead
+      // ball back out onto the lane instead of ending the shot.
+      troughFric: 0.40,
+      troughRest: 0.06,
       woodFric: 0.30,
       woodRest: 0.22,
       // THE SIDE WALLS ARE DEAD, and this is a measured gameplay fix rather than a look. At HOT
@@ -260,14 +300,24 @@ export const BOARD = {
       // rattle that can still drop, or can still bounce out.
       ringFric: 0.06,
       // BOUNCIER AGAIN, 2026-09-22. Matt, having played it: "i'd like for them to be bouncier."
-      // 0.46 -> 0.62, which is 3.4x THE CLASSIC (0.18) and more than twice HOT SHOT (0.30). What
-      // makes that safe is the THROAT: a captured ball is contained by a wall 8 ball-radii tall,
-      // so a livelier rim cannot cost the "100% of the time" promise the way it did at 2.4 and
-      // 4.0 - and hoops4/js/test.js asserts that promise at exactly 100.00%, so a bounce number
-      // that broke it would go red rather than quietly leak balls into the wrong column.
-      ringRest: 0.62,
+      // 0.46 -> 0.62 -> 0.72, which is 4x THE CLASSIC (0.18) and more than twice HOT SHOT (0.30).
+      // What makes that safe is the THROAT: a captured ball is contained by a wall 8 ball-radii
+      // tall, so a livelier rim cannot cost the "100% of the time" promise the way it did at 2.4
+      // and 4.0 - and hoops4/js/test.js asserts that promise at exactly 100.00%, so a bounce
+      // number that broke it would go red rather than quietly leak balls into the wrong column.
+      //
+      // AND BACK TO 0.55 THE SAME DAY, which is not a reversal of that - it is the price of the
+      // other half of what he asked for. Matt, on the 0.72 build: "the bounce is good... I want
+      // the bounce to add some randomness, not make the game measurably more difficult/players
+      // measurably less accurate." Measured, 0.72 WAS measurably harder: 22.9% of the test grid
+      // scored against 30.7% before the bounce work, and of every knob on this machine the rim is
+      // the one that moves that number - a rim that lively fires a shot that is not a swish
+      // clean off the row. 0.55 is still 1.8x HOT SHOT and 3x THE CLASSIC, the rest of the
+      // machine (shelf 0.58, display panel 0.70) carries the bounce he can SEE, and the grid
+      // comes back to 29.4%. The whole sweep is in hoops4/CLAUDE.md, "The bounce goes SIDEWAYS".
+      ringRest: 0.55,
       ring100Fric: 0.06,
-      ring100Rest: 0.62,
+      ring100Rest: 0.55,
       deadFric: 0.06,
       deadRest: 0.32,
       backFric: 0,

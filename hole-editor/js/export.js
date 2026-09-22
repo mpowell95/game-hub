@@ -4,6 +4,8 @@
 // three blocks copied verbatim (the header comment, DESERT_TYPES, RM_DEFAULTS/rm and RED_MESA).
 
 import { serialiseDocument } from './model.js';
+import { slugOf } from './course.js';
+import { PARKLAND_TYPES, DESERT_TYPES } from './starter.js';
 
 // --- verbatim blocks (section 8.1/8.2) -----------------------------------------------------------
 // Copied from golf/courses/redmesa.js as shipped. If that file's header, obstacle table or house
@@ -149,9 +151,16 @@ export default RED_MESA;`;
 /** Generate the full `redmesa.js` text for a document. `doc.order` decides the slot (and so the
  *  SPEC_i / HOLE_i numbering and every `n`) - never the id. */
 export function generateSource(doc, date = new Date().toISOString().slice(0, 10)) {
+  const custom = doc.courseId === 'custom';
+  const meta = custom ? customMeta(doc) : null;
   const blocks = [];
-  blocks.push(`${HEADER}\n// EDITED IN THE HOLE EDITOR on ${date} - see HANDOFF-GOLF-HOLE-EDITOR.md`);
-  blocks.push(IMPORT_AND_DEFAULTS);
+  if (custom) {
+    blocks.push(`// golf/courses/${meta.slug}.js - ${meta.name.toUpperCase()}, ${doc.order.length} holes. Built in the hole editor's\n// Course Creator on ${date} (hole-editor/CLAUDE.md, "The Course Creator") and folded in as a course.\n// Yards throughout. x across the hole (right positive), y up it away from the tee.`);
+    blocks.push(customDefaults(meta));
+  } else {
+    blocks.push(`${HEADER}\n// EDITED IN THE HOLE EDITOR on ${date} - see HANDOFF-GOLF-HOLE-EDITOR.md`);
+    blocks.push(IMPORT_AND_DEFAULTS);
+  }
 
   const specNames = [];
   const holeNames = [];
@@ -168,9 +177,54 @@ export function generateSource(doc, date = new Date().toISOString().slice(0, 10)
 
   blocks.push(`/** THE RECIPES, in slot order - what the hole editor reads and what it writes back. Each SPEC_n is\n *  exactly the object HOLE_n is built from; nothing here is derived twice. */\nexport const SPECS = [\n  ${specNames.join(', ')},\n];`);
   blocks.push(`export const HOLES = [\n  ${holeNames.join(', ')},\n];`);
-  blocks.push(printRedMesa());
+  blocks.push(custom ? printCustomCourse(meta) : printRedMesa());
 
   return `${blocks.join('\n\n')}\n`;
+}
+
+// --- a custom course (2026-09-22) -------------------------------------------------------------
+
+function customMeta(doc) {
+  const name = (doc.course && doc.course.name) || 'My Course';
+  const theme = (doc.course && doc.course.theme) === 'desert' ? 'desert' : 'parkland';
+  const slug = slugOf(name);
+  return { name, theme, slug, constName: slug.toUpperCase() + '_COURSE' };
+}
+
+function customDefaults(meta) {
+  const types = meta.theme === 'desert' ? DESERT_TYPES : PARKLAND_TYPES;
+  const rough = meta.theme === 'desert' ? '\n  rough: 7,' : '';
+  return `import { makeHole } from '../js/holegen.js';
+
+/** The obstacle table: the ${meta.theme} set, as the Course Creator shipped it. */
+const TREE_TYPES = [
+${types.map((t) => `  { name: '${t.name}', trunk: ${t.trunk}, canopy: ${t.canopy}, height: ${t.height} },`).join('\n')}
+];
+
+/** Course-level defaults every recipe below is laid on top of. EXPORTED for the hole editor. */
+export const RM_DEFAULTS = {
+  treeTypes: TREE_TYPES,${rough}
+  belts: { left: { depth: 20, spacing: 14 }, right: { depth: 20, spacing: 14 } },
+};
+const rm = (spec) => makeHole({ ...RM_DEFAULTS, ...spec });`;
+}
+
+function printCustomCourse(meta) {
+  return `export const ${meta.constName} = {
+  id: '${meta.slug}',
+  name: ${JSON.stringify(meta.name)},
+  theme: '${meta.theme}',
+  blurbKey: 'blurb_custom',
+  holes: HOLES,
+  get par() { return this.holes.reduce((a, h) => a + h.par, 0); },
+};
+
+export default ${meta.constName};`;
+}
+
+/** What the Export button names the download. */
+export function exportFileName(doc) {
+  return doc.courseId === 'custom' ? `${customMeta(doc).slug}.js` : 'redmesa.js';
 }
 
 /** The "Copy JSON" button: the document, verbatim. */

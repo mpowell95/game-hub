@@ -104,6 +104,13 @@ function buildWorld(board) {
   const matWood = new CANNON.Material('wood');     // lane + hump: varnished, low bounce
   const matBoard = new CANNON.Material('board');   // the face: livelier
   const matWall = new CANNON.Material('wall');     // side rails: slick, so a ball banks off them
+  // THE RISER AND THE TROUGH GOT THEIR OWN MATERIALS (2026-09-22). They used to share the
+  // shelf's, which meant the display panel - the most-struck surface on the machine, 165 of 231
+  // throws - and the catch pit could not be tuned apart from the floor a scored ball lands on.
+  // The panel needs to come BACK at the player and the pit needs to swallow; one number cannot
+  // be both. Defaults here are the old shared values, so a board that sets neither is unchanged.
+  const matRiser = new CANNON.Material('riser');
+  const matTrough = new CANNON.Material('trough');
   const matRing = new CANNON.Material('ring');     // the white plastic (PVC) rings: barely bounce
   const matDead = new CANNON.Material('dead');     // kick panel: padded, kills the ball
   // The BACK WALL gets its OWN material so it can rebound a hard throw at the player (the classic's
@@ -134,6 +141,8 @@ function buildWorld(board) {
     new CANNON.ContactMaterial(a, b, { friction, restitution }));
   contact(matBall, matWood, pick(MAT.woodFric, 0.30), pick(MAT.woodRest, 0.22));
   contact(matBall, matBoard, pick(MAT.boardFric, 0.62), pick(MAT.boardRest, 0.08));
+  contact(matBall, matRiser, pick(MAT.riserFric, 0.10), pick(MAT.riserRest, 0.08));
+  contact(matBall, matTrough, pick(MAT.troughFric, 0.40), pick(MAT.troughRest, 0.06));
   contact(matBall, matWall, pick(MAT.wallFric, 0.04), pick(MAT.wallRest, 0.50));
   // GUARD: the rings are PVC, not steel - a ball that clips a rim loses its energy and drops or
   // dribbles down rather than bouncing across ring tops and back out. Low restitution kills the
@@ -158,11 +167,22 @@ function buildWorld(board) {
       type: CANNON.Body.STATIC,
       shape,
       material: s.part === 'lane' || s.part === 'hump' ? matWood
-        : s.part === 'board' || s.part === 'riser' || s.part === 'trough' ? matBoard
-          : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
-            : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat' || s.part === 'splitter' ? matRing
-            : s.part === 'backboard' ? matBack
-              : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
+        : s.part === 'board' ? matBoard
+          : s.part === 'riser' ? matRiser
+            : s.part === 'trough' ? matTrough
+              : s.part === 'ringSeg' && String(s.ring || '').startsWith('100') ? matRing100
+                // THE FINS AND THE CHAMFERS ARE HOOP HARDWARE, so they bounce like the rims.
+                // They used to fall through to matWall (0.03) and a near-miss that clipped one
+                // simply died - which is 111 of 231 throws, and most of what "not very bouncy"
+                // was. A ball kicking off a fin into the next basket is exactly the
+                // unpredictability Matt asked for, and nothing steers it there.
+                : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat'
+                  || s.part === 'splitter' || s.part === 'fin' || s.part === 'finCap'
+                  || s.part === 'chamfer' ? matRing
+                  : s.part === 'backboard' ? matBack
+                    // The SIDE RAILS stay dead on purpose (wallRest 0.03, measured): a live rail
+                    // made the outer columns catch-alls for every over-aimed ball.
+                    : s.part === 'kick' || s.part === 'keep' || s.part === 'cage' ? matDead : matWall,
       // GUARD: only 'board' (a tread the ball can fall THROUGH on capture) is GROUP_FLOOR. A
       // staircase's risers are walls - they stay solid for a captured ball, always.
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR
@@ -300,6 +320,8 @@ export function startThrow(board, { power = 0.5, aim = 0, seed = null } = {}) {
     emergencyUsed: false,
     clamped: 0,
     troughAt: -1,
+    // The part touched during the CURRENT step, for the sideways-bounce rule. Cleared every step.
+    hitPart: null,
     // Has this throw already left its scuff on the back wall? One per throw - see the 'wall'
     // event below.
     wallMarked: false,
@@ -352,6 +374,9 @@ export function startThrow(board, { power = 0.5, aim = 0, seed = null } = {}) {
     // per-step resting contacts while keeping a soft side-wall graze; the cap stops a jammed ball
     // growing the array without bound. The throw log no longer carries these (see _logThrow in
     // ui.js), but the tests and the bench tools read them to work out where a ball actually went.
+    // WHAT THE BALL JUST CAME OFF, for the sideways-bounce rule in substep. Set here because
+    // `collide` is the only place the part is known; cleared at the top of every step.
+    if (vn > 0.05 && part) st.hitPart = part;
     if (vn > 0.05 && st.nContacts < 300) {
       st.nContacts += 1;
       const p = ball.position;
@@ -370,10 +395,60 @@ function finishAt(st, hole, value, kind) {
   st.events.push({ type: 'done' });
 }
 
+// THE SIDEWAYS BOUNCE. The parts a bounce is turned on: the hoop shelf and the hoop row's own
+// furniture. Deliberately NOT the display panel (a vertical wall below the hoops - a ball sliding
+// sideways down a wall it cannot score from is nonsense), NOT the back wall (an overthrow coming
+// back forward off it is a real shot save and must stay honest), NOT the side rails (dead), and
+// NOT `throat`/`cupSeg` - a captured ball is committed to its column and nothing may touch it.
+const SIDEWAYS_PARTS = new Set(['board', 'ringSeg', 'fin', 'finCap', 'chamfer', 'splitter']);
+
 function substep(st) {
   const { world, ball, M, G } = st;
+  st.hitPart = null;
+  const vyWas = ball.velocity.y;
   world.step(H);
   st.t += H;
+
+  // 0a. THE BOUNCE GOES SIDEWAYS, NOT FORWARDS (2026-09-22). Matt, having played the bouncy
+  //     build: "can we make it so it only bounces sideways? Like right now it bounces forward and
+  //     rolls off the front of the machine a lot... I want the bounce to add some randomness, not
+  //     make the game measurably more difficult."
+  //
+  //     Those are two different things and the probe had to be taught to tell them apart
+  //     (`reference/hoops/probe-bounce.mjs` now reports the lateral/forward split of every bounce
+  //     and how many misses come back over the shelf's front edge). A bounce ACROSS the hoop row
+  //     changes which column a shot finds, which is the randomness he asked for. A bounce toward
+  //     the player only walks the ball off the front edge, which costs a shot and buys nothing.
+  //     Both look identical on screen, which is how the previous build shipped 14 points of
+  //     scoring rate for the wrong one.
+  //
+  //     THE RULE IS A ROTATION, NOT A KICK. The horizontal velocity vector is turned toward the
+  //     u axis and its MAGNITUDE IS UNCHANGED - hypot(vx, vz) before equals hypot(vx, vz) after,
+  //     and the vertical component is never touched. No energy is added, so a livelier rim cannot
+  //     become a ball fired off the machine.
+  //
+  //     AND IT IS NOT MAGNETISM (MACHINE-SPEC section 9). It never reads `G.holes`, never asks
+  //     where a hoop is, and never picks a side: the direction is the sign of the sideways drift
+  //     the ball ALREADY had. A ball drifting left comes off the rim further left. That it more
+  //     often finds a hoop is a consequence of the hoops being in a row along that axis, not of
+  //     anything steering it - `hoops4/js/test.js` asserts the redirect reads no hole position.
+  //
+  //     Forward only (+z is toward the player). A ball still travelling INTO the machine needs
+  //     that momentum to reach the row at all.
+  const K = typeof G.bounceSideways === 'number' ? G.bounceSideways : 0;
+  if (K > 0 && !st.captured && st.hitPart && SIDEWAYS_PARTS.has(st.hitPart)
+      && vyWas < -0.20 && ball.velocity.y > 0.15 && ball.velocity.z > 0.10
+      // A ball with no sideways drift at all has no side to be sent to, and INVENTING one is
+      // where this rule would stop being physics and start being a coin toss the machine makes
+      // for the player. A dead-centre bounce is left exactly as it was.
+      && Math.abs(ball.velocity.x) > 1e-4) {
+    const v = ball.velocity;
+    const hor = Math.hypot(v.x, v.z);
+    const zKeep = v.z * (1 - K);
+    const xMag = Math.sqrt(Math.max(0, hor * hor - zKeep * zKeep));
+    v.x = (v.x > 0 ? 1 : -1) * xMag;
+    v.z = zKeep;
+  }
 
   // 0. THE SOLVER-ARTEFACT CEILING (2026-09-04). NOT a gameplay rule and NOT a brake: this
   //    machine cannot produce a ball this fast, so nothing a player throws can ever meet it. The
