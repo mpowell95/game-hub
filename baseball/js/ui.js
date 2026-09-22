@@ -41,6 +41,20 @@ import {
   Actors, BATTER_FACING_RAD, PITCHER_FACING_RAD, CATCHER_FACING_RAD, UMPIRE_FACING_RAD,
   FIELDER_ROLES, RUNNER_ROLES,
 } from './actors.js';
+// R15-B (docs/BASEBALL-3D-BUILD.md section 9, "R15"): the career screens. `engine/career.js` is
+// the rules (pure, headless-tested by test-baseball-career.mjs); `career-io.js` is the one door to
+// `js/career-store.js`/`js/game-stats.js` this game uses for a career's writes. ui.js never
+// imports either of those two directly - see career-io.js's own header.
+import {
+  startSeason, nextGame, startGame as careerStartGame, checkpoint, finishGame, spend,
+  gameStatsFromEvents, resumeGame, playerTeamFor, leagueTeams, playerSideFor, seasonRecord,
+  standingsFor,
+} from './engine/career.js';
+import {
+  loadCareer, startCareer, saveCheckpoint, saveAtBat, saveGameEnd, saveCareerState,
+  recordGameResult, retire as retireCareerIO, installLifecycle, uninstallLifecycle,
+  careerSyncHealth, HEALTH_PULLING, HEALTH_OFFLINE_LOCAL, HEALTH_FORK,
+} from './career-io.js';
 
 const t = makeT(STRINGS);
 
@@ -378,6 +392,19 @@ class BaseballPlayScreen {
     this.destroyed = false;
     this.screen = 'setup'; // setup | play | end
     this.league = LEAGUE_ORDER[0]; // Quick Play opens on Little League (the ladder's first rung), never mid-ladder
+
+    // R15-B: the setup screen's two tabs. Quick Play stays the default (unchanged screen for
+    // everyone who has not touched Career yet); Career is reached by tapping the other tab, and
+    // that first tap is when `_loadCareerAsync` even matters for what is painted.
+    this.tab = 'quickPlay'; // 'career' | 'quickPlay'
+    this._tabChosenByPlayer = false; // true once the player has tapped a tab themselves this session
+    this.career = null;         // { doc, state, health } | null, once loaded
+    this.careerLoaded = false;  // true once the first loadCareer() attempt has settled
+    this.careerGame = false;    // true while `this.game` is a CAREER game, not Quick Play
+    this.careerMeta = null;     // the {kind, idx, opponentIndex, home, seed} of the live career game
+    this.playerSide = 'away';   // which engine side the human plays - always 'away' in Quick Play,
+                                 // 'home' or 'away' in a career (playerSideFor(meta))
+    this._loadCareerAsync();
     // Found wrong against the real file while wiring the stage 1 dev screen (docs/BASEBALL-3D-BUILD.md
     // section 3.7): this called `isDevProfile()` with no argument, so it could never match a real
     // profile name and the Frames panel (and now the 3D preview inside it) was unreachable for
@@ -419,7 +446,14 @@ class BaseballPlayScreen {
         else if (this.screen === 'player') this._renderPlayer();
         return this.quickPlay;
       };
+      // R15-B item 5: the career dev seams, merged onto the same object - never replacing it.
+      // `careerState()` is read-only; `newCareerNow`/`scriptSeason` are async because every real
+      // write in career-io.js is (loadCareer/startCareer/push), and a probe awaits them.
+      window.__bbTest.careerState = () => (this.career ? this.career.state : null);
+      window.__bbTest.newCareerNow = (build) => this._devStartCareer(build);
+      window.__bbTest.scriptSeason = (results) => this._devScriptSeason(results);
     }
+    installLifecycle();
 
     // STAGE 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D actor layer starts loading here, at
     // MOUNT (the setup screen), not at _startGame - a player who spends a few seconds picking a
@@ -633,6 +667,7 @@ class BaseballPlayScreen {
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
     if (this.gameAbort) this.gameAbort();
+    uninstallLifecycle();
   }
 
   _fit() {
@@ -760,53 +795,327 @@ class BaseballPlayScreen {
     if (el) el.innerHTML = this._playerChipInnerHTML();
   }
 
+  // ------------------------------------------------------------------------------- R15-B: career
+  /** `loadCareer()` (career-io.js): local copy first, then a short remote pull. Kicked off from the
+   *  constructor so the Career tab is never the reason a device waits - a load that turns up
+   *  nothing (or turns up a career with no game in progress) leaves Quick Play's own default tab
+   *  alone. A RESUMABLE game is the one case worth landing on automatically: a player who force-
+   *  closed mid-game, or a device that simply hasn't opened the hub since, should see career home
+   *  and its Resume button rather than Quick Play - but only if they have not already tapped a tab
+   *  for themselves this session (`_tabChosenByPlayer`), so this can never yank the screen out from
+   *  under a deliberate choice. */
+  async _loadCareerAsync() {
+    try {
+      this.career = await loadCareer();
+    } catch (err) {
+      console.error('[baseball] loadCareer threw', err);
+      this.career = null;
+    }
+    if (this.destroyed) return;
+    this.careerLoaded = true;
+    if (this.career && this.career.state.game && !this._tabChosenByPlayer && this.tab === 'quickPlay') {
+      this.tab = 'career';
+    }
+    if (this.screen === 'setup') this._renderSetup();
+  }
+
+  /** Re-reads sync health fresh (career-io.js writes it on every push/pull) and re-paints only the
+   *  one line that shows it, when the career tab is the one on screen. */
+  _refreshCareerHealth() {
+    if (this.screen === 'setup' && this.tab === 'career' && this.rootEl) {
+      const el = this.rootEl.querySelector('[data-role="careersync"]');
+      if (el) el.innerHTML = this._careerSyncLineHTML();
+    }
+  }
+
+  _careerSyncLineHTML() {
+    const health = careerSyncHealth() || {};
+    const words = {
+      [HEALTH_PULLING]: { glyph: '↻', text: t('sync_pulling') },
+      [HEALTH_OFFLINE_LOCAL]: { glyph: '⚠', text: t('sync_offline') },
+      [HEALTH_FORK]: { glyph: '⚠', text: t('sync_fork') },
+    };
+    const w = words[health.state];
+    if (!w) return ''; // doc section 15: "nothing shown when OK" (and Denied logs loudly, shows nothing)
+    return `<span class="bb-sync-glyph" aria-hidden="true">${w.glyph}</span>${w.text}`;
+  }
+
+  /** Dev seam (`window.__bbTest.newCareerNow`): starts a brand-new career from a build (defaulting
+   *  to the Little League start budget/cap with the first preset) and starts its first season, so
+   *  the career home a probe reaches immediately has a season to show. Merged onto `this.career`
+   *  the same way the real Start flow does (`_doStartCareer`). */
+  async _devStartCareer(build) {
+    if (!this.dev) return null;
+    const budget = SETTINGS.START_POINTS_PER_SIDE, cap = SETTINGS.START_CAP;
+    const b = build && typeof build === 'object' ? build : {};
+    const skills = b.skills && typeof b.skills === 'object' ? b.skills : scalePreset(SETTINGS.PRESETS[PRESET_ORDER[0]], budget, cap);
+    const hand = b.hand === 'L' || b.hand === 'R' ? b.hand : (this._lockedHand() || 'R');
+    return this._doStartCareer({ presetId: b.presetId || PRESET_ORDER[0], hand, skills });
+  }
+
+  /** Dev seam (`window.__bbTest.scriptSeason`): plays the CURRENT regular season through
+   *  `finishGame` with SCRIPTED results, no engine, exactly the shape `test-baseball-career.mjs`
+   *  already exercises headlessly - this just does it against the live instance's own career so a
+   *  device probe can reach the standings/playoffs/trophy screens without twelve real at-bats.
+   *  `results` is an array of booleans, one per regular-season game (true = win); extra entries play
+   *  the semifinal/championship once the regular season is full. Every result is a modest, plausible
+   *  scoreline (never 0-0), not a real simulated game - this is a screen-reachability tool, not
+   *  another simulator. */
+  async _devScriptSeason(results) {
+    if (!this.dev || !this.career) return null;
+    let state = this.career.state;
+    if (!state.season || state.season.phase === 'done') state = startSeason(state);
+    const beforeUnspent = state.unspent, beforePointsLost = state.pointsLost;
+    const rs = Array.isArray(results) ? results : [];
+    let i = 0;
+    let resolved = false, trophy = null;
+    while (state.season && state.season.phase !== 'done' && i < rs.length) {
+      const meta = nextGame(state);
+      if (!meta) break;
+      const won = !!rs[i];
+      const you = won ? 5 : 2, cpu = won ? 2 : 5;
+      const out = finishGame(state, { won, you, cpu, forfeit: false, meta });
+      state = out.state;
+      recordGameResult(out.record);
+      if (out.resolved) { resolved = true; trophy = out.trophy; }
+      i += 1;
+    }
+    this.career.state = state;
+    const saved = saveCareerState(state);
+    if (saved) this.career.doc = saved;
+    if (!this.destroyed && this.screen === 'setup' && this.tab === 'career') this._renderSetup();
+    if (!this.destroyed && resolved) {
+      const pointsEarned = Math.max(0, (state.unspent - beforeUnspent) + (state.pointsLost - beforePointsLost));
+      this._showSeasonModal({ trophy, pointsEarned });
+    }
+    return state;
+  }
+
+  /** `.bb-playerchip`'s inner HTML for a CAREER build (career home's player chip, and the top of
+   *  the career player screen) - hand and the six values, no preset label (a career build has no
+   *  meaningful preset identity once it has been spent into). */
+  _careerChipInnerHTML(state) {
+    const digits = SETTINGS.SKILL_IDS.map((id) => `<span class="bb-pcd"><b>${SKILL_SHORT[id]}</b>${state.player.skills[id] || 0}</span>`).join('');
+    return `
+      <div class="bb-playerchip-top"><span>${t('hand_' + state.player.hand.toLowerCase())}</span><span>${t('player_title')}</span></div>
+      <div class="bb-playerchip-digits">${digits}</div>`;
+  }
+
+  /** The five-step ladder (doc section 4, [Locked]): five markers, the current rung filled with a
+   *  check - never colour alone. `bestLeague` is not shown separately; the current rung IS the one
+   *  that matters for "what do I play next", and the trophy shelf below already carries the
+   *  per-league best. */
+  _careerLadderHTML(state) {
+    const cur = LEAGUE_ORDER.indexOf(state.league);
+    return `<div class="bb-ladder" role="list" aria-label="${t('league_ladder')}">${
+      LEAGUE_ORDER.map((lg, i) => `
+        <div class="bb-ladder-step${i === cur ? ' is-current' : ''}${i < cur ? ' is-past' : ''}" role="listitem">
+          <span class="bb-ladder-mark" aria-hidden="true">${i === cur ? '&#10003;' : ''}</span>
+          <span class="bb-ladder-label">${t('leagueshort_' + lg)}</span>
+        </div>`).join('')
+    }</div>`;
+  }
+
+  /** The season line: the record so far, which game of 12, or the playoff round name. `null`
+   *  season (before the first `startSeason`) reads the same as a fresh league - never reached by a
+   *  real player (Start always starts season 1) but kept honest for the dev seam. */
+  _careerSeasonLineHTML(state) {
+    const s = state.season;
+    if (!s) return t('season_new');
+    const rec = seasonRecord(state);
+    const recordText = t('season_record').replace('{w}', rec.wins).replace('{l}', rec.losses);
+    let phase;
+    if (s.phase === 'regular') phase = t('season_game').replace('{n}', String(s.results.length + 1)).replace('{of}', String(SETTINGS.SEASON.gamesPerSeason));
+    else if (s.phase === 'semifinal') phase = t('season_semifinal');
+    else if (s.phase === 'championship') phase = t('season_championship');
+    else phase = t('season_done');
+    return `${recordText} &middot; ${phase}`;
+  }
+
+  /** The next opponent's name and home/away, or nothing once the season is done and waiting on the
+   *  player to start the next one. */
+  _careerOpponentHTML(state) {
+    if (!state.season || state.season.phase === 'done') return '';
+    const meta = nextGame(state);
+    if (!meta) return '';
+    const teams = leagueTeams(state);
+    const opp = teams[meta.opponentIndex];
+    const where = meta.home ? t('home_game') : t('away_game');
+    return `${t('vs_team').replace('{team}', opp ? opp.name : '?')} &middot; ${where}`;
+  }
+
+  /** The nine-row standings table, the player's own row marked (never colour alone - a glyph, not
+   *  just the accent fill every row already gets from `.bb-league-row`-style selection). Two
+   *  columns so nine rows fit one screen without scrolling: column 1 gets ranks 1-5, column 2 gets
+   *  ranks 6-9 (never split a tie visually differently - the ranking itself is what the doc calls
+   *  scripted, this just lays out whatever `standingsFor` returns). */
+  _careerStandingsHTML(state) {
+    if (!state.season) return '';
+    const rows = standingsFor(state);
+    const rowHTML = (r, i) => `
+      <div class="bb-standing-row${r.isPlayer ? ' is-you' : ''}">
+        <span class="bb-standing-rank">${i + 1}</span>
+        <span class="bb-standing-name">${r.isPlayer ? `<span class="bb-check" aria-hidden="true">&#10003;</span>${t('you')}` : r.id}</span>
+        <span class="bb-standing-rec">${r.wins}-${r.losses}</span>
+      </div>`;
+    const col1 = rows.slice(0, 5).map((r, i) => rowHTML(r, i)).join('');
+    const col2 = rows.slice(5).map((r, i) => rowHTML(r, i + 5)).join('');
+    return `<div class="bb-standings"><div class="bb-standings-col">${col1}</div><div class="bb-standings-col">${col2}</div></div>`;
+  }
+
+  /** The trophy shelf: Bronze a circle, Silver a triangle, Gold a diamond - filled when won for
+   *  THIS league, outline otherwise (doc's own shapes, root CLAUDE.md's colorblind palette). Reads
+   *  `bestTrophyByLeague[state.league]`, the current rung's own best, not the career's all-time
+   *  best (a Majors Gold does not make Little League's shelf light up). */
+  _careerTrophyHTML(state) {
+    const best = Number(state.bestTrophyByLeague[state.league]) || 0;
+    const shapes = [
+      { n: 1, cls: 'bronze', shape: 'circle', key: 'trophy_bronze' },
+      { n: 2, cls: 'silver', shape: 'triangle', key: 'trophy_silver' },
+      { n: 3, cls: 'gold', shape: 'diamond', key: 'trophy_gold' },
+    ];
+    return `<div class="bb-trophies">${shapes.map((s) => `
+      <div class="bb-trophy${best >= s.n ? ' is-won' : ''}" title="${t(s.key)}">
+        <span class="bb-trophy-shape bb-trophy-${s.shape}" aria-hidden="true"></span>
+        <span class="bb-trophy-label">${t(s.key)}</span>
+      </div>`).join('')}</div>`;
+  }
+
+  /** What the career home's ONE primary button says and does: Resume (a saved mid-game), Play next
+   *  game (a season in progress or none started yet), or Start a career (no career at all). */
+  _careerPrimaryLabel() {
+    if (!this.career) return t('start_career');
+    if (this.career.state.game) return t('resume_game');
+    return t('play_next');
+  }
+
+  async _onCareerPrimary() {
+    if (!this.career) { this._openPlayerScreen('careerStart'); return; }
+    if (this.career.state.game) { this._resumeCareerGame(); return; }
+    let state = this.career.state;
+    if (!state.season || state.season.phase === 'done') {
+      state = startSeason(state);
+      this.career.state = state;
+      const saved = saveCareerState(state);
+      if (saved) this.career.doc = saved;
+    }
+    const meta = nextGame(state);
+    if (!meta) return; // should not happen once a season is in progress
+    this._startCareerGame(meta, null);
+  }
+
+  _resumeCareerGame() {
+    const state = this.career.state;
+    if (!state.game) return;
+    this._startCareerGame(state.game.meta, state.game.snap);
+  }
+
+  /** Opens the player screen in one of its two career flavors. 'careerStart' seeds
+   *  `this._careerStartBuild` once, on the very first open (a re-open after Randomize/etc. keeps
+   *  what is there, same as Quick Play's `this.quickPlay` persisting across screen visits). */
+  _openPlayerScreen(mode) {
+    if (mode === 'careerStart' && !this._careerStartBuild) {
+      const league = LEAGUE_ORDER[0]; // R15-A: a career always starts at Little League
+      const budget = budgetFor(league), cap = capFor(league);
+      const presetId = PRESET_ORDER[0];
+      this._careerStartBuild = {
+        presetId, hand: this._lockedHand() || 'R',
+        skills: scalePreset(SETTINGS.PRESETS[presetId], budget, cap),
+      };
+    }
+    this._renderPlayer(mode);
+  }
+
+  /** The Start button on the career player screen: mints the career (career-io.js's
+   *  `startCareer`, which also stamps `bb.hand` once and bumps `careersStarted`), starts season 1
+   *  right away (a career always has a season in progress or just resolved, never neither), and
+   *  lands back on career home. */
+  async _doStartCareer(build) {
+    if (!build) return null;
+    const res = await startCareer({ hand: build.hand, presetId: build.presetId, skills: build.skills, now: Date.now() });
+    if (!res) { console.error('[baseball] startCareer failed; staying on the player screen'); return null; }
+    const state = startSeason(res.state);
+    const saved = saveCareerState(state);
+    this.career = { doc: saved || res.doc, state, health: careerSyncHealth() };
+    this._careerStartBuild = null;
+    this.careerLoaded = true;
+    this.tab = 'career';
+    this.screen = 'setup';
+    if (!this.destroyed) { this._renderSetup(); this._fit(); }
+    return this.career.state;
+  }
+
   // -------------------------------------------------------------------------- player screen ----
-  /** R14 item 1: hand, the 4x2 preset grid, two skill columns, Randomize and Done. Fits one phone
-   *  screen at both heights in both hosts, nothing scrolls (`.bb-player-topspacer` clears the
-   *  hub's floating back pill the same way `.bb-play`'s own top spacer does). Full re-render on
-   *  every tap - a handful of DOM nodes, no animation, the same pattern `_renderSetup` already
-   *  uses for its league rows. */
-  _renderPlayer() {
+  /** R14 item 1, extended by R15-B item 1: hand, the 4x2 preset grid, two skill columns, Randomize
+   *  and Done. Fits one phone screen at both heights in both hosts, nothing scrolls
+   *  (`.bb-player-topspacer` clears the hub's floating back pill the same way `.bb-play`'s own top
+   *  spacer does). Full re-render on every tap - a handful of DOM nodes, no animation, the same
+   *  pattern `_renderSetup` already uses for its league rows.
+   *
+   *  `mode` is one of:
+   *    'quickPlay'   - R14, unchanged: presets, Custom, Randomize, a minus AND a plus per skill,
+   *                    a per-SIDE points-left pill (hitting/pitching budgets, `build.js`).
+   *    'careerStart' - the same controls, budgeted at Little League's own start budget/cap
+   *                    (`budgetFor('little')`/`capFor('little')`, the doc's own 15/15, cap 10),
+   *                    building `this._careerStartBuild` rather than `this.quickPlay`. The button
+   *                    reads Start and calls `startCareer`.
+   *    'careerSpend' - an EXISTING career's `unspent` pool: no minus, no Randomize, no presets, the
+   *                    hand is always the career's own fixed hand, ONE points-left pill (the pool,
+   *                    not per-side), and a plus calls `spend(state, id)` through a save. */
+  _renderPlayer(mode) {
     if (this.destroyed || !this.rootEl) return;
     this.screen = 'player';
-    const qp = this.quickPlay;
-    const budget = budgetFor(this.league);
-    const cap = capFor(this.league);
-    const lockedHand = this._lockedHand();
+    this.playerScreenMode = mode || this.playerScreenMode || 'quickPlay';
+    const m = this.playerScreenMode;
+    const careerState = m === 'careerSpend' && this.career ? this.career.state : null;
+    if (m === 'careerSpend' && !careerState) { this.playerScreenMode = 'quickPlay'; return this._renderPlayer('quickPlay'); }
+
+    const build = m === 'quickPlay' ? this.quickPlay : m === 'careerStart' ? this._careerStartBuild : { skills: careerState.player.skills };
+    const budget = m === 'careerSpend' ? null : budgetFor(m === 'careerStart' ? LEAGUE_ORDER[0] : this.league);
+    const cap = m === 'careerSpend' ? careerState.cap : capFor(m === 'careerStart' ? LEAGUE_ORDER[0] : this.league);
+    const hand = m === 'careerSpend' ? careerState.player.hand : build.hand;
+    const lockedHand = m === 'careerSpend' ? hand : this._lockedHand();
+    const presetsEnabled = m !== 'careerSpend';
+    const minusEnabled = m !== 'careerSpend';
+    const randomizeEnabled = m !== 'careerSpend';
 
     const handHTML = lockedHand
       ? `<div class="bb-hand-locked"><span class="bb-check" aria-hidden="true">&#10003;</span>${t('hand_' + lockedHand.toLowerCase())}</div>`
       : ['L', 'R'].map((h) => {
-        const sel = qp.hand === h;
+        const sel = hand === h;
         return `<button type="button" class="bb-hand-btn" data-act="hand" data-hand="${h}" aria-pressed="${sel}">${sel ? '<span class="bb-check" aria-hidden="true">&#10003;</span>' : ''}${t('hand_' + h.toLowerCase())}</button>`;
       }).join('');
 
-    const presetChipsHTML = [...PRESET_ORDER, 'custom'].map((pid) => {
-      const sel = qp.presetId === pid || (pid === 'custom' && qp.presetId === 'random');
+    const presetChipsHTML = !presetsEnabled ? '' : [...PRESET_ORDER, 'custom'].map((pid) => {
+      const sel = build.presetId === pid || (pid === 'custom' && build.presetId === 'random');
       const label = pid === 'custom' ? t('preset_custom') : t('preset_' + pid);
       return `<button type="button" class="bb-preset-chip" data-act="preset" data-preset="${pid}" aria-pressed="${sel}">${sel ? '<span class="bb-check" aria-hidden="true">&#10003;</span> ' : ''}${label}</button>`;
     }).join('');
 
     const skillRowHTML = (id) => {
-      const val = qp.skills[id] || 0;
-      const canMinus = canAdjust(qp.skills, id, -1, budget, cap);
-      const canPlus = canAdjust(qp.skills, id, 1, budget, cap);
+      const val = build.skills[id] || 0;
+      const canMinus = minusEnabled && canAdjust(build.skills, id, -1, budget, cap);
+      const canPlus = m === 'careerSpend' ? (careerState.unspent > 0 && val < cap) : canAdjust(build.skills, id, 1, budget, cap);
       const cells = Array.from({ length: cap }, (_, i) => `<span class="bb-seg-cell${i < val ? ' is-filled' : ''}"></span>`).join('');
       const label = t('skill_' + id);
       return `
         <div class="bb-skill-row">
           <div class="bb-skill-row-top"><span class="bb-skill-label">${label}</span><span class="bb-skill-num">${val}</span></div>
           <div class="bb-skill-row-bar">
-            <button type="button" class="bb-skill-btn" data-act="minus" data-skill="${id}" aria-label="${label} -1"${canMinus ? '' : ' aria-disabled="true"'}>&minus;</button>
+            ${minusEnabled ? `<button type="button" class="bb-skill-btn" data-act="minus" data-skill="${id}" aria-label="${label} -1"${canMinus ? '' : ' aria-disabled="true"'}>&minus;</button>` : ''}
             <div class="bb-skill-segbar" aria-hidden="true">${cells}</div>
             <button type="button" class="bb-skill-btn" data-act="plus" data-skill="${id}" aria-label="${label} +1"${canPlus ? '' : ' aria-disabled="true"'}>+</button>
           </div>
         </div>`;
     };
 
-    const hitLeft = budget - SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + (qp.skills[id] || 0), 0);
-    const pitchLeft = budget - SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + (qp.skills[id] || 0), 0);
     const pointsLeft = (n) => t('points_left').replace('{n}', String(n));
+    const singlePillHTML = m === 'careerSpend' ? `<div class="bb-points-pill bb-points-pill--single">${pointsLeft(careerState.unspent)}</div>` : '';
+    const hitLeft = m === 'careerSpend' ? null : budget - SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + (build.skills[id] || 0), 0);
+    const pitchLeft = m === 'careerSpend' ? null : budget - SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + (build.skills[id] || 0), 0);
+
+    const doneAct = m === 'careerStart' ? 'start-career' : 'done';
+    const doneLabel = m === 'careerStart' ? t('start_career') : t('done');
 
     this.rootEl.innerHTML = `
       <div class="bb-player">
@@ -814,86 +1123,157 @@ class BaseballPlayScreen {
         <div class="bb-player-body">
           <h2 class="bb-player-title">${t('player_title')}</h2>
           <div class="bb-hand-row">${handHTML}</div>
-          <div class="bb-preset-grid">${presetChipsHTML}</div>
+          ${presetChipsHTML ? `<div class="bb-preset-grid">${presetChipsHTML}</div>` : ''}
+          ${singlePillHTML}
           <div class="bb-skill-cols">
             <div class="bb-skill-col">
               <div class="bb-skill-col-head">${t('hitting_col')}</div>
-              <div class="bb-points-pill">${pointsLeft(hitLeft)}</div>
+              ${m === 'careerSpend' ? '' : `<div class="bb-points-pill">${pointsLeft(hitLeft)}</div>`}
               ${SETTINGS.HIT_SKILL_IDS.map(skillRowHTML).join('')}
             </div>
             <div class="bb-skill-col">
               <div class="bb-skill-col-head">${t('pitching_col')}</div>
-              <div class="bb-points-pill">${pointsLeft(pitchLeft)}</div>
+              ${m === 'careerSpend' ? '' : `<div class="bb-points-pill">${pointsLeft(pitchLeft)}</div>`}
               ${SETTINGS.PITCH_SKILL_IDS.map(skillRowHTML).join('')}
             </div>
           </div>
           <div class="bb-player-actions">
-            <button type="button" class="gh-btn gh-btn--sm" data-act="randomize">${t('randomize')}</button>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--sm" data-act="done">${t('done')}</button>
+            ${randomizeEnabled ? `<button type="button" class="gh-btn gh-btn--sm" data-act="randomize">${t('randomize')}</button>` : ''}
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--sm" data-act="${doneAct}">${doneLabel}</button>
           </div>
         </div>
       </div>`;
 
-    this._wirePlayerEvents();
+    this._wirePlayerEvents(m);
     this._fit();
   }
 
-  _wirePlayerEvents() {
+  _wirePlayerEvents(mode) {
     const root = this.rootEl;
+    const m = mode || this.playerScreenMode || 'quickPlay';
+    const targetBuild = () => (m === 'quickPlay' ? this.quickPlay : this._careerStartBuild);
+    const setBuild = (next) => {
+      if (m === 'quickPlay') { this.quickPlay = next; this._saveQuickPlay(); }
+      else { this._careerStartBuild = next; }
+    };
     root.querySelectorAll('[data-act="hand"]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.quickPlay = Object.assign({}, this.quickPlay, { hand: btn.dataset.hand, updatedAt: Date.now() });
-        this._saveQuickPlay();
-        this._renderPlayer();
+        setBuild(Object.assign({}, targetBuild(), { hand: btn.dataset.hand, updatedAt: Date.now() }));
+        this._renderPlayer(m);
       });
     });
     root.querySelectorAll('[data-act="preset"]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const pid = btn.dataset.preset;
-        const budget = budgetFor(this.league);
-        const cap = capFor(this.league);
-        const skills = pid === 'custom' ? this.quickPlay.skills : scalePreset(SETTINGS.PRESETS[pid], budget, cap);
-        this.quickPlay = Object.assign({}, this.quickPlay, { presetId: pid, skills, league: this.league, updatedAt: Date.now() });
-        this._saveQuickPlay();
-        this._renderPlayer();
+        const league = m === 'careerStart' ? LEAGUE_ORDER[0] : this.league;
+        const budget = budgetFor(league);
+        const cap = capFor(league);
+        const cur = targetBuild();
+        const skills = pid === 'custom' ? cur.skills : scalePreset(SETTINGS.PRESETS[pid], budget, cap);
+        setBuild(Object.assign({}, cur, { presetId: pid, skills, league, updatedAt: Date.now() }));
+        this._renderPlayer(m);
       });
     });
-    root.querySelectorAll('[data-act="minus"], [data-act="plus"]').forEach((btn) => {
+    root.querySelectorAll('[data-act="minus"]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (btn.getAttribute('aria-disabled') === 'true') return;
         const id = btn.dataset.skill;
-        const delta = btn.dataset.act === 'plus' ? 1 : -1;
-        const budget = budgetFor(this.league);
-        const cap = capFor(this.league);
-        const next = adjust(this.quickPlay.skills, id, delta, budget, cap);
-        if (next === this.quickPlay.skills) return; // refused: no visible change, no write
+        const league = m === 'careerStart' ? LEAGUE_ORDER[0] : this.league;
+        const budget = budgetFor(league);
+        const cap = capFor(league);
+        const cur = targetBuild();
+        const next = adjust(cur.skills, id, -1, budget, cap);
+        if (next === cur.skills) return; // refused: no visible change, no write
+        setBuild(Object.assign({}, cur, { skills: next, presetId: 'custom', league, updatedAt: Date.now() }));
+        this._renderPlayer(m);
+      });
+    });
+    root.querySelectorAll('[data-act="plus"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (btn.getAttribute('aria-disabled') === 'true') return;
+        const id = btn.dataset.skill;
+        if (m === 'careerSpend') {
+          if (!this.career) return;
+          const next = spend(this.career.state, id);
+          if (next === this.career.state) return; // refused: no visible change, no write
+          this.career.state = next;
+          saveCareerState(next); // fire and forget, same shape as `saveAtBat`
+          this._renderPlayer(m);
+          return;
+        }
+        const league = m === 'careerStart' ? LEAGUE_ORDER[0] : this.league;
+        const budget = budgetFor(league);
+        const cap = capFor(league);
+        const cur = targetBuild();
+        const next = adjust(cur.skills, id, 1, budget, cap);
+        if (next === cur.skills) return; // refused: no visible change, no write
         // A manual tweak is no longer an exact preset (unless it happens to land back on one -
         // not worth detecting; 'custom' is honest either way).
-        this.quickPlay = Object.assign({}, this.quickPlay, { skills: next, presetId: 'custom', league: this.league, updatedAt: Date.now() });
-        this._saveQuickPlay();
-        this._renderPlayer();
+        setBuild(Object.assign({}, cur, { skills: next, presetId: 'custom', league, updatedAt: Date.now() }));
+        this._renderPlayer(m);
       });
     });
     const randBtn = root.querySelector('[data-act="randomize"]');
     if (randBtn) randBtn.addEventListener('click', () => {
-      const budget = budgetFor(this.league);
-      const cap = capFor(this.league);
-      this.quickPlay = Object.assign({}, this.quickPlay, { presetId: 'random', skills: randomBuild(budget, cap), league: this.league, updatedAt: Date.now() });
-      this._saveQuickPlay();
-      this._renderPlayer();
+      const league = m === 'careerStart' ? LEAGUE_ORDER[0] : this.league;
+      const budget = budgetFor(league);
+      const cap = capFor(league);
+      const cur = targetBuild();
+      setBuild(Object.assign({}, cur, { presetId: 'random', skills: randomBuild(budget, cap), league, updatedAt: Date.now() }));
+      this._renderPlayer(m);
     });
     const doneBtn = root.querySelector('[data-act="done"]');
     if (doneBtn) doneBtn.addEventListener('click', () => {
       this.screen = 'setup';
+      if (m === 'careerSpend') this.tab = 'career';
       this._renderSetup();
       this._fit();
+    });
+    const startBtn = root.querySelector('[data-act="start-career"]');
+    if (startBtn) startBtn.addEventListener('click', async () => {
+      if (this._startingCareer) return;
+      this._startingCareer = true;
+      startBtn.setAttribute('aria-disabled', 'true');
+      try { await this._doStartCareer(this._careerStartBuild); }
+      finally { this._startingCareer = false; }
     });
   }
 
   // -------------------------------------------------------------------------------- setup screen
+  /** R15-B item 1: the setup screen now has two tabs, Career and Quick Play - the chosen one
+   *  filled with a check mark (never colour alone). Quick Play is exactly R14's screen, just
+   *  wrapped in its own body div; Career is new (`_careerTabHTML`). `this.tab` decides which body
+   *  renders; both bodies' own event wiring is unchanged in shape from before this stage. */
   _renderSetup() {
+    this.screen = 'setup';
+    const tabHTML = (id, label) => `<button type="button" class="bb-tab" data-act="tab" data-tab="${id}" aria-pressed="${this.tab === id}">${this.tab === id ? '<span class="bb-check" aria-hidden="true">&#10003;</span> ' : ''}${label}</button>`;
     this.rootEl.innerHTML = `
       <div class="bb-setup">
+        <div class="bb-setup-tabs" role="tablist">
+          ${tabHTML('career', t('tab_career'))}
+          ${tabHTML('quickPlay', t('tab_quickplay'))}
+        </div>
+        <div class="bb-setup-body" data-role="setupbody">
+          ${this.tab === 'career' ? this._careerTabHTML() : this._quickPlayTabHTML()}
+        </div>
+      </div>`;
+    this.rootEl.querySelectorAll('[data-act="tab"]').forEach((b) => {
+      b.addEventListener('click', () => {
+        this._tabChosenByPlayer = true;
+        if (this.tab === b.dataset.tab) return;
+        this.tab = b.dataset.tab;
+        this._renderSetup();
+        this._fit();
+      });
+    });
+    if (this.tab === 'career') this._wireCareerTab(); else this._wireQuickPlayTab();
+  }
+
+  /** R14's setup body, unchanged in markup/behavior from before this stage - league list, player
+   *  chip, Play button, the dev-only Tune/Frames buttons. */
+  _quickPlayTabHTML() {
+    return `
+      <div class="bb-setup-quickplay">
         <h1 class="bb-setup-title">${t('setup_quick')}</h1>
         <div class="bb-league-list" role="radiogroup" aria-label="${t('setup_league')}">
           ${LEAGUE_ORDER.map((lg) => `
@@ -909,6 +1289,9 @@ class BaseballPlayScreen {
         ${this.dev ? `<button type="button" class="bb-tune-open" data-act="tune">${t('tune_open')}</button>` : ''}
         ${this.dev ? `<button type="button" class="bb-tune-open" data-act="frames">Frames</button>` : ''}
       </div>`;
+  }
+
+  _wireQuickPlayTab() {
     this.rootEl.querySelectorAll('[data-league]').forEach((b) => {
       b.addEventListener('click', () => {
         this.league = b.dataset.league;
@@ -924,7 +1307,7 @@ class BaseballPlayScreen {
       });
     });
     const playerChipBtn = this.rootEl.querySelector('[data-act="player"]');
-    if (playerChipBtn) playerChipBtn.addEventListener('click', () => this._renderPlayer());
+    if (playerChipBtn) playerChipBtn.addEventListener('click', () => this._renderPlayer('quickPlay'));
     // STAGE 4: the button stays a real, always-tappable <button> (never HTML `disabled`) so a
     // tap that lands during the model load isn't silently dropped - it just awaits the same
     // promise the button's own label is already counting down, then starts the game exactly as a
@@ -944,43 +1327,135 @@ class BaseballPlayScreen {
     if (framesBtn) framesBtn.addEventListener('click', () => this._openFrameCheck());
   }
 
-  // -------------------------------------------------------------------------------- game start
-  _startGame() {
-    const league = this.league;
-    const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-    const cpuLeague = makeLeague(league);
-    const cpuTeam = randPick(cpuLeague);
-    // R14 (docs/BASEBALL-3D-BUILD.md section 9): the player's build is the one set up on the
-    // player screen (or its default), never a random preset and a coin-flip hand.
-    const hand = this._effectiveHand();
-    const skills = { ...this.quickPlay.skills };
-    const playerTeam = makePlayerTeam({ skills, hand });
-    playerTeam.league = league;
+  /** R15-B item 1: career home, or the empty "no career yet" state. Compact by necessity - nine
+   *  standings rows, a five-step ladder and three trophies all have to fit beside the player chip
+   *  and the primary button with nothing scrolling (root CLAUDE.md's "no game in this hub may
+   *  scroll"). */
+  _careerTabHTML() {
+    if (!this.career) {
+      return `
+        <div class="bb-career bb-career--empty">
+          <button type="button" class="gh-btn gh-btn--primary" data-act="start-career">${t('start_career')}</button>
+        </div>`;
+    }
+    const state = this.career.state;
+    const inProgress = !!state.game;
+    return `
+      <div class="bb-career">
+        <button type="button" class="bb-playerchip" data-act="career-player" aria-label="${t('player_title')}">${this._careerChipInnerHTML(state)}</button>
+        ${this._careerLadderHTML(state)}
+        <div class="bb-career-line">${this._careerSeasonLineHTML(state)}</div>
+        <div class="bb-career-line bb-career-opp">${this._careerOpponentHTML(state)}</div>
+        ${this._careerStandingsHTML(state)}
+        ${this._careerTrophyHTML(state)}
+        <div class="bb-career-sync" data-role="careersync">${this._careerSyncLineHTML()}</div>
+        <div class="bb-career-actions">
+          <button type="button" class="gh-btn gh-btn--primary" data-act="career-primary">${this._careerPrimaryLabel()}</button>
+          <button type="button" class="bb-retire-btn" data-act="career-retire">${inProgress ? t('forfeit') : t('retire')}</button>
+        </div>
+      </div>`;
+  }
 
-    this.human = new HumanAgent(this, league, playerTeam);
-    const agents = {
-      away: this.human,
-      home: {
-        decidePitch: (v) => new CpuPitcher({ league, settings: SETTINGS, ladderOffset: cpuTeam.ladderOffset }).decidePitch(v),
-        decideSwing: (v) => {
-          const batter = cpuTeam.players.find((p) => p.id === v.batterId) || cpuTeam.players[0];
-          return new CpuBatter({ league, skills: batter.skills, settings: SETTINGS, styleId: cpuTeam.styleId, ladderOffset: cpuTeam.ladderOffset }).decideSwing(v);
-        },
+  _wireCareerTab() {
+    const startBtn = this.rootEl.querySelector('[data-act="start-career"]');
+    if (startBtn) startBtn.addEventListener('click', () => this._openPlayerScreen('careerStart'));
+    const chipBtn = this.rootEl.querySelector('[data-act="career-player"]');
+    if (chipBtn) chipBtn.addEventListener('click', () => this._openPlayerScreen('careerSpend'));
+    const primaryBtn = this.rootEl.querySelector('[data-act="career-primary"]');
+    if (primaryBtn) primaryBtn.addEventListener('click', () => this._onCareerPrimary());
+    const retireBtn = this.rootEl.querySelector('[data-act="career-retire"]');
+    if (retireBtn) retireBtn.addEventListener('click', () => this._onCareerRetireTap());
+  }
+
+  /** The career home's bottom button: Forfeit while a game is saved mid-play, Retire otherwise
+   *  (doc section 15, [Locked]: "blocked while a game is in progress: forfeit first, then retire
+   *  from career home"). Both go through a confirm modal first. */
+  async _onCareerRetireTap() {
+    if (!this.career) return;
+    if (this.career.state.game) {
+      const leave = await this._confirmForfeitModal();
+      if (!leave) return;
+      await this._forfeitSavedCareerGame();
+    } else {
+      const ok = await this._confirmRetireModal();
+      if (!ok) return;
+      await this._doRetireCareer();
+    }
+  }
+
+  /** Forfeits a game that is SAVED (`state.game` set) but not currently being played - reached
+   *  from career home, never from the play screen itself (`_forfeitLiveCareerGame` is that path).
+   *  No engine involved: `finishGame` is a pure fold over `state`, so a pending game can be
+   *  forfeited without ever resuming it. */
+  async _forfeitSavedCareerGame() {
+    const state = this.career.state;
+    const meta = state.game.meta;
+    const beforeUnspent = state.unspent, beforePointsLost = state.pointsLost;
+    const out = finishGame(state, { won: false, you: 0, cpu: 0, forfeit: true, meta });
+    this.career.state = out.state;
+    recordGameResult(out.record);
+    const res = await saveGameEnd(out.state);
+    if (res && res.saved) this.career.doc = res.saved;
+    this.career.health = careerSyncHealth();
+    if (!this.destroyed) { this._renderSetup(); this._fit(); }
+    if (out.resolved && !this.destroyed) {
+      const pointsEarned = Math.max(0, (out.state.unspent - beforeUnspent) + (out.state.pointsLost - beforePointsLost));
+      this._showSeasonModal({ trophy: out.trophy, pointsEarned });
+    }
+  }
+
+  _confirmRetireModal() {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'gh-overlay';
+      overlay.innerHTML = `
+        <div class="gh-modal" role="dialog" aria-modal="true">
+          <p>${t('confirm_retire')}</p>
+          <div class="gh-modal__actions">
+            <button type="button" class="gh-btn" data-act="cancel">${t('cancel')}</button>
+            <button type="button" class="gh-btn gh-btn--primary" data-act="retire">${t('retire')}</button>
+          </div>
+        </div>`;
+      this.rootEl.appendChild(overlay);
+      const done = (ok) => { overlay.remove(); resolve(ok); };
+      overlay.querySelector('[data-act="cancel"]').addEventListener('click', () => done(false));
+      overlay.querySelector('[data-act="retire"]').addEventListener('click', () => done(true));
+    });
+  }
+
+  /** Retire is the only way to end a career (doc section 4, [Locked]). A failed retire changes
+   *  nothing - the career is still there, still playable (career-io.js's own contract) - so this
+   *  only clears the local `this.career` once `retireCareerIO` actually reports success. */
+  async _doRetireCareer() {
+    const res = await retireCareerIO(this.career.state, Date.now());
+    if (res && res.ok) this.career = null;
+    if (!this.destroyed) { this._renderSetup(); this._fit(); }
+  }
+
+  // -------------------------------------------------------------------------------- game start
+  /** Builds the CPU's `decidePitch`/`decideSwing` pair for one opponent team. Shared by Quick Play
+   *  and a career game (R15-B) - the only difference between the two is which real team object
+   *  `cpuTeam` is and which league it plays at. */
+  _cpuAgentFor(cpuTeam, league) {
+    return {
+      decidePitch: (v) => new CpuPitcher({ league, settings: SETTINGS, ladderOffset: cpuTeam.ladderOffset }).decidePitch(v),
+      decideSwing: (v) => {
+        const batter = cpuTeam.players.find((p) => p.id === v.batterId) || cpuTeam.players[0];
+        return new CpuBatter({ league, skills: batter.skills, settings: SETTINGS, styleId: cpuTeam.styleId, ladderOffset: cpuTeam.ladderOffset }).decideSwing(v);
       },
     };
+  }
 
-    // RA (docs/BASEBALL-3D-BUILD.md section 9): this screen is QUICK PLAY and nothing else.
-    // R11 (same doc, section 9): Quick Play no longer unlocks all eight - both sides throw the
-    // league's own ladder now (Little League fastball only), the same `unlockedPitchesFor` career
-    // reads. `quickPlay: true` still rides on the Game/view (additive, other code may read it
-    // later) but no longer changes which pitches are unlocked or how the CPU picks one.
-    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true });
-    this.cpuTeam = cpuTeam;
-    this.playerTeam = playerTeam;
-    this.state = {
-      mode: 'batting', // 'batting' | 'pitching'
+  /** The play screen's own runtime state object, fresh for a new game. `wsTitles` only matters for
+   *  a career (`unlockedPitchesFor`'s second argument, doc section 11) - Quick Play always passes 0
+   *  (RA: it throws the league's own ladder, not a title-unlocked one). `initialMode` is 'batting'
+   *  in Quick Play (the human is always away, and away always bats first) but has to be computed
+   *  for a career, where the human can be either side - see `playerSideFor`. */
+  _freshPlayState(league, wsTitles, initialMode) {
+    return {
+      mode: initialMode, // 'batting' | 'pitching'
       selectedPitch: 'fastball',
-      unlockedPitches: SETTINGS.unlockedPitchesFor(league, 0),
+      unlockedPitches: SETTINGS.unlockedPitchesFor(league, wsTitles || 0),
       line1: '', line2: '',
       lastPitches: [], // batting strip: last 8 of the at-bat
       recentPitches: [], // pitching strip: last 4
@@ -997,6 +1472,59 @@ class BaseballPlayScreen {
       armedSteal: false,
       armedBunt: false,
     };
+  }
+
+  /** STAGE 8/R2/RA's dev-only test seams that need a live `this.game` - `forceHalf`, `noScatter`
+   *  and `putOnFirst`. Shared by Quick Play and a career game so `test-baseball-device.mjs`'s
+   *  existing seams keep working against a career play screen too. Merged onto `window.__bbTest`,
+   *  never replacing it (see `setBuild`'s own comment for why). */
+  _installDevGameSeams() {
+    if (!this.dev) return;
+    const forceHalf = (h) => { if (this.game) this.game.half = h; };
+    if (window.__bbForceHalfNext) { forceHalf(window.__bbForceHalfNext); window.__bbForceHalfNext = null; }
+    const putOnFirst = () => {
+      if (!this.game) return null;
+      const side = this.game.half === 'top' ? 'away' : 'home';
+      const team = this.game[side];
+      const batterId = this.game._currentBatterId(side);
+      const id = team.battingOrder.find((x) => x !== batterId) || team.battingOrder[0];
+      this.game.bases[0] = id;
+      this._runnerStanding = {};
+      this._paintHud();
+      this._paintActionSlots();
+      if (!this._flightActive) this._drawStaticField();
+      return id;
+    };
+    Object.assign(window.__bbTest, { forceHalf, noScatter: (on) => { this._testNoScatter = on !== false; }, putOnFirst });
+  }
+
+  _startGame() {
+    const league = this.league;
+    const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
+    const cpuLeague = makeLeague(league);
+    const cpuTeam = randPick(cpuLeague);
+    // R14 (docs/BASEBALL-3D-BUILD.md section 9): the player's build is the one set up on the
+    // player screen (or its default), never a random preset and a coin-flip hand.
+    const hand = this._effectiveHand();
+    const skills = { ...this.quickPlay.skills };
+    const playerTeam = makePlayerTeam({ skills, hand });
+    playerTeam.league = league;
+
+    this.careerGame = false;
+    this.careerMeta = null;
+    this.playerSide = 'away'; // RA: Quick Play is always away
+    this.human = new HumanAgent(this, league, playerTeam);
+    const agents = { away: this.human, home: this._cpuAgentFor(cpuTeam, league) };
+
+    // RA (docs/BASEBALL-3D-BUILD.md section 9): this screen is QUICK PLAY and nothing else.
+    // R11 (same doc, section 9): Quick Play no longer unlocks all eight - both sides throw the
+    // league's own ladder now (Little League fastball only), the same `unlockedPitchesFor` career
+    // reads. `quickPlay: true` still rides on the Game/view (additive, other code may read it
+    // later) but no longer changes which pitches are unlocked or how the CPU picks one.
+    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true });
+    this.cpuTeam = cpuTeam;
+    this.playerTeam = playerTeam;
+    this.state = this._freshPlayState(league, 0, 'batting');
     // THE 2-D CURSOR, in zone units, shared by both states (R2) - the pitcher's aim while
     // pitching, the batter's circle while batting. It deliberately PERSISTS across pitches and
     // across the half-inning swap: a player who found a spot keeps it, exactly as the reference
@@ -1015,41 +1543,7 @@ class BaseballPlayScreen {
     // round-trip ever reaches the page, so `window.__bbForceHalfNext` (set by the test, in the SAME
     // evaluate call that taps Play, before this method even runs) is applied here SYNCHRONOUSLY,
     // in the same tick `this.game` is created - the only timing that is guaranteed safe.
-    // `window.__bbTest.forceHalf` is also exposed for a later, explicit call (defensive/idempotent
-    // - reapplying the same half is a no-op).
-    if (this.dev) {
-      const forceHalf = (h) => { if (this.game) this.game.half = h; };
-      if (window.__bbForceHalfNext) { forceHalf(window.__bbForceHalfNext); window.__bbForceHalfNext = null; }
-      // R2 test seam (docs/BASEBALL-3D-BUILD.md section 9), for `test-baseball-device.mjs`'s
-      // pitch-drag probe: pin the human pitcher's four pre-rolled draws to their midpoint, which
-      // is exactly NO aim scatter, so the pitch a drag asks for is the pitch that crosses and the
-      // probe can assert on the number rather than on a distribution. It is honest rather than a
-      // decoration: `_throw` writes the pinned draws back into the SAME `view.scatterDraw` object
-      // `game.js` reads after `decidePitch` resolves, so the engine scores the identical pitch the
-      // screen drew - the one property the whole seam exists to check.
-      // RA test seam (docs/BASEBALL-3D-BUILD.md section 9), for `test-baseball-device.mjs`'s
-      // actions-live probe: put a REAL roster player (never the batter at the plate, and never an
-      // invented id - the engine looks his skills up) on first, so the STEAL and PICKOFF wells can
-      // be driven without first playing until somebody happens to reach base. It writes only
-      // `game.bases[0]`, which is ordinary engine state that a single, a walk or an error would
-      // have written the same way, and repaints whatever reads it.
-      const putOnFirst = () => {
-        if (!this.game) return null;
-        const side = this.game.half === 'top' ? 'away' : 'home';
-        const team = this.game[side];
-        const batterId = this.game._currentBatterId(side);
-        const id = team.battingOrder.find((x) => x !== batterId) || team.battingOrder[0];
-        this.game.bases[0] = id;
-        this._runnerStanding = {};
-        this._paintHud();
-        this._paintActionSlots();
-        if (!this._flightActive) this._drawStaticField();
-        return id;
-      };
-      // R14: merged onto the object the constructor already created (`setBuild`), never replaced -
-      // a probe that called `setBuild` before Play must not lose it the moment the game starts.
-      Object.assign(window.__bbTest, { forceHalf, noScatter: (on) => { this._testNoScatter = on !== false; }, putOnFirst });
-    }
+    this._installDevGameSeams();
 
     this.screen = 'play';
     this._renderPlay();
@@ -1060,6 +1554,95 @@ class BaseballPlayScreen {
       if (this.destroyed) return;
       this._showEndModal();
     });
+  }
+
+  // ------------------------------------------------------------------------- R15-B: career game
+  /** Opens a career game, freshly started or resumed from `state.game.snap`. Builds the agents the
+   *  same way `_startGame` does (a `HumanAgent` for the player's own side, `CpuPitcher`/
+   *  `CpuBatter` for the CPU team read off `leagueTeams(state)[meta.opponentIndex]`), but which
+   *  side is which follows `playerSideFor(meta)` - a career opponent can be home OR away, unlike
+   *  Quick Play. */
+  _startCareerGame(meta, resumeSnap) {
+    const state = this.career.state;
+    const league = state.season.league;
+    this.league = league; // _renderPlay rebuilds the stadium below when this differs from `_fieldLeague`
+
+    const teams = leagueTeams(state);
+    const cpuTeam = teams[meta.opponentIndex];
+    const you = playerTeamFor(state);
+
+    this.careerGame = true;
+    this.careerMeta = meta;
+    this.playerSide = playerSideFor(meta);
+    this.human = new HumanAgent(this, league, you);
+    const cpuAgent = this._cpuAgentFor(cpuTeam, league);
+    const agents = this.playerSide === 'home' ? { home: this.human, away: cpuAgent } : { away: this.human, home: cpuAgent };
+
+    if (resumeSnap) {
+      this.game = resumeGame(state, agents);
+    } else {
+      const built = careerStartGame(state, meta.seed, agents);
+      this.career.state = built.state;
+      this.game = built.game;
+      // A crash right before the first pitch must still resume into this game, not back to the
+      // primary button re-minting a duplicate one (doc section 4: "leave to the hub or force close
+      // the app mid-game and resume exactly where you were").
+      const saved = saveCheckpoint(this.career.state);
+      if (saved) this.career.doc = saved;
+    }
+    this.cpuTeam = cpuTeam;
+    this.playerTeam = you;
+    this.state = this._freshPlayState(league, state.wsTitles, this.playerSide === 'away' ? 'batting' : 'pitching');
+    this.cursor = { x: 0, y: 0 };
+    this._target = null;
+    this._targetMarkerPx = null;
+    this.gameAbort = () => { if (this.game) this.game.abort(); };
+    this._installDevGameSeams();
+    // Fed by `_onEngineEvent` for the whole game, read once at the end by `gameStatsFromEvents` -
+    // the per-game counters `recordBaseball` takes (career.js's own header names which event
+    // carries what).
+    this._careerEvents = [];
+    // Guards `_onCareerGameEnd`/`_forfeitLiveCareerGame` against BOTH running for the same game -
+    // `game.abort()` still resolves `playGame()`'s promise, so a manual forfeit that aborts the
+    // engine would otherwise also trigger the ordinary end-of-game fold right behind it.
+    this._careerEndHandled = false;
+
+    this.screen = 'play';
+    this._renderPlay();
+    this._fit();
+
+    this.game.onEvent = (type, payload) => this._onEngineEvent(type, payload);
+    this.game.playGame().then(() => {
+      if (this.destroyed) return;
+      this._onCareerGameEnd();
+    });
+  }
+
+  /** Folds the finished career game (`finishGame`), records it exactly once
+   *  (`recordGameResult`), saves and verifies (`saveGameEnd`), then shows the ordinary end modal -
+   *  chained into the season modal afterward when this game also resolved the season. */
+  async _onCareerGameEnd() {
+    if (this.destroyed || !this.game || this._careerEndHandled) return;
+    this._careerEndHandled = true;
+    const g = this.game;
+    const you = g.score[this.playerSide];
+    const cpu = g.score[this.playerSide === 'home' ? 'away' : 'home'];
+    const won = g.winner === this.playerSide;
+    const events = this._careerEvents || [];
+    const gameStats = gameStatsFromEvents(events, { playerSide: this.playerSide });
+    const before = this.career.state;
+    const beforeUnspent = before.unspent, beforePointsLost = before.pointsLost;
+    const out = finishGame(before, { won, you, cpu, forfeit: false, gameStats, meta: this.careerMeta });
+    this.career.state = out.state;
+    recordGameResult(out.record);
+    const res = await saveGameEnd(out.state);
+    if (res && res.saved) this.career.doc = res.saved;
+    this.career.health = careerSyncHealth();
+    this._lastCareerGameResult = {
+      you, cpu, won, pointsEarned: Math.max(0, (out.state.unspent - beforeUnspent) + (out.state.pointsLost - beforePointsLost)),
+      resolved: out.resolved, trophy: out.trophy,
+    };
+    this._showEndModal();
   }
 
   // -------------------------------------------------------------------------------- play screen shell
@@ -1823,15 +2406,18 @@ class BaseballPlayScreen {
     const hud = this.rootEl.querySelector('[data-role="hud"]');
     if (!hud || !this.game) return;
     const g = this.game;
-    const you = 'away';
+    // R15-B: Quick Play is always 'away'; a career opponent can put the player at 'home'. The
+    // score's OWN order is always away-home (the real scoreboard convention, universal), only the
+    // You/CPU label and the "is-you" mark move.
+    const you = this.playerSide === 'home' ? 'home' : 'away';
     const arrow = g.half === 'top' ? '▲' : '▼';
     hud.innerHTML = `
       <div class="bb-sb-top">
-        <span class="bb-sb-team${you === 'away' ? ' is-you' : ''}">${t('you')}</span>
+        <span class="bb-sb-team${you === 'away' ? ' is-you' : ''}">${you === 'away' ? t('you') : t('cpu')}</span>
         <span class="bb-sb-runs">${g.score.away}</span>
         <span class="bb-sb-dash">-</span>
         <span class="bb-sb-runs">${g.score.home}</span>
-        <span class="bb-sb-team">${t('cpu')}</span>
+        <span class="bb-sb-team${you === 'home' ? ' is-you' : ''}">${you === 'home' ? t('you') : t('cpu')}</span>
         <span class="bb-sb-inning">${arrow} ${g.inning}</span>
       </div>
       <div class="bb-sb-count">
@@ -2254,9 +2840,17 @@ class BaseballPlayScreen {
   // -------------------------------------------------------------------------------- engine glue
   async _onEngineEvent(type, payload) {
     if (this.destroyed) return;
+    // R15-B item 2/5: a career game collects its own event stream for `gameStatsFromEvents`
+    // (career.js) once the game ends, and checkpoints locally at every pitch boundary - see the
+    // 'count'/'atBatEnd' branches below for where the boundary actually is.
+    if (this.careerGame && this._careerEvents) this._careerEvents.push({ type, payload });
     if (type === 'halfInningStart') {
       const swap = () => {
-        this.state.mode = this.game.half === 'top' ? 'batting' : 'pitching';
+        // R15-B: which SIDE bats first is universal (away bats the top of every inning) but which
+        // one is the HUMAN is not, once a career opponent can be home. Quick Play's `playerSide` is
+        // always 'away', so this is unchanged there.
+        const battingSide = this.game.half === 'top' ? 'away' : 'home';
+        this.state.mode = battingSide === this.playerSide ? 'batting' : 'pitching';
         this.state.lastPitches = [];
         // R2: the RIGHT button's word belongs to whichever turn is live, and between halves there
         // is none - clearing it lets `_paintModeLabels` fall back to this state's own first word
@@ -2294,6 +2888,7 @@ class BaseballPlayScreen {
       this._currentShiftDeg = payload.shiftDeg || 0;
       this._paintHud();
     } else if (type === 'count') {
+      this._careerCheckpoint();
       this._paintHud();
       // R4 (docs/BASEBALL-3D-BUILD.md section 9): Line 1/Line 2 (`.bb-lines`, the band's bottom)
       // go EMPTY on a pitch - the verdict word, the pitch readout and the swing line all moved into
@@ -2371,6 +2966,8 @@ class BaseballPlayScreen {
       // header), never in front of it, or every steal would add a second to the game's cadence.
       this._animateSteal(payload);
     } else if (type === 'atBatEnd') {
+      this._careerCheckpoint();
+      this._careerSaveAtBat();
       this._paintHud();
       await this._settleAtBat(payload);
     } else if (type === 'halfInningEnd') {
@@ -2388,6 +2985,25 @@ class BaseballPlayScreen {
       this._pendingHalfSwap = false;
       this._setLine1(''); this._setLine2('');
     }
+  }
+
+  /** R15-B item 2: called on every pitch boundary ('count' for a pitch that does not conclude the
+   *  at-bat, 'atBatEnd' for one that does - together, every single pitch) - `checkpoint()`
+   *  (career.js) replaces `state.game.snap` with the engine's own fresh `snapshot()`, and
+   *  `saveCheckpoint` (career-io.js) writes it LOCAL ONLY, no network (doc section 15's own per-
+   *  at-bat push cadence). A no-op for Quick Play (`this.careerGame` false). */
+  _careerCheckpoint() {
+    if (!this.careerGame || !this.career || !this.game) return;
+    this.career.state = checkpoint(this.career.state, this.game.snapshot());
+    const saved = saveCheckpoint(this.career.state);
+    if (saved) this.career.doc = saved;
+  }
+
+  /** R15-B item 2: every at-bat end also pushes remotely, coalesced and NOT awaited (career-io.js's
+   *  own `saveAtBat` - an at-bat must not wait on a network round trip). */
+  _careerSaveAtBat() {
+    if (!this.careerGame || !this.career) return;
+    saveAtBat(this.career.state);
   }
 
   /** R4 (docs/BASEBALL-3D-BUILD.md section 9): true whenever the OS/browser asks for reduced
@@ -3454,6 +4070,12 @@ class BaseballPlayScreen {
     if (this.screen === 'play' && this.game && this.game.winner == null && !this.game.aborted) {
       const leave = await this._confirmForfeitModal();
       if (!leave) return;
+      // R15-B: leaving mid-CAREER-game from the standalone back button really does end that game
+      // (unlike the hub's own back pill, which just pauses - see `destroy()`'s header) - the doc's
+      // own forfeit button, reached from the same confirm this screen already had. `game.abort()`
+      // still resolves `playGame()`, so `_careerEndHandled` stops the ordinary end-of-game fold
+      // from ALSO firing right behind this one.
+      if (this.careerGame && this.career) { await this._forfeitLiveCareerGame(); return; }
     }
     if (this.game) this.game.abort();
     this._backToLauncher();
@@ -3478,6 +4100,35 @@ class BaseballPlayScreen {
     });
   }
 
+  /** Forfeits the career game CURRENTLY being played (standalone back button only - see
+   *  `_confirmBack`). Records the score as it stood at the moment of leaving, then goes to career
+   *  home directly - not `_backToLauncher()`, which is the HUB's launcher and means nothing for a
+   *  standalone career page (its `history.back()` is a no-op on a page with no prior entry). */
+  async _forfeitLiveCareerGame() {
+    if (this._careerEndHandled) return;
+    this._careerEndHandled = true;
+    const g = this.game;
+    if (g) g.abort();
+    const you = g ? (g.score[this.playerSide] || 0) : 0;
+    const cpu = g ? (g.score[this.playerSide === 'home' ? 'away' : 'home'] || 0) : 0;
+    const before = this.career.state;
+    const beforeUnspent = before.unspent, beforePointsLost = before.pointsLost;
+    const out = finishGame(before, { won: false, you, cpu, forfeit: true, meta: this.careerMeta });
+    this.career.state = out.state;
+    recordGameResult(out.record);
+    await saveGameEnd(out.state);
+    this.career.health = careerSyncHealth();
+    if (this.destroyed) return;
+    this.tab = 'career';
+    this.screen = 'setup';
+    this._renderSetup();
+    this._fit();
+    if (out.resolved) {
+      const pointsEarned = Math.max(0, (out.state.unspent - beforeUnspent) + (out.state.pointsLost - beforePointsLost));
+      this._showSeasonModal({ trophy: out.trophy, pointsEarned });
+    }
+  }
+
   _backToLauncher() {
     window.dispatchEvent(new CustomEvent('gamehub:backtolauncher'));
     if (window.history.length > 1) window.history.back();
@@ -3487,10 +4138,43 @@ class BaseballPlayScreen {
   _showEndModal() {
     if (this.destroyed || !this.game) return;
     const g = this.game;
-    const you = g.score.away, cpu = g.score.home;
-    const wonYou = g.winner === 'away';
+    // R15-B: a career opponent can put the player at 'home' - Quick Play's `playerSide` is always
+    // 'away', so this branch is a no-op there.
+    const you = g.score[this.playerSide], cpu = g.score[this.playerSide === 'home' ? 'away' : 'home'];
+    const wonYou = g.winner === this.playerSide;
     const modal = document.createElement('div');
     modal.className = 'bb-end-overlay';
+
+    if (this.careerGame && this.career) {
+      // R15-B item 3: the score, the season record, and the points earned this game, with Continue
+      // back to career home (never Play again - a career game is not repeatable on demand).
+      const r = this._lastCareerGameResult || { pointsEarned: 0, resolved: false, trophy: null };
+      const rec = seasonRecord(this.career.state);
+      modal.innerHTML = `
+        <div class="bb-end-modal">
+          <button type="button" class="bb-end-close" data-act="close" aria-label="${t('close')}">&times;</button>
+          <div class="bb-end-title">${wonYou ? t('end_win') : (g.winner === 'tie' ? t('end_tie') : t('end_loss'))}</div>
+          <div class="bb-end-line">${t('you')} ${you} - ${cpu} ${t('cpu')}</div>
+          <div class="bb-end-line">${t('season_record').replace('{w}', String(rec.wins)).replace('{l}', String(rec.losses))}</div>
+          <div class="bb-end-line">${t('points_earned').replace('{n}', String(r.pointsEarned || 0))}</div>
+          <div class="bb-end-actions">
+            <button type="button" class="gh-btn gh-btn--primary" data-act="continue">${t('continue_btn')}</button>
+          </div>
+        </div>`;
+      this.rootEl.appendChild(modal);
+      const toHome = () => {
+        modal.remove();
+        this.tab = 'career';
+        this.screen = 'setup';
+        this._renderSetup();
+        this._fit();
+        if (r.resolved) this._showSeasonModal(r);
+      };
+      modal.querySelector('[data-act="close"]').addEventListener('click', toHome);
+      modal.querySelector('[data-act="continue"]').addEventListener('click', toHome);
+      return;
+    }
+
     modal.innerHTML = `
       <div class="bb-end-modal">
         <button type="button" class="bb-end-close" data-act="close" aria-label="${t('close')}">&times;</button>
@@ -3511,6 +4195,38 @@ class BaseballPlayScreen {
       this._renderSetup();
       this._fit();
     });
+  }
+
+  /** R15-B item 3: shown after the end modal when the finishing game also resolved the season -
+   *  the trophy shape and name, or Missed the playoffs, the points earned, and the new league name
+   *  when a Gold advanced the ladder. */
+  _showSeasonModal(result) {
+    if (this.destroyed || !this.career || !this.rootEl) return;
+    const trophy = Number.isInteger(result.trophy) ? result.trophy : 0;
+    const state = this.career.state;
+    const season = state.season; // still 'done', still carrying the league just played
+    const advanced = trophy === 3 && season && season.league !== state.league;
+    const shapeCls = trophy === 1 ? 'circle' : trophy === 2 ? 'triangle' : trophy === 3 ? 'diamond' : null;
+    const titleText = trophy === 1 ? t('trophy_bronze') : trophy === 2 ? t('trophy_silver')
+      : trophy === 3 ? t('trophy_gold') : t('season_missed');
+    const modal = document.createElement('div');
+    modal.className = 'bb-end-overlay';
+    modal.innerHTML = `
+      <div class="bb-end-modal">
+        <button type="button" class="bb-end-close" data-act="close" aria-label="${t('close')}">&times;</button>
+        <div class="bb-end-title">${t('season_over')}</div>
+        ${shapeCls ? `<div class="bb-trophy-big bb-trophy-${shapeCls}" aria-hidden="true"></div>` : ''}
+        <div class="bb-end-line">${titleText}</div>
+        <div class="bb-end-line">${t('points_earned').replace('{n}', String(result.pointsEarned || 0))}</div>
+        ${advanced ? `<div class="bb-end-line">${t('league_advanced').replace('{league}', t('league_' + state.league))}</div>` : ''}
+        <div class="bb-end-actions">
+          <button type="button" class="gh-btn gh-btn--primary" data-act="ok">${t('continue_btn')}</button>
+        </div>
+      </div>`;
+    this.rootEl.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('[data-act="close"]').addEventListener('click', close);
+    modal.querySelector('[data-act="ok"]').addEventListener('click', close);
   }
 
   // -------------------------------------------------------------------------------- Tune panel (dev only)

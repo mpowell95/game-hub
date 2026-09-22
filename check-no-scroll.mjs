@@ -89,6 +89,30 @@ const EXTRA_SCREENS = {
         await page.waitForTimeout(250);
       },
     },
+    // R15-B (docs/BASEBALL-3D-BUILD.md section 9): the two career screens - the setup screen's
+    // Career tab (no career yet, on a fresh profile) and the player screen it opens in ITS OWN
+    // "start a career" flavor (presets/Custom/Randomize/hand, budgeted at Little League - a
+    // different skill-point table than Quick Play's, so it earns its own scroll check).
+    {
+      name: 'career tab',
+      async open(page) {
+        await page.waitForSelector('[data-act="tab"][data-tab="career"]', { timeout: 8000 });
+        await page.click('[data-act="tab"][data-tab="career"]');
+        await page.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'career start player screen',
+      async open(page) {
+        await page.waitForSelector('[data-act="tab"][data-tab="career"]', { timeout: 8000 });
+        await page.click('[data-act="tab"][data-tab="career"]');
+        await page.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
+        await page.click('[data-act="start-career"]');
+        await page.waitForSelector('.bb-player-body', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
   ],
 };
 

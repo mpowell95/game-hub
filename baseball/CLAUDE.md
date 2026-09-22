@@ -4,6 +4,181 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R15-B: the career screens (2026-09-22)
+
+R15 is two halves built in parallel (`docs/BASEBALL-3D-BUILD.md` section 9, "R15: the career"): A
+(above) is headless and owns the rules and the writes; this is B, the screens, built entirely in
+`baseball/js/ui.js` (plus new EN/ES strings and CSS) with no change to `baseball/js/engine/` or
+`baseball/js/career-io.js`'s public contract beyond one additive export
+(`saveCareerState`, below).
+
+**The setup screen gained two tabs, Career and Quick Play** (`.bb-setup-tabs`, `.bb-tab`), the
+chosen one filled with a check mark. Quick Play stays the DEFAULT tab and its own markup/behavior
+is byte-identical to R14's - `.bb-play-btn`, `[data-league]`, `[data-act="player"]` all still
+resolve exactly where `test-visual.mjs`'s PLAY probe and `check-no-scroll.mjs`'s existing `player
+screen` entry expect them. **One exception, added after `career-resume`'s own probe caught it**: on
+load, if a career exists AND has a game saved (`state.game` set) and the player has not already
+tapped a tab this session (`_tabChosenByPlayer`), the screen lands on Career instead - a device
+reopening mid-career-game should show Resume, not Quick Play's setup. A deliberate tab tap always
+wins; this only ever fires on the very first paint after `loadCareer()` resolves.
+
+**Career home** (`.bb-career`, `_careerTabHTML`) is one screen, no scroll, showing: the player chip
+(`.bb-playerchip[data-act="career-player"]`, hand + the six skills, no preset label - a career
+build has no preset identity once it has been spent into), a five-step ladder
+(`.bb-ladder-step`, current rung filled with a check), the season line (record + "Game n of 12", or
+the playoff round name, or "Season over"), the next opponent's name and Home/Away, the standings as
+a NINE-ROW TABLE split into two 5/4 columns to fit one screen (`.bb-standings`, the player's row
+marked with a check, never colour alone), the trophy shelf (Bronze a circle, Silver a triangle,
+Gold a diamond - root CLAUDE.md's colorblind palette, filled + outlined when won), a one-line sync
+health readout (glyph only, nothing shown when OK - doc section 15's own wording, paraphrased short
+per "no helper text"), one PRIMARY button (Resume game / Play next game / Start a career, in that
+priority - `_careerPrimaryLabel`), and Retire at the bottom, which reads **Forfeit** first whenever
+`state.game` is set (a game saved but not currently open) with its own confirm modal
+(`_onCareerRetireTap`/`_forfeitSavedCareerGame`/`_confirmRetireModal`).
+
+**Starting a career** opens the SAME player screen component R14 built, in a third mode
+(`_renderPlayer(mode)`, now `'quickPlay' | 'careerStart' | 'careerSpend'`): `'careerStart'` is
+budgeted at Little League's own start budget/cap (`budgetFor('little')`/`capFor('little')`, doc's
+15/15 cap 10) with presets/Custom/Randomize/hand exactly like Quick Play's, its Done button reading
+Start and calling `startCareer(build)` then `startSeason` (career-io.js/career.js) before landing
+on career home. `'careerSpend'` (opened from the career-home player chip once a career exists) is
+spend-only against the career's own live `unspent`/`cap`: no minus button, no Randomize, no preset
+grid, the hand shown as a locked pill unconditionally (a career's hand is fixed for its whole life),
+ONE points-left pill (the pool, not per-side budgets) and a plus that calls `spend(state, id)`
+through a save. The three modes share one render function and one event-wiring function
+(`_wirePlayerEvents(mode)`) rather than three near-duplicates.
+
+**A career game uses the exact same play screen as Quick Play**, with one real difference: **the
+player can be `home`, not always `away`.** `playerSideFor(meta)` decides it, and three spots in
+ui.js that used to hardcode 'away' as "you" now read `this.playerSide`: the HUD's You/CPU labels and
+`is-you` mark (`_paintHud`), the initial batting/pitching mode at a half-inning boundary (the
+universal "away bats the top of every inning" rule is unchanged; only which one is the HUMAN
+follows `playerSide`), and `_showEndModal`'s winner/score logic. Everything else in this 4,000+ line
+file already computed `battingSide`/`defenseSide` from `this.game.half`, and `HumanAgent`'s own
+`decidePitch`/`decideSwing` set `state.mode` themselves the instant the ENGINE calls whichever one
+it needs - so wiring `agents = playerSide === 'home' ? {home: human, away: cpu} : {away: human,
+home: cpu}` was enough for the rest of the play screen to behave correctly with no further changes.
+`_cpuAgentFor(cpuTeam, league)` and `_freshPlayState(league, wsTitles, initialMode)` were factored
+out of `_startGame` (Quick Play) so `_startCareerGame` could reuse them exactly - Quick Play's own
+behavior is untouched by the extraction (verified: all 44 pre-existing device probes still pass,
+including `r2-cadence`, `pitch-drag`'s mirrored-aim check, and `sides-match`).
+
+**Every pitch boundary checkpoints; every at-bat pushes.** `_onEngineEvent`'s 'count' branch (a
+pitch that does not conclude the at-bat) and 'atBatEnd' branch (one that does) TOGETHER cover every
+single pitch - both call `_careerCheckpoint()`, which does `checkpoint(state, this.game.snapshot())`
+then `saveCheckpoint` (career-io.js, LOCAL ONLY); 'atBatEnd' additionally calls `_careerSaveAtBat()`
+(`saveAtBat`, local + a coalesced push, not awaited). `this._careerEvents` collects every `{type,
+payload}` for the whole game, read once at the end by `gameStatsFromEvents` (career.js).
+
+**A finished career game folds through `finishGame` exactly once** (`_onCareerGameEnd`, wired on
+`playGame().then()`): `recordGameResult` is called with `finishGame`'s own returned `record`, never
+built by hand, then `saveGameEnd` awaits the push and reports what `careerSyncHealth()` concluded.
+The end modal (career branch of `_showEndModal`) shows the score, the season record and the points
+earned this game (the `unspent`+`pointsLost` delta across the `finishGame` call, since the SAME call
+also pays a trophy bonus when it resolves the season - the one place the "points earned" figure on
+the end modal and the season modal can legitimately repeat the same number). When `finishGame`
+returns `resolved: true`, Continue chains straight into `_showSeasonModal` - the trophy shape and
+name (or "Missed the playoffs"), the points earned, and the new league name when a Gold advanced the
+ladder (`state.league !== season.league`, since `resolveSeason` leaves `season.league` as the rung
+just played).
+
+**Leaving mid-career-game is two different things, and the code now says so explicitly:**
+- **Via the HUB's own back pill is a PAUSE, not a forfeit** (doc section 4, [Locked]: "leave to the
+  hub... and resume exactly where you were"). The hub calls `destroy()` directly with no chance to
+  run any of this game's own code, and that is correct: the last pitch boundary already checkpointed
+  `state.game`, so nothing further is owed. `isInProgress()` is UNCHANGED and already returns true
+  for a live career game exactly as it does for Quick Play, which is what keeps the hub's own leave
+  dialog firing at all.
+- **Via the standalone `.bb-back` button (or career home's own Forfeit button on a SAVED game) really
+  does end it.** `_forfeitLiveCareerGame` (mid-play, standalone only - the only host with a back
+  button of its own) and `_forfeitSavedCareerGame` (career home, on a game that is not currently
+  open) both fold a loss through `finishGame({forfeit:true, won:false, ...})`, record it, save it,
+  and land on career home - never `_backToLauncher()`, whose `history.back()` is a no-op on a
+  standalone page with no prior entry and would leave the player staring at a dead play screen.
+  `this._careerEndHandled` guards both against ALSO firing the ordinary `_onCareerGameEnd` fold:
+  `game.abort()` still resolves `playGame()`'s own promise, so a manual forfeit that aborts the
+  engine would otherwise double-record the same game.
+
+**Dev seams, all under the existing `this.dev` gate, merged onto `window.__bbTest`, never
+replacing it:** `careerState()` (read-only), `newCareerNow(build)` (mints a career, defaulting to
+the first preset at Little League's start budget, and starts season 1 so career home has something
+to show immediately), `scriptSeason(results)` (plays the CURRENT regular season through `finishGame`
+with scripted win/loss booleans, no engine at all - the same shape `test-baseball-career.mjs`
+already exercises headlessly, just run against the LIVE instance's own career so a device probe can
+reach standings/playoffs/trophy screens without a real season). Both dev-seam functions show the
+season modal themselves when a scripted game happens to resolve the season, computing the same
+points-earned delta the real flow does.
+
+### Tests
+
+`node baseball/js/test.js` (2,799 assertions, unaffected - this stage touched no engine file),
+`node test-baseball-career.mjs` (293 assertions, unaffected), `node test-career-sync.mjs` (46,
+unaffected), `node players-agg.test.mjs` and `node test-game-conventions.mjs` green (two new CSS
+rules had to be raised from 10px/9px to the 11px floor - `.bb-ladder-step`, `.bb-trophy-label`).
+
+`BB_DEVICE_QUICK=1 node test-baseball-device.mjs`: all 44 pre-existing probes still pass (Quick
+Play is unchanged), plus four new career probes:
+- **`career-home`**: starts a career through the dev seam, asserts the chip, the 5-step ladder, all
+  9 standings rows, all 3 trophy shapes, the primary button and the retire/forfeit button are
+  present, every one of those controls measures >= 44px, and the page does not overflow.
+- **`career-resume`**: starts a game, drives real pitches (the same tap-the-ring-every-500ms pattern
+  `r2-cadence` uses) until the engine shows genuine progress, remounts through the hub's own path
+  (a fresh `page.goto`, the same "force close and reopen" the doc's resume promise covers), taps
+  Resume, and asserts the inning/half/outs/count are byte-identical to what was checkpointed.
+- **`career-forfeit`**: standalone only (the only host with a back button of its own) - starts a
+  game, taps back, confirms, and asserts `careerState().season.results[0]` reads `{won:false,
+  forfeit:true}` and career home is what's on screen afterward.
+- **`career-season`**: scripts a 9-3 regular season plus two playoff wins through the dev seam and
+  asserts `trophy===3`, `stats.golds===1`, `league==='highschool'` (Little League Gold advances),
+  and that the season modal actually appeared with a trophy shape in it.
+
+**One pre-existing, unrelated probe (`target-marker`, R8) measured 4.32px against its own 4px
+budget in one run of four** (1.41px, 2.74px, then this 4.32px, then back under budget on the
+following run) - a marker-vs-crossing-point tolerance this stage never touched (no edit anywhere
+near `field.js`/`pitch.js`/`actors.js`), and the number moves run to run under SwiftShader's own
+timing jitter. Flagged here per root CLAUDE.md rule 9's spirit rather than silently retried away;
+not a regression from this stage.
+
+`node check-no-scroll.mjs baseball`: the existing 4 default screens plus 3 EXTRA_SCREENS entries
+(R14's `player screen`, plus this stage's `career tab` and `career start player screen`), all
+clean at both phone heights in both hosts.
+
+`node test-visual.mjs baseball`: unaffected (the PLAY probe still finds `.bb-play-btn` on Quick
+Play's own default tab).
+
+### What was rejected
+
+- **A fourth tab-body layout for career home mirroring Quick Play's centered `justify-content:
+  center` container.** Career home's content varies far more in height across its states (empty,
+  fresh season, mid-playoffs with the standings table full) than Quick Play's fixed league list
+  ever did; centering it would have shifted the whole screen up and down between states. The outer
+  `.bb-setup` is top-aligned instead, and `.bb-setup-quickplay` alone carries the old centered
+  layout so Quick Play's own look is pixel-identical to before this stage.
+- **A separate "no career" screen file/component.** The empty state is one branch of
+  `_careerTabHTML` (`.bb-career--empty`), not a fourth mode - it is a Start button and nothing else,
+  and giving it its own render path would have meant a fourth near-duplicate of the tab-body
+  plumbing for one button.
+- **Showing the trophy bonus separately from the per-game points on the end-of-game modal.** The
+  design doc doesn't ask for the split, and the two numbers come from one `finishGame` call anyway
+  (a season-ending game pays both in the same fold) - showing them as one combined delta is honest
+  and is what the state actually did.
+
+### Known limitations, stated rather than hidden
+
+- **The career player screen's `'careerStart'` mode has no Cancel/back control of its own**, the
+  same as R14's Quick Play player screen - the only way off it is the hub's own back button, which
+  exits the whole game (an unsaved start-build is discarded, since nothing about it is persisted
+  until Start is tapped). Consistent with the existing convention, not a new gap.
+- **The end-of-game and season modals' `.bb-end-modal` keeps `overflow-y: auto` as a defensive
+  floor**, the same as its pre-existing form - the career branch adds up to two more lines than
+  Quick Play's ever had, and in practice both were measured fitting without ever needing to scroll
+  at 393x852 and 390x664, but the safety net is there rather than assumed away.
+- **`js/career-store.js`'s `careers` branch is not published in `database.rules.json` yet** (R15-A's
+  own note, unchanged by this stage) - every push in a real deploy will record `HEALTH_DENIED` and
+  the sync line will simply show nothing (doc section 15: Denied has no player-facing wording),
+  while the career keeps playing and saving locally. Matt has to publish that branch by hand before
+  a push can ever succeed for a real player.
+
 ## R15-A: the career loop and its persistence (2026-09-22)
 
 Matt: *"Go, build the skill points and career."* R15 is two halves built in parallel
