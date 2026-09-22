@@ -3283,24 +3283,25 @@ console.log('\n-- 25. POWER LINES: a wire is a BAND of heights, not a wall (2026
     wind: { speed: 0, deg: 0 },       // still air, so every resolveShot below flies the line it is aimed on
   };
   const WIRE_Y = 150;
-  const pl = makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [0, WIRE_Y], [40, WIRE_Y]], h: 10 }] });
+  // Three spans, and NO pole on the centreline, so a shot straight up the middle meets only the wire.
+  const pl = makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [-12, WIRE_Y + 2], [12, WIRE_Y + 2], [40, WIRE_Y]], h: 10 }] });
   ok('a hole with a power line VALIDATES', validateHole(pl).length === 0, validateHole(pl).join('; '));
   ok('...its built line is the band h-1.0 .. h+0.6',
-    pl.lines.length === 1 && pl.lines[0].lo === 9 && pl.lines[0].hi === 10.6 && pl.lines[0].pts.length === 3);
+    pl.lines.length === 1 && pl.lines[0].lo === 9 && pl.lines[0].hi === 10.6 && pl.lines[0].pts.length === 4);
   ok('...and a pole tree stands at every point',
-    pl.trees.length === 3 && pl.trees.every((t) => pl.treeTypes[t.type].name === 'pole'));
+    pl.trees.length === 4 && pl.trees.every((t) => pl.treeTypes[t.type].name === 'pole'));
   const dflt = makeHole({ ...base, lines: [{ pts: [[-40, WIRE_Y], [40, WIRE_Y]] }] });
   ok('h defaults to 10', dflt.lines[0].lo === 9 && dflt.lines[0].hi === 10.6);
 
-  // Straight up the hole from [0, 5]: the wire is crossed 145 yds out. With a 200 yd carry that is
-  // p = 0.725, and the ball's height there is apex * 4 p (1 - p) = 0.7975 * apex.
+  // Straight up the hole from [0, 5]: the middle span is crossed at y = 152, 147 yds out. With a
+  // 200 yd carry that is p = 0.735, and the ball's height there is apex * 4 p (1 - p).
   const from = [0, 5];
-  const pAt = 145 / 200;
+  const pAt = 147 / 200;
   const k = 4 * pAt * (1 - pAt);
   const inBand = SH.wireHit(pl, from, 0, 200, 0, 10 / k);      // 10 yds up at the wire: in the band
   ok('a shot crossing the wire INSIDE the band is blocked', !!inBand && inBand.wire === 0);
   ok('...where it crosses the wire',
-    !!inBand && Math.abs(inBand.at[1] - WIRE_Y) < 0.01 && Math.abs(inBand.at[0]) < 0.01 && Math.abs(inBand.p - pAt) < 0.005,
+    !!inBand && Math.abs(inBand.at[1] - (WIRE_Y + 2)) < 0.01 && Math.abs(inBand.at[0]) < 0.01 && Math.abs(inBand.p - pAt) < 0.005,
     inBand && `at ${inBand.at.map((v) => v.toFixed(3))}, p ${inBand.p.toFixed(4)}`);
   ok('the same line with a HIGH apex is clear (over the wire)', SH.wireHit(pl, from, 0, 200, 0, 30) === null);
   ok('...and with a LOW one (a runner under it) is clear', SH.wireHit(pl, from, 0, 200, 0, 5) === null);
@@ -3309,13 +3310,13 @@ console.log('\n-- 25. POWER LINES: a wire is a BAND of heights, not a wall (2026
   ok('a shot that stops SHORT of the wire is not blocked by it', SH.wireHit(pl, from, 0, 140, 0, 10 / k) === null);
   ok('a shot running PAST the end of the wire is not blocked by it', SH.wireHit(pl, [60, 5], 0, 200, 0, 10 / k) === null);
   ok('a chip still climbing passes under it (min apex 2, crossing 5 yds out)',
-    SH.wireHit(pl, [0, WIRE_Y - 5], 0, 30, 0, 2) === null);
+    SH.wireHit(pl, [0, WIRE_Y - 3], 0, 30, 0, 2) === null);
   ok('the ball standing right under the wire can always leave it',
-    SH.wireHit(pl, [0, WIRE_Y], 0, 100, 0, 30) === null && SH.wireHit(pl, [0, WIRE_Y - 0.2], 0, 100, 0, 12) === null);
+    SH.wireHit(pl, [0, WIRE_Y + 2], 0, 100, 0, 30) === null && SH.wireHit(pl, [0, WIRE_Y + 1.8], 0, 100, 0, 12) === null);
 
   // A PUTT NEVER LEAVES THE GROUND, so it rolls under the wire.
   const putt = SH.simulatePutt({ hole: pl, from: [0, WIRE_Y - 3], aimRad: 0, power: 1, rangeFt: 40 });
-  ok('a putt rolls under the wire', putt.rest[1] > WIRE_Y + 1, `rest ${putt.rest.map((v) => v.toFixed(1))}`);
+  ok('a putt rolls under the wire', putt.rest[1] > WIRE_Y + 3, `rest ${putt.rest.map((v) => v.toFixed(1))}`);
 
   // THE FULL SHOT: some real club and power in the bag meets the wire in the band, and resolveShot
   // drops it at the wire - no penalty, short of the crossing, straight down the line it flew.
@@ -3330,7 +3331,7 @@ console.log('\n-- 25. POWER LINES: a wire is a BAND of heights, not a wall (2026
   ok('resolveShot: a real club in the bag can be stopped by the wire', !!wireRes);
   if (wireRes) {
     ok('...it falls where it met the wire (just short of it), with no penalty and no roll',
-      wireRes.penalty === 0 && wireRes.rollYd === 0 && wireRes.rest[1] < WIRE_Y && wireRes.rest[1] > WIRE_Y - 4,
+      wireRes.penalty === 0 && wireRes.rollYd === 0 && wireRes.rest[1] < WIRE_Y + 2 && wireRes.rest[1] > WIRE_Y - 2,
       `rest ${wireRes.rest.map((v) => v.toFixed(1))}, penalty ${wireRes.penalty}`);
     ok('...and the flight is cut at the wire', wireRes.flightMs < SH.flightMs(wireRes.carry));
   }

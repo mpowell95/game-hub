@@ -307,6 +307,7 @@ file per hole only if one file becomes unwieldy.
 | `trees` | array | Individually placed trees |
 | `treeBelts` | array | Polygons filled with trees procedurally |
 | `decor` | array | Art only, never consulted for anything (below) |
+| `lines` | array, optional | Power lines, `[{pts, lo, hi}]`: the band of heights each wire occupies (below). Course Creator courses only |
 
 ### Surfaces: one ordered list, painted and tested the same way
 
@@ -429,8 +430,9 @@ sprite** - the obstacle catalogue carries a log and three rocks for exactly that
 ### The obstacle catalogue (2026-09-22)
 
 Matt: *"we need more options for objects too. More trees, rocks, power lines, water, swamp, etc.
-lots of stuff."* `golf/js/obstacles.js` exports **`OBSTACLE_CATALOG`**, seventeen entries - nine
-parkland species, five desert, three rocks and a fallen log - and it is what a course built in the
+lots of stuff."* `golf/js/obstacles.js` exports **`OBSTACLE_CATALOG`**, eighteen entries - nine
+parkland species, five desert, three rocks, a fallen log and (index 17, appended 2026-09-22) a power
+pole - and it is what a course built in the
 **Course Creator** uses as its `treeTypes`. The shipped courses are untouched: Pine Valley, Red Mesa
 and Oasis Sands each keep their own three-entry table, because eighteen recipes each have those
 indices baked in.
@@ -474,6 +476,34 @@ looking finished on screen. Two of its checks are structural and cover every fut
 **every member of `SURFACE_KINDS` must have its own `LIES` row and a `lie_` label in both
 languages.** A kind with no row falls back silently to the fairway's and plays as if it were mown.
 
+### Power lines: a wire is a BAND of heights (2026-09-22)
+
+`docs/HANDOFF-GOLF-POWER-LINES.md` is the spec. The RECIPE field is `lines: [{ pts: [[x, y], ...],
+h }]` - world yards, 2+ points, `h` the wire's height (4..20, default 10). `makeHole` turns each
+entry into two things:
+
+- **a pole at every point**, as an ordinary TREE of the hole's own `'pole'` type (catalogue index
+  17: trunk 0.3, canopy 0.3, height 40). So a pole blocks, stops a run-out and draws exactly like
+  any trunk, and nothing downstream needs to know it is a pole.
+- **`hole.lines[i] = { pts, lo: h - 1.0, hi: h + 0.6 }`**, the band the wire occupies.
+
+**The rule is `wireHit` in `shot.js`**, same signature and sampling as `treeHit` (`flightPoint`,
+STEP 0.4, the same `startAt` so the ball's own spot never blocks leaving it). Each step of the
+flight is intersected with every span and the ball's height interpolated at the crossing: **blocked
+iff `lo <= height <= hi`.** Over the wire (a high shot) and under it (a runner, a chip still
+climbing, any putt - `simulatePutt` never consults it) are both clear; that is the whole difference
+from a canopy, which blocks from the ground up. `resolveShot` takes whichever of `treeHit` /
+`wireHit` comes first (smaller `p`) and a wire block resolves like a canopy block - the ball drops
+just short of where it met the wire, no roll, **no penalty stroke**. It carries `blocked.wire` (an
+index into `hole.lines`) where a tree block carries `blocked.tree`/`blocked.type`, and the trunk
+clearance step is skipped for it. `ui.js` names it with a banner (`blocked_wire`) and does NOT offer
+the trees drop prompt; only a tree block does.
+
+`validateHole` refuses a hole with `lines` but no `'pole'` entry in `treeTypes` (only a Course
+Creator course carries the catalogue; Pine Valley / Red Mesa / Oasis Sands never get `lines`), a
+line with fewer than 2 points, any point outside `bounds`, and a wire height (`lo + 1`) outside
+4..20. `golf/js/test.js` section 25 covers all of it.
+
 ### What the validator asserts
 
 `validateHole()` in `golf/js/holes.js` (written at the start of Stage B, run by the engine test and
@@ -487,6 +517,8 @@ at load in dev):
 - Every `trees[].type` and `treeBelts[].type` indexes a real `treeTypes` entry.
 - (2026-09-16) No polygon crosses itself (`polySelfIntersects`, which names the two edges). Written
   for the hole editor; the generator's backward-point guard had been the only prevention.
+- (2026-09-22) `lines`: a `'pole'` type exists, 2+ points each, every point inside `bounds`, wire
+  height 4..20 (above).
 - It does NOT check reachability - that is `test.js` section 14, by playing the hole. This list
   claimed otherwise until 2026-09-16.
 
