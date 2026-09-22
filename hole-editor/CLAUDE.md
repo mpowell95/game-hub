@@ -610,3 +610,78 @@ orchestrator. What changed at that merge, beyond the agent's own work:
 - Reference stills: `reference/golf/palette-2026-09-22-{parkland,desert}.png` (the palette's top,
   in each look). The agent's own contact-sheet script cropped neighbouring objects into every tile
   and was dropped.
+
+## Power lines: the drawing half (2026-09-22, `docs/HANDOFF-GOLF-POWER-LINES.md`)
+
+Built against the ENGINE half once it landed (branch `worktree-agent-a0c026cf7aa1d8bcb`, not
+merged into this worktree - built by reading its diff, not by importing it): `golf/js/obstacles.js`
+gets an 18th entry, `pole` (`trunk: 0.3, canopy: 0.3, height: 40`); a hole's recipe carries
+`lines: [{pts, h}]`; the BUILT hole carries `hole.lines[i] = {pts, lo, hi}` (`lo = h - 1.0, hi = h +
+0.6` - the band `shot.js`'s `wireHit` reads) plus an ordinary `'pole'`-type tree at every point.
+
+- **`golf/js/render.js`**: `treeShapes`/`treeAccent` case `'pole'` - a small grey disc with a dark
+  crossarm, both FLOORED (`Math.max(1.1, r*0.5)` / `Math.max(2.2, r*1.7)`) because the catalogue's
+  own `canopy: 0.3` rasterises to a sub-pixel 0.36 px disc at `MAP_PPY` (2.4 px/yd) - honest to the
+  pole's real width and invisible, not small. `drawWire()` draws two thin parallel strokes per span
+  (offset in RASTER space off `toPx`'d points, so the y-flip can't put them on the wrong side) plus
+  a shadow offset by `SHADOW_LEN`/`SHADOW_DROP` x wire height, the same rule a tree's canopy shadow
+  uses. Drawn straight onto the map canvas AFTER the tree layer is composited (poles are ordinary
+  trees and are already in it) - a wire has no canopy to fade for a putt underneath it, so unlike a
+  tree it is never drawn translucent. `h = ln.lo + 1` when the built shape is present, falling back
+  to `ln.h` for a hand-built stand-in hole that skips holegen entirely (a browser probe, or the
+  palette's own sampler, below).
+- **`hole-editor/js/canvas.js`**: `listObjects()` gets a `lines` entry per spec line -
+  `{group:'lines', index, pts, h, center: <midpoint>, drawn: true}`, deliberately no `poly` key (a
+  polyline is not a closed shape). `drawn: true` is the whole trick: the EXISTING generic
+  select-and-drag code (`objDrag.kind === 'object' && objDrag.drawn`) already calls
+  `translateDrawn`, and the engine's `translateDrawn` was extended to move `pts` when there is no
+  `poly` - so a whole line drags with no new drag branch. `hitTest()` adds its own two checks (a
+  line's SPAN, 1.5 yd tolerance, point-to-segment distance; and, only when a line is already
+  selected, a POINT HANDLE at each pole, checked first so it wins over "drag the whole line" - the
+  same precedence a bunker's resize handle gets over its outline) and returns `{group:'linePoint',
+  index, k}` for the latter, handled by its own `objDrag.kind === 'linePoint'` branch calling
+  `moveLinePoint`. `finishDraw()`'s only change is the minimum point count (2 for `group ===
+  'lines'`, 3 for a closed shape) - the actual add goes through the SAME `addDrawnShape` call every
+  other drawn group uses, because the engine's `addDrawnShape` routes `group === 'lines'` straight
+  to `addLine` (unsmoothed - Chaikin-rounding a clicked pole position would move the pole). The
+  render loop's object-outline pass gets its own `o.group === 'lines'` branch (the polyline plus, if
+  selected, a gold point handle per pole) and the generic "selected -> centre dot" code is skipped
+  for lines, since the point handles already mark every pole.
+- **`hole-editor/js/panels.js`**: `renderLine()` (wired into `renderSelect`'s `byGroup` AND into
+  `renderContextPanel`'s `byTool.line`, for the moment between picking the tool and placing the
+  first pole) shows the wire height (a 4-20 yd slider) and the pole count; there is no shape control
+  here at all - a line's SHAPE is edited by dragging its point handles on the map, the same way a
+  route waypoint is. `drawingHint()` gets line-aware wording ("click each pole... Enter or
+  double-click to finish") instead of "close the shape".
+- **`hole-editor/js/palette.js`**: a new "Structures" section, one tile, `{kind: 'tool', tool:
+  'line'}` (not a `kind: 'draw'` tile - picking the RIBBON TOOL is what starts the line, per
+  `main.js`'s `setTool('line')`). Its sampler stamps `hole.lines` on the BUILT sampler hole by hand,
+  AFTER `makeHole()` (which never sees a `lines` field this way - a sampler is hand-built, not a
+  recipe, so this is not a stand-in and stays this shape even after the merge), in the real
+  `{pts, lo, hi}` form. The matching "Power pole" single-tree tile needs no code at all - it falls
+  out of the catalogue loop that already builds one tile per `treeTypes` entry.
+- **TEMP, to remove at merge**: `paintTile()`'s `item.id === 'power-line' && s.poleIdx < 0` block.
+  It exists only because this worktree's `obstacles.js` had no `pole` entry while this was built, so
+  the sampler could add no real pole TREES for `buildMap`'s own tree pass to draw (the wire itself
+  needed no stand-in - `drawWire` reads `hole.lines` regardless of the catalogue). Self-obsoleting:
+  once `OBSTACLE_CATALOG` carries `'pole'`, `s.poleIdx >= 0` and the block never fires again: nothing
+  else has to change, but the block is dead code worth deleting rather than leaving as a permanent
+  no-op.
+- **Tests**: `test-hole-editor-ui.mjs`'s "Power line" block (Power line tile + three map clicks +
+  Enter -> `spec.lines` with 3 points; select + Delete removes it) is guarded on
+  `typeof M.addLine === 'function'` from `hole-editor/js/model.js` and SKIPS with a printed reason
+  in this worktree, since the engine half is not merged here. Also updated (forward, to the state
+  true only after merge, per the orchestrator's contract): the catalogue-size assertion is
+  `cat === 18`, which is why that one assertion is currently red in this worktree's own run (17
+  entries locally) and will go green the moment the engine branch is folded in - every other
+  assertion in the suite is green, including the rest of the same test block that does not touch
+  the catalogue count.
+- **Still**: `reference/golf/power-line-2026-09-22.png` - a hand-built three-pole line (bypassing
+  holegen.js entirely, in the real `{pts, lo, hi}` shape) rendered in both themes at map resolution,
+  the palette's own "Power line" tile in both themes, and a 6x nearest-neighbour crop over the
+  centre pole so the raster can be judged by eye rather than guessed at from a thumbnail. Looked at
+  directly: the pole reads as a solid dark knob where its crossarm (drawn along the wire's own
+  direction here, since the span is dead straight and horizontal) merges with the two wire strokes;
+  the wire itself is unambiguous as two thin parallel dark lines the whole span. That merge is
+  realistic, not a probe artefact - a power line usually crosses a fairway close to perpendicular to
+  the hole's own direction, which is exactly the layout drawn here.

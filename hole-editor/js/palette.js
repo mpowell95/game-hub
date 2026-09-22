@@ -98,6 +98,14 @@ export function paletteSections(built, look) {
       { id: 'cross-swamp', label: 'Swamp across', kind: 'tool', tool: 'cross', state: { crossKind: 'swamp' } },
     ] },
     { title: 'Around the green', items: GUARD_TOKENS.map(([tok, label]) => ({ id: `guard-${tok}`, label, kind: 'guard', token: tok })) },
+    // Structures (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 4): a power line is its
+    // own RIBBON TOOL (`'line'`, main.js), not a `kind: 'draw'` tile - picking it starts the same
+    // click-points-then-Enter flow a drawn shape uses, but it is a polyline, not a closed outline.
+    // The matching "Power pole" single-tree tile comes for free out of "Trees & rocks" above, now
+    // that the catalogue carries a 'pole' entry.
+    { title: 'Structures', items: [
+      { id: 'power-line', label: 'Power line', kind: 'tool', tool: 'line' },
+    ] },
     // Decor (2026-09-22): cosmetic only, never consulted for play (golf/CLAUDE.md, "`decor` never
     // affects play"). A sprite is a `tool` tile like a tree; the cart path is the existing drawn
     // form, group 'decor', unchanged since 2026-09-16.
@@ -163,18 +171,35 @@ function sampler(theme, types) {
     at[`cross-${kind === 'fairwayBunker' ? 'sand' : kind}`] = [0, y];
     y += 44;
   }
+  // Power line (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 4). A real `hole.lines`
+  // entry is stamped onto the BUILT hole below (`makeHole` does not build `lines` - that is the
+  // recipe field `holegen.js` gets, and a sampler hole is hand-built, not a recipe). If the
+  // catalogue already carries a 'pole' entry (the engine half of this batch, `obstacles.js`) the
+  // three poles are ordinary tree objects like every other tile's specimen; `paintTile` below
+  // draws a stand-in only when it does not.
+  const poleIdx = d.treeTypes.findIndex((ty) => ty.name === 'pole');
+  const lineY = y;
+  const linePts = [[-14, lineY], [0, lineY], [14, lineY]];
+  if (poleIdx >= 0) for (const [px, py] of linePts) trees.push({ x: px, y: py, type: poleIdx });
+  at['power-line'] = [0, lineY];
+  y += 44;
   const len = y + 60;
   const hole = makeHole({
     ...d, n: 1, par: 5, nickname: 'sampler', path: [[0, 5], [0, len]],
     fw: [{ at: 0, w: 15 }, { at: 1, w: 15 }], hard: 0.3, seed: 11, greenSeed: 12, defend: false, belts: false, slope: 'gentle',
     trees, sentinels, bunkers, water, cross,
   });
+  // The real BUILT shape (holegen.js, once the engine half lands) is `{pts, lo, hi}`, not `{pts,
+  // h}` - lo/hi is the band `shot.js`'s wireHit reads, and render.js's drawWire draws the wire at
+  // its centre, `lo + 1`. h=10 here matches that formula (lo=9, hi=10.6) so the sampler tile shows
+  // exactly what a real `h: 10` line would look like once holegen.js builds it for real.
+  hole.lines = [{ pts: linePts, lo: 9, hi: 10.6 }];
   // The three sprites are NOT painted into the map: at MAP_PPY a 3-yd bench is eight pixels. The
   // tile paints ground only and `paintTile` draws the sprite over it at tile resolution.
   const decorY = y;
   at['decor-bench'] = [-24, decorY - 10]; at['decor-sign'] = [0, decorY - 10]; at['decor-flagpole'] = [24, decorY - 10];
   at['decor-path'] = [0, decorY - 10];
-  s = { map: buildMap(hole, theme), at };
+  s = { map: buildMap(hole, theme), at, poleIdx };
   _samplers.set(key, s);
   return s;
 }
@@ -218,8 +243,27 @@ export function paintTile(canvas, item, theme, types) {
     const ppy = (canvas.width / CROP_W) * 4;
     drawDecorSprite(canvas.getContext('2d'), item.state.decorKind, canvas.width / 2 - ppy * 0.4, canvas.height / 2, ppy, 0, paletteFor(theme));
   }
-  if (item.kind === 'draw') {
-    // A pencil over the picture: this one you outline yourself.
+  if (item.id === 'power-line' && s.poleIdx < 0) {
+    // TEMP until the engine half lands: `golf/js/obstacles.js` has no 'pole' entry yet, so the
+    // sampler above could not add real pole trees for `buildMap`'s own tree pass to draw. The
+    // wire itself needs no stand-in - `drawWire` paints it from `hole.lines` regardless of the
+    // catalogue - only the three pole markers are faked here, at tile resolution, and only while
+    // `s.poleIdx` stays -1. Remove this block once OBSTACLE_CATALOG carries 'pole'.
+    const ctx = canvas.getContext('2d');
+    const ppy = canvas.width / CROP_W;
+    for (const dxYd of [-14, 0, 14]) {
+      const cx = canvas.width / 2 + dxYd * ppy;
+      const cy = canvas.height / 2;
+      const r = 5;
+      ctx.fillStyle = '#9a9a92';
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#4f4f48'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx - r * 1.7, cy); ctx.lineTo(cx + r * 1.7, cy); ctx.stroke();
+    }
+  }
+  if (item.kind === 'draw' || item.tool === 'line') {
+    // A pencil over the picture: this one you outline (or, for the power line, string pole to
+    // pole) yourself.
     const ctx = canvas.getContext('2d');
     ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.setLineDash([10, 8]);
     ctx.strokeRect(24, 18, canvas.width - 48, canvas.height - 36);
@@ -264,6 +308,7 @@ export function activeItemFor(tool, toolState, drawing) {
   if (drawing) {
     if (drawing.group === 'water') return drawing.kind === 'swamp' ? 'water-swamp-draw' : 'water-draw';
     if (drawing.group === 'decor') return 'decor-path';
+    if (drawing.group === 'lines') return 'power-line';
     return 'bunker-draw';
   }
   if (tool === 'tree') return `${toolState.treeMode === 'stand' ? 'stand' : 'tree'}-${toolState.treePlantType || 0}`;
@@ -271,5 +316,6 @@ export function activeItemFor(tool, toolState, drawing) {
   if (tool === 'water') return toolState.waterKind === 'swamp' ? 'water-swamp' : 'water-pond';
   if (tool === 'cross') return `cross-${toolState.crossKind === 'fairwayBunker' ? 'sand' : (toolState.crossKind || 'water')}`;
   if (tool === 'decor') return `decor-${toolState.decorKind || 'bench'}`;
+  if (tool === 'line') return 'power-line';
   return null;
 }
