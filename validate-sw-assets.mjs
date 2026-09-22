@@ -91,10 +91,24 @@ if (offenders.length) {
 // (business-deal/sw.js), by design (CLAUDE.md: "launch-out... its own nested service worker, not
 // ESM. A precedent, not the preferred pattern."). Parchís is a compiled single-file build from the
 // sibling ../Parchís/ repo; only its index.html lives in this repo and is already precached.
-const SCAN_DIRS = [
-  'connect-four', 'chinchon', 'escoba', 'filler', 'mancala', 'nuts-bolts', 'ball-run', 'tic-tac-toe',
-  'js', 'profile', 'css', 'golf', 'pinball2',
-];
+// EVERY GAME FOLDER, DISCOVERED FROM DISK - not a hand-written list (2026-09-22).
+//
+// It WAS a hand-written list, and it was thirteen entries written when there were thirteen things
+// worth scanning. Everything added since - skeeball, boggle, baseball, yahtzee, hoops4 and the
+// rest - was never scanned at all, so "every scanned file is in ASSETS" passed while saying
+// nothing about most of the repo. Found the honest way: `hoops4/js/alert.js` shipped as a new
+// file that js/hub.js imports on every launcher paint, was missing from ASSETS, and this script
+// printed ok. A precache list with a hole in it is an offline launcher with a hole in it.
+//
+// Measured when this changed: across the WHOLE repo exactly 14 files were outside ASSETS, and
+// all 14 are the four documented exclusions below. So widening the scan cost nothing and closed
+// the gap - it is not a list anybody has to remember to extend again.
+const SCAN_SKIP = new Set([
+  'node_modules', 'backups', 'reference', 'docs', 'icons', '.visual-out', '.claude', '.github',
+]);
+const SCAN_DIRS = readdirSync('.', { withFileTypes: true })
+  .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SCAN_SKIP.has(e.name))
+  .map((e) => e.name);
 const SCAN_EXT = new Set(['.js', '.css', '.html']);
 
 // Deliberate exclusions, transcribed from the comments already in this repo (not re-invented
@@ -109,6 +123,12 @@ const EXCLUDED = [
   // "Reference screenshots in mancala/reference/ (gitignored)" - CLAUDE.md, Mancala row.
   { re: /^mancala\/reference\//, why: 'design reference screenshots, gitignored - CLAUDE.md Mancala row' },
   { re: /^hole-editor\//, why: 'Matt-only desktop design tool, never deployed - HANDOFF-GOLF-HOLE-EDITOR.md' },
+  // Monopoly Deal is a LAUNCH-OUT game with its OWN nested service worker (root CLAUDE.md, the
+  // games table) - its files are precached by that worker, not by this one.
+  { re: /^business-deal\//, why: "launch-out game with its own nested service worker - root CLAUDE.md's games table" },
+  // Design tools and mockups: opened by hand on a desktop, never reachable from the app.
+  { re: /^pinball\/design\//, why: 'design tool, opened by hand, never linked from the app' },
+  { re: /\/mockup-[^/]+\.html$/, why: 'a mockup, opened by hand, never linked from the app' },
 ];
 function excludedWhy(relPath) {
   const hit = EXCLUDED.find((x) => x.re.test(relPath));
@@ -139,9 +159,42 @@ for (const d of SCAN_DIRS) {
   }
 }
 
+let missingFailed = false;
 if (missingFromAssets.length) {
-  console.log(`\nWARN: ${missingFromAssets.length} deployed file(s) not in ASSETS (won't be cached offline):`);
-  for (const m of missingFromAssets) console.log('  ' + m);
+  // A FAILURE, NOT A WARNING (2026-09-22). It was a warning with exit 0 for as long as this file
+  // has existed, and a warning in a pre-deploy gate is a line of text nobody reads: `hoops4/js/
+  // alert.js` shipped missing from ASSETS while this script printed WARN and exited clean.
+  //
+  // WHAT A MISSING ENTRY ACTUALLY COSTS, corrected the same day by Matt, who was right: the first
+  // version of this comment said "the OFFLINE app", and for that particular file that was the
+  // wrong headline - a turn-by-turn challenge needs the network anyway, so its alert module being
+  // unreachable offline costs nothing that was not already gone. Matt: "This is multiplayer - of
+  // course it breaks the offline functionality... But everything else still should."
+  //
+  // The real cost is on EVERY OPEN, online, and it is `CACHE_FIRST_PATHS` - built in sw.js from
+  // ASSETS, exactly like `REST_MANIFEST`. A file outside ASSETS is therefore:
+  //   - NOT cache-first, so it takes a network round trip on every single request rather than
+  //     being served from the cache (js/hub.js imports alert.js on every launcher paint);
+  //   - NOT in REST_MANIFEST, so it has no content hash and is not carried forward across a
+  //     CACHE bump - it re-downloads after every deploy, at ~13 deploys a day;
+  //   - NOT warmed by warmRest, so the first open after a deploy pays for it in front of the
+  //     player.
+  // That is the same trio root CLAUDE.md spells out for Boggle's word lists, in the entry
+  // explaining why a LAZY tier had to exist instead of just dropping them from ASSETS.
+  //
+  // Offline still matters for everything that is NOT a network feature - a game's code, its CSS,
+  // its art - which is most of what this list holds.
+  //
+  // It is safe to be a failure because the exclusion list below it is real: measured across the
+  // whole repo the day this changed, exactly 14 files sat outside ASSETS and all 14 matched a
+  // documented exclusion. If you are reading this because a deploy went red, the two honest fixes
+  // are the two named in the message.
+  console.error(`\nFAIL: ${missingFromAssets.length} deployed file(s) not in ASSETS (they will NOT work offline):`);
+  for (const m of missingFromAssets) console.error('  ' + m);
+  console.error('\n  Either add each one to ASSETS in sw.js, or, if it is genuinely never served'
+    + '\n  to a player (a design tool, a mockup, a node-only script), add it to EXCLUDED in'
+    + '\n  validate-sw-assets.mjs with the reason.');
+  missingFailed = true;
 } else {
   console.log('ok   every scanned .js/.css/.html file is in ASSETS (or a documented exclusion)');
 }
@@ -232,4 +285,4 @@ let manifestFailed = false;
   }
 }
 
-process.exit(offenders.length || manifestFailed ? 1 : 0);
+process.exit(offenders.length || manifestFailed || missingFailed ? 1 : 0);

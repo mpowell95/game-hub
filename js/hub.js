@@ -310,6 +310,12 @@ export const GAMES = [
       es: 'Encesta en una de las siete canastas y tu ficha cae por esa columna. Cuatro en raya gana.',
     },
     module: '../hoops4/js/ui.js',
+    // SOMEBODY MAY BE WAITING ON YOU, and the launcher is where that has to be said. A game may
+    // declare an `alerts` module exporting check() / armCeremony(); the hub imports it lazily
+    // AFTER the launcher has painted and draws a speech bubble on that game's tile. This is the
+    // only per-game hook of its kind - see _checkGameAlerts below for why it is a registry entry
+    // rather than js/hub.js knowing what a Connect 4 Hoops challenge is.
+    alerts: () => import('../hoops4/js/alert.js'),
     // Owns the whole viewport (a fixed edge-to-edge canvas under a thin HUD), so the hub's header
     // collapses to the floating back button - the same call as Skeeball and Pinball.
     immersive: true,
@@ -540,6 +546,7 @@ class Hub {
     this._onMessagesChanged = () => this._paintReplyBadge();
     window.addEventListener('gamehub:messages', this._onMessagesChanged);
     this._afterPaint(() => this._maybeAnnounce());
+    this._afterPaint(() => this._checkGameAlerts());
     // Subscribe to the service worker's lifecycle so the version chip can never go stale again,
     // and so a new build applies itself while they are on the launcher (see _watchForUpdates).
     this._watchForUpdates();
@@ -923,8 +930,21 @@ class Hub {
         this.render();   // full re-render: ordering logic stays in exactly one place
         return;
       }
+      // The challenge bubble. The X puts it away; anywhere else on it opens the game with the
+      // full-screen card armed. Checked BEFORE .hub-card because the bubble overlaps the tile.
+      const dismiss = e.target.closest('[data-role="alert-dismiss"]');
+      if (dismiss) { e.preventDefault(); e.stopPropagation(); this._dismissGameAlert(); return; }
+      const bubble = e.target.closest('.hub-alert');
+      if (bubble) { e.preventDefault(); e.stopPropagation(); this._openAlertGame(); return; }
       const card = e.target.closest('.hub-card');
       if (!card) return;
+      // Matt: "when you click into the game or click on the popup thing, it goes to a new, full
+      // screen popup thing" - so the TILE arms the card too, not just the bubble.
+      if (this._gameAlert && this._gameAlert.game === card.dataset.id && !this._favEdit) {
+        e.preventDefault();
+        this._openAlertGame();
+        return;
+      }
       // Edit mode replaces the favorite heart with move arrows and must not let a mis-tap
       // launch (or navigate away to) the game underneath - card.dataset.favGroup marks every
       // tile in the favorites group, button or <a> alike.
@@ -985,6 +1005,135 @@ class Hub {
 
     this.initFirstRun();
     this._initVersionPill();
+    // render() rewrites the grid, so a bubble already decided has to be redrawn. The NETWORK
+    // check is separate (_checkGameAlerts) and only runs on the launcher; this is pure DOM.
+    this._paintGameAlert();
+  }
+
+  // --- a game saying somebody is waiting on you -------------------------------------------------
+  /**
+   * Ask every game that declares an `alerts` module whether it wants the launcher's attention.
+   *
+   * WHY THE HUB DOES NOT KNOW WHAT A CHALLENGE IS. Matt: "to see a challenge, you must go into
+   * the hoops connect 4, click play a friend... There is no other notification anywhere." The
+   * launcher is the right place to say it, but "a Connect 4 Hoops turn-by-turn match" is not
+   * something js/hub.js should be able to name - so a registry entry hands over a module and the
+   * hub only handles the shape it returns. Today hoops4 is the only registrant.
+   *
+   * LAZY AND AFTER THE PAINT, ALWAYS. This reaches Firebase; putting it on the critical path
+   * would trade a launcher that appears in 6 requests for one that waits on a network read.
+   * Everything is guarded: a game tile must never be able to break the launcher.
+   */
+  async _checkGameAlerts() {
+    let found = null;
+    for (const g of GAMES) {
+      if (typeof g.alerts !== 'function') continue;
+      try {
+        const mod = await g.alerts();
+        const alert = await mod.check();
+        if (alert) { found = { game: g.id, alert, mod }; break; }   // one bubble at a time
+      } catch (err) {
+        console.warn('[hub] alert check failed for', g.id, err);
+      }
+    }
+    // ASSIGNED EVERY TIME, INCLUDING TO NULL. The first version only assigned when it FOUND
+    // something and returned early, so an alert that had stopped being true was never cleared -
+    // half of why Matt's bubble survived him playing the turn.
+    this._gameAlert = found;
+    this._paintGameAlert();
+    // A tile the player cannot see is not "super obvious". Bring it into view ONCE per alert,
+    // gently, and never fight a scroll they have already started.
+    if (found && this._alertScrolledFor !== found.alert.id) {
+      this._alertScrolledFor = found.alert.id;
+      const cell = this._cellFor(found.game);
+      if (cell && cell.scrollIntoView) {
+        try { cell.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
+      }
+    }
+  }
+
+  /** The grid cell holding a game's tile. A favourited game is drawn twice; the first is the
+   *  favourites copy at the top of the page, which is the one worth pointing at. */
+  _cellFor(id) {
+    if (!this.el || !this.el.grid) return null;
+    const card = this.el.grid.querySelector(`.hub-card[data-id="${id}"]`);
+    return card ? card.closest('.hub-cell') : null;
+  }
+
+  /** Draw (or redraw) the speech bubble. Pure DOM - the decision was made in _checkGameAlerts. */
+  _paintGameAlert() {
+    const prev = this.root && this.root.querySelector('.hub-alert');
+    if (prev) prev.remove();
+    const state = this._gameAlert;
+    if (!state || !state.alert) return;
+    const cell = this._cellFor(state.game);
+    if (!cell) return;
+    const a = state.alert;
+    // CROSSED SWORDS, DRAWN RATHER THAN TYPED. Matt's mockup used the ⚔️ emoji and he was clear
+    // it is the idea, not the asset: "it doesn't have to be that specific swords image. You can
+    // recreate something." Drawing it removes the one real risk an emoji carried - it is a font
+    // glyph, so a device without a colour emoji font renders a tofu box in the middle of the
+    // headline (which is exactly what happened in the headless browser this was checked in).
+    // currentColor, so it takes the bubble's own ink on either variant.
+    const swords = `<svg class="hub-alert-swords" viewBox="0 0 24 24" aria-hidden="true"
+        fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <path d="M5 4 L16 16"/><path d="M19 4 L8 16"/>
+        <path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>`;
+    const head = `${swords}<span>${t('hub_alert_head')}</span>${swords}`;
+    const line = a.kind === 'challenge'
+      ? t('hub_alert_challenged', { who: a.name || t('hub_alert_someone') })
+      : t('hub_alert_your_turn');
+    const el = document.createElement('div');
+    // role=status + aria-live: this appears without the player doing anything, so it has to be
+    // announced rather than just drawn.
+    // WHICH WAY IT GROWS, measured rather than assumed. The bubble is wider than a tile, so it
+    // has to grow toward the middle of the grid; and on the top row there is nothing above it to
+    // grow into, so it flips underneath. Both are read off the real layout - a two-column grid
+    // today, but nothing here hard-codes two columns or a row height.
+    const grid = this.el.grid;
+    const rightHalf = cell.offsetLeft + cell.offsetWidth / 2 > grid.clientWidth / 2;
+    const noRoomAbove = cell.offsetTop < 120;
+    el.className = `hub-alert is-${a.kind} ${rightHalf ? 'is-col-right' : 'is-col-left'}`
+      + (noRoomAbove ? ' is-below' : '');
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.innerHTML = `
+      <button type="button" class="hub-alert-x" data-role="alert-dismiss"
+              aria-label="${t('hub_alert_dismiss')}">&times;</button>
+      <span class="hub-alert-head">${head}</span>
+      <span class="hub-alert-line">${line}</span>
+      ${a.count > 1 ? `<span class="hub-alert-count">${t('hub_alert_more', { n: a.count })}</span>` : ''}`;
+    cell.appendChild(el);
+  }
+
+  /** Tapping the bubble (or the tile it points at) arms the full-screen card and opens the game. */
+  _openAlertGame() {
+    const state = this._gameAlert;
+    if (!state) return;
+    try { state.mod.armCeremony(state.alert); } catch {}
+    this._dismissGameAlert();
+    this.launch(state.game);
+  }
+
+  /**
+   * Put the bubble away: acknowledge the match AND take the element out of the DOM.
+   *
+   * IT ALWAYS REPAINTS. It used to take a `paint = false` on the open-the-game path, on the
+   * reasoning that mounting a game was about to replace the view anyway. It does not:
+   * `launch()` only HIDES the grid, and `showLauncher()` only un-hides it - neither re-renders,
+   * so the bubble element was still sitting in its cell and came back into view on return. Matt:
+   * "once I've clicked on the new challenge popup and gone into the matchup and played and stuff,
+   * it should go away. I just did that and it stayed there even though it's not my turn."
+   */
+  _dismissGameAlert() {
+    const state = this._gameAlert;
+    if (!state) return;
+    try {
+      const row = state.mod.rowFor(state.alert.id);
+      state.mod.markSeen(state.alert.id, row ? row.updated : Date.now());
+    } catch {}
+    this._gameAlert = null;
+    this._paintGameAlert();
   }
 
   /** The theme toggle's face: sun/moon for the RESOLVED theme, plus an "A" badge when the
@@ -1512,6 +1661,10 @@ class Hub {
     // config landed, and went straight into the game - see the note on `onAdminConfig` in _boot.
     this._maybeAnnounce();
     this._drainBugReports();   // and the connection may have come back while they played
+    // AND ASK AGAIN WHETHER ANYBODY IS WAITING. Two directions, both real: the turn they just
+    // took means their own bubble should be gone, and a match they are NOT looking at may have
+    // come back round while they played. Same afterPaint-class work as the announcement above.
+    this._checkGameAlerts();
     // A new build that landed WHILE they were playing was deliberately held (never interrupt a
     // game). They are on the launcher now, so it is safe to take it.
     if (this._updateWaiting) { this._updateWaiting = false; this._applyUpdate(); }
