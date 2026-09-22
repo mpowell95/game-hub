@@ -96,7 +96,7 @@
   font: 800 clamp(20px, 6vw, 26px)/1.1 ui-sans-serif, system-ui, sans-serif;
   color: var(--h4s-ink);
 }
-.h4-root .h4-tag { margin: 0; font-size: 13px; color: var(--h4s-muted); max-width: 34ch; }
+/* `.h4-tag` (the tagline) was deleted, not hidden - Matt: "delete... DO NOT replace it." */
 
 /* The cabinet, at the top of its own setup screen. Sized by the space that is actually spare -
    the card below it is the control and must never be pushed off a short phone, so this shrinks
@@ -184,7 +184,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 16px;                   /* the hub's floating chip is a row BELOW this one */
+  /* 76px ON THE LEFT IS FOR THE HUB'S FLOATING CHIP, and removing it was a mistake this file
+     already knew about - the original comment said exactly what it was for. It was dropped on a
+     measurement taken in a browser with NO NOTCH, where `env(safe-area-inset-top)` is 0: the HUD
+     sat at y 9-42 and the chip at 54+, so they looked like separate rows. On a real iPhone the
+     inset is ~59px, `.h4-play-wrap` pushes this row down by it, and the chip (whose own top is
+     `max(inset, 54px)`) lands in the SAME BAND - with the hub's chrome painting above the game.
+     Matt: "whatever back button you made is hidden behind the Hub quit button."
+     A vertical measurement cannot answer this. Horizontal separation can, so the Menu button
+     sits at the far RIGHT and this reserve keeps the turn pill clear of the chip on the left. */
+  padding: 8px 16px 8px 76px;
   min-height: 38px;
 }
 /* BACK TO THIS GAME'S OWN SETUP SCREEN - not out to the launcher, which is what the hub's
@@ -193,6 +202,7 @@
    y 54+, so they never overlap - the first attempt failed on the LABEL, not the position. */
 .h4-root .h4-menu {
   appearance: none; flex: 0 0 auto;
+  margin-left: auto;                   /* the far right, opposite the hub's chip */
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
   color: var(--h4-ink, #fff);
@@ -342,14 +352,19 @@
 .h4-root .h4-mp-acts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
 .h4-root .h4-mp-act {
   appearance: none;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  width: 100%; min-height: 56px;                 /* well past the UX floor's 44px */
+  display: flex; align-items: center;
+  width: 100%; min-height: 52px;                 /* past the UX floor's 44px */
   padding: 10px 14px;
   border: 1px solid var(--h4s-line, rgba(0, 0, 0, 0.14));
   border-radius: 12px;
   background: var(--h4s-surface, #fff);
   color: var(--h4s-ink);
-  font: inherit; text-align: left;
+  /* GUARD: `font: inherit` is a SHORTHAND and resets weight and size, so it has to come BEFORE
+     them, not after. It was after, and these four names rendered at the page's regular weight
+     while the rule above them said 800. */
+  font: inherit;
+  font-size: 15px; font-weight: 800;
+  text-align: left;
   cursor: pointer; touch-action: manipulation;
 }
 .h4-root .h4-mp-act.is-primary {
@@ -357,8 +372,6 @@
   border-width: 2px;
 }
 .h4-root .h4-mp-act:active { background: var(--h4s-surface-2, rgba(0, 0, 0, 0.04)); }
-.h4-root .h4-mp-act-name { font-size: 15px; font-weight: 800; }
-.h4-root .h4-mp-act-hint { font-size: 12px; color: var(--h4s-muted); }
 
 .h4-root .h4-mp-row { display: flex; gap: 8px; }
 .h4-root .h4-mp-row .gh-btn { flex: 1 1 0; min-height: 46px; }

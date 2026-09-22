@@ -3,7 +3,6 @@
 export const STRINGS = {
   en: {
     title: 'Connect 4 Hoops',
-    tagline: 'Sink a hoop, drop a disc. Four in a row wins.',
     // THE HUB'S OWN DIFFICULTY WORDS, not this game's. They were 'Beginner / Steady /
     // Sharpshooter' - invented here and nowhere else in the repo. Matt: "you created brand new
     // terminology for the difficulties. Don't do that."
@@ -26,9 +25,7 @@ export const STRINGS = {
     difficulty: 'Difficulty',
     multiplayer: 'Multiplayer',
     mpHome: 'Multiplayer',
-    mpLiveHint: 'You both play now',
-    mpPassPlay: 'Pass and play', mpPassPlayHint: 'Two of you on this phone',
-    mpChallengeHint: 'They play next time they open the hub',
+    mpPassPlay: 'Pass and play',
     mpActive: 'Active games',
     mpNoActive: 'No games yet. Challenge somebody above.',
     // The full-screen challenge card (showCeremony in ui.js).
@@ -79,7 +76,6 @@ export const STRINGS = {
   },
   es: {
     title: 'Connect 4 Hoops',
-    tagline: 'Encesta y suelta una ficha. Cuatro en raya gana.',
     cpu1: 'Fácil', cpu2: 'Normal', cpu3: 'Difícil',
     play: 'Jugar',
     howto: 'Cómo se juega',
@@ -93,9 +89,7 @@ export const STRINGS = {
     difficulty: 'Dificultad',
     multiplayer: 'Multijugador',
     mpHome: 'Multijugador',
-    mpLiveHint: 'Los dos juegan ahora',
-    mpPassPlay: 'Pasar y jugar', mpPassPlayHint: 'Dos personas en este teléfono',
-    mpChallengeHint: 'Jugarán la próxima vez que abran el hub',
+    mpPassPlay: 'Pasar y jugar',
     mpActive: 'Partidas activas',
     mpNoActive: 'Aún no hay partidas. Reta a alguien arriba.',
     cerHead: 'RETO', cerHeadTurn: 'TE TOCA',
