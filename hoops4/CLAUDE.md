@@ -59,36 +59,64 @@ which you deliberately did not.
 
 ## The cabinet, and why every number is what it is
 
-`js/boarddef.js`. **Every value that differs from HOT SHOT was measured** — the sweep is
-`reference/hoops/sweep-hoops-columns.mjs`, the write-up is `reference/hoops/FINDINGS.md`, and the
-probe that holds it all is `hoops4/js/test.js`.
+`js/boarddef.js`. **Every value that differs from HOT SHOT was measured.** Three tools do the
+measuring and all three answer to a change in here:
 
-### The cabinet is ONE STEP, and the screen is BELOW the hoops
+| tool | what it answers |
+|---|---|
+| `reference/hoops/sweep-speed.mjs` | the launch speed band, against THIS engine (`--scan`, then `--band=min,max`) |
+| `hoops4/js/test.js` | Matt's four requirements, as numbers. Headless, ~2 min |
+| `reference/hoops/check-display.mjs` | the machine as the PLAYER sees it, in a real browser: is the whole display on screen, is anything occluding it, is column N under hoop N, and does a real swipe reach all seven |
 
-**The first build got this badly wrong and it shipped.** It reused HOT SHOT's three-tread
-staircase verbatim (the geometry already measured) and hung the Connect 4 screen on the back wall
-above it. Matt: *"WHY did you put the connect 4 board way up on top of stairs? that is a bizarre
-choice. I can't even reach the top of the board by throwing the ball."* Measured, he was describing
-it exactly — the hoops sat at 0.53 m and the screen at **1.13 m, two full steps above them**, on a
+`reference/hoops/sweep-hoops-columns.mjs` is the original FEASIBILITY sweep (write-up:
+`reference/hoops/FINDINGS.md`) and is kept for the record only — it predates this folder and
+throws at a synthetic board through HOT SHOT's engine, so it cannot answer anything about the
+cabinet as built.
+
+### The cabinet is ONE STEP, the display is VERTICAL, and it is BELOW the hoops
+
+It has been wrong twice, in opposite directions, and both are worth keeping because the second
+one was a correct piece of arithmetic that still produced an unplayable machine.
+
+**Build 1 — the grid two steps up a staircase.** It reused HOT SHOT's three-tread staircase
+verbatim (the geometry already measured) and hung the Connect 4 screen on the back wall above it.
+Matt: *"WHY did you put the connect 4 board way up on top of stairs? that is a bizarre choice. I
+can't even reach the top of the board by throwing the ball."* Measured, he was describing it
+exactly — the hoops sat at 0.53 m and the screen at **1.13 m, two full steps above them**, on a
 machine whose own mockup and whose real Bay Tek cabinet both put the hoops UP and the grid BELOW.
 
-What it is now: **a screen riser, a hoop shelf, a back wall.** The player throws up and over the
-display into the hoops above it.
+**Build 2 — the grid raked back at 38 degrees.** Six rows at the column pitch is 7.80X; a panel
+that size standing vertical puts the hoops at 1.335 m, and the sweep says scoring there is
+0.0–1.3% at *every* launch speed up to 8.8 m/s (the ball has to rise 1.14 m in the 0.26 m between
+the ramp crest and the board — a 75-degree launch off a 70-degree ramp). Raking the panel spends
+that size along the cabinet instead of up it and brings the hoops back to 0.90 m. All of that is
+true and none of it helped, because **a raked panel is seen edge on.** Measured through the real
+play camera (`reference/hoops/check-display.mjs`): the display projected to **309 x 159 px** on a
+393 x 852 phone, every round cell an ellipse 1.7 times wider than tall, the whole bottom row
+hidden behind the cabinet's own furniture, and perspective fanning the hoop row 15 px off its own
+columns. **A Connect 4 board you cannot read is not a Connect 4 board.**
+
+**Build 3, what it is now — the size gives, not the angle.** The panel stands VERTICAL and is as
+tall as the gap between the board's lip and the hoop shelf allows: 4.80X, which rises exactly what
+the 7.80X rake rose, so the shelf, the hoop row and every height the sweep measured stay where
+they were. Six rows in 4.80X is a row pitch of 0.80X against a column pitch of 1.30X, so the board
+is WIDE — round cells with more air between columns than between rows, which is what a widescreen
+panel showing a 7 x 6 grid looks like and is the reference cabinet's own shape.
 
 | | |
 |---|---|
-| screen riser | 4.2X, vertical. The Connect 4 display is on this face |
+| display | 4.80X, **vertical**, 9.10X wide. Six rows, seven columns, one under each hoop |
 | hoop shelf | 4.0X, tilt 0.10, hoops **0.75X from its BACK edge** |
 | back wall | 1.8X + `backboardH` 0.42 |
-| hoops | 0.858 m · screen 0.420–0.805 m |
+| heights | display 0.52–1.22 m · hoops 1.27 m |
 
 **Three things about that shape are load-bearing, and each was arrived at by getting it wrong
 first:**
 
-- **There is no apron in front of the screen riser.** A 1.0X near-flat tread at the board's
-  bottom edge is a *parking spot* — a throw that fails to clear the riser lands on it and waits
-  out the watchdog. **49% of throws parked.** The riser now rises straight off the bottom edge and
-  a short throw hits it, drops to the trough and is a clean fast miss.
+- **There is no apron in front of the display.** A 1.0X near-flat tread at the board's bottom edge
+  is a *parking spot* — a throw that fails to clear the face lands on it and waits out the
+  watchdog. **49% of throws parked.** The face now rises straight off the bottom edge and a short
+  throw hits it, drops to the trough and is a clean fast miss.
 - **The hoops sit at the BACK of the shelf, not the front.** This is HOT SHOT's layout and Matt's
   explicit call on that machine. With them 1.2X from the *front*, 2.0X of bare shelf sat behind
   the row and **119 of 325 throws flew over the hoops and parked on it**. Shortening the shelf
@@ -97,23 +125,76 @@ first:**
   must be DEEP (the ball lands in front of the row, and the landing point is what picks the
   column) *and* the row must be at the BACK (nowhere to park). Both at once is the only thing
   that satisfies both.
-- **A TALLER machine plays better, which is the opposite of what an earlier pass concluded.** That
-  pass measured a 0.697 m shelf as unreachable (6–10% scoring, up to 73% parked) and blamed the
-  height. It was wrong — the fault was the shelf layout of the time. Re-swept against the
-  corrected layout, height is a straight win, and it also lifts the display clear of the ramp
-  crest:
+- **The board stands ABOVE the ramp crest, and the gap in front of it is 0.70 m.** Both numbers
+  are the same defect: the camera could not see the bottom of the display. The crest is 0.464 m up
+  and the lip used to be 0.20 m, a quarter of a metre in front of it — so the ramp stood 0.26 m
+  PROUD of the foot of the display and hid the bottom row, which on a board that FILLS FROM THE
+  BOTTOM is the row that matters. **No camera can solve it**: the sightline from the serve spot's
+  side of the crest only clears it from 3.2 m up, which is a bird's-eye view of a machine whose
+  whole point is that it faces you. Raising the BOARD is skeeball's own fix for its own version of
+  this (`boardLipY` 0.07 → 0.20) and it is how a real cabinet is built. Raising it costs distance,
+  and the trough is what buys that back: at 0.225 m of run a ball off a 70-degree ramp can climb
+  0.62 m at the very best and a board 0.32 m higher needs 0.73 m — impossible at any speed. At
+  0.70 m of run the same shot clears the panel's top edge by 0.29 m and comes down on the shelf.
 
-  | riser | shelf | screen clear of crest | scored | parked | separation |
-  |---|---|---|---|---|---|
-  | 2.3X | 0.535 m | 0.147 m | 36.3% | 7.4% | 0.92 |
-  | 3.0X | 0.636 m | 0.248 m | 35.2% | 9.7% | 1.87 |
-  | **4.2X** | **0.858 m** | **0.423 m** | **33.3%** | **6.7%** | **2.11** |
+### The camera, and the ceiling it cannot beat
 
-**THE RAMP CREST IS WHY THE DISPLAY STARTS AT 0.42 m.** The camera stands behind the ball, so the
-crest (top y 0.388) cuts a sight line straight across the bottom of the board — the occlusion
-`sight.mjs` exists to catch. A panel starting at the board's bottom edge had **43% of itself
-hidden**. `SCREEN_V` starts above that line, which is what lets the display be large *and* wholly
-on screen (0.92 m wide, 61% of the cabinet).
+`reference/hoops/check-display.mjs` is the probe for all of this: it raycasts all 42 cells from
+the real play camera and fails if one is clipped or occluded, checks a column is derived from its
+hoop's own `u`, and checks every hoop still projects nearest to its OWN column.
+
+**Where the camera stands is arithmetic, and the binding constraint is the BALL, not the machine.**
+It has to keep the resting ball in shot (skeeball's rule, measured: a camera in front of the ball
+leaves it off screen for the first 250 ms of every throw), and the ball sits low and very near.
+Close in that is ruinously expensive — 0.62 m behind the ball and 1.35 m above it needs an 86
+degree field, and the cabinet shrinks to a third of the frame. Standing BACK costs the ball almost
+nothing while the machine loses only what distance takes:
+
+| camera | display on a 393 x 852 phone |
+|---|---|
+| 1.15 m back, 1.02 m up | 171 x 90 px (44% of the frame's width) |
+| **3.00 m back, 1.00 m up** | **326 x 172 px (83% of the width)** |
+
+**Past 3.00 m the frame is capped by the cabinet's WIDTH.** 1.52 m of board on a 0.49-aspect phone
+is a 3.09 m tall frame however far back you stand, so a 0.70 m display can never be more than
+**22.6%** of a portrait screen. That is geometry, not tuning — which is why the probe measures the
+display's share of the frame's WIDTH and not of its height. A "quarter of the frame tall" bar is
+unsatisfiable by any camera, and asserting it would be exactly the failure
+`test-runaway-capped.mjs`'s header records.
+
+### A REAL THUMB, not a sweep, throws at all seven columns
+
+The open question this game has carried since it was designed was whether a human gesture has the
+precision seven columns need - every sweep drives `aim` as a number, and a real swipe goes through
+`atan2`, `aimDiv` and `aimCurve` first. `check-display.mjs` now answers it in a real browser:
+seven fresh matches (two-player, so the CPU's turns cannot be mistaken for the player's), a
+scripted touch gesture per column built by INVERTING ui.js's own mapping, and the match's own
+move list read back.
+
+| | col 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| aim asked for | -0.413 | -0.253 | -0.133 | 0.000 | 0.131 | 0.256 | 0.420 |
+| landed (of 4) | 3 | 2 | 3 | 3 | 3 | 3 | 2 |
+| in the column aimed at | 2 | 1 | 2 | 3 | 2 | 2 | 1 |
+
+**19 of 28 swipes scored, 13 of those in the column they asked for, and all 7 columns were hit.**
+It is still a scripted thumb on a SwiftShader canvas and not a person - what it rules out is the
+bad case, a column a real gesture simply cannot reach.
+
+### The speed band answers to the cabinet's DEPTH, and has been re-measured twice
+
+`reference/hoops/sweep-speed.mjs --scan` walks every launch speed and reports what reaches a hoop;
+`--band=min,max` scores a candidate pair over the real power x aim grid. On this cabinet nothing
+scores below 6.00 or above 6.65:
+
+| band | scored | live powers | columns | ordered |
+|---|---|---|---|---|
+| 6.00 / 6.60 | 31.5% | 11 of 11 | 7 of 7 | yes |
+| **6.05 / 6.50** | **39.2%** | **11 of 11** | **7 of 7** | **yes** |
+| 5.95 / 6.65 | 30.6% | 11 of 11 | 7 of 7 | yes |
+
+"Live powers" is the one that would be a spec failure on its own: at HOT SHOT's 2.60/6.60 nothing
+scored below power 0.65, two thirds of the dial dead.
 
 ### The width is set by the COLLARS, not by the holes
 
@@ -149,7 +230,7 @@ is what `VISUAL-PROCESS.md` is for.
 | "rims a little bouncier than other skeeball games" | `ringRest` 0.46 (HOT SHOT 0.30, THE CLASSIC 0.18) plus `captureDrop` 0.52 (HOT SHOT 0.35) | both asserted in `test.js` |
 | "a little bit of unpredictability" | a SEEDED per-throw scatter on the launch only | seeded replays exactly; unseeded is bit-identical to before |
 | "a ball can't get stuck balancing between two rims" | **the fins** — see below | 18 saddle drops, **0** stay |
-| "once it goes into a basket, it goes down that column 100% of the time" | **no rimout**, plus a throat that runs above the rim | **100.00%** (was 94.07%) |
+| "once it goes into a basket, it goes down that column 100% of the time" | **no rimout**, plus a throat 8 ball-radii tall | **100.00%** (94.07%, then 98.21%) |
 
 ### The fins
 
@@ -208,18 +289,19 @@ Connect Four's solver already knows which column to play, so that is free. What 
 easy or hard here is whether it can hit the hoop it picked — a Beginner knows the right column and
 bricks it. `js/cpu.js`'s `COLUMN_AIM` is the **measured** mean aim each column's baskets actually
 came from; the per-skill `spread` is in those same units, and the gaps between neighbouring
-columns are 0.08 to 0.20, so a Beginner's 0.30 genuinely lands it in the wrong column often.
+columns are 0.12 to 0.16, so a Beginner's 0.19 genuinely lands it in the wrong column often.
 
 **It shoots through the same physics the player does.** Nothing places a CPU disc directly.
 
 ## The swipe
 
-`aimCurve: 1` and `aimDiv: 1.10`, both departures from Skeeball's defaults and both deliberate.
+`aimCurve: 1` and `aimDiv: 1.00`, both departures from Skeeball's defaults and both deliberate.
 Skeeball squares the swipe angle (forgiving near straight, steep at the corners), which is right
 for a machine whose hard shots ARE the corners and wrong for this one — squaring compresses the
 OUTER columns into the narrowest slivers of thumb arc, so columns would get harder to pick the
 further out they are on top of already being smaller targets. BRICK CITY set `aimCurve: 1` for the
-same reason. `aimDiv` spends the whole thumb arc on the aim range that actually exists (±0.42).
+same reason. `aimDiv` spends the whole thumb arc on the aim range that actually exists (±0.41,
+which is about ±24 degrees of swipe end to end).
 
 **`aimDiv` IS THE FIRST NUMBER TO TUNE if Matt finds the columns fiddly.** It is pure input
 shaping and touches no physics.
@@ -231,12 +313,13 @@ shaping and touches no physics.
   CODE so a match follows a person to every device), not `js/net.js` (a live room layer with a
   heartbeat and a TTL). The sketch is `skeeball/mockup-hoops-four.html`. There is no push
   notification in this repo, so the opponent would find out via a badge on their next hub load.
-- **Whether a human swipe has the precision seven columns need.** The sweep drives `aim`
-  directly; a real gesture goes through the curve above. This is the thing a playtest answers.
-- **The outer columns are easier than the middle** (112 and 113 hits against 26-43 in the sweep),
-  because everything past the aim needed to reach column 1 still lands in column 1. Arguably the
-  right way round, since Connect 4's centre columns carry the most winning lines — but confirm it
-  reads as skill.
+- **Whether a human swipe has the precision seven columns need.** `check-display.mjs` (without
+  `--no-swipe`) now drives real touch gestures at each of the seven columns through the real pad,
+  the real swipe maths and the real engine, and reports what lands. It is still a scripted thumb
+  on a SwiftShader canvas, not a person — a playtest is what finally answers this.
+- **The outer columns are easier than the middle**, because everything past the aim needed to
+  reach column 1 still lands in column 1. Arguably the right way round, since Connect 4's centre
+  columns carry the most winning lines — but confirm it reads as skill.
 
 ## Testing
 

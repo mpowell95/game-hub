@@ -140,6 +140,10 @@ class Hoops4 {
       this.offViewport = onViewportResize(() => this.fit());
       this.startLoop();
       this.maybeCpu();
+      // Read-only hook for the headless drivers (skeeball's `window.__skTest` precedent). The
+      // game itself never reads it; `reference/hoops/check-display.mjs` projects the display and
+      // the hoops through the real play camera with it.
+      try { window.__h4Test = this; } catch {}
     } catch (err) {
       // A mount that throws lands somewhere recoverable rather than on a dead canvas - the exact
       // failure skeeball shipped on 2026-09-01, where the HUD painted over a 300x150 default.
@@ -374,6 +378,7 @@ class Hoops4 {
 
   destroy() {
     this.disposed = true;
+    try { if (window.__h4Test === this) delete window.__h4Test; } catch {}
     clearTimeout(this._toastT);
     this.teardownEngine();
     this.unbindAll();

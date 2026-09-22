@@ -433,12 +433,18 @@ export function buildMachine(G) {
     // 2.4 ball-radii two captured balls in a 231-throw sweep climbed to h 2.19-2.21X against a
     // throat topping out at 1.78X, cleared it sideways and resolved as a 0 - which is the
     // "100% of the time" promise broken by a number that was sized before the rims were made
-    // bouncy. 4.0 clears the measured peak with room to spare.
+    // bouncy. 4.0 cleared that peak - and then the cabinet changed and it was too short AGAIN:
+    // on the vertical build the flight is longer and steeper, and 2 of 112 captures at full power
+    // and near-full aim climbed to h 0.451-0.453 against a throat topping out at 0.345.
     //
-    // Making it taller is close to free: a throat is on its OWN collision bit, so nothing that
-    // has not been captured by THAT basket can touch it - not another ball, not a neighbouring
-    // throat (they overlap at this pitch and always have), not the fins.
-    const top = H.collarH + G.ballR * 4.0;
+    // 8.0 (h 0.563) is not "a bit more", deliberately. Making it taller is close to free - a
+    // throat is on its OWN collision bit, so nothing that has not been captured by THAT basket
+    // can touch it: not another ball, not a neighbouring throat (they overlap at this pitch and
+    // always have), not the fins - and a captured ball can always still fall out of the bottom,
+    // because capture took the tread away. So the height is chosen to survive the next change to
+    // the cabinet rather than to just clear today's measurement, which is what 2.4 and then 4.0
+    // each failed to do.
+    const top = H.collarH + G.ballR * 8.0;
     const bot = -G.ballR * 2.6;
     const cupFrame = frameAt(H.v);
     for (let i = 0; i < N; i++) {
