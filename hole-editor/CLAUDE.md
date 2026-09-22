@@ -582,3 +582,27 @@ by anyone signed in; `$code` writable by the device that claimed that code, or a
 origin here and dev never writes to the family database (`writesAllowed`), so the panel reads
 "Offline: saved on this device only" locally by design. The first real proof is Matt's own
 editor showing "Saved to cloud" after the rules are published.
+
+## PAUSED 2026-09-22: the "more objects" batch, half merged
+
+Matt: *"save everything at the next opportunity and stop all work for now."* State at the pause:
+
+- **Spec**: `docs/HANDOFF-GOLF-OBJECTS.md` (catalogue, swamp, decor; power lines out of scope).
+- **Engine half (Opus agent): DONE and merged into this branch** (`92862d3`): `golf/js/obstacles.js`,
+  swamp as a surface kind, decor sprites in the model/validator/export, the custom-document
+  migration to catalogue indices, 48 headless editor tests and golf test.js section 21 green.
+  `sw.js` has `golf/js/obstacles.js` in ASSETS with the manifest regenerated; **CACHE not yet
+  bumped** (main was v899 at the pause; bump past whatever main is at resume).
+- **Art half (Sonnet agent): INTERRUPTED mid-work.** Its worktree was saved as a WIP commit and
+  pushed as branch `worktree-agent-afbe2793454a75d38` (`d3b3347`, 12 files, unreviewed, untested).
+  It owns `golf/js/render.js`, `hole-editor/js/palette.js`, `canvas.js`, `panels.js`,
+  `editor.css`, `test-hole-editor-ui.mjs`, the still under `reference/golf/`. It was told the
+  engine side's wiring (tool `'decor'`, `toolState.waterKind`/`decorKind`, `getWaterKind()`/
+  `getDecorKind()`, `addWater(spec, placement, kind)`, `addDecor(spec, kind, x, y)`), and to keep a
+  TEMP copy of the catalogue in `palette.js` behind a try/catch import - **delete that temp copy at
+  merge** now that `obstacles.js` exists.
+- **To resume**: merge `worktree-agent-afbe2793454a75d38` into this branch (expect no conflicts:
+  disjoint files; `main.js` was edited only by the engine half), replace `palette.js`'s `NICE`
+  labels with `t('obst_' + name)`, review the still, run `test-hole-editor.mjs`,
+  `test-hole-editor-ui.mjs` (server up), `test-game-conventions.mjs`, `validate-sw-assets.mjs`,
+  bump CACHE, PR, merge, verify Pages, then tell Matt it is live. Nothing here is deployed yet.
