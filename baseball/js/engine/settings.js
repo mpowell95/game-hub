@@ -130,14 +130,17 @@ export const SKILL_IDS = [...HIT_SKILL_IDS, ...PITCH_SKILL_IDS];
 
 // A build preset: a ready-made point allocation for a player who does not want to hand-tune one.
 // [Draft] doc §6 - every row sums to 15 per side with nothing over 10 (asserted in test.js).
+//
+// R18 (docs/BASEBALL-3D-BUILD.md section 9): cut from seven to three. Matt, on the shipped seven:
+// "Simplify the presets. Those names don't help at all. They make it way more confusing." Balanced
+// is the old twoWayStar row unchanged; Hitter and Pitcher are a simple lean (7/7/1) on their own
+// side while the OTHER side stays balanced (5/5/5), so a player choosing "Hitter" still pitches
+// competently and vice versa. Order within a side is Accuracy/Power/Speed for hitting,
+// Speed/Accuracy/Spin for pitching (`HIT_SKILL_IDS`/`PITCH_SKILL_IDS` above).
 export const PRESETS = {
-  twoWayStar:  { hitAcc: 5, hitPow: 5, hitSpd: 5, pitchSpd: 5,  pitchAcc: 5, pitchSpin: 5 },
-  tableSetter: { hitAcc: 8, hitPow: 2, hitSpd: 5, pitchSpd: 5,  pitchAcc: 6, pitchSpin: 4 },
-  slugger:     { hitAcc: 3, hitPow: 10, hitSpd: 2, pitchSpd: 7, pitchAcc: 4, pitchSpin: 4 },
-  speedster:   { hitAcc: 6, hitPow: 1, hitSpd: 8, pitchSpd: 5,  pitchAcc: 5, pitchSpin: 5 },
-  flamethrower:{ hitAcc: 4, hitPow: 7, hitSpd: 4, pitchSpd: 10, pitchAcc: 3, pitchSpin: 2 },
-  junkballer:  { hitAcc: 7, hitPow: 3, hitSpd: 5, pitchSpd: 2,  pitchAcc: 5, pitchSpin: 8 },
-  painter:     { hitAcc: 6, hitPow: 4, hitSpd: 5, pitchSpd: 4,  pitchAcc: 9, pitchSpin: 2 },
+  balanced: { hitAcc: 5, hitPow: 5, hitSpd: 5, pitchSpd: 5, pitchAcc: 5, pitchSpin: 5 },
+  hitter:   { hitAcc: 7, hitPow: 7, hitSpd: 1, pitchSpd: 5, pitchAcc: 5, pitchSpin: 5 },
+  pitcher:  { hitAcc: 5, hitPow: 5, hitSpd: 5, pitchSpd: 7, pitchAcc: 7, pitchSpin: 1 },
 };
 
 // ---------------------------------------------------------------------------------------------

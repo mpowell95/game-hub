@@ -3042,10 +3042,11 @@ await (async function section34() {
       }
     }
     ok(allOk, `(2) every preset at every league sums to the budget exactly on both sides, never exceeds the cap (first bad: ${worst})`);
-    // Slugger at Majors: Power at the cap (spec's own worked example - "the rest carried over").
-    const majorsSlugger = scalePreset(SETTINGS.PRESETS.slugger, budgetFor('majors'), capFor('majors'));
-    ok(majorsSlugger.hitPow === capFor('majors'),
-      `(2) Slugger at Majors: hitPow is at the cap (${majorsSlugger.hitPow}, cap ${capFor('majors')})`);
+    // R18: Hitter at Majors - hitAcc and hitPow (its two 7s) both scale up together, staying equal
+    // to each other (the spec's own worked shape - a lean, not a single maxed skill).
+    const majorsHitter = scalePreset(SETTINGS.PRESETS.hitter, budgetFor('majors'), capFor('majors'));
+    ok(majorsHitter.hitAcc === majorsHitter.hitPow && majorsHitter.hitAcc > majorsHitter.hitSpd,
+      `(2) Hitter at Majors: hitAcc and hitPow scale up together (${majorsHitter.hitAcc}/${majorsHitter.hitPow}), both above hitSpd (${majorsHitter.hitSpd})`);
   }
 
   // (3) randomBuild never exceeds the budget or the cap, at every league, over many draws.
@@ -3101,7 +3102,7 @@ await (async function section34() {
   {
     const littleBudget = budgetFor('little'), littleCap = capFor('little');
     const majorsBudget = budgetFor('majors'), majorsCap = capFor('majors');
-    const littleBuild = scalePreset(SETTINGS.PRESETS.twoWayStar, littleBudget, littleCap);
+    const littleBuild = scalePreset(SETTINGS.PRESETS.balanced, littleBudget, littleCap);
     const upscaled = clampBuild(littleBuild, majorsBudget, majorsCap);
     const upHit = SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + upscaled[id], 0);
     ok(upHit === majorsBudget, `(5) clampBuild going UP (Little -> Majors) still sums to the new budget exactly (got ${upHit}, want ${majorsBudget})`);
