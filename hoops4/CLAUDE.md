@@ -468,6 +468,33 @@ this about a lit machine, and it had to be rediscovered from a screenshot. And t
 silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
 gone would have dropped the player back with no explanation at all. The card stays up and says so.
 
+#### Two buttons in one place, and why a measurement said otherwise
+
+Matt, on the build that shipped the Menu button: *"whatever back button you made is hidden behind
+the Hub quit button."*
+
+**The measurement that cleared it was taken in a browser with no notch, which is the wrong
+browser.** `.h4-play-wrap` carries `padding-top: env(safe-area-inset-top)`. In headless Chromium
+that inset is **0**, so the HUD row sat at y 9-42 and the hub's floating chip at 54+, and they read
+as separate rows - which is exactly what was reported at the time, and it was true and useless. On
+a real iPhone the inset is about 59px: the HUD is pushed down by it, the chip's own top is
+`max(inset, 54px)`, and the two land in the SAME BAND with the hub's chrome painting above the
+game.
+
+**So the separation is HORIZONTAL now, because that is the axis a notch cannot move.** The Menu
+button sits at the far right (`margin-left: auto`), the hub's chip is always at the far left, and
+the HUD's `padding-left: 76px` - which this file had and which was removed on the strength of that
+bad measurement, with its own comment saying what it was for - keeps the turn pill clear of the
+chip.
+
+The probe simulates the inset rather than hoping for one, and asks `elementFromPoint` whether the
+Menu button is actually the thing at its own centre. Against the old layout at a 59px inset it
+reports **`Menu tappable false`**, which is Matt's sentence as a number.
+
+**The lesson, since this is the second time on this game**: a headless browser has no safe area, no
+notch and no home indicator. Any claim about two fixed-position elements not colliding has to name
+the inset it assumed, or simulate one.
+
 #### The bubble that would not go away
 
 Matt, on the first build of it: *"the popup looks great as is! and the versus / matchup page and
@@ -506,10 +533,12 @@ multiplayer sheet, beside the other two ways two people play.
 
 - **The setup screen is one card and one door.** "Play the computer" holds difficulty and shots per
   turn and nothing else, with Play inside it; **Multiplayer** is a separate button below.
-- **The multiplayer sheet is four rows that say what they do** - Challenge, Host a game, Join a
-  game, Pass and play - each with one line under the name, replacing the section headings and
-  paragraphs it used to carry. Then **Active games**, which lists only matches still in play and
-  says whose turn each one is.
+- **The multiplayer sheet is four rows** - Challenge, Host a game, Join a game, Pass and play -
+  replacing the section headings and paragraphs it used to carry. Then **Active games**, which
+  lists only matches still in play and says whose turn each one is. They shipped with one line of
+  explanation under each name and Matt deleted all four the same day (*"Delete all the subtitles on
+  the Multiplayer screen as well"*), along with the setup screen's tagline: *"DO NOT replace it."*
+  Four buttons whose names say what they are do not need four sentences explaining them.
 - **And it has a picture of the machine now.** Matt, on the old screen: *"it looks nothing like the
   others."* What every other machine's setup screen leads with is a picture of the machine, and
   this had none. It reuses `GAME_ART['hoops4']` - the SAME inline SVG the launcher tile draws - so

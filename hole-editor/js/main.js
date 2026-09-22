@@ -24,8 +24,9 @@ import {
 import { resolveProfile } from './course.js';
 import { starterSpec } from './starter.js';
 import { designer, rememberDesigner, forgetDesigner, makeAutosaver, listDrafts, fetchDraft } from './drafts.js';
-import { EditorCanvas, fairwayEdgesAt } from './canvas.js';
-import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderObjectsList, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
+import { EditorCanvas, fairwayEdgesAt, setEditorTheme } from './canvas.js';
+import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
+import { renderPalette, activeItemFor } from './palette.js';
 import { validateHole } from '../../golf/js/holes.js';
 import { generateSource, generateJSON, exportFileName } from './export.js';
 
@@ -44,18 +45,20 @@ const MUTATORS = {
   setGreenOutline, clearGreenOutline, setFringe, addPin, movePin, deletePin,
 };
 
+// THE RIBBON HOLDS ACTIONS, THE PALETTE HOLDS OBJECTS (2026-09-22). A tool with `ribbon: false`
+// is picked by clicking a picture in the palette (bunker, water, tree, cross); its key still works.
+// 'belts' is gone as a tool: tree lines are a property of the hole and live in the Hole panel.
 const TOOLS = [
-  ['select', 'V', '↖', 'Select'],
-  ['route', 'R', '⤳', 'Route'],
-  ['width', 'W', '↔', 'Width'],
-  ['bunker', 'B', '●', 'Bunker'],
-  ['water', 'H', '≈', 'Water'],
-  ['tree', 'T', '♣', 'Tree'],
-  ['belts', 'L', '‖', 'Belts'],
-  ['green', 'G', '○', 'Green'],
-  ['slope', 'S', '↗', 'Slope'],
-  ['cross', 'C', '✖', 'Cross'],
-  ['ruler', 'M', '⇲', 'Ruler'],
+  ['select', 'V', '↖', 'Select', true],
+  ['route', 'R', '⤳', 'Route', true],
+  ['width', 'W', '↔', 'Width', true],
+  ['green', 'G', '○', 'Green', true],
+  ['slope', 'S', '↗', 'Slope', true],
+  ['ruler', 'M', '⇲', 'Ruler', true],
+  ['bunker', 'B', '●', 'Bunker', false],
+  ['water', 'H', '≈', 'Water', false],
+  ['tree', 'T', '♣', 'Tree', false],
+  ['cross', 'C', '✖', 'Across', false],
 ];
 
 const root = document.getElementById('he-root');
@@ -64,17 +67,18 @@ root.innerHTML = `
   <div class="he-ribbon" id="he-ribbon"></div>
   <div class="he-body">
     <div class="he-left">
-      <div class="he-panel" data-panel="legend">
-        <div class="he-panel__head">Legend</div>
-        <div class="he-panel__body" id="he-legend"></div>
-      </div>
-      <div class="he-panel" data-panel="objects">
-        <div class="he-panel__head">Objects</div>
-        <div class="he-panel__body" id="he-objects"></div>
+      <div class="he-panel he-panel--fill" data-panel="palette">
+        <div class="he-panel__head">Add to the hole</div>
+        <div class="he-panel__body he-panel__body--flush" id="he-palette"></div>
       </div>
     </div>
     <div class="he-canvas-wrap">
       <canvas id="he-canvas"></canvas>
+      <div class="he-canvas-top">
+        <div class="he-layers" id="he-layers"></div>
+        <button type="button" class="he-chip" id="he-legend-btn" title="Colour key">Key</button>
+        <div class="he-legend" id="he-legend" hidden></div>
+      </div>
       <div class="he-canvas-controls">
         <input type="range" id="he-zoom" min="0" max="100" value="50" />
         <button class="he-tool" id="he-fit" style="flex:none;width:auto;padding:2px 10px;">Fit</button>
@@ -82,21 +86,17 @@ root.innerHTML = `
       <div class="he-hover-readout" id="he-hover">Width at cursor: -</div>
     </div>
     <div class="he-right">
-      <div class="he-panel" data-panel="course">
-        <div class="he-panel__head">Course</div>
-        <div class="he-panel__body" id="he-course"></div>
-      </div>
       <div class="he-panel" data-panel="context">
-        <div class="he-panel__head">Tool</div>
-        <div class="he-panel__body" id="he-context"><span class="he-empty">Tools land in step 4.</span></div>
+        <div class="he-panel__head">Selection</div>
+        <div class="he-panel__body" id="he-context"></div>
       </div>
       <div class="he-panel" data-panel="hole">
         <div class="he-panel__head">Hole</div>
         <div class="he-panel__body" id="he-hole"></div>
       </div>
-      <div class="he-panel" data-panel="layers">
-        <div class="he-panel__head">Layers</div>
-        <div class="he-panel__body" id="he-layers"></div>
+      <div class="he-panel collapsed" data-panel="course">
+        <div class="he-panel__head">Course &amp; saving</div>
+        <div class="he-panel__body" id="he-course"></div>
       </div>
     </div>
   </div>
@@ -116,7 +116,8 @@ function saveUiState(s) { try { localStorage.setItem(UI_KEY, JSON.stringify(s));
 const uiState = loadUiState();
 for (const panel of root.querySelectorAll('.he-panel')) {
   const key = panel.dataset.panel;
-  if (uiState[key]) panel.classList.add('collapsed');
+  if (uiState[key] === true) panel.classList.add('collapsed');
+  else if (uiState[key] === false) panel.classList.remove('collapsed');
   panel.querySelector('.he-panel__head').addEventListener('click', () => {
     panel.classList.toggle('collapsed');
     uiState[key] = panel.classList.contains('collapsed');
@@ -130,6 +131,7 @@ const profile = resolveProfile();
 document.title = profile.title;
 const stored = loadDocument(localStorage.getItem(profile.storageKey));
 setCourse(profile, stored && stored.course && stored.course.theme);
+setEditorTheme(profile.custom ? ((stored && stored.course && stored.course.theme) || profile.theme) : profile.theme);
 const originals = originalSpecs();
 let doc = (stored && stored.courseId === profile.id) ? stored : null;
 if (!doc) doc = createDocument();
@@ -225,7 +227,7 @@ editorCanvas.onHoverChange = (w) => {
 // --- ribbon --------------------------------------------------------------------------------
 const ribbon = document.getElementById('he-ribbon');
 ribbon.innerHTML = [
-  ...TOOLS.map(([id, key, icon, label]) => `<button class="he-tool" data-tool="${id}" title="${label} (${key})"><span class="he-tool-icon">${icon}</span><span class="he-tool-label">${label}</span></button>`),
+  ...TOOLS.filter((t) => t[4]).map(([id, key, icon, label]) => `<button class="he-tool" data-tool="${id}" title="${label} (${key})"><span class="he-tool-icon">${icon}</span><span class="he-tool-label">${label}</span></button>`),
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-undo" title="Undo (Ctrl+Z)"><span class="he-tool-icon">↶</span><span class="he-tool-label">Undo</span></button>',
   '<button class="he-tool" id="he-redo" title="Redo (Ctrl+Y)"><span class="he-tool-icon">↷</span><span class="he-tool-label">Redo</span></button>',
@@ -247,6 +249,33 @@ function setTool(id) {
   for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.setAttribute('aria-pressed', String(btn.dataset.tool === id));
   editorCanvas.setTool(id);
   refreshContext();
+  refreshPalette();
+}
+
+// --- the palette (palette.js): pictures of everything that can be added --------------------------
+function refreshPalette() {
+  const el = document.getElementById('he-palette');
+  if (!el) return;
+  const spec = doc.holes[currentId].spec;
+  renderPalette(el, {
+    built: getBuilt(currentId),
+    theme: profile.custom ? ((doc.course && doc.course.theme) || profile.theme) : profile.theme,
+    active: activeItemFor(currentTool, toolState, editorCanvas.drawing),
+    guardsOn: spec.guard || [],
+    onPick: (item) => {
+      if (item.kind === 'guard') {
+        editOps.instant((s) => editOps.mutators.toggleGuard(s, item.token, !(s.guard || []).includes(item.token)));
+        return;
+      }
+      if (item.kind === 'draw') {
+        editOps.startDraw(item.group, item.drawKind || null);
+        refreshPalette();
+        return;
+      }
+      toolState = { ...toolState, ...item.state };
+      setTool(item.tool);
+    },
+  });
 }
 for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.addEventListener('click', () => setTool(btn.dataset.tool));
 
@@ -274,7 +303,7 @@ function refreshPanels() {
   const built = getBuilt(currentId);
   renderCoursePanel();
   renderHolePanel(document.getElementById('he-hole'), doc, currentId, built, editOps, lastWidthAtCursor, validateResults, onValidateRowClick);
-  renderObjectsList(document.getElementById('he-objects'), doc, currentId, built);
+  refreshPalette();
 }
 
 function refreshStrip() {
@@ -425,7 +454,9 @@ editorCanvas.onDrawChange = () => refreshContext();
 
 const contextHeadEl = document.querySelector('[data-panel="context"] .he-panel__head');
 function refreshContext() {
-  contextHeadEl.textContent = TOOLS.find(([id]) => id === currentTool)?.[3] || 'Tool';
+  const sel = editorCanvas.selection;
+  const toolName = TOOLS.find(([id]) => id === currentTool)?.[3] || 'Tool';
+  contextHeadEl.textContent = editorCanvas.drawing ? 'Drawing' : (sel && currentTool === 'select') ? 'Selected' : toolName;
   renderContextPanel(document.getElementById('he-context'), {
     tool: currentTool,
     spec: doc.holes[currentId].spec,
@@ -495,6 +526,7 @@ document.getElementById('he-discard-all').addEventListener('click', () => {
 function replaceDocument(next) {
   doc = next;
   setCourse(profile, doc.course && doc.course.theme);
+  setEditorTheme(profile.custom ? ((doc.course && doc.course.theme) || profile.theme) : profile.theme);
   invalidateBuilds(doc);
   editorState.doc = doc;
   editorState.undo = [];
@@ -564,6 +596,7 @@ function renderCoursePanel() {
         if ((doc.course && doc.course.theme) === theme) return;
         doc.course = setCourseMeta(doc, { theme }).course;
         setCourse(profile, theme);
+        setEditorTheme(theme);
         invalidateBuilds(doc);
         editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
         afterChange();
@@ -677,6 +710,10 @@ document.getElementById('he-reset').addEventListener('click', () => {
 
 renderLegend(document.getElementById('he-legend'));
 renderLayers(document.getElementById('he-layers'), layers, () => editorCanvas.draw());
+{
+  const btn = document.getElementById('he-legend-btn'); const box = document.getElementById('he-legend');
+  btn.addEventListener('click', () => { box.hidden = !box.hidden; btn.setAttribute('aria-pressed', String(!box.hidden)); });
+}
 
 // --- keyboard (section 4.1) ----------------------------------------------------------------
 window.addEventListener('keydown', (e) => {
@@ -696,7 +733,7 @@ window.addEventListener('keydown', (e) => {
 
 // A debug seam, not a feature: lets a Playwright check (or Matt, in devtools) read live state
 // without a second copy of it. Nothing reads this at runtime.
-window.__he = { get doc() { return doc; }, get currentId() { return currentId; }, editorCanvas, getBuilt };
+window.__he = { get doc() { return doc; }, get currentId() { return currentId; }, get validateResults() { return validateResults; }, editorCanvas, getBuilt };
 
 // --- boot ---------------------------------------------------------------------------------
 window.addEventListener('beforeunload', saveNow);

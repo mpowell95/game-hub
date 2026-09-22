@@ -26,7 +26,11 @@ export function bboxHandles(poly) {
   };
 }
 
-const THEME = 'desert';
+let THEME = 'desert';
+/** The look the editor paints in (2026-09-22): the Course Creator's parkland used to be drawn in
+ *  desert colours here. Clears the map cache so the next draw rebuilds in the new palette. */
+export function setEditorTheme(theme) { THEME = theme || 'desert'; _maps = new WeakMap(); }
+export function editorTheme() { return THEME; }
 // render.js's own thresholds (SLOPE_FLAT, SLOPE_MIN_PX) are not exported - copied here as plain
 // drawing constants, not geometry, so this stays a faithful copy of what the game shows rather
 // than a second opinion about it.
@@ -215,7 +219,7 @@ export function fitCamera(built, W, H) {
  *  existed (2026-09-16): every pointermove of a drag re-ran `buildMap` for all 18 holes (~17 ms
  *  each) inside the strip refresh, so a 20-step drag produced long tasks of 965, 476, 421 and
  *  422 ms - the "very slow/delayed" Matt reported the first time he used it. */
-const _maps = new WeakMap();
+let _maps = new WeakMap();
 export function mapFor(built) {
   let m = _maps.get(built);
   if (!m) { m = buildMap(built, THEME); _maps.set(built, m); }
@@ -712,6 +716,14 @@ export class EditorCanvas {
       }
       dragging = null;
       el.style.cursor = '';
+      if (objDrag && this.ops) { this.ops.liveEnd(); objDrag = null; }
+      try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+    });
+    // A CANCELLED POINTER ENDS THE GESTURE TOO (2026-09-22). Without this a browser that cancels a
+    // drag (a gesture handed to the OS, a lost window) left the canvas holding pointer capture, and
+    // every later click anywhere on the page went to the map instead of the button under it.
+    el.addEventListener('pointercancel', (e) => {
+      slopeDrag = null; dragging = null; el.style.cursor = '';
       if (objDrag && this.ops) { this.ops.liveEnd(); objDrag = null; }
       try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
     });
