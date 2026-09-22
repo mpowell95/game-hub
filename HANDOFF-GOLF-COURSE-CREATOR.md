@@ -54,7 +54,12 @@ course file is public on the site anyway. Matt was told and did not ask for a ga
 - **Tests**: `test-hole-editor.mjs` (headless, 48 on this branch), `test-hole-editor-ui.mjs`
   (browser, 66 on main), `test-hole-editor-play.mjs`.
 
-## 4. What is HALF-BUILT: the "more objects" batch
+## 4. DONE on resume (2026-09-22): the "more objects" batch
+
+Finished and shipped; what the merge changed is in `hole-editor/CLAUDE.md`, "The more objects
+batch". The original notes follow for the record.
+
+### (as written at the pause)
 
 Spec: `docs/HANDOFF-GOLF-OBJECTS.md`. Two agents built it in parallel; one finished, one was
 stopped mid-verification when Matt paused.

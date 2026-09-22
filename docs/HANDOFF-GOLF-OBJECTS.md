@@ -35,7 +35,7 @@ export const OBSTACLE_CATALOG = [
   { name: 'palm',      shape: 'palm',   trunk: 0.5, canopy: 4.0, height: 16, looks: ['desert'] },
   { name: 'saguaro',   shape: 'cactus', trunk: 0.9, canopy: 1.8, height: 15, looks: ['desert'] },
   { name: 'paloverde', shape: 'canopy', trunk: 0.7, canopy: 6.5, height: 8,  looks: ['desert'] },
-  { name: 'joshua',    shape: 'dead',   trunk: 0.6, canopy: 3.0, height: 9,  looks: ['desert'] },
+  { name: 'joshua',    shape: 'joshua', trunk: 0.6, canopy: 3.0, height: 9,  looks: ['desert'] },
   { name: 'boulder',   shape: 'rock',   trunk: 3.2, canopy: 3.2, height: 40, looks: ['desert', 'parkland'] },
   { name: 'smallrock', shape: 'rock',   trunk: 1.5, canopy: 1.5, height: 40, looks: ['desert', 'parkland'] },
   { name: 'rockpile',  shape: 'rocks',  trunk: 4.5, canopy: 4.5, height: 40, looks: ['desert', 'parkland'] },
@@ -110,6 +110,7 @@ painter dispatches on `shape`:
 | `willow` | today's crown plus 8-10 thin drooping strokes from the centre past the rim, lighter |
 | `cypress` | one tall narrow oval (r × 0.55 wide), dark, with a lighter spine |
 | `dead` | a small trunk disc plus 5-6 bare branch strokes radiating, brown-grey, NO green |
+| `joshua` | `dead`'s branches with a spiky olive tuft at every tip (added at merge: as `dead` it was the dead tree's exact picture) |
 | `bush` | three small overlapping circles, brighter green |
 | `palm` | a small trunk disc plus 7-8 frond strokes radiating to the rim, each a tapered wedge |
 | `cactus` | today's saguaro (unchanged) |

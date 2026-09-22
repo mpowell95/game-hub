@@ -583,26 +583,30 @@ origin here and dev never writes to the family database (`writesAllowed`), so th
 "Offline: saved on this device only" locally by design. The first real proof is Matt's own
 editor showing "Saved to cloud" after the rules are published.
 
-## PAUSED 2026-09-22: the "more objects" batch, half merged
+## The "more objects" batch (2026-09-22, finished and shipped on resume)
 
-Matt: *"save everything at the next opportunity and stop all work for now."* State at the pause:
+Spec: `docs/HANDOFF-GOLF-OBJECTS.md`. Engine half (Opus) was merged at the pause; the art half's
+WIP branch (`worktree-agent-afbe2793454a75d38`) was merged on resume and finished by the
+orchestrator. What changed at that merge, beyond the agent's own work:
 
-- **Spec**: `docs/HANDOFF-GOLF-OBJECTS.md` (catalogue, swamp, decor; power lines out of scope).
-- **Engine half (Opus agent): DONE and merged into this branch** (`92862d3`): `golf/js/obstacles.js`,
-  swamp as a surface kind, decor sprites in the model/validator/export, the custom-document
-  migration to catalogue indices, 48 headless editor tests and golf test.js section 21 green.
-  `sw.js` has `golf/js/obstacles.js` in ASSETS with the manifest regenerated; **CACHE not yet
-  bumped** (main was v899 at the pause; bump past whatever main is at resume).
-- **Art half (Sonnet agent): INTERRUPTED mid-work.** Its worktree was saved as a WIP commit and
-  pushed as branch `worktree-agent-afbe2793454a75d38` (`d3b3347`, 12 files, unreviewed, untested).
-  It owns `golf/js/render.js`, `hole-editor/js/palette.js`, `canvas.js`, `panels.js`,
-  `editor.css`, `test-hole-editor-ui.mjs`, the still under `reference/golf/`. It was told the
-  engine side's wiring (tool `'decor'`, `toolState.waterKind`/`decorKind`, `getWaterKind()`/
-  `getDecorKind()`, `addWater(spec, placement, kind)`, `addDecor(spec, kind, x, y)`), and to keep a
-  TEMP copy of the catalogue in `palette.js` behind a try/catch import - **delete that temp copy at
-  merge** now that `obstacles.js` exists.
-- **To resume**: merge `worktree-agent-afbe2793454a75d38` into this branch (expect no conflicts:
-  disjoint files; `main.js` was edited only by the engine half), replace `palette.js`'s `NICE`
-  labels with `t('obst_' + name)`, review the still, run `test-hole-editor.mjs`,
-  `test-hole-editor-ui.mjs` (server up), `test-game-conventions.mjs`, `validate-sw-assets.mjs`,
-  bump CACHE, PR, merge, verify Pages, then tell Matt it is live. Nothing here is deployed yet.
+- **`palette.js` imports `OBSTACLE_CATALOG` from `golf/js/obstacles.js`**; the TEMP copy and its
+  try/catch are gone. Labels are `t('obst_' + name)`, with a capitalised-name fallback only for an
+  older course's own type that has no catalogue entry (Oasis Sands' `tall palm`).
+- **A single's tile is drawn at ONE common size, not true scale** (`SINGLE_R = 7` yd, through the
+  tree's own `s`). At true scale a saguaro, a log or a small rock was a few pixels on a 34-yd tile
+  and did not read. Stand tiles keep true relative scale (lifted to a 3-yd floor for the smallest
+  things), so the oak/bush size difference still shows somewhere.
+- **Decor sprites are painted over the tile at tile resolution** (`drawDecorSprite`, 4x the tile's
+  own yards-to-pixels), not into the sampler map: at `MAP_PPY` (2.4 px/yd) a 3-yd bench is eight
+  pixels. The same limit applies in the game itself; a bench on a real hole is small, by design.
+- **The joshua tree got its own shape, `joshua`** (catalogue and spec updated before the catalogue
+  ever shipped, so the frozen-order rule was not broken): with `dead` it was the dead tree's exact
+  picture. It is `dead`'s branches plus a spiky olive tuft at each tip.
+- **The sampler's swamp is a real `kind: 'swamp'` water recipe** and the post-build relabel and
+  post-build decor push (both workarounds for the engine half not being there yet) are gone.
+- `test-hole-editor-ui.mjs` gained: every catalogue entry has a single AND a stand tile, the Swamp
+  tile places a swamp, the Bench tile places a bench sprite. The Desert-look check now asserts every
+  belt tree is a saguaro (with the catalogue, `treeTypes[0]` is `pine` on both looks).
+- Reference stills: `reference/golf/palette-2026-09-22-{parkland,desert}.png` (the palette's top,
+  in each look). The agent's own contact-sheet script cropped neighbouring objects into every tile
+  and was dropped.

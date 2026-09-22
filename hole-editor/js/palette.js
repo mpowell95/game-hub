@@ -14,10 +14,11 @@
 //   'guard' - toggles a green-side preset on the CURRENT hole (no map click needed).
 
 import { makeHole } from '../../golf/js/holegen.js';
-import { buildMap } from '../../golf/js/render.js';
+import { buildMap, drawDecorSprite, paletteFor } from '../../golf/js/render.js';
 import { THEME_DEFAULTS } from './starter.js';
 import { makeT } from '../../js/i18n.js';
 import { STRINGS } from '../../golf/js/strings.js';
+import { OBSTACLE_CATALOG } from '../../golf/js/obstacles.js';
 
 const t = makeT(STRINGS);
 
@@ -33,49 +34,19 @@ export const GUARD_TOKENS = [
 
 // --- the obstacle catalogue (2026-09-22, docs/HANDOFF-GOLF-OBJECTS.md section 1) ----------------
 //
-// `golf/js/obstacles.js` is Opus's file, built in a parallel worktree. TEMP_CATALOG below is the
-// SAME table, verbatim from the handoff spec, so THIS editor can group and order tiles by
-// shape/looks today - both for the whole catalogue on the custom course (where `built.treeTypes`
-// already IS the catalogue, section 1's last bullet) and, by NAME lookup, for the smaller
-// per-course tables (Red Mesa, Pine Valley, Oasis Sands) that predate it and stay untouched, whose
-// own type objects carry no `shape`/`looks` field of their own.
-//
-// TEMP UNTIL obstacles.js LANDS: delete this block and the try/catch below at merge - the dynamic
-// import already prefers the real file the instant it exists, so nothing else here changes.
-const TEMP_CATALOG = [
-  { name: 'pine', shape: 'fir', trunk: 0.6, canopy: 4.5, height: 18, looks: ['parkland'] },
-  { name: 'oak', shape: 'canopy', trunk: 1.0, canopy: 8.0, height: 13, looks: ['parkland'] },
-  { name: 'sentinel', shape: 'fir', trunk: 1.2, canopy: 5.0, height: 40, looks: ['parkland'] },
-  { name: 'maple', shape: 'canopy', trunk: 0.9, canopy: 7.0, height: 14, looks: ['parkland'] },
-  { name: 'birch', shape: 'canopy', trunk: 0.5, canopy: 3.5, height: 12, looks: ['parkland'] },
-  { name: 'willow', shape: 'willow', trunk: 1.0, canopy: 9.0, height: 12, looks: ['parkland'] },
-  { name: 'cypress', shape: 'cypress', trunk: 0.7, canopy: 2.5, height: 22, looks: ['parkland'] },
-  { name: 'deadtree', shape: 'dead', trunk: 0.7, canopy: 3.0, height: 10, looks: ['parkland', 'desert'] },
-  { name: 'bush', shape: 'bush', trunk: 0.4, canopy: 2.5, height: 2, looks: ['parkland', 'desert'] },
-  { name: 'palm', shape: 'palm', trunk: 0.5, canopy: 4.0, height: 16, looks: ['desert'] },
-  { name: 'saguaro', shape: 'cactus', trunk: 0.9, canopy: 1.8, height: 15, looks: ['desert'] },
-  { name: 'paloverde', shape: 'canopy', trunk: 0.7, canopy: 6.5, height: 8, looks: ['desert'] },
-  { name: 'joshua', shape: 'dead', trunk: 0.6, canopy: 3.0, height: 9, looks: ['desert'] },
-  { name: 'boulder', shape: 'rock', trunk: 3.2, canopy: 3.2, height: 40, looks: ['desert', 'parkland'] },
-  { name: 'smallrock', shape: 'rock', trunk: 1.5, canopy: 1.5, height: 40, looks: ['desert', 'parkland'] },
-  { name: 'rockpile', shape: 'rocks', trunk: 4.5, canopy: 4.5, height: 40, looks: ['desert', 'parkland'] },
-  { name: 'log', shape: 'log', trunk: 1.2, canopy: 1.2, height: 1.5, looks: ['parkland'] },
-];
-let _catalog = TEMP_CATALOG;
-try {
-  const mod = await import('../../golf/js/obstacles.js');
-  if (mod && Array.isArray(mod.OBSTACLE_CATALOG) && mod.OBSTACLE_CATALOG.length) _catalog = mod.OBSTACLE_CATALOG;
-} catch { /* not landed in this worktree yet - TEMP_CATALOG stands in, see the comment above */ }
-export const OBSTACLE_CATALOG = _catalog;
+// The shared table lives in `golf/js/obstacles.js`. Tiles are grouped and ordered by its
+// `shape`/`looks` - directly on the custom course (where `built.treeTypes` IS the catalogue) and,
+// by NAME lookup, for the older per-course tables (Red Mesa, Pine Valley, Oasis Sands), whose own
+// type objects carry no `shape`/`looks` field of their own.
 const catalogByName = new Map(OBSTACLE_CATALOG.map((c) => [c.name, c]));
 
-const TREE_SHAPES = new Set(['canopy', 'fir', 'willow', 'cypress', 'dead', 'bush', 'palm', 'cactus']);
+const TREE_SHAPES = new Set(['canopy', 'fir', 'willow', 'cypress', 'dead', 'joshua', 'bush', 'palm', 'cactus']);
 
 function shapeOf(ty) { return ty.shape || (catalogByName.get(ty.name) || {}).shape || (ty.name === 'saguaro' ? 'cactus' : 'canopy'); }
 function looksOf(ty) { return ty.looks || (catalogByName.get(ty.name) || {}).looks || []; }
 
-/** A tile's label: `t('obst_' + name)` (golf/js/strings.js, Opus's addition alongside the
- *  catalogue) falling back to a capitalised name when that key hasn't landed yet - `makeT`
+/** A tile's label: `t('obst_' + name)` (golf/js/strings.js). An older course's own type with no
+ *  catalogue entry (Oasis Sands' 'tall palm') falls back to its capitalised name - `makeT`
  *  returns the KEY ITSELF on a miss, which is how the fallback is detected. */
 function nice(name) {
   const key = 'obst_' + name;
@@ -160,9 +131,16 @@ function sampler(theme, types) {
   // Every row is kept >= 40 yd from the next (section 5: "keep every item >= 40 yds from the next
   // so crops never overlap") - the tree/stand rows step 44 yd apart already; every OTHER row below
   // is on its own 50 yd step for the same reason.
+  // A single's tile is a PICTURE of the thing, not a map at true scale: at true scale a saguaro
+  // (1.8 yd canopy), a log or a small rock was a few pixels across on a 34-yd tile and did not read
+  // at all. So every single is drawn at one common size (`s`, the same per-tree size field the
+  // editor's own size control writes) and the STAND tiles keep true relative scale, lightly
+  // lifted for the smallest things, so the size difference between an oak and a bush still shows.
+  const SINGLE_R = 7; const STAND_MIN_R = 3;
   d.treeTypes.forEach((ty, i) => {
-    trees.push({ x: -28, y, type: i }); at[`tree-${i}`] = [-28, y];
-    sentinels.push({ yd: y - 5, side: 1, off: 28, n: 4, spread: 5, type: i }); at[`stand-${i}`] = [28, y];
+    const c = Math.max(0.5, ty.canopy || 1);
+    trees.push({ x: -28, y, type: i, s: +(SINGLE_R / c).toFixed(2) }); at[`tree-${i}`] = [-28, y];
+    sentinels.push({ yd: y - 5, side: 1, off: 28, n: 4, spread: 5, type: i, ...(c < STAND_MIN_R ? { s: +(STAND_MIN_R / c).toFixed(2) } : {}) }); at[`stand-${i}`] = [28, y];
     y += 44;
   });
   const bunkers = [
@@ -171,14 +149,10 @@ function sampler(theme, types) {
   ];
   at['bunker-fairway'] = [-26, y]; at['bunker-greenside'] = [26, y]; at['bunker-draw'] = [26, y];
   y += 50;
-  // TWO water entries: the first is the plain pond ("Pond"/"Draw a lake"), the second is relabelled
-  // to 'swamp' on the BUILT hole below, a NAME NOT a source. This worktree's holegen.js does not
-  // yet understand a water recipe's `kind` (Opus's docs/HANDOFF-GOLF-OBJECTS.md section 2 item) -
-  // relabelling the built surface directly needs no coordinated merge, and render.js's swamp paint
-  // (already built) makes the tile honest either way.
+  // The pond ("Pond"/"Draw a lake") and a swamp beside it (`kind: 'swamp'`, holegen.js).
   const water = [
     { yd: y - 5, side: -1, off: 26, rx: 13, ry: 8.5, seed: 77 },
-    { yd: y - 5, side: 1, off: 26, rx: 11, ry: 8, seed: 78 },
+    { yd: y - 5, side: 1, off: 26, rx: 11, ry: 8, seed: 78, kind: 'swamp' },
   ];
   at['water-pond'] = [-26, y]; at['water-draw'] = [-26, y];
   at['water-swamp'] = [26, y]; at['water-swamp-draw'] = [26, y];
@@ -195,20 +169,9 @@ function sampler(theme, types) {
     fw: [{ at: 0, w: 15 }, { at: 1, w: 15 }], hard: 0.3, seed: 11, greenSeed: 12, defend: false, belts: false, slope: 'gentle',
     trees, sentinels, bunkers, water, cross,
   });
-  // Relabel the second water surface (built from `water[1]` above) as swamp - see the comment
-  // above `water` for why this happens here rather than in the recipe.
-  const waterSurfaces = hole.surfaces.filter((sf) => sf.kind === 'water');
-  if (waterSurfaces.length >= 2) waterSurfaces[1].kind = 'swamp';
-  // DECOR, post-build (2026-09-22): a sprite entry (`{at, kind, rot}`) has no `.poly`, and this
-  // worktree's `makeHole` (holegen.js, Opus's file) bounds-measures every `spec.decor` entry by
-  // its `.poly` alone - pushing one through the RECIPE would throw here. Appending straight onto
-  // the BUILT hole's own `decor` array, after `makeHole` has already returned, needs no change to
-  // that file and paints identically (render.js reads `hole.decor` either way).
-  hole.decor = [...(hole.decor || [])];
+  // The three sprites are NOT painted into the map: at MAP_PPY a 3-yd bench is eight pixels. The
+  // tile paints ground only and `paintTile` draws the sprite over it at tile resolution.
   const decorY = y;
-  hole.decor.push({ at: [-24, decorY - 10], kind: 'bench', rot: 0 });
-  hole.decor.push({ at: [0, decorY - 10], kind: 'sign', rot: 0 });
-  hole.decor.push({ at: [24, decorY - 10], kind: 'flagpole', rot: 0 });
   at['decor-bench'] = [-24, decorY - 10]; at['decor-sign'] = [0, decorY - 10]; at['decor-flagpole'] = [24, decorY - 10];
   at['decor-path'] = [0, decorY - 10];
   s = { map: buildMap(hole, theme), at };
@@ -251,6 +214,10 @@ export function paintTile(canvas, item, theme, types) {
   const s = sampler(theme, types);
   const [x, y] = s.at[item.id] || [0, 60];
   crop(s.map, x, y, CROP_W, CROP_H, canvas);
+  if (item.tool === 'decor' && item.state && item.state.decorKind) {
+    const ppy = (canvas.width / CROP_W) * 4;
+    drawDecorSprite(canvas.getContext('2d'), item.state.decorKind, canvas.width / 2 - ppy * 0.4, canvas.height / 2, ppy, 0, paletteFor(theme));
+  }
   if (item.kind === 'draw') {
     // A pencil over the picture: this one you outline yourself.
     const ctx = canvas.getContext('2d');

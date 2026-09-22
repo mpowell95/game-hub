@@ -190,7 +190,7 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   await p2.click('[data-seg="theme"] [data-val="desert"]'); await p2.waitForTimeout(300);
   s = await st2();
   ok('name and Desert are written and the hole rebuilds with saguaros', s.course.name === "King's Landing" && s.course.theme === 'desert'
-    && (await p2.evaluate(() => window.__he.getBuilt(window.__he.currentId).treeTypes[0].name)) === 'saguaro');
+    && (await p2.evaluate(async () => { const H = await import('/golf/js/holes.js'); const b = window.__he.getBuilt(window.__he.currentId); const ts = H.treesOf(b); return ts.length > 0 && ts.every((t) => b.treeTypes[t.type].name === 'saguaro'); })));
   await p2.click('#he-c-add'); await p2.waitForTimeout(300);
   ok('+ Add hole appends h-19 and selects it', (await st2()).n === 19 && (await st2()).id === 'h-19');
   await p2.keyboard.press('Control+z'); await p2.waitForTimeout(300);
@@ -205,6 +205,25 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   ok('Play opens the game with the custom course listed and selected', /editor=custom/.test(gp.url()) && chips.includes('custom*'), chips.join(','));
   ok('...as 17 holes named by the document, recording off', await gp.evaluate(() => globalThis.__gfCourseOverride.holes.length === 17 && globalThis.__gfCourseOverride.name === "King's Landing" && globalThis.__gfNoRecord === true));
   await gp.close();
+  // The objects batch (2026-09-22, docs/HANDOFF-GOLF-OBJECTS.md section 5): the palette carries the
+  // whole catalogue, and the swamp and bench tiles place what they show.
+  const cat = await p2.evaluate(async () => (await import('/golf/js/obstacles.js')).OBSTACLE_CATALOG.length);
+  const tiles = await p2.$$eval('.he-tile', (els) => els.map((e) => e.dataset.item));
+  ok('the palette shows every catalogue entry, single and stand', cat === 17
+    && Array.from({ length: cat }, (_, i) => tiles.includes(`tree-${i}`) && tiles.includes(`stand-${i}`)).every(Boolean), `${cat} entries, ${tiles.length} tiles`);
+  const at2 = (x, y) => p2.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cam = c.camera; const r = c.el.getBoundingClientRect(); return { x: r.x + (x - cam.cx) * cam.ppy + r.width / 2, y: r.y + r.height / 2 - (y - cam.cy) * cam.ppy }; }, [x, y]);
+  const sp2 = () => p2.evaluate(() => window.__he.doc.holes[window.__he.currentId].spec);
+  const nW = ((await sp2()).water || []).length;
+  await p2.click('.he-tile[data-item="water-swamp"]'); await p2.waitForTimeout(150);
+  let m2 = await at2(20, 180); await p2.mouse.click(m2.x, m2.y); await p2.waitForTimeout(300);
+  const w2 = (await sp2()).water || [];
+  ok('the Swamp tile places a swamp', w2.length === nW + 1 && w2[nW].kind === 'swamp'
+    && await p2.evaluate(() => window.__he.getBuilt(window.__he.currentId).surfaces.some((sf) => sf.kind === 'swamp')), JSON.stringify(w2[nW] || null));
+  const nD = ((await sp2()).decor || []).length;
+  await p2.click('.he-tile[data-item="decor-bench"]'); await p2.waitForTimeout(150);
+  m2 = await at2(-20, 120); await p2.mouse.click(m2.x, m2.y); await p2.waitForTimeout(300);
+  const d2 = (await sp2()).decor || [];
+  ok('the Bench tile places a bench sprite', d2.length === nD + 1 && d2[nD].kind === 'bench' && Array.isArray(d2[nD].at), JSON.stringify(d2[nD] || null));
   // the Red Mesa editor is a different document under a different key
   await p2.goto(URL, { waitUntil: 'networkidle' }); await p2.waitForTimeout(500);
   s = await st2();

@@ -45,7 +45,7 @@ export const OBSTACLE_CATALOG = [
   { name: 'palm', shape: 'palm', trunk: 0.5, canopy: 4.0, height: 16, looks: ['desert'] },
   { name: 'saguaro', shape: 'cactus', trunk: 0.9, canopy: 1.8, height: 15, looks: ['desert'] },
   { name: 'paloverde', shape: 'canopy', trunk: 0.7, canopy: 6.5, height: 8, looks: ['desert'] },
-  { name: 'joshua', shape: 'dead', trunk: 0.6, canopy: 3.0, height: 9, looks: ['desert'] },
+  { name: 'joshua', shape: 'joshua', trunk: 0.6, canopy: 3.0, height: 9, looks: ['desert'] },
   { name: 'boulder', shape: 'rock', trunk: 3.2, canopy: 3.2, height: 40, looks: ['desert', 'parkland'] },
   { name: 'smallrock', shape: 'rock', trunk: 1.5, canopy: 1.5, height: 40, looks: ['desert', 'parkland'] },
   { name: 'rockpile', shape: 'rocks', trunk: 4.5, canopy: 4.5, height: 40, looks: ['desert', 'parkland'] },

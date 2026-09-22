@@ -400,6 +400,19 @@ export function treeAccent(ctx, shape, px, py, r, fill, rim, rnd) {
         const a = (i / n) * Math.PI * 2 + rnd() * 0.4;
         const x1 = px + Math.cos(a) * r * 0.95; const y1 = py + Math.sin(a) * r * 0.95;
         ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x1, y1); ctx.stroke();
+        if (shape === 'joshua') {
+          // A spiky tuft at every branch tip: the one thing that tells a joshua tree from a dead
+          // one seen from above (with only the branches, the two tiles were the same picture).
+          ctx.save();
+          ctx.strokeStyle = '#6f7d3c';
+          ctx.lineWidth = Math.max(0.8, r * 0.1);
+          for (let k = 0; k < 8; k++) {
+            const b = (k / 8) * Math.PI * 2;
+            ctx.beginPath(); ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 + Math.cos(b) * r * 0.3, y1 + Math.sin(b) * r * 0.3); ctx.stroke();
+          }
+          ctx.restore();
+        }
       }
       break;
     }
