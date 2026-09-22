@@ -364,8 +364,13 @@ export const BOARD = {
       ringRest: 0.55,
       ring100Fric: 0.06,
       ring100Rest: 0.55,
+      // 0.32 -> 0.50 (2026-09-22, the square board). A FREE improvement, measured: same scoring
+      // rate (28.6%), parking down 3.0% -> 1.7%, and a little of the bounce back. It SATURATES
+      // there - 0.50, 0.62 and 0.75 return byte-identical numbers, so there is nothing above it
+      // to gain. Found by teaching probe-bounce.mjs to PRINT which surfaces a miss touches; the
+      // cup furniture ('keep') takes ~71 of 231 throws and was the deadest thing they land on.
       deadFric: 0.06,
-      deadRest: 0.32,
+      deadRest: 0.50,
       backFric: 0,
       backRest: 0.60,
     },
