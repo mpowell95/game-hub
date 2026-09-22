@@ -108,6 +108,26 @@ class Hoops4 {
     let armed = null;
     try { const A = await import('./alert.js'); armed = A.takeCeremony(); } catch { return; }
     if (!armed || this.disposed) return;
+    // THE TERMS COME FROM THE MATCH, NOT THE LAUNCHER. Matt: "when you accept a challenge and go
+    // to play, you should see what the shot settings and the series selection is and stuff like
+    // that." The launcher's index row does not carry the caption, so the document is read here -
+    // and the card is shown either way, because a card without its terms is still better than no
+    // card if the read fails.
+    try {
+      const MP = await import('./mp.js');
+      const game = await MP.readGame(armed.id);
+      if (this.disposed) return;
+      if (game) {
+        const bits = [game.oneShot ? t('shotsOne') : t('shotsUntil')];
+        if (game.series > 1) {
+          bits.push(t(game.series === 3 ? 'chBo3' : 'chBo5'));
+          if (game.seriesNo > 1) bits.push(t('gameOf', { n: game.seriesNo, m: game.series }));
+        }
+        armed.terms = bits.join(' \u00B7 ');
+        armed.caption = game.caption || '';
+      }
+    } catch { /* the card still shows; it just will not name the terms */ }
+    if (this.disposed) return;
     this.showCeremony(armed);
   }
 
@@ -160,6 +180,8 @@ class Hoops4 {
           </div>
         </div>
         <p class="h4-cer-line">${head}</p>
+        ${a.terms ? `<p class="h4-cer-terms">${a.terms}</p>` : ''}
+        ${a.caption ? `<p class="h4-cer-caption">&ldquo;${a.caption}&rdquo;</p>` : ''}
         <div class="h4-cer-btns">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-cer-go">
             ${a.kind === 'challenge' ? t('cerGo') : t('cerGoTurn')}</button>
@@ -438,7 +460,13 @@ class Hoops4 {
       <div class="gh-modal h4-sheet-in" role="dialog" aria-modal="true" aria-label="${t('howto')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <h2 class="gh-modal__title">${t('howto')}</h2>
-        <p class="h4-sheet-body">${t('howtoBody')}</p>
+        <p class="h4-how-goal">${t('howtoGoal')}</p>
+        ${this._howtoDiagram()}
+        <p class="h4-how-cap">${t('howtoCap')}</p>
+        <p class="h4-how-eg">${t('howtoEg')}</p>
+        <p class="h4-how-line">${t('howtoArc')}</p>
+        <p class="h4-how-line">${t('howtoAim')}</p>
+        <p class="h4-how-line">${t('howtoRim')}</p>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-sheet-close">${t('close')}</button>
         </div>
@@ -448,6 +476,53 @@ class Hoops4 {
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
     this.on(el.querySelector('.h4-sheet-close'), 'click', close);
     this.on(el, 'click', (e) => { if (e.target === el) close(); });
+  }
+
+  /**
+   * THE ONE MECHANIC THAT IS NOT OBVIOUS, DRAWN. Seven hoops over a 7x6 grid, the third hoop
+   * taking a ball, and a dashed arrow carrying it down column 3 to a disc at the bottom.
+   *
+   * Everybody already knows Connect 4 and everybody already knows basketball. The thing nobody
+   * can guess is that the two are WIRED TOGETHER - which hoop you sink decides which column your
+   * disc falls down. That is the whole diagram, and the rest of the screen is four short lines.
+   * docs/BUILDING-A-GAME.md, "How-to-play screens": show it rather than describe it.
+   *
+   * COLOURBLIND-SAFE BY CONSTRUCTION: the chosen hoop is marked by a THICKER OUTLINE, a ball
+   * sitting in it and the arrow leaving it - never by its colour (root CLAUDE.md).
+   */
+  _howtoDiagram() {
+    const L = BOARD.look;
+    const cols = 7, rows = 4;                 // four rows is enough to read; six crowds it
+    const x0 = 14, dx = 24, hoopY = 16, gridY = 40, dy = 17, r = 6.2;
+    const cx = (c) => x0 + c * dx;
+    const pick = 2;                           // the third hoop, 0-based
+    let hoops = '', grid = '';
+    for (let c = 0; c < cols; c++) {
+      const on = c === pick;
+      hoops += `<ellipse cx="${cx(c)}" cy="${hoopY}" rx="8.5" ry="3.2" fill="none"
+        stroke="${on ? L.ring : '#7c8797'}" stroke-width="${on ? 3 : 1.6}"/>`;
+      for (let rw = 0; rw < rows; rw++) {
+        const filled = on && rw === rows - 1;
+        grid += `<circle cx="${cx(c)}" cy="${gridY + rw * dy}" r="${r}"
+          fill="${filled ? L.red : '#0e1c30'}" stroke="${filled ? '#8f1f18' : '#2b3b52'}"
+          stroke-width="${filled ? 2 : 1.2}"/>`;
+      }
+    }
+    return `
+      <div class="h4-how-fig" aria-hidden="true">
+        <svg viewBox="0 0 ${x0 * 2 + dx * (cols - 1)} ${gridY + dy * (rows - 1) + 14}" width="100%">
+          <rect x="4" y="${gridY - 12}" width="${x0 * 2 + dx * (cols - 1) - 8}"
+                height="${dy * (rows - 1) + 24}" rx="5" fill="${L.face}" opacity="0.9"/>
+          ${grid}
+          ${hoops}
+          <circle cx="${cx(pick)}" cy="${hoopY - 8}" r="4.4" fill="${L.ring}" stroke="#8f1f18" stroke-width="1"/>
+          <path d="M ${cx(pick)} ${hoopY + 6} V ${gridY + dy * (rows - 1) - 9}"
+                stroke="${L.ring}" stroke-width="2" stroke-dasharray="3 3" fill="none"/>
+          <path d="M ${cx(pick) - 4} ${gridY + dy * (rows - 1) - 13} L ${cx(pick)} ${gridY + dy * (rows - 1) - 8}
+                   L ${cx(pick) + 4} ${gridY + dy * (rows - 1) - 13}"
+                stroke="${L.ring}" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+      </div>`;
   }
 
   // --- the match --------------------------------------------------------------------------------
@@ -463,6 +538,9 @@ class Hoops4 {
     if (typeof opts.replay === 'function') opts.replay(this.match);
     this.cpu = vsCpu ? new Cpu(skill) : null;
     this.recorded = false;
+    // A new match cannot inherit the last one's falling disc, or _whenLanded would hold its first
+    // move for a drop that will never land.
+    this._dropping = false; this._afterDrop = null; this._predicted = null;
     this.renderPlay();
     try {
       const [phys, mach, rend] = await Promise.all([
@@ -490,6 +568,59 @@ class Hoops4 {
     }
   }
 
+  /**
+   * WHERE THE SERIES STANDS, on the game-over card, and the button that starts the next one.
+   *
+   * Only for a turn-by-turn match of more than one game. The line is painted from the SAME pure
+   * `seriesAfter()` both devices run, so the two cards cannot disagree about the score, and the
+   * button is replaced by a verdict once the series is decided.
+   */
+  async _paintSeriesEnd(card) {
+    const mp = this.mp;
+    if (!mp || mp.kind !== 'async' || !mp.game || !(mp.game.series > 1)) return;
+    let MP;
+    try { MP = await import('./mp.js'); } catch { return; }
+    if (this.disposed || !card.isConnected) return;
+    // The local match knows the result; the stored document may not have caught up yet, so the
+    // score is computed from the document plus THIS game's winner.
+    const side = mp.side;
+    const m = this.match;
+    const winnerSide = m.winner === null ? null : (m.winner === this.myPlayer ? side : (side === 'a' ? 'b' : 'a'));
+    const st = MP.seriesAfter({ ...mp.game, over: { winner: winnerSide } });
+    const line = card.querySelector('.h4-series');
+    if (line) {
+      const mine = side === 'a' ? st.wins.a : st.wins.b;
+      const theirs = side === 'a' ? st.wins.b : st.wins.a;
+      const score = t('seriesScore', { a: mine, b: theirs });
+      line.hidden = false;
+      line.textContent = st.done
+        ? `${score} \u00B7 ${st.winner === null ? t('seriesDrawn')
+          : st.winner === side ? t('youTakeIt') : t('seriesWon', { who: this.themName() })}`
+        : `${t('gameOf', { n: st.no, m: st.len })} \u00B7 ${score}`;
+    }
+    if (st.done) return;
+    // A LIVE SERIES REPLACES "Play again", which in multiplayer only quits to the setup screen.
+    const again = card.querySelector('.h4-again');
+    if (!again) return;
+    again.textContent = t('nextGame');
+    again.replaceWith(again.cloneNode(true));            // drop the quit-to-setup handler
+    const next = card.querySelector('.h4-again');
+    this.on(next, 'click', async () => {
+      next.disabled = true;
+      const res = await MP.nextInSeries({ ...mp.game, over: { winner: winnerSide } });
+      if (this.disposed) return;
+      if (!res || !res.ok) {
+        // Say it on the card. There is no toast on this screen and a dead button is worse than
+        // a sentence (docs/BUILDING-A-GAME.md Part 0).
+        if (line) line.textContent = t('mpOffline');
+        next.disabled = false;
+        return;
+      }
+      card.remove();
+      this.startAsync(res.game);
+    });
+  }
+
   renderLoadError() {
     this.root.innerHTML = `<div class="h4-setup"><p class="h4-note">${t('loadError')}</p>
       <button type="button" class="gh-btn gh-btn-primary h4-play">${t('play')}</button></div>`;
@@ -502,7 +633,8 @@ class Hoops4 {
         <div class="h4-hud">
           <span class="h4-who" aria-live="polite"></span>
           <span class="h4-shots"></span>
-          <button type="button" class="h4-menu" aria-label="${t('menu')}">${t('menu')}</button>
+          <span class="h4-leg" hidden></span>
+          <button type="button" class="h4-menu" aria-label="${t('menu')}">☰</button>
         </div>
         <div class="h4-stage">
           <canvas class="h4-canvas"></canvas>
@@ -512,7 +644,65 @@ class Hoops4 {
       </div>`;
     this.paintHud();
     this.bindSwipe();
-    this.on(this.root.querySelector('.h4-menu'), 'click', () => this.leaveMatch());
+    this.on(this.root.querySelector('.h4-menu'), 'click', () => this._showPause());
+  }
+
+  /**
+   * THE PAUSE SHEET, WHICH IS SKEEBALL'S. Matt: "make the 'menu' button look just like skeeball.
+   * With the same options." So this is `skeeball/js/ui.js`'s `_showPause` ported: the same
+   * `.gh-overlay`/`.gh-modal` primitives, the same X in the corner, the same Resume / New game /
+   * leave stack, and the same 44x44 hamburger opening it.
+   *
+   * **The third option is this game's own destination, not skeeball's.** Skeeball's third button
+   * quits to its machine gallery; this game has no gallery, and the Menu button has always gone
+   * to its setup screen, which is where you change opponent and shot rule. In a turn-by-turn
+   * match it goes to the multiplayer screen instead, because that is where the rest of your
+   * matches are.
+   *
+   * **New game is hidden in any multiplayer match**, and that is a rule rather than tidiness:
+   * there is nobody on the other end of a unilateral restart. In a live room both engines would
+   * be replaying different boards from the next move on, and a turn-by-turn challenge is a shared
+   * document with a move log - a rematch there is a new challenge, which the game-over card
+   * already says.
+   *
+   * **PAUSED MEANS PAUSED.** The loop is stopped while the sheet is up, which is skeeball's own
+   * lesson (2026-08-26) and is if anything more load-bearing here: a ball still in the air when
+   * you tap the button would otherwise go on flying, drop through a hoop, take your turn and hand
+   * the CPU its shot while you sat reading the menu. The canvas keeps showing its last frame.
+   */
+  _showPause() {
+    // NOT ONCE THE MATCH IS OVER - the game-over card is already up or about to be, and it
+    // carries its own Play again / Quit.
+    if (!this.match || this.match.over) return;
+    const isAsync = !!(this.mp && this.mp.kind === 'async');
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal h4-pause" role="dialog" aria-modal="true" aria-label="${t('paused')}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <h2 class="h4-pause-title">${t('paused')}</h2>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
+          ${this.mp ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${t('newGame')}</button>`}
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="leave">${isAsync ? t('backMp') : t('backSetup')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    this.stopLoop();
+    const close = () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      if (!this.disposed) this.startLoop();
+    };
+    this.on(el.querySelector('[data-role="close"]'), 'click', close);
+    this.on(el.querySelector('[data-role="resume"]'), 'click', close);
+    const nw = el.querySelector('[data-role="new"]');
+    // A live ball is abandoned, not banked: nothing is recorded until a match ENDS, so a
+    // restart loses a board and no history (THE LAW rule 2).
+    if (nw) this.on(nw, 'click', () => { if (el.parentNode) el.parentNode.removeChild(el); this.start(); });
+    this.on(el.querySelector('[data-role="leave"]'), 'click', () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      this.leaveMatch();
+    });
   }
 
   /** OUT OF A MATCH, BUT NOT OUT OF THE GAME. Matt: "we had the Hub back button. That's more of
@@ -599,6 +789,17 @@ class Hoops4 {
     who.className = 'h4-who ' + (red ? 'is-red' : 'is-yellow') + (mine ? ' is-mine' : ' is-them')
       + (waiting ? ' is-waiting' : '');
     sh.textContent = m.shotsThisTurn ? `${t('shots')} ${m.shotsThisTurn}` : '';
+    // WHICH GAME OF A SERIES, on the HUD, because it changes what the match is worth. Matt: "when
+    // you accept a challenge and go to play, you should see what the shot settings and the series
+    // selection is". The shot rule is visible in the play itself (a miss either passes the turn
+    // or does not); the series is not visible anywhere else.
+    const leg = this.root.querySelector('.h4-leg');
+    const g = this.mp && this.mp.kind === 'async' ? this.mp.game : null;
+    if (leg) {
+      const on = !!(g && g.series > 1);
+      leg.hidden = !on;
+      leg.textContent = on ? t('gameOf', { n: g.seriesNo, m: g.series }) : '';
+    }
   }
 
   toast(msg) {
@@ -703,11 +904,18 @@ class Hoops4 {
   stopLoop() { if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; } }
 
   tick(dt) {
+    // THE DISC FALLING DOWN ITS COLUMN, advanced by the game's own loop. A no-op unless one is
+    // in the air - see render.js's startDrop.
+    if (this.rend) this.rend.stepDrop(dt);
     const st = this.throwState;
     if (st && !st.done) {
       this.engine.phys.step(BOARD, st, dt);
       for (const ev of this.engine.phys.takeEvents(st)) {
-        if (ev.type === 'capture') { this.captured = ev.hole; this.rend && this.rend.flashRim(ev.hole); }
+        if (ev.type === 'capture') {
+          this.captured = ev.hole;
+          this.rend && this.rend.flashRim(ev.hole);
+          this._dropOnCapture(ev.hole);
+        }
       }
     } else if (st && st.done) {
       this.throwState = null;
@@ -730,8 +938,8 @@ class Hoops4 {
     this._paintShot(res);
     if (this.mp) this._sendShot(res);
 
-    if (m.over) { this.finish(); return; }
-    this.maybeCpu();
+    if (m.over) { this._whenLanded(() => { if (!this.disposed) this.finish(); }); return; }
+    this._whenLanded(() => { if (!this.disposed) this.maybeCpu(); });
   }
 
   /** Everything a settled shot changes on screen. Shared by a local shot and a remote one, so the
@@ -742,10 +950,77 @@ class Hoops4 {
     else if (res.type === 'full') { this.toast(t('full')); }
     else { this.toast(t('inCol').replace('{n}', String(res.col + 1))); }
     if (this.rend) {
-      this.rend.setGrid(m.cells(), res.type === 'win' ? res.cells : null);
+      const win = res.type === 'win' ? res.cells : null;
+      // A DISC THAT LANDED FALLS DOWN ITS COLUMN. Matt: "Can you show the ball fall down the
+      // columns rather than go into the basket and just appear at the bottom of that column?"
+      // A miss or a full column changes no cell, so there is nothing to drop and it paints at
+      // once. `onDone` is what makes the game-over card wait: a winning disc's card would
+      // otherwise cover the drop that won.
+      // `_predicted` is the cell _dropOnCapture already started falling into, and it is matched
+      // on the PREDICTION rather than on whether a disc is still in the air: a short fall
+      // (0.22 s at the top row) can finish before the throw resolves (0.35 s median), and
+      // restarting on that would replay the whole drop a second time.
+      const pre = this._predicted; this._predicted = null;
+      const landed = Number.isInteger(res.row) && Number.isInteger(res.col);
+      if (pre && landed && pre.c === res.col && pre.r === res.row && pre.who === res.by) {
+        // The disc the player is already watching IS this move. Hand it the real grid rather
+        // than restarting it, or the fall would visibly jump back to the top. Once it has
+        // already landed this is just the authoritative repaint of the same picture.
+        this.rend.commitDrop(m.cells(), win);
+      } else if (pre) {
+        // The prediction did not survive the rules (a full column). Drop it and paint honestly.
+        this._dropping = false; this._afterDrop = null;
+        this.rend.cancelDrop(m.cells(), win);
+      } else if (landed) {
+        this._dropping = true;
+        this.rend.startDrop(m.cells(), win, res.col, res.row, res.by, () => {
+          this._dropping = false;
+          if (this.disposed) return;
+          if (this._afterDrop) { const fn = this._afterDrop; this._afterDrop = null; fn(); }
+        });
+      } else {
+        this.rend.setGrid(m.cells(), win);
+      }
       this.rend.setBallColor(m.turn === RED ? BOARD.look.red : BOARD.look.yellow);
     }
     this.paintHud();
+  }
+
+  /**
+   * THE DISC STARTS FALLING THE MOMENT THE BALL IS IN THE BASKET, not when the throw resolves.
+   * Matt: "There's a tiny lag between when the ball goes into the basket and when it's shown
+   * falling... It should look like it's the same ball that goes in the basket falling down the
+   * column." Measured over the 231-throw grid, resolving takes a further 0.35 s on average and
+   * 0.92 s at worst, because capture COMMITS the score and the ball then falls 0.26 m through the
+   * throat before `finishAt` fires. That whole window was dead time on screen.
+   *
+   * The cell is a PREDICTION and it is safe to make here for one reason only: this machine has no
+   * rimout, so a captured ball scores in that column 100% of the time (hoops4/CLAUDE.md, "There is
+   * NO rimout on this machine"). The prediction is never authoritative - `_paintShot` hands the
+   * real grid to `commitDrop`, or cancels the drop outright if the rules refused the move.
+   */
+  _dropOnCapture(hole) {
+    const m = this.match;
+    const H = hole && BOARD.geom.holes[hole];
+    if (!H || !m || m.over || !this.rend || this._predicted) return;
+    const col = H.value - 1;
+    if (!m.board.canPlay(col)) return;   // a full column is a miss, and no disc falls
+    const row = m.board.heights[col];
+    const who = m.turn;
+    const cells = m.cells();
+    cells[col][row] = who;               // the predicted grid, replaced by commitDrop
+    this._predicted = { c: col, r: row, who };
+    this._dropping = true;
+    this.rend.startDrop(cells, null, col, row, who, () => {
+      this._dropping = false;
+      if (this.disposed) return;
+      if (this._afterDrop) { const fn = this._afterDrop; this._afterDrop = null; fn(); }
+    });
+  }
+
+  /** Run `fn` once the falling disc has landed, or immediately if nothing is falling. */
+  _whenLanded(fn) {
+    if (this._dropping) this._afterDrop = fn; else fn();
   }
 
   finish() {
@@ -779,11 +1054,13 @@ class Hoops4 {
         <button type="button" class="h4-x" aria-label="${t('close')}">&times;</button>
         <h2>${head}</h2>
         <p class="h4-acc">${t('accuracy')} ${acc}% <span>(${r.myDiscs}/${r.myShots})</span></p>
+        <p class="h4-series" hidden></p>
         <button type="button" class="gh-btn gh-btn-primary h4-again">${t('again')}</button>
         <button type="button" class="gh-btn h4-quit">${t('quit')}</button>
       </div>`;
     this.root.appendChild(card);
     this.on(card.querySelector('.h4-x'), 'click', () => card.remove());
+    this._paintSeriesEnd(card);
     const again = card.querySelector('.h4-again');
     // "Play again" restarts a SOLO match. In multiplayer there is nobody on the other end of it -
     // a rematch is a new room or a new challenge - so the button quits to the setup screen.

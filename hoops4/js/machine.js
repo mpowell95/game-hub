@@ -179,11 +179,31 @@ export function buildMachine(G) {
     const crestZ = -(G.laneLen + G.humpLen);
     const dx = G.boardW / 2 - G.laneW / 2;
     const len = Math.hypot(dx, G.troughLen);
+    // ITS TOP MUST NOT RISE ABOVE THE BOARD'S LIP (2026-09-22). Matt: "Why is the bottom left and
+    // bottom right of the connect 4 board covered by the black board thing?" - it was the flare.
+    // It used to be centred on `(crestY + lipY) / 2` and half `railH / 2 + 0.02`, which put its
+    // top at 0.497 against a board whose bottom edge is at `boardLipY` 0.39: 107 mm of cabinet
+    // standing in front of the bottom of the screen. Because it runs DIAGONALLY out to the
+    // board's full width, the camera sees it cut across the bottom-left and bottom-right corners
+    // of the grid - the two corners of a board that FILLS FROM THE BOTTOM.
+    //
+    // It was always slightly wrong (35 mm proud at the old `boardLipY` 0.52) and the square
+    // rebuild, which dropped the lip to 0.39 to grow the board downward, tripled it.
+    //
+    // `check-display.mjs` passed throughout because it raycasts cell CENTRES, and the bottom
+    // row's centres clear the flare even when the cells themselves are clipped. It now checks
+    // the panel's own bottom corners as well.
+    //
+    // So the top is pinned to the lip and the slab keeps its height by growing DOWNWARD, toward
+    // the trough it spans. A cabinet's side taper ending exactly where the screen begins is also
+    // what a real one looks like.
+    const flareH = G.railH + 0.04;
+    const flareTop = lipY - 0.002;                 // a hair under, so z-fighting cannot show a seam
     for (const side of [-1, 1]) {
       solids.push({
         part: 'flare',
-        pos: [side * (G.laneW / 2 + G.boardW / 2) / 2, (crestY + lipY) / 2, (crestZ + lipZ) / 2],
-        half: [0.015, G.railH / 2 + 0.02, len / 2],
+        pos: [side * (G.laneW / 2 + G.boardW / 2) / 2, flareTop - flareH / 2, (crestZ + lipZ) / 2],
+        half: [0.015, flareH / 2, len / 2],
         rot: { axis: [0, 1, 0], angle: Math.atan2(side * dx, -G.troughLen) },
       });
     }

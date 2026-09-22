@@ -140,7 +140,37 @@ const geo = await page.evaluate(async () => {
     const cu = (r.colX[c] / PX - 0.5) * pw;
     uErr.push(Math.abs(cu - HOLES[holes[c]].u));
   }
-  return { W, H, corners, cells, hoops, cols, hidden, hiddenBy, uErr };
+  // A CELL'S CENTRE CLEARING THE FURNITURE IS NOT THE SAME AS THE CELL CLEARING IT (2026-09-22).
+  // Matt: "Why is the bottom left and bottom right of the connect 4 board covered by the black
+  // board thing?" It was the cabinet's flare, standing 107 mm above the board's bottom edge and
+  // cutting diagonally across the two bottom corners of the grid - and THIS PROBE REPORTED 10/10
+  // THROUGHOUT, because the bottom row's cell CENTRES clear it even when the cells themselves
+  // are clipped. A board that fills from the bottom cannot afford that blind spot.
+  //
+  // So the panel's own four corners are raycast too, and each bottom cell is sampled at its
+  // OUTER LOWER edge rather than only at its middle.
+  const panelHidden = [];
+  const sample = (wx, wy, wz, label) => {
+    const v = new THREE.Vector3(wx, wy, wz).project(cam);
+    ray.setFromCamera(new THREE.Vector2(v.x, v.y), cam);
+    const hit = ray.intersectObjects(solid, false)[0];
+    if (hit && hit.object !== r.screen) {
+      panelHidden.push(`${label} behind ${hit.object.name || hit.object.geometry.type || 'mesh'}`);
+    }
+  };
+  for (const [sx, sy, lbl] of [[-1, -1, 'panel bottom-left'], [1, -1, 'panel bottom-right'],
+                               [-1, 1, 'panel top-left'], [1, 1, 'panel top-right']]) {
+    const lp = local(sx * pw * 0.499, sy * pl * 0.499);
+    sample(lp.x, lp.y, lp.z, lbl);
+  }
+  // the outer lower edge of the bottom row's two end cells - the exact pixels Matt pointed at
+  for (const c of [0, 6]) {
+    const cx = (r.colX[c] / PX - 0.5) * pw + (c === 0 ? -1 : 1) * (r.gridPitch / PX) * pw * 0.30;
+    const cy = (0.5 - (r.gridTop + r.gridRowPitch * 5.80) / cvH) * pl;
+    const lp = local(cx, cy);
+    sample(lp.x, lp.y, lp.z, `bottom row, column ${c + 1}, outer lower edge`);
+  }
+  return { W, H, corners, cells, hoops, cols, hidden, hiddenBy, uErr, panelHidden };
 });
 
 console.log(`\nCONNECT 4 HOOPS - display probe   canvas ${geo.W}x${geo.H}\n`);
@@ -174,6 +204,12 @@ console.log(`       display on screen: ${panelW.toFixed(0)} x ${panelH.toFixed(0
 
 check('no cell is hidden behind the cabinet\'s own furniture', geo.hidden === 0,
   `${geo.hidden} of 42 occluded by ${JSON.stringify(geo.hiddenBy)}`);
+// [KNOWN-BUG PROBE] Born red against the flare at its old height (`machine.js`, "ITS TOP MUST NOT
+// RISE ABOVE THE BOARD'S LIP"): the panel's two bottom corners and the outer lower edge of the
+// bottom row's end cells were behind it, while every cell CENTRE was clear and this file said
+// 10/10.
+check('the panel\'s own corners and the bottom row\'s outer edges are not occluded either',
+  geo.panelHidden.length === 0, geo.panelHidden.join('; '));
 
 // ALIGNMENT IS TWO DIFFERENT QUESTIONS AND BOTH ARE ASKED, because only one of them can break.
 // The derivation is exact - a column's x on the panel is computed FROM that hoop's own `u` - so

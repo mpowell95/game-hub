@@ -193,25 +193,46 @@
      Matt: "whatever back button you made is hidden behind the Hub quit button."
      A vertical measurement cannot answer this. Horizontal separation can, so the Menu button
      sits at the far RIGHT and this reserve keeps the turn pill clear of the chip on the left. */
-  padding: 8px 16px 8px 76px;
+  /* 64px ON THE RIGHT is the mirror of the 76px above: the Menu button is absolutely positioned
+     now (top right, skeeball's box), so this row no longer CONTAINS it and the turn pill would
+     otherwise run underneath it. */
+  padding: 8px 64px 8px 76px;
   min-height: 38px;
 }
-/* BACK TO THIS GAME'S OWN SETUP SCREEN - not out to the launcher, which is what the hub's
-   floating "Hub" chip does. Two destinations, so two buttons, so two different words: this one
-   is labelled by where it goes. It sits in the HUD row (y ~8-46); the hub's chip floats at
-   y 54+, so they never overlap - the first attempt failed on the LABEL, not the position. */
+/* SKEEBALL'S BUTTON, IN SKEEBALL'S PLACE. Matt: "make the 'menu' button look just like
+   skeeball. With the same options." So this is `.sk-menu`'s box verbatim - absolute, top right,
+   44x44, a hamburger - and it opens the same pause sheet (ui.js's _showPause).
+
+   TOP RIGHT IS NOT A STYLE CHOICE, it is the fix for a real bug this game already had once. The
+   hub's floating "Hub" chip owns the top LEFT, and a Menu button that shares its band is hidden
+   behind it on a notched phone - which is what happened, and which a headless measurement could
+   not see because `env(safe-area-inset-top)` is 0 there and ~59px on an iPhone. Horizontal
+   separation is the axis a notch cannot move. Skeeball has sat here for a month without
+   colliding.
+
+   44x44 is the floor for a reliable thumb; do not shrink it back to fit a layout. */
 .h4-root .h4-menu {
-  appearance: none; flex: 0 0 auto;
-  margin-left: auto;                   /* the far right, opposite the hub's chip */
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--h4-ink, #fff);
-  font: inherit; font-size: 13px; font-weight: 700;
-  padding: 6px 12px; border-radius: 10px;
+  appearance: none;
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  right: 12px;
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--h4-edge);
+  background: var(--h4-panel);
+  color: var(--h4-dim);
+  font: inherit; font-size: 18px; line-height: 1;
   cursor: pointer; touch-action: manipulation;
-  min-height: 32px;
 }
-.h4-root .h4-menu:active { background: rgba(255, 255, 255, 0.16); }
+.h4-root .h4-menu:active { background: #262a31; color: var(--h4-ink); }
+
+.h4-root .h4-pause { text-align: center; }
+.h4-root .h4-pause-title {
+  margin: 0 0 2px; font-size: 22px; font-weight: 800; color: var(--gh-ink);
+}
 
 /* WHOSE SHOT IT IS, as a pill you cannot miss. It was a 14px coloured word, and the colour was
    the only thing separating "your turn" from "their turn" - unreadable for Matt (red/green
@@ -384,7 +405,12 @@
   text-align: center;
   color: var(--h4s-ink);
 }
+/* THE ROOM CODE, which is five characters and is read out loud - hence the uppercase and the
+   wide tracking. GUARD: this is NOT a general text input. The challenge caption reused it and
+   rendered "FIRST TO THREE, NO EXC" in spaced capitals, cut off by its own letter-spacing. */
 .h4-root .h4-mp-input { text-transform: uppercase; letter-spacing: .18em; font-weight: 700; }
+/* Free text a person writes to another person: left alone. */
+.h4-root .h4-mp-text { text-transform: none; letter-spacing: normal; font-weight: 500; }
 .h4-root .h4-mp-games { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .h4-root .h4-mp-game {
   display: flex;
@@ -559,4 +585,71 @@
    the hero is the one thing on this screen nobody needs in order to start a game. */
 @media (max-height: 700px) {
   .h4-root .h4-hero { display: none; }
+}
+
+/* --- the terms of a challenge ----------------------------------------------------------------
+   Matt: "when you accept a challenge and go to play, you should see what the shot settings and
+   the series selection is and stuff like that. Maybe include a caption option thing where you can
+   say something to your opponent with the challenge request thing?" */
+.h4-root .h4-cer-terms {
+  margin: 0;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  color: #cbd6e6;
+}
+.h4-root .h4-cer-caption {
+  margin: 0;
+  font-size: 15px; font-style: italic; line-height: 1.3;
+  color: #ffce3a;
+  max-width: 30ch;
+}
+/* Which game of a series, on the play HUD. */
+.h4-root .h4-leg {
+  font-size: 12px; font-weight: 700;
+  color: var(--h4-dim);
+  font-variant-numeric: tabular-nums;
+}
+/* And on the game-over card. */
+.h4-root .h4-series {
+  margin: 0 0 2px;
+  font-size: 13px; font-weight: 700;
+  color: var(--h4-dim);
+}
+/* The series leg on a row in the active-games list. */
+.h4-root .h4-mp-leg {
+  margin-left: 8px;
+  font-size: 11px; font-weight: 700;              /* the UX floor's minimum */
+  color: var(--h4s-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- How to play -----------------------------------------------------------------------------
+   docs/BUILDING-A-GAME.md, "How-to-play screens": one bold sentence, a diagram of the ONE
+   non-obvious mechanic, a caption, a concrete "X = Y" example, then the edge cases as plain
+   single-row lines. Matt, on the paragraph this replaced: "it's JUST words."
+
+   EVERY LINE FITS ON ONE ROW - the sizes below are what a measurement said fits at 393px, not a
+   guess, and `check-no-scroll.mjs` holds the whole sheet to one screen. */
+.h4-root .h4-how-goal {
+  margin: 0;
+  font-size: 17px; font-weight: 800; color: var(--h4s-ink);
+}
+.h4-root .h4-how-fig {
+  margin: 12px 0 10px;
+  padding: 8px 6px;
+  background: #0b1523;
+  border-radius: 10px;
+  line-height: 0;
+}
+.h4-root .h4-how-cap {
+  margin: 0 0 6px;
+  font-size: 14px; font-weight: 700; color: var(--h4s-ink);
+}
+.h4-root .h4-how-eg {
+  margin: 0 0 10px;
+  font-size: 13px; font-weight: 700; color: var(--h4s-muted);
+  font-variant-numeric: tabular-nums;
+}
+.h4-root .h4-how-line {
+  margin: 0 0 5px;
+  font-size: 13px; color: var(--h4s-muted);
 }

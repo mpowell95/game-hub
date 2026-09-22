@@ -2030,3 +2030,43 @@ Deliverables: stills from all three cameras at all five leagues in one contact s
 v888 sheet, the per-league tables as implemented, draw-call counts, and the suites green:
 `node test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node
 test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`.
+
+### R18: the career start screen (2026-09-22)
+
+Matt, with a screenshot of the career-start player screen on his phone (dark, 393x852): *"My
+landing page is still quick play... Simplify the presets. Those names don't help at all. They make
+it way more confusing. And it's not even clear that they ARE presets. And give the skill stats
+some more space. Everything here is all crammed to the top half of the page. Even the randomize
+and start a career options... Nobody would ever guess that they're going to win more skill points
+and be able to allocate them. Show the economy chart but ONLY for little league (since that's
+where they'll start). And say play your first season or something and say how many regular season
+games and playoffs etc. but DO NOT explain anything in paragraph prose. It should be EXTREMELY
+SHORT AND CONCISE AND SUCCINCT. fragments are ok and even preferred over full sentences."*
+
+1. **Career is the landing tab.** `this.tab` defaults to `'career'`; Quick Play is one tap away.
+2. **Three presets, labelled as presets.** A small caps label PRESET above one row of chips:
+   Balanced, Hitter, Pitcher (Custom is shown as a fourth chip only while the build matches none
+   of the three, never as something to tap). Tables in `settings.js` replacing the seven
+   (design doc section 6 is [Draft] there): Balanced 5/5/5 and 5/5/5; Hitter 7/7/1 hitting,
+   5/5/5 pitching; Pitcher 5/5/5 hitting, 7/7/1 pitching (Accuracy/Power/Speed and
+   Speed/Accuracy/Spin; every side still sums to 15, nothing over 10). A stored `presetId` that
+   no longer exists reads as Custom. `scalePreset` and the rest of `build.js` unchanged.
+3. **The skills get the room.** The screen uses the whole height: skill rows about 64 px tall with
+   12 px bar cells, real space between the two columns, the points-left pills beside the column
+   headers, and the buttons at the bottom of the screen (career start: Randomize and Start a
+   career; Quick Play: Randomize and Done). On the short phone height (390x664, and in the hub)
+   the gaps compress and nothing scrolls.
+4. **The first-season block, career start only,** between the skills and the buttons, in this
+   exact shape (values read from `SEASON`, `POINTS.little`, `CAPS.little`, EN and ES):
+
+   ```
+   FIRST SEASON · LITTLE LEAGUE
+   3 games · 4 teams · everyone makes the playoffs
+   Semifinal · Final
+   Win +6 · Loss +2 · Bronze +4 · Silver +8 · Gold +12
+   Points buy skills · max 10 each
+   ```
+   Fragments only, no sentence, no explanation. The same block is NOT shown in Quick Play.
+5. **Probes.** `player-screen` and `player-budget` follow the new chips; `check-no-scroll`'s
+   player screens stay in; a new assertion that the first-season block is present in career
+   start mode and absent in Quick Play. Stills at 393x852 and 390x664, dark and light, both modes.

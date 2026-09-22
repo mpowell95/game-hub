@@ -9,7 +9,16 @@ export const STRINGS = {
     cpu1: 'Easy', cpu2: 'Medium', cpu3: 'Hard',
     play: 'Play',
     howto: 'How to play',
-    howtoBody: 'Swipe up the lane to shoot. How hard you swipe sets the arc, the angle picks the hoop. Sink any hoop and your disc drops down that column. Miss and you simply shoot again, so a turn only ends when a ball goes in. A ball that rims out into the next hoop still counts, in that column.',
+    // THE ONE MECHANIC THAT IS NOT OBVIOUS, drawn rather than described - everybody already knows
+    // Connect 4 and everybody already knows basketball; what they do not know is that the two are
+    // wired together. docs/BUILDING-A-GAME.md, "How-to-play screens". Matt, on the paragraph this
+    // replaces: "The How To Play is even worse. it's JUST words."
+    howtoGoal: 'Four in a row wins.',
+    howtoCap: 'The hoop you sink picks the column.',
+    howtoEg: 'Sink hoop 3 = disc down column 3.',
+    howtoArc: 'Swipe harder for a higher arc.',
+    howtoAim: 'The angle picks the hoop.',
+    howtoRim: 'Rim out into the next hoop? That one counts.',
     close: 'Close',
     yourTurn: 'Your turn', theirTurn: 'Their turn',
     // WHOSE SHOT IT IS, said before the shot rather than after it. Matt: "it's not clear when
@@ -17,6 +26,14 @@ export const STRINGS = {
     you: 'You', shooting: 'is shooting', yourShot: 'Your shot',
     leaveKept: 'Your match is saved. Pick it up whenever you like.',
     menu: 'Menu',
+    // THE PAUSE SHEET. Matt asked for skeeball's button and skeeball's options, so these mirror
+    // its `paused`/`resume`/`new_game` - except the third, which goes where THIS game's menu
+    // button has always gone (its own setup screen), not out to a gallery this game does not have.
+    paused: 'Paused',
+    resume: 'Resume',
+    newGame: 'New game',
+    backSetup: 'Back to setup screen',
+    backMp: 'Back to multiplayer',
     // --- the setup screen, restructured 2026-09-22 ------------------------------------------
     // Matt: "What is 2 player? There should be options to play the computer player and
     // 'Multiplayer Options'... The computer player options should just have the difficulties and
@@ -27,6 +44,22 @@ export const STRINGS = {
     mpHome: 'Multiplayer',
     mpPassPlay: 'Pass and play',
     mpActive: 'Active games',
+    // --- the terms of a challenge (2026-09-22) ----------------------------------------------
+    // Matt: "Before you challenge someone or anything, you should be able to select the shots per
+    // turn setting and if you want to play a single game, best of 3 series or best of 5 series.
+    // And when you accept a challenge and go to play, you should see what the shot settings and
+    // the series selection is."
+    chTitle: 'Challenge {who}',
+    chSeries: 'Series',
+    chSingle: 'Single game', chBo3: 'Best of 3', chBo5: 'Best of 5',
+    chCaption: 'Say something (optional)',
+    chCaptionPh: 'Good luck...',
+    chSend: 'Send challenge',
+    gameOf: 'Game {n} of {m}',
+    seriesScore: 'Series {a}\u2013{b}',
+    nextGame: 'Next game',
+    seriesWon: '{who} takes the series', seriesDrawn: 'Series drawn',
+    youTakeIt: 'You take the series',
     mpNoActive: 'No games yet. Challenge somebody above.',
     // The full-screen challenge card (showCeremony in ui.js).
     cerHead: 'CHALLENGE', cerHeadTurn: 'YOUR TURN',
@@ -79,18 +112,39 @@ export const STRINGS = {
     cpu1: 'Fácil', cpu2: 'Normal', cpu3: 'Difícil',
     play: 'Jugar',
     howto: 'Cómo se juega',
-    howtoBody: 'Desliza hacia arriba para tirar. La fuerza marca el arco y el ángulo elige la canasta. Si encestas, tu ficha cae por esa columna. Si fallas, vuelves a tirar, así que el turno solo termina cuando entra una bola. Una bola que rebota y entra en la canasta de al lado también cuenta, en esa columna.',
+    howtoGoal: 'Cuatro en raya gana.',
+    howtoCap: 'La canasta que encestas elige la columna.',
+    howtoEg: 'Encesta la 3 = ficha en la columna 3.',
+    howtoArc: 'Desliza más fuerte para un arco más alto.',
+    howtoAim: 'El ángulo elige la canasta.',
+    howtoRim: '¿Rebota a la de al lado? Cuenta esa.',
     close: 'Cerrar',
     yourTurn: 'Tu turno', theirTurn: 'Su turno',
     you: 'Tú', shooting: 'está tirando', yourShot: 'Tu tiro',
     leaveKept: 'Tu partida está guardada. Puedes seguir cuando quieras.',
     menu: 'Menú',
+    paused: 'En pausa',
+    resume: 'Continuar',
+    newGame: 'Partida nueva',
+    backSetup: 'Volver a la pantalla de inicio',
+    backMp: 'Volver a multijugador',
     vsCpu: 'Jugar contra la máquina',
     difficulty: 'Dificultad',
     multiplayer: 'Multijugador',
     mpHome: 'Multijugador',
     mpPassPlay: 'Pasar y jugar',
     mpActive: 'Partidas activas',
+    chTitle: 'Retar a {who}',
+    chSeries: 'Serie',
+    chSingle: 'Una partida', chBo3: 'Al mejor de 3', chBo5: 'Al mejor de 5',
+    chCaption: 'Di algo (opcional)',
+    chCaptionPh: 'Suerte...',
+    chSend: 'Enviar reto',
+    gameOf: 'Partida {n} de {m}',
+    seriesScore: 'Serie {a}\u2013{b}',
+    nextGame: 'Siguiente partida',
+    seriesWon: '{who} gana la serie', seriesDrawn: 'Serie empatada',
+    youTakeIt: 'Ganas la serie',
     mpNoActive: 'Aún no hay partidas. Reta a alguien arriba.',
     cerHead: 'RETO', cerHeadTurn: 'TE TOCA',
     cerChallenged: '{who} te ha retado a Connect 4 Hoops',

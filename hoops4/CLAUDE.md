@@ -468,6 +468,219 @@ this about a lit machine, and it had to be rediscovered from a screenshot. And t
 silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
 gone would have dropped the player back with no explanation at all. The card stays up and says so.
 
+### The marquee is a SIGN now (2026-09-22)
+
+Matt, with a photo of BRICK CITY's marquee beside this one: *"please improve the game
+banner/header on connect 4. Do not copy brick city's banner, but see how cool it is? Connect 4
+hoops is laaame in comparison."*
+
+It was a flat three-stop orange gradient, a plain dark box, and two lines of default sans-serif.
+No frame, no texture, no depth, and nothing on it said WHICH machine it was.
+
+**Brick city was the quality BAR, not the design.** What was taken from `_paintMarquee()` is the
+construction of a lit sign - a layered frame, a textured panel rather than a flat fill, bulb bars,
+and lettering drawn several times (a dark offset copy for depth, two glow passes at shrinking
+blur, the crisp face, a thin keyline). What was NOT taken is anything you can see: no brick
+coursing, no red-brick palette, no HOT SHOT typography, and no import from `skeeball/` - those
+engine files are a deliberate fork and this drawing code is this game's own.
+
+Everything on it is drawn from `boarddef.js`'s own `look` block, so the sign belongs to the
+cabinet under it:
+
+- **The panel is the board's own lit blue** (`face` -> `faceEdge`), textured with a staggered
+  field of dark punched holes. That is this machine's coursing: the Connect 4 grid, which is the
+  same motif as the screen directly below it.
+- **A basketball on one side, a dropped red-over-yellow chip pair on the other** - the two games
+  this cabinet welds together, one per side, so the sign names both halves without a third word.
+- **Bulb bars top and bottom**, alternating lit and dim, so it reads as electric rather than
+  printed.
+
+**Three things were wrong on the first build and only a screenshot at PLAY SIZE found them** -
+which is `VISUAL-PROCESS.md`'s whole point, and the third time this game has learned it:
+
+- **"HOOPS" was a smudge.** Five characters under a nine-character word, in the rim's orange,
+  which is the lowest-contrast pair on the cabinet, with a glow behind it muddying what was left.
+  Measured on a 393px phone: 45px wide against CONNECT 4's 145. It is **letter-spaced to CONNECT
+  4's own measured width** (`signWord`'s `trackTo`, drawn character by character because
+  `ctx.letterSpacing` is not available everywhere this ships) and **in the bulb yellow**, the one
+  colour that stays crisp on that blue.
+- **The flanking icons were specks.** At `ph * 0.15` on a sign only ~340px wide at play size, an
+  icon is about 9px across and reads as dirt. They are `ph * 0.30` now, and the chip pair's two
+  discs nearly touch so the same height buys bigger chips.
+- **The sign had no room.** `mqH` 0.12 -> 0.145, into dead cabinet that was already above it.
+  `_marqueeTop` is computed from `mqH`, so the camera follows on its own - which
+  `check-display.mjs` then proved rather than assumed.
+
+The fascia below it gained a bright top edge, a centre seam and corner bolts, and is deliberately
+still quiet: it sits between the sign and the hoop row, and nothing there may compete with the
+hoops.
+
+Measured after: `check-display.mjs` **10/10** (all 42 cells on screen, nothing occluded, every
+hoop still nearest its own column, worst perspective fan 10.7px), `test-visual.mjs hoops4` 13/13,
+`check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-game-conventions.mjs` 11/11, no page
+errors. Still paint only - not one thing on the marquee or the fascia has a collider.
+
+### The flare was standing in front of the bottom of the screen (2026-09-22)
+
+Matt: *"Why is the bottom left and bottom right of the connect 4 board covered by the black board
+thing?"*
+
+**The flare** - the cabinet's taper from the 0.53 m lane out to the 1.52 m board, spanning the
+trough gap. It was centred on `(crestY + lipY) / 2` with a half-height of `railH / 2 + 0.02`,
+which put its top at **y 0.497 against a board whose bottom edge is at `boardLipY` 0.39**. That is
+107 mm of black cabinet standing in front of the bottom of the screen - and because the flare runs
+DIAGONALLY out to the board's full width, the camera sees it cut across the bottom-left and
+bottom-right corners of the grid. On a board that FILLS FROM THE BOTTOM, those are the cells that
+matter.
+
+**It was always slightly wrong and the square rebuild tripled it.** At the old `boardLipY` 0.52 it
+stood 35 mm proud, which was small enough to read as the cabinet's own edge; dropping the lip to
+0.39 to grow the board downward took it to 107 mm. So this is the square board's bill, arriving
+late.
+
+The top is pinned to the lip now (`flareTop = lipY - 0.002`, a hair under so no seam z-fights) and
+the slab keeps its height by growing DOWNWARD into the trough it spans. A cabinet's side taper
+ending exactly where the screen begins is also what a real one looks like.
+
+**Measured cost in play: none.** 231-throw grid, before and after: scored **28.6%** both, parked
+**1.7%** both. The 107 mm band it gave up is above the trough and below the hoops, and nothing was
+resting on a 30 mm-wide ledge. The bounce figures moved a touch (misses bouncing 42% -> 41%, mean
+best rebound 0.47 -> 0.45 m/s) because slightly fewer misses clip the flare on their way past;
+both sit inside the two gaps `test.js` already owes for the square board, and neither changes a
+pass or a fail. The numbers in "Square, and what it cost" are the pre-flare-fix ones and are left
+as the record of that change.
+
+#### THE PROBE SAID 10/10 THE WHOLE TIME, AND THAT IS THE REAL LESSON
+
+`check-display.mjs` has a raycast occlusion test written for exactly this failure - it exists
+because the first raked build hid the bottom row behind a front apron. It passed throughout,
+because **it raycasts cell CENTRES**, and the bottom row's centres clear the flare even when the
+cells themselves are clipped and both panel corners are gone.
+
+A centre is not a cell. The probe now also raycasts **the panel's own four corners** and **the
+outer lower edge of the bottom row's two end cells** - the exact pixels Matt pointed at. Verified
+born red by restoring the old flare height: four failures, naming both bottom corners and both end
+cells. `check-display.mjs` is 11 checks now.
+
+### The marquee got taller (2026-09-22)
+
+Matt, after the sign was rebuilt: *"the banner can be bigger. It's short. it can be taller."*
+
+`mqH` 0.145 -> **0.20** of the board's width (it was 0.12 before the rebuild, so two thirds
+taller than it shipped). A marquee is the tallest thing on an arcade cabinet and this one was a
+strip.
+
+**`MQH` is now DERIVED from `mqH`, not a constant.** The texture is `MQW * (mqH / (bw * 1.02))`,
+so it always matches the panel's aspect. Left at a fixed 260 it would have squashed every letter
+and every bulb the moment the sign grew, which is the kind of change that looks like a font bug.
+
+**It cost nothing, and that was measured rather than hoped for.** `_marqueeTop` is computed from
+`mqH` and is one of the camera's `_fitPoints`, so a taller sign pulls the camera back - but the
+frame here is already capped by the cabinet's WIDTH (root of the 22.6% ceiling this file records),
+so the display stayed at **326 x 278 px, the same as before**. `check-display.mjs` 11/11.
+
+### THE SCORING RATE: every lever measured, and Matt's call (2026-09-22)
+
+Matt, after playing the square board: *"I don't understand why you can't make it better than 20
+something % made shots."*
+
+**First, the number he is quoting is the GRID's, not a player's.** `probe-bounce.mjs` and
+`test.js` sweep every power x aim combination evenly, including the ones no thumb would ever
+produce - it is a floor, not an experience. The one measurement of a real gesture
+(`check-display.mjs`'s scripted thumb, seven columns) landed **19 of 28, 68%**. Both numbers are
+honest and they answer different questions; do not quote the grid as what a person shoots.
+
+**Second, it really did fall on purpose, twice.** Making the machine bouncy cost 37.7% -> 23.7%,
+and turning the bounce sideways bought back to 29.4%. Those were Matt's own asks on two different
+days, in two different directions.
+
+Every lever was then swept on the full 231-throw grid, against the shipped build (**28.6% scored,
+1.7% parked, 45.5% of misses bouncing, mean rebound 0.48 m/s**):
+
+| lever | scored | parked | misses bouncing / mean rebound |
+|---|---|---|---|
+| **shipped** | **28.6%** | **1.7%** | 45.5% / 0.48 |
+| **hoop mouth r x1.10** | **31.6%** | **0.9%** | 43.0% / 0.51 |
+| hoop mouth r x1.05 | 26.4% | 0.9% | 44.1% / 0.50 |
+| ringRest 0.30 | 29.9% | 3.5% | 40.1% / 0.38 |
+| ringRest 0.40 / 0.46 / 0.62 / 0.72 | 28.1 / 26.4 / 26.0 / 26.8% | 3.5 / 1.7 / 1.3 / 1.3% | ~45% / 0.44-0.53 |
+| riserRest 0.05 | 31.2% | 5.2% | 41.5% / 0.43 |
+| riserRest 0.30 | 30.3% | 3.5% | 44.1% / 0.46 |
+| speed band 6.45/6.70 | 30.7% | **6.1%** | 45.0% / 0.46 |
+| speed band 6.40/6.85 | 21.6% | 3.5% | 48.1% / 0.50 |
+| boardRest 0.40 / 0.20 / 0.05 | **28.6%, all three** | 1.7% | bounce only falls |
+| deadRest 0.32 / 0.20 / 0.06 | **28.6%, all three** | 3.0 / 1.7 / 1.7% | bounce only falls |
+| jitterAim / jitterSpeed, 0.000 to 0.013 | **28.6%, every value** | 1.7% | unchanged |
+| bounceSideways 0.8 | 28.6% | 1.7% | worse ratio (3.92:1 vs 4.48:1) |
+
+**Four findings worth keeping:**
+
+1. **Only ONE change raises scoring without paying for it: widening the hoop mouth.** +3.0 points
+   AND parked nearly halved AND the bounce intact. Everything else that scores higher does it by
+   tripling the parked rate or by flattening the machine's most-struck surface back toward the
+   "beanbag" it was raised out of.
+2. **The two candidate wins do not stack.** `holeR x1.10` + `ringRest 0.30` measured **28.1%** -
+   worse than the mouth alone and back at baseline. Never assume two levers add.
+3. **Three knobs are NOT scoring levers at all**: `boardRest`, `deadRest` and the jitter pair move
+   the scoring rate by exactly zero at every value tested. Lowering them is pure cost.
+4. **`holeR x1.05` measured WORSE than baseline (26.4%) while x1.10 measured better.** That is a
+   quantisation artefact of 21 discrete aim steps, not a curve - so a midpoint cannot be
+   interpolated from this grid, and a small delta on this instrument means nothing.
+
+**MATT'S CALL, ASKED AND ANSWERED: leave the hoops alone.** He was given the table above and chose
+it, so the rate stays at 28.6% and **this question is closed.** A future session must not widen
+the mouth, deaden the rim, or retune the band to chase a scoring number - `boarddef.js` already
+says `RIM` is never changed without him, root `CLAUDE.md` says a mouth's width is his number, and
+he has now said no to the one change that would have worked. Re-open it only if he does.
+
+#### The Menu button is SKEEBALL'S button, with skeeball's sheet (2026-09-22)
+
+Matt, with a screenshot of each: *"make the 'menu' button look just like skeeball. With the same
+options."*
+
+It was a 13px pill reading "Menu" that QUIT the match on one tap (straight into `leaveMatch`).
+Skeeball's is a 44x44 hamburger that opens a **pause sheet**, and that difference is the point: a
+button that ends a game on a single tap with no way to say you did not mean it is the exact
+complaint skeeball itself got on 2026-08-21.
+
+So `.h4-menu` is now `.sk-menu`'s box verbatim - absolute, `top: max(10px, env(safe-area-inset-top))`,
+`right: 12px`, 44x44, `☰` - and `_showPause()` is `skeeball/js/ui.js`'s `_showPause` ported:
+the same `.gh-overlay`/`.gh-modal` primitives, the same X in the corner, the same
+Resume / New game / leave stack.
+
+**Top right is not a style choice, it is the fix this game already needed once.** The hub's
+floating "Hub" chip owns the top LEFT, and the previous Menu button shared its band on a notched
+phone. The HUD row's `padding-left: 76px` stays for the turn pill and gains a mirrored
+`padding-right: 64px`, because the button is absolutely positioned now and the row no longer
+CONTAINS it.
+
+**Three things differ from skeeball, each for a reason:**
+
+- **The third button is this game's own destination.** Skeeball's quits to its machine gallery;
+  this game has no gallery, and the Menu button has always gone to the setup screen where you
+  change opponent and shot rule. In a turn-by-turn match it reads "Back to multiplayer" instead,
+  because that is where the rest of your matches are.
+- **New game is HIDDEN in any multiplayer match**, and that is a rule rather than tidiness: there
+  is nobody on the other end of a unilateral restart. In a live room both engines would replay
+  different boards from the next move on; a turn-by-turn challenge is a shared move log, and a
+  rematch there is a new challenge.
+- **Leaving still routes through `leaveMatch()`**, so the mid-game confirm and the async
+  "your match is saved" toast are unchanged - the sheet is a new door onto the same behaviour,
+  not a replacement for it.
+
+**PAUSED MEANS PAUSED.** The loop is stopped while the sheet is up (skeeball's 2026-08-26 lesson),
+and it is if anything more load-bearing here: a ball still in the air when you tap would otherwise
+go on flying, drop through a hoop, take your turn and hand the CPU its shot while you read the
+menu. `preserveDrawingBuffer` keeps the last frame on the canvas, so the machine freezes rather
+than going black. `leaveMatch`'s cancel path restarts the loop, or declining the confirm would
+leave a permanently frozen game.
+
+Measured in a browser **with a 59px inset simulated**, since a headless one has none: the button
+is 44x44 at x 337 / y 59 and `elementFromPoint` returns it at its own centre; the sheet reads
+Paused / Resume / New game / Back to setup screen with an X; `raf` is 0 while it is up and
+non-zero after Resume; no page errors. `test-game-conventions.mjs` 11/11, `test-hoops4-mp.mjs`
+77/77, `check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-visual.mjs hoops4` 13/13.
+
 #### Two buttons in one place, and why a measurement said otherwise
 
 Matt, on the build that shipped the Menu button: *"whatever back button you made is hidden behind
@@ -555,6 +768,202 @@ a pass-and-play game from a button labelled "Play".
 **Still to come in this thread**: series (single / best of 3 / best of 5) with the shot rule and an
 optional caption attached to a challenge, shown to whoever accepts it; quick chat inside a match;
 challenge history with records; and the visual How to Play, which is still just words.
+
+### A series, and the terms of a challenge (2026-09-22)
+
+Matt: *"Before you challenge someone or anything, you should be able to select the shots per turn
+setting and if you want to play a single game, best of 3 series or best of 5 series. And when you
+accept a challenge and go to play, you should see what the shot settings and the series selection
+is and stuff like that. Maybe include a caption option thing where you can say something to your
+opponent with the challenge request thing?"*
+
+**Picking an opponent no longer sends the challenge.** It opens a terms screen: shots per turn
+(defaulting to the challenger's own setup choice, because it is the rule BOTH people will play
+under and this is the only moment either agrees to it), the series, and an optional caption. A
+failed send keeps the form and everything typed in it.
+
+**THE NEW FIELDS ARE OPTIONAL, AND THAT IS THE LOAD-BEARING PART.** `validateGame` returning null
+is a REFUSAL TO OPEN THE MATCH - so a required `series` would have made every match already in
+`hoops/games/` unplayable the moment this shipped. Everything defaults: `series` 1, `seriesNo` 1,
+`seriesWins` 0-0, `seriesOf` the game's own id, `caption` empty. `test-hoops4-mp.mjs` pins it with
+a hand-written pre-series document.
+
+**`seriesAfter(game)` is pure and is the only place the rules live**, so the two devices cannot
+disagree about the score. A best of 3 needs two wins, a best of 5 needs three. **A drawn board
+gives nobody a win**, so a series also ends when it runs out of games - the leader takes it, and a
+dead tie is an honest draw. Without that, three drawn boards would chase a target neither side can
+reach for ever.
+
+**The next game is started by a BUTTON, never automatically.** Creating it inside the finishing
+device's `pushMove` would stall a series silently whenever that person happened to be offline at
+that moment - a failure with nobody looking at it. A button has somebody in front of it, and
+`createGame` already returns a reason it can say out loud. `test-hoops4-mp.mjs` asserts `pushMove`'s
+own body never calls it.
+
+**The sides swap each game** (`first: 'them'`), because side 'a' shoots first and otherwise a best
+of 3 is just "the challenger shoots first, three times".
+
+**Where the terms are shown**: on the full-screen card when you accept (read from the MATCH, not
+from the launcher's index row, which carries no caption), as "Game 2 of 3" on the play HUD and on
+each row of the active list, and as the running score on the game-over card.
+
+**Two things a screenshot caught that a test would not have.** The terms screen reused `.h4-opt`
+for its selectors but not the CHECKMARK that goes with it - the setup screen's own comment says
+selection is marked "by a BORDER, A WEIGHT AND A CHECKMARK, never colour alone", and without the
+glyph the options differed only by tint. And the caption box reused `.h4-mp-input`, which is
+styled for the five-character ROOM CODE: uppercase, letter-spaced, centred. "First to three, no
+excuses" rendered as spaced capitals running off the end of its own box.
+
+### Square, and what it cost (2026-09-22)
+
+Matt, with an old screenshot beside a new one: *"The connect 4 board is shorter than it used to
+be. It should be a square. Not a short rectangle."*
+
+He was right and it was this repo's own doing: the board WAS 7.80X tall when it was raked, and the
+rebuild that stood it upright (v884, the one that fixed "I can't read the board") cut it to 4.80X.
+Width never changed, so the cells went to 1.63:1.
+
+**`PANEL_L` 4.80 -> 7.80X, `boardLipY` 0.52 -> 0.39.** Six rows over 7.80X is a row pitch of 1.30X,
+exactly the column pitch, so the cells are square. It grows BOTH ways: down to where the ramp crest
+starts hiding the bottom row, the rest up, which lifts the hoop row 1.265 -> 1.572 m.
+
+**The launch band had to move with the hoops, and that is the whole difference between this working
+and not.** On the old 6.05/6.50 nothing reached below power 0.50 - half the swipe dead, which is
+the exact failure this game's own `boarddef.js` already records against HOT SHOT's band. Re-derived
+to 6.35/6.80.
+
+**A COARSE GRID LIED.** A 77-throw sweep (7 aim steps) was used first because it runs in seconds.
+It ranked a different band best AND said the taller board outscored the short one outright. The
+real 231-throw grid (21 aim steps) disagreed on both. **Aim resolution is exactly what a narrow
+hoop row is sensitive to** - so a fast sweep can rank BANDS roughly, and must never be the thing a
+decision is made on.
+
+Measured on the 861-throw suite grid, against the 4.80X board:
+
+| | 4.80X shipped | 7.80X square |
+|---|---|---|
+| scored | 28.9% | **29.2%** |
+| parked (a ball that vanishes) | 7.32% | **2.44%** |
+| misses that bounce | 56% | 42% |
+| mean best rebound | 0.61 m/s | 0.47 m/s |
+
+`check-display.mjs` 13/13 - all 42 cells on screen, none behind the cabinet's own furniture - and
+**"every column is hit by the gesture that asks for it" now passes 7 of 7, where the 4.80X board
+fails at 6 of 7.**
+
+**THE COST IS THE BOUNCE, AND IT IS RECORDED AS A KNOWN GAP RATHER THAN PAPERED OVER.** The taller
+board lifts the hoops, the faster band makes balls arrive flatter, and they stop landing on the
+SHELF - the surface made live in v890 specifically to create bounce. `board` has dropped out of the
+top eight surfaces a miss touches entirely. Restoring it (riserRest 0.85) costs about four points
+of scoring, which is a trade between two things Matt has asked for at different times, so it was
+his to make: *"Ship square now, tune the bounce after you've felt it."*
+
+So `hoops4/js/test.js` gained a `KNOWN_GAPS` map, the same shape as
+`test-game-conventions.mjs`'s and for the same reason. The two bars are NOT lowered: the real
+number is measured and printed every run, the summary says `2 KNOWN GAP(S) STILL OWED`, and **a
+gap whose check starts passing FAILS the run and tells you to delete the entry** (verified by
+listing a passing check and watching it go red). A silently lowered bar is how a requirement
+disappears.
+
+**`deadRest` 0.32 -> 0.50 came free** on the way: same scoring, parking 3.0% -> 1.7%, a little
+bounce back. It SATURATES there - 0.50, 0.62 and 0.75 return byte-identical numbers. Found by
+teaching `probe-bounce.mjs` to PRINT which surfaces a miss touches, which it had collected since
+its first version and never shown; every restitution decision before that was a guess across
+variants instead of one look.
+
+### The disc FALLS down its column (2026-09-22)
+
+Matt: *"Can you show the ball fall down the columns rather than go into the basket and just appear
+at the bottom of that column?"* It did exactly that - `setGrid` repainted the whole grid the
+instant a ball was captured, so the disc teleported to the bottom of its column and the one piece
+of feedback tying the basket you sank to the move you made was missing.
+
+`render.js` gained `startDrop` / `stepDrop` / `_dropY`, and `setGrid` a third `drop` argument. The
+falling disc is drawn on the SAME `CanvasTexture` as the counters - there is no second layer and
+no new draw call, because the grid was already a painted canvas on a plane (see "The grid is a
+SCREEN").
+
+**Three things about it are load-bearing:**
+
+- **It is driven by the game's own loop**, not its own `requestAnimationFrame`. `ui.js`'s `tick`
+  calls `stepDrop(dt)` first, so a drop cannot outlive the screen, cannot run twice, and stops
+  with everything else when the loop stops. A private rAF here would be the one animation in the
+  game that `destroy()` does not cancel.
+- **The target cell is drawn EMPTY while the disc is in the air**, and the win ring is suppressed
+  for the whole drop. Otherwise the disc is already sitting in the hole it is falling into, and a
+  winning move rings four cells before the fourth one arrives.
+- **`onDone` is what makes everything downstream wait.** `resolve()` defers `finish()` and
+  `maybeCpu()` through `_whenLanded`, so a game-over card cannot cover the drop that won and the
+  CPU cannot start its shot while the player's disc is still falling. A miss or a shot into a full
+  column changes no cell, so there is nothing to drop and it paints at once - `_whenLanded` runs
+  its callback immediately in that case, which is why the timing of a miss is unchanged.
+
+`start()` clears `_dropping`/`_afterDrop`: a new match inheriting the last one's flag would hold
+its first move for a drop that will never land.
+
+The fall is a quadratic (accelerating, like a dropped disc) for the first 80% of it and one
+decaying hop of a fifth of a cell for the rest. Duration is per row - about 0.45 s to the bottom
+row, 0.22 s to the top - so a disc that falls further takes longer, and a nearly full column does
+not feel sluggish.
+
+Measured: 28 frames from y -77.8 to 931.6 with the gaps widening 2.1 / 6.1 / 10.2 / 14.3, a bounce
+back up to 912.5 settling at 929.4, `onDone` fired, no page errors. `test-game-conventions.mjs`
+11/11, `check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-visual.mjs hoops4` 13/13.
+
+#### It starts when the ball goes IN, not when the throw resolves
+
+Matt, on a screen recording of the first build: *"There's a tiny lag between when the ball goes into
+the basket and when it's shown falling. There shouldn't be. It should look like it's the same ball
+that goes in the basket falling down the column."*
+
+**It was not tiny and it was not a frame-timing problem. Measured over the 231-throw grid, the gap
+between the capture and the throw resolving is a median of 0.346 s, p90 0.712 s, worst 0.917 s** -
+and the drop was started at `resolve()`, so every one of those milliseconds was dead time with the
+ball already in the basket and nothing happening on the board.
+
+The gap is the throat. `physics.js` treats capture as COMMITTED here, and `finishAt` only fires
+once the ball has fallen 0.26 m below the capture point. That fall is correct and is not being
+shortened - it is what makes a captured ball unable to come back out.
+
+So the drop starts on the **capture event** in `tick`, from a PREDICTED cell (`_dropOnCapture`).
+Predicting is safe here for exactly one reason, and it is a property of this machine rather than a
+guess: **there is no rimout, so a captured ball scores in that column 100% of the time** (measured;
+see "There is NO rimout on this machine"). It is still never authoritative - `_paintShot` hands the
+real grid to `commitDrop` when the move lands, or calls `cancelDrop` if the rules refused it (a
+full column is a miss, so `_dropOnCapture` checks `canPlay` before starting at all).
+
+**The match is matched on the PREDICTION, not on whether a disc is still in the air.** A top-row
+fall is 0.22 s and the median resolve gap is 0.35 s, so the drop routinely FINISHES before the
+throw resolves; keying off `dropTarget()` would then see nothing flying and start the whole fall a
+second time. `_predicted` is set at capture and consumed by `_paintShot`, which covers both
+orderings.
+
+Verified in a real browser, instrumenting the renderer over made shots: **exactly one `startDrop`
+and one `commitDrop` per made shot, the drop starting on the same frame as the capture**, no page
+errors. `test-game-conventions.mjs` 11/11, `test-hoops4-mp.mjs` 77/77,
+`check-no-scroll.mjs hoops4` 4 screens / 0 scroll, `test-visual.mjs hoops4` 13/13.
+
+### How to play, drawn (2026-09-22)
+
+Matt: *"The How To Play is even worse. it's JUST words. That goes against everything I've ever
+told you."* It was one paragraph of five sentences.
+
+Rebuilt to `docs/BUILDING-A-GAME.md`'s "How-to-play screens" pattern, which already existed and
+which this screen had simply never followed: one bold sentence, **a diagram of the ONE
+non-obvious mechanic**, a caption, a concrete "X = Y" example, then the edge cases as plain
+single-row lines.
+
+**The one non-obvious mechanic is that the two games are WIRED TOGETHER.** Everybody already
+knows Connect 4 and everybody already knows basketball; nobody can guess that the hoop you sink
+decides which column your disc falls down. So the diagram is seven hoops over a grid with the
+third taking a ball and a dashed arrow carrying it down column 3 to a disc at the bottom. The
+chosen hoop is marked by a **thicker outline, the ball in it and the arrow leaving it** - never by
+its colour (root CLAUDE.md; Matt is red/green colourblind).
+
+**Every line fits on one row, and that was measured rather than eyeballed.** The first build had
+two lines wrapping to two rows at 393px; the fix was shortening both strings in both languages,
+not shrinking the type, which is already 13px against the UX floor's 11px. The probe in
+`reference/` reports wrapped lines, the minimum font size and whether anything scrolls.
 
 ### What makes a hoop read as a hoop (2026-09-22)
 
