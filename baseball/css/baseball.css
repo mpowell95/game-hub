@@ -376,7 +376,7 @@
  * 64px tall (measured against the two shipped stills, tall and short), and the points-left pill
  * moves beside its column header instead of stacked below it. */
 .bb-skill-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; min-height: 0; }
-.bb-skill-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; justify-content: center; }
+.bb-skill-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .bb-skill-col-head-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .bb-skill-col-head { font-size: 11px; font-weight: 800; text-transform: uppercase; opacity: .7; }
 .bb-points-pill {
@@ -388,7 +388,10 @@
   background: var(--gh-surface-2, #eef2f8);
   white-space: nowrap;
 }
-.bb-skill-row { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 64px; }
+/* flex: 1 (not a fixed height) so the three rows share whatever room the column actually has -
+ * ~64px each at 393x852, less on the short 390x664 height - rather than the rows staying compact
+ * and leaving one big dead gap in the middle of a tall screen. */
+.bb-skill-row { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 56px; }
 .bb-skill-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
 .bb-skill-label { font-size: 12px; font-weight: 700; }
 .bb-skill-num { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
