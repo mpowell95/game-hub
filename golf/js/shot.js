@@ -89,7 +89,7 @@ const HOP_LENS = [1, HOP_DECAY, HOP_DECAY * HOP_DECAY];
  *  it. Those surfaces roll from a standing start instead. */
 export function groundPoint(p, rollYd, apex, landedOn) {
   const noHop = landedOn === 'greensideBunker' || landedOn === 'fairwayBunker'
-    || landedOn === 'heavyRough' || landedOn === 'water';
+    || landedOn === 'heavyRough' || landedOn === 'water' || landedOn === 'swamp';
   // 2026-09-06: `apex * 0.14 + 0.8` capped at a THIRD of the run-out, which is about 10 px for a
   // driver and 3 px for an iron pitching on a green - Matt: "it bounces very low". Raised to
   // `apex * 0.22 + 1.2`, and the cap given a floor of 1.2 yd, because the cap is what was killing
@@ -909,6 +909,10 @@ export const PUTT_DRAG = {
   greensideBunker: 6.00,
   trees: 3.40,
   water: 8.00,
+  // Swamp (2026-09-22): the highest drag of anything a ball can legally come to rest on. A ball
+  // that RUNS onto a swamp at the end of a putt stops in it almost at once, which is the whole
+  // read - the edge of a swamp is a wall, not a slow patch.
+  swamp: 7.00,
 };
 export function puttDrag(kind) { return PUTT_DRAG[kind] || PUTT_DRAG.fairway; }
 

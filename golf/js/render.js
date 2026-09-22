@@ -111,6 +111,11 @@ export const PALETTE = {
   // golf.css - a cream scorecard on a fairway is what golf looks like from above.
   setupA: '#1d4423',
   setupB: '#326d33',
+  // SWAMP (2026-09-22): "it is not water" - no penalty, no drop prompt, the ball just plugs. Dark
+  // olive-brown so it never reads as a lake at a glance; `swampEdge` is the mottled reed tone laid
+  // over it in the map painter, not a separate band the way water's shoreline is.
+  swamp: '#3d5a3a',
+  swampEdge: '#5c7a4a',
 };
 
 /** THE COURSE THEME. `PALETTE` above is Pine Valley's, and it stays the module's default so
@@ -151,13 +156,35 @@ export const THEMES = {
     bankMud: '#4a3020',
     setupA: '#7a3f1e',
     setupB: '#a35f2d',
+    swamp: '#4f6b3a',
+    swampEdge: '#6f8a4a',
   },
 };
 
-const TREE_FILL = {
+/** The fill/rim pair for every OBSTACLE CATALOGUE name (`golf/js/obstacles.js`), plus the three
+ *  desert specimens that predate the catalogue. Keyed by NAME, never by `shape` - shape decides
+ *  the silhouette (`treeShapes` below), name decides the colour, exactly as the course themes
+ *  above decide the colour of a surface kind. An unrecognised name falls back to the theme's own
+ *  `treeCanopy`/`treeRim` (see every call site below), which is what lets Oasis Sands' bespoke
+ *  `tall palm` / `scrub palm` keep working with no entry here at all. */
+export const TREE_FILL = {
+  pine: ['#1f4a26', '#12301a'],
+  oak: ['#4a7a2e', '#2c4c1c'],
+  sentinel: ['#193d20', '#0f2814'],
+  maple: ['#7a9a3a', '#4a621f'],
+  birch: ['#8fae55', '#5a7530'],
+  willow: ['#7ea852', '#4c6b30'],
+  cypress: ['#25502c', '#16321b'],
+  deadtree: ['#7a6a55', '#4a3f30'],    // NO green - see treeShapes' `dead` row
+  bush: ['#5fae3a', '#3a7522'],
+  palm: ['#4f9a4a', '#2e6b2c'],
   saguaro: ['#3f7a3a', '#22421f'],
   paloverde: ['#7f9a3f', '#4c6224'],
+  joshua: ['#8a7a5a', '#544a36'],      // also `dead` shape - a desert species, still no green
   boulder: ['#8b7f72', '#4d453d'],
+  smallrock: ['#9a9086', '#5e564c'],
+  rockpile: ['#8f8578', '#544c42'],
+  log: ['#8a6a42', '#5c4529'],
 };
 
 /** The paint colour for every surface kind, in one theme. Exported since 2026-09-05: the HUD's
@@ -171,6 +198,7 @@ export function fillsFor(pal) {
     green: pal.green,
     tee: pal.tee,
     water: pal.water,
+    swamp: pal.swamp || pal.water,
     fairwayBunker: pal.sand,
     greensideBunker: pal.sand,
     trees: pal.treesFloor || '#4a6b28',   // the woods FLOOR; canopies are drawn on top of it
@@ -244,20 +272,210 @@ function scatterTufts(ctx, bb, toPx, colour, seed) {
 
 /** THE CANOPY'S SILHOUETTE: a union of circles, as [x, y, r] triples.
  *
- *  EVERY CIRCLE MUST FIT INSIDE `r` OF THE CENTRE. `shot.js`'s `treeHit` tests the ball against
- *  `type.canopy`, and the whole contract of this renderer is that what is painted is what stops the
- *  ball - a bump that stuck out past `r` would be a tree the ball flies straight through. That is
- *  why this is an exported pure function with a test rather than four literals inside a draw loop.
+ *  EVERY CIRCLE MUST FIT INSIDE `r` OF THE CENTRE for the default `canopy` shape (and every other
+ *  shape but `log` - see its own row below). `shot.js`'s `treeHit` tests the ball against
+ *  `type.canopy`/`type.trunk`, never against this function, so a bump that stuck out past `r`
+ *  would be a tree that LOOKS bigger than what actually stops the ball - the whole contract this
+ *  file has always kept. That is why this is an exported pure function with a test rather than
+ *  literals inside a draw loop.
  *
- *  A cactus is one circle: it is a pillar, drawn at its trunk. */
-export function treeShapes(px, py, r, cactus) {
-  if (cactus) return [[px, py, r]];
-  return [
-    [px, py, r * 0.94],
-    [px - r * 0.50, py + r * 0.32, r * 0.40],
-    [px, py + r * 0.45, r * 0.42],
-    [px + r * 0.50, py + r * 0.32, r * 0.40],
-  ];
+ *  `shape` is the OBSTACLE CATALOGUE's own word (`golf/js/obstacles.js`, section 3 of
+ *  `docs/HANDOFF-GOLF-OBJECTS.md`); an unrecognised shape (including `undefined`, for every course
+ *  table that predates the catalogue) falls back to `canopy`, so an old course's tree table draws
+ *  exactly as it always has. `true`/`false` still work for backward compatibility with existing
+ *  callers and `golf/js/test.js`'s own probes: `true` is `'cactus'`, `false` is the default.
+ *
+ *  A cactus is one circle: it is a pillar, drawn at its trunk. Rock/rocks/log return a CIRCLE
+ *  UNION baseline used for the wood painter's black-key and clump passes exactly like every other
+ *  shape; the angular/elongated READ on top of that baseline is `treeAccent` below, not this
+ *  function - keeping every shape here a plain union of circles is what lets one three-pass
+ *  painter (buildMap) and one hit-test loop (`canvas.js`) serve all of them with no per-shape
+ *  branch beyond the geometry itself. */
+export function treeShapes(px, py, r, shape) {
+  if (shape === true || shape === 'cactus') return [[px, py, r]];
+  switch (shape) {
+    case 'fir': {
+      // A dense ring of small circles plus a centre: reads as a pointed conifer crown from above,
+      // where "today's four-circle crown" reads as a broad deciduous canopy.
+      const out = [[px, py, r * 0.55]];
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+        out.push([px + Math.cos(a) * r * 0.55, py + Math.sin(a) * r * 0.55, r * 0.36]);
+      }
+      return out;
+    }
+    case 'willow':
+      // The crown itself is a touch smaller than `canopy`'s, leaving room at the rim for the
+      // drooping strokes `treeAccent` draws past it.
+      return [
+        [px, py, r * 0.82],
+        [px - r * 0.45, py + r * 0.32, r * 0.34],
+        [px, py + r * 0.46, r * 0.36],
+        [px + r * 0.45, py + r * 0.32, r * 0.34],
+      ];
+    case 'cypress':
+      // A tall narrow stack, not a round crown - four circles centred on the same x, so the union
+      // reads as one oval about `r * 0.55` wide rather than a disc.
+      return [
+        [px, py - r * 0.55, r * 0.42],
+        [px, py - r * 0.18, r * 0.48],
+        [px, py + r * 0.18, r * 0.48],
+        [px, py + r * 0.52, r * 0.40],
+      ];
+    case 'dead':
+    case 'joshua':
+      // A bare trunk disc only - NO canopy circles, because a dead tree has no green to paint. The
+      // radiating branches are `treeAccent`'s job.
+      return [[px, py, r * 0.35]];
+    case 'bush':
+      // Three small overlapping circles, brighter green (TREE_FILL carries the colour) - no
+      // trunk, no rim key needed at this size to read as a shrub rather than a tree.
+      return [
+        [px - r * 0.35, py + r * 0.1, r * 0.55],
+        [px + r * 0.32, py - r * 0.05, r * 0.5],
+        [px, py - r * 0.35, r * 0.48],
+      ];
+    case 'palm':
+      // A small trunk disc; the fronds are accent strokes reaching to the rim.
+      return [[px, py, r * 0.28]];
+    case 'rock':
+      // One roughly round baseline for the key/clump passes; `treeAccent` draws the angular facets
+      // on top.
+      return [[px, py, r * 0.85]];
+    case 'rocks':
+      // Three rocks of different sizes, overlapping.
+      return [
+        [px - r * 0.38, py + r * 0.15, r * 0.55],
+        [px + r * 0.32, py - r * 0.12, r * 0.42],
+        [px + r * 0.05, py + r * 0.38, r * 0.32],
+      ];
+    case 'log': {
+      // A chain of circles along the long axis reads as a rounded rectangle when filled solid.
+      // DELIBERATELY LONGER THAN `r` (the table in docs/HANDOFF-GOLF-OBJECTS.md calls for
+      // "2.4r long x 0.9r wide") - a log is drawn elongated on purpose, and `treeHit` never reads
+      // this function, only `type.trunk`/`type.canopy`, so the wider silhouette costs nothing in
+      // collision.
+      const rr = r * 0.45;
+      return [-0.85, -0.28, 0.28, 0.85].map((t) => [px + t * r, py, rr]);
+    }
+    case 'canopy':
+    default:
+      return [
+        [px, py, r * 0.94],
+        [px - r * 0.50, py + r * 0.32, r * 0.40],
+        [px, py + r * 0.45, r * 0.42],
+        [px + r * 0.50, py + r * 0.32, r * 0.40],
+      ];
+  }
+}
+
+/** The linework a plain circle union cannot carry: willow droop, a dead tree's bare branches,
+ *  palm fronds, a log's ring lines, a rock's angular facets. Drawn AFTER the clump pass in
+ *  `buildMap`'s wood painter (and mirrored, more simply, by nothing else - see `canvas.js`'s own
+ *  simplified per-tree draw, which does not call this). `rnd` is the same per-tree seeded RNG the
+ *  clump pass uses, so the accent is stable across reloads like everything else here. Everything
+ *  else (`fir`, `willow`'s crown, `cypress`, `bush`, `canopy`, `cactus`) reads entirely from
+ *  `treeShapes`'s geometry and needs no accent. */
+export function treeAccent(ctx, shape, px, py, r, fill, rim, rnd) {
+  switch (shape) {
+    case 'willow': {
+      ctx.strokeStyle = tintOf(fill, 1.15);
+      ctx.lineWidth = Math.max(0.6, r * 0.05);
+      const n = 8 + Math.round(rnd() * 2);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.2;
+        const x0 = px + Math.cos(a) * r * 0.3; const y0 = py + Math.sin(a) * r * 0.3;
+        const x1 = px + Math.cos(a) * r * 1.08; const y1 = py + Math.sin(a) * r * 1.08 + r * 0.12;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      }
+      break;
+    }
+    case 'dead':
+    case 'joshua': {
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = Math.max(0.7, r * 0.09);
+      ctx.lineCap = 'round';
+      const n = 5 + Math.round(rnd());
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.4;
+        const x1 = px + Math.cos(a) * r * 0.95; const y1 = py + Math.sin(a) * r * 0.95;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x1, y1); ctx.stroke();
+        if (shape === 'joshua') {
+          // A spiky tuft at every branch tip: the one thing that tells a joshua tree from a dead
+          // one seen from above (with only the branches, the two tiles were the same picture).
+          ctx.save();
+          ctx.strokeStyle = '#6f7d3c';
+          ctx.lineWidth = Math.max(0.8, r * 0.1);
+          for (let k = 0; k < 8; k++) {
+            const b = (k / 8) * Math.PI * 2;
+            ctx.beginPath(); ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 + Math.cos(b) * r * 0.3, y1 + Math.sin(b) * r * 0.3); ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+      break;
+    }
+    case 'palm': {
+      ctx.fillStyle = fill;
+      const n = 7 + Math.round(rnd());
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.15;
+        const tipx = px + Math.cos(a) * r * 0.98; const tipy = py + Math.sin(a) * r * 0.98;
+        const perpx = -Math.sin(a); const perpy = Math.cos(a);
+        const wob = r * 0.14;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(a) * r * 0.4 + perpx * wob, py + Math.sin(a) * r * 0.4 + perpy * wob);
+        ctx.lineTo(tipx, tipy);
+        ctx.lineTo(px + Math.cos(a) * r * 0.4 - perpx * wob, py + Math.sin(a) * r * 0.4 - perpy * wob);
+        ctx.closePath(); ctx.fill();
+      }
+      break;
+    }
+    case 'log': {
+      ctx.strokeStyle = tintOf(fill, 1.3);
+      ctx.lineWidth = Math.max(0.7, r * 0.08);
+      const ex = px + r * 0.78;
+      for (const off of [-0.14, 0.06]) {
+        ctx.beginPath();
+        ctx.ellipse(ex + off * r, py, r * 0.14, r * 0.4, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'rock':
+    case 'rocks': {
+      // An angular facet: a jagged polygon lighter at the upper-left, plus a darker rim stroke -
+      // "reads as angular" against the round baseline `treeShapes` gives the key/clump passes.
+      const n = 6 + Math.round(rnd());
+      const pts = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.3;
+        const rad = r * (0.75 + rnd() * 0.2);
+        pts.push([px + Math.cos(a) * rad, py + Math.sin(a) * rad]);
+      }
+      ctx.beginPath();
+      pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1])));
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = tintOf(rim, 0.8);
+      ctx.lineWidth = Math.max(0.7, r * 0.06);
+      ctx.stroke();
+      // A lighter top-left facet, roughly a third of the rock.
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(pts[0][0], pts[0][1]);
+      ctx.lineTo(pts[1 % n][0], pts[1 % n][1]);
+      ctx.closePath();
+      ctx.fillStyle = tintOf(fill, 1.3);
+      ctx.fill();
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 /** A lighter or darker version of a hex colour, as a fraction of its own brightness. */
@@ -265,6 +483,54 @@ function tintOf(hex, f) {
   const n = parseInt(hex.slice(1), 16);
   const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
   return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+}
+
+/** A decor SPRITE, top-down, 3-4 yds across (`docs/HANDOFF-GOLF-OBJECTS.md` section 4): bench (a
+ *  brown slab with two legs), sign (a post with a small board) and flagpole (a pole with a
+ *  triangular pennant). Cosmetic only - `holes.js` never consults `decor`, so an unrecognised
+ *  `kind` simply draws nothing rather than crashing a course that outruns this renderer. `ppy` is
+ *  pixels per yard (so the sprite scales with `MAP_PPY` here and with the editor's own zoom in
+ *  `canvas.js`, if it ever draws one directly); `rot` is radians. */
+export function drawDecorSprite(ctx, kind, px, py, ppy, rot, pal) {
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(rot || 0);
+  if (kind === 'bench') {
+    const w2 = 1.6 * ppy; const h2 = 0.5 * ppy;
+    ctx.fillStyle = '#6b4a2f';
+    ctx.fillRect(-w2, -h2, w2 * 2, h2 * 2);
+    ctx.strokeStyle = '#4a3220';
+    ctx.lineWidth = Math.max(0.6, ppy * 0.06);
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo(i * w2 * 0.36, -h2); ctx.lineTo(i * w2 * 0.36, h2); ctx.stroke();
+    }
+    ctx.fillStyle = '#3a2818';
+    const legR = Math.max(1, ppy * 0.14);
+    ctx.beginPath(); ctx.arc(-w2 * 0.75, 0, legR, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w2 * 0.75, 0, legR, 0, Math.PI * 2); ctx.fill();
+  } else if (kind === 'sign') {
+    ctx.fillStyle = '#6b5a3f';
+    const postR = Math.max(1, ppy * 0.16);
+    ctx.beginPath(); ctx.arc(0, 0, postR, 0, Math.PI * 2); ctx.fill();
+    const bw = 0.9 * ppy; const bh = 0.55 * ppy;
+    ctx.fillStyle = '#e8dcc0';
+    ctx.fillRect(postR * 0.5, -bh, bw, bh * 2);
+    ctx.strokeStyle = '#6b5a3f';
+    ctx.lineWidth = Math.max(0.6, ppy * 0.06);
+    ctx.strokeRect(postR * 0.5, -bh, bw, bh * 2);
+  } else if (kind === 'flagpole') {
+    ctx.fillStyle = '#d8d8d8';
+    const postR = Math.max(1, ppy * 0.12);
+    ctx.beginPath(); ctx.arc(0, 0, postR, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = (pal && pal.pin) || '#e01b1b';
+    ctx.beginPath();
+    ctx.moveTo(postR * 0.6, -0.05 * ppy);
+    ctx.lineTo(postR * 0.6 + 0.9 * ppy, 0.12 * ppy);
+    ctx.lineTo(postR * 0.6, 0.3 * ppy);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** Rasterise a whole hole. Returns { canvas, ppy, minX, minY, w, h }. */
@@ -350,6 +616,33 @@ export function buildMap(hole, theme) {
         ctx.fillRect(0, py - 3.4 * MAP_PPY, w, 3.4 * MAP_PPY);
       }
       ctx.globalAlpha = 1;
+    } else if (s.kind === 'swamp') {
+      // NOT WATER: no bank, no mud line, no ripple bands - a swamp is dark olive-brown ground the
+      // ball plugs into, not a body of water it drops out of. The "mottled" read comes from short
+      // vertical reed dashes in a darker tone, seeded from the poly the same way the sand dots are
+      // seeded from theirs, so the reeds are the same every load.
+      ctx.clip();
+      const bb = bboxOf(poly);
+      const rnd = mulberry32(Math.round(bb.minX * 977) ^ Math.round(bb.minY * 733));
+      ctx.strokeStyle = tintOf(FILL.swamp, 0.72);
+      ctx.lineWidth = Math.max(1, MAP_PPY * 0.4);
+      ctx.lineCap = 'butt';
+      for (let yy = bb.minY; yy < bb.maxY; yy += 1.1) {
+        for (let xx = bb.minX; xx < bb.maxX; xx += 1.1) {
+          if (rnd() < 0.6) continue;
+          const jx = xx + (rnd() - 0.5) * 1.1;
+          const jy = yy + (rnd() - 0.5) * 1.1;
+          const [px, py] = toPx(jx, jy);
+          const len = MAP_PPY * (0.9 + rnd() * 0.6);
+          ctx.beginPath();
+          ctx.moveTo(px, py + len * 0.5);
+          ctx.lineTo(px, py - len * 0.5);
+          ctx.stroke();
+        }
+      }
+      ctx.strokeStyle = pal.swampEdge || pal.bank;
+      ctx.lineWidth = MAP_PPY * 1.2;
+      tracePoly(ctx, poly, toPx); ctx.stroke();
     } else if (s.kind === 'fairwayBunker' || s.kind === 'greensideBunker') {
       // Dithered speckle in the sand, and a BANK: the reference's bunkers have a stepped darker
       // rim a couple of art pixels wide inside their edge, which is what makes them read as a dish
@@ -383,10 +676,20 @@ export function buildMap(hole, theme) {
     }
   }
 
+  // DECOR: a `{poly}` entry is art-only ground (a cart path, unchanged since 2026-09-16); a
+  // `{at, kind, rot}` entry is a SPRITE (bench/sign/flagpole, 2026-09-22) - a few yards across,
+  // drawn here so it sits on top of the ground and (below) under the trees, exactly like the real
+  // world: a bench under a tree's shade reads wrong if the tree is painted first.
   for (const d of hole.decor || []) {
-    tracePoly(ctx, d.poly, toPx);
-    ctx.fillStyle = pal.path;
-    ctx.fill();
+    if (d.poly) {
+      tracePoly(ctx, d.poly, toPx);
+      ctx.fillStyle = pal.path;
+      ctx.fill();
+      continue;
+    }
+    if (!d.at) continue;
+    const [px, py] = toPx(d.at[0], d.at[1]);
+    drawDecorSprite(ctx, d.kind, px, py, MAP_PPY, ((d.rot || 0) * Math.PI) / 180, pal);
   }
 
   // THE SLOPE READ IS NOT IN THE MAP ANY MORE. It is drawn per frame, at screen resolution, by
@@ -421,7 +724,9 @@ export function buildMap(hole, theme) {
     sc.fillStyle = '#000';
     for (const t of treesOf(hole)) {
       const type = hole.treeTypes[t.type];
-      const rr = (type.name === 'saguaro' ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * (t.s || 1) * MAP_PPY;
+      const shape = type.shape || (type.name === 'saguaro' ? 'cactus' : 'canopy');
+      if (shape === 'log') continue;   // a log lies flat - it throws no shadow (section 3)
+      const rr = (shape === 'cactus' ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * (t.s || 1) * MAP_PPY;
       const [tx, ty] = toPx(t.x, t.y);
       const th = t.h != null ? t.h : type.height;   // a hand-placed tree's own height, if it has one
       sc.beginPath();
@@ -466,16 +771,25 @@ export function buildMap(hole, theme) {
   const treesCv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
   const tctx = treesCv.getContext('2d');
   tctx.imageSmoothingEnabled = false;
+  // SHAPE resolution, per section 3: the catalogue's own `shape` field decides the silhouette; a
+  // course table written before the catalogue existed (no `shape` at all) falls back to the same
+  // rule the renderer always used - a saguaro is a cactus, everything else is a canopy - so no
+  // existing course changes by one pixel.
   const stand = treesOf(hole).map((t) => {
     const type = hole.treeTypes[t.type];
-    const cactus = type.name === 'saguaro';
+    const shape = type.shape || (type.name === 'saguaro' ? 'cactus' : 'canopy');
+    const cactus = shape === 'cactus';
     const [px, py] = toPx(t.x, t.y);
     // `t.s` is the tree's own size (holes.js's `treeScale`), so a wood is mature specimens with
     // younger trees between them rather than one crown stamped three hundred times. `treeHit` reads
     // the SAME multiple - what is painted is what stops the ball.
     const r = (cactus ? Math.max(type.trunk * 1.5, 1.2) : type.canopy) * (t.s || 1) * MAP_PPY;
-    return { t, type, cactus, px, py, r, shapes: treeShapes(px, py, r, cactus) };
+    return { t, type, shape, cactus, px, py, r, shapes: treeShapes(px, py, r, shape) };
   });
+  // Shapes whose silhouette is already the whole read (a bare trunk, a chain of log circles, a
+  // rock baseline `treeAccent` repaints entirely) skip the leafy clump pass - it would sprinkle
+  // canopy-coloured spots onto a trunk or a stone, which is not what any of them are.
+  const LEAFY = new Set(['canopy', 'fir', 'willow', 'cypress', 'bush']);
   {
     const ctx = tctx;   // every tree pass below paints the tree layer, never the ground
     const key = Math.max(1.2, MAP_PPY * 0.75);
@@ -494,6 +808,7 @@ export function buildMap(hole, theme) {
     const ctx = tctx;
     const t = st.t;
     const type = st.type;
+    const shape = st.shape;
     const [fill, rim] = TREE_FILL[type.name] || [pal.treeCanopy, pal.treeRim];
     const px = st.px, py = st.py;
     // A saguaro is drawn at its TRUNK, not its canopy: it is a pillar, and a 1.8 yd disc is what
@@ -510,7 +825,7 @@ export function buildMap(hole, theme) {
     // The bumps stay INSIDE `r`, because what is painted has to be what stops the ball.
     const shapes = st.shapes;
     ctx.save();
-    if (!cactus) {
+    if (LEAFY.has(shape)) {
       // The clumps, clipped to the canopy so nothing spills onto the grass.
       ctx.beginPath();
       for (const [cx, cy, cr] of shapes) { ctx.moveTo(cx + cr, cy); ctx.arc(cx, cy, cr, 0, Math.PI * 2); }
@@ -534,6 +849,9 @@ export function buildMap(hole, theme) {
       ctx.fillRect(px - r * 2.1, py - r * 0.4, r * 1.3, r * 0.8);
       ctx.fillRect(px + r * 0.8, py - r * 1.4, r * 0.8, r * 1.3);
     }
+    // The linework a circle union cannot carry (willow droop, dead branches, palm fronds, log
+    // rings, angular rock facets) - see `treeAccent`'s own header.
+    treeAccent(ctx, shape, px, py, r, fill, rim, rnd);
   }
 
   ctx.drawImage(treesCv, 0, 0);
