@@ -570,7 +570,7 @@ function replaceDocument(next) {
 // Course Creator: name, theme, hole count. Both editors: who is designing (player code), the
 // cloud status, other people's drafts to review, an import and a backup download.
 /** The Course Creator's looks: render.js THEMES + starter.js THEME_DEFAULTS, one row each. */
-const LOOKS = [['parkland', 'Parkland'], ['desert', 'Desert'], ['links', 'Links'], ['tropical', 'Tropical']];
+const LOOKS = [['parkland', 'Parkland'], ['desert', 'Desert'], ['links', 'Links'], ['tropical', 'Tropical'], ['mountain', 'Mountain'], ['swamp', 'Swamp']];
 
 function renderCoursePanel() {
   const el = document.getElementById('he-course');

@@ -67,6 +67,16 @@ export const THEME_DEFAULTS = {
     treeTypes: OBSTACLE_CATALOG,
     belts: BELT('palm'),
   },
+  // Mountain and Swamp (2026-09-22): spruce woods; willows standing in flooded ground.
+  mountain: {
+    treeTypes: OBSTACLE_CATALOG,
+    belts: BELT('spruce'),
+  },
+  swamp: {
+    treeTypes: OBSTACLE_CATALOG,
+    rough: 7,
+    belts: BELT('willow'),
+  },
 };
 
 /** [par, length in yards, bend in yards (+ right, - left, 0 straight)] for the 18 starters. */

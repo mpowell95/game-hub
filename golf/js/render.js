@@ -216,6 +216,62 @@ export const THEMES = {
     swamp: '#3a6a44',
     swampEdge: '#5a8a54',
   },
+  // MOUNTAIN (2026-09-22): cool alpine greens, a dark needle floor under spruce, grey granite
+  // sand, glacial blue water with a stone bank.
+  mountain: {
+    ...PALETTE,
+    fairwayA: '#8fb05a',
+    fairwayB: '#87a852',
+    lightRough: '#7a9848',
+    heavyRough: '#4f6a36',
+    treesFloor: '#34422a',
+    green: '#9ccf62',
+    greenEdge: '#88bb52',
+    fringe: '#90bf55',
+    tee: '#b0d06a',
+    sand: '#e6e0d0',
+    sandDot: '#cfc8b4',
+    water: '#5aa0c8',
+    waterBand: '#4a8ab0',
+    waterEdge: '#2e6a8e',
+    bank: '#6e6a62',
+    bankMud: '#3e3a34',
+    treeCanopy: '#2a4a30',
+    treeRim: '#18301c',
+    path: '#7a7468',
+    setupA: '#23352a',
+    setupB: '#3f5a44',
+    swamp: '#3d5a3a',
+    swampEdge: '#5c7a4a',
+  },
+  // SWAMP (2026-09-22): a bayou course. Murky green water with a mud bank, olive turf, a dark
+  // floor under weeping willows, damp tan sand. Swamp ground itself (the surface) keeps its own tone.
+  swamp: {
+    ...PALETTE,
+    fairwayA: '#94a85a',
+    fairwayB: '#8ca052',
+    lightRough: '#7a8c46',
+    heavyRough: '#4e5e30',
+    treesFloor: '#3a5234',       // FLOODED woods: the swamp-water tone, so the belts read as bayou
+    green: '#a0cc62',
+    greenEdge: '#8cb852',
+    fringe: '#92b650',
+    tee: '#b4cc6a',
+    sand: '#e0d6b4',
+    sandDot: '#cbbf98',
+    water: '#4f7a5e',
+    waterBand: '#436a52',
+    waterEdge: '#2f4e3c',
+    bank: '#5a4a32',
+    bankMud: '#33291c',
+    treeCanopy: '#3a5a2c',
+    treeRim: '#223a1a',
+    path: '#7a6e58',
+    setupA: '#2a3320',
+    setupB: '#4a5a34',
+    swamp: '#35492e',
+    swampEdge: '#56704a',
+  },
 };
 
 /** The fill/rim pair for every OBSTACLE CATALOGUE name (`golf/js/obstacles.js`), plus the three
@@ -245,7 +301,8 @@ export const TREE_FILL = {
   // POLE (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 4): a plain grey disc with a dark
   // crossarm - not green at all, since a utility pole carries no canopy.
   pole: ['#9a9a92', '#4f4f48'],
-  gorse: ['#4a6a2c', '#2c421a'],     // dark, dense; the yellow flowers are treeAccent's
+  gorse: ['#4a6a2c', '#2c421a'],
+  spruce: ['#2c5a4c', '#183a30'],    // blue-green: tells it from the pine at a glance     // dark, dense; the yellow flowers are treeAccent's
 };
 
 /** The paint colour for every surface kind, in one theme. Exported since 2026-09-05: the HUD's
