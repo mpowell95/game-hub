@@ -40,23 +40,23 @@ Working and live:
 - A square board with square cells, and a lit marquee.
 - A skeeball-style hamburger Menu button opening a Paused sheet.
 - The disc **falls down its column**, starting the instant the ball goes through the hoop.
+- **Quick chat inside a match** (both protocols) and a **History** screen with a record per
+  opponent (2026-09-22).
 
 ## 3. What is left
 
 The one list is **`hoops4/CLAUDE.md`, "Still open"** at the foot of the file. Keep it there; two
 mid-file "still to come" paragraphs went stale within a day and had to be consolidated into it.
 
-1. **Quick chat inside a match.** From Matt's 2026-09-22 playtest list, alongside the series and
-   caption that did ship. `js/messages-ui.js` already has a quick-chat preset row and `js/net.js`
-   already carries a live room, so the live half is mostly wiring. **The turn-by-turn half needs a
-   field on the match document, and that field must be OPTIONAL** — `validateGame` returning null
-   is a refusal to OPEN the match, so a required field makes every match already sitting in
-   `hoops/games/` unplayable the moment it ships. `test-hoops4-mp.mjs` pins this with a
-   hand-written pre-series document; add one for chat too.
-2. **Challenge history with records.** The data already exists and is already permanent — a
-   finished match keeps its move list and both index rows, and nothing in `js/mp.js` deletes
-   anything. `readMyGames()` already returns finished matches; the active list filters them out.
-   **This is a screen, not a schema change.**
+1. ~~**Quick chat inside a match.**~~ **DONE 2026-09-22.** A 💬 button on the play HUD, left of
+   Menu, in both protocols. Live rides `rooms/<CODE>/reactions` (the existing `net.sendReaction`,
+   no net.js change, never the move log); turn-by-turn writes an OPTIONAL
+   `hoops/games/<id>/chat/<key>` child, verified by re-read, that `validateGame` never refuses a
+   match over. No rules change. `hoops4/CLAUDE.md`, "Quick chat inside a match".
+2. ~~**Challenge history with records.**~~ **DONE 2026-09-22.** "History" on the multiplayer home:
+   a record per opponent (by player code) and every finished match, opened read only. New finished
+   index rows carry an optional `result`; old rows are worked out from their match.
+   `hoops4/CLAUDE.md`, "Challenge history with records".
 3. **The two bounce gaps `test.js` owes** (see §5). Do not touch without asking.
 
 ## 4. Settled — do not re-open these
