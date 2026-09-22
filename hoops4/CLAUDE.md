@@ -380,15 +380,28 @@ name, filled for your own shot and outlined for theirs, and it says **"Medium is
 the pause - which is painted BEFORE the timer starts and runs 1100ms rather than 800 so there is
 something to read. Verified in a browser at exactly that moment.
 
-**"There is no back button" - there was, and it was accusing you.** The hub's floating "Hub" chip
-has always been there (this HUD's 76px left padding exists to clear it). What was wrong is
-`isInProgress()`: `js/hub.js`'s `requestLeave()` confirms whenever the mounted module says a game
-is under way, and this one said yes for a TURN-BY-TURN challenge whose move log lives in
-`hoops/games/<id>` and replays on re-entry. Nothing can be lost, so nothing should be warned about.
-`isInProgress()` now returns false for `mp.kind === 'async'` and true for everything else, and
-entering a challenge toasts that the match is saved. **A second back button was built and then
-removed** - a game inventing its own back chip beside the hub's is the root CLAUDE.md's "USE WHAT
-EXISTS" rule, and the duplicate was visible in a screenshot before it went anywhere.
+**"There is no back button" - TWO separate faults, and the first fix only caught one.**
+
+The one it caught: `isInProgress()`. `js/hub.js`'s `requestLeave()` confirms whenever the mounted
+module says a game is under way, and this one said yes for a TURN-BY-TURN challenge whose move log
+lives in `hoops/games/<id>` and replays on re-entry. Nothing can be lost, so nothing should be
+warned about. It now returns false for `mp.kind === 'async'`, true for everything else, and
+entering a challenge toasts that the match is saved.
+
+The one it missed, and the reason a second pass was needed the same day: **the hub's chip is a
+QUIT, not a back.** Matt: *"we had the Hub back button. That's more of a quit button. There is no
+back button to go back to the setup screen."* It unmounts the module and lands on the launcher;
+what was missing is a way to stay inside Connect 4 Hoops and change opponent or shot rule.
+
+So there ARE two buttons, deliberately, and **they are labelled by DESTINATION**. The first
+attempt built the second chip and labelled it "Back", stacked over the hub's own "Back" - two
+words for two places was the fix; one word for two was the bug. It is `.h4-menu`, reading "Menu",
+in the HUD row (y 9-42) while the hub's chip floats at y 54+, measured as non-overlapping. A
+turn-by-turn match leaves it with no question (straight to the multiplayer screen, where the rest
+of your matches are); solo, pass-and-play and a live room ask first, because those really do end.
+
+The HUD's `padding-left` was 76px to clear the hub's chip. That was never needed - the two rows do
+not overlap - and the Menu button now leads the row, so it is a normal 16px gutter.
 
 Measured after: `test-game-conventions.mjs` 11/11, `test-visual.mjs hoops4` 13/13,
 `check-no-scroll.mjs hoops4` 4 screens / 0 scroll.
