@@ -2720,8 +2720,8 @@ class BaseballPlayScreen {
         // the same non-passive touchstart/touchend shape the main button already uses so a hold
         // here can never also start a page scroll (root CLAUDE.md's touch rules).
         b.style.touchAction = 'none';
-        b.addEventListener('touchstart', (e) => { e.preventDefault(); this._onBuntDown(); }, { passive: false });
-        b.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') return; this._onBuntDown(); });
+        b.addEventListener('touchstart', (e) => { e.preventDefault(); this._onBuntDown(e); }, { passive: false });
+        b.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') return; this._onBuntDown(e); });
       } else {
         b.style.touchAction = 'manipulation';
         b.addEventListener('click', () => this._onActionSlot(b.dataset.act));
@@ -2765,8 +2765,23 @@ class BaseballPlayScreen {
    *  wind-up. `_buntRelease` is bound at `document`, not this button, because `_paintActionSlots()`
    *  rebuilds the well's own DOM on every repaint (READY's own tap included) - an element-scoped
    *  listener would be dropped mid-hold the instant that happens. Both `touchend`/`touchcancel` and
-   *  `pointerup`/`pointercancel` are covered, the same dual path the main button already uses. */
-  _onBuntDown() {
+   *  `pointerup`/`pointercancel` are covered, the same dual path the main button already uses.
+   *
+   *  A REAL, LOAD-BEARING REASON this matches the SPECIFIC touch/pointer that pressed this well,
+   *  never just "any touchend/pointerup anywhere": a player has to be able to hold Bunt with one
+   *  thumb and tap READY with the other, and a touchend from that OTHER tap bubbles to `document`
+   *  exactly like this well's own would - a listener keyed on event TYPE alone would end the hold
+   *  the instant READY is tapped, before the wind-up even starts. Found by driving this end to end
+   *  (a scratch diagnostic script, not read off the code): the first build of this method armed the
+   *  well, then measured `armedBunt: false` by the time the pitch's own flight began, entirely from
+   *  READY's own touchend bubbling up to this same `document` listener. Once THIS press carries a
+   *  real identity (`e.changedTouches[0].identifier` for a real touch, `e.pointerId` for a mouse/
+   *  pen), any release that does not carry the SAME identity for the SAME input family is ignored
+   *  outright - never a fallback match, or a plain touchend from an unrelated tap would still slip
+   *  through. Only a press with NO identity at all (a bare `new Event(...)`, which carries neither)
+   *  falls back to matching any release, which is what keeps a test dispatching bare events simple
+   *  when it is not exercising this multi-touch distinction on purpose. */
+  _onBuntDown(e) {
     if (this._buntHeld) return;
     this._buntHeld = true;
     this.state.armedBunt = true;
@@ -2774,7 +2789,22 @@ class BaseballPlayScreen {
     this._paintModeLabels();
     this.actors.play('batter', 'Bunt');
     if (!this._flightActive) this._drawStaticField();
-    this._buntRelease = () => this._onBuntUp();
+    const touchId = e && e.changedTouches && e.changedTouches.length ? e.changedTouches[0].identifier : null;
+    const pointerId = e && e.pointerId !== undefined ? e.pointerId : null;
+    const hasIdentity = touchId != null || pointerId != null;
+    const matches = (ev) => {
+      if (!hasIdentity) return true;
+      if (ev.type === 'touchend' || ev.type === 'touchcancel') {
+        if (touchId == null) return false;
+        const touches = ev.changedTouches;
+        return !!touches && Array.prototype.some.call(touches, (t) => t.identifier === touchId);
+      }
+      if (ev.type === 'pointerup' || ev.type === 'pointercancel') {
+        return pointerId != null && ev.pointerId === pointerId;
+      }
+      return false;
+    };
+    this._buntRelease = (ev) => { if (matches(ev)) this._onBuntUp(); };
     document.addEventListener('touchend', this._buntRelease);
     document.addEventListener('touchcancel', this._buntRelease);
     document.addEventListener('pointerup', this._buntRelease);

@@ -1393,10 +1393,18 @@ if (!process.env.BB_DEVICE_QUICK) {
         while (Date.now() < end) { if (fn()) return true; await new Promise((r) => setTimeout(r, 40)); }
         return false;
       };
-      const touchStart = (el) => el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
       const tap = (el) => {
         el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
         el.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      };
+      // A REAL, identified touch (not a bare `new Event(...)`) - `_onBuntDown` scopes its own
+      // release listener to the SPECIFIC touch that pressed this well (a player holds Bunt with
+      // one thumb and taps READY with the other), and only a press that itself carries an identity
+      // exercises that scoping; a bare event falls back to matching anything, which would let
+      // READY's own touchend (dispatched below, on a different element) end the hold immediately.
+      const buntStart = (el) => {
+        const touch = new Touch({ identifier: 1, target: el, clientX: 1, clientY: 1 });
+        el.dispatchEvent(new TouchEvent('touchstart', { touches: [touch], targetTouches: [touch], changedTouches: [touch], bubbles: true, cancelable: true }));
       };
       const BUNT_KINDS = ['bunt-out', 'bunt-single', 'bunt-popup', 'sacrifice'];
       const deadline = Date.now() + 120000;
@@ -1413,7 +1421,7 @@ if (!process.env.BB_DEVICE_QUICK) {
         }
         const buntBtn = document.querySelector('[data-act="bunt"]');
         if (!buntBtn || buntBtn.disabled) return { error: 'the BUNT well is disabled during a batting turn before READY' };
-        touchStart(buntBtn);   // HOLD arms it - never a click/tap any more
+        buntStart(buntBtn);   // HOLD arms it - never a click/tap any more
         // Freshly queried: `_paintActionSlots()` rebuilds the well's own DOM the instant it arms.
         const armedBtn = document.querySelector('[data-act="bunt"]');
         if (!armedBtn || !armedBtn.classList.contains('is-armed')) return { error: 'holding BUNT did not arm the well' };
@@ -1451,16 +1459,27 @@ if (!process.env.BB_DEVICE_QUICK) {
         while (Date.now() < end) { if (fn()) return true; await new Promise((r) => setTimeout(r, 40)); }
         return false;
       };
-      const touchStart = (el) => el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
       const tap = (el) => {
         el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
         el.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      };
+      // The same real, identified touch `actions-live (b)` uses - arm and release must carry the
+      // SAME identifier (`_onBuntDown` scopes its release listener to it), or the release below
+      // would need to fall back to the "no identity" case to fire at all, which would also let
+      // READY's own touchend end the hold early, defeating the very thing this probe checks.
+      const buntStart = (el) => {
+        const touch = new Touch({ identifier: 1, target: el, clientX: 1, clientY: 1 });
+        el.dispatchEvent(new TouchEvent('touchstart', { touches: [touch], targetTouches: [touch], changedTouches: [touch], bubbles: true, cancelable: true }));
+      };
+      const buntEnd = () => {
+        const touch = new Touch({ identifier: 1, target: document.body, clientX: 1, clientY: 1 });
+        document.dispatchEvent(new TouchEvent('touchend', { touches: [], targetTouches: [], changedTouches: [touch], bubbles: true, cancelable: true }));
       };
       const ready = await waitFor(() => inst.state.mode === 'batting' && inst.state.actionLabel === 'act_ready', 20000);
       if (!ready) return { error: 'never reached a batting turn offering READY within 20s' };
       const buntBtn = document.querySelector('[data-act="bunt"]');
       if (!buntBtn || buntBtn.disabled) return { error: 'the BUNT well is disabled before READY' };
-      touchStart(buntBtn);
+      buntStart(buntBtn);
       const armedBtn = document.querySelector('[data-act="bunt"]');
       const armed = !!(armedBtn && armedBtn.classList.contains('is-armed'));
       tap(document.querySelector('[data-role="mainbtn"]'));   // READY
@@ -1468,7 +1487,7 @@ if (!process.env.BB_DEVICE_QUICK) {
       // `_resolveBuntTake`, not the wind-up's own downgrade-to-ordinary-swing path) but well before
       // any real pitch's own crossing (the fastest flight in this engine is still several hundred ms).
       await new Promise((r) => setTimeout(r, windupMs + 150));
-      document.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      buntEnd();
       const settled = await waitFor(() => counts.length > 0, 8000);
       let squaredAfter = false;
       if (inst.actors.actors.batter && inst.actors.actors.batter.current) {
