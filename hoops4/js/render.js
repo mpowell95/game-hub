@@ -765,19 +765,33 @@ export class Renderer {
       basketball(x, px + pw * 0.075, midY, iconR);
       chipPair(x, px + pw * 0.925, midY, iconR * 0.54);
 
-      // Layer 6: the wordmark. "CONNECT 4" in white (the ball, the neutral word) over "HOOPS" in
-      // the rim's own orange (the half that scores) - each dimensional, each keyed to a colour
-      // already on this cabinet.
-      const cx = px + pw / 2;
-      const capH = ph * 0.42;
-      x.font = `900 ${capH}px ui-sans-serif, system-ui, sans-serif`;
-      const topW2 = x.measureText('CONNECT 4').width;
-      signWord(x, 'CONNECT 4', cx, py + ph * 0.34, capH, '#ffffff', '#0c0d10', L.bulb);
-      // HOOPS IS YELLOW, NOT THE RIM'S ORANGE. Orange on this blue is the lowest-contrast pair on
-      // the cabinet and the glow behind it only muddied it further - at play size it was a smear.
-      // The bulb yellow is already the machine's accent, and it is the one colour on here that
-      // stays crisp against the board's blue.
-      signWord(x, 'HOOPS', cx, py + ph * 0.77, ph * 0.30, L.bulb, '#0c0d10', L.glow, topW2);
+      // Layer 6: the wordmark. HOOPS IS THE NAME, big and centred; "CONNECT 4" is a small stacked
+      // tag to its LEFT (2026-09-22). Matt: "change the name of the game to have HOOPS be big and
+      // Connect 4 smaller and to the side." HOOPS stays the bulb yellow - orange on this blue was
+      // the lowest-contrast pair on the cabinet and read as a smear at play size - and the tag is
+      // white, the neutral word. The block is sized by MEASURING the words and shrinks as one unit
+      // if it would reach either flanking icon, so no language or font can push it into them.
+      const leftEdge = px + pw * 0.075 + iconR * 1.25;
+      const rightEdge = px + pw * 0.925 - iconR * 1.0;
+      let big = ph * 0.66;
+      const tagTop = 0.29, tagNum = 0.52, gapK = 0.16;   // sizes as fractions of `big`
+      const widthAt = (sz) => {
+        x.font = `900 ${sz}px ui-sans-serif, system-ui, sans-serif`;
+        const hoopsW = x.measureText('HOOPS').width;
+        x.font = `900 ${sz * tagTop}px ui-sans-serif, system-ui, sans-serif`;
+        const tagW = x.measureText('CONNECT').width;
+        return { hoopsW, tagW, total: tagW + sz * gapK + hoopsW };
+      };
+      let w = widthAt(big);
+      const room = rightEdge - leftEdge;
+      if (w.total > room) { big *= room / w.total; w = widthAt(big); }
+      const startX = leftEdge + (room - w.total) / 2;
+      const tagCx = startX + w.tagW / 2;
+      const hoopsCx = startX + w.tagW + big * gapK + w.hoopsW / 2;
+      const midW = py + ph * 0.54;
+      signWord(x, 'CONNECT', tagCx, midW - big * 0.20, big * tagTop, '#ffffff', '#0c0d10', L.bulb);
+      signWord(x, '4', tagCx, midW + big * 0.17, big * tagNum, '#ffffff', '#0c0d10', L.bulb);
+      signWord(x, 'HOOPS', hoopsCx, midW + big * 0.03, big, L.bulb, '#0c0d10', L.glow);
     }), bw * 1.02, mqH, [0, topW[1] + bbH + mqH / 2 + 0.01, topW[2] + 0.02]);
     // The highest lit thing on the machine, which is one of the two points the camera frames on.
     this._marqueeTop = [0, topW[1] + bbH + mqH, topW[2] + 0.02];

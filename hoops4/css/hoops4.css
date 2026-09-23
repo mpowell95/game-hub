@@ -196,9 +196,23 @@
   /* 64px ON THE RIGHT is the mirror of the 76px above: the Menu button is absolutely positioned
      now (top right, skeeball's box), so this row no longer CONTAINS it and the turn pill would
      otherwise run underneath it. */
-  padding: 8px 64px 8px 76px;
-  min-height: 38px;
+  /* (2026-09-22) 76px WAS NOT ENOUGH. Measured in the hub with a 59px notch: the chip spans
+     x 10-86 and the pill started at x 76, so the Hub chip sat on the first 10px of "Your shot".
+     Matt: "the Hub back button covers part of it". The label is now CENTRED between two EQUAL
+     reserves of 96px (chip's right edge + 10), so it can never reach the chip, and in a
+     multiplayer match both reserves widen to clear the chat button too. */
+  justify-content: center;
+  padding: 6px 96px;
+  min-height: 44px;
 }
+/* The turn label: who, in words, with their ball; under it, the shot count after a miss and the
+   game of a series. One centred column. */
+.h4-root .h4-turn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; max-width: 100%;
+}
+.h4-root .h4-sub { display: flex; gap: 8px; font-size: 11px; line-height: 1.2; color: var(--h4-dim); }
+.h4-root .h4-sub:not(:has(:not(:empty):not([hidden]))) { display: none; }
+.h4-root .h4-ball { width: 18px; height: 18px; flex: 0 0 auto; }
 /* SKEEBALL'S BUTTON, IN SKEEBALL'S PLACE. Matt: "make the 'menu' button look just like
    skeeball. With the same options." So this is `.sk-menu`'s box verbatim - absolute, top right,
    44x44, a hamburger - and it opens the same pause sheet (ui.js's _showPause).
@@ -240,12 +254,12 @@
    doing nothing until a ball suddenly appeared. The marker is a SHAPE first (disc / triangle). */
 .h4-root .h4-who {
   display: inline-flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 7px;
-  font-size: 15px; font-weight: 800; letter-spacing: 0.02em;
-  padding: 5px 12px; border-radius: 999px;
+  font-size: 14px; font-weight: 800; letter-spacing: 0.02em;
+  padding: 4px 12px 4px 6px; border-radius: 999px;
   border: 2px solid transparent; background: rgba(255, 255, 255, 0.06);
-  max-width: 62vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  max-width: 100%; overflow: hidden; white-space: nowrap;
 }
-.h4-root .h4-who .h4-mark { font-size: 13px; line-height: 1; flex: 0 0 auto; }
+.h4-root .h4-who-txt { overflow: hidden; text-overflow: ellipsis; }
 .h4-root .h4-who.is-red { color: var(--h4-red); border-color: var(--h4-red); }
 .h4-root .h4-who.is-yellow { color: var(--h4-yellow); border-color: var(--h4-yellow); }
 /* Your own shot is FILLED, theirs is outlined - a second non-colour signal on top of the shape. */
@@ -257,7 +271,7 @@
 @media (prefers-reduced-motion: reduce) {
   .h4-root .h4-who.is-waiting { animation: none; opacity: 0.8; }
 }
-.h4-root .h4-shots { font-size: 12px; color: var(--h4-dim); font-variant-numeric: tabular-nums; }
+.h4-root .h4-shots { font-size: 11px; color: var(--h4-dim); font-variant-numeric: tabular-nums; }
 
 .h4-root .h4-stage { position: relative; flex: 1 1 auto; min-height: 0; }
 /* An absolutely positioned canvas is a REPLACED element: inset:0 does NOT stretch it, which is
@@ -664,9 +678,8 @@
    clipped and "Game 2 of 3" wrapped onto two lines: an empty shot counter no longer spends a flex
    gap, the gap tightens, and the series leg never wraps. */
 .h4-root .h4-hud .h4-shots:empty { display: none; }
-.h4-root .h4-hud.has-chat { padding-right: 116px; gap: 6px; }
-.h4-root .h4-hud.has-chat .h4-leg { white-space: nowrap; flex: 0 0 auto; font-size: 11px; }
-.h4-root .h4-hud.has-chat .h4-who { padding: 5px 10px; gap: 6px; }
+.h4-root .h4-hud.has-chat { padding: 6px 116px; }
+.h4-root .h4-hud .h4-leg { white-space: nowrap; font-size: 11px; }
 
 .h4-root .h4-chat-btn {
   appearance: none;

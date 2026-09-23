@@ -180,6 +180,7 @@ mixed build), then run `node validate-sw-assets.mjs`, which also rewrites `REST_
 
 | CACHE | what |
 |---|---|
+| v915 | Ball hidden once through the rim; "<who>'s turn" label clear of the Hub chip; HOOPS-first marquee |
 | v913 | Disc falls on `through`; the thrown ball is a red/yellow basketball; rimout knobs (off) |
 | v908 | Quick chat in a match; challenge History with records |
 | v906 | The cabinet flare no longer covers the board's bottom corners; taller marquee |

@@ -1170,6 +1170,33 @@ scored ball passes through first; the through -> resolved median stays under 0.2
 starts the drop on `through`, never on `capture` (structural). **The physics is otherwise
 unchanged**: checked throw by throw against main over 861 throws, 0 differ.
 
+**And the ball stops being drawn at `through`** (same day, second recording): *"now the ball falls
+in front of the connect 4 board."* After `through` the physics keeps the ball falling down the
+throat until the throw resolves, and the screen is directly under the hoops, so the 3D ball slid
+down the face of the board beside the disc. `ui.js`'s `tick` passes no ball to the renderer once
+`st.committed` is set: from that frame the falling disc IS the ball. Verified in a real browser:
+the ball stops being drawn on the same frame `startDrop` runs, before the throw is done.
+
+### The turn label, and HOOPS as the name (2026-09-22)
+
+Matt: *"change the 'Your shot' and the 'Hard is shooting'. Those are not good and the Hub back
+button covers part of it. and change the name of the game to have HOOPS be big and Connect 4
+smaller and to the side."*
+
+- **The words**: always "<who>'s turn" - `turnYou` / `turnCpu` ("Computer's turn", no longer the
+  difficulty as a name) / `turnOf` with the opponent's name, or Red / Yellow on one phone. Spanish
+  "Turno de la CPU", because "Turno del ordenador" measured wider than the room and truncated.
+  Beside the words, a small basketball in that player's colour (the same ball as on the lane);
+  the words carry the meaning, so colour is never the only signal. A shot count ("Shot 2", only
+  after a miss) and "Game 2 of 3" sit on a small second line.
+- **Where**: measured in the hub with a 59px notch, the Hub chip spans x 10-86 and the old pill
+  started at x 76. The label is now CENTRED between equal 96px reserves (116px in a multiplayer
+  match, clearing the chat button). Measured after: "Your turn" x 135-258, "Computer's turn"
+  x 106-287, Menu at x 337.
+- **The marquee**: HOOPS big and centred in the bulb yellow, with a small stacked "CONNECT / 4"
+  tag in white to its left. The block is laid out by MEASURING the words and shrinks as one unit
+  if it would reach either flanking icon.
+
 ### The thrown ball is a basketball in the player's colour (2026-09-22)
 
 Matt: *"the yellow ball is not yellow enough. the ball you throw is not the same yellow as the
