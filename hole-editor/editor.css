@@ -335,6 +335,9 @@ input[type="range"] { accent-color: var(--he-accent); }
  * sizes) is the proof the desktop editor did not move. */
 .he-sheet-bar, .he-sheet-scrim, .he-mbar, #he-m-tools, .he-drawbar, .he-m-note { display: none; }
 
+/* Phone-only chrome (isometric look stage 2): hidden on the desktop editor. */
+.he-ptop, .he-pbar, .he-tray, .he-more { display: none; }
+
 @media (max-width: 899px) {
   .he-root { height: 100vh; height: 100dvh; min-height: 0; }
   input[type="text"], input[type="number"], select { font-size: 16px; }   /* iOS zooms in under 16 px */
@@ -451,4 +454,87 @@ input[type="range"] { accent-color: var(--he-accent); }
   .he-drafts tr { padding: 6px 0; }
   .he-drafts td { padding: 2px 6px !important; white-space: normal !important; }
   .he-drafts .gh-btn { min-height: 40px; width: 100%; margin-top: 4px; }
+
+  /* ---- THE PASTEL PHONE (isometric look stage 2, 2026-09-23; docs/mockups/hole-editor-phone.html).
+     The dark ribbon, the Tools grid, the + Add sheet and the holes bar give way to a top bar, a
+     bottom bar of seven picture buttons, trays and a More sheet. The colour tokens flip to the
+     Pocket Metropolis palette here, so every panel, sheet and modal on a phone follows. */
+  :root {
+    --gh-bg: #fffaf3; --gh-surface: #fffaf3; --gh-surface-2: #fbf1e6;
+    --gh-ink: #4a4063; --gh-muted: #8a82a0; --gh-accent-ink: #4a4063;
+    --gh-border: rgba(74, 64, 99, .12); --gh-border-strong: rgba(74, 64, 99, .22);
+    --he-bay: #fffaf3; --he-panel: #fffaf3; --he-card: #fbf1e6; --he-card-hi: #f6e6d6;
+    --he-ink: #4a4063; --he-muted: #8a82a0; --he-accent-soft: rgba(255, 206, 58, .28); --he-canvas-bg: #bfe3f2;
+    --he-shadow: 0 10px 28px -12px rgba(74, 64, 99, .45), 0 2px 0 rgba(255, 255, 255, .7) inset;
+    --he-round: ui-rounded, "SF Pro Rounded", "Nunito", "Quicksand", "Trebuchet MS", sans-serif;
+  }
+  body { background: #bfe3f2; color: var(--he-ink); }
+  .he-ribbon, .he-mbar, .he-canvas-controls, .he-hover-readout, #he-layers-btn, #he-legend-btn { display: none !important; }
+  .he-canvas-top { top: 70px; }
+
+  .he-ptop { display: flex; position: absolute; top: 10px; left: 10px; right: 10px; z-index: 12; gap: 6px; align-items: center; font-family: var(--he-round); }
+  .he-ptop-hole { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; padding: 5px; background: #fffaf3; border-radius: 18px; box-shadow: var(--he-shadow); }
+  .he-parrow { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; background: #fbf1e6; color: var(--he-ink); font-size: 22px; font-weight: 800; line-height: 1; touch-action: manipulation; }
+  .he-ptop-mid { position: relative; flex: 1 1 auto; min-width: 0; text-align: center; line-height: 1.15; }
+  .he-ptop-mid b { display: block; font-size: 15px; }
+  .he-ptop-mid small { display: block; font-size: 11px; font-weight: 700; color: var(--he-muted); white-space: nowrap; }
+  .he-ptop-mid select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; }
+  .he-ppill { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: #fffaf3; color: var(--he-ink); box-shadow: var(--he-shadow); font-size: 20px; font-weight: 800; touch-action: manipulation; }
+  .he-ppill--play { background: #ffe29a; font-size: 16px; }
+
+  .he-pbar { display: flex; position: absolute; left: 8px; right: 8px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 26;
+    gap: 2px; padding: 5px; background: #fffaf3; border-radius: 22px; box-shadow: var(--he-shadow); font-family: var(--he-round); }
+  .he-ptab { flex: 1 1 0; min-width: 0; display: grid; justify-items: center; gap: 1px; padding: 5px 0 4px; border: 0; border-radius: 14px; background: none;
+    color: #6f6689; font: 800 10.5px var(--he-round); touch-action: manipulation; transition: transform .25s cubic-bezier(.3, 1.6, .5, 1), background .2s; }
+  .he-ptab i { display: block; width: 28px; height: 28px; }
+  .he-ptab i svg { width: 28px; height: 28px; display: block; }
+  .he-ptab span { white-space: nowrap; }
+  .he-ptab.is-on { background: var(--tint, #b8e0d2); color: var(--he-ink); transform: translateY(-5px); box-shadow: 0 10px 18px -10px rgba(74, 64, 99, .55); }
+  .he-ptab[data-ptab="move"] { --tint: #e3d4ec; }
+  .he-ptab[data-ptab="trees"] { --tint: #cfe8c8; }
+  .he-ptab[data-ptab="sand"] { --tint: #f6e7c1; }
+  .he-ptab[data-ptab="water"] { --tint: #c6e8f3; }
+  .he-ptab[data-ptab="green"] { --tint: #d9efb8; }
+  .he-ptab[data-ptab="fairway"] { --tint: #ebe4d8; }
+  .he-ptab[data-ptab="more"] { --tint: #ffe29a; }
+
+  .he-tray:not([hidden]) { display: flex; flex-direction: column; position: absolute; left: 8px; right: 8px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 24;
+    max-height: calc(100% - 170px); background: #fffaf3; border-radius: 22px; box-shadow: var(--he-shadow); font-family: var(--he-round); overscroll-behavior: contain; }
+  .he-tray-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 6px 2px 14px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--he-muted); }
+  .he-tray-x { width: 40px; height: 40px; border: 0; background: none; color: var(--he-ink); font-size: 26px; line-height: 1; touch-action: manipulation; }
+  .he-tray-body { overflow-y: auto; padding: 0 10px 10px; overscroll-behavior: contain; }
+  .he-tray-sub { font-size: 11px; font-weight: 800; color: var(--he-muted); text-transform: uppercase; letter-spacing: .05em; margin: 10px 2px 6px; }
+  .he-tray-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .he-ttile { display: grid; justify-items: center; gap: 2px; padding: 4px 2px 5px; border: 0; border-radius: 14px; background: #fbf1e6; color: #6f6689;
+    font: 800 11px/1.15 var(--he-round); text-align: center; touch-action: manipulation; min-height: 44px; }
+  .he-ttile canvas { width: 100%; max-width: 80px; aspect-ratio: 80 / 66; display: block; }
+  .he-ttile.is-on { background: #fff6d8; box-shadow: 0 0 0 2.5px #ffce3a inset; color: var(--he-ink); }
+  .he-tseg { display: flex; background: #fbf1e6; border-radius: 999px; padding: 3px; margin: 4px 0 6px; }
+  .he-tseg button { flex: 1 1 0; border: 0; background: none; border-radius: 999px; padding: 7px 4px; font: 800 12.5px var(--he-round); color: #6f6689; touch-action: manipulation; }
+  .he-tseg button.is-on { background: #fff; color: var(--he-ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+
+  .he-more:not([hidden]) { display: block; position: absolute; left: 0; right: 0; bottom: 0; z-index: 25; max-height: calc(100% - 60px); overflow-y: auto;
+    padding: 10px 12px calc(92px + env(safe-area-inset-bottom, 0px)); background: #fffaf3; border-radius: 26px 26px 0 0;
+    box-shadow: 0 -10px 30px -12px rgba(74, 64, 99, .4); font-family: var(--he-round); overscroll-behavior: contain; }
+  .he-more-grab { width: 40px; height: 5px; border-radius: 3px; background: #e2d6c8; margin: 0 auto 6px; }
+  .he-more-grp { font-size: 11px; font-weight: 800; color: var(--he-muted); text-transform: uppercase; letter-spacing: .06em; margin: 10px 2px 6px; }
+  .he-more-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .he-more-item { display: grid; justify-items: center; gap: 2px; padding: 9px 2px 8px; border: 0; border-radius: 14px; background: #fbf1e6; color: #6f6689;
+    font: 800 11.5px/1.2 var(--he-round); touch-action: manipulation; min-height: 58px; }
+  .he-more-item i { font-style: normal; font-size: 20px; }
+
+  /* The Settings sheet becomes the pastel card that sits above the bar. */
+  .he-right { left: 8px; right: 8px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border-radius: 22px; border: 0; background: #fffaf3;
+    box-shadow: var(--he-shadow); max-height: calc(100% - 170px); }
+  .he-right { max-height: 46%; }
+  .he-right[data-show="hole"], .he-right[data-show="course"] { max-height: calc(100% - 170px); }
+  .he-right[data-show="context"] > .he-panel:not([data-panel="context"]),
+  .he-right[data-show="hole"] > .he-panel:not([data-panel="hole"]),
+  .he-right[data-show="course"] > .he-panel:not([data-panel="course"]) { display: none; }
+  .he-left { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  .he-sheet-bar { background: #fffaf3; border-radius: 22px 22px 0 0; }
+  .he-root--drawing .he-drawbar { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); background: #fffaf3; border: 0; border-radius: 18px; box-shadow: var(--he-shadow); }
+  .he-mbtn { background: #fbf1e6; color: var(--he-ink); border: 0; border-radius: 12px; }
+  .he-mbtn--add { background: #ffe29a; }
+  .he-mbtn--danger { background: #ffd6cc; color: #8a3a2a; }
 }

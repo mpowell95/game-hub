@@ -73,24 +73,28 @@ const tapEl = async (sel) => { const r = await page.locator(sel).first().boundin
 console.log('\n-- stage 1: layout --');
 ok('the page does not scroll sideways at 390 px', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 ok('the desktop columns and holes bar are hidden', await page.evaluate(() => ['.he-left', '.he-right', '.he-bottom'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')));
-ok('the hole picker bar is showing', await page.evaluate(() => getComputedStyle(document.getElementById('he-mbar')).display !== 'none'));
+ok('the pastel top bar and the 7-button bottom bar are showing', await page.evaluate(() => getComputedStyle(document.getElementById('he-ptop')).display !== 'none' && document.querySelectorAll('#he-pbar [data-ptab]').length === 7 && getComputedStyle(document.getElementById('he-pbar')).display !== 'none'));
+ok('the dark ribbon is gone on a phone', await page.evaluate(() => getComputedStyle(document.getElementById('he-ribbon')).display === 'none'));
+ok('the top bar names the hole, par and length', /Hole 1/.test(await page.textContent('#he-ptop-n')) && /Par \d · \d+ yd/.test(await page.textContent('#he-ptop-sub')));
 const mb = await mapBox();
 ok('the map gets most of the screen (> 70% of the height)', mb.h > 844 * 0.7, `map ${Math.round(mb.h)} px tall`);
-await tapEl('#he-m-tools');
-ok('Tools unfolds the ribbon', await page.evaluate(() => document.getElementById('he-ribbon').classList.contains('is-open')));
-await tapEl('#he-ribbon [data-tool="route"]');
-ok('picking a tool in it folds it and switches tool', await page.evaluate(() => !document.getElementById('he-ribbon').classList.contains('is-open') && window.__he.editorCanvas.tool === 'route'));
+await tapEl('[data-ptab="fairway"]');
+ok('Fairway opens its tray', await page.evaluate(() => !document.getElementById('he-tray').hidden && window.__he.trayTab === 'fairway'));
+ok('every tray tile is a drawn picture, not an emoji', await page.evaluate(() => [...document.querySelectorAll('#he-tray .he-ttile')].every((t) => t.querySelector('canvas'))));
+await tapEl('#he-tray [data-tool-pick="route"]');
+ok('Route in it closes the tray and switches tool', await page.evaluate(() => document.getElementById('he-tray').hidden && window.__he.editorCanvas.tool === 'route'));
+ok('...and the bottom bar shows Fairway as armed', await page.evaluate(() => document.querySelector('[data-ptab="fairway"]').classList.contains('is-on')));
+await tapEl('.he-right [data-sheet-close]').catch(() => {});
 await tapEl('#he-m-next');
 ok('the next-hole arrow moves to hole 2', await page.evaluate(() => window.__he.doc.order.indexOf(window.__he.currentId) === 1 && document.getElementById('he-m-hole').value === window.__he.currentId));
 await tapEl('#he-m-prev');
 
 console.log('\n-- stage 2: touch --');
-// Pick the fairway bunker from the Add sheet.
-await tapEl('#he-m-add');
-ok('+ Add opens the Add sheet', await page.evaluate(() => document.querySelector('.he-left').classList.contains('is-open')));
-await page.locator('[data-item="bunker-fairway"]').scrollIntoViewIfNeeded();
-await tapEl('[data-item="bunker-fairway"]');
-ok('picking a tile closes the sheet and arms the Bunker tool', await page.evaluate(() => !document.querySelector('.he-left').classList.contains('is-open') && window.__he.editorCanvas.tool === 'bunker'));
+// Pick the fairway bunker from the Sand tray.
+await tapEl('[data-ptab="sand"]');
+ok('Sand opens its tray', await page.evaluate(() => !document.getElementById('he-tray').hidden && window.__he.trayTab === 'sand'));
+await tapEl('#he-tray [data-item="bunker-fairway"]');
+ok('picking a tile closes the tray and arms the Bunker tool', await page.evaluate(() => document.getElementById('he-tray').hidden && window.__he.editorCanvas.tool === 'bunker'));
 
 // [KNOWN-BUG PROBE] a placement tool placed on pointerDOWN, so the first finger of a pinch dropped a bunker.
 const nB0 = ((await spec()).bunkers || []).length;
@@ -124,7 +128,7 @@ ok('one finger on empty ground moves the view', Math.abs(c3.cy - c2.cy) > 5, `cy
 ok('...and places nothing', ((await spec()).bunkers || []).length === nB1);
 
 // Select tool: one finger on the bunker drags it.
-await tapEl('#he-m-tools'); await tapEl('#he-ribbon [data-tool="select"]');
+await tapEl('[data-ptab="move"]');
 const bObj = await page.evaluate(() => { const o = window.__he.editorCanvas; const b = o.spec.bunkers[o.spec.bunkers.length - 1]; return { yd: b.yd }; });
 const bc = await page.evaluate(async () => { const m = await import('/hole-editor/js/canvas.js'); const c = window.__he.editorCanvas; const list = m.listObjects ? m.listObjects(c.spec, c.stations, c.length) : null; const o = list && list.filter((x) => x.group === 'bunkers').pop(); return o ? o.center : null; });
 if (bc) {
@@ -136,7 +140,7 @@ if (bc) {
 } else ok('listObjects is exported for the probe', false);
 
 // Long press = double-click: the Route tool adds a dot.
-await tapEl('#he-m-tools'); await tapEl('#he-ribbon [data-tool="route"]');
+await tapEl('[data-ptab="fairway"]'); await tapEl('#he-tray [data-tool-pick="route"]'); await tapEl('.he-right [data-sheet-close]').catch(() => {});
 const nP0 = (await spec()).path.length;
 const s2 = await spec();
 const mid2 = await toScreen((s2.path[0][0] + s2.path[1][0]) / 2 + 3, (s2.path[0][1] + s2.path[1][1]) / 2);
@@ -151,10 +155,9 @@ await drag(wps.x + 16, wps.y, wps.x + 16 + 40, wps.y);
 const wp2 = (await spec()).path[1];
 ok('a finger 16 px off a route dot still drags it (22 px target)', Math.abs(wp2[0] - wp[0]) > 3, `x ${wp[0]} -> ${wp2[0]}`);
 
-ok('the readout follows the last touch', await page.evaluate(() => /\d/.test(document.getElementById('he-hover').textContent)));
 ok('the canvas has touch-action: none', await page.evaluate(() => getComputedStyle(document.getElementById('he-canvas')).touchAction === 'none'));
 console.log('\n-- stage 3: on-screen stand-ins for the keys --');
-await tapEl('#he-m-tools'); await tapEl('#he-ribbon [data-tool="select"]');
+await tapEl('[data-ptab="move"]');
 const nB2 = ((await spec()).bunkers || []).length;
 const bc2 = await page.evaluate(async () => { const m = await import('/hole-editor/js/canvas.js'); const c = window.__he.editorCanvas; return m.listObjects(c.spec, c.stations, c.length).filter((x) => x.group === 'bunkers').pop().center; });
 let bs2 = await toScreen(bc2[0], bc2[1]);
@@ -168,7 +171,7 @@ ok('Delete is hidden with nothing selected', await page.evaluate(() => document.
 
 // Draw a lake: the drawing bar replaces Enter / Backspace / Esc.
 const nW = ((await spec()).water || []).length;
-await tapEl('#he-m-add'); await page.locator('[data-item="water-draw"]').scrollIntoViewIfNeeded(); await tapEl('[data-item="water-draw"]');
+await tapEl('[data-ptab="water"]'); await tapEl('#he-tray [data-item="water-draw"]');
 ok('drawing shows the Finish / Undo point / Cancel bar', await page.evaluate(() => getComputedStyle(document.getElementById('he-m-drawbar')).display === 'flex'));
 const sp = await spec(); const mid = [(sp.path[0][0] + sp.path[sp.path.length - 1][0]) / 2, (sp.path[0][1] + sp.path[sp.path.length - 1][1]) / 2];
 for (const [dx, dy] of [[-30, -10], [-10, -10], [-10, 10], [-30, 10], [-40, 0]]) { const q = await toScreen(mid[0] + dx, mid[1] + dy); await tap(q.x, q.y); }
@@ -180,13 +183,15 @@ const w2 = (await spec()).water || [];
 ok('Finish makes the lake', w2.length === nW + 1 && Array.isArray(w2[nW].poly), JSON.stringify(w2[nW] || null).slice(0, 60));
 ok('...and the drawing bar goes away', await page.evaluate(() => getComputedStyle(document.getElementById('he-m-drawbar')).display === 'none'));
 await tapEl('.he-right [data-sheet-close]').catch(() => {});
-await tapEl('#he-m-add'); await page.locator('[data-item="water-draw"]').scrollIntoViewIfNeeded(); await tapEl('[data-item="water-draw"]');
+await tapEl('[data-ptab="water"]'); await tapEl('#he-tray [data-item="water-draw"]');
 { const q = await toScreen(mid[0] + 20, mid[1]); await tap(q.x, q.y); }
 await tapEl('#he-m-draw-cancel');
 ok('Cancel abandons a drawing', ((await spec()).water || []).length === nW + 1 && await page.evaluate(() => !window.__he.editorCanvas.drawing));
 
 console.log('\n-- stage 4: modals and the walkthrough --');
-await tapEl('#he-m-tools'); await tapEl('#he-ribbon #he-compare'); await page.waitForTimeout(400);
+await tapEl('[data-ptab="more"]');
+ok('More opens its sheet', await page.evaluate(() => !document.getElementById('he-more').hidden));
+await tapEl('#he-more [data-more="compare"]'); await page.waitForTimeout(400);
 ok('Compare fits the screen', await page.evaluate(() => { const b = document.querySelector('.he-modal-box').getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; }));
 await tapEl('#he-compare-close');
 
