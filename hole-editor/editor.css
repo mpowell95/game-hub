@@ -323,7 +323,7 @@ input[type="range"] { accent-color: var(--he-accent); }
 .he-root--strip-min .he-totals { flex: 1 1 auto; flex-direction: row; align-items: center; gap: 14px; }
 /* Palette groups collapse (2026-09-23): a click on a section or sub-head folds it. */
 .he-pal-fold { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
-.he-pal-fold::before { content: '\25BE'; font-size: 11px; }
+.he-pal-fold::before { content: '\25BE'; font-size: 18px; line-height: 1; color: var(--he-accent); }
 .he-pal-fold.is-shut::before { content: '\25B8'; }
 .he-pal-fold.is-shut + .he-pal-body { display: none; }
 .he-pal-fold:hover { color: var(--he-accent); }

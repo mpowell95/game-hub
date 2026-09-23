@@ -302,11 +302,8 @@ function renderRoute(el, ctx) {
     <button class="gh-btn gh-btn--block" id="he-sbend-r" style="margin-bottom:6px;">S-bend: right, then left</button>
     <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-straighten">Straighten</button>
     <div class="he-empty" style="margin-top:8px;">
-      The white squares are waypoints; the fairway is a smooth curve through them, so one waypoint
-      set off to the side makes a bend, and two set off to opposite sides make an S. Keep a bend at
-      least 60 yd from the next one or the curve cannot round it. Drag a waypoint to move it, drag
-      the pin to lengthen or shorten. Double-click the centreline to add a waypoint; Delete removes
-      a selected one. The outside of a bend is drawn wider on purpose.
+      Drag a white dot to bend the hole. Double-click the middle line to add a dot. Drag the flag
+      end to change the length.
     </div>
   `;
   el.querySelector('#he-dogleg-l').addEventListener('click', () => ops.instant((s) => ops.mutators.insertDogleg(s, -1, built.cardYards)));
@@ -547,7 +544,7 @@ function renderGreen(el, ctx) {
       <div class="he-empty">Drawn outline (${spec.greenOutline.length} points).</div>
       <button class="gh-btn gh-btn--block" id="he-g-draw" style="margin:6px 0;">Redraw outline</button>
       <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-g-preset" style="margin-bottom:6px;">Use a preset shape instead</button>` : `
-      ${seg('shape', Object.keys(GREEN_SHAPES).map((k) => [k, k]), spec.greenShape || 'round')}
+      ${seg('shape', Object.keys(GREEN_SHAPES).map((k) => [k, k]), spec.greenShape || 'round').replace('class="gh-seg"', 'class="gh-seg" style="flex-wrap:wrap;height:auto;border-radius:14px;"')}
       ${slider('he-g-angle', 'greenAngle', 0, 359, 1, spec.greenAngle || 0)}
       ${slider('he-g-r', 'greenR', 8, 22, 0.5, spec.greenR || Math.round(built.green ? Math.max(...built.green.poly.map((p) => Math.hypot(p[0] - built.pin[0], p[1] - built.pin[1]))) : 14))}
       ${checkbox('he-g-same', 'same (greenRy = greenR)', spec.greenRy == null)}
