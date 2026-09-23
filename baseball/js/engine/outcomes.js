@@ -101,7 +101,7 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
       // beating out grounders" - MECHANICS.beatOutPerPt/groundEdgeMarginFt name the roll.
       const nearEdge = distanceFt > sector.toFt - settings.MECHANICS.groundEdgeMarginFt;
       if (nearEdge) {
-        const beatOutChance = Math.min(0.5, Math.max(0, hitSpd || 0) * settings.MECHANICS.beatOutPerPt);
+        const beatOutChance = Math.min(settings.MECHANICS.beatOutMax != null ? settings.MECHANICS.beatOutMax : 0.5, Math.max(0, hitSpd || 0) * settings.MECHANICS.beatOutPerPt);
         if (rand01() < beatOutChance) {
           return { result: 'hit', bases: 1, kind: 'ground-single-beatout', distanceFt, isFoul: false };
         }
@@ -163,9 +163,15 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   // SPRAY ANGLE (`wallFt`, already computed above) instead of two flat feet numbers - a flat 250/
   // 320 meant nothing once the fence itself varies by league and by spray angle; the fractions
   // reproduce the old cutoffs exactly at College's 400ft center fence (250/400=0.625, 320/400=0.80).
+  // R19: A FAST BATTER STRETCHES THE HIT. Speed pulls both depth cutoffs in, so the same ball in a
+  // gap is a double for a fast runner and a single for a slow one (doc §6: "beat out grounders,
+  // stretch hits"). Before R19 the batter's own Speed decided nothing here, and the skill measured
+  // +0.3 pp of win rate for 6 points.
+  const stretchPerPt = (settings.SKILL_EFFECT && settings.SKILL_EFFECT.hitSpd && settings.SKILL_EFFECT.hitSpd.stretchDepthPerPt) || 0;
+  const stretch = 1 - Math.min(0.5, Math.max(0, hitSpd || 0) * stretchPerPt);
   let bases = 1;
-  if (distanceFt > wallFt * TRIPLE_DEPTH_FRAC) bases = 3;
-  else if (distanceFt > wallFt * DOUBLE_DEPTH_FRAC) bases = 2;
+  if (distanceFt > wallFt * TRIPLE_DEPTH_FRAC * stretch) bases = 3;
+  else if (distanceFt > wallFt * DOUBLE_DEPTH_FRAC * stretch) bases = 2;
   return { result: 'hit', bases, kind: `${kind}-hit`, distanceFt, isFoul: false };
 }
 
@@ -201,7 +207,7 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
 export function resolveBunt(batted, bases, outs, hitSpd, settings, rand01) {
   const distanceFt = batted.distanceFt || 0;
   const sprayAngleDeg = batted.sprayAngleDeg || 0;
-  const beatOutChance = Math.min(0.5, Math.max(0, hitSpd || 0) * settings.MECHANICS.beatOutPerPt);
+  const beatOutChance = Math.min(settings.MECHANICS.beatOutMax != null ? settings.MECHANICS.beatOutMax : 0.5, Math.max(0, hitSpd || 0) * settings.MECHANICS.beatOutPerPt);
   const beatOut = rand01() < beatOutChance;
   const runnersOn = bases.some((b) => b != null);
   const canSacrifice = runnersOn && outs < settings.MECHANICS.outsPerInning - 1;

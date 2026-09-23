@@ -84,6 +84,7 @@ import {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_CAP, SKILL_IDS,
   BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, STANDINGS_TIEBREAK, SCHEDULE_SHAPE,
   gamesForLeague, slotsForLeague, playoffFormatFor,
+  SPEND_AFTER_SEASON,
 } from './settings.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './season.js';
 import { leagueTeamsFor, makePlayerTeam } from './teams.js';
@@ -409,8 +410,16 @@ export function earn(state, n) {
 
 /** Move one unspent point onto one skill, under the cap. A refused spend returns the state
  *  unchanged (the button reads disabled, R15-B) - it never throws and never half-applies. */
+/** R19: true while a season is in progress in a league whose points are spent between seasons
+ *  (settings.js `SPEND_AFTER_SEASON`). The points are not touched; they wait in `unspent`. */
+export function spendLocked(state) {
+  const s = state && state.season;
+  return !!(s && s.phase !== 'done' && SPEND_AFTER_SEASON[s.league]);
+}
+
 export function spend(state, id) {
   if (SKILL_IDS.indexOf(id) < 0) return state;
+  if (spendLocked(state)) return state;
   if (int(state.unspent) <= 0) return state;
   if (int(state.player.skills[id]) >= int(state.cap)) return state;
   return {

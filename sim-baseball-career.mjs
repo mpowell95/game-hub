@@ -19,9 +19,9 @@
 // everything it mirrored exists now and is imported here instead.
 //
 // WHAT IT CANNOT SEE, stated because a number this tool prints is easy to over-read: the model
-// human swings CONTACT or POWER and nothing else. It never steals, never bunts, never attempts a
-// pickoff. So `hitSpd` - whose whole asymmetric mechanic is the steal - is invisible to every
-// number below, and this tool cannot be used to argue that skill is fine.
+// human swings CONTACT or POWER, never bunts and never attempts a pickoff. Since R19 it does steal
+// (HUMAN_STEAL, below) and does work the corners when pitching (`paint`), the two things that make
+// Speed and Accuracy visible here at all; how often a real player does either is an assumption.
 //
 //   node sim-baseball-career.mjs [--careers N] [--tier weak|median|strong] [--all-tiers]
 //        [--perfect N] [--assert] [--json out.json] [--seed S] [--seasons-cap N]
@@ -56,10 +56,18 @@ const TIERS = FLAG_ALL_TIERS ? ['weak', 'median', 'strong'] : [arg('tier', 'medi
 // The human model. Copied from `sim-baseball.mjs`'s own MODEL_TIERS so the two tools speak the
 // same three tiers - a number from one is comparable with a number from the other.
 const MODEL_TIERS = {
-  weak:   { timingSigmaMs: 85, placementSigma: 0.35, variety: 0.3, swingIn: 0.85, chase: 0.35 },
-  median: { timingSigmaMs: 55, placementSigma: 0.22, variety: 0.6, swingIn: 0.85, chase: 0.22 },
-  strong: { timingSigmaMs: 35, placementSigma: 0.12, variety: 0.85, swingIn: 0.88, chase: 0.12 },
+  weak:   { timingSigmaMs: 85, placementSigma: 0.35, variety: 0.3, swingIn: 0.85, chase: 0.35, paint: 0.5 },
+  median: { timingSigmaMs: 55, placementSigma: 0.22, variety: 0.6, swingIn: 0.85, chase: 0.22, paint: 0.8 },
+  strong: { timingSigmaMs: 35, placementSigma: 0.12, variety: 0.85, swingIn: 0.88, chase: 0.12, paint: 1.0 },
 };
+
+// R19: TWO THINGS A PLAYER DOES THAT THE MODEL NOW DOES TOO. `paint` is how often the model human
+// works the corners when pitching (the league's own CPU rate is the floor): since R19's
+// EDGE_CONTACT an edge pitch is harder to hit, so a real player learns to aim there, and Accuracy
+// is what lets them. HUMAN_STEAL sends the runner on 30% of pitches when the engine's own success
+// chance is at least 70% - roughly where a steal stops costing more outs than it gains bases.
+// Before R19 the model never did either, so Accuracy and Speed read as dead skills.
+const HUMAN_STEAL = { minChance: 0.70, rate: 0.30 };
 
 // ---------------------------------------------------------------------------------------------
 // The assertion bands (R16 spec item 6). Every one is a MEASURED band, not an aspiration: the
@@ -124,9 +132,10 @@ function mkModelAgent(league, tier, skills) {
   const batter = new ModelBatter({
     timingSigmaMs: tier.timingSigmaMs, placementSigma: tier.placementSigma,
     swingIn: tier.swingIn, chase: tier.chase, settings: SETTINGS, skills,
+    steal: HUMAN_STEAL,
   });
   const pitcher = new ModelPitcher({ league, settings: SETTINGS, variety: tier.variety,
-    cornerBias: cpu.cornerBias, pitchMix: cpu.pitchMix });
+    cornerBias: Math.max(cpu.cornerBias, tier.paint || 0), pitchMix: cpu.pitchMix });
   return { decidePitch: (v) => pitcher.decidePitch(v), decideSwing: (v) => batter.decideSwing(v) };
 }
 
@@ -174,8 +183,8 @@ function spendAll(state) {
 
 /** One whole career, through the real rules, until a World Series title or the season cap. */
 async function playCareer(tier, careerSeed) {
-  const startSkills = { ...SETTINGS.PRESETS.twoWayStar };
-  let st = newCareer({ hand: 'R', presetId: 'twoWayStar', skills: startSkills, now: 0,
+  const startSkills = { ...SETTINGS.PRESETS.balanced };
+  let st = newCareer({ hand: 'R', presetId: 'balanced', skills: startSkills, now: 0,
     careerId: `SIM-${careerSeed}` });
   const perLeague = Object.fromEntries(LEAGUES.map((lg) => [lg, {
     seasons: 0, firstAttemptGold: null, winRates: [], arrivalSkills: null,

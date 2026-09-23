@@ -101,8 +101,15 @@ export const POINTS = {                 // [Draft] doc §7 - "numbers, to tune a
   highschool: { win: 3, loss: 1, bronze: 3, silver: 5, gold: 8 },   // R16, measured (was 2 / 1 / 2 / 4 / 6)
   college:    { win: 2, loss: 0, bronze: 3, silver: 5, gold: 8 },   // R16, measured (was 1 / 0 / 2 / 4 / 6)
   minors:     { win: 2, loss: 0, bronze: 2, silver: 4, gold: 7 },   // R16, measured (was 1 / 0 / 1 / 2 / 4)
-  majors:     { win: 1, loss: 0, bronze: 2, silver: 4, gold: 6 },   // R16, measured (was 1 / 0 / 1 / 2 / 3)
+  majors:     { win: 1, loss: 1, bronze: 2, silver: 4, gold: 6 },   // R16, measured (was 1 / 0 / 1 / 2 / 3)
 };
+// R19 (docs/BASEBALL-3D-BUILD.md section 9): LEAGUES WHERE POINTS ARE SPENT BETWEEN SEASONS. Matt
+// chose it, 2026-09-23. In the Majors the points a season pays can be spent once that season is
+// over, never mid-season. Measured with sim-baseball-career.mjs: spending mid-season let a strong
+// player climb toward the 26 cap before his first World Series and win it first try 54% of the
+// time; banked to the season's end it is 32%, the median player's first title stays at 11 seasons,
+// and a maxed Perfect Season is untouched. Nothing is lost: the points wait in `unspent`.
+export const SPEND_AFTER_SEASON = { majors: true };
 // [Locked] doc §7: playoff wins pay no per-win points; the trophy bonus is the entire playoff
 // reward. [Locked]: points past a league's CAPS are lost - no banking. [Locked]: you can only
 // earn points in your current league.
@@ -264,7 +271,9 @@ export const FEEL = {
     // R16, measured (was 0.12): an aim that lands within an eighth of the plate half-width of
     // where it was aimed leaves pitch Accuracy nothing to tighten - measured at +5 points on the
     // skill, pitchAcc moved a win rate by -0.3 pp, inside noise. At 0.30 the skill has room.
-    aimScatter: 0.30,       // [Tested] doc §14 - normal pitch miss from aim, fraction of plate half-width
+    aimScatter: 0.30,
+    // R19: how far below-full Accuracy pulls the aim toward the middle of the plate (pitch.js).
+    aimPull: 2,       // [Tested] doc §14 - normal pitch miss from aim, fraction of plate half-width
     // R16, measured: THE FLIGHT-TIME REFERENCE. `swing.js` scales the good-contact timing window
     // by `pitchResult.timeToPlateS / referenceFlightS`, so a slow pitch really is easier to time
     // and a fast one really is harder - until R16 a 95 mph and a 55 mph pitch bought the batter
@@ -380,6 +389,17 @@ export const LEAGUE_TIMING_WINDOW_MULT = { little: 1.6, highschool: 1.3, college
 // not assumed: at a flat 0.34 the WEAK tier (85 ms timing) wins Little League first time 93% of
 // the time with it and far less without. College's 1.0 is a true no-op.
 export const LEAGUE_CONTACT_MULT = { little: 1.6, highschool: 1.3, college: 1.0, minors: 1.0, majors: 1.0 };
+
+// R19 (docs/BASEBALL-3D-BUILD.md section 9): THE EDGE OF THE ZONE IS HARDER TO SQUARE UP. Until
+// R19 where a pitch crossed changed nothing about how well it could be hit (the batter's cursor
+// follows the ball, and only ball-or-strike read the location), so pitch Accuracy measured +0.1 pp
+// of win rate for 6 points: a pitcher gained nothing by hitting a spot. Now the good-contact
+// timing window shrinks as the crossing moves out from `start` (zone units, the zone edge is 1) to
+// the edge, by up to `penalty`, and stays at the full penalty outside the zone (a chase). The foul
+// boundary is left where it was, so an edge pitch is fouled off more, not whiffed more. Accuracy
+// is what lets a pitcher live on the edge without missing off the plate. Applies to every batter,
+// human and CPU. Absent (a fixture's own settings object), nothing changes.
+export const EDGE_CONTACT = { start: 0.3, penalty: 0.5 };
 
 // Out-zone/field size multipliers (doc §14's outZoneMult/fieldScale). [Tested] as a flat baseline;
 // the actual PER-LEAGUE escalation ("fields get bigger each league... out zones also grow", doc
@@ -560,8 +580,8 @@ export const CPU_LEVEL_SHORTFALL = { little: 3, highschool: 1, college: 3, minor
 // real step up"). At 22, which is what the study's own 3.3x roster multiplier actually clamped
 // against, the realised mean is 20.96 (the table's number), the ladder keeps its shape
 // (18.7 .. 22.0 by slot) and the Minors reads 48.7% against College's 52.0%.
-export const CPU_ROSTER_LEVEL = { little: 4.1, highschool: 10.7, college: 16.4, minors: 21.0, majors: 22.1 };
-export const CPU_ROSTER_CEILING = { little: 9, highschool: 13, college: 17, minors: 22, majors: 25 };
+export const CPU_ROSTER_LEVEL = { little: 4.1, highschool: 10.7, college: 16.4, minors: 21.0, majors: 23.0 };
+export const CPU_ROSTER_CEILING = { little: 9, highschool: 13, college: 17, minors: 22, majors: 26 };
 
 // ---------------------------------------------------------------------------------------------
 // Pattern memory (doc §8's "CPU batters read your patterns"): the last N pitches to one batter,
@@ -788,7 +808,7 @@ export const LEFTY_RATE = 0.25; // [Locked] doc §9 - "About 1 in 4 CPU players 
 export const SKILL_EFFECT = {                // Draft [Open item 4]
   hitAcc:    { contactRadiusInPerPt: 0.045, whiffReductionPerPt: 0.006 }, // R16, measured (contactRadiusInPerPt was 0.09): 0.09 saturated the circle - 22 points made it 2.98x its base, so every extra point bought nothing a player could feel. At 0.045 hitAcc measures +5.3 pp per 5 points, the second-most noticeable skill after hitPow. Previously: "bigger timing window and sweet spot" - BB-2a step 6 retune (was 0.15/0.01, reverted-from-phase-2 value) against the NEW contact-quality axis, within `sim-baseball.mjs --contact-grid`'s own constraints; lowers the SKILL_EFFECT sensitivity experiment's win-rate gap
   hitPow:    { exitVeloMphPerPt: 1.3889 },                               // "more distance, stronger charged swings" - R5 (was 0.07, BB-2d commit 4's own value). DERIVED, not swept: rule 2's two broadcast targets, (CAP_POWER_EXIT_VELO_MPH 105 - PERFECT_EXIT_VELO_MPH 80) / CAPS.college 18 = 1.3889 mph per point. BB-2d's 0.07 was the largest value that kept the contact grid's margins against a BASE_EXIT_VELO of 31.39, where power was competing with a 1.4 mph-wide axis; at a base of 80 the same 18 points buy 25 mph and the grid's own "E rises with hitPow, every sigma" check passes for the first time since that retune (it was FAILING before R5, measured: 0.293/0.291/0.302 at sigma=35). It is far above SKILL_EFFECT_MAX_PER_POINT (0.03, a soft ceiling nothing enforces) because that ceiling was written for fractional multipliers, not for a value in mph
-  hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.01 },       // "beat out grounders, stretch hits, steal/bunt" - RA wired stealSuccessPerPt (game.js's steal roll, with STEAL_BASE/STEAL_MIN/STEAL_MAX below) and the BUNT reads the same beat-out roll the infield grounder does (MECHANICS.beatOutPerPt, outcomes.js); sprintFtPerSPerPt is still unused (nothing here models a runner's speed over the ground)
+  hitSpd:    { sprintFtPerSPerPt: 0.08, stealSuccessPerPt: 0.02, stretchDepthPerPt: 0.015 },       // "beat out grounders, stretch hits, steal/bunt" - RA wired stealSuccessPerPt (game.js's steal roll, with STEAL_BASE/STEAL_MIN/STEAL_MAX below) and the BUNT reads the same beat-out roll the infield grounder does (MECHANICS.beatOutPerPt, outcomes.js); sprintFtPerSPerPt is still unused (nothing here models a runner's speed over the ground)
   pitchSpd:  { throwMphPerPt: 3.0 },                                     // R16, measured (was 0.5): "pitch velocity" - inert until R16's flight-time window (FEEL.engine.referenceFlightS) made travel time matter at all, and 0.5 mph a point is invisible beside a league readout that moves 40 mph. 3.0 buys 66 mph across a Majors cap.
   pitchAcc:  { throwAccuracyPerPt: 0.038, pickoffPerPt: 0.01 },          // R16, measured (throwAccuracyPerPt was 0.01). HONEST NOTE: nothing reads `throwAccuracyPerPt` today - `game.js`'s `_controlSkillFor` resolves pitchAcc against the league CAP and hands `flyPitch` a 0..1 skill, so what actually made the skill matter in R16 is `FEEL.engine.aimScatter` (0.12 -> 0.30) plus the corner aim landing inside the zone (AIM_CORNER_BIAS_BASE/_SCALE). The value is moved with them so a later session wiring it does not start from a number set against the old scatter. Previously: "lands closer to aim, bigger Nice zone, better pickoffs" - RA wired pickoffPerPt (game.js's pickoff roll, with PICKOFF_BASE/PICKOFF_MAX below)
   pitchSpin: { breakPerPt: 0.05, changeupGapPerPt: 0.025 },              // R16, measured (was 0.02 / 0.01): more break USED TO COST the pitcher walks, because pitch.js judged the strike on the post-break position - R16 aims at target minus break, so break is an edge again and the numbers can be worth paying for. Previously: "more bend on curve/slider/screwball; bigger changeup speed gap" - unused this phase, no steering modeled yet
@@ -817,11 +837,13 @@ export const MECHANICS = {
   // Step 1 (zones.js/outcomes.js): a grounder within this many feet of its infield sector's outer
   // edge is a close play, eligible for the batter's hitSpd to beat out the throw (doc §6, [Locked]:
   // "Batter Speed affects beating out grounders"). Draft, new.
-  groundEdgeMarginFt: 15,
+  groundEdgeMarginFt: 60,   // R19, measured (was 15): wide enough that Speed decides a real share of grounders
   // Chance PER hitSpd SKILL POINT that a close grounder (within groundEdgeMarginFt of the sector
   // edge) beats the throw for a single, rather than being fielded. Draft, new - for the phase 2
   // simulator to verify a reasonable beat-out rate results.
-  beatOutPerPt: 0.02,
+  beatOutPerPt: 0.03,        // R19, measured (was 0.02)
+  // R19: the ceiling on that chance (was a literal 0.5 in outcomes.js, twice).
+  beatOutMax: 0.9,
 };
 
 // R5 (docs/BASEBALL-3D-BUILD.md section 9): THE CONTACT AND CARRY MODEL, RE-DERIVED FROM BROADCAST

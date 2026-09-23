@@ -145,6 +145,18 @@ function buntSwing(batterSkills, decision, settings, rand01, league, pitchResult
     mode: 'bunt' };
 }
 
+/** R19: how much of the good-contact timing window survives where this pitch crossed. 1 inside
+ *  `EDGE_CONTACT.start` of the middle, falling linearly to `1 - penalty` at the zone edge, and
+ *  `1 - penalty` for anything outside it. */
+export function edgeWindowMult(pitchResult, settings) {
+  const E = settings && settings.EDGE_CONTACT;
+  if (!E || !E.penalty) return 1;
+  const zone = settings.ZONE || { xMax: 1, yMax: 1 };
+  const e = Math.max(Math.abs(pitchResult.x || 0) / (zone.xMax || 1), Math.abs(pitchResult.y || 0) / (zone.yMax || 1));
+  const t = Math.max(0, Math.min(1, (e - E.start) / Math.max(1e-6, 1 - E.start)));
+  return 1 - E.penalty * t;
+}
+
 export function swing(pitchResult, batterSkills, decision, settings, rand01, league) {
   if (!decision || decision.action !== 'swing') {
     return { swung: false, contact: false, foul: false, inPlay: false };
@@ -167,8 +179,11 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
   // R16: THE PITCH'S OWN FLIGHT TIME scales the window too (see `flightWindowMult`) - this is the
   // whole of what makes pitch Speed a skill rather than a readout.
   const flightMult = flightWindowMult(pitchResult, settings);
-  const timingWindowMs = F.timingWindow * windowMult * flightMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
-  const foulBoundaryMs = timingWindowMs * F.foulMult;
+  const baseWindowMs = F.timingWindow * windowMult * flightMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
+  const foulBoundaryMs = baseWindowMs * F.foulMult;
+  // R19: an edge pitch narrows the good-contact window, never the foul boundary (settings.js's
+  // EDGE_CONTACT has why).
+  const timingWindowMs = baseWindowMs * edgeWindowMult(pitchResult, settings);
   const timingErrorMs = decision.timingErrorMs || 0;
   const absTiming = Math.abs(timingErrorMs);
 
