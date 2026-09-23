@@ -4,6 +4,14 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## No difficulty setting, no help for weaker players (Matt, 2026-09-23) - CLOSED, do not re-propose
+
+Proposed (Easy/Normal setting, automatic catch-up help) and rejected in Matt's words: *"there
+should be no help. that's what the skill points are for"*; *"there is no easy medium and hard.
+It's a career mode. It begins easy and gets more difficult"*; the setting *"should not exist"*.
+The career ladder IS the difficulty curve and skill points are the only progression. A weak
+player stalling (sim: ~6% of weak careers titled in 25 seasons) is accepted, not a bug.
+
 ## Late pitches and Majors parks (2026-09-23, design doc items 9 and 11)
 
 - **Pitches**: movement and travel times unchanged (Matt). `READOUT` now has screwball/eephus/
@@ -241,8 +249,8 @@ Perfect Season (maxed skills, strong timing, N=300): **7.0% [4.6, 10.5]**, again
   real person hits the model's 35 ms timing is unknown until playtest.
 - **The weak tier stalls at the Minors** (2% first attempt, 7.5 seasons there, only 17% of careers
   ever titled). Softer High School and College rosters did not move it in the study: the weak
-  tier's 85 ms timing is the wall. If real players land there, the answer is a difficulty option
-  or a wider timing window, not the roster ladder.
+  tier's 85 ms timing is the wall. **Matt, 2026-09-23: NO difficulty option, NO help of any kind**
+  - see "No difficulty setting" at the top of this file.
 - **`hitSpd` is still dead, and R16 does not fix it.** Its only asymmetric mechanic is the STEAL,
   and the simulator's model human never steals, bunts or picks off - so no number in this entry
   can be used to argue that skill is fine either way. It needs the steal in the model human first.
