@@ -144,6 +144,8 @@ for (const panel of root.querySelectorAll('.he-panel')) {
 // WHICH COURSE (2026-09-22): Red Mesa by default, the blank Course Creator on `?course=new`.
 const profile = resolveProfile();
 document.title = profile.title;
+// Practice starts from nothing every time.
+if (profile.tutorial) { try { localStorage.removeItem(profile.storageKey); } catch { /* fine */ } }
 const stored = loadDocument(localStorage.getItem(profile.storageKey));
 setCourse(profile, stored && stored.course && stored.course.theme);
 setEditorTheme(profile.custom ? ((stored && stored.course && stored.course.theme) || profile.theme) : profile.theme);
@@ -174,10 +176,11 @@ let cloudStatus = { state: 'idle' };
 const autosaver = makeAutosaver({
   getDoc: () => doc,
   getJson: () => serialiseDocument(doc),
-  getDesigner: designer,
+  getDesigner: () => (profile.tutorial ? null : designer()),   // practice never reaches the cloud
   onStatus: (s) => { cloudStatus = s; paintCloudStatus(); },
 });
 function cloudStatusText() {
+  if (profile.tutorial) return 'Practice: nothing here is saved';
   const s = cloudStatus;
   if (s.state === 'saving') return 'Saving to cloud...';
   if (s.state === 'saved') return `Saved to cloud ${new Date(s.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
@@ -259,7 +262,7 @@ ribbon.innerHTML = [
   '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
   '<div class="he-sep"></div>',
   // Help (2026-09-22): hole-editor/help.html, plain words for someone who has never seen the tool.
-  '<a class="he-tool" id="he-help" href="help.html" target="_blank" rel="noopener" title="How to use the Course Creator" style="text-decoration:none;color:inherit;"><span class="he-tool-icon">?</span><span class="he-tool-label">Help</span></a>',
+  '<a class="he-tool" id="he-help" href="./?course=tutorial" target="_blank" rel="noopener" title="How to use the Course Creator" style="text-decoration:none;color:inherit;"><span class="he-tool-icon">?</span><span class="he-tool-label">Help</span></a>',
 ].join('');
 
 const TOOL_KEYS = Object.fromEntries(TOOLS.map(([id, key]) => [key.toLowerCase(), id]));
@@ -621,7 +624,7 @@ function openSetupModal() {
   if (document.getElementById('he-setup')) return;
   const c = doc.course || {};
   let pick = THEME_DEFAULTS[c.theme] ? c.theme : 'parkland';
-  const who = designer();
+  const who = profile.tutorial ? { name: 'practice' } : designer();
   const overlay = document.createElement('div');
   overlay.id = 'he-setup';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1000;display:flex;align-items:center;justify-content:center;';
@@ -894,6 +897,8 @@ if (profile.custom) {
   document.getElementById('he-course-btn').addEventListener('click', openSetupModal);
   if (!(doc.course && doc.course.named)) openSetupModal();
 }
+// Help is a guided practice run of this same editor (tour.js), not a page of text.
+if (profile.tutorial) import('./tour.js').then((m) => m.startTour());
 
 // A debug seam, not a feature: lets a Playwright check (or Matt, in devtools) read live state
 // without a second copy of it. Nothing reads this at runtime.
