@@ -638,5 +638,32 @@ check('a player code is normalised and validated',
     && /MP\.nextInSeries\(g\)/.test(mpui));
 }
 
+// THE FIRST SHOT SENDS THE CHALLENGE (2026-09-23). The King of Games challenged Matt, Matt
+// accepted, and it was the King's turn - he had never shot. Shooting first, createGame now writes
+// only the sender's own row and arms "your turn" on the sender's launcher; the first pushMove
+// writes both rows, which is what delivers it. (Verified end to end against an in-memory database
+// the same day: no row for the other person until the shot, a challenge bubble for them after it.)
+{
+  const A = await import('./hoops4/js/alert.js');
+  const MPsrc = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
+  const body = (name) => { const i = MPsrc.indexOf(`export async function ${name}(`); return i < 0 ? '' : MPsrc.slice(i, MPsrc.indexOf('\nexport ', i + 10)); };
+  check('shooting first, createGame writes only our own index row',
+    /writeRows\(api, db, game, meSide === 'a' \? 'a' : null\)/.test(body('createGame')));
+  check('shooting first, createGame arms "your turn" rather than marking the match seen',
+    /if \(meSide === 'a'\) armTurn\(id, game\.updated\);/.test(body('createGame')));
+  check('pushMove writes BOTH rows, which is what delivers the challenge',
+    /await writeRows\(api, db, back\);/.test(body('pushMove')));
+  check('quitting an undelivered challenge writes no row for the other person',
+    /writeRows\(api, db, back, theirs \? null : side\)/.test(body('resignGame')));
+  const unshot = { id: 'Zq9', with: 'MATT1', name: 'Matt', emoji: 'x', updated: 500, yourTurn: true, over: false };
+  const al = A.decideAlert([unshot], { Zq9: 499 });
+  check('a challenge I made and have not shot in reads as "your turn vs <them>", never a challenge',
+    !!al && al.kind === 'turn' && al.names[0] === 'Matt');
+  check('once I shoot, the reminder stops', A.decideAlert([{ ...unshot, yourTurn: false, updated: 600 }], { Zq9: 600 }) === null);
+  const Asrc = readFileSync(new URL('./hoops4/js/alert.js', import.meta.url), 'utf8');
+  check('challenges sent before the fix are re-armed once, on check and on the live watch',
+    (Asrc.match(/await rearmUnshot\(lastRows\)/g) || []).length === 2 && /UNSHOT_KEY/.test(Asrc));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

@@ -363,6 +363,20 @@ function writeSeen(map) {
   } catch { /* private mode: the bubble simply shows again, which is the safe direction */ }
 }
 
+/**
+ * "YOUR TURN", NOT "A CHALLENGE" (2026-09-23). Stamps a match one tick BEHIND its `updated`, so
+ * decideAlert sees an id it knows (never a challenge) with something still owed (a live turn).
+ * Used for a challenge this device made and has not shot in yet: the challenge is not delivered
+ * until that first shot (see createGame), so the launcher must keep reminding its sender.
+ */
+export function armTurn(id, updated) {
+  const u = ms(updated);
+  if (!id || !u) return;
+  const map = readSeen();
+  map[id] = u - 1;
+  writeSeen(map);
+}
+
 /** Acknowledge one match up to `updated`, so its bubble stops until something new happens. */
 export function markSeen(id, updated) {
   if (!id) return;
@@ -569,15 +583,25 @@ function rowFor(game, side) {
 }
 
 /** Write both index rows for a game. Best effort per row, so one failure cannot strand the other
- *  person with a match they can see and this one with nothing. */
-async function writeRows(api, db, game) {
-  await api.update(api.ref(db, `hoops/index/${game.a.code}/${game.id}`), rowFor(game, 'a'));
-  await api.update(api.ref(db, `hoops/index/${game.b.code}/${game.id}`), rowFor(game, 'b'));
+ *  person with a match they can see and this one with nothing. `only` writes just that side's row
+ *  (a challenge that has not been delivered yet - see createGame). */
+async function writeRows(api, db, game, only = null) {
+  if (only !== 'b') await api.update(api.ref(db, `hoops/index/${game.a.code}/${game.id}`), rowFor(game, 'a'));
+  if (only !== 'a') await api.update(api.ref(db, `hoops/index/${game.b.code}/${game.id}`), rowFor(game, 'b'));
 }
 
 /**
  * Start a match against `them` ({code, name, emoji}). The challenger is side 'a' and shoots first,
  * which is also RED on the board - so "you challenged, you go first" needs no extra field.
+ *
+ * THE CHALLENGE IS DELIVERED BY THE FIRST SHOT, NOT BY THIS CALL (2026-09-23). Matt, after the
+ * King of Games challenged him: "i accepted, but it was his turn to play first so it went back to
+ * him... if it's his turn to go first, he should have gone before he sent the challenge to me."
+ * So when this device shoots first, only ITS OWN index row is written here; the other person's
+ * row is written by the first pushMove (writeRows writes both), which is the moment there is
+ * something for them to answer. Until then it sits in the sender's "Your turn" list and the
+ * launcher reminds them (armTurn). When the OTHER person shoots first (game 2+ of a series), they
+ * are told at once, as before - the turn is already theirs.
  *
  * Returns { ok:true, id, game } or { ok:false, reason, retryable }.
  */
@@ -626,8 +650,12 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
       return { ok: false, reason: 'did-not-land', retryable: true };
     }
     game.id = id;
-    await writeRows(api, db, game);
-    markSeen(id, game.updated);          // this device made it: never "a challenge" here
+    // Shooting first: our row only - theirs arrives with the first shot (see above).
+    await writeRows(api, db, game, meSide === 'a' ? 'a' : null);
+    // This device made it, so it is never "a challenge" here. If the first shot is ours it IS
+    // "your turn" until we take it, so the launcher keeps saying so if we walk away.
+    if (meSide === 'a') armTurn(id, game.updated);
+    else markSeen(id, game.updated);
     return { ok: true, id, game };
   } catch (err) {
     console.error('[hoops4] could not start the game', err);
@@ -755,7 +783,15 @@ export async function resignGame(id) {
     });
     const back = await readGame(id);
     if (!back || !back.over) return { ok: false, reason: 'did-not-land', retryable: true };
-    await writeRows(api, db, back);
+    // A challenge quit before its first shot was never delivered: the other person has no row,
+    // and must not be handed a "won, they resigned" for a match they never saw.
+    const other = side === 'a' ? 'b' : 'a';
+    let theirs = true;
+    if (!fresh.moves.length && side === 'a') {
+      const r = await api.get(api.ref(db, `hoops/index/${back[other].code}/${id}`));
+      theirs = !!(r && r.exists());
+    }
+    await writeRows(api, db, back, theirs ? null : side);
     markSeen(id, back && back.updated);  // our own move is not news to us
     return { ok: true, game: back };
   } catch (err) {

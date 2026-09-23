@@ -20,7 +20,7 @@
 // NOTHING HERE IS PLAYER HISTORY. The seen map is a one-tap-recreatable preference (THE LAW rule
 // 2's stated exemption, the same class as launcher favourites) - losing it shows a bubble twice,
 // which is the harmless direction. It never writes to `hoops/`, so no match state is at risk.
-import { readMyGames, myCode, watchMyGames, readSeen, markSeen, SEEN_KEY } from './mp.js';
+import { readMyGames, myCode, watchMyGames, readSeen, markSeen, armTurn, readGame, sideOf, SEEN_KEY } from './mp.js';
 
 // The seen map moved to mp.js (2026-09-23) so that mp.js's own writes can stamp it - see there.
 // Re-exported so callers (js/hub.js, the tests) keep one import site.
@@ -61,6 +61,32 @@ export function decideAlert(rows, seen) {
   };
 }
 
+// CHALLENGES SENT BEFORE THE FIRST SHOT DELIVERED THEM (2026-09-23). Until then createGame told
+// the other person at once, and stamped the sender's own seen map at `updated` - so a sender who
+// walked away without shooting was never reminded, and the person they challenged opened a board
+// that was not their turn. The King of Games' challenge to Matt is sitting exactly like that.
+// createGame now arms "your turn" itself (mp.js armTurn); this re-arms the ones made before it,
+// ONCE per match: a first game (seriesNo 1, so this device made it), on its side 'a', its turn,
+// with no shot in it yet. Only matches made before the fix are looked at, so a reminder the
+// player has since closed stays closed. Reads a match only when its row already fits.
+const UNSHOT_BEFORE = Date.parse('2026-09-24T00:00:00Z');
+const UNSHOT_KEY = 'gamehub.hoops4.unshot.v1';
+async function rearmUnshot(rows) {
+  let done;
+  try { done = new Set(JSON.parse(localStorage.getItem(UNSHOT_KEY) || '[]')); } catch { done = new Set(); }
+  const todo = rows.filter((r) => r && r.id && !r.over && r.yourTurn && (r.seriesNo | 0) <= 1
+    && ms(r.updated) < UNSHOT_BEFORE && !done.has(r.id));
+  if (!todo.length) return;
+  const me = myCode();
+  for (const r of todo) {
+    const g = await readGame(r.id);
+    if (!g) continue;                  // could not read it: try again next time
+    if (!g.over && !g.moves.length && g.turn === 'a' && sideOf(g, me) === 'a') armTurn(r.id, r.updated);
+    done.add(r.id);
+  }
+  try { localStorage.setItem(UNSHOT_KEY, JSON.stringify([...done].slice(-200))); } catch { /* shows again: harmless */ }
+}
+
 // The rows behind the alert the launcher is currently showing, so `markSeen` has an `updated` to
 // record and the ceremony has something to open. Set by check(), read by take().
 let lastRows = [];
@@ -74,6 +100,7 @@ export async function check() {
     if (!myCode()) return null;
     const rows = await readMyGames();
     lastRows = Array.isArray(rows) ? rows : [];
+    await rearmUnshot(lastRows);
     return decideAlert(lastRows, readSeen());
   } catch (err) {
     console.warn('[hoops4] could not check for challenges', err);
@@ -89,8 +116,9 @@ export async function check() {
 export async function watch(cb) {
   try {
     if (!myCode()) return () => {};
-    return await watchMyGames((rows) => {
+    return await watchMyGames(async (rows) => {
       lastRows = Array.isArray(rows) ? rows : [];
+      try { await rearmUnshot(lastRows); } catch { /* the plain decision below still stands */ }
       try { cb(decideAlert(lastRows, readSeen())); } catch (err) { console.warn('[hoops4] alert watch', err); }
     });
   } catch { return () => {}; }

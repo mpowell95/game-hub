@@ -415,7 +415,10 @@ class Hoops4 {
     if (game.over) { if (review) this.recorded = true; this.finish(); return; }
     // The match is on the server, so leaving really is free - say so rather than leaving the
     // player to discover it. This is the reassurance half of the isInProgress() fix below.
-    this.toast(this.isMyShot() ? t('leaveKept') : t('mpTheirTurn'));
+    // A first game with no shot in it yet, on our side 'a', has not reached the other person:
+    // the first shot is what sends it (mp.js createGame). Say so, or "saved" reads as "sent".
+    const unsent = side === 'a' && !game.moves.length && (game.seriesNo | 0) <= 1;
+    this.toast(!this.isMyShot() ? t('mpTheirTurn') : unsent ? t('mpShootToSend') : t('leaveKept'));
     // AND STAY LIVE (2026-09-23). Matt: "if you stay in the game it never shows the other
     // person's turn... it should auto be my turn whenever it's my turn." Their move arrives here
     // while the match is on screen, drops down its column, and hands the turn back.
