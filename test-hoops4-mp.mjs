@@ -551,5 +551,30 @@ check('a player code is normalised and validated',
     /_watchGameAlerts\(\)/.test(hub) && /this\._alertWatches\[g\.id\]/.test(hub));
 }
 
+// QUIT, AND COUNTING A FINISHED MATCH ON BOTH PHONES (2026-09-23). Only the phone that played the
+// last move used to record a result, and a resignation would have scored the winner a loss.
+{
+  const MPm = await import('./hoops4/js/mp.js');
+  const S = MPm.LEDGER_SINCE;
+  const rows = [
+    { id: 'A1', over: true, result: 'won', updated: S + 10 },
+    { id: 'A2', over: true, result: 'lost', updated: S + 20 },
+    { id: 'A3', over: true, result: null, updated: S + 30 },        // an old row: never guessed
+    { id: 'A4', over: true, result: 'won', updated: S - 1000 },     // finished before the ledger
+    { id: 'A5', over: false, result: null, updated: S + 40 },       // still being played
+  ];
+  const todo = MPm.rowsToCount(rows, new Set()).map((r) => r.id).join(',');
+  check('only finished rows with a result, from after the ledger started, are counted', todo === 'A1,A2', todo);
+  check('a row already in the ledger is never counted again', MPm.rowsToCount(rows, new Set(['A1', 'A2'])).length === 0);
+  const ui = readFileSync(new URL('./hoops4/js/ui.js', import.meta.url), 'utf8');
+  check('finish() counts an async match through the ledger, from the STORED winner',
+    /markCounted\(this\.mp\.id\)/.test(ui) && /g\.over\.winner === this\.mp\.side/.test(ui));
+  const mpui = readFileSync(new URL('./hoops4/js/mp-ui.js', import.meta.url), 'utf8');
+  check('every active game row has a Quit that resigns (and asks first)',
+    /data-quit=/.test(mpui) && /MP\.resignGame\(id\)/.test(mpui) && /mpQuitQ/.test(mpui));
+  check('the multiplayer screen counts finished matches when it loads', /MP\.recordFinished\(rows\)/.test(mpui));
+  check('the pause sheet can quit a turn-by-turn match', /data-role="quit"/.test(ui) && /resignGame\(this\.mp\.id\)/.test(ui));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

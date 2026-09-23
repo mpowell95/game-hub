@@ -783,7 +783,9 @@ class Hoops4 {
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
           ${this.mp ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${t('newGame')}</button>`}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="leave">${isAsync ? t('backMp') : t('backSetup')}</button>
+          ${isAsync && !(this.mp && this.mp.review) ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="quit">${t('mpQuitQ').replace('?', '').replace('\u00bf', '')}</button>` : ''}
         </div>
+        <p class="h4-mp-note" data-role="qerr" hidden></p>
       </div>`;
     this.root.appendChild(el);
     this.stopLoop();
@@ -800,6 +802,28 @@ class Hoops4 {
     this.on(el.querySelector('[data-role="leave"]'), 'click', () => {
       if (el.parentNode) el.parentNode.removeChild(el);
       this.leaveMatch();
+    });
+    // QUIT A TURN-BY-TURN MATCH (2026-09-23): a resignation through MP.resignGame, asked twice
+    // (the second tap says it counts as a loss). Nothing is deleted; the match ends for both.
+    const qb = el.querySelector('[data-role="quit"]');
+    if (qb) this.on(qb, 'click', async () => {
+      if (!qb.dataset.armed) {
+        qb.dataset.armed = '1';
+        const g = this.mp && this.mp.game;
+        const other = g ? (this.mp.side === 'a' ? g.b : g.a) : null;
+        qb.textContent = t('mpQuitYes') + ': ' + t('mpQuitBody', { who: (other && other.name) || '?' });
+        return;
+      }
+      qb.disabled = true;
+      const res = await this.mp.MP.resignGame(this.mp.id);
+      if (!res || !res.ok) {
+        qb.disabled = false;
+        const e = el.querySelector('[data-role="qerr"]'); e.hidden = false; e.textContent = t('mpQuitFail');
+        return;
+      }
+      if (el.parentNode) el.parentNode.removeChild(el);
+      this.teardownEngine();
+      this.showMultiplayer();
     });
   }
 
@@ -1148,7 +1172,15 @@ class Hoops4 {
         // 'mp' is the repo's own difficulty for a multiplayer match (js/game-stats.js) - it is
         // unmapped in js/difficulty-tiers.js, so it never lands in a difficulty tier. A
         // two-players-on-one-phone match records nothing, because there is no "you" in it.
-        if (this.mp) recordResult('hoops4', 'mp', m.winner === this.myPlayer);
+        // A TURN-BY-TURN match: counted once per device through the ledger (mp.js), and scored
+        // from the STORED winner when there is one - a resignation replays into an unfinished
+        // board, whose m.winner would have scored the winner a loss.
+        if (this.mp && this.mp.kind === 'async') {
+          const g = this.mp.game || {};
+          const won = g.over && (g.over.winner === 'a' || g.over.winner === 'b')
+            ? g.over.winner === this.mp.side : m.winner === this.myPlayer;
+          if (this.mp.MP.markCounted(this.mp.id)) recordResult('hoops4', 'mp', won);
+        } else if (this.mp) recordResult('hoops4', 'mp', m.winner === this.myPlayer);
         else if (m.vsCpu) recordResult('hoops4', ['easy', 'medium', 'hard'][this.settings.opponent - 1] || 'medium', r.won);
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }

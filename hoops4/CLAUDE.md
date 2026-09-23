@@ -488,6 +488,34 @@ back for it to fetch?"* He had to come back - the launcher asked once per paint.
 paint, so listeners cannot stack), repainting the bubble on every change. Verified in a browser:
 one subscription, no page errors. `test-hoops4-mp.mjs` pins both halves.
 
+### The multiplayer home, reorganised, and Quit (2026-09-23)
+
+Matt, with two screenshots of it: *"Make this page better/easier to navigate. And let people quit
+games."* It was five full-width rows before the first game (so the list scrolled off a phone),
+every row said "Waiting on <name>" beside the same name, and names and "Game 1 of 3" wrapped onto
+four lines.
+
+- **Layout** (`mp-ui.js` `viewHome`): one primary **Challenge someone**; **Host / Join / Pass &
+  play** as three small tiles in one row; games split into **Your turn** (first, accent bar) and
+  **Waiting on them**, each headed with a count; **History ›** as a link at the foot. Each row is
+  the name on one line with a small line under it ("Game 1 of 3", and "One shot only" only when
+  that is the rule - the default goes unsaid). No status chip: the section heading says it in
+  words.
+- **Quit** on every row and in the pause sheet of a turn-by-turn match. It is a RESIGNATION
+  (`MP.resignGame`, which already existed and no screen called): asks first, says it counts as a
+  loss, writes `over: {winner, why:'resign'}`, deletes nothing. The other person's history reads
+  "Won, they resigned".
+- **A finished match is now counted on BOTH phones, exactly once.** Found while adding Quit: only
+  the phone that played the last move ever recorded a result, because a finished match leaves the
+  active list and raises no bubble, so the other player never opened it; and a resigned match
+  replays into an UNFINISHED board, so `finish()` would have scored the winner a loss. Now a
+  per-device ledger (`gamehub.hoops4.counted.v1`, mp.js `markCounted`/`recordFinished`):
+  `finish()` counts through it using the STORED `over.winner`, and the multiplayer screen counts
+  every finished row the ledger has not seen, from the row's own `result`. THE LAW rule 2 - never
+  count twice - is why rows WITHOUT a `result` (pre-2026-09-22) are skipped rather than guessed,
+  and why rows finished before `LEDGER_SINCE` (2026-09-23 03:15Z) are skipped: their finishing
+  device may already have counted them before the ledger existed.
+
 ### The marquee is a SIGN now (2026-09-22)
 
 Matt, with a photo of BRICK CITY's marquee beside this one: *"please improve the game
