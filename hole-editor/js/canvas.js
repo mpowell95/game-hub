@@ -1408,6 +1408,40 @@ export class EditorCanvas {
       }
     }
 
+    // FLOWER BEDS (2026-09-23): the map raster paints them at 2.4 px a yard, which up close is a
+    // smudge; here each flower stands up, crisp at any zoom. Looks only, like the bed itself.
+    if (built.decor && built.decor.some((d) => d.kind === 'flowerbed')) {
+      const COLS = ['#f7a8c4', '#ffd84a', '#fff6ee', '#b79be6', '#ff9f6a'];
+      const step = k < 3 ? 1.6 : 0.9;
+      const head = Math.max(1.2, k * 0.26);
+      const pts = [];
+      for (const d of built.decor) {
+        if (d.kind !== 'flowerbed') continue;
+        if (d.poly) {
+          let mnx = Infinity; let mny = Infinity; let mxx = -Infinity; let mxy = -Infinity;
+          for (const q of d.poly) { mnx = Math.min(mnx, q[0]); mxx = Math.max(mxx, q[0]); mny = Math.min(mny, q[1]); mxy = Math.max(mxy, q[1]); }
+          for (let y = mny + step / 2; y < mxy && pts.length < 1500; y += step) {
+            for (let x = mnx + step / 2; x < mxx; x += step) {
+              const jx = x + (((x * 7.3 + y * 3.1) % 1) - 0.5) * step * 0.6; const jy = y + (((x * 2.7 + y * 5.9) % 1) - 0.5) * step * 0.6;
+              if (pointInPoly([jx, jy], d.poly)) pts.push([jx, jy]);
+            }
+          }
+        } else if (d.at) {
+          for (let i = 0; i < 40; i++) { const a = i * 2.39996; const rr = Math.sqrt((i + 0.5) / 40) * 2.0; pts.push([d.at[0] + Math.cos(a) * rr, d.at[1] + Math.sin(a) * rr]); }
+        }
+      }
+      pts.sort((a2, b2) => (a2[0] - a2[1]) - (b2[0] - b2[1]));
+      ctx.save();
+      pts.forEach((q, i) => {
+        const [bx, by] = P(q[0], q[1]); const tip = P(q[0], q[1], 0.5);
+        ctx.strokeStyle = '#5f8a44'; ctx.lineWidth = Math.max(0.6, k * 0.08);
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tip[0], tip[1]); ctx.stroke();
+        ctx.fillStyle = COLS[(i * 7) % COLS.length];
+        ctx.beginPath(); ctx.arc(tip[0], tip[1], head, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.restore();
+    }
+
     // tee (a pair of markers) and pin (a flag standing in the cup)
     if (L.teePin) {
       const [tx, ty] = P(built.tee[0], built.tee[1]);

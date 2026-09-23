@@ -1041,3 +1041,19 @@ cattails, reeds. EN/ES names in `golf/js/strings.js`.
 Tests: `golf/js/test.js` has the same 5 failures before and after (Red Mesa difficulty/yardage,
 pre-existing); `test-hole-editor.mjs` 55/55 (catalogue now 55), `test-hole-editor-ui.mjs` 108/108,
 `test-hole-editor-mobile.mjs` 44/44, `test-sw-strategy.mjs` 107/107, i18n and conventions clean.
+
+## Flower beds (2026-09-23, CACHE v938)
+
+From the look-only list (fountain, lighthouse, windmill, ducks and deer, waterfall, flower beds),
+Matt: *"only do the flower beds out of that list"*. Two forms, both decor, so they never touch play
+(`holes.js` never reads decor; `test-hole-editor.mjs` proves the lie under a bed is unchanged):
+
+- **Flower bed** (tap): a decor SPRITE, `{at, kind: 'flowerbed'}`, a round bed ~2.2 yd radius with a
+  stone edge. `DECOR_KINDS` and the desktop Decor panel's list carry it.
+- **Draw a flower bed**: a drawn decor shape, `{poly, kind: 'flowerbed'}` (`addDrawnShape` keeps the
+  kind; a redraw keeps it too). The game paints soil, a stone edge and flowers clipped inside.
+- Flowers are pink, yellow, white, purple and orange (`flowerDots` in `render.js`): nothing relies on
+  red-vs-green.
+- **The iso editor stands each flower up** over the bed (a stem and a head, crisp at any zoom),
+  because the map raster's 2.4 px/yd is a smudge up close.
+- Phone: More -> "Add & draw" -> Flower bed / Draw a flower bed. Desktop: the palette's Decor group.
