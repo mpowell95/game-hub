@@ -1068,3 +1068,25 @@ single-colour DRIFTS (yellow, white, purple, cornflower blue, a little pink) plu
 soil, no edging. `paintWildflowers` paints it top-down (the game, and the palette tile through
 `drawDecorSprite`); `canvas.js` stands the SAME flowers up (grass blades, stems, five-petal heads
 when zoomed in). Labels: "Wildflowers" / "Draw wildflowers".
+
+## Tall grass and the island green (2026-09-23, CACHE v944)
+
+Matt: *"yes go ahead with tall grass and island greens"* (and no bridges).
+
+- **Tall grass is a new SURFACE KIND, `tallGrass`** (`golf/js/holes.js` SURFACE_KINDS): you play it
+  where it lies, no penalty. `clubs.js` LIES.tallGrass `{ power 0.68, zone 0.14, roll 0.012 }` - a
+  step beyond heavy rough, short of a swamp - `shot.js` PUTT_DRAG 6.5 and no hop on landing. It rides
+  the WATER list and the CROSS list as `kind: 'tallGrass'`, exactly like a swamp, so placing, drawing,
+  "across" bands, duplicate, redraw and export all come for free. Colour: the look's rough mixed 38%
+  toward straw (`grassDeeper` in render.js) - it was a dark patch first and read as mud.
+- **Island green is a guard token, `island`** (`holegen.js`): a 40-point ring of water following the
+  green's own edge + fringe + ~9 yd, at the water layer, so fringe and green sit on top and the
+  fairway stops at the shore. No causeway. The real water drop (`dropNear`) searches 14 yd, wider
+  than the moat, so a ball in it always gets a dry drop.
+- **Editor**: desktop palette has a "Tall grass" group (Tall grass / Draw tall grass / Tall grass
+  across) and "Island green" in Around the green; the water and cross panels list Tall grass. Phone:
+  tall grass is at the bottom of the TREES tray (it is a plant), Island green in the GREEN tray. The
+  iso view stands grass blades up over every tallGrass surface (cached per built hole and zoom band).
+- Tests: `golf/js/test.js` builds an island par 3, an island par 4 and a tall-grass par 4, checks they
+  validate and that the bot finishes each, that the moat surrounds the green, and that tall grass sits
+  between heavy rough and swamp. `test-hole-editor.mjs` 57/57 (placed, drawn, across + island export).

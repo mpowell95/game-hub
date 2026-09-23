@@ -6139,3 +6139,10 @@ strike is dead straight at the top of the arc"*, *"nothing beats a dead-centre s
 distance"*), and both probes pass. The five failures the golf suite reports on `main` today are all
 course data - Red Mesa's back-nine difficulty ordering, hole 3's rough, one card yardage - and none
 of them touch the swing.
+
+## Tall grass and the island green (2026-09-23)
+
+`tallGrass` joined SURFACE_KINDS: a lie you play out of (LIES power 0.68, zone 0.14, roll 0.012;
+PUTT_DRAG 6.5; no hop). Authored as `kind: 'tallGrass'` on a `water` or `cross` entry, like a swamp.
+`guard: ['island']` rings the green with water. Neither is on a shipped course; both are Course
+Creator pieces. Full notes: `hole-editor/CLAUDE.md`, "Tall grass and the island green".

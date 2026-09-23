@@ -413,18 +413,18 @@ function renderWater(el, ctx) {
     // it is a toggle here rather than a fourth tool of its own (docs/HANDOFF-GOLF-OBJECTS.md
     // section 2: "it is not water - no penalty stroke, no drop prompt").
     el.innerHTML = `
-      ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp']], toolState.waterKind || 'water')}
+      ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp'], ['tallGrass', 'Tall grass']], toolState.waterKind || 'water')}
       <div class="he-empty" style="margin:6px 0;">Swamp: the ball just plugs where it lands and comes out at half power. Click the hole to place it, or draw one:</div>
       <button class="gh-btn gh-btn--block" id="he-w-draw">Draw shape</button>`;
     wireSeg(el, 'kind', (val) => setToolState({ waterKind: val }));
-    el.querySelector('#he-w-draw').addEventListener('click', () => ops.startDraw('water', toolState.waterKind === 'swamp' ? 'swamp' : null));
+    el.querySelector('#he-w-draw').addEventListener('click', () => ops.startDraw('water', toolState.waterKind === 'swamp' || toolState.waterKind === 'tallGrass' ? toolState.waterKind : null));
     return;
   }
   const w = spec.water[target.index];
   const drawn = !!w.poly;
   const kind = w.kind || 'water';
   el.innerHTML = `
-    ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp']], kind)}
+    ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp'], ['tallGrass', 'Tall grass']], kind)}
     ${drawn ? '<div class="he-empty">Drawn shape. Drag its white handles to resize, drag inside to move.</div>' : `
       ${slider('he-w-rx', 'rx', 4, 30, 0.5, w.rx)}
       ${slider('he-w-ry', 'ry', 4, 30, 0.5, w.ry == null ? w.rx : w.ry)}
@@ -646,7 +646,7 @@ function renderCross(el, ctx) {
   const depth = target ? (spec.cross[target.index].depth == null ? 22 : spec.cross[target.index].depth) : toolState.crossDepth;
   const over = target ? (spec.cross[target.index].over == null ? 8 : spec.cross[target.index].over) : (toolState.crossOver == null ? 8 : toolState.crossOver);
   el.innerHTML = `
-    ${seg('crosskind', [['water', 'Water'], ['waste', 'Waste'], ['fairwayBunker', 'Sand']], kind)}
+    ${seg('crosskind', [['water', 'Water'], ['waste', 'Waste'], ['fairwayBunker', 'Sand'], ['swamp', 'Swamp'], ['tallGrass', 'Tall grass']], kind)}
     ${slider('he-c-depth', 'depth', 10, 40, 1, depth)}
     ${slider('he-c-over', 'over', 0, 20, 1, over)}
     ${!target ? '<div class="he-empty" style="margin-top:6px;">Click the hole to place it; drag along the hole to move it.</div>' : ''}

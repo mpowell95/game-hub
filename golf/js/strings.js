@@ -156,6 +156,7 @@ export const STRINGS = {
     lie_green: 'Green',
     lie_water: 'Water',
     lie_swamp: 'Swamp',
+    lie_tallGrass: 'Tall grass',
     // The obstacle catalogue (golf/js/obstacles.js). The palette and the tree panel's type picker
     // both print t('obst_' + name); the catalogue's `name` is an identifier, never a label.
     obst_pine: 'Pine',
@@ -403,6 +404,7 @@ export const STRINGS = {
     lie_green: 'Green',
     lie_water: 'Agua',
     lie_swamp: 'Pantano',
+    lie_tallGrass: 'Hierba alta',
     obst_pine: 'Pino',
     obst_oak: 'Roble',
     obst_sentinel: 'Pino centinela',

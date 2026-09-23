@@ -6,7 +6,7 @@
 // is read off the BUILT hole (`buildHole()` in model.js), the same object the game itself plays.
 
 import {
-  buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC,
+  buildMap, paletteFor, fillsFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC,
   SHADOW_LEN, SHADOW_DROP, SHADOW_RX, SHADOW_RY, SHADOW_ALPHA, treeShapes, TREE_FILL, wildflowers,
 } from '../../golf/js/render.js';
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
@@ -257,6 +257,7 @@ export function fitCamera(built, W, H) {
  *  422 ms - the "very slow/delayed" Matt reported the first time he used it. */
 let _maps = new WeakMap();
 let _bare = new WeakMap();
+const _grassPts = new WeakMap();   // built hole -> { step: [[x, y]] } tall-grass blade positions
 /** The same hole with no trees and no wires: the iso view stands those up itself (iso.js), so the
  *  map under them must not also paint them flat. A prototype copy, so buildMap reads everything
  *  else off the real built hole; `_trees` is what treesOf() returns first. */
@@ -1069,7 +1070,7 @@ export class EditorCanvas {
         // "Draw a swamp" replacing a placed swamp: `setDrawnPoly` keeps a bunker's `kind`
         // (model.js) but a water-group entry has never carried one before this batch, so the
         // swamp kind is re-stamped the same way `_place` does (see its comment).
-        if (group === 'water' && kind === 'swamp') s2 = this.ops.mutators.setWaterField(s2, replaceIndex, { kind: 'swamp' });
+        if (group === 'water' && (kind === 'swamp' || kind === 'tallGrass')) s2 = this.ops.mutators.setWaterField(s2, replaceIndex, { kind });
         return s2;
       });
       this.setSelection({ group, index: replaceIndex });
@@ -1080,7 +1081,7 @@ export class EditorCanvas {
       // Chaikin-rounded approximation of it) rather than treating it as a closed polygon.
       this.ops.instant((spec) => {
         let s2 = this.ops.mutators.addDrawnShape(spec, group, points, kind);
-        if (group === 'water' && kind === 'swamp') s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind: 'swamp' });
+        if (group === 'water' && (kind === 'swamp' || kind === 'tallGrass')) s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind });
         return s2;
       });
       this.setSelection({ group, index: (this.spec[group] || []).length - 1 });
@@ -1103,9 +1104,9 @@ export class EditorCanvas {
       // and `setWaterField` (already generic, `{...w, ...fields}`, since before this batch)
       // stamps it on afterward, so "Swamp" still works either way.
       const wk = this.ops.getWaterKind ? this.ops.getWaterKind() : 'water';
-      let s2 = this.ops.mutators.addWater(spec, placement, wk === 'swamp' ? 'swamp' : undefined);
+      let s2 = this.ops.mutators.addWater(spec, placement, wk === 'swamp' || wk === 'tallGrass' ? wk : undefined);
       const last = s2.water && s2.water[s2.water.length - 1];
-      if (wk === 'swamp' && last && last.kind !== 'swamp') s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind: 'swamp' });
+      if ((wk === 'swamp' || wk === 'tallGrass') && last && last.kind !== wk) s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind: wk });
       return s2;
     }
     if (kind === 'tree') {
@@ -1258,6 +1259,45 @@ export class EditorCanvas {
       for (let gx = Math.ceil(b.minX / step) * step; gx <= b.maxX; gx += step) { trace([[gx, b.minY], [gx, b.maxY]], false); ctx.stroke(); }
       for (let gy = Math.ceil(b.minY / step) * step; gy <= b.maxY; gy += step) { trace([[b.minX, gy], [b.maxX, gy]], false); ctx.stroke(); }
       ctx.restore();
+    }
+
+    // TALL GRASS stands up (2026-09-23): blades over every tallGrass surface, sampled once per
+    // built hole and zoom band (a coarser grid when zoomed out), back to front.
+    {
+      const tg = (built.surfaces || []).filter((sf) => sf.kind === 'tallGrass' && Array.isArray(sf.poly));
+      if (tg.length) {
+        const step = k < 2 ? 2.4 : 1.3;
+        let cache = _grassPts.get(built);
+        if (!cache) { cache = {}; _grassPts.set(built, cache); }
+        if (!cache[step]) {
+          const pts = [];
+          for (const sf of tg) {
+            let mnx = Infinity; let mny = Infinity; let mxx = -Infinity; let mxy = -Infinity;
+            for (const q of sf.poly) { mnx = Math.min(mnx, q[0]); mxx = Math.max(mxx, q[0]); mny = Math.min(mny, q[1]); mxy = Math.max(mxy, q[1]); }
+            for (let y = mny; y < mxy && pts.length < 4000; y += step) {
+              for (let x = mnx; x < mxx; x += step) {
+                const jx = x + ((Math.sin(x * 12.9 + y * 78.2) * 43758.5) % 1) * step * 0.5;
+                const jy = y + ((Math.sin(x * 39.3 + y * 11.1) * 24634.6) % 1) * step * 0.5;
+                if (pointInPoly([jx, jy], sf.poly)) pts.push([jx, jy]);
+              }
+            }
+          }
+          pts.sort((p1, p2) => (p1[0] - p1[1]) - (p2[0] - p2[1]));
+          cache[step] = pts;
+        }
+        const col = fillsFor(paletteFor(THEME)).tallGrass || '#8a9a4a';
+        const hi = shade(col, 1.25); const lo = shade(col, 0.8);
+        const h = Math.max(3, k * 1.1 * ISO_Z);
+        ctx.save(); ctx.lineCap = 'round'; ctx.lineWidth = Math.max(0.8, k * 0.12);
+        cache[step].forEach((q, i) => {
+          const [bx, by] = P(q[0], q[1]);
+          const lean = ((i * 7) % 5 - 2) * h * 0.15;
+          ctx.strokeStyle = i % 2 ? hi : lo;
+          ctx.beginPath(); ctx.moveTo(bx - 1.5, by); ctx.quadraticCurveTo(bx - 1, by - h * 0.6, bx - 2 + lean, by - h);
+          ctx.moveTo(bx + 1.5, by); ctx.quadraticCurveTo(bx + 1, by - h * 0.5, bx + 2 + lean, by - h * 0.85); ctx.stroke();
+        });
+        ctx.restore();
+      }
     }
 
     // 3. slope chevrons on the green - drawn IN the ground plane, so they lie on the grass.

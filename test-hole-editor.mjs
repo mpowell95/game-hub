@@ -762,6 +762,25 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
     assert.equal(H.surfaceAt(built, 18, 65), H.surfaceAt(buildHole(doc2, 'h-01'), 18, 65), 'a flower bed never changes the lie');
   });
 
+  await test('tall grass (placed, drawn, across) and the island green build, validate and export (2026-09-23)', async () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    let spec = addWater(doc.holes['h-01'].spec, { yd: 150, side: 1, off: 22 }, 'tallGrass');
+    assert.equal(spec.water[0].kind, 'tallGrass');
+    spec = setWaterField(spec, 0, { rx: 10 });
+    assert.equal(spec.water[0].kind, 'tallGrass', 'editing a patch keeps it tall grass');
+    spec = addDrawnShape(spec, 'water', [[-30, 90], [-18, 90], [-18, 110], [-30, 110]], 'tallGrass');
+    assert.equal(spec.water[1].kind, 'tallGrass', 'a drawn patch is tall grass');
+    spec = addCross(spec, { yd: 240, kind: 'tallGrass', depth: 14 });
+    spec = { ...spec, guard: ['island'] };
+    doc.holes['h-01'].spec = spec;
+    const built = buildHole(doc, 'h-01');
+    assert.deepEqual(validateHoleTop(built), []);
+    assert.equal(built.surfaces.filter((sf) => sf.kind === 'tallGrass').length, 3);
+    const src = generateSource(doc, '2026-09-23');
+    assert.ok(/tallGrass/.test(src) && /'island'/.test(src), 'export prints both');
+  });
+
   await test('validateHole refuses a sprite off the map, and a malformed one, by name', () => {
     setCourse(PROFILES.custom, 'parkland');
     const doc = createDocument();
