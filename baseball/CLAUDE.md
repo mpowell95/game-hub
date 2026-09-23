@@ -4,6 +4,19 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Team names: 40, one per league and style (2026-09-23)
+
+Closes design doc section 17 item 12. Matt approved the list; it lives in `baseball/js/ui.js`
+`TEAM_NAMES[league][styleId]` (Little League sponsors, High School towns, made-up colleges, smaller
+Minors cities, the 8 park cities in the Majors). Proper nouns, never translated.
+
+- **Full name** on the career home (next opponent line, standings). **Short name** (last word,
+  `teamShortName`) on the in-game scoreboard, in place of "CPU", in career and Quick Play (Matt OK'd short names there, 2026-09-23).
+- **Standings are ONE column at every league now.** Two 110px columns cut most full names off at
+  360 wide. Rows went 18px + 2px gap to 15px + 0 so nine rows cost ~37px more than the old
+  five-row double column; measured to fit 390x664 in the hub (`check-no-scroll.mjs baseball`).
+- The team's own `name` (`little-balanced`) is still the generator key and is never shown.
+
 ## R19: every skill counts; Majors points are spent after the season (2026-09-23)
 
 Spec and record: `docs/BASEBALL-3D-BUILD.md` section 9, R19. What changed, in one line each:

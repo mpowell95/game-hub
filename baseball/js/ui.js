@@ -387,15 +387,46 @@ export function isInProgress() {
 
 function randPick(arr, rand = Math.random) { return arr[Math.floor(rand() * arr.length)]; }
 
-// Ship review (R15-B): a CPU team's `name` is its generator key (`little-balanced`), which is not
-// a name a player should read. Until doc section 17's open item 12 (the real list of 40 team
-// names) is decided, a team is shown by its style, one proper noun per style, untranslated (open
-// item 15: team names are proper nouns and are not translated). Falls back to the raw name.
-const TEAM_STYLE_NAMES = {
-  balanced: 'Generals', smallBall: 'Sparrows', patient: 'Owls', junkballers: 'Tricksters',
-  shifters: 'Foxes', flamethrowers: 'Flames', sluggers: 'Sluggers', aces: 'Aces',
+// Doc section 9 / open item 12, closed 2026-09-23 (Matt approved the list): 40 team names, one per
+// (league, style). A CPU team's `name` is its generator key (`little-balanced`), never shown.
+// Little League = sponsors, High School = small towns, College = made-up schools, Minors = smaller
+// cities, Majors = the 8 cities the doc's parks are modelled on. Proper nouns, NOT translated (open
+// item 15). The SHORT name (the last word) is what the in-game scoreboard shows, where the full
+// name does not fit (Matt, 2026-09-23); every other screen shows the full name.
+const TEAM_NAMES = {
+  little: {
+    sluggers: "Big Al's Hardware Hammers", smallBall: 'Mini Mart Minnows', patient: 'Sit Tight Dental Molars',
+    flamethrowers: 'Hot Wok Kitchen Chilis', junkballers: 'Ace Salvage Yard Junkers', shifters: 'Two Guys Moving Co. Movers',
+    balanced: "Tony's Pizza Pepperonis", aces: 'Top Card Games Aces',
+  },
+  highschool: {
+    sluggers: 'Iron Ridge Miners', smallBall: 'Pine Hollow Chipmunks', patient: 'Stillwater Herons',
+    flamethrowers: 'Cinder Creek Firebirds', junkballers: 'Crooked Fork Coyotes', shifters: 'Drifton Dust Devils',
+    balanced: 'Maple Grove Mustangs', aces: 'Highcrest Hawks',
+  },
+  college: {
+    sluggers: 'Big Sky State Bison', smallBall: 'Wren College Wrens', patient: 'Grayson University Tortoises',
+    flamethrowers: 'Sunbelt State Scorchers', junkballers: 'Mudville A&M Mudcats', shifters: 'Tidewater College Crabs',
+    balanced: 'Midland State Rangers', aces: 'Kingsbury College Kings',
+  },
+  minors: {
+    sluggers: 'Omaha Stockyard Bulls', smallBall: 'Boise Spuds', patient: 'Fargo Ice Fishermen',
+    flamethrowers: 'Tucson Sidewinders', junkballers: 'Toledo Tin Cans', shifters: 'Wichita Whirlwinds',
+    balanced: 'Des Moines Hog Callers', aces: 'Reno High Rollers',
+  },
+  majors: {
+    sluggers: 'New York Skyscrapers', smallBall: 'Denver Jackrabbits', patient: 'San Francisco Fog',
+    flamethrowers: 'Houston Rocketeers', junkballers: 'Detroit Gearheads', shifters: 'Chicago Windmakers',
+    balanced: 'Boston Harbormasters', aces: 'Los Angeles Stars',
+  },
 };
-function teamDisplayName(styleId, fallback) { return TEAM_STYLE_NAMES[styleId] || fallback || '?'; }
+function teamDisplayName(styleId, league, fallback) {
+  return (TEAM_NAMES[league] && TEAM_NAMES[league][styleId]) || fallback || '?';
+}
+function teamShortName(styleId, league, fallback) {
+  const full = TEAM_NAMES[league] && TEAM_NAMES[league][styleId];
+  return full ? full.split(' ').pop() : (fallback || '?');
+}
 
 // Ship review (Matt, 2026-09-22: "use trophies for gold silver and bronze - not just the colors"):
 // one inline SVG cup per tier. The tiers differ in more than hue (root CLAUDE.md, colorblind-safe):
@@ -983,35 +1014,25 @@ class BaseballPlayScreen {
     const teams = leagueTeams(state);
     const opp = teams[meta.opponentIndex];
     const where = meta.home ? t('home_game') : t('away_game');
-    return `${t('vs_team').replace('{team}', opp ? teamDisplayName(opp.styleId, opp.name) : '?')} &middot; ${where}`;
+    return `${t('vs_team').replace('{team}', opp ? teamDisplayName(opp.styleId, state.season.league, opp.name) : '?')} &middot; ${where}`;
   }
 
   /** The standings table, the player's own row marked (never colour alone - a glyph, not just the
-   *  accent fill every row already gets from `.bb-league-row`-style selection). Two columns so
-   *  nine rows fit one screen without scrolling: column 1 gets ranks 1-5, column 2 gets ranks 6-9
-   *  (never split a tie visually differently - the ranking itself is what the doc calls scripted,
-   *  this just lays out whatever `standingsFor` returns).
-   *
-   *  R16: LITTLE LEAGUE IS A FOUR-TEAM LEAGUE, and four rows split 5-and-the-rest is four rows in
-   *  the left column and a column-wide hole beside them. A table short enough to fit one column
-   *  gets ONE column (`.is-single`), so the card reads as a table rather than as a table with a
-   *  gap in it. */
+   *  accent fill every row already gets from `.bb-league-row`-style selection). One column, in
+   *  `standingsFor`'s own order. It was two columns (ranks 1-5, 6-9) until the real team names
+   *  landed (2026-09-23): a half-width column cut most of them off. */
   _careerStandingsHTML(state) {
     if (!state.season) return '';
     const rows = standingsFor(state);
-    const SINGLE_COL_MAX = 5;
     const rowHTML = (r, i) => `
       <div class="bb-standing-row${r.isPlayer ? ' is-you' : ''}">
         <span class="bb-standing-rank">${i + 1}</span>
-        <span class="bb-standing-name">${r.isPlayer ? `<span class="bb-check" aria-hidden="true">&#10003;</span>${t('you')}` : teamDisplayName(r.styleId, r.id)}</span>
+        <span class="bb-standing-name">${r.isPlayer ? `<span class="bb-check" aria-hidden="true">&#10003;</span>${t('you')}` : teamDisplayName(r.styleId, state.season.league, r.id)}</span>
         <span class="bb-standing-rec">${r.wins}-${r.losses}</span>
       </div>`;
-    if (rows.length <= SINGLE_COL_MAX) {
-      return `<div class="bb-standings is-single"><div class="bb-standings-col">${rows.map((r, i) => rowHTML(r, i)).join('')}</div></div>`;
-    }
-    const col1 = rows.slice(0, 5).map((r, i) => rowHTML(r, i)).join('');
-    const col2 = rows.slice(5).map((r, i) => rowHTML(r, i + 5)).join('');
-    return `<div class="bb-standings"><div class="bb-standings-col">${col1}</div><div class="bb-standings-col">${col2}</div></div>`;
+    // 2026-09-23 (team names): ONE column at every league. The full names ("Grayson University
+    // Tortoises") were cut off in a 110px half-column at 360 wide; nine rows fit one screen.
+    return `<div class="bb-standings"><div class="bb-standings-col">${rows.map((r, i) => rowHTML(r, i)).join('')}</div></div>`;
   }
 
   /** The trophy shelf: Bronze a circle, Silver a triangle, Gold a diamond - filled when won for
@@ -2505,13 +2526,14 @@ class BaseballPlayScreen {
     // You/CPU label and the "is-you" mark move.
     const you = this.playerSide === 'home' ? 'home' : 'away';
     const arrow = g.half === 'top' ? '▲' : '▼';
+    const cpuLabel = this.cpuTeam ? teamShortName(this.cpuTeam.styleId, this.league, t('cpu')) : t('cpu');
     hud.innerHTML = `
       <div class="bb-sb-top">
-        <span class="bb-sb-team${you === 'away' ? ' is-you' : ''}">${you === 'away' ? t('you') : t('cpu')}</span>
+        <span class="bb-sb-team${you === 'away' ? ' is-you' : ''}">${you === 'away' ? t('you') : cpuLabel}</span>
         <span class="bb-sb-runs">${g.score.away}</span>
         <span class="bb-sb-dash">-</span>
         <span class="bb-sb-runs">${g.score.home}</span>
-        <span class="bb-sb-team${you === 'home' ? ' is-you' : ''}">${you === 'home' ? t('you') : t('cpu')}</span>
+        <span class="bb-sb-team${you === 'home' ? ' is-you' : ''}">${you === 'home' ? t('you') : cpuLabel}</span>
         <span class="bb-sb-inning">${arrow} ${g.inning}</span>
       </div>
       <div class="bb-sb-count">
