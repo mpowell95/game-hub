@@ -117,6 +117,7 @@ Major League	9	14	top 4 of 9: semifinal + final
 
 - **[Locked] by Matt 2026-09-22 (R16)** Standings: each CPU team's scripted record is scaled onto the season's own length (CPU rank r finishes `round(n * r / (size - 1))` of n), and **the player wins every tie**. Before R16 a CPU record topped out at 7 wins however long the season was, and the player lost every tie to every CPU team.
 - **[Locked] by Matt 2026-09-22 (R16)** A season snapshots its own length, its own team list and its own playoff format when it starts, beside the cap and the point table it already snapshotted. A tuning deploy applies from the next season and never reshapes one in progress; a season saved before R16 keeps playing as the 12-game, all-eight-slots, top-4 season it was generated as.
+- **[Locked] 2026-09-23** Mid-season, a CPU team's record covers only the games played so far: its final scripted record pro-rated (`round(finalWins * played / games)`), so it ends exactly on the full-season record. Display only; the end-of-season table that decides the playoff cut is unchanged. Before this, game 1 showed every CPU team's whole season (8-0 beside your 1-0).
 - **[Open]** Schedule shape (which opponents the extra games above eight go to) remains open; the generator repeats the middle slots, meets every team at least once, and meets the champion exactly once, last.
 
 ### After the Majors

@@ -119,7 +119,7 @@ export function makeSchedule(league, seasonSeed, n = SEASON.gamesPerSeason, size
  *   sorted strongest/most-wins first (index 0 = the standings leader)
  */
 export function scriptedStandings(teams, playerResults, games = SEASON.gamesPerSeason,
-  standingsModel = STANDINGS_MODEL, tieBreak = STANDINGS_TIEBREAK) {
+  standingsModel = STANDINGS_MODEL, tieBreak = STANDINGS_TIEBREAK, played = null) {
   // R16: the legacy three-argument form `scriptedStandings(teams, record, 'rawWins7')` still
   // works - a STRING third argument is the model, and the season length falls back to the frozen
   // `SEASON.gamesPerSeason`.
@@ -131,8 +131,18 @@ export function scriptedStandings(teams, playerResults, games = SEASON.gamesPerS
   const rows = teams.map((team, rank) => {
     const scaled = model === 'scaledTo12' || model === 'scaledToSeason';
     const scale = model === 'scaledTo12' ? 12 : seasonGames;
-    const wins = scaled ? Math.round((scale * rank) / Math.max(1, size - 1)) : rank;
-    const losses = scaled ? scale - wins : (size - 1) - rank;
+    let wins = scaled ? Math.round((scale * rank) / Math.max(1, size - 1)) : rank;
+    let losses = scaled ? scale - wins : (size - 1) - rank;
+    // 2026-09-23 (doc open item 13): MID-SEASON, a CPU team has played as many games as the player,
+    // not its whole season. `played` games in, its record is its final one pro-rated
+    // (round(finalWins * played / games)), so it grows with the player's and lands exactly on the
+    // final record at the last game. Rounding is monotone in finalWins, so a weaker team never
+    // passes a stronger one. The end-of-season table (which decides the playoff cut) is unchanged.
+    if (scaled && played != null && played < scale) {
+      const g = Math.max(0, Math.trunc(played));
+      wins = Math.round((wins * g) / scale);
+      losses = g - wins;
+    }
     return {
       id: team.name,
       styleId: team.styleId,

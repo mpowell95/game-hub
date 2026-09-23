@@ -709,6 +709,26 @@ console.log('\n-- 8d. season.js: schedule, standings, playoffs (Step 3) --');
       ok(cpu.every((r, i) => i === 0 || r.wins >= cpu[i - 1].wins), `${lg}: CPU win totals rise with strength rank`);
     }
 
+    // Open item 13, 2026-09-23: MID-SEASON a CPU record covers only the games played so far.
+    for (const lg of SETTINGS.LEAGUES) {
+      const n = SETTINGS.gamesForLeague(lg);
+      const teams = leagueTeamsFor(lg);
+      const full = scriptedStandings(teams, { wins: 0, losses: n }, n, 'scaledToSeason', 'player');
+      const finalOf = (id) => full.find((r) => r.id === id).wins;
+      let prev = null;
+      for (let g = 0; g <= n; g++) {
+        const rows = scriptedStandings(teams, { wins: 0, losses: g }, n, 'scaledToSeason', 'player', g);
+        const cpu = rows.filter((r) => !r.isPlayer).sort((a, b) => a.strengthRank - b.strengthRank);
+        ok(cpu.every((r) => r.wins + r.losses === g), `${lg} game ${g}: every CPU row has played ${g} games, like the player`);
+        ok(cpu.every((r, i) => i === 0 || r.wins >= cpu[i - 1].wins), `${lg} game ${g}: a weaker team never leads a stronger one`);
+        if (prev) ok(cpu.every((r) => r.wins >= prev.get(r.id)), `${lg} game ${g}: no CPU win total ever goes down`);
+        prev = new Map(cpu.map((r) => [r.id, r.wins]));
+        if (g === n) ok(cpu.every((r) => r.wins === finalOf(r.id)), `${lg}: the last game lands exactly on the full-season record`);
+      }
+      const noPlayed = scriptedStandings(teams, { wins: 0, losses: n }, n, 'scaledToSeason', 'player');
+      ok(JSON.stringify(noPlayed) === JSON.stringify(full), `${lg}: without \`played\` the table is the full-season one (the playoff cut is unchanged)`);
+    }
+
     // STANDINGS_TIEBREAK: the player WINS every tie now (they lost every one before R16).
     {
       const teams = leagueTeamsFor('college');
