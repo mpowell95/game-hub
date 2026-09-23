@@ -715,3 +715,14 @@ belts of weeping willows standing on a FLOODED floor (`treesFloor` is the swamp-
 Cypress belts were tried first and vanished: dark narrow crowns on a dark floor. The Look control
 is six buttons in two columns. Wind stays per hole (Hole panel, untick "Wind: auto"); no look
 changes it. Still: `reference/golf/looks-2026-09-22.png`, all six looks.
+
+## The setup screen comes first (2026-09-23)
+
+Matt: *"Course and Savings needs to be easy and obvious as a first selection... it's the first thing
+he should do - name the course and choose the terrain type."* A Course Creator document that has
+never been named (`course.named` unset) opens on a modal (`openSetupModal` in `main.js`): course
+name (required), six terrain tiles each drawn by the real renderer, and the player code if the
+editor does not know it yet. `named: true` is stamped on Start, or when the Course & saving panel's
+name field is filled. The ribbon's first item on the Course Creator is a course button ("name ·
+terrain") that reopens it. Ribbon tools may now shrink to 60px (`.he-tool`) so that button and Help
+still fit at 1280px. `applyLook()` is the one place a look is switched. UI suite: six probes.
