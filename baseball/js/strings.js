@@ -69,6 +69,9 @@ export const STRINGS = {
     // worth a button (`outcomeWord` in ui.js carries the same note).
     res_bunt_out: 'Bunt out',
     res_bunt_single: 'Bunt single',
+    // Batch 2 (2026-09-23): a bunt popped up (the bat sat under the ball) - always an out, never a
+    // sacrifice's free advance (`outcomes.js`'s `resolveBunt`).
+    res_bunt_popup: 'Bunt popup',
     res_sacrifice: 'Sacrifice',
     // SPEC.md section 3/13: Line 1's verdict vocabulary, one word per pitch before the outcome
     // is known (`js/ui.js`'s `verdictWord`/`timingWord` glue, BB-3b commit 6).
@@ -239,6 +242,7 @@ export const STRINGS = {
     res_strikeout: 'Ponche',
     res_bunt_out: 'Toque out',
     res_bunt_single: 'Sencillo de toque',
+    res_bunt_popup: 'Elevado de toque',
     res_sacrifice: 'Sacrificio',
     v_ball: 'Bola',
     v_strike: 'Strike',

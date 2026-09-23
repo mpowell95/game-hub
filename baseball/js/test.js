@@ -2089,13 +2089,13 @@ console.log('\n-- 24. BB-2e commit 2: LADDER_SHAPE and the per-league TEAM_LADDE
         'slower than the reference widens the window, faster narrows it');
       ok(flightWindowMult({}, SETTINGS) === 1 && flightWindowMult(null, SETTINGS) === 1,
         'and a pitch with no flight time at all (an old fixture) keeps its exact pre-R16 window');
-      // The BUNT is on the same axis - a bunt is timing alone, so leaving it out would have made
-      // the bunt the one swing a fast pitch could not punish.
-      const bunt = (timeToPlateS, errMs) => swing({ x: 0, y: 0, isStrike: true, timeToPlateS }, skills,
-        { action: 'swing', bunt: true, timingErrorMs: errMs }, SETTINGS, () => 0.5, 'college');
-      const bErr = F.timingWindow * (SETTINGS.BUNT_WINDOW_MULT || 1.6) * 1.2;
-      ok(bunt(slow, bErr).foul === false && bunt(fast, bErr).foul === true,
-        'the same is true of a bunt: the slow pitch is still fair, the fast one is fouled off');
+      // Playtest 1, batch 2 (2026-09-23): the bunt is POSITION now, not timing - a fast pitch
+      // punishes an ordinary swing (above) but changes nothing for a held bunt, since there is no
+      // window left for a pitch's own flight time to widen or narrow.
+      const buntAt = (offX, timeToPlateS) => swing({ x: offX, y: 0, isStrike: true, timeToPlateS }, skills,
+        { action: 'swing', bunt: true, cursor: { x: 0, y: 0 } }, SETTINGS, () => 0.5, 'college');
+      ok(buntAt(0.2, slow).inPlay === true && buntAt(0.2, fast).inPlay === true,
+        'a centred bunt is in play at any pitch speed - position decides it now, never flight time');
     }
     // Kind follows the VERTICAL offset, per the spec.
     const R = SETTINGS.FEEL.engine.cursorR.contact;
@@ -2518,26 +2518,39 @@ await (async function section30() {
     ok(pitches > 0, 'and the at-bat goes on to real pitches once the cap binds');
   }
 
-  // --- the bunt: a foul bunt with two strikes IS strike three --------------------------------------
+  // --- the bunt: a foul bunt with two strikes IS strike three (playtest 1, batch 2: position, not
+  // timing - "resolveBunt takes contact from bat-vs-ball position instead of swing timing") -------
   {
     const skills = { hitAcc: 0, hitPow: 0, hitSpd: 0 };
     const pitch = { type: 'fastball', x: 0, y: 0, isStrike: true, timeToPlateS: 0.5 };
-    const wide = SETTINGS.FEEL.engine.timingWindow * SETTINGS.BUNT_WINDOW_MULT;
-    const foul = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: wide + 50 }, SETTINGS, () => 0.5, 'college');
+    const halfX = SETTINGS.BUNT_BAR_HALF_X, halfY = SETTINGS.BUNT_BAR_HALF_Y;
+    const foulX = halfX * SETTINGS.BUNT_FOUL_X_FRAC;
+    const foul = swing(pitch, skills, { action: 'swing', bunt: true, cursor: { x: -(foulX + 0.05), y: 0 } }, SETTINGS, () => 0.5, 'college');
     ok(foul.foul === true && foul.inPlay === false && foul.bunt === true,
-      'a bunt timed outside the widened window is a foul, never a swinging miss');
-    const good = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: 0 }, SETTINGS, () => 0.5, 'college');
-    ok(good.inPlay === true && good.kind === 'ground' && good.bunt === true, 'a well-timed bunt is always a grounder in play');
+      'a bunt mishit past BUNT_FOUL_X_FRAC of the bar (but still inside it) is a foul, never a swinging miss');
+    const good = swing(pitch, skills, { action: 'swing', bunt: true, cursor: { x: 0, y: 0 } }, SETTINGS, () => 0.5, 'college');
+    ok(good.inPlay === true && good.kind === 'ground' && good.bunt === true, 'a centred bunt is always a grounder in play');
     ok(good.distanceFt >= SETTINGS.BUNT_DIST_FT[0] && good.distanceFt <= SETTINGS.BUNT_DIST_FT[1],
       `a bunt travels inside BUNT_DIST_FT (${good.distanceFt.toFixed(1)} ft)`);
     ok(Math.abs(good.sprayAngleDeg) <= SETTINGS.BUNT_SPRAY_DEG, 'a bunt sprays inside +/-BUNT_SPRAY_DEG');
     ok(SETTINGS.BUNT_SPRAY_DEG < SETTINGS.FOUL_LINE_DEG, 'a bunt that makes contact is never in foul ground');
-    // The window really is WIDER than an ordinary swing's, which is the whole reason to bunt.
-    const ordinaryEdge = SETTINGS.FEEL.engine.timingWindow;
-    const stillFair = swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: ordinaryEdge + 10 }, SETTINGS, () => 0.5, 'college');
-    ok(stillFair.inPlay === true, 'a bunt still makes contact at a timing error that would have fouled an ordinary swing');
+    // Outside the bar's own reach entirely, the bat never gets there - a take, never a foul: "if the
+    // pitch crosses the bar, contact happens on its own" implies the opposite when it does not.
+    const outOfReach = swing(pitch, skills, { action: 'swing', bunt: true, cursor: { x: halfX + 1, y: 0 } }, SETTINGS, () => 0.5, 'college');
+    ok(outOfReach.swung === false && outOfReach.contact === false && outOfReach.foul === false,
+      'a pitch outside the bar\'s own reach never meets the bat at all - not even a foul');
+    // A bat held too far UNDER the ball (large positive offY, still inside the bar's own reach)
+    // pops it up - `resolveBunt` decides this from position, no random draw at all.
+    const underIt = swing(pitch, skills,
+      { action: 'swing', bunt: true, cursor: { x: 0, y: -(halfY * SETTINGS.BUNT_POPUP_Y_FRAC + 0.02) } },
+      SETTINGS, () => 0.5, 'college');
+    const popped = resolveBunt(underIt, ['r1', null, null], 0, 0, SETTINGS, () => 1);
+    ok(popped.kind === 'bunt-popup' && popped.result === 'out',
+      'a bat held too far under the ball pops the bunt up - always an out, decided by position alone');
 
-    // End to end: a two-strike foul bunt is a strikeout, through the real at-bat loop.
+    // End to end: a two-strike foul bunt is a strikeout, through the real at-bat loop. The batter's
+    // own cursor is read off the pitch's REAL crossing (`view.pitch.x`) minus the same foul offset
+    // above, so the foul happens whatever scatter this seed's pitch actually drew.
     const { home, away } = fixture('college');
     const g = new Game({
       home, away, seed: 606,
@@ -2545,7 +2558,8 @@ await (async function section30() {
         home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
         away: {
           decidePitch: async () => BALL_OUTSIDE,
-          decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: wide + 500 }),
+          decideSwing: async (view) => ({ action: 'swing', bunt: true,
+            cursor: { x: view.pitch.x - (foulX + 0.05), y: view.pitch.y || 0 } }),
         },
       },
     });
@@ -2598,7 +2612,7 @@ await (async function section30() {
       home, away, seed: 808, settings: { MECHANICS: { ...SETTINGS.MECHANICS, beatOutPerPt: 0 } },
       agents: {
         home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
-        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: 0 }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async (view) => ({ action: 'swing', bunt: true, cursor: { x: view.pitch.x, y: view.pitch.y || 0 } }) },
       },
     });
     g.bases = [RUNNER, null, null];
@@ -2617,7 +2631,7 @@ await (async function section30() {
       home, away, seed: 909, settings: { MECHANICS: { ...SETTINGS.MECHANICS, beatOutPerPt: 0 } },
       agents: {
         home: { decidePitch: async () => ({ type: 'fastball', aim: { x: 0, y: 0 } }), decideSwing: async () => ({ action: 'take' }) },
-        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async () => ({ action: 'swing', bunt: true, timingErrorMs: 0 }) },
+        away: { decidePitch: async () => BALL_OUTSIDE, decideSwing: async (view) => ({ action: 'swing', bunt: true, cursor: { x: view.pitch.x, y: view.pitch.y || 0 } }) },
       },
     });
     g2.bases = [null, null, RUNNER];
@@ -2997,14 +3011,16 @@ await (async function section33() {
       `(3) a 90ms-off, dead-centred swing at MAJORS (window 80ms) is a foul, not real contact (got ${JSON.stringify(majorsSwing)})`);
     ok(littleSwing.contact === true && littleSwing.foul === false,
       `(3) the IDENTICAL swing at LITTLE LEAGUE (window 160ms) is genuine contact, not a foul (got ${JSON.stringify(littleSwing)})`);
-    // The bunt reads the same multiplier (swing.js's OTHER F.timingWindow read, buntSwing).
-    const bunt = (absMs, league) => swing(pitch, skills, { action: 'swing', bunt: true, timingErrorMs: absMs }, SETTINGS, mulberry32(1), league);
-    // Base bunt window at college (mult 1.0): 100 x BUNT_WINDOW_MULT(1.6) = 160ms.
-    const collegeBunt = bunt(150, 'college');
-    const majorsBunt = bunt(150, 'majors'); // 100 x 0.8 x 1.6 = 128ms - 150 is a miss-turned-foul past it
-    ok(collegeBunt.inPlay === true, `(3) a 150ms-off bunt at COLLEGE (window 160ms) is still in play (got ${JSON.stringify(collegeBunt)})`);
-    ok(majorsBunt.inPlay === false && majorsBunt.foul === true,
-      `(3) the IDENTICAL bunt at MAJORS (window 128ms) is a foul (got ${JSON.stringify(majorsBunt)})`);
+    // Playtest 1, batch 2 (2026-09-23): the bunt no longer reads this multiplier at all - it is
+    // POSITION now, and `BUNT_BAR_HALF_X`/`BUNT_BAR_HALF_Y` do not vary by league, so the identical
+    // positional offset is in play at every league, unlike an ordinary swing above.
+    const bunt = (offX, league) => swing(pitch, skills, { action: 'swing', bunt: true, cursor: { x: -offX, y: 0 } }, SETTINGS, mulberry32(1), league);
+    const nearCentre = SETTINGS.BUNT_BAR_HALF_X * SETTINGS.BUNT_FOUL_X_FRAC * 0.5;
+    const collegeBunt = bunt(nearCentre, 'college');
+    const majorsBunt = bunt(nearCentre, 'majors');
+    ok(collegeBunt.inPlay === true, `(3) a well-centred bunt at COLLEGE is in play (got ${JSON.stringify(collegeBunt)})`);
+    ok(majorsBunt.inPlay === true,
+      `(3) the IDENTICAL bunt at MAJORS is also in play - no league timing window left to read (got ${JSON.stringify(majorsBunt)})`);
     // The CPU's own timing SIGMA (how far off-centre its swings tend to land) is untouched - a
     // structural check that R11 never touched the CPU table at all.
     ok(SETTINGS.CPU.little.timingSigmaMs === 115 && SETTINGS.CPU.majors.timingSigmaMs === 58,

@@ -754,9 +754,21 @@ export class Game {
         // HOME RUN stats strip's `{deg}` reads; a bunt has no launch angle worth reporting
         // (`resolveBunt`'s own swingResult carries `launchAngleDeg: 0`, never a homer candidate) so
         // this is honest there too.
+        // Batch 2 (2026-09-23): `swingResult.kind` is 'ground' for every bunt attempt (the swing
+        // MOTION, decided before contact) - but `resolveBunt` decides AFTER contact whether this one
+        // popped up, and the UI's own overhead flight (`_flightMsFor`/`_battedApexFt`) needs to know
+        // that to draw a real short pop-up arc instead of a grounder's roll (and to skip the
+        // ground-out throw beat a caught popup never takes - `_animateBattedBall`'s own throw-beat
+        // check reads `battedKind === 'ground'`). `battedKind` reads `'bunt-popup'` for exactly that
+        // one outcome - deliberately NOT the shared `'popup'` kind, whose own apex floor
+        // (`BATTED_POPUP_APEX_MIN_FT`, tuned for a full swing's infield fly) would fly a 15-45ft
+        // bunt pop absurdly high; `'bunt-popup'` falls through to the plain fly branch instead,
+        // which scales with distance and gives a short pop exactly that: short. `swingResult.kind`
+        // is unaffected everywhere else.
         await this.emit('atBatEnd', { batterId, side: battingSide, outcome: outcome.kind, bases, runsScored,
           q: swingResult.q, exitVeloMph: swingResult.exitVeloMph, centered: swingResult.centered,
-          distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg, battedKind: swingResult.kind,
+          distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg,
+          battedKind: outcome.kind === 'bunt-popup' ? 'bunt-popup' : swingResult.kind,
           launchAngleDeg: swingResult.launchAngleDeg,
           timingWord, basesBefore: basesBeforeAtBat, runnersOut });
         return;

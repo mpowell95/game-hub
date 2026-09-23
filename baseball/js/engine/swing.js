@@ -99,49 +99,55 @@ export function flightWindowMult(pitchResult, settings) {
   return t / ref;
 }
 
-/** RA (docs/BASEBALL-3D-BUILD.md section 9): THE BUNT. A different swing entirely, so it is its own
- *  branch rather than a flag threaded through the one above: a bunt has no cursor, no mode, no
- *  spray geometry off the bat and no exit velocity worth modelling - the batter holds the bat out
- *  and the ball dies in front of the plate. What it DOES have is timing, on a window widened by
- *  `BUNT_WINDOW_MULT`, and that timing is the whole of its quality.
+/** Playtest 1, batch 2 (2026-09-23): THE BUNT, rebuilt from timing to a HELD POSITION. Matt: "if I
+ *  hold it down, the bat should stay there. A bunt isn't a swing... you hold the bat horizontal and
+ *  move it up/down/side to side to hit the ball." `ui.js`'s HumanAgent only ever calls this branch
+ *  once the pitch has actually CROSSED while the bunt button was still held - "no timing tap" - so
+ *  there is no window to be inside or outside of any more; there is only where the bar was.
  *
- *  Three facts, all the spec's: the ball is always `kind: 'ground'`; it travels `BUNT_DIST_FT` feet
- *  and sprays inside `+/-BUNT_SPRAY_DEG` (both uniform, both well inside `FOUL_LINE_DEG`, so a
- *  bunt that makes contact is never in foul ground); and `q` comes from timing ALONE.
+ *  Reused, unchanged: the 2-D cursor a decision carries is the SAME `cursor` an ordinary swing
+ *  reads (`cursorOf`), so a CPU bunt (`agents.js`'s `CpuBatter`, which already builds `cursor:
+ *  {x: aimX, y: aimY}` for every decision, bunt or not) needs no changes here at all - it is aiming
+ *  at where it thinks the ball is going exactly as it always has, and that aim is now what the bat
+ *  bar is "held" at.
  *
- *  A mistimed bunt is a FOUL, never a swinging miss - a bat held in the zone nicks the ball rather
- *  than passing under it, and the spec names only two outcomes for a bunt attempt. What makes that
- *  a real cost rather than a free pitch is game.js's own rule: a foul bunt with two strikes is
- *  strike three (`swingResult.bunt` is what tells it apart from an ordinary foul, which can never
- *  be strike three - `MECHANICS.foulNeverThirdStrike`).
+ *  Contact is BAT-VS-BALL POSITION: `offX`/`offY` are the same "ball minus cursor" measurement
+ *  `swing()` takes below, just against a BAR instead of a circle - wide across the plate
+ *  (`BUNT_BAR_HALF_X`), thin top to bottom (`BUNT_BAR_HALF_Y`), because a bat is a bar, not a
+ *  circle. Outside either half-width the bat never reaches the ball at all: `swung: false` reads
+ *  through `game.js`'s own `!swingResult.swung` branch exactly like a batter who let a pitch go by
+ *  - an ordinary ball or strike, never a foul (a bat that was never near the ball cannot nick it).
  *
- *  `distanceFt`/`sprayAngleDeg` are returned here rather than derived by `outcomes.js`'s `carryFt`
- *  because a bunt has no carry: 8 to 40 ft is the fact, and an exit-velocity-and-launch-angle model
- *  asked to produce it would be arithmetic invented to justify a number already known. */
-function buntSwing(batterSkills, decision, settings, rand01, league, pitchResult) {
-  const F = settings.FEEL.engine;
-  const hitAccPts = Math.max(0, batterSkills.hitAcc || 0);
-  const effect = settings.SKILL_EFFECT;
-  // R11 (docs/BASEBALL-3D-BUILD.md section 9): the league ladder widens/narrows the timing window
-  // here too - a bunt is still timing-only, so it is still "forgiving at Little League, tight at
-  // Majors" exactly the same way an ordinary swing is, below.
-  const windowMult = (settings.LEAGUE_TIMING_WINDOW_MULT && settings.LEAGUE_TIMING_WINDOW_MULT[league]) || 1;
-  // R16: and the pitch's own flight time (see `flightWindowMult`).
-  const flightMult = flightWindowMult(pitchResult, settings);
-  const baseWindowMs = F.timingWindow * windowMult * flightMult * (1 + hitAccPts * (effect.hitAcc.whiffReductionPerPt || 0) * 4);
-  const windowMs = baseWindowMs * (settings.BUNT_WINDOW_MULT != null ? settings.BUNT_WINDOW_MULT : 1.6);
-  const timingErrorMs = decision.timingErrorMs || 0;
-  const absTiming = Math.abs(timingErrorMs);
-  if (absTiming > windowMs) {
+ *  Inside the bar, HOW CENTRED the contact was is what `outcomes.js`'s `resolveBunt` decides fair,
+ *  foul or pop-up from - `offY`/the bar's own half-height ride along on the returned object for
+ *  exactly that (a bat sitting too far under the ball is what pops a real bunt up); a mishit near
+ *  either END of the bar is a foul, decided right here since a foul bunt (unlike a fair one) never
+ *  reaches `resolveBunt` at all - `game.js`'s own foul branch fires before that call, exactly as it
+ *  did for the old timing-window foul. `MECHANICS.foulNeverThirdStrike`'s one exception (a foul
+ *  BUNT with two strikes is strike three) still reads `swingResult.bunt`, unchanged by this stage.
+ *
+ *  `distanceFt`/`sprayAngleDeg` (a fair bunt only) are still `BUNT_DIST_FT`/`+/-BUNT_SPRAY_DEG` -
+ *  the spec's own numbers, untouched: a bunt has no carry to derive them from. */
+function buntSwing(decision, settings, rand01, pitchResult) {
+  const cursor = cursorOf(decision);
+  const offX = pitchResult.x - cursor.x;
+  const offY = (pitchResult.y || 0) - cursor.y;
+  const halfX = settings.BUNT_BAR_HALF_X != null ? settings.BUNT_BAR_HALF_X : 0.95;
+  const halfY = settings.BUNT_BAR_HALF_Y != null ? settings.BUNT_BAR_HALF_Y : 0.28;
+  if (Math.abs(offX) > halfX || Math.abs(offY) > halfY) {
+    return { swung: false, contact: false, foul: false, inPlay: false };
+  }
+  const foulX = halfX * (settings.BUNT_FOUL_X_FRAC != null ? settings.BUNT_FOUL_X_FRAC : 0.62);
+  if (Math.abs(offX) > foulX) {
     return { swung: true, contact: true, foul: true, inPlay: false, bunt: true };
   }
-  const q = qualityFor(absTiming, F.perfectMs, windowMs);
   const dist = settings.BUNT_DIST_FT || [8, 40];
   const sprayMax = settings.BUNT_SPRAY_DEG != null ? settings.BUNT_SPRAY_DEG : 30;
   const distanceFt = dist[0] + rand01() * (dist[1] - dist[0]);
   const sprayAngleDeg = (rand01() * 2 - 1) * sprayMax;
   return { swung: true, contact: true, foul: false, inPlay: true, bunt: true,
-    kind: 'ground', launchAngleDeg: 0, exitVeloMph: 0, distanceFt, sprayAngleDeg, q, centered: false,
+    kind: 'ground', launchAngleDeg: 0, exitVeloMph: 0, distanceFt, sprayAngleDeg,
+    offY, barHalfY: halfY, q: 1 - Math.abs(offX) / foulX, centered: Math.abs(offX) <= foulX * 0.5,
     mode: 'bunt' };
 }
 
@@ -162,7 +168,7 @@ export function swing(pitchResult, batterSkills, decision, settings, rand01, lea
     return { swung: false, contact: false, foul: false, inPlay: false };
   }
   // RA: a bunt is decided before the pitch and resolved on its own terms (see `buntSwing` above).
-  if (decision.bunt) return buntSwing(batterSkills, decision, settings, rand01, league, pitchResult);
+  if (decision.bunt) return buntSwing(decision, settings, rand01, pitchResult);
 
   const F = settings.FEEL.engine;
   const hitAccPts = Math.max(0, batterSkills.hitAcc || 0);

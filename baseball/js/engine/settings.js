@@ -1121,13 +1121,32 @@ export const PICKOFF_MAX = 0.35;
 // can never bind on honest play while it makes the loop provably terminate.
 export const PICKOFF_MAX_PER_AT_BAT = 3;
 
-// THE BUNT. A bunt is contact-only: the timing window widens by BUNT_WINDOW_MULT, the ball is
-// always a grounder, it travels BUNT_DIST_FT[0]..[1] feet and sprays inside +/-BUNT_SPRAY_DEG.
-// Those are the spec's own numbers. The beat-out roll a bunt for a hit turns on is
+// THE BUNT (playtest 1, batch 2, 2026-09-23: rebuilt from a timing window to a HELD POSITION -
+// Matt: "if I hold it down, the bat should stay there. A bunt isn't a swing... you hold the bat
+// horizontal and move it up/down/side to side to hit the ball"). Contact is now bat-vs-ball
+// POSITION, read the same way an ordinary swing's cursor-vs-crossing offset is (`swing.js`'s own
+// `offX`/`offY`, `cursorOf`) - never timing, which BUNT_WINDOW_MULT used to widen and no longer
+// exists. `BUNT_BAR_HALF_X`/`BUNT_BAR_HALF_Y` are the held bar's own reach in zone units (wide
+// across the plate, thin top to bottom - a bat, not a circle); a pitch outside both axes never
+// meets it at all, and `swing.js`'s `buntSwing` reads `swung: false` back through it, which
+// `game.js`'s own `!swingResult.swung` branch scores as an ordinary ball/strike - a bunt that
+// never touches the ball is a take, not a foul. Inside the bar, `BUNT_FOUL_X_FRAC` and
+// `BUNT_POPUP_Y_FRAC` (fractions of the bar's own half-reach) are how CENTRED the contact was:
+// too far to either side of the bar's centre is a foul (a real mishit toward the side); too high
+// (the bat sat under the ball) is a pop-up - `outcomes.js`'s `resolveBunt` is where both are
+// actually decided, off the position `buntSwing` hands it. A bunt in play is still always a
+// grounder, still travels BUNT_DIST_FT[0]..[1] feet and still sprays inside +/-BUNT_SPRAY_DEG -
+// the spec's own numbers, untouched. The beat-out roll a bunt for a hit turns on is still
 // `MECHANICS.beatOutPerPt` - the SAME roll an infield grounder already uses, never a second one.
-export const BUNT_WINDOW_MULT = 1.6;
+// CPU bunts read the identical positional check off the cursor `agents.js`'s `CpuBatter` already
+// builds for every swing (`aimX`/`aimY`) - nothing in agents.js changed for this.
+export const BUNT_BAR_HALF_X = 0.95;
+export const BUNT_BAR_HALF_Y = 0.28;
+export const BUNT_FOUL_X_FRAC = 0.62;
+export const BUNT_POPUP_Y_FRAC = 0.55;
 export const BUNT_DIST_FT = [8, 40];
 export const BUNT_SPRAY_DEG = 30;
+export const BUNT_POPUP_DIST_FT = [15, 45];
 
 // WHAT THE CPU DOES WITH THEM (doc §3's [Open] half, for the side the player does not control).
 export const CPU_STEAL_BASE = 0.12;
@@ -1523,7 +1542,7 @@ export default {
   CARRY_PEAK_DEG,
   LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, MECHANICS,
   STEAL_BASE, STEAL_PER_ACC, STEAL_MIN, STEAL_MAX, PICKOFF_BASE, PICKOFF_MAX, PICKOFF_MAX_PER_AT_BAT,
-  BUNT_WINDOW_MULT, BUNT_DIST_FT, BUNT_SPRAY_DEG,
+  BUNT_BAR_HALF_X, BUNT_BAR_HALF_Y, BUNT_FOUL_X_FRAC, BUNT_POPUP_Y_FRAC, BUNT_DIST_FT, BUNT_SPRAY_DEG, BUNT_POPUP_DIST_FT,
   CPU_STEAL_BASE, CPU_STEAL_PER_SPD, CPU_PICKOFF_RATE, CPU_BUNT_RATE, CPU_BUNT_POW_FRAC,
   BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, STANDINGS_TIEBREAK, SCHEDULE_SHAPE,
   GAP_DEG, BLOOP_BAND_FT, SPEED_SURPRISE_MS_PER_MULT,

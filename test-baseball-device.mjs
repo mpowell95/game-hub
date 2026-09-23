@@ -1369,21 +1369,36 @@ if (!process.env.BB_DEVICE_QUICK) {
       }
     }
 
+    // Batch 2 (playtest 1, 2026-09-23): BUNT is a HOLD now, not a tap-to-arm-then-swing-tap - the
+    // well is held down through the whole pitch and the engine decides contact on its own, from
+    // position, the instant the pitch crosses. No SWING tap exists in this path at all.
     const bunt = await page13.evaluate(async () => {
       const inst = document.querySelector('.hub-game')._bbInstance;
-      const S = await import('/baseball/js/engine/settings.js');
-      const swingDelayMs = S.FEEL.engine.swingDelay;
       const ends = [];
       const origEvent = inst.game.onEvent;
       inst.game.onEvent = (type, pl) => { if (type === 'atBatEnd') ends.push(pl); return origEvent(type, pl); };
-      let timeToPlateS = null;
+      // A real player tracks the pitch's own height/side as it flies ("move it up/down/side to
+      // side to hit the ball", Matt) - a script holding the bar dead-centre the whole time is
+      // testing a player who never moves at all, which is not what the feature is for. This hooks
+      // the same seam `pitch-drag`'s own probes use to read the real thrown pitch, and moves the
+      // cursor to meet it the instant the flight starts, the same as a player with perfect
+      // tracking would - not a bypass of the position check, an actual (idealised) use of it.
       const origFlight = inst._animatePitchFlight.bind(inst);
-      inst._animatePitchFlight = (p) => { timeToPlateS = p.timeToPlateS; return origFlight(p); };
+      inst._animatePitchFlight = (p) => {
+        if (inst.state.armedBunt) { inst.cursor.x = p.x; inst.cursor.y = p.y || 0; }
+        return origFlight(p);
+      };
+      const waitFor = async (fn, ms) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) { if (fn()) return true; await new Promise((r) => setTimeout(r, 40)); }
+        return false;
+      };
+      const touchStart = (el) => el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
       const tap = (el) => {
         el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
         el.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
       };
-      const BUNT_KINDS = ['bunt-out', 'bunt-single', 'sacrifice'];
+      const BUNT_KINDS = ['bunt-out', 'bunt-single', 'bunt-popup', 'sacrifice'];
       const deadline = Date.now() + 120000;
       let attempts = 0, squared = false;
       while (Date.now() < deadline && !ends.some((e) => BUNT_KINDS.includes(e.outcome))) {
@@ -1398,35 +1413,76 @@ if (!process.env.BB_DEVICE_QUICK) {
         }
         const buntBtn = document.querySelector('[data-act="bunt"]');
         if (!buntBtn || buntBtn.disabled) return { error: 'the BUNT well is disabled during a batting turn before READY' };
-        buntBtn.click();
-        // Freshly queried, for the same reason the steal block above says: the well that was
-        // clicked has already been replaced by `_paintActionSlots`'s own repaint.
+        touchStart(buntBtn);   // HOLD arms it - never a click/tap any more
+        // Freshly queried: `_paintActionSlots()` rebuilds the well's own DOM the instant it arms.
         const armedBtn = document.querySelector('[data-act="bunt"]');
-        if (!armedBtn || !armedBtn.classList.contains('is-armed')) return { error: 'tapping BUNT did not arm the well' };
+        if (!armedBtn || !armedBtn.classList.contains('is-armed')) return { error: 'holding BUNT did not arm the well' };
         attempts += 1;
-        timeToPlateS = null;
-        tap(document.querySelector('[data-role="mainbtn"]'));   // READY
-        // Wait for the flight to start so the crossing time is known, then tap SWING on it.
-        const flightEnd = Date.now() + 6000;
-        while (timeToPlateS == null && Date.now() < flightEnd) await new Promise((r) => setTimeout(r, 20));
-        if (timeToPlateS == null) { await new Promise((r) => setTimeout(r, 200)); continue; }
+        tap(document.querySelector('[data-role="mainbtn"]'));   // READY - the hold covers the pitch
         if (inst.actors.actors.batter && inst.actors.actors.batter.current) {
           const clip = inst.actors.actors.batter.current.getClip();
           if (clip && clip.name === 'Bunt') squared = true;
         }
-        await new Promise((r) => setTimeout(r, Math.max(0, timeToPlateS * 1000 - swingDelayMs)));
-        if (inst._onMainDown) tap(document.querySelector('[data-role="mainbtn"]'));
-        await new Promise((r) => setTimeout(r, 2600));
+        // Never taps SWING - the crossing resolves it on its own. Just wait for this at-bat to
+        // move on (a bunt outcome, or a strikeout/walk putting the human back on READY).
+        await waitFor(() => ends.some((e) => BUNT_KINDS.includes(e.outcome)) || inst.state.actionLabel === 'act_ready', 8000);
       }
       const hit = ends.find((e) => BUNT_KINDS.includes(e.outcome));
       return { attempts, squared, outcome: hit ? hit.outcome : null, battedKind: hit ? hit.battedKind : null,
         kinds: ends.map((e) => e.outcome).slice(-6) };
     });
     if (bunt.error) fail('actions-live (b) bunt', bunt.error);
-    else if (!bunt.outcome) fail('actions-live (b) bunt', `${bunt.attempts} armed bunts in 120s never produced a bunt outcome (saw ${bunt.kinds.join(',')})`);
-    else if (!bunt.squared) fail('actions-live (b) bunt', 'the batter never played the Bunt clip while armed');
-    else if (bunt.battedKind !== 'ground') fail('actions-live (b) bunt', `the bunt's battedKind is "${bunt.battedKind}", not "ground"`);
-    else ok(`actions-live (b): BUNT armed, the batter squared on the Bunt clip, and a swing tap produced atBatEnd outcome "${bunt.outcome}" (battedKind ground) after ${bunt.attempts} attempt(s)`);
+    else if (!bunt.outcome) fail('actions-live (b) bunt', `${bunt.attempts} held bunts in 120s never produced a bunt outcome (saw ${bunt.kinds.join(',')})`);
+    else if (!bunt.squared) fail('actions-live (b) bunt', 'the batter never played the Bunt clip while held');
+    else if (!['ground', 'bunt-popup'].includes(bunt.battedKind)) fail('actions-live (b) bunt', `the bunt's battedKind is "${bunt.battedKind}", not "ground" or "bunt-popup"`);
+    else ok(`actions-live (b): BUNT held through the crossing, the batter squared on the Bunt clip, and contact happened on its own with no swing tap - atBatEnd outcome "${bunt.outcome}" (battedKind ${bunt.battedKind}) after ${bunt.attempts} attempt(s)`);
+
+    // Batch 2: releasing BEFORE the pitch arrives pulls the bat back - an ordinary take, never a
+    // foul, resolved the instant the finger lifts rather than waiting for the pitch's own timeout.
+    const buntRelease = await page13.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const S = await import('/baseball/js/engine/settings.js');
+      const windupMs = S.FEEL.ui.windupMs;
+      const counts = [];
+      const origEvent = inst.game.onEvent;
+      inst.game.onEvent = (type, pl) => { if (type === 'count') counts.push(pl); return origEvent(type, pl); };
+      const waitFor = async (fn, ms) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) { if (fn()) return true; await new Promise((r) => setTimeout(r, 40)); }
+        return false;
+      };
+      const touchStart = (el) => el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+      const tap = (el) => {
+        el.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      };
+      const ready = await waitFor(() => inst.state.mode === 'batting' && inst.state.actionLabel === 'act_ready', 20000);
+      if (!ready) return { error: 'never reached a batting turn offering READY within 20s' };
+      const buntBtn = document.querySelector('[data-act="bunt"]');
+      if (!buntBtn || buntBtn.disabled) return { error: 'the BUNT well is disabled before READY' };
+      touchStart(buntBtn);
+      const armedBtn = document.querySelector('[data-act="bunt"]');
+      const armed = !!(armedBtn && armedBtn.classList.contains('is-armed'));
+      tap(document.querySelector('[data-role="mainbtn"]'));   // READY
+      // Release well past the wind-up (so it lands mid-FLIGHT, resolved through
+      // `_resolveBuntTake`, not the wind-up's own downgrade-to-ordinary-swing path) but well before
+      // any real pitch's own crossing (the fastest flight in this engine is still several hundred ms).
+      await new Promise((r) => setTimeout(r, windupMs + 150));
+      document.dispatchEvent(new Event('touchend', { bubbles: true, cancelable: true }));
+      const settled = await waitFor(() => counts.length > 0, 8000);
+      let squaredAfter = false;
+      if (inst.actors.actors.batter && inst.actors.actors.batter.current) {
+        const clip = inst.actors.actors.batter.current.getClip();
+        squaredAfter = !!(clip && clip.name === 'Bunt');
+      }
+      return { armed, settled, verdict: counts[0] ? counts[0].verdict : null, squaredAfter };
+    });
+    if (buntRelease.error) fail('actions-live (b2) bunt release', buntRelease.error);
+    else if (!buntRelease.armed) fail('actions-live (b2) bunt release', 'holding BUNT did not arm the well');
+    else if (!buntRelease.settled) fail('actions-live (b2) bunt release', 'releasing before the crossing never produced a count event - an ordinary take should have resolved it immediately');
+    else if (!(buntRelease.verdict === 'ball' || buntRelease.verdict === 'strike')) fail('actions-live (b2) bunt release', `releasing early read as verdict "${buntRelease.verdict}", not an ordinary ball/strike take`);
+    else if (buntRelease.squaredAfter) fail('actions-live (b2) bunt release', 'the batter is still squared on the Bunt clip after releasing - the bat was not pulled back');
+    else ok(`actions-live (b2): releasing BUNT before the pitch arrives pulls the bat back - an ordinary take (verdict "${buntRelease.verdict}"), batter no longer squared`);
   }
   if (errs13.length) fail('actions-live', `page errors in the batting half: ${errs13.slice(0, 3).join(' | ')}`);
   else ok('no page errors during the actions-live batting half');

@@ -4,6 +4,82 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Playtest 1, batch 2: bunt rework (2026-09-23) - DONE, live at v934
+
+`docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 2. Matt: *"if I hold it down, the bat should stay
+there. A bunt isn't a swing. When you bunt, you hold the bat horizontal and move it up/down/side to
+side to hit the ball."* Overrules design doc §3's own "[Locked] All three [steal/bunt/pickoff] are
+tap, never hold" - for BUNT only, noted in place there with this date.
+
+**HOLD replaces tap-to-arm.** `_onBuntDown()`/`_onBuntUp()`/`_endBuntHold()` (`ui.js`) wire
+pointerdown/touchstart on the well straight to a press-and-hold, not `_onActionSlot`'s click toggle
+(that function's own `'bunt'` branch is gone; STEAL and PICKOFF are unchanged). The batter squares
+on the `Bunt` clip the instant the well is held - not only after READY, since the hold now covers
+the whole pitch, not just the wind-up. **The release listener lives on `document`, not the button**:
+`_paintActionSlots()` rebuilds the well's own DOM on every repaint (READY's own tap included), which
+would silently drop an element-scoped listener mid-hold - a real, load-bearing reason, not caution
+for its own sake. `_endBuntHold()` is the one place those document listeners come off, called from a
+real release, from the crossing check resolving the pitch on its own (via `_clearArmed`), and from
+`destroy()` (a hold surviving a teardown would leak for the tab's whole life).
+
+**Contact is bat-vs-ball POSITION now, never timing.** While held, the CONTACT/POWER circle is
+replaced by a horizontal bar at the batting cursor (`_drawBatCursor`, drawn at exactly
+`BUNT_BAR_HALF_X`/`BUNT_BAR_HALF_Y` - the same reach the engine scores against, so the drawn bar can
+never disagree with where contact actually happens). The bar follows the pad exactly like the circle
+did - no new input plumbing needed there. `HumanAgent.decideSwing`'s bunt branch (`ui.js`) sets a
+timer for the pitch's own crossing instant (`pitch.timeToPlateS * 1000`, no `swingDelay` offset -
+"if the pitch crosses the bat" means the real crossing, not an anticipated one) instead of waiting
+on a tap: still held at that instant resolves `{action:'swing', bunt:true, cursor}` with no swing
+tap at all; a release before it resolves `{action:'take'}` through `_resolveBuntTake` - "release
+pulls the bat back," and `_endBuntHold()` removing the listener the moment the crossing resolves is
+what makes "releasing after the pitch is past does nothing" true structurally, not by convention.
+
+**Engine: `swing.js`'s `buntSwing` and `outcomes.js`'s `resolveBunt` both rebuilt around position.**
+`buntSwing` reads the SAME `cursor`/`pitchResult` offset an ordinary swing does (`offX`/`offY`,
+`cursorOf`) against a bar instead of a circle - outside `BUNT_BAR_HALF_X`/`_Y` the bat never reaches
+the ball at all (`swung: false`, scored as an ordinary ball/strike through `game.js`'s own
+`!swingResult.swung` branch, never a foul); past `BUNT_FOUL_X_FRAC` of the bar's own half-width is a
+foul, decided here since a foul bunt never reaches `resolveBunt`. Everything else rides through with
+`offY`/`barHalfY` for `resolveBunt` to read: `offY` past `BUNT_POPUP_Y_FRAC` of the bar's own
+half-height (the bat sat too far under the ball) is a new outcome, **`bunt-popup`** - always an out,
+no beat-out roll, no random draw at all (position alone decides it). `BUNT_WINDOW_MULT` and every
+timing constant the old bunt read are gone from `settings.js`; the beat-out roll
+(`MECHANICS.beatOutPerPt`) and sacrifice/single/out split are byte-identical.
+
+**CPU bunts are unchanged, structurally, not by exception.** `agents.js`'s `CpuBatter` already built
+a `cursor: {x: aimX, y: aimY}` for every decision, bunt or not, before this stage - the same
+placement-noise aim it always used. Nothing in `agents.js` changed; the CPU's own bunt simply reads
+the identical position check a human's held bar does now, with no code of its own.
+
+**A popped-up bunt's own presentation needed one more fact, not a new mechanism.**
+`swingResult.kind` is `'ground'` for every bunt attempt (the swing motion, fixed before contact) -
+`game.js`'s `atBatEnd` emit now sends `battedKind: 'bunt-popup'` instead when `resolveBunt` decided
+that outcome, so the overhead flight draws a short pop (`_flightMsFor`/`_battedApexFt` fall through
+to the plain-fly branch, which scales with distance) instead of a grounder's roll, and skips the
+ground-out throw beat a caught popup never takes. Deliberately NOT the shared `'popup'` kind: that
+one's own apex FLOOR (`BATTED_POPUP_APEX_MIN_FT`, tuned for a full swing's infield fly) would fly a
+15-45ft bunt pop absurdly high.
+
+**Three new strings** (`res_bunt_popup`, EN/ES) name the outcome the same way `bunt_out`/
+`bunt_single` already do - "Out" is true of it and loses the only thing that made the play worth a
+button.
+
+**Tests.** `baseball/js/test.js`'s whole bunt section rewritten around position (reach, foul,
+popup, and the league-independence a position check implies - no `LEAGUE_TIMING_WINDOW_MULT` left
+to read). `node baseball/js/test.js`: 3199 assertions, 0 failed.
+`node sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400`: all 8 assertions
+pass, numbers unmoved from batch 1's own report (this stage is a control-input rework, not an
+economy change - CPU bunt behavior is statistically identical, per the "structurally unchanged"
+note above). `test-baseball-device.mjs` gained two probes: **`actions-live (b)`** holds BUNT through
+a real pitch's crossing (tracking the pitch's own height/side the instant its flight starts, the
+same idealised-perfect-player seam `pitch-drag`'s own probes use to read a real thrown pitch - a
+script holding the bar dead-centre the whole time would be testing a player who never moves at all)
+and asserts contact happened with no swing tap, the batter squared on the `Bunt` clip, and
+`battedKind` is `ground` or `bunt-popup`; **`actions-live (b2)`** holds BUNT then releases well
+before any pitch can cross, and asserts an ordinary ball/strike take fired and the batter is no
+longer squared. Both green. `node check-no-scroll.mjs baseball`: 16/16, `node test-visual.mjs
+baseball`: 20/20, `node test-game-conventions.mjs`: 11/11, no new gaps.
+
 ## Playtest 1, batch 1: quick fixes (2026-09-23) - DONE, live at v933
 
 `docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 1, all six items:
