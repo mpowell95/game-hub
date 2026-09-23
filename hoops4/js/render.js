@@ -1075,6 +1075,19 @@ export class Renderer {
     this.renderer.shadowMap.needsUpdate = true;
   }
 
+  /** Where the bottom edge of the Connect 4 screen lands on the canvas, in CSS px from its top.
+   *  ui.js hangs the shot messages just under it, where the player is already looking. */
+  boardBottomPx() {
+    if (this.disposed || !this.screen) return null;
+    this.camera.updateMatrixWorld(true);
+    this.screen.updateMatrixWorld(true);
+    const v = new THREE.Vector3(0, -this.panel.len / 2, 0);
+    this.screen.localToWorld(v);
+    v.project(this.camera);
+    const h = this.renderer.domElement.clientHeight;
+    return h ? (1 - (v.y + 1) / 2) * h : null;
+  }
+
   render(balls, dt = 0.016) {
     if (this.disposed) return;
     const live = balls && balls.length ? balls : [];

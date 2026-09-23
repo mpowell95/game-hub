@@ -902,13 +902,13 @@ class Hoops4 {
     }
   }
 
-  toast(msg) {
+  toast(msg, kind = '') {
     const el = this.root.querySelector('.h4-toast');
     if (!el) return;
     el.textContent = msg;
-    el.classList.add('is-on');
+    el.className = 'h4-toast is-on' + (kind ? ' ' + kind : '');
     clearTimeout(this._toastT);
-    this._toastT = setTimeout(() => el && el.classList.remove('is-on'), 1100);
+    this._toastT = setTimeout(() => el && el.classList.remove('is-on'), 1400);
   }
 
   // --- input -------------------------------------------------------------------------------------
@@ -1059,9 +1059,10 @@ class Hoops4 {
    *  two devices in a live match cannot paint different things for the same move. */
   _paintShot(res) {
     const m = this.match;
-    if (res.type === 'miss') { this.toast(t('miss')); }
-    else if (res.type === 'full') { this.toast(t('full')); }
-    else { this.toast(t('inCol').replace('{n}', String(res.col + 1))); }
+    // A made shot and a miss read differently by SHAPE (tick / cross), never by colour alone.
+    if (res.type === 'miss') { this.toast('\u2715 ' + t('miss'), 'is-miss'); }
+    else if (res.type === 'full') { this.toast('\u2715 ' + t('full'), 'is-miss'); }
+    else { this.toast('\u2713 ' + t('inCol').replace('{n}', String(res.col + 1)), 'is-made'); }
     if (this.rend) {
       const win = res.type === 'win' ? res.cells : null;
       // A DISC THAT LANDED FALLS DOWN ITS COLUMN. Matt: "Can you show the ball fall down the
@@ -1192,6 +1193,12 @@ class Hoops4 {
     if (!stage || !this.rend) return;
     const r = stage.getBoundingClientRect();
     this.rend.resize(Math.max(1, Math.round(r.width)), Math.max(1, Math.round(r.height)));
+    // THE SHOT MESSAGE HANGS JUST UNDER THE BOARD (2026-09-23). Matt: "the 'column 4' and 'miss'
+    // stuff and those notifications are in a bad spot and are tiny." They sat at the very bottom
+    // of the lane in 13px type, under the thumb, while the player's eyes are on the hoops and the
+    // board. The spot is MEASURED from the camera, so it follows the board on any screen size.
+    const y = this.rend.boardBottomPx();
+    if (y != null) stage.style.setProperty('--h4-toast-top', Math.round(y + 10) + 'px');
   }
 
   /** Detach from a live room, and end it for the other person too. A room nobody is in must not
