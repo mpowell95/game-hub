@@ -179,7 +179,7 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   const p2 = await b.newPage({ viewport: { width: 1400, height: 900 } });
   const errs2 = []; p2.on('pageerror', (e) => errs2.push(e.message));
   p2.on('dialog', (d) => d.accept());
-  await p2.addInitScript(() => { localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'aa King of Games', emoji: '\u{1F451}', color: '#1F5FA8', playerId: 'KNG7Q' })); });
+  await p2.addInitScript(() => { localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'aa King of Games', emoji: '\u{1F451}', color: '#1F5FA8', playerId: 'KNG7Q' })); localStorage.setItem('golf.holeEditor.tourOffered.v1', '1'); });
   await p2.goto(`${URL}?course=new`, { waitUntil: 'networkidle' }); await p2.waitForTimeout(600);
   const st2 = () => p2.evaluate(() => ({ id: window.__he.currentId, n: window.__he.doc.order.length, course: window.__he.doc.course, courseId: window.__he.doc.courseId, title: document.title }));
   let s = await st2();
@@ -276,9 +276,16 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   {
     const p4 = await b.newPage({ viewport: { width: 1400, height: 900 } });
     await p4.addInitScript(() => { localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'aa King of Games', playerId: 'KNG7Q' })); });
-    await p4.goto(`${URL}?course=new`, { waitUntil: 'networkidle' }); await p4.waitForTimeout(500);
-    ok('a first visit offers the guided tour on the setup screen', /guided tour/.test(await p4.$eval('#he-setup', (e) => e.textContent)));
+    // FIRST VISIT (2026-09-23): the link goes straight into the walkthrough, once.
+    await p4.goto(`${URL}?course=new`, { waitUntil: 'networkidle' }); await p4.waitForSelector('.tr-tip .tr-n', { timeout: 6000 }).catch(() => {});
+    ok('a first visit opens the walkthrough, not the tool', /course=tutorial&first=1/.test(p4.url()) && /type a name/.test(await p4.$eval('.tr-tip', (e) => e.textContent)), p4.url());
+    await p4.click('.tr-btn[data-go=exit]'); await p4.waitForURL(/course=new/); await p4.waitForTimeout(600);
+    ok('skipping it (x) lands on the real course, on its setup screen', !!(await p4.$('#he-setup')) && !/tutorial/.test(p4.url()));
+    ok('...which still offers the tour', /guided tour/.test(await p4.$eval('#he-setup', (e) => e.textContent)));
+    await p4.fill('#he-setup-name', "King's Landing"); await p4.click('#he-setup-go'); await p4.waitForTimeout(400);
     ok('...and a note points at Help', await p4.isVisible('#he-help-nudge'));
+    await p4.reload({ waitUntil: 'networkidle' }); await p4.waitForTimeout(500);
+    ok('the walkthrough is offered only once: the next visit opens the tool', !/tutorial/.test(p4.url()) && !(await p4.$('#he-setup')));
     await p4.evaluate(() => localStorage.setItem('golf.holeEditor.tourDone.v1', '1'));
     await p4.reload({ waitUntil: 'networkidle' }); await p4.waitForTimeout(500);
     if (await p4.$('#he-setup')) await p4.click('#he-setup-x');
@@ -289,6 +296,27 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
     await p4.goto(`${URL}?course=tutorial&topic=green`, { waitUntil: 'networkidle' }); await p4.waitForSelector('.tr-tip .tr-n', { timeout: 5000 }).catch(() => {});
     ok('a topic link jumps straight to that part of the tour', /Click Green/.test(await p4.$eval('.tr-tip', (e) => e.textContent)) && !(await p4.$('#he-setup')));
     await p4.close();
+  }
+  // THE WHOLE FIRST-TIME PATH, in order: link -> walkthrough -> Start my course -> name/terrain -> tool.
+  {
+    const p5 = await b.newPage({ viewport: { width: 1400, height: 900 } });
+    const e5 = []; p5.on('pageerror', (e) => e5.push(e.message));
+    await p5.goto(`${URL}?course=new`, { waitUntil: 'networkidle' }); await p5.waitForSelector('.tr-tip .tr-n', { timeout: 6000 }).catch(() => {});
+    await p5.fill('#he-setup-name', 'Practice'); await p5.waitForTimeout(1500);
+    for (let k = 0; k < 40 && !(await p5.$('.tr-btn[data-go=start]')); k++) {
+      const n = await p5.$('.tr-btn[data-go=next]'); if (!n) break; await n.click(); await p5.waitForTimeout(150);
+    }
+    ok('the first-time walkthrough ends on Start my course', !!(await p5.$('.tr-btn[data-go=start]')));
+    await p5.click('.tr-btn[data-go=start]'); await p5.waitForURL(/course=new/); await p5.waitForTimeout(600);
+    ok('...which opens the real course on a fresh setup screen, not the practice one', !!(await p5.$('#he-setup')) && (await p5.$eval('#he-setup-name', (e) => e.value)) === '');
+    ok('...without the tour button or the Help note (already done)', !/guided tour/.test(await p5.$eval('#he-setup', (e) => e.textContent)));
+    await p5.fill('#he-setup-name', 'Real One'); await p5.click('#he-setup [data-look="tropical"]'); await p5.click('#he-setup-go'); await p5.waitForTimeout(500);
+    ok('...then the tool, with no note', !(await p5.$('#he-help-nudge')) && /Real One · Tropical/.test(await p5.$eval('#he-course-btn', (e) => e.textContent)));
+    await p5.reload({ waitUntil: 'networkidle' }); await p5.waitForTimeout(500);
+    ok('...and every visit after goes straight to the tool, course intact', !(await p5.$('#he-setup')) && /Real One/.test(await p5.$eval('#he-course-btn', (e) => e.textContent)));
+    ok('the practice course never touched the real one', await p5.evaluate(() => /Real One/.test(localStorage.getItem('golf.holeEditor.custom.v1') || '')));
+    ok('no page errors on the first-time path', e5.length === 0, JSON.stringify(e5));
+    await p5.close();
   }
   ok('no page errors in the Course Creator', errs2.length === 0, JSON.stringify(errs2));
   await p2.close();
