@@ -1000,7 +1000,7 @@ class BaseballPlayScreen {
     // Majors, and the frozen 12 for a season document written before R16 (THE LAW).
     if (s.phase === 'regular') phase = t('season_game').replace('{n}', String(s.results.length + 1)).replace('{of}', String(seasonGames(state)));
     else if (s.phase === 'semifinal') phase = t('season_semifinal');
-    else if (s.phase === 'championship') phase = t('season_championship');
+    else if (s.phase === 'championship') phase = t(s.league === 'majors' ? 'season_world_series' : 'season_championship');
     else phase = t('season_done');
     return `${recordText} &middot; ${phase}`;
   }
@@ -1046,10 +1046,13 @@ class BaseballPlayScreen {
       { n: 2, cls: 'silver', key: 'trophy_silver' },
       { n: 3, cls: 'gold', key: 'trophy_gold' },
     ];
+    // Doc item 10 (Matt, 2026-09-23): in the Majors the Gold cup carries the World Series title count.
+    const titles = state.league === 'majors' ? Number(state.wsTitles) || 0 : 0;
+    const label = (s) => (s.n === 3 && titles > 0 ? `${t(s.key)} &times;${titles}` : t(s.key));
     return `<div class="bb-trophies">${shapes.map((s) => `
       <div class="bb-trophy bb-trophy--${s.cls}${best >= s.n ? ' is-won' : ''}" title="${t(s.key)}">
         <span class="bb-trophy-shape" aria-hidden="true">${trophySVG(s.n)}</span>
-        <span class="bb-trophy-label">${t(s.key)}</span>
+        <span class="bb-trophy-label">${label(s)}</span>
       </div>`).join('')}</div>`;
   }
 
@@ -4325,14 +4328,25 @@ class BaseballPlayScreen {
 
     const titleText = trophy === 1 ? t('trophy_bronze') : trophy === 2 ? t('trophy_silver')
       : trophy === 3 ? t('trophy_gold') : t('season_missed');
+    // Doc item 10 (Matt, 2026-09-23): a World Series win gets its own celebration - the title
+    // number, a Perfect Season, and any pitch it unlocked (Eephus at 1, Cutter at 2). The next Majors
+    // season is ready behind Continue; caps and difficulty do not change.
+    const ws = trophy === 3 && season && season.league === 'majors';
+    const titles = Number(state.wsTitles) || 0;
+    const newPitches = ws ? SETTINGS.unlockedPitchesFor('majors', titles)
+      .filter((p) => !SETTINGS.unlockedPitchesFor('majors', titles - 1).includes(p)) : [];
+    const wsLines = ws ? `
+        <div class="bb-end-line">${t('ws_title_n').replace('{n}', String(titles))}</div>
+        ${season.perfect ? `<div class="bb-end-line">${t('ws_perfect')}</div>` : ''}
+        ${newPitches.map((p) => `<div class="bb-end-line">${t('ws_new_pitch').replace('{pitch}', t('pitchname_' + p))}</div>`).join('')}` : '';
     const modal = document.createElement('div');
     modal.className = 'bb-end-overlay';
     modal.innerHTML = `
       <div class="bb-end-modal">
         <button type="button" class="bb-end-close" data-act="close" aria-label="${t('close')}">&times;</button>
-        <div class="bb-end-title">${t('season_over')}</div>
+        <div class="bb-end-title">${ws ? t('ws_champions') : t('season_over')}</div>
         ${trophy > 0 ? `<div class="bb-trophy-big" aria-hidden="true">${trophySVG(trophy)}</div>` : ''}
-        <div class="bb-end-line">${titleText}</div>
+        ${ws ? wsLines : `<div class="bb-end-line">${titleText}</div>`}
         <div class="bb-end-line">${t('points_earned').replace('{n}', String(result.pointsEarned || 0))}</div>
         ${advanced ? `<div class="bb-end-line">${t('league_advanced').replace('{league}', t('league_' + state.league))}</div>` : ''}
         <div class="bb-end-actions">
