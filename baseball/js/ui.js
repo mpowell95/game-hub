@@ -657,7 +657,7 @@ class BaseballPlayScreen {
           // still be changed on the setup screen, so `_renderPlay` rebuilds if it has.
           if (this.actors) {
             this.actors.buildField(this._fenceFt(), this.league);
-            this._fieldLeague = this.league;
+            this._fieldLeague = this._fieldKey();
             this.actors.warm();
           }
           this._updatePlayButtonState();
@@ -1014,7 +1014,11 @@ class BaseballPlayScreen {
     const teams = leagueTeams(state);
     const opp = teams[meta.opponentIndex];
     const where = meta.home ? t('home_game') : t('away_game');
-    return `${t('vs_team').replace('{team}', opp ? teamDisplayName(opp.styleId, state.season.league, opp.name) : '?')} &middot; ${where}`;
+    // Doc item 11: a Majors game names the park it is played at (proper noun, not translated).
+    const s = state.season;
+    const parkId = (s.parks && opp) ? SETTINGS.parkFor(s.league, !!meta.home, opp.styleId) : 'default';
+    const park = SETTINGS.PARKS[parkId] && SETTINGS.PARKS[parkId].name;
+    return `${t('vs_team').replace('{team}', opp ? teamDisplayName(opp.styleId, state.season.league, opp.name) : '?')} &middot; ${where}${park ? ` &middot; ${park}` : ''}`;
   }
 
   /** The standings table, the player's own row marked (never colour alone - a glyph, not just the
@@ -1639,7 +1643,9 @@ class BaseballPlayScreen {
     // league's own ladder now (Little League fastball only), the same `unlockedPitchesFor` career
     // reads. `quickPlay: true` still rides on the Game/view (additive, other code may read it
     // later) but no longer changes which pitches are unlocked or how the CPU picks one.
-    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true });
+    // Doc item 11: Quick Play is always away, so a Majors game is at the CPU team's own park.
+    const parkId = SETTINGS.parkFor(league, false, cpuTeam.styleId);
+    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true, parkId });
     this.cpuTeam = cpuTeam;
     this.playerTeam = playerTeam;
     this.state = this._freshPlayState(league, 0, 'batting');
@@ -1807,9 +1813,11 @@ class BaseballPlayScreen {
     // geometry that varies by league - settings.js's own `fieldScale` scales named-park distances
     // inside the engine, never the diamond, so the base paths and the rubber are regulation here
     // at every league exactly as they are there).
-    if (this._fieldLeague !== this.league) {
+    // Doc item 11: keyed on the PARK as well as the league - two Majors games in a row can be at
+    // two different parks.
+    if (this._fieldLeague !== this._fieldKey()) {
       this.actors.buildField(this._fenceFt(), this.league);
-      this._fieldLeague = this.league;
+      this._fieldLeague = this._fieldKey();
     }
     this.actors.setCamera(this.state.mode === 'pitching' ? 'pitcher' : 'batter');
     this.actors.idle('batter');
@@ -1845,8 +1853,15 @@ class BaseballPlayScreen {
     requestAnimationFrame(() => { this._sizeCanvas(); });
   }
 
+  /** The fence the play screen draws and measures against: the live game's own park (doc item 11 -
+   *  a named Majors park, walls and all) once a game exists, the league's field before that. The
+   *  engine's `_parkFt()` is the one source, so the drawn wall and the scored wall cannot differ. */
   _fenceFt() {
+    if (this.game && this.game.league === this.league && typeof this.game._parkFt === 'function') return this.game._parkFt();
     return (SETTINGS.FIELD[this.league] || SETTINGS.FIELD.majors).fenceFt;
+  }
+  _fieldKey() {
+    return `${this.league}:${(this.game && this.game.league === this.league && this.game.parkId) || 'default'}`;
   }
 
   /** THE LIVE CAMERA. R1 (docs/BASEBALL-3D-BUILD.md section 9) replaced "draw the painted plate

@@ -82,7 +82,7 @@
 import { hashSeed } from './rng.js';
 import {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_CAP, SKILL_IDS,
-  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, STANDINGS_TIEBREAK, SCHEDULE_SHAPE,
+  BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, STANDINGS_TIEBREAK, SCHEDULE_SHAPE, parkFor,
   gamesForLeague, slotsForLeague, playoffFormatFor,
   SPEND_AFTER_SEASON,
 } from './settings.js';
@@ -284,6 +284,7 @@ export function startSeason(state, seed) {
       slots,
       playoffFormat,
       standingsModel: STANDINGS_MODEL,
+      parks: true,
       points: { ...POINTS[league] },
       schedule: makeSchedule(league, seasonSeed, games, slots.length, SCHEDULE_SHAPE),
       results: [],
@@ -355,7 +356,12 @@ export function buildGame(state, meta, agents = { home: null, away: null }) {
   const you = playerTeamFor(state);
   const home = meta.home ? you : opponent;
   const away = meta.home ? opponent : you;
-  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId: 'default', quickPlay: false });
+  // Doc item 11 (Matt, 2026-09-23): Majors games are at the HOME team's park - the player's own is
+  // Boston's. Only a season that snapshotted `parks` uses them, so a season in progress when this
+  // shipped keeps the even field it started on.
+  const s = state.season;
+  const parkId = (s && s.parks) ? parkFor(s.league, !!meta.home, opponent && opponent.styleId) : 'default';
+  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false });
 }
 
 /** Which engine side ('home'|'away') the player is, for a given meta. */

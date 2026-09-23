@@ -837,5 +837,28 @@ console.log('\n--- RULES: standings match your results (doc item 13, Matt 2026-0
   eq(C.validateState(full), [], 'a season carrying standingsModel validates');
 }
 
+// -----------------------------------------------------------------------------------------------
+console.log('\n--- RULES: Majors parks (doc item 11, Matt 2026-09-23) ---');
+// -----------------------------------------------------------------------------------------------
+{
+  const S = await import('./baseball/js/engine/settings.js');
+  const st = C.startSeason(at('majors'), 5);
+  eq(st.season.parks, true, 'a new season snapshots parks');
+  const teams = C.leagueTeams(st);
+  const meta0 = C.nextGame(st);
+  const opp = teams[meta0.opponentIndex];
+  const homeGame = C.buildGame(st, { ...meta0, home: true });
+  const awayGame = C.buildGame(st, { ...meta0, home: false });
+  eq(homeGame.parkId, 'boston', "a home game is at the player's own park, Boston's");
+  eq(awayGame.parkId, S.PARK_BY_STYLE[opp.styleId], "an away game is at the opponent's park");
+  eq(awayGame.snapshot().parkId, awayGame.parkId, 'the park rides in the snapshot, so a resumed game keeps it');
+  const legacy = { ...st, season: { ...st.season } };
+  delete legacy.season.parks;
+  eq(C.buildGame(legacy, { ...meta0, home: false }).parkId, 'default', 'a season already in progress keeps the even field');
+  const minors = C.startSeason(at('minors'), 5);
+  eq(C.buildGame(minors, C.nextGame(minors)).parkId, 'default', 'below the Majors every game is on the league field');
+  eq(C.validateState(st), [], 'a season carrying parks validates');
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

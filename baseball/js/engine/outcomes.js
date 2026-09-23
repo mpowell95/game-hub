@@ -64,6 +64,22 @@ export function fenceFtAt(sprayDeg, fenceFt) {
   return pts[i] + (pts[i + 1] - pts[i]) * frac;
 }
 
+/** Extra carry a ball needs to clear a TALL wall at this spray angle, over an ordinary fence: 0
+ *  where the park has no tall section (every park but Boston's and Houston's, and every league
+ *  below the Majors). */
+export function tallWallExtraFt(sprayDeg, fenceFt, settings) {
+  const walls = fenceFt && fenceFt.walls;
+  if (!walls || !walls.length) return 0;
+  const rule = (settings && settings.WALL_RULE) || { baseHeightFt: 8, carryFtPerFt: 1 };
+  let extra = 0;
+  for (const w of walls) {
+    if (sprayDeg >= w.fromDeg && sprayDeg <= w.toDeg) {
+      extra = Math.max(extra, (w.heightFt - rule.baseHeightFt) * rule.carryFtPerFt);
+    }
+  }
+  return Math.max(0, extra);
+}
+
 /**
  * @param {{exitVeloMph:number, launchAngleDeg:number, sprayAngleDeg:number, q?:number}} batted -
  *   `q` (BB-2a) is swing.js's contact-quality axis, 0..1; used only by the line-through rule below
@@ -122,6 +138,13 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   // whatever angle it left at. A grounder or a pop-up still never reaches this branch.
   const wallFt = fenceFtAt(batted.sprayAngleDeg, fenceFt);
   if ((kind === 'fly' || kind === 'line') && distanceFt >= wallFt) {
+    // Doc item 11 (Matt, 2026-09-23): a park's TALL wall section (`PARKS[id].walls`) stops a ball
+    // that clears the distance but not the height - a double off the wall, and it drops at the
+    // wall's foot (distanceFt pulled in, so the drawn ball never flies through the wall).
+    const extraFt = tallWallExtraFt(batted.sprayAngleDeg, fenceFt, settings);
+    if (extraFt > 0 && distanceFt < wallFt + extraFt) {
+      return { result: 'hit', bases: 2, kind: 'wall-double', distanceFt: Math.max(0, wallFt - 2), isFoul: false };
+    }
     return { result: 'hit', bases: 4, kind: 'homer', distanceFt, isFoul: false };
   }
 
@@ -220,4 +243,4 @@ export function resolveBunt(batted, bases, outs, hitSpd, settings, rand01) {
   return { result: 'out', bases: 0, kind: 'bunt-out', distanceFt, sprayAngleDeg, isFoul: false };
 }
 
-export default { carryFt, fenceFtAt, resolveContact, resolveBunt };
+export default { carryFt, fenceFtAt, tallWallExtraFt, resolveContact, resolveBunt };
