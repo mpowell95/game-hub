@@ -6,7 +6,7 @@
 // a run is live, so the hub confirms before navigating away. A run that is left with points on the
 // board is still RECORDED (destroy() finishes it), so a hub back-tap never loses a score.
 
-import { createGame, createSound, DIFFS, POWER_COLORS } from './game.js';
+import { createGame, DIFFS, POWER_COLORS } from './game.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -27,15 +27,14 @@ function saveSettings(s) {
 function loadSettings() {
   const saved = readJSON(SETTINGS_KEY) || {};
   const mode = MODES.includes(saved.mode) ? saved.mode : 'arcade';
-  const muted = saved.muted === true;
-  if (DIFFS.includes(saved.difficulty)) return { difficulty: saved.difficulty, mode, muted };
+  if (DIFFS.includes(saved.difficulty)) return { difficulty: saved.difficulty, mode };
   let skillDiff = null;
   try {
     const p = loadProfile();
     const skill = p && p.opponents && p.opponents[0] ? p.opponents[0].skill : null;
     skillDiff = skill === 1 ? 'easy' : skill === 3 ? 'hard' : skill === 2 ? 'medium' : null;
   } catch { /* no profile is fine */ }
-  return { difficulty: skillDiff || 'medium', mode, muted };
+  return { difficulty: skillDiff || 'medium', mode };
 }
 /** The best score is read from the shared stats store, never a local high-score table: one home
  *  for a score, so it cannot disagree with My Stats or the leaderboard. */
@@ -50,8 +49,6 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
 const PAUSE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';
-const soundSVG = (muted) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/>${muted
-  ? '<path d="M16 9l6 6M22 9l-6 6"/>' : '<path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19.5 5.5a9 9 0 0 1 0 13"/>'}</g></svg>`;
 
 /** How-to-play diagram: a plain brick beside a two-hit brick (told apart by the inner outline and
  *  rivets, never colour), then the four capsules, each carrying its LETTER. */
@@ -84,15 +81,13 @@ class BrickBlitzUI {
     this.reduce = this.reduceMQ.matches;
     this._onReduce = (e) => { this.reduce = e.matches; };
     if (this.reduceMQ.addEventListener) this.reduceMQ.addEventListener('change', this._onReduce);
-    this.sound = createSound();
-    this.sound.setMuted(this.settings.muted);
     this.pointer = { active: false, id: null, sx: 0, spx: 0, moved: 0, t: 0 };
     this._hud = {};
     this._ensureCss();
     this._build();
 
     this.game = createGame(this.canvas, {
-      t, sound: this.sound, reduce: () => this.reduce,
+      t, reduce: () => this.reduce,
       onHud: () => this._syncHud(),
       onCombo: (c, bump) => this._combo(c, bump),
       onStage: (n, key, endless) => this._stageStarted(n, key, endless),
@@ -154,7 +149,6 @@ class BrickBlitzUI {
           </div>
         </div>
         <div class="bx-dock" data-role="dock">
-          <button type="button" class="bx-ibtn" data-act="mute"></button>
           <button type="button" class="bx-ibtn" data-act="pause">${PAUSE_SVG}<span data-l="pause"></span></button>
         </div>
 
@@ -264,7 +258,6 @@ class BrickBlitzUI {
     this.root.querySelector('[data-role="modes"]').innerHTML = MODES.map((id) => `
       <button type="button" class="bx-seg bx-seg-2${m === id ? ' is-on' : ''}" data-mode="${id}" aria-pressed="${m === id}">
         <span>${esc(t('mode_' + id))}</span><small>${esc(t('mode_' + id + '_sub'))}</small></button>`).join('');
-    this._syncMute();
     this._syncSetupBest();
     if (this.game) { this._hud = {}; this._syncHud(); }
     if (this.screen === 'over' || this.screen === 'victory') this._fillOver(this._lastOver);
@@ -272,13 +265,6 @@ class BrickBlitzUI {
   _syncSetupBest() {
     const d = this.settings.difficulty;
     this.root.querySelector('[data-role="setupBest"]').textContent = t('best', { diff: t('diff_' + d), n: fmt(bestFor(d)) });
-  }
-  _syncMute() {
-    const m = this.sound.muted;
-    const b = this.root.querySelector('[data-act="mute"]');
-    b.innerHTML = `${soundSVG(m)}<span>${esc(t(m ? 'muted' : 'sound'))}</span>`;
-    b.setAttribute('aria-pressed', String(m));
-    b.setAttribute('aria-label', t(m ? 'aria_unmute' : 'aria_mute'));
   }
   _setHud(k, v, html) {
     if (this._hud[k] === v) return;
@@ -334,7 +320,6 @@ class BrickBlitzUI {
 
   // --- run lifecycle ---------------------------------------------------------------------------
   _play() {
-    this.sound.init();
     const d = this.settings.difficulty;
     this._runBest = bestFor(d);
     this.runActive = true;
@@ -437,20 +422,12 @@ class BrickBlitzUI {
       if (this.screen === 'victory') { this.screen = 'game'; this._showOnly(null); this.game.continueEndless(); this._start(); }
       else this._play();
     }
-    else if (act === 'mute') {
-      this.sound.init();
-      this.sound.setMuted(!this.sound.muted);
-      this.settings.muted = this.sound.muted;
-      saveSettings(this.settings);
-      this._syncMute();
-    }
   }
   _fieldX(clientX) {
     const r = this.canvas.getBoundingClientRect();
     return (clientX - r.left) / (r.width || 1) * 600;
   }
   _pointerDown(e) {
-    this.sound.init();
     if (this.screen !== 'game') return;
     if (e.pointerType === 'mouse') {
       this.game.setTarget(this._fieldX(e.clientX));
@@ -484,11 +461,10 @@ class BrickBlitzUI {
     else if (k === 'ArrowRight' || k === 'd' || k === 'D') { this.game.keys.right = true; if (inGame) e.preventDefault(); }
     else if (k === ' ' || k === 'Spacebar') {
       if (e.target && e.target.closest && e.target.closest('button') && !inGame) return;
-      if (inGame) { e.preventDefault(); this.sound.init(); if (this.game.phase === 'serve') this.game.launch(); else this._pause(); }
+      if (inGame) { e.preventDefault(); if (this.game.phase === 'serve') this.game.launch(); else this._pause(); }
       else if (this.screen === 'paused') { e.preventDefault(); this._resume(); }
     }
     else if (k === 'p' || k === 'P' || k === 'Escape') { if (inGame) this._pause(); else if (this.screen === 'paused') this._resume(); }
-    else if ((k === 'm' || k === 'M') && this.screen !== 'setup') { this.root.querySelector('[data-act="mute"]').click(); }
   }
   _keyUp(e) {
     const k = e.key;
@@ -526,7 +502,6 @@ class BrickBlitzUI {
     if (this._offResize) this._offResize();
     if (this._ro) this._ro.disconnect();
     if (this._offLang) this._offLang();
-    this.sound.close();
     this.host.innerHTML = '';
   }
 }

@@ -144,7 +144,6 @@
   box-shadow: inset 0 0 0 1.5px rgba(0, 245, 212, 0.7), 0 0 12px rgba(0, 245, 212, 0.25);
 }
 .bx-root .bx-ibtn svg { width: 18px; height: 18px; }
-.bx-root .bx-ibtn[aria-pressed="true"] { box-shadow: inset 0 0 0 1.5px var(--bx-pink), 0 0 14px rgba(255, 46, 151, 0.45); }
 .bx-root .bx-ibtn:active { transform: scale(0.96); }
 
 /* On the setup screen the HUD and dock have nothing to say; visibility (not display) keeps the
