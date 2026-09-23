@@ -19,9 +19,8 @@ stored player data (THE LAW rule 5). Never "fix" them to match the name.
 
 - In-hub `module:` (`brick-blitz/js/ui.js`), **immersive**. Hub id `brick-blitz` (= the folder,
   which the dev tools assume); stats id `brickblitz` (mapped in `HUB_ID`, `js/game-stats-ui.js`).
-- **Admin only** (`devOnly: true`, Matt 2026-09-23, right after it shipped live). The My Stats tab
-  is NOT gated (it was live to everyone briefly, so plays may exist: rule 1). The `GAME_META`
-  row stays (the Pinball rule, root CLAUDE.md).
+- **Live to everyone** (released 2026-09-23 by Matt). It was admin-only (`devOnly`) for a few hours
+  that day; the My Stats tab and `GAME_META` row were never gated, so nothing needed changing there.
 - `isInProgress()`: the LITERAL meaning (no mid-run resume, same class as Snake/Pinball). True while
   a run is live or paused.
 - The root is `position: fixed; inset: 0` (Pinball's pattern, avoids the `.hub-game` height trap).
