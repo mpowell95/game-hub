@@ -125,6 +125,9 @@ root.innerHTML = `
 `;
 
 // --- collapsible panels (section 4: "clicking [a header] collapses to the header") ---------------
+// Set by tour.js on the walkthrough's last step: Help becomes a topic menu, the first-visit nudge stops.
+const TOUR_DONE = 'golf.holeEditor.tourDone.v1';
+const tourDone = () => { try { return localStorage.getItem(TOUR_DONE) === '1'; } catch { return false; } };
 const UI_KEY = 'golf.holeEditor.ui.v1';
 function loadUiState() { try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch { return {}; } }
 function saveUiState(s) { try { localStorage.setItem(UI_KEY, JSON.stringify(s)); } catch { /* best effort */ } }
@@ -644,6 +647,7 @@ function openSetupModal() {
     <div style="background:#1e211a;border-radius:14px;padding:24px 26px;width:760px;max-width:94vw;max-height:92vh;overflow:auto;color:#eceee4;font:15px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div style="font:700 22px system-ui,sans-serif;">Set up your course</div>
+        ${!profile.tutorial && !tourDone() ? '<a href="./?course=tutorial" target="_blank" rel="noopener" class="gh-btn gh-btn--sm" style="margin-left:auto;margin-right:10px;background:#ffce3a;color:#1b1d14;text-decoration:none;">New here? Take the guided tour</a>' : ''}
         <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-setup-x" aria-label="Close">&times;</button>
       </div>
       <label style="display:flex;flex-direction:column;gap:6px;">
@@ -910,7 +914,53 @@ if (profile.custom) {
   if (!(doc.course && doc.course.named)) openSetupModal();
 }
 // Help is a guided practice run of this same editor (tour.js), not a page of text.
-if (profile.tutorial) import('./tour.js').then((m) => m.startTour());
+if (profile.tutorial) import('./tour.js').then((m) => m.startTour(new URLSearchParams(location.search).get('topic')));
+
+// HELP (2026-09-23): the first time, straight into the guided practice run; once it has been
+// finished, a menu of its topics (each jumps into the run at that point) plus "replay it all".
+document.getElementById('he-help').addEventListener('click', async (e) => {
+  if (profile.tutorial || !tourDone()) return;   // the link itself opens the full run
+  e.preventDefault();
+  const old = document.getElementById('he-help-menu');
+  if (old) { old.remove(); return; }
+  const r = e.currentTarget.getBoundingClientRect();   // before the await: currentTarget is null after it
+  const { TOPICS } = await import('./tour.js');
+  const m = document.createElement('div');
+  m.id = 'he-help-menu';
+  m.style.cssText = `position:fixed;z-index:1500;top:${r.bottom + 6}px;right:${innerWidth - r.right}px;width:320px;background:#1e211a;border:1px solid #4a5040;border-radius:12px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);font:15px system-ui,sans-serif;color:#eceee4;`;
+  const link = (href, label, strong) => `<a href="${href}" target="_blank" rel="noopener" style="display:block;padding:8px 10px;border-radius:8px;color:${strong ? '#1b1d14' : '#eceee4'};background:${strong ? '#ffce3a' : 'transparent'};text-decoration:none;font-weight:${strong ? 700 : 500};margin-bottom:4px;">${label}</a>`;
+  m.innerHTML = `<div style="font-weight:700;padding:4px 10px 8px;">What do you need help with?</div>
+    ${TOPICS.map(([id, label]) => link(`./?course=tutorial&topic=${id}`, label)).join('')}
+    ${link('./?course=tutorial', 'Replay the whole walkthrough', true)}`;
+  for (const a of m.querySelectorAll('a')) {
+    if (a.style.background === 'transparent') { a.addEventListener('mouseenter', () => { a.style.background = '#2f3428'; }); a.addEventListener('mouseleave', () => { a.style.background = 'transparent'; }); }
+    a.addEventListener('click', () => m.remove());
+  }
+  document.body.appendChild(m);
+  setTimeout(() => document.addEventListener('click', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', off); } }), 0);
+});
+
+// FIRST VISIT: POINT AT HELP (Matt: "when he opens the tool, it needs to guide him to click help
+// first"). Until the walkthrough has been finished once (or this is dismissed), a yellow note hangs
+// under the Help button; the setup screen carries the same offer.
+function showHelpNudge() {
+  if (profile.tutorial || !profile.custom || tourDone()) return;
+  try { if (localStorage.getItem('golf.holeEditor.helpNudgeOff.v1') === '1') return; } catch { /* show it */ }
+  if (document.getElementById('he-help-nudge')) return;
+  const b = document.getElementById('he-help').getBoundingClientRect();
+  const n = document.createElement('div');
+  n.id = 'he-help-nudge';
+  n.style.cssText = `position:fixed;z-index:900;top:${b.bottom + 12}px;right:${Math.max(8, innerWidth - b.right - 8)}px;width:260px;background:#ffce3a;color:#1b1d14;border-radius:12px;padding:12px 14px;font:600 15px/1.35 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45);`;
+  n.innerHTML = `<div style="position:absolute;top:-10px;right:${Math.max(14, b.width / 2 - 10)}px;border:10px solid transparent;border-top:none;border-bottom-color:#ffce3a;"></div>
+    New here? Click <b>Help</b> for a quick guided tour first.
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
+      <button type="button" id="he-help-nudge-x" style="all:unset;cursor:pointer;text-decoration:underline;font-weight:500;font-size:13px;">No thanks</button>
+    </div>`;
+  document.body.appendChild(n);
+  n.querySelector('#he-help-nudge-x').addEventListener('click', () => { try { localStorage.setItem('golf.holeEditor.helpNudgeOff.v1', '1'); } catch { /* fine */ } n.remove(); });
+  document.getElementById('he-help').addEventListener('click', () => n.remove(), { once: true });
+}
+showHelpNudge();
 
 // A debug seam, not a feature: lets a Playwright check (or Matt, in devtools) read live state
 // without a second copy of it. Nothing reads this at runtime.

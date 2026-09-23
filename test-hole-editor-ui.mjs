@@ -264,11 +264,31 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
     ok('practice opens on the setup screen with the tour pointing at the name', !!(await p3.$('#he-setup')) && /type a name/.test(await p3.$eval('.tr-tip', (e) => e.textContent)));
     await p3.fill('#he-setup-name', 'Practice'); await p3.waitForTimeout(1600);
     ok('...and moves on by itself once a name is typed', /2 of/.test(await p3.$eval('.tr-tip', (e) => e.textContent)));
+    await p3.click('#he-setup [data-look="links"]'); await p3.waitForTimeout(1000);
+    ok('picking a terrain moves the tour on to Start designing', /Start designing/.test(await p3.$eval('.tr-tip', (e) => e.textContent)));
     await p3.click('#he-setup-go'); await p3.waitForTimeout(1200);
     ok('practice never saves to the cloud', /nothing here is saved/.test(await p3.evaluate(() => (document.getElementById('he-cloud-status') || {}).textContent || '')));
     ok('practice has its own storage, apart from the real course', await p3.evaluate(() => localStorage.getItem('golf.holeEditor.tutorial.v1') !== null));
     ok('no page errors in practice', errs3.length === 0, JSON.stringify(errs3));
     await p3.close();
+  }
+  // Help after the walkthrough: a topic menu; a topic jumps straight in. Before it: a nudge.
+  {
+    const p4 = await b.newPage({ viewport: { width: 1400, height: 900 } });
+    await p4.addInitScript(() => { localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'aa King of Games', playerId: 'KNG7Q' })); });
+    await p4.goto(`${URL}?course=new`, { waitUntil: 'networkidle' }); await p4.waitForTimeout(500);
+    ok('a first visit offers the guided tour on the setup screen', /guided tour/.test(await p4.$eval('#he-setup', (e) => e.textContent)));
+    ok('...and a note points at Help', await p4.isVisible('#he-help-nudge'));
+    await p4.evaluate(() => localStorage.setItem('golf.holeEditor.tourDone.v1', '1'));
+    await p4.reload({ waitUntil: 'networkidle' }); await p4.waitForTimeout(500);
+    if (await p4.$('#he-setup')) await p4.click('#he-setup-x');
+    ok('once the walkthrough is done, the note is gone', !(await p4.$('#he-help-nudge')));
+    await p4.click('#he-help'); await p4.waitForTimeout(400);
+    const items = await p4.$$eval('#he-help-menu a', (as) => as.map((a) => a.getAttribute('href')));
+    ok('...and Help opens a topic menu with a replay', items.length === 10 && items.includes('./?course=tutorial') && items.includes('./?course=tutorial&topic=green'), items.join(' '));
+    await p4.goto(`${URL}?course=tutorial&topic=green`, { waitUntil: 'networkidle' }); await p4.waitForSelector('.tr-tip .tr-n', { timeout: 5000 }).catch(() => {});
+    ok('a topic link jumps straight to that part of the tour', /Click Green/.test(await p4.$eval('.tr-tip', (e) => e.textContent)) && !(await p4.$('#he-setup')));
+    await p4.close();
   }
   ok('no page errors in the Course Creator', errs2.length === 0, JSON.stringify(errs2));
   await p2.close();
