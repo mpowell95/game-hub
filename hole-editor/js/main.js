@@ -281,10 +281,21 @@ function setTool(id) {
 }
 
 // --- the palette (palette.js): pictures of everything that can be added --------------------------
-function refreshPalette() {
+// THE PALETTE IS ONLY REBUILT WHEN WHAT IT SHOWS CHANGES (2026-09-23, Matt: "it's laggy"). It was
+// rebuilt - ~75 tiles, each a canvas crop - on every refresh, which during a drag is every frame:
+// measured ~30 ms of each ~120-230 ms drag frame. What a tile shows depends only on the look, the
+// type table, the highlighted item and the green's guards, so that is the key.
+let paletteKey = '';
+function refreshPalette(force = false) {
   const el = document.getElementById('he-palette');
   if (!el) return;
   const spec = doc.holes[currentId].spec;
+  const built = getBuilt(currentId);
+  const theme = profile.custom ? ((doc.course && doc.course.theme) || profile.theme) : profile.theme;
+  const active = activeItemFor(currentTool, toolState, editorCanvas.drawing);
+  const key = [theme, active, (spec.guard || []).join(','), (built.treeTypes || []).map((t) => t.name).join(',')].join('|');
+  if (!force && key === paletteKey && el.firstChild) return;
+  paletteKey = key;
   renderPalette(el, {
     built: getBuilt(currentId),
     theme: profile.custom ? ((doc.course && doc.course.theme) || profile.theme) : profile.theme,
@@ -415,8 +426,9 @@ function afterChange({ keepContext = false } = {}) {
   requestAnimationFrame(() => {
     refreshQueued = false;
     editorCanvas.updateBuilt(getBuilt(currentId), doc.holes[currentId].spec);
+    // The holes bar is NOT redrawn mid-gesture (its thumbnail of this hole costs a map build a
+    // frame); it catches up when the drag ends, which calls afterChange() with no gesture.
     refreshPanels();
-    refreshStrip();
   });
 }
 

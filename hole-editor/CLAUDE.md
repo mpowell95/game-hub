@@ -748,3 +748,15 @@ player has done it (typed a name, picked the bunker tile, placed a bunker, plant
 have Next. The tour only reads `window.__he` and the DOM. `help.html` is now just a redirect so old
 links work; the text page and its screenshots are gone. When the editor's screen changes, walk the
 tour again (`reference`-style: drive it in Chromium and look at each step).
+
+## "It's laggy" (2026-09-23)
+
+Measured with a CPU profile of a 15-step bunker drag (Chromium, software rendering): every frame
+was a 120-230 ms long task. Three things ran per frame: the hole's own map build (~45 ms, needed),
+**the whole palette** (~75 canvas tiles, ~30 ms - it grew from ~20 tiles to ~75 this week), and
+**the holes bar's thumbnail of this hole** (~14 ms). Now `refreshPalette()` rebuilds only when its
+key changes (look, highlighted item, guards, type names) and the holes bar is not redrawn mid-
+gesture (it catches up at the end of the drag). Measured after: 20-step drag 3.7 s -> 1.8 s, long
+tasks 120-230 ms -> ~50 ms, and a tool switch that re-renders the palette 38 ms -> 3 ms. What is
+left is `buildMap` itself; do not add per-frame work to `afterChange`'s gesture path without
+measuring it (the profiling script pattern: CDP `Profiler.start` around a scripted drag).
