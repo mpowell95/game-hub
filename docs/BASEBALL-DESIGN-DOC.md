@@ -166,16 +166,16 @@ Pitching:
 - **[Locked]** **Accuracy**: pitch lands closer to your aim, bigger Nice zone, better pickoffs.
 - **[Locked]** **Spin**: more bend on curve, slider, and screwball; bigger speed gap on the changeup.
 - **[Locked]** Rejected labels: Contact, Break.
-- **[Open]** How much each skill point changes each effect. Must stay a small nudge.
+- **[Locked] by Matt 2026-09-23, as shipped at v929**: how much each skill point changes each effect (`settings.js` `SKILL_EFFECT`). Must stay a small nudge.
 
 ### Points and caps
 - **[Locked]** Start with 15 points in hitting and 15 in pitching. Cap of 10 per skill.
-- **[Draft]** Caps by league: 10, 14, 18, 22, 26. (Was +5 per league to 30. Lowered because at Majors point rates the top caps were unreachable and therefore meaningless.)
+- **[Locked] by Matt 2026-09-23, as shipped at v929**: caps by league: 10, 14, 18, 22, 26. (Was +5 per league to 30. Lowered because at Majors point rates the top caps were unreachable and therefore meaningless.)
 - **[Locked]** After the start, earned points can go into any skill.
 
 ### Setup
 - **[Locked]** Presets, Custom, and a Randomize button (true random within caps).
-- **[Draft]** Presets:
+- **[Locked] by Matt 2026-09-23, as shipped at v929** Presets:
 
 ```
 Preset	Hit Acc	Hit Pow	Hit Spd	Pitch Spd	Pitch Acc	Pitch Spin
@@ -254,9 +254,9 @@ Minor League	70%	45 to 57%
 Major League	62%	40 to 52%
 ```
 
-- **[Draft]** Every band in this section is a starting point, tunable later from the settings block. They are not worth another round of tuning to hit exactly.
+- **[Locked] by Matt 2026-09-23, as shipped at v929**: the bands in this section, as the settings block holds them.
 - **[Locked]** Every league's CPU teams are generated below that league's cap, so the champion has room to be better than its league mates. No league may generate every team at the cap. (R16: this is `CPU_ROSTER_CEILING`, one point under the raw cap at every league but the Minors, where a ceiling of 21 against a level of 21.0 would have pinned every value on it and flattened the slot ladder entirely - measured, and written out at the table in `settings.js`.)
-- **[Open]** The cap table in section 7 assumed only Little League and High School would bind. With more seasons spent in the upper leagues, caps will likely bind everywhere. To be measured, not assumed.
+- **[Locked] by Matt 2026-09-23, as shipped at v929**: caps bind in every league, as measured by `sim-baseball-career.mjs`; that is accepted (points past the cap are lost, section 7).
 - **[Locked]** CPU teams must get better as you move up. Each league's teams are generated at that league's expected player level, so they are stronger than the league below.
 - **[Locked]** Within a league, the 8 teams are ordered weakest to strongest, and the schedule puts harder opponents later in the season. The championship opponent is the toughest team in the league.
 - **[Locked]** Rosters are fixed. The same team always has the same players. CPU stats do not track or react to your stats.
@@ -268,7 +268,7 @@ Major League	62%	40 to 52%
 - **[Locked]** Little League: mostly fastballs down the middle.
 - **[Locked]** Each league up: mixes pitches more, works the corners more, spots your habits more.
 - **[Locked]** Majors: attacks your weak spots.
-- **[Open]** Exact pitch mix and "spots your habits" rules per league.
+- **[Locked] by Matt 2026-09-23, as shipped at v929**: pitch mix and "spots your habits" rules per league (`settings.js` per-league CPU rows).
 
 ### CPU batting by league
 - **[Locked]** Little League: swings at almost anything.
@@ -277,11 +277,11 @@ Major League	62%	40 to 52%
 
 ### CPU batters read your patterns
 - **[Locked]** The CPU batter's pattern memory is the last 3 pitches, newest weighted most. The window is the same in every league; how strongly it is used scales by league.
-- **[Draft]** **Speed:** the batter times his swing to your last few pitches (newest counts most). Throw the same speed over and over and he times it. Change speeds and he swings early or late.
-- **[Draft]** **Location:** the batter leans toward where you have been throwing. Keep hitting one spot and he waits there. Move the ball around for weaker contact.
+- **[Locked] by Matt 2026-09-23, as shipped at v929** **Speed:** the batter times his swing to your last few pitches (newest counts most). Throw the same speed over and over and he times it. Change speeds and he swings early or late.
+- **[Locked] by Matt 2026-09-23, as shipped at v929** **Location:** the batter leans toward where you have been throwing. Keep hitting one spot and he waits there. Move the ball around for weaker contact.
 - **[Tested]** **Commit point:** the batter decides to swing about halfway to the plate. A curve or slider steered after that can make him chase or miss.
-- **[Draft]** **Fooled feedback:** when a CPU swing is fooled on timing, "Early" or "Late" pops above the plate, the same place as your own batting feedback.
-- **[Open]** How these scale by league. Intent: younger batters get fooled more by speed changes and guess your spot less. Majors batters read patterns best.
+- **[Locked] by Matt 2026-09-23, as shipped at v929** **Fooled feedback:** when a CPU swing is fooled on timing, "Early" or "Late" pops above the plate, the same place as your own batting feedback.
+- **[Locked] by Matt 2026-09-23, as shipped at v929**: how these scale by league. Younger batters get fooled more by speed changes and guess your spot less; Majors batters read patterns best.
 
 ## 9. CPU teams
 
@@ -292,7 +292,7 @@ Major League	62%	40 to 52%
 - **[Locked]** About 1 in 4 CPU players are lefties (setting).
 - **[Locked]** Some teams shift their out zones toward where you tend to hit.
 - **[Locked]** Team names by league: sponsor names in Little League, small towns in High School, fake colleges, lower-tier cities in the Minors, big cities in the Majors. Fictional names only.
-- **[Draft]** Name examples: Tony's Pizza Pepperonis, Iron Ridge Miners, Big Sky State Bison, Des Moines Hog Callers, Boston Harbormasters.
+- **[Superseded 2026-09-23]** by the full list (item 12). Name examples were: Tony's Pizza Pepperonis, Iron Ridge Miners, Big Sky State Bison, Des Moines Hog Callers, Boston Harbormasters.
 - **[Locked, 2026-09-23]** Full name list (40 teams): `baseball/js/ui.js` `TEAM_NAMES`, one per league and style. Full name on career screens; last word on the in-game scoreboard.
 
 ## 10. Field and hit outcomes
@@ -303,7 +303,7 @@ Major League	62%	40 to 52%
   - Pop-ups in the infield are outs
 - **[Locked]** Singles go through gaps and as bloopers. Doubles in the gaps and down the lines. Triples in deep corners and deep center. Home runs over the wall.
 - **[Locked]** Fields get bigger each league (deeper fences). Out zones also grow (better fielders). Screen size stays the same; bigger fields just render smaller.
-- **[Open]** Exact zone sizes and fence distances per league.
+- **[Locked] by Matt 2026-09-23, as shipped at v929**: zone sizes and fence distances per league (`settings.js` `FIELD`; the Majors parks override the fence, item 11).
 
 ### Majors parks
 - **[Locked]** Fictional names, shapes inspired by famous parks: Boston (tall, short left wall), New York (short right porch), Chicago (ivy), San Francisco (deep right-center), Houston (short left), Detroit (deep center), Denver (huge outfield), Los Angeles (even).
@@ -351,7 +351,7 @@ World Series Champ x2	Cutter
   readout mph (alongside `PITCH_TRAVEL_MULT` and the pitcher's own skill points, as before), so the
   number shown and the time the ball actually takes agree with each other - "a slow pitch is slow"
   (Matt, 2026-09-21).
-- **[Draft]** Readout by league (mph):
+- **[Locked] by Matt 2026-09-23, as shipped at v929** Readout by league (mph):
 
 ```
 League	Scale	FB	CH	CB	SL	KN
@@ -587,14 +587,14 @@ perfectSeasons * 10000 + wsTitles * 100 + (league - 1) * 4 + bestTrophyInThatLea
 
 ## 17. Open items (summary)
 
-1. Final swing popup wording.
-2. Power pitch meter and CPU pattern reading: playtest, then lock.
-3. How CPU pattern reading and pitch mix scale per league.
-4. How much each skill point changes each effect.
-5. Final point values, caps, and games per season (confirm by simulator, not by feel).
+1. Closed 2026-09-23 (Matt: "confirm them"): swing popup wording locked as shipped (`baseball/js/strings.js`).
+2. Closed 2026-09-23: power pitch meter and CPU pattern reading locked as shipped.
+3. Closed 2026-09-23: per-league pattern reading and pitch mix locked as shipped (`settings.js`).
+4. Closed 2026-09-23: per-point skill effects locked as shipped (`settings.js` `SKILL_EFFECT`, R19).
+5. Closed 2026-09-23: point values, caps and games per season locked as shipped (R16/R19, simulator-measured).
 6. Closed: the league settings block is a source file, tuned by deploy. No admin page control.
-7. Out zone sizes and fence distances per league.
-8. Steal, bunt, and pickoff mechanics.
+7. Closed 2026-09-23: out zones and fence distances per league locked as shipped (`settings.js` `FIELD`; Majors parks per item 11).
+8. Closed 2026-09-23: steal, bunt and pickoff locked as shipped.
 9. Closed 2026-09-23: movement/speed kept, readouts 82/55/91, eephus shown as "Blooper".
 10. Closed 2026-09-23: World Series celebration popup, then the next Majors season; cap stays 26; no difficulty change.
 11. Closed 2026-09-23: fence shapes + tall walls; your home park is Boston's.
