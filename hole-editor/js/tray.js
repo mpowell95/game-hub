@@ -46,11 +46,12 @@ export function tabForTool(tool, toolState) {
 
 // Trees are grouped by what they LOOK like, which is what someone scanning a tray is looking for.
 const TREE_GROUPS = [
-  ['Leafy', ['canopy', 'willow']],
+  ['Leafy', ['canopy', 'willow', 'acacia', 'windbent', 'mangrove']],
+  ['Flowering', ['blossom']],
   ['Evergreen', ['fir', 'cypress']],
-  ['Palms', ['palm']],
-  ['Desert', ['cactus', 'joshua']],
-  ['Shrubs', ['bush', 'gorse']],
+  ['Palms & tropical', ['palm', 'banana', 'bamboo']],
+  ['Desert', ['cactus', 'joshua', 'agave', 'pricklypear', 'barrel', 'ocotillo', 'tumbleweed']],
+  ['Shrubs & grasses', ['bush', 'gorse', 'grass']],
   ['Bare', ['dead']],
   ['Rocks & logs', ['rock', 'rocks', 'log']],
 ];
@@ -157,12 +158,12 @@ function treeAt(sc, x, y, ty, scale = 1) {
   const [bx, by] = sc.P(x, y);
   const H = info.height || 15; const R = info.canopy || 4;
   // One common size, like the desktop palette's singles: fit the tallest things to the tile.
-  const low = shape === 'rock' || shape === 'rocks' || shape === 'bush' || shape === 'gorse' || shape === 'log';
-  const kk = (low ? 22 / R : Math.min(70 / Math.max(4, H * Z), 34 / R)) * scale;
-  const [fill] = TREE_FILL[ty.name] || ['#3f6b34'];
+  const low = ['rock', 'rocks', 'log'].includes(shape) || (['bush', 'gorse', 'barrel', 'tumbleweed', 'agave', 'pricklypear', 'grass'].includes(shape) && H < 7);
+  const kk = (low ? (['rock', 'rocks', 'log'].includes(shape) ? 22 : 40) / R : Math.min(70 / Math.max(4, H * Z), 34 / R)) * scale;
+  const [fill, , accent] = TREE_FILL[ty.name] || ['#3f6b34'];
   sc.ctx.fillStyle = 'rgba(40,40,60,.16)';
   sc.ctx.beginPath(); sc.ctx.ellipse(bx - 2, by + 1, Math.max(4, R * kk * 0.9), Math.max(2, R * kk * 0.4), 0, 0, Math.PI * 2); sc.ctx.fill();
-  drawIsoTree(sc.ctx, bx, by, { shape, k: kk, fill, muted: false, R, H: shape === 'rock' || shape === 'rocks' ? R : H, trunk: info.trunk || 0.8, seed: 0.3, poleH: 10 });
+  drawIsoTree(sc.ctx, bx, by, { shape, k: kk, fill, accent, muted: false, R, H: shape === 'rock' || shape === 'rocks' ? R : H, trunk: info.trunk || 0.8, seed: 0.3, poleH: 10 });
 }
 
 function pencil(sc) {

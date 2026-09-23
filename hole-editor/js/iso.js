@@ -215,10 +215,18 @@ export function drawIsoTree(ctx, bx, by, o) {
   // The game's tree colours are deep, for a top-down map; standing up in a pastel scene they read
   // as black. Lift every one toward a soft leaf green; a belt tree a little less than a placed one,
   // so what you placed still stands out from the tree lines around it.
-  const base = mix(o.fill, '#9ed48a', o.muted ? 0.32 : 0.45);
+  // Lifted toward white first, so a gold aspen or a grey olive keeps its own colour (2026-09-23).
+  const base = mix(toHex(mix(o.fill, '#ffffff', o.muted ? 0.2 : 0.28)), '#9ed48a', 0.18);
   const light = mix(toHex(base), '#ffffff', 0.4);
   const dark = mix(toHex(base), '#000000', 0.28);
   const trunkCol = '#9a7654';
+  const dots = (cx, cy, r, n, col) => {
+    ctx.fillStyle = col;
+    for (let i = 0; i < n; i++) {
+      const a = i * 2.39996 + o.seed * 6; const d = Math.sqrt((i + 0.5) / n) * r * 0.85;
+      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.85 - r * 0.1, Math.max(1, r * 0.11), 0, Math.PI * 2); ctx.fill();
+    }
+  };
   const shape = o.shape;
   const crown = (cx, cy, r) => {
     const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.1, cx, cy, r * 1.1);
@@ -304,6 +312,7 @@ export function drawIsoTree(ctx, bx, by, o) {
   if (shape === 'bush' || shape === 'gorse') {
     const r = Math.max(2, Rp * 0.7);
     crown(bx, by - r * 0.7, r);
+    if (o.accent) dots(bx, by - r * 0.7, r, 10, o.accent);
     if (shape === 'gorse') {
       ctx.fillStyle = '#f2d24a';
       for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(bx + (hash(o.seed * 50, i) - 0.5) * r * 1.8, by - r * 0.7 + (hash(i, o.seed * 30) - 0.5) * r * 1.2, Math.max(0.8, r * 0.12), 0, Math.PI * 2); ctx.fill(); }
@@ -336,6 +345,142 @@ export function drawIsoTree(ctx, bx, by, o) {
     ctx.beginPath(); ctx.moveTo(bx - Math.max(3, k * 1.6), by - h + 2); ctx.lineTo(bx + Math.max(3, k * 1.6), by - h + 2); ctx.stroke();
     return h;
   }
+  // --- THE WIDE VARIETY (2026-09-23): the new catalogue shapes, standing up ---------------------
+  if (shape === 'acacia') {
+    // A flat umbrella on a thin, forked trunk.
+    Rp = Math.min(Rp * 1.1, Hp * 0.9);
+    const top = Hp * 0.8;
+    ctx.strokeStyle = trunkCol; ctx.lineWidth = Math.max(1.2, o.trunk * k * 0.6); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by - top * 0.55); ctx.lineTo(bx - Rp * 0.4, by - top); ctx.moveTo(bx, by - top * 0.55); ctx.lineTo(bx + Rp * 0.4, by - top); ctx.stroke();
+    const g = ctx.createLinearGradient(0, by - top - Rp * 0.35, 0, by - top + Rp * 0.2);
+    g.addColorStop(0, light); g.addColorStop(1, dark);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(bx, by - top, Rp, Rp * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    return top + Rp * 0.3;
+  }
+  if (shape === 'windbent') {
+    // Blown one way: the trunk leans and the crown streams off downwind.
+    Rp = Math.min(Rp, Hp * 0.6);
+    const lean = Rp * 0.8; const cz = Math.max(Rp * 0.7, Hp - Rp * 0.7);
+    ctx.strokeStyle = trunkCol; ctx.lineWidth = Math.max(1.2, o.trunk * k * 0.7); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + lean * 0.2, by - cz * 0.6, bx + lean, by - cz); ctx.stroke();
+    crown(bx + lean, by - cz, Rp * 0.75);
+    crown(bx + lean + Rp * 0.6, by - cz + Rp * 0.25, Rp * 0.45);
+    return cz + Rp;
+  }
+  if (shape === 'mangrove') {
+    // A crown on a tangle of arching stilt roots.
+    Rp = Math.min(Rp, Hp * 0.65);
+    const rootTop = Hp * 0.35; const cz = Math.max(Rp * 0.9, Hp - Rp * 0.8);
+    ctx.strokeStyle = trunkCol; ctx.lineWidth = Math.max(1, o.trunk * k * 0.4); ctx.lineCap = 'round';
+    for (const f of [-1, -0.5, 0.5, 1]) { ctx.beginPath(); ctx.moveTo(bx + f * Rp * 0.8, by); ctx.quadraticCurveTo(bx + f * Rp * 0.6, by - rootTop, bx, by - rootTop); ctx.stroke(); }
+    trunk(cz, o.trunk * k * 0.6);
+    crown(bx, by - cz, Rp);
+    return cz + Rp;
+  }
+  if (shape === 'blossom') {
+    // A round crown covered in flowers (the accent: pink, white, purple, cream).
+    Rp = Math.min(Rp, Hp * 0.6);
+    const cz = Math.max(Rp * 0.9, Hp - Rp * 0.85);
+    trunk(cz, o.trunk * k * 0.7);
+    crown(bx, by - cz, Rp);
+    dots(bx, by - cz, Rp, 22, o.accent || '#f7b3cc');
+    return cz + Rp;
+  }
+  if (shape === 'agave') {
+    // A rosette of pointed leaves at the ground (agave), or on a short trunk (yucca, when tall).
+    const lift = o.H > 3 ? Hp * 0.6 : 0;
+    if (lift) trunk(lift, o.trunk * k * 0.8);
+    const L = Math.max(4, lift ? Math.min(Rp * 1.2, Hp * 0.9) : Rp * 1.1);
+    const cy = by - lift - 1;
+    for (let i = 0; i < 9; i++) {
+      const a = -Math.PI * (0.08 + 0.84 * (i / 8));
+      ctx.fillStyle = i % 2 ? base : light;
+      const tx = bx + Math.cos(a) * L; const ty = cy + Math.sin(a) * L * 0.9;
+      const px2 = -Math.sin(a) * L * 0.12; const py2 = Math.cos(a) * L * 0.12;
+      ctx.beginPath(); ctx.moveTo(bx + px2, cy + py2); ctx.lineTo(tx, ty); ctx.lineTo(bx - px2, cy - py2); ctx.closePath(); ctx.fill();
+      if (o.accent && i % 3 === 1) { ctx.fillStyle = o.accent; ctx.beginPath(); ctx.arc(tx, ty, Math.max(1.3, L * 0.1), 0, Math.PI * 2); ctx.fill(); }
+    }
+    return lift + L;
+  }
+  if (shape === 'pricklypear') {
+    // Flat paddles stacked on each other, with a few flowers on the rims.
+    const pw = Math.max(3, Rp * 0.45);
+    const pad = (x, y, rot) => { ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(0, -pw, pw * 0.75, pw, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = light; ctx.beginPath(); ctx.ellipse(-pw * 0.25, -pw * 1.15, pw * 0.25, pw * 0.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); };
+    pad(bx, by, 0); pad(bx - pw * 0.8, by - pw * 1.4, -0.5); pad(bx + pw * 0.8, by - pw * 1.5, 0.45);
+    if (o.accent) { ctx.fillStyle = o.accent; for (const [x, y] of [[-0.8, -3.2], [0.9, -3.4], [0, -1.9]]) { ctx.beginPath(); ctx.arc(bx + x * pw, by + y * pw, Math.max(1.2, pw * 0.22), 0, Math.PI * 2); ctx.fill(); } }
+    return pw * 3.5;
+  }
+  if (shape === 'barrel') {
+    // A squat, ribbed ball with a crown of flowers.
+    const r = Math.max(3, Rp * 1.2);
+    const g = ctx.createRadialGradient(bx - r * 0.35, by - r * 1.2, r * 0.1, bx, by - r * 0.8, r * 1.1);
+    g.addColorStop(0, light); g.addColorStop(1, dark);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(bx, by - r * 0.8, r, r * 0.9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = dark; ctx.lineWidth = Math.max(0.6, r * 0.08);
+    for (const f of [-0.55, 0, 0.55]) { ctx.beginPath(); ctx.ellipse(bx + f * r * 0.5, by - r * 0.8, Math.max(0.5, r * 0.18 * (1 - Math.abs(f))), r * 0.85, 0, 0, Math.PI * 2); ctx.stroke(); }
+    if (o.accent) dots(bx, by - r * 1.55, r * 0.5, 5, o.accent);
+    return r * 1.8;
+  }
+  if (shape === 'ocotillo') {
+    // Tall thin whips fanning from one base, flame-tipped.
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 7; i++) {
+      const f = (i / 6) - 0.5;
+      const tx = bx + f * Rp * 1.6; const ty = by - Hp * (0.8 + 0.2 * Math.cos(f * 2));
+      ctx.strokeStyle = base; ctx.lineWidth = Math.max(1, k * 0.35);
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + f * Rp * 0.4, by - Hp * 0.5, tx, ty); ctx.stroke();
+      if (o.accent) { ctx.strokeStyle = o.accent; ctx.lineWidth = Math.max(1.4, k * 0.5); ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx + f * 2, ty - Math.max(3, Hp * 0.1)); ctx.stroke(); }
+    }
+    return Hp * 1.1;
+  }
+  if (shape === 'tumbleweed') {
+    // A loose ball of twigs sitting on the ground.
+    const r = Math.max(3, Rp * 1.1);
+    ctx.strokeStyle = base; ctx.lineWidth = Math.max(0.8, r * 0.1);
+    for (let i = 0; i < 9; i++) { const a = i * 0.7 + o.seed * 3; ctx.beginPath(); ctx.ellipse(bx, by - r, r * (0.55 + (i % 3) * 0.2), r * (0.4 + (i % 2) * 0.35), a, 0, Math.PI * 1.6); ctx.stroke(); }
+    return r * 2;
+  }
+  if (shape === 'grass') {
+    // A clump of blades (marram, reeds), or cattails with their brown heads.
+    const hh = Math.max(5, Hp * 1.4); const w = Math.max(3, Rp * 0.9);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 11; i++) {
+      const f = (i / 10) - 0.5;
+      const x0 = bx + f * w; const tx = bx + f * w * 1.8; const ty = by - hh * (0.75 + 0.25 * Math.sin(i * 1.7));
+      ctx.strokeStyle = i % 2 ? base : light; ctx.lineWidth = Math.max(0.8, k * 0.25);
+      ctx.beginPath(); ctx.moveTo(x0, by); ctx.quadraticCurveTo(x0, by - hh * 0.5, tx, ty); ctx.stroke();
+      if (o.accent && i % 3 === 0) { ctx.strokeStyle = o.accent; ctx.lineWidth = Math.max(2, k * 0.8); ctx.beginPath(); ctx.moveTo(tx, ty + 1); ctx.lineTo(tx, ty + Math.max(3, hh * 0.18)); ctx.stroke(); }
+    }
+    return hh;
+  }
+  if (shape === 'bamboo') {
+    // A stand of jointed green canes with leaves at the top.
+    const w = Math.max(4, Rp * 0.9);
+    for (let i = 0; i < 6; i++) {
+      const x = bx + ((i / 5) - 0.5) * w * 1.4; const h = Hp * (0.8 + 0.2 * ((i * 7) % 3) / 2);
+      ctx.strokeStyle = i % 2 ? base : light; ctx.lineWidth = Math.max(1.2, k * 0.4);
+      ctx.beginPath(); ctx.moveTo(x, by); ctx.lineTo(x, by - h); ctx.stroke();
+      ctx.strokeStyle = dark; ctx.lineWidth = 1;
+      for (let j = 1; j < 4; j++) { const y = by - (h * j) / 4; ctx.beginPath(); ctx.moveTo(x - 1.5, y); ctx.lineTo(x + 1.5, y); ctx.stroke(); }
+      ctx.fillStyle = light; ctx.beginPath(); ctx.ellipse(x + 3, by - h, Math.max(2, w * 0.25), Math.max(1, w * 0.08), -0.4, 0, Math.PI * 2); ctx.fill();
+    }
+    return Hp;
+  }
+  if (shape === 'banana') {
+    // A short trunk under a few huge, drooping leaves.
+    const top = Hp * 0.7; const L = Math.max(5, Rp * 1.1);
+    trunk(top, o.trunk * k * 0.9);
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (i - 2.5) * 0.55;
+      ctx.save(); ctx.translate(bx, by - top); ctx.rotate(a + Math.PI / 2 * 0.2);
+      ctx.fillStyle = i % 2 ? base : light;
+      ctx.beginPath(); ctx.ellipse(0, -L * 0.5, L * 0.22, L * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    return top + L;
+  }
+
   // canopy (oak, maple, birch, paloverde) and willow
   Rp = Math.min(Rp, Hp * 0.6);
   const cz = Math.max(Rp * 0.9, Hp - Rp * 0.85);

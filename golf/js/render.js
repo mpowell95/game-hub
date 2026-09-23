@@ -303,6 +303,45 @@ export const TREE_FILL = {
   pole: ['#9a9a92', '#4f4f48'],
   gorse: ['#4a6a2c', '#2c421a'],
   spruce: ['#2c5a4c', '#183a30'],    // blue-green: tells it from the pine at a glance     // dark, dense; the yellow flowers are treeAccent's
+  // THE WIDE VARIETY (2026-09-23, obstacles.js). A third entry is an ACCENT: blossom on a flowering
+  // tree, berries or bells on a shrub, the brown head of a cattail, the red tip of an ocotillo.
+  // Matt is red/green colourblind: no accent here relies on red-vs-green alone to be seen (pinks,
+  // whites, purples, yellows and oranges on green, all a clear step lighter).
+  elm: ['#4f7f34', '#2e4d1e'],
+  beech: ['#5d8a3a', '#355223'],
+  chestnut: ['#3f6f2c', '#24421a'],
+  cherry: ['#6f9a52', '#41602f', '#f7b3cc'],
+  magnolia: ['#5f8f44', '#385a28', '#fff4f2'],
+  dogwood: ['#6a9650', '#3f5f2e', '#fbe3ec'],
+  jacaranda: ['#5f8f4a', '#385a2c', '#b69be6'],
+  acacia: ['#7f9a44', '#4c6226'],
+  olive: ['#8a9a6a', '#55613f'],
+  ocotillo: ['#6f7a4a', '#454d2c', '#ff8a5c'],
+  pricklypear: ['#6f9a52', '#41602f', '#ffd35c'],
+  barrel: ['#5f8a4a', '#35532a', '#ffcf4a'],
+  agave: ['#7fa38f', '#4c6a5a'],
+  yucca: ['#7f9a5a', '#4c6236', '#fff4d8'],
+  tumbleweed: ['#b59a6a', '#7a6442'],
+  hawthorn: ['#5a7a3a', '#344a22'],
+  heather: ['#6a7a4a', '#3f4a2c', '#c9a0dc'],
+  marram: ['#b8b27a', '#7a764a'],
+  buckthorn: ['#7a8a5a', '#4a5636', '#ffa04a'],
+  coconut: ['#4f9a4a', '#2e6b2c'],
+  fanpalm: ['#5a9a5f', '#336b39'],
+  banana: ['#6fb04a', '#3f7a2a'],
+  bamboo: ['#8fb84a', '#5a7a2a'],
+  banyan: ['#3f7a38', '#224a1f'],
+  frangipani: ['#5f944a', '#385c2c', '#fff0b8'],
+  birdofparadise: ['#4f8a5a', '#2c5a36', '#ff9a3c'],
+  aspen: ['#d8b83a', '#8a7422'],      // autumn gold: yellow, not red, so it reads for Matt
+  larch: ['#b8a04a', '#76662c'],
+  redwood: ['#2f5a36', '#1a3a20'],
+  juniper: ['#4f7a6a', '#2c4a40'],
+  douglasfir: ['#2a5236', '#173320'],
+  mangrove: ['#3f7040', '#244425'],
+  mossoak: ['#7a8a6a', '#4a5640'],
+  cattails: ['#6f8a4a', '#445630', '#7a5230'],
+  reeds: ['#8a9a5a', '#56623a'],
 };
 
 /** The paint colour for every surface kind, in one theme. Exported since 2026-09-05: the HUD's
@@ -488,6 +527,35 @@ export function treeShapes(px, py, r, shape) {
       // against a club's flight the way a tree's canopy is, so a floor costs nothing a player
       // could rely on.
       return [[px, py, Math.max(1.1, r * 0.5)]];
+    // THE WIDE VARIETY (2026-09-23): the new shapes, seen from directly above. Kept inside `r` like
+    // every other shape, since what is painted is what stops the ball.
+    case 'acacia':
+      // A flat umbrella: one broad disc and a ragged ring - wider-reading than a round crown.
+      return [[px, py, r * 0.9], ...[0, 1, 2, 3, 4, 5].map((i) => { const a = i / 6 * Math.PI * 2; return [px + Math.cos(a) * r * 0.62, py + Math.sin(a) * r * 0.62, r * 0.36]; })];
+    case 'windbent':
+      // Blown one way: the crown leans off its trunk, downwind.
+      return [[px + r * 0.25, py, r * 0.7], [px + r * 0.55, py + r * 0.2, r * 0.4], [px - r * 0.2, py + r * 0.15, r * 0.35]];
+    case 'mangrove':
+      return [[px, py, r * 0.72], [px - r * 0.4, py + r * 0.25, r * 0.36], [px + r * 0.4, py + r * 0.25, r * 0.36]];
+    case 'pricklypear':
+      // Paddles: a cluster of flat ovals, drawn as small overlapping discs.
+      return [[px, py, r * 0.42], [px - r * 0.45, py - r * 0.2, r * 0.36], [px + r * 0.45, py - r * 0.25, r * 0.34], [px + r * 0.1, py + r * 0.45, r * 0.32]];
+    case 'barrel':
+    case 'tumbleweed':
+      return [[px, py, r * 0.9]];
+    case 'agave':
+    case 'ocotillo':
+    case 'banana':
+      // A small centre; the leaves, spikes or whips are `treeAccent`'s.
+      return [[px, py, r * 0.3]];
+    case 'grass':
+    case 'bamboo': {
+      // A clump: a ring of small tufts round a centre.
+      const out = [[px, py, r * 0.32]];
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; out.push([px + Math.cos(a) * r * 0.55, py + Math.sin(a) * r * 0.55, r * 0.26]); }
+      return out;
+    }
+    case 'blossom':
     case 'canopy':
     default:
       return [
@@ -506,8 +574,90 @@ export function treeShapes(px, py, r, shape) {
  *  clump pass uses, so the accent is stable across reloads like everything else here. Everything
  *  else (`fir`, `willow`'s crown, `cypress`, `bush`, `canopy`, `cactus`) reads entirely from
  *  `treeShapes`'s geometry and needs no accent. */
-export function treeAccent(ctx, shape, px, py, r, fill, rim, rnd) {
+export function treeAccent(ctx, shape, px, py, r, fill, rim, rnd, accent) {
+  // A FLOWERING or BERRIED thing (TREE_FILL's third entry, 2026-09-23): dots of its accent over the
+  // crown, whatever its shape. Blossom trees are the obvious case; heather and buckthorn are bushes
+  // with one.
+  if (accent && (shape === 'blossom' || shape === 'bush' || shape === 'pricklypear' || shape === 'barrel')) {
+    ctx.fillStyle = accent;
+    const dr = Math.max(0.6, r * (shape === 'blossom' ? 0.1 : 0.08));
+    const n = shape === 'blossom' ? 16 : 8;
+    for (let k = 0; k < n; k++) {
+      const a = rnd() * Math.PI * 2; const d = Math.sqrt(rnd()) * r * 0.78;
+      ctx.beginPath(); ctx.arc(px + Math.cos(a) * d, py + Math.sin(a) * d, dr, 0, Math.PI * 2); ctx.fill();
+    }
+  }
   switch (shape) {
+    case 'agave': {
+      // A rosette of pointed leaves; a yucca or bird of paradise shows its accent at the tips.
+      ctx.fillStyle = fill;
+      const n = 9;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd() * 0.2;
+        const px2 = -Math.sin(a) * r * 0.12; const py2 = Math.cos(a) * r * 0.12;
+        ctx.beginPath(); ctx.moveTo(px + px2, py + py2); ctx.lineTo(px + Math.cos(a) * r * 0.95, py + Math.sin(a) * r * 0.95); ctx.lineTo(px - px2, py - py2); ctx.closePath(); ctx.fill();
+        if (accent && i % 3 === 0) { ctx.save(); ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(px + Math.cos(a) * r * 0.9, py + Math.sin(a) * r * 0.9, Math.max(0.7, r * 0.1), 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      }
+      break;
+    }
+    case 'ocotillo': {
+      // Whips: long thin canes from one base, flame-coloured at the tips.
+      ctx.strokeStyle = fill; ctx.lineWidth = Math.max(0.6, r * 0.07); ctx.lineCap = 'round';
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2 + rnd() * 0.3;
+        const x1 = px + Math.cos(a) * r * 0.95; const y1 = py + Math.sin(a) * r * 0.95;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x1, y1); ctx.stroke();
+        if (accent) { ctx.save(); ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(x1, y1, Math.max(0.6, r * 0.08), 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      }
+      break;
+    }
+    case 'banana': {
+      // A few big broad leaves.
+      ctx.fillStyle = fill;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + rnd() * 0.3;
+        ctx.save(); ctx.translate(px, py); ctx.rotate(a);
+        ctx.beginPath(); ctx.ellipse(r * 0.5, 0, r * 0.5, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = tintOf(fill, 1.3); ctx.lineWidth = Math.max(0.5, r * 0.03);
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r * 0.95, 0); ctx.stroke();
+        ctx.restore();
+      }
+      break;
+    }
+    case 'barrel': {
+      // Ribs round a round cactus.
+      ctx.strokeStyle = tintOf(fill, 0.75); ctx.lineWidth = Math.max(0.5, r * 0.06);
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(a) * r * 0.85, py + Math.sin(a) * r * 0.85); ctx.stroke(); }
+      break;
+    }
+    case 'tumbleweed': {
+      // A loose tangle of twigs.
+      ctx.strokeStyle = tintOf(fill, 0.7); ctx.lineWidth = Math.max(0.5, r * 0.07);
+      for (let i = 0; i < 7; i++) {
+        const a = rnd() * Math.PI * 2; const b = a + 1.5 + rnd();
+        ctx.beginPath(); ctx.arc(px, py, r * (0.3 + rnd() * 0.55), a, b); ctx.stroke();
+      }
+      break;
+    }
+    case 'grass':
+    case 'bamboo': {
+      // Blades (or canes) standing up out of the clump; a cattail's brown head at a few tips.
+      ctx.strokeStyle = tintOf(fill, shape === 'bamboo' ? 1.15 : 0.8); ctx.lineWidth = Math.max(0.5, r * 0.06); ctx.lineCap = 'round';
+      for (let i = 0; i < 14; i++) {
+        const a = rnd() * Math.PI * 2; const d = rnd() * r * 0.7;
+        const x0 = px + Math.cos(a) * d; const y0 = py + Math.sin(a) * d;
+        const x1 = x0 + Math.cos(a) * r * 0.25; const y1 = y0 + Math.sin(a) * r * 0.25;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        if (accent && i % 3 === 0) { ctx.save(); ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(x1, y1, Math.max(0.6, r * 0.09), 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      }
+      break;
+    }
+    case 'mangrove': {
+      // Arching roots showing past the crown's rim.
+      ctx.strokeStyle = tintOf(rim, 1.4); ctx.lineWidth = Math.max(0.6, r * 0.06);
+      for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + rnd() * 0.3; ctx.beginPath(); ctx.moveTo(px + Math.cos(a) * r * 0.6, py + Math.sin(a) * r * 0.6); ctx.lineTo(px + Math.cos(a) * r * 0.98, py + Math.sin(a) * r * 0.98); ctx.stroke(); }
+      break;
+    }
     case 'gorse': {
       // Gorse in flower: yellow dots scattered over the dark shrub. The flowers are what tell it
       // from a plain bush at tile size.
@@ -1024,7 +1174,7 @@ export function buildMap(hole, theme) {
   // Shapes whose silhouette is already the whole read (a bare trunk, a chain of log circles, a
   // rock baseline `treeAccent` repaints entirely) skip the leafy clump pass - it would sprinkle
   // canopy-coloured spots onto a trunk or a stone, which is not what any of them are.
-  const LEAFY = new Set(['canopy', 'fir', 'willow', 'cypress', 'bush']);
+  const LEAFY = new Set(['canopy', 'fir', 'willow', 'cypress', 'bush', 'blossom', 'acacia', 'windbent', 'mangrove', 'pricklypear']);
   {
     const ctx = tctx;   // every tree pass below paints the tree layer, never the ground
     const key = Math.max(1.2, MAP_PPY * 0.75);
@@ -1086,7 +1236,7 @@ export function buildMap(hole, theme) {
     }
     // The linework a circle union cannot carry (willow droop, dead branches, palm fronds, log
     // rings, angular rock facets) - see `treeAccent`'s own header.
-    treeAccent(ctx, shape, px, py, r, fill, rim, rnd);
+    treeAccent(ctx, shape, px, py, r, fill, rim, rnd, (TREE_FILL[type.name] || [])[2]);
   }
 
   ctx.drawImage(treesCv, 0, 0);

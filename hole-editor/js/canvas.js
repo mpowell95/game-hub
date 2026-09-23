@@ -1392,10 +1392,10 @@ export class EditorCanvas {
       for (const { i, t, p } of order) {
         const type = types[t.type] || {};
         const shape = shapeOf(type);
-        const [fill] = TREE_FILL[type.name] || ['#3f6b34', '#26431f'];
+        const [fill, , accent] = TREE_FILL[type.name] || ['#3f6b34', '#26431f'];
         const s = t.s || 1;
         drawIsoTree(ctx, p[0], p[1], {
-          shape, k, fill, muted: i >= handCount,
+          shape, k, fill, accent, muted: i >= handCount,
           R: (shape === 'cactus' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * s,
           H: t.h != null ? t.h : (type.height || 15),
           trunk: (type.trunk || 0.8) * s,
