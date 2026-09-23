@@ -50,7 +50,7 @@ await page.waitForFunction(() => window.__he && window.__he.editorCanvas.camera)
 
 const spec = () => page.evaluate(() => window.__he.doc.holes[window.__he.currentId].spec);
 const trees = () => page.evaluate(async () => { const H = await import('/golf/js/holes.js'); return H.treesOf(window.__he.getBuilt(window.__he.currentId)).length; });
-const toScreen = (x, y) => page.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cam = c.camera; const r = c.el.getBoundingClientRect(); return { x: r.x + (x - cam.cx) * cam.ppy + r.width / 2, y: r.y + r.height / 2 - (y - cam.cy) * cam.ppy }; }, [x, y]);
+const toScreen = (x, y) => page.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cam = c.camera; const r = c.el.getBoundingClientRect(); const q = c.toScreen(x, y); return { x: r.x + q.x, y: r.y + q.y }; }, [x, y]);
 const key = async (k) => { await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.keyboard.press(k); await page.waitForTimeout(150); };
 const settle = () => page.waitForTimeout(250);
 
@@ -238,7 +238,7 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   // 18 (2026-09-22): the power-line batch appended 'pole' as OBSTACLE_CATALOG's 18th entry.
   ok('the palette shows every catalogue entry, single and stand', cat === 20
     && Array.from({ length: cat }, (_, i) => tiles.includes(`tree-${i}`) && tiles.includes(`stand-${i}`)).every(Boolean), `${cat} entries, ${tiles.length} tiles`);
-  const at2 = (x, y) => p2.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cam = c.camera; const r = c.el.getBoundingClientRect(); return { x: r.x + (x - cam.cx) * cam.ppy + r.width / 2, y: r.y + r.height / 2 - (y - cam.cy) * cam.ppy }; }, [x, y]);
+  const at2 = (x, y) => p2.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cam = c.camera; const r = c.el.getBoundingClientRect(); const q = c.toScreen(x, y); return { x: r.x + q.x, y: r.y + q.y }; }, [x, y]);
   const sp2 = () => p2.evaluate(() => window.__he.doc.holes[window.__he.currentId].spec);
   const nW = ((await sp2()).water || []).length;
   await p2.click('.he-tile[data-item="water-swamp"]'); await p2.waitForTimeout(150);
@@ -388,9 +388,11 @@ const gb = await page.evaluate(async () => { const H = await import('/golf/js/ho
 const cellW = (gb.maxX - gb.minX) / 8; const cellH = (gb.maxY - gb.minY) / 8;
 const cx = gb.minX + cellW * 2.5; const cy = gb.minY + cellH * 3.5;
 const cp = await toScreen(cx, cy);
-await page.mouse.move(cp.x, cp.y); await page.mouse.down(); await page.mouse.move(cp.x + 40, cp.y, { steps: 4 }); await page.mouse.up(); await settle();
+// The view is isometric (2026-09-23): drag along the GROUND's +x, which on screen runs right and down.
+const cpx = await toScreen(cx + 40, cy); const ux = (cpx.x - cp.x) / Math.hypot(cpx.x - cp.x, cpx.y - cp.y); const uy = (cpx.y - cp.y) / Math.hypot(cpx.x - cp.x, cpx.y - cp.y);
+await page.mouse.move(cp.x, cp.y); await page.mouse.down(); await page.mouse.move(cp.x + 40 * ux, cp.y + 40 * uy, { steps: 4 }); await page.mouse.up(); await settle();
 const painted = (await spec()).slope.cells[3 * 8 + 2];
-ok('[KNOWN-BUG PROBE] a drag inside a cell paints it (rightward drag -> +x downhill, magnitude 1)', painted[0] > 0.9 && Math.abs(painted[1]) < 0.1, JSON.stringify(painted));
+ok('[KNOWN-BUG PROBE] a drag inside a cell paints it (a drag along the ground +x -> +x downhill, magnitude 1)', painted[0] > 0.9 && Math.abs(painted[1]) < 0.1, JSON.stringify(painted));
 await page.mouse.click(cp.x, cp.y); await settle();
 ok('...and a plain click zeroes it', JSON.stringify((await spec()).slope.cells[3 * 8 + 2]) === '[0,0]');
 page.once('dialog', (d) => d.accept());

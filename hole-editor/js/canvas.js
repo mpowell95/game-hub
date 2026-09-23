@@ -12,6 +12,7 @@ import {
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
 import { blob, routeStations } from '../../golf/js/holegen.js';
 import { polyCentroid } from './model.js';
+import { isoProject, isoUnproject, isoGroundMatrix, isoScreenDelta, isoFit, drawSky, drawIsland, drawIsoTree, drawIsoWire, Z as ISO_Z, SHADOW_SHARE } from './iso.js';
 
 /** The axis-aligned box round an outline, plus its eight resize handles (corners and side
  *  midpoints) in world yards - Matt's "small white squares on the sides that i can click and
@@ -32,7 +33,7 @@ export function bboxHandles(poly) {
 let THEME = 'desert';
 /** The look the editor paints in (2026-09-22): the Course Creator's parkland used to be drawn in
  *  desert colours here. Clears the map cache so the next draw rebuilds in the new palette. */
-export function setEditorTheme(theme) { THEME = theme || 'desert'; _maps = new WeakMap(); }
+export function setEditorTheme(theme) { THEME = theme || 'desert'; _maps = new WeakMap(); _bare = new WeakMap(); }
 export function editorTheme() { return THEME; }
 // render.js's own thresholds (SLOPE_FLAT, SLOPE_MIN_PX) are not exported - copied here as plain
 // drawing constants, not geometry, so this stays a faithful copy of what the game shows rather
@@ -240,14 +241,9 @@ export function fairwayEdgesAt(built, px, py, nx, ny) {
   return { left, right };
 }
 
-/** Fit camera: whole `bounds` visible with a 24px margin (section 5.1). */
+/** Fit camera: the whole island visible (iso.js, 2026-09-23 - was a top-down 24px-margin fit). */
 export function fitCamera(built, W, H) {
-  const b = built.bounds;
-  const w = b.maxX - b.minX;
-  const h = b.maxY - b.minY;
-  const margin = 24;
-  const ppy = Math.max(0.5, Math.min(12, Math.min((W - margin * 2) / w, (H - margin * 2) / h)));
-  return { ppy, cx: (b.minX + b.maxX) / 2, cy: (b.minY + b.maxY) / 2 };
+  return isoFit(built.bounds, W, H);
 }
 
 /** One `<canvas>` per hole thumbnail (section 4.2): buildMap's canvas, letterboxed, never
@@ -260,6 +256,21 @@ export function fitCamera(built, W, H) {
  *  each) inside the strip refresh, so a 20-step drag produced long tasks of 965, 476, 421 and
  *  422 ms - the "very slow/delayed" Matt reported the first time he used it. */
 let _maps = new WeakMap();
+let _bare = new WeakMap();
+/** The same hole with no trees and no wires: the iso view stands those up itself (iso.js), so the
+ *  map under them must not also paint them flat. A prototype copy, so buildMap reads everything
+ *  else off the real built hole; `_trees` is what treesOf() returns first. */
+function bareHole(built) {
+  const bare = Object.create(built);
+  Object.defineProperty(bare, '_trees', { value: [] });
+  bare.trees = []; bare.treeBelts = []; bare.lines = [];
+  return bare;
+}
+export function bareMapFor(built) {
+  let m = _bare.get(built);
+  if (!m) { m = buildMap(bareHole(built), THEME); _bare.set(built, m); }
+  return m;
+}
 export function mapFor(built) {
   let m = _maps.get(built);
   if (!m) { m = buildMap(built, THEME); _maps.set(built, m); }
@@ -401,14 +412,11 @@ export class EditorCanvas {
     const W = r.width; const H = r.height;
     const sx = aboutSx == null ? W / 2 : aboutSx;
     const sy = aboutSy == null ? H / 2 : aboutSy;
-    // world point under the cursor before the zoom
-    const wx = cam.cx + (sx - W / 2) / cam.ppy;
-    const wy = cam.cy - (sy - H / 2) / cam.ppy;
+    // the ground point under the cursor before the zoom stays under it after
+    const w = isoUnproject(cam, W, H, sx, sy);
     const ppy = Math.max(0.5, Math.min(12, cam.ppy * factor));
-    // re-solve cx/cy so that world point stays under the cursor after the zoom
-    const cx = wx - (sx - W / 2) / ppy;
-    const cy = wy + (sy - H / 2) / ppy;
-    this.cameras.set(this.holeId, { ppy, cx, cy });
+    const d = isoScreenDelta(ppy, sx - W / 2, sy - H / 2);
+    this.cameras.set(this.holeId, { ppy, cx: w.x - d.dx, cy: w.y - d.dy });
     this.draw();
   }
 
@@ -422,7 +430,8 @@ export class EditorCanvas {
   pan(dxPx, dyPx) {
     const cam = this.camera;
     if (!cam) return;
-    this.cameras.set(this.holeId, { ...cam, cx: cam.cx - dxPx / cam.ppy, cy: cam.cy + dyPx / cam.ppy });
+    const d = isoScreenDelta(cam.ppy, dxPx, dyPx);
+    this.cameras.set(this.holeId, { ...cam, cx: cam.cx - d.dx, cy: cam.cy - d.dy });
     this.draw();
   }
 
@@ -830,8 +839,10 @@ export class EditorCanvas {
       if (slopeDrag && this.ops) {
         const dx = e.clientX - slopeDrag.x0; const dy = e.clientY - slopeDrag.y0;
         const px = Math.hypot(dx, dy);
-        // Screen y runs down, world y runs up the hole: flip dy. Magnitude saturates at 24 px.
-        const vec = px < 4 ? [0, 0] : [+((dx / px) * Math.min(1, px / 24)).toFixed(2), +((-dy / px) * Math.min(1, px / 24)).toFixed(2)];
+        // The drag's direction ON THE GROUND (the view is isometric, so a screen direction is not a
+        // world one). Magnitude saturates at 24 screen px.
+        const g = isoScreenDelta(1, dx, dy); const gl = Math.hypot(g.dx, g.dy) || 1;
+        const vec = px < 4 ? [0, 0] : [+((g.dx / gl) * Math.min(1, px / 24)).toFixed(2), +((g.dy / gl) * Math.min(1, px / 24)).toFixed(2)];
         const { r, c } = slopeDrag;
         slopeDrag = null;
         this.ops.instant((spec) => this.ops.mutators.setSlopeCell(spec, r, c, vec));
@@ -1145,20 +1156,27 @@ export class EditorCanvas {
     }
   }
 
-  /** Screen (css px, canvas-relative) -> world. */
+  /** Screen (css px, canvas-relative) -> the world point on the ground under it. */
   toWorld(sxPx, syPx) {
     const cam = this.camera;
     if (!cam) return { x: 0, y: 0 };
     const r = this.el.getBoundingClientRect();
-    return {
-      x: cam.cx + (sxPx - r.width / 2) / cam.ppy,
-      y: cam.cy - (syPx - r.height / 2) / cam.ppy,
-    };
+    return isoUnproject(cam, r.width, r.height, sxPx, syPx);
+  }
+
+  /** World (on the ground, or `z` yards up) -> screen css px, canvas-relative. The one inverse of
+   *  toWorld; main.js and the browser tests use it rather than re-deriving the projection. */
+  toScreen(x, y, z = 0) {
+    const cam = this.camera;
+    if (!cam) return { x: 0, y: 0 };
+    const r = this.el.getBoundingClientRect();
+    const [px, py] = isoProject(cam, r.width, r.height, x, y, z);
+    return { x: px, y: py };
   }
 
   _mapFor(built) {
     let m = this._mapCache.get(built);
-    if (!m) { m = mapFor(built); this._mapCache.set(built, m); }
+    if (!m) { m = bareMapFor(built); this._mapCache.set(built, m); }
     return m;
   }
 
@@ -1166,224 +1184,257 @@ export class EditorCanvas {
     const { ctx, el } = this;
     const dpr = this.dpr || 1;
     const W = el.width; const H = el.height;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#0b0f07';
-    ctx.fillRect(0, 0, W, H);
+    const Wc = W / dpr; const Hc = H / dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawSky(ctx, Wc, Hc);
     const built = this.built;
     const cam = this.camera;
     if (!built || !cam) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const Wc = W / dpr; const Hc = H / dpr;
+    const k = cam.ppy;
 
-    const sx = (x) => (x - cam.cx) * cam.ppy + Wc / 2;
-    const sy = (y) => Hc / 2 - (y - cam.cy) * cam.ppy;
+    // THE ISOMETRIC VIEW (iso.js, 2026-09-23). P projects a world point (z yards up) to css px;
+    // `ground()` switches the context to the ground plane so a shape drawn in world yards lies flat
+    // on the hole, `screen()` switches back. Everything that used to be sx()/sy() goes through P.
+    const P = (x, y, z = 0) => isoProject(cam, Wc, Hc, x, y, z);
+    const G = isoGroundMatrix(cam, Wc, Hc);
+    const ground = () => ctx.setTransform(G[0] * dpr, G[1] * dpr, G[2] * dpr, G[3] * dpr, G[4] * dpr, G[5] * dpr);
+    const screen = () => ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const trace = (pts, close = true) => {
+      ctx.beginPath();
+      pts.forEach((p, i) => { const [px, py] = P(p[0], p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+      if (close) ctx.closePath();
+    };
+    // A circle of `rYd` yards lying on the ground is a 2:1 ellipse on screen.
+    const ringAt = (x, y, rYd, minPx) => {
+      const [px, py] = P(x, y);
+      const rx = Math.max(minPx, rYd * k * Math.SQRT2);
+      ctx.beginPath(); ctx.ellipse(px, py, rx, rx / 2, 0, 0, Math.PI * 2);
+    };
 
     const L = this.layers;
-
-    // 1. the built map (buildMap's own canvas), drawn from bounds.
-    const map = this._mapFor(built);
     const b = built.bounds;
-    const x0 = sx(b.minX); const y0 = sy(b.maxY);
-    const w = (b.maxX - b.minX) * cam.ppy;
-    const h = (b.maxY - b.minY) * cam.ppy;
-    ctx.imageSmoothingEnabled = cam.ppy <= 3;
-    ctx.drawImage(map.canvas, x0, y0, w, h);
-    ctx.imageSmoothingEnabled = true;
+    const pal = paletteFor(THEME);
 
-    // 8a. bounds, dotted (drawn early so everything else sits over it)
+    // 0. the floating island's soil sides and shadow
+    drawIsland(ctx, P, b, k, pal.heavyRough);
+
+    // 1. the built map with NO trees (bareMapFor), laid on the ground plane. A raster pixel (i, j)
+    // is world (minX + i*sx, maxY - j*sy): fold that into the ground matrix.
+    const map = this._mapFor(built);
+    const rsx = (b.maxX - b.minX) / map.canvas.width;
+    const rsy = (b.maxY - b.minY) / map.canvas.height;
+    ctx.setTransform(
+      dpr * G[0] * rsx, dpr * G[1] * rsx, -dpr * G[2] * rsy, -dpr * G[3] * rsy,
+      dpr * (G[0] * b.minX + G[2] * b.maxY + G[4]), dpr * (G[1] * b.minX + G[3] * b.maxY + G[5]),
+    );
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(map.canvas, 0, 0);
+    screen();
+    // A soft light wash over the ground: the game's deep map colours, lifted toward the pastel
+    // scene around them. Colours stay in the same order, so every surface still reads as itself.
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,250,243,.16)';
+    trace([[b.minX, b.minY], [b.maxX, b.minY], [b.maxX, b.maxY], [b.minX, b.maxY]]);
+    ctx.fill();
+    ctx.restore();
+
+    // 8a. bounds, dotted
     if (L.bounds) {
       ctx.save();
-      ctx.strokeStyle = 'rgba(255,255,255,.5)';
+      ctx.strokeStyle = 'rgba(255,255,255,.6)';
       ctx.setLineDash([4, 4]);
       ctx.lineWidth = 1;
-      ctx.strokeRect(x0, y0, w, h);
+      trace([[b.minX, b.minY], [b.maxX, b.minY], [b.maxX, b.maxY], [b.minX, b.maxY]]);
+      ctx.stroke();
       ctx.restore();
     }
 
     // 8b. 50-yd grid
     if (L.grid) {
       ctx.save();
-      ctx.strokeStyle = 'rgba(255,255,255,.12)';
+      ctx.strokeStyle = 'rgba(255,255,255,.18)';
       ctx.lineWidth = 1;
       const step = 50;
-      for (let gx = Math.ceil(b.minX / step) * step; gx <= b.maxX; gx += step) {
-        ctx.beginPath(); ctx.moveTo(sx(gx), sy(b.minY)); ctx.lineTo(sx(gx), sy(b.maxY)); ctx.stroke();
-      }
-      for (let gy = Math.ceil(b.minY / step) * step; gy <= b.maxY; gy += step) {
-        ctx.beginPath(); ctx.moveTo(sx(b.minX), sy(gy)); ctx.lineTo(sx(b.maxX), sy(gy)); ctx.stroke();
-      }
+      for (let gx = Math.ceil(b.minX / step) * step; gx <= b.maxX; gx += step) { trace([[gx, b.minY], [gx, b.maxY]], false); ctx.stroke(); }
+      for (let gy = Math.ceil(b.minY / step) * step; gy <= b.maxY; gy += step) { trace([[b.minX, gy], [b.maxX, gy]], false); ctx.stroke(); }
       ctx.restore();
     }
 
-    // 2. trees - SHADOWS FIRST, the way the game draws them (2026-09-16). The game offsets a
-    // tree's shadow by 0.92 yd per yard of HEIGHT, so a 47 yd tree throws its shade 43 yd across
-    // the hole; the editor drew crowns only, and Matt's hole 7 looked nothing like the game's.
-    if (L.trees) {
-      const handCount = (built.trees || []).length;
-      const types = built.treeTypes || [];
-      const list = treesOf(built);
-      ctx.save();
-      ctx.globalAlpha = SHADOW_ALPHA;
-      ctx.fillStyle = '#000';
-      for (let i = 0; i < list.length; i++) {
-        const t = list[i];
-        const type = types[t.type] || {};
-        const shape = type.shape || (type.name === 'saguaro' ? 'cactus' : 'canopy');
-        if (shape === 'log') continue;   // a log throws no shadow (render.js, section 3)
-        if (i >= handCount && L.belts === false) continue;
-        const rr = (shape === 'cactus' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * (t.s || 1) * cam.ppy;
-        const th = t.h != null ? t.h : (type.height || 15);
-        ctx.beginPath();
-        ctx.ellipse(sx(t.x) - th * SHADOW_LEN * cam.ppy, sy(t.y) + th * SHADOW_DROP * cam.ppy, rr * SHADOW_RX, rr * SHADOW_RY, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-      // The editor draws a SIMPLIFIED silhouette (treeShapes' circle union, no clumps/accents -
-      // those are buildMap's three-pass wood painter, section 3) rather than the full painted
-      // wood: this loop needs to dim belt-origin trees per-tree (which a baked raster cannot do)
-      // and stay legible at the editor's much wider zoom range, not to reproduce every brushstroke.
-      for (let i = 0; i < list.length; i++) {
-        const t = list[i];
-        const type = types[t.type] || {};
-        const shape = type.shape || (type.name === 'saguaro' ? 'cactus' : 'canopy');
-        const cactus = shape === 'cactus';
-        const isBelt = i >= handCount;
-        const [fill, rim] = TREE_FILL[type.name] || ['#3f6b34', '#26431f'];
-        const r = (cactus ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * (t.s || 1) * cam.ppy;
-        const px = sx(t.x); const py = sy(t.y);
-        ctx.globalAlpha = (isBelt && L.belts === false) ? 0 : (isBelt ? 0.6 : 1);
-        if (ctx.globalAlpha > 0) {
-          ctx.fillStyle = fill;
-          for (const [cx, cy, cr] of treeShapes(px, py, Math.max(1, r), shape)) {
-            ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill();
-          }
-          if (!cactus) {
-            ctx.fillStyle = shade(rim, 0.6);
-            ctx.beginPath(); ctx.arc(px, py, Math.max(0.8, (type.trunk || 0.8) * cam.ppy), 0, Math.PI * 2); ctx.fill();
-          }
-        }
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // 3. slope chevrons on the green
+    // 3. slope chevrons on the green - drawn IN the ground plane, so they lie on the grass.
     if (L.slope && built.green && built.green.slope && built.green.slope.cells) {
-      const pal = paletteFor(THEME);
       const sl = built.green.slope;
       const gb = greenBox(built);
       const cellYd = Math.min((gb.maxX - gb.minX) / sl.cols, (gb.maxY - gb.minY) / sl.rows);
-      const cellPx = cellYd * cam.ppy;
-      // THE EDITOR ALWAYS DRAWS THE READ. The game hides chevrons under SLOPE_MIN_PX because a
-      // 3 px smudge on a phone tells the player nothing; here, at the fit zoom, that gate hid
-      // every arrow (measured 2.2 px on Red Mesa 1), which is why Matt could not see the Slope
-      // tool doing anything. A floor of 7 px keeps them legible at any zoom.
-      const size = Math.max(7, cellPx * SLOPE_GLYPH_FRAC);
-      {
-        ctx.save();
-        ctx.beginPath();
-        const poly = built.green.poly;
-        ctx.moveTo(sx(poly[0][0]), sy(poly[0][1]));
-        for (let i = 1; i < poly.length; i++) ctx.lineTo(sx(poly[i][0]), sy(poly[i][1]));
-        ctx.closePath();
-        ctx.clip();
-        ctx.strokeStyle = shade(pal.green, SLOPE_TINT);
-        ctx.lineWidth = Math.max(1.5, size * 0.28);
-        ctx.lineCap = 'butt';
-        ctx.lineJoin = 'miter';
-        const cw = (gb.maxX - gb.minX) / sl.cols;
-        const chh = (gb.maxY - gb.minY) / sl.rows;
-        for (let r = 0; r < sl.rows; r++) {
-          for (let c = 0; c < sl.cols; c++) {
-            const g = sl.cells[r * sl.cols + c] || [0, 0];
-            const mag = Math.hypot(g[0], g[1]);
-            if (mag < SLOPE_FLAT) continue;
-            const a = slopeGlyphAngle(g);
-            // Steeper is denser: the game's own rule (render.js slopeChevronGrid), 1x1 to 3x3.
-            const n = slopeChevronGrid(mag);
-            const arm = (size * (n === 1 ? 1 : 0.8)) / 2;
-            for (let j = 0; j < n; j++) {
-              for (let i = 0; i < n; i++) {
-                const px = sx(gb.minX + (c + (i + 0.5) / n) * cw);
-                const py = sy(gb.minY + (r + (j + 0.5) / n) * chh);
-                const tipX = px + Math.cos(a) * arm * 0.55;
-                const tipY = py + Math.sin(a) * arm * 0.55;
-                ctx.beginPath();
-                for (const d of [2.356, -2.356]) {
-                  ctx.moveTo(tipX, tipY);
-                  ctx.lineTo(tipX + Math.cos(a + d) * arm, tipY + Math.sin(a + d) * arm);
-                }
-                ctx.stroke();
+      // THE EDITOR ALWAYS DRAWS THE READ (floor of 7 px; the game's SLOPE_MIN_PX gate hid every
+      // arrow at the fit zoom). Sizes below are converted to yards for the ground plane.
+      const size = Math.max(7, cellYd * k * SLOPE_GLYPH_FRAC) / k;
+      ground();
+      ctx.save();
+      const poly = built.green.poly;
+      ctx.beginPath();
+      ctx.moveTo(poly[0][0], poly[0][1]);
+      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+      ctx.closePath();
+      ctx.clip();
+      ctx.strokeStyle = shade(pal.green, SLOPE_TINT);
+      ctx.lineWidth = Math.max(1.5 / k, size * 0.28);
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'miter';
+      const cw = (gb.maxX - gb.minX) / sl.cols;
+      const chh = (gb.maxY - gb.minY) / sl.rows;
+      for (let r = 0; r < sl.rows; r++) {
+        for (let c = 0; c < sl.cols; c++) {
+          const g = sl.cells[r * sl.cols + c] || [0, 0];
+          const mag = Math.hypot(g[0], g[1]);
+          if (mag < SLOPE_FLAT) continue;
+          const a = -slopeGlyphAngle(g);   // the game's angle is screen-space (y down); this is world
+          const n = slopeChevronGrid(mag);
+          const arm = (size * (n === 1 ? 1 : 0.8)) / 2;
+          for (let j = 0; j < n; j++) {
+            for (let i = 0; i < n; i++) {
+              const px = gb.minX + (c + (i + 0.5) / n) * cw;
+              const py = gb.minY + (r + (j + 0.5) / n) * chh;
+              const tipX = px + Math.cos(a) * arm * 0.55;
+              const tipY = py + Math.sin(a) * arm * 0.55;
+              ctx.beginPath();
+              for (const d of [2.356, -2.356]) {
+                ctx.moveTo(tipX, tipY);
+                ctx.lineTo(tipX + Math.cos(a + d) * arm, tipY + Math.sin(a + d) * arm);
               }
+              ctx.stroke();
             }
           }
         }
-        ctx.restore();
       }
+      ctx.restore();
+      screen();
     }
 
-    // 3b. Slope tool in Paint mode: the 8x8 cell grid over the green's box, so a press lands in a
-    // cell you can see.
+    // 3b. Slope tool in Paint mode: the cell grid over the green's box.
     if (this.tool === 'slope' && this.spec && this.spec.slope && this.spec.slope.cells && built.green) {
       const gb = greenBox(built);
       const sl = this.spec.slope;
       ctx.save();
-      ctx.strokeStyle = 'rgba(255,206,58,.45)';
+      ctx.strokeStyle = 'rgba(255,206,58,.6)';
       ctx.lineWidth = 1;
-      for (let i = 0; i <= sl.cols; i++) { const x = sx(gb.minX + ((gb.maxX - gb.minX) * i) / sl.cols); ctx.beginPath(); ctx.moveTo(x, sy(gb.minY)); ctx.lineTo(x, sy(gb.maxY)); ctx.stroke(); }
-      for (let j = 0; j <= sl.rows; j++) { const y = sy(gb.minY + ((gb.maxY - gb.minY) * j) / sl.rows); ctx.beginPath(); ctx.moveTo(sx(gb.minX), y); ctx.lineTo(sx(gb.maxX), y); ctx.stroke(); }
+      for (let i = 0; i <= sl.cols; i++) { const x = gb.minX + ((gb.maxX - gb.minX) * i) / sl.cols; trace([[x, gb.minY], [x, gb.maxY]], false); ctx.stroke(); }
+      for (let j = 0; j <= sl.rows; j++) { const y = gb.minY + ((gb.maxY - gb.minY) * j) / sl.rows; trace([[gb.minX, y], [gb.maxX, y]], false); ctx.stroke(); }
       ctx.restore();
     }
 
     // 4. route, dashed
     if (L.route && built.route) {
       ctx.save();
-      ctx.strokeStyle = 'rgba(255,255,255,.4)';
+      ctx.strokeStyle = 'rgba(255,255,255,.55)';
       ctx.setLineDash([3, 3]);
       ctx.lineWidth = 1;
-      ctx.beginPath();
-      built.route.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+      trace(built.route, false);
       ctx.stroke();
       ctx.restore();
     }
 
-    // 5. centreline + waypoints + tee/pin
+    // 5. centreline + waypoints
     if (L.centreline) {
       const path = (this.spec && this.spec.path) || [built.tee, built.pin];
       ctx.save();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      path.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+      trace(path, false);
       ctx.stroke();
       ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(74,64,99,.6)';
+      ctx.lineWidth = 1;
       for (let i = 1; i < path.length - 1; i++) {
-        const px = sx(path[i][0]); const py = sy(path[i][1]);
-        ctx.fillRect(px - 5, py - 5, 10, 10);
+        const [px, py] = P(path[i][0], path[i][1]);
+        ctx.fillRect(px - 5, py - 5, 10, 10); ctx.strokeRect(px - 5, py - 5, 10, 10);
       }
       ctx.restore();
     }
 
-    // tee (triangle, never draggable) and pin (circle)
+    // 2. STANDING THINGS: ground shadows first (one pass, one alpha, as the game composites them),
+    // then every tree/rock/pole upright, back to front.
+    if (L.trees) {
+      const handCount = (built.trees || []).length;
+      const types = built.treeTypes || [];
+      const list = treesOf(built);
+      const shapeOf = (type) => type.shape || (type.name === 'saguaro' ? 'cactus' : 'canopy');
+      ground();
+      ctx.save();
+      ctx.globalAlpha = SHADOW_ALPHA;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i];
+        const type = types[t.type] || {};
+        const shape = shapeOf(type);
+        if (shape === 'log' || shape === 'pole') continue;
+        if (i >= handCount && L.belts === false) continue;
+        const rr = (shape === 'cactus' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * (t.s || 1);
+        const th = Math.min(t.h != null ? t.h : (type.height || 15), shape === 'rock' || shape === 'rocks' ? rr : 60);
+        const cx = t.x - th * SHADOW_LEN * SHADOW_SHARE; const cy = t.y - th * SHADOW_DROP * SHADOW_SHARE;
+        ctx.moveTo(cx + rr * SHADOW_RX, cy);
+        ctx.ellipse(cx, cy, rr * SHADOW_RX, rr * SHADOW_RY, 0, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      ctx.restore();
+      screen();
+
+      // pole heights come from the line they carry (a pole's catalogue height is a clearance)
+      const poleH = new Map();
+      for (const ln of built.lines || []) for (const p of ln.pts || []) poleH.set(p[0] + ',' + p[1], ln.lo != null ? ln.lo + 1 : (ln.h || 10));
+      const order = [];
+      for (let i = 0; i < list.length; i++) {
+        if (i >= handCount && L.belts === false) continue;
+        const t = list[i];
+        order.push({ i, t, p: P(t.x, t.y) });
+      }
+      order.sort((a2, b2) => a2.p[1] - b2.p[1]);
+      for (const { i, t, p } of order) {
+        const type = types[t.type] || {};
+        const shape = shapeOf(type);
+        const [fill] = TREE_FILL[type.name] || ['#3f6b34', '#26431f'];
+        const s = t.s || 1;
+        drawIsoTree(ctx, p[0], p[1], {
+          shape, k, fill, muted: i >= handCount,
+          R: (shape === 'cactus' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * s,
+          H: t.h != null ? t.h : (type.height || 15),
+          trunk: (type.trunk || 0.8) * s,
+          seed: ((Math.abs(t.x * 13.1 + t.y * 7.7) % 1) + 1) % 1,
+          poleH: poleH.get(t.x + ',' + t.y),
+        });
+      }
+      for (const ln of built.lines || []) {
+        if (ln.pts && ln.pts.length > 1) drawIsoWire(ctx, P, ln.pts, ln.lo != null ? ln.lo + 1 : (ln.h || 10), k);
+      }
+    }
+
+    // tee (a pair of markers) and pin (a flag standing in the cup)
     if (L.teePin) {
-      const teePx = sx(built.tee[0]); const teePy = sy(built.tee[1]);
+      const [tx, ty] = P(built.tee[0], built.tee[1]);
       ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(74,64,99,.7)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(teePx, teePy - 7);
-      ctx.lineTo(teePx - 6, teePy + 5);
-      ctx.lineTo(teePx + 6, teePy + 5);
+      ctx.moveTo(tx, ty - 7);
+      ctx.lineTo(tx - 6, ty + 5);
+      ctx.lineTo(tx + 6, ty + 5);
       ctx.closePath();
-      ctx.fill();
+      ctx.fill(); ctx.stroke();
 
-      const pinPx = sx(built.pin[0]); const pinPy = sy(built.pin[1]);
-      ctx.beginPath();
-      ctx.arc(pinPx, pinPy, 6, 0, Math.PI * 2);
-      ctx.fill();
+      const [px, py] = P(built.pin[0], built.pin[1]);
+      const fh = Math.max(22, 7 * k * ISO_Z);
+      ctx.fillStyle = 'rgba(30,30,30,.55)';
+      ctx.beginPath(); ctx.ellipse(px, py, 4, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fffaf3'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - fh); ctx.stroke();
+      ctx.fillStyle = '#ff6b6b';
+      ctx.beginPath(); ctx.moveTo(px + 1, py - fh); ctx.lineTo(px + 13, py - fh + 4); ctx.lineTo(px + 1, py - fh + 9); ctx.closePath(); ctx.fill();
 
-      ctx.fillStyle = 'rgba(255,255,255,.7)';
-      ctx.font = '11px sans-serif';
+      ctx.fillStyle = '#4a4063';
+      ctx.font = 'bold 11px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('tee', teePx, teePy + 20);
-      ctx.fillText('pin', pinPx, pinPy - 12);
+      ctx.fillText('tee', tx, ty + 18);
+      ctx.fillText('pin', px, py - fh - 6);
     }
 
     // 6. object outlines - each placed thing's OWN generated polygon (section 5.3), stroked white,
@@ -1393,95 +1444,74 @@ export class EditorCanvas {
       for (const o of objects) {
         const selected = this.selection && this.selection.group === o.group && this.selection.index === o.index;
         ctx.lineWidth = selected ? 2 : 1;
-        ctx.strokeStyle = selected ? '#ffce3a' : 'rgba(255,255,255,.7)';
+        ctx.strokeStyle = selected ? '#ffce3a' : 'rgba(255,255,255,.75)';
         if (o.poly) {
-          ctx.beginPath();
-          o.poly.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
-          ctx.closePath();
+          trace(o.poly);
           ctx.stroke();
         } else if (o.group === 'sentinels') {
-          ctx.beginPath();
-          ctx.arc(sx(o.center[0]), sy(o.center[1]), Math.max(3, o.radius * cam.ppy), 0, Math.PI * 2);
+          ringAt(o.center[0], o.center[1], o.radius, 3);
           ctx.stroke();
         } else if (o.group === 'trees') {
-          // A single tree's own draw circle (layer 2) IS its outline; only ring it when selected.
-          if (selected) {
-            ctx.beginPath();
-            ctx.arc(sx(o.center[0]), sy(o.center[1]), Math.max(4, (o.radius || 4) * cam.ppy + 3), 0, Math.PI * 2);
-            ctx.stroke();
-          }
+          // A single tree stands on its own; only ring its base when selected.
+          if (selected) { ringAt(o.center[0], o.center[1], (o.radius || 4) + 2, 6); ctx.stroke(); }
         } else if (o.group === 'decor') {
-          // A sprite is baked into the blitted map image already (buildMap draws it, section 4),
-          // so the editor draws nothing for it unselected - only a ring, the same rule trees use.
-          if (selected) {
-            ctx.beginPath();
-            ctx.arc(sx(o.center[0]), sy(o.center[1]), Math.max(6, (o.radius || 2) * cam.ppy + 5), 0, Math.PI * 2);
-            ctx.stroke();
-          }
+          if (selected) { ringAt(o.center[0], o.center[1], (o.radius || 2) + 3, 8); ctx.stroke(); }
         } else if (o.group === 'pins') {
           // A pin: a small flag with its number. Several pins = the game picks one per visit.
-          const px = sx(o.center[0]); const py = sy(o.center[1]);
+          const [px, py] = P(o.center[0], o.center[1]);
           ctx.save();
           ctx.fillStyle = selected ? '#ffce3a' : '#ffffff';
           ctx.strokeStyle = '#1e1e1e';
           ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.beginPath(); ctx.ellipse(px, py, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
           ctx.fillRect(px - 1, py - 18, 2, 18);
           ctx.fillStyle = '#e01b1b';
           ctx.beginPath(); ctx.moveTo(px + 1, py - 18); ctx.lineTo(px + 11, py - 14); ctx.lineTo(px + 1, py - 10); ctx.closePath(); ctx.fill();
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = '#4a4063';
           ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(String(o.index + 1), px, py - 21);
           ctx.restore();
         } else if (o.group === 'lines') {
-          // A power line: the polyline itself, plus a point handle at every pole when selected -
-          // there is no closed outline to stroke, and the wire's own strokes are already baked
-          // into the map raster (render.js's `drawWire`), so this is a SELECTION AID, not the art.
-          ctx.beginPath();
-          o.pts.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+          // A power line: the polyline on the ground, plus a point handle at every pole when selected.
+          trace(o.pts, false);
           ctx.stroke();
           if (selected) {
             ctx.fillStyle = '#ffce3a';
             ctx.strokeStyle = '#1e1e1e';
             ctx.lineWidth = 1;
-            for (const p of o.pts) {
-              const px = sx(p[0]); const py = sy(p[1]);
-              ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            }
+            for (const p of o.pts) { const [px, py] = P(p[0], p[1]); ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
           }
         } else if (o.group === 'cross') {
-          // No exact wavy-band outline (built by holegen's own wave maths, not blob()) - a straight
-          // band across the corridor at this yardage is enough to see and grab it.
+          // A straight band across the corridor at this yardage (the real wavy shape is painted below).
           const st = o.station;
           const half = Math.max(30, (built.bounds.maxX - built.bounds.minX) / 2);
           const depth = (this.spec.cross[o.index].depth == null ? 22 : this.spec.cross[o.index].depth) / 2;
-          const p1 = [st.x - st.nx * half - st.tx * depth, st.y - st.ny * half - st.ty * depth];
-          const p2 = [st.x + st.nx * half - st.tx * depth, st.y + st.ny * half - st.ty * depth];
-          const p3 = [st.x + st.nx * half + st.tx * depth, st.y + st.ny * half + st.ty * depth];
-          const p4 = [st.x - st.nx * half + st.tx * depth, st.y - st.ny * half + st.ty * depth];
-          ctx.beginPath();
-          [p1, p2, p3, p4].forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
-          ctx.closePath();
+          trace([
+            [st.x - st.nx * half - st.tx * depth, st.y - st.ny * half - st.ty * depth],
+            [st.x + st.nx * half - st.tx * depth, st.y + st.ny * half - st.ty * depth],
+            [st.x + st.nx * half + st.tx * depth, st.y + st.ny * half + st.ty * depth],
+            [st.x - st.nx * half + st.tx * depth, st.y - st.ny * half + st.ty * depth],
+          ]);
           ctx.stroke();
         }
         if (selected && o.group !== 'lines') {
+          const [cx, cy] = P(o.center[0], o.center[1]);
           ctx.fillStyle = '#ffce3a';
-          ctx.beginPath();
-          ctx.arc(sx(o.center[0]), sy(o.center[1]), 4, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
           // The resize box and its eight white handles (Select tool, bunkers and lakes).
           if (this.tool === 'select' && o.poly && (o.group === 'bunkers' || o.group === 'water')) {
             const bb = bboxHandles(o.poly);
             ctx.save();
-            ctx.strokeStyle = 'rgba(255,255,255,.85)';
+            ctx.strokeStyle = 'rgba(255,255,255,.9)';
             ctx.setLineDash([4, 3]);
             ctx.lineWidth = 1;
-            ctx.strokeRect(sx(bb.minX), sy(bb.maxY), (bb.maxX - bb.minX) * cam.ppy, (bb.maxY - bb.minY) * cam.ppy);
+            trace([[bb.minX, bb.minY], [bb.maxX, bb.minY], [bb.maxX, bb.maxY], [bb.minX, bb.maxY]]);
+            ctx.stroke();
             ctx.setLineDash([]);
             ctx.fillStyle = '#ffffff';
             ctx.strokeStyle = '#1e1e1e';
-            for (const h of bb.handles) { const px = sx(h.x); const py = sy(h.y); ctx.fillRect(px - 5, py - 5, 10, 10); ctx.strokeRect(px - 5, py - 5, 10, 10); }
+            for (const h of bb.handles) { const [px, py] = P(h.x, h.y); ctx.fillRect(px - 5, py - 5, 10, 10); ctx.strokeRect(px - 5, py - 5, 10, 10); }
             ctx.restore();
           }
         }
@@ -1492,15 +1522,13 @@ export class EditorCanvas {
     if (this.selection && this.selection.group === 'guard' && this.selection.poly) {
       ctx.save();
       ctx.strokeStyle = '#ffce3a'; ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
-      ctx.beginPath();
-      this.selection.poly.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
-      ctx.closePath(); ctx.stroke();
+      trace(this.selection.poly);
+      ctx.stroke();
       ctx.restore();
     }
 
     // 6b. a shape being drawn: the corners so far, the outline, and the rubber band to the cursor.
-    // A power line (`group: 'lines'`) is drawn the same way but is never closed - it is a span of
-    // poles, not a polygon - so it gets no dashed closing segment and its own hint text.
+    // A power line (`group: 'lines'`) is never closed - it is a span of poles, not a polygon.
     if (this.drawing) {
       const isLine = this.drawing.group === 'lines';
       const pts = this.drawing.points;
@@ -1508,15 +1536,13 @@ export class EditorCanvas {
       ctx.strokeStyle = '#ffce3a';
       ctx.fillStyle = '#ffce3a';
       ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      pts.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
-      if (this.hover && pts.length) ctx.lineTo(sx(this.hover.x), sy(this.hover.y));
+      trace(this.hover && pts.length ? [...pts, [this.hover.x, this.hover.y]] : pts, false);
       ctx.stroke();
-      if (!isLine && pts.length > 2) { ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(sx(pts[pts.length - 1][0]), sy(pts[pts.length - 1][1])); ctx.lineTo(sx(pts[0][0]), sy(pts[0][1])); ctx.stroke(); ctx.setLineDash([]); }
-      for (const p of pts) { ctx.beginPath(); ctx.arc(sx(p[0]), sy(p[1]), 3.5, 0, Math.PI * 2); ctx.fill(); }
-      ctx.font = '13px sans-serif';
+      if (!isLine && pts.length > 2) { ctx.setLineDash([3, 3]); trace([pts[pts.length - 1], pts[0]], false); ctx.stroke(); ctx.setLineDash([]); }
+      for (const p of pts) { const [px, py] = P(p[0], p[1]); ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill(); }
+      ctx.font = 'bold 13px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = '#4a4063';
       // A finger has the drawing bar (Finish shows the count) and no Enter / Esc / double-click.
       if (!this.touchMode) ctx.fillText(isLine
         ? `${pts.length} pole${pts.length === 1 ? '' : 's'} - Enter or double-click to finish, Esc to cancel`
@@ -1526,12 +1552,13 @@ export class EditorCanvas {
 
     // 7. width handles (Width tool only) - section 6.3.
     if (this.tool === 'width' && this.spec) {
-      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(74,64,99,.7)';
+      ctx.lineWidth = 1;
       for (const h of this._widthHandles()) {
         const selected = this.selection && this.selection.group === 'widthHandle' && this.selection.key === h.key && this.selection.index === h.index && this.selection.side === h.side;
         ctx.fillStyle = selected ? '#ffce3a' : '#ffffff';
-        const px = sx(h.point[0]); const py = sy(h.point[1]);
-        ctx.fillRect(px - 5, py - 5, 10, 10);
+        const [px, py] = P(h.point[0], h.point[1]);
+        ctx.fillRect(px - 5, py - 5, 10, 10); ctx.strokeRect(px - 5, py - 5, 10, 10);
       }
     }
 
@@ -1541,14 +1568,15 @@ export class EditorCanvas {
       ctx.strokeStyle = '#ffce3a';
       ctx.fillStyle = '#ffce3a';
       ctx.lineWidth = 1.5;
-      for (const p of this.ruler) { ctx.beginPath(); ctx.arc(sx(p[0]), sy(p[1]), 3, 0, Math.PI * 2); ctx.fill(); }
+      for (const p of this.ruler) { const [px, py] = P(p[0], p[1]); ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill(); }
       if (this.ruler.length === 2) {
         const [a, b2] = this.ruler;
-        ctx.beginPath(); ctx.moveTo(sx(a[0]), sy(a[1])); ctx.lineTo(sx(b2[0]), sy(b2[1])); ctx.stroke();
-        const mx = (sx(a[0]) + sx(b2[0])) / 2; const my = (sy(a[1]) + sy(b2[1])) / 2;
-        ctx.font = '12px sans-serif';
+        trace([a, b2], false); ctx.stroke();
+        const pa = P(a[0], a[1]); const pb = P(b2[0], b2[1]);
+        ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(`${distYd(a, b2).toFixed(1)} yd`, mx, my - 8);
+        ctx.fillStyle = '#4a4063';
+        ctx.fillText(`${distYd(a, b2).toFixed(1)} yd`, (pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2 - 8);
       }
       ctx.restore();
     }
@@ -1557,16 +1585,12 @@ export class EditorCanvas {
       ctx.strokeStyle = '#ff4433';
       ctx.lineWidth = 2.5;
       for (const p of this.validateRing) {
-        ctx.beginPath();
-        ctx.arc(sx(p[0]), sy(p[1]), 14, 0, Math.PI * 2);
-        ctx.stroke();
+        const [px, py] = P(p[0], p[1]);
+        ctx.beginPath(); ctx.ellipse(px, py, 16, 9, 0, 0, Math.PI * 2); ctx.stroke();
       }
-      // A "crosses itself" report cites two edges - draw the offending segment between them too.
       if (this.validateRing.length === 2) {
         ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(sx(this.validateRing[0][0]), sy(this.validateRing[0][1]));
-        ctx.lineTo(sx(this.validateRing[1][0]), sy(this.validateRing[1][1]));
+        trace(this.validateRing, false);
         ctx.stroke();
       }
       ctx.restore();

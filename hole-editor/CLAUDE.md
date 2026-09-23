@@ -929,3 +929,46 @@ pattern as "It's laggy").
 - **The hidden holes bar is not painted on a phone** (`refreshStrip()` only refreshes the hole
   picker; it paints the bar when the screen widens). It cost a map build per edit.
 - What is left per edit is the edit's own rebuild (makeHole + buildMap), about 85 ms unthrottled.
+
+## The isometric look, stage 1: the view (2026-09-23)
+
+Matt, pointing at a pastel isometric city-builder toy (Pocket Metropolis, "025-isometric-city.html"):
+*"This is exactly how our golf hole creator should look and work like."* He chose **new look, same
+hole format**: every hole is still a centreline with widths built by the game's own makeHole /
+buildMap (R5); only the camera and the paint changed. Three stages, each shipped live: (1) the
+view, (2) the chrome (bottom toolbar of picture tools, cream cards), (3) the motion (pop-ins, dust,
+a ghost preview under the cursor).
+
+Stage 1, `js/iso.js` plus `canvas.js`:
+- **The projection is one formula, in `iso.js`**: `px = W/2 + (u+v)k`, `py = H/2 + (u-v)k/2 - z*k*Z`
+  (`u,v` = world minus camera centre, `k = cam.ppy`). Tee bottom-left, pin top-right, a 2:1 diamond.
+  The camera keeps its shape `{ppy, cx, cy}`, so the zoom slider, per-hole memory and tests read the
+  same numbers. `toWorld` is `isoUnproject` (the ground point under the cursor); **`toScreen(x, y, z)`
+  is new and is the ONE way anything else maps world to screen** - `main.js`'s `keepAboveSheet` and
+  both browser suites use it. Never re-derive the projection in a caller.
+- **The map is laid on the ground with one affine** (`isoGroundMatrix`, folded with the raster's own
+  scale and y-flip). Flat overlays that must lie on the grass (slope chevrons) draw inside that
+  matrix in world yards; everything else goes through `P()` and stays screen-crisp.
+- **Trees stand up.** `buildMap` is handed `bareHole(built)` - a prototype copy with no trees, belts
+  or wires (`_trees: []` is what `treesOf` returns first) - so the raster does not also paint them
+  flat. `bareMapFor` caches it per built hole beside `mapFor` (thumbnails, Compare and the terrain
+  pictures still use the full top-down map). `drawIsoTree` draws each shape upright, back to front;
+  wires hang between pole tops at the line's height (`lo + 1`).
+- **Shadows are 30% of the game's offset** (`SHADOW_SHARE`). The game throws them 0.92 yd per yard
+  of height because top-down that is the only way height shows; standing up, height shows itself
+  and a full-length shadow floats 16 yd from its trunk. The game is unchanged.
+- **Belt trees are no longer 60% transparent**; overlapping see-through crowns turned a wood to mud.
+  They are lifted slightly less toward the pastel green than a placed tree, which still stands out.
+- **Tree colours are lifted toward a soft leaf green and the ground gets a 16% cream wash** - the
+  game's deep map colours read almost black in a pastel scene. Hue order is unchanged, so every
+  surface still reads as itself.
+- **Slope Paint reads the drag's direction on the GROUND** (`isoScreenDelta`), not on screen; the UI
+  suite's probe now drags along the ground's +x.
+- **Hit tolerances are unchanged** (`_tolPx() / ppy` yards). On the diamond a yard is 0.7-1.4 ppy
+  on screen depending on direction; every probe in both suites still lands.
+- **Fit** (`isoFit`) frames the whole island: diamond, soil depth below, 22 yd of tree headroom above.
+  A long hole on a phone in portrait fits smaller than top-down did (the diagonal wastes width);
+  pinch to zoom.
+
+Tests: `test-hole-editor.mjs` 55/55, `test-hole-editor-ui.mjs` 108/108, `test-hole-editor-mobile.mjs`
+40/40. `hole-editor/` is outside the service worker, so no CACHE bump.
