@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v908';
+const CACHE = 'game-hub-v912';
 
 const ASSETS = [
   './',
@@ -873,16 +873,16 @@ const REST_MANIFEST = {
   './golf/': 'ca3b3b7acc',
   './golf/index.html': 'ca3b3b7acc',
   './golf/css/golf.css': '5daf144650',
-  './golf/js/ui.js': '6cec6f4881',
-  './golf/js/strings.js': '54bff39d35',
-  './golf/js/holes.js': '13b91eb70f',
-  './golf/js/obstacles.js': '521257b8dd',
+  './golf/js/ui.js': 'f80f7eeef2',
+  './golf/js/strings.js': 'be301aedfd',
+  './golf/js/holes.js': 'e4871d322a',
+  './golf/js/obstacles.js': '0a360e547b',
   './golf/js/club-art.js': 'b501cf9342',
   './golf/js/clubs.js': '8ed3f0cc3f',
   './golf/js/swing.js': '50dfc9ca97',
-  './golf/js/shot.js': '3f40cf2d06',
-  './golf/js/render.js': 'cf15f6289d',
-  './golf/js/holegen.js': '3e600de935',
+  './golf/js/shot.js': '084c415dbb',
+  './golf/js/render.js': '41b6dadf29',
+  './golf/js/holegen.js': 'eb3422d062',
   './golf/js/rounds.js': 'f9e4a66390',
   './golf/js/board.js': 'f6c1612123',
   './golf/js/save.js': '0126d36c18',
@@ -894,11 +894,11 @@ const REST_MANIFEST = {
   './golf/courses/tutorial.js': '5f72833828',
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
-  './baseball/css/baseball.css': '9b85898fdc',
-  './baseball/js/ui.js': '482b5b2f88',
+  './baseball/css/baseball.css': '88d63a86df',
+  './baseball/js/ui.js': 'ed29f89b54',
   './baseball/js/field.js': '549d87932f',
   './baseball/js/ring.js': '4786e4ea61',
-  './baseball/js/strings.js': 'cf10f6e515',
+  './baseball/js/strings.js': '4a542cafed',
   './baseball/js/rig.js': '15167015a3',
   './baseball/js/actors.js': '18eaa14aeb',
   './baseball/js/poses.js': 'a8cde6e9fb',
@@ -913,7 +913,7 @@ const REST_MANIFEST = {
   './baseball/models/skins/skaterFemaleA.png': 'de575f5075',
   './baseball/models/skins/cyborgFemaleA.png': '321b7ba2d8',
   './baseball/js/engine/rng.js': '8119f3c46a',
-  './baseball/js/engine/settings.js': 'db1b039a7b',
+  './baseball/js/engine/settings.js': '803516a817',
   './baseball/js/engine/pitch.js': '56c5aa0d80',
   './baseball/js/engine/swing.js': 'ad5bda9322',
   './baseball/js/engine/outcomes.js': '441c7c7345',

@@ -2070,3 +2070,15 @@ SHORT AND CONCISE AND SUCCINCT. fragments are ok and even preferred over full se
 5. **Probes.** `player-screen` and `player-budget` follow the new chips; `check-no-scroll`'s
    player screens stay in; a new assertion that the first-season block is present in career
    start mode and absent in Quick Play. Stills at 393x852 and 390x664, dark and light, both modes.
+
+### R18 record (shipped v901, 2026-09-22)
+
+Career is the landing tab. Three presets under a PRESET label (Balanced, Hitter 7/7/1 hitting,
+Pitcher 7/7/1 pitching), Custom a display-only chip that appears only while the build matches
+none. The skill rows grow with the screen height (52 px buttons, 18 px cells, 15 px labels on a
+tall phone; 44 / 12 / 13 on a short one) and sit as one cluster; the first attempt stretched the
+gaps instead of the rows and was redone. The first-season block, career start only, five fragment
+lines with every number from the settings. Ship review took over the last verification steps
+after the agent was cut off twice waiting on its own suite. Probes `player-screen`,
+`player-budget`, `first-season-block`; `check-no-scroll` 16 of 16; `baseball/js/test.js` 2988;
+device and visual suites run on the merged tree.

@@ -101,6 +101,13 @@ async function mountInHub(page) {
     }
     await hub.launch('baseball');
     if (!hub.current || hub.current.id !== 'baseball') return 'hub.launch("baseball") did not mount it';
+    // R18 (docs/BASEBALL-3D-BUILD.md section 9, item 1): Career is now the landing tab, but every
+    // probe in this file except the career-specific ones (which force their own tab right back to
+    // 'career' through the `__bbTest.newCareerNow` dev seam, or click the tab explicitly) wants
+    // Quick Play's own setup screen - the screen this function used to land on before this stage.
+    // Best-effort so a mount into a screen with no tab bar (there is none) is still a no-op.
+    const tabBtn = document.querySelector('[data-act="tab"][data-tab="quickPlay"]');
+    if (tabBtn) tabBtn.click();
     return null;
   });
 }
@@ -2692,6 +2699,154 @@ function bbProfileInit() {
     }
   }
   await ctxS.close();
+}
+
+// -------------------------------------------------------------------------------- player-screen
+// R18 (docs/BASEBALL-3D-BUILD.md section 9): the preset chip row follows the new three-preset
+// table - Balanced/Hitter/Pitcher always shown as real buttons, Custom a display-only chip that
+// appears only while the build matches none of them, and Career is now the landing tab so the
+// Quick Play chip is reached through the Quick Play tab first.
+{
+  const ctxP = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageP = await ctxP.newPage();
+  await pageP.addInitScript(bbProfileInit(), { name: 'Player Screen Test', code: 'BBPS1' });
+  const mountErrP = await mountInHub(pageP);
+  if (mountErrP) {
+    fail('player-screen', `mount failed: ${mountErrP}`);
+  } else {
+    await pageP.click('[data-act="tab"][data-tab="quickPlay"]');
+    await pageP.waitForSelector('[data-act="player"]', { timeout: 8000 });
+    await pageP.click('[data-act="player"]');
+    await pageP.waitForSelector('.bb-player-body', { timeout: 8000 });
+    await pageP.waitForTimeout(200);
+    const initial = await pageP.evaluate(() => [...document.querySelectorAll('.bb-preset-chip')]
+      .map((el) => ({ text: el.textContent.trim(), tag: el.tagName, pressed: el.getAttribute('aria-pressed') })));
+    const wantNames = ['Balanced', 'Hitter', 'Pitcher'];
+    const namesMatch = initial.length === 3 && initial.every((c, i) => c.tag === 'BUTTON' && c.text.replace('✓', '').trim() === wantNames[i]);
+    const balancedChecked = initial[0] && initial[0].pressed === 'true' && /✓/.test(initial[0].text);
+    if (!namesMatch) {
+      fail('player-screen', `initial chips are not exactly [Balanced, Hitter, Pitcher] as buttons: ${JSON.stringify(initial)}`);
+    } else if (!balancedChecked) {
+      fail('player-screen', `Balanced (the first preset) should start selected with a check mark: ${JSON.stringify(initial[0])}`);
+    } else {
+      // A hand-tuned build (minus one skill, plus another) should surface a fourth, non-tappable
+      // Custom chip - a <div>, never a <button> - and leave the three named ones unchecked.
+      await pageP.click('[data-act="minus"][data-skill="hitPow"]');
+      await pageP.click('[data-act="plus"][data-skill="hitAcc"]');
+      const custom = await pageP.evaluate(() => [...document.querySelectorAll('.bb-preset-chip')]
+        .map((el) => ({ text: el.textContent.trim(), tag: el.tagName, pressed: el.getAttribute('aria-pressed') })));
+      const customChip = custom[3];
+      if (custom.length !== 4) {
+        fail('player-screen', `expected a 4th Custom chip after a hand-tuned tap, got ${custom.length} chips: ${JSON.stringify(custom)}`);
+      } else if (!customChip || customChip.tag !== 'DIV' || customChip.pressed !== 'true' || !/Custom/.test(customChip.text)) {
+        fail('player-screen', `the 4th chip should be a display-only, checked Custom <div>: ${JSON.stringify(customChip)}`);
+      } else if (custom.slice(0, 3).some((c) => c.pressed === 'true')) {
+        fail('player-screen', `a named preset is still checked after a hand-tuned tap: ${JSON.stringify(custom)}`);
+      } else {
+        // Tapping a named preset again makes the Custom chip disappear.
+        await pageP.click('[data-act="preset"][data-preset="hitter"]');
+        const afterTap = await pageP.evaluate(() => [...document.querySelectorAll('.bb-preset-chip')].length);
+        if (afterTap !== 3) {
+          fail('player-screen', `Custom chip should disappear once a named preset is tapped again, still ${afterTap} chips`);
+        } else {
+          ok('player-screen: exactly [Balanced, Hitter, Pitcher] as tappable buttons, Balanced checked by default, a hand-tuned build shows a 4th display-only Custom <div>, tapping a named preset makes it disappear again');
+        }
+      }
+    }
+  }
+  await ctxP.close();
+}
+
+// -------------------------------------------------------------------------------- player-budget
+// R18: every preset still sums to the per-side budget exactly and never exceeds the cap, read off
+// the REAL skill numbers and points-left pills on screen (headless test.js already covers the
+// pure `scalePreset` maths - this covers the DOM the player actually sees).
+{
+  const ctxB = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageB = await ctxB.newPage();
+  await pageB.addInitScript(bbProfileInit(), { name: 'Player Budget Test', code: 'BBPB2' });
+  const mountErrB = await mountInHub(pageB);
+  if (mountErrB) {
+    fail('player-budget', `mount failed: ${mountErrB}`);
+  } else {
+    await pageB.click('[data-act="tab"][data-tab="quickPlay"]');
+    await pageB.waitForSelector('[data-act="player"]', { timeout: 8000 });
+    await pageB.click('[data-act="player"]');
+    await pageB.waitForSelector('.bb-player-body', { timeout: 8000 });
+    let worst = '';
+    let allOk = true;
+    for (const pid of ['balanced', 'hitter', 'pitcher']) {
+      await pageB.click(`[data-act="preset"][data-preset="${pid}"]`);
+      await pageB.waitForTimeout(80);
+      const res = await pageB.evaluate(() => {
+        const pills = [...document.querySelectorAll('.bb-points-pill')].map((p) => p.textContent.trim());
+        const nums = [...document.querySelectorAll('.bb-skill-num')].map((n) => Number(n.textContent.trim()));
+        return { pills, nums };
+      });
+      const bothZero = res.pills.length === 2 && res.pills.every((p) => /^0 left$/.test(p));
+      const anyOverTen = res.nums.some((n) => n > 10); // Little League cap
+      if (!bothZero || anyOverTen) {
+        allOk = false;
+        worst = `${pid}: pills=${JSON.stringify(res.pills)} skills=${JSON.stringify(res.nums)}`;
+      }
+    }
+    if (!allOk) fail('player-budget', `a preset did not spend its full budget or exceeded the cap at Little League (${worst})`);
+    else ok('player-budget: Balanced/Hitter/Pitcher each spend the full budget on both sides ("0 left") and stay within the Little League cap, read off the real skill numbers and pills');
+  }
+  await ctxB.close();
+}
+
+// --------------------------------------------------------------------------- first-season-block
+// R18 item 4/5: the first-season block is present in career-start mode only, and its numbers
+// match SEASON/POINTS.little/CAPS.little exactly - the exact shape doc section 9 specifies.
+{
+  const ctxF = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageF = await ctxF.newPage();
+  await pageF.addInitScript(bbProfileInit(), { name: 'First Season Test', code: 'BBFS3' });
+  const mountErrF = await mountInHub(pageF);
+  if (mountErrF) {
+    fail('first-season-block', `mount failed: ${mountErrF}`);
+  } else {
+    // Absent in Quick Play.
+    await pageF.click('[data-act="tab"][data-tab="quickPlay"]');
+    await pageF.waitForSelector('[data-act="player"]', { timeout: 8000 });
+    await pageF.click('[data-act="player"]');
+    await pageF.waitForSelector('.bb-player-body', { timeout: 8000 });
+    const quickPlayHasBlock = await pageF.evaluate(() => !!document.querySelector('.bb-first-season'));
+    await pageF.click('[data-act="done"]');
+    await pageF.waitForTimeout(150);
+    // Present, and exact, in career-start mode.
+    await pageF.click('[data-act="tab"][data-tab="career"]');
+    await pageF.waitForSelector('[data-act="start-career"]', { timeout: 8000 });
+    await pageF.click('[data-act="start-career"]');
+    await pageF.waitForSelector('.bb-player-body', { timeout: 8000 });
+    const res = await pageF.evaluate(() => {
+      const lines = [...document.querySelectorAll('.bb-first-season .bb-fs-title, .bb-first-season .bb-fs-line')].map((el) => el.textContent.trim());
+      return { present: !!document.querySelector('.bb-first-season'), lines };
+    });
+    if (quickPlayHasBlock) {
+      fail('first-season-block', 'the first-season block is shown in Quick Play mode; it should never appear there');
+    } else if (!res.present) {
+      fail('first-season-block', 'the first-season block is missing from career-start mode');
+    } else if (res.lines.length !== 5) {
+      fail('first-season-block', `expected 5 lines, got ${res.lines.length}: ${JSON.stringify(res.lines)}`);
+    } else {
+      const want = [
+        'First season · Little League',
+        '3 games · 4 teams · everyone makes the playoffs',
+        'Semifinal · Final',
+        'Win +6 · Loss +2 · Bronze +4 · Silver +8 · Gold +12',
+        'Points buy skills · max 10 each',
+      ];
+      const mismatch = want.findIndex((w, i) => w !== res.lines[i]);
+      if (mismatch !== -1) {
+        fail('first-season-block', `line ${mismatch} reads "${res.lines[mismatch]}", want "${want[mismatch]}"`);
+      } else {
+        ok(`first-season-block: absent in Quick Play, present in career-start mode, all 5 lines exact (${JSON.stringify(res.lines)})`);
+      }
+    }
+  }
+  await ctxF.close();
 }
 
 await browser.close();

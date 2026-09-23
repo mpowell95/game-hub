@@ -180,8 +180,30 @@ export function listObjects(spec, stations, length) {
     if (d.x == null || d.y == null) return;
     out.push({ group: 'decor', index, kind: d.kind || 'bench', center: [d.x, d.y], x: d.x, y: d.y, r: 2, radius: 2, rot: d.rot || 0 });
   });
+  // A power line (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 4). DELIBERATELY NO `poly`
+  // key - it is a polyline, not a closed shape, so it takes its own render/hit-test path below
+  // rather than the generic `o.poly` outline code. `drawn: true` is what lets the GENERIC
+  // select-and-drag code (the same branch a drawn bunker/lake uses) translate a whole line via
+  // `translateDrawn`, which model.js's engine half extends to move `pts` when there is no `poly`.
+  (spec.lines || []).forEach((ln, index) => {
+    if (!ln.pts || ln.pts.length < 2) return;
+    let cx = 0; let cy = 0;
+    for (const p of ln.pts) { cx += p[0]; cy += p[1]; }
+    out.push({ group: 'lines', index, kind: 'line', center: [cx / ln.pts.length, cy / ln.pts.length], pts: ln.pts, h: ln.h, drawn: true });
+  });
   return out;
 }
+
+/** Point-to-segment distance, world yards - the line span's own hit test (1.5 yd tolerance). */
+function distToSegment(px, py, a, b) {
+  const dx = b[0] - a[0]; const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / len2)) : 0;
+  const cx = a[0] + t * dx; const cy = a[1] + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
+
+const LINE_HIT_TOL_YD = 1.5;   // section 4's own figure
 
 /** Point-in-polygon (ray cast), used for hit-testing an object outline. */
 function pointInPoly(pt, poly) {
@@ -423,13 +445,36 @@ export class EditorCanvas {
       const handle = this._widthHandleAt(wx, wy, tolYd);
       if (handle) return handle;
     }
+    if (this.tool === 'select' || this.tool === 'line') {
+      // POINT HANDLES on the SELECTED line, checked before the span - a handle on the span wins
+      // over "select the line again" (same rule the resize handles use against a bunker's own
+      // outline, above in the pointerdown handler).
+      if (this.selection && this.selection.group === 'lines' && this.spec.lines) {
+        const ln = this.spec.lines[this.selection.index];
+        if (ln && ln.pts) {
+          for (let k = 0; k < ln.pts.length; k++) {
+            const p = ln.pts[k];
+            if (Math.hypot(p[0] - wx, p[1] - wy) <= tolYd) return { group: 'linePoint', index: this.selection.index, k };
+          }
+        }
+      }
+      for (let li = 0; li < (this.spec.lines || []).length; li++) {
+        const ln = this.spec.lines[li];
+        if (!ln.pts || ln.pts.length < 2) continue;
+        for (let k = 1; k < ln.pts.length; k++) {
+          // `drawn: true` matters here, not just for style: the generic pointerdown fallback below
+          // reads it to decide whether a Select-tool drag should translate the whole object.
+          if (distToSegment(wx, wy, ln.pts[k - 1], ln.pts[k]) <= LINE_HIT_TOL_YD) return { group: 'lines', index: li, drawn: true };
+        }
+      }
+    }
     if (this.tool === 'select' || this.tool === 'bunker' || this.tool === 'water' || this.tool === 'tree' || this.tool === 'cross' || this.tool === 'green' || this.tool === 'decor') {
       const objects = listObjects(this.spec, this.stations, this.length);
       // Pins first: they sit on the green and are tiny, so they must win over anything under them.
       for (const o of objects) if (o.group === 'pins' && Math.hypot(o.center[0] - wx, o.center[1] - wy) <= Math.max(tolYd, o.radius)) return o;
       if (this.tool === 'green') return null;
       for (const o of objects) {
-        if (o.group === 'pins') continue;
+        if (o.group === 'pins' || o.group === 'lines') continue;
         if (o.poly && pointInPoly([wx, wy], o.poly)) return o;
         if (!o.poly && Math.hypot(o.center[0] - wx, o.center[1] - wy) <= Math.max(tolYd, o.radius || 3)) return o;
       }
@@ -529,6 +574,9 @@ export class EditorCanvas {
         const last = this.drawing.points[this.drawing.points.length - 1];
         if (!last || Math.hypot(last[0] - w.x, last[1] - w.y) > 1) this.drawing.points.push([+w.x.toFixed(1), +w.y.toFixed(1)]);
         this.draw();
+        // The panel's corner count and "Delete last point" button read this (it said "0 corners"
+        // with three placed, and the button stayed disabled until something else re-rendered).
+        if (this.onDrawChange) this.onDrawChange(this.drawing);
         return;
       }
 
@@ -570,6 +618,18 @@ export class EditorCanvas {
         el.setPointerCapture(e.pointerId);
         return;
       }
+      // A power line's own point handle (checked before the generic "select and drag" fallback
+      // below, the same way a bunker's resize handle wins over its outline).
+      if (hit && hit.group === 'linePoint') {
+        this.setSelection({ group: 'lines', index: hit.index });
+        objDrag = { kind: 'linePoint', index: hit.index, k: hit.k };
+        this.ops.liveBegin();
+        el.setPointerCapture(e.pointerId);
+        return;
+      }
+      // A whole line (span, not a point handle) needs no special case here: `listObjects` marks
+      // it `drawn: true`, and the generic `if (hit) {...}` fallback below already drags anything
+      // `drawn` through `translateDrawn` - the same path a drawn bunker/lake outline uses.
       // Green tool with "Add pin" armed: the next click inside the green places a pin.
       if (this.tool === 'green' && this.placingPin && this.built) {
         const gb = greenBox(this.built);
@@ -694,6 +754,9 @@ export class EditorCanvas {
             return this.ops.mutators.scaleObject(spec, objDrag.group, objDrag.index, fx, fy);
           });
         } else if (objDrag.kind === 'object' && objDrag.drawn) {
+          // A whole power line (`objDrag.group === 'lines'`) drags here too - `listObjects` marks
+          // it `drawn: true` for exactly this, and model.js's `translateDrawn` moves `pts` when an
+          // object has no `poly` (docs/HANDOFF-GOLF-POWER-LINES.md section 3).
           const dx = w.x - objDrag.lastX; const dy = w.y - objDrag.lastY;
           objDrag.lastX = w.x; objDrag.lastY = w.y;
           this.ops.liveUpdate((spec) => this.ops.mutators.translateDrawn(spec, objDrag.group, objDrag.index, dx, dy));
@@ -709,6 +772,19 @@ export class EditorCanvas {
             }
             try { return this.ops.mutators.moveObject(spec, 'decor', objDrag.index, { x: wx, y: wy }); }
             catch (e) { console.warn('[decor] moveObject has no decor case yet', e); return spec; }
+          });
+        } else if (objDrag.kind === 'linePoint') {
+          // A single pole moved (the drag handle checked in hitTest above). `moveLinePoint` is
+          // Opus's mutator; it may not exist yet in a parallel build, same fail-soft pattern the
+          // decor drag above uses, so this warns rather than throwing when it is missing.
+          const wx = +w.x.toFixed(1); const wy = +w.y.toFixed(1);
+          this.ops.liveUpdate((spec) => {
+            if (typeof this.ops.mutators.moveLinePoint !== 'function') {
+              console.warn('[lines] moveLinePoint mutator not available yet');
+              return spec;
+            }
+            try { return this.ops.mutators.moveLinePoint(spec, objDrag.index, objDrag.k, wx, wy); }
+            catch (e) { console.warn('[lines] moveLinePoint failed', e); return spec; }
           });
         } else if (objDrag.kind === 'object') {
           const placement = nearestPlacement(this.stations, this.length, w.x, w.y);
@@ -812,7 +888,10 @@ export class EditorCanvas {
   finishDraw() {
     const d = this.drawing;
     if (!d) return;
-    if (d.points.length < 3) { this.cancelDraw(); return; }
+    // A power line is 2+ points, not a closed shape - every other group here needs at least a
+    // triangle to be a polygon at all.
+    const minPts = d.group === 'lines' ? 2 : 3;
+    if (d.points.length < minPts) { this.cancelDraw(); return; }
     const { group, kind, replaceIndex, points } = d;
     this.drawing = null;
     this.el.style.cursor = '';
@@ -832,12 +911,16 @@ export class EditorCanvas {
       });
       this.setSelection({ group, index: replaceIndex });
     } else {
+      // A power line (`group: 'lines'`, docs/HANDOFF-GOLF-POWER-LINES.md section 4) goes through
+      // this SAME call: model.js's `addDrawnShape` routes `group === 'lines'` straight to
+      // `addLine` (unsmoothed - a pole's position is exactly where it was clicked, never a
+      // Chaikin-rounded approximation of it) rather than treating it as a closed polygon.
       this.ops.instant((spec) => {
         let s2 = this.ops.mutators.addDrawnShape(spec, group, points, kind);
         if (group === 'water' && kind === 'swamp') s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind: 'swamp' });
         return s2;
       });
-      this.setSelection({ group, index: this.spec[group].length - 1 });
+      this.setSelection({ group, index: (this.spec[group] || []).length - 1 });
     }
     if (this.onDrawChange) this.onDrawChange(null);
   }
@@ -901,6 +984,10 @@ export class EditorCanvas {
       if (sel.group === 'decor') {
         console.warn('[decor] deleteObject has no decor case yet; removing locally', e);
         return { ...spec, decor: (spec.decor || []).filter((_, i) => i !== sel.index) };
+      }
+      if (sel.group === 'lines') {
+        console.warn('[lines] deleteObject has no lines case yet; removing locally', e);
+        return { ...spec, lines: (spec.lines || []).filter((_, i) => i !== sel.index) };
       }
       throw e;
     }
@@ -1195,6 +1282,22 @@ export class EditorCanvas {
           ctx.textAlign = 'center';
           ctx.fillText(String(o.index + 1), px, py - 21);
           ctx.restore();
+        } else if (o.group === 'lines') {
+          // A power line: the polyline itself, plus a point handle at every pole when selected -
+          // there is no closed outline to stroke, and the wire's own strokes are already baked
+          // into the map raster (render.js's `drawWire`), so this is a SELECTION AID, not the art.
+          ctx.beginPath();
+          o.pts.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+          ctx.stroke();
+          if (selected) {
+            ctx.fillStyle = '#ffce3a';
+            ctx.strokeStyle = '#1e1e1e';
+            ctx.lineWidth = 1;
+            for (const p of o.pts) {
+              const px = sx(p[0]); const py = sy(p[1]);
+              ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            }
+          }
         } else if (o.group === 'cross') {
           // No exact wavy-band outline (built by holegen's own wave maths, not blob()) - a straight
           // band across the corridor at this yardage is enough to see and grab it.
@@ -1210,7 +1313,7 @@ export class EditorCanvas {
           ctx.closePath();
           ctx.stroke();
         }
-        if (selected) {
+        if (selected && o.group !== 'lines') {
           ctx.fillStyle = '#ffce3a';
           ctx.beginPath();
           ctx.arc(sx(o.center[0]), sy(o.center[1]), 4, 0, Math.PI * 2);
@@ -1244,7 +1347,10 @@ export class EditorCanvas {
     }
 
     // 6b. a shape being drawn: the corners so far, the outline, and the rubber band to the cursor.
+    // A power line (`group: 'lines'`) is drawn the same way but is never closed - it is a span of
+    // poles, not a polygon - so it gets no dashed closing segment and its own hint text.
     if (this.drawing) {
+      const isLine = this.drawing.group === 'lines';
       const pts = this.drawing.points;
       ctx.save();
       ctx.strokeStyle = '#ffce3a';
@@ -1254,12 +1360,14 @@ export class EditorCanvas {
       pts.forEach((p, i) => { const px = sx(p[0]); const py = sy(p[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
       if (this.hover && pts.length) ctx.lineTo(sx(this.hover.x), sy(this.hover.y));
       ctx.stroke();
-      if (pts.length > 2) { ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(sx(pts[pts.length - 1][0]), sy(pts[pts.length - 1][1])); ctx.lineTo(sx(pts[0][0]), sy(pts[0][1])); ctx.stroke(); ctx.setLineDash([]); }
+      if (!isLine && pts.length > 2) { ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(sx(pts[pts.length - 1][0]), sy(pts[pts.length - 1][1])); ctx.lineTo(sx(pts[0][0]), sy(pts[0][1])); ctx.stroke(); ctx.setLineDash([]); }
       for (const p of pts) { ctx.beginPath(); ctx.arc(sx(p[0]), sy(p[1]), 3.5, 0, Math.PI * 2); ctx.fill(); }
       ctx.font = '13px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(`${pts.length} corner${pts.length === 1 ? '' : 's'} - double-click or Enter to close, Esc to cancel`, 12, 24);
+      ctx.fillText(isLine
+        ? `${pts.length} pole${pts.length === 1 ? '' : 's'} - Enter or double-click to finish, Esc to cancel`
+        : `${pts.length} corner${pts.length === 1 ? '' : 's'} - double-click or Enter to close, Esc to cancel`, 12, 24);
       ctx.restore();
     }
 

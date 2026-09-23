@@ -159,6 +159,119 @@ export const THEMES = {
     swamp: '#4f6b3a',
     swampEdge: '#6f8a4a',
   },
+  // LINKS (2026-09-22): a coastal course. Fescue rather than parkland rye - the fairway yellower
+  // and flatter, the rough a straw-tan, the base a dune-grass olive - with pot-bunker sand a shade
+  // darker than the desert's, and a grey North Sea for water with a sandy bank.
+  links: {
+    ...PALETTE,
+    fairwayA: '#a9b465',
+    fairwayB: '#a1ab5c',
+    lightRough: '#a39f5c',
+    heavyRough: '#8c8a4a',
+    treesFloor: '#7d7a40',
+    green: '#9fcf5f',
+    greenEdge: '#8bbd4f',
+    fringe: '#95b955',
+    tee: '#b5cf6c',
+    sand: '#e8dcb5',
+    sandDot: '#d4c69c',
+    water: '#3f86a8',
+    waterBand: '#336f8e',
+    waterEdge: '#274f66',
+    bank: '#8a7a5a',
+    bankMud: '#4a4030',
+    treeCanopy: '#4f6a2a',
+    treeRim: '#2f4418',
+    path: '#8f8a78',
+    setupA: '#3e4a2a',
+    setupB: '#6b7240',
+    swamp: '#4f5f3a',
+    swampEdge: '#707a4a',
+  },
+  // TROPICAL (2026-09-22): lush and saturated - jungle for the base, white beach sand, and a
+  // turquoise lagoon whose bank is beach rather than dirt.
+  tropical: {
+    ...PALETTE,
+    fairwayA: '#7fc04e',
+    fairwayB: '#76b645',
+    lightRough: '#63a23a',
+    heavyRough: '#37752a',
+    treesFloor: '#1c4416',       // dark jungle floor: palm fronds vanished on anything lighter
+    green: '#9be35a',
+    greenEdge: '#86d04a',
+    fringe: '#8acb4c',
+    tee: '#a9dc62',
+    sand: '#fbf3de',
+    sandDot: '#efe3c4',
+    water: '#27c3d6',
+    waterBand: '#1aa9c0',
+    waterEdge: '#0f7f9a',
+    bank: '#e8dcb8',
+    bankMud: '#c9b78a',
+    treeCanopy: '#2f7a34',
+    treeRim: '#1a4a20',
+    path: '#b8a888',
+    setupA: '#0f5a4a',
+    setupB: '#1f8a6a',
+    swamp: '#3a6a44',
+    swampEdge: '#5a8a54',
+  },
+  // MOUNTAIN (2026-09-22): cool alpine greens, a dark needle floor under spruce, grey granite
+  // sand, glacial blue water with a stone bank.
+  mountain: {
+    ...PALETTE,
+    fairwayA: '#8fb05a',
+    fairwayB: '#87a852',
+    lightRough: '#7a9848',
+    heavyRough: '#4f6a36',
+    treesFloor: '#34422a',
+    green: '#9ccf62',
+    greenEdge: '#88bb52',
+    fringe: '#90bf55',
+    tee: '#b0d06a',
+    sand: '#e6e0d0',
+    sandDot: '#cfc8b4',
+    water: '#5aa0c8',
+    waterBand: '#4a8ab0',
+    waterEdge: '#2e6a8e',
+    bank: '#6e6a62',
+    bankMud: '#3e3a34',
+    treeCanopy: '#2a4a30',
+    treeRim: '#18301c',
+    path: '#7a7468',
+    setupA: '#23352a',
+    setupB: '#3f5a44',
+    swamp: '#3d5a3a',
+    swampEdge: '#5c7a4a',
+  },
+  // SWAMP (2026-09-22): a bayou course. Murky green water with a mud bank, olive turf, a dark
+  // floor under weeping willows, damp tan sand. Swamp ground itself (the surface) keeps its own tone.
+  swamp: {
+    ...PALETTE,
+    fairwayA: '#94a85a',
+    fairwayB: '#8ca052',
+    lightRough: '#7a8c46',
+    heavyRough: '#4e5e30',
+    treesFloor: '#3a5234',       // FLOODED woods: the swamp-water tone, so the belts read as bayou
+    green: '#a0cc62',
+    greenEdge: '#8cb852',
+    fringe: '#92b650',
+    tee: '#b4cc6a',
+    sand: '#e0d6b4',
+    sandDot: '#cbbf98',
+    water: '#4f7a5e',
+    waterBand: '#436a52',
+    waterEdge: '#2f4e3c',
+    bank: '#5a4a32',
+    bankMud: '#33291c',
+    treeCanopy: '#3a5a2c',
+    treeRim: '#223a1a',
+    path: '#7a6e58',
+    setupA: '#2a3320',
+    setupB: '#4a5a34',
+    swamp: '#35492e',
+    swampEdge: '#56704a',
+  },
 };
 
 /** The fill/rim pair for every OBSTACLE CATALOGUE name (`golf/js/obstacles.js`), plus the three
@@ -185,6 +298,11 @@ export const TREE_FILL = {
   smallrock: ['#9a9086', '#5e564c'],
   rockpile: ['#8f8578', '#544c42'],
   log: ['#8a6a42', '#5c4529'],
+  // POLE (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 4): a plain grey disc with a dark
+  // crossarm - not green at all, since a utility pole carries no canopy.
+  pole: ['#9a9a92', '#4f4f48'],
+  gorse: ['#4a6a2c', '#2c421a'],
+  spruce: ['#2c5a4c', '#183a30'],    // blue-green: tells it from the pine at a glance     // dark, dense; the yellow flowers are treeAccent's
 };
 
 /** The paint colour for every surface kind, in one theme. Exported since 2026-09-05: the HUD's
@@ -328,6 +446,7 @@ export function treeShapes(px, py, r, shape) {
       // radiating branches are `treeAccent`'s job.
       return [[px, py, r * 0.35]];
     case 'bush':
+    case 'gorse':
       // Three small overlapping circles, brighter green (TREE_FILL carries the colour) - no
       // trunk, no rim key needed at this size to read as a shrub rather than a tree.
       return [
@@ -358,6 +477,17 @@ export function treeShapes(px, py, r, shape) {
       const rr = r * 0.45;
       return [-0.85, -0.28, 0.28, 0.85].map((t) => [px + t * r, py, rr]);
     }
+    case 'pole':
+      // A UTILITY POLE (2026-09-22, section 4): a small solid disc for the base seen from
+      // directly above - no canopy circles, same reason `dead` has none. The crossarm that
+      // actually reads as "pole" rather than "rock" is `treeAccent`'s job, below.
+      //
+      // FLOORED, unlike every other shape here: the catalogue's own pole entry is `canopy: 0.3`
+      // (a physically honest ~11" pole), which at `MAP_PPY` (2.4 px/yd) rasterises to a
+      // SUB-PIXEL 0.36 px disc - invisible, not small. A pole is read at a glance, never measured
+      // against a club's flight the way a tree's canopy is, so a floor costs nothing a player
+      // could rely on.
+      return [[px, py, Math.max(1.1, r * 0.5)]];
     case 'canopy':
     default:
       return [
@@ -378,6 +508,17 @@ export function treeShapes(px, py, r, shape) {
  *  `treeShapes`'s geometry and needs no accent. */
 export function treeAccent(ctx, shape, px, py, r, fill, rim, rnd) {
   switch (shape) {
+    case 'gorse': {
+      // Gorse in flower: yellow dots scattered over the dark shrub. The flowers are what tell it
+      // from a plain bush at tile size.
+      ctx.fillStyle = '#f2c230';
+      const dr = Math.max(0.6, r * 0.09);
+      for (let k = 0; k < 11; k++) {
+        const a = rnd() * Math.PI * 2; const d = Math.sqrt(rnd()) * r * 0.75;
+        ctx.beginPath(); ctx.arc(px + Math.cos(a) * d, py + Math.sin(a) * d, dr, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
     case 'willow': {
       ctx.strokeStyle = tintOf(fill, 1.15);
       ctx.lineWidth = Math.max(0.6, r * 0.05);
@@ -473,6 +614,20 @@ export function treeAccent(ctx, shape, px, py, r, fill, rim, rnd) {
       ctx.fill();
       break;
     }
+    case 'pole': {
+      // A short dark crossarm stroke across the disc - the one thing that separates a pole from a
+      // rock at this pixel size, seen from directly above. Floored the same way `treeShapes`'s
+      // disc is (the raw canopy-derived `r` here is 0.72 raster px at MAP_PPY, sub-pixel).
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = Math.max(0.9, r * 0.22);
+      ctx.lineCap = 'round';
+      const arm = Math.max(2.2, r * 1.7);
+      ctx.beginPath();
+      ctx.moveTo(px - arm, py);
+      ctx.lineTo(px + arm, py);
+      ctx.stroke();
+      break;
+    }
     default:
       break;
   }
@@ -531,6 +686,86 @@ export function drawDecorSprite(ctx, kind, px, py, ppy, rot, pal) {
     ctx.fill();
   }
   ctx.restore();
+}
+
+/** THE WIRE (2026-09-22, `docs/HANDOFF-GOLF-POWER-LINES.md` section 4): two thin parallel dark
+ *  strokes along each span of `hole.lines`, plus a shadow offset by the same SHADOW_LEN/
+ *  SHADOW_DROP rule a tree uses - `h` (the wire's own height) standing in for a tree's `height`.
+ *  Drawn AFTER the poles (which are ordinary TREE entries, from `hole.treeTypes`, and so are
+ *  already composited by the tree pass above this call site) directly onto the MAP canvas rather
+ *  than the translucent tree layer: a wire has no canopy to fade for a putt underneath it, so it
+ *  stays solid at every zoom, the same as a green's edge or a bunker's rim.
+ *
+ *  Everything is worked out in RASTER (map-pixel) space, off points already run through `toPx`,
+ *  so the perpendicular offset between the two strokes is exact regardless of the world/screen
+ *  y-flip `toPx` carries. Every stroke is floored at 1 raster px, which is what keeps a wire
+ *  legible at `MAP_PPY` (2.4 px/yd) - the same floor `swamp`'s reeds and a green's edge use.
+ *
+ *  Guarded on `hole.lines` being absent, which is every course except one built in the Course
+ *  Creator: `buildMap` is called on every hole in this repo and must not assume the field exists. */
+const WIRE_GAP_YD = 0.25;         // MEASURED against the spec's "about 0.25 yd apart"
+const WIRE_STROKE_YD = 0.10;      // a thin cable, floored below to stay visible at MAP_PPY
+const WIRE_COLOR = '#26261f';
+
+function drawWire(ctx, hole, toPx) {
+  if (!hole.lines || !hole.lines.length) return;
+  for (const ln of hole.lines) {
+    const pts = ln.pts;
+    if (!pts || pts.length < 2) continue;
+    // The BUILT hole's own shape is `{pts, lo, hi}` (holegen.js, docs/HANDOFF-GOLF-POWER-LINES.md
+    // section 1) - the wire is drawn at the CENTRE of that band, `lo + 1`. `ln.h` is kept as a
+    // fallback for a hand-built stand-in hole (a browser probe, or a palette sampler built before
+    // the engine's holegen.js ran) that sets the height directly rather than the band.
+    const h = ln.lo != null ? ln.lo + 1 : (ln.h == null ? 10 : ln.h);
+    const raster = pts.map((p) => toPx(p[0], p[1]));
+
+    // The shadow first, so the wire itself paints over it - the same offset-and-composite rule a
+    // tree's crown shadow uses, just applied to a polyline instead of an ellipse per canopy.
+    ctx.save();
+    ctx.globalAlpha = SHADOW_ALPHA;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = Math.max(1, MAP_PPY * WIRE_STROKE_YD * 3);
+    ctx.beginPath();
+    raster.forEach(([x, y], i) => {
+      const sxp = x - h * SHADOW_LEN * MAP_PPY;
+      const syp = y + h * SHADOW_DROP * MAP_PPY;
+      if (i === 0) ctx.moveTo(sxp, syp); else ctx.lineTo(sxp, syp);
+    });
+    ctx.stroke();
+    ctx.restore();
+
+    // Two parallel strokes, offset along each point's own normal (averaged from the segments
+    // either side, so a bend in the span is followed rather than kinked at the vertex).
+    const gapPx = Math.max(1, WIRE_GAP_YD * MAP_PPY);
+    const lw = Math.max(1, MAP_PPY * WIRE_STROKE_YD);
+    ctx.strokeStyle = WIRE_COLOR;
+    ctx.lineWidth = lw;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      for (let i = 0; i < raster.length; i++) {
+        const [x, y] = raster[i];
+        let nx = 0; let ny = 0;
+        if (i > 0) {
+          const [px0, py0] = raster[i - 1];
+          const dx = x - px0; const dy = y - py0;
+          const len = Math.hypot(dx, dy) || 1;
+          nx += -dy / len; ny += dx / len;
+        }
+        if (i < raster.length - 1) {
+          const [px1, py1] = raster[i + 1];
+          const dx = px1 - x; const dy = py1 - y;
+          const len = Math.hypot(dx, dy) || 1;
+          nx += -dy / len; ny += dx / len;
+        }
+        const nlen = Math.hypot(nx, ny) || 1;
+        nx /= nlen; ny /= nlen;
+        const ox = x + nx * side * gapPx / 2;
+        const oy = y + ny * side * gapPx / 2;
+        if (i === 0) ctx.moveTo(ox, oy); else ctx.lineTo(ox, oy);
+      }
+      ctx.stroke();
+    }
+  }
 }
 
 /** Rasterise a whole hole. Returns { canvas, ppy, minX, minY, w, h }. */
@@ -855,6 +1090,11 @@ export function buildMap(hole, theme) {
   }
 
   ctx.drawImage(treesCv, 0, 0);
+
+  // THE WIRE, after the trees (section 4): the poles themselves are ordinary tree entries and are
+  // already part of `treesCv` above; only the cable spanning them is drawn here.
+  drawWire(ctx, hole, toPx);
+
   return { canvas: cv, ground: groundCv, trees: treesCv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h, pal };
 }
 
