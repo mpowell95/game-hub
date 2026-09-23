@@ -972,3 +972,45 @@ Stage 1, `js/iso.js` plus `canvas.js`:
 
 Tests: `test-hole-editor.mjs` 55/55, `test-hole-editor-ui.mjs` 108/108, `test-hole-editor-mobile.mjs`
 40/40. `hole-editor/` is outside the service worker, so no CACHE bump.
+
+## The isometric look, stage 2: the pastel phone (2026-09-23)
+
+Matt approved `docs/mockups/hole-editor-phone.html` (round 2) with two notes: *"benches and signs,
+not needed"* and, on the mockup's emoji tree icons, *"those trees don't look like colored hearts"*.
+He also chose to change **only the phone** for now: *"The desktop version can be the full editor and
+stay as is."* Shape button: option A, **Fairway**.
+
+Under 900 px wide the dark ribbon, the Tools grid, the + Add sheet and the holes bar are hidden
+(`display: none !important` in the phone block) and replaced by:
+
+- **Top bar** (`#he-ptop`): ‹ Hole N / Par · yd › (the hole `<select>`, `#he-m-hole`, sits invisibly
+  over the label, so a tap opens the phone's own picker), Undo, Redo, Play. The three pills only
+  `.click()` the ribbon's own buttons.
+- **Bottom bar** (`#he-pbar`): Move, Trees, Sand, Water, Green, Fairway, More (`TABS` in `tray.js`,
+  inline-SVG icons). The armed button follows the tool (`tabForTool`) and lifts, like the reference.
+- **Trays** (`#he-tray`, `js/tray.js`): the items are palette.js's own (`paletteSections`) so a tile
+  does exactly what the desktop tile of the same id does - `pickItem()` in `main.js` is now the ONE
+  pick handler for both. Every tile is a **drawn isometric picture** (`paintTrayTile`: a soil block
+  with grass, the thing on it, drawn by `drawIsoTree` and the game's `fillsFor` colours), clipped to
+  its block. Trees are grouped by look (Leafy / Evergreen / Palms / Desert / Shrubs / Bare / Rocks &
+  logs), with One tree / A row of trees and This terrain / All. Fairway and Green hold `kind: 'ptool'`
+  tiles: they arm Route / Width / Slope / Ruler / Green and open that tool's settings card.
+- **More** (`#he-more`): This hole (name, par & wind; Check hole; Compare; Reset), Course (Name &
+  terrain; Saving & holes; Export), Draw (Cart path, Power line), View & help (Layers, Colour key,
+  Fit, Help, Report bug). Benches, signs and flagpoles are not offered on the phone (Matt); the
+  desktop palette still has them and existing ones still draw.
+- **The Settings sheet is the tapped-object card**: pastel, above the bar, ONE panel at a time
+  (`.he-right[data-show]` = context / hole / course; `openPanelKey()` sets it). It was showing every
+  panel and covered the hole.
+- **Colours**: the phone block redefines the `--gh-*` / `--he-*` tokens to the Pocket Metropolis
+  palette, so every panel, modal and the setup screen on a phone follow without per-rule edits.
+- **The walkthrough's phone steps point at the new buttons** (`viaTray(tab, sel)` in `tour.js`: the
+  bar button, then the tile once its tray is open; `tour.js` only calls `__he.openTray` /
+  `closePhone` / `openPanelKey`).
+
+Tests: `test-hole-editor-mobile.mjs` 44/44 (drives the bar, trays, More and the card),
+`test-hole-editor-ui.mjs` 108/108 (desktop unchanged), `test-hole-editor.mjs` 55/55.
+
+Next (agreed with Matt, in order): ~40 new trees and plants (engine + editor), look-only objects
+(flower beds, fountain, lighthouse, windmill, ducks and deer, waterfall), tall grass / reeds / island
+green / bridges, walls / hedges / buildings / cliffs that stop the ball, out of bounds, then hills.

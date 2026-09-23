@@ -29,6 +29,7 @@ import { designer, rememberDesigner, forgetDesigner, makeAutosaver, listDrafts, 
 import { EditorCanvas, fairwayEdgesAt, setEditorTheme, listObjects } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
 import { renderPalette, activeItemFor } from './palette.js';
+import { TABS, tabForTool, renderTray, setTreeFilterAll } from './tray.js';
 import { validateHole } from '../../golf/js/holes.js';
 import { makeHole } from '../../golf/js/holegen.js';
 import { buildMap } from '../../golf/js/render.js';
@@ -100,12 +101,25 @@ root.innerHTML = `
         <button class="he-tool" id="he-fit" style="flex:none;width:auto;padding:2px 10px;">Fit</button>
       </div>
       <div class="he-hover-readout" id="he-hover">Width at cursor: -</div>
+      <div class="he-ptop" id="he-ptop">
+        <div class="he-ptop-hole">
+          <button type="button" class="he-parrow" id="he-m-prev" aria-label="Previous hole">&#8249;</button>
+          <label class="he-ptop-mid"><b id="he-ptop-n">Hole 1</b><small id="he-ptop-sub"></small><select id="he-m-hole" aria-label="Hole"></select></label>
+          <button type="button" class="he-parrow" id="he-m-next" aria-label="Next hole">&#8250;</button>
+        </div>
+        <button type="button" class="he-ppill" id="he-p-undo" aria-label="Undo">&#8630;</button>
+        <button type="button" class="he-ppill" id="he-p-redo" aria-label="Redo">&#8631;</button>
+        <button type="button" class="he-ppill he-ppill--play" id="he-p-play" aria-label="Play">&#9654;</button>
+      </div>
       <div class="he-drawbar" id="he-m-drawbar">
         <button type="button" class="he-mbtn" id="he-m-draw-undo">Undo point</button>
         <button type="button" class="he-mbtn" id="he-m-draw-cancel">Cancel</button>
         <button type="button" class="he-mbtn he-mbtn--add" id="he-m-draw-finish">Finish</button>
       </div>
     </div>
+    <div class="he-tray" id="he-tray" hidden></div>
+    <div class="he-more" id="he-more" hidden></div>
+    <nav class="he-pbar" id="he-pbar" aria-label="Tools"></nav>
     <div class="he-right">
       <div class="he-sheet-bar"><span>Settings</span><span class="he-sheet-acts"><button type="button" class="he-mbtn he-mbtn--sm" id="he-m-dup" hidden>Duplicate</button><button type="button" class="he-mbtn he-mbtn--sm he-mbtn--danger" id="he-m-del" hidden>Delete</button></span><button type="button" class="he-sheet-x" data-sheet-close aria-label="Close">&times;</button></div>
       <div class="he-panel" data-panel="context">
@@ -131,9 +145,6 @@ root.innerHTML = `
     <div class="he-strip" id="he-strip"></div>
   </div>
   <div class="he-mbar" id="he-mbar">
-    <button type="button" class="he-mbtn he-mbtn--arrow" id="he-m-prev" aria-label="Previous hole">&#8249;</button>
-    <select id="he-m-hole" aria-label="Hole"></select>
-    <button type="button" class="he-mbtn he-mbtn--arrow" id="he-m-next" aria-label="Next hole">&#8250;</button>
     <button type="button" class="he-mbtn he-mbtn--add" id="he-m-add">+ Add</button>
     <button type="button" class="he-mbtn" id="he-m-edit">Edit</button>
   </div>
@@ -341,6 +352,7 @@ function setTool(id) {
   if (id === 'line' && !(editorCanvas.drawing && editorCanvas.drawing.group === 'lines')) editOps.startDraw('lines', null);
   refreshContext();
   refreshPalette();
+  syncPbar();
 }
 
 // --- the palette (palette.js): pictures of everything that can be added --------------------------
@@ -364,22 +376,32 @@ function refreshPalette(force = false) {
     theme: profile.custom ? ((doc.course && doc.course.theme) || profile.theme) : profile.theme,
     active: activeItemFor(currentTool, toolState, editorCanvas.drawing),
     guardsOn: spec.guard || [],
-    onPick: (item) => {
-      if (item.kind === 'guard') {
-        editOps.instant((s) => editOps.mutators.toggleGuard(s, item.token, !(s.guard || []).includes(item.token)));
-        return;
-      }
-      // Phone: the Add sheet covers the map, so picking a thing to place puts the map back.
-      if (isPhone()) openSheet(null);
-      if (item.kind === 'draw') {
-        editOps.startDraw(item.group, item.drawKind || null);
-        refreshPalette();
-        return;
-      }
-      toolState = { ...toolState, ...item.state };
-      setTool(item.tool);
-    },
+    onPick: pickItem,
   });
+}
+/** What picking a tile does - the desktop palette's tiles and the phone's trays share it. */
+function pickItem(item) {
+  if (item.kind === 'guard') {
+    editOps.instant((s) => editOps.mutators.toggleGuard(s, item.token, !(s.guard || []).includes(item.token)));
+    if (isPhone()) refreshTray();
+    return;
+  }
+  // Phone: a sheet or tray covers the map, so picking a thing to place puts the map back.
+  if (isPhone()) { openSheet(null); closePhone(); }
+  if (item.kind === 'draw') {
+    editOps.startDraw(item.group, item.drawKind || null);
+    refreshPalette();
+    return;
+  }
+  if (item.kind === 'ptool') {
+    // Phone trays: Route / Width / Slope / Ruler / the green's own settings are TOOLS, not things to
+    // place. Arm it and show its settings card (the route's dogleg buttons, the green's shapes).
+    setTool(item.tool);
+    if (item.tool !== 'ruler') { openSheet('edit'); openPanelKey('context'); }
+    return;
+  }
+  toolState = { ...toolState, ...item.state };
+  setTool(item.tool);
 }
 for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.addEventListener('click', () => setTool(btn.dataset.tool));
 // Phone: Tools unfolds the ribbon; picking anything in it folds it again.
@@ -392,6 +414,103 @@ for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.addEventListener('
     if (b && b !== toolsBtn && ribbon.classList.contains('is-open')) setOpen(false);
   });
 }
+
+// --- THE PHONE'S PASTEL CHROME (2026-09-23, isometric look stage 2) ------------------------------
+// Matt approved the mockup (docs/mockups/hole-editor-phone.html): on a phone the dark ribbon, the
+// Tools grid and the + Add sheet give way to the Pocket Metropolis layout - a top bar (hole picker,
+// Undo, Redo, Play), a bottom bar of seven picture buttons, a tray of picture tiles for each, and a
+// More sheet for everything else. Every button here only CALLS what the desktop already has (the
+// ribbon's own buttons, pickItem, setTool, the Settings sheet); the desktop layout is untouched.
+const pbar = document.getElementById('he-pbar');
+const trayEl = document.getElementById('he-tray');
+const moreEl = document.getElementById('he-more');
+let trayTab = null;
+pbar.innerHTML = TABS.map(([id, label, icon]) => `<button type="button" class="he-ptab" data-ptab="${id}"><i>${icon}</i><span>${label}</span></button>`).join('');
+const proxy = (id) => { const b = document.getElementById(id); if (b) b.click(); };
+function openPanelKey(key) {
+  // On a phone the Settings card shows ONE panel: the thing tapped, or what More asked for.
+  root.querySelector('.he-right').dataset.show = key;
+  const panel = root.querySelector(`[data-panel="${key}"]`);
+  if (panel && panel.classList.contains('collapsed')) panel.querySelector('.he-panel__head').click();
+  if (panel && isPhone()) panel.scrollIntoView({ block: 'start' });
+}
+function closePhone() {
+  trayTab = null; trayEl.hidden = true; moreEl.hidden = true;
+  syncPbar();
+}
+function syncPbar() {
+  const armed = trayTab || (moreEl.hidden ? tabForTool(currentTool, toolState) : 'more');
+  for (const b of pbar.querySelectorAll('[data-ptab]')) b.classList.toggle('is-on', b.dataset.ptab === armed);
+}
+function refreshTray() {
+  if (!trayTab) return;
+  const spec = doc.holes[currentId].spec;
+  renderTray(trayEl, trayTab, {
+    built: getBuilt(currentId),
+    theme: profile.custom ? ((doc.course && doc.course.theme) || profile.theme) : profile.theme,
+    toolState, tool: currentTool,
+    active: activeItemFor(currentTool, toolState, editorCanvas.drawing),
+    guardsOn: spec.guard || [],
+    onPick: pickItem,
+    onSeg: (key, v) => {
+      if (key === 'treeMode') toolState = { ...toolState, treeMode: v };
+      if (key === 'filter') setTreeFilterAll(v === 'all');
+      refreshTray();
+    },
+    onClose: closePhone,
+  });
+}
+function openTray(tab) {
+  openSheet(null);
+  moreEl.hidden = true;
+  trayTab = tab; trayEl.hidden = false; trayEl.dataset.tab = tab;
+  refreshTray();
+  syncPbar();
+}
+const MORE = [
+  ['This hole', [
+    ['hole', '✏️', 'Name, par & wind', () => { openSheet('edit'); openPanelKey('hole'); }],
+    ['validate', '✓', 'Check hole', () => { proxy('he-validate'); openSheet('edit'); openPanelKey('hole'); }],
+    ['compare', '⇄', 'Compare', () => proxy('he-compare')],
+    ['reset', '↺', 'Reset hole', () => proxy('he-reset')],
+  ]],
+  ['Course', [
+    ...(profile.custom ? [['course', '⛳', 'Name & terrain', () => proxy('he-course-btn')]] : []),
+    ['saving', '☁️', 'Saving & holes', () => { openSheet('edit'); openPanelKey('course'); }],
+    ['export', '⤓', 'Export', () => proxy('he-export')],
+  ]],
+  ['Draw', [
+    ['path', '〰️', 'Cart path', () => pickItem({ id: 'decor-path', kind: 'draw', group: 'decor' })],
+    ['line', '⚡', 'Power line', () => pickItem({ id: 'power-line', kind: 'tool', tool: 'line' })],
+  ]],
+  ['View & help', [
+    ['layers', '👁️', 'Layers', () => proxy('he-layers-btn')],
+    ['key', '🔑', 'Colour key', () => proxy('he-legend-btn')],
+    ['fit', '🎯', 'Fit the hole', () => proxy('he-fit')],
+    ['help', '❓', 'Help', () => proxy('he-help')],
+    ['bug', '🐞', 'Report bug', () => proxy('he-bug')],
+  ]],
+];
+moreEl.innerHTML = `<div class="he-more-grab"></div>` + MORE.map(([title, items]) => `<div class="he-more-grp">${title}</div><div class="he-more-list">${
+  items.map(([id, icon, label]) => `<button type="button" class="he-more-item" data-more="${id}"><i>${icon}</i><span>${label}</span></button>`).join('')}</div>`).join('');
+for (const [, items] of MORE) for (const [id, , , fn] of items) moreEl.querySelector(`[data-more="${id}"]`).addEventListener('click', () => { closePhone(); fn(); });
+pbar.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ptab]');
+  if (!b) return;
+  const tab = b.dataset.ptab;
+  if (tab === 'move') { closePhone(); openSheet(null); setTool('select'); return; }
+  if (tab === 'more') {
+    const open = moreEl.hidden;
+    closePhone(); openSheet(null);
+    moreEl.hidden = !open; syncPbar();
+    return;
+  }
+  if (trayTab === tab) { closePhone(); return; }
+  openTray(tab);
+});
+document.getElementById('he-p-undo').addEventListener('click', () => proxy('he-undo'));
+document.getElementById('he-p-redo').addEventListener('click', () => proxy('he-redo'));
+document.getElementById('he-p-play').addEventListener('click', () => proxy('he-play'));
 
 // --- rendering the current hole into every panel ------------------------------------------------
 // buildHole() (model.js) already caches per document/id and invalidates on spec or order change
@@ -437,6 +556,9 @@ function refreshHolePicker() {
   const sel = document.getElementById('he-m-hole');
   if (!sel) return;
   sel.innerHTML = doc.order.map((id, i) => `<option value="${id}"${id === currentId ? ' selected' : ''}>Hole ${i + 1} · par ${doc.holes[id].spec.par}</option>`).join('');
+  const n = document.getElementById('he-ptop-n'); const sub = document.getElementById('he-ptop-sub');
+  if (n) n.textContent = `Hole ${doc.order.indexOf(currentId) + 1}`;
+  if (sub) { const b = getBuilt(currentId); sub.textContent = `Par ${doc.holes[currentId].spec.par} · ${Math.round(b.cardYards || 0)} yd`; }
 }
 document.getElementById('he-m-hole').addEventListener('change', (e) => selectHole(e.target.value));
 for (const [bid, step] of [['he-m-prev', -1], ['he-m-next', 1]]) {
@@ -613,7 +735,7 @@ function syncPhoneBars() {
     const fin = document.getElementById('he-m-draw-finish');
     fin.textContent = `Finish (${n})`; fin.disabled = n < min;
     document.getElementById('he-m-draw-undo').disabled = n === 0;
-    if (!wasDrawing && isPhone()) openSheet(null);   // the map must be free to tap corners on
+    if (!wasDrawing && isPhone()) { openSheet(null); closePhone(); }   // the map must be free to tap corners on
   }
   wasDrawing = !!d;
 }
@@ -656,8 +778,10 @@ editorCanvas.onSelectionChange = () => {
   refreshContext();
   // Phone: selecting something opens its settings (the Selection panel, unfolded, on top).
   // Not mid-drag: a finger dragging an object must keep the map (stage 2).
+  if (isPhone() && editorCanvas.selection) { closePhone(); root.querySelector('.he-right').dataset.show = 'context'; }
   if (isPhone() && editorCanvas.selection && !editorCanvas.touchDragging && sheetOpen() !== 'edit') {
     root.querySelector('[data-panel="context"]').classList.remove('collapsed');
+    root.querySelector('.he-right').dataset.show = 'context';
     openSheet('edit');
     keepAboveSheet(editorCanvas.selection);
   }
@@ -1138,7 +1262,7 @@ showHelpNudge();
 
 // A debug seam, not a feature: lets a Playwright check (or Matt, in devtools) read live state
 // without a second copy of it. Nothing reads this at runtime.
-window.__he = { get doc() { return doc; }, get currentId() { return currentId; }, get validateResults() { return validateResults; }, editorCanvas, getBuilt, isPhone, openSheet, sheetOpen };
+window.__he = { get doc() { return doc; }, get currentId() { return currentId; }, get validateResults() { return validateResults; }, editorCanvas, getBuilt, isPhone, openSheet, sheetOpen, openTray, closePhone, openPanelKey, get trayTab() { return trayTab; } };
 
 // --- boot ---------------------------------------------------------------------------------
 window.addEventListener('beforeunload', saveNow);
