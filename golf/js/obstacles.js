@@ -61,6 +61,56 @@ export const OBSTACLE_CATALOG = [
   // SPRUCE (2026-09-22, the Mountain look): a blue-green conifer, drawn like the pine (`fir`) in
   // its own colour. Taller than a pine, so a mountain belt is harder to fly than a parkland one.
   { name: 'spruce', shape: 'fir', trunk: 0.6, canopy: 4.0, height: 20, looks: ['mountain'] },
+
+  // THE WIDE VARIETY (2026-09-23). Matt: "Please add a wide variety of trees." Thirty-five more,
+  // grouped by the look that lists them first. APPEND ONLY, as above. Twelve new renderer `shape`s
+  // (blossom, acacia, agave, pricklypear, barrel, ocotillo, tumbleweed, grass, bamboo, banana,
+  // mangrove, windbent) are drawn by render.js (top-down, the game) and hole-editor/js/iso.js
+  // (standing, the editor); the engine still reads only trunk / canopy / height. A flowering
+  // tree's blossom colour is TREE_FILL's third entry, not a field here - it is paint, not physics.
+  // Grasses and reeds are SHORT (1-2.5 yd): every club flies them, a putt or a topped shot meets
+  // them. Slowing a ball in tall grass is a surface, and comes later.
+  // -- parkland
+  { name: 'elm', shape: 'canopy', trunk: 1.0, canopy: 7.5, height: 16, looks: ['parkland'] },
+  { name: 'beech', shape: 'canopy', trunk: 1.0, canopy: 7.0, height: 15, looks: ['parkland'] },
+  { name: 'chestnut', shape: 'canopy', trunk: 1.0, canopy: 8.0, height: 15, looks: ['parkland'] },
+  { name: 'cherry', shape: 'blossom', trunk: 0.6, canopy: 4.5, height: 8, looks: ['parkland'] },
+  { name: 'magnolia', shape: 'blossom', trunk: 0.6, canopy: 4.5, height: 9, looks: ['parkland'] },
+  { name: 'dogwood', shape: 'blossom', trunk: 0.5, canopy: 3.5, height: 7, looks: ['parkland'] },
+  { name: 'jacaranda', shape: 'blossom', trunk: 0.7, canopy: 6.0, height: 11, looks: ['parkland', 'tropical'] },
+  // -- desert
+  { name: 'acacia', shape: 'acacia', trunk: 0.6, canopy: 6.5, height: 9, looks: ['desert'] },
+  { name: 'olive', shape: 'canopy', trunk: 0.8, canopy: 4.0, height: 7, looks: ['desert'] },
+  { name: 'ocotillo', shape: 'ocotillo', trunk: 0.3, canopy: 2.5, height: 6, looks: ['desert'] },
+  { name: 'pricklypear', shape: 'pricklypear', trunk: 0.8, canopy: 2.2, height: 3, looks: ['desert'] },
+  { name: 'barrel', shape: 'barrel', trunk: 1.0, canopy: 1.0, height: 1.5, looks: ['desert'] },
+  { name: 'agave', shape: 'agave', trunk: 0.8, canopy: 2.0, height: 2, looks: ['desert'] },
+  { name: 'yucca', shape: 'agave', trunk: 0.5, canopy: 2.0, height: 6, looks: ['desert'] },
+  { name: 'tumbleweed', shape: 'tumbleweed', trunk: 1.0, canopy: 1.0, height: 1.2, looks: ['desert'] },
+  // -- links
+  { name: 'hawthorn', shape: 'windbent', trunk: 0.6, canopy: 4.0, height: 6, looks: ['links'] },
+  { name: 'heather', shape: 'bush', trunk: 0.3, canopy: 2.5, height: 1, looks: ['links', 'mountain'] },
+  { name: 'marram', shape: 'grass', trunk: 0.2, canopy: 2.0, height: 1.2, looks: ['links'] },
+  { name: 'buckthorn', shape: 'bush', trunk: 0.4, canopy: 2.5, height: 3, looks: ['links'] },
+  // -- tropical
+  { name: 'coconut', shape: 'palm', trunk: 0.5, canopy: 4.5, height: 20, looks: ['tropical'] },
+  { name: 'fanpalm', shape: 'palm', trunk: 0.5, canopy: 3.0, height: 12, looks: ['tropical', 'desert'] },
+  { name: 'banana', shape: 'banana', trunk: 0.5, canopy: 3.5, height: 6, looks: ['tropical'] },
+  { name: 'bamboo', shape: 'bamboo', trunk: 0.3, canopy: 2.5, height: 10, looks: ['tropical'] },
+  { name: 'banyan', shape: 'canopy', trunk: 1.6, canopy: 10.0, height: 14, looks: ['tropical'] },
+  { name: 'frangipani', shape: 'blossom', trunk: 0.5, canopy: 3.5, height: 6, looks: ['tropical'] },
+  { name: 'birdofparadise', shape: 'agave', trunk: 0.4, canopy: 2.0, height: 2.5, looks: ['tropical'] },
+  // -- mountain
+  { name: 'aspen', shape: 'canopy', trunk: 0.5, canopy: 3.5, height: 14, looks: ['mountain'] },
+  { name: 'larch', shape: 'fir', trunk: 0.6, canopy: 4.0, height: 18, looks: ['mountain'] },
+  { name: 'redwood', shape: 'fir', trunk: 1.4, canopy: 5.5, height: 45, looks: ['mountain'] },
+  { name: 'juniper', shape: 'cypress', trunk: 0.6, canopy: 3.0, height: 5, looks: ['mountain', 'desert'] },
+  { name: 'douglasfir', shape: 'fir', trunk: 0.7, canopy: 4.5, height: 24, looks: ['mountain'] },
+  // -- swamp
+  { name: 'mangrove', shape: 'mangrove', trunk: 0.8, canopy: 5.0, height: 7, looks: ['swamp', 'tropical'] },
+  { name: 'mossoak', shape: 'willow', trunk: 1.2, canopy: 9.0, height: 13, looks: ['swamp'] },
+  { name: 'cattails', shape: 'grass', trunk: 0.2, canopy: 2.0, height: 2, looks: ['swamp'] },
+  { name: 'reeds', shape: 'grass', trunk: 0.2, canopy: 2.5, height: 2, looks: ['swamp', 'links'] },
 ];
 
 /** The catalogue index of a named entry, or -1. Use it wherever an index is needed from code, so a

@@ -40,7 +40,8 @@ export const GUARD_TOKENS = [
 // type objects carry no `shape`/`looks` field of their own.
 const catalogByName = new Map(OBSTACLE_CATALOG.map((c) => [c.name, c]));
 
-const TREE_SHAPES = new Set(['canopy', 'fir', 'willow', 'cypress', 'dead', 'joshua', 'bush', 'gorse', 'palm', 'cactus']);
+const TREE_SHAPES = new Set(['canopy', 'fir', 'willow', 'cypress', 'dead', 'joshua', 'bush', 'gorse', 'palm', 'cactus',
+  'blossom', 'acacia', 'windbent', 'mangrove', 'agave', 'pricklypear', 'barrel', 'ocotillo', 'tumbleweed', 'grass', 'bamboo', 'banana']);
 
 function shapeOf(ty) { return ty.shape || (catalogByName.get(ty.name) || {}).shape || (ty.name === 'saguaro' ? 'cactus' : 'canopy'); }
 function looksOf(ty) { return ty.looks || (catalogByName.get(ty.name) || {}).looks || []; }

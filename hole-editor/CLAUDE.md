@@ -1014,3 +1014,30 @@ Tests: `test-hole-editor-mobile.mjs` 44/44 (drives the bar, trays, More and the 
 Next (agreed with Matt, in order): ~40 new trees and plants (engine + editor), look-only objects
 (flower beds, fountain, lighthouse, windmill, ducks and deer, waterfall), tall grass / reeds / island
 green / bridges, walls / hedges / buildings / cliffs that stop the ball, out of bounds, then hills.
+
+## A wide variety of trees (2026-09-23, CACHE v937)
+
+Matt: *"Please add a wide variety of trees."* 35 entries appended to `golf/js/obstacles.js`
+(55 in all; the order is frozen, append only): elm, beech, chestnut, cherry, magnolia, dogwood,
+jacaranda, acacia, olive, ocotillo, prickly pear, barrel cactus, agave, yucca, tumbleweed,
+wind-bent hawthorn, heather, marram, sea buckthorn, coconut palm, fan palm, banana, bamboo, banyan,
+frangipani, bird of paradise, aspen, larch, redwood, juniper, Douglas fir, mangrove, mossy oak,
+cattails, reeds. EN/ES names in `golf/js/strings.js`.
+
+- **Twelve new renderer shapes** (blossom, acacia, agave, pricklypear, barrel, ocotillo, tumbleweed,
+  grass, bamboo, banana, mangrove, windbent): top-down in `render.js` (`treeShapes`/`treeAccent`,
+  the game) and standing in `iso.js` (`drawIsoTree`, the editor). The engine still reads only
+  trunk / canopy / height; no rock was added (the "three rocks" engine test stands).
+- **An ACCENT colour is TREE_FILL's optional third entry** (blossom, berries, flower tips, cattail
+  heads), passed to `treeAccent` and `drawIsoTree` as `accent`. Paint, not physics. No accent relies
+  on red-vs-green alone (Matt is colourblind); autumn trees are gold, not red.
+- **Grasses and reeds are short** (1-2.5 yd): every club flies them. Slowing a ball in tall grass is
+  a surface and comes in a later stage.
+- **The iso tree colour is lifted toward white first, then a little toward leaf green**, so a gold
+  aspen or a grey olive keeps its own hue (it was mixed 45% toward green, which turned yellow green).
+- Phone tray groups: Leafy, Flowering, Evergreen, Palms & tropical, Desert, Shrubs & grasses, Bare,
+  Rocks & logs. The desktop palette sorts the new shapes into "Trees".
+
+Tests: `golf/js/test.js` has the same 5 failures before and after (Red Mesa difficulty/yardage,
+pre-existing); `test-hole-editor.mjs` 55/55 (catalogue now 55), `test-hole-editor-ui.mjs` 108/108,
+`test-hole-editor-mobile.mjs` 44/44, `test-sw-strategy.mjs` 107/107, i18n and conventions clean.

@@ -530,7 +530,7 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
   // --- the obstacle catalogue, and the migration onto it (2026-09-22) ------------------------
 
   await test('the catalogue is the shape the engine and the renderer each expect', () => {
-    assert.equal(OBSTACLE_CATALOG.length, 20);
+    assert.equal(OBSTACLE_CATALOG.length, 55);
     assert.equal(OBSTACLE_CATALOG[19].name, 'spruce', 'appended after gorse');
     assert.equal(OBSTACLE_CATALOG[18].name, 'gorse', 'appended after the pole');
     const names = OBSTACLE_CATALOG.map((o) => o.name);
