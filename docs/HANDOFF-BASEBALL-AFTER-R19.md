@@ -24,7 +24,7 @@ You are continuing work on the Baseball game in the Game Hub repo (`baseball/`).
 ## Open items
 
 1. **Playtest first.** Matt hasn't played R19 yet. Act on his feedback before anything below.
-2. **Weak player stalls**: about 7% of simulated careers win a World Series; most get stuck in the Minors. The likely fix is a difficulty option. Ask Matt before building it.
+2. **Weak player stalls**: CLOSED 2026-09-23, won't do. Matt: no difficulty setting, no help; skill points are the progression.
 3. **Standings**: DONE 2026-09-23 (CPU records match your results; see `baseball/CLAUDE.md`).
 4. **Team names**: DONE 2026-09-23 (40 names, `TEAM_NAMES` in `baseball/js/ui.js`; see `baseball/CLAUDE.md`).
 5. **After a World Series win**: DONE 2026-09-23 (celebration popup, title count; see `baseball/CLAUDE.md`).
