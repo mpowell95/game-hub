@@ -1133,7 +1133,10 @@ export const PLAYOFF_HOME = 'higherSeed'; // Draft [Open item 13]
 // is (CPU rank r finishes `round(n * r / (size - 1))` of n games). 'rawWins7' capped every CPU
 // record at 7 wins however long the season was - meaningless at 3 games and at 14 alike - and
 // 'scaledTo12' hardcoded the one length R16 removed. Both are kept and still work (THE LAW rule 5).
-export const STANDINGS_MODEL = 'scaledToSeason'; // R16, measured (was 'rawWins7'). Draft [Open item 13], BB-2b commit 4
+// 2026-09-23, Matt ("make them match"): 'withResults' - each CPU team's games against the player
+// count as they actually went, the rest are scripted at its 'scaledToSeason' rate. Snapshotted per
+// season (`season.standingsModel`), so a season already in progress keeps 'scaledToSeason'.
+export const STANDINGS_MODEL = 'withResults'; // was 'scaledToSeason' (R16). Locked, doc item 13
 
 // R16, measured (new): who wins a tie in the standings. 'cpu' is the shipped behaviour - the
 // player's `strengthRank` is -1, so they lose every tie to every CPU team, which at 12 games put

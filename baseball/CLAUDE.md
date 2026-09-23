@@ -4,15 +4,21 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
-## Standings: mid-season CPU records (2026-09-23, open item 13, part 1)
+## Standings: closed (2026-09-23, design doc item 13)
 
-`scriptedStandings(..., played)` (`engine/season.js`): with `played` < the season length, each CPU
-record is its final one pro-rated, `round(finalWins * played / games)`, W+L = played. Monotone,
-so no inversions and no CPU total ever drops; lands exactly on the final record at the last game.
-`standingsFor` passes the player's games played. The season-end call (the playoff cut) has
-played = games, so the cut, the sim and the economy are untouched (no sim run needed).
-`baseball/js/test.js` pins all four properties per league. Still open: schedule shape and tie-breaks
-(design doc section 17 item 13) - waiting on Matt.
+Matt's calls: keep `SCHEDULE_SHAPE` 'repeatMiddle'; CPU records must MATCH the player's results.
+
+- **`STANDINGS_MODEL` 'withResults'** (`engine/season.js` `scriptedStandings`): a CPU team's games
+  vs the player come from `season.results` as they went; its other games are scripted at its
+  'scaledToSeason' rate, `round(finalW * cpuGames / n)`. Weaker CPU teams CAN now pass stronger
+  ones - that is the point. Ties: player wins (R16), CPU-vs-CPU by strength.
+- **Snapshotted** as `season.standingsModel` in `startSeason`; a season without it (started before
+  this deploy) keeps 'scaledToSeason' (`standingsFor`). `test-baseball-career.mjs` pins both.
+- **Mid-season**, every CPU team has played as many games as the player (`played` argument), under
+  both models. Before, game 1 showed full-season CPU records (8-0 beside 1-0).
+- **Measured** (`sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400`): all 8
+  assertions pass before and after; moves are within noise (median college first-try Gold 44.5% to
+  46.0%, minors 29.5% to 28.0%, strong first-try World Series 30.5% to 32.0%, median first title 11).
 
 ## Team names: 40, one per league and style (2026-09-23)
 

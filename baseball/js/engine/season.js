@@ -129,7 +129,7 @@ export function scriptedStandings(teams, playerResults, games = SEASON.gamesPerS
   const seasonGames = Math.max(1, Math.trunc(n) || SEASON.gamesPerSeason);
   const size = teams.length;
   const rows = teams.map((team, rank) => {
-    const scaled = model === 'scaledTo12' || model === 'scaledToSeason';
+    const scaled = model === 'scaledTo12' || model === 'scaledToSeason' || model === 'withResults';
     const scale = model === 'scaledTo12' ? 12 : seasonGames;
     let wins = scaled ? Math.round((scale * rank) / Math.max(1, size - 1)) : rank;
     let losses = scaled ? scale - wins : (size - 1) - rank;
@@ -138,7 +138,16 @@ export function scriptedStandings(teams, playerResults, games = SEASON.gamesPerS
     // (round(finalWins * played / games)), so it grows with the player's and lands exactly on the
     // final record at the last game. Rounding is monotone in finalWins, so a weaker team never
     // passes a stronger one. The end-of-season table (which decides the playoff cut) is unchanged.
-    if (scaled && played != null && played < scale) {
+    if (model === 'withResults') {
+      // Doc open item 13, Matt 2026-09-23: "make them match". A CPU team's games against the
+      // PLAYER count as they actually went (a team you beat carries that loss); only its other
+      // games are scripted, at its final scripted win rate. `played` defaults to the full season.
+      const g = played != null ? Math.max(0, Math.trunc(played)) : scale;
+      const vs = (playerResults.results || []).filter((r) => r.opponentIndex === rank);
+      const cpuGames = Math.max(0, g - vs.length);
+      wins = Math.round((wins * cpuGames) / scale) + vs.filter((r) => !r.won).length;
+      losses = g - wins;
+    } else if (scaled && played != null && played < scale) {
       const g = Math.max(0, Math.trunc(played));
       wins = Math.round((wins * g) / scale);
       losses = g - wins;
