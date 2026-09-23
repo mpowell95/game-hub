@@ -1,5 +1,7 @@
 # Baseball handoff, after R19 (2026-09-23)
 
+**DONE. Superseded by `docs/HANDOFF-BASEBALL-PLAYTEST-1.md`.**
+
 Paste everything below the line into a fresh Claude Code session on `mpowell95/game-hub`.
 
 ---
