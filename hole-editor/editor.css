@@ -421,4 +421,22 @@ input[type="range"] { accent-color: var(--he-accent); }
   .he-mbtn--add { background: var(--he-accent); color: var(--gh-accent-ink); border-color: var(--he-accent); }
   .he-mbtn[aria-pressed="true"] { outline: 2px solid var(--he-accent); outline-offset: 1px; }
   .he-tool, .he-chip, .he-tile, .he-sheet-x { touch-action: manipulation; }
+  /* Stage 4: the modals at phone width (class hooks only; every value here is phone-only). */
+  .he-setup-box { padding: 16px 14px !important; gap: 12px !important; max-width: calc(100vw - 16px) !important; max-height: calc(100dvh - 16px) !important; }
+  .he-setup-head { flex-wrap: wrap; gap: 8px; }
+  .he-setup-head > div:first-child { font-size: 19px !important; flex: 1 1 auto; }
+  .he-setup-head a { order: 3; margin: 0 !important; flex: 1 1 100%; text-align: center; }
+  #he-setup-looks { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+  #he-setup-looks [data-look] > div { padding: 4px 8px !important; }
+  .he-setup-foot { flex-direction: column-reverse; align-items: stretch !important; }
+  .he-setup-foot .gh-btn { width: 100%; min-height: 48px; }
+  #he-setup-code, #he-setup-who { width: 100% !important; }
+  .he-modal-box { min-width: 0 !important; max-width: calc(100vw - 16px) !important; max-height: calc(100dvh - 16px) !important; overflow: auto; padding: 14px !important; }
+  .he-cmp-row { gap: 8px !important; }
+  .he-cmp-frame { width: calc((100vw - 60px) / 2) !important; height: auto !important; aspect-ratio: 1 / 2; }
+  .he-cmp-frame canvas { max-width: 100%; max-height: 100%; }
+  .he-drafts table, .he-drafts tbody, .he-drafts tr, .he-drafts td { display: block; width: 100%; }
+  .he-drafts tr { padding: 6px 0; }
+  .he-drafts td { padding: 2px 6px !important; white-space: normal !important; }
+  .he-drafts .gh-btn { min-height: 40px; width: 100%; margin-top: 4px; }
 }

@@ -16,7 +16,21 @@ const visible = (sel) => { const e = document.querySelector(sel); return !!(e &&
 // course rather than closing a tab.
 const FIRST = (() => { try { return new URLSearchParams(location.search).has('first'); } catch { return false; } })();
 
-let base = {};   // what a step captured when it opened, so "you did it" means "since then"
+let base = {};
+
+// ON A PHONE (2026-09-23, stage 4 of docs/HANDOFF-GOLF-COURSE-CREATOR-MOBILE.md) the palette and the
+// settings are bottom sheets, most tools live behind Tools, and there is no mouse. A step may carry
+// `m: {at, say, start, done, side}`, used instead of its own fields under the phone breakpoint;
+// every other step's words have "Click" turned into "Tap". `at` may be a function (the Tools
+// button, then the tool inside it once the grid is open).
+const PHONE = () => !!(window.__he && window.__he.isPhone && window.__he.isPhone());
+const sheet = (w) => { const h = he(); if (h && h.openSheet) h.openSheet(w); };
+const ribbonOpen = () => { const r = document.getElementById('he-ribbon'); return !!(r && r.classList.contains('is-open')); };
+const viaTools = (sel) => () => (ribbonOpen() ? sel : '#he-m-tools');
+const tapWords = (s) => s.replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap').replace(/\bclicks\b/g, 'taps');
+/** The fields of step `st` for this screen: its phone overrides, when on a phone. */
+const pick = (st) => (PHONE() && st.m ? { ...st, ...st.m } : st);
+const sel = (st) => (typeof st.at === 'function' ? st.at() : st.at);   // what a step captured when it opened, so "you did it" means "since then"
 
 const clickTool = (id) => { const b = document.querySelector(`[data-tool="${id}"]`); if (b && b.getAttribute('aria-pressed') !== 'true') b.click(); };
 const toolOn = (id) => { const b = document.querySelector(`[data-tool="${id}"]`); return !!b && b.getAttribute('aria-pressed') === 'true'; };
@@ -44,29 +58,47 @@ const STEPS = [
     start: () => { base.picked = false; const l = document.querySelector('#he-setup-looks'); if (l) l.addEventListener('click', () => { base.picked = true; }, { once: true }); },
     done: () => base.picked },
   { at: '#he-setup-go', say: 'Click Start designing.', done: () => !document.getElementById('he-setup') },
-  { topic: 'add', at: '#he-palette', side: 'right', say: 'These are the things you can add to a hole. Click a heading (with the arrow) to hide that group, and click it again to show it.' },
+  { topic: 'add', at: '#he-palette', side: 'right', say: 'These are the things you can add to a hole. Click a heading (with the arrow) to hide that group, and click it again to show it.',
+    m: { at: '#he-m-add', side: 'above', say: 'Tap + Add to see everything you can put on a hole.', start: () => sheet(null), done: () => !!document.querySelector('.he-left.is-open') } },
   { topic: 'move', at: '.he-tile[data-item="bunker-fairway"]', side: 'right', say: 'Click the Fairway bunker to pick it.',
-    open: 'Sand', done: () => !!document.querySelector('.he-tile.is-on[data-item="bunker-fairway"]') },
+    open: 'Sand', done: () => !!document.querySelector('.he-tile.is-on[data-item="bunker-fairway"]'),
+    m: { side: 'above', say: 'Tap the Fairway bunker to pick it.', start: () => sheet('add') } },
   { at: '#he-canvas', side: 'left', say: 'Click anywhere on the hole to add the bunker there.',
-    start: () => { base.bunkers = count('bunkers'); }, done: () => count('bunkers') > base.bunkers },
-  { at: '#he-context', side: 'left', say: 'Its settings are here. Try the size sliders.', start: () => openPanel('context') },
+    start: () => { base.bunkers = count('bunkers'); }, done: () => count('bunkers') > base.bunkers,
+    m: { say: 'Tap anywhere on the hole to add the bunker there.', start: () => { sheet(null); base.bunkers = count('bunkers'); } } },
+  { at: '#he-context', side: 'left', say: 'Its settings are here. Try the size sliders.', start: () => openPanel('context'),
+    m: { say: 'Its settings are here. Try the size sliders, then tap the × to close them.', start: () => { sheet('edit'); openPanel('context'); } } },
   { at: '#he-canvas', side: 'left', say: 'Now drag the bunker to move it. (Delete removes it, D makes a copy.)',
-    start: () => { clickTool('select'); base.b = lastBunker(); }, done: () => lastBunker() !== base.b },
+    start: () => { clickTool('select'); base.b = lastBunker(); }, done: () => lastBunker() !== base.b,
+    m: { say: 'Now drag the bunker with one finger to move it. Drag empty grass to move the map, and pinch to zoom.', start: () => { sheet(null); clickTool('select'); base.b = lastBunker(); } } },
   { topic: 'trees', at: '.he-tile[data-item^="tree-"]', side: 'right', say: 'Trees work the same way: pick one here, then click the hole.',
-    open: 'Trees & rocks/Trees', start: () => { base.trees = count('trees'); }, done: () => count('trees') > base.trees },
-  { at: '#he-context', side: 'left', say: 'A tree has settings too: its size, and its height. A tall tree is hard to hit over.', start: () => openPanel('context') },
-  { topic: 'route', at: '[data-tool="route"]', side: 'below', say: 'Click Route to shape the hole.', done: () => toolOn('route') },
-  { at: '#he-canvas', side: 'left', say: 'Drag a white dot to bend the hole. Double-click the middle line to add another dot. Drag the flag end to make the hole longer or shorter.' },
-  { at: '#he-context', side: 'left', say: 'Or use these buttons: a dogleg left or right, an S-bend, or Straighten.', start: () => openPanel('context') },
-  { topic: 'green', at: '[data-tool="green"]', side: 'below', say: 'Click Green.', done: () => toolOn('green') },
-  { at: '#he-context', side: 'left', say: 'Pick the green\'s shape, size and angle, and the fringe round it. Add pins: with several, the game picks one each round.', start: () => openPanel('context') },
-  { at: '[data-tool="select"]', side: 'below', say: 'Select: click anything on the hole to change it. Drag an empty spot to move around the hole, and scroll to zoom.', start: () => clickTool('select') },
-  { topic: 'holes', at: '#he-strip-toggle', side: 'above', say: 'Every hole of your course is along the bottom. Click one to work on it. This button hides the bar for more room.' },
-  { topic: 'check', at: '#he-validate', side: 'below', say: 'Validate checks the hole for problems, like a shape that crosses itself, something off the map, or a pin off the green. Click a problem to jump to it.' },
-  { at: '#he-play', side: 'below', say: 'Play opens your course in the real game so you can try it.' },
+    open: 'Trees & rocks/Trees', start: () => { base.trees = count('trees'); }, done: () => count('trees') > base.trees,
+    m: { side: 'above', say: 'Trees work the same way: pick one here, then tap the hole.', start: () => { sheet('add'); base.trees = count('trees'); } } },
+  { at: '#he-context', side: 'left', say: 'A tree has settings too: its size, and its height. A tall tree is hard to hit over.', start: () => openPanel('context'),
+    m: { start: () => { sheet('edit'); openPanel('context'); } } },
+  { topic: 'route', at: '[data-tool="route"]', side: 'below', say: 'Click Route to shape the hole.', done: () => toolOn('route'),
+    m: { at: viaTools('[data-tool="route"]'), say: 'Tap Tools, then Route, to shape the hole.', start: () => sheet(null) } },
+  { at: '#he-canvas', side: 'left', say: 'Drag a white dot to bend the hole. Double-click the middle line to add another dot. Drag the flag end to make the hole longer or shorter.',
+    m: { say: 'Drag a white dot to bend the hole. Press and hold on the middle line to add another dot. Drag the flag end to make the hole longer or shorter.' } },
+  { at: '#he-context', side: 'left', say: 'Or use these buttons: a dogleg left or right, an S-bend, or Straighten.', start: () => openPanel('context'),
+    m: { start: () => { sheet('edit'); openPanel('context'); } } },
+  { topic: 'green', at: '[data-tool="green"]', side: 'below', say: 'Click Green.', done: () => toolOn('green'),
+    m: { at: viaTools('[data-tool="green"]'), say: 'Tap Tools, then Green.', start: () => sheet(null) } },
+  { at: '#he-context', side: 'left', say: 'Pick the green\'s shape, size and angle, and the fringe round it. Add pins: with several, the game picks one each round.', start: () => openPanel('context'),
+    m: { start: () => { sheet('edit'); openPanel('context'); } } },
+  { at: '[data-tool="select"]', side: 'below', say: 'Select: click anything on the hole to change it. Drag an empty spot to move around the hole, and scroll to zoom.', start: () => clickTool('select'),
+    m: { at: '#he-m-tools', say: 'Select (in Tools): tap anything on the hole to change it. Drag with one finger to move around, and pinch to zoom.', start: () => { sheet(null); clickTool('select'); } } },
+  { topic: 'holes', at: '#he-strip-toggle', side: 'above', say: 'Every hole of your course is along the bottom. Click one to work on it. This button hides the bar for more room.',
+    m: { at: '#he-m-hole', side: 'above', say: 'Pick a hole here, or use the arrows beside it.', start: () => sheet(null) } },
+  { topic: 'check', at: '#he-validate', side: 'below', say: 'Validate checks the hole for problems, like a shape that crosses itself, something off the map, or a pin off the green. Click a problem to jump to it.',
+    m: { at: '#he-m-tools', say: 'Validate (in Tools) checks the hole for problems, like a shape that crosses itself, something off the map, or a pin off the green. Tap a problem to jump to it.' } },
+  { at: '#he-play', side: 'below', say: 'Play opens your course in the real game so you can try it.',
+    m: { at: '#he-m-tools', say: 'Play (in Tools) opens your course in the real game so you can try it.' } },
   { topic: 'save', at: '#he-course', side: 'left', say: 'Your course saves by itself as you work, on this computer and online under your player code. Open the same link any time and it is all there. Download backup gives you a copy as a file. (The practice course here in Help is the one thing that is not saved.)',
-    start: () => { openPanel('course'); const c = document.getElementById('he-course'); if (c) c.scrollIntoView({ block: 'start' }); } },
-  { at: '#he-course-btn', side: 'below', say: 'Click here any time to rename the course or change its terrain. Careful with the terrain: it changes EVERY hole at once, the colours and the woods down each side. Things you placed yourself stay put, and picking the old terrain again puts it all back.' },
+    start: () => { openPanel('course'); const c = document.getElementById('he-course'); if (c) c.scrollIntoView({ block: 'start' }); },
+    m: { say: 'Your course saves by itself as you work, on this phone and online under your player code. Open the same link any time and it is all there. (The practice course here in Help is the one thing that is not saved.)',
+      start: () => { sheet('edit'); openPanel('course'); const c = document.getElementById('he-course'); if (c) c.scrollIntoView({ block: 'start' }); } } },
+  { at: '#he-course-btn', side: 'below', m: { start: () => sheet(null) }, say: 'Click here any time to rename the course or change its terrain. Careful with the terrain: it changes EVERY hole at once, the colours and the woods down each side. Things you placed yourself stay put, and picking the old terrain again puts it all back.' },
   { at: '#he-bug', side: 'below', say: 'Something broken or confusing? Report bug sends it straight to Matt. Add a screenshot if you can.' },
   { at: null, say: 'That is everything! Close this Help tab to go back and start creating your own course. Help, at the top right, brings you back here any time.', sayFirst: 'That is everything! Now start your own course. Help, at the top right, brings this back any time.', last: true },
 ];
@@ -112,16 +144,16 @@ function openFold(key) {
 
 function show(n) {
   i = Math.max(0, Math.min(STEPS.length - 1, n));
-  const st = STEPS[i];
+  const st = pick(STEPS[i]);
   doneAt = 0;
   if (st.open) openFold(st.open);
   if (st.start) st.start();
-  const t = st.at && document.querySelector(st.at);
+  const t = sel(st) && document.querySelector(sel(st));
   if (t) t.scrollIntoView({ block: 'nearest' });
   els.tip.classList.toggle('tr-tip--last', !!st.last);
   if (st.last) { try { localStorage.setItem(TOUR_DONE_KEY, '1'); } catch { /* per-browser */ } }
   els.tip.innerHTML = `
-    <div>${FIRST && st.sayFirst ? st.sayFirst : st.say}</div>
+    <div>${(() => { const w = FIRST && st.sayFirst ? st.sayFirst : st.say; return PHONE() ? tapWords(w) : w; })()}</div>
     <div class="tr-row">
       <span class="tr-n">${i + 1} of ${STEPS.length}</span>
       ${i > 0 ? '<button class="tr-btn tr-btn--ghost" data-go="back">Back</button>' : ''}
@@ -146,10 +178,12 @@ function show(n) {
 }
 
 function place() {
-  const st = STEPS[i];
-  const t = st.at && document.querySelector(st.at);
+  const st = pick(STEPS[i]);
+  const at = sel(st);
+  const t = at && document.querySelector(at);
   const { ring, tip } = els;
-  if (!t || !visible(st.at)) {
+  if (PHONE()) tip.style.width = `${Math.min(st.last ? 380 : 300, innerWidth - 24)}px`;
+  if (!t || !visible(at)) {
     ring.style.display = 'none';
     tip.dataset.side = '';
     tip.style.left = `${(innerWidth - (tip.offsetWidth || 300)) / 2}px`; tip.style.top = `${innerHeight / 2 - 60}px`;
@@ -180,13 +214,22 @@ function place() {
     tip.style.setProperty('--ax', `${Math.max(12, Math.min(tw - 34, aimX - x - 11))}px`);
   }
   if (side === 'left' && r.width > 400) { x = r.left + r.width - tw - 16; side = 'inside'; }
+  // A PHONE has no room beside anything: the pop-up goes above or below its target, or across the
+  // top of a target taller than half the screen (the map, a sheet).
+  if (PHONE()) {
+    x = Math.max(12, Math.min(innerWidth - tw - 12, r.left + r.width / 2 - tw / 2));
+    if (r.height > innerHeight * 0.45) { side = 'inside'; y = Math.max(64, r.top + 12); }
+    else if ((st.side === 'above' || r.top > innerHeight / 2) && r.top - gap - th > 8) { side = 'above'; y = r.top - gap - th; }
+    else { side = 'below'; y = Math.min(innerHeight - th - 8, r.bottom + gap); }
+    tip.style.setProperty('--ax', `${Math.max(12, Math.min(tw - 34, r.left + r.width / 2 - x - 11))}px`);
+  }
   tip.dataset.side = side === 'inside' ? '' : side;
   tip.style.left = `${x}px`; tip.style.top = `${y}px`;
 }
 
 function tick() {
   if (!els) return;
-  const st = STEPS[i];
+  const st = pick(STEPS[i]);
   if (st.done && st.done()) {
     if (!doneAt) {
       doneAt = performance.now();

@@ -872,3 +872,21 @@ pointerdown, so the first finger of a pinch dropped a bunker.
 canvas it failed 10 of them. `test-hole-editor-ui.mjs`'s topic-link check now waits 15 s, not 5:
 it failed 2 runs in 3 on UNCHANGED code, because on a reload headless software rendering spends
 3-6 s in `drawImage` (buildMap for the palette and the holes bar) before the tour paints.
+
+## On a phone, stage 4: the setup screen, modals and walkthrough (2026-09-23)
+
+Done BEFORE stage 3 on purpose: Matt had already sent the King the link, and the walkthrough plus
+the setup screen are the first two things a phone meets.
+
+- **Modals** get class hooks only (`.he-setup-box/-head/-foot`, `.he-modal-box`, `.he-drafts`,
+  `.he-cmp-row/-frame`); every rule on them sits in the phone `@media` block. Setup: two terrain
+  columns, the guided-tour link on its own row, Start designing full width above the note.
+  Compare: the two holes side by side at half width each. Drafts: one stacked card per draft.
+- **`tour.js` on a phone**: a step may carry `m: {at, say, start, done, side}`, used in place of
+  its own fields when `window.__he.isPhone()`; `at` may be a function (`viaTools(sel)`: the Tools
+  button, then the tool inside the open grid). Steps open the right sheet themselves (`sheet('add'
+  | 'edit' | null)` via `window.__he.openSheet`). Every other step's words get "Click" -> "Tap".
+  Placement: never beside a target; above or below it, or across the top of a target taller than
+  45% of the screen (the map, a sheet); pop-up width `min(300, 100vw - 24)`.
+- `test-hole-editor-mobile.mjs` walks the whole run from a first visit on a 390x844 touch
+  screen: it reaches the last step, every pop-up is on screen, none says "click". 30 checks.

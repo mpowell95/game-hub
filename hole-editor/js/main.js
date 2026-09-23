@@ -754,8 +754,8 @@ function openSetupModal() {
   overlay.id = 'he-setup';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1000;display:flex;align-items:center;justify-content:center;';
   overlay.innerHTML = `
-    <div style="background:#1e211a;border-radius:14px;padding:24px 26px;width:760px;max-width:94vw;max-height:92vh;overflow:auto;color:#eceee4;font:15px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
+    <div class="he-setup-box" style="background:#1e211a;border-radius:14px;padding:24px 26px;width:760px;max-width:94vw;max-height:92vh;overflow:auto;color:#eceee4;font:15px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;">
+      <div class="he-setup-head" style="display:flex;justify-content:space-between;align-items:center;">
         <div style="font:700 22px system-ui,sans-serif;">Set up your course</div>
         ${!profile.tutorial && !tourDone() ? '<a href="./?course=tutorial" target="_blank" rel="noopener" class="gh-btn gh-btn--sm" style="margin-left:auto;margin-right:10px;background:#ffce3a;color:#1b1d14;text-decoration:none;">New here? Take the guided tour</a>' : ''}
         <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-setup-x" aria-label="Close">&times;</button>
@@ -780,7 +780,7 @@ function openSetupModal() {
           <input type="text" id="he-setup-who" placeholder="Your name" maxlength="40" style="width:14em;font-size:16px;padding:8px 10px;border-radius:8px;" />
         </div>
       </div>`}
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <div class="he-setup-foot" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
         <span style="color:#b4b9a6;font-size:13px;">You can change all of this later with the course button at the top left.</span>
         <button class="gh-btn" id="he-setup-go" style="font-size:17px;padding:10px 22px;">Start designing</button>
       </div>
@@ -939,6 +939,7 @@ async function openDraftsModal() {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;';
   const box = document.createElement('div');
+  box.className = 'he-modal-box he-drafts';
   box.style.cssText = 'background:#1e1e1e;border-radius:10px;padding:20px;min-width:520px;max-width:760px;max-height:80vh;overflow:auto;display:flex;flex-direction:column;gap:12px;color:#e8e8e8;font:14px sans-serif;';
   box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font:600 15px sans-serif;">Drafts in the cloud</div><button class="gh-btn gh-btn--sm" id="he-drafts-close">Close</button></div><div id="he-drafts-list">Loading...</div>';
   overlay.appendChild(box);
@@ -1092,7 +1093,7 @@ showHelpNudge();
 
 // A debug seam, not a feature: lets a Playwright check (or Matt, in devtools) read live state
 // without a second copy of it. Nothing reads this at runtime.
-window.__he = { get doc() { return doc; }, get currentId() { return currentId; }, get validateResults() { return validateResults; }, editorCanvas, getBuilt };
+window.__he = { get doc() { return doc; }, get currentId() { return currentId; }, get validateResults() { return validateResults; }, editorCanvas, getBuilt, isPhone, openSheet, sheetOpen };
 
 // --- boot ---------------------------------------------------------------------------------
 window.addEventListener('beforeunload', saveNow);
