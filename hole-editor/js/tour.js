@@ -60,10 +60,10 @@ const STEPS = [
   { topic: 'holes', at: '#he-strip-toggle', side: 'above', say: 'Every hole of your course is along the bottom. Click one to work on it. This button hides the bar for more room.' },
   { topic: 'check', at: '#he-validate', side: 'below', say: 'Validate checks the hole for problems, like a shape that crosses itself, something off the map, or a pin off the green. Click a problem to jump to it.' },
   { at: '#he-play', side: 'below', say: 'Play opens your course in the real game so you can try it.' },
-  { topic: 'save', at: '#he-course', side: 'left', say: 'Your course saves by itself as you work, on this computer and online under your player code. Open the same link any time and it is all there. Download backup gives you a copy as a file. (This practice course is the one thing that is not saved.)',
+  { topic: 'save', at: '#he-course', side: 'left', say: 'Your course saves by itself as you work, on this computer and online under your player code. Open the same link any time and it is all there. Download backup gives you a copy as a file. (The practice course here in Help is the one thing that is not saved.)',
     start: () => { openPanel('course'); const c = document.getElementById('he-course'); if (c) c.scrollIntoView({ block: 'start' }); } },
   { at: '#he-course-btn', side: 'below', say: 'Click here any time to rename the course or change its terrain. The terrain changes the whole course, every hole.' },
-  { at: null, say: 'That is everything! Help, at the top right, brings you back here any time.', last: true },
+  { at: null, say: 'That is everything! Close this Help tab to go back and start creating your own course. Help, at the top right, brings you back here any time.', last: true },
 ];
 
 let i = 0; let els = null; let timer = 0; let doneAt = 0;
@@ -121,14 +121,20 @@ function show(n) {
       <span class="tr-n">${i + 1} of ${STEPS.length}</span>
       ${i > 0 ? '<button class="tr-btn tr-btn--ghost" data-go="back">Back</button>' : ''}
       ${st.last
-    ? '<a class="tr-btn" href="./?course=new">Start my real course</a>'
+    ? '<button class="tr-btn" data-go="close">Close Help</button>'
     : st.done ? '<span class="tr-ok" data-ok hidden>Nice!</span><button class="tr-btn tr-btn--ghost" data-go="next">Skip</button>'
       : '<button class="tr-btn" data-go="next">Next</button>'}
       <button class="tr-btn tr-btn--ghost" data-go="exit" title="End the tour">&times;</button>
     </div>`;
   els.tip.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => {
     const g = b.dataset.go;
-    if (g === 'next') show(i + 1); else if (g === 'back') show(i - 1); else stop();
+    if (g === 'next') show(i + 1); else if (g === 'back') show(i - 1);
+    else if (g === 'close') {
+      // Help opened in its own tab. A browser only lets a page close a tab it opened itself, so
+      // if the tab is still here a moment later, go to the real Course Creator instead.
+      window.close();
+      setTimeout(() => { location.href = './?course=new'; }, 250);
+    } else stop();
   }));
   place();
 }
