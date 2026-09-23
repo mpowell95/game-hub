@@ -670,7 +670,7 @@ function renderCross(el, ctx) {
   }
 }
 
-const DECOR_SPRITES = [['bench', 'Bench'], ['sign', 'Sign'], ['flagpole', 'Flagpole'], ['flowerbed', 'Flower bed']];
+const DECOR_SPRITES = [['bench', 'Bench'], ['sign', 'Sign'], ['flagpole', 'Flagpole'], ['flowerbed', 'Wildflowers']];
 
 /** Decor (2026-09-22): a bench, sign or flagpole sprite, or a drawn cart path. Cosmetic only -
  *  `holes.js` never reads `decor` for anything, so nothing here can break a hole's play. */

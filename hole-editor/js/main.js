@@ -480,8 +480,8 @@ const MORE = [
     ['export', '⤓', 'Export', () => proxy('he-export')],
   ]],
   ['Add & draw', [
-    ['flowerbed', '🌷', 'Flower bed', () => pickItem({ id: 'decor-flowerbed', kind: 'tool', tool: 'decor', state: { decorKind: 'flowerbed' } })],
-    ['flowerbed-draw', '✏️', 'Draw a flower bed', () => pickItem({ id: 'decor-flowerbed-draw', kind: 'draw', group: 'decor', drawKind: 'flowerbed' })],
+    ['flowerbed', '🌼', 'Wildflowers', () => pickItem({ id: 'decor-flowerbed', kind: 'tool', tool: 'decor', state: { decorKind: 'flowerbed' } })],
+    ['flowerbed-draw', '✏️', 'Draw wildflowers', () => pickItem({ id: 'decor-flowerbed-draw', kind: 'draw', group: 'decor', drawKind: 'flowerbed' })],
     ['path', '〰️', 'Cart path', () => pickItem({ id: 'decor-path', kind: 'draw', group: 'decor' })],
     ['line', '⚡', 'Power line', () => pickItem({ id: 'power-line', kind: 'tool', tool: 'line' })],
   ]],

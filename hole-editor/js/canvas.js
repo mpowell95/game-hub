@@ -7,7 +7,7 @@
 
 import {
   buildMap, paletteFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC,
-  SHADOW_LEN, SHADOW_DROP, SHADOW_RX, SHADOW_RY, SHADOW_ALPHA, treeShapes, TREE_FILL,
+  SHADOW_LEN, SHADOW_DROP, SHADOW_RX, SHADOW_RY, SHADOW_ALPHA, treeShapes, TREE_FILL, wildflowers,
 } from '../../golf/js/render.js';
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
 import { blob, routeStations } from '../../golf/js/holegen.js';
@@ -1408,37 +1408,40 @@ export class EditorCanvas {
       }
     }
 
-    // FLOWER BEDS (2026-09-23): the map raster paints them at 2.4 px a yard, which up close is a
-    // smudge; here each flower stands up, crisp at any zoom. Looks only, like the bed itself.
+    // WILDFLOWERS (2026-09-23): the same flowers the game paints (render.js `wildflowers`, world
+    // yards, seeded per patch), stood up here - grass blades, then stems and small heads, back to
+    // front. The raster under them is the pale meadow patch, which reads fine at any zoom.
     if (built.decor && built.decor.some((d) => d.kind === 'flowerbed')) {
-      const COLS = ['#f7a8c4', '#ffd84a', '#fff6ee', '#b79be6', '#ff9f6a'];
-      const step = k < 3 ? 1.6 : 0.9;
-      const head = Math.max(1.2, k * 0.26);
-      const pts = [];
+      const items = [];
       for (const d of built.decor) {
         if (d.kind !== 'flowerbed') continue;
-        if (d.poly) {
-          let mnx = Infinity; let mny = Infinity; let mxx = -Infinity; let mxy = -Infinity;
-          for (const q of d.poly) { mnx = Math.min(mnx, q[0]); mxx = Math.max(mxx, q[0]); mny = Math.min(mny, q[1]); mxy = Math.max(mxy, q[1]); }
-          for (let y = mny + step / 2; y < mxy && pts.length < 1500; y += step) {
-            for (let x = mnx + step / 2; x < mxx; x += step) {
-              const jx = x + (((x * 7.3 + y * 3.1) % 1) - 0.5) * step * 0.6; const jy = y + (((x * 2.7 + y * 5.9) % 1) - 0.5) * step * 0.6;
-              if (pointInPoly([jx, jy], d.poly)) pts.push([jx, jy]);
-            }
-          }
-        } else if (d.at) {
-          for (let i = 0; i < 40; i++) { const a = i * 2.39996; const rr = Math.sqrt((i + 0.5) / 40) * 2.0; pts.push([d.at[0] + Math.cos(a) * rr, d.at[1] + Math.sin(a) * rr]); }
-        }
+        const w = wildflowers(d);
+        for (const t of w.tufts) items.push({ x: t[0], y: t[1], t: 1 });
+        for (const f of w.flowers) items.push(f);
       }
-      pts.sort((a2, b2) => (a2[0] - a2[1]) - (b2[0] - b2[1]));
+      items.sort((p1, p2) => (p1.x - p1.y) - (p2.x - p2.y));
+      const head = Math.max(1, k * 0.2);
       ctx.save();
-      pts.forEach((q, i) => {
-        const [bx, by] = P(q[0], q[1]); const tip = P(q[0], q[1], 0.5);
-        ctx.strokeStyle = '#5f8a44'; ctx.lineWidth = Math.max(0.6, k * 0.08);
-        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tip[0], tip[1]); ctx.stroke();
-        ctx.fillStyle = COLS[(i * 7) % COLS.length];
-        ctx.beginPath(); ctx.arc(tip[0], tip[1], head, 0, Math.PI * 2); ctx.fill();
-      });
+      ctx.lineCap = 'round';
+      for (const it of items) {
+        const [bx, by] = P(it.x, it.y);
+        if (it.t) {
+          const h = Math.max(2, k * 0.45);
+          ctx.strokeStyle = 'rgba(96,130,60,.8)'; ctx.lineWidth = Math.max(0.6, k * 0.06);
+          ctx.beginPath(); ctx.moveTo(bx - 1, by); ctx.quadraticCurveTo(bx - 1, by - h * 0.6, bx - h * 0.3, by - h);
+          ctx.moveTo(bx + 1, by); ctx.quadraticCurveTo(bx + 1, by - h * 0.6, bx + h * 0.35, by - h * 0.9); ctx.stroke();
+          continue;
+        }
+        const [tx, ty] = P(it.x, it.y, it.h);
+        ctx.strokeStyle = '#6f9a4e'; ctx.lineWidth = Math.max(0.6, k * 0.05);
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.fillStyle = it.c;
+        if (head >= 2.2) {
+          for (let i = 0; i < 5; i++) { const a2 = (i / 5) * Math.PI * 2; ctx.beginPath(); ctx.arc(tx + Math.cos(a2) * head * 0.55, ty + Math.sin(a2) * head * 0.4, head * 0.5, 0, Math.PI * 2); ctx.fill(); }
+          ctx.fillStyle = it.c === '#ffd84a' ? '#e8a830' : '#ffd84a';
+          ctx.beginPath(); ctx.arc(tx, ty, head * 0.3, 0, Math.PI * 2); ctx.fill();
+        } else { ctx.beginPath(); ctx.arc(tx, ty, head, 0, Math.PI * 2); ctx.fill(); }
+      }
       ctx.restore();
     }
 

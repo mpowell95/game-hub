@@ -1057,3 +1057,14 @@ Matt: *"only do the flower beds out of that list"*. Two forms, both decor, so th
 - **The iso editor stands each flower up** over the bed (a stem and a head, crisp at any zoom),
   because the map raster's 2.4 px/yd is a smudge up close.
 - Phone: More -> "Add & draw" -> Flower bed / Draw a flower bed. Desktop: the palette's Decor group.
+
+### ...remade as WILDFLOWERS (same day)
+
+Matt, on the soil-and-stone beds: *"those flower beds look really bad"* ... *"they'd be wild
+flowers"*. The `flowerbed` kind (id kept, so nothing saved changes) is now a loose meadow patch:
+`wildflowers(d)` in `golf/js/render.js` generates it in WORLD YARDS, seeded per patch - an uneven
+edge (a tapped patch is ~12 yd across; a drawn one is its outline), pale longer grass, flowers in
+single-colour DRIFTS (yellow, white, purple, cornflower blue, a little pink) plus loose singles, no
+soil, no edging. `paintWildflowers` paints it top-down (the game, and the palette tile through
+`drawDecorSprite`); `canvas.js` stands the SAME flowers up (grass blades, stems, five-petal heads
+when zoomed in). Labels: "Wildflowers" / "Draw wildflowers".
