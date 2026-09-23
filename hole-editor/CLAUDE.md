@@ -907,3 +907,25 @@ the setup screen are the first two things a phone meets.
 
 `test-hole-editor-mobile.mjs`: 40 checks (stage 3 adds Duplicate, Delete, and a lake drawn with
 five taps, Undo point, Finish, then a Cancel).
+
+## On a phone, stage 5: measured on a phone profile (2026-09-23)
+
+Profile: 390x844, deviceScaleFactor 3, touch, CDP `Emulation.setCPUThrottlingRate` 4, a
+long-task PerformanceObserver, and a CDP CPU profile around the gesture (scratch script, the same
+pattern as "It's laggy").
+
+| Gesture (4x throttle) | Before | After |
+|---|---|---|
+| 20-step finger drag of a bunker | 4.4 s, 18 long tasks, median 159 ms | 1.2 s, 1 long task (128 ms, the release rebuild) |
+| Tap to place a bunker | one 433-490 ms task | one 342 ms task |
+| 20-step pan / pinch / hole switch | no long tasks | unchanged |
+
+- **A finger drag on the map, on a phone, no longer rebuilds the hole per frame**
+  (`fingerDrag()` in `main.js`: `isPhone() && editorCanvas.touchDragging`). `buildMap` was ~70% of
+  each frame. The frame calls `EditorCanvas.previewSpec(spec)` instead: the object's outline moves
+  over the UNCHANGED map (the old sand stays painted where it was until the finger lifts), and
+  `liveEnd()` rebuilds once. `liveUpdate` passes the last built hole instead of building one (no
+  canvas drag reads it). A mouse, and every slider, keep the full live rebuild.
+- **The hidden holes bar is not painted on a phone** (`refreshStrip()` only refreshes the hole
+  picker; it paints the bar when the screen widens). It cost a map build per edit.
+- What is left per edit is the edit's own rebuild (makeHole + buildMap), about 85 ms unthrottled.
