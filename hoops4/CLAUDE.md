@@ -1226,6 +1226,24 @@ bounce gaps (mean best rebound 0.47 -> 0.53 m/s against the 0.50 bar; misses tha
 47%, still owed against 50%). `test.js` now pins that rimouts EXIST and that the tube is gone;
 the "100% of the time" promise moved to `through`, where it is true.
 
+### A little harder, and the shot messages under the board (2026-09-23)
+
+Matt, after the tube came out: *"it's a little too easy again. And the 'column 4' and 'miss' stuff
+and those notifications are in a bad spot and are tiny."*
+
+- **Harder = the release, not the rim.** `captureDrop` no longer moves anything (0.52 to 0.85 all
+  measured identical): `through`, not capture, now decides a score. The honest question is "how
+  often does a well-aimed shot land in the column aimed at", which the power x aim grid cannot
+  answer, so `reference/hoops/probe-aim.mjs` throws each column's measured aim at its best power
+  with a fresh release seed per shot. Before: **78%** (centre column 100%). A solid rim for a
+  captured ball (`captureKeepsCollar`) gave 42% but made dead-centre shots miss 26% of the time, so
+  it was rejected (a perfect shot must go in). `jitterAim` 0.013 -> **0.025**: **62%** aimed
+  column, 5% another column, 33% nothing.
+- **The messages**: 13px at the very bottom of the lane, under the thumb. Now 24px, bordered, with
+  a tick for a make and a cross for a miss (shape, not colour), hung 10px under the board's bottom
+  edge - MEASURED from the camera each `fit()` (`render.js` `boardBottomPx`), so it follows the
+  board on any screen. Status messages (sent, offline) share the slot at 17px and wrap.
+
 ### The turn label, and HOOPS as the name (2026-09-22)
 
 Matt: *"change the 'Your shot' and the 'Hard is shooting'. Those are not good and the Hub back
@@ -1484,6 +1502,8 @@ completion is re-derived as outstanding work). Track it here or nowhere.
 
 - `node hoops4/js/test.js` — the engine probe, headless, ~2 min. `POWERS`/`AIMS` env vars set the
   grid. It is the file that holds all four of Matt's requirements as numbers.
+- `node reference/hoops/probe-aim.mjs [--set=k=v,...] [--shots=N]` — how often a PERFECTLY aimed
+  shot lands in the column aimed at (another / nothing), per column. The difficulty number.
 - `node reference/hoops/probe-rim.mjs [--set=k=v,...]` — where a shot that ARRIVES at a hoop
   ends up (that hoop / another / nothing, by how far off centre), and the capture / through ->
   resolved timings the falling disc depends on. `POWERS`/`AIMS` set the grid; use 21 x 61 for any

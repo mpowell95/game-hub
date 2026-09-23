@@ -180,6 +180,7 @@ mixed build), then run `node validate-sw-assets.mjs`, which also rewrites `REST_
 
 | CACHE | what |
 |---|---|
+| v920 | Release jitter 0.013 -> 0.025 (a perfect aim lands 78% -> 62%); big shot messages under the board |
 | v917 | Invisible tube above the rims removed; rimouts on; rim bounces go sideways. Scored 29% -> 21% |
 | v916 | Disc falls behind the board face (seen through the holes); thrown ball unlit, painted from the disc's own colours |
 | v915 | Ball hidden once through the rim; "<who>'s turn" label clear of the Hub chip; HOOPS-first marquee |

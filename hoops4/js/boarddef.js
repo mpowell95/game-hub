@@ -289,7 +289,13 @@ export const BOARD = {
     // rng through startThrow and leaves simulateThrow deterministic, exactly as skeeball's
     // "Things a future session will want to know" says to, so every sweep and test still
     // reproduces. Radians of aim and a fraction of speed.
-    jitterAim: 0.013,
+    // 0.013 -> 0.025 (2026-09-23). Matt: "it's a little too easy again." With the tube gone, a
+    // PERFECTLY lined-up shot (each column's measured aim at its best power, a fresh release seed
+    // per shot as ui.js throws) still landed in the column aimed at 78% of the time - the centre
+    // column 100%. reference/hoops/probe-aim.mjs, 60 shots a column: 0.018 -> 74%, 0.022 -> 68%,
+    // 0.030 -> 54%. 0.025 sits at about 64%: harder, not a lottery. The CPU throws through the
+    // same release, so it gets the same wobble.
+    jitterAim: 0.025,
     jitterSpeed: 0.012,
 
     // HOW MUCH OF A FORWARD BOUNCE IS TURNED SIDEWAYS, 0..1. The rule and the reasoning are in

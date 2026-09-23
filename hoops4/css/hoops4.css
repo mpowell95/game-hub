@@ -284,22 +284,32 @@
   touch-action: none;                  /* a swipe surface, not a tappable control */
   background: transparent;
 }
+/* (2026-09-23) BIG, AND JUST UNDER THE BOARD. `--h4-toast-top` is measured by ui.js `fit()` from
+   the camera (the bottom edge of the Connect 4 screen + 10px); 64% is only the fallback before
+   the first measurement. */
 .h4-root .h4-toast {
   position: absolute;
   left: 50%;
-  bottom: calc(14px + env(safe-area-inset-bottom));
+  top: var(--h4-toast-top, 64%);
   transform: translateX(-50%) translateY(6px);
   margin: 0;
-  padding: 7px 14px;
+  padding: 10px 22px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.62);
-  font-size: 13px;
-  font-weight: 700;
+  background: rgba(0, 0, 0, 0.78);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  width: max-content; max-width: calc(100% - 32px);
+  text-align: center; line-height: 1.2;
+  z-index: 3;
   opacity: 0;
   pointer-events: none;
   transition: opacity 160ms ease, transform 160ms ease;
 }
 .h4-root .h4-toast.is-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.h4-root .h4-toast.is-made { border-color: #ffce3a; color: #ffffff; }
+.h4-root .h4-toast.is-miss { border-color: rgba(255, 255, 255, 0.45); color: rgba(255, 255, 255, 0.85); font-size: 22px; }
 
 /* --- the how-to sheet: a HUB SCREEN, css/ui.css's .gh-overlay/.gh-modal (skeeball's pause/
    game-over precedent) - only the body paragraph is local, everything else is the primitive. --- */
@@ -801,3 +811,5 @@
 /* A record row is a DIV, not a button, so it does not get a button's border-box sizing: without
    this its padding pushed "W 3 · L 1 · D 0" off its own right edge. */
 .h4-root .h4-hist-rec { box-sizing: border-box; cursor: default; }
+/* Status messages (sent, offline, the other player left) share the slot at a calmer size. */
+.h4-root .h4-toast:not(.is-made):not(.is-miss) { font-size: 17px; font-weight: 800; }
