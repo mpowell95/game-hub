@@ -1177,6 +1177,44 @@ down the face of the board beside the disc. `ui.js`'s `tick` passes no ball to t
 `st.committed` is set: from that frame the falling disc IS the ball. Verified in a real browser:
 the ball stops being drawn on the same frame `startDrop` runs, before the throw is done.
 
+### The disc falls BEHIND the face, and the ball is unlit (2026-09-23)
+
+Matt, with two slow-motion recordings (the first ones a session actually watched: `ffmpeg-static`
+from npm decodes the iPhone .MOV where headless Chromium cannot): *"the ball still falls in front
+of the connect 4 board instead of IN the board"* and *"the red basketball isn't the same color when
+thrown as when it's in the board."*
+
+- **In front of the board**: the falling disc was painted ON TOP of the blue face, so it slid over
+  the plastic between holes. It is now clipped to its column's holes (render.js `setGrid`), each
+  hole's rim redrawn over it: you see it hole by hole, the way a real Connect 4 disc drops down
+  the slot behind the face.
+- **The red**: measured in his recording, thrown red RGB 221,70,64 against the disc's 241,87,79.
+  A LIT ball cannot match an UNLIT screen. The ball is now a `MeshBasicMaterial` like the screen,
+  and its wrap is painted from the disc's own gradient (40% light stop, 60% fill) rather than the
+  bare hex. Measured after, in a rendered frame: red 221,82,75 vs disc 217,83,76; yellow
+  235,197,81 vs 232,194,85.
+
+### The invisible tube above every hoop, said plainly (2026-09-23)
+
+Matt, same recordings: *"the yellow ball seems to hit an invisible object on the right. It's shot,
+bounces off the rim towards the right, and appears to hit an invisible wall back into the
+basket."* **He was right, and it had never been explained to him.** Once `capture` fires, three
+things happen that he could not see:
+
+1. **The throat**: an invisible cylinder standing **8 ball-radii (about 44 cm) above the rim**
+   (machine.js, "the throats"), which a captured ball collides with and nothing else does. A ball
+   that bounces off the rim sideways hits it and drops back in. That is the wall in the recording.
+2. **"The net"**: a captured ball stops colliding with its OWN rim, so it can pass through it.
+3. **Early capture**: capture fires with the ball up to 1.9 ball-radii ABOVE the rim.
+
+They exist because this hoop's mouth is only 1.33x the ball's width (a real basketball hoop is
+about 1.9x), so honest rim physics lets few balls in. Measured on the 1,281-throw grid, with the
+tube removed and rimouts on: **scoring falls from about 29% to 12-18%**, and a shot that is over
+the mouth but not centred goes in 33-54% instead of 84%. That same tube is why no bounce ever
+reached a neighbouring hoop in the "50-50" study - it holds the ball in the first hoop it touches.
+Shrinking the ball (ballR 0.0436 / 0.0400) did not restore scoring (16% / 15%). **Not changed:
+reported to Matt with these numbers for his call.**
+
 ### The turn label, and HOOPS as the name (2026-09-22)
 
 Matt: *"change the 'Your shot' and the 'Hard is shooting'. Those are not good and the Hub back

@@ -470,13 +470,16 @@ export class Renderer {
     // basketball?" It was a plain lit sphere (`color` only, roughness 0.75), so the scene lights
     // multiplied the hex down while the board is an UNLIT screen showing the hex as is: two
     // different yellows from one number. Now the texture is sRGB (see skeeball's `_buildBall` for
-    // what happens without that line) and it is ALSO the emissive map, so the ball carries the
+    // what happens without that line). (Superseded 2026-09-23: unlit, see below.)
     // board's colour under any light and the key light only adds the round shading on top.
+    // (2026-09-23) AND IT IS UNLIT, like the board. Matt, after the first version: "the red
+    // basketball isn't the same color when thrown as when it's in the board." Measured in his
+    // recording: thrown red RGB 221,70,64 against the disc's 241,87,79. A lit ball can never match
+    // an unlit screen - the scene's lights move its colour with every frame - so the ball is now a
+    // MeshBasicMaterial exactly like the screen, painted from the disc's OWN gradient (see
+    // `_basketballTex`), and its seams still show the roll.
     this._ballTex = { red: this._basketballTex(L.red, true), yellow: this._basketballTex(L.yellow, false) };
-    this.ballMat = new THREE.MeshStandardMaterial({
-      map: this._ballTex.red, emissiveMap: this._ballTex.red, emissive: 0xffffff,
-      emissiveIntensity: 0.55, roughness: 0.6,
-    });
+    this.ballMat = new THREE.MeshBasicMaterial({ map: this._ballTex.red });
     this.ballMesh = new THREE.Mesh(bGeo, this.ballMat);
     this.ballMesh.castShadow = !this.soft;
     this.ballMesh.visible = false;
@@ -948,15 +951,29 @@ export class Renderer {
       }
     }
     if (drop) {
-      // CLIPPED TO THE LIT FIELD, so the disc slides in from behind the bezel rather than
-      // appearing out of nowhere above the board.
+      // THE DISC FALLS BEHIND THE BOARD'S FACE, SEEN ONLY THROUGH THE HOLES (2026-09-23). Matt,
+      // on two slow-motion recordings: "the ball still falls in front of the connect 4 board
+      // instead of IN the board." It was painted ON TOP of the blue face, so it slid down over the
+      // plastic between the holes. On a real Connect 4 the disc drops down a slot behind the
+      // face and you glimpse it hole by hole - so it is clipped to that column's holes, and each
+      // hole's own rim is redrawn over it so it reads as inside the hole, not on it.
+      const c = drop.c, cx = this.colX[c];
       x.save();
       x.beginPath();
-      x.rect(bez, bez, cv.width - bez * 2, cv.height - bez * 2);
+      for (let r = 0; r < R; r++) {
+        const cy = top + rowPitch * (R - 1 - r + 0.5);
+        x.moveTo(cx + rad, cy);
+        x.arc(cx, cy, rad, 0, Math.PI * 2);
+      }
       x.clip();
-      this._ball2d(x, this.colX[drop.c], this._dropY(drop, top, rowPitch, R), rad,
+      this._ball2d(x, cx, this._dropY(drop, top, rowPitch, R), rad,
         drop.who === 0 ? L.red : L.yellow, drop.who === 0);
       x.restore();
+      x.lineWidth = Math.max(1.5, rad * 0.10); x.strokeStyle = '#0b3d80';
+      for (let r = 0; r < R; r++) {
+        const cy = top + rowPitch * (R - 1 - r + 0.5);
+        x.beginPath(); x.arc(cx, cy, rad, 0, Math.PI * 2); x.stroke();
+      }
     }
     this.gridTex.needsUpdate = true;
   }
@@ -998,7 +1015,7 @@ export class Renderer {
     if (!this.ballMat || !this._ballTex) return;
     const tex = String(hex).toLowerCase() === String(this.look.yellow).toLowerCase()
       ? this._ballTex.yellow : this._ballTex.red;
-    this.ballMat.map = tex; this.ballMat.emissiveMap = tex; this.ballMat.needsUpdate = true;
+    this.ballMat.map = tex; this.ballMat.needsUpdate = true;
   }
 
   /** A basketball wrap (equirect: the horizontal band is the equator seam, the vertical bands are
@@ -1008,7 +1025,16 @@ export class Renderer {
     const cv = document.createElement('canvas');
     cv.width = 256; cv.height = 128;
     const x = cv.getContext('2d');
-    x.fillStyle = fill; x.fillRect(0, 0, 256, 128);
+    // THE DISC'S OWN COLOUR, not the bare hex: `_ball2d` paints a disc as a gradient from a light
+    // stop to `fill`, and what the eye reads as "the red disc" is that blend. So the wrap is the
+    // same blend (40% light stop, 60% fill), measured against the disc in a rendered frame.
+    const hi = dark ? '#ff7a6e' : '#ffe488';
+    const mix = (a, b, k) => {
+      const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+      const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+      return 'rgb(' + pa.map((v, i) => Math.round(v * (1 - k) + pb[i] * k)).join(',') + ')';
+    };
+    x.fillStyle = mix(hi, fill, 0.6); x.fillRect(0, 0, 256, 128);
     for (let i = 0; i < 140; i++) {
       x.globalAlpha = 0.16;
       x.beginPath(); x.arc((i * 41) % 256, (i * 23) % 128, 2.2, 0, Math.PI * 2);
