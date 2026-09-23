@@ -82,8 +82,9 @@ Each of these cost real time and each is closed. If an audit says otherwise, the
 - **The cabinet is ONE STEP, the display is VERTICAL and BELOW the hoops.** Two earlier builds got
   this wrong in opposite directions (a grid two steps up a staircase; a panel raked 38° that was
   unreadable edge-on). Do not rake it, do not raise it.
-- **There is no rimout.** A capture IS a Connect 4 move, so a ball that climbed back out would
-  leave the board and the physics disagreeing. Measured 100%.
+- ~~**There is no rimout.**~~ **Reversed 2026-09-23 by Matt**: rimouts are on and the invisible
+  tube above the rims is gone (*"it should be able to freely bounce horizontally"*). The disc falls
+  at `through` (the ball wholly below the rim), which is final, so the board and physics agree.
 - **Nothing may read `G.holes` to steer a ball.** The sideways-bounce redirect is a rotation of
   velocity the ball already had; `test.js` asserts structurally that it reads no hole position.
   This is the rule a future session would "improve" into magnetism.
@@ -179,6 +180,7 @@ mixed build), then run `node validate-sw-assets.mjs`, which also rewrites `REST_
 
 | CACHE | what |
 |---|---|
+| v917 | Invisible tube above the rims removed; rimouts on; rim bounces go sideways. Scored 29% -> 21% |
 | v916 | Disc falls behind the board face (seen through the holes); thrown ball unlit, painted from the disc's own colours |
 | v915 | Ball hidden once through the rim; "<who>'s turn" label clear of the Hub chip; HOOPS-first marquee |
 | v913 | Disc falls on `through`; the thrown ball is a red/yellow basketball; rimout knobs (off) |

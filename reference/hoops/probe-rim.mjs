@@ -46,13 +46,22 @@ for (const run of RUNS) {
   const ids = Object.keys(G.holes);
   const B = { perfect: [0, 0, 0, 0], good: [0, 0, 0, 0], rim: [0, 0, 0, 0], wide: [0, 0, 0, 0] };
   let scored = 0, shots = 0, parked = 0, rimouts = 0, throughThenOther = 0;
+  let latSum = 0, fwdSum = 0, backAtYou = 0, nBounce = 0;
   const capLag = [], thrLag = [], capToThr = [];
   for (let s = 0; s < SEEDS; s++) for (let p = 0; p < P; p++) for (let a = 0; a < A; a++) {
     const st = startThrow(BRD, { power: p / (P - 1), aim: -1 + 2 * a / (A - 1), seed: SEEDS > 1 ? s * 1000 + p * 50 + a : null });
     let arrived = null, off = 0, g = 30000, tCap = -1, tThr = -1, capHole = null, thrHole = null, nCaps = 0;
+    let prevVy = 0;
     while (!st.done && g-- > 0) {
       substep(st);
       const pos = st.ball.position;
+      // A BOUNCE, and which way it went: world x is across the hoop row, +z is toward the player.
+      const v = st.ball.velocity;
+      if (prevVy < -0.25 && v.y > 0.45 && !st.committed) {
+        nBounce++; latSum += Math.abs(v.x); fwdSum += Math.max(v.z, 0);
+        if (v.z > 0.3 && v.z > 2 * Math.abs(v.x)) backAtYou++;
+      }
+      prevVy = v.y;
       if (!arrived) {
         // nearest hole in u, in its own frame
         let best = null;
@@ -87,6 +96,7 @@ for (const run of RUNS) {
   }
   console.log(`\n=== ${run.tag}  (${shots} throws)`);
   console.log(`scored ${pct(scored, shots)}   parked ${pct(parked, shots)}   rimouts(capture that did not score there) ${rimouts}   through-then-elsewhere ${throughThenOther}`);
+  console.log(`bounces ${nBounce}: sideways ${(latSum / Math.max(1, nBounce)).toFixed(2)} m/s vs toward you ${(fwdSum / Math.max(1, nBounce)).toFixed(2)} m/s; straight back at you ${pct(backAtYou, nBounce)}`);
   console.log('band        n    that hoop   other hoop   nothing');
   for (const [k, r] of Object.entries(B)) console.log(`${k.padEnd(8)} ${String(r[0]).padStart(4)}     ${pct(r[1], r[0])}        ${pct(r[2], r[0])}       ${pct(r[3], r[0])}`);
   const ms = (v) => (isNaN(v) ? '  -  ' : (v * 1000).toFixed(0).padStart(4) + 'ms');
