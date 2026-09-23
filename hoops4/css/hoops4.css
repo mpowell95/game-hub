@@ -876,3 +876,5 @@
 /* The row's right border was cut off: width 100% plus its own border overflowed the list. */
 .h4-root .h4-mp-game, .h4-root .h4-mp-tile, .h4-root .h4-mp-act { box-sizing: border-box; }
 .h4-root .h4-mp-games { min-width: 0; }
+/* "Start game 3" on a series row that is owed its next game - a real action, so it reads as one. */
+.h4-root .h4-mp-start { min-width: 86px; color: var(--h4s-ink); font-weight: 800; }

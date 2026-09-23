@@ -502,6 +502,11 @@ both `{a:1,b:0}` with the opponent as side 'a', and no game 3 existed anywhere.*
 - **Correction on read, nothing rewritten**: `validateGame` swaps the stored score of a game 2 with
   no `winsBySide` - off by exactly one missed swap. Both series now read 1-1 and not over. A game 3+
   without the flag would be wrong in a way a swap cannot fix; none exists, and none can now.
+- **Owed games are on the multiplayer home, in "Your turn"** (Matt: *"they're in my history - not
+  the my turn area"*). `owedSeries(rows)` in mp-ui.js lists every finished series game with no
+  later game whose series is not over (reading each candidate, since index rows carry no score).
+  ONE person gets **Start game N** so the two phones cannot both create it: whoever LOST the last
+  game (on a draw, side 'b'); the other sees it under "Waiting on them" as "they start it".
 - **Reaching the owed game 3**: a finished match opened from History (review) used to NEVER offer
   "Next game" (fear of forking the series). It now offers it when no later game of that series
   exists yet. The series line also uses the STORED winner, so a resignation scores right.

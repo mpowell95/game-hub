@@ -119,14 +119,26 @@ export function openMultiplayer(ui) {
     // MP.recordFinished) - including a game the other person won, or quit.
     try { MP.recordFinished(rows); } catch (err) { console.warn('[hoops4] recordFinished', err); }
     const live = rows.filter((r) => r && !r.over);
+    // A SERIES THAT IS OWED ITS NEXT GAME (2026-09-23). Matt, after two series were mis-scored
+    // "2-0" (really 1-1): "can you fix the two series the game incorrectly said i lost". The
+    // score was already right on read; what was missing was a way BACK to them - a finished game
+    // leaves this list, so game 3 was only reachable through History. Now a finished series game
+    // with no later game, whose series is not over, is listed here. ONE person gets the button so
+    // the two phones cannot both create game 3: the one who LOST the last game (on a draw, the
+    // side that was 'b'). The other sees it waiting.
+    const owed = await owedSeries(rows);
+    if (!el.isConnected) return;
     const mine = live.filter((r) => r.yourTurn);
     const theirs = live.filter((r) => !r.yourTurn);
-    const sec = (title, list) => list.length ? `
-      <section class="h4-mp-sec"><h3>${esc(title)} <span class="h4-mp-count">${list.length}</span></h3>
-        <div class="h4-mp-games">${list.map(gameRow).join('')}</div></section>` : '';
-    box.innerHTML = live.length
-      ? sec(t('mpSecYours'), mine) + sec(t('mpSecTheirs'), theirs)
+    const sec = (title, list, extra = []) => (list.length + extra.length) ? `
+      <section class="h4-mp-sec"><h3>${esc(title)} <span class="h4-mp-count">${list.length + extra.length}</span></h3>
+        <div class="h4-mp-games">${extra.join('')}${list.map(gameRow).join('')}</div></section>` : '';
+    const owedMine = owed.filter((o) => o.mine).map(owedRow);
+    const owedTheirs = owed.filter((o) => !o.mine).map(owedRow);
+    box.innerHTML = (live.length || owed.length)
+      ? sec(t('mpSecYours'), mine, owedMine) + sec(t('mpSecTheirs'), theirs, owedTheirs)
       : `<p class="h4-mp-sub">${t('mpNoActive')}</p>`;
+    for (const b of box.querySelectorAll('[data-next]')) ui.on(b, 'click', () => startNext(b.dataset.next, b));
     for (const b of box.querySelectorAll('[data-game]')) ui.on(b, 'click', () => openGame(b.dataset.game));
     for (const b of box.querySelectorAll('[data-quit]')) ui.on(b, 'click', (e) => { e.stopPropagation(); confirmQuit(b.dataset.quit); });
   }
@@ -147,6 +159,57 @@ export function openMultiplayer(ui) {
         </button>
         <button type="button" class="h4-mp-quit" data-quit="${esc(r.id)}" aria-label="${esc(t('mpQuitAria', { who: r.name || '?' }))}">${esc(t('mpQuit'))}</button>
       </div>`;
+  }
+
+  /** Finished series games that are owed a next game. Reads each candidate match (there are
+   *  only ever a handful), because the index row does not carry the running score. */
+  async function owedSeries(rows) {
+    const me = MP.myCode();
+    const cands = (rows || []).filter((r) => r && r.over && r.series > 1
+      && !(rows || []).some((x) => x && x.seriesOf === r.seriesOf && (x.seriesNo | 0) > (r.seriesNo | 0)));
+    const out = [];
+    for (const r of cands.slice(0, 8)) {
+      let g = null;
+      try { g = await MP.readGame(r.id); } catch { g = null; }
+      if (!g || !g.over) continue;
+      const st = MP.seriesAfter(g);
+      if (st.done) continue;
+      const side = MP.sideOf(g, me);
+      if (!side) continue;
+      const w = g.over.winner;
+      const starter = w === 'a' ? 'b' : w === 'b' ? 'a' : 'b';
+      const mineW = side === 'a' ? st.wins.a : st.wins.b;
+      const theirW = side === 'a' ? st.wins.b : st.wins.a;
+      out.push({ id: g.id, row: r, next: st.no + 1, len: st.len, mine: side === starter, score: `${mineW}-${theirW}` });
+    }
+    state.owed = out;
+    return out;
+  }
+
+  function owedRow(o) {
+    const r = o.row;
+    const meta = `${t('gameOf', { n: o.next, m: o.len })} \u00b7 ${t('mpSeriesAt', { s: o.score })}`;
+    const right = o.mine
+      ? `<button type="button" class="h4-mp-quit h4-mp-start" data-next="${esc(o.id)}">${esc(t('mpStartN', { n: o.next }))}</button>`
+      : '';
+    return `<div class="h4-mp-game ${o.mine ? 'is-yours' : 'is-theirs'}">
+        <div class="h4-mp-open" role="group">
+          <span class="h4-mp-emo" aria-hidden="true">${esc(r.emoji)}</span>
+          <span class="h4-mp-txt"><span class="h4-mp-name">${esc(r.name || '?')}</span>
+            <span class="h4-mp-meta">${esc(meta)}${o.mine ? '' : ' \u00b7 ' + esc(t('mpTheyStart'))}</span></span>
+        </div>${right}
+      </div>`;
+  }
+
+  async function startNext(id, btn) {
+    if (state.busy) return;
+    state.busy = true; btn.disabled = true;
+    const g = await MP.readGame(id);
+    const res = g ? await MP.nextInSeries(g) : { ok: false };
+    state.busy = false;
+    if (!res || !res.ok) { btn.disabled = false; btn.textContent = t('mpOffline'); return; }
+    el.remove();
+    ui.startAsync(res.game);
   }
 
   /** QUITTING IS RESIGNING. It asks first, says it counts as a loss, and writes `over` on the
