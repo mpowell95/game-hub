@@ -49,6 +49,7 @@ import {
   startSeason, nextGame, startGame as careerStartGame, checkpoint, finishGame, spend,
   gameStatsFromEvents, resumeGame, playerTeamFor, leagueTeams, playerSideFor, seasonRecord,
   standingsFor, seasonGames,
+  spendLocked,
 } from './engine/career.js';
 import {
   loadCareer, startCareer, saveCheckpoint, saveAtBat, saveGameEnd, saveCareerState,
@@ -1147,6 +1148,7 @@ class BaseballPlayScreen {
     this.playerScreenMode = mode || this.playerScreenMode || 'quickPlay';
     const m = this.playerScreenMode;
     const careerState = m === 'careerSpend' && this.career ? this.career.state : null;
+    const spendLockedNow = !!(careerState && spendLocked(careerState));
     if (m === 'careerSpend' && !careerState) { this.playerScreenMode = 'quickPlay'; return this._renderPlayer('quickPlay'); }
 
     const build = m === 'quickPlay' ? this.quickPlay : m === 'careerStart' ? this._careerStartBuild : { skills: careerState.player.skills };
@@ -1177,7 +1179,7 @@ class BaseballPlayScreen {
     const skillRowHTML = (id) => {
       const val = build.skills[id] || 0;
       const canMinus = minusEnabled && canAdjust(build.skills, id, -1, budget, cap);
-      const canPlus = m === 'careerSpend' ? (careerState.unspent > 0 && val < cap) : canAdjust(build.skills, id, 1, budget, cap);
+      const canPlus = m === 'careerSpend' ? (!spendLockedNow && careerState.unspent > 0 && val < cap) : canAdjust(build.skills, id, 1, budget, cap);
       const cells = Array.from({ length: cap }, (_, i) => `<span class="bb-seg-cell${i < val ? ' is-filled' : ''}"></span>`).join('');
       const label = t('skill_' + id);
       return `
@@ -1192,7 +1194,8 @@ class BaseballPlayScreen {
     };
 
     const pointsLeft = (n) => t('points_left').replace('{n}', String(n));
-    const singlePillHTML = m === 'careerSpend' ? `<div class="bb-points-pill bb-points-pill--single">${pointsLeft(careerState.unspent)}</div>` : '';
+    // R19: in a league whose points are spent between seasons, the pill says so instead of offering them.
+    const singlePillHTML = m === 'careerSpend' ? `<div class="bb-points-pill bb-points-pill--single">${pointsLeft(careerState.unspent)}${spendLockedNow ? ` · ${t('spend_after_season')}` : ''}</div>` : '';
     const hitLeft = m === 'careerSpend' ? null : budget - SETTINGS.HIT_SKILL_IDS.reduce((s, id) => s + (build.skills[id] || 0), 0);
     const pitchLeft = m === 'careerSpend' ? null : budget - SETTINGS.PITCH_SKILL_IDS.reduce((s, id) => s + (build.skills[id] || 0), 0);
     // R18 item 3: the points-left pill sits BESIDE its column header, not stacked below it - one

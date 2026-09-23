@@ -4,6 +4,23 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## R19: every skill counts; Majors points are spent after the season (2026-09-23)
+
+Spec and record: `docs/BASEBALL-3D-BUILD.md` section 9, R19. What changed, in one line each:
+
+- **Edge of the zone is harder to hit** (`EDGE_CONTACT`, `swing.js` `edgeWindowMult`), and **low
+  Accuracy pulls the aim toward the middle** (`FEEL.engine.aimPull`, `pitch.js`). Accuracy was
+  worth +0.1 pp for 6 points; now +3.4 with a pitcher who works the corners.
+- **Speed**: wider, stronger grounder beat-outs (`MECHANICS.groundEdgeMarginFt`/`beatOutPerPt`/
+  `beatOutMax`), gap hits stretch (`SKILL_EFFECT.hitSpd.stretchDepthPerPt`), steals 0.02 a point.
+- **Majors points wait for the season's end** (`SPEND_AFTER_SEASON`, `career.js` `spendLocked`),
+  Matt's choice. With Majors rosters at 23.0 / 26 and 1 point a loss: a strong player's
+  first-try World Series 60% to 30.5%; median first title 11 seasons; Perfect Season 3.8%.
+- **The simulator's player steals and works the corners** (`HUMAN_STEAL`, `paint`); before R19
+  it did neither, so the tool could not see Speed or Accuracy at all. `view.steal.chance` is new.
+- **R18 left the career test red on `main`** (the `twoWayStar` preset rename); both career tools
+  now start from `balanced`.
+
 ## R18: the career start screen (2026-09-22)
 
 Matt, with a screenshot of the career-start player screen on his phone: *"My landing page is

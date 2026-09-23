@@ -2082,3 +2082,47 @@ lines with every number from the settings. Ship review took over the last verifi
 after the agent was cut off twice waiting on its own suite. Probes `player-screen`,
 `player-budget`, `first-season-block`; `check-no-scroll` 16 of 16; `baseball/js/test.js` 2988;
 device and visual suites run on the merged tree.
+
+### R19: every skill counts, and the Majors take more than one season (2026-09-23)
+
+Matt: *"do 1 and 2"* - (1) a strong player won the World Series first time in the Majors, and
+(2) Speed and Accuracy did nothing. Measured first (median player, Majors, +6 points in one skill,
+3,000+ games a cell): hitPow +11.4 pp of win rate, hitAcc +9.8, pitchSpin +2.3, pitchSpd +2.1,
+**hitSpd +0.3, pitchAcc +0.1**. Pitch Accuracy 0 against 26 moved runs allowed 7.54 to 7.46.
+
+**Why Accuracy was dead.** The batter's cursor follows the ball, so where a pitch crossed changed
+nothing but ball or strike, and a random miss is as likely to land on the edge as over the
+middle. Matt chose the fix: **the edge of the zone is harder to square up** (`EDGE_CONTACT`,
+start 0.3, penalty 0.5: the good-contact window shrinks toward the edge, the foul boundary does
+not), and **a missed spot catches more plate** (`FEEL.engine.aimPull` 2: below full Accuracy the
+aim is drawn toward the middle, no new random draw). Measured with a pitcher who works the corners:
++6 Accuracy = +3.4 pp.
+
+**Why Speed was dead.** The model never stole, and a steal adds little in this run environment
+anyway (+0.1 runs a game even at 84% success); gap hits are rare since R5. What Speed now buys:
+the grounder beat-out margin 15 to 60 ft, 0.02 to 0.03 a point, ceiling 0.5 to 0.9
+(`MECHANICS.beatOutMax`, was a literal); `stretchDepthPerPt` 0.015 pulls the double and triple
+cutoffs in; `stealSuccessPerPt` 0.01 to 0.02. +6 Speed = about +2 pp, in line with Spin and Speed.
+
+**The simulator's player now does what a player does**: works the corners when pitching (`paint`
+per tier, 0.5 / 0.8 / 1.0, the league's own rate as the floor) and steals when the engine's own
+odds are 70% or better, 30% of pitches (`HUMAN_STEAL`; `view.steal.chance` is new and additive).
+
+**The Majors.** Tougher rosters alone traded the median player for the strong one, and a maxed
+Perfect Season fell under its 2% floor. Matt chose a rule: **Majors points are spent after the
+season** (`SPEND_AFTER_SEASON`, `career.js` `spendLocked`; nothing is lost, the points wait in
+`unspent`; the player screen says "spend after the season"). With it, `CPU_ROSTER_LEVEL.majors`
+22.1 to 23.0, `CPU_ROSTER_CEILING.majors` 25 to 26, `POINTS.majors.loss` 0 to 1.
+
+Found on the way: R18 renamed the `twoWayStar` preset and `sim-baseball-career.mjs` and
+`test-baseball-career.mjs` still asked for it, so both started careers at zero skills and the
+career test failed 15 checks on `main`. Fixed to `balanced`.
+
+### R19 record (2026-09-23)
+
+`sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400`, all eight assertions
+pass. First-attempt Gold, median 100 / 93.5 / 44.5 / 29.5 / 2.0; first title median 11 seasons,
+Majors median 4; strong 100 / 96 / 86.5 / 87.5 / **30.5** (was 60.0), strong Majors seasons median
+2; weak 94.5 / 65 / 5 / 1 / 0; Perfect Season 3.8% [2.3, 6.1]. `baseball/js/test.js` 2996 (the
+Perfect Season smoke test now plays the simulator's own maxed player, 150 seasons),
+`test-baseball-career.mjs` 315.

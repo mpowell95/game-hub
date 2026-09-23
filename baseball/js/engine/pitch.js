@@ -140,8 +140,17 @@ export function flyPitch(type, aim, pitchAccSkill01, settings, rand01, pitcherSk
   // still judged on them; `straightX`/`straightY` are still where the pitch APPEARS to be headed
   // at release (now aim minus break, plus the same scatter), which is exactly what the batting-side
   // target marker needs to slide FROM so that where it ends up is the truth.
-  const straightX = (aimX - brk.x) + (drawX * 2 - 1) * scatter;
-  const straightY = (aimY - brk.y) + (drawY * 2 - 1) * scatter;
+  // R19: A MISSED SPOT CATCHES MORE PLATE. Symmetric scatter alone could not make Accuracy a
+  // skill: a miss is as likely to land further out (onto the edge, which R19's EDGE_CONTACT makes
+  // harder to hit) as further in, so 0 and 26 points measured the same runs allowed. Below full
+  // Accuracy the aim itself is drawn toward the middle of the plate by `AIM_PULL x (1 - skill)`, so
+  // a pitcher without control cannot live on the corners. No new random draw (the four above are
+  // the pitch's whole budget).
+  const pull = Math.max(0, Math.min(1, (F.aimPull || 0) * (1 - skill)));
+  const aimXe = aimX * (1 - pull);
+  const aimYe = aimY * (1 - pull);
+  const straightX = (aimXe - brk.x) + (drawX * 2 - 1) * scatter;
+  const straightY = (aimYe - brk.y) + (drawY * 2 - 1) * scatter;
   const x = straightX + brk.x;
   const y = straightY + brk.y;
 

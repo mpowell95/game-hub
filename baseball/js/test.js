@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import * as SETTINGS from './engine/settings.js';
 import { ZONE, flyPitch, breakOffsetFor } from './engine/pitch.js';
-import { swing, qualityFor, computeSwingTiming, flightWindowMult } from './engine/swing.js';
+import { swing, qualityFor, computeSwingTiming, flightWindowMult, edgeWindowMult } from './engine/swing.js';
 import { resolveContact, resolveBunt, carryFt, fenceFtAt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
@@ -1807,8 +1807,11 @@ console.log('\n-- 23. BB-2d commit 8: inventory - Perfect Season reachable at th
     const playerTeam = makePlayerTeam({ skills, hand: 'R' });
     const cpu = SETTINGS.CPU[league];
     const playerAgent = {
-      decidePitch: (v) => new ModelPitcher({ league, settings: SETTINGS, variety: MAXED.variety, cornerBias: cpu.cornerBias, pitchMix: cpu.pitchMix }).decidePitch(v),
-      decideSwing: (v) => new ModelBatter({ timingSigmaMs: MAXED.timingSigmaMs, placementSigma: MAXED.placementSigma, swingIn: MAXED.swingIn, chase: MAXED.chase, settings: SETTINGS }).decideSwing(v),
+      // R19: the same maxed player sim-baseball-career.mjs's Perfect Season probe plays - he works the
+      // corners (EDGE_CONTACT made that worth doing), swings with his own power, and steals when
+      // the engine's own odds are good. The pre-R19 model did none of the three.
+      decidePitch: (v) => new ModelPitcher({ league, settings: SETTINGS, variety: MAXED.variety, cornerBias: Math.max(cpu.cornerBias, 1), pitchMix: cpu.pitchMix }).decidePitch(v),
+      decideSwing: (v) => new ModelBatter({ timingSigmaMs: MAXED.timingSigmaMs, placementSigma: MAXED.placementSigma, swingIn: MAXED.swingIn, chase: MAXED.chase, settings: SETTINGS, skills, steal: { minChance: 0.70, rate: 0.30 } }).decideSwing(v),
     };
     let wins = 0, losses = 0;
     for (let i = 0; i < schedule.length; i++) {
@@ -1841,7 +1844,7 @@ console.log('\n-- 23. BB-2d commit 8: inventory - Perfect Season reachable at th
     return chGame.winner === 'home';
   }
   let perfectCount = 0;
-  const SEASONS = 40;
+  const SEASONS = 150;   // R19: 40 -> 150; at the measured ~4% rate 40 seasons read 0 about one run in five
   for (let i = 0; i < SEASONS; i++) if (await playMaxedSeason('majors', i)) perfectCount += 1;
   ok(perfectCount > 0, `doc §5, [Locked]: Perfect Season is reachable at the maxed tier - ${perfectCount}/${SEASONS} Majors seasons perfect`);
 }
@@ -2564,7 +2567,7 @@ await (async function section30() {
       return hits / N;
     };
     const slow = rateFor(0), quick = rateFor(20);
-    const wantQuick = Math.min(0.5, 20 * SETTINGS.MECHANICS.beatOutPerPt);
+    const wantQuick = Math.min(SETTINGS.MECHANICS.beatOutMax, 20 * SETTINGS.MECHANICS.beatOutPerPt);
     ok(slow === 0, `a batter with no speed never beats out a bunt (${slow})`);
     ok(Math.abs(quick - wantQuick) <= 0.02,
       `a 20-point hitSpd batter beats out ${quick.toFixed(3)} of his bunts against MECHANICS.beatOutPerPt's ${wantQuick.toFixed(3)}`);
@@ -3154,6 +3157,24 @@ await (async function section34() {
       '(6) and BOTH still cross at the aim - R16 aim compensation, so spin is an edge rather than a walk');
   }
 })();
+
+// ---------------------------------------------------------------------------------------------
+// R19 (docs/BASEBALL-3D-BUILD.md section 9): Accuracy and Speed are real skills.
+{
+  const E = SETTINGS.EDGE_CONTACT;
+  ok(edgeWindowMult({ x: 0, y: 0 }, SETTINGS) === 1, 'R19: a pitch down the middle keeps the whole good-contact window');
+  ok(Math.abs(edgeWindowMult({ x: 1, y: 0 }, SETTINGS) - (1 - E.penalty)) < 1e-9, 'R19: a pitch on the edge loses EDGE_CONTACT.penalty of it');
+  ok(edgeWindowMult({ x: 0.2, y: 1.4 }, SETTINGS) === edgeWindowMult({ x: 1, y: 0 }, SETTINGS), 'R19: outside the zone keeps the full edge penalty, on either axis');
+  ok(edgeWindowMult({ x: 1, y: 0 }, {}) === 1, 'R19: settings without EDGE_CONTACT change nothing');
+  const draws = { x: 0.5, y: 0.5, bx: 0.5, by: 0.5 };
+  const aim = { x: 0.9, y: 0 };
+  const wild = flyPitch('fastball', aim, 0, SETTINGS, () => 0.5, {}, { scatter: draws });
+  const ace = flyPitch('fastball', aim, 1, SETTINGS, () => 0.5, {}, { scatter: draws });
+  ok(Math.abs(ace.x - 0.9) < 1e-9, `R19: full Accuracy lands on the aim (${ace.x.toFixed(3)})`);
+  ok(Math.abs(wild.x) < Math.abs(ace.x), `R19: low Accuracy leaves the pitch closer to the middle (${wild.x.toFixed(3)} vs ${ace.x.toFixed(3)})`);
+  ok(SETTINGS.MECHANICS.beatOutMax > 0.5 && SETTINGS.MECHANICS.groundEdgeMarginFt > 15, 'R19: Speed decides a real share of grounders (wider margin, higher ceiling)');
+  ok(SETTINGS.SKILL_EFFECT.hitSpd.stretchDepthPerPt > 0, 'R19: Speed stretches a gap hit');
+}
 
 // ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);

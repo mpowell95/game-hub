@@ -349,8 +349,12 @@ export class ModelBatter {
    *  `settings` (BB-2b commit 3, optional) is only needed for `PITCH_TRAVEL_MULT`/
    *  `SPEED_SURPRISE_MS_PER_MULT` overrides in a settings-sweep test; the real module's own values
    *  are the default. */
-  constructor({ timingSigmaMs, placementSigma, swingIn = 0.85, chase = 0.20, settings, skills, powerChance }) {
+  constructor({ timingSigmaMs, placementSigma, swingIn = 0.85, chase = 0.20, settings, skills, powerChance, steal }) {
     this.timingSigmaMs = timingSigmaMs;
+    // R19: `{ minChance, rate }` or absent. A model human who reads the bases: sends the runner on
+    // `rate` of pitches when the engine's own success chance is at least `minChance`. Absent, the
+    // model never steals, which is what every measurement before R19 assumed.
+    this.steal = steal || null;
     this.placementSigma = placementSigma;
     this.swingIn = swingIn;
     this.chase = chase;
@@ -363,8 +367,16 @@ export class ModelBatter {
   }
   async decideSwing(view) {
     const pitch = view.pitch;
+    // R19: the steal is decided first and rides out on a take or a swing, the CpuBatter's own shape.
+    // It draws only when a steal is genuinely worth considering, so a model without a steal policy
+    // (or with nobody on) keeps its exact place in the seeded stream.
+    let steal = false;
+    const S = this.steal;
+    if (S && view.steal && !(view.outs >= 2 && view.balls >= 3) && (view.steal.chance || 0) >= S.minChance) {
+      steal = view.rand01() < S.rate;
+    }
     const swingChance = pitch.isStrike ? this.swingIn : this.chase;
-    if (view.rand01() >= swingChance) return { action: 'take' };
+    if (view.rand01() >= swingChance) return steal ? { action: 'take', steal } : { action: 'take' };
     // BB-2b commit 3, doc §8: "Change speeds and he swings early or late" - a human is fooled by a
     // pitch speed that surprises them exactly the way a CpuBatter's own pattern read already was
     // (see `speedSurpriseMs`/`expectedTravelMult` above), which `ModelBatter` never modeled before
@@ -382,7 +394,9 @@ export class ModelBatter {
     const seenY = pitch.straightY != null ? pitch.straightY : (pitch.y || 0);
     const aimX = seenX + (view.rand01() * 2 - 1) * this.placementSigma;
     const aimY = seenY + (view.rand01() * 2 - 1) * this.placementSigma;
-    return { action: 'swing', cursor: { x: aimX, y: aimY }, timingErrorMs, mode: pickMode(this.skills || {}, view.rand01, this.powerChance) };
+    const out = { action: 'swing', cursor: { x: aimX, y: aimY }, timingErrorMs, mode: pickMode(this.skills || {}, view.rand01, this.powerChance) };
+    if (steal) out.steal = true;
+    return out;
   }
 }
 

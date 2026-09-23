@@ -737,7 +737,7 @@ await ctx.close();
         // dev seam so the break this probe reads is BREAK_OFFSET's own raw table, not that table
         // widened by whatever pitchSpin points the current preset happens to carry. AFTER the
         // league click, never before it (a league change re-scales the preset and would clobber it).
-        if (window.__bbTest && window.__bbTest.setBuild) window.__bbTest.setBuild({ skills: { pitchSpin: 0 } });
+        if (window.__bbTest && window.__bbTest.setBuild) window.__bbTest.setBuild({ skills: { pitchSpin: 0, pitchAcc: 14 } });   // R19: full Accuracy at High School (cap 14), so aimPull is 0 and the crossing is the aim
         const btn = root && root.querySelector('.bb-play-btn');
         if (btn) btn.click();
         return !!btn;
@@ -2557,6 +2557,9 @@ function bbProfileInit() {
           // loadCareer() on this fresh mount races a real network pull (up to
           // CAREER_PULL_TIMEOUT_MS = 2500ms) before the career tab auto-switch can fire - a fixed
           // short wait here raced that and lost. Wait for the real button instead.
+          // R18's mountInHub taps Quick Play (every other probe wants it), which counts as a deliberate
+          // tab choice and so beats the career tab's own auto-switch; go back to Career explicitly.
+          await pageR.click('[data-act="tab"][data-tab="career"]').catch(() => {});
           await pageR.waitForSelector('[data-act="career-primary"]', { timeout: 8000 }).catch(() => {});
           const resumeErr = await pageR.evaluate(() => {
             const btn = document.querySelector('[data-act="career-primary"]');
