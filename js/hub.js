@@ -441,6 +441,20 @@ export const GAMES = [
     devOnly: true,
   },
   {
+    // A clone of "Neon Breakout" (HYPERBRICK): synthwave breakout with five hand-built stages,
+    // an Endless mode and four power-ups. Owns the whole viewport (a fixed canvas under its own
+    // HUD row, which shares the floating back button's row), so immersive like Pinball.
+    id: 'brick-blitz',
+    released: '2026-09-23',
+    title: 'Brick Blitz',
+    blurb: { en: 'Neon breakout. Smash the bricks, chain combos, grab multi-ball and lasers.',
+      es: 'Rompeladrillos de neón. Rompe ladrillos, encadena combos y coge multibola y láseres.' },
+    module: '../brick-blitz/js/ui.js',
+    immersive: true,
+    accent: '#ff2e97',
+    art: GAME_ART['brick-blitz'],
+  },
+  {
     // BEING REBUILT (golf-reference-spec.md). The 3D game that shipped here is deleted; the 2D
     // top-down game replaces it. `module:` still points at golf/js/ui.js, which is a placeholder
     // screen for the duration, so the hub's mount path never carries a broken import.

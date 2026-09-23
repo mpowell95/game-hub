@@ -607,6 +607,34 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
     SOLO.has('pinball'));
 }
 
+// ---- Brick Blitz's bz sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// Written the day the game shipped (2026-09-23). Counters ADD; every best (overall, per
+// difficulty, combo) takes Math.max. d3 synced before Brick Blitz existed and has no key at all.
+{
+  const all = {
+    d1: rec({ playerId: 'BZ111', name: 'Smash' }, {
+      brickblitz: {
+        total: { played: 3, won: 3, lost: 0 },
+        byDiff: { easy: { played: 3, won: 3, lost: 0 } },
+        bz: { games: 3, bestScore: 42000, bestScoreByDiff: { easy: 42000, medium: 0, hard: 0 }, points: 90000, bricks: 300, stages: 4, circuits: 0, bestCombo: 9 },
+      },
+    }, 100),
+    d2: rec({ playerId: 'bz111', name: 'Smash' }, {
+      brickblitz: {
+        total: { played: 2, won: 2, lost: 0 },
+        byDiff: { hard: { played: 2, won: 2, lost: 0 } },
+        bz: { games: 2, bestScore: 30000, bestScoreByDiff: { easy: 5000, medium: 0, hard: 30000 }, points: 50000, bricks: 200, stages: 5, circuits: 1, bestCombo: 14 },
+      },
+    }, 200),
+    d3: rec({ playerId: 'BZ111', name: 'Smash' }, { connect4: comp(1, 1, 0) }, 300),
+  };
+  const bz = aggregatePlayers(all)[0].games.brickblitz.bz;
+  eq('brickblitz: lifetime counters add', [bz.games, bz.points, bz.bricks, bz.stages, bz.circuits], [5, 140000, 500, 9, 1]);
+  eq('brickblitz: best score and best combo take the max, never a sum', [bz.bestScore, bz.bestCombo], [42000, 14]);
+  eq('brickblitz: per-difficulty bests take the max per key', bz.bestScoreByDiff, { easy: 42000, medium: 0, hard: 30000 });
+  ok('brickblitz counts as a SOLO game', SOLO.has('brickblitz'));
+}
+
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
 //
 // Root CLAUDE.md, "Adding a game" item 7: a per-game sub-counter (`grid`/`cc`/`es`/`nb`/`br`/`tt`/

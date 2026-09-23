@@ -73,6 +73,7 @@ const TABS = [
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
   // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
   { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
+  { id: 'brickblitz', labelKey: 'game_title_brickblitz' },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
@@ -91,10 +92,10 @@ const TABS = [
 const HUB_ID = {
   connect4: 'connect-four', nutsbolts: 'nuts-bolts', tictactoe: 'tic-tac-toe',
   dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
-  hillclimb: 'hill-climb',
+  hillclimb: 'hill-climb', brickblitz: 'brick-blitz',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -1145,6 +1146,7 @@ function hasPlays(id, rec) {
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
   if (id === 'pinball') return !!(rec.pb && rec.pb.games);
+  if (id === 'brickblitz') return !!(rec.bz && rec.bz.games);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
   if (id === 'sudoku') return !!(rec.sd && rec.sd.solved);
@@ -1163,6 +1165,7 @@ function headlineOf(id, rec) {
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
   if (id === 'pinball') return { n: (rec.pb && rec.pb.bestScore) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'brickblitz') return { n: (rec.bz && rec.bz.bestScore) | 0, unitKey: unitKeyOf(id) };
   // Lifetime points, not the best single rack - the same fix leaderboard-ui.js's skPointsAt
   // already made for the Skeeball board's own Points sort (2026-09-01, Matt: "Points should
   // show lifetime points. Not your best single round"). This second call site (My Stats' and
@@ -1300,6 +1303,36 @@ function pinballScreen(rec) {
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_played')}</th></tr></thead>
       <tbody>${PB_TABLES.map(([k, labelKey]) =>
         `<tr><th scope="row">${t(labelKey)}</th><td>${((rec && rec.byDiff && rec.byDiff[k] && rec.byDiff[k].played) | 0)}</td></tr>`).join('')}</tbody>
+    </table>`;
+}
+
+// --- Brick Blitz (solo, score attack, three difficulties) -------------------------------------
+/** No wins or losses (a run ends when the last ball is lost), so the honest numbers are runs,
+ *  bests and lifetime counters, like Pinball's screen. Average is derived at render time from
+ *  `points` and `games`, never stored. The per-difficulty table shows every stored best. */
+function brickBlitzScreen(rec) {
+  const bz = (rec && rec.bz) || {};
+  const games = bz.games | 0;
+  if (!games) return emptyState('Brick Blitz');
+  const avg = Math.round((bz.points | 0) / games);
+  const by = bz.bestScoreByDiff || {};
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${(bz.bestScore | 0).toLocaleString()}</b><span>${t('gs_bz_best')}</span></div>
+      <div class="gs-tally"><b>${games}</b><span>${t('gs_played')}</span></div>
+      <div class="gs-tally"><b>${avg.toLocaleString()}</b><span>${t('gs_bz_avg')}</span></div>
+      <div class="gs-tally"><b>x${bz.bestCombo | 0}</b><span>${t('gs_bz_combo')}</span></div>
+    </div>
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${(bz.bricks | 0).toLocaleString()}</b><span>${t('gs_bz_bricks')}</span></div>
+      <div class="gs-tally"><b>${bz.stages | 0}</b><span>${t('gs_bz_stages')}</span></div>
+      <div class="gs-tally"><b>${bz.circuits | 0}</b><span>${t('gs_bz_circuits')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_bz_by_diff')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_played')}</th><th scope="col">${t('gs_bz_best')}</th></tr></thead>
+      <tbody>${SN_DIFFS.map(([k, labelKey]) =>
+        `<tr><th scope="row">${t(labelKey)}</th><td>${((rec && rec.byDiff && rec.byDiff[k] && rec.byDiff[k].played) | 0)}</td><td>${(by[k] | 0).toLocaleString()}</td></tr>`).join('')}</tbody>
     </table>`;
 }
 
@@ -1445,6 +1478,7 @@ function screenFor(id, st) {
   if (id === 'battleship') return battleshipScreen(rec);
   if (id === 'skeeball') return skeeballScreen(rec);
   if (id === 'pinball') return pinballScreen(rec);
+  if (id === 'brickblitz') return brickBlitzScreen(rec);
   if (id === 'golf') return golfScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }

@@ -161,6 +161,18 @@
 //                                                   // high-score TABLE anywhere: this is the one and
 //                                                   // only record of a pinball score, so it cannot
 //                                                   // disagree with itself; see recordPinball
+//       brickblitz: {
+//         total, byDiff,                           // byDiff keyed easy|medium|hard (the setup screen's
+//                                                   // three difficulties, stored under their own names)
+//         bz: { games, bestScore, bestScoreByDiff: { easy, medium, hard }, points,
+//               bricks, stages, circuits, bestCombo } },
+//                                                   // solo score attack, same family as pinball's pb:
+//                                                   // no loss axis, so every run is played+won.
+//                                                   // bestScore/bestScoreByDiff/bestCombo are Math.max
+//                                                   // ONLY; games/points/bricks/stages/circuits are
+//                                                   // lifetime counters, additive. The one home of a
+//                                                   // Brick Blitz score (no local high-score table);
+//                                                   // see recordBrickBlitz
 //       sudoku: {
 //         total, byDiff,                           // byDiff keyed easy|medium|hard|expert
 //         sd: { solved, perfect, hints, mistakes,
@@ -182,7 +194,7 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -845,6 +857,7 @@ function normalize(raw) {
   ensureGf(st.games.golf);
   ensureBb(st.games.baseball);
   ensureMs(st.games.minesweeper);
+  ensureBz(st.games.brickblitz);
   return st;
 }
 
@@ -2025,6 +2038,52 @@ export function recordPinball(score, difficulty, extras) {
   g.pb.multiballs += n(x.multiballs);
   g.pb.missions += n(x.missions);
   g.pb.ramps += n(x.ramps);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Brick Blitz: a solo score-attack breakout. Same shape family as Pinball's `pb` - no opponent,
+ *  no loss axis (a run ends when the last ball is lost, or when the player walks away), so
+ *  `bz.games` is the true play count and the score bests are the scoreboard.
+ *    bestScore / bestScoreByDiff   highest run overall and per difficulty. Math.max ONLY.
+ *    bestCombo                     longest brick streak between paddle touches. Math.max ONLY.
+ *    points / bricks / stages / circuits
+ *                                  lifetime counters, additive forever. `circuits` counts runs
+ *                                  that cleared all five Arcade stages. */
+export const BZ_DIFFS = ['easy', 'medium', 'hard'];
+function ensureBz(g) {
+  if (!g.bz || typeof g.bz !== 'object') {
+    g.bz = { games: 0, bestScore: 0, bestScoreByDiff: {}, points: 0, bricks: 0, stages: 0, circuits: 0, bestCombo: 0 };
+  }
+  for (const k of ['games', 'bestScore', 'points', 'bricks', 'stages', 'circuits', 'bestCombo']) {
+    if (!Number.isFinite(g.bz[k])) g.bz[k] = 0;
+  }
+  if (!g.bz.bestScoreByDiff || typeof g.bz.bestScoreByDiff !== 'object') g.bz.bestScoreByDiff = {};
+  for (const d of BZ_DIFFS) if (!Number.isFinite(g.bz.bestScoreByDiff[d])) g.bz.bestScoreByDiff[d] = 0;
+}
+
+/** Brick Blitz: record one finished run. `score` is the final score, `difficulty` one of
+ *  easy|medium|hard, `extras` = { bricks, stages, bestCombo, circuit } from the run. Counts as
+ *  played+won (no loss state), like Snake / Pinball. Additive: bests only go up, counters only add. */
+export function recordBrickBlitz(score, difficulty, extras) {
+  if (tooFast('brickblitz')) return null;
+  const st = loadStats();
+  const g = st.games.brickblitz;
+  ensureBz(g);
+  const d = BZ_DIFFS.indexOf(normDiff(difficulty)) >= 0 ? normDiff(difficulty) : null;
+  const n = (v) => (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
+  const pts = n(score);
+  const x = extras || {};
+  if (d) bumpTotals(g, d, true); else { g.total.played += 1; g.total.won += 1; }
+  g.bz.games += 1;
+  g.bz.points += pts;
+  g.bz.bestScore = Math.max(g.bz.bestScore | 0, pts);
+  if (d) g.bz.bestScoreByDiff[d] = Math.max(g.bz.bestScoreByDiff[d] | 0, pts);
+  g.bz.bricks += n(x.bricks);
+  g.bz.stages += n(x.stages);
+  if (x.circuit === true) g.bz.circuits += 1;
+  g.bz.bestCombo = Math.max(g.bz.bestCombo | 0, n(x.bestCombo));
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

@@ -585,6 +585,46 @@ export const GAME_ART = {
   // (46,70)->(110,38), i.e. rotate(-26.6) about a point one wheel-radius up the surface normal -
   // so the wheels touch the grass exactly. Same flat-cartoon ink (#231f1c) the live game draws
   // with, so the tile and the gameplay read as one thing.
+  // Brick Blitz: the game's own synthwave screen at tile size - neon brick rows up top (one two-hit
+  // brick marked by its inner outline, never colour alone), a striped sun on the horizon, the pink
+  // perspective grid, a glowing ball and the cyan paddle with magenta end caps.
+  'brick-blitz': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <defs>
+              <linearGradient id="bxSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c001f"/><stop offset="0.7" stop-color="#3a0a5e"/><stop offset="1" stop-color="#ff2e97"/></linearGradient>
+              <linearGradient id="bxSun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff200"/><stop offset="0.5" stop-color="#ff9e00"/><stop offset="1" stop-color="#ff2e97"/></linearGradient>
+            </defs>
+            <rect width="160" height="90" fill="#12002b"/>
+            <rect width="160" height="56" fill="url(#bxSky)"/>
+            <circle cx="80" cy="56" r="20" fill="url(#bxSun)" opacity="0.9"/>
+            <g fill="#12002b"><rect x="58" y="47" width="44" height="1.5"/><rect x="58" y="51" width="44" height="2"/><rect x="58" y="55" width="44" height="2.5"/></g>
+            <rect x="0" y="56" width="160" height="34" fill="#16012f"/>
+            <g stroke="#ff2e97" stroke-width="0.8" opacity="0.8">
+              <line x1="0" y1="56" x2="160" y2="56"/><line x1="0" y1="61" x2="160" y2="61"/><line x1="0" y1="68" x2="160" y2="68"/><line x1="0" y1="78" x2="160" y2="78"/>
+              <line x1="80" y1="56" x2="80" y2="90"/><line x1="70" y1="56" x2="40" y2="90"/><line x1="90" y1="56" x2="120" y2="90"/>
+              <line x1="60" y1="56" x2="0" y2="90"/><line x1="100" y1="56" x2="160" y2="90"/>
+            </g>
+            <g stroke-width="1.2">
+              <rect x="8" y="8" width="20" height="7" rx="2" fill="#ff2e97" fill-opacity="0.5" stroke="#ff2e97"/>
+              <rect x="31" y="8" width="20" height="7" rx="2" fill="#ff2e97" fill-opacity="0.5" stroke="#ff2e97"/>
+              <rect x="54" y="8" width="20" height="7" rx="2" fill="#ff9e00" fill-opacity="0.5" stroke="#ff9e00"/>
+              <rect x="86" y="8" width="20" height="7" rx="2" fill="#ff9e00" fill-opacity="0.5" stroke="#ff9e00"/>
+              <rect x="109" y="8" width="20" height="7" rx="2" fill="#fff200" fill-opacity="0.5" stroke="#fff200"/>
+              <rect x="132" y="8" width="20" height="7" rx="2" fill="#fff200" fill-opacity="0.5" stroke="#fff200"/>
+              <rect x="19" y="18" width="20" height="7" rx="2" fill="#00f5d4" fill-opacity="0.75" stroke="#00f5d4"/>
+              <rect x="42" y="18" width="20" height="7" rx="2" fill="#00bbf9" fill-opacity="0.5" stroke="#00bbf9"/>
+              <rect x="98" y="18" width="20" height="7" rx="2" fill="#9b5de5" fill-opacity="0.5" stroke="#9b5de5"/>
+              <rect x="121" y="18" width="20" height="7" rx="2" fill="#9b5de5" fill-opacity="0.5" stroke="#9b5de5"/>
+            </g>
+            <rect x="21" y="19.8" width="16" height="3.4" rx="1" fill="none" stroke="#ffffff" stroke-width="0.7"/>
+            <circle cx="77" cy="21" r="4.5" fill="#00f5d4" opacity="0.35"/>
+            <circle cx="77" cy="21" r="2.4" fill="#ffffff"/>
+            <path d="M70 40 L74 29" stroke="#00f5d4" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+            <circle cx="96" cy="36" r="4.5" fill="#00f5d4" opacity="0.35"/>
+            <circle cx="96" cy="36" r="2.6" fill="#ffffff"/>
+            <rect x="66" y="78" width="30" height="5" rx="2.5" fill="#00f5d4"/>
+            <rect x="66" y="78" width="6" height="5" rx="2.5" fill="#ff2e97"/>
+            <rect x="90" y="78" width="6" height="5" rx="2.5" fill="#ff2e97"/>
+          </svg>`,
   // Pinball: the one composition a 16:9 frame suits better than the real table does. A pinball
   // playfield is tall and narrow, so rather than squash it, this is a CLOSE-UP of the part that
   // reads instantly at tile size: the arch, the bumper nest, the ramp, and the two flippers with a

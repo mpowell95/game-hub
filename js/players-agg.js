@@ -13,7 +13,7 @@ import { GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball', 'golf', 'sudoku', 'minesweeper']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'brickblitz']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -359,6 +359,19 @@ export function aggregatePlayers(all, corrections) {
         dst.pb.ramps += src.pb.ramps | 0;
         dst.pb.bestScore = Math.max(dst.pb.bestScore | 0, src.pb.bestScore | 0);
         dst.pb.bestBall = Math.max(dst.pb.bestBall | 0, src.pb.bestBall | 0);
+      } else if (g === 'brickblitz' && src.bz) {
+        // Root CLAUDE.md "Adding a game" item 7's third edit, present from day one. Lifetime
+        // counters ADD; every best (overall, per difficulty, combo) takes Math.max, never a sum.
+        if (!dst.bz) dst.bz = { games: 0, bestScore: 0, bestScoreByDiff: {}, points: 0, bricks: 0, stages: 0, circuits: 0, bestCombo: 0 };
+        dst.bz.games += src.bz.games | 0;
+        dst.bz.points += src.bz.points | 0;
+        dst.bz.bricks += src.bz.bricks | 0;
+        dst.bz.stages += src.bz.stages | 0;
+        dst.bz.circuits += src.bz.circuits | 0;
+        dst.bz.bestScore = Math.max(dst.bz.bestScore | 0, src.bz.bestScore | 0);
+        dst.bz.bestCombo = Math.max(dst.bz.bestCombo | 0, src.bz.bestCombo | 0);
+        const sbd = src.bz.bestScoreByDiff || {};
+        for (const k of Object.keys(sbd)) dst.bz.bestScoreByDiff[k] = Math.max(dst.bz.bestScoreByDiff[k] | 0, sbd[k] | 0);
       } else if (g === 'battleship' && src.bs) {
         // Root CLAUDE.md "Adding a game" item 7's third edit. Counters (played/won/lost/shots/
         // hits/sunk) ADD; bestAccuracy takes Math.max. fewestShotsWin is this repo's first
