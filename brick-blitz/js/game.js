@@ -24,9 +24,9 @@ export const DIFFS = ['easy', 'medium', 'hard'];
  *  drop rate make Easy forgiving and Hard stingy. Lives are 5/3/3: Hard is faster and narrower,
  *  not also shorter. */
 export const DIFF_TUNING = {
-  easy:   { speed: 0.82, paddle: 116, lives: 5, drop: 0.18 },
-  medium: { speed: 1.00, paddle: 98,  lives: 3, drop: 0.15 },
-  hard:   { speed: 1.18, paddle: 84,  lives: 3, drop: 0.12 },
+  easy:   { speed: 0.82, paddle: 116, lives: 5, drop: 0.18, fire: 6.0 },
+  medium: { speed: 1.00, paddle: 98,  lives: 3, drop: 0.15, fire: 4.5 },
+  hard:   { speed: 1.18, paddle: 84,  lives: 3, drop: 0.12, fire: 3.2 },
 };
 
 /* Five hand-built stages (13 columns; a capital letter takes two hits). Verbatim from the original. */
@@ -66,6 +66,14 @@ function endlessRows(wave) {
   return rows;
 }
 
+/* SPACE INVADERS elements (Matt, 2026-09-23). Two 11x8 pixel frames of the classic crab alien,
+ * the bomb speed, how long a bomb freezes the paddle, and the saucer's bonus values. */
+const ALIEN = [
+  ['..X.....X..', '...X...X...', '..XXXXXXX..', '.XX.XXX.XX.', 'XXXXXXXXXXX', 'X.XXXXXXX.X', 'X.X.....X.X', '...XX.XX...'],
+  ['..X.....X..', 'X..X...X..X', 'X.XXXXXXX.X', 'XXX.XXX.XXX', 'XXXXXXXXXXX', '.XXXXXXXXX.', '..X.....X..', '.X.......X.'],
+];
+const BOMB_V = 240, STUN_S = 0.9, UFO_W = 46, UFO_H = 18, UFO_VALUES = [300, 500, 1000], INVADER_BONUS = 250;
+
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
 function roundRect(g, x, y, w, h, r) {
@@ -101,6 +109,7 @@ export function createGame(canvas, hooks) {
   let bricks = [], grid = [], breakable = 0;
   let balls = [], caps = [], beams = [];
   let wideT = 0, laserT = 0, slowT = 0, laserCd = 0;
+  let bombs = [], ufo = null, ufoT = 15, stunT = 0;
   let shake = 0, flash = 0, flashCol = '255,255,255', hitStop = 0, clearT = 0, serveT = 0, gridPhase = 0, time = 0;
   const paddle = { x: FW / 2, y: FH - 72, w: 98, tw: 98, sq: 0, tx: FW / 2, vx: 0 };
   const keys = { left: false, right: false };
@@ -207,6 +216,28 @@ export function createGame(canvas, hooks) {
       }
     });
     caps = []; beams = [];
+    // Invaders: a few of the LOWEST bricks in their columns become aliens. An alien only fires
+    // while nothing is below it, so clearing the bricks under one is what unleashes it.
+    const lows = [];
+    for (let c = 0; c < COLS; c++) {
+      for (let r = grid.length - 1; r >= 0; r--) { const b = grid[r] && grid[r][c]; if (b) { lows.push(b); break; } }
+    }
+    for (let i = lows.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [lows[i], lows[j]] = [lows[j], lows[i]]; }
+    const n = endless ? Math.min(8, 2 + wave) : Math.min(6, 2 + stageIdx);
+    lows.slice(0, n).forEach((b) => { b.inv = true; b.fireT = 2 + Math.random() * 3; });
+    bombs = []; ufo = null; ufoT = 12 + Math.random() * 10; stunT = 0;
+  }
+  function exposed(b) {
+    for (let r = b.r + 1; r < grid.length; r++) if (grid[r] && grid[r][b.c]) return false;
+    return true;
+  }
+  function hitUfo(byBall) {
+    const v = UFO_VALUES[Math.floor(Math.random() * UFO_VALUES.length)];
+    if (live()) { score += v; hooks.onHud(); }
+    pop(ufo.x, ufo.y, '+' + v, '#ff2e97', 24);
+    for (let i = 0; i < (reduce() ? 10 : 30); i++) { const a = Math.random() * 6.28, sp = 60 + Math.random() * 240; spawn(ufo.x, ufo.y, Math.cos(a) * sp, Math.sin(a) * sp, 0.5 + Math.random() * 0.5, i % 2 ? '#ff2e97' : '#fff200', 2 + Math.random() * 4, 2, 0); }
+    addShake(byBall ? 4 : 3);
+    ufo = null;
   }
   function resetPaddle() { paddle.tw = tune.paddle; wideT = 0; laserT = 0; slowT = 0; }
   function serve() {
@@ -280,7 +311,7 @@ export function createGame(canvas, hooks) {
     if (b.hp > 0) { addShake(1.5); spawn(b.x + b.w / 2, b.y + b.h / 2, 0, 0, 0.25, '#ffffff', b.w * 0.5, 0, 1); return; }
     b.alive = false; grid[b.r][b.c] = null; breakable--;
     combo++; bestCombo = Math.max(bestCombo, combo);
-    const pts = (b.max === 2 ? 160 : 100) * Math.min(combo, 12);
+    const pts = (b.max === 2 ? 160 : 100) * Math.min(combo, 12) + (b.inv ? INVADER_BONUS : 0);
     if (live()) { score += pts; bricksBroken++; hooks.onHud(); }
     pop(b.x + b.w / 2, b.y + b.h / 2, '+' + pts, COLORS[b.k], combo >= 5 ? 20 : 15);
     shatter(b, ball); addShake(2.4 + Math.min(4, combo * 0.35));
@@ -385,7 +416,7 @@ export function createGame(canvas, hooks) {
   function ballLost() {
     if (demo) { serve(); return; }
     lives--; addShake(14); flash = reduce() ? 0.2 : 0.55; flashCol = '255,46,151';
-    combo = 0; hooks.onCombo(0, false); caps = []; beams = []; resetPaddle(); hooks.onHud();
+    combo = 0; hooks.onCombo(0, false); caps = []; beams = []; bombs = []; stunT = 0; resetPaddle(); hooks.onHud();
     if (lives <= 0) { phase = 'done'; hooks.onGameOver(); return; }
     hooks.onLifeLost(lives);
     serve();
@@ -411,6 +442,7 @@ export function createGame(canvas, hooks) {
     const slow = slowT > 0 ? 0.55 : 1;
 
     if (demo) aiPaddle(dt);
+    else if (stunT > 0) { stunT -= dt; paddle.vx = 0; paddle.tx = paddle.x; }
     else {
       if (keys.left || keys.right) { paddle.vx = clamp(paddle.vx + (keys.right - keys.left) * 5200 * dt, -900, 900); paddle.tx = paddle.x + paddle.vx * dt; }
       else paddle.vx *= Math.exp(-dt * 18);
@@ -444,9 +476,49 @@ export function createGame(canvas, hooks) {
       if (c.y > paddle.y - PADDLE_H / 2 - 9 && c.y < paddle.y + PADDLE_H / 2 + 9 && Math.abs(c.x - paddle.x) < paddle.w / 2 + 18) { caps.splice(i, 1); applyPower(c.t); continue; }
       if (c.y > FH + 20) caps.splice(i, 1);
     }
+    // Invaders fire; bombs fall; the saucer crosses. Only while the ball is in play.
+    if (phase === 'play') {
+      for (const b of bricks) {
+        if (!b.alive || !b.inv) continue;
+        b.fireT -= dt * slow;
+        if (b.fireT <= 0) {
+          b.fireT = tune.fire * (0.6 + Math.random() * 0.8);
+          if (bombs.length < 6 && exposed(b)) bombs.push({ x: b.x + b.w / 2, y: b.y + b.h, ph: Math.random() * 6 });
+        }
+      }
+      if (ufo) {
+        ufo.x += ufo.dir * ufo.v * dt * slow;
+        if (ufo.x < -UFO_W || ufo.x > FW + UFO_W) ufo = null;
+        else for (const b of balls) {
+          if (Math.abs(b.x - ufo.x) < UFO_W / 2 + BALL_R && Math.abs(b.y - ufo.y) < UFO_H / 2 + BALL_R) { hitUfo(true); break; }
+        }
+      } else if ((ufoT -= dt) <= 0) {
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        ufo = { x: dir > 0 ? -UFO_W / 2 : FW + UFO_W / 2, y: TOP + 28, dir, v: 130 * tune.speed };
+        ufoT = 18 + Math.random() * 12;
+      }
+    }
+    for (let i = bombs.length - 1; i >= 0; i--) {
+      const bo = bombs[i]; bo.y += BOMB_V * tune.speed * dt * slow; bo.ph += dt * 14;
+      if (bo.y > paddle.y - PADDLE_H / 2 - 6 && bo.y < paddle.y + PADDLE_H / 2 + 6 && Math.abs(bo.x - paddle.x) < paddle.w / 2 + 3) {
+        bombs.splice(i, 1);
+        if (live()) {
+          stunT = STUN_S; paddle.vx = 0; combo = 0; hooks.onCombo(0, false);
+          addShake(6); flash = Math.max(flash, reduce() ? 0.15 : 0.3); flashCol = '255,46,151';
+          pop(paddle.x, paddle.y - 30, say('pop_zap'), '#ff2e97', 18);
+        }
+        for (let k = 0; k < (reduce() ? 4 : 12); k++) spawn(bo.x, paddle.y - PADDLE_H / 2, (Math.random() - 0.5) * 260, -Math.random() * 220, 0.4, '#ff2e97', 2, 2, 0);
+        continue;
+      }
+      if (bo.y > FH + 20) bombs.splice(i, 1);
+    }
     for (let i = beams.length - 1; i >= 0; i--) {
       const bm = beams[i]; bm.y -= 900 * dt;
       if (bm.y < TOP) { beams.splice(i, 1); continue; }
+      // A laser shot takes out a bomb, or the saucer, before it reaches a brick.
+      const hitBomb = bombs.findIndex((bo) => Math.abs(bo.x - bm.x) < 7 && bo.y > bm.y - 4 && bo.y < bm.y + 26);
+      if (hitBomb >= 0) { spawn(bombs[hitBomb].x, bombs[hitBomb].y, 0, 0, 0.25, '#ffffff', 10, 0, 1); bombs.splice(hitBomb, 1); beams.splice(i, 1); continue; }
+      if (ufo && Math.abs(bm.x - ufo.x) < UFO_W / 2 && bm.y < ufo.y + UFO_H / 2 && bm.y > ufo.y - UFO_H) { beams.splice(i, 1); hitUfo(false); continue; }
       const c = Math.floor((bm.x - GX) / CW), r = Math.floor((bm.y - GY) / RH), row = grid[r], b = row && row[c];
       if (b && b.alive && bm.y < b.y + b.h && bm.y > b.y) { beams.splice(i, 1); hitBrick(b, null); if (phase !== 'play') return; }
     }
@@ -467,8 +539,8 @@ export function createGame(canvas, hooks) {
     const pad = 12;
     for (const b of bricks) {
       if (!b.alive) continue;
-      const spr = sprites[b.k + (b.hp > 1 ? '2' : '1')];
-      ctx.drawImage(spr, b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+      if (b.inv) drawAlien(b);
+      else { const spr = sprites[b.k + (b.hp > 1 ? '2' : '1')]; ctx.drawImage(spr, b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2); }
       if (b.max === 2 && b.hp === 1) {
         ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1; ctx.beginPath();
         ctx.moveTo(b.x + b.w * 0.3, b.y + 2); ctx.lineTo(b.x + b.w * 0.42, b.y + b.h * 0.55); ctx.lineTo(b.x + b.w * 0.36, b.y + b.h - 2);
@@ -489,6 +561,8 @@ export function createGame(canvas, hooks) {
       ctx.restore();
     }
 
+    drawBombs();
+    if (ufo) drawUfo();
     drawPaddle();
     drawBalls();
 
@@ -542,11 +616,52 @@ export function createGame(canvas, hooks) {
     ctx.stroke();
     ctx.restore();
   }
+  /** An alien brick: the classic crab, two-frame march, in its brick's colour. A two-hit alien
+   *  keeps a white outline box (the same shape marker as a two-hit brick, never colour alone). */
+  function drawAlien(b) {
+    const frame = reduce() ? 0 : Math.abs(Math.floor(time * 2)) % 2, rows = ALIEN[frame];
+    const px = Math.min(b.w / 11.5, 3.2), ox = b.x + (b.w - px * 11) / 2, oy = b.y + (b.h - px * 8) / 2;
+    const col = COLORS[b.k];
+    ctx.save();
+    ctx.globalAlpha = 0.28; ctx.fillStyle = col; roundRect(ctx, b.x, b.y, b.w, b.h, 5); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.shadowColor = col; ctx.shadowBlur = 8; ctx.fillStyle = col;
+    ctx.beginPath();
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 11; c++) if (rows[r][c] === 'X') ctx.rect(ox + c * px, oy + r * px, px + 0.3, px + 0.3);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    if (b.hp > 1) { ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.2; roundRect(ctx, b.x + 1, b.y + 1, b.w - 2, b.h - 2, 4); ctx.stroke(); }
+    ctx.restore();
+  }
+  function drawBombs() {
+    ctx.save();
+    ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#ffd1ea'; ctx.shadowColor = '#ff2e97'; ctx.shadowBlur = 8;
+    for (const bo of bombs) {
+      const w = Math.sin(bo.ph) > 0 ? 3 : -3;
+      ctx.beginPath(); ctx.moveTo(bo.x, bo.y - 12); ctx.lineTo(bo.x + w, bo.y - 8); ctx.lineTo(bo.x - w, bo.y - 4); ctx.lineTo(bo.x + w, bo.y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function drawUfo() {
+    const x = ufo.x, y = ufo.y;
+    ctx.save();
+    ctx.shadowColor = '#ff2e97'; ctx.shadowBlur = 14;
+    ctx.fillStyle = '#ff2e97'; ctx.beginPath(); ctx.ellipse(x, y + 2, UFO_W / 2, UFO_H / 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#c9fff6'; ctx.beginPath(); ctx.ellipse(x, y - 3, UFO_W / 4.5, UFO_H / 2.6, 0, Math.PI, 0); ctx.fill();
+    const on = reduce() ? 0 : Math.floor(time * 6) % 3;
+    for (let i = 0; i < 3; i++) { ctx.fillStyle = i === on ? '#fff200' : '#6b0f45'; ctx.beginPath(); ctx.arc(x + (i - 1) * 12, y + 3, 2.2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
   function drawPaddle() {
     const w = paddle.w * (1 + paddle.sq * 0.22), h = PADDLE_H * (1 - paddle.sq * 0.35), x = paddle.x - w / 2, y = paddle.y - h / 2 + paddle.sq * 3;
     ctx.save();
     ctx.shadowColor = laserT > 0 ? '#ff2e97' : '#00f5d4'; ctx.shadowBlur = 22;
-    const gr = ctx.createLinearGradient(0, y, 0, y + h); gr.addColorStop(0, '#c9fff6'); gr.addColorStop(0.45, laserT > 0 ? '#ff7ab8' : '#00f5d4'); gr.addColorStop(1, laserT > 0 ? '#b0126a' : '#008c9e');
+    // Frozen by a bomb: greyed out and flickering until it thaws.
+    const frozen = stunT > 0;
+    if (frozen) { ctx.globalAlpha = (reduce() || Math.floor(time * 16) % 2) ? 0.6 : 0.35; ctx.shadowColor = '#ff2e97'; }
+    const gr = ctx.createLinearGradient(0, y, 0, y + h); gr.addColorStop(0, frozen ? '#e6e6f0' : '#c9fff6');
+    gr.addColorStop(0.45, frozen ? '#8a8aa0' : laserT > 0 ? '#ff7ab8' : '#00f5d4'); gr.addColorStop(1, frozen ? '#4a4a60' : laserT > 0 ? '#b0126a' : '#008c9e');
     ctx.fillStyle = gr; roundRect(ctx, x, y, w, h, h / 2); ctx.fill();
     ctx.shadowBlur = 0;
     ctx.fillStyle = 'rgba(255,255,255,.85)'; roundRect(ctx, x + h * 0.6, y + 2.5, w - h * 1.2, 2.4, 1.2); ctx.fill();

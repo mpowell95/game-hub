@@ -264,7 +264,7 @@
 .bx-root .bx-help-goal { margin: 2px 0 0; font-size: 14px; font-weight: 700; color: #fff; text-align: center; }
 .bx-root .bx-help-svg { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
 .bx-root .bx-help-line { margin: 0; font-size: 13px; line-height: 1.35; color: #e2d2fa; white-space: nowrap; }
-.bx-root .bx-help-kv { padding-left: 12px; font-weight: 700; color: #fff; white-space: nowrap; }
+.bx-root .bx-help-kv { padding-left: 12px; font-weight: 700; color: #fff; white-space: pre; }
 .bx-root .bx-help .bx-mbtn { margin-top: 6px; }
 
 .bx-root .bx-sr {
