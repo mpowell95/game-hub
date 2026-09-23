@@ -100,9 +100,14 @@ root.innerHTML = `
         <button class="he-tool" id="he-fit" style="flex:none;width:auto;padding:2px 10px;">Fit</button>
       </div>
       <div class="he-hover-readout" id="he-hover">Width at cursor: -</div>
+      <div class="he-drawbar" id="he-m-drawbar">
+        <button type="button" class="he-mbtn" id="he-m-draw-undo">Undo point</button>
+        <button type="button" class="he-mbtn" id="he-m-draw-cancel">Cancel</button>
+        <button type="button" class="he-mbtn he-mbtn--add" id="he-m-draw-finish">Finish</button>
+      </div>
     </div>
     <div class="he-right">
-      <div class="he-sheet-bar"><span>Settings</span><button type="button" class="he-sheet-x" data-sheet-close aria-label="Close">&times;</button></div>
+      <div class="he-sheet-bar"><span>Settings</span><span class="he-sheet-acts"><button type="button" class="he-mbtn he-mbtn--sm" id="he-m-dup" hidden>Duplicate</button><button type="button" class="he-mbtn he-mbtn--sm he-mbtn--danger" id="he-m-del" hidden>Delete</button></span><button type="button" class="he-sheet-x" data-sheet-close aria-label="Close">&times;</button></div>
       <div class="he-panel" data-panel="context">
         <div class="he-panel__head">Selection</div>
         <div class="he-panel__body" id="he-context"></div>
@@ -319,6 +324,8 @@ ribbon.innerHTML = [
   // Help (2026-09-22): hole-editor/help.html, plain words for someone who has never seen the tool.
   '<button class="he-tool" id="he-bug" title="Report a bug to Matt" style="width:auto;padding:0 8px;"><span class="he-tool-icon">\u{1F41E}</span><span class="he-tool-label">Report bug</span></button>',
   '<a class="he-tool" id="he-help" href="./?course=tutorial" target="_blank" rel="noopener" title="How to use the Course Creator" style="text-decoration:none;color:inherit;"><span class="he-tool-icon">?</span><span class="he-tool-label">Help</span></a>',
+  // Phone only (in the Tools grid): the tools that are fiddly with a finger at any size.
+  '<div class="he-m-note">Width handles, slope painting and drawn outlines are easier on a tablet or computer.</div>',
 ].join('');
 
 const TOOL_KEYS = Object.fromEntries(TOOLS.map(([id, key]) => [key.toLowerCase(), id]));
@@ -579,6 +586,32 @@ function duplicateSelected() {
 document.getElementById('he-duplicate').addEventListener('click', duplicateSelected);
 editorCanvas.onDrawChange = () => refreshContext();
 
+// --- PHONE: on-screen stand-ins for the keys (stage 3) -------------------------------------------
+// Delete, D, Enter, Backspace and Esc do not exist on a phone. The Edit sheet's bar carries
+// Duplicate and Delete for the selection; while drawing, a bar over the map carries Undo point,
+// Cancel and Finish (with the point count). All of it is display:none above the phone breakpoint.
+let wasDrawing = false;
+function syncPhoneBars() {
+  const sel = editorCanvas.selection;
+  document.getElementById('he-m-del').hidden = !editorCanvas.canDeleteSelection();
+  document.getElementById('he-m-dup').hidden = !(sel && DUPLICABLE.includes(sel.group));
+  const d = editorCanvas.drawing;
+  root.classList.toggle('he-root--drawing', !!d);
+  if (d) {
+    const n = d.points.length; const min = d.group === 'lines' ? 2 : 3;
+    const fin = document.getElementById('he-m-draw-finish');
+    fin.textContent = `Finish (${n})`; fin.disabled = n < min;
+    document.getElementById('he-m-draw-undo').disabled = n === 0;
+    if (!wasDrawing && isPhone()) openSheet(null);   // the map must be free to tap corners on
+  }
+  wasDrawing = !!d;
+}
+document.getElementById('he-m-del').addEventListener('click', () => { editorCanvas.deleteSelection(); openSheet(null); });
+document.getElementById('he-m-dup').addEventListener('click', () => duplicateSelected());
+document.getElementById('he-m-draw-undo').addEventListener('click', () => { editorCanvas.undoDrawPoint(); refreshContext(); });
+document.getElementById('he-m-draw-cancel').addEventListener('click', () => editorCanvas.cancelDraw());
+document.getElementById('he-m-draw-finish').addEventListener('click', () => editorCanvas.finishDraw());
+
 const contextHeadEl = document.querySelector('[data-panel="context"] .he-panel__head');
 function refreshContext() {
   const sel = editorCanvas.selection;
@@ -595,6 +628,7 @@ function refreshContext() {
     setToolState(patch) { toolState = { ...toolState, ...patch }; refreshContext(); },
     refresh: refreshContext,
   });
+  syncPhoneBars();
 }
 // Phone: the Edit sheet covers the bottom half of the map, so the thing just selected is moved up
 // into the half that is still showing (only when the sheet would hide it).

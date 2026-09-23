@@ -153,6 +153,38 @@ ok('a finger 16 px off a route dot still drags it (22 px target)', Math.abs(wp2[
 
 ok('the readout follows the last touch', await page.evaluate(() => /\d/.test(document.getElementById('he-hover').textContent)));
 ok('the canvas has touch-action: none', await page.evaluate(() => getComputedStyle(document.getElementById('he-canvas')).touchAction === 'none'));
+console.log('\n-- stage 3: on-screen stand-ins for the keys --');
+await tapEl('#he-m-tools'); await tapEl('#he-ribbon [data-tool="select"]');
+const nB2 = ((await spec()).bunkers || []).length;
+const bc2 = await page.evaluate(async () => { const m = await import('/hole-editor/js/canvas.js'); const c = window.__he.editorCanvas; return m.listObjects(c.spec, c.stations, c.length).filter((x) => x.group === 'bunkers').pop().center; });
+let bs2 = await toScreen(bc2[0], bc2[1]);
+await tap(bs2.x, bs2.y);
+ok('tapping the bunker opens the Edit sheet with Delete and Duplicate', await page.evaluate(() => document.querySelector('.he-right').classList.contains('is-open') && !document.getElementById('he-m-del').hidden && !document.getElementById('he-m-dup').hidden));
+await tapEl('#he-m-dup');
+ok('Duplicate adds a copy', ((await spec()).bunkers || []).length === nB2 + 1);
+await tapEl('#he-m-del');
+ok('Delete removes the selected one and closes the sheet', ((await spec()).bunkers || []).length === nB2 && await page.evaluate(() => !document.querySelector('.he-right').classList.contains('is-open')));
+ok('Delete is hidden with nothing selected', await page.evaluate(() => document.getElementById('he-m-del').hidden));
+
+// Draw a lake: the drawing bar replaces Enter / Backspace / Esc.
+const nW = ((await spec()).water || []).length;
+await tapEl('#he-m-add'); await page.locator('[data-item="water-draw"]').scrollIntoViewIfNeeded(); await tapEl('[data-item="water-draw"]');
+ok('drawing shows the Finish / Undo point / Cancel bar', await page.evaluate(() => getComputedStyle(document.getElementById('he-m-drawbar')).display === 'flex'));
+const sp = await spec(); const mid = [(sp.path[0][0] + sp.path[sp.path.length - 1][0]) / 2, (sp.path[0][1] + sp.path[sp.path.length - 1][1]) / 2];
+for (const [dx, dy] of [[-30, -10], [-10, -10], [-10, 10], [-30, 10], [-40, 0]]) { const q = await toScreen(mid[0] + dx, mid[1] + dy); await tap(q.x, q.y); }
+ok('each tap adds a corner (Finish shows 5)', /\(5\)/.test(await page.textContent('#he-m-draw-finish')));
+await tapEl('#he-m-draw-undo');
+ok('Undo point takes the last one off', /\(4\)/.test(await page.textContent('#he-m-draw-finish')));
+await tapEl('#he-m-draw-finish');
+const w2 = (await spec()).water || [];
+ok('Finish makes the lake', w2.length === nW + 1 && Array.isArray(w2[nW].poly), JSON.stringify(w2[nW] || null).slice(0, 60));
+ok('...and the drawing bar goes away', await page.evaluate(() => getComputedStyle(document.getElementById('he-m-drawbar')).display === 'none'));
+await tapEl('.he-right [data-sheet-close]').catch(() => {});
+await tapEl('#he-m-add'); await page.locator('[data-item="water-draw"]').scrollIntoViewIfNeeded(); await tapEl('[data-item="water-draw"]');
+{ const q = await toScreen(mid[0] + 20, mid[1]); await tap(q.x, q.y); }
+await tapEl('#he-m-draw-cancel');
+ok('Cancel abandons a drawing', ((await spec()).water || []).length === nW + 1 && await page.evaluate(() => !window.__he.editorCanvas.drawing));
+
 console.log('\n-- stage 4: modals and the walkthrough --');
 await tapEl('#he-m-tools'); await tapEl('#he-ribbon #he-compare'); await page.waitForTimeout(400);
 ok('Compare fits the screen', await page.evaluate(() => { const b = document.querySelector('.he-modal-box').getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; }));
