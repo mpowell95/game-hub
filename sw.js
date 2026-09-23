@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v934';
+const CACHE = 'game-hub-v935';
 
 const ASSETS = [
   './',
@@ -1330,6 +1330,16 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
+
+  // THE HOLE EDITOR IS NOT PART OF THE APP (2026-09-23). It lives under this worker's scope, so its
+  // page and every golf engine module it imports came through the handlers below - and the golf
+  // engine is REST tier, CACHE-FIRST. A device holding an older render.js served it to a newer
+  // editor, which imports an export that copy does not have: "doesn't provide an export named
+  // 'TREE_FILL'", and the editor could not start. The editor is outside ASSETS, has no offline
+  // promise to keep, and must always build holes with the golf code that is live now - so the
+  // editor's page and everything it loads (a module import's referrer is the importing module)
+  // go straight to the network, untouched by this worker.
+  if (sameOrigin && (url.pathname.includes('/hole-editor/') || (req.referrer && new URL(req.referrer).pathname.includes('/hole-editor/')))) return;
 
   // Cache-first for immutable same-origin assets: images and fonts (which are versioned by the
   // CACHE bump, and whose network round-trip made card boards flash blank on every re-render),
