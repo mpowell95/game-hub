@@ -4,6 +4,13 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Design doc fully locked (Matt, 2026-09-23: "confirm them")
+
+Every remaining [Open] and [Draft] rule in `docs/BASEBALL-DESIGN-DOC.md` (section 17 items 1-5,
+7, 8 and their body lines, plus presets and the mph readout) is now **[Locked] as shipped at
+v929**: the values in the code at that version ARE the spec. Changing one is reopening a locked
+rule - Matt's call, not a tuning pass. Only the playtest can reopen them.
+
 ## No difficulty setting, no help for weaker players (Matt, 2026-09-23) - CLOSED, do not re-propose
 
 Proposed (Easy/Normal setting, automatic catch-up help) and rejected in Matt's words: *"there
