@@ -1210,7 +1210,7 @@ seam colour taken from the board pieces' own `_ball2d`. The texture is sRGB AND 
 so the ball shows the board's colour under any light and the key light only adds the shading.
 `setBallColor(hex)` keeps its signature and swaps between the two prebuilt textures.
 
-### Rimouts and a round rim: built, measured, and switched OFF pending Matt (2026-09-22)
+### Rimouts and a round rim: built, measured, switched OFF - and Matt chose to leave the hoops as is (2026-09-23)
 
 Matt, same message: *"It's too easy to get the one you aim for. i want it bouncier. i don't want
 it to always bounce off and get nothing. I want it to have to be a perfect shot to go right in,
@@ -1243,7 +1243,7 @@ stands 2.3 ballR tall), so only a ball that bounces a full pitch sideways IN THE
 hoop, and a neighbour catches 2-23% at best. The rimout-and-reflect-sideways family trades
 accuracy for "nothing" and parked balls, never for the neighbour hoop. **Getting there is a
 cabinet decision** (something that returns a bounced ball to the hoop row, or hoops closer or
-wider), which is why this is waiting on Matt and not shipped. `rimKeep 0.35` with `ringRest 0.7`
+wider). **Matt was offered those and chose "leave the hoops as is" (2026-09-23). Closed.** `rimKeep 0.35` with `ringRest 0.7`
 also produced a throw that never settled (the probe hung): treat it as unsafe.
 
 ### There is NO rimout on this machine
@@ -1417,9 +1417,9 @@ completion is re-derived as outstanding work). Track it here or nowhere.
   turn-by-turn has worked since. Kept as a struck line because this entry outlived the fact and
   got quoted back at him as outstanding work; see the root `CLAUDE.md`'s Messages section for the
   lesson.
-- **Matt's "50-50" bounce (2026-09-22): waiting on his call.** Rimouts and a round rim are built
-  and switched off; the measured table and the reason no knob reaches his target are in "Rimouts
-  and a round rim". The next step needs him to pick a cabinet change.
+- ~~**Matt's "50-50" bounce.**~~ **CLOSED 2026-09-23 - Matt: "leave the hoops as is."** He was
+  offered a hood to catch bounces, hoops closer together, wider hoops, or no change, and chose no
+  change. The rimout / round-rim knobs stay in the code, OFF. Do not re-open without him.
 - **Whether a human swipe has the precision seven columns need.** `check-display.mjs` (without
   `--no-swipe`) now drives real touch gestures at each of the seven columns through the real pad,
   the real swipe maths and the real engine, and reports what lands. It is still a scripted thumb
