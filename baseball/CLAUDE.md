@@ -4,6 +4,14 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Playtest 1 (Matt, 2026-09-23): six batches queued
+
+Matt's first playtest of Little League career (v929) produced six batches of work, with his
+decisions: `docs/HANDOFF-BASEBALL-PLAYTEST-1.md`. It is the current handoff; the R19 one is done.
+Headline bug found while scoping: a ball in play's result comes from abstract out zones, and the
+drawn fielder always arrives exactly when the ball lands, so a "caught" ball can be scored a hit;
+home runs ignore the wall's height. Batch 4 (live plays) is the fix.
+
 ## Design doc fully locked (Matt, 2026-09-23: "confirm them")
 
 Every remaining [Open] and [Draft] rule in `docs/BASEBALL-DESIGN-DOC.md` (section 17 items 1-5,
