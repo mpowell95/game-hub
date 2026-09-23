@@ -822,3 +822,28 @@ shown under the description in the inbox): designer, course and terrain, hole, t
 Copy JSON is hidden on the Course Creator (Download backup does its job) so Report bug and Help fit
 at 1280 px. The walkthrough has a step for it. `js/` is in the service worker's shell, so this one
 bumped CACHE.
+
+## On a phone, stage 1: the layout (2026-09-23, `docs/HANDOFF-GOLF-COURSE-CREATOR-MOBILE.md`)
+
+Matt chose REFLOW (one editor, a phone layout under a breakpoint) over a separate phone mode, on
+the condition that the desktop editor does not change. Under 900 px wide (`PHONE_MQ` in
+`main.js`, the one `@media (max-width: 899px)` block at the end of `editor.css`):
+
+- **Viewport meta is `width=device-width`** (was `width=1280`). Desktop browsers ignore it.
+- **Ribbon**: course button, Undo, Redo, **Tools**, Bug, Help. Tools (`#he-m-tools`) unfolds the
+  whole ribbon as a four-column grid over the map; picking anything in it folds it again.
+- **Palette = the Add sheet, inspector = the Edit sheet**: `.he-left` / `.he-right` become bottom
+  sheets (`openSheet('add' | 'edit' | null)`) with a close bar (`.he-sheet-bar`) and a scrim.
+  Picking a tile closes Add so the map can be tapped; a new selection opens Edit with Selection
+  unfolded.
+- **Holes bar = `#he-mbar`**: previous, a hole `<select>`, next, + Add, Edit. Reordering holes by
+  drag and Discard ALL edits are desktop-only.
+- **Every phone-only element is `display:none` above the breakpoint**, and the few behaviour
+  changes are gated on `isPhone()`. Proof it held: `test-hole-editor-ui.mjs` 108/108, and 8
+  desktop screens (Red Mesa, setup, Course Creator, Route; 1920x1080 and 1280x800) pixel-identical
+  before and after (0 pixels changed).
+- Inputs are 16 px on the phone (iOS zooms the page into anything smaller).
+
+Not yet: touch gestures (stage 2), on-screen Delete/Finish (stage 3), setup screen and walkthrough
+at 390 px (stage 4), measured speed on a phone profile (stage 5).
+
