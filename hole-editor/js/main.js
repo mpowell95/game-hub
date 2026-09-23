@@ -150,6 +150,21 @@ document.title = profile.title;
 // Practice starts from nothing every time.
 if (profile.tutorial) { try { localStorage.removeItem(profile.storageKey); } catch { /* fine */ } }
 const stored = loadDocument(localStorage.getItem(profile.storageKey));
+// FIRST VISIT GOES STRAIGHT INTO THE WALKTHROUGH (Matt, 2026-09-23: "the link should auto open the
+// help walkthrough the first time someone visits the site? then after that it just goes straight
+// to the tool"). Only once per browser (`tourOffered`), only on the Course Creator, and never for
+// someone who already has a named course here - they are past the first visit whatever the flag
+// says. The walkthrough ends on "Start my course", which comes back to this link.
+{
+  const OFFERED = 'golf.holeEditor.tourOffered.v1';
+  let offered = false; try { offered = localStorage.getItem(OFFERED) === '1'; } catch { offered = true; }
+  const named = !!(stored && stored.course && stored.course.named);
+  if (profile.custom && !profile.tutorial && !offered && !tourDone() && !named) {
+    try { localStorage.setItem(OFFERED, '1'); } catch { /* fine */ }
+    location.replace('./?course=tutorial&first=1');
+    await new Promise(() => {});   // stop here; the page is leaving
+  }
+}
 setCourse(profile, stored && stored.course && stored.course.theme);
 setEditorTheme(profile.custom ? ((stored && stored.course && stored.course.theme) || profile.theme) : profile.theme);
 const originals = originalSpecs();

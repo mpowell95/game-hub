@@ -796,3 +796,16 @@ is named, `confirmLookChange()` asks before switching (setup screen and Course &
 the tour step says the same thing in one sentence. The final tour step now says to close the Help
 tab (its button tries `window.close()` and falls back to opening `?course=new`), and the saving
 step says it is the practice course *in Help* that is not saved.
+
+### The first visit IS the walkthrough (2026-09-23)
+
+Matt: *"the link should auto open the help walkthrough the first time someone visits... then after
+that it just goes straight to the tool."* `main.js`, right after the stored document is read: on
+the Course Creator, if this browser has never been offered the tour (`golf.holeEditor.tourOffered.v1`),
+has not finished it, and has no NAMED course, it sets the flag and `location.replace`s to
+`?course=tutorial&first=1` (a top-level `await` on a never-resolving promise stops the rest of the
+module). In `first` mode the tour's last step says "Now start your own course" with a **Start my
+course** button, and its x means "skip the tour and start my course" - both go to `?course=new`,
+same tab. The order is therefore always: link -> walkthrough -> name and terrain -> the tool; every
+later visit goes straight to the tool. `test-hole-editor-ui.mjs` walks both paths (finish, and skip
+with x) end to end, including that the practice course never touches the real one.

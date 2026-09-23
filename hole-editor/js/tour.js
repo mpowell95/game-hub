@@ -12,6 +12,10 @@ const spec = () => { const h = he(); return h && h.doc.holes[h.currentId] && h.d
 const count = (k) => ((spec() || {})[k] || []).length;
 const visible = (sel) => { const e = document.querySelector(sel); return !!(e && e.offsetParent !== null); };
 
+// Opened by the first visit's redirect (main.js), in the SAME tab: it ends by going to the real
+// course rather than closing a tab.
+const FIRST = (() => { try { return new URLSearchParams(location.search).has('first'); } catch { return false; } })();
+
 let base = {};   // what a step captured when it opened, so "you did it" means "since then"
 
 const clickTool = (id) => { const b = document.querySelector(`[data-tool="${id}"]`); if (b && b.getAttribute('aria-pressed') !== 'true') b.click(); };
@@ -34,7 +38,7 @@ export const TOPICS = [
 ];
 
 const STEPS = [
-  { topic: 'name', at: '#he-setup-name', say: 'Welcome! This is a practice course, so try anything. First, type a name for your course.',
+  { topic: 'name', at: '#he-setup-name', say: 'Welcome! This is a quick practice run on a pretend course, so try anything. First, type a name for your course.',
     done: () => { const e = document.querySelector('#he-setup-name'); return e && e.value.trim().length > 0; }, wait: 900 },
   { at: '#he-setup-looks', say: 'Now pick a terrain. It sets the colours, the water and the trees for the whole course.',
     start: () => { base.picked = false; const l = document.querySelector('#he-setup-looks'); if (l) l.addEventListener('click', () => { base.picked = true; }, { once: true }); },
@@ -63,7 +67,7 @@ const STEPS = [
   { topic: 'save', at: '#he-course', side: 'left', say: 'Your course saves by itself as you work, on this computer and online under your player code. Open the same link any time and it is all there. Download backup gives you a copy as a file. (The practice course here in Help is the one thing that is not saved.)',
     start: () => { openPanel('course'); const c = document.getElementById('he-course'); if (c) c.scrollIntoView({ block: 'start' }); } },
   { at: '#he-course-btn', side: 'below', say: 'Click here any time to rename the course or change its terrain. Careful with the terrain: it changes EVERY hole at once, the colours and the woods down each side. Things you placed yourself stay put, and picking the old terrain again puts it all back.' },
-  { at: null, say: 'That is everything! Close this Help tab to go back and start creating your own course. Help, at the top right, brings you back here any time.', last: true },
+  { at: null, say: 'That is everything! Close this Help tab to go back and start creating your own course. Help, at the top right, brings you back here any time.', sayFirst: 'That is everything! Now start your own course. Help, at the top right, brings this back any time.', last: true },
 ];
 
 let i = 0; let els = null; let timer = 0; let doneAt = 0;
@@ -116,19 +120,20 @@ function show(n) {
   els.tip.classList.toggle('tr-tip--last', !!st.last);
   if (st.last) { try { localStorage.setItem(TOUR_DONE_KEY, '1'); } catch { /* per-browser */ } }
   els.tip.innerHTML = `
-    <div>${st.say}</div>
+    <div>${FIRST && st.sayFirst ? st.sayFirst : st.say}</div>
     <div class="tr-row">
       <span class="tr-n">${i + 1} of ${STEPS.length}</span>
       ${i > 0 ? '<button class="tr-btn tr-btn--ghost" data-go="back">Back</button>' : ''}
       ${st.last
-    ? '<button class="tr-btn" data-go="close">Close Help</button>'
+    ? (FIRST ? '<button class="tr-btn" data-go="start">Start my course</button>' : '<button class="tr-btn" data-go="close">Close Help</button>')
     : st.done ? '<span class="tr-ok" data-ok hidden>Nice!</span><button class="tr-btn tr-btn--ghost" data-go="next">Skip</button>'
       : '<button class="tr-btn" data-go="next">Next</button>'}
-      <button class="tr-btn tr-btn--ghost" data-go="exit" title="End the tour">&times;</button>
+      <button class="tr-btn tr-btn--ghost" data-go="exit" title="${FIRST ? 'Skip the tour and start my course' : 'End the tour'}">&times;</button>
     </div>`;
   els.tip.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => {
     const g = b.dataset.go;
     if (g === 'next') show(i + 1); else if (g === 'back') show(i - 1);
+    else if (g === 'start' || (g === 'exit' && FIRST)) location.href = './?course=new';
     else if (g === 'close') {
       // Help opened in its own tab. A browser only lets a page close a tab it opened itself, so
       // if the tab is still here a moment later, go to the real Course Creator instead.
