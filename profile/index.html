@@ -372,6 +372,14 @@
               <div class="pf-seg" id="pf-lang-seg" role="group" data-i18n-aria="pf_lang_h" aria-label="Language"></div>
             </div>
           </details>
+          <!-- NOTIFICATIONS (2026-09-23, js/push.js): per DEVICE, because a permission is. -->
+          <details class="pf-collapse" id="pf-notify">
+            <summary data-i18n="pf_notify_h">Notifications</summary>
+            <div class="pf-rowbody">
+              <p class="pf-hint" id="pf-notify-msg" role="status" aria-live="polite" style="margin:0 0 10px"></p>
+              <button type="button" class="pf-linkbtn" id="pf-notify-btn" hidden></button>
+            </div>
+          </details>
           <details class="pf-collapse">
             <summary data-i18n="pf_color_summary">Preferred color</summary>
             <div class="pf-rowbody"><div class="pf-swatches" id="pf-colors"></div></div>
@@ -504,13 +512,40 @@
     // "(2 new)" off the replies button on a language switch.
     onLangChange(() => {
       applyI18n(); renderColors(); renderOpps(); renderTheme(); renderLang(); renderQuickChat();
-      paintReplyCount(); paintMessageCount();
+      paintReplyCount(); paintMessageCount(); paintNotify();
       // The emoji picker's category tabs are rendered, not [data-i18n] markup, and its search
       // keywords are a per-language file - so both have to be dropped and rebuilt, not just relabelled.
       searchIndex = null; searchPromise = null;
       renderPickerCats();
       if (!els.picker.hidden) renderPickerGrid();
     });
+
+    // NOTIFICATIONS on this device (js/push.js). Lazily imported: the page pays nothing for it
+    // until it has painted. The button's tap IS the permission request - iOS only shows the prompt
+    // for a user gesture. On an iPhone in a Safari tab there is no button, only what to do instead.
+    let notifyBusy = false;
+    async function paintNotify(extra) {
+      const msg = document.getElementById('pf-notify-msg');
+      const btn = document.getElementById('pf-notify-btn');
+      if (!msg || !btn) return;
+      let P;
+      try { P = await import('../js/push.js'); } catch { msg.textContent = t('pf_notify_unsupported'); btn.hidden = true; return; }
+      const st = await P.pushState().catch(() => 'unsupported');
+      const text = { on: 'pf_notify_on', off: 'pf_notify_off', denied: 'pf_notify_denied', install: 'pf_notify_install',
+        unsupported: 'pf_notify_unsupported', 'no-code': 'pf_notify_nocode' }[st] || 'pf_notify_unsupported';
+      msg.textContent = t(text) + (extra ? ' ' + extra : '');
+      btn.hidden = !(st === 'on' || st === 'off');
+      btn.textContent = t(st === 'on' ? 'pf_notify_btn_off' : 'pf_notify_btn_on');
+      btn.onclick = async () => {
+        if (notifyBusy) return;
+        notifyBusy = true; btn.disabled = true;
+        try {
+          const res = st === 'on' ? await P.disablePush() : await P.enablePush();
+          await paintNotify(res && !res.ok && res.reason !== 'dismissed' && res.reason !== 'denied' ? t('pf_notify_failed') : '');
+        } finally { notifyBusy = false; btn.disabled = false; }
+      };
+    }
+    paintNotify();
 
     // Register the shared service worker so this page works offline too. Ignored on file://.
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

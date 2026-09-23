@@ -626,7 +626,9 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
   };
   const len = SERIES_LENGTHS.includes(+series) ? +series : 1;
   const doc = {
-    v: 1, id, created: now, updated: now, oneShot: !!oneShot,
+    // `by` (2026-09-23, OPTIONAL - validateGame ignores it): who made this match. Read only by the
+    // push-notification function (functions/decide.js) so it never notifies a match's own maker.
+    v: 1, id, by: me, created: now, updated: now, oneShot: !!oneShot,
     series: len,
     seriesNo: Math.min(len, Math.max(1, seriesNo | 0 || 1)),
     seriesWins: { a: Math.max(0, (seriesWins && seriesWins.a) | 0), b: Math.max(0, (seriesWins && seriesWins.b) | 0) },

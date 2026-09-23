@@ -73,6 +73,35 @@ export function openMultiplayer(ui) {
     return `<p class="h4-mp-note${kind ? ' is-' + kind : ''}">${esc(msg)}</p>`;
   }
 
+  // --- "tell me when it's my turn" (2026-09-23, js/push.js) ---------------------------------
+  // Matt: "are you sure there's no way to have real notifications or something close to it?" This
+  // is the screen where a turn-by-turn match is started, so it is where the offer belongs. Shown
+  // only while it would DO something: nothing once it is on, and on an iPhone in a Safari tab it
+  // says what is actually needed (the Home Screen app) instead of a button that cannot work.
+  async function paintPush(msg) {
+    const box = el.querySelector('[data-role="push"]');
+    if (!box) return;
+    let P;
+    try { P = await import('../../js/push.js'); } catch { return; }
+    const st = await P.pushState().catch(() => 'unsupported');
+    if (!box.isConnected) return;
+    if (st === 'off') {
+      box.innerHTML = `<button type="button" class="h4-mp-act h4-mp-push" data-act="push-on"><span aria-hidden="true">&#128276;</span> ${esc(t('pushOn'))}</button>${note(msg, 'warn')}`;
+      const b = box.querySelector('[data-act="push-on"]');
+      // enablePush asks permission FIRST, inside this tap - iOS only prompts for a user gesture.
+      ui.on(b, 'click', async () => {
+        b.disabled = true;
+        const res = await P.enablePush().catch(() => ({ ok: false, reason: 'subscribe-failed' }));
+        if (!box.isConnected) return;
+        if (res.ok) { box.innerHTML = note(t('pushDone')); return; }
+        paintPush(res.reason === 'denied' ? t('pushDenied')
+          : res.reason === 'dismissed' ? '' : t('pushFailed'));
+      });
+    } else if (st === 'install') box.innerHTML = note(t('pushInstall'));
+    else if (st === 'denied') box.innerHTML = note(t('pushDenied'));
+    else box.innerHTML = '';
+  }
+
   // --- home ---------------------------------------------------------------------------------
   async function viewHome() {
     if (!MP.myCode()) {
@@ -105,9 +134,11 @@ export function openMultiplayer(ui) {
         ${tile('join', '&#128273;', t('mpJoinShort'))}
         ${tile('pass', '&#128241;', t('mpPassShort'))}
       </div>
+      <div data-role="push"></div>
       <div data-role="games"><p class="h4-mp-sub">${t('mpGames')}...</p></div>
       <button type="button" class="h4-mp-link" data-go="history">${esc(t('mpHistory'))} &rsaquo;</button>`);
     for (const b of el.querySelectorAll('[data-go]')) ui.on(b, 'click', () => go(b.dataset.go));
+    paintPush();
     // The list is filled in behind the painted screen rather than in front of it, the repo's own
     // rule for a screen that waits on a read: name what replaces it, and when.
     MP.drainOutbox().catch(() => {});

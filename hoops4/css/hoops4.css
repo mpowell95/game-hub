@@ -417,6 +417,8 @@
   border-width: 2px;
 }
 .h4-root .h4-mp-act:active { background: var(--h4s-surface-2, rgba(0, 0, 0, 0.04)); }
+/* "Notify me when it's my turn" (js/push.js): an ordinary row, with room under it before the list. */
+.h4-root .h4-mp-push { gap: 8px; margin-bottom: 12px; }
 
 .h4-root .h4-mp-row { display: flex; gap: 8px; }
 .h4-root .h4-mp-row .gh-btn { flex: 1 1 0; min-height: 46px; }

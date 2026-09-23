@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v944';
+const CACHE = 'game-hub-v945';
 
 const ASSETS = [
   './',
@@ -58,6 +58,7 @@ const ASSETS = [
   // a message written offline has to be able to queue itself on the device that is offline.
   './js/messages.js',
   './js/messages-ui.js',
+  './js/push.js',
   // Baseball's career sync (BB-0-phase-0-handoff.md step 9). SHELL for the same reason: it must be
   // reachable offline the moment a career-mode game imports it, on the same device that just
   // played offline.
@@ -614,6 +615,9 @@ const NETWORK_FIRST = [
   './js/career-store.js',
   './js/bug-report.js', './js/device-report.js', './js/admin-config.js', './js/error-log.js',
   './js/net.js', './js/install-state.js', './js/firebase-boot.js', './js/firebase-config.js',
+  // Push notifications: stores this device's delivery address (pushSubs/<CODE>) and keeps a
+  // gamehub.* record of it. Lazily imported, so fresh costs nothing at launch.
+  './js/push.js',
   // Decides whether that data is SHOWN. A device on an old visibility gate hides history the rest
   // of the family can see, which is THE LAW rule 1 whether or not a byte was lost.
   './js/game-stats-ui.js', './js/leaderboard-ui.js', './js/messages-ui.js', './js/bug-report-ui.js',
@@ -846,7 +850,7 @@ const REST_MANIFEST = {
   './skeeball/js/ui.js': '705d81eba9',
   './skeeball/js/swipe.js': 'c596f565de',
   './hoops4/index.html': 'dce91b13bd',
-  './hoops4/css/hoops4.css': 'ffcb601877',
+  './hoops4/css/hoops4.css': '2d377cc049',
   './hoops4/js/ui.js': '1004c43650',
   './hoops4/js/boarddef.js': '3824cfe605',
   './hoops4/js/machine.js': '19b59b7c18',
@@ -854,10 +858,10 @@ const REST_MANIFEST = {
   './hoops4/js/render.js': '0ebde06b52',
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/cpu.js': 'f1b8a3e68b',
-  './hoops4/js/mp.js': 'facc98bd73',
-  './hoops4/js/mp-ui.js': 'c5ed5062b5',
+  './hoops4/js/mp.js': '7d8c518d4e',
+  './hoops4/js/mp-ui.js': '9ec72ddd4b',
   './hoops4/js/alert.js': 'e112852c78',
-  './hoops4/js/strings.js': '06479bbdb9',
+  './hoops4/js/strings.js': '3767f6be7b',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/boards.js': '8cf226684b',
@@ -1220,6 +1224,56 @@ self.addEventListener('message', (event) => {
     const port = event.ports && event.ports[0];
     if (port) port.postMessage({ type: 'VERSION', cache: CACHE });
   }
+});
+
+// --- PUSH NOTIFICATIONS (2026-09-23) ------------------------------------------------------------
+// Sent by functions/index.js (a Firebase Cloud Function; the only holder of the private key) to a
+// device that turned them on through js/push.js. The payload is JSON {title, body, tag, url}.
+//
+// EVERY PUSH SHOWS A NOTIFICATION, WITHOUT EXCEPTION. Safari revokes the subscription of a site
+// whose push arrives and shows nothing, and Chrome shows a generic one in its place. So a payload
+// that will not parse still shows something honest rather than nothing.
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch { d = { body: event.data ? event.data.text() : '' }; }
+  const title = String(d.title || 'Game Hub');
+  const opts = {
+    body: String(d.body || ''),
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    // One notification per match: a second turn in the same game replaces the first.
+    tag: String(d.tag || 'game-hub'),
+    renotify: true,
+    data: { url: String(d.url || './'), game: String(d.game || '') },
+  };
+  event.waitUntil(self.registration.showNotification(title, opts));
+});
+
+// TAP: bring the hub forward, onto the game the notification is about. An open window is told by
+// message (it may be mid-game; js/hub.js decides what is safe); otherwise a fresh one opens on
+// `?open=<game>`, which js/hub.js reads once after the launcher paints.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const url = new URL(data.url || './', self.registration.scope).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const scope = self.registration.scope;
+    const bare = (u) => u.split(/[?#]/)[0];
+    // The hub itself is told by message. Any other page of ours (the profile page, a standalone
+    // game) is sent to the hub's URL instead, since only the hub knows how to open a game.
+    const hub = wins.find((w) => bare(w.url) === scope || bare(w.url) === scope + 'index.html');
+    if (hub) {
+      try { await hub.focus(); } catch { /* iOS may refuse; the message still lands */ }
+      hub.postMessage({ type: 'OPEN_GAME', game: data.game || '' });
+      return;
+    }
+    const ours = wins.find((w) => w.url.startsWith(scope));
+    if (ours && typeof ours.navigate === 'function') {
+      try { await ours.focus(); await ours.navigate(url); return; } catch { /* fall through to a new window */ }
+    }
+    await self.clients.openWindow(url);
+  })());
 });
 
 self.addEventListener('activate', (event) => {
