@@ -58,6 +58,12 @@ mid-file "still to come" paragraphs went stale within a day and had to be consol
    index rows carry an optional `result`; old rows are worked out from their match.
    `hoops4/CLAUDE.md`, "Challenge history with records".
 3. **The two bounce gaps `test.js` owes** (see §5). Do not touch without asking.
+4. **Matt's "perfect shot or 50-50" bounce (2026-09-22).** Rimouts and a round rim are built and
+   switched OFF; no knob reaches his target because a bounced ball rolls off the shelf's front
+   edge. Waiting on his pick of a cabinet change. `hoops4/CLAUDE.md`, "Rimouts and a round rim".
+
+Also done 2026-09-22: the falling disc now starts when the ball is THROUGH the rim (not at
+capture), and the thrown ball is a basketball in the board's exact red/yellow.
 
 ## 4. Settled — do not re-open these
 
@@ -174,6 +180,8 @@ mixed build), then run `node validate-sw-assets.mjs`, which also rewrites `REST_
 
 | CACHE | what |
 |---|---|
+| v913 | Disc falls on `through`; the thrown ball is a red/yellow basketball; rimout knobs (off) |
+| v908 | Quick chat in a match; challenge History with records |
 | v906 | The cabinet flare no longer covers the board's bottom corners; taller marquee |
 | v905 | Skeeball-style Menu button + Paused sheet; the marquee rebuilt as a lit sign |
 | v904 | The falling disc starts at the capture, not at the throw resolving |

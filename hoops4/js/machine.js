@@ -303,6 +303,24 @@ export function buildMachine(G) {
         faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
         segH: h,
       });
+      // THE RIM IS ROUND (2026-09-22). A flat-topped collar box has an UP normal across its whole
+      // top, so a ball landing on the rim bounced straight up with all of its speed across the
+      // shelf intact and rolled off the front - 126 of 152 rimouts measured by
+      // reference/hoops/probe-rim.mjs. A real rim is a tube: where the ball meets it decides where
+      // it goes, and a hit on the outside of the rim throws it OUTWARD, toward the next hoop. The
+      // cap is a square section stood on its edge along the rim (the fin cap's trick), so its top
+      // is a ridge with an inner slope that feeds a ball in and an outer slope that throws it out.
+      if (G.rimCap) {
+        const a = G.collarThick * G.rimCap;             // the square's side
+        solids.push({
+          part: 'rimCap',
+          cup: id,
+          pos: faceToWorldIn(cupFrame, pu, pv, h),
+          half: [rr * Math.tan(Math.PI / N) * 1.02, a / 2, a / 2],
+          faceRot: { phi: phi + Math.PI / 2, tilt: tiltAt(H.v) },
+          rimSpin: true,
+        });
+      }
     }
   }
 
@@ -464,7 +482,7 @@ export function buildMachine(G) {
     // because capture took the tread away. So the height is chosen to survive the next change to
     // the cabinet rather than to just clear today's measurement, which is what 2.4 and then 4.0
     // each failed to do.
-    const top = H.collarH + G.ballR * 8.0;
+    const top = H.collarH + G.ballR * (typeof G.throatTop === 'number' ? G.throatTop : 8.0);
     const bot = -G.ballR * 2.6;
     const cupFrame = frameAt(H.v);
     for (let i = 0; i < N; i++) {
