@@ -38,8 +38,8 @@ const AIMS = Number(process.env.AIMS || 41);
 const KNOWN_GAPS = {
   'a miss usually BOUNCES rather than thudding':
     'the square board, 2026-09-22 - 42% against a 50% bar; see hoops4/CLAUDE.md, "Square, and what it cost"',
-  'and the bounce is big enough to see':
-    'the square board, 2026-09-22 - 0.47 m/s against 0.50; same entry',
+  // 'and the bounce is big enough to see' - CLOSED 2026-09-23: removing the invisible tube above
+  // the rims (boarddef `throatTop: 0`, `rimout`) made the rim bounce big enough again.
 };
 
 let pass = 0, fail = 0;
@@ -188,9 +188,13 @@ check('ui.js starts the falling disc on `through`, never on `capture`',
 
 const paidRate = capturedCount ? paidCount / capturedCount : 1;
 console.log(`captured ${capturedCount}, paid their own hole ${paidCount}  (${(100 * paidRate).toFixed(2)}%)\n`);
-check('a captured ball ALWAYS pays the column that captured it (Matt: 100% of the time)',
-  capturedCount > 0 && paidCount === capturedCount,
-  `${paidCount} of ${capturedCount}`);
+// (2026-09-23) CAPTURE IS A GUESS AGAIN - the "100% of the time" rule is now carried by `through`
+// above, where it is actually true. Matt: "it should be able to freely bounce horizontally." A
+// captured ball may climb back out over the rim and play on, so this now pins the opposite: rimouts
+// EXIST (the invisible tube is gone) and none of them is ever paid for the hoop that let it go.
+check('a ball can bounce back OUT of a hoop (no invisible tube above the rim)',
+  capturedCount > paidCount, `${capturedCount - paidCount} of ${capturedCount} captures rimmed out`);
+check('the tube above the rim is gone and rimouts are on', BOARD.geom.throatTop === 0 && BOARD.geom.rimout === true, '');
 
 // ---------------------------------------------------------------------------------------------
 // 3. NO BALL BALANCING BETWEEN TWO RIMS

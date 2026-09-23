@@ -308,6 +308,24 @@ export const BOARD = {
     // "The bounce goes SIDEWAYS". Re-run the probe after changing either.
     bounceSideways: 1.0,
 
+    // NO INVISIBLE TUBE ABOVE THE HOOPS (2026-09-23). Matt, having watched a ball bounce off a rim
+    // to the right and come straight back into the basket off nothing: "it should be able to
+    // freely bounce horizontally. I don't want it to bounce straight back at me all the time."
+    // What he saw was the THROAT - an invisible cylinder 8 ball-radii above every rim that a
+    // captured ball could not leave (machine.js). With `throatTop: 0` it stops at the rim, and
+    // with `rimout` a ball that climbs back out over the rim plays on - into the next hoop, onto
+    // the shelf, or off the machine. The disc only falls once the ball is THROUGH the rim
+    // (physics.js), which can never be undone, so the board and the physics still agree.
+    // `rimSideways`/`rimKeep`: a bounce off a rim is turned ACROSS the hoop row (its sideways
+    // drift picks the side, nothing reads a hoop position) and keeps 60% of that speed, so it
+    // lands among the hoops instead of flying off the machine or coming back at the player.
+    // Measured (reference/hoops/probe-rim.mjs, 21 x 61 grid): scored 29% -> 21%, a rim bounce
+    // into a DIFFERENT hoop 7% -> 15%, straight back at the player 9% -> 7%, parked 3% -> 4%.
+    rimout: true,
+    throatTop: 0,
+    rimSideways: 1,
+    rimKeep: 0.6,
+
     // --- bounce and grip ------------------------------------------------------------------------
     mat: {
       // THE SHELF BOUNCES, AND THIS IS THE HALF OF "BOUNCIER" THAT WAS MISSING. Matt, twice:

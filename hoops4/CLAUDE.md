@@ -1212,8 +1212,19 @@ about 1.9x), so honest rim physics lets few balls in. Measured on the 1,281-thro
 tube removed and rimouts on: **scoring falls from about 29% to 12-18%**, and a shot that is over
 the mouth but not centred goes in 33-54% instead of 84%. That same tube is why no bounce ever
 reached a neighbouring hoop in the "50-50" study - it holds the ball in the first hoop it touches.
-Shrinking the ball (ballR 0.0436 / 0.0400) did not restore scoring (16% / 15%). **Not changed:
-reported to Matt with these numbers for his call.**
+Shrinking the ball (ballR 0.0436 / 0.0400) did not restore scoring (16% / 15%).
+
+**REMOVED the same day, on Matt's call** - shown these numbers, he said: *"it should be able to
+freely bounce horizontally. I don't want it to bounce straight back at me all the time."* So
+`boarddef.js` now sets `throatTop: 0` (the throat stops at the rim), `rimout: true` (a ball that
+climbs back out over the rim plays on), and `rimSideways: 1` / `rimKeep: 0.6` (a rim bounce is
+turned across the hoop row by the drift it already had, keeping 60% of that speed; nothing reads a
+hoop position). Measured on the 21 x 61 grid, before -> after: **scored 29% -> 21%; a rim bounce
+into a DIFFERENT hoop 7% -> 15%; bounces straight back at the player 9% -> 7%; sideways vs toward
+the player 0.56/0.18 -> 0.60/0.14 m/s; parked 3% -> 4%.** It also closed one of `test.js`'s two
+bounce gaps (mean best rebound 0.47 -> 0.53 m/s against the 0.50 bar; misses that bounce 41% ->
+47%, still owed against 50%). `test.js` now pins that rimouts EXIST and that the tube is gone;
+the "100% of the time" promise moved to `through`, where it is true.
 
 ### The turn label, and HOOPS as the name (2026-09-22)
 
@@ -1284,10 +1295,11 @@ cabinet decision** (something that returns a bounced ball to the hoop row, or ho
 wider). **Matt was offered those and chose "leave the hoops as is" (2026-09-23). Closed.** `rimKeep 0.35` with `ringRest 0.7`
 also produced a throw that never settled (the probe hung): treat it as unsafe.
 
-### There is NO rimout on this machine
+### There is NO rimout on this machine - SUPERSEDED 2026-09-23
 
-**(2026-09-22) Still true as shipped** - the `rimout` knob above exists and is OFF. With the disc
-now keyed to `through`, turning it on would no longer let the board and the physics disagree.
+**Rimouts are ON** (`rimout: true`, see "The invisible tube above every hoop"). What was true below
+was that a capture had to be final because the disc fell at capture; the disc now falls at
+`through`, which IS final, so a ball may bounce out right up until it is below the rim. History:
 
 BRICK CITY's rimout hands the floor and the collar back so a ball that bounces out over the rim
 plays on. Correct there, where a rack is nine independent balls. **Here a capture IS a Connect 4
