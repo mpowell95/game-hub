@@ -585,7 +585,7 @@ export const GAME_ART = {
   // (46,70)->(110,38), i.e. rotate(-26.6) about a point one wheel-radius up the surface normal -
   // so the wheels touch the grass exactly. Same flat-cartoon ink (#231f1c) the live game draws
   // with, so the tile and the gameplay read as one thing.
-  // Brick Blitz: the game's own synthwave screen at tile size - neon brick rows up top (one two-hit
+  // Brick Breaker: the game's own synthwave screen at tile size - neon brick rows up top (one two-hit
   // brick marked by its inner outline, never colour alone), a striped sun on the horizon, the pink
   // perspective grid, a glowing ball and the cyan paddle with magenta end caps.
   'brick-blitz': `<svg viewBox="0 0 160 90" aria-hidden="true">

@@ -171,7 +171,7 @@
 //                                                   // bestScore/bestScoreByDiff/bestCombo are Math.max
 //                                                   // ONLY; games/points/bricks/stages/circuits are
 //                                                   // lifetime counters, additive. The one home of a
-//                                                   // Brick Blitz score (no local high-score table);
+//                                                   // Brick Breaker score (no local high-score table);
 //                                                   // see recordBrickBlitz
 //       sudoku: {
 //         total, byDiff,                           // byDiff keyed easy|medium|hard|expert
@@ -2043,7 +2043,7 @@ export function recordPinball(score, difficulty, extras) {
   return st;
 }
 
-/** Brick Blitz: a solo score-attack breakout. Same shape family as Pinball's `pb` - no opponent,
+/** Brick Breaker: a solo score-attack breakout. Same shape family as Pinball's `pb` - no opponent,
  *  no loss axis (a run ends when the last ball is lost, or when the player walks away), so
  *  `bz.games` is the true play count and the score bests are the scoreboard.
  *    bestScore / bestScoreByDiff   highest run overall and per difficulty. Math.max ONLY.
@@ -2063,7 +2063,7 @@ function ensureBz(g) {
   for (const d of BZ_DIFFS) if (!Number.isFinite(g.bz.bestScoreByDiff[d])) g.bz.bestScoreByDiff[d] = 0;
 }
 
-/** Brick Blitz: record one finished run. `score` is the final score, `difficulty` one of
+/** Brick Breaker: record one finished run. `score` is the final score, `difficulty` one of
  *  easy|medium|hard, `extras` = { bricks, stages, bestCombo, circuit } from the run. Counts as
  *  played+won (no loss state), like Snake / Pinball. Additive: bests only go up, counters only add. */
 export function recordBrickBlitz(score, difficulty, extras) {

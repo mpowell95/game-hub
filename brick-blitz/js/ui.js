@@ -1,4 +1,4 @@
-// brick-blitz/js/ui.js — Brick Blitz's DOM shell: setup screen (over a live attract-mode demo),
+// brick-blitz/js/ui.js — Brick Breaker's DOM shell: setup screen (over a live attract-mode demo),
 // HUD, pause / game-over / how-to-play overlays, input, the clock, and stats. The engine
 // (game.js) owns every rule and every pixel on the canvas.
 //
