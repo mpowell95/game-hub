@@ -1917,6 +1917,32 @@ console.log('\n-- 14. EVERY hole on BOTH courses can actually be finished --');
     ok(`${c.name}: every hole is finished in par+2 or better (worst was ${worst} on hole ${worstHole})`,
       worst > 0 && c.holes.every((h) => { const n = playOut(h); return n > 0 && n <= h.par + 2; }));
   }
+
+  // TALL GRASS AND THE ISLAND GREEN (2026-09-23). Both are Course Creator pieces, not on any
+  // shipped course, so the courses above cannot catch a softlock in them: build a hole with each
+  // and play it out with the same bot. An island green is the one that could trap a ball for good
+  // (a drop that lands back in the moat), so it is played on a par 3 and a par 4.
+  {
+    const { THEME_DEFAULTS } = await import('../../hole-editor/js/starter.js');
+    const base = { ...THEME_DEFAULTS.parkland, n: 1, nickname: 't', fw: [{ at: 0, w: 15 }, { at: 1, w: 15 }], hard: 0.3, slope: 'gentle' };
+    const island3 = makeHole({ ...base, par: 3, path: [[0, 5], [0, 150]], seed: 31, greenSeed: 32, guard: ['island'] });
+    const island4 = makeHole({ ...base, par: 4, path: [[0, 5], [0, 360]], seed: 33, greenSeed: 34, guard: ['island'] });
+    const grass = makeHole({ ...base, par: 4, path: [[0, 5], [0, 360]], seed: 35, greenSeed: 36,
+      cross: [{ yd: 230, kind: 'tallGrass', depth: 16 }], water: [{ yd: 160, side: 1, off: 18, rx: 12, ry: 8, kind: 'tallGrass' }] });
+    for (const [name, h] of [['island par 3', island3], ['island par 4', island4], ['tall-grass par 4', grass]]) {
+      ok(`${name}: validates`, validateHole(h).length === 0, validateHole(h).join('; '));
+      const n = playOut(h);
+      ok(`${name}: the bot finishes it (${n} strokes)`, n > 0 && n <= h.par + 3);
+    }
+    ok('an island green is ringed by water: short, long, left and right of it are all water',
+      [[0, -1], [0, 1], [-1, 0], [1, 0]].every(([dx, dy]) => {
+        let d = 4; while (surfaceAt(island4, island4.pin[0] + dx * d, island4.pin[1] + dy * d) !== 'water' && d < 40) d += 1;
+        return d < 40;
+      }));
+    ok('tall grass is a lie of its own, harsher than heavy rough and kinder than a swamp',
+      SURFACE_KINDS.has('tallGrass') && LIES.tallGrass.power < LIES.heavyRough.power && LIES.tallGrass.power > LIES.swamp.power
+      && surfaceAt(grass, 0, 230) === 'tallGrass' && typeof STRINGS.en.lie_tallGrass === 'string' && typeof STRINGS.es.lie_tallGrass === 'string');
+  }
 }
 
 

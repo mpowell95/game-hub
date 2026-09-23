@@ -422,7 +422,7 @@ export function rerollBunker(spec, index) {
 export function addWater(spec, { yd, side, off }, kind) {
   const seed0 = spec.seed;
   const entry = { yd: +yd, side, off: +off, rx: 12, ry: 9, seed: nextSeed(spec.water, seed0 + 40) };
-  if (kind === 'swamp') entry.kind = 'swamp';
+  if (kind === 'swamp' || kind === 'tallGrass') entry.kind = kind;   // tall grass (2026-09-23) rides the same list
   const water = [...(spec.water || []), entry];
   return { ...spec, water };
 }
@@ -434,7 +434,7 @@ export function setWaterField(spec, index, fields) {
   const water = spec.water.map((w, i) => {
     if (i !== index) return w;
     const next = { ...w, ...fields };
-    if (next.kind !== 'swamp') delete next.kind;
+    if (next.kind !== 'swamp' && next.kind !== 'tallGrass') delete next.kind;
     return next;
   });
   return { ...spec, water };
@@ -555,7 +555,7 @@ export function addDrawnShape(spec, group, points, kind) {
   const poly = smoothPoly(points);
   const entry = group === 'bunkers'
     ? { poly, kind: kind || 'greensideBunker' }
-    : (group === 'water' && kind === 'swamp' ? { poly, kind: 'swamp' }
+    : (group === 'water' && (kind === 'swamp' || kind === 'tallGrass') ? { poly, kind }
       : (group === 'decor' && kind === 'flowerbed' ? { poly, kind: 'flowerbed' } : { poly }));
   return { ...spec, [group]: [...(spec[group] || []), entry] };
 }

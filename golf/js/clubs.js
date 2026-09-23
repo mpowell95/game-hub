@@ -204,6 +204,12 @@ export const LIES = {
   // Never a putt from here - `canPutt` names the four grass surfaces and this is not one of them,
   // so no change was needed there.
   swamp: { power: 0.55, zone: 0.35, roll: 0 },
+  // TALL GRASS (2026-09-23, Matt: "tall grass and reeds that slow the ball"). A step beyond heavy
+  // rough in every column, short of a swamp: the grass wraps the club (0.68 power against heavy
+  // rough's 0.82 and swamp's 0.55), the strike is harder to find (zone 0.14), and a ball landing
+  // in it barely moves (roll 0.012 - it nestles down, no hop; see shot.js `groundPoint`). No
+  // penalty stroke and no drop: you play it where it lies.
+  tallGrass: { power: 0.68, zone: 0.14, roll: 0.012 },
 };
 
 export function lieOf(kind) { return LIES[kind] || LIES.fairway; }

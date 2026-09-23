@@ -947,6 +947,20 @@ export function makeHole(spec) {
         }
         break;
       }
+      // AN ISLAND GREEN (2026-09-23). Water all the way round, following the green's own edge a few
+      // yards past the fringe, so the only way on is through the air. It sits at the water layer,
+      // so the fringe and the green are laid over its middle; the fairway simply stops at the
+      // shore. There is deliberately no causeway (Matt: no bridges).
+      case 'island': {
+        const ring = [];
+        for (let i = 0; i < 40; i++) {
+          const bg = (i / 40) * TAU;
+          const d = edgeAt(bg) + fringeAt(bg) + 9 + 1.5 * Math.sin(bg * 3 + gseed);
+          ring.push([+(pin[0] + Math.cos(gBase + bg) * d).toFixed(2), +(pin[1] + Math.sin(gBase + bg) * d).toFixed(2)]);
+        }
+        specWater.push({ poly: ring });
+        break;
+      }
       default: throw new Error(`golf: unknown green guard "${g}"`);
     }
   }
@@ -1018,7 +1032,7 @@ export function makeHole(spec) {
     const ck = cx.kind || 'water';
     // A swamp band rides the SAME list as a water band - it is a surface laid at the water layer,
     // and the only thing that differs is which `kind` the surface carries (2026-09-22).
-    if (ck === 'water' || ck === 'swamp') specWater.push({ poly, ...(ck === 'swamp' ? { kind: 'swamp' } : {}) });
+    if (ck === 'water' || ck === 'swamp' || ck === 'tallGrass') specWater.push({ poly, ...(ck !== 'water' ? { kind: ck } : {}) });
     else specBunkers.push({ poly, kind: ck === 'waste' ? 'fairwayBunker' : ck });
   }
 
@@ -1067,7 +1081,7 @@ export function makeHole(spec) {
     // `kind: 'swamp'` (2026-09-22) makes the same shape a swamp instead of a lake. Anything else,
     // including an absent kind, is water - this list has always been "the water layer" and an
     // unrecognised value must not quietly invent a new surface for the closed set to reject.
-    const wk = w.kind === 'swamp' ? 'swamp' : 'water';
+    const wk = w.kind === 'swamp' ? 'swamp' : (w.kind === 'tallGrass' ? 'tallGrass' : 'water');
     if (w.poly) { surfaces.push({ kind: wk, poly: w.poly }); continue; }
     const [cx, cy] = place(stations, w.at, w.side == null ? 0 : w.side, w.off || 0);
     surfaces.push({ kind: wk, poly: blob(cx, cy, w.rx, w.ry == null ? w.rx : w.ry, w.seed || (seed0 + 40 + i), w.n || 12) });

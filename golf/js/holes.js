@@ -18,6 +18,9 @@ export const SURFACE_KINDS = new Set([
   // the hazard that costs you the shot rather than a stroke, and it is the only surface added
   // since Stage B, so the closed set really is closed - a `kind` not on this list is an error.
   'swamp',
+  // TALL GRASS (2026-09-23): long uncut grass you play out of (clubs.js LIES.tallGrass). Laid at
+  // the water layer like a swamp, as `kind: 'tallGrass'` on a water/cross entry.
+  'tallGrass',
 ]);
 
 /** Ray-cast point-in-polygon. Winding order is irrelevant, which is why hole data never states
@@ -329,7 +332,7 @@ export function expandBelt(belt, type) {
  *  from. HAND-PLACED `trees` ENTRIES ARE NEVER FILTERED: hole 3's signature oak stands ON THE
  *  FAIRWAY on purpose, and an author who writes a coordinate means it. */
 const NO_BELT_TREE = new Set(['fairway', 'lightRough', 'green', 'fringe', 'tee', 'water',
-  'fairwayBunker', 'greensideBunker', 'swamp']);
+  'fairwayBunker', 'greensideBunker', 'swamp', 'tallGrass']);
 
 export function treesOf(hole) {
   if (hole._trees) return hole._trees;
