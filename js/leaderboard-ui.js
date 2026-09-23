@@ -191,6 +191,8 @@ const GAME_META = [
   // rule 1, and exactly how Yahtzee shipped. The row costs nothing while the game is hidden -
   // gameListHTML only renders a game somebody has actually played.
   { id: 'pinball', labelKey: 'game_title_pinball' },
+  // Brick Blitz (2026-09-23): released with this row in the same commit - the Yahtzee lesson above.
+  { id: 'brickblitz', labelKey: 'game_title_brickblitz' },
   // Golf is solo (js/players-agg.js's SOLO set) and ranks by lifetime points, same shape as
   // Skeeball/Pinball - see golfPointsAt below. The row exists from Part 7 even though the one
   // course starts admin-gated to 'testing' (js/admin-config.js): same reasoning as Pinball above,
@@ -454,6 +456,15 @@ function snBestAtWalls(g, tier, walls) {
   if (bdw && bdw[walls]) return bdw[walls][key] | 0;
   return walls === 'off' ? (sn.bestLenByDiff || {})[key] | 0 : 0;
 }
+/** Brick Blitz's board: best single run, per difficulty tier (the same shape as Snake's). */
+const BZ_TIER_KEYS = ['easy', 'medium', 'hard'];
+function bzBestAt(g, tier) {
+  const bz = (g.games.brickblitz || {}).bz;
+  if (!bz) return 0;
+  if (tier == null) return bz.bestScore | 0;
+  const key = BZ_TIER_KEYS[tier - 1];
+  return key ? (bz.bestScoreByDiff || {})[key] | 0 : 0;
+}
 function hcBestAt(g, tier) {
   const hc = (g.games.hillclimb || {}).hc;
   if (!hc) return 0;
@@ -559,6 +570,7 @@ function gameMetricAt(g, id, tier) {
   if (id === 'hillclimb') return hcBestAt(g, tier);
   if (id === 'skeeball') return skPointsAt(g, _machine);
   if (id === 'pinball') return pbPointsAt(g);
+  if (id === 'brickblitz') return bzBestAt(g, tier);
   if (id === 'golf') return golfBestAt(g);   // to par, LOWER WINS, null when never played
   // Best time at this difficulty, LOWER WINS, null when that level was never cleared. The tier
   // machinery does the rest: a row ranks at the HIGHEST level it has both played and cleared,
@@ -1366,6 +1378,10 @@ const TEXTURE = {
       get: (g) => ((g.games.boggle.bg || {}).longestWord || {}).len | 0,
       show: (g) => ((g.games.boggle.bg || {}).longestWord || {}).word || '',
     },
+  ],
+  brickblitz: [
+    { labelKey: 'lb_tex_bz_bricks', get: (g) => (((g.games.brickblitz || {}).bz || {}).bricks) | 0 },
+    { labelKey: 'lb_tex_bz_combo', get: (g) => (((g.games.brickblitz || {}).bz || {}).bestCombo) | 0 },
   ],
   snake: [
     { labelKey: 'lb_tex_longest_snake', get: (g) => (((g.games.snake || {}).sn || {}).bestLen) | 0 },

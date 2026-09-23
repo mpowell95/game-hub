@@ -531,6 +531,7 @@ working in that folder).
 | Game | Integration | CSS root / prefix | Settings key | Stats recorder |
 |---|---|---|---|---|
 | Baseball | in-hub `module:`, immersive, **a real three.js stadium with the reference game's three cameras (R1, 2026-09-20, being rebuilt as a clone of Baseball 9's mechanics per `docs/BASEBALL-REFERENCE-B9.md`); career is phase 4; `devOnly`** | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
+| Brick Blitz | in-hub `module:`, immersive, **solo score attack** (clone of Neon Breakout, 2026-09-23) | `.bx-root` / `.bx-` | `gamehub.brickblitz.v1` | `recordBrickBlitz` |
 | Ball Run | in-hub `module:`, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen gen-1 dotted keys) | `recordBallRun` |
 | Battleship | in-hub `module:`, immersive, **multiplayer** (`gamehub.battleship.mp.v1`, the repo's first hidden-information game) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` |
 | Boggle | in-hub `module:`, **multiplayer** (`gamehub.boggle.mp.v1`), **bilingual gameplay** (EN/ES word list + dice, chosen on the setup screen) | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |

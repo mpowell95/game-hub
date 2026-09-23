@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v929';
+const CACHE = 'game-hub-v930';
 
 const ASSETS = [
   './',
@@ -251,6 +251,12 @@ const ASSETS = [
   './snake/js/ui.js',
   './snake/js/game.js',
   './snake/js/strings.js',
+  './brick-blitz/',
+  './brick-blitz/index.html',
+  './brick-blitz/css/brick-blitz.css',
+  './brick-blitz/js/ui.js',
+  './brick-blitz/js/game.js',
+  './brick-blitz/js/strings.js',
   // Hill Climb (2026-08-02). Note test.js is deliberately NOT listed: it is a node-only engine
   // suite, never loaded by the page (same convention as every other game's test file).
   './pinball/',
@@ -777,6 +783,12 @@ const REST_MANIFEST = {
   './snake/js/ui.js': '438cb348fa',
   './snake/js/game.js': 'f69fbe6fe8',
   './snake/js/strings.js': 'f4c6fd66b0',
+  './brick-blitz/': 'ff0f66e242',
+  './brick-blitz/index.html': 'ff0f66e242',
+  './brick-blitz/css/brick-blitz.css': 'fa6414e3d5',
+  './brick-blitz/js/ui.js': '4c4ed99fcd',
+  './brick-blitz/js/game.js': '811333f86d',
+  './brick-blitz/js/strings.js': '7878f8a342',
   './pinball/': 'c7d7cf8581',
   './pinball/index.html': 'c7d7cf8581',
   './pinball/css/pinball.css': '4d378af4c3',

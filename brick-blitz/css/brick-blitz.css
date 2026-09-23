@@ -1,0 +1,281 @@
+/* brick-blitz/css/brick-blitz.css — every rule descendant-scoped under .bx-root (Mancala's
+   discipline, docs/BUILDING-A-GAME.md "CSS scoping"). A fixed neon look in both hub themes, like
+   Pinball: the game is its own dark arcade screen, so .gh-dark changes nothing here. */
+
+.bx-root {
+  /* Fixed to the viewport: full bleed both standalone and mounted (immersive: true in js/hub.js).
+     z-index sits below the hub's floating back button. */
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  touch-action: none;
+  color: #f6eaff;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(255, 46, 151, 0.16), transparent 60%),
+    linear-gradient(180deg, #0b001c 0%, #12002b 55%, #1d0538 100%);
+
+  --bx-pink: #ff2e97;
+  --bx-cyan: #00f5d4;
+  --bx-yellow: #fff200;
+  --bx-orange: #ff9e00;
+  --bx-violet: #9b5de5;
+  --bx-dim: #cdb5ee;
+  --bx-disp: "Avenir Next Condensed", "Futura Condensed", "Arial Narrow", "Nimbus Sans Narrow", "Helvetica Neue", Arial, sans-serif;
+}
+.bx-root,
+.bx-root * {
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.bx-root button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+.bx-root button > span,
+.bx-root button > small,
+.bx-root button > svg { pointer-events: none; }
+.bx-root :focus-visible { outline: 2px solid var(--bx-yellow); outline-offset: 3px; }
+.bx-root [hidden] { display: none !important; }
+
+/* ------------------------------------------------------------------ HUD --- */
+/* Shares its row with the hub's floating back button (top-left, ~54-90px down), so it starts at
+   that height and leaves the left end clear for it. */
+.bx-root .bx-hud {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  height: 46px;
+  margin-top: max(env(safe-area-inset-top, 0px), 48px);
+  padding: 0 12px 0 96px;
+  font-family: var(--bx-disp);
+  font-style: italic;
+  font-weight: 900;
+}
+.bx-root .bx-h { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
+.bx-root .bx-h small {
+  font-size: 11px; letter-spacing: 0.16em; color: var(--bx-dim); font-weight: 800; text-transform: uppercase;
+  white-space: nowrap;
+}
+.bx-root .bx-h strong {
+  font-size: 19px; letter-spacing: 0.03em; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap;
+  text-shadow: 0 0 6px var(--bx-pink), 0 0 14px var(--bx-pink);
+}
+.bx-root .bx-h-c strong { text-shadow: 0 0 6px var(--bx-cyan), 0 0 14px var(--bx-cyan); }
+.bx-root .bx-h-v strong { text-shadow: 0 0 6px var(--bx-violet), 0 0 14px var(--bx-violet); }
+.bx-root .bx-lives { display: flex; gap: 4px; height: 19px; align-items: center; }
+.bx-root .bx-lives i { display: block; width: 14px; height: 7px; border-radius: 4px; background: var(--bx-cyan); box-shadow: 0 0 8px var(--bx-cyan); }
+
+/* ---------------------------------------------------------------- stage --- */
+.bx-root .bx-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+.bx-root .bx-screen {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #12002b;
+  box-shadow: 0 0 0 2px #3c1070, 0 0 0 4px rgba(255, 46, 151, 0.85), 0 0 22px 3px rgba(255, 46, 151, 0.4);
+  container-type: inline-size;
+}
+.bx-root .bx-canvas { display: block; touch-action: none; }
+.bx-root .bx-scan {
+  position: absolute; inset: 0; pointer-events: none; border-radius: 12px;
+  background:
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px),
+    radial-gradient(120% 90% at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.5) 100%);
+}
+.bx-root .bx-combo {
+  position: absolute; right: 12px; top: 34px; pointer-events: none; text-align: right;
+  opacity: 0; transition: opacity 0.4s ease;
+  font-family: var(--bx-disp); font-style: italic;
+}
+.bx-root .bx-combo.is-on { opacity: 1; }
+.bx-root .bx-combo b {
+  display: block; font-weight: 900; font-size: 32px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 6px var(--bx-orange), 0 0 18px var(--bx-pink);
+}
+.bx-root .bx-combo span { font-weight: 800; font-size: 12px; letter-spacing: 0.3em; color: var(--bx-orange); text-transform: uppercase; }
+.bx-root .bx-combo.is-pop b { animation: bx-pop 0.32s cubic-bezier(0.3, 1.8, 0.5, 1); }
+@keyframes bx-pop { from { transform: scale(1.7) rotate(-6deg); } to { transform: none; } }
+
+.bx-root .bx-banner {
+  position: absolute; left: 0; right: 0; top: 44%;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: none; opacity: 0;
+  font-family: var(--bx-disp); font-style: italic; text-transform: uppercase;
+}
+.bx-root .bx-banner.is-show { animation: bx-banner 2.1s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.bx-root .bx-banner b {
+  font-weight: 900; font-size: clamp(30px, 9cqw, 56px); letter-spacing: 0.06em; color: #fff; line-height: 1;
+  text-shadow: 0 0 8px var(--bx-cyan), 0 0 26px var(--bx-cyan), -3px 3px 0 rgba(255, 46, 151, 0.85);
+}
+.bx-root .bx-banner span { font-weight: 800; font-size: 14px; letter-spacing: 0.35em; color: var(--bx-yellow); text-shadow: 0 0 10px rgba(255, 242, 0, 0.7); }
+@keyframes bx-banner {
+  0% { opacity: 0; transform: translateX(-30%) skewX(-18deg); }
+  14% { opacity: 1; transform: translateX(0) skewX(-8deg); }
+  78% { opacity: 1; transform: translateX(3%) skewX(-8deg); }
+  100% { opacity: 0; transform: translateX(40%) skewX(-18deg); }
+}
+
+/* ----------------------------------------------------------------- dock --- */
+.bx-root .bx-dock {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 6px 12px max(env(safe-area-inset-bottom, 0px), 8px);
+}
+.bx-root .bx-ibtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-width: 44px; height: 44px; padding: 0 16px; border: 0; border-radius: 22px;
+  font-family: var(--bx-disp); font-style: italic; font-weight: 800; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase;
+  background: rgba(40, 8, 78, 0.85);
+  box-shadow: inset 0 0 0 1.5px rgba(0, 245, 212, 0.7), 0 0 12px rgba(0, 245, 212, 0.25);
+}
+.bx-root .bx-ibtn svg { width: 18px; height: 18px; }
+.bx-root .bx-ibtn[aria-pressed="true"] { box-shadow: inset 0 0 0 1.5px var(--bx-pink), 0 0 14px rgba(255, 46, 151, 0.45); }
+.bx-root .bx-ibtn:active { transform: scale(0.96); }
+
+/* On the setup screen the HUD and dock have nothing to say; visibility (not display) keeps the
+   stage the same size, so the attract demo behind the menu does not jump when a run starts. */
+.bx-root.is-setup .bx-hud,
+.bx-root.is-setup .bx-dock { visibility: hidden; }
+
+/* ------------------------------------------------------------- overlays --- */
+.bx-root .bx-ov {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  padding: max(env(safe-area-inset-top, 0px), 96px) 16px max(env(safe-area-inset-bottom, 0px), 16px);
+  background: radial-gradient(90% 70% at 50% 45%, rgba(18, 0, 43, 0.4), rgba(18, 0, 43, 0.86));
+  text-align: center;
+}
+.bx-root .bx-ov-setup {
+  background: linear-gradient(180deg, rgba(18, 0, 43, 0.25) 0%, rgba(18, 0, 43, 0.55) 40%, rgba(18, 0, 43, 0.82) 100%);
+}
+.bx-root .bx-setup,
+.bx-root .bx-card {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: min(100%, 340px);
+}
+.bx-root .bx-card {
+  padding: 22px 18px 18px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(40, 8, 78, 0.92), rgba(16, 0, 38, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(155, 93, 229, 0.55), 0 0 0 2px rgba(255, 46, 151, 0.6), 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+.bx-root .bx-logo {
+  margin: 0;
+  font-family: var(--bx-disp); font-style: italic; font-weight: 900; text-transform: uppercase;
+  font-size: 46px; line-height: 1; letter-spacing: 0.04em;
+  background: linear-gradient(180deg, #fff 0%, #fff 36%, #ffd0ec 48%, #ff2e97 62%, #ff9e00 80%, #fff200 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 6px rgba(255, 46, 151, 0.9)) drop-shadow(0 0 20px rgba(255, 46, 151, 0.4));
+  transform: skewX(-6deg);
+}
+.bx-root .bx-tag {
+  margin: -4px 0 4px;
+  font-family: var(--bx-disp); font-style: italic; font-weight: 700; font-size: 14px; letter-spacing: 0.12em;
+  color: var(--bx-cyan); text-shadow: 0 0 8px rgba(0, 245, 212, 0.7);
+}
+.bx-root .bx-field { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.bx-root .bx-label {
+  font-family: var(--bx-disp); font-style: italic; font-weight: 800; font-size: 12px; letter-spacing: 0.24em;
+  color: var(--bx-dim); text-transform: uppercase;
+}
+.bx-root .bx-segrow { display: flex; gap: 8px; width: 100%; }
+.bx-root .bx-seg {
+  flex: 1 1 0; min-width: 0; min-height: 46px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 8px; border: 0; border-radius: 10px;
+  font-family: var(--bx-disp); font-style: italic; font-weight: 800; font-size: 15px; letter-spacing: 0.06em;
+  background: rgba(40, 8, 78, 0.85);
+  box-shadow: inset 0 0 0 1.5px rgba(155, 93, 229, 0.6);
+}
+.bx-root .bx-seg svg { width: 16px; height: 16px; flex: 0 0 auto; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
+.bx-root .bx-seg-2 { flex-direction: column; gap: 1px; min-height: 54px; }
+.bx-root .bx-seg-2 small { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--bx-dim); font-style: normal; }
+/* Selected = the standing #ffce3a accent AND a thicker ring (never colour alone). */
+.bx-root .bx-seg.is-on {
+  background: rgba(255, 46, 151, 0.22);
+  box-shadow: inset 0 0 0 3px #ffce3a, 0 0 14px rgba(255, 206, 58, 0.35);
+}
+.bx-root .bx-mbtn {
+  width: 100%; min-height: 50px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 10px 18px; border: 0; border-radius: 10px;
+  font-family: var(--bx-disp); font-style: italic; font-weight: 900; font-size: 20px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(90deg, rgba(255, 46, 151, 0.35), rgba(155, 93, 229, 0.28));
+  box-shadow: inset 0 0 0 2px var(--bx-pink), 0 0 16px rgba(255, 46, 151, 0.45);
+}
+.bx-root .bx-mbtn.bx-alt {
+  min-height: 46px; font-size: 16px;
+  background: linear-gradient(90deg, rgba(0, 245, 212, 0.16), rgba(0, 187, 249, 0.14));
+  box-shadow: inset 0 0 0 2px var(--bx-cyan), 0 0 14px rgba(0, 245, 212, 0.3);
+}
+.bx-root .bx-mbtn:active { transform: scale(0.97); }
+.bx-root .bx-best {
+  margin: 0; font-family: var(--bx-disp); font-style: italic; font-weight: 800; font-size: 14px; letter-spacing: 0.14em;
+  color: #fff; text-shadow: 0 0 8px var(--bx-violet); font-variant-numeric: tabular-nums;
+}
+.bx-root .bx-menu { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 4px; }
+.bx-root .bx-h2 {
+  margin: 0;
+  font-family: var(--bx-disp); font-style: italic; font-weight: 900; text-transform: uppercase;
+  font-size: 40px; line-height: 0.95; letter-spacing: 0.04em; color: #fff;
+  text-shadow: 0 0 6px var(--bx-pink), 0 0 22px var(--bx-pink), 3px 3px 0 rgba(0, 245, 212, 0.8);
+}
+.bx-root .bx-h2-sm { font-size: 28px; }
+.bx-root .bx-kick {
+  margin: 0; font-family: var(--bx-disp); font-style: italic; font-weight: 800; font-size: 13px; letter-spacing: 0.24em;
+  color: var(--bx-cyan); text-transform: uppercase;
+}
+.bx-root .bx-scoreline {
+  margin: 0; font-family: var(--bx-disp); font-style: italic; font-weight: 900; font-size: 32px; letter-spacing: 0.06em;
+  color: var(--bx-yellow); text-shadow: 0 0 10px rgba(255, 242, 0, 0.6); font-variant-numeric: tabular-nums;
+}
+.bx-root .bx-record {
+  margin: 0; font-family: var(--bx-disp); font-style: italic; font-weight: 900; font-size: 18px; letter-spacing: 0.18em;
+  color: #fff; text-shadow: 0 0 12px var(--bx-pink); text-transform: uppercase;
+}
+.bx-root .bx-note { margin: 0; max-width: 32ch; font-size: 14px; line-height: 1.45; color: #e2d2fa; }
+.bx-root .bx-x {
+  position: absolute; top: 4px; right: 4px;
+  width: 44px; height: 44px; border: 0; border-radius: 22px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; color: #fff;
+}
+.bx-root .bx-x svg { width: 20px; height: 20px; }
+
+/* ------------------------------------------------------------ how to play --- */
+.bx-root .bx-help { gap: 7px; text-align: left; align-items: stretch; }
+.bx-root .bx-help .bx-h2 { text-align: center; }
+.bx-root .bx-help-goal { margin: 2px 0 0; font-size: 14px; font-weight: 700; color: #fff; text-align: center; }
+.bx-root .bx-help-svg { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
+.bx-root .bx-help-line { margin: 0; font-size: 13px; line-height: 1.35; color: #e2d2fa; white-space: nowrap; }
+.bx-root .bx-help-kv { padding-left: 12px; font-weight: 700; color: #fff; white-space: nowrap; }
+.bx-root .bx-help .bx-mbtn { margin-top: 6px; }
+
+.bx-root .bx-sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; margin: 0;
+}
+
+/* Reduced motion thins garnish only: the ball and bricks keep moving (the canvas handles that
+   side). The banner shows and goes without sliding, settled rather than hidden. */
+@media (prefers-reduced-motion: reduce) {
+  .bx-root .bx-banner.is-show { animation: bx-banner-still 2.1s steps(1, end) both; }
+  .bx-root .bx-combo.is-pop b { animation: none; }
+}
+@keyframes bx-banner-still { 0% { opacity: 1; transform: skewX(-8deg); } 100% { opacity: 0; } }
