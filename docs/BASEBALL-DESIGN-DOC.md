@@ -118,7 +118,8 @@ Major League	9	14	top 4 of 9: semifinal + final
 - **[Locked] by Matt 2026-09-22 (R16)** Standings: each CPU team's scripted record is scaled onto the season's own length (CPU rank r finishes `round(n * r / (size - 1))` of n), and **the player wins every tie**. Before R16 a CPU record topped out at 7 wins however long the season was, and the player lost every tie to every CPU team.
 - **[Locked] by Matt 2026-09-22 (R16)** A season snapshots its own length, its own team list and its own playoff format when it starts, beside the cap and the point table it already snapshotted. A tuning deploy applies from the next season and never reshapes one in progress; a season saved before R16 keeps playing as the 12-game, all-eight-slots, top-4 season it was generated as.
 - **[Locked] 2026-09-23** Mid-season, a CPU team's record covers only the games played so far: its final scripted record pro-rated (`round(finalWins * played / games)`), so it ends exactly on the full-season record. Display only; the end-of-season table that decides the playoff cut is unchanged. Before this, game 1 showed every CPU team's whole season (8-0 beside your 1-0).
-- **[Open]** Schedule shape (which opponents the extra games above eight go to) remains open; the generator repeats the middle slots, meets every team at least once, and meets the champion exactly once, last.
+- **[Locked] by Matt 2026-09-23** Schedule shape: the games above eight are repeats against the MIDDLE teams (`SCHEDULE_SHAPE` 'repeatMiddle'); every team is met at least once, and the champion exactly once, last.
+- **[Locked] by Matt 2026-09-23** CPU records match your results (`STANDINGS_MODEL` 'withResults'): a CPU team's games against you count as they actually went, and only its other games are scripted, at its scripted win rate. A team you beat carries that loss. Snapshotted per season; a season already in progress keeps the fully scripted table. Measured with `sim-baseball-career.mjs`: all 8 assertions still pass and every number moved within noise (median first title 11 seasons, strong first-try World Series 30.5% to 32.0%).
 
 ### After the Majors
 - **[Locked]** Winning the World Series repeats the Majors season for more titles.
@@ -597,6 +598,6 @@ perfectSeasons * 10000 + wsTitles * 100 + (league - 1) * 4 + bestTrophyInThatLea
 10. What happens after a World Series win (next season flow).
 11. Park features for version 1 vs. later.
 12. Closed 2026-09-23: 40 team names (`baseball/js/ui.js` `TEAM_NAMES`).
-13. Schedule shape (12 games over 8 opponents) and standings tie-breakers.
+13. Closed 2026-09-23: schedule repeats the middle teams; you win standings ties (R16); CPU records match your results.
 14. Closed: no sound in version 1.
 15. Closed: team and park names are proper nouns and are not translated.

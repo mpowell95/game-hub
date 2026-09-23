@@ -283,6 +283,7 @@ export function startSeason(state, seed) {
       games,
       slots,
       playoffFormat,
+      standingsModel: STANDINGS_MODEL,
       points: { ...POINTS[league] },
       schedule: makeSchedule(league, seasonSeed, games, slots.length, SCHEDULE_SHAPE),
       results: [],
@@ -453,8 +454,11 @@ export function seasonRecord(state) {
  */
 export function standingsFor(state) {
   const rec = seasonRecord(state);
-  return scriptedStandings(leagueTeams(state), rec, seasonGames(state),
-    STANDINGS_MODEL, STANDINGS_TIEBREAK, rec.wins + rec.losses);
+  // The season's own snapshot (startSeason); a season started before 2026-09-23 has none and keeps
+  // the fully scripted table it began with.
+  const model = (state.season && state.season.standingsModel) || 'scaledToSeason';
+  return scriptedStandings(leagueTeams(state), { ...rec, results: (state.season && state.season.results) || [] },
+    seasonGames(state), model, STANDINGS_TIEBREAK, rec.wins + rec.losses);
 }
 
 /** Build the playoff branch when the regular season ends in a top-4 place. Pure. */

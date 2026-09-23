@@ -810,5 +810,32 @@ console.log('\n--- STRUCTURAL: career-io is the only door to the stores ---');
   ok(!C.spendLocked(minors) && C.spend(minors, 'hitAcc').unspent === 2, 'R19: every other league still spends mid-season');
 }
 
+// -----------------------------------------------------------------------------------------------
+console.log('\n--- RULES: standings match your results (doc item 13, Matt 2026-09-23) ---');
+// -----------------------------------------------------------------------------------------------
+{
+  let st = C.startSeason(at('highschool'), 11);
+  eq(st.season.standingsModel, 'withResults', 'a new season snapshots the withResults standings model');
+  const teams = C.leagueTeams(st);
+  const last = teams.length - 1;
+  // Beat everyone except the weakest team.
+  const results = st.season.schedule.map((g, idx) => ({ idx, opponentIndex: g.opponentIndex, home: g.home,
+    won: g.opponentIndex !== 0, you: 1, cpu: 0, forfeit: false }));
+  const full = { ...st, season: { ...st.season, results } };
+  const row = (s, i) => C.standingsFor(s).find((r) => r.id === teams[i].name);
+  const n = C.seasonGames(full);
+  eq(`${row(full, last).wins}-${row(full, last).losses}`, `${n - 1}-1`, 'the champion you beat carries that loss');
+  eq(`${row(full, 0).wins}-${row(full, 0).losses}`, `1-${n - 1}`, 'the weakest team that beat you carries that win');
+  ok(C.standingsFor(full).filter((r) => !r.isPlayer).every((r) => r.wins + r.losses === n), 'every CPU team still plays the whole season');
+  // Mid-season: only games played so far, and the champion (met last) is untouched until then.
+  const mid = { ...st, season: { ...st.season, results: results.slice(0, 3) } };
+  ok(C.standingsFor(mid).filter((r) => !r.isPlayer).every((r) => r.wins + r.losses === 3), 'mid-season: every CPU team has played 3, like you');
+  // THE LAW rule 3/5: a season started before this change has no snapshot and keeps the old table.
+  const legacy = { ...full, season: { ...full.season } };
+  delete legacy.season.standingsModel;
+  eq(`${row(legacy, last).wins}-${row(legacy, last).losses}`, `${n}-0`, 'a season already in progress keeps its fully scripted table');
+  eq(C.validateState(full), [], 'a season carrying standingsModel validates');
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
