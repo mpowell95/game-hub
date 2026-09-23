@@ -115,8 +115,8 @@ export function paletteSections(built, look) {
       { id: 'decor-sign', label: 'Sign', kind: 'tool', tool: 'decor', state: { decorKind: 'sign' } },
       { id: 'decor-flagpole', label: 'Flagpole', kind: 'tool', tool: 'decor', state: { decorKind: 'flagpole' } },
       { id: 'decor-path', label: 'Draw a cart path', kind: 'draw', group: 'decor' },
-      { id: 'decor-flowerbed', label: 'Flower bed', kind: 'tool', tool: 'decor', state: { decorKind: 'flowerbed' } },
-      { id: 'decor-flowerbed-draw', label: 'Draw a flower bed', kind: 'draw', group: 'decor', drawKind: 'flowerbed' },
+      { id: 'decor-flowerbed', label: 'Wildflowers', kind: 'tool', tool: 'decor', state: { decorKind: 'flowerbed' } },
+      { id: 'decor-flowerbed-draw', label: 'Draw wildflowers', kind: 'draw', group: 'decor', drawKind: 'flowerbed' },
     ] },
   ];
 }
@@ -245,7 +245,7 @@ export function paintTile(canvas, item, theme, types) {
   crop(s.map, x, y, CROP_W, CROP_H, canvas);
   const decorKind = (item.tool === 'decor' && item.state && item.state.decorKind) || (item.id === 'decor-flowerbed-draw' ? 'flowerbed' : null);
   if (decorKind) {
-    const ppy = (canvas.width / CROP_W) * (decorKind === 'flowerbed' ? 2.2 : 4);
+    const ppy = (canvas.width / CROP_W) * (decorKind === 'flowerbed' ? 1.3 : 4);
     drawDecorSprite(canvas.getContext('2d'), decorKind, canvas.width / 2 - (decorKind === 'flowerbed' ? 0 : ppy * 0.4), canvas.height / 2, ppy, 0, paletteFor(theme));
   }
   if (item.kind === 'draw' || item.tool === 'line') {

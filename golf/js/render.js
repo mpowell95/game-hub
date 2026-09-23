@@ -790,17 +790,95 @@ function tintOf(hex, f) {
   return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
 }
 
-/** Mixed flowers scattered over a disc of radius `r` (px), seeded so a bed is the same every load.
- *  Pink, yellow, white and purple: none of them depends on red-vs-green to be seen. */
-const FLOWER_COLOURS = ['#f7a8c4', '#ffd84a', '#fff6ee', '#b79be6', '#ff9f6a'];
-export function flowerDots(ctx, cx, cy, r, ppy, seed) {
-  const dr = Math.max(0.7, ppy * 0.22);
-  const n = Math.max(8, Math.round((r * r) / (dr * dr * 3)));
-  for (let i = 0; i < n; i++) {
-    const a = i * 2.39996 + seed; const d = Math.sqrt((i + 0.5) / n) * r * 0.92;
-    ctx.fillStyle = FLOWER_COLOURS[(i * 7 + Math.round(seed)) % FLOWER_COLOURS.length];
-    ctx.beginPath(); ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, dr, 0, Math.PI * 2); ctx.fill();
+/** WILDFLOWERS (2026-09-23). Matt, on the first flower beds (soil, a stone edge, confetti of
+ *  colours): "those flower beds look really bad" ... "they'd be wild flowers". So a `flowerbed`
+ *  decor is a loose MEADOW PATCH: an uneven edge of longer grass, flowers in natural DRIFTS of one
+ *  colour each, a few loose singles, no soil and no edging. Looks only (holes.js never reads decor).
+ *
+ *  One generator in WORLD YARDS, seeded from the patch itself, so the game's top-down map and the
+ *  editor's standing flowers are the same flowers in the same places. Colours: yellow, white,
+ *  purple, cornflower blue and a little pink - none relies on red-vs-green (Matt is colourblind). */
+const WILD = [['#ffd84a', 3], ['#fffaf0', 3], ['#a98be0', 2], ['#7fa8f0', 2], ['#f7a8c4', 1]];
+function inPoly(x, y, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]; const [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
   }
+  return c;
+}
+const _wild = new Map();
+/** `d` is a decor entry: `{at, kind}` (a tapped patch, ~3 yd across) or `{poly, kind}` (drawn).
+ *  Returns `{ edge, tufts: [[x,y]], flowers: [{x, y, c, h}] }`, cached per patch. */
+export function wildflowers(d) {
+  const key = JSON.stringify(d.poly || d.at);
+  let w = _wild.get(key);
+  if (w) return w;
+  const seedPt = d.poly ? d.poly[0] : d.at;
+  const rnd = mulberry32((Math.round(seedPt[0] * 131) ^ Math.round(seedPt[1] * 977)) >>> 0);
+  let edge = d.poly;
+  if (!edge) {
+    const R = 6; const ph = rnd() * 6;
+    edge = Array.from({ length: 20 }, (_, i) => {
+      const a = (i / 20) * Math.PI * 2;
+      const r = R * (0.82 + 0.14 * Math.sin(a * 3 + ph) + 0.08 * Math.sin(a * 5 + ph * 2));
+      return [d.at[0] + Math.cos(a) * r, d.at[1] + Math.sin(a) * r];
+    });
+  }
+  const bb = bboxOf(edge);
+  const area = Math.max(4, (bb.maxX - bb.minX) * (bb.maxY - bb.minY) * 0.7);
+  const inside = (x, y) => inPoly(x, y, edge);
+  const pick = () => { let t = rnd() * 11; for (const [c, wgt] of WILD) { t -= wgt; if (t <= 0) return c; } return WILD[0][0]; };
+  const flowers = []; const tufts = [];
+  const nDrift = Math.max(3, Math.min(40, Math.round(area / 7)));
+  for (let k = 0; k < nDrift; k++) {
+    let cx = 0; let cy = 0; let ok = false;
+    for (let tries = 0; tries < 12 && !ok; tries++) { cx = bb.minX + rnd() * (bb.maxX - bb.minX); cy = bb.minY + rnd() * (bb.maxY - bb.minY); ok = inside(cx, cy); }
+    if (!ok) continue;
+    const c = pick(); const spread = 0.5 + rnd() * 0.9; const n = 5 + Math.floor(rnd() * 7);
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * Math.PI * 2; const r = spread * Math.sqrt(rnd());
+      const x = cx + Math.cos(a) * r; const y = cy + Math.sin(a) * r;
+      if (inside(x, y)) flowers.push({ x, y, c, h: 0.3 + rnd() * 0.5 });
+    }
+  }
+  const nSingle = Math.round(area / 4);
+  for (let i = 0; i < nSingle; i++) {
+    const x = bb.minX + rnd() * (bb.maxX - bb.minX); const y = bb.minY + rnd() * (bb.maxY - bb.minY);
+    if (inside(x, y)) flowers.push({ x, y, c: rnd() < 0.5 ? '#fffaf0' : '#ffd84a', h: 0.25 + rnd() * 0.4 });
+  }
+  for (let y = bb.minY + 0.5; y < bb.maxY; y += 1.1) {
+    for (let x = bb.minX + 0.5; x < bb.maxX; x += 1.1) {
+      const jx = x + (rnd() - 0.5) * 0.8; const jy = y + (rnd() - 0.5) * 0.8;
+      if (inside(jx, jy)) tufts.push([jx, jy]);
+    }
+  }
+  w = { edge, tufts, flowers };
+  _wild.set(key, w);
+  return w;
+}
+
+/** Paint a wildflower patch top-down. `toPx` maps world yards to raster px; `ppy` px per yard. */
+export function paintWildflowers(ctx, d, toPx, ppy) {
+  const w = wildflowers(d);
+  ctx.save();
+  ctx.beginPath();
+  w.edge.forEach((p, i) => { const [x, y] = toPx(p[0], p[1]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(206,222,128,.38)';   // longer, paler meadow grass over whatever is under it
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(96,120,52,.55)';
+  ctx.lineWidth = Math.max(0.6, ppy * 0.12);
+  for (const [tx, ty] of w.tufts) {
+    const [x, y] = toPx(tx, ty); const l = ppy * 0.45;
+    ctx.beginPath(); ctx.moveTo(x - l * 0.4, y + l * 0.3); ctx.lineTo(x - l * 0.1, y - l * 0.3); ctx.moveTo(x + l * 0.3, y + l * 0.3); ctx.lineTo(x + l * 0.1, y - l * 0.35); ctx.stroke();
+  }
+  const dr = Math.max(0.7, ppy * 0.2);
+  for (const f of w.flowers) {
+    const [x, y] = toPx(f.x, f.y);
+    ctx.fillStyle = f.c; ctx.beginPath(); ctx.arc(x, y, dr, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** A decor SPRITE, top-down, 3-4 yds across (`docs/HANDOFF-GOLF-OBJECTS.md` section 4): bench (a
@@ -837,14 +915,8 @@ export function drawDecorSprite(ctx, kind, px, py, ppy, rot, pal) {
     ctx.lineWidth = Math.max(0.6, ppy * 0.06);
     ctx.strokeRect(postR * 0.5, -bh, bw, bh * 2);
   } else if (kind === 'flowerbed') {
-    // A FLOWER BED (2026-09-23, Matt picked it from the look-only list): a round bed of dark soil
-    // with a stone edge, packed with mixed flowers. Looks only - `holes.js` never reads decor.
-    const r = 2.2 * ppy;
-    ctx.fillStyle = '#cfc6b4';
-    ctx.beginPath(); ctx.arc(0, 0, r + Math.max(0.8, ppy * 0.25), 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#6b4f36';
-    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
-    flowerDots(ctx, 0, 0, r, ppy, 1);
+    // Wildflowers (see `wildflowers` above), painted around this point at this scale.
+    paintWildflowers(ctx, { at: [0, 0], kind }, (x, y) => [x * ppy, -y * ppy], ppy);
   } else if (kind === 'flagpole') {
     ctx.fillStyle = '#d8d8d8';
     const postR = Math.max(1, ppy * 0.12);
@@ -1088,19 +1160,7 @@ export function buildMap(hole, theme) {
   // drawn here so it sits on top of the ground and (below) under the trees, exactly like the real
   // world: a bench under a tree's shade reads wrong if the tree is painted first.
   for (const d of hole.decor || []) {
-    if (d.poly && d.kind === 'flowerbed') {
-      // A DRAWN flower bed: its own outline, stone-edged, soil, packed with flowers (clipped).
-      tracePoly(ctx, d.poly, toPx);
-      ctx.strokeStyle = '#cfc6b4'; ctx.lineWidth = Math.max(1, MAP_PPY * 0.6); ctx.stroke();
-      ctx.fillStyle = '#6b4f36'; ctx.fill();
-      ctx.save(); tracePoly(ctx, d.poly, toPx); ctx.clip();
-      const bb = bboxOf(d.poly);
-      const [x0, y0] = toPx(bb.minX, bb.maxY); const [x1, y1] = toPx(bb.maxX, bb.minY);
-      const rr = Math.hypot(x1 - x0, y1 - y0) / 2;
-      flowerDots(ctx, (x0 + x1) / 2, (y0 + y1) / 2, rr, MAP_PPY, Math.round(bb.minX + bb.minY));
-      ctx.restore();
-      continue;
-    }
+    if (d.kind === 'flowerbed') { paintWildflowers(ctx, d, toPx, MAP_PPY); continue; }
     if (d.poly) {
       tracePoly(ctx, d.poly, toPx);
       ctx.fillStyle = pal.path;
