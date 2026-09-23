@@ -414,6 +414,29 @@ export function recordFinished(rows) {
   return todo.length;
 }
 
+/**
+ * WATCH ONE MATCH LIVE (2026-09-23). Matt: "if you stay in the game it never shows the other
+ * person's turn... if i stay in the game, it should auto be my turn whenever it's my turn." The
+ * open match used to be read once. This is a READ-ONLY listener on hoops/games/<id>; `cb` gets the
+ * VALIDATED match on every change (a document that fails validateGame is simply not passed on).
+ * Returns an unsubscribe that is always safe to call.
+ */
+export async function watchGame(id, cb) {
+  if (!ID_RE.test(String(id || ''))) return () => {};
+  try {
+    const boot = await ready();
+    if (!boot || typeof boot.api.onValue !== 'function') return () => {};
+    const { db, api } = boot;
+    const stop = api.onValue(api.ref(db, `hoops/games/${id}`), (snap) => {
+      try {
+        const g = validateGame(snap && snap.exists() ? snap.val() : null);
+        if (g) { g.id = id; cb(g); }
+      } catch (err) { console.warn('[hoops4] match watch callback', err); }
+    }, () => { /* denied or dropped: the board keeps what it has */ });
+    return () => { try { stop(); } catch { /* already detached */ } };
+  } catch { return () => {}; }
+}
+
 /** One index row, normalised - shared by the one-off read and the live watch. */
 function rowsFromIndex(val) {
   if (!val || typeof val !== 'object') return [];

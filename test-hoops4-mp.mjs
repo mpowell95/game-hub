@@ -576,5 +576,28 @@ check('a player code is normalised and validated',
   check('the pause sheet can quit a turn-by-turn match', /data-role="quit"/.test(ui) && /resignGame\(this\.mp\.id\)/.test(ui));
 }
 
+// LIVE TURNS, NAMES ON THE BUBBLE, THE CARD ONCE (2026-09-23).
+{
+  const A = await import('./hoops4/js/alert.js');
+  const MPm = await import('./hoops4/js/mp.js');
+  const r = (id, name, upd, yours) => ({ id, name, with: 'X' + id, emoji: 'e', updated: upd, yourTurn: yours, over: false });
+  const al = A.decideAlert([r('Q1', 'HDJ, Inc.', 900, true), r('Q2', 'test1', 800, true), r('Q3', 'Anita', 950, false)],
+    { Q1: 100, Q2: 100, Q3: 100 });
+  check('"Your turn" names everybody whose turn it is (and nobody whose it is not)',
+    !!al && al.kind === 'turn' && al.names.join('|') === 'HDJ, Inc.|test1', al && al.names.join('|'));
+  const hub = readFileSync(new URL('./js/hub.js', import.meta.url), 'utf8');
+  check('the hub writes those names into the bubble', /_turnLine\(a\.names\)/.test(hub) && /hub_alert_your_turn_vs/.test(hub));
+  check('an open match can be watched live', typeof MPm.watchGame === 'function');
+  const ui = readFileSync(new URL('./hoops4/js/ui.js', import.meta.url), 'utf8');
+  check('the open match subscribes, applies only NEW entries, and skips its own',
+    /MP\.watchGame\(id, \(g\) => this\._onAsyncGame\(g\)\)/.test(ui) && /g\.moves\.slice\(mp\.applied\)/.test(ui)
+    && /e\.by === mp\.side\) continue/.test(ui));
+  check('our own move is counted as applied BEFORE it is sent (so the watch never re-plays it)',
+    /mp\.applied\+\+;[^\n]*\n\s*const r = await mp\.MP\.pushMove/.test(ui));
+  check('leaving the match stops the watch', /this\._gameStop\(\)/.test(ui));
+  check('the challenge card plays once per match, then goes straight to the board',
+    /gamehub\.hoops4\.cerShown\.v1/.test(ui) && /shown\.includes\(armed\.id\)/.test(ui));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

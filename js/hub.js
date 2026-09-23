@@ -1111,8 +1111,8 @@ class Hub {
         <path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>`;
     const head = `${swords}<span>${t('hub_alert_head')}</span>${swords}`;
     const line = a.kind === 'challenge'
-      ? t('hub_alert_challenged', { who: a.name || t('hub_alert_someone') })
-      : t('hub_alert_your_turn');
+      ? t('hub_alert_challenged', { who: a.name ? String(a.name).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : t('hub_alert_someone') })
+      : this._turnLine(a.names);
     const el = document.createElement('div');
     // role=status + aria-live: this appears without the player doing anything, so it has to be
     // announced rather than just drawn.
@@ -1134,6 +1134,19 @@ class Hub {
       <span class="hub-alert-line">${line}</span>
       ${a.count > 1 ? `<span class="hub-alert-count">${t('hub_alert_more', { n: a.count })}</span>` : ''}`;
     cell.appendChild(el);
+  }
+
+  /** "Your turn vs A", "vs A and B", "vs A, B and 2 more" - WHO is waiting, not just that
+   *  somebody is (Matt, 2026-09-23). Falls back to the plain line when no names came with it. */
+  _turnLine(names) {
+    // Other players' names, going into innerHTML: escaped.
+    const e = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const n = Array.isArray(names) ? names.filter(Boolean).map(e) : [];
+    if (!n.length) return t('hub_alert_your_turn');
+    const who = n.length === 1 ? n[0]
+      : n.length === 2 ? t('hub_and', { a: n[0], b: n[1] })
+        : t('hub_and', { a: n.slice(0, 2).join(', '), b: t('hub_n_more', { n: n.length - 2 }) });
+    return t('hub_alert_your_turn_vs', { who });
   }
 
   /** Tapping the bubble (or the tile it points at) arms the full-screen card and opens the game. */
