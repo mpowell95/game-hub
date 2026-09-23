@@ -371,6 +371,13 @@ export class EditorCanvas {
     this.draw();
   }
 
+  /** Draw `spec`'s outlines over the CURRENT built hole and map, without rebuilding either - the
+   *  phone's live preview during a finger drag (stage 5). updateBuilt() catches up at the end. */
+  previewSpec(spec) {
+    this.spec = spec;
+    this.draw();
+  }
+
   updateBuilt(built, spec) {
     this.built = built;
     this.spec = spec;

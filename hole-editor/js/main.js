@@ -160,7 +160,7 @@ for (const x of root.querySelectorAll('[data-sheet-close]')) x.addEventListener(
 document.getElementById('he-m-scrim').addEventListener('click', () => openSheet(null));
 document.getElementById('he-m-add').addEventListener('click', () => openSheet(sheetOpen() === 'add' ? null : 'add'));
 document.getElementById('he-m-edit').addEventListener('click', () => openSheet(sheetOpen() === 'edit' ? null : 'edit'));
-PHONE_MQ.addEventListener('change', () => { if (!isPhone()) openSheet(null); root.querySelector('.he-ribbon').classList.remove('is-open'); });
+PHONE_MQ.addEventListener('change', () => { if (!isPhone()) { openSheet(null); refreshStrip(); } root.querySelector('.he-ribbon').classList.remove('is-open'); });
 
 // --- collapsible panels (section 4: "clicking [a header] collapses to the header") ---------------
 // Set by tour.js on the walkthrough's last step: Help becomes a topic menu, the first-visit nudge stops.
@@ -421,6 +421,9 @@ function refreshPanels() {
 }
 
 function refreshStrip() {
+  // The holes bar is display:none on a phone; painting its thumbnails there cost a map build per
+  // edit for nothing (stage 5). It is painted when the screen widens (PHONE_MQ's change listener).
+  if (isPhone()) { refreshHolePicker(); return; }
   renderBottomStrip(
     document.getElementById('he-totals-text'),
     document.getElementById('he-strip'),
@@ -515,6 +518,11 @@ function afterChange({ keepContext = false } = {}) {
   refreshQueued = true;
   requestAnimationFrame(() => {
     refreshQueued = false;
+    // A FINGER DRAGGING ON THE MAP, ON A PHONE (stage 5, measured): rebuilding and repainting the
+    // whole hole was ~160 ms a frame at 4x CPU throttle (buildMap ~70% of it). So the drag moves
+    // only the object's outline over the unchanged map; liveEnd() rebuilds once when the finger
+    // lifts. A mouse, and every slider, keep the full live rebuild.
+    if (fingerDrag()) { editorCanvas.previewSpec(doc.holes[currentId].spec); return; }
     editorCanvas.updateBuilt(getBuilt(currentId), doc.holes[currentId].spec);
     // The holes bar is NOT redrawn mid-gesture (its thumbnail of this hole costs a map build a
     // frame); it catches up when the drag ends, which calls afterChange() with no gesture.
@@ -527,6 +535,7 @@ function afterChange({ keepContext = false } = {}) {
 // `liveBegin`/`liveUpdate`/`liveEnd`: a drag or a slider - live-previewed with no undo pushes, then
 // ONE push of the PRE-drag state at the end, so the whole gesture undoes in one step.
 let liveBeforeSpec = null;
+const fingerDrag = () => isPhone() && !!editorCanvas.touchDragging;
 const editOps = {
   mutators: MUTATORS,
   getTreeMode: () => toolState.treeMode,
@@ -540,7 +549,9 @@ const editOps = {
   },
   liveBegin() { liveBeforeSpec = doc.holes[currentId].spec; },
   liveUpdate(mutateFn) {
-    doc.holes[currentId].spec = mutateFn(doc.holes[currentId].spec, getBuilt(currentId));
+    // No canvas drag reads the built hole (every liveUpdate there is (spec) => ...), so a finger
+    // drag skips building it per frame too.
+    doc.holes[currentId].spec = mutateFn(doc.holes[currentId].spec, fingerDrag() ? editorCanvas.built : getBuilt(currentId));
     afterChange();
   },
   liveEnd() {
