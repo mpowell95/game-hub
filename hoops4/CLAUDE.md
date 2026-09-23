@@ -488,6 +488,24 @@ back for it to fetch?"* He had to come back - the launcher asked once per paint.
 paint, so listeners cannot stack), repainting the bubble on every change. Verified in a browser:
 one subscription, no page errors. `test-hoops4-mp.mjs` pins both halves.
 
+### The series score was carried across unswapped (2026-09-23)
+
+Matt: *"i won game 1, then king of games won game 2, but it said he won the series 2-0. I think
+the same thing happened against anita bonita too."* The running score (`seriesWins`) is keyed by
+SIDE, and the sides swap every game (`first: 'them'`) - but `nextInSeries` copied the score across
+unswapped, so game 2 credited game 1's winner to the other person. **Read from the database
+(read-only) the same day: exactly two game-2 documents had it (vs King of Games, vs Anita Bonita),
+both `{a:1,b:0}` with the opponent as side 'a', and no game 3 existed anywhere.**
+
+- **Source fix**: `nextInSeries` passes `{ a: st.wins.b, b: st.wins.a }` (whoever was 'a' is 'b'
+  next game, whichever device creates it), and `createGame` stamps `winsBySide: 2`.
+- **Correction on read, nothing rewritten**: `validateGame` swaps the stored score of a game 2 with
+  no `winsBySide` - off by exactly one missed swap. Both series now read 1-1 and not over. A game 3+
+  without the flag would be wrong in a way a swap cannot fix; none exists, and none can now.
+- **Reaching the owed game 3**: a finished match opened from History (review) used to NEVER offer
+  "Next game" (fear of forking the series). It now offers it when no later game of that series
+  exists yet. The series line also uses the STORED winner, so a resignation scores right.
+
 ### Their move arrives while you watch; names on the bubble; the card once (2026-09-23)
 
 Matt: *"if you stay in the game it never shows the other person's turn... if i stay in the game,

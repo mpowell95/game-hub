@@ -599,5 +599,37 @@ check('a player code is normalised and validated',
     /gamehub\.hoops4\.cerShown\.v1/.test(ui) && /shown\.includes\(armed\.id\)/.test(ui));
 }
 
+// THE SERIES SCORE WAS CARRIED ACROSS UNSWAPPED (2026-09-23). Matt: "i won game 1, then king of
+// games won game 2, but it said he won the series 2-0." This is the REAL game-2 document's shape
+// from hoops/games (vs King of Games), read-only: the King is side 'a' in game 2 and won it; Matt
+// (side 'a' in game 1) won game 1, but the carried score said {a:1}.
+{
+  const MPm = await import('./hoops4/js/mp.js');
+  const game2 = MPm.validateGame({
+    v: 1, created: 1, updated: 2, oneShot: false,
+    a: { code: B, name: 'aa King of Games', emoji: 'k' }, b: { code: A, name: 'MattyIce', emoji: 'm' },
+    turn: 'a', moves: { '0000': { by: 'a', col: 3, shots: 1, at: 10 } },
+    series: 3, seriesNo: 2, seriesWins: { a: 1, b: 0 }, seriesOf: 'mudhdt7ouzug2bz0',
+    over: { winner: 'a', why: 'four', at: 3 },
+  });
+  const st = MPm.seriesAfter(game2);
+  check('the real broken game 2 now reads 1-1 (Matt 1, King 1), not 2-0',
+    st.wins.a === 1 && st.wins.b === 1, JSON.stringify(st.wins));
+  check('...so that best of 3 is NOT over - game 3 is owed', st.done === false);
+  // A game 2 written after the fix carries winsBySide: 2 and is read exactly as stored.
+  const fixed = MPm.validateGame({
+    v: 1, created: 1, updated: 2, oneShot: false,
+    a: { code: B, name: 'K', emoji: 'k' }, b: { code: A, name: 'M', emoji: 'm' },
+    turn: 'a', moves: {}, series: 3, seriesNo: 2, seriesWins: { a: 0, b: 1 }, winsBySide: 2, seriesOf: 'x', over: null,
+  });
+  check('a game written after the fix is read exactly as stored', fixed.seriesWins.a === 0 && fixed.seriesWins.b === 1);
+  const src = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
+  check('nextInSeries SWAPS the running score onto the new sides', /seriesWins: \{ a: st\.wins\.b, b: st\.wins\.a \}/.test(src));
+  check('createGame stamps winsBySide: 2', /winsBySide: 2,/.test(src));
+  const uiS = readFileSync(new URL('./hoops4/js/ui.js', import.meta.url), 'utf8');
+  check('a finished game from History offers "Next game" only when that game does not exist yet',
+    /r\.seriesOf === of && \(r\.seriesNo \| 0\) > st\.no/.test(uiS));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

@@ -180,6 +180,7 @@ mixed build), then run `node validate-sw-assets.mjs`, which also rewrites `REST_
 
 | CACHE | what |
 |---|---|
+| v924 | Series score swapped correctly between games (two live series corrected on read); Next game from History |
 | v923 | Opponent's move arrives live in an open match; "Your turn vs <names>"; the challenge card plays once per match |
 | v922 | Multiplayer home reorganised; Quit (resign) on every game and in the pause sheet; finished matches counted on both phones |
 | v921 | Own challenge no longer pops up as one received; the launcher bubble listens live |
