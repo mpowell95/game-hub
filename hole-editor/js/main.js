@@ -649,7 +649,7 @@ function keepAboveSheet(sel) {
   if (!o || !o.center) return;
   const cr = c.el.getBoundingClientRect();
   const top = root.querySelector('.he-right').getBoundingClientRect().top - cr.top;
-  const y = cr.height / 2 - (o.center[1] - cam.cy) * cam.ppy;
+  const y = c.toScreen(o.center[0], o.center[1]).y;
   if (y > top - 30) c.pan(0, top / 2 - y);
 }
 editorCanvas.onSelectionChange = () => {

@@ -50,7 +50,7 @@ const cdp = await ctx.newCDPSession(page);
 const settle = () => page.waitForTimeout(250);
 const spec = () => page.evaluate(() => window.__he.doc.holes[window.__he.currentId].spec);
 const cam = () => page.evaluate(() => ({ ...window.__he.editorCanvas.camera }));
-const toScreen = (x, y) => page.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cm = c.camera; const r = c.el.getBoundingClientRect(); return { x: r.x + (x - cm.cx) * cm.ppy + r.width / 2, y: r.y + r.height / 2 - (y - cm.cy) * cm.ppy }; }, [x, y]);
+const toScreen = (x, y) => page.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const cm = c.camera; const r = c.el.getBoundingClientRect(); const q = c.toScreen(x, y); return { x: r.x + q.x, y: r.y + q.y }; }, [x, y]);
 const mapBox = () => page.evaluate(() => { const r = document.getElementById('he-canvas').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
 const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], i) => ({ x, y, id: i, radiusX: 4, radiusY: 4, force: 1 })) });
 async function drag(x0, y0, x1, y1, steps = 8) {
@@ -109,10 +109,10 @@ const nB1 = ((await spec()).bunkers || []).length;
 ok('a tap places a bunker and selects it', nB1 === nB0 + 1 && (await page.evaluate(() => (window.__he.editorCanvas.selection || {}).group)) === 'bunkers');
 ok('selecting on a phone opens the Edit sheet', await page.evaluate(() => document.querySelector('.he-right').classList.contains('is-open')));
 ok('...and the map moves so the new bunker shows above the sheet', await page.evaluate(async () => {
-  const m = await import('/hole-editor/js/canvas.js'); const c = window.__he.editorCanvas; const cm = c.camera;
+  const m = await import('/hole-editor/js/canvas.js'); const c = window.__he.editorCanvas;
   const o = m.listObjects(c.spec, c.stations, c.length).filter((x) => x.group === 'bunkers').pop();
   const r = c.el.getBoundingClientRect();
-  return r.top + r.height / 2 - (o.center[1] - cm.cy) * cm.ppy < document.querySelector('.he-right').getBoundingClientRect().top - 20;
+  return r.top + c.toScreen(o.center[0], o.center[1]).y < document.querySelector('.he-right').getBoundingClientRect().top - 20;
 }));
 await tapEl('.he-right [data-sheet-close]');
 
