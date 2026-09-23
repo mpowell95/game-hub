@@ -20,37 +20,13 @@
 // NOTHING HERE IS PLAYER HISTORY. The seen map is a one-tap-recreatable preference (THE LAW rule
 // 2's stated exemption, the same class as launcher favourites) - losing it shows a bubble twice,
 // which is the harmless direction. It never writes to `hoops/`, so no match state is at risk.
-import { readMyGames, myCode } from './mp.js';
+import { readMyGames, myCode, watchMyGames, readSeen, markSeen, SEEN_KEY } from './mp.js';
 
-export const SEEN_KEY = 'gamehub.hoops4.seen.v1';
-const MAX_SEEN = 200;               // a ceiling against a map that only ever grows
+// The seen map moved to mp.js (2026-09-23) so that mp.js's own writes can stamp it - see there.
+// Re-exported so callers (js/hub.js, the tests) keep one import site.
+export { readSeen, markSeen, SEEN_KEY };
 
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
-
-/** The seen map: { [gameId]: the `updated` stamp that was acknowledged }. Never throws. */
-export function readSeen() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}');
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-    const out = {};
-    for (const k of Object.keys(raw)) if (ms(raw[k])) out[k] = ms(raw[k]);
-    return out;
-  } catch { return {}; }
-}
-
-function writeSeen(map) {
-  try {
-    let keys = Object.keys(map);
-    // Oldest acknowledgements go first. A dropped entry re-shows one bubble; it loses nothing.
-    if (keys.length > MAX_SEEN) {
-      keys = keys.sort((a, b) => map[b] - map[a]).slice(0, MAX_SEEN);
-      const trimmed = {};
-      for (const k of keys) trimmed[k] = map[k];
-      map = trimmed;
-    }
-    localStorage.setItem(SEEN_KEY, JSON.stringify(map));
-  } catch { /* private mode: the bubble simply shows again, which is the safe direction */ }
-}
 
 /**
  * PURE. Given index rows and the seen map, what should the launcher say?
@@ -81,14 +57,6 @@ export function decideAlert(rows, seen) {
   };
 }
 
-/** Acknowledge one match up to `updated`, so its bubble stops until something new happens. */
-export function markSeen(id, updated) {
-  if (!id) return;
-  const map = readSeen();
-  map[id] = Math.max(ms(map[id]), ms(updated) || Date.now());
-  writeSeen(map);
-}
-
 // The rows behind the alert the launcher is currently showing, so `markSeen` has an `updated` to
 // record and the ceremony has something to open. Set by check(), read by take().
 let lastRows = [];
@@ -107,6 +75,21 @@ export async function check() {
     console.warn('[hoops4] could not check for challenges', err);
     return null;
   }
+}
+
+/**
+ * LIVE: call `cb(alert | null)` every time the match list changes, while the launcher is up.
+ * Matt: "If i'm in the hub and someone plays me back, will I see?" - with only check() he would
+ * not, until the launcher next painted. Returns an unsubscribe. Never throws.
+ */
+export async function watch(cb) {
+  try {
+    if (!myCode()) return () => {};
+    return await watchMyGames((rows) => {
+      lastRows = Array.isArray(rows) ? rows : [];
+      try { cb(decideAlert(lastRows, readSeen())); } catch (err) { console.warn('[hoops4] alert watch', err); }
+    });
+  } catch { return () => {}; }
 }
 
 /** The row behind an alert id, for the ceremony. */

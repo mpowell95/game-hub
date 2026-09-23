@@ -471,6 +471,23 @@ this about a lit machine, and it had to be rediscovered from a screenshot. And t
 silently when `.h4-toast` is not on screen, and it never is on the setup screen. A match that had
 gone would have dropped the player back with no explanation at all. The card stays up and says so.
 
+#### The challenge that was not a challenge, and the bubble that did not listen (2026-09-23)
+
+Released to everyone that day, Matt challenged the King of Games: *"once i sent it and went back to
+the hub, the popup appeared saying the king of games challenged me. but he didn't - it brought me
+to the game i just sent him."* `decideAlert` calls any match id this device has never SEEN "a
+challenge" - and nothing marked a match this device had just CREATED as seen. **Fix: the seen map
+moved into `mp.js`, and `createGame`, `pushMove` and `resignGame` stamp it on success**, so this
+device's own writes are never news to it and only the other person's can raise the bubble.
+`alert.js` re-exports `readSeen`/`markSeen`/`SEEN_KEY`, so callers are unchanged.
+
+And: *"If i'm in the hub and someone plays me back, will I see? or would i have to leave and come
+back for it to fetch?"* He had to come back - the launcher asked once per paint. **`watchMyGames`
+(mp.js) is a read-only live listener on `hoops/index/<you>`, `alert.js` `watch(cb)` wraps it, and
+`js/hub.js` `_watchGameAlerts` subscribes ONCE per game for the life of the hub** (never per
+paint, so listeners cannot stack), repainting the bubble on every change. Verified in a browser:
+one subscription, no page errors. `test-hoops4-mp.mjs` pins both halves.
+
 ### The marquee is a SIGN now (2026-09-22)
 
 Matt, with a photo of BRICK CITY's marquee beside this one: *"please improve the game

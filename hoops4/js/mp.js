@@ -315,6 +315,98 @@ export function sortRows(rows) {
 // --- reading ----------------------------------------------------------------------------------
 
 /** Every match this player has, from their own index. ONE read. [] when offline or not allowed. */
+// --- "have I already seen this?" ---------------------------------------------------------------
+// The launcher's seen map (read by hoops4/js/alert.js). It lives HERE, not in alert.js, because
+// this module's own writes have to stamp it: Matt, 2026-09-23, having sent the King of Games a
+// challenge: "once i sent it and went back to the hub, the popup appeared saying the king of games
+// challenged me. but he didn't." The alert called ANY match id this device had never seen "a
+// challenge", including the one this device had just created. So every write this device makes to
+// a match - creating it, a move, a resignation - acknowledges it here, and only the OTHER person's
+// writes can ever raise the bubble. A one-tap-recreatable preference (THE LAW rule 2's exemption):
+// losing it shows a bubble twice, which is the harmless direction.
+export const SEEN_KEY = 'gamehub.hoops4.seen.v1';
+const MAX_SEEN = 200;
+
+/** The seen map: { [gameId]: the `updated` stamp that was acknowledged }. Never throws. */
+export function readSeen() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const out = {};
+    for (const k of Object.keys(raw)) if (ms(raw[k])) out[k] = ms(raw[k]);
+    return out;
+  } catch { return {}; }
+}
+
+function writeSeen(map) {
+  try {
+    let keys = Object.keys(map);
+    // Oldest acknowledgements go first. A dropped entry re-shows one bubble; it loses nothing.
+    if (keys.length > MAX_SEEN) {
+      keys = keys.sort((a, b) => map[b] - map[a]).slice(0, MAX_SEEN);
+      const trimmed = {};
+      for (const k of keys) trimmed[k] = map[k];
+      map = trimmed;
+    }
+    localStorage.setItem(SEEN_KEY, JSON.stringify(map));
+  } catch { /* private mode: the bubble simply shows again, which is the safe direction */ }
+}
+
+/** Acknowledge one match up to `updated`, so its bubble stops until something new happens. */
+export function markSeen(id, updated) {
+  if (!id) return;
+  const map = readSeen();
+  map[id] = Math.max(ms(map[id]), ms(updated) || Date.now());
+  writeSeen(map);
+}
+
+/** One index row, normalised - shared by the one-off read and the live watch. */
+function rowsFromIndex(val) {
+  if (!val || typeof val !== 'object') return [];
+  return sortRows(Object.keys(val).map((id) => {
+    const r = val[id] || {};
+    return {
+      id,
+      with: asCode(r.with),
+      name: String(r.name || ''),
+      emoji: String(r.emoji || '\u{1F642}'),
+      updated: ms(r.updated),
+      yourTurn: !!r.yourTurn,
+      over: !!r.over,
+      oneShot: !!r.oneShot,
+      series: Math.max(1, ms(r.series) || 1),
+      seriesNo: Math.max(1, ms(r.seriesNo) || 1),
+      seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id,
+      // OPTIONAL, and ABSENT on every finished row written before the history screen existed
+      // (2026-09-22). `recordsFrom` works out an old row's result from its match instead.
+      result: RESULTS.includes(r.result) ? r.result : null,
+      why: typeof r.why === 'string' ? r.why : '',
+    };
+  }).filter((r) => ID_RE.test(r.id) && r.with));
+}
+
+/**
+ * WATCH YOUR MATCH LIST LIVE (2026-09-23). Matt: "If i'm in the hub and someone plays me back,
+ * will I see? or would i have to leave and come back for it to fetch?" He would have had to come
+ * back: the launcher asked once per paint. This is a READ-ONLY listener on hoops/index/<you>, so
+ * a challenge or a returned turn reaches the launcher the moment it is written. Returns an
+ * unsubscribe that is always safe to call.
+ */
+export async function watchMyGames(cb) {
+  const me = myCode();
+  if (!me) return () => {};
+  try {
+    const boot = await ready();
+    if (!boot || typeof boot.api.onValue !== 'function') return () => {};
+    const { db, api } = boot;
+    const stop = api.onValue(api.ref(db, `hoops/index/${me}`), (snap) => {
+      try { cb(rowsFromIndex(snap && snap.exists() ? snap.val() : null)); }
+      catch (err) { console.warn('[hoops4] match-list callback', err); }
+    }, () => { /* denied or dropped: the launcher keeps what it last showed */ });
+    return () => { try { stop(); } catch { /* already detached */ } };
+  } catch { return () => {}; }
+}
+
 export async function readMyGames() {
   const me = myCode();
   if (!me) return [];
@@ -323,28 +415,7 @@ export async function readMyGames() {
     if (!boot) return [];
     const { db, api } = boot;
     const snap = await api.get(api.ref(db, `hoops/index/${me}`));
-    const val = (snap && snap.exists()) ? snap.val() : null;
-    if (!val || typeof val !== 'object') return [];
-    return sortRows(Object.keys(val).map((id) => {
-      const r = val[id] || {};
-      return {
-        id,
-        with: asCode(r.with),
-        name: String(r.name || ''),
-        emoji: String(r.emoji || '🙂'),
-        updated: ms(r.updated),
-        yourTurn: !!r.yourTurn,
-        over: !!r.over,
-        oneShot: !!r.oneShot,
-        series: Math.max(1, ms(r.series) || 1),
-        seriesNo: Math.max(1, ms(r.seriesNo) || 1),
-        seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id,
-        // OPTIONAL, and ABSENT on every finished row written before the history screen existed
-        // (2026-09-22). `recordsFrom` works out an old row's result from its match instead.
-        result: RESULTS.includes(r.result) ? r.result : null,
-        why: typeof r.why === 'string' ? r.why : '',
-      };
-    }).filter((r) => ID_RE.test(r.id) && r.with));
+    return rowsFromIndex((snap && snap.exists()) ? snap.val() : null);
   } catch (err) {
     console.warn('[hoops4] could not read your games', err);
     return [];
@@ -468,6 +539,7 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
     }
     game.id = id;
     await writeRows(api, db, game);
+    markSeen(id, game.updated);          // this device made it: never "a challenge" here
     return { ok: true, id, game };
   } catch (err) {
     console.error('[hoops4] could not start the game', err);
@@ -533,6 +605,7 @@ export async function pushMove(id, { col, shots = 1, passed = false, over = null
       return { ok: false, reason: 'did-not-land', retryable: true };
     }
     await writeRows(api, db, back);
+    markSeen(id, back && back.updated);  // our own move is not news to us
     return { ok: true, game: back };
   } catch (err) {
     console.error('[hoops4] could not send the move', err);
@@ -594,6 +667,7 @@ export async function resignGame(id) {
     const back = await readGame(id);
     if (!back || !back.over) return { ok: false, reason: 'did-not-land', retryable: true };
     await writeRows(api, db, back);
+    markSeen(id, back && back.updated);  // our own move is not news to us
     return { ok: true, game: back };
   } catch (err) {
     console.error('[hoops4] could not resign', err);

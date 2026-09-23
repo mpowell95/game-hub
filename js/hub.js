@@ -1041,6 +1041,7 @@ class Hub {
     // half of why Matt's bubble survived him playing the turn.
     this._gameAlert = found;
     this._paintGameAlert();
+    this._watchGameAlerts();
     // A tile the player cannot see is not "super obvious". Bring it into view ONCE per alert,
     // gently, and never fight a scroll they have already started.
     if (found && this._alertScrolledFor !== found.alert.id) {
@@ -1048,6 +1049,35 @@ class Hub {
       const cell = this._cellFor(found.game);
       if (cell && cell.scrollIntoView) {
         try { cell.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
+      }
+    }
+  }
+
+  /**
+   * AND KEEP LISTENING (2026-09-23). Matt: "If i'm in the hub and someone plays me back, will I
+   * see? or would i have to leave and come back for it to fetch?" He had to come back: the check
+   * above runs once per paint. A game whose `alerts` module offers `watch(cb)` gets ONE live,
+   * read-only subscription for the life of the hub; each change repaints the bubble. While a game
+   * is mounted the grid is hidden, so a repaint there is invisible and `showLauncher` re-checks
+   * anyway. Subscribed once per game, never per paint, so it cannot stack listeners.
+   */
+  async _watchGameAlerts() {
+    this._alertWatches = this._alertWatches || {};
+    for (const g of GAMES) {
+      if (typeof g.alerts !== 'function' || this._alertWatches[g.id]) continue;
+      this._alertWatches[g.id] = 'pending';
+      try {
+        const mod = await g.alerts();
+        if (typeof mod.watch !== 'function') continue;
+        this._alertWatches[g.id] = await mod.watch((alert) => {
+          const cur = this._gameAlert;
+          if (alert) this._gameAlert = { game: g.id, alert, mod };
+          else if (cur && cur.game === g.id) this._gameAlert = null;
+          else return;
+          this._paintGameAlert();
+        });
+      } catch (err) {
+        console.warn('[hub] alert watch failed for', g.id, err);
       }
     }
   }

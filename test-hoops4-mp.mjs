@@ -529,5 +529,27 @@ check('a player code is normalised and validated',
     /openGame\(b\.dataset\.past, \{ review: true \}\)/.test(mpui));
 }
 
+// THE CHALLENGE THAT WAS NOT A CHALLENGE (2026-09-23). Matt sent the King of Games a challenge,
+// went back to the hub, and the popup said the King had challenged HIM. Any match id this device
+// had never seen counted as "a challenge", including its own. Every write this device makes now
+// stamps the seen map, so only the other person's writes can raise the bubble.
+{
+  const A = await import('./hoops4/js/alert.js');
+  const MPsrc = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
+  const body = (name) => { const i = MPsrc.indexOf(`export async function ${name}(`); return i < 0 ? '' : MPsrc.slice(i, MPsrc.indexOf('\nexport ', i + 10)); };
+  check('createGame marks the match it just made as seen on this device', /markSeen\(id, game\.updated\)/.test(body('createGame')));
+  check('pushMove marks our own move as seen', /markSeen\(id, back/.test(body('pushMove')));
+  check('resignGame marks our own resignation as seen', /markSeen\(id, back/.test(body('resignGame')));
+  // A match I created (stamped at its `updated`) raises nothing; when THEY move it, it is a turn.
+  const mine = { id: 'Zq1', with: 'KING1', name: 'King of Games', emoji: 'x', updated: 500, yourTurn: true, over: false };
+  check('a challenge I SENT never reads as one sent to me', A.decideAlert([mine], { Zq1: 500 }) === null);
+  const back = A.decideAlert([{ ...mine, updated: 900 }], { Zq1: 500 });
+  check('when they play it back, it is "your turn", not "a challenge"', !!back && back.kind === 'turn');
+  check('the launcher can watch the list live', typeof A.watch === 'function');
+  const hub = readFileSync(new URL('./js/hub.js', import.meta.url), 'utf8');
+  check('the hub subscribes to that watch once per game, not per paint',
+    /_watchGameAlerts\(\)/.test(hub) && /this\._alertWatches\[g\.id\]/.test(hub));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
