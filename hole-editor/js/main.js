@@ -26,7 +26,7 @@ import {
 import { resolveProfile } from './course.js';
 import { starterSpec, THEME_DEFAULTS } from './starter.js';
 import { designer, rememberDesigner, forgetDesigner, makeAutosaver, listDrafts, fetchDraft } from './drafts.js';
-import { EditorCanvas, fairwayEdgesAt, setEditorTheme } from './canvas.js';
+import { EditorCanvas, fairwayEdgesAt, setEditorTheme, listObjects } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
 import { renderPalette, activeItemFor } from './palette.js';
 import { validateHole } from '../../golf/js/holes.js';
@@ -146,7 +146,7 @@ function openSheet(which) {
   const left = root.querySelector('.he-left'); const right = root.querySelector('.he-right');
   left.classList.toggle('is-open', which === 'add');
   right.classList.toggle('is-open', which === 'edit');
-  root.classList.toggle('he-root--sheet', !!which);
+  root.classList.toggle('he-root--sheet', which === 'add');   // the Edit sheet leaves the map live above it
   document.getElementById('he-m-add').setAttribute('aria-pressed', String(which === 'add'));
   document.getElementById('he-m-edit').setAttribute('aria-pressed', String(which === 'edit'));
 }
@@ -596,12 +596,25 @@ function refreshContext() {
     refresh: refreshContext,
   });
 }
+// Phone: the Edit sheet covers the bottom half of the map, so the thing just selected is moved up
+// into the half that is still showing (only when the sheet would hide it).
+function keepAboveSheet(sel) {
+  const c = editorCanvas; const cam = c.camera;
+  const o = cam && listObjects(c.spec, c.stations, c.length).find((x) => x.group === sel.group && x.index === sel.index);
+  if (!o || !o.center) return;
+  const cr = c.el.getBoundingClientRect();
+  const top = root.querySelector('.he-right').getBoundingClientRect().top - cr.top;
+  const y = cr.height / 2 - (o.center[1] - cam.cy) * cam.ppy;
+  if (y > top - 30) c.pan(0, top / 2 - y);
+}
 editorCanvas.onSelectionChange = () => {
   refreshContext();
   // Phone: selecting something opens its settings (the Selection panel, unfolded, on top).
-  if (isPhone() && editorCanvas.selection && sheetOpen() !== 'edit') {
+  // Not mid-drag: a finger dragging an object must keep the map (stage 2).
+  if (isPhone() && editorCanvas.selection && !editorCanvas.touchDragging && sheetOpen() !== 'edit') {
     root.querySelector('[data-panel="context"]').classList.remove('collapsed');
     openSheet('edit');
+    keepAboveSheet(editorCanvas.selection);
   }
 };
 

@@ -434,7 +434,7 @@ export class EditorCanvas {
   hitTest(wx, wy) {
     const cam = this.camera;
     if (!cam) return null;
-    const tolYd = 12 / cam.ppy;
+    const tolYd = this._tolPx() / cam.ppy;
     if (this.tool === 'route' && this.spec) {
       for (let i = 0; i < this.spec.path.length; i++) {
         const p = this.spec.path[i];
@@ -464,7 +464,7 @@ export class EditorCanvas {
         for (let k = 1; k < ln.pts.length; k++) {
           // `drawn: true` matters here, not just for style: the generic pointerdown fallback below
           // reads it to decide whether a Select-tool drag should translate the whole object.
-          if (distToSegment(wx, wy, ln.pts[k - 1], ln.pts[k]) <= LINE_HIT_TOL_YD) return { group: 'lines', index: li, drawn: true };
+          if (distToSegment(wx, wy, ln.pts[k - 1], ln.pts[k]) <= (this.touchMode ? Math.max(LINE_HIT_TOL_YD, 16 / cam.ppy) : LINE_HIT_TOL_YD)) return { group: 'lines', index: li, drawn: true };
         }
       }
     }
@@ -514,6 +514,9 @@ export class EditorCanvas {
     return null;
   }
 
+  /** Hit radius in screen pixels: a finger needs a bigger target than a mouse (stage 2). */
+  _tolPx() { return this.touchMode ? 22 : 12; }
+
   _wireInput() {
     const el = this.el;
     let spaceDown = false;
@@ -532,7 +535,7 @@ export class EditorCanvas {
     let dragging = null; // camera pan
     let objDrag = null;  // {kind:'object'|'waypoint'|'widthHandle', ...}
     let slopeDrag = null; // Slope tool, Paint mode: {r, c, x0, y0} - the cell pressed and where
-    el.addEventListener('pointerdown', (e) => {
+    const onDown = (e) => {
       if (e.button === 1 || (e.button === 0 && spaceDown)) {
         dragging = { x: e.clientX, y: e.clientY };
         el.setPointerCapture(e.pointerId);
@@ -585,7 +588,7 @@ export class EditorCanvas {
       if (this.tool === 'select' && this.selection && (this.selection.group === 'bunkers' || this.selection.group === 'water')) {
         const o = listObjects(this.spec, this.stations, this.length).find((x) => x.group === this.selection.group && x.index === this.selection.index);
         if (o && o.poly) {
-          const tol = 12 / this.camera.ppy;
+          const tol = this._tolPx() / this.camera.ppy;
           const bb = bboxHandles(o.poly);
           const hnd = bb.handles.find((h) => Math.hypot(h.x - w.x, h.y - w.y) <= tol);
           if (hnd) {
@@ -690,9 +693,9 @@ export class EditorCanvas {
           el.style.cursor = 'grabbing';
         }
       }
-    });
+    };
 
-    el.addEventListener('dblclick', (e) => {
+    const onDbl = (e) => {
       if (!this.ops) return;
       const r = el.getBoundingClientRect();
       const w = this.toWorld(e.clientX - r.left, e.clientY - r.top);
@@ -720,9 +723,9 @@ export class EditorCanvas {
         const side = signed < 0 ? -1 : 1;
         this.ops.instant((spec) => this.ops.mutators.insertWidthPoint(spec, side, best.t));
       }
-    });
+    };
 
-    el.addEventListener('pointermove', (e) => {
+    const onMove = (e) => {
       if (dragging) {
         this.pan(e.clientX - dragging.x, e.clientY - dragging.y);
         dragging = { x: e.clientX, y: e.clientY };
@@ -815,8 +818,8 @@ export class EditorCanvas {
           });
         }
       }
-    });
-    el.addEventListener('pointerup', (e) => {
+    };
+    const onUp = (e) => {
       if (slopeDrag && this.ops) {
         const dx = e.clientX - slopeDrag.x0; const dy = e.clientY - slopeDrag.y0;
         const px = Math.hypot(dx, dy);
@@ -832,16 +835,143 @@ export class EditorCanvas {
       el.style.cursor = '';
       if (objDrag && this.ops) { this.ops.liveEnd(); objDrag = null; }
       try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
-    });
+    };
     // A CANCELLED POINTER ENDS THE GESTURE TOO (2026-09-22). Without this a browser that cancels a
     // drag (a gesture handed to the OS, a lost window) left the canvas holding pointer capture, and
     // every later click anywhere on the page went to the map instead of the button under it.
-    el.addEventListener('pointercancel', (e) => {
+    const onCancel = (e) => {
       slopeDrag = null; dragging = null; el.style.cursor = '';
       if (objDrag && this.ops) { this.ops.liveEnd(); objDrag = null; }
       try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
-    });
-    el.addEventListener('pointerleave', () => { this.hover = null; if (this.onHoverChange) this.onHoverChange(null); });
+    };
+
+    // --- TOUCH (2026-09-23, docs/HANDOFF-GOLF-COURSE-CREATOR-MOBILE.md stage 2) ----------------------
+    // A mouse goes straight to the handlers above, exactly as before. A FINGER goes through this
+    // layer first, because a finger is not a mouse in three ways:
+    //  - nothing may happen on touch-DOWN: a placement tool places on pointerdown, so the first finger
+    //    of a pinch would drop a bunker. A touch waits until it is a TAP (up without moving: replayed
+    //    as a click, down then up at the start point), a DRAG (moved > 10 px: replayed as a mouse drag
+    //    if it started on something draggable, otherwise it pans the view), or a LONG PRESS (held
+    //    500 ms: replayed as a double-click - adds a route dot / width dot, closes a drawing).
+    //  - two fingers pinch-zoom and pan. A second finger cancels whatever the first was doing.
+    //  - hit sizes are in screen pixels, 22 px for a finger (this.touchMode) against 12 for a mouse.
+    const touches = new Map();
+    let pend = null;      // {id, x, y, timer} - a first finger that is not a tap / drag / press yet
+    let tDrag = false;    // a one-finger drag is running through the mouse handlers
+    let pinch = null;     // {d, mx, my} - two fingers down
+    let spent = false;    // this touch sequence is used up (pinch ended, long press fired)
+    const at = (id, pt) => ({ clientX: pt.x, clientY: pt.y, button: 0, pointerId: id, pointerType: 'touch', preventDefault() {} });
+    const TAP_SLOP = 10;
+    const setReadout = (pt) => {
+      const r = el.getBoundingClientRect();
+      this.hover = this.toWorld(pt.x - r.left, pt.y - r.top);
+      if (this.onHoverChange) this.onHoverChange(this.hover);
+    };
+    /** Would a mouse press at this point grab something that a drag then moves? */
+    const wouldGrab = (pt) => {
+      if (!this.ops || !this.camera) return false;
+      const r = el.getBoundingClientRect();
+      const w = this.toWorld(pt.x - r.left, pt.y - r.top);
+      if (this.tool === 'ruler' || this.drawing) return false;
+      if (this.tool === 'slope' && this.spec && this.spec.slope && this.spec.slope.cells && this.built) {
+        const gb = greenBox(this.built);
+        if (w.x >= gb.minX && w.x <= gb.maxX && w.y >= gb.minY && w.y <= gb.maxY) return true;
+      }
+      if (this.tool === 'select' && this.selection && (this.selection.group === 'bunkers' || this.selection.group === 'water')) {
+        const o = listObjects(this.spec, this.stations, this.length).find((x) => x.group === this.selection.group && x.index === this.selection.index);
+        if (o && o.poly && bboxHandles(o.poly).handles.some((h) => Math.hypot(h.x - w.x, h.y - w.y) <= this._tolPx() / this.camera.ppy)) return true;
+      }
+      const hit = this.hitTest(w.x, w.y);
+      if (!hit) return false;
+      if (hit.group === 'waypoint') return hit.index !== 0;
+      if (hit.group === 'widthHandle' || hit.group === 'pins' || hit.group === 'linePoint') return true;
+      return this.tool === 'select';
+    };
+    const startDrag = (e) => {
+      const p0 = pend; clearTimeout(p0.timer); pend = null;
+      this.touchDragging = true;
+      if (wouldGrab(p0)) { tDrag = true; onDown(at(e.pointerId, p0)); onMove(e); }
+      else dragging = { x: p0.x, y: p0.y };   // empty ground: one finger moves the view
+    };
+    const endPinchOrDrag = (e) => {
+      clearTimeout(pend && pend.timer); pend = null;
+      if (tDrag) { onUp(e); tDrag = false; }
+      dragging = null;
+    };
+    const tDown = (e) => {
+      e.preventDefault();
+      this.touchMode = true;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { el.setPointerCapture(e.pointerId); } catch { /* noop */ }
+      if (spent) return;
+      if (touches.size === 2) {
+        endPinchOrDrag(e);
+        const [a, b] = [...touches.values()];
+        pinch = { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+        return;
+      }
+      if (touches.size > 2) return;
+      const id = e.pointerId;
+      pend = { id, x: e.clientX, y: e.clientY, timer: setTimeout(() => {
+        if (!pend || pend.id !== id) return;
+        const p0 = pend; pend = null; spent = true;
+        if (navigator.vibrate) { try { navigator.vibrate(15); } catch { /* noop */ } }
+        setReadout(p0);
+        onDbl(at(id, p0));
+      }, 500) };
+      setReadout(pend);
+    };
+    const tMove = (e) => {
+      const t = touches.get(e.pointerId);
+      if (!t) return;
+      t.x = e.clientX; t.y = e.clientY;
+      if (pinch && touches.size >= 2) {
+        const [a, b] = [...touches.values()];
+        const d = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+        const mx = (a.x + b.x) / 2; const my = (a.y + b.y) / 2;
+        const r = el.getBoundingClientRect();
+        this.pan(mx - pinch.mx, my - pinch.my);
+        this.zoomBy(d / pinch.d, mx - r.left, my - r.top);
+        pinch = { d, mx, my };
+        if (this.onZoomChange) this.onZoomChange(this.camera.ppy);
+        return;
+      }
+      if (spent) return;
+      if (pend && pend.id === e.pointerId) {
+        if (Math.hypot(e.clientX - pend.x, e.clientY - pend.y) <= TAP_SLOP) return;
+        startDrag(e);
+        return;
+      }
+      if (tDrag || dragging) { onMove(e); if (!dragging) setReadout(t); }
+    };
+    const tUp = (e) => {
+      touches.delete(e.pointerId);
+      try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+      if (pinch) { if (touches.size < 2) { pinch = null; spent = true; } }
+      else if (pend && pend.id === e.pointerId) {
+        // A TAP: the mouse's click, replayed at the point the finger went down.
+        const p0 = pend; clearTimeout(p0.timer); pend = null;
+        onDown(at(e.pointerId, p0));
+        onUp(at(e.pointerId, p0));
+      } else if (tDrag) { onUp(e); tDrag = false; }
+      else if (dragging) dragging = null;
+      if (!touches.size) { spent = false; this.touchDragging = false; }
+    };
+    const tCancel = (e) => {
+      touches.delete(e.pointerId);
+      clearTimeout(pend && pend.timer); pend = null; pinch = null; tDrag = false;
+      onCancel(e);
+      if (!touches.size) { spent = false; this.touchDragging = false; }
+    };
+    const isTouch = (e) => e.pointerType === 'touch';
+    el.addEventListener('pointerdown', (e) => { if (isTouch(e)) tDown(e); else { this.touchMode = false; onDown(e); } });
+    el.addEventListener('pointermove', (e) => { if (isTouch(e)) tMove(e); else onMove(e); });
+    el.addEventListener('pointerup', (e) => { if (isTouch(e)) tUp(e); else onUp(e); });
+    el.addEventListener('pointercancel', (e) => { if (isTouch(e)) tCancel(e); else onCancel(e); });
+    // A double-TAP is not a double-click here: the long press is. (A browser may still synthesise one.)
+    el.addEventListener('dblclick', (e) => { if (!this.touchMode) onDbl(e); });
+    // A finger has no hover: the readout keeps the last touch instead of clearing when it lifts.
+    el.addEventListener('pointerleave', (e) => { if (isTouch(e)) return; this.hover = null; if (this.onHoverChange) this.onHoverChange(null); });
 
     window.addEventListener('keydown', (e) => {
       if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;

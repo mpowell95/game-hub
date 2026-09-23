@@ -296,7 +296,11 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
     await p4.click('#he-help'); await p4.waitForTimeout(400);
     const items = await p4.$$eval('#he-help-menu a', (as) => as.map((a) => a.getAttribute('href')));
     ok('...and Help opens a topic menu with a replay', items.length === 10 && items.includes('./?course=tutorial') && items.includes('./?course=tutorial&topic=green'), items.join(' '));
-    await p4.goto(`${URL}?course=tutorial&topic=green`, { waitUntil: 'networkidle' }); await p4.waitForSelector('.tr-tip .tr-n', { timeout: 5000 }).catch(() => {});
+    await p4.goto(`${URL}?course=tutorial&topic=green`, { waitUntil: 'networkidle' });
+    // 15 s, not 5 (2026-09-23): on a RELOAD, headless software rendering spends 3-6 s in drawImage
+    // building the palette and holes-bar maps before the tour's first pop-up paints (CPU profile).
+    // A timing flake of the renderer - it failed 2 runs in 3 on unchanged code - not a tour bug.
+    await p4.waitForSelector('.tr-tip .tr-n', { timeout: 15000 }).catch(() => {});
     ok('a topic link jumps straight to that part of the tour', /Click Green/.test(await p4.$eval('.tr-tip', (e) => e.textContent)) && !(await p4.$('#he-setup')));
     await p4.close();
   }
