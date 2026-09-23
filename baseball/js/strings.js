@@ -85,6 +85,7 @@ export const STRINGS = {
     // every other big word, with the same two shapes Strike and Ball already carry.
     v_out: 'Out',
     big_out: 'OUT',   // playtest 1: the big word over the field on every out
+    play_ball: 'PLAY BALL!',   // playtest 1 batch 3: the pre-game intro's own umpire word
     v_safe: 'Safe',
     // R2 (docs/BASEBALL-3D-BUILD.md section 9): `v_nice` and `v_hung` are gone with the pitch
     // meter - a release can no longer be early, Nice or hung, because there is no release to time.
@@ -252,6 +253,7 @@ export const STRINGS = {
     v_perfect: 'Perfecto',
     v_out: 'Out',
     big_out: 'OUT',
+    play_ball: '¡A JUGAR!',
     v_safe: 'Quieto',
     swing_miss: 'Swing y fallo',
     swing_late: 'Swing tarde',

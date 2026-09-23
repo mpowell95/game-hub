@@ -790,6 +790,15 @@ export class Actors {
     const actor = this.actors[role];
     if (actor) actor.pivot.visible = false;
   }
+  /** Batch 3 (docs/HANDOFF-BASEBALL-PLAYTEST-1.md): which way `role`'s figure is mirrored RIGHT
+   *  NOW - so a caller walking the batter off can keep his own stance's side without re-deriving it
+   *  from lineup state that may already have moved on (`ui.js`'s `_currentBatterFlip()` reads the
+   *  UPCOMING batter the instant a half-inning flips, which is the wrong hand for the batter who
+   *  just finished). */
+  mirroredOf(role) {
+    const actor = this.actors[role];
+    return !!(actor && actor.mirrored);
+  }
 
   // ------------------------------------------------------------------ cameras ----
   /** Switch the live camera: 'batter', 'pitcher' or 'chase'. R1 replaces the old "cut the 2-D

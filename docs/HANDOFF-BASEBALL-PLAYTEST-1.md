@@ -211,7 +211,7 @@ distance would have to be accounted for)."
 |---|---|
 | 1. Quick fixes | DONE (2026-09-23, v933; `baseball/CLAUDE.md` top entry) |
 | 2. Bunt rework | DONE (2026-09-23, v936; `baseball/CLAUDE.md` top entry) |
-| 3. Game flow | not started |
+| 3. Game flow | DONE (2026-09-23, v938; `baseball/CLAUDE.md` top entry) |
 | 4. Live plays | not started |
 | 5. Player base running | not started (needs 4) |
 | 6. Player fielding | not started (needs 4) |

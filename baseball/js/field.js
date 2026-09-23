@@ -186,6 +186,23 @@ export const OUTFIELD_FENCE_REF_FT = 405; // section 9's own scale reference (mi
 // +z at facingRad 0, and every fielder stands at negative z, so facing the plate IS facing +z).
 export const FIELDER_FACING_RAD = 0;
 
+// ------------------------------------------------------------------ playtest 1, batch 3: dugouts ----
+// docs/HANDOFF-BASEBALL-PLAYTEST-1.md batch 3, item 1. One entrance point per team, in foul ground
+// past each foul line (58deg - past the 45deg line, so it reads as foul territory, not infield
+// dirt) and close to home (42ft - real dugouts sit near the on-deck circles, not out by first/
+// third). Home is the third-base side (-x), away the first-base side (+x) - arbitrary (real parks
+// vary), picked once and never re-derived. `ui.js`'s own actor-walk beats (the pre-game intro, the
+// batter-change beat, the half-inning jog swap) animate to/from these exact points, so the entrance
+// IS the physical structure's own near corner (`buildStadium`'s own dugout block, below) - nobody
+// walks to a point the model doesn't actually stand at.
+const DUGOUT_DIST_FT = 42;
+const DUGOUT_SPRAY_DEG = 58;
+function dugoutPoint(sign) {
+  const p = polar(sign * DUGOUT_SPRAY_DEG, DUGOUT_DIST_FT);
+  return { x: p.x, z: -p.y };
+}
+export const DUGOUT_POS = { home: dugoutPoint(-1), away: dugoutPoint(1) };
+
 /** One fielder's real world spot, for this league's fence (`fenceFt`, the same shape `buildStadium`
  *  draws the wall from) and this at-bat's shift (`game.js`'s own `_shiftDegFor`, carried on the
  *  'atBatStart' event as `shiftDeg`). Infielders pass straight through unscaled and unrotated - only
@@ -394,6 +411,14 @@ export const CAMERAS = {
   // can't see where the ball goes" stage 8 was written to fix. At (0, 10, 22) it is 24 ft out and
   // draws about 14 px, with the fence and the stands still in frame behind it.
   chase: { offset: [0, 10, 22] },
+  // Batch 3, item 3: the pre-game intro's own high wide shot - the fielding team's run-out, the
+  // batter's walk-up and (batch 3, item 5) the half-inning jog swap all play on this camera, never
+  // the ordinary batter/pitcher pair. Pulled back and angled rather than a strict top-down look:
+  // straight overhead reads as a diagram, not a stadium, and this one keeps the field's own scale
+  // and the two dugouts (`DUGOUT_POS`, both well inside 58deg of the plate) legible in one frame on
+  // a portrait phone without needing its own per-league measurement pass (presentation only,
+  // skippable, never the camera a real play is judged against).
+  overhead: { pos: [0, 145, 25], look: [0, 0, -70] },
 };
 export const CHASE_LERP = 0.15;
 // R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7"): the chase's own MINIMUM START, used only for the
@@ -420,8 +445,8 @@ export const CHASE_LERP = 0.15;
 export const CHASE_MIN_HEIGHT_FT = 11;
 export const CHASE_MIN_BACK_FT = 24;
 
-/** The three cameras, already aimed. `setAspect(a)` re-applies the portrait aspect on every
- *  resize; the chase camera is positioned by `Actors` every frame and only needs its aspect here. */
+/** The cameras, already aimed. `setAspect(a)` re-applies the portrait aspect on every resize; the
+ *  chase camera is positioned by `Actors` every frame and only needs its aspect here. */
 export function makeCameras(aspect) {
   // R8: `def.fov` overrides the shared `CAMERAS.fov` when a camera carries its own (the pitcher's
   // long lens) - batter and chase have none and keep the shared value.
@@ -435,11 +460,14 @@ export function makeCameras(aspect) {
   const chase = mk(null);
   chase.position.set(CAMERAS.chase.offset[0], CAMERAS.chase.offset[1], CAMERAS.chase.offset[2]);
   chase.lookAt(0, 0, 0);
+  // Batch 3: the pre-game intro/half-inning swap's own wide shot - fixed and aimed once, exactly
+  // like batter/pitcher, never repositioned per frame the way chase is.
+  const overhead = mk(CAMERAS.overhead);
   const setAspect = (a) => {
-    for (const c of [batter, pitcher, chase]) { c.aspect = a; c.updateProjectionMatrix(); }
+    for (const c of [batter, pitcher, chase, overhead]) { c.aspect = a; c.updateProjectionMatrix(); }
   };
   setAspect(aspect);
-  return { batter, pitcher, chase, setAspect };
+  return { batter, pitcher, chase, overhead, setAspect };
 }
 
 // ------------------------------------------------------------------ procedural textures ----
@@ -1497,6 +1525,49 @@ export function buildStadium(scene, { fenceFt, league = 'majors' }) {
     group.add(new THREE.Mesh(winGeo, winMat)); track(winGeo, winMat);
   }
 
+  // --- Playtest 1 batch 3, item 1: two dugouts, home and away (`DUGOUT_POS`, above) - a sunken
+  // floor, a low back wall and a flat roof, reusing three colours this file already carries for
+  // other surfaces at a similar scale (`dirtDark`, `backstopPad`, `standsDeck`) rather than growing
+  // PALETTE for a one-off "simple dugouts" ask. Both sides share one shape, mirrored, and merged
+  // into three meshes total (one per material) the same budget discipline the stands/towers use.
+  // `DUGOUT_POS[side]` is each footprint's own NEAR corner (closest to home) - also the exact point
+  // `ui.js`'s actor-walk beats animate to/from, so nobody ever walks to a point this structure
+  // doesn't actually stand at. Axis-aligned, not rotated to the foul line's own 45deg - a real
+  // dugout runs parallel to the baseline; this one doesn't, a simplification accepted for a small,
+  // mostly-decorative structure seen almost entirely from the wide `overhead` camera.
+  {
+    const DUGOUT_W = 16, DUGOUT_D = 8, DUGOUT_WALL_H = 3.5, DUGOUT_ROOF_Y0 = 7.2, DUGOUT_ROOF_T = 0.4;
+    const floorParts = [], wallParts = [], roofParts = [];
+    for (const side of ['home', 'away']) {
+      const p = DUGOUT_POS[side];
+      const sign = side === 'home' ? -1 : 1;   // which way the footprint extends past its near corner
+      const x0 = Math.min(p.x, p.x + sign * DUGOUT_W), x1 = Math.max(p.x, p.x + sign * DUGOUT_W);
+      const z0 = p.z - DUGOUT_D, z1 = p.z;     // always extends further from home (more negative z)
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0;
+      const floor = new THREE.BoxGeometry(w, 0.3, d);
+      floor.translate(cx, -0.15, cz);
+      floorParts.push(floor);
+      const wall = new THREE.BoxGeometry(w, DUGOUT_WALL_H, 0.5);
+      wall.translate(cx, DUGOUT_WALL_H / 2, z0 + 0.25);
+      wallParts.push(wall);
+      const roof = new THREE.BoxGeometry(w, DUGOUT_ROOF_T, d);
+      roof.translate(cx, DUGOUT_ROOF_Y0 + DUGOUT_ROOF_T / 2, cz);
+      roofParts.push(roof);
+    }
+    const dugoutFloorGeo = mergeGeometries(floorParts, false);
+    const dugoutFloorMat = new THREE.MeshLambertMaterial({ color: PALETTE.dirtDark });
+    group.add(new THREE.Mesh(dugoutFloorGeo, dugoutFloorMat)); track(dugoutFloorGeo, dugoutFloorMat);
+    for (const g of floorParts) g.dispose();
+    const dugoutWallGeo = mergeGeometries(wallParts, false);
+    const dugoutWallMat = new THREE.MeshLambertMaterial({ color: PALETTE.backstopPad });
+    group.add(new THREE.Mesh(dugoutWallGeo, dugoutWallMat)); track(dugoutWallGeo, dugoutWallMat);
+    for (const g of wallParts) g.dispose();
+    const dugoutRoofGeo = mergeGeometries(roofParts, false);
+    const dugoutRoofMat = new THREE.MeshLambertMaterial({ color: PALETTE.standsDeck });
+    group.add(new THREE.Mesh(dugoutRoofGeo, dugoutRoofMat)); track(dugoutRoofGeo, dugoutRoofMat);
+    for (const g of roofParts) g.dispose();
+  }
+
   scene.add(group);
   return {
     group,
@@ -1530,4 +1601,5 @@ export default {
   fencePoints, planGeometry, CAMERAS, ZONE, BATTER_BOX, RUBBER, MOUND, CATCHER, UMPIRE, FENCE,
   MARKER, FIGURE_HEIGHT_FT, BALL_RADIUS_FT, BATTER_AIM_TRAVEL_FT, CHASE_LERP,
   FIELDER_POS, FIELDER_FACING_RAD, OUTFIELD_FENCE_REF_FT, fielderWorld, basePositions, runnerPath,
+  DUGOUT_POS,
 };
