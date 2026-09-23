@@ -632,13 +632,20 @@ export function createGame(canvas, hooks) {
     if (b.hp > 1) { ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.2; roundRect(ctx, b.x + 1, b.y + 1, b.w - 2, b.h - 2, 4); ctx.stroke(); }
     ctx.restore();
   }
+  /** Alien bombs: made to stand out against busy neon (Matt, 2026-09-23: "easier to see"). A
+   *  bright zig-zag bolt about three times the old size, drawn twice: a wide glowing pink halo, then a
+   *  white-hot yellow core, plus a small glow dot at the tip. Shape carries it, not colour alone. */
   function drawBombs() {
     ctx.save();
-    ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#ffd1ea'; ctx.shadowColor = '#ff2e97'; ctx.shadowBlur = 8;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const bo of bombs) {
-      const w = Math.sin(bo.ph) > 0 ? 3 : -3;
-      ctx.beginPath(); ctx.moveTo(bo.x, bo.y - 12); ctx.lineTo(bo.x + w, bo.y - 8); ctx.lineTo(bo.x - w, bo.y - 4); ctx.lineTo(bo.x + w, bo.y); ctx.stroke();
+      const w = Math.sin(bo.ph) > 0 ? 8 : -8, x = bo.x, y = bo.y;
+      const bolt = () => { ctx.beginPath(); ctx.moveTo(x, y - 34); ctx.lineTo(x + w, y - 25); ctx.lineTo(x - w, y - 16); ctx.lineTo(x + w, y - 7); ctx.lineTo(x, y + 2); ctx.stroke(); };
+      ctx.shadowColor = '#ff2e97'; ctx.shadowBlur = 20;
+      ctx.strokeStyle = 'rgba(255,46,151,.9)'; ctx.lineWidth = 11; bolt();
+      ctx.shadowBlur = 6; ctx.shadowColor = '#fff200';
+      ctx.strokeStyle = '#fffbd0'; ctx.lineWidth = 4.5; bolt();
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, y + 2, 5, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
   }
