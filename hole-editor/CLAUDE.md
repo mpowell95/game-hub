@@ -726,3 +726,37 @@ editor does not know it yet. `named: true` is stamped on Start, or when the Cour
 name field is filled. The ribbon's first item on the Course Creator is a course button ("name ·
 terrain") that reopens it. Ribbon tools may now shrink to 60px (`.he-tool`) so that button and Help
 still fit at 1280px. `applyLook()` is the one place a look is switched. UI suite: six probes.
+
+## Tidying the screen (2026-09-23)
+
+- **Terrain pictures show the EDGE of a hole** (a pond, a bunker, that look's woods on its own
+  ground), not the fairway: every fairway is nearly the same green, so the first version's six
+  tiles looked alike (Matt: *"why do all of these look the same?"*). `lookPicture()` in `main.js`.
+- **Palette groups fold** (click a section or sub-head; `golf.holeEditor.palFolds.v1`, per browser).
+- **Layer checkboxes live behind a Layers chip** beside Key; opening one closes the other.
+- **The holes bar minimises** to one thin row (totals + Show holes); `uiState.stripMin`.
+
+## Help is a guided practice run (2026-09-23)
+
+Matt: *"way too much text on the Help page... should be a test (or fakeish) version of the tool, that
+has arrows and pop ups."* The ribbon's Help opens `?course=tutorial`: the REAL Course Creator on a
+throwaway course (`PROFILES.tutorial` in `course.js`: same document type, its own storage key wiped on
+every open, `getDesigner` returns null so it never reaches the cloud, status reads "Practice: nothing
+here is saved"), with `js/tour.js` over it: a pulsing ring round the thing to use, a yellow pop-up
+with an arrow, one sentence per step, 17 steps. A step with `done()` moves on by itself once the
+player has done it (typed a name, picked the bunker tile, placed a bunker, planted a tree); the rest
+have Next. The tour only reads `window.__he` and the DOM. `help.html` is now just a redirect so old
+links work; the text page and its screenshots are gone. When the editor's screen changes, walk the
+tour again (`reference`-style: drive it in Chromium and look at each step).
+
+## "It's laggy" (2026-09-23)
+
+Measured with a CPU profile of a 15-step bunker drag (Chromium, software rendering): every frame
+was a 120-230 ms long task. Three things ran per frame: the hole's own map build (~45 ms, needed),
+**the whole palette** (~75 canvas tiles, ~30 ms - it grew from ~20 tiles to ~75 this week), and
+**the holes bar's thumbnail of this hole** (~14 ms). Now `refreshPalette()` rebuilds only when its
+key changes (look, highlighted item, guards, type names) and the holes bar is not redrawn mid-
+gesture (it catches up at the end of the drag). Measured after: 20-step drag 3.7 s -> 1.8 s, long
+tasks 120-230 ms -> ~50 ms, and a tool switch that re-renders the palette 38 ms -> 3 ms. What is
+left is `buildMap` itself; do not add per-frame work to `afterChange`'s gesture path without
+measuring it (the profiling script pattern: CDP `Profiler.start` around a scripted drag).

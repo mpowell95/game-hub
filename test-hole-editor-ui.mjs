@@ -199,6 +199,19 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   await p2.click('#he-course-btn'); await p2.waitForTimeout(200);
   ok('...but the course button reopens it', !!(await p2.$('#he-setup')));
   await p2.click('#he-setup-x'); await p2.waitForTimeout(150);
+  // 2026-09-23: palette groups fold, Layers is a chip like Key, the holes bar minimises.
+  await p2.click('[data-fold="Trees & rocks/Stands"]'); await p2.waitForTimeout(100);
+  ok('a palette group folds away', !(await p2.isVisible('.he-tile[data-item="stand-0"]')));
+  await p2.click('[data-fold="Trees & rocks/Stands"]'); await p2.waitForTimeout(100);
+  ok('...and opens again', await p2.isVisible('.he-tile[data-item="stand-0"]'));
+  ok('the layer checkboxes are hidden until the Layers chip is clicked', !(await p2.isVisible('#he-layers')));
+  await p2.click('#he-layers-btn'); await p2.waitForTimeout(100);
+  ok('...which shows them', await p2.isVisible('#he-layers [data-layer="grid"]'));
+  await p2.click('#he-layers-btn');
+  await p2.click('#he-strip-toggle'); await p2.waitForTimeout(200);
+  ok('Hide holes folds the holes bar', !(await p2.isVisible('#he-strip')));
+  await p2.click('#he-strip-toggle'); await p2.waitForTimeout(200);
+  ok('...and Show holes brings it back', await p2.isVisible('#he-strip'));
   // The Course & saving panel starts collapsed (2026-09-22 layout); open it for add/delete hole.
   if (await p2.$('[data-panel="course"].collapsed')) { await p2.click('[data-panel="course"] .he-panel__head'); await p2.waitForTimeout(150); }
   s = await st2();
@@ -242,9 +255,21 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   await p2.goto(URL, { waitUntil: 'networkidle' }); await p2.waitForTimeout(500);
   s = await st2();
   ok('the plain link still opens Red Mesa, untouched by the Course Creator', s.courseId === 'redmesa' && s.n === 18 && s.id === 'rm-01');
-  const help = await p2.$eval('#he-help', (a) => a.getAttribute('href'));
-  const helpRes = await p2.request.get(new globalThis.URL('help.html', p2.url()).href);
-  ok('the ribbon has a Help link to help.html, and it loads', help === 'help.html' && helpRes.ok());
+  ok('the ribbon Help link opens the practice run', (await p2.$eval('#he-help', (a) => a.getAttribute('href'))) === './?course=tutorial');
+  // HELP IS A GUIDED PRACTICE RUN (2026-09-23): the real editor, a throwaway course, a tour over it.
+  {
+    const p3 = await b.newPage({ viewport: { width: 1400, height: 900 } });
+    const errs3 = []; p3.on('pageerror', (e) => errs3.push(e.message));
+    await p3.goto(`${URL}?course=tutorial`, { waitUntil: 'networkidle' }); await p3.waitForSelector('.tr-tip .tr-n', { timeout: 5000 }).catch(() => {});
+    ok('practice opens on the setup screen with the tour pointing at the name', !!(await p3.$('#he-setup')) && /type a name/.test(await p3.$eval('.tr-tip', (e) => e.textContent)));
+    await p3.fill('#he-setup-name', 'Practice'); await p3.waitForTimeout(1600);
+    ok('...and moves on by itself once a name is typed', /2 of/.test(await p3.$eval('.tr-tip', (e) => e.textContent)));
+    await p3.click('#he-setup-go'); await p3.waitForTimeout(1200);
+    ok('practice never saves to the cloud', /nothing here is saved/.test(await p3.evaluate(() => (document.getElementById('he-cloud-status') || {}).textContent || '')));
+    ok('practice has its own storage, apart from the real course', await p3.evaluate(() => localStorage.getItem('golf.holeEditor.tutorial.v1') !== null));
+    ok('no page errors in practice', errs3.length === 0, JSON.stringify(errs3));
+    await p3.close();
+  }
   ok('no page errors in the Course Creator', errs2.length === 0, JSON.stringify(errs2));
   await p2.close();
 }

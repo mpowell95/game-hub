@@ -20,6 +20,11 @@ export const PROFILES = {
     exportFile: null,   // named after the course, see export.js
   },
 };
+// PRACTICE (2026-09-23): the Course Creator with a guided tour over it (tour.js), for Help. Same
+// document type ('custom'), its OWN storage key wiped on every open, and never saved to the cloud.
+PROFILES.tutorial = {
+  ...PROFILES.custom, tutorial: true, title: 'Course Creator: practice', storageKey: 'golf.holeEditor.tutorial.v1',
+};
 
 export function defaultsFor(theme) {
   return THEME_DEFAULTS[theme] || THEME_DEFAULTS.parkland;
@@ -31,6 +36,7 @@ export function defaultsFor(theme) {
 export function resolveProfile(search) {
   let q = '';
   try { q = new URLSearchParams(search != null ? search : (typeof location !== 'undefined' ? location.search : '')).get('course') || ''; } catch { q = ''; }
+  if (q === 'tutorial') return PROFILES.tutorial;
   return (q === 'new' || q === 'custom') ? PROFILES.custom : PROFILES.redmesa;
 }
 
