@@ -760,3 +760,28 @@ gesture (it catches up at the end of the drag). Measured after: 20-step drag 3.7
 tasks 120-230 ms -> ~50 ms, and a tool switch that re-renders the palette 38 ms -> 3 ms. What is
 left is `buildMap` itself; do not add per-frame work to `afterChange`'s gesture path without
 measuring it (the profiling script pattern: CDP `Profiler.start` around a scripted drag).
+
+### Matt's review of the walkthrough (2026-09-23), all 14 points
+
+22 steps now. What changed and why, so nobody re-derives it:
+- **Every "do this" step moves on by itself** when it is done: name typed, terrain tile clicked,
+  Start pressed, bunker tile picked, bunker placed, bunker DRAGGED (the step switches to Select
+  first: after placing, the tool is still Bunker, so a drag placed another bunker instead - that
+  was "dragging to move doesn't work"), tree planted, Route/Green tools clicked.
+- **A step that points at settings opens the Selection panel first** (`openPanel('context')`); a
+  folded panel made "Its settings show up here" point at nothing. Same for Course & saving.
+- **New steps**: the tree's settings, the Route panel's dogleg/S-bend buttons, the green's settings,
+  and SAVING ("saves by itself... open the same link any time... Download backup").
+- **Wording**: fold -> "hide that group"; "Click anywhere on the hole to add the bunker there";
+  Route says double-click adds a dot; Select says drag an empty spot to move around (that pan
+  already existed on Select); Validate names real problems; the course button says the terrain
+  changes EVERY hole. The Route panel's paragraph of text was cut to one line.
+- **Layout**: fold arrows are 18 px and gold; the green's six shapes wrap instead of clipping
+  "teardrop"/"clover"; the tour ring is clipped to the visible part of a tall panel; the last
+  pop-up is wider and centred with nowrap buttons (it wrapped "Start my course" in two).
+- **After the walkthrough** (`golf.holeEditor.tourDone.v1`, set on the last step), Help opens a
+  menu: nine topics (`TOPICS` in tour.js, each `?course=tutorial&topic=<id>` - the tour fills the
+  setup screen with "Practice" and jumps in) plus "Replay the whole walkthrough".
+- **Before it**, the real Course Creator nudges toward Help: a "New here? Take the guided tour"
+  button on the setup screen and a yellow note under Help ("No thanks" dismisses it for good,
+  `golf.holeEditor.helpNudgeOff.v1`). Neither shows in Red Mesa's editor or in practice.
