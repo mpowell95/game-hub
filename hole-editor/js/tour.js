@@ -62,7 +62,7 @@ const STEPS = [
   { at: '#he-play', side: 'below', say: 'Play opens your course in the real game so you can try it.' },
   { topic: 'save', at: '#he-course', side: 'left', say: 'Your course saves by itself as you work, on this computer and online under your player code. Open the same link any time and it is all there. Download backup gives you a copy as a file. (The practice course here in Help is the one thing that is not saved.)',
     start: () => { openPanel('course'); const c = document.getElementById('he-course'); if (c) c.scrollIntoView({ block: 'start' }); } },
-  { at: '#he-course-btn', side: 'below', say: 'Click here any time to rename the course or change its terrain. The terrain changes the whole course, every hole.' },
+  { at: '#he-course-btn', side: 'below', say: 'Click here any time to rename the course or change its terrain. Careful with the terrain: it changes EVERY hole at once, the colours and the woods down each side. Things you placed yourself stay put, and picking the old terrain again puts it all back.' },
   { at: null, say: 'That is everything! Close this Help tab to go back and start creating your own course. Help, at the top right, brings you back here any time.', last: true },
 ];
 
