@@ -261,7 +261,17 @@ export function validateGame(raw) {
     oneShot: !!raw.oneShot,
     series,
     seriesNo: Math.min(series, Math.max(1, ms(raw.seriesNo) || 1)),
-    seriesWins: { a: Math.max(0, ms(sw.a)), b: Math.max(0, ms(sw.b)) },
+    // THE SERIES SCORE IS KEPT BY SIDE, AND THE SIDES SWAP EVERY GAME (2026-09-23). Matt: "i won
+    // game 1, then king of games won game 2, but it said he won the series 2-0." nextInSeries
+    // carried the running score across unswapped, so game 2 credited game 1's winner to the other
+    // person. Fixed at the source (nextInSeries swaps, and createGame stamps `winsBySide: 2`), and
+    // corrected HERE on read for a game 2 written before the fix: its score is off by exactly one
+    // missed swap. Nothing stored is rewritten. Checked against the database the day it shipped:
+    // exactly two such documents existed (vs King of Games, vs Anita Bonita) and no game 3 at all,
+    // so there is no deeper case to correct.
+    seriesWins: (raw.winsBySide !== 2 && (ms(raw.seriesNo) | 0) === 2)
+      ? { a: Math.max(0, ms(sw.b)), b: Math.max(0, ms(sw.a)) }
+      : { a: Math.max(0, ms(sw.a)), b: Math.max(0, ms(sw.b)) },
     // A single game is its own series, so `seriesOf` is always a usable grouping key.
     seriesOf: (typeof raw.seriesOf === 'string' && ID_RE.test(raw.seriesOf)) ? raw.seriesOf : id,
     caption: cleanCaption(raw.caption),
@@ -596,6 +606,7 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
     series: len,
     seriesNo: Math.min(len, Math.max(1, seriesNo | 0 || 1)),
     seriesWins: { a: Math.max(0, (seriesWins && seriesWins.a) | 0), b: Math.max(0, (seriesWins && seriesWins.b) | 0) },
+    winsBySide: 2,                    // the score above is keyed to THIS document's sides (see validateGame)
     seriesOf: (typeof seriesOf === 'string' && ID_RE.test(seriesOf)) ? seriesOf : id,
     caption: cleanCaption(caption),
     a: seats.a, b: seats.b,
@@ -716,7 +727,8 @@ export async function nextInSeries(game) {
     oneShot: !!game.oneShot,
     series: st.len,
     seriesNo: st.no + 1,
-    seriesWins: st.wins,
+    // SWAPPED: whoever was side 'a' last game is side 'b' in this one, whichever device creates it.
+    seriesWins: { a: st.wins.b, b: st.wins.a },
     seriesOf: game.seriesOf || game.id,
     // Whoever did NOT shoot first last time shoots first now. This device is `side`; if it was
     // 'a' it went first, so the next game hands 'a' to the other person.

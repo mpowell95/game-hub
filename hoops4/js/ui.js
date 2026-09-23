@@ -731,7 +731,10 @@ class Hoops4 {
     // score is computed from the document plus THIS game's winner.
     const side = mp.side;
     const m = this.match;
-    const winnerSide = m.winner === null ? null : (m.winner === this.myPlayer ? side : (side === 'a' ? 'b' : 'a'));
+    // The STORED winner when there is one (a resignation leaves the board unfinished).
+    const ow = mp.game.over && mp.game.over.winner;
+    const winnerSide = (ow === 'a' || ow === 'b') ? ow
+      : m.winner === null ? null : (m.winner === this.myPlayer ? side : (side === 'a' ? 'b' : 'a'));
     const st = MP.seriesAfter({ ...mp.game, over: { winner: winnerSide } });
     const line = card.querySelector('.h4-series');
     if (line) {
@@ -744,9 +747,17 @@ class Hoops4 {
           : st.winner === side ? t('youTakeIt') : t('seriesWon', { who: this.themName() })}`
         : `${t('gameOf', { n: st.no, m: st.len })} \u00B7 ${score}`;
     }
-    // A REVIEW never offers the next game: that game may already exist, and a second one would
-    // fork the series. The score line above is still shown.
-    if (st.done || review) return;
+    if (st.done) return;
+    // A REVIEW offers the next game ONLY IF IT DOES NOT EXIST YET - a second one would fork the
+    // series. (2026-09-23: this used to be never, which left the two series mis-scored "2-0" -
+    // really 1-1 - with no way to reach the game 3 they are owed. See mp.js validateGame.)
+    if (review) {
+      const of = mp.game.seriesOf || mp.game.id;
+      let rows = [];
+      try { rows = await MP.readMyGames(); } catch { return; }
+      if (this.disposed || !card.isConnected) return;
+      if (rows.some((r) => r && r.seriesOf === of && (r.seriesNo | 0) > st.no)) return;
+    }
     // A LIVE SERIES REPLACES "Play again", which in multiplayer only quits to the setup screen.
     const again = card.querySelector('.h4-again');
     if (!again) return;
