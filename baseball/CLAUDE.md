@@ -4,7 +4,7 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
-## Playtest 1, batch 2: bunt rework (2026-09-23) - DONE, live at v934
+## Playtest 1, batch 2: bunt rework (2026-09-23) - DONE, live at v936
 
 `docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 2. Matt: *"if I hold it down, the bat should stay
 there. A bunt isn't a swing. When you bunt, you hold the bat horizontal and move it up/down/side to
