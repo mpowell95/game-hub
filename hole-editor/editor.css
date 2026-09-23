@@ -311,3 +311,19 @@ input[type="range"] { accent-color: var(--he-accent); }
 .he-thumb.selected .he-thumb-cap { color: var(--he-ink); }
 .he-dirty-dot { position: absolute; top: 4px; left: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--he-accent); }
 .he-broken-mark { position: absolute; top: 2px; right: 8px; color: var(--he-danger); font-weight: 700; font-size: 16px; }
+
+/* Layers pop-over (2026-09-23): the checkboxes live behind a chip like Key, not always on the map. */
+.he-layers--pop { position: absolute; right: 60px; top: 36px; flex-direction: column; flex-wrap: nowrap; max-width: 240px; z-index: 5; }
+.he-layers[hidden] { display: none; }
+/* Holes bar minimise (2026-09-23): the bar folds to one thin row with the totals and the toggle. */
+.he-strip-toggle { background: none; color: var(--he-muted); border: 1px solid var(--gh-border); border-radius: 999px; padding: 3px 10px; font: 13px system-ui, sans-serif; cursor: pointer; }
+.he-strip-toggle:hover { color: var(--he-accent); border-color: var(--he-accent); }
+.he-root--strip-min { --he-bottom-h: 38px; }
+.he-root--strip-min .he-strip, .he-root--strip-min #he-discard-all { display: none; }
+.he-root--strip-min .he-totals { flex: 1 1 auto; flex-direction: row; align-items: center; gap: 14px; }
+/* Palette groups collapse (2026-09-23): a click on a section or sub-head folds it. */
+.he-pal-fold { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+.he-pal-fold::before { content: '\25BE'; font-size: 11px; }
+.he-pal-fold.is-shut::before { content: '\25B8'; }
+.he-pal-fold.is-shut + .he-pal-body { display: none; }
+.he-pal-fold:hover { color: var(--he-accent); }
