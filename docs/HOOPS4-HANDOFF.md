@@ -180,6 +180,7 @@ mixed build), then run `node validate-sw-assets.mjs`, which also rewrites `REST_
 
 | CACHE | what |
 |---|---|
+| v925 | A series owed its next game shows in "Your turn" with Start game N (the loser of the last game starts it) |
 | v924 | Series score swapped correctly between games (two live series corrected on read); Next game from History |
 | v923 | Opponent's move arrives live in an open match; "Your turn vs <names>"; the challenge card plays once per match |
 | v922 | Multiplayer home reorganised; Quit (resign) on every game and in the pause sheet; finished matches counted on both phones |

@@ -631,5 +631,12 @@ check('a player code is normalised and validated',
     /r\.seriesOf === of && \(r\.seriesNo \| 0\) > st\.no/.test(uiS));
 }
 
+{
+  const mpui = readFileSync(new URL('./hoops4/js/mp-ui.js', import.meta.url), 'utf8');
+  check('a series owed its next game is listed, and only the loser of the last game can start it',
+    /async function owedSeries\(rows\)/.test(mpui) && /const starter = w === 'a' \? 'b' : w === 'b' \? 'a' : 'b';/.test(mpui)
+    && /MP\.nextInSeries\(g\)/.test(mpui));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
