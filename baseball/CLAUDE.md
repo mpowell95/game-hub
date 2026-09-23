@@ -22,6 +22,21 @@ for its own sake. `_endBuntHold()` is the one place those document listeners com
 real release, from the crossing check resolving the pitch on its own (via `_clearArmed`), and from
 `destroy()` (a hold surviving a teardown would leak for the tab's whole life).
 
+**A real bug, found by driving the real UI end to end, not by reading the code.** The first build
+of the document-level release listener matched ANY `touchend`/`pointerup` on the whole page - so
+tapping READY with the other thumb (the normal way to play: one thumb holds Bunt, the other taps
+READY) bubbled ITS OWN touchend up to that same listener and cancelled the hold before the wind-up
+even started, every single time. A scratch diagnostic (hooking `game.onEvent` and
+`_animatePitchFlight` to log `state.armedBunt` at each step) caught it: armed `true` right after the
+hold, `false` by the time the pitch's own flight began. Fixed by scoping the match to the SPECIFIC
+touch/pointer identifier that pressed the well (`e.changedTouches[0].identifier` /
+`e.pointerId`, captured at `_onBuntDown`) - a release event only counts if it carries the SAME
+identity; a press with no identity at all (a bare `new Event(...)`, which is what most of
+`test-baseball-device.mjs`'s own taps already dispatch) falls back to matching anything, so those
+probes needed no changes elsewhere. The two bunt probes below use real, identified `Touch`/
+`TouchEvent` objects specifically because this is the one interaction in the repo so far that
+depends on telling two fingers apart.
+
 **Contact is bat-vs-ball POSITION now, never timing.** While held, the CONTACT/POWER circle is
 replaced by a horizontal bar at the batting cursor (`_drawBatCursor`, drawn at exactly
 `BUNT_BAR_HALF_X`/`BUNT_BAR_HALF_Y` - the same reach the engine scores against, so the drawn bar can
@@ -77,8 +92,16 @@ script holding the bar dead-centre the whole time would be testing a player who 
 and asserts contact happened with no swing tap, the batter squared on the `Bunt` clip, and
 `battedKind` is `ground` or `bunt-popup`; **`actions-live (b2)`** holds BUNT then releases well
 before any pitch can cross, and asserts an ordinary ball/strike take fired and the batter is no
-longer squared. Both green. `node check-no-scroll.mjs baseball`: 16/16, `node test-visual.mjs
-baseball`: 20/20, `node test-game-conventions.mjs`: 11/11, no new gaps.
+longer squared. Both green. `node check-no-scroll.mjs baseball`: 16/16, `node
+test-game-conventions.mjs`: 11/11, no new gaps.
+
+**`test-visual.mjs baseball`'s own `[play]` probe (pitching half: PITCH then drag the pad) failed
+on this branch, and is a confirmed PRE-EXISTING container flake, not a regression from this stage.**
+Verified the way this repo's own history says to (R10's entry, "the decisive check"): a
+`git worktree` at the commit immediately before this stage, its own dev server on port 8124, same
+probe - failed IDENTICALLY on the byte-for-byte unmodified code. This stage never touches the
+pitching side, the pad, or anything `pitch-drag`'s own device-suite probe (which passed, every run,
+in the real suite) already covers. 19/20 otherwise, unaffected in the ways that matter.
 
 ## Playtest 1, batch 1: quick fixes (2026-09-23) - DONE, live at v933
 
