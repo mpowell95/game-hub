@@ -785,3 +785,40 @@ measuring it (the profiling script pattern: CDP `Profiler.start` around a script
 - **Before it**, the real Course Creator nudges toward Help: a "New here? Take the guided tour"
   button on the setup screen and a yellow note under Help ("No thanks" dismisses it for good,
   `golf.holeEditor.helpNudgeOff.v1`). Neither shows in Red Mesa's editor or in practice.
+
+### Changing the terrain later asks first (2026-09-23)
+
+Matt: the course-button step should warn that a terrain change can "mess it up". What it really
+does: every hole's colours and every untouched tree line switch to the new terrain; placed objects
+keep their type. It is NOT on the undo stack (undo snapshots `order`/`holes`, not `course`), but
+nothing is lost - picking the old terrain again restores the exact same course. So once a course
+is named, `confirmLookChange()` asks before switching (setup screen and Course & saving panel), and
+the tour step says the same thing in one sentence. The final tour step now says to close the Help
+tab (its button tries `window.close()` and falls back to opening `?course=new`), and the saving
+step says it is the practice course *in Help* that is not saved.
+
+### The first visit IS the walkthrough (2026-09-23)
+
+Matt: *"the link should auto open the help walkthrough the first time someone visits... then after
+that it just goes straight to the tool."* `main.js`, right after the stored document is read: on
+the Course Creator, if this browser has never been offered the tour (`golf.holeEditor.tourOffered.v1`),
+has not finished it, and has no NAMED course, it sets the flag and `location.replace`s to
+`?course=tutorial&first=1` (a top-level `await` on a never-resolving promise stops the rest of the
+module). In `first` mode the tour's last step says "Now start your own course" with a **Start my
+course** button, and its x means "skip the tour and start my course" - both go to `?course=new`,
+same tab. The order is therefore always: link -> walkthrough -> name and terrain -> the tool; every
+later visit goes straight to the tool. `test-hole-editor-ui.mjs` walks both paths (finish, and skip
+with x) end to end, including that the practice course never touches the real one.
+
+## Report bug (2026-09-23)
+
+Matt: *"we need a report bug option so i can fix things that are broken."* The ribbon's **Report
+bug** opens the HUB's own form (`js/bug-report-ui.js`): same `bugReports/` node, same inbox Matt
+reads in Messages, same screenshots and offline outbox - not a second pipeline. Two small additive
+options were added to it: `where: {value, label}` puts a place the hub list lacks at the top of
+the picker, preselected ("Course Creator", "Red Mesa hole editor", or "Course Creator (Help
+practice run)"), and `context` saves one line on the record (`report.context`, max 500 chars,
+shown under the description in the inbox): designer, course and terrain, hole, tool, selection.
+Copy JSON is hidden on the Course Creator (Download backup does its job) so Report bug and Help fit
+at 1280 px. The walkthrough has a step for it. `js/` is in the service worker's shell, so this one
+bumped CACHE.

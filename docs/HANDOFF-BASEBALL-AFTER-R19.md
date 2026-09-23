@@ -21,12 +21,12 @@ You are continuing work on the Baseball game in the Game Hub repo (`baseball/`).
   - Median player, first title: 11 seasons. Perfect Season: 3.8%.
 - The career simulator's player now steals (`HUMAN_STEAL`) and works the corners (`paint` per tier).
 
-## Open items (none started)
+## Open items
 
 1. **Playtest first.** Matt hasn't played R19 yet. Act on his feedback before anything below.
 2. **Weak player stalls**: about 7% of simulated careers win a World Series; most get stuck in the Minors. The likely fix is a difficulty option. Ask Matt before building it.
 3. **Standings**: CPU records are scaled to the season length (`scaledToSeason`), but the design doc still lists the schedule shape and tie-breakers as open (item 13).
-4. **Team names**: 8 placeholders (Aces, Sluggers, ...); the design calls for 40 (`docs/BASEBALL-DESIGN-DOC.md` §17 item 12). Cheapest quick win. Proper nouns, not translated.
+4. **Team names**: DONE 2026-09-23 (40 names, `TEAM_NAMES` in `baseball/js/ui.js`; see `baseball/CLAUDE.md`).
 5. **After a World Series win**: what happens next (item 10).
 6. **Screwball / Eephus / Cutter** movement and speed (item 9); park features (item 11).
 

@@ -121,6 +121,11 @@ stopped mid-verification when Matt paused.
    `node golf/js/test.js`, bumps CACHE, deploys. The course is admin-only until Matt releases it
    on the Admin page. Same recipe as Red Mesa's first fold-back (`hole-editor/CLAUDE.md`).
 
+## 5b. Phones (not started)
+
+The editor is desktop-only. The plan for making it work on a phone is its own handoff:
+`docs/HANDOFF-GOLF-COURSE-CREATOR-MOBILE.md`.
+
 ## 6. How to work it (the repo's rules, applied here)
 
 - The session that reads this is the ORCHESTRATOR. Write the spec into a doc first (as

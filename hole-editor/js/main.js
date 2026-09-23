@@ -150,6 +150,21 @@ document.title = profile.title;
 // Practice starts from nothing every time.
 if (profile.tutorial) { try { localStorage.removeItem(profile.storageKey); } catch { /* fine */ } }
 const stored = loadDocument(localStorage.getItem(profile.storageKey));
+// FIRST VISIT GOES STRAIGHT INTO THE WALKTHROUGH (Matt, 2026-09-23: "the link should auto open the
+// help walkthrough the first time someone visits the site? then after that it just goes straight
+// to the tool"). Only once per browser (`tourOffered`), only on the Course Creator, and never for
+// someone who already has a named course here - they are past the first visit whatever the flag
+// says. The walkthrough ends on "Start my course", which comes back to this link.
+{
+  const OFFERED = 'golf.holeEditor.tourOffered.v1';
+  let offered = false; try { offered = localStorage.getItem(OFFERED) === '1'; } catch { offered = true; }
+  const named = !!(stored && stored.course && stored.course.named);
+  if (profile.custom && !profile.tutorial && !offered && !tourDone() && !named) {
+    try { localStorage.setItem(OFFERED, '1'); } catch { /* fine */ }
+    location.replace('./?course=tutorial&first=1');
+    await new Promise(() => {});   // stop here; the page is leaving
+  }
+}
 setCourse(profile, stored && stored.course && stored.course.theme);
 setEditorTheme(profile.custom ? ((stored && stored.course && stored.course.theme) || profile.theme) : profile.theme);
 const originals = originalSpecs();
@@ -262,9 +277,12 @@ ribbon.innerHTML = [
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-export" title="Export (Ctrl+E)"><span class="he-tool-icon">⤓</span><span class="he-tool-label">Export</span></button>',
   '<button class="he-tool" id="he-play" title="Play this hole" style="width:auto;padding:0 8px;"><span class="he-tool-icon">▶</span><span class="he-tool-label">Play</span></button>',
-  '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
+  // Copy JSON is a developer's button; the Course Creator has Download backup for the same job, and
+  // the room it frees keeps Report bug and Help on screen at 1280 px (2026-09-23).
+  '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;' + (profile.custom ? 'display:none;' : '') + '"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
   '<div class="he-sep"></div>',
   // Help (2026-09-22): hole-editor/help.html, plain words for someone who has never seen the tool.
+  '<button class="he-tool" id="he-bug" title="Report a bug to Matt" style="width:auto;padding:0 8px;"><span class="he-tool-icon">\u{1F41E}</span><span class="he-tool-label">Report bug</span></button>',
   '<a class="he-tool" id="he-help" href="./?course=tutorial" target="_blank" rel="noopener" title="How to use the Course Creator" style="text-decoration:none;color:inherit;"><span class="he-tool-icon">?</span><span class="he-tool-label">Help</span></a>',
 ].join('');
 
@@ -599,6 +617,16 @@ const LOOK_BLURB = {
   tropical: 'Palms, lagoons', mountain: 'Spruce, glacial lakes', swamp: 'Willows, murky water',
 };
 
+/** Changing the terrain of a course already under way repaints EVERY hole and swaps the woods
+ *  along each side for the new terrain's trees (placed objects keep their own type). It is not on
+ *  the undo stack (snapshots hold holes, not course settings), but it destroys nothing: picking
+ *  the old terrain again restores it exactly. So: a plain confirm, saying so. */
+function confirmLookChange(theme) {
+  if (!(doc.course && doc.course.named) || (doc.course.theme || 'parkland') === theme) return true;
+  const label = (LOOKS.find(([v]) => v === theme) || [0, theme])[1];
+  return window.confirm(`Change the terrain to ${label}? This changes EVERY hole at once: the colours, and the woods down each side become ${label} trees. Things you placed yourself stay put, and you can switch back to the old terrain any time to put it all back.`);
+}
+
 /** Switch the Course Creator's look: data, model defaults, canvas palette, rebuild. */
 function applyLook(theme) {
   doc.course = setCourseMeta(doc, { theme }).course;
@@ -694,6 +722,7 @@ function openSetupModal() {
       }
       autosaver.touch();
     }
+    if (pick !== (doc.course && doc.course.theme) && !confirmLookChange(pick)) return;
     pushUndo(editorState);
     if (pick !== (doc.course && doc.course.theme)) applyLook(pick);
     doc.course = setCourseMeta(doc, { name, named: true }).course;
@@ -757,6 +786,7 @@ function renderCoursePanel() {
       b.addEventListener('click', () => {
         const theme = b.dataset.val;
         if ((doc.course && doc.course.theme) === theme) return;
+        if (!confirmLookChange(theme)) { renderCoursePanel(); return; }
         applyLook(theme);
         afterChange();
       });
@@ -938,6 +968,22 @@ document.getElementById('he-help').addEventListener('click', async (e) => {
   }
   document.body.appendChild(m);
   setTimeout(() => document.addEventListener('click', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', off); } }), 0);
+});
+
+// REPORT A BUG (2026-09-23): the hub's own form (js/bug-report-ui.js) - same inbox Matt already
+// reads, same screenshots, same offline outbox - with "Course Creator" preselected and a line saying
+// exactly where the designer was. A practice-run report says so, so it is not mistaken for his course.
+document.getElementById('he-bug').addEventListener('click', async () => {
+  try {
+    const m = await import('../../js/bug-report-ui.js');
+    const c = doc.course || {};
+    const where = profile.tutorial ? 'Course Creator (Help practice run)' : profile.custom ? 'Course Creator' : 'Red Mesa hole editor';
+    const who = designer();
+    const context = [where, who ? `designer ${who.name || ''} ${who.code || ''}`.trim() : null, profile.custom ? `course "${c.name || ''}" (${c.theme || 'parkland'})` : null,
+      `hole ${doc.order.indexOf(currentId) + 1} of ${doc.order.length} (${currentId})`, `tool ${currentTool}`,
+      editorCanvas.selection ? `selected ${editorCanvas.selection.group}` : null].filter(Boolean).join(' · ');
+    await m.openBugReport({ where: { value: 'golf-course-creator', label: where }, context });
+  } catch (err) { console.error('[hole-editor] bug report form failed to load', err); window.alert('The bug report form could not load. Check the connection and try again.'); }
 });
 
 // FIRST VISIT: POINT AT HELP (Matt: "when he opens the tool, it needs to guide him to click help

@@ -290,7 +290,7 @@ Major League	62%	40 to 52%
 - **[Locked]** Some teams shift their out zones toward where you tend to hit.
 - **[Locked]** Team names by league: sponsor names in Little League, small towns in High School, fake colleges, lower-tier cities in the Minors, big cities in the Majors. Fictional names only.
 - **[Draft]** Name examples: Tony's Pizza Pepperonis, Iron Ridge Miners, Big Sky State Bison, Des Moines Hog Callers, Boston Harbormasters.
-- **[Open]** Full name list (40 teams).
+- **[Locked, 2026-09-23]** Full name list (40 teams): `baseball/js/ui.js` `TEAM_NAMES`, one per league and style. Full name on career screens; last word on the in-game scoreboard.
 
 ## 10. Field and hit outcomes
 
@@ -595,7 +595,7 @@ perfectSeasons * 10000 + wsTitles * 100 + (league - 1) * 4 + bestTrophyInThatLea
 9. Screwball, Eephus, and Cutter movement and speed.
 10. What happens after a World Series win (next season flow).
 11. Park features for version 1 vs. later.
-12. Full list of 40 team names.
+12. Closed 2026-09-23: 40 team names (`baseball/js/ui.js` `TEAM_NAMES`).
 13. Schedule shape (12 games over 8 opponents) and standings tie-breakers.
 14. Closed: no sound in version 1.
 15. Closed: team and park names are proper nouns and are not translated.
