@@ -452,8 +452,9 @@ export function seasonRecord(state) {
  * cut are 10, 9, 7 and 6, and the player makes the top 4 with 6 wins of 10.
  */
 export function standingsFor(state) {
-  return scriptedStandings(leagueTeams(state), seasonRecord(state), seasonGames(state),
-    STANDINGS_MODEL, STANDINGS_TIEBREAK);
+  const rec = seasonRecord(state);
+  return scriptedStandings(leagueTeams(state), rec, seasonGames(state),
+    STANDINGS_MODEL, STANDINGS_TIEBREAK, rec.wins + rec.losses);
 }
 
 /** Build the playoff branch when the regular season ends in a top-4 place. Pure. */

@@ -4,6 +4,16 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Standings: mid-season CPU records (2026-09-23, open item 13, part 1)
+
+`scriptedStandings(..., played)` (`engine/season.js`): with `played` < the season length, each CPU
+record is its final one pro-rated, `round(finalWins * played / games)`, W+L = played. Monotone,
+so no inversions and no CPU total ever drops; lands exactly on the final record at the last game.
+`standingsFor` passes the player's games played. The season-end call (the playoff cut) has
+played = games, so the cut, the sim and the economy are untouched (no sim run needed).
+`baseball/js/test.js` pins all four properties per league. Still open: schedule shape and tie-breaks
+(design doc section 17 item 13) - waiting on Matt.
+
 ## Team names: 40, one per league and style (2026-09-23)
 
 Closes design doc section 17 item 12. Matt approved the list; it lives in `baseball/js/ui.js`
