@@ -96,19 +96,19 @@ stopped mid-verification when Matt paused.
 ## 5. What is still TO DO, in Matt's order
 
 1. **Finish the objects batch** (section 4).
-2. **Power lines.** Out of the objects batch on purpose: the poles are ordinary obstacles, but
+2. **Power lines.** DONE 2026-09-22 (v910); `docs/HANDOFF-GOLF-POWER-LINES.md`. Out of the objects batch on purpose: the poles are ordinary obstacles, but
    the WIRE needs a new kind of blocker in `golf/js/shot.js` that stops a ball only within a band
    of heights (today a canopy blocks from the ground up to `height`). Write a short spec first
    (engine: a `band: [lo, hi]` on an obstacle or a new `lines` recipe group; `treeHit` samples
    it; validator; renderer draws the wire between poles). Opus for the engine, Sonnet for the
    drawing and the palette tile.
-3. **New looks.** Matt: *"it sounds like we need more engines."* A look is a palette for every
+3. **New looks.** Links and Tropical DONE 2026-09-22 (`hole-editor/CLAUDE.md`, "Two new looks"). Matt: *"it sounds like we need more engines."* A look is a palette for every
    surface in `golf/js/render.js` `THEMES` plus a default obstacle set and belt species in
    `hole-editor/js/starter.js` `THEME_DEFAULTS`. Start with **Links** (coastal: gorse, dunes,
    wind) and **Tropical** (palms, lagoons, sand); then Mountain and Swamp if he wants them. Each
    is about half a day of Sonnet art plus the two-line data entries. The Course Creator's Look
    control (`renderCoursePanel` in `main.js`) is a two-button segment today; make it a list.
-4. **The Help page.** Matt asked for instructions for the tool and agreed to a Help button in the
+4. **The Help page.** DONE 2026-09-22 (`hole-editor/help.html`). Matt asked for instructions for the tool and agreed to a Help button in the
    ribbon opening `/hole-editor/help.html`, deployed with the editor. Plain words for someone who
    has never seen it: start here (code, name, look, export often), one card per tool with a short
    looping recording, shapes, the green, trees (height rule of thumb: a palo verde is 8 yards,

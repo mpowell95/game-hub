@@ -24,7 +24,7 @@ import {
   setCourse, invalidateBuilds, setCourseMeta, addHole, deleteHole, mintId, normalise,
 } from './model.js';
 import { resolveProfile } from './course.js';
-import { starterSpec } from './starter.js';
+import { starterSpec, THEME_DEFAULTS } from './starter.js';
 import { designer, rememberDesigner, forgetDesigner, makeAutosaver, listDrafts, fetchDraft } from './drafts.js';
 import { EditorCanvas, fairwayEdgesAt, setEditorTheme } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
@@ -252,6 +252,9 @@ ribbon.innerHTML = [
   '<button class="he-tool" id="he-export" title="Export (Ctrl+E)"><span class="he-tool-icon">⤓</span><span class="he-tool-label">Export</span></button>',
   '<button class="he-tool" id="he-play" title="Play this hole" style="width:auto;padding:0 8px;"><span class="he-tool-icon">▶</span><span class="he-tool-label">Play</span></button>',
   '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
+  '<div class="he-sep"></div>',
+  // Help (2026-09-22): hole-editor/help.html, plain words for someone who has never seen the tool.
+  '<a class="he-tool" id="he-help" href="help.html" target="_blank" rel="noopener" title="How to use the Course Creator" style="text-decoration:none;color:inherit;"><span class="he-tool-icon">?</span><span class="he-tool-label">Help</span></a>',
 ].join('');
 
 const TOOL_KEYS = Object.fromEntries(TOOLS.map(([id, key]) => [key.toLowerCase(), id]));
@@ -566,6 +569,9 @@ function replaceDocument(next) {
 // --- the Course panel (2026-09-22) ---------------------------------------------------------------
 // Course Creator: name, theme, hole count. Both editors: who is designing (player code), the
 // cloud status, other people's drafts to review, an import and a backup download.
+/** The Course Creator's looks: render.js THEMES + starter.js THEME_DEFAULTS, one row each. */
+const LOOKS = [['parkland', 'Parkland'], ['desert', 'Desert'], ['links', 'Links'], ['tropical', 'Tropical'], ['mountain', 'Mountain'], ['swamp', 'Swamp']];
+
 function renderCoursePanel() {
   const el = document.getElementById('he-course');
   if (!el) return;
@@ -579,9 +585,8 @@ function renderCoursePanel() {
     </div>
     <div class="he-field">
       <span class="he-field__label">Look</span>
-      <div class="gh-seg" data-seg="theme" role="group">
-        <button type="button" class="gh-seg__item" data-val="parkland" aria-pressed="${c.theme !== 'desert'}">Parkland</button>
-        <button type="button" class="gh-seg__item" data-val="desert" aria-pressed="${c.theme === 'desert'}">Desert</button>
+      <div class="gh-seg" data-seg="theme" role="group" style="display:grid;grid-template-columns:1fr 1fr;">
+        ${LOOKS.map(([val, label]) => `<button type="button" class="gh-seg__item" data-val="${val}" aria-pressed="${(THEME_DEFAULTS[c.theme] ? c.theme : 'parkland') === val}">${label}</button>`).join('')}
       </div>
     </div>
     <div class="he-field">

@@ -673,3 +673,45 @@ gets an 18th entry, `pole` (`trunk: 0.3, canopy: 0.3, height: 40`); a hole's rec
   the wire itself is unambiguous as two thin parallel dark lines the whole span. That merge is
   realistic, not a probe artefact - a power line usually crosses a fairway close to perpendicular to
   the hole's own direction, which is exactly the layout drawn here.
+
+## Two new looks: Links and Tropical (2026-09-22)
+
+The Course Creator's Look control is now a list of four (`LOOKS` in `main.js`): Parkland, Desert,
+Links, Tropical. A look is two data entries and nothing else:
+
+- a palette in `golf/js/render.js` `THEMES` (keyed by the look's own name; `paletteFor` falls back
+  to Pine Valley's for `parkland`, which has no entry of its own);
+- a default in `hole-editor/js/starter.js` `THEME_DEFAULTS` (belt species, optional `rough`).
+
+Links: fescue fairways, straw rough, dune-grass base, darker pot-bunker sand, a grey sea with a
+sandy bank; belts of **gorse**, a new catalogue entry (index 18, appended after the pole; `shape:
+'gorse'` = the bush's circles plus yellow flower dots in `treeAccent`). Tropical: saturated turf, a
+dark jungle floor (palm fronds vanished on anything lighter, measured by eye on a zoomed still),
+white sand, a turquoise lagoon with a beach bank; belts of palms. Catalogue `looks` hints were
+widened so each look lists its own species first (ordering only; the table order is unchanged).
+`export.js` now accepts any `THEME_DEFAULTS` key as the exported theme and prints that look's
+`rough`, instead of hard-coding desert. Wind was NOT made a property of a look: per-hole wind is
+already in the editor. Still: `reference/golf/looks-2026-09-22.png`. Mountain and Swamp looks are
+the next two if Matt wants them.
+
+## Help page (2026-09-22)
+
+`hole-editor/help.html`, opened by the ribbon's **? Help** link (new tab). Plain words for someone
+who has never seen the tool: start here, the screen, adding things, drawing, one card per ribbon
+tool, the green, a tree-height rule of thumb, Validate/Play, saving and sending, keys. Pictures are
+STILL screenshots of the real Course Creator (`hole-editor/help/*.jpg`, ~125 KB each), not looping
+recordings: much smaller and cheaper to make. Re-take them when the screen changes. The whole
+`hole-editor/` folder is outside the service worker (`validate-sw-assets.mjs` EXCLUDED), so
+changing it needs no CACHE bump. Written alongside it: the drawing panel's corner count now
+refreshes on every click (`canvas.js` calls `onDrawChange` after each point; it read "0 corners"
+with three placed). UI suite: a probe for that and one that the Help link loads.
+
+### Mountain and Swamp (2026-09-22, same day)
+
+Two more looks, same two-entry recipe. **Mountain**: cool alpine greens, glacial blue water with a
+stone bank, granite-grey sand; belts of **spruce**, a new catalogue entry (index 19, `shape: 'fir'`
+in a blue-green `TREE_FILL`, height 20). **Swamp**: olive turf, murky green water with a mud bank;
+belts of weeping willows standing on a FLOODED floor (`treesFloor` is the swamp-water tone).
+Cypress belts were tried first and vanished: dark narrow crowns on a dark floor. The Look control
+is six buttons in two columns. Wind stays per hole (Hole panel, untick "Wind: auto"); no look
+changes it. Still: `reference/golf/looks-2026-09-22.png`, all six looks.
