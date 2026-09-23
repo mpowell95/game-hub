@@ -58,9 +58,8 @@ mid-file "still to come" paragraphs went stale within a day and had to be consol
    index rows carry an optional `result`; old rows are worked out from their match.
    `hoops4/CLAUDE.md`, "Challenge history with records".
 3. **The two bounce gaps `test.js` owes** (see §5). Do not touch without asking.
-4. **Matt's "perfect shot or 50-50" bounce (2026-09-22).** Rimouts and a round rim are built and
-   switched OFF; no knob reaches his target because a bounced ball rolls off the shelf's front
-   edge. Waiting on his pick of a cabinet change. `hoops4/CLAUDE.md`, "Rimouts and a round rim".
+4. ~~**Matt's "perfect shot or 50-50" bounce.**~~ **CLOSED 2026-09-23: "leave the hoops as is."**
+   Rimouts and a round rim stay in the code, OFF. Settled; do not re-open without him.
 
 Also done 2026-09-22: the falling disc now starts when the ball is THROUGH the rim (not at
 capture), and the thrown ball is a basketball in the board's exact red/yellow.
