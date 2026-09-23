@@ -726,3 +726,12 @@ editor does not know it yet. `named: true` is stamped on Start, or when the Cour
 name field is filled. The ribbon's first item on the Course Creator is a course button ("name ·
 terrain") that reopens it. Ribbon tools may now shrink to 60px (`.he-tool`) so that button and Help
 still fit at 1280px. `applyLook()` is the one place a look is switched. UI suite: six probes.
+
+## Tidying the screen (2026-09-23)
+
+- **Terrain pictures show the EDGE of a hole** (a pond, a bunker, that look's woods on its own
+  ground), not the fairway: every fairway is nearly the same green, so the first version's six
+  tiles looked alike (Matt: *"why do all of these look the same?"*). `lookPicture()` in `main.js`.
+- **Palette groups fold** (click a section or sub-head; `golf.holeEditor.palFolds.v1`, per browser).
+- **Layer checkboxes live behind a Layers chip** beside Key; opening one closes the other.
+- **The holes bar minimises** to one thin row (totals + Show holes); `uiState.stripMin`.

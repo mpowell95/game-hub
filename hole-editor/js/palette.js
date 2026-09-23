@@ -255,6 +255,12 @@ export function paintTile(canvas, item, theme, types) {
   }
 }
 
+// WHICH PALETTE GROUPS ARE FOLDED (Matt, 2026-09-23: "let me collapse trees then rocks & logs,
+// stands etc. so you can find things quicker"). Keyed by title, remembered per browser.
+const FOLD_KEY = 'golf.holeEditor.palFolds.v1';
+let _folds = {};
+try { _folds = JSON.parse(localStorage.getItem(FOLD_KEY)) || {}; } catch { _folds = {}; }
+
 /** Render the palette. `active` is the item id that matches the current tool + options, if any;
  *  `guardsOn` the current hole's guard tokens. `onPick(item)` handles a click. */
 export function renderPalette(el, { built, theme, active, guardsOn, onPick }) {
@@ -267,15 +273,25 @@ export function renderPalette(el, { built, theme, active, guardsOn, onPick }) {
       <span class="he-tile__label">${it.label}${it.kind === 'guard' ? (on ? ' ✓' : '') : ''}</span>
     </button>`;
   };
+  const shut = (k) => (_folds[k] ? ' is-shut' : '');
   el.innerHTML = sections.map((sec) => `
     <div class="he-pal-section">
-      <div class="he-pal-title">${sec.title}</div>
+      <div class="he-pal-title he-pal-fold${shut(sec.title)}" data-fold="${sec.title}">${sec.title}</div>
+      <div class="he-pal-body">
       ${sec.subs
     ? sec.subs.map((sub) => (sub.items.length ? `
-      <div class="he-subhead" style="margin:8px 0 4px;padding-top:0;border-top:none;">${sub.subtitle}</div>
-      <div class="he-pal-grid">${sub.items.map(tileHTML).join('')}</div>` : '')).join('')
+      <div class="he-subhead he-pal-fold${shut(sec.title + '/' + sub.subtitle)}" data-fold="${sec.title}/${sub.subtitle}" style="margin:8px 0 4px;padding-top:0;border-top:none;">${sub.subtitle}</div>
+      <div class="he-pal-body"><div class="he-pal-grid">${sub.items.map(tileHTML).join('')}</div></div>` : '')).join('')
     : `<div class="he-pal-grid">${sec.items.map(tileHTML).join('')}</div>`}
+      </div>
     </div>`).join('');
+  for (const h of el.querySelectorAll('[data-fold]')) {
+    h.addEventListener('click', () => {
+      const k = h.dataset.fold; _folds[k] = !_folds[k];
+      h.classList.toggle('is-shut', !!_folds[k]);
+      try { localStorage.setItem(FOLD_KEY, JSON.stringify(_folds)); } catch { /* per-browser convenience */ }
+    });
+  }
   const allItems = sections.flatMap((s) => (s.subs ? s.subs.flatMap((sub) => sub.items) : s.items));
   const byId = new Map(allItems.map((it) => [it.id, it]));
   for (const btn of el.querySelectorAll('.he-tile')) {

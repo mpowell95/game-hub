@@ -199,6 +199,19 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   await p2.click('#he-course-btn'); await p2.waitForTimeout(200);
   ok('...but the course button reopens it', !!(await p2.$('#he-setup')));
   await p2.click('#he-setup-x'); await p2.waitForTimeout(150);
+  // 2026-09-23: palette groups fold, Layers is a chip like Key, the holes bar minimises.
+  await p2.click('[data-fold="Trees & rocks/Stands"]'); await p2.waitForTimeout(100);
+  ok('a palette group folds away', !(await p2.isVisible('.he-tile[data-item="stand-0"]')));
+  await p2.click('[data-fold="Trees & rocks/Stands"]'); await p2.waitForTimeout(100);
+  ok('...and opens again', await p2.isVisible('.he-tile[data-item="stand-0"]'));
+  ok('the layer checkboxes are hidden until the Layers chip is clicked', !(await p2.isVisible('#he-layers')));
+  await p2.click('#he-layers-btn'); await p2.waitForTimeout(100);
+  ok('...which shows them', await p2.isVisible('#he-layers [data-layer="grid"]'));
+  await p2.click('#he-layers-btn');
+  await p2.click('#he-strip-toggle'); await p2.waitForTimeout(200);
+  ok('Hide holes folds the holes bar', !(await p2.isVisible('#he-strip')));
+  await p2.click('#he-strip-toggle'); await p2.waitForTimeout(200);
+  ok('...and Show holes brings it back', await p2.isVisible('#he-strip'));
   // The Course & saving panel starts collapsed (2026-09-22 layout); open it for add/delete hole.
   if (await p2.$('[data-panel="course"].collapsed')) { await p2.click('[data-panel="course"] .he-panel__head'); await p2.waitForTimeout(150); }
   s = await st2();

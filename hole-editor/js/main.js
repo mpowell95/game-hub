@@ -88,8 +88,9 @@ root.innerHTML = `
     <div class="he-canvas-wrap">
       <canvas id="he-canvas"></canvas>
       <div class="he-canvas-top">
-        <div class="he-layers" id="he-layers"></div>
-        <button type="button" class="he-chip" id="he-legend-btn" title="Colour key">Key</button>
+        <button type="button" class="he-chip" id="he-layers-btn" title="Show or hide map layers" style="margin-left:auto;">Layers</button>
+        <button type="button" class="he-chip" id="he-legend-btn" title="Colour key" style="margin-left:0;">Key</button>
+        <div class="he-layers he-layers--pop" id="he-layers" hidden></div>
         <div class="he-legend" id="he-legend" hidden></div>
       </div>
       <div class="he-canvas-controls">
@@ -117,6 +118,7 @@ root.innerHTML = `
     <div class="he-totals">
       <span id="he-totals-text"></span>
       <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-discard-all">Discard ALL edits</button>
+      <button type="button" class="he-strip-toggle" id="he-strip-toggle" title="Hide or show the holes bar">&#9662; Hide holes</button>
     </div>
     <div class="he-strip" id="he-strip"></div>
   </div>
@@ -588,18 +590,25 @@ function applyLook(theme) {
   editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
 }
 
-/** A small picture of each look: the lower half of starter hole 1 in that look's paint. */
+/** A small picture of each look. NOT the fairway: every look's fairway is nearly the same
+ *  green, so a fairway-centred crop made six near-identical tiles (Matt, 2026-09-23: "why do all of
+ *  these look the same?"). This is the edge of the hole instead - a pond, a bunker and the woods
+ *  on that look's own ground - which is where the looks actually differ. */
 const _lookPics = new Map();
 function lookPicture(theme) {
   if (_lookPics.has(theme)) return _lookPics.get(theme);
-  const hole = makeHole({ ...THEME_DEFAULTS[theme], ...starterSpec(1), n: 1,
-    water: [{ yd: 230, side: 1, off: 20, rx: 12, ry: 8, seed: 3 }],
-    bunkers: [{ yd: 170, side: -1, off: 12, r: 6, kind: 'fairwayBunker' }] });
+  const d = THEME_DEFAULTS[theme];
+  const sp = d.belts.left.type;
+  const hole = makeHole({ ...d, ...starterSpec(1), n: 1,
+    water: [{ yd: 200, side: 1, off: 24, rx: 11, ry: 7, seed: 3 }],
+    bunkers: [{ yd: 186, side: -1, off: 2, r: 5, kind: 'fairwayBunker' }],
+    trees: [{ yd: 214, side: 1, off: 14, type: sp }, { yd: 186, side: 1, off: 36, type: sp }, { yd: 210, side: 1, off: 44, type: sp }] });
   const m = buildMap(hole, theme);
+  const W = 64, H = W * 150 / 320, cx = 24, cy = 200;   // yards shown, centred on the pond
   const cv = document.createElement('canvas'); cv.width = 320; cv.height = 150;
   const ctx = cv.getContext('2d');
-  const src = m.canvas; const sw = src.width; const sh = sw * 150 / 320;
-  ctx.drawImage(src, 0, Math.max(0, src.height * 0.5 - sh / 2), sw, sh, 0, 0, 320, 150);
+  ctx.fillStyle = '#111'; ctx.fillRect(0, 0, 320, 150);
+  ctx.drawImage(m.canvas, (cx - W / 2 - m.minX) * m.ppy, (m.maxY - (cy + H / 2)) * m.ppy, W * m.ppy, H * m.ppy, 0, 0, 320, 150);
   const url = cv.toDataURL();
   _lookPics.set(theme, url);
   return url;
@@ -842,8 +851,26 @@ document.getElementById('he-reset').addEventListener('click', () => {
 renderLegend(document.getElementById('he-legend'));
 renderLayers(document.getElementById('he-layers'), layers, () => editorCanvas.draw());
 {
-  const btn = document.getElementById('he-legend-btn'); const box = document.getElementById('he-legend');
-  btn.addEventListener('click', () => { box.hidden = !box.hidden; btn.setAttribute('aria-pressed', String(!box.hidden)); });
+  // Key and Layers are two chips that each open their own pop-over; opening one closes the other.
+  const pairs = [['he-legend-btn', 'he-legend'], ['he-layers-btn', 'he-layers']].map(([b, x]) => [document.getElementById(b), document.getElementById(x)]);
+  for (const [btn, box] of pairs) {
+    btn.addEventListener('click', () => {
+      const open = box.hidden;
+      for (const [b2, x2] of pairs) { x2.hidden = true; b2.setAttribute('aria-pressed', 'false'); }
+      box.hidden = !open; btn.setAttribute('aria-pressed', String(open));
+    });
+  }
+}
+// THE HOLES BAR CAN BE MINIMISED (Matt, 2026-09-23), remembered per browser.
+{
+  const btn = document.getElementById('he-strip-toggle');
+  const apply = () => {
+    root.classList.toggle('he-root--strip-min', !!uiState.stripMin);
+    btn.innerHTML = uiState.stripMin ? '&#9652; Show holes' : '&#9662; Hide holes';
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  };
+  btn.addEventListener('click', () => { uiState.stripMin = !uiState.stripMin; saveUiState(uiState); apply(); });
+  apply();
 }
 
 // --- keyboard (section 4.1) ----------------------------------------------------------------
