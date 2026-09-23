@@ -255,6 +255,9 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   await p2.goto(URL, { waitUntil: 'networkidle' }); await p2.waitForTimeout(500);
   s = await st2();
   ok('the plain link still opens Red Mesa, untouched by the Course Creator', s.courseId === 'redmesa' && s.n === 18 && s.id === 'rm-01');
+  await p2.click('#he-bug'); await p2.waitForTimeout(1200);
+  ok('Report bug opens the hub form with this editor preselected', /^(Course Creator|Red Mesa hole editor)$/.test(await p2.evaluate(() => { const s = document.querySelector('[data-role="where"]'); return s ? s.selectedOptions[0].textContent : ''; })));
+  await p2.click('[data-role="cancel"]'); await p2.waitForTimeout(200);
   ok('the ribbon Help link opens the practice run', (await p2.$eval('#he-help', (a) => a.getAttribute('href'))) === './?course=tutorial');
   // HELP IS A GUIDED PRACTICE RUN (2026-09-23): the real editor, a throwaway course, a tour over it.
   {

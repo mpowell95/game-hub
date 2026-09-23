@@ -154,6 +154,8 @@ function mountOverlay({ wide, ariaLabel, guardClose }) {
 
 /**
  * Open the report form.
+ * `opts.where` ({value, label}) adds a place the hub list does not have (the golf Course Creator)
+ *        at the top of the picker, preselected; `opts.context` is a short line saved with the report.
  * @param {{gameId?:string, gameTitle?:string}} opts - `gameId` is a HUB id ('connect-four'), which
  *        preselects the game the player was last in. All optional: the form works opened cold from
  *        the profile page.
@@ -183,7 +185,8 @@ export async function openBugReport(opts = {}) {
     <div class="bug-field gh-field">
       <label class="gh-field__label" for="bug-where">${esc(t('bug_where_label'))}</label>
       <select class="gh-input bug-select" id="bug-where" data-role="where">
-        <option value="" selected>${esc(t('bug_where_placeholder'))}</option>
+        <option value="" ${opts.where ? '' : 'selected'}>${esc(t('bug_where_placeholder'))}</option>
+        ${opts.where ? `<option value="${esc(opts.where.value)}" selected>${esc(opts.where.label)}</option>` : ''}
         <optgroup label="${esc(t('bug_where_hub_group'))}">
           <option value="hub">${esc(t('bug_where_hub'))}</option>
           <option value="leaderboards">${esc(t('hub_leaderboard_btn'))}</option>
@@ -290,7 +293,7 @@ export async function openBugReport(opts = {}) {
       : null;
     let report;
     try {
-      report = await buildBugReport({ description, gameId, gameTitle, screenshots: shots });
+      report = await buildBugReport({ description, gameId, gameTitle, screenshots: shots, context: opts.context || null });
     } catch (err) {
       // Gathering must not be able to swallow a report: send what we do have rather than nothing.
       console.error('[bug-report] could not gather the full context; sending the description alone', err);
@@ -460,6 +463,7 @@ export async function openBugInbox() {
         ${esc([r.reporter && r.reporter.name, whenText(r.createdAtMs), r.gameTitle || r.game].filter(Boolean).join(' · '))}
       </p>
       <p class="bug-quote">${esc(r.description || '')}</p>
+      ${r.context ? `<p class="bug-row-meta">${esc(r.context)}</p>` : ''}
       <p class="bug-row-meta" style="margin-top:12px">${esc(r.summary || summarizeEnvironment(r.environment))}</p>
       <h3 style="margin:16px 0 0;font-size:15px">${esc(t('bug_inbox_shots'))}</h3>
       <div class="bug-detail-shots" data-role="shots"><span class="bug-row-meta">${esc(t('bug_inbox_loading'))}</span></div>
