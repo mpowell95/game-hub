@@ -351,7 +351,10 @@ export class Game {
       // own batter and nothing about the runner standing on second, so the runner's own `hitSpd`
       // (the skill the CPU's rate reads, and the engine's own success roll) is resolved here, where
       // the roster actually is, instead of being guessed from the batter's.
-      steal: this._stealCandidate(battingSide),
+      // R19: plus `chance`, the engine's own success probability against THIS pitcher, so an agent
+      // can decide a steal the way a player reading the bases does. Additive; nothing that ignores
+      // it changes.
+      steal: this._stealCandidateWithChance(battingSide),
       rand01: () => this._rand(),
     };
   }
@@ -375,6 +378,14 @@ export class Game {
       return { runnerId, from: i, to: i + 1, hitSpd: (runner && runner.skills.hitSpd) || 0 };
     }
     return null;
+  }
+
+  _stealCandidateWithChance(battingSide) {
+    const c = this._stealCandidate(battingSide);
+    if (!c) return null;
+    const defenseTeam = this[battingSide === 'home' ? 'away' : 'home'];
+    const pitcher = defenseTeam.players.find((p) => p.id === defenseTeam.pitcherId);
+    return { ...c, chance: this._stealChance(c.hitSpd, pitcher) };
   }
 
   /** RA: the steal's own success probability (settings.js's STEAL_* block and

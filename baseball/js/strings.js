@@ -134,6 +134,7 @@ export const STRINGS = {
     hitting_col: 'Hitting',
     pitching_col: 'Pitching',
     points_left: '{n} left',
+    spend_after_season: 'spend after the season',
     randomize: 'Randomize',
     // R15-B (docs/BASEBALL-3D-BUILD.md section 9): the career screens.
     tab_career: 'Career',
@@ -281,6 +282,7 @@ export const STRINGS = {
     hitting_col: 'Bateo',
     pitching_col: 'Pitcheo',
     points_left: '{n} restantes',
+    spend_after_season: 'se gastan al acabar la temporada',
     randomize: 'Aleatorio',
     tab_career: 'Carrera',
     tab_quickplay: 'Partida rápida',

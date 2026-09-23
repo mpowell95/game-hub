@@ -57,8 +57,10 @@ body {
 }
 .he-ribbon .he-sep { flex: 0 0 1px; background: var(--gh-border-strong); margin: 12px 6px; }
 .he-tool {
-  flex: 0 0 78px;
+  /* Shrinks toward 60px so the Course Creator's course button (2026-09-23) and Help still fit. */
+  flex: 0 1 78px;
   width: 78px;
+  min-width: 60px;
   display: flex;
   flex-direction: column;
   align-items: center;

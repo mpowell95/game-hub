@@ -46,10 +46,10 @@ const { LEAGUES, POINTS, CAPS, START_CAP, SEASON, SKILL_IDS, PRESETS, RULES_V,
 // Helpers: play a whole season with a scripted win/loss list, never an engine.
 // -----------------------------------------------------------------------------------------------
 
-const START_BUILD = { ...PRESETS.twoWayStar };   // 5/5/5 and 5/5/5, the doc's own 15-per-side start
+const START_BUILD = { ...PRESETS.balanced };   // 5/5/5 and 5/5/5, the doc's own 15-per-side start
 
 function fresh(now = 1000) {
-  return C.newCareer({ hand: 'R', presetId: 'twoWayStar', skills: START_BUILD, now, careerId: `${CODE}-${now}-AAAA` });
+  return C.newCareer({ hand: 'R', presetId: 'balanced', skills: START_BUILD, now, careerId: `${CODE}-${now}-AAAA` });
 }
 /** R16: a career parked on one rung, so a per-league fixture does not have to climb to it. */
 function at(league, extra = {}) {
@@ -793,6 +793,21 @@ console.log('\n--- STRUCTURAL: career-io is the only door to the stores ---');
   ok(/addEventListener\('pagehide'/.test(io) && /removeEventListener\('pagehide'/.test(io),
     'career-io installs and removes its pagehide listener');
   ok(/visibilitychange/.test(io), 'career-io pushes on a hidden visibilitychange');
+}
+
+// R19: in the Majors, points wait for the season's end (settings.js SPEND_AFTER_SEASON).
+{
+  let st = fresh(1);
+  st = { ...st, league: 'majors', cap: 26, unspent: 5 };
+  st = C.startSeason(st, 7);
+  ok(C.spendLocked(st), 'R19: a Majors season in progress locks spending');
+  ok(C.spend(st, 'hitAcc') === st, 'R19: spend() refuses mid-Majors-season and leaves the state untouched');
+  ok(st.unspent === 5, 'R19: the points are kept, not lost');
+  const done = { ...st, season: { ...st.season, phase: 'done' } };
+  ok(!C.spendLocked(done), 'R19: once the Majors season is over, spending opens');
+  ok(C.spend(done, 'hitAcc').unspent === 4, 'R19: and a point spends');
+  let minors = C.startSeason({ ...fresh(2), league: 'minors', cap: 22, unspent: 3 }, 9);
+  ok(!C.spendLocked(minors) && C.spend(minors, 'hitAcc').unspent === 2, 'R19: every other league still spends mid-season');
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

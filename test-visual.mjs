@@ -326,6 +326,7 @@ const MOTION = {
     minMs: 600,
     minTravelPx: 0,
     async drive(page) {
+      await page.waitForSelector('[data-act="tab"][data-tab="quickPlay"]', { timeout: 15000 }).then((b) => b.click()).catch(() => {});   // R18 made Career the landing tab
       await page.click('.bb-play-btn').catch(() => {});
       await page.waitForSelector('.bb-play', { timeout: 15000 }).catch(() => {});
       await page.waitForTimeout(300);
@@ -397,6 +398,7 @@ const PLAY = {
 
       // ---- BATTING: the human is always "away" and away bats the top of the inning first, so a
       // real Play tap with nothing forced lands on a real batting turn - no seam needed for this half.
+      await page.waitForSelector('[data-act="tab"][data-tab="quickPlay"]', { timeout: 15000 }).then((b) => b.click()).catch(() => {});   // R18 made Career the landing tab
       const play1 = await page.waitForSelector('.bb-play-btn', { timeout: 15000 }).catch(() => null);
       if (!play1) return { ok: false, why: 'no .bb-play-btn on the setup screen' };
       await tap(play1);
@@ -480,6 +482,7 @@ const PLAY = {
       await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 });
       await page.waitForTimeout(300);
       await page.evaluate(() => { window.__bbForceHalfNext = 'bottom'; });
+      await page.waitForSelector('[data-act="tab"][data-tab="quickPlay"]', { timeout: 15000 }).then((b) => b.click()).catch(() => {});   // R18 made Career the landing tab
       const play2 = await page.waitForSelector('.bb-play-btn', { timeout: 15000 }).catch(() => null);
       if (!play2) return { ok: false, why: 'no .bb-play-btn on the setup screen (second mount)' };
       await tap(play2);
