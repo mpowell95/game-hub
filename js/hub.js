@@ -453,6 +453,9 @@ export const GAMES = [
     immersive: true,
     accent: '#ff2e97',
     art: GAME_ART['brick-blitz'],
+    // ADMIN ONLY for now (Matt, 2026-09-23, the day it shipped). Releasing it is a tap on the
+    // admin page or dropping this line.
+    devOnly: true,
   },
   {
     // BEING REBUILT (golf-reference-spec.md). The 3D game that shipped here is deleted; the 2D

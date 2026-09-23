@@ -13,6 +13,9 @@ synth are the original's, ported into a module. Renamed **Brick Blitz**.
 
 - In-hub `module:` (`brick-blitz/js/ui.js`), **immersive**. Hub id `brick-blitz` (= the folder,
   which the dev tools assume); stats id `brickblitz` (mapped in `HUB_ID`, `js/game-stats-ui.js`).
+- **Admin only** (`devOnly: true`, Matt 2026-09-23, right after it shipped live). The My Stats tab
+  is NOT gated (it was live to everyone briefly, so plays may exist: rule 1). The `GAME_META`
+  row stays (the Pinball rule, root CLAUDE.md).
 - `isInProgress()`: the LITERAL meaning (no mid-run resume, same class as Snake/Pinball). True while
   a run is live or paused.
 - The root is `position: fixed; inset: 0` (Pinball's pattern, avoids the `.hub-game` height trap).
