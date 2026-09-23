@@ -30,6 +30,8 @@ import { EditorCanvas, fairwayEdgesAt, setEditorTheme } from './canvas.js';
 import { renderLegend, renderLayers, DEFAULT_LAYERS, renderHolePanel, renderBottomStrip, renderContextPanel, pointsInMessage, openCompareModal } from './panels.js';
 import { renderPalette, activeItemFor } from './palette.js';
 import { validateHole } from '../../golf/js/holes.js';
+import { makeHole } from '../../golf/js/holegen.js';
+import { buildMap } from '../../golf/js/render.js';
 import { generateSource, generateJSON, exportFileName } from './export.js';
 
 const MUTATORS = {
@@ -239,6 +241,7 @@ editorCanvas.onHoverChange = (w) => {
 // --- ribbon --------------------------------------------------------------------------------
 const ribbon = document.getElementById('he-ribbon');
 ribbon.innerHTML = [
+  ...(profile.custom ? ['<button class="he-tool" id="he-course-btn" title="Course name and terrain" style="flex:0 0 auto;width:auto;max-width:220px;padding:0 12px;border:2px solid #ffce3a;border-radius:8px;"><span class="he-tool-icon">\u26F3</span><span class="he-tool-label" id="he-course-btn-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;"></span></button>', '<div class="he-sep"></div>'] : []),
   ...TOOLS.filter((t) => t[4]).map(([id, key, icon, label]) => `<button class="he-tool" data-tool="${id}" title="${label} (${key})"><span class="he-tool-icon">${icon}</span><span class="he-tool-label">${label}</span></button>`),
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-undo" title="Undo (Ctrl+Z)"><span class="he-tool-icon">↶</span><span class="he-tool-label">Undo</span></button>',
@@ -571,8 +574,114 @@ function replaceDocument(next) {
 // cloud status, other people's drafts to review, an import and a backup download.
 /** The Course Creator's looks: render.js THEMES + starter.js THEME_DEFAULTS, one row each. */
 const LOOKS = [['parkland', 'Parkland'], ['desert', 'Desert'], ['links', 'Links'], ['tropical', 'Tropical'], ['mountain', 'Mountain'], ['swamp', 'Swamp']];
+const LOOK_BLURB = {
+  parkland: 'Green grass, pine woods', desert: 'Red sand, cactus', links: 'Seaside, gorse, dunes',
+  tropical: 'Palms, lagoons', mountain: 'Spruce, glacial lakes', swamp: 'Willows, murky water',
+};
+
+/** Switch the Course Creator's look: data, model defaults, canvas palette, rebuild. */
+function applyLook(theme) {
+  doc.course = setCourseMeta(doc, { theme }).course;
+  setCourse(profile, theme);
+  setEditorTheme(theme);
+  invalidateBuilds(doc);
+  editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
+}
+
+/** A small picture of each look: the lower half of starter hole 1 in that look's paint. */
+const _lookPics = new Map();
+function lookPicture(theme) {
+  if (_lookPics.has(theme)) return _lookPics.get(theme);
+  const hole = makeHole({ ...THEME_DEFAULTS[theme], ...starterSpec(1), n: 1,
+    water: [{ yd: 230, side: 1, off: 20, rx: 12, ry: 8, seed: 3 }],
+    bunkers: [{ yd: 170, side: -1, off: 12, r: 6, kind: 'fairwayBunker' }] });
+  const m = buildMap(hole, theme);
+  const cv = document.createElement('canvas'); cv.width = 320; cv.height = 150;
+  const ctx = cv.getContext('2d');
+  const src = m.canvas; const sw = src.width; const sh = sw * 150 / 320;
+  ctx.drawImage(src, 0, Math.max(0, src.height * 0.5 - sh / 2), sw, sh, 0, 0, 320, 150);
+  const url = cv.toDataURL();
+  _lookPics.set(theme, url);
+  return url;
+}
+
+/** THE FIRST THING A DESIGNER DOES (Matt, 2026-09-23: "it's the first thing he should do - name
+ *  the course and choose the terrain type"). Opens by itself on a Course Creator document that
+ *  has never been through it (`course.named` unset), and from the ribbon's course button after. */
+function openSetupModal() {
+  if (document.getElementById('he-setup')) return;
+  const c = doc.course || {};
+  let pick = THEME_DEFAULTS[c.theme] ? c.theme : 'parkland';
+  const who = designer();
+  const overlay = document.createElement('div');
+  overlay.id = 'he-setup';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:#1e211a;border-radius:14px;padding:24px 26px;width:760px;max-width:94vw;max-height:92vh;overflow:auto;color:#eceee4;font:15px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font:700 22px system-ui,sans-serif;">Set up your course</div>
+        <button class="gh-btn gh-btn--sm gh-btn--ghost" id="he-setup-x" aria-label="Close">&times;</button>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:6px;">
+        <span style="font-weight:600;">1. Course name</span>
+        <input type="text" id="he-setup-name" maxlength="40" placeholder="e.g. King's Landing" value="${escHtml(c.name && c.name !== 'My Course' ? c.name : '')}" style="font-size:18px;padding:10px 12px;border-radius:8px;" />
+      </label>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <span style="font-weight:600;">2. Terrain</span>
+        <div id="he-setup-looks" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+          ${LOOKS.map(([val, label]) => `<button type="button" data-look="${val}" style="all:unset;cursor:pointer;border-radius:10px;overflow:hidden;background:#2a2e24;border:3px solid transparent;">
+            <img src="${lookPicture(val)}" alt="" style="display:block;width:100%;height:auto;" />
+            <div style="padding:6px 10px;"><div style="font-weight:700;">${label}</div><div style="font-size:13px;color:#b4b9a6;">${LOOK_BLURB[val]}</div></div>
+          </button>`).join('')}
+        </div>
+      </div>
+      ${who ? '' : `<div style="display:flex;flex-direction:column;gap:6px;">
+        <span style="font-weight:600;">3. Your player code <span style="font-weight:400;color:#b4b9a6;">(on your Game Hub profile page; your course saves under it)</span></span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="text" id="he-setup-code" placeholder="5 letters" maxlength="5" style="width:9em;text-transform:uppercase;font-size:16px;padding:8px 10px;border-radius:8px;" />
+          <input type="text" id="he-setup-who" placeholder="Your name" maxlength="40" style="width:14em;font-size:16px;padding:8px 10px;border-radius:8px;" />
+        </div>
+      </div>`}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <span style="color:#b4b9a6;font-size:13px;">You can change all of this later with the course button at the top left.</span>
+        <button class="gh-btn" id="he-setup-go" style="font-size:17px;padding:10px 22px;">Start designing</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const looksEl = overlay.querySelector('#he-setup-looks');
+  const mark = () => { for (const b of looksEl.querySelectorAll('[data-look]')) b.style.borderColor = b.dataset.look === pick ? '#ffce3a' : 'transparent'; };
+  mark();
+  for (const b of looksEl.querySelectorAll('[data-look]')) b.addEventListener('click', () => { pick = b.dataset.look; mark(); });
+  const nameEl = overlay.querySelector('#he-setup-name');
+  setTimeout(() => nameEl.focus(), 0);
+  const close = () => overlay.remove();
+  overlay.querySelector('#he-setup-x').addEventListener('click', close);
+  overlay.querySelector('#he-setup-go').addEventListener('click', () => {
+    const name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); nameEl.style.outline = '3px solid #e0532f'; nameEl.placeholder = 'Give your course a name first'; return; }
+    const codeEl = overlay.querySelector('#he-setup-code');
+    if (codeEl && codeEl.value.trim()) {
+      if (!rememberDesigner(codeEl.value, overlay.querySelector('#he-setup-who').value)) {
+        window.alert('That is not a player code. It is 5 letters/numbers, on your Game Hub profile page.'); return;
+      }
+      autosaver.touch();
+    }
+    pushUndo(editorState);
+    if (pick !== (doc.course && doc.course.theme)) applyLook(pick);
+    doc.course = setCourseMeta(doc, { name, named: true }).course;
+    close();
+    refreshStrip();
+    afterChange();
+  });
+}
 
 function renderCoursePanel() {
+  const cb = document.getElementById('he-course-btn-label');
+  if (cb) {
+    const cc = doc.course || {};
+    const look = (LOOKS.find(([v]) => v === cc.theme) || LOOKS[0])[1];
+    cb.textContent = `${cc.named ? cc.name : 'Name your course'} \u00B7 ${look}`;
+  }
   const el = document.getElementById('he-course');
   if (!el) return;
   const who = designer();
@@ -615,16 +724,12 @@ function renderCoursePanel() {
       <input type="file" id="he-c-file" accept=".json,.txt,application/json" style="display:none;" />
     </div>`;
   if (profile.custom) {
-    el.querySelector('#he-c-name').addEventListener('change', (e) => { doc.course = setCourseMeta(doc, { name: e.target.value.trim() || 'My Course' }).course; refreshStrip(); scheduleSave(); });
+    el.querySelector('#he-c-name').addEventListener('change', (e) => { const nm = e.target.value.trim(); doc.course = setCourseMeta(doc, { name: nm || 'My Course', ...(nm ? { named: true } : {}) }).course; refreshStrip(); scheduleSave(); renderCoursePanel(); });
     for (const b of el.querySelectorAll('[data-seg="theme"] .gh-seg__item')) {
       b.addEventListener('click', () => {
         const theme = b.dataset.val;
         if ((doc.course && doc.course.theme) === theme) return;
-        doc.course = setCourseMeta(doc, { theme }).course;
-        setCourse(profile, theme);
-        setEditorTheme(theme);
-        invalidateBuilds(doc);
-        editorCanvas.setHole(currentId, getBuilt(currentId), doc.holes[currentId].spec);
+        applyLook(theme);
         afterChange();
       });
     }
@@ -756,6 +861,12 @@ window.addEventListener('keydown', (e) => {
   if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'd') { duplicateSelected(); return; }
   if (!e.ctrlKey && !e.metaKey && !e.altKey && TOOL_KEYS[e.key.toLowerCase()]) { setTool(TOOL_KEYS[e.key.toLowerCase()]); }
 });
+
+// The course button, and the setup screen opening by itself on a course that has never had a name.
+if (profile.custom) {
+  document.getElementById('he-course-btn').addEventListener('click', openSetupModal);
+  if (!(doc.course && doc.course.named)) openSetupModal();
+}
 
 // A debug seam, not a feature: lets a Playwright check (or Matt, in devtools) read live state
 // without a second copy of it. Nothing reads this at runtime.

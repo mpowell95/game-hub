@@ -185,10 +185,22 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   let s = await st2();
   ok('opens on the blank course: 18 holes, h-01, its own title', s.courseId === 'custom' && s.n === 18 && s.id === 'h-01' && s.title === 'Course Creator', JSON.stringify(s));
   ok('the designer is the hub profile', /aa King of Games .* KNG7Q/.test(await p2.$eval('#he-course', (e) => e.textContent.replace(/\s+/g, ' '))));
-  // The Course & saving panel starts collapsed (2026-09-22 layout); open it to edit the course.
+  // THE SETUP SCREEN (2026-09-23): a never-named course opens on it - name and terrain first.
+  ok('a new course opens on the setup screen with all six terrains', !!(await p2.$('#he-setup')) && (await p2.$$('#he-setup [data-look]')).length === 6);
+  await p2.click('#he-setup-go'); await p2.waitForTimeout(150);
+  ok('...which will not start without a name', !!(await p2.$('#he-setup')));
+  await p2.fill('#he-setup-name', "King's Landing");
+  await p2.click('#he-setup [data-look="desert"]');
+  await p2.click('#he-setup-go'); await p2.waitForTimeout(400);
+  ok('...and closes once named', !(await p2.$('#he-setup')));
+  ok('the ribbon course button shows the name and terrain', /King's Landing · Desert/.test(await p2.$eval('#he-course-btn', (e) => e.textContent)));
+  await p2.reload({ waitUntil: 'networkidle' }); await p2.waitForTimeout(500);
+  ok('a named course does not show the setup screen again', !(await p2.$('#he-setup')));
+  await p2.click('#he-course-btn'); await p2.waitForTimeout(200);
+  ok('...but the course button reopens it', !!(await p2.$('#he-setup')));
+  await p2.click('#he-setup-x'); await p2.waitForTimeout(150);
+  // The Course & saving panel starts collapsed (2026-09-22 layout); open it for add/delete hole.
   if (await p2.$('[data-panel="course"].collapsed')) { await p2.click('[data-panel="course"] .he-panel__head'); await p2.waitForTimeout(150); }
-  await p2.fill('#he-c-name', "King's Landing"); await p2.keyboard.press('Tab'); await p2.waitForTimeout(200);
-  await p2.click('[data-seg="theme"] [data-val="desert"]'); await p2.waitForTimeout(300);
   s = await st2();
   ok('name and Desert are written and the hole rebuilds with saguaros', s.course.name === "King's Landing" && s.course.theme === 'desert'
     && (await p2.evaluate(async () => { const H = await import('/golf/js/holes.js'); const b = window.__he.getBuilt(window.__he.currentId); const ts = H.treesOf(b); return ts.length > 0 && ts.every((t) => b.treeTypes[t.type].name === 'saguaro'); })));
