@@ -333,7 +333,7 @@ input[type="range"] { accent-color: var(--he-accent); }
  * Everything below 900 px wide. Above it nothing here applies: the phone-only elements are
  * display:none, and every other rule is inside the media query. test-hole-editor-ui.mjs (desktop
  * sizes) is the proof the desktop editor did not move. */
-.he-sheet-bar, .he-sheet-scrim, .he-mbar, #he-m-tools { display: none; }
+.he-sheet-bar, .he-sheet-scrim, .he-mbar, #he-m-tools, .he-drawbar, .he-m-note { display: none; }
 
 @media (max-width: 899px) {
   .he-root { height: 100vh; height: 100dvh; min-height: 0; }
@@ -362,6 +362,7 @@ input[type="range"] { accent-color: var(--he-accent); }
   }
   .he-ribbon.is-open > * { display: flex; }
   .he-ribbon.is-open > .he-sep { display: none; }
+  .he-ribbon.is-open > .he-m-note { display: block; grid-column: 1 / -1; order: 9; font-size: 12px; color: var(--he-muted); padding: 4px 4px 0; }
   .he-ribbon.is-open > #he-copy-json[style*="display:none"] { display: none; }
   .he-ribbon.is-open .he-tool, .he-ribbon.is-open #he-bug, .he-ribbon.is-open #he-help { width: auto !important; min-height: 56px; margin: 0; }
   .he-ribbon.is-open #he-course-btn { grid-column: 1 / -1; order: -1; min-height: 48px; width: auto !important; margin: 0; }
@@ -421,6 +422,17 @@ input[type="range"] { accent-color: var(--he-accent); }
   .he-mbtn--add { background: var(--he-accent); color: var(--gh-accent-ink); border-color: var(--he-accent); }
   .he-mbtn[aria-pressed="true"] { outline: 2px solid var(--he-accent); outline-offset: 1px; }
   .he-tool, .he-chip, .he-tile, .he-sheet-x { touch-action: manipulation; }
+  /* Stage 3: on-screen stand-ins for the keys. */
+  .he-sheet-acts { display: flex; gap: 6px; margin-left: auto; margin-right: 4px; }
+  .he-mbtn--sm { height: 36px; min-width: 0; padding: 0 12px; font-size: 14px; letter-spacing: 0; text-transform: none; }
+  .he-mbtn--danger { color: #ff8d82; border-color: rgba(255, 107, 94, .6); }
+  .he-mbtn:disabled { opacity: .4; }
+  .he-root--drawing .he-drawbar {
+    display: flex; gap: 8px; position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 12;
+    padding: 8px; background: rgba(23, 26, 23, .92); border: 1px solid var(--gh-border-strong); border-radius: 12px;
+  }
+  .he-root--drawing .he-drawbar .he-mbtn { flex: 1 1 0; padding: 0 6px; }
+  .he-root--drawing .he-canvas-controls, .he-root--drawing .he-hover-readout { display: none; }
   /* Stage 4: the modals at phone width (class hooks only; every value here is phone-only). */
   .he-setup-box { padding: 16px 14px !important; gap: 12px !important; max-width: calc(100vw - 16px) !important; max-height: calc(100dvh - 16px) !important; }
   .he-setup-head { flex-wrap: wrap; gap: 8px; }

@@ -978,16 +978,7 @@ export class EditorCanvas {
       if (e.key === 'Backspace' && this.drawing) { e.preventDefault(); this.undoDrawPoint(); return; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && this.selection && this.ops) {
         e.preventDefault();
-        const sel = this.selection;
-        if (sel.group === 'waypoint') {
-          if (sel.index > 0 && sel.index < this.spec.path.length - 1) {
-            this.setSelection(null);
-            this.ops.instant((spec) => ({ ...spec, path: spec.path.filter((_, i) => i !== sel.index) }));
-          }
-        } else if (sel.group !== 'widthHandle') {
-          this.setSelection(null);
-          this.ops.instant((spec) => this._deleteSelected(spec, sel));
-        }
+        this.deleteSelection();
       } else if (e.key === 'Escape') {
         if (this.drawing) this.cancelDraw();
         else if (this.selection) this.setSelection(null);
@@ -997,6 +988,30 @@ export class EditorCanvas {
         this.finishDraw();
       }
     });
+  }
+
+  /** Can the current selection be deleted? (The tee's route dot, the last route dot and a width
+   *  handle cannot; a guard hazard is detached first.) The phone's Delete button reads this. */
+  canDeleteSelection() {
+    const sel = this.selection;
+    if (!sel || !this.ops || !this.spec) return false;
+    if (sel.group === 'waypoint') return sel.index > 0 && sel.index < this.spec.path.length - 1;
+    return sel.group !== 'widthHandle' && sel.group !== 'guard';
+  }
+
+  /** Delete what is selected - the Delete key, and the phone's Delete button (stage 3). */
+  deleteSelection() {
+    const sel = this.selection;
+    if (!sel || !this.ops) return;
+    if (sel.group === 'waypoint') {
+      if (sel.index > 0 && sel.index < this.spec.path.length - 1) {
+        this.setSelection(null);
+        this.ops.instant((spec) => ({ ...spec, path: spec.path.filter((_, i) => i !== sel.index) }));
+      }
+    } else if (sel.group !== 'widthHandle') {
+      this.setSelection(null);
+      this.ops.instant((spec) => this._deleteSelected(spec, sel));
+    }
   }
 
   /** Enter draw mode for a new bunker/lake (`replaceIndex` null) or to redraw the outline of an
@@ -1495,7 +1510,8 @@ export class EditorCanvas {
       ctx.font = '13px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(isLine
+      // A finger has the drawing bar (Finish shows the count) and no Enter / Esc / double-click.
+      if (!this.touchMode) ctx.fillText(isLine
         ? `${pts.length} pole${pts.length === 1 ? '' : 's'} - Enter or double-click to finish, Esc to cancel`
         : `${pts.length} corner${pts.length === 1 ? '' : 's'} - double-click or Enter to close, Esc to cancel`, 12, 24);
       ctx.restore();

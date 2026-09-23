@@ -890,3 +890,20 @@ the setup screen are the first two things a phone meets.
   45% of the screen (the map, a sheet); pop-up width `min(300, 100vw - 24)`.
 - `test-hole-editor-mobile.mjs` walks the whole run from a first visit on a 390x844 touch
   screen: it reaches the last step, every pop-up is on screen, none says "click". 30 checks.
+
+## On a phone, stage 3: on-screen stand-ins for the keys (2026-09-23)
+
+- **Edit sheet bar: Duplicate and Delete** (`#he-m-dup`, `#he-m-del`), shown only when the
+  selection allows it. Delete goes through `EditorCanvas.deleteSelection()`, which is the Delete
+  key's own code moved into a method (the key now calls it too); `canDeleteSelection()` says when
+  (never the tee's or the last route dot, a width handle, or a guard hazard).
+- **Drawing bar** over the map (`#he-m-drawbar`, shown by `.he-root--drawing`): Undo point,
+  Cancel, Finish (n) - Backspace, Esc and Enter. Finish is disabled below the minimum (3 corners, 2
+  poles). Starting a drawing closes any open sheet. The map's own "double-click or Enter" hint is
+  not drawn for a finger (`touchMode`).
+- **The Tools grid** ends with one line: width handles, slope painting and drawn outlines are
+  easier on a tablet or computer (the handoff's "say which tools are tablet/desktop recommended").
+- `syncPhoneBars()` runs at the end of every `refreshContext()`.
+
+`test-hole-editor-mobile.mjs`: 40 checks (stage 3 adds Duplicate, Delete, and a lake drawn with
+five taps, Undo point, Finish, then a Cancel).
