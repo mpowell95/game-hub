@@ -27,6 +27,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { readPlayersOnce } from '../../js/stats-net.js';
 import { aggregatePlayers, isPlaceholderName } from '../../js/players-agg.js';
 import { COLS, ROWS } from './game.js';
+import { recordResult } from '../../js/game-stats.js';
 
 export const OUTBOX_KEY = 'gamehub.hoops4.outbox.v1';
 export const MAX_OUTBOX = 20;
@@ -358,6 +359,59 @@ export function markSeen(id, updated) {
   const map = readSeen();
   map[id] = Math.max(ms(map[id]), ms(updated) || Date.now());
   writeSeen(map);
+}
+
+// --- counting a finished match exactly once, on BOTH phones (2026-09-23) --------------------------
+// Before this, only the device that played the LAST move ever recorded a result (ui.js finish()).
+// The other player never opened a finished match - it leaves the active list and raises no bubble -
+// so their win or loss was never counted; and a match ended by a resignation replays into an
+// UNFINISHED board, so finish() would have scored the winner a loss. Found while adding Quit.
+//
+// The ledger is the set of match ids this device has already counted. finish() adds to it; the
+// multiplayer screen calls recordFinished(rows) and counts every finished row NOT in it, from the
+// row's own `result`. THE LAW rule 2 (writes are additive) is why it must never count twice:
+//   - rows without a `result` (written before 2026-09-22) are skipped, never guessed;
+//   - rows finished before LEDGER_SINCE are skipped, because the device that finished them may
+//     already have recorded them through finish() before the ledger existed.
+export const LEDGER_KEY = 'gamehub.hoops4.counted.v1';
+export const LEDGER_SINCE = Date.parse('2026-09-23T03:15:00Z');
+const MAX_LEDGER = 400;
+
+export function readLedger() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LEDGER_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : []);
+  } catch { return new Set(); }
+}
+
+/** Mark a match as counted on this device. Returns false if it already was. */
+export function markCounted(id) {
+  if (!id) return false;
+  const set = readLedger();
+  if (set.has(id)) return false;
+  set.add(id);
+  try { localStorage.setItem(LEDGER_KEY, JSON.stringify([...set].slice(-MAX_LEDGER))); } catch { /* private mode */ }
+  return true;
+}
+
+/**
+ * PURE: which finished rows still need counting here? A row counts once it is over, carries a
+ * result, finished on or after LEDGER_SINCE, and is not already in the ledger.
+ */
+export function rowsToCount(rows, ledger) {
+  if (!Array.isArray(rows)) return [];
+  return rows.filter((r) => r && r.id && r.over && RESULTS.includes(r.result)
+    && ms(r.updated) >= LEDGER_SINCE && !(ledger && ledger.has(r.id)));
+}
+
+/** Count every finished match this device has not counted yet. A draw is recorded as not won. */
+export function recordFinished(rows) {
+  const todo = rowsToCount(rows, readLedger());
+  for (const r of todo) {
+    if (!markCounted(r.id)) continue;
+    try { recordResult('hoops4', 'mp', r.result === 'won'); } catch (err) { console.error('[hoops4] recordResult failed', err); }
+  }
+  return todo.length;
 }
 
 /** One index row, normalised - shared by the one-off read and the live watch. */

@@ -89,20 +89,24 @@ export function openMultiplayer(ui) {
     // NAMES ONLY. The one-line hints under each of these went the way of the setup screen's
     // tagline - Matt: "Delete all the subtitles on the Multiplayer screen as well". Four buttons
     // whose names say what they are do not need four sentences explaining them.
-    const act = (go, label, primary) => `
-      <button type="button" class="h4-mp-act${primary ? ' is-primary' : ''}" data-go="${go}">${esc(label)}</button>`;
+    // (2026-09-23) ONE BIG ACTION, THREE SMALL ONES, THEN YOUR GAMES SPLIT BY WHOSE MOVE IT IS.
+    // Matt, with two screenshots of this screen: "Make this page better/easier to navigate. And
+    // let people quit games." It was five full-width rows before the first game, so the list
+    // scrolled off a phone; every row said "Waiting on <name>" beside the same name; names and
+    // "Game 1 of 3" wrapped onto four lines. Now: Challenge is the one primary button, Host / Join
+    // / Pass and play share a row, "Your turn" comes first, History is a link, and every game has
+    // a Quit (a resignation - nothing is deleted, see MP.resignGame).
+    const tile = (go, icon, label) => `
+      <button type="button" class="h4-mp-tile" data-go="${go}"><span class="h4-mp-ico" aria-hidden="true">${icon}</span><span>${esc(label)}</span></button>`;
     shell(t('mpHome'), `
-      <div class="h4-mp-acts">
-        ${act('pick', t('mpChallenge'), true)}
-        ${act('host', t('mpHost'))}
-        ${act('join', t('mpJoin'))}
-        ${act('pass', t('mpPassPlay'))}
-        ${act('history', t('mpHistory'))}
+      <button type="button" class="h4-mp-act is-primary h4-mp-big" data-go="pick"><span aria-hidden="true">&#9876;&#65039;</span> ${esc(t('mpChallengeBig'))}</button>
+      <div class="h4-mp-tiles">
+        ${tile('host', '&#128225;', t('mpHostShort'))}
+        ${tile('join', '&#128273;', t('mpJoinShort'))}
+        ${tile('pass', '&#128241;', t('mpPassShort'))}
       </div>
-      <section class="h4-mp-sec">
-        <h3>${t('mpActive')}</h3>
-        <div class="h4-mp-games" data-role="games"><p class="h4-mp-sub">${t('mpGames')}...</p></div>
-      </section>`);
+      <div data-role="games"><p class="h4-mp-sub">${t('mpGames')}...</p></div>
+      <button type="button" class="h4-mp-link" data-go="history">${esc(t('mpHistory'))} &rsaquo;</button>`);
     for (const b of el.querySelectorAll('[data-go]')) ui.on(b, 'click', () => go(b.dataset.go));
     // The list is filled in behind the painted screen rather than in front of it, the repo's own
     // rule for a screen that waits on a read: name what replaces it, and when.
@@ -111,27 +115,74 @@ export function openMultiplayer(ui) {
     const box = el.querySelector('[data-role="games"]');
     if (!box) return;                                   // the sheet closed while the read was out
     state.games = rows;
-    // ACTIVE means active: a finished match is not something you can take a turn in, and Matt
-    // asked for this list to say "if it's your turn or their turn". Finished ones belong in the
-    // challenge history (`viewHistory`, the "History" row above).
+    // Every finished match this device has not yet counted is counted now, once (see
+    // MP.recordFinished) - including a game the other person won, or quit.
+    try { MP.recordFinished(rows); } catch (err) { console.warn('[hoops4] recordFinished', err); }
     const live = rows.filter((r) => r && !r.over);
-    box.innerHTML = live.length ? live.map(gameRow).join('') : `<p class="h4-mp-sub">${t('mpNoActive')}</p>`;
-    for (const b of box.querySelectorAll('[data-game]')) {
-      ui.on(b, 'click', () => openGame(b.dataset.game));
-    }
+    const mine = live.filter((r) => r.yourTurn);
+    const theirs = live.filter((r) => !r.yourTurn);
+    const sec = (title, list) => list.length ? `
+      <section class="h4-mp-sec"><h3>${esc(title)} <span class="h4-mp-count">${list.length}</span></h3>
+        <div class="h4-mp-games">${list.map(gameRow).join('')}</div></section>` : '';
+    box.innerHTML = live.length
+      ? sec(t('mpSecYours'), mine) + sec(t('mpSecTheirs'), theirs)
+      : `<p class="h4-mp-sub">${t('mpNoActive')}</p>`;
+    for (const b of box.querySelectorAll('[data-game]')) ui.on(b, 'click', () => openGame(b.dataset.game));
+    for (const b of box.querySelectorAll('[data-quit]')) ui.on(b, 'click', (e) => { e.stopPropagation(); confirmQuit(b.dataset.quit); });
   }
 
   function gameRow(r) {
-    const status = r.over ? t('mpOver')
-      : r.yourTurn ? t('mpYourMove')
-        : t('mpWaitingOn').replace('{who}', r.name || '?');
-    const cls = r.over ? 'is-over' : r.yourTurn ? 'is-yours' : 'is-theirs';
+    const cls = r.yourTurn ? 'is-yours' : 'is-theirs';
     // Only a real series says so - "Game 1 of 1" is noise on a one-off.
-    const leg = (r.series > 1) ? `<span class="h4-mp-leg">${esc(t('gameOf', { n: r.seriesNo, m: r.series }))}</span>` : '';
-    return `<button type="button" class="h4-mp-game ${cls}" data-game="${esc(r.id)}">
-        <span class="h4-mp-who"><span aria-hidden="true">${esc(r.emoji)}</span> ${esc(r.name || '?')}${leg}</span>
-        <span class="h4-mp-state">${esc(status)}</span>
-      </button>`;
+    const bits = [];
+    if (r.series > 1) bits.push(t('gameOf', { n: r.seriesNo, m: r.series }));
+    if (r.oneShot) bits.push(t('shotsOne'));            // the default rule goes unsaid
+    // NO STATUS CHIP: the section heading ("Your turn" / "Waiting on them") already says it in
+    // words, and a chip repeating it squeezed every name to an ellipsis.
+    return `<div class="h4-mp-game ${cls}">
+        <button type="button" class="h4-mp-open" data-game="${esc(r.id)}">
+          <span class="h4-mp-emo" aria-hidden="true">${esc(r.emoji)}</span>
+          <span class="h4-mp-txt"><span class="h4-mp-name">${esc(r.name || '?')}</span>
+            <span class="h4-mp-meta">${esc(bits.join(' · '))}</span></span>
+        </button>
+        <button type="button" class="h4-mp-quit" data-quit="${esc(r.id)}" aria-label="${esc(t('mpQuitAria', { who: r.name || '?' }))}">${esc(t('mpQuit'))}</button>
+      </div>`;
+  }
+
+  /** QUITTING IS RESIGNING. It asks first, says it counts as a loss, and writes `over` on the
+   *  match through MP.resignGame - it deletes nothing. The other person sees "Won, they
+   *  resigned" in their history. */
+  function confirmQuit(id) {
+    const row = (state.games || []).find((r) => r && r.id === id);
+    const who = (row && row.name) || '?';
+    const ov = document.createElement('div');
+    ov.className = 'gh-overlay';
+    ov.innerHTML = `
+      <div class="gh-modal" role="dialog" aria-modal="true" aria-label="${esc(t('mpQuitQ'))}">
+        <h2 class="gh-modal__title">${esc(t('mpQuitQ'))}</h2>
+        <p class="h4-sheet-body">${esc(t('mpQuitBody', { who }))}</p>
+        <p class="h4-mp-note" data-role="err" hidden></p>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--block" data-role="no">${esc(t('mpQuitNo'))}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(t('mpQuitYes'))}</button>
+        </div>
+      </div>`;
+    ui.root.appendChild(ov);
+    const close = () => ov.remove();
+    ui.on(ov.querySelector('[data-role="no"]'), 'click', close);
+    ui.on(ov.querySelector('[data-role="yes"]'), 'click', async () => {
+      const yes = ov.querySelector('[data-role="yes"]');
+      yes.disabled = true;
+      const res = await MP.resignGame(id);
+      if (!res || !res.ok) {
+        yes.disabled = false;
+        const err = ov.querySelector('[data-role="err"]');
+        err.hidden = false; err.textContent = t('mpQuitFail');
+        return;
+      }
+      close();
+      viewHome();
+    });
   }
 
   // --- live: host ----------------------------------------------------------------------------

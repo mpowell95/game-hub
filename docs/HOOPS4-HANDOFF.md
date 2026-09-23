@@ -180,6 +180,7 @@ mixed build), then run `node validate-sw-assets.mjs`, which also rewrites `REST_
 
 | CACHE | what |
 |---|---|
+| v922 | Multiplayer home reorganised; Quit (resign) on every game and in the pause sheet; finished matches counted on both phones |
 | v921 | Own challenge no longer pops up as one received; the launcher bubble listens live |
 | v920 | Release jitter 0.013 -> 0.025 (a perfect aim lands 78% -> 62%); big shot messages under the board |
 | v917 | Invisible tube above the rims removed; rimouts on; rim bounces go sideways. Scored 29% -> 21% |

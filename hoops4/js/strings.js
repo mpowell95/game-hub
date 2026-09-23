@@ -43,6 +43,14 @@ export const STRINGS = {
     difficulty: 'Difficulty',
     multiplayer: 'Multiplayer',
     mpHome: 'Multiplayer',
+    // The multiplayer home, reorganised 2026-09-23 (Matt: "Make this page better/easier to
+    // navigate. And let people quit games.")
+    mpChallengeBig: 'Challenge someone', mpHostShort: 'Host', mpJoinShort: 'Join', mpPassShort: 'Pass & play',
+    mpSecYours: 'Your turn', mpSecTheirs: 'Waiting on them', mpWaiting2: 'Waiting',
+    mpQuit: 'Quit', mpQuitAria: 'Quit your game with {who}', mpQuitQ: 'Quit this game?',
+    mpQuitBody: 'Your game with {who} ends and counts as a loss for you.',
+    mpQuitNo: 'Keep playing', mpQuitYes: 'Quit',
+    mpQuitFail: 'Could not quit. Check your connection and try again.',
     mpPassPlay: 'Pass and play',
     mpActive: 'Active games',
     // --- the terms of a challenge (2026-09-22) ----------------------------------------------
@@ -143,6 +151,12 @@ export const STRINGS = {
     difficulty: 'Dificultad',
     multiplayer: 'Multijugador',
     mpHome: 'Multijugador',
+    mpChallengeBig: 'Retar a alguien', mpHostShort: 'Crear', mpJoinShort: 'Unirse', mpPassShort: 'Pasar y jugar',
+    mpSecYours: 'Te toca', mpSecTheirs: 'Esperando al rival', mpWaiting2: 'Esperando',
+    mpQuit: 'Abandonar', mpQuitAria: 'Abandonar la partida con {who}', mpQuitQ: '¿Abandonar esta partida?',
+    mpQuitBody: 'Tu partida con {who} termina y cuenta como derrota.',
+    mpQuitNo: 'Seguir jugando', mpQuitYes: 'Abandonar',
+    mpQuitFail: 'No se pudo abandonar. Revisa tu conexión e inténtalo de nuevo.',
     mpPassPlay: 'Pasar y jugar',
     mpActive: 'Partidas activas',
     chTitle: 'Retar a {who}',
