@@ -446,7 +446,7 @@ export const GAMES = [
     // HUD row, which shares the floating back button's row), so immersive like Pinball.
     id: 'brick-blitz',
     released: '2026-09-23',
-    title: 'Brick Blitz',
+    title: 'Brick Breaker',
     blurb: { en: 'Neon breakout. Smash the bricks, chain combos, grab multi-ball and lasers.',
       es: 'Rompeladrillos de neón. Rompe ladrillos, encadena combos y coge multibola y láseres.' },
     module: '../brick-blitz/js/ui.js',

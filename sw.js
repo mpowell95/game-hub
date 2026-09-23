@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v931';
+const CACHE = 'game-hub-v932';
 
 const ASSETS = [
   './',
@@ -783,12 +783,12 @@ const REST_MANIFEST = {
   './snake/js/ui.js': '438cb348fa',
   './snake/js/game.js': 'f69fbe6fe8',
   './snake/js/strings.js': 'f4c6fd66b0',
-  './brick-blitz/': 'ff0f66e242',
-  './brick-blitz/index.html': 'ff0f66e242',
-  './brick-blitz/css/brick-blitz.css': 'fa6414e3d5',
-  './brick-blitz/js/ui.js': '4c4ed99fcd',
-  './brick-blitz/js/game.js': '811333f86d',
-  './brick-blitz/js/strings.js': '7878f8a342',
+  './brick-blitz/': 'a6d3daf30c',
+  './brick-blitz/index.html': 'a6d3daf30c',
+  './brick-blitz/css/brick-blitz.css': 'b6bf96045d',
+  './brick-blitz/js/ui.js': '290f48da67',
+  './brick-blitz/js/game.js': '279e3527e8',
+  './brick-blitz/js/strings.js': '27f6156baf',
   './pinball/': 'c7d7cf8581',
   './pinball/index.html': 'c7d7cf8581',
   './pinball/css/pinball.css': '4d378af4c3',

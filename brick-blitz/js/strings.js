@@ -2,7 +2,7 @@
 // source of truth; a missing Spanish key falls back to English. No em dashes (root CLAUDE.md).
 export const STRINGS = {
   en: {
-    title: 'Brick Blitz',
+    title: 'Brick Breaker',
     tagline: 'Neon breakout. Smash every brick.',
     difficulty: 'Difficulty',
     diff_easy: 'Easy',
@@ -73,7 +73,7 @@ export const STRINGS = {
     say_clear: 'Stage clear! Bonus {n}.',
   },
   es: {
-    title: 'Brick Blitz',
+    title: 'Brick Breaker',
     tagline: 'Rompeladrillos de neón. Rómpelos todos.',
     difficulty: 'Dificultad',
     diff_easy: 'Fácil',

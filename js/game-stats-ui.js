@@ -1309,14 +1309,14 @@ function pinballScreen(rec) {
     </table>`;
 }
 
-// --- Brick Blitz (solo, score attack, three difficulties) -------------------------------------
+// --- Brick Breaker (solo, score attack, three difficulties) -------------------------------------
 /** No wins or losses (a run ends when the last ball is lost), so the honest numbers are runs,
  *  bests and lifetime counters, like Pinball's screen. Average is derived at render time from
  *  `points` and `games`, never stored. The per-difficulty table shows every stored best. */
 function brickBlitzScreen(rec) {
   const bz = (rec && rec.bz) || {};
   const games = bz.games | 0;
-  if (!games) return emptyState('Brick Blitz');
+  if (!games) return emptyState('Brick Breaker');
   const avg = Math.round((bz.points | 0) / games);
   const by = bz.bestScoreByDiff || {};
   return `
