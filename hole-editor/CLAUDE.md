@@ -847,3 +847,28 @@ the condition that the desktop editor does not change. Under 900 px wide (`PHONE
 Not yet: touch gestures (stage 2), on-screen Delete/Finish (stage 3), setup screen and walkthrough
 at 390 px (stage 4), measured speed on a phone profile (stage 5).
 
+
+## On a phone, stage 2: touch (2026-09-23)
+
+`canvas.js`'s four mouse handlers are now named (`onDown`/`onMove`/`onUp`/`onDbl`, bodies
+unchanged) and a MOUSE still goes straight to them. A FINGER (`pointerType === 'touch'`) goes
+through a touch layer first, because nothing may happen on touch-DOWN: a placement tool placed on
+pointerdown, so the first finger of a pinch dropped a bunker.
+
+- **Tap** (up within 10 px): replayed as a click at the start point (down + up).
+- **Drag** (moved > 10 px): replayed as a mouse drag when it started on something the mouse could
+  drag (`wouldGrab`: an object with Select, a route dot, a width handle, a pin, a pole, a resize
+  handle, a slope cell); otherwise one finger PANS. Nothing is placed by a drag.
+- **Two fingers**: pinch zoom about the midpoint plus pan. A second finger cancels (ends) the first
+  finger's action; the rest of that touch sequence is ignored until every finger is up.
+- **Long press** (500 ms): replayed as a double-click - route dot, width dot, closes a drawing.
+  A browser's own synthesised `dblclick` is ignored after a touch.
+- **Hit sizes**: `_tolPx()` is 22 screen px for a finger, 12 for a mouse (`touchMode`).
+- The readout keeps the last touch (a finger has no hover); `#he-canvas` has `touch-action: none`.
+- **The Edit sheet** no longer auto-opens mid-drag (`touchDragging`), has no scrim (the map above
+  it stays live), and pans the map so the thing just selected sits above it (`keepAboveSheet`).
+
+`test-hole-editor-mobile.mjs` (repo root, 390x844, CDP touch): 23 checks; against the stage-1
+canvas it failed 10 of them. `test-hole-editor-ui.mjs`'s topic-link check now waits 15 s, not 5:
+it failed 2 runs in 3 on UNCHANGED code, because on a reload headless software rendering spends
+3-6 s in `drawImage` (buildMap for the palette and the holes bar) before the tour paints.
