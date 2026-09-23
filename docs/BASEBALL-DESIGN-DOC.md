@@ -123,7 +123,7 @@ Major League	9	14	top 4 of 9: semifinal + final
 
 ### After the Majors
 - **[Locked]** Winning the World Series repeats the Majors season for more titles.
-- **[Open]** Confirm: after a World Series win, does the next Majors season start right away, and do points keep coming (subject to caps)?
+- **[Locked] by Matt 2026-09-23** After a World Series win: a celebration popup ("World Series Champions", the title number, Perfect Season if earned, any pitch it unlocked, points earned), then Continue to career home with the next Majors season ready. Career home shows the title count on the Gold cup ("Gold ×2"). Points keep coming, capped at 26 as before (no cap rise per title). The Majors do not get harder after a title. The Majors final is labelled "World Series".
 
 ### Saves
 - **[Locked]** One active career at a time. No save slots.
@@ -595,7 +595,7 @@ perfectSeasons * 10000 + wsTitles * 100 + (league - 1) * 4 + bestTrophyInThatLea
 7. Out zone sizes and fence distances per league.
 8. Steal, bunt, and pickoff mechanics.
 9. Screwball, Eephus, and Cutter movement and speed.
-10. What happens after a World Series win (next season flow).
+10. Closed 2026-09-23: World Series celebration popup, then the next Majors season; cap stays 26; no difficulty change.
 11. Park features for version 1 vs. later.
 12. Closed 2026-09-23: 40 team names (`baseball/js/ui.js` `TEAM_NAMES`).
 13. Closed 2026-09-23: schedule repeats the middle teams; you win standings ties (R16); CPU records match your results.

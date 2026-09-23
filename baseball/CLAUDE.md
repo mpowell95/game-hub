@@ -4,6 +4,17 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## After a World Series win (2026-09-23, design doc item 10)
+
+Matt's calls: celebrate, then straight into the next Majors season; cap stays 26; no difficulty
+rise per title. Engine untouched (`resolveSeason` already repeated the Majors). UI only, `ui.js`:
+
+- `_showSeasonModal`: a Majors Gold reads "World Series Champions", then Title N, Perfect Season
+  (if `season.perfect`), "New pitch: X" for whatever `unlockedPitchesFor('majors', titles)` adds
+  over `titles - 1` (Eephus at 1, Cutter at 2), then points earned.
+- `_careerTrophyHTML`: in the Majors the Gold label carries `×wsTitles`.
+- The Majors championship phase label reads "World Series" (`season_world_series`).
+
 ## Standings: closed (2026-09-23, design doc item 13)
 
 Matt's calls: keep `SCHEDULE_SHAPE` 'repeatMiddle'; CPU records must MATCH the player's results.
