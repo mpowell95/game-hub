@@ -63,6 +63,21 @@ space available, so a tall phone gets a taller field rather than letterboxing.
   and bricks keep moving (Part 0: reduced motion thins garnish, it never freezes gameplay).
 - The ball sub-steps at 0.6 x radius per step, so it cannot tunnel through a 21-unit brick.
 
+## Space Invaders elements (Matt, 2026-09-23: "add some sort of space invaders elements")
+
+- **Alien bricks.** At each stage load, a few of the LOWEST bricks in their columns become aliens
+  (`b.inv`): Arcade 2 + stage index (max 6), Endless 2 + wave (max 8). Drawn as the two-frame
+  11x8 crab in the brick's colour; a two-hit alien keeps a white outline (shape marker). Breaking
+  one is worth +250 on top of the brick's points.
+- **Bombs.** An alien fires only while it is EXPOSED (no brick below it in its column), every
+  `DIFF_TUNING[d].fire` seconds (6 / 4.5 / 3.2) +-40%, at most 6 bombs in the air. A bomb hitting
+  the paddle FREEZES it for 0.9 s and resets the combo; it never costs a life. Laser shots
+  destroy bombs.
+- **Flying saucer.** Crosses the lane above the bricks every 18-30 s (first at 12-22 s) while the
+  ball is in play. Ball or laser hit = 300, 500 or 1000 points (random, like the arcade's
+  mystery ship). The ball passes through it.
+- Nothing new is stored: the bonuses land in the score, so `bz` is unchanged.
+
 ## Settings / persistence
 
 - `gamehub.brickblitz.v1`: `{ difficulty, mode: 'arcade'|'endless' }`. Saved on selection. (An older save may still carry
