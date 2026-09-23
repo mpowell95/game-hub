@@ -744,6 +744,24 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
     assert.equal(spec.decor, undefined, 'the last delete removes the key rather than leaving []');
   });
 
+  await test('flower beds: a tapped round bed and a drawn one both build, validate and paint (2026-09-23)', async () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    let spec = addDecor(doc.holes['h-01'].spec, 'flowerbed', -20, 40);
+    assert.equal(spec.decor[0].kind, 'flowerbed', 'flowerbed is a sprite kind of its own');
+    spec = addDrawnShape(spec, 'decor', [[14, 60], [22, 60], [22, 70], [14, 70]], 'flowerbed');
+    assert.equal(spec.decor[1].kind, 'flowerbed', 'a drawn bed keeps its kind');
+    assert.ok(Array.isArray(spec.decor[1].poly));
+    doc.holes['h-01'].spec = spec;
+    const built = buildHole(doc, 'h-01');
+    assert.deepEqual(validateHoleTop(built), []);
+    // Looks only: the lie under a bed is whatever surface was already there.
+    const H = await import('./golf/js/holes.js');
+    const noBed = { ...doc.holes['h-01'].spec }; delete noBed.decor;
+    const doc2 = createDocument(); doc2.holes['h-01'].spec = noBed;
+    assert.equal(H.surfaceAt(built, 18, 65), H.surfaceAt(buildHole(doc2, 'h-01'), 18, 65), 'a flower bed never changes the lie');
+  });
+
   await test('validateHole refuses a sprite off the map, and a malformed one, by name', () => {
     setCourse(PROFILES.custom, 'parkland');
     const doc = createDocument();

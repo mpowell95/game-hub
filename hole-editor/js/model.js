@@ -555,7 +555,8 @@ export function addDrawnShape(spec, group, points, kind) {
   const poly = smoothPoly(points);
   const entry = group === 'bunkers'
     ? { poly, kind: kind || 'greensideBunker' }
-    : (group === 'water' && kind === 'swamp' ? { poly, kind: 'swamp' } : { poly });
+    : (group === 'water' && kind === 'swamp' ? { poly, kind: 'swamp' }
+      : (group === 'decor' && kind === 'flowerbed' ? { poly, kind: 'flowerbed' } : { poly }));
   return { ...spec, [group]: [...(spec[group] || []), entry] };
 }
 
@@ -755,7 +756,7 @@ export function deleteObject(spec, group, index) {
 // sideways with it.
 
 /** The sprite kinds a decor entry may take. 'path' is the drawn polygon; the rest are sprites. */
-export const DECOR_KINDS = ['path', 'bench', 'sign', 'flagpole'];
+export const DECOR_KINDS = ['path', 'bench', 'sign', 'flagpole', 'flowerbed'];
 
 export function addDecor(spec, kind, x, y) {
   const k = DECOR_KINDS.includes(kind) && kind !== 'path' ? kind : 'bench';

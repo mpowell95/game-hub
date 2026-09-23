@@ -790,6 +790,19 @@ function tintOf(hex, f) {
   return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
 }
 
+/** Mixed flowers scattered over a disc of radius `r` (px), seeded so a bed is the same every load.
+ *  Pink, yellow, white and purple: none of them depends on red-vs-green to be seen. */
+const FLOWER_COLOURS = ['#f7a8c4', '#ffd84a', '#fff6ee', '#b79be6', '#ff9f6a'];
+export function flowerDots(ctx, cx, cy, r, ppy, seed) {
+  const dr = Math.max(0.7, ppy * 0.22);
+  const n = Math.max(8, Math.round((r * r) / (dr * dr * 3)));
+  for (let i = 0; i < n; i++) {
+    const a = i * 2.39996 + seed; const d = Math.sqrt((i + 0.5) / n) * r * 0.92;
+    ctx.fillStyle = FLOWER_COLOURS[(i * 7 + Math.round(seed)) % FLOWER_COLOURS.length];
+    ctx.beginPath(); ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, dr, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
 /** A decor SPRITE, top-down, 3-4 yds across (`docs/HANDOFF-GOLF-OBJECTS.md` section 4): bench (a
  *  brown slab with two legs), sign (a post with a small board) and flagpole (a pole with a
  *  triangular pennant). Cosmetic only - `holes.js` never consults `decor`, so an unrecognised
@@ -823,6 +836,15 @@ export function drawDecorSprite(ctx, kind, px, py, ppy, rot, pal) {
     ctx.strokeStyle = '#6b5a3f';
     ctx.lineWidth = Math.max(0.6, ppy * 0.06);
     ctx.strokeRect(postR * 0.5, -bh, bw, bh * 2);
+  } else if (kind === 'flowerbed') {
+    // A FLOWER BED (2026-09-23, Matt picked it from the look-only list): a round bed of dark soil
+    // with a stone edge, packed with mixed flowers. Looks only - `holes.js` never reads decor.
+    const r = 2.2 * ppy;
+    ctx.fillStyle = '#cfc6b4';
+    ctx.beginPath(); ctx.arc(0, 0, r + Math.max(0.8, ppy * 0.25), 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6b4f36';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+    flowerDots(ctx, 0, 0, r, ppy, 1);
   } else if (kind === 'flagpole') {
     ctx.fillStyle = '#d8d8d8';
     const postR = Math.max(1, ppy * 0.12);
@@ -1066,6 +1088,19 @@ export function buildMap(hole, theme) {
   // drawn here so it sits on top of the ground and (below) under the trees, exactly like the real
   // world: a bench under a tree's shade reads wrong if the tree is painted first.
   for (const d of hole.decor || []) {
+    if (d.poly && d.kind === 'flowerbed') {
+      // A DRAWN flower bed: its own outline, stone-edged, soil, packed with flowers (clipped).
+      tracePoly(ctx, d.poly, toPx);
+      ctx.strokeStyle = '#cfc6b4'; ctx.lineWidth = Math.max(1, MAP_PPY * 0.6); ctx.stroke();
+      ctx.fillStyle = '#6b4f36'; ctx.fill();
+      ctx.save(); tracePoly(ctx, d.poly, toPx); ctx.clip();
+      const bb = bboxOf(d.poly);
+      const [x0, y0] = toPx(bb.minX, bb.maxY); const [x1, y1] = toPx(bb.maxX, bb.minY);
+      const rr = Math.hypot(x1 - x0, y1 - y0) / 2;
+      flowerDots(ctx, (x0 + x1) / 2, (y0 + y1) / 2, rr, MAP_PPY, Math.round(bb.minX + bb.minY));
+      ctx.restore();
+      continue;
+    }
     if (d.poly) {
       tracePoly(ctx, d.poly, toPx);
       ctx.fillStyle = pal.path;

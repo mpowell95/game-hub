@@ -115,6 +115,8 @@ export function paletteSections(built, look) {
       { id: 'decor-sign', label: 'Sign', kind: 'tool', tool: 'decor', state: { decorKind: 'sign' } },
       { id: 'decor-flagpole', label: 'Flagpole', kind: 'tool', tool: 'decor', state: { decorKind: 'flagpole' } },
       { id: 'decor-path', label: 'Draw a cart path', kind: 'draw', group: 'decor' },
+      { id: 'decor-flowerbed', label: 'Flower bed', kind: 'tool', tool: 'decor', state: { decorKind: 'flowerbed' } },
+      { id: 'decor-flowerbed-draw', label: 'Draw a flower bed', kind: 'draw', group: 'decor', drawKind: 'flowerbed' },
     ] },
   ];
 }
@@ -200,6 +202,7 @@ function sampler(theme, types) {
   const decorY = y;
   at['decor-bench'] = [-24, decorY - 10]; at['decor-sign'] = [0, decorY - 10]; at['decor-flagpole'] = [24, decorY - 10];
   at['decor-path'] = [0, decorY - 10];
+  at['decor-flowerbed'] = [0, decorY - 10]; at['decor-flowerbed-draw'] = [0, decorY - 10];
   s = { map: buildMap(hole, theme), at, poleIdx };
   _samplers.set(key, s);
   return s;
@@ -240,9 +243,10 @@ export function paintTile(canvas, item, theme, types) {
   const s = sampler(theme, types);
   const [x, y] = s.at[item.id] || [0, 60];
   crop(s.map, x, y, CROP_W, CROP_H, canvas);
-  if (item.tool === 'decor' && item.state && item.state.decorKind) {
-    const ppy = (canvas.width / CROP_W) * 4;
-    drawDecorSprite(canvas.getContext('2d'), item.state.decorKind, canvas.width / 2 - ppy * 0.4, canvas.height / 2, ppy, 0, paletteFor(theme));
+  const decorKind = (item.tool === 'decor' && item.state && item.state.decorKind) || (item.id === 'decor-flowerbed-draw' ? 'flowerbed' : null);
+  if (decorKind) {
+    const ppy = (canvas.width / CROP_W) * (decorKind === 'flowerbed' ? 2.2 : 4);
+    drawDecorSprite(canvas.getContext('2d'), decorKind, canvas.width / 2 - (decorKind === 'flowerbed' ? 0 : ppy * 0.4), canvas.height / 2, ppy, 0, paletteFor(theme));
   }
   if (item.kind === 'draw' || item.tool === 'line') {
     // A pencil over the picture: this one you outline (or, for the power line, string pole to
@@ -306,7 +310,7 @@ export function renderPalette(el, { built, theme, active, guardsOn, onPick }) {
 export function activeItemFor(tool, toolState, drawing) {
   if (drawing) {
     if (drawing.group === 'water') return drawing.kind === 'swamp' ? 'water-swamp-draw' : 'water-draw';
-    if (drawing.group === 'decor') return 'decor-path';
+    if (drawing.group === 'decor') return drawing.kind === 'flowerbed' ? 'decor-flowerbed-draw' : 'decor-path';
     if (drawing.group === 'lines') return 'power-line';
     return 'bunker-draw';
   }
