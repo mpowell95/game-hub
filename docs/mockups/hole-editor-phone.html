@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Course Creator Phone Mockup</title>
+<style>
+  :root {
+    --ink: #4a4063; --ink2: #6f6689; --ink3: #9a93ad; --cream: #fffaf3; --cream2: #fbf1e6;
+    --mint: #b8e0d2; --peach: #ffb5a7; --lav: #cdb4db; --sky: #c6e8f3; --sand: #f3e2b8;
+    --shadow: 0 10px 28px -12px rgba(74,64,99,.45), 0 2px 0 rgba(255,255,255,.7) inset;
+    --round: ui-rounded, "Nunito", "Quicksand", "Trebuchet MS", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 40px; background: #eef3f5; color: var(--ink); font-family: var(--round); }
+  .row { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; }
+  .cap { text-align: center; font-weight: 800; font-size: 15px; margin: 10px 0 0; }
+  .phone { width: 300px; height: 620px; border-radius: 34px; border: 8px solid #2f2a3d; position: relative; overflow: hidden;
+    background: linear-gradient(#9fd3ee, #e4f5fb 72%, #eef4ef); box-shadow: 0 20px 40px -20px rgba(0,0,0,.4); }
+  .island { position: absolute; left: 10px; top: 190px; width: 280px; }
+  /* top bar */
+  .top { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 6px; align-items: center; }
+  .card { background: var(--cream); border-radius: 18px; box-shadow: var(--shadow); }
+  .hole { flex: 1; display: flex; align-items: center; gap: 4px; padding: 6px 6px; }
+  .hole b { font-size: 13px; } .hole small { display: block; white-space: nowrap; font-size: 10px; color: var(--ink3); font-weight: 700; }
+  .hole .mid { flex: 1; text-align: center; line-height: 1.1; }
+  .arrow { width: 26px; height: 26px; border-radius: 50%; background: var(--cream2); display: grid; place-items: center; font-weight: 900; font-size: 13px; }
+  .pill { height: 38px; min-width: 38px; border-radius: 999px; background: var(--cream); box-shadow: var(--shadow); display: grid; place-items: center; font-size: 16px; font-weight: 800; padding: 0 10px; }
+  .pill.play { background: #ffe29a; }
+  /* bottom toolbar */
+  .bar { position: absolute; left: 8px; right: 8px; bottom: 10px; padding: 5px; display: flex; gap: 2px; border-radius: 22px; }
+  .tool { flex: 1; display: grid; justify-items: center; gap: 1px; padding: 5px 0 4px; border-radius: 14px; font-size: 9.5px; font-weight: 800; color: var(--ink2); }
+  .tool i { font-style: normal; font-size: 20px; line-height: 24px; }
+  .tool.on { background: var(--tint, var(--mint)); color: var(--ink); transform: translateY(-4px); box-shadow: 0 10px 18px -10px rgba(74,64,99,.55); }
+  /* tray */
+  .tray { position: absolute; left: 8px; right: 8px; bottom: 76px; padding: 10px; border-radius: 22px; }
+  .tray h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink3); display: flex; justify-content: space-between; }
+  .seg { display: flex; background: var(--cream2); border-radius: 999px; padding: 3px; margin-bottom: 8px; }
+  .seg span { flex: 1; text-align: center; font-size: 11px; font-weight: 800; padding: 4px 0; border-radius: 999px; color: var(--ink2); }
+  .seg span.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .tile { background: var(--cream2); border-radius: 12px; padding: 5px 2px 4px; text-align: center; font-size: 9.5px; font-weight: 800; color: var(--ink2); }
+  .tile i { display: block; font-style: normal; font-size: 22px; line-height: 28px; }
+  .tile.on { outline: 2.5px solid #ffce3a; background: #fff6d8; }
+  .sub { font-size: 10px; font-weight: 800; color: var(--ink3); margin: 8px 0 5px; text-transform: uppercase; letter-spacing: .05em; }
+  /* selection card */
+  .sel { position: absolute; left: 8px; right: 8px; bottom: 76px; padding: 10px 12px; border-radius: 22px; }
+  .sel .head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; }
+  .sel .head i { font-style: normal; font-size: 22px; }
+  .sel .head small { color: var(--ink3); font-size: 11px; font-weight: 700; display: block; }
+  .acts { display: flex; gap: 6px; margin-top: 8px; }
+  .act { flex: 1; text-align: center; font-size: 10px; font-weight: 800; border-radius: 12px; background: var(--cream2); padding: 6px 0 5px; color: var(--ink2); }
+  .act i { display: block; font-style: normal; font-size: 16px; }
+  .act.del { background: #ffd6cc; color: #8a3a2a; }
+  .slider { margin-top: 8px; font-size: 11px; font-weight: 800; color: var(--ink2); }
+  .slider .trk { height: 6px; border-radius: 3px; background: #efe4d6; margin-top: 4px; position: relative; }
+  .slider .trk b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: linear-gradient(90deg,#b8e0d2,#86c07f); }
+  .slider .trk u { position: absolute; top: -5px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  /* more sheet */
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 150px; border-radius: 26px 26px 0 0; padding: 12px 12px 76px; background: var(--cream); box-shadow: 0 -10px 30px -12px rgba(74,64,99,.4); }
+  .grab { width: 40px; height: 5px; border-radius: 3px; background: #e2d6c8; margin: 0 auto 10px; }
+  .grp { font-size: 10px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; margin: 10px 2px 5px; }
+  .list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .li { background: var(--cream2); border-radius: 12px; padding: 7px 2px 6px; text-align: center; font-size: 10px; font-weight: 800; color: var(--ink2); }
+  .li i { display: block; font-style: normal; font-size: 18px; }
+  .dim { position: absolute; inset: 0; background: rgba(74,64,99,.18); }
+  .ring { position: absolute; border: 2.5px dashed #ffce3a; border-radius: 50%; }
+  .ghost { position: absolute; opacity: .5; font-size: 20px; }
+  table { border-collapse: collapse; margin: 26px auto 0; background: #fff; border-radius: 14px; overflow: hidden; font-size: 13px; max-width: 980px; width: 100%; box-shadow: var(--shadow); }
+  th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid #efe8f3; vertical-align: top; }
+  th { background: var(--cream2); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink2); }
+  td:first-child { font-weight: 800; white-space: nowrap; }
+  .wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="isl" viewBox="0 0 280 170">
+      <polygon points="10,110 180,20 270,65 100,155" fill="#94b86a"/>
+      <polygon points="10,110 100,155 100,168 10,123" fill="#d9b690"/>
+      <polygon points="100,155 270,65 270,78 100,168" fill="#c49c78"/>
+      <path d="M40,108 C90,80 120,90 160,62 C190,44 215,50 236,58" stroke="#b9dd8e" stroke-width="16" fill="none" stroke-linecap="round"/>
+      <path d="M40,108 C90,80 120,90 160,62 C190,44 215,50 236,58" stroke="#fff" stroke-width="1.2" fill="none" stroke-dasharray="3 3"/>
+      <ellipse cx="236" cy="58" rx="16" ry="8" fill="#c9ec9a"/>
+      <line x1="238" y1="58" x2="238" y2="36" stroke="#fff" stroke-width="1.5"/><polygon points="239,36 250,40 239,44" fill="#ff6b6b"/>
+      <ellipse cx="120" cy="100" rx="11" ry="5" fill="#f3e2b8"/>
+      <ellipse cx="190" cy="84" rx="14" ry="6" fill="#7ec8e3"/>
+      <g fill="#6fae63"><circle cx="60" cy="86" r="6"/><circle cx="80" cy="76" r="6"/><circle cx="104" cy="66" r="6"/><circle cx="150" cy="44" r="6"/><circle cx="84" cy="128" r="6"/><circle cx="130" cy="112" r="6"/><circle cx="176" cy="104" r="6"/><circle cx="214" cy="84" r="6"/></g>
+      <polygon points="30,112 36,98 42,112" fill="#fff"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="row">
+
+  <div>
+    <div class="phone">
+      <svg class="island" viewBox="0 0 280 170"><use href="#isl"/></svg>
+      <div class="top">
+        <div class="card hole"><span class="arrow">‹</span><div class="mid"><b>Hole 1</b><small>Par 4 · 375 yd</small></div><span class="arrow">›</span></div>
+        <div class="pill">↶</div><div class="pill">↷</div><div class="pill play">▶</div>
+      </div>
+      <div class="card bar">
+        <div class="tool on" style="--tint:#e3d4ec"><i>✋</i>Move</div>
+        <div class="tool"><i>🌳</i>Trees</div>
+        <div class="tool"><i>⛱️</i>Sand</div>
+        <div class="tool"><i>💧</i>Water</div>
+        <div class="tool"><i>⛳</i>Green</div>
+        <div class="tool"><i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M4 19 C4 12 16 12 16 5" stroke="#8cc76a" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="4" cy="19" r="1.6" fill="#fff"/><line x1="16" y1="5" x2="16" y2="1" stroke="#4a4063" stroke-width="1.2"/><path d="M16 1 L20 2.4 L16 3.8Z" fill="#ff6b6b"/></svg></i>Fairway</div>
+        <div class="tool"><i>☰</i>More</div>
+      </div>
+    </div>
+    <p class="cap">1 · Map</p>
+  </div>
+
+  <div>
+    <div class="phone">
+      <svg class="island" viewBox="0 0 280 170"><use href="#isl"/></svg>
+      <span class="ghost" style="left:132px;top:252px">🌲</span>
+      <div class="top">
+        <div class="card hole"><span class="arrow">‹</span><div class="mid"><b>Hole 1</b><small>Par 4 · 375 yd</small></div><span class="arrow">›</span></div>
+        <div class="pill">↶</div><div class="pill">↷</div><div class="pill play">▶</div>
+      </div>
+      <div class="card tray" style="top:120px;overflow:hidden">
+        <h4><span>Trees &amp; rocks</span><span>✕</span></h4>
+        <div class="seg"><span class="on">One tree</span><span>A row of trees</span></div>
+        <div class="seg" style="margin-top:-2px"><span class="on">This terrain</span><span>All</span></div>
+        <div class="sub" style="margin-top:2px">Leafy</div>
+        <div class="tiles">
+          <div class="tile on"><i>🌳</i>Oak</div><div class="tile"><i>🍁</i>Maple</div><div class="tile"><i>🌳</i>Elm</div><div class="tile"><i>🌿</i>Birch</div>
+        </div>
+        <div class="sub">Flowering</div>
+        <div class="tiles">
+          <div class="tile"><i>🌸</i>Cherry</div><div class="tile"><i>💜</i>Jacaranda</div><div class="tile"><i>🤍</i>Magnolia</div><div class="tile"><i>💛</i>Aspen</div>
+        </div>
+        <div class="sub">Evergreen</div>
+        <div class="tiles">
+          <div class="tile"><i>🌲</i>Pine</div><div class="tile"><i>🌲</i>Spruce</div><div class="tile"><i>🌲</i>Redwood</div><div class="tile"><i>🌲</i>Juniper</div>
+        </div>
+        <div class="sub">Palms · desert · swamp · shrubs · rocks (scroll)</div>
+      </div>
+      <div class="card bar">
+        <div class="tool"><i>✋</i>Move</div>
+        <div class="tool on" style="--tint:#cfe8c8"><i>🌳</i>Trees</div>
+        <div class="tool"><i>⛱️</i>Sand</div>
+        <div class="tool"><i>💧</i>Water</div>
+        <div class="tool"><i>⛳</i>Green</div>
+        <div class="tool"><i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M4 19 C4 12 16 12 16 5" stroke="#8cc76a" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="4" cy="19" r="1.6" fill="#fff"/><line x1="16" y1="5" x2="16" y2="1" stroke="#4a4063" stroke-width="1.2"/><path d="M16 1 L20 2.4 L16 3.8Z" fill="#ff6b6b"/></svg></i>Fairway</div>
+        <div class="tool"><i>☰</i>More</div>
+      </div>
+    </div>
+    <p class="cap">2 · Tray: pick, tap map</p>
+  </div>
+
+  <div>
+    <div class="phone">
+      <svg class="island" viewBox="0 0 280 170"><use href="#isl"/></svg>
+      <span class="ring" style="left:116px;top:282px;width:38px;height:20px"></span>
+      <div class="top">
+        <div class="card hole"><span class="arrow">‹</span><div class="mid"><b>Hole 1</b><small>Par 4 · 375 yd</small></div><span class="arrow">›</span></div>
+        <div class="pill">↶</div><div class="pill">↷</div><div class="pill play">▶</div>
+      </div>
+      <div class="card sel">
+        <div class="head"><i>⛱️</i><div>Fairway bunker<small>182 yd from tee · left</small></div></div>
+        <div class="slider">Size<div class="trk"><b style="width:55%"></b><u style="left:50%"></u></div></div>
+        <div class="acts">
+          <div class="act"><i>⧉</i>Copy</div><div class="act"><i>🎲</i>Reshape</div><div class="act"><i>✏️</i>Redraw</div><div class="act"><i>⚙️</i>More</div><div class="act del"><i>🗑</i>Delete</div>
+        </div>
+      </div>
+      <div class="card bar">
+        <div class="tool on" style="--tint:#e3d4ec"><i>✋</i>Move</div>
+        <div class="tool"><i>🌳</i>Trees</div>
+        <div class="tool"><i>⛱️</i>Sand</div>
+        <div class="tool"><i>💧</i>Water</div>
+        <div class="tool"><i>⛳</i>Green</div>
+        <div class="tool"><i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M4 19 C4 12 16 12 16 5" stroke="#8cc76a" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="4" cy="19" r="1.6" fill="#fff"/><line x1="16" y1="5" x2="16" y2="1" stroke="#4a4063" stroke-width="1.2"/><path d="M16 1 L20 2.4 L16 3.8Z" fill="#ff6b6b"/></svg></i>Fairway</div>
+        <div class="tool"><i>☰</i>More</div>
+      </div>
+    </div>
+    <p class="cap">3 · Tapped something</p>
+  </div>
+
+  <div>
+    <div class="phone">
+      <svg class="island" viewBox="0 0 280 170"><use href="#isl"/></svg>
+      <div class="top">
+        <div class="card hole"><span class="arrow">‹</span><div class="mid"><b>Hole 1</b><small>Par 4 · 375 yd</small></div><span class="arrow">›</span></div>
+        <div class="pill">↶</div><div class="pill">↷</div><div class="pill play">▶</div>
+      </div>
+      <div class="card tray">
+        <h4><span>Fairway</span><span>✕</span></h4>
+        <div class="tiles">
+          <div class="tile on"><i>↝</i>Route</div><div class="tile"><i>↔</i>Width</div><div class="tile"><i>⤵</i>Slope</div><div class="tile"><i>📏</i>Ruler</div>
+        </div>
+        <div class="sub">Route</div>
+        <div class="seg"><span class="on">Straight</span><span>Dogleg ◀</span><span>Dogleg ▶</span><span>S-bend</span></div>
+      </div>
+      <div class="card bar">
+        <div class="tool"><i>✋</i>Move</div>
+        <div class="tool"><i>🌳</i>Trees</div>
+        <div class="tool"><i>⛱️</i>Sand</div>
+        <div class="tool"><i>💧</i>Water</div>
+        <div class="tool"><i>⛳</i>Green</div>
+        <div class="tool on" style="--tint:#ebe4d8"><i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M4 19 C4 12 16 12 16 5" stroke="#8cc76a" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="4" cy="19" r="1.6" fill="#fff"/><line x1="16" y1="5" x2="16" y2="1" stroke="#4a4063" stroke-width="1.2"/><path d="M16 1 L20 2.4 L16 3.8Z" fill="#ff6b6b"/></svg></i>Fairway</div>
+        <div class="tool"><i>☰</i>More</div>
+      </div>
+    </div>
+    <p class="cap">4 · Fairway tray</p>
+  </div>
+
+  <div>
+    <div class="phone">
+      <svg class="island" viewBox="0 0 280 170"><use href="#isl"/></svg>
+      <div class="dim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="grp">This hole</div>
+        <div class="list">
+          <div class="li"><i>✏️</i>Name &amp; par</div><div class="li"><i>🌬️</i>Wind</div><div class="li"><i>📈</i>Difficulty</div>
+          <div class="li"><i>✓</i>Check hole</div><div class="li"><i>⇄</i>Compare</div><div class="li"><i>↺</i>Reset hole</div>
+        </div>
+        <div class="grp">Course</div>
+        <div class="list">
+          <div class="li"><i>⛳</i>Name &amp; terrain</div><div class="li"><i>🗂️</i>All holes</div><div class="li"><i>☁️</i>Saving</div>
+          <div class="li"><i>⤓</i>Export</div><div class="li"><i>📂</i>Open draft</div><div class="li"><i>💾</i>Backup</div>
+        </div>
+        <div class="grp">View &amp; help</div>
+        <div class="list">
+          <div class="li"><i>👁️</i>Layers</div><div class="li"><i>🔑</i>Key</div><div class="li"><i>🎯</i>Fit view</div>
+          <div class="li"><i>❓</i>Help</div><div class="li"><i>🐞</i>Report bug</div><div class="li"><i>⚡</i>Paths &amp; lines</div>
+        </div>
+      </div>
+      <div class="card bar">
+        <div class="tool"><i>✋</i>Move</div>
+        <div class="tool"><i>🌳</i>Trees</div>
+        <div class="tool"><i>⛱️</i>Sand</div>
+        <div class="tool"><i>💧</i>Water</div>
+        <div class="tool"><i>⛳</i>Green</div>
+        <div class="tool"><i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M4 19 C4 12 16 12 16 5" stroke="#8cc76a" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="4" cy="19" r="1.6" fill="#fff"/><line x1="16" y1="5" x2="16" y2="1" stroke="#4a4063" stroke-width="1.2"/><path d="M16 1 L20 2.4 L16 3.8Z" fill="#ff6b6b"/></svg></i>Fairway</div>
+        <div class="tool on" style="--tint:#ffe29a"><i>☰</i>More</div>
+      </div>
+    </div>
+    <p class="cap">5 · More</p>
+  </div>
+
+</div>
+
+
+<div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin:26px auto 0;max-width:980px">
+  <div class="card" style="padding:12px 16px;text-align:center"><div style="font-size:11px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">A</div>
+    <div class="tool on" style="--tint:#ebe4d8;width:64px;margin:0 auto"><i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M4 19 C4 12 16 12 16 5" stroke="#8cc76a" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="4" cy="19" r="1.6" fill="#fff"/><line x1="16" y1="5" x2="16" y2="1" stroke="#4a4063" stroke-width="1.2"/><path d="M16 1 L20 2.4 L16 3.8Z" fill="#ff6b6b"/></svg></i>Fairway</div></div>
+  <div class="card" style="padding:12px 16px;text-align:center"><div style="font-size:11px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">B</div>
+    <div class="tool on" style="--tint:#ebe4d8;width:64px;margin:0 auto"><i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M3 18 L9 12 L13 14 L19 5" stroke="#4a4063" stroke-width="1.6" fill="none" stroke-dasharray="2 2"/><circle cx="3" cy="18" r="2" fill="#fff" stroke="#4a4063"/><circle cx="9" cy="12" r="2" fill="#ffce3a"/><circle cx="13" cy="14" r="2" fill="#ffce3a"/><circle cx="19" cy="5" r="2" fill="#ff6b6b"/></svg></i>Layout</div></div>
+  <div class="card" style="padding:12px 16px;text-align:center"><div style="font-size:11px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">C</div>
+    <div class="tool on" style="--tint:#ebe4d8;width:64px;margin:0 auto"><i><svg width="22" height="22" viewBox="0 0 22 22"><path d="M5 20 L7 3 M17 20 L15 3" stroke="#8cc76a" stroke-width="3" stroke-linecap="round"/><path d="M4 11 H18" stroke="#4a4063" stroke-width="1.4"/><path d="M4 11 l2.5 -2 M4 11 l2.5 2 M18 11 l-2.5 -2 M18 11 l-2.5 2" stroke="#4a4063" stroke-width="1.4"/></svg></i>Bend &amp; width</div></div>
+</div>
+
+<div class="wrap">
+<table>
+  <tr><th>Terrain</th><th>Trees now</th><th>Trees to add</th></tr>
+  <tr><td>Parkland</td><td>Pine, Oak, Sentinel, Maple, Birch, Willow, Cypress, Dead tree, Bush</td><td>Elm, Beech, Cherry blossom, Magnolia, Dogwood, Chestnut, Hedge, Flower bed</td></tr>
+  <tr><td>Desert</td><td>Palm, Saguaro, Palo verde, Joshua tree, Bush</td><td>Acacia, Olive, Ocotillo, Prickly pear, Barrel cactus, Agave, Yucca, Tumbleweed</td></tr>
+  <tr><td>Links</td><td>Gorse, Bush</td><td>Wind-bent hawthorn, Heather, Marram grass, Sea buckthorn</td></tr>
+  <tr><td>Tropical</td><td>Palm, Bush</td><td>Coconut palm, Fan palm, Banana, Bamboo, Banyan, Frangipani, Bird of paradise</td></tr>
+  <tr><td>Mountain</td><td>Pine, Spruce, Birch, Sentinel</td><td>Aspen, Larch, Redwood, Juniper, Douglas fir</td></tr>
+  <tr><td>Swamp</td><td>Willow, Cypress, Dead tree</td><td>Mangrove, Live oak with moss, Cattails, Reeds, Lily pads</td></tr>
+</table>
+</div>
+<div class="wrap">
+<table>
+  <tr><th>Button</th><th>Opens</th><th>Holds</th></tr>
+  <tr><td>✋ Move</td><td>nothing (the map)</td><td>Select · drag objects · drag empty map to pan · pinch to zoom</td></tr>
+  <tr><td>🌳 Trees</td><td>tray</td><td>One tree / A row of trees · This terrain / All · Leafy · Flowering · Evergreen · Palms · Desert · Swamp · Shrubs &amp; grass · Rocks &amp; logs</td></tr>
+  <tr><td>⛱️ Sand</td><td>tray</td><td>Fairway bunker · Greenside bunker · Draw a bunker · Sand across</td></tr>
+  <tr><td>💧 Water</td><td>tray</td><td>Pond · Draw a lake · Swamp · Draw a swamp · Creek across · Waste across · Swamp across</td></tr>
+  <tr><td>⛳ Green</td><td>tray</td><td>Green shape (6) · Draw green · Fringe · Pins · Around-the-green presets</td></tr>
+  <tr><td>Fairway</td><td>tray</td><td>Route (dogleg / S-bend) · Width · Slope · Ruler</td></tr>
+  <tr><td>☰ More</td><td>sheet</td><td>Hole settings · Check / Compare / Reset · Course &amp; terrain · All holes · Saving / Export / Drafts / Backup · Layers · Key · Fit · Help · Report bug · Cart path · Power line</td></tr>
+  <tr><td>Top bar</td><td>always</td><td>‹ Hole › picker · Undo · Redo · ▶ Play</td></tr>
+  <tr><td>Tapped object</td><td>card</td><td>Size / height / angle sliders · Copy · Reshape · Redraw · More settings · Delete</td></tr>
+  <tr><td>Drawing</td><td>card</td><td>Undo point · Cancel · Finish (n)</td></tr>
+</table>
+</div>
+
+</body>
+</html>

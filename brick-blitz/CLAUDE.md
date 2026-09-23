@@ -32,7 +32,7 @@ stored player data (THE LAW rule 5). Never "fix" them to match the name.
 
 | File | Role |
 |---|---|
-| `js/game.js` | engine + renderer + synth. `createGame(canvas, hooks)`, `createSound()`. No DOM beyond the canvas; never touches window/document listeners |
+| `js/game.js` | engine + renderer. `createGame(canvas, hooks)`. No DOM beyond the canvas; never touches window/document listeners |
 | `js/ui.js` | setup screen (over a live AI attract demo), HUD, pause/over/help overlays, input, clock, stats |
 | `js/strings.js` | `{ en, es }`, including the canvas strings (launch prompt, power names, stage clear) and the stage names |
 | `css/brick-blitz.css` | everything under `.bx-root` |
@@ -41,6 +41,9 @@ The field is logical units, 600 wide and 780-1000 tall: `layout()` picks the hei
 space available, so a tall phone gets a taller field rather than letterboxing.
 
 ## Design decisions (differences from the original)
+
+- **No sound, on purpose** (Matt, 2026-09-23: *"we don't want it to have sound"*). The original's
+  Web Audio synth and the Sound button were removed. Do not add audio back.
 
 - **Difficulty added** (Easy / Medium / Hard, `DIFF_TUNING` in `game.js`): ball speed x0.82/1/1.18,
   paddle 116/98/84, lives 5/3/3, power-up drop 18/15/12%. The leaderboard ranks tier-first.
@@ -62,7 +65,8 @@ space available, so a tall phone gets a taller field rather than letterboxing.
 
 ## Settings / persistence
 
-- `gamehub.brickblitz.v1`: `{ difficulty, mode: 'arcade'|'endless', muted }`. Saved on selection.
+- `gamehub.brickblitz.v1`: `{ difficulty, mode: 'arcade'|'endless' }`. Saved on selection. (An older save may still carry
+  `muted` from the day the game had sound; it is ignored.)
 - Stats: `recordBrickBlitz(score, difficulty, extras)` in `js/game-stats.js`, sub-counter `bz`:
   `{ games, bestScore, bestScoreByDiff: {easy,medium,hard}, points, bricks, stages, circuits,
   bestCombo }`. All three surfaces are wired (THE LAW rule 1): `ensureBz` + recorder,
