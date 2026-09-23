@@ -73,10 +73,18 @@ space available, so a tall phone gets a taller field rather than letterboxing.
   `DIFF_TUNING[d].fire` seconds (6 / 4.5 / 3.2) +-40%, at most 6 bombs in the air. A bomb hitting
   the paddle FREEZES it for 0.9 s and resets the combo; it never costs a life. Laser shots
   destroy bombs.
+  Bombs are drawn LARGE (a ~36-unit zig-zag bolt, pink halo + white-hot core) because the first
+  small version was hard to see on a phone (Matt, 2026-09-23). Do not shrink them back.
 - **Flying saucer.** Crosses the lane above the bricks every 18-30 s (first at 12-22 s) while the
   ball is in play. Ball or laser hit = 300, 500 or 1000 points (random, like the arcade's
   mystery ship). The ball passes through it.
 - Nothing new is stored: the bonuses land in the score, so `bz` is unchanged.
+
+## How to play: a picture, not paragraphs (Matt, 2026-09-23: "way too many words")
+
+One goal line, a labelled diagram (brick kinds, alien, saucer; the four capsules), one controls
+line. Every label is one or two words. Keep it that way: a new mechanic gets an icon and a label,
+never a sentence.
 
 ## Settings / persistence
 

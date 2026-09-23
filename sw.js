@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v940';
+const CACHE = 'game-hub-v941';
 
 const ASSETS = [
   './',
@@ -786,9 +786,9 @@ const REST_MANIFEST = {
   './brick-blitz/': 'a6d3daf30c',
   './brick-blitz/index.html': 'a6d3daf30c',
   './brick-blitz/css/brick-blitz.css': 'a51a845920',
-  './brick-blitz/js/ui.js': '711009d45e',
-  './brick-blitz/js/game.js': 'a3161d4a79',
-  './brick-blitz/js/strings.js': '0d27bd7457',
+  './brick-blitz/js/ui.js': 'b19c93a44a',
+  './brick-blitz/js/game.js': 'ae87ee3447',
+  './brick-blitz/js/strings.js': 'f0c1f0996f',
   './pinball/': 'c7d7cf8581',
   './pinball/index.html': 'c7d7cf8581',
   './pinball/css/pinball.css': '4d378af4c3',
