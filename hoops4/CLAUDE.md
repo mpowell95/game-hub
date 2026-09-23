@@ -1010,6 +1010,9 @@ back up to 912.5 settling at 929.4, `onDone` fired, no page errors. `test-game-c
 
 #### It starts when the ball goes IN, not when the throw resolves
 
+**SUPERSEDED 2026-09-22: the drop now starts on `through`, not `capture`** - see "The disc falls
+when the ball goes THROUGH the rim". The history below is why it moved off `resolve()` at all.
+
 Matt, on a screen recording of the first build: *"There's a tiny lag between when the ball goes into
 the basket and when it's shown falling. There shouldn't be. It should look like it's the same ball
 that goes in the basket falling down the column."*
@@ -1141,7 +1144,85 @@ own v axis so **the top of the fin is an edge, not a face**. There is no longer 
 rim tops to sit across. **A fin is narrower than the gap and never overhangs a rim** (`inset`) —
 a mouth's width is Matt's number and nothing may narrow one.
 
+### The disc falls when the ball goes THROUGH the rim, not at capture (2026-09-22)
+
+Matt, on a screen recording: *"the ball that goes in the basket and the ball that falls down the
+connect 4 column are still not timed correctly. A ball can bounce around on a rim and the ball
+falls down the column while the ball is still bouncing around the rim... fix this once and for
+all."*
+
+**The cause was the event, not the animation.** The disc started on `capture` (see "It starts
+when the ball goes IN" above), and `capture` fires while the ball is still UP AT RIM HEIGHT: the
+kinematic gate admits a falling ball up to 1.9 ballR above the rim, and the "inside the cup
+volume" branch captures a ball whose centre has merely dipped under the rim plane. From there the
+ball can rattle around inside the throat for a long time. Measured with
+`reference/hoops/probe-rim.mjs` over the 231-throw grid: **capture -> the ball actually below the
+rim, median 271 ms, p90 612 ms, worst 825 ms**, and the disc was falling for all of it.
+
+**`through` is the fix** (`physics.js`, section 1): the ball is WHOLLY below the rim (centre under
+`collarH - ballR`), inside the mouth, and moving down. Nothing can send it back up from there, so
+it sets `st.committed`, and `ui.js` starts the disc on that event instead of `capture`. It still
+comes early enough that the disc leaves with the ball: **through -> the throw resolving is 83 ms
+median, 208 ms worst.**
+
+`test.js` pins all four halves: a ball that has gone through always scores in that column; every
+scored ball passes through first; the through -> resolved median stays under 0.2 s; and ui.js
+starts the drop on `through`, never on `capture` (structural). **The physics is otherwise
+unchanged**: checked throw by throw against main over 861 throws, 0 differ.
+
+### The thrown ball is a basketball in the player's colour (2026-09-22)
+
+Matt: *"the yellow ball is not yellow enough. the ball you throw is not the same yellow as the
+balls in the connect 4 board. same with the reds. And why is the ball you throw not a
+basketball?"* It was a plain sphere with `color` set and roughness 0.75: the scene's lights
+multiplied the hex down, while the board is an UNLIT screen showing the same hex as is.
+
+Now `render.js`'s `_basketballTex` paints a basketball wrap (skeeball's `_buildBall` layout:
+equator and meridian seams, pebbling so the roll shows) in `L.red` / `L.yellow`, with each player's
+seam colour taken from the board pieces' own `_ball2d`. The texture is sRGB AND the emissive map,
+so the ball shows the board's colour under any light and the key light only adds the shading.
+`setBallColor(hex)` keeps its signature and swaps between the two prebuilt textures.
+
+### Rimouts and a round rim: built, measured, and switched OFF pending Matt (2026-09-22)
+
+Matt, same message: *"It's too easy to get the one you aim for. i want it bouncier. i don't want
+it to always bounce off and get nothing. I want it to have to be a perfect shot to go right in,
+otherwise it's like a 50-50 chance it bounces into the one you wanted or into a different one."*
+
+`reference/hoops/probe-rim.mjs` classifies every throw by the hoop it ARRIVED at (first time it
+comes down to rim height) and how far off that hoop's centre: **perfect** under 0.25 r (touches no
+rim - the mouth clears the ball by exactly 0.25 r), **good** 0.25-1.0 r, **rim** 1.0-1.75 r. As
+shipped, a good shot goes in the hoop it arrived at 84%, another hoop 3%, nothing 12%.
+
+Six knobs were added, **every one OFF by default** (so the shipped machine is untouched):
+`rimout` (capture is a guess until `through`; a ball climbing back out gets its floor back),
+`rimCap` (a square rim cap stood on its edge on every collar segment - a ROUND rim, so a hit on its
+outer slope throws the ball outward), `captureKeepsCollar`, `throatTop` (ballR above the rim; 8 as
+shipped), `rimSideways` and `rimKeep` (the sideways-bounce rotation applied to rim contacts in both
+directions, with the turned speed softened - energy is only ever removed, and nothing reads a hole
+position). Best rows of the 1,281-throw grid (21 powers x 61 aims):
+
+| knobs (with `rimout`) | perfect: that / other / none | good: that / other / none | parked |
+|---|---|---|---|
+| as shipped (no rimout) | 100 / 0 / 0 | 84 / 3 / 12 | 2% |
+| rimout alone | 100 / 0 / 0 | 54 / 2 / 44 | 3% |
+| rimCap 1.4, rimSideways 1, rimKeep 0.5 | 93 / 2 / 5 | 73 / 7 / 21 | 2% |
+| rimCap 1.4, keepsCollar, throatTop 0, rimSideways 1, rimKeep 0.5, ringRest 0.7 | 74 / 18 / 8 | 48 / 23 / 29 | 4% |
+| rimCap 1, keepsCollar, throatTop 0, rimSideways 1, rimKeep 0.5, ringRest 0.7, backRest 0.2 | 83 / 11 / 6 | 62 / 17 / 21 | 4% |
+
+**Why nothing reaches "50-50, rarely nothing":** traced, 126 of 152 rimouts land on the 3.25X of
+shelf in FRONT of the hoops and roll off its front edge. A rolling ball can never score (a collar
+stands 2.3 ballR tall), so only a ball that bounces a full pitch sideways IN THE AIR finds another
+hoop, and a neighbour catches 2-23% at best. The rimout-and-reflect-sideways family trades
+accuracy for "nothing" and parked balls, never for the neighbour hoop. **Getting there is a
+cabinet decision** (something that returns a bounced ball to the hoop row, or hoops closer or
+wider), which is why this is waiting on Matt and not shipped. `rimKeep 0.35` with `ringRest 0.7`
+also produced a throw that never settled (the probe hung): treat it as unsafe.
+
 ### There is NO rimout on this machine
+
+**(2026-09-22) Still true as shipped** - the `rimout` knob above exists and is OFF. With the disc
+now keyed to `through`, turning it on would no longer let the board and the physics disagree.
 
 BRICK CITY's rimout hands the floor and the collar back so a ball that bounces out over the rim
 plays on. Correct there, where a rack is nine independent balls. **Here a capture IS a Connect 4
@@ -1309,10 +1390,15 @@ completion is re-derived as outstanding work). Track it here or nowhere.
   turn-by-turn has worked since. Kept as a struck line because this entry outlived the fact and
   got quoted back at him as outstanding work; see the root `CLAUDE.md`'s Messages section for the
   lesson.
+- **Matt's "50-50" bounce (2026-09-22): waiting on his call.** Rimouts and a round rim are built
+  and switched off; the measured table and the reason no knob reaches his target are in "Rimouts
+  and a round rim". The next step needs him to pick a cabinet change.
 - **Whether a human swipe has the precision seven columns need.** `check-display.mjs` (without
   `--no-swipe`) now drives real touch gestures at each of the seven columns through the real pad,
   the real swipe maths and the real engine, and reports what lands. It is still a scripted thumb
-  on a SwiftShader canvas, not a person — a playtest is what finally answers this.
+  on a SwiftShader canvas, not a person — a playtest is what finally answers this. **It is not
+  stable run to run (2026-09-22):** main itself measured 3/7, 4/7 and 5/7 in three consecutive
+  runs, with 1 of 3 throws landing per column, so one red run is not evidence of a regression.
 - **The outer columns are easier than the middle**, because everything past the aim needed to
   reach column 1 still lands in column 1. Arguably the right way round, since Connect 4's centre
   columns carry the most winning lines — but confirm it reads as skill.
@@ -1321,6 +1407,10 @@ completion is re-derived as outstanding work). Track it here or nowhere.
 
 - `node hoops4/js/test.js` — the engine probe, headless, ~2 min. `POWERS`/`AIMS` env vars set the
   grid. It is the file that holds all four of Matt's requirements as numbers.
+- `node reference/hoops/probe-rim.mjs [--set=k=v,...]` — where a shot that ARRIVES at a hoop
+  ends up (that hoop / another / nothing, by how far off centre), and the capture / through ->
+  resolved timings the falling disc depends on. `POWERS`/`AIMS` set the grid; use 21 x 61 for any
+  decision (a coarse grid lies here too).
 - `node test-game-conventions.mjs` — the shared checklist; it discovers game folders from disk.
 - `node check-no-scroll.mjs hoops4` — **no game in this hub may scroll.**
 - `node test-hoops4-mp.mjs` — the PURE halves of turn-by-turn multiplayer: whole-document

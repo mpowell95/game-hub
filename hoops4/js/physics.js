@@ -43,7 +43,7 @@ const throatBit = (G, id) => {
 };
 const restMask = (G) => Object.keys(G.holes).reduce((m, id) => m | cupBit(G, id), GROUP_REST);
 /** The ball's mask while hole `id` has it: the floor and that collar let go, its throat takes over. */
-const capturedMask = (G, st, id) => (st.restMask & ~cupBit(G, id)) | throatBit(G, id);
+const capturedMask = (G, st, id) => (G.captureKeepsCollar ? st.restMask : (st.restMask & ~cupBit(G, id))) | throatBit(G, id);
 
 // Machine descriptions are pure per-board data; build each once.
 const machines = new Map();
@@ -176,7 +176,7 @@ function buildWorld(board) {
                 // simply died - which is 111 of 231 throws, and most of what "not very bouncy"
                 // was. A ball kicking off a fin into the next basket is exactly the
                 // unpredictability Matt asked for, and nothing steers it there.
-                : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat'
+                : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat' || s.part === 'rimCap'
                   || s.part === 'splitter' || s.part === 'fin' || s.part === 'finCap'
                   || s.part === 'chamfer' ? matRing
                   : s.part === 'backboard' ? matBack
@@ -187,7 +187,7 @@ function buildWorld(board) {
       // staircase's risers are walls - they stay solid for a captured ball, always.
       collisionFilterGroup: s.part === 'board' ? GROUP_FLOOR
         : s.part === 'throat' && s.cup ? throatBit(G, s.cup)
-          : s.part === 'cupSeg' && s.cup ? cupBit(G, s.cup) : GROUP_REST,
+          : (s.part === 'cupSeg' || s.part === 'rimCap') && s.cup ? cupBit(G, s.cup) : GROUP_REST,
       collisionFilterMask: GROUP_BALL,
     });
     if (s.shape !== 'prism') {
@@ -200,6 +200,10 @@ function buildWorld(board) {
         // A fin cap is a square section stood on its corner, so its TOP IS AN EDGE and a ball
         // cannot rest on it. The 45 is about the box's own v axis and must be applied AFTER the
         // face rotation in multiplication order (i.e. rightmost), or the diamond tips sideways.
+        if (s.rimSpin) {
+          const qr = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(1, 0, 0), Math.PI / 4);
+          body.quaternion = body.quaternion.mult(qr);
+        }
         if (s.spin45) {
           const qz = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 0, 1), Math.PI / 4);
           body.quaternion = body.quaternion.mult(qz);
@@ -305,7 +309,8 @@ export function startThrow(board, { power = 0.5, aim = 0, seed = null } = {}) {
     // tread, so a ball dropping toward a basket is seen while it is still above it.
     maxLip: Object.values(G.holes).reduce((m, h) => Math.max(m, (h && h.collarH) || 0), 0),
     restMask: restMask(G),
-    captured: null,           // hole id once the mouth has the ball
+    captured: null,           // hole id once the mouth has the ball (a GUESS until `committed`)
+    committed: null,          // hole id once the ball is THROUGH - wholly below the rim; never undone
     capturedFaceY: 0,
     touchedBoard: false,
     bounces: 0,
@@ -401,6 +406,7 @@ function finishAt(st, hole, value, kind) {
 // back forward off it is a real shot save and must stay honest), NOT the side rails (dead), and
 // NOT `throat`/`cupSeg` - a captured ball is committed to its column and nothing may touch it.
 const SIDEWAYS_PARTS = new Set(['board', 'ringSeg', 'fin', 'finCap', 'chamfer', 'splitter']);
+const RIM_PARTS = new Set(['ringSeg', 'cupSeg', 'throat', 'rimCap']);
 
 function substep(st) {
   const { world, ball, M, G } = st;
@@ -435,9 +441,13 @@ function substep(st) {
   //
   //     Forward only (+z is toward the player). A ball still travelling INTO the machine needs
   //     that momentum to reach the row at all.
-  const K = typeof G.bounceSideways === 'number' ? G.bounceSideways : 0;
-  if (K > 0 && !st.captured && st.hitPart && SIDEWAYS_PARTS.has(st.hitPart)
-      && vyWas < -0.20 && ball.velocity.y > 0.15 && ball.velocity.z > 0.10
+  const rimHit = RIM_PARTS.has(st.hitPart) && typeof G.rimSideways === 'number';
+  const K = rimHit ? G.rimSideways : (typeof G.bounceSideways === 'number' ? G.bounceSideways : 0);
+  // A captured ball is left alone - unless rimouts are on, where capture is only a guess and the
+  // ball is not really in until it is THROUGH.
+  if (K > 0 && !(G.rimout ? st.committed : st.captured) && st.hitPart
+      && (rimHit || SIDEWAYS_PARTS.has(st.hitPart))
+      && vyWas < -0.20 && ball.velocity.y > 0.15 && (rimHit ? Math.abs(ball.velocity.z) : ball.velocity.z) > 0.10
       // A ball with no sideways drift at all has no side to be sent to, and INVENTING one is
       // where this rule would stop being physics and start being a coin toss the machine makes
       // for the player. A dead-centre bounce is left exactly as it was.
@@ -446,8 +456,10 @@ function substep(st) {
     const hor = Math.hypot(v.x, v.z);
     const zKeep = v.z * (1 - K);
     const xMag = Math.sqrt(Math.max(0, hor * hor - zKeep * zKeep));
-    v.x = (v.x > 0 ? 1 : -1) * xMag;
-    v.z = zKeep;
+    // On a RIM the turned speed is also SOFTENED (`rimKeep`, 0..1 of it kept). Never raised.
+    const keep = rimHit && typeof G.rimKeep === 'number' ? G.rimKeep : 1;
+    v.x = (v.x > 0 ? 1 : -1) * xMag * keep;
+    v.z = zKeep * keep;
   }
 
   // 0. THE SOLVER-ARTEFACT CEILING (2026-09-04). NOT a gameplay rule and NOT a brake: this
@@ -501,6 +513,20 @@ function substep(st) {
     // In the CAPTURED HOLE'S OWN frame, never the nearest one - see machine.js worldToFaceIn.
     const fc = M.worldToFaceIn(M.frameAt(hDef.v), p);
     const d = Math.hypot(fc.u - hDef.u, fc.v - hDef.v);
+    // THROUGH: THE BALL IS WHOLLY BELOW THE RIM, INSIDE THE MOUTH, AND GOING DOWN (2026-09-22).
+    // This - not `capture` - is the moment the ball has gone in, and the moment the Connect 4 disc
+    // starts to fall (ui.js). Matt, on a screen recording: "A ball can bounce around on a rim and
+    // the ball falls down the column while the ball is still bouncing around the rim." It could:
+    // `capture` fires while the ball is still UP AT RIM HEIGHT (the kinematic gate admits a ball
+    // up to 1.9 ballR above the rim) and the drop was started there, 0.35 s median and 0.92 s
+    // worst before the ball actually dropped. Below the rim, inside the collar, with no floor and
+    // falling, nothing can send it back up: from here it is COMMITTED to this column, and
+    // reference/hoops/probe-rim.mjs asserts that no through ever ends anywhere else.
+    if (!st.committed && d < hDef.r && fc.h < (hDef.collarH || 0) - G.ballR
+      && ball.velocity.y * Math.cos(fc.tilt) + ball.velocity.z * Math.sin(fc.tilt) < 0) {
+      st.committed = st.captured;
+      st.events.push({ type: 'through', hole: st.captured, value: hDef.value });
+    }
     if (st.t > MAX_T) {
       finishAt(st, st.captured, hDef.value, 'hole');
     } else if (fc.h < -G.ballR * 1.2) {
@@ -552,7 +578,17 @@ function substep(st) {
       // The throat (below, radius r + ballR on its own collision bit) is what makes the commit
       // physically honest rather than a teleport: the ball is confined to the mouth it entered
       // and falls through it.
-      st.events.push({ type: 'rattle', hole: st.captured });
+      if (st.committed || !G.rimout) { st.events.push({ type: 'rattle', hole: st.captured }); return; }
+      // A RIMOUT (restored 2026-09-22). Until the ball is THROUGH (above), capture is only the
+      // engine's guess, and a ball that climbs back out over the rim gets its floor and the collar
+      // back and plays on - into the next hoop, or nothing. Matt: "I want it to have to be a
+      // perfect shot to go right in, otherwise it's like a 50-50 chance it bounces into the one
+      // you wanted or into a different one." The earlier "no rimout" rule existed only because
+      // the disc used to start falling at capture; now it starts at `through`, which can never
+      // be undone, so the board and the physics still cannot disagree.
+      st.events.push({ type: 'rimout', hole: st.captured });
+      st.captured = null;
+      ball.collisionFilterMask = GROUP_FLOOR | st.restMask;
     }
     return;
   }

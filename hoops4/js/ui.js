@@ -1008,7 +1008,15 @@ class Hoops4 {
     if (st && !st.done) {
       this.engine.phys.step(BOARD, st, dt);
       for (const ev of this.engine.phys.takeEvents(st)) {
-        if (ev.type === 'capture') {
+        // THE DISC FALLS ON `through`, NOT ON `capture` (2026-09-22). Matt: "A ball can bounce
+        // around on a rim and the ball falls down the column while the ball is still bouncing
+        // around the rim." `capture` is the engine's GUESS, made while the ball is still up at rim
+        // height, and since rimouts came back it can be wrong. `through` is the ball wholly below
+        // the rim, inside the mouth and falling - it cannot come back out, and it fires about
+        // 90 ms (median) before the throw resolves, so the disc still leaves with the ball.
+        if (ev.type === 'capture') this.captured = ev.hole;
+        if (ev.type === 'rimout') this.captured = null;
+        if (ev.type === 'through') {
           this.captured = ev.hole;
           this.rend && this.rend.flashRim(ev.hole);
           this._dropOnCapture(ev.hole);

@@ -71,6 +71,8 @@ let shots = 0, scored = 0, rattled = 0, parked = 0, worstSettle = 0;
 const settleTimes = [];
 const parkedAt = [];
 let capturedCount = 0, paidCount = 0;
+let scoredNoThrough = 0, throughElsewhere = 0;
+const throughLag = [];
 let missCount = 0, bouncedMisses = 0, bounceTotal = 0, bounceBest = 0;
 let lateralSum = 0, forwardSum = 0, bounceN = 0;
 
@@ -128,12 +130,13 @@ check('a shot goes in often enough for a turn to end, and rarely enough to be a 
 for (let p = 0; p < POWERS; p++) {
   for (let a = 0; a < AIMS; a++) {
     const st = startThrow(BOARD, { power: p / (POWERS - 1), aim: -1 + (2 * a) / (AIMS - 1) });
-    let capturedBy = null;
+    let capturedBy = null, throughBy = null, throughAt = -1;
     let guard = 20000;
     let prevVy = 0, bounces = 0, best = 0;
     while (!st.done && guard-- > 0) {
       substep(st);
       if (!capturedBy && st.captured) capturedBy = st.captured;
+      if (!throughBy && st.committed) { throughBy = st.committed; throughAt = st.t; }
       // A BOUNCE, measured rather than inferred from an event name: the ball was falling and is
       // now rising fast enough to see. This is the same definition `probe-bounce.mjs` uses.
       const v = st.ball.velocity;
@@ -152,6 +155,10 @@ for (let p = 0; p < POWERS; p++) {
       capturedCount++;
       if (st.outcome && st.outcome.hole === capturedBy) paidCount++;
     }
+    if (st.outcome && G.holes[st.outcome.hole]) {
+      if (!throughBy) scoredNoThrough++;
+      else { if (st.outcome.hole !== throughBy) throughElsewhere++; throughLag.push(st.t - throughAt); }
+    }
     if (!(st.outcome && G.holes[st.outcome.hole])) {
       missCount++;
       if (bounces) bouncedMisses++;
@@ -160,6 +167,25 @@ for (let p = 0; p < POWERS; p++) {
     }
   }
 }
+// THE DISC FALLS ON `through` (ui.js), SO `through` HAS TO BE THE TRUTH. Matt, 2026-09-22: "A
+// ball can bounce around on a rim and the ball falls down the column while the ball is still
+// bouncing around the rim." The disc used to start at `capture`, which fires with the ball still
+// up at rim height. `through` is the ball wholly below the rim; it must never be followed by any
+// other outcome, every scored ball must pass it, and it must come late enough to be honest but
+// early enough that the disc still leaves with the ball.
+throughLag.sort((a, b) => a - b);
+const lagMed = throughLag.length ? throughLag[Math.floor(throughLag.length / 2)] : 0;
+check('a ball that has gone THROUGH the rim always scores in that column', throughElsewhere === 0,
+  throughElsewhere + ' went elsewhere');
+check('every scored ball passes THROUGH the rim first (the disc waits for it)', scoredNoThrough === 0,
+  scoredNoThrough + ' scored without it');
+check('the disc still leaves with the ball: through -> resolved median under 0.2 s', lagMed < 0.2,
+  (lagMed * 1000).toFixed(0) + ' ms');
+const uiSrc = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+check('ui.js starts the falling disc on `through`, never on `capture`',
+  /ev\.type === 'through'\)\s*\{[^}]*_dropOnCapture/.test(uiSrc)
+  && !/ev\.type === 'capture'\)\s*\{[^}]*_dropOnCapture/.test(uiSrc), '');
+
 const paidRate = capturedCount ? paidCount / capturedCount : 1;
 console.log(`captured ${capturedCount}, paid their own hole ${paidCount}  (${(100 * paidRate).toFixed(2)}%)\n`);
 check('a captured ball ALWAYS pays the column that captured it (Matt: 100% of the time)',

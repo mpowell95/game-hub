@@ -342,7 +342,7 @@ export class Renderer {
     // Merged per part into one geometry: a box per solid was ~280 draw calls before any dressing.
     const byPart = new Map();
     for (const s of M.solids) {
-      if (s.part === 'keep' || s.part === 'throat' || s.part === 'cupSeg') continue;
+      if (s.part === 'keep' || s.part === 'throat' || s.part === 'cupSeg' || s.part === 'rimCap') continue;
       if (!byPart.has(s.part)) byPart.set(s.part, []);
       byPart.get(s.part).push(s);
     }
@@ -464,12 +464,24 @@ export class Renderer {
 
     // --- the ball ------------------------------------------------------------------------------
     const bGeo = new THREE.SphereGeometry(G.ballR, this.soft ? 12 : 22, this.soft ? 10 : 16);
-    this.ballMat = new THREE.MeshStandardMaterial({ color: COL(L.red), roughness: 0.75 });
+    // THE THROWN BALL IS A BASKETBALL IN THE PLAYER'S OWN COLOUR, painted from the SAME hexes the
+    // board's discs use (`L.red` / `L.yellow`). Matt, 2026-09-22: "the ball you throw is not the
+    // same yellow as the balls in the connect 4 board... why is the ball you throw not a
+    // basketball?" It was a plain lit sphere (`color` only, roughness 0.75), so the scene lights
+    // multiplied the hex down while the board is an UNLIT screen showing the hex as is: two
+    // different yellows from one number. Now the texture is sRGB (see skeeball's `_buildBall` for
+    // what happens without that line) and it is ALSO the emissive map, so the ball carries the
+    // board's colour under any light and the key light only adds the round shading on top.
+    this._ballTex = { red: this._basketballTex(L.red, true), yellow: this._basketballTex(L.yellow, false) };
+    this.ballMat = new THREE.MeshStandardMaterial({
+      map: this._ballTex.red, emissiveMap: this._ballTex.red, emissive: 0xffffff,
+      emissiveIntensity: 0.55, roughness: 0.6,
+    });
     this.ballMesh = new THREE.Mesh(bGeo, this.ballMat);
     this.ballMesh.castShadow = !this.soft;
     this.ballMesh.visible = false;
     this.scene.add(this.ballMesh);
-    this._trash.push(bGeo, this.ballMat);
+    this._trash.push(bGeo, this.ballMat, this._ballTex.red, this._ballTex.yellow);
 
     // THE CAMERA IS FRAMED ON THE TWO THINGS THAT MUST ALWAYS BE VISIBLE - the hoop row and the
     // screen above it - rather than on the board's width. Skeeball learned this: fitting the
@@ -966,7 +978,37 @@ export class Renderer {
     r._flash = 0.5;
   }
 
-  setBallColor(hex) { if (this.ballMat) this.ballMat.color.set(hex); }
+  /** Which player's basketball is in the air. Matched on the hex so callers keep passing
+   *  `BOARD.look.red` / `.yellow`, exactly the colours the board's discs are painted in. */
+  setBallColor(hex) {
+    if (!this.ballMat || !this._ballTex) return;
+    const tex = String(hex).toLowerCase() === String(this.look.yellow).toLowerCase()
+      ? this._ballTex.yellow : this._ballTex.red;
+    this.ballMat.map = tex; this.ballMat.emissiveMap = tex; this.ballMat.needsUpdate = true;
+  }
+
+  /** A basketball wrap (equirect: the horizontal band is the equator seam, the vertical bands are
+   *  meridians, the pebbling keeps the roll visible - skeeball's `_buildBall`) in one player's
+   *  colour, with the seam colour the board's `_ball2d` pieces use for the same player. */
+  _basketballTex(fill, dark) {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 128;
+    const x = cv.getContext('2d');
+    x.fillStyle = fill; x.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 140; i++) {
+      x.globalAlpha = 0.16;
+      x.beginPath(); x.arc((i * 41) % 256, (i * 23) % 128, 2.2, 0, Math.PI * 2);
+      x.fillStyle = i % 2 ? (dark ? '#8f1f18' : '#a97c00') : '#ffffff';
+      x.fill();
+    }
+    x.globalAlpha = 1;
+    x.fillStyle = dark ? '#6e140e' : '#7a5800';
+    x.fillRect(0, 61, 256, 6);                                        // equator
+    for (const sx of [0, 64, 128, 192]) x.fillRect(sx, 0, 5, 128);    // meridians
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
 
   /** The narrowest field that still holds every `_fitPoints` point, width AND height. */
   _fovFor(aspect) {
