@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v928';
+const CACHE = 'game-hub-v929';
 
 const ASSETS = [
   './',
@@ -895,10 +895,10 @@ const REST_MANIFEST = {
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
   './baseball/css/baseball.css': '79be53aea0',
-  './baseball/js/ui.js': '32a38e5bb0',
-  './baseball/js/field.js': '549d87932f',
+  './baseball/js/ui.js': 'c15220349c',
+  './baseball/js/field.js': '49839c8fac',
   './baseball/js/ring.js': '4786e4ea61',
-  './baseball/js/strings.js': '188c6a764c',
+  './baseball/js/strings.js': 'eeb37cacda',
   './baseball/js/rig.js': '15167015a3',
   './baseball/js/actors.js': '18eaa14aeb',
   './baseball/js/poses.js': 'a8cde6e9fb',
@@ -913,17 +913,17 @@ const REST_MANIFEST = {
   './baseball/models/skins/skaterFemaleA.png': 'de575f5075',
   './baseball/models/skins/cyborgFemaleA.png': '321b7ba2d8',
   './baseball/js/engine/rng.js': '8119f3c46a',
-  './baseball/js/engine/settings.js': '8a4942e9d6',
+  './baseball/js/engine/settings.js': '896cb3a60d',
   './baseball/js/engine/pitch.js': 'b6fb2c8d7d',
   './baseball/js/engine/swing.js': '948dadacf3',
-  './baseball/js/engine/outcomes.js': '82bb135014',
+  './baseball/js/engine/outcomes.js': 'b27d698f1e',
   './baseball/js/engine/bases.js': '76c79f21c6',
   './baseball/js/engine/game.js': '651853c29d',
   './baseball/js/engine/agents.js': '50cd36eb0c',
   './baseball/js/engine/teams.js': 'b74168b3cf',
   './baseball/js/engine/zones.js': '1bc65ed6ba',
   './baseball/js/engine/season.js': 'd2ad1033fc',
-  './baseball/js/engine/career.js': 'e3fa9a0a95',
+  './baseball/js/engine/career.js': 'ffcafa4fd6',
   './baseball/js/career-io.js': 'ac45a5b7e1',
   './baseball/js/build.js': '7506fc4e23',
   './dominoes/': 'f371088b83',

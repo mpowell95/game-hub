@@ -449,6 +449,8 @@ export function makeCameras(aspect) {
 const PALETTE = {
   grassA: '#3f8f3a', grassB: '#4aa244', dirt: '#b8743f', dirtDark: '#a5652f',
   line: '#f2f4f8', fenceSeam: '#154f2a', rail: '#e8c34a',
+  // Doc item 11: a tall park wall (a deep green face) and the ivy tint multiplied over the padded wall.
+  tallWall: '#2e5a3a', ivy: '#7fbf5a',
   // R9 (docs/BASEBALL-3D-BUILD.md section 9, "R9", item 4): the crowd was a DARK ground
   // (`#2b3038`) lit only by ambient+one overhead sun - a vertical wall's own normal points
   // horizontally (toward home, `ribbonGeometry`'s own comment), so a light coming mostly from
@@ -1203,6 +1205,28 @@ export function buildStadium(scene, { fenceFt, league = 'majors' }) {
   const railGeo = ribbonGeometry(fencePts, FENCE.height, FENCE.height + FENCE.railHeight);
   const railMat = new THREE.MeshLambertMaterial({ color: PALETTE.rail, side: THREE.DoubleSide });
   group.add(new THREE.Mesh(railGeo, railMat)); track(railGeo, railMat);
+
+  // Doc item 11 (Matt, 2026-09-23): a Majors park's own features. `ivy` is looks only - the padded
+  // wall tinted green. `walls` are the TALL sections (`PARKS[id].walls`, the same entries
+  // `outcomes.js` scores a double off): a plain green face from the rail up to the wall's height,
+  // with its own rail on top, sampled every degree along the same fence curve.
+  if (fenceFt.ivy) wallMat.color.set(PALETTE.ivy);
+  if (Array.isArray(fenceFt.walls) && fenceFt.walls.length) {
+    const tallMat = new THREE.MeshLambertMaterial({ color: PALETTE.tallWall, side: THREE.DoubleSide });
+    mats.push(tallMat);
+    for (const w of fenceFt.walls) {
+      const pts = [];
+      for (let deg = w.fromDeg; deg <= w.toDeg + 1e-6; deg += 1) {
+        const p = polar(deg, fenceFtAt(deg, fenceFt));
+        pts.push({ x: p.x, z: -p.y });
+      }
+      if (pts.length < 2) continue;
+      const faceGeo = ribbonGeometry(pts, FENCE.height + FENCE.railHeight, w.heightFt);
+      group.add(new THREE.Mesh(faceGeo, tallMat)); track(faceGeo, null);
+      const topGeo = ribbonGeometry(pts, w.heightFt, w.heightFt + FENCE.railHeight);
+      group.add(new THREE.Mesh(topGeo, railMat)); track(topGeo, null);
+    }
+  }
 
   // --- the stands: R13 - `cfg.tiers` stepped tiers (0-3, `LEAGUE_STADIUM`'s own table), each 12 ft
   // deep, rising to 40 ft. Flat boxes, as budgeted: one vertical face and one horizontal deck per

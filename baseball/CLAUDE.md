@@ -4,6 +4,28 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Late pitches and Majors parks (2026-09-23, design doc items 9 and 11)
+
+- **Pitches**: movement and travel times unchanged (Matt). `READOUT` now has screwball/eephus/
+  cutter rows (Majors 82/55/91, others x scale); before, they fell back to the fastball's mph.
+  **The eephus DISPLAYS as "Blooper"** (EN `BL`, ES "Globo" `GB`); the id `eephus` is frozen -
+  it is in `TITLE_PITCH_UNLOCKS`, pitch mixes and stored games.
+- **Parks** (`settings.js`): eight named `PARKS` entries (five-point fences, `walls`, `ivy`),
+  `PARK_BY_STYLE`, `PLAYER_HOME_PARK = 'boston'` (Matt), `parkFor(league, homeIsPlayer, style)`,
+  `WALL_RULE` (base 8 ft, 1 ft of carry per ft of wall). Majors only; lower leagues stay 'default'.
+- **Tall wall** (`outcomes.js` `tallWallExtraFt`): clears the distance but not the height =
+  `kind: 'wall-double'`, bases 2, `distanceFt` pulled to the wall's foot so the drawn ball never
+  flies through it.
+- **Which park**: career `buildGame` uses `parkFor` only when the season snapshotted `parks: true`
+  (a season in progress keeps 'default'); Quick Play is always away, so the CPU's park. The park
+  rides in `Game.snapshot()`, so a resume keeps it.
+- **Drawing**: `ui.js` `_fenceFt()` reads the live game's `_parkFt()` (one source for the drawn
+  and the scored wall); the stadium rebuilds on `_fieldKey()` (league + park). `field.js` draws a
+  tall section as a green face + rail, and tints the wall for ivy. Park name shows on the career
+  opponent line in the Majors.
+- **Measured**: all 8 `sim-baseball-career.mjs` assertions pass; Majors median win rate 55.1% ->
+  55.9%, strong first-try World Series 32.0% -> 34.0%, Perfect Season 3.8% -> 3.3% (noise-level).
+
 ## After a World Series win (2026-09-23, design doc item 10)
 
 Matt's calls: celebrate, then straight into the next Majors season; cap stays 26; no difficulty

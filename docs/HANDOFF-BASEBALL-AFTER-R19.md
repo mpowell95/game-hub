@@ -28,7 +28,7 @@ You are continuing work on the Baseball game in the Game Hub repo (`baseball/`).
 3. **Standings**: DONE 2026-09-23 (CPU records match your results; see `baseball/CLAUDE.md`).
 4. **Team names**: DONE 2026-09-23 (40 names, `TEAM_NAMES` in `baseball/js/ui.js`; see `baseball/CLAUDE.md`).
 5. **After a World Series win**: DONE 2026-09-23 (celebration popup, title count; see `baseball/CLAUDE.md`).
-6. **Screwball / Eephus / Cutter** movement and speed (item 9); park features (item 11).
+6. **Screwball / Eephus / Cutter; parks**: DONE 2026-09-23 (see `baseball/CLAUDE.md`).
 
 ## Rules that bit last session
 

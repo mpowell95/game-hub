@@ -218,9 +218,9 @@ export const PITCH_TRAVEL_MULT = {
   curveball: 1.3,        // [Tested] doc §14
   slider: 1.1,           // [Tested] doc §14
   knuckleball: 1.45,     // [Tested] doc §14
-  screwball: 1.2,        // Draft [Open item 9] - doc leaves this open; invented, not measured
-  eephus: 1.9,           // Draft [Open item 9] - a very slow "junk" pitch by name; invented
-  cutter: 1.05,          // Draft [Open item 9] - a fast pitch by name; invented
+  screwball: 1.2,        // Locked 2026-09-23 (doc item 9, Matt kept today's feel)
+  eephus: 1.9,           // Locked 2026-09-23 (doc item 9); shown to players as "Blooper"
+  cutter: 1.05,          // Locked 2026-09-23 (doc item 9)
 };
 
 // The mph readout by league (doc §11/§14). Was DISPLAY ONLY until R11 (docs/BASEBALL-3D-BUILD.md
@@ -230,14 +230,15 @@ export const PITCH_TRAVEL_MULT = {
 // plate in the same time as a Majors 95 mph one. `pitch.js` now reads READOUT[league][type] (or
 // this league's own fastball row, for a type with none - see the comment there) as the real
 // travel-time divisor, alongside PITCH_TRAVEL_MULT. [Draft] doc §11 (fastball values based on
-// published averages; "off-speed values are estimates"). Screwball/eephus/cutter have no readout
-// row - doc Open item 9.
+// published averages; "off-speed values are estimates"). Screwball/eephus/cutter rows added
+// 2026-09-23 (doc item 9, Matt): Majors 82/55/91, every other league the Majors row x its scale.
+// Before that they fell back to the fastball's mph, so a 55 mph lob read "95". Display only.
 export const READOUT = {
-  little:     { scale: 0.58, fastball: 55, changeup: 50, curveball: 46, slider: 50, knuckleball: 44 },
-  highschool: { scale: 0.84, fastball: 80, changeup: 72, curveball: 67, slider: 73, knuckleball: 64 },
-  college:    { scale: 0.93, fastball: 88, changeup: 80, curveball: 74, slider: 81, knuckleball: 71 },
-  minors:     { scale: 0.98, fastball: 93, changeup: 84, curveball: 78, slider: 85, knuckleball: 74 },
-  majors:     { scale: 1.00, fastball: 95, changeup: 86, curveball: 80, slider: 87, knuckleball: 76 },
+  little:     { scale: 0.58, fastball: 55, changeup: 50, curveball: 46, slider: 50, knuckleball: 44, screwball: 48, eephus: 32, cutter: 53 },
+  highschool: { scale: 0.84, fastball: 80, changeup: 72, curveball: 67, slider: 73, knuckleball: 64, screwball: 69, eephus: 46, cutter: 76 },
+  college:    { scale: 0.93, fastball: 88, changeup: 80, curveball: 74, slider: 81, knuckleball: 71, screwball: 76, eephus: 51, cutter: 85 },
+  minors:     { scale: 0.98, fastball: 93, changeup: 84, curveball: 78, slider: 85, knuckleball: 74, screwball: 80, eephus: 54, cutter: 89 },
+  majors:     { scale: 1.00, fastball: 95, changeup: 86, curveball: 80, slider: 87, knuckleball: 76, screwball: 82, eephus: 55, cutter: 91 },
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -659,7 +660,41 @@ export const PARKS = {                      // Draft [Open item 7]
   bandbox:  { left: 302, center: 375, right: 302 },
   canyon:   { left: 355, center: 430, right: 355 },
   asymmetric: { left: 315, center: 410, right: 340 },
+  // Doc item 11, Matt 2026-09-23: "fence shapes + tall walls" for version 1. The eight Majors parks,
+  // fictional names, shapes inspired by the doc's eight cities. Spray angle: -45 = the left-field
+  // line, +45 = the right-field line (`outcomes.js` `fenceFtAt`). `walls` are the tall sections:
+  // a ball that would clear a normal fence but not this height is a double off the wall
+  // (`WALL_RULE`). `ivy` is LOOKS ONLY (field.js tints the wall green). Majors only.
+  boston:       { name: 'Harbor Yard',     left: 310, leftCenter: 379, center: 390, rightCenter: 380, right: 302,
+                  walls: [{ fromDeg: -45, toDeg: -17, heightFt: 37 }] },   // tall, short left wall
+  newyork:      { name: 'Empire Grounds',  left: 318, leftCenter: 399, center: 408, rightCenter: 385, right: 314 }, // short right porch
+  chicago:      { name: 'Lakeshore Park',  left: 355, leftCenter: 368, center: 400, rightCenter: 368, right: 353, ivy: true },
+  sanfrancisco: { name: 'Bayview Field',   left: 339, leftCenter: 364, center: 391, rightCenter: 415, right: 309 }, // deep right-center
+  houston:      { name: 'Launchpad Park',  left: 315, leftCenter: 362, center: 409, rightCenter: 373, right: 326,
+                  walls: [{ fromDeg: -45, toDeg: -22, heightFt: 21 }] },   // short left, tall wall
+  detroit:      { name: 'Assembly Park',   left: 345, leftCenter: 370, center: 420, rightCenter: 365, right: 330 }, // deep center
+  denver:       { name: 'Summit Field',    left: 347, leftCenter: 390, center: 415, rightCenter: 375, right: 350 }, // huge outfield
+  losangeles:   { name: 'Sunset Park',     left: 330, leftCenter: 375, center: 395, rightCenter: 375, right: 330 }, // even
 };
+
+// Which park a Majors CPU team plays at home, by style (the style is what places each team in its
+// city - `ui.js` `TEAM_NAMES.majors`). The player's own home park is Boston's (Matt, 2026-09-23),
+// shared with the Boston Harbormasters. Below the Majors every game is on the league's own field.
+export const PARK_BY_STYLE = {
+  sluggers: 'newyork', smallBall: 'denver', patient: 'sanfrancisco', flamethrowers: 'houston',
+  junkballers: 'detroit', shifters: 'chicago', balanced: 'boston', aces: 'losangeles',
+};
+export const PLAYER_HOME_PARK = 'boston';
+/** The park for a game, from the league, the HOME team's style and whether the player is home. */
+export function parkFor(league, homeIsPlayer, homeStyleId) {
+  if (league !== 'majors') return 'default';
+  if (homeIsPlayer) return PLAYER_HOME_PARK;
+  return PARK_BY_STYLE[homeStyleId] || 'default';
+}
+// A tall wall: a fly/line that clears the fence distance but lands less than
+// (heightFt - baseHeightFt) * carryFtPerFt past it hit the wall, and is a double. baseHeightFt is
+// the ordinary fence (field.js FENCE.height). 1 ft of extra carry per ft of wall = a ~45 deg descent.
+export const WALL_RULE = { baseHeightFt: 8, carryFtPerFt: 1.0 };
 
 // ---------------------------------------------------------------------------------------------
 // Team generation styles (doc §9's named 8: Sluggers, Small Ball, Patient, Flamethrowers,
@@ -1445,7 +1480,7 @@ export default {
   PITCH_TYPES, PITCH_UNLOCKS, TITLE_PITCH_UNLOCKS, unlockedPitchesFor, PITCH_TRAVEL_MULT, READOUT,
   FEEL, LEAGUE_TIMING_WINDOW_MULT, LEAGUE_CONTACT_MULT, FIELD_SCALE, CPU, CPU_LEVEL_SHORTFALL,
   CPU_ROSTER_LEVEL, CPU_ROSTER_CEILING, WEAKSPOT_WINDOW,
-  PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, SHIFT_MIN_SAMPLES, PARKS,
+  PATTERN_WINDOW, PATTERN_WEIGHTS, FOUL_LINE_DEG, PARK_GEOMETRY, FIELD, SHIFT_WINDOW, SHIFT_MAX_DEG, SHIFT_MIN_SAMPLES, PARKS, PARK_BY_STYLE, PLAYER_HOME_PARK, parkFor, WALL_RULE,
   TEAM_STYLES, SHIFTERS_ADJUST_OUT_ZONES, STYLE_BEHAVIOR, STYLE_STRENGTH_DELTA, SIGMA_MS_PER_WINRATE_PP, CHASE_PER_WINRATE_PP,
   TEAM_LADDER_OFFSETS, LEAGUE_LADDER_STYLES,
   TEAM_STYLE_WEIGHTS, LEFTY_RATE,

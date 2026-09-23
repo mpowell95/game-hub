@@ -307,7 +307,7 @@ Major League	62%	40 to 52%
 ### Majors parks
 - **[Locked]** Fictional names, shapes inspired by famous parks: Boston (tall, short left wall), New York (short right porch), Chicago (ivy), San Francisco (deep right-center), Houston (short left), Detroit (deep center), Denver (huge outfield), Los Angeles (even).
 - **[Locked]** No wind, air, or weather.
-- **[Open]** Which park features make version 1 vs. later (for example, does ivy do anything).
+- **[Locked] by Matt 2026-09-23** Version 1 = fence shapes + tall walls. Eight parks (`settings.js` `PARKS`, one per Majors style via `PARK_BY_STYLE`): Harbor Yard (Boston, 37 ft left wall), Empire Grounds (New York), Lakeshore Park (Chicago, ivy = looks only), Bayview Field (San Francisco), Launchpad Park (Houston, 21 ft left wall), Assembly Park (Detroit), Summit Field (Denver), Sunset Park (Los Angeles). A ball that clears the distance but not a tall wall is a double off it. Majors games are at the home team's park; **the player's own home park is Harbor Yard (Boston's shape, Matt)**. Snapshotted per season (`season.parks`). Measured: all 8 simulator assertions pass; moves within noise.
 
 ## 11. Pitches
 
@@ -340,7 +340,7 @@ World Series Champ x2	Cutter
 - **[Tested]** Curveball: slow, big smooth one-way bend that starts right after release.
 - **[Tested]** Slider: faster, smaller bend that only starts about halfway to the plate.
 - **[Tested]** Knuckleball: very slow, wobbles on its own. Not steerable.
-- **[Open]** Screwball, Eephus, and Cutter movement and speed.
+- **[Locked] by Matt 2026-09-23** Screwball, Eephus and Cutter keep their shipped movement and flight times (screwball = the mirror of a slider, cutter = a small late cut, eephus = a high slow lob; travel 1.2 / 1.9 / 1.05). Majors mph readouts 82 / 55 / 91, other leagues scaled. **The eephus is shown to players as "Blooper"** (Matt: "there must be a more normal name"); the internal id stays `eephus` (stored data).
 
 ### Speed readout
 - **[Locked]** Pitch type and speed are hidden until the ball crosses the plate. This applies when you bat and when you pitch.
@@ -594,9 +594,9 @@ perfectSeasons * 10000 + wsTitles * 100 + (league - 1) * 4 + bestTrophyInThatLea
 6. Closed: the league settings block is a source file, tuned by deploy. No admin page control.
 7. Out zone sizes and fence distances per league.
 8. Steal, bunt, and pickoff mechanics.
-9. Screwball, Eephus, and Cutter movement and speed.
+9. Closed 2026-09-23: movement/speed kept, readouts 82/55/91, eephus shown as "Blooper".
 10. Closed 2026-09-23: World Series celebration popup, then the next Majors season; cap stays 26; no difficulty change.
-11. Park features for version 1 vs. later.
+11. Closed 2026-09-23: fence shapes + tall walls; your home park is Boston's.
 12. Closed 2026-09-23: 40 team names (`baseball/js/ui.js` `TEAM_NAMES`).
 13. Closed 2026-09-23: schedule repeats the middle teams; you win standings ties (R16); CPU records match your results.
 14. Closed: no sound in version 1.

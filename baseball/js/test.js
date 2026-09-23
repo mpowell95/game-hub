@@ -3197,5 +3197,53 @@ await (async function section34() {
 }
 
 // ---------------------------------------------------------------------------------------------
+console.log('\n-- 35. Doc items 9 and 11 (2026-09-23): pitch readouts, Majors parks, tall walls --');
+{
+  // Item 9: every league has its own mph for the three late pitches (a Blooper no longer reads 95).
+  for (const lg of SETTINGS.LEAGUES) {
+    for (const p of ['screwball', 'eephus', 'cutter']) {
+      ok(Number.isFinite(SETTINGS.READOUT[lg][p]) && SETTINGS.READOUT[lg][p] < SETTINGS.READOUT[lg].fastball,
+        `${lg}: ${p} has its own readout, slower than the fastball`);
+    }
+  }
+  ok(SETTINGS.READOUT.majors.eephus === 55 && SETTINGS.READOUT.majors.screwball === 82 && SETTINGS.READOUT.majors.cutter === 91,
+    'Majors readouts are the approved 82 / 55 / 91');
+
+  // Item 11: eight Majors parks, one per style, each a full five-point fence.
+  const styles = Object.keys(SETTINGS.PARK_BY_STYLE);
+  ok(styles.length === 8 && new Set(Object.values(SETTINGS.PARK_BY_STYLE)).size === 8, 'eight styles, eight different parks');
+  for (const id of Object.values(SETTINGS.PARK_BY_STYLE)) {
+    const pk = SETTINGS.PARKS[id];
+    ok(pk && pk.name && ['left', 'leftCenter', 'center', 'rightCenter', 'right'].every((k) => Number.isFinite(pk[k])),
+      `${id}: a named park with all five fence distances`);
+  }
+  ok(SETTINGS.parkFor('majors', true, 'aces') === 'boston', "the player's own home park is Boston's (Matt)");
+  ok(SETTINGS.parkFor('majors', false, 'sluggers') === 'newyork', "an away game is at the home CPU team's park");
+  ok(SETTINGS.parkFor('minors', false, 'sluggers') === 'default', 'below the Majors every game is on the league field');
+  ok(SETTINGS.PARKS.newyork.right < SETTINGS.PARKS.newyork.left, 'New York: short right porch');
+  ok(SETTINGS.PARKS.detroit.center >= 420, 'Detroit: deep center');
+
+  // The tall wall: a ball that clears 310 ft to left but not 37 ft of wall is a double; the same
+  // park with no wall calls it a homer; a ball carrying far enough past is still a homer.
+  const zonesM = zonesFor('majors', 0);
+  const noWall = { ...SETTINGS.PARKS.boston, walls: [] };
+  let wallDouble = null, stillHomer = null;
+  for (let v = 80; v <= 125; v += 0.25) {
+    const b = { exitVeloMph: v, launchAngleDeg: 30, sprayAngleDeg: -35, q: 1 };
+    const plain = resolveContact(b, zonesM, SETTINGS, noWall, 5, mulberry32(7));
+    const walled = resolveContact(b, zonesM, SETTINGS, SETTINGS.PARKS.boston, 5, mulberry32(7));
+    if (plain.bases === 4 && walled.kind === 'wall-double' && !wallDouble) wallDouble = { plain, walled };
+    if (walled.bases === 4 && !stillHomer) stillHomer = walled;
+  }
+  ok(!!wallDouble, 'Boston: a ball that would clear a normal left-field fence is a double off the tall wall');
+  ok(wallDouble && wallDouble.walled.bases === 2 && wallDouble.walled.distanceFt < fenceFtAt(-35, SETTINGS.PARKS.boston),
+    'the wall double drops in front of the wall (the drawn ball never flies through it)');
+  ok(!!stillHomer && stillHomer.distanceFt >= fenceFtAt(-35, SETTINGS.PARKS.boston) + (37 - SETTINGS.WALL_RULE.baseHeightFt) * SETTINGS.WALL_RULE.carryFtPerFt,
+    'a ball carrying far enough still clears the tall wall');
+  const rightSide = resolveContact({ exitVeloMph: 110, launchAngleDeg: 30, sprayAngleDeg: 35, q: 1 }, zonesM, SETTINGS, SETTINGS.PARKS.boston, 5, mulberry32(7));
+  ok(rightSide.kind !== 'wall-double', 'the tall wall is left field only');
+}
+
+// ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;
