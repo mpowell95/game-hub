@@ -277,9 +277,12 @@ ribbon.innerHTML = [
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-export" title="Export (Ctrl+E)"><span class="he-tool-icon">⤓</span><span class="he-tool-label">Export</span></button>',
   '<button class="he-tool" id="he-play" title="Play this hole" style="width:auto;padding:0 8px;"><span class="he-tool-icon">▶</span><span class="he-tool-label">Play</span></button>',
-  '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
+  // Copy JSON is a developer's button; the Course Creator has Download backup for the same job, and
+  // the room it frees keeps Report bug and Help on screen at 1280 px (2026-09-23).
+  '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;' + (profile.custom ? 'display:none;' : '') + '"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
   '<div class="he-sep"></div>',
   // Help (2026-09-22): hole-editor/help.html, plain words for someone who has never seen the tool.
+  '<button class="he-tool" id="he-bug" title="Report a bug to Matt" style="width:auto;padding:0 8px;"><span class="he-tool-icon">\u{1F41E}</span><span class="he-tool-label">Report bug</span></button>',
   '<a class="he-tool" id="he-help" href="./?course=tutorial" target="_blank" rel="noopener" title="How to use the Course Creator" style="text-decoration:none;color:inherit;"><span class="he-tool-icon">?</span><span class="he-tool-label">Help</span></a>',
 ].join('');
 
@@ -965,6 +968,22 @@ document.getElementById('he-help').addEventListener('click', async (e) => {
   }
   document.body.appendChild(m);
   setTimeout(() => document.addEventListener('click', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', off); } }), 0);
+});
+
+// REPORT A BUG (2026-09-23): the hub's own form (js/bug-report-ui.js) - same inbox Matt already
+// reads, same screenshots, same offline outbox - with "Course Creator" preselected and a line saying
+// exactly where the designer was. A practice-run report says so, so it is not mistaken for his course.
+document.getElementById('he-bug').addEventListener('click', async () => {
+  try {
+    const m = await import('../../js/bug-report-ui.js');
+    const c = doc.course || {};
+    const where = profile.tutorial ? 'Course Creator (Help practice run)' : profile.custom ? 'Course Creator' : 'Red Mesa hole editor';
+    const who = designer();
+    const context = [where, who ? `designer ${who.name || ''} ${who.code || ''}`.trim() : null, profile.custom ? `course "${c.name || ''}" (${c.theme || 'parkland'})` : null,
+      `hole ${doc.order.indexOf(currentId) + 1} of ${doc.order.length} (${currentId})`, `tool ${currentTool}`,
+      editorCanvas.selection ? `selected ${editorCanvas.selection.group}` : null].filter(Boolean).join(' · ');
+    await m.openBugReport({ where: { value: 'golf-course-creator', label: where }, context });
+  } catch (err) { console.error('[hole-editor] bug report form failed to load', err); window.alert('The bug report form could not load. Check the connection and try again.'); }
 });
 
 // FIRST VISIT: POINT AT HELP (Matt: "when he opens the tool, it needs to guide him to click help

@@ -349,7 +349,7 @@ export async function prepareScreenshot(file) {
 
 /** Assemble the whole report. `shots` are prepareScreenshot() results; they ride separately on the
  *  wire (see submitBugReport) but are counted here so the record knows what belongs to it. */
-export async function buildBugReport({ description, gameId, gameTitle, screenshots }) {
+export async function buildBugReport({ description, gameId, gameTitle, screenshots, context }) {
   const prof = loadProfile() || {};
   const shots = Array.isArray(screenshots) ? screenshots.slice(0, MAX_SHOTS) : [];
   const [environment, deviceReport] = await Promise.all([
@@ -367,6 +367,9 @@ export async function buildBugReport({ description, gameId, gameTitle, screensho
     description: normalizeDescription(description),
     game: gameId || null,
     gameTitle: gameTitle || null,
+    // (2026-09-23) Where exactly, from a page that knows more than a game id - the golf Course
+    // Creator sends course, hole and tool. Additive and optional; older reports simply lack it.
+    ...(context ? { context: String(context).slice(0, 500) } : {}),
     reporter: {
       name: (prof.name || '').trim(),
       emoji: prof.emoji || '',

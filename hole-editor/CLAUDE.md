@@ -809,3 +809,16 @@ course** button, and its x means "skip the tour and start my course" - both go t
 same tab. The order is therefore always: link -> walkthrough -> name and terrain -> the tool; every
 later visit goes straight to the tool. `test-hole-editor-ui.mjs` walks both paths (finish, and skip
 with x) end to end, including that the practice course never touches the real one.
+
+## Report bug (2026-09-23)
+
+Matt: *"we need a report bug option so i can fix things that are broken."* The ribbon's **Report
+bug** opens the HUB's own form (`js/bug-report-ui.js`): same `bugReports/` node, same inbox Matt
+reads in Messages, same screenshots and offline outbox - not a second pipeline. Two small additive
+options were added to it: `where: {value, label}` puts a place the hub list lacks at the top of
+the picker, preselected ("Course Creator", "Red Mesa hole editor", or "Course Creator (Help
+practice run)"), and `context` saves one line on the record (`report.context`, max 500 chars,
+shown under the description in the inbox): designer, course and terrain, hole, tool, selection.
+Copy JSON is hidden on the Course Creator (Download backup does its job) so Report bug and Help fit
+at 1280 px. The walkthrough has a step for it. `js/` is in the service worker's shell, so this one
+bumped CACHE.
