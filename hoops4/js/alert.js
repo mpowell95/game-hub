@@ -48,7 +48,11 @@ export function decideAlert(rows, seen) {
   const mine = live.filter((r) => r.yourTurn).sort((a, b) => ms(b.updated) - ms(a.updated));
   const pick = fresh[0] || mine[0];
   if (!pick) return null;
+  // (2026-09-23) EVERY NAME WAITING ON YOU, newest first. Matt: "when the Your Turn pops up, it
+  // should say the peoples names who i'm playing against where it's my turn."
+  const names = [...new Set(mine.map((r) => String(r.name || '')).filter(Boolean))];
   return {
+    names,
     kind: fresh[0] ? 'challenge' : 'turn',
     id: pick.id,
     name: String(pick.name || ''),

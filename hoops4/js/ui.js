@@ -127,6 +127,22 @@ class Hoops4 {
     let armed = null;
     try { const A = await import('./alert.js'); armed = A.takeCeremony(); } catch { return; }
     if (!armed || this.disposed) return;
+    // ONCE PER MATCH (2026-09-23). Matt: "The animation should play the first time you click on it
+    // - not every time. just go to the game i guess when it's not the first time." So a match that
+    // has had its card goes straight to the board. The shown-list is a one-tap convenience (THE
+    // LAW rule 2's exemption): losing it replays one animation, nothing more.
+    const SHOWN = 'gamehub.hoops4.cerShown.v1';
+    let shown = [];
+    try { shown = JSON.parse(localStorage.getItem(SHOWN) || '[]'); if (!Array.isArray(shown)) shown = []; } catch { shown = []; }
+    if (shown.includes(armed.id)) {
+      try {
+        const MP = await import('./mp.js');
+        const game = await MP.readGame(armed.id);
+        if (!this.disposed && game) this.startAsync(game);
+      } catch (err) { console.error('[hoops4] could not open the match', err); }
+      return;
+    }
+    try { localStorage.setItem(SHOWN, JSON.stringify([...shown, armed.id].slice(-200))); } catch { /* private mode */ }
     // THE TERMS COME FROM THE MATCH, NOT THE LAUNCHER. Matt: "when you accept a challenge and go
     // to play, you should see what the shot settings and the series selection is and stuff like
     // that." The launcher's index row does not carry the caption, so the document is read here -
@@ -390,7 +406,9 @@ class Hoops4 {
     // write in js/game-stats.js is additive, so re-recording on each look would inflate the
     // play count by one per visit.
     const review = !!(opts && opts.review && game.over);
-    this.mp = { kind: 'async', id: game.id, side, game, MP, sent: false, review };
+    // `applied` = how many entries of the shared move log this board already reflects, so the live
+    // watch below applies only what is new - and never this device's own move a second time.
+    this.mp = { kind: 'async', id: game.id, side, game, MP, sent: false, review, applied: game.moves.length };
     this.myPlayer = side === 'a' ? RED : YELLOW;
     await this.start({ vsCpu: false, oneShot: !!game.oneShot, keepMp: true, replay: (m) => MP.replay(m, game) });
     if (this.disposed || !this.match) return;
@@ -398,6 +416,39 @@ class Hoops4 {
     // The match is on the server, so leaving really is free - say so rather than leaving the
     // player to discover it. This is the reassurance half of the isInProgress() fix below.
     this.toast(this.isMyShot() ? t('leaveKept') : t('mpTheirTurn'));
+    // AND STAY LIVE (2026-09-23). Matt: "if you stay in the game it never shows the other
+    // person's turn... it should auto be my turn whenever it's my turn." Their move arrives here
+    // while the match is on screen, drops down its column, and hands the turn back.
+    const id = game.id;
+    MP.watchGame(id, (g) => this._onAsyncGame(g)).then((stop) => {
+      if (this.disposed || !this.mp || this.mp.id !== id) { try { stop(); } catch {} return; }
+      this._gameStop = stop;
+    });
+  }
+
+  /** The open turn-by-turn match changed on the server. Apply only what is NEW and not ours. */
+  _onAsyncGame(g) {
+    const mp = this.mp, m = this.match;
+    if (this.disposed || !mp || mp.kind !== 'async' || mp.review || !m || g.id !== mp.id) return;
+    const fresh = g.moves.slice(mp.applied);
+    let last = null;
+    for (const e of fresh) {
+      mp.applied++;
+      if (e.by === mp.side) continue;                 // our own move, already on this board
+      if (m.over) break;
+      if (e.miss) { last = m.miss(); continue; }
+      for (let i = 1; i < e.shots; i++) m.miss();     // misses before a make never pass the turn
+      last = m.land(e.col);
+    }
+    mp.game = g;
+    if (last) {
+      this._paintShot(last);
+      if (m.over) { this._whenLanded(() => { if (!this.disposed) this.finish(); }); return; }
+      if (this.isMyShot()) this._whenLanded(() => { if (!this.disposed) this.toast(t('turnYou')); });
+      return;
+    }
+    // THEY QUIT: the match is over on the server while this board is not.
+    if (g.over && !m.over && !this.recorded) this.finish();
   }
 
   /** May this device shoot right now? Solo and two-players-on-one-phone: always. Multiplayer:
@@ -469,6 +520,7 @@ class Hoops4 {
       ? { winner: m.winner === null ? null : (m.winner === RED ? 'a' : 'b'), why: m.winner === null ? 'full' : 'four' }
       : null;
     const payload = { col: landed ? col : null, shots: res.shots || 1, passed, over };
+    mp.applied++;                                     // this entry is already on our board
     const r = await mp.MP.pushMove(mp.id, payload);
     if (!r.ok) {
       // KEPT, not lost: a turn somebody actually took is retried on the next open. And the screen
@@ -1187,7 +1239,8 @@ class Hoops4 {
     const r = m.result();
     const acc = r.myShots ? Math.round((100 * r.myDiscs) / r.myShots) : 0;
     let head;
-    const rv = this.mp && this.mp.review && this.mp.game && this.mp.game.over;
+    // A resignation (reviewed, or arriving live while the match is open) - the board never ended.
+    const rv = this.mp && this.mp.kind === 'async' && this.mp.game && this.mp.game.over;
     if (rv && !m.over) {
       // A REVIEWED match whose board never ended it - a resignation. The stored result is the
       // truth; the board alone would read as a draw.
@@ -1247,6 +1300,7 @@ class Hoops4 {
   teardownEngine() {
     this._unmountChat();
     this._stopRoom();
+    if (this._gameStop) { try { this._gameStop(); } catch {} this._gameStop = null; }
     this.mp = null;
     this.myPlayer = RED;
     this.stopLoop();

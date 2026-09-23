@@ -488,6 +488,27 @@ back for it to fetch?"* He had to come back - the launcher asked once per paint.
 paint, so listeners cannot stack), repainting the bubble on every change. Verified in a browser:
 one subscription, no page errors. `test-hoops4-mp.mjs` pins both halves.
 
+### Their move arrives while you watch; names on the bubble; the card once (2026-09-23)
+
+Matt: *"if you stay in the game it never shows the other person's turn... if i stay in the game,
+it should auto be my turn whenever it's my turn. And when the Your Turn pops up, it should say the
+peoples names who i'm playing against where it's my turn. And the animation should play the first
+time you click on it - not every time."*
+
+- **Live turns**: `MP.watchGame(id, cb)` is a read-only listener on `hoops/games/<id>`, passing on
+  only documents that pass `validateGame`. `startAsync` subscribes; `_onAsyncGame` applies only
+  log entries past `mp.applied` (how many this board already reflects) and skips this device's own
+  - `_sendShot` bumps `applied` BEFORE the push, so the echo of our own move is never replayed. A
+  new disc drops with the usual animation, the pill flips to "Your turn" and a toast says so; a
+  resignation arriving live ends the match with the stored winner. `teardownEngine` stops the
+  watch. Verified in a browser with the database stubbed: King's turn -> his move pushed -> disc
+  count 1 -> 2, "Your turn"; the same snapshot again changes nothing.
+- **Names**: `decideAlert` returns `names` (every match waiting on you, newest first); the hub's
+  `_turnLine` writes "Your turn vs A", "vs A and B", "vs A, B and 2 more" (escaped - they are
+  other people's names going into innerHTML).
+- **The card once per match**: `gamehub.hoops4.cerShown.v1` (a one-tap convenience) - a match that
+  has had its full-screen card opens straight onto the board next time.
+
 ### The multiplayer home, reorganised, and Quit (2026-09-23)
 
 Matt, with two screenshots of it: *"Make this page better/easier to navigate. And let people quit
