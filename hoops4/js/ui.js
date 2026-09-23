@@ -727,9 +727,10 @@ class Hoops4 {
     this.root.innerHTML = `
       <div class="h4-play-wrap">
         <div class="h4-hud${this.mp ? ' has-chat' : ''}">
-          <span class="h4-who" aria-live="polite"></span>
-          <span class="h4-shots"></span>
-          <span class="h4-leg" hidden></span>
+          <div class="h4-turn" aria-live="polite">
+            <span class="h4-who"></span>
+            <span class="h4-sub"><span class="h4-shots"></span><span class="h4-leg" hidden></span></span>
+          </div>
           <button type="button" class="h4-menu" aria-label="${t('menu')}">☰</button>
         </div>
         <div class="h4-stage">
@@ -871,21 +872,23 @@ class Hoops4 {
     // COLOUR IS NEVER THE ONLY SIGNAL (Matt is red/green colourblind - root CLAUDE.md). The
     // marker is a SHAPE as well as a hue: a disc for red, a triangle for yellow, the same pairing
     // the rest of the hub uses.
-    const mark = red ? '\u25CF' : '\u25B2';
-    const name = (m.vsCpu || this.mp)
-      ? (mine ? t('you') : this.themName())
-      : (red ? t('red') : t('yellow'));
-    // AND IT SAYS IT BEFORE THE SHOT, NOT AFTER. `waiting` is true while the other side is on
-    // the clock - the CPU thinking, or a live opponent yet to swipe - so the bar reads
-    // "Medium is shooting" during the pause rather than going quiet until a ball appears.
+    // WHOSE TURN, IN WORDS, WITH THAT PLAYER'S BALL (2026-09-22). Matt: *"change the 'Your shot'
+    // and the 'Hard is shooting'. Those are not good."* The CPU was named by its difficulty, so the
+    // bar read "Hard is shooting". Now it is always "<who>'s turn": You / the computer / the other
+    // player's name / Red or Yellow on one phone. The WORD says whose turn it is; the ball beside
+    // it is the same basketball, in the same colour, as the ball on the lane - colour is never the
+    // only signal (Matt is red/green colourblind), and the pill is filled on your turn, outlined
+    // on theirs.
+    const label = mine && (m.vsCpu || this.mp) ? t('turnYou')
+      : m.vsCpu ? t('turnCpu')
+        : this.mp ? t('turnOf', { name: this.themName() })
+          : t('turnOf', { name: red ? t('red') : t('yellow') });
     const waiting = !mine && (m.vsCpu || (this.mp && this.mp.kind === 'live'));
-    who.innerHTML = `<span class="h4-mark" aria-hidden="true">${mark}</span>`
-      + `<span class="h4-who-txt"></span>`;
-    who.querySelector('.h4-who-txt').textContent =
-      mine ? t('yourShot') : `${name} ${waiting ? t('shooting') : ''}`.trim();
+    who.innerHTML = `${ballSVG(red ? BOARD.look.red : BOARD.look.yellow, red)}<span class="h4-who-txt"></span>`;
+    who.querySelector('.h4-who-txt').textContent = label;
     who.className = 'h4-who ' + (red ? 'is-red' : 'is-yellow') + (mine ? ' is-mine' : ' is-them')
       + (waiting ? ' is-waiting' : '');
-    sh.textContent = m.shotsThisTurn ? `${t('shots')} ${m.shotsThisTurn}` : '';
+    sh.textContent = m.shotsThisTurn ? `${t('shot')} ${m.shotsThisTurn + 1}` : '';
     // WHICH GAME OF A SERIES, on the HUD, because it changes what the match is worth. Matt: "when
     // you accept a challenge and go to play, you should see what the shot settings and the series
     // selection is". The shot rule is visible in the play itself (a miss either passes the turn
@@ -1026,7 +1029,12 @@ class Hoops4 {
       this.throwState = null;
       this.resolve(st);
     }
-    if (this.rend) this.rend.render(st && !st.done ? [st.ball] : [], dt);
+    // THE BALL STOPS BEING DRAWN THE MOMENT IT IS THROUGH THE RIM (2026-09-22). From then on the
+    // disc falling down the column IS that ball. Matt, on a slow-motion recording: "now the ball
+    // falls in front of the connect 4 board." It did: the physics keeps the ball falling through
+    // the throat below the hoop until the throw resolves (83 ms median), and the screen is right
+    // underneath the hoops, so the 3D ball dropped down the face of the board beside the disc.
+    if (this.rend) this.rend.render(st && !st.done && !st.committed ? [st.ball] : [], dt);
   }
 
   resolve(st) {
@@ -1254,6 +1262,13 @@ export function isInProgress() {
   // about losing something that cannot be lost, which is exactly the friction Matt hit - "you
   // should be able to leave the game and play a regular game until the opponent plays."
   return !(instance.mp && instance.mp.kind === 'async');
+}
+
+/** A tiny basketball in a player's colour, for the turn pill - the same ball as on the lane. */
+function ballSVG(fill, dark) {
+  const seam = dark ? '#6e140e' : '#7a5800';
+  return `<svg class="h4-ball" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="${fill}" stroke="${seam}" stroke-width="1.4"/>`
+    + `<path d="M1 10h18M10 1v18M4 3.5c3 3 3 10 0 13M16 3.5c-3 3-3 10 0 13" fill="none" stroke="${seam}" stroke-width="1.3"/></svg>`;
 }
 
 export default { init, destroy, isInProgress };
