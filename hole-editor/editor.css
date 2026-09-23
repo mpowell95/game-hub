@@ -1,7 +1,8 @@
 /* hole-editor/editor.css - a desktop tool. Dark chrome with LEVELS (2026-09-22): the map is the
  * darkest thing on screen, the bays a step lighter, cards on the bays lighter again, and one
  * accent for whatever is active. Matt: "everything is the *same* dark." Design target 1920x1080,
- * must still work at 1280x800. No touch handling, no phone anything. */
+ * must still work at 1280x800. Under 900 px wide a separate phone layout takes over (the @media
+ * block at the end of this file); nothing above that width is affected by it. */
 
 @import '../css/ui.css';
 
@@ -327,3 +328,97 @@ input[type="range"] { accent-color: var(--he-accent); }
 .he-pal-fold.is-shut::before { content: '\25B8'; }
 .he-pal-fold.is-shut + .he-pal-body { display: none; }
 .he-pal-fold:hover { color: var(--he-accent); }
+
+/* === THE PHONE LAYOUT (2026-09-23, docs/HANDOFF-GOLF-COURSE-CREATOR-MOBILE.md) ====================
+ * Everything below 900 px wide. Above it nothing here applies: the phone-only elements are
+ * display:none, and every other rule is inside the media query. test-hole-editor-ui.mjs (desktop
+ * sizes) is the proof the desktop editor did not move. */
+.he-sheet-bar, .he-sheet-scrim, .he-mbar, #he-m-tools { display: none; }
+
+@media (max-width: 899px) {
+  .he-root { height: 100vh; height: 100dvh; min-height: 0; }
+  input[type="text"], input[type="number"], select { font-size: 16px; }   /* iOS zooms in under 16 px */
+
+  /* Ribbon: course, Undo, Redo, Tools, Report bug, Help. Tools unfolds the rest as a grid. */
+  .he-ribbon { flex: 0 0 56px; position: relative; overflow: visible; padding: 0 6px; gap: 2px; z-index: 30; }
+  .he-ribbon > * { display: none; }
+  .he-ribbon > #he-course-btn, .he-ribbon > #he-undo, .he-ribbon > #he-redo, .he-ribbon > #he-m-tools,
+  .he-ribbon > #he-bug, .he-ribbon > #he-help { display: flex; }
+  .he-ribbon .he-tool { flex: 0 0 auto; width: 46px; min-width: 44px; margin: 6px 0; padding: 0 2px; }
+  .he-ribbon .he-tool .he-tool-label { font-size: 11px; white-space: nowrap; }
+  .he-ribbon #he-course-btn { flex: 1 1 auto !important; width: auto !important; min-width: 0; max-width: none !important; padding: 0 8px !important; margin-right: auto; }
+  .he-ribbon #he-course-btn .he-tool-label { max-width: 100% !important; }
+  .he-ribbon #he-bug, .he-ribbon #he-help { width: 46px !important; padding: 0 2px !important; }
+  .he-ribbon:not(.is-open) #he-bug .he-tool-label { font-size: 0; }
+  .he-ribbon:not(.is-open) #he-bug .he-tool-label::after { content: 'Bug'; font-size: 11px; }
+  .he-ribbon #he-m-tools { order: 1; }
+  .he-ribbon #he-bug { order: 2; }
+  .he-ribbon #he-help { order: 3; }
+  .he-ribbon.is-open {
+    position: absolute; left: 0; right: 0; top: 0;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px;
+    background: #171a17; border-bottom: 1px solid var(--gh-border-strong);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .6);
+  }
+  .he-ribbon.is-open > * { display: flex; }
+  .he-ribbon.is-open > .he-sep { display: none; }
+  .he-ribbon.is-open > #he-copy-json[style*="display:none"] { display: none; }
+  .he-ribbon.is-open .he-tool, .he-ribbon.is-open #he-bug, .he-ribbon.is-open #he-help { width: auto !important; min-height: 56px; margin: 0; }
+  .he-ribbon.is-open #he-course-btn { grid-column: 1 / -1; order: -1; min-height: 48px; width: auto !important; margin: 0; }
+  body:has(.he-ribbon.is-open) #he-help-nudge { display: none; }
+  .he-ribbon.is-open .he-tool .he-tool-label { font-size: 12px; }
+
+  /* The map takes the whole body; the palette and the inspector are bottom sheets over it. */
+  .he-body { position: relative; }
+  .he-left, .he-right {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 20;
+    width: auto; border: 0; border-top: 1px solid var(--gh-border-strong);
+    border-radius: 14px 14px 0 0; padding: 0 10px 10px;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, .55);
+    overscroll-behavior: contain;
+    display: none;
+  }
+  .he-left { max-height: 72%; }
+  .he-right { max-height: 50%; }
+  .he-left.is-open, .he-right.is-open { display: flex; }
+  .he-sheet-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 2; margin: 0 -10px; padding: 6px 6px 6px 16px;
+    background: var(--he-bay); border-bottom: 1px solid var(--gh-border);
+    font-weight: 700; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--he-muted);
+  }
+  .he-sheet-x { width: 44px; height: 44px; background: none; border: 0; color: var(--he-ink); font-size: 28px; line-height: 1; cursor: pointer; }
+  .he-sheet-scrim { position: absolute; inset: 0; z-index: 15; background: rgba(0, 0, 0, .35); }
+  .he-root--sheet .he-sheet-scrim { display: block; }
+  .he-left [data-panel="palette"] > .he-panel__head { display: none; }
+  .he-left [data-panel="palette"].collapsed > .he-panel__body { display: block; }
+  .he-left .he-panel--fill { border: 0; background: none; }
+  .he-pal-grid { grid-template-columns: repeat(3, 1fr); }
+  .he-panel__head { min-height: 44px; }
+
+  /* Map chrome: Fit and zoom stay; the cursor readout waits for touch (stage 2). */
+  .he-canvas-top { left: 8px; right: 8px; top: 8px; }
+  .he-chip { min-height: 36px; }
+  .he-canvas-controls { right: 8px; bottom: 8px; padding: 4px 8px; }
+  .he-canvas-controls input[type="range"] { width: 80px; }
+  .he-canvas-controls .he-tool { min-height: 36px; }
+  .he-hover-readout { display: none; }
+
+  /* The holes bar becomes a picker bar. */
+  .he-bottom { display: none; }
+  .he-mbar {
+    display: flex; align-items: center; gap: 6px; flex: 0 0 auto;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: var(--he-bay); border-top: 1px solid var(--gh-border-strong); position: relative; z-index: 25;
+  }
+  .he-mbar select { flex: 1 1 auto; min-width: 0; height: 44px; padding: 0 6px; }
+  .he-mbtn {
+    flex: 0 0 auto; height: 44px; min-width: 44px; padding: 0 12px;
+    background: var(--he-card); color: var(--he-ink); border: 1px solid var(--gh-border-strong);
+    border-radius: 10px; font: 600 15px system-ui, sans-serif; cursor: pointer; touch-action: manipulation;
+  }
+  .he-mbtn--arrow { min-width: 40px; padding: 0; font-size: 26px; line-height: 1; }
+  .he-mbtn--add { background: var(--he-accent); color: var(--gh-accent-ink); border-color: var(--he-accent); }
+  .he-mbtn[aria-pressed="true"] { outline: 2px solid var(--he-accent); outline-offset: 1px; }
+  .he-tool, .he-chip, .he-tile, .he-sheet-x { touch-action: manipulation; }
+}

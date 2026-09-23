@@ -79,7 +79,9 @@ root.className = 'he-root';
 root.innerHTML = `
   <div class="he-ribbon" id="he-ribbon"></div>
   <div class="he-body">
+    <div class="he-sheet-scrim" id="he-m-scrim"></div>
     <div class="he-left">
+      <div class="he-sheet-bar"><span>Add to the hole</span><button type="button" class="he-sheet-x" data-sheet-close aria-label="Close">&times;</button></div>
       <div class="he-panel he-panel--fill" data-panel="palette">
         <div class="he-panel__head">Add to the hole</div>
         <div class="he-panel__body he-panel__body--flush" id="he-palette"></div>
@@ -100,6 +102,7 @@ root.innerHTML = `
       <div class="he-hover-readout" id="he-hover">Width at cursor: -</div>
     </div>
     <div class="he-right">
+      <div class="he-sheet-bar"><span>Settings</span><button type="button" class="he-sheet-x" data-sheet-close aria-label="Close">&times;</button></div>
       <div class="he-panel" data-panel="context">
         <div class="he-panel__head">Selection</div>
         <div class="he-panel__body" id="he-context"></div>
@@ -122,7 +125,37 @@ root.innerHTML = `
     </div>
     <div class="he-strip" id="he-strip"></div>
   </div>
+  <div class="he-mbar" id="he-mbar">
+    <button type="button" class="he-mbtn he-mbtn--arrow" id="he-m-prev" aria-label="Previous hole">&#8249;</button>
+    <select id="he-m-hole" aria-label="Hole"></select>
+    <button type="button" class="he-mbtn he-mbtn--arrow" id="he-m-next" aria-label="Next hole">&#8250;</button>
+    <button type="button" class="he-mbtn he-mbtn--add" id="he-m-add">+ Add</button>
+    <button type="button" class="he-mbtn" id="he-m-edit">Edit</button>
+  </div>
 `;
+
+// --- THE PHONE LAYOUT (2026-09-23, docs/HANDOFF-GOLF-COURSE-CREATOR-MOBILE.md) -------------------
+// Under 900 px the same screen reflows: the palette and the inspector become bottom SHEETS, the
+// holes bar becomes a hole picker (#he-mbar), and the ribbon folds behind a Tools button. Every
+// phone-only element is display:none above the breakpoint and every rule lives in editor.css's
+// one @media block, so the desktop editor is untouched. isPhone() gates the few behaviours that
+// differ (a tile pick closes the Add sheet; a selection opens the Settings sheet).
+const PHONE_MQ = window.matchMedia('(max-width: 899px)');
+const isPhone = () => PHONE_MQ.matches;
+function openSheet(which) {
+  const left = root.querySelector('.he-left'); const right = root.querySelector('.he-right');
+  left.classList.toggle('is-open', which === 'add');
+  right.classList.toggle('is-open', which === 'edit');
+  root.classList.toggle('he-root--sheet', !!which);
+  document.getElementById('he-m-add').setAttribute('aria-pressed', String(which === 'add'));
+  document.getElementById('he-m-edit').setAttribute('aria-pressed', String(which === 'edit'));
+}
+const sheetOpen = () => (root.querySelector('.he-left.is-open') ? 'add' : root.querySelector('.he-right.is-open') ? 'edit' : null);
+for (const x of root.querySelectorAll('[data-sheet-close]')) x.addEventListener('click', () => openSheet(null));
+document.getElementById('he-m-scrim').addEventListener('click', () => openSheet(null));
+document.getElementById('he-m-add').addEventListener('click', () => openSheet(sheetOpen() === 'add' ? null : 'add'));
+document.getElementById('he-m-edit').addEventListener('click', () => openSheet(sheetOpen() === 'edit' ? null : 'edit'));
+PHONE_MQ.addEventListener('change', () => { if (!isPhone()) openSheet(null); root.querySelector('.he-ribbon').classList.remove('is-open'); });
 
 // --- collapsible panels (section 4: "clicking [a header] collapses to the header") ---------------
 // Set by tour.js on the walkthrough's last step: Help becomes a topic menu, the first-visit nudge stops.
@@ -269,7 +302,9 @@ ribbon.innerHTML = [
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-undo" title="Undo (Ctrl+Z)"><span class="he-tool-icon">↶</span><span class="he-tool-label">Undo</span></button>',
   '<button class="he-tool" id="he-redo" title="Redo (Ctrl+Y)"><span class="he-tool-icon">↷</span><span class="he-tool-label">Redo</span></button>',
-  '<button class="he-tool" id="he-duplicate" title="Duplicate the selected object (D)"><span class="he-tool-icon">⧉</span><span class="he-tool-label">Duplicate</span></button>',
+  // Phone only (display:none above 900 px): unfolds the rest of this ribbon as a grid.
+  '<button class="he-tool" id="he-m-tools" title="All tools" aria-pressed="false"><span class="he-tool-icon">☰</span><span class="he-tool-label">Tools</span></button>',
+  '<button class="he-tool" id="he-duplicate"title="Duplicate the selected object (D)"><span class="he-tool-icon">⧉</span><span class="he-tool-label">Duplicate</span></button>',
   '<div class="he-sep"></div>',
   '<button class="he-tool" id="he-validate" title="Validate"><span class="he-tool-icon">✓</span><span class="he-tool-label">Validate</span></button>',
   '<button class="he-tool" id="he-compare" title="Compare"><span class="he-tool-icon">⇄</span><span class="he-tool-label">Compare</span></button>',
@@ -327,6 +362,8 @@ function refreshPalette(force = false) {
         editOps.instant((s) => editOps.mutators.toggleGuard(s, item.token, !(s.guard || []).includes(item.token)));
         return;
       }
+      // Phone: the Add sheet covers the map, so picking a thing to place puts the map back.
+      if (isPhone()) openSheet(null);
       if (item.kind === 'draw') {
         editOps.startDraw(item.group, item.drawKind || null);
         refreshPalette();
@@ -338,6 +375,16 @@ function refreshPalette(force = false) {
   });
 }
 for (const btn of ribbon.querySelectorAll('[data-tool]')) btn.addEventListener('click', () => setTool(btn.dataset.tool));
+// Phone: Tools unfolds the ribbon; picking anything in it folds it again.
+{
+  const toolsBtn = document.getElementById('he-m-tools');
+  const setOpen = (open) => { ribbon.classList.toggle('is-open', open); toolsBtn.setAttribute('aria-pressed', String(open)); };
+  toolsBtn.addEventListener('click', () => { const open = !ribbon.classList.contains('is-open'); if (open) openSheet(null); setOpen(open); });
+  ribbon.addEventListener('click', (e) => {
+    const b = e.target.closest('.he-tool');
+    if (b && b !== toolsBtn && ribbon.classList.contains('is-open')) setOpen(false);
+  });
+}
 
 // --- rendering the current hole into every panel ------------------------------------------------
 // buildHole() (model.js) already caches per document/id and invalidates on spec or order change
@@ -372,6 +419,21 @@ function refreshStrip() {
     document.getElementById('he-strip'),
     { doc, originals, currentId, getBuilt, onSelect: selectHole, onReorder: reorder },
   );
+  refreshHolePicker();
+}
+
+// Phone: the holes bar is a picker (one option per hole) with previous / next arrows.
+function refreshHolePicker() {
+  const sel = document.getElementById('he-m-hole');
+  if (!sel) return;
+  sel.innerHTML = doc.order.map((id, i) => `<option value="${id}"${id === currentId ? ' selected' : ''}>Hole ${i + 1} · par ${doc.holes[id].spec.par}</option>`).join('');
+}
+document.getElementById('he-m-hole').addEventListener('change', (e) => selectHole(e.target.value));
+for (const [bid, step] of [['he-m-prev', -1], ['he-m-next', 1]]) {
+  document.getElementById(bid).addEventListener('click', () => {
+    const i = doc.order.indexOf(currentId); const n = doc.order.length;
+    selectHole(doc.order[(i + step + n) % n]);
+  });
 }
 
 function selectHole(id) {
@@ -534,7 +596,14 @@ function refreshContext() {
     refresh: refreshContext,
   });
 }
-editorCanvas.onSelectionChange = () => refreshContext();
+editorCanvas.onSelectionChange = () => {
+  refreshContext();
+  // Phone: selecting something opens its settings (the Selection panel, unfolded, on top).
+  if (isPhone() && editorCanvas.selection && sheetOpen() !== 'edit') {
+    root.querySelector('[data-panel="context"]').classList.remove('collapsed');
+    openSheet('edit');
+  }
+};
 
 // Undo/redo restore the WHOLE document, including `order` - the current hole may have moved, and
 // any selection may point at an object that is gone (pruneSelection, in afterChange, handles it).
