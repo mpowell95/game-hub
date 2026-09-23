@@ -8,6 +8,28 @@
 </head>
 <body>
 <div id="he-root" class="he-root">Loading...</div>
+<script>
+  // IF THE EDITOR NEVER STARTS, SAY WHY (2026-09-23). On Matt's iPhone the page sat on "Loading..."
+  // for ever: a module that fails to load or throws before main.js draws the screen leaves nothing
+  // to see. This only ever writes while the root still says "Loading...", so a running editor is
+  // never touched; a screenshot of it is the bug report.
+  (function () {
+    var t0 = Date.now();
+    function say(msg) {
+      var r = document.getElementById('he-root');
+      if (!r || r.textContent.trim().indexOf('Loading...') !== 0) return;
+      r.style.cssText = 'padding:16px;font:15px/1.4 system-ui,sans-serif;color:#ecebe4;white-space:pre-wrap;word-break:break-word;';
+      r.textContent = 'Loading...\n\nThe editor could not start. Please send Matt a screenshot of this.\n\n' + msg +
+        '\n\n' + navigator.userAgent + '\n' + Math.round((Date.now() - t0) / 1000) + ' s after opening';
+    }
+    window.addEventListener('error', function (e) {
+      if (e && e.message) say(e.message + (e.filename ? '\n' + e.filename.split('/').slice(-3).join('/') + ':' + e.lineno + ':' + e.colno : ''));
+      else if (e && e.target && e.target.src) say('Could not load ' + e.target.src);
+    }, true);
+    window.addEventListener('unhandledrejection', function (e) { say('Unhandled: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)); });
+    setTimeout(function () { say('Still not started after 20 s (no error reported).'); }, 20000);
+  })();
+</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
