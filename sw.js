@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v942';
+const CACHE = 'game-hub-v943';
 
 const ASSETS = [
   './',
@@ -847,17 +847,17 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './hoops4/index.html': 'dce91b13bd',
   './hoops4/css/hoops4.css': 'ffcb601877',
-  './hoops4/js/ui.js': '232a371959',
+  './hoops4/js/ui.js': '1004c43650',
   './hoops4/js/boarddef.js': '3824cfe605',
   './hoops4/js/machine.js': '19b59b7c18',
   './hoops4/js/physics.js': '6d54965f70',
   './hoops4/js/render.js': '0ebde06b52',
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/cpu.js': 'f1b8a3e68b',
-  './hoops4/js/mp.js': 'db291ce36a',
+  './hoops4/js/mp.js': 'facc98bd73',
   './hoops4/js/mp-ui.js': 'c5ed5062b5',
-  './hoops4/js/alert.js': '77c5d0f294',
-  './hoops4/js/strings.js': '217a94f350',
+  './hoops4/js/alert.js': 'e112852c78',
+  './hoops4/js/strings.js': '06479bbdb9',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/boards.js': '8cf226684b',

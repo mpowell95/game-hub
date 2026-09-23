@@ -488,6 +488,36 @@ back for it to fetch?"* He had to come back - the launcher asked once per paint.
 paint, so listeners cannot stack), repainting the bubble on every change. Verified in a browser:
 one subscription, no page errors. `test-hoops4-mp.mjs` pins both halves.
 
+#### The first shot SENDS the challenge; the sender is reminded until they take it (2026-09-23)
+
+Matt: *"the king of games challenged me in connect 4 hoops. i accepted, but it was his turn to play
+first so it went back to him... if it's his turn to go first, he should have gone before he sent
+the challenge to me."* And: *"make sure he has a popup notification telling him that it's his
+turn."* The challenger is side 'a' and shoots first, but `createGame` wrote BOTH index rows at
+once and stamped the sender's seen map at `updated` - so a sender who walked away without shooting
+had already "sent" it, and nothing ever reminded them.
+
+- **Delivery moved to the first shot.** Shooting first, `createGame` writes only the sender's own
+  row (`writeRows(..., only)`); the first `pushMove` writes both, as every move does, and that is
+  the moment the other person's "challenged you" bubble appears - with a disc already on the board
+  and the turn theirs. Under one-shot a first-shot miss is a `passed` entry, so it delivers too.
+  When the OTHER person shoots first (`first: 'them'`, game 2+ of a series) they are told at once,
+  unchanged. On opening such a match the sender sees "Take your first shot to send the challenge"
+  (`mpShootToSend`) instead of "saved".
+- **The sender's reminder.** `armTurn(id, updated)` (mp.js) stamps the seen map one tick BEHIND
+  `updated`: a known id (never "a challenge") that is still owed (a live turn), so the launcher
+  says "Your turn vs <them>" until the shot is taken or the bubble is closed.
+- **Quit before the first shot** writes no row for the other person (`resignGame` checks theirs
+  exists first), so nobody is handed "won, they resigned" for a match they never saw. It still
+  counts as the sender's loss, as the Quit dialog says.
+- **Matches made before this** (the King's challenge to Matt is one) are re-armed ONCE per match
+  by `alert.js` `rearmUnshot` on the sender's next hub load: a first game, this device on side 'a',
+  its turn, zero moves, `updated` before `UNSHOT_BEFORE` (2026-09-24). Only those are read, and
+  `gamehub.hoops4.unshot.v1` records each one handled, so a closed reminder stays closed. The
+  other person's already-written row is left alone (THE LAW rule 5; nothing is deleted).
+- Verified end to end in node against an in-memory database with two swapped profiles (17
+  checks); `test-hoops4-mp.mjs` pins the shape.
+
 ### The series score was carried across unswapped (2026-09-23)
 
 Matt: *"i won game 1, then king of games won game 2, but it said he won the series 2-0. I think
