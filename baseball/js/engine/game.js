@@ -74,8 +74,10 @@ export class Game {
    * @param {{home:object, away:object}} opts.agents - each with async decidePitch()/decideSwing()
    * @param {string} [opts.parkId] - a settings.PARKS key; falls back to 'default'
    * @param {object} [opts.settings] - override settings (tests only); merged over the real module
+   * @param {boolean} [opts.wallHeight] - playtest 1's wall-height home run rule (outcomes.js);
+   *   career passes its season's snapshot, so a season saved before it keeps the old rule
    */
-  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false }) {
+  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false, wallHeight = true }) {
     // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY. It rides on the pitch view rather
     // than being read from a module global, so a CAREER game constructed in the same page is
     // unaffected either way.
@@ -89,6 +91,7 @@ export class Game {
     this.away = away;
     this.agents = agents;
     this.parkId = parkId;
+    this.wallHeight = !!wallHeight;
     // Both sides play in the same league (a Career opponent is always drawn from the player's own
     // league); home's is authoritative if the two ever disagreed.
     this.league = home.league || away.league;
@@ -154,6 +157,7 @@ export class Game {
     g.away = snap.away;
     g.agents = agents;
     g.parkId = snap.parkId || 'default';
+    g.wallHeight = !!snap.wallHeight; // playtest 1: an older snapshot keeps the old home run rule
     g.quickPlay = !!snap.quickPlay; // RA: additive; an older snapshot simply resumes as a career game
     g.league = snap.home.league || snap.away.league;
     g.settings = { ...SETTINGS_DEFAULTS, ZONE };
@@ -208,6 +212,7 @@ export class Game {
       home: this.home,
       away: this.away,
       parkId: this.parkId,
+      wallHeight: this.wallHeight,
       quickPlay: this.quickPlay,
       inning: this.inning,
       half: this.half,
@@ -729,7 +734,7 @@ export class Game {
         // the same place they always did.
         const outcome = swingResult.bunt
           ? resolveBunt(swingResult, this.bases, this.outs, batter.skills.hitSpd, this.settings, () => this._rand())
-          : resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand());
+          : resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand(), this.wallHeight);
         this._recordSpray(batterId, swingResult.sprayAngleDeg);
         const { bases, runsScored, runnersOut } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);

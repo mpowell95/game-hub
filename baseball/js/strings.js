@@ -81,6 +81,7 @@ export const STRINGS = {
     // RA: the steal's and the pickoff's own verdict words, popped through the same `_showPop` as
     // every other big word, with the same two shapes Strike and Ball already carry.
     v_out: 'Out',
+    big_out: 'OUT',   // playtest 1: the big word over the field on every out
     v_safe: 'Safe',
     // R2 (docs/BASEBALL-3D-BUILD.md section 9): `v_nice` and `v_hung` are gone with the pitch
     // meter - a release can no longer be early, Nice or hung, because there is no release to time.
@@ -246,6 +247,7 @@ export const STRINGS = {
     v_late: 'Tarde',
     v_perfect: 'Perfecto',
     v_out: 'Out',
+    big_out: 'OUT',
     v_safe: 'Quieto',
     swing_miss: 'Swing y fallo',
     swing_late: 'Swing tarde',

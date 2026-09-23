@@ -1500,14 +1500,14 @@ if (!process.env.BB_DEVICE_QUICK) {
     if (res.strip) {
       // R11 (docs/BASEBALL-3D-BUILD.md section 9): Quick Play throws the LEAGUE'S ladder now, not
       // all eight - this mount is at Little League (Quick Play's own default league,
-      // `LEAGUE_ORDER[0]`), which unlocks fastball only. Eight tiles still draw (the strip always
-      // shows all eight, locked or not); one is unlocked.
-      if (res.strip.tiles !== 8 || res.strip.unlocked !== 1 || res.strip.locked !== 7) {
-        fail('actions-live (d) strip', `Little League Quick Play's strip shows ${res.strip.tiles} tiles, ${res.strip.unlocked} unlocked, ${res.strip.locked} locked - expected 8/1/7 (fastball only)`);
-      } else if (res.strip.pitches.length !== 1 || res.strip.pitches[0] !== 'fastball') {
-        fail('actions-live (d) strip', `the one unlocked tile is "${res.strip.pitches.join(', ')}", not fastball`);
+      // `LEAGUE_ORDER[0]`), which unlocks fastball + changeup (playtest 1, Matt 2026-09-23).
+      // Eight tiles still draw (the strip always shows all eight, locked or not); two are unlocked.
+      if (res.strip.tiles !== 8 || res.strip.unlocked !== 2 || res.strip.locked !== 6) {
+        fail('actions-live (d) strip', `Little League Quick Play's strip shows ${res.strip.tiles} tiles, ${res.strip.unlocked} unlocked, ${res.strip.locked} locked - expected 8/2/6 (fastball + changeup)`);
+      } else if (res.strip.pitches.join(',') !== 'fastball,changeup') {
+        fail('actions-live (d) strip', `the unlocked tiles are "${res.strip.pitches.join(', ')}", not fastball, changeup`);
       } else {
-        ok(`actions-live (d): Little League Quick Play's strip unlocks only fastball, the other seven locked (${res.strip.pitches.join(', ')})`);
+        ok(`actions-live (d): Little League Quick Play's strip unlocks fastball + changeup, the other six locked (${res.strip.pitches.join(', ')})`);
       }
     }
     if (res.error) fail('actions-live (c) pickoff', res.error);

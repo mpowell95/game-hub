@@ -19,7 +19,7 @@ import { flyPitch, breakOffsetFor } from './engine/pitch.js';
 // R14 (docs/BASEBALL-3D-BUILD.md section 9): the Quick Play skill-point budget - see build.js's
 // own header for why this is a separate pure module rather than more code in ui.js.
 import { budgetFor, capFor, scalePreset, clampBuild, randomBuild, adjust, canAdjust } from './build.js';
-import { fenceFtAt } from './engine/outcomes.js';
+import { fenceFtAt, battedApexFt } from './engine/outcomes.js';
 import {
   engineToWorld, zoneRectFt, zoneCornersFt, projectToCanvas,
   ZONE, BATTER_BOX, RUBBER, CATCHER, UMPIRE, FIGURE_HEIGHT_FT,
@@ -146,6 +146,8 @@ const FLIGHT_MS_MAX = 5500;  // nor longer, even a towering popup
 // he is still running when it would otherwise end - see `_settleAtBat`'s and
 // `_animateBattedBall`'s own headers (`holdMs`).
 const MARKER_HOLD_MS = 800;
+// Playtest 1: how long the big OUT stays over the field (Matt: "about a second").
+const BIG_OUT_MS = 1000;
 // R10 item 2: "for an out, after a throw beat of about a second to first" - a GROUND ball out
 // only, between the ball reaching the fielder and the Out word appearing. The spec's own number.
 const THROW_BEAT_MS = 1000;
@@ -165,27 +167,9 @@ const FIRST_FRAME_CAP_MS = 3000;
 //   The zone's own centre height is where a pitch ends laterally and vertically; the engine has no
 //   vertical aim yet (that is R2), so every pitch crosses at the middle of the zone, as it did.
 const PITCH_SAG_FT = 0.8;
-// R1: the batted ball's apex, in feet, from the engine's own distance - stage 8's rule, restated in
-// world units by section 9. A grounder barely leaves the ground; anything else arcs.
-// R2: halved (0.35 -> 0.22, cap 120 -> 80). R1's own record: the old rule is "about 40% too high
-// for a real fly ball and puts the wall out of the chase camera's frame on a home run".
-const BATTED_APEX_MAX_FT = 80;
-const BATTED_APEX_FRAC = 0.22;
-const BATTED_GROUNDER_APEX_FT = 4;
-// R5: a POP-UP is the one kind whose height is not a function of how far it went - it is the kind
-// where ALL of the swing went up. `distanceFt * 0.22` drew a 60 ft pop-up as a 13 ft liner, which
-// was invisible while `carryFt` returned 0 ft for it and is not once R5's `MIN_IN_PLAY_FT` puts it
-// on the infield grass (40 to 120 ft out). Height is taken from the distance too, but on its own
-// much steeper fraction and with a floor, so the shortest pop-up still goes up rather than across.
-const BATTED_POPUP_APEX_FRAC = 0.9;
-const BATTED_POPUP_APEX_MIN_FT = 55;
-// R10: a LINE DRIVE gets its own, flatter apex - unlike a fly ball, a liner does not arc; sharing
-// BATTED_APEX_FRAC/BATTED_APEX_MAX_FT with 'fly' put a 200ft liner 44ft up (a 3.3s hang time)
-// where the spec's own worked example wants "about 2.5s" (~25ft). Solved from the same
-// `t = 2*sqrt(2*apex/32.2)` the flight-time formula uses: apex = (t/2)^2 * 32.2, so
-// apex(2.5s) = 25.16ft, frac = 25.16 / 200 = 0.126 - baseball/CLAUDE.md's R10 entry has the check.
-const BATTED_LINE_APEX_FRAC = 0.126;
-const BATTED_LINE_APEX_MAX_FT = 40; // a liner that arced as high as a fly ball's own 80ft cap would read as one
+// The batted ball's apex constants (R1/R2/R5/R10) live in engine/settings.js now, and the formula
+// in engine/outcomes.js `battedApexFt` (playtest 1: the engine reads the ball's height at the wall
+// from the same arc this file draws).
 // R10: the grounder's own roll, decelerating from a stopped-ball start speed - solved against the
 // spec's own two worked examples (a 40ft dribbler under a second, a 150ft grounder about 2.7s):
 // d = v0*t - 0.5*a*t^2. GROUND_ROLL_DECEL_FT_S2 = 3.3 gives 150ft -> 2.70s (the spec's own number,
@@ -734,6 +718,8 @@ class BaseballPlayScreen {
     if (this._stealWidgetTimer) clearTimeout(this._stealWidgetTimer);
     if (this.actors) { this.actors.dispose(); this.actors = null; }
     if (this._popTimer) clearTimeout(this._popTimer);
+    if (this._bigOutTimer) clearTimeout(this._bigOutTimer);
+    if (this._bigOutTap && this.rootEl) this.rootEl.removeEventListener('pointerdown', this._bigOutTap, true);
     if (this._safeAreaProbe) { this._safeAreaProbe.remove(); this._safeAreaProbe = null; }
     if (this._devActors) { this._devActors.dispose(); this._devActors = null; }
     if (this.gameAbort) this.gameAbort();
@@ -1787,6 +1773,7 @@ class BaseballPlayScreen {
             <div class="bb-line1" data-role="line1"></div>
             <div class="bb-line2" data-role="line2"></div>
           </div>
+          <div class="bb-bigout" data-role="bigout" aria-live="polite"></div>
           <div class="bb-homerun" data-role="homerun" aria-live="polite">
             <div class="bb-homerun-word" data-role="hrword"></div>
             <div class="bb-homerun-strip" data-role="hrstrip"></div>
@@ -2406,16 +2393,7 @@ class BaseballPlayScreen {
    *  `battedKind` unset or anything other than the engine's own `'ground'`/`'popup'`/`'line'` is a
    *  fly. */
   _battedApexFt(battedKind, distanceFt) {
-    if (battedKind === 'ground') return BATTED_GROUNDER_APEX_FT;
-    // R5: a pop-up goes UP. See BATTED_POPUP_APEX_FRAC.
-    if (battedKind === 'popup') {
-      return Math.min(BATTED_APEX_MAX_FT, Math.max(BATTED_POPUP_APEX_MIN_FT, (distanceFt || 0) * BATTED_POPUP_APEX_FRAC));
-    }
-    // R10: a LINE DRIVE arcs flatter than a fly ball - see BATTED_LINE_APEX_FRAC's own header.
-    if (battedKind === 'line') {
-      return Math.min(BATTED_LINE_APEX_MAX_FT, (distanceFt || 0) * BATTED_LINE_APEX_FRAC);
-    }
-    return Math.min(BATTED_APEX_MAX_FT, (distanceFt || 0) * BATTED_APEX_FRAC);
+    return battedApexFt(battedKind, distanceFt);
   }
 
   /** R10 (docs/BASEBALL-3D-BUILD.md section 9, "R10", item 1): how long this play's own ball
@@ -3034,12 +3012,17 @@ class BaseballPlayScreen {
       // never at the pitch DECISION (`decideSwing`'s own header explains why that read as
       // precognition).
       this._flushPendingPitch();
-      const opts = { pitchLine: this._pitchReadout(), swingLine: this._swingLine(payload.verdict, payload.timingWord) };
-      if (payload.timingWord) {
+      // Playtest 1 (Matt, 2026-09-23): Early/Late/Perfect only when the PLAYER bats - a CPU
+      // batter's swing shows its plain verdict (Strike/Foul) instead. Overrules design doc section
+      // 8's "Fooled feedback" pop for the CPU.
+      const timingWord = this._humanBatting() ? payload.timingWord : null;
+      const opts = { pitchLine: this._pitchReadout(), swingLine: this._swingLine(payload.verdict, timingWord) };
+      if (timingWord) {
         this._showPop(t('v_' + payload.timingWord), payload.timingWord, opts);
       } else if (payload.verdict === 'ball') {
         this._showPop(t('v_ball'), 'ball', opts);
-      } else if (payload.verdict === 'strike') {
+      } else if (payload.verdict === 'strike' || payload.verdict === 'miss') {
+        // A CPU swing-and-miss (no timing word since playtest 1) is simply a strike.
         this._showPop(t('v_strike'), 'strike', opts);
       } else if (payload.verdict === 'foul') {
         this._showPop(t('v_foul'), 'foul', opts);
@@ -3249,6 +3232,34 @@ class BaseballPlayScreen {
     this._popTimer = setTimeout(() => { el.classList.remove('is-on'); if (wordEl) wordEl.textContent = ''; if (line1El) line1El.textContent = ''; if (line2El) line2El.textContent = ''; }, RESULT_MS);
   }
 
+  /** Is the human the batting side right now? (The player bats in the top when away.) */
+  _humanBatting() {
+    if (!this.game) return this.state && this.state.mode === 'batting';
+    const battingSide = this.game.half === 'top' ? 'away' : 'home';
+    return battingSide === this.playerSide;
+  }
+
+  /** Playtest 1 (Matt, 2026-09-23): a big OUT over the field on every out, for ~1 s
+   *  (BIG_OUT_MS). Fixed geometry (`.bb-bigout`, opacity/transform only), pointer-events none so it
+   *  never blocks input, and any tap clears it early. */
+  _showBigOut() {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="bigout"]');
+    if (!el) return;
+    el.textContent = '\u25A0 ' + t('big_out');
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    el.classList.add('is-on');
+    if (this._bigOutTimer) clearTimeout(this._bigOutTimer);
+    const hide = () => {
+      if (this._bigOutTimer) { clearTimeout(this._bigOutTimer); this._bigOutTimer = null; }
+      el.classList.remove('is-on');
+      if (this._bigOutTap) { this.rootEl.removeEventListener('pointerdown', this._bigOutTap, true); this._bigOutTap = null; }
+    };
+    if (this._bigOutTap) this.rootEl.removeEventListener('pointerdown', this._bigOutTap, true);
+    this._bigOutTap = hide;
+    this.rootEl.addEventListener('pointerdown', hide, { capture: true, passive: true });
+    this._bigOutTimer = setTimeout(hide, BIG_OUT_MS);
+  }
+
   _setLine1(text) { const el = this.rootEl.querySelector('[data-role="line1"]'); if (el) el.textContent = text; }
   _setLine2(text) { const el = this.rootEl.querySelector('[data-role="line2"]'); if (el) el.textContent = text; }
 
@@ -3315,7 +3326,7 @@ class BaseballPlayScreen {
     // no `verdict` on a ball-in-play payload (game.js never sets one for that branch), so
     // `_swingLine` only ever reads its timingWord here - exactly right, since a miss/foul can never
     // put a ball in play.
-    if (inPlay && payload.timingWord) {
+    if (inPlay && payload.timingWord && this._humanBatting()) {   // playtest 1: the player's swings only
       this._showPop(t('v_' + payload.timingWord), payload.timingWord,
         { pitchLine: this._pitchReadout(), swingLine: this._swingLine(undefined, payload.timingWord) });
     }
@@ -3364,6 +3375,7 @@ class BaseballPlayScreen {
       // `_animateRunners` is a no-op the instant it sees that outcome (nothing to build a mover
       // list from). Same non-blocking rule as the in-play branch above.
       this._animateRunners(payload);
+      if (outKind === 'strikeout') this._showBigOut();
       await sleep(RESULT_MS);
       // R2's between-pitch gap - unless this at-bat ALSO just ended the half-inning, in which case
       // `_onEngineEvent`'s 'halfInningEnd' case supplies the one gap that transition already gets
@@ -3564,6 +3576,7 @@ class BaseballPlayScreen {
         if (this.destroyed) return;
       }
       this._setLine1(outWord);
+      if (isOut) this._showBigOut();
     }
     // R10 item 3: the settle - MARKER_HOLD_MS at minimum, extended to cover the last runner's own
     // real arrival if he needs longer. `elapsedMs` is how much of `longestRunnerMs` (measured from
@@ -3908,6 +3921,7 @@ class BaseballPlayScreen {
     });
     if (this.destroyed || !this.actors) return;
     this._showPop(t(payload.out ? 'v_out' : 'v_safe'), payload.out ? 'out' : 'safe');
+    if (payload.out) this._showBigOut();
     this._setLine1(t(payload.out ? 'v_out' : 'v_safe'));
     this.actors.setBall(null);
     this.actors.toSet();
@@ -3958,6 +3972,7 @@ class BaseballPlayScreen {
         this._runnerStanding = {};
         this._syncBaseRunners();   // the slot role that owns his new bag re-derives him, standing
         this._showPop(t(payload.safe ? 'v_safe' : 'v_out'), payload.safe ? 'safe' : 'out');
+        if (!payload.safe) this._showBigOut();
         this._paintHud();
         // The widget holds one beat on the finished play, then clears - it is only ever shown for
         // something in motion (R3's own rule: shown from the cut, cleared at `_returnToPlate`).
@@ -4883,13 +4898,17 @@ function dots(n, max, cls) {
 }
 
 /** R6 (orchestrator's ship review): the HUD's own mini-diamond reads from behind the plate like
- *  the chase-time widget, first base on the RIGHT (x 28..36) and third on the LEFT (x 4..12). */
+ *  the chase-time widget: index 0 (first base) draws on the RIGHT, index 2 (third) on the LEFT.
+ *  Playtest 1 (Matt, 2026-09-23: unclear): bigger bases, and an occupied one is SOLID `#ffce3a`
+ *  with a dark outline while an empty one is an outline only - filled vs hollow, never hue alone.
+ *  Same 38px box as before (fixed geometry). */
 function basesSvg(bases) {
   const on = (i) => bases[i] != null;
+  const base = (cx, cy, i) => `<rect x="${cx - 5.5}" y="${cy - 5.5}" width="11" height="11" transform="rotate(45 ${cx} ${cy})" class="${on(i) ? 'is-on' : ''}"></rect>`;
   return `<svg viewBox="0 0 40 40" class="bb-bases-svg">
-    <rect x="18" y="4" width="8" height="8" transform="rotate(45 22 8)" class="${on(1) ? 'is-on' : ''}"></rect>
-    <rect x="28" y="18" width="8" height="8" transform="rotate(45 32 22)" class="${on(0) ? 'is-on' : ''}"></rect>
-    <rect x="4" y="18" width="8" height="8" transform="rotate(45 8 22)" class="${on(2) ? 'is-on' : ''}"></rect>
+    ${base(20, 9, 1)}
+    ${base(31, 21, 0)}
+    ${base(9, 21, 2)}
   </svg>`;
 }
 
@@ -4901,8 +4920,7 @@ function basesSvg(bases) {
 // reference game's own view) - this array is a SEPARATE hardcoded copy of the CSS positions
 // (`.bb-diamond-cell[data-cell]` in baseball.css), not derived from them, so R3's original mirror
 // had to be undone in both places, together (Matt's v865 recording, item 4). It no longer claims
-// to agree with `basesSvg` above - that widget (the HUD's own persistent mini-diamond, `_paintHud`)
-// still draws first base on the left; see this stage's report for that inconsistency.
+// to agree with `basesSvg` above, though both now draw first base on the right.
 const DIAMOND_PCT = [
   { x: 50, y: 88 }, { x: 88, y: 50 }, { x: 50, y: 12 }, { x: 12, y: 50 }, { x: 50, y: 88 },
 ];

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import * as SETTINGS from './engine/settings.js';
 import { ZONE, flyPitch, breakOffsetFor } from './engine/pitch.js';
 import { swing, qualityFor, computeSwingTiming, flightWindowMult, edgeWindowMult } from './engine/swing.js';
-import { resolveContact, resolveBunt, carryFt, fenceFtAt } from './engine/outcomes.js';
+import { resolveContact, resolveBunt, carryFt, fenceFtAt, battedApexFt, battedHeightAtFt } from './engine/outcomes.js';
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
@@ -2641,12 +2641,12 @@ await (async function section30() {
       ok(JSON.stringify(career) === JSON.stringify(SETTINGS.PITCH_UNLOCKS[lg]),
         `unlockedPitchesFor('${lg}', 0) with no quickPlay option returns the identical ladder - the option is a no-op now`);
     }
-    // Little League is FASTBALL ONLY (Matt, 2026-09-21: "only 'fastballs' should be able to be
-    // thrown"); changeup moved to High School, alongside curveball.
-    ok(JSON.stringify(SETTINGS.PITCH_UNLOCKS.little) === JSON.stringify(['fastball']),
-      `Little League's own ladder is fastball only (got ${JSON.stringify(SETTINGS.PITCH_UNLOCKS.little)})`);
+    // Playtest 1 (Matt, 2026-09-23): Little League throws fastball AND changeup (overrules R11's
+    // fastball only); High School adds the curveball.
+    ok(JSON.stringify(SETTINGS.PITCH_UNLOCKS.little) === JSON.stringify(['fastball', 'changeup']),
+      `Little League's own ladder is fastball + changeup (got ${JSON.stringify(SETTINGS.PITCH_UNLOCKS.little)})`);
     ok(JSON.stringify(SETTINGS.PITCH_UNLOCKS.highschool) === JSON.stringify(['fastball', 'changeup', 'curveball']),
-      `High School's own ladder picks up changeup and curveball together (got ${JSON.stringify(SETTINGS.PITCH_UNLOCKS.highschool)})`);
+      `High School's own ladder adds the curveball (got ${JSON.stringify(SETTINGS.PITCH_UNLOCKS.highschool)})`);
     ok(SETTINGS.QUICK_PLAY_PITCH_MIX === undefined, 'QUICK_PLAY_PITCH_MIX is deleted with the override it existed only to serve');
     // The CPU actually respects the ladder now: a Little League CPU in Quick Play throws fastball
     // only, exactly as it does in a career game - there is no longer a second distribution to
@@ -2659,15 +2659,15 @@ await (async function section30() {
       const d = await pitcher.decidePitch({ quickPlay: true, runnerOnFirst: false, weakZone: null, rand01: rnd });
       seen.add(d.type);
     }
-    ok(seen.size === 1 && seen.has('fastball'),
-      `a Little League CPU in Quick Play throws fastball only now (saw ${JSON.stringify([...seen])}) - the career ladder gives it the identical one type`);
+    ok(seen.size === 2 && seen.has('fastball') && seen.has('changeup'),
+      `a Little League CPU in Quick Play throws fastball and changeup (saw ${JSON.stringify([...seen])}) - the career ladder's own two`);
     const careerSeen = new Set();
     for (let i = 0; i < 2000; i++) {
       const d = await pitcher.decidePitch({ runnerOnFirst: false, weakZone: null, rand01: rnd });
       careerSeen.add(d.type);
     }
-    ok(careerSeen.size === 1 && careerSeen.has('fastball'),
-      'and the same CPU pitcher in a CAREER game (no quickPlay flag) throws the identical one type');
+    ok(careerSeen.size === 2 && careerSeen.has('fastball') && careerSeen.has('changeup'),
+      'and the same CPU pitcher in a CAREER game (no quickPlay flag) throws the identical two types');
     // A High School CPU (changeup AND curveball unlocked, doc §11) still throws both in Quick Play.
     const hsPitcher = new CpuPitcher({ league: 'highschool', settings: SETTINGS });
     const hsSeen = new Set();
@@ -2905,14 +2905,14 @@ console.log('\n-- 33. R11: the league ladder is real in Quick Play --');
 await (async function section33() {
   const F = SETTINGS.FEEL.engine;
 
-  // (1) Pitch types follow the league in Quick Play too: Little League unlocks only the fastball,
+  // (1) Pitch types follow the league in Quick Play too: Little League unlocks fastball + changeup,
   //     Majors its six (fastball/changeup/curveball/slider/knuckleball/screwball - eephus/cutter
   //     are title-gated, doc §11, and no CPU roster or fresh Quick Play career ever carries a
   //     title). `unlockedPitchesFor(..., {quickPlay:true})` is now byte-identical to the career
   //     ladder at every league - the RA override is gone.
   {
-    ok(JSON.stringify(SETTINGS.unlockedPitchesFor('little', 0, { quickPlay: true })) === JSON.stringify(['fastball']),
-      `(1) Quick Play at Little League unlocks only the fastball (got ${JSON.stringify(SETTINGS.unlockedPitchesFor('little', 0, { quickPlay: true }))})`);
+    ok(JSON.stringify(SETTINGS.unlockedPitchesFor('little', 0, { quickPlay: true })) === JSON.stringify(['fastball', 'changeup']),
+      `(1) Quick Play at Little League unlocks fastball + changeup (got ${JSON.stringify(SETTINGS.unlockedPitchesFor('little', 0, { quickPlay: true }))})`);
     const majorsQP = SETTINGS.unlockedPitchesFor('majors', 0, { quickPlay: true });
     const wantMajors = ['fastball', 'changeup', 'curveball', 'slider', 'knuckleball', 'screwball'];
     ok(majorsQP.length === 6 && wantMajors.every((t) => majorsQP.includes(t)),
@@ -3242,6 +3242,46 @@ console.log('\n-- 35. Doc items 9 and 11 (2026-09-23): pitch readouts, Majors pa
     'a ball carrying far enough still clears the tall wall');
   const rightSide = resolveContact({ exitVeloMph: 110, launchAngleDeg: 30, sprayAngleDeg: 35, q: 1 }, zonesM, SETTINGS, SETTINGS.PARKS.boston, 5, mulberry32(7));
   ok(rightSide.kind !== 'wall-double', 'the tall wall is left field only');
+}
+
+// Playtest 1 (Matt, 2026-09-23): a home run must clear the wall's HEIGHT.
+{
+  const zonesL = zonesFor('little', 0);
+  const fence = SETTINGS.FIELD.little.fenceFt;
+  const wallC = fenceFtAt(0, fence);
+  // A low liner that lands just past the centre-field fence hits the 8 ft wall: in play, not a homer.
+  let lowLiner = null, highFly = null;
+  for (let v = 50; v <= 130 && !(lowLiner && highFly); v += 0.25) {
+    const liner = resolveContact({ exitVeloMph: v, launchAngleDeg: 12, sprayAngleDeg: 0, q: 1 }, zonesL, SETTINGS, fence, 0, mulberry32(3));
+    const d = carryFt(v, 12, SETTINGS);
+    if (!lowLiner && d >= wallC && d < wallC * 1.03) lowLiner = liner;
+    const fly = resolveContact({ exitVeloMph: v, launchAngleDeg: 30, sprayAngleDeg: 0, q: 1 }, zonesL, SETTINGS, fence, 0, mulberry32(3));
+    if (!highFly && carryFt(v, 30, SETTINGS) >= wallC * 1.1) highFly = fly;
+  }
+  ok(lowLiner && lowLiner.kind === 'wall-double' && lowLiner.bases === 2 && lowLiner.distanceFt < wallC,
+    `a low liner landing just past the fence is a double off the wall, dropped in front of it (got ${JSON.stringify(lowLiner)})`);
+  ok(highFly && highFly.kind === 'homer', 'a fly ball carrying well past the fence is still a homer');
+  // Into the corner (within cornerTripleDeg of a line) the same low ball is a triple.
+  let corner = null;
+  for (let v = 50; v <= 130 && !corner; v += 0.25) {
+    const d = carryFt(v, 12, SETTINGS), w = fenceFtAt(43, fence);
+    if (d >= w && d < w * 1.03) corner = resolveContact({ exitVeloMph: v, launchAngleDeg: 12, sprayAngleDeg: 43, q: 1 }, zonesL, SETTINGS, fence, 0, mulberry32(3));
+  }
+  ok(corner && corner.kind === 'wall-triple' && corner.bases === 3, `off the wall in a deep corner is a triple (got ${JSON.stringify(corner)})`);
+  // The old rule is kept for a game saved before this shipped.
+  if (lowLiner) {
+    const v = [];
+    for (let x = 50; x <= 130; x += 0.25) { const d = carryFt(x, 12, SETTINGS); if (d >= wallC && d < wallC * 1.03) { v.push(x); break; } }
+    const old = resolveContact({ exitVeloMph: v[0], launchAngleDeg: 12, sprayAngleDeg: 0, q: 1 }, zonesL, SETTINGS, fence, 0, mulberry32(3), false);
+    ok(old.kind === 'homer', 'wallHeight=false (a pre-playtest-1 save) keeps the distance-only homer');
+  }
+  // The engine reads the ball's height from the SAME arc ui.js draws.
+  ok(battedHeightAtFt('line', 300, 150) === battedApexFt('line', 300), 'the arc peaks at half the carry, at the drawn apex');
+  // Snapshotting: a new season carries the rule; an older snapshot without it resumes on the old rule.
+  const g = new Game({ home: makeTeam('little', 0), away: makeTeam('little', 1), seed: 9, agents: { home: null, away: null } });
+  ok(g.snapshot().wallHeight === true, 'a new game snapshots wallHeight: true');
+  const snapOld = { ...g.snapshot() }; delete snapOld.wallHeight;
+  ok(Game.fromSnapshot(snapOld, { home: null, away: null }).wallHeight === false, 'an older snapshot resumes on the old home run rule');
 }
 
 // ---------------------------------------------------------------------------------------------

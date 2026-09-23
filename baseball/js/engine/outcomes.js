@@ -5,7 +5,8 @@
 
 import { FOUL_LINE_DEG, CARRY_SCALE, LINE_THROUGH_Q, LINE_THROUGH_MAX_FT, BLOOP_BAND_FT,
   DOUBLE_DEPTH_FRAC, TRIPLE_DEPTH_FRAC, CARRY_ZERO_MPH, GROUND_CARRY_FACTOR, MIN_IN_PLAY_FT,
-  CARRY_PEAK_DEG } from './settings.js';
+  CARRY_PEAK_DEG, BATTED_APEX_MAX_FT, BATTED_APEX_FRAC, BATTED_GROUNDER_APEX_FT, BATTED_POPUP_APEX_FRAC,
+  BATTED_POPUP_APEX_MIN_FT, BATTED_LINE_APEX_FRAC, BATTED_LINE_APEX_MAX_FT } from './settings.js';
 import { angleSector } from './zones.js';
 
 /** Rough carry distance in feet from exit velocity (mph) and launch angle (deg). A simplified,
@@ -66,7 +67,8 @@ export function fenceFtAt(sprayDeg, fenceFt) {
 
 /** Extra carry a ball needs to clear a TALL wall at this spray angle, over an ordinary fence: 0
  *  where the park has no tall section (every park but Boston's and Houston's, and every league
- *  below the Majors). */
+ *  below the Majors). Playtest 1: only the OLD rule (a season saved before the wall-height rule
+ *  shipped) still uses this; the new rule reads `wallHeightFtAt` against the ball's own height. */
 export function tallWallExtraFt(sprayDeg, fenceFt, settings) {
   const walls = fenceFt && fenceFt.walls;
   if (!walls || !walls.length) return 0;
@@ -80,6 +82,39 @@ export function tallWallExtraFt(sprayDeg, fenceFt, settings) {
   return Math.max(0, extra);
 }
 
+/** The wall's height, in feet, at this spray angle: the ordinary fence (`WALL_RULE.baseHeightFt`,
+ *  field.js's FENCE.height) or a park's tall section (`PARKS[id].walls`), whichever is taller. */
+export function wallHeightFtAt(sprayDeg, fenceFt, settings) {
+  const rule = (settings && settings.WALL_RULE) || { baseHeightFt: 8 };
+  let h = rule.baseHeightFt;
+  const walls = fenceFt && fenceFt.walls;
+  if (walls) for (const w of walls) {
+    if (sprayDeg >= w.fromDeg && sprayDeg <= w.toDeg) h = Math.max(h, w.heightFt);
+  }
+  return h;
+}
+
+/** A batted ball's apex in feet, from its kind and carry. THE one formula: `ui.js`'s
+ *  `_battedApexFt` draws the flight with it, and `resolveContact` reads the ball's height at the
+ *  wall from it, so the ball the player watches and the call the engine makes cannot disagree.
+ *  Moved here from ui.js (playtest 1); the constants' history is in their own headers there. */
+export function battedApexFt(kind, distanceFt) {
+  const d = distanceFt || 0;
+  if (kind === 'ground') return BATTED_GROUNDER_APEX_FT;
+  if (kind === 'popup') return Math.min(BATTED_APEX_MAX_FT, Math.max(BATTED_POPUP_APEX_MIN_FT, d * BATTED_POPUP_APEX_FRAC));
+  if (kind === 'line') return Math.min(BATTED_LINE_APEX_MAX_FT, d * BATTED_LINE_APEX_FRAC);
+  return Math.min(BATTED_APEX_MAX_FT, d * BATTED_APEX_FRAC);
+}
+
+/** How high a batted ball is, in feet, when it has travelled `atFt` of its `distanceFt` carry:
+ *  the drawn parabola `apex * 4f(1-f)` (ui.js `_battedBallAt`). The contact height is left out
+ *  (it adds a few inches at the wall), which errs toward "off the wall". */
+export function battedHeightAtFt(kind, distanceFt, atFt) {
+  if (!(distanceFt > 0)) return 0;
+  const f = Math.max(0, Math.min(1, atFt / distanceFt));
+  return battedApexFt(kind, distanceFt) * 4 * f * (1 - f);
+}
+
 /**
  * @param {{exitVeloMph:number, launchAngleDeg:number, sprayAngleDeg:number, q?:number}} batted -
  *   `q` (BB-2a) is swing.js's contact-quality axis, 0..1; used only by the line-through rule below
@@ -89,9 +124,11 @@ export function tallWallExtraFt(sprayDeg, fenceFt, settings) {
  * @param {number} hitSpd - the batter's hitSpd skill points (doc §6, [Locked]: "Batter Speed
  *   affects beating out grounders and stretching hits" - the beat-out half, this phase)
  * @param {function} rand01
+ * @param {boolean} [wallHeight=true] - playtest 1's wall-height rule; `false` only for a game or
+ *   season saved before it shipped (career.js snapshots it), which keeps the old distance-only rule
  * @returns {{result:'out'|'hit', bases?:number, kind:string, distanceFt:number, isFoul:boolean}}
  */
-export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01) {
+export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01, wallHeight = true) {
   const isFoul = Math.abs(batted.sprayAngleDeg) > FOUL_LINE_DEG;
   if (isFoul) {
     return { result: 'out', bases: 0, kind: 'foulout', distanceFt: 0, isFoul: true };
@@ -138,9 +175,23 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01)
   // whatever angle it left at. A grounder or a pop-up still never reaches this branch.
   const wallFt = fenceFtAt(batted.sprayAngleDeg, fenceFt);
   if ((kind === 'fly' || kind === 'line') && distanceFt >= wallFt) {
-    // Doc item 11 (Matt, 2026-09-23): a park's TALL wall section (`PARKS[id].walls`) stops a ball
-    // that clears the distance but not the height - a double off the wall, and it drops at the
-    // wall's foot (distanceFt pulled in, so the drawn ball never flies through the wall).
+    // Playtest 1 (Matt, 2026-09-23): "it gives homeruns too easily... it should bounce off the wall
+    // and still be in play." A ball that would LAND past the fence is a homer only if it is still
+    // above the wall's HEIGHT when it gets there - the same drawn arc `ui.js` flies. Below it, it
+    // hits the wall: a double, or a triple into a deep corner (`WALL_RULE.cornerTripleDeg`), and it
+    // drops at the wall's foot (distanceFt pulled in, so the drawn ball never flies through the
+    // wall). This folds in doc item 11's tall-wall rule: a tall section is just a higher wall.
+    if (wallHeight) {
+      const heightFt = battedHeightAtFt(kind, distanceFt, wallFt);
+      if (heightFt < wallHeightFtAt(batted.sprayAngleDeg, fenceFt, settings)) {
+        const cornerDeg = (settings.WALL_RULE && settings.WALL_RULE.cornerTripleDeg) || 40;
+        const corner = Math.abs(batted.sprayAngleDeg) >= cornerDeg;
+        return { result: 'hit', bases: corner ? 3 : 2, kind: corner ? 'wall-triple' : 'wall-double',
+          distanceFt: Math.max(0, wallFt - 2), isFoul: false };
+      }
+      return { result: 'hit', bases: 4, kind: 'homer', distanceFt, isFoul: false };
+    }
+    // The OLD rule, kept for a game saved before playtest 1: distance only, plus the tall wall.
     const extraFt = tallWallExtraFt(batted.sprayAngleDeg, fenceFt, settings);
     if (extraFt > 0 && distanceFt < wallFt + extraFt) {
       return { result: 'hit', bases: 2, kind: 'wall-double', distanceFt: Math.max(0, wallFt - 2), isFoul: false };
@@ -243,4 +294,4 @@ export function resolveBunt(batted, bases, outs, hitSpd, settings, rand01) {
   return { result: 'out', bases: 0, kind: 'bunt-out', distanceFt, sprayAngleDeg, isFoul: false };
 }
 
-export default { carryFt, fenceFtAt, tallWallExtraFt, resolveContact, resolveBunt };
+export default { carryFt, fenceFtAt, tallWallExtraFt, wallHeightFtAt, battedApexFt, battedHeightAtFt, resolveContact, resolveBunt };
