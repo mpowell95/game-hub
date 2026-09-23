@@ -163,6 +163,14 @@ when the ball lands, whatever the result. Runners advance by the awarded bases (
   re-tune the leagues until all 8 assertions pass. This reopens locked economy values (R16/R19);
   report every number that moved to Matt. Design doc section 10 ("Out zones sit where fielders
   would stand") is overruled; rewrite it.
+- **Home runs: bring them down to real-life rates** (Matt, 2026-09-23, after batch 1). Batch 1's
+  wall-height fix left them far too common (both teams, average player: Little League 2.08, High
+  School 5.41, College 6.04, Minors 9.66, Majors 9.89 per game; about 1 in 4 at-bats in the
+  Majors). The cause is fly-ball CARRY (`outcomes.js` `carryFt`, `LEAGUE_POWER_SCALE` in
+  `settings.js`), not the wall. Target: roughly real-life, about 2-3 home runs per Majors game
+  (both teams), fewer in each lower league. That MLB figure is from memory; check it against a
+  reliable source before tuning. Measure per league with the sim's home run counter (added in
+  batch 1), before and after, and report both.
 - **Speed and Accuracy now matter more** (running and throwing). Measure both with the sim and
   report.
 - Split into two sessions if needed: engine + sim first (4a), drawing second (4b). Don't ship 4a
