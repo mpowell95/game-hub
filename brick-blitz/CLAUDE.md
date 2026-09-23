@@ -1,4 +1,4 @@
-# Brick Blitz (`brick-blitz/`)
+# Brick Breaker (`brick-blitz/`)
 
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
 > never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`,
@@ -7,12 +7,21 @@
 A synthwave breakout, built 2026-09-23 at Matt's ask: *"Clone this game for the gamehub. Call it
 something new."* The source is miaai-lab's `038-neon-breakout.html` ("HYPERBRICK"). The physics,
 the five hand-built stages, the Endless wave generator, scoring, power-ups, particles, backdrop and
-synth are the original's, ported into a module. Renamed **Brick Blitz**.
+synth are the original's, ported into a module. Renamed **Brick Breaker**.
+
+**Name vs identifiers (settled, like Monopoly Deal's).** It shipped as "Brick Blitz" and was
+renamed **Brick Breaker** the same day (Matt: the name most people would call it). Only the
+DISPLAYED name changed. The folder `brick-blitz/`, hub id `brick-blitz`, stats id `brickblitz`,
+sub-counter `bz`, settings key `gamehub.brickblitz.v1` and CSS prefix `.bx-` are frozen: they key
+stored player data (THE LAW rule 5). Never "fix" them to match the name.
 
 ## Hub integration
 
 - In-hub `module:` (`brick-blitz/js/ui.js`), **immersive**. Hub id `brick-blitz` (= the folder,
   which the dev tools assume); stats id `brickblitz` (mapped in `HUB_ID`, `js/game-stats-ui.js`).
+- **Admin only** (`devOnly: true`, Matt 2026-09-23, right after it shipped live). The My Stats tab
+  is NOT gated (it was live to everyone briefly, so plays may exist: rule 1). The `GAME_META`
+  row stays (the Pinball rule, root CLAUDE.md).
 - `isInProgress()`: the LITERAL meaning (no mid-run resume, same class as Snake/Pinball). True while
   a run is live or paused.
 - The root is `position: fixed; inset: 0` (Pinball's pattern, avoids the `.hub-game` height trap).

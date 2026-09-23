@@ -73,6 +73,9 @@ const TABS = [
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
   // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
   { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
+  // NOT devOnly, though the game is admin-only: it was live to everyone on 2026-09-23 before being
+  // pulled back, so someone may have real plays (Skeeball's reasoning above). Rows only render
+  // for a game with plays, so this costs nothing for anyone who never played it.
   { id: 'brickblitz', labelKey: 'game_title_brickblitz' },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
@@ -1306,14 +1309,14 @@ function pinballScreen(rec) {
     </table>`;
 }
 
-// --- Brick Blitz (solo, score attack, three difficulties) -------------------------------------
+// --- Brick Breaker (solo, score attack, three difficulties) -------------------------------------
 /** No wins or losses (a run ends when the last ball is lost), so the honest numbers are runs,
  *  bests and lifetime counters, like Pinball's screen. Average is derived at render time from
  *  `points` and `games`, never stored. The per-difficulty table shows every stored best. */
 function brickBlitzScreen(rec) {
   const bz = (rec && rec.bz) || {};
   const games = bz.games | 0;
-  if (!games) return emptyState('Brick Blitz');
+  if (!games) return emptyState('Brick Breaker');
   const avg = Math.round((bz.points | 0) / games);
   const by = bz.bestScoreByDiff || {};
   return `

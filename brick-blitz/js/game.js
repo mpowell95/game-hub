@@ -1,4 +1,4 @@
-// brick-blitz/js/game.js — Brick Blitz's engine AND renderer: stages, ball/paddle/brick physics,
+// brick-blitz/js/game.js — Brick Breaker's engine AND renderer: stages, ball/paddle/brick physics,
 // power-ups, particles, the synthwave backdrop, and the tiny Web Audio synth. No DOM beyond the one
 // <canvas> it is handed; ui.js owns every screen, the clock's start/stop, input wiring and stats.
 //

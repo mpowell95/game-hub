@@ -607,9 +607,9 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
     SOLO.has('pinball'));
 }
 
-// ---- Brick Blitz's bz sub-counter survives the cross-device combine (THE LAW rule 1) ----
+// ---- Brick Breaker's bz sub-counter survives the cross-device combine (THE LAW rule 1) ----
 // Written the day the game shipped (2026-09-23). Counters ADD; every best (overall, per
-// difficulty, combo) takes Math.max. d3 synced before Brick Blitz existed and has no key at all.
+// difficulty, combo) takes Math.max. d3 synced before Brick Breaker existed and has no key at all.
 {
   const all = {
     d1: rec({ playerId: 'BZ111', name: 'Smash' }, {
