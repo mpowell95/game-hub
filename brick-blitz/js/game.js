@@ -1,5 +1,6 @@
 // brick-blitz/js/game.js — Brick Breaker's engine AND renderer: stages, ball/paddle/brick physics,
-// power-ups, particles, the synthwave backdrop, and the tiny Web Audio synth. No DOM beyond the one
+// power-ups, particles and the synthwave backdrop. SILENT by design (Matt, 2026-09-23: the
+// original's synth was removed; this game has no audio). No DOM beyond the one
 // <canvas> it is handed; ui.js owns every screen, the clock's start/stop, input wiring and stats.
 //
 // A clone of "Neon Breakout / HYPERBRICK" (miaai-lab's 038-neon-breakout.html), ported to a module:
@@ -72,56 +73,9 @@ function roundRect(g, x, y, w, h, r) {
   g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
 }
 
-/* ============ sound: tiny synth, created on the first gesture ============ */
-export function createSound() {
-  let ac = null, master = null, noiseBuf = null, muted = false;
-  function init() {
-    if (ac) { if (ac.state === 'suspended') ac.resume().catch(() => {}); return; }
-    try {
-      ac = new (window.AudioContext || window.webkitAudioContext)();
-      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6;
-      master = ac.createGain(); master.gain.value = muted ? 0 : 0.55; master.connect(comp); comp.connect(ac.destination);
-      noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.25, ac.sampleRate);
-      const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    } catch { ac = null; }
-  }
-  function tone(f, dur, type, vol, f2, delay) {
-    if (!ac || muted) return;
-    const t = ac.currentTime + (delay || 0), o = ac.createOscillator(), g = ac.createGain();
-    o.type = type || 'square'; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.1, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.03);
-  }
-  function noise(dur, freq, vol) {
-    if (!ac || muted || !noiseBuf) return;
-    const t = ac.currentTime, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-    src.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 1.4;
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t + dur + 0.02);
-  }
-  const PENTA = [0, 3, 5, 7, 10];
-  return {
-    init,
-    get muted() { return muted; },
-    setMuted(m) { muted = !!m; if (master && ac) master.gain.setTargetAtTime(muted ? 0 : 0.55, ac.currentTime, 0.02); },
-    close() { try { if (ac) ac.close(); } catch { /* already closed */ } ac = null; master = null; },
-    brick(combo) { const i = Math.min(combo, 19), f = 261.63 * Math.pow(2, (PENTA[i % 5] + 12 * Math.floor(i / 5)) / 12); tone(f, 0.13, 'square', 0.07); tone(f * 2, 0.09, 'triangle', 0.05); noise(0.08, 2400 + i * 120, 0.12); },
-    armor() { tone(1180, 0.05, 'square', 0.05, 760); noise(0.05, 5200, 0.08); },
-    paddle() { tone(174, 0.09, 'square', 0.09, 262); },
-    wall() { tone(620, 0.035, 'triangle', 0.05); },
-    launch() { tone(260, 0.14, 'square', 0.07, 720); },
-    power() { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, 0.1, 'triangle', 0.09, null, i * 0.055)); },
-    laser() { tone(1500, 0.07, 'sawtooth', 0.025, 380); },
-    lose() { tone(440, 0.7, 'sawtooth', 0.09, 52); noise(0.4, 500, 0.12); },
-    clear() { [392, 493.88, 587.33, 739.99, 783.99, 987.77, 1174.66, 1567.98].forEach((f, i) => tone(f, 0.14, 'square', 0.06, null, i * 0.06)); },
-    over() { [392, 329.63, 261.63, 196].forEach((f, i) => tone(f, 0.28, 'triangle', 0.1, f * 0.97, i * 0.2)); },
-  };
-}
-
 /**
  * The game. `hooks`:
  *   t(key, vars)        translator for the few strings drawn ON the canvas
- *   sound               createSound() instance (shared with ui.js for the mute toggle)
  *   reduce()            true when reduced motion is on (thins garnish; the ball keeps moving)
  *   onHud()             score/lives/stage changed
  *   onCombo(combo, bump)
@@ -133,7 +87,6 @@ export function createSound() {
  */
 export function createGame(canvas, hooks) {
   const ctx = canvas.getContext('2d');
-  const sound = hooks.sound;
   const say = hooks.t;
   let FH = 800, scale = 1, dpr = 1;
   const bgCanvas = document.createElement('canvas'), bgc = bgCanvas.getContext('2d');
@@ -265,7 +218,7 @@ export function createGame(canvas, hooks) {
     if (phase !== 'serve') return;
     const sp = baseSpeed(), a = (Math.random() * 0.5 - 0.25);
     for (const b of balls) if (b.stuck) { b.stuck = false; b.vx = Math.sin(a) * sp; b.vy = -Math.cos(a) * sp; }
-    phase = 'play'; if (live()) sound.launch();
+    phase = 'play';
   }
   const stageNum = () => (endless ? wave : stageIdx + 1);
   const stageNameKey = () => (endless ? null : LEVELS[stageIdx].key);
@@ -324,11 +277,11 @@ export function createGame(canvas, hooks) {
   // --- collisions ------------------------------------------------------------------------------
   function hitBrick(b, ball) {
     b.hp--; b.flash = 1;
-    if (b.hp > 0) { if (live()) sound.armor(); addShake(1.5); spawn(b.x + b.w / 2, b.y + b.h / 2, 0, 0, 0.25, '#ffffff', b.w * 0.5, 0, 1); return; }
+    if (b.hp > 0) { addShake(1.5); spawn(b.x + b.w / 2, b.y + b.h / 2, 0, 0, 0.25, '#ffffff', b.w * 0.5, 0, 1); return; }
     b.alive = false; grid[b.r][b.c] = null; breakable--;
     combo++; bestCombo = Math.max(bestCombo, combo);
     const pts = (b.max === 2 ? 160 : 100) * Math.min(combo, 12);
-    if (live()) { score += pts; bricksBroken++; sound.brick(combo); hooks.onHud(); }
+    if (live()) { score += pts; bricksBroken++; hooks.onHud(); }
     pop(b.x + b.w / 2, b.y + b.h / 2, '+' + pts, COLORS[b.k], combo >= 5 ? 20 : 15);
     shatter(b, ball); addShake(2.4 + Math.min(4, combo * 0.35));
     if (combo >= 6 && !reduce()) hitStop = 0.035;
@@ -342,7 +295,7 @@ export function createGame(canvas, hooks) {
     phase = 'clear'; clearT = demo ? 1.2 : 2.3; flash = reduce() ? 0.2 : 0.7; flashCol = '255,255,255';
     for (const b of balls) { b.vx = 0; b.vy = 0; }
     if (live()) {
-      sound.clear(); stagesCleared++;
+      stagesCleared++;
       const bonus = lives * 500; score += bonus;
       pop(FW / 2, FH * 0.5, say('pop_clear', { n: bonus }), '#fff200', 28);
       hooks.onHud(); hooks.onStageClear(bonus);
@@ -377,7 +330,6 @@ export function createGame(canvas, hooks) {
     ball.vx = Math.sin(a) * sp; ball.vy = -Math.cos(a) * sp;
     ball.y = paddle.y - PADDLE_H / 2 - BALL_R;
     paddle.sq = 1; combo = 0; hooks.onCombo(0, false);
-    if (live()) sound.paddle();
     for (let i = 0; i < (reduce() ? 3 : 9); i++) spawn(ball.x, paddle.y - PADDLE_H / 2, (Math.random() - 0.5) * 220, -Math.random() * 200, 0.35, '#00f5d4', 2, 2, 0);
   }
   function stepBall(ball, dt) {
@@ -388,9 +340,9 @@ export function createGame(canvas, hooks) {
     const sdt = dt / n;
     for (let i = 0; i < n; i++) {
       ball.x += ball.vx * sdt; ball.y += ball.vy * sdt;
-      if (ball.x < BALL_R) { ball.x = BALL_R; ball.vx = Math.abs(ball.vx); if (live()) sound.wall(); }
-      else if (ball.x > FW - BALL_R) { ball.x = FW - BALL_R; ball.vx = -Math.abs(ball.vx); if (live()) sound.wall(); }
-      if (ball.y < TOP + BALL_R) { ball.y = TOP + BALL_R; ball.vy = Math.abs(ball.vy); if (live()) sound.wall(); }
+      if (ball.x < BALL_R) { ball.x = BALL_R; ball.vx = Math.abs(ball.vx); }
+      else if (ball.x > FW - BALL_R) { ball.x = FW - BALL_R; ball.vx = -Math.abs(ball.vx); }
+      if (ball.y < TOP + BALL_R) { ball.y = TOP + BALL_R; ball.vy = Math.abs(ball.vy); }
       if (ball.vy > 0 && ball.y + BALL_R >= paddle.y - PADDLE_H / 2 && ball.y - BALL_R <= paddle.y + PADDLE_H / 2 && Math.abs(ball.x - paddle.x) <= paddle.w / 2 + BALL_R * 0.8) paddleHit(ball);
       if (ball.y - BALL_R < GY + RH * grid.length + 4) collideBricks(ball);
       if (phase !== 'play') return;
@@ -400,7 +352,6 @@ export function createGame(canvas, hooks) {
     if (s2 > 0 && Math.abs(ball.vy) < s2 * 0.28) { ball.vy = Math.sign(ball.vy || -1) * s2 * 0.28; ball.vx = Math.sign(ball.vx) * Math.sqrt(s2 * s2 - ball.vy * ball.vy); }
   }
   function applyPower(t) {
-    if (live()) sound.power();
     pop(paddle.x, paddle.y - 34, say('pw_' + t).toUpperCase(), POWER_COLORS[t], 17);
     if (t === 'M') {
       const src = balls.filter((b) => !b.stuck).slice(0, 3);
@@ -433,9 +384,9 @@ export function createGame(canvas, hooks) {
   }
   function ballLost() {
     if (demo) { serve(); return; }
-    lives--; sound.lose(); addShake(14); flash = reduce() ? 0.2 : 0.55; flashCol = '255,46,151';
+    lives--; addShake(14); flash = reduce() ? 0.2 : 0.55; flashCol = '255,46,151';
     combo = 0; hooks.onCombo(0, false); caps = []; beams = []; resetPaddle(); hooks.onHud();
-    if (lives <= 0) { phase = 'done'; sound.over(); hooks.onGameOver(); return; }
+    if (lives <= 0) { phase = 'done'; hooks.onGameOver(); return; }
     hooks.onLifeLost(lives);
     serve();
   }
@@ -473,7 +424,7 @@ export function createGame(canvas, hooks) {
     if (slowT > 0) slowT -= dt;
     if (laserT > 0) {
       laserT -= dt; laserCd -= dt;
-      if (laserCd <= 0 && phase === 'play') { laserCd = 0.24; for (const s of [-1, 1]) beams.push({ x: paddle.x + s * (paddle.w / 2 - 8), y: paddle.y - PADDLE_H }); if (live()) sound.laser(); }
+      if (laserCd <= 0 && phase === 'play') { laserCd = 0.24; for (const s of [-1, 1]) beams.push({ x: paddle.x + s * (paddle.w / 2 - 8), y: paddle.y - PADDLE_H }); }
     }
 
     if (phase === 'clear') { clearT -= dt; if (clearT <= 0) nextStage(); return; }
