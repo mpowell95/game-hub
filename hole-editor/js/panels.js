@@ -784,18 +784,18 @@ export function openCompareModal({ originalBuilt, currentBuilt, slot, id }) {
     const h = Math.max(1, Math.round((b.maxY - b.minY) * scale));
     return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
       <div style="color:#e8e8e8;font:600 13px sans-serif;">${label} &middot; par ${built.par} &middot; ${Math.round(built.cardYards)} yd</div>
-      <div style="width:${W}px;height:${H}px;background:#0b0f07;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.15);">
+      <div class="he-cmp-frame" style="width:${W}px;height:${H}px;background:#0b0f07;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.15);">
         <canvas width="${w}" height="${h}" data-role="${label}"></canvas>
       </div>
     </div>`;
   };
   overlay.innerHTML = `
-    <div style="background:#1e1e1e;border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:12px;">
+    <div class="he-modal-box" style="background:#1e1e1e;border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div style="color:#e8e8e8;font:600 15px sans-serif;">Compare &middot; ${id} (slot ${slot})</div>
         <button class="gh-btn gh-btn--sm" id="he-compare-close">Close</button>
       </div>
-      <div style="display:flex;gap:20px;">
+      <div class="he-cmp-row" style="display:flex;gap:20px;">
         ${card(originalBuilt, 'Original')}
         ${card(currentBuilt, 'Current')}
       </div>

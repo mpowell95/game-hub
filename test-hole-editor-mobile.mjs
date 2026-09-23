@@ -153,6 +153,40 @@ ok('a finger 16 px off a route dot still drags it (22 px target)', Math.abs(wp2[
 
 ok('the readout follows the last touch', await page.evaluate(() => /\d/.test(document.getElementById('he-hover').textContent)));
 ok('the canvas has touch-action: none', await page.evaluate(() => getComputedStyle(document.getElementById('he-canvas')).touchAction === 'none'));
+console.log('\n-- stage 4: modals and the walkthrough --');
+await tapEl('#he-m-tools'); await tapEl('#he-ribbon #he-compare'); await page.waitForTimeout(400);
+ok('Compare fits the screen', await page.evaluate(() => { const b = document.querySelector('.he-modal-box').getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; }));
+await tapEl('#he-compare-close');
+
+// A brand-new phone: the link opens the walkthrough first (first-visit redirect), on the setup screen.
+const ctx2 = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+const p2 = await ctx2.newPage();
+p2.on('pageerror', (e) => errors.push('walkthrough: ' + e.message.split('\n')[0]));
+await p2.goto(`${URL}?course=new`, { waitUntil: 'networkidle' });
+await p2.waitForSelector('.tr-tip .tr-n', { timeout: 20000 }).catch(() => {});
+ok('a first visit on a phone opens the walkthrough', /course=tutorial/.test(p2.url()) && !!(await p2.$('.tr-tip .tr-n')));
+ok('the setup screen fits the phone', await p2.evaluate(() => { const b = document.querySelector('.he-setup-box').getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && b.top >= 0 && document.documentElement.scrollWidth <= innerWidth; }));
+ok('...with two terrain columns', await p2.evaluate(() => getComputedStyle(document.getElementById('he-setup-looks')).gridTemplateColumns.split(' ').length === 2));
+// Walk every step with its own Skip / Next, checking each pop-up is on screen and says "tap".
+const seen = []; const off = []; const click = [];
+for (let g = 0; g < 30; g++) {
+  const n = parseInt(await p2.locator('.tr-tip .tr-n').textContent().catch(() => ''), 10);
+  if (!n || seen.includes(n)) break;
+  seen.push(n);
+  const bx = await p2.locator('.tr-tip').boundingBox();
+  if (!bx || bx.x < 0 || bx.x + bx.width > 390 || bx.y < 0 || bx.y + bx.height > 844) off.push(n);
+  if (/\bclick/i.test(await p2.locator('.tr-tip').textContent())) click.push(n);
+  if (n === 1) { await p2.fill('#he-setup-name', 'Practice'); await p2.waitForTimeout(1200); continue; }
+  if (n === 3) { const r = await p2.locator('#he-setup-go').boundingBox(); await p2.touchscreen.tap(r.x + r.width / 2, r.y + r.height / 2); await p2.waitForTimeout(1200); continue; }
+  const btn = p2.locator('.tr-tip [data-go="next"]');
+  if (!(await btn.count())) break;
+  const r = await btn.boundingBox(); await p2.touchscreen.tap(r.x + r.width / 2, r.y + r.height / 2); await p2.waitForTimeout(350);
+}
+ok('the walkthrough reaches its last step on a phone', seen.length >= 20 && !!(await p2.$('.tr-tip [data-go="start"]')), `steps seen: ${seen.join(',')}`);
+ok('every pop-up stays on the screen', off.length === 0, `off screen: ${off.join(',')}`);
+ok('no pop-up says "click" on a phone', click.length === 0, `steps: ${click.join(',')}`);
+await ctx2.close();
+
 ok('no page errors during the whole run', errors.length === 0, errors.join(' | '));
 
 await b.close();
