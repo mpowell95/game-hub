@@ -251,8 +251,18 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01,
 
 /** RA (docs/BASEBALL-3D-BUILD.md section 9): A BUNT'S OWN OUTCOME. `resolveContact` above cannot
  *  answer this one - its whole model is out-zone geometry against a ball that CARRIED, and a bunt
- *  that dies 20 ft in front of the plate is not in anybody's sector at any depth. So the bunt gets
- *  its own three-line rule book, exactly as the spec writes it:
+ *  that dies 20 ft in front of the plate is not in anybody's sector at any depth.
+ *
+ *  Playtest 1, batch 2 (2026-09-23): the FIRST thing this decides is now POSITION, not `swing.js`'s
+ *  old timing window - "resolveBunt takes contact from bat-vs-ball position instead of swing
+ *  timing." `batted.offY` is the same "ball minus bar-centre" measurement `buntSwing` already
+ *  computed to confirm the bar reached the ball at all; here it decides whether the contact was
+ *  clean or popped up. `offY > 0` means the ball crossed ABOVE the bar's own centre - the bat sat
+ *  UNDER it, which is exactly what pops a real bunt up. A popped-up bunt is an easy catch: always
+ *  an out, never a sacrifice's free advance, and it never rolls the beat-out dice at all (there is
+ *  nothing to beat out - the ball is in the air, not on the ground).
+ *
+ *  Otherwise the same three-line rule book as before, exactly as the spec writes it:
  *
  *    - Runners on and fewer than 2 outs: it is a SACRIFICE. Every runner moves up one (bases.js's
  *      `advanceSacBunt`, applied by game.js) and the batter is out - UNLESS he beats the throw,
@@ -267,13 +277,16 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01,
  *  hitSpd, capped at 0.5, the identical line an infield grounder at the edge of a sector already
  *  runs (see `resolveContact`'s `nearEdge` branch). Doc §6, [Locked]: "Batter Speed raises steal
  *  and bunt success", and a second, differently-calibrated speed roll for the same question would
- *  be two answers to it.
+ *  be two answers to it. Unchanged by this stage, and its own draw is the ONLY randomness this
+ *  function still spends - the fair/foul/pop-up split above is decided from position alone, with
+ *  no new call to `rand01`, so a fair bunt costs this function exactly the one draw it always did.
  *
  *  Returns the same shape `resolveContact` does (plus the bunt's own `distanceFt`/`sprayAngleDeg`,
  *  which came off `swing.js` rather than out of `carryFt`), so `game.js`'s `_resolveBattedBall`
  *  reads it with no special case beyond the one kind name it has to recognise.
  *
- *  @param {{distanceFt:number, sprayAngleDeg:number}} batted - `swing.js`'s bunt result
+ *  @param {{distanceFt:number, sprayAngleDeg:number, offY?:number, barHalfY?:number}} batted -
+ *    `swing.js`'s bunt result
  *  @param {Array} bases - `[first, second, third]`, ids or null
  *  @param {number} outs - outs BEFORE this play
  *  @param {number} hitSpd - the batter's hitSpd skill points
@@ -281,6 +294,12 @@ export function resolveContact(batted, zones, settings, fenceFt, hitSpd, rand01,
 export function resolveBunt(batted, bases, outs, hitSpd, settings, rand01) {
   const distanceFt = batted.distanceFt || 0;
   const sprayAngleDeg = batted.sprayAngleDeg || 0;
+  const barHalfY = batted.barHalfY != null ? batted.barHalfY
+    : (settings.BUNT_BAR_HALF_Y != null ? settings.BUNT_BAR_HALF_Y : 0.28);
+  const popupYFrac = settings.BUNT_POPUP_Y_FRAC != null ? settings.BUNT_POPUP_Y_FRAC : 0.55;
+  if (batted.offY != null && batted.offY > barHalfY * popupYFrac) {
+    return { result: 'out', bases: 0, kind: 'bunt-popup', distanceFt, sprayAngleDeg, isFoul: false };
+  }
   const beatOutChance = Math.min(settings.MECHANICS.beatOutMax != null ? settings.MECHANICS.beatOutMax : 0.5, Math.max(0, hitSpd || 0) * settings.MECHANICS.beatOutPerPt);
   const beatOut = rand01() < beatOutChance;
   const runnersOn = bases.some((b) => b != null);

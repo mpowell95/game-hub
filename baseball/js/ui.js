@@ -716,6 +716,9 @@ class BaseballPlayScreen {
     if (this._stealRaf) cancelAnimationFrame(this._stealRaf);
     if (this._pickoffRaf) cancelAnimationFrame(this._pickoffRaf);
     if (this._stealWidgetTimer) clearTimeout(this._stealWidgetTimer);
+    // batch 2: a held bunt's own release listener lives on `document`, not this screen's root -
+    // a teardown mid-hold must remove it or it leaks for the life of the tab.
+    this._endBuntHold();
     if (this.actors) { this.actors.dispose(); this.actors = null; }
     if (this._popTimer) clearTimeout(this._popTimer);
     if (this._bigOutTimer) clearTimeout(this._bigOutTimer);
@@ -2037,6 +2040,27 @@ class BaseballPlayScreen {
     }
     const c = this.cursor;
     const a = map.toPx(c.x, c.y);
+    // Batch 2 (Matt): "a bunt isn't a swing" - while the bat is held, a horizontal BAR replaces
+    // the CONTACT/POWER circle entirely, drawn at exactly the reach `swing.js`'s `buntSwing`/
+    // `outcomes.js`'s `resolveBunt` score against (`BUNT_BAR_HALF_X`/`BUNT_BAR_HALF_Y`) - the same
+    // "the drawn thing is the scored thing" rule the zone box and every cursor here already follow,
+    // so the bar a player sees can never disagree with where contact actually happens.
+    if (this.state.armedBunt) {
+      const halfX = SETTINGS.BUNT_BAR_HALF_X != null ? SETTINGS.BUNT_BAR_HALF_X : 0.95;
+      const halfY = SETTINGS.BUNT_BAR_HALF_Y != null ? SETTINGS.BUNT_BAR_HALF_Y : 0.28;
+      const bw = Math.abs(map.unitX * halfX);
+      const bh = Math.abs(map.unitY * halfY);
+      ctx.save();
+      ctx.fillStyle = 'rgba(158,110,66,0.92)';
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.rect(a.x - bw, a.y - bh, bw * 2, bh * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     const r = SETTINGS.FEEL.engine.cursorR[this.state.battingMode] || SETTINGS.FEEL.engine.cursorR.contact;
     ctx.save();
     ctx.strokeStyle = 'rgba(0,0,0,0.55)';
@@ -2679,16 +2703,29 @@ class BaseballPlayScreen {
     const prePitch = !batting && label === 'act_pitch';
     const canSteal = preReady && !!this._stealCandidate();
     const canPickoff = prePitch && !!(this.game && this.game.bases[0] != null);
+    // Batch 2: a held bunt started before READY has to keep reading as live through the wind-up
+    // and the pitch itself (the hold does not end just because `preReady` did), or the well would
+    // render disabled under a finger that is still down.
+    const canBunt = preReady || this._buntHeld;
     const empty = () => `<div class="bb-slot is-empty" aria-hidden="true"></div>`;
     const slot = (act, enabled, armed) => (enabled
       ? `<button type="button" class="bb-slot is-live${armed ? ' is-armed' : ''}" data-act="${act}" aria-pressed="${armed ? 'true' : 'false'}">${armed ? '\u25CF ' : ''}${t('act_' + act)}</button>`
       : `<button type="button" class="bb-slot" data-act="${act}" disabled title="${t('locked')}">${t('act_' + act)}</button>`);
     actions.innerHTML = !batting
       ? `${empty()}${empty()}${slot('pickoff', canPickoff, false)}`
-      : `${slot('bunt', preReady, this.state.armedBunt)}${slot('steal', canSteal, this.state.armedSteal)}${empty()}`;
+      : `${slot('bunt', canBunt, this.state.armedBunt)}${slot('steal', canSteal, this.state.armedSteal)}${empty()}`;
     actions.querySelectorAll('button[data-act]:not([disabled])').forEach((b) => {
-      b.style.touchAction = 'manipulation';
-      b.addEventListener('click', () => this._onActionSlot(b.dataset.act));
+      if (b.dataset.act === 'bunt') {
+        // Batch 2 (Matt): "if I hold it down, the bat should stay there" - a HOLD, never a tap,
+        // the same non-passive touchstart/touchend shape the main button already uses so a hold
+        // here can never also start a page scroll (root CLAUDE.md's touch rules).
+        b.style.touchAction = 'none';
+        b.addEventListener('touchstart', (e) => { e.preventDefault(); this._onBuntDown(e); }, { passive: false });
+        b.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') return; this._onBuntDown(e); });
+      } else {
+        b.style.touchAction = 'manipulation';
+        b.addEventListener('click', () => this._onActionSlot(b.dataset.act));
+      }
     });
   }
 
@@ -2701,11 +2738,14 @@ class BaseballPlayScreen {
     return this.game._stealCandidate(battingSide);
   }
 
-  /** RA: a tap on one of the three wells. STEAL and BUNT ARM for the next pitch (tap again to
-   *  disarm - they are toggles, and a player who armed one by accident must be able to take it
-   *  back without throwing a pitch away); PICKOFF is not an arming action at all, it IS the
-   *  decision, so it resolves the pitching turn immediately with no pitch thrown. Every one of
-   *  them is a TAP, never a hold (doc §3, [Locked]). */
+  /** RA: a tap on one of the two remaining tap wells. STEAL ARMS for the next pitch (tap again to
+   *  disarm - a toggle, so a player who armed it by accident can take it back without throwing a
+   *  pitch away); PICKOFF is not an arming action at all, it IS the decision, so it resolves the
+   *  pitching turn immediately with no pitch thrown. Both are a TAP, never a hold (doc §3,
+   *  [Locked]). **BUNT is no longer wired here** - playtest 1, batch 2 (2026-09-23) made it a HOLD
+   *  instead of a tap-to-arm toggle, wired straight off pointerdown/touchstart in
+   *  `_paintActionSlots()` (`_onBuntDown`/`_onBuntUp`), since a hold and a tap are different
+   *  gestures, not two branches of the same handler. */
   _onActionSlot(act) {
     if (act === 'steal') {
       this.state.armedSteal = !this.state.armedSteal;
@@ -2714,20 +2754,109 @@ class BaseballPlayScreen {
       // off the bag the instant the well lights up.
       this._runnerStanding = {};
       if (!this._flightActive) this._drawStaticField();
-    } else if (act === 'bunt') {
-      this.state.armedBunt = !this.state.armedBunt;
-      this._paintActionSlots();
-      this._paintModeLabels();
     } else if (act === 'pickoff') {
       if (this._onPickoff) this._onPickoff();
     }
   }
 
+  /** Playtest 1, batch 2 (2026-09-23): pointerdown/touchstart on the BUNT well - Matt: "if I hold
+   *  it down, the bat should stay there." Squares the batter the instant the finger is down, not
+   *  only once READY is tapped, since the whole pitch is now covered by the hold, not just the
+   *  wind-up. `_buntRelease` is bound at `document`, not this button, because `_paintActionSlots()`
+   *  rebuilds the well's own DOM on every repaint (READY's own tap included) - an element-scoped
+   *  listener would be dropped mid-hold the instant that happens. Both `touchend`/`touchcancel` and
+   *  `pointerup`/`pointercancel` are covered, the same dual path the main button already uses.
+   *
+   *  A REAL, LOAD-BEARING REASON this matches the SPECIFIC touch/pointer that pressed this well,
+   *  never just "any touchend/pointerup anywhere": a player has to be able to hold Bunt with one
+   *  thumb and tap READY with the other, and a touchend from that OTHER tap bubbles to `document`
+   *  exactly like this well's own would - a listener keyed on event TYPE alone would end the hold
+   *  the instant READY is tapped, before the wind-up even starts. Found by driving this end to end
+   *  (a scratch diagnostic script, not read off the code): the first build of this method armed the
+   *  well, then measured `armedBunt: false` by the time the pitch's own flight began, entirely from
+   *  READY's own touchend bubbling up to this same `document` listener. Once THIS press carries a
+   *  real identity (`e.changedTouches[0].identifier` for a real touch, `e.pointerId` for a mouse/
+   *  pen), any release that does not carry the SAME identity for the SAME input family is ignored
+   *  outright - never a fallback match, or a plain touchend from an unrelated tap would still slip
+   *  through. Only a press with NO identity at all (a bare `new Event(...)`, which carries neither)
+   *  falls back to matching any release, which is what keeps a test dispatching bare events simple
+   *  when it is not exercising this multi-touch distinction on purpose. */
+  _onBuntDown(e) {
+    if (this._buntHeld) return;
+    this._buntHeld = true;
+    this.state.armedBunt = true;
+    this._paintActionSlots();
+    this._paintModeLabels();
+    this.actors.play('batter', 'Bunt');
+    if (!this._flightActive) this._drawStaticField();
+    const touchId = e && e.changedTouches && e.changedTouches.length ? e.changedTouches[0].identifier : null;
+    const pointerId = e && e.pointerId !== undefined ? e.pointerId : null;
+    const hasIdentity = touchId != null || pointerId != null;
+    const matches = (ev) => {
+      if (!hasIdentity) return true;
+      if (ev.type === 'touchend' || ev.type === 'touchcancel') {
+        if (touchId == null) return false;
+        const touches = ev.changedTouches;
+        return !!touches && Array.prototype.some.call(touches, (t) => t.identifier === touchId);
+      }
+      if (ev.type === 'pointerup' || ev.type === 'pointercancel') {
+        return pointerId != null && ev.pointerId === pointerId;
+      }
+      return false;
+    };
+    this._buntRelease = (ev) => { if (matches(ev)) this._onBuntUp(); };
+    document.addEventListener('touchend', this._buntRelease);
+    document.addEventListener('touchcancel', this._buntRelease);
+    document.addEventListener('pointerup', this._buntRelease);
+    document.addEventListener('pointercancel', this._buntRelease);
+  }
+
+  /** The finger lifts - "release pulls the bat back." Two real cases: released before a pitch was
+   *  even thrown (nothing further to do beyond dropping the arm), or released while a pitch is in
+   *  flight, in which case `_resolveBuntTake` (set by `HumanAgent.decideSwing`'s own bunt branch)
+   *  is what actually resolves that pitch as a take - "a bunt isn't a swing," so letting go before
+   *  the ball arrives is simply not swinging at it. `_endBuntHold()` (and so this method) can only
+   *  ever fire while the hold is still live, which is exactly what makes "releasing after the pitch
+   *  is past does nothing" true for free: the crossing check clears the hold itself the instant it
+   *  resolves the pitch, so a real release after that point finds no listener left to call. */
+  _onBuntUp() {
+    if (!this._buntHeld) return;
+    this._endBuntHold();
+    const takeResolve = this._resolveBuntTake;
+    this._resolveBuntTake = null;
+    if (takeResolve) {
+      takeResolve();
+    } else {
+      this.state.armedBunt = false;
+      this._paintActionSlots();
+      this._paintModeLabels();
+    }
+    if (!this.destroyed) this.actors.idle('batter');
+  }
+
+  /** The one place the hold's own document listeners are removed - a real release (`_onBuntUp`),
+   *  the crossing check resolving the pitch on its own (`HumanAgent.decideSwing`, through
+   *  `_clearArmed`), and a mid-hold `destroy()` all funnel through here so there is exactly one
+   *  way to stop listening, never three copies of the same four `removeEventListener` calls. */
+  _endBuntHold() {
+    if (this._buntRelease) {
+      document.removeEventListener('touchend', this._buntRelease);
+      document.removeEventListener('touchcancel', this._buntRelease);
+      document.removeEventListener('pointerup', this._buntRelease);
+      document.removeEventListener('pointercancel', this._buntRelease);
+      this._buntRelease = null;
+    }
+    this._buntHeld = false;
+  }
+
   /** RA: both one-pitch arms, cleared the moment the pitch that carried them resolves. Called from
    *  the two places a batting decision is actually returned (`HumanAgent.decideSwing`'s swing tap
    *  and its take timeout), never from an event handler - the decision object has already been
-   *  built by then, so clearing here cannot change what the engine was told. */
+   *  built by then, so clearing here cannot change what the engine was told. Batch 2: also ends a
+   *  live bunt hold (`_endBuntHold`), since the pitch that hold was covering has just resolved one
+   *  way or another. */
   _clearArmed() {
+    this._endBuntHold();
     this.state.armedSteal = false;
     this.state.armedBunt = false;
     this._runnerStanding = {};
@@ -3333,8 +3462,9 @@ class BaseballPlayScreen {
     const outsPerInning = SETTINGS.MECHANICS.outsPerInning;
     if (inPlay) {
       // RA: 'sacrifice' is an out that does not END in "out" - the landing marker would otherwise
-      // draw a bunt the batter was thrown out on in the green of a base hit.
-      const isOut = /out$/.test(outKind) || outKind === 'strikeout' || outKind === 'sacrifice';
+      // draw a bunt the batter was thrown out on in the green of a base hit. Batch 2: 'bunt-popup'
+      // is the same fact for a popped-up bunt (always an out, `outcomes.js`'s `resolveBunt`).
+      const isOut = /out$/.test(outKind) || outKind === 'strikeout' || outKind === 'sacrifice' || outKind === 'bunt-popup';
       const isHr = outKind === 'homer';
       const rad = (payload.sprayAngleDeg * Math.PI) / 180;
       const xFt = Math.sin(rad) * payload.distanceFt;
@@ -3756,8 +3886,9 @@ class BaseballPlayScreen {
     }
     if (payload.outcome !== 'strikeout') {
       // RA: same exception `_settleAtBat` makes - on a sacrifice the batter-runner jogs to first
-      // and vanishes there like any other out, while the runners he moved up keep running.
-      const wasOut = /out$/.test(payload.outcome || '') || payload.outcome === 'sacrifice';
+      // and vanishes there like any other out, while the runners he moved up keep running. Batch 2:
+      // 'bunt-popup' is the same fact - a popped-up bunt is always an out.
+      const wasOut = /out$/.test(payload.outcome || '') || payload.outcome === 'sacrifice' || payload.outcome === 'bunt-popup';
       const toIdx = payload.outcome === 'walk' ? 0 : (wasOut ? 0 : (payload.bases || 1) - 1);
       const speedFt = payload.outcome === 'walk' ? WALK_RUNNER_SPEED_FT_S : RUNNER_SPEED_FT_S;
       raw.push({ role: 'rb', from: -1, to: toIdx, speedFt });
@@ -4777,16 +4908,51 @@ class HumanAgent {
     // RA (docs/BASEBALL-3D-BUILD.md section 9): READY has been tapped, so STEAL and BUNT are no
     // longer offered - both are decisions made BETWEEN pitches, and the pitch is now coming.
     s._paintActionSlots();
-    // RA: "the batter squares on `Bunt` clip at the wind-up". A loop, held from here through the
-    // pitch and through contact - a bunt has no separate swing, the bat is already where it is
-    // going to meet the ball, which is exactly what `swing.js`'s timing-only bunt branch scores.
-    if (s.state.armedBunt) s.actors.play('batter', 'Bunt');
+    // Batch 2: the squaring itself already happened at `_onBuntDown`, the instant the well was
+    // held - there is nothing left to start here, and re-playing the clip on every READY tap would
+    // restart its loop for no reason under a bat that never actually moved.
 
     // The CPU's own wind-up (FEEL.ui.windupMs), THEN the ball leaves the hand.
     await s._stepWindup();
     if (s.destroyed) return { action: 'take', steal: !!s.state.armedSteal };
 
     const flightPromise = s._animatePitchFlight(pitch);
+
+    // Playtest 1, batch 2 (2026-09-23): Matt: "if I hold it down, the bat should stay there... if
+    // the pitch crosses the bat, contact happens on its own - no timing tap." A held bunt resolves
+    // POSITIONALLY, at the pitch's own crossing instant, never on a tap - the tap-to-swing path
+    // below is for an ordinary (non-bunt) turn only. `state.armedBunt` cannot go from false to true
+    // past this point (the well only ever arms while `preReady`, before this promise exists), so
+    // one check here is enough to know which turn this is for its whole remaining life.
+    if (s.state.armedBunt) {
+      return new Promise((resolve) => {
+        let resolved = false;
+        let crossTimer = null;
+        const finish = (result) => {
+          if (resolved) return;
+          resolved = true;
+          if (crossTimer) clearTimeout(crossTimer);
+          s._resolveBuntTake = null;
+          s._clearArmed();
+          resolve(result);
+        };
+        // Released before the pitch arrives: the bat is pulled back - an ordinary take, exactly
+        // "a take in bunt mode is an ordinary take."
+        s._resolveBuntTake = () => finish({ action: 'take', steal: !!s.state.armedSteal });
+        const crossMs = pitch.timeToPlateS * 1000;
+        crossTimer = setTimeout(() => {
+          // Still held when the pitch crosses: contact happens on its own, wherever the bar
+          // actually is right now - no swing tap, no timing quality. `swing.js`'s `buntSwing`/
+          // `outcomes.js`'s `resolveBunt` decide fair/foul/pop-up from this position alone.
+          // `finish()`'s own `_clearArmed()` ends the hold (`_endBuntHold`) in the same breath, so
+          // a stray real release a moment later finds no listener left: "releasing after the pitch
+          // is past does nothing."
+          finish({ action: 'swing', cursor: { x: s.cursor.x, y: s.cursor.y }, bunt: true,
+            mode: s.state.battingMode, steal: !!s.state.armedSteal });
+        }, crossMs);
+        if (flightPromise && flightPromise.catch) flightPromise.catch(() => {});
+      });
+    }
 
     return new Promise((resolve) => {
       let resolved = false;
@@ -4802,16 +4968,10 @@ class HumanAgent {
         s._onMainDown = null; s._onMainUp = null;
         const releaseMs = performance.now() - releaseMs0;
         const timing = timingFromRelease(releaseMs, pitch.timeToPlateS, F);
-        // RA: the two one-pitch arms are read into the decision BEFORE they are cleared, so what
-        // the engine is told and what the player armed are the same thing.
-        const bunt = !!s.state.armedBunt;
         const steal = !!s.state.armedSteal;
-        // STAGE 7 row 4: fade:0 - no cross-fade in, so the swing is visible on the very frame it
-        // starts (`markAtMs: 80` lands the contact keyframe where the old sprite frame 5 did).
-        // RA: a BUNT plays no swing at all - the batter is already squared and stays squared.
-        if (!bunt) s.actors.play('batter', 'Swing', { markAtMs: 80, fade: 0 });
+        s.actors.play('batter', 'Swing', { markAtMs: 80, fade: 0 });
         s._clearArmed();
-        resolve({ action: 'swing', cursor: { x: s.cursor.x, y: s.cursor.y }, timingErrorMs: timing, mode: s.state.battingMode, bunt, steal });
+        resolve({ action: 'swing', cursor: { x: s.cursor.x, y: s.cursor.y }, timingErrorMs: timing, mode: s.state.battingMode, steal });
       };
       s._onMainDown = settle;
       s._onMainUp = null;
@@ -4824,7 +4984,6 @@ class HumanAgent {
         // A take: the batter never left Idle (no half-cock pose exists - inventing one is a
         // feature not discussed, docs/BASEBALL-3D-BUILD.md section 3.6).
         // RA: a take still carries the steal - the runner left with the pitch, not with the swing.
-        // The bunt is dropped with the rest of the arm: "a take in bunt mode is an ordinary take."
         const steal = !!s.state.armedSteal;
         s._clearArmed();
         resolve({ action: 'take', steal });
@@ -4976,6 +5135,9 @@ function outcomeWord(kind, bases) {
   // play worth a button.
   if (kind === 'bunt-out') return 'bunt_out';
   if (kind === 'bunt-single') return 'bunt_single';
+  // Batch 2 (2026-09-23): a popped-up bunt, named apart from `res_out` for the same reason as the
+  // other two - "Out" is true and loses the only thing that made the play worth a button.
+  if (kind === 'bunt-popup') return 'bunt_popup';
   if (kind === 'sacrifice') return 'sacrifice';
   if (kind === 'homer') return 'homer';
   if (kind === 'walk') return 'walk';

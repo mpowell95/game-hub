@@ -45,7 +45,10 @@ This doc says how the game works. It is not a coding or implementation guide. Lo
 
 ### Steal, bunt, pickoff
 - **[Locked]** Steal button (batting, runner on). Bunt button (batting). Pickoff button (pitching, runner on). All sit in reserved fixed slots that never move.
-- **[Locked]** All three are tap, never hold.
+- **[Locked, playtest 1 batch 2, 2026-09-23 - overrules the line below for BUNT only]** Steal and
+  Pickoff are tap, never hold. **Bunt is a HOLD, not a tap** - Matt: "if I hold it down, the bat
+  should stay there. A bunt isn't a swing." See "Bunt" below.
+- ~~All three are tap, never hold.~~ (Matt, playtest 1, 2026-09-23: overruled for Bunt - see above.)
 - **[Locked]** Batter Speed raises steal and bunt success. Pitcher Accuracy improves pickoffs.
 - **[Locked, RA]** **How each works in play.** Built as `docs/BASEBALL-3D-BUILD.md` section 9's "RA"
   stage specifies; the constants are settings.js's own STEAL_*/PICKOFF_*/BUNT_*/CPU_* block and the
@@ -64,17 +67,27 @@ This doc says how the game works. It is not a coding or implementation guide. Lo
     the play resolves exactly as it always did. A caught steal that makes the third out ends the
     half-inning, and the batter at the plate keeps the lineup pointer: he leads off the next time
     that side bats. Emitted as `steal {runnerId, from, to, safe}`.
-  - **Bunt.** Armed before READY, always available; the mode row reads BUNT and the batter squares
-    on the `Bunt` clip at the wind-up. Contact is TIMING ONLY, on a window 1.6x the ordinary one -
-    there is no cursor, no mode and no miss: a bunt timed outside that window is a FOUL, and a foul
-    bunt with two strikes is a strikeout (the one exception to "a foul can never be strike 3").
-    A bunt in play is always a grounder, 8 to 40 ft, spraying inside +/-30 deg. With runners on and
-    fewer than two outs it is a **sacrifice**: every runner moves up one (the runner from third
-    scores) and the batter is out, unless he beats the throw - the SAME `MECHANICS.beatOutPerPt` x
-    hitSpd roll an infield grounder already uses - in which case it is a **bunt single** and the
-    runners still move up one. With nobody on (or with two outs) it is a bunt for a hit: that same
-    roll, else a **bunt out**. Bunt mode clears after the pitch, and a take in bunt mode is an
-    ordinary take. Emitted on `atBatEnd` as `outcome: 'bunt-out' | 'bunt-single' | 'sacrifice'`.
+  - **Bunt (rebuilt, playtest 1 batch 2, Matt, 2026-09-23: "if I hold it down, the bat should stay
+    there. A bunt isn't a swing. When you bunt, you hold the bat horizontal and move it up/down/
+    side to side to hit the ball").** HOLDING the well squares the batter (the `Bunt` clip) and
+    replaces the CONTACT/POWER circle with a horizontal BAR at the batting cursor; the bar follows
+    the cursor/pad exactly like the circle did. Contact is POSITION now, never timing: if the pitch
+    crosses the bar (`BUNT_BAR_HALF_X`/`BUNT_BAR_HALF_Y`, wide across the plate, thin top to
+    bottom), contact happens on its own, no swing tap - outside the bar's own reach the bat never
+    gets there and the pitch is an ordinary ball/strike, never a foul. HOW CENTRED the contact was
+    decides the rest: too far under the ball (`BUNT_POPUP_Y_FRAC` of the bar's own half-height) pops
+    it up - always an out; too far to either side (`BUNT_FOUL_X_FRAC`) is a FOUL, and a foul bunt
+    with two strikes is still a strikeout (the one exception to "a foul can never be strike 3").
+    RELEASING pulls the bat back - a take, exactly as before releasing after the pitch is past does
+    nothing. A bunt in play is still always a grounder, 8 to 40 ft, spraying inside +/-30 deg. With
+    runners on and fewer than two outs it is a **sacrifice**: every runner moves up one (the runner
+    from third scores) and the batter is out, unless he beats the throw - the SAME
+    `MECHANICS.beatOutPerPt` x hitSpd roll an infield grounder already uses - in which case it is a
+    **bunt single** and the runners still move up one. With nobody on (or with two outs) it is a
+    bunt for a hit: that same roll, else a **bunt out**. Bunt mode clears after the pitch. Emitted
+    on `atBatEnd` as `outcome: 'bunt-out' | 'bunt-single' | 'bunt-popup' | 'sacrifice'`. CPU bunts
+    are unchanged - `agents.js`'s `CpuBatter` already built a `cursor` for every decision, bunt or
+    not, so the same position check applies to it with no code of its own.
   - **Pickoff.** Offered while pitching, before PITCH, when a runner is on first. Tapping it
     THROWS NO PITCH: the pitcher turns and throws to first (`Pickoff` clip, 0.5 s, release at
     0.3 s), the runner is out with probability `clamp(0.06 + 0.01 * pitcher.pitchAcc, 0.06, 0.35)`,
@@ -596,7 +609,9 @@ perfectSeasons * 10000 + wsTitles * 100 + (league - 1) * 4 + bestTrophyInThatLea
 5. Closed 2026-09-23: point values, caps and games per season locked as shipped (R16/R19, simulator-measured).
 6. Closed: the league settings block is a source file, tuned by deploy. No admin page control.
 7. Closed 2026-09-23: out zones and fence distances per league locked as shipped (`settings.js` `FIELD`; Majors parks per item 11).
-8. Closed 2026-09-23: steal, bunt and pickoff locked as shipped.
+8. Closed 2026-09-23: steal, bunt and pickoff locked as shipped. **Bunt reopened and re-closed the
+   same day, playtest 1 batch 2**: rebuilt from a tap-armed timing window to a held, positional bar
+   (Matt: "a bunt isn't a swing") - see "Steal, bunt, pickoff" above for the shipped mechanic.
 9. Closed 2026-09-23: movement/speed kept, readouts 82/55/91, eephus shown as "Blooper".
 10. Closed 2026-09-23: World Series celebration popup, then the next Majors season; cap stays 26; no difficulty change.
 11. Closed 2026-09-23: fence shapes + tall walls; your home park is Boston's.
