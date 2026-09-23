@@ -829,4 +829,53 @@ export const CLIPS = {
       upperLegL: [48, 0, 0], lowerLegL: [0, 0, 12],
     }, hipsOffset: [0, 0.7059, -0.14] },
   ] },
+  // Batch 3 (docs/HANDOFF-BASEBALL-PLAYTEST-1.md, item 2): a Walk, for the pre-game intro, the
+  // batter-change beat and the half-inning jog swap - hand-authored like Run, its own header's
+  // words, but honestly a SCALED DERIVATIVE of Run rather than an independently rendered-and-
+  // measured clip (unlike every clip above it): every arm/leg swing angle and the stride offset are
+  // Run's own numbers x0.45 (a walk's stride is shorter and less violent than a run's, not merely
+  // slower), the vertical bounce is compressed toward Run's own t=0.15 trough (a walk's hips barely
+  // rise; a run's launch off the ground) rather than scaled from zero, the spine's forward lean is
+  // cut from 8deg to 4deg (upright, not sprinting), and the five keyframe TIMES are Run's own x2 (a
+  // slower cadence, not just a smaller one). I'm not fully certain this reads as convincingly as a
+  // pixel-measured clip would at the sizes these figures draw (this file's own STAGE 6 rule) - if a
+  // future session renders and measures it against real walking reference footage the way Idle/Run
+  // were, treat that as the more trustworthy number, not this one.
+  Walk: { loop: 'pingpong', mark: null, keys: [
+    { t: 0.00, pose: {
+      spine: [4, 0, 0],
+      upperArmR: [-15.3, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [15.3, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [21.6, 0, 0], lowerLegR: [0, 0, 30.15],
+      upperLegL: [-21.6, 0, 0], lowerLegL: [0, 0, 59.85],
+    }, hipsOffset: [0, 0.4436, 0.063] },
+    { t: 0.15, pose: {
+      spine: [4, 0, 0],
+      upperArmR: [-7.65, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [7.65, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [10.8, 0, 0], lowerLegR: [0, 0, 37.575],
+      upperLegL: [-10.8, 0, 0], lowerLegL: [0, 0, 52.425],
+    }, hipsOffset: [0, 0.3403, 0.0315] },
+    { t: 0.30, pose: {
+      spine: [4, 0, 0],
+      upperArmR: [0, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [0, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [0, 0, 0], lowerLegR: [0, 0, 45],
+      upperLegL: [0, 0, 0], lowerLegL: [0, 0, 45],
+    }, hipsOffset: [0, 0.3150, 0] },
+    { t: 0.45, pose: {
+      spine: [4, 0, 0],
+      upperArmR: [7.65, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [-7.65, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [-10.8, 0, 0], lowerLegR: [0, 0, 52.425],
+      upperLegL: [10.8, 0, 0], lowerLegL: [0, 0, 37.575],
+    }, hipsOffset: [0, 0.3619, -0.0315] },
+    { t: 0.60, pose: {
+      spine: [4, 0, 0],
+      upperArmR: [15.3, 0, 0], lowerArmR: [55, 0, 0],
+      upperArmL: [-15.3, 0, 0], lowerArmL: [55, 0, 0],
+      upperLegR: [-21.6, 0, 0], lowerLegR: [0, 0, 59.85],
+      upperLegL: [21.6, 0, 0], lowerLegL: [0, 0, 30.15],
+    }, hipsOffset: [0, 0.4518, -0.063] },
+  ] },
 };

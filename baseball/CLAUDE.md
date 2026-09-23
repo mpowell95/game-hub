@@ -4,6 +4,117 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Playtest 1, batch 3: game flow animations (2026-09-23) - DONE, live at v938
+
+`docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 3, all six items: two dugouts, a Walk clip, the
+pre-game intro, the batter-change beat, the half-inning jog swap, and the device-suite fix that
+lets all four coexist with a fast test run. Presentation only - the engine and every game result
+are untouched; `sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400` still
+passes all 8 assertions with numbers unmoved from batch 1's own report.
+
+**Two dugouts** (`DUGOUT_POS`, `field.js`): one entrance point per team, in real foul ground (58deg
+spray - past the 45deg foul line - at 42ft, close to home the way a real on-deck area is), built as
+three merged meshes (a sunken floor, a low back wall, a flat roof) reusing three colours the file
+already carries (`dirtDark`/`backstopPad`/`standsDeck`) rather than growing PALETTE for one more
+surface. Home is the third-base side (-x), away the first-base side (+x) - arbitrary, picked once
+and never re-derived. The entrance point IS the structure's own near corner, so nobody ever walks
+to a point the model doesn't stand at. Axis-aligned rather than rotated to the baseline's own
+45deg, a simplification accepted for a small, mostly decorative structure seen almost entirely from
+the new overhead camera.
+
+**A Walk clip** (`poses.js`): honestly a SCALED DERIVATIVE of `Run`, not an independently rendered-
+and-measured clip like every other clip in that file (its own header says so) - every swing angle
+and the stride offset are Run's own numbers x0.45, the vertical bounce is compressed toward Run's
+t=0.15 trough rather than scaled from zero, the spine's forward lean drops from 8deg to 4deg, and
+the five keyframe times are doubled (a slower cadence, not just a smaller stride). I'm not fully
+certain this reads as convincingly as a pixel-measured clip would at the sizes these figures draw
+(the file's own STAGE 6 rule); if a future session renders and measures it against real reference
+footage the way Idle/Run were, treat that as the more trustworthy number, not this one.
+
+**A new `overhead` camera** (`CAMERAS.overhead`, `field.js`): pulled back and angled, not a strict
+top-down look - used only by the three beats below, never the camera a real play is judged against.
+
+**One generic mover, three beats.** `ui.js`'s `_animateActorTo(role, side, from, to, {durationMs,
+clip, skipRef, facingRad, mirrored})` walks or runs one actor between two world points over a fixed
+DURATION (not a fixed ft/s) - the intro and the half-inning swap put several actors of very
+different real distances through it at once and want them arriving together. `skipRef.skipped`
+(flipped by a `pointerdown` listener - root CLAUDE.md: "every new animation is skippable with a
+tap") is checked every frame and snaps straight to the target position, never leaving anyone
+stranded mid-field. `_skippableSleep(ms, skipRef)` is the same idea for a hold (the "PLAY BALL!"
+word). All three new beats reuse `_cutawayUp` (the SAME flag `_animateBattedBall`'s own cutaway
+already uses to stop `_drawStaticField`'s ordinary sync from fighting a hand-driven animation)
+rather than inventing a second guard - its own comment already anticipated "a half-inning swap" as
+a future caller.
+
+- **`_playIntro()`** (item 3, on the engine's own `gameStart` event - the ONE event `game.js`
+  awaits before the first `halfInningStart`, so nothing about the ordinary loop needed to change):
+  overhead camera, every actor reset to its own dugout SYNCHRONOUSLY before the first frame paints
+  (no flash of the finished picture first - no browser paint can land between two synchronous calls
+  in the same tick), the fielding team runs out (`Run`, `INTRO_FIELDER_RUN_MS` 2800ms for every
+  fielder concurrently), the first batter walks up (`Walk`, `INTRO_BATTER_WALK_MS` 1100ms), "PLAY
+  BALL!" holds `PLAY_BALL_MS` (1000ms), then the ordinary batter/pitcher camera. 4.9s total, inside
+  Matt's own "5-6s, I have not set a number."
+- **`_playHalfInningSwap(swap)`** (item 5, replaces `_crossFadeSwap` - DELETED along with
+  `_showCrossfadeSnapshot`/`_hideCrossfadeSnapshot`, the `.bb-crossfade-snap` canvas and
+  `.bb-fading`/`FADE_MS`, all now unused): PASS 1 jogs everyone on the field (fielders, pitcher,
+  catcher, the last batter) to their OWN team's dugout; PASS 2 jogs the new defense on from ITS
+  dugout and the new leadoff batter up, THEN `swap()` (the existing state/HUD flip this replaces
+  the fade around) runs once, against positions the jog already finished at - no second visible
+  move. `this.game.half` is already the UPCOMING half by the time this runs, so "outgoing"/
+  "incoming" read off it directly: the team that WAS fielding heads to ITS OWN dugout to bat, and
+  vice versa - the away/home dugout split stays fixed per team, so this also means the visiting
+  team correctly always heads to ITS side, home to its own. `HALF_SWAP_JOG_MS` 1200ms/leg, 2.4s
+  total (replaces an ~400ms instant/cross-fade step).
+- **`_playBatterChange(batterOut)`** (item 4, called from `_settleAtBat`, only when this at-bat did
+  NOT end the half - `_playHalfInningSwap`'s own PASS 1 already walks that batter off as part of
+  the whole team's jog, or the two beats would double up): on a BATTER out (strikeout, an in-play
+  out, sacrifice, or bunt-popup - `isBatterOut`, hoisted to the top of `_settleAtBat`), the one
+  'batter' mesh walks from the box to the dugout, a `BATTER_WALK_GAP_MS` (150ms) beat, then walks
+  back in as the next batter (his own mirrored hand read fresh via `_currentBatterFlip()` -
+  `game.js`'s `_advanceLineup` already runs before every `atBatEnd`, so the lineup pointer is
+  already on the NEXT batter by the time this runs). On a hit or a walk, only the walk-IN half
+  runs - the batter who reached base is a different actor entirely ('rb' or a base slot), so
+  skipping the walk-off just leaves the box empty for as long as it takes the next batter to reach
+  it, the same gap a real broadcast shows. `BATTER_WALK_LEG_MS` 900ms.
+
+**Skippable, and proven skippable in the real suite, not just claimed.** `_skipFlowAnim()` (new,
+beside `_reducedMotion()`) is `_reducedMotion() || navigator.webdriver === true` - every context
+`test-baseball-device.mjs` launches already reports `navigator.webdriver: true` (confirmed by hand
+against this repo's own pinned Chromium; it is Playwright's own default, no flag needed), which is
+exactly the population that should never sit through a skippable cosmetic beat dozens of times a
+suite run. Before this fix the suite (`BB_DEVICE_QUICK=1`) ran past 300s and was killed by its own
+timeout - measured, not assumed: 26+ test mounts x an unskipped ~5s intro alone is well over two
+minutes before a single one of them reaches the mechanic it actually tests. Real players never set
+`navigator.webdriver`, so this can never skip a beat for them. Two new probes cover the path every
+OTHER probe now skips past: **`game-flow-intro`** spoofs `navigator.webdriver` back to `false` via
+`addInitScript` (the standard anti-automation technique, in reverse) and asserts the overhead
+camera engages, f1b starts near the home dugout, "PLAY BALL!" appears, and the game settles back to
+the ordinary camera/fielder spots - 5.7s measured. **`game-flow-skip`** does the same spoof, taps
+mid-run, and asserts the beat snaps to ready well under a second later (92ms measured) - the "every
+new animation is skippable with a tap" rule, actually exercised, not just documented. **If a future
+batch adds another skippable beat, wire it through `_skipFlowAnim()` too, or it will slow the whole
+device suite down the same way.**
+
+**Measured added time for a full 3-inning Quick Play game (CPU-vs-CPU, 50 games/league, the real
+engine, no UI)**, since every beat above is frequent, not a one-off:
+
+| League | half-inning swaps/game | non-terminal batter-outs/game | non-terminal hits+walks/game | total added if nothing is skipped |
+|---|---|---|---|---|
+| Little League | 5.38 | 11.88 | 10.44 | ~50s |
+| Minors | 5.02 | 12.60 | 16.86 | ~57s |
+
+Every one of those beats is skippable with a single tap, which is exactly the tradeoff Matt's own
+brief made: "All of it is short, and a tap skips it." Not retuned or shortened on this session's own
+judgement - reported, per the handoff's own rule for economy/timing numbers ("measured, never
+guessed... don't retune on your own").
+
+**Suites**: `node baseball/js/test.js` 3199 assertions, 0 failed (unchanged from batch 2 - no engine
+edit). `node test-baseball-career.mjs` 329 passed, 0 failed.
+`node sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400`: all 8 assertions
+pass, numbers unmoved. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`: all checks green,
+including the two new probes. `node check-no-scroll.mjs baseball`: 16/16.
+`node test-game-conventions.mjs`: 11/11.
+
 ## Playtest 1, batch 2: bunt rework (2026-09-23) - DONE, live at v936
 
 `docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 2. Matt: *"if I hold it down, the bat should stay

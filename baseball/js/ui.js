@@ -25,6 +25,9 @@ import {
   ZONE, BATTER_BOX, RUBBER, CATCHER, UMPIRE, FIGURE_HEIGHT_FT,
   // R3 (docs/BASEBALL-3D-BUILD.md section 9): the fielders' own spots and the runners' base paths.
   fielderWorld, FIELDER_FACING_RAD, basePositions, runnerPath,
+  // Playtest 1 batch 3 (docs/HANDOFF-BASEBALL-PLAYTEST-1.md): the two dugouts, the intro/half-
+  // inning swap's own entrance points for every actor-walk beat.
+  DUGOUT_POS,
   // R4: the ball's own real-world size, for the fire trail's discs (a fraction of the ball's OWN
   // projected radius, never a literal pixel count - baseball.css's own header on why nothing here
   // hardcodes a screen size).
@@ -120,11 +123,6 @@ const FIELD_FLOOR_FRAC = 0.28;
 const BETWEEN_MS = SETTINGS.FEEL.ui.betweenMs;
 const WINDUP_MS = SETTINGS.FEEL.ui.windupMs;
 const RESULT_MS = SETTINGS.FEEL.ui.resultMs;
-// The half-inning transition's cross-fade (SPEC.md section 5, "the swap is instant at the beat's
-// midpoint" under reduced motion - so full motion fades AROUND that same midpoint): half of each
-// side of `_crossFadeSwap`'s own round trip (fade out, then in), well inside the BETWEEN_MS/2
-// budget `_onEngineEvent`'s 'halfInningEnd'/'halfInningStart' pair splits around it.
-const FADE_MS = 150;
 
 // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7): the flow beats added around a ball in play and a
 // delivery's own end. Presentation durations, not tuned engine feel - they sit beside FEEL.ui's
@@ -148,6 +146,21 @@ const FLIGHT_MS_MAX = 5500;  // nor longer, even a towering popup
 const MARKER_HOLD_MS = 800;
 // Playtest 1: how long the big OUT stays over the field (Matt: "about a second").
 const BIG_OUT_MS = 1000;
+// Playtest 1 batch 3 (docs/HANDOFF-BASEBALL-PLAYTEST-1.md): the game-flow animations. Every one is
+// DURATION-first, not speed-first - the intro and the half-inning swap put several actors of very
+// different real dugout-to-position distances through `_animateActorTo` at once and want them
+// arriving together, never each at its own pace off a shared ft/s constant. Target for the whole
+// pre-game intro, Matt's own words: "short... 5-6s, I have not set a number" - the four beats below
+// sum to INTRO_FIELDER_RUN_MS + INTRO_BATTER_WALK_MS + PLAY_BALL_MS = 4.9s.
+const INTRO_FIELDER_RUN_MS = 2800;   // the fielding team's own run-out, every fielder concurrently
+const INTRO_BATTER_WALK_MS = 1100;   // the first batter's own walk to the box
+const PLAY_BALL_MS = 1000;           // the umpire's "PLAY BALL!" hold
+// The batter-change beat (item 4): one Walk leg each way, a short beat between them so "the batter
+// walks back" and "the next batter walks up" read as two things, not one blurred cut.
+const BATTER_WALK_LEG_MS = 900;
+const BATTER_WALK_GAP_MS = 150;
+// The half-inning jog swap (item 5): one Run/Walk leg off, one leg on - see `_playHalfInningSwap`.
+const HALF_SWAP_JOG_MS = 1200;
 // R10 item 2: "for an out, after a throw beat of about a second to first" - a GROUND ball out
 // only, between the ball reaching the fielder and the Out word appearing. The spec's own number.
 const THROW_BEAT_MS = 1000;
@@ -1771,7 +1784,6 @@ class BaseballPlayScreen {
             <div class="bb-pop-line" data-role="popline2"></div>
           </div>
           <canvas class="bb-field-canvas" data-role="canvas"></canvas>
-          <canvas class="bb-crossfade-snap" data-role="crossfadesnap"></canvas>
           <div class="bb-lines">
             <div class="bb-line1" data-role="line1"></div>
             <div class="bb-line2" data-role="line2"></div>
@@ -3012,72 +3024,6 @@ class BaseballPlayScreen {
     mainBtn.addEventListener('pointerup', (e) => { if (e.pointerType === 'touch') return; onUp(); });
   }
 
-  /** SPEC.md section 5's half-inning transition: "the labels swap in place... the strip cross-
-   *  fades... the wells swap... the foreground figure cross-fades... no element changes size or
-   *  position... under reduced motion the swap is instant at the beat's midpoint." `swapFn` is
-   *  the actual state mutation + repaint (mode flip, HUD/strip/actions/labels/field); this only
-   *  wraps it in the fade. Reduced motion runs `swapFn` immediately with no fade at all - still at
-   *  the beat's midpoint, since the caller (`_onEngineEvent`'s 'halfInningEnd' case) already
-   *  splits the 3000ms beat in half around this call either way. */
-  async _crossFadeSwap(swapFn) {
-    if (this.destroyed) { swapFn(); return; }
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced) { swapFn(); return; }
-    // R1: the WebGL canvas joins the fade. It carries the whole field now, so a half-inning swap
-    // that faded only the 2-D overlay would have faded the strike-zone box and nothing else.
-    const els = [...this.rootEl.querySelectorAll('[data-role="hud"], [data-role="strip"], [data-role="ringlabel"], [data-role="actions"], [data-role="canvas"]')];
-    if (this.actors && this.actors.canvas) els.push(this.actors.canvas);
-    // R7 (item 6): the two canvases above fade to opacity 0 with everything else, which - with
-    // nothing behind them but `.bb-root`'s own flat page background - is exactly Matt's report ("a
-    // flat green frame... with 'Side retired' over it"). A snapshot of the scene's own last
-    // rendered frame, painted over the top at full opacity BEFORE the fade starts, covers that gap:
-    // the canvases (and the state under them) can do whatever they want while it sits there, and it
-    // only fades itself away once `swapFn()` has actually painted the new half.
-    this._showCrossfadeSnapshot();
-    els.forEach((el) => el.classList.add('bb-fading'));
-    await sleep(FADE_MS);
-    if (this.destroyed) return;
-    swapFn();
-    // Force a reflow before removing the class, or the browser can coalesce the add+remove into
-    // no visible transition at all (the fade-in would never be seen).
-    void this.rootEl.offsetHeight;
-    els.forEach((el) => el.classList.remove('bb-fading'));
-    // `swapFn()` above always ends in a synchronous `_drawStaticField()` (every caller's own swap
-    // does), so the new half's first frame is already painted by the time this line runs - safe to
-    // start fading the snapshot away right here, not after another sleep.
-    this._hideCrossfadeSnapshot();
-    await sleep(FADE_MS);
-  }
-
-  /** R7 (item 6): freezes the scene's own last rendered frame into `.bb-crossfade-snap` - both
-   *  canvases (the WebGL scene UNDER the 2-D overlay, matching how they actually stack) drawn into
-   *  one 2-D canvas, in the same order they are already painted in. A render is forced immediately
-   *  before the read-back, the same discipline `test-baseball-device.mjs`'s own sky-pixel probe uses
-   *  to read a WebGL canvas back with no `preserveDrawingBuffer`: JS runs synchronously, so nothing
-   *  can composite (and so clear) the drawing buffer between that render and this `drawImage` call.
-   *  A snapshot that fails to draw (context lost, zero size) is not worth blocking the swap over -
-   *  `_crossFadeSwap`'s own `.bb-fading` toggle on the two canvases is what shipped before this
-   *  stage, and it still runs regardless, so a failed snapshot degrades to exactly that. */
-  _showCrossfadeSnapshot() {
-    const el = this.rootEl && this.rootEl.querySelector('[data-role="crossfadesnap"]');
-    if (!el || !this.actors || !this.actors.renderer || !this.actors.canvas || !this.canvas || !this._fieldW) return;
-    try {
-      this.actors.renderer.render(this.actors.scene, this.actors.camera);
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      el.width = Math.round(this._fieldW * dpr);
-      el.height = Math.round(this._fieldH * dpr);
-      const ctx = el.getContext('2d');
-      ctx.clearRect(0, 0, el.width, el.height);
-      ctx.drawImage(this.actors.canvas, 0, 0, el.width, el.height);
-      ctx.drawImage(this.canvas, 0, 0, el.width, el.height);
-      el.classList.add('is-on');
-    } catch { /* degrade to the plain canvas fade below - nothing to clean up */ }
-  }
-  _hideCrossfadeSnapshot() {
-    const el = this.rootEl && this.rootEl.querySelector('[data-role="crossfadesnap"]');
-    if (el) el.classList.remove('is-on');
-  }
-
   // -------------------------------------------------------------------------------- engine glue
   async _onEngineEvent(type, payload) {
     if (this.destroyed) return;
@@ -3085,7 +3031,13 @@ class BaseballPlayScreen {
     // (career.js) once the game ends, and checkpoints locally at every pitch boundary - see the
     // 'count'/'atBatEnd' branches below for where the boundary actually is.
     if (this.careerGame && this._careerEvents) this._careerEvents.push({ type, payload });
-    if (type === 'halfInningStart') {
+    if (type === 'gameStart') {
+      // Playtest 1 batch 3, item 3: the pre-game intro. `game.js`'s own `playGame()` awaits this
+      // event before it ever emits 'halfInningStart', so the whole rest of the game loop is
+      // naturally gated behind it - no separate flag needed, the same way every other awaited
+      // event here already serializes the engine against the UI.
+      await this._playIntro();
+    } else if (type === 'halfInningStart') {
       const swap = () => {
         // R15-B: which SIDE bats first is universal (away bats the top of every inning) but which
         // one is the HUMAN is not, once a career opponent can be home. Quick Play's `playerSide` is
@@ -3104,20 +3056,19 @@ class BaseballPlayScreen {
         // half-inning swap where the strip does. The `ResizeObserver` above only watches the
         // OUTER mount host (`.bb-root` is always viewport-sized, so an internal flex reflow never
         // fires it) - `_sizeCanvas`, when it exists, re-measures the field band and resizes both
-        // canvases; this runs while everything is still hidden behind `.bb-fading`/the crossfade
-        // snapshot, so the resize itself is never seen, only its result.
+        // canvases; this and the `_drawStaticField()` two lines down run in the same synchronous
+        // tick as the strip's own class flip, with no `await` between them, so the browser never
+        // paints the in-between state - the resize itself is never seen, only its result.
         if (this._sizeCanvas) this._sizeCanvas();
         this._drawStaticField();
       };
       if (this._pendingHalfSwap) {
         // A real half-inning transition (not the game's very first half, where there is nothing
-        // to fade FROM and no beat to split) - SPEC.md section 5: swap at the beat's midpoint,
-        // cross-faded under full motion, instant under reduced motion (`_crossFadeSwap`'s own
-        // check).
+        // to swap FROM and no beat to split). Playtest 1 batch 3, item 5: `_playHalfInningSwap`
+        // (the whole team's own jog off/on) replaces the old `_crossFadeSwap` here - instant under
+        // reduced motion, exactly like the fade it replaces.
         this._pendingHalfSwap = false;
-        await this._crossFadeSwap(swap);
-        const remaining = Math.max(0, BETWEEN_MS / 2 - FADE_MS * 2);
-        await sleep(remaining);
+        await this._playHalfInningSwap(swap);
         this._setLine1(''); this._setLine2('');
       } else {
         swap();
@@ -3218,8 +3169,8 @@ class BaseballPlayScreen {
       await this._settleAtBat(payload);
     } else if (type === 'halfInningEnd') {
       // First half of the 3000ms beat (SPEC.md section 5); the 'halfInningStart' that follows
-      // (always immediately - nothing awaits between the two in game.js's own loop) does the
-      // cross-fade swap and holds the second half, then clears both lines.
+      // (always immediately - nothing awaits between the two in game.js's own loop) runs the
+      // jog swap (`_playHalfInningSwap`, batch 3) and holds the second half, then clears both lines.
       this._setLine1(t('half_end'));
       this._pendingHalfSwap = true;
       await sleep(BETWEEN_MS / 2);
@@ -3231,6 +3182,186 @@ class BaseballPlayScreen {
       this._pendingHalfSwap = false;
       this._setLine1(''); this._setLine2('');
     }
+  }
+
+  /** Playtest 1 batch 3, item 3: the pre-game intro. Runs once, on the engine's own 'gameStart'
+   *  event (the ONE event `game.js`'s `playGame()` awaits before it ever emits 'halfInningStart'),
+   *  so nothing about the ordinary game loop needs to know it happened: an overhead camera, the
+   *  fielding team running out of its own dugout (`DUGOUT_POS`, field.js) to position, the first
+   *  batter walking to the box, the umpire's "PLAY BALL!", then the ordinary batter/pitcher camera
+   *  and the game starts for real. Reduced motion (or a tap, mid-beat) skips straight to exactly
+   *  the positions `_syncActors()` would have placed everyone at anyway - never the dugouts, so a
+   *  reduced-motion player never even sees them empty for a frame.
+   *
+   *  `_renderPlay()` has already drawn every actor standing in his ordinary spot by the time this
+   *  runs (its own `idle()` calls) - the very first thing this method does, before any `await`, is
+   *  jump them all back to their dugouts SYNCHRONOUSLY, so the "run out" is the first thing a
+   *  player actually sees rather than a flash of the finished picture first (no browser paint can
+   *  land between two synchronous calls in the same tick). */
+  async _playIntro() {
+    if (this.destroyed || !this.actors || !this.game) return;
+    const battingSide = this.game.half === 'top' ? 'away' : 'home';
+    const defenseSide = battingSide === 'away' ? 'home' : 'away';
+    const fenceFt = this._fenceFt();
+    const flip = this._currentBatterFlip();
+    const boxPos = { x: flip ? BATTER_BOX.x : -BATTER_BOX.x, y: 0, z: BATTER_BOX.z };
+    if (this._skipFlowAnim()) {
+      for (const role of FIELDER_ROLES) {
+        const pos = fielderWorld(role, fenceFt, 0);
+        if (pos) this.actors.setActor(role, { side: defenseSide, pos, heightFt: FIGURE_HEIGHT_FT, facingRad: FIELDER_FACING_RAD });
+      }
+      this.actors.setActor('pitcher', { side: defenseSide, pos: { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: PITCHER_FACING_RAD });
+      this.actors.setActor('catcher', { side: defenseSide, pos: { x: CATCHER.x, y: 0, z: CATCHER.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: CATCHER_FACING_RAD });
+      this.actors.setActor('batter', { side: battingSide, pos: boxPos, heightFt: FIGURE_HEIGHT_FT, facingRad: BATTER_FACING_RAD, mirrored: flip });
+      this.actors.setCamera(this.state.mode === 'pitching' ? 'pitcher' : 'batter');
+      this._drawStaticField();
+      return;
+    }
+
+    this._cutawayUp = true;   // the same "ordinary sync must not fight this animation" guard the
+                               // ball-in-play cutaway uses (`_drawStaticField`'s own header)
+    const defenseDugout = DUGOUT_POS[defenseSide];
+    const offenseDugout = DUGOUT_POS[battingSide];
+    for (const role of FIELDER_ROLES) {
+      this.actors.setActor(role, { side: defenseSide, pos: defenseDugout, heightFt: FIGURE_HEIGHT_FT, facingRad: 0 });
+    }
+    this.actors.setActor('pitcher', { side: defenseSide, pos: defenseDugout, heightFt: FIGURE_HEIGHT_FT, facingRad: 0 });
+    this.actors.setActor('catcher', { side: defenseSide, pos: defenseDugout, heightFt: FIGURE_HEIGHT_FT, facingRad: 0 });
+    this.actors.setActor('batter', { side: battingSide, pos: offenseDugout, heightFt: FIGURE_HEIGHT_FT, facingRad: BATTER_FACING_RAD, mirrored: flip });
+    this.actors.setUmpire({ pos: { x: UMPIRE.x, y: 0, z: UMPIRE.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: UMPIRE_FACING_RAD });
+    this.actors.setCamera('overhead');
+
+    const skipRef = { skipped: false };
+    const onTap = () => { skipRef.skipped = true; };
+    this.rootEl.addEventListener('pointerdown', onTap, { capture: true, passive: true });
+    const cleanup = () => this.rootEl.removeEventListener('pointerdown', onTap, true);
+
+    const runs = [];
+    for (const role of FIELDER_ROLES) {
+      const pos = fielderWorld(role, fenceFt, 0);
+      if (pos) runs.push(this._animateActorTo(role, defenseSide, defenseDugout, pos, { durationMs: INTRO_FIELDER_RUN_MS, clip: 'Run', skipRef, facingRad: FIELDER_FACING_RAD }));
+    }
+    runs.push(this._animateActorTo('pitcher', defenseSide, defenseDugout, { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, { durationMs: INTRO_FIELDER_RUN_MS, clip: 'Run', skipRef, facingRad: PITCHER_FACING_RAD }));
+    runs.push(this._animateActorTo('catcher', defenseSide, defenseDugout, { x: CATCHER.x, y: 0, z: CATCHER.z }, { durationMs: INTRO_FIELDER_RUN_MS, clip: 'Run', skipRef, facingRad: CATCHER_FACING_RAD }));
+    await Promise.all(runs);
+    if (this.destroyed) { cleanup(); return; }
+
+    await this._animateActorTo('batter', battingSide, offenseDugout, boxPos, { durationMs: INTRO_BATTER_WALK_MS, clip: 'Walk', skipRef, facingRad: BATTER_FACING_RAD, mirrored: flip });
+    if (this.destroyed) { cleanup(); return; }
+
+    this._showBigWord(t('play_ball'), PLAY_BALL_MS, { small: true });
+    await this._skippableSleep(PLAY_BALL_MS, skipRef);
+    cleanup();
+    if (this.destroyed) return;
+    this._cutawayUp = false;
+    this.actors.setCamera(this.state.mode === 'pitching' ? 'pitcher' : 'batter');
+    this._drawStaticField();
+  }
+
+  /** Playtest 1 batch 3, item 5: replaces the old `_crossFadeSwap` for a REAL half-inning
+   *  transition (the game's very first half has nothing to swap FROM - `_onEngineEvent`'s own
+   *  `_pendingHalfSwap` guard, unchanged). `this.game.half` is already the UPCOMING half by the
+   *  time this runs (the 'halfInningStart' payload carries it), so "outgoing"/"incoming" read off
+   *  it directly: the team that was just fielding is the team about to bat, and vice versa - one
+   *  jog off (every fielder plus the last batter, to their OWN team's dugout), one jog on (the new
+   *  defense from ITS dugout to its spots, the new leadoff batter from HIS to the box), then
+   *  `swap()` - the existing state/HUD update this replaces the fade around - runs once, against
+   *  exactly the positions the jog just finished at, so nothing visibly moves a second time. */
+  async _playHalfInningSwap(swap) {
+    if (this.destroyed || !this.actors || !this.game) { swap(); return; }
+    if (this._skipFlowAnim()) { swap(); return; }
+    const newBattingSide = this.game.half === 'top' ? 'away' : 'home';
+    const newDefenseSide = newBattingSide === 'away' ? 'home' : 'away';
+    const oldDefenseSide = newBattingSide;   // was fielding, about to bat
+    const oldBattingSide = newDefenseSide;   // was batting, about to field
+    const fenceFt = this._fenceFt();
+
+    this._cutawayUp = true;
+    this.actors.setCamera('overhead');
+    const skipRef = { skipped: false };
+    const onTap = () => { skipRef.skipped = true; };
+    this.rootEl.addEventListener('pointerdown', onTap, { capture: true, passive: true });
+    const cleanup = () => this.rootEl.removeEventListener('pointerdown', onTap, true);
+
+    // PASS 1: everyone currently on the field/at the plate jogs to their OWN team's dugout. The
+    // batter's own FROM position uses `mirroredOf` (his stance as it stands right now), not
+    // `_currentBatterFlip()` - `this.game.half` has already flipped, so that call would answer for
+    // the NEXT half's leadoff batter, not the one who just finished this one.
+    const off = [];
+    for (const role of FIELDER_ROLES) {
+      const pos = fielderWorld(role, fenceFt, this._currentShiftDeg || 0);
+      if (pos) off.push(this._animateActorTo(role, oldDefenseSide, pos, DUGOUT_POS[oldDefenseSide], { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef }));
+    }
+    off.push(this._animateActorTo('pitcher', oldDefenseSide, { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, DUGOUT_POS[oldDefenseSide], { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef }));
+    off.push(this._animateActorTo('catcher', oldDefenseSide, { x: CATCHER.x, y: 0, z: CATCHER.z }, DUGOUT_POS[oldDefenseSide], { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef }));
+    const oldFlip = this.actors.mirroredOf('batter');
+    const oldBoxPos = { x: oldFlip ? BATTER_BOX.x : -BATTER_BOX.x, y: 0, z: BATTER_BOX.z };
+    off.push(this._animateActorTo('batter', oldBattingSide, oldBoxPos, DUGOUT_POS[oldBattingSide], { durationMs: HALF_SWAP_JOG_MS, clip: 'Walk', skipRef }));
+    await Promise.all(off);
+    if (this.destroyed) { cleanup(); swap(); return; }
+
+    // PASS 2: the new defense takes the field from ITS dugout, the new leadoff batter walks up
+    // from his - `swap()` has not run yet, so nothing here has been painted by the ordinary sync.
+    const on = [];
+    for (const role of FIELDER_ROLES) {
+      const pos = fielderWorld(role, fenceFt, 0);
+      if (pos) on.push(this._animateActorTo(role, newDefenseSide, DUGOUT_POS[newDefenseSide], pos, { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef, facingRad: FIELDER_FACING_RAD }));
+    }
+    on.push(this._animateActorTo('pitcher', newDefenseSide, DUGOUT_POS[newDefenseSide], { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef, facingRad: PITCHER_FACING_RAD }));
+    on.push(this._animateActorTo('catcher', newDefenseSide, DUGOUT_POS[newDefenseSide], { x: CATCHER.x, y: 0, z: CATCHER.z }, { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef, facingRad: CATCHER_FACING_RAD }));
+    const newFlip = this._currentBatterFlip();   // correct here - `this.game.half` already reads newBattingSide
+    const newBoxPos = { x: newFlip ? BATTER_BOX.x : -BATTER_BOX.x, y: 0, z: BATTER_BOX.z };
+    on.push(this._animateActorTo('batter', newBattingSide, DUGOUT_POS[newBattingSide], newBoxPos, { durationMs: HALF_SWAP_JOG_MS, clip: 'Walk', skipRef, facingRad: BATTER_FACING_RAD, mirrored: newFlip }));
+    await Promise.all(on);
+    cleanup();
+    if (this.destroyed) { swap(); return; }
+    swap();
+    this._cutawayUp = false;
+    this.actors.setCamera(this.state.mode === 'pitching' ? 'pitcher' : 'batter');
+    this._drawStaticField();
+  }
+
+  /** Playtest 1 batch 3, item 4: after every out that does not end the half, the batter walks back
+   *  to his own dugout and the same actor (recast - there is one 'batter' mesh) walks back in as
+   *  the NEXT batter. On a hit or a walk `batterOut` is false: the batter who just finished is a
+   *  RUNNER now (a different actor entirely - 'rb', or a base slot), so only the walk-IN half runs,
+   *  leaving the box empty for exactly as long as it takes the next batter to reach it, the same
+   *  gap a real broadcast shows. Skipped entirely when this out ends the half-inning -
+   *  `_playHalfInningSwap` (the whole team's own jog) covers that batter as part of its own PASS 1,
+   *  or the two would double up. */
+  async _playBatterChange(batterOut) {
+    if (this.destroyed || !this.actors || !this.game) return;
+    const battingSide = this.game.half === 'top' ? 'away' : 'home';
+    const dugout = DUGOUT_POS[battingSide];
+    const flip = this._currentBatterFlip();
+    const boxPos = { x: flip ? BATTER_BOX.x : -BATTER_BOX.x, y: 0, z: BATTER_BOX.z };
+    if (this._skipFlowAnim()) {
+      this.actors.setActor('batter', { side: battingSide, pos: boxPos, heightFt: FIGURE_HEIGHT_FT, facingRad: BATTER_FACING_RAD, mirrored: flip });
+      this._drawStaticField();
+      return;
+    }
+    this._cutawayUp = true;
+    const skipRef = { skipped: false };
+    const onTap = () => { skipRef.skipped = true; };
+    this.rootEl.addEventListener('pointerdown', onTap, { capture: true, passive: true });
+    const cleanup = () => this.rootEl.removeEventListener('pointerdown', onTap, true);
+    if (batterOut) {
+      // The outgoing batter's own mirrored state is whatever it already is (`_currentBatterFlip()`
+      // now answers for the NEXT batter, the lineup pointer having already advanced - `game.js`'s
+      // `_advanceLineup` runs before every 'atBatEnd') - leave `mirrored` unset so `setActor` keeps it.
+      await this._animateActorTo('batter', battingSide, boxPos, dugout, { durationMs: BATTER_WALK_LEG_MS, clip: 'Walk', skipRef, facingRad: BATTER_FACING_RAD });
+      if (this.destroyed) { cleanup(); return; }
+      await this._skippableSleep(BATTER_WALK_GAP_MS, skipRef);
+    } else {
+      this.actors.setActor('batter', { side: battingSide, pos: dugout, heightFt: FIGURE_HEIGHT_FT, facingRad: BATTER_FACING_RAD, mirrored: flip });
+    }
+    if (!this.destroyed && this.actors) {
+      await this._animateActorTo('batter', battingSide, dugout, boxPos, { durationMs: BATTER_WALK_LEG_MS, clip: 'Walk', skipRef, facingRad: BATTER_FACING_RAD, mirrored: flip });
+    }
+    cleanup();
+    if (this.destroyed) return;
+    this._cutawayUp = false;
+    this._drawStaticField();
   }
 
   /** R15-B item 2: called on every pitch boundary ('count' for a pitch that does not conclude the
@@ -3253,12 +3384,25 @@ class BaseballPlayScreen {
   }
 
   /** R4 (docs/BASEBALL-3D-BUILD.md section 9): true whenever the OS/browser asks for reduced
-   *  motion. Read fresh every call (never cached) - the same check `_crossFadeSwap`/
-   *  `_runMarkerHold` already make inline; this is the one place the new R4 effects (fire trail,
-   *  contact burst, HOME RUN confetti/scale) all gate through, so there is exactly one query to
-   *  keep honest rather than four copies of the same media-query string. */
+   *  motion. Read fresh every call (never cached) - the same check `_runMarkerHold` already makes
+   *  inline; this is the one place the R4 effects (fire trail, contact burst, HOME RUN
+   *  confetti/scale) gate through, so there is exactly one query to keep honest rather than
+   *  several copies of the same media-query string. */
   _reducedMotion() {
     try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+  }
+
+  /** Playtest 1 batch 3: whether the intro/half-inning-swap/batter-change beats should skip
+   *  straight to their end state - `_reducedMotion()`, OR `navigator.webdriver` (true for every
+   *  Playwright/automation-driven page, never for a real player's browser). The device suite
+   *  (`test-baseball-device.mjs`) mounts dozens of short, timing-sensitive probes that tap Play
+   *  and immediately drive the game; none of them are testing THIS beat's own motion (that is
+   *  what a dedicated probe is for - see this file's own header), so the fixed ~5s intro and the
+   *  per-out/per-half beats would otherwise multiply the whole suite's real runtime for no signal
+   *  anyone reads. A real device never sets `navigator.webdriver`, so a real player never sees a
+   *  beat skip for this reason. */
+  _skipFlowAnim() {
+    return this._reducedMotion() || (typeof navigator !== 'undefined' && navigator.webdriver === true);
   }
 
   /** R4: the batter's own head, in world feet - 6.9 ft above his stand position. There is only
@@ -3368,13 +3512,16 @@ class BaseballPlayScreen {
     return battingSide === this.playerSide;
   }
 
-  /** Playtest 1 (Matt, 2026-09-23): a big OUT over the field on every out, for ~1 s
-   *  (BIG_OUT_MS). Fixed geometry (`.bb-bigout`, opacity/transform only), pointer-events none so it
-   *  never blocks input, and any tap clears it early. */
-  _showBigOut() {
+  /** Playtest 1 (Matt, 2026-09-23): a big word over the field for `ms`, dismissed early by any tap.
+   *  Fixed geometry (`.bb-bigout`, opacity/transform only), pointer-events none so it never blocks
+   *  input on its own. `_showBigOut()` (below) is this with its own word/timer; batch 3's pre-game
+   *  "PLAY BALL!" (`_playIntro`) is the other caller, `small` for its longer text (`.is-long`,
+   *  baseball.css). */
+  _showBigWord(text, ms, { small } = {}) {
     const el = this.rootEl && this.rootEl.querySelector('[data-role="bigout"]');
     if (!el) return;
-    el.textContent = '\u25A0 ' + t('big_out');
+    el.textContent = text;
+    el.classList.toggle('is-long', !!small);
     el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
     el.classList.add('is-on');
     if (this._bigOutTimer) clearTimeout(this._bigOutTimer);
@@ -3386,7 +3533,10 @@ class BaseballPlayScreen {
     if (this._bigOutTap) this.rootEl.removeEventListener('pointerdown', this._bigOutTap, true);
     this._bigOutTap = hide;
     this.rootEl.addEventListener('pointerdown', hide, { capture: true, passive: true });
-    this._bigOutTimer = setTimeout(hide, BIG_OUT_MS);
+    this._bigOutTimer = setTimeout(hide, ms);
+  }
+  _showBigOut() {
+    this._showBigWord('\u25A0 ' + t('big_out'), BIG_OUT_MS);
   }
 
   _setLine1(text) { const el = this.rootEl.querySelector('[data-role="line1"]'); if (el) el.textContent = text; }
@@ -3423,6 +3573,12 @@ class BaseballPlayScreen {
   async _settleAtBat(payload) {
     const outKind = payload.outcome;
     const inPlay = payload.distanceFt != null && payload.sprayAngleDeg != null;
+    // Playtest 1 batch 3, item 4: true for every outcome that retires the BATTER specifically (a
+    // strikeout, or an in-play out/sacrifice/bunt-popup) - false for a walk, where he is forced to
+    // first instead (`_animateRunners`'s own 'rb'), same as a hit. Hoisted here, ahead of the
+    // `inPlay` branch that used to compute the identical expression locally, so `_playBatterChange`
+    // (below) reads the one true answer rather than a second copy of the same regex.
+    const isBatterOut = /out$/.test(outKind) || outKind === 'strikeout' || outKind === 'sacrifice' || outKind === 'bunt-popup';
     // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 4): a walk/strikeout has no batted ball to
     // hold for, so the batter returns to rest right away, same as every at-bat did before this
     // stage. A ball IN PLAY does NOT reset here - the Swing clip keeps playing through the contact
@@ -3463,8 +3619,10 @@ class BaseballPlayScreen {
     if (inPlay) {
       // RA: 'sacrifice' is an out that does not END in "out" - the landing marker would otherwise
       // draw a bunt the batter was thrown out on in the green of a base hit. Batch 2: 'bunt-popup'
-      // is the same fact for a popped-up bunt (always an out, `outcomes.js`'s `resolveBunt`).
-      const isOut = /out$/.test(outKind) || outKind === 'strikeout' || outKind === 'sacrifice' || outKind === 'bunt-popup';
+      // is the same fact for a popped-up bunt (always an out, `outcomes.js`'s `resolveBunt`). Same
+      // expression as `isBatterOut`, above - kept as its own local so this branch reads as it always
+      // has (`isOut` feeds `_animateBattedBall`'s own `kind` argument three lines down).
+      const isOut = isBatterOut;
       const isHr = outKind === 'homer';
       const rad = (payload.sprayAngleDeg * Math.PI) / 180;
       const xFt = Math.sin(rad) * payload.distanceFt;
@@ -3512,6 +3670,12 @@ class BaseballPlayScreen {
       // (spec section 5: the half-inning transition's own beat IS betweenMs) - applying both here
       // would double the pause.
       if (this.game && this.game.outs < outsPerInning) await sleep(BETWEEN_MS);
+    }
+    // Playtest 1 batch 3, item 4: the batter-change beat - skipped when this at-bat's own out just
+    // ended the half-inning (`_playHalfInningSwap`'s own PASS 1 walks this exact batter off as part
+    // of the whole team's jog; running both would double the trip to the dugout).
+    if (this.game && this.game.outs < outsPerInning) {
+      await this._playBatterChange(isBatterOut);
     }
     this._setLine1(''); this._setLine2('');
   }
@@ -4167,6 +4331,60 @@ class BaseballPlayScreen {
       }
     };
     this._fielderRaf = requestAnimationFrame(step);
+  }
+
+  /** Playtest 1 batch 3: walk or run one actor from `from` to `to` (world feet) over `durationMs`,
+   *  playing `clip` ('Run' or 'Walk') the whole way and Idle once arrived. DURATION-first, not
+   *  speed-first, unlike `_animateFielderChase` above - the pre-game intro and the half-inning jog
+   *  swap put several actors of very different real distances through this AT ONCE and want them
+   *  arriving together, not each at its own pace.
+   *
+   *  `skipRef` (a plain `{ skipped }` a caller flips from a tap listener) is checked every frame and
+   *  snaps straight to `to` the instant it is set - root CLAUDE.md's "every new animation is
+   *  skippable with a tap", and the one thing every batch-3 beat must do. Snapping to the exact
+   *  target rather than just stopping is what keeps a skip from leaving anyone stranded mid-field:
+   *  `to` is always a real, already-correct position (a fielder's own `fielderWorld` spot, a dugout
+   *  entrance, the batter's box), the same one `_syncActors()` would have placed him at anyway. */
+  _animateActorTo(role, side, from, to, { durationMs, clip = 'Run', skipRef, facingRad, mirrored } = {}) {
+    return new Promise((resolve) => {
+      if (this.destroyed || !this.actors) { resolve(); return; }
+      const dx = to.x - from.x, dz = to.z - from.z;
+      const dist = Math.hypot(dx, dz);
+      const face = facingRad != null ? facingRad : (dist > 0.01 ? Math.atan2(dx, dz) : 0);
+      const finish = () => {
+        this.actors.setActor(role, { side, pos: to, heightFt: FIGURE_HEIGHT_FT, facingRad: face, mirrored });
+        this.actors.idle(role);
+        resolve();
+      };
+      if (!(durationMs > 0) || dist < 0.01) { finish(); return; }
+      this.actors.play(role, clip);
+      const t0 = performance.now();
+      const step = (now) => {
+        if (this.destroyed || !this.actors) { resolve(); return; }
+        if (skipRef && skipRef.skipped) { finish(); return; }
+        const frac = Math.min(1, (now - t0) / durationMs);
+        const p = { x: from.x + dx * frac, y: 0, z: from.z + dz * frac };
+        this.actors.setActor(role, { side, pos: p, heightFt: FIGURE_HEIGHT_FT, facingRad: face, mirrored });
+        if (frac < 1) requestAnimationFrame(step); else finish();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  /** The hold half of a skippable beat (`_playIntro`'s "PLAY BALL!") - `ms`, or however much of it
+   *  is left once `skipRef.skipped` goes true, whichever is shorter. Polls on the render loop's own
+   *  clock rather than a raw `setTimeout`, so it shares one cancellation idiom with
+   *  `_animateActorTo` above instead of a second, promise-racing one. */
+  _skippableSleep(ms, skipRef) {
+    return new Promise((resolve) => {
+      if (!(ms > 0)) { resolve(); return; }
+      const t0 = performance.now();
+      const step = () => {
+        if (this.destroyed || (skipRef && skipRef.skipped) || performance.now() - t0 >= ms) { resolve(); return; }
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
   }
 
   /** The overlay while the chase camera is live: nothing at all during the flight (the ball is a

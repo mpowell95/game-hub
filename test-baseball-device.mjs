@@ -1077,6 +1077,136 @@ await ctx.close();
   await p11.close();
 }
 
+// 11b. Playtest 1 batch 3 (docs/HANDOFF-BASEBALL-PLAYTEST-1.md): GAME-FLOW-INTRO/SKIP. Every
+// OTHER probe in this file runs with `navigator.webdriver === true` (Playwright's own default,
+// confirmed by hand), which is exactly the signal `ui.js`'s `_skipFlowAnim()` uses to snap batch
+// 3's new beats (the pre-game intro, the half-inning jog, the batter-change walk) straight to
+// their end state - see that method's own header for why. That is the right behaviour for every
+// OTHER probe here (none of them are testing this beat's own motion, and it would multiply the
+// whole suite's runtime for no signal anyone reads), but it also means the real animated path has
+// NO coverage anywhere in this file unless one probe explicitly opts back into it - spoofing
+// `navigator.webdriver` to `false`, the same technique real anti-automation testing uses in
+// reverse, is what lets this one page see what a real player's browser would.
+{
+  const pA = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageA = await pA.newPage();
+  await pageA.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Game Flow Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErrA = await mountInHub(pageA);
+  if (mountErrA) {
+    fail('game-flow-intro', `mount failed: ${mountErrA}`);
+  } else {
+    const t0 = Date.now();
+    await pageA.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await pageA.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    const sawOverhead = await pageA.waitForFunction(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      return !!(inst && inst.actors && inst.actors.cameraName === 'overhead');
+    }, null, { timeout: 2000 }).then(() => true).catch(() => false);
+    const dugoutStart = await pageA.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const F = await import('/baseball/js/field.js');
+      const actor = inst.actors.actors.f1b;
+      const want = F.DUGOUT_POS.home;   // top of the 1st: away bats, home fields
+      const got = actor ? { x: actor.pivot.position.x, z: actor.pivot.position.z } : null;
+      return { want, got, dist: got ? Math.hypot(got.x - want.x, got.z - want.z) : null };
+    });
+    const sawPlayBall = await pageA.waitForFunction(() => {
+      const el = document.querySelector('.hub-game .bb-bigout');
+      return !!(el && el.classList.contains('is-on') && /play ball|jugar/i.test(el.textContent || ''));
+    }, null, { timeout: 7000 }).then(() => true).catch(() => false);
+    const readyAfterIntro = await pageA.waitForFunction(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      return !!(inst && inst.actors && inst.actors.cameraName !== 'overhead');
+    }, null, { timeout: 3000 }).then(() => true).catch(() => false);
+    const introMs = Date.now() - t0;
+    const finalPositions = await pageA.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const F = await import('/baseball/js/field.js');
+      const A = await import('/baseball/js/actors.js');
+      const fenceFt = (await import('/baseball/js/engine/settings.js')).FIELD[inst.league].fenceFt;
+      const worst = A.FIELDER_ROLES.reduce((m, role) => {
+        const actor = inst.actors.actors[role];
+        const want = F.fielderWorld(role, fenceFt, 0);
+        const got = actor ? { x: actor.pivot.position.x, z: actor.pivot.position.z } : null;
+        const dist = got ? Math.hypot(got.x - want.x, got.z - want.z) : Infinity;
+        return Math.max(m, dist);
+      }, 0);
+      return { worst };
+    });
+    if (!sawOverhead) {
+      fail('game-flow-intro', 'the overhead camera never engaged within 2000ms of Play');
+    } else if (dugoutStart.dist == null || dugoutStart.dist > 35) {
+      // Budget is coarse (35 ft, not the 2 ft `fielders-placed` uses) on purpose: this read is a
+      // SEPARATE round trip from the `waitForFunction` above, so f1b may already be a few frames
+      // into its ~2.8s run by the time it lands - the point is telling "started at the dugout"
+      // (106 ft from f1b's own spec spot) apart from "already at the spec spot", not pinning the
+      // exact frame.
+      fail('game-flow-intro', `f1b did not start near the home dugout (want ${JSON.stringify(dugoutStart.want)}, got ${JSON.stringify(dugoutStart.got)}, ${dugoutStart.dist == null ? 'no position' : dugoutStart.dist.toFixed(1) + 'ft off'})`);
+    } else if (!sawPlayBall) {
+      fail('game-flow-intro', 'the "PLAY BALL!" word never appeared within 7000ms');
+    } else if (!readyAfterIntro || finalPositions.worst > 2) {
+      fail('game-flow-intro', `did not settle back to the ordinary camera/fielder spots (readyAfterIntro=${readyAfterIntro}, worst=${finalPositions.worst})`);
+    } else {
+      ok(`game-flow-intro: overhead camera engaged, fielders ran out from the home dugout, "PLAY BALL!" shown, settled back to the ordinary game in ${introMs}ms`);
+    }
+  }
+  await pA.close();
+}
+{
+  const pB = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const pageB = await pB.newPage();
+  await pageB.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Game Flow Skip Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mountErrB = await mountInHub(pageB);
+  if (mountErrB) {
+    fail('game-flow-skip', `mount failed: ${mountErrB}`);
+  } else {
+    await pageB.evaluate(() => {
+      const root = document.querySelector('.hub-game');
+      const btn = root && root.querySelector('.bb-play-btn');
+      if (btn) btn.click();
+    });
+    await pageB.waitForSelector('.bb-play', { timeout: 5000 }).catch(() => {});
+    await pageB.waitForFunction(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      return !!(inst && inst.actors && inst.actors.cameraName === 'overhead');
+    }, null, { timeout: 2000 }).catch(() => {});
+    // Mid run-out - well before the ~2.8s fielder leg would finish on its own.
+    await pageB.waitForTimeout(300);
+    const tTap = Date.now();
+    await pageB.evaluate(() => {
+      const root = document.querySelector('.hub-game .bb-root');
+      if (root) root.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    });
+    const skippedReady = await pageB.waitForFunction(() => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      return !!(inst && inst.actors && inst.actors.cameraName !== 'overhead');
+    }, null, { timeout: 1500 }).then(() => true).catch(() => false);
+    const skipMs = Date.now() - tTap;
+    if (!skippedReady) {
+      fail('game-flow-skip', `a tap mid-intro did not return the camera to normal within 1500ms (root CLAUDE.md: "every new animation is skippable with a tap")`);
+    } else {
+      ok(`game-flow-skip: a tap ${skipMs}ms after it fired snapped the intro straight to the ordinary game`);
+    }
+  }
+  await pB.close();
+}
+
 // 12. R3: RUNNERS-MOVE. Drives the human's batting with an auto-swing (timed off the pitch's own
 // `timeToPlateS` and `FEEL.engine.swingDelay`, the pattern the R2 review stages used) through real
 // at-bats until an `atBatEnd` fires with a runner on base BEFORE the play who is STILL on a base

@@ -18,18 +18,6 @@
   touch-action: manipulation;
 }
 
-/* BB-3b commit 6: the half-inning transition (SPEC.md section 5) - "the labels swap in place...
- * the strip cross-fades... the wells swap... the foreground figure cross-fades", "no element
- * changes size or position". `_crossFadeSwap()` in ui.js toggles `.bb-fading` on these five
- * elements around the actual state swap; opacity only, per the compositor-only animation rule
- * (docs/BUILDING-A-GAME.md Part 0). Reduced motion skips the fade (ui.js's own check), landing the
- * swap instantly at the beat's midpoint instead - the transition here is untouched by it because
- * `.bb-fading` is never applied in that path at all. */
-.bb-hud, .bb-strip, .bb-ring-label, .bb-actions, .bb-field-canvas, .bb-actor-canvas {
-  transition: opacity var(--gh-dur-mid, 200ms) ease;
-}
-.bb-fading { opacity: 0; }
-
 :root.gh-dark .bb-root {
   background: #0d1420;
   color: #e7edf5;
@@ -613,20 +601,6 @@
  * WebGL canvas held two figures over it. Neither ever intercepts touch. */
 .bb-actor-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; pointer-events: none; }
 .bb-field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; pointer-events: none; }
-/* R7 (docs/BASEBALL-3D-BUILD.md section 9, "R7", item 6): a frozen copy of the scene's own last
- * rendered frame (both canvases above, composited together - `_showCrossfadeSnapshot` in ui.js),
- * painted over them for the half-inning swap instead of letting them fade to `.bb-root`'s own flat
- * page background (Matt: "a flat green frame... with 'Side retired' over it"). Sits above every
- * other field-band element (`.bb-pop` 3, `.bb-diamond` 4, `.bb-homerun` 5) so it genuinely covers
- * the whole scene through the swap, not just the two canvases. Opacity only, `.is-on` toggled by
- * JS - the CSS transition is what makes ui.js's own hide (once the NEW half has painted) a fade
- * rather than a cut, the same `var(--gh-dur-mid)` duration the rest of the swap already uses. */
-.bb-crossfade-snap {
-  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
-  z-index: 6; pointer-events: none; opacity: 0;
-  transition: opacity var(--gh-dur-mid, 200ms) ease;
-}
-.bb-crossfade-snap.is-on { opacity: 1; }
 /* Stage 1 dev-only 3D preview (_open3DCheck, inside the Frames panel): the real backdrop and the
  * two idle figures, in the panel's own small canvas - never reachable without the dev profile. */
 .bb-dev3d-wrap { position: relative; width: 320px; height: 342px; max-width: 100%; margin: 8px auto; border-radius: 8px; overflow: hidden; background: #1c1c1c; }
@@ -724,15 +698,9 @@
   gap: 4px;
   pointer-events: none;
   text-align: center;
-  /* R7 item 6: an explicit z-index, ABOVE `.bb-crossfade-snap` (6). Before that element existed
-   * this had none and it never mattered - `.bb-field-canvas` (z-index 2) already painted "above"
-   * it by the same stacking rule, but that canvas is mostly `clearRect`-transparent outside its own
-   * drawn zone box, so Line 1's own pixels (down at `bottom: 14%`) were never actually covered.
-   * `.bb-crossfade-snap` is NOT transparent - it is the whole scene, opaque - so without this it
-   * would silently hide "Side retired" for the exact stretch of the swap it has to stay lit through
-   * (`_onEngineEvent`'s 'halfInningEnd' sets it BEFORE `_crossFadeSwap` ever runs, and it is cleared
-   * only AFTER `_crossFadeSwap` resolves - `.bb-lines` is deliberately never in `_crossFadeSwap`'s
-   * own `.bb-fading` list, so it must out-rank whatever covers the scene beneath it). */
+  /* R7 item 6: an explicit z-index, above both canvases (`.bb-actor-canvas` 1, `.bb-field-canvas`
+   * 2) - so "Side retired" (`_onEngineEvent`'s 'halfInningEnd', held through batch 3's own jog
+   * swap) always paints over the 3-D scene rather than under it. */
   z-index: 7;
 }
 /* The big word (Early / Late / Perfect / Nice / Hung). One reserved element, empty between
@@ -838,6 +806,9 @@
 @media (prefers-reduced-motion: reduce) {
   .bb-bigout.is-on { animation: none; }
 }
+/* Playtest 1 batch 3: the same fixed word, smaller - "PLAY BALL!"/"¡A JUGAR!" is several
+ * characters longer than "OUT" and would run off a 390px phone at the plain 56px size. */
+.bb-bigout.is-long { font-size: 34px; }
 
 /* R4 (docs/BASEBALL-3D-BUILD.md section 9): HOME RUN. Fixed geometry - a reserved spot centred in
  * the field band, opacity/transform only, so nothing else in the band ever moves when it shows.
@@ -895,20 +866,16 @@
       rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 5px),
     rgba(6,10,6,0.5);
   border-top: 1px solid rgba(0, 0, 0, 0.65);
-  /* Carries the opacity transition the top-of-file `.bb-hud, .bb-strip, ...` rule already set
-     (a later same-specificity rule replaces the whole `transition` shorthand, not just the
-     properties it names, so opacity has to be repeated here or the cross-fade loses it) plus the
-     compact-mode height/flex-basis change, inert during the real swap - see the comment below. */
-  transition: opacity var(--gh-dur-mid, 200ms) ease, flex-basis var(--gh-dur-mid, 200ms) ease, height var(--gh-dur-mid, 200ms) ease;
+  /* The compact-mode height/flex-basis change eases rather than snaps - see the comment below. */
+  transition: flex-basis var(--gh-dur-mid, 200ms) ease, height var(--gh-dur-mid, 200ms) ease;
 }
 /* R8 (docs/BASEBALL-3D-BUILD.md section 9, "R8", item 5): the BATTING strip - Matt's "the type of
  * pitch is way too prominent" - shrinks from the 108px selector to a 32px row of small chips; the
  * freed 76px goes to `.bb-field-wrap` (flex:1 auto). This is a DELIBERATE break of BB-3b's "nothing
  * moves between states" rule for this one band - see `_paintStrip`'s own header for why. Pitching
- * is untouched (`.bb-strip` alone, no modifier, stays 108px/92px tiles). The `transition` above is
- * inert during the actual swap (the class flips while the band sits at opacity 0 behind the
- * crossfade snapshot - `_sizeCanvas` is called synchronously in that same window, never mid-fade
- * visibly) - it exists only so a stray external re-render cannot make this band SNAP. */
+ * is untouched (`.bb-strip` alone, no modifier, stays 108px/92px tiles). The class flips at the very
+ * end of the half-inning swap (`_onEngineEvent`'s 'halfInningStart', after batch 3's own jog off/on
+ * has already finished) - the `transition` above is what turns that into an ease rather than a snap. */
 .bb-strip.bb-strip--compact {
   height: 32px;
   min-height: 32px;
