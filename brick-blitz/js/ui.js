@@ -50,27 +50,30 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
 const PAUSE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';
 
-/** How-to-play diagram: a plain brick, a two-hit brick (told apart by the inner outline and
- *  rivets, never colour), an alien brick with its zig-zag bomb, and the flying saucer; then the
- *  four capsules, each carrying its LETTER. */
+/** How-to-play: the picture IS the explanation (Matt, 2026-09-23: "way too many words"). Two rows,
+ *  each icon with a one- or two-word label under it: brick kinds (a two-hit brick is told apart by
+ *  its inner outline and rivets, never colour), the alien with its bomb, the saucer; then the four
+ *  capsules by LETTER. Built at render time so the labels follow the language. */
 const HELP_ALIEN = ['..X.....X..', '...X...X...', '..XXXXXXX..', '.XX.XXX.XX.', 'XXXXXXXXXXX', 'X.XXXXXXX.X', 'X.X.....X.X', '...XX.XX...'];
 function helpDiagramSVG() {
-  const cap = (x, k) => `<g transform="translate(${x} 72)"><rect x="-22" y="-10" width="44" height="20" rx="10" fill="${POWER_COLORS[k]}"/>
+  const COLS = [32.5, 97.5, 162.5, 227.5];
+  const label = (i, y, key) => `<text x="${COLS[i]}" y="${y}" text-anchor="middle" font-size="11" font-weight="700" fill="#e7d7ff">${esc(t(key))}</text>`;
+  const cap = (i, k) => `<g transform="translate(${COLS[i]} 76)"><rect x="-22" y="-10" width="44" height="20" rx="10" fill="${POWER_COLORS[k]}"/>
     <text x="0" y="5" text-anchor="middle" font-size="14" font-weight="900" font-style="italic" fill="#12002b">${k}</text></g>`;
   let alien = '';
-  HELP_ALIEN.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === 'X') alien += `<rect x="${136 + c * 2.6}" y="${10 + r * 2.6}" width="2.7" height="2.7"/>`; }));
-  return `<svg class="bx-help-svg" viewBox="0 0 260 92" role="img" aria-hidden="true">
-    <rect x="6" y="10" width="50" height="22" rx="5" fill="rgba(255,46,151,.35)" stroke="#ff2e97" stroke-width="2"/>
-    <rect x="66" y="10" width="50" height="22" rx="5" fill="rgba(0,245,212,.6)" stroke="#00f5d4" stroke-width="2"/>
-    <rect x="70" y="14" width="42" height="14" rx="3" fill="none" stroke="#fff" stroke-width="1.4"/>
-    <circle cx="74" cy="21" r="2" fill="#fff"/><circle cx="108" cy="21" r="2" fill="#fff"/>
+  HELP_ALIEN.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === 'X') alien += `<rect x="${144 + c * 2.6}" y="${10 + r * 2.6}" width="2.7" height="2.7"/>`; }));
+  return `<svg class="bx-help-svg" viewBox="0 0 260 108" role="img" aria-hidden="true">
+    <rect x="7.5" y="10" width="50" height="22" rx="5" fill="rgba(255,46,151,.35)" stroke="#ff2e97" stroke-width="2"/>
+    <rect x="72.5" y="10" width="50" height="22" rx="5" fill="rgba(0,245,212,.6)" stroke="#00f5d4" stroke-width="2"/>
+    <rect x="76.5" y="14" width="42" height="14" rx="3" fill="none" stroke="#fff" stroke-width="1.4"/>
+    <circle cx="80.5" cy="21" r="2" fill="#fff"/><circle cx="114.5" cy="21" r="2" fill="#fff"/>
     <g fill="#00bbf9">${alien}</g>
-    <path d="M150 36 l3 4 l-3 4 l3 4" fill="none" stroke="#ffd1ea" stroke-width="2" stroke-linecap="round"/>
-    <ellipse cx="220" cy="24" rx="23" ry="6" fill="#ff2e97"/><path d="M210 22 a10 7 0 0 1 20 0 z" fill="#c9fff6"/>
-    <circle cx="208" cy="25" r="2" fill="#fff200"/><circle cx="220" cy="25" r="2" fill="#6b0f45"/><circle cx="232" cy="25" r="2" fill="#fff200"/>
-    <text x="31" y="46" text-anchor="middle" font-size="11" fill="#e7d7ff">1</text>
-    <text x="91" y="46" text-anchor="middle" font-size="11" fill="#e7d7ff">2</text>
-    ${cap(40, 'M')}${cap(100, 'W')}${cap(160, 'L')}${cap(220, 'S')}
+    <path d="M178 14 l3 4 l-3 4 l3 4" fill="none" stroke="#ffd1ea" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="227.5" cy="23" rx="23" ry="6" fill="#ff2e97"/><path d="M217.5 21 a10 7 0 0 1 20 0 z" fill="#c9fff6"/>
+    <circle cx="215.5" cy="24" r="2" fill="#fff200"/><circle cx="227.5" cy="24" r="2" fill="#6b0f45"/><circle cx="239.5" cy="24" r="2" fill="#fff200"/>
+    ${label(0, 48, 'hl_brick1')}${label(1, 48, 'hl_brick2')}${label(2, 48, 'hl_alien')}${label(3, 48, 'hl_ufo')}
+    ${cap(0, 'M')}${cap(1, 'W')}${cap(2, 'L')}${cap(3, 'S')}
+    ${label(0, 102, 'hl_M')}${label(1, 102, 'hl_W')}${label(2, 102, 'hl_L')}${label(3, 102, 'hl_S')}
   </svg>`;
 }
 
@@ -208,14 +211,7 @@ class BrickBlitzUI {
             <button type="button" class="bx-x" data-act="helpClose" data-la="aria_close">${X_SVG}</button>
             <h2 class="bx-h2 bx-h2-sm" data-l="howto"></h2>
             <p class="bx-help-goal" data-l="help_goal"></p>
-            ${helpDiagramSVG()}
-            <p class="bx-help-line" data-l="help_armor"></p>
-            <p class="bx-help-line" data-l="help_caps"></p>
-            <p class="bx-help-line bx-help-kv" data-l="help_MW"></p>
-            <p class="bx-help-line bx-help-kv" data-l="help_LS"></p>
-            <p class="bx-help-line" data-l="help_alien"></p>
-            <p class="bx-help-line" data-l="help_ufo"></p>
-            <p class="bx-help-line" data-l="help_combo"></p>
+            <div data-role="helpSvg"></div>
             <p class="bx-help-line" data-l="help_controls"></p>
             <button type="button" class="bx-mbtn bx-alt" data-act="helpClose"><span data-l="help_close"></span></button>
           </div>
@@ -257,6 +253,7 @@ class BrickBlitzUI {
     this.root.querySelectorAll('[data-l]').forEach((el) => { el.textContent = t(el.dataset.l); });
     this.root.querySelectorAll('[data-la]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.la)); });
     this.canvas.setAttribute('aria-label', t('aria_canvas'));
+    this.root.querySelector('[data-role="helpSvg"]').innerHTML = helpDiagramSVG();
     const d = this.settings.difficulty, m = this.settings.mode;
     this.root.querySelector('[data-role="diffs"]').setAttribute('aria-label', t('difficulty'));
     this.root.querySelector('[data-role="diffs"]').innerHTML = DIFFS.map((id) => `

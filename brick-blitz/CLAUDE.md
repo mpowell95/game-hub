@@ -78,6 +78,12 @@ space available, so a tall phone gets a taller field rather than letterboxing.
   mystery ship). The ball passes through it.
 - Nothing new is stored: the bonuses land in the score, so `bz` is unchanged.
 
+## How to play: a picture, not paragraphs (Matt, 2026-09-23: "way too many words")
+
+One goal line, a labelled diagram (brick kinds, alien, saucer; the four capsules), one controls
+line. Every label is one or two words. Keep it that way: a new mechanic gets an icon and a label,
+never a sentence.
+
 ## Settings / persistence
 
 - `gamehub.brickblitz.v1`: `{ difficulty, mode: 'arcade'|'endless' }`. Saved on selection. (An older save may still carry
