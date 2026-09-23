@@ -255,9 +255,21 @@ console.log('\n-- Course Creator: ?course=new (2026-09-22) --');
   await p2.goto(URL, { waitUntil: 'networkidle' }); await p2.waitForTimeout(500);
   s = await st2();
   ok('the plain link still opens Red Mesa, untouched by the Course Creator', s.courseId === 'redmesa' && s.n === 18 && s.id === 'rm-01');
-  const help = await p2.$eval('#he-help', (a) => a.getAttribute('href'));
-  const helpRes = await p2.request.get(new globalThis.URL('help.html', p2.url()).href);
-  ok('the ribbon has a Help link to help.html, and it loads', help === 'help.html' && helpRes.ok());
+  ok('the ribbon Help link opens the practice run', (await p2.$eval('#he-help', (a) => a.getAttribute('href'))) === './?course=tutorial');
+  // HELP IS A GUIDED PRACTICE RUN (2026-09-23): the real editor, a throwaway course, a tour over it.
+  {
+    const p3 = await b.newPage({ viewport: { width: 1400, height: 900 } });
+    const errs3 = []; p3.on('pageerror', (e) => errs3.push(e.message));
+    await p3.goto(`${URL}?course=tutorial`, { waitUntil: 'networkidle' }); await p3.waitForSelector('.tr-tip .tr-n', { timeout: 5000 }).catch(() => {});
+    ok('practice opens on the setup screen with the tour pointing at the name', !!(await p3.$('#he-setup')) && /type a name/.test(await p3.$eval('.tr-tip', (e) => e.textContent)));
+    await p3.fill('#he-setup-name', 'Practice'); await p3.waitForTimeout(1600);
+    ok('...and moves on by itself once a name is typed', /2 of/.test(await p3.$eval('.tr-tip', (e) => e.textContent)));
+    await p3.click('#he-setup-go'); await p3.waitForTimeout(1200);
+    ok('practice never saves to the cloud', /nothing here is saved/.test(await p3.evaluate(() => (document.getElementById('he-cloud-status') || {}).textContent || '')));
+    ok('practice has its own storage, apart from the real course', await p3.evaluate(() => localStorage.getItem('golf.holeEditor.tutorial.v1') !== null));
+    ok('no page errors in practice', errs3.length === 0, JSON.stringify(errs3));
+    await p3.close();
+  }
   ok('no page errors in the Course Creator', errs2.length === 0, JSON.stringify(errs2));
   await p2.close();
 }

@@ -735,3 +735,16 @@ still fit at 1280px. `applyLook()` is the one place a look is switched. UI suite
 - **Palette groups fold** (click a section or sub-head; `golf.holeEditor.palFolds.v1`, per browser).
 - **Layer checkboxes live behind a Layers chip** beside Key; opening one closes the other.
 - **The holes bar minimises** to one thin row (totals + Show holes); `uiState.stripMin`.
+
+## Help is a guided practice run (2026-09-23)
+
+Matt: *"way too much text on the Help page... should be a test (or fakeish) version of the tool, that
+has arrows and pop ups."* The ribbon's Help opens `?course=tutorial`: the REAL Course Creator on a
+throwaway course (`PROFILES.tutorial` in `course.js`: same document type, its own storage key wiped on
+every open, `getDesigner` returns null so it never reaches the cloud, status reads "Practice: nothing
+here is saved"), with `js/tour.js` over it: a pulsing ring round the thing to use, a yellow pop-up
+with an arrow, one sentence per step, 17 steps. A step with `done()` moves on by itself once the
+player has done it (typed a name, picked the bunker tile, placed a bunker, planted a tree); the rest
+have Next. The tour only reads `window.__he` and the DOM. `help.html` is now just a redirect so old
+links work; the text page and its screenshots are gone. When the editor's screen changes, walk the
+tour again (`reference`-style: drive it in Chromium and look at each step).
