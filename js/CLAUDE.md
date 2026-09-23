@@ -150,6 +150,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/bug-report-ui.js` | (2026-08-11) the SCREEN half: the player's form and Matt's inbox (`isAdmin` only, unread count in `gamehub.bugadmin.v1`). **The first shipped consumer of `css/ui.css`'s `.gh-*` primitives** — a new surface is the cheapest place to adopt that layer |
 | `js/messages.js` | (2026-08-31) the DATA half of player-to-player Messages: the `messages/threads/<pairKey>` + `messages/index/<CODE>` node, addressed by PLAYER CODE (never deviceId), the pure helpers (`pairKey`/`isUnread`/`visibleThreads`/`indexPatch`), verified writes, the dev-origin write guard, and the offline outbox (`gamehub.messages.outbox.v1`) the hub drains on load/reconnect. See "Messages" below |
 | `js/messages-ui.js` | (2026-08-31) the SCREEN half: conversation list, one thread, the recipient picker, Matt's Everyone broadcast, and his read-only view of every conversation. Built on `css/ui.css`'s `.gh-*` primitives, like `js/bug-report-ui.js` and `js/admin-ui.js` |
+| `js/push.js` | (2026-09-23) Web Push, the app's half: permission (asked inside the tap, for iOS), subscribe, and the device's address at `pushSubs/<CODE>/<sha256(endpoint)>` - addressed by PLAYER CODE like Messages, so every device a person turns it on for is notified. Writes are claim-scoped (`msgAuth`, the Messages claim) and verified by re-read; `gamehub.push.v1` records what was last stored so a hub load writes only on a change. The sender is `functions/` (a Cloud Function holding the private key). Root `CLAUDE.md`, "Push notifications" |
 | `js/error-log.js` | (2026-08-11) last-20 ring buffer of uncaught errors, unhandled rejections and failed resource loads (`gamehub.errorlog.v1`), installed by `hub.js` at LOAD (not in the constructor) so it catches a game module failing to import. Read only by `bug-report.js` |
 | `js/admin-config.js` | (2026-08-24) the app-wide admin config at `adminConfig/v1`: `isGameLive(hubId, codeDefault)` and `isBoardReleased(boardId)` (synchronous reads of the `gamehub.adminConfig.v1` cache), the pure resolvers behind them, `refreshAdminConfig()` (one background read per hub load, fires `gamehub:adminconfig` only on a real change) and the two writers, each dev-origin-guarded and verified by fresh re-read. See "The admin config" below |
 | `js/stats-corrections.js` | (2026-08-24) the read-time score-correction overlay: `correctBoard()`, `correctSkeeballRecord()`, `correctStats()` and `snapshotOf()`. Pure, headless-testable, and never mutates its input. Applied by `players-agg.js` (per source record, before the merge), `game-stats-ui.js` (both paints) and `skeeball/js/ui.js` (the backboard) |
@@ -1156,9 +1157,9 @@ soft delete (rule 5).
   SHELL asset the launcher loads on every start just to paint the badge and importing the canonical
   copy meant dragging the whole leaderboard overlay onto that path. The shared module has no imports
   of its own, so that objection is gone and there is nothing left to keep in step by hand.
-- **No push notifications.** The badge appears when a player opens the app. Web Push needs FCM, a
-  server to send from, and a permission prompt — the same platform limit Report a bug documents.
-  `navigator.setAppBadge()` on the installed app is the cheapest half-step if it is ever wanted.
+- **No push notifications for Messages yet.** The badge appears when a player opens the app. The
+  server to send from now exists (2026-09-23: `functions/`, `js/push.js`, root `CLAUDE.md` "Push
+  notifications"); Messages needs only its own trigger in `functions/index.js`.
 
 ### Privacy: this is the one node with real rules on it
 

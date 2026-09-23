@@ -316,7 +316,7 @@ check('a player code is normalised and validated',
     /alerts: \(\) => import\('\.\.\/hoops4\/js\/alert\.js'\)/.test(hub)
     && /typeof g\.alerts !== 'function'/.test(hub));
   check('the alert check runs AFTER the launcher has painted, never on the critical path',
-    /_afterPaint\(\(\) => this\._checkGameAlerts\(\)\)/.test(hub));
+    /_afterPaint\(\(\) => this\._checkGameAlerts\(\)/.test(hub));
   check('a game tile cannot break the launcher', /console\.warn\('\[hub\] alert check failed for'/.test(hub));
 
   // [KNOWN-BUG PROBE] THE BUBBLE THAT WOULD NOT GO AWAY (2026-09-22). Matt, having played the

@@ -27,6 +27,11 @@ export const STRINGS = {
     you: 'You', turnYou: 'Your turn', turnCpu: 'Computer\u2019s turn', turnOf: '{name}\u2019s turn',
     leaveKept: 'Your match is saved. Pick it up whenever you like.',
     mpShootToSend: 'Take your first shot to send the challenge.',
+    pushOn: 'Notify me when it\'s my turn',
+    pushDone: 'Done. Your phone will buzz when it\'s your turn.',
+    pushDenied: 'Notifications are blocked for Game Hub. Turn them on in your phone\'s Settings.',
+    pushFailed: 'That didn\'t work. Check your connection and try again.',
+    pushInstall: 'To get a notification when it\'s your turn, add Game Hub to your Home Screen and open it from there.',
     menu: 'Menu',
     // THE PAUSE SHEET. Matt asked for skeeball's button and skeeball's options, so these mirror
     // its `paused`/`resume`/`new_game` - except the third, which goes where THIS game's menu
@@ -144,6 +149,11 @@ export const STRINGS = {
     you: 'Tú', turnYou: 'Tu turno', turnCpu: 'Turno de la CPU', turnOf: 'Turno de {name}',
     leaveKept: 'Tu partida está guardada. Puedes seguir cuando quieras.',
     mpShootToSend: 'Haz tu primer tiro para enviar el reto.',
+    pushOn: 'Avísame cuando me toque',
+    pushDone: 'Listo. Tu teléfono sonará cuando te toque.',
+    pushDenied: 'Las notificaciones están bloqueadas para Game Hub. Actívalas en los Ajustes del teléfono.',
+    pushFailed: 'No funcionó. Revisa tu conexión e inténtalo otra vez.',
+    pushInstall: 'Para recibir un aviso cuando te toque, añade Game Hub a tu pantalla de inicio y ábrelo desde allí.',
     menu: 'Menú',
     paused: 'En pausa',
     resume: 'Continuar',

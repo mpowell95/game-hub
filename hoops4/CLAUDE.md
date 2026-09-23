@@ -1547,8 +1547,11 @@ step with the rules file or a branch is silently missing from every snapshot.
 
 ### What is NOT built
 
-- **No push notification.** The badge-on-next-open model is all this repo has; real push needs FCM
-  and a permission prompt, and `js/CLAUDE.md` says so in as many words about Messages.
+- ~~No push notification~~ **Built 2026-09-23**: a challenge, your turn, a series game the other
+  person started, and a match they ended all push to every phone you turned it on for (the
+  "Notify me when it's my turn" row on the multiplayer home, or profile -> Settings). The server is
+  `functions/` (root `CLAUDE.md`, "Push notifications"); `createGame` now stamps `by` so the maker
+  of a match is never notified about it.
 - **No launcher badge yet.** `countMyTurns(rows, code)` is exported and tested and is exactly what
   a badge would count, but nothing on the hub reads it. A badge goes where the thing it counts is
   reached (`js/CLAUDE.md`), and that is a hub-side change, not a hoops4 one.
