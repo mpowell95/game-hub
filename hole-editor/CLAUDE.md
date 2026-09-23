@@ -785,3 +785,14 @@ measuring it (the profiling script pattern: CDP `Profiler.start` around a script
 - **Before it**, the real Course Creator nudges toward Help: a "New here? Take the guided tour"
   button on the setup screen and a yellow note under Help ("No thanks" dismisses it for good,
   `golf.holeEditor.helpNudgeOff.v1`). Neither shows in Red Mesa's editor or in practice.
+
+### Changing the terrain later asks first (2026-09-23)
+
+Matt: the course-button step should warn that a terrain change can "mess it up". What it really
+does: every hole's colours and every untouched tree line switch to the new terrain; placed objects
+keep their type. It is NOT on the undo stack (undo snapshots `order`/`holes`, not `course`), but
+nothing is lost - picking the old terrain again restores the exact same course. So once a course
+is named, `confirmLookChange()` asks before switching (setup screen and Course & saving panel), and
+the tour step says the same thing in one sentence. The final tour step now says to close the Help
+tab (its button tries `window.close()` and falls back to opening `?course=new`), and the saving
+step says it is the practice course *in Help* that is not saved.

@@ -599,6 +599,16 @@ const LOOK_BLURB = {
   tropical: 'Palms, lagoons', mountain: 'Spruce, glacial lakes', swamp: 'Willows, murky water',
 };
 
+/** Changing the terrain of a course already under way repaints EVERY hole and swaps the woods
+ *  along each side for the new terrain's trees (placed objects keep their own type). It is not on
+ *  the undo stack (snapshots hold holes, not course settings), but it destroys nothing: picking
+ *  the old terrain again restores it exactly. So: a plain confirm, saying so. */
+function confirmLookChange(theme) {
+  if (!(doc.course && doc.course.named) || (doc.course.theme || 'parkland') === theme) return true;
+  const label = (LOOKS.find(([v]) => v === theme) || [0, theme])[1];
+  return window.confirm(`Change the terrain to ${label}? This changes EVERY hole at once: the colours, and the woods down each side become ${label} trees. Things you placed yourself stay put, and you can switch back to the old terrain any time to put it all back.`);
+}
+
 /** Switch the Course Creator's look: data, model defaults, canvas palette, rebuild. */
 function applyLook(theme) {
   doc.course = setCourseMeta(doc, { theme }).course;
@@ -694,6 +704,7 @@ function openSetupModal() {
       }
       autosaver.touch();
     }
+    if (pick !== (doc.course && doc.course.theme) && !confirmLookChange(pick)) return;
     pushUndo(editorState);
     if (pick !== (doc.course && doc.course.theme)) applyLook(pick);
     doc.course = setCourseMeta(doc, { name, named: true }).course;
@@ -757,6 +768,7 @@ function renderCoursePanel() {
       b.addEventListener('click', () => {
         const theme = b.dataset.val;
         if ((doc.course && doc.course.theme) === theme) return;
+        if (!confirmLookChange(theme)) { renderCoursePanel(); return; }
         applyLook(theme);
         afterChange();
       });
