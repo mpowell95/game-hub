@@ -154,12 +154,23 @@ async function playNext(state, tier) {
   const cpuAgent = mkCpuAgent(opponent, league);
   const agents = meta.home ? { home: playerAgent, away: cpuAgent } : { home: cpuAgent, away: playerAgent };
   const g = buildGame(state, meta, agents);
+  // Playtest 1 batch 1: count home runs (both teams) per league, so "too many homers" is a number.
+  const hr = { hr: 0, wall: 0, pa: 0 };
+  const inner = g.onEvent;
+  g.onEvent = async (type, payload) => {
+    if (type === 'atBatEnd') {
+      hr.pa += 1;
+      if (payload.outcome === 'homer') hr.hr += 1;
+      if (payload.outcome === 'wall-double' || payload.outcome === 'wall-triple') hr.wall += 1;
+    }
+    if (inner) await inner(type, payload);
+  };
   await g.playGame();
   const side = meta.home ? 'home' : 'away';
   const you = meta.home ? g.score.home : g.score.away;
   const cpu = meta.home ? g.score.away : g.score.home;
   const out = finishGame(state, { won: g.winner === side, you, cpu, meta });
-  return { ...out, meta, you, cpu };
+  return { ...out, meta, you, cpu, hr };
 }
 
 /** The spend policy: LOWEST SKILL FIRST, until nothing more can be spent. The study measured this
@@ -188,7 +199,7 @@ async function playCareer(tier, careerSeed) {
     careerId: `SIM-${careerSeed}` });
   const perLeague = Object.fromEntries(LEAGUES.map((lg) => [lg, {
     seasons: 0, firstAttemptGold: null, winRates: [], arrivalSkills: null,
-    pointsEarned: 0, pointsLost: 0, runsFor: [], runsAgainst: [],
+    pointsEarned: 0, pointsLost: 0, runsFor: [], runsAgainst: [], hr: 0, wall: 0, pa: 0, games: 0,
   }]));
   const seasons = [];
   let totalGames = 0;
@@ -205,6 +216,7 @@ async function playCareer(tier, careerSeed) {
       if (!out) break;
       st = spendAll(out.state);
       totalGames += 1;
+      L.hr += out.hr.hr; L.wall += out.hr.wall; L.pa += out.hr.pa; L.games += 1;
       if (out.meta.kind === 'regular') {
         if (out.record.won) wins += 1; else losses += 1;
         L.runsFor.push(out.you); L.runsAgainst.push(out.cpu);
@@ -274,6 +286,12 @@ async function runTier(tierName, careers) {
       runsAgainst: mean(reached.flatMap((r) => r.perLeague[lg].runsAgainst)),
       arrivalSkills: arrivalMean,
       games: SETTINGS.gamesForLeague(lg),
+      hrPerGame: (() => { const g = reached.reduce((a, r) => a + r.perLeague[lg].games, 0);
+        return g ? reached.reduce((a, r) => a + r.perLeague[lg].hr, 0) / g : 0; })(),
+      hrPerPa: (() => { const n = reached.reduce((a, r) => a + r.perLeague[lg].pa, 0);
+        return n ? reached.reduce((a, r) => a + r.perLeague[lg].hr, 0) / n : 0; })(),
+      wallPerGame: (() => { const g = reached.reduce((a, r) => a + r.perLeague[lg].games, 0);
+        return g ? reached.reduce((a, r) => a + r.perLeague[lg].wall, 0) / g : 0; })(),
     };
   }
   const titled = rows.filter((r) => r.titled);
@@ -307,6 +325,10 @@ function printRun(out) {
     const arr = mean(SKILL_IDS.map((id) => r.arrivalSkills[id])).toFixed(1);
     console.log(`${lg.padEnd(12)} ${String(r.games).padStart(5)}  ${String(r.reached).padStart(7)}  ${(r.firstAttemptGold == null ? 'n/a' : pct(r.firstAttemptGold)).padStart(8)}  ${ci.padEnd(17)} ${r.seasonsMedian.toFixed(1).padStart(6)}/${r.seasonsMean.toFixed(2).padStart(5)}    ${pct(r.winRate).padStart(6)} ${r.pointsPerSeason.toFixed(1).padStart(6)}  ${r.pointsLostPerSeason.toFixed(1).padStart(5)}  ${r.runsFor.toFixed(1).padStart(6)}-${r.runsAgainst.toFixed(1).padEnd(5)}  ${arr}`);
   }
+  console.log('home runs (both teams): ' + LEAGUES.map((lg) => {
+    const r = out.leagues[lg];
+    return `${lg} ${r.hrPerGame.toFixed(2)}/game ${pct(r.hrPerPa)} of PA, off-wall ${r.wallPerGame.toFixed(2)}/game`;
+  }).join(' | '));
   console.log(`first World Series title: ${pct(out.titledRate)} of careers inside ${SEASON_CAP} seasons [${pct(out.titledCI[0])},${pct(out.titledCI[1])}], median ${out.seasonsToTitleMedian.toFixed(1)} / mean ${out.seasonsToTitleMean.toFixed(2)} seasons; Majors seasons median ${out.majorsSeasonsMedian.toFixed(1)} (${out.majorsReached} careers reached the Majors)`);
 }
 

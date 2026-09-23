@@ -280,7 +280,7 @@ Major League	62%	40 to 52%
 - **[Locked] by Matt 2026-09-23, as shipped at v929** **Speed:** the batter times his swing to your last few pitches (newest counts most). Throw the same speed over and over and he times it. Change speeds and he swings early or late.
 - **[Locked] by Matt 2026-09-23, as shipped at v929** **Location:** the batter leans toward where you have been throwing. Keep hitting one spot and he waits there. Move the ball around for weaker contact.
 - **[Tested]** **Commit point:** the batter decides to swing about halfway to the plate. A curve or slider steered after that can make him chase or miss.
-- **[Locked] by Matt 2026-09-23, as shipped at v929** **Fooled feedback:** when a CPU swing is fooled on timing, "Early" or "Late" pops above the plate, the same place as your own batting feedback.
+- **[Locked]** **Fooled feedback:** Early / Late / Perfect pops ONLY when you bat; a CPU swing shows its plain verdict (Strike, Foul) (Matt, playtest 1, 2026-09-23; overrules "when a CPU swing is fooled on timing, Early or Late pops above the plate").
 - **[Locked] by Matt 2026-09-23, as shipped at v929**: how these scale by league. Younger batters get fooled more by speed changes and guess your spot less; Majors batters read patterns best.
 
 ## 9. CPU teams
@@ -302,13 +302,14 @@ Major League	62%	40 to 52%
   - 3 outfield fly-out zones
   - Pop-ups in the infield are outs
 - **[Locked]** Singles go through gaps and as bloopers. Doubles in the gaps and down the lines. Triples in deep corners and deep center. Home runs over the wall.
+- **[Locked]** A home run must clear the wall's HEIGHT, not just its distance (Matt, playtest 1, 2026-09-23: "it gives homeruns too easily... it should bounce off the wall and still be in play"). The ball's height at the fence is read from the same arc the game draws; below the wall (8 ft, or a tall section's own height) it hits the wall and stays in play: a double, or a triple within 5 degrees of a foul line. Snapshotted per season (`season.wallHeight`).
 - **[Locked]** Fields get bigger each league (deeper fences). Out zones also grow (better fielders). Screen size stays the same; bigger fields just render smaller.
 - **[Locked] by Matt 2026-09-23, as shipped at v929**: zone sizes and fence distances per league (`settings.js` `FIELD`; the Majors parks override the fence, item 11).
 
 ### Majors parks
 - **[Locked]** Fictional names, shapes inspired by famous parks: Boston (tall, short left wall), New York (short right porch), Chicago (ivy), San Francisco (deep right-center), Houston (short left), Detroit (deep center), Denver (huge outfield), Los Angeles (even).
 - **[Locked]** No wind, air, or weather.
-- **[Locked] by Matt 2026-09-23** Version 1 = fence shapes + tall walls. Eight parks (`settings.js` `PARKS`, one per Majors style via `PARK_BY_STYLE`): Harbor Yard (Boston, 37 ft left wall), Empire Grounds (New York), Lakeshore Park (Chicago, ivy = looks only), Bayview Field (San Francisco), Launchpad Park (Houston, 21 ft left wall), Assembly Park (Detroit), Summit Field (Denver), Sunset Park (Los Angeles). A ball that clears the distance but not a tall wall is a double off it. Majors games are at the home team's park; **the player's own home park is Harbor Yard (Boston's shape, Matt)**. Snapshotted per season (`season.parks`). Measured: all 8 simulator assertions pass; moves within noise.
+- **[Locked] by Matt 2026-09-23** Version 1 = fence shapes + tall walls. Eight parks (`settings.js` `PARKS`, one per Majors style via `PARK_BY_STYLE`): Harbor Yard (Boston, 37 ft left wall), Empire Grounds (New York), Lakeshore Park (Chicago, ivy = looks only), Bayview Field (San Francisco), Launchpad Park (Houston, 21 ft left wall), Assembly Park (Detroit), Summit Field (Denver), Sunset Park (Los Angeles). A ball that clears the distance but not a tall wall is a double off it (since playtest 1, the general wall-height rule in section 10 covers this). Majors games are at the home team's park; **the player's own home park is Harbor Yard (Boston's shape, Matt)**. Snapshotted per season (`season.parks`). Measured: all 8 simulator assertions pass; moves within noise.
 
 ## 11. Pitches
 
@@ -320,13 +321,14 @@ Major League	62%	40 to 52%
   list `unlockedPitchesFor(league, wsTitles)` does; the CPU throws from the SAME per-league
   `pitchMix` career uses. `QUICK_PLAY_PITCH_MIX` is deleted with the override it existed only to
   serve.
-- **[Locked, R11]** Little League is fastball only. Changeup moves to High School, alongside
-  curveball - it does not vanish, it is simply not the very first thing a brand-new career unlocks.
+- **[Locked]** Little League throws fastball AND changeup, for the player and the CPU (Matt,
+  playtest 1, 2026-09-23; overrules R11's "Little League is fastball only"). The CPU's Little
+  League mix is `{ fastball: 3, changeup: 1 }`.
 
 ```
 When unlocked	Pitch
-Little League	Fastball
-High School	Changeup, Curveball
+Little League	Fastball, Changeup
+High School	Curveball
 College	Slider
 Minor League	Knuckleball
 Major League	Screwball

@@ -4,6 +4,44 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Playtest 1, batch 1: quick fixes (2026-09-23) - DONE, live at v933
+
+`docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 1, all six items:
+
+1. **Changeup at Little League, both sides** (`LEAGUE_UNLOCK_ADDS.little`, CPU `pitchMix
+   { fastball: 3, changeup: 1 }`). Overrules R11. No sim run (Matt). Not snapshotted: a season in
+   progress simply gains the pitch, which is what Matt asked for.
+2. **Early/Late/Perfect only when the player bats** (`_humanBatting()` in `ui.js`, both the
+   `'count'` and in-play branches). A CPU swing shows Strike (miss included) or Foul; a CPU ball in
+   play shows no timing pop. Overrules design doc section 8 "Fooled feedback".
+3. **Scoreboard bases**: 11-unit diamonds, occupied = solid `#ffce3a` + dark outline, empty =
+   white outline only. Same 38px box (fixed geometry). Stale "first base on the left" comments fixed.
+4. **Mini-map runner dots** 9px -> 16px, white outline + dark ring. Widget itself unchanged.
+5. **Big OUT** (`_showBigOut`, `.bb-bigout`, `BIG_OUT_MS` 1000): strikeouts, in-play outs (when the
+   result word paints), pickoff and steal outs. pointer-events none; any tap clears it.
+6. **Home runs must clear the wall's HEIGHT** (`outcomes.js`). The ball's height at the fence is
+   read from the SAME arc `ui.js` draws: the apex constants and `battedApexFt` moved from `ui.js` to
+   `settings.js`/`outcomes.js`, and `_battedApexFt` now delegates, so the drawing and the call cannot
+   disagree. Below the wall (8 ft, or a park's tall section): `wall-double`, or `wall-triple` within
+   `WALL_RULE.cornerTripleDeg` (40) of a foul line; the ball drops at the wall's foot. This folds in
+   the old tall-wall rule. **Snapshotted**: `season.wallHeight` (career.js) -> `Game({ wallHeight })`
+   -> engine snapshot; a season or game saved before this keeps the old distance-only rule.
+   The drawn arc ignores launch angle except through kind (line vs fly), so the engine does too.
+
+Home runs per game (both teams), median tier, `sim-baseball-career.mjs` (new counter, 200 careers):
+
+| League | before (v929) | changeup only | after both |
+|---|---|---|---|
+| Little | 7.37 (13.5% of PA) | 4.71 (10.6%) | 2.08 (4.7%) |
+| High School | 6.84 (20.3%) | 6.84 | 5.41 (16.1%) |
+| College | 6.95 (21.9%) | 6.95 | 6.04 (18.9%) |
+| Minors | 10.87 (30.2%) | 10.88 | 9.66 (26.9%) |
+| Majors | 12.39 (32.9%) | 12.39 | 9.89 (26.4%) |
+
+All 8 assertions pass after. Most remaining homers are fly balls that clear the wall high; the
+rate above Little League is still very high. That is the carry model, not the wall, and batch 4's
+job (not retuned here).
+
 ## Playtest 1 (Matt, 2026-09-23): six batches queued
 
 Matt's first playtest of Little League career (v929) produced six batches of work, with his

@@ -285,6 +285,7 @@ export function startSeason(state, seed) {
       playoffFormat,
       standingsModel: STANDINGS_MODEL,
       parks: true,
+      wallHeight: true,   // playtest 1: home runs must clear the wall's height (outcomes.js)
       points: { ...POINTS[league] },
       schedule: makeSchedule(league, seasonSeed, games, slots.length, SCHEDULE_SHAPE),
       results: [],
@@ -361,7 +362,10 @@ export function buildGame(state, meta, agents = { home: null, away: null }) {
   // shipped keeps the even field it started on.
   const s = state.season;
   const parkId = (s && s.parks) ? parkFor(s.league, !!meta.home, opponent && opponent.styleId) : 'default';
-  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false });
+  // Playtest 1: the wall-height home run rule, snapshotted the same way (an older season keeps
+  // the distance-only rule it started with).
+  const wallHeight = !!(s && s.wallHeight);
+  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false, wallHeight });
 }
 
 /** Which engine side ('home'|'away') the player is, for a given meta. */

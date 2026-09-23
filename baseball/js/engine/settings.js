@@ -168,9 +168,12 @@ export const PITCH_TYPES = ['fastball', 'changeup', 'curveball', 'slider', 'knuc
 // should be able to be thrown." Changeup moves down to High School, alongside curveball - it does
 // not vanish, it is simply no longer the very first thing a brand-new career unlocks alongside
 // the fastball.
+//
+// Playtest 1 (Matt, 2026-09-23): the changeup is back at Little League, for the player AND the
+// CPU (overrules R11's fastball-only rule; no sim run, Matt's call).
 const LEAGUE_UNLOCK_ADDS = {
-  little: ['fastball'],
-  highschool: ['changeup', 'curveball'],
+  little: ['fastball', 'changeup'],
+  highschool: ['curveball'],
   college: ['slider'],
   minors: ['knuckleball'],
   majors: ['screwball'],
@@ -454,7 +457,8 @@ export const CPU = {
   // highschool), and `unlockedPitchesFor` no longer lets Quick Play draw a type the league has
   // not unlocked, so this row can only ever be asked for the one type it names.
   little:     { timingSigmaMs: 115, placementNoise: 0.27, swingIn: 0.30, chase: 0.55, fool: 0.45, guess: 0.10,
-    pitchMix: { fastball: 1 }, cornerBias: 0.05, patternWeight: 0.02, weakSpotWeight: 0 },
+    // Playtest 1 (Matt, 2026-09-23): changeup added back, both sides.
+    pitchMix: { fastball: 3, changeup: 1 }, cornerBias: 0.05, patternWeight: 0.02, weakSpotWeight: 0 },
   highschool: { timingSigmaMs: 95, placementNoise: 0.24, swingIn: 0.50, chase: 0.40, fool: 0.35, guess: 0.20,
     pitchMix: { fastball: 3, changeup: 2, curveball: 2 }, cornerBias: 0.20, patternWeight: 0.13, weakSpotWeight: 0 },
   college:    { timingSigmaMs: 80, placementNoise: 0.22, swingIn: 0.78, chase: 0.28, fool: 0.25, guess: 0.30,   // BB-2c commit 2: timingSigmaMs 65 -> 80 (CPU_SIGMA_MIN_MS.college); placementNoise floored at CPU_PLACEMENT_MIN (was 0.21 under the old guess-derived formula)
@@ -694,7 +698,35 @@ export function parkFor(league, homeIsPlayer, homeStyleId) {
 // A tall wall: a fly/line that clears the fence distance but lands less than
 // (heightFt - baseHeightFt) * carryFtPerFt past it hit the wall, and is a double. baseHeightFt is
 // the ordinary fence (field.js FENCE.height). 1 ft of extra carry per ft of wall = a ~45 deg descent.
-export const WALL_RULE = { baseHeightFt: 8, carryFtPerFt: 1.0 };
+export const WALL_RULE = { baseHeightFt: 8, carryFtPerFt: 1.0, cornerTripleDeg: 40 };
+// Playtest 1 (Matt, 2026-09-23): a fly/line that reaches the fence BELOW the wall's height (the
+// ordinary 8 ft, or a tall section's own) hits it: a double, or a triple within `cornerTripleDeg`
+// of a foul line (+/-45). `carryFtPerFt` is the pre-playtest rule, kept for older saves only.
+
+// The batted ball's drawn arc (moved from ui.js, playtest 1, so outcomes.js can read the ball's
+// height at the wall from the SAME arc the player watches - `outcomes.js` `battedApexFt`).
+// R1: the batted ball's apex, in feet, from the engine's own distance - stage 8's rule, restated in
+// world units by section 9. A grounder barely leaves the ground; anything else arcs.
+// R2: halved (0.35 -> 0.22, cap 120 -> 80). R1's own record: the old rule is "about 40% too high
+// for a real fly ball and puts the wall out of the chase camera's frame on a home run".
+export const BATTED_APEX_MAX_FT = 80;
+export const BATTED_APEX_FRAC = 0.22;
+export const BATTED_GROUNDER_APEX_FT = 4;
+// R5: a POP-UP is the one kind whose height is not a function of how far it went - it is the kind
+// where ALL of the swing went up. `distanceFt * 0.22` drew a 60 ft pop-up as a 13 ft liner, which
+// was invisible while `carryFt` returned 0 ft for it and is not once R5's `MIN_IN_PLAY_FT` puts it
+// on the infield grass (40 to 120 ft out). Height is taken from the distance too, but on its own
+// much steeper fraction and with a floor, so the shortest pop-up still goes up rather than across.
+export const BATTED_POPUP_APEX_FRAC = 0.9;
+export const BATTED_POPUP_APEX_MIN_FT = 55;
+// R10: a LINE DRIVE gets its own, flatter apex - unlike a fly ball, a liner does not arc; sharing
+// BATTED_APEX_FRAC/BATTED_APEX_MAX_FT with 'fly' put a 200ft liner 44ft up (a 3.3s hang time)
+// where the spec's own worked example wants "about 2.5s" (~25ft). Solved from the same
+// `t = 2*sqrt(2*apex/32.2)` the flight-time formula uses: apex = (t/2)^2 * 32.2, so
+// apex(2.5s) = 25.16ft, frac = 25.16 / 200 = 0.126 - baseball/CLAUDE.md's R10 entry has the check.
+export const BATTED_LINE_APEX_FRAC = 0.126;
+export const BATTED_LINE_APEX_MAX_FT = 40; // a liner that arced as high as a fly ball's own 80ft cap would read as one
+
 
 // ---------------------------------------------------------------------------------------------
 // Team generation styles (doc §9's named 8: Sluggers, Small Ball, Patient, Flamethrowers,

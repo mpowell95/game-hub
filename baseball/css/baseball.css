@@ -593,8 +593,9 @@
  * reads as "bigger and to the right" rather than "bigger and floating high". */
 .bb-sb-diamond { grid-column: 2; grid-row: 2; width: 38px; height: 38px; align-self: center; }
 .bb-bases-svg { width: 38px; height: 38px; }
-.bb-bases-svg rect { fill: none; stroke: #fff; stroke-width: 1.2; }
-.bb-bases-svg rect.is-on { fill: #178A7A; stroke: #12181f; }
+/* Playtest 1: empty = white outline only, occupied = solid #ffce3a with a dark outline. */
+.bb-bases-svg rect { fill: none; stroke: #fff; stroke-width: 1.8; }
+.bb-bases-svg rect.is-on { fill: #ffce3a; stroke: #12181f; stroke-width: 2; }
 
 .bb-field-wrap {
   flex: 1 1 auto;
@@ -634,7 +635,7 @@
 /* R3 (docs/BASEBALL-3D-BUILD.md section 9): THE DIAMOND WIDGET. Fixed geometry, top-right of the
  * field band, 8px inset - opacity ONLY toggles it (ui.js's `_setDiamondVisible`), never layout, so
  * it never moves anything else. Four cells (HOME/1B/2B/3B, `basesSvg`'s own left/right convention
- * carried over - first left, third right, seen from behind the plate) and up to
+ * first base on the RIGHT, third on the LEFT, seen from behind the plate) and up to
  * `DIAMOND_DOT_COUNT` moving dots (a batter plus up to three existing runners, the most one play
  * ever has in motion at once). */
 .bb-diamond {
@@ -697,12 +698,16 @@
 .bb-diamond-cell b[data-role="num"]:empty { display: none; }
 .bb-diamond-cell.is-on span, .bb-diamond-cell.is-on b { color: #12181f; }
 .bb-diamond-dot {
+  /* Playtest 1 (Matt: "tiny"): 9px -> 16px, white-outlined so it reads over any cell. */
   position: absolute;
-  width: 9px;
-  height: 9px;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
   border-radius: 50%;
   background: #E0532F;
-  border: 1.5px solid #12181f;
+  border: 2.5px solid #fff;
+  box-shadow: 0 0 0 1.5px #12181f;
+  z-index: 1;
   transform: translate(-50%, -50%);
   opacity: 0;
 }
@@ -805,6 +810,34 @@
   white-space: nowrap;
 }
 .bb-line2 { font-size: 11px; font-weight: 700; opacity: 0.92; }
+
+/* Playtest 1 (Matt, 2026-09-23): a big OUT over the field on every out, ~1 s. Fixed geometry,
+ * opacity/transform only, never takes input (`_showBigOut`). The square mark is the same "costs
+ * you something" shape Strike/Out already carry, so colour is never the only cue. */
+.bb-bigout {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  font-size: 56px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #fff;
+  -webkit-text-stroke: 2px #16240f;
+  text-shadow: 0 3px 0 #16240f, 0 0 18px rgba(0,0,0,0.6);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 5;
+  white-space: nowrap;
+}
+.bb-bigout.is-on { opacity: 1; animation: bb-bigout-in 220ms ease-out forwards; }
+@keyframes bb-bigout-in {
+  0%   { transform: translate(-50%, -50%) scale(0.6); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bb-bigout.is-on { animation: none; }
+}
 
 /* R4 (docs/BASEBALL-3D-BUILD.md section 9): HOME RUN. Fixed geometry - a reserved spot centred in
  * the field band, opacity/transform only, so nothing else in the band ever moves when it shows.
