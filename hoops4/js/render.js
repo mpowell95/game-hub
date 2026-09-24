@@ -357,6 +357,7 @@ export class Renderer {
     }
     const tmp = new THREE.Object3D();
     for (const [part, list] of byPart) {
+      if (part === 'sideWall') { this._sideWalls(list); continue; }   // drawn as framed glass
       const geo = new THREE.BoxGeometry(1, 1, 1);
       const mat = this._mat(part);
       (this._partMats || (this._partMats = new Map())).set(part, mat);
@@ -1050,6 +1051,38 @@ export class Renderer {
     // The red-left / yellow-right strips beside the display too: in a match where you are red, a
     // yellow strip is one more thing saying the wrong colour.
     for (const { m } of this._sideMats || []) { m.color = COL('#000000'); m.emissive = tone.clone(); m.emissiveIntensity = 1; }
+  }
+
+  /**
+   * THE SIDE WALLS AS AN ARCADE CABINET'S PLEXIGLASS (2026-09-24). Matt: "Can you make the new
+   * walls look nicer..? They're blocky and clunky and take away from the aesthetic." The physics
+   * is a 2 cm pane at the display's edge (machine.js "THE SIDE WALLS"); what is drawn is what a real
+   * hoops cabinet has there - a clear panel, the ball visible through it, in a slim frame: a
+   * front post in the display's blue and a gold top rail picking up the marquee's trim.
+   */
+  _sideWalls(list) {
+    const L = this.look;
+    const glass = new THREE.MeshStandardMaterial({
+      color: COL('#bfe0ff'), transparent: true, opacity: 0.16, roughness: 0.1, metalness: 0,
+      depthWrite: false, side: THREE.DoubleSide,
+    });
+    const post = new THREE.MeshStandardMaterial({ color: COL(L.faceEdge), roughness: 0.45, metalness: 0.3 });
+    const gold = new THREE.MeshStandardMaterial({
+      color: COL(L.marqueeText), emissive: COL(L.marqueeText), emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.4,
+    });
+    this._trash.push(glass, post, gold);
+    for (const s of list) {
+      const [hx, hy, hz] = s.half;
+      const [x, y, z] = s.pos;
+      const add = (geo, mat, px, py, pz) => {
+        const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); this.scene.add(m); this._trash.push(geo);
+      };
+      add(new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2), glass, x, y, z);                 // the pane
+      const pw = Math.max(hx * 2, 0.024);
+      add(new THREE.BoxGeometry(pw, hy * 2, 0.022), post, x, y, z + hz - 0.011);          // front post
+      add(new THREE.BoxGeometry(pw * 1.3, 0.016, 0.03), gold, x, y + hy - 0.008, z + hz - 0.015);   // cap
+      add(new THREE.BoxGeometry(pw * 1.15, 0.012, hz * 2), gold, x, y + hy - 0.006, z);   // top rail
+    }
   }
 
   /**

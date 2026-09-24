@@ -620,7 +620,10 @@ export function buildMachine(G) {
       const topY = faceToWorld(0, G.boardLen, 0)[1] + G.boardW * 0.10 + 0.01;
       const y0 = Math.min(front[1], back[1]) - 0.02;
       const z0 = Math.max(front[2], back[2]), z1 = Math.min(front[2], back[2]) - 0.05;
-      const x0 = G.sideWallU, x1 = G.boardW / 2 + 0.02;
+      // A PANE, NOT A BLOCK (2026-09-24, Matt: "Can you make the new walls look nicer..? They're
+      // blocky and clunky"). `sideWallT` thick at the display's edge; the strip outside it keeps
+      // the rail chamfer and back-corner wedge, so a ball that does get out there still rolls off.
+      const x0 = G.sideWallU, x1 = G.sideWallU + (G.sideWallT || (G.boardW / 2 + 0.02 - G.sideWallU));
       for (const sx of [-1, 1]) {
         solids.push({
           part: 'sideWall',
