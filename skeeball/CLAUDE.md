@@ -2317,8 +2317,9 @@ out with nothing thrown posts 0 and delivers; a force-closed game posts its last
 next open. That run also caught two real bugs before shipping (one internal flag doing two jobs
 made every challenge "All machines"; a shared phone could block the other player's game).
 
-**Outstanding (2026-09-24):** the `skeeChallenges` rule must be PUBLISHED by hand, and
-`skeeChallengePush` DEPLOYED by hand (`firebase deploy --only functions`). Root `CLAUDE.md`,
+**Rules PUBLISHED by Matt 2026-09-24.** **Outstanding:** `skeeChallengePush` must be DEPLOYED by
+hand from his PC (`firebase deploy --only functions`); until then challenges work but send no phone
+notification. Root `CLAUDE.md`,
 "Skeeball challenges", tracks both - close them there when done.
 
 Tests: `node test-skee-challenge.mjs` (70: the rules, one attempt, the bubble, shared machines, the
