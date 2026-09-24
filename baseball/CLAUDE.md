@@ -4,6 +4,86 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Playtest 1, batch 4a: live plays, the engine (2026-09-24) - DONE, live, SWITCH OFF
+
+`docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 4, first half (engine + simulator). **Nothing a player
+sees changed yet**: `LIVE_PLAY.on` is `false`, so every new season still snapshots
+`livePlays: false` and plays the out-zone model. Batch 4b draws the play and flips the switch
+(the handoff's own rule: never ship an engine the drawing disagrees with). What 4b must do, in
+order, is written in the handoff's batch 4 section, "Where batch 4 stopped".
+
+**`engine/liveplay.js` plays a ball in play out in time.** Pure and seeded (game.js's RNG), one
+synchronous call inside the pitch pass, so a snapshot can never land mid-play: a resume starts at
+the pitch boundary before or after it and replays identically. The ball: carry from `carryFt` (x
+`carryMult`), hang time from its launch (`hangMult` x the vacuum time, never faster over the ground
+than it left the bat), apex from gravity; it lands, keeps `landSpeedFrac` into a roll, comes off the
+wall (`wallRestitution`), grounders roll with `dirtDecel`/`grassDecel`. A home run still has to
+clear the wall's height. The fielders: nine spots (`fielderSpots`), league speed and reaction;
+the first who can reach the ball takes it; **reached in the air = caught = always an out**. Throws:
+pitch Speed = arm (`throwBaseMph` + 1 mph a point), pitch Accuracy = aim (miss distance sigma
+`throwErrFt` x (1 - 0.85 x Accuracy/cap); past 4 ft it costs time, past 10 ft it is wild and every
+runner takes a base), long throws through the cutoff man. Runners: Speed = `runBaseFtS` + 0.7 ft/s a
+point; forced runners go; everyone else takes the furthest base he reckons he can make (a margin
+plus his own misjudgement, so runners do get thrown out at home). Force outs, tags, double plays,
+tag-ups and sac flies all fall out of the timing. No run scores on a play whose third out is a
+force or the batter before first. Scored like a scorer: fielder's choice, reached on a wild throw
+(no hit), thrown out stretching (keeps the base behind). A bunt keeps `resolveBunt`.
+
+**Wiring.** `Game({ livePlays })` + snapshot (an older snapshot resumes on zones); 'atBatEnd'
+carries `play` (the timeline 4b draws: ball samples, fielder spots, possession, throws, runner legs,
+outs, all in seconds), `fielder`, `doublePlay`. `career.js` snapshots `season.livePlays` and builds a
+live season's CPU rosters from `LIVE_PLAY.cpuRosterLevel` (`teams.js` `makeLeague(league,
+{ rosterLevel })`); an out-zone season's rosters are byte-identical. A live GAME also swaps in
+`LIVE_PLAY.hitPowMphPerPt` (`liveSettings`). The extra-innings ghost runner runs at his team's
+average Speed. `sim-baseball-career.mjs --live` forces the live model.
+
+**Measured, not guessed.** Real-life check: 5,453 MLB home runs in 2024 over 2,430 games = 2.24 a
+game, both teams, about 3% of plate appearances (Baseball Almanac league totals). Games here are 3
+innings, so the target is the RATE, not the per-game count. Median tier, both teams,
+`--all-tiers --careers 200 --assert --perfect 400`:
+
+| League | HR/game before (zone, v938) | HR/game after (live) | % of PA before | after |
+|---|---|---|---|---|
+| Little | 2.08 | 0.26 | 4.7% | 1.0% |
+| High School | 5.40 | 0.32 | 16.1% | 1.3% |
+| College | 6.04 | 0.48 | 19.0% | 1.9% |
+| Minors | 9.65 | 0.63 | 26.9% | 2.6% |
+| Majors | 9.89 | 0.75 | 26.4% | 3.0% (= 2.25 per 9 innings) |
+
+Runs fall with them: median player's runs for-against a game, Majors 8.9-8.3 before, 1.6-0.9 after
+(real MLB is about 2.9 total per 3 innings). BABIP was tuned to about .300 above Little League
+(Little League higher, kids' ball). All 8 assertions pass on `--live`; the default (zone) run is
+unchanged, line for line.
+
+**Economy numbers that moved (live seasons only; out-zone seasons keep the old ones):**
+- CPU roster level (`LIVE_PLAY.cpuRosterLevel`, was `CPU_ROSTER_LEVEL`): 4.1 / 10.7 / 16.4 / 21.0 /
+  23.0 -> **2.0 / 7.0 / 12.8 / 17.5 / 20.5**. Low-scoring games are more random, so the player
+  needs a bigger edge to win a title the same share of the time.
+- Power (`LIVE_PLAY.hitPowMphPerPt`, was `SKILL_EFFECT.hitPow.exitVeloMphPerPt`): **1.389 -> 0.4 mph
+  a point**. At 1.389 with carry cut to real home run rates, a homer became an exit-velocity
+  threshold only Power moved: +6 Power measured **+32 pp** of win rate and every other skill ~0.
+  At 0.4 the carry sits back near 1.0 in every league (1.034 / 1.008 / 0.992 / 0.974 / 0.970).
+- Results, median tier, before -> after: first-attempt Gold 99.5 / 93.5 / 44.0 / 33.0 / 2.0 ->
+  **97.0 / 81.0 / 45.5 / 36.0 / 10.5**; first title median 11 -> **10** seasons; Majors seasons
+  before it 4 -> **3**; Perfect Season 3.0% -> **2.8%**. Strong tier Majors first try 26 -> 31%.
+
+**What each skill is worth** (median model player, Majors, all skills 20, +6 in one, 3,000 games a
+cell, about +/-1.8 pp noise), out-zone -> live: Contact 8.1 -> 4.3, Power 8.7 -> 11.1, **Speed 3.1
+-> 6.9**, **pitch Speed 2.7 -> 4.5**, **pitch Accuracy 1.5 -> 0.0**, Spin 2.0 -> 2.8. Speed and pitch
+Speed now matter more. **Pitch Accuracy does not, at this level**: from 77% of cap up, throws are
+already clean, so its throwing half only bites a player who neglected it (at half the Majors cap a
+throw is wild about 1 time in 20). Left for Matt to call; not re-tuned here.
+
+**Suites**: `node baseball/js/test.js` 3236 passed (new section 36: a caught ball is always an out
+across 3,000 random plays, every runner ends scored/out/on one base, determinism, named plays,
+Speed/arm/Accuracy each move their effect, snapshot and season flag). `node test-baseball-career.mjs`
+329 passed. `node test-game-conventions.mjs` 11/11. `node check-no-scroll.mjs baseball` 16/16.
+`BB_DEVICE_QUICK=1 node test-baseball-device.mjs`: one failure, **`game-flow-intro`** (f1b not near
+the home dugout) - it fails the same way on unmodified `main` (a2aa97f, checked in a worktree on port
+8124), so it is pre-existing and not from this change; batch 4a touches no UI. `target-marker`
+failed once by 0.6 px and passed on re-run. `node test-visual.mjs baseball`: the `[play]` probe
+fails, the same pre-existing container flake batch 2's entry records.
+
 ## Playtest 1, batch 3: game flow animations (2026-09-23) - DONE, live at v938
 
 `docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 3, all six items: two dugouts, a Walk clip, the

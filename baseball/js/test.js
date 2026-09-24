@@ -21,6 +21,8 @@ import { makeTeam, makeLeague, leagueTeamsFor, makePlayerTeam, teamStrength, eff
   rosterScaleFor, rosterCeilingFor, POSITIONS } from './engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
+import { resolveLivePlay, ballPath, fielderSpots } from './engine/liveplay.js';
+import { startSeason, newCareer, buildGame, nextGame, leagueTeams } from './engine/career.js';
 import { budgetFor, capFor, scalePreset, clampBuild, randomBuild, adjust, canAdjust } from './build.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -3300,6 +3302,115 @@ console.log('\n-- 35. Doc items 9 and 11 (2026-09-23): pitch readouts, Majors pa
   ok(Game.fromSnapshot(snapOld, { home: null, away: null }).wallHeight === false, 'an older snapshot resumes on the old home run rule');
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Playtest 1, batch 4a: THE LIVE PLAY (liveplay.js). A ball in play is played out in time; a caught
+// ball is always an out; Speed runs, pitch Speed throws, pitch Accuracy aims.
+console.log('\n-- 36. Playtest 1 batch 4a: live plays --');
+await (async function section36LivePlay() {
+  const S = { ...SETTINGS };
+  const fence = SETTINGS.FIELD.majors.fenceFt;
+  const team = (sk) => makePlayerTeam({ skills: { hitAcc: 10, hitPow: 10, hitSpd: 10, pitchSpd: 13, pitchAcc: 22, pitchSpin: 10, ...sk }, hand: 'R' });
+  const play = (batted, o = {}) => resolveLivePlay({ batted, league: o.league || 'majors', fenceFt: o.fence || fence,
+    bases: o.bases || [null, null, null], outs: o.outs || 0, batterId: 'B', speedOf: o.speedOf || (() => 13),
+    defense: o.defense || team({}), shiftDeg: 0, settings: S, rand01: o.rand || mulberry32(o.seed || 1) });
+  // A random census of batted balls, both kinds of league, every base/out state.
+  const rnd = mulberry32(4242);
+  const kinds = [['ground', 0, 8], ['line', 8, 26], ['fly', 26, 52], ['popup', 55, 70]];
+  let caughtNotOut = 0, conservationBad = 0, n = 0, hits = 0, homers = 0, dps = 0;
+  for (let i = 0; i < 3000; i++) {
+    const [kind, a0, a1] = kinds[i % 4];
+    const lgId = i % 2 ? 'majors' : 'little';
+    const bases = [rnd() < 0.4 ? 'r1' : null, rnd() < 0.3 ? 'r2' : null, rnd() < 0.25 ? 'r3' : null];
+    const outs = Math.floor(rnd() * 3);
+    const r = play({ exitVeloMph: 45 + rnd() * 65, launchAngleDeg: a0 + rnd() * (a1 - a0), sprayAngleDeg: -44 + rnd() * 88, kind },
+      { league: lgId, fence: SETTINGS.FIELD[lgId].fenceFt, bases, outs, seed: i + 1 });
+    n++;
+    if (r.timeline && r.timeline.possession && r.timeline.possession.caught && !(r.result === 'out' && r.batterOut)) caughtNotOut++;
+    if (r.result === 'hit') hits++;
+    if (r.kind === 'homer') homers++;
+    if (r.doublePlay) dps++;
+    // Every runner and the batter is accounted for: scored, out, or on a base (unless the inning ended).
+    if (outs + r.outsAdded < 3) {
+      const before = bases.filter(Boolean).length + 1;
+      const after = r.runsScored + r.outsAdded + r.finalBases.filter(Boolean).length;
+      if (before !== after) conservationBad++;
+      if (new Set(r.finalBases.filter(Boolean)).size !== r.finalBases.filter(Boolean).length) conservationBad++;
+    }
+  }
+  ok(caughtNotOut === 0, `a caught ball is always an out (${caughtNotOut} of ${n} were not)`);
+  ok(conservationBad === 0, `every runner ends scored, out or on exactly one base (${conservationBad} bad of ${n})`);
+  ok(hits > 0 && homers > 0 && dps > 0, `the census has hits (${hits}), homers (${homers}) and double plays (${dps})`);
+
+  // Deterministic: the same ball and the same seed play the same play.
+  const b1 = { exitVeloMph: 96, launchAngleDeg: 14, sprayAngleDeg: -18, kind: 'line' };
+  ok(JSON.stringify(play(b1, { bases: ['r1', null, 'r3'], seed: 9 })) === JSON.stringify(play(b1, { bases: ['r1', null, 'r3'], seed: 9 })),
+    'a live play is deterministic for a seed');
+
+  // Named plays.
+  const gb = play({ exitVeloMph: 85, launchAngleDeg: 3, sprayAngleDeg: -12, kind: 'ground' });
+  ok(gb.kind === 'groundout' && gb.fielder === 'SS' && gb.timeline.throws.length === 1 && gb.timeline.throws[0].to === '1B',
+    `a routine grounder to short is thrown to first for the out (${gb.kind} by ${gb.fielder})`);
+  const dp = play({ exitVeloMph: 88, launchAngleDeg: 3, sprayAngleDeg: -8, kind: 'ground' }, { bases: ['r1', null, null] });
+  ok(dp.outsAdded === 2 && dp.doublePlay && dp.runnersOut[0] === 'r1', 'a hard grounder at short with a runner on first is a double play');
+  const hr = play({ exitVeloMph: 125, launchAngleDeg: 28, sprayAngleDeg: 5, kind: 'fly' }, { bases: [null, 'r2', null] });
+  ok(hr.kind === 'homer' && hr.runsScored === 2 && hr.finalBases.every((x) => x == null), 'a ball over the wall is a two-run homer with a man on second');
+  const pop = play({ exitVeloMph: 70, launchAngleDeg: 62, sprayAngleDeg: 5, kind: 'popup' });
+  ok(pop.kind === 'popout' && pop.result === 'out', 'an infield pop-up is caught');
+  // Third out on a force: no run scores, even if the runner from third crossed first.
+  const force3 = play({ exitVeloMph: 85, launchAngleDeg: 3, sprayAngleDeg: -12, kind: 'ground' }, { bases: ['r1', 'r2', 'r3'], outs: 2 });
+  ok(force3.outsAdded === 1 && force3.runsScored === 0, 'a force out for the third out scores nobody');
+
+  // SPEED: the same grounders, a slow batter and a fast one - the fast one beats out more.
+  const beat = (spd) => { let h = 0; for (let i = 0; i < 400; i++) {
+    const r = play({ exitVeloMph: 55 + (i % 40), launchAngleDeg: 2, sprayAngleDeg: -40 + (i * 7.3) % 80, kind: 'ground' }, { speedOf: () => spd, seed: i + 5 });
+    if (r.result === 'hit') h++; } return h; };
+  const slow = beat(0), fast = beat(26);
+  ok(fast > slow, `a fast batter beats out more grounders (Speed 26: ${fast}, Speed 0: ${slow}, of 400)`);
+  // PITCH SPEED is the arm: the same throw arrives sooner.
+  const t1 = (ps) => play({ exitVeloMph: 85, launchAngleDeg: 3, sprayAngleDeg: -12, kind: 'ground' }, { defense: team({ pitchSpd: ps }) }).timeline.throws[0];
+  ok(t1(26).tArrive < t1(0).tArrive, `a stronger arm (pitch Speed) gets the throw there sooner (${t1(26).tArrive.toFixed(2)}s vs ${t1(0).tArrive.toFixed(2)}s)`);
+  // PITCH ACCURACY is the aim: fewer throws off the bag and fewer wild ones.
+  const wild = (acc) => { let w = 0, off = 0; for (let i = 0; i < 600; i++) {
+    const r = play({ exitVeloMph: 70 + (i % 30), launchAngleDeg: 3, sprayAngleDeg: -30 + (i * 3.1) % 60, kind: 'ground' },
+      { league: 'little', fence: SETTINGS.FIELD.little.fenceFt, defense: team({ pitchAcc: acc }), seed: i + 11 });
+    for (const t of r.timeline.throws) { if (t.wild) w++; off += t.offFt; } } return { w, off }; };
+  const lo = wild(0), hi = wild(10);
+  ok(lo.w > hi.w && lo.off > hi.off, `low pitch Accuracy throws wild more (Accuracy 0: ${lo.w} wild, 10: ${hi.w})`);
+
+  // The drawing's data: the ball path starts at the plate and the fielders stand where the engine says.
+  const path = ballPath({ exitVeloMph: 95, launchAngleDeg: 30, sprayAngleDeg: 0, kind: 'fly' }, 'majors', fence, S);
+  ok(path.s[0] === 0 && path.landT > 0 && path.hangS > 3, `a fly ball hangs (${path.hangS.toFixed(2)}s)`);
+  const spots = fielderSpots('majors', fence, 0);
+  ok(Object.keys(spots).length === 9 && spots.CF.y > spots.SS.y && spots.SS.y > spots.P.y, 'nine fielders, outfield behind infield behind the mound');
+
+  // Snapshotted per season (THE LAW's "a season in progress keeps its rules").
+  const g = new Game({ home: makeTeam('majors', 0), away: makeTeam('majors', 1), seed: 3, agents: { home: null, away: null }, livePlays: true });
+  ok(g.snapshot().livePlays === true, 'a live-play game snapshots livePlays');
+  const snapOld = { ...g.snapshot() }; delete snapOld.livePlays;
+  ok(Game.fromSnapshot(snapOld, { home: null, away: null }).livePlays === false, 'an older snapshot resumes on the out-zone model');
+  let st = newCareer({ hand: 'R', presetId: 'balanced', skills: { ...SETTINGS.PRESETS.balanced }, now: 0, careerId: 'LIVE-T' });
+  st = startSeason(st, 5);
+  ok(st.season.livePlays === !!SETTINGS.LIVE_PLAY.on, 'a new season snapshots LIVE_PLAY.on');
+  const meta = nextGame(st);
+  ok(buildGame(st, meta).livePlays === !!SETTINGS.LIVE_PLAY.on, 'buildGame hands the season\'s flag to the Game');
+  const stLive = { ...st, season: { ...st.season, livePlays: true } };
+  ok(buildGame(stLive, meta).livePlays === true && buildGame({ ...st, season: { ...st.season, livePlays: false } }, meta).livePlays === false,
+    'a live season plays live, an out-zone season stays on zones');
+  const liveOpp = leagueTeams(stLive)[0], zoneOpp = leagueTeams({ ...st, season: { ...st.season, livePlays: false } })[0];
+  ok(liveOpp && zoneOpp && JSON.stringify(zoneOpp.players) === JSON.stringify(leagueTeams({ ...st, season: { ...st.season, livePlays: false } })[0].players),
+    'an out-zone season\'s CPU rosters are rebuilt identically');
+
+  // A whole live game plays to the end, deterministically.
+  const cpu = (tm) => ({ decidePitch: (v) => new CpuPitcher({ league: 'college', settings: SETTINGS }).decidePitch(v),
+    decideSwing: (v) => new CpuBatter({ league: 'college', skills: tm.players[0].skills, settings: SETTINGS }).decideSwing(v) });
+  const runLive = async () => { const h = makeTeam('college', 0), a = makeTeam('college', 1);
+    const gm = new Game({ home: h, away: a, seed: 77, agents: { home: cpu(h), away: cpu(a) }, livePlays: true });
+    let plays = 0; gm.onEvent = async (t, p) => { if (t === 'atBatEnd' && p.play) plays++; };
+    await gm.playGame(); return { score: gm.score, over: gm.over, plays }; };
+  const r1 = await runLive(), r2 = await runLive();
+  ok(r1.over && r1.plays > 0 && JSON.stringify(r1) === JSON.stringify(r2), `a live game finishes and replays identically (${JSON.stringify(r1)})`);
+})();
 // ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exitCode = 1;
