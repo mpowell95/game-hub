@@ -1469,3 +1469,79 @@
     text-align: center;
   }
 }
+
+/* --- CHALLENGES (2026-09-24) -------------------------------------------------------------------
+   "Beat my score": skeeball/js/challenge.js + challenge-ui.js. Every screen is a css/ui.css
+   .gh-overlay/.gh-modal, so it follows the hub theme. The page never scrolls; the one list that
+   can outgrow a phone (people, or a long history) scrolls INSIDE the modal with overscroll
+   contained, the same call Connect 4 Hoops' "Play a friend" sheet made. */
+.sk-root .sk-setup-row { display: flex; gap: 8px; }
+.sk-root .sk-setup-row > .gh-btn { flex: 1 1 0; min-width: 0; }
+.sk-root .sk-ch-btn { position: relative; }
+.sk-root .sk-ch-badge {
+  position: absolute; top: -6px; right: -4px;
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #ffce3a; color: #3a1f0a; border: 2px solid #3a1f0a;
+  font: 800 12px/1 ui-sans-serif, system-ui, sans-serif;
+}
+.sk-root .sk-ch { text-align: left; max-width: 420px; }
+.sk-root .sk-ch-title { margin: 0 44px 12px; text-align: center; font-size: 20px; font-weight: 800; color: var(--gh-ink); }
+.sk-root .sk-ch-back {
+  position: absolute; top: var(--gh-sp-2); left: var(--gh-sp-2);
+  width: 44px; height: 44px; border: 0; background: none; cursor: pointer;
+  font-size: 30px; line-height: 1; color: var(--gh-muted); touch-action: manipulation;
+}
+.sk-root .sk-ch-body { display: flex; flex-direction: column; gap: 12px; }
+.sk-root .sk-ch-list {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 56vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
+.sk-root .sk-ch-sec { display: flex; flex-direction: column; gap: 6px; }
+.sk-root .sk-ch-sec + .sk-ch-sec { margin-top: 8px; }
+.sk-root .sk-ch-sec h3 {
+  margin: 0; font: 700 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--gh-muted);
+}
+.sk-root .sk-ch-row {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: "who side" "line side";
+  align-items: center; gap: 2px 10px; min-height: 52px; padding: 8px 12px; width: 100%;
+  border: 1px solid var(--gh-border); border-radius: var(--gh-r-md); background: var(--gh-surface-2);
+  color: var(--gh-ink); font: inherit; text-align: left; box-sizing: border-box;
+}
+.sk-root .sk-ch-row.is-go { cursor: pointer; touch-action: manipulation; border-color: var(--gh-border-strong); }
+.sk-root .sk-ch-row.is-go::after { content: '\203A'; grid-area: side; justify-self: end; font-size: 22px; color: var(--gh-muted); }
+.sk-root .sk-ch-row.is-go .sk-ch-side { margin-right: 18px; }
+.sk-root .sk-ch-who { grid-area: who; font-weight: 800; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sk-root .sk-ch-line { grid-area: line; font-size: 13px; color: var(--gh-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sk-root .sk-ch-side { grid-area: side; font-size: 13px; font-weight: 700; color: var(--gh-ink); font-variant-numeric: tabular-nums; }
+.sk-root .sk-ch-note { margin: 0; font-size: 14px; line-height: 1.4; color: var(--gh-muted); text-align: center; }
+.sk-root .sk-ch-err { margin: 8px 0 0; font-size: 14px; font-weight: 700; color: var(--gh-ink); text-align: center; }
+.sk-root .sk-ch-label { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--gh-muted); text-align: center; }
+.sk-root .sk-ch-opts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.sk-root .sk-ch-opt { flex: 1 1 40%; min-height: 44px; font-weight: 700; }
+/* Selected = a thicker border, heavier weight AND a check mark, never colour alone. */
+.sk-root .sk-ch-opt.is-on { border: 2px solid #ffce3a; font-weight: 900; }
+.sk-root .sk-ch-field .gh-input { font-size: 16px; }
+.sk-root .sk-ch-machine {
+  margin: 0; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--gh-muted);
+}
+.sk-root .sk-ch-big {
+  margin: 0; text-align: center; font-size: 56px; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--sk-amber, #ff9d3d);
+}
+.sk-root .sk-ch-caption { margin: 0; text-align: center; font-size: 15px; font-style: italic; color: var(--gh-ink); overflow-wrap: anywhere; }
+.sk-root .sk-ch-caption:empty { display: none; }
+.sk-root .sk-ch-left { margin: 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--gh-muted); }
+.sk-root .sk-ch-vs { display: flex; justify-content: center; gap: 28px; margin: 14px 0 6px; }
+.sk-root .sk-ch-vs > div { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.sk-root .sk-ch-vs b { font-size: 44px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--gh-ink); }
+.sk-root .sk-ch-vs em { margin-top: 4px; font-style: normal; font-size: 13px; font-weight: 700; color: var(--gh-muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sk-root .sk-ch-over .sk-ch-note { margin-top: 10px; }
+/* The HUD line under the machine name on a challenge rack. Inline in the same row, so it costs
+   the in-flow rack no height. */
+.sk-root .sk-hud-ch { margin-left: 6px; color: #ffce3a; }
+/* Two buttons share the row, so each gives up some of .gh-btn's side padding to keep its label on
+   one line (measured: "How to play" wrapped at 375px with the default 24px). */
+.sk-root .sk-setup-row > .gh-btn { padding: 0 10px; white-space: nowrap; }

@@ -733,7 +733,7 @@ if (G.mat) {
 // exact: the board _startGame resolves must be derived from the snapshot when there is one.
 {
   const uiSrc = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
-  const head = /async _startGame\(snap\)\s*{[\s\S]{0,2600}?await loadEngine\(/.exec(uiSrc);
+  const head = /async _startGame\(snap[^)]*\)\s*{[\s\S]{0,2600}?await loadEngine\(/.exec(uiSrc);
   ok('[KNOWN-BUG PROBE] _startGame picks its board from the SNAPSHOT, not just the carousel',
     !!head && /boardById\(\s*snap\s*&&\s*snap\.board\s*\?/.test(head[0]),
     'ui.js resumes a rack on snap.board but would load the engine for settings.board - the two\n'

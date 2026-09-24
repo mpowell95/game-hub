@@ -8,10 +8,11 @@
 // the only thing that ever sends. The app's half is js/push.js (subscribe, store the subscription
 // under pushSubs/<CODE>/<key>) and sw.js (show it, open the hub on tap).
 //
-// THREE TRIGGERS, all deciding in pure code (decide.js) and all sending through sendTo():
+// FOUR TRIGGERS, all deciding in pure code (decide.js) and all sending through sendTo():
 //   hoopsTurnPush   hoops/index/<code>/<gameId>      a challenge, your turn, a finished match
 //   messagePush     messages/index/<code>/<other>    somebody wrote to you (2026-09-24)
 //   bugReportPush   bugReports/<id>                  a new report, to every admin (2026-09-24)
+//   skeeChallengePush skeeChallenges/index/<code>/<id> a Skeeball challenge, or its result (2026-09-24)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
@@ -21,7 +22,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, isActive } from './decide.js';
 
 initializeApp();
 
@@ -114,4 +115,12 @@ export const bugReportPush = onValueCreated({ ref: '/bugReports/{id}', ...OPTS }
     if (typeof c === 'string' && /^[A-Z2-9]{5}$/.test(c)) codes.add(c);
   }
   for (const c of codes) await sendTo(db, c, note, `bug-${event.params.id}`, { game: 'bugs' });
+});
+
+export const skeeChallengePush = onValueWritten({ ref: '/skeeChallenges/index/{code}/{id}', ...OPTS }, async (event) => {
+  const { code, id } = event.params;
+  const before = event.data.before.exists() ? event.data.before.val() : null;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  const note = decideSkee({ code, id, before, after });
+  if (note) await sendTo(getDatabase(), code, note, `skee-${id}`, { game: 'skeeball' });
 });

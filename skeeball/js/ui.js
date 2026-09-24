@@ -31,6 +31,10 @@ import { correctBoard, correctionFor } from '../../js/stats-corrections.js';
 import { isBoardReleased, isBoardTesting, corrections, myBoardCorrections } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 import { loadProfile } from '../../js/profile-store.js';
+// CHALLENGES (2026-09-24): "beat my score" against another player. challenge.js is the data,
+// challenge-ui.js the screens; this file only starts a challenge rack and ends it.
+import * as CH from './challenge.js';
+import { openChallenges, showChallengeOver } from './challenge-ui.js';
 
 const t = makeT(STRINGS);
 
@@ -414,6 +418,13 @@ export class SkeeballUI {
 
     this.disposed = false;
     this._startToken = 0;              // which _startGame call is still the current one
+    // THE CHALLENGE THIS RACK IS FOR, or null for an ordinary rack. Set by _startChallenge, read
+    // by _rackOver/_abandonRack, cleared by the ordinary Play button and the challenge card.
+    //   { mode:'send',   them, board, caption }          the challenger's rack
+    //   { mode:'answer', id, them, board, target }        answering one: its score is posted
+    this.challenge = null;
+    this._challengeRows = [];
+    this._stopChallengeWatch = null;
 
     // FIRST PAINT WAITS FOR THE STYLESHEET, and is capped so it can never wait for ever. The
     // root is hidden with an INLINE style on purpose: hub.js sets `.hidden = false` on this same
@@ -448,6 +459,67 @@ export class SkeeballUI {
     // leave... And clicking into skeeball should just land you on the machine selection page."
     // A rack you walk out of is RECORDED and then over (see _abandonRack).
     this._renderSetup();
+    this._initChallenges();
+  }
+
+  // --- challenges ------------------------------------------------------------------------------
+
+  /** Once per mount: send any score still owed, keep the gallery's badge live, and take the
+   *  launcher bubble's handoff (a tapped "challenged you" / result bubble opens straight onto it). */
+  _initChallenges() {
+    let armed = null;
+    import('./alert.js').then((m) => { armed = m.takeCeremony(); }).catch(() => {}).then(() => {
+      if (this.disposed) return;
+      if (armed && this.screen === 'setup') openChallenges(this, { focus: armed });
+    });
+    CH.flushOutbox().catch(() => {});
+    CH.watchMyChallenges((rows) => {
+      this._challengeRows = rows;
+      this._paintChallengeBadge();
+    }).then((stop) => {
+      if (this.disposed) { try { stop(); } catch { /* fine */ } } else this._stopChallengeWatch = stop;
+    });
+  }
+
+  /** The number on the gallery's Challenges button: challenges waiting on you. */
+  _paintChallengeBadge() {
+    const btn = this.root && this.root.querySelector('[data-role="challenges"]');
+    if (!btn) return;
+    const n = CH.groupRows(this._challengeRows || []).toPlay.length;
+    const badge = btn.querySelector('.sk-ch-badge');
+    if (badge) badge.remove();
+    if (n > 0) {
+      const b = document.createElement('span');
+      b.className = 'sk-ch-badge';
+      b.textContent = String(n);
+      b.setAttribute('aria-label', t('ch_badge_aria', { n }));
+      btn.appendChild(b);
+    }
+  }
+
+  /** Start a challenge rack on its own machine, whatever the carousel is showing. */
+  _startChallenge(ch) {
+    if (!ch || !ch.board) return;
+    this.challenge = ch;
+    this._startGame(null, ch.board);
+  }
+
+  /** One line under the machine name on the HUD, so a challenge rack never looks like any other. */
+  _challengeTag() {
+    const ch = this.challenge;
+    if (!ch) return '';
+    const txt = ch.mode === 'answer' ? t('ch_hud_beat', { n: ch.target | 0, name: (ch.them && ch.them.name) || '' })
+      : t('ch_hud_vs', { name: (ch.them && ch.them.name) || '' });
+    return ` <span class="sk-hud-ch">${esc(txt)}</span>`;
+  }
+
+  /** An ANSWER rack ended (finished or walked out of): its score goes in the outbox NOW, before
+   *  any network call, then is sent. See challenge.js's outbox. */
+  _queueChallengeAnswer(score) {
+    const ch = this.challenge;
+    if (!ch || ch.mode !== 'answer') return;
+    try { CH.queueAnswer(ch.id, score | 0); } catch (err) { console.error('[skeeball] could not queue your challenge score', err); }
+    CH.flushOutbox().catch(() => {});
   }
 
   // --- unlocks ---------------------------------------------------------------------------------
@@ -751,9 +823,14 @@ export class SkeeballUI {
                A mid-rack snapshot is still WRITTEN and still restores itself silently on a
                reload (see _mount) - that is the rack surviving an accidental refresh, which is
                not a thing the player ever has to choose. -->
+          <div class="sk-setup-row">
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5c-1.6-1-4.2-1.5-6.2-1.5-1 0-1.8.1-1.8.1v12s.8-.1 1.8-.1c2 0 4.6.5 6.2 1.5 1.6-1 4.2-1.5 6.2-1.5 1 0 1.8.1 1.8.1v-12s-.8-.1-1.8-.1c-2 0-4.6.5-6.2 1.5z"/><path d="M12 6.5V18.6"/></svg>
             ${esc(t('howto'))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block sk-ch-btn" data-role="challenges">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 4 L16 16"/><path d="M19 4 L8 16"/><path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>
+            ${esc(t('ch_btn'))}</button>
+          </div>
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="play"></button>
         </div>
       </div>`;
@@ -879,7 +956,10 @@ export class SkeeballUI {
     // rebind on a swipe. Both re-read the save at click time rather than closing over the one
     // this render saw.
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
+    this.root.querySelector('[data-role="challenges"]').addEventListener('click', () => openChallenges(this));
+    this._paintChallengeBadge();
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
+      this.challenge = null;
       // One button, one meaning: start a rack. There is nothing banked to choose between since
       // the mid-rack snapshot was removed (2026-09-03).
       this._startGame(null);
@@ -1077,7 +1157,7 @@ export class SkeeballUI {
         <h2 class="sk-pause-title">${esc(t('paused'))}</h2>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${esc(t('resume'))}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${esc(t('new_game'))}</button>
+          ${this.challenge && this.challenge.mode === 'answer' ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${esc(t('new_game'))}</button>`}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="gallery">${esc(t('quit'))}</button>
         </div>
       </div>`;
@@ -1109,12 +1189,14 @@ export class SkeeballUI {
     el.querySelector('[data-role="resume"]').addEventListener('click', close);
     // GUARD: this DISCARDS the live rack, exactly as the gallery's New game does with a banked
     // one. Same rule in both places, so the word means one thing wherever a player meets it.
-    el.querySelector('[data-role="new"]').addEventListener('click', () => {
+    const newBtn = el.querySelector('[data-role="new"]');
+    // Not offered while ANSWERING a challenge: one rack, one answer.
+    if (newBtn) newBtn.addEventListener('click', () => {
       close();
       // The live rack is ABANDONED, not binned: it counts, exactly as walking out counts.
       this._abandonRack();
       clearSave();
-      this._startGame(null);
+      this._startGame(null, this.challenge ? this.challenge.board : null);
     });
     // GUARD: this Resume is UN-PAUSE - close the card and carry on with the ball you are
     // holding. It is not the gallery Resume, which was removed 2026-09-03; do not remove this one
@@ -1128,6 +1210,7 @@ export class SkeeballUI {
       close();
       this._abandonRack();
       this.game = null;
+      this.challenge = null;
       this._renderSetup();
     });
     el.addEventListener('click', (e) => { if (e.target === el) close(); });
@@ -1291,7 +1374,7 @@ export class SkeeballUI {
 
   // --- play ------------------------------------------------------------------------------------
 
-  async _startGame(snap) {
+  async _startGame(snap, forceBoard = null) {
     // THE SNAPSHOT'S BOARD, NOT THE CAROUSEL'S (2026-09-01, same day, hotfix).
     //
     // THE BUG THIS FIXES. Matt, with a screenshot of a painted HUD over an empty playfield: "You
@@ -1311,7 +1394,8 @@ export class SkeeballUI {
     //
     // The Resume BUTTON was always guarded (`snap.board === this.settings.board`, see
     // _paintSetupActions); it is the constructor's automatic resume-at-mount that has no such gate.
-    const board = boardById(snap && snap.board ? snap.board : this.settings.board);
+    // `forceBoard` (2026-09-24): a CHALLENGE rack is on the challenge's machine, not the carousel's.
+    const board = boardById(snap && snap.board ? snap.board : forceBoard || this.settings.board);
     // THE ENGINE FIRST (2026-09-01). game.js steps this machine's physics every frame and cannot
     // await, so the rack does not begin until its engine is in hand. Already-loaded resolves on
     // the next microtask, which is the normal case: the gallery warms the selected machine while
@@ -1380,7 +1464,7 @@ export class SkeeballUI {
              hub's floating Hub button. No TOP/BEST/TODAY strip here - those records are painted
              on the machine's own backboard (render.js setScoreboard), never shown twice. -->
         <div class="sk-rack">
-          <div class="sk-hud-name">${esc(this.game.board.name)}</div>
+          <div class="sk-hud-name">${esc(this.game.board.name)}${this._challengeTag()}</div>
           <div class="sk-score" data-role="score" aria-label="${esc(t('hud_score_aria'))}">${this.game.score}</div>
           <div class="sk-pips" data-role="pips" aria-label="${esc(t('hud_ball'))}">${pips}</div>
         </div>
@@ -2136,6 +2220,8 @@ export class SkeeballUI {
     } catch (err) {
       console.error('[skeeball] could not record the abandoned rack', err);
     }
+    // Walking out of an ANSWER rack is quitting it: what was thrown is the answer.
+    this._queueChallengeAnswer(this.game.score);
     try {
       for (const id of this._earnedUnlocks(board.id, this.game.score)) unlockSkeeballBoard(id);
     } catch (err) {
@@ -2171,6 +2257,7 @@ export class SkeeballUI {
       }
       try { syncMyStats(); } catch (err) { console.error('[skeeball] stats sync could not start', err); }
       clearSave();
+      this._queueChallengeAnswer(result.score);
     }
     this.lastScore = { board: board.id, score: result.score };
 
@@ -2192,6 +2279,17 @@ export class SkeeballUI {
     // One pill on the score, strongest claim first: machine record > personal best > best today.
     const pillKey = isTop ? 'over_new_top' : isMine ? 'over_new_mine' : isToday ? 'over_new_today' : '';
     const pill = pillKey ? `<span class="gh-chip gh-chip--accent sk-over-pill">${esc(t(pillKey))}</span>` : '';
+
+    // A CHALLENGE RACK GETS ITS OWN CARD (send it / who won). The rack above was recorded exactly
+    // like any other; only what is said about it differs.
+    if (this.challenge) {
+      const card = showChallengeOver(this, result);
+      this._closeOverlay();
+      this._showWhenQuiet(card);
+      this.overlay = card;
+      if (isMine || isTop) this.renderer.celebrate();
+      return;
+    }
 
     // Your average ON THIS MACHINE: its per-board points / plays, from the store this rack was
     // just written to (a blended cross-machine average reads as wrong the moment two machines
@@ -2263,6 +2361,8 @@ export class SkeeballUI {
   // --- overlays --------------------------------------------------------------------------------
 
   _closeOverlay() {
+    // A challenges sheet has a live list watch to stop; its own close does both.
+    if (this.overlay && typeof this.overlay._skClose === 'function') { this.overlay._skClose(); this.overlay = null; return; }
     if (this.overlay && this.overlay.parentNode) this.overlay.parentNode.removeChild(this.overlay);
     this.overlay = null;
   }
@@ -2309,6 +2409,7 @@ export class SkeeballUI {
     try { this._abandonRack(); } catch (err) { console.error('[skeeball] could not record on leave', err); }
     this._stopHpDemo();
     this._closeOverlay();
+    if (this._stopChallengeWatch) { try { this._stopChallengeWatch(); } catch { /* fine */ } this._stopChallengeWatch = null; }
     this.root.removeEventListener('click', this._onDefTap);
     this.root.removeEventListener('keydown', this._onDefKey);
     window.removeEventListener('pointermove', this._onPointerMove);

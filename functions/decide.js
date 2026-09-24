@@ -144,3 +144,48 @@ export function decideBugReport(report) {
     }),
   };
 }
+
+// --- SKEEBALL CHALLENGES (2026-09-24) ---------------------------------------------------------------
+// Watches skeeChallenges/index/<code>/<id>, the row that lists one challenge from <code>'s side
+// (skeeball/js/challenge.js rowFor). The row carries everything a notification needs - the other
+// person's name, the machine's name, both scores - so no read of the match is needed.
+//   - a NEW row that is your turn   -> "<them> challenged you on <machine>. Beat <n>!"
+//   - a row you SENT turning over   -> "<them> scored <n> on <machine>. You won / They won / Tie."
+// The challenged player finishes the match themselves, so their own row turning over is not news;
+// the sender's new row (sent:true, never yourTurn) is not news either.
+const SKEE_TEXT = {
+  en: {
+    title: 'Skeeball challenge',
+    challenge: (w, m, n) => `${w} challenged you on ${m}. Beat ${n}!`,
+    won: (w, m, n) => `${w} scored ${n} on ${m}. You won!`,
+    lost: (w, m, n) => `${w} scored ${n} on ${m} and beat you.`,
+    draw: (w, m, n) => `${w} scored ${n} on ${m}. It's a tie.`,
+  },
+  es: {
+    title: 'Reto de Skeeball',
+    challenge: (w, m, n) => `${w} te ha retado en ${m}. ¡Supera ${n}!`,
+    won: (w, m, n) => `${w} hizo ${n} en ${m}. ¡Ganaste!`,
+    lost: (w, m, n) => `${w} hizo ${n} en ${m} y te ganó.`,
+    draw: (w, m, n) => `${w} hizo ${n} en ${m}. Empate.`,
+  },
+};
+
+export function decideSkee({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  const who = clean(after.name) || 'Someone';
+  const machine = clean(after.boardName || after.board, 30) || 'Skeeball';
+  const n = Number.isFinite(+after.theirs) ? Math.round(+after.theirs) : 0;
+  const mk = (kind, pick) => ({
+    kind, who,
+    text: (lang) => { const s = SKEE_TEXT[lang] || SKEE_TEXT.en; return { title: s.title, body: pick(s)(who, machine, n) }; },
+  });
+  if (!before) {
+    if (after.sent || !after.yourTurn || after.over) return null;
+    return mk('challenge', (s) => s.challenge);
+  }
+  if (after.over && !before.over && after.sent) {
+    const r = after.result === 'won' ? 'won' : after.result === 'lost' ? 'lost' : 'draw';
+    return mk('over', (s) => s[r]);
+  }
+  return null;
+}

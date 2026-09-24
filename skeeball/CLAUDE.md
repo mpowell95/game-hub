@@ -2250,3 +2250,58 @@ third too big. Rescale before porting it.
 gate is `live.length || used !== _shadowBalls || movers !== _shadowMovers || _celebrateT` rather
 than the shared form, and its teardown disposes through a `disposeMat()` helper. Both are noted in
 the port so a future copy does not paste the wrong line.
+
+## Challenges: "beat my score" (2026-09-24)
+
+Matt: *"what about skeeball? challenge someone to a game for the higher score?"* He accepted all
+five suggested choices ("yes all that sounds good"); two he did not state were picked by the
+session and are Matt's to change: **one rack per challenge (no best-of-3)**, and **the second
+player SEES the score to beat**.
+
+| File | Role |
+|---|---|
+| `js/challenge.js` | the data: `skeeChallenges/games/<id>` + `skeeChallenges/index/<CODE>/<id>`, validation, who won, index rows, expiry, the seen map, the answer outbox. Reuses `hoops4/js/mp.js`'s player-code helpers and `opponentsFrom` rather than copying them |
+| `js/challenge-ui.js` | the screens: the list, pick a person, pick a machine + caption, a challenge to you, a result, and the card at the end of a challenge rack. Also `sharedBoards` / `unlockedFrom` |
+| `js/alert.js` | the launcher's bubble (the hub's `alerts` hook, the same one Connect 4 Hoops uses) |
+| `functions/decide.js` `decideSkee` | the push notification (repo root `functions/`) |
+
+**The flow.** The challenger taps **Challenge** on the gallery, picks a person and a machine, and
+plays a rack; only a FINISHED rack can be sent, from its own game-over card (Send / Try again). The
+other person gets a notification and a launcher bubble, sees the score to beat, and plays ONE rack
+on that machine. Their score ends the match; the challenger gets the result as a notification and a
+bubble. **An unanswered challenge expires after 3 days**, computed on read from `expires` - nothing
+is written and nobody wins.
+
+**Rules that are load-bearing:**
+
+- **Both racks are ordinary racks.** They go through `recordSkeeball` unchanged (bests, averages,
+  goals, unlocks all count). The challenge adds NOTHING to `gamehub.stats` - no counter, no win or
+  loss - so there is no sub-counter three-edit work and nothing on the leaderboard. If Matt later
+  wants challenge wins counted, that IS a new sub-counter and needs item 7's three edits.
+- **Machines offered = `sharedBoards`**: never one in Testing (a testing rack is practice and
+  counts for nothing), and only one BOTH players can play - THE CLASSIC, one released to everyone,
+  or one each of them has EARNED. The other person's unlocks are the union of every synced device
+  with their code (`unlockedFrom`). The answering player then plays that machine even if this
+  device's own store says it is locked; nothing is written to `sk.unlocked`, so no unlock is ever
+  granted by a challenge.
+- **Answering: one rack, one answer, and walking out counts.** The score goes into
+  `gamehub.skeeball.challengeOutbox.v1` SYNCHRONOUSLY the instant the rack ends (`_rackOver`) or is
+  walked out of (`_abandonRack`, which `destroy()` calls), before any network call, then is sent.
+  `queueAnswer` keeps the FIRST score per challenge. The pause card hides **New game** while
+  answering. A rack with nothing thrown posts nothing (same rule as `_abandonRack` already had).
+  Known gap, accepted: killing the app mid-rack (no `destroy()`) posts nothing, so that player can
+  play again. A family game; not worth a server.
+- **Writes are verified by fresh re-read** (rule 6) and a dev origin never writes (the
+  `gamehub.devAllowSync.v1` opt-in, same as everywhere). The end-of-rack card says what actually
+  happened to the score: sent, saved for later, or refused.
+- **Nothing is deleted.** Finished and expired challenges stay in both index rows.
+- **`openChallenges(ui, { seed })` is for local probes only** - Firebase is unreachable from a local
+  browser, so a probe hands it index rows directly. The game never passes it.
+
+**Outstanding (2026-09-24):** the `skeeChallenges` rule must be PUBLISHED by hand, and
+`skeeChallengePush` DEPLOYED by hand (`firebase deploy --only functions`). Root `CLAUDE.md`,
+"Skeeball challenges", tracks both - close them there when done.
+
+Tests: `node test-skee-challenge.mjs` (pure rules, the bubble, shared machines, the push decision,
+the wiring). Verified in a real browser: the gallery still fits one screen at 375x667 and 393x852
+with the new button row; send and answer racks show their HUD tag and their own end card.
