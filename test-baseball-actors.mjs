@@ -434,12 +434,17 @@ if (CLIPS.Bunt && CLIPS.Bunt.keys.length >= 2 && CLIPS.Bunt.loop === true && CLI
     else fail('ui.js _drawStaticField cutaway guard', '_drawStaticField() does not check/return on _cutawayUp');
     if (animateMatch && /this\._cutawayUp *= *true/.test(animateMatch[0])) ok('ui.js: _animateBattedBall() sets _cutawayUp');
     else fail('ui.js _animateBattedBall cutaway flag', '_animateBattedBall() does not set _cutawayUp');
-    // Nowhere else in the file clears it - _returnToPlate() is the only exit.
-    // Two legitimate sites: the constructor's own initial declaration, and _returnToPlate()'s own
-    // clear (already checked above) - never a third, which would be a second exit from the flag.
+    // Batch 3 (_playIntro/_playHalfInningSwap/_playBatterChange) deliberately reused this SAME
+    // flag for their own self-contained cutaways instead of inventing a second guard (batch 3's
+    // own CLAUDE.md entry: "All three new beats reuse `_cutawayUp`... rather than inventing a
+    // second guard"), each pairing its own `= true` with its own `= false` at the end of that one
+    // beat - a legitimate exit, not a stray clear. Five sites total: the constructor's own initial
+    // declaration, _returnToPlate() (the shared clear for the ball-in-play cutaway, batted-ball and
+    // live-play alike), and the three self-paired beats above. A SIXTH would be a real new exit and
+    // should fail this check.
     const clearSites = (uiSrc.match(/_cutawayUp *= *false/g) || []).length;
-    if (clearSites === 2) ok('ui.js: _cutawayUp = false appears in exactly 2 places (constructor init, _returnToPlate)');
-    else fail('ui.js _cutawayUp single exit', `_cutawayUp = false appears in ${clearSites} places, expected 2`);
+    if (clearSites === 5) ok('ui.js: _cutawayUp = false appears in exactly 5 places (constructor init, _returnToPlate, _playIntro, _playHalfInningSwap, _playBatterChange)');
+    else fail('ui.js _cutawayUp single exit', `_cutawayUp = false appears in ${clearSites} places, expected 5`);
 
     // Row 7, restated for R1: there is no picture to preload, so the first wind-up waits for the
     // SCENE's own first rendered frame instead. Bounded to `_stepWindup`'s own body so a comment
@@ -730,6 +735,11 @@ async function runMountInHubHalf() {
 
   await page.evaluate(async () => {
     const root = document.querySelector('.hub-game');
+    // R18 (2026-09-22): the setup screen now lands on the Career tab by default, so a click
+    // straight for '.bb-play-btn' (Quick Play's own button) is a no-op until Quick Play's tab is
+    // chosen first - the same tap test-baseball-device.mjs's own mountInHub() added.
+    const tabBtn = root && root.querySelector('[data-act="tab"][data-tab="quickPlay"]');
+    if (tabBtn) tabBtn.click();
     const btn = root && root.querySelector('.bb-play-btn');
     if (btn) btn.click();
   });
