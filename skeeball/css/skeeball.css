@@ -1545,3 +1545,13 @@
 /* Two buttons share the row, so each gives up some of .gh-btn's side padding to keep its label on
    one line (measured: "How to play" wrapped at 375px with the default 24px). */
 .sk-root .sk-setup-row > .gh-btn { padding: 0 10px; white-space: nowrap; }
+/* The per-game table on a challenge (2026-09-24, series and all-machines). Numbers right-aligned
+   and tabular so the columns read down; a won/lost/tied game carries a mark, never colour alone. */
+.sk-root .sk-ch-table { width: 100%; border-collapse: collapse; font-size: 14px; color: var(--gh-ink); font-variant-numeric: tabular-nums; }
+.sk-root .sk-ch-table th { font-size: 12px; font-weight: 800; color: var(--gh-muted); text-align: right; padding: 4px 6px; }
+.sk-root .sk-ch-table td { text-align: right; padding: 5px 6px; border-top: 1px solid var(--gh-border); white-space: nowrap; }
+.sk-root .sk-ch-table th:nth-child(-n+2), .sk-root .sk-ch-table td:nth-child(-n+2) { text-align: left; }
+.sk-root .sk-ch-table td.sk-ch-tm { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+.sk-root .sk-ch-table .sk-ch-foot td { font-weight: 800; border-top-width: 2px; }
+.sk-root .sk-ch-mark { font-weight: 900; }
+.sk-root .sk-ch-opt { padding: 0 8px; }

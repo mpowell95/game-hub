@@ -1,32 +1,41 @@
-// skeeball/js/challenge.js - SKEEBALL CHALLENGES (2026-09-24). "Beat my score."
+// skeeball/js/challenge.js - SKEEBALL CHALLENGES. "Beat my score."
 //
-// Matt: "what about skeeball? challenge someone to a game for the higher score?" ... "yes all that
-// sounds good." One rack each, the higher score wins:
+// v1 (2026-09-24): one rack each, the higher score wins.
+// v2 (2026-09-24, same day), Matt: "You should not get to try again. It's 1 attempt only. You
+// should be able to challenge it series like in connect 4. There should be an option to do best of
+// individual games and a total best score... I want an option to challenge someone to play all
+// machines too." And: "I want it to send their score as is if they leave in the middle of a game."
 //
-//   1. The challenger picks a person and a machine BOTH of them can already play, and plays a rack.
-//   2. Only a FINISHED rack can be sent. Sending writes the match with the challenger's score in it
-//      and one index row per person - the other person's row is what notifies them.
-//   3. The other person sees the score to beat and plays one rack on that machine. Their score is
-//      posted the moment the rack ends (finished OR walked out of - walking out is quitting, the
-//      same rule as every other rack), and that write ends the match.
-//   4. A challenge nobody answers EXPIRES after 3 days. Expiry is worked out on READ from the
-//      `expires` stamp; nothing is written and nobody wins.
+// A CHALLENGE IS A LIST OF GAMES ("legs"), each one rack on one machine:
+//   1, 3 or 5 games on one machine, or ALL MACHINES (one game on every machine both can play).
+// SCORED one of two ways (only matters for more than one game):
+//   'games'  most games won; a tied game counts for nobody; level on games -> higher total wins
+//   'total'  highest combined score across every game
 //
-// THE SAME SHAPE AS CONNECT 4 HOOPS' TURN-BY-TURN (hoops4/js/mp.js), much smaller, because there
-// are no turns to replay: a match is two numbers. Addressed by PLAYER CODE, never deviceId (several
-// people here have two phones); one index row per person so "what do I have" is ONE read; nothing
-// is ever deleted. Every write is verified by a fresh re-read (THE LAW rule 6).
+// THE ORDER: the challenger plays ALL their games first (stage 'a'). Only then is the challenge
+// delivered: the other person's index row is written, which is what notifies them (stage 'b'),
+// and they get 3 days. They see the score to beat in every game. The match ends the moment it is
+// decided - a best-of that one side can no longer win, or a total the challenged player has
+// already passed - or when every game is played (stage 'over').
 //
-// THE RACKS ARE ORDINARY RACKS. Both of them are recorded through recordSkeeball exactly as any
-// other rack (ui.js), so they count for bests, averages, goals and unlocks. The challenge itself
-// is NOT player history: it adds no counter to gamehub.stats and records no win or loss there.
+// ONE ATTEMPT PER GAME, AND LEAVING COUNTS. A game is committed the moment its rack STARTS: an
+// entry for it goes into this device's outbox (score 0) before the first ball, its running score
+// is saved after every ball, and the entry is finalised when the rack ends, is walked out of, or -
+// if the app was killed mid-rack - the next time Skeeball opens. There is no path back to a game
+// that has an entry, and the server refuses a second score for any game. (Only a SECOND DEVICE
+// that has never heard of the first one's attempt could play the same game again, and its score
+// is refused if the first one's has already landed.)
 //
-// WHAT A PUSH DOES NOT DEPLOY: `skeeChallenges` is a new top-level node and the database root is
-// deny-by-default, so it must be added in the console (database.rules.json, published BY HAND).
-// Until it is, every call here fails softly with reason 'denied' and the screen says so.
+// Same store shape as Connect 4 Hoops' turn-by-turn (hoops4/js/mp.js): addressed by PLAYER CODE,
+// one index row per person, nothing ever deleted, every write verified by a fresh re-read (THE LAW
+// rule 6). The racks themselves are ORDINARY racks, recorded by ui.js through recordSkeeball; the
+// challenge adds nothing to gamehub.stats.
+//
+// `skeeChallenges` must be enumerated in database.rules.json and PUBLISHED by hand; until then
+// every write fails softly with reason 'denied' and the screen says so.
 import { getStatsApp } from '../../js/firebase-boot.js';
-// Player codes, the id minting and the per-CODE opponent list are Connect 4 Hoops' own, reused
-// rather than copied (root CLAUDE.md, "USE WHAT EXISTS"). mp.js is pure at load: no side effects.
+// Player codes, id minting and the per-CODE opponent list are Connect 4 Hoops' own, reused rather
+// than copied (root CLAUDE.md, "USE WHAT EXISTS"). mp.js is pure at load: no side effects.
 import { asCode, myCode, meLabel, mintGameId, opponentsFrom } from '../../hoops4/js/mp.js';
 
 export { asCode, myCode, meLabel, opponentsFrom };
@@ -34,6 +43,9 @@ export { asCode, myCode, meLabel, opponentsFrom };
 export const NODE = 'skeeChallenges';
 export const EXPIRE_MS = 3 * 24 * 60 * 60 * 1000;
 export const MAX_CAPTION = 120;
+export const COUNTS = [1, 3, 5];
+export const SCORINGS = ['games', 'total'];
+export const MAX_LEGS = 12;
 export const OUTBOX_KEY = 'gamehub.skeeball.challengeOutbox.v1';
 export const SEEN_KEY = 'gamehub.skeeball.challengeSeen.v1';
 const ID_RE = /^[a-z0-9]{6,24}$/;
@@ -42,9 +54,11 @@ const MAX_SCORE = 100000;           // a ceiling against garbage, not a rule of 
 
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 const score = (v) => {
+  if (v == null || v === '') return null;
   const n = Number.isFinite(+v) ? Math.round(+v) : NaN;
   return Number.isFinite(n) && n >= 0 && n <= MAX_SCORE ? n : null;
 };
+const other = (side) => (side === 'a' ? 'b' : 'a');
 
 /** Trim a caption to what a screen can hold. Never throws. */
 export function cleanCaption(v) {
@@ -53,10 +67,48 @@ export function cleanCaption(v) {
 
 // --- pure rules -------------------------------------------------------------------------------
 
-/** 'a' | 'b' | null for a tie. `a` is the challenger. */
-export function winnerOf(aScore, bScore) {
-  const a = ms(aScore); const b = ms(bScore);
-  return a > b ? 'a' : b > a ? 'b' : null;
+/** One side's scores as an array the length of the legs, null where not played. */
+export function scoresOf(game, side) {
+  const n = game && Array.isArray(game.legs) ? game.legs.length : 0;
+  const src = (game && game[side] && game[side].s) || {};
+  return Array.from({ length: n }, (_, i) => score(src[i]));
+}
+
+/** Where the match stands. Only games BOTH sides have played count for wins. */
+export function tally(game) {
+  const A = scoresOf(game, 'a'); const B = scoresOf(game, 'b');
+  const out = { n: A.length, aWins: 0, bWins: 0, aTotal: 0, bTotal: 0, both: 0 };
+  for (let i = 0; i < A.length; i++) {
+    if (A[i] != null) out.aTotal += A[i];
+    if (B[i] != null) out.bTotal += B[i];
+    if (A[i] != null && B[i] != null) {
+      out.both++;
+      if (A[i] > B[i]) out.aWins++; else if (B[i] > A[i]) out.bWins++;
+    }
+  }
+  return out;
+}
+
+/**
+ * Is it decided, and who took it? PURE. Called once the challenger has played everything, so every
+ * game still unplayed is the challenged player's to play. Returns { done, winner: 'a'|'b'|null }.
+ */
+export function decide(game) {
+  const t = tally(game);
+  const left = t.n - t.both;
+  if (game.scoring === 'total') {
+    // The challenger's total is fixed and a rack never scores below 0, so once the challenged
+    // player has passed it nothing left can change the answer.
+    if (t.bTotal > t.aTotal) return { done: true, winner: 'b' };
+    if (left > 0) return { done: false, winner: null };
+    return { done: true, winner: t.aTotal > t.bTotal ? 'a' : null };
+  }
+  if (t.bWins > t.aWins + left) return { done: true, winner: 'b' };
+  if (t.aWins > t.bWins + left) return { done: true, winner: 'a' };
+  if (left > 0) return { done: false, winner: null };
+  if (t.aWins !== t.bWins) return { done: true, winner: t.aWins > t.bWins ? 'a' : 'b' };
+  // Level on games: the higher total takes it, and only an exact tie on both is a draw.
+  return { done: true, winner: t.aTotal > t.bTotal ? 'a' : t.bTotal > t.aTotal ? 'b' : null };
 }
 
 /** 'won' | 'lost' | 'draw' | null from one side's point of view. */
@@ -67,48 +119,102 @@ export function resultFor(game, side) {
   return w === side ? 'won' : 'lost';
 }
 
-/** Has this unanswered challenge run out of time? A finished one never expires. */
+/** The next game this side has to play, or -1. `played(i)` can veto a leg (this device's outbox). */
+export function nextLeg(game, side, played = () => false) {
+  if (!game || game.over || game.stage !== side) return -1;
+  const mine = scoresOf(game, side);
+  for (let i = 0; i < mine.length; i++) if (mine[i] == null && !played(i)) return i;
+  return -1;
+}
+
+/** Has this unanswered challenge run out of time? Only a delivered one has a clock. */
 export function isExpired(x, now = Date.now()) {
   return !!x && !x.over && ms(x.expires) > 0 && now >= ms(x.expires);
 }
 
+/** Build the legs for a new challenge. `count` is 1/3/5 on one board, or `all` for every board. */
+export function makeLegs({ count = 1, all = false, board = null, boards = [] } = {}) {
+  const pick = (b) => ({ board: String(b.id), boardName: String(b.name || '').slice(0, 40) });
+  if (all) return boards.slice(0, MAX_LEGS).map(pick);
+  const b = boards.find((x) => x.id === board) || boards[0];
+  if (!b) return [];
+  const n = COUNTS.includes(+count) ? +count : 1;
+  return Array.from({ length: n }, () => pick(b));
+}
+
 /**
  * WHOLE-DOCUMENT REJECTION, the same call hoops4/js/mp.js made: a match that does not validate is
- * not shown at all rather than half-shown. Every field added later must be OPTIONAL here, or every
- * document already stored becomes unreadable.
+ * not shown at all rather than half-shown. Every field added later must be OPTIONAL here.
+ *
+ * A v1 document (one game, `a.score` / `b.score`, written for a few hours on 2026-09-24) is READ
+ * as a one-game v2 challenge. Nothing stored is rewritten.
  */
 export function validateChallenge(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const a = asCode(raw.a && raw.a.code);
   const b = asCode(raw.b && raw.b.code);
   if (!a || !b || a === b) return null;
-  const board = String(raw.board || '');
-  if (!BOARD_RE.test(board)) return null;
-  const aScore = score(raw.a.score);
-  if (aScore == null) return null;             // a challenge is only ever sent with a score in it
-  const bScore = raw.b.score == null ? null : score(raw.b.score);
-  if (raw.b.score != null && bScore == null) return null;
+  const who = (x) => ({ code: asCode(x.code), name: String(x.name || ''), emoji: String(x.emoji || '🙂') });
+  const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
+  const created = ms(raw.created);
   let over = null;
   if (raw.over && typeof raw.over === 'object') {
     const w = raw.over.winner;
     if (w !== 'a' && w !== 'b' && w !== null && w !== undefined) return null;
     over = { winner: w == null ? null : w, at: ms(raw.over.at) };
   }
-  const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
-  const created = ms(raw.created);
+  const base = {
+    id, by: asCode(raw.by) || a, created, updated: ms(raw.updated) || created,
+    caption: cleanCaption(raw.caption), over,
+  };
+
+  if (raw.v !== 2) {
+    // v1: one game.
+    if (!BOARD_RE.test(String(raw.board || ''))) return null;
+    const as = score(raw.a.score);
+    if (as == null) return null;
+    const bs = raw.b.score == null ? null : score(raw.b.score);
+    if (raw.b.score != null && bs == null) return null;
+    return {
+      ...base, v: 2, scoring: 'games', all: false,
+      legs: [{ board: String(raw.board), boardName: String(raw.boardName || '').slice(0, 40) }],
+      expires: ms(raw.expires) || (created ? created + EXPIRE_MS : 0),
+      stage: over ? 'over' : 'b',
+      a: { ...who(raw.a), s: { 0: as } },
+      b: { ...who(raw.b), s: bs == null ? {} : { 0: bs } },
+    };
+  }
+
+  const srcLegs = Array.isArray(raw.legs) ? raw.legs
+    : (raw.legs && typeof raw.legs === 'object') ? Object.keys(raw.legs).sort((x, y) => x - y).map((k) => raw.legs[k]) : [];
+  if (!srcLegs.length || srcLegs.length > MAX_LEGS) return null;
+  const legs = [];
+  for (const l of srcLegs) {
+    if (!l || !BOARD_RE.test(String(l.board || ''))) return null;
+    legs.push({ board: String(l.board), boardName: String(l.boardName || '').slice(0, 40) });
+  }
+  const sides = {};
+  for (const side of ['a', 'b']) {
+    const src = (raw[side].s && typeof raw[side].s === 'object') ? raw[side].s : {};
+    const s = {};
+    for (const k of Object.keys(src)) {
+      const i = +k;
+      if (!Number.isInteger(i) || i < 0 || i >= legs.length) return null;
+      if (src[k] == null) continue;
+      const v = score(src[k]);
+      if (v == null) return null;
+      s[i] = v;
+    }
+    sides[side] = { ...who(raw[side]), s };
+  }
+  const stage = ['a', 'b', 'over'].includes(raw.stage) ? raw.stage : (over ? 'over' : 'a');
   return {
-    v: 1,
-    id,
-    by: asCode(raw.by) || a,
-    created,
-    updated: ms(raw.updated) || created,
-    expires: ms(raw.expires) || (created ? created + EXPIRE_MS : 0),
-    board,
-    boardName: String(raw.boardName || '').slice(0, 40),
-    caption: cleanCaption(raw.caption),
-    a: { code: a, name: String(raw.a.name || ''), emoji: String(raw.a.emoji || '🙂'), score: aScore, at: ms(raw.a.at) },
-    b: { code: b, name: String(raw.b.name || ''), emoji: String(raw.b.emoji || '🙂'), score: bScore, at: ms(raw.b.at) },
-    over,
+    ...base, v: 2,
+    scoring: SCORINGS.includes(raw.scoring) ? raw.scoring : 'games',
+    all: !!raw.all, legs,
+    expires: ms(raw.expires),
+    stage: over ? 'over' : stage,
+    a: sides.a, b: sides.b,
   };
 }
 
@@ -121,28 +227,38 @@ export function sideOf(game, code) {
   return null;
 }
 
-/** The index row one side gets. Everything a list or a notification needs, so neither reads the match. */
+/** The index row one side gets: everything a list or a notification needs, without the match. */
 export function rowFor(game, side) {
+  const t = tally(game);
   const mine = side === 'a' ? game.a : game.b;
   const them = side === 'a' ? game.b : game.a;
+  const my = scoresOf(game, side).filter((x) => x != null).length;
   return {
     with: them.code,
     name: them.name,
     emoji: them.emoji,
-    board: game.board,
-    boardName: game.boardName || '',
+    n: game.legs.length,
+    all: !!game.all,
+    scoring: game.scoring,
+    board: game.legs[0].board,
+    boardName: game.all ? '' : game.legs[0].boardName,
     sent: side === 'a',
+    stage: game.stage,
     updated: game.updated,
-    expires: game.expires,
-    yourTurn: !game.over && side === 'b',
+    expires: game.expires || 0,
+    yourTurn: !game.over && game.stage === side,
     over: !!game.over,
-    mine: mine.score == null ? null : mine.score,
-    theirs: them.score == null ? null : them.score,
+    played: my,
+    // Totals and games won, from this row's side. `theirs` is what a single game has to beat.
+    mine: side === 'a' ? t.aTotal : t.bTotal,
+    theirs: side === 'a' ? t.bTotal : t.aTotal,
+    myWins: side === 'a' ? t.aWins : t.bWins,
+    theirWins: side === 'a' ? t.bWins : t.aWins,
     ...(game.over ? { result: resultFor(game, side) } : {}),
   };
 }
 
-/** One index map, normalised and sorted: waiting on you first, then waiting on them, then done. */
+/** One index map, normalised and sorted: your turn first, then waiting on them, then done. */
 export function rowsFromIndex(val) {
   if (!val || typeof val !== 'object') return [];
   const rows = [];
@@ -155,6 +271,9 @@ export function rowsFromIndex(val) {
       with: code,
       name: String(r.name || ''),
       emoji: String(r.emoji || '🙂'),
+      n: Math.max(1, ms(r.n) || 1),
+      all: !!r.all,
+      scoring: SCORINGS.includes(r.scoring) ? r.scoring : 'games',
       board: BOARD_RE.test(String(r.board || '')) ? String(r.board) : '',
       boardName: String(r.boardName || ''),
       sent: !!r.sent,
@@ -162,8 +281,11 @@ export function rowsFromIndex(val) {
       expires: ms(r.expires),
       yourTurn: !!r.yourTurn,
       over: !!r.over,
+      played: ms(r.played),
       mine: r.mine == null ? null : score(r.mine),
       theirs: r.theirs == null ? null : score(r.theirs),
+      myWins: ms(r.myWins),
+      theirWins: ms(r.theirWins),
       result: ['won', 'lost', 'draw'].includes(r.result) ? r.result : null,
     });
   }
@@ -201,15 +323,14 @@ export function readSeen() {
 }
 export function markSeen(id, updated) {
   if (!id) return;
-  const map = readSeen();
+  let map = readSeen();
   map[id] = Math.max(ms(map[id]), ms(updated) || Date.now());
-  let keys = Object.keys(map);
+  const keys = Object.keys(map);
   if (keys.length > MAX_SEEN) {
-    keys = keys.sort((x, y) => map[y] - map[x]).slice(0, MAX_SEEN);
+    const keep = keys.sort((x, y) => map[y] - map[x]).slice(0, MAX_SEEN);
     const trimmed = {};
-    for (const k of keys) trimmed[k] = map[k];
-    try { localStorage.setItem(SEEN_KEY, JSON.stringify(trimmed)); } catch { /* shows again */ }
-    return;
+    for (const k of keep) trimmed[k] = map[k];
+    map = trimmed;
   }
   try { localStorage.setItem(SEEN_KEY, JSON.stringify(map)); } catch { /* shows again */ }
 }
@@ -290,83 +411,101 @@ export async function readChallenge(id) {
 
 // --- writing ----------------------------------------------------------------------------------
 
+async function writeRows(api, db, game) {
+  await api.update(api.ref(db, `${NODE}/index/${game.a.code}/${game.id}`), rowFor(game, 'a'));
+  // The challenged player hears nothing until the challenger has played every game: writing
+  // their row IS the delivery, and it is what the notification watches.
+  if (game.stage !== 'a') await api.update(api.ref(db, `${NODE}/index/${game.b.code}/${game.id}`), rowFor(game, 'b'));
+}
+
 /**
- * SEND A CHALLENGE, carrying the challenger's finished rack. `them` is {code, name, emoji}.
+ * START A CHALLENGE, before the challenger's first rack. `them` is {code, name, emoji}; `legs`
+ * from makeLegs. Only the challenger's own row is written.
  * Returns { ok:true, game } or { ok:false, reason }.
  */
-export async function sendChallenge({ them, board, boardName = '', score: sc, caption = '' } = {}) {
+export async function createChallenge({ them, legs, scoring = 'games', all = false, caption = '' } = {}) {
   const me = myCode();
   const to = asCode(them && them.code);
-  const s = score(sc);
   if (!me) return { ok: false, reason: 'no-player-code' };
   if (!to || to === me) return { ok: false, reason: 'bad-opponent' };
-  if (!BOARD_RE.test(String(board || '')) || s == null) return { ok: false, reason: 'bad-challenge' };
-  if (!writesAllowed('sendChallenge')) return { ok: false, reason: 'dev-origin-blocked' };
+  if (!Array.isArray(legs) || !legs.length || legs.length > MAX_LEGS
+    || !legs.every((l) => l && BOARD_RE.test(String(l.board || '')))) return { ok: false, reason: 'bad-challenge' };
+  if (!writesAllowed('createChallenge')) return { ok: false, reason: 'dev-origin-blocked' };
   const mine = meLabel();
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, by: me, created: now, updated: now, expires: now + EXPIRE_MS,
-    board: String(board), boardName: String(boardName || '').slice(0, 40), caption: cleanCaption(caption),
-    a: { code: me, name: mine.name, emoji: mine.emoji, score: s, at: now },
+    v: 2, id, by: me, created: now, updated: now, expires: 0,
+    scoring: SCORINGS.includes(scoring) ? scoring : 'games', all: !!all,
+    legs: legs.map((l) => ({ board: String(l.board), boardName: String(l.boardName || '').slice(0, 40) })),
+    caption: cleanCaption(caption),
+    a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String((them && them.name) || ''), emoji: String((them && them.emoji) || '🙂') },
-    over: null,
+    stage: 'a', over: null,
   };
   try {
     const boot = await ready();
     if (!boot) return { ok: false, reason: 'offline' };
     const { db, api } = boot;
     await api.set(api.ref(db, `${NODE}/games/${id}`), doc);
-    // VERIFY BY FRESH RE-READ before either index points at it (rule 6).
     const game = await readChallenge(id);
     if (!game) {
       console.error(`[skeeball] challenge VERIFY FAILED for ${NODE}/games/${id} - nothing landed.`);
       return { ok: false, reason: 'did-not-land' };
     }
-    // Our row first: if theirs then fails, the sender can still see what they sent.
-    await api.update(api.ref(db, `${NODE}/index/${game.a.code}/${id}`), rowFor(game, 'a'));
-    await api.update(api.ref(db, `${NODE}/index/${game.b.code}/${id}`), rowFor(game, 'b'));
-    markSeen(id, game.updated);              // our own challenge is never news to us
+    await writeRows(api, db, game);
+    markSeen(id, game.updated);
     return { ok: true, game };
   } catch (err) {
-    console.error('[skeeball] could not send the challenge', err);
+    console.error('[skeeball] could not start the challenge', err);
     return { ok: false, reason: reasonOf(err) };
   }
 }
 
 /**
- * ANSWER ONE: post the challenged player's score and end the match. Refused (not retryable) when
- * it is not theirs, already answered, or the score is not a score.
+ * POST ONE GAME'S SCORE. The FIRST score for a game stands: a second one is refused (not
+ * retryable). The challenger's last game delivers the challenge; each of the challenged player's
+ * games is checked against `decide`, which ends the match the moment it is settled.
  * Returns { ok:true, game } or { ok:false, reason, retryable }.
  */
-export async function answerChallenge(id, sc) {
+export async function postLeg(id, side, leg, sc) {
   const me = myCode();
   const s = score(sc);
   if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
-  if (s == null) return { ok: false, reason: 'bad-score', retryable: false };
-  if (!writesAllowed('answerChallenge')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
+  if (s == null || (side !== 'a' && side !== 'b')) return { ok: false, reason: 'bad-score', retryable: false };
+  if (!writesAllowed('postLeg')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
   try {
     const boot = await ready();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
     const fresh = await readChallenge(id);
     if (!fresh) return { ok: false, reason: 'not-found', retryable: true };
-    if (sideOf(fresh, me) !== 'b') return { ok: false, reason: 'not-yours', retryable: false };
-    if (fresh.over || fresh.b.score != null) return { ok: false, reason: 'already-over', retryable: false };
+    // RETRYABLE, deliberately: on a phone two players share, the outbox can hold the OTHER
+    // player's score while this one is signed in. It must wait for them, never be dropped.
+    if (sideOf(fresh, me) !== side) return { ok: false, reason: 'not-yours', retryable: true };
+    if (fresh.over) return { ok: false, reason: 'already-over', retryable: false };
+    if (fresh.stage !== side) return { ok: false, reason: 'not-your-turn', retryable: false };
+    if (!Number.isInteger(leg) || leg < 0 || leg >= fresh.legs.length) return { ok: false, reason: 'bad-leg', retryable: false };
+    if (scoresOf(fresh, side)[leg] != null) return { ok: false, reason: 'already-played', retryable: false };
+
     const now = Date.now();
-    await api.update(api.ref(db, `${NODE}/games/${id}`), {
-      updated: now,
-      'b/score': s, 'b/at': now,
-      over: { winner: winnerOf(fresh.a.score, s), at: now },
-    });
+    const next = { ...fresh, updated: now, [side]: { ...fresh[side], s: { ...fresh[side].s, [leg]: s } } };
+    const patch = { updated: now, [`${side}/s/${leg}`]: s };
+    if (side === 'a' && scoresOf(next, 'a').every((x) => x != null)) {
+      patch.stage = 'b';
+      patch.expires = now + EXPIRE_MS;
+    } else if (side === 'b') {
+      const d = decide(next);
+      if (d.done) { patch.stage = 'over'; patch.over = { winner: d.winner, at: now }; }
+    }
+    await api.update(api.ref(db, `${NODE}/games/${id}`), patch);
     const back = await readChallenge(id);
-    if (!back || !back.over || back.b.score !== s) {
-      console.error(`[skeeball] answer VERIFY FAILED for ${NODE}/games/${id}.`);
+    if (!back || scoresOf(back, side)[leg] !== s) {
+      console.error(`[skeeball] score VERIFY FAILED for ${NODE}/games/${id} game ${leg + 1}.`);
       return { ok: false, reason: 'did-not-land', retryable: true };
     }
-    await api.update(api.ref(db, `${NODE}/index/${back.a.code}/${id}`), rowFor(back, 'a'));
-    await api.update(api.ref(db, `${NODE}/index/${back.b.code}/${id}`), rowFor(back, 'b'));
-    markSeen(id, back.updated);
+    await writeRows(api, db, back);
+    markSeen(id, back.updated);            // our own write is never news to us
     return { ok: true, game: back };
   } catch (err) {
     console.error('[skeeball] could not post your score', err);
@@ -375,49 +514,87 @@ export async function answerChallenge(id, sc) {
   }
 }
 
-// --- the outbox: an answered rack is never lost to a bad signal --------------------------------
-// The score is written HERE, synchronously, the instant the rack ends - before any network call -
-// so walking out of the game, losing signal or closing the app cannot drop it. It is sent from
-// here and removed only once the server has it (or has refused it for good).
+// --- the outbox: every game ever started on this device -----------------------------------------
+// [{ id, side, leg, score, final, at }]. An entry is written when a rack STARTS (score 0), updated
+// after every ball, and finalised when the rack ends or is left. Only final entries are sent; an
+// entry leaves once the server has the score, or has refused it for good. While an entry exists,
+// that game cannot be started again on this device (legPlayed) - one attempt.
 export function readOutbox() {
   try {
     const raw = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
-    return Array.isArray(raw) ? raw.filter((x) => x && ID_RE.test(String(x.id || '')) && score(x.score) != null) : [];
+    return Array.isArray(raw) ? raw.filter((x) => x && ID_RE.test(String(x.id || ''))
+      && (x.side === 'a' || x.side === 'b') && Number.isInteger(x.leg) && score(x.score) != null) : [];
   } catch { return []; }
 }
 function writeOutbox(list) {
-  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(list.slice(-20))); }
+  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(list.slice(-40))); }
   catch (err) { console.error('[skeeball] could not save your challenge score on this device', err); }
 }
+// Keyed by SIDE as well: one phone shared by two players (a family phone) can hold both people's
+// games of the same challenge, and neither may block or overwrite the other's.
+const same = (x, id, side, leg) => x.id === id && x.side === side && x.leg === leg;
 
-/** Queue one answer. Keeps the FIRST score queued for a challenge: one rack, one answer. */
-export function queueAnswer(id, sc) {
-  const s = score(sc);
-  if (!ID_RE.test(String(id || '')) || s == null) return false;
+/** Has this side's game of this challenge been started on this device (and not yet confirmed sent)? */
+export function legPlayed(id, side, leg) { return readOutbox().some((x) => same(x, id, side, leg)); }
+
+/** Commit a game BEFORE its first ball. Returns false if it was already started: one attempt. */
+export function beginLeg(id, side, leg) {
+  if (!ID_RE.test(String(id || '')) || (side !== 'a' && side !== 'b') || !Number.isInteger(leg)) return false;
   const list = readOutbox();
-  if (list.some((x) => x.id === id)) return false;
-  list.push({ id, score: s, at: Date.now() });
+  if (list.some((x) => same(x, id, side, leg))) return false;
+  list.push({ id, side, leg, score: 0, final: false, at: Date.now() });
   writeOutbox(list);
   return true;
 }
 
-/** Is an answer to this challenge already waiting on this device? */
-export function isQueued(id) { return readOutbox().some((x) => x.id === id); }
+/** The running score, saved after every ball, so a killed app still counts what was thrown. */
+export function saveLeg(id, side, leg, sc, final = false) {
+  const s = score(sc);
+  if (s == null) return false;
+  const list = readOutbox();
+  const e = list.find((x) => same(x, id, side, leg));
+  if (!e || e.final) return false;
+  e.score = s;
+  if (final) e.final = true;
+  writeOutbox(list);
+  return true;
+}
+
+/** Any game left unfinished by a closed app is over: finalise it at the score it had. */
+export function finalizeStale() {
+  const list = readOutbox();
+  let n = 0;
+  for (const e of list) if (!e.final) { e.final = true; n++; }
+  if (n) writeOutbox(list);
+  return n;
+}
+
+/** This device's unsent scores laid over a match, so the screens show what was actually played. */
+export function withLocal(game) {
+  if (!game) return game;
+  const g = { ...game, a: { ...game.a, s: { ...game.a.s } }, b: { ...game.b, s: { ...game.b.s } } };
+  for (const e of readOutbox()) {
+    if (e.id !== game.id || !g[e.side] || e.leg >= g.legs.length) continue;
+    if (g[e.side].s[e.leg] == null) g[e.side].s[e.leg] = e.score;
+  }
+  return g;
+}
 
 let flushing = null;
-/** Send everything queued. Returns { sent: [{id, game}], refused: [{id, reason}], failed }. Never throws; one at a time. */
+/** Send every FINAL entry, oldest first. Returns { sent:[{id,leg,game}], refused:[{id,leg,reason}], failed }. */
 export function flushOutbox() {
   if (flushing) return flushing;
   flushing = (async () => {
     const sent = []; const refused = []; let failed = 0;
-    for (const item of readOutbox()) {
-      const res = await answerChallenge(item.id, item.score);
-      if (res.ok) sent.push({ id: item.id, game: res.game });
+    const todo = readOutbox().filter((x) => x.final).sort((x, y) => (x.at - y.at) || (x.leg - y.leg));
+    for (const item of todo) {
+      const res = await postLeg(item.id, item.side, item.leg, item.score);
+      if (res.ok) sent.push({ id: item.id, side: item.side, leg: item.leg, game: res.game });
       else if (!res.retryable) {
-        console.warn(`[skeeball] queued answer to ${item.id} refused: ${res.reason}`);
-        refused.push({ id: item.id, reason: res.reason });
+        console.warn(`[skeeball] challenge ${item.id} game ${item.leg + 1} refused: ${res.reason}`);
+        refused.push({ id: item.id, side: item.side, leg: item.leg, reason: res.reason });
       } else { failed++; continue; }
-      writeOutbox(readOutbox().filter((x) => x.id !== item.id));
+      writeOutbox(readOutbox().filter((x) => !same(x, item.id, item.side, item.leg)));
     }
     return { sent, refused, failed };
   })().finally(() => { flushing = null; });

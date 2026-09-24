@@ -2251,57 +2251,75 @@ gate is `live.length || used !== _shadowBalls || movers !== _shadowMovers || _ce
 than the shared form, and its teardown disposes through a `disposeMat()` helper. Both are noted in
 the port so a future copy does not paste the wrong line.
 
-## Challenges: "beat my score" (2026-09-24)
+## Challenges: "beat my score" (2026-09-24, v2 the same day)
 
-Matt: *"what about skeeball? challenge someone to a game for the higher score?"* He accepted all
-five suggested choices ("yes all that sounds good"); two he did not state were picked by the
-session and are Matt's to change: **one rack per challenge (no best-of-3)**, and **the second
-player SEES the score to beat**.
+Matt: *"what about skeeball? challenge someone to a game for the higher score?"* v1 shipped as one
+rack each with a Send / Try again card. Matt, the same day: *"You should not get to try again.
+It's 1 attempt only. You should be able to challenge it series like in connect 4. There should be
+an option to do best of individual games and a total best score... I want an option to challenge
+someone to play all machines too."* And, on the old doc claiming both that leaving sends the score
+AND that a force-closed app could replay: *"Those both can't be true. I want it to send their score
+as is if they leave in the middle of a game."* v2 is that.
 
 | File | Role |
 |---|---|
-| `js/challenge.js` | the data: `skeeChallenges/games/<id>` + `skeeChallenges/index/<CODE>/<id>`, validation, who won, index rows, expiry, the seen map, the answer outbox. Reuses `hoops4/js/mp.js`'s player-code helpers and `opponentsFrom` rather than copying them |
-| `js/challenge-ui.js` | the screens: the list, pick a person, pick a machine + caption, a challenge to you, a result, and the card at the end of a challenge rack. Also `sharedBoards` / `unlockedFrom` |
-| `js/alert.js` | the launcher's bubble (the hub's `alerts` hook, the same one Connect 4 Hoops uses) |
+| `js/challenge.js` | the data: `skeeChallenges/games/<id>` + `skeeChallenges/index/<CODE>/<id>`, validation (v1 documents still read), `decide` (who won, and when it is settled), index rows, expiry, the seen map, the per-game outbox. Reuses `hoops4/js/mp.js`'s player-code helpers and `opponentsFrom` |
+| `js/challenge-ui.js` | the screens: list, pick a person, format + winner + machine + caption, one match's table, and the card after each game. Also `sharedBoards` / `unlockedFrom` / `formatLine` |
+| `js/alert.js` | the launcher's bubble (the hub's `alerts` hook, shared with Connect 4 Hoops) |
 | `functions/decide.js` `decideSkee` | the push notification (repo root `functions/`) |
 
-**The flow.** The challenger taps **Challenge** on the gallery, picks a person and a machine, and
-plays a rack; only a FINISHED rack can be sent, from its own game-over card (Send / Try again). The
-other person gets a notification and a launcher bubble, sees the score to beat, and plays ONE rack
-on that machine. Their score ends the match; the challenger gets the result as a notification and a
-bubble. **An unanswered challenge expires after 3 days**, computed on read from `expires` - nothing
-is written and nobody wins.
+**Formats.** 1, 3 or 5 games on one machine, or **All machines** (one game on every machine both
+players can play; the chip only shows when there are two or more). With more than one game the
+challenger picks the **winner rule**: **Most wins** (a tied game counts for nobody; level on games
+goes to the higher total; level on both is a draw) or **Total score**.
 
-**Rules that are load-bearing:**
+**Order.** The challenger plays ALL their games first (`stage: 'a'`); only then is the other
+person's index row written, which is the delivery and what notifies them (`stage: 'b'`,
+`expires` = 3 days from then). They see every score to beat. `decide()` ends the match the moment
+it is settled: a best-of one side can no longer win, or a total the challenged player has already
+passed (a rack never scores below 0). The session chose challenger-first over alternating game by
+game; Matt may want it the other way.
 
-- **Both racks are ordinary racks.** They go through `recordSkeeball` unchanged (bests, averages,
-  goals, unlocks all count). The challenge adds NOTHING to `gamehub.stats` - no counter, no win or
-  loss - so there is no sub-counter three-edit work and nothing on the leaderboard. If Matt later
-  wants challenge wins counted, that IS a new sub-counter and needs item 7's three edits.
-- **Machines offered = `sharedBoards`**: never one in Testing (a testing rack is practice and
-  counts for nothing), and only one BOTH players can play - THE CLASSIC, one released to everyone,
-  or one each of them has EARNED. The other person's unlocks are the union of every synced device
-  with their code (`unlockedFrom`). The answering player then plays that machine even if this
-  device's own store says it is locked; nothing is written to `sk.unlocked`, so no unlock is ever
-  granted by a challenge.
-- **Answering: one rack, one answer, and walking out counts.** The score goes into
-  `gamehub.skeeball.challengeOutbox.v1` SYNCHRONOUSLY the instant the rack ends (`_rackOver`) or is
-  walked out of (`_abandonRack`, which `destroy()` calls), before any network call, then is sent.
-  `queueAnswer` keeps the FIRST score per challenge. The pause card hides **New game** while
-  answering. A rack with nothing thrown posts nothing (same rule as `_abandonRack` already had).
-  Known gap, accepted: killing the app mid-rack (no `destroy()`) posts nothing, so that player can
-  play again. A family game; not worth a server.
-- **Writes are verified by fresh re-read** (rule 6) and a dev origin never writes (the
-  `gamehub.devAllowSync.v1` opt-in, same as everywhere). The end-of-rack card says what actually
-  happened to the score: sent, saved for later, or refused.
+**ONE ATTEMPT, AND LEAVING COUNTS - three layers, all load-bearing:**
+
+1. **Committed before the first ball.** `_startGameInner` calls `CH.beginLeg` (after the engine has
+   loaded, so a failed load cannot cost the attempt). An outbox entry (score 0) now exists, and
+   `beginLeg` refuses a game that already has one.
+2. **Saved after every ball** (`_saveChallengeProgress` right after `ballDone`'s `_paintHud`).
+3. **Finalised** when the rack ends (`_rackOver`), is walked out of (`_abandonRack` - BEFORE its
+   nothing-thrown return, so Play-then-leave counts 0), or - if the app was killed and no
+   `destroy()` ran - by `CH.finalizeStale()` on the next mount, at the last saved score.
+
+The server refuses a second score for any game (`already-played`). The outbox is keyed by
+challenge + SIDE + game, so a family phone two players share never lets one block or drop the
+other's score (`not-yours` is retryable for exactly that reason). The pause card offers no New game
+during a challenge game, and nothing offers Try again. Known and accepted: a SECOND device that
+never heard of the first device's attempt could start the same game; whichever score lands first
+stands.
+
+**Other rules:**
+
+- **Racks are ordinary racks** (`recordSkeeball` unchanged: bests, goals, unlocks). The challenge
+  adds nothing to `gamehub.stats` - no counter, no win or loss. Counting challenge wins would be a
+  new sub-counter and item 7's three edits.
+- **Machines offered = `sharedBoards`**: never one in Testing, only one both can play (THE CLASSIC,
+  released to everyone, or earned by each - the other person's unlocks are the union of their synced
+  devices). Playing a challenge game never writes `sk.unlocked`.
+- **Writes verified by fresh re-read** (rule 6); a dev origin never writes (`gamehub.devAllowSync.v1`).
 - **Nothing is deleted.** Finished and expired challenges stay in both index rows.
-- **`openChallenges(ui, { seed })` is for local probes only** - Firebase is unreachable from a local
-  browser, so a probe hands it index rows directly. The game never passes it.
+- **`openChallenges(ui, { seed, seedGame })` is for local probes only.**
+
+**Verified end to end in a real browser against an in-memory stand-in for Firebase** (the firebase
+SDK URLs routed to a fake module; the container cannot reach Firebase): a 3-game most-wins
+challenge played through, delivered only after the challenger's third game, won 2-0 early by the
+challenged player; an all-machines total-score challenge across THE CLASSIC and HOT SHOT; walking
+out with nothing thrown posts 0 and delivers; a force-closed game posts its last saved score on the
+next open. That run also caught two real bugs before shipping (one internal flag doing two jobs
+made every challenge "All machines"; a shared phone could block the other player's game).
 
 **Outstanding (2026-09-24):** the `skeeChallenges` rule must be PUBLISHED by hand, and
 `skeeChallengePush` DEPLOYED by hand (`firebase deploy --only functions`). Root `CLAUDE.md`,
 "Skeeball challenges", tracks both - close them there when done.
 
-Tests: `node test-skee-challenge.mjs` (pure rules, the bubble, shared machines, the push decision,
-the wiring). Verified in a real browser: the gallery still fits one screen at 375x667 and 393x852
-with the new button row; send and answer racks show their HUD tag and their own end card.
+Tests: `node test-skee-challenge.mjs` (70: the rules, one attempt, the bubble, shared machines, the
+push decision, the hub's pills, the wiring).

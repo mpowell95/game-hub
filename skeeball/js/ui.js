@@ -418,10 +418,9 @@ export class SkeeballUI {
 
     this.disposed = false;
     this._startToken = 0;              // which _startGame call is still the current one
-    // THE CHALLENGE THIS RACK IS FOR, or null for an ordinary rack. Set by _startChallenge, read
-    // by _rackOver/_abandonRack, cleared by the ordinary Play button and the challenge card.
-    //   { mode:'send',   them, board, caption }          the challenger's rack
-    //   { mode:'answer', id, them, board, target }        answering one: its score is posted
+    // THE CHALLENGE GAME THIS RACK IS, or null for an ordinary rack: { id, side, leg, game, board }.
+    // Set by _startChallengeLeg, read by _startGameInner / ballDone / _rackOver / _abandonRack,
+    // cleared by the ordinary Play button and the challenge card.
     this.challenge = null;
     this._challengeRows = [];
     this._stopChallengeWatch = null;
@@ -472,6 +471,10 @@ export class SkeeballUI {
       if (this.disposed) return;
       if (armed && this.screen === 'setup') openChallenges(this, { focus: armed });
     });
+    // A challenge game left unfinished by a closed app (no destroy() ever ran) is OVER, at the
+    // score it had after its last ball: one attempt, and leaving counts. Safe here because nothing
+    // can be mid-rack at mount.
+    try { CH.finalizeStale(); } catch (err) { console.error('[skeeball] could not finalise an unfinished challenge game', err); }
     CH.flushOutbox().catch(() => {});
     CH.watchMyChallenges((rows) => {
       this._challengeRows = rows;
@@ -497,28 +500,58 @@ export class SkeeballUI {
     }
   }
 
-  /** Start a challenge rack on its own machine, whatever the carousel is showing. */
-  _startChallenge(ch) {
-    if (!ch || !ch.board) return;
-    this.challenge = ch;
-    this._startGame(null, ch.board);
+  /** Start one game of a challenge on its own machine, whatever the carousel is showing.
+   *  `ctx` = { id, side, leg, game }. The game is COMMITTED in _startGameInner, once its engine
+   *  has loaded - an engine that fails to load must not cost the player their one attempt. */
+  _startChallengeLeg(ctx) {
+    const leg = ctx && ctx.game && ctx.game.legs[ctx.leg];
+    if (!leg) return;
+    this.challenge = { ...ctx, board: leg.board };
+    this._startGame(null, leg.board);
   }
 
-  /** One line under the machine name on the HUD, so a challenge rack never looks like any other. */
+  /** One line beside the machine name on the HUD, so a challenge game never looks like any other. */
   _challengeTag() {
     const ch = this.challenge;
-    if (!ch) return '';
-    const txt = ch.mode === 'answer' ? t('ch_hud_beat', { n: ch.target | 0, name: (ch.them && ch.them.name) || '' })
-      : t('ch_hud_vs', { name: (ch.them && ch.them.name) || '' });
+    if (!ch || !ch.game) return '';
+    const g = ch.game;
+    const n = g.legs.length;
+    const them = ch.side === 'a' ? g.b : g.a;
+    const target = CH.scoresOf(g, ch.side === 'a' ? 'b' : 'a')[ch.leg];
+    // "Beat 320" when a single number is the target (one game, or most-wins); otherwise who it is.
+    const beat = ch.side === 'b' && target != null && (n === 1 || g.scoring !== 'total');
+    let txt = beat ? t('ch_hud_beat', { n: target }) : t('ch_hud_vs', { name: them.name || '' });
+    if (n > 1) txt += ` · ${ch.leg + 1}/${n}`;
     return ` <span class="sk-hud-ch">${esc(txt)}</span>`;
   }
 
-  /** An ANSWER rack ended (finished or walked out of): its score goes in the outbox NOW, before
-   *  any network call, then is sent. See challenge.js's outbox. */
-  _queueChallengeAnswer(score) {
+  /** ONE ATTEMPT: a challenge game is committed before its first ball. If this device has already
+   *  started it, it is not started again - the player lands on that challenge instead. Returns
+   *  whether the rack may go ahead. */
+  _commitChallengeLeg() {
     const ch = this.challenge;
-    if (!ch || ch.mode !== 'answer') return;
-    try { CH.queueAnswer(ch.id, score | 0); } catch (err) { console.error('[skeeball] could not queue your challenge score', err); }
+    if (CH.beginLeg(ch.id, ch.side, ch.leg)) return true;
+    console.warn(`[skeeball] challenge ${ch.id} game ${ch.leg + 1} was already played on this device`);
+    this.challenge = null;
+    this._renderSetup();
+    openChallenges(this, { open: ch.id });
+    return false;
+  }
+
+  /** The running score of a challenge game, saved after every ball: if the app is killed now, the
+   *  next mount sends exactly this (CH.finalizeStale). */
+  _saveChallengeProgress() {
+    const ch = this.challenge;
+    if (!ch || !this.game) return;
+    try { CH.saveLeg(ch.id, ch.side, ch.leg, this.game.score | 0); } catch { /* the final save below still runs */ }
+  }
+
+  /** A challenge game ended (finished OR walked out of): its score is FINAL in the outbox NOW,
+   *  before any network call, then sent. One attempt; leaving counts. See challenge.js. */
+  _finishChallengeLeg(score) {
+    const ch = this.challenge;
+    if (!ch) return;
+    try { CH.saveLeg(ch.id, ch.side, ch.leg, score | 0, true); } catch (err) { console.error('[skeeball] could not save your challenge score', err); }
     CH.flushOutbox().catch(() => {});
   }
 
@@ -1157,7 +1190,7 @@ export class SkeeballUI {
         <h2 class="sk-pause-title">${esc(t('paused'))}</h2>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${esc(t('resume'))}</button>
-          ${this.challenge && this.challenge.mode === 'answer' ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${esc(t('new_game'))}</button>`}
+          ${this.challenge ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${esc(t('new_game'))}</button>`}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="gallery">${esc(t('quit'))}</button>
         </div>
       </div>`;
@@ -1190,13 +1223,13 @@ export class SkeeballUI {
     // GUARD: this DISCARDS the live rack, exactly as the gallery's New game does with a banked
     // one. Same rule in both places, so the word means one thing wherever a player meets it.
     const newBtn = el.querySelector('[data-role="new"]');
-    // Not offered while ANSWERING a challenge: one rack, one answer.
+    // Not offered during a challenge game: one attempt.
     if (newBtn) newBtn.addEventListener('click', () => {
       close();
       // The live rack is ABANDONED, not binned: it counts, exactly as walking out counts.
       this._abandonRack();
       clearSave();
-      this._startGame(null, this.challenge ? this.challenge.board : null);
+      this._startGame(null);
     });
     // GUARD: this Resume is UN-PAUSE - close the card and carry on with the ball you are
     // holding. It is not the gallery Resume, which was removed 2026-09-03; do not remove this one
@@ -1432,6 +1465,7 @@ export class SkeeballUI {
   /** The body of _startGame. Split out purely so the caller above can catch a mid-mount throw;
    *  see its comment. Never call this directly - it assumes the engine is already loaded. */
   _startGameInner(snap, board) {
+    if (this.challenge && !this._commitChallengeLeg()) return;   // one attempt: see there
     this.screen = 'play';
     this.recorded = false;
     // A queued gallery picture must not build a WebGL scene on top of a live rack's frame budget.
@@ -1746,6 +1780,7 @@ export class SkeeballUI {
             if (gold) Rr.celebrate();
           }
           this._paintHud();
+          this._saveChallengeProgress();
           if (this._lastThrow) {
             const ts = this._throwStats || {};
             const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -2209,6 +2244,9 @@ export class SkeeballUI {
    *  which is why _rackOver checks the same flag and why this sets it. */
   _abandonRack() {
     if (!this.game || this.game.over || this.recorded) return;
+    // Walking out of a CHALLENGE game ends it at the score it has, even with nothing thrown: the
+    // game was committed when it started (one attempt).
+    this._finishChallengeLeg(this.game.score);
     // Nothing thrown yet is not a rack. Recording it would put an empty 0 in the player's history
     // for opening a machine and changing their mind.
     if (!this.game.thrown) { this.recorded = true; return; }
@@ -2220,8 +2258,6 @@ export class SkeeballUI {
     } catch (err) {
       console.error('[skeeball] could not record the abandoned rack', err);
     }
-    // Walking out of an ANSWER rack is quitting it: what was thrown is the answer.
-    this._queueChallengeAnswer(this.game.score);
     try {
       for (const id of this._earnedUnlocks(board.id, this.game.score)) unlockSkeeballBoard(id);
     } catch (err) {
@@ -2257,7 +2293,7 @@ export class SkeeballUI {
       }
       try { syncMyStats(); } catch (err) { console.error('[skeeball] stats sync could not start', err); }
       clearSave();
-      this._queueChallengeAnswer(result.score);
+      this._finishChallengeLeg(result.score);
     }
     this.lastScore = { board: board.id, score: result.score };
 
