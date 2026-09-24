@@ -92,3 +92,45 @@ export function decide({ code, gameId, before, after, game }) {
   }
   return mk('turn', (s) => s.turn(who));
 }
+
+
+// --- MESSAGES (2026-09-24) ------------------------------------------------------------------------
+// Watches messages/index/<code>/<other>, the row that lists the conversation in <code>'s inbox.
+// A send `update`s BOTH people's rows with {at, from, preview, name, emoji} - `name`/`emoji` are
+// always the OTHER person as seen from that row - so the row is everything a notification needs.
+// Notify only when the row's `at` moved forward AND the newest message is FROM the other person:
+// the sender's own row moves too, and a read stamp (`seenAt`) or a hide (`hiddenAt`) moves nothing.
+const MSG_TEXT = {
+  en: { title: (w) => `Message from ${w}` },
+  es: { title: (w) => `Mensaje de ${w}` },
+};
+
+export function decideMessage({ code, other, before, after }) {
+  if (!after || !code || !other) return null;
+  if (after.from !== other) return null;                         // our own send
+  const was = before && Number.isFinite(+before.at) ? +before.at : 0;
+  if (!(+after.at > was)) return null;                           // nothing new arrived
+  const who = clean(after.name) || 'Someone';
+  const preview = String(after.preview == null ? '' : after.preview).slice(0, 140);
+  return {
+    kind: 'message', who,
+    text: (lang) => ({ title: (MSG_TEXT[lang] || MSG_TEXT.en).title(who), body: preview }),
+  };
+}
+
+// --- BUG REPORTS, to the admins (2026-09-24) -------------------------------------------------------
+// Matt: "and bug reports for me". A report is written in ONE set (js/bug-report.js), so its creation
+// carries the whole record. Only a short line goes in the notification - never the environment.
+export function decideBugReport(report) {
+  if (!report || typeof report !== 'object') return null;
+  const who = clean(report.reporter && report.reporter.name) || 'Someone';
+  const game = clean(report.gameTitle || report.game || '', 30);
+  const desc = String(report.description || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return {
+    kind: 'bug', who,
+    text: () => ({
+      title: game ? `Bug report: ${game}` : 'Bug report',
+      body: desc ? `${who}: ${desc}` : `${who} sent a report`,
+    }),
+  };
+}

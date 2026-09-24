@@ -15,6 +15,8 @@ import { Match, RED, YELLOW } from './game.js';
 import { Cpu } from './cpu.js';
 
 const t = makeT(STRINGS);
+// Other players' names go into innerHTML (the notify prompt): escaped.
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const SETTINGS_KEY = 'gamehub.hoops4.v1';
 const CSS_MARK = 'data-hoops4-css';
 
@@ -534,7 +536,55 @@ class Hoops4 {
       return;
     }
     mp.game = r.game;
-    if (!m.over) { mp.sent = true; this.toast(t('mpSent')); }
+    if (!m.over) { mp.sent = true; this.toast(t('mpSent')); this._askPush(mp); }
+  }
+
+  /**
+   * "WANT TO GET NOTIFIED WHEN <THEM> PLAYS BACK?" (2026-09-24). Matt: "I challenge someone, they
+   * click on it and it says i challenged them, they accept and play, then it asks 'want to get
+   * notified when MattyIce plays back?'" Asked right after a move of yours is SENT, because that is
+   * the moment you start waiting on them - it covers the challenger's first shot too. Only while
+   * notifications are OFF on this device (never when on, blocked, unsupported, or an iPhone Safari
+   * tab where the button could not work), and once per match, so "Not now" is respected. The yes
+   * tap IS the permission request, which iOS insists on.
+   */
+  async _askPush(mp) {
+    if (!mp || mp.kind !== 'async' || mp.review) return;
+    const KEY = 'gamehub.hoops4.pushAsk.v1';
+    let asked = [];
+    try { const v = JSON.parse(localStorage.getItem(KEY) || '[]'); if (Array.isArray(v)) asked = v; } catch { /* none */ }
+    if (asked.includes(mp.id)) return;
+    let P;
+    try { P = await import('../../js/push.js'); } catch { return; }
+    const st = await P.pushState().catch(() => 'unsupported');
+    if (st !== 'off' || this.disposed || this.mp !== mp) return;
+    try { localStorage.setItem(KEY, JSON.stringify(asked.concat(mp.id).slice(-50))); } catch { /* asks again: harmless */ }
+    const who = (mp.MP.otherLabel(mp.game, mp.MP.myCode()) || {}).name || '?';
+    const ov = document.createElement('div');
+    ov.className = 'gh-overlay';
+    ov.innerHTML = `
+      <div class="gh-modal" role="dialog" aria-modal="true" aria-label="${esc(t('pushAskQ', { who }))}">
+        <h2 class="gh-modal__title">🔔 ${esc(t('pushAskQ', { who }))}</h2>
+        <p class="h4-mp-note" data-role="err" hidden></p>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--block" data-role="no">${esc(t('pushAskNo'))}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(t('pushAskYes'))}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(ov);
+    const close = () => ov.remove();
+    this.on(ov.querySelector('[data-role="no"]'), 'click', close);
+    this.on(ov.querySelector('[data-role="yes"]'), 'click', async () => {
+      const yes = ov.querySelector('[data-role="yes"]');
+      yes.disabled = true;
+      const res = await P.enablePush().catch(() => ({ ok: false, reason: 'subscribe-failed' }));
+      if (res.ok) { close(); this.toast(t('pushDone')); return; }
+      if (res.reason === 'dismissed') { close(); return; }
+      yes.disabled = false;
+      const err = ov.querySelector('[data-role="err"]');
+      err.hidden = false;
+      err.textContent = res.reason === 'denied' ? t('pushDenied') : t('pushFailed');
+    });
   }
 
   // --- quick chat inside a match (2026-09-22) ------------------------------------------------

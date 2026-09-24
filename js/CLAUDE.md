@@ -1157,9 +1157,10 @@ soft delete (rule 5).
   SHELL asset the launcher loads on every start just to paint the badge and importing the canonical
   copy meant dragging the whole leaderboard overlay onto that path. The shared module has no imports
   of its own, so that objection is gone and there is nothing left to keep in step by hand.
-- **No push notifications for Messages yet.** The badge appears when a player opens the app. The
-  server to send from now exists (2026-09-23: `functions/`, `js/push.js`, root `CLAUDE.md` "Push
-  notifications"); Messages needs only its own trigger in `functions/index.js`.
+- **Push notifications since 2026-09-24** (`messagePush`, `functions/index.js`): it watches the
+  recipient's `messages/index/<me>/<them>` row, which a send already `update`s with the sender's
+  name and a preview, and notifies only when `at` moves forward with `from` = them. Read stamps and
+  hides never notify. Root `CLAUDE.md`, "Push notifications".
 
 ### Privacy: this is the one node with real rules on it
 

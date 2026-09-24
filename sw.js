@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v949';
+const CACHE = 'game-hub-v950';
 
 const ASSETS = [
   './',
@@ -852,7 +852,7 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './hoops4/index.html': 'dce91b13bd',
   './hoops4/css/hoops4.css': '2d377cc049',
-  './hoops4/js/ui.js': '1004c43650',
+  './hoops4/js/ui.js': 'cab88e72ac',
   './hoops4/js/boarddef.js': '3824cfe605',
   './hoops4/js/machine.js': '19b59b7c18',
   './hoops4/js/physics.js': '6d54965f70',
@@ -862,7 +862,7 @@ const REST_MANIFEST = {
   './hoops4/js/mp.js': 'b28d567c20',
   './hoops4/js/mp-ui.js': '9ec72ddd4b',
   './hoops4/js/alert.js': 'e112852c78',
-  './hoops4/js/strings.js': '3767f6be7b',
+  './hoops4/js/strings.js': 'e668fcc242',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/boards.js': '8cf226684b',
@@ -1246,7 +1246,7 @@ self.addEventListener('push', (event) => {
     // One notification per match: a second turn in the same game replaces the first.
     tag: String(d.tag || 'game-hub'),
     renotify: true,
-    data: { url: String(d.url || './'), game: String(d.game || '') },
+    data: { url: String(d.url || './'), game: String(d.game || ''), with: String(d.with || ''), name: String(d.name || '') },
   };
   event.waitUntil(self.registration.showNotification(title, opts));
 });
@@ -1267,7 +1267,7 @@ self.addEventListener('notificationclick', (event) => {
     const hub = wins.find((w) => bare(w.url) === scope || bare(w.url) === scope + 'index.html');
     if (hub) {
       try { await hub.focus(); } catch { /* iOS may refuse; the message still lands */ }
-      hub.postMessage({ type: 'OPEN_GAME', game: data.game || '' });
+      hub.postMessage({ type: 'OPEN_GAME', game: data.game || '', with: data.with || '', name: data.name || '' });
       return;
     }
     const ours = wins.find((w) => w.url.startsWith(scope));
