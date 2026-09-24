@@ -747,7 +747,8 @@ Matt: *"are you sure there's no way to have real notifications or something clos
 `bugReportPush` (a new `bugReports/<id>`, to every code whose uid is in `admins/`, found through
 `msgAuth/<uid>` - no code is hardcoded; a tap opens the bug inbox). **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
-for it.
+for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
+`hoopsTurnPush` updated).
 
 - **Three pieces.** `js/push.js` subscribes a device (permission is asked INSIDE the tap - iOS only
   prompts for a user gesture) and stores it at `pushSubs/<PLAYER CODE>/<key>`; **`functions/`** is a
