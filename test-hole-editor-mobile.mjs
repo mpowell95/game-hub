@@ -239,7 +239,9 @@ await tapEl('#he-compare-close');
 // A brand-new phone: the link opens the walkthrough first (first-visit redirect), on the setup screen.
 const ctx2 = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
 const p2 = await ctx2.newPage();
-const edges2 = await iphoneEdges(await ctx2.newCDPSession(p2));
+const cdp2 = await ctx2.newCDPSession(p2);
+const edges2 = await iphoneEdges(cdp2);
+const real = [];
 const TOP2 = edges2 ? SAFE_TOP : 0;
 p2.on('pageerror', (e) => errors.push('walkthrough: ' + e.message.split('\n')[0]));
 await p2.goto(`${URL}?course=new`, { waitUntil: 'networkidle' });
@@ -258,11 +260,32 @@ for (let g = 0; g < 30; g++) {
   if (/\bclick/i.test(await p2.locator('.tr-tip').textContent())) click.push(n);
   if (n === 1) { await p2.fill('#he-setup-name', 'Practice'); await p2.waitForTimeout(1200); continue; }
   if (n === 3) { const r = await p2.locator('#he-setup-go').boundingBox(); await p2.touchscreen.tap(r.x + r.width / 2, r.y + r.height / 2); await p2.waitForTimeout(1200); continue; }
+  // Steps 5, 6 and 8 DONE FOR REAL (2026-09-24): walked with Skip, the "drag the bunker" pop-up
+  // sat right on the bunker and nothing noticed. Each must move on by itself once it is done.
+  const tap2 = async (sel) => { const r = await p2.locator(sel).first().boundingBox(); await p2.touchscreen.tap(r.x + r.width / 2, r.y + r.height / 2); await p2.waitForTimeout(500); };
+  const stepNow = () => p2.locator('.tr-tip .tr-n').textContent().then((t) => parseInt(t, 10)).catch(() => 0);
+  const scr2 = (x, y) => p2.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const r = c.el.getBoundingClientRect(); const q = c.toScreen(x, y); return { x: r.x + q.x, y: r.y + q.y }; }, [x, y]);
+  if (n === 5) { await tap2('[data-ptab="sand"]'); await tap2('#he-tray [data-item="bunker-fairway"]'); await p2.waitForTimeout(900); real.push(['5 picking the bunker tile moves the tour on', (await stepNow()) === 6]); continue; }
+  if (n === 6) {
+    const sp = await p2.evaluate(() => window.__he.editorCanvas.spec.path);
+    const q = await scr2((sp[0][0] + sp[sp.length - 1][0]) / 2 + 18, (sp[0][1] + sp[sp.length - 1][1]) / 2);
+    await p2.touchscreen.tap(q.x, q.y); await p2.waitForTimeout(900); real.push(['6 tapping the hole places a bunker and moves on', (await stepNow()) === 7]); continue;
+  }
+  if (n === 8) {
+    const c = await p2.evaluate(async () => { const m = await import('/hole-editor/js/canvas.js'); const cv = window.__he.editorCanvas; const o = m.listObjects(cv.spec, cv.stations, cv.length).filter((x) => x.group === 'bunkers').pop(); return o && o.center; });
+    const q = await scr2(c[0], c[1]);
+    real.push(['8 the pop-up does not cover the bunker it asks you to drag', await p2.evaluate(([x, y]) => document.elementFromPoint(x, y) && document.elementFromPoint(x, y).id === 'he-canvas', [q.x, q.y])]);
+    const touch2 = (type, pts) => cdp2.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], i) => ({ x, y, id: i, radiusX: 4, radiusY: 4, force: 1 })) });
+    await touch2('touchStart', [[q.x, q.y]]); for (let i = 1; i <= 8; i++) { await touch2('touchMove', [[q.x + i * 3, q.y - i * 6]]); await p2.waitForTimeout(20); } await touch2('touchEnd', []);
+    await p2.waitForTimeout(900); real.push(['8 dragging the bunker moves the tour on', (await stepNow()) === 9]); continue;
+  }
   const btn = p2.locator('.tr-tip [data-go="next"]');
   if (!(await btn.count())) break;
   const r = await btn.boundingBox(); await p2.touchscreen.tap(r.x + r.width / 2, r.y + r.height / 2); await p2.waitForTimeout(350);
 }
 ok('the walkthrough reaches its last step on a phone', seen.length >= 20 && !!(await p2.$('.tr-tip [data-go="start"]')), `steps seen: ${seen.join(',')}`);
+for (const [name, pass] of real) ok('walkthrough, done for real: step ' + name, pass);
+ok('walkthrough: steps 5, 6 and 8 were all done for real', real.length === 4, `checked ${real.length}`);
 ok('every pop-up stays on the screen', off.length === 0, `off screen: ${off.join(',')}`);
 ok('no pop-up says "click" on a phone', click.length === 0, `steps: ${click.join(',')}`);
 await ctx2.close();

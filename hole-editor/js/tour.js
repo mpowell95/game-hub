@@ -8,6 +8,12 @@
 // have a Next button. Nothing here changes the editor; it only reads `window.__he` and the DOM.
 
 /** env(safe-area-inset-top) in px: the notch / Dynamic Island band of an installed iPhone app. */
+/** env(safe-area-inset-bottom) in px: the home bar of an installed iPhone app. */
+function safeBottom() {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-bottom, 0px);visibility:hidden;pointer-events:none';
+  document.body.appendChild(d); const h = d.offsetHeight || 0; d.remove(); return h;
+}
 function safeTop() {
   const d = document.createElement('div');
   d.style.cssText = 'position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top, 0px);visibility:hidden;pointer-events:none';
@@ -233,10 +239,29 @@ function place() {
   // top of a target taller than half the screen (the map, a sheet).
   if (PHONE()) {
     x = Math.max(12, Math.min(innerWidth - tw - 12, r.left + r.width / 2 - tw / 2));
-    const sTop = safeTop();   // an iPhone's notch area (0 elsewhere): the top bar sits below it
-    if (r.height > innerHeight * 0.45) { side = 'inside'; y = Math.max(64 + sTop, r.top + 12); }
-    else if ((st.side === 'above' || r.top > innerHeight / 2) && r.top - gap - th > 8 + sTop) { side = 'above'; y = r.top - gap - th; }
-    else { side = 'below'; y = Math.min(innerHeight - th - 8, r.bottom + gap); }
+    // (2026-09-24, walked on an emulated iPhone) ABOVE or BELOW whenever there is room, so the
+    // pop-up never covers what it is talking about (it hid the dogleg buttons, the green's shape
+    // picker and two of the six terrains); ACROSS THE TOP of the target only when neither fits.
+    // Room is measured between the notch and the home bar, never the raw screen edges.
+    const sTop = safeTop(); const sBot = safeBottom();
+    const minY = 8 + sTop; const maxY = innerHeight - sBot - 8;
+    const fitsAbove = r.top - gap - th >= minY; const fitsBelow = r.bottom + gap + th <= maxY;
+    if (st.side === 'above' && fitsAbove) { side = 'above'; y = r.top - gap - th; }
+    else if (r.top > innerHeight / 2 && fitsAbove) { side = 'above'; y = r.top - gap - th; }
+    else if (fitsBelow) { side = 'below'; y = r.bottom + gap; }
+    else if (fitsAbove) { side = 'above'; y = r.top - gap - th; }
+    else {
+      side = 'inside'; y = Math.max(64 + sTop, r.top + 12);
+      // On the MAP, keep off the thing just placed or selected: "drag the bunker" sat right on
+      // top of the bunker. Drop to just above the bottom bar instead.
+      const sp = t.id === 'he-canvas' && he() && he().editorCanvas && he().editorCanvas.selectionScreenPoint && he().editorCanvas.selectionScreenPoint();
+      if (sp && sp.y > y - 24 && sp.y < y + th + 24) {
+        const bar = document.getElementById('he-pbar'); const barTop = bar ? bar.getBoundingClientRect().top : maxY;
+        const low = Math.min(barTop, maxY) - 12 - th;
+        if (!(sp.y > low - 24 && sp.y < low + th + 24)) y = low;
+      }
+    }
+    y = Math.max(minY, Math.min(maxY - th, y));
     tip.style.setProperty('--ax', `${Math.max(12, Math.min(tw - 34, r.left + r.width / 2 - x - 11))}px`);
   }
   tip.dataset.side = side === 'inside' ? '' : side;
