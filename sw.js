@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v966';
+const CACHE = 'game-hub-v967';
 
 const ASSETS = [
   './',
@@ -855,7 +855,7 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './hoops4/index.html': 'dce91b13bd',
   './hoops4/css/hoops4.css': 'e01defe088',
-  './hoops4/js/ui.js': '1b15271976',
+  './hoops4/js/ui.js': '6cef346291',
   './hoops4/js/boarddef.js': '732dc4111d',
   './hoops4/js/machine.js': '2113d0c58e',
   './hoops4/js/physics.js': '15a93405fd',
@@ -864,7 +864,7 @@ const REST_MANIFEST = {
   './hoops4/js/cpu.js': 'f1b8a3e68b',
   './hoops4/js/mp.js': '37e999d186',
   './hoops4/js/mp-ui.js': 'dd22db658a',
-  './hoops4/js/alert.js': '148eaff72f',
+  './hoops4/js/alert.js': '26e25c8d5e',
   './hoops4/js/strings.js': '14406c4362',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
@@ -1263,7 +1263,16 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
-  const url = new URL(data.url || './', self.registration.scope).href;
+  // WHICH MATCH (2026-09-24). Matt: "when i click on the connect 4 hoops notification, it takes me
+  // to the setup screen... It should take me directly to that game." The payload never named the
+  // match, but the Cloud Function has always TAGGED it `hoops-<gameId>` (skeeball `skee-<id>`), so
+  // the id is read from there - no function redeploy needed. `data.match` wins if a later payload
+  // carries it. The hub validates it before use.
+  const tag = String(event.notification.tag || '');
+  const match = String(data.match || (tag.startsWith('hoops-') ? tag.slice(6) : ''));
+  const u0 = new URL(data.url || './', self.registration.scope);
+  if (match) u0.searchParams.set('match', match);
+  const url = u0.href;
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const scope = self.registration.scope;
@@ -1273,7 +1282,7 @@ self.addEventListener('notificationclick', (event) => {
     const hub = wins.find((w) => bare(w.url) === scope || bare(w.url) === scope + 'index.html');
     if (hub) {
       try { await hub.focus(); } catch { /* iOS may refuse; the message still lands */ }
-      hub.postMessage({ type: 'OPEN_GAME', game: data.game || '', with: data.with || '', name: data.name || '' });
+      hub.postMessage({ type: 'OPEN_GAME', game: data.game || '', with: data.with || '', name: data.name || '', match });
       return;
     }
     const ours = wins.find((w) => w.url.startsWith(scope));

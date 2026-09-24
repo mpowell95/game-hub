@@ -802,6 +802,12 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
   `sendTo` skips a device stamped within 75 s (`isActive` in `functions/decide.js`). Decided on the
   SERVER on purpose: Safari revokes a site whose push shows nothing, so `sw.js` must show every push
   it gets. Other devices of the same player still get it. Needs the functions redeploy to be live.
+- **A Hoops tap opens THAT match** (2026-09-24, Matt: "it takes me to the setup screen... It should
+  take me directly to that game"). The payload never named the match, but the function tags every
+  Hoops push `hoops-<gameId>`, so `sw.js` reads the id from the tag and adds `&match=` (or `match`
+  on the `OPEN_GAME` message); `js/hub.js _openPushedGame` hands it to the game's alerts module
+  (`armOpen` in `hoops4/js/alert.js`) and the game opens that board with no card. No function
+  redeploy was needed. A game without `armOpen` falls back to the old bubble-or-launch path.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
 

@@ -1782,3 +1782,12 @@ before this was a misreading of the ask.
   is the point of the walls, and a reason to look here first if Matt ever says 1 and 7 are too easy.
 - The black arrow shapes he circled beside the outer hoops are the rail CHAMFERS (the 45-degree
   ramps in the shelf/rail joint) seen from the play camera.
+
+## A notification tap opens that match (2026-09-24)
+
+Matt: *"when i click on the connect 4 hoops notification, it takes me to the setup screen of connect
+4 hoops. It should take me directly to that game."* A tap only reached a match when a launcher
+bubble was up for it. Now `sw.js` takes the match id from the notification's tag (`hoops-<id>`),
+`js/hub.js` calls `alert.js armOpen(id)` (the ceremony handoff key, kind `'open'`), and
+`ui.js maybeCeremony` opens that board directly - no card; a finished match opens as its
+read-only review (Game Over card), and is marked result-seen so the away-popup does not repeat it.

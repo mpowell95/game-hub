@@ -1161,9 +1161,9 @@ class Hub {
     try {
       const u = new URL(location.href);
       id = u.searchParams.get('open');
-      extra = { with: u.searchParams.get('with') || '' };
+      extra = { with: u.searchParams.get('with') || '', match: u.searchParams.get('match') || '' };
       if (id) {
-        u.searchParams.delete('open'); u.searchParams.delete('with');
+        u.searchParams.delete('open'); u.searchParams.delete('with'); u.searchParams.delete('match');
         history.replaceState(history.state, '', u.pathname + u.search + u.hash);
       }
     } catch { return; }
@@ -1197,6 +1197,25 @@ class Hub {
         const tm = setTimeout(() => { stop(); resolve(); }, 6000);
       });
       if (this.current || !this.games.some((x) => x.id === id)) return;
+    }
+    // STRAIGHT INTO THE MATCH THE NOTIFICATION IS ABOUT (2026-09-24), when it names one and the
+    // game's alerts module can open a match directly (hoops4 `armOpen`). Before this a tap only
+    // reached the match when a launcher bubble happened to be up for it; otherwise it landed on the
+    // game's setup screen. Matt: "It should take me directly to that game."
+    const match = /^[A-Za-z0-9_-]{4,40}$/.test(String(extra.match || '')) ? String(extra.match) : '';
+    if (match && typeof g.alerts === 'function') {
+      try {
+        const mod = await g.alerts();
+        if (typeof mod.armOpen === 'function' && !this.current) {
+          mod.armOpen(match);
+          // Any bubble for this game is answered by opening it, so it goes, like a bubble tap.
+          const st = this._alertFor(id);
+          if (st && st.alert.kind !== 'over') this._dismissGameAlert(id);
+          this.launch(id);
+          return;
+        }
+      } catch (err) { console.warn('[hub] could not open the notified match', err); }
+      if (this.current) return;
     }
     await this._checkGameAlerts();
     if (this.current) return;
