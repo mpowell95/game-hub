@@ -751,6 +751,8 @@ class Hoops4 {
       this.fit();
       this.rend.setGrid(this.match.cells(), null);
       this.rend.setBallColor(this.match.turn === RED ? BOARD.look.red : BOARD.look.yellow);
+      // Multiplayer only: the machine wears YOUR colour for the whole match (render.setPlayerTint).
+      if (this.mp) this.rend.setPlayerTint(this.myPlayer === RED ? BOARD.look.red : BOARD.look.yellow);
       this.offViewport = onViewportResize(() => this.fit());
       this.startLoop();
       this.maybeCpu();
@@ -1036,9 +1038,13 @@ class Hoops4 {
     const leg = this.root.querySelector('.h4-leg');
     const g = this.mp && this.mp.kind === 'async' ? this.mp.game : null;
     if (leg) {
-      const on = !!(g && g.series > 1);
-      leg.hidden = !on;
-      leg.textContent = on ? t('gameOf', { n: g.seriesNo, m: g.series }) : '';
+      // YOUR COLOUR, IN WORDS, in any multiplayer match (2026-09-24) - the machine's tint says it
+      // in colour (render.setPlayerTint), this says it for a red/green colourblind player.
+      const bits = [];
+      if (this.mp) bits.push(this.myPlayer === RED ? t('youAreRed') : t('youAreYellow'));
+      if (g && g.series > 1) bits.push(t('gameOf', { n: g.seriesNo, m: g.series }));
+      leg.hidden = !bits.length;
+      leg.textContent = bits.join(' \u00b7 ');
     }
   }
 
@@ -1082,7 +1088,8 @@ class Hoops4 {
       const div = G.aimDiv > 0 ? G.aimDiv : 0.38;
       const raw = Math.max(-1, Math.min(1, Math.atan2(last.x - first.x, first.y - last.y) / div));
       const curve = G.aimCurve > 0 ? G.aimCurve : 2;
-      const aim = Math.sign(raw) * Math.pow(Math.abs(raw), curve);
+      const reach = G.aimReach > 0 ? G.aimReach : 1;   // boarddef: the outer columns' sweet spot
+      const aim = Math.sign(raw) * Math.min(reach, Math.pow(Math.abs(raw), curve));
       this.shoot(power, aim);
     };
     this.on(pad, 'touchstart', start, { passive: true });

@@ -282,6 +282,16 @@ export const BOARD = {
     // shaping and touches no physics. The columns sit at aim -0.37 .. +0.38 on the raked
     // cabinet, so 1.00 spends about +/-22 degrees of thumb arc reaching them end to end.
     aimDiv: 1.00,
+    // THE SWIPE STOPS AT THE OUTER COLUMNS (2026-09-24). Matt: "it's pretty difficult to hit the
+    // outer columns." Measured (60 perfect shots a column, reference/hoops/probe-aim.mjs): column 7
+    // scored 38% against 60-73% everywhere else, because just past the outer hoops the throw meets
+    // the dead side rail and falls off a cliff - col 7 by aim: 0.38 -> 80%, 0.40 -> 77%, 0.42 ->
+    // 40%, 0.44 -> 33%, 0.46 -> 13% (col 1 mirrors it at -0.42 -> 70%, -0.46 -> 27%). So an
+    // over-aimed swipe, the most natural miss at an edge target, died. ui.js now clamps the SWIPE
+    // at +/-aimReach, the outer columns' own sweet spot: any swipe that far or further is the best
+    // outer shot there is. Input shaping only - the engine, the release jitter and every probe are
+    // untouched, and no ball is steered once it is thrown.
+    aimReach: 0.39,
 
     // A SEEDED PER-THROW SCATTER, which is the ONLY randomness in this engine and the only one
     // in any engine in this repo. MACHINE-SPEC.md section 9 bans steering a ball toward a hole;
