@@ -54,7 +54,7 @@ export const STRINGS = {
     // The multiplayer home, reorganised 2026-09-23 (Matt: "Make this page better/easier to
     // navigate. And let people quit games.")
     mpChallengeBig: 'Challenge someone', mpHostShort: 'Host', mpJoinShort: 'Join', mpPassShort: 'Pass & play',
-    youAreRed: 'You are Red', youAreYellow: 'You are Yellow', mpSecEnded: 'Game over', mpSeeResult: 'tap to see', mpSecYours: 'Your turn', mpSecTheirs: 'Waiting on them', mpWaiting2: 'Waiting',
+    vsName: 'vs {name}', youAreRed: 'You are Red', youAreYellow: 'You are Yellow', mpSecEnded: 'Game over', mpSeeResult: 'tap to see', mpSecYours: 'Your turn', mpSecTheirs: 'Waiting on them', mpWaiting2: 'Waiting',
     mpQuit: 'Quit', mpQuitAria: 'Quit your game with {who}', mpQuitQ: 'Quit this game?',
     mpQuitBody: 'Your game with {who} ends and counts as a loss for you.',
     mpQuitNo: 'Keep playing', mpQuitYes: 'Quit',
@@ -169,7 +169,7 @@ export const STRINGS = {
     multiplayer: 'Multijugador',
     mpHome: 'Multijugador',
     mpChallengeBig: 'Retar a alguien', mpHostShort: 'Crear', mpJoinShort: 'Unirse', mpPassShort: 'Pasar y jugar',
-    youAreRed: 'Eres Rojo', youAreYellow: 'Eres Amarillo', mpSecEnded: 'Partida terminada', mpSeeResult: 'toca para ver', mpSecYours: 'Te toca', mpSecTheirs: 'Esperando al rival', mpWaiting2: 'Esperando',
+    vsName: 'contra {name}', youAreRed: 'Eres Rojo', youAreYellow: 'Eres Amarillo', mpSecEnded: 'Partida terminada', mpSeeResult: 'toca para ver', mpSecYours: 'Te toca', mpSecTheirs: 'Esperando al rival', mpWaiting2: 'Esperando',
     mpQuit: 'Abandonar', mpQuitAria: 'Abandonar la partida con {who}', mpQuitQ: '¿Abandonar esta partida?',
     mpQuitBody: 'Tu partida con {who} termina y cuenta como derrota.',
     mpQuitNo: 'Seguir jugando', mpQuitYes: 'Abandonar',
