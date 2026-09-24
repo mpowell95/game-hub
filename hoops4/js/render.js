@@ -413,7 +413,7 @@ export class Renderer {
       g.add(net);
 
       this.scene.add(g);
-      this.rims[id] = { group: g, rim, mat: rimMat };
+      this.rims[id] = { group: g, rim, mat: rimMat, H, lid: null };
     }
 
     this._hoopBackboards(M, G, L);
@@ -1049,6 +1049,38 @@ export class Renderer {
     // The red-left / yellow-right strips beside the display too: in a match where you are red, a
     // yellow strip is one more thing saying the wrong colour.
     for (const { m } of this._sideMats || []) { m.color = COL('#000000'); m.emissive = tone.clone(); m.emissiveIntensity = 1; }
+  }
+
+  /**
+   * CAP THE HOOPS OF FULL COLUMNS (2026-09-24) - the picture of physics.js's lid (buildWorld's
+   * `closed`). A flat grey disc over the whole rim, the same size as the physics lid, in the
+   * group's own frame (local +Y is the face normal), so it sits exactly where the ball meets it.
+   * Built on first need and only shown or hidden after that. `ids` is the set of capped hole ids.
+   */
+  setClosed(ids) {
+    const want = new Set(ids || []);
+    for (const [id, r] of Object.entries(this.rims || {})) {
+      if (want.has(id) && !r.lid) {
+        const G = this.board.geom;
+        const lidT = G.ballR * 0.6;   // the physics lid's own size (physics.js buildWorld)
+        const geo = new THREE.CylinderGeometry(r.H.r + G.collarThick * 1.5, r.H.r + G.collarThick * 1.5, lidT, 40);
+        const mat = new THREE.MeshStandardMaterial({ color: COL('#d9dde3'), roughness: 0.5, metalness: 0.1, emissive: COL('#8a9099'), emissiveIntensity: 0.35 });
+        const lid = new THREE.Mesh(geo, mat);
+        lid.position.y = lidT / 2;
+        r.group.add(lid);
+        r.lid = lid;
+        this._trash.push(geo, mat);
+      }
+      if (r.lid) r.lid.visible = want.has(id);
+      // The camera sees the shelf nearly edge-on, so the lid alone is a thin line. A capped hoop
+      // also loses its orange: the rim goes grey, which reads at any distance.
+      const shut = want.has(id);
+      if (r.shut !== shut) {
+        r.shut = shut;
+        const c = shut ? '#7a7f88' : this.look.ring;
+        r.mat.color = COL(c); r.mat.emissive = COL(c);
+      }
+    }
   }
 
   /** Which player's basketball is in the air. Matched on the hex so callers keep passing

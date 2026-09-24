@@ -1726,3 +1726,23 @@ Matt, after a session of simultaneous turn-by-turn games with another player.
   (from `seriesWins`, the score BEFORE this game, by side).
 - **The challenge card is skippable**: a Skip button top right from the first frame opens the
   match; a tap anywhere else jumps the animation to its end (`is-still`).
+
+## A full column's hoop is CAPPED (2026-09-24)
+
+Matt: *"Can you make it so a ball can't go in an already filled column? Like cap it so the ball
+could bounce on or roll over it?"* Before, a ball went in and the rules scored it a miss
+(`land()`'s `'full'`), which read as a basket that did not count.
+
+- **Physics** (`physics.js` `buildWorld(board, closed)`, `startThrow({ closed })`): a static box
+  LID over each closed hoop, lying in the shelf plane at rim height, `0.6 x ballR` thick and the
+  collar's width plus a margin, in the rims' material (so it bounces like a rim). The capture loop
+  also skips a closed hole (`st.closed`), belt and braces. Measured, 392 lined-up shots at capped
+  hoops: 0 scored in the capped hoop, 19% bounced into another hoop, 81% missed, 4.1% parked.
+  `test.js` asserts a capped hoop never scores where the same shots score it open.
+- **Which holes**: `ui.js closedHoles()` (every column `canPlay` refuses), passed on every shot, so
+  the CPU and every protocol get it. Unseeded probes pass nothing and are unchanged.
+- **Picture** (`render.js setClosed`): the same-size lid in light grey, AND the rim turns grey -
+  the camera sees the shelf almost edge-on, so the lid alone is a thin line; the grey rim is what
+  reads. Called from `paintHud()` and when the renderer is built (a resumed match).
+- `land()`'s `'full'` branch is kept: nothing can reach it now, and it stays the rule if anything
+  ever does.

@@ -344,6 +344,18 @@ check('a seeded throw replays exactly', s1.time === s2.time);
 check('a different seed is a different shot',
   s1.time !== s3.time || JSON.stringify(s1.outcome) !== JSON.stringify(s3.outcome));
 
+// A FULL COLUMN'S HOOP IS CAPPED (2026-09-24): the lid is solid and the hole is never captured.
+// The same power sweep that scores the open hoop must never score it once it is closed.
+{
+  let openIn = 0, capIn = 0;
+  for (let p = 0.2; p <= 0.8001; p += 0.1) for (let s = 0; s < 6; s++) {
+    if ((simulateThrow(BOARD, { power: p, aim: 0, seed: 5 + s * 131 }).outcome || {}).hole === 'c4') openIn++;
+    if ((simulateThrow(BOARD, { power: p, aim: 0, seed: 5 + s * 131, closed: ['c4'] }).outcome || {}).hole === 'c4') capIn++;
+  }
+  check('a capped hoop (full column) never scores - the same shots score it open',
+    openIn > 5 && capIn === 0, `open ${openIn}, capped ${capIn}`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`
   + (gapsOwed.length ? `, ${gapsOwed.length} KNOWN GAP(S) STILL OWED` : '') + '\n');
 for (const g of gapsOwed) console.log(`  owed: ${g}`);
