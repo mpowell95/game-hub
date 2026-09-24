@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v948';
+const CACHE = 'game-hub-v949';
 
 const ASSETS = [
   './',
@@ -912,13 +912,13 @@ const REST_MANIFEST = {
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
   './baseball/css/baseball.css': '24a58dbd74',
-  './baseball/js/ui.js': 'a240c186e8',
+  './baseball/js/ui.js': 'dd800249f8',
   './baseball/js/field.js': 'c79a1b9f80',
   './baseball/js/ring.js': '4786e4ea61',
-  './baseball/js/strings.js': '4182e02856',
+  './baseball/js/strings.js': '875c578379',
   './baseball/js/rig.js': '15167015a3',
   './baseball/js/actors.js': '1eb3dd86e5',
-  './baseball/js/poses.js': 'c74af1e620',
+  './baseball/js/poses.js': 'ba1357811d',
   './baseball/js/vendor/three.core.min.js': '05b2609338',
   './baseball/js/vendor/three.module.min.js': '86bcee248b',
   './baseball/js/vendor/GLTFLoader.js': 'e2ab44d6c6',
@@ -930,11 +930,11 @@ const REST_MANIFEST = {
   './baseball/models/skins/skaterFemaleA.png': 'de575f5075',
   './baseball/models/skins/cyborgFemaleA.png': '321b7ba2d8',
   './baseball/js/engine/rng.js': '8119f3c46a',
-  './baseball/js/engine/settings.js': 'c789eafc88',
+  './baseball/js/engine/settings.js': 'ce67b02825',
   './baseball/js/engine/pitch.js': 'b6fb2c8d7d',
   './baseball/js/engine/swing.js': 'd56c6a8137',
   './baseball/js/engine/outcomes.js': '4031077cfe',
-  './baseball/js/engine/liveplay.js': '1f1863d396',
+  './baseball/js/engine/liveplay.js': '6d229bbe15',
   './baseball/js/engine/bases.js': '76c79f21c6',
   './baseball/js/engine/game.js': 'f205bc03de',
   './baseball/js/engine/agents.js': '50cd36eb0c',
