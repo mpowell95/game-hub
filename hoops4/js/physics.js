@@ -407,11 +407,30 @@ function finishAt(st, hole, value, kind) {
 // NOT `throat`/`cupSeg` - a captured ball is committed to its column and nothing may touch it.
 const SIDEWAYS_PARTS = new Set(['board', 'ringSeg', 'fin', 'finCap', 'chamfer', 'splitter']);
 const RIM_PARTS = new Set(['ringSeg', 'cupSeg', 'throat', 'rimCap']);
+// THE BACK WALL, TURNED TOO - PARTLY (2026-09-24). Matt: "a lot of mine have been bouncing back
+// towards me i thought we made it so they bounce up or sideways?" ... "a bunch of mine have
+// actually bounced back onto the ramp". Traced (thumb-realistic shots, 7 columns): the ball clips
+// a fin cap, hits the short wall BEHIND the hoops (a `riser`, restitution 0.70) or the backboard,
+// and leaves at ~2 m/s toward the player and ~2 m/s up - clean over the hoop row and the gap and
+// back onto the ramp. The note above kept the back wall out of the TURN so an overthrow could
+// still come back into a hoop - and measured, turning it cost 10+ points of right-column shots -
+// so instead `backWallKeep` SOFTENS that wall's rebound toward the player (boarddef has the
+// sweep). It only takes speed away, never adds or steers. The display panel below the shelf is
+// told apart by position: it faces the player a whole shelf-depth further forward.
+const BACK_PARTS = new Set(['riser', 'backboard']);
+function backWallZ(M) {
+  if (M._backMidZ == null) {
+    const zs = M.solids.filter((x) => x.part === 'riser').map((x) => x.pos[2]);
+    M._backMidZ = zs.length > 1 ? (Math.min(...zs) + Math.max(...zs)) / 2 : -Infinity;
+  }
+  return M._backMidZ;
+}
 
 function substep(st) {
   const { world, ball, M, G } = st;
   st.hitPart = null;
   const vyWas = ball.velocity.y;
+  const vzWas = ball.velocity.z;
   world.step(H);
   st.t += H;
 
@@ -460,6 +479,15 @@ function substep(st) {
     const keep = rimHit && typeof G.rimKeep === 'number' ? G.rimKeep : 1;
     v.x = (v.x > 0 ? 1 : -1) * xMag * keep;
     v.z = zKeep * keep;
+  }
+
+  // 0b. The back wall and backboard: see BACK_PARTS. Only a ball that was going INTO the machine
+  //     and now comes OUT of it, above the shelf, and never a captured one. Its speed back toward
+  //     the player (the wall's normal) is scaled by `backWallKeep` - a softer wall, not a turn.
+  const KB = typeof G.backWallKeep === 'number' ? G.backWallKeep : 1;
+  if (KB < 1 && !(G.rimout ? st.committed : st.captured) && BACK_PARTS.has(st.hitPart)
+      && ball.position.z < backWallZ(M) && vzWas < -0.20 && ball.velocity.z > 0.10) {
+    ball.velocity.z *= Math.max(0, KB);
   }
 
   // 0. THE SOLVER-ARTEFACT CEILING (2026-09-04). NOT a gameplay rule and NOT a brake: this

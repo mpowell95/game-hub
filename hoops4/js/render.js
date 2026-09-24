@@ -36,6 +36,15 @@ function isSoftGL() {
 }
 
 const COL = (h) => new THREE.Color(h);
+/** The colour a player's ball actually reads as: 40% of its light stop, 60% of `fill` - the same
+ *  blend the board's discs are painted with. One function, so the ball and setPlayerTint's
+ *  background and rails can never drift apart. */
+function ballTone(fill, dark) {
+  const hi = dark ? '#ff7a6e' : '#ffe488';
+  const pa = [1, 3, 5].map((i) => parseInt(hi.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(String(fill).slice(i, i + 2), 16));
+  return '#' + pa.map((v, i) => Math.round(v * 0.4 + pb[i] * 0.6).toString(16).padStart(2, '0')).join('');
+}
 
 export class Renderer {
   constructor(canvas, board, machine) {
@@ -817,6 +826,7 @@ export class Renderer {
       const sGeo = new THREE.PlaneGeometry(strip, this.panel.len);
       for (const [sx, col] of [[-1, L.cabRed], [1, L.cabYellow]]) {
         const m = new THREE.MeshStandardMaterial({ color: COL(col), roughness: 0.8 });
+        (this._sideMats || (this._sideMats = [])).push({ m, col });   // setPlayerTint repaints these
         const mesh = new THREE.Mesh(sGeo, m);
         mesh.position.set(sx * (this.panel.w + strip) / 2, this.screen.position.y, this.screen.position.z + 0.003);
         this.scene.add(mesh);
@@ -1020,14 +1030,25 @@ export class Renderer {
    * on the HUD still say it too; colour is never the only signal (Matt is red/green colourblind).
    */
   setPlayerTint(hex) {
-    const wall = COL(this.look.wall);
-    // YELLOW NEEDS MORE THAN RED. A dark yellow is not yellow, it is olive-brown - Matt, on the
-    // first build (42% for both): "the yellow is NOT yellow enough". Red keeps reading as red
-    // when darkened; yellow only reads as yellow near full brightness, so it is mixed far further.
-    const isYellow = hex && String(hex).toLowerCase() === String(this.look.yellow).toLowerCase();
-    this.scene.background = hex ? wall.clone().lerp(COL(hex), isYellow ? 0.85 : 0.42) : wall;
+    // THE BALL'S OWN COLOUR, EXACTLY (2026-09-24). Matt: "the yellow must be the same yellow as
+    // the ball. and the red the same red as the ball." The first two builds mixed the colour into
+    // the dark wall (42%, then 85% for yellow), so it was never the ball's colour. Now it is
+    // `ballTone()` - the same blend the ball's wrap is painted with - unlit on the background
+    // and EMISSIVE on the rails, so the lights cannot shade it into another colour either.
     const rail = this._partMats && this._partMats.get('rail');
-    if (rail) rail.color = hex ? COL(hex).multiplyScalar(isYellow ? 1 : 0.85) : COL(this.look.cabinet);
+    if (!hex) {
+      this.scene.background = COL(this.look.wall);
+      if (rail) { rail.color = COL(this.look.cabinet); rail.emissive = COL('#000000'); }
+      for (const { m, col } of this._sideMats || []) { m.color = COL(col); m.emissive = COL('#000000'); }
+      return;
+    }
+    const dark = String(hex).toLowerCase() !== String(this.look.yellow).toLowerCase();
+    const tone = COL(ballTone(hex, dark));
+    this.scene.background = tone.clone();
+    if (rail) { rail.color = COL('#000000'); rail.emissive = tone.clone(); rail.emissiveIntensity = 1; }
+    // The red-left / yellow-right strips beside the display too: in a match where you are red, a
+    // yellow strip is one more thing saying the wrong colour.
+    for (const { m } of this._sideMats || []) { m.color = COL('#000000'); m.emissive = tone.clone(); m.emissiveIntensity = 1; }
   }
 
   /** Which player's basketball is in the air. Matched on the hex so callers keep passing
@@ -1049,13 +1070,7 @@ export class Renderer {
     // THE DISC'S OWN COLOUR, not the bare hex: `_ball2d` paints a disc as a gradient from a light
     // stop to `fill`, and what the eye reads as "the red disc" is that blend. So the wrap is the
     // same blend (40% light stop, 60% fill), measured against the disc in a rendered frame.
-    const hi = dark ? '#ff7a6e' : '#ffe488';
-    const mix = (a, b, k) => {
-      const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
-      const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
-      return 'rgb(' + pa.map((v, i) => Math.round(v * (1 - k) + pb[i] * k)).join(',') + ')';
-    };
-    x.fillStyle = mix(hi, fill, 0.6); x.fillRect(0, 0, 256, 128);
+    x.fillStyle = ballTone(fill, dark); x.fillRect(0, 0, 256, 128);
     for (let i = 0; i < 140; i++) {
       x.globalAlpha = 0.16;
       x.beginPath(); x.arc((i * 41) % 256, (i * 23) % 128, 2.2, 0, Math.PI * 2);

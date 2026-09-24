@@ -209,6 +209,7 @@ class Hoops4 {
     el.setAttribute('aria-label', head);
     el.innerHTML = `
       <div class="h4-cer-veil" aria-hidden="true"></div>
+      <button type="button" class="h4-cer-skip">${t('cerSkip')} &rsaquo;</button>
       <div class="h4-cer-body">
         <p class="h4-cer-head">${a.kind === 'challenge' ? t('cerHead') : t('cerHeadTurn')}</p>
         <div class="h4-cer-pair">
@@ -240,6 +241,13 @@ class Hoops4 {
     // with no explanation at all: docs/BUILDING-A-GAME.md Part 0, "if you paint before the data
     // has arrived, name the path back to the truth". The failure is said HERE, on the card.
     const go = el.querySelector('.h4-cer-go');
+    // SKIPPABLE (2026-09-24). Matt: "I should be able to skip the new challenge animation (i
+    // thought we already added this)". Only the SECOND view of a match skipped it (the shown-list
+    // in maybeCeremony). Now: Skip, top right from the first frame, goes straight into the match;
+    // and a tap anywhere else on the card jumps the animation to its end (`is-still`, the same
+    // final pose reduced motion uses), so the buttons are there at once.
+    this.on(el.querySelector('.h4-cer-skip'), 'click', () => go.click());
+    this.on(el, 'click', (e) => { if (!e.target.closest('button')) el.classList.add('is-still'); });
     this.on(go, 'click', async () => {
       go.disabled = true;
       try {
@@ -1059,7 +1067,15 @@ class Hoops4 {
         // "You are Red/Yellow" was here for one deploy; Matt: "remove the 'you are yellow'". The
         // machine's tint (render.setPlayerTint) and the ball in the pill carry it.
       }
-      if (g && g.series > 1) bits.push(t('gameOf', { n: g.seriesNo, m: g.series }));
+      if (g && g.series > 1) {
+        bits.push(t('gameOf', { n: g.seriesNo, m: g.series }));
+        // THE SERIES SCORE WHILE PLAYING (2026-09-24). Matt: "you can't see the series score
+        // anywhere while playing. that needs to be added somewhere." It was only on the game-over
+        // card. `seriesWins` is the score BEFORE this game (mp.js seriesAfter); yours first.
+        const sw = g.seriesWins || { a: 0, b: 0 };
+        const side = this.mp.side;
+        bits.push(t('seriesScore', { a: (side === 'a' ? sw.a : sw.b) | 0, b: (side === 'a' ? sw.b : sw.a) | 0 }));
+      }
       leg.hidden = !bits.length;
       // The name on its own line, the rest under it: one line cut "You are Red" off at 393px.
       leg.textContent = this.mp && bits.length > 1 ? bits[0] + '\n' + bits.slice(1).join(' \u00b7 ') : bits.join(' \u00b7 ');
