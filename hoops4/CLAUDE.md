@@ -1809,6 +1809,26 @@ corner X), and the same line again from the same person bumps a "×5" on the car
 and restarts its clock instead of adding another card. Same day, `js/mp-reactions.js` stopped
 limiting the quick-chat palette to its 12 starter emojis: any emoji `isEmoji()` accepts is kept
 (max `EMOJI_MAX` 16), added from the profile page's "+" tile, which opens the full emoji picker.
+
+## The setup screen shows your turns (2026-09-24)
+
+Matt: *"On the setup screen, if I have multiplayer games where it's my turn, please show them. Let
+me collapse the computer game section too. The games where it's my turn should be above
+Multiplayer. Think about the layout so that it looks good and you can have a few games going at
+once."* Order now: title, **Your turn** card (only when there is one), **Multiplayer**, **Play the
+computer** (collapsible), How to play.
+
+- `ui.js _fillTurns()` reads `MP.readMyGames()` behind the painted screen (only when the player has
+  a code, so a solo device never loads mp.js); `_paintTurns(rows)` draws one row per match waiting
+  on you, newest first - face, name, "Game 3 of 5 · One shot only", a Play pill - up to 4, then
+  "+N more" (opens the multiplayer sheet). A row opens the match (`startAsync`); if it moved on, the
+  sheet opens instead. The hero picture hides while the card shows, to keep it on one phone screen.
+- The computer card's heading is its toggle (arrow ▾/▸); open/shut is remembered in
+  `gamehub.hoops4.cpuOpen.v1` (a view preference, not the settings object).
+- `.h4-setup` scrolls now (auto margins centre it when it fits; `overscroll-behavior: contain`).
+- **CSS class clash, avoided**: the HUD's turn label is `.h4-turn`; the setup rows are `.h4-trow`.
+  The first cut used `.h4-turn` and the HUD's column layout stacked every row vertically.
+
 Also the same day: the profile's Quick chat has an **"Order in game"** row showing `qc.emojis` /
 `qc.phrases` in the order the chat panel uses. Tap one, then tap where it goes (tap-to-move, not
 drag, so it never fights the page's scroll on a phone). The order is just the array order in

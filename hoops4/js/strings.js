@@ -24,7 +24,7 @@ export const STRINGS = {
     // WHOSE TURN IT IS, said before the shot rather than after it. Matt: "it's not clear when
     // it's the computers turn. There's no indication until they've thrown." Then (2026-09-22):
     // "change the 'Your shot' and the 'Hard is shooting'. Those are not good."
-    you: 'You', turnYou: 'Your turn', turnCpu: 'Computer\u2019s turn', turnOf: '{name}\u2019s turn',
+    you: 'You', turnGo: 'Play', turnYou: 'Your turn', turnCpu: 'Computer\u2019s turn', turnOf: '{name}\u2019s turn',
     leaveKept: 'Your match is saved. Pick it up whenever you like.',
     mpShootToSend: 'Take your first shot to send the challenge.',
     pushOn: 'Notify me when it\'s my turn',
@@ -149,7 +149,7 @@ export const STRINGS = {
     howtoRim: '¿Rebota a la de al lado? Cuenta esa.',
     close: 'Cerrar',
     yourTurn: 'Tu turno', theirTurn: 'Su turno',
-    you: 'Tú', turnYou: 'Tu turno', turnCpu: 'Turno de la CPU', turnOf: 'Turno de {name}',
+    you: 'Tú', turnGo: 'Jugar', turnYou: 'Tu turno', turnCpu: 'Turno de la CPU', turnOf: 'Turno de {name}',
     leaveKept: 'Tu partida está guardada. Puedes seguir cuando quieras.',
     mpShootToSend: 'Haz tu primer tiro para enviar el reto.',
     pushOn: 'Avísame cuando me toque',
