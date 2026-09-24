@@ -5,7 +5,7 @@
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide } from './functions/decide.js';
+import { decide, decideMessage, decideBugReport } from './functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -67,6 +67,31 @@ check('you resign: silent', n === null);
 n = decide({ code: 'KNGGG', gameId: 'g1', before: row(), after: null, game: game() });
 check('a deleted row says nothing', n === null);
 
+// --- messages (2026-09-24) -----------------------------------------------------------------------
+// The recipient's row messages/index/<me>/<them> carries {at, from, preview, name, emoji}, with
+// name/emoji = THEM (js/messages.js indexPatch). Only a newer `at` FROM them is news.
+{
+  const row = (extra = {}) => ({ at: 200, from: 'KNGGG', preview: 'your move!', name: 'King', emoji: 'k', ...extra });
+  let n = decideMessage({ code: 'MTTTT', other: 'KNGGG', before: row({ at: 100 }), after: row() });
+  check('a new message from them notifies, titled with their name and showing the text',
+    n && n.text('en').title === 'Message from King' && n.text('en').body === 'your move!' && /Mensaje de King/.test(n.text('es').title));
+  check('the first message of a conversation (no row before) notifies', !!decideMessage({ code: 'MTTTT', other: 'KNGGG', before: null, after: row() }));
+  check('my own send (my row, from me) is silent',
+    decideMessage({ code: 'MTTTT', other: 'KNGGG', before: row({ at: 100, from: 'MTTTT' }), after: row({ from: 'MTTTT' }) }) === null);
+  check('reading it (seenAt only) is silent', decideMessage({ code: 'MTTTT', other: 'KNGGG', before: row(), after: row({ seenAt: 300 }) }) === null);
+  check('hiding it (hiddenAt only) is silent', decideMessage({ code: 'MTTTT', other: 'KNGGG', before: row(), after: row({ hiddenAt: 300 }) }) === null);
+  check('a deleted row is silent', decideMessage({ code: 'MTTTT', other: 'KNGGG', before: row(), after: null }) === null);
+}
+
+// --- bug reports, to admins (2026-09-24) ------------------------------------------------------------
+{
+  const n = decideBugReport({ description: 'the  ball\nfell through', gameTitle: 'Golf', reporter: { name: 'Ana' }, environment: { big: 'x'.repeat(5000) } });
+  check('a bug report says who, which game, and the start of what they wrote',
+    n && n.text().title === 'Bug report: Golf' && n.text().body === 'Ana: the ball fell through');
+  check('...and never the environment dump', n.text().body.length < 200);
+  check('a report with no text still says who sent it', decideBugReport({ reporter: { name: 'Bo' } }).text().body === 'Bo sent a report');
+}
+
 // --- the wiring -------------------------------------------------------------------------------
 const keyOf = (src) => (src.match(/VAPID_PUBLIC_KEY = '([A-Za-z0-9_-]+)'/) || [])[1];
 const appKey = keyOf(read('./js/push.js'));
@@ -84,7 +109,7 @@ check('js/push.js is network-first (it writes a gamehub.* key)', nf.includes("'.
 
 const hub = read('./js/hub.js');
 check('the hub takes a tapped notification to its game, and never from inside another game',
-  /_openPushedGame\(id\)/.test(hub) && /if \(!g \|\| this\.current\) return;/.test(hub) && /searchParams\.get\('open'\)/.test(hub));
+  /async _openPushedGame\(id, extra = \{\}\) \{\n    if \(this\.current\) return;/.test(hub) && /searchParams\.get\('open'\)/.test(hub));
 check('the hub refreshes this device\'s address on load', /import\('\.\/push\.js'\)\.then\(\(m\) => m\.refreshPush\(\)\)/.test(hub));
 
 const rules = JSON.parse(read('./database.rules.json'));
@@ -97,6 +122,19 @@ check('enablePush asks permission before anything else can await (iOS needs the 
   push.indexOf('Notification.requestPermission()') < push.indexOf('await registration()', push.indexOf('export async function enablePush')));
 check('createGame stamps who made the match (`by`), so the function never notifies its maker',
   /by: me,/.test(read('./hoops4/js/mp.js')));
+
+const fnSrc = read('./functions/index.js');
+check('three triggers: hoops turns, messages, bug reports',
+  /export const hoopsTurnPush/.test(fnSrc) && /ref: '\/messages\/index\/\{code\}\/\{other\}'/.test(fnSrc) && /onValueCreated\(\{ ref: '\/bugReports\/\{id\}'/.test(fnSrc));
+check('bug reports go to every ADMIN, found through admins/<uid> and msgAuth/<uid> (no code hardcoded)',
+  /db\.ref\('admins'\)/.test(fnSrc) && /msgAuth\/\$\{uid\}/.test(fnSrc) && !/QZCC4/.test(fnSrc));
+check('a tapped message opens that conversation; a tapped report opens the bug inbox',
+  /id === 'messages'/.test(hub) && /openMessages\(to \?/.test(hub) && /id === 'bugs'/.test(hub));
+check('sw.js carries who the message is from through to the hub', /with: data\.with/.test(sw));
+const hui = read('./hoops4/js/ui.js');
+check('Hoops asks "notify me when <them> plays back?" after a SENT move, once per match, only while off',
+  /this\._askPush\(mp\)/.test(hui) && /gamehub\.hoops4\.pushAsk\.v1/.test(hui) && /if \(st !== 'off'/.test(hui));
+check('Messages offers "Notify me of new messages" while off', /addPushRow\(card, gen\)/.test(read('./js/messages-ui.js')));
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
