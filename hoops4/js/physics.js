@@ -92,7 +92,7 @@ class BallBroadphase extends CANNON.NaiveBroadphase {
 
 /** One throw = one fresh world (cheap: ~150 static boxes) so every throw is a clean determinism
  *  boundary - nothing persists from the previous ball. */
-function buildWorld(board) {
+function buildWorld(board, closed = []) {
   const G = board.geom;
   const M = machineFor(board);
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
@@ -214,6 +214,33 @@ function buildWorld(board) {
     world.addBody(body);
   }
 
+  // A FULL COLUMN'S HOOP IS CAPPED (2026-09-24). Matt: "Can you make it so a ball can't go in an
+  // already filled column? Like cap it so the ball could bounce on or roll over it?" Before this a
+  // ball went in and the rules called it a miss ('full'), which read as a basket that did not
+  // count. Now the hoop has a solid LID at rim height: a static box lying in the shelf's plane,
+  // covering the whole collar, with the rims' own material - so a ball landing on it bounces like
+  // it hit the rim, and one rolling onto it rolls over and off (the shelf's forward tilt carries
+  // it). The capture loop also skips a closed hole (st.closed), so nothing can score in it even
+  // if the solver ever let a ball through. Not magnetism: it is a surface, and it steers nothing.
+  for (const id of closed) {
+    const H = G.holes[id];
+    if (!H) continue;
+    const lidT = G.ballR * 0.6;   // render.js setClosed draws the same size
+    const half = H.r + G.collarThick * 1.5;
+    const p = M.faceToWorld(H.u, H.v, (H.collarH || 0) + lidT / 2);
+    const lid = new CANNON.Body({
+      type: CANNON.Body.STATIC,
+      shape: new CANNON.Box(new CANNON.Vec3(half, lidT / 2, half)),
+      material: matRing,
+      collisionFilterGroup: GROUP_REST,
+      collisionFilterMask: GROUP_BALL,
+    });
+    lid.position.set(p[0], p[1], p[2]);
+    lid.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), M.tiltAt(H.v));
+    lid.userData = { part: 'lid', cup: id };
+    world.addBody(lid);
+  }
+
   const ball = new CANNON.Body({
     mass: G.ballMass,
     shape: new CANNON.Sphere(G.ballR),
@@ -253,9 +280,10 @@ function mulberry32(a) {
   };
 }
 
-export function startThrow(board, { power = 0.5, aim = 0, seed = null } = {}) {
+export function startThrow(board, { power = 0.5, aim = 0, seed = null, closed = [] } = {}) {
   const G = board.geom;
-  const { world, ball, M } = buildWorld(board);
+  const closedList = Array.isArray(closed) ? closed.filter((id) => G.holes[id]) : [];
+  const { world, ball, M } = buildWorld(board, closedList);
 
   // GUARD: POWER IS NOT CLAMPED TO 0..1. 0 and 1 are the ends of the NATURAL swipe range, not
   // the ends of what is physically possible - a harder-than-normal swipe reaches higher up the
@@ -297,6 +325,7 @@ export function startThrow(board, { power = 0.5, aim = 0, seed = null } = {}) {
 
   const st = {
     world, ball, M, G,
+    closed: new Set(closedList),   // capped hoops (full columns): never captured, never scored
     t: 0,
     acc: 0,
     events: [{ type: 'launch' }],
@@ -655,6 +684,7 @@ function substep(st) {
   // rim-relative gate below.
   if (f.v > 0 && f.v < G.boardLen && f.h < G.ballR * 1.9 + st.maxLip) {
     for (const id of Object.keys(G.holes)) {
+      if (st.closed && st.closed.has(id)) continue;   // capped: a full column (see buildWorld)
       const hDef = G.holes[id];
       // GUARD: THIS HOLE'S OWN FRAME. f above is the nearest segment's, which on a staircase is
       // the RISER once the ball is deep in a bottom-row basket - and a riser-frame d comes out

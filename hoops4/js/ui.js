@@ -764,6 +764,7 @@ class Hoops4 {
       this.rend = new this.engine.Renderer(canvas, BOARD, this.engine.machine);
       this.fit();
       this.rend.setGrid(this.match.cells(), null);
+      this.rend.setClosed(this.closedHoles());   // a resumed match may already have full columns
       this.rend.setBallColor(this.match.turn === RED ? BOARD.look.red : BOARD.look.yellow);
       // Multiplayer only: the machine wears YOUR colour for the whole match (render.setPlayerTint).
       if (this.mp) this.rend.setPlayerTint(this.myPlayer === RED ? BOARD.look.red : BOARD.look.yellow);
@@ -1013,9 +1014,19 @@ class Hoops4 {
     return t('theirTurn');
   }
 
+  /** The hoops over full columns, as hole ids ('c1'..'c7'). */
+  closedHoles() {
+    const m = this.match;
+    if (!m) return [];
+    const out = [];
+    for (let c = 0; c < 7; c++) if (!m.board.canPlay(c)) out.push('c' + (c + 1));
+    return out;
+  }
+
   paintHud() {
     const m = this.match;
     if (!m) return;
+    if (this.rend) this.rend.setClosed(this.closedHoles());
     const who = this.root.querySelector('.h4-who');
     const sh = this.root.querySelector('.h4-shots');
     if (!who || !sh) return;
@@ -1149,7 +1160,9 @@ class Hoops4 {
     if (this.rend) {
       this.rend.setBallColor(this.match.turn === RED ? BOARD.look.red : BOARD.look.yellow);
     }
-    this.throwState = this.engine.phys.startThrow(BOARD, { power, aim, seed });
+    // A FULL COLUMN'S HOOP IS CAPPED (physics.js buildWorld `closed`): the ball bounces or rolls
+    // off it and cannot score there. The same list paints the lids (paintHud -> setClosed).
+    this.throwState = this.engine.phys.startThrow(BOARD, { power, aim, seed, closed: this.closedHoles() });
     this.captured = null;
   }
 
