@@ -1110,3 +1110,26 @@ Matt: *"hedges and out of bounds"*.
   Out of bounds. The line panel shows "Hedge height (yd)" for a hedge.
 - Tests: `golf/js/test.js` (hedge blocks a low shot and lets a high one over, stops a putt; OOB is
   stroke and distance; the hole validates), `test-hole-editor.mjs` 58/58, UI 108/108, mobile 44/44.
+
+## The isometric look, stage 3: motion (2026-09-24)
+
+Matt: *"go ahead with all of stage 3"*. Three pieces, all paint in `canvas.js` (nothing touches the
+document):
+
+- **Pop-in**: a newly placed tree, stand or rock grows up out of the ground with a small overshoot
+  (`FX_POP_MS` 420, `popEase`). New standing things are found by diffing the built hole's hand-placed
+  tree keys before and after the placement (`_standKeys`), so a stand's whole row pops.
+- **Dust**: ten cream puffs thrown out along the ground where anything lands (`FX_DUST_MS` 560); a
+  flat thing (bunker, lake, grass, wildflowers) also gets a white ring settling onto its outline.
+- **Ghost**: a see-through copy of what the armed tool (`PLACE_TOOLS`) would place, built by running
+  the real `_place` on a copy of the spec, with a gold dot at the exact point. Mouse: follows the
+  cursor, hidden over something a click would select, gone when the mouse leaves the map. Finger: a
+  LONG PRESS (500 ms) on open ground shows it, sliding moves it, lifting places it; lifting off the
+  map or putting a second finger down cancels. A tap still places instantly and a quick one-finger
+  drag still pans, exactly as in stage 2 (the long press did nothing for these tools before).
+- One animation loop (`_kick`) runs only while something is animating; the ghost redraws at most
+  once a frame (`_drawSoon`). Reduced motion keeps the ghost and drops pop-in and dust.
+
+Tests: `test-hole-editor-ui.mjs` 112/112 (4 new), `test-hole-editor-mobile.mjs` 50/50 (6 new: hold
+shows the preview, lift places, dust plays and stops, a second finger cancels, undo). `hole-editor/`
+is outside the service worker, so no CACHE bump.

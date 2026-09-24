@@ -14,6 +14,14 @@ import { blob, routeStations } from '../../golf/js/holegen.js';
 import { polyCentroid } from './model.js';
 import { isoProject, isoUnproject, isoGroundMatrix, isoScreenDelta, isoFit, drawSky, drawIsland, drawIsoTree, drawIsoWire, drawIsoHedge, Z as ISO_Z, SHADOW_SHARE } from './iso.js';
 
+// Stage 3, motion (2026-09-24): the tools that place on a click, [the _place kind, the spec group].
+const PLACE_TOOLS = { bunker: ['bunker', 'bunkers'], water: ['water', 'water'], tree: ['tree', 'trees'], cross: ['cross', 'cross'], decor: ['decor', 'decor'] };
+const FX_POP_MS = 420;    // a placed tree grows out of the ground
+const FX_DUST_MS = 560;   // the puff where anything lands
+const FX_RING_MS = 380;   // the white ring settling onto a flat thing's outline
+/** 0 -> 1 with a small overshoot (easeOutBack). */
+const popEase = (u) => { const c1 = 1.9; const c3 = c1 + 1; return 1 + c3 * (u - 1) ** 3 + c1 * (u - 1) ** 2; };
+
 /** The axis-aligned box round an outline, plus its eight resize handles (corners and side
  *  midpoints) in world yards - Matt's "small white squares on the sides that i can click and
  *  drag". `axis` says what a handle changes: 'x', 'y' or both. */
@@ -354,6 +362,7 @@ export class EditorCanvas {
     this.tool = tool;
     this.selection = null;
     this.ruler = null;
+    this.ghost = null;
     if (this.onSelectionChange) this.onSelectionChange(null);
     this.draw();
   }
@@ -674,7 +683,9 @@ export class EditorCanvas {
       // Nothing hit: a placement tool places here (and selects what it just placed, so the
       // context panel shows its controls immediately); Select deselects.
       const placeAndSelect = (kind, group) => {
+        const before = this._standKeys();
         this.ops.instant((spec) => this._place(spec, kind, w));
+        this._celebrate(group, w, before);
         // `(this.spec[group] || [])` (2026-09-22): `decor` had no default empty array anywhere in
         // the document before this batch (no course has ever carried one), and `addDecor` may not
         // exist yet in a parallel build (`_place` already fails soft for that) - so a placement
@@ -753,6 +764,14 @@ export class EditorCanvas {
       this.hover = w;
       if (this.onHoverChange) this.onHoverChange(w);
       if (this.drawing) { this.draw(); return; }   // the rubber band follows the cursor
+
+      // THE GHOST, under a mouse (stage 3): what a click here would place. Not over something a
+      // click would select instead, and never mid-drag. A finger's ghost is the touch layer's.
+      if (!objDrag && e.pointerType !== 'touch' && PLACE_TOOLS[this.tool]) {
+        const had = !!this.ghost;
+        this.ghost = this.hitTest(w.x, w.y) ? null : { x: w.x, y: w.y };
+        if (had || this.ghost) this._drawSoon();
+      }
 
       if (objDrag && this.ops) {
         if (objDrag.kind === 'waypoint') {
@@ -879,6 +898,7 @@ export class EditorCanvas {
     let tDrag = false;    // a one-finger drag is running through the mouse handlers
     let pinch = null;     // {d, mx, my} - two fingers down
     let spent = false;    // this touch sequence is used up (pinch ended, long press fired)
+    let gTouch = null;    // {id} - a held finger dragging the placement GHOST (stage 3)
     const at = (id, pt) => ({ clientX: pt.x, clientY: pt.y, button: 0, pointerId: id, pointerType: 'touch', preventDefault() {} });
     const TAP_SLOP = 10;
     const setReadout = (pt) => {
@@ -906,6 +926,13 @@ export class EditorCanvas {
       if (hit.group === 'widthHandle' || hit.group === 'pins' || hit.group === 'linePoint') return true;
       return this.tool === 'select';
     };
+    /** Would a tap here hit an existing object (and so select it rather than place)? */
+    const wouldSelect = (pt) => {
+      if (!this.camera) return false;
+      const r = el.getBoundingClientRect();
+      const w = this.toWorld(pt.x - r.left, pt.y - r.top);
+      return !!this.hitTest(w.x, w.y);
+    };
     const startDrag = (e) => {
       const p0 = pend; clearTimeout(p0.timer); pend = null;
       this.touchDragging = true;
@@ -924,6 +951,8 @@ export class EditorCanvas {
       try { el.setPointerCapture(e.pointerId); } catch { /* noop */ }
       if (spent) return;
       if (touches.size === 2) {
+        // A second finger while previewing is "never mind": the ghost goes, the pinch takes over.
+        if (gTouch) { gTouch = null; this.ghost = null; }
         endPinchOrDrag(e);
         const [a, b] = [...touches.values()];
         pinch = { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
@@ -933,9 +962,18 @@ export class EditorCanvas {
       const id = e.pointerId;
       pend = { id, x: e.clientX, y: e.clientY, timer: setTimeout(() => {
         if (!pend || pend.id !== id) return;
-        const p0 = pend; pend = null; spent = true;
+        const p0 = pend; pend = null;
         if (navigator.vibrate) { try { navigator.vibrate(15); } catch { /* noop */ } }
         setReadout(p0);
+        // STAGE 3: a long press with a placement tool, on open ground, shows the GHOST under the
+        // finger; sliding moves it, lifting places it. (A long press meant nothing for these tools.)
+        if (PLACE_TOOLS[this.tool] && !this.drawing && !wouldSelect(p0)) {
+          gTouch = { id };
+          this.ghost = { ...this.hover };
+          this.draw();
+          return;
+        }
+        spent = true;
         onDbl(at(id, p0));
       }, 500) };
       setReadout(pend);
@@ -955,6 +993,12 @@ export class EditorCanvas {
         if (this.onZoomChange) this.onZoomChange(this.camera.ppy);
         return;
       }
+      if (gTouch && gTouch.id === e.pointerId) {
+        setReadout(t);
+        this.ghost = wouldSelect(t) ? null : { ...this.hover };
+        this._drawSoon();
+        return;
+      }
       if (spent) return;
       if (pend && pend.id === e.pointerId) {
         if (Math.hypot(e.clientX - pend.x, e.clientY - pend.y) <= TAP_SLOP) return;
@@ -967,7 +1011,15 @@ export class EditorCanvas {
       touches.delete(e.pointerId);
       try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
       if (pinch) { if (touches.size < 2) { pinch = null; spent = true; } }
-      else if (pend && pend.id === e.pointerId) {
+      else if (gTouch && gTouch.id === e.pointerId) {
+        // Lift: place where the ghost is - unless the finger slid off the map (that cancels).
+        gTouch = null;
+        const r = el.getBoundingClientRect();
+        const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+        this.ghost = null;
+        if (inside) { onDown(at(e.pointerId, { x: e.clientX, y: e.clientY })); onUp(at(e.pointerId, { x: e.clientX, y: e.clientY })); }
+        else this.draw();
+      } else if (pend && pend.id === e.pointerId) {
         // A TAP: the mouse's click, replayed at the point the finger went down.
         const p0 = pend; clearTimeout(p0.timer); pend = null;
         onDown(at(e.pointerId, p0));
@@ -979,6 +1031,7 @@ export class EditorCanvas {
     const tCancel = (e) => {
       touches.delete(e.pointerId);
       clearTimeout(pend && pend.timer); pend = null; pinch = null; tDrag = false;
+      if (gTouch) { gTouch = null; this.ghost = null; this.draw(); }
       onCancel(e);
       if (!touches.size) { spent = false; this.touchDragging = false; }
     };
@@ -990,7 +1043,11 @@ export class EditorCanvas {
     // A double-TAP is not a double-click here: the long press is. (A browser may still synthesise one.)
     el.addEventListener('dblclick', (e) => { if (!this.touchMode) onDbl(e); });
     // A finger has no hover: the readout keeps the last touch instead of clearing when it lifts.
-    el.addEventListener('pointerleave', (e) => { if (isTouch(e)) return; this.hover = null; if (this.onHoverChange) this.onHoverChange(null); });
+    el.addEventListener('pointerleave', (e) => {
+      if (isTouch(e)) return;
+      this.hover = null; if (this.onHoverChange) this.onHoverChange(null);
+      if (this.ghost) { this.ghost = null; this._drawSoon(); }
+    });
 
     window.addEventListener('keydown', (e) => {
       if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
@@ -1091,6 +1148,77 @@ export class EditorCanvas {
 
   /** Click placement for Bunker/Water/Tree/Cross/Decor (sections 6.4-6.6/6.10, section 4). `w` is
    *  the world point. */
+  // --- STAGE 3: MOTION (2026-09-24) -------------------------------------------------------------
+  // Pocket Metropolis's feel, three pieces, all paint (nothing here touches the document):
+  //  - POP-IN: a newly placed tree / stand / rock grows up out of the ground with a small overshoot.
+  //  - DUST: a puff of cream dust where anything lands; a flat thing (bunker, lake, grass, patch)
+  //    also gets a white ring that settles onto its outline.
+  //  - GHOST: a see-through copy of what the armed tool WOULD place, under the mouse, or under a
+  //    finger that is held down (long press) and slid; lifting places it there.
+  // Reduced motion keeps the ghost (it is information, not garnish) and drops pop-in and dust.
+  _reducedMotion() {
+    try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+  }
+
+  /** The hand-placed standing things of the current built hole, as "x,y" keys. */
+  _standKeys() {
+    return new Set(((this.built && this.built.trees) || []).map((t) => t.x + ',' + t.y));
+  }
+
+  /** Called right after a placement: start the pop-in for whatever NEW stands up, and the dust. */
+  _celebrate(group, w, beforeKeys) {
+    this.ghost = null;
+    if (this._reducedMotion() || !this.built) { this.draw(); return; }
+    const now = performance.now();
+    this._pops = this._pops || new Map();
+    this._fx = this._fx || [];
+    for (const k of this._standKeys()) if (!beforeKeys.has(k)) this._pops.set(k, now);
+    const o = listObjects(this.spec, this.stations, this.length).filter((x) => x.group === group).pop();
+    let cx = w.x; let cy = w.y; let r = 4;
+    if (o) {
+      [cx, cy] = o.center;
+      if (o.poly) {
+        r = Math.min(18, Math.max(...o.poly.map((p) => Math.hypot(p[0] - cx, p[1] - cy))));
+        this._fx.push({ type: 'ring', poly: o.poly, c: o.center, t0: now, dur: FX_RING_MS });
+      } else if (group === 'cross') r = 16;
+      else r = Math.min(10, o.radius || 4);
+    }
+    this._fx.push({ type: 'dust', x: cx, y: cy, r, t0: now, dur: FX_DUST_MS, seed: (Math.abs(cx * 7.3 + cy * 3.1) % 1) });
+    this._kick();
+  }
+
+  /** Run the animation loop until every pop and puff has finished. */
+  _kick() {
+    if (this._raf) return;
+    const tick = () => {
+      this._raf = 0;
+      const now = performance.now();
+      if (this._pops) for (const [k, t0] of this._pops) if (now - t0 > FX_POP_MS) this._pops.delete(k);
+      if (this._fx) this._fx = this._fx.filter((f) => now - f.t0 < f.dur);
+      this.draw();
+      if ((this._pops && this._pops.size) || (this._fx && this._fx.length)) this._raf = requestAnimationFrame(tick);
+    };
+    this._raf = requestAnimationFrame(tick);
+  }
+
+  /** One redraw on the next frame (the ghost follows the pointer at most once a frame). */
+  _drawSoon() {
+    if (this._raf || this._soon) return;
+    this._soon = requestAnimationFrame(() => { this._soon = 0; this.draw(); });
+  }
+
+  /** What the armed tool would place at the ghost point, as a listObjects entry plus its spec row. */
+  _ghostObject() {
+    if (!this.ghost || !this.ops || !this.spec || !PLACE_TOOLS[this.tool]) return null;
+    const [kind, group0] = PLACE_TOOLS[this.tool];
+    const group = kind === 'tree' && this.ops.getTreeMode && this.ops.getTreeMode() === 'stand' ? 'sentinels' : group0;
+    let gs;
+    try { gs = this._place(JSON.parse(JSON.stringify(this.spec)), kind, this.ghost); } catch { return null; }
+    if (!gs || !(gs[group] || []).length || (gs[group] || []).length === (this.spec[group] || []).length) return null;
+    const o = listObjects(gs, this.stations, this.length).filter((x) => x.group === group).pop();
+    return o ? { o, row: gs[group][gs[group].length - 1] } : null;
+  }
+
   _place(spec, kind, w) {
     const placement = nearestPlacement(this.stations, this.length, w.x, w.y);
     if (kind === 'bunker') {
@@ -1463,6 +1591,13 @@ export class EditorCanvas {
         const shape = shapeOf(type);
         const [fill, , accent] = TREE_FILL[type.name] || ['#3f6b34', '#26431f'];
         const s = t.s || 1;
+        // POP-IN (stage 3): a just-placed tree grows up out of the ground, about its own base.
+        const pop0 = this._pops && this._pops.get(t.x + ',' + t.y);
+        const pu = pop0 != null ? Math.min(1, (performance.now() - pop0) / FX_POP_MS) : 1;
+        if (pu < 1) {
+          const sy = Math.max(0.02, popEase(pu)); const sxp = 0.55 + 0.45 * sy;
+          ctx.save(); ctx.translate(p[0], p[1]); ctx.scale(sxp, sy); ctx.translate(-p[0], -p[1]);
+        }
         drawIsoTree(ctx, p[0], p[1], {
           shape, k, fill, accent, muted: i >= handCount,
           R: (shape === 'cactus' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * s,
@@ -1471,6 +1606,7 @@ export class EditorCanvas {
           seed: ((Math.abs(t.x * 13.1 + t.y * 7.7) % 1) + 1) % 1,
           poleH: poleH.get(t.x + ',' + t.y),
         });
+        if (pu < 1) ctx.restore();
       }
       for (const ln of built.lines || []) {
         if (ln.pts && ln.pts.length > 1) drawIsoWire(ctx, P, ln.pts, ln.lo != null ? ln.lo + 1 : (ln.h || 10), k);
@@ -1666,6 +1802,82 @@ export class EditorCanvas {
         const [px, py] = P(h.point[0], h.point[1]);
         ctx.fillRect(px - 5, py - 5, 10, 10); ctx.strokeRect(px - 5, py - 5, 10, 10);
       }
+    }
+
+    // 10. STAGE 3 (2026-09-24): the landing dust and rings, then the placement ghost on top.
+    if (this._fx && this._fx.length) {
+      const now = performance.now();
+      ctx.save();
+      for (const f of this._fx) {
+        const u = Math.min(1, (now - f.t0) / f.dur);
+        if (f.type === 'ring') {
+          // a white outline that starts a little big and settles onto the shape as it fades
+          const sc = 1 + 0.35 * (1 - u) * (1 - u);
+          ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - u)})`;
+          ctx.lineWidth = 2.5;
+          trace(f.poly.map((q) => [f.c[0] + (q[0] - f.c[0]) * sc, f.c[1] + (q[1] - f.c[1]) * sc]));
+          ctx.stroke();
+        } else if (f.type === 'dust') {
+          // ten cream puffs thrown out along the ground, growing and fading
+          const n = 10;
+          for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2 + f.seed * 6.28;
+            const dist = f.r * (0.55 + 0.75 * (1 - (1 - u) ** 2)) * (0.8 + 0.4 * ((i * 0.618 + f.seed) % 1));
+            const [px, py] = P(f.x + Math.cos(a) * dist, f.y + Math.sin(a) * dist, 0.6 + 1.6 * u * (1 - u));
+            const rr = Math.max(2, (0.9 + 1.6 * u) * k * 0.9);
+            ctx.fillStyle = `rgba(244,234,214,${0.75 * (1 - u)})`;
+            ctx.beginPath(); ctx.ellipse(px, py, rr, rr * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+      }
+      ctx.restore();
+    }
+    const gh = this.ghost && this._ghostObject();
+    if (gh) {
+      const { o, row } = gh;
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      const flat = { bunkers: '#f1e4b6', decor: '#e6d8f0' };
+      const waterFill = { water: '#79bfe0', swamp: '#7d8c52', tallGrass: '#b7c46f', oob: '#ffffff' };
+      if (o.poly) {
+        ctx.fillStyle = o.group === 'water' ? (waterFill[o.kind] || waterFill.water) : (flat[o.group] || '#ffffff');
+        trace(o.poly); ctx.fill();
+        ctx.globalAlpha = 0.9; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        trace(o.poly); ctx.stroke(); ctx.setLineDash([]);
+      } else if (o.group === 'cross' && o.station) {
+        const st = o.station; const tx = st.ny; const ty = -st.nx;
+        const half = (this.ops.getCrossDepth ? this.ops.getCrossDepth() : 22) / 2; const wide = 34;
+        const q = [[-wide, -half], [wide, -half], [wide, half], [-wide, half]].map(([a2, d2]) => [st.x + st.nx * a2 + tx * d2, st.y + st.ny * a2 + ty * d2]);
+        const ck = o.kind || 'water';
+        ctx.fillStyle = waterFill[ck] || (ck === 'waste' || ck === 'sand' ? flat.bunkers : waterFill.water);
+        trace(q); ctx.fill();
+        ctx.globalAlpha = 0.9; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        trace(q); ctx.stroke(); ctx.setLineDash([]);
+      } else if (o.group === 'trees' || o.group === 'sentinels') {
+        const types = built.treeTypes || [];
+        const type = types[row && row.type] || types[0] || {};
+        const shape = type.shape || (type.name === 'saguaro' ? 'cactus' : 'canopy');
+        const [fill, , accent] = TREE_FILL[type.name] || ['#3f6b34', '#26431f'];
+        if (o.group === 'sentinels') {
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+          ringAt(o.center[0], o.center[1], o.radius || 7, 8); ctx.stroke(); ctx.setLineDash([]);
+        }
+        const s = (row && row.s) || 1;
+        const [px, py] = P(o.center[0], o.center[1]);
+        drawIsoTree(ctx, px, py, {
+          shape, k, fill, accent,
+          R: (shape === 'cactus' ? Math.max((type.trunk || 0.9) * 1.5, 1.2) : (type.canopy || 4)) * s,
+          H: row && row.h != null ? row.h : (type.height || 15),
+          trunk: (type.trunk || 0.8) * s, seed: 0.37,
+        });
+      } else {
+        ctx.fillStyle = flat.decor;
+        ringAt(o.center[0], o.center[1], 5, 8); ctx.fill();
+      }
+      // the exact point it is anchored to
+      ctx.globalAlpha = 1; ctx.fillStyle = '#ffce3a'; ctx.strokeStyle = '#4a4063'; ctx.lineWidth = 1;
+      ringAt(this.ghost.x, this.ghost.y, 0.8, 4); ctx.fill(); ctx.stroke();
+      ctx.restore();
     }
 
     // 9. ruler + validate ring
