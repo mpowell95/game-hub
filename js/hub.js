@@ -579,6 +579,14 @@ class Hub {
     // PUSH NOTIFICATIONS (2026-09-23, js/push.js): keep this device's stored address current, and
     // take a tapped notification to its game. Both lazy; neither can break the launcher.
     this._afterPaint(() => { import('./push.js').then((m) => m.refreshPush()).catch(() => {}); });
+    // ...and clear the notifications already showing, on open and every time the app comes back to
+    // the front (Matt, 2026-09-24: "Can the notifications auto dismiss if i go to the game hub?").
+    this._clearPushes = () => {
+      if (document.visibilityState !== 'visible') return;
+      import('./push.js').then((m) => m.clearShownNotifications()).catch(() => {});
+    };
+    this._afterPaint(this._clearPushes);
+    document.addEventListener('visibilitychange', this._clearPushes);
     this._onSwMessage = (e) => {
       if (e && e.data && e.data.type === 'OPEN_GAME') this._openPushedGame(e.data.game, e.data);
     };
@@ -1807,6 +1815,7 @@ class Hub {
     this.unmount();
     this.el.back.removeEventListener('click', this._onBack);
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
+    if (this._clearPushes) document.removeEventListener('visibilitychange', this._clearPushes);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
     if (this._onOnlineBugs) window.removeEventListener('online', this._onOnlineBugs);
     if (this._onSwMessage) { try { navigator.serviceWorker.removeEventListener('message', this._onSwMessage); } catch {} }

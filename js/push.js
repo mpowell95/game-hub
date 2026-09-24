@@ -188,6 +188,23 @@ export async function disablePush() {
 }
 
 /**
+ * CLEAR WHAT IS SHOWING (2026-09-24). Matt: "Can the notifications auto dismiss if i go to the game
+ * hub?" Opening the app is how a player answers them, so every notification this app put on the
+ * lock screen / Notification Center is closed when the hub opens or comes back to the front.
+ * Only this site's own notifications can be reached. Never throws.
+ */
+export async function clearShownNotifications() {
+  try {
+    if (!('serviceWorker' in navigator)) return 0;
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg || typeof reg.getNotifications !== 'function') return 0;
+    const shown = await reg.getNotifications();
+    for (const n of shown) { try { n.close(); } catch { /* already gone */ } }
+    return shown.length;
+  } catch { return 0; }
+}
+
+/**
  * ON EVERY HUB LOAD, quietly: if this device has notifications on, make sure the stored address is
  * current - the phone can rotate its subscription, the player can switch code or language. Writes
  * only when something differs from what was last stored. Never prompts, never throws.
