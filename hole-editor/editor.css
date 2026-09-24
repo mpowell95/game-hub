@@ -338,8 +338,16 @@ input[type="range"] { accent-color: var(--he-accent); }
 /* Phone-only chrome (isometric look stage 2): hidden on the desktop editor. */
 .he-ptop, .he-pbar, .he-tray, .he-more { display: none; }
 
+/* Full-screen overlays (setup, compare, drafts) keep clear of an iPhone's notch and home bar
+   (2026-09-24, Matt's screenshots from the installed app). env() is 0 everywhere else. */
+.he-overlay { box-sizing: border-box; padding: calc(8px + env(safe-area-inset-top, 0px)) 0 calc(8px + env(safe-area-inset-bottom, 0px)); }
+
 @media (max-width: 899px) {
-  .he-root { height: 100vh; height: 100dvh; min-height: 0; }
+  /* FIXED TO THE SCREEN, not 100dvh: in an installed iPhone app with a see-through status bar,
+     100vh/100dvh come out one status bar SHORT, which left an empty strip under the bottom bar
+     (Matt's screenshot, 2026-09-24). inset: 0 is the whole screen on every phone. */
+  .he-root { position: fixed; inset: 0; height: auto; min-height: 0; }
+  #he-help-nudge { display: none !important; }   /* points at the desktop Help button, hidden here */
   input[type="text"], input[type="number"], select { font-size: 16px; }   /* iOS zooms in under 16 px */
 
   /* Ribbon: course, Undo, Redo, Tools, Report bug, Help. Tools unfolds the rest as a grid. */
@@ -437,7 +445,7 @@ input[type="range"] { accent-color: var(--he-accent); }
   .he-root--drawing .he-drawbar .he-mbtn { flex: 1 1 0; padding: 0 6px; }
   .he-root--drawing .he-canvas-controls, .he-root--drawing .he-hover-readout { display: none; }
   /* Stage 4: the modals at phone width (class hooks only; every value here is phone-only). */
-  .he-setup-box { padding: 16px 14px !important; gap: 12px !important; max-width: calc(100vw - 16px) !important; max-height: calc(100dvh - 16px) !important; }
+  .he-setup-box { padding: 16px 14px !important; gap: 12px !important; max-width: calc(100vw - 16px) !important; max-height: 100% !important; }
   .he-setup-head { flex-wrap: wrap; gap: 8px; }
   .he-setup-head > div:first-child { font-size: 19px !important; flex: 1 1 auto; }
   .he-setup-head a { order: 3; margin: 0 !important; flex: 1 1 100%; text-align: center; }
@@ -446,7 +454,7 @@ input[type="range"] { accent-color: var(--he-accent); }
   .he-setup-foot { flex-direction: column-reverse; align-items: stretch !important; }
   .he-setup-foot .gh-btn { width: 100%; min-height: 48px; }
   #he-setup-code, #he-setup-who { width: 100% !important; }
-  .he-modal-box { min-width: 0 !important; max-width: calc(100vw - 16px) !important; max-height: calc(100dvh - 16px) !important; overflow: auto; padding: 14px !important; }
+  .he-modal-box { min-width: 0 !important; max-width: calc(100vw - 16px) !important; max-height: 100% !important; overflow: auto; padding: 14px !important; }
   .he-cmp-row { gap: 8px !important; }
   .he-cmp-frame { width: calc((100vw - 60px) / 2) !important; height: auto !important; aspect-ratio: 1 / 2; }
   .he-cmp-frame canvas { max-width: 100%; max-height: 100%; }
@@ -470,9 +478,9 @@ input[type="range"] { accent-color: var(--he-accent); }
   }
   body { background: #bfe3f2; color: var(--he-ink); }
   .he-ribbon, .he-mbar, .he-canvas-controls, .he-hover-readout, #he-layers-btn, #he-legend-btn { display: none !important; }
-  .he-canvas-top { top: 70px; }
+  .he-canvas-top { top: calc(70px + env(safe-area-inset-top, 0px)); }
 
-  .he-ptop { display: flex; position: absolute; top: 10px; left: 10px; right: 10px; z-index: 12; gap: 6px; align-items: center; font-family: var(--he-round); }
+  .he-ptop { display: flex; position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); z-index: 12; gap: 6px; align-items: center; font-family: var(--he-round); }
   .he-ptop-hole { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; padding: 5px; background: #fffaf3; border-radius: 18px; box-shadow: var(--he-shadow); }
   .he-parrow { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; background: #fbf1e6; color: var(--he-ink); font-size: 22px; font-weight: 800; line-height: 1; touch-action: manipulation; }
   .he-ptop-mid { position: relative; flex: 1 1 auto; min-width: 0; text-align: center; line-height: 1.15; }

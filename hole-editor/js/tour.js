@@ -7,6 +7,13 @@
 // sentence. A step with `done` moves on by itself when the player has actually done it; the rest
 // have a Next button. Nothing here changes the editor; it only reads `window.__he` and the DOM.
 
+/** env(safe-area-inset-top) in px: the notch / Dynamic Island band of an installed iPhone app. */
+function safeTop() {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top, 0px);visibility:hidden;pointer-events:none';
+  document.body.appendChild(d); const h = d.offsetHeight || 0; d.remove(); return h;
+}
+
 const he = () => window.__he;
 const spec = () => { const h = he(); return h && h.doc.holes[h.currentId] && h.doc.holes[h.currentId].spec; };
 const count = (k) => ((spec() || {})[k] || []).length;
@@ -213,7 +220,7 @@ function place() {
     x = side === 'right' ? r.right + gap : r.left - gap - tw;
     // A tall target (the map, a panel): point at a spot near its top third, not its middle.
     const aimY = r.height > 300 ? r.top + Math.min(160, r.height / 3) : r.top + r.height / 2;
-    y = Math.max(10, Math.min(innerHeight - th - 10, aimY - 34));
+    y = Math.max(10 + safeTop(), Math.min(innerHeight - th - 10, aimY - 34));
     tip.style.setProperty('--ay', `${Math.max(12, Math.min(th - 34, aimY - y - 11))}px`);
   } else {
     y = side === 'below' ? r.bottom + gap : r.top - gap - th;
@@ -226,8 +233,9 @@ function place() {
   // top of a target taller than half the screen (the map, a sheet).
   if (PHONE()) {
     x = Math.max(12, Math.min(innerWidth - tw - 12, r.left + r.width / 2 - tw / 2));
-    if (r.height > innerHeight * 0.45) { side = 'inside'; y = Math.max(64, r.top + 12); }
-    else if ((st.side === 'above' || r.top > innerHeight / 2) && r.top - gap - th > 8) { side = 'above'; y = r.top - gap - th; }
+    const sTop = safeTop();   // an iPhone's notch area (0 elsewhere): the top bar sits below it
+    if (r.height > innerHeight * 0.45) { side = 'inside'; y = Math.max(64 + sTop, r.top + 12); }
+    else if ((st.side === 'above' || r.top > innerHeight / 2) && r.top - gap - th > 8 + sTop) { side = 'above'; y = r.top - gap - th; }
     else { side = 'below'; y = Math.min(innerHeight - th - 8, r.bottom + gap); }
     tip.style.setProperty('--ax', `${Math.max(12, Math.min(tw - 34, r.left + r.width / 2 - x - 11))}px`);
   }

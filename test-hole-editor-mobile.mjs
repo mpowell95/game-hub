@@ -46,6 +46,18 @@ await page.waitForFunction(() => window.__he && window.__he.editorCanvas.camera)
 if (await page.$('#he-setup')) { await page.fill('#he-setup-name', 'Phone Test'); await page.click('#he-setup-go'); }
 await page.waitForTimeout(300);
 const cdp = await ctx.newCDPSession(page);
+// AN iPHONE'S EDGES (2026-09-24, Matt's screenshots from the installed app): the notch / Dynamic
+// Island band (59 px) and the home bar (34 px), as env(safe-area-inset-*) reports them.
+const SAFE_TOP = 59; const SAFE_BOTTOM = 34;
+const iphoneEdges = (c) => c.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: SAFE_TOP, topMax: SAFE_TOP, bottom: SAFE_BOTTOM, bottomMax: SAFE_BOTTOM, left: 0, leftMax: 0, right: 0, rightMax: 0 } }).then(() => true, () => false);
+const edges = await iphoneEdges(cdp);
+if (edges) {
+  await page.waitForTimeout(150);
+  ok('[iPhone edges] the top bar sits below the notch', await page.evaluate((t) => document.getElementById('he-ptop').getBoundingClientRect().top >= t, SAFE_TOP));
+  ok('[iPhone edges] the bottom bar sits above the home bar', await page.evaluate((b) => document.getElementById('he-pbar').getBoundingClientRect().bottom <= innerHeight - b, SAFE_BOTTOM));
+  ok('[iPhone edges] the editor fills the whole screen (no strip under the bar)', await page.evaluate(() => { const r = document.querySelector('.he-root').getBoundingClientRect(); return r.top === 0 && r.bottom === innerHeight && getComputedStyle(document.querySelector('.he-root')).position === 'fixed'; }));
+  ok('[iPhone edges] the desktop Help note never shows on a phone', await page.evaluate(() => { const n = document.getElementById('he-help-nudge'); return !n || getComputedStyle(n).display === 'none'; }));
+} else console.log('(this Chromium cannot emulate iPhone edges; those checks skipped)');
 
 const settle = () => page.waitForTimeout(250);
 const spec = () => page.evaluate(() => window.__he.doc.holes[window.__he.currentId].spec);
@@ -227,11 +239,13 @@ await tapEl('#he-compare-close');
 // A brand-new phone: the link opens the walkthrough first (first-visit redirect), on the setup screen.
 const ctx2 = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
 const p2 = await ctx2.newPage();
+const edges2 = await iphoneEdges(await ctx2.newCDPSession(p2));
+const TOP2 = edges2 ? SAFE_TOP : 0;
 p2.on('pageerror', (e) => errors.push('walkthrough: ' + e.message.split('\n')[0]));
 await p2.goto(`${URL}?course=new`, { waitUntil: 'networkidle' });
 await p2.waitForSelector('.tr-tip .tr-n', { timeout: 20000 }).catch(() => {});
 ok('a first visit on a phone opens the walkthrough', /course=tutorial/.test(p2.url()) && !!(await p2.$('.tr-tip .tr-n')));
-ok('the setup screen fits the phone', await p2.evaluate(() => { const b = document.querySelector('.he-setup-box').getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && b.top >= 0 && document.documentElement.scrollWidth <= innerWidth; }));
+ok('the setup screen fits the phone (below the notch)', await p2.evaluate((t) => { const b = document.querySelector('.he-setup-box').getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && b.top >= t && document.documentElement.scrollWidth <= innerWidth; }, TOP2));
 ok('...with two terrain columns', await p2.evaluate(() => getComputedStyle(document.getElementById('he-setup-looks')).gridTemplateColumns.split(' ').length === 2));
 // Walk every step with its own Skip / Next, checking each pop-up is on screen and says "tap".
 const seen = []; const off = []; const click = [];
@@ -240,7 +254,7 @@ for (let g = 0; g < 30; g++) {
   if (!n || seen.includes(n)) break;
   seen.push(n);
   const bx = await p2.locator('.tr-tip').boundingBox();
-  if (!bx || bx.x < 0 || bx.x + bx.width > 390 || bx.y < 0 || bx.y + bx.height > 844) off.push(n);
+  if (!bx || bx.x < 0 || bx.x + bx.width > 390 || bx.y < TOP2 || bx.y + bx.height > 844) off.push(n);
   if (/\bclick/i.test(await p2.locator('.tr-tip').textContent())) click.push(n);
   if (n === 1) { await p2.fill('#he-setup-name', 'Practice'); await p2.waitForTimeout(1200); continue; }
   if (n === 3) { const r = await p2.locator('#he-setup-go').boundingBox(); await p2.touchscreen.tap(r.x + r.width / 2, r.y + r.height / 2); await p2.waitForTimeout(1200); continue; }
