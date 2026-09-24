@@ -992,16 +992,21 @@ class Hub {
       // The challenge bubble. The X puts it away; anywhere else on it opens the game with the
       // full-screen card armed. Checked BEFORE .hub-card because the bubble overlaps the tile.
       const dismiss = e.target.closest('[data-role="alert-dismiss"]');
-      if (dismiss) { e.preventDefault(); e.stopPropagation(); this._dismissGameAlert(); return; }
+      if (dismiss) {
+        e.preventDefault(); e.stopPropagation();
+        const b = dismiss.closest('.hub-alert');
+        this._dismissGameAlert(b && b.dataset.game);
+        return;
+      }
       const bubble = e.target.closest('.hub-alert');
-      if (bubble) { e.preventDefault(); e.stopPropagation(); this._openAlertGame(); return; }
+      if (bubble) { e.preventDefault(); e.stopPropagation(); this._openAlertGame(bubble.dataset.game); return; }
       const card = e.target.closest('.hub-card');
       if (!card) return;
       // Matt: "when you click into the game or click on the popup thing, it goes to a new, full
       // screen popup thing" - so the TILE arms the card too, not just the bubble.
-      if (this._gameAlert && this._gameAlert.game === card.dataset.id && !this._favEdit) {
+      if (this._alertFor(card.dataset.id) && !this._favEdit) {
         e.preventDefault();
-        this._openAlertGame();
+        this._openAlertGame(card.dataset.id);
         return;
       }
       // Edit mode replaces the favorite heart with move arrows and must not let a mis-tap
@@ -1084,13 +1089,17 @@ class Hub {
    * Everything is guarded: a game tile must never be able to break the launcher.
    */
   async _checkGameAlerts() {
-    let found = null;
+    // EVERY GAME'S ALERT, not the first one (2026-09-24). Matt: "If someone has challenges waiting
+    // on both games, can we switch to a smaller 'your turn' bubbles so you can see both? But so it
+    // doesn't take up the entire screen?" One alert draws the big bubble; two or more draw a small
+    // pill on each tile (_paintGameAlert).
+    const found = [];
     for (const g of GAMES) {
       if (typeof g.alerts !== 'function') continue;
       try {
         const mod = await g.alerts();
         const alert = await mod.check();
-        if (alert) { found = { game: g.id, alert, mod }; break; }   // one bubble at a time
+        if (alert) found.push({ game: g.id, alert, mod });
       } catch (err) {
         console.warn('[hub] alert check failed for', g.id, err);
       }
@@ -1098,14 +1107,15 @@ class Hub {
     // ASSIGNED EVERY TIME, INCLUDING TO NULL. The first version only assigned when it FOUND
     // something and returned early, so an alert that had stopped being true was never cleared -
     // half of why Matt's bubble survived him playing the turn.
-    this._gameAlert = found;
+    this._gameAlerts = found;
     this._paintGameAlert();
     this._watchGameAlerts();
     // A tile the player cannot see is not "super obvious". Bring it into view ONCE per alert,
     // gently, and never fight a scroll they have already started.
-    if (found && this._alertScrolledFor !== found.alert.id) {
-      this._alertScrolledFor = found.alert.id;
-      const cell = this._cellFor(found.game);
+    const first = found[0];
+    if (first && this._alertScrolledFor !== first.alert.id) {
+      this._alertScrolledFor = first.alert.id;
+      const cell = this._cellFor(first.game);
       if (cell && cell.scrollIntoView) {
         try { cell.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
       }
@@ -1129,10 +1139,13 @@ class Hub {
         const mod = await g.alerts();
         if (typeof mod.watch !== 'function') continue;
         this._alertWatches[g.id] = await mod.watch((alert) => {
-          const cur = this._gameAlert;
-          if (alert) this._gameAlert = { game: g.id, alert, mod };
-          else if (cur && cur.game === g.id) this._gameAlert = null;
-          else return;
+          const list = this._gameAlerts || [];
+          const had = list.some((x) => x.game === g.id);
+          if (!alert && !had) return;
+          const rest = list.filter((x) => x.game !== g.id);
+          if (alert) rest.push({ game: g.id, alert, mod });
+          // Keep the registry's order, so the pills never swap places.
+          this._gameAlerts = GAMES.map((x) => rest.find((r) => r.game === x.id)).filter(Boolean);
           this._paintGameAlert();
         });
       } catch (err) {
@@ -1187,7 +1200,7 @@ class Hub {
     }
     await this._checkGameAlerts();
     if (this.current) return;
-    if (this._gameAlert && this._gameAlert.game === id) this._openAlertGame();
+    if (this._alertFor(id)) this._openAlertGame(id);
     else this.launch(id);
   }
 
@@ -1200,13 +1213,33 @@ class Hub {
   }
 
   /** Draw (or redraw) the speech bubble. Pure DOM - the decision was made in _checkGameAlerts. */
+  /** The alert a game currently has on the launcher, or null. */
+  _alertFor(id) {
+    return (this._gameAlerts || []).find((x) => x.game === id && x.alert) || null;
+  }
+
   _paintGameAlert() {
-    const prev = this.root && this.root.querySelector('.hub-alert');
-    if (prev) prev.remove();
-    const state = this._gameAlert;
-    if (!state || !state.alert) return;
+    if (this.root) for (const prev of this.root.querySelectorAll('.hub-alert')) prev.remove();
+    const list = (this._gameAlerts || []).filter((x) => x && x.alert && this._cellFor(x.game));
+    if (!list.length) return;
+    // TWO OR MORE: a small pill on each tile instead of one big bubble, so every game waiting on
+    // the player is visible at once without covering the launcher. The tile under it opens the
+    // game exactly as the pill does, so the pill does not have to carry the tap target alone.
+    if (list.length > 1) {
+      for (const state of list) {
+        const a = state.alert;
+        const pill = document.createElement('div');
+        pill.className = `hub-alert is-mini is-${a.kind}`;
+        pill.dataset.game = state.game;
+        pill.setAttribute('role', 'status');
+        pill.setAttribute('aria-live', 'polite');
+        pill.textContent = a.kind === 'over' ? t('hub_alert_over_short') : t('hub_alert_your_turn');
+        this._cellFor(state.game).appendChild(pill);
+      }
+      return;
+    }
+    const state = list[0];
     const cell = this._cellFor(state.game);
-    if (!cell) return;
     const a = state.alert;
     // CROSSED SWORDS, DRAWN RATHER THAN TYPED. Matt's mockup used the ⚔️ emoji and he was clear
     // it is the idea, not the asset: "it doesn't have to be that specific swords image. You can
@@ -1241,6 +1274,7 @@ class Hub {
     const noRoomAbove = cell.offsetTop < 120;
     el.className = `hub-alert is-${a.kind} ${rightHalf ? 'is-col-right' : 'is-col-left'}`
       + (noRoomAbove ? ' is-below' : '');
+    el.dataset.game = state.game;
     el.setAttribute('role', 'status');
     el.setAttribute('aria-live', 'polite');
     el.innerHTML = `
@@ -1266,14 +1300,16 @@ class Hub {
   }
 
   /** Tapping the bubble (or the tile it points at) arms the full-screen card and opens the game. */
-  _openAlertGame() {
-    const state = this._gameAlert;
+  _openAlertGame(id) {
+    const state = id ? this._alertFor(id) : (this._gameAlerts || [])[0];
     if (!state) return;
     try { state.mod.armCeremony(state.alert); } catch {}
     // A GAME OVER bubble is NOT acknowledged by tapping it: the game's own Game Over popup is what
     // the tap is for, and it marks the result seen. Acknowledging here would leave it nothing to show.
-    if (state.alert.kind === 'over') { this._gameAlert = null; this._paintGameAlert(); }
-    else this._dismissGameAlert();
+    if (state.alert.kind === 'over') {
+      this._gameAlerts = (this._gameAlerts || []).filter((x) => x !== state);
+      this._paintGameAlert();
+    } else this._dismissGameAlert(state.game);
     this.launch(state.game);
   }
 
@@ -1287,8 +1323,8 @@ class Hub {
    * "once I've clicked on the new challenge popup and gone into the matchup and played and stuff,
    * it should go away. I just did that and it stayed there even though it's not my turn."
    */
-  _dismissGameAlert() {
-    const state = this._gameAlert;
+  _dismissGameAlert(id) {
+    const state = id ? this._alertFor(id) : (this._gameAlerts || [])[0];
     if (!state) return;
     try {
       if (state.alert.kind === 'over' && typeof state.mod.markResultSeen === 'function') {
@@ -1298,7 +1334,7 @@ class Hub {
         state.mod.markSeen(state.alert.id, row ? row.updated : Date.now());
       }
     } catch {}
-    this._gameAlert = null;
+    this._gameAlerts = (this._gameAlerts || []).filter((x) => x !== state);
     this._paintGameAlert();
   }
 

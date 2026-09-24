@@ -5,7 +5,7 @@
 // registers. The hub only knows the SHAPE returned here, never what a Skeeball challenge is:
 //
 //   challenge  an unanswered challenge to you this device has not acknowledged
-//   over       one you SENT that the other person has now played (won / lost / draw)
+//   over       a match the other person finished (won / lost / draw)
 //   turn       (hub wording "Your turn vs <names>") never raised here: a challenge's `updated`
 //              does not move until it is answered, so a seen one simply waits in the game's list
 //
@@ -21,9 +21,12 @@ const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 export function decideAlert(rows, seen, now = Date.now()) {
   if (!Array.isArray(rows)) return null;
   const unseen = (r) => ms(r.updated) > ms(seen && seen[r.id]);
-  const fresh = rows.filter((r) => r && r.id && !r.over && r.yourTurn && !isExpired(r, now) && unseen(r))
+  // A delivered challenge to you (never your own: the challenger's row is `sent`).
+  const fresh = rows.filter((r) => r && r.id && !r.sent && !r.over && r.yourTurn && !isExpired(r, now) && unseen(r))
     .sort((a, b) => ms(b.updated) - ms(a.updated));
-  const ended = rows.filter((r) => r && r.id && r.over && r.sent && unseen(r))
+  // A finished match this device has not acknowledged. Every write this device makes stamps the
+  // seen map, so a match you finished yourself never raises this; one the other person finished does.
+  const ended = rows.filter((r) => r && r.id && r.over && unseen(r))
     .sort((a, b) => ms(b.updated) - ms(a.updated));
   if (fresh.length) {
     const r = fresh[0];

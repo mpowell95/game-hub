@@ -15,15 +15,26 @@ import * as CH from './challenge.js';
 const t = makeT(STRINGS);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = (v) => (v == null ? '-' : String(v));
 
 const boardName = (id, fallback) => (BOARDS.some((b) => b.id === id) ? boardById(id).name : (fallback || id));
 
-/** "2 days left" / "5 hours left" / "Expired". */
+/** "2d left" / "5h left" / "Expired". */
 function timeLeft(expires, now = Date.now()) {
   const left = (+expires || 0) - now;
   if (left <= 0) return t('ch_expired');
   const h = Math.ceil(left / 3600000);
   return h >= 24 ? t('ch_days_left', { n: Math.ceil(h / 24) }) : t('ch_hours_left', { n: h });
+}
+
+/** "THE CLASSIC", "3 games · THE CLASSIC · Most wins", "All machines · Total score". */
+export function formatLine(x) {
+  if (!x) return '';
+  const n = x.n != null ? x.n : (x.legs || []).length;
+  const machine = x.all ? t('ch_all_machines') : boardName(x.board || (x.legs && x.legs[0] && x.legs[0].board), x.boardName || (x.legs && x.legs[0] && x.legs[0].boardName));
+  if (n <= 1 && !x.all) return machine;
+  const scoring = x.scoring === 'total' ? t('ch_sc_total') : t('ch_sc_games');
+  return x.all ? `${machine} · ${scoring}` : `${t('ch_n_games', { n })} · ${machine} · ${scoring}`;
 }
 
 // --- which machines two people can both play ------------------------------------------------------
@@ -65,18 +76,44 @@ function localUnlocked() {
   return out;
 }
 
+/** The per-game table: # · machine · them · you. `g` is a match with this device's scores laid over. */
+function legsTable(g, side) {
+  const mine = CH.scoresOf(g, side);
+  const theirs = CH.scoresOf(g, side === 'a' ? 'b' : 'a');
+  // Every score to beat is on show by design. The CHALLENGER, while still playing, simply has an
+  // empty column for the other person. Won / lost / tied per game is a mark, not only a colour.
+  const rows = g.legs.map((l, i) => {
+    const m = mine[i]; const o = theirs[i];
+    const mark = (m != null && o != null) ? (m > o ? '✓' : m < o ? '✗' : '=') : '';
+    return `<tr><td>${i + 1}</td><td class="sk-ch-tm">${esc(boardName(l.board, l.boardName))}</td>
+      <td>${num(o)}</td><td><b>${num(m)}</b>${mark ? ` <span class="sk-ch-mark" aria-hidden="true">${mark}</span>` : ''}</td></tr>`;
+  }).join('');
+  const them = side === 'a' ? g.b : g.a;
+  const tl = CH.tally(g);
+  const myTot = side === 'a' ? tl.aTotal : tl.bTotal;
+  const thTot = side === 'a' ? tl.bTotal : tl.aTotal;
+  const foot = g.legs.length > 1
+    ? `<tr class="sk-ch-foot"><td></td><td>${esc(g.scoring === 'total' ? t('ch_total') : t('ch_games_won'))}</td>
+        <td>${g.scoring === 'total' ? thTot : (side === 'a' ? tl.bWins : tl.aWins)}</td>
+        <td><b>${g.scoring === 'total' ? myTot : (side === 'a' ? tl.aWins : tl.bWins)}</b></td></tr>` : '';
+  return `<table class="sk-ch-table"><thead><tr><th>#</th><th>${esc(t('ch_machine'))}</th>
+    <th>${esc(them.name || t('ch_someone'))}</th><th>${esc(t('ch_you'))}</th></tr></thead>
+    <tbody>${rows}${foot}</tbody></table>`;
+}
+
 // --- the challenge list, and everything reached from it -------------------------------------------
 
 /**
  * Open the challenges sheet. `focus` = { kind:'challenge'|'over', id } lands straight on that one
- * (the launcher bubble's handoff). `pickFor` = { code, name, emoji } starts a new challenge to them.
- * `seed` is for local probes only (the __h4Test precedent): index rows to show instead of reading
- * Firebase, which a local browser cannot reach. The game never passes it.
+ * (the launcher bubble's handoff); `open` = id does the same from anywhere. `pickFor` = { code,
+ * name, emoji } starts a new challenge to them. `seed` is for local probes only (the __h4Test
+ * precedent): index rows to show instead of reading Firebase, which a local browser cannot reach.
+ * The game never passes it.
  */
-export function openChallenges(ui, { focus = null, pickFor = null, seed = null } = {}) {
+export function openChallenges(ui, { focus = null, open = null, pickFor = null, seed = null, seedGame = null } = {}) {
   const el = document.createElement('div');
   el.className = 'gh-overlay sk-ch-veil';
-  const state = { rows: null, players: null, them: null, board: null, caption: '', busy: false };
+  const state = { rows: null, players: null, recs: null, board: null, caption: '', count: 1, all: false, scoring: 'games', busy: false, view: null };
   let stopWatch = () => {};
   let closed = false;
 
@@ -88,8 +125,7 @@ export function openChallenges(ui, { focus = null, pickFor = null, seed = null }
     if (ui.overlay === el) ui.overlay = null;
     ui._paintChallengeBadge();
   };
-  // ui._closeOverlay() only removes the node; this makes it stop the live watch too.
-  el._skClose = close;
+  el._skClose = close;           // ui._closeOverlay() calls this, so the live watch stops too
 
   const shell = (title, body, back) => {
     el.innerHTML = `
@@ -107,28 +143,29 @@ export function openChallenges(ui, { focus = null, pickFor = null, seed = null }
 
   // --- list ---
   const rowHtml = (r, i) => {
-    const machine = esc(boardName(r.board, r.boardName));
+    const fmt = esc(formatLine(r));
     let line; let side = '';
+    const multi = r.n > 1 || r.all;
     if (r.over) {
       const head = r.result === 'won' ? t('ch_row_won') : r.result === 'lost' ? t('ch_row_lost') : t('ch_row_draw');
-      line = `${esc(head)} · ${machine}`;
-      side = `${r.mine == null ? '-' : r.mine} : ${r.theirs == null ? '-' : r.theirs}`;
+      line = `${esc(head)} · ${fmt}`;
+      side = multi && r.scoring !== 'total' ? `${r.myWins} : ${r.theirWins}` : `${num(r.mine)} : ${num(r.theirs)}`;
     } else if (CH.isExpired(r)) {
-      line = `${esc(t('ch_expired'))} · ${machine}`;
+      line = `${esc(t('ch_expired'))} · ${fmt}`;
+    } else if (r.yourTurn && r.sent) {
+      line = `${fmt} · ${esc(t('ch_your_games', { p: r.played, n: r.n }))}`;
     } else if (r.yourTurn) {
-      line = `${machine} · ${esc(t('ch_beat', { n: r.theirs }))}`;
+      line = multi ? `${fmt} · ${esc(t('ch_your_games', { p: r.played, n: r.n }))}` : `${fmt} · ${esc(t('ch_beat', { n: num(r.theirs) }))}`;
       side = esc(timeLeft(r.expires));
     } else {
-      line = `${machine} · ${esc(t('ch_you_scored', { n: r.mine }))}`;
-      side = esc(timeLeft(r.expires));
+      line = `${fmt} · ${esc(t('ch_waiting'))}`;
+      side = r.expires ? esc(timeLeft(r.expires)) : '';
     }
-    const tag = r.yourTurn && !r.over && !CH.isExpired(r) ? 'button type="button"' : 'div';
-    const end = tag === 'div' ? 'div' : 'button';
-    return `<${tag} class="sk-ch-row${tag === 'div' ? '' : ' is-go'}" data-row="${i}">
+    return `<button type="button" class="sk-ch-row is-go" data-row="${i}">
         <span class="sk-ch-who"><span aria-hidden="true">${esc(r.emoji)}</span> ${esc(r.name || t('ch_someone'))}</span>
         <span class="sk-ch-line">${line}</span>
         ${side ? `<span class="sk-ch-side">${side}</span>` : ''}
-      </${end}>`;
+      </button>`;
   };
 
   const viewList = () => {
@@ -138,10 +175,11 @@ export function openChallenges(ui, { focus = null, pickFor = null, seed = null }
     if (!rows) body = note(t('ch_loading'));
     else {
       const g = CH.groupRows(rows);
-      const all = [...g.toPlay, ...g.sent, ...g.done.slice(0, 12)];
+      const done = g.done.slice(0, 12);
+      const all = [...g.toPlay, ...g.sent, ...done];
       const sec = (title, list) => (list.length ? `<section class="sk-ch-sec"><h3>${esc(title)}</h3>
         ${list.map((r) => rowHtml(r, all.indexOf(r))).join('')}</section>` : '');
-      body = `${sec(t('ch_sec_play'), g.toPlay)}${sec(t('ch_sec_sent'), g.sent)}${sec(t('ch_sec_done'), g.done.slice(0, 12))}`
+      body = `${sec(t('ch_sec_play'), g.toPlay)}${sec(t('ch_sec_sent'), g.sent)}${sec(t('ch_sec_done'), done)}`
         || note(t('ch_none'));
       state.listed = all;
     }
@@ -150,7 +188,7 @@ export function openChallenges(ui, { focus = null, pickFor = null, seed = null }
       <div class="sk-ch-list">${body}</div>`, null);
     el.querySelector('[data-act="new"]').addEventListener('click', () => viewPick());
     for (const b of el.querySelectorAll('button[data-row]')) {
-      b.addEventListener('click', () => viewAnswer(state.listed[+b.dataset.row]));
+      b.addEventListener('click', () => viewMatch(state.listed[+b.dataset.row].id));
     }
   };
 
@@ -158,8 +196,8 @@ export function openChallenges(ui, { focus = null, pickFor = null, seed = null }
   const loadPlayers = async () => {
     if (state.players) return state.players;
     const all = await readPlayersOnce().catch(() => ({}));
-    state.all = all || {};
-    state.players = CH.opponentsFrom(state.all, CH.myCode());
+    state.recs = all || {};
+    state.players = CH.opponentsFrom(state.recs, CH.myCode());
     return state.players;
   };
   const viewPick = async () => {
@@ -176,95 +214,111 @@ export function openChallenges(ui, { focus = null, pickFor = null, seed = null }
     }
   };
 
-  // --- the machine and a caption ---
-  const viewTerms = async (them) => {
+  // --- the format, the machine and a caption ---
+  const viewTerms = async (them, err = '') => {
     if (!them) return viewList();
     state.view = 'terms';
-    state.them = them;
-    if (!state.all) { shell(t('ch_to', { name: them.name }), note(t('ch_loading')), viewPick); await loadPlayers(); }
+    if (!state.recs) { shell(t('ch_to', { name: them.name }), note(t('ch_loading')), viewPick); await loadPlayers(); }
     if (closed || state.view !== 'terms') return;
-    const mine = new Set([...localUnlocked(), ...unlockedFrom(state.all, CH.myCode())]);
-    const boards = sharedBoards(mine, unlockedFrom(state.all, them.code));
+    const mine = new Set([...localUnlocked(), ...unlockedFrom(state.recs, CH.myCode())]);
+    const boards = sharedBoards(mine, unlockedFrom(state.recs, them.code));
+    if (boards.length < 2) state.all = false;
     if (!boards.some((b) => b.id === state.board)) state.board = (boards.find((b) => b.id === ui.settings.board) || boards[0] || {}).id || null;
-    const chip = (b) => {
-      const on = b.id === state.board;
-      return `<button type="button" class="gh-btn sk-ch-opt${on ? ' is-on' : ''}" data-board="${b.id}" aria-pressed="${on}">${on ? '<span aria-hidden="true">&check; </span>' : ''}${esc(b.name)}</button>`;
-    };
+    // A CHECKMARK, NOT JUST A COLOUR (Matt is red/green colourblind): the chosen chip carries a
+    // check, a heavier border and a heavier weight.
+    const chip = (key, val, label, on) => `<button type="button" class="gh-btn sk-ch-opt${on ? ' is-on' : ''}"
+      data-${key}="${esc(val)}" aria-pressed="${on}">${on ? '<span aria-hidden="true">&check; </span>' : ''}${esc(label)}</button>`;
+    const fmtChips = [1, 3, 5].map((n) => chip('count', n, n === 1 ? t('ch_one_game') : t('ch_n_games', { n }), !state.all && state.count === n)).join('')
+      + (boards.length > 1 ? chip('count', 'all', t('ch_all_machines'), state.all) : '');
+    const multi = state.all || state.count > 1;
+    const scChips = chip('scoring', 'games', t('ch_sc_games'), state.scoring === 'games') + chip('scoring', 'total', t('ch_sc_total'), state.scoring === 'total');
+    const machines = state.all
+      ? `<p class="sk-ch-note">${esc(boards.map((b) => b.name).join(', '))}</p>`
+      : `<div class="sk-ch-opts">${boards.map((b) => chip('board', b.id, b.name, b.id === state.board)).join('')}</div>`;
     shell(t('ch_to', { name: them.name }), boards.length ? `
-      <p class="sk-ch-label">${esc(t('ch_machine'))}</p>
-      <div class="sk-ch-opts">${boards.map(chip).join('')}</div>
+      <p class="sk-ch-label">${esc(t('ch_format'))}</p>
+      <div class="sk-ch-opts">${fmtChips}</div>
+      ${multi ? `<p class="sk-ch-label">${esc(t('ch_scoring'))}</p><div class="sk-ch-opts">${scChips}</div>` : ''}
+      <p class="sk-ch-label">${esc(state.all ? t('ch_machines') : t('ch_machine'))}</p>
+      ${machines}
       <label class="gh-field sk-ch-field">
         <span class="gh-field__label">${esc(t('ch_caption'))}</span>
         <input class="gh-input" type="text" maxlength="${CH.MAX_CAPTION}" data-role="caption"
                placeholder="${esc(t('ch_caption_ph'))}" value="${esc(state.caption)}">
       </label>
       ${note(t('ch_terms_note', { name: them.name }))}
-      <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play">${esc(t('ch_play_rack'))}</button>`
+      ${err ? `<p class="sk-ch-err" role="alert">${esc(err)}</p>` : ''}
+      <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="start">${esc(t('ch_start'))}</button>`
       : note(t('ch_no_machine')), viewPick);
-    for (const b of el.querySelectorAll('[data-board]')) {
-      b.addEventListener('click', () => {
-        const box = el.querySelector('[data-role="caption"]');
-        if (box) state.caption = box.value;
-        state.board = b.dataset.board;
-        viewTerms(them);
-      });
-    }
-    const play = el.querySelector('[data-act="play"]');
-    if (play) play.addEventListener('click', () => {
-      const box = el.querySelector('[data-role="caption"]');
-      const caption = CH.cleanCaption(box ? box.value : state.caption);
+    const keep = () => { const box = el.querySelector('[data-role="caption"]'); if (box) state.caption = box.value; };
+    for (const b of el.querySelectorAll('[data-count]')) b.addEventListener('click', () => {
+      keep();
+      if (b.dataset.count === 'all') state.all = true; else { state.all = false; state.count = +b.dataset.count; }
+      viewTerms(them);
+    });
+    for (const b of el.querySelectorAll('[data-scoring]')) b.addEventListener('click', () => { keep(); state.scoring = b.dataset.scoring; viewTerms(them); });
+    for (const b of el.querySelectorAll('[data-board]')) b.addEventListener('click', () => { keep(); state.board = b.dataset.board; viewTerms(them); });
+    const start = el.querySelector('[data-act="start"]');
+    if (start) start.addEventListener('click', async () => {
+      if (state.busy) return;
+      keep();
+      state.busy = true;
+      start.disabled = true;
+      start.textContent = t('ch_starting');
+      const legs = CH.makeLegs({ count: state.count, all: state.all, board: state.board, boards });
+      const res = await CH.createChallenge({ them, legs, scoring: multi ? state.scoring : 'games', all: state.all,
+        caption: CH.cleanCaption(state.caption) });
+      state.busy = false;
+      if (closed) return;
+      if (!res.ok) {
+        return viewTerms(them, res.reason === 'denied' ? t('ch_err_off') : res.reason === 'dev-origin-blocked'
+          ? t('ch_err_dev') : t('ch_err_start'));
+      }
       close();
-      ui._startChallenge({ mode: 'send', them, board: state.board, caption });
+      ui._startChallengeLeg({ id: res.game.id, side: 'a', leg: 0, game: res.game });
     });
   };
 
-  // --- a challenge to you ---
-  const viewAnswer = (r) => {
-    if (!r) return viewList();
-    state.view = 'answer';
-    CH.markSeen(r.id, r.updated);
-    const machine = boardName(r.board, r.boardName);
-    const queued = CH.isQueued(r.id);
-    const expired = CH.isExpired(r);
-    shell(t('ch_from', { name: r.name || t('ch_someone') }), `
-      <p class="sk-ch-machine">${esc(machine)}</p>
-      <p class="sk-ch-label">${esc(t('ch_to_beat'))}</p>
-      <p class="sk-ch-big">${r.theirs == null ? '-' : r.theirs}</p>
+  // --- one match: where it stands, and the next game to play ---
+  const viewMatch = async (id, fallbackRow = null) => {
+    state.view = 'match';
+    shell(t('ch_title'), note(t('ch_loading')), viewList);
+    const raw = (seedGame && seedGame.id === id) ? seedGame : await CH.readChallenge(id);
+    if (closed || state.view !== 'match') return;
+    if (!raw) { shell(t('ch_title'), note(t('ch_err_read')), viewList); return; }
+    const g = CH.withLocal(raw);
+    const side = CH.sideOf(g, CH.myCode());
+    if (!side) { shell(t('ch_title'), note(t('ch_err_read')), viewList); return; }
+    CH.markSeen(id, raw.updated);
+    const them = side === 'a' ? g.b : g.a;
+    const expired = CH.isExpired({ over: g.over, expires: g.expires });
+    const next = expired ? -1 : CH.nextLeg(g, side, (i) => CH.legPlayed(id, side, i));
+    const res = CH.resultFor(g, side);
+    const title = res ? (res === 'won' ? t('ch_won') : res === 'lost' ? t('ch_lost') : t('ch_draw'))
+      : side === 'a' ? t('ch_yours_to', { name: them.name || t('ch_someone') })
+        : t('ch_from', { name: them.name || t('ch_someone') });
+    let status = '';
+    if (!g.over && expired) status = t('ch_expired_long');
+    else if (!g.over && next < 0) status = g.stage === side ? t('ch_queued') : t('ch_waiting_on', { name: them.name || t('ch_someone') });
+    const play = next >= 0 ? `
+      ${note(t('ch_one_rack'))}
+      ${side === 'b' && g.expires ? `<p class="sk-ch-left">${esc(timeLeft(g.expires))}</p>` : ''}
+      <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="go">${esc(g.legs.length > 1
+        ? t('ch_play_n', { k: next + 1, n: g.legs.length, m: boardName(g.legs[next].board, g.legs[next].boardName) })
+        : t('play'))}</button>` : '';
+    shell(title, `
+      <p class="sk-ch-machine">${esc(formatLine(g))}</p>
       <p class="sk-ch-caption" data-role="cap"></p>
-      ${queued ? note(t('ch_queued')) : expired ? note(t('ch_expired_long')) : `
-        ${note(t('ch_one_rack'))}
-        <p class="sk-ch-left">${esc(timeLeft(r.expires))}</p>
-        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="go">${esc(t('play'))}</button>`}`, viewList);
-    // The caption is on the MATCH, not the index row: one read, painted when it lands.
-    CH.readChallenge(r.id).then((g) => {
-      const cap = el.querySelector('[data-role="cap"]');
-      if (cap && g && g.caption && !closed) cap.textContent = `“${g.caption}”`;
-    });
+      ${legsTable(g, side)}
+      ${status ? note(status) : ''}
+      ${play}
+      ${g.over ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="again">${esc(t('ch_rematch'))}</button>` : ''}`, viewList);
+    const cap = el.querySelector('[data-role="cap"]');
+    if (cap && g.caption) cap.textContent = `“${g.caption}”`;
     const go = el.querySelector('[data-act="go"]');
-    if (go) go.addEventListener('click', () => {
-      close();
-      ui._startChallenge({ mode: 'answer', id: r.id, board: r.board, target: r.theirs,
-        them: { code: r.with, name: r.name, emoji: r.emoji } });
-    });
-  };
-
-  // --- a result (from the launcher bubble) ---
-  const viewResult = (r) => {
-    if (!r) return viewList();
-    state.view = 'result';
-    CH.markSeen(r.id, r.updated);
-    const head = r.result === 'won' ? t('ch_won') : r.result === 'lost' ? t('ch_lost') : t('ch_draw');
-    shell(head, `
-      <p class="sk-ch-machine">${esc(boardName(r.board, r.boardName))}</p>
-      <div class="sk-ch-vs">
-        <div><b>${r.mine == null ? '-' : r.mine}</b><em>${esc(t('ch_you'))}</em></div>
-        <div><b>${r.theirs == null ? '-' : r.theirs}</b><em>${esc(r.name || t('ch_someone'))}</em></div>
-      </div>
-      <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="again">${esc(t('ch_rematch'))}</button>
-      <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="list">${esc(t('ch_all'))}</button>`, null);
-    el.querySelector('[data-act="again"]').addEventListener('click', () =>
-      viewTerms({ code: r.with, name: r.name, emoji: r.emoji }));
-    el.querySelector('[data-act="list"]').addEventListener('click', viewList);
+    if (go) go.addEventListener('click', () => { close(); ui._startChallengeLeg({ id, side, leg: next, game: g }); });
+    const again = el.querySelector('[data-act="again"]');
+    if (again) again.addEventListener('click', () => viewTerms({ code: them.code, name: them.name, emoji: them.emoji }));
   };
 
   ui._closeOverlay();
@@ -272,23 +326,21 @@ export function openChallenges(ui, { focus = null, pickFor = null, seed = null }
   ui.overlay = el;
   el.addEventListener('click', (e) => { if (e.target === el) close(); });
 
-  // What lands first: a named person, a focused challenge, or the list.
   let focused = false;
   const onRows = (rows) => {
     state.rows = rows;
     if (closed) return;
     if (focus && !focused) {
       focused = true;
-      const r = rows.find((x) => x.id === focus.id);
-      if (r && focus.kind === 'over') return viewResult(r);
-      if (r && r.yourTurn && !r.over) return viewAnswer(r);
+      if (rows.some((x) => x.id === focus.id)) return viewMatch(focus.id);
     }
-    if (!state.view || state.view === 'list') viewList();
+    if (state.view === 'list') viewList();
   };
   if (pickFor) viewTerms(pickFor);
-  else { state.view = 'list'; viewList(); }
+  else if (open) viewMatch(open);
+  else viewList();
   if (Array.isArray(seed)) { onRows(CH.sortRows(seed)); return el; }
-  // A score still owed from an earlier rack goes first, so the list it paints is already true.
+  // A score still owed from an earlier game goes first, so the list it paints is already true.
   CH.flushOutbox().catch(() => {}).then(() => CH.readMyChallenges()).then((rows) => {
     onRows(rows);
     // LIVE while open: a challenge arriving or being answered repaints the list.
@@ -297,90 +349,74 @@ export function openChallenges(ui, { focus = null, pickFor = null, seed = null }
   return el;
 }
 
-// --- the card at the end of a challenge rack -------------------------------------------------------
+// --- the card at the end of each challenge game ---------------------------------------------------
 
 /**
- * Replaces the ordinary game-over card for a challenge rack. `ch` is ui.challenge; the rack has
- * already been RECORDED by the caller (an ordinary rack) and, for an answer, QUEUED.
+ * Replaces the ordinary game-over card for a challenge game. The rack has already been RECORDED as
+ * an ordinary rack and its score FINALISED in the outbox by the caller; this sends it and says
+ * what happened. `ctx` is ui.challenge: { id, side, leg, game }.
  */
 export function showChallengeOver(ui, result) {
-  const ch = ui.challenge;
+  const ctx = ui.challenge;
   const el = document.createElement('div');
   el.className = 'gh-overlay sk-over-veil';
-  const name = (ch.them && ch.them.name) || t('ch_someone');
-  const machine = boardName(ch.board);
   const s = result.score | 0;
 
-  const paint = (inner) => {
+  const paint = (g, status) => {
+    const side = ctx.side;
+    const n = g.legs.length;
+    const them = side === 'a' ? g.b : g.a;
+    const name = them.name || t('ch_someone');
+    const target = CH.scoresOf(g, side === 'a' ? 'b' : 'a')[ctx.leg];
+    const d = side === 'b' ? CH.decide(g) : { done: false };
+    const aDone = side === 'a' && CH.scoresOf(g, 'a').every((x) => x != null);
+    const next = (d.done || g.over) ? -1 : CH.nextLeg({ ...g, stage: side }, side, (i) => CH.legPlayed(ctx.id, side, i));
+    let head;
+    if (g.over || d.done) {
+      const w = g.over ? g.over.winner : d.winner;
+      head = w === side ? t('ch_won') : w == null ? t('ch_draw') : t('ch_lost');
+    } else if (aDone) head = t('ch_sent_h');
+    else head = n > 1 ? t('ch_game_k', { k: ctx.leg + 1, n }) : t('over_h');
+    const vs = side === 'b' && target != null
+      ? `<div class="sk-ch-vs"><div><b>${s}</b><em>${esc(t('ch_you'))}</em></div><div><b>${target}</b><em>${esc(name)}</em></div></div>`
+      : `<p class="sk-over-score">${s}</p>`;
+    const aNote = aDone ? note(t('ch_sent_note', { name })) : '';
     el.innerHTML = `
-      <div class="gh-modal sk-over sk-ch-over" role="dialog" aria-label="${esc(t('over_h'))}">
+      <div class="gh-modal sk-over sk-ch-over" role="dialog" aria-label="${esc(head)}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
-        ${inner}
-      </div>`;
-    el.querySelector('[data-role="close"]').addEventListener('click', () => { ui.challenge = null; ui._renderSetup(); });
-  };
-
-  if (ch.mode === 'answer') {
-    const target = ch.target | 0;
-    const head = s > target ? t('ch_won') : s < target ? t('ch_lost') : t('ch_draw');
-    paint(`
-      <h2 class="sk-over-title">${esc(head)}</h2>
-      <p class="sk-over-machine">${esc(machine)}</p>
-      <div class="sk-ch-vs">
-        <div><b>${s}</b><em>${esc(t('ch_you'))}</em></div>
-        <div><b>${target}</b><em>${esc(name)}</em></div>
-      </div>
-      <p class="sk-ch-note" data-role="status">${esc(t('ch_sending'))}</p>
-      <div class="gh-modal__actions">
-        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="done">${esc(t('ch_done'))}</button>
-      </div>`);
-    el.querySelector('[data-act="done"]').addEventListener('click', () => { ui.challenge = null; ui._renderSetup(); });
-    const say = (k) => { const n = el.querySelector('[data-role="status"]'); if (n) n.textContent = t(k); };
-    // Say what actually happened to THIS score: sent, still waiting on a connection, or refused
-    // (a dev server never writes; a challenge somebody already answered cannot be answered twice).
-    CH.flushOutbox().then((r) => {
-      const no = r.refused.find((x) => x.id === ch.id);
-      if (r.sent.some((x) => x.id === ch.id)) say('ch_sent_score');
-      else if (no) say(no.reason === 'dev-origin-blocked' ? 'ch_err_dev' : no.reason === 'already-over' ? 'ch_err_answered' : 'ch_err_send');
-      else say('ch_saved_later');
-    }).catch(() => say('ch_saved_later'));
-  } else {
-    const sendView = (err) => {
-      paint(`
-        <h2 class="sk-over-title">${esc(t('over_h'))}</h2>
-        <p class="sk-over-machine">${esc(machine)}</p>
-        <p class="sk-over-score">${s}</p>
-        <p class="sk-ch-note">${esc(t('ch_send_q', { name }))}</p>
-        ${err ? `<p class="sk-ch-err" role="alert">${esc(err)}</p>` : ''}
+        <h2 class="sk-over-title">${esc(head)}</h2>
+        <p class="sk-over-machine">${esc(boardName(g.legs[ctx.leg].board, g.legs[ctx.leg].boardName))}${n > 1 ? ` · ${esc(t('ch_game_k', { k: ctx.leg + 1, n }))}` : ''}</p>
+        ${vs}
+        ${n > 1 ? legsTable(g, side) : ''}
+        ${aNote}
+        <p class="sk-ch-note" data-role="status">${esc(status)}</p>
         <div class="gh-modal__actions">
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="send">${esc(t('ch_send', { name }))}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="again">${esc(t('ch_try_again'))}</button>
-        </div>`);
-      const btn = el.querySelector('[data-act="send"]');
-      btn.addEventListener('click', async () => {
-        if (btn.disabled) return;
-        btn.disabled = true;
-        btn.textContent = t('ch_sending');
-        const res = await CH.sendChallenge({ them: ch.them, board: ch.board, boardName: machine, score: s, caption: ch.caption });
-        if (ui.disposed) return;
-        if (!res.ok) {
-          return sendView(res.reason === 'denied' ? t('ch_err_off') : res.reason === 'dev-origin-blocked'
-            ? t('ch_err_dev') : t('ch_err_send'));
-        }
-        ui.challenge = null;
-        paint(`
-          <h2 class="sk-over-title">${esc(t('ch_sent_h'))}</h2>
-          <p class="sk-over-machine">${esc(machine)}</p>
-          <p class="sk-over-score">${s}</p>
-          <p class="sk-ch-note">${esc(t('ch_sent_note', { name, n: s }))}</p>
-          <div class="gh-modal__actions">
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="done">${esc(t('ch_done'))}</button>
-          </div>`);
-        el.querySelector('[data-act="done"]').addEventListener('click', () => ui._renderSetup());
-      });
-      el.querySelector('[data-act="again"]').addEventListener('click', () => ui._startGame(null, ch.board));
-    };
-    sendView('');
-  }
+          ${next >= 0 ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="next">${esc(t('ch_play_n',
+            { k: next + 1, n, m: boardName(g.legs[next].board, g.legs[next].boardName) }))}</button>` : ''}
+          <button type="button" class="gh-btn ${next >= 0 ? 'gh-btn--ghost' : 'gh-btn--primary'} gh-btn--block" data-act="done">${esc(t('ch_done'))}</button>
+        </div>
+      </div>`;
+    const done = () => { ui.challenge = null; ui._renderSetup(); };
+    el.querySelector('[data-role="close"]').addEventListener('click', done);
+    el.querySelector('[data-act="done"]').addEventListener('click', done);
+    const nx = el.querySelector('[data-act="next"]');
+    if (nx) nx.addEventListener('click', () => ui._startChallengeLeg({ id: ctx.id, side, leg: next, game: g }));
+  };
+  const note = (x) => `<p class="sk-ch-note">${esc(x)}</p>`;
+
+  // Paint at once from what this device knows (its own finalised score laid over the match), then
+  // again from the server's answer once the score has been sent.
+  paint(CH.withLocal(ctx.game), t('ch_sending'));
+  CH.flushOutbox().then((r) => {
+    if (ui.disposed) return;
+    const me = (x) => x.id === ctx.id && x.side === ctx.side && x.leg === ctx.leg;
+    const mine = r.sent.find(me);
+    const no = r.refused.find(me);
+    if (mine) { ctx.game = mine.game; paint(CH.withLocal(mine.game), t('ch_sent_score')); return; }
+    const later = r.sent.filter((x) => x.id === ctx.id).pop();
+    const g = CH.withLocal(later ? later.game : ctx.game);
+    if (no) paint(g, no.reason === 'dev-origin-blocked' ? t('ch_err_dev') : no.reason === 'already-over' ? t('ch_err_answered') : t('ch_err_send'));
+    else paint(g, t('ch_saved_later'));
+  }).catch(() => paint(CH.withLocal(ctx.game), t('ch_saved_later')));
   return el;
 }
