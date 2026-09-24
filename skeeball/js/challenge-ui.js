@@ -37,19 +37,20 @@ export function formatLine(x) {
   return x.all ? `${machine} · ${scoring}` : `${t('ch_n_games', { n })} · ${machine} · ${scoring}`;
 }
 
-// --- which machines two people can both play ------------------------------------------------------
+// --- which machines a challenge can be on ---------------------------------------------------------
 
 /**
- * PURE. The machines a challenge between two players may be on: not in testing (a testing rack is
- * practice and counts for nothing), and open to BOTH - released to everyone, the first machine, or
- * earned by each of them. `mine`/`theirs` are Sets of unlocked board ids. `testing(b)`/`released(b)`
- * are injected so this is testable without the admin config.
+ * PURE. The machines a challenge may be on: every machine THE CHALLENGER can play (the first
+ * machine, one released to everyone, or one they have earned) that is not in Testing (a testing rack
+ * is practice and counts for nothing). Matt, 2026-09-24, choosing it over "both players must have
+ * it": the other person plays that machine for the challenge even if it is locked for them, and
+ * playing it unlocks nothing (the challenge never writes sk.unlocked). `mine` is a Set of unlocked
+ * board ids; `testing(b)`/`released(b)` are injected so this is testable without the admin config.
  */
-export function sharedBoards(mine, theirs, { boards = BOARDS, testing, released } = {}) {
+export function challengeBoards(mine, { boards = BOARDS, testing, released } = {}) {
   const isTesting = testing || ((b) => isBoardTesting(b.id, !!b.adminOnly));
   const isReleased = released || ((b) => isBoardReleased(b.id));
-  const can = (set, b) => b.id === DEFAULT_BOARD || isReleased(b) || (set && set.has(b.id));
-  return boards.filter((b) => !isTesting(b) && can(mine, b) && can(theirs, b));
+  return boards.filter((b) => !isTesting(b) && (b.id === DEFAULT_BOARD || isReleased(b) || (mine && mine.has(b.id))));
 }
 
 /** PURE. Every board id a player code has unlocked, across ALL of that person's synced devices. */
@@ -221,7 +222,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     if (!state.recs) { shell(t('ch_to', { name: them.name }), note(t('ch_loading')), viewPick); await loadPlayers(); }
     if (closed || state.view !== 'terms') return;
     const mine = new Set([...localUnlocked(), ...unlockedFrom(state.recs, CH.myCode())]);
-    const boards = sharedBoards(mine, unlockedFrom(state.recs, them.code));
+    const boards = challengeBoards(mine);
     if (boards.length < 2) state.all = false;
     if (!boards.some((b) => b.id === state.board)) state.board = (boards.find((b) => b.id === ui.settings.board) || boards[0] || {}).id || null;
     // A CHECKMARK, NOT JUST A COLOUR (Matt is red/green colourblind): the chosen chip carries a
@@ -368,19 +369,20 @@ export function showChallengeOver(ui, result) {
     const them = side === 'a' ? g.b : g.a;
     const name = them.name || t('ch_someone');
     const target = CH.scoresOf(g, side === 'a' ? 'b' : 'a')[ctx.leg];
-    const d = side === 'b' ? CH.decide(g) : { done: false };
-    const aDone = side === 'a' && CH.scoresOf(g, 'a').every((x) => x != null);
-    const next = (d.done || g.over) ? -1 : CH.nextLeg({ ...g, stage: side }, side, (i) => CH.legPlayed(ctx.id, side, i));
+    // ONE GAME PER TURN (v3): after any game the turn passes, so this card never offers the next
+    // game - it says who won, or that the challenge is sent, or whose turn it is now.
+    const d = CH.decide(g);
+    const first = side === 'a' && ctx.leg === 0;
     let head;
     if (g.over || d.done) {
       const w = g.over ? g.over.winner : d.winner;
       head = w === side ? t('ch_won') : w == null ? t('ch_draw') : t('ch_lost');
-    } else if (aDone) head = t('ch_sent_h');
+    } else if (first) head = t('ch_sent_h');
     else head = n > 1 ? t('ch_game_k', { k: ctx.leg + 1, n }) : t('over_h');
-    const vs = side === 'b' && target != null
+    const vs = target != null
       ? `<div class="sk-ch-vs"><div><b>${s}</b><em>${esc(t('ch_you'))}</em></div><div><b>${target}</b><em>${esc(name)}</em></div></div>`
       : `<p class="sk-over-score">${s}</p>`;
-    const aNote = aDone ? note(t('ch_sent_note', { name })) : '';
+    const aNote = (g.over || d.done) ? '' : note(t('ch_turn_passed', { name }));
     el.innerHTML = `
       <div class="gh-modal sk-over sk-ch-over" role="dialog" aria-label="${esc(head)}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
@@ -391,16 +393,12 @@ export function showChallengeOver(ui, result) {
         ${aNote}
         <p class="sk-ch-note" data-role="status">${esc(status)}</p>
         <div class="gh-modal__actions">
-          ${next >= 0 ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="next">${esc(t('ch_play_n',
-            { k: next + 1, n, m: boardName(g.legs[next].board, g.legs[next].boardName) }))}</button>` : ''}
-          <button type="button" class="gh-btn ${next >= 0 ? 'gh-btn--ghost' : 'gh-btn--primary'} gh-btn--block" data-act="done">${esc(t('ch_done'))}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="done">${esc(t('ch_done'))}</button>
         </div>
       </div>`;
     const done = () => { ui.challenge = null; ui._renderSetup(); };
     el.querySelector('[data-role="close"]').addEventListener('click', done);
     el.querySelector('[data-act="done"]').addEventListener('click', done);
-    const nx = el.querySelector('[data-act="next"]');
-    if (nx) nx.addEventListener('click', () => ui._startChallengeLeg({ id: ctx.id, side, leg: next, game: g }));
   };
   const note = (x) => `<p class="sk-ch-note">${esc(x)}</p>`;
 

@@ -149,11 +149,13 @@ export function decideBugReport(report) {
 // Watches skeeChallenges/index/<code>/<id>, the row that lists one challenge from <code>'s side
 // (skeeball/js/challenge.js rowFor). The row carries everything a notification needs - the other
 // person's name, the format, the machine, totals and games won - so no read of the match is needed.
-//   - the challenged player's row APPEARING  -> "<them> challenged you ..." (it is only written once
-//     the challenger has played every game, so this is the delivery)
-//   - the challenger's row turning over      -> the result
-// The challenged player finishes the match themselves, so their own row turning over is not news;
-// the challenger's own row appearing (sent:true) is not news either.
+//   - the challenged player's row APPEARING  -> "<them> challenged you ..." (written once the
+//     challenger's first game is in, so this is the delivery)
+//   - either row flipping to yourTurn        -> "<them> played game k of n. Your turn!" (v3: turns
+//     alternate, one game each)
+//   - a row turning over when it was NOT that player's turn -> the result (whoever played the last
+//     game ended it themselves and is not told)
+// The challenger's own row appearing (sent:true) is not news.
 const SKEE_TEXT = {
   en: {
     title: 'Skeeball challenge',
@@ -166,6 +168,7 @@ const SKEE_TEXT = {
     oneWon: (w, m, n) => `${w} scored ${n} on ${m}. You won!`,
     oneLost: (w, m, n) => `${w} scored ${n} on ${m} and beat you.`,
     oneDraw: (w, m, n) => `${w} scored ${n} on ${m}. It's a tie.`,
+    turn: (w, k, n) => `${w} played game ${k} of ${n}. Your turn!`,
   },
   es: {
     title: 'Reto de Skeeball',
@@ -178,6 +181,7 @@ const SKEE_TEXT = {
     oneWon: (w, m, n) => `${w} hizo ${n} en ${m}. ¡Ganaste!`,
     oneLost: (w, m, n) => `${w} hizo ${n} en ${m} y te ganó.`,
     oneDraw: (w, m, n) => `${w} hizo ${n} en ${m}. Empate.`,
+    turn: (w, k, n) => `${w} jugó la partida ${k} de ${n}. ¡Te toca!`,
   },
 };
 
@@ -198,7 +202,13 @@ export function decideSkee({ code, id, before, after }) {
     if (single) return mk('challenge', (s) => s.one(who, machine, n));
     return mk('challenge', (s) => s.games(who, machine, k));
   }
-  if (after.over && !before.over && after.sent) {
+  // v3, turns alternate: the turn coming back to you (either side) after the other person's game.
+  if (!after.over && after.yourTurn && !before.yourTurn) {
+    const game = Math.min(k, Math.max(1, Math.round(+after.theirPlayed) || 1));
+    return mk('turn', (s) => s.turn(who, game, k));
+  }
+  // The end, to whoever did not play the last game (the other person's own write ends it for them).
+  if (after.over && !before.over && !before.yourTurn) {
     const r = after.result === 'won' ? 'won' : after.result === 'lost' ? 'lost' : 'draw';
     if (single) return mk('over', (s) => s[{ won: 'oneWon', lost: 'oneLost', draw: 'oneDraw' }[r]](who, machine, n));
     return mk('over', (s) => s[r](who));

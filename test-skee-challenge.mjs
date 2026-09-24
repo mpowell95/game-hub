@@ -15,7 +15,7 @@ globalThis.localStorage = {
 
 const CH = await import('./skeeball/js/challenge.js');
 const { decideAlert } = await import('./skeeball/js/alert.js');
-const { sharedBoards, unlockedFrom } = await import('./skeeball/js/challenge-ui.js');
+const { challengeBoards, unlockedFrom } = await import('./skeeball/js/challenge-ui.js');
 const { decideSkee } = await import('./functions/decide.js');
 
 let pass = 0; let fail = 0;
@@ -62,20 +62,28 @@ check('level on games AND total is a draw',
 
 // --- total score ---------------------------------------------------------------------------------
 const tot = doc({ legs: [leg(), leg(), leg()], scoring: 'total', stage: 'b' });
-check('total: passing the challenger\'s total ends it early (a rack never scores below 0)',
-  (() => { const d = CH.decide(withScores(tot, { 0: 100, 1: 100, 2: 100 }, { 0: 250, 1: 60 })); return d.done && d.winner === 'b'; })());
-check('total: still behind with games left is not decided', !CH.decide(withScores(tot, { 0: 100, 1: 100, 2: 100 }, { 0: 250 })).done);
+check('total: never settled while games are left, even far ahead (turns alternate, both totals can still grow)',
+  !CH.decide(withScores(tot, { 0: 100, 1: 100 }, { 0: 250, 1: 60 })).done);
 check('total: all played and behind loses; equal is a draw',
   CH.decide(withScores(tot, { 0: 100, 1: 100, 2: 100 }, { 0: 100, 1: 100, 2: 90 })).winner === 'a'
   && CH.decide(withScores(tot, { 0: 100, 1: 100, 2: 100 }, { 0: 100, 1: 100, 2: 100 })).winner === null);
 check('results read from each side', CH.resultFor({ over: { winner: 'b' } }, 'b') === 'won' && CH.resultFor({ over: { winner: 'b' } }, 'a') === 'lost'
   && CH.resultFor({ over: { winner: null } }, 'a') === 'draw');
 
+// --- turns alternate, one game each (v3) ------------------------------------------------------------
+const alt = doc({ legs: [leg(), leg(), leg()] });
+check('after the challenger\'s game 1, it is the other person\'s turn', CH.nextStage(withScores(alt, { 0: 300 }, {}), 'a') === 'b');
+check('after their game 1, it is the challenger\'s turn again (never two games in a row)', CH.nextStage(withScores(alt, { 0: 300 }, { 0: 200 }), 'b') === 'a');
+check('the challenger\'s next game is game 2, and only on their turn',
+  CH.nextLeg({ ...withScores(alt, { 0: 300 }, { 0: 200 }), stage: 'a' }, 'a') === 1 && CH.nextLeg({ ...withScores(alt, { 0: 300 }, { 0: 200 }), stage: 'b' }, 'a') === -1);
+check('an old (v2) match where the challenger played everything still runs to its end',
+  CH.nextStage(withScores(alt, { 0: 1, 1: 2, 2: 3 }, { 0: 5 }), 'b') === 'b');
+
 // --- index rows ----------------------------------------------------------------------------------
 const mid = CH.validateChallenge(withScores(doc({ legs: [leg(), leg(), leg()], stage: 'b', expires: Date.now() + 1e6 }), { 0: 300, 1: 200, 2: 100 }, { 0: 350 }));
 const ra = CH.rowFor(mid, 'a'); const rb = CH.rowFor(mid, 'b');
 check('the challenger\'s row: sent, waiting, totals and games from their side', ra.sent && !ra.yourTurn && ra.mine === 600 && ra.theirs === 350 && ra.theirWins === 1 && ra.n === 3);
-check('the challenged row: their turn, the format and totals carried', !rb.sent && rb.yourTurn && rb.theirs === 600 && rb.played === 1 && rb.scoring === 'games');
+check('the challenged row: their turn, the format and totals carried', !rb.sent && rb.yourTurn && rb.theirs === 600 && rb.played === 1 && rb.theirPlayed === 3 && rb.scoring === 'games');
 const rows = CH.rowsFromIndex({ aaaaaa11: rb, bbbbbb22: { ...ra, updated: 9 }, BAD: { with: B }, dddddd44: { with: 'nope' } });
 check('an index lists valid rows only, your turn first', rows.length === 2 && rows[0].id === 'aaaaaa11');
 const late = Date.now() + 2e6;
@@ -102,21 +110,25 @@ const fresh = CH.rowsFromIndex({ aaaaaa11: { ...rb, updated: 5 } });
 let al = decideAlert(fresh, {});
 check('a delivered challenge to you raises "challenged you"', al && al.kind === 'challenge' && al.name === 'Matt');
 check('...and not once seen', decideAlert(fresh, { aaaaaa11: 5 }) === null);
-check('your OWN unfinished challenge never raises a bubble', decideAlert(CH.rowsFromIndex({ bbbbbb22: { ...ra, stage: 'a', yourTurn: true, updated: 5 } }), {}) === null);
+check('your OWN new challenge never raises a bubble (you just made it)', decideAlert(CH.rowsFromIndex({ bbbbbb22: { ...ra, stage: 'a', yourTurn: true, updated: 5 } }), { bbbbbb22: 5 }) === null);
+al = decideAlert(CH.rowsFromIndex({ bbbbbb22: { ...ra, stage: 'a', yourTurn: true, updated: 9 } }), { bbbbbb22: 5 });
+check('the turn coming BACK to the challenger raises "Your turn vs <them>"', al && al.kind === 'turn' && al.names.join() === 'Anita');
 const over = CH.rowFor(CH.validateChallenge({ ...withScores(doc(), { 0: 300 }, { 0: 350 }), stage: 'over', over: { winner: 'b', at: 7 }, updated: 7 }), 'a');
 al = decideAlert(CH.rowsFromIndex({ cccccc33: over }), {});
 check('a finished match you have not seen raises a result bubble', al && al.kind === 'over' && al.result === 'lost');
 check('an expired challenge raises nothing', decideAlert(CH.rowsFromIndex({ aaaaaa11: { ...rb, updated: 5, expires: 10 } }), {}) === null);
 
 // --- which machines two players share ------------------------------------------------------------
-const Bd = [{ id: 'classic' }, { id: 'basketball' }, { id: 'brickcity' }, { id: 'runaway' }, { id: 'popongo', adminOnly: true }];
+const Bd0 = [{ id: 'classic' }, { id: 'basketball' }, { id: 'brickcity' }, { id: 'runaway' }, { id: 'popongo', adminOnly: true }];
+const Bd = Bd0;
 const opts = (released = [], testing = ['popongo']) => ({ boards: Bd, released: (b) => released.includes(b.id), testing: (b) => testing.includes(b.id) });
 const ids = (l) => l.map((b) => b.id).join(',');
-check('THE CLASSIC is always shared', ids(sharedBoards(new Set(), new Set(), opts())) === 'classic');
-check('a machine only ONE of them has earned is not offered', ids(sharedBoards(new Set(['basketball']), new Set(), opts())) === 'classic');
-check('a machine BOTH earned is offered', ids(sharedBoards(new Set(['basketball']), new Set(['basketball']), opts())) === 'classic,basketball');
-check('a machine opened to everyone is offered to both', ids(sharedBoards(new Set(), new Set(), opts(['runaway']))) === 'classic,runaway');
-check('a machine in TESTING is never offered', !sharedBoards(new Set(['popongo']), new Set(['popongo']), opts()).some((b) => b.id === 'popongo'));
+check('THE CLASSIC is always offered', ids(challengeBoards(new Set(), opts())) === 'classic');
+check('every machine the CHALLENGER has earned is offered (the other person need not have it)',
+  ids(challengeBoards(new Set(['basketball', 'brickcity']), opts())) === 'classic,basketball,brickcity');
+check('a machine opened to everyone is offered', ids(challengeBoards(new Set(), opts(['runaway']))) === 'classic,runaway');
+check('a machine in TESTING is never offered', !challengeBoards(new Set(['popongo']), opts()).some((b) => b.id === 'popongo'));
+check('a challenge never writes an unlock', !/unlockSkeeballBoard|sk\.unlocked\s*=/.test(read('./skeeball/js/challenge-ui.js') + read('./skeeball/js/challenge.js')));
 const all = {
   d1: { profile: { playerId: B }, stats: { games: { skeeball: { sk: { unlocked: { basketball: true } } } } } },
   d2: { profile: { playerId: B }, stats: { games: { skeeball: { sk: { unlocked: { brickcity: true } } } } } },
@@ -135,10 +147,12 @@ check('delivery of a series says how many games', body(n) === 'Matt challenged y
 n = decideSkee({ code: B, id: 'x', before: null, after: { ...rb, all: true } });
 check('delivery of an all-machines challenge says so', body(n) === 'Matt challenged you on every machine.');
 check('the challenger\'s own row never notifies them', decideSkee({ code: A, id: 'x', before: null, after: ra }) === null);
-n = decideSkee({ code: A, id: 'x', before: ra, after: { ...ra, over: true, result: 'lost', yourTurn: false } });
+n = decideSkee({ code: A, id: 'x', before: { ...ra, yourTurn: false }, after: { ...ra, over: true, result: 'lost', yourTurn: false } });
 check('the result notifies the challenger', n && n.kind === 'over' && body(n) === 'Anita beat your challenge.');
-check('the challenged player\'s own finish never notifies them', decideSkee({ code: B, id: 'x', before: rb, after: { ...rb, over: true, result: 'won' } }) === null);
-check('a mid-series score notifies nobody', decideSkee({ code: A, id: 'x', before: ra, after: { ...ra, played: 3 } }) === null);
+check('whoever played the LAST game is not told (they ended it)', decideSkee({ code: B, id: 'x', before: rb, after: { ...rb, over: true, result: 'won', yourTurn: false } }) === null);
+n = decideSkee({ code: A, id: 'x', before: { ...ra, yourTurn: false }, after: { ...ra, yourTurn: true, theirPlayed: 1 } });
+check('the turn coming back notifies: "<them> played game 1 of 3. Your turn!"', n && n.kind === 'turn' && body(n) === 'Anita played game 1 of 3. Your turn!');
+check('a write that does not hand you the turn notifies nobody', decideSkee({ code: A, id: 'x', before: { ...ra, yourTurn: false }, after: { ...ra, yourTurn: false, played: 3 } }) === null);
 
 // --- wiring ------------------------------------------------------------------------------------
 const rules = JSON.parse(read('./database.rules.json')).rules;
@@ -161,6 +175,8 @@ check('walking out counts even with nothing thrown (it runs before the nothing-t
   /_abandonRack\(\) \{\n\s*if \(!this\.game \|\| this\.game\.over \|\| this\.recorded\) return;[\s\S]{0,300}this\._finishChallengeLeg\(this\.game\.score\);[\s\S]{0,300}if \(!this\.game\.thrown\)/.test(ui));
 check('a killed app\'s game is finalised on the next open', /CH\.finalizeStale\(\)/.test(ui));
 check('no "try again" anywhere in a challenge', !/ch_try_again/.test(read('./skeeball/js/challenge-ui.js')));
+check('ONE GAME PER TURN: the card after a game never offers the next one',
+  !/data-act="next"/.test(read('./skeeball/js/challenge-ui.js').slice(read('./skeeball/js/challenge-ui.js').indexOf('export function showChallengeOver'))));
 check('the pause card offers no New game during a challenge', /\$\{this\.challenge \? '' : `<button[^`]*data-role="new"/.test(ui));
 check('the ordinary Play button drops any challenge', /data-role="play"\]'\)\.addEventListener\('click', \(\) => \{\s*this\.challenge = null;/.test(ui));
 check('challenge games are recorded like any other (the recorder call is untouched)', (ui.match(/recordSkeeball\(board\.id, \{ \.\.\./g) || []).length === 2);

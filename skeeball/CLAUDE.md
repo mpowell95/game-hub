@@ -2264,7 +2264,7 @@ as is if they leave in the middle of a game."* v2 is that.
 | File | Role |
 |---|---|
 | `js/challenge.js` | the data: `skeeChallenges/games/<id>` + `skeeChallenges/index/<CODE>/<id>`, validation (v1 documents still read), `decide` (who won, and when it is settled), index rows, expiry, the seen map, the per-game outbox. Reuses `hoops4/js/mp.js`'s player-code helpers and `opponentsFrom` |
-| `js/challenge-ui.js` | the screens: list, pick a person, format + winner + machine + caption, one match's table, and the card after each game. Also `sharedBoards` / `unlockedFrom` / `formatLine` |
+| `js/challenge-ui.js` | the screens: list, pick a person, format + winner + machine + caption, one match's table, and the card after each game. Also `challengeBoards` / `unlockedFrom` / `formatLine` |
 | `js/alert.js` | the launcher's bubble (the hub's `alerts` hook, shared with Connect 4 Hoops) |
 | `functions/decide.js` `decideSkee` | the push notification (repo root `functions/`) |
 
@@ -2273,12 +2273,17 @@ players can play; the chip only shows when there are two or more). With more tha
 challenger picks the **winner rule**: **Most wins** (a tied game counts for nobody; level on games
 goes to the higher total; level on both is a draw) or **Total score**.
 
-**Order.** The challenger plays ALL their games first (`stage: 'a'`); only then is the other
-person's index row written, which is the delivery and what notifies them (`stage: 'b'`,
-`expires` = 3 days from then). They see every score to beat. `decide()` ends the match the moment
-it is settled: a best-of one side can no longer win, or a total the challenged player has already
-passed (a rack never scores below 0). The session chose challenger-first over alternating game by
-game; Matt may want it the other way.
+**Order (v3, same day): TURNS ALTERNATE, ONE GAME PER TURN.** Matt, testing v2: *"it asked if i
+wanted to play game 2 or send it. That shouldn't be an option. You have to alternate games - seeing
+each others scores."* So: challenger game 1 -> (delivery: the other person's index row is written,
+which notifies them) -> their game 1, seeing the score to beat -> challenger game 2, seeing the
+standings -> ... `nextStage()` passes the turn after every game (to the same side only when the
+other has nothing left, which carries an old v2 match to its end). Every turn gets its own 3 days
+(`expires` is re-stamped on each hand-over). `decide()` ends a most-wins match the moment one side
+cannot be caught; a TOTAL is only settled once both have played every game. The card after a game
+never offers the next one; it says who won, "Challenge sent", or whose turn it is. Each hand-over
+notifies (`decideSkee` 'turn': "<them> played game k of n. Your turn!") and raises the launcher's
+"Your turn" bubble; the result notifies whoever did NOT play the last game.
 
 **ONE ATTEMPT, AND LEAVING COUNTS - three layers, all load-bearing:**
 
@@ -2302,9 +2307,11 @@ stands.
 - **Racks are ordinary racks** (`recordSkeeball` unchanged: bests, goals, unlocks). The challenge
   adds nothing to `gamehub.stats` - no counter, no win or loss. Counting challenge wins would be a
   new sub-counter and item 7's three edits.
-- **Machines offered = `sharedBoards`**: never one in Testing, only one both can play (THE CLASSIC,
-  released to everyone, or earned by each - the other person's unlocks are the union of their synced
-  devices). Playing a challenge game never writes `sk.unlocked`.
+- **Machines offered = `challengeBoards`: every machine the CHALLENGER can play** (THE CLASSIC, one
+  released to everyone, or one they earned, across all their synced devices), never one in Testing.
+  Matt's choice, 2026-09-24, over "both must have it" (test1 had unlocked nothing, so only THE
+  CLASSIC was offered). The other person plays it for the challenge even if it is locked for them;
+  playing a challenge game never writes `sk.unlocked`, so it unlocks nothing.
 - **Writes verified by fresh re-read** (rule 6); a dev origin never writes (`gamehub.devAllowSync.v1`).
 - **Nothing is deleted.** Finished and expired challenges stay in both index rows.
 - **`openChallenges(ui, { seed, seedGame })` is for local probes only.**
