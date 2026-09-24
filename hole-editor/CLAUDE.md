@@ -1188,3 +1188,11 @@ tree, Route, Green) instead of pressing Skip - the Skip walk looked clean and hi
 `test-hole-editor-mobile.mjs` does steps 5, 6 and 8 for real and checks each moves the tour on by
 itself and that step 8's pop-up does not cover the bunker (born red: against the previous tour the
 walk stalls at step 8). 59/59; desktop 112/112.
+
+### A Home button in the phone top bar (2026-09-24)
+
+Matt: *"there isn't a back to the hub button"*. There was one, at the bottom of More, where nobody
+looks. The phone top bar now starts with a house button (`#he-p-hub`, `goHub()`: saves, then goes to
+the hub). Under 380 px the bar tightens (36 px pills, 26 px hole arrows, 10 px sub-line) so "Par 5 ·
+516 yd" is not cut off at 360 or 320 px - measured, not guessed. More keeps its "Back to Game Hub"
+too. `test-hole-editor-mobile.mjs`: visible below the notch, and a tap lands on the hub. 61/61.
