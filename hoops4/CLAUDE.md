@@ -1809,3 +1809,7 @@ corner X), and the same line again from the same person bumps a "×5" on the car
 and restarts its clock instead of adding another card. Same day, `js/mp-reactions.js` stopped
 limiting the quick-chat palette to its 12 starter emojis: any emoji `isEmoji()` accepts is kept
 (max `EMOJI_MAX` 16), added from the profile page's "+" tile, which opens the full emoji picker.
+Also the same day: the profile's Quick chat has an **"Order in game"** row showing `qc.emojis` /
+`qc.phrases` in the order the chat panel uses. Tap one, then tap where it goes (tap-to-move, not
+drag, so it never fights the page's scroll on a phone). The order is just the array order in
+`gamehub.quickchat.v1`, so no model change was needed.

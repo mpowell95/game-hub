@@ -183,6 +183,20 @@
       cursor: pointer; touch-action: manipulation; opacity: .55; transition: opacity .12s ease, border-color .12s ease;
     }
     .pf-qc-phrases button.is-on { opacity: 1; color: var(--hub-ink); border-color: var(--hub-accent); background: var(--hub-surface); }
+    .pf-qc-ord-emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+    .pf-qc-ord-phrases { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .pf-qc-order button {
+      font: inherit; border: 2px solid var(--hub-surface-2); background: var(--hub-surface);
+      color: var(--hub-ink); cursor: pointer; touch-action: manipulation;
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .pf-qc-order .pf-qc-ord-e { font-size: 22px; line-height: 1; border-radius: 10px; padding: 8px 0; min-height: 44px; }
+    .pf-qc-order .pf-qc-ord-p { font-weight: 600; font-size: .84rem; border-radius: 999px; padding: 8px 12px; min-height: 44px; }
+    .pf-qc-order button.is-lift {
+      border: 3px solid var(--hub-ink); transform: translateY(-3px) scale(1.06);
+      box-shadow: 0 6px 14px rgba(0,0,0,.22);
+    }
+    @media (prefers-reduced-motion: reduce) { .pf-qc-order button { transition: none; } .pf-qc-order button.is-lift { transform: none; } }
     .pf-qc-custom { display: flex; flex-direction: column; gap: 6px; }
     .pf-qc-custom input {
       font: inherit; width: 100%; padding: 9px 11px; border-radius: 10px;
@@ -395,6 +409,9 @@
               <div class="pf-qc-emojis" id="pf-qc-emojis"></div>
               <div class="pf-qc-label" data-i18n="pf_quickchat_phrases">Phrases</div>
               <div class="pf-qc-phrases" id="pf-qc-phrases"></div>
+              <div class="pf-qc-label" data-i18n="pf_quickchat_order">Order in game</div>
+              <p class="pf-hint pf-qc-order-hint" id="pf-qc-order-hint" aria-live="polite" style="margin:0 0 6px"></p>
+              <div class="pf-qc-order" id="pf-qc-order"></div>
               <div class="pf-qc-label" data-i18n="pf_quickchat_custom">Your own phrases</div>
               <div class="pf-qc-custom" id="pf-qc-custom"></div>
             </div>
@@ -619,6 +636,8 @@
       qcEmojis: $('#pf-qc-emojis'),
       qcPhrases: $('#pf-qc-phrases'),
       qcCustom: $('#pf-qc-custom'),
+      qcOrder: $('#pf-qc-order'),
+      qcOrderHint: $('#pf-qc-order-hint'),
     };
     const msg = (el, t) => { if (el) el.textContent = t || ''; };
     let prevName = (state.name || '').trim();
@@ -917,6 +936,7 @@
     // preference (gamehub.quickchat.v1 via js/mp-reactions.js), same class as theme/
     // language - never a gamehub.profile field, never player history.
     const qc = loadPalette();
+    let qcLift = null;   // the order row's picked-up item, { kind: 'e' | 'p', i }
     const escAttr = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const saveQc = () => savePalette(qc);   // normalizes a copy; leaves the working `qc` untouched
 
@@ -936,6 +956,40 @@
         return `<button type="button" data-qc-phrase="${id}" class="${on ? 'is-on' : ''}" aria-pressed="${on}">${escAttr(reactionText({ t: 'p', v: id }))}</button>`;
       }).join('');
       renderQcCustom();
+      renderQcOrder();
+    }
+    // ORDER (2026-09-24). Matt: "Can I reorder them?" The game's chat panel shows emojis and
+    // phrases in the order they sit in qc.emojis / qc.phrases, which the tiles above cannot show
+    // (they stay put). This row IS that order. Tap one to pick it up, tap another to drop it
+    // there: tap-to-move rather than drag, because a drag on a phone fights the page's scroll.
+    // The picked-up item is marked by a lift, a thick border AND the hint's words, never colour.
+    function renderQcOrder() {
+      if (!els.qcOrder) return;
+      const btn = (kind, i, label, cls) => {
+        const on = qcLift && qcLift.kind === kind && qcLift.i === i;
+        return `<button type="button" class="${cls}${on ? ' is-lift' : ''}" data-qc-ord="${kind}" data-i="${i}" aria-pressed="${!!on}">${escAttr(label)}</button>`;
+      };
+      const em = qc.emojis.map((e, i) => btn('e', i, e, 'pf-qc-ord-e')).join('');
+      const ph = qc.phrases.map((id, i) => btn('p', i, reactionText({ t: 'p', v: id }), 'pf-qc-ord-p')).join('');
+      els.qcOrder.innerHTML = (em ? `<div class="pf-qc-ord-emojis">${em}</div>` : '')
+        + (ph ? `<div class="pf-qc-ord-phrases">${ph}</div>` : '');
+      els.qcOrderHint.textContent = t(qcLift ? 'pf_quickchat_order_drop' : 'pf_quickchat_order_hint');
+    }
+    if (els.qcOrder) {
+      els.qcOrder.addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-qc-ord]'); if (!b) return;
+        const kind = b.dataset.qcOrd, i = +b.dataset.i;
+        if (!qcLift || qcLift.kind !== kind) qcLift = { kind, i };
+        else if (qcLift.i === i) qcLift = null;
+        else {
+          const arr = kind === 'e' ? qc.emojis : qc.phrases;
+          const [x] = arr.splice(qcLift.i, 1);
+          arr.splice(i, 0, x);
+          qcLift = null;
+          saveQc();
+        }
+        renderQcOrder();
+      });
     }
     function renderQcCustom() {
       let rows = '';
@@ -954,6 +1008,7 @@
         const on = qc.emojis.includes(e);
         b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on);
         saveQc();
+        qcLift = null; renderQcOrder();
       });
       els.qcPhrases.addEventListener('click', (ev) => {
         const b = ev.target.closest('[data-qc-phrase]'); if (!b) return;
@@ -962,6 +1017,7 @@
         const on = qc.phrases.includes(id);
         b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on);
         saveQc();
+        qcLift = null; renderQcOrder();
       });
       // Edit custom lines. Don't re-render on input (it would drop focus mid-type);
       // just track the value at its slot and persist.
