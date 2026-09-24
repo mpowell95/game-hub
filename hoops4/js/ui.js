@@ -135,6 +135,17 @@ class Hoops4 {
     let armed = null;
     try { const A = await import('./alert.js'); armed = A.takeCeremony(); } catch { return; }
     if (!armed || this.disposed) return;
+    // FROM A NOTIFICATION (2026-09-24): straight onto that match's board, no card. A match that
+    // has already ended opens as its read-only review, which shows the Game Over card.
+    if (armed.kind === 'open') {
+      try {
+        const MP = await import('./mp.js');
+        MP.markResultSeen(armed.id);   // its own card shows the result; the away-popup must not too
+        const game = await MP.readGame(armed.id);
+        if (!this.disposed && game) this.startAsync(game, game.over ? { review: true } : {});
+      } catch (err) { console.error('[hoops4] could not open the notified match', err); }
+      return;
+    }
     // ONCE PER MATCH (2026-09-23). Matt: "The animation should play the first time you click on it
     // - not every time. just go to the game i guess when it's not the first time." So a match that
     // has had its card goes straight to the board. The shown-list is a one-tap convenience (THE

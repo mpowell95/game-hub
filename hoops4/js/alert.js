@@ -159,6 +159,15 @@ export function armCeremony(alert) {
   } catch { /* no session storage: the game simply opens without the card */ }
 }
 
+/** A tapped NOTIFICATION names its match: open that match directly on the next mount, no card.
+ *  (2026-09-24, js/hub.js `_openPushedGame`.) Same handoff key, kind 'open'. */
+export function armOpen(id) {
+  try {
+    if (!id) return;
+    sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: 'open', id: String(id), name: '', emoji: '', count: 0 }));
+  } catch { /* no session storage: the game opens on its setup screen, as before */ }
+}
+
 /** Take it, once. Returns the armed alert or null, and clears it either way. */
 export function takeCeremony() {
   try {
@@ -166,7 +175,7 @@ export function takeCeremony() {
     sessionStorage.removeItem(ARM_KEY);
     if (!raw) return null;
     const a = JSON.parse(raw);
-    if (!a || (a.kind !== 'challenge' && a.kind !== 'turn')) return null;
+    if (!a || (a.kind !== 'challenge' && a.kind !== 'turn' && a.kind !== 'open')) return null;
     return { kind: a.kind, id: String(a.id || ''), name: String(a.name || ''),
       emoji: String(a.emoji || '🙂'), count: a.count | 0 };
   } catch { return null; }
