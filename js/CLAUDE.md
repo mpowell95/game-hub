@@ -236,6 +236,11 @@ The hub is bilingual, English/Spanish, English the default and fallback. The des
   toggle (`[data-role="lang"]`, `_paintLangToggle()` in hub.js — Matt's design, inline SVG)
   BETWEEN the title and the version pill, showing only the CURRENT language; tap to switch
   (re-renders the launcher). It hides in-game and in immersive mode, same as the version pill.
+- **A NEW key can be missing for one visit (2026-09-24).** `js/strings.js` is a cache-first shell
+  file, so the first load after a deploy can pair a freshly fetched page with the previous build's
+  dictionary, and `makeT` then prints the KEY (Matt saw `pf_quickchat_order_hint` on his phone).
+  The profile page's `tf(key, englishFallback)` and its `applyI18n` (which keeps the markup's own
+  text as the fallback) cover this. Any page rendering a newly added key should do the same.
 - **Live-switch policy**: language changes apply to newly rendered UI. Games read `t()` at
   render time and MAY subscribe via `onLangChange` for live re-labeling (Snake does); they are
   not required to.
