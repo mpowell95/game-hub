@@ -66,6 +66,9 @@ export const BRANCHES = [
   // courseDrafts/ (hole-editor/js/drafts.js): golf course designs autosaved by player code. Read
   // by any signed-in session, so it backs up normally.
   'courseDrafts',
+  // skeeChallenges/ (skeeball/js/challenge.js, 2026-09-24): Skeeball "beat my score" challenges and
+  // their per-player index. Same auth shape as hoops/.
+  'skeeChallenges',
   // pushSubs/ (2026-09-23, js/push.js): each device's push-notification address, by player code.
   // Readable by any signed-in session; written only by the device that claimed that code.
   'pushSubs',

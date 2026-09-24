@@ -444,7 +444,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-stats-replay.mjs`, `test-stats-identity.mjs`, `test-stats-corrections.mjs`,
   `test-rate-guard.mjs`, `test-leaderboard-rank.mjs`, `test-admin-config.mjs`
 - Hub features: `test-new-badge.mjs`, `test-emoji.mjs`, `test-messages.mjs`,
-  `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`
+  `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`, `test-skee-challenge.mjs`
 - Cross-game: `test-game-conventions.mjs`, `test-visual.mjs`, `check-no-scroll.mjs`,
   `test-mp-lockstep.mjs`, `run-all-tests.mjs`
 - Generators: `build-emoji-data.mjs`, `build-boggle-es.mjs`, `convert-kenney.mjs`
@@ -551,7 +551,7 @@ working in that folder).
 | Pool | in-hub `module:`, immersive, **multiplayer** (`gamehub.poolv2.mp.v1`) | `.p2-root` / `.p2-` | `gamehub.poolv2.v1` (frozen; see its file) | `recordResult('pool', …)` |
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
 | Pinball | in-hub `module:`, immersive, **admin only** (`devOnly`) | `.pb-root` / `.pb-` | `gamehub.pinball.v1` | `recordPinball` |
-| Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines, no opponent) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
+| Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines), plus **"beat my score" challenges** (`skeeChallenges/`, 2026-09-24) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Sudoku | in-hub `module:` | `.sd-root` / `.sd-` | `gamehub.sudoku.v1` | `recordSudoku` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
@@ -741,11 +741,13 @@ ability to see it and undo it afterwards. Do not describe any of it as making th
 ## Push notifications (2026-09-23)
 
 Matt: *"are you sure there's no way to have real notifications or something close to it?"* ...
-*"mostly iphone, installed. go with firebase."* Real Web Push. **Three triggers since 2026-09-24**:
+*"mostly iphone, installed. go with firebase."* Real Web Push. **Four triggers since 2026-09-24**:
 `hoopsTurnPush` (Connect 4 Hoops challenges/turns/results), `messagePush` (a new message, from
 `messages/index/<me>/<them>` - only a newer `at` FROM them notifies; a tap opens that thread) and
 `bugReportPush` (a new `bugReports/<id>`, to every code whose uid is in `admins/`, found through
-`msgAuth/<uid>` - no code is hardcoded; a tap opens the bug inbox). **A change to `functions/` is
+`msgAuth/<uid>` - no code is hardcoded; a tap opens the bug inbox). The fourth, `skeeChallengePush`
+(Skeeball challenges, `skeeChallenges/index/<code>/<id>`, a tap opens Skeeball), was added later
+the same day and is **NOT deployed yet** - see "Skeeball challenges" below. **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
 for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
 `hoopsTurnPush` updated).
@@ -802,6 +804,26 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
   it gets. Other devices of the same player still get it. Needs the functions redeploy to be live.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
+
+## Skeeball challenges (2026-09-24)
+
+Matt: *"what about skeeball? challenge someone to a game for the higher score?"* One rack each, the
+higher score wins. Full contract: `skeeball/CLAUDE.md`, "Challenges". The parts that live outside
+the game folder:
+
+- **A new top-level node, `skeeChallenges/`** (`games/<id>` + `index/<CODE>/<id>`), added to
+  `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **OUTSTANDING as of
+  2026-09-24: Matt has NOT yet published the rules** (console -> Realtime Database -> Rules ->
+  paste -> Publish). Until he does, sending fails with "Challenges are not switched on yet".
+  Update this line, with the date, the moment he does.
+- **A fourth Cloud Function, `skeeChallengePush`** (`functions/decide.js` `decideSkee`): a new
+  challenge, and the result to the person who sent it. **OUTSTANDING as of 2026-09-24: not
+  deployed** - it is live only after Matt runs `firebase deploy --only functions`. Challenges work
+  without it (the launcher bubble and the in-game badge still show them); only the phone
+  notification waits on it.
+- **The hub's `alerts` hook has a second registrant** (`skeeball/js/alert.js`). The hub still shows
+  ONE bubble at a time, first registrant first, so a pending Connect 4 Hoops alert hides a Skeeball
+  one until it is dealt with. The Challenge button's badge in the game is the backstop.
 
 ## The admin control page (2026-08-24)
 

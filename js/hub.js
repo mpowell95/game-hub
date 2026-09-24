@@ -347,6 +347,9 @@ export const GAMES = [
     blurb: { en: 'Roll it up the lane and lob it into the rings. Nine balls, five rings, two corner pockets worth 100.',
       es: 'Lanza la bola por la pista y encéstala en los anillos. Nueve bolas, cinco anillos y dos huecos de 100 en las esquinas.' },
     module: '../skeeball/js/ui.js',
+    // CHALLENGES (2026-09-24): "beat my score". The same launcher hook as Connect 4 Hoops: a bubble on
+    // the tile when somebody challenged you or answered one you sent. See skeeball/js/alert.js.
+    alerts: () => import('../skeeball/js/alert.js'),
     // Owns the whole viewport (fixed edge-to-edge canvas under a marquee HUD), so the hub's
     // header collapses to the floating back button - same call as Pinball and Hill Climb.
     immersive: true,

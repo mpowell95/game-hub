@@ -65,6 +65,7 @@
     "rooms":          { ".read": "auth != null", ".write": "auth != null" },
     "selfies":        { ".read": "auth != null", ".write": "auth != null" },
     "skeeballThrows": { ".read": "auth != null", ".write": "auth != null" },
+    "skeeChallenges": { ".read": "auth != null", ".write": "auth != null" },
     "usernames":      { ".read": "auth != null", ".write": "auth != null" }
   }
 }
