@@ -1148,3 +1148,21 @@ where I can select users who can see it and it remains hidden for everyone else?
   Hub** (phone: More -> View & help; desktop: the ribbon's Hub button). It saves first.
 - **Needs a connection**: `hole-editor/` is outside the service worker on purpose (the stale
   `render.js` fix), so the tile does not open offline.
+
+## On a real iPhone: the notch and the home bar (2026-09-24)
+
+Matt's screenshots from the installed app: the top bar sat under the clock / Dynamic Island, the
+setup screen's title too, an empty strip showed under the bottom bar, and a yellow sliver stuck out
+of the left edge.
+
+- **Top:** the phone top bar, the readout under it and every full-screen overlay (`.he-overlay`:
+  setup, compare, drafts) add `env(safe-area-inset-top)`; the tour's own placement adds it too
+  (`safeTop()` in `tour.js`).
+- **Bottom strip:** in an installed iPhone app with a see-through status bar, `100vh`/`100dvh` come
+  out one status bar SHORT. The phone `.he-root` is `position: fixed; inset: 0` instead.
+- **The sliver** was the desktop-only "New here? Click Help" note, placed against the desktop Help
+  button, which is hidden on a phone. It is `display: none` under 900 px.
+- **How to check it without a phone:** Chromium's CDP `Emulation.setSafeAreaInsetsOverride` (top
+  59, bottom 34 = iPhone 15 Pro). `test-hole-editor-mobile.mjs` now runs the whole suite that way
+  and asserts the top bar is below the notch, the bottom bar above the home bar, the editor fills
+  the screen, and every tour pop-up stays below the notch. 54/54.

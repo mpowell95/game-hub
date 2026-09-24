@@ -779,6 +779,7 @@ export function renderContextPanel(el, ctx) {
 
 export function openCompareModal({ originalBuilt, currentBuilt, slot, id }) {
   const overlay = document.createElement('div');
+  overlay.classList.add('he-overlay');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;';
   const W = 360; const H = 720;
   const scale = Math.min(

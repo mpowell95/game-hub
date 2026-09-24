@@ -929,6 +929,7 @@ function openSetupModal() {
   const who = profile.tutorial ? { name: 'practice' } : designer();
   const overlay = document.createElement('div');
   overlay.id = 'he-setup';
+  overlay.classList.add('he-overlay');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1000;display:flex;align-items:center;justify-content:center;';
   overlay.innerHTML = `
     <div class="he-setup-box" style="background:#1e211a;border-radius:14px;padding:24px 26px;width:760px;max-width:94vw;max-height:92vh;overflow:auto;color:#eceee4;font:15px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;">
@@ -1114,6 +1115,7 @@ function importDocumentText(text, label) {
 /** Every draft in the cloud for THIS editor's course, newest first, with a Load button each. */
 async function openDraftsModal() {
   const overlay = document.createElement('div');
+  overlay.classList.add('he-overlay');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;';
   const box = document.createElement('div');
   box.className = 'he-modal-box he-drafts';
