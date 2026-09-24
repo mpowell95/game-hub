@@ -699,19 +699,54 @@ export function createMatchChat({ root, send, them, failText }) {
   listen(panel, 'submit', onSubmit);
   listen(root, 'pointerdown', onOutside, true);
 
+  // A card can be TAPPED AWAY, and a repeat STACKS (2026-09-24). Matt: "I need to be able to
+  // dismiss chats from people too. King of games will send Your Turn 5 times and it blocks my
+  // entire connect 4 board." The same line again from the same person bumps a "x5" on the card
+  // already showing (and restarts its clock) instead of adding another card under it.
+  function arm(el, ms) {
+    if (el._t) { clearTimeout(el._t); timers.delete(el._t); }
+    const t1 = setTimeout(() => { timers.delete(t1); el._t = null; el.classList.add('is-off');
+      const t2 = setTimeout(() => { timers.delete(t2); el.remove(); }, 260); timers.add(t2); }, ms);
+    el._t = t1;
+    timers.add(t1);
+  }
+  function dismiss(el) {
+    if (el._t) { clearTimeout(el._t); timers.delete(el._t); el._t = null; }
+    el.remove();
+  }
+  listen(pops, 'click', (ev) => { const el = ev.target.closest('.h4-chat-pop'); if (el) dismiss(el); });
+  // Never let a tap on a card start a swipe or close the panel underneath it.
+  listen(pops, 'pointerdown', (ev) => { if (ev.target.closest('.h4-chat-pop')) ev.stopPropagation(); });
+
   function popBubble(e) {
     const text = textOf(e);
     if (!text) return;
+    const ms = e.mine ? POP_MS : POP_THEM_MS;
+    const sig = `${e.mine ? 1 : 0}|${e.t}|${text}`;
+    const same = Array.from(pops.children).find((n) => n._sig === sig && !n.classList.contains('is-off'));
+    if (same) {
+      same._n += 1;
+      const n = same.querySelector('.h4-chat-pop-n');
+      if (n) { n.textContent = `×${same._n}`; n.hidden = false; }
+      pops.appendChild(same);   // newest to the end, like a fresh card
+      arm(same, ms);
+      return;
+    }
     const who = e.mine ? { name: t('chatYou'), emoji: '' } : (them() || {});
     const el = document.createElement('div');
     el.className = 'h4-chat-pop' + (e.mine ? ' is-mine' : '') + (e.t === 'e' ? ' is-emoji' : '');
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', `${text}. ${t('chatDismiss')}`);
+    el.title = t('chatDismiss');
+    el._sig = sig;
+    el._n = 1;
     el.innerHTML = `<span class="h4-chat-pop-who">${who.emoji ? `<span aria-hidden="true">${esc(who.emoji)}</span> ` : ''}${esc(who.name || '?')}</span>`
-      + `<span class="h4-chat-pop-text">${esc(text)}</span>`;
+      + `<span class="h4-chat-pop-text">${esc(text)}</span>`
+      + `<span class="h4-chat-pop-n" hidden></span>`
+      + `<span class="h4-chat-pop-x" aria-hidden="true">✕</span>`;
     pops.appendChild(el);
-    while (pops.children.length > MAX_POPS) pops.removeChild(pops.firstChild);
-    const t1 = setTimeout(() => { timers.delete(t1); el.classList.add('is-off');
-      const t2 = setTimeout(() => { timers.delete(t2); el.remove(); }, 260); timers.add(t2); }, e.mine ? POP_MS : POP_THEM_MS);
-    timers.add(t1);
+    while (pops.children.length > MAX_POPS) dismiss(pops.firstChild);
+    arm(el, ms);
   }
 
   /** One line of this match. `pop` shows it as a bubble; a line from them also badges the

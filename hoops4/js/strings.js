@@ -128,6 +128,7 @@ export const STRINGS = {
     // shared quick-chat palette (js/mp-reactions.js), already translated there.
     chat: 'Chat', chatPh: 'Say something', chatSend: 'Send', chatYou: 'You',
     chatNone: 'Nothing said yet.', chatNotSent: 'Message not sent. Try again.',
+    chatDismiss: 'Tap to close',
     // Challenge history (2026-09-22).
     mpHistory: 'History', histRecords: 'Records', histGames: 'Finished games',
     histNone: 'No finished games yet.',
@@ -235,6 +236,7 @@ export const STRINGS = {
     mpUnavailable: 'El modo por turnos todavia no esta activado. Las partidas en vivo si funcionan.',
     chat: 'Chat', chatPh: 'Di algo', chatSend: 'Enviar', chatYou: 'Tú',
     chatNone: 'Nadie ha dicho nada.', chatNotSent: 'Mensaje no enviado. Inténtalo otra vez.',
+    chatDismiss: 'Toca para cerrar',
     mpHistory: 'Historial', histRecords: 'Récords', histGames: 'Partidas terminadas',
     histNone: 'Aún no hay partidas terminadas.',
     histWon: 'Ganada', histLost: 'Perdida', histDraw: 'Empate', histResigned: 'Te rendiste',

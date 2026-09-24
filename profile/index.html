@@ -173,6 +173,9 @@
       transition: opacity .12s ease, border-color .12s ease;
     }
     .pf-qc-emojis button.is-on { opacity: 1; border-color: var(--hub-accent); background: var(--hub-surface); }
+    .pf-qc-emojis button.pf-qc-add {
+      opacity: 1; font-weight: 800; color: var(--hub-ink); border: 2px dashed var(--hub-muted); background: transparent;
+    }
     .pf-qc-phrases { display: flex; flex-wrap: wrap; gap: 6px; }
     .pf-qc-phrases button {
       font: inherit; font-weight: 600; font-size: .84rem; border: 2px solid transparent;
@@ -496,7 +499,7 @@
     import { isEmoji, firstEmoji } from '../js/emoji.js';
     import { getTheme, setTheme } from '../js/theme.js';
     import { diffShapeSVG } from '../js/difficulty-tiers.js';
-    import { loadPalette, savePalette, ALL_EMOJIS, PHRASES, CUSTOM_MAX, CUSTOM_MAXLEN, reactionText } from '../js/mp-reactions.js';
+    import { loadPalette, savePalette, ALL_EMOJIS, EMOJI_MAX, PHRASES, CUSTOM_MAX, CUSTOM_MAXLEN, reactionText } from '../js/mp-reactions.js';
     import STRINGS from '../js/strings.js';
 
     const t = makeT(STRINGS);
@@ -800,6 +803,15 @@
       // Belt and braces: every path into the grid already validates, but this is the one place a
       // value becomes someone's avatar, so it is also the one place worth checking twice.
       if (!isEmoji(emoji)) return;
+      if (pickTarget === 'qc') {
+        // Quick chat, not the profile: its own preference key, so no commitNow().
+        if (!qc.emojis.includes(emoji) && qc.emojis.length < EMOJI_MAX) qc.emojis.push(emoji);
+        saveQc();
+        renderQuickChat();
+        pushRecent(emoji);
+        closePicker();
+        return;
+      }
       if (pickTarget === 'you') { state.emoji = emoji; els.youEmoji.textContent = emoji; }
       else { state.opponents[pickTarget].emoji = emoji; renderOpps(); }
       pushRecent(emoji);
@@ -910,10 +922,15 @@
 
     function renderQuickChat() {
       if (!els.qcEmojis) return;
-      els.qcEmojis.innerHTML = ALL_EMOJIS.map((e) => {
+      // The starter tiles, then every emoji this player added from the full picker, then "+".
+      // Any emoji at all can be added (2026-09-24); the starter set is a shortcut, not a limit.
+      const tiles = [...ALL_EMOJIS, ...qc.emojis.filter((e) => !ALL_EMOJIS.includes(e))];
+      els.qcEmojis.innerHTML = tiles.map((e) => {
         const on = qc.emojis.includes(e);
-        return `<button type="button" data-qc-emoji="${escAttr(e)}" class="${on ? 'is-on' : ''}" aria-pressed="${on}">${e}</button>`;
-      }).join('');
+        return `<button type="button" data-qc-emoji="${escAttr(e)}" class="${on ? 'is-on' : ''}" aria-pressed="${on}">${escAttr(e)}</button>`;
+      }).join('') + (qc.emojis.length < EMOJI_MAX
+        ? `<button type="button" class="pf-qc-add" data-qc-add aria-label="${escAttr(t('pf_quickchat_add'))}" title="${escAttr(t('pf_quickchat_add'))}">+</button>`
+        : '');
       els.qcPhrases.innerHTML = Object.keys(PHRASES).map((id) => {
         const on = qc.phrases.includes(id);
         return `<button type="button" data-qc-phrase="${id}" class="${on ? 'is-on' : ''}" aria-pressed="${on}">${escAttr(reactionText({ t: 'p', v: id }))}</button>`;
@@ -929,8 +946,10 @@
     }
     if (els.qcEmojis) {
       els.qcEmojis.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-qc-add]')) { openPicker('qc', ''); return; }
         const b = ev.target.closest('[data-qc-emoji]'); if (!b) return;
         const e = b.dataset.qcEmoji, i = qc.emojis.indexOf(e);
+        if (i < 0 && qc.emojis.length >= EMOJI_MAX) return;
         if (i >= 0) qc.emojis.splice(i, 1); else qc.emojis.push(e);
         const on = qc.emojis.includes(e);
         b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on);

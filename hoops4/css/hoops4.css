@@ -825,6 +825,15 @@
   transition: opacity 240ms ease;
 }
 .h4-root .h4-chat-pop.is-off { opacity: 0; }
+/* Tap a card to dismiss it (2026-09-24). The container stays click-through; only the cards take
+   a tap. Their card carries a corner X so it reads as closable; a repeat shows "x5". */
+.h4-root .h4-chat-pop { position: relative; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+.h4-root .h4-chat-pop-n { font-size: 14px; font-weight: 800; opacity: .85; }
+.h4-root .h4-chat-pop-n[hidden] { display: none; }
+.h4-root .h4-chat-pop-x { display: none; }
+.h4-root .h4-chat-pop:not(.is-mine) .h4-chat-pop-x {
+  display: block; position: absolute; top: 6px; right: 10px; font-size: 16px; line-height: 1; opacity: .7;
+}
 .h4-root .h4-chat-pop.is-emoji .h4-chat-pop-text { font-size: 22px; }
 .h4-root .h4-chat-pop-who { font-size: 12px; font-weight: 800; white-space: nowrap; }
 .h4-root .h4-chat-pop-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
