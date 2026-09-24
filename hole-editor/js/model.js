@@ -422,7 +422,7 @@ export function rerollBunker(spec, index) {
 export function addWater(spec, { yd, side, off }, kind) {
   const seed0 = spec.seed;
   const entry = { yd: +yd, side, off: +off, rx: 12, ry: 9, seed: nextSeed(spec.water, seed0 + 40) };
-  if (kind === 'swamp' || kind === 'tallGrass') entry.kind = kind;   // tall grass (2026-09-23) rides the same list
+  if (kind === 'swamp' || kind === 'tallGrass' || kind === 'oob') entry.kind = kind;   // tall grass (2026-09-23) rides the same list
   const water = [...(spec.water || []), entry];
   return { ...spec, water };
 }
@@ -434,7 +434,7 @@ export function setWaterField(spec, index, fields) {
   const water = spec.water.map((w, i) => {
     if (i !== index) return w;
     const next = { ...w, ...fields };
-    if (next.kind !== 'swamp' && next.kind !== 'tallGrass') delete next.kind;
+    if (next.kind !== 'swamp' && next.kind !== 'tallGrass' && next.kind !== 'oob') delete next.kind;
     return next;
   });
   return { ...spec, water };
@@ -550,12 +550,12 @@ export function smoothPoly(points, passes = 2) {
 export function addDrawnShape(spec, group, points, kind) {
   // A power line is drawn with the same click-points flow, but it is a polyline, not a closed
   // outline: never smoothed, and two points are enough.
-  if (group === 'lines') return addLine(spec, points);
+  if (group === 'lines') return addLine(spec, points, undefined, kind);
   if (!points || points.length < 3) return spec;
   const poly = smoothPoly(points);
   const entry = group === 'bunkers'
     ? { poly, kind: kind || 'greensideBunker' }
-    : (group === 'water' && (kind === 'swamp' || kind === 'tallGrass') ? { poly, kind }
+    : (group === 'water' && (kind === 'swamp' || kind === 'tallGrass' || kind === 'oob') ? { poly, kind }
       : (group === 'decor' && kind === 'flowerbed' ? { poly, kind: 'flowerbed' } : { poly }));
   return { ...spec, [group]: [...(spec[group] || []), entry] };
 }
@@ -790,17 +790,20 @@ const clampLineH = (h) => Math.max(LINE_H_MIN, Math.min(LINE_H_MAX, Number.isFin
 const linePts = (pts) => (pts || []).map((p) => [+(+p[0]).toFixed(1), +(+p[1]).toFixed(1)]);
 
 /** A new power line through `pts` (2 or more clicked points; fewer is a no-op). */
-export function addLine(spec, pts, h = 10) {
+export function addLine(spec, pts, h, kind) {
   if (!Array.isArray(pts) || pts.length < 2) return spec;
-  return { ...spec, lines: [...(spec.lines || []), { pts: linePts(pts), h: clampLineH(h) }] };
+  // A HEDGE (2026-09-24) is a line of `kind: 'hedge'`: same points, its own height range (0.8-4 yd).
+  if (kind === 'hedge') return { ...spec, lines: [...(spec.lines || []), { pts: linePts(pts), h: clampHedgeH(h == null ? 2 : h), kind: 'hedge' }] };
+  return { ...spec, lines: [...(spec.lines || []), { pts: linePts(pts), h: clampLineH(h == null ? 10 : h) }] };
 }
+const clampHedgeH = (h) => Math.max(0.8, Math.min(4, Math.round(+h * 10) / 10 || 2));
 
 /** Patch one field of line `i`: `'h'` (clamped to 4..20) or `'pts'` (2+ points, else no-op). */
 export function setLineField(spec, i, field, value) {
   const list = spec.lines || [];
   if (!list[i]) return spec;
   let patch;
-  if (field === 'h') patch = { h: clampLineH(value) };
+  if (field === 'h') patch = { h: list[i].kind === 'hedge' ? clampHedgeH(value) : clampLineH(value) };
   else if (field === 'pts') {
     if (!Array.isArray(value) || value.length < 2) return spec;
     patch = { pts: linePts(value) };

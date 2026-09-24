@@ -21,6 +21,9 @@ export const SURFACE_KINDS = new Set([
   // TALL GRASS (2026-09-23): long uncut grass you play out of (clubs.js LIES.tallGrass). Laid at
   // the water layer like a swamp, as `kind: 'tallGrass'` on a water/cross entry.
   'tallGrass',
+  // OUT OF BOUNDS (2026-09-24): an area, marked by white stakes, where a ball may not come to rest
+  // (shot.js: stroke and distance). Laid at the water layer as `kind: 'oob'` on a water entry.
+  'oob',
 ]);
 
 /** Ray-cast point-in-polygon. Winding order is irrelevant, which is why hole data never states
@@ -332,7 +335,7 @@ export function expandBelt(belt, type) {
  *  from. HAND-PLACED `trees` ENTRIES ARE NEVER FILTERED: hole 3's signature oak stands ON THE
  *  FAIRWAY on purpose, and an author who writes a coordinate means it. */
 const NO_BELT_TREE = new Set(['fairway', 'lightRough', 'green', 'fringe', 'tee', 'water',
-  'fairwayBunker', 'greensideBunker', 'swamp', 'tallGrass']);
+  'fairwayBunker', 'greensideBunker', 'swamp', 'tallGrass', 'oob']);
 
 export function treesOf(hole) {
   if (hole._trees) return hole._trees;
@@ -487,6 +490,21 @@ export function validateHole(hole) {
         }
         const h = ln.lo + 1.0;
         if (!Number.isFinite(h) || !(ln.hi > ln.lo) || h < 4 - 1e-6 || h > 20 + 1e-6) at(`lines[${i}] wire height ${Number.isFinite(h) ? +h.toFixed(2) : h} is not 4..20`);
+      }
+    }
+  }
+  // HEDGES (2026-09-24): `hedges[i] = {pts, h}`, a wall from the ground up to h (0.8..4 yd).
+  if (hole.hedges != null) {
+    if (!Array.isArray(hole.hedges)) at('hedges is not a list');
+    else {
+      for (const [i, hg] of hole.hedges.entries()) {
+        const pts = hg && hg.pts;
+        if (!Array.isArray(pts) || pts.length < 2) { at(`hedges[${i}] needs at least 2 points`); continue; }
+        for (const p of pts) {
+          if (!Array.isArray(p) || p.length !== 2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) { at(`hedges[${i}] has a malformed point ${JSON.stringify(p)}`); continue; }
+          if (p[0] < b.minX || p[0] > b.maxX || p[1] < b.minY || p[1] > b.maxY) at(`hedges[${i}] has a point outside bounds: ${JSON.stringify(p)}`);
+        }
+        if (!(hg.h >= 0.8 && hg.h <= 4)) at(`hedges[${i}] height ${hg.h} is not 0.8..4`);
       }
     }
   }

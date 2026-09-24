@@ -7,12 +7,12 @@
 
 import {
   buildMap, paletteFor, fillsFor, slopeGlyphAngle, slopeChevronGrid, SLOPE_TINT, SLOPE_GLYPH_FRAC,
-  SHADOW_LEN, SHADOW_DROP, SHADOW_RX, SHADOW_RY, SHADOW_ALPHA, treeShapes, TREE_FILL, wildflowers,
+  SHADOW_LEN, SHADOW_DROP, SHADOW_RX, SHADOW_RY, SHADOW_ALPHA, treeShapes, TREE_FILL, wildflowers, stakesAlong,
 } from '../../golf/js/render.js';
 import { treesOf, greenBox, distYd } from '../../golf/js/holes.js';
 import { blob, routeStations } from '../../golf/js/holegen.js';
 import { polyCentroid } from './model.js';
-import { isoProject, isoUnproject, isoGroundMatrix, isoScreenDelta, isoFit, drawSky, drawIsland, drawIsoTree, drawIsoWire, Z as ISO_Z, SHADOW_SHARE } from './iso.js';
+import { isoProject, isoUnproject, isoGroundMatrix, isoScreenDelta, isoFit, drawSky, drawIsland, drawIsoTree, drawIsoWire, drawIsoHedge, Z as ISO_Z, SHADOW_SHARE } from './iso.js';
 
 /** The axis-aligned box round an outline, plus its eight resize handles (corners and side
  *  midpoints) in world yards - Matt's "small white squares on the sides that i can click and
@@ -264,7 +264,7 @@ const _grassPts = new WeakMap();   // built hole -> { step: [[x, y]] } tall-gras
 function bareHole(built) {
   const bare = Object.create(built);
   Object.defineProperty(bare, '_trees', { value: [] });
-  bare.trees = []; bare.treeBelts = []; bare.lines = [];
+  bare.trees = []; bare.treeBelts = []; bare.lines = []; bare.hedges = [];   // hedges stand up too (2026-09-24)
   return bare;
 }
 export function bareMapFor(built) {
@@ -1070,7 +1070,7 @@ export class EditorCanvas {
         // "Draw a swamp" replacing a placed swamp: `setDrawnPoly` keeps a bunker's `kind`
         // (model.js) but a water-group entry has never carried one before this batch, so the
         // swamp kind is re-stamped the same way `_place` does (see its comment).
-        if (group === 'water' && (kind === 'swamp' || kind === 'tallGrass')) s2 = this.ops.mutators.setWaterField(s2, replaceIndex, { kind });
+        if (group === 'water' && (kind === 'swamp' || kind === 'tallGrass' || kind === 'oob')) s2 = this.ops.mutators.setWaterField(s2, replaceIndex, { kind });
         return s2;
       });
       this.setSelection({ group, index: replaceIndex });
@@ -1081,7 +1081,7 @@ export class EditorCanvas {
       // Chaikin-rounded approximation of it) rather than treating it as a closed polygon.
       this.ops.instant((spec) => {
         let s2 = this.ops.mutators.addDrawnShape(spec, group, points, kind);
-        if (group === 'water' && (kind === 'swamp' || kind === 'tallGrass')) s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind });
+        if (group === 'water' && (kind === 'swamp' || kind === 'tallGrass' || kind === 'oob')) s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind });
         return s2;
       });
       this.setSelection({ group, index: (this.spec[group] || []).length - 1 });
@@ -1104,9 +1104,9 @@ export class EditorCanvas {
       // and `setWaterField` (already generic, `{...w, ...fields}`, since before this batch)
       // stamps it on afterward, so "Swamp" still works either way.
       const wk = this.ops.getWaterKind ? this.ops.getWaterKind() : 'water';
-      let s2 = this.ops.mutators.addWater(spec, placement, wk === 'swamp' || wk === 'tallGrass' ? wk : undefined);
+      let s2 = this.ops.mutators.addWater(spec, placement, wk === 'swamp' || wk === 'tallGrass' || wk === 'oob' ? wk : undefined);
       const last = s2.water && s2.water[s2.water.length - 1];
-      if ((wk === 'swamp' || wk === 'tallGrass') && last && last.kind !== wk) s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind: wk });
+      if ((wk === 'swamp' || wk === 'tallGrass' || wk === 'oob') && last && last.kind !== wk) s2 = this.ops.mutators.setWaterField(s2, s2.water.length - 1, { kind: wk });
       return s2;
     }
     if (kind === 'tree') {
@@ -1300,6 +1300,26 @@ export class EditorCanvas {
       }
     }
 
+    // OUT-OF-BOUNDS STAKES stand up (2026-09-24): a white post with a dark cap every 7 yd of edge.
+    {
+      const oobs = (built.surfaces || []).filter((sf) => sf.kind === 'oob' && Array.isArray(sf.poly));
+      if (oobs.length) {
+        const stakes = [];
+        for (const sf of oobs) for (const q of stakesAlong(sf.poly, 7)) stakes.push(q);
+        stakes.sort((p1, p2) => (p1[0] - p1[1]) - (p2[0] - p2[1]));
+        const w = Math.max(1.4, k * 0.3); const hh = 1.3;
+        ctx.save();
+        for (const q of stakes) {
+          const [bx, by] = P(q[0], q[1]); const [tx, ty] = P(q[0], q[1], hh);
+          ctx.fillStyle = 'rgba(40,40,40,.2)'; ctx.beginPath(); ctx.ellipse(bx - w, by, w * 1.2, w * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(bx - w / 2, ty, w, by - ty);
+          ctx.strokeStyle = 'rgba(40,40,40,.45)'; ctx.lineWidth = 0.8; ctx.strokeRect(bx - w / 2, ty, w, by - ty);
+          ctx.fillStyle = '#2a2a2a'; ctx.fillRect(bx - w / 2, ty, w, Math.max(1.5, (by - ty) * 0.18));
+        }
+        ctx.restore();
+      }
+    }
+
     // 3. slope chevrons on the green - drawn IN the ground plane, so they lie on the grass.
     if (L.slope && built.green && built.green.slope && built.green.slope.cells) {
       const sl = built.green.slope;
@@ -1428,8 +1448,17 @@ export class EditorCanvas {
         const t = list[i];
         order.push({ i, t, p: P(t.x, t.y) });
       }
+      // HEDGES stand up too (2026-09-24): each span is a clipped box, sorted in with the trees.
+      for (const hg of built.hedges || []) {
+        for (let si = 0; si + 1 < hg.pts.length; si++) {
+          const a = hg.pts[si]; const b3 = hg.pts[si + 1];
+          order.push({ hedge: { a, b: b3, h: hg.h }, p: P((a[0] + b3[0]) / 2, (a[1] + b3[1]) / 2) });
+        }
+      }
       order.sort((a2, b2) => a2.p[1] - b2.p[1]);
-      for (const { i, t, p } of order) {
+      for (const it of order) {
+        if (it.hedge) { drawIsoHedge(ctx, P, it.hedge.a, it.hedge.b, it.hedge.h, k); continue; }
+        const { i, t, p } = it;
         const type = types[t.type] || {};
         const shape = shapeOf(type);
         const [fill, , accent] = TREE_FILL[type.name] || ['#3f6b34', '#26431f'];

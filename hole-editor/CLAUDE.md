@@ -1090,3 +1090,23 @@ Matt: *"yes go ahead with tall grass and island greens"* (and no bridges).
 - Tests: `golf/js/test.js` builds an island par 3, an island par 4 and a tall-grass par 4, checks they
   validate and that the bot finishes each, that the moat surrounds the green, and that tall grass sits
   between heavy rough and swamp. `test-hole-editor.mjs` 57/57 (placed, drawn, across + island export).
+
+## Hedges and out of bounds (2026-09-24)
+
+Matt: *"hedges and out of bounds"*.
+
+- **A hedge is a drawn LINE with `kind: 'hedge'`** (`spec.lines`, same as a power line, so drawing,
+  dragging poles, duplicate and export all come for free). `h` is its height, 0.8-4 yd, default 2
+  (`clampHedgeH` in `model.js`). holegen turns it into `hole.hedges = [{pts, h}]`, NOT `hole.lines`,
+  and plants no poles. A hedge is a solid wall from the ground to `h`: `shot.js` `hedgeHit` stops a
+  shot flying through that band (banner "Stopped by the hedge", no penalty), and a roll or a putt
+  stops at it. A high shot flies over.
+- **Out of bounds is a surface kind, `oob`**, drawn like a swamp or tall grass (a `water` entry with
+  `kind: 'oob'`). A ball that STOPS there is stroke and distance: one penalty, played again from
+  where it was hit (`res.oob`, banner "Out of bounds"). A ball that only rolls across it is fine.
+  Painted as a white hatch with white stakes along the edge (`stakesAlong` in `render.js`; the iso
+  editor stands the stakes up).
+- **Editor**: desktop palette Structures -> Hedge / Out of bounds; phone More -> Add & draw -> Hedge /
+  Out of bounds. The line panel shows "Hedge height (yd)" for a hedge.
+- Tests: `golf/js/test.js` (hedge blocks a low shot and lets a high one over, stops a putt; OOB is
+  stroke and distance; the hole validates), `test-hole-editor.mjs` 58/58, UI 108/108, mobile 44/44.

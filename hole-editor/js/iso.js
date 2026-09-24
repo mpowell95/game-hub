@@ -513,3 +513,32 @@ export function drawIsoWire(ctx, P, pts, h, k) {
   }
   ctx.restore();
 }
+
+/** A HEDGE SPAN standing up (2026-09-24): a clipped box from `a` to `b` (world yards), `h` yards
+ *  tall and 1.4 yd thick. Only the faces turned toward the viewer are drawn (the view looks along
+ *  world (+x, -y)), then the lit top with a scatter of leaf highlights. */
+export function drawIsoHedge(ctx, P, a, b, h, k) {
+  const dx = b[0] - a[0]; const dy = b[1] - a[1];
+  const L = Math.hypot(dx, dy) || 1;
+  const ux = dx / L; const uy = dy / L; const nx = -uy; const ny = ux;
+  const t = 0.7;
+  const c = [[a[0] + nx * t, a[1] + ny * t], [b[0] + nx * t, b[1] + ny * t], [b[0] - nx * t, b[1] - ny * t], [a[0] - nx * t, a[1] - ny * t]];
+  const quad = (pts, col) => { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); };
+  const face = (p, q, nxx, nyy) => {
+    const vis = nxx - nyy;              // outward normal against the view direction (+x, -y)
+    if (vis <= 0) return;
+    quad([P(p[0], p[1]), P(q[0], q[1]), P(q[0], q[1], h), P(p[0], p[1], h)], vis > 0.7 ? '#4f8a42' : '#3f7536');
+  };
+  // shadow on the ground, thrown left like the trees'
+  ctx.fillStyle = 'rgba(40,50,40,.18)';
+  quad(c.map((p) => P(p[0] - h * 0.35, p[1] - h * 0.15)), 'rgba(40,50,40,.18)');
+  face(c[0], c[1], nx, ny); face(c[2], c[3], -nx, -ny); face(c[1], c[2], ux, uy); face(c[3], c[0], -ux, -uy);
+  quad(c.map((p) => P(p[0], p[1], h)), '#6fae5a');
+  ctx.fillStyle = 'rgba(190,230,150,.55)';
+  const n = Math.max(2, Math.round(L * 1.5));
+  for (let i = 0; i < n; i++) {
+    const f = (i + 0.5) / n; const side = ((i * 7) % 5 - 2) / 2 * t * 0.6;
+    const [x, y] = P(a[0] + dx * f + nx * side, a[1] + dy * f + ny * side, h);
+    ctx.beginPath(); ctx.arc(x, y, Math.max(0.8, k * 0.18), 0, Math.PI * 2); ctx.fill();
+  }
+}

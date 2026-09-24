@@ -6146,3 +6146,13 @@ of them touch the swing.
 PUTT_DRAG 6.5; no hop). Authored as `kind: 'tallGrass'` on a `water` or `cross` entry, like a swamp.
 `guard: ['island']` rings the green with water. Neither is on a shipped course; both are Course
 Creator pieces. Full notes: `hole-editor/CLAUDE.md`, "Tall grass and the island green".
+
+## Hedges and out of bounds (2026-09-24)
+
+`oob` joined SURFACE_KINDS (LIES power 0.92, zone 0.22, roll 0.054; PUTT_DRAG 3.4). A ball that comes
+to REST on it is stroke and distance (`resolveShot`/`simulatePutt` return `oob: {at}`, `penalty: 1`,
+`rest` = where it was struck); the water walk-back, drops and tree push all treat it as bad ground.
+A recipe `lines` entry with `kind: 'hedge'` becomes `hole.hedges = [{pts, h}]` (h 0.8-4): a wall from
+the ground to `h` that stops flight (`hedgeHit`), run-outs and putts. No penalty for a hedge.
+`validateHole` checks hedges. Neither is on a shipped course. Full notes: `hole-editor/CLAUDE.md`,
+"Hedges and out of bounds".
