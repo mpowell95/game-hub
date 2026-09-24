@@ -1799,3 +1799,13 @@ read-only review (Game Over card), and is marked result-seen so the away-popup d
   strip. Picture (`render.js _sideWalls`, the 'sideWall' part skips the generic box renderer): a
   clear pane (opacity 0.16, ball visible through it), a front post in the display's blue, and a
   gold cap and top rail in the marquee's trim colour.
+
+## Chat cards can be tapped away; repeats stack (2026-09-24)
+
+Matt: *"I need to be able to dismiss chats from people too. King of games will send Your Turn 5
+times and it blocks my entire connect 4 board."* `createMatchChat`'s cards (and the shared
+`js/mp-reactions-ui.js` bubbles every other MP game uses) now close on a tap (their card shows a
+corner X), and the same line again from the same person bumps a "×5" on the card already showing
+and restarts its clock instead of adding another card. Same day, `js/mp-reactions.js` stopped
+limiting the quick-chat palette to its 12 starter emojis: any emoji `isEmoji()` accepts is kept
+(max `EMOJI_MAX` 16), added from the profile page's "+" tile, which opens the full emoji picker.

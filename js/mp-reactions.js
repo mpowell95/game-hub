@@ -18,11 +18,17 @@
 // PREFERENCE — THE LAW rule 2's carve-out — one-tap recreatable, never earned history.
 
 import { getLang } from './i18n.js';
+import { isEmoji } from './emoji.js';
 
 const KEY = 'gamehub.quickchat.v1';
 
-// The full catalog a player can choose their palette FROM. Curated, family-friendly.
+// The starter set the profile page shows as one-tap tiles. NOT the limit: since 2026-09-24 a
+// player can add ANY emoji (the profile page's full picker), and normalizePalette keeps anything
+// isEmoji() accepts. Matt: "I thought we made it so you can choose your own emojis for the in
+// game quick chat? It looks like I can only select from your pre chosen list?"
 export const ALL_EMOJIS = ['👍', '😂', '😮', '😅', '🔥', '🎉', '👏', '🤔', '😢', '😎', '❤️', '🫡'];
+
+export const EMOJI_MAX = 16;      // how many emojis one palette may hold (the panel is a 4-wide grid)
 
 // Preset phrases, id → { en, es }. English is the source; a missing es falls back to en.
 export const PHRASES = {
@@ -64,10 +70,13 @@ export function savePalette(p) {
   return clean;
 }
 
-/** Drop anything not in the catalog; clamp custom lines. Unknown ids can't crash a game. */
+/** Drop anything that is not one real emoji or a known phrase; clamp custom lines. Unknown ids
+ *  can't crash a game. */
 export function normalizePalette(p) {
   if (!p || typeof p !== 'object') return clone(DEFAULT_PALETTE);
-  const emojis = Array.isArray(p.emojis) ? dedupe(p.emojis.filter((e) => ALL_EMOJIS.includes(e))) : DEFAULT_PALETTE.emojis.slice();
+  const emojis = Array.isArray(p.emojis)
+    ? dedupe(p.emojis.filter((e) => typeof e === 'string' && (ALL_EMOJIS.includes(e) || isEmoji(e))).map((e) => e.trim())).slice(0, EMOJI_MAX)
+    : DEFAULT_PALETTE.emojis.slice();
   const phrases = Array.isArray(p.phrases) ? dedupe(p.phrases.filter((id) => PHRASES[id])) : DEFAULT_PALETTE.phrases.slice();
   const custom = Array.isArray(p.custom)
     ? p.custom.map((s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, CUSTOM_MAXLEN)).filter(Boolean).slice(0, CUSTOM_MAX)
@@ -101,6 +110,6 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 function dedupe(arr) { const seen = new Set(); return arr.filter((x) => (seen.has(x) ? false : (seen.add(x), true))); }
 
 export default {
-  ALL_EMOJIS, PHRASES, DEFAULT_PALETTE, CUSTOM_MAX, CUSTOM_MAXLEN,
+  ALL_EMOJIS, EMOJI_MAX, PHRASES, DEFAULT_PALETTE, CUSTOM_MAX, CUSTOM_MAXLEN,
   loadPalette, savePalette, normalizePalette, reactionText, paletteItems,
 };

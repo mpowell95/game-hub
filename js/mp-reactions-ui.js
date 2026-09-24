@@ -24,6 +24,7 @@ import { loadPalette, paletteItems, reactionText } from './mp-reactions.js';
 const LABELS = {
   open:  { en: 'Send a reaction', es: 'Enviar una reacción' },
   close: { en: 'Close',           es: 'Cerrar' },
+  dismiss: { en: 'Tap to close',   es: 'Toca para cerrar' },
 };
 const MAX_BUBBLES = 5;
 const BUBBLE_MS = 4500;
@@ -155,26 +156,59 @@ export function createReactions(opts) {
     }
   }
 
+  // A bubble can be TAPPED AWAY, and a repeat STACKS (2026-09-24): the same line again from the
+  // same sender bumps a "x5" on the bubble already showing instead of piling up five. Matt: "I
+  // need to be able to dismiss chats from people too."
+  function arm(el) {
+    if (el._t) { clearTimeout(el._t); timers.delete(el._t); }
+    const t = setTimeout(() => {
+      timers.delete(t); el._t = null; el._gone = true;
+      el.classList.remove('is-on');
+      const t2 = setTimeout(() => { el.remove(); timers.delete(t2); }, 260);
+      timers.add(t2);
+    }, BUBBLE_MS);
+    el._t = t;
+    timers.add(t);
+  }
+  function dismiss(el) {
+    if (el._t) { clearTimeout(el._t); timers.delete(el._t); el._t = null; }
+    el.remove();
+  }
+  function onBubbleClick(e) {
+    const el = e.target.closest('.mpr-bubble');
+    if (el) dismiss(el);
+  }
+  bubbles.addEventListener('click', onBubbleClick);
+
   function popBubble(entry, sender) {
     const text = reactionText(entry, getLang());
     if (!text) return;
     const isEmoji = entry.t === 'e';
+    const sig = `${sender && sender.self ? 'self' : (sender && sender.name) || ''}|${entry.t}|${text}`;
+    const same = Array.from(bubbles.children).find((n) => n._sig === sig && !n._gone);
+    if (same) {
+      same._n += 1;
+      const n = same.querySelector('.mpr-n');
+      if (n) { n.textContent = `×${same._n}`; n.hidden = false; }
+      bubbles.appendChild(same);
+      arm(same);
+      return;
+    }
     const el = document.createElement('div');
     el.className = 'mpr-bubble' + (isEmoji ? ' is-emoji' : '') + (sender && sender.self ? ' is-self' : '');
+    const lang = getLang();
+    el.setAttribute('role', 'button');
+    el.title = LABELS.dismiss[lang] || LABELS.dismiss.en;
+    el._sig = sig;
+    el._n = 1;
     const who = sender && (sender.emoji || sender.name)
       ? `<span class="mpr-who">${esc(sender.emoji || '')}${sender.name ? `<span class="mpr-who-name">${esc(sender.name)}</span>` : ''}</span>`
       : '';
-    el.innerHTML = who + `<span class="mpr-react">${esc(text)}</span>`;
+    el.innerHTML = who + `<span class="mpr-react">${esc(text)}</span><span class="mpr-n" hidden></span><span class="mpr-x" aria-hidden="true">✕</span>`;
     bubbles.appendChild(el);
-    while (bubbles.children.length > MAX_BUBBLES) bubbles.removeChild(bubbles.firstChild);
+    while (bubbles.children.length > MAX_BUBBLES) dismiss(bubbles.firstChild);
     requestAnimationFrame(() => el.classList.add('is-on'));
-    const t = setTimeout(() => {
-      el.classList.remove('is-on');
-      const t2 = setTimeout(() => { el.remove(); timers.delete(t2); }, 260);
-      timers.add(t2);
-      timers.delete(t);
-    }, BUBBLE_MS);
-    timers.add(t);
+    arm(el);
   }
 
   function setActive(on) {
@@ -188,6 +222,7 @@ export function createReactions(opts) {
     closePanel();
     btn.removeEventListener('click', onBtn);
     panel.removeEventListener('click', onPanelClick);
+    bubbles.removeEventListener('click', onBubbleClick);
     document.removeEventListener('pointerdown', onOutside, true);
     for (const t of timers) clearTimeout(t);
     timers.clear();
@@ -256,6 +291,10 @@ function injectCss() {
   opacity:0; transform:translateY(10px) scale(0.96); transition:opacity .22s ease, transform .22s ease;
 }
 .mpr-bubble.is-on{ opacity:1; transform:translateY(0) scale(1); }
+.mpr-bubble{ pointer-events:auto; cursor:pointer; touch-action:manipulation; min-height:32px; }
+.mpr-n{ font-size:13px; font-weight:800; opacity:0.85; }
+.mpr-n[hidden]{ display:none; }
+.mpr-x{ font-size:12px; opacity:0.6; margin-left:2px; }
 .mpr-bubble.is-self{ background:rgba(31,95,168,0.94); }
 .mpr-bubble.is-emoji .mpr-react{ font-size:26px; }
 .mpr-who{ display:inline-flex; align-items:center; gap:5px; font-size:18px; }
