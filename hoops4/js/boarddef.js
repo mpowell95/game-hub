@@ -462,6 +462,11 @@ export const BOARD = {
     // shots: 0.00X -> 24 parked, every one in those two corners; 0.42X -> 24; 0.70X -> 8;
     // 1.00X -> 0, with the right column 50.5% -> 54.0%. The smallest that empties the pocket.
     backCornerChamfer: X * 1.00,
+    // THE BOARD'S EDGES GO STRAIGHT UP (2026-09-24), machine.js "THE SIDE WALLS". The inner face
+    // of each wall is the display's own edge (SCREEN_W / 2), so the walls stand 1 cm outside the
+    // outer collars and a ball going wide of hoop 1 or 7 comes back in instead of reaching the
+    // shelf outside them. `0` removes them.
+    sideWallU: SCREEN_W / 2,
 
     fins: {
       rise: X * 0.30,        // how far the ridge stands above the rim

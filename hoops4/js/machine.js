@@ -601,6 +601,37 @@ export function buildMachine(G) {
       rot: null,
     });
   }
+  // THE SIDE WALLS (2026-09-24). Matt, drawing two lines from the edges of the Connect 4 board
+  // straight up to the sign: "I'm talking about if the sides of the connect 4 board went straight
+  // up" - so a ball that goes wide of hoop 1 or 7 bounces back into play instead of landing on the
+  // 1.3X of bare shelf outside the last hoop (where the chamfers and the back-corner pocket were).
+  // A solid block each side, from the display's edge (`sideWallU`, inner face) out to the rail,
+  // from below the shelf up to the top of the backboard, and from the shelf's front edge back to
+  // the back wall - so nothing can get behind it. Its inner face is a real, lively wall (physics
+  // gives 'sideWall' the rims' material); the front face stands in the display's plane.
+  if (G.sideWallU > 0) {
+    const shelf = frames.find((fr) => fr.tilt <= 0.5 && Object.values(G.holes || {}).some((H) => H.v >= fr.v0 && H.v <= fr.v1));
+    if (shelf) {
+      const front = faceToWorldIn(shelf, 0, shelf.v0, 0);
+      const back = faceToWorldIn(shelf, 0, shelf.v1, 0);
+      // Up to the BOTTOM OF THE SIGN, not past it: the first build ran them to the backboard's top
+      // and they covered both ends of the marquee (the ball and the two lamps). render.js puts the
+      // marquee's bottom edge at the header fascia's top, boardW * 0.10 above the back wall's top.
+      const topY = faceToWorld(0, G.boardLen, 0)[1] + G.boardW * 0.10 + 0.01;
+      const y0 = Math.min(front[1], back[1]) - 0.02;
+      const z0 = Math.max(front[2], back[2]), z1 = Math.min(front[2], back[2]) - 0.05;
+      const x0 = G.sideWallU, x1 = G.boardW / 2 + 0.02;
+      for (const sx of [-1, 1]) {
+        solids.push({
+          part: 'sideWall',
+          pos: [sx * (x0 + x1) / 2, (y0 + topY) / 2, (z0 + z1) / 2],
+          half: [(x1 - x0) / 2, (topY - y0) / 2, (z0 - z1) / 2],
+          rot: null,
+        });
+      }
+    }
+  }
+
   // The backboard: the vertical wall rising from the board's top edge. A real wall the engine
   // bounces the ball off - the reaction IS the contact solve, nothing is scripted.
   const top = faceToWorld(0, G.boardLen, 0);

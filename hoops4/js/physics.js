@@ -178,7 +178,7 @@ function buildWorld(board, closed = []) {
                 // unpredictability Matt asked for, and nothing steers it there.
                 : s.part === 'ringSeg' || s.part === 'cupSeg' || s.part === 'throat' || s.part === 'rimCap'
                   || s.part === 'splitter' || s.part === 'fin' || s.part === 'finCap'
-                  || s.part === 'chamfer' ? matRing
+                  || s.part === 'chamfer' || s.part === 'sideWall' ? matRing
                   : s.part === 'backboard' ? matBack
                     // The SIDE RAILS stay dead on purpose (wallRest 0.03, measured): a live rail
                     // made the outer columns catch-alls for every over-aimed ball.
