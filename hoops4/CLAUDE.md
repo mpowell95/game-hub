@@ -1833,3 +1833,7 @@ Also the same day: the profile's Quick chat has an **"Order in game"** row showi
 `qc.phrases` in the order the chat panel uses. Tap one, then tap where it goes (tap-to-move, not
 drag, so it never fights the page's scroll on a phone). The order is just the array order in
 `gamehub.quickchat.v1`, so no model change was needed.
+- **Multiplayer is a card row like the computer card** (same day, Matt: *"make the multiplayer and
+  computer pills look similar? They don't look like buttons on the same page"*). `.h4-mp` is a
+  `.gh-card` button with the same `.h4-card-head` heading and a `›` on the right, sized to the
+  closed computer card (measured 66px both); the computer card keeps its ▾/▸ fold arrow.
