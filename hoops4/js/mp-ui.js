@@ -166,31 +166,14 @@ export function openMultiplayer(ui) {
         <div class="h4-mp-games">${extra.join('')}${list.map(gameRow).join('')}</div></section>` : '';
     const owedMine = owed.filter((o) => o.mine).map(owedRow);
     const owedTheirs = owed.filter((o) => !o.mine).map(owedRow);
-    // A MATCH THAT ENDED WHILE THIS PHONE WAS AWAY is listed first until it is opened, so a loss
-    // (or a win) is never just a game that vanished from the list (MP.readUnseen).
-    const unseenIds = MP.readUnseen();
-    const ended = rows.filter((r) => r && r.over && unseenIds.includes(r.id)).map(endedRow);
-    box.innerHTML = (live.length || owed.length || ended.length)
-      ? sec(t('mpSecEnded'), [], ended) + sec(t('mpSecYours'), mine, owedMine) + sec(t('mpSecTheirs'), theirs, owedTheirs)
+    box.innerHTML = (live.length || owed.length)
+      ? sec(t('mpSecYours'), mine, owedMine) + sec(t('mpSecTheirs'), theirs, owedTheirs)
       : `<p class="h4-mp-sub">${t('mpNoActive')}</p>`;
-    for (const b of box.querySelectorAll('[data-ended]')) {
-      ui.on(b, 'click', () => { MP.markResultSeen(b.dataset.ended); openGame(b.dataset.ended, { review: true }); });
-    }
+    // A MATCH THAT ENDED WHILE THIS PHONE WAS AWAY gets the Game Over popup, on top of this sheet.
+    showUnseenResults(ui, rows);
     for (const b of box.querySelectorAll('[data-next]')) ui.on(b, 'click', () => startNext(b.dataset.next, b));
     for (const b of box.querySelectorAll('[data-game]')) ui.on(b, 'click', () => openGame(b.dataset.game));
     for (const b of box.querySelectorAll('[data-quit]')) ui.on(b, 'click', (e) => { e.stopPropagation(); confirmQuit(b.dataset.quit); });
-  }
-
-  function endedRow(r) {
-    const mark = r.result === 'won' ? '\u2713' : r.result === 'lost' ? '\u2715' : '=';
-    const word = r.result === 'won' ? t('youWin') : r.result === 'lost' ? t('youLose') : t('draw');
-    return `<div class="h4-mp-game is-ended is-${esc(r.result || 'unknown')}">
-        <button type="button" class="h4-mp-open" data-ended="${esc(r.id)}">
-          <span class="h4-mp-emo" aria-hidden="true">${esc(r.emoji)}</span>
-          <span class="h4-mp-txt"><span class="h4-mp-name">${esc(r.name || '?')}</span>
-            <span class="h4-mp-meta"><span aria-hidden="true">${mark}</span> ${esc(word)} \u00b7 ${esc(t('mpSeeResult'))}</span></span>
-        </button>
-      </div>`;
   }
 
   function gameRow(r) {
@@ -780,3 +763,61 @@ export function createMatchChat({ root, send, them, failText }) {
 }
 
 export default { openMultiplayer, createMatchChat };
+
+/**
+ * THE GAME OVER POPUP FOR A MATCH THAT ENDED WHILE YOU WERE AWAY (2026-09-24). Matt, first: "there
+ * isn't a You Lost screen or anything. the game just disappears." A list section was tried first
+ * and he rejected it the same evening: "this is not what I meant by show the loss. It should have
+ * a Game Over popup that says You Lost or something." So it is a popup, the same card family as
+ * the one finish() puts up at the end of a match you watched: GAME OVER, then You lost / You won
+ * and who it was against, one row per match, with See the board (the read-only replay and its
+ * own result card). Shown on mount and when the multiplayer sheet opens; any button marks every
+ * match on it seen (MP.markResultSeen), so it pops ONCE. `rows` is optional - read when absent.
+ */
+export async function showUnseenResults(ui, rows) {
+  try {
+    if (!rows) rows = await MP.readMyGames();
+    if (!Array.isArray(rows) || ui.disposed) return;
+    try { MP.recordFinished(rows); } catch (err) { console.warn('[hoops4] recordFinished', err); }
+    const ids = MP.readUnseen();
+    const list = rows.filter((r) => r && r.over && ids.includes(r.id))
+      .sort((a, b) => (+b.updated || 0) - (+a.updated || 0));
+    if (!list.length || ui.disposed || ui.root.querySelector('.h4-results')) return;
+    const shown = list.slice(0, 4);
+    const row = (r) => {
+      const res = r.result === 'won' ? 'won' : r.result === 'lost' ? 'lost' : 'draw';
+      const mark = res === 'won' ? '\u2713' : res === 'lost' ? '\u2715' : '=';
+      const word = res === 'won' ? t('youWin') : res === 'lost' ? t('youLose') : t('draw');
+      const who = (r.emoji ? r.emoji + ' ' : '') + (r.name || '?');
+      return `<div class="h4-res is-${res}">
+          <p class="h4-res-word"><span aria-hidden="true">${mark}</span> ${esc(word)}</p>
+          <p class="h4-res-vs">${esc(t('vsName2', { name: who }))}${r.series > 1 ? ' \u00b7 ' + esc(t('gameOf', { n: r.seriesNo, m: r.series })) : ''}</p>
+          <button type="button" class="gh-btn h4-res-see" data-see="${esc(r.id)}">${esc(t('seeBoard'))}</button>
+        </div>`;
+    };
+    const card = document.createElement('div');
+    card.className = 'h4-over h4-results';
+    card.innerHTML = `<div class="h4-over-in" role="dialog" aria-modal="true" aria-label="${esc(t('gameOver'))}">
+        <button type="button" class="h4-x" aria-label="${esc(t('close'))}">&times;</button>
+        <p class="h4-over-kicker">${esc(t('gameOver'))}</p>
+        ${shown.map(row).join('')}
+        ${list.length > shown.length ? `<p class="h4-res-more">${esc(t('nMore', { n: list.length - shown.length }))}</p>` : ''}
+        <button type="button" class="gh-btn gh-btn-primary h4-again" data-ok>${esc(t('ok'))}</button>
+      </div>`;
+    ui.root.appendChild(card);
+    const done = () => { for (const r of list) MP.markResultSeen(r.id); card.remove(); };
+    ui.on(card.querySelector('.h4-x'), 'click', done);
+    ui.on(card.querySelector('[data-ok]'), 'click', done);
+    for (const b of card.querySelectorAll('[data-see]')) {
+      ui.on(b, 'click', async () => {
+        const id = b.dataset.see;
+        done();
+        const sheet = ui.root.querySelector('.h4-sheet');
+        const game = await MP.readGame(id);
+        if (!game || ui.disposed) return;
+        if (sheet) sheet.remove();
+        ui.startAsync(game, { review: true });
+      });
+    }
+  } catch (err) { console.warn('[hoops4] could not show finished matches', err); }
+}

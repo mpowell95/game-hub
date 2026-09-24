@@ -1671,8 +1671,16 @@ Matt, after a session of simultaneous turn-by-turn games with another player.
   mp.js `addUnseen`/`readUnseen`/`markResultSeen`). *"there isn't a You Lost screen or anything.
   the game just disappears."* A finished match left the active list, and `recordFinished` counted
   it silently. Every row it counts is one this device never watched end, so it is queued; the
-  list shows it first under "Game over" (tick/cross/equals + words), and a tap opens the
-  read-only review with the result card. A display flag, not history (the result is in the match).
+  **Game Over POPUP** shows it (mp-ui `showUnseenResults`: on mount and when the multiplayer sheet
+  opens; "GAME OVER", then "You lost / You won", "vs <emoji> <name>", See the board, OK; any button
+  marks all of them seen). A "Game over" LIST SECTION shipped first and Matt rejected it the same
+  evening: *"this is not what I meant by show the loss. It should have a Game Over popup that says
+  You Lost or something."* The launcher bubble has a third kind, `'over'` ("GAME OVER / You lost
+  vs <name>", orange), decided in alert.js below a new challenge and above a turn; `check()`/
+  `watch()` now call `recordFinished` so the launcher learns of it too. Tapping that bubble does
+  NOT mark it seen (js/hub.js `_openAlertGame`) - the game's popup does; its X does. `finish()`
+  marks a match it showed. The in-game end card got the same "GAME OVER" kicker and a 34px
+  result, and the words are now past tense ("You lost" / "You won"). A display flag, not history.
 - **Chat cap 24 -> 120** (`MP.CHAT_MAXLEN`; `js/net.js` `sendReaction` slice 40 -> 120, a no-op for
   every other game since each caps its own lines shorter). Display goes through `MP.cleanChat`, not
   `js/mp-reactions.js`'s `reactionText`, which cuts at the hub's 24.

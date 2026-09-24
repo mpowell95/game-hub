@@ -20,11 +20,12 @@
 // NOTHING HERE IS PLAYER HISTORY. The seen map is a one-tap-recreatable preference (THE LAW rule
 // 2's stated exemption, the same class as launcher favourites) - losing it shows a bubble twice,
 // which is the harmless direction. It never writes to `hoops/`, so no match state is at risk.
-import { readMyGames, myCode, watchMyGames, readSeen, markSeen, armTurn, readGame, sideOf, SEEN_KEY } from './mp.js';
+import { readMyGames, myCode, watchMyGames, readSeen, markSeen, armTurn, readGame, sideOf, SEEN_KEY,
+  recordFinished, readUnseen, markResultSeen } from './mp.js';
 
 // The seen map moved to mp.js (2026-09-23) so that mp.js's own writes can stamp it - see there.
 // Re-exported so callers (js/hub.js, the tests) keep one import site.
-export { readSeen, markSeen, SEEN_KEY };
+export { readSeen, markSeen, SEEN_KEY, markResultSeen };
 
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 
@@ -37,11 +38,21 @@ const ms = (v) => (Number.isFinite(+v) ? +v : 0);
  * ORDER MATTERS: a brand new match outranks a turn, because "somebody challenged you" is the
  * bigger event and the one with a person's name attached. Among equals, the most recent.
  */
-export function decideAlert(rows, seen) {
+export function decideAlert(rows, seen, unseen = []) {
   if (!Array.isArray(rows)) return null;
   const live = rows.filter((r) => r && r.id && !r.over && ms(r.updated) > ms(seen && seen[r.id]));
-  if (!live.length) return null;
+  // (2026-09-24) A MATCH THAT ENDED WHILE YOU WERE AWAY: "GAME OVER - You lost vs <name>". Below a
+  // new challenge, above an ordinary turn. `unseen` is mp.js's readUnseen(); the game's own Game
+  // Over popup clears it, so the bubble goes when the popup has been seen.
+  const ended = rows.filter((r) => r && r.id && r.over && Array.isArray(unseen) && unseen.includes(r.id))
+    .sort((a, b) => ms(b.updated) - ms(a.updated));
+  if (!live.length && !ended.length) return null;
   const isNew = (r) => !(seen && seen[r.id]);
+  if (ended.length && !live.some(isNew)) {
+    const r = ended[0];
+    return { kind: 'over', id: r.id, name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
+      result: r.result === 'won' || r.result === 'lost' ? r.result : 'draw', names: [], count: ended.length };
+  }
   // A challenge only counts as one while it is genuinely unseen AND still waiting on them: once
   // you have taken a shot the match is just a match, and the next nudge is an ordinary "your turn".
   const fresh = live.filter(isNew).sort((a, b) => ms(b.updated) - ms(a.updated));
@@ -101,7 +112,8 @@ export async function check() {
     const rows = await readMyGames();
     lastRows = Array.isArray(rows) ? rows : [];
     await rearmUnshot(lastRows);
-    return decideAlert(lastRows, readSeen());
+    try { recordFinished(lastRows); } catch (err) { console.warn('[hoops4] recordFinished', err); }
+    return decideAlert(lastRows, readSeen(), readUnseen());
   } catch (err) {
     console.warn('[hoops4] could not check for challenges', err);
     return null;
@@ -119,7 +131,8 @@ export async function watch(cb) {
     return await watchMyGames(async (rows) => {
       lastRows = Array.isArray(rows) ? rows : [];
       try { await rearmUnshot(lastRows); } catch { /* the plain decision below still stands */ }
-      try { cb(decideAlert(lastRows, readSeen())); } catch (err) { console.warn('[hoops4] alert watch', err); }
+      try { recordFinished(lastRows); } catch { /* counted on the next open instead */ }
+      try { cb(decideAlert(lastRows, readSeen(), readUnseen())); } catch (err) { console.warn('[hoops4] alert watch', err); }
     });
   } catch { return () => {}; }
 }

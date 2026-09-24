@@ -1215,8 +1215,15 @@ class Hub {
         fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
         <path d="M5 4 L16 16"/><path d="M19 4 L8 16"/>
         <path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>`;
-    const head = `${swords}<span>${t('hub_alert_head')}</span>${swords}`;
-    const line = a.kind === 'challenge'
+    const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    // (2026-09-24) 'over': a match that ended while the player was away - "GAME OVER / You lost
+    // vs <name>". Matt: "It should have a Game Over popup that says You Lost".
+    const head = a.kind === 'over' ? `<span>${t('hub_alert_over_head')}</span>`
+      : `${swords}<span>${t('hub_alert_head')}</span>${swords}`;
+    const line = a.kind === 'over'
+      ? t(a.result === 'won' ? 'hub_alert_won_vs' : a.result === 'lost' ? 'hub_alert_lost_vs' : 'hub_alert_draw_vs',
+        { who: esc(a.name || t('hub_alert_someone')) })
+      : a.kind === 'challenge'
       ? t('hub_alert_challenged', { who: a.name ? String(a.name).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : t('hub_alert_someone') })
       : this._turnLine(a.names);
     const el = document.createElement('div');
@@ -1238,7 +1245,7 @@ class Hub {
               aria-label="${t('hub_alert_dismiss')}">&times;</button>
       <span class="hub-alert-head">${head}</span>
       <span class="hub-alert-line">${line}</span>
-      ${a.count > 1 ? `<span class="hub-alert-count">${t('hub_alert_more', { n: a.count })}</span>` : ''}`;
+      ${a.count > 1 && a.kind !== 'over' ? `<span class="hub-alert-count">${t('hub_alert_more', { n: a.count })}</span>` : ''}`;
     cell.appendChild(el);
   }
 
@@ -1260,7 +1267,10 @@ class Hub {
     const state = this._gameAlert;
     if (!state) return;
     try { state.mod.armCeremony(state.alert); } catch {}
-    this._dismissGameAlert();
+    // A GAME OVER bubble is NOT acknowledged by tapping it: the game's own Game Over popup is what
+    // the tap is for, and it marks the result seen. Acknowledging here would leave it nothing to show.
+    if (state.alert.kind === 'over') { this._gameAlert = null; this._paintGameAlert(); }
+    else this._dismissGameAlert();
     this.launch(state.game);
   }
 
@@ -1278,8 +1288,12 @@ class Hub {
     const state = this._gameAlert;
     if (!state) return;
     try {
-      const row = state.mod.rowFor(state.alert.id);
-      state.mod.markSeen(state.alert.id, row ? row.updated : Date.now());
+      if (state.alert.kind === 'over' && typeof state.mod.markResultSeen === 'function') {
+        state.mod.markResultSeen(state.alert.id);
+      } else {
+        const row = state.mod.rowFor(state.alert.id);
+        state.mod.markSeen(state.alert.id, row ? row.updated : Date.now());
+      }
     } catch {}
     this._gameAlert = null;
     this._paintGameAlert();
