@@ -462,6 +462,24 @@ ok('] moves to the next hole', (await page.evaluate(() => window.__he.currentId)
 await key('[');
 ok('[ moves back', (await page.evaluate(() => window.__he.currentId)) === 'rm-01');
 
+console.log('\n-- Stage 3: motion (2026-09-24) --');
+{
+  await page.evaluate(() => { const c = window.__he.editorCanvas; c.setSelection(null); c.setTool('tree'); c.fit(); });
+  await settle();
+  const sp = await spec();
+  const tgt = await page.evaluate(([x, y]) => { const c = window.__he.editorCanvas; const r = c.el.getBoundingClientRect(); const q = c.toScreen(x, y); return { x: r.x + q.x, y: r.y + q.y }; }, [sp.path[0][0] + 26, (sp.path[0][1] + sp.path[sp.path.length - 1][1]) / 2]);
+  await page.mouse.move(tgt.x - 4, tgt.y); await page.mouse.move(tgt.x, tgt.y); await page.waitForTimeout(120);
+  ok('a placement tool shows a see-through preview under the mouse', await page.evaluate(() => !!window.__he.editorCanvas._ghostObject()));
+  const nT = (sp.trees || []).length;
+  await page.mouse.click(tgt.x, tgt.y);
+  ok('clicking places it and starts the pop-in', ((await spec()).trees || []).length === nT + 1 && await page.evaluate(() => (window.__he.editorCanvas._pops || new Map()).size > 0));
+  await page.waitForTimeout(700);
+  ok('...which finishes on its own', await page.evaluate(() => !window.__he.editorCanvas._raf && !(window.__he.editorCanvas._pops || new Map()).size));
+  await page.mouse.move(5, 5); await page.waitForTimeout(80);
+  ok('the preview goes when the mouse leaves the map', await page.evaluate(() => !window.__he.editorCanvas.ghost));
+  await page.evaluate(() => window.__he.editorCanvas.setTool('select'));
+}
+
 console.log('\n-- Validate / Reset / persistence --');
 await page.click('#he-validate'); await settle();
 ok('Validate reports on the hole', /validate/i.test(await page.evaluate(() => document.getElementById('he-hole').innerText)));
