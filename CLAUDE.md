@@ -789,6 +789,10 @@ for it.
   `functions/README.md`). **Give Matt deploy steps in the chat, in full, not as a pointer to that
   file** - he asked for exactly that. The masked prompt of `functions:secrets:set` ignored a paste
   in PowerShell (saved an empty value, refused); `--data-file` from a temp file worked.
+- **Opening the hub clears them** (2026-09-24, Matt: "Can the notifications auto dismiss if i go to
+  the game hub?"): `clearShownNotifications()` in `js/push.js` closes every notification this app is
+  showing, on hub load and whenever it returns to the front. Verified in Chromium (2 -> 0); on iOS
+  it depends on Safari honouring `Notification.close()` for web push, confirmed only by a phone.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
 

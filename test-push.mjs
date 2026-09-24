@@ -136,5 +136,9 @@ check('Hoops asks "notify me when <them> plays back?" after a SENT move, once pe
   /this\._askPush\(mp\)/.test(hui) && /gamehub\.hoops4\.pushAsk\.v1/.test(hui) && /if \(st !== 'off'/.test(hui));
 check('Messages offers "Notify me of new messages" while off', /addPushRow\(card, gen\)/.test(read('./js/messages-ui.js')));
 
+check('opening the hub, or coming back to it, clears the notifications already showing',
+  /export async function clearShownNotifications/.test(read('./js/push.js'))
+  && /this\._afterPaint\(this\._clearPushes\)/.test(hub) && /addEventListener\('visibilitychange', this\._clearPushes\)/.test(hub));
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
