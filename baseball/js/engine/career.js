@@ -287,6 +287,7 @@ export function startSeason(state, seed) {
       parks: true,
       wallHeight: true,   // playtest 1: home runs must clear the wall's height (outcomes.js)
       livePlays: !!LIVE_PLAY.on, // batch 4: balls in play played out in time (liveplay.js); off until 4b draws it
+      runControl: !!(LIVE_PLAY.on && LIVE_PLAY.runControl), // batch 5: the player runs his own runners
       points: { ...POINTS[league] },
       schedule: makeSchedule(league, seasonSeed, games, slots.length, SCHEDULE_SHAPE),
       results: [],
@@ -373,7 +374,10 @@ export function buildGame(state, meta, agents = { home: null, away: null }) {
   // Batch 4: the live play, snapshotted the same way - a season started without it keeps the
   // out-zone model to its last game.
   const livePlays = !!(s && s.livePlays);
-  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false, wallHeight, livePlays });
+  // Batch 5: the player running his own runners, snapshotted the same way (a season started before
+  // it keeps automatic base running to its last game).
+  const runControl = !!(s && s.runControl);
+  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false, wallHeight, livePlays, runControl });
 }
 
 /** Which engine side ('home'|'away') the player is, for a given meta. */

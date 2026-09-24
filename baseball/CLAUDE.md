@@ -4,6 +4,97 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Playtest 1, batch 5: the player runs the bases (2026-09-24) - DONE, live
+
+`docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 5. Matt: "if I hit the ball and it lands in the outfield, I
+have to click something to send the batter to second, then again to third, then again to home. And I
+could change my mind halfway to a base." **Snapshotted per season** (`season.runControl`, set from
+`LIVE_PLAY.on && LIVE_PLAY.runControl` in `startSeason`; `Game({ runControl })` + snapshot; an older
+season or snapshot keeps automatic running to its last game). Quick Play has it at once.
+
+**How it plays.** While the player's ball is in play, the diamond widget (now 148px, was 84px; always
+that size, so nothing moves when running starts) lights up and each base is a 44px tap target
+(`data-base` 0 first .. 3 home). The batter runs to first and a forced runner to his forced base on
+their own; everyone else holds his lead until the ball is picked up, then gives it back. Nobody else
+moves without a tap. **Addressing** (liveplay.js `applyOrder`): tap a base = the runner nearest
+behind it who is not already heading there or further runs to it (through any base between);
+refused if another runner stands on or is heading to it. Tap the base a runner is running away from
+(left it, ran through it, or is about to leave it) = he goes back, unless still forced off it. When a
+tap reads both ways, the runner NEARER that base is meant, except that a runner sent less than
+`ctlBackGraceS` (1.0 s) ago is never the one turned back: "home, then second" sends the man on second
+home and the batter to second; "home, then third" as he rounds third holds him at third (found by
+the model runner: with back-first priority, "home then second" turned the runner round). A tap made
+while the ball is in the air waits for it to come down: the catch (a tag-up) or the landing. After
+a wild throw (every runner already takes a base) or the third out, taps are over. A tap anywhere
+off the widget skips the rest of the play (runners do what they were last told); a near miss inside
+the widget box does nothing.
+
+**The engine** (`liveplay.js` `controlPlay`, reached with `p.control = { orders: [{t, k}] }`). The
+defense is played event by event against what the runners are doing AT THAT MOMENT: a decision
+when the ball is picked up, after each throw arrives, and `ctlReadS` after an idle fielder sees a
+runner go. It throws at the most advanced runner it can beat, a force at his forced base included
+(the batter sent to second can still be forced at first); a throw in the air cannot follow a
+runner who turns round, and the receiver then decides again (up to `ctlMaxThrows` = 6, so a runner
+can be chased). A runner who turns round mid-leg stands `turnS` (0.3 s) first; legs can run
+backward now (`at`/`arriveT` take the sign). **A later tap never changes anything before it** - the
+only random draws are the throws', taken in time order - which is what lets the UI re-resolve the
+whole play on every tap and keep drawing from the same moment (test section 37 checks it on 2,400
+plays; it caught one real bug: a fielder "running the ball to the bag" could record an out before
+the moment he decided to, `throwTo` now clamps it).
+
+**Wiring.** game.js `_livePlay`: with `runControl` and a batting agent that has `runBases(view)`, the
+agent gets the play with no taps (`view.play`, plus `view.est` for a model) and `view.resolve(orders)`,
+which replays it from a PRIVATE copy of the RNG state (nothing consumed); what it returns is booked
+from the real RNG, so the booked play is exactly the last one drawn (test and device probe both check
+it). The one await inside the pitch pass; a screen torn down mid-play settles it (`destroy` ends the
+clock), and a resume starts at the pitch boundary before it, as batch 4 decided. Not asked on a home
+run, a foul out or a catch that ends the inning. The CPU's runners are unchanged (automatic).
+**UI** (`ui.js`): `_animateLivePlay` split into `_liveBegin`/`_liveDraw`/`_liveClock`/`_liveFinish`;
+`HumanAgent.runBases` -> `_runBasesLive` draws the play with the widget live and swaps in a new
+`_livePlayModel` on every tap; the atBatEnd that follows only settles it (`this._liveCtx`). A new
+throw's receiver on a player-run play sets off `LIVE_CTL_COVER_LEAD_S` before it (not at his
+reaction time, which would make him jump on the redraw). The swing's timing word still pops at
+contact (`_runBasesLive` pops it; 'atBatEnd' now arrives after the run and skips it). New string
+`widget_run_hint` (EN/ES).
+
+**The simulator's model runner** (`agents.js` `ModelRunner`, `HUMAN_RUN` in the sim): taps like the
+UI. Look 1: once the ball is down or caught (on a ball in the air it taps during the flight, the way
+a player who watched it would; on a grounder 0.6 s late), each runner lead first to the furthest base
+he can make before the defense could get the ball there, 0.25 s margin, up to 0.45 s misjudgement.
+Look 2: once the first throw is in the air, the runner it is aimed at turns back if he will not make
+it and is less than halfway; a runner it is not aimed at takes one more base if the relay cannot beat
+him. Private RNG seeded from the play. On 20,000 random Majors plays at Speed 20 it scores 1% fewer
+runs than the automatic runner (4% fewer at Speed 26: the automatic runner on third went on contact
+on a grounder, a player reacts).
+
+**Re-tuned: Majors `LIVE_PLAY.cpuRosterLevel` 21.0 -> 20.5.** With the model runner, Perfect Season fell
+3.7% -> 1.5% (under its 2% floor); everything else still passed. `--all-tiers --careers 200 --assert
+--perfect 400`, median tier, 4b -> 5: first-attempt Gold 97.5 / 87.5 / 53.5 / 35.0 / 12.5 -> **96.0 /
+84.5 / 49.5 / 30.5 / 6.0**; first title median 10 -> **10** seasons; Majors seasons before it 4 ->
+**3**; Perfect Season 3.7% -> **3.3%**. All 8 assertions pass. Weak tier Majors first try 0.5% ->
+0.0%, strong 38.0% -> 32.5%. Runs a game (you-them, median): 3.6-0.2 / 3.3-0.5 / 2.5-1.0 / 2.7-1.4 /
+2.6-1.8. Home runs a game (both teams): 0.99 / 1.08 / 1.60 / 2.16 / 2.51 (4b 0.90 / 1.08 / 1.57 /
+2.16 / 2.55).
+
+**What Speed is worth** (median model player, Majors, all skills 20, +6 Speed, 10,000 games a cell,
+same seeds): **+4.0 pp before** (automatic running, 45.0 -> 49.0%), **+3.7 pp after** (model runner,
+47.0 -> 50.7%), +4.1 pp for a more aggressive model (no margin, 0.4 s reaction). Honest reading:
+Speed is not worth more yet - a player who runs about as well as the automatic runner gets about what
+it got. What changed is who decides; per play, Speed 26 makes second on a tap safely far more often
+than Speed 5 (test section 37). If Matt wants Speed to count for more, the lever is
+`LIVE_PLAY.runFtSPerPt` (0.7 ft/s a point) - his call, not made here.
+
+**Suites**: `node baseball/js/test.js` 3257 (new section 37: invariants with and without random taps,
+a tap never changes the past, send/back/forced/tag-up/"home then second", Speed per play, the booked
+play = the last drawn, snapshot + season flag). `node test-baseball-career.mjs` 329.
+`node test-game-conventions.mjs` 11/11. `node check-no-scroll.mjs baseball` 16/16.
+`BB_DEVICE_QUICK=1 node test-baseball-device.mjs` 55/55 (new probe `run-bases`: at 390x664 in the
+hub, the widget keeps its box when running starts, sits inside the field and clear of the HUD (worst
+team name ends at 208px, the widget starts at 234px), every base 44x44; a real touch on 2B becomes an
+order; the booked play equals the drawn one). `node test-visual.mjs baseball` 20/20 (one earlier run
+failed `[play]` on its pitching half - the CPU put the first pitch in play, which pops no word by
+design - and passed on both re-runs).
+
 ## Playtest 1, batch 4b: live plays, drawn and switched on (2026-09-24) - DONE, live
 
 `docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 4, second half. **`LIVE_PLAY.on` is `true`**: every new

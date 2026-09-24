@@ -23,7 +23,8 @@ import { CPU, PITCH_TRAVEL_MULT, PATTERN_WEIGHTS, STYLE_BEHAVIOR, unlockedPitche
   CPU_STEAL_BASE, CPU_STEAL_PER_SPD, CPU_PICKOFF_RATE, CPU_BUNT_RATE, CPU_BUNT_POW_FRAC,
   SPEED_SURPRISE_MS_PER_MULT } from './settings.js';
 import { ZONE } from './pitch.js';
-import { pickWeighted } from './rng.js';
+import { pickWeighted, mulberry32, hashSeed } from './rng.js';
+import { basePoint } from './liveplay.js';
 
 /** BB-2c commit 2: the CPU strength contract's timing half, doc §8, [Locked] (design doc v9):
  *  "CPU batters may never time or place better than a median human, in any league or any slot."
@@ -400,6 +401,95 @@ export class ModelBatter {
   }
 }
 
+/** Playtest 1 batch 5: the simulator's stand-in for a PLAYER running his own runners (game.js
+ *  `runBases`, liveplay.js `controlPlay`), the base-running twin of `HUMAN_STEAL`. It taps bases the
+ *  way the UI does, so the sim measures the real controlled play. Two looks, each `reactS` late:
+ *    1. once the ball is down (or caught), every runner, lead first, is sent to the furthest base he
+ *       can reach before the defense could get the ball there (`view.est.deliverT`), with a margin
+ *       and his own misjudgement (`noiseS`) - the CPU runner's own read, made later and rougher;
+ *    2. once the first throw is in the air, the runner it is aimed at turns back if he will not make
+ *       it and is less than halfway, and a runner it is not aimed at takes one more base if the ball
+ *       cannot be relayed there in time.
+ *  It never draws from the game's RNG (a replay must not consume it): its misjudgement comes from
+ *  a private stream seeded from the play itself, so a seed still replays exactly. */
+export class ModelRunner {
+  constructor({ reactS = 0.6, noiseS = 0.45, marginS = 0.25 } = {}) {
+    this.reactS = reactS; this.noiseS = noiseS; this.marginS = marginS;
+  }
+  runBases(view) {
+    const est = view.est, play = view.play;
+    if (!est || !play) return [];
+    const rand = mulberry32(hashSeed('bb-model-runner', Math.round(est.tReady * 1000), Math.round(play.ball.spray * 100), view.outs));
+    const noise = () => (rand() * 2 - 1) * this.noiseS;
+    const baseS = (k) => 90 * (k + 1);
+    const legAt = (r, t) => {
+      if (!r.legs.length) return { s: r.from < 0 ? 0 : baseS(r.from), moving: false, back: false, waiting: true, target: r.from < 0 ? 0 : baseS(r.from), spd: r.spd || 20 };
+      let g = r.legs[0];
+      for (const x of r.legs) if (x.t0 <= t) g = x;
+      const dir = Math.sign(g.s1 - g.s0);
+      const run = Math.max(0, t - g.t0) * g.spd;
+      const done = run >= Math.abs(g.s1 - g.s0);
+      const last = r.legs[r.legs.length - 1];
+      return { s: g.s0 + dir * Math.min(Math.abs(g.s1 - g.s0), run), moving: !done && t >= g.t0, back: dir < 0 && !done && t >= g.t0,
+        waiting: t < g.t0, target: last.s1, spd: g.spd };
+    };
+    const orders = [];
+    // Look 1. On a ball in the air the player has had all its flight to decide, and an order made
+    // in the air waits for the catch or the landing anyway; on a grounder he reacts.
+    const t1 = est.onContact ? est.tGo + this.reactS : est.tGo;
+    let aheadLimit = 4;
+    for (const r of play.runners) {
+      if (r.outT != null && r.outT <= t1) continue;
+      const st = legAt(r, t1);
+      const k0 = Math.round(st.target / 90) - 1;
+      const pause = st.back ? est.turnS : (st.moving || st.waiting ? 0 : est.restartS);
+      const e = noise();
+      let pick = k0;
+      for (let k = k0 + 1; k <= 3; k++) {
+        if (k >= aheadLimit && k !== 3) break;
+        const tR = t1 + pause + (baseS(k) - st.s) / st.spd;
+        if (tR + this.marginS + est.tagS < est.deliverT[k] + e) pick = k; else break;
+      }
+      if (pick > k0) orders.push({ t: t1, k: pick });
+      if (pick !== 3) aheadLimit = Math.max(0, pick);
+    }
+    // Look 2: the first throw.
+    const p1 = orders.length ? view.resolve(orders) : play;
+    const th = (p1.throws || [])[0];
+    if (!th) return orders;
+    const baseOf = (pt) => { for (let k = 0; k < 4; k++) { const b = basePoint(k); if (Math.hypot(pt.x - b.x, pt.y - b.y) < 3) return k; } return -1; };
+    const leg = (p1.throws || []).find((x) => baseOf(x.toPt) >= 0);
+    if (!leg || leg.wild) return orders;
+    const kT = baseOf(leg.toPt);
+    const t2 = th.tRelease + this.reactS * 0.7;
+    if (t2 >= leg.tArrive) return orders;
+    aheadLimit = 4;
+    for (const r of p1.runners) {
+      if (r.outT != null && r.outT <= t2) continue;
+      const st = legAt(r, t2);
+      const k = Math.round(st.target / 90) - 1;
+      if (k === kT && st.moving && !st.back && r.from >= 0) {
+        const left = Math.floor(st.s / 90) - 1;                 // the base he is running away from
+        const tR = t2 + (baseS(k) - st.s) / st.spd;
+        const behindForced = (() => { for (let j = 0; j < r.from; j++) if (!view.bases[j]) return false; return true; })();
+        const forced = !est.caught && behindForced && left <= r.from;
+        const back = !forced && left >= 0 && tR > leg.tArrive + est.tagS - 0.05 && st.s - baseS(left) < 45;
+        if (back) orders.push({ t: t2, k: left });
+        aheadLimit = back ? left : k;
+        continue;
+      }
+      if (k !== kT && k >= 0 && k < 3 && k + 1 < aheadLimit) {
+        const nb = basePoint(k + 1), tb = basePoint(kT);
+        const tCan = leg.tArrive + est.pivotS + Math.hypot(nb.x - tb.x, nb.y - tb.y) / est.armFtS;
+        const tR = t2 + Math.abs(baseS(k) - st.s) / st.spd + (st.back ? est.turnS : 0) + (st.moving ? 0 : est.restartS) + 90 / st.spd;
+        if (tR + this.marginS + est.tagS < tCan + noise()) { orders.push({ t: t2, k: k + 1 }); aheadLimit = k + 1; continue; }
+      }
+      if (k < 3) aheadLimit = Math.max(0, k);
+    }
+    return orders;
+  }
+}
+
 /** Step 4: the model pitcher half of the same stand-in. `variety` plays the same role
  *  `cornerBias` plays for a CPU - how often the aim leaves dead center - and `pitchMix` is drawn
  *  from the same per-league CPU table by default, since a human is choosing among the SAME
@@ -462,4 +552,4 @@ export class ScriptedAgent {
   }
 }
 
-export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, speedSurpriseMs, pickMode };
+export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ModelRunner, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, speedSurpriseMs, pickMode };

@@ -38,6 +38,7 @@ This doc says how the game works. It is not a coding or implementation guide. Lo
 
 ### Baserunning (automatic)
 Overruled for a live-play season (Matt, playtest 1, 2026-09-23, batch 4; section 10): runners run, and take what the play gives them. The fixed rules below hold for an out-zone season.
+Overruled again for the PLAYER'S runners in a season that snapshotted `runControl` (Matt, playtest 1, 2026-09-23, batch 5): the player runs them by tapping bases on the diamond widget while the ball is in play. Tap a base: the runner nearest behind it runs there. Tap the base a runner just left: he goes back (when a tap could mean either, the runner nearer that base is meant, and a runner sent in the last second is never turned back by it). The batter always runs to first and a forced runner to his forced base on their own; nobody else moves without a tap. A tap made while the ball is in the air waits for the catch (a tag-up) or the landing. The CPU fielders throw to the base being run to, with force outs and tags. The CPU's own runners are still automatic.
 - **[Locked]** Single: all runners +1. Double: +2. Triple and home run: everyone scores.
 - **[Locked]** Walk: only forced runners move.
 - **[Locked]** Ground out with a runner on first and fewer than 2 outs can be a double play.

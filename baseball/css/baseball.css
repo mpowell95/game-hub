@@ -616,14 +616,32 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 84px;
-  height: 84px;
+  /* Playtest 1 batch 5 (Matt: "a BIGGER mini-map"): 84px -> 148px, so each base is a 44px tap
+   * target while the player runs his runners (`.is-running`). Fixed size at all times, so nothing
+   * moves when running starts. */
+  width: 148px;
+  height: 148px;
+  border-radius: 14px;
   pointer-events: none;
   z-index: 4;
   opacity: 0;
   transition: opacity var(--gh-dur-mid, 200ms) ease;
 }
 .bb-diamond.is-visible { opacity: 1; }
+/* Batch 5: while the player runs his runners the whole box takes taps (a near miss does nothing,
+ * never skips the play), the four bases are the targets, and the box and bases light up. */
+.bb-diamond.is-running { pointer-events: auto; background: rgba(10, 16, 10, 0.35); touch-action: manipulation; }
+.bb-diamond.is-running .bb-diamond-cell { cursor: pointer; }
+.bb-diamond.is-running .bb-diamond-cell-shape { border-color: #ffce3a; border-width: 2.5px; }
+.bb-diamond-cell.is-tapped .bb-diamond-cell-shape { animation: bb-base-tap 260ms ease-out; }
+@keyframes bb-base-tap { 0% { transform: rotate(45deg) scale(1.35); } 100% { transform: rotate(45deg) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .bb-diamond-cell.is-tapped .bb-diamond-cell-shape { animation: none; } }
+.bb-diamond-hint {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 64px; text-align: center; font-size: 11px; font-weight: 800; line-height: 1.15;
+  color: #ffce3a; opacity: 0; pointer-events: none;
+}
+.bb-diamond.is-running .bb-diamond-hint { opacity: 1; }
 /* The cell itself stays UNROTATED - only its own `-shape` child (the diamond look) rotates. A
  * `position:absolute` child of a ROTATED ancestor is carried along that rotation when painted (it
  * does not just inherit the ancestor's coordinate system, the whole painted box swings through the
@@ -634,8 +652,8 @@
  * inside it is what a still screenshot cannot show is correct without that measurement. */
 .bb-diamond-cell {
   position: absolute;
-  width: 24px;
-  height: 24px;
+  width: 44px;
+  height: 44px;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
@@ -648,13 +666,13 @@
  * widget had them swapped from R3 on (Matt's v865 recording, item 4). `DIAMOND_PCT` in ui.js is
  * the SAME swap, one layer down (the moving dot's own coordinates, not derived from this CSS - see
  * its own header) - both had to move together or the dot would slide to the wrong corner. */
-.bb-diamond-cell[data-cell="home"] { left: 50%; top: 88%; }
-.bb-diamond-cell[data-cell="1b"]   { left: 88%; top: 50%; }
-.bb-diamond-cell[data-cell="2b"]   { left: 50%; top: 12%; }
-.bb-diamond-cell[data-cell="3b"]   { left: 12%; top: 50%; }
+.bb-diamond-cell[data-cell="home"] { left: 50%; top: 85%; }
+.bb-diamond-cell[data-cell="1b"]   { left: 85%; top: 50%; }
+.bb-diamond-cell[data-cell="2b"]   { left: 50%; top: 15%; }
+.bb-diamond-cell[data-cell="3b"]   { left: 15%; top: 50%; }
 .bb-diamond-cell-shape {
   position: absolute;
-  inset: 0;
+  inset: 11px;
   transform: rotate(45deg);
   background: rgba(10, 16, 10, 0.6);
   border: 1.5px solid rgba(255, 255, 255, 0.8);
@@ -668,7 +686,8 @@
   line-height: 1;
   white-space: nowrap;
 }
-.bb-diamond-cell span { position: absolute; top: -14px; }
+/* Batch 5: the label sits UNDER its base (above it, 2B's label was cut off by the top of the field). */
+.bb-diamond-cell span { position: absolute; bottom: -5px; }
 .bb-diamond-cell b[data-role="num"]:empty { display: none; }
 .bb-diamond-cell.is-on span, .bb-diamond-cell.is-on b { color: #12181f; }
 .bb-diamond-dot {

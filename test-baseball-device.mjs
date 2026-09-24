@@ -3058,6 +3058,97 @@ function bbProfileInit() {
   await ctxF.close();
 }
 
+// 40. Playtest 1 batch 5: THE PLAYER RUNS THE BASES. At the phone size the fit rule names (390x664),
+// in the hub, with real touch: auto-play Quick Play until the player's own ball is in play, then
+// (a) the diamond widget is the same box it was before running started (fixed geometry), inside the
+// field and clear of the HUD, every base a >= 44px target; (b) a real tap on 2B becomes an order at
+// the play clock's second; (c) the play the engine books is exactly the one on screen when the
+// player stopped tapping (`view.resolve(orders)`), and the widget stops taking taps afterwards.
+{
+  const ctxR = await browser.newContext({ viewport: { width: 390, height: 664 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  const pageR = await ctxR.newPage();
+  const errsR = [];
+  pageR.on('pageerror', (e) => errsR.push(String((e && e.message) || e)));
+  await pageR.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Run Bases Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mErr = await mountInHub(pageR);
+  if (mErr) {
+    fail('run-bases', `mount failed: ${mErr}`);
+  } else {
+    await pageR.evaluate(() => { const b = document.querySelector('.hub-game .bb-play-btn'); if (b) b.click(); });
+    await pageR.waitForSelector('.bb-play', { timeout: 8000 }).catch(() => {});
+    const idleRect = await pageR.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const S = await import('/baseball/js/engine/settings.js');
+      const swingDelayMs = S.FEEL.engine.swingDelay;
+      let tts = null;
+      const of = inst._animatePitchFlight.bind(inst);
+      inst._animatePitchFlight = (p) => { tts = p.timeToPlateS; return of(p); };
+      let handler = inst._onMainDown || null;
+      const fire = (fn) => {
+        if (!fn) return;
+        const delay = inst.state && inst.state.actionLabel === 'act_swing' ? Math.max(0, (tts || 0) * 1000 - swingDelayMs) : 0;
+        setTimeout(() => { if (handler === fn) fn(); }, delay);
+      };
+      Object.defineProperty(inst, '_onMainDown', { configurable: true, get() { return handler; }, set(fn) { handler = fn; fire(fn); } });
+      fire(handler);
+      window.__rb = null;
+      const orig = inst._runBasesLive.bind(inst);
+      inst._runBasesLive = async (view) => {
+        if (window.__rb) return orig(view);
+        const rec = { t: performance.now() };
+        window.__rb = rec;
+        const orders = await orig(view);
+        rec.orders = orders;
+        rec.shown = JSON.stringify(view.resolve(orders));
+        return orders;
+      };
+      const origEnd = inst._animateLivePlay.bind(inst);
+      inst._animateLivePlay = async (payload, word) => {
+        const rec = window.__rb;
+        if (rec && rec.orders && rec.booked == null) { rec.booked = JSON.stringify(payload.play); rec.pre = !!inst._liveCtx; }
+        return origEnd(payload, word);
+      };
+      const r = document.querySelector('.bb-diamond').getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    });
+    const got = await pageR.waitForFunction(() => !!document.querySelector('.bb-diamond.is-running'), null, { timeout: 150000 }).then(() => true).catch(() => false);
+    if (!got) {
+      fail('run-bases', 'no ball in play with the player batting within 150 s of auto-play');
+    } else {
+      const geo = await pageR.evaluate(() => {
+        const R = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, r: r.right, b: r.bottom }; };
+        const d = document.querySelector('.bb-diamond');
+        return { d: R(d), field: R(document.querySelector('.bb-field-wrap')), hud: R(document.querySelector('.bb-hud')),
+          cells: [...d.querySelectorAll('[data-base]')].map((c) => ({ k: c.dataset.base, ...R(c) })), clock: document.querySelector('.hub-game')._bbInstance && null };
+      });
+      const c2 = geo.cells.find((c) => c.k === '1');
+      await pageR.touchscreen.tap(c2.x + c2.w / 2, c2.y + c2.h / 2);
+      await pageR.waitForFunction(() => window.__rb && window.__rb.booked != null, null, { timeout: 30000 }).catch(() => {});
+      const rec = await pageR.evaluate(() => ({ ...window.__rb, stillRunning: !!document.querySelector('.bb-diamond.is-running') }));
+      const same = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5;
+      const overlap = (a, b) => a.x < b.r && b.x < a.r && a.y < b.b && b.y < a.b;
+      const small = geo.cells.filter((c) => c.w < 44 || c.h < 44);
+      const inside = geo.d.x >= geo.field.x - 0.5 && geo.d.r <= geo.field.r + 0.5 && geo.d.y >= geo.field.y - 0.5 && geo.d.b <= geo.field.b + 0.5;
+      if (!same(idleRect, geo.d)) fail('run-bases', `the widget moved or resized when running started: ${JSON.stringify(idleRect)} -> ${JSON.stringify(geo.d)}`);
+      else if (small.length) fail('run-bases', `base target(s) under 44px: ${JSON.stringify(small)}`);
+      else if (!inside) fail('run-bases', `the widget leaves the field: ${JSON.stringify(geo.d)} vs ${JSON.stringify(geo.field)}`);
+      else if (overlap(geo.d, geo.hud)) fail('run-bases', `the widget overlaps the HUD: ${JSON.stringify(geo.d)} vs ${JSON.stringify(geo.hud)}`);
+      else if (!rec.orders || !rec.orders.some((o) => o.k === 1)) fail('run-bases', `the tap on 2B did not become an order: ${JSON.stringify(rec.orders)}`);
+      else if (!rec.booked || rec.booked !== rec.shown) fail('run-bases', 'the booked play differs from the one drawn when the player stopped tapping');
+      else if (!rec.pre) fail('run-bases', 'the settle step redrew the play instead of reusing the one the player ran');
+      else if (rec.stillRunning) fail('run-bases', 'the widget still takes taps after the play');
+      else ok(`run-bases: widget ${geo.d.w}x${geo.d.h} fixed, inside the field, clear of the HUD, bases ${geo.cells.map((c) => `${c.w}x${c.h}`).join(' ')}; tap on 2B -> order ${JSON.stringify(rec.orders)}; booked play = drawn play`);
+    }
+  }
+  if (errsR.length) fail('run-bases', `page errors: ${errsR.slice(0, 3).join(' | ')}`);
+  await ctxR.close();
+}
+
 await browser.close();
 
 console.log('');

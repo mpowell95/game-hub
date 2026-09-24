@@ -80,7 +80,7 @@ export class Game {
    * @param {boolean} [opts.livePlays] - playtest 1 batch 4: play every ball in play out in time
    *   (liveplay.js) instead of the out-zone model. Career passes its season's snapshot; off by default
    */
-  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false, wallHeight = true, livePlays = false }) {
+  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false, wallHeight = true, livePlays = false, runControl = false }) {
     // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY. It rides on the pitch view rather
     // than being read from a module global, so a CAREER game constructed in the same page is
     // unaffected either way.
@@ -96,6 +96,9 @@ export class Game {
     this.parkId = parkId;
     this.wallHeight = !!wallHeight;
     this.livePlays = !!livePlays;
+    // Batch 5: on a live play, a batting agent with `runBases()` runs its own runners (liveplay.js
+    // `controlPlay`). Snapshotted per season like `livePlays`; meaningless without it.
+    this.runControl = !!runControl;
     // Both sides play in the same league (a Career opponent is always drawn from the player's own
     // league); home's is authoritative if the two ever disagreed.
     this.league = home.league || away.league;
@@ -164,6 +167,7 @@ export class Game {
     g.parkId = snap.parkId || 'default';
     g.wallHeight = !!snap.wallHeight; // playtest 1: an older snapshot keeps the old home run rule
     g.livePlays = !!snap.livePlays;   // batch 4: an older snapshot keeps the out-zone model
+    g.runControl = !!snap.runControl; // batch 5: an older snapshot keeps automatic base running
     g.quickPlay = !!snap.quickPlay; // RA: additive; an older snapshot simply resumes as a career game
     g.league = snap.home.league || snap.away.league;
     g.settings = { ...SETTINGS_DEFAULTS, ZONE };
@@ -221,6 +225,7 @@ export class Game {
       parkId: this.parkId,
       wallHeight: this.wallHeight,
       livePlays: this.livePlays,
+      runControl: this.runControl,
       quickPlay: this.quickPlay,
       inning: this.inning,
       half: this.half,
@@ -744,9 +749,9 @@ export class Game {
         // (liveplay.js) - it replaces `resolveContact` AND `_resolveBattedBall`, since the play
         // itself decides who is out and where every runner ends up. A bunt keeps its own rule book.
         const live = (this.livePlays && !swingResult.bunt)
-          ? resolveLivePlay({ batted: swingResult, league: this.league, fenceFt: this._parkFt(), bases: this.bases.slice(),
+          ? await this._livePlay({ batted: swingResult, league: this.league, fenceFt: this._parkFt(), bases: this.bases.slice(),
             outs: this.outs, batterId, speedOf: (id) => this._hitSpdOf(battingTeam, id), defense: defenseTeam, shiftDeg,
-            settings: this.settings, rand01: () => this._rand(), wallHeight: this.wallHeight })
+            settings: this.settings, wallHeight: this.wallHeight }, battingAgent, battingSide, timingWord)
           : null;
         const outcome = live || (swingResult.bunt
           ? resolveBunt(swingResult, this.bases, this.outs, batter.skills.hitSpd, this.settings, () => this._rand())
@@ -833,6 +838,36 @@ export class Game {
         return;
       }
     }
+  }
+
+  /** Batch 4/5: play the ball in play out (liveplay.js). Batch 5: when this game's season snapshotted
+   *  `runControl` and the BATTING agent has `runBases(view)`, that agent runs its own runners: it is
+   *  handed the play with no orders yet (`view.play`), and `view.resolve(orders)`, which replays the
+   *  whole play with a list of taps `[{t, k}]` from the same RNG state, as often as it likes (each
+   *  replay draws from a private copy of the state, so nothing is consumed). What it returns is then
+   *  played for real from the real RNG, so the play the agent last saw IS the play that is booked -
+   *  the same draws in the same order. The one await inside the pitch pass: a screen torn down
+   *  mid-play settles it (HumanAgent), and since game events are dropped once aborted, a resume
+   *  starts from the pitch boundary before this pitch (batch 4's rule, unchanged). */
+  async _livePlay(args, battingAgent, battingSide, timingWord = null) {
+    const control = this.runControl && battingAgent && typeof battingAgent.runBases === 'function';
+    if (!control) return resolveLivePlay({ ...args, rand01: () => this._rand() });
+    const rng0 = this.rngState;
+    const replay = (orders) => {
+      let st = rng0;
+      return resolveLivePlay({ ...args, control: { orders }, rand01: () => { const r = stepRng(st); st = r.next; return r.value; } });
+    };
+    const first = replay([]);
+    const ps = first.timeline && first.timeline.possession;
+    let orders = [];
+    // Nothing to run on a home run, a foul out, or a catch that ends the inning.
+    if (ps && first.kind !== 'homer' && !(ps.caught && this.outs + 1 >= this.settings.MECHANICS.outsPerInning)) {
+      const view = { play: first.timeline, est: first.est, side: battingSide, league: this.league, outs: this.outs, timingWord,
+        bases: args.bases.slice(), resolve: (o) => replay(o).timeline };
+      const got = await battingAgent.runBases(view);
+      orders = Array.isArray(got) ? got.map((o) => ({ t: Number(o && o.t), k: Number(o && o.k) })) : [];
+    }
+    return resolveLivePlay({ ...args, control: { orders }, rand01: () => this._rand() });
   }
 
   /** Batch 4: a runner's Speed. The extra-innings ghost runner is on no roster: he runs at his

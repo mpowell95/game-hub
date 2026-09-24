@@ -111,6 +111,7 @@ export const STRINGS = {
     stats_mph: '{n} mph',
     // R3: the diamond widget's own four cell labels (docs/BASEBALL-3D-BUILD.md section 9, "R3").
     widget_home: 'Home',
+    widget_run_hint: 'Tap a base to run',
     widget_1b: '1B',
     widget_2b: '2B',
     widget_3b: '3B',
@@ -277,6 +278,7 @@ export const STRINGS = {
     stats_ft: '{n} ft',
     stats_mph: '{n} mph',
     widget_home: 'Casa',
+    widget_run_hint: 'Toca una base para correr',
     widget_1b: '1B',
     widget_2b: '2B',
     widget_3b: '3B',
