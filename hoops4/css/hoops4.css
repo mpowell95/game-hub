@@ -798,6 +798,22 @@
 .h4-root .h4-chat-pop.is-emoji .h4-chat-pop-text { font-size: 22px; }
 .h4-root .h4-chat-pop-who { font-size: 12px; font-weight: 800; white-space: nowrap; }
 .h4-root .h4-chat-pop-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* THEIR LINE IS BIG AND CENTRED (2026-09-24). Matt: "when someone sends you a chat, it's easy to
+   miss. it needs to be much larger and just appear." Yours stays the small corner bubble; theirs
+   is a card across the top of the machine, whole (it wraps, never ellipsed), with no slide-in. */
+.h4-root .h4-chat-pops { align-items: center; left: 12px; }
+.h4-root .h4-chat-pop.is-mine { align-self: flex-end; }
+.h4-root .h4-chat-pop:not(.is-mine) {
+  flex-direction: column; align-items: center; gap: 4px;
+  width: min(92%, 420px); padding: 14px 18px; border-radius: 16px;
+  border: 2px solid var(--h4-ink);
+  font-size: 24px; line-height: 1.25; text-align: center;
+  animation: none;
+}
+.h4-root .h4-chat-pop:not(.is-mine) .h4-chat-pop-who { font-size: 16px; }
+.h4-root .h4-chat-pop:not(.is-mine) .h4-chat-pop-text { white-space: normal; overflow-wrap: anywhere; }
+.h4-root .h4-chat-pop.is-emoji:not(.is-mine) .h4-chat-pop-text { font-size: 44px; }
+.h4-root .h4-chat-pop.is-mine .h4-chat-pop-text { white-space: normal; overflow-wrap: anywhere; }
 @keyframes h4-pop-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   .h4-root .h4-chat-pop { animation: none; }

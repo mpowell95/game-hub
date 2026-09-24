@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v949';
+const CACHE = 'game-hub-v954';
 
 const ASSETS = [
   './',
@@ -790,7 +790,7 @@ const REST_MANIFEST = {
   './snake/js/strings.js': 'f4c6fd66b0',
   './brick-blitz/': 'a6d3daf30c',
   './brick-blitz/index.html': 'a6d3daf30c',
-  './brick-blitz/css/brick-blitz.css': 'a51a845920',
+  './brick-blitz/css/brick-blitz.css': '34c58df412',
   './brick-blitz/js/ui.js': 'b19c93a44a',
   './brick-blitz/js/game.js': 'ae87ee3447',
   './brick-blitz/js/strings.js': 'f0c1f0996f',
@@ -851,18 +851,18 @@ const REST_MANIFEST = {
   './skeeball/js/ui.js': '705d81eba9',
   './skeeball/js/swipe.js': 'c596f565de',
   './hoops4/index.html': 'dce91b13bd',
-  './hoops4/css/hoops4.css': '2d377cc049',
-  './hoops4/js/ui.js': '1004c43650',
-  './hoops4/js/boarddef.js': '3824cfe605',
+  './hoops4/css/hoops4.css': '388ca42c6a',
+  './hoops4/js/ui.js': '23f718b6d7',
+  './hoops4/js/boarddef.js': '9dedffed41',
   './hoops4/js/machine.js': '19b59b7c18',
   './hoops4/js/physics.js': '6d54965f70',
-  './hoops4/js/render.js': '0ebde06b52',
+  './hoops4/js/render.js': '3b39f38631',
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/cpu.js': 'f1b8a3e68b',
-  './hoops4/js/mp.js': 'b28d567c20',
-  './hoops4/js/mp-ui.js': '9ec72ddd4b',
+  './hoops4/js/mp.js': '37e999d186',
+  './hoops4/js/mp-ui.js': '1c334542b1',
   './hoops4/js/alert.js': 'e112852c78',
-  './hoops4/js/strings.js': '3767f6be7b',
+  './hoops4/js/strings.js': '7c4dec2770',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/boards.js': '8cf226684b',
@@ -1246,7 +1246,7 @@ self.addEventListener('push', (event) => {
     // One notification per match: a second turn in the same game replaces the first.
     tag: String(d.tag || 'game-hub'),
     renotify: true,
-    data: { url: String(d.url || './'), game: String(d.game || '') },
+    data: { url: String(d.url || './'), game: String(d.game || ''), with: String(d.with || ''), name: String(d.name || '') },
   };
   event.waitUntil(self.registration.showNotification(title, opts));
 });
@@ -1267,7 +1267,7 @@ self.addEventListener('notificationclick', (event) => {
     const hub = wins.find((w) => bare(w.url) === scope || bare(w.url) === scope + 'index.html');
     if (hub) {
       try { await hub.focus(); } catch { /* iOS may refuse; the message still lands */ }
-      hub.postMessage({ type: 'OPEN_GAME', game: data.game || '' });
+      hub.postMessage({ type: 'OPEN_GAME', game: data.game || '', with: data.with || '', name: data.name || '' });
       return;
     }
     const ours = wins.find((w) => w.url.startsWith(scope));

@@ -579,8 +579,25 @@ class Hub {
     // PUSH NOTIFICATIONS (2026-09-23, js/push.js): keep this device's stored address current, and
     // take a tapped notification to its game. Both lazy; neither can break the launcher.
     this._afterPaint(() => { import('./push.js').then((m) => m.refreshPush()).catch(() => {}); });
+    // ...and clear the notifications already showing, on open and every time the app comes back to
+    // the front (Matt, 2026-09-24: "Can the notifications auto dismiss if i go to the game hub?").
+    // ...and while the hub is on screen, tell the server so it does not notify THIS device at all
+    // (Matt: "if i have the hub open i shouldn't get them either") - js/push.js markActive.
+    this._clearPushes = () => {
+      const on = document.visibilityState === 'visible';
+      clearInterval(this._activeBeat);
+      this._activeBeat = null;
+      import('./push.js').then((m) => {
+        m.markActive(on);
+        if (!on) return;
+        m.clearShownNotifications();
+        this._activeBeat = setInterval(() => m.markActive(document.visibilityState === 'visible'), m.ACTIVE_BEAT_MS);
+      }).catch(() => {});
+    };
+    this._afterPaint(this._clearPushes);
+    document.addEventListener('visibilitychange', this._clearPushes);
     this._onSwMessage = (e) => {
-      if (e && e.data && e.data.type === 'OPEN_GAME') this._openPushedGame(e.data.game);
+      if (e && e.data && e.data.type === 'OPEN_GAME') this._openPushedGame(e.data.game, e.data);
     };
     try { navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', this._onSwMessage); } catch {}
     // Subscribe to the service worker's lifecycle so the version chip can never go stale again,
@@ -1124,13 +1141,17 @@ class Hub {
   /** A notification tapped with no hub open arrives as `?open=<game>`: take it once, then drop the
    *  parameter so a reload does not re-open the game. */
   _openFromUrl() {
-    let id = null;
+    let id = null; let extra = {};
     try {
       const u = new URL(location.href);
       id = u.searchParams.get('open');
-      if (id) { u.searchParams.delete('open'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); }
+      extra = { with: u.searchParams.get('with') || '' };
+      if (id) {
+        u.searchParams.delete('open'); u.searchParams.delete('with');
+        history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+      }
     } catch { return; }
-    if (id) this._openPushedGame(id);
+    if (id) this._openPushedGame(id, extra);
   }
 
   /**
@@ -1138,9 +1159,20 @@ class Hub {
    * middle of another game is never pulled out of it - the bubble is waiting when they come back.
    * With the game already open, its own live watch has the new turn on the board.
    */
-  async _openPushedGame(id) {
+  async _openPushedGame(id, extra = {}) {
+    if (this.current) return;
+    // (2026-09-24) Not every notification is a game: a message opens that conversation, a bug
+    // report opens Matt's inbox. Same rule - only from the launcher, never over a game.
+    if (id === 'messages') {
+      const to = /^[A-Z2-9]{5}$/.test(String(extra.with || '')) ? extra.with : '';
+      import('./messages-ui.js')
+        .then((m) => m.openMessages(to ? { to, toName: String(extra.name || '') } : {}))
+        .catch((err) => console.error('[hub] messages failed to load', err));
+      return;
+    }
+    if (id === 'bugs') { this.openBugInbox(); return; }
     const g = GAMES.find((x) => x.id === id);
-    if (!g || this.current) return;
+    if (!g) return;
     // A game released from the admin page is only on the launcher once the config has landed, and
     // on a cold start (the notification opened the app) it may not have yet. Wait for it, briefly.
     if (!this.games.some((x) => x.id === id)) {
@@ -1792,6 +1824,8 @@ class Hub {
     this.unmount();
     this.el.back.removeEventListener('click', this._onBack);
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
+    if (this._clearPushes) document.removeEventListener('visibilitychange', this._clearPushes);
+    clearInterval(this._activeBeat);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
     if (this._onOnlineBugs) window.removeEventListener('online', this._onOnlineBugs);
     if (this._onSwMessage) { try { navigator.serviceWorker.removeEventListener('message', this._onSwMessage); } catch {} }

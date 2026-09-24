@@ -61,7 +61,9 @@ export function cleanCaption(v) {
 // OPTIONAL in the strongest sense: every match written before it existed has no `chat` at all,
 // and a malformed chat entry is DROPPED, never allowed to refuse the match - `validateGame`'s
 // whole-document rejection exists to protect the REPLAY, and chat is not in the replay.
-export const CHAT_MAXLEN = 24;      // the same cap js/mp-reactions.js puts on a custom line
+// 24 -> 120 (2026-09-24). Matt: "the in game chat has a small character limit. please increase
+// that." 24 was borrowed from js/mp-reactions.js's one-line bubble; this chat has its own panel.
+export const CHAT_MAXLEN = 120;
 export const MAX_CHAT = 40;         // how many a validated match carries (the newest)
 const CHAT_TYPES = ['e', 'p', 'c'];
 
@@ -435,7 +437,38 @@ export function recordFinished(rows) {
     if (!markCounted(r.id)) continue;
     try { recordResult('hoops4', 'mp', r.result === 'won'); } catch (err) { console.error('[hoops4] recordResult failed', err); }
   }
+  addUnseen(todo.map((r) => r.id));
   return todo.length;
+}
+
+/**
+ * A RESULT THIS DEVICE NEVER SAW (2026-09-24). Matt: "there isn't a You Lost screen or anything.
+ * the game just disappears." A match the other person ended while this phone was away was counted
+ * above and then simply dropped out of the active list - nothing ever said who won. Every row
+ * recordFinished counts is, by definition, one whose end this device did not watch (finish()
+ * ledgers the ones it did), so it goes on this list; the multiplayer screen shows it at the top
+ * until it is opened, and opening it shows the result card. A one-tap display flag, not history:
+ * the result itself lives in the match and the ledger.
+ */
+export const UNSEEN_KEY = 'gamehub.hoops4.unseenResults.v1';
+export function readUnseen() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(UNSEEN_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : [];
+  } catch { return []; }
+}
+function writeUnseen(list) {
+  try { localStorage.setItem(UNSEEN_KEY, JSON.stringify(list.slice(-50))); } catch { /* private mode */ }
+}
+export function addUnseen(ids) {
+  if (!ids || !ids.length) return;
+  const cur = readUnseen();
+  for (const id of ids) if (id && !cur.includes(id)) cur.push(id);
+  writeUnseen(cur);
+}
+export function markResultSeen(id) {
+  const cur = readUnseen();
+  if (cur.includes(id)) writeUnseen(cur.filter((x) => x !== id));
 }
 
 /**

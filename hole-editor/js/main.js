@@ -102,6 +102,7 @@ root.innerHTML = `
       </div>
       <div class="he-hover-readout" id="he-hover">Width at cursor: -</div>
       <div class="he-ptop" id="he-ptop">
+        <button type="button" class="he-ppill he-ppill--home" id="he-p-hub" aria-label="Back to Game Hub" title="Back to Game Hub"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 11.2 12 4l9 7.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10v9.2h4.6v-5.4h2.8v5.4H18V10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg></button>
         <div class="he-ptop-hole">
           <button type="button" class="he-parrow" id="he-m-prev" aria-label="Previous hole">&#8249;</button>
           <label class="he-ptop-mid"><b id="he-ptop-n">Hole 1</b><small id="he-ptop-sub"></small><select id="he-m-hole" aria-label="Hole"></select></label>
@@ -1242,6 +1243,7 @@ function goHub() {
   location.href = new URL('../', location.href).href;
 }
 document.getElementById('he-hub').addEventListener('click', goHub);
+document.getElementById('he-p-hub').addEventListener('click', goHub);   // phone top bar (Matt: "there isn't a back to the hub button")
 document.getElementById('he-bug').addEventListener('click', async () => {
   try {
     const m = await import('../../js/bug-report-ui.js');

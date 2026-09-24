@@ -278,3 +278,34 @@
   .bx-root .bx-combo.is-pop b { animation: none; }
 }
 @keyframes bx-banner-still { 0% { opacity: 1; transform: skewX(-8deg); } 100% { opacity: 0; } }
+
+/* ---- setup readability (Matt, 2026-09-24: "make this a little easier to read") ----
+   The attract demo showed straight through the menu, and the small italic, widely-spaced text sat
+   on busy neon. The menu now sits on its own near-solid card over a darker veil, and the small
+   text is upright, brighter and tighter. The logo keeps its arcade style. */
+.bx-root .bx-ov-setup {
+  background: linear-gradient(180deg, rgba(10, 0, 26, 0.55) 0%, rgba(10, 0, 26, 0.8) 45%, rgba(10, 0, 26, 0.9) 100%);
+}
+.bx-root .bx-setup {
+  padding: 18px 16px 16px;
+  border-radius: 16px;
+  background: rgba(16, 0, 38, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(155, 93, 229, 0.55), 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+.bx-root .bx-tag {
+  font-style: normal; font-weight: 600; font-size: 15px; letter-spacing: 0.02em;
+  color: #9ffcee; text-shadow: none;
+}
+.bx-root .bx-label {
+  font-style: normal; font-weight: 700; font-size: 13px; letter-spacing: 0.08em; color: #e6d6ff;
+}
+.bx-root .bx-seg {
+  font-style: normal; font-weight: 700; font-size: 16px; letter-spacing: 0.01em;
+  background: #2a0b52;
+}
+.bx-root .bx-seg-2 small { font-size: 12px; letter-spacing: 0.02em; color: #e6d6ff; }
+.bx-root .bx-mbtn { letter-spacing: 0.06em; }
+.bx-root .bx-best {
+  font-style: normal; font-weight: 700; font-size: 15px; letter-spacing: 0.02em; text-shadow: none;
+}
+.bx-root .bx-logo { font-size: clamp(26px, 8.2vw, 35px); }

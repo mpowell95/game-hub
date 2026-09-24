@@ -622,9 +622,8 @@ profile pill carries the unread badge, which is why the button is there and not 
   replying to a broadcast is an ordinary conversation.
 - **The admin page has a read-only "Messages" section.** Read-only is a property of the module (there
   is no admin write path in `js/messages.js` at all), not of the button.
-- **No push notifications for Messages yet.** The badge appears when a player opens the app. The
-  push infrastructure now exists (see "Push notifications" below) and currently serves Connect 4
-  Hoops only; adding Messages is a second trigger in `functions/index.js`.
+- **Push notifications for new messages since 2026-09-24** (`messagePush` in `functions/index.js`,
+  see "Push notifications" below); a tap opens that conversation. The badge still works as before.
 - **Messages has the top bar's third button since 2026-08-31, where My Stats used to be.** Matt: *"I
   don't think My Stats is used by anyone... we could change it into a Messages button?"* Four buttons
   wrap to a second row on a phone (measured), so it was a swap or nothing. **My Stats moved to the
@@ -742,7 +741,14 @@ ability to see it and undo it afterwards. Do not describe any of it as making th
 ## Push notifications (2026-09-23)
 
 Matt: *"are you sure there's no way to have real notifications or something close to it?"* ...
-*"mostly iphone, installed. go with firebase."* Real Web Push, for Connect 4 Hoops turns today.
+*"mostly iphone, installed. go with firebase."* Real Web Push. **Three triggers since 2026-09-24**:
+`hoopsTurnPush` (Connect 4 Hoops challenges/turns/results), `messagePush` (a new message, from
+`messages/index/<me>/<them>` - only a newer `at` FROM them notifies; a tap opens that thread) and
+`bugReportPush` (a new `bugReports/<id>`, to every code whose uid is in `admins/`, found through
+`msgAuth/<uid>` - no code is hardcoded; a tap opens the bug inbox). **A change to `functions/` is
+live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
+for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
+`hoopsTurnPush` updated).
 
 - **Three pieces.** `js/push.js` subscribes a device (permission is asked INSIDE the tap - iOS only
   prompts for a user gesture) and stores it at `pushSubs/<PLAYER CODE>/<key>`; **`functions/`** is a
@@ -759,7 +765,10 @@ Matt: *"are you sure there's no way to have real notifications or something clos
 - **iPhone: only the Home Screen app can get them (iOS 16.4+).** In a Safari tab `PushManager`
   does not exist; `pushState()` returns `'install'` and both screens say what to do instead.
 - **Where a player turns it on:** the Connect 4 Hoops multiplayer screen ("Notify me when it's my
-  turn", shown only while it is off) and profile -> Settings -> Notifications (on/off, per device).
+  turn"), the Messages screen ("Notify me of new messages"), both shown only while it is off, and
+  profile -> Settings -> Notifications (on/off, per device). **And Hoops ASKS** (Matt, 2026-09-24):
+  right after a move of yours is sent in a turn-by-turn match, "Want a notification when <them>
+  plays back?" - once per match (`gamehub.hoops4.pushAsk.v1`), only while it is off.
 - **Who is notified, decided in `functions/decide.js` (pure):** a challenge arriving, the turn
   coming back, a series game the other person started, and a match the other person ended. Never
   your own action: `createGame` stamps `by` on the match (optional field) so its maker is not told.
@@ -781,6 +790,16 @@ Matt: *"are you sure there's no way to have real notifications or something clos
   `functions/README.md`). **Give Matt deploy steps in the chat, in full, not as a pointer to that
   file** - he asked for exactly that. The masked prompt of `functions:secrets:set` ignored a paste
   in PowerShell (saved an empty value, refused); `--data-file` from a temp file worked.
+- **Opening the hub clears them** (2026-09-24, Matt: "Can the notifications auto dismiss if i go to
+  the game hub?"): `clearShownNotifications()` in `js/push.js` closes every notification this app is
+  showing, on hub load and whenever it returns to the front. Verified in Chromium (2 -> 0); on iOS
+  it depends on Safari honouring `Notification.close()` for web push, confirmed only by a phone.
+- **No notification to a device that has the hub OPEN** (2026-09-24, Matt: "if i have the hub open
+  i shouldn't get them either"). While visible, the hub stamps `activeAt` (server time) on that
+  device's own `pushSubs` entry every 30 s (`markActive` in `js/push.js`) and writes 0 when hidden;
+  `sendTo` skips a device stamped within 75 s (`isActive` in `functions/decide.js`). Decided on the
+  SERVER on purpose: Safari revokes a site whose push shows nothing, so `sw.js` must show every push
+  it gets. Other devices of the same player still get it. Needs the functions redeploy to be live.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
 

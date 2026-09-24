@@ -188,6 +188,50 @@ export async function disablePush() {
 }
 
 /**
+ * "I'M LOOKING AT THE APP" (2026-09-24). Matt: "if i have the hub open i shouldn't get them either."
+ * While the hub is on screen this device stamps `activeAt` (the SERVER's clock, so a phone with a
+ * wrong clock cannot skew it) on its own subscription every ACTIVE_BEAT_MS; the function skips a
+ * device stamped within ACTIVE_WINDOW_MS (functions/decide.js isActive). Hiding the app writes 0.
+ *
+ * WHY THE SERVER DECIDES AND NOT sw.js: Safari revokes the subscription of a site whose push shows
+ * nothing, so the worker must show every push it receives. The only safe "don't notify" is not to
+ * send. The window outlives two missed beats, so an app killed without a goodbye is quiet for at
+ * most ~75 s, never for good. Other devices of the same player are unaffected. Never throws.
+ */
+export const ACTIVE_BEAT_MS = 30000;
+export async function markActive(on) {
+  try {
+    if (!pushSupported() || Notification.permission !== 'granted') return;
+    const was = readLocal();
+    const me = myCode();
+    if (!was || !was.key || !me || was.code !== me) return;       // not subscribed here (yet)
+    if (!writesAllowed('push presence')) return;
+    const boot = await getStatsApp().catch(() => null);
+    if (!boot) return;
+    await ensureAuthClaim(boot);
+    const { db, api } = boot;
+    await api.update(api.ref(db, `pushSubs/${me}/${was.key}`), { activeAt: on ? api.serverTimestamp() : 0 });
+  } catch (err) { console.warn('[push] presence write failed', err); }
+}
+
+/**
+ * CLEAR WHAT IS SHOWING (2026-09-24). Matt: "Can the notifications auto dismiss if i go to the game
+ * hub?" Opening the app is how a player answers them, so every notification this app put on the
+ * lock screen / Notification Center is closed when the hub opens or comes back to the front.
+ * Only this site's own notifications can be reached. Never throws.
+ */
+export async function clearShownNotifications() {
+  try {
+    if (!('serviceWorker' in navigator)) return 0;
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg || typeof reg.getNotifications !== 'function') return 0;
+    const shown = await reg.getNotifications();
+    for (const n of shown) { try { n.close(); } catch { /* already gone */ } }
+    return shown.length;
+  } catch { return 0; }
+}
+
+/**
  * ON EVERY HUB LOAD, quietly: if this device has notifications on, make sure the stored address is
  * current - the phone can rotate its subscription, the player can switch code or language. Writes
  * only when something differs from what was last stored. Never prompts, never throws.

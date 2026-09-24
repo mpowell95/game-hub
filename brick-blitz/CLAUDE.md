@@ -85,6 +85,13 @@ One goal line, a labelled diagram (brick kinds, alien, saucer; the four capsules
 line. Every label is one or two words. Keep it that way: a new mechanic gets an icon and a label,
 never a sentence.
 
+## Setup screen readability (Matt, 2026-09-24: "a little easier to read")
+
+The menu sits on a near-solid card over a darker veil, so the attract demo no longer shows through
+the text. Small text (tagline, labels, buttons, best line) is upright, brighter and tightly spaced;
+only the logo and the two big buttons keep the italic arcade style. Keep new setup text readable
+the same way. The rules live at the end of `css/brick-blitz.css`.
+
 ## Settings / persistence
 
 - `gamehub.brickblitz.v1`: `{ difficulty, mode: 'arcade'|'endless' }`. Saved on selection. (An older save may still carry

@@ -131,6 +131,8 @@ function ensureCss() {
                 -webkit-overflow-scrolling: touch;
                 margin: 0 calc(var(--gh-sp-4) * -1); padding: 0 var(--gh-sp-4); }
   .msg-lead { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.5; }
+  .msg-push { margin: var(--gh-sp-2) 0 var(--gh-sp-3); }
+  .msg-push .gh-btn { margin-bottom: var(--gh-sp-2); }
   .msg-back { margin-right: var(--gh-sp-2); }
   .gh-modal__title .msg-sub { display: block; font-size: var(--gh-fs-xs); font-weight: 600;
                               color: var(--gh-muted); margin-top: 2px; }
@@ -457,9 +459,42 @@ async function renderList(card) {
   });
   card.querySelector('[data-role="new"]').addEventListener('click', () => renderPicker(card));
   addAdminButtons(card, gen);
+  addPushRow(card, gen);
   card.querySelectorAll('.msg-row').forEach((b) => b.addEventListener('click', () => renderThread(card, {
     code: b.dataset.code, name: b.dataset.name, emoji: b.dataset.emoji,
   })));
+}
+
+/**
+ * "NOTIFY ME ABOUT NEW MESSAGES" (2026-09-24, js/push.js). Matt: "add notifications for messages
+ * too". Shown only while it would do something: off -> a button; an iPhone in a Safari tab -> what
+ * to do instead; on, blocked or unsupported -> nothing (the profile page's Settings row covers
+ * those). The tap IS the permission request, which iOS insists on.
+ */
+async function addPushRow(card, gen) {
+  let P;
+  try { P = await import('./push.js'); } catch { return; }
+  const st = await P.pushState().catch(() => 'unsupported');
+  if (!current(gen) || (st !== 'off' && st !== 'install')) return;
+  const title = card.querySelector('.gh-modal__title');
+  if (!title) return;
+  const row = document.createElement('div');
+  row.className = 'msg-push';
+  const paint = (msg) => {
+    row.innerHTML = st === 'install'
+      ? `<p class="msg-lead">${esc(t('msg_push_install'))}</p>`
+      : `<button type="button" class="gh-btn gh-btn--block" data-role="push"><span aria-hidden="true">🔔</span><span>${esc(t('msg_push_on'))}</span></button>`
+        + (msg ? `<p class="msg-lead">${esc(msg)}</p>` : '');
+    const b = row.querySelector('[data-role="push"]');
+    if (b) b.addEventListener('click', async () => {
+      b.disabled = true;
+      const res = await P.enablePush().catch(() => ({ ok: false, reason: 'subscribe-failed' }));
+      if (res.ok) { row.innerHTML = `<p class="msg-lead">${esc(t('msg_push_done'))}</p>`; return; }
+      paint(res.reason === 'denied' ? t('msg_push_denied') : res.reason === 'dismissed' ? '' : t('msg_push_failed'));
+    });
+  };
+  paint('');
+  title.insertAdjacentElement('afterend', row);
 }
 
 // --- pick somebody to write to -------------------------------------------------------------------

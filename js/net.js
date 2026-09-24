@@ -318,7 +318,9 @@ export async function sendReaction(code, seatKey, payload) {
   if (!code || seatKey == null || !payload || (payload.t !== 'e' && payload.t !== 'p' && payload.t !== 'c')) return;
   if (!(await init())) return;
   const slot = String(seatKey).replace(/[.#$/[\]]/g, '_');   // RTDB keys can't contain . # $ / [ ]
-  const v = String(payload.v == null ? '' : payload.v).slice(0, 40);
+  // 120, not 40 (2026-09-24): Connect 4 Hoops' live chat carries up to 120 characters. Every
+  // other caller caps its own lines shorter before they get here, so nothing else changes.
+  const v = String(payload.v == null ? '' : payload.v).slice(0, 120);
   if (!v) return;
   try {
     await _api.set(_api.ref(_db, `rooms/${code}/reactions/${slot}`), { t: payload.t, v, at: Date.now() });
