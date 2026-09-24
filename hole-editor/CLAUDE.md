@@ -1166,3 +1166,25 @@ of the left edge.
   59, bottom 34 = iPhone 15 Pro). `test-hole-editor-mobile.mjs` now runs the whole suite that way
   and asserts the top bar is below the notch, the bottom bar above the home bar, the editor fills
   the screen, and every tour pop-up stays below the notch. 54/54.
+
+### The guided tour, walked for real on an emulated iPhone (2026-09-24)
+
+Matt: *"please do the same thing and check the guided tour"*. Walked all 23 steps on 393x852 with
+iPhone edges, DOING each step (typing, picking terrain, placing and dragging a bunker, planting a
+tree, Route, Green) instead of pressing Skip - the Skip walk looked clean and hid all of this:
+
+- **Step 8 ("drag the bunker") was impossible**: the map had panned the new bunker up (to keep it
+  above the settings card) straight under the pop-up, so a finger on the bunker touched the pop-up.
+  The phone placement now keeps a map pop-up off the selected object OR, failing that, the object
+  placed last (`EditorCanvas.selectionScreenPoint()`, fed by `_lastPlaced`; step 8 arms Move, which
+  clears the selection).
+- **Pop-ups covered what they described**: the dogleg buttons (13), the green's shape picker (15),
+  two of the six terrains (2), and the bunker card ran into the home bar (7). The rule is now ABOVE
+  or BELOW the target whenever it fits between the notch and the home bar (`safeTop()` /
+  `safeBottom()`), ACROSS THE TOP of it only when neither does, and always clamped between them.
+- **Tall sheets** (settings, trays, More) subtract both safe areas from their max-height, so the
+  tallest card no longer rises under the top bar.
+
+`test-hole-editor-mobile.mjs` does steps 5, 6 and 8 for real and checks each moves the tour on by
+itself and that step 8's pop-up does not cover the bunker (born red: against the previous tour the
+walk stalls at step 8). 59/59; desktop 112/112.

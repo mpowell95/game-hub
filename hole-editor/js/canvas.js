@@ -1066,6 +1066,19 @@ export class EditorCanvas {
     });
   }
 
+  /** Where the selected object is on the page (client px), or null. The phone tour reads it to keep
+   *  its pop-up off the thing it has just asked you to drag. */
+  selectionScreenPoint() {
+    // The selection, or else the thing placed last: "drag the bunker" arms Move first, which
+    // clears the selection, and the pop-up still has to stay off that bunker.
+    const want = this.selection || this._lastPlaced;
+    if (!want || !this.spec || !this.camera) return null;
+    const o = listObjects(this.spec, this.stations, this.length).find((x) => x.group === want.group && x.index === want.index);
+    if (!o || !o.center) return null;
+    const r = this.el.getBoundingClientRect(); const q = this.toScreen(o.center[0], o.center[1]);
+    return { x: r.left + q.x, y: r.top + q.y };
+  }
+
   /** Can the current selection be deleted? (The tee's route dot, the last route dot and a width
    *  handle cannot; a guard hazard is detached first.) The phone's Delete button reads this. */
   canDeleteSelection() {
@@ -1168,6 +1181,7 @@ export class EditorCanvas {
   /** Called right after a placement: start the pop-in for whatever NEW stands up, and the dust. */
   _celebrate(group, w, beforeKeys) {
     this.ghost = null;
+    this._lastPlaced = { group, index: ((this.spec && this.spec[group]) || []).length - 1 };
     if (this._reducedMotion() || !this.built) { this.draw(); return; }
     const now = performance.now();
     this._pops = this._pops || new Map();
