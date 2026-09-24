@@ -813,13 +813,12 @@ score as it stands. Full contract: `skeeball/CLAUDE.md`, "Challenges". The parts
 the game folder:
 
 - **A new top-level node, `skeeChallenges/`** (`games/<id>` + `index/<CODE>/<id>`), added to
-  `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **OUTSTANDING as of
-  2026-09-24: Matt has NOT yet published the rules** (console -> Realtime Database -> Rules ->
-  paste -> Publish). Until he does, sending fails with "Challenges are not switched on yet".
-  Update this line, with the date, the moment he does.
+  `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **PUBLISHED by Matt
+  on 2026-09-24** (he pasted his live rules; the only change was adding `skeeChallenges`).
 - **A fourth Cloud Function, `skeeChallengePush`** (`functions/decide.js` `decideSkee`): a new
   challenge, and the result to the person who sent it. **OUTSTANDING as of 2026-09-24: not
-  deployed** - it is live only after Matt runs `firebase deploy --only functions`. Challenges work
+  deployed** - it is live only after Matt runs `firebase deploy --only functions` from his PC
+  (he was away from it that day). Challenges work
   without it (the launcher bubble and the in-game badge still show them); only the phone
   notification waits on it.
 - **The hub's `alerts` hook has a second registrant** (`skeeball/js/alert.js`), and **the launcher
