@@ -591,6 +591,15 @@
   animation: h4-cer-rise 0.5s ease-out 1.95s both;
 }
 
+/* SKIP (2026-09-24): there from the first frame, top right, above the veil. */
+.h4-root .h4-cer-skip {
+  position: absolute; z-index: 2;
+  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 4px); right: 12px;
+  min-height: 44px; padding: 0 16px; border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.6); background: rgba(0, 0, 0, 0.45);
+  color: #fff; font: inherit; font-size: 16px; font-weight: 800;
+  cursor: pointer; touch-action: manipulation;
+}
 /* REDUCED MOTION: the same DOM, every element settled on its final pose. Nothing is hidden and
    nothing is display:none - docs/BUILDING-A-GAME.md, Part 0. */
 .h4-root .h4-cer.is-still .h4-cer-veil,

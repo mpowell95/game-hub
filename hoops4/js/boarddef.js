@@ -292,6 +292,21 @@ export const BOARD = {
     // outer shot there is. Input shaping only - the engine, the release jitter and every probe are
     // untouched, and no ball is steered once it is thrown.
     aimReach: 0.39,
+    // THE WALL BEHIND THE HOOPS IS SOFTER (2026-09-24), physics.js BACK_PARTS. Matt: "a bunch of
+    // mine have actually bounced back onto the ramp". Traced: a ball clips a fin cap, hits the
+    // short wall behind the hoop row (riserRest 0.70) or the backboard, and comes off at ~2 m/s
+    // toward the player - over the row, over the gap, onto the ramp. Keeping this fraction of that
+    // wall's rebound, measured over 420 thumb-realistic shots (each column's aim +/-0.05, power
+    // 0.2-0.8):
+    //   keep   right col   wrong col   off shelf front   back on ramp   parked
+    //   1.00     45.5%        7.9%         27.1%             7.1%         3.1%   <- before
+    //   0.60     49.8%       13.6%         18.6%             0.7%         6.7%
+    //   0.45     50.5%       16.9%         14.8%             0.0%         5.7%   <- this
+    //   0.30     48.1%       20.2%         10.7%             0.0%         9.0%
+    // A TURN instead of a softening was measured first and rejected: turning that rebound across
+    // the row (0.4-1.0 of it) dropped the right column to 30-35%, because the back wall is what
+    // drops an overthrow into the hoop it was aimed at.
+    backWallKeep: 0.45,
 
     // A SEEDED PER-THROW SCATTER, which is the ONLY randomness in this engine and the only one
     // in any engine in this repo. MACHINE-SPEC.md section 9 bans steering a ball toward a hole;

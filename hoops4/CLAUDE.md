@@ -1705,3 +1705,24 @@ Matt, after a session of simultaneous turn-by-turn games with another player.
 - **Yellow's tint is mixed much further than red's** (0.85 vs 0.42 into the wall colour, rails at
   full yellow). *"the yellow is NOT yellow enough"* - a darkened yellow reads as olive-brown,
   while a darkened red still reads as red. Do not "equalise" the two.
+
+## Round 3, same night (2026-09-24)
+
+- **Balls came back onto the ramp: the wall BEHIND the hoops is softer** (`backWallKeep: 0.45`,
+  physics.js `BACK_PARTS`, sweep in boarddef). *"a bunch of mine have actually bounced back onto
+  the ramp"*. Traced: fin cap -> the short `riser` behind the row (0.70) or the backboard -> ~2 m/s
+  back over everything. Right column 45.5% -> 50.5%, back on the ramp 7.1% -> 0%, off the shelf's
+  front 27% -> 15%; costs: wrong column 7.9% -> 16.9% (sideways randomness, which he asked for)
+  and parked 3.1% -> 5.7% (below the 7.8% once shipped). Turning that rebound sideways instead was
+  measured and REJECTED (right column fell to 30-35%). A bouncier SIDE wall (Matt's idea) was also
+  measured: wallRest 0.03 -> 0.75 changes nothing, because after `aimReach` a ball almost never
+  reaches the side rails.
+- **The tint is the BALL'S colour exactly** (`ballTone()` in render.js, the one function the ball
+  wrap is also painted with): background unlit, rails and the two side strips EMISSIVE so light
+  cannot shade them off it. *"the yellow must be the same yellow as the ball ... idk why you
+  aren't doing that"*. The strips beside the display were red-left/yellow-right always; in a
+  multiplayer match they are your colour too.
+- **Series score while playing**: the HUD's second line is "Game 2 of 3 · Series 1-0", yours first
+  (from `seriesWins`, the score BEFORE this game, by side).
+- **The challenge card is skippable**: a Skip button top right from the first frame opens the
+  match; a tap anywhere else jumps the animation to its end (`is-still`).
