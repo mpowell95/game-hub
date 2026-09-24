@@ -1053,7 +1053,7 @@ export class Renderer {
 
   /**
    * CAP THE HOOPS OF FULL COLUMNS (2026-09-24) - the picture of physics.js's lid (buildWorld's
-   * `closed`). A flat grey disc over the whole rim, the same size as the physics lid, in the
+   * `closed`). A flat grey disc filling the mouth, flush with the rim, the same size as the physics lid, in the
    * group's own frame (local +Y is the face normal), so it sits exactly where the ball meets it.
    * Built on first need and only shown or hidden after that. `ids` is the set of capped hole ids.
    */
@@ -1063,10 +1063,10 @@ export class Renderer {
       if (want.has(id) && !r.lid) {
         const G = this.board.geom;
         const lidT = G.ballR * 0.6;   // the physics lid's own size (physics.js buildWorld)
-        const geo = new THREE.CylinderGeometry(r.H.r + G.collarThick * 1.5, r.H.r + G.collarThick * 1.5, lidT, 40);
+        const geo = new THREE.CylinderGeometry(r.H.r, r.H.r, lidT, 40);   // inside the mouth
         const mat = new THREE.MeshStandardMaterial({ color: COL('#d9dde3'), roughness: 0.5, metalness: 0.1, emissive: COL('#8a9099'), emissiveIntensity: 0.35 });
         const lid = new THREE.Mesh(geo, mat);
-        lid.position.y = lidT / 2;
+        lid.position.y = -lidT / 2;   // top flush with the rim plane (the group's origin)
         r.group.add(lid);
         r.lid = lid;
         this._trash.push(geo, mat);

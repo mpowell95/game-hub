@@ -361,6 +361,36 @@ export function buildMachine(G) {
     }
   }
 
+  // --- THE BACK CORNERS BESIDE THE OUTER HOOPS (2026-09-24) ---------------------------------------
+  // Matt: "what if you put walls up the sides? so instead of getting stuck on those angles next to
+  // the outermost columns, it bounced back into play?" MEASURED over 420 thumb-realistic shots:
+  // EVERY parked ball (24, 5.7%) was at u = +/-0.69, against the back wall, in the gap between the
+  // outer collar and the side rail - the rail chamfer above angles the rail joint, but the joint
+  // with the BACK wall was still square, so rail chamfer + back wall + shelf made a pocket. A
+  // wedge along that joint, from the rail in to just outside the outer collar, stood on its corner
+  // like the rail chamfer, turns the pocket into a 45-degree ramp back out toward the hoops.
+  {
+    const cw = G.backCornerChamfer || 0;
+    const ids = Object.keys(G.holes || {});
+    if (cw > 0 && ids.length) {
+      const H0 = G.holes[ids[0]];
+      const shelf = frames.find((fr) => fr.tilt <= 0.5 && H0.v >= fr.v0 && H0.v <= fr.v1);
+      const outer = Math.max(...ids.map((id) => Math.abs(G.holes[id].u) + G.holes[id].r + (G.collarThick || 0)));
+      const len = G.boardW / 2 - outer - (G.ballR || 0) * 0.15;
+      if (shelf && len > 0.01) {
+        for (const sx of [-1, 1]) {
+          solids.push({
+            part: 'chamfer',
+            pos: faceToWorldIn(shelf, sx * (G.boardW / 2 - len / 2), shelf.v1, 0),
+            half: [len / 2, cw, cw],
+            faceRot: { phi: 0, tilt: shelf.tilt },
+            rimSpin: true,                             // 45 degrees about its own length (u)
+          });
+        }
+      }
+    }
+  }
+
   // --- THE FINS: why a ball cannot balance between two rims -------------------------------------
   // Matt, 2026-09-21: "Make sure a ball can't get stuck balancing between two rims."
   //

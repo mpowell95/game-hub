@@ -225,12 +225,15 @@ function buildWorld(board, closed = []) {
   for (const id of closed) {
     const H = G.holes[id];
     if (!H) continue;
+    // FLUSH WITH THE RIM (2026-09-24, Matt: "I don't like that. I want it flush with the rim").
+    // The first lid was a slab sitting ON TOP of the collar. Now it is a disc INSIDE the mouth,
+    // its top exactly at the rim plane (collarH) and its edge at the collar's inner wall, so the
+    // hoop reads as a filled-in hoop and not a hoop with a lid on it.
     const lidT = G.ballR * 0.6;   // render.js setClosed draws the same size
-    const half = H.r + G.collarThick * 1.5;
-    const p = M.faceToWorld(H.u, H.v, (H.collarH || 0) + lidT / 2);
+    const p = M.faceToWorld(H.u, H.v, (H.collarH || 0) - lidT / 2);
     const lid = new CANNON.Body({
       type: CANNON.Body.STATIC,
-      shape: new CANNON.Box(new CANNON.Vec3(half, lidT / 2, half)),
+      shape: new CANNON.Cylinder(H.r, H.r, lidT, 24),   // cannon-es cylinders run along local Y
       material: matRing,
       collisionFilterGroup: GROUP_REST,
       collisionFilterMask: GROUP_BALL,
