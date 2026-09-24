@@ -766,7 +766,17 @@ Matt: *"are you sure there's no way to have real notifications or something clos
 - **`pushSubs` rules: PUBLISHED by Matt on 2026-09-24** (verified the same day: `pushSubs/<code>`
   reads succeed, and `players/`, `hoops/`, `adminConfig/`, `usernames/` still read normally). The
   only change from the rules live before was adding `pushSubs`; a diff proved nothing else moved.
-  Deploying the Cloud Function (`functions/README.md` steps 1-6) is a separate step.
+- **The Cloud Function `hoopsTurnPush` was DEPLOYED by Matt on 2026-09-24** (Blaze plan, us-central1,
+  Node 22 2nd gen, image cleanup policy 1 day). Usage measured that day, before deciding: database
+  9 MB stored of 1 GB free, ~21 MB/day downloaded of ~360 MB/day free, 7 connections - so Blaze
+  costs $0 here. Blaze was taken with Google's $300 free-trial credit; **if notifications stop
+  around late December 2026, the trial ended and the billing account needs "activating"** (not
+  certain; check that first).
+- **Matt's local `Game-Hub/` folder is stale** (he works through cloud sessions on GitHub now), so
+  deploy from a separate sparse clone, `C:\Users\powel\game-hub-deploy` (steps in
+  `functions/README.md`). **Give Matt deploy steps in the chat, in full, not as a pointer to that
+  file** - he asked for exactly that. The masked prompt of `functions:secrets:set` ignored a paste
+  in PowerShell (saved an empty value, refused); `--data-file` from a temp file worked.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
 
