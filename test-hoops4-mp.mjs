@@ -329,9 +329,9 @@ check('a player code is normalised and validated',
   //      that had stopped being true was never cleared.
   check('[KNOWN-BUG PROBE] dismissing an alert always removes it from the DOM',
     !/_dismissGameAlert\(false\)/.test(hub)
-    && /_dismissGameAlert\(\) \{[\s\S]{0,600}this\._gameAlert = null;\n    this\._paintGameAlert\(\);/.test(hub));
+    && /_dismissGameAlert\(id\) \{[\s\S]{0,700}this\._gameAlerts = \(this\._gameAlerts \|\| \[\]\)\.filter\(\(x\) => x !== state\);\n    this\._paintGameAlert\(\);/.test(hub));
   check('[KNOWN-BUG PROBE] the alert check clears a stale alert, not just sets a new one',
-    /this\._gameAlert = found;\n    this\._paintGameAlert\(\);/.test(hub));
+    /this\._gameAlerts = found;\n    this\._paintGameAlert\(\);/.test(hub));
   check('[KNOWN-BUG PROBE] returning to the launcher re-asks who is waiting',
     /showLauncher\(\)[\s\S]{0,1400}this\._checkGameAlerts\(\);/.test(hub));
 

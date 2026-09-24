@@ -807,8 +807,9 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
 
 ## Skeeball challenges (2026-09-24)
 
-Matt: *"what about skeeball? challenge someone to a game for the higher score?"* One rack each, the
-higher score wins. Full contract: `skeeball/CLAUDE.md`, "Challenges". The parts that live outside
+Matt: *"what about skeeball? challenge someone to a game for the higher score?"* 1, 3 or 5 games or
+every machine, won on most wins or total score, ONE attempt per game, and leaving a game counts its
+score as it stands. Full contract: `skeeball/CLAUDE.md`, "Challenges". The parts that live outside
 the game folder:
 
 - **A new top-level node, `skeeChallenges/`** (`games/<id>` + `index/<CODE>/<id>`), added to
@@ -821,9 +822,12 @@ the game folder:
   deployed** - it is live only after Matt runs `firebase deploy --only functions`. Challenges work
   without it (the launcher bubble and the in-game badge still show them); only the phone
   notification waits on it.
-- **The hub's `alerts` hook has a second registrant** (`skeeball/js/alert.js`). The hub still shows
-  ONE bubble at a time, first registrant first, so a pending Connect 4 Hoops alert hides a Skeeball
-  one until it is dealt with. The Challenge button's badge in the game is the backstop.
+- **The hub's `alerts` hook has a second registrant** (`skeeball/js/alert.js`), and **the launcher
+  now shows EVERY game's alert** (`this._gameAlerts`, a list in registry order). One alert draws the
+  big bubble as before; two or more draw a small "Your turn!" / "Game over" pill on each tile
+  (`.hub-alert.is-mini`), no X, the tile under it opening the same game. Matt: *"If someone has
+  challenges waiting on both games, can we switch to a smaller 'your turn' bubbles so you can see
+  both? But so it doesn't take up the entire screen?"*
 
 ## The admin control page (2026-08-24)
 
