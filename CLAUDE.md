@@ -747,7 +747,7 @@ Matt: *"are you sure there's no way to have real notifications or something clos
 `bugReportPush` (a new `bugReports/<id>`, to every code whose uid is in `admins/`, found through
 `msgAuth/<uid>` - no code is hardcoded; a tap opens the bug inbox). The fourth, `skeeChallengePush`
 (Skeeball challenges, `skeeChallenges/index/<code>/<id>`, a tap opens Skeeball), was added later
-the same day and is **NOT deployed yet** - see "Skeeball challenges" below. **A change to `functions/` is
+the same day and **deployed by Matt on 2026-09-25** - see "Skeeball challenges" below. **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
 for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
 `hoopsTurnPush` updated).
@@ -823,11 +823,8 @@ the game folder:
   `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **PUBLISHED by Matt
   on 2026-09-24** (he pasted his live rules; the only change was adding `skeeChallenges`).
 - **A fourth Cloud Function, `skeeChallengePush`** (`functions/decide.js` `decideSkee`): a new
-  challenge, and the result to the person who sent it. **OUTSTANDING as of 2026-09-24: not
-  deployed** - it is live only after Matt runs `firebase deploy --only functions` from his PC
-  (he was away from it that day). Challenges work
-  without it (the launcher bubble and the in-game badge still show them); only the phone
-  notification waits on it.
+  challenge, and the result to the person who sent it. **DEPLOYED by Matt on 2026-09-25**
+  ("deploy complete"), together with the v3 turn-by-turn wording. Every hand-over notifies.
 - **The hub's `alerts` hook has a second registrant** (`skeeball/js/alert.js`), and **the launcher
   now shows EVERY game's alert** (`this._gameAlerts`, a list in registry order). One alert draws the
   big bubble as before; two or more draw a small "Your turn!" / "Game over" pill on each tile
