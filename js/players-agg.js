@@ -68,11 +68,28 @@ export function buildIdentity(all) {
   const add = (x) => { if (!parent.has(x)) parent.set(x, x); return x; };
   const find = (x) => { add(x); while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
   const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+  // A CODE'S NAME IS ITS NEWEST RECORD'S NAME (2026-09-24). Matt: "The stats for Test1 and MattyIce
+  // are identical. They shouldn't be." One stale record - device 2b0d7c05, last synced 2026-09-13,
+  // named "test1" while carrying QZCC4, a code MattyIce uses - bridged the two for ever:
+  // test1(DREG5) -> name "test1" -> that record -> QZCC4 -> MattyIce. A record whose name is not its
+  // code's CURRENT name is a leftover of a rename, so it still joins its CODE (its history stays with
+  // the code's owner) but no longer lends that old name to the graph. A record with no code keeps
+  // joining by name exactly as before. Measured against all 280 synced records the day it shipped:
+  // exactly one grouping changed (test1/DREG5 split back out); every other person was identical.
+  const current = new Map();
+  for (const id of Object.keys(all || {})) {
+    const rec = all[id] || {};
+    const code = codeOf(rec.profile);
+    if (!code) continue;
+    const at = +rec.updatedAt || 0;
+    const cur = current.get(code);
+    if (!cur || at >= cur.at) current.set(code, { at, name: nameOf(rec.profile) });
+  }
   for (const id of Object.keys(all || {})) {
     const p = (all[id] || {}).profile || {};
     const dev = add('device:' + id), code = codeOf(p), name = nameOf(p);
     if (code) union(dev, 'code:' + code);
-    if (name) union(dev, 'name:' + name);
+    if (name && (!code || current.get(code).name === name)) union(dev, 'name:' + name);
   }
   return {
     keyFor(profileLike, fallbackId) {

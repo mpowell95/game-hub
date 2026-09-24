@@ -1834,6 +1834,24 @@ sets a real profile name, their existing rows already carry the same identity ke
 themselves next render. The device still keeps whatever it recorded under `HIDDEN_NAMES` if a
 name is later set to one of those (e.g. `zzztest`).
 
+### A code's name is its NEWEST record's name (2026-09-24)
+
+Matt: *"The stats for Test1 and MattyIce are identical. They shouldn't be."* No data was wrong -
+every record was separate. The GROUPING was: `buildIdentity()` joined records that share a code OR
+a name, and one stale record (device `2b0d7c05`, last synced 2026-09-13, named **test1** while
+carrying **QZCC4**, a code whose newer records are all MattyIce) bridged two people for good:
+test1 (DREG5) -> name "test1" -> that record -> QZCC4 -> MattyIce. test1 had no row of its own.
+
+**The rule now:** a record joins its CODE always, and joins its NAME only if that name is its code's
+CURRENT name (the newest record carrying that code), or if it has no code. A leftover of a rename
+therefore still counts for the code's owner and stops lending its old name to the graph.
+
+**Measured on all 280 synced records before shipping:** exactly one grouping changed (test1/DREG5
+split back out, MattyIce 300 -> 296 plays, test1 4); the total across everyone stayed 2,594; every
+other row was identical. `test-stats-identity.mjs` carries the case as a `[KNOWN-BUG PROBE]`, red on
+the old code. **Before changing this graph again, rerun that whole-database before/after diff** -
+a grouping rule's reach is only knowable against the real records.
+
 ### Name aliases, and why a rename in Firebase does not stick (2026-07-31)
 
 `players-agg.js` has two hand-maintained maps for a person whose devices disagree about their name:
@@ -3057,6 +3075,24 @@ stored field changed, no migration, `players-agg.js` untouched; the moment that 
 sets a real profile name, their existing rows already carry the same identity key and just relabel
 themselves next render. The device still keeps whatever it recorded under `HIDDEN_NAMES` if a
 name is later set to one of those (e.g. `zzztest`).
+
+### A code's name is its NEWEST record's name (2026-09-24)
+
+Matt: *"The stats for Test1 and MattyIce are identical. They shouldn't be."* No data was wrong -
+every record was separate. The GROUPING was: `buildIdentity()` joined records that share a code OR
+a name, and one stale record (device `2b0d7c05`, last synced 2026-09-13, named **test1** while
+carrying **QZCC4**, a code whose newer records are all MattyIce) bridged two people for good:
+test1 (DREG5) -> name "test1" -> that record -> QZCC4 -> MattyIce. test1 had no row of its own.
+
+**The rule now:** a record joins its CODE always, and joins its NAME only if that name is its code's
+CURRENT name (the newest record carrying that code), or if it has no code. A leftover of a rename
+therefore still counts for the code's owner and stops lending its old name to the graph.
+
+**Measured on all 280 synced records before shipping:** exactly one grouping changed (test1/DREG5
+split back out, MattyIce 300 -> 296 plays, test1 4); the total across everyone stayed 2,594; every
+other row was identical. `test-stats-identity.mjs` carries the case as a `[KNOWN-BUG PROBE]`, red on
+the old code. **Before changing this graph again, rerun that whole-database before/after diff** -
+a grouping rule's reach is only knowable against the real records.
 
 ### Name aliases, and why a rename in Firebase does not stick (2026-07-31)
 
