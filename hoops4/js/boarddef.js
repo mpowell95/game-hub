@@ -467,6 +467,7 @@ export const BOARD = {
     // outer collars and a ball going wide of hoop 1 or 7 comes back in instead of reaching the
     // shelf outside them. `0` removes them.
     sideWallU: SCREEN_W / 2,
+    sideWallT: 0.02,                 // a 2 cm pane (render.js draws it as framed plexiglass)
 
     fins: {
       rise: X * 0.30,        // how far the ridge stands above the rim

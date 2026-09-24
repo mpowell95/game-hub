@@ -1791,3 +1791,11 @@ bubble was up for it. Now `sw.js` takes the match id from the notification's tag
 `js/hub.js` calls `alert.js armOpen(id)` (the ceremony handoff key, kind `'open'`), and
 `ui.js maybeCeremony` opens that board directly - no card; a finished match opens as its
 read-only review (Game Over card), and is marked result-seen so the away-popup does not repeat it.
+- **Then made to look like plexiglass, same day** (Matt: *"Can you make the new walls look nicer..?
+  They're blocky and clunky and take away from the aesthetic"*). Physics: a 2 cm pane
+  (`sideWallT: 0.02`) at the display's edge, not a block out to the rail; the strip outside keeps
+  the rail chamfer and back-corner wedge. Measured on the same 420 shots: identical to the block
+  (60.0% / 23.6% / 16.4%, 0 parked, same per-column numbers), because a ball never reaches the
+  strip. Picture (`render.js _sideWalls`, the 'sideWall' part skips the generic box renderer): a
+  clear pane (opacity 0.16, ball visible through it), a front post in the display's blue, and a
+  gold cap and top rail in the marquee's trim colour.
