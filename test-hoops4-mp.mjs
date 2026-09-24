@@ -582,8 +582,16 @@ check('a player code is normalised and validated',
   MPm.markResultSeen('A1');
   check('opening it clears only that one', MPm.readUnseen().join(',') === 'A2');
   check('recordFinished queues what it counts', /addUnseen\(todo\.map/.test(readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8')));
-  check('the list shows ended matches first and opens them as a result card',
-    /sec\(t\('mpSecEnded'\)/.test(mpui) && /markResultSeen\(b\.dataset\.ended\); openGame\(b\.dataset\.ended, \{ review: true \}\)/.test(mpui));
+  check('an ended match gets the Game Over POPUP (not a list row), on mount and on the sheet',
+    /export async function showUnseenResults/.test(mpui) && /showUnseenResults\(ui, rows\)/.test(mpui)
+    && /showUnseenResults\(this\)/.test(ui) && !/mpSecEnded/.test(mpui));
+  check('finish() marks a match it showed as seen, so the popup never repeats it', /markResultSeen\(this\.mp\.id\)/.test(ui));
+  const AL = await import('./hoops4/js/alert.js');
+  const over = AL.decideAlert([{ id: 'E1', over: true, result: 'lost', name: 'King', updated: 5 }], {}, ['E1']);
+  check('the launcher bubble says GAME OVER for a result not yet seen', !!over && over.kind === 'over' && over.result === 'lost' && over.name === 'King');
+  check('...and says nothing once it has been seen', AL.decideAlert([{ id: 'E1', over: true, result: 'lost', updated: 5 }], {}, []) === null);
+  const both = AL.decideAlert([{ id: 'E1', over: true, result: 'lost', updated: 5 }, { id: 'N1', over: false, updated: 9 }], {}, ['E1']);
+  check('a brand new challenge still outranks it', !!both && both.kind === 'challenge');
   delete globalThis.localStorage;
 }
 

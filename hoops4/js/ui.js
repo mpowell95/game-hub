@@ -112,6 +112,12 @@ class Hoops4 {
     this.root.classList.add('h4-root');
     this.renderSetup();
     this.maybeCeremony();
+    // A match that ended while this phone was away: the Game Over popup (mp-ui showUnseenResults).
+    // Only for a player with a code, so a solo-only device never loads the multiplayer module.
+    import('./mp.js').then((MP) => {
+      if (this.disposed || !MP.myCode()) return;
+      return import('./mp-ui.js').then((mod) => { if (!this.disposed) mod.showUnseenResults(this); });
+    }).catch(() => {});
   }
 
   /**
@@ -1315,6 +1321,8 @@ class Hoops4 {
           const won = g.over && (g.over.winner === 'a' || g.over.winner === 'b')
             ? g.over.winner === this.mp.side : m.winner === this.myPlayer;
           if (this.mp.MP.markCounted(this.mp.id)) recordResult('hoops4', 'mp', won);
+          // Seen right here, so the away-from-the-board Game Over popup never repeats it.
+          try { this.mp.MP.markResultSeen(this.mp.id); } catch { /* display flag only */ }
         } else if (this.mp) recordResult('hoops4', 'mp', m.winner === this.myPlayer);
         else if (m.vsCpu) recordResult('hoops4', ['easy', 'medium', 'hard'][this.settings.opponent - 1] || 'medium', r.won);
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
@@ -1340,6 +1348,7 @@ class Hoops4 {
     // without being forced into a rematch (root CLAUDE.md).
     card.innerHTML = `<div class="h4-over-in" role="dialog" aria-modal="true">
         <button type="button" class="h4-x" aria-label="${t('close')}">&times;</button>
+        <p class="h4-over-kicker">${t('gameOver')}</p>
         <h2>${head}</h2>
         <p class="h4-acc">${t('accuracy')} ${acc}% <span>(${r.myDiscs}/${r.myShots})</span></p>
         <p class="h4-series" hidden></p>

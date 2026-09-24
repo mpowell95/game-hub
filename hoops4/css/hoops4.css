@@ -348,6 +348,22 @@
   font: 700 19px/1.2 ui-sans-serif, system-ui, sans-serif;
   color: var(--h4-yellow);
 }
+/* GAME OVER, THEN THE RESULT, BIG (2026-09-24). Matt: "It should have a Game Over popup that says
+   You Lost or something." The result was a 19px line; it is the headline now, and the same card
+   carries the away-from-the-board results (mp-ui showUnseenResults). */
+.h4-root .h4-over-kicker {
+  margin: 0 0 4px; font-size: 15px; font-weight: 800; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--h4-dim);
+}
+.h4-root .h4-over-in h2 { font-size: 34px; font-weight: 900; }
+.h4-root .h4-results { z-index: 1000; position: fixed; }
+.h4-root .h4-res { padding: 10px 0 12px; border-top: 1px solid var(--h4-edge); }
+.h4-root .h4-over-kicker + .h4-res { border-top: 0; }
+.h4-root .h4-res-word { margin: 0; font-size: 32px; font-weight: 900; line-height: 1.1; color: var(--h4-yellow); }
+.h4-root .h4-res.is-lost .h4-res-word { color: var(--h4-ink); }
+.h4-root .h4-res-vs { margin: 4px 0 10px; font-size: 18px; font-weight: 700; color: var(--h4-ink); }
+.h4-root .h4-res-see { width: 100%; min-height: 44px; }
+.h4-root .h4-res-more { margin: 4px 0 0; font-size: 14px; color: var(--h4-dim); }
 .h4-root .h4-again, .h4-root .h4-quit { width: 100%; min-height: 46px; margin-top: 8px; }
 .h4-root .h4-acc { margin: 0 0 14px; font-size: 14px; }
 .h4-root .h4-acc span { color: var(--h4-dim); font-size: 12px; }

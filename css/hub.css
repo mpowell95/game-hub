@@ -683,6 +683,7 @@ body {
 }
 .hub-alert.is-challenge { background: #8b5cf6; }
 .hub-alert.is-turn      { background: #7cc3ef; }
+.hub-alert.is-over      { background: #f0a24a; }   /* GAME OVER, a match that ended while away (2026-09-24) */
 .hub-alert.is-col-right { right: 6px; left: auto; }
 .hub-alert.is-col-left  { left: 6px; right: auto; }
 /* The tail: a rotated square with the same border, showing only the two sides that face out. It
