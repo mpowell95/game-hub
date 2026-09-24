@@ -1828,3 +1828,8 @@ computer** (collapsible), How to play.
 - `.h4-setup` scrolls now (auto margins centre it when it fits; `overscroll-behavior: contain`).
 - **CSS class clash, avoided**: the HUD's turn label is `.h4-turn`; the setup rows are `.h4-trow`.
   The first cut used `.h4-turn` and the HUD's column layout stacked every row vertically.
+
+Also the same day: the profile's Quick chat has an **"Order in game"** row showing `qc.emojis` /
+`qc.phrases` in the order the chat panel uses. Tap one, then tap where it goes (tap-to-move, not
+drag, so it never fights the page's scroll on a phone). The order is just the array order in
+`gamehub.quickchat.v1`, so no model change was needed.
