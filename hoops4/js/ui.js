@@ -14,6 +14,7 @@ import { BOARD, COLS } from './boarddef.js';
 import { Match, RED, YELLOW } from './game.js';
 import { Cpu } from './cpu.js';
 
+const CPU_OPEN_KEY = 'gamehub.hoops4.cpuOpen.v1';   // setup screen: is the computer card open
 const t = makeT(STRINGS);
 // Other players' names go into innerHTML (the notify prompt): escaped.
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -313,6 +314,10 @@ class Hoops4 {
     // shows its nearest meaning (Medium) until the player picks something; `start()` reads the
     // same fallback, so a device that never touches this screen keeps behaving sensibly.
     const cpuPick = s.opponent === 'two' ? 2 : s.opponent;
+    // "Let me collapse the computer game section too" (2026-09-24). A one-tap view preference in
+    // its own key, never in the settings object (THE LAW rule 2's exemption: nothing earned).
+    let cpuOpen = true;
+    try { cpuOpen = localStorage.getItem(CPU_OPEN_KEY) !== '0'; } catch { /* default open */ }
     const opt = (v, label) => {
       const on = cpuPick === v;
       return `<button type="button" class="gh-btn h4-opt${on ? ' is-on' : ''}" data-opp="${v}" aria-pressed="${on}">${on ? check : ''}${label}</button>`;
@@ -339,8 +344,18 @@ class Hoops4 {
              SVG already in the hub's bundle: no WebGL, no readback, no placeholder to correct
              later, and nothing to go wrong offline. -->
         <div class="h4-hero" aria-hidden="true">${GAME_ART['hoops4'] || ''}</div>
-        <div class="gh-card h4-card">
-          <p class="h4-card-head">${t('vsCpu')}</p>
+        <!-- YOUR TURN, ON THE SETUP SCREEN (2026-09-24). Matt: "if I have multiplayer games where
+             it's my turn, please show them... above Multiplayer... so you can have a few games
+             going at once". Filled in behind the painted screen by _fillTurns(); hidden until it
+             has something to show, and the hero picture steps aside while it does. -->
+        <div class="gh-card h4-turns" hidden></div>
+        <button type="button" class="gh-btn gh-btn--block h4-mp">${t('multiplayer')}</button>
+        <div class="gh-card h4-card${cpuOpen ? '' : ' is-shut'}">
+          <button type="button" class="h4-card-toggle" aria-expanded="${cpuOpen}">
+            <span class="h4-card-head">${t('vsCpu')}</span>
+            <span class="h4-card-chev" aria-hidden="true">${cpuOpen ? '\u25BE' : '\u25B8'}</span>
+          </button>
+          <div class="h4-card-body"${cpuOpen ? '' : ' hidden'}>
           <div class="h4-row">
             <p class="h4-row-label">${t('difficulty')}</p>
             <div class="h4-opts h4-opts-3">
@@ -354,8 +369,8 @@ class Hoops4 {
             </div>
           </div>
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-play">${t('play')}</button>
+          </div>
         </div>
-        <button type="button" class="gh-btn gh-btn--block h4-mp">${t('multiplayer')}</button>
         <button type="button" class="h4-howto-link">${t('howto')}</button>
       </div>`;
     for (const b of this.root.querySelectorAll('[data-opp]')) {
@@ -378,6 +393,77 @@ class Hoops4 {
     this.on(this.root.querySelector('.h4-play'), 'click', () => this.start({ vsCpu: true }));
     this.on(this.root.querySelector('.h4-mp'), 'click', () => this.showMultiplayer());
     this.on(this.root.querySelector('.h4-howto-link'), 'click', () => this.showHowto());
+    this.on(this.root.querySelector('.h4-card-toggle'), 'click', () => {
+      const card = this.root.querySelector('.h4-card');
+      const open = card.classList.contains('is-shut');
+      card.classList.toggle('is-shut', !open);
+      card.querySelector('.h4-card-body').hidden = !open;
+      const tg = card.querySelector('.h4-card-toggle');
+      tg.setAttribute('aria-expanded', String(open));
+      tg.querySelector('.h4-card-chev').textContent = open ? '\u25BE' : '\u25B8';
+      try { localStorage.setItem(CPU_OPEN_KEY, open ? '1' : '0'); } catch { /* not remembered */ }
+    });
+    this._fillTurns();
+  }
+
+  /**
+   * The matches waiting on this player, as a card on the setup screen. Only for a player with a
+   * code (so a solo-only device never loads the multiplayer module); the read happens behind the
+   * painted screen, and a screen that has moved on by the time it lands is left alone.
+   */
+  async _fillTurns() {
+    const box = this.root.querySelector('.h4-turns');
+    if (!box) return;
+    let MP, rows;
+    try {
+      MP = await import('./mp.js');
+      if (!MP.myCode()) return;
+      rows = await MP.readMyGames();
+    } catch { return; }
+    this._paintTurns(rows, MP);
+  }
+
+  /** Paint the Your-turn card from index rows (split out so a probe can paint it offline). */
+  _paintTurns(rows, MP) {
+    const box = this.root.querySelector('.h4-turns');
+    if (this.disposed || !box || !box.isConnected) return;
+    const mine = (rows || []).filter((r) => r && !r.over && r.yourTurn)
+      .sort((a, b) => (+b.updated || 0) - (+a.updated || 0));
+    if (!mine.length) return;
+    const SHOW = 4;
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const row = (r) => {
+      const bits = [];
+      if (r.series > 1) bits.push(t('gameOf', { n: r.seriesNo, m: r.series }));
+      if (r.oneShot) bits.push(t('shotsOne'));
+      return `<button type="button" class="h4-trow" data-turn="${esc(r.id)}">
+          <span class="h4-trow-emo" aria-hidden="true">${esc(r.emoji || '\u{1F642}')}</span>
+          <span class="h4-trow-txt"><span class="h4-trow-name">${esc(r.name || '?')}</span>
+            ${bits.length ? `<span class="h4-trow-meta">${esc(bits.join(' \u00b7 '))}</span>` : ''}</span>
+          <span class="h4-trow-go">${esc(t('turnGo'))} \u203A</span>
+        </button>`;
+    };
+    box.innerHTML = `<p class="h4-turns-head"><span>${esc(t('turnYou'))}</span><span class="h4-turns-count">${mine.length}</span></p>
+      <div class="h4-turns-list">${mine.slice(0, SHOW).map(row).join('')}</div>
+      ${mine.length > SHOW ? `<button type="button" class="h4-turns-more">${esc(t('nMore', { n: mine.length - SHOW }))}</button>` : ''}`;
+    box.hidden = false;
+    const hero = this.root.querySelector('.h4-hero');
+    if (hero) hero.hidden = true;                 // room for the list on a phone
+    for (const b of box.querySelectorAll('[data-turn]')) {
+      this.on(b, 'click', async () => {
+        if (b.disabled) return;
+        b.disabled = true;
+        try {
+          const game = await MP.readGame(b.dataset.turn);
+          if (this.disposed) return;
+          if (game) { this.startAsync(game); return; }
+        } catch (err) { console.error('[hoops4] could not open the match', err); }
+        b.disabled = false;
+        this.showMultiplayer();                   // it moved on: the full list is the truth
+      });
+    }
+    const more = box.querySelector('.h4-turns-more');
+    if (more) this.on(more, 'click', () => this.showMultiplayer());
   }
 
   /** The multiplayer sheet: host or join a live game, or hand a turn-by-turn match over.
