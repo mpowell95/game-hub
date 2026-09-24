@@ -190,6 +190,19 @@ What exists: `baseball/js/engine/liveplay.js` (`resolveLivePlay`, `ballPath`, `f
 `sim-baseball-career.mjs --live` measures it (all 8 assertions pass). A bunt keeps its own rule
 book (`resolveBunt`), even in a live season.
 
+**Matt, 2026-09-24, after 4a: home runs are 2-3 per 3-INNING game in the Majors (both teams),
+as played here - NOT the per-9-inning real-life rate 4a tuned to (0.75 per game).** So 4b first
+re-tunes carry (`LIVE_PLAY` / `LEAGUE_POWER_SCALE`, whichever 4a used) to land Majors at 2-3 HR per
+game, each lower league proportionally fewer (keep 4a's league-to-league shape: Little 0.26, HS
+0.32, College 0.48, Minors 0.63, Majors 0.75, scaled up together), then re-runs the sim until all 8
+assertions pass. Scoring will rise with it (4a: Majors average-player games about 1.6-0.9 runs);
+report the new runs per game. Pitch Accuracy (worth ~0 at the Majors in 4a) and scoring have no
+new decision from Matt; leave them unless the re-tune changes them, and report both.
+
+**Also fix in 4b:** the device probe `game-flow-intro` (batch 3's pre-game intro; a fielder does
+not start at the dugout). It passed when batch 3 shipped (v939), so something after that broke it:
+find the change and fix the game or the probe, whichever is wrong.
+
 **4b, the next session, in this order:**
 1. **Draw `payload.play`** in `ui.js`, frame by frame, instead of the out-zone animation, only when
    `payload.play` is non-null (an out-zone season still gets today's drawing). The timeline is in
