@@ -288,6 +288,8 @@ export function startSeason(state, seed) {
       wallHeight: true,   // playtest 1: home runs must clear the wall's height (outcomes.js)
       livePlays: !!LIVE_PLAY.on, // batch 4: balls in play played out in time (liveplay.js); off until 4b draws it
       runControl: !!(LIVE_PLAY.on && LIVE_PLAY.runControl), // batch 5: the player runs his own runners
+      fieldControl: !!(LIVE_PLAY.on && LIVE_PLAY.fieldControl), // batch 6: the player plays the field
+      runSpeedV: LIVE_PLAY.runSpeedV, // batch 6: Speed matters more (liveplay.js `liveSettings`)
       points: { ...POINTS[league] },
       schedule: makeSchedule(league, seasonSeed, games, slots.length, SCHEDULE_SHAPE),
       results: [],
@@ -377,7 +379,10 @@ export function buildGame(state, meta, agents = { home: null, away: null }) {
   // Batch 5: the player running his own runners, snapshotted the same way (a season started before
   // it keeps automatic base running to its last game).
   const runControl = !!(s && s.runControl);
-  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false, wallHeight, livePlays, runControl });
+  // Batch 6: the player fielding (the catch tap and the throw), snapshotted the same way.
+  const fieldControl = !!(s && s.fieldControl);
+  const runSpeedV = (s && s.runSpeedV) || 1;
+  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false, wallHeight, livePlays, runControl, fieldControl, runSpeedV });
 }
 
 /** Which engine side ('home'|'away') the player is, for a given meta. */

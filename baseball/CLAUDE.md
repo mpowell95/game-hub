@@ -4,6 +4,90 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## Playtest 1, batch 6: the player plays the field (2026-09-24) - DONE, live
+
+`docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 6. Matt: "if the ball is hit to an outfielder, I'd have to
+time pressing a button correctly in order to catch it. If I mis-time it, I bobble it... and if the ball
+lands, I'd choose where to throw it." Plus (Matt, same day): "make Speed matter more". **Both
+snapshotted per season**: `season.fieldControl` (`LIVE_PLAY.on && LIVE_PLAY.fieldControl`) and
+`season.runSpeedV` (`LIVE_PLAY.runSpeedV`, 2); `Game({ fieldControl, runSpeedV })` + snapshot. An older
+season or snapshot keeps automatic fielding and the 0.7 ft/s running table to its last game. Quick
+Play has both at once.
+
+**How it plays.** When the CPU puts a ball in play, the FIELDING PANEL covers the control band (exactly
+the band's 390x172 box, so nothing on the screen moves): five throw buttons (68x48) and a CATCH button
+(366x94). His fielder runs to the ball on his own (Matt's decision 2). CATCH: a ball slides along the
+button's track into a dashed target box and is at its centre as the ball reaches the glove; a tap while
+it is in the box catches it (or gloves a grounder cleanly), any other tap or none is a BOBBLE: the ball
+drops at his feet, stays live, and he picks it up `fldBobbleS` (1.0 s) later. The window is
+`fldCatchWinS`, 1.5x the batting window (`timingWindow` x `LEAGUE_TIMING_WINDOW_MULT`): 0.24 / 0.195 /
+0.15 / 0.135 / 0.12 s either side. Then the throw buttons are live from the moment he has the ball:
+**Cutoff** (reads **Hold** on an infield ball: no throw, the play ends), **1B, 2B, 3B, Home**. He lets
+go at max(ready, tap): a quick choice costs nothing, a slow one costs every second, and the CPU runners
+look again every `fldReadS` (0.5 s) while he holds it. No choice `fldAutoS` (2.5 s) after ready = the
+automatic throw. Taps on the field do nothing until the throw is made (the play is his to play), then
+skip the rest as always. **A bobble is scored like any other ball not caught** - design doc section 10
+has no error outcome, and test.js's `[KNOWN-BUG PROBE]` forbids an `'error'` string in the engine.
+
+**The engine** (`liveplay.js` `fieldPlay`, reached with `p.field = { catchT, throw: {t, to} }`,
+`catchT` `undefined` = not decided yet, drawn clean). The first throw is the player's: a base goes
+straight to its cover man (flight = distance / arm, `fldLongSlow` 0.5 slower per arm's length past
+`maxThrowFtPerMph`: a bounce), the cutoff goes to the cutoff man on the line to the lead runner's next
+base (the quickest throw, never an out). Aim is `execute()`'s (pitch Accuracy). Every later throw is the
+automatic defense's (`controlPlay`'s decide). **The CPU runners react to every throw** once it is in the
+air (`ctlReadS`): the runner it is aimed at turns back if it will beat him and he can get back before a
+relay could (not when forced); any other runner takes one more base if the ball cannot be got there in
+time. **Nothing before the ball arrives depends on the catch** (the UI draws before it knows): on a ball
+in the air with fewer than two out every runner stands on his bag until it comes down, caught or
+dropped; with two out they all run on contact either way; a dropped fly's batter goes on from wherever
+he had got to. All draws are in time order, so a later input never changes anything before it (test
+section 38 checks both the catch and the throw on ~2,000 plays). `controlPlay`'s `redirect`/`reachT`
+became the hoisted `redirectRunner`/`reachTime` (unchanged; section 37 still passes).
+
+**Wiring.** game.js `_fieldPlay`: with `fieldControl` and a FIELDING agent that has `fieldBall(view)`,
+the agent gets the play with the catch undecided (`view.play`, `view.est`: takeT, catchWinS, tHave,
+tReady, tAuto, throwNeeded, infield, `throwT(to, T)`) and `view.resolve(input)` (a private RNG copy,
+returns the timeline plus its `est`); the returned input is booked from the real RNG. **UI** (`ui.js`):
+`HumanAgent.fieldBall` -> `_fieldBallLive`, the panel is `fieldPanelHTML()` in `_paintControl`,
+`_liveClock` gained `ctx.onFrame` and `ctx.minEndT` (the play stays open while the catch or throw is
+the player's). A bobbled ball is drawn falling out of the glove (`LIVE_BOBBLE_DROP_S`). New strings
+`fld_*` (EN/ES).
+
+**The simulator's model fielder** (`agents.js` `ModelFielder`, `HUMAN_FIELD` in the sim): taps at the
+ball's arrival plus the tier's own batting timing sigma (the same hands: 85 / 55 / 35 ms), then 0.3-0.9 s
+after he has the ball throws at the most advanced runner a throw let go then would beat (0.15 s margin,
+0.3 s misjudgement), else Cutoff/Hold. Private RNG. Balls it drops (share of fielded plays): median
+0 / 0 / 0.5 / 1.4 / 2.1% by league, weak 0.2 / 2.2 / 8.0 / 10.0 / 15.8%, strong 0 everywhere.
+
+**Speed** (`LIVE_PLAY.runSpeedV2`): 0.7 -> **1.2 ft/s a point**, and each league's base lowered so a runner
+AT its CPU roster level runs exactly as fast as before (Majors: 13.0 + 0.7x -> 2.75 + 1.2x; the slowest
+Majors CPU runner, 11 Speed, 20.7 -> 16.0 ft/s, the fastest, 26, 31.2 -> 34.0). Measured +6 Speed at
+0.7 / 1.0 / 1.2 / 1.5: +3.7 / +4.3 / +5.6 / +7.9 pp (6,000 games a cell); 1.5 would put the slowest
+Majors runners at a 13 ft/s jog.
+
+**No re-tune needed.** `--all-tiers --careers 200 --assert --perfect 400`, median tier, batch 5 -> 6:
+first-attempt Gold 96.0 / 84.5 / 49.5 / 30.5 / 6.0 -> **95.0 / 84.5 / 54.0 / 37.5 / 7.0**; first title
+median 10 -> **10** seasons; Majors seasons before it 3 -> **3**; Perfect Season 3.3% -> **4.8%**. All 8
+pass. Weak tier: title inside 25 seasons 65.0% -> 47.5% (median 17 -> 19 seasons; it drops 16% of
+Majors balls) - no help for weaker players, by rule. Strong: Majors first try 32.5 -> 34.0%.
+
+**What each skill is worth** (median model player, Majors, all skills 20, +6 in one, 10,000 games a
+cell, same seeds, about +/-1 pp; scratch script, not in the repo): batch 5 (automatic fielding, 0.7
+ft/s) -> batch 6 (model fielder, 1.2 ft/s): base 46.8 -> 44.0%; **Speed +3.3 -> +6.3 pp**; **pitch Speed
++2.0 -> +3.1 pp**; **pitch Accuracy +1.0 -> +1.0 pp** (still about nothing at the Majors: from 77% of
+cap up a throw is already clean, as 4a found; the player choosing throws did not change that).
+
+**Suites**: `node baseball/js/test.js` 5213 (new section 38: invariants with random taps and throws, the
+catch window, bobble pick-up, the catch and the throw never change the past, runners turn back and take
+bases off throws, the automatic throw at tAuto, farther = slower, cutoff quickest, holding costs bases,
+arm and aim, the running tables, the model fielder, the booked play = the last drawn, snapshots and
+season flags). `node test-baseball-career.mjs` 329. `node test-game-conventions.mjs` 11/11.
+`node check-no-scroll.mjs baseball` 16/16. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs` all pass,
+with a new probe `field-play` (at 390x664 in the hub: the panel is exactly the control band's box and
+nothing moves when fielding starts or ends, every button >= 44px; a real tap in the window catches it;
+a real tap on 2B becomes the throw; the booked play equals the drawn one; the panel is gone after).
+`node test-visual.mjs baseball` 20/20.
+
 ## Playtest 1, batch 5: the player runs the bases (2026-09-24) - DONE, live
 
 `docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 5. Matt: "if I hit the ball and it lands in the outfield, I

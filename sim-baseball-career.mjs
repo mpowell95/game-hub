@@ -20,7 +20,8 @@
 //
 // WHAT IT CANNOT SEE, stated because a number this tool prints is easy to over-read: the model
 // human swings CONTACT or POWER, never bunts and never attempts a pickoff. Since batch 5 it runs its
-// own runners (HUMAN_RUN, below), which is a model of a player, not a player. Since R19 it does steal
+// own runners (HUMAN_RUN, below) and since batch 6 it fields (HUMAN_FIELD: the catch tap and the
+// first throw), each a model of a player, not a player. Since R19 it does steal
 // (HUMAN_STEAL, below) and does work the corners when pitching (`paint`), the two things that make
 // Speed and Accuracy visible here at all; how often a real player does either is an assumption.
 //
@@ -34,7 +35,7 @@ import fs from 'fs';
 import {
   newCareer, startSeason, nextGame, finishGame, buildGame, spend, leagueTeams,
 } from './baseball/js/engine/career.js';
-import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ModelRunner } from './baseball/js/engine/agents.js';
+import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ModelRunner, ModelFielder } from './baseball/js/engine/agents.js';
 import { hashSeed } from './baseball/js/engine/rng.js';
 import * as SETTINGS from './baseball/js/engine/settings.js';
 
@@ -80,6 +81,10 @@ const HUMAN_STEAL = { minChance: 0.70, rate: 0.30 };
 // whole flight), misjudging by up to 0.45 s, with a quarter-second margin. Measured against the
 // CPU's own automatic runner on 20,000 random Majors plays: 1% fewer runs.
 const HUMAN_RUN = { reactS: 0.6, noiseS: 0.45, marginS: 0.25 };
+// Playtest 1 batch 6: the player fields in a season that snapshotted `fieldControl` (game.js
+// `fieldBall`), so the model does too (agents.js `ModelFielder`): it times the catch with the tier's
+// own batting timing sigma (the same hands) and picks the first throw 0.3-0.9 s after it has the ball.
+const HUMAN_FIELD = { reactS: 0.3, reactSpreadS: 0.6, noiseS: 0.3, marginS: 0.15 };
 
 // ---------------------------------------------------------------------------------------------
 // The assertion bands (R16 spec item 6). Every one is a MEASURED band, not an aspiration: the
@@ -149,7 +154,9 @@ function mkModelAgent(league, tier, skills) {
   const pitcher = new ModelPitcher({ league, settings: SETTINGS, variety: tier.variety,
     cornerBias: Math.max(cpu.cornerBias, tier.paint || 0), pitchMix: cpu.pitchMix });
   const runner = new ModelRunner(HUMAN_RUN);
-  return { decidePitch: (v) => pitcher.decidePitch(v), decideSwing: (v) => batter.decideSwing(v), runBases: (v) => runner.runBases(v) };
+  const fielder = new ModelFielder({ ...HUMAN_FIELD, catchSigmaMs: tier.timingSigmaMs });
+  return { decidePitch: (v) => pitcher.decidePitch(v), decideSwing: (v) => batter.decideSwing(v), runBases: (v) => runner.runBases(v),
+    fieldBall: (v) => fielder.fieldBall(v) };
 }
 
 // ---------------------------------------------------------------------------------------------

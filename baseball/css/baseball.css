@@ -1138,6 +1138,123 @@
   background: rgba(255,206,58,0.18);
 }
 
+/* Batch 6: THE FIELDING PANEL. Laid over the whole control band (the band's own fixed 172px box)
+ * only while the player fields a ball, so nothing in the band - or anywhere else - moves or
+ * resizes. Row 1: the five throw buttons (48px tall); below, the CATCH button with its timing
+ * track: the ball slides toward the dashed target box and is inside it exactly for the catch
+ * window. Every state is marked by shape or text as well as colour (dashed = not live, solid =
+ * live, a filled circle in front of the chosen throw). */
+.bb-fieldpanel {
+  position: absolute;
+  inset: -1px 0 0 0; /* over the band's 1px top border too: exactly the band's box */
+  z-index: 6;
+  visibility: hidden;
+  pointer-events: none;
+  background: #0b120b;
+}
+.bb-fieldpanel.is-on { visibility: visible; pointer-events: auto; }
+.bb-fld-row {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 10px;
+  height: 48px;
+  display: flex;
+  gap: 6px;
+}
+.bb-fld-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 48px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.4);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  padding: 0 2px;
+  touch-action: manipulation;
+}
+.bb-fld-btn.is-live {
+  border: 2px solid rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+}
+.bb-fld-btn.is-live:active { background: rgba(255,255,255,0.26); }
+.bb-fld-btn.is-armed {
+  border: 2px solid #ffce3a;
+  color: #ffce3a;
+  background: rgba(255,206,58,0.18);
+}
+.bb-fld-catch {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 68px;
+  bottom: 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px dashed rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.55);
+  touch-action: none;
+  user-select: none;
+  padding: 0;
+}
+.bb-fld-catch.is-live {
+  border: 2px solid #ffce3a;
+  background: rgba(255,206,58,0.12);
+  color: #fff;
+}
+.bb-fld-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  font-size: 20px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  text-align: center;
+  pointer-events: none;
+}
+.bb-fld-catch[data-result="bobble"] .bb-fld-label { color: #ff9a7a; }
+.bb-fld-track {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  height: 28px;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.35);
+  overflow: hidden;
+  pointer-events: none;
+}
+.bb-fld-target {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  border: 2px dashed rgba(255,255,255,0.85);
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+.bb-fld-ball {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #16240f;
+  will-change: transform;
+}
+.bb-fld-ball.is-in { background: #ffce3a; }
+
 /* The Swing/Throw control: one canvas draws BOTH the progress ring and the fill button
  * (`ring.js`, ported from the mocks) - never a CSS-colored button overlapping a separate SVG
  * ring, which is how the phase 3 first cut drew an oversized flat-teal circle with no state of

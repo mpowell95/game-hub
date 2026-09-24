@@ -285,6 +285,9 @@ const LIVE_WILD_MAX_FT = 40;      // ...for at most this far
 const LIVE_OUT_HIDE_S = 0.8;      // a runner who is out stands this long, then leaves the field
 const LIVE_SCORED_HIDE_S = 0.3;   // one who scored, this long after touching the plate
 const LIVE_CTL_COVER_LEAD_S = 1.0; // batch 5: a player-run play's throw receiver sets off this long before it
+const LIVE_BOBBLE_DROP_S = 0.35;   // batch 6: a bobbled ball falls out of the glove over this long
+const FLD_PX_PER_S = 150;          // batch 6: the catch cue's ball slides this many px a second
+const FLD_CUE_S = 1.1;             // ...and appears this long before the ball arrives
 const LIVE_SETTLE_MS = 900;       // the held last frame once the play is over (a tap skips it)
 const RUNNER_STAND_FACING_RAD = FIELDER_FACING_RAD; // facing the plate, same as every fielder
 
@@ -1674,7 +1677,8 @@ class BaseballPlayScreen {
     // Doc item 11: Quick Play is always away, so a Majors game is at the CPU team's own park.
     const parkId = SETTINGS.parkFor(league, false, cpuTeam.styleId);
     this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true, parkId, livePlays: !!SETTINGS.LIVE_PLAY.on,
-      runControl: !!(SETTINGS.LIVE_PLAY.on && SETTINGS.LIVE_PLAY.runControl) });
+      runControl: !!(SETTINGS.LIVE_PLAY.on && SETTINGS.LIVE_PLAY.runControl),
+      fieldControl: !!(SETTINGS.LIVE_PLAY.on && SETTINGS.LIVE_PLAY.fieldControl), runSpeedV: SETTINGS.LIVE_PLAY.runSpeedV });
     this.cpuTeam = cpuTeam;
     this.playerTeam = playerTeam;
     this.state = this._freshPlayState(league, 0, 'batting');
@@ -2720,6 +2724,7 @@ class BaseballPlayScreen {
         <canvas data-role="ringcanvas" width="${RING_D}" height="${RING_D}"></canvas>
         <div class="bb-ring-label" data-role="ringlabel"></div>
       </div>
+      ${fieldPanelHTML()}
     `;
     this._paintActionSlots();
     this._bindControlInput();
@@ -4531,6 +4536,120 @@ class BaseballPlayScreen {
     return orders;
   }
 
+  /** Batch 6 (Matt): "if the ball is hit to an outfielder, I'd have to time pressing a button
+   *  correctly in order to catch it. If I mis-time it, I bobble it... and if the ball lands, I'd
+   *  choose where to throw it." `HumanAgent.fieldBall`: the live play is drawn as `_animateLivePlay`
+   *  draws it, with the FIELDING PANEL over the control band (always the band's own box, so nothing
+   *  moves). His fielder runs to the ball on his own. CATCH: a ball slides along the button's track
+   *  toward the target box and reaches its centre as the ball reaches the glove; a tap while it is
+   *  inside the box (`est.catchWinS`) catches it, any other tap - or none by the time it leaves the
+   *  box - bobbles it. Then the five throw buttons (Cutoff, which is Hold on an infield ball, 1B,
+   *  2B, 3B, Home) are live from the moment he has the ball until `est.tAuto`, when he throws on
+   *  his own. Each input re-resolves the play (`view.resolve`) and the drawing carries on from the
+   *  same moment. Taps on the field do nothing until the throw is made (the play is his to play,
+   *  not to skip), then skip the rest as always. */
+  async _fieldBallLive(view) {
+    if (this.destroyed || !this.actors || !this.game || !view || !view.play || !view.est) return {};
+    this._flushPendingPitch();
+    const est = view.est;
+    const ctx = this._liveBegin(view.play, view.side === 'home' ? 'away' : 'home');
+    const panel = this.rootEl.querySelector('[data-role="fieldpanel"]');
+    const input = { catchT: undefined, throw: null };
+    let phase = 'catch';      // catch -> have (throw buttons live) -> done
+    let e = est;              // the est of the play as last resolved (the catch changes tHave)
+    const q = (sel) => panel && panel.querySelector(sel);
+    const catchBtn = q('[data-role="fldcatch"]');
+    const label = q('[data-role="fldlabel"]');
+    const ballEl = q('[data-role="fldball"]');
+    const target = q('[data-role="fldtarget"]');
+    const btns = panel ? [...panel.querySelectorAll('[data-to]')] : [];
+    const resolve = () => {
+      const play = view.resolve({ catchT: input.catchT, throw: input.throw });
+      if (!play) return;
+      e = play.est || e;
+      ctx.model = this._livePlayModel(play);
+    };
+    const paintThrows = () => {
+      for (const b of btns) {
+        const live = phase === 'have';
+        const chosen = input.throw && String(input.throw.to) === b.dataset.to;
+        b.disabled = !live;
+        b.classList.toggle('is-live', live);
+        b.classList.toggle('is-armed', !!chosen);
+        const name = b.dataset.to === 'cut' ? (e.infield ? t('fld_hold') : t('fld_cut')) : t('fld_' + ['1b', '2b', '3b', 'home'][Number(b.dataset.to)]);
+        b.textContent = (chosen ? '\u25CF ' : '') + name;
+      }
+    };
+    const setCatchWord = (key) => { if (label) label.textContent = t(key); };
+    const afterCatch = () => {
+      phase = e.throwNeeded ? 'wait' : 'done';
+      if (catchBtn) { catchBtn.disabled = true; catchBtn.classList.remove('is-live'); }
+      ctx.minEndT = phase === 'wait' ? e.tAuto : 0;
+      paintThrows();
+    };
+    const onCatch = (ev) => {
+      if (phase !== 'catch' || ctx.skipRef.skipped || this.destroyed) return;
+      ev.preventDefault();
+      input.catchT = Math.round(ctx.clock * 1000) / 1000;
+      resolve();
+      setCatchWord(e.bobble ? 'fld_bobble' : 'fld_caught');
+      if (catchBtn) catchBtn.dataset.result = e.bobble ? 'bobble' : 'caught';
+      afterCatch();
+    };
+    const onThrow = (ev) => {
+      const b = ev.target && ev.target.closest && ev.target.closest('[data-to]');
+      if (!b || phase !== 'have' || this.destroyed) return;
+      ev.preventDefault();
+      const tt = Math.round(ctx.clock * 1000) / 1000;
+      input.throw = { t: tt, to: b.dataset.to === 'cut' ? 'cut' : Number(b.dataset.to) };
+      resolve();
+      phase = 'done';
+      ctx.minEndT = 0;
+      paintThrows();
+    };
+    if (panel) {
+      setCatchWord('fld_catch');
+      if (catchBtn) { catchBtn.disabled = false; catchBtn.classList.add('is-live'); delete catchBtn.dataset.result; }
+      if (target) target.style.width = Math.round(2 * est.catchWinS * FLD_PX_PER_S) + 'px';
+      if (ballEl) ballEl.style.transform = `translateX(${-FLD_CUE_S * FLD_PX_PER_S}px)`;
+      paintThrows();
+      panel.classList.add('is-on');
+      panel.setAttribute('aria-hidden', 'false');
+      if (catchBtn) catchBtn.addEventListener('pointerdown', onCatch);
+      panel.addEventListener('pointerdown', onThrow);
+    }
+    // Nothing on the field skips the play until the throw is made.
+    ctx.tapFilter = (ev) => (panel && ev.target && panel.contains(ev.target)) || phase !== 'done';
+    ctx.minEndT = est.takeT + est.catchWinS + 0.1;
+    ctx.onFrame = (clock) => {
+      if (ballEl) {
+        const dx = Math.max(-FLD_CUE_S, Math.min(FLD_CUE_S, clock - est.takeT)) * FLD_PX_PER_S;
+        ballEl.style.transform = `translateX(${dx.toFixed(1)}px)`;
+        ballEl.classList.toggle('is-in', phase === 'catch' && Math.abs(clock - est.takeT) <= est.catchWinS);
+      }
+      if (phase === 'catch' && clock > est.takeT + est.catchWinS) {
+        input.catchT = null;          // it went by: bobbled
+        resolve();
+        setCatchWord('fld_bobble');
+        if (catchBtn) catchBtn.dataset.result = 'bobble';
+        afterCatch();
+      }
+      if (phase === 'wait' && clock >= e.tHave) { phase = 'have'; paintThrows(); }
+      if (phase === 'have' && clock >= e.tAuto) { phase = 'done'; ctx.minEndT = 0; paintThrows(); }
+    };
+    await this._liveClock(ctx);
+    ctx.onFrame = null;
+    ctx.tapFilter = null;
+    if (panel) {
+      if (catchBtn) catchBtn.removeEventListener('pointerdown', onCatch);
+      panel.removeEventListener('pointerdown', onThrow);
+      panel.classList.remove('is-on');
+      panel.setAttribute('aria-hidden', 'true');
+    }
+    if (!this.destroyed) this._liveCtx = ctx;
+    return { catchT: input.catchT === undefined ? null : input.catchT, throw: input.throw };
+  }
+
   /** The start of a drawn live play: everything `_liveClock` and `_liveFinish` share. */
   _liveBegin(play, battingSide) {
     const defenseSide = battingSide === 'away' ? 'home' : 'away';
@@ -4611,8 +4730,10 @@ class BaseballPlayScreen {
         if (this.destroyed) { resolve(); return; }
         ctx.clock += last == null ? 0 : Math.min(ACTOR_MAX_STEP_MS, now - last) / 1000;
         last = now;
-        const endT = ctx.model.endT;
+        // Batch 6: a fielding play is held open while the catch or the throw is still the player's.
+        const endT = Math.max(ctx.model.endT, ctx.minEndT || 0);
         if (ctx.skipRef.skipped) ctx.clock = Math.max(ctx.clock, endT);
+        if (ctx.onFrame) ctx.onFrame(Math.min(ctx.clock, endT));
         this._liveDraw(ctx, Math.min(ctx.clock, endT));
         if (ctx.clock < endT) this._liveRaf = requestAnimationFrame(step);
         else { this._liveRaf = 0; resolve(); }
@@ -4669,7 +4790,8 @@ class BaseballPlayScreen {
       const d = Math.hypot(at.x - from.x, at.z - from.z);
       const f = d > reach ? (d - reach) / d : 0;
       addMove(ps.pos, ps.runStartT, { x: from.x + (at.x - from.x) * f, z: from.z + (at.z - from.z) * f }, ps.t);
-      holders.push({ t: ps.t, role: LIVE_ROLE[ps.pos], pos: ps.pos });
+      // Batch 6: a bobbled ball is his again only once he has picked it up.
+      holders.push({ t: ps.bobble ? ps.pickT : ps.t, role: LIVE_ROLE[ps.pos], pos: ps.pos });
     }
     const throws = play.throws || [];
     // A fielder is busy until he lets go of the ball: the one who took it until his first throw,
@@ -4683,7 +4805,8 @@ class BaseballPlayScreen {
       // Batch 5: a player-run play is redrawn on every tap, and a throw a tap brought about must not
       // make its receiver jump - he starts for the bag LIVE_CTL_COVER_LEAD_S before the throw, not
       // at his reaction time (in the past, on the new timeline).
-      const lead = play.controlled ? th.tRelease - LIVE_CTL_COVER_LEAD_S : 0;
+      // Batch 6: the same on a play the player fields (a throw he chose).
+      const lead = (play.controlled || play.fielded) ? th.tRelease - LIVE_CTL_COVER_LEAD_S : 0;
       addMove(th.to, Math.max(react, busy[th.to] || 0, lead), to, th.tArrive);
       busy[th.from] = Math.max(busy[th.from] || 0, th.tRelease);
       if (!th.wild) holders.push({ t: th.tArrive, role: LIVE_ROLE[th.to], pos: th.to });
@@ -4696,7 +4819,7 @@ class BaseballPlayScreen {
       const thrown = throws.some((th) => Math.abs(th.tArrive - o.t) < 0.05 && Math.hypot(W(th.toPt).x - bp.x, W(th.toPt).z - bp.z) < 3);
       if (thrown) continue;
       const h = holders.filter((x) => x.t <= o.t + 1e-6).pop();
-      if (h) addMove(h.pos, play.controlled ? Math.max(h.t, o.t - LIVE_CTL_COVER_LEAD_S) : h.t, bp, o.t);
+      if (h) addMove(h.pos, (play.controlled || play.fielded) ? Math.max(h.t, o.t - LIVE_CTL_COVER_LEAD_S) : h.t, bp, o.t);
     }
     for (const role of Object.keys(moves)) moves[role].sort((a, b) => a.t0 - b.t0);
     // The play's drawn end: the engine's own end, or later if a runner is still going (a home run's
@@ -4734,6 +4857,14 @@ class BaseballPlayScreen {
       if (play.ball.homer && t > sm[sm.length - 1][0]) s = sm[sm.length - 1][1] + (t - sm[sm.length - 1][0]) * 60;
       const rad = (play.ball.spray * Math.PI) / 180;
       return engineToWorld(Math.sin(rad) * s, Math.cos(rad) * s, Math.max(0.3, h));
+    }
+    if (ps.bobble && t < ps.pickT) {
+      // Batch 6: bobbled - out of the glove and down at his feet, a step on along the ball's line,
+      // until he picks it up.
+      const f = Math.min(1, (t - ps.t) / LIVE_BOBBLE_DROP_S);
+      const rad = (play.ball.spray * Math.PI) / 180;
+      const a = engineToWorld(ps.x + Math.sin(rad) * 3 * f, ps.y + Math.cos(rad) * 3 * f, 0);
+      return { x: a.x, y: Math.max(0.3, LIVE_HAND_FT * (1 - f * f)), z: a.z };
     }
     const throws = play.throws || [];
     let last = null;
@@ -5603,6 +5734,14 @@ class HumanAgent {
     return s._runBasesLive(view);
   }
 
+  /** Batch 6: the CPU put the ball in play and the player fields it: the play is drawn with the
+   *  fielding panel live (`_fieldBallLive`); returns his catch tap and throw for the engine to book. */
+  async fieldBall(view) {
+    const s = this.screen;
+    if (s.destroyed) return {};
+    return s._fieldBallLive(view);
+  }
+
   async decideSwing(view) {
     const s = this.screen;
     if (s.destroyed) return { action: 'take' };
@@ -5859,6 +5998,19 @@ function diamondWidgetHTML() {
  *  Strikeout) - a hit's WORD comes from `bases` (the authoritative count `game.js`'s own
  *  `resolveContact` already resolves), never re-derived from the finer-grained `kind` string
  *  (`ground-gap`/`blooper`/`line-through`/... - those exist for measurement, not for display). */
+/** Batch 6: the fielding panel, laid over the control band (its own fixed box) only while the
+ *  player fields a ball: five throw buttons in a row and the CATCH button with its timing track. */
+function fieldPanelHTML() {
+  const b = (to) => `<button type="button" class="bb-fld-btn" data-to="${to}" disabled></button>`;
+  return `<div class="bb-fieldpanel" data-role="fieldpanel" aria-hidden="true">
+    <div class="bb-fld-row">${b('cut')}${b(0)}${b(1)}${b(2)}${b(3)}</div>
+    <button type="button" class="bb-fld-catch" data-role="fldcatch" disabled>
+      <span class="bb-fld-label" data-role="fldlabel"></span>
+      <span class="bb-fld-track"><span class="bb-fld-target" data-role="fldtarget"></span><span class="bb-fld-ball" data-role="fldball"></span></span>
+    </button>
+  </div>`;
+}
+
 function outcomeWord(kind, bases) {
   // RA (docs/BASEBALL-3D-BUILD.md section 9): the three bunt outcomes get their own words. They
   // have to be named BEFORE the generic tests below, both because 'bunt-out' ends in "out" and

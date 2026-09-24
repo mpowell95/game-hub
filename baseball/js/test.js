@@ -16,12 +16,12 @@ import { resolveContact, resolveBunt, carryFt, fenceFtAt, battedApexFt, battedHe
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
-import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ModelRunner, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, pickMode } from './engine/agents.js';
+import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ModelRunner, ModelFielder, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, pickMode } from './engine/agents.js';
 import { makeTeam, makeLeague, leagueTeamsFor, makePlayerTeam, teamStrength, effectiveCapFor,
   rosterScaleFor, rosterCeilingFor, POSITIONS } from './engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
 import { mulberry32, hashSeed, stepRng, pickWeighted, gaussian } from './engine/rng.js';
-import { resolveLivePlay, ballPath, fielderSpots } from './engine/liveplay.js';
+import { resolveLivePlay, ballPath, fielderSpots, liveSettings } from './engine/liveplay.js';
 import { startSeason, newCareer, buildGame, nextGame, leagueTeams } from './engine/career.js';
 import { budgetFor, capFor, scalePreset, clampBuild, randomBuild, adjust, canAdjust } from './build.js';
 
@@ -3589,6 +3589,221 @@ await (async function section37RunControl() {
     && buildGame({ ...st, season: { ...st.season, runControl: false } }, meta).runControl === false
     && buildGame({ ...st, season: (({ runControl, ...rest }) => rest)(st.season) }, meta).runControl === false,
     'buildGame hands the season\'s flag to the Game (a season without it runs automatically)');
+})();
+
+console.log('\n-- 38. Playtest 1 batch 6: the player plays the field --');
+await (async function section38FieldControl() {
+  const S = { ...SETTINGS };
+  const L = SETTINGS.LIVE_PLAY;
+  const team = (sk) => makePlayerTeam({ skills: { hitAcc: 10, hitPow: 10, hitSpd: 10, pitchSpd: 13, pitchAcc: 13, pitchSpin: 10, ...sk }, hand: 'R' });
+  const def = team({});
+  const mk = (seed) => { let st = seed >>> 0; return () => { const r = stepRng(st); st = r.next; return r.value; }; };
+  const args = (batted, o, d = def) => ({ batted, league: o.league, fenceFt: SETTINGS.FIELD[o.league].fenceFt, bases: o.bases, outs: o.outs,
+    batterId: 'B', speedOf: () => 13, defense: d, shiftDeg: 0, settings: S });
+  const fld = (batted, o, field, d) => resolveLivePlay({ ...args(batted, o, d), field, rand01: mk(o.seed) });
+  const kinds = [['ground', 0, 8], ['line', 8, 26], ['fly', 26, 52], ['popup', 55, 70]];
+  const rnd = mulberry32(6262);
+  const cases = [];
+  for (let i = 0; i < 2400; i++) {
+    const [kind, a0, a1] = kinds[i % 4];
+    const league = i % 2 ? 'majors' : 'little';
+    cases.push({ batted: { exitVeloMph: 45 + rnd() * 65, launchAngleDeg: a0 + rnd() * (a1 - a0), sprayAngleDeg: -44 + rnd() * 88, kind },
+      o: { league, bases: [rnd() < 0.4 ? 'r1' : null, rnd() < 0.3 ? 'r2' : null, rnd() < 0.25 ? 'r3' : null], outs: Math.floor(rnd() * 3), seed: i + 11 } });
+  }
+  const lastS = (r) => (r.legs.length ? r.legs[r.legs.length - 1].s1 : (r.from < 0 ? 0 : 90 * (r.from + 1)));
+  const TO = ['cut', 0, 1, 2, 3];
+
+  let n = 0, bad = 0, caughtNotOut = 0, windowBad = 0, prefixCatch = 0, prefixThrow = 0, bobbles = 0, pickBad = 0;
+  let wentBack = 0, tookExtra = 0, autoN = 0, autoBad = 0;
+  for (const c of cases) {
+    const p0 = fld(c.batted, c.o, {});
+    if (!p0.timeline || !p0.timeline.possession || p0.kind === 'homer') continue;
+    n++;
+    const e = p0.est;
+    ok(n > 1 || (e.field && e.catchWinS === (c.o.league === 'majors' ? L.fldCatchWinS.majors : L.fldCatchWinS.little)), 'the est carries the league catch window');
+    // Random input: a tap near the ball's arrival, and maybe a throw.
+    const tap = e.takeT + (rnd() * 2 - 1) * 2.5 * e.catchWinS;
+    const inWin = Math.abs(tap - e.takeT) <= e.catchWinS;
+    const p1 = fld(c.batted, c.o, { catchT: tap });
+    const e1 = p1.est;
+    if (!!p1.timeline.possession.bobble !== !inWin || (!inWin && p1.timeline.possession.caught)) windowBad++;
+    if (!inWin) { bobbles++; if (Math.abs(p1.timeline.possession.pickT - (e.takeT + L.fldBobbleS)) > 1e-9) pickBad++; }
+    const th = e1.throwNeeded && rnd() < 0.8 ? { t: e1.tHave + rnd() * 2.5, to: TO[Math.floor(rnd() * 5)] } : null;
+    const p2 = fld(c.batted, c.o, { catchT: tap, throw: th });
+    for (const r of [p0, p1, p2]) {
+      const tl = r.timeline;
+      if (tl.possession.caught && !r.batterOut) caughtNotOut++;
+      const ended = c.o.outs + r.outsAdded >= 3;
+      const onBase = [];
+      for (const x of tl.runners) {
+        if (x.outT != null || x.scoredT != null) continue;
+        const sx = lastS(x);
+        if (!ended && (sx % 90 !== 0 || sx === 0 || sx === 360)) bad++;
+        onBase.push(sx);
+      }
+      if (!ended && new Set(onBase).size !== onBase.length) bad++;
+      if (!ended && r.finalBases.filter(Boolean).length !== onBase.length) bad++;
+    }
+    // A later input never changes anything before it: the catch (nothing before the ball arrives)
+    // and the throw (nothing before it is let go).
+    const posAt = (x, t) => { let g = null; for (const q of x.legs) if (q.t0 <= t) g = q;
+      if (!g) return x.legs.length ? x.legs[0].s0 : (x.from < 0 ? 0 : 90 * (x.from + 1));
+      return Math.round((g.s0 + Math.sign(g.s1 - g.s0) * Math.min(Math.abs(g.s1 - g.s0), g.spd * (t - g.t0))) * 100) / 100; };
+    const before = (r, T) => JSON.stringify({ th: r.timeline.throws.filter((x) => x.tRelease < T), outs: r.timeline.outs.filter((x) => x.t < T),
+      pos: r.timeline.runners.map((x) => [0.2, 0.4, 0.6, 0.8, 1].map((f) => posAt(x, T * f))) });
+    if (before(p0, e.takeT - 1e-6) !== before(p1, e.takeT - 1e-6)) prefixCatch++;
+    if (th) {
+      const T = Math.max(e1.tReady, th.t);
+      if (before(p1, T - 1e-6) !== before(p2, T - 1e-6)) prefixThrow++;
+      // The runners react to it once it is in the air.
+      for (const x of p2.timeline.runners) {
+        const y = p1.timeline.runners.find((z) => z.id === x.id);
+        if (x.outT == null && y && y.outT == null && lastS(x) > lastS(y) && !p2.timeline.throws.some((w) => w.wild)) tookExtra++;
+      }
+    } else if (e1.throwNeeded) {
+      // No choice: he throws on his own at tAuto.
+      autoN++;
+      if (!p1.timeline.throws.length && !e1.infield) autoBad++;
+      if (p1.timeline.throws.length && p1.timeline.throws[0].tRelease < e1.tAuto - 1e-9) autoBad++;
+    }
+  }
+  ok(n > 1500, `census ran (${n} fielded plays)`);
+  ok(bad === 0, `every runner ends scored, out or on his own base, one to a base (${bad} bad)`);
+  ok(caughtNotOut === 0, 'a caught ball is always an out');
+  ok(windowBad === 0, `a tap inside the window catches it, any other bobbles it (${windowBad} wrong)`);
+  ok(bobbles > 200 && pickBad === 0, `a bobbled ball is picked up fldBobbleS later (${bobbles} bobbles, ${pickBad} wrong)`);
+  ok(prefixCatch === 0, `the catch tap never changes anything before the ball arrives (${prefixCatch} changed)`);
+  ok(prefixThrow === 0, `the throw never changes anything before it is let go (${prefixThrow} changed)`);
+  // A runner the throw is coming for turns back when he can make it (one runner, not forced).
+  const rb = mulberry32(77);
+  for (let i = 0; i < 1500; i++) {
+    const batted = { exitVeloMph: 60 + rb() * 45, launchAngleDeg: rb() * 30, sprayAngleDeg: -40 + rb() * 80 };
+    batted.kind = batted.launchAngleDeg < 8 ? 'ground' : 'line';
+    for (const bases of [[null, 'r2', null], [null, null, 'r3']]) {
+      const o = { league: 'majors', bases, outs: 0, seed: i };
+      const r0 = fld(batted, o, {});
+      if (!r0.timeline || !r0.timeline.possession || r0.kind === 'homer' || r0.est.caught) continue;
+      for (const to of [2, 3]) {
+        const r = fld(batted, o, { catchT: r0.est.takeT, throw: { t: r0.est.tReady, to } });
+        if (r.timeline.runners.some((x) => x.from >= 0 && x.legs.some((q, j) => j > 0 && q.s1 < q.s0 && q.t0 > r0.est.tReady))) wentBack++;
+      }
+    }
+  }
+  ok(wentBack > 0 && tookExtra > 0, `CPU runners react to the throw: turned back ${wentBack}, took an extra base ${tookExtra}`);
+  ok(autoN > 50 && autoBad === 0, `with no choice he throws on his own at tAuto (${autoN} plays, ${autoBad} wrong)`);
+
+  // Outfield plays: throw time grows with distance, the cutoff is the quickest, a slow choice costs.
+  const outfield = cases.filter((c) => {
+    if (c.o.league !== 'majors') return false;
+    const r = fld(c.batted, c.o, {});
+    return r.timeline && r.timeline.possession && r.kind !== 'homer' && !r.est.infield;
+  });
+  ok(outfield.length > 100, `outfield plays to test with (${outfield.length})`);
+  let order = 0, orderN = 0, cutQuick = 0, slowWorse = 0, slowBetter = 0, bounce = 0;
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const baseXY = [{ x: 63.64, y: 63.64 }, { x: 0, y: 127.28 }, { x: -63.64, y: 63.64 }, { x: 0, y: 0 }];
+  for (const c of outfield) {
+    const r = fld(c.batted, c.o, {});
+    const e = r.est, P = r.timeline.possession;
+    const T = 30; // late enough that every cover man is on his bag: flight time only
+    const fly = [0, 1, 2, 3].map((k) => ({ d: dist(P, baseXY[k]), f: e.throwT(k, T) - T }));
+    for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) if (fly[a].d + 5 < fly[b].d) { orderN++; if (fly[a].f < fly[b].f) order++; }
+    if (e.throwT('cut', T) - T < Math.min(...fly.map((x) => x.f))) cutQuick++;
+    if (fly.some((x) => x.d > 3.0 * (L.throwBaseMph.majors + 13) * 1.0)) bounce++;
+    if (!e.throwNeeded) continue;
+    const quick = fld(c.batted, c.o, { catchT: e.takeT, throw: { t: e.tReady, to: 'cut' } });
+    const slow = fld(c.batted, c.o, { catchT: e.takeT, throw: { t: e.tReady + 2, to: 'cut' } });
+    const adv = (x) => x.runsScored * 400 + x.timeline.runners.reduce((a, y) => a + (y.outT == null ? lastS(y) : 0), 0);
+    if (adv(slow) > adv(quick)) slowWorse++;
+    if (adv(slow) < adv(quick)) slowBetter++;
+  }
+  ok(orderN > 0 && order === orderN, `a farther throw takes longer (${order}/${orderN})`);
+  ok(cutQuick > outfield.length * 0.9, `the throw to the cutoff is the quickest (${cutQuick}/${outfield.length})`);
+  ok(bounce > 0, `some throws are past the arm and bounce in (${bounce})`);
+  ok(slowWorse > 10 && slowWorse > slowBetter, `holding the ball two seconds gives the runners bases (${slowWorse} worse, ${slowBetter} better)`);
+
+  // pitch Speed is the arm, pitch Accuracy the aim: the same throws, only the fielder's skills differ.
+  let fastArrive = 0, slowArrive = 0, offLo = 0, offHi = 0, cnt = 0;
+  const strong = team({ pitchSpd: 26, pitchAcc: 26 }), weak = team({ pitchSpd: 0, pitchAcc: 0 });
+  for (const c of outfield) {
+    const r = fld(c.batted, c.o, {});
+    if (!r.est.throwNeeded) continue;
+    const inp = { catchT: r.est.takeT, throw: { t: r.est.tReady, to: 1 } };
+    const a = fld(c.batted, c.o, inp, strong), b = fld(c.batted, c.o, inp, weak);
+    const ta = a.timeline.throws[0], tb = b.timeline.throws[0];
+    if (!ta || !tb) continue;
+    cnt++;
+    fastArrive += ta.tArrive - ta.tRelease; slowArrive += tb.tArrive - tb.tRelease;
+    offLo += ta.offFt; offHi += tb.offFt;
+  }
+  ok(cnt > 50 && fastArrive < slowArrive, `a strong arm gets the ball there sooner (${(fastArrive / cnt).toFixed(2)} s vs ${(slowArrive / cnt).toFixed(2)} s)`);
+  ok(offLo < offHi, `pitch Accuracy puts the throw closer to the bag (${(offLo / cnt).toFixed(1)} ft vs ${(offHi / cnt).toFixed(1)} ft)`);
+
+  // Speed (batch 6, Matt: "make Speed matter more"): runSpeedV 2 is more ft/s a point, the same
+  // speed at the league's CPU roster level.
+  const v1 = liveSettings({ ...SETTINGS }, 1).LIVE_PLAY || SETTINGS.LIVE_PLAY, v2 = liveSettings({ ...SETTINGS }, 2).LIVE_PLAY;
+  ok(v2.runFtSPerPt > v1.runFtSPerPt && v1.runFtSPerPt === 0.7, `runSpeedV 2 adds more a point (${v2.runFtSPerPt} vs ${v1.runFtSPerPt} ft/s)`);
+  let same = true;
+  for (const lg of SETTINGS.LEAGUES) {
+    const lv = L.cpuRosterLevel[lg];
+    const a = v1.runBaseFtS[lg] + v1.runFtSPerPt * lv, b = v2.runBaseFtS[lg] + v2.runFtSPerPt * lv;
+    if (Math.abs(a - b) > 0.35 || !(v2.runBaseFtS[lg] + v2.runFtSPerPt * 1 > 0)) same = false;
+  }
+  ok(same, 'a runner at the CPU roster level runs as fast on either table (and nobody runs backward)');
+
+  // The model fielder: taps near the ball, throws once he has it.
+  const mf = new ModelFielder({ catchSigmaMs: 55 });
+  let mfOk = 0, mfN = 0;
+  for (const c of outfield.slice(0, 60)) {
+    const r = fld(c.batted, c.o, {});
+    const view = { play: r.timeline, est: r.est, outs: c.o.outs, bases: c.o.bases,
+      resolve: (inp) => { const x = fld(c.batted, c.o, inp); return { ...x.timeline, est: x.est }; } };
+    const got = mf.fieldBall(view);
+    mfN++;
+    if (Math.abs(got.catchT - r.est.takeT) < 0.3 && (!got.throw || (got.throw.t >= r.est.takeT && TO.includes(got.throw.to)))) mfOk++;
+  }
+  ok(mfN > 0 && mfOk === mfN, `the model fielder taps near the ball and picks a real throw (${mfOk}/${mfN})`);
+
+  // game.js: asked only in a fieldControl game, the booked play is the last one drawn, snapshots.
+  let seen = null, asked = 0, mismatch = 0;
+  const fielder = new ModelFielder({ catchSigmaMs: 55 });
+  const strip = (tl) => { const { est, ...rest } = tl; return JSON.stringify(rest); };
+  const humanish = (tm) => ({
+    decidePitch: (v) => new CpuPitcher({ league: 'college', settings: SETTINGS }).decidePitch(v),
+    decideSwing: (v) => new CpuBatter({ league: 'college', skills: tm.players[0].skills, settings: SETTINGS }).decideSwing(v),
+    fieldBall: (v) => { asked++; const o = fielder.fieldBall(v); seen = strip(v.resolve(o)); return o; },
+  });
+  const cpu = (tm) => ({ decidePitch: (v) => new CpuPitcher({ league: 'college', settings: SETTINGS }).decidePitch(v),
+    decideSwing: (v) => new CpuBatter({ league: 'college', skills: tm.players[0].skills, settings: SETTINGS }).decideSwing(v) });
+  const runGame = async (fieldControl) => {
+    const h = makeTeam('college', 0), a = makeTeam('college', 1);
+    const gm = new Game({ home: h, away: a, seed: 93, agents: { home: humanish(h), away: cpu(a) }, livePlays: true, fieldControl, runSpeedV: 2 });
+    gm.onEvent = async (t, p) => { if (t === 'atBatEnd' && p.play && p.side === 'away' && seen) { if (JSON.stringify(p.play) !== seen) mismatch++; seen = null; } };
+    await gm.playGame();
+    return { score: gm.score, over: gm.over };
+  };
+  asked = 0; const g1 = await runGame(true); const askedOn = asked;
+  const g2 = await runGame(true);
+  asked = 0; await runGame(false);
+  ok(askedOn > 0 && asked === 0, `fieldBall is asked only in a fieldControl game (${askedOn} vs ${asked})`);
+  ok(mismatch === 0, `the booked play is exactly the one the fielder last saw (${mismatch} differ)`);
+  ok(g1.over && JSON.stringify(g1) === JSON.stringify(g2), `a player-fielded game replays identically (${JSON.stringify(g1.score)})`);
+  const g = new Game({ home: makeTeam('majors', 0), away: makeTeam('majors', 1), seed: 3, agents: { home: null, away: null }, livePlays: true, fieldControl: true, runSpeedV: 2 });
+  ok(g.snapshot().fieldControl === true && g.snapshot().runSpeedV === 2, 'a game snapshots fieldControl and runSpeedV');
+  ok(g.settings.LIVE_PLAY.runFtSPerPt === v2.runFtSPerPt, 'a runSpeedV 2 game runs on the new table');
+  const snapOld = { ...g.snapshot() }; delete snapOld.fieldControl; delete snapOld.runSpeedV;
+  const gOld = Game.fromSnapshot(snapOld, { home: null, away: null });
+  ok(gOld.fieldControl === false && gOld.runSpeedV === 1 && gOld.settings.LIVE_PLAY.runFtSPerPt === 0.7,
+    'an older snapshot keeps automatic fielding and the old running speeds');
+  let st = newCareer({ hand: 'R', presetId: 'balanced', skills: { ...SETTINGS.PRESETS.balanced }, now: 0, careerId: 'FLD-T' });
+  st = startSeason(st, 5);
+  ok(st.season.fieldControl === !!(L.on && L.fieldControl) && st.season.runSpeedV === L.runSpeedV, 'a new season snapshots fieldControl and runSpeedV');
+  const meta = nextGame(st);
+  const bg = (season) => buildGame({ ...st, season }, meta);
+  ok(bg({ ...st.season, fieldControl: true }).fieldControl === true
+    && bg((({ fieldControl, runSpeedV, ...rest }) => rest)(st.season)).fieldControl === false
+    && bg((({ fieldControl, runSpeedV, ...rest }) => rest)(st.season)).runSpeedV === 1,
+    'buildGame hands the season\'s flags to the Game (a season without them keeps the old rules)');
 })();
 // ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);

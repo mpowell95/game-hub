@@ -490,6 +490,49 @@ export class ModelRunner {
   }
 }
 
+/** Playtest 1 batch 6: the simulator's stand-in for a PLAYER fielding (game.js `fieldBall`,
+ *  liveplay.js `fieldPlay`). The fielder runs to the ball on his own; the model does the two things
+ *  the player does:
+ *    1. THE CATCH: taps at the ball's arrival plus a timing error of `catchSigmaMs` (the same hands
+ *       that time a swing: the sim passes the tier's own batting timing sigma);
+ *    2. THE THROW: `reactS` (drawn between `reactS` and `reactS + reactSpreadS`) after he has the
+ *       ball, he throws at the most advanced runner a throw let go then would beat, by `marginS`
+ *       and his own misjudgement (`noiseS`); with nobody to get, to the cutoff (an outfielder) or
+ *       he holds it (an infielder).
+ *  Like `ModelRunner` it never draws from the game's RNG (a replay must not consume it). */
+export class ModelFielder {
+  constructor({ catchSigmaMs = 55, reactS = 0.3, reactSpreadS = 0.6, noiseS = 0.3, marginS = 0.15 } = {}) {
+    this.catchSigmaMs = catchSigmaMs; this.reactS = reactS; this.reactSpreadS = reactSpreadS;
+    this.noiseS = noiseS; this.marginS = marginS;
+  }
+  fieldBall(view) {
+    const est = view.est, play = view.play;
+    if (!est || !est.field || !play) return {};
+    const rand = mulberry32(hashSeed('bb-model-fielder', Math.round(est.takeT * 1000), Math.round(play.ball.spray * 100), view.outs));
+    const catchT = est.takeT + gaussianLite(rand) * this.catchSigmaMs / 1000;
+    const p1 = view.resolve({ catchT });
+    const e1 = p1 && p1.est;
+    if (!e1 || !e1.throwNeeded) return { catchT };
+    const tD = e1.tHave + this.reactS + rand() * this.reactSpreadS;
+    const tRel = Math.max(tD, e1.tReady);
+    let best = null;
+    for (const r of p1.runners) {
+      if (r.outT != null && r.outT <= tD) continue;
+      const legs = r.legs.filter((g) => g.t0 <= tD + 1e-9);
+      if (!legs.length) continue;
+      const g = legs[legs.length - 1];
+      const tArr = g.t0 + Math.abs(g.s1 - g.s0) / g.spd;
+      if (tArr <= tD || g.s1 <= g.s0) continue;          // standing on a bag, or going back
+      const k = Math.round(g.s1 / 90) - 1;
+      if (k < 0 || k > 3) continue;
+      const force = !e1.caught && e1.forced[r.id] === k;
+      const tT = e1.throwT(k, tRel) + (force ? 0 : e1.tagS) + this.marginS + (rand() * 2 - 1) * this.noiseS;
+      if (tT < tArr && (best == null || k > best)) best = k;
+    }
+    return { catchT, throw: { t: tD, to: best != null ? best : 'cut' } };
+  }
+}
+
 /** Step 4: the model pitcher half of the same stand-in. `variety` plays the same role
  *  `cornerBias` plays for a CPU - how often the aim leaves dead center - and `pitchMix` is drawn
  *  from the same per-league CPU table by default, since a human is choosing among the SAME
@@ -552,4 +595,4 @@ export class ScriptedAgent {
   }
 }
 
-export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ModelRunner, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, speedSurpriseMs, pickMode };
+export default { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ModelRunner, ModelFielder, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, speedSurpriseMs, pickMode };

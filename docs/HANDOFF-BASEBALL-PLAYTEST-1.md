@@ -275,4 +275,4 @@ distance would have to be accounted for)."
 | 3. Game flow | DONE (2026-09-23, v938; `baseball/CLAUDE.md` top entry) |
 | 4. Live plays | DONE (2026-09-24): 4a engine + sim, 4b drawing + switch ON; `baseball/CLAUDE.md` top two entries |
 | 5. Player base running | DONE (2026-09-24): tap a base on the bigger diamond; `baseball/CLAUDE.md` top entry |
-| 6. Player fielding | not started (batch 4 is merged, ready) |
+| 6. Player fielding | DONE (2026-09-24): catch tap + throw choice, and Speed worth more; `baseball/CLAUDE.md` top entry |
