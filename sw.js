@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v954';
+const CACHE = 'game-hub-v955';
 
 const ASSETS = [
   './',
@@ -911,11 +911,11 @@ const REST_MANIFEST = {
   './golf/courses/tutorial.js': '5f72833828',
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
-  './baseball/css/baseball.css': '24a58dbd74',
-  './baseball/js/ui.js': 'dd800249f8',
+  './baseball/css/baseball.css': '032c75faa0',
+  './baseball/js/ui.js': '3483f35edc',
   './baseball/js/field.js': 'c79a1b9f80',
   './baseball/js/ring.js': '4786e4ea61',
-  './baseball/js/strings.js': '875c578379',
+  './baseball/js/strings.js': 'ec020a9a42',
   './baseball/js/rig.js': '15167015a3',
   './baseball/js/actors.js': '1eb3dd86e5',
   './baseball/js/poses.js': 'ba1357811d',
@@ -930,18 +930,18 @@ const REST_MANIFEST = {
   './baseball/models/skins/skaterFemaleA.png': 'de575f5075',
   './baseball/models/skins/cyborgFemaleA.png': '321b7ba2d8',
   './baseball/js/engine/rng.js': '8119f3c46a',
-  './baseball/js/engine/settings.js': 'ce67b02825',
+  './baseball/js/engine/settings.js': 'd2cc6f6149',
   './baseball/js/engine/pitch.js': 'b6fb2c8d7d',
   './baseball/js/engine/swing.js': 'd56c6a8137',
   './baseball/js/engine/outcomes.js': '4031077cfe',
-  './baseball/js/engine/liveplay.js': '6d229bbe15',
+  './baseball/js/engine/liveplay.js': '4b5a4d68f7',
   './baseball/js/engine/bases.js': '76c79f21c6',
-  './baseball/js/engine/game.js': 'f205bc03de',
-  './baseball/js/engine/agents.js': '50cd36eb0c',
+  './baseball/js/engine/game.js': 'f680727e21',
+  './baseball/js/engine/agents.js': '4c9ea5acf6',
   './baseball/js/engine/teams.js': '7f5e1b872d',
   './baseball/js/engine/zones.js': '1bc65ed6ba',
   './baseball/js/engine/season.js': 'd2ad1033fc',
-  './baseball/js/engine/career.js': '3fb94aaf7c',
+  './baseball/js/engine/career.js': '994d4d3b9f',
   './baseball/js/career-io.js': 'ac45a5b7e1',
   './baseball/js/build.js': '7506fc4e23',
   './dominoes/': 'f371088b83',
