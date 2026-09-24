@@ -21,7 +21,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport } from './decide.js';
+import { decide, decideMessage, decideBugReport, isActive } from './decide.js';
 
 initializeApp();
 
@@ -56,6 +56,8 @@ async function sendTo(db, code, note, tag, open) {
   await Promise.all(keys.map(async (k) => {
     const s = subs[k];
     if (!s || !s.endpoint || !s.keys) return;
+    // The hub is open on this device right now: it already shows the news, so no notification.
+    if (isActive(s)) { logger.info('skipped, app open', { code, tag, sub: k }); return; }
     const { title, body } = note.text(s.lang === 'es' ? 'es' : 'en');
     const payload = JSON.stringify({ title, body, tag, url, game: open.game, with: open.with || '', name: open.name || '' });
     try {

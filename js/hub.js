@@ -581,9 +581,18 @@ class Hub {
     this._afterPaint(() => { import('./push.js').then((m) => m.refreshPush()).catch(() => {}); });
     // ...and clear the notifications already showing, on open and every time the app comes back to
     // the front (Matt, 2026-09-24: "Can the notifications auto dismiss if i go to the game hub?").
+    // ...and while the hub is on screen, tell the server so it does not notify THIS device at all
+    // (Matt: "if i have the hub open i shouldn't get them either") - js/push.js markActive.
     this._clearPushes = () => {
-      if (document.visibilityState !== 'visible') return;
-      import('./push.js').then((m) => m.clearShownNotifications()).catch(() => {});
+      const on = document.visibilityState === 'visible';
+      clearInterval(this._activeBeat);
+      this._activeBeat = null;
+      import('./push.js').then((m) => {
+        m.markActive(on);
+        if (!on) return;
+        m.clearShownNotifications();
+        this._activeBeat = setInterval(() => m.markActive(document.visibilityState === 'visible'), m.ACTIVE_BEAT_MS);
+      }).catch(() => {});
     };
     this._afterPaint(this._clearPushes);
     document.addEventListener('visibilitychange', this._clearPushes);
@@ -1816,6 +1825,7 @@ class Hub {
     this.el.back.removeEventListener('click', this._onBack);
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
     if (this._clearPushes) document.removeEventListener('visibilitychange', this._clearPushes);
+    clearInterval(this._activeBeat);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
     if (this._onOnlineBugs) window.removeEventListener('online', this._onOnlineBugs);
     if (this._onSwMessage) { try { navigator.serviceWorker.removeEventListener('message', this._onSwMessage); } catch {} }

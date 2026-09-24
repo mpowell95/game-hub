@@ -5,7 +5,7 @@
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport } from './functions/decide.js';
+import { decide, decideMessage, decideBugReport, isActive, ACTIVE_WINDOW_MS } from './functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -139,6 +139,18 @@ check('Messages offers "Notify me of new messages" while off', /addPushRow\(card
 check('opening the hub, or coming back to it, clears the notifications already showing',
   /export async function clearShownNotifications/.test(read('./js/push.js'))
   && /this\._afterPaint\(this\._clearPushes\)/.test(hub) && /addEventListener\('visibilitychange', this\._clearPushes\)/.test(hub));
+
+// --- the app is open on that device (2026-09-24) ---------------------------------------------------
+{
+  const now = 1_000_000_000;
+  check('a device that checked in 10 s ago is skipped (the app is open there)', isActive({ activeAt: now - 10000 }, now));
+  check('...one that checked in over 75 s ago is notified (closed, or killed without a goodbye)', !isActive({ activeAt: now - ACTIVE_WINDOW_MS - 1 }, now));
+  check('...one that said goodbye (0) or never checked in is notified', !isActive({ activeAt: 0 }, now) && !isActive({}, now));
+  check('the function skips an active device before sending', /if \(isActive\(s\)\)/.test(read('./functions/index.js')));
+  check('the hub checks in while visible and says goodbye when hidden',
+    /m\.markActive\(on\)/.test(hub) && /setInterval\(\(\) => m\.markActive/.test(hub));
+  check('the check-in uses the SERVER clock', /activeAt: on \? api\.serverTimestamp\(\) : 0/.test(read('./js/push.js')));
+}
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
