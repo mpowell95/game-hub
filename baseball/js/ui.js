@@ -284,6 +284,7 @@ const LIVE_WILD_FT_S = 30;        // a wild throw keeps rolling past its target 
 const LIVE_WILD_MAX_FT = 40;      // ...for at most this far
 const LIVE_OUT_HIDE_S = 0.8;      // a runner who is out stands this long, then leaves the field
 const LIVE_SCORED_HIDE_S = 0.3;   // one who scored, this long after touching the plate
+const LIVE_CTL_COVER_LEAD_S = 1.0; // batch 5: a player-run play's throw receiver sets off this long before it
 const LIVE_SETTLE_MS = 900;       // the held last frame once the play is over (a tap skips it)
 const RUNNER_STAND_FACING_RAD = FIELDER_FACING_RAD; // facing the plate, same as every fielder
 
@@ -1672,7 +1673,8 @@ class BaseballPlayScreen {
     // later) but no longer changes which pitches are unlocked or how the CPU picks one.
     // Doc item 11: Quick Play is always away, so a Majors game is at the CPU team's own park.
     const parkId = SETTINGS.parkFor(league, false, cpuTeam.styleId);
-    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true, parkId, livePlays: !!SETTINGS.LIVE_PLAY.on });
+    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true, parkId, livePlays: !!SETTINGS.LIVE_PLAY.on,
+      runControl: !!(SETTINGS.LIVE_PLAY.on && SETTINGS.LIVE_PLAY.runControl) });
     this.cpuTeam = cpuTeam;
     this.playerTeam = playerTeam;
     this.state = this._freshPlayState(league, 0, 'batting');
@@ -3652,7 +3654,8 @@ class BaseballPlayScreen {
     // no `verdict` on a ball-in-play payload (game.js never sets one for that branch), so
     // `_swingLine` only ever reads its timingWord here - exactly right, since a miss/foul can never
     // put a ball in play.
-    if (inPlay && payload.timingWord && this._humanBatting()) {   // playtest 1: the player's swings only
+    // Batch 5: a play the player ran himself already popped its timing word at contact (`_runBasesLive`).
+    if (inPlay && payload.timingWord && this._humanBatting() && !this._liveCtx) {   // playtest 1: the player's swings only
       this._showPop(t('v_' + payload.timingWord), payload.timingWord,
         { pitchLine: this._pitchReadout(), swingLine: this._swingLine(undefined, payload.timingWord) });
     }
@@ -4465,96 +4468,174 @@ class BaseballPlayScreen {
    *  once skipped. `_cutawayUp` is set for the whole play so no ordinary redraw fights it. */
   async _animateLivePlay(payload, word) {
     const play = payload.play;
-    if (!this.actors || !this.game || !play) return;
-    const battingSide = payload.side || (this.game.half === 'top' ? 'away' : 'home');
+    if (!this.actors || !this.game || !play) { this._liveCtx = null; return; }
+    // Batch 5: the player already ran this play (`_runBasesLive`, before the engine booked it); the
+    // engine's final timeline is the one he last saw, so only its last frame is drawn again here.
+    const pre = this._liveCtx;
+    this._liveCtx = null;
+    const ctx = pre || this._liveBegin(play, payload.side || (this.game.half === 'top' ? 'away' : 'home'));
+    ctx.payload = payload; ctx.word = word;
+    if (pre) {
+      this._hidePop();
+      ctx.model = this._livePlayModel(play);
+      this._liveDraw(ctx, ctx.model.endT);
+    } else {
+      await this._liveClock(ctx);
+    }
+    if (this.destroyed) return;
+    await this._liveFinish(ctx, payload, word);
+  }
+
+  /** Batch 5 (Matt): "if I hit the ball and it lands in the outfield, I have to click something to
+   *  send the batter to second, then again to third, then again to home. And I could change my mind
+   *  halfway." `HumanAgent.runBases`: the live play is drawn exactly as `_animateLivePlay` draws it,
+   *  but WHILE it runs every base on the (bigger) diamond widget is a tap target. A tap on a base is
+   *  an order `{t, k}` at the play clock's current second; the engine replays the whole play with the
+   *  orders so far (`view.resolve`, game.js `_livePlay`) and the drawing carries on from the same
+   *  moment on the new timeline - nothing before the tap can change (liveplay.js `controlPlay`). A
+   *  tap anywhere else skips to the end, the runners doing what they were last told. The orders go
+   *  back to the engine, which books the same play for real; `_animateLivePlay` then only settles it. */
+  async _runBasesLive(view) {
+    if (this.destroyed || !this.actors || !this.game || !view || !view.play) return [];
+    // The swing's timing word pops at contact, exactly as it did when 'atBatEnd' came at contact.
+    this._flushPendingPitch();
+    if (view.timingWord) {
+      this._showPop(t('v_' + view.timingWord), view.timingWord,
+        { pitchLine: this._pitchReadout(), swingLine: this._swingLine(undefined, view.timingWord) });
+    }
+    const ctx = this._liveBegin(view.play, view.side);
+    const orders = [];
+    const diamond = this.rootEl.querySelector('[data-role="diamond"]');
+    ctx.tapFilter = (e) => !!(diamond && e.target && diamond.contains(e.target));
+    const onBase = (e) => {
+      const cell = e.target && e.target.closest && e.target.closest('[data-base]');
+      if (!cell || ctx.skipRef.skipped || !ctx.running || this.destroyed) return;
+      e.preventDefault();
+      const k = Number(cell.dataset.base);
+      const t = Math.round(ctx.clock * 1000) / 1000;
+      if (t >= ctx.model.endT) return;
+      const next = orders.concat([{ t, k }]);
+      const play = view.resolve(next);
+      if (!play) return;
+      orders.push({ t, k });
+      ctx.model = this._livePlayModel(play);
+      cell.classList.remove('is-tapped'); void cell.offsetWidth; cell.classList.add('is-tapped');
+    };
+    if (diamond) diamond.addEventListener('pointerdown', onBase);
+    ctx.onCut = () => { ctx.running = true; if (diamond) diamond.classList.add('is-running'); };
+    await this._liveClock(ctx);
+    ctx.running = false;
+    if (diamond) { diamond.classList.remove('is-running'); diamond.removeEventListener('pointerdown', onBase); }
+    ctx.tapFilter = null;
+    if (!this.destroyed) this._liveCtx = ctx;
+    return orders;
+  }
+
+  /** The start of a drawn live play: everything `_liveClock` and `_liveFinish` share. */
+  _liveBegin(play, battingSide) {
     const defenseSide = battingSide === 'away' ? 'home' : 'away';
-    const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
-    const model = this._livePlayModel(play);
-    const skipRef = { skipped: false };
-    const onTap = () => { skipRef.skipped = true; };
-    this.rootEl.addEventListener('pointerdown', onTap, { capture: true, passive: true });
+    const ctx = {
+      play, model: this._livePlayModel(play), battingSide, defenseSide,
+      mode: this.state.mode === 'pitching' ? 'pitching' : 'batting',
+      skipRef: { skipped: false }, clips: {}, outsShown: new Set(), cut: false, homerShown: false,
+      lastBall: null, clock: 0, running: false, tapFilter: null, onCut: null, payload: null, word: null,
+    };
+    ctx.onTap = (e) => { if (ctx.tapFilter && ctx.tapFilter(e)) return; ctx.skipRef.skipped = true; };
+    this.rootEl.addEventListener('pointerdown', ctx.onTap, { capture: true, passive: true });
     if (this._crossingHideTimer) { clearTimeout(this._crossingHideTimer); this._crossingHideTimer = null; }
     this._cutawayUp = true;
     this._hidePop();
     // The runners are this play's now: nothing else may stand them on a bag until it is over.
-    const runnerRoles = new Set(play.runners.map((r) => LIVE_RUNNER_ROLE[r.from]).filter(Boolean));
-    this._runnersInMotion = runnerRoles;
-    this._rbActive = runnerRoles.has('rb');
+    ctx.runnerRoles = new Set(play.runners.map((r) => LIVE_RUNNER_ROLE[r.from]).filter(Boolean));
+    this._runnersInMotion = ctx.runnerRoles;
+    this._rbActive = ctx.runnerRoles.has('rb');
     this.actors.setForceHidden('batter', this._rbActive);
     const contactPos = this.actors.lastBallPos() || { x: 0, y: zoneRectFt().cy, z: ZONE.z };
     const ball0 = engineToWorld(0, 0, (play.ball.samples[0] || [0, 0, 3])[2]);
-    const contactOff = { x: contactPos.x - ball0.x, y: contactPos.y - ball0.y, z: contactPos.z - ball0.z };
+    ctx.contactOff = { x: contactPos.x - ball0.x, y: contactPos.y - ball0.y, z: contactPos.z - ball0.z };
+    ctx.lastBall = contactPos;
     if (!this._reducedMotion() && this._fieldW && this.actors.camera) {
       this._contactBurstStart = performance.now();
       this._contactBurstPx = projectToCanvas(this.actors.camera, contactPos, this._fieldW, this._fieldH);
     } else {
       this._contactBurstStart = null;
     }
-    const holdS = CONTACT_HOLD_MS / 1000;
-    const clips = {};
-    const outsShown = new Set();
-    let cut = false, homerShown = false, lastBall = contactPos;
-    const draw = (t) => {
-      // The ball: the engine's own position, with the contact point's small offset from home plate
-      // blended out over its first 0.35 s so it leaves exactly where the bat met it.
-      const b = this._liveBallAt(model, t);
-      const k = Math.max(0, 1 - t / 0.35);
-      lastBall = b ? { x: b.x + contactOff.x * k, y: Math.max(0.3, b.y + contactOff.y * k), z: b.z + contactOff.z * k } : null;
-      this.actors.setBall(lastBall);
-      this._drawLiveFielders(model, t, defenseSide, clips, lastBall);
-      const states = this._drawLiveRunners(model, t, battingSide, clips);
-      this._paintDiamondLive(states);
-      for (const o of play.outs) {
-        if (t >= o.t && !outsShown.has(o)) { outsShown.add(o); if (!skipRef.skipped) this._showBigOut(); }
-      }
-      if (play.ball.homer && !homerShown && t >= model.homerT) {
-        homerShown = true;
-        if (!skipRef.skipped) this._triggerHomerun({ distanceFt: payload.distanceFt, exitVeloMph: payload.exitVeloMph, launchAngleDeg: payload.launchAngleDeg });
-        this._setLine1(word);
-      }
-      if (!cut && t >= holdS) {
-        cut = true;
-        this.actors.setCamera('chase');
-        this._setDiamondVisible(true);
-        this.actors.chaseAt(lastBall || model.lastHeld || { x: 0, y: 2, z: -60 }, true);
-      }
-      if (cut) {
-        if (lastBall) this.actors.chaseAt(lastBall);
-        this._drawOverlayChase(null);
-      } else {
-        this._drawOverlay(mode);
-        if (this._contactBurstStart != null) this._drawContactBurst(performance.now() - this._contactBurstStart);
-      }
-    };
-    await new Promise((resolve) => {
-      // The play's clock: seconds from contact, each frame's step capped at ACTOR_MAX_STEP_MS so
-      // a stalled frame (the chase camera's first render) slows the play instead of skipping it.
-      let clock = 0, last = null;
+    return ctx;
+  }
+
+  /** One frame of a live play at time `t`, from `ctx.model` (which a base-running tap replaces). */
+  _liveDraw(ctx, t) {
+    const model = ctx.model, play = model.play, payload = ctx.payload || {};
+    // The ball: the engine's own position, with the contact point's small offset from home plate
+    // blended out over its first 0.35 s so it leaves exactly where the bat met it.
+    const b = this._liveBallAt(model, t);
+    const k = Math.max(0, 1 - t / 0.35);
+    const off = ctx.contactOff;
+    ctx.lastBall = b ? { x: b.x + off.x * k, y: Math.max(0.3, b.y + off.y * k), z: b.z + off.z * k } : null;
+    this.actors.setBall(ctx.lastBall);
+    this._drawLiveFielders(model, t, ctx.defenseSide, ctx.clips, ctx.lastBall);
+    const states = this._drawLiveRunners(model, t, ctx.battingSide, ctx.clips);
+    this._paintDiamondLive(states);
+    for (const o of play.outs) {
+      const key = `${o.id}@${o.t}`;
+      if (t >= o.t && !ctx.outsShown.has(key)) { ctx.outsShown.add(key); if (!ctx.skipRef.skipped) this._showBigOut(); }
+    }
+    if (play.ball.homer && !ctx.homerShown && t >= model.homerT) {
+      ctx.homerShown = true;
+      if (!ctx.skipRef.skipped) this._triggerHomerun({ distanceFt: payload.distanceFt, exitVeloMph: payload.exitVeloMph, launchAngleDeg: payload.launchAngleDeg });
+      if (ctx.word) this._setLine1(ctx.word);
+    }
+    if (!ctx.cut && t >= CONTACT_HOLD_MS / 1000) {
+      ctx.cut = true;
+      this.actors.setCamera('chase');
+      this._setDiamondVisible(true);
+      this.actors.chaseAt(ctx.lastBall || model.lastHeld || { x: 0, y: 2, z: -60 }, true);
+      if (ctx.onCut) ctx.onCut();
+    }
+    if (ctx.cut) {
+      if (ctx.lastBall) this.actors.chaseAt(ctx.lastBall);
+      this._drawOverlayChase(null);
+    } else {
+      this._drawOverlay(ctx.mode);
+      if (this._contactBurstStart != null) this._drawContactBurst(performance.now() - this._contactBurstStart);
+    }
+  }
+
+  /** The play's clock: seconds from contact, each frame's step capped at ACTOR_MAX_STEP_MS so a
+   *  stalled frame (the chase camera's first render) slows the play instead of skipping it. It runs
+   *  until `ctx.model.endT` - which a base-running tap can move either way. */
+  _liveClock(ctx) {
+    return new Promise((resolve) => {
+      let last = null;
       const step = (now) => {
         if (this.destroyed) { resolve(); return; }
-        clock += last == null ? 0 : Math.min(ACTOR_MAX_STEP_MS, now - last) / 1000;
+        ctx.clock += last == null ? 0 : Math.min(ACTOR_MAX_STEP_MS, now - last) / 1000;
         last = now;
-        const t = skipRef.skipped ? model.endT : clock;
-        draw(Math.min(t, model.endT));
-        if (t < model.endT) this._liveRaf = requestAnimationFrame(step);
+        const endT = ctx.model.endT;
+        if (ctx.skipRef.skipped) ctx.clock = Math.max(ctx.clock, endT);
+        this._liveDraw(ctx, Math.min(ctx.clock, endT));
+        if (ctx.clock < endT) this._liveRaf = requestAnimationFrame(step);
         else { this._liveRaf = 0; resolve(); }
       };
       this._liveRaf = requestAnimationFrame(step);
     });
-    if (this.destroyed) return;
-    if (!cut) { this.actors.setCamera('chase'); this._setDiamondVisible(true); }
-    if (!homerShown) this._setLine1(word);
+  }
+
+  /** The end of a drawn live play: the result word, LIVE_SETTLE_MS held, back to the plate. */
+  async _liveFinish(ctx, payload, word) {
+    if (!ctx.cut) { this.actors.setCamera('chase'); this._setDiamondVisible(true); }
+    if (!ctx.homerShown) this._setLine1(word);
     if (payload.doublePlay) this._setLine1(t('res_double_play'));
-    await this._skippableSleep(LIVE_SETTLE_MS, skipRef);
-    this.rootEl.removeEventListener('pointerdown', onTap, true);
+    await this._skippableSleep(LIVE_SETTLE_MS, ctx.skipRef);
+    this.rootEl.removeEventListener('pointerdown', ctx.onTap, true);
     if (this.destroyed) return;
     // Hand everyone back to the ordinary between-pitch picture: the runners re-derived from the
     // engine's bases (`_runnerStanding` cleared so every slot is placed fresh), every fielder the
     // play moved back on his rest clip, and `_returnToPlate()` redraws them all on their spots.
     for (const role of RUNNER_ROLES) this.actors.hide(role);
-    if (this._runnersInMotion === runnerRoles) this._runnersInMotion = null;
+    if (this._runnersInMotion === ctx.runnerRoles) this._runnersInMotion = null;
     this._runnerStanding = {};
-    for (const role of Object.keys(clips)) {
+    for (const role of Object.keys(ctx.clips)) {
       if (role === 'pitcher' || RUNNER_ROLES.includes(role)) continue;
       this.actors.idle(role);
     }
@@ -4599,7 +4680,11 @@ class BaseballPlayScreen {
       const to = W(th.toPt);
       // The receiver: off at his reaction (or once he has thrown, if he was the thrower), there
       // before the ball - he was, in the engine.
-      addMove(th.to, Math.max(react, busy[th.to] || 0), to, th.tArrive);
+      // Batch 5: a player-run play is redrawn on every tap, and a throw a tap brought about must not
+      // make its receiver jump - he starts for the bag LIVE_CTL_COVER_LEAD_S before the throw, not
+      // at his reaction time (in the past, on the new timeline).
+      const lead = play.controlled ? th.tRelease - LIVE_CTL_COVER_LEAD_S : 0;
+      addMove(th.to, Math.max(react, busy[th.to] || 0, lead), to, th.tArrive);
       busy[th.from] = Math.max(busy[th.from] || 0, th.tRelease);
       if (!th.wild) holders.push({ t: th.tArrive, role: LIVE_ROLE[th.to], pos: th.to });
     }
@@ -4611,7 +4696,7 @@ class BaseballPlayScreen {
       const thrown = throws.some((th) => Math.abs(th.tArrive - o.t) < 0.05 && Math.hypot(W(th.toPt).x - bp.x, W(th.toPt).z - bp.z) < 3);
       if (thrown) continue;
       const h = holders.filter((x) => x.t <= o.t + 1e-6).pop();
-      if (h) addMove(h.pos, h.t, bp, o.t);
+      if (h) addMove(h.pos, play.controlled ? Math.max(h.t, o.t - LIVE_CTL_COVER_LEAD_S) : h.t, bp, o.t);
     }
     for (const role of Object.keys(moves)) moves[role].sort((a, b) => a.t0 - b.t0);
     // The play's drawn end: the engine's own end, or later if a runner is still going (a home run's
@@ -5510,6 +5595,14 @@ class HumanAgent {
     s._flightRaf = requestAnimationFrame(flightStep);
   }
 
+  /** Batch 5: the player runs his own runners by tapping bases on the diamond while the play is
+   *  drawn (`_runBasesLive`); returns his taps as orders for the engine to book. */
+  async runBases(view) {
+    const s = this.screen;
+    if (s.destroyed) return [];
+    return s._runBasesLive(view);
+  }
+
   async decideSwing(view) {
     const s = this.screen;
     if (s.destroyed) return { action: 'take' };
@@ -5718,7 +5811,7 @@ function basesSvg(bases) {
 // had to be undone in both places, together (Matt's v865 recording, item 4). It no longer claims
 // to agree with `basesSvg` above, though both now draw first base on the right.
 const DIAMOND_PCT = [
-  { x: 50, y: 88 }, { x: 88, y: 50 }, { x: 50, y: 12 }, { x: 12, y: 50 }, { x: 50, y: 88 },
+  { x: 50, y: 85 }, { x: 85, y: 50 }, { x: 50, y: 15 }, { x: 15, y: 50 }, { x: 50, y: 85 },
 ];
 /** A point along the widget's own diamond edges between base index `from` and `to` (the same -1..3
  *  domain `runnerPath()` uses), `frac` of the way there by DISTANCE (not by corner count), so a
@@ -5748,14 +5841,16 @@ function diamondWidgetHTML() {
   // ancestor's coordinate SYSTEM, the whole painted box swings through the rotation), which is
   // what put "3B" a few px past the viewport's own right edge - found by measuring its real
   // getBoundingClientRect, not by eye.
-  const cell = (key, label) => `<div class="bb-diamond-cell" data-cell="${key}"><div class="bb-diamond-cell-shape"></div><span>${label}</span><b data-role="num"></b></div>`;
+  // Batch 5: `data-base` is the engine's base index (0 first .. 3 home) a tap on it orders.
+  const cell = (key, label, k) => `<div class="bb-diamond-cell" data-cell="${key}" data-base="${k}"><div class="bb-diamond-cell-shape"></div><span>${label}</span><b data-role="num"></b></div>`;
   let dots = '';
   for (let i = 0; i < DIAMOND_DOT_COUNT; i++) dots += `<div class="bb-diamond-dot" data-dot="${i}"></div>`;
   return `<div class="bb-diamond" data-role="diamond" aria-hidden="true">
-    ${cell('home', t('widget_home'))}
-    ${cell('1b', t('widget_1b'))}
-    ${cell('2b', t('widget_2b'))}
-    ${cell('3b', t('widget_3b'))}
+    ${cell('home', t('widget_home'), 3)}
+    ${cell('1b', t('widget_1b'), 0)}
+    ${cell('2b', t('widget_2b'), 1)}
+    ${cell('3b', t('widget_3b'), 2)}
+    <div class="bb-diamond-hint">${t('widget_run_hint')}</div>
     ${dots}
   </div>`;
 }

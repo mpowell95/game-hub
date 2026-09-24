@@ -1161,9 +1161,18 @@ export const LIVE_PLAY = {
   batterStartS: 0.9, runnerStartS: 0.25, restartS: 0.3, tagUpS: 0.15,
   leadFt: 10, halfwayFt: 30, halfwayHangS: 2.0,
   runnerMarginS: 0.25, runnerNoiseS: 0.30,
+  // Batch 5: the player runs his own runners (liveplay.js `controlPlay`). A runner who turns round
+  // mid-leg stands `turnS` first; a fielder holding the ball sees a runner go `ctlReadS` after he
+  // does; a controlled play allows up to `ctlMaxThrows` throws (a runner can be chased back and
+  // forth) and `ctlMaxOrders` taps; `ctlBackGraceS` is how long after sending a runner a tap on the
+  // base he left still reads as meaning the runner behind him (liveplay.js `applyOrder`).
+  runControl: true,
+  turnS: 0.3, ctlReadS: 0.2, ctlMaxThrows: 6, ctlMaxOrders: 40, ctlBackGraceS: 1.0,
   // The live model's own CPU roster level (was `CPU_ROSTER_LEVEL`, which out-zone seasons keep).
-  // Batch 4b: Majors 20.5 -> 21.0 with the home run re-tune.
-  cpuRosterLevel: { little: 2.0, highschool: 7.0, college: 12.8, minors: 17.5, majors: 21.0 },
+  // Batch 4b: Majors 20.5 -> 21.0 with the home run re-tune. Batch 5: back to 20.5 - the player's own
+  // base running (the sim's model runner reacts to a grounder 0.6 s late, where the automatic runner
+  // went on contact) cost a maxed player's Perfect Season rate 3.7% -> 1.5%, under its 2% floor.
+  cpuRosterLevel: { little: 2.0, highschool: 7.0, college: 12.8, minors: 17.5, majors: 20.5 },
 };
 
 // THE STEAL. Success is `clamp(STEAL_BASE + SKILL_EFFECT.hitSpd.stealSuccessPerPt * runner.hitSpd

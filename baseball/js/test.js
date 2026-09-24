@@ -16,7 +16,7 @@ import { resolveContact, resolveBunt, carryFt, fenceFtAt, battedApexFt, battedHe
 import { zonesFor, angleSector } from './engine/zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceDoublePlay } from './engine/bases.js';
 import { Game, SNAP_V, validateSnapshot } from './engine/game.js';
-import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, pickMode } from './engine/agents.js';
+import { CpuPitcher, CpuBatter, ModelBatter, ModelPitcher, ModelRunner, ScriptedAgent, cpuBaseTimingSigmaMs, cpuSigmaFloorMs, pickMode } from './engine/agents.js';
 import { makeTeam, makeLeague, leagueTeamsFor, makePlayerTeam, teamStrength, effectiveCapFor,
   rosterScaleFor, rosterCeilingFor, POSITIONS } from './engine/teams.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './engine/season.js';
@@ -3410,6 +3410,185 @@ await (async function section36LivePlay() {
     await gm.playGame(); return { score: gm.score, over: gm.over, plays }; };
   const r1 = await runLive(), r2 = await runLive();
   ok(r1.over && r1.plays > 0 && JSON.stringify(r1) === JSON.stringify(r2), `a live game finishes and replays identically (${JSON.stringify(r1)})`);
+})();
+// ---------------------------------------------------------------------------------------------
+console.log('\n-- 37. Playtest 1 batch 5: the player runs the bases --');
+await (async function section37RunControl() {
+  const S = { ...SETTINGS };
+  const team = (sk) => makePlayerTeam({ skills: { hitAcc: 10, hitPow: 10, hitSpd: 10, pitchSpd: 13, pitchAcc: 22, pitchSpin: 10, ...sk }, hand: 'R' });
+  const def = team({});
+  const mk = (seed) => { let st = seed >>> 0; return () => { const r = stepRng(st); st = r.next; return r.value; }; };
+  const args = (batted, o) => ({ batted, league: o.league, fenceFt: SETTINGS.FIELD[o.league].fenceFt, bases: o.bases, outs: o.outs,
+    batterId: 'B', speedOf: () => 13, defense: def, shiftDeg: 0, settings: S });
+  const ctl = (batted, o, orders) => resolveLivePlay({ ...args(batted, o), control: { orders }, rand01: mk(o.seed) });
+  const kinds = [['ground', 0, 8], ['line', 8, 26], ['fly', 26, 52], ['popup', 55, 70]];
+  const rnd = mulberry32(5151);
+  const cases = [];
+  for (let i = 0; i < 2400; i++) {
+    const [kind, a0, a1] = kinds[i % 4];
+    const league = i % 2 ? 'majors' : 'little';
+    cases.push({ batted: { exitVeloMph: 45 + rnd() * 65, launchAngleDeg: a0 + rnd() * (a1 - a0), sprayAngleDeg: -44 + rnd() * 88, kind },
+      o: { league, bases: [rnd() < 0.4 ? 'r1' : null, rnd() < 0.3 ? 'r2' : null, rnd() < 0.25 ? 'r3' : null], outs: Math.floor(rnd() * 3), seed: i + 7 } });
+  }
+  const bs = (k) => 90 * (k + 1);
+  const lastS = (r) => (r.legs.length ? r.legs[r.legs.length - 1].s1 : (r.from < 0 ? 0 : bs(r.from)));
+
+  // Invariants, with no taps and with random taps.
+  let bad = 0, caughtNotOut = 0, extraNoTap = 0, forcedHeld = 0, prefixBad = 0, n = 0;
+  for (const c of cases) {
+    const none = ctl(c.batted, c.o, []);
+    if (!none.timeline || none.kind === 'homer') continue;
+    n++;
+    const orders = [];
+    for (let j = 0; j < 1 + Math.floor(rnd() * 4); j++) orders.push({ t: Math.round(rnd() * 8 * 100) / 100, k: Math.floor(rnd() * 4) });
+    orders.sort((a, b) => a.t - b.t);
+    for (const r of [none, ctl(c.batted, c.o, orders)]) {
+      const tl = r.timeline;
+      if (tl.possession.caught && !r.batterOut) caughtNotOut++;
+      const ended = c.o.outs + r.outsAdded >= 3;
+      const onBase = [];
+      for (const x of tl.runners) {
+        if (x.outT != null || x.scoredT != null) continue;
+        const s = lastS(x);
+        if (!ended && (s % 90 !== 0 || s === 0 || s === 360)) bad++;
+        onBase.push(s);
+      }
+      if (!ended && new Set(onBase).size !== onBase.length) bad++;
+      if (!ended && r.finalBases.filter(Boolean).length !== onBase.length) bad++;
+    }
+    // No taps: the batter never passes first on his own (a throw that gets away aside), and every
+    // forced runner runs.
+    const b0 = none.timeline.runners.find((x) => x.id === 'B');
+    if (!none.timeline.throws.some((th) => th.wild) && b0.outT == null && lastS(b0) > 90) extraNoTap++;
+    if (!none.timeline.possession.caught) {
+      for (const x of none.timeline.runners) {
+        if (x.from < 0) continue;
+        let forced = true; for (let j = 0; j < x.from; j++) if (!c.o.bases[j]) forced = false;
+        if (forced && x.legs[0].s1 !== bs(x.from + 1)) forcedHeld++;
+      }
+    }
+    // A later tap never changes what happened before it (the UI redraws from the same moment).
+    const T = orders[orders.length - 1].t + 0.01;
+    const more = ctl(c.batted, c.o, orders.concat([{ t: T, k: Math.floor(rnd() * 4) }]));
+    const base = ctl(c.batted, c.o, orders);
+    const before = (r) => JSON.stringify({ th: r.timeline.throws.filter((x) => x.tRelease < T), outs: r.timeline.outs.filter((x) => x.t < T) });
+    if (before(base) !== before(more)) prefixBad++;
+  }
+  ok(n > 1500, `census ran (${n} controlled plays)`);
+  ok(bad === 0, `every runner ends scored, out or on his own base, one to a base (${bad} bad)`);
+  ok(caughtNotOut === 0, 'a caught ball is still always an out');
+  ok(extraNoTap === 0, `with no taps the batter stops at first (${extraNoTap} did not)`);
+  ok(forcedHeld === 0, `a forced runner runs on his own (${forcedHeld} held)`);
+  ok(prefixBad === 0, `a tap never changes anything before it (${prefixBad} changed)`);
+
+  // Named plays, found in the census: a ball in the outfield with the batter safe at first.
+  const gaps = cases.filter((c) => {
+    if (c.o.outs === 2 || c.o.bases.some(Boolean)) return false;
+    const r = ctl(c.batted, c.o, []);
+    return r.timeline && r.timeline.possession && !r.timeline.possession.caught && r.kind !== 'homer' && Math.hypot(r.timeline.possession.x, r.timeline.possession.y) > 200 && !r.batterOut;
+  });
+  ok(gaps.length > 20, `outfield hits to test with (${gaps.length})`);
+  let sent = 0, sentOut = 0, thrownAt = 0, backed = 0, backedSafe = 0, backN = 0;
+  for (const c of gaps) {
+    const r0 = ctl(c.batted, c.o, []);
+    const tTap = r0.timeline.possession.t - 0.5;
+    const r = ctl(c.batted, c.o, [{ t: tTap, k: 1 }]);
+    const b = r.timeline.runners.find((x) => x.id === 'B');
+    if (b.outT == null && lastS(b) === 180) sent++;
+    if (b.outT != null && r.timeline.outs.some((o) => o.id === 'B' && o.base === 1)) sentOut++;
+    if (r.timeline.throws.some((th) => Math.hypot(th.toPt.x - 0, th.toPt.y - 127.28) < 3)) thrownAt++;
+    // Change of mind: back to first once he has rounded it.
+    const legP = b.legs.find((g) => g.s0 <= 110 && g.s1 >= 110);
+    if (!legP) continue;
+    const tRound = legP.t0 + (110 - legP.s0) / legP.spd;          // 20 ft past first
+    if (tRound < tTap || (b.outT != null && b.outT <= tRound)) continue;
+    backN++;
+    const rb = ctl(c.batted, c.o, [{ t: tTap, k: 1 }, { t: tRound, k: 0 }]);
+    const bb = rb.timeline.runners.find((x) => x.id === 'B');
+    if (lastS(bb) === 90) { backed++; if (bb.outT == null) backedSafe++; }
+  }
+  ok(sent + sentOut === gaps.length, `tapping second sends the batter there: safe ${sent}, thrown out ${sentOut} of ${gaps.length}`);
+  ok(sentOut > 0 && sent > 0, `some make it (${sent}), some are thrown out (${sentOut})`);
+  ok(thrownAt > 0, `the defense throws to the base he is running to (${thrownAt} plays)`);
+  ok(backN > 10 && backed === backN && backedSafe > 0, `tapping first sends him back (${backed}/${backN}, ${backedSafe} safe)`);
+
+  // A tap made while the ball is in the air waits for it: a tag-up from third on a caught fly.
+  let tagups = 0, tagOk = 0;
+  for (const c of cases) {
+    if (c.batted.kind !== 'fly' || c.o.outs === 2) continue;
+    const o = { ...c.o, bases: [null, null, 'r3'] };
+    const r0 = ctl(c.batted, o, []);
+    if (!r0.timeline || !r0.timeline.possession || !r0.timeline.possession.caught) continue;
+    tagups++;
+    const r = ctl(c.batted, o, [{ t: 0.3, k: 3 }]);
+    const r3 = r.timeline.runners.find((x) => x.id === 'r3');
+    if (r3.legs.length && r3.legs[0].t0 >= r.timeline.possession.t - 1e-9 && r3.legs[0].s1 === 360) tagOk++;
+  }
+  ok(tagups > 10 && tagOk === tagups, `an order in the air becomes a tag-up at the catch (${tagOk}/${tagups})`);
+
+  // Addressing: "home, then second" sends the runner on second home and the batter to second.
+  let both = 0, bothN = 0;
+  for (const c of gaps) {
+    const o = { ...c.o, bases: [null, 'r2', null] };
+    const r0 = ctl(c.batted, o, []);
+    if (!r0.timeline || !r0.timeline.possession || r0.timeline.possession.caught) continue;
+    bothN++;
+    const t0 = Math.max(0.5, r0.timeline.possession.t - 1);
+    const r = ctl(c.batted, o, [{ t: t0, k: 3 }, { t: t0 + 0.3, k: 1 }]);
+    const r2 = r.timeline.runners.find((x) => x.id === 'r2'), b = r.timeline.runners.find((x) => x.id === 'B');
+    if (lastS(r2) === 360 && lastS(b) === 180) both++;
+  }
+  ok(bothN > 10 && both === bothN, `home then second: both go (${both}/${bothN})`);
+
+  // Speed is worth more with the player running: a faster man takes the extra base more often.
+  // (Measured per play: the same taps, only his legs differ.)
+  let slowSafe = 0, fastSafe = 0;
+  for (const c of gaps) {
+    for (const [spd, add] of [[5, (v) => { slowSafe += v; }], [26, (v) => { fastSafe += v; }]]) {
+      const r0 = ctl(c.batted, c.o, []);
+      const r = resolveLivePlay({ ...args(c.batted, c.o), speedOf: () => spd, control: { orders: [{ t: r0.timeline.possession.t - 0.5, k: 1 }] }, rand01: mk(c.o.seed) });
+      const b = r.timeline.runners.find((x) => x.id === 'B');
+      add(b.outT == null && lastS(b) === 180 ? 1 : 0);
+    }
+  }
+  ok(fastSafe > slowSafe, `Speed 26 makes second safely more often than Speed 5 (${fastSafe} vs ${slowSafe})`);
+
+  // game.js: the booked play IS the play the agent last saw; snapshotted per season.
+  let seen = null, booked = null, asked = 0;
+  const runner = new ModelRunner();
+  const humanish = (tm) => ({
+    decidePitch: (v) => new CpuPitcher({ league: 'college', settings: SETTINGS }).decidePitch(v),
+    decideSwing: (v) => new CpuBatter({ league: 'college', skills: tm.players[0].skills, settings: SETTINGS }).decideSwing(v),
+    runBases: (v) => { asked++; const o = runner.runBases(v); seen = JSON.stringify(v.resolve(o)); return o; },
+  });
+  const cpu = (tm) => ({ decidePitch: (v) => new CpuPitcher({ league: 'college', settings: SETTINGS }).decidePitch(v),
+    decideSwing: (v) => new CpuBatter({ league: 'college', skills: tm.players[0].skills, settings: SETTINGS }).decideSwing(v) });
+  let mismatch = 0;
+  const runGame = async (runControl) => {
+    const h = makeTeam('college', 0), a = makeTeam('college', 1);
+    const gm = new Game({ home: h, away: a, seed: 91, agents: { home: humanish(h), away: cpu(a) }, livePlays: true, runControl });
+    gm.onEvent = async (t, p) => { if (t === 'atBatEnd' && p.play && p.side === 'home' && seen) { booked = JSON.stringify(p.play); if (booked !== seen) mismatch++; seen = null; } };
+    await gm.playGame();
+    return { score: gm.score, over: gm.over };
+  };
+  asked = 0; const g1 = await runGame(true); const askedOn = asked;
+  const g2 = await runGame(true);
+  asked = 0; await runGame(false);
+  ok(askedOn > 0 && asked === 0, `runBases is asked only in a runControl game (${askedOn} vs ${asked})`);
+  ok(mismatch === 0, `the booked play is exactly the one the runner last saw (${mismatch} differ)`);
+  ok(g1.over && JSON.stringify(g1) === JSON.stringify(g2), `a player-run game replays identically (${JSON.stringify(g1.score)})`);
+  const g = new Game({ home: makeTeam('majors', 0), away: makeTeam('majors', 1), seed: 3, agents: { home: null, away: null }, livePlays: true, runControl: true });
+  ok(g.snapshot().runControl === true, 'a game snapshots runControl');
+  const snapOld = { ...g.snapshot() }; delete snapOld.runControl;
+  ok(Game.fromSnapshot(snapOld, { home: null, away: null }).runControl === false, 'an older snapshot keeps automatic running');
+  let st = newCareer({ hand: 'R', presetId: 'balanced', skills: { ...SETTINGS.PRESETS.balanced }, now: 0, careerId: 'RUN-T' });
+  st = startSeason(st, 5);
+  ok(st.season.runControl === !!(SETTINGS.LIVE_PLAY.on && SETTINGS.LIVE_PLAY.runControl), 'a new season snapshots runControl');
+  const meta = nextGame(st);
+  ok(buildGame({ ...st, season: { ...st.season, runControl: true } }, meta).runControl === true
+    && buildGame({ ...st, season: { ...st.season, runControl: false } }, meta).runControl === false
+    && buildGame({ ...st, season: (({ runControl, ...rest }) => rest)(st.season) }, meta).runControl === false,
+    'buildGame hands the season\'s flag to the Game (a season without it runs automatically)');
 })();
 // ---------------------------------------------------------------------------------------------
 console.log(`\n${pass} passed, ${fail} failed`);
