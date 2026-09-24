@@ -404,7 +404,7 @@ check('a player code is normalised and validated',
 
   // THE PURE HELPERS
   check('cleanChat trims, collapses and clamps',
-    MP.cleanChat('  hi   there ') === 'hi there' && MP.cleanChat('y'.repeat(99)).length === MP.CHAT_MAXLEN
+    MP.cleanChat('  hi   there ') === 'hi there' && MP.cleanChat('y'.repeat(400)).length === MP.CHAT_MAXLEN
     && MP.cleanChat(null) === '' && MP.cleanChat(undefined) === '');
   {
     const many = {};
@@ -574,6 +574,17 @@ check('a player code is normalised and validated',
     /data-quit=/.test(mpui) && /MP\.resignGame\(id\)/.test(mpui) && /mpQuitQ/.test(mpui));
   check('the multiplayer screen counts finished matches when it loads', /MP\.recordFinished\(rows\)/.test(mpui));
   check('the pause sheet can quit a turn-by-turn match', /data-role="quit"/.test(ui) && /resignGame\(this\.mp\.id\)/.test(ui));
+  // A MATCH THAT ENDED WHILE THIS PHONE WAS AWAY (2026-09-24): "the game just disappears".
+  const mem = {};
+  globalThis.localStorage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
+  MPm.addUnseen(['A1', 'A2']); MPm.addUnseen(['A2']);
+  check('a result counted away from the board is queued to be SHOWN, once', MPm.readUnseen().join(',') === 'A1,A2');
+  MPm.markResultSeen('A1');
+  check('opening it clears only that one', MPm.readUnseen().join(',') === 'A2');
+  check('recordFinished queues what it counts', /addUnseen\(todo\.map/.test(readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8')));
+  check('the list shows ended matches first and opens them as a result card',
+    /sec\(t\('mpSecEnded'\)/.test(mpui) && /markResultSeen\(b\.dataset\.ended\); openGame\(b\.dataset\.ended, \{ review: true \}\)/.test(mpui));
+  delete globalThis.localStorage;
 }
 
 // LIVE TURNS, NAMES ON THE BUBBLE, THE CARD ONCE (2026-09-23).

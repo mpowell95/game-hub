@@ -350,6 +350,7 @@ export class Renderer {
     for (const [part, list] of byPart) {
       const geo = new THREE.BoxGeometry(1, 1, 1);
       const mat = this._mat(part);
+      (this._partMats || (this._partMats = new Map())).set(part, mat);
       const mesh = new THREE.InstancedMesh(geo, mat, list.length);
       mesh.castShadow = !this.soft && part !== 'lane';
       mesh.receiveShadow = !this.soft;
@@ -1007,6 +1008,22 @@ export class Renderer {
     if (!r) return;
     r.mat.emissiveIntensity = 1.4;
     r._flash = 0.5;
+  }
+
+  /**
+   * WHICH SIDE YOU ARE, painted on the machine itself (2026-09-24). Matt: "me and the king of
+   * games just had multiple games going at once and i was red in some and yellow in others. It
+   * was very confusing... change the ramp color or background color or something?" In a
+   * multiplayer match the room behind the machine and the side rails take YOUR colour for the
+   * whole match - it never follows the turn, so a glance says which colour is yours. `null` puts
+   * the plain cabinet back (solo and two-on-one-phone, where there is no single "you"). The words
+   * on the HUD still say it too; colour is never the only signal (Matt is red/green colourblind).
+   */
+  setPlayerTint(hex) {
+    const wall = COL(this.look.wall);
+    this.scene.background = hex ? wall.clone().lerp(COL(hex), 0.42) : wall;
+    const rail = this._partMats && this._partMats.get('rail');
+    if (rail) rail.color = hex ? COL(hex).multiplyScalar(0.85) : COL(this.look.cabinet);
   }
 
   /** Which player's basketball is in the air. Matched on the hex so callers keep passing

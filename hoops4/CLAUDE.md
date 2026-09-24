@@ -1655,3 +1655,30 @@ completion is re-derived as outstanding work). Track it here or nowhere.
   with and without a readable match, rows missing fields). The Firebase write path and
   `js/mp-ui.js` are NOT covered, and the suite header says so.
 - `node test-visual.mjs hoops4` — the only suite that LOOKS at it.
+
+## Five playtest fixes (2026-09-24)
+
+Matt, after a session of simultaneous turn-by-turn games with another player.
+
+- **Outer columns: the swipe is clamped at the outer columns' sweet spot** (`aimReach: 0.39` in
+  boarddef, applied in ui.js's swipe handler only). *"it's pretty difficult to hit the outer
+  columns."* Measured with `reference/hoops/probe-aim.mjs`: col 7 scored 38% on a lined-up shot
+  (col 1 60%, the middle 60-73%), because just past the outer hoops the dead side rail makes a
+  cliff - col 7 by aim: 0.38 -> 80%, 0.42 -> 40%, 0.46 -> 13%. An over-aimed swipe, the natural
+  miss at an edge target, died there. Clamped, any swipe of 0.39 rad or more IS the best outer
+  shot: col 1 93%, col 7 80% at best power. Engine, jitter and `COLUMN_AIM` (the CPU) untouched.
+- **A match that ended while you were away is shown, not dropped** (`gamehub.hoops4.unseenResults.v1`,
+  mp.js `addUnseen`/`readUnseen`/`markResultSeen`). *"there isn't a You Lost screen or anything.
+  the game just disappears."* A finished match left the active list, and `recordFinished` counted
+  it silently. Every row it counts is one this device never watched end, so it is queued; the
+  list shows it first under "Game over" (tick/cross/equals + words), and a tap opens the
+  read-only review with the result card. A display flag, not history (the result is in the match).
+- **Chat cap 24 -> 120** (`MP.CHAT_MAXLEN`; `js/net.js` `sendReaction` slice 40 -> 120, a no-op for
+  every other game since each caps its own lines shorter). Display goes through `MP.cleanChat`, not
+  `js/mp-reactions.js`'s `reactionText`, which cuts at the hub's 24.
+- **Their chat line is a big centred card** (24px, wraps whole, no slide-in, 8 s up; yours stays
+  the small corner bubble). *"it's easy to miss. it needs to be much larger and just appear."*
+- **In multiplayer the machine wears YOUR colour for the whole match** (`render.setPlayerTint`:
+  background and side rails; never follows the turn) plus "You are Red / Yellow" on the HUD's
+  second line, because colour alone is never the signal. *"i was red in some and yellow in others.
+  It was very confusing."*

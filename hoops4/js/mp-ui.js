@@ -166,12 +166,31 @@ export function openMultiplayer(ui) {
         <div class="h4-mp-games">${extra.join('')}${list.map(gameRow).join('')}</div></section>` : '';
     const owedMine = owed.filter((o) => o.mine).map(owedRow);
     const owedTheirs = owed.filter((o) => !o.mine).map(owedRow);
-    box.innerHTML = (live.length || owed.length)
-      ? sec(t('mpSecYours'), mine, owedMine) + sec(t('mpSecTheirs'), theirs, owedTheirs)
+    // A MATCH THAT ENDED WHILE THIS PHONE WAS AWAY is listed first until it is opened, so a loss
+    // (or a win) is never just a game that vanished from the list (MP.readUnseen).
+    const unseenIds = MP.readUnseen();
+    const ended = rows.filter((r) => r && r.over && unseenIds.includes(r.id)).map(endedRow);
+    box.innerHTML = (live.length || owed.length || ended.length)
+      ? sec(t('mpSecEnded'), [], ended) + sec(t('mpSecYours'), mine, owedMine) + sec(t('mpSecTheirs'), theirs, owedTheirs)
       : `<p class="h4-mp-sub">${t('mpNoActive')}</p>`;
+    for (const b of box.querySelectorAll('[data-ended]')) {
+      ui.on(b, 'click', () => { MP.markResultSeen(b.dataset.ended); openGame(b.dataset.ended, { review: true }); });
+    }
     for (const b of box.querySelectorAll('[data-next]')) ui.on(b, 'click', () => startNext(b.dataset.next, b));
     for (const b of box.querySelectorAll('[data-game]')) ui.on(b, 'click', () => openGame(b.dataset.game));
     for (const b of box.querySelectorAll('[data-quit]')) ui.on(b, 'click', (e) => { e.stopPropagation(); confirmQuit(b.dataset.quit); });
+  }
+
+  function endedRow(r) {
+    const mark = r.result === 'won' ? '\u2713' : r.result === 'lost' ? '\u2715' : '=';
+    const word = r.result === 'won' ? t('youWin') : r.result === 'lost' ? t('youLose') : t('draw');
+    return `<div class="h4-mp-game is-ended is-${esc(r.result || 'unknown')}">
+        <button type="button" class="h4-mp-open" data-ended="${esc(r.id)}">
+          <span class="h4-mp-emo" aria-hidden="true">${esc(r.emoji)}</span>
+          <span class="h4-mp-txt"><span class="h4-mp-name">${esc(r.name || '?')}</span>
+            <span class="h4-mp-meta"><span aria-hidden="true">${mark}</span> ${esc(word)} \u00b7 ${esc(t('mpSeeResult'))}</span></span>
+        </button>
+      </div>`;
   }
 
   function gameRow(r) {
@@ -571,7 +590,8 @@ export function openMultiplayer(ui) {
 
 const CHAT_SHOW = 4;      // lines shown at the top of the panel
 const CHAT_KEEP = 30;     // lines this device remembers for the match
-const POP_MS = 4500;
+const POP_MS = 4500;      // your own line
+const POP_THEM_MS = 8000; // theirs stays up long enough to read a 120-character line
 const MAX_POPS = 3;
 
 /**
@@ -609,7 +629,9 @@ export function createMatchChat({ root, send, them, failText }) {
   root.appendChild(panel);
   root.appendChild(btn);
 
-  const textOf = (e) => reactionText({ t: e.t, v: e.v }, getLang());
+  // A typed line is shown WHOLE, up to this game's own cap (MP.CHAT_MAXLEN, 120) - the shared
+  // reactionText() cuts a custom line at the hub's 24-character bubble cap.
+  const textOf = (e) => (e.t === 'c' ? MP.cleanChat(e.v) : reactionText({ t: e.t, v: e.v }, getLang()));
   const whoOf = (e) => (e.mine ? t('chatYou') : ((them() || {}).name || '?'));
 
   function paintBtn() {
@@ -705,7 +727,7 @@ export function createMatchChat({ root, send, them, failText }) {
     pops.appendChild(el);
     while (pops.children.length > MAX_POPS) pops.removeChild(pops.firstChild);
     const t1 = setTimeout(() => { timers.delete(t1); el.classList.add('is-off');
-      const t2 = setTimeout(() => { timers.delete(t2); el.remove(); }, 260); timers.add(t2); }, POP_MS);
+      const t2 = setTimeout(() => { timers.delete(t2); el.remove(); }, 260); timers.add(t2); }, e.mine ? POP_MS : POP_THEM_MS);
     timers.add(t1);
   }
 
