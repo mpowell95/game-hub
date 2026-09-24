@@ -359,6 +359,8 @@ export function fillsFor(pal) {
     // Tall grass (2026-09-23): the rough's own colour, a shade deeper and yellower, so it reads as
     // longer grass of the same field on every look rather than as a new material.
     tallGrass: pal.tallGrass || grassDeeper(pal.heavyRough),
+    // Out of bounds (2026-09-24): the light rough's own ground, washed paler; the stakes say the rest.
+    oob: pal.oob || pal.lightRough,
     fairwayBunker: pal.sand,
     greensideBunker: pal.sand,
     trees: pal.treesFloor || '#4a6b28',   // the woods FLOOR; canopies are drawn on top of it
@@ -372,6 +374,35 @@ function grassDeeper(hex) {
   const straw = [196, 186, 104];
   const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v, i) => Math.round(v * 0.62 + straw[i] * 0.38));
   return '#' + c.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+}
+
+/** Points every `step` yards along a closed outline: where out-of-bounds stakes stand. */
+export function stakesAlong(poly, step) {
+  const out = []; let carry = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]; const b = poly[(i + 1) % poly.length];
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    let d = carry ? step - carry : 0;
+    for (; d <= L; d += step) out.push([a[0] + ((b[0] - a[0]) * d) / L, a[1] + ((b[1] - a[1]) * d) / L]);
+    carry = (carry + L) % step;
+  }
+  return out;
+}
+
+/** HEDGES (2026-09-24), top-down: a clipped hedge along each span - its shadow, a dark body 1.4 yd
+ *  thick and a lighter top. What is drawn is where `hedgeHit` stops the ball. */
+function drawHedges(ctx, hole, toPx) {
+  if (!Array.isArray(hole.hedges) || !hole.hedges.length) return;
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const path = (pts, dx = 0, dy = 0) => { ctx.beginPath(); pts.forEach((p, i) => { const [x, y] = toPx(p[0], p[1]); if (i) ctx.lineTo(x + dx, y + dy); else ctx.moveTo(x + dx, y + dy); }); };
+  for (const hg of hole.hedges) {
+    const off = hg.h * SHADOW_LEN * MAP_PPY * 0.5;
+    path(hg.pts, -off, off * 0.4); ctx.strokeStyle = 'rgba(0,0,0,.22)'; ctx.lineWidth = MAP_PPY * 1.6; ctx.stroke();
+    path(hg.pts); ctx.strokeStyle = '#2f5a2c'; ctx.lineWidth = MAP_PPY * 1.5; ctx.stroke();
+    path(hg.pts); ctx.strokeStyle = '#4f8a42'; ctx.lineWidth = MAP_PPY * 0.9; ctx.stroke();
+    path(hg.pts, -MAP_PPY * 0.15, -MAP_PPY * 0.15); ctx.strokeStyle = 'rgba(160,210,120,.5)'; ctx.lineWidth = MAP_PPY * 0.3; ctx.stroke();
+  }
+  ctx.restore();
 }
 
 export function paletteFor(theme) { return THEMES[theme] || PALETTE; }
@@ -1107,6 +1138,21 @@ export function buildMap(hole, theme) {
         ctx.fillRect(0, py - 3.4 * MAP_PPY, w, 3.4 * MAP_PPY);
       }
       ctx.globalAlpha = 1;
+    } else if (s.kind === 'oob') {
+      // OUT OF BOUNDS: pale diagonal hatching over the ground, and WHITE STAKES along the edge every
+      // ~7 yd - the marker a golfer reads. White with a dark rim, so it reads on every look.
+      ctx.clip();
+      ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fill();
+      const bb = bboxOf(poly);
+      ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = Math.max(1, MAP_PPY * 0.4);
+      const [hx0, hy0] = toPx(bb.minX, bb.maxY); const [hx1, hy1] = toPx(bb.maxX, bb.minY);
+      for (let o = -(hy1 - hy0); o < hx1 - hx0; o += MAP_PPY * 4) { ctx.beginPath(); ctx.moveTo(hx0 + o, hy0); ctx.lineTo(hx0 + o + (hy1 - hy0), hy1); ctx.stroke(); }
+      ctx.restore(); ctx.save();
+      for (const [sx, sy] of stakesAlong(poly, 7)) {
+        const [px, py] = toPx(sx, sy);
+        ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(px, py, Math.max(1.6, MAP_PPY * 0.55), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(px, py, Math.max(1.1, MAP_PPY * 0.38), 0, Math.PI * 2); ctx.fill();
+      }
     } else if (s.kind === 'tallGrass') {
       // TALL GRASS: dense upright blades in two tones, seeded from the patch, and a soft darker rim.
       ctx.clip();
@@ -1371,6 +1417,7 @@ export function buildMap(hole, theme) {
   // THE WIRE, after the trees (section 4): the poles themselves are ordinary tree entries and are
   // already part of `treesCv` above; only the cable spanning them is drawn here.
   drawWire(ctx, hole, toPx);
+  drawHedges(ctx, hole, toPx);
 
   return { canvas: cv, ground: groundCv, trees: treesCv, ppy: MAP_PPY, minX: b.minX, minY: b.minY, maxY: b.maxY, w, h, pal };
 }

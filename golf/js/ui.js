@@ -2102,13 +2102,13 @@ class GolfGame {
     // comes to rest. It used to be set in _fire(), which meant the third tap printed how far the
     // ball was ABOUT to go before it had gone anywhere - the ring told you the outcome while you
     // were still watching the flight (Matt's playtest, 2026-09-04).
-    this.lastShotYd = distYd(from, wat ? wat.splash : a.res.rest);
+    this.lastShotYd = distYd(from, wat ? wat.splash : (a.res.oob ? a.res.oob.at : a.res.rest));
     // LONGEST DRIVE is a lifetime best in the stored shape, so it is measured where a golfer
     // measures one: the TEE SHOT, and only when it was actually a driver. A holed 4 iron from the
     // fairway is not a drive, however far it went.
     // ...and a drive into the lake is not a measured drive, however far it flew: `!wat` keeps a
     // lifetime best off a ball nobody could play from where it landed.
-    if (this.roundStats && !wat && this.shotN === 1 && a.type === 'flight' && a.club && a.club.id === 'driver') {
+    if (this.roundStats && !wat && !a.res.oob && this.shotN === 1 && a.type === 'flight' && a.club && a.club.id === 'driver') {
       this.roundStats.longestDriveYd = Math.max(this.roundStats.longestDriveYd, this.lastShotYd);
     }
     // Any shot can be holed, not just a putt: a pitch that drops, a wood that rolls in.
@@ -2178,7 +2178,8 @@ class GolfGame {
     // puts up a modal with two stacked buttons - take a drop, or play it as it lies. Ours had
     // neither: a ball in the water was moved and a stroke added with nothing on screen saying so,
     // and a ball in the trees was simply yours to deal with.
-    if (a.res && a.res.penalty) this._showBanner(t('in_water'), t('penalty_stroke'));
+    if (a.res && a.res.oob) this._showBanner(t('out_of_bounds'), t('oob_sub'));
+    else if (a.res && a.res.penalty) this._showBanner(t('in_water'), t('penalty_stroke'));
     // ...and "in the trees" is any tree, not only the painted wood: a ball a tree just stopped, or
     // one resting under a crown / against a trunk / inside a stand, gets the same two buttons.
     // ...never on the green or its collar: a putt runs under the branches and nothing stops it, so
@@ -2186,6 +2187,8 @@ class GolfGame {
     // A POWER LINE (2026-09-22) is not a tree: the ball dropped where it met the wire and is played
     // from there, so it is named, not offered a drop. Only a TREE block asks the drop question.
     else if (a.res && a.res.blocked && a.res.blocked.wire != null && !amongTrees(this.hole, this.ball)) this._showBanner(t('blocked_wire'), t('blocked_wire_sub'));
+    // A HEDGE (2026-09-24) is named like the wire: the ball stopped against it and is played from there.
+    else if (a.res && a.res.blocked && a.res.blocked.hedge != null && !amongTrees(this.hole, this.ball)) this._showBanner(t('blocked_hedge'), t('blocked_hedge_sub'));
     else if (!mustPutt(this._lie()) && (this._lie() === 'trees' || (a.res && a.res.blocked && a.res.blocked.tree) || amongTrees(this.hole, this.ball))) this._showDropPrompt();
     // THE BALL IS AT REST HERE, which is the only state worth snapshotting: `this.ball` while
     // `this.anim` runs is a point on a flight path, and a save taken then would restore the ball
@@ -2341,7 +2344,7 @@ class GolfGame {
     this._on(el.querySelector('[data-role="drop-play"]'), 'click', close);
     this._on(el.querySelector('[data-role="drop-take"]'), 'click', () => {
       // Out of the trees AND never into the water; a stroke either way.
-      const moved = dropNear(this.hole, this.ball, (k, p) => k === 'trees' || k === 'water' || amongTrees(this.hole, p));
+      const moved = dropNear(this.hole, this.ball, (k, p) => k === 'trees' || k === 'water' || k === 'oob' || amongTrees(this.hole, p));
       if (moved) {
         this.ball = [...moved.rest];
         this.shotN += 1;
@@ -2598,7 +2601,8 @@ class GolfGame {
           // `r.rest` on a water shot is the DROP, and rolling the ball to it across dry land is
           // precisely the slide Matt reported. `r.water.splash` is the real end of the roll - see
           // shot.js's penalty-drop block, which computes it and, until 2026-09-12, threw it away.
-          const end = r.water ? r.water.splash : r.rest;
+          // ...and for a ball OUT OF BOUNDS it is where it ran out (2026-09-24); it is brought back after.
+          const end = r.water ? r.water.splash : (r.oob ? r.oob.at : r.rest);
           const dx = end[0] - r.landing[0];
           const dy = end[1] - r.landing[1];
           const len = Math.hypot(dx, dy);

@@ -1939,9 +1939,35 @@ console.log('\n-- 14. EVERY hole on BOTH courses can actually be finished --');
         let d = 4; while (surfaceAt(island4, island4.pin[0] + dx * d, island4.pin[1] + dy * d) !== 'water' && d < 40) d += 1;
         return d < 40;
       }));
+    // HEDGES AND OUT OF BOUNDS (2026-09-24).
+    const hb = makeHole({ ...base, par: 4, path: [[0, 5], [0, 360]], seed: 37, greenSeed: 38,
+      water: [{ poly: [[25, 100], [70, 100], [70, 300], [25, 300]], kind: 'oob' }],
+      lines: [{ kind: 'hedge', h: 2, pts: [[-30, 60], [30, 60]] }] });
+    ok('a hole with a hedge and an out-of-bounds area validates, and the hedge is not a power line',
+      validateHole(hb).length === 0 && hb.hedges.length === 1 && !hb.lines, validateHole(hb).join('; '));
+    {
+      const wedge = CLUBS.slice().sort((a, b) => a.carry - b.carry).find((c) => c.carry >= 70);
+      const r = SH.resolveShot({ hole: hb, from: [0, 150], aimRad: Math.atan2(40, 50), club: wedge, power: 0.8, mishitDeg: 0 });
+      ok('a ball that stops out of bounds is STROKE AND DISTANCE: back where it was struck, one on',
+        r.oob && r.penalty === 1 && r.rest[0] === 0 && r.rest[1] === 150 && surfaceAt(hb, r.oob.at[0], r.oob.at[1]) === 'oob');
+      const drv = CLUBS.find((c) => c.id === 'driver');
+      const over = SH.resolveShot({ hole: hb, from: [0, 20], aimRad: 0, club: drv, power: 1, mishitDeg: 0 });
+      ok('a high ball clears a hedge', !over.blocked && over.rest[1] > 60);
+      const low = SH.resolveShot({ hole: hb, from: [0, 57], aimRad: 0, club: drv, power: 0.5, mishitDeg: 0 });
+      ok('a ball below the hedge\'s height is stopped by it (and still moves, no softlock)',
+        low.blocked && low.blocked.hedge === 0 && distYd([0, 57], low.rest) >= 0.5);
+      const putt = SH.simulatePutt({ hole: hb, from: [0, 50], aimRad: 0, power: 1, rangeFt: 60 });
+      ok('a putt stops short of a hedge', putt.rest[1] < 60 && putt.rest[1] > 55);
+      const roll = SH.rollWatchingCup(hb, [0, 50], 0, 30);
+      ok('a rolling ball stops short of a hedge', roll.rest[1] < 60 && roll.rest[1] > 55);
+      const dropped = SH.dropNear(hb, [24, 200], (k) => k === 'water' || k === 'oob');
+      ok('a drop never lands out of bounds', !dropped || surfaceAt(hb, dropped.rest[0], dropped.rest[1]) !== 'oob');
+      ok('the hedge and out-of-bounds hole is finished by the bot', (() => { const n = playOut(hb); return n > 0 && n <= hb.par + 3; })());
+    }
     ok('tall grass is a lie of its own, harsher than heavy rough and kinder than a swamp',
       SURFACE_KINDS.has('tallGrass') && LIES.tallGrass.power < LIES.heavyRough.power && LIES.tallGrass.power > LIES.swamp.power
-      && surfaceAt(grass, 0, 230) === 'tallGrass' && typeof STRINGS.en.lie_tallGrass === 'string' && typeof STRINGS.es.lie_tallGrass === 'string');
+      && surfaceAt(grass, 0, 230) === 'tallGrass' && typeof STRINGS.en.lie_tallGrass === 'string' && typeof STRINGS.es.lie_tallGrass === 'string'
+      && ['lie_oob', 'out_of_bounds', 'oob_sub', 'blocked_hedge', 'blocked_hedge_sub'].every((k2) => typeof STRINGS.en[k2] === 'string' && typeof STRINGS.es[k2] === 'string'));
   }
 }
 

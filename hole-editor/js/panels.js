@@ -348,12 +348,15 @@ function objTargetFor(spec, selection, groups) {
 // line (`group: 'lines'`) is a span of poles, not a closed shape, so it gets its own wording.
 function drawingHint(el, ctx) {
   const isLine = ctx.drawing.group === 'lines';
+  const hedge = isLine && ctx.drawing.kind === 'hedge';
   const n = ctx.drawing.points.length;
   el.innerHTML = `
-    <div class="he-empty">${isLine
+    <div class="he-empty">${hedge
+    ? 'Drawing a hedge: click each corner along it on the map. Enter or double-click to finish, Esc to cancel.'
+    : isLine
     ? 'Drawing a power line: click each pole on the map. Enter or double-click to finish, Esc to cancel.'
     : 'Drawing: click each corner on the map. Double-click or Enter to close the shape, Esc to cancel.'}</div>
-    <div class="he-field__value" style="margin:6px 0;">${n} ${isLine ? `pole${n === 1 ? '' : 's'}` : `corner${n === 1 ? '' : 's'}`}</div>
+    <div class="he-field__value" style="margin:6px 0;">${n} ${isLine && !hedge ? `pole${n === 1 ? '' : 's'}` : `corner${n === 1 ? '' : 's'}`}</div>
     <button class="gh-btn gh-btn--block" id="he-draw-undo" ${n ? '' : 'disabled'} style="margin-bottom:6px;">Delete last point (Backspace)</button>
     <button class="gh-btn gh-btn--block gh-btn--ghost" id="he-draw-cancel">Cancel (Esc)</button>`;
   el.querySelector('#he-draw-undo').addEventListener('click', () => ctx.ops.undoDrawPoint());
@@ -413,18 +416,18 @@ function renderWater(el, ctx) {
     // it is a toggle here rather than a fourth tool of its own (docs/HANDOFF-GOLF-OBJECTS.md
     // section 2: "it is not water - no penalty stroke, no drop prompt").
     el.innerHTML = `
-      ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp'], ['tallGrass', 'Tall grass']], toolState.waterKind || 'water')}
+      ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp'], ['tallGrass', 'Tall grass'], ['oob', 'Out of bounds']], toolState.waterKind || 'water')}
       <div class="he-empty" style="margin:6px 0;">Swamp: the ball just plugs where it lands and comes out at half power. Click the hole to place it, or draw one:</div>
       <button class="gh-btn gh-btn--block" id="he-w-draw">Draw shape</button>`;
     wireSeg(el, 'kind', (val) => setToolState({ waterKind: val }));
-    el.querySelector('#he-w-draw').addEventListener('click', () => ops.startDraw('water', toolState.waterKind === 'swamp' || toolState.waterKind === 'tallGrass' ? toolState.waterKind : null));
+    el.querySelector('#he-w-draw').addEventListener('click', () => ops.startDraw('water', toolState.waterKind === 'swamp' || toolState.waterKind === 'tallGrass' || toolState.waterKind === 'oob' ? toolState.waterKind : null));
     return;
   }
   const w = spec.water[target.index];
   const drawn = !!w.poly;
   const kind = w.kind || 'water';
   el.innerHTML = `
-    ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp'], ['tallGrass', 'Tall grass']], kind)}
+    ${seg('kind', [['water', 'Water'], ['swamp', 'Swamp'], ['tallGrass', 'Tall grass'], ['oob', 'Out of bounds']], kind)}
     ${drawn ? '<div class="he-empty">Drawn shape. Drag its white handles to resize, drag inside to move.</div>' : `
       ${slider('he-w-rx', 'rx', 4, 30, 0.5, w.rx)}
       ${slider('he-w-ry', 'ry', 4, 30, 0.5, w.ry == null ? w.rx : w.ry)}
@@ -720,8 +723,12 @@ function renderLine(el, ctx) {
   const { spec, selection, ops } = ctx;
   const ln = spec.lines && spec.lines[selection.index];
   if (!ln) { el.innerHTML = '<div class="he-empty">Selected.</div>'; return; }
-  const h = ln.h == null ? 10 : ln.h;
-  el.innerHTML = `
+  const hedge = ln.kind === 'hedge';
+  const h = ln.h == null ? (hedge ? 2 : 10) : ln.h;
+  el.innerHTML = hedge ? `
+    ${slider('he-line-h', 'Hedge height (yd)', 0.8, 4, 0.1, h)}
+    <div class="he-empty" style="margin-top:6px;">A ball below this height stops against it. Drag a gold handle to move a corner. Delete removes the hedge.</div>
+  ` : `
     ${slider('he-line-h', 'Wire height (yd)', 4, 20, 0.5, h)}
     <div class="he-field"><span class="he-field__label">Poles</span><span class="he-field__value">${(ln.pts || []).length}</span></div>
     <div class="he-empty" style="margin-top:6px;">Drag a pole's gold handle to move it. Delete removes the whole line.</div>

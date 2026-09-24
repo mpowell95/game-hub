@@ -210,6 +210,10 @@ export const LIES = {
   // in it barely moves (roll 0.012 - it nestles down, no hop; see shot.js `groundPoint`). No
   // penalty stroke and no drop: you play it where it lies.
   tallGrass: { power: 0.68, zone: 0.14, roll: 0.012 },
+  // OUT OF BOUNDS (2026-09-24). Never played from: a ball that comes to rest on it goes back to
+  // where it was struck, one stroke on (shot.js "OUT OF BOUNDS"). The row exists because every
+  // surface kind must have one; its numbers are the light rough's so a stray read is harmless.
+  oob: { power: 0.92, zone: 0.22, roll: 0.054 },
 };
 
 export function lieOf(kind) { return LIES[kind] || LIES.fairway; }

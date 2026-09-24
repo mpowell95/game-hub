@@ -781,6 +781,25 @@ console.log('\n-- Course Creator (hole-editor/js/course.js, starter.js) --');
     assert.ok(/tallGrass/.test(src) && /'island'/.test(src), 'export prints both');
   });
 
+  await test('hedges (a line of kind hedge) and out of bounds (a drawn oob shape) build, validate and export (2026-09-24)', async () => {
+    setCourse(PROFILES.custom, 'parkland');
+    const doc = createDocument();
+    let spec = addDrawnShape(doc.holes['h-01'].spec, 'lines', [[-20, 80], [0, 84], [20, 80]], 'hedge');
+    assert.deepEqual({ h: spec.lines[0].h, kind: spec.lines[0].kind }, { h: 2, kind: 'hedge' });
+    spec = setLineField(spec, 0, 'h', 9);
+    assert.equal(spec.lines[0].h, 4, 'a hedge is clamped to 4 yd, not a wire\'s 20');
+    spec = addDrawnShape(spec, 'water', [[30, 120], [60, 120], [60, 200], [30, 200]], 'oob');
+    assert.equal(spec.water[0].kind, 'oob');
+    doc.holes['h-01'].spec = spec;
+    const built = buildHole(doc, 'h-01');
+    assert.deepEqual(validateHoleTop(built), []);
+    assert.equal(built.hedges.length, 1);
+    assert.ok(!built.lines, 'a hedge builds no power line');
+    assert.ok(built.surfaces.some((sf) => sf.kind === 'oob'));
+    const src = generateSource(doc, '2026-09-24');
+    assert.ok(/'hedge'/.test(src) && /'oob'/.test(src), 'export prints both');
+  });
+
   await test('validateHole refuses a sprite off the map, and a malformed one, by name', () => {
     setCourse(PROFILES.custom, 'parkland');
     const doc = createDocument();

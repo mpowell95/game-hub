@@ -115,6 +115,10 @@ export function paletteSections(built, look) {
     // that the catalogue carries a 'pole' entry.
     { title: 'Structures', items: [
       { id: 'power-line', label: 'Power line', kind: 'tool', tool: 'line' },
+      // HEDGES and OUT OF BOUNDS (2026-09-24). A hedge is a drawn LINE of kind 'hedge' (the power
+      // line's own flow); out of bounds is a drawn water-layer shape of kind 'oob' (the lake's).
+      { id: 'hedge-draw', label: 'Hedge', kind: 'draw', group: 'lines', drawKind: 'hedge' },
+      { id: 'oob-draw', label: 'Out of bounds', kind: 'draw', group: 'water', drawKind: 'oob' },
     ] },
     // Decor (2026-09-22): cosmetic only, never consulted for play (golf/CLAUDE.md, "`decor` never
     // affects play"). A sprite is a `tool` tile like a tree; the cart path is the existing drawn
@@ -174,7 +178,9 @@ function sampler(theme, types) {
     { yd: y - 5, side: -1, off: 26, rx: 13, ry: 8.5, seed: 77 },
     { yd: y - 5, side: 1, off: 26, rx: 11, ry: 8, seed: 78, kind: 'swamp' },
     { yd: y + 45, side: -1, off: 26, rx: 11, ry: 8, seed: 79, kind: 'tallGrass' },
+    { yd: y + 45, side: 1, off: 26, rx: 12, ry: 9, seed: 80, kind: 'oob' },
   ];
+  at['oob-draw'] = [26, y + 50];
   at['water-pond'] = [-26, y]; at['water-draw'] = [-26, y];
   at['water-swamp'] = [26, y]; at['water-swamp-draw'] = [26, y];
   at['grass-patch'] = [-26, y + 50]; at['grass-draw'] = [-26, y + 50];
@@ -198,6 +204,9 @@ function sampler(theme, types) {
   if (poleIdx >= 0) for (const [px, py] of linePts) trees.push({ x: px, y: py, type: poleIdx });
   at['power-line'] = [0, lineY];
   y += 44;
+  const hedgeY = y;   // a hedge (2026-09-24), stamped on the built hole below like the wire
+  at['hedge-draw'] = [0, hedgeY];
+  y += 44;
   const len = y + 60;
   const hole = makeHole({
     ...d, n: 1, par: 5, nickname: 'sampler', path: [[0, 5], [0, len]],
@@ -209,6 +218,7 @@ function sampler(theme, types) {
   // its centre, `lo + 1`. h=10 here matches that formula (lo=9, hi=10.6) so the sampler tile shows
   // exactly what a real `h: 10` line would look like once holegen.js builds it for real.
   hole.lines = [{ pts: linePts, lo: 9, hi: 10.6 }];
+  hole.hedges = [{ pts: [[-15, hedgeY - 4], [0, hedgeY + 2], [15, hedgeY - 2]], h: 2 }];
   // The three sprites are NOT painted into the map: at MAP_PPY a 3-yd bench is eight pixels. The
   // tile paints ground only and `paintTile` draws the sprite over it at tile resolution.
   const decorY = y;
@@ -321,14 +331,14 @@ export function renderPalette(el, { built, theme, active, guardsOn, onPick }) {
 /** Which tile the current tool + options correspond to, so the palette can highlight it. */
 export function activeItemFor(tool, toolState, drawing) {
   if (drawing) {
-    if (drawing.group === 'water') return drawing.kind === 'swamp' ? 'water-swamp-draw' : (drawing.kind === 'tallGrass' ? 'grass-draw' : 'water-draw');
+    if (drawing.group === 'water') return drawing.kind === 'swamp' ? 'water-swamp-draw' : (drawing.kind === 'tallGrass' ? 'grass-draw' : (drawing.kind === 'oob' ? 'oob-draw' : 'water-draw'));
     if (drawing.group === 'decor') return drawing.kind === 'flowerbed' ? 'decor-flowerbed-draw' : 'decor-path';
-    if (drawing.group === 'lines') return 'power-line';
+    if (drawing.group === 'lines') return drawing.kind === 'hedge' ? 'hedge-draw' : 'power-line';
     return 'bunker-draw';
   }
   if (tool === 'tree') return `${toolState.treeMode === 'stand' ? 'stand' : 'tree'}-${toolState.treePlantType || 0}`;
   if (tool === 'bunker') return toolState.bunkerKind === 'fairwayBunker' ? 'bunker-fairway' : 'bunker-greenside';
-  if (tool === 'water') return toolState.waterKind === 'swamp' ? 'water-swamp' : (toolState.waterKind === 'tallGrass' ? 'grass-patch' : 'water-pond');
+  if (tool === 'water') return toolState.waterKind === 'swamp' ? 'water-swamp' : (toolState.waterKind === 'tallGrass' ? 'grass-patch' : (toolState.waterKind === 'oob' ? 'oob-draw' : 'water-pond'));
   if (tool === 'cross') return `cross-${toolState.crossKind === 'fairwayBunker' ? 'sand' : (toolState.crossKind || 'water')}`;
   if (tool === 'decor') return `decor-${toolState.decorKind || 'bench'}`;
   if (tool === 'line') return 'power-line';

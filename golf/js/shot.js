@@ -454,6 +454,54 @@ export function wireHit(hole, from, dirRad, distanceYd, sideYd, apex) {
   return null;
 }
 
+/** DOES A HEDGE STOP THIS SHOT (2026-09-24)? A hedge is a WALL from the ground up to its height:
+ *  a ball crossing its line below `h` is stopped there, like a wire block (it falls where it met it,
+ *  no penalty stroke); a ball over it is clear. Returns `{ hedge, at, p }` or null. Same sampling
+ *  and the same `startAt` as `wireHit`, so the ball's own spot can never block leaving it. */
+export function hedgeHit(hole, from, dirRad, distanceYd, sideYd, apex) {
+  const hedges = hole.hedges;
+  if (!Array.isArray(hedges) || !hedges.length) return null;
+  const cos = Math.cos(dirRad);
+  const sin = Math.sin(dirRad);
+  const steps = Math.max(2, Math.ceil(distanceYd / 0.4));
+  const startAt = Math.min(0.35, 1.2 / Math.max(1, distanceYd));
+  const pos = (p) => {
+    const f = flightPoint(p, distanceYd, sideYd, apex);
+    return { x: from[0] + sin * f.along + cos * f.side, y: from[1] + cos * f.along - sin * f.side, h: f.height };
+  };
+  let prev = pos(startAt); let prevP = startAt;
+  for (let i = 1; i <= steps; i++) {
+    const p = i / steps;
+    if (p <= startAt) continue;
+    const cur = pos(p);
+    let best = null;
+    for (let hi = 0; hi < hedges.length; hi++) {
+      const pts = hedges[hi].pts || [];
+      for (let k = 0; k + 1 < pts.length; k++) {
+        const t = segCross(prev.x, prev.y, cur.x, cur.y, pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]);
+        if (t == null) continue;
+        const h = prev.h + (cur.h - prev.h) * t;
+        if (h > hedges[hi].h) continue;
+        if (!best || t < best.t) best = { t, hi, x: prev.x + (cur.x - prev.x) * t, y: prev.y + (cur.y - prev.y) * t };
+      }
+    }
+    if (best) return { hedge: best.hi, at: [best.x, best.y], p: prevP + (p - prevP) * best.t };
+    prev = cur; prevP = p;
+  }
+  return null;
+}
+
+/** Does the ground step a->b cross any hedge? (the run-out and the putt both ask) */
+function crossesHedge(hole, ax, ay, bx, by) {
+  const hedges = hole.hedges;
+  if (!Array.isArray(hedges)) return false;
+  for (const hg of hedges) {
+    const pts = hg.pts || [];
+    for (let k = 0; k + 1 < pts.length; k++) if (segCross(ax, ay, bx, by, pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]) != null) return true;
+  }
+  return false;
+}
+
 /** Where segment A (a->b) crosses segment C (c->d), as the fraction along A, or null. */
 function segCross(ax, ay, bx, by, cx, cy, dx, dy) {
   const rx = bx - ax, ry = by - ay, sx = dx - cx, sy = dy - cy;
@@ -533,7 +581,9 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   // carries `wire` (an index into hole.lines) where a tree block carries `tree`/`type`.
   const byTree = treeHit(hole, from, aimRad, carry, sideYd, apex);
   const byWire = wireHit(hole, from, aimRad, carry, sideYd, apex);
-  const blocked = byWire && (!byTree || byWire.p < byTree.p) ? byWire : byTree;
+  const byHedge = hedgeHit(hole, from, aimRad, carry, sideYd, apex);
+  // ...or a hedge (2026-09-24), resolved the same way as a wire: whichever of the three comes first.
+  const blocked = [byTree, byWire, byHedge].filter(Boolean).sort((a, b) => a.p - b.p)[0] || null;
   const cos = Math.cos(aimRad);
   const sin = Math.sin(aimRad);
 
@@ -647,7 +697,7 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
       const fp = flightPoint(q * p, carry, sideYd, apex);
       const cand = [from[0] + sin * fp.along + cos * fp.side, from[1] + cos * fp.along - sin * fp.side];
       const on = surfaceAt(hole, cand[0], cand[1]);
-      if (on !== 'water') { found = { cand, on }; break; }
+      if (on !== 'water' && on !== 'oob') { found = { cand, on }; break; }
     }
     if (found) { rest = found.cand; restOn = found.on; }
     else { rest = [...from]; restOn = lieKind; }
@@ -664,7 +714,7 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
     // none. The stroke is still charged - it is the ball being stuck that is the bug, not the
     // penalty.
     if (distYd(from, rest) < MIN_DROP_YD) {
-      const moved = dropNear(hole, from, (k) => k === 'water');
+      const moved = dropNear(hole, from, (k) => k === 'water' || k === 'oob');
       if (moved) { rest = moved.rest; restOn = moved.restOn; }
     }
 
@@ -677,6 +727,19 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
       before: [...rest], beforeOn: restOn,
       prev: [...from], prevOn: lieKind,
     };
+  }
+
+  // OUT OF BOUNDS (2026-09-24, Matt: "hedges and out of bounds"). A ball that comes to rest on an
+  // `oob` surface is out: STROKE AND DISTANCE, real golf's rule - one stroke on, and the next shot
+  // is played from where this one was struck. `oob.at` is where it finished, so ui.js can show the
+  // ball running out before it is brought back; `rest` is `from`, which is known good (the player
+  // was standing on it), so this can never strand a ball.
+  let oob = null;
+  if (!rolled.holed && !water && restOn === 'oob') {
+    penalty = 1;
+    oob = { at: [...rest] };
+    rest = [...from];
+    restOn = lieKind;
   }
 
   // THE BALL NEVER FINISHES OFF THE MAP. `hole.bounds` is the drawn extent of the hole, and the
@@ -713,7 +776,7 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
             if (cand[0] < b.minX + EDGE_MARGIN_YD || cand[0] > b.maxX - EDGE_MARGIN_YD) continue;
             if (cand[1] < b.minY + EDGE_MARGIN_YD || cand[1] > b.maxY - EDGE_MARGIN_YD) continue;
             const on = surfaceAt(hole, cand[0], cand[1]);
-            if (on !== 'water') { out = { cand, on }; break; }
+            if (on !== 'water' && on !== 'oob') { out = { cand, on }; break; }
           }
         }
         if (out) { rest = out.cand; restOn = out.on; } else { rest = [...from]; restOn = lieKind; }
@@ -741,7 +804,7 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
       if (cand[0] < b2.minX + EDGE_MARGIN_YD || cand[0] > b2.maxX - EDGE_MARGIN_YD) continue;
       if (cand[1] < b2.minY + EDGE_MARGIN_YD || cand[1] > b2.maxY - EDGE_MARGIN_YD) continue;
       const on = surfaceAt(hole, cand[0], cand[1]);
-      if (on === 'water') continue;
+      if (on === 'water' || on === 'oob') continue;
       // ...and never at the cost of the drop rule: a penalty drop that got pushed back onto the
       // divot would be the softlock this file just fixed, wearing a tree.
       if (penalty && distYd(from, cand) < MIN_DROP_YD) continue;
@@ -758,7 +821,7 @@ export function resolveShot({ hole, from, aimRad, club, power, mishitDeg, distan
   if (water) { water.before = [...rest]; water.beforeOn = restOn; }
 
   return {
-    carry, apex, sideYd, aimRad, blocked, wind, penalty, water,
+    carry, apex, sideYd, aimRad, blocked, wind, penalty, water, oob,
     landing, landedOn, rollYd, rest, restOn,
     holed: rolled.holed,
     travelledYd: distYd(from, rest),
@@ -985,6 +1048,7 @@ export const PUTT_DRAG = {
   swamp: 7.00,
   // Tall grass (2026-09-23): between heavy rough (5.00) and a swamp - a putt that runs into it dies.
   tallGrass: 6.50,
+  oob: 3.40,   // never rested on (stroke and distance); the light rough's drag for a putt crossing it
 };
 export function puttDrag(kind) { return PUTT_DRAG[kind] || PUTT_DRAG.fairway; }
 
@@ -1160,6 +1224,8 @@ export function rollWatchingCup(hole, start, dirRad, rollYd) {
       }
     }
     v2 -= 2 * PUTT_DECEL * STEP;
+    // A HEDGE STOPS A ROLLING BALL (2026-09-24): it rests just short of it.
+    if (hole.hedges && crossesHedge(hole, x, y, x + dx * STEP * 6, y + dy * STEP * 6)) return { rest: [x, y], holed: false };
     x += dx * STEP;
     y += dy * STEP;
     travelled += STEP;
@@ -1236,6 +1302,8 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
     const dec = PUTT_DECEL * puttDrag(surfaceAt(hole, x, y)) * DT;
     if (v > dec) { vx -= (vx / v) * dec; vy -= (vy / v) * dec; } else { vx = 0; vy = 0; }
 
+    // A hedge stops a putt dead, just short of it (2026-09-24).
+    if (hole.hedges && crossesHedge(hole, x, y, x + vx * DT * 4, y + vy * DT * 4)) break;
     x += vx * DT;
     y += vy * DT;
     t += DT;
@@ -1247,7 +1315,10 @@ export function simulatePutt({ hole, from, aimRad, power, rangeFt }) {
     // half the frames.
     if (cupCheck(hole, x, y, Math.hypot(vx, vy), maxSpeed)) { holed = true; break; }
   }
-  return { path, rest: [x, y], holed, ms: t * 1000, restOn: surfaceAt(hole, x, y) };
+  const restOn = surfaceAt(hole, x, y);
+  // A putt that runs out of bounds is stroke and distance too: back where it was struck, one on.
+  if (!holed && restOn === 'oob') return { path, rest: [...from], holed, ms: t * 1000, restOn: surfaceAt(hole, from[0], from[1]), penalty: 1, oob: { at: [x, y] } };
+  return { path, rest: [x, y], holed, ms: t * 1000, restOn };
 }
 
 /** The five aim dots (§21.1). NOT decoration and NOT evenly spaced filler: dot N is where the ball

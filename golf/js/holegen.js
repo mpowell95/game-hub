@@ -1081,7 +1081,7 @@ export function makeHole(spec) {
     // `kind: 'swamp'` (2026-09-22) makes the same shape a swamp instead of a lake. Anything else,
     // including an absent kind, is water - this list has always been "the water layer" and an
     // unrecognised value must not quietly invent a new surface for the closed set to reject.
-    const wk = w.kind === 'swamp' ? 'swamp' : (w.kind === 'tallGrass' ? 'tallGrass' : 'water');
+    const wk = w.kind === 'swamp' || w.kind === 'tallGrass' || w.kind === 'oob' ? w.kind : 'water';
     if (w.poly) { surfaces.push({ kind: wk, poly: w.poly }); continue; }
     const [cx, cy] = place(stations, w.at, w.side == null ? 0 : w.side, w.off || 0);
     surfaces.push({ kind: wk, poly: blob(cx, cy, w.rx, w.ry == null ? w.rx : w.ry, w.seed || (seed0 + 40 + i), w.n || 12) });
@@ -1163,7 +1163,14 @@ export function makeHole(spec) {
   //     stops a ball whose height is inside it where it crosses a span; over and under are clear.
   // A hole whose `treeTypes` has no 'pole' entry gets no poles and is refused by validateHole
   // (only a Course Creator course carries the catalogue; the shipped courses never get `lines`).
-  const lines = Array.isArray(spec.lines) ? spec.lines.map((ln) => {
+  // HEDGES (2026-09-24) ride the SAME recipe list as power lines, as `kind: 'hedge'`, so the editor's
+  // whole click-the-points / drag-a-point / height-slider flow serves both. They build to their own
+  // `hole.hedges = [{pts, h}]` (no poles; shot.js `hedgeHit` and the roll/putt checks read it).
+  const hedges = Array.isArray(spec.lines) ? spec.lines.filter((ln) => ln && ln.kind === 'hedge').map((ln) => ({
+    pts: (ln.pts || []).map((p) => [+p[0], +p[1]]),
+    h: ln.h != null ? Math.max(0.8, Math.min(4, +ln.h)) : 2,
+  })).filter((hg) => hg.pts.length >= 2) : [];
+  const lines = Array.isArray(spec.lines) && spec.lines.some((ln) => !ln || ln.kind !== 'hedge') ? spec.lines.filter((ln) => !ln || ln.kind !== 'hedge').map((ln) => {
     const h = ln && ln.h != null ? +ln.h : 10;
     const pts = ((ln && ln.pts) || []).map((p) => [+p[0], +p[1]]);
     return { pts, lo: +(h - 1.0).toFixed(2), hi: +(h + 0.6).toFixed(2) };
@@ -1197,6 +1204,7 @@ export function makeHole(spec) {
     if (Array.isArray(d.poly)) { eat(d.poly); continue; }
     if (Array.isArray(d.at)) eat([[d.at[0] - 2, d.at[1] - 2], [d.at[0] + 2, d.at[1] - 2], [d.at[0] + 2, d.at[1] + 2]]);
   }
+  for (const hg of hedges) eat(hg.pts.length > 2 ? hg.pts : [...hg.pts, hg.pts[0]]);
   for (const tr of trees) { minX = Math.min(minX, tr.x - 9); maxX = Math.max(maxX, tr.x + 9); minY = Math.min(minY, tr.y - 9); maxY = Math.max(maxY, tr.y + 9); }
   const bounds = {
     minX: Math.floor(minX - 8),
@@ -1252,6 +1260,7 @@ export function makeHole(spec) {
     trees,
     treeBelts,
     ...(lines ? { lines } : {}),
+    ...(hedges.length ? { hedges } : {}),
     decor,
     // Design intent, carried for the scorecard and the hole-select screen. Never read by any rule.
     nickname: spec.nickname || '',

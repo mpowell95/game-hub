@@ -482,6 +482,8 @@ const MORE = [
   ['Add & draw', [
     ['flowerbed', '🌼', 'Wildflowers', () => pickItem({ id: 'decor-flowerbed', kind: 'tool', tool: 'decor', state: { decorKind: 'flowerbed' } })],
     ['flowerbed-draw', '✏️', 'Draw wildflowers', () => pickItem({ id: 'decor-flowerbed-draw', kind: 'draw', group: 'decor', drawKind: 'flowerbed' })],
+    ['hedge', '🌳', 'Hedge', () => pickItem({ id: 'hedge-draw', kind: 'draw', group: 'lines', drawKind: 'hedge' })],
+    ['oob', '🚩', 'Out of bounds', () => pickItem({ id: 'oob-draw', kind: 'draw', group: 'water', drawKind: 'oob' })],
     ['path', '〰️', 'Cart path', () => pickItem({ id: 'decor-path', kind: 'draw', group: 'decor' })],
     ['line', '⚡', 'Power line', () => pickItem({ id: 'power-line', kind: 'tool', tool: 'line' })],
   ]],
