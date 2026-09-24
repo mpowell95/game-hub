@@ -387,6 +387,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/announce.js` | one-time launcher announcements: the entries, the seen-list (`gamehub.announce.v1`), and the pure "does this device still owe one" decision. Each entry's `until` date retires it |
 | `js/announce-ui.js` | the announcement popup (DOM only) |
 | `js/challenge/` | retired challenge system — still load-bearing (`hub.js` imports its `hooks.js` on every load; do not delete) |
+| `js/push.js` | (2026-09-23) push notifications, the app's half: `pushState()`, `enablePush()` (asks permission inside the tap), `disablePush()`, `refreshPush()` on every hub load; stores each device's address at `pushSubs/<PLAYER CODE>/<key>`. See "Push notifications" below |
 | `js/career-store.js` | (2026-09-12) Baseball's shared career sync store (BB-0-phase-0-handoff.md): the `careers/<CODE>/baseball/{live,history,forks}` node, `reconcile()`'s none/adopt/push/fork decision, `mintCareerId()`, `newCareerDoc()` and `careerSyncHealth()`. Its one consumer since R15-A (2026-09-22) is `baseball/js/career-io.js` |
 
 ### Where the deep docs live
@@ -443,7 +444,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-stats-replay.mjs`, `test-stats-identity.mjs`, `test-stats-corrections.mjs`,
   `test-rate-guard.mjs`, `test-leaderboard-rank.mjs`, `test-admin-config.mjs`
 - Hub features: `test-new-badge.mjs`, `test-emoji.mjs`, `test-messages.mjs`,
-  `test-bug-report.mjs`, `test-career-sync.mjs`
+  `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`
 - Cross-game: `test-game-conventions.mjs`, `test-visual.mjs`, `check-no-scroll.mjs`,
   `test-mp-lockstep.mjs`, `run-all-tests.mjs`
 - Generators: `build-emoji-data.mjs`, `build-boggle-es.mjs`, `convert-kenney.mjs`
@@ -531,7 +532,7 @@ working in that folder).
 | Game | Integration | CSS root / prefix | Settings key | Stats recorder |
 |---|---|---|---|---|
 | Baseball | in-hub `module:`, immersive, **a real three.js stadium with the reference game's three cameras (R1, 2026-09-20, being rebuilt as a clone of Baseball 9's mechanics per `docs/BASEBALL-REFERENCE-B9.md`); career is phase 4; `devOnly`** | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
-| Brick Breaker | in-hub `module:`, immersive, **solo score attack** (clone of Neon Breakout, 2026-09-23), **admin only** (`devOnly`) | `.bx-root` / `.bx-` | `gamehub.brickblitz.v1` | `recordBrickBlitz` |
+| Brick Breaker | in-hub `module:`, immersive, **solo score attack** (clone of Neon Breakout, released 2026-09-23) | `.bx-root` / `.bx-` | `gamehub.brickblitz.v1` | `recordBrickBlitz` |
 | Ball Run | in-hub `module:`, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen gen-1 dotted keys) | `recordBallRun` |
 | Battleship | in-hub `module:`, immersive, **multiplayer** (`gamehub.battleship.mp.v1`, the repo's first hidden-information game) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` |
 | Boggle | in-hub `module:`, **multiplayer** (`gamehub.boggle.mp.v1`), **bilingual gameplay** (EN/ES word list + dice, chosen on the setup screen) | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
@@ -620,8 +621,9 @@ profile pill carries the unread badge, which is why the button is there and not 
   replying to a broadcast is an ordinary conversation.
 - **The admin page has a read-only "Messages" section.** Read-only is a property of the module (there
   is no admin write path in `js/messages.js` at all), not of the button.
-- **No push notifications.** The badge appears when a player opens the app. Real push needs FCM and a
-  permission prompt, which is its own job.
+- **No push notifications for Messages yet.** The badge appears when a player opens the app. The
+  push infrastructure now exists (see "Push notifications" below) and currently serves Connect 4
+  Hoops only; adding Messages is a second trigger in `functions/index.js`.
 - **Messages has the top bar's third button since 2026-08-31, where My Stats used to be.** Matt: *"I
   don't think My Stats is used by anyone... we could change it into a Messages button?"* Four buttons
   wrap to a second row on a phone (measured), so it was a swap or nothing. **My Stats moved to the
@@ -735,6 +737,36 @@ is no game server here, and every score is written by code the player controls. 
 a floor against unattended grinding, an arithmetic check where a real invariant exists, and the
 ability to see it and undo it afterwards. Do not describe any of it as making the hub cheat-proof.
 
+
+## Push notifications (2026-09-23)
+
+Matt: *"are you sure there's no way to have real notifications or something close to it?"* ...
+*"mostly iphone, installed. go with firebase."* Real Web Push, for Connect 4 Hoops turns today.
+
+- **Three pieces.** `js/push.js` subscribes a device (permission is asked INSIDE the tap - iOS only
+  prompts for a user gesture) and stores it at `pushSubs/<PLAYER CODE>/<key>`; **`functions/`** is a
+  Firebase Cloud Function (`hoopsTurnPush`) that watches `hoops/index/<code>/<gameId>` and sends;
+  `sw.js` shows every push (never silently: Safari revokes a site that does) and opens the game on
+  a tap (`?open=<game>`, or an `OPEN_GAME` message to an open hub - never pulling a player out of
+  another game).
+- **The sender needs a PRIVATE key, so it cannot live in the app.** It is the Firebase secret
+  `VAPID_PRIVATE_KEY`; its public half is in `js/push.js` and `functions/index.js`, and
+  `test-push.mjs` fails if the two differ. It is NOT in this repo and must never be.
+- **The function is deployed by hand from Matt's PC** (`functions/README.md`, `firebase deploy
+  --only functions`); GitHub Pages never serves `functions/` (`validate-sw-assets.mjs` skips it).
+  A change there ships only when that command runs. **It needs the Blaze plan.**
+- **iPhone: only the Home Screen app can get them (iOS 16.4+).** In a Safari tab `PushManager`
+  does not exist; `pushState()` returns `'install'` and both screens say what to do instead.
+- **Where a player turns it on:** the Connect 4 Hoops multiplayer screen ("Notify me when it's my
+  turn", shown only while it is off) and profile -> Settings -> Notifications (on/off, per device).
+- **Who is notified, decided in `functions/decide.js` (pure):** a challenge arriving, the turn
+  coming back, a series game the other person started, and a match the other person ended. Never
+  your own action: `createGame` stamps `by` on the match (optional field) so its maker is not told.
+- **`pushSubs` is a new top-level node, so `database.rules.json` must be PUBLISHED BY HAND.**
+  As of 2026-09-23 it is NOT yet published; until it is, turning notifications on reports "That
+  didn't work". When Matt publishes it, change this line to say so, with the date.
+- A subscription is a delivery address, not player history: the function removes one the phone
+  has dropped (404/410), and the player recreates it with one tap.
 
 ## The admin control page (2026-08-24)
 

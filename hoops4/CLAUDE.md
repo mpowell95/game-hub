@@ -488,6 +488,48 @@ back for it to fetch?"* He had to come back - the launcher asked once per paint.
 paint, so listeners cannot stack), repainting the bubble on every change. Verified in a browser:
 one subscription, no page errors. `test-hoops4-mp.mjs` pins both halves.
 
+#### The first shot SENDS the challenge; the sender is reminded until they take it (2026-09-23)
+
+Matt: *"the king of games challenged me in connect 4 hoops. i accepted, but it was his turn to play
+first so it went back to him... if it's his turn to go first, he should have gone before he sent
+the challenge to me."* And: *"make sure he has a popup notification telling him that it's his
+turn."* The challenger is side 'a' and shoots first, but `createGame` wrote BOTH index rows at
+once and stamped the sender's seen map at `updated` - so a sender who walked away without shooting
+had already "sent" it, and nothing ever reminded them.
+
+- **Delivery moved to the first shot.** Shooting first, `createGame` writes only the sender's own
+  row (`writeRows(..., only)`); the first `pushMove` writes both, as every move does, and that is
+  the moment the other person's "challenged you" bubble appears - with a disc already on the board
+  and the turn theirs. Under one-shot a first-shot miss is a `passed` entry, so it delivers too.
+  When the OTHER person shoots first (`first: 'them'`, game 2+ of a series) they are told at once,
+  unchanged. On opening such a match the sender sees "Take your first shot to send the challenge"
+  (`mpShootToSend`) instead of "saved".
+- **The sender's reminder.** `armTurn(id, updated)` (mp.js) stamps the seen map one tick BEHIND
+  `updated`: a known id (never "a challenge") that is still owed (a live turn), so the launcher
+  says "Your turn vs <them>" until the shot is taken or the bubble is closed.
+- **Quit before the first shot** writes no row for the other person (`resignGame` checks theirs
+  exists first), so nobody is handed "won, they resigned" for a match they never saw. It still
+  counts as the sender's loss, as the Quit dialog says.
+- **Matches made before this** (the King's challenge to Matt is one) are re-armed ONCE per match
+  by `alert.js` `rearmUnshot` on the sender's next hub load: a first game, this device on side 'a',
+  its turn, zero moves, `updated` before `UNSHOT_BEFORE` (2026-09-24). Only those are read, and
+  `gamehub.hoops4.unshot.v1` records each one handled, so a closed reminder stays closed. The
+  other person's already-written row is left alone (THE LAW rule 5; nothing is deleted).
+- Verified end to end in node against an in-memory database with two swapped profiles (17
+  checks); `test-hoops4-mp.mjs` pins the shape.
+
+#### Who you can challenge is listed by CODE, not by person (2026-09-24)
+
+Matt: *"why can't i challenge mattyice from the test1 profile?"* The picker used the leaderboard's
+per-PERSON list (`aggregatePlayers`), which joins records sharing a code OR a name. One record from
+2026-09-13 - a phone renamed "test1" while still holding MattyIce's code QZCC4 - joined the two for
+good, so the picker showed one row labelled "test1" carrying QZCC4, and no MattyIce. **`opponentsFrom`
+(mp.js, pure) now builds the list from CODES**: each code's newest record names it, and two codes
+collapse only when the identity graph joins them AND their names match after aliasing (Ana's old
+and new code, Lili/Lill, matt/MattyIce) - the newest code wins. Checked against the live `players/`
+node (read-only): 28 rows from test1, MattyIce among them, no duplicates. The leaderboard's
+per-person merge is untouched.
+
 ### The series score was carried across unswapped (2026-09-23)
 
 Matt: *"i won game 1, then king of games won game 2, but it said he won the series 2-0. I think
@@ -1517,8 +1559,11 @@ step with the rules file or a branch is silently missing from every snapshot.
 
 ### What is NOT built
 
-- **No push notification.** The badge-on-next-open model is all this repo has; real push needs FCM
-  and a permission prompt, and `js/CLAUDE.md` says so in as many words about Messages.
+- ~~No push notification~~ **Built 2026-09-23**: a challenge, your turn, a series game the other
+  person started, and a match they ended all push to every phone you turned it on for (the
+  "Notify me when it's my turn" row on the multiplayer home, or profile -> Settings). The server is
+  `functions/` (root `CLAUDE.md`, "Push notifications"); `createGame` now stamps `by` so the maker
+  of a match is never notified about it.
 - **No launcher badge yet.** `countMyTurns(rows, code)` is exported and tested and is exactly what
   a badge would count, but nothing on the hub reads it. A badge goes where the thing it counts is
   reached (`js/CLAUDE.md`), and that is a hub-side change, not a hoops4 one.

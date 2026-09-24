@@ -83,6 +83,9 @@ export function trayModel(tab, built, theme, toolState) {
           return all.find((it) => it.id === `${stand ? 'stand' : 'tree'}-${i}`);
         }).filter(Boolean),
     })).filter((g) => g.items.length);
+    // Tall grass (2026-09-23) is a plant, so it lives here rather than under Water, where the
+    // desktop palette's own tool happens to file it.
+    groups.push({ title: 'Tall grass', items: sec('Tall grass').items });
     return {
       title: 'Trees & rocks',
       segs: [
@@ -206,6 +209,23 @@ export function paintTrayTile(canvas, item, theme, types) {
     return;
   }
   if (id === 'bunker-greenside') { greenPatch(sc); blobOnGround(sc, -6, -5, 3.5, 2.4, sand, 'rgba(120,90,50,.35)'); return; }
+  if (id === 'grass-patch' || id === 'grass-draw' || id === 'cross-tallGrass') {
+    const col = FILL.tallGrass || '#8a9a4a';
+    if (id === 'cross-tallGrass') { stripOnGround(sc, [[-10, 0], [10, 0]], 12, FILL.fairway || '#8cc76a'); stripOnGround(sc, [[0, -10], [0, 10]], 6, col); }
+    else blobOnGround(sc, 0, 0, 7, 5, col);
+    const { ctx } = sc;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 60; i++) {
+      const u = ((i * 37) % 60) / 60 - 0.5; const v = ((i * 23) % 60) / 60 - 0.5;
+      const gx = id === 'cross-tallGrass' ? u * 5 : u * 12; const gy = id === 'cross-tallGrass' ? v * 18 : v * 8;
+      if (id !== 'cross-tallGrass' && (gx * gx) / 49 + (gy * gy) / 25 > 1) continue;
+      const [x, y] = sc.P(gx, gy);
+      ctx.strokeStyle = i % 2 ? mix(col, '#ffffff', 0.25) : mix(col, '#000000', 0.2); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x, y - 8, x + (i % 3 - 1) * 4, y - 14); ctx.stroke();
+    }
+    if (id === 'grass-draw') pencil(sc);
+    return;
+  }
   if (id.startsWith('cross-')) {
     const col = id === 'cross-sand' ? sand : id === 'cross-water' ? water : id === 'cross-swamp' ? (FILL.swamp || '#3d5a3a') : '#d8c49a';
     stripOnGround(sc, [[-10, 0], [10, 0]], 12, FILL.fairway || '#8cc76a');
@@ -233,6 +253,12 @@ export function paintTrayTile(canvas, item, theme, types) {
       else if (/Trees/.test(tok)) treeAt(sc, x, y, { name: 'oak', shape: 'canopy', canopy: 5, height: 11, trunk: 0.8 }, 0.55);
     };
     if (tok === 'ringSand') { for (const [x, y] of [[-7, -2], [7, 2], [-2, 7], [2, -7]]) put(x, y); return; }
+    if (tok === 'island') {
+      // Water right round the green: repaint the patch as a moat with the green on top.
+      blobOnGround(sc, 0, 0, 9.6, 9.6, water);
+      greenPatch(sc);
+      return;
+    }
     if (tok === 'frontJaws') { put(-5, -7); put(5, -7); return; }
     if (tok.startsWith('front')) put(0, -8.5);
     else if (tok.startsWith('back')) put(0, 8.5);

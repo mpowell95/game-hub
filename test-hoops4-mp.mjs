@@ -316,7 +316,7 @@ check('a player code is normalised and validated',
     /alerts: \(\) => import\('\.\.\/hoops4\/js\/alert\.js'\)/.test(hub)
     && /typeof g\.alerts !== 'function'/.test(hub));
   check('the alert check runs AFTER the launcher has painted, never on the critical path',
-    /_afterPaint\(\(\) => this\._checkGameAlerts\(\)\)/.test(hub));
+    /_afterPaint\(\(\) => this\._checkGameAlerts\(\)/.test(hub));
   check('a game tile cannot break the launcher', /console\.warn\('\[hub\] alert check failed for'/.test(hub));
 
   // [KNOWN-BUG PROBE] THE BUBBLE THAT WOULD NOT GO AWAY (2026-09-22). Matt, having played the
@@ -636,6 +636,60 @@ check('a player code is normalised and validated',
   check('a series owed its next game is listed, and only the loser of the last game can start it',
     /async function owedSeries\(rows\)/.test(mpui) && /const starter = w === 'a' \? 'b' : w === 'b' \? 'a' : 'b';/.test(mpui)
     && /MP\.nextInSeries\(g\)/.test(mpui));
+}
+
+// THE FIRST SHOT SENDS THE CHALLENGE (2026-09-23). The King of Games challenged Matt, Matt
+// accepted, and it was the King's turn - he had never shot. Shooting first, createGame now writes
+// only the sender's own row and arms "your turn" on the sender's launcher; the first pushMove
+// writes both rows, which is what delivers it. (Verified end to end against an in-memory database
+// the same day: no row for the other person until the shot, a challenge bubble for them after it.)
+{
+  const A = await import('./hoops4/js/alert.js');
+  const MPsrc = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
+  const body = (name) => { const i = MPsrc.indexOf(`export async function ${name}(`); return i < 0 ? '' : MPsrc.slice(i, MPsrc.indexOf('\nexport ', i + 10)); };
+  check('shooting first, createGame writes only our own index row',
+    /writeRows\(api, db, game, meSide === 'a' \? 'a' : null\)/.test(body('createGame')));
+  check('shooting first, createGame arms "your turn" rather than marking the match seen',
+    /if \(meSide === 'a'\) armTurn\(id, game\.updated\);/.test(body('createGame')));
+  check('pushMove writes BOTH rows, which is what delivers the challenge',
+    /await writeRows\(api, db, back\);/.test(body('pushMove')));
+  check('quitting an undelivered challenge writes no row for the other person',
+    /writeRows\(api, db, back, theirs \? null : side\)/.test(body('resignGame')));
+  const unshot = { id: 'Zq9', with: 'MATT1', name: 'Matt', emoji: 'x', updated: 500, yourTurn: true, over: false };
+  const al = A.decideAlert([unshot], { Zq9: 499 });
+  check('a challenge I made and have not shot in reads as "your turn vs <them>", never a challenge',
+    !!al && al.kind === 'turn' && al.names[0] === 'Matt');
+  check('once I shoot, the reminder stops', A.decideAlert([{ ...unshot, yourTurn: false, updated: 600 }], { Zq9: 600 }) === null);
+  const Asrc = readFileSync(new URL('./hoops4/js/alert.js', import.meta.url), 'utf8');
+  check('challenges sent before the fix are re-armed once, on check and on the live watch',
+    (Asrc.match(/await rearmUnshot\(lastRows\)/g) || []).length === 2 && /UNSHOT_KEY/.test(Asrc));
+}
+
+// WHO YOU CAN CHALLENGE, by CODE (2026-09-24). Matt could not challenge MattyIce from test1: one old
+// record (a phone renamed "test1" still holding MattyIce's code) made the per-PERSON list merge the
+// two into a single row labelled "test1". This fixture is that real shape.
+{
+  const P = (name, playerId, updatedAt) => ({ profile: { name, playerId, emoji: 'x' }, updatedAt });
+  const all = {
+    bridge: P('test1', 'QZCC4', 100),          // the Sept 13 record that joined them
+    mi: P('MattyIce', 'QZCC4', 300),
+    t1: P('test1', 'DREG5', 301),
+    anaOld: P('Anita Bonita', '89N3N', 50), anaNew: P('Anita Bonita', 'K99MB', 200),
+    lill: P('Lill', '6VCRJ', 60), lili: P('Lili', 'S2BEP', 250),
+    oldMatt: P('matt', 'XV382', 40),
+    nameless: P('', 'ABCDE', 400), you: P('You', 'FGHJK', 400),
+  };
+  const fromT1 = MP.opponentsFrom(all, 'DREG5');
+  const fromMI = MP.opponentsFrom(all, 'QZCC4');
+  check('test1 can challenge MattyIce, by MattyIce\'s code and name',
+    fromT1.some((o) => o.code === 'QZCC4' && o.name === 'MattyIce'));
+  check('MattyIce can challenge test1', fromMI.some((o) => o.code === 'DREG5' && o.name === 'test1'));
+  check('nobody is offered themselves', !fromT1.some((o) => o.code === 'DREG5') && !fromMI.some((o) => o.code === 'QZCC4'));
+  check('one person\'s old and new code with the same name is ONE row, the newest code',
+    fromT1.filter((o) => /anita/i.test(o.name)).map((o) => o.code).join() === 'K99MB'
+    && fromT1.filter((o) => /^lil/i.test(o.name)).map((o) => o.code).join() === 'S2BEP'
+    && !fromT1.some((o) => o.code === 'XV382'));
+  check('a nameless or "You" record is never offered', !fromT1.some((o) => o.code === 'ABCDE' || o.code === 'FGHJK'));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

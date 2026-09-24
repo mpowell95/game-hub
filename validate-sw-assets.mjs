@@ -105,6 +105,9 @@ if (offenders.length) {
 // the gap - it is not a list anybody has to remember to extend again.
 const SCAN_SKIP = new Set([
   'node_modules', 'backups', 'reference', 'docs', 'icons', '.visual-out', '.claude', '.github',
+  // The Firebase Cloud Function (push notifications). Server code, deployed to Firebase, never
+  // served to a phone - so never precached.
+  'functions',
 ]);
 const SCAN_DIRS = readdirSync('.', { withFileTypes: true })
   .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SCAN_SKIP.has(e.name))

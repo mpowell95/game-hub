@@ -453,9 +453,7 @@ export const GAMES = [
     immersive: true,
     accent: '#ff2e97',
     art: GAME_ART['brick-blitz'],
-    // ADMIN ONLY for now (Matt, 2026-09-23, the day it shipped). Releasing it is a tap on the
-    // admin page or dropping this line.
-    devOnly: true,
+    // RELEASED to everyone 2026-09-23 (Matt), after a few hours admin-only the same day.
   },
   {
     // BEING REBUILT (golf-reference-spec.md). The 3D game that shipped here is deleted; the 2D
@@ -563,7 +561,14 @@ class Hub {
     this._onMessagesChanged = () => this._paintReplyBadge();
     window.addEventListener('gamehub:messages', this._onMessagesChanged);
     this._afterPaint(() => this._maybeAnnounce());
-    this._afterPaint(() => this._checkGameAlerts());
+    this._afterPaint(() => this._checkGameAlerts().then(() => this._openFromUrl()));
+    // PUSH NOTIFICATIONS (2026-09-23, js/push.js): keep this device's stored address current, and
+    // take a tapped notification to its game. Both lazy; neither can break the launcher.
+    this._afterPaint(() => { import('./push.js').then((m) => m.refreshPush()).catch(() => {}); });
+    this._onSwMessage = (e) => {
+      if (e && e.data && e.data.type === 'OPEN_GAME') this._openPushedGame(e.data.game);
+    };
+    try { navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', this._onSwMessage); } catch {}
     // Subscribe to the service worker's lifecycle so the version chip can never go stale again,
     // and so a new build applies itself while they are on the launcher (see _watchForUpdates).
     this._watchForUpdates();
@@ -1097,6 +1102,41 @@ class Hub {
         console.warn('[hub] alert watch failed for', g.id, err);
       }
     }
+  }
+
+  /** A notification tapped with no hub open arrives as `?open=<game>`: take it once, then drop the
+   *  parameter so a reload does not re-open the game. */
+  _openFromUrl() {
+    let id = null;
+    try {
+      const u = new URL(location.href);
+      id = u.searchParams.get('open');
+      if (id) { u.searchParams.delete('open'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); }
+    } catch { return; }
+    if (id) this._openPushedGame(id);
+  }
+
+  /**
+   * A TAPPED NOTIFICATION, onto its game (2026-09-23). Only from the launcher: a player in the
+   * middle of another game is never pulled out of it - the bubble is waiting when they come back.
+   * With the game already open, its own live watch has the new turn on the board.
+   */
+  async _openPushedGame(id) {
+    const g = GAMES.find((x) => x.id === id);
+    if (!g || this.current) return;
+    // A game released from the admin page is only on the launcher once the config has landed, and
+    // on a cold start (the notification opened the app) it may not have yet. Wait for it, briefly.
+    if (!this.games.some((x) => x.id === id)) {
+      await new Promise((resolve) => {
+        const stop = onAdminConfig(() => { stop(); clearTimeout(tm); setTimeout(resolve, 0); });
+        const tm = setTimeout(() => { stop(); resolve(); }, 6000);
+      });
+      if (this.current || !this.games.some((x) => x.id === id)) return;
+    }
+    await this._checkGameAlerts();
+    if (this.current) return;
+    if (this._gameAlert && this._gameAlert.game === id) this._openAlertGame();
+    else this.launch(id);
   }
 
   /** The grid cell holding a game's tile. A favourited game is drawn twice; the first is the
@@ -1737,6 +1777,7 @@ class Hub {
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
     if (this._onOnlineBugs) window.removeEventListener('online', this._onOnlineBugs);
+    if (this._onSwMessage) { try { navigator.serviceWorker.removeEventListener('message', this._onSwMessage); } catch {} }
     if (this._onController) navigator.serviceWorker.removeEventListener('controllerchange', this._onController);
     if (this._onResume) {
       document.removeEventListener('visibilitychange', this._onResume);

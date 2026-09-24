@@ -30,6 +30,7 @@ export const GUARD_TOKENS = [
   ['leftSand', 'Left sand'], ['rightSand', 'Right sand'], ['backSand', 'Back sand'], ['ringSand', 'Ring sand'],
   ['leftWater', 'Left water'], ['rightWater', 'Right water'], ['backWater', 'Back water'],
   ['leftTrees', 'Left trees'], ['rightTrees', 'Right trees'],
+  ['island', 'Island green'],   // 2026-09-23: water all the way round (holegen.js)
 ];
 
 // --- the obstacle catalogue (2026-09-22, docs/HANDOFF-GOLF-OBJECTS.md section 1) ----------------
@@ -98,6 +99,14 @@ export function paletteSections(built, look) {
       { id: 'cross-waste', label: 'Waste across', kind: 'tool', tool: 'cross', state: { crossKind: 'waste' } },
       { id: 'cross-swamp', label: 'Swamp across', kind: 'tool', tool: 'cross', state: { crossKind: 'swamp' } },
     ] },
+    // TALL GRASS (2026-09-23): long uncut grass you play out of - no penalty, weak shots, the ball
+    // stops where it lands (clubs.js LIES.tallGrass). Rides the water tool and the cross tool as
+    // `kind: 'tallGrass'`, exactly as a swamp does.
+    { title: 'Tall grass', items: [
+      { id: 'grass-patch', label: 'Tall grass', kind: 'tool', tool: 'water', state: { waterKind: 'tallGrass' } },
+      { id: 'grass-draw', label: 'Draw tall grass', kind: 'draw', group: 'water', drawKind: 'tallGrass' },
+      { id: 'cross-tallGrass', label: 'Tall grass across', kind: 'tool', tool: 'cross', state: { crossKind: 'tallGrass' } },
+    ] },
     { title: 'Around the green', items: GUARD_TOKENS.map(([tok, label]) => ({ id: `guard-${tok}`, label, kind: 'guard', token: tok })) },
     // Structures (2026-09-22, docs/HANDOFF-GOLF-POWER-LINES.md section 4): a power line is its
     // own RIBBON TOOL (`'line'`, main.js), not a `kind: 'draw'` tile - picking it starts the same
@@ -164,12 +173,15 @@ function sampler(theme, types) {
   const water = [
     { yd: y - 5, side: -1, off: 26, rx: 13, ry: 8.5, seed: 77 },
     { yd: y - 5, side: 1, off: 26, rx: 11, ry: 8, seed: 78, kind: 'swamp' },
+    { yd: y + 45, side: -1, off: 26, rx: 11, ry: 8, seed: 79, kind: 'tallGrass' },
   ];
   at['water-pond'] = [-26, y]; at['water-draw'] = [-26, y];
   at['water-swamp'] = [26, y]; at['water-swamp-draw'] = [26, y];
+  at['grass-patch'] = [-26, y + 50]; at['grass-draw'] = [-26, y + 50];
+  y += 50;
   y += 50;
   const cross = [];
-  for (const kind of ['water', 'waste', 'fairwayBunker', 'swamp']) {
+  for (const kind of ['water', 'waste', 'fairwayBunker', 'swamp', 'tallGrass']) {
     cross.push({ yd: y - 5, kind, depth: 14 });
     at[`cross-${kind === 'fairwayBunker' ? 'sand' : kind}`] = [0, y];
     y += 44;
@@ -309,14 +321,14 @@ export function renderPalette(el, { built, theme, active, guardsOn, onPick }) {
 /** Which tile the current tool + options correspond to, so the palette can highlight it. */
 export function activeItemFor(tool, toolState, drawing) {
   if (drawing) {
-    if (drawing.group === 'water') return drawing.kind === 'swamp' ? 'water-swamp-draw' : 'water-draw';
+    if (drawing.group === 'water') return drawing.kind === 'swamp' ? 'water-swamp-draw' : (drawing.kind === 'tallGrass' ? 'grass-draw' : 'water-draw');
     if (drawing.group === 'decor') return drawing.kind === 'flowerbed' ? 'decor-flowerbed-draw' : 'decor-path';
     if (drawing.group === 'lines') return 'power-line';
     return 'bunker-draw';
   }
   if (tool === 'tree') return `${toolState.treeMode === 'stand' ? 'stand' : 'tree'}-${toolState.treePlantType || 0}`;
   if (tool === 'bunker') return toolState.bunkerKind === 'fairwayBunker' ? 'bunker-fairway' : 'bunker-greenside';
-  if (tool === 'water') return toolState.waterKind === 'swamp' ? 'water-swamp' : 'water-pond';
+  if (tool === 'water') return toolState.waterKind === 'swamp' ? 'water-swamp' : (toolState.waterKind === 'tallGrass' ? 'grass-patch' : 'water-pond');
   if (tool === 'cross') return `cross-${toolState.crossKind === 'fairwayBunker' ? 'sand' : (toolState.crossKind || 'water')}`;
   if (tool === 'decor') return `decor-${toolState.decorKind || 'bench'}`;
   if (tool === 'line') return 'power-line';

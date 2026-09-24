@@ -66,6 +66,9 @@ export const BRANCHES = [
   // courseDrafts/ (hole-editor/js/drafts.js): golf course designs autosaved by player code. Read
   // by any signed-in session, so it backs up normally.
   'courseDrafts',
+  // pushSubs/ (2026-09-23, js/push.js): each device's push-notification address, by player code.
+  // Readable by any signed-in session; written only by the device that claimed that code.
+  'pushSubs',
   // messages/ is deliberately last: an anonymous sign-in is not on the admins allowlist, so this
   // one comes back denied and is recorded as such rather than as an empty branch. See the warning
   // main() prints, and database.rules.README.md for how to export it from the console.

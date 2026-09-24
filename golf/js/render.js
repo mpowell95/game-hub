@@ -356,10 +356,22 @@ export function fillsFor(pal) {
     tee: pal.tee,
     water: pal.water,
     swamp: pal.swamp || pal.water,
+    // Tall grass (2026-09-23): the rough's own colour, a shade deeper and yellower, so it reads as
+    // longer grass of the same field on every look rather than as a new material.
+    tallGrass: pal.tallGrass || grassDeeper(pal.heavyRough),
     fairwayBunker: pal.sand,
     greensideBunker: pal.sand,
     trees: pal.treesFloor || '#4a6b28',   // the woods FLOOR; canopies are drawn on top of it
   };
+}
+
+/** The rough's colour mixed a third of the way toward dry straw: tall grass on any look - longer,
+ *  paler and yellower than the rough around it, so it reads as uncut grass, not as a dark patch. */
+function grassDeeper(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const straw = [196, 186, 104];
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v, i) => Math.round(v * 0.62 + straw[i] * 0.38));
+  return '#' + c.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
 }
 
 export function paletteFor(theme) { return THEMES[theme] || PALETTE; }
@@ -1095,6 +1107,26 @@ export function buildMap(hole, theme) {
         ctx.fillRect(0, py - 3.4 * MAP_PPY, w, 3.4 * MAP_PPY);
       }
       ctx.globalAlpha = 1;
+    } else if (s.kind === 'tallGrass') {
+      // TALL GRASS: dense upright blades in two tones, seeded from the patch, and a soft darker rim.
+      ctx.clip();
+      const bb = bboxOf(poly);
+      const rnd = mulberry32(Math.round(bb.minX * 613) ^ Math.round(bb.minY * 389));
+      const base = FILL.tallGrass;
+      ctx.lineWidth = Math.max(1, MAP_PPY * 0.35);
+      ctx.lineCap = 'round';
+      for (let yy = bb.minY; yy < bb.maxY; yy += 0.9) {
+        for (let xx = bb.minX; xx < bb.maxX; xx += 0.9) {
+          const jx = xx + (rnd() - 0.5) * 0.9; const jy = yy + (rnd() - 0.5) * 0.9;
+          const [px, py] = toPx(jx, jy);
+          const len = MAP_PPY * (1.0 + rnd() * 0.8); const lean = (rnd() - 0.5) * len * 0.6;
+          ctx.strokeStyle = tintOf(base, rnd() < 0.5 ? 0.78 : 1.22);
+          ctx.beginPath(); ctx.moveTo(px, py + len * 0.5); ctx.lineTo(px + lean, py - len * 0.5); ctx.stroke();
+        }
+      }
+      ctx.restore(); ctx.save();
+      tracePoly(ctx, poly, toPx);
+      ctx.strokeStyle = tintOf(base, 0.8); ctx.lineWidth = MAP_PPY * 0.8; ctx.stroke();
     } else if (s.kind === 'swamp') {
       // NOT WATER: no bank, no mud line, no ripple bands - a swamp is dark olive-brown ground the
       // ball plugs into, not a body of water it drops out of. The "mottled" read comes from short
