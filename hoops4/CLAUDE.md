@@ -1829,10 +1829,11 @@ computer** (collapsible), How to play.
 - **CSS class clash, avoided**: the HUD's turn label is `.h4-turn`; the setup rows are `.h4-trow`.
   The first cut used `.h4-turn` and the HUD's column layout stacked every row vertically.
 
-Also the same day: the profile's Quick chat has an **"Order in game"** row showing `qc.emojis` /
-`qc.phrases` in the order the chat panel uses. Tap one, then tap where it goes (tap-to-move, not
-drag, so it never fights the page's scroll on a phone). The order is just the array order in
-`gamehub.quickchat.v1`, so no model change was needed.
+Also the same day: the profile's Quick chat was redesigned as ONE list per kind. The top row is
+your chat in the order the game's panel shows it (the array order in `gamehub.quickchat.v1`);
+tap one to pick it up, then tap another to drop it there, or use the bar's Remove / Done.
+Tap-to-move, not drag, so it never fights the page's scroll. "Add more" below holds the starter
+emojis and phrases you have not picked; "+" opens the full emoji picker.
 - **Multiplayer is a card row like the computer card** (same day, Matt: *"make the multiplayer and
   computer pills look similar? They don't look like buttons on the same page"*). `.h4-mp` is a
   `.gh-card` button with the same `.h4-card-head` heading and a `›` on the right, sized to the

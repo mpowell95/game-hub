@@ -163,40 +163,47 @@
     .pf-seg .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
     .pf-seg .lb-dshape-x2 { width: 1.7em; }
 
-    /* Quick chat customizer. A dimmed tile/chip is OFF, a bright bordered one is ON:
-       brightness is the signal, the accent border is secondary (colorblind rule). */
-    .pf-qc-label { font-weight: 700; font-size: .78rem; color: var(--hub-muted); margin: 12px 0 6px; }
-    .pf-qc-emojis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+    /* Quick chat. The top row of each kind IS your chat, in game order; "Add more" is what you
+       have not picked. A picked-up item is lifted, gets a thick ink border and the bar below
+       names it in words (colorblind rule: never colour alone). */
+    .pf-qc-label { font-weight: 800; font-size: .8rem; color: var(--hub-ink); margin: 16px 0 8px; }
+    .pf-qc-sublabel { font-weight: 700; font-size: .74rem; color: var(--hub-muted); margin: 12px 0 6px; }
+    .pf-qc-emojis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
     .pf-qc-emojis button {
-      font-size: 24px; line-height: 1; border: 2px solid transparent; background: var(--hub-surface-2);
-      border-radius: 10px; padding: 8px 0; cursor: pointer; touch-action: manipulation; opacity: .38;
-      transition: opacity .12s ease, border-color .12s ease;
-    }
-    .pf-qc-emojis button.is-on { opacity: 1; border-color: var(--hub-accent); background: var(--hub-surface); }
-    .pf-qc-emojis button.pf-qc-add {
-      opacity: 1; font-weight: 800; color: var(--hub-ink); border: 2px dashed var(--hub-muted); background: transparent;
-    }
-    .pf-qc-phrases { display: flex; flex-wrap: wrap; gap: 6px; }
-    .pf-qc-phrases button {
-      font: inherit; font-weight: 600; font-size: .84rem; border: 2px solid transparent;
-      background: var(--hub-surface-2); color: var(--hub-muted); border-radius: 999px; padding: 6px 12px;
-      cursor: pointer; touch-action: manipulation; opacity: .55; transition: opacity .12s ease, border-color .12s ease;
-    }
-    .pf-qc-phrases button.is-on { opacity: 1; color: var(--hub-ink); border-color: var(--hub-accent); background: var(--hub-surface); }
-    .pf-qc-ord-emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
-    .pf-qc-ord-phrases { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .pf-qc-order button {
-      font: inherit; border: 2px solid var(--hub-surface-2); background: var(--hub-surface);
-      color: var(--hub-ink); cursor: pointer; touch-action: manipulation;
+      font-size: 26px; line-height: 1; min-height: 50px; border-radius: 12px; cursor: pointer;
+      touch-action: manipulation; border: 2px solid var(--hub-surface-2); background: var(--hub-surface-2);
       transition: transform .12s ease, box-shadow .12s ease;
     }
-    .pf-qc-order .pf-qc-ord-e { font-size: 22px; line-height: 1; border-radius: 10px; padding: 8px 0; min-height: 44px; }
-    .pf-qc-order .pf-qc-ord-p { font-weight: 600; font-size: .84rem; border-radius: 999px; padding: 8px 12px; min-height: 44px; }
-    .pf-qc-order button.is-lift {
-      border: 3px solid var(--hub-ink); transform: translateY(-3px) scale(1.06);
-      box-shadow: 0 6px 14px rgba(0,0,0,.22);
+    .pf-qc-emojis button.pf-qc-add { font-size: 24px; font-weight: 800; color: var(--hub-muted); border: 2px dashed var(--hub-muted); background: transparent; }
+    .pf-qc-more-e { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+    .pf-qc-more-e button {
+      font-size: 20px; line-height: 1; min-height: 44px; border-radius: 10px; cursor: pointer;
+      touch-action: manipulation; border: 1px dashed var(--hub-muted); background: transparent;
     }
-    @media (prefers-reduced-motion: reduce) { .pf-qc-order button { transition: none; } .pf-qc-order button.is-lift { transform: none; } }
+    .pf-qc-phrases { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pf-qc-chip {
+      font: inherit; font-weight: 700; font-size: .86rem; min-height: 40px; padding: 8px 14px;
+      border-radius: 999px; cursor: pointer; touch-action: manipulation; color: var(--hub-ink);
+      border: 2px solid var(--hub-surface-2); background: var(--hub-surface-2);
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .pf-qc-chip.pf-qc-sugg { font-weight: 600; color: var(--hub-muted); background: transparent; border: 1px dashed var(--hub-muted); }
+    #pf-quickchat .is-lift {
+      border: 3px solid var(--hub-ink); background: var(--hub-surface);
+      transform: translateY(-3px) scale(1.06); box-shadow: 0 6px 14px rgba(0,0,0,.28);
+    }
+    .pf-qc-bar {
+      display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px;
+      border-radius: 12px; background: var(--hub-surface-2);
+    }
+    .pf-qc-bar[hidden] { display: none; }
+    .pf-qc-bar-txt { flex: 1; font-weight: 700; font-size: .84rem; }
+    .pf-qc-bar button {
+      font: inherit; font-weight: 800; font-size: .84rem; min-height: 40px; padding: 6px 14px;
+      border-radius: 10px; border: 1px solid var(--hub-muted); background: var(--hub-surface);
+      color: var(--hub-ink); cursor: pointer; touch-action: manipulation;
+    }
+    @media (prefers-reduced-motion: reduce) { #pf-quickchat button { transition: none; } #pf-quickchat .is-lift { transform: none; } }
     .pf-qc-custom { display: flex; flex-direction: column; gap: 6px; }
     .pf-qc-custom input {
       font: inherit; width: 100%; padding: 9px 11px; border-radius: 10px;
@@ -404,14 +411,21 @@
           <details class="pf-collapse" id="pf-quickchat">
             <summary data-i18n="pf_quickchat_summary">Quick chat</summary>
             <div class="pf-rowbody">
-              <p class="pf-hint" data-i18n="pf_quickchat_hint" style="margin:0 0 10px">Pick the reactions you send during multiplayer games.</p>
+              <p class="pf-hint" data-i18n="pf_quickchat_hint" style="margin:0 0 4px">Your chat, in the order it shows in multiplayer games. Tap one to move or remove it.</p>
               <div class="pf-qc-label" data-i18n="pf_quickchat_emojis">Emojis</div>
               <div class="pf-qc-emojis" id="pf-qc-emojis"></div>
+              <div class="pf-qc-bar" id="pf-qc-bar-e" aria-live="polite" hidden></div>
+              <div id="pf-qc-emojis-more-wrap">
+                <div class="pf-qc-sublabel" data-i18n="pf_quickchat_more">Add more</div>
+                <div class="pf-qc-more-e" id="pf-qc-emojis-more"></div>
+              </div>
               <div class="pf-qc-label" data-i18n="pf_quickchat_phrases">Phrases</div>
               <div class="pf-qc-phrases" id="pf-qc-phrases"></div>
-              <div class="pf-qc-label" data-i18n="pf_quickchat_order">Order in game</div>
-              <p class="pf-hint pf-qc-order-hint" id="pf-qc-order-hint" aria-live="polite" style="margin:0 0 6px"></p>
-              <div class="pf-qc-order" id="pf-qc-order"></div>
+              <div class="pf-qc-bar" id="pf-qc-bar-p" aria-live="polite" hidden></div>
+              <div id="pf-qc-phrases-more-wrap">
+                <div class="pf-qc-sublabel" data-i18n="pf_quickchat_more">Add more</div>
+                <div class="pf-qc-phrases" id="pf-qc-phrases-more"></div>
+              </div>
               <div class="pf-qc-label" data-i18n="pf_quickchat_custom">Your own phrases</div>
               <div class="pf-qc-custom" id="pf-qc-custom"></div>
             </div>
@@ -520,10 +534,19 @@
     import STRINGS from '../js/strings.js';
 
     const t = makeT(STRINGS);
+    // A NEW string can be missing for one visit: js/strings.js is a cache-first shell file, so the
+    // first load after a deploy can pair this fresh page with the previous build's dictionary.
+    // makeT then returns the KEY itself, which is how "pf_quickchat_order_hint" reached Matt's
+    // screen (2026-09-24). tf() shows the English fallback instead of a key, ever.
+    const tf = (k, fb) => { const v = t(k); return v === k ? fb : v; };
     // The one static-HTML surface in the hub (decision 4, HANDOFF-I18N-EXTRACTION.md): apply
     // data-i18n / data-i18n-placeholder / data-i18n-aria on load and on every language switch.
     function applyI18n() {
-      document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+      // The markup's own English text is the fallback (see tf above), captured once.
+      document.querySelectorAll('[data-i18n]').forEach((el) => {
+        if (el.dataset.i18nFb == null) el.dataset.i18nFb = el.textContent;
+        el.textContent = tf(el.dataset.i18n, el.dataset.i18nFb);
+      });
       document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
       document.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
     }
@@ -636,8 +659,13 @@
       qcEmojis: $('#pf-qc-emojis'),
       qcPhrases: $('#pf-qc-phrases'),
       qcCustom: $('#pf-qc-custom'),
-      qcOrder: $('#pf-qc-order'),
-      qcOrderHint: $('#pf-qc-order-hint'),
+      qcSection: $('#pf-quickchat'),
+      qcEmojisMore: $('#pf-qc-emojis-more'),
+      qcEmojisMoreWrap: $('#pf-qc-emojis-more-wrap'),
+      qcPhrasesMore: $('#pf-qc-phrases-more'),
+      qcPhrasesMoreWrap: $('#pf-qc-phrases-more-wrap'),
+      qcBarE: $('#pf-qc-bar-e'),
+      qcBarP: $('#pf-qc-bar-p'),
     };
     const msg = (el, t) => { if (el) el.textContent = t || ''; };
     let prevName = (state.name || '').trim();
@@ -935,50 +963,76 @@
     // The palette of reactions this device sends in multiplayer games. A device
     // preference (gamehub.quickchat.v1 via js/mp-reactions.js), same class as theme/
     // language - never a gamehub.profile field, never player history.
+    //
+    // ONE LIST PER KIND (2026-09-24, Matt: "Make this look better"). The first version showed a
+    // grid of dimmed on/off tiles AND a second "order" copy of the same emojis below it. Now the
+    // top row IS your chat, in the order the game's panel shows it; "Add more" under it holds
+    // what you have not picked. Tap one of yours to pick it up: a bar says "Tap a spot to move
+    // it" with Remove and Done, and tapping another of yours drops it there. Tap-to-move, not
+    // drag, because a drag on a phone fights the page's scroll. The picked-up item is marked by a
+    // lift, a thick border AND the bar's words, never by colour alone.
     const qc = loadPalette();
-    let qcLift = null;   // the order row's picked-up item, { kind: 'e' | 'p', i }
+    let qcLift = null;   // the picked-up item, { kind: 'e' | 'p', i }
     const escAttr = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const saveQc = () => savePalette(qc);   // normalizes a copy; leaves the working `qc` untouched
+    const phraseText = (id) => reactionText({ t: 'p', v: id });
 
     function renderQuickChat() {
       if (!els.qcEmojis) return;
-      // The starter tiles, then every emoji this player added from the full picker, then "+".
-      // Any emoji at all can be added (2026-09-24); the starter set is a shortcut, not a limit.
-      const tiles = [...ALL_EMOJIS, ...qc.emojis.filter((e) => !ALL_EMOJIS.includes(e))];
-      els.qcEmojis.innerHTML = tiles.map((e) => {
-        const on = qc.emojis.includes(e);
-        return `<button type="button" data-qc-emoji="${escAttr(e)}" class="${on ? 'is-on' : ''}" aria-pressed="${on}">${escAttr(e)}</button>`;
-      }).join('') + (qc.emojis.length < EMOJI_MAX
-        ? `<button type="button" class="pf-qc-add" data-qc-add aria-label="${escAttr(t('pf_quickchat_add'))}" title="${escAttr(t('pf_quickchat_add'))}">+</button>`
-        : '');
-      els.qcPhrases.innerHTML = Object.keys(PHRASES).map((id) => {
-        const on = qc.phrases.includes(id);
-        return `<button type="button" data-qc-phrase="${id}" class="${on ? 'is-on' : ''}" aria-pressed="${on}">${escAttr(reactionText({ t: 'p', v: id }))}</button>`;
-      }).join('');
+      const lifted = (kind, i) => !!(qcLift && qcLift.kind === kind && qcLift.i === i);
+      // Yours, in order, then "+" (the full picker: ANY emoji, 2026-09-24).
+      els.qcEmojis.innerHTML = qc.emojis.map((e, i) =>
+        `<button type="button" class="pf-qc-item${lifted('e', i) ? ' is-lift' : ''}" data-qc-mine="e" data-i="${i}" aria-pressed="${lifted('e', i)}">${escAttr(e)}</button>`).join('')
+        + (qc.emojis.length < EMOJI_MAX
+          ? `<button type="button" class="pf-qc-add" data-qc-add aria-label="${escAttr(tf('pf_quickchat_add', 'Add any emoji'))}" title="${escAttr(tf('pf_quickchat_add', 'Add any emoji'))}">+</button>`
+          : '');
+      const moreE = ALL_EMOJIS.filter((e) => !qc.emojis.includes(e));
+      els.qcEmojisMore.innerHTML = qc.emojis.length < EMOJI_MAX ? moreE.map((e) =>
+        `<button type="button" class="pf-qc-sugg" data-qc-more="e" data-v="${escAttr(e)}" aria-label="${escAttr(tf('pf_quickchat_add', 'Add'))} ${escAttr(e)}">${escAttr(e)}</button>`).join('') : '';
+      els.qcEmojisMoreWrap.hidden = !els.qcEmojisMore.innerHTML;
+
+      els.qcPhrases.innerHTML = qc.phrases.map((id, i) =>
+        `<button type="button" class="pf-qc-chip${lifted('p', i) ? ' is-lift' : ''}" data-qc-mine="p" data-i="${i}" aria-pressed="${lifted('p', i)}">${escAttr(phraseText(id))}</button>`).join('');
+      const moreP = Object.keys(PHRASES).filter((id) => !qc.phrases.includes(id));
+      els.qcPhrasesMore.innerHTML = moreP.map((id) =>
+        `<button type="button" class="pf-qc-chip pf-qc-sugg" data-qc-more="p" data-v="${id}"><span aria-hidden="true">+ </span>${escAttr(phraseText(id))}</button>`).join('');
+      els.qcPhrasesMoreWrap.hidden = !moreP.length;
+
+      for (const k of ['e', 'p']) {
+        const bar = k === 'e' ? els.qcBarE : els.qcBarP;
+        const on = !!(qcLift && qcLift.kind === k);
+        bar.hidden = !on;
+        if (!on) bar.innerHTML = '';
+        else bar.innerHTML = `<span class="pf-qc-bar-txt">${escAttr(tf('pf_quickchat_move', 'Tap a spot to move it'))}</span>`
+          + `<button type="button" data-qc-act="remove">${escAttr(tf('pf_quickchat_remove', 'Remove'))}</button>`
+          + `<button type="button" data-qc-act="done">${escAttr(tf('pf_quickchat_done', 'Done'))}</button>`;
+      }
       renderQcCustom();
-      renderQcOrder();
     }
-    // ORDER (2026-09-24). Matt: "Can I reorder them?" The game's chat panel shows emojis and
-    // phrases in the order they sit in qc.emojis / qc.phrases, which the tiles above cannot show
-    // (they stay put). This row IS that order. Tap one to pick it up, tap another to drop it
-    // there: tap-to-move rather than drag, because a drag on a phone fights the page's scroll.
-    // The picked-up item is marked by a lift, a thick border AND the hint's words, never colour.
-    function renderQcOrder() {
-      if (!els.qcOrder) return;
-      const btn = (kind, i, label, cls) => {
-        const on = qcLift && qcLift.kind === kind && qcLift.i === i;
-        return `<button type="button" class="${cls}${on ? ' is-lift' : ''}" data-qc-ord="${kind}" data-i="${i}" aria-pressed="${!!on}">${escAttr(label)}</button>`;
-      };
-      const em = qc.emojis.map((e, i) => btn('e', i, e, 'pf-qc-ord-e')).join('');
-      const ph = qc.phrases.map((id, i) => btn('p', i, reactionText({ t: 'p', v: id }), 'pf-qc-ord-p')).join('');
-      els.qcOrder.innerHTML = (em ? `<div class="pf-qc-ord-emojis">${em}</div>` : '')
-        + (ph ? `<div class="pf-qc-ord-phrases">${ph}</div>` : '');
-      els.qcOrderHint.textContent = t(qcLift ? 'pf_quickchat_order_drop' : 'pf_quickchat_order_hint');
+    function renderQcCustom() {
+      let rows = '';
+      for (let i = 0; i < CUSTOM_MAX; i++) {
+        rows += `<input type="text" data-qc-custom="${i}" maxlength="${CUSTOM_MAXLEN}" autocomplete="off" value="${escAttr(qc.custom[i] || '')}" placeholder="${escAttr(tf('pf_quickchat_custom_ph', 'Type a phrase'))}">`;
+      }
+      els.qcCustom.innerHTML = rows;
     }
-    if (els.qcOrder) {
-      els.qcOrder.addEventListener('click', (ev) => {
-        const b = ev.target.closest('[data-qc-ord]'); if (!b) return;
-        const kind = b.dataset.qcOrd, i = +b.dataset.i;
+    if (els.qcEmojis) {
+      els.qcSection.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-qc-add]')) { qcLift = null; openPicker('qc', ''); return; }
+        const act = ev.target.closest('[data-qc-act]');
+        if (act && qcLift) {
+          if (act.dataset.qcAct === 'remove') (qcLift.kind === 'e' ? qc.emojis : qc.phrases).splice(qcLift.i, 1);
+          qcLift = null; saveQc(); renderQuickChat(); return;
+        }
+        const more = ev.target.closest('[data-qc-more]');
+        if (more) {
+          const arr = more.dataset.qcMore === 'e' ? qc.emojis : qc.phrases;
+          if (!arr.includes(more.dataset.v) && (more.dataset.qcMore !== 'e' || arr.length < EMOJI_MAX)) arr.push(more.dataset.v);
+          qcLift = null; saveQc(); renderQuickChat(); return;
+        }
+        const mine = ev.target.closest('[data-qc-mine]');
+        if (!mine) return;
+        const kind = mine.dataset.qcMine, i = +mine.dataset.i;
         if (!qcLift || qcLift.kind !== kind) qcLift = { kind, i };
         else if (qcLift.i === i) qcLift = null;
         else {
@@ -988,36 +1042,7 @@
           qcLift = null;
           saveQc();
         }
-        renderQcOrder();
-      });
-    }
-    function renderQcCustom() {
-      let rows = '';
-      for (let i = 0; i < CUSTOM_MAX; i++) {
-        rows += `<input type="text" data-qc-custom="${i}" maxlength="${CUSTOM_MAXLEN}" autocomplete="off" value="${escAttr(qc.custom[i] || '')}" placeholder="${escAttr(t('pf_quickchat_custom_ph'))}">`;
-      }
-      els.qcCustom.innerHTML = rows;
-    }
-    if (els.qcEmojis) {
-      els.qcEmojis.addEventListener('click', (ev) => {
-        if (ev.target.closest('[data-qc-add]')) { openPicker('qc', ''); return; }
-        const b = ev.target.closest('[data-qc-emoji]'); if (!b) return;
-        const e = b.dataset.qcEmoji, i = qc.emojis.indexOf(e);
-        if (i < 0 && qc.emojis.length >= EMOJI_MAX) return;
-        if (i >= 0) qc.emojis.splice(i, 1); else qc.emojis.push(e);
-        const on = qc.emojis.includes(e);
-        b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on);
-        saveQc();
-        qcLift = null; renderQcOrder();
-      });
-      els.qcPhrases.addEventListener('click', (ev) => {
-        const b = ev.target.closest('[data-qc-phrase]'); if (!b) return;
-        const id = b.dataset.qcPhrase, i = qc.phrases.indexOf(id);
-        if (i >= 0) qc.phrases.splice(i, 1); else qc.phrases.push(id);
-        const on = qc.phrases.includes(id);
-        b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on);
-        saveQc();
-        qcLift = null; renderQcOrder();
+        renderQuickChat();
       });
       // Edit custom lines. Don't re-render on input (it would drop focus mid-type);
       // just track the value at its slot and persist.
