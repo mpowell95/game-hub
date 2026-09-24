@@ -238,6 +238,26 @@ console.log('\n-- G: aggregation keeps them apart, and still combines a real per
   const one = agg.aggregatePlayers(oneP);
   eq('one person on two phones is still ONE row', one.length, 1);
   eq('...with both phones\' plays summed, never double-counted', one[0].games.mancala.total.played, 10);
+
+  // [KNOWN-BUG PROBE] A STALE RENAMED RECORD MUST NOT BRIDGE TWO PEOPLE (2026-09-24). Matt: "The
+  // stats for Test1 and MattyIce are identical. They shouldn't be." The real shape: a Sept-13 record
+  // named "test1" carrying QZCC4, a code whose NEWEST record is MattyIce's. Name "test1" -> that
+  // record -> QZCC4 -> MattyIce put test1's own code (DREG5) into MattyIce's row.
+  const g = (n) => ({ games: { mancala: { total: { played: n, won: 0, lost: n }, byDiff: {} } } });
+  const bridge = {
+    'old-t1': { profile: { name: 'test1', playerId: 'QZCC4' }, stats: g(1), updatedAt: 100 },
+    'mi-phone': { profile: { name: 'MattyIce', playerId: 'QZCC4' }, stats: g(5), updatedAt: 300 },
+    'lap': { profile: { name: 'MattyIce', playerId: 'Y3D55' }, stats: g(7), updatedAt: 290 },
+    'lap-DREG5': { profile: { name: 'test1', playerId: 'DREG5' }, stats: g(4), updatedAt: 295 },
+  };
+  const br = agg.aggregatePlayers(bridge);
+  eq('a stale renamed record no longer bridges two people: two rows', br.length, 2);
+  eq('test1 (DREG5) keeps exactly its own plays', br.find((r) => r.playerId === 'DREG5').games.mancala.total.played, 4);
+  eq('the old record still counts for its CODE\'s owner (nothing dropped)',
+    br.reduce((a, r) => a + r.games.mancala.total.played, 0), 17);
+  // ...and a rename that IS current still joins by name, as before.
+  const renamed = { a: { profile: { name: 'Ana', playerId: 'AAAA2' }, stats: g(3), updatedAt: 1 }, b: { profile: { name: 'Ana', playerId: 'BBBB2' }, stats: g(2), updatedAt: 2 } };
+  eq('two codes whose CURRENT names match are still one person', agg.aggregatePlayers(renamed).length, 1);
 }
 
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
