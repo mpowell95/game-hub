@@ -103,10 +103,12 @@ function styleWeightsFor(league) {
 }
 
 const ROSTER_SCALE_CACHE = new Map();
-/** The league-wide draw scale whose realised roster mean is `CPU_ROSTER_LEVEL[league]`. */
-export function rosterScaleFor(league) {
-  if (ROSTER_SCALE_CACHE.has(league)) return ROSTER_SCALE_CACHE.get(league);
-  const target = CPU_ROSTER_LEVEL[league] != null ? CPU_ROSTER_LEVEL[league] : CPU_ROSTER_LEVEL.majors;
+/** The league-wide draw scale whose realised roster mean is `CPU_ROSTER_LEVEL[league]` - or
+ *  `level`, when a caller passes its own (batch 4: a live-play season's `LIVE_PLAY.cpuRosterLevel`). */
+export function rosterScaleFor(league, level) {
+  const key = level != null ? `${league}@${level}` : league;
+  if (ROSTER_SCALE_CACHE.has(key)) return ROSTER_SCALE_CACHE.get(key);
+  const target = level != null ? level : (CPU_ROSTER_LEVEL[league] != null ? CPU_ROSTER_LEVEL[league] : CPU_ROSTER_LEVEL.majors);
   const ceiling = rosterCeilingFor(league);
   const slotW = slotSkillWeights(league);
   const styleW = styleWeightsFor(league);
@@ -132,7 +134,7 @@ export function rosterScaleFor(league) {
     if (realised(mid) < target) lo = mid; else hi = mid;
   }
   const scale = (lo + hi) / 2;
-  ROSTER_SCALE_CACHE.set(league, scale);
+  ROSTER_SCALE_CACHE.set(key, scale);
   return scale;
 }
 
@@ -229,10 +231,11 @@ function slotSigmaFloorMs(league, slot) {
   return leagueMin + (CPU_SIGMA_ABSOLUTE_FLOOR_MS - leagueMin) * t;
 }
 
-export function makeLeague(league) {
+export function makeLeague(league, opts = {}) {
   const order = LEAGUE_LADDER_STYLES[league] || LEAGUE_LADDER_STYLES.majors;
-  // R16: the ladder's own relative shape, and the league level it is scaled onto.
-  const baseScale = rosterScaleFor(league);
+  // R16: the ladder's own relative shape, and the league level it is scaled onto. Batch 4:
+  // `opts.rosterLevel` replaces `CPU_ROSTER_LEVEL[league]` (a live-play season's own table).
+  const baseScale = rosterScaleFor(league, opts.rosterLevel);
   const ceiling = rosterCeilingFor(league);
   const slotW = slotSkillWeights(league);
   const teams = order.map((styleId, slot) => {
@@ -282,8 +285,8 @@ export function makeLeague(league) {
  *  is untouched - a caller that wants the whole ladder (the tuner, the style sweeps) keeps it.
  *  `slots` may be passed explicitly, which is what `career.js` does with a season's own frozen
  *  snapshot so a deploy never reshapes a season in progress (THE LAW). */
-export function leagueTeamsFor(league, slots) {
-  const teams = makeLeague(league);
+export function leagueTeamsFor(league, slots, opts) {
+  const teams = makeLeague(league, opts);
   const pick = Array.isArray(slots) && slots.length ? slots : slotsForLeague(league);
   const out = [];
   for (const i of pick) {

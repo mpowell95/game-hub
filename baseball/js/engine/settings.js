@@ -1100,6 +1100,69 @@ export const LINE_THROUGH_MAX_FT = 280;
 // said so at its own definition. None of them touch CPU/CAPS/SKILL_EFFECT, which stay exactly as
 // the ladder tuning left them.
 
+// ---------------------------------------------------------------------------------------------
+// PLAYTEST 1, BATCH 4a: THE LIVE PLAY (`liveplay.js`). Every number the live model plays a ball in
+// play with, in one block, read ONLY by a game whose season snapshotted `livePlays` (career.js
+// `startSeason`, game.js `livePlays`) - a season on the out-zone model never reads any of it, which
+// is what keeps a season in progress on the rules it started with. Feet, seconds, feet per second,
+// mph. Measured with `sim-baseball-career.mjs --live`; see baseball/CLAUDE.md's batch 4 entry.
+//
+// `on` is what a NEW season snapshots. It stays false until batch 4b draws the play the engine
+// plays (the handoff's own rule: never ship an engine the drawing disagrees with).
+export const LIVE_PLAY = {
+  on: false,
+  // Where the nine stand (plan feet): polar spots, infield depth scaled per league, outfielders at
+  // a fraction of the fence at their own angle. P/C are fixed points.
+  positions: {
+    P: { xy: [0, 56] }, C: { xy: [0, -3] },
+    '1B': { deg: 34, r: 108 }, '2B': { deg: 13, r: 145 }, SS: { deg: -13, r: 145 }, '3B': { deg: -34, r: 108 },
+    LF: { deg: -27, outfield: true }, CF: { deg: 0, outfield: true }, RF: { deg: 27, outfield: true },
+  },
+  fieldOrder: ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'], // tie-break order only
+  infieldDepthMult: { little: 0.80, highschool: 0.92, college: 1.0, minors: 1.0, majors: 1.0 },
+  outfieldDepthFrac: { little: 0.86, highschool: 0.77, college: 0.74, minors: 0.74, majors: 0.74 },
+  infieldRadiusFt: 165,          // a ball picked up inside this is an infield play (release, scoring)
+  // Power in a live game: mph of exit velocity per hitPow point (the out-zone model's is
+  // SKILL_EFFECT.hitPow.exitVeloMphPerPt, 1.3889). liveplay.js `liveSettings` swaps it in.
+  hitPowMphPerPt: 0.4,
+  // The ball.
+  carryMult: { little: 1.034, highschool: 1.008, college: 0.992, minors: 0.974, majors: 0.97 },
+  contactHeightFt: 3,
+  hangMult: 0.95,                // hang time = hangMult x the vacuum time of its launch
+  maxGroundSpeedFrac: 0.95,      // ...but never faster over the ground than this share of exit velocity
+  groundSpeedFrac: 0.85,         // a grounder leaves at this share of its exit velocity
+  dirtDecel: 12, grassDecel: 18, // ft/s/s rolling
+  dirtRadiusFt: 155,
+  landSpeedFrac: 0.5,            // a landed fly keeps this share of its speed into the roll
+  wallRestitution: 0.3,
+  // The fielders.
+  fielderFtS: { little: 17, highschool: 20, college: 21, minors: 22, majors: 22 },
+  reactionS: { little: 1.4, highschool: 0.6, college: 0.44, minors: 0.42, majors: 0.34 },
+  pitcherExtraReactS: 0.25,      // he is finishing his delivery
+  catchReachFt: 4.5, fieldReachFt: 3.0, reachHeightFt: 8.0, wallReachFt: 10.5,
+  // Throws: pitch Speed is arm strength, pitch Accuracy is aim (Matt's decision 3).
+  throwBaseMph: { little: 66, highschool: 64, college: 64, minors: 62, majors: 62 },
+  throwMphPerPt: 1.0,
+  throwCarry: 0.85,              // average speed over the throw's arc, as a share of release speed
+  maxThrowFtPerMph: 3.0,         // longer than this goes through the cutoff man
+  releaseS: { infield: 0.55, outfield: 0.8, catch: 0.7, pivot: 0.4 },
+  throwErrFt: { little: 6, highschool: 7, college: 8, minors: 8, majors: 8 }, // sigma at 0 Accuracy, 100 ft
+  throwErrAccCut: 0.85,          // full Accuracy (the league cap) takes this share off
+  cleanCatchFt: 4, wildFt: 10, offTargetSPerFt: 0.06,
+  selfTagFt: 30,                 // closer than this to the bag, he just runs there himself
+  tagS: 0.12,
+  maxThrows: 2,
+  // The runners: Speed (hitSpd) is how fast.
+  runBaseFtS: { little: 25.6, highschool: 22.1, college: 18.0, minors: 14.8, majors: 13.0 },
+  runFtSPerPt: 0.7,
+  trotFtS: 18,
+  batterStartS: 0.9, runnerStartS: 0.25, restartS: 0.3, tagUpS: 0.15,
+  leadFt: 10, halfwayFt: 30, halfwayHangS: 2.0,
+  runnerMarginS: 0.25, runnerNoiseS: 0.30,
+  // The live model's own CPU roster level (was `CPU_ROSTER_LEVEL`, which out-zone seasons keep).
+  cpuRosterLevel: { little: 2.0, highschool: 7.0, college: 12.8, minors: 17.5, majors: 20.5 },
+};
+
 // THE STEAL. Success is `clamp(STEAL_BASE + SKILL_EFFECT.hitSpd.stealSuccessPerPt * runner.hitSpd
 // - STEAL_PER_ACC * pitcher.pitchAcc, STEAL_MIN, STEAL_MAX)` - the runner's own legs against the
 // pitcher's ability to hold him, which is the doc §6 [Locked] pair ("Batter Speed raises steal and
@@ -1551,5 +1614,5 @@ export default {
   LOCATION_LEAN_WEIGHT, VARIETY_REPEAT_BASE_CHANCE,
   CPU_SIGMA_MIN_MS, CPU_SIGMA_ABSOLUTE_FLOOR_MS, CPU_PLACEMENT_MIN, CHAMPION_CEILING, SLOT_SIGMA_DESCENT,
   LADDER_SHAPE, CLIFF_TOP_GAP_FRAC, STEEP_SHALLOW_GAP_FRAC, ladderGapWeights, CHAMPION_SIGMA_HEADROOM_FRAC,
-  BREAK_OFFSET,
+  BREAK_OFFSET, LIVE_PLAY,
 };
