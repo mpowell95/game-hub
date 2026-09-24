@@ -1133,3 +1133,18 @@ document):
 Tests: `test-hole-editor-ui.mjs` 112/112 (4 new), `test-hole-editor-mobile.mjs` 50/50 (6 new: hold
 shows the preview, lift places, dust plays and stops, a second finger cancels, undo). `hole-editor/`
 is outside the service worker, so no CACHE bump.
+
+## It is a Game Hub tile now (2026-09-24)
+
+Matt: *"Can we make it its own 'game'? and you can add an admin control specific for this game
+where I can select users who can see it and it remains hidden for everyone else?"*
+
+- **`course-creator` in `js/hub.js` `GAMES`**: launch-out `href: 'hole-editor/?course=new'`, `devOnly`,
+  tile art `GAME_ART['course-creator']`. No stats, no GAME_META row.
+- **Who can see it**: admin page -> Games -> Course Creator (while Admin only) shows every player
+  with a code as a chip; tap to add or remove. Stored at `adminConfig/v1/games/course-creator/allow`.
+  Full contract in the root `CLAUDE.md`, "The admin control page".
+- **The way back**: an installed iPhone app has no Back button, so the editor has **Back to Game
+  Hub** (phone: More -> View & help; desktop: the ribbon's Hub button). It saves first.
+- **Needs a connection**: `hole-editor/` is outside the service worker on purpose (the stale
+  `render.js` fix), so the tile does not open offline.

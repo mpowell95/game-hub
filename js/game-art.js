@@ -825,6 +825,25 @@ export const GAME_ART = {
   // bunkers, a pond with an earth bank, lily pads and cattails, tall grass in the corners, and
   // a ball on a tee. ~38 KB, sharp at any size. The lesson, for whoever draws the next tile:
   // the other tiles in this file are ~7 flat shapes, and that is NOT the standard to aim at.
+  'course-creator': `<svg viewBox="0 0 160 90" aria-hidden="true">
+         <defs><linearGradient id="ccTileSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A9D4F0"/><stop offset="1" stop-color="#E6F2FA"/></linearGradient></defs>
+         <rect width="160" height="90" fill="url(#ccTileSky)"/>
+         <g fill="#FFFFFF"><ellipse cx="26" cy="16" rx="11" ry="4"/><ellipse cx="32" cy="13" rx="7" ry="5"/><ellipse cx="128" cy="20" rx="10" ry="3.5"/><ellipse cx="133" cy="17.5" rx="6" ry="4"/></g>
+         <ellipse cx="80" cy="81" rx="46" ry="4" fill="#9FB6C8" opacity=".55"/>
+         <path d="M34 50 L80 73 L80 79 L34 56 Z" fill="#B98A5E"/>
+         <path d="M126 50 L80 73 L80 79 L126 56 Z" fill="#9C6F48"/>
+         <path d="M80 27 L126 50 L80 73 L34 50 Z" fill="#8DBF62"/>
+         <path d="M48 52 C 60 44, 76 46, 84 40 C 94 33, 104 36, 112 44 L106 47 C 99 41, 92 40, 86 45 C 78 51, 62 50, 54 55 Z" fill="#B8DC86"/>
+         <ellipse cx="108" cy="45" rx="9" ry="4.5" fill="#D6EFA8" stroke="#A7CF74" stroke-width="1"/>
+         <ellipse cx="66" cy="57" rx="7" ry="3.2" fill="#F3E3B3"/>
+         <ellipse cx="90" cy="57" rx="8" ry="3.6" fill="#7EC4E4"/>
+         <g><path d="M47 49 L43 49 L45 40 Z" fill="#5E9B62"/><path d="M47.5 45 L42.5 45 L45 36 Z" fill="#6FAF72"/><rect x="44.5" y="48.5" width="1" height="2.5" fill="#7A5A3A"/></g>
+         <g><path d="M57 42 L52 42 L54.5 32 Z" fill="#5E9B62"/><path d="M57.5 38 L51.5 38 L54.5 28 Z" fill="#6FAF72"/><rect x="54" y="41.5" width="1" height="2.5" fill="#7A5A3A"/></g>
+         <g><circle cx="118" cy="56" r="4" fill="#79B06A"/><circle cx="121" cy="54" r="3" fill="#8CC17A"/><rect x="118" y="58" width="1" height="3" fill="#7A5A3A"/></g>
+         <rect x="108" y="30" width="1.2" height="15" fill="#4A4063"/>
+         <path d="M109.2 30 L117 33 L109.2 36 Z" fill="#E0532F"/>
+         <g transform="rotate(-38 136 60)"><rect x="126" y="56" width="22" height="7" rx="1.5" fill="#FFCE3A" stroke="#4A4063" stroke-width="1"/><path d="M126 56 L119 59.5 L126 63 Z" fill="#F4D9B0" stroke="#4A4063" stroke-width="1"/><path d="M121.4 58.3 L119 59.5 L121.4 60.7 Z" fill="#4A4063"/><rect x="144" y="56" width="4" height="7" fill="#F29BAE" stroke="#4A4063" stroke-width="1"/></g>
+       </svg>`,
   golf: `<svg viewBox="0 0 160 90" aria-hidden="true">
          <defs><linearGradient id="golfTileSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C3DCF2"/><stop offset="1" stop-color="#D6E9F8"/></linearGradient></defs>
          <rect width="160" height="90" fill="url(#golfTileSky)"/>

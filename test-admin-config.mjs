@@ -211,3 +211,18 @@ eq('junk is not a reset', A.resolveDeviceReset({ deviceResets: { 'dev-1': { at: 
 eq('a cleared reset reads as never', A.resolveDeviceReset({ deviceResets: { 'dev-1': { at: null } } }, 'dev-1'), 0);
 eq('normalizeConfig keeps the branch', A.normalizeConfig({ deviceResets: { x: { at: 1 } } }).deviceResets, { x: { at: 1 } });
 eq('a junk branch is replaced, not trusted', A.normalizeConfig({ deviceResets: 7 }).deviceResets, {});
+
+console.log('\n-- per-player access (games/<id>/allow, 2026-09-24) --');
+{
+  const cfg = { games: { 'course-creator': { allow: { ABCDE: true, FGHJK: null, XYZ12: 'yes' } } } };
+  eq('a picked code can see it', A.resolveGameAllowed(cfg, 'course-creator', 'ABCDE'), true);
+  eq('the code is matched case-blind', A.resolveGameAllowed(cfg, 'course-creator', ' abcde '), true);
+  eq('an unpicked code cannot', A.resolveGameAllowed(cfg, 'course-creator', 'QQQQQ'), false);
+  eq('a cleared entry is not a pick', A.resolveGameAllowed(cfg, 'course-creator', 'FGHJK'), false);
+  eq('only a literal true counts', A.resolveGameAllowed(cfg, 'course-creator', 'XYZ12'), false);
+  eq('no code, no access', A.resolveGameAllowed(cfg, 'course-creator', ''), false);
+  eq('a pick on one game never reaches another', A.resolveGameAllowed(cfg, 'golf', 'ABCDE'), false);
+  eq('the list is the picked codes only', A.gameAllowList(cfg, 'course-creator'), ['ABCDE']);
+  eq('an allow list never touches the live switch', A.resolveGameLive(cfg, 'course-creator', false), false);
+  eq('junk config is nobody', A.resolveGameAllowed({ games: 5 }, 'course-creator', 'ABCDE'), false);
+}
