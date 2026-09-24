@@ -34,6 +34,8 @@
 //     Batch 5: in a season that snapshotted `runControl` the PLAYER'S runners make none of these
 //     decisions - he taps bases instead (`controlPlay`, below; game.js `_livePlay`). The CPU's
 //     runners stay automatic.
+//     Batch 6: in a season that snapshotted `fieldControl` the PLAYER'S fielders still run to the
+//     ball on their own, but the catch is his tap and the first throw his choice (`fieldPlay`).
 //   - THROWING: the defense throws at the most advanced runner it can get; if it can get nobody it
 //     throws to the lead runner's base. After an out it may make one more throw (the double play's
 //     pivot). A throw longer than the thrower's arm goes through the cutoff man.
@@ -58,11 +60,19 @@ const DT = 0.02; // the integrator's step, seconds
  *  `SKILL_EFFECT.hitPow.exitVeloMphPerPt`. Measured: with the out-zone value (1.389) and the carry
  *  cut to real home run rates, a home run became an exit-velocity threshold only Power moves, and
  *  +6 Power was worth +32 points of win rate (Contact +2, the pitching skills about 0). */
-export function liveSettings(settings) {
-  const L = settings.LIVE_PLAY || LIVE_PLAY;
-  if (L.hitPowMphPerPt == null) return settings;
-  const eff = settings.SKILL_EFFECT || {};
-  return { ...settings, SKILL_EFFECT: { ...eff, hitPow: { ...(eff.hitPow || {}), exitVeloMphPerPt: L.hitPowMphPerPt } } };
+export function liveSettings(settings, runSpeedV = 1) {
+  let L = settings.LIVE_PLAY || LIVE_PLAY;
+  let out = settings;
+  // Batch 6 (Matt: "make Speed matter more"): a season that snapshotted `runSpeedV` 2 runs on
+  // `LIVE_PLAY.runSpeedV2` (more feet a second per Speed point, the same speed at the league's CPU
+  // roster level); an older season keeps the table it started with.
+  if (runSpeedV >= 2 && L.runSpeedV2) {
+    L = { ...L, ...L.runSpeedV2 };
+    out = { ...out, LIVE_PLAY: L };
+  }
+  if (L.hitPowMphPerPt == null) return out;
+  const eff = out.SKILL_EFFECT || {};
+  return { ...out, SKILL_EFFECT: { ...eff, hitPow: { ...(eff.hitPow || {}), exitVeloMphPerPt: L.hitPowMphPerPt } } };
 }
 
 /** Base index k -> plan point. 0 first, 1 second, 2 third, 3 home. */
@@ -377,7 +387,7 @@ export function resolveLivePlay(p) {
       const sigma = lg(L.throwErrFt, league) * (1 - L.throwErrAccCut * f.acc01) * Math.sqrt(Math.max(30, leg.dist) / 100);
       const u1 = Math.max(1e-9, rand()), u2 = rand();
       const offFt = Math.abs(sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2));
-      const tFly = leg.dist / f.throwFtS;
+      const tFly = leg.flyS != null ? leg.flyS : leg.dist / f.throwFtS; // batch 6: a long throw carries its own
       const tArr = leg.tRelease + slip + tFly;
       let extra = 0;
       if (offFt > L.wildFt) { wild = true; wildAt = tArr; } // batch 4b: runners go when it gets away
@@ -424,9 +434,22 @@ export function resolveLivePlay(p) {
   // --- 2. the ball's fate ---------------------------------------------------------------------------
   const holderPos = take.pos;
   const P = { x: take.x, y: take.y };
-  const caught = take.air;
+  let caught = take.air;
+  // Batch 6: when the PLAYER fields (`p.field`), the fielder still runs to the ball on his own, but
+  // he only catches it (or gloves it cleanly off the ground) if the player taps inside
+  // `fldCatchWinS` of the moment it arrives (`p.field.catchT`, seconds from contact; `undefined`
+  // means "not decided yet" and is drawn as clean). A miss is a BOBBLE: the ball drops at his feet,
+  // stays live, and he picks it up `fldBobbleS` later.
+  let bobble = null;
+  const fieldWin = lg(L.fldCatchWinS, league);
+  if (p.field && !p.control) {
+    const c = p.field.catchT;
+    const ok = c === undefined || (Number.isFinite(c) && Math.abs(c - take.t) <= fieldWin + 1e-9);
+    if (!ok) { bobble = { t: take.t, pickT: take.t + L.fldBobbleS }; caught = false; }
+  }
   timeline.possession = { pos: holderPos, t: take.t, x: P.x, y: P.y, caught,
     runFrom: { x: fielders[holderPos].spot.x, y: fielders[holderPos].spot.y }, runStartT: fielders[holderPos].react };
+  if (bobble) { timeline.possession.bobble = true; timeline.possession.pickT = bobble.pickT; }
   let outsNow = p.outs;
   const occupied = (i) => p.bases[i] != null;
   const forcedBase = (r) => {
@@ -440,6 +463,8 @@ export function resolveLivePlay(p) {
   let est = null; // batch 5: what a model base runner reads (sim-baseball-career.mjs); see controlPlay
   if (p.control) {
     controlPlay(p.control.orders);
+  } else if (p.field) {
+    fieldPlay(p.field);
   } else if (caught) {
     // A CAUGHT BALL IS ALWAYS AN OUT (Matt).
     recordOut(batter, take.t, false, -1);
@@ -597,21 +622,7 @@ export function resolveLivePlay(p) {
     const baseIdx = (s) => Math.round(s / BASE_FT) - 1;
     const forceOn = (r) => runners.every((x) => x === r || x.from >= r.from || x.outT == null);
     const blocked = (k, r) => k < 3 && alive().some((x) => x !== r && Math.abs(targetS(x) - baseS(k)) < EPS);
-    /** Send runner r toward base-path position s1, decided at t. */
-    const redirect = (r, t, s1) => {
-      const g = lastLeg(r);
-      if (!g) { r.legs.push({ t0: t, s0: at(r, t), s1, spd: r.spd }); return; }
-      if (t <= g.t0 + EPS) {                                   // his next leg has not started: re-aim it
-        g.s1 = s1;
-        if (g.hold) { g.t0 = t; delete g.hold; }               // a held lead: he goes now
-        return;
-      }
-      const pos = at(r, t);
-      const arrived = t >= arriveT(r) - EPS;
-      if (!arrived && Math.sign(g.s1 - g.s0) === Math.sign(s1 - pos)) { g.s1 = s1; return; } // keep going
-      g.s1 = pos;                                              // stop where he is...
-      r.legs.push({ t0: t + (arrived ? L.restartS : L.turnS), s0: pos, s1, spd: r.spd }); // ...and go
-    };
+    const redirect = redirectRunner;
     const applyOrder = (k, t) => {
       const sk = baseS(k);
       // BACK: a runner running away from base k (he left it, or passed it), not forced off it.
@@ -645,12 +656,7 @@ export function resolveLivePlay(p) {
       redirect(r, t, sk);
       return true;
     };
-    /** When runner r (on his current leg) first reaches base-path position s, or null. */
-    const reachT = (r, s) => {
-      const g = lastLeg(r);
-      if (!g || g.s1 <= g.s0 || s > g.s1 + EPS || s < g.s0 - EPS) return null;
-      return g.t0 + (s - g.s0) / g.spd;
-    };
+    const reachT = reachTime;
 
     let holder = holderPos, at0 = P, ready = tReady;
     let decT = tReady, inFlight = null, done = false, throwN = 0;
@@ -718,6 +724,271 @@ export function resolveLivePlay(p) {
       if (inFlight) { const fl = inFlight; inFlight = null; arrive(fl); continue; }
       const T = decT; decT = null;
       decide(T);
+    }
+  }
+  /** Send runner r toward base-path position s1, decided at t (batch 5; batch 6 turns the CPU's
+   *  runners back with it). A leg not started yet is re-aimed; a runner going the same way keeps
+   *  going; otherwise he stops where he is and goes again after `turnS` (or `restartS` from a bag). */
+  function redirectRunner(r, t, s1) {
+    const EPS = 1e-6;
+    const g = lastLeg(r);
+    if (!g) { r.legs.push({ t0: t, s0: at(r, t), s1, spd: r.spd }); return; }
+    if (t <= g.t0 + EPS) {                                   // his next leg has not started: re-aim it
+      g.s1 = s1;
+      if (g.hold) { g.t0 = t; delete g.hold; }               // a held lead: he goes now
+      return;
+    }
+    const pos = at(r, t);
+    const arrived = t >= arriveT(r) - EPS;
+    if (!arrived && Math.sign(g.s1 - g.s0) === Math.sign(s1 - pos)) { g.s1 = s1; return; } // keep going
+    g.s1 = pos;                                              // stop where he is...
+    r.legs.push({ t0: t + (arrived ? L.restartS : L.turnS), s0: pos, s1, spd: r.spd }); // ...and go
+  }
+  /** When runner r (on his current leg) first reaches base-path position s, or null. */
+  function reachTime(r, s) {
+    const EPS = 1e-6;
+    const g = lastLeg(r);
+    if (!g || g.s1 <= g.s0 || s > g.s1 + EPS || s < g.s0 - EPS) return null;
+    return g.t0 + (s - g.s0) / g.spd;
+  }
+
+  // --- 3c. batch 6: THE PLAYER PLAYS THE FIELD --------------------------------------------------------
+  // Matt: "if the ball is hit to an outfielder, I'd have to time pressing a button correctly in order
+  // to catch it. If I mis-time it, I bobble it... and if the ball lands, I'd choose where to throw it
+  // (cutoff man, directly to a base, all the way to home plate)." With `p.field` the fielding side is
+  // the player's: its fielder still runs to the ball on his own (Matt's decision 2) and the catch is
+  // the tap decided above (`bobble`). His FIRST throw is the player's `p.field.throw = {t, to}`: `to`
+  // is 'cut' or a base (0 first .. 3 home), `t` the second it was tapped. He lets go at
+  // max(ready, tap): a quick choice costs nothing, a slow one costs every second it takes, and the
+  // CPU's runners use it - while he holds the ball past ready they look again every `fldReadS` and
+  // take another base if a throw let go right then could not beat them. With no choice by
+  // `fldAutoS` after ready he makes the automatic defense's own throw.
+  //   - A BASE: straight there, to that base's cover man. Time is distance over his arm (pitch Speed);
+  //     past his arm's reach (`maxThrowFtPerMph`) it bounces in, `fldLongSlow` slower per arm's length
+  //     beyond. Accuracy is `execute`'s (pitch Accuracy), and the aim error grows with distance.
+  //   - CUTOFF: to the cutoff man, lined up between the ball and the lead runner's next base: the
+  //     quickest throw, and no out. He then plays on as the automatic defense does.
+  // Every throw after the first is the automatic defense's (the receiver's), as in `controlPlay`. The
+  // CPU runners react to every throw once it is in the air (`ctlReadS` to read it): the runner it is
+  // aimed at turns back if it will beat him and he is short of halfway (not when forced), and any
+  // other runner takes one more base if the ball cannot be got there in time. Every random draw
+  // is taken in time order (the runners' reads, then each throw's aim as it is let go), so a later
+  // input never changes anything before it - the UI re-resolves the play on each tap (game.js).
+  function fieldPlay(F) {
+    // (A bobble is scored like any other ball not caught - doc section 10 has no error.)
+    timeline.fielded = true;
+    const EPS = 1e-6;
+    let holdState = null; // who has the ball next, where, and when he can throw it
+    const tHave = bobble ? bobble.pickT : take.t;
+    const release = caught ? L.releaseS.catch : (isInfield(P) ? L.releaseS.infield : L.releaseS.outfield);
+    const tReady = tHave + release;
+    const tAuto = tReady + L.fldAutoS;
+    const delivery = (T) => { const m = {}; return (k) => (m[k] || (m[k] = planDelivery(holderPos, P, T, k))).t; };
+    // Nothing anyone does before the ball arrives may depend on the catch (the player's tap decides
+    // it at that moment, and the UI draws the play before it knows): so on a ball in the air with
+    // fewer than two out every runner stands on his bag until it comes down, caught or dropped, and
+    // with two out they all run on contact either way. Before a bobble they read a clean pick-up.
+    const twoOut = outsNow >= outsPerInning - 1;
+    const onContact = path.kind === 'ground' || twoOut;
+    const cleanReady = take.t + (isInfield(P) ? L.releaseS.infield : L.releaseS.outfield);
+    const firstRead = (tGo, offBase, ready, batterFrom = { t: L.batterStartS, s: 0 }) => {
+      decideRunners(tGo, delivery(ready), (r) => forcedBase(r),
+        (r, t) => (r.isBatter ? batterFrom : { t, s: baseS(r.from) + offBase }));
+      for (const r of alive()) if (!r.legs.length && !r.isBatter) r.legs.push({ t0: tGo, s0: baseS(r.from) + offBase, s1: baseS(r.from), spd: r.spd });
+    };
+    if (caught) {
+      if (onContact) firstRead(L.runnerStartS, L.leadFt, cleanReady); // two out: the catch ends the inning
+      else batter.legs.push({ t0: L.batterStartS, s0: 0, s1: Math.max(0, Math.min(BASE_FT, batter.spd * (take.t - L.batterStartS))), spd: batter.spd });
+      recordOut(batter, take.t, false, -1);
+      outsNow += 1;
+      if (outsNow < outsPerInning) {
+        decideRunners(take.t, delivery(tReady), (r) => (r.isBatter ? -1 : r.from), (r, t) => ({ t: t + L.tagUpS, s: baseS(r.from) }));
+      }
+    } else {
+      const tGo = onContact ? L.runnerStartS : (path.landT != null ? path.landT : take.t);
+      const offBase = onContact ? L.leadFt : (path.hangS > L.halfwayHangS ? L.halfwayFt : L.leadFt);
+      const early = bobble && tGo < bobble.t - EPS;
+      if (bobble && take.air && !onContact) {
+        // A dropped fly: they go as it drops - the runners from their bags, the batter from wherever
+        // he had got to (the same run a catch would have stopped).
+        const pos = Math.max(0, Math.min(BASE_FT, batter.spd * (take.t - L.batterStartS)));
+        batter.legs.push({ t0: L.batterStartS, s0: 0, s1: pos, spd: batter.spd });
+        firstRead(take.t, 0, tReady, { t: take.t, s: pos });
+        if (batter.outT == null && targetS(batter) < BASE_FT) runTo(batter, BASE_FT, take.t);
+      } else {
+        firstRead(tGo, offBase, early ? cleanReady : tReady);
+      }
+      if (early) extraBase(bobble.t, delivery(tReady));
+    }
+    const throwNeeded = outsNow < outsPerInning && alive().length > 0;
+    est = { field: true, takeT: take.t, air: take.air, pos: holderPos, catchWinS: fieldWin, bobbleS: L.fldBobbleS,
+      caught, bobble: !!bobble, tHave, tReady, tAuto, throwNeeded, infield: isInfield(P),
+      forced: Object.fromEntries(runners.map((r) => [r.id, forcedBase(r)])), tagS: L.tagS,
+      throwT: (to, T) => firstThrow(to, T).t };
+    if (!throwNeeded) {
+      if (outsNow < outsPerInning) autoThrows(tReady, true);
+      return;
+    }
+
+    // The player's throw (or the automatic one, if he has not chosen by tAuto).
+    const ch = F.throw;
+    const to = ch && (ch.to === 'cut' || (Number.isInteger(ch.to) && ch.to >= 0 && ch.to <= 3)) ? ch.to : null;
+    const tRel = to != null && Number.isFinite(ch.t) ? Math.max(tReady, ch.t) : Infinity;
+    const tFirst = Math.min(tRel, tAuto);
+    for (let T = tReady + L.fldReadS; T < tFirst - EPS; T += L.fldReadS) extraBase(T, delivery(T));
+    if (tRel > tAuto) { autoThrows(tAuto, true); return; }
+    if (to === 'cut' && isInfield(P)) { timeline.playerThrow = { to, t: tRel }; return; } // an infield ball: HOLD it
+    const plan = firstThrow(to, tRel);
+    const fl = launch(plan, tRel);
+    timeline.playerThrow = { to, t: tRel };
+    settle(fl);
+    autoThrows(null, false);
+
+    // --- helpers -------------------------------------------------------------------------------
+    /** The player's first throw as a plan `execute()` plays: a base (straight, bouncing past his
+     *  arm), the cutoff, or a run to the bag himself when he is standing by it. */
+    function firstThrow(dest, T) {
+      const h = fielders[holderPos];
+      if (dest === 'cut') {
+        const going = alive().filter((r) => targetS(r) < 360);
+        const kc = going.length ? Math.min(3, Math.round(targetS(going[0]) / BASE_FT)) : 1;
+        const b = basePoint(kc);
+        const cutPos = (path.spray < 0 ? ['SS', '3B'] : ['2B', '1B']).find((pos) => pos !== holderPos) || 'SS';
+        const cut = fielders[cutPos];
+        const d = dist(P, b);
+        const frac = Math.min(0.6, Math.max(0.35, 1 - (h.maxThrowFt * 0.85) / d));
+        const relay = { x: P.x + (b.x - P.x) * frac, y: P.y + (b.y - P.y) * frac };
+        const d1 = dist(P, relay);
+        const tCut = cut.react + dist(cut.spot, relay) / cut.spd;
+        return { kind: 'cut', t: Math.max(T + d1 / h.throwFtS, tCut), k: -1, cover: cutPos, at: relay,
+          legs: [{ from: holderPos, to: cutPos, fromPt: P, toPt: relay, tRelease: T, dist: d1 }] };
+      }
+      const b = basePoint(dest);
+      const d = dist(P, b);
+      if (d <= L.selfTagFt) return { kind: 'run', t: T + d / h.spd, k: dest, cover: holderPos, at: b, legs: [] };
+      const cover = coverFor(dest, holderPos);
+      const over = Math.max(0, d / h.maxThrowFt - 1);
+      const flyS = (d / h.throwFtS) * (1 + L.fldLongSlow * over);
+      return { kind: 'throw', t: Math.max(T + flyS, coverArrive(cover, dest)), k: dest, cover, at: b,
+        legs: [{ from: holderPos, to: cover, fromPt: P, toPt: b, tRelease: T, dist: d, flyS }] };
+    }
+    /** Let a plan go at T: its aim is drawn now, then the runners read it. */
+    function launch(pl, T) {
+      const res = execute(pl);
+      timeline.throws.push(...res.legs);
+      const tA = Math.max(res.t, T);
+      timeline.endT = Math.max(timeline.endT, tA);
+      const fl = { k: pl.k, tA, cover: pl.cover, at: pl.at, wild: res.wild, wildAt: res.wildAt, cut: pl.kind === 'cut' };
+      const tRead = T + L.ctlReadS;
+      if (!res.wild && tRead < tA - EPS) readThrow(tRead, pl, fl);
+      return fl;
+    }
+    /** The runners see where a throw is going (its expected arrival - never its aim). */
+    function readThrow(T, pl, fl) {
+      const cover = fielders[pl.cover];
+      let ahead = 4;
+      for (const r of alive()) {
+        const tgt = targetS(r);
+        const k = Math.round(tgt / BASE_FT) - 1;
+        if (tgt >= 360) continue;
+        const pos = at(r, T);
+        if (!fl.cut && k === fl.k && arriveT(r) > T + EPS && lastLeg(r) && lastLeg(r).s1 > lastLeg(r).s0) {
+          // The throw is coming to HIS base: back to the one he left if it will beat him there...
+          const left = Math.floor((pos - EPS) / BASE_FT) - 1;
+          const force = !caught && forcedAt(r, k);
+          const noise = (rand() * 2 - 1) * L.runnerNoiseS;
+          const beaten = arriveT(r) + L.runnerMarginS > pl.t + (force ? 0 : L.tagS) + noise;
+          const free = left >= 0 && !alive().some((x) => x !== r && Math.abs(targetS(x) - baseS(left)) < EPS);
+          // ...and only if he can get back before the ball could be relayed there from the bag.
+          const tBack = T + L.turnS + (pos - baseS(Math.max(0, left))) / r.spd;
+          const tRelay = pl.t + L.releaseS.pivot + (left >= 0 ? dist(fl.at, basePoint(left)) : 0) / cover.throwFtS;
+          if (beaten && !force && free && tBack + L.runnerMarginS < tRelay) { redirectRunner(r, T, baseS(left)); ahead = left; continue; }
+          ahead = k; continue;
+        }
+        const nb = k + 1;
+        if (k >= 0 && nb <= 3 && (nb < ahead || nb === 3)) {
+          const from = fl.at;
+          const tCan = pl.t + L.releaseS.pivot + dist(from, basePoint(nb)) / cover.throwFtS;
+          const tR = Math.max(T, arriveT(r)) + (arriveT(r) <= T ? L.restartS : 0) + (baseS(nb) - tgt) / r.spd;
+          const noise = (rand() * 2 - 1) * L.runnerNoiseS;
+          if (tR + L.runnerMarginS + L.tagS < tCan + noise) { runTo(r, baseS(nb), T); ahead = nb === 3 ? 4 : nb; continue; }
+        }
+        if (k >= 0) ahead = k;
+      }
+    }
+    /** A throw arrives: a force or a tag at its base (never at the cutoff), or it got away. */
+    function settle(fl) {
+      if (fl.wild) {
+        const aimed = fl.cut ? null : alive().find((r) => Math.abs(targetS(r) - baseS(fl.k)) < EPS && arriveT(r) > fl.tA);
+        if (aimed) wildOn = { id: aimed.id, k: fl.k };
+        wildAdvance(fl.wildAt);
+        return false;
+      }
+      if (!fl.cut) {
+        const sk = baseS(fl.k);
+        for (const r of alive()) {
+          const pos = at(r, fl.tA);
+          const force = !caught && forcedAt(r, fl.k) && pos < sk - EPS;
+          const tag = !force && Math.abs(targetS(r) - sk) < EPS && arriveT(r) > fl.tA + L.tagS;
+          if (force || tag) { recordOut(r, fl.tA, force, fl.k); outsNow += 1; break; }
+        }
+      }
+      holdState = { holder: fl.cover, at: fl.at, ready: fl.tA + L.releaseS.pivot };
+      return true;
+    }
+    /** The automatic defense from here (`controlPlay`'s `decide`): throw at the most advanced runner
+     *  it can beat, up to `ctlMaxThrows`; `first` = nobody has thrown yet (an outfielder with nobody
+     *  to get throws it in). */
+    function autoThrows(T0, first) {
+      if (first) holdState = { holder: holderPos, at: P, ready: T0 };
+      let throwN = first ? 0 : 1;
+      for (let guard = 0; guard < L.ctlMaxThrows && holdState; guard++) {
+        if (outsNow >= outsPerInning || throwN >= L.ctlMaxThrows) return;
+        const { holder, at: at0, ready: T } = holdState;
+        holdState = null;
+        let choice = null;
+        const consider = (r, k, tR, force) => {
+          if (tR == null || tR <= T + EPS) return;
+          const pl = planDelivery(holder, at0, T, k);
+          if (pl.t + (force ? 0 : L.tagS) < tR && (!choice || k > choice.k)) choice = { r, k, plan: pl };
+        };
+        for (const r of alive()) {
+          if (arriveT(r) <= T + EPS) continue;
+          const k = Math.round(targetS(r) / BASE_FT) - 1;
+          if (k >= 0) consider(r, k, arriveT(r), !caught && forcedAt(r, k) && at(r, T) < baseS(k) - EPS);
+          const fb = forcedBase(r);
+          const forceOn = runners.every((x) => x === r || x.from >= r.from || x.outT == null);
+          if (!caught && fb > r.from && fb < k && forceOn) consider(r, fb, reachTime(r, baseS(fb)), true);
+        }
+        let pl = choice && choice.plan;
+        if (!pl && throwN === 0 && !isInfield(at0)) {
+          const going = alive().filter((r) => targetS(r) < 360);
+          const k = going.length ? Math.min(3, Math.max(0, Math.round(targetS(going[0]) / BASE_FT))) : 1;
+          pl = planDelivery(holder, at0, T, k);
+        }
+        if (!pl) return;
+        pl.at = basePoint(pl.k);
+        throwN += 1;
+        if (!settle(launch(pl, T))) return;
+      }
+    }
+  }
+  /** A runner's second look while the fielder is not throwing (a bobble, or the ball held): one more
+   *  base if the ball, let go now (`defenseAt`), could not beat him there. */
+  function extraBase(T, defenseAt) {
+    let ahead = 4;
+    for (const r of alive()) {
+      const tgt = targetS(r);
+      if (tgt >= 360) continue;
+      const k = Math.round(tgt / BASE_FT) - 1;
+      const nb = k + 1;
+      if (k >= 0 && nb <= 3 && (nb < ahead || nb === 3)) {
+        const there = arriveT(r) <= T;
+        const tR = (there ? T + L.restartS : arriveT(r)) + (baseS(nb) - tgt) / r.spd;
+        const noise = (rand() * 2 - 1) * L.runnerNoiseS;
+        if (tR + L.runnerMarginS + L.tagS < defenseAt(nb) + noise) { runTo(r, baseS(nb), T); ahead = nb === 3 ? 4 : nb; continue; }
+      }
+      if (k >= 0) ahead = k;
     }
   }
   function forcedAt(r, k) {

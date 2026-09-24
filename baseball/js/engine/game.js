@@ -80,7 +80,7 @@ export class Game {
    * @param {boolean} [opts.livePlays] - playtest 1 batch 4: play every ball in play out in time
    *   (liveplay.js) instead of the out-zone model. Career passes its season's snapshot; off by default
    */
-  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false, wallHeight = true, livePlays = false, runControl = false }) {
+  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false, wallHeight = true, livePlays = false, runControl = false, fieldControl = false, runSpeedV = 1 }) {
     // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY. It rides on the pitch view rather
     // than being read from a module global, so a CAREER game constructed in the same page is
     // unaffected either way.
@@ -99,11 +99,16 @@ export class Game {
     // Batch 5: on a live play, a batting agent with `runBases()` runs its own runners (liveplay.js
     // `controlPlay`). Snapshotted per season like `livePlays`; meaningless without it.
     this.runControl = !!runControl;
+    // Batch 6: on a live play, a FIELDING agent with `fieldBall()` times the catch and picks the
+    // first throw (liveplay.js `fieldPlay`). Snapshotted per season the same way.
+    this.fieldControl = !!fieldControl;
+    // Batch 6: which running-speed table a live play uses (liveplay.js `liveSettings`), per season.
+    this.runSpeedV = Number(runSpeedV) || 1;
     // Both sides play in the same league (a Career opponent is always drawn from the player's own
     // league); home's is authoritative if the two ever disagreed.
     this.league = home.league || away.league;
     this.settings = { ...SETTINGS_DEFAULTS, ZONE, ...(settings || {}) };
-    if (this.livePlays) this.settings = liveSettings(this.settings); // batch 4: the live model's Power
+    if (this.livePlays) this.settings = liveSettings(this.settings, this.runSpeedV); // batch 4: the live model's Power (batch 6: and its running speeds)
 
     this.rngState = seed >>> 0;
     this.inning = 1;
@@ -168,10 +173,12 @@ export class Game {
     g.wallHeight = !!snap.wallHeight; // playtest 1: an older snapshot keeps the old home run rule
     g.livePlays = !!snap.livePlays;   // batch 4: an older snapshot keeps the out-zone model
     g.runControl = !!snap.runControl; // batch 5: an older snapshot keeps automatic base running
+    g.fieldControl = !!snap.fieldControl; // batch 6: an older snapshot keeps automatic fielding
+    g.runSpeedV = Number(snap.runSpeedV) || 1; // batch 6: ...and the running speeds it started with
     g.quickPlay = !!snap.quickPlay; // RA: additive; an older snapshot simply resumes as a career game
     g.league = snap.home.league || snap.away.league;
     g.settings = { ...SETTINGS_DEFAULTS, ZONE };
-    if (g.livePlays) g.settings = liveSettings(g.settings);
+    if (g.livePlays) g.settings = liveSettings(g.settings, g.runSpeedV);
     g.rngState = snap.rngState >>> 0;
     g.inning = snap.inning;
     g.half = snap.half;
@@ -226,6 +233,8 @@ export class Game {
       wallHeight: this.wallHeight,
       livePlays: this.livePlays,
       runControl: this.runControl,
+      fieldControl: this.fieldControl,
+      runSpeedV: this.runSpeedV,
       quickPlay: this.quickPlay,
       inning: this.inning,
       half: this.half,
@@ -751,7 +760,7 @@ export class Game {
         const live = (this.livePlays && !swingResult.bunt)
           ? await this._livePlay({ batted: swingResult, league: this.league, fenceFt: this._parkFt(), bases: this.bases.slice(),
             outs: this.outs, batterId, speedOf: (id) => this._hitSpdOf(battingTeam, id), defense: defenseTeam, shiftDeg,
-            settings: this.settings, wallHeight: this.wallHeight }, battingAgent, battingSide, timingWord)
+            settings: this.settings, wallHeight: this.wallHeight }, battingAgent, battingSide, timingWord, defenseAgent)
           : null;
         const outcome = live || (swingResult.bunt
           ? resolveBunt(swingResult, this.bases, this.outs, batter.skills.hitSpd, this.settings, () => this._rand())
@@ -849,8 +858,10 @@ export class Game {
    *  the same draws in the same order. The one await inside the pitch pass: a screen torn down
    *  mid-play settles it (HumanAgent), and since game events are dropped once aborted, a resume
    *  starts from the pitch boundary before this pitch (batch 4's rule, unchanged). */
-  async _livePlay(args, battingAgent, battingSide, timingWord = null) {
+  async _livePlay(args, battingAgent, battingSide, timingWord = null, defenseAgent = null) {
     const control = this.runControl && battingAgent && typeof battingAgent.runBases === 'function';
+    const field = !control && this.fieldControl && defenseAgent && typeof defenseAgent.fieldBall === 'function';
+    if (field) return this._fieldPlay(args, defenseAgent, battingSide === 'home' ? 'away' : 'home');
     if (!control) return resolveLivePlay({ ...args, rand01: () => this._rand() });
     const rng0 = this.rngState;
     const replay = (orders) => {
@@ -868,6 +879,33 @@ export class Game {
       orders = Array.isArray(got) ? got.map((o) => ({ t: Number(o && o.t), k: Number(o && o.k) })) : [];
     }
     return resolveLivePlay({ ...args, control: { orders }, rand01: () => this._rand() });
+  }
+
+  /** Batch 6: the FIELDING agent plays the ball (liveplay.js `fieldPlay`), the same shape as batch
+   *  5's `runBases`: it is handed the play as drawn with the catch not yet decided (`view.play`,
+   *  `view.est`) and `view.resolve(input)`, which replays the whole play from a private copy of the
+   *  RNG state for an input `{catchT, throw: {t, to}}` (catchT `undefined` = not decided yet, drawn
+   *  clean). What it returns is booked from the real RNG, so the booked play is the last one drawn.
+   *  Nothing to field on a home run or a foul out. */
+  async _fieldPlay(args, defenseAgent, defenseSide) {
+    const rng0 = this.rngState;
+    const replay = (input) => {
+      let st = rng0;
+      return resolveLivePlay({ ...args, field: input || {}, rand01: () => { const r = stepRng(st); st = r.next; return r.value; } });
+    };
+    const first = replay({});
+    const ps = first.timeline && first.timeline.possession;
+    let input = { catchT: null, throw: null };
+    if (ps && first.kind !== 'homer') {
+      const view = { play: first.timeline, est: first.est, side: defenseSide, league: this.league, outs: this.outs,
+        bases: args.bases.slice(), resolve: (inp) => { const r = replay(inp); return r.timeline ? { ...r.timeline, est: r.est } : null; } };
+      const got = (await defenseAgent.fieldBall(view)) || {};
+      const c = Number(got.catchT);
+      const th = got.throw && (got.throw.to === 'cut' || [0, 1, 2, 3].includes(Number(got.throw.to)))
+        ? { t: Number(got.throw.t), to: got.throw.to === 'cut' ? 'cut' : Number(got.throw.to) } : null;
+      input = { catchT: got.catchT != null && Number.isFinite(c) ? c : null, throw: th && Number.isFinite(th.t) ? th : null };
+    }
+    return resolveLivePlay({ ...args, field: input, rand01: () => this._rand() });
   }
 
   /** Batch 4: a runner's Speed. The extra-innings ghost runner is on no roster: he runs at his

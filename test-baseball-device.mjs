@@ -3149,6 +3149,119 @@ function bbProfileInit() {
   await ctxR.close();
 }
 
+// 41. Playtest 1 batch 6: THE PLAYER PLAYS THE FIELD. At 390x664 in the hub, with real touch:
+// auto-play Quick Play until the CPU puts a ball in play against the player, then (a) the fielding
+// panel covers exactly the control band's own box and nothing on the screen moved or resized, every
+// button >= 44px; (b) a real tap while the cue ball is in the target box catches it (or gloves it);
+// (c) a real tap on 2B becomes the throw; (d) the play the engine books is exactly the one on screen
+// (`view.resolve(input)`), and the panel is gone afterwards.
+{
+  const ctxF = await browser.newContext({ viewport: { width: 390, height: 664 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  const pageF = await ctxF.newPage();
+  const errsF = [];
+  pageF.on('pageerror', (e) => errsF.push(String((e && e.message) || e)));
+  await pageF.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({
+      name: 'Field Test', emoji: '\u{26BE}', opponents: [{ name: 'Bot', emoji: '\u{1F916}', skill: 1 }],
+    }));
+    for (const k of Object.keys(localStorage)) if (/\.save\.|\.mp\./.test(k)) localStorage.removeItem(k);
+  });
+  const mErr = await mountInHub(pageF);
+  if (mErr) {
+    fail('field-play', `mount failed: ${mErr}`);
+  } else {
+    await pageF.evaluate(() => { const b = document.querySelector('.hub-game .bb-play-btn'); if (b) b.click(); });
+    await pageF.waitForSelector('.bb-play', { timeout: 8000 }).catch(() => {});
+    await pageF.evaluate(async () => {
+      const inst = document.querySelector('.hub-game')._bbInstance;
+      const S = await import('/baseball/js/engine/settings.js');
+      const swingDelayMs = S.FEEL.engine.swingDelay;
+      let tts = null;
+      const of = inst._animatePitchFlight.bind(inst);
+      inst._animatePitchFlight = (p) => { tts = p.timeToPlateS; return of(p); };
+      let handler = inst._onMainDown || null;
+      const fire = (fn) => {
+        if (!fn) return;
+        const delay = inst.state && inst.state.actionLabel === 'act_swing' ? Math.max(0, (tts || 0) * 1000 - swingDelayMs) : 0;
+        setTimeout(() => { if (handler === fn) fn(); }, delay);
+      };
+      Object.defineProperty(inst, '_onMainDown', { configurable: true, get() { return handler; }, set(fn) { handler = fn; fire(fn); } });
+      fire(handler);
+      window.__fb = null;
+      const strip = (tl) => { if (!tl) return null; const { est, ...rest } = tl; return JSON.stringify(rest); };
+      const orig = inst._fieldBallLive.bind(inst);
+      inst._fieldBallLive = async (view) => {
+        if (window.__fb) return orig(view);
+        const R0 = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+        const rec = { est: { takeT: view.est.takeT, catchWinS: view.est.catchWinS },
+          before: { control: R0(document.querySelector('.bb-control')), field: R0(document.querySelector('.bb-field-wrap')),
+            diamond: R0(document.querySelector('.bb-diamond')) } };
+        window.__fb = rec;
+        const input = await orig(view);
+        rec.input = input;
+        const shown = view.resolve(input);
+        rec.shown = strip(shown);
+        rec.caught = !!(shown && shown.possession && !shown.possession.bobble);
+        return input;
+      };
+      const origEnd = inst._animateLivePlay.bind(inst);
+      inst._animateLivePlay = async (payload, word) => {
+        const rec = window.__fb;
+        if (rec && rec.input && rec.booked == null) { rec.booked = JSON.stringify(payload.play); rec.pre = !!inst._liveCtx; }
+        return origEnd(payload, word);
+      };
+    });
+    // Up to six fielded plays, until one of them needs a throw (a catch with nobody on needs none).
+    let result = null;
+    const t0 = Date.now();
+    for (let n = 0; n < 6 && !result && Date.now() - t0 < 400000; n++) {
+      const got = await pageF.waitForFunction(() => !!document.querySelector('.bb-fieldpanel.is-on'), null, { timeout: 240000 }).then(() => true).catch(() => false);
+      if (!got) { result = { fail: 'no ball in play against the player within 240 s of auto-play' }; break; }
+      const R = () => pageF.evaluate(() => {
+        const r = (el) => { const q = el.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; };
+        return { control: r(document.querySelector('.bb-control')), field: r(document.querySelector('.bb-field-wrap')),
+          diamond: r(document.querySelector('.bb-diamond')), panel: r(document.querySelector('.bb-fieldpanel')),
+          catchBtn: r(document.querySelector('.bb-fld-catch')), btns: [...document.querySelectorAll('.bb-fld-btn')].map((b) => ({ to: b.dataset.to, ...r(b) })) };
+      });
+      const geo = await R();
+      const inWin = await pageF.waitForFunction(() => !!document.querySelector('.bb-fld-ball.is-in'), null, { timeout: 15000, polling: 'raf' }).then(() => true).catch(() => false);
+      const cb = geo.catchBtn;
+      if (inWin) await pageF.touchscreen.tap(cb.x + cb.w / 2, cb.y + cb.h / 2);
+      const live = await pageF.waitForFunction(() => !!document.querySelector('.bb-fld-btn.is-live'), null, { timeout: 8000 }).then(() => true).catch(() => false);
+      let tapped = false;
+      if (live) {
+        if (process.env.BB_FIELD_SHOT) await pageF.screenshot({ path: process.env.BB_FIELD_SHOT });
+        const b2 = geo.btns.find((b) => b.to === '1');
+        await pageF.touchscreen.tap(b2.x + b2.w / 2, b2.y + b2.h / 2);
+        tapped = true;
+      }
+      await pageF.waitForFunction(() => window.__fb && window.__fb.booked != null, null, { timeout: 30000 }).catch(() => {});
+      const rec = await pageF.evaluate(() => ({ ...window.__fb, panelOn: !!document.querySelector('.bb-fieldpanel.is-on') }));
+      const after = await R();
+      const before = rec.before;
+      const same = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5;
+      const small = geo.btns.concat([{ to: 'catch', ...cb }]).filter((b) => b.w < 44 || b.h < 44);
+      if (!same(geo.panel, geo.control)) result = { fail: `the panel is not the control band's box: ${JSON.stringify(geo.panel)} vs ${JSON.stringify(geo.control)}` };
+      else if (!same(before.control, geo.control) || !same(before.field, geo.field) || !same(before.diamond, geo.diamond)
+        || !same(before.control, after.control) || !same(before.field, after.field)) result = { fail: `something moved or resized when fielding started or ended: ${JSON.stringify({ before, geo: { control: geo.control, field: geo.field, diamond: geo.diamond }, after: { control: after.control, field: after.field } })}` };
+      else if (small.length) result = { fail: `button(s) under 44px: ${JSON.stringify(small)}` };
+      else if (!inWin) result = { fail: 'the catch cue never entered its target box' };
+      else if (!rec.input || rec.input.catchT == null || !rec.caught) result = { fail: `a tap in the window did not catch it: ${JSON.stringify(rec.input)} ${JSON.stringify(rec.est)}` };
+      else if (tapped && !(rec.input.throw && rec.input.throw.to === 1)) result = { fail: `the tap on 2B did not become the throw: ${JSON.stringify(rec.input.throw)}` };
+      else if (!rec.booked || rec.booked !== rec.shown) result = { fail: 'the booked play differs from the one drawn' };
+      else if (!rec.pre) result = { fail: 'the settle step redrew the play instead of reusing the one the player fielded' };
+      else if (rec.panelOn) result = { fail: 'the panel is still up after the play' };
+      else if (tapped) result = { ok: `field-play: panel = control band ${geo.panel.w}x${geo.panel.h}, nothing moved, buttons ${geo.btns.map((b) => `${Math.round(b.w)}x${b.h}`).join(' ')} + catch ${Math.round(cb.w)}x${cb.h}; tap in window caught it (catchT ${rec.input.catchT} vs ${rec.est.takeT.toFixed(2)} +/- ${rec.est.catchWinS}); tap on 2B -> throw; booked play = drawn play (${n + 1} fielded plays)` };
+      if (!result) await pageF.evaluate(() => { window.__fb = null; });
+    }
+    if (!result) fail('field-play', 'no fielded play needed a throw in six tries');
+    else if (result.fail) fail('field-play', result.fail);
+    else ok(result.ok);
+  }
+  if (errsF.length) fail('field-play', `page errors: ${errsF.slice(0, 3).join(' | ')}`);
+  await ctxF.close();
+}
+
 await browser.close();
 
 console.log('');

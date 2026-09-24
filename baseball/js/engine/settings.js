@@ -1109,6 +1109,10 @@ export const LINE_THROUGH_MAX_FT = 280;
 //
 // `on` is what a NEW season snapshots (and what Quick Play plays). Batch 4b drew the play and
 // switched it on (2026-09-24); a season already in progress keeps the model it started with.
+// Batch 6: feet a second each Speed point adds on the version-2 running table (was 0.7). Measured
+// (Majors, median model player, +6 Speed, 6,000 games a cell): 0.7 +3.7, 1.0 +4.3, 1.2 +5.6, 1.5 +7.9
+// points of win rate. 1.5 would put the slowest Majors CPU runner (11 Speed) at 13 ft/s, a jog.
+const RUN_PER_PT_V2 = 1.2;
 export const LIVE_PLAY = {
   on: true,
   // Where the nine stand (plan feet): polar spots, infield depth scaled per league, outfielders at
@@ -1157,6 +1161,16 @@ export const LIVE_PLAY = {
   // The runners: Speed (hitSpd) is how fast.
   runBaseFtS: { little: 25.6, highschool: 22.1, college: 18.0, minors: 14.8, majors: 13.0 },
   runFtSPerPt: 0.7,
+  // Batch 6 (Matt: "make Speed matter more"): what a NEW season snapshots (`season.runSpeedV`) and
+  // Quick Play plays. Version 2 is `runSpeedV2`: more feet a second per Speed point, and a base
+  // lowered so a runner AT the league's CPU roster level (`cpuRosterLevel`) runs exactly as fast as
+  // before - only the distance between a fast and a slow runner grew. A season that started on
+  // version 1 (the two lines above) keeps it to its last game.
+  runSpeedV: 2,
+  runSpeedV2: { runFtSPerPt: RUN_PER_PT_V2,
+    runBaseFtS: { little: 25.6 - (RUN_PER_PT_V2 - 0.7) * 2.0, highschool: 22.1 - (RUN_PER_PT_V2 - 0.7) * 7.0,
+      college: 18.0 - (RUN_PER_PT_V2 - 0.7) * 12.8, minors: 14.8 - (RUN_PER_PT_V2 - 0.7) * 17.5,
+      majors: 13.0 - (RUN_PER_PT_V2 - 0.7) * 20.5 } },
   trotFtS: 18,
   batterStartS: 0.9, runnerStartS: 0.25, restartS: 0.3, tagUpS: 0.15,
   leadFt: 10, halfwayFt: 30, halfwayHangS: 2.0,
@@ -1168,6 +1182,15 @@ export const LIVE_PLAY = {
   // base he left still reads as meaning the runner behind him (liveplay.js `applyOrder`).
   runControl: true,
   turnS: 0.3, ctlReadS: 0.2, ctlMaxThrows: 6, ctlMaxOrders: 40, ctlBackGraceS: 1.0,
+  // Batch 6: the player plays the field (liveplay.js `fieldPlay`). His fielder catches the ball only
+  // if he taps within `fldCatchWinS` of its arrival (1.5x the batting window, `FEEL.engine.timingWindow`
+  // x `LEAGUE_TIMING_WINDOW_MULT`); a miss is a bobble and he picks it up `fldBobbleS` later. He chooses
+  // the first throw; with no choice `fldAutoS` after he is ready he makes the automatic one. While he
+  // holds the ball the CPU's runners look again every `fldReadS`. A throw past his arm's reach bounces
+  // in, `fldLongSlow` slower for each arm's length beyond it.
+  fieldControl: true,
+  fldCatchWinS: { little: 0.24, highschool: 0.195, college: 0.15, minors: 0.135, majors: 0.12 },
+  fldBobbleS: 1.0, fldAutoS: 2.5, fldReadS: 0.5, fldLongSlow: 0.5,
   // The live model's own CPU roster level (was `CPU_ROSTER_LEVEL`, which out-zone seasons keep).
   // Batch 4b: Majors 20.5 -> 21.0 with the home run re-tune. Batch 5: back to 20.5 - the player's own
   // base running (the sim's model runner reacts to a grounder 0.6 s late, where the automatic runner
