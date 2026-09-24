@@ -1694,3 +1694,6 @@ Matt, after a session of simultaneous turn-by-turn games with another player.
   "Game 2 of 3" under it; the turn pill went 14px -> 19px (ball 24px). In multiplayer the pill
   says "Their turn", not "<name>'s turn" - the name is on the line below, and at 19px a long name
   ran under the chat button. Your colour is carried by the machine's tint and the pill's ball.
+- **Yellow's tint is mixed much further than red's** (0.85 vs 0.42 into the wall colour, rails at
+  full yellow). *"the yellow is NOT yellow enough"* - a darkened yellow reads as olive-brown,
+  while a darkened red still reads as red. Do not "equalise" the two.
