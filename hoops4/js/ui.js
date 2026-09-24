@@ -349,7 +349,14 @@ class Hoops4 {
              going at once". Filled in behind the painted screen by _fillTurns(); hidden until it
              has something to show, and the hero picture steps aside while it does. -->
         <div class="gh-card h4-turns" hidden></div>
-        <button type="button" class="gh-btn gh-btn--block h4-mp">${t('multiplayer')}</button>
+        <!-- THE SAME CARD AS THE COMPUTER ONE (2026-09-24). Matt: the multiplayer and computer
+             controls "don't look like buttons on the same page, they look like two unrelated
+             things". A card row: bold heading left, an arrow right (\u203A opens a sheet, the
+             computer card's \u25BE/\u25B8 folds). -->
+        <button type="button" class="gh-card h4-mp">
+          <span class="h4-card-head">${t('multiplayer')}</span>
+          <span class="h4-card-chev" aria-hidden="true">\u203A</span>
+        </button>
         <div class="gh-card h4-card${cpuOpen ? '' : ' is-shut'}">
           <button type="button" class="h4-card-toggle" aria-expanded="${cpuOpen}">
             <span class="h4-card-head">${t('vsCpu')}</span>

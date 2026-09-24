@@ -219,7 +219,15 @@
 .h4-root .h4-note { margin: 0; font-size: 11px; line-height: 1.5; color: var(--h4s-muted); }
 
 .h4-root .h4-play { width: min(420px, 100%); min-height: 48px; font-size: 16px; }
-.h4-root .h4-mp { width: min(420px, 100%); }
+.h4-root .h4-mp {
+  appearance: none; width: min(420px, 100%); box-sizing: border-box;
+  /* the computer card's closed height: its toggle row is 44px with -6px margins = 32px of content */
+  min-height: calc(32px + 2 * var(--gh-sp-4, 16px) + 2px);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.h4-root .h4-mp:active { transform: scale(0.99); }
+.h4-root .h4-mp .h4-card-chev { font-size: 22px; line-height: 1; }
 .h4-root .h4-howto-link {
   min-height: 44px;
   background: none;
