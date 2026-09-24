@@ -94,6 +94,16 @@ export function decide({ code, gameId, before, after, game }) {
 }
 
 
+// --- THE APP IS OPEN ON THAT DEVICE (2026-09-24) --------------------------------------------------
+// Matt: "if i have the hub open i shouldn't get them either." A device with the hub on screen stamps
+// `activeAt` (server time) on its own subscription every 30 s (js/push.js markActive) and writes 0
+// when it goes to the background. 75 s = two missed beats plus slack.
+export const ACTIVE_WINDOW_MS = 75000;
+export function isActive(sub, now = Date.now()) {
+  const at = sub && Number.isFinite(+sub.activeAt) ? +sub.activeAt : 0;
+  return at > 0 && now - at < ACTIVE_WINDOW_MS && now - at > -ACTIVE_WINDOW_MS;
+}
+
 // --- MESSAGES (2026-09-24) ------------------------------------------------------------------------
 // Watches messages/index/<code>/<other>, the row that lists the conversation in <code>'s inbox.
 // A send `update`s BOTH people's rows with {at, from, preview, name, emoji} - `name`/`emoji` are

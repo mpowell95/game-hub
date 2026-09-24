@@ -794,6 +794,12 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
   the game hub?"): `clearShownNotifications()` in `js/push.js` closes every notification this app is
   showing, on hub load and whenever it returns to the front. Verified in Chromium (2 -> 0); on iOS
   it depends on Safari honouring `Notification.close()` for web push, confirmed only by a phone.
+- **No notification to a device that has the hub OPEN** (2026-09-24, Matt: "if i have the hub open
+  i shouldn't get them either"). While visible, the hub stamps `activeAt` (server time) on that
+  device's own `pushSubs` entry every 30 s (`markActive` in `js/push.js`) and writes 0 when hidden;
+  `sendTo` skips a device stamped within 75 s (`isActive` in `functions/decide.js`). Decided on the
+  SERVER on purpose: Safari revokes a site whose push shows nothing, so `sw.js` must show every push
+  it gets. Other devices of the same player still get it. Needs the functions redeploy to be live.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
 
