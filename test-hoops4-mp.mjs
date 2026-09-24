@@ -665,5 +665,32 @@ check('a player code is normalised and validated',
     (Asrc.match(/await rearmUnshot\(lastRows\)/g) || []).length === 2 && /UNSHOT_KEY/.test(Asrc));
 }
 
+// WHO YOU CAN CHALLENGE, by CODE (2026-09-24). Matt could not challenge MattyIce from test1: one old
+// record (a phone renamed "test1" still holding MattyIce's code) made the per-PERSON list merge the
+// two into a single row labelled "test1". This fixture is that real shape.
+{
+  const P = (name, playerId, updatedAt) => ({ profile: { name, playerId, emoji: 'x' }, updatedAt });
+  const all = {
+    bridge: P('test1', 'QZCC4', 100),          // the Sept 13 record that joined them
+    mi: P('MattyIce', 'QZCC4', 300),
+    t1: P('test1', 'DREG5', 301),
+    anaOld: P('Anita Bonita', '89N3N', 50), anaNew: P('Anita Bonita', 'K99MB', 200),
+    lill: P('Lill', '6VCRJ', 60), lili: P('Lili', 'S2BEP', 250),
+    oldMatt: P('matt', 'XV382', 40),
+    nameless: P('', 'ABCDE', 400), you: P('You', 'FGHJK', 400),
+  };
+  const fromT1 = MP.opponentsFrom(all, 'DREG5');
+  const fromMI = MP.opponentsFrom(all, 'QZCC4');
+  check('test1 can challenge MattyIce, by MattyIce\'s code and name',
+    fromT1.some((o) => o.code === 'QZCC4' && o.name === 'MattyIce'));
+  check('MattyIce can challenge test1', fromMI.some((o) => o.code === 'DREG5' && o.name === 'test1'));
+  check('nobody is offered themselves', !fromT1.some((o) => o.code === 'DREG5') && !fromMI.some((o) => o.code === 'QZCC4'));
+  check('one person\'s old and new code with the same name is ONE row, the newest code',
+    fromT1.filter((o) => /anita/i.test(o.name)).map((o) => o.code).join() === 'K99MB'
+    && fromT1.filter((o) => /^lil/i.test(o.name)).map((o) => o.code).join() === 'S2BEP'
+    && !fromT1.some((o) => o.code === 'XV382'));
+  check('a nameless or "You" record is never offered', !fromT1.some((o) => o.code === 'ABCDE' || o.code === 'FGHJK'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
