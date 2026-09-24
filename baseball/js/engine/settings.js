@@ -1107,10 +1107,10 @@ export const LINE_THROUGH_MAX_FT = 280;
 // is what keeps a season in progress on the rules it started with. Feet, seconds, feet per second,
 // mph. Measured with `sim-baseball-career.mjs --live`; see baseball/CLAUDE.md's batch 4 entry.
 //
-// `on` is what a NEW season snapshots. It stays false until batch 4b draws the play the engine
-// plays (the handoff's own rule: never ship an engine the drawing disagrees with).
+// `on` is what a NEW season snapshots (and what Quick Play plays). Batch 4b drew the play and
+// switched it on (2026-09-24); a season already in progress keeps the model it started with.
 export const LIVE_PLAY = {
-  on: false,
+  on: true,
   // Where the nine stand (plan feet): polar spots, infield depth scaled per league, outfielders at
   // a fraction of the fence at their own angle. P/C are fixed points.
   positions: {
@@ -1126,7 +1126,9 @@ export const LIVE_PLAY = {
   // SKILL_EFFECT.hitPow.exitVeloMphPerPt, 1.3889). liveplay.js `liveSettings` swaps it in.
   hitPowMphPerPt: 0.4,
   // The ball.
-  carryMult: { little: 1.034, highschool: 1.008, college: 0.992, minors: 0.974, majors: 0.97 },
+  // Batch 4b (Matt, 2026-09-24): 2-3 home runs a 3-INNING Majors game, both teams, each lower league
+  // proportionally fewer (4a had tuned to the per-9-inning real rate). Was 1.034/1.008/0.992/0.974/0.97.
+  carryMult: { little: 1.11, highschool: 1.07, college: 1.08, minors: 1.066, majors: 1.08 },
   contactHeightFt: 3,
   hangMult: 0.95,                // hang time = hangMult x the vacuum time of its launch
   maxGroundSpeedFrac: 0.95,      // ...but never faster over the ground than this share of exit velocity
@@ -1160,7 +1162,8 @@ export const LIVE_PLAY = {
   leadFt: 10, halfwayFt: 30, halfwayHangS: 2.0,
   runnerMarginS: 0.25, runnerNoiseS: 0.30,
   // The live model's own CPU roster level (was `CPU_ROSTER_LEVEL`, which out-zone seasons keep).
-  cpuRosterLevel: { little: 2.0, highschool: 7.0, college: 12.8, minors: 17.5, majors: 20.5 },
+  // Batch 4b: Majors 20.5 -> 21.0 with the home run re-tune.
+  cpuRosterLevel: { little: 2.0, highschool: 7.0, college: 12.8, minors: 17.5, majors: 21.0 },
 };
 
 // THE STEAL. Success is `clamp(STEAL_BASE + SKILL_EFFECT.hitSpd.stealSuccessPerPt * runner.hitSpd

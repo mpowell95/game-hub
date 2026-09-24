@@ -318,8 +318,8 @@ Major League	62%	40 to 52%
 - **[Locked]** Throwing uses the PITCHING skills (Matt's decision 3): pitch **Speed** is how hard a fielder throws, pitch **Accuracy** how close to the bag it arrives (low accuracy can throw wild; a wild throw gets away and every runner takes a base). Your team throws with your skills; each CPU fielder with his own.
 - **[Locked]** Runners run at a speed set by hitting **Speed**.
 - **[Locked]** Base running and fielding decisions are automatic for both teams in batch 4 (batches 5 and 6 hand your side to you).
-- **[Locked]** Home runs at about real-life rates: about 3 in 100 plate appearances in the Majors, fewer in each lower league.
-- Snapshotted per season (`season.livePlays`). A season started before it switches on keeps the out-zone model to its last game. **Switched on by batch 4b** (the drawing); until then new seasons still start on the out-zone model. All numbers: `settings.js` `LIVE_PLAY`.
+- **[Locked]** Home runs: 2 to 3 a game in the Majors, both teams, in these 3-inning games; fewer in each lower league (Matt, 2026-09-24, after batch 4a, overruling "about 3 in 100 plate appearances").
+- Snapshotted per season (`season.livePlays`). A season started before it switches on keeps the out-zone model to its last game. **Switched on by batch 4b (2026-09-24)**: every new season, and Quick Play, plays live. All numbers: `settings.js` `LIVE_PLAY`.
 
 The out-zone model, kept for seasons started before batch 4b:
 
