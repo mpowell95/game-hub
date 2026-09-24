@@ -38,6 +38,8 @@ const emptyGrid = () => {
 // both devices to one player code - either would also work, and this alias stays harmless if so.)
 const NAME_ALIAS = { matt: 'mattyice', lill: 'lili' };
 const canonName = (n) => NAME_ALIAS[n] || n;
+/** The alias-folded, lowercased form of a profile name - what two names must share to be one person. */
+export const canonicalName = (raw) => canonName((typeof raw === 'string' ? raw : '').trim().toLowerCase());
 
 // Preferred DISPLAY spelling for a folded identity, keyed by the canonical (lowercased) name.
 // Grouping alone is not enough: `grp.name` below takes the most recently active device's raw name,

@@ -518,6 +518,18 @@ had already "sent" it, and nothing ever reminded them.
 - Verified end to end in node against an in-memory database with two swapped profiles (17
   checks); `test-hoops4-mp.mjs` pins the shape.
 
+#### Who you can challenge is listed by CODE, not by person (2026-09-24)
+
+Matt: *"why can't i challenge mattyice from the test1 profile?"* The picker used the leaderboard's
+per-PERSON list (`aggregatePlayers`), which joins records sharing a code OR a name. One record from
+2026-09-13 - a phone renamed "test1" while still holding MattyIce's code QZCC4 - joined the two for
+good, so the picker showed one row labelled "test1" carrying QZCC4, and no MattyIce. **`opponentsFrom`
+(mp.js, pure) now builds the list from CODES**: each code's newest record names it, and two codes
+collapse only when the identity graph joins them AND their names match after aliasing (Ana's old
+and new code, Lili/Lill, matt/MattyIce) - the newest code wins. Checked against the live `players/`
+node (read-only): 28 rows from test1, MattyIce among them, no duplicates. The leaderboard's
+per-person merge is untouched.
+
 ### The series score was carried across unswapped (2026-09-23)
 
 Matt: *"i won game 1, then king of games won game 2, but it said he won the series 2-0. I think

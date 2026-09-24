@@ -25,7 +25,7 @@
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readPlayersOnce } from '../../js/stats-net.js';
-import { aggregatePlayers, isPlaceholderName } from '../../js/players-agg.js';
+import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { COLS, ROWS } from './game.js';
 import { recordResult } from '../../js/game-stats.js';
 
@@ -543,14 +543,49 @@ export async function readGame(id) {
 }
 
 /** Who can be challenged: every synced player who is not this device's own. */
+/**
+ * WHO YOU CAN CHALLENGE, one row per PLAYER CODE (2026-09-24). PURE, so it is tested headless.
+ *
+ * Matt: "why can't i challenge mattyice from the test1 profile?" This used to be the leaderboard's
+ * per-PERSON list, and that list joins two records when they share a code OR a name. One old record
+ * - a phone renamed "test1" while still holding MattyIce's code - joined the two for good, so the
+ * picker showed ONE row, labelled "test1", carrying MattyIce's code, and no MattyIce at all.
+ *
+ * A challenge is addressed to a CODE, so the list is built from codes: each code's newest record
+ * gives its name and emoji. Two codes collapse into one row only when they are the same person AND
+ * carry the same name (Ana's old and new code, Lili/Lill, matt/MattyIce) - then the newest code
+ * wins, since that is the phone they are using. Different names stay separate rows, even if the
+ * identity graph has joined them.
+ */
+export function opponentsFrom(all, me) {
+  const mine = asCode(me);
+  const ident = buildIdentity(all);
+  const byCode = new Map();
+  for (const id of Object.keys(all || {})) {
+    const rec = (all || {})[id] || {};
+    const p = rec.profile || {};
+    const code = asCode(p.playerId);
+    const name = String(p.name || '').trim();
+    if (!code || !name || isPlaceholderName(name)) continue;
+    const at = ms(rec.updatedAt);
+    const cur = byCode.get(code);
+    if (!cur || at >= cur.at) byCode.set(code, { code, name, emoji: p.emoji || '🙂', at, who: ident.keyFor(p, id) });
+  }
+  const rows = new Map();
+  for (const r of byCode.values()) {
+    const k = r.who + '|' + canonicalName(r.name);
+    const cur = rows.get(k);
+    if (!cur || r.at >= cur.at) rows.set(k, r);
+  }
+  return [...rows.values()]
+    .filter((r) => r.code !== mine)
+    .map((r) => ({ code: r.code, name: r.name, emoji: r.emoji }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function readOpponents() {
-  const me = myCode();
   try {
-    const all = await readPlayersOnce();
-    return aggregatePlayers(all)
-      .filter((r) => r && asCode(r.playerId) && asCode(r.playerId) !== me && !isPlaceholderName(r.name))
-      .map((r) => ({ code: asCode(r.playerId), name: r.name, emoji: r.emoji || '🙂' }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return opponentsFrom(await readPlayersOnce(), myCode());
   } catch (err) {
     console.warn('[hoops4] could not read the player list', err);
     return [];
