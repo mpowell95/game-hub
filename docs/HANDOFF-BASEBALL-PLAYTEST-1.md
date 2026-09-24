@@ -177,7 +177,11 @@ when the ball lands, whatever the result. Runners advance by the awarded bases (
   on its own if it leaves the drawn play disagreeing with the result; ship them together, or keep
   4a behind the per-season snapshot flag until 4b lands.
 
-### Where batch 4 stopped (2026-09-24): 4a DONE and live, 4b NOT STARTED
+### Where batch 4 stopped (2026-09-24): 4a and 4b DONE and live (switch ON)
+
+**4b is done** (2026-09-24): the play is drawn, the result words are in, Quick Play is live, the intro
+probe is fixed, carry is re-tuned and `LIVE_PLAY.on` is `true`. Full record and every number:
+`baseball/CLAUDE.md`'s top entry. What follows is the brief 4b worked from, kept as written.
 
 **4a (engine + simulator) is shipped with the switch OFF.** `LIVE_PLAY.on` is `false` in
 `settings.js`, so every new season still snapshots `livePlays: false` and plays the out-zone model;
@@ -269,6 +273,6 @@ distance would have to be accounted for)."
 | 1. Quick fixes | DONE (2026-09-23, v933; `baseball/CLAUDE.md` top entry) |
 | 2. Bunt rework | DONE (2026-09-23, v936; `baseball/CLAUDE.md` top entry) |
 | 3. Game flow | DONE (2026-09-23, v938; `baseball/CLAUDE.md` top entry) |
-| 4. Live plays | 4a DONE (2026-09-24, engine + sim, switch OFF; `baseball/CLAUDE.md` top entry). 4b (drawing, switch ON) not started |
-| 5. Player base running | not started (needs 4) |
-| 6. Player fielding | not started (needs 4) |
+| 4. Live plays | DONE (2026-09-24): 4a engine + sim, 4b drawing + switch ON; `baseball/CLAUDE.md` top two entries |
+| 5. Player base running | not started (batch 4 is merged, ready) |
+| 6. Player fielding | not started (batch 4 is merged, ready) |

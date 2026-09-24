@@ -879,3 +879,15 @@ export const CLIPS = {
     }, hipsOffset: [0, 0.4518, -0.063] },
   ] },
 };
+
+// Playtest 1 batch 4b: the live play's two fielding clips. THROW is the pickoff's own motion (the
+// same turn and short arm toward the figure's right, `mark` the release), which is what an
+// infielder's or outfielder's throw looks like at these sizes; ui.js turns the fielder so his target
+// is on that side. CATCH holds Set's hands-together pose (the ball in the glove at the chest), the
+// opening pose of that same clip, so it blends in and out of Run and Idle without a pose nobody
+// authored.
+CLIPS.Throw = { loop: false, mark: CLIPS.Pickoff.mark, keys: CLIPS.Pickoff.keys };
+CLIPS.Catch = { loop: true, mark: null, keys: [
+  { t: 0.00, pose: CLIPS.Pickoff.keys[0].pose, hipsOffset: CLIPS.Pickoff.keys[0].hipsOffset },
+  { t: 0.50, pose: CLIPS.Pickoff.keys[0].pose, hipsOffset: CLIPS.Pickoff.keys[0].hipsOffset },
+] };

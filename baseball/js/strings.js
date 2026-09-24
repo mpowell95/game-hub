@@ -73,6 +73,14 @@ export const STRINGS = {
     // sacrifice's free advance (`outcomes.js`'s `resolveBunt`).
     res_bunt_popup: 'Bunt popup',
     res_sacrifice: 'Sacrifice',
+    // Playtest 1 batch 4b: the live play's own results (liveplay.js names them; ui.js
+    // `outcomeWord` maps them). Every other live kind reads as its bases (Single..Triple).
+    res_fielders_choice: "Fielder's choice",
+    res_wild_throw: 'Safe on a wild throw',
+    res_thrown_out: 'Thrown out at first',
+    res_inside_park_homer: 'Inside-the-park home run',
+    res_wall_single: 'Single off the wall',
+    res_double_play: 'Double play',
     // SPEC.md section 3/13: Line 1's verdict vocabulary, one word per pitch before the outcome
     // is known (`js/ui.js`'s `verdictWord`/`timingWord` glue, BB-3b commit 6).
     v_ball: 'Ball',
@@ -245,6 +253,12 @@ export const STRINGS = {
     res_bunt_single: 'Sencillo de toque',
     res_bunt_popup: 'Elevado de toque',
     res_sacrifice: 'Sacrificio',
+    res_fielders_choice: 'Jugada de selección',
+    res_wild_throw: 'Quieto por tiro malo',
+    res_thrown_out: 'Out en primera',
+    res_inside_park_homer: 'Jonrón dentro del parque',
+    res_wall_single: 'Sencillo contra la pared',
+    res_double_play: 'Doble play',
     v_ball: 'Bola',
     v_strike: 'Strike',
     v_foul: 'Foul',

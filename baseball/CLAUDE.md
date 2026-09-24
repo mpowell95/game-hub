@@ -4,7 +4,82 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
-## Playtest 1, batch 4a: live plays, the engine (2026-09-24) - DONE, live, SWITCH OFF
+## Playtest 1, batch 4b: live plays, drawn and switched on (2026-09-24) - DONE, live
+
+`docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 4, second half. **`LIVE_PLAY.on` is `true`**: every new
+career season snapshots `livePlays: true`, and Quick Play plays live (`new Game({ livePlays })` plus
+`makeLeague(league, { rosterLevel: LIVE_PLAY.cpuRosterLevel[league] })`). A season already in
+progress keeps the out-zone model to its last game (4a's snapshot), and so does its drawing: an
+atBatEnd with `payload.play === null` (out-zone, or any bunt) still goes through
+`_animateBattedBall`/`_animateRunners`, unchanged.
+
+**The drawing (`ui.js` `_animateLivePlay`) follows the engine's timeline and decides nothing.** One
+clock in seconds from contact drives the ball (samples, then a fielder's hand, then each throw on a
+small arc; a wild throw rolls on past its target), all nine fielders (`_livePlayModel`: the taker runs
+to where he took it; each throw's receiver runs to where he caught it, leaving only once he has let go
+of the ball himself, which is what keeps a first baseman from abandoning a grounder to cover; an out
+with no throw arriving means the holder ran it to the bag), and every runner on his own legs
+(`pathPoint`, a lead-off eases out to where the first leg starts). The plate camera holds
+CONTACT_HOLD_MS with the contact burst, then the chase camera follows the ball; the big OUT fires at
+each out's own time; the word at the end (a homer's the moment it clears the wall), then
+LIVE_SETTLE_MS and `_returnToPlate()`. **A tap skips it** (the clock jumps to the end, the plate view
+comes straight back). A homer's trot runs at HOMER_RUNNER_SPEEDUP once the ball is gone, as before.
+The clock's per-frame step is capped (ACTOR_MAX_STEP_MS), so a stalled frame slows the play instead
+of skipping part of it. The diamond widget is painted from the drawn runners
+(`_paintDiamondLive`), never from `game.bases` (already the after-state). A live game also stands
+its fielders between plays on the engine's own spots (`_fielderStand`, used by `_syncFielders`, the
+intro and the half-inning jog), so nobody jumps at contact.
+
+**New clips** (`poses.js`): `Throw` is the pickoff's own motion (the fielder is turned so his target
+is on his throwing side), `Catch` holds Set's hands-together pose. **New result words** (EN/ES):
+fielder's choice, safe on a wild throw, thrown out at first, inside-the-park home run, single off the
+wall, double play. `ground-hit` and the other live kinds read as their bases (Double/Triple);
+`outcomeWord` maps them before its "ends in out" test.
+
+**Engine fix:** on a wild throw, runners now take their extra base from the moment the ball gets
+away (the wild leg's arrival), not from when the whole relay would have arrived (a runner used to
+stand on third for 2.5 s watching the ball roll away). Same outcomes.
+
+**`game-flow-intro` probe, found and fixed:** no commit broke it. The overhead camera's first render
+stalls 1.2-1.4 s under software GL at 3x density (measured, identical at v939 and now), and
+`_animateActorTo` was timed by the wall clock, so the fielders were already halfway out of the dugout
+on the first frame anyone saw; the probe raced that stall. Fixed in the game (the per-frame step cap
+above; a slow phone saw the same jump). The probe's end check, and `fielders-placed`'s, now read
+`_fielderStand` (the live spots).
+
+**Home runs re-tuned (Matt, 2026-09-24: 2-3 per 3-inning Majors game, both teams, lower leagues
+proportionally fewer).** `LIVE_PLAY.carryMult` 1.034 / 1.008 / 0.992 / 0.974 / 0.97 -> **1.11 / 1.07 /
+1.08 / 1.066 / 1.08**; Majors `cpuRosterLevel` 20.5 -> **21.0** (Majors first-try Gold sat at the top
+of its band, 15.0%, after the carry change). Median tier, both teams,
+`--all-tiers --careers 200 --assert --perfect 400` (live is now the default):
+
+| League | HR/game 4a -> 4b | runs a game (you-them) 4a -> 4b |
+|---|---|---|
+| Little | 0.26 -> 0.90 | 2.8-0.2 -> 3.5-0.2 |
+| High School | 0.32 -> 1.08 | 2.7-0.3 -> 3.5-0.4 |
+| College | 0.48 -> 1.57 | 1.8-0.6 -> 2.5-1.0 |
+| Minors | 0.63 -> 2.16 | 1.7-0.7 -> 2.8-1.5 |
+| Majors | 0.75 -> 2.55 | 1.6-0.9 -> 2.6-1.9 |
+
+Results, median tier, 4a -> 4b: first-attempt Gold 97.0 / 81.0 / 45.5 / 36.0 / 10.5 -> **97.5 / 87.5 /
+53.5 / 35.0 / 12.5**; first title median 10 -> **10** seasons; Majors seasons before it 3 -> **4**;
+Perfect Season 2.8% -> **3.7%**. All 8 assertions pass. Weak tier Majors first try 4.5% -> 0.5%;
+strong 29.5% -> 38.0%.
+
+**What each skill is worth** (median model player, Majors, all skills 20, +6 in one, 3,000 games a
+cell, live, about +/-1.8 pp noise; the same script run on 4a's code and on 4b's): Contact 1.6 -> 5.2,
+Power 11.7 -> 6.9, Speed 7.7 -> 3.4, pitch Speed 2.0 -> 3.4, **pitch Accuracy 0.7 -> 0.4**, Spin 0.7 ->
+0.5. Pitch Accuracy is still worth about nothing at the Majors; no decision from Matt yet, left as is.
+(4a's own table used a different script; compare within a row of this one.)
+
+**Suites**: `node baseball/js/test.js` 3236 (the "fly ball hangs" check uses an 85 mph ball: 95 mph
+now leaves the park), `node test-baseball-career.mjs` 329, `BB_DEVICE_QUICK=1 node
+test-baseball-device.mjs` 54/54, `node test-visual.mjs baseball` 20/20, `node check-no-scroll.mjs
+baseball` 16/16, `node test-game-conventions.mjs` 11/11. Not in this batch's list and failing the same
+way without this change: `test-baseball-actors.mjs`'s `_cutawayUp single exit` (5 exits since batch 3,
+it expects 2) and `mount-in-hub layering` (missing canvas).
+
+## Playtest 1, batch 4a: live plays, the engine (2026-09-24) - DONE, live (switched on by 4b, above)
 
 `docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 4, first half (engine + simulator). **Nothing a player
 sees changed yet**: `LIVE_PLAY.on` is `false`, so every new season still snapshots

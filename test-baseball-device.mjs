@@ -1059,7 +1059,7 @@ await ctx.close();
         shiftDeg: inst._currentShiftDeg,
         roles: A.FIELDER_ROLES.map((role) => {
           const actor = inst.actors.actors[role];
-          const want = F.fielderWorld(role, fenceFt, 0);
+          const want = inst._fielderStand ? inst._fielderStand(role, fenceFt, 0) : F.fielderWorld(role, fenceFt, 0);   // batch 4b: live-play stand spots
           const got = actor ? { x: actor.pivot.position.x, z: actor.pivot.position.z } : null;
           const dist = got ? Math.hypot(got.x - want.x, got.z - want.z) : null;
           return { role, visible: !!(actor && actor.pivot.visible), want, got, dist };
@@ -1136,7 +1136,8 @@ await ctx.close();
       const fenceFt = (await import('/baseball/js/engine/settings.js')).FIELD[inst.league].fenceFt;
       const worst = A.FIELDER_ROLES.reduce((m, role) => {
         const actor = inst.actors.actors[role];
-        const want = F.fielderWorld(role, fenceFt, 0);
+        // Batch 4b: a live-play game stands its fielders the engine's way (`_fielderStand`).
+        const want = inst._fielderStand ? inst._fielderStand(role, fenceFt, 0) : F.fielderWorld(role, fenceFt, 0);
         const got = actor ? { x: actor.pivot.position.x, z: actor.pivot.position.z } : null;
         const dist = got ? Math.hypot(got.x - want.x, got.z - want.z) : Infinity;
         return Math.max(m, dist);

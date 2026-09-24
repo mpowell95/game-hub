@@ -3379,7 +3379,7 @@ await (async function section36LivePlay() {
   ok(lo.w > hi.w && lo.off > hi.off, `low pitch Accuracy throws wild more (Accuracy 0: ${lo.w} wild, 10: ${hi.w})`);
 
   // The drawing's data: the ball path starts at the plate and the fielders stand where the engine says.
-  const path = ballPath({ exitVeloMph: 95, launchAngleDeg: 30, sprayAngleDeg: 0, kind: 'fly' }, 'majors', fence, S);
+  const path = ballPath({ exitVeloMph: 85, launchAngleDeg: 30, sprayAngleDeg: 0, kind: 'fly' }, 'majors', fence, S);
   ok(path.s[0] === 0 && path.landT > 0 && path.hangS > 3, `a fly ball hangs (${path.hangS.toFixed(2)}s)`);
   const spots = fielderSpots('majors', fence, 0);
   ok(Object.keys(spots).length === 9 && spots.CF.y > spots.SS.y && spots.SS.y > spots.P.y, 'nine fielders, outfield behind infield behind the mound');
