@@ -458,6 +458,10 @@ export const BOARD = {
     // See machine.js, "THE RAIL CHAMFERS". 67 of 231 throws parked against a square rail corner
     // before this existed; a chamfer is the spec's own prescribed fix for a right-angled pocket.
     railChamfer: X * 0.42,
+    // The back corners beside the outer hoops (machine.js, "THE BACK CORNERS"). 420 thumb-realistic
+    // shots: 0.00X -> 24 parked, every one in those two corners; 0.42X -> 24; 0.70X -> 8;
+    // 1.00X -> 0, with the right column 50.5% -> 54.0%. The smallest that empties the pocket.
+    backCornerChamfer: X * 1.00,
 
     fins: {
       rise: X * 0.30,        // how far the ridge stands above the rim

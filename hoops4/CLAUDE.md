@@ -1733,16 +1733,31 @@ Matt: *"Can you make it so a ball can't go in an already filled column? Like cap
 could bounce on or roll over it?"* Before, a ball went in and the rules scored it a miss
 (`land()`'s `'full'`), which read as a basket that did not count.
 
-- **Physics** (`physics.js` `buildWorld(board, closed)`, `startThrow({ closed })`): a static box
-  LID over each closed hoop, lying in the shelf plane at rim height, `0.6 x ballR` thick and the
-  collar's width plus a margin, in the rims' material (so it bounces like a rim). The capture loop
-  also skips a closed hole (`st.closed`), belt and braces. Measured, 392 lined-up shots at capped
-  hoops: 0 scored in the capped hoop, 19% bounced into another hoop, 81% missed, 4.1% parked.
+- **Physics** (`physics.js` `buildWorld(board, closed)`, `startThrow({ closed })`): a static
+  cylinder LID FILLING THE MOUTH, its top exactly at the rim plane (`collarH`) and its edge at the
+  collar's inner wall (`H.r`), `0.6 x ballR` thick, in the rims' material. **Flush, not on top**:
+  the first build was a slab sitting on the collar and Matt rejected it the same day - *"I don't
+  like that. I want it flush with the rim."* The capture loop also skips a closed hole
+  (`st.closed`), belt and braces. Measured, 392 lined-up shots at capped hoops (flush lid, back
+  corners filled): 0 scored in the capped hoop, 12.5% bounced into another hoop, 0 parked.
   `test.js` asserts a capped hoop never scores where the same shots score it open.
 - **Which holes**: `ui.js closedHoles()` (every column `canPlay` refuses), passed on every shot, so
   the CPU and every protocol get it. Unseeded probes pass nothing and are unchanged.
-- **Picture** (`render.js setClosed`): the same-size lid in light grey, AND the rim turns grey -
+- **Picture** (`render.js setClosed`): the same flush lid in light grey, AND the rim turns grey -
   the camera sees the shelf almost edge-on, so the lid alone is a thin line; the grey rim is what
   reads. Called from `paintHud()` and when the renderer is built (a resumed match).
 - `land()`'s `'full'` branch is kept: nothing can reach it now, and it stays the rule if anything
   ever does.
+
+## The back corners beside the outer hoops are filled (2026-09-24)
+
+Matt: *"what if you put walls up the sides? so instead of getting stuck on those angles next to
+the outermost columns, it bounced back into play?"* and later *"Did you add the walls above the
+outer columns so the balls would bounce back?"* (they had NOT been added: a bouncier side RAIL was
+measured first and changed nothing, see Round 3). What was actually trapping balls: 420
+thumb-realistic shots, EVERY parked ball (24, 5.7%) at u = +/-0.69 against the back wall, in the
+pocket between the outer collar and the side rail - the rail chamfer angles the rail joint, but
+the joint with the back wall was square. `backCornerChamfer` (machine.js "THE BACK CORNERS") is a
+45-degree wedge along that joint, rail to just outside the outer collar. Sweep: 0.42X -> 24
+parked, 0.70X -> 8, **1.00X -> 0** (right column 50.5% -> 54.0%, wrong column 16.9% -> 19.3%).
+On `test.js`'s 861-shot grid the watchdog went from 5.57% to 0.00%.
