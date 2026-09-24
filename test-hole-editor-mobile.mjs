@@ -290,6 +290,23 @@ ok('every pop-up stays on the screen', off.length === 0, `off screen: ${off.join
 ok('no pop-up says "click" on a phone', click.length === 0, `steps: ${click.join(',')}`);
 await ctx2.close();
 
+// BACK TO THE GAME HUB (2026-09-24, Matt: "there isn't a back to the hub button" - it was only at
+// the bottom of More). A Home button in the top bar, visible, below the notch, and it goes home.
+{
+  const ctx3 = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+  await ctx3.addInitScript(() => { try { localStorage.setItem('golf.holeEditor.tourOffered.v1', '1'); localStorage.setItem('golf.holeEditor.helpNudgeOff.v1', '1'); } catch { /* fine */ } });
+  const p3 = await ctx3.newPage();
+  const e3 = await iphoneEdges(await ctx3.newCDPSession(p3));
+  await p3.goto(`${URL}?course=new`, { waitUntil: 'networkidle' });
+  if (await p3.$('#he-setup')) { await p3.fill('#he-setup-name', 'Home Test'); await p3.click('#he-setup-go'); }
+  await p3.waitForTimeout(300);
+  ok('the top bar has a Home button, on screen and below the notch', await p3.evaluate((t) => { const h = document.getElementById('he-p-hub'); if (!h) return false; const r = h.getBoundingClientRect(); return getComputedStyle(h).display !== 'none' && r.width >= 30 && r.top >= t && r.left >= 0; }, e3 ? SAFE_TOP : 0));
+  const hb = await p3.locator('#he-p-hub').boundingBox();
+  await Promise.all([p3.waitForURL((u) => !/hole-editor/.test(u.pathname), { timeout: 8000 }).catch(() => {}), p3.touchscreen.tap(hb.x + hb.width / 2, hb.y + hb.height / 2)]);
+  ok('...and tapping it goes back to the Game Hub', !/hole-editor/.test(new globalThis.URL(p3.url()).pathname), p3.url());
+  await ctx3.close();
+}
+
 ok('no page errors during the whole run', errors.length === 0, errors.join(' | '));
 
 await b.close();
