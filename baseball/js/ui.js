@@ -20,6 +20,9 @@ import { flyPitch, breakOffsetFor } from './engine/pitch.js';
 // own header for why this is a separate pure module rather than more code in ui.js.
 import { budgetFor, capFor, scalePreset, clampBuild, randomBuild, adjust, canAdjust } from './build.js';
 import { fenceFtAt, battedApexFt } from './engine/outcomes.js';
+// Playtest 1 batch 4b: the live play's own geometry (where the nine stand, the base path), so the
+// drawing stands everyone exactly where the engine played them from.
+import { fielderSpots, pathPoint } from './engine/liveplay.js';
 import {
   engineToWorld, zoneRectFt, zoneCornersFt, projectToCanvas,
   ZONE, BATTER_BOX, RUBBER, CATCHER, UMPIRE, FIGURE_HEIGHT_FT,
@@ -264,6 +267,24 @@ const FIELDER_SPEED_FT_S = 27;
 // ball is already gone gets compressed. Every other outcome (single/double/triple/out/walk) is
 // untouched by this constant entirely.
 const HOMER_RUNNER_SPEEDUP = 3;
+
+// Playtest 1 batch 4b (docs/HANDOFF-BASEBALL-PLAYTEST-1.md): drawing the engine's LIVE PLAY
+// (`payload.play`, liveplay.js). Presentation numbers only - every time, spot and speed that decides
+// anything comes from the engine's own timeline. `_animateLivePlay` has the whole contract.
+// Batch 4b: the most one frame may advance an actor walk (`_animateActorTo`), so a stalled frame
+// (a first render compiling shaders) slows the walk down instead of skipping half of it.
+const ACTOR_MAX_STEP_MS = 100;
+const LIVE_ROLE = { P: 'pitcher', C: 'catcher', '1B': 'f1b', '2B': 'f2b', '3B': 'f3b', SS: 'fss', LF: 'flf', CF: 'fcf', RF: 'frf' };
+const LIVE_RUNNER_ROLE = { '-1': 'rb', 0: 'r1', 1: 'r2', 2: 'r3' };
+const LIVE_HAND_FT = 5;           // the ball's height in a fielder's hand
+const LIVE_THROW_ARC = 0.03;      // a throw's apex above the straight line, feet per foot thrown
+const LIVE_THROW_WINDUP_S = 0.3;  // the Throw clip's own mark (poses.js), so the arm releases on time
+const LIVE_CATCH_S = 0.35;        // the Catch clip is held this long either side of a catch
+const LIVE_WILD_FT_S = 30;        // a wild throw keeps rolling past its target at this speed...
+const LIVE_WILD_MAX_FT = 40;      // ...for at most this far
+const LIVE_OUT_HIDE_S = 0.8;      // a runner who is out stands this long, then leaves the field
+const LIVE_SCORED_HIDE_S = 0.3;   // one who scored, this long after touching the plate
+const LIVE_SETTLE_MS = 900;       // the held last frame once the play is over (a tap skips it)
 const RUNNER_STAND_FACING_RAD = FIELDER_FACING_RAD; // facing the plate, same as every fielder
 
 // RA (docs/BASEBALL-3D-BUILD.md section 9): STEAL, BUNT, PICKOFF - presentation only. Every rule
@@ -712,6 +733,7 @@ class BaseballPlayScreen {
     document.removeEventListener('visibilitychange', this._onVis);
     if (this._onWindowPointerUp) window.removeEventListener('pointerup', this._onWindowPointerUp);
     if (this._rafBall) cancelAnimationFrame(this._rafBall);
+    if (this._liveRaf) cancelAnimationFrame(this._liveRaf);
     if (this._pitchRaf) cancelAnimationFrame(this._pitchRaf);
     if (this._flightRaf) cancelAnimationFrame(this._flightRaf);
     if (this._contactRaf) cancelAnimationFrame(this._contactRaf);
@@ -1625,7 +1647,10 @@ class BaseballPlayScreen {
   _startGame() {
     const league = this.league;
     const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-    const cpuLeague = makeLeague(league);
+    // Playtest 1 batch 4b: Quick Play plays the model a new career season would (LIVE_PLAY.on),
+    // with that model's own CPU roster level.
+    const cpuLeague = SETTINGS.LIVE_PLAY.on
+      ? makeLeague(league, { rosterLevel: SETTINGS.LIVE_PLAY.cpuRosterLevel[league] }) : makeLeague(league);
     const cpuTeam = randPick(cpuLeague);
     // R14 (docs/BASEBALL-3D-BUILD.md section 9): the player's build is the one set up on the
     // player screen (or its default), never a random preset and a coin-flip hand.
@@ -1647,7 +1672,7 @@ class BaseballPlayScreen {
     // later) but no longer changes which pitches are unlocked or how the CPU picks one.
     // Doc item 11: Quick Play is always away, so a Majors game is at the CPU team's own park.
     const parkId = SETTINGS.parkFor(league, false, cpuTeam.styleId);
-    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true, parkId });
+    this.game = new Game({ home: cpuTeam, away: playerTeam, seed, agents, settings: SETTINGS, quickPlay: true, parkId, livePlays: !!SETTINGS.LIVE_PLAY.on });
     this.cpuTeam = cpuTeam;
     this.playerTeam = playerTeam;
     this.state = this._freshPlayState(league, 0, 'batting');
@@ -2224,10 +2249,23 @@ class BaseballPlayScreen {
     const fenceFt = this._fenceFt();
     for (const role of FIELDER_ROLES) {
       if (role === this._chasingFielderRole) continue;
-      const pos = fielderWorld(role, fenceFt, this._currentShiftDeg || 0);
+      const pos = this._fielderStand(role, fenceFt, this._currentShiftDeg || 0);
       if (!pos) continue;
       this.actors.setActor(role, { side: defenseSide, pos, heightFt: FIGURE_HEIGHT_FT, facingRad: FIELDER_FACING_RAD });
     }
+  }
+
+  /** Playtest 1 batch 4b: where fielder `role` stands between plays, world feet. A LIVE-PLAY game
+   *  stands the seven the engine's own way (`liveplay.js` `fielderSpots`, the spots every live play
+   *  is played from), so the figures a player watches at contact are exactly where the play starts
+   *  them; an out-zone game keeps `field.js`'s `fielderWorld`, unchanged. */
+  _fielderStand(role, fenceFt, shiftDeg = 0) {
+    if (this.game && this.game.livePlays) {
+      const pos = Object.keys(LIVE_ROLE).find((k) => LIVE_ROLE[k] === role);
+      const spot = pos && fielderSpots(this.game.league, fenceFt, shiftDeg)[pos];
+      if (spot) return engineToWorld(spot.x, spot.y, 0);
+    }
+    return fielderWorld(role, fenceFt, shiftDeg);
   }
 
   /** R3: the runners standing on their bags between pitches, driven ONLY by `this.game.bases` (the
@@ -3207,7 +3245,7 @@ class BaseballPlayScreen {
     const boxPos = { x: flip ? BATTER_BOX.x : -BATTER_BOX.x, y: 0, z: BATTER_BOX.z };
     if (this._skipFlowAnim()) {
       for (const role of FIELDER_ROLES) {
-        const pos = fielderWorld(role, fenceFt, 0);
+        const pos = this._fielderStand(role, fenceFt, 0);
         if (pos) this.actors.setActor(role, { side: defenseSide, pos, heightFt: FIGURE_HEIGHT_FT, facingRad: FIELDER_FACING_RAD });
       }
       this.actors.setActor('pitcher', { side: defenseSide, pos: { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: PITCHER_FACING_RAD });
@@ -3238,7 +3276,7 @@ class BaseballPlayScreen {
 
     const runs = [];
     for (const role of FIELDER_ROLES) {
-      const pos = fielderWorld(role, fenceFt, 0);
+      const pos = this._fielderStand(role, fenceFt, 0);
       if (pos) runs.push(this._animateActorTo(role, defenseSide, defenseDugout, pos, { durationMs: INTRO_FIELDER_RUN_MS, clip: 'Run', skipRef, facingRad: FIELDER_FACING_RAD }));
     }
     runs.push(this._animateActorTo('pitcher', defenseSide, defenseDugout, { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, { durationMs: INTRO_FIELDER_RUN_MS, clip: 'Run', skipRef, facingRad: PITCHER_FACING_RAD }));
@@ -3289,7 +3327,7 @@ class BaseballPlayScreen {
     // the NEXT half's leadoff batter, not the one who just finished this one.
     const off = [];
     for (const role of FIELDER_ROLES) {
-      const pos = fielderWorld(role, fenceFt, this._currentShiftDeg || 0);
+      const pos = this._fielderStand(role, fenceFt, this._currentShiftDeg || 0);
       if (pos) off.push(this._animateActorTo(role, oldDefenseSide, pos, DUGOUT_POS[oldDefenseSide], { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef }));
     }
     off.push(this._animateActorTo('pitcher', oldDefenseSide, { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, DUGOUT_POS[oldDefenseSide], { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef }));
@@ -3304,7 +3342,7 @@ class BaseballPlayScreen {
     // from his - `swap()` has not run yet, so nothing here has been painted by the ordinary sync.
     const on = [];
     for (const role of FIELDER_ROLES) {
-      const pos = fielderWorld(role, fenceFt, 0);
+      const pos = this._fielderStand(role, fenceFt, 0);
       if (pos) on.push(this._animateActorTo(role, newDefenseSide, DUGOUT_POS[newDefenseSide], pos, { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef, facingRad: FIELDER_FACING_RAD }));
     }
     on.push(this._animateActorTo('pitcher', newDefenseSide, DUGOUT_POS[newDefenseSide], { x: RUBBER.x, y: RUBBER.y, z: RUBBER.z }, { durationMs: HALF_SWAP_JOG_MS, clip: 'Run', skipRef, facingRad: PITCHER_FACING_RAD }));
@@ -3578,7 +3616,10 @@ class BaseballPlayScreen {
     // first instead (`_animateRunners`'s own 'rb'), same as a hit. Hoisted here, ahead of the
     // `inPlay` branch that used to compute the identical expression locally, so `_playBatterChange`
     // (below) reads the one true answer rather than a second copy of the same regex.
-    const isBatterOut = /out$/.test(outKind) || outKind === 'strikeout' || outKind === 'sacrifice' || outKind === 'bunt-popup';
+    // Batch 4b: a live play says so itself (its own outs list), since a live 'fielders-choice' or
+    // 'wild-throw' leaves the batter safe and a caught ball retires him whatever it is called.
+    const isBatterOut = payload.play ? payload.play.outs.some((o) => o.batter)
+      : (/out$/.test(outKind) || outKind === 'strikeout' || outKind === 'sacrifice' || outKind === 'bunt-popup');
     // STAGE 7 (docs/BASEBALL-3D-BUILD.md section 7, row 4): a walk/strikeout has no batted ball to
     // hold for, so the batter returns to rest right away, same as every at-bat did before this
     // stage. A ball IN PLAY does NOT reset here - the Swing clip keeps playing through the contact
@@ -3616,7 +3657,15 @@ class BaseballPlayScreen {
         { pitchLine: this._pitchReadout(), swingLine: this._swingLine(undefined, payload.timingWord) });
     }
     const outsPerInning = SETTINGS.MECHANICS.outsPerInning;
-    if (inPlay) {
+    if (inPlay && payload.play) {
+      // Batch 4b: a live play draws the engine's own timeline instead (`_animateLivePlay`); an
+      // out-zone season, and a bunt in any season (`resolveBunt`, no timeline), keep the drawing
+      // below, unchanged.
+      await this._animateLivePlay(payload, word);
+      if (this.destroyed) return;
+      const skipBetween = this.game && this.game.outs >= outsPerInning;
+      if (!skipBetween) await sleep(BETWEEN_MS);
+    } else if (inPlay) {
       // RA: 'sacrifice' is an out that does not END in "out" - the landing marker would otherwise
       // draw a bunt the batter was thrown out on in the green of a base hit. Batch 2: 'bunt-popup'
       // is the same fact for a popped-up bunt (always an out, `outcomes.js`'s `resolveBunt`). Same
@@ -4358,11 +4407,19 @@ class BaseballPlayScreen {
       };
       if (!(durationMs > 0) || dist < 0.01) { finish(); return; }
       this.actors.play(role, clip);
-      const t0 = performance.now();
+      // Batch 4b: the clock only advances by what a frame can SHOW - each frame's step is capped
+      // at ACTOR_MAX_STEP_MS. The intro calls this right after cutting to the overhead camera,
+      // whose first render stalls for 1.2-1.4 s on a slow device (measured, software GL at 3x
+      // density, the same at v939 as now); timed by the wall clock, every fielder was already
+      // halfway out of the dugout on the first frame anyone saw. That was the `game-flow-intro`
+      // probe's failure: no commit broke it, it raced the stall and lost.
+      let elapsed = 0, last = null;
       const step = (now) => {
         if (this.destroyed || !this.actors) { resolve(); return; }
         if (skipRef && skipRef.skipped) { finish(); return; }
-        const frac = Math.min(1, (now - t0) / durationMs);
+        elapsed += last == null ? 0 : Math.min(ACTOR_MAX_STEP_MS, now - last);
+        last = now;
+        const frac = Math.min(1, elapsed / durationMs);
         const p = { x: from.x + dx * frac, y: 0, z: from.z + dz * frac };
         this.actors.setActor(role, { side, pos: p, heightFt: FIGURE_HEIGHT_FT, facingRad: face, mirrored });
         if (frac < 1) requestAnimationFrame(step); else finish();
@@ -4385,6 +4442,368 @@ class BaseballPlayScreen {
       };
       requestAnimationFrame(step);
     });
+  }
+
+  // ------------------------------------------------------------ playtest 1 batch 4b: live plays
+  /** THE LIVE PLAY, DRAWN (docs/HANDOFF-BASEBALL-PLAYTEST-1.md batch 4b). The engine has already
+   *  played the ball out in time (`liveplay.js` `resolveLivePlay`) and handed the whole timeline over
+   *  as `payload.play`; this draws it frame by frame and decides NOTHING. One clock, in seconds from
+   *  contact, drives everything: the ball (its sampled flight, bounce, roll and wall carom; then in a
+   *  fielder's hand; then along each throw, a relay being two), all nine fielders (the one who takes
+   *  it runs to where he took it; every throw's receiver runs to where he caught it; a fielder who
+   *  made an out without a throw ran the ball to the bag himself), and every runner along his own
+   *  legs on the 0..360 base path (`pathPoint`). A catch, an out, a run: each happens on screen at
+   *  the instant the engine says it did, so the drawing can never disagree with the result.
+   *
+   *  The beats: the first CONTACT_HOLD_MS on the plate camera (the contact burst), the cut to the
+   *  chase camera following the ball, the result word once the play is over (a home run's the
+   *  instant it clears the wall), LIVE_SETTLE_MS held, then `_returnToPlate()`. A home run's trot
+   *  runs at HOMER_RUNNER_SPEEDUP once the ball is gone, as the out-zone drawing always did.
+   *
+   *  A TAP SKIPS IT (Matt: every new animation): the clock jumps to the end, the final frame is
+   *  drawn once, the word is set and the plate view comes straight back - input is never blocked
+   *  once skipped. `_cutawayUp` is set for the whole play so no ordinary redraw fights it. */
+  async _animateLivePlay(payload, word) {
+    const play = payload.play;
+    if (!this.actors || !this.game || !play) return;
+    const battingSide = payload.side || (this.game.half === 'top' ? 'away' : 'home');
+    const defenseSide = battingSide === 'away' ? 'home' : 'away';
+    const mode = this.state.mode === 'pitching' ? 'pitching' : 'batting';
+    const model = this._livePlayModel(play);
+    const skipRef = { skipped: false };
+    const onTap = () => { skipRef.skipped = true; };
+    this.rootEl.addEventListener('pointerdown', onTap, { capture: true, passive: true });
+    if (this._crossingHideTimer) { clearTimeout(this._crossingHideTimer); this._crossingHideTimer = null; }
+    this._cutawayUp = true;
+    this._hidePop();
+    // The runners are this play's now: nothing else may stand them on a bag until it is over.
+    const runnerRoles = new Set(play.runners.map((r) => LIVE_RUNNER_ROLE[r.from]).filter(Boolean));
+    this._runnersInMotion = runnerRoles;
+    this._rbActive = runnerRoles.has('rb');
+    this.actors.setForceHidden('batter', this._rbActive);
+    const contactPos = this.actors.lastBallPos() || { x: 0, y: zoneRectFt().cy, z: ZONE.z };
+    const ball0 = engineToWorld(0, 0, (play.ball.samples[0] || [0, 0, 3])[2]);
+    const contactOff = { x: contactPos.x - ball0.x, y: contactPos.y - ball0.y, z: contactPos.z - ball0.z };
+    if (!this._reducedMotion() && this._fieldW && this.actors.camera) {
+      this._contactBurstStart = performance.now();
+      this._contactBurstPx = projectToCanvas(this.actors.camera, contactPos, this._fieldW, this._fieldH);
+    } else {
+      this._contactBurstStart = null;
+    }
+    const holdS = CONTACT_HOLD_MS / 1000;
+    const clips = {};
+    const outsShown = new Set();
+    let cut = false, homerShown = false, lastBall = contactPos;
+    const draw = (t) => {
+      // The ball: the engine's own position, with the contact point's small offset from home plate
+      // blended out over its first 0.35 s so it leaves exactly where the bat met it.
+      const b = this._liveBallAt(model, t);
+      const k = Math.max(0, 1 - t / 0.35);
+      lastBall = b ? { x: b.x + contactOff.x * k, y: Math.max(0.3, b.y + contactOff.y * k), z: b.z + contactOff.z * k } : null;
+      this.actors.setBall(lastBall);
+      this._drawLiveFielders(model, t, defenseSide, clips, lastBall);
+      const states = this._drawLiveRunners(model, t, battingSide, clips);
+      this._paintDiamondLive(states);
+      for (const o of play.outs) {
+        if (t >= o.t && !outsShown.has(o)) { outsShown.add(o); if (!skipRef.skipped) this._showBigOut(); }
+      }
+      if (play.ball.homer && !homerShown && t >= model.homerT) {
+        homerShown = true;
+        if (!skipRef.skipped) this._triggerHomerun({ distanceFt: payload.distanceFt, exitVeloMph: payload.exitVeloMph, launchAngleDeg: payload.launchAngleDeg });
+        this._setLine1(word);
+      }
+      if (!cut && t >= holdS) {
+        cut = true;
+        this.actors.setCamera('chase');
+        this._setDiamondVisible(true);
+        this.actors.chaseAt(lastBall || model.lastHeld || { x: 0, y: 2, z: -60 }, true);
+      }
+      if (cut) {
+        if (lastBall) this.actors.chaseAt(lastBall);
+        this._drawOverlayChase(null);
+      } else {
+        this._drawOverlay(mode);
+        if (this._contactBurstStart != null) this._drawContactBurst(performance.now() - this._contactBurstStart);
+      }
+    };
+    await new Promise((resolve) => {
+      // The play's clock: seconds from contact, each frame's step capped at ACTOR_MAX_STEP_MS so
+      // a stalled frame (the chase camera's first render) slows the play instead of skipping it.
+      let clock = 0, last = null;
+      const step = (now) => {
+        if (this.destroyed) { resolve(); return; }
+        clock += last == null ? 0 : Math.min(ACTOR_MAX_STEP_MS, now - last) / 1000;
+        last = now;
+        const t = skipRef.skipped ? model.endT : clock;
+        draw(Math.min(t, model.endT));
+        if (t < model.endT) this._liveRaf = requestAnimationFrame(step);
+        else { this._liveRaf = 0; resolve(); }
+      };
+      this._liveRaf = requestAnimationFrame(step);
+    });
+    if (this.destroyed) return;
+    if (!cut) { this.actors.setCamera('chase'); this._setDiamondVisible(true); }
+    if (!homerShown) this._setLine1(word);
+    if (payload.doublePlay) this._setLine1(t('res_double_play'));
+    await this._skippableSleep(LIVE_SETTLE_MS, skipRef);
+    this.rootEl.removeEventListener('pointerdown', onTap, true);
+    if (this.destroyed) return;
+    // Hand everyone back to the ordinary between-pitch picture: the runners re-derived from the
+    // engine's bases (`_runnerStanding` cleared so every slot is placed fresh), every fielder the
+    // play moved back on his rest clip, and `_returnToPlate()` redraws them all on their spots.
+    for (const role of RUNNER_ROLES) this.actors.hide(role);
+    if (this._runnersInMotion === runnerRoles) this._runnersInMotion = null;
+    this._runnerStanding = {};
+    for (const role of Object.keys(clips)) {
+      if (role === 'pitcher' || RUNNER_ROLES.includes(role)) continue;
+      this.actors.idle(role);
+    }
+    this._returnToPlate();
+  }
+
+  /** Everything `_animateLivePlay` needs precomputed from the engine's timeline, in WORLD feet:
+   *  each fielder's own list of runs (the chase, a run to cover a bag, a run to tag it himself), who
+   *  holds the ball when, and the play's real end time (a home run's trot compressed as drawn). */
+  _livePlayModel(play) {
+    const L = SETTINGS.LIVE_PLAY;
+    const lgv = (tab) => (tab[this.game.league] != null ? tab[this.game.league] : tab.majors);
+    const spd = lgv(L.fielderFtS);
+    const react = lgv(L.reactionS);
+    const W = (p) => engineToWorld(p.x, p.y, 0);
+    const moves = {};   // role -> [{t0, to:{x,z}, spd, arriveBy}]
+    const addMove = (pos, t0, to, arriveBy) => {
+      const role = LIVE_ROLE[pos];
+      if (!role) return;
+      (moves[role] = moves[role] || []).push({ t0, to, arriveBy });
+    };
+    const spots = {};
+    for (const [pos, p] of Object.entries(play.fielders || {})) if (LIVE_ROLE[pos]) spots[LIVE_ROLE[pos]] = W(p);
+    const ps = play.possession;
+    // Who holds the ball, from when: [{t, role}] - the fielder who took it, then each throw's
+    // receiver on its arrival (a wild throw is nobody's until the play ends).
+    const holders = [];
+    if (ps) {
+      const reach = ps.caught ? L.catchReachFt : L.fieldReachFt;
+      const from = W(ps.runFrom), at = W(ps);
+      const d = Math.hypot(at.x - from.x, at.z - from.z);
+      const f = d > reach ? (d - reach) / d : 0;
+      addMove(ps.pos, ps.runStartT, { x: from.x + (at.x - from.x) * f, z: from.z + (at.z - from.z) * f }, ps.t);
+      holders.push({ t: ps.t, role: LIVE_ROLE[ps.pos], pos: ps.pos });
+    }
+    const throws = play.throws || [];
+    // A fielder is busy until he lets go of the ball: the one who took it until his first throw,
+    // and each receiver until he throws it on (a double play's pivot).
+    const busy = {};
+    if (ps) busy[ps.pos] = throws.length && throws[0].from === ps.pos ? throws[0].tRelease : ps.t;
+    for (const th of throws) {
+      const to = W(th.toPt);
+      // The receiver: off at his reaction (or once he has thrown, if he was the thrower), there
+      // before the ball - he was, in the engine.
+      addMove(th.to, Math.max(react, busy[th.to] || 0), to, th.tArrive);
+      busy[th.from] = Math.max(busy[th.from] || 0, th.tRelease);
+      if (!th.wild) holders.push({ t: th.tArrive, role: LIVE_ROLE[th.to], pos: th.to });
+    }
+    // An out with no throw arriving at that bag at that moment: the fielder holding the ball ran it
+    // there himself (liveplay.js `planDelivery`'s 'run').
+    for (const o of play.outs || []) {
+      if (o.base == null || o.base < 0) continue;
+      const bp = W(pathPoint(90 * (o.base + 1)));
+      const thrown = throws.some((th) => Math.abs(th.tArrive - o.t) < 0.05 && Math.hypot(W(th.toPt).x - bp.x, W(th.toPt).z - bp.z) < 3);
+      if (thrown) continue;
+      const h = holders.filter((x) => x.t <= o.t + 1e-6).pop();
+      if (h) addMove(h.pos, h.t, bp, o.t);
+    }
+    for (const role of Object.keys(moves)) moves[role].sort((a, b) => a.t0 - b.t0);
+    // The play's drawn end: the engine's own end, or later if a runner is still going (a home run's
+    // trot is drawn at HOMER_RUNNER_SPEEDUP once the ball is gone).
+    const homerT = play.ball.homer ? play.endT : null;
+    const warp = (t) => (homerT != null && t > homerT ? homerT + (t - homerT) * HOMER_RUNNER_SPEEDUP : t);
+    const unwarp = (t) => (homerT != null && t > homerT ? homerT + (t - homerT) / HOMER_RUNNER_SPEEDUP : t);
+    // Over when the ball is held and nobody is still running: the last catch or throw, and every
+    // runner either standing on a base, across the plate, or out and off the field. (The engine's
+    // own `endT` also counts a runner's run past the moment he was put out, which is not drawn.)
+    let endT = Math.max(homerT || 0, ps ? ps.t : 0, holdSFloor());
+    for (const r of play.runners || []) {
+      const g = r.legs[r.legs.length - 1];
+      if (r.outT != null) endT = Math.max(endT, unwarp(r.outT) + LIVE_OUT_HIDE_S);
+      else if (g) endT = Math.max(endT, unwarp(g.t0 + Math.abs(g.s1 - g.s0) / g.spd));
+    }
+    for (const th of throws) endT = Math.max(endT, th.tArrive + (th.wild ? LIVE_WILD_MAX_FT / LIVE_WILD_FT_S : 0));
+    return { play, spots, moves, holders, spd, homerT, warp, endT: endT + 0.2, lastHeld: null };
+    function holdSFloor() { return CONTACT_HOLD_MS / 1000 + 0.3; }
+  }
+
+  /** The ball at time `t` (world feet), or null once it has left the park. */
+  _liveBallAt(model, t) {
+    const play = model.play;
+    const ps = play.possession;
+    if (!ps || t < ps.t) {
+      const sm = play.ball.samples;
+      if (play.ball.homer && t > model.homerT + 0.6) return null;
+      let i = 1;
+      while (i < sm.length - 1 && sm[i][0] < t) i++;
+      const a = sm[i - 1] || sm[0], b = sm[i] || a;
+      const f = b[0] > a[0] ? Math.max(0, Math.min(1, (t - a[0]) / (b[0] - a[0]))) : 1;
+      let s = a[1] + (b[1] - a[1]) * f;
+      const h = a[2] + (b[2] - a[2]) * f;
+      if (play.ball.homer && t > sm[sm.length - 1][0]) s = sm[sm.length - 1][1] + (t - sm[sm.length - 1][0]) * 60;
+      const rad = (play.ball.spray * Math.PI) / 180;
+      return engineToWorld(Math.sin(rad) * s, Math.cos(rad) * s, Math.max(0.3, h));
+    }
+    const throws = play.throws || [];
+    let last = null;
+    for (const th of throws) {
+      if (t < th.tRelease) break;
+      last = th;
+      if (t < th.tArrive) {
+        const f = (t - th.tRelease) / Math.max(0.01, th.tArrive - th.tRelease);
+        const a = engineToWorld(th.fromPt.x, th.fromPt.y, 0), b = engineToWorld(th.toPt.x, th.toPt.y, 0);
+        const d = Math.hypot(b.x - a.x, b.z - a.z);
+        return { x: a.x + (b.x - a.x) * f, y: LIVE_HAND_FT + d * LIVE_THROW_ARC * 4 * f * (1 - f), z: a.z + (b.z - a.z) * f };
+      }
+    }
+    if (last && last.wild) {
+      // Past the man it was thrown to, rolling away along the throw's own line.
+      const a = engineToWorld(last.fromPt.x, last.fromPt.y, 0), b = engineToWorld(last.toPt.x, last.toPt.y, 0);
+      const d = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+      const more = Math.min(LIVE_WILD_MAX_FT, (t - last.tArrive) * LIVE_WILD_FT_S);
+      return { x: b.x + ((b.x - a.x) / d) * more, y: 0.3, z: b.z + ((b.z - a.z) / d) * more };
+    }
+    // In somebody's hand: the latest holder, wherever he is right now.
+    const h = model.holders.filter((x) => x.t <= t + 1e-6).pop();
+    const p = h && this._liveFielderAt(model, h.role, t);
+    if (!p) return model.lastHeld;
+    model.lastHeld = { x: p.x, y: LIVE_HAND_FT, z: p.z };
+    return model.lastHeld;
+  }
+
+  /** Where fielder `role` is at time `t`: his spot, then each of his runs in order (a run starts
+   *  from wherever the last one left him and goes at league speed, faster only if that is what it
+   *  takes to be there when the engine says he was). Returns {x, z, moving, dir}. */
+  _liveFielderAt(model, role, t) {
+    let cur = model.spots[role];
+    if (!cur) return null;
+    cur = { x: cur.x, z: cur.z };
+    let moving = false, dir = null;
+    const list = model.moves[role] || [];
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i];
+      if (t <= m.t0) break;
+      const tEnd = i + 1 < list.length ? Math.min(t, list[i + 1].t0) : t;
+      const dx = m.to.x - cur.x, dz = m.to.z - cur.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.01) continue;
+      const need = m.arriveBy != null ? Math.max(0.01, m.arriveBy - m.t0) : Infinity;
+      const v = Math.max(model.spd, d / need);
+      const go = v * (tEnd - m.t0);
+      if (go >= d) { cur = { x: m.to.x, z: m.to.z }; continue; }
+      cur = { x: cur.x + (dx / d) * go, z: cur.z + (dz / d) * go };
+      if (tEnd === t) { moving = true; dir = Math.atan2(dx, dz); }
+    }
+    return { x: cur.x, z: cur.z, moving, dir };
+  }
+
+  /** All nine fielders at time `t`, with the clip each one should be on: Run while running, Throw
+   *  around each of his releases, Catch around each catch, otherwise his resting clip - and a
+   *  fielder the play never moved keeps whatever he was doing (the pitcher's follow-through). */
+  _drawLiveFielders(model, t, side, clips, ball) {
+    const play = model.play;
+    for (const role of Object.keys(model.spots)) {
+      const p = this._liveFielderAt(model, role, t);
+      if (!p) continue;
+      let clip = p.moving ? 'Run' : null;
+      let facing = p.moving ? p.dir : (ball ? Math.atan2(ball.x - p.x, ball.z - p.z) : 0);
+      for (const th of play.throws || []) {
+        if (LIVE_ROLE[th.from] === role && t >= th.tRelease - LIVE_THROW_WINDUP_S && t < th.tRelease + 0.4) {
+          clip = 'Throw';
+          const to = engineToWorld(th.toPt.x, th.toPt.y, 0);
+          // The Throw clip (the pickoff's own motion) throws to the figure's right: turn so the
+          // target is there (the left, for a mirrored figure).
+          facing = Math.atan2(to.x - p.x, to.z - p.z) + (this.actors.mirroredOf(role) ? Math.PI / 2 : -Math.PI / 2);
+        } else if (LIVE_ROLE[th.to] === role && !th.wild && Math.abs(t - th.tArrive) < LIVE_CATCH_S && clip !== 'Throw') {
+          clip = 'Catch';
+        }
+      }
+      const ps = play.possession;
+      if (ps && LIVE_ROLE[ps.pos] === role && Math.abs(t - ps.t) < LIVE_CATCH_S && clip !== 'Throw') clip = 'Catch';
+      if (!clip && clips[role]) clip = 'Idle';
+      this.actors.setActor(role, { side, pos: { x: p.x, y: 0, z: p.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: facing });
+      if (clip && clips[role] !== clip) { clips[role] = clip; this.actors.play(role, clip); }
+    }
+  }
+
+  /** Every runner at time `t` on his own legs (`liveplay.js`'s `at()`, drawn): a runner leading off
+   *  eases out to where his first leg starts; one who is out stops there and leaves the field
+   *  LIVE_OUT_HIDE_S later; one who scored leaves once he has touched the plate. Returns each
+   *  runner's drawn state for the diamond widget. */
+  _drawLiveRunners(model, t, side, clips) {
+    const states = [];
+    for (const r of model.play.runners || []) {
+      const role = LIVE_RUNNER_ROLE[r.from];
+      if (!role) continue;
+      const tr = model.warp(t);
+      const base = r.from < 0 ? 0 : 90 * (r.from + 1);
+      const sAt = (tt) => {
+        const legs = r.legs;
+        if (!legs.length) return base;
+        if (tt < legs[0].t0) return base + (legs[0].s0 - base) * (legs[0].t0 > 0 ? Math.max(0, tt) / legs[0].t0 : 1);
+        let g = legs[0];
+        for (const x of legs) if (x.t0 <= tt) g = x;
+        const dirS = Math.sign(g.s1 - g.s0);
+        return g.s0 + dirS * Math.min(Math.abs(g.s1 - g.s0), g.spd * (tt - g.t0));
+      };
+      const outT = r.outT != null ? r.outT : null;
+      const s = sAt(outT != null ? Math.min(tr, outT) : tr);
+      const sPrev = sAt(outT != null ? Math.min(tr - 0.05, outT) : tr - 0.05);
+      const scored = s >= 359.5 && r.scoredT != null;
+      const gone = (outT != null && tr > outT + LIVE_OUT_HIDE_S) || (s >= 359.5 && tr > this._liveReachT(r, 359.5) + LIVE_SCORED_HIDE_S);
+      states.push({ role, id: r.id, s, moving: Math.abs(s - sPrev) > 0.05, out: outT != null && tr >= outT, gone, scored });
+      if (gone) { this.actors.hide(role); continue; }
+      const p = pathPoint(s), q = pathPoint(Math.min(360, s + (s >= sPrev ? 1 : -1)));
+      const w = engineToWorld(p.x, p.y, 0), wq = engineToWorld(q.x, q.y, 0);
+      const facing = Math.abs(s - sPrev) > 0.05 ? Math.atan2(wq.x - w.x, wq.z - w.z) : RUNNER_STAND_FACING_RAD;
+      this.actors.setActor(role, { side, pos: { x: w.x, y: 0, z: w.z }, heightFt: FIGURE_HEIGHT_FT, facingRad: facing });
+      const clip = Math.abs(s - sPrev) > 0.05 ? 'Run' : 'Idle';
+      if (clips[role] !== clip) { clips[role] = clip; this.actors.play(role, clip); }
+    }
+    return states;
+  }
+
+  /** The (drawn) time runner `r` first reaches base-path position `s`, or Infinity. */
+  _liveReachT(r, s) {
+    for (const g of r.legs) {
+      if (g.s1 >= s && g.s0 <= s && g.s1 > g.s0) return g.t0 + (s - g.s0) / g.spd;
+    }
+    return Infinity;
+  }
+
+  /** The diamond widget from the drawn runners, not from `this.game.bases` (already the play's
+   *  after-state): a base is filled by whoever is standing on it right now, and every runner
+   *  between bases is a moving dot. */
+  _paintDiamondLive(states) {
+    const el = this.rootEl && this.rootEl.querySelector('[data-role="diamond"]');
+    if (!el) return;
+    const CELL = ['1b', '2b', '3b'];
+    for (let i = 0; i < 3; i++) {
+      const cellEl = el.querySelector(`[data-cell="${CELL[i]}"]`);
+      if (!cellEl) continue;
+      const on = states.find((st) => !st.gone && !st.out && Math.abs(st.s - 90 * (i + 1)) < 0.5);
+      cellEl.classList.toggle('is-on', !!on);
+      const numEl = cellEl.querySelector('[data-role="num"]');
+      if (numEl) numEl.textContent = on ? String(this._jerseyFor(on.id)) : '';
+    }
+    const moving = states.filter((st) => !st.gone && !st.out && st.s < 359.5 && Math.abs(st.s - 90 * Math.round(st.s / 90)) >= 0.5);
+    for (let i = 0; i < DIAMOND_DOT_COUNT; i++) {
+      const dotEl = el.querySelector(`[data-dot="${i}"]`);
+      if (!dotEl) continue;
+      const st = moving[i];
+      if (!st) { dotEl.style.opacity = '0'; continue; }
+      const from = Math.max(-1, Math.min(2, Math.floor(st.s / 90) - 1));
+      const p = lerpDiamondPct(from, from + 1, (st.s - 90 * (from + 1)) / 90);
+      dotEl.style.left = p.x + '%';
+      dotEl.style.top = p.y + '%';
+      dotEl.style.opacity = '1';
+    }
   }
 
   /** The overlay while the chase camera is live: nothing at all during the flight (the ball is a
@@ -5358,6 +5777,14 @@ function outcomeWord(kind, bases) {
   if (kind === 'bunt-popup') return 'bunt_popup';
   if (kind === 'sacrifice') return 'sacrifice';
   if (kind === 'homer') return 'homer';
+  // Playtest 1 batch 4b: the live play's own results. Named before the "out" test below, since
+  // 'thrown-out' ends in it; 'inside-park-homer' carries bases 4, which the fallback cannot read,
+  // and the two a batter reaches on without a hit carry bases 0.
+  if (kind === 'fielders-choice') return 'fielders_choice';
+  if (kind === 'wild-throw') return 'wild_throw';
+  if (kind === 'thrown-out') return 'thrown_out';
+  if (kind === 'inside-park-homer') return 'inside_park_homer';
+  if (kind === 'wall-single') return 'wall_single';
   if (kind === 'walk') return 'walk';
   if (kind === 'strikeout') return 'strikeout';
   if (/out$/.test(kind)) return 'out';

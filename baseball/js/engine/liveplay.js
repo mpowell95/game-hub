@@ -367,7 +367,7 @@ export function resolveLivePlay(p) {
   const execute = (plan) => {
     if (plan.kind === 'run') return { t: plan.t, wild: false, legs: [] };
     let slip = 0; const done = [];
-    let wild = false;
+    let wild = false, wildAt = null;
     for (const leg of plan.legs) {
       const f = fielders[leg.from];
       const sigma = lg(L.throwErrFt, league) * (1 - L.throwErrAccCut * f.acc01) * Math.sqrt(Math.max(30, leg.dist) / 100);
@@ -376,14 +376,14 @@ export function resolveLivePlay(p) {
       const tFly = leg.dist / f.throwFtS;
       const tArr = leg.tRelease + slip + tFly;
       let extra = 0;
-      if (offFt > L.wildFt) wild = true;
+      if (offFt > L.wildFt) { wild = true; wildAt = tArr; } // batch 4b: runners go when it gets away
       else if (offFt > L.cleanCatchFt) extra = (offFt - L.cleanCatchFt) * L.offTargetSPerFt;
       done.push({ from: leg.from, to: leg.to, fromPt: leg.fromPt, toPt: leg.toPt, tRelease: leg.tRelease + slip,
         tArrive: tArr, offFt: Math.round(offFt * 10) / 10, wild: offFt > L.wildFt, mph: Math.round(f.throwMph) });
       slip += extra;
       if (wild) break;
     }
-    return { t: plan.t + slip, wild, legs: done };
+    return { t: plan.t + slip, wild, wildAt, legs: done };
   };
 
   /** Each runner (lead first) picks the furthest base he can make, deciding at `tDecide` from where
@@ -494,7 +494,7 @@ export function resolveLivePlay(p) {
           const res = execute(plan);
           timeline.throws.push(...res.legs);
           timeline.endT = Math.max(timeline.endT, res.t);
-          if (res.wild) wildAdvance(res.t);
+          if (res.wild) wildAdvance(res.wildAt);
         }
         break;
       }
@@ -517,7 +517,7 @@ export function resolveLivePlay(p) {
       const res = execute(choice.plan);
       timeline.throws.push(...res.legs);
       timeline.endT = Math.max(timeline.endT, res.t);
-      if (res.wild) { wildOn = { id: choice.r.id, k: choice.k }; wildAdvance(res.t); break; }
+      if (res.wild) { wildOn = { id: choice.r.id, k: choice.k }; wildAdvance(res.wildAt); break; }
       const need = res.t + (choice.force ? 0 : L.tagS);
       if (need < choice.tR) {
         recordOut(choice.r, res.t, choice.force, choice.k);
