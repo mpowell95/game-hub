@@ -6,8 +6,7 @@
 //
 //   challenge  an unanswered challenge to you this device has not acknowledged
 //   over       a match the other person finished (won / lost / draw)
-//   turn       (hub wording "Your turn vs <names>") never raised here: a challenge's `updated`
-//              does not move until it is answered, so a seen one simply waits in the game's list
+//   turn       the other person played their game and it is your turn again (v3: turns alternate)
 //
 // Nothing here is player history (see challenge.js). It lives in skeeball/, not js/, because it
 // writes a `gamehub.*` key and the cache-first shell may not (root CLAUDE.md, sw.js strategy).
@@ -21,16 +20,23 @@ const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 export function decideAlert(rows, seen, now = Date.now()) {
   if (!Array.isArray(rows)) return null;
   const unseen = (r) => ms(r.updated) > ms(seen && seen[r.id]);
-  // A delivered challenge to you (never your own: the challenger's row is `sent`).
-  const fresh = rows.filter((r) => r && r.id && !r.sent && !r.over && r.yourTurn && !isExpired(r, now) && unseen(r))
+  // Waiting on you and not yet acknowledged: a challenge just delivered, or (v3, turns alternate)
+  // the other person having played their game so the turn is yours again. Your own writes stamp
+  // the seen map, so starting a challenge or playing a game never raises this on your own device.
+  const fresh = rows.filter((r) => r && r.id && !r.over && r.yourTurn && !isExpired(r, now) && unseen(r))
     .sort((a, b) => ms(b.updated) - ms(a.updated));
   // A finished match this device has not acknowledged. Every write this device makes stamps the
   // seen map, so a match you finished yourself never raises this; one the other person finished does.
   const ended = rows.filter((r) => r && r.id && r.over && unseen(r))
     .sort((a, b) => ms(b.updated) - ms(a.updated));
+  // A brand-new challenge to you outranks a returned turn; a turn names everyone waiting on you.
+  const isNew = (r) => !r.sent && !(seen && seen[r.id]);
+  const neu = fresh.find(isNew);
+  if (neu) return { kind: 'challenge', id: neu.id, name: neu.name, emoji: neu.emoji, names: [], count: fresh.length + ended.length };
   if (fresh.length) {
     const r = fresh[0];
-    return { kind: 'challenge', id: r.id, name: r.name, emoji: r.emoji, names: [], count: fresh.length + ended.length };
+    return { kind: 'turn', id: r.id, name: r.name, emoji: r.emoji,
+      names: [...new Set(fresh.map((x) => x.name).filter(Boolean))], count: fresh.length + ended.length };
   }
   if (ended.length) {
     const r = ended[0];
@@ -94,7 +100,7 @@ export function takeCeremony() {
     sessionStorage.removeItem(ARM_KEY);
     if (!raw) return null;
     const a = JSON.parse(raw);
-    if (!a || (a.kind !== 'challenge' && a.kind !== 'over')) return null;
+    if (!a || !['challenge', 'turn', 'over'].includes(a.kind)) return null;
     return { kind: a.kind, id: String(a.id || '') };
   } catch { return null; }
 }

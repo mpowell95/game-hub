@@ -814,8 +814,9 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
 ## Skeeball challenges (2026-09-24)
 
 Matt: *"what about skeeball? challenge someone to a game for the higher score?"* 1, 3 or 5 games or
-every machine, won on most wins or total score, ONE attempt per game, and leaving a game counts its
-score as it stands. Full contract: `skeeball/CLAUDE.md`, "Challenges". The parts that live outside
+every machine the challenger can play, won on most wins or total score, TURNS ALTERNATE one game at a
+time (each seeing the other's score), ONE attempt per game, and leaving a game counts its score as
+it stands. Full contract: `skeeball/CLAUDE.md`, "Challenges". The parts that live outside
 the game folder:
 
 - **A new top-level node, `skeeChallenges/`** (`games/<id>` + `index/<CODE>/<id>`), added to

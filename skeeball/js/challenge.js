@@ -12,11 +12,12 @@
 //   'games'  most games won; a tied game counts for nobody; level on games -> higher total wins
 //   'total'  highest combined score across every game
 //
-// THE ORDER: the challenger plays ALL their games first (stage 'a'). Only then is the challenge
-// delivered: the other person's index row is written, which is what notifies them (stage 'b'),
-// and they get 3 days. They see the score to beat in every game. The match ends the moment it is
-// decided - a best-of that one side can no longer win, or a total the challenged player has
-// already passed - or when every game is played (stage 'over').
+// THE ORDER (v3, 2026-09-24): TURNS ALTERNATE, ONE GAME PER TURN. Matt: "You have to alternate
+// games - seeing each others scores." The challenger plays game 1 (stage 'a'); that delivers the
+// challenge (the other person's index row is written, which notifies them); they play game 1
+// seeing the score to beat; the challenger plays game 2 seeing the standings; and so on. Each turn
+// gets 3 days. The match ends the moment it is decided - a best-of one side can no longer win - or
+// when every game has been played by both (a total is only ever settled then).
 //
 // ONE ATTEMPT PER GAME, AND LEAVING COUNTS. A game is committed the moment its rack STARTS: an
 // entry for it goes into this device's outbox (score 0) before the first ball, its running score
@@ -90,16 +91,15 @@ export function tally(game) {
 }
 
 /**
- * Is it decided, and who took it? PURE. Called once the challenger has played everything, so every
- * game still unplayed is the challenged player's to play. Returns { done, winner: 'a'|'b'|null }.
+ * Is it decided, and who took it? PURE. Only games BOTH sides have played count; a most-wins match
+ * is settled early once one side cannot be caught. Returns { done, winner: 'a'|'b'|null }.
  */
 export function decide(game) {
   const t = tally(game);
   const left = t.n - t.both;
   if (game.scoring === 'total') {
-    // The challenger's total is fixed and a rack never scores below 0, so once the challenged
-    // player has passed it nothing left can change the answer.
-    if (t.bTotal > t.aTotal) return { done: true, winner: 'b' };
+    // Turns alternate, so BOTH totals can still grow while games are left: a total is only
+    // settled once every game has been played by both.
     if (left > 0) return { done: false, winner: null };
     return { done: true, winner: t.aTotal > t.bTotal ? 'a' : null };
   }
@@ -117,6 +117,19 @@ export function resultFor(game, side) {
   const w = game.over.winner;
   if (w !== 'a' && w !== 'b') return 'draw';
   return w === side ? 'won' : 'lost';
+}
+
+/**
+ * WHOSE TURN IS NEXT, after `side` has just played (2026-09-24, v3). Matt: "You have to alternate
+ * games - seeing each others scores." One game per turn: a1, b1, a2, b2 ... - the other side if it
+ * has a game left to play, otherwise the same side (which also carries a v2 match, where the
+ * challenger had already played everything, through to its end).
+ */
+export function nextStage(game, side) {
+  const o = side === 'a' ? 'b' : 'a';
+  if (scoresOf(game, o).some((x) => x == null)) return o;
+  if (scoresOf(game, side).some((x) => x == null)) return side;
+  return 'over';
 }
 
 /** The next game this side has to play, or -1. `played(i)` can veto a leg (this device's outbox). */
@@ -249,6 +262,7 @@ export function rowFor(game, side) {
     yourTurn: !game.over && game.stage === side,
     over: !!game.over,
     played: my,
+    theirPlayed: scoresOf(game, side === 'a' ? 'b' : 'a').filter((x) => x != null).length,
     // Totals and games won, from this row's side. `theirs` is what a single game has to beat.
     mine: side === 'a' ? t.aTotal : t.bTotal,
     theirs: side === 'a' ? t.bTotal : t.aTotal,
@@ -282,6 +296,7 @@ export function rowsFromIndex(val) {
       yourTurn: !!r.yourTurn,
       over: !!r.over,
       played: ms(r.played),
+      theirPlayed: ms(r.theirPlayed),
       mine: r.mine == null ? null : score(r.mine),
       theirs: r.theirs == null ? null : score(r.theirs),
       myWins: ms(r.myWins),
@@ -413,9 +428,11 @@ export async function readChallenge(id) {
 
 async function writeRows(api, db, game) {
   await api.update(api.ref(db, `${NODE}/index/${game.a.code}/${game.id}`), rowFor(game, 'a'));
-  // The challenged player hears nothing until the challenger has played every game: writing
-  // their row IS the delivery, and it is what the notification watches.
-  if (game.stage !== 'a') await api.update(api.ref(db, `${NODE}/index/${game.b.code}/${game.id}`), rowFor(game, 'b'));
+  // The challenged player hears nothing until the challenger's FIRST game is in: writing their row
+  // is the delivery, and every later turn flipping to them is what the notification watches.
+  if (scoresOf(game, 'a').some((x) => x != null)) {
+    await api.update(api.ref(db, `${NODE}/index/${game.b.code}/${game.id}`), rowFor(game, 'b'));
+  }
 }
 
 /**
@@ -491,12 +508,15 @@ export async function postLeg(id, side, leg, sc) {
     const now = Date.now();
     const next = { ...fresh, updated: now, [side]: { ...fresh[side], s: { ...fresh[side].s, [leg]: s } } };
     const patch = { updated: now, [`${side}/s/${leg}`]: s };
-    if (side === 'a' && scoresOf(next, 'a').every((x) => x != null)) {
-      patch.stage = 'b';
-      patch.expires = now + EXPIRE_MS;
-    } else if (side === 'b') {
-      const d = decide(next);
-      if (d.done) { patch.stage = 'over'; patch.over = { winner: d.winner, at: now }; }
+    // One game per turn. Settled -> over; otherwise the turn passes and gets its own 3 days.
+    const d = decide(next);
+    const stage = d.done ? 'over' : nextStage(next, side);
+    if (stage === 'over') {
+      patch.stage = 'over';
+      patch.over = { winner: d.winner, at: now };   // every game played by both: decide() is done
+    } else {
+      patch.stage = stage;
+      if (stage !== side) patch.expires = now + EXPIRE_MS;
     }
     await api.update(api.ref(db, `${NODE}/games/${id}`), patch);
     const back = await readChallenge(id);
