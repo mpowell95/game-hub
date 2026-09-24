@@ -1761,3 +1761,24 @@ the joint with the back wall was square. `backCornerChamfer` (machine.js "THE BA
 45-degree wedge along that joint, rail to just outside the outer collar. Sweep: 0.42X -> 24
 parked, 0.70X -> 8, **1.00X -> 0** (right column 50.5% -> 54.0%, wrong column 16.9% -> 19.3%).
 On `test.js`'s 861-shot grid the watchdog went from 5.57% to 0.00%.
+
+## The board's edges go straight up: the SIDE WALLS (2026-09-24)
+
+Matt, with a screenshot and two yellow lines from the Connect 4 board's edges up to the sign:
+*"That's my point of asking you to add the walls. Because if the ball doesn't reach them, obviously
+those walls are not where I suggested they be. I'm talking about if the sides of the connect 4
+board went straight up."* The earlier "bouncier side wall" test had changed the existing RAILS,
+which stand 1.3X outside the last hoop - the wrong walls. He was right and the answer he got
+before this was a misreading of the ask.
+
+- `machine.js` "THE SIDE WALLS": a solid block each side, inner face at the display's edge
+  (`sideWallU: SCREEN_W / 2`, 1 cm outside the outer collars), out to the rail, from below the
+  shelf to the BOTTOM of the marquee (the first cut ran to the backboard's top and hid both ends
+  of the sign), and from the shelf's front edge to the back wall. Rims' material (`matRing`).
+  The back-corner chamfers and the rail chamfers beside the outer hoops are now inside the block.
+- Measured, 420 thumb-realistic shots: right column 54.0% -> 60.0%, wrong 19.3% -> 23.6%, miss
+  26.7% -> 16.4%, parked 0 -> 0; per column (of 60) 40 29 29 37 33 29 30 -> **45** 29 29 37 33 33
+  **46**. The outer columns are now the EASIEST, because a wide ball comes back into them - that
+  is the point of the walls, and a reason to look here first if Matt ever says 1 and 7 are too easy.
+- The black arrow shapes he circled beside the outer hoops are the rail CHAMFERS (the 45-degree
+  ramps in the shelf/rail joint) seen from the play camera.

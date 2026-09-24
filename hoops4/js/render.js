@@ -361,6 +361,7 @@ export class Renderer {
       const mat = this._mat(part);
       (this._partMats || (this._partMats = new Map())).set(part, mat);
       const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+      mesh.name = part;                       // which machine part (debug probes read this)
       mesh.castShadow = !this.soft && part !== 'lane';
       mesh.receiveShadow = !this.soft;
       list.forEach((s, i) => {
