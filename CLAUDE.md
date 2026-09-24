@@ -622,9 +622,8 @@ profile pill carries the unread badge, which is why the button is there and not 
   replying to a broadcast is an ordinary conversation.
 - **The admin page has a read-only "Messages" section.** Read-only is a property of the module (there
   is no admin write path in `js/messages.js` at all), not of the button.
-- **No push notifications for Messages yet.** The badge appears when a player opens the app. The
-  push infrastructure now exists (see "Push notifications" below) and currently serves Connect 4
-  Hoops only; adding Messages is a second trigger in `functions/index.js`.
+- **Push notifications for new messages since 2026-09-24** (`messagePush` in `functions/index.js`,
+  see "Push notifications" below); a tap opens that conversation. The badge still works as before.
 - **Messages has the top bar's third button since 2026-08-31, where My Stats used to be.** Matt: *"I
   don't think My Stats is used by anyone... we could change it into a Messages button?"* Four buttons
   wrap to a second row on a phone (measured), so it was a swap or nothing. **My Stats moved to the
@@ -742,7 +741,13 @@ ability to see it and undo it afterwards. Do not describe any of it as making th
 ## Push notifications (2026-09-23)
 
 Matt: *"are you sure there's no way to have real notifications or something close to it?"* ...
-*"mostly iphone, installed. go with firebase."* Real Web Push, for Connect 4 Hoops turns today.
+*"mostly iphone, installed. go with firebase."* Real Web Push. **Three triggers since 2026-09-24**:
+`hoopsTurnPush` (Connect 4 Hoops challenges/turns/results), `messagePush` (a new message, from
+`messages/index/<me>/<them>` - only a newer `at` FROM them notifies; a tap opens that thread) and
+`bugReportPush` (a new `bugReports/<id>`, to every code whose uid is in `admins/`, found through
+`msgAuth/<uid>` - no code is hardcoded; a tap opens the bug inbox). **A change to `functions/` is
+live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
+for it.
 
 - **Three pieces.** `js/push.js` subscribes a device (permission is asked INSIDE the tap - iOS only
   prompts for a user gesture) and stores it at `pushSubs/<PLAYER CODE>/<key>`; **`functions/`** is a
@@ -759,7 +764,10 @@ Matt: *"are you sure there's no way to have real notifications or something clos
 - **iPhone: only the Home Screen app can get them (iOS 16.4+).** In a Safari tab `PushManager`
   does not exist; `pushState()` returns `'install'` and both screens say what to do instead.
 - **Where a player turns it on:** the Connect 4 Hoops multiplayer screen ("Notify me when it's my
-  turn", shown only while it is off) and profile -> Settings -> Notifications (on/off, per device).
+  turn"), the Messages screen ("Notify me of new messages"), both shown only while it is off, and
+  profile -> Settings -> Notifications (on/off, per device). **And Hoops ASKS** (Matt, 2026-09-24):
+  right after a move of yours is sent in a turn-by-turn match, "Want a notification when <them>
+  plays back?" - once per match (`gamehub.hoops4.pushAsk.v1`), only while it is off.
 - **Who is notified, decided in `functions/decide.js` (pure):** a challenge arriving, the turn
   coming back, a series game the other person started, and a match the other person ended. Never
   your own action: `createGame` stamps `by` on the match (optional field) so its maker is not told.
