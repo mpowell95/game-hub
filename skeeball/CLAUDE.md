@@ -2285,6 +2285,14 @@ never offers the next one; it says who won, "Challenge sent", or whose turn it i
 notifies (`decideSkee` 'turn': "<them> played game k of n. Your turn!") and raises the launcher's
 "Your turn" bubble; the result notifies whoever did NOT play the last game.
 
+**A total the challenged player won was shown as a tie (fixed 2026-09-24, same evening).** v3's
+`decide()` answered only 'a' or a draw for Total score, so King of Games' 1790-1250 win over Matt
+was stored with no winner. Now the result is RE-DERIVED on read, never trusted from storage: the
+match's winner from its scores (`validateChallenge`), a list row's from its own totals and games
+won (`rowResult`). Nothing stored was rewritten; the one affected match reads correctly for both.
+Note the Firebase trap behind it: a stored `winner: null` is DROPPED, so a draw and a missing winner
+look identical on disk - derive, do not read.
+
 **ONE ATTEMPT, AND LEAVING COUNTS - three layers, all load-bearing:**
 
 1. **Committed before the first ball.** `_startGameInner` calls `CH.beginLeg` (after the engine has
