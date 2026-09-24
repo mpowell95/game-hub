@@ -17,6 +17,7 @@ import * as SETTINGS_DEFAULTS from './settings.js';
 import { ZONE, flyPitch } from './pitch.js';
 import { swing, modeOf as swingMode } from './swing.js';
 import { resolveContact, resolveBunt } from './outcomes.js';
+import { resolveLivePlay, liveSettings } from './liveplay.js';
 import { zonesFor } from './zones.js';
 import { emptyBases, advanceAll, advanceWalk, advanceSacFly, advanceSacBunt, advanceDoublePlay } from './bases.js';
 import { stepRng } from './rng.js';
@@ -76,8 +77,10 @@ export class Game {
    * @param {object} [opts.settings] - override settings (tests only); merged over the real module
    * @param {boolean} [opts.wallHeight] - playtest 1's wall-height home run rule (outcomes.js);
    *   career passes its season's snapshot, so a season saved before it keeps the old rule
+   * @param {boolean} [opts.livePlays] - playtest 1 batch 4: play every ball in play out in time
+   *   (liveplay.js) instead of the out-zone model. Career passes its season's snapshot; off by default
    */
-  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false, wallHeight = true }) {
+  constructor({ home, away, seed, agents, parkId = 'default', settings, quickPlay = false, wallHeight = true, livePlays = false }) {
     // RA (docs/BASEBALL-3D-BUILD.md section 9): QUICK PLAY. It rides on the pitch view rather
     // than being read from a module global, so a CAREER game constructed in the same page is
     // unaffected either way.
@@ -92,10 +95,12 @@ export class Game {
     this.agents = agents;
     this.parkId = parkId;
     this.wallHeight = !!wallHeight;
+    this.livePlays = !!livePlays;
     // Both sides play in the same league (a Career opponent is always drawn from the player's own
     // league); home's is authoritative if the two ever disagreed.
     this.league = home.league || away.league;
     this.settings = { ...SETTINGS_DEFAULTS, ZONE, ...(settings || {}) };
+    if (this.livePlays) this.settings = liveSettings(this.settings); // batch 4: the live model's Power
 
     this.rngState = seed >>> 0;
     this.inning = 1;
@@ -158,9 +163,11 @@ export class Game {
     g.agents = agents;
     g.parkId = snap.parkId || 'default';
     g.wallHeight = !!snap.wallHeight; // playtest 1: an older snapshot keeps the old home run rule
+    g.livePlays = !!snap.livePlays;   // batch 4: an older snapshot keeps the out-zone model
     g.quickPlay = !!snap.quickPlay; // RA: additive; an older snapshot simply resumes as a career game
     g.league = snap.home.league || snap.away.league;
     g.settings = { ...SETTINGS_DEFAULTS, ZONE };
+    if (g.livePlays) g.settings = liveSettings(g.settings);
     g.rngState = snap.rngState >>> 0;
     g.inning = snap.inning;
     g.half = snap.half;
@@ -213,6 +220,7 @@ export class Game {
       away: this.away,
       parkId: this.parkId,
       wallHeight: this.wallHeight,
+      livePlays: this.livePlays,
       quickPlay: this.quickPlay,
       inning: this.inning,
       half: this.half,
@@ -732,11 +740,20 @@ export class Game {
         // `resolveContact`). Everything AFTER this line is identical for both, which is the point:
         // `_resolveBattedBall` applies it, and `basesBefore`/`runnersOut`/`runsScored` come out of
         // the same place they always did.
-        const outcome = swingResult.bunt
+        // Playtest 1 batch 4: a season that snapshotted `livePlays` plays the ball out in time
+        // (liveplay.js) - it replaces `resolveContact` AND `_resolveBattedBall`, since the play
+        // itself decides who is out and where every runner ends up. A bunt keeps its own rule book.
+        const live = (this.livePlays && !swingResult.bunt)
+          ? resolveLivePlay({ batted: swingResult, league: this.league, fenceFt: this._parkFt(), bases: this.bases.slice(),
+            outs: this.outs, batterId, speedOf: (id) => this._hitSpdOf(battingTeam, id), defense: defenseTeam, shiftDeg,
+            settings: this.settings, rand01: () => this._rand(), wallHeight: this.wallHeight })
+          : null;
+        const outcome = live || (swingResult.bunt
           ? resolveBunt(swingResult, this.bases, this.outs, batter.skills.hitSpd, this.settings, () => this._rand())
-          : resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand(), this.wallHeight);
+          : resolveContact(swingResult, zones, this.settings, this._parkFt(), batter.skills.hitSpd, () => this._rand(), this.wallHeight));
         this._recordSpray(batterId, swingResult.sprayAngleDeg);
-        const { bases, runsScored, runnersOut } = this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
+        const { bases, runsScored, runnersOut } = live ? this._applyLivePlay(live, battingSide)
+          : this._resolveBattedBall(outcome, batterId, battingSide, () => this._rand());
         this._advanceLineup(battingSide);
         this._atBatOpen = false;
         // BB-2c commit 1: q/exitVeloMph/centered exposed for measurement
@@ -770,7 +787,10 @@ export class Game {
           distanceFt: outcome.distanceFt, sprayAngleDeg: swingResult.sprayAngleDeg,
           battedKind: outcome.kind === 'bunt-popup' ? 'bunt-popup' : swingResult.kind,
           launchAngleDeg: swingResult.launchAngleDeg,
-          timingWord, basesBefore: basesBeforeAtBat, runnersOut });
+          timingWord, basesBefore: basesBeforeAtBat, runnersOut,
+          // Batch 4: the whole live play (ball, fielders, throws, runners, in seconds) for the
+          // drawing to follow; null on the out-zone model.
+          play: live ? live.timeline : null, fielder: live ? live.fielder : null, doublePlay: live ? !!live.doublePlay : false });
         return;
       }
 
@@ -813,6 +833,25 @@ export class Game {
         return;
       }
     }
+  }
+
+  /** Batch 4: a runner's Speed. The extra-innings ghost runner is on no roster: he runs at his
+   *  team's average Speed (at 0 points he would be the slowest man in the park). */
+  _hitSpdOf(team, id) {
+    const pl = team.players.find((p) => p.id === id);
+    if (pl) return (pl.skills && pl.skills.hitSpd) || 0;
+    const all = team.players.map((p) => (p.skills && p.skills.hitSpd) || 0);
+    return all.length ? all.reduce((a, b) => a + b, 0) / all.length : 0;
+  }
+
+  /** Batch 4: apply a live play (liveplay.js) - it already knows the outs, the runs that count and
+   *  where every runner stands, so this only books them. Synchronous, like `_resolveBattedBall`. */
+  _applyLivePlay(live, battingSide) {
+    this.outs += live.outsAdded;
+    if (this.outs < this.settings.MECHANICS.outsPerInning) this.bases = live.finalBases.slice();
+    if (live.result === 'hit') this.totals[battingSide].hits += 1;
+    this._addRuns(battingSide, live.runsScored);
+    return { bases: live.bases, runsScored: live.runsScored, runnersOut: live.runnersOut };
   }
 
   /** Apply a resolved batted-ball outcome to outs/bases/runs/totals. Synchronous - nothing here

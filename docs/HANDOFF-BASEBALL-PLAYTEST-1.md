@@ -177,6 +177,55 @@ when the ball lands, whatever the result. Runners advance by the awarded bases (
   on its own if it leaves the drawn play disagreeing with the result; ship them together, or keep
   4a behind the per-season snapshot flag until 4b lands.
 
+### Where batch 4 stopped (2026-09-24): 4a DONE and live, 4b NOT STARTED
+
+**4a (engine + simulator) is shipped with the switch OFF.** `LIVE_PLAY.on` is `false` in
+`settings.js`, so every new season still snapshots `livePlays: false` and plays the out-zone model;
+nothing a player sees changed. Full record: `baseball/CLAUDE.md`'s top entry.
+
+What exists: `baseball/js/engine/liveplay.js` (`resolveLivePlay`, `ballPath`, `fielderSpots`,
+`liveSettings`); `game.js` takes `livePlays` (constructor + snapshot) and emits the whole play on
+'atBatEnd' as `payload.play` (plus `fielder`, `doublePlay`); `career.js` snapshots
+`season.livePlays` and builds a live season's CPU rosters from `LIVE_PLAY.cpuRosterLevel`;
+`sim-baseball-career.mjs --live` measures it (all 8 assertions pass). A bunt keeps its own rule
+book (`resolveBunt`), even in a live season.
+
+**Matt, 2026-09-24, after 4a: home runs are 2-3 per 3-INNING game in the Majors (both teams),
+as played here - NOT the per-9-inning real-life rate 4a tuned to (0.75 per game).** So 4b first
+re-tunes carry (`LIVE_PLAY` / `LEAGUE_POWER_SCALE`, whichever 4a used) to land Majors at 2-3 HR per
+game, each lower league proportionally fewer (keep 4a's league-to-league shape: Little 0.26, HS
+0.32, College 0.48, Minors 0.63, Majors 0.75, scaled up together), then re-runs the sim until all 8
+assertions pass. Scoring will rise with it (4a: Majors average-player games about 1.6-0.9 runs);
+report the new runs per game. Pitch Accuracy (worth ~0 at the Majors in 4a) and scoring have no
+new decision from Matt; leave them unless the re-tune changes them, and report both.
+
+**Also fix in 4b:** the device probe `game-flow-intro` (batch 3's pre-game intro; a fielder does
+not start at the dugout). It passed when batch 3 shipped (v939), so something after that broke it:
+find the change and fix the game or the probe, whichever is wrong.
+
+**4b, the next session, in this order:**
+1. **Draw `payload.play`** in `ui.js`, frame by frame, instead of the out-zone animation, only when
+   `payload.play` is non-null (an out-zone season still gets today's drawing). The timeline is in
+   SECONDS from contact, plan feet (x right, y to centre; `field.js` `engineToWorld` converts):
+   - `play.ball.samples`: `[t, s, h]` every 0.1 s along the spray ray (`play.ball.spray` degrees);
+     `landT`, `wallT`, `homer`, `stopT`.
+   - `play.fielders`: each position's start spot (`fielderSpots`; replaces `field.js` `FIELDER_POS`
+     for a live play). `play.possession`: who took it, where, when, `caught`, and his run
+     (`runFrom`, `runStartT`).
+   - `play.throws`: `{from, to, fromPt, toPt, tRelease, tArrive, wild, offFt, mph}` (a relay is two).
+   - `play.runners`: `{id, from, legs:[{t0, s0, s1, spd}], scoredT, outT}` on the 0..360 base path
+     (`liveplay.js` `pathPoint(s)`). `play.outs`: `{id, t, force, base}`. `play.endT`.
+   Replace `_animateBattedBall`/`_animateFielderChase`/`_animateRunners` (ui.js ~3815/4290/4033)
+   for a live play; reuse `_animateActorTo`-style movers. New clips as needed (Throw, Catch;
+   `poses.js`). Skippable with a tap (`_skipFlowAnim`), never blocks input once skipped.
+2. **Result words** for the new kinds (`strings.js`, EN/ES): `fielders-choice`, `wild-throw`,
+   `thrown-out`, `inside-park-homer`, `wall-single`, `ground-hit`, plus a double play. The rest
+   reuse today's words (`bases` 1-4 = Single..Home run).
+3. **Quick Play**: pass `livePlays: LIVE_PLAY.on` to its `new Game` (ui.js ~1650) and build its CPU
+   league with `makeLeague(league, { rosterLevel: LIVE_PLAY.cpuRosterLevel[league] })` (ui.js ~1628).
+4. **Flip `LIVE_PLAY.on` to `true`**, re-run `sim-baseball-career.mjs --all-tiers --careers 200
+   --assert --perfect 400` (now live by default), the device suite and the visual suite; then ship.
+
 ## Batch 5: the player runs the bases (one or two sessions, after batch 4)
 
 Matt: "if I hit the ball and it lands in the outfield, I have to click something to send the
@@ -220,6 +269,6 @@ distance would have to be accounted for)."
 | 1. Quick fixes | DONE (2026-09-23, v933; `baseball/CLAUDE.md` top entry) |
 | 2. Bunt rework | DONE (2026-09-23, v936; `baseball/CLAUDE.md` top entry) |
 | 3. Game flow | DONE (2026-09-23, v938; `baseball/CLAUDE.md` top entry) |
-| 4. Live plays | not started |
+| 4. Live plays | 4a DONE (2026-09-24, engine + sim, switch OFF; `baseball/CLAUDE.md` top entry). 4b (drawing, switch ON) not started |
 | 5. Player base running | not started (needs 4) |
 | 6. Player fielding | not started (needs 4) |

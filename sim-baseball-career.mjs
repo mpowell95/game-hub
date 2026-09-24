@@ -24,7 +24,7 @@
 // Speed and Accuracy visible here at all; how often a real player does either is an assumption.
 //
 //   node sim-baseball-career.mjs [--careers N] [--tier weak|median|strong] [--all-tiers]
-//        [--perfect N] [--assert] [--json out.json] [--seed S] [--seasons-cap N]
+//        [--perfect N] [--assert] [--json out.json] [--seed S] [--seasons-cap N] [--live]
 //
 // It REPORTS; `--assert` is the phase gate, and like `sim-baseball.mjs --assert` it is
 // deliberately NOT in `run-all-tests.mjs` - 150 careers is about a minute, not a second.
@@ -45,6 +45,11 @@ const SKILL_IDS = SETTINGS.SKILL_IDS;
 function arg(name, dflt) { const i = process.argv.indexOf(`--${name}`); return i >= 0 ? process.argv[i + 1] : dflt; }
 const FLAG_ASSERT = process.argv.includes('--assert');
 const FLAG_ALL_TIERS = process.argv.includes('--all-tiers');
+// Playtest 1 batch 4: `--live` plays every season on the live-play model (liveplay.js) whatever
+// `LIVE_PLAY.on` says, so the model can be measured and tuned before batch 4b switches it on.
+// Without it the tool plays exactly what a new season in the shipped game snapshots.
+const FLAG_LIVE = process.argv.includes('--live');
+const withLive = (st) => (FLAG_LIVE && st.season ? { ...st, season: { ...st.season, livePlays: true } } : st);
 const CAREERS = Math.max(1, Number(arg('careers', 150)));
 const PERFECT_N = Math.max(0, Number(arg('perfect', 0)));
 const SEED0 = Number(arg('seed', 1));
@@ -161,7 +166,7 @@ async function playNext(state, tier) {
     if (type === 'atBatEnd') {
       hr.pa += 1;
       if (payload.outcome === 'homer') hr.hr += 1;
-      if (payload.outcome === 'wall-double' || payload.outcome === 'wall-triple') hr.wall += 1;
+      if (/^wall-/.test(payload.outcome)) hr.wall += 1; // batch 4: the live model also has 'wall-single'
     }
     if (inner) await inner(type, payload);
   };
@@ -209,7 +214,7 @@ async function playCareer(tier, careerSeed) {
     const L = perLeague[league];
     if (L.arrivalSkills == null) L.arrivalSkills = { ...st.player.skills };
     const before = { earned: st.pointsEarned, lost: st.pointsLost };
-    st = startSeason(st, hashSeed('sim-career-season', careerSeed, st.seasonsPlayed + 1) >>> 0);
+    st = withLive(startSeason(st, hashSeed('sim-career-season', careerSeed, st.seasonsPlayed + 1) >>> 0));
     let wins = 0, losses = 0, trophy = 0, resolved = false;
     for (let guard = 0; guard < 64 && !resolved; guard++) {
       const out = await playNext(st, tier);
@@ -245,7 +250,7 @@ async function playPerfectProbe(tier, seed) {
   const skills = Object.fromEntries(SKILL_IDS.map((id) => [id, cap]));
   let st = newCareer({ hand: 'R', presetId: 'maxed', skills, now: 0, careerId: `PERFECT-${seed}` });
   st = { ...st, league: 'majors', cap, bestLeague: LEAGUES.length };
-  st = startSeason(st, hashSeed('sim-career-perfect', seed) >>> 0);
+  st = withLive(startSeason(st, hashSeed('sim-career-perfect', seed) >>> 0));
   let losses = 0, trophy = 0;
   for (let guard = 0; guard < 64; guard++) {
     const out = await playNext(st, tier);
@@ -333,6 +338,7 @@ function printRun(out) {
 }
 
 // ---------------------------------------------------------------------------------------------
+if (FLAG_LIVE) console.log('LIVE PLAYS: every season plays balls in play out in time (liveplay.js)');
 const report = { generatedAt: new Date().toISOString(), careers: CAREERS, seed: SEED0, tiers: {}, perfect: null };
 for (const t of TIERS) {
   const out = await runTier(t, CAREERS);

@@ -84,7 +84,7 @@ import {
   RULES_V, LEAGUES, SEASON, POINTS, CAPS, START_CAP, SKILL_IDS,
   BRACKET_MODEL, PLAYOFF_HOME, STANDINGS_MODEL, STANDINGS_TIEBREAK, SCHEDULE_SHAPE, parkFor,
   gamesForLeague, slotsForLeague, playoffFormatFor,
-  SPEND_AFTER_SEASON,
+  SPEND_AFTER_SEASON, LIVE_PLAY,
 } from './settings.js';
 import { makeSchedule, scriptedStandings, playoffs, trophyFor } from './season.js';
 import { leagueTeamsFor, makePlayerTeam } from './teams.js';
@@ -286,6 +286,7 @@ export function startSeason(state, seed) {
       standingsModel: STANDINGS_MODEL,
       parks: true,
       wallHeight: true,   // playtest 1: home runs must clear the wall's height (outcomes.js)
+      livePlays: !!LIVE_PLAY.on, // batch 4: balls in play played out in time (liveplay.js); off until 4b draws it
       points: { ...POINTS[league] },
       schedule: makeSchedule(league, seasonSeed, games, slots.length, SCHEDULE_SHAPE),
       results: [],
@@ -343,7 +344,11 @@ export function playerTeamFor(state) {
  *  league id and the season's frozen slot list, never stored. */
 export function leagueTeams(state) {
   const league = state.season ? state.season.league : state.league;
-  return leagueTeamsFor(league, state.season ? seasonSlots(state) : undefined);
+  // Batch 4: a live-play season's CPU rosters are built to the live model's own level table
+  // (`LIVE_PLAY.cpuRosterLevel`); an out-zone season keeps `CPU_ROSTER_LEVEL`.
+  const live = !!(state.season && state.season.livePlays);
+  return leagueTeamsFor(league, state.season ? seasonSlots(state) : undefined,
+    live ? { rosterLevel: LIVE_PLAY.cpuRosterLevel[league] } : undefined);
 }
 
 /**
@@ -365,7 +370,10 @@ export function buildGame(state, meta, agents = { home: null, away: null }) {
   // Playtest 1: the wall-height home run rule, snapshotted the same way (an older season keeps
   // the distance-only rule it started with).
   const wallHeight = !!(s && s.wallHeight);
-  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false, wallHeight });
+  // Batch 4: the live play, snapshotted the same way - a season started without it keeps the
+  // out-zone model to its last game.
+  const livePlays = !!(s && s.livePlays);
+  return new Game({ home, away, seed: meta.seed >>> 0, agents, parkId, quickPlay: false, wallHeight, livePlays });
 }
 
 /** Which engine side ('home'|'away') the player is, for a given meta. */

@@ -762,9 +762,10 @@ Matt: *"are you sure there's no way to have real notifications or something clos
 - **Who is notified, decided in `functions/decide.js` (pure):** a challenge arriving, the turn
   coming back, a series game the other person started, and a match the other person ended. Never
   your own action: `createGame` stamps `by` on the match (optional field) so its maker is not told.
-- **`pushSubs` is a new top-level node, so `database.rules.json` must be PUBLISHED BY HAND.**
-  As of 2026-09-23 it is NOT yet published; until it is, turning notifications on reports "That
-  didn't work". When Matt publishes it, change this line to say so, with the date.
+- **`pushSubs` rules: PUBLISHED by Matt on 2026-09-24** (verified the same day: `pushSubs/<code>`
+  reads succeed, and `players/`, `hoops/`, `adminConfig/`, `usernames/` still read normally). The
+  only change from the rules live before was adding `pushSubs`; a diff proved nothing else moved.
+  Deploying the Cloud Function (`functions/README.md` steps 1-6) is a separate step.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
 

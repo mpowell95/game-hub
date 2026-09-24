@@ -37,6 +37,7 @@ This doc says how the game works. It is not a coding or implementation guide. Lo
 - **[Locked]** Career alternates home and away. The order is shuffled, but the split across a season is even. The prototype's always-bat-first is a prototype limitation only.
 
 ### Baserunning (automatic)
+Overruled for a live-play season (Matt, playtest 1, 2026-09-23, batch 4; section 10): runners run, and take what the play gives them. The fixed rules below hold for an out-zone season.
 - **[Locked]** Single: all runners +1. Double: +2. Triple and home run: everyone scores.
 - **[Locked]** Walk: only forced runners move.
 - **[Locked]** Ground out with a runner on first and fewer than 2 outs can be a double play.
@@ -175,8 +176,8 @@ Hitting:
 - **[Locked]** **Speed**: beat out grounders, stretch hits, better steals and bunts.
 
 Pitching:
-- **[Locked]** **Speed**: pitch velocity.
-- **[Locked]** **Accuracy**: pitch lands closer to your aim, bigger Nice zone, better pickoffs.
+- **[Locked]** **Speed**: pitch velocity. Also how hard your fielders throw (Matt, playtest 1, 2026-09-23, batch 4; section 10).
+- **[Locked]** **Accuracy**: pitch lands closer to your aim, bigger Nice zone, better pickoffs. Also how accurately your fielders throw (Matt, playtest 1, 2026-09-23, batch 4; section 10).
 - **[Locked]** **Spin**: more bend on curve, slider, and screwball; bigger speed gap on the changeup.
 - **[Locked]** Rejected labels: Contact, Break.
 - **[Locked] by Matt 2026-09-23, as shipped at v929**: how much each skill point changes each effect (`settings.js` `SKILL_EFFECT`). Must stay a small nudge.
@@ -309,6 +310,18 @@ Major League	62%	40 to 52%
 - **[Locked, 2026-09-23]** Full name list (40 teams): `baseball/js/ui.js` `TEAM_NAMES`, one per league and style. Full name on career screens; last word on the in-game scoreboard.
 
 ## 10. Field and hit outcomes
+
+**Overruled by Matt, playtest 1, 2026-09-23 (batch 4): every ball in play is played out live.** Matt: "if it's caught, it's an out... allow the ball to land on the ground, bounce, and roll... show the fielder running towards it and throwing the ball in... it needs to look like baseball." The out-zone rules (the old first bullet below) are replaced by:
+
+- **[Locked]** Nine fielders, drawn. The ball flies, lands, bounces, rolls and comes off the wall. The first fielder who can reach it takes it. **A ball caught before it touches the ground is always an out.** A ball picked up off the ground is thrown in; a long throw goes through the cutoff man.
+- **[Locked]** Outs on the bases are real: force outs and tags, decided by who gets there first. A double play is a real relay. A runner can be thrown out at home.
+- **[Locked]** Throwing uses the PITCHING skills (Matt's decision 3): pitch **Speed** is how hard a fielder throws, pitch **Accuracy** how close to the bag it arrives (low accuracy can throw wild; a wild throw gets away and every runner takes a base). Your team throws with your skills; each CPU fielder with his own.
+- **[Locked]** Runners run at a speed set by hitting **Speed**.
+- **[Locked]** Base running and fielding decisions are automatic for both teams in batch 4 (batches 5 and 6 hand your side to you).
+- **[Locked]** Home runs at about real-life rates: about 3 in 100 plate appearances in the Majors, fewer in each lower league.
+- Snapshotted per season (`season.livePlays`). A season started before it switches on keeps the out-zone model to its last game. **Switched on by batch 4b** (the drawing); until then new seasons still start on the out-zone model. All numbers: `settings.js` `LIVE_PLAY`.
+
+The out-zone model, kept for seasons started before batch 4b:
 
 - **[Locked]** No fielders drawn. Out zones sit where fielders would stand:
   - 4 infield ground-out zones
