@@ -67,6 +67,14 @@ check('total: never settled while games are left, even far ahead (turns alternat
 check('total: all played and behind loses; equal is a draw',
   CH.decide(withScores(tot, { 0: 100, 1: 100, 2: 100 }, { 0: 100, 1: 100, 2: 90 })).winner === 'a'
   && CH.decide(withScores(tot, { 0: 100, 1: 100, 2: 100 }, { 0: 100, 1: 100, 2: 100 })).winner === null);
+check('[KNOWN-BUG PROBE] total: the CHALLENGED player can win (it was stored as a tie)',
+  CH.decide(withScores(tot, { 0: 290, 1: 520, 2: 440 }, { 0: 320, 1: 650, 2: 820 })).winner === 'b');
+const king = CH.validateChallenge({ ...withScores(tot, { 0: 290, 1: 520, 2: 440 }, { 0: 320, 1: 650, 2: 820 }), stage: 'over', over: { at: 5 } });
+check('the real King of Games match (stored with no winner) now reads as his win', CH.resultFor(king, 'b') === 'won' && CH.resultFor(king, 'a') === 'lost');
+check('a finished row\'s result comes from its own numbers, not the stored "draw"',
+  CH.rowsFromIndex({ muftb7ifyzn2ac6n: { with: 'KNGGG', n: 3, scoring: 'total', over: true, result: 'draw', mine: 1250, theirs: 1790 } })[0].result === 'lost');
+check('...and a real draw still reads as a draw',
+  CH.rowsFromIndex({ muftb7ifyzn2ac6n: { with: 'KNGGG', n: 3, scoring: 'total', over: true, result: 'draw', mine: 900, theirs: 900 } })[0].result === 'draw');
 check('results read from each side', CH.resultFor({ over: { winner: 'b' } }, 'b') === 'won' && CH.resultFor({ over: { winner: 'b' } }, 'a') === 'lost'
   && CH.resultFor({ over: { winner: null } }, 'a') === 'draw');
 

@@ -101,7 +101,10 @@ export function decide(game) {
     // Turns alternate, so BOTH totals can still grow while games are left: a total is only
     // settled once every game has been played by both.
     if (left > 0) return { done: false, winner: null };
-    return { done: true, winner: t.aTotal > t.bTotal ? 'a' : null };
+    // GUARD (2026-09-24): BOTH SIDES CAN WIN. v3 dropped v2's "b passes a" early exit and left this
+    // line answering only 'a' or a draw, so every total the challenged player WON was stored as a
+    // tie (Matt: King of Games 1790 vs 1250, "How is this a tie...?").
+    return { done: true, winner: t.aTotal > t.bTotal ? 'a' : t.bTotal > t.aTotal ? 'b' : null };
   }
   if (t.bWins > t.aWins + left) return { done: true, winner: 'b' };
   if (t.aWins > t.bWins + left) return { done: true, winner: 'a' };
@@ -221,6 +224,13 @@ export function validateChallenge(raw) {
     sides[side] = { ...who(raw[side]), s };
   }
   const stage = ['a', 'b', 'over'].includes(raw.stage) ? raw.stage : (over ? 'over' : 'a');
+  // THE RESULT IS RE-DERIVED FROM THE SCORES, never trusted from the stored winner. Firebase drops a
+  // null, so a draw and a missing winner look identical on disk - and matches finished while
+  // decide() had its total bug (above) were stored with no winner at all. Nothing is rewritten.
+  if (over) {
+    const d = decide({ legs, scoring: SCORINGS.includes(raw.scoring) ? raw.scoring : 'games', a: sides.a, b: sides.b });
+    if (d.done) over.winner = d.winner;
+  }
   return {
     ...base, v: 2,
     scoring: SCORINGS.includes(raw.scoring) ? raw.scoring : 'games',
@@ -301,10 +311,27 @@ export function rowsFromIndex(val) {
       theirs: r.theirs == null ? null : score(r.theirs),
       myWins: ms(r.myWins),
       theirWins: ms(r.theirWins),
-      result: ['won', 'lost', 'draw'].includes(r.result) ? r.result : null,
+      result: rowResult(r),
     });
   }
   return sortRows(rows);
+}
+
+/**
+ * A finished row's result, worked out from its own numbers rather than its stored `result` (see the
+ * GUARD in decide: some rows were stored as 'draw' when the other person had won). Most wins: games
+ * won, then total. Total: total. Falls back to the stored value for a row without the numbers.
+ */
+export function rowResult(r) {
+  if (!r || !r.over) return null;
+  const mine = ms(r.mine); const theirs = ms(r.theirs);
+  const cmp = (x, y) => (x > y ? 'won' : x < y ? 'lost' : 'draw');
+  if (r.mine != null && r.theirs != null) {
+    if (r.scoring === 'total') return cmp(mine, theirs);
+    const w = cmp(ms(r.myWins), ms(r.theirWins));
+    return w !== 'draw' ? w : cmp(mine, theirs);
+  }
+  return ['won', 'lost', 'draw'].includes(r.result) ? r.result : null;
 }
 
 export function sortRows(rows, now = Date.now()) {
