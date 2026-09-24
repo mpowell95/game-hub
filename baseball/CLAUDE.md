@@ -4,6 +4,36 @@
 > and its nine working rules are at the top of the root `CLAUDE.md`, always loaded alongside this
 > file.
 
+## test-baseball-actors.mjs's two pre-existing failures, closed (2026-09-24)
+
+Both were flagged as pre-existing since batch 4b's own entry ("Not in this batch's list and failing
+the same way without this change"). Both were the TEST going stale behind the game, not the game
+going wrong - fixed in `test-baseball-actors.mjs` only, no game code touched.
+
+1. **`_cutawayUp single exit` expected exactly 2 clear sites, found 5.** The check's own comment
+   was simply out of date: batch 3 (2026-09-20) deliberately reused `_cutawayUp` for three MORE
+   self-contained beats (`_playIntro`, `_playHalfInningSwap`, `_playBatterChange`) instead of
+   inventing a second guard - each pairs its own `= true` with its own `= false` at the end of that
+   one beat, exactly as that batch's own CLAUDE.md entry says it would ("all three new beats reuse
+   `_cutawayUp`... rather than inventing a second guard"). Five is correct: the constructor's
+   initial declaration, `_returnToPlate()` (the shared clear for the ball-in-play cutaway), and the
+   three self-paired beats. The check now asserts 5, with a comment naming all five sites, so a
+   genuine sixth (a real new exit) still fails it.
+2. **`mount-in-hub layering` failed with "missing canvas".** R18 (2026-09-22) made Career the
+   landing tab, so `.bb-play-btn` (Quick Play's own button) no longer exists on the screen a mount
+   lands on - clicking it was a no-op, `.bb-play` never appeared, and neither canvas ever mounted.
+   `test-baseball-device.mjs`'s own `mountInHub()` was updated for this the same day; this file's
+   separate, inline mount flow was missed. Fixed the same way: tap
+   `[data-act="tab"][data-tab="quickPlay"]` before `.bb-play-btn`.
+
+Verified: `node test-baseball-actors.mjs` (node half 49/49, chromium half all green including both
+fixed checks - `_cutawayUp = false appears in exactly 5 places`, `the 2-D overlay sits above the
+WebGL scene`, `the idle batter paints on the real play screen`), `node baseball/js/test.js` (5213
+passed), `node test-baseball-career.mjs` (329 passed), `BB_DEVICE_QUICK=1 node
+test-baseball-device.mjs` (all checks passed), `node test-visual.mjs baseball` (20 passed),
+`node check-no-scroll.mjs baseball` (16 screens, 0 scroll), `node test-game-conventions.mjs`
+(11 passed, no new gaps).
+
 ## Playtest 1, batch 6: the player plays the field (2026-09-24) - DONE, live
 
 `docs/HANDOFF-BASEBALL-PLAYTEST-1.md` batch 6. Matt: "if the ball is hit to an outfielder, I'd have to
