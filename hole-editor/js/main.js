@@ -333,6 +333,7 @@ ribbon.innerHTML = [
   '<button class="he-tool" id="he-copy-json" title="Copy JSON" style="width:auto;padding:0 8px;' + (profile.custom ? 'display:none;' : '') + '"><span class="he-tool-icon">{}</span><span class="he-tool-label">Copy JSON</span></button>',
   '<div class="he-sep"></div>',
   // Help (2026-09-22): hole-editor/help.html, plain words for someone who has never seen the tool.
+  '<button class="he-tool" id="he-hub" title="Back to the Game Hub" style="width:auto;padding:0 8px;"><span class="he-tool-icon">\u{1F3E0}</span><span class="he-tool-label">Hub</span></button>',
   '<button class="he-tool" id="he-bug" title="Report a bug to Matt" style="width:auto;padding:0 8px;"><span class="he-tool-icon">\u{1F41E}</span><span class="he-tool-label">Report bug</span></button>',
   '<a class="he-tool" id="he-help" href="./?course=tutorial" target="_blank" rel="noopener" title="How to use the Course Creator" style="text-decoration:none;color:inherit;"><span class="he-tool-icon">?</span><span class="he-tool-label">Help</span></a>',
   // Phone only (in the Tools grid): the tools that are fiddly with a finger at any size.
@@ -493,6 +494,9 @@ const MORE = [
     ['fit', '🎯', 'Fit the hole', () => proxy('he-fit')],
     ['help', '❓', 'Help', () => proxy('he-help')],
     ['bug', '🐞', 'Report bug', () => proxy('he-bug')],
+    // The Course Creator is a Game Hub tile since 2026-09-24, and an installed iPhone app has no
+    // Back button: without this a player who opened it from the hub could not get back.
+    ['hub', '🏠', 'Back to Game Hub', () => goHub()],
   ]],
 ];
 moreEl.innerHTML = `<div class="he-more-grab"></div>` + MORE.map(([title, items]) => `<div class="he-more-grp">${title}</div><div class="he-more-list">${
@@ -1229,6 +1233,13 @@ document.getElementById('he-help').addEventListener('click', async (e) => {
 // REPORT A BUG (2026-09-23): the hub's own form (js/bug-report-ui.js) - same inbox Matt already
 // reads, same screenshots, same offline outbox - with "Course Creator" preselected and a line saying
 // exactly where the designer was. A practice-run report says so, so it is not mistaken for his course.
+/** Back to the Game Hub launcher (the editor is a launch-out tile). Saves first, so nothing waits on
+ *  the 300 ms debounce; the cloud copy catches up on the next open, as it always has. */
+function goHub() {
+  try { saveNow(); } catch (err) { console.error('[hub] save before leaving failed', err); }
+  location.href = new URL('../', location.href).href;
+}
+document.getElementById('he-hub').addEventListener('click', goHub);
 document.getElementById('he-bug').addEventListener('click', async () => {
   try {
     const m = await import('../../js/bug-report-ui.js');

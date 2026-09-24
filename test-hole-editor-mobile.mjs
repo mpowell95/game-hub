@@ -127,6 +127,35 @@ const c3 = await cam();
 ok('one finger on empty ground moves the view', Math.abs(c3.cy - c2.cy) > 5, `cy ${c2.cy.toFixed(1)} -> ${c3.cy.toFixed(1)}`);
 ok('...and places nothing', ((await spec()).bunkers || []).length === nB1);
 
+// STAGE 3 (2026-09-24): hold with a placement tool shows the see-through preview; sliding moves
+// it; lifting places there. A second finger instead cancels it.
+{
+  await page.evaluate(() => window.__he.editorCanvas.setTool('bunker'));
+  const h0 = await toScreen((s1.path[0][0] + cup[0]) / 2 - 20, (s1.path[0][1] + cup[1]) / 2 + 30);
+  await touch('touchStart', [[h0.x, h0.y]]); await page.waitForTimeout(650);
+  ok('holding a finger with the Bunker tool shows the preview', await page.evaluate(() => !!window.__he.editorCanvas.ghost && !!window.__he.editorCanvas._ghostObject()));
+  ok('...and places nothing yet', ((await spec()).bunkers || []).length === nB1);
+  for (let i = 1; i <= 4; i++) { await touch('touchMove', [[h0.x, h0.y - i * 8]]); await page.waitForTimeout(20); }
+  await touch('touchEnd', []);
+  const fxStarted = await page.evaluate(() => (window.__he.editorCanvas._fx || []).length > 0);
+  await settle();
+  const nB2 = ((await spec()).bunkers || []).length;
+  ok('lifting the held finger places the bunker', nB2 === nB1 + 1);
+  await page.waitForTimeout(600);
+  ok('...with a puff of dust that plays and then stops', fxStarted && await page.evaluate(() => !window.__he.editorCanvas.ghost && !window.__he.editorCanvas._raf));
+  await tapEl('.he-right [data-sheet-close]').catch(() => {});
+  await page.evaluate(() => { const c = window.__he.editorCanvas; c.setSelection(null); c.setTool('bunker'); });
+  await touch('touchStart', [[h0.x + 40, h0.y + 40]]); await page.waitForTimeout(650);
+  await touch('touchStart', [[h0.x + 40, h0.y + 40], [h0.x + 120, h0.y + 40]]);
+  await touch('touchMove', [[h0.x + 30, h0.y + 40], [h0.x + 130, h0.y + 40]]);
+  await touch('touchEnd', []); await settle();
+  ok('a second finger cancels the preview and places nothing', ((await spec()).bunkers || []).length === nB2 && await page.evaluate(() => !window.__he.editorCanvas.ghost));
+  // take the extra bunker back out, so the checks below see the same document they always did
+  await page.evaluate(() => document.getElementById('he-undo').click()); await settle();
+  ok('...and Undo takes the held placement back out', ((await spec()).bunkers || []).length === nB1);
+  await page.evaluate(() => window.__he.editorCanvas.setTool('bunker'));
+}
+
 // Select tool: one finger on the bunker drags it.
 await tapEl('[data-ptab="move"]');
 const bObj = await page.evaluate(() => { const o = window.__he.editorCanvas; const b = o.spec.bunkers[o.spec.bunkers.length - 1]; return { yd: b.yd }; });

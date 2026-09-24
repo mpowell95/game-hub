@@ -37,6 +37,7 @@ import { ANNOUNCEMENTS, textFor } from './announce.js';
 import { isHiddenName, isHiddenDeviceId } from './hidden-players.js';
 import {
   readCachedConfig, refreshAdminConfig, resolveGameLive, resolveBoardMode, setGameLive,
+  resolveGameAllowed, gameAllowList, setGameAllowed,
   setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
 } from './admin-config.js';
 import { correctionFor, snapshotOf } from './stats-corrections.js';
@@ -90,6 +91,12 @@ function ensureCss() {
                 margin: 0 calc(var(--gh-sp-4) * -1); padding: 0 var(--gh-sp-4); }
   /* --- accordion: four headings until one is tapped --- */
   .adm-sec { border-top: 1px solid var(--gh-border); }
+  .adm-allow { padding: 0 0 var(--gh-sp-3); }
+  .adm-allow__list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .adm-allow__p { min-height: 44px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 14px;
+                  border: 1px solid var(--gh-border); background: var(--gh-surface, transparent); color: inherit;
+                  touch-action: manipulation; cursor: pointer; }
+  .adm-allow__p[aria-pressed="true"] { border: 2px solid #ffce3a; background: rgba(255,206,58,.18); font-weight: 700; }
   .adm-sec:last-of-type { border-bottom: 1px solid var(--gh-border); }
   /* The headings carried gh-sp-4 top AND bottom on top of a 44px min-height, so five collapsed
      sections filled the sheet with gaps. The 44px target is untouched; only the padding went. */
@@ -277,10 +284,41 @@ function segHTML(name, options, value) {
 
 // --- games --------------------------------------------------------------------------------------
 
+// Games whose admin row also carries a WHO CAN SEE IT picker (2026-09-24, the Course Creator).
+const ALLOW_PICKER = new Set(['course-creator']);
+
+/** One row per PERSON with a player code, A-Z by name: {code, name, emoji}. */
+function codedPeople() {
+  const out = new Map();
+  for (const g of aggregatePlayers(_players || {})) {
+    const code = (g.playerId || '').trim().toUpperCase();
+    if (!code || isHiddenName(g.name)) continue;
+    if (!out.has(code)) out.set(code, { code, name: g.name || code, emoji: g.emoji || '' });
+  }
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function allowPickerHTML(cfg, g) {
+  const people = codedPeople();
+  const allowed = new Set(gameAllowList(cfg, g.id));
+  // a code picked earlier whose person has no synced record any more still shows, so it can be removed
+  for (const c of allowed) if (!people.some((p) => p.code === c)) people.push({ code: c, name: c, emoji: '' });
+  people.sort((a, b) => (allowed.has(b.code) - allowed.has(a.code)) || a.name.localeCompare(b.name));
+  const chips = people.map((p) => {
+    const on = resolveGameAllowed(cfg, g.id, p.code);
+    return `<button type="button" class="adm-allow__p" data-allow-code="${esc(p.code)}" aria-pressed="${on}"
+      >${on ? '✓ ' : ''}${p.emoji ? esc(p.emoji) + ' ' : ''}${esc(p.name)}</button>`;
+  }).join('');
+  return `<div class="adm-allow" data-allow-game="${esc(g.id)}">
+      <div class="adm-note">${esc(t('adm_allow_title', { n: allowed.size }))}</div>
+      <div class="adm-allow__list">${chips || `<span class="adm-note">${esc(t('adm_allow_none'))}</span>`}</div>
+    </div>`;
+}
+
 function gamesSectionHTML(cfg) {
   return GAMES.slice().sort((a, b) => titleText(a).localeCompare(titleText(b))).map((g) => {
     const live = resolveGameLive(cfg, g.id, !g.devOnly);
-    return `<div class="adm-row" data-game="${esc(g.id)}">
+    const row = `<div class="adm-row" data-game="${esc(g.id)}">
       <div class="adm-row-main"><div class="adm-name">${esc(titleText(g))}</div></div>
       <div class="adm-ctl">
         ${segHTML(titleText(g), [
@@ -289,6 +327,8 @@ function gamesSectionHTML(cfg) {
         ], live ? 'live' : 'test')}
       </div>
     </div>`;
+    // Only while it is hidden: a live game is already everyone's, so a picker there would be a lie.
+    return ALLOW_PICKER.has(g.id) && !live ? row + allowPickerHTML(cfg, g) : row;
   }).join('');
 }
 
@@ -556,7 +596,12 @@ function wire(card) {
     const boardRow = scoreRow ? null : e.target.closest('[data-board]');
 
     let run = null;
-    if (seg && gameRow) {
+    const allowBtn = e.target.closest('[data-allow-code]');
+    const allowBox = allowBtn && allowBtn.closest('[data-allow-game]');
+    if (allowBtn && allowBox) {
+      const on = allowBtn.getAttribute('aria-pressed') !== 'true';
+      run = () => setGameAllowed(allowBox.dataset.allowGame, allowBtn.dataset.allowCode, on);
+    } else if (seg && gameRow) {
       run = () => setGameLive(gameRow.dataset.game, seg.dataset.set === 'live');
     } else if (seg && boardRow) {
       run = () => setBoardMode(boardRow.dataset.board, seg.dataset.set);
