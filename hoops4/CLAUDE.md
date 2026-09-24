@@ -1689,3 +1689,8 @@ Matt, after a session of simultaneous turn-by-turn games with another player.
   line whole; the chat card sits at +92px so it clears the taller HUD.
 - **v953 was shipped twice** (#794 Brick Breaker and #795 this change, merged a minute apart);
   #796 bumped to v954. The root rule on CACHE bumps is exactly this failure.
+- **Then trimmed, same evening** (Matt: *"remove the 'you are yellow' and make the Your Turn larger
+  and the vs King of games larger"*): the HUD's second line is "vs <emoji> <name>" (16px) with
+  "Game 2 of 3" under it; the turn pill went 14px -> 19px (ball 24px). In multiplayer the pill
+  says "Their turn", not "<name>'s turn" - the name is on the line below, and at 19px a long name
+  ran under the chat button. Your colour is carried by the machine's tint and the pill's ball.

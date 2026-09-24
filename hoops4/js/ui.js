@@ -1023,7 +1023,8 @@ class Hoops4 {
     // on theirs.
     const label = mine && (m.vsCpu || this.mp) ? t('turnYou')
       : m.vsCpu ? t('turnCpu')
-        : this.mp ? t('turnOf', { name: this.themName() })
+        // Their NAME is on the line under the pill now, and at the pill's 19px it did not fit beside it.
+        : this.mp ? t('theirTurn')
           : t('turnOf', { name: red ? t('red') : t('yellow') });
     const waiting = !mine && (m.vsCpu || (this.mp && this.mp.kind === 'live'));
     who.innerHTML = `${ballSVG(red ? BOARD.look.red : BOARD.look.yellow, red)}<span class="h4-who-txt"></span>`;
@@ -1049,12 +1050,13 @@ class Hoops4 {
         const o = mp.kind === 'async' ? (mp.side === 'a' ? g2.b : g2.a) : mp.them;
         const emo = (o && typeof o === 'object' && o.emoji) || '';
         bits.push(t('vsName', { name: (emo ? emo + ' ' : '') + this.themName() }));
-        bits.push(this.myPlayer === RED ? t('youAreRed') : t('youAreYellow'));
+        // "You are Red/Yellow" was here for one deploy; Matt: "remove the 'you are yellow'". The
+        // machine's tint (render.setPlayerTint) and the ball in the pill carry it.
       }
       if (g && g.series > 1) bits.push(t('gameOf', { n: g.seriesNo, m: g.series }));
       leg.hidden = !bits.length;
       // The name on its own line, the rest under it: one line cut "You are Red" off at 393px.
-      leg.textContent = this.mp ? bits[0] + '\n' + bits.slice(1).join(' \u00b7 ') : bits.join(' \u00b7 ');
+      leg.textContent = this.mp && bits.length > 1 ? bits[0] + '\n' + bits.slice(1).join(' \u00b7 ') : bits.join(' \u00b7 ');
     }
   }
 
