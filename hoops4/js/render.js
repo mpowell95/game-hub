@@ -1021,9 +1021,13 @@ export class Renderer {
    */
   setPlayerTint(hex) {
     const wall = COL(this.look.wall);
-    this.scene.background = hex ? wall.clone().lerp(COL(hex), 0.42) : wall;
+    // YELLOW NEEDS MORE THAN RED. A dark yellow is not yellow, it is olive-brown - Matt, on the
+    // first build (42% for both): "the yellow is NOT yellow enough". Red keeps reading as red
+    // when darkened; yellow only reads as yellow near full brightness, so it is mixed far further.
+    const isYellow = hex && String(hex).toLowerCase() === String(this.look.yellow).toLowerCase();
+    this.scene.background = hex ? wall.clone().lerp(COL(hex), isYellow ? 0.85 : 0.42) : wall;
     const rail = this._partMats && this._partMats.get('rail');
-    if (rail) rail.color = hex ? COL(hex).multiplyScalar(0.85) : COL(this.look.cabinet);
+    if (rail) rail.color = hex ? COL(hex).multiplyScalar(isYellow ? 1 : 0.85) : COL(this.look.cabinet);
   }
 
   /** Which player's basketball is in the air. Matched on the hex so callers keep passing
