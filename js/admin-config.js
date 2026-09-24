@@ -122,6 +122,28 @@ export function resolveGameLive(cfg, id, codeDefault) {
   return !!codeDefault;
 }
 
+/**
+ * PER-PLAYER ACCESS (2026-09-24, Matt: *"an admin control specific for this game where I can
+ * select users who can see it and it remains hidden for everyone else"*). `games/<id>/allow` is a
+ * map of PLAYER CODE -> true. It only ever ADDS a player to a hidden game's audience; it never
+ * hides a live game from anyone. Keyed by code, not device, so it follows a person to every phone.
+ * @returns {boolean}
+ */
+export function resolveGameAllowed(cfg, id, code) {
+  const c = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  if (!c) return false;
+  const row = normalizeConfig(cfg).games[id];
+  const allow = row && row.allow && typeof row.allow === 'object' ? row.allow : null;
+  return !!(allow && allow[c] === true);
+}
+
+/** Every player code allowed to see this game, A-Z. */
+export function gameAllowList(cfg, id) {
+  const row = normalizeConfig(cfg).games[id];
+  const allow = row && row.allow && typeof row.allow === 'object' ? row.allow : {};
+  return Object.keys(allow).filter((c) => allow[c] === true).sort();
+}
+
 /** The override on a game, or null when the code default is in force. */
 export function gameOverride(cfg, id) {
   const row = normalizeConfig(cfg).games[id];
@@ -276,6 +298,9 @@ function writeCachedConfig(cfg) {
 
 /** Is this hub game live for ordinary players? `codeDefault` is `!g.devOnly`. */
 export function isGameLive(id, codeDefault) { return resolveGameLive(readCachedConfig(), id, codeDefault); }
+
+/** Has the admin picked this player (by code) to see this game? Synchronous cache read. */
+export function isGameAllowed(id, code) { return resolveGameAllowed(readCachedConfig(), id, code); }
 
 /** Has this Skeeball machine been released to everyone? OR it with the earned unlock, never replace. */
 export function isBoardReleased(boardId) { return resolveBoardReleased(readCachedConfig(), boardId); }
@@ -441,7 +466,7 @@ function fail(msg) { console.error('[admin-config] ' + msg); return { ok: false,
  *                         fields can never land half-applied and read as a contradiction
  * @param {(cfg:object)=>boolean} verify  re-read check, run against the freshly fetched config
  */
-async function writeNode(path, fields, verify) {
+async function writeNode(path, fields, verify, { stamp = true } = {}) {
   if (!writesAllowed()) {
     return fail(`write BLOCKED: this is a dev origin (${location.hostname}) and dev never writes the family's config. `
       + `To allow it in this browser: localStorage.setItem('${DEV_SYNC_OK}', '1')`);
@@ -453,7 +478,10 @@ async function writeNode(path, fields, verify) {
   const cleared = Object.keys(fields).every((k) => fields[k] === null);
   let by = '';
   try { by = (await import('./game-stats.js')).statsId() || ''; } catch { by = ''; }
-  const patch = Object.assign({}, fields, cleared ? { at: null, by: null } : { at: Date.now(), by });
+  // `stamp: false` for a map of plain entries (an allow list): its `at`/`by` would land inside
+  // the map as if they were two more entries, and clearing one entry must not wipe a release date.
+  const patch = !stamp ? Object.assign({}, fields)
+    : Object.assign({}, fields, cleared ? { at: null, by: null } : { at: Date.now(), by });
   try {
     await api.update(api.ref(db, full), patch);
   } catch (err) {
@@ -489,6 +517,14 @@ export function gameLiveAt(id) {
   if (!row || typeof row !== 'object' || row.live !== true) return 0;
   const at = Number(row.at);
   return Number.isFinite(at) && at > 0 ? at : 0;
+}
+
+/** Let one player (by code) see a hidden game, or take that back. Verified by fresh re-read. */
+export function setGameAllowed(id, code, on) {
+  const c = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));
+  return writeNode(`games/${id}/allow`, { [c]: on ? true : null },
+    (cfg) => resolveGameAllowed(cfg, id, c) === !!on, { stamp: false });
 }
 
 export function setGameLive(id, live) {

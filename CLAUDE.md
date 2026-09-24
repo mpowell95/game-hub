@@ -537,6 +537,7 @@ working in that folder).
 | Battleship | in-hub `module:`, immersive, **multiplayer** (`gamehub.battleship.mp.v1`, the repo's first hidden-information game) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` |
 | Boggle | in-hub `module:`, **multiplayer** (`gamehub.boggle.mp.v1`), **bilingual gameplay** (EN/ES word list + dice, chosen on the setup screen) | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
 | Chinchón | in-hub `module:` | `.cc-root` / `.cc-` (many rules still bare-prefixed) | `chinchon-settings` (frozen gen-1) | `recordChinchon` |
+| Course Creator | launch-out `href:` (`hole-editor/?course=new`), **`devOnly`, opened to chosen players by player code from the admin page** (2026-09-24); records no stats, so no GAME_META row | n/a (own page) | its own `golf.holeEditor.*` keys | none |
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | `gamehub.connect4.v1` (+ `gamehub.connect4.save.v1` autosave) | `recordConnect4` |
 | Dominoes | in-hub `module:` | `.dm-root` / `.dm-` | `gamehub.dominoes.v1` | `recordDominoes` |
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
@@ -816,6 +817,13 @@ screen needs it.
   id check. It deliberately does NOT hide the My Stats tab. `visibleTabs()` in the same file keeps its own,
   MORE PERMISSIVE rule on purpose - a game hidden by an override still has its My Stats screen, so a
   player's own record of a game Matt has pulled back stays reachable. Do not unify the two.
+- **A hidden game can be opened to NAMED PLAYERS (2026-09-24, the Course Creator).**
+  `games/<id>/allow/<PLAYER CODE> = true`, written by `setGameAllowed` (verified re-read, no
+  `at`/`by` stamp inside the map), read by `isGameAllowed(id, code)`; the launcher shows a tile when
+  `isGameLive || dev || isGameAllowed`. It only ever ADDS viewers; the picker (chips, one per coded
+  person) shows on a game's admin row only while that game is Admin only, and only for ids in
+  `ALLOW_PICKER` in `js/admin-ui.js`. **It hides the TILE, not the page**: the editor's URL still
+  opens for anyone who has it (nothing client-side could stop that).
 - **`devOnly` is now only a DEFAULT, so a game can go live with no commit.** That is why Pinball has
   a `GAME_META` row in `js/leaderboard-ui.js` while still being admin-only, and why
   `players-agg.test.mjs`'s `OFF_THE_BOARD` list is now empty and must stay that way: a game released

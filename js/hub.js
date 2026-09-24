@@ -28,7 +28,7 @@ import { isNewGame, releaseMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
 import { pendingAnnouncement } from './announce.js';
-import { isGameLive, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice } from './admin-config.js';
+import { isGameLive, isGameAllowed, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice } from './admin-config.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -477,6 +477,20 @@ export const GAMES = [
     art: GAME_ART["golf"],
   },
   {
+    // THE COURSE CREATOR (2026-09-24, Matt: *"Can we make it its own 'game'? ... select users who
+    // can see it and it remains hidden for everyone else"*). The golf hole editor on a blank course,
+    // launched out like Monopoly Deal (it is its own page, hole-editor/). devOnly keeps it off the
+    // launcher; the admin page's Games section opens it to chosen players by code. It records no
+    // stats, so it needs no GAME_META row. Its "Back to Game Hub" button returns here.
+    id: 'course-creator',
+    title: { en: 'Course Creator', es: 'Creador de campos' },
+    blurb: { en: 'Design your own golf holes.', es: 'Diseña tus propios hoyos de golf.' },
+    href: 'hole-editor/?course=new',
+    accent: '#8f7bd6',
+    art: GAME_ART['course-creator'],
+    devOnly: true,
+  },
+  {
     // Phase 0 (BB-0-phase-0-handoff.md): stats plumbing and a placeholder screen only, no game.
     // devOnly, unlike Golf's admin-config gate - there is nothing behind this tile yet for the
     // admin config's "live/testing" distinction to be meaningful about. No `released` date: that
@@ -800,7 +814,10 @@ class Hub {
     // admin-only for testing" and "make it live" happen from inside the app instead of from a
     // commit; the registry stays the default, and a device that has never reached the config (new,
     // offline) behaves exactly as it did before this existed. Dev profiles still see everything.
-    const visible = GAMES.filter((g) => isGameLive(g.id, !g.devOnly) || dev);
+    // A hidden game can also be opened to named PLAYERS from the admin page (games/<id>/allow,
+    // keyed by player code, 2026-09-24) - the Course Creator's "select who can see it".
+    const myCode = (prof && prof.playerId) || '';
+    const visible = GAMES.filter((g) => isGameLive(g.id, !g.devOnly) || dev || isGameAllowed(g.id, myCode));
     const storedFavIds = loadFavorites();
     const favIdSet = new Set(storedFavIds);
     // FAVORITES ARE NEVER TOUCHED BY THE SORT. They stay above, in the player's own custom order
