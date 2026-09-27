@@ -625,6 +625,39 @@ export const GAME_ART = {
             <rect x="66" y="78" width="6" height="5" rx="2.5" fill="#ff2e97"/>
             <rect x="90" y="78" width="6" height="5" rx="2.5" fill="#ff2e97"/>
           </svg>`,
+  // Texas Hold'em: green felt with a wooden rail edge, the flop face up in the middle, your two
+  // cards (an ace and a king) fanned on the right and a chip stack on the left - all kept above the
+  // caption band and clear of the NEW pill and the favourite heart. Suits
+  // are told apart by SHAPE (spade, heart, diamond, club), never by red/black alone.
+  holdem: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <defs>
+              <radialGradient id="pkFelt" cx="0.5" cy="0.35" r="0.8"><stop offset="0" stop-color="#1a8052"/><stop offset="1" stop-color="#0b4a2e"/></radialGradient>
+            </defs>
+            <rect width="160" height="90" fill="#3a2414"/>
+            <ellipse cx="80" cy="44" rx="92" ry="52" fill="url(#pkFelt)" stroke="#5c3a20" stroke-width="3"/>
+            <g font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">
+              <g transform="translate(36 30)">
+                <rect width="20" height="28" rx="3" fill="#fbfaf6"/><text x="10" y="13" font-size="10" fill="#16181d">Q</text><path d="M10 16 l4 4 l-4 4 l-4 -4z" fill="#c8102e"/>
+              </g>
+              <g transform="translate(60 30)">
+                <rect width="20" height="28" rx="3" fill="#fbfaf6"/><text x="10" y="13" font-size="10" fill="#16181d">J</text><path d="M10 25 c-6 -4 -6 -9 -2.6 -9.6 c1.6 -0.3 2.6 1 2.6 1 c0 0 1 -1.3 2.6 -1 c3.4 0.6 3.4 5.6 -2.6 9.6z" fill="#c8102e"/>
+              </g>
+              <g transform="translate(84 30)">
+                <rect width="20" height="28" rx="3" fill="#fbfaf6"/><text x="10" y="13" font-size="10" fill="#16181d">10</text><g fill="#16181d"><circle cx="10" cy="17.6" r="2.4"/><circle cx="7.4" cy="21" r="2.4"/><circle cx="12.6" cy="21" r="2.4"/><rect x="9.2" y="21" width="1.6" height="4"/></g>
+              </g>
+              <g transform="translate(110 33) rotate(-9)">
+                <rect width="24" height="34" rx="3" fill="#fbfaf6" stroke="#ffce3a" stroke-width="1.5"/><text x="12" y="15" font-size="12" fill="#16181d">A</text><path d="M12 18 c-6 5 -6 9 -2.4 9.4 c1.3 0.1 2 -0.8 2 -0.8 l-1 3 h2.8 l-1 -3 c0 0 0.7 0.9 2 0.8 c3.6 -0.4 3.6 -4.4 -2.4 -9.4z" fill="#16181d"/>
+              </g>
+              <g transform="translate(132 30) rotate(9)">
+                <rect width="24" height="34" rx="3" fill="#fbfaf6" stroke="#ffce3a" stroke-width="1.5"/><text x="12" y="15" font-size="12" fill="#16181d">K</text><path d="M12 30 c-7 -5 -7 -10.5 -3 -11.2 c1.9 -0.3 3 1.2 3 1.2 c0 0 1.1 -1.5 3 -1.2 c4 0.7 4 6.2 -3 11.2z" fill="#c8102e"/>
+              </g>
+            </g>
+            <g>
+              <ellipse cx="17" cy="64" rx="10" ry="3.6" fill="#1F5FA8"/><rect x="7" y="57" width="20" height="7" fill="#1F5FA8"/><ellipse cx="17" cy="57" rx="10" ry="3.6" fill="#3b7fd0"/>
+              <ellipse cx="17" cy="55" rx="10" ry="3.6" fill="#E0532F"/><rect x="7" y="49" width="20" height="6" fill="#E0532F"/><ellipse cx="17" cy="49" rx="10" ry="3.6" fill="#f07a5a"/>
+              <ellipse cx="17" cy="47" rx="10" ry="3.6" fill="#F2B705"/><rect x="7" y="42" width="20" height="5" fill="#F2B705"/><ellipse cx="17" cy="42" rx="10" ry="3.6" fill="#ffd84d" stroke="#fff" stroke-width="0.8" stroke-dasharray="3 3"/>
+            </g>
+          </svg>`,
   // Pinball: the one composition a 16:9 frame suits better than the real table does. A pinball
   // playfield is tall and narrow, so rather than squash it, this is a CLOSE-UP of the part that
   // reads instantly at tile size: the arch, the bumper nest, the ramp, and the two flippers with a

@@ -1,0 +1,395 @@
+/* holdem/css/holdem.css - Texas Hold'em. Every rule descendant-scoped under .pk-root (Mancala's
+   discipline, docs/BUILDING-A-GAME.md). A fixed casino look in both hub themes, like Pinball and
+   Brick Breaker: the table is its own dark room with green felt, so .gh-dark changes nothing. */
+
+.pk-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: #f3f1ea;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  background:
+    radial-gradient(120% 70% at 50% 45%, #1d3a2c 0%, #0f1f18 55%, #090f0c 100%);
+  --pk-gold: #ffce3a;
+  --pk-felt: #146b43;
+  --pk-felt-2: #0c4d30;
+  --pk-rail: #3a2414;
+  --pk-ink: #f3f1ea;
+  --pk-dim: #b8c4bb;
+  --pk-red: #c8102e;
+  --pk-card: #fbfaf6;
+  --pk-cw: 44px;
+}
+.pk-root,
+.pk-root * {
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.pk-root input { -webkit-user-select: text; user-select: text; }
+.pk-root button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+.pk-root button > span,
+.pk-root button > svg { pointer-events: none; }
+.pk-root :focus-visible { outline: 2px solid var(--pk-gold); outline-offset: 2px; }
+.pk-root [hidden] { display: none !important; }
+
+/* ------------------------------------------------------------ buttons --- */
+.pk-root .pk-btn {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.pk-root .pk-btn:disabled { opacity: 0.45; cursor: default; }
+.pk-root .pk-btn-primary { background: var(--pk-gold); color: #231a00; border-color: var(--pk-gold); }
+.pk-root .pk-btn-big { width: 100%; min-height: 52px; font-size: 18px; }
+.pk-root .pk-btn-sm { min-height: 44px; padding: 6px 10px; font-size: 13px; }
+.pk-root .pk-btn-fold { background: #5b1d20; border-color: #8a2d31; }
+.pk-root .pk-btn-call { background: #1f5fa8; border-color: #3b7fd0; }
+.pk-root .pk-btn-raise { background: var(--pk-gold); color: #231a00; border-color: var(--pk-gold); }
+.pk-root .pk-link {
+  background: none; border: 0; min-height: 44px; padding: 8px 12px;
+  color: var(--pk-dim); text-decoration: underline; font-size: 14px;
+}
+.pk-root .pk-iconbtn {
+  width: 44px; height: 44px; flex: 0 0 44px;
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.25); font-size: 17px; font-weight: 800;
+}
+.pk-root .pk-hint { color: var(--pk-dim); font-size: 13px; font-weight: 500; }
+.pk-root .pk-center-text { text-align: center; margin: 0; }
+.pk-root .pk-label { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pk-dim); margin-bottom: 6px; }
+.pk-root .pk-error { color: #ffb4a8; background: rgba(160, 30, 20, 0.35); border-radius: 10px; padding: 8px 12px; margin: 0; font-size: 14px; text-align: center; }
+.pk-root .pk-shape { display: inline-flex; width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }
+.pk-root .pk-shape svg { width: 16px; height: 16px; }
+.pk-root .pk-shape .lb-dshape-t3,
+.pk-root .pk-shape .lb-dshape-t4 { fill: #e9edf2; }
+.pk-root .pk-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ------------------------------------------------------- setup + lobby --- */
+.pk-root .pk-setup,
+.pk-root .pk-lobby {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px) 18px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  justify-content: center;
+}
+.pk-root .pk-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.pk-root .pk-brand-cards { display: flex; gap: 6px; --pk-cw: 46px; }
+.pk-root .pk-brand-cards .pk-card:first-child { transform: rotate(-8deg); }
+.pk-root .pk-brand-cards .pk-card:last-child { transform: rotate(8deg); }
+.pk-root .pk-title { margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 0.01em; color: var(--pk-gold); }
+.pk-root .pk-tabs { display: flex; background: rgba(0, 0, 0, 0.3); border-radius: 14px; padding: 4px; gap: 4px; }
+.pk-root .pk-tab { flex: 1; min-height: 44px; border: 0; border-radius: 10px; background: transparent; font-size: 15px; font-weight: 700; color: var(--pk-dim); }
+.pk-root .pk-tab.is-on { background: var(--pk-felt); color: #fff; box-shadow: 0 0 0 2px var(--pk-gold) inset; }
+.pk-root .pk-panel { display: flex; flex-direction: column; gap: 14px; }
+.pk-root .pk-field { display: flex; flex-direction: column; }
+.pk-root .pk-seg { display: flex; gap: 6px; }
+.pk-root .pk-segbtn {
+  flex: 1; min-height: 44px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06); font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+.pk-root .pk-segbtn.is-on { background: var(--pk-felt); border-color: var(--pk-gold); box-shadow: 0 0 0 1px var(--pk-gold) inset; }
+.pk-root .pk-stepper { display: flex; align-items: center; gap: 12px; }
+.pk-root .pk-stepbtn { width: 48px; height: 44px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); font-size: 22px; font-weight: 800; }
+.pk-root .pk-stepbtn:disabled { opacity: 0.35; }
+.pk-root .pk-stepval { min-width: 28px; text-align: center; font-size: 24px; font-weight: 900; }
+.pk-root .pk-joinrow { display: flex; gap: 8px; }
+.pk-root .pk-input {
+  flex: 1; min-width: 0; min-height: 48px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 22px; font-weight: 800; letter-spacing: 0.3em;
+  text-align: center; text-transform: uppercase; padding: 0 10px;
+}
+.pk-root .pk-codebox { text-align: center; background: rgba(0, 0, 0, 0.3); border-radius: 16px; padding: 12px; }
+.pk-root .pk-bigcode {
+  display: inline-block; font-size: 44px; font-weight: 900; letter-spacing: 0.18em; color: var(--pk-gold);
+  padding: 2px 10px; border-radius: 10px; cursor: pointer; min-height: 44px;
+}
+.pk-root .pk-llist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pk-root .pk-lrow { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; background: rgba(255, 255, 255, 0.06); border-radius: 12px; }
+.pk-root .pk-lav { font-size: 22px; width: 28px; text-align: center; }
+.pk-root .pk-lname { flex: 1; font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-root .pk-badge { font-size: 11px; font-weight: 800; text-transform: uppercase; padding: 3px 7px; border-radius: 999px; background: rgba(255, 206, 58, 0.18); color: var(--pk-gold); }
+.pk-root .pk-badge.is-you { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.pk-root .pk-lobby-tools { display: flex; gap: 8px; align-items: stretch; }
+.pk-root .pk-lobby-tools .pk-btn { flex: 1.4; }
+.pk-root .pk-lobby-tools .pk-seg { flex: 1; }
+.pk-root .pk-lobby-tools .pk-shape { margin: 0; }
+.pk-root .pk-waiting { text-align: center; color: var(--pk-dim); font-size: 15px; margin: 6px 0; }
+
+/* -------------------------------------------------------------- cards --- */
+.pk-root .pk-card {
+  position: relative;
+  width: var(--pk-cw);
+  height: calc(var(--pk-cw) * 1.4);
+  flex: 0 0 auto;
+  border-radius: calc(var(--pk-cw) * 0.12);
+  background: var(--pk-card);
+  color: #16181d;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-weight: 800;
+}
+.pk-root .pk-card.is-red { color: var(--pk-red); }
+.pk-root .pk-card .pk-r { font-size: calc(var(--pk-cw) * 0.46); letter-spacing: -0.04em; }
+.pk-root .pk-card .pk-s { font-size: calc(var(--pk-cw) * 0.44); margin-top: 1px; }
+.pk-root .pk-card.is-back {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.14) 0 3px, transparent 3px 7px),
+    linear-gradient(160deg, #9b1b30, #5e0f1d);
+  border: 2px solid #fbfaf6;
+}
+.pk-root .pk-card.is-slot { background: rgba(0, 0, 0, 0.18); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+.pk-root .pk-card.is-dim { filter: brightness(0.55); }
+.pk-root .pk-card.is-best { box-shadow: 0 0 0 2px var(--pk-gold), 0 0 12px rgba(255, 206, 58, 0.7); }
+.pk-root .pk-card.is-tiny { --pk-cw: 22px; border-radius: 3px; box-shadow: none; }
+.pk-root .pk-card.is-tiny .pk-r { font-size: 11px; }
+.pk-root .pk-card.is-tiny .pk-s { font-size: 11px; }
+.pk-root .pk-card.is-new { animation: pk-deal 260ms cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes pk-deal {
+  from { opacity: 0; transform: translateY(-16px) scale(0.7); }
+  to { opacity: 1; transform: none; }
+}
+
+/* -------------------------------------------------------------- table --- */
+.pk-root .pk-table { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.pk-root .pk-top {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  margin-top: max(env(safe-area-inset-top, 0px), 48px);
+  padding: 0 10px 0 96px;
+}
+.pk-root .pk-info { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.pk-root .pk-info-hand { font-size: 12px; color: var(--pk-dim); font-weight: 600; }
+.pk-root .pk-info-blinds { font-size: 14px; font-weight: 800; color: var(--pk-gold); white-space: nowrap; }
+.pk-root .pk-topcode {
+  font-size: 15px; font-weight: 900; letter-spacing: 0.14em; padding: 0 10px; min-height: 44px;
+  display: inline-flex; align-items: center; border-radius: 10px; background: rgba(0, 0, 0, 0.3); cursor: pointer;
+}
+
+.pk-root .pk-feltwrap { position: relative; flex: 1; min-height: 0; margin: 4px 6px 0; width: calc(100% - 12px); max-width: 960px; align-self: center; }
+.pk-root .pk-felt {
+  position: absolute;
+  inset: 6% 7% 7%;
+  border-radius: 50% / 38%;
+  background: radial-gradient(ellipse at 50% 40%, var(--pk-felt) 0%, var(--pk-felt-2) 75%);
+  border: 10px solid var(--pk-rail);
+  box-shadow: 0 0 0 2px #5c3a20, inset 0 0 30px rgba(0, 0, 0, 0.55), 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+.pk-root .pk-center {
+  position: absolute; left: 50%; top: 45%;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  width: 64%;
+}
+.pk-root .pk-board { display: flex; gap: calc(var(--pk-cw) * 0.08); }
+.pk-root .pk-pot {
+  min-height: 24px; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; font-weight: 800; background: rgba(0, 0, 0, 0.35); padding: 3px 12px; border-radius: 999px;
+}
+.pk-root .pk-pot:empty { visibility: hidden; }
+.pk-root .pk-msg { min-height: 18px; font-size: 13px; font-weight: 700; text-align: center; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+.pk-root .pk-chip {
+  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  background: radial-gradient(circle, var(--pk-gold) 0 35%, #fff 36% 50%, #c79b12 51%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+/* Seats: each is anchored at its AVATAR centre (left/top set by ui.js's _layout). */
+.pk-root .pk-seats { position: absolute; inset: 0; pointer-events: none; }
+.pk-root .pk-seat {
+  position: absolute;
+  width: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -22px);
+}
+.pk-root .pk-av {
+  position: relative;
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  background: #1c2a24;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.pk-root .pk-seat.is-turn .pk-av { border-color: var(--pk-gold); box-shadow: 0 0 0 3px rgba(255, 206, 58, 0.5), 0 0 16px rgba(255, 206, 58, 0.7); }
+.pk-root .pk-seat.is-winner .pk-av { border-color: var(--pk-gold); box-shadow: 0 0 0 3px var(--pk-gold), 0 0 22px rgba(255, 206, 58, 0.9); }
+.pk-root .pk-seat.is-folded .pk-av,
+.pk-root .pk-seat.is-folded .pk-plate { opacity: 0.45; }
+.pk-root .pk-seat.is-outp { opacity: 0.4; }
+.pk-root .pk-plate {
+  margin-top: -4px;
+  min-width: 70px;
+  max-width: 78px;
+  padding: 3px 6px 3px;
+  border-radius: 8px;
+  background: rgba(8, 14, 11, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex; flex-direction: column; align-items: center;
+  line-height: 1.15;
+  position: relative;
+  overflow: hidden;
+}
+.pk-root .pk-seat.is-turn .pk-plate { border-color: var(--pk-gold); }
+.pk-root .pk-name { font-size: 11px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-root .pk-stack { font-size: 12px; font-weight: 800; color: var(--pk-gold); }
+.pk-root .pk-clock { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, 0.12); }
+.pk-root .pk-clock i {
+  display: block; height: 100%; background: var(--pk-gold); transform-origin: left center;
+  animation-name: pk-clock; animation-timing-function: linear; animation-fill-mode: both;
+}
+@keyframes pk-clock {
+  from { transform: scaleX(var(--f, 1)); }
+  to { transform: scaleX(0); }
+}
+.pk-root .pk-seatcards { position: absolute; display: flex; }
+.pk-root .pk-seatcards:not(.is-up) { right: -16px; top: -4px; }
+.pk-root .pk-seatcards:not(.is-up) .pk-mini + .pk-mini { margin-left: -8px; transform: rotate(10deg); }
+.pk-root .pk-mini {
+  width: 16px; height: 22px; border-radius: 3px; border: 1.5px solid #fbfaf6;
+  background: linear-gradient(160deg, #9b1b30, #5e0f1d);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.pk-root .pk-seatcards.is-up { left: 50%; top: 50%; transform: translate(-50%, -55%); gap: 2px; --pk-cw: 28px; z-index: 2; }
+.pk-root .pk-under { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3px; margin-top: 3px; max-width: 96px; }
+.pk-root .pk-tag {
+  margin-top: 0; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55); color: #fff; white-space: nowrap;
+}
+.pk-root .pk-tag.is-win { background: var(--pk-gold); color: #231a00; }
+.pk-root .pk-tag.is-out { background: rgba(0, 0, 0, 0.4); color: var(--pk-dim); }
+.pk-root .pk-tag.is-away { background: #5b1d20; }
+.pk-root .pk-seathand { margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--pk-gold); white-space: nowrap; text-shadow: 0 1px 2px #000; }
+.pk-root .pk-bet {
+  margin-top: 0; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 800; padding: 2px 8px 2px 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.45);
+}
+.pk-root .pk-dealer {
+  position: absolute; left: -2px; top: -6px; z-index: 3;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; color: #111; font-size: 11px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+/* My own seat sits on the bottom rail: its bet goes ABOVE the plate so it stays on the felt. */
+.pk-root .pk-seat.is-me { flex-direction: column-reverse; transform: translate(-50%, calc(-100% + 22px)); }
+.pk-root .pk-seat.is-me .pk-av { display: none; }
+.pk-root .pk-seat.is-me .pk-plate { margin-top: 0; }
+.pk-root .pk-seat.is-me .pk-under { margin: 0 0 3px; }
+.pk-root .pk-seat.is-me .pk-dealer { left: -14px; top: auto; bottom: 4px; }
+
+/* Short table (a phone in landscape, or a small screen with toolbars): tighter seats. */
+.pk-root.is-short .pk-av { width: 34px; height: 34px; font-size: 19px; }
+.pk-root.is-short .pk-seat { transform: translate(-50%, -17px); }
+.pk-root.is-short .pk-seat.is-me { transform: translate(-50%, calc(-100% + 17px)); }
+
+/* ------------------------------------------------------ my hand + actions --- */
+.pk-root .pk-banner {
+  position: absolute; left: 50%; top: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px); transform: translateX(-50%);
+  z-index: 5; max-width: 90%; padding: 6px 14px; border-radius: 999px; background: #5b1d20; font-size: 13px; font-weight: 700; text-align: center;
+}
+.pk-root .pk-mine {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  min-height: calc(var(--pk-mcw, 54px) * 1.4 + 8px);
+  padding: 4px 12px 0;
+  --pk-cw: var(--pk-mcw, 54px);
+}
+.pk-root .pk-mycards { display: flex; gap: 6px; }
+.pk-root .pk-myhand { font-size: 14px; font-weight: 800; color: var(--pk-gold); max-width: 45%; }
+.pk-root .pk-actions {
+  flex: 0 0 auto;
+  width: 100%; max-width: 760px; align-self: center;
+  min-height: 68px;
+  padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
+  display: flex; flex-direction: column; justify-content: center; gap: 8px;
+}
+.pk-root.is-online .pk-actions { padding-right: 70px; }
+.pk-root .pk-actrow { display: flex; gap: 8px; }
+.pk-root .pk-actrow .pk-btn { flex: 1; min-height: 50px; font-size: 16px; padding: 8px 6px; }
+.pk-root .pk-note { margin: 0; text-align: center; font-size: 14px; color: var(--pk-dim); }
+.pk-root .pk-note-side { flex: 1.6; align-self: center; font-size: 13px; text-align: left; }
+/* The raise panel slides up OVER my cards instead of growing the bar: a bar that changes height
+   resizes the table and moves every seat under the player's thumb. */
+.pk-root .pk-actions { position: relative; }
+.pk-root .pk-raise {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
+  background: #0e1a14;
+  border-top: 1px solid rgba(255, 206, 58, 0.4);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.5);
+}
+.pk-root.is-online .pk-raise { padding-right: 70px; }
+.pk-root .pk-presets { display: flex; gap: 6px; }
+.pk-root .pk-presets .pk-btn { flex: 1; }
+.pk-root .pk-slider { width: 100%; height: 36px; accent-color: var(--pk-gold); touch-action: pan-x; }
+
+/* ------------------------------------------------------------ overlays --- */
+.pk-root .pk-overlay {
+  position: absolute; inset: 0; z-index: 20;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+.pk-root .pk-modal {
+  position: relative;
+  width: 100%; max-width: 380px;
+  background: #13241c;
+  border: 1px solid rgba(255, 206, 58, 0.35);
+  border-radius: 18px;
+  padding: 18px 16px 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  display: flex; flex-direction: column; gap: 10px;
+  animation: pk-pop 200ms ease-out both;
+}
+@keyframes pk-pop { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+.pk-root .pk-modal-sm { max-width: 320px; }
+.pk-root .pk-x {
+  position: absolute; top: 6px; right: 6px; width: 44px; height: 44px;
+  background: none; border: 0; font-size: 18px; color: var(--pk-dim);
+}
+.pk-root .pk-help-goal { margin: 0 34px 0 0; font-size: 14px; }
+.pk-root .pk-ranks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pk-root .pk-ranks li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pk-root .pk-rname { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.pk-root .pk-rcards { display: flex; gap: 2px; }
+.pk-root .pk-rcards .pk-card { height: 28px; }
+.pk-root .pk-confirm { margin: 6px 0; font-size: 16px; font-weight: 700; text-align: center; }
+.pk-root .pk-over-title { margin: 0 34px 0 0; font-size: 22px; font-weight: 900; color: var(--pk-gold); }
+.pk-root .pk-final { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pk-root .pk-final li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
+.pk-root .pk-final li.is-first { background: rgba(255, 206, 58, 0.18); box-shadow: inset 0 0 0 1px var(--pk-gold); }
+.pk-root .pk-fplace { width: 32px; font-weight: 900; font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pk-root .pk-card.is-new,
+  .pk-root .pk-modal { animation: none; }
+}

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Texas Hold'em</title>
+<style>html,body{margin:0;height:100%;background:#090f0c;}</style>
+</head>
+<body>
+<div id="holdem"></div>
+<script type="module">
+  // The app is not playable without a name (see js/name-gate.js): this standalone page is a
+  // door into the hub too, and an ungated one is where the leaderboard's nameless device
+  // records came from. `requireName()` is a no-op once this device has a name.
+  import { requireName } from '../js/name-gate.js';
+  import { init } from './js/ui.js';
+  await requireName();
+  init(document.getElementById('holdem'));
+</script>
+</body>
+</html>

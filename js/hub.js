@@ -459,6 +459,20 @@ export const GAMES = [
     // RELEASED to everyone 2026-09-23 (Matt), after a few hours admin-only the same day.
   },
   {
+    // Texas Hold'em (2026-09-27): no-limit tournament poker, vs up to 7 computers or at an online
+    // table of up to 8 (host-authoritative: the host's device deals - see holdem/CLAUDE.md). Its
+    // own full-bleed table, so immersive like Pool and Yahtzee.
+    id: 'holdem',
+    released: '2026-09-27',
+    title: "Texas Hold'em",
+    blurb: { en: 'No-limit poker. Beat up to 7 computers, or open a table for up to 8 friends online.',
+      es: 'Póker sin límite. Vence a hasta 7 máquinas, o abre una mesa en línea para hasta 8 amigos.' },
+    module: '../holdem/js/ui.js',
+    immersive: true,
+    accent: '#146b43',
+    art: GAME_ART['holdem'],
+  },
+  {
     // BEING REBUILT (golf-reference-spec.md). The 3D game that shipped here is deleted; the 2D
     // top-down game replaces it. `module:` still points at golf/js/ui.js, which is a placeholder
     // screen for the duration, so the hub's mount path never carries a broken import.

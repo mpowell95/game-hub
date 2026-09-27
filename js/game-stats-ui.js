@@ -75,6 +75,8 @@ const TABS = [
   { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
   // Brick Breaker (released 2026-09-23).
   { id: 'brickblitz', labelKey: 'game_title_brickblitz' },
+  // Texas Hold'em (released 2026-09-27). total/byDiff only, so the generic screen draws it.
+  { id: 'holdem', labelKey: 'game_title_holdem' },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
