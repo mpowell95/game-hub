@@ -815,6 +815,22 @@ none of them share:
 
 ---
 
+### The twelfth consumer: Texas Hold'em (2026-09-27) - host-authoritative, not lockstep
+
+Full write-up: `holdem/CLAUDE.md`. `js/net.js` was NOT touched. Poker is the one game here that
+CANNOT be lockstep: a lockstep deck is a deck every device holds. So the host's device runs the
+whole engine (`holdem/js/table.js`) and publishes a public view plus each seat's own two cards
+under its own room child `rooms/<CODE>/pk`; guests only render and send moves stamped with the
+host's action counter (`state.k`), which is what refuses a stale or repeated move. It uses the
+N-seat half at 8 seats (`joinSeat`, `vacateSeat` for a guest leaving, `leaveRoom` for the host
+closing the table). Presence is judged on the HOST's own clock by when a seat's heartbeat stamp
+last changed, never by comparing two devices' clocks. **Honest limit: `rooms/` is `auth != null`,
+so pk/hole/* is readable from developer tools.** Proven in three browser profiles against a local
+RTDB stand-in (the cloud sandbox cannot open Firebase's WebSocket); real Firebase on real phones is
+unverified.
+
+---
+
 ## Report a bug (2026-08-11)
 
 Matt: *"It needs to allow for uploads of screenshots... a text field to explain the problem, and it

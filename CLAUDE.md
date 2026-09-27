@@ -372,7 +372,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
 | `js/arcade-scores.js` | shared high-score + unlock layer for the arcade-cabinet games (Skeeball, Pinball): per-board bests, date-keyed daily bests, unlocks, app-wide records |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee and Battleship; its N-seat half (`joinSeat`/`vacateSeat`/seat-addressed recovery) is used by Chinchón and Escoba |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee, Battleship and Texas Hold'em; its N-seat half (`joinSeat`/`vacateSeat`/seat-addressed recovery) is used by Chinchón, Escoba and Texas Hold'em (8 seats) |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the identity/storage dump. Its profile-page button was RETIRED 2026-08-11 (Report a bug supersedes it and sends the same payload); `gatherDeviceReport()` is still load-bearing, called by every bug report |
 | `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two |
@@ -554,6 +554,7 @@ working in that folder).
 | Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines), plus **"beat my score" challenges** (`skeeChallenges/`, 2026-09-24) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Sudoku | in-hub `module:` | `.sd-root` / `.sd-` | `gamehub.sudoku.v1` | `recordSudoku` |
+| Texas Hold'em | in-hub `module:`, immersive, **multiplayer up to 8, HOST-AUTHORITATIVE** (the host's device deals; `rooms/<CODE>/pk`; `gamehub.holdem.mp.v1`), plus solo vs up to 7 computers | `.pk-root` / `.pk-` | `gamehub.holdem.v1` | `recordResult('holdem', …)` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 | Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |
 | Yahtzee | in-hub `module:`, immersive, **multiplayer** (`js/net.js`, no persisted MP save key) | `.yz-root` / `.yz-` | none yet (no persisted settings) | `recordYahtzee` |

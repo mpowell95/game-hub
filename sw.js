@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v975';
+const CACHE = 'game-hub-v976';
 
 const ASSETS = [
   './',
@@ -258,6 +258,15 @@ const ASSETS = [
   './brick-blitz/js/ui.js',
   './brick-blitz/js/game.js',
   './brick-blitz/js/strings.js',
+  './holdem/',
+  './holdem/index.html',
+  './holdem/css/holdem.css',
+  './holdem/js/ui.js',
+  './holdem/js/engine.js',
+  './holdem/js/ai.js',
+  './holdem/js/table.js',
+  './holdem/js/net-table.js',
+  './holdem/js/strings.js',
   // Hill Climb (2026-08-02). Note test.js is deliberately NOT listed: it is a node-only engine
   // suite, never loaded by the page (same convention as every other game's test file).
   './pinball/',
@@ -797,6 +806,15 @@ const REST_MANIFEST = {
   './brick-blitz/js/ui.js': 'b19c93a44a',
   './brick-blitz/js/game.js': 'ae87ee3447',
   './brick-blitz/js/strings.js': 'f0c1f0996f',
+  './holdem/': 'db36df9867',
+  './holdem/index.html': 'db36df9867',
+  './holdem/css/holdem.css': 'cdd5b1bc5c',
+  './holdem/js/ui.js': '92b343476e',
+  './holdem/js/engine.js': '5c721394c8',
+  './holdem/js/ai.js': '501a498bec',
+  './holdem/js/table.js': '687795030a',
+  './holdem/js/net-table.js': '287aa65964',
+  './holdem/js/strings.js': 'b513b0c88d',
   './pinball/': 'c7d7cf8581',
   './pinball/index.html': 'c7d7cf8581',
   './pinball/css/pinball.css': '4d378af4c3',

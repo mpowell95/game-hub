@@ -173,6 +173,13 @@
 //                                                   // lifetime counters, additive. The one home of a
 //                                                   // Brick Breaker score (no local high-score table);
 //                                                   // see recordBrickBlitz
+//       holdem: {
+//         total, byDiff },                         // Texas Hold'em (2026-09-27): one result per
+//                                                   // tournament per device, via recordResult. Won =
+//                                                   // held every chip at the end; lost = busted out
+//                                                   // (or walked away mid-game). byDiff keyed
+//                                                   // easy|medium|hard (the computers' skill, solo)
+//                                                   // or 'mp' (an online table). No sub-counter.
 //       sudoku: {
 //         total, byDiff,                           // byDiff keyed easy|medium|hard|expert
 //         sd: { solved, perfect, hints, mistakes,
@@ -194,7 +201,7 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
