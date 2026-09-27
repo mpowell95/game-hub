@@ -7,6 +7,7 @@
 //   2. THE PUCK STAYS ON THE TABLE: across whole scripted-player-vs-CPU matches it is never outside the
 //      rounded table except inside a goal slot, and nothing goes NaN.
 //   3. MATCHES END: first to 7, the score adds up, both sides score.
+//   3b. LEVELS IN ORDER: Easy < Medium < Hard against a scripted new player.
 //   4. A FAST SWIPE IS A HARD SHOT: puck speed off a still-to-moving mallet scales with the swipe.
 //   5. STUCK PUCK: a puck left still in a half moves to that player's serve spot after ~5 s.
 
@@ -63,9 +64,12 @@ function onTable(p) {
   return true;
 }
 
-// A scripted "average player": quick hands, slow to read the puck, shoots anywhere at the goal
-// and banks a third of the time. Stage 2 tunes Easy/Medium/Hard against it.
+// Two scripted players, driven by the same AI code with human-ish settings:
+//   HUMAN - an "average player": quick hands, slow to read the puck, shoots anywhere at the goal
+//           and banks a third of the time.
+//   NEW   - a new player: slower hands, slower reads, wilder aim, hardly ever banks.
 const HUMAN = { speed: 1800, react: 0.2, aimErr: 0.5, strike: 1.2, bank: 0.3, misread: 0.3 };
+const NEW = { speed: 1300, react: 0.28, aimErr: 0.65, strike: 1.0, bank: 0.1, misread: 0.4 };
 
 function playMatch(levelA, levelB, seed) {
   const s = createMatch();
@@ -106,6 +110,29 @@ function playMatch(levelA, levelB, seed) {
   ok('both sides score (the computer is beatable, and it scores too)', goals[0] > 0 && goals[1] > 0, `player ${goals[0]} - cpu ${goals[1]}, wins ${winsA}-${winsB}`);
   ok('puck speed never exceeds PUCK_MAX', maxSp <= PHYS.PUCK_MAX + 1e-6, `max=${maxSp.toFixed(0)}`);
   console.log(`      avg match ${(totalT / N).toFixed(0)} s, stuck-puck moves ${stucks}`);
+}
+
+// ---- 3b. the three levels are in order ---------------------------------------------------------
+// Bars (2026-09-27, stage 2): a NEW player beats Easy nearly every time, Medium is a fair fight
+// for them, Hard beats them; and each level concedes a smaller share of the goals than the last.
+{
+  const share = {}, newWins = {};
+  const N = 8;
+  for (const lv of ['easy', 'medium', 'hard']) {
+    const g = [0, 0]; let w = 0;
+    for (let i = 0; i < N; i++) {
+      const r = playMatch(NEW, lv, 100 + i);
+      g[0] += r.s.score[0]; g[1] += r.s.score[1]; if (r.s.winner === 0) w++;
+    }
+    share[lv] = g[1] / (g[0] + g[1]); newWins[lv] = w;
+    console.log(`      new player vs ${lv.padEnd(6)} goals ${g[0]}-${g[1]}, new player wins ${w}/${N}`);
+  }
+  ok('each level scores a bigger share of the goals than the one below',
+    share.easy < share.medium && share.medium < share.hard,
+    ['easy', 'medium', 'hard'].map((k) => `${k} ${(share[k] * 100).toFixed(0)}%`).join(', '));
+  ok('a new player beats Easy nearly every time', newWins.easy >= N - 1, `${newWins.easy}/${N}`);
+  ok('Medium is a fair fight for a new player (they win some, lose some)', newWins.medium >= 2 && newWins.medium <= N - 1, `${newWins.medium}/${N}`);
+  ok('Hard beats a new player', newWins.hard <= 1, `${newWins.hard}/${N}`);
 }
 
 // ---- 4. swipe speed -> shot speed --------------------------------------------------------------
