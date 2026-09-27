@@ -8,7 +8,9 @@
 // 2 ft (2.44 x 0.61 m); a 16 oz party cup is ~9.5 cm across the top, ~6 cm across the base and
 // ~12 cm tall; a ping pong ball is 40 mm across and weighs 2.7 g.
 
-export const TABLE = { len: 2.44, width: 0.61, thick: 0.05 };
+// GamePigeon's table is WIDER than a real 2 ft one relative to its cups: fitting a camera to Matt's
+// recording (2026-09-27) put it at 0.72 m against the real cup size. It is the look being cloned.
+export const TABLE = { len: 2.44, width: 0.72, thick: 0.05 };
 
 export const CUP = {
   topR: 0.0475,      // outer radius at the rim
@@ -22,28 +24,27 @@ export const CUP = {
 // collision walls from overlapping; on screen they read as touching.
 export const CUP_D = CUP.topR * 2 + 0.002;
 export const ROW_H = CUP_D * Math.sqrt(3) / 2;
-/** Where row 0 (the row furthest from the shooter) sits: its cups' rims 3 cm in from the far edge. */
-export const RACK_Z0 = -TABLE.len / 2 + CUP.topR + 0.03;
+/** Where row 0 (the row furthest from the shooter) sits: its cups' rims just in from the far edge. */
+export const RACK_Z0 = -TABLE.len / 2 + CUP.topR + 0.012;
 
-export const BALL = { r: 0.02, mass: 0.0027 };
+const BALL_R = 0.02;
+export const BALL = { r: BALL_R, mass: 0.0027 };
 
-/** THE THROW. The ball is released from a fixed point in front of the camera at a fixed angle;
- *  the swipe decides only its SPEED (power) and its heading (aim).
+/** THE THROW. The ball waits ON THE TABLE at mid-court, where GamePigeon serves it (the camera fit
+ *  to Matt's recording put it at z ~0), and leaves at a fixed angle; the swipe decides only its
+ *  SPEED (power) and its heading (aim).
  *
- *  TUNE THESE WITH MATT'S HAND, NOT BY REASONING (brief section 6, stage 1). `node
- *  cup-pong/js/tune.mjs` prints where each power lands; the band was set so the middle of the
- *  natural swipe range (power ~0.55, see skeeball/js/swipe.js) lands in the middle of the rack. */
+ *  THE BAND: power 0 (skeeball's measured slowest natural flick) lands ~0.4 m on, power 0.55 crosses
+ *  the rim plane at the middle of the rack, power 1 flies off the far end. Flight to the rack is
+ *  ~0.33 s, which is what the recording shows (15 fps frames: release to the front cups in 4-5 frames). Re-derive with the landing table test.js prints. */
 export const THROW = {
-  z0: TABLE.len / 2 + 0.08,  // just behind the near edge
-  y0: 0.30,                  // above the table top
-  elev: 0.62,                // launch angle above horizontal, radians
+  z0: 0,
+  y0: BALL_R + 0.001,
+  elev: 0.55,                // launch angle: the recording reaches the cups in ~0.33 s without climbing above them on screen
   // power 0 -> minSpeed, power 1 -> maxSpeed, interpolated as ENERGY (v^2), like skeeball's.
-  minSpeed: 3.62,
-  maxSpeed: 6.28,
-  // Swipe angle (radians off straight up) -> heading. 0.24 turns a 20-degree swipe into ~5 degrees,
-  // which is the back corner cup from the release point.
-  aimGain: 0.24,
-  aimMax: 0.14,              // heading clamp, radians - past the table's edge either way
+  minSpeed: 2.12,
+  maxSpeed: 4.85,
+  aimMax: 0.30,              // heading clamp, radians - well past the table's edge either way
 };
 
 /** Contact materials. A ping pong ball on a table bounces high; on a thin plastic cup it loses
@@ -53,12 +54,9 @@ export const MAT = { tableRest: 0.78, tableFric: 0.22, cupRest: 0.52, cupFric: 0
 // Air drag on a ping pong ball is real (terminal velocity ~9 m/s): a = -k |v| v, k = g / vt^2.
 export const DRAG_K = 0.12;
 
-/** The camera: the shooter's eye, behind the near end and above the table. render.js widens the
- *  field until every point in `fit` is on screen, so a phone of any shape keeps the rack and the
- *  resting ball in frame. */
-export const CAMERA = {
-  pos: [0, 1.00, 2.60],
-  // The top of a mid-dial throw's arc. The frame holds it, so the ball stays on screen as it
-  // rises and drops into the cups - the GamePigeon view, where the arc happens above the rack.
-  apex: [0, 0.78, 0.20],
-};
+/** THE CAMERA, FITTED TO MATT'S GAMEPIGEON RECORDING (2026-09-27), not designed: high over the
+ *  near half of the table, pitched 44 degrees down, 42 degree vertical field on a 1:2 phone. The
+ *  fit matched the far edge, the far edge's width, where the side edges leave the screen, the
+ *  ball, the rack's point and back row, and the rack's width to within a few pixels. render.js
+ *  keeps the WIDTH it shows on a taller phone and the HEIGHT on a wider screen. */
+export const CAMERA = { pos: [0, 1.305, 0.803], pitch: 44.0, vfov: 41.8, aspect: 0.5 };

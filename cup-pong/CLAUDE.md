@@ -13,15 +13,31 @@ this file says which are done.
 
 | Stage | What | State |
 |---|---|---|
-| 1 | Table + throw: three.js + cannon-es, the camera, flick to throw, cups vanish when made, rack as hex cells. Solo practice only | **Built, deployed devOnly, waiting on Matt's feel check** |
-| 2 | Rules (brief section 3, as Matt confirms them), settings, Gentleman's, vs CPU, rebuttal, stats | not started - **blocked on Matt's yes/no to the section 3 list** |
+| 1 | Table + throw: three.js + cannon-es, the camera, flick to throw, cups vanish when made, rack as hex cells. Solo practice only | **Rebuilt to Matt's GamePigeon recordings (2026-09-27, second pass), deployed devOnly, waiting on his second feel check** |
+| 2 | Rules (brief section 3, confirmed below), settings, Gentleman's, vs CPU, rebuttal, stats | not started - after the feel check |
 | 3 | Rerack: presets, then custom | not started |
 | 4 | Bounce shots | not started - brief says show Matt the async design first |
 | 5 | Challenges + push | not started |
 
-**Matt was sent the section 3 rules as one list on 2026-09-27 and has not answered yet.** Do not
-build any rule from that list until he has. When he answers, write his answers here, line by
-line, dated.
+### The GamePigeon rules, CONFIRMED by Matt 2026-09-27 ("1-7: yes")
+
+1. 10 cups per side, triangle 4-3-2-1, point toward the shooter. **Yes.**
+2. Each turn is 2 throws. A made cup disappears. **Yes.**
+3. Balls back: make both throws in a turn and you get 2 more throws. Repeats. **Yes.**
+4. Same cup twice cannot happen (a made cup vanishes at once). **Yes.**
+5. Heating up / on fire IS in GamePigeon: cups on 2 turns in a row = heating up, the 3rd = on
+   fire, shoot until you miss. **Yes.**
+6. Win: clear all the opponent's cups. **Yes.**
+7. Ball physics: rims, rolling round a rim and out, bouncing off table and cups, off the table.
+   **Yes.**
+
+### Matt's first feel check (2026-09-27): "the flick doesn't feel right"
+
+He sent two screen recordings of real GamePigeon (Dropbox, `/Claude Code Refs/ScreenRecording_
+09-27-2026 16-04-24_1.MOV` and its `(1)` twin). Stage 1's first build had been designed without a
+reference and was wrong in almost every visible way: a camera low behind the shooter, a wood table,
+red cups, the ball hanging in the air near the lens, a slow high lob. The second pass rebuilt it
+from the recordings - see "The look" and "The throw" below. Aim: he was "not sure".
 
 ## Hub integration
 
@@ -45,7 +61,7 @@ line, dated.
 | `js/render.js` | three.js scene from `geom.js`'s numbers |
 | `js/ui.js` | the shell, the flick, the loop, the module contract |
 | `js/strings.js` | EN/ES |
-| `js/test.js` | `node cup-pong/js/test.js` - 25 checks, ~15 s. Not in `sw.js` (dev only) |
+| `js/test.js` | `node cup-pong/js/test.js` - ~30 checks, ~15 s. Not in `sw.js` (dev only) |
 | `css/cup-pong.css` | every rule under `.cp-root` |
 
 ## The rack is a set of hex cells (brief 4c: "build this first")
@@ -54,47 +70,51 @@ line, dated.
 row (0 = furthest from the shooter), `c` counts HALF cup-widths, and a cell is real only when
 `c + r` is odd - that parity is what shifts every other row by half a cup. The pitch IS one cup
 across (plus 2 mm, so two cups' collision walls never overlap), so neighbouring cells are
-touching cups. `cellXZ` turns a cell into table metres; the physics and the renderer only ever see
+touching cups. `cellXZ` turns a cup into table metres; the physics and the renderer only ever see
 `{ id, x, z }` from `cupsXZ`. A cup keeps its id (`k0`..`k9`) for the whole game; a rerack will
 move ids to new cells.
 
+**A cup may instead sit at an exact SPOT, `{ id, u, v }` in cup-widths.** Straight lines toward the
+shooter cannot live on a hex grid (touching cups one behind the other are 1 cup-width apart along
+the table; hex rows are 0.866 apart), and that covers the Gentleman's and the Line presets. Matt,
+2026-09-27: *"do whatever you have to do so that these racks are possible and look correct and are
+placed correctly."* So `line2` (the Gentleman's), `line3` and `line4` are spots: centred, touching,
+front cup exactly where the triangle's point stands, except `line4`, which is deeper than the
+triangle and so has its back cup on the back row instead. `validRack` checks overlap and the area in
+METRES, so cells and spots are checked against each other correctly. Custom racks (stage 3) snap to
+cells; only the line shapes need spots.
+
 `AREA` (|c| <= 5, r 0..4) is the rack area. The triangle is `PRESETS.tri10`.
 
-### OPEN QUESTION for Matt: the Gentleman's line does not fit a hex grid
+## The throw (rebuilt 2026-09-27 from the recordings)
 
-Brief 4b: *"one centered at the front, one directly behind it, touching."* Two cups touching in a
-straight line pointing at the shooter are one cup-width apart ALONG the table, and a hex grid's rows
-are `0.866` of a cup-width apart - so no two cells are ever directly behind each other and touching.
-The same is true of the brief's "Line 1-1-1" and "Line 1-1-1-1" presets. It is geometry: no
-single lattice holds both the 4-3-2-1 triangle and a straight touching line. Options to put to
-Matt before stage 2 builds Gentleman's: (a) the rack format also accepts free positions for the
-line shapes; (b) the line cups sit on alternate rows, straight but with a small gap between them;
-(c) a line is drawn slightly zig-zag on the grid.
-
-## The throw
-
+- **The ball waits ON THE TABLE at mid-court** (z = 0), where the recording serves it - not in the
+  air in front of the camera.
 - **The flick is skeeball's** (`skeeball/js/swipe.js`, imported, never copied): speed in
   screen-heights per second clocked with `e.timeStamp`, and its measured natural range
   (`SWIPE_SLOW` 0.65 -> power 0, `SWIPE_FAST` 4.20 -> power 1). Power is NOT clamped.
-- **Power -> launch speed** is `geom.js`'s `THROW.minSpeed`/`maxSpeed`, interpolated as energy
-  (v^2). The ball leaves a fixed release point (`THROW.z0`, `y0`) at a fixed angle (`elev`
-  0.62 rad); only speed and heading change.
-- **Aim** is the swipe's angle off straight up times `aimGain` (0.24), clamped to `aimMax`.
-  A 15 degree swipe is ~3.5 degrees of heading, which is the back corner cup.
-- **The band was set by measurement, not by feel** (Matt has not thrown it yet): power 0 lands
-  just past midcourt, power 0.55 lands at the rack, power 1 flies off the far end.
-  `node cup-pong/js/test.js` prints the landing point per power.
+- **Power -> launch speed** is `THROW.minSpeed`/`maxSpeed` (2.12 / 4.85 m/s), interpolated as energy
+  (v^2), at a fixed 0.55 rad. Power 0 lands ~0.4 m on, power 0.55 reaches the middle of the rack,
+  power 1 flies off the end.
+- **THE LAUNCH ANGLE WAS MEASURED OFF THE RECORDING.** At 15 fps the GamePigeon ball goes from the
+  serve spot to the front cups in 4-5 frames (~0.3 s) and climbs up the screen almost evenly,
+  never above the rack before it arrives. Projecting candidate arcs through the fitted camera,
+  0.55 rad reaches the cups in 0.33 s on that path; the first build's 0.70 took 0.40 s and 0.62 from
+  a raised release looked like a slow lob.
+- **AIM FOLLOWS THE FINGER** (`aimFromSwipe` in `ui.js`). The flick's direction on screen is carried
+  up from the waiting ball to the rack's row on screen, that point is unprojected onto the table,
+  and the heading is the line from the ball to it. A flick that points at a cup sends the ball at
+  that cup, on any phone. The first build multiplied the flick's angle by 0.24 instead, so the
+  ball went somewhere other than where the finger pointed.
 
-**Stage 1's feel check is Matt's.** The numbers to change if the throw feels wrong, in order:
-`aimGain` (fiddly aim), `minSpeed`/`maxSpeed` (everything short or long), `elev` (arc too flat or
-too high). All pure input shaping - none of them changes the physics. A small "Power 0.55 · Aim
-+1.8°" line bottom right shows the last throw, so a report can quote numbers. Remove it once the
-throw is settled.
+**If the throw still feels wrong**, in order: `minSpeed`/`maxSpeed` (everything short or long),
+`elev` (too flat or too loopy). Aim has no knob any more: it is where you point. The "Power / Aim"
+line bottom right shows the last throw so a report can quote numbers; remove it once the throw is
+settled.
 
-**Measured in a real browser (2026-09-27):** scripted touch flicks through the real pad throw
-the ball, and aim follows the swipe's angle. The harness CANNOT measure power: SwiftShader delays
-each synthetic touch event by 35-200 ms, so every scripted flick reads as a slow push. Only a real
-hand can say whether the band is right.
+**Measured in a real browser:** scripted touch flicks through the real pad throw the ball, and aim
+follows the flick. The harness CANNOT measure power: SwiftShader delays each synthetic touch event
+by 35-200 ms, so every scripted flick reads as a slow push. Only a real hand can judge the band.
 
 ## The physics
 
@@ -111,21 +131,40 @@ hand can say whether the band is right.
   (fell off the table) or `miss` (came to rest, including on top of the cups).
 - **No magnetism, ever** (skeeball's ban). Nothing steers the ball.
 
-Measured, 858-throw power x aim grid over the full rack: every one of the 10 cups is made (5-10
-times each), 9.3% of the even sweep scores, 380 throws touch a cup and stay out, none reaches
-the time cap (slowest 4.2 s). **Bounce shots:** soft throws that bounce off the table score about
-as often as direct throws on an even sweep (~12% vs ~11%). Table bounce (`MAT.tableRest`) is not a
-clean lever for that (0.78 / 0.70 / 0.62 / 0.55 gave 12 / 12 / 15 / 6.5%). Revisit in stage 4.
+Measured on the rebuilt throw, 858-throw power x aim grid over the full rack: every one of the 10
+cups is made (5-9 times each), 8.4% of the even sweep scores, 538 throws touch a cup and stay out,
+none reaches the time cap.
 
-## The camera
+**BOUNCE SHOTS DO NOT GO IN AT THE RECORDED LAUNCH ANGLE: 0 of 969 throws (2026-09-27).** A ball
+thrown at 0.55 rad comes off the table too low to clear a 12 cm rim. The first build's steeper
+lob made them about as often as direct shots. Bounce shots are brief section 5d, stage 4, which
+owns making them possible; `test.js` prints the count as `info` rather than failing, and stage 4
+turns it back into an assertion.
 
-GamePigeon's view: behind the shooter's end, looking down the table, the rack in the middle of
-the screen, the arc above it, the ball waiting at the bottom. `render.js` pitches the camera to
-centre a fit list (the rack's outer rims, the far table corners, the resting ball, and the top of
-a mid-dial arc, `CAMERA.apex`) and widens the field until all of it is on screen. The camera
-stands well BEHIND the ball (`CAMERA.pos` z 2.60 against a release point at 1.30): closer, the
-ball dominates the frame and the rack shrinks to a sliver. Measured on a 393x852 phone: the rack
-is ~180 px wide.
+## The look and the camera (fitted to the recording, 2026-09-27)
+
+**The camera is FITTED, not designed.** `CAMERA` in `geom.js`: 1.305 m above the table, over
+z = 0.803 (the near half), pitched 44 degrees down, 41.8 degree vertical field on a 1:2 screen. A
+search over camera height, distance, pitch, field, table width and serve spot matched seven things
+read off a GamePigeon frame: where the far edge sits (22% down), how wide it is (79% of the
+screen), where the side edges leave the screen, where the ball sits (82% down) and how big it is,
+where the rack's point and back row sit, and the rack's width (46%). `resize()` keeps that WIDTH
+on a taller phone and that HEIGHT on anything wider.
+
+**The table is 0.72 m wide**, not a real 0.61: the same fit says GamePigeon's table is wider
+relative to its cups, and this is a clone of that.
+
+The rest, from the recording: green felt (matte - a specular one washed out to grey) with a white
+border and a white centre line down its length and NO crosswise line; the opponent's cups BLUE
+(`LOOK.cups.blue`; your own will be red) with white insides that glow slightly so they read white;
+a striped brown wall over a strip of dark panelling behind the far end (an UNLIT backdrop, because
+the key light stands behind it); a pale plank floor just below the table, so it shows beside the
+far end; black legs; the light high behind the far end on the right, so shadows fall toward the
+player's left. **A made cup lifts out and is carried off** up and to the right, fading - not a
+sink. No word pops up for a make or a miss (GamePigeon shows none; "Balls Back" is stage 2).
+
+Headless Chromium is SwiftShader, so `render.js` turns shadows off there: screenshots from the
+container never show them. A phone does.
 
 ## Tests
 

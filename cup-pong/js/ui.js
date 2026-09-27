@@ -7,7 +7,10 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
-import { THROW } from './geom.js';
+import { THROW, CUP, RACK_Z0, ROW_H } from './geom.js';
+
+/** The middle of the full rack, along the table: where aim is measured. */
+const RACK_MID_Z = RACK_Z0 + 1.5 * ROW_H;
 import { makeRack, cupsXZ } from './rack.js';
 
 const t = makeT(STRINGS);
@@ -222,9 +225,7 @@ class CupPong {
       const perH = swipeSpeed(list, Math.max(320, window.innerHeight));
       if (perH === null) return;
       const power = powerOf(perH);
-      // AIM IS THE SWIPE'S ANGLE off straight up, scaled down to a heading (geom.js aimGain).
-      const ang = Math.atan2(last.x - first.x, first.y - last.y);
-      this.shoot(power, ang * THROW.aimGain, { perH, ang });
+      this.shoot(power, this.aimFromSwipe(first, last), { perH });
     };
     const cancel = () => { samples = null; touchId = null; };
     this.on(pad, 'touchstart', start, { passive: true });
@@ -235,6 +236,28 @@ class CupPong {
     this.on(pad, 'mousemove', move);
     this.on(pad, 'mouseup', end);
     this.on(pad, 'mouseleave', cancel);
+  }
+
+  /**
+   * AIM FOLLOWS YOUR FINGER. The flick's direction ON SCREEN is carried up from the waiting ball to
+   * the rack's row on screen, and that screen point is unprojected onto the table: the heading is
+   * the line from the ball to it. So a flick that points at a cup sends the ball at that cup, on any
+   * phone, whatever the camera does. (Stage 1's first build scaled the flick's angle down by a
+   * constant instead, which pointed the ball somewhere other than where the finger went - Matt:
+   * "the flick doesn't feel right".)
+   */
+  aimFromSwipe(first, last) {
+    const R = this.engine && this.engine.rend;
+    const cv = this.root.querySelector('.cp-canvas');
+    const dx = last.x - first.x, dy = last.y - first.y;
+    if (!R || !cv || dy >= 0) return 0;
+    const ball = R.project(0, THROW.y0, THROW.z0);
+    const aimZ = RACK_MID_Z;
+    const row = R.project(0, CUP.h, aimZ);
+    const k = (row.y - ball.y) / dy;                  // how far along the flick the rack row is
+    const hit = R.unproject(ball.x + dx * k, row.y, CUP.h);
+    if (!hit) return 0;
+    return Math.atan2(hit.x - 0, THROW.z0 - hit.z);
   }
 
   shoot(power, aim, info = {}) {
@@ -291,12 +314,10 @@ class CupPong {
     if (ev.type === 'made') {
       this.rack = this.rack.filter((k) => k.id !== ev.id);
       E.rend.vanish(ev.id);
-      this.later(() => E.rend.hideBall(), 90);
-      this.toast(ev.bounced ? t('bounceMade') : t('made'));
+      this.later(() => E.rend.hideBall(), 60);
       this.paintHud();
     } else if (ev.type === 'done') {
       const o = ev.outcome;
-      if (o.kind !== 'made') this.toast(this.throwState && this.throwState.touchedCup ? t('rimOut') : t('miss'));
       this.later(() => this.serve(), o.kind === 'made' ? SETTLE_MS + 200 : SETTLE_MS);
     }
   }
