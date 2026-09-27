@@ -303,6 +303,23 @@ export const GAMES = [
     art: GAME_ART["snake"],
   },
   {
+    id: 'cuppong',
+    title: 'Cup Pong',
+    blurb: {
+      en: 'Flick the ball down the table and sink it in the cups.',
+      es: 'Lanza la pelota por la mesa y métela en los vasos.',
+    },
+    module: '../cup-pong/js/ui.js',
+    // Owns the whole viewport (a full-bleed three.js table under a thin HUD), like Hoops.
+    immersive: true,
+    accent: '#d4252b',
+    art: GAME_ART['cuppong'],
+    // ADMIN ONLY while it is built (docs/CUP-PONG-BRIEF.md). No `released` date on purpose: it is
+    // the only input to the launcher's New pill and must be the day Matt releases it, which he
+    // does from the admin page with no commit.
+    devOnly: true,
+  },
+  {
     id: 'hoops4',
     title: 'Connect 4 Hoops',
     blurb: {

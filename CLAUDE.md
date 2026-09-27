@@ -539,6 +539,7 @@ working in that folder).
 | Chinchón | in-hub `module:` | `.cc-root` / `.cc-` (many rules still bare-prefixed) | `chinchon-settings` (frozen gen-1) | `recordChinchon` |
 | Course Creator | launch-out `href:` (`hole-editor/?course=new`), **`devOnly`, opened to chosen players by player code from the admin page** (2026-09-24); records no stats, so no GAME_META row | n/a (own page) | its own `golf.holeEditor.*` keys | none |
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | `gamehub.connect4.v1` (+ `gamehub.connect4.save.v1` autosave) | `recordConnect4` |
+| Cup Pong | in-hub `module:`, immersive, **`devOnly`**, three.js + cannon-es; **stage 1 of 5 (table + throw, practice only, records nothing yet)** per `docs/CUP-PONG-BRIEF.md`; folder `cup-pong/`, hub id `cuppong` | `.cp-root` / `.cp-` | `gamehub.cuppong.v1` (reserved, not written yet) | none yet; `recordResult('cuppong', …)` from stage 2 |
 | Dominoes | in-hub `module:` | `.dm-root` / `.dm-` | `gamehub.dominoes.v1` | `recordDominoes` |
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive, **multiplayer at 2-4 seats** (save key `escoba-save`, MP field) | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
