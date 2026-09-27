@@ -16,12 +16,17 @@ export const RANKS = '23456789TJQKA';
 export const SUITS = 'shdc';
 export const SUIT_GLYPH = ['♠', '♥', '♦', '♣'];
 
-// Blind ladder (small blind; the big blind is double). With 1000 chips the table opens at 50 big
-// blinds, deep enough to play poker, and the ladder climbs about 1.5x a level so a full table of
-// eight finishes in an evening rather than a week.
+// Blind ladder (small blind; the big blind is double), in units of `cfg.scale`. The table opens at
+// 50 big blinds, deep enough to play poker, and the ladder climbs about 1.5x a level so a full
+// table of eight finishes in an evening rather than a week.
+//
+// 2026-09-27: new games are $10,000 stacks with $100/$200 blinds (scale 10), matching the app the
+// look was cloned from. A game saved before that has no `cfg.scale` and keeps playing at scale 1
+// with its 1,000-chip stacks, so a resumed game never changes size under a player.
 export const BLINDS = [10, 15, 25, 40, 60, 100, 150, 250, 400, 600, 1000, 1500, 2500, 4000, 6000, 10000];
 export const SPEEDS = { slow: 15, normal: 10, fast: 6 };
-export const START_CHIPS = 1000;
+export const START_CHIPS = 10000;
+export const START_SCALE = 10;
 export const MAX_PLAYERS = 8;
 
 export const cardRank = (c) => c >> 2;
@@ -158,9 +163,10 @@ export function bestFive(cards) {
 export function newGame(players, cfg = {}) {
   const speed = SPEEDS[cfg.speed] ? cfg.speed : 'normal';
   const chips = cfg.chips > 0 ? cfg.chips | 0 : START_CHIPS;
+  const scale = cfg.scale > 0 ? cfg.scale | 0 : START_SCALE;
   return {
     v: 1,
-    cfg: { speed, chips },
+    cfg: { speed, chips, scale },
     players: players.slice(0, MAX_PLAYERS).map((p, i) => ({
       id: i,
       name: String(p.name || 'Player').slice(0, 20),
@@ -185,7 +191,7 @@ export function newGame(players, cfg = {}) {
 }
 
 export const blindsOf = (state) => {
-  const sb = BLINDS[Math.min(state.level, BLINDS.length - 1)];
+  const sb = BLINDS[Math.min(state.level, BLINDS.length - 1)] * ((state.cfg && state.cfg.scale) || 1);
   return { sb, bb: sb * 2 };
 };
 

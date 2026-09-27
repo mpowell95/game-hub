@@ -108,14 +108,40 @@ under the computers' skill (`easy`/`medium`/`hard`), online under `'mp'`. Dedupe
 - `gamehub.holdem.save.v1` - the solo game in progress (full engine state)
 - `gamehub.holdem.mp.v1` - the online seat for "Back to table" (+ host's state)
 
-## Layout
+## Layout: a clone of Matt's reference recording (2026-09-27)
 
-Seats sit on fixed slots (fractions of the measured table area, `SLOT`/`SLOTS_FOR` in `ui.js`),
-with this device always at the bottom and the rest clockwise. The side columns keep clear of the
-board. Each seat's action tag and bet share one line under the name plate. The raise panel
-overlays my cards instead of growing the action bar (a growing bar resized the table and moved
-every seat). Online, the action bar keeps 70px clear on the right for the quick-chat button.
-Checked with no scroll at 393x852, 390x664 and 1280x720.
+Matt: *"make it look more like a clone of the screen recording I just uploaded to Dropbox"*
+(`/Claude Code Refs/ScreenRecording_09-26-2026 23-26-39_1.mp4`, a portrait mobile poker app).
+Copied from it, top to bottom:
+
+- A league-style **banner**: red panel with the blinds, then Hand, Your Rank (by chips among the
+  players still in), and hands until the blinds go up. It starts 96px in to clear the hub's back
+  button. The small `i` opens the hand-rankings help.
+- **Opponents on one curved row** across a navy band (`_layout`: edges sit lower, names and stacks
+  tilt with the arc; 16px kept clear at each end for the red close button). Name above, round
+  avatar, big stack below. The last action is a **stamp printed over the avatar** (POST, FOLD,
+  CHECK, CALL, BET, RAISE, ALL IN, WIN). A small two-card icon shows who is still in the hand; at a
+  showdown it becomes their two real cards. Folded players grey out.
+- A **flat blue felt** with a faint weave: bets as chip + `$100` under each opponent's column, the
+  `D` button beside the dealer's column (or beside my own bet), five **sunken card slots**, and a
+  **sunken pot box**. The result line reads like the reference: "Jackson wins 2,700 chips with Two
+  Pair, Aces and Fives" / "You take the 2,500 chip pot" (`handName`, full rank names in EN/ES).
+- **My corner**: FOLD / SET RAISE tabs over two big overlapping cards on the left, one **big black
+  glossy button** on the right (CHECK with a green tick, CALL $200, BET / RAISE TO / ALL IN with
+  chips), and "Stack: $10.8k" under it. SET RAISE opens a bar over the bottom of the felt (pot,
+  Min / 1/2 Pot / Pot / All in, slider); the big button then commits the amount.
+- **Money is printed the reference's way**: `$9200` under ten thousand, then `$10.0k`.
+- **Solo waits for "Tap the table to start the next hand"** (`Table`'s `tapToDeal`); online the
+  host still deals on a timer so nobody waits on one player's tap. After a solo hand the big
+  button offers **"See everyone's cards"** (the reference's "replay the last hand and see all the
+  opponents' cards"): it reveals every computer's hole cards from the dealer's own state. It is
+  never offered online, where it would show other people's cards.
+- **Stacks are $10,000 with $100/$200 blinds** (`cfg.scale = 10`), as in the reference. A game
+  saved before this has no `cfg.scale` and keeps its 1,000-chip, 10/20 numbers.
+- Online, the quick-chat button is moved to the felt's lower-left corner (it defaults to the
+  bottom-right, which is the big action button).
+
+Checked with no scroll at 402x874, 390x664 (8 players) and 393x780 (online).
 
 ## Verification record (2026-09-27)
 

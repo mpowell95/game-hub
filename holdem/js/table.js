@@ -22,6 +22,9 @@ export class Table {
   constructor(state, opts = {}) {
     this.state = state;
     this.clockMs = opts.clockMs | 0;
+    // Solo waits for "Tap the table to start the next hand" (the reference app's rule); an online
+    // host deals on a timer, because nobody should have to wait on one player's tap.
+    this.tapToDeal = !!opts.tapToDeal;
     this.onChange = opts.onChange || (() => {});
     this.timer = null;
     this.clockEnd = 0;
@@ -67,6 +70,14 @@ export class Table {
     this.pump();
   }
 
+  /** Deal the next hand now (the tap in solo). No-op while a hand is still being played. */
+  next() {
+    const s = this.state;
+    if (this.dead || s.over || (s.hand && !s.hand.result)) return;
+    startHand(s);
+    this.pump();
+  }
+
   back(i) {
     const p = this.state.players[i];
     if (!p || !p.sitOut) return;
@@ -83,7 +94,9 @@ export class Table {
     const s = this.state;
     const h = s.hand;
     if (!s.over) {
-      if (!h || h.result) {
+      if (h && h.result && this.tapToDeal) {
+        // nothing scheduled: next() deals
+      } else if (!h || h.result) {
         const wait = !h ? 0 : (h.result.noShow ? FOLD_WIN_MS : RESULT_MS + 350 * (h.runout | 0));
         this.timer = setTimeout(() => { this.timer = null; if (this.dead || s.over) return; startHand(s); this.pump(); }, wait);
       } else if (h.toAct >= 0) {

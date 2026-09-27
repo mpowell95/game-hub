@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v976';
+const CACHE = 'game-hub-v977';
 
 const ASSETS = [
   './',
@@ -808,13 +808,13 @@ const REST_MANIFEST = {
   './brick-blitz/js/strings.js': 'f0c1f0996f',
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
-  './holdem/css/holdem.css': 'cdd5b1bc5c',
-  './holdem/js/ui.js': '92b343476e',
-  './holdem/js/engine.js': '5c721394c8',
+  './holdem/css/holdem.css': 'f44fe6b923',
+  './holdem/js/ui.js': '8b7d258c3d',
+  './holdem/js/engine.js': '42db16828a',
   './holdem/js/ai.js': '501a498bec',
-  './holdem/js/table.js': '687795030a',
+  './holdem/js/table.js': '15374c2320',
   './holdem/js/net-table.js': '287aa65964',
-  './holdem/js/strings.js': 'b513b0c88d',
+  './holdem/js/strings.js': '3e31aabcf3',
   './pinball/': 'c7d7cf8581',
   './pinball/index.html': 'c7d7cf8581',
   './pinball/css/pinball.css': '4d378af4c3',

@@ -50,9 +50,10 @@ ok('quads kicker', cmp('9s 9d 9h 9c As', '9s 9d 9h 9c Ks') === 1);
 }
 
 // ---- betting order -------------------------------------------------------------------------
+const SMALL = { chips: 1000, scale: 1 };
 const seat = (n, bot = 0) => Array.from({ length: n }, (_, i) => ({ name: 'P' + i, bot }));
 {
-  const s = newGame(seat(2));
+  const s = newGame(seat(2), SMALL);
   startHand(s, () => 0.5);
   ok('heads-up: button posts the small blind', s.hand.sbIdx === s.button);
   ok('heads-up: button acts first before the flop', s.hand.toAct === s.button);
@@ -63,7 +64,7 @@ const seat = (n, bot = 0) => Array.from({ length: n }, (_, i) => ({ name: 'P' + 
   ok('heads-up: big blind acts first after the flop', s.hand.toAct === s.hand.bbIdx);
 }
 {
-  const s = newGame(seat(4));
+  const s = newGame(seat(4), SMALL);
   startHand(s, () => 0.3);
   const { sbIdx, bbIdx } = s.hand;
   const utg = (bbIdx + 1) % 4;
@@ -84,7 +85,7 @@ const seat = (n, bot = 0) => Array.from({ length: n }, (_, i) => ({ name: 'P' + 
 }
 {
   // Short all-in for less than a full raise does not reopen betting to the original raiser.
-  const s = newGame(seat(3));
+  const s = newGame(seat(3), SMALL);
   startHand(s, () => 0.7);
   const a = s.hand.toAct;                      // button, first to act 3-handed
   act(s, a, { a: 'raise', to: 100 });
@@ -98,7 +99,7 @@ const seat = (n, bot = 0) => Array.from({ length: n }, (_, i) => ({ name: 'P' + 
 }
 {
   // publicView leaks nothing.
-  const s = newGame(seat(3));
+  const s = newGame(seat(3), SMALL);
   startHand(s);
   const pub = JSON.parse(JSON.stringify(publicView(s)));
   ok('public view has no deck', !('deck' in pub.hand));
@@ -106,7 +107,7 @@ const seat = (n, bot = 0) => Array.from({ length: n }, (_, i) => ({ name: 'P' + 
 }
 {
   // A player leaving on their turn folds and the hand moves on.
-  const s = newGame(seat(3));
+  const s = newGame(seat(3), SMALL);
   startHand(s);
   const who = s.hand.toAct;
   leave(s, who);
@@ -118,7 +119,7 @@ const seat = (n, bot = 0) => Array.from({ length: n }, (_, i) => ({ name: 'P' + 
 let games = 0, hands = 0, errors = 0;
 for (let g = 0; g < 60; g++) {
   const n = 2 + (g % 7);
-  const s = newGame(seat(n, 1 + (g % 3)), { speed: 'fast' });
+  const s = newGame(seat(n, 1 + (g % 3)), { ...SMALL, speed: 'fast' });
   const total = n * 1000;
   let guard = 0;
   while (!s.over && guard++ < 3000) {
@@ -152,4 +153,14 @@ ok('bots never make an illegal move', errors === 0, errors);
 
 console.log(`holdem engine: ${pass} passed, ${fail} failed (${games} tournaments, ${hands} hands)`);
 if (fail) process.exit(1);
+{
+  // The shipped default: $10,000 stacks, $100/$200 blinds.
+  const s = newGame(seat(3));
+  startHand(s);
+  ok('default game: 10,000 chips and 100/200 blinds', s.cfg.chips === 10000 && s.hand.sb === 100 && s.hand.bb === 200, s.hand);
+  const old = newGame(seat(3), SMALL);
+  delete old.cfg.scale;                      // a game saved before the scale existed
+  startHand(old);
+  ok('an old save without a scale keeps 10/20 blinds', old.hand.sb === 10 && old.hand.bb === 20);
+}
 void E;
