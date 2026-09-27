@@ -12,6 +12,16 @@ export const GAME_ART = {
   // Landscape, composed for the 160x90 frame it is given - never a square cropped with
   // preserveAspectRatio, which bisects shapes at the edge (it cut Connect Four's discs).
   // A row of hoops over the grid, which is the machine.
+  // The GamePigeon view: down the table at a triangle of red cups, the ball waiting in front.
+  cuppong: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#1a2230"/>
+            <path d="M58 12 L102 12 L150 90 L10 90 Z" fill="#b98552"/>
+            <path d="M58 12 L102 12 L150 90 L10 90 Z" fill="none" stroke="#f4efe6" stroke-width="2"/>
+            <path d="M34 51 L126 51" stroke="#f4efe6" stroke-width="1.4"/>
+            ${[[0,-3],[0,-1],[0,1],[0,3],[1,-2],[1,0],[1,2],[2,-1],[2,1],[3,0]].map(([r,c])=>{const x=80+c*5.6,y=12+r*4.6;return `<path d="M${x-4.6} ${y-5} L${x-3.3} ${y+4} L${x+3.3} ${y+4} L${x+4.6} ${y-5} Z" fill="#d4252b"/><ellipse cx="${x}" cy="${y-5}" rx="4.6" ry="1.4" fill="#f3f0ea"/>`;}).join('')}
+            <circle cx="80" cy="72" r="7" fill="#fbfaf6"/>
+            <ellipse cx="80" cy="84" rx="7" ry="2" fill="#000" opacity=".25"/>
+          </svg>`,
   hoops4: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#15171c"/>
             <rect x="8" y="30" width="144" height="56" rx="4" fill="#1f5fa8"/>

@@ -341,6 +341,16 @@ const ASSETS = [
   './skeeball/js/ui.js',
   './skeeball/js/swipe.js',
 
+  // Cup Pong. Like Hoops, it imports skeeball's vendored three.js and cannon-es.
+  './cup-pong/index.html',
+  './cup-pong/css/cup-pong.css',
+  './cup-pong/js/ui.js',
+  './cup-pong/js/geom.js',
+  './cup-pong/js/rack.js',
+  './cup-pong/js/physics.js',
+  './cup-pong/js/render.js',
+  './cup-pong/js/strings.js',
+
   // Connect 4 Hoops. Its engine imports skeeball's vendored three.js and cannon-es rather than
   // carrying a second copy, so nothing new is added for those.
   './hoops4/index.html',
@@ -887,6 +897,14 @@ const REST_MANIFEST = {
   './skeeball/css/skeeball.css': '3eb808d483',
   './skeeball/js/ui.js': '50ef7223f1',
   './skeeball/js/swipe.js': 'c596f565de',
+  './cup-pong/index.html': 'bb54739524',
+  './cup-pong/css/cup-pong.css': '33ff436439',
+  './cup-pong/js/ui.js': 'c138038fb3',
+  './cup-pong/js/geom.js': '5b17fae6f5',
+  './cup-pong/js/rack.js': '5ca8b06c4e',
+  './cup-pong/js/physics.js': 'a4a0c362e1',
+  './cup-pong/js/render.js': 'e0d719dec8',
+  './cup-pong/js/strings.js': '9c90b8afba',
   './hoops4/index.html': 'dce91b13bd',
   './hoops4/css/hoops4.css': '76c8caa474',
   './hoops4/js/ui.js': '36959f5b7a',

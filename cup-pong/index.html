@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cup Pong</title>
+<link rel="stylesheet" href="../css/ui.css">
+<link rel="stylesheet" href="css/cup-pong.css">
+<style>html,body{margin:0;height:100%;background:#1a2230;overflow:hidden}</style>
+</head>
+<body>
+<div id="cup-pong"></div>
+<script type="module">
+  // A STANDALONE PAGE IS A DOOR INTO THE HUB LIKE ANY OTHER, so it gates on the name BEFORE it
+  // mounts (the ungated pages are where the leaderboard's "Unnamed player" rows came from).
+  import { requireName } from '../js/name-gate.js';
+  import { init } from './js/ui.js';
+  await requireName();
+  init(document.getElementById('cup-pong'));
+</script>
+</body>
+</html>
