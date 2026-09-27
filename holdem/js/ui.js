@@ -162,6 +162,7 @@ class Game {
     this.joinCode = '';
     this.seen = new Set();
     this.seenHand = -1;
+    this.oppX = {};              // opponent column centres, filled by _layout (empty until measured)
     this.dead = false;
     this.timers = new Set();
 
@@ -428,7 +429,7 @@ class Game {
     let bh = '';
     if (h && !res) {
       opps.forEach((j) => {
-        if (h.bets[j] > 0) bh += `<span class="pk-betchip" style="left:${this.oppX[j] || 0}px"><i class="pk-chip" aria-hidden="true"></i><span>${money(h.bets[j])}</span></span>`;
+        if (h.bets[j] > 0) bh += `<span class="pk-betchip" style="left:${(this.oppX && this.oppX[j]) || 0}px"><i class="pk-chip" aria-hidden="true"></i><span>${money(h.bets[j])}</span></span>`;
       });
     }
     if (pub.button >= 0 && pub.button !== this.myIdx && this.oppX && this.oppX[pub.button] != null) {
