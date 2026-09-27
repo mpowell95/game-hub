@@ -15,6 +15,8 @@ export const FOLD_WIN_MS = 2400;      // a hand everyone folded to: shorter, not
 const BOT_MIN_MS = 800;
 const BOT_MAX_MS = 1700;
 const AUTO_MS = 700;                  // an away / sitting-out player's automatic check or fold
+const FF_MS = 40;                     // fast-forward: a computer's move, no thinking pause
+const FF_RESULT_MS = 350;             // fast-forward through a whole game: each result, briefly
 
 export class Table {
   /** `opts.clockMs` > 0 gives every human a turn clock (online only); `opts.onChange(table)` fires
@@ -25,6 +27,11 @@ export class Table {
     // Solo waits for "Tap the table to start the next hand" (the reference app's rule); an online
     // host deals on a timer, because nobody should have to wait on one player's tap.
     this.tapToDeal = !!opts.tapToDeal;
+    // Fast-forward (2026-09-27, Matt: "after i fold ... skip the computer players playing it out").
+    // A hand number = race through that hand; 'game' = race through every hand to the end (the
+    // player is out). The rules are untouched: the same bots make the same kind of decisions, just
+    // with no thinking pause between them.
+    this.ff = null;
     this.onChange = opts.onChange || (() => {});
     this.timer = null;
     this.clockEnd = 0;
@@ -70,6 +77,18 @@ export class Table {
     this.pump();
   }
 
+  /** Race the computers through the rest of this hand ('hand'), or every hand to the end of the
+   *  game ('game'). Cleared by itself when that hand ends / the game ends. */
+  fastForward(scope) {
+    if (this.dead || this.state.over) return;
+    this.ff = scope === 'game' ? 'game' : this.state.handNo;
+    this.pump();
+  }
+
+  _fast() {
+    return this.ff === 'game' || (this.ff != null && this.ff === this.state.handNo);
+  }
+
   /** Deal the next hand now (the tap in solo). No-op while a hand is still being played. */
   next() {
     const s = this.state;
@@ -94,8 +113,10 @@ export class Table {
     const s = this.state;
     const h = s.hand;
     if (!s.over) {
-      if (h && h.result && this.tapToDeal) {
+      if (h && h.result && this.tapToDeal && this.ff !== 'game') {
         // nothing scheduled: next() deals
+      } else if (h && h.result && this.ff === 'game') {
+        this.timer = setTimeout(() => { this.timer = null; if (this.dead || s.over) return; startHand(s); this.pump(); }, FF_RESULT_MS);
       } else if (!h || h.result) {
         const wait = !h ? 0 : (h.result.noShow ? FOLD_WIN_MS : RESULT_MS + 350 * (h.runout | 0));
         this.timer = setTimeout(() => { this.timer = null; if (this.dead || s.over) return; startHand(s); this.pump(); }, wait);
@@ -104,7 +125,7 @@ export class Table {
         const p = s.players[i];
         const k = s.k;
         if (p.bot) {
-          const delay = BOT_MIN_MS + Math.random() * (BOT_MAX_MS - BOT_MIN_MS);
+          const delay = this._fast() ? FF_MS : BOT_MIN_MS + Math.random() * (BOT_MAX_MS - BOT_MIN_MS);
           this.timer = setTimeout(() => {
             this.timer = null;
             if (this.dead || s.k !== k) return;
@@ -115,7 +136,7 @@ export class Table {
             this.pump();
           }, delay);
         } else if (p.away || p.sitOut || p.left) {
-          this.timer = setTimeout(() => { this.timer = null; if (!this.dead && s.k === k) this._auto(i); }, AUTO_MS);
+          this.timer = setTimeout(() => { this.timer = null; if (!this.dead && s.k === k) this._auto(i); }, this._fast() ? FF_MS : AUTO_MS);
         } else if (this.clockMs > 0) {
           this.clockEnd = Date.now() + this.clockMs;
           this.timer = setTimeout(() => {

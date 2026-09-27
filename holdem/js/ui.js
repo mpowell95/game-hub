@@ -140,7 +140,7 @@ function cardHTML(c, cls = '') {
   const face = FACE[c >> 2];
   const centre = face ? `<span class="pk-cc is-face"><b>${face}</b><i>${g}</i></span>` : `<span class="pk-cc"><i>${g}</i></span>`;
   return `<div class="pk-card${red ? ' is-red' : ''} ${cls}" data-c="${c}" role="img" aria-label="${esc(t('aria_card', { rank: r, suit: t('s_' + s) }))}">`
-    + `<span class="pk-ci"><b>${r}</b><i>${g}</i></span>${centre}<span class="pk-ci is-rot"><b>${r}</b><i>${g}</i></span></div>`;
+    + `<span class="pk-ci${r === '10' ? ' is-ten' : ''}"><b>${r}</b><i>${g}</i></span>${centre}<span class="pk-ci is-rot${r === '10' ? ' is-ten' : ''}"><b>${r}</b><i>${g}</i></span></div>`;
 }
 
 const HELP_HANDS = [
@@ -539,6 +539,9 @@ class Game {
       + (pub.button === this.myIdx && this.myIdx >= 0 ? `<span class="pk-dbtn is-mine" title="${esc(t('dealer'))}">D</span>` : '');
 
     // --- message, board, pot
+    // Folded (or out) against the computers: the rest of the hand can be skipped with one tap.
+    const canSkip = this.kind === 'solo' && this.table && meP && h && !res && !pub.over
+      && (meP.out || (h.folded && h.folded[this.myIdx])) && !this.table._fast();
     const msg = this._message();
     const msgEl = q('.pk-msg');
     msgEl.textContent = msg;
@@ -552,8 +555,9 @@ class Game {
     let potHTML = '';
     if (res) potHTML = `<span class="pk-tapnext">${esc(this.kind === 'solo' ? t('tap_next') : t('next_soon'))}</span>`;
     else if (pot > 0) potHTML = `<span class="pk-potchips" aria-hidden="true"><i class="pk-chip"></i><i class="pk-chip"></i><i class="pk-chip"></i></span><span class="pk-potamt">${money(pot)}</span>`;
+    if (canSkip) potHTML += `<span class="pk-skiphint">${esc(t('tap_skip'))}</span>`;
     q('.pk-potbox').innerHTML = potHTML;
-    q('.pk-felt').classList.toggle('is-tappable', !!(res && this.kind === 'solo' && !pub.over));
+    q('.pk-felt').classList.toggle('is-tappable', !!((res && this.kind === 'solo' && !pub.over) || canSkip));
 
     // --- my cards
     const mine = q('.pk-mycards');
@@ -839,7 +843,13 @@ class Game {
       }
       case 'felt':
         // "Tap the table to start the next hand" (solo). Online the host deals on a timer.
-        if (this.kind === 'solo' && this.table && this.pub && this.pub.hand && this.pub.hand.result && !this.pub.over) this.table.next();
+        if (this.kind !== 'solo' || !this.table || !this.pub || !this.pub.hand || this.pub.over) return undefined;
+        if (this.pub.hand.result) { this.table.next(); return undefined; }
+        {
+          const meP = this.myIdx >= 0 ? this.pub.players[this.myIdx] : null;
+          if (meP && meP.out) this.table.fastForward('game');
+          else if (meP && this.pub.hand.folded && this.pub.hand.folded[this.myIdx]) this.table.fastForward('hand');
+        }
         return undefined;
       case 'back': return this._back();
       case 'again': return this._newSolo((this.table && this.table.state.cfg.tier) || null);

@@ -191,28 +191,33 @@
 }
 .pk-root .pk-card.is-red { color: var(--pk-red); }
 .pk-root .pk-ci {
-  position: absolute; left: 5%; top: 3%;
+  position: absolute; left: 3%; top: 3%;
   display: flex; flex-direction: column; align-items: center;
-  width: 26%;
+  width: 19%;
 }
-.pk-root .pk-ci b { font-size: calc(var(--pk-cw) * 0.27); font-weight: 500; letter-spacing: -0.06em; }
-.pk-root .pk-ci i { font-style: normal; font-size: calc(var(--pk-cw) * 0.24); margin-top: 1px; }
-.pk-root .pk-ci.is-rot { left: auto; top: auto; right: 5%; bottom: 3%; transform: rotate(180deg); }
+/* The index column is 3%..22% of the card and the frame starts at 26%, on BOTH sides (the upside-down
+   index mirrors it bottom-right), so nothing crosses the frame and the frame is dead centre. "10"
+   is the one two-glyph rank: it is condensed to fit the same column rather than widening it. */
+.pk-root .pk-ci b { font-size: calc(var(--pk-cw) * 0.21); font-weight: 600; letter-spacing: -0.04em; line-height: 1; }
+.pk-root .pk-ci.is-ten b { letter-spacing: -0.09em; transform: scaleX(0.9); margin-left: -0.08em; }
+.pk-root .pk-ci i { font-style: normal; font-size: calc(var(--pk-cw) * 0.18); margin-top: 2px; line-height: 1; }
+.pk-root .pk-ci.is-rot { left: auto; top: auto; right: 3%; bottom: 3%; transform: rotate(180deg); }
 .pk-root .pk-cc {
-  position: absolute; left: 25%; right: 25%; top: 15%; bottom: 15%;
+  position: absolute; left: 26%; right: 26%; top: 12%; bottom: 12%;
   border: 1px solid currentColor; border-radius: 2px; opacity: 0.95;
   display: flex; align-items: center; justify-content: center;
 }
-.pk-root .pk-cc i { font-style: normal; font-size: calc(var(--pk-cw) * 0.62); line-height: 1; }
+.pk-root .pk-cc i { font-style: normal; font-size: calc(var(--pk-cw) * 0.5); line-height: 1; }
 .pk-root .pk-cc.is-face { flex-direction: column; gap: 2px; background: repeating-linear-gradient(135deg, rgba(0,0,0,0.04) 0 3px, transparent 3px 6px); }
-.pk-root .pk-cc.is-face b { font-size: calc(var(--pk-cw) * 0.44); font-family: Georgia, "Times New Roman", serif; }
-.pk-root .pk-cc.is-face i { font-size: calc(var(--pk-cw) * 0.3); }
+.pk-root .pk-cc.is-face b { font-size: calc(var(--pk-cw) * 0.38); font-family: Georgia, "Times New Roman", serif; line-height: 1; }
+.pk-root .pk-cc.is-face i { font-size: calc(var(--pk-cw) * 0.26); }
 /* Mini (opponents at a showdown) and tiny (help list): the index alone, big enough to read. */
 .pk-root .pk-card.is-mini,
 .pk-root .pk-card.is-tiny { --pk-cw: 24px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
 .pk-root .pk-card.is-mini .pk-cc, .pk-root .pk-card.is-mini .pk-ci.is-rot,
 .pk-root .pk-card.is-tiny .pk-cc, .pk-root .pk-card.is-tiny .pk-ci.is-rot { display: none; }
-.pk-root .pk-card.is-mini .pk-ci, .pk-root .pk-card.is-tiny .pk-ci { left: 0; right: 0; width: auto; top: 2px; }
+.pk-root .pk-card.is-mini .pk-ci, .pk-root .pk-card.is-tiny .pk-ci { left: 0; right: 0; width: auto; top: 3px; }
+.pk-root .pk-card.is-mini .pk-ci.is-ten b, .pk-root .pk-card.is-tiny .pk-ci.is-ten b { transform: scaleX(0.85); margin-left: 0; }
 .pk-root .pk-card.is-mini .pk-ci b, .pk-root .pk-card.is-tiny .pk-ci b { font-size: 12px; font-weight: 700; }
 .pk-root .pk-card.is-mini .pk-ci i, .pk-root .pk-card.is-tiny .pk-ci i { font-size: 12px; }
 .pk-root .pk-card.is-tiny { --pk-cw: 22px; height: 30px; }
@@ -366,15 +371,17 @@
   box-shadow: inset 0 8px 14px rgba(0, 0, 0, 0.35);
 }
 .pk-root .pk-felt.is-tappable { cursor: pointer; }
-.pk-root .pk-bets { position: absolute; left: 0; right: 0; top: 6px; height: 48px; pointer-events: none; }
+.pk-root .pk-potbox { flex-wrap: wrap; }
+.pk-root .pk-skiphint { flex: 0 0 100%; text-align: center; font-size: 14px; font-weight: 700; color: #ffe38a; line-height: 1.2; }
+.pk-root .pk-bets { position: absolute; left: 0; right: 0; top: 6px; height: 56px; pointer-events: none; }
 .pk-root .pk-betchip {
   position: absolute; top: 0; transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  font-size: 16px; color: #fff; text-shadow: 0 1px 2px #000; white-space: nowrap;
+  font-size: 18px; color: #fff; text-shadow: 0 1px 2px #000; white-space: nowrap;
 }
 .pk-root .pk-betchip.is-mine { position: static; transform: none; }
 .pk-root .pk-chip {
-  display: inline-block; width: 22px; height: 22px; border-radius: 50%;
+  display: inline-block; width: 28px; height: 28px; border-radius: 50%;
   background:
     radial-gradient(circle, #1b1b1b 0 38%, #fff 39% 44%, transparent 45%),
     repeating-conic-gradient(#f4f4f4 0 12deg, #1b1b1b 12deg 45deg);
@@ -406,10 +413,10 @@
   border-radius: 3px;
   background: rgba(10, 30, 60, 0.16);
   box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.12);
-  font-size: 18px; color: #fff; text-shadow: 0 1px 2px #000;
+  font-size: 20px; color: #fff; text-shadow: 0 1px 2px #000;
 }
 .pk-root .pk-potchips { display: inline-flex; }
-.pk-root .pk-potchips .pk-chip + .pk-chip { margin-left: -12px; }
+.pk-root .pk-potchips .pk-chip + .pk-chip { margin-left: -15px; }
 .pk-root .pk-tapnext { font-size: 13px; color: #cdd6e4; text-align: center; line-height: 1.3; }
 .pk-root .pk-mybet {
   position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
@@ -481,11 +488,11 @@
   background: linear-gradient(180deg, #1a4274 0%, #10284a 36%, #000 36.2%);
 }
 .pk-root .pk-left { flex: 1.5; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.pk-root .pk-acttabs { display: flex; gap: 8px; min-height: 36px; }
+.pk-root .pk-acttabs { display: flex; gap: 8px; min-height: 46px; }
 .pk-root .pk-tab2 {
-  min-height: 36px; padding: 0 14px; border: 1px solid #2b2b2b; border-radius: 2px;
+  min-height: 46px; padding: 0 18px; border: 1px solid #2b2b2b; border-radius: 3px;
   background: linear-gradient(180deg, #262626, #000); color: #fff;
-  font-size: 15px; text-transform: uppercase; letter-spacing: 0.02em;
+  font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
 }
 .pk-root .pk-tab2:disabled { color: #8c96a5; background: linear-gradient(180deg, #1a2b44, #0e1a2d); border-color: #243a5c; opacity: 1; }
 .pk-root .pk-tab2.is-on { box-shadow: inset 0 0 0 2px var(--pk-gold); }
@@ -495,7 +502,7 @@
 .pk-root .pk-mycards .pk-note { margin: 10px 0 0; font-size: 14px; color: #c9d2de; }
 .pk-root .pk-right { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; }
 .pk-root .pk-bigbtn {
-  flex: 1; min-height: 88px; max-height: 190px;
+  flex: 1; min-height: 100px; max-height: 200px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   border: 1px solid #1e1e1e; border-radius: 4px;
   background:
@@ -506,12 +513,12 @@
 }
 .pk-root .pk-bigbtn:disabled { cursor: default; }
 .pk-root .pk-bigbtn:not(:disabled):active { filter: brightness(1.3); }
-.pk-root .pk-biglbl { font-size: 18px; letter-spacing: 0.02em; text-align: center; line-height: 1.15; }
+.pk-root .pk-biglbl { font-size: 22px; font-weight: 700; letter-spacing: 0.02em; text-align: center; line-height: 1.15; }
 .pk-root .pk-biglbl.is-small { font-size: 14px; line-height: 1.3; }
-.pk-root .pk-tick { width: 64%; max-width: 92px; height: auto; }
+.pk-root .pk-tick { width: 74%; max-width: 112px; height: auto; }
 .pk-root .pk-gem { width: 34px; height: 28px; }
 .pk-root .pk-bigchips { display: inline-flex; }
-.pk-root .pk-bigchips .pk-chip { width: 26px; height: 26px; }
+.pk-root .pk-bigchips .pk-chip { width: 34px; height: 34px; }
 .pk-root .pk-bigchips .pk-chip + .pk-chip { margin-left: -6px; }
 .pk-root .pk-stackline { flex: 0 0 auto; padding: 8px 2px 2px; text-align: right; font-size: 17px; color: #fff; white-space: nowrap; }
 
