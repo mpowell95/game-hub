@@ -1,23 +1,74 @@
 // air-hockey/js/ui.js - Air Hockey's DOM shell: start card, score row, pause and result cards,
 // touch/mouse input, sound, the clock. physics.js owns every rule; render.js every pixel.
 //
-// STAGE 1 (2026-09-27): one simple computer (ai.js 'medium'), no setup screen, no stats. Stage 2
-// adds Easy/Medium/Hard, the setup screen, how to play and recordResult('airhockey', ...).
+// Stage 2 (2026-09-27): setup screen (Easy / Medium / Hard), how to play, and the result recorded
+// with recordResult('airhockey', difficulty, won) when a match ENDS. A match left before 7 records
+// nothing (it was neither won nor lost). Online play is stages 3-4 (docs/AIR-HOCKEY-BRIEF.md).
 //
 // isInProgress(): the LITERAL meaning (no mid-game resume, Hoops' / Snake's class): true while a
 // match is under way (playing, between goals, or paused). Nothing is persisted mid-match.
 
 import { TABLE, createMatch, resetMatch, advance, clampTarget } from './physics.js';
-import { createCpu, cpuThink } from './ai.js';
+import { createCpu, cpuThink, DIFFS } from './ai.js';
 import { createRenderer } from './render.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onThemeChange } from '../../js/theme.js';
 import { onViewportResize } from '../../js/viewport.js';
+import { recordResult, loadStats } from '../../js/game-stats.js';
+import { loadProfile } from '../../js/profile-store.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
 const t = makeT(STRINGS);
 const { H } = TABLE;
-const CPU_LEVEL = 'medium';
+const SETTINGS_KEY = 'gamehub.airhockey.v1';
+
+function saveSettings(s) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+  catch (err) { console.error('[airhockey] settings save failed', err); }
+}
+/** Last difficulty picked, else the profile's first opponent skill (1/2/3), else Medium. */
+function loadSettings() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); } catch { /* none */ }
+  if (saved && DIFFS.includes(saved.difficulty)) return { difficulty: saved.difficulty };
+  let d = null;
+  try {
+    const p = loadProfile();
+    const skill = p && p.opponents && p.opponents[0] ? p.opponents[0].skill : null;
+    d = skill === 1 ? 'easy' : skill === 3 ? 'hard' : skill === 2 ? 'medium' : null;
+  } catch { /* no profile is fine */ }
+  return { difficulty: d || 'medium' };
+}
+/** This player's record against one level, read from the shared stats store (THE LAW rule 1: the
+ *  setup screen shows what is stored, so a result is never invisible). */
+function recordVs(diff) {
+  try {
+    const b = ((loadStats().games.airhockey || {}).byDiff || {})[diff] || {};
+    return { won: b.won | 0, lost: b.lost | 0 };
+  } catch { return { won: 0, lost: 0 }; }
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/** How to play: the diagram carries the one non-obvious part - your mallet stays in YOUR half and
+ *  sits just above your finger - with shapes and arrows, never colour alone. Built at render time
+ *  so the labels follow the language. */
+function helpSVG() {
+  const lbl = (x, y, key, anchor = 'middle') => `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="11" font-weight="700" fill="currentColor">${esc(t(key))}</text>`;
+  return `<svg class="ah-help-svg" viewBox="0 0 240 190" role="img" aria-hidden="true">
+    <rect x="60" y="6" width="120" height="178" rx="16" fill="none" stroke="currentColor" stroke-width="2.5"/>
+    <rect x="96" y="3" width="48" height="6" fill="currentColor"/><rect x="96" y="181" width="48" height="6" fill="currentColor"/>
+    <rect x="62" y="95" width="116" height="87" rx="14" fill="currentColor" opacity="0.12"/>
+    <line x1="60" y1="95" x2="180" y2="95" stroke="currentColor" stroke-width="2" stroke-dasharray="5 4"/>
+    <circle cx="112" cy="40" r="7" fill="currentColor"/>
+    <path d="M114 60 L113 50" stroke="currentColor" stroke-width="2"/><path d="M109 53 L113 46 L117 53" fill="none" stroke="currentColor" stroke-width="2"/>
+    <circle cx="120" cy="130" r="13" fill="#1f5fa8"/><path d="M120 124 L125.5 133.5 L114.5 133.5 Z" fill="#fff"/>
+    <path d="M120 146 L120 160" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 3"/>
+    <path d="M113 177 q0 -12 7 -14 q7 2 7 14 z" fill="currentColor" opacity="0.55"/>
+    <path d="M122 118 L114 70" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3"/>
+    ${lbl(186, 140, 'hl_half', 'start')}${lbl(54, 172, 'hl_finger', 'end')}${lbl(54, 44, 'hl_puck', 'end')}${lbl(186, 12, 'hl_goal', 'start')}
+  </svg>`;
+}
 const FINGER_OFFSET_CSS = 34;   // the mallet sits this far ABOVE the finger, so the thumb never hides it
 
 const X_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
@@ -65,9 +116,10 @@ let instance = null;
 class AirHockeyUI {
   constructor(host) {
     this.host = host;
-    this.screen = 'menu';          // menu | game | paused | over
+    this.screen = 'menu';          // menu | help | game | paused | over
+    this.settings = loadSettings();
     this.match = createMatch();
-    this.cpu = createCpu(CPU_LEVEL, 1, (Date.now() & 0xffff) + 1);
+    this.cpu = createCpu(this.settings.difficulty, 1, (Date.now() & 0xffff) + 1);
     this.raf = 0;
     this.last = 0;
     this.flash = 0;
@@ -140,8 +192,30 @@ class AirHockeyUI {
           <div class="gh-modal ah-card">
             <h2 class="ah-title" data-l="title"></h2>
             <p class="ah-tag" data-l="tagline"></p>
-            <p class="ah-hint" data-l="hint"></p>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play"><span data-l="play"></span></button>
+            <p class="ah-label" data-l="difficulty"></p>
+            <div class="gh-seg ah-seg" role="group" data-role="diffs"></div>
+            <p class="ah-rec" data-role="rec"></p>
+            <div class="ah-actions">
+              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play"><span data-l="play"></span></button>
+              <button type="button" class="gh-btn gh-btn--block" data-act="howto"><span data-l="howto"></span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ah-ov" data-ov="help" hidden>
+          <div class="gh-modal ah-card ah-help" role="dialog" aria-modal="true">
+            <button type="button" class="gh-modal__close" data-act="helpClose" data-la="aria_close">${X_SVG}</button>
+            <h2 class="ah-title ah-title-sm" data-l="howto"></h2>
+            <div class="ah-help-body" data-role="helpBody">
+              <p class="ah-line ah-line-goal" data-l="help_goal"></p>
+              <div data-role="helpSvg"></div>
+              <p class="ah-line" data-l="help_caption"></p>
+              <p class="ah-line ah-line-ex" data-l="help_example"></p>
+              <p class="ah-line" data-l="help_in"></p>
+              <p class="ah-line" data-l="help_serve"></p>
+              <p class="ah-line" data-l="help_stuck"></p>
+            </div>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="helpClose"><span data-l="help_close"></span></button>
           </div>
         </div>
 
@@ -160,6 +234,7 @@ class AirHockeyUI {
             <button type="button" class="gh-modal__close" data-act="back" data-la="aria_close">${X_SVG}</button>
             <h2 class="ah-title" data-role="overTitle"></h2>
             <p class="ah-final" data-role="overScore"></p>
+            <p class="ah-rec" data-role="overRec"></p>
             <div class="ah-actions">
               <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="rematch"><span data-l="rematch"></span></button>
               <button type="button" class="gh-btn gh-btn--block" data-act="back"><span data-l="back"></span></button>
@@ -201,8 +276,30 @@ class AirHockeyUI {
     this.root.querySelectorAll('[data-l]').forEach((el) => { el.textContent = t(el.dataset.l); });
     this.root.querySelectorAll('[data-la]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.la)); });
     this.canvas.setAttribute('aria-label', t('aria_canvas'));
+    this.root.querySelector('[data-role="helpSvg"]').innerHTML = helpSVG();
+    const d = this.settings.difficulty;
+    const row = this.root.querySelector('[data-role="diffs"]');
+    row.setAttribute('aria-label', t('difficulty'));
+    row.innerHTML = DIFFS.map((id) => `
+      <button type="button" class="gh-seg__item" data-diff="${id}" aria-pressed="${d === id}">
+        ${diffShapeSVG(tierOf(id))}<span>${esc(t('diff_' + id))}</span></button>`).join('');
+    this._syncRec();
     this._syncScore();
     if (this.screen === 'over') this._fillOver();
+    if (this.screen === 'help') this._fitHelp();
+  }
+  _syncRec() {
+    const d = this.settings.difficulty, r = recordVs(d);
+    this.root.querySelector('[data-role="rec"]').textContent = t('rec_vs', { diff: t('diff_' + d), w: r.won, l: r.lost });
+  }
+  /** Every help line on ONE row (docs/BUILDING-A-GAME.md, "How-to-play screens"): measure, and
+   *  step the font down until it fits, never below the 11px floor. */
+  _fitHelp() {
+    this.root.querySelectorAll('.ah-help .ah-line').forEach((el) => {
+      el.style.fontSize = '';
+      let px = parseFloat(getComputedStyle(el).fontSize) || 14;
+      while (el.scrollWidth > el.clientWidth + 0.5 && px > 11) { px -= 0.5; el.style.fontSize = px + 'px'; }
+    });
   }
 
   _syncScore() {
@@ -234,7 +331,8 @@ class AirHockeyUI {
   // --- match lifecycle ---------------------------------------------------------------------------
   _play() {
     resetMatch(this.match, 0);
-    this.cpu = createCpu(CPU_LEVEL, 1, (Date.now() & 0xffff) + 1);
+    this.cpu = createCpu(this.settings.difficulty, 1, (Date.now() & 0xffff) + 1);
+    this.difficulty = this.settings.difficulty;
     this.flash = 0; this.goalT = 0;
     this.banner.hidden = true;
     this._syncScore();
@@ -261,6 +359,7 @@ class AirHockeyUI {
     this.banner.hidden = true;
     this._syncScore();
     this.renderer.render(this.match, 0);
+    this._syncRec();
     this._showOnly('menu');
   }
   _over() {
@@ -268,13 +367,20 @@ class AirHockeyUI {
     this.screen = 'over';
     this.banner.hidden = true;
     this.renderer.render(this.match, 0);
+    // Recorded once, when the match ENDS at 7. Rule 6: a refused or failed write is said loudly.
+    try {
+      const st = recordResult('airhockey', this.difficulty, this.match.winner === 0);
+      if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[airhockey] recording the result failed', err); }
     this._fillOver();
     this._showOnly('over');
   }
   _fillOver() {
     const [a, b] = this.match.score;
+    const d = this.difficulty || this.settings.difficulty, r = recordVs(d);
     this.root.querySelector('[data-role="overTitle"]').textContent = t(this.match.winner === 0 ? 'you_win' : 'cpu_wins');
     this.root.querySelector('[data-role="overScore"]').textContent = `${a} - ${b}`;
+    this.root.querySelector('[data-role="overRec"]').textContent = t('rec_vs', { diff: t('diff_' + d), w: r.won, l: r.lost });
   }
 
   _goal(scorer) {
@@ -295,11 +401,21 @@ class AirHockeyUI {
 
   // --- input -------------------------------------------------------------------------------------
   _click(e) {
+    const seg = e.target.closest('[data-diff]');
+    if (seg) {
+      this.settings.difficulty = seg.dataset.diff;
+      saveSettings(this.settings);   // saved on selection, not only at start
+      this.root.querySelectorAll('[data-diff]').forEach((x) => x.setAttribute('aria-pressed', String(x === seg)));
+      this._syncRec();
+      return;
+    }
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
     this.sound.unlock();
-    if (act === 'play' || act === 'rematch') this._play();
+    if (act === 'play' || act === 'rematch') { saveSettings(this.settings); this._play(); }
+    else if (act === 'howto') { this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
+    else if (act === 'helpClose') { this.screen = 'menu'; this._showOnly('menu'); }
     else if (act === 'pause') { if (this.screen === 'game') this._pause(); else if (this.screen === 'paused') this._resume(); }
     else if (act === 'resume') this._resume();
     else if (act === 'quit' || act === 'back') this._toMenu();
