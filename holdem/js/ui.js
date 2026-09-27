@@ -43,29 +43,18 @@ const BOT_NAMES = [
   ['Maverick', '\u{1F985}'], ['Lola', '\u{1F98A}'], ['Duke', '\u{1F3A9}'], ['Olive', '\u{1F989}'],
 ];
 
-// Seat slots, as fractions of the table area, for the AVATAR centre. Index 0 is always this
-// device's own seat (bottom); the rest run clockwise, which on screen is up the left side, across
-// the top and down the right - the direction the action moves.
-const SLOT = {
-  B: [0.5, 0.86], BL: [0.11, 0.7], L: [0.11, 0.43], TL: [0.11, 0.16], T: [0.5, 0.08],
-  TR: [0.89, 0.16], R: [0.89, 0.43], BR: [0.89, 0.7],
-};
-const SLOTS_FOR = {
-  1: ['B'],
-  2: ['B', 'T'],
-  3: ['B', 'TL', 'TR'],
-  4: ['B', 'L', 'T', 'R'],
-  5: ['B', 'BL', 'TL', 'TR', 'BR'],
-  6: ['B', 'BL', 'TL', 'T', 'TR', 'BR'],
-  7: ['B', 'BL', 'L', 'TL', 'TR', 'R', 'BR'],
-  8: ['B', 'BL', 'L', 'TL', 'T', 'TR', 'R', 'BR'],
-};
-
 const readJSON = (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { console.warn('[holdem] save failed', k, e); return false; } };
 const drop = (k) => { try { localStorage.removeItem(k); } catch { /* nothing to drop */ } };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (n) => (n | 0).toLocaleString();
+/** Money the way the reference app prints it: $9200 below ten thousand, then $10.0k, $11.8k. */
+const money = (n) => {
+  n = Math.max(0, n | 0);
+  if (n < 10000) return '$' + n;
+  if (n < 1000000) return '$' + (n / 1000).toFixed(n < 100000 ? 1 : 0) + 'k';
+  return '$' + (n / 1000000).toFixed(1) + 'M';
+};
 const rid = () => Math.random().toString(36).slice(2, 10);
 const rankText = (r) => (RANKS[r] === 'T' ? '10' : RANKS[r]);
 const placeText = (n) => (n === 1 ? t('place_1') : n === 2 ? t('place_2') : n === 3 ? t('place_3') : t('place_n', { n }));
@@ -109,25 +98,32 @@ function shuffle(a) {
   return a;
 }
 
-function handLabel(score) {
+/** "Two Pair, Aces and Fives" - the full name the reference app announces a winner with. */
+function handName(score) {
   const cat = categoryOf(score);
   const r = scoreRanks(score);
-  if (cat === 8 && r[0] === 12) return t('hn_9');
-  let detail;
-  if (cat === 2 || cat === 6) detail = `${rankText(r[0])}, ${rankText(r[1])}`;
-  else detail = rankText(r[0]);
-  return `${t('hn_' + cat)} (${detail})`;
+  if (cat === 8 && r[0] === 12) return t('hd_9');
+  const one = (k) => t('rn_' + k);
+  const many = (k) => t('rp_' + k);
+  return t('hd_' + cat, { r: one(r[0]), p: many(r[0]), q: many(r[1]) });
 }
 
 // ---------------------------------------------------------------------------------------------
 
+const FACE = { 9: 'J', 10: 'Q', 11: 'K' };
+
+/** A playing card: rank-and-suit index in the top-left corner (and upside down bottom-right), a
+ *  framed centre with one big suit, or the letter on a court card. Suits differ by SHAPE, so red
+ *  versus black is never the only cue. */
 function cardHTML(c, cls = '') {
-  if (c == null) return `<div class="pk-card is-back ${cls}" role="img" aria-label="${esc(t('aria_back'))}"></div>`;
   const r = rankText(c >> 2);
   const s = c & 3;
   const red = s === 1 || s === 2;
+  const g = SUIT_GLYPH[s];
+  const face = FACE[c >> 2];
+  const centre = face ? `<span class="pk-cc is-face"><b>${face}</b><i>${g}</i></span>` : `<span class="pk-cc"><i>${g}</i></span>`;
   return `<div class="pk-card${red ? ' is-red' : ''} ${cls}" data-c="${c}" role="img" aria-label="${esc(t('aria_card', { rank: r, suit: t('s_' + s) }))}">`
-    + `<span class="pk-r">${r}</span><span class="pk-s">${SUIT_GLYPH[s]}</span></div>`;
+    + `<span class="pk-ci"><b>${r}</b><i>${g}</i></span>${centre}<span class="pk-ci is-rot"><b>${r}</b><i>${g}</i></span></div>`;
 }
 
 const HELP_HANDS = [
@@ -296,38 +292,64 @@ class Game {
       </div>`;
   }
 
-  /** The table skeleton is built once per game; everything inside it updates in place. */
+  /** The table skeleton is built once per game; everything inside it updates in place.
+   *  Layout cloned from the reference recording (2026-09-27): a league-style banner, the opponents
+   *  in one curved row along the top, a flat blue felt with five sunken card slots and a sunken pot
+   *  box, and at the bottom the player's two big cards beside one big glossy action button. */
   _renderTable(full) {
     if (full || !this.el.querySelector('.pk-table')) {
       this.el.innerHTML = `
         <div class="pk-table">
           <div class="pk-top">
-            <div class="pk-info"><span class="pk-info-hand"></span><span class="pk-info-blinds"></span></div>
-            <span class="pk-topcode" data-role="mp-code" hidden></span>
-            <button type="button" class="pk-iconbtn" data-act="help" aria-label="${esc(t('help'))}">?</button>
-            <button type="button" class="pk-iconbtn" data-act="leave" aria-label="${esc(t('leave_table'))}">&#x2715;</button>
-          </div>
-          <div class="pk-feltwrap">
-            <div class="pk-felt" aria-hidden="true"></div>
-            <div class="pk-center">
-              <div class="pk-pot"></div>
-              <div class="pk-board"></div>
-              <div class="pk-msg" aria-live="polite"></div>
+            <div class="pk-ban">
+              <div class="pk-ban-red"><span class="pk-ban-title">${esc(t('title'))}</span><span class="pk-ban-blinds"></span></div>
+              <div class="pk-ban-cell"><small>${esc(t('ban_hand'))}</small><b class="pk-ban-hand"></b></div>
+              <div class="pk-ban-cell is-rank"><small>${esc(t('ban_rank'))}</small><b class="pk-ban-rank"></b><small class="pk-ban-of"></small></div>
+              <div class="pk-ban-cell"><small>${esc(t('ban_up'))}</small><b class="pk-ban-up"></b></div>
+              <button type="button" class="pk-ban-info" data-act="help" aria-label="${esc(t('help'))}">i</button>
             </div>
-            <div class="pk-seats"></div>
           </div>
-          <div class="pk-banner" hidden></div>
-          <div class="pk-mine">
-            <div class="pk-mycards"></div>
-            <div class="pk-myhand"></div>
+          <div class="pk-strip">
+            <span class="pk-topcode" data-role="mp-code" hidden></span>
+            <button type="button" class="pk-redx" data-act="leave" aria-label="${esc(t('leave_table'))}">&#x2715;</button>
+            <div class="pk-opps"></div>
           </div>
-          <div class="pk-actions"></div>
+          <div class="pk-felt" data-act="felt">
+            <div class="pk-bets"></div>
+            <div class="pk-msg" aria-live="polite"></div>
+            <div class="pk-board"></div>
+            <div class="pk-potrow">
+              <div class="pk-potbox"></div>
+              <div class="pk-mybet"></div>
+            </div>
+            <div class="pk-raisebar" hidden></div>
+            <div class="pk-banner" hidden></div>
+          </div>
+          <div class="pk-bottom">
+            <div class="pk-left">
+              <div class="pk-acttabs"></div>
+              <div class="pk-mycards"></div>
+            </div>
+            <div class="pk-right">
+              <button type="button" class="pk-bigbtn" data-act="big" disabled></button>
+              <div class="pk-stackline"></div>
+            </div>
+          </div>
         </div>`;
       this.seatSig = '';
       this.actSig = '';
-      if (this.ro) { this.ro.disconnect(); this.ro.observe(this.el.querySelector('.pk-feltwrap')); }
+      if (this.ro) { this.ro.disconnect(); this.ro.observe(this.el.querySelector('.pk-table')); }
     }
     this._paintTable();
+  }
+
+  /** Opponents in table order, starting from the seat on this player's left. */
+  _opps() {
+    const n = this.pub.players.length;
+    const my = this.myIdx;
+    const out = [];
+    for (let r = my >= 0 ? 1 : 0; r < n; r++) out.push((Math.max(0, my) + r) % n);
+    return out;
   }
 
   _paintTable() {
@@ -335,25 +357,28 @@ class Game {
     const q = (s) => this.el.querySelector(s);
     if (!pub || !q('.pk-table')) return;
     const h = pub.hand;
-    const n = pub.players.length;
-    if (h && h.sb) {
-      q('.pk-info-hand').textContent = t('hand_n', { n: pub.handNo });
-      q('.pk-info-blinds').textContent = t('blinds', { sb: fmt(h.sb), bb: fmt(h.bb) });
+    const res = h && h.result;
+    const meP = this.myIdx >= 0 ? pub.players[this.myIdx] : null;
+    if (pub.handNo !== this.seenHand) { this.seen = new Set(); this.seenHand = pub.handNo; }
+
+    // --- banner
+    if (h && h.sb) q('.pk-ban-blinds').textContent = `${money(h.sb)}/${money(h.bb)}`;
+    q('.pk-ban-hand').textContent = String(pub.handNo || 0);
+    const alive = pub.players.filter((p) => !p.out);
+    if (meP && !meP.out) {
+      q('.pk-ban-rank').textContent = placeText(1 + alive.filter((p) => p.chips > meP.chips).length);
+      q('.pk-ban-of').textContent = t('ban_of', { n: alive.length });
+    } else {
+      q('.pk-ban-rank').textContent = meP ? placeText(meP.place) : '-';
+      q('.pk-ban-of').textContent = '';
     }
+    const per = SPEEDS[(pub.cfg && pub.cfg.speed) || 'normal'] || 10;
+    const left = per - ((Math.max(1, pub.handNo) - 1) % per);
+    q('.pk-ban-up').textContent = t('ban_up_in', { n: left });
     const codeEl = q('.pk-topcode');
     if (this.mp) { codeEl.hidden = false; codeEl.textContent = this.mp.code; } else codeEl.hidden = true;
 
-    if (pub.handNo !== this.seenHand) { this.seen = new Set(); this.seenHand = pub.handNo; }
-
-    // Seats: rebuild the elements only when the seating changes; fill them every paint.
-    const sig = `${n}:${this.myIdx}`;
-    const seatsEl = q('.pk-seats');
-    if (sig !== this.seatSig) {
-      this.seatSig = sig;
-      seatsEl.innerHTML = pub.players.map((_, j) => `<div class="pk-seat" data-j="${j}"></div>`).join('');
-      this._layout();
-    }
-    const res = h && h.result;
+    // --- the winner(s) and, at a showdown, the five cards that won
     const winners = new Set();
     const won = {};
     if (res) res.pots.forEach((p) => p.winners.forEach((w) => { winners.add(w); won[w] = (won[w] || 0) + Math.floor(p.amount / p.winners.length); }));
@@ -361,57 +386,88 @@ class Game {
     let best = null;
     if (res && !res.noShow && res.reveal && res.reveal[mainWinner]) best = bestFive([...res.reveal[mainWinner], ...h.board]);
     const bestSet = new Set(best ? best.cards : []);
+    const everyone = this.revealAll === pub.handNo && this.table ? this.table.state.hand && this.table.state.hand.holes : null;
 
-    pub.players.forEach((p, j) => {
-      const el = seatsEl.querySelector(`[data-j="${j}"]`);
+    // --- opponents strip
+    const opps = this._opps();
+    const sig = `${pub.players.length}:${this.myIdx}`;
+    const oppsEl = q('.pk-opps');
+    if (sig !== this.seatSig) {
+      this.seatSig = sig;
+      oppsEl.innerHTML = opps.map((j) => `<div class="pk-opp" data-j="${j}"></div>`).join('');
+      this._layout();
+    }
+    const left2 = this.clockEnd - Date.now();
+    opps.forEach((j) => {
+      const p = pub.players[j];
+      const el = oppsEl.querySelector(`[data-j="${j}"]`);
       if (!el) return;
       const inHand = h && h.inHand && h.inHand[j];
       const folded = h && h.folded && h.folded[j] && !p.out;
       const isTurn = h && !res && h.toAct === j;
-      const isMe = j === this.myIdx;
+      const isWin = res && winners.has(j);
+      let stamp = '';
+      if (isWin) stamp = t('st_win');
+      else if (p.out) stamp = p.left ? t('st_left') : t('st_out');
+      else if (p.away || p.sitOut) stamp = t('st_away');
+      else if (h && h.last && h.last[j]) stamp = t('st_' + h.last[j].a);
+      const shown = (res && res.reveal && res.reveal[j]) || (everyone && everyone[j]);
       let cards = '';
-      if (res && res.reveal && res.reveal[j]) cards = `<div class="pk-seatcards is-up">${res.reveal[j].map((c) => this._card(c, bestSet.has(c) ? 'is-best' : (best ? 'is-dim' : ''))).join('')}</div>`;
-      else if (inHand && !isMe) cards = '<div class="pk-seatcards"><div class="pk-mini"></div><div class="pk-mini"></div></div>';
-      let tag = '';
-      if (res && winners.has(j)) tag = `<span class="pk-tag is-win">+${fmt(won[j])}</span>`;
-      else if (p.out) tag = `<span class="pk-tag is-out">${esc(p.left ? t('left') : t('out'))}</span>`;
-      else if (p.away || p.sitOut) tag = `<span class="pk-tag is-away">${esc(t('away'))}</span>`;
-      else if (h && h.last && h.last[j]) tag = `<span class="pk-tag">${esc(t('a_' + h.last[j].a))}</span>`;
-      const bet = h && h.bets && h.bets[j] > 0 && !res ? `<span class="pk-bet"><i class="pk-chip" aria-hidden="true"></i>${fmt(h.bets[j])}</span>` : '';
-      const handName = res && !res.noShow && res.scores && res.scores[j] != null ? `<span class="pk-seathand">${esc(handLabel(res.scores[j]))}</span>` : '';
-      const left = this.clockEnd - Date.now();
-      const clock = isTurn && left > 0 ? `<span class="pk-clock"><i style="--f:${Math.min(1, left / CLOCK_MS).toFixed(3)};animation-duration:${left}ms"></i></span>` : '';
-      el.className = `pk-seat${isMe ? ' is-me' : ''}${isTurn ? ' is-turn' : ''}${folded ? ' is-folded' : ''}${p.out ? ' is-outp' : ''}${res && winners.has(j) ? ' is-winner' : ''}`;
+      if (shown) cards = `<span class="pk-ocards is-up">${shown.map((c) => cardHTML(c, 'is-mini' + (bestSet.has(c) ? ' is-best' : ''))).join('')}</span>`;
+      else if (inHand) cards = '<span class="pk-ocards"><i></i><i></i></span>';
+      const clock = isTurn && left2 > 0 ? `<span class="pk-clock"><i style="--f:${Math.min(1, left2 / CLOCK_MS).toFixed(3)};animation-duration:${left2}ms"></i></span>` : '';
+      el.className = `pk-opp${folded || p.out ? ' is-dim' : ''}${isTurn ? ' is-turn' : ''}${isWin ? ' is-winner' : ''}${shown ? ' has-cards' : ''}`;
       el.innerHTML = `
-        ${j === pub.button && !p.out ? `<span class="pk-dealer" title="${esc(t('dealer'))}">D</span>` : ''}
-        <div class="pk-av">${esc(p.emoji)}${cards}</div>
-        <div class="pk-plate"><span class="pk-name">${esc(isMe ? t('you') : p.name)}</span><span class="pk-stack">${fmt(p.chips)}</span>${clock}</div>
-        ${tag || bet ? `<div class="pk-under">${tag}${bet}</div>` : ''}${handName}`;
+        <span class="pk-oname">${esc(p.name)}</span>
+        <span class="pk-oav"><span class="pk-oemoji">${esc(p.emoji)}</span>${cards}${stamp ? `<span class="pk-stamp">${esc(stamp)}</span>` : ''}</span>
+        <span class="pk-ostack">${isWin ? '+' + money(won[j]) : money(p.chips)}</span>${clock}`;
     });
 
-    // Board and pot
-    const boardEl = q('.pk-board');
-    const board = (h && h.board) || [];
+    // --- bets on the felt under each opponent, and the dealer button
+    const betsEl = q('.pk-bets');
     let bh = '';
-    for (let k = 0; k < 5; k++) bh += k < board.length ? this._card(board[k], bestSet.size ? (bestSet.has(board[k]) ? 'is-best' : 'is-dim') : '', k) : '<div class="pk-card is-slot"></div>';
-    boardEl.innerHTML = bh;
-    const pot = h ? potTotal(h) : 0;
-    q('.pk-pot').innerHTML = pot > 0 && !res ? `<i class="pk-chip" aria-hidden="true"></i>${esc(t('pot', { n: fmt(pot) }))}` : '';
-    q('.pk-msg').textContent = this._message();
-
-    // My cards
-    const mine = q('.pk-mycards');
-    const meP = this.myIdx >= 0 ? pub.players[this.myIdx] : null;
-    const shown = res && res.reveal && res.reveal[this.myIdx];
-    if (meP && this.hole && h && (shown || (!meP.out && (h.inHand[this.myIdx] || h.folded[this.myIdx])))) {
-      const dim = !shown && h.folded[this.myIdx];
-      mine.innerHTML = this.hole.map((c) => this._card(c, (dim ? 'is-dim ' : '') + (bestSet.size && !dim ? (bestSet.has(c) ? 'is-best' : 'is-dim') : ''))).join('');
-      const all = [...this.hole, ...board];
-      q('.pk-myhand').textContent = dim ? t('a_fold') : handLabel(evaluate(all));
-    } else {
-      mine.innerHTML = '';
-      q('.pk-myhand').textContent = '';
+    if (h && !res) {
+      opps.forEach((j) => {
+        if (h.bets[j] > 0) bh += `<span class="pk-betchip" style="left:${this.oppX[j] || 0}px"><i class="pk-chip" aria-hidden="true"></i><span>${money(h.bets[j])}</span></span>`;
+      });
     }
+    if (pub.button >= 0 && pub.button !== this.myIdx && this.oppX && this.oppX[pub.button] != null) {
+      bh += `<span class="pk-dbtn" style="left:${this.oppX[pub.button] - 30}px" title="${esc(t('dealer'))}">D</span>`;
+    }
+    betsEl.innerHTML = bh;
+    const myBet = h && !res && this.myIdx >= 0 && h.bets[this.myIdx] > 0 ? h.bets[this.myIdx] : 0;
+    q('.pk-mybet').innerHTML = (myBet ? `<span class="pk-betchip is-mine"><i class="pk-chip" aria-hidden="true"></i><span>${money(myBet)}</span></span>` : '')
+      + (pub.button === this.myIdx && this.myIdx >= 0 ? `<span class="pk-dbtn is-mine" title="${esc(t('dealer'))}">D</span>` : '');
+
+    // --- message, board, pot
+    const msg = this._message();
+    const msgEl = q('.pk-msg');
+    msgEl.textContent = msg;
+    msgEl.hidden = !msg;
+    betsEl.hidden = !!msg && !!res;
+    const board = (h && h.board) || [];
+    let bd = '';
+    for (let k = 0; k < 5; k++) bd += k < board.length ? this._card(board[k], bestSet.size ? (bestSet.has(board[k]) ? 'is-best' : 'is-dim') : '', k) : '<div class="pk-slot"></div>';
+    q('.pk-board').innerHTML = bd;
+    const pot = h ? potTotal(h) : 0;
+    let potHTML = '';
+    if (res) potHTML = `<span class="pk-tapnext">${esc(this.kind === 'solo' ? t('tap_next') : t('next_soon'))}</span>`;
+    else if (pot > 0) potHTML = `<span class="pk-potchips" aria-hidden="true"><i class="pk-chip"></i><i class="pk-chip"></i><i class="pk-chip"></i></span><span class="pk-potamt">${money(pot)}</span>`;
+    q('.pk-potbox').innerHTML = potHTML;
+    q('.pk-felt').classList.toggle('is-tappable', !!(res && this.kind === 'solo' && !pub.over));
+
+    // --- my cards
+    const mine = q('.pk-mycards');
+    const shownMine = res && res.reveal && res.reveal[this.myIdx];
+    if (meP && this.hole && h && (shownMine || (!meP.out && (h.inHand[this.myIdx] || h.folded[this.myIdx])))) {
+      const dim = !shownMine && h.folded[this.myIdx];
+      mine.innerHTML = this.hole.map((c) => this._card(c, 'is-big' + (dim ? ' is-dim' : (bestSet.size ? (bestSet.has(c) ? ' is-best' : ' is-dim') : '')))).join('');
+    } else if (!meP) {
+      mine.innerHTML = `<p class="pk-note">${esc(t('next_game_wait'))}</p>`;
+    } else if (meP.out) {
+      mine.innerHTML = `<p class="pk-note">${esc(t('you_are_out', { place: placeText(meP.place) }))}</p>`;
+    } else mine.innerHTML = '';
+    q('.pk-stackline').textContent = meP ? t('stack_n', { n: money(meP.chips) }) : '';
 
     this._paintBanner();
     this._paintActions();
@@ -427,19 +483,17 @@ class Game {
 
   _message() {
     const pub = this.pub, h = pub && pub.hand;
-    if (!h) return '';
+    if (!h || !h.result) return '';
     const res = h.result;
-    if (res) {
-      const p0 = res.pots[0];
-      const name = (j) => (j === this.myIdx ? t('you') : pub.players[j].name);
-      const total = res.pots.reduce((a, p) => a + p.amount, 0);
-      if (res.noShow) return t('wins_pot', { name: name(p0.winners[0]), n: fmt(total) });
-      if (p0.winners.length > 1) return t('split_pot', { n: fmt(p0.amount) });
-      return t('wins_with', { name: name(p0.winners[0]), n: fmt(p0.amount), hand: handLabel(res.scores[p0.winners[0]]) });
-    }
-    if (h.toAct === this.myIdx) return t('your_turn');
-    if (h.toAct >= 0) return t('waiting_for', { name: pub.players[h.toAct].name });
-    return '';
+    const p0 = res.pots[0];
+    const total = res.pots.reduce((a, p) => a + p.amount, 0);
+    const w = p0.winners[0];
+    const mine = w === this.myIdx;
+    const name = pub.players[w] ? pub.players[w].name : '';
+    if (res.noShow) return mine ? t('msg_you_take', { n: fmt(total) }) : t('msg_takes', { name, n: fmt(total) });
+    if (p0.winners.length > 1) return t('msg_split', { n: fmt(p0.amount) });
+    const hand = handName(res.scores[w]);
+    return mine ? t('msg_you_win', { n: fmt(p0.amount), hand }) : t('msg_wins', { name, n: fmt(p0.amount), hand });
   }
 
   _paintBanner() {
@@ -452,60 +506,57 @@ class Game {
     el.textContent = msg;
   }
 
+  /** The FOLD / SET RAISE tabs, the raise bar, and the one big action button. */
   _paintActions() {
-    const el = this.el.querySelector('.pk-actions');
-    if (!el) return;
+    const tabs = this.el.querySelector('.pk-acttabs');
+    const big = this.el.querySelector('.pk-bigbtn');
+    const bar = this.el.querySelector('.pk-raisebar');
+    if (!tabs || !big) return;
     const pub = this.pub, h = pub && pub.hand;
     const meP = this.myIdx >= 0 ? pub.players[this.myIdx] : null;
-    let html = '';
-    let sig = '';
-    if (!meP) {
-      sig = 'spectate';
-      html = `<p class="pk-note">${esc(t('next_game_wait'))}</p>`;
-    } else if (meP.out) {
-      sig = 'out' + meP.place;
-      html = `<p class="pk-note">${esc(t('you_are_out', { place: placeText(meP.place) }))}</p>`;
-    } else if (meP.sitOut || meP.away) {
-      sig = 'sitout';
-      html = `<div class="pk-actrow"><p class="pk-note pk-note-side">${esc(t('sitting_out'))}</p><button type="button" class="pk-btn pk-btn-primary" data-act="back">${esc(t('im_back'))}</button></div>`;
-    } else if (h && !h.result && h.toAct === this.myIdx && !this.sending) {
-      const L = legal(pub);
-      if (L) {
-        const r = this.raise;
-        sig = `turn:${pub.k}:${r ? 'r' : ''}`;
-        if (r) {
-          const step = Math.max(1, h.sb);
-          const label = r.to >= L.maxTo ? t('allin_n', { n: fmt(r.to) }) : (L.isBet ? t('bet_n', { n: fmt(r.to) }) : t('raise_to', { n: fmt(r.to) }));
-          html = `
-            <div class="pk-raise">
-              <div class="pk-presets">
-                <button type="button" class="pk-btn pk-btn-sm" data-act="preset" data-p="min">${esc(t('min'))}</button>
-                <button type="button" class="pk-btn pk-btn-sm" data-act="preset" data-p="half">${esc(t('half_pot'))}</button>
-                <button type="button" class="pk-btn pk-btn-sm" data-act="preset" data-p="pot">${esc(t('pot_btn'))}</button>
-                <button type="button" class="pk-btn pk-btn-sm" data-act="preset" data-p="max">${esc(t('allin'))}</button>
-              </div>
-              <input type="range" class="pk-slider" data-role="raise" min="${L.minTo}" max="${L.maxTo}" step="${step}" value="${r.to}" aria-label="${esc(L.isBet ? t('bet') : t('raise'))}">
-              <div class="pk-actrow">
-                <button type="button" class="pk-btn" data-act="raise-cancel">${esc(t('cancel'))}</button>
-                <button type="button" class="pk-btn pk-btn-primary" data-act="raise-go" data-role="raise-label">${esc(label)}</button>
-              </div>
-            </div>`;
-        } else {
-          const callLabel = L.canCheck ? t('check') : (L.callAmt >= meP.chips ? t('allin_n', { n: fmt(L.callAmt) }) : t('call', { n: fmt(L.callAmt) }));
-          html = `<div class="pk-actrow">
-              ${L.canCheck ? '' : `<button type="button" class="pk-btn pk-btn-fold" data-act="fold">${esc(t('fold'))}</button>`}
-              <button type="button" class="pk-btn pk-btn-call" data-act="${L.canCheck ? 'check' : 'call'}">${esc(callLabel)}</button>
-              ${L.canRaise ? `<button type="button" class="pk-btn pk-btn-raise" data-act="raise-open">${esc(L.isBet ? t('bet') : t('raise'))}</button>` : ''}
-            </div>`;
-        }
-      }
-    } else {
-      sig = 'wait';
-      html = '';
+    const myTurn = !!(meP && h && !h.result && h.toAct === this.myIdx && !this.sending && !meP.sitOut && !meP.away);
+    const L = myTurn ? legal(pub) : null;
+    if (!L) this.raise = null;
+    const r = this.raise;
+    let mode = 'idle';
+    if (meP && (meP.sitOut || meP.away) && !meP.out) mode = 'back';
+    else if (L) mode = r ? 'raise' : (L.canCheck ? 'check' : 'call');
+    else if (h && h.result && this.kind === 'solo' && this.revealAll !== pub.handNo && !pub.over) mode = 'reveal';
+    const sig = `${mode}:${pub.k}:${r ? 1 : 0}:${this.revealAll === pub.handNo}`;
+    if (sig !== this.actSig) {
+      this.actSig = sig;
+      const inHand = meP && h && !h.result && h.inHand && h.inHand[this.myIdx];
+      tabs.innerHTML = inHand || L ? `
+        <button type="button" class="pk-tab2" data-act="fold" ${L && !L.canCheck ? '' : 'disabled'}>${esc(t('fold'))}</button>
+        ${L && L.canRaise ? `<button type="button" class="pk-tab2${r ? ' is-on' : ''}" data-act="raise-toggle">${esc(r ? t('cancel') : t('set_raise'))}</button>` : ''}` : '';
+      if (r && L) {
+        bar.hidden = false;
+        bar.innerHTML = `
+          <div class="pk-barpot"><i class="pk-chip" aria-hidden="true"></i>${esc(t('pot', { n: money(L.pot) }))}</div>
+          <div class="pk-presets">
+            <button type="button" class="pk-pre" data-act="preset" data-p="min">${esc(t('min'))}</button>
+            <button type="button" class="pk-pre" data-act="preset" data-p="half">${esc(t('half_pot'))}</button>
+            <button type="button" class="pk-pre" data-act="preset" data-p="pot">${esc(t('pot_btn'))}</button>
+            <button type="button" class="pk-pre" data-act="preset" data-p="max">${esc(t('allin'))}</button>
+          </div>
+          <input type="range" class="pk-slider" data-role="raise" min="${L.minTo}" max="${L.maxTo}" step="${Math.max(1, h.sb)}" value="${r.to}" aria-label="${esc(L.isBet ? t('bet') : t('raise'))}">`;
+      } else { bar.hidden = true; bar.innerHTML = ''; }
     }
-    if (sig === this.actSig) return;
-    this.actSig = sig;
-    el.innerHTML = html;
+    // The big button's label changes with the slider, so it is refreshed on every paint.
+    big.className = 'pk-bigbtn' + (mode === 'idle' ? '' : ' is-live') + (mode === 'check' ? ' is-check' : '');
+    big.disabled = mode === 'idle';
+    big.dataset.mode = mode;
+    const chips = '<span class="pk-bigchips" aria-hidden="true"><i class="pk-chip"></i><i class="pk-chip is-pink"></i><i class="pk-chip"></i></span>';
+    let label = '';
+    if (mode === 'check') label = `<span class="pk-biglbl">${esc(t('big_check'))}</span><svg class="pk-tick" viewBox="0 0 48 40" aria-hidden="true"><path d="M4 22 L17 34 L44 5" fill="none" stroke="#1f7a12" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 22 L17 34 L44 5" fill="none" stroke="#7ddf2a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    else if (mode === 'call') label = `<span class="pk-biglbl">${esc(L.callAmt >= meP.chips ? t('big_allin', { n: money(L.callAmt) }) : t('big_call', { n: money(L.callAmt) }))}</span>${chips}`;
+    else if (mode === 'raise') {
+      const to = Math.max(L.minTo, Math.min(L.maxTo, r.to));
+      const key = to >= L.maxTo ? 'big_allin' : (L.isBet ? 'big_bet' : 'big_raise');
+      label = `<span class="pk-biglbl">${esc(t(key, { n: money(to) }))}</span>${chips}`;
+    } else if (mode === 'reveal') label = `<span class="pk-biglbl is-small">${esc(t('see_cards'))}</span><svg class="pk-gem" viewBox="0 0 40 32" aria-hidden="true"><path d="M8 2 H32 L39 11 L20 31 L1 11 Z" fill="#2fd07a" stroke="#0f7a3e" stroke-width="2"/><path d="M1 11 H39 M14 2 L10 11 L20 31 L30 11 L26 2" fill="none" stroke="#0f7a3e" stroke-width="1.5"/></svg>`;
+    else if (mode === 'back') label = `<span class="pk-biglbl">${esc(t('im_back'))}</span>`;
+    big.innerHTML = label;
   }
 
   _renderOverlay() {
@@ -526,7 +577,7 @@ class Game {
           <p class="pk-help-goal"><b>${esc(t('help_goal'))}</b></p>
           <div class="pk-label">${esc(t('help_rank'))}</div>
           <ol class="pk-ranks">${HELP_HANDS.map((cards, k) => `<li><span class="pk-rname">${esc(t('hn_' + (9 - k)))}</span><span class="pk-rcards">${cards.map(([r, s]) => cardHTML(r * 4 + s, 'is-tiny')).join('')}</span></li>`).join('')}</ol>
-          <p class="pk-hint">${esc(t('help_blinds', { chips: fmt(START_CHIPS) }))}</p>
+          <p class="pk-hint">${esc(t('help_blinds', { chips: money(START_CHIPS) }))}</p>
         </div>`;
     } else if (want === 'confirm') {
       const hostClose = this.kind === 'host';
@@ -554,27 +605,44 @@ class Game {
     }
   }
 
-  /** Seat positions come from the measured table area, not a vh formula: the hub's chrome and a
-   *  phone's toolbars both change what is left. */
+  /** Measured, not a vh formula: the hub's chrome and a phone's toolbars both change what is left.
+   *  Opponents sit on a shallow arc (edges lower, names and stacks tilted with it) like the
+   *  reference; the board cards size to whatever height the felt actually has. */
   _layout() {
-    const wrap = this.el.querySelector('.pk-feltwrap');
-    if (!wrap || !this.pub) return;
-    const W = wrap.clientWidth, H = wrap.clientHeight;
-    if (!W || !H) { requestAnimationFrame(() => this._layout()); return; }
-    const n = this.pub.players.length;
-    const slots = SLOTS_FOR[Math.max(1, Math.min(8, n))];
-    const my = this.myIdx >= 0 ? this.myIdx : 0;
-    const cw = Math.round(Math.max(30, Math.min(58, W * 0.112, H * 0.105)));
-    wrap.style.setProperty('--pk-cw', cw + 'px');
-    this.el.classList.toggle('is-short', H < 380);
-    wrap.querySelectorAll('.pk-seat').forEach((el) => {
-      const j = +el.dataset.j;
-      const rel = (j - my + n) % n;
-      const [x, y] = SLOT[slots[rel]];
-      el.style.left = Math.round(x * W) + 'px';
-      el.style.top = Math.round(y * H) + 'px';
-      el.dataset.slot = slots[rel];
+    const strip = this.el.querySelector('.pk-strip');
+    const felt = this.el.querySelector('.pk-felt');
+    const bottom = this.el.querySelector('.pk-bottom');
+    if (!strip || !felt || !this.pub) return;
+    const W = strip.clientWidth, FH = felt.clientHeight;
+    if (!W || !FH) { requestAnimationFrame(() => this._layout()); return; }
+    const opps = this._opps();
+    const m = Math.max(1, opps.length);
+    const av = Math.round(Math.max(36, Math.min(62, (W - 12) / m - 12)));
+    strip.style.setProperty('--pk-av', av + 'px');
+    this.oppX = {};
+    strip.querySelectorAll('.pk-opp').forEach((el, k) => {
+      // 16px kept clear at each end so the outermost seats never sit under the red close button.
+      const x = 16 + (W - 32) * (k + 0.5) / m;
+      const tt = m > 1 ? (k + 0.5) / m * 2 - 1 : 0;
+      el.style.left = Math.round(x) + 'px';
+      el.style.top = Math.round(tt * tt * av * 0.6) + 'px';
+      el.style.setProperty('--pk-tilt', (tt * 13).toFixed(1) + 'deg');
+      this.oppX[+el.dataset.j] = Math.round(x);
     });
+    const cw = Math.round(Math.max(32, Math.min((W - 24 - 4 * 6) / 5, (FH - 118) / 1.4, 96)));
+    felt.style.setProperty('--pk-cw', cw + 'px');
+    if (bottom) {
+      const bh = bottom.clientHeight;
+      const hw = Math.round(Math.max(60, Math.min(W * 0.3, (bh - 58) / 1.4, 150)));
+      bottom.style.setProperty('--pk-hw', hw + 'px');
+    }
+    {
+      // The quick-chat button floats bottom-right by default, which is exactly where the big action
+      // button lives here; lift it to the felt's lower-left corner instead.
+      const fab = document.querySelector('.mpr-layer .mpr-fab');
+      if (fab && bottom) { fab.style.bottom = (bottom.getBoundingClientRect().height + 10) + 'px'; fab.style.right = 'auto'; fab.style.left = '10px'; }
+    }
+    this._paintTable();
   }
 
   // ----------------------------------------------------------------------- input ---
@@ -599,8 +667,9 @@ class Game {
       case 'startnet': return this._startNet();
       case 'leave': return this._leaveAsk();
       case 'leave-go': this.overlay = null; return this._leave();
-      case 'fold': case 'check': case 'call': return this._move({ a });
-      case 'raise-open': {
+      case 'fold': return this._move({ a: 'fold' });
+      case 'raise-toggle': {
+        if (this.raise) { this.raise = null; return this._paintActions(); }
         const L = legal(this.pub);
         if (!L) return;
         const pot = L.pot;
@@ -608,14 +677,25 @@ class Game {
         this.raise = { to: Math.max(L.minTo, Math.min(L.maxTo, this._snap(def))) };
         return this._paintActions();
       }
-      case 'raise-cancel': this.raise = null; return this._paintActions();
       case 'preset': return this._preset(b.dataset.p);
-      case 'raise-go': {
-        const L = legal(this.pub);
-        const to = this.raise ? this.raise.to : 0;
-        this.raise = null;
-        return this._move(L && to >= L.maxTo ? { a: 'allin' } : { a: 'raise', to });
+      case 'big': {
+        const mode = b.dataset.mode;
+        if (mode === 'check') return this._move({ a: 'check' });
+        if (mode === 'call') return this._move({ a: 'call' });
+        if (mode === 'raise') {
+          const L = legal(this.pub);
+          const to = this.raise ? this.raise.to : 0;
+          this.raise = null;
+          return this._move(L && to >= L.maxTo ? { a: 'allin' } : { a: 'raise', to });
+        }
+        if (mode === 'reveal') { this.revealAll = this.pub.handNo; this.actSig = ''; return this._paintTable(); }
+        if (mode === 'back') return this._back();
+        return undefined;
       }
+      case 'felt':
+        // "Tap the table to start the next hand" (solo). Online the host deals on a timer.
+        if (this.kind === 'solo' && this.table && this.pub && this.pub.hand && this.pub.hand.result && !this.pub.over) this.table.next();
+        return undefined;
       case 'back': return this._back();
       case 'again': return this._newSolo();
       case 'to-setup': this._endSolo(); return;
@@ -663,13 +743,7 @@ class Game {
     this._raiseLabel();
   }
 
-  _raiseLabel() {
-    const L = legal(this.pub);
-    const b = this.el.querySelector('[data-role="raise-label"]');
-    if (!L || !b || !this.raise) return;
-    const to = Math.max(L.minTo, Math.min(L.maxTo, this.raise.to));
-    b.textContent = to >= L.maxTo ? t('allin_n', { n: fmt(to) }) : (L.isBet ? t('bet_n', { n: fmt(to) }) : t('raise_to', { n: fmt(to) }));
-  }
+  _raiseLabel() { this._paintActions(); }
 
   _set(k, v) {
     const s = this.settings;
@@ -706,7 +780,7 @@ class Game {
     this.screen = 'table';
     this.overlay = null;
     this.overDismissed = null;
-    this.table = new Table(state, { onChange: () => this._onLocalChange() });
+    this.table = new Table(state, { tapToDeal: true, onChange: () => this._onLocalChange() });
     this.myIdx = state.players.findIndex((p) => !p.bot);
     this.render(true);
     this.table.start();
@@ -1241,4 +1315,4 @@ export function isInProgress() {
 export default { init, destroy, isInProgress };
 
 // exposed for the headless tests only
-export const _test = { handLabel, botRoster, SLOTS_FOR, blindsOf };
+export const _test = { handName, money, botRoster, blindsOf };

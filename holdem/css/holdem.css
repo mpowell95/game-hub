@@ -1,6 +1,8 @@
 /* holdem/css/holdem.css - Texas Hold'em. Every rule descendant-scoped under .pk-root (Mancala's
    discipline, docs/BUILDING-A-GAME.md). A fixed casino look in both hub themes, like Pinball and
-   Brick Breaker: the table is its own dark room with green felt, so .gh-dark changes nothing. */
+   Brick Breaker: the table is its own room, so .gh-dark changes nothing.
+   2026-09-27: restyled as a clone of Matt's reference recording - a navy opponents strip, flat
+   blue felt with sunken card slots, black glossy controls and big realistic cards. */
 
 .pk-root {
   position: fixed;
@@ -13,15 +15,15 @@
   flex-direction: column;
   color: #f3f1ea;
   font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  background:
-    radial-gradient(120% 70% at 50% 45%, #1d3a2c 0%, #0f1f18 55%, #090f0c 100%);
+  background: #000;
   --pk-gold: #ffce3a;
-  --pk-felt: #146b43;
-  --pk-felt-2: #0c4d30;
-  --pk-rail: #3a2414;
+  --pk-felt: #23548e;
+  --pk-felt-2: #1a4274;
+  --pk-navy: #14223a;
+  --pk-rail: #0b1322;
   --pk-ink: #f3f1ea;
   --pk-dim: #b8c4bb;
-  --pk-red: #c8102e;
+  --pk-red: #c4281c;
   --pk-card: #fbfaf6;
   --pk-cw: 44px;
 }
@@ -81,13 +83,12 @@
 .pk-root .pk-setup,
 .pk-root .pk-lobby {
   flex: 1;
+  background: linear-gradient(180deg, #213656 0%, #14223a 45%, #0b1322 100%);
   display: flex;
   flex-direction: column;
   gap: 14px;
   width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
-  padding: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px) 18px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  padding: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px) max(18px, calc(50% - 220px)) calc(env(safe-area-inset-bottom, 0px) + 12px);
   justify-content: center;
 }
 .pk-root .pk-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -134,131 +135,174 @@
 .pk-root .pk-waiting { text-align: center; color: var(--pk-dim); font-size: 15px; margin: 6px 0; }
 
 /* -------------------------------------------------------------- cards --- */
+/* A real card: index top-left and (upside down) bottom-right, a thin frame round the centre with
+   one big pip, or the court letter. Width drives everything (--pk-cw). */
 .pk-root .pk-card {
   position: relative;
   width: var(--pk-cw);
   height: calc(var(--pk-cw) * 1.4);
   flex: 0 0 auto;
-  border-radius: calc(var(--pk-cw) * 0.12);
-  background: var(--pk-card);
-  color: #16181d;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  border-radius: calc(var(--pk-cw) * 0.07);
+  background: linear-gradient(180deg, #ffffff 0%, #f4f4f2 100%);
+  color: #111;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25), 0 3px 8px rgba(0, 0, 0, 0.45);
   line-height: 1;
-  font-weight: 800;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
 }
 .pk-root .pk-card.is-red { color: var(--pk-red); }
-.pk-root .pk-card .pk-r { font-size: calc(var(--pk-cw) * 0.46); letter-spacing: -0.04em; }
-.pk-root .pk-card .pk-s { font-size: calc(var(--pk-cw) * 0.44); margin-top: 1px; }
-.pk-root .pk-card.is-back {
-  background:
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.14) 0 3px, transparent 3px 7px),
-    linear-gradient(160deg, #9b1b30, #5e0f1d);
-  border: 2px solid #fbfaf6;
+.pk-root .pk-ci {
+  position: absolute; left: 5%; top: 3%;
+  display: flex; flex-direction: column; align-items: center;
+  width: 26%;
 }
-.pk-root .pk-card.is-slot { background: rgba(0, 0, 0, 0.18); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
-.pk-root .pk-card.is-dim { filter: brightness(0.55); }
-.pk-root .pk-card.is-best { box-shadow: 0 0 0 2px var(--pk-gold), 0 0 12px rgba(255, 206, 58, 0.7); }
-.pk-root .pk-card.is-tiny { --pk-cw: 22px; border-radius: 3px; box-shadow: none; }
-.pk-root .pk-card.is-tiny .pk-r { font-size: 11px; }
-.pk-root .pk-card.is-tiny .pk-s { font-size: 11px; }
-.pk-root .pk-card.is-new { animation: pk-deal 260ms cubic-bezier(.2, .8, .3, 1) both; }
+.pk-root .pk-ci b { font-size: calc(var(--pk-cw) * 0.27); font-weight: 500; letter-spacing: -0.06em; }
+.pk-root .pk-ci i { font-style: normal; font-size: calc(var(--pk-cw) * 0.24); margin-top: 1px; }
+.pk-root .pk-ci.is-rot { left: auto; top: auto; right: 5%; bottom: 3%; transform: rotate(180deg); }
+.pk-root .pk-cc {
+  position: absolute; left: 25%; right: 25%; top: 15%; bottom: 15%;
+  border: 1px solid currentColor; border-radius: 2px; opacity: 0.95;
+  display: flex; align-items: center; justify-content: center;
+}
+.pk-root .pk-cc i { font-style: normal; font-size: calc(var(--pk-cw) * 0.62); line-height: 1; }
+.pk-root .pk-cc.is-face { flex-direction: column; gap: 2px; background: repeating-linear-gradient(135deg, rgba(0,0,0,0.04) 0 3px, transparent 3px 6px); }
+.pk-root .pk-cc.is-face b { font-size: calc(var(--pk-cw) * 0.44); font-family: Georgia, "Times New Roman", serif; }
+.pk-root .pk-cc.is-face i { font-size: calc(var(--pk-cw) * 0.3); }
+/* Mini (opponents at a showdown) and tiny (help list): the index alone, big enough to read. */
+.pk-root .pk-card.is-mini,
+.pk-root .pk-card.is-tiny { --pk-cw: 24px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.pk-root .pk-card.is-mini .pk-cc, .pk-root .pk-card.is-mini .pk-ci.is-rot,
+.pk-root .pk-card.is-tiny .pk-cc, .pk-root .pk-card.is-tiny .pk-ci.is-rot { display: none; }
+.pk-root .pk-card.is-mini .pk-ci, .pk-root .pk-card.is-tiny .pk-ci { left: 0; right: 0; width: auto; top: 2px; }
+.pk-root .pk-card.is-mini .pk-ci b, .pk-root .pk-card.is-tiny .pk-ci b { font-size: 12px; font-weight: 700; }
+.pk-root .pk-card.is-mini .pk-ci i, .pk-root .pk-card.is-tiny .pk-ci i { font-size: 12px; }
+.pk-root .pk-card.is-tiny { --pk-cw: 22px; height: 30px; }
+.pk-root .pk-card.is-dim { filter: brightness(0.5); }
+.pk-root .pk-card.is-best { box-shadow: 0 0 0 2px var(--pk-gold), 0 0 14px rgba(255, 206, 58, 0.75); }
+.pk-root .pk-card.is-new { animation: pk-deal 280ms cubic-bezier(.2, .8, .3, 1) both; }
 @keyframes pk-deal {
-  from { opacity: 0; transform: translateY(-16px) scale(0.7); }
+  from { opacity: 0; transform: translateY(-18px) scale(0.75); }
   to { opacity: 1; transform: none; }
+}
+.pk-root .pk-slot {
+  width: var(--pk-cw); height: calc(var(--pk-cw) * 1.4); flex: 0 0 auto;
+  border-radius: calc(var(--pk-cw) * 0.07);
+  background: rgba(10, 30, 60, 0.18);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.12);
 }
 
 /* -------------------------------------------------------------- table --- */
 .pk-root .pk-table { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+
+/* The league-style banner. It shares its row with the hub's floating back button, so it starts
+   96px in from the left. */
 .pk-root .pk-top {
   flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 46px;
   margin-top: max(env(safe-area-inset-top, 0px), 48px);
-  padding: 0 10px 0 96px;
+  padding: 0 6px 6px 96px;
 }
-.pk-root .pk-info { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
-.pk-root .pk-info-hand { font-size: 12px; color: var(--pk-dim); font-weight: 600; }
-.pk-root .pk-info-blinds { font-size: 14px; font-weight: 800; color: var(--pk-gold); white-space: nowrap; }
+.pk-root .pk-ban {
+  position: relative;
+  display: flex; align-items: stretch;
+  height: 46px; padding-right: 12px;
+  border: 1px solid #b0141b;
+  background: #070707;
+}
+.pk-root .pk-ban-red {
+  flex: 1.25; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #9d0f14; color: #fff; line-height: 1.05; padding: 0 4px; min-width: 0;
+}
+.pk-root .pk-ban-title { font-size: 11px; font-variant: small-caps; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pk-root .pk-ban-blinds { font-size: 15px; color: #ff9a9a; font-weight: 600; white-space: nowrap; }
+.pk-root .pk-ban-cell {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  line-height: 1.05; color: #fff; min-width: 0;
+}
+.pk-root .pk-ban-cell.is-rank { border: 1px solid #b0141b; margin: 2px; }
+.pk-root .pk-ban-cell small { font-size: 11px; font-variant: small-caps; color: #ddd; white-space: nowrap; }
+.pk-root .pk-ban-cell b { font-size: 15px; font-weight: 600; }
+.pk-root .pk-ban-info {
+  position: absolute; right: -2px; top: -2px; width: 44px; height: 44px;
+  background: none; border: 0; color: #aaa; font: italic 700 13px Georgia, serif;
+  display: flex; align-items: flex-start; justify-content: flex-end; padding: 4px 6px;
+}
+
+/* The opponents, on one curved row across a navy band. */
+.pk-root .pk-strip {
+  --pk-av: 56px;
+  position: relative;
+  flex: 0 0 auto;
+  height: calc(var(--pk-av) * 1.5 + 58px);
+  background: linear-gradient(180deg, #213656 0%, #14223a 55%, #0e1829 100%);
+  border-top: 1px solid #2c4468;
+  box-shadow: inset 0 -8px 12px rgba(0, 0, 0, 0.45);
+}
+.pk-root .pk-redx {
+  position: absolute; right: 0; top: 0; z-index: 3; width: 44px; height: 44px; padding: 0;
+  background: none; border: 0; display: flex; align-items: flex-start; justify-content: flex-end;
+}
+.pk-root .pk-redx::before {
+  content: "\2715"; display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; margin: 3px 3px 0 0;
+  background: linear-gradient(180deg, #e8332b, #b3130e); border: 1px solid #ff8a80;
+  color: #fff; font-size: 17px; font-weight: 700;
+}
+.pk-root .pk-redx { font-size: 0; }
 .pk-root .pk-topcode {
-  font-size: 15px; font-weight: 900; letter-spacing: 0.14em; padding: 0 10px; min-height: 44px;
-  display: inline-flex; align-items: center; border-radius: 10px; background: rgba(0, 0, 0, 0.3); cursor: pointer;
+  position: absolute; left: 6px; top: 4px; z-index: 3;
+  font-size: 13px; font-weight: 900; letter-spacing: 0.14em; padding: 4px 8px; min-height: 28px;
+  border-radius: 6px; background: rgba(0, 0, 0, 0.45); color: var(--pk-gold); cursor: pointer;
 }
-
-.pk-root .pk-feltwrap { position: relative; flex: 1; min-height: 0; margin: 4px 6px 0; width: calc(100% - 12px); max-width: 960px; align-self: center; }
-.pk-root .pk-felt {
+.pk-root .pk-opps { position: absolute; inset: 14px 0 0; }
+.pk-root .pk-opp {
   position: absolute;
-  inset: 6% 7% 7%;
-  border-radius: 50% / 38%;
-  background: radial-gradient(ellipse at 50% 40%, var(--pk-felt) 0%, var(--pk-felt-2) 75%);
-  border: 10px solid var(--pk-rail);
-  box-shadow: 0 0 0 2px #5c3a20, inset 0 0 30px rgba(0, 0, 0, 0.55), 0 12px 30px rgba(0, 0, 0, 0.5);
-}
-.pk-root .pk-center {
-  position: absolute; left: 50%; top: 45%;
-  transform: translate(-50%, -50%);
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  width: 64%;
-}
-.pk-root .pk-board { display: flex; gap: calc(var(--pk-cw) * 0.08); }
-.pk-root .pk-pot {
-  min-height: 24px; display: inline-flex; align-items: center; gap: 6px;
-  font-size: 14px; font-weight: 800; background: rgba(0, 0, 0, 0.35); padding: 3px 12px; border-radius: 999px;
-}
-.pk-root .pk-pot:empty { visibility: hidden; }
-.pk-root .pk-msg { min-height: 18px; font-size: 13px; font-weight: 700; text-align: center; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
-.pk-root .pk-chip {
-  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
-  background: radial-gradient(circle, var(--pk-gold) 0 35%, #fff 36% 50%, #c79b12 51%);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
-}
-
-/* Seats: each is anchored at its AVATAR centre (left/top set by ui.js's _layout). */
-.pk-root .pk-seats { position: absolute; inset: 0; pointer-events: none; }
-.pk-root .pk-seat {
-  position: absolute;
-  width: 78px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transform: translate(-50%, -22px);
-}
-.pk-root .pk-av {
-  position: relative;
-  width: 44px; height: 44px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 24px;
-  background: #1c2a24;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
-}
-.pk-root .pk-seat.is-turn .pk-av { border-color: var(--pk-gold); box-shadow: 0 0 0 3px rgba(255, 206, 58, 0.5), 0 0 16px rgba(255, 206, 58, 0.7); }
-.pk-root .pk-seat.is-winner .pk-av { border-color: var(--pk-gold); box-shadow: 0 0 0 3px var(--pk-gold), 0 0 22px rgba(255, 206, 58, 0.9); }
-.pk-root .pk-seat.is-folded .pk-av,
-.pk-root .pk-seat.is-folded .pk-plate { opacity: 0.45; }
-.pk-root .pk-seat.is-outp { opacity: 0.4; }
-.pk-root .pk-plate {
-  margin-top: -4px;
-  min-width: 70px;
-  max-width: 78px;
-  padding: 3px 6px 3px;
-  border-radius: 8px;
-  background: rgba(8, 14, 11, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  width: calc(var(--pk-av) + 20px);
+  transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center;
-  line-height: 1.15;
-  position: relative;
-  overflow: hidden;
+  text-align: center;
 }
-.pk-root .pk-seat.is-turn .pk-plate { border-color: var(--pk-gold); }
-.pk-root .pk-name { font-size: 11px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pk-root .pk-stack { font-size: 12px; font-weight: 800; color: var(--pk-gold); }
-.pk-root .pk-clock { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, 0.12); }
+.pk-root .pk-oname {
+  font-size: 12px; color: #d9dde6; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  transform: rotate(var(--pk-tilt, 0deg)); margin-bottom: 2px;
+}
+.pk-root .pk-oav {
+  position: relative;
+  width: var(--pk-av); height: var(--pk-av); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 40% 35%, #56657c, #1d2638 70%);
+  border: 2px solid #aeb7c6;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
+}
+.pk-root .pk-oemoji { font-size: calc(var(--pk-av) * 0.56); line-height: 1; }
+.pk-root .pk-stamp {
+  position: absolute; left: 50%; top: 42%; z-index: 2;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  font: 800 calc(var(--pk-av) * 0.27) / 1 "Arial Black", Arial, sans-serif;
+  color: #fff; letter-spacing: 0.02em; white-space: nowrap;
+  text-shadow: 0 0 2px #000, 0 0 3px #000, 1px 1px 0 #000, -1px -1px 0 #000;
+}
+.pk-root .pk-ocards { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); display: flex; z-index: 1; }
+.pk-root .pk-ocards:not(.is-up) i {
+  width: calc(var(--pk-av) * 0.22); height: calc(var(--pk-av) * 0.3); border-radius: 2px;
+  background: linear-gradient(180deg, #e9ecf2, #aab2c0); border: 1px solid #5b6474;
+  box-shadow: inset 0 0 0 2px #cfd5df;
+}
+.pk-root .pk-ocards:not(.is-up) i + i { margin-left: 2px; }
+.pk-root .pk-ocards.is-up { bottom: -10px; gap: 1px; }
+.pk-root .pk-ostack {
+  margin-top: 6px; font-size: 16px; color: #fff; white-space: nowrap;
+  transform: rotate(var(--pk-tilt, 0deg));
+  text-shadow: 0 1px 2px #000;
+}
+.pk-root .pk-opp.is-dim .pk-oemoji { filter: grayscale(1) brightness(0.4); }
+.pk-root .pk-opp.is-dim .pk-oav { background: #1a202b; border-color: #5c6574; }
+.pk-root .pk-opp.is-dim .pk-oname,
+.pk-root .pk-opp.is-dim .pk-ostack { opacity: 0.4; }
+.pk-root .pk-opp.is-dim .pk-stamp { filter: none; }
+.pk-root .pk-opp.is-turn .pk-oav { border-color: var(--pk-gold); box-shadow: 0 0 0 3px rgba(255, 206, 58, 0.55), 0 0 16px rgba(255, 206, 58, 0.8); }
+.pk-root .pk-opp.is-winner .pk-oav { border-color: var(--pk-gold); box-shadow: 0 0 0 3px var(--pk-gold), 0 0 22px rgba(255, 206, 58, 0.9); }
+.pk-root .pk-opp.is-winner .pk-ostack { color: var(--pk-gold); }
+.pk-root .pk-clock { display: block; width: 100%; height: 3px; margin-top: 3px; background: rgba(255, 255, 255, 0.15); }
 .pk-root .pk-clock i {
   display: block; height: 100%; background: var(--pk-gold); transform-origin: left center;
   animation-name: pk-clock; animation-timing-function: linear; animation-fill-mode: both;
@@ -267,89 +311,137 @@
   from { transform: scaleX(var(--f, 1)); }
   to { transform: scaleX(0); }
 }
-.pk-root .pk-seatcards { position: absolute; display: flex; }
-.pk-root .pk-seatcards:not(.is-up) { right: -16px; top: -4px; }
-.pk-root .pk-seatcards:not(.is-up) .pk-mini + .pk-mini { margin-left: -8px; transform: rotate(10deg); }
-.pk-root .pk-mini {
-  width: 16px; height: 22px; border-radius: 3px; border: 1.5px solid #fbfaf6;
-  background: linear-gradient(160deg, #9b1b30, #5e0f1d);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+
+/* The felt: flat blue cloth with a faint weave, everything else sunk into it. */
+.pk-root .pk-felt {
+  --pk-cw: 60px;
+  position: relative;
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-evenly;
+  gap: 8px;
+  padding: 58px 10px 8px;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 3px),
+    radial-gradient(120% 90% at 50% 30%, #2a5f9f 0%, var(--pk-felt) 45%, var(--pk-felt-2) 100%);
+  box-shadow: inset 0 8px 14px rgba(0, 0, 0, 0.35);
 }
-.pk-root .pk-seatcards.is-up { left: 50%; top: 50%; transform: translate(-50%, -55%); gap: 2px; --pk-cw: 28px; z-index: 2; }
-.pk-root .pk-under { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3px; margin-top: 3px; max-width: 96px; }
-.pk-root .pk-tag {
-  margin-top: 0; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px;
-  background: rgba(0, 0, 0, 0.55); color: #fff; white-space: nowrap;
+.pk-root .pk-felt.is-tappable { cursor: pointer; }
+.pk-root .pk-bets { position: absolute; left: 0; right: 0; top: 6px; height: 48px; pointer-events: none; }
+.pk-root .pk-betchip {
+  position: absolute; top: 0; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 16px; color: #fff; text-shadow: 0 1px 2px #000; white-space: nowrap;
 }
-.pk-root .pk-tag.is-win { background: var(--pk-gold); color: #231a00; }
-.pk-root .pk-tag.is-out { background: rgba(0, 0, 0, 0.4); color: var(--pk-dim); }
-.pk-root .pk-tag.is-away { background: #5b1d20; }
-.pk-root .pk-seathand { margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--pk-gold); white-space: nowrap; text-shadow: 0 1px 2px #000; }
-.pk-root .pk-bet {
-  margin-top: 0; display: inline-flex; align-items: center; gap: 4px;
-  font-size: 12px; font-weight: 800; padding: 2px 8px 2px 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.45);
+.pk-root .pk-betchip.is-mine { position: static; transform: none; }
+.pk-root .pk-chip {
+  display: inline-block; width: 22px; height: 22px; border-radius: 50%;
+  background:
+    radial-gradient(circle, #1b1b1b 0 38%, #fff 39% 44%, transparent 45%),
+    repeating-conic-gradient(#f4f4f4 0 12deg, #1b1b1b 12deg 45deg);
+  box-shadow: 0 0 0 1px #000, 0 2px 3px rgba(0, 0, 0, 0.6);
 }
-.pk-root .pk-dealer {
-  position: absolute; left: -2px; top: -6px; z-index: 3;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: #fff; color: #111; font-size: 11px; font-weight: 900;
+.pk-root .pk-chip.is-pink {
+  background:
+    radial-gradient(circle, #d6247f 0 38%, #fff 39% 44%, transparent 45%),
+    repeating-conic-gradient(#f4f4f4 0 12deg, #d6247f 12deg 45deg);
+}
+.pk-root .pk-dbtn {
+  position: absolute; top: 2px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #f2f2f2; color: #333; border: 1px solid #999;
+  font-size: 12px; font-weight: 800;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
-/* My own seat sits on the bottom rail: its bet goes ABOVE the plate so it stays on the felt. */
-.pk-root .pk-seat.is-me { flex-direction: column-reverse; transform: translate(-50%, calc(-100% + 22px)); }
-.pk-root .pk-seat.is-me .pk-av { display: none; }
-.pk-root .pk-seat.is-me .pk-plate { margin-top: 0; }
-.pk-root .pk-seat.is-me .pk-under { margin: 0 0 3px; }
-.pk-root .pk-seat.is-me .pk-dealer { left: -14px; top: auto; bottom: 4px; }
-
-/* Short table (a phone in landscape, or a small screen with toolbars): tighter seats. */
-.pk-root.is-short .pk-av { width: 34px; height: 34px; font-size: 19px; }
-.pk-root.is-short .pk-seat { transform: translate(-50%, -17px); }
-.pk-root.is-short .pk-seat.is-me { transform: translate(-50%, calc(-100% + 17px)); }
-
-/* ------------------------------------------------------ my hand + actions --- */
+.pk-root .pk-dbtn.is-mine { position: static; }
+.pk-root .pk-msg {
+  position: absolute; left: 8px; right: 8px; top: 10px;
+  text-align: center; font-size: 15px; line-height: 1.3; color: #fff; text-shadow: 0 1px 2px #000;
+}
+.pk-root .pk-board { display: flex; gap: 6px; justify-content: center; }
+.pk-root .pk-potrow { position: relative; width: 100%; display: flex; justify-content: center; }
+.pk-root .pk-potbox {
+  width: 54%; min-height: 58px; padding: 4px 8px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 3px;
+  background: rgba(10, 30, 60, 0.16);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+  font-size: 18px; color: #fff; text-shadow: 0 1px 2px #000;
+}
+.pk-root .pk-potchips { display: inline-flex; }
+.pk-root .pk-potchips .pk-chip + .pk-chip { margin-left: -12px; }
+.pk-root .pk-tapnext { font-size: 13px; color: #cdd6e4; text-align: center; line-height: 1.3; }
+.pk-root .pk-mybet {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 6px;
+}
 .pk-root .pk-banner {
-  position: absolute; left: 50%; top: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px); transform: translateX(-50%);
-  z-index: 5; max-width: 90%; padding: 6px 14px; border-radius: 999px; background: #5b1d20; font-size: 13px; font-weight: 700; text-align: center;
+  position: absolute; left: 50%; top: 44px; transform: translateX(-50%); z-index: 5;
+  max-width: 92%; padding: 6px 14px; border-radius: 999px; background: #7a1111;
+  font-size: 13px; font-weight: 700; text-align: center;
 }
-.pk-root .pk-mine {
-  flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: center; gap: 12px;
-  min-height: calc(var(--pk-mcw, 54px) * 1.4 + 8px);
-  padding: 4px 12px 0;
-  --pk-cw: var(--pk-mcw, 54px);
+/* The raise bar sits on the bottom of the felt, right above the FOLD / SET RAISE tabs. */
+.pk-root .pk-raisebar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px 6px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.85));
 }
-.pk-root .pk-mycards { display: flex; gap: 6px; }
-.pk-root .pk-myhand { font-size: 14px; font-weight: 800; color: var(--pk-gold); max-width: 45%; }
-.pk-root .pk-actions {
-  flex: 0 0 auto;
-  width: 100%; max-width: 760px; align-self: center;
-  min-height: 68px;
-  padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
-  display: flex; flex-direction: column; justify-content: center; gap: 8px;
-}
-.pk-root.is-online .pk-actions { padding-right: 70px; }
-.pk-root .pk-actrow { display: flex; gap: 8px; }
-.pk-root .pk-actrow .pk-btn { flex: 1; min-height: 50px; font-size: 16px; padding: 8px 6px; }
-.pk-root .pk-note { margin: 0; text-align: center; font-size: 14px; color: var(--pk-dim); }
-.pk-root .pk-note-side { flex: 1.6; align-self: center; font-size: 13px; text-align: left; }
-/* The raise panel slides up OVER my cards instead of growing the bar: a bar that changes height
-   resizes the table and moves every seat under the player's thumb. */
-.pk-root .pk-actions { position: relative; }
-.pk-root .pk-raise {
-  position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 12px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
-  background: #0e1a14;
-  border-top: 1px solid rgba(255, 206, 58, 0.4);
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.5);
-}
-.pk-root.is-online .pk-raise { padding-right: 70px; }
 .pk-root .pk-presets { display: flex; gap: 6px; }
-.pk-root .pk-presets .pk-btn { flex: 1; }
-.pk-root .pk-slider { width: 100%; height: 36px; accent-color: var(--pk-gold); touch-action: pan-x; }
+.pk-root .pk-pre {
+  flex: 1; min-height: 44px; border: 1px solid #333; border-radius: 3px;
+  background: linear-gradient(180deg, #2a2a2a, #050505); color: #fff; font-size: 14px; text-transform: uppercase;
+}
+.pk-root .pk-opp.has-cards .pk-ostack { margin-top: 14px; }
+.pk-root .pk-barpot { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; color: #fff; }
+.pk-root .pk-slider { width: 100%; height: 34px; accent-color: #7ddf2a; touch-action: pan-x; }
+
+/* The player's corner: FOLD / SET RAISE tabs over two big cards, and the big glossy button. */
+.pk-root .pk-bottom {
+  --pk-hw: 120px;
+  flex: 0 0 auto;
+  height: clamp(190px, 31vh, 280px);
+  display: flex; gap: 8px;
+  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 6px);
+  background: linear-gradient(180deg, #1a4274 0%, #10284a 36%, #000 36.2%);
+}
+.pk-root .pk-left { flex: 1.5; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pk-root .pk-acttabs { display: flex; gap: 8px; min-height: 36px; }
+.pk-root .pk-tab2 {
+  min-height: 36px; padding: 0 14px; border: 1px solid #2b2b2b; border-radius: 2px;
+  background: linear-gradient(180deg, #262626, #000); color: #fff;
+  font-size: 15px; text-transform: uppercase; letter-spacing: 0.02em;
+}
+.pk-root .pk-tab2:disabled { color: #8c96a5; background: linear-gradient(180deg, #1a2b44, #0e1a2d); border-color: #243a5c; opacity: 1; }
+.pk-root .pk-tab2.is-on { box-shadow: inset 0 0 0 2px var(--pk-gold); }
+.pk-root .pk-mycards { position: relative; flex: 1; min-height: 0; --pk-cw: var(--pk-hw); }
+.pk-root .pk-mycards .pk-card { position: absolute; top: 0; left: 0; }
+.pk-root .pk-mycards .pk-card + .pk-card { left: calc(var(--pk-hw) * 0.72); top: -2px; }
+.pk-root .pk-mycards .pk-note { margin: 10px 0 0; font-size: 14px; color: #c9d2de; }
+.pk-root .pk-right { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; }
+.pk-root .pk-bigbtn {
+  flex: 1; min-height: 88px; max-height: 190px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid #1e1e1e; border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 22%, transparent 23%),
+    linear-gradient(180deg, #1c1c1c 0%, #000 60%, #111 100%);
+  box-shadow: inset 0 -10px 18px rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.6);
+  color: #fff; padding: 8px;
+}
+.pk-root .pk-bigbtn:disabled { cursor: default; }
+.pk-root .pk-bigbtn:not(:disabled):active { filter: brightness(1.3); }
+.pk-root .pk-biglbl { font-size: 18px; letter-spacing: 0.02em; text-align: center; line-height: 1.15; }
+.pk-root .pk-biglbl.is-small { font-size: 14px; line-height: 1.3; }
+.pk-root .pk-tick { width: 64%; max-width: 92px; height: auto; }
+.pk-root .pk-gem { width: 34px; height: 28px; }
+.pk-root .pk-bigchips { display: inline-flex; }
+.pk-root .pk-bigchips .pk-chip { width: 26px; height: 26px; }
+.pk-root .pk-bigchips .pk-chip + .pk-chip { margin-left: -6px; }
+.pk-root .pk-stackline { flex: 0 0 auto; padding: 8px 2px 2px; text-align: right; font-size: 17px; color: #fff; white-space: nowrap; }
+
+.pk-root.is-online .pk-bottom { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
 
 /* ------------------------------------------------------------ overlays --- */
 .pk-root .pk-overlay {
@@ -362,7 +454,7 @@
 .pk-root .pk-modal {
   position: relative;
   width: 100%; max-width: 380px;
-  background: #13241c;
+  background: #14223a;
   border: 1px solid rgba(255, 206, 58, 0.35);
   border-radius: 18px;
   padding: 18px 16px 16px;
