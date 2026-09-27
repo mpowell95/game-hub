@@ -179,6 +179,19 @@ Copied from it, top to bottom:
   moment there is a bet, for the rest of that hand (it resets on the next deal; tap again to
   untick). It acts 350ms after the turn arrives, through the normal move path, so online it is
   just an ordinary move.
+- **Skip ahead after folding (2026-09-27, Matt: "after i fold ... let me press anywhere on the
+  table and have it fast forward").** Solo only. Folded in a hand: the pot box says "Tap the table
+  to skip ahead" and a tap races the computers through the rest of THAT hand (`Table.fastForward
+  ('hand')`, 40ms per move instead of ~1s) and stops on the result. Busted out: the tap races
+  through EVERY remaining hand to the end of the game (`'game'`, each result shown 350ms). Same
+  bots, same decisions, no thinking pause. Never online: other people's turns are theirs.
+- **Card faces (2026-09-27, Matt: "the numbers intersect with the rectangle ... the rectangle
+  doesn't look centered").** The corner index is a 3%..22% column (rank 0.21cw, suit 0.18cw) and
+  the frame starts at 26% on BOTH sides - the upside-down index mirrors it bottom-right, so the
+  frame is exactly centred and nothing crosses it. "10" is condensed (`is-ten`) to fit the same
+  column instead of widening it.
+- FOLD / SET RAISE tabs are 46px tall at 17px, the big button's label 22px, chips 28px (34px on
+  the big button) - all "a little larger", per Matt.
 - **Money is printed the reference's way**: `$9200` under ten thousand, then `$10.0k`.
 - **Solo waits for "Tap the table to start the next hand"** (`Table`'s `tapToDeal`); online the
   host still deals on a timer so nobody waits on one player's tap. After a solo hand the big
