@@ -1,0 +1,168 @@
+/* cup-pong/css/cup-pong.css - CUP PONG.
+ *
+ * EVERY RULE IS DESCENDANT-SCOPED UNDER .cp-root. A module stylesheet is never removed once
+ * injected, so a collision would be permanent for that session (Mancala's discipline).
+ *
+ * The PLAY screen keeps its own dark look in BOTH hub themes - it is in-game art, like Hoops',
+ * Skeeball's and Pinball's play screens. The overlays use css/ui.css's .gh-* primitives, pointed
+ * at this file's own tokens below so they flip with the hub theme on the standalone page too.
+ *
+ * NOTHING HERE SCROLLS. `node check-no-scroll.mjs cup-pong` is the safety net.
+ */
+
+.cp-root {
+  --cp-ink: #f3ece1;
+  --cp-dim: #a79c8b;
+  --cp-panel: #232b39;
+  --cp-edge: #3a4558;
+  --cp-bg: #1a2230;
+
+  --cps-ink: #1d2430;
+  --cps-muted: #5b6675;
+  --cps-surface: #ffffff;
+  --cps-surface-2: #f2f5f9;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1;                 /* under the hub's floating back button, like Hoops/Skeeball */
+  overflow: hidden;
+  background: var(--cp-bg);
+  color: var(--cp-ink);
+  font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Rapid taps on iOS Safari otherwise start text selection; these do not inherit, hence the *. */
+.cp-root * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+:root.gh-dark .cp-root {
+  --cps-ink: #e8edf5;
+  --cps-muted: #9aa7b8;
+  --cps-surface: #161d28;
+  --cps-surface-2: #1e2734;
+}
+.cp-root .gh-overlay {
+  --gh-surface: var(--cps-surface);
+  --gh-surface-2: var(--cps-surface-2);
+  --gh-ink: var(--cps-ink);
+  --gh-muted: var(--cps-muted);
+  overscroll-behavior: contain;
+}
+
+/* --- play ------------------------------------------------------------------------------------- */
+.cp-root .cp-play {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+}
+/* IN FLOW: the stage is flex:1 and the renderer fits the table to what is left, so the bar can
+   never cover the table. 96px either side keeps the label clear of the hub's floating chip (top
+   left) and this game's Menu button (top right) - Hoops measured the chip on a notched phone. */
+.cp-root .cp-hud {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 96px;
+  min-height: 44px;
+}
+.cp-root .cp-status {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0;
+}
+.cp-root .cp-mode { font-size: 17px; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; }
+.cp-root .cp-sub {
+  font-size: 12px; color: var(--cp-dim); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.cp-root .cp-menu {
+  appearance: none;
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  right: 12px;
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--cp-edge);
+  background: var(--cp-panel);
+  color: var(--cp-dim);
+  font: inherit; font-size: 18px; line-height: 1;
+  cursor: pointer; touch-action: manipulation;
+}
+.cp-root .cp-menu:active { color: var(--cp-ink); }
+
+.cp-root .cp-stage { position: relative; flex: 1 1 auto; min-height: 0; }
+/* An absolutely positioned canvas is a REPLACED element: inset:0 does NOT stretch it, which is
+   why render.js calls setSize(w, h, true). */
+.cp-root .cp-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* The flick pad: the lower 60% of the table view, where the ball waits. */
+.cp-root .cp-swipe {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 60%;
+  touch-action: none;                  /* a swipe surface */
+  cursor: grab;
+}
+.cp-root .cp-toast {
+  position: absolute;
+  left: 0; right: 0; top: 38%;
+  margin: 0;
+  text-align: center;
+  font-size: 30px; font-weight: 900; letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: none;
+}
+.cp-root .cp-toast.is-on { animation: cp-pop 1.1s ease-out both; }
+@keyframes cp-pop {
+  0% { opacity: 0; transform: translateY(8px) scale(0.92); }
+  15% { opacity: 1; transform: translateY(0) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+.cp-root .cp-hint {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  margin: 0;
+  text-align: center;
+  font-size: 14px; font-weight: 700;
+  color: var(--cp-ink);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  animation: cp-breathe 1.6s ease-in-out infinite;
+}
+.cp-root .cp-hint[hidden] { display: none; }
+@keyframes cp-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+/* The last throw's power and aim, for the feel check (stage 1). Small, out of the way. */
+.cp-root .cp-last {
+  position: absolute;
+  right: 10px;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  margin: 0;
+  font-size: 11px;
+  color: var(--cp-dim);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cp-root .cp-toast.is-on { animation: none; opacity: 1; }
+  .cp-root .cp-hint { animation: none; }
+}
+
+/* --- cards ------------------------------------------------------------------------------------ */
+.cp-root .cp-card, .cp-root .cp-pause { text-align: center; }
+.cp-root .cp-card-title { margin: 0 0 4px; font-size: 22px; font-weight: 800; color: var(--gh-ink); }
+.cp-root .cp-card-line { margin: 0 0 6px; color: var(--gh-muted); }
+
+.cp-root .cp-error {
+  height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: 24px; text-align: center;
+}

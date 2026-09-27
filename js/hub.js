@@ -303,6 +303,23 @@ export const GAMES = [
     art: GAME_ART["snake"],
   },
   {
+    id: 'cuppong',
+    title: 'Cup Pong',
+    blurb: {
+      en: 'Flick the ball down the table and sink it in the cups.',
+      es: 'Lanza la pelota por la mesa y métela en los vasos.',
+    },
+    module: '../cup-pong/js/ui.js',
+    // Owns the whole viewport (a full-bleed three.js table under a thin HUD), like Hoops.
+    immersive: true,
+    accent: '#d4252b',
+    art: GAME_ART['cuppong'],
+    // ADMIN ONLY while it is built (docs/CUP-PONG-BRIEF.md). No `released` date on purpose: it is
+    // the only input to the launcher's New pill and must be the day Matt releases it, which he
+    // does from the admin page with no commit.
+    devOnly: true,
+  },
+  {
     id: 'hoops4',
     title: 'Connect 4 Hoops',
     blurb: {
@@ -457,6 +474,24 @@ export const GAMES = [
     accent: '#ff2e97',
     art: GAME_ART['brick-blitz'],
     // RELEASED to everyone 2026-09-23 (Matt), after a few hours admin-only the same day.
+  },
+  {
+    // Air Hockey (2026-09-27, docs/AIR-HOCKEY-BRIEF.md): top-down, first to 7, vs the computer
+    // (online comes in a later stage). A fixed full-bleed table under its own score row, so
+    // immersive like Brick Breaker. Hub id = the folder (the dev tools assume it); stats id
+    // `airhockey`.
+    id: 'air-hockey',
+    title: 'Air Hockey',
+    blurb: { en: 'Arcade air hockey. Slam the puck past the computer. First to 7 wins.',
+      es: 'Hockey de aire de arcade. Mete el disco en la portería de la CPU. Gana quien llegue a 7.' },
+    module: '../air-hockey/js/ui.js',
+    immersive: true,
+    accent: '#1f5fa8',
+    art: GAME_ART['air-hockey'],
+    // ADMIN ONLY while it is built in stages. No `released` date on purpose: that field drives
+    // the launcher's New pill and must be the day the game actually goes live. Releasing it needs
+    // no commit (the admin page's live switch overrides this).
+    devOnly: true,
   },
   {
     // Texas Hold'em (2026-09-27): no-limit tournament poker, vs up to 7 computers or at an online

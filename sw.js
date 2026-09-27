@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v979';
+const CACHE = 'game-hub-v981';
 
 const ASSETS = [
   './',
@@ -258,6 +258,14 @@ const ASSETS = [
   './brick-blitz/js/ui.js',
   './brick-blitz/js/game.js',
   './brick-blitz/js/strings.js',
+  './air-hockey/',
+  './air-hockey/index.html',
+  './air-hockey/css/air-hockey.css',
+  './air-hockey/js/ui.js',
+  './air-hockey/js/physics.js',
+  './air-hockey/js/ai.js',
+  './air-hockey/js/render.js',
+  './air-hockey/js/strings.js',
   './holdem/',
   './holdem/index.html',
   './holdem/css/holdem.css',
@@ -332,6 +340,16 @@ const ASSETS = [
   './skeeball/css/skeeball.css',
   './skeeball/js/ui.js',
   './skeeball/js/swipe.js',
+
+  // Cup Pong. Like Hoops, it imports skeeball's vendored three.js and cannon-es.
+  './cup-pong/index.html',
+  './cup-pong/css/cup-pong.css',
+  './cup-pong/js/ui.js',
+  './cup-pong/js/geom.js',
+  './cup-pong/js/rack.js',
+  './cup-pong/js/physics.js',
+  './cup-pong/js/render.js',
+  './cup-pong/js/strings.js',
 
   // Connect 4 Hoops. Its engine imports skeeball's vendored three.js and cannon-es rather than
   // carrying a second copy, so nothing new is added for those.
@@ -806,6 +824,14 @@ const REST_MANIFEST = {
   './brick-blitz/js/ui.js': 'b19c93a44a',
   './brick-blitz/js/game.js': 'ae87ee3447',
   './brick-blitz/js/strings.js': 'f0c1f0996f',
+  './air-hockey/': 'e62c8ea1ee',
+  './air-hockey/index.html': 'e62c8ea1ee',
+  './air-hockey/css/air-hockey.css': 'f78f5f4056',
+  './air-hockey/js/ui.js': '20364eac77',
+  './air-hockey/js/physics.js': '1069f3e95c',
+  './air-hockey/js/ai.js': 'e570cb8cab',
+  './air-hockey/js/render.js': '7187dbe241',
+  './air-hockey/js/strings.js': 'a9b19552e4',
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
   './holdem/css/holdem.css': 'daa155bdc8',
@@ -871,6 +897,14 @@ const REST_MANIFEST = {
   './skeeball/css/skeeball.css': '3eb808d483',
   './skeeball/js/ui.js': '50ef7223f1',
   './skeeball/js/swipe.js': 'c596f565de',
+  './cup-pong/index.html': 'bb54739524',
+  './cup-pong/css/cup-pong.css': '33ff436439',
+  './cup-pong/js/ui.js': 'c138038fb3',
+  './cup-pong/js/geom.js': '5b17fae6f5',
+  './cup-pong/js/rack.js': '5ca8b06c4e',
+  './cup-pong/js/physics.js': 'a4a0c362e1',
+  './cup-pong/js/render.js': 'e0d719dec8',
+  './cup-pong/js/strings.js': '9c90b8afba',
   './hoops4/index.html': 'dce91b13bd',
   './hoops4/css/hoops4.css': '76c8caa474',
   './hoops4/js/ui.js': '36959f5b7a',
