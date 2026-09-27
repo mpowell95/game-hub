@@ -130,6 +130,19 @@ Copied from it, top to bottom:
   glossy button** on the right (CHECK with a green tick, CALL $200, BET / RAISE TO / ALL IN with
   chips), and "Stack: $10.8k" under it. SET RAISE opens a bar over the bottom of the felt (pot,
   Min / 1/2 Pot / Pot / All in, slider); the big button then commits the amount.
+- **One-motion raise (2026-09-27, Matt: "click 'Raise' and drag it up to whatever $ amount you
+  want in 1 motion").** Press RAISE and slide up: a meter rises from the button with the amount on
+  a bubble, the big button reads RAISE TO $X live, and letting go bets it. The curve is squared
+  (fine control low, races to the whole stack high) and the top 4% is ALL IN; sliding back to the
+  start cancels. A plain tap still opens the Min / 1/2 Pot / Pot / All in slider panel. The
+  pointer is captured on the game ROOT (a repaint can replace the button mid-drag), which
+  re-targets the click - so `_dragEnd` handles a no-move tap itself and swallows the click that
+  follows; otherwise a mouse tap did nothing while a touch tap worked.
+- **Check / Fold pre-action.** While it is someone else's turn and you are in the hand, the big
+  button is a CHECK / FOLD tick-box. Ticked, it checks whenever nothing is owed and folds the
+  moment there is a bet, for the rest of that hand (it resets on the next deal; tap again to
+  untick). It acts 350ms after the turn arrives, through the normal move path, so online it is
+  just an ordinary move.
 - **Money is printed the reference's way**: `$9200` under ten thousand, then `$10.0k`.
 - **Solo waits for "Tap the table to start the next hand"** (`Table`'s `tapToDeal`); online the
   host still deals on a timer so nobody waits on one player's tap. After a solo hand the big

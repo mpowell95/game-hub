@@ -179,6 +179,17 @@ class Game {
       if (e.key === 'Enter' && e.target && e.target.matches('[data-role="join-code"]')) this._join();
     };
     this.el.addEventListener('keydown', this.onKey);
+    // One-motion raise: press RAISE and slide up (the reference app's control). Bound to the game's
+    // own root, never document; the root holds the pointer capture so a repaint that replaces the
+    // button mid-drag cannot drop the gesture.
+    this.onPDown = (e) => this._dragStart(e);
+    this.onPMove = (e) => this._dragMove(e);
+    this.onPUp = (e) => this._dragEnd(e, false);
+    this.onPCancel = (e) => this._dragEnd(e, true);
+    this.el.addEventListener('pointerdown', this.onPDown);
+    this.el.addEventListener('pointermove', this.onPMove);
+    this.el.addEventListener('pointerup', this.onPUp);
+    this.el.addEventListener('pointercancel', this.onPCancel);
     this.offCopy = enableCodeCopy(this.el);
     this.offView = onViewportResize(() => this._layout());
     // The table area also changes size without the viewport doing so (the hub's chrome settling,
@@ -519,18 +530,32 @@ class Game {
     const L = myTurn ? legal(pub) : null;
     if (!L) this.raise = null;
     const r = this.raise;
+    const handKey = `${pub.gid || ''}:${pub.handNo}`;
+    const canPre = !!(meP && h && !h.result && !myTurn && h.inHand && h.inHand[this.myIdx] && !(h.allIn && h.allIn[this.myIdx]) && !meP.sitOut && !meP.away);
+    const preOn = this.precf === handKey;
     let mode = 'idle';
     if (meP && (meP.sitOut || meP.away) && !meP.out) mode = 'back';
     else if (L) mode = r ? 'raise' : (L.canCheck ? 'check' : 'call');
+    else if (canPre) mode = 'precf';
     else if (h && h.result && this.kind === 'solo' && this.revealAll !== pub.handNo && !pub.over) mode = 'reveal';
-    const sig = `${mode}:${pub.k}:${r ? 1 : 0}:${this.revealAll === pub.handNo}`;
+    // "Check / Fold" ticked and the turn has come round: check if nothing is owed, otherwise fold.
+    // It stays on for the rest of the hand, so it keeps checking until somebody bets.
+    if (L && preOn && !r && this.autoK !== pub.k) {
+      this.autoK = pub.k;
+      const k = pub.k;
+      this._later(() => {
+        const L2 = this.pub && this.pub.k === k ? legal(this.pub) : null;
+        if (L2 && L2.i === this.myIdx && this.precf === handKey) this._move({ a: L2.canCheck ? 'check' : 'fold' });
+      }, 350);
+    }
+    const sig = `${mode}:${pub.k}:${r ? 1 : 0}:${this.revealAll === pub.handNo}:${preOn}:${this.drag ? 1 : 0}`;
     if (sig !== this.actSig) {
       this.actSig = sig;
       const inHand = meP && h && !h.result && h.inHand && h.inHand[this.myIdx];
       tabs.innerHTML = inHand || L ? `
         <button type="button" class="pk-tab2" data-act="fold" ${L && !L.canCheck ? '' : 'disabled'}>${esc(t('fold'))}</button>
-        ${L && L.canRaise ? `<button type="button" class="pk-tab2${r ? ' is-on' : ''}" data-act="raise-toggle">${esc(r ? t('cancel') : t('set_raise'))}</button>` : ''}` : '';
-      if (r && L) {
+        ${L && L.canRaise ? `<button type="button" class="pk-tab2 pk-raisehandle${r ? ' is-on' : ''}" data-act="raise-toggle" data-drag="raise" aria-label="${esc(t('raise_aria'))}">${esc(r && !this.drag ? t('cancel') : t('raise_drag'))}</button>` : ''}` : '';
+      if (r && L && !this.drag) {
         bar.hidden = false;
         bar.innerHTML = `
           <div class="pk-barpot"><i class="pk-chip" aria-hidden="true"></i>${esc(t('pot', { n: money(L.pot) }))}</div>
@@ -557,6 +582,9 @@ class Game {
       label = `<span class="pk-biglbl">${esc(t(key, { n: money(to) }))}</span>${chips}`;
     } else if (mode === 'reveal') label = `<span class="pk-biglbl is-small">${esc(t('see_cards'))}</span><svg class="pk-gem" viewBox="0 0 40 32" aria-hidden="true"><path d="M8 2 H32 L39 11 L20 31 L1 11 Z" fill="#2fd07a" stroke="#0f7a3e" stroke-width="2"/><path d="M1 11 H39 M14 2 L10 11 L20 31 L30 11 L26 2" fill="none" stroke="#0f7a3e" stroke-width="1.5"/></svg>`;
     else if (mode === 'back') label = `<span class="pk-biglbl">${esc(t('im_back'))}</span>`;
+    else if (mode === 'precf') label = `<span class="pk-cfbox${preOn ? ' is-on' : ''}" aria-hidden="true">${preOn ? '&#x2714;' : ''}</span><span class="pk-biglbl">${esc(t('check_fold'))}</span>`;
+    big.classList.toggle('is-pre', mode === 'precf');
+    big.setAttribute('aria-pressed', mode === 'precf' ? String(preOn) : 'false');
     big.innerHTML = label;
   }
 
@@ -649,8 +677,9 @@ class Game {
   // ----------------------------------------------------------------------- input ---
 
   _click(e) {
+    if (!e.fromDrag && this.noClickUntil && Date.now() < this.noClickUntil) { this.noClickUntil = 0; return; }
     const b = e.target.closest('[data-act]');
-    if (!b || b.disabled || !this.el.contains(b)) return;
+    if (!b || b.disabled || (!e.fromDrag && !this.el.contains(b))) return;
     const a = b.dataset.act;
     switch (a) {
       case 'set': return this._set(b.dataset.k, b.dataset.v);
@@ -691,6 +720,12 @@ class Game {
         }
         if (mode === 'reveal') { this.revealAll = this.pub.handNo; this.actSig = ''; return this._paintTable(); }
         if (mode === 'back') return this._back();
+        if (mode === 'precf') {
+          const key = `${this.pub.gid || ''}:${this.pub.handNo}`;
+          this.precf = this.precf === key ? null : key;
+          this.actSig = '';
+          return this._paintActions();
+        }
         return undefined;
       }
       case 'felt':
@@ -704,6 +739,80 @@ class Game {
       case 'to-lobby': return this._toLobby();
       default:
     }
+  }
+
+  /** Raise amount for a drag fraction 0..1. Squared, so the first half of the slide gives fine
+   *  control over small raises and the top of it races to the whole stack. */
+  _dragAmount(f, L) {
+    if (f >= 0.96) return L.maxTo;
+    const raw = L.minTo + (L.maxTo - L.minTo) * f * f;
+    return Math.max(L.minTo, Math.min(L.maxTo, this._snap(raw)));
+  }
+
+  _dragStart(e) {
+    const handle = e.target.closest && e.target.closest('[data-drag="raise"]');
+    if (!handle || this.drag || e.button > 0) return;
+    const L = legal(this.pub);
+    if (!L || !L.canRaise) return;
+    const table = this.el.querySelector('.pk-table');
+    const felt = this.el.querySelector('.pk-felt');
+    if (!table || !felt) return;
+    const tb = table.getBoundingClientRect(), hb = handle.getBoundingClientRect(), fb = felt.getBoundingClientRect();
+    const travel = Math.max(140, Math.min(420, hb.top - fb.top - 16));
+    const meter = document.createElement('div');
+    meter.className = 'pk-dragmeter';
+    meter.setAttribute('aria-hidden', 'true');
+    meter.style.left = Math.round(hb.left - tb.left + hb.width / 2) + 'px';
+    meter.style.bottom = Math.round(tb.bottom - hb.top + 6) + 'px';
+    meter.style.height = Math.round(travel) + 'px';
+    meter.innerHTML = `<span class="pk-dm-top">${esc(t('allin'))}</span><span class="pk-dm-track"><i></i></span><span class="pk-dm-bubble"></span>`;
+    table.appendChild(meter);
+    this.drag = { id: e.pointerId, y0: e.clientY, travel, moved: false, meter, prev: this.raise };
+    try { this.el.setPointerCapture(e.pointerId); } catch { /* the gesture still works without capture */ }
+    this._dragMove(e);
+  }
+
+  _dragMove(e) {
+    const d = this.drag;
+    if (!d || e.pointerId !== d.id) return;
+    const L = legal(this.pub);
+    if (!L) return this._dragEnd(e, true);
+    const dy = d.y0 - e.clientY;
+    if (Math.abs(dy) > 10) d.moved = true;
+    const f = Math.max(0, Math.min(1, dy / d.travel));
+    const to = this._dragAmount(f, L);
+    d.to = to;
+    d.cancel = d.moved && dy < 14;
+    if (d.moved) {
+      if (!this.raise || this.raise.to !== to) { this.raise = { to }; this._paintActions(); }
+      e.preventDefault();
+    }
+    const fill = d.meter.querySelector('.pk-dm-track i');
+    const bubble = d.meter.querySelector('.pk-dm-bubble');
+    fill.style.transform = `scaleY(${f.toFixed(3)})`;
+    bubble.style.transform = `translate(-50%, ${(-f * d.travel).toFixed(1)}px)`;
+    bubble.textContent = d.cancel ? t('cancel') : (to >= L.maxTo ? t('allin') : money(to));
+    d.meter.classList.toggle('is-allin', to >= L.maxTo && !d.cancel);
+  }
+
+  _dragEnd(e, cancelled) {
+    const d = this.drag;
+    if (!d || e.pointerId !== d.id) return;
+    this.drag = null;
+    d.meter.remove();
+    try { this.el.releasePointerCapture(d.id); } catch { /* already released */ }
+    // Pointer capture on the root re-targets the click, so a plain tap is handled HERE (open the
+    // slider panel) and the click that follows is swallowed - same result by mouse or by touch.
+    this.noClickUntil = Date.now() + 500;
+    if (!d.moved) {
+      if (cancelled) return undefined;
+      this.actSig = '';
+      return this._click({ target: { closest: () => ({ dataset: { act: 'raise-toggle' }, disabled: false }) }, fromDrag: true });
+    }
+    const L = legal(this.pub);
+    if (cancelled || d.cancel || !L) { this.raise = d.prev || null; this.actSig = ''; return this._paintActions(); }
+    this.raise = null;
+    this._move(d.to >= L.maxTo ? { a: 'allin' } : { a: 'raise', to: d.to });
   }
 
   _input(e) {
@@ -1277,6 +1386,10 @@ class Game {
     this.el.removeEventListener('click', this.onClick);
     this.el.removeEventListener('input', this.onInput);
     this.el.removeEventListener('keydown', this.onKey);
+    this.el.removeEventListener('pointerdown', this.onPDown);
+    this.el.removeEventListener('pointermove', this.onPMove);
+    this.el.removeEventListener('pointerup', this.onPUp);
+    this.el.removeEventListener('pointercancel', this.onPCancel);
     try { this.offCopy(); } catch { /* already gone */ }
     try { this.offView(); } catch { /* already gone */ }
     try { this.offLang(); } catch { /* already gone */ }
