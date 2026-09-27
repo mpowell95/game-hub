@@ -3,8 +3,6 @@
 // SPEED LIMIT (how fast it can move its mallet) and a REACTION DELAY (it sees the puck as it was
 // `react` seconds ago, re-sampled every `react` seconds, and extrapolates in between).
 //
-// Stage 1 plays at 'medium' only; the three levels are tuned in stage 2 (air-hockey/CLAUDE.md).
-//
 // Everything is worked out in the mallet's OWN frame - its own goal at y = 0, the opponent's at
 // y = H - so the same code can drive either side (the headless test plays CPU vs CPU).
 
@@ -13,11 +11,16 @@ import { TABLE, clampTarget } from './physics.js';
 const { W, H, PUCK_R: PR, MALLET_R: MR } = TABLE;
 const SUM = PR + MR;
 
+// Tuned 2026-09-27 (stage 2) against js/test.js's two scripted players, after Matt played stage
+// 1's single computer (speed 900, react 0.17 - between Medium and Hard below) and called it "a
+// little too hard". Medium is now easier than that; Hard is a little tougher than it. Numbers in
+// air-hockey/CLAUDE.md, "The computer".
 export const LEVELS = {
-  easy:   { speed: 650,  react: 0.24, aimErr: 0.45, strike: 0.75, bank: 0,    misread: 0.35 },
-  medium: { speed: 900,  react: 0.17, aimErr: 0.3,  strike: 1.0,  bank: 0.2,  misread: 0.27 },
-  hard:   { speed: 1700, react: 0.06, aimErr: 0.08, strike: 1.3,  bank: 0.35, misread: 0.06 },
+  easy:   { speed: 600, react: 0.26,  aimErr: 0.5,  strike: 0.8,  bank: 0,    misread: 0.4 },
+  medium: { speed: 840, react: 0.19,  aimErr: 0.33, strike: 1.0,  bank: 0.15, misread: 0.3 },
+  hard:   { speed: 950, react: 0.16,  aimErr: 0.27, strike: 1.05, bank: 0.25, misread: 0.25 },
 };
+export const DIFFS = ['easy', 'medium', 'hard'];
 
 /** Small seeded PRNG, so a headless sim is repeatable. */
 export function rng(seed) {
