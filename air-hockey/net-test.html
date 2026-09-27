@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Air Hockey online test</title>
+  <!-- Stage 3 dev tool (docs/AIR-HOCKEY-BRIEF.md §5): two phones, a puck passed back and forth
+       over Firebase, the delay measured. Not linked from the launcher. air-hockey/CLAUDE.md. -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a1322; color: #e8eef8; font: 15px system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; overflow: hidden; touch-action: none;
+      padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); box-sizing: border-box; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; }
+    .bar button, .bar input { font: inherit; min-height: 44px; border-radius: 22px; border: 1px solid #3a5582; background: #16233a; color: inherit; padding: 0 16px; }
+    .bar button { cursor: pointer; touch-action: manipulation; }
+    .bar input { width: 6.5em; text-transform: uppercase; letter-spacing: .15em; }
+    .bar .primary { background: #1769d4; border-color: transparent; }
+    #status { font-weight: 700; }
+    #stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; touch-action: none; }
+    canvas { display: block; touch-action: none; }
+    #nums { margin: 0; padding: 6px 12px 10px; font: 13px ui-monospace, Menlo, Consolas, monospace; white-space: pre; line-height: 1.35; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="bar" id="lobby">
+    <button type="button" class="primary" id="create">Create</button>
+    <input id="code" maxlength="4" placeholder="CODE" autocomplete="off" aria-label="Room code">
+    <button type="button" id="join">Join</button>
+  </div>
+  <div class="bar"><span id="status">Create a room on one phone, join it on the other.</span>
+    <button type="button" id="robot" hidden>Robot: on</button></div>
+  <div id="stage"><canvas aria-label="Test table"></canvas></div>
+  <p id="nums"></p>
+  <script type="module">
+    import { requireName } from '../js/name-gate.js';
+    import { start } from './js/net-test.js';
+    await requireName();
+    start();
+  </script>
+</body>
+</html>

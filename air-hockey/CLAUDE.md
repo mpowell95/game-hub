@@ -14,7 +14,7 @@ starting a stage**. It holds the decisions (look, modes, win rule) and the onlin
 |---|---|---|
 | 1 | Table, mallet, puck, goals, first to 7, one simple computer | **Done 2026-09-27.** Matt's feel check: *"the computer is probably a little too hard. Other than that it's great. proceed"* |
 | 2 | Easy / Medium / Hard tuned, stats, setup screen, how to play | **Done 2026-09-27, deployed devOnly** |
-| 3 | Latency test for online (brief §5), numbers to Matt | not started |
+| 3 | Latency test for online (brief §5), numbers to Matt | **Built and deployed 2026-09-27. Waiting on Matt's two-phone numbers** (see "Online: the stage 3 latency test") |
 | 4 | Live online, if stage 3 says it works | not started |
 
 ## Stats and settings (stage 2)
@@ -59,6 +59,8 @@ starting a stage**. It holds the decisions (look, modes, win rule) and the onlin
 | `js/strings.js` | `{ en, es }` |
 | `css/air-hockey.css` | everything under `.ah-root`; cards and buttons are `css/ui.css`'s `.gh-modal` / `.gh-btn` |
 | `js/test.js` | headless engine probe, `node air-hockey/js/test.js` (not deployed) |
+| `js/live.js` | the real-time channel and the puck-ownership protocol (stage 3; stage 4 builds on it) |
+| `net-test.html` + `js/net-test.js` | the stage 3 latency test page. Dev tool, not on the launcher; in `ASSETS` so it is validated and cached |
 
 ## The physics (correctness-critical)
 
@@ -139,6 +141,36 @@ somewhere just below stage 1's computer.
   motion thins garnish, never gameplay).
 - Sound: a mallet clack (louder and higher for harder hits), a soft wall tick, a two-note goal horn.
   Web Audio, created on the first tap. No mute button yet.
+
+## Online: the stage 3 latency test (2026-09-27)
+
+**`https://mpowell95.github.io/game-hub/air-hockey/net-test.html`** on two devices: Create on one,
+type its code and Join on the other. A robot plays each side (touching the table hands that side
+to your finger). The numbers under the table: round trip, gap between updates, how far the puck
+jumps when a phone takes it over, and a pass count.
+
+**The protocol (`js/live.js`), in brief** (the file header has the full version): each phone
+overwrites `rooms/<CODE>/ah/s<side>` 20 times a second; the lobby is `js/net.js`'s
+createRoom / joinRoom / heartbeat / leaveRoom. Whoever's half the puck is in OWNS it and runs its
+physics; crossing the centre line hands it over (`o`, handoff counter `h`), and the handover state
+is RE-SENT on every message until the other phone's messages show it took it (the channel is a
+value, not a queue, so one handoff message can be overtaken). The non-owner shows a GHOST: the
+last state stepped forward with the real table physics, jumps smoothed over 0.1 s, and held at the
+centre line until the handover arrives. Only the scored-on phone decides a goal (goal counter
+`g`). The round trip is timed by an echoed ping on ONE clock, so no clock sync is needed.
+`physics.js` has one addition for it: `match.puckRemote` (mallets move, the puck is left alone).
+
+**Measured from the cloud session, NOT representative**: this container's proxy does not pass
+WebSockets, so the Firebase SDK fell back to long-polling. Two browsers here, 60 s, robots:
+round trip median ~380 ms (p90 ~450), update gap median ~45 ms, catch-up jump median ~110 units
+(2.5 puck widths), ~60 passes a minute, 0 write failures. That is a worst case for the transport,
+and it proves the protocol works (passes, goals, re-sent handovers). The deciding numbers are
+Matt's, on real phones over WebSockets. **Do not start stage 4 until he has them and says go.**
+
+**Known cost of this protocol, to fix in stage 4 if the numbers are good**: the ghost waits at the
+centre line for the handover, so a puck crossing to you appears to pause for about a one-way
+delay plus up to one send interval, then jumps. The obvious next step is an optimistic takeover
+(take the puck as soon as the ghost crosses, reconcile if the owner's own mallet hit it first).
 
 ## How to play
 
