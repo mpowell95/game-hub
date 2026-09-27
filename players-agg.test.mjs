@@ -635,6 +635,26 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   ok('brickblitz counts as a SOLO game', SOLO.has('brickblitz'));
 }
 
+// ---- Texas Hold'em's bankroll LEDGER combines across devices (THE LAW rule 1) ----
+// 2026-09-27. The balance is derived (start + winnings + grants - buyins), so a person's bankroll
+// across two phones is the sum of both ledgers; the starting stake is counted ONCE, at read time.
+{
+  const { holdemBalance, HOLDEM_START_BANK } = await import('./js/game-stats.js');
+  const all = {
+    d1: rec({ playerId: 'HB111', name: 'Ace' }, {
+      holdem: { total: { played: 2, won: 1, lost: 1 }, byDiff: {}, hb: { buyins: 6000, winnings: 19500, grants: 0, best: 19500, cashes: 1, entries: 2 } },
+    }, 100),
+    d2: rec({ playerId: 'hb111', name: 'Ace' }, {
+      holdem: { total: { played: 1, won: 0, lost: 1 }, byDiff: {}, hb: { buyins: 5000, winnings: 7000, grants: 1000, best: 7000, cashes: 1, entries: 1 } },
+    }, 200),
+    d3: rec({ playerId: 'HB111', name: 'Ace' }, { connect4: comp(1, 1, 0) }, 300),
+  };
+  const hb = aggregatePlayers(all)[0].games.holdem.hb;
+  eq('holdem: money counters add across devices', [hb.buyins, hb.winnings, hb.grants, hb.cashes, hb.entries], [11000, 26500, 1000, 2, 3]);
+  eq('holdem: biggest prize is the max, never a sum', hb.best, 19500);
+  eq('holdem: the combined balance counts the starting stake once', holdemBalance(hb), HOLDEM_START_BANK + 26500 + 1000 - 11000);
+}
+
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
 //
 // Root CLAUDE.md, "Adding a game" item 7: a per-game sub-counter (`grid`/`cc`/`es`/`nb`/`br`/`tt`/

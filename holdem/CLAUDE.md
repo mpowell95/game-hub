@@ -94,6 +94,42 @@ cards before the showdown, but a determined snoop is not stopped. Real secrecy n
 dealer (a Cloud Function holding the deck), which does not exist. The host's device also holds
 the whole deck in memory and localStorage.
 
+## The bankroll (2026-09-27)
+
+Matt: *"You should have a pile of money you can grow too."* Defaults he approved: start with
+**$25,000**, **1st takes 65% of the pot and 2nd 35%**, **online tables use it too**.
+
+- **Stored as a LEDGER, never a balance** - `games.holdem.hb = { buyins, winnings, grants, best,
+  cashes, entries }` in `gamehub.stats` (`js/game-stats.js`, `recordHoldemBank`). Every field
+  only grows (best: `Math.max`), so THE LAW rule 2 holds even though the balance goes down. The
+  balance is DERIVED: `holdemBalance(hb) = HOLDEM_START_BANK + winnings + grants - buyins`, the
+  starting $25,000 added once at read time (storing it would count it once per device).
+- **It follows the player to every device** because the ledgers ADD: players-agg sums them (its
+  `hb` branch), `ui.js`'s `bank()` = this device's ledger + `bankRemote` (the other devices'
+  part, read like My Stats does and kept as combined-minus-local so a later local write is never
+  counted twice). Offline, it shows this device's own ledger.
+- **Tables** (`TIERS` in `ui.js`, the reference app's tournament tiles): Buddy's House $500, Las
+  Vegas Casino $1,000, Regional $5,000, World Championship $10,000, Solar System $100,000, Galaxy
+  Championship $1,000,000, Universe Championship $10,000,000. A table is locked until the
+  bankroll covers it. The chips at the table are always $10,000 tournament chips.
+- **Money moves at exactly two moments**: the buy-in when the cards are dealt (solo `_newSolo`;
+  online `_stake`, once per game per device, keyed `code:gid:stake`), and the prize when this
+  player's place is decided - `payout()` in `engine.js`: everyone at the table (computers too)
+  puts the buy-in in the pot, 1st 65% and 2nd the rest with 3+ players, winner takes all
+  heads-up. It rides the same once-per-game dedupe as the win/loss result (`state.rec` solo,
+  `code:gid` online), so a reload can never pay twice. Walking away pays nothing.
+- **Online**: the host picks the table in the lobby (only ones they can afford, or "no buy-in").
+  A guest whose bankroll cannot cover it plays that game just for fun (no buy-in, no prize), so a
+  balance never goes below zero.
+- **Broke**: below the cheapest table, the table picker offers free chips back up to $25,000
+  (`grants`).
+- **Not behind the rate gate**, deliberately (`test-rate-guard.mjs` EXEMPT, with the reason): a
+  refused buy-in would be a free game and a refused prize would be money lost. The game result
+  itself is still gated. A failed write is queued and replayed (`persistOrQueue`).
+- **Visible**: the setup screen and table picker, the end-of-game card ("+$X to your
+  bankroll"), My Stats (Bankroll, Biggest prize, Won in prizes, Paid in buy-ins), and the
+  leaderboard's Texas Hold'em records (Bankroll, Biggest prize).
+
 ## Stats
 
 One result per game per device, recorded **the moment the engine decides it** (busting out = loss,

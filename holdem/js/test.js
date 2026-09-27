@@ -2,7 +2,7 @@
 // Hand ranking, pots and side pots, betting-order rules, and whole tournaments played out by the
 // computer players with the chip count checked after every single action.
 
-import E, { evaluate, categoryOf, CAT, newGame, startHand, act, legal, leave, buildPots, publicView } from './engine.js';
+import E, { evaluate, categoryOf, CAT, newGame, startHand, act, legal, leave, buildPots, publicView, payout } from './engine.js';
 import { decide } from './ai.js';
 
 let pass = 0, fail = 0;
@@ -163,4 +163,12 @@ if (fail) process.exit(1);
   startHand(old);
   ok('an old save without a scale keeps 10/20 blinds', old.hand.sb === 10 && old.hand.bb === 20);
 }
+// ---- bankroll prizes -------------------------------------------------------------------------
+ok('6 players at $1,000: 1st takes 65% of $6,000', payout(1, 6, 1000) === 3900);
+ok('6 players at $1,000: 2nd takes the rest', payout(2, 6, 1000) === 2100);
+ok('3rd and below get nothing', payout(3, 6, 1000) === 0 && payout(6, 6, 1000) === 0);
+ok('heads-up: winner takes the whole pot', payout(1, 2, 5000) === 10000 && payout(2, 2, 5000) === 0);
+ok('no buy-in, no prize (old saves, free games)', payout(1, 6, 0) === 0);
+for (const [n, b] of [[3, 500], [5, 1000], [7, 5000], [8, 10000000]]) ok(`prizes add up to the pot exactly (${n} x $${b})`, payout(1, n, b) + payout(2, n, b) === n * b);
+ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 5000, tier: 'regional' }).cfg.buyin === 5000);
 void E;

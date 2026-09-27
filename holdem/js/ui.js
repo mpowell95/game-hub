@@ -14,7 +14,7 @@
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { deviceId, recordResult } from '../../js/game-stats.js';
+import { deviceId, recordResult, recordHoldemBank, holdemLedger, holdemBalance, HOLDEM_START_BANK, loadStats, statsId } from '../../js/game-stats.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
@@ -22,7 +22,7 @@ import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
 import {
   newGame, publicView, legal, blindsOf, SPEEDS, START_CHIPS, MAX_PLAYERS,
-  evaluate, bestFive, categoryOf, scoreRanks, RANKS, SUIT_GLYPH, potTotal,
+  evaluate, bestFive, categoryOf, scoreRanks, RANKS, SUIT_GLYPH, potTotal, payout,
 } from './engine.js';
 import { Table } from './table.js';
 import NT from './net-table.js';
@@ -37,6 +37,22 @@ const CLOCK_MS = 45000;          // online turn clock
 const AWAY_MS = 35000;           // no heartbeat change for this long = away (heartbeat is every 10s)
 const MP_SAVE_TTL = 12 * 3600 * 1000;
 const SKILL_ID = { 1: 'easy', 2: 'medium', 3: 'hard' };
+
+// The tables you can buy into with your bankroll (2026-09-27), cheapest first - the tournament
+// tiles on the reference app's menu. A table is locked until the bankroll covers its buy-in. The
+// chips AT the table are always $10,000 tournament chips; the buy-in is what the seat costs.
+const TIERS = [
+  { id: 'buddy', buyin: 500, bg: 'linear-gradient(135deg, #c0582f, #6e2412)' },
+  { id: 'vegas', buyin: 1000, bg: 'linear-gradient(135deg, #7b3fb8, #34105e)' },
+  { id: 'regional', buyin: 5000, bg: 'linear-gradient(135deg, #2f9a3e, #0f4d1a)' },
+  { id: 'world', buyin: 10000, bg: 'linear-gradient(135deg, #c42f7d, #5e0f3a)' },
+  { id: 'solar', buyin: 100000, bg: 'linear-gradient(135deg, #e0892a, #7a3c05)' },
+  { id: 'galaxy', buyin: 1000000, bg: 'linear-gradient(135deg, #2f6fd0, #0f2a66)' },
+  { id: 'universe', buyin: 10000000, bg: 'linear-gradient(135deg, #8a2fd0, #2a0a5a)' },
+];
+const tierById = (id) => TIERS.find((x) => x.id === id) || null;
+const bigMoney = (n) => '$' + Math.max(0, n | 0).toLocaleString();
+const BANK_TIMEOUT_MS = 8000;
 
 const BOT_NAMES = [
   ['Lucky', '\u{1F340}'], ['Rosa', '\u{1F339}'], ['Tex', '\u{1F920}'], ['Chip', '\u{1F43F}️'],
@@ -70,6 +86,7 @@ function loadSettings() {
     speed: SPEEDS[s.speed] ? s.speed : 'normal',
     netBots: Math.max(0, Math.min(7, s.netBots | 0)),
     netSkill: [1, 2, 3].includes(s.netSkill) ? s.netSkill : 2,
+    netTier: typeof s.netTier === 'string' ? s.netTier : null,
   };
 }
 
@@ -163,6 +180,7 @@ class Game {
     this.seen = new Set();
     this.seenHand = -1;
     this.oppX = {};              // opponent column centres, filled by _layout (empty until measured)
+    this.bankRemote = null;      // the bankroll ledger of this player's OTHER devices, once read
     this.dead = false;
     this.timers = new Set();
 
@@ -202,6 +220,7 @@ class Game {
     });
     this.tick = setInterval(() => this._tick(), 1000);
 
+    this._refreshBank();
     // A solo game in progress picks up exactly where it stopped.
     const save = readJSON(SAVE_KEY);
     if (save && save.state && !save.state.over && save.state.players) this._startSolo(save.state);
@@ -213,6 +232,7 @@ class Game {
   render(full) {
     if (this.dead) return;
     if (this.screen === 'setup') this._renderSetup();
+    else if (this.screen === 'tiers') this._renderTiers();
     else if (this.screen === 'lobby') this._renderLobby();
     else this._renderTable(full);
     this._renderOverlay();
@@ -237,7 +257,7 @@ class Game {
         ${seg('skill', [1, 2, 3].map((k) => [k, `<span class="pk-shape">${diffShapeSVG(k)}</span>${esc(t(SKILL_ID[k]))}`]), s.skill)}</div>
       <div class="pk-field"><div class="pk-label">${esc(t('blinds_speed'))} <span class="pk-hint">${esc(speedHint)}</span></div>
         ${seg('speed', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('speed_' + k))]), s.speed)}</div>
-      <button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="deal">${esc(t('deal'))}</button>`;
+      <button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="choose">${esc(t('choose_table'))}</button>`;
     const online = `
       ${mpSave ? `<button type="button" class="pk-btn pk-btn-primary" data-act="rejoin">${esc(t('back_to_table', { code: mpSave.code }))}</button>` : ''}
       <button type="button" class="pk-btn ${mpSave ? '' : 'pk-btn-primary'} pk-btn-big" data-act="create" ${this.busy ? 'disabled' : ''}>${esc(t('create_table'))}</button>
@@ -253,6 +273,7 @@ class Game {
         <div class="pk-brand">
           <div class="pk-brand-cards">${cardHTML(48)}${cardHTML(45)}</div>
           <h1 class="pk-title">${esc(t('title'))}</h1>
+          <div class="pk-bankchip"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))} <b>${esc(bigMoney(this.bank()))}</b></div>
         </div>
         <div class="pk-tabs" role="tablist">
           <button type="button" role="tab" aria-selected="${s.tab === 'solo'}" class="pk-tab${s.tab === 'solo' ? ' is-on' : ''}" data-act="set" data-k="tab" data-v="solo">${esc(t('tab_solo'))}</button>
@@ -264,6 +285,59 @@ class Game {
       </div>`;
   }
 
+  /** Pick a table to buy into (the reference app's tournament tiles). */
+  _renderTiers() {
+    const bal = this.bank();
+    const n = this.settings.bots + 1;
+    const broke = bal < TIERS[0].buyin;
+    this.el.innerHTML = `
+      <div class="pk-tiers">
+        <div class="pk-tierhead">
+          <button type="button" class="pk-btn pk-btn-sm" data-act="to-setup-tab">&#x2039; ${esc(t('back'))}</button>
+          <div class="pk-bankbar"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))}: <b>${esc(bigMoney(bal))}</b></div>
+        </div>
+        ${broke ? `<button type="button" class="pk-btn pk-btn-primary" data-act="topup">${esc(t('topup', { n: bigMoney(HOLDEM_START_BANK - bal) }))}</button>` : ''}
+        <div class="pk-tiergrid">
+          ${TIERS.map((x) => {
+            const locked = bal < x.buyin;
+            return `<button type="button" class="pk-tier${locked ? ' is-locked' : ''}" data-act="deal" data-tier="${x.id}" style="background:${x.bg}" ${locked ? 'disabled' : ''}>
+              <span class="pk-tiername">${esc(t('tier_' + x.id))}</span>
+              <span class="pk-tierbuy">${esc(t('buy_in', { n: bigMoney(x.buyin) }))}</span>
+              <span class="pk-tierwin">${locked ? '&#x1F512; ' + esc(t('locked')) : esc(t('first_wins', { n: bigMoney(payout(1, n, x.buyin)) }))}</span>
+            </button>`;
+          }).join('')}
+        </div>
+        <p class="pk-hint pk-center-text">${esc(t('prize_rule', { n }))}</p>
+      </div>`;
+  }
+
+  /** This device's ledger plus (once read) the player's other devices', as one balance. */
+  bank() {
+    const l = holdemLedger();
+    const r = this.bankRemote || {};
+    return holdemBalance({ buyins: (l.buyins | 0) + (r.buyins | 0), winnings: (l.winnings | 0) + (r.winnings | 0), grants: (l.grants | 0) + (r.grants | 0) });
+  }
+
+  /** Read the player's other devices' ledgers (the same cross-device read My Stats uses). The
+   *  remote part is kept as combined-minus-local, so later local writes are never counted twice. */
+  async _refreshBank() {
+    try {
+      const [net, agg] = await Promise.all([import('../../js/stats-net.js'), import('../../js/players-agg.js')]);
+      const all = await Promise.race([net.readPlayersOnce(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
+      if (!all || this.dead) return;
+      const mine = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats());
+      const hb = mine && mine.games && mine.games.holdem && mine.games.holdem.hb;
+      if (!hb) return;
+      const l = holdemLedger();
+      this.bankRemote = {
+        buyins: Math.max(0, (hb.buyins | 0) - (l.buyins | 0)),
+        winnings: Math.max(0, (hb.winnings | 0) - (l.winnings | 0)),
+        grants: Math.max(0, (hb.grants | 0) - (l.grants | 0)),
+      };
+      if (this.screen === 'setup' || this.screen === 'tiers') this.render();
+    } catch { /* offline: this device's own ledger is still exact for this device */ }
+  }
+
   _renderLobby() {
     const mp = this.mp;
     const room = mp.room || {};
@@ -271,6 +345,9 @@ class Game {
     const bots = mp.host ? mp.bots : ((NT.parse(room.pk && room.pk.lobby) || {}).bots || []);
     const speed = mp.host ? this.settings.speed : ((NT.parse(room.pk && room.pk.lobby) || {}).speed || 'normal');
     const count = humans.length + bots.length;
+    const lobbyCfg = mp.host ? null : (NT.parse(room.pk && room.pk.lobby) || {});
+    const tier = tierById(mp.host ? this._netTier().id : lobbyCfg.tier);
+    const tierLine = tier ? `${t('tier_' + tier.id)} · ${t('buy_in', { n: bigMoney(tier.buyin) })}` : t('no_buyin');
     const rows = humans.map((h) => `
         <li class="pk-lrow"><span class="pk-lav">${esc(h.avatar || '\u{1F642}')}</span><span class="pk-lname">${esc(h.name)}</span>
           ${h.seat === 0 ? `<span class="pk-badge">${esc(t('host'))}</span>` : ''}${h.seat === mp.seat ? `<span class="pk-badge is-you">${esc(t('you'))}</span>` : ''}</li>`).join('')
@@ -285,10 +362,18 @@ class Game {
           <button type="button" class="pk-btn" data-act="addbot" ${count >= MAX_PLAYERS ? 'disabled' : ''}>+ ${esc(t('add_bot'))}</button>
           ${seg('netSkill', [1, 2, 3].map((k) => [k, `<span class="pk-shape">${diffShapeSVG(k)}</span><span class="pk-sr">${esc(t(SKILL_ID[k]))}</span>`]), this.settings.netSkill)}
         </div>
+        <div class="pk-field"><div class="pk-label">${esc(t('table_label'))}</div>
+          <div class="pk-tierstep">
+            <button type="button" class="pk-stepbtn" data-act="nettier" data-d="-1" aria-label="-">&#x2039;</button>
+            <span class="pk-tierstepval" style="background:${tier ? tier.bg : '#222'}">${esc(tierLine)}</span>
+            <button type="button" class="pk-stepbtn" data-act="nettier" data-d="1" aria-label="+">&#x203A;</button>
+          </div></div>
         <div class="pk-field"><div class="pk-label">${esc(t('blinds_speed'))} <span class="pk-hint">${esc(t('speed_hint', { n: SPEEDS[speed] }))}</span></div>
           ${seg('speed', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('speed_' + k))]), speed)}</div>
         <button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="startnet" ${count >= 2 ? '' : 'disabled'}>${esc(count >= 2 ? t('start_game') : t('need_two'))}</button>`
-      : `<p class="pk-waiting">${esc(t('waiting_host'))}</p>`;
+      : `<p class="pk-tierline" style="background:${tier ? tier.bg : '#222'}">${esc(tierLine)}</p>
+         ${tier && this.bank() < tier.buyin ? `<p class="pk-hint pk-center-text">${esc(t('cant_cover'))}</p>` : ''}
+         <p class="pk-waiting">${esc(t('waiting_host'))}</p>`;
     this.el.innerHTML = `
       <div class="pk-lobby">
         <div class="pk-codebox">
@@ -375,6 +460,8 @@ class Game {
 
     // --- banner
     if (h && h.sb) q('.pk-ban-blinds').textContent = `${money(h.sb)}/${money(h.bb)}`;
+    const tierNow = tierById(pub.cfg && pub.cfg.tier);
+    q('.pk-ban-title').textContent = tierNow ? t('tier_' + tierNow.id) : t('title');
     q('.pk-ban-hand').textContent = String(pub.handNo || 0);
     const alive = pub.players.filter((p) => !p.out);
     if (meP && !meP.out) {
@@ -514,6 +601,7 @@ class Game {
     let msg = '';
     if (this.mp && this.mp.hostAway) msg = t('host_away');
     else if (this.error) msg = this.error;
+    else if (this.flash) msg = this.flash;
     el.hidden = !msg;
     el.textContent = msg;
   }
@@ -628,6 +716,8 @@ class Game {
       ov.innerHTML = `<div class="pk-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
           <button type="button" class="pk-x" data-act="close" aria-label="${esc(t('done'))}">&#x2715;</button>
           <h2 class="pk-over-title">${esc(title)}</h2>
+          ${this._myPrize() ? `<p class="pk-prize">${esc(t('prize_won', { n: bigMoney(this._myPrize()) }))}</p>` : ''}
+          ${pub.cfg && pub.cfg.buyin > 0 ? `<p class="pk-hint">${esc(t('bankroll'))}: ${esc(bigMoney(this.bank()))}</p>` : ''}
           <ol class="pk-final">${ranked.map((p) => `<li class="${p.id === pub.winner ? 'is-first' : ''}"><span class="pk-fplace">${esc(placeText(p.place || 0))}</span><span class="pk-lav">${esc(p.emoji)}</span><span class="pk-lname">${esc(p.id === this.myIdx ? t('you') : p.name)}</span></li>`).join('')}</ol>
           <div class="pk-actrow">${btns}</div>
         </div>`;
@@ -684,7 +774,26 @@ class Game {
     switch (a) {
       case 'set': return this._set(b.dataset.k, b.dataset.v);
       case 'bots': this.settings.bots = Math.max(1, Math.min(7, this.settings.bots + (+b.dataset.d))); this._saveSettings(); return this.render();
-      case 'deal': return this._newSolo();
+      case 'choose': this.screen = 'tiers'; this._refreshBank(); return this.render(true);
+      case 'deal': return this._newSolo(b.dataset.tier);
+      case 'to-setup-tab': this.screen = 'setup'; return this.render(true);
+      case 'topup': {
+        const need = HOLDEM_START_BANK - this.bank();
+        if (need > 0 && this.bank() < TIERS[0].buyin) recordHoldemBank({ grant: need });
+        return this.render(true);
+      }
+      case 'nettier': {
+        // The host can only choose a table they can afford themselves; none = just for fun.
+        const bal = this.bank();
+        const opts = [null, ...TIERS.filter((x) => x.buyin <= bal)];
+        let i = opts.findIndex((x) => (x ? x.id : null) === (this.settings.netTier || null));
+        if (i < 0) i = 0;
+        i = (i + (+b.dataset.d) + opts.length) % opts.length;
+        this.settings.netTier = opts[i] ? opts[i].id : null;
+        this._saveSettings();
+        this._pushLobby();
+        return this.render();
+      }
       case 'help': this.overlay = 'help'; return this._renderOverlay();
       case 'close':
         if (this.overlay === 'over') this.overDismissed = this.pub && this.pub.k;
@@ -733,7 +842,7 @@ class Game {
         if (this.kind === 'solo' && this.table && this.pub && this.pub.hand && this.pub.hand.result && !this.pub.over) this.table.next();
         return undefined;
       case 'back': return this._back();
-      case 'again': return this._newSolo();
+      case 'again': return this._newSolo((this.table && this.table.state.cfg.tier) || null);
       case 'to-setup': this._endSolo(); return;
       case 'again-net': return this._startNet();
       case 'to-lobby': return this._toLobby();
@@ -870,14 +979,18 @@ class Game {
 
   // ----------------------------------------------------------------------- solo ---
 
-  _newSolo() {
+  _newSolo(tierId) {
     const s = this.settings;
+    const tier = tierById(tierId);
+    if (tierId && (!tier || this.bank() < tier.buyin)) { this.screen = 'tiers'; return this.render(true); }
     const prof = loadProfile();
     const human = { name: (prof && prof.name) || t('you'), emoji: (prof && prof.emoji) || '\u{1F642}', bot: 0, dev: deviceId() };
     const players = [human, ...botRoster(s.bots, s.skill)];
-    const state = newGame(players, { speed: s.speed });
+    const state = newGame(players, { speed: s.speed, buyin: tier ? tier.buyin : 0, tier: tier ? tier.id : null });
     state.gid = rid();
     state.skill = s.skill;
+    // The seat is paid for the moment the cards are dealt, before anything else can happen.
+    if (tier) recordHoldemBank({ buyin: tier.buyin });
     this._saveSettings();
     this._startSolo(state);
   }
@@ -912,6 +1025,10 @@ class Game {
     if (!tb || this.dead) return;
     const s = tb.state;
     this.pub = publicView(s);
+    // The game id rides the public view the guests get (_publish); the host's own copy needs it
+    // too, or its once-per-game keys ("code:gid") are all "code:undefined" - which lost the host's
+    // prize and merged every game in a room into one result.
+    this.pub.gid = s.gid;
     this.hole = s.hand && s.hand.holes && s.hand.holes[this.myIdx] ? s.hand.holes[this.myIdx] : null;
     this.clockEnd = tb.clockEnd;
     this._maybeRecord();
@@ -996,17 +1113,43 @@ class Game {
       const s = this.table && this.table.state;
       if (!s || s.rec) return;
       s.rec = true;
+      const prize = this._prizeFor(won);
+      if (prize) s.prize = prize;
       writeJSON(SAVE_KEY, { state: s, at: Date.now() });
       try { recordResult('holdem', SKILL_ID[s.skill] || 'medium', won); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      if (prize) recordHoldemBank({ prize });
       return;
     }
     const key = `${this.mp.code}:${pub.gid}`;
     const rec = this.mp.rec || (this.mp.rec = []);
     if (rec.includes(key)) return;
     rec.push(key);
-    if (rec.length > 30) rec.splice(0, rec.length - 30);
+    const prize = rec.includes(key + ':stake') ? this._prizeFor(won) : 0;
+    if (prize) rec.push(key + ':prize:' + prize);
+    if (rec.length > 60) rec.splice(0, rec.length - 60);
     this._saveMp();
     try { recordResult('holdem', 'mp', won); } catch (e) { console.warn('[holdem] stats write failed', e); }
+    if (prize) recordHoldemBank({ prize });
+  }
+
+  /** What this finish pays from the pot (0 for a game with no buy-in, or for walking away). */
+  _prizeFor(won) {
+    const pub = this.pub;
+    const meP = pub && this.myIdx >= 0 ? pub.players[this.myIdx] : null;
+    if (!meP || !(pub.cfg && pub.cfg.buyin > 0)) return 0;
+    const place = won ? 1 : (meP.place | 0);
+    return payout(place, pub.players.length, pub.cfg.buyin);
+  }
+
+  /** The prize this device was paid for the game on screen, for the end-of-game card. */
+  _myPrize() {
+    const pub = this.pub;
+    if (!pub) return 0;
+    if (this.kind === 'solo') return (this.table && this.table.state.prize) | 0;
+    if (!this.mp) return 0;
+    const key = `${this.mp.code}:${pub.gid}:prize:`;
+    const hit = (this.mp.rec || []).find((k) => k.startsWith(key));
+    return hit ? +hit.slice(key.length) : 0;
   }
 
   // ----------------------------------------------------------------------- online ---
@@ -1135,6 +1278,12 @@ class Game {
     });
   }
 
+  /** The host's chosen table, if they can still afford it (otherwise no buy-in). */
+  _netTier() {
+    const x = tierById(this.settings.netTier);
+    return x && this.bank() >= x.buyin ? x : { id: null, buyin: 0 };
+  }
+
   _addBot() {
     const mp = this.mp;
     const count = this._roster(mp.room).length + mp.bots.length;
@@ -1153,7 +1302,7 @@ class Game {
   _pushLobby() {
     const mp = this.mp;
     if (!mp || !mp.host) return;
-    NT.pkUpdate(mp.code, { lobby: JSON.stringify({ bots: mp.bots, speed: this.settings.speed }) }).catch((e) => console.warn('[holdem] lobby publish failed', e));
+    NT.pkUpdate(mp.code, { lobby: JSON.stringify({ bots: mp.bots, speed: this.settings.speed, tier: this._netTier().id }) }).catch((e) => console.warn('[holdem] lobby publish failed', e));
   }
 
   /** Host: deal a new game to everyone sitting in the room right now, plus the computers. */
@@ -1165,7 +1314,8 @@ class Game {
     // lose a person to a computer.
     const players = shuffle([...humans, ...mp.bots.map((b) => ({ ...b }))].slice(0, MAX_PLAYERS));
     if (players.length < 2) return;
-    const state = newGame(players, { speed: this.settings.speed });
+    const tier = this._netTier();
+    const state = newGame(players, { speed: this.settings.speed, buyin: tier.buyin, tier: tier.id });
     state.gid = rid();
     this._stopTable();
     this.screen = 'table';
@@ -1173,8 +1323,25 @@ class Game {
     this.overDismissed = null;
     this.table = new Table(state, { clockMs: CLOCK_MS, onChange: () => this._onLocalChange() });
     this.myIdx = state.players.findIndex((p) => p.seat === 0 && !p.bot);
+    this.pub = publicView(state);
+    this.pub.gid = state.gid;
+    this._stake();
     this.render(true);
     this.table.start();
+  }
+
+  /** Online: pay this device's own buy-in once per game. A player whose bankroll cannot cover it
+   *  plays that game just for fun (no buy-in, no prize) rather than going below zero. */
+  _stake() {
+    const pub = this.pub, mp = this.mp;
+    if (!pub || !mp || this.myIdx < 0 || !(pub.cfg && pub.cfg.buyin > 0)) return;
+    const base = `${mp.code}:${pub.gid}`;
+    const rec = mp.rec || (mp.rec = []);
+    if (rec.includes(base + ':stake') || rec.includes(base + ':free')) return;
+    if (this.bank() >= pub.cfg.buyin) { recordHoldemBank({ buyin: pub.cfg.buyin }); rec.push(base + ':stake'); }
+    else { rec.push(base + ':free'); this.flash = t('playing_free'); this._later(() => { this.flash = ''; this._paintBanner(); }, 6000); }
+    if (rec.length > 60) rec.splice(0, rec.length - 60);
+    this._saveMp();
   }
 
   _toLobby() {
@@ -1288,6 +1455,7 @@ class Game {
     this.hole = hole && hole.g === pub.gid && hole.h === pub.handNo ? hole.c : null;
     if (pk.clock && pk.clock.k === pub.k && changed) this.clockEnd = pk.clock.ms > 0 ? Date.now() + pk.clock.ms : 0;
     if (changed) this.sending = false;
+    this._stake();
     this._maybeRecord();
     if (first) { this.screen = 'table'; this.overlay = null; this.render(true); }
     else if (changed || !this.hole !== !this._hadHole) this._paintTable();
