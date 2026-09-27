@@ -395,6 +395,41 @@
 }
 .pk-root .pk-opp.has-cards .pk-ostack { margin-top: 14px; }
 .pk-root .pk-barpot { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; color: #fff; }
+.pk-root .pk-raisehandle { touch-action: none; min-width: 108px; }
+.pk-root .pk-raisehandle.is-on { background: linear-gradient(180deg, #3a3000, #120e00); }
+/* The one-motion raise meter: a vertical track above the RAISE button, filled from the bottom as
+   the finger slides up, with the amount riding on top of the fill. Transform-only animation. */
+.pk-root .pk-dragmeter {
+  position: absolute; z-index: 30; width: 46px; transform: translateX(-50%);
+  pointer-events: none;
+}
+.pk-root .pk-dm-track {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 16px; transform: translateX(-50%);
+  border-radius: 8px; background: rgba(0, 0, 0, 0.6); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+.pk-root .pk-dm-track i {
+  position: absolute; inset: 0; transform-origin: bottom center; transform: scaleY(0);
+  background: linear-gradient(0deg, #7ddf2a, var(--pk-gold));
+}
+.pk-root .pk-dm-top {
+  position: absolute; left: 50%; top: -22px; transform: translateX(-50%);
+  font-size: 11px; font-weight: 800; color: #fff; white-space: nowrap; text-shadow: 0 1px 2px #000;
+}
+.pk-root .pk-dm-bubble {
+  position: absolute; left: 50%; bottom: 0; margin-bottom: -14px;
+  min-width: 64px; padding: 4px 10px; border-radius: 999px;
+  background: #000; border: 2px solid var(--pk-gold); color: #fff;
+  font-size: 16px; font-weight: 800; text-align: center; white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.6);
+}
+.pk-root .pk-dragmeter.is-allin .pk-dm-bubble { background: #9d0f14; }
+.pk-root .pk-bigbtn.is-pre { flex-direction: row; gap: 10px; }
+.pk-root .pk-cfbox {
+  width: 28px; height: 28px; flex: 0 0 28px; border-radius: 4px; border: 2px solid #cfd6e0;
+  display: flex; align-items: center; justify-content: center; color: #7ddf2a; font-size: 20px; line-height: 1;
+}
+.pk-root .pk-cfbox.is-on { border-color: #7ddf2a; background: rgba(125, 223, 42, 0.12); }
 .pk-root .pk-slider { width: 100%; height: 34px; accent-color: #7ddf2a; touch-action: pan-x; }
 
 /* The player's corner: FOLD / SET RAISE tabs over two big cards, and the big glossy button. */
