@@ -455,6 +455,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `sweep-mover.mjs`, `measure-gallery.mjs`, `test-runaway-capped.mjs`,
   `test-brickcity-stall.mjs`, `test-brickcity-corner100.mjs`, `test-brickcity-throat.mjs`,
   `test-skeeball-popup.mjs`
+- Air Hockey: `air-hockey/js/test.js` (headless engine probe)
 - Pinball: `sweep-pinball-rests.mjs` · Golf: `sheet-course.mjs`, `measure-hole-strip.mjs` ·
   Yahtzee: `test-yahtzee-ai.mjs`
 - Matt-only readers: `read-install-state.mjs`, `read-bug-reports.mjs`, `read-device-reports.mjs`
@@ -531,6 +532,7 @@ working in that folder).
 
 | Game | Integration | CSS root / prefix | Settings key | Stats recorder |
 |---|---|---|---|---|
+| Air Hockey | in-hub `module:`, immersive, **`devOnly`, stage 1 of 4** (vs one simple computer; stats, levels and online come later, `docs/AIR-HOCKEY-BRIEF.md`) | `.ah-root` / `.ah-` | none yet (stage 2: `gamehub.airhockey.v1`) | none yet (stage 2: `recordResult('airhockey', …)`) |
 | Baseball | in-hub `module:`, immersive, **a real three.js stadium with the reference game's three cameras (R1, 2026-09-20, being rebuilt as a clone of Baseball 9's mechanics per `docs/BASEBALL-REFERENCE-B9.md`); career is phase 4; `devOnly`** | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
 | Brick Breaker | in-hub `module:`, immersive, **solo score attack** (clone of Neon Breakout, released 2026-09-23) | `.bx-root` / `.bx-` | `gamehub.brickblitz.v1` | `recordBrickBlitz` |
 | Ball Run | in-hub `module:`, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen gen-1 dotted keys) | `recordBallRun` |

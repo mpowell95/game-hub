@@ -32,13 +32,13 @@ air hockey table, not a variant.
 | Thing | Value |
 |---|---|
 | Folder | `air-hockey/` |
-| Hub id / stats id | `airhockey` |
+| Hub id / stats id | stats id `airhockey`. **Hub id is `air-hockey`** (= the folder, which the dev tools assume; changed in stage 1, see `air-hockey/CLAUDE.md`) |
 | Registry | `module: '../air-hockey/js/ui.js'`, `immersive: true`, `devOnly: true`, NO `released` date until Matt releases it from the admin page |
 | CSS root / prefix | `.ah-root` / `.ah-` (checked 2026-09-27: unused) |
 | Settings key | `gamehub.airhockey.v1` (last difficulty picked) |
 | Stats | `recordResult('airhockey', difficulty, won)`: `'easy'`/`'medium'`/`'hard'` vs CPU, `'mp'` online. Add the `GAME_META` row in `js/leaderboard-ui.js` even while admin-only (`OFF_THE_BOARD` must stay empty) |
 | `isInProgress()` | true while a match is under way; nothing is persisted (Hoops' "no mid-game resume" class) |
-| Tile art | `GAME_ART.airhockey` in `js/game-art.js` |
+| Tile art | `GAME_ART['air-hockey']` in `js/game-art.js` |
 | Strings | `air-hockey/js/strings.js`, `{en, es}`, via `makeT` |
 
 Every row of the "Use what exists" table applies (`onViewportResize`, `js/theme.js`,
