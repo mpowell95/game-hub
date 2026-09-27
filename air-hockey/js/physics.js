@@ -63,6 +63,10 @@ export function createMatch() {
     stuckHalf: -1,
     stuckT: 0,
     acc: 0,
+    // Online (js/live.js): true while the OTHER phone owns the puck. The mallets still move, but
+    // this phone neither moves the puck nor decides anything about it (brief §5: whoever's half
+    // the puck is in runs its physics).
+    puckRemote: false,
     // Events for the UI, reset by it after reading (sound, flash). Numbers only, no allocation.
     ev: { hit: 0, wall: 0, goal: -1, stuck: -1 },
   };
@@ -193,7 +197,7 @@ function substep(s, dt, a) {
     m.ox = ox; m.oy = oy;
   }
 
-  if (!p.live) return;
+  if (!p.live || s.puckRemote) return;
 
   // 2. The puck moves, swept against both mallets over the step.
   let t = 0;

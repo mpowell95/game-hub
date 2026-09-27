@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v985';
+const CACHE = 'game-hub-v986';
 
 const ASSETS = [
   './',
@@ -266,6 +266,9 @@ const ASSETS = [
   './air-hockey/js/ai.js',
   './air-hockey/js/render.js',
   './air-hockey/js/strings.js',
+  './air-hockey/js/live.js',
+  './air-hockey/js/net-test.js',
+  './air-hockey/net-test.html',
   './holdem/',
   './holdem/index.html',
   './holdem/css/holdem.css',
@@ -828,10 +831,13 @@ const REST_MANIFEST = {
   './air-hockey/index.html': 'e62c8ea1ee',
   './air-hockey/css/air-hockey.css': '8c158ef2fa',
   './air-hockey/js/ui.js': '87f653d9be',
-  './air-hockey/js/physics.js': '1069f3e95c',
+  './air-hockey/js/physics.js': '0ef349cb2c',
   './air-hockey/js/ai.js': 'b867d375e6',
   './air-hockey/js/render.js': '7187dbe241',
   './air-hockey/js/strings.js': '6a0e28b92e',
+  './air-hockey/js/live.js': '2768ebeea0',
+  './air-hockey/js/net-test.js': '7037b18203',
+  './air-hockey/net-test.html': 'aff33de9b9',
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
   './holdem/css/holdem.css': 'e4a8c2b504',
