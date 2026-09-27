@@ -391,6 +391,13 @@ export function aggregatePlayers(all, corrections) {
         dst.bz.bestCombo = Math.max(dst.bz.bestCombo | 0, src.bz.bestCombo | 0);
         const sbd = src.bz.bestScoreByDiff || {};
         for (const k of Object.keys(sbd)) dst.bz.bestScoreByDiff[k] = Math.max(dst.bz.bestScoreByDiff[k] | 0, sbd[k] | 0);
+      } else if (g === 'holdem' && src.hb) {
+        // Texas Hold'em's bankroll LEDGER (js/game-stats.js, recordHoldemBank). Every money field
+        // is an additive counter, so a person's balance across devices is the SUM of the ledgers;
+        // `best` (biggest single prize) takes Math.max, never a sum.
+        if (!dst.hb) dst.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
+        for (const k of ['buyins', 'winnings', 'grants', 'cashes', 'entries']) dst.hb[k] += src.hb[k] | 0;
+        dst.hb.best = Math.max(dst.hb.best | 0, src.hb.best | 0);
       } else if (g === 'battleship' && src.bs) {
         // Root CLAUDE.md "Adding a game" item 7's third edit. Counters (played/won/lost/shots/
         // hits/sunk) ADD; bestAccuracy takes Math.max. fewestShotsWin is this repo's first

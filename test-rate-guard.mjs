@@ -89,7 +89,11 @@ const recorders = [...src.matchAll(/^export function (record[A-Za-z0-9]*)\(/gm)]
 // none of the three is a per-play counter, so none takes the gate. A career is started and retired
 // by hand, once each; gating them on a per-minute play rate could only ever cost a real player a
 // real career record (THE LAW rule 1), which is the failure this suite exists to avoid.
-const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished']);
+// recordHoldemBank (2026-09-27) moves MONEY that rides a game, not a play: the game itself is
+// counted by recordResult('holdem'), which IS gated. Refusing a buy-in would hand out a free game,
+// and refusing a prize would lose money already won - THE LAW's failure, on the one ledger that is
+// a balance (js/game-stats.js, "Texas Hold'em bankroll").
+const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank']);
 ok('found the recorders', recorders.length >= 18);
 for (const r of recorders) {
   if (EXEMPT.has(r)) continue;

@@ -166,7 +166,7 @@ export function newGame(players, cfg = {}) {
   const scale = cfg.scale > 0 ? cfg.scale | 0 : START_SCALE;
   return {
     v: 1,
-    cfg: { speed, chips, scale },
+    cfg: { speed, chips, scale, buyin: cfg.buyin > 0 ? Math.floor(cfg.buyin) : 0, tier: cfg.tier || null },
     players: players.slice(0, MAX_PLAYERS).map((p, i) => ({
       id: i,
       name: String(p.name || 'Player').slice(0, 20),
@@ -556,6 +556,21 @@ export function publicView(state) {
     pub.hand = { ...rest, inHand: state.players.map((_, j) => !!holes[j] && !h.folded[j]) };
   }
   return pub;
+}
+
+/** The bankroll prize for finishing in `place` of an `n`-player game that cost `buyin` to enter.
+ *  Everyone at the table (computers too) puts the buy-in in the pot; with three or more players 1st
+ *  takes 65% and 2nd the rest, heads-up the winner takes it all. Whole dollars; nothing is lost to
+ *  rounding (1st + 2nd == the pot exactly). */
+export function payout(place, n, buyin) {
+  const b = Math.max(0, Math.floor(buyin || 0));
+  if (!b || n < 2 || place < 1) return 0;
+  const pot = b * n;
+  if (n === 2) return place === 1 ? pot : 0;
+  const first = Math.round(pot * 0.65);
+  if (place === 1) return first;
+  if (place === 2) return pot - first;
+  return 0;
 }
 
 export default {

@@ -12,7 +12,7 @@
 // per-game screens) are both exported so the Leaderboard's player detail screen can reuse them
 // verbatim - see the export block at the bottom of this file.
 
-import { loadStats, statsId } from './game-stats.js';
+import { loadStats, statsId, holdemBalance } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
 import { isGameLive, corrections } from './admin-config.js';
@@ -271,6 +271,28 @@ function recordScreen(id, rec) {
       <div class="gs-tally"><b>${lost}</b><span>${t('gs_losses')}</span></div>
       <div class="gs-tally"><b>${played}</b><span>${t('gs_plays')}</span></div>
       <div class="gs-tally"><b>${pct(won, played)}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>
+    ${diffTable(rec && rec.byDiff)}`;
+}
+
+/** Texas Hold'em: the usual wins/losses, plus the BANKROLL ledger (js/game-stats.js,
+ *  recordHoldemBank) - the balance it adds up to, the biggest prize, and both sides of the book. */
+function holdemScreen(rec) {
+  const hb = (rec && rec.hb) || {};
+  const total = (rec && rec.total) || { played: 0, won: 0, lost: 0 };
+  if (!(total.played | 0) && !(hb.entries | 0) && !(hb.grants | 0)) return emptyState("Texas Hold'em");
+  const money = (n) => '$' + (n | 0).toLocaleString();
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${money(holdemBalance(hb))}</b><span>${t('gs_hb_bank')}</span></div>
+      <div class="gs-tally"><b>${money(hb.best)}</b><span>${t('gs_hb_best')}</span></div>
+      <div class="gs-tally"><b>${total.won | 0}</b><span>${t('gs_wins')}</span></div>
+      <div class="gs-tally"><b>${total.played | 0}</b><span>${t('gs_plays')}</span></div>
+    </div>
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${money(hb.winnings)}</b><span>${t('gs_hb_won')}</span></div>
+      <div class="gs-tally"><b>${money(hb.buyins)}</b><span>${t('gs_hb_paid')}</span></div>
+      <div class="gs-tally"><b>${hb.cashes | 0}</b><span>${t('gs_hb_cashes')}</span></div>
     </div>
     ${diffTable(rec && rec.byDiff)}`;
 }
@@ -1482,6 +1504,7 @@ function screenFor(id, st) {
   if (id === 'skeeball') return skeeballScreen(rec);
   if (id === 'pinball') return pinballScreen(rec);
   if (id === 'brickblitz') return brickBlitzScreen(rec);
+  if (id === 'holdem') return holdemScreen(rec);
   if (id === 'golf') return golfScreen(rec);
   return recordScreen(id, rec);   // business, parchis
 }

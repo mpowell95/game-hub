@@ -134,6 +134,45 @@
 .pk-root .pk-lobby-tools .pk-shape { margin: 0; }
 .pk-root .pk-waiting { text-align: center; color: var(--pk-dim); font-size: 15px; margin: 6px 0; }
 
+/* ------------------------------------------------------------ bankroll --- */
+.pk-root .pk-bankchip, .pk-root .pk-bankbar {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 15px; color: #e6ebf3;
+}
+.pk-root .pk-bankchip b, .pk-root .pk-bankbar b { color: #7ddf2a; font-size: 18px; }
+.pk-root .pk-bankicon {
+  width: 26px; height: 26px; border-radius: 50%; flex: 0 0 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, #3fae3a, #1d6b1a); color: #fff; font-weight: 900; font-size: 15px;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+/* The table picker: the reference menu's tournament tiles, two to a row. */
+.pk-root .pk-tiers {
+  flex: 1; display: flex; flex-direction: column; gap: 10px;
+  padding: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px) max(12px, calc(50% - 230px)) calc(env(safe-area-inset-bottom, 0px) + 10px);
+  background: linear-gradient(180deg, #213656 0%, #14223a 45%, #0b1322 100%);
+}
+.pk-root .pk-tierhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pk-root .pk-tierhead .pk-bankbar { background: #000; border: 1px solid #333; padding: 6px 12px; border-radius: 4px; }
+.pk-root .pk-tiergrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pk-root .pk-tier {
+  position: relative; min-height: 78px; padding: 8px 8px 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 6px; color: #fff; text-align: center;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.pk-root .pk-tiername { font-size: 16px; font-weight: 900; line-height: 1.1; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+.pk-root .pk-tierbuy { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.pk-root .pk-tierwin { font-size: 12px; color: #fff3b0; }
+.pk-root .pk-tier.is-locked { filter: grayscale(0.85) brightness(0.55); opacity: 1; }
+.pk-root .pk-tier.is-locked .pk-tierwin { color: #fff; }
+.pk-root .pk-tierstep { display: flex; align-items: center; gap: 8px; }
+.pk-root .pk-tierstepval, .pk-root .pk-tierline {
+  flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; text-align: center;
+  border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.4); font-size: 14px; font-weight: 800; padding: 4px 8px; margin: 0;
+}
+.pk-root .pk-prize { margin: 0; font-size: 18px; font-weight: 900; color: #7ddf2a; }
+
 /* -------------------------------------------------------------- cards --- */
 /* A real card: index top-left and (upside down) bottom-right, a thin frame round the centre with
    one big pip, or the court letter. Width drives everything (--pk-cw). */

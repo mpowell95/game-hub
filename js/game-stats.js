@@ -174,7 +174,16 @@
 //                                                   // Brick Breaker score (no local high-score table);
 //                                                   // see recordBrickBlitz
 //       holdem: {
-//         total, byDiff },                         // Texas Hold'em (2026-09-27): one result per
+//         total, byDiff,
+//         hb: { buyins, winnings, grants, best, cashes, entries } },
+//                                                   // the BANKROLL (2026-09-27), kept as a LEDGER of
+//                                                   // additive counters and never as a stored balance:
+//                                                   // balance = HOLDEM_START_BANK + winnings + grants
+//                                                   // - buyins (holdemBalance). Every field only ever
+//                                                   // grows (best: Math.max), so rule 2 holds and two
+//                                                   // devices' ledgers simply ADD in players-agg. See
+//                                                   // recordHoldemBank.
+//                                                   // Texas Hold'em (2026-09-27): one result per
 //                                                   // tournament per device, via recordResult. Won =
 //                                                   // held every chip at the end; lost = busted out
 //                                                   // (or walked away mid-game). byDiff keyed
@@ -865,6 +874,7 @@ function normalize(raw) {
   ensureBb(st.games.baseball);
   ensureMs(st.games.minesweeper);
   ensureBz(st.games.brickblitz);
+  ensureHb(st.games.holdem);
   return st;
 }
 
@@ -1016,6 +1026,7 @@ function drainPendingResults(st) {
   for (const e of q) {
     if (!e || GAMES.indexOf(e.game) < 0) continue;
     if (e.h2h) { applyHeadToHead(st, e.game, e.h2h, e.won); applied++; continue; }
+    if (e.bank) { applyHoldemBank(st.games.holdem, e.bank); applied++; continue; }
     bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
     if (e.game === 'escoba') {
       ensureEs(st.games.escoba);
@@ -2094,6 +2105,57 @@ export function recordBrickBlitz(score, difficulty, extras) {
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
+}
+
+// --- Texas Hold'em bankroll (2026-09-27) --------------------------------------------------------
+//
+// Matt: "You should have a pile of money you can grow". A ledger, not a balance: three money
+// counters that only ever INCREASE (what you paid in, what you won, what you were given) plus two
+// counts and a best. The balance is derived, so no write can ever overwrite money already earned,
+// and a person's balance across devices is just every device's ledger added together - which is
+// exactly what players-agg already does with counters. Starting money is NOT stored (it would be
+// counted once per device); it is added once, here, at read time.
+//
+// Deliberately NOT behind the rate gate: a buy-in that was refused would let a game be played for
+// free, and a prize that was refused would be money lost (THE LAW). A failed write is queued and
+// replayed like any other result (persistOrQueue + drainPendingResults).
+export const HOLDEM_START_BANK = 25000;
+
+function ensureHb(g) {
+  if (!g.hb || typeof g.hb !== 'object') g.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
+  for (const k of ['buyins', 'winnings', 'grants', 'best', 'cashes', 'entries']) if (!Number.isFinite(g.hb[k])) g.hb[k] = 0;
+}
+
+/** The bankroll a ledger adds up to. Accepts a partial/missing ledger. */
+export function holdemBalance(hb) {
+  const h = hb || {};
+  return HOLDEM_START_BANK + (h.winnings | 0) + (h.grants | 0) - (h.buyins | 0);
+}
+
+function applyHoldemBank(g, e) {
+  ensureHb(g);
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
+  const buyin = n(e.buyin), prize = n(e.prize), grant = n(e.grant);
+  if (buyin) { g.hb.buyins += buyin; g.hb.entries += 1; }
+  if (prize) { g.hb.winnings += prize; g.hb.cashes += 1; g.hb.best = Math.max(g.hb.best | 0, prize); }
+  if (grant) g.hb.grants += grant;
+}
+
+/** One bankroll movement: `{ buyin }` when a game starts, `{ prize }` when a paid place is decided,
+ *  `{ grant }` for the free top-up. Returns this device's ledger after the write. */
+export function recordHoldemBank(e) {
+  const st = loadStats();
+  applyHoldemBank(st.games.holdem, e || {});
+  st.updatedAt = new Date().toISOString();
+  persistOrQueue(st, { game: 'holdem', bank: { buyin: e && e.buyin, prize: e && e.prize, grant: e && e.grant } });
+  return Object.assign({}, st.games.holdem.hb);
+}
+
+/** This device's own ledger (no network). */
+export function holdemLedger() {
+  const g = loadStats().games.holdem;
+  ensureHb(g);
+  return Object.assign({}, g.hb);
 }
 
 /** Multiplayer head-to-head. CAPTURE ONLY -- nothing displays this yet, and that is deliberate.

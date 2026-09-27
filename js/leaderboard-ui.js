@@ -52,7 +52,7 @@ import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
-import { statsId } from './game-stats.js';
+import { statsId, holdemBalance } from './game-stats.js';
 import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
   boardRankTier, formatBoardMetric, GOLF_BOARD_COURSE } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
@@ -1380,6 +1380,12 @@ const TEXTURE = {
       get: (g) => ((g.games.boggle.bg || {}).longestWord || {}).len | 0,
       show: (g) => ((g.games.boggle.bg || {}).longestWord || {}).word || '',
     },
+  ],
+  // The bankroll is only anyone's once they have played for money; a player with no ledger shows 0
+  // rather than the untouched starting stake, which would put every non-player on the podium.
+  holdem: [
+    { labelKey: 'lb_tex_hb_bank', get: (g) => { const hb = (g.games.holdem || {}).hb; return hb && ((hb.entries | 0) || (hb.grants | 0)) ? Math.max(0, holdemBalance(hb)) : 0; } },
+    { labelKey: 'lb_tex_hb_best', get: (g) => (((g.games.holdem || {}).hb || {}).best) | 0 },
   ],
   brickblitz: [
     { labelKey: 'lb_tex_bz_bricks', get: (g) => (((g.games.brickblitz || {}).bz || {}).bricks) | 0 },
