@@ -14,8 +14,8 @@ starting a stage**. It holds the decisions (look, modes, win rule) and the onlin
 |---|---|---|
 | 1 | Table, mallet, puck, goals, first to 7, one simple computer | **Done 2026-09-27.** Matt's feel check: *"the computer is probably a little too hard. Other than that it's great. proceed"* |
 | 2 | Easy / Medium / Hard tuned, stats, setup screen, how to play | **Done 2026-09-27, deployed devOnly** |
-| 3 | Latency test for online (brief §5), numbers to Matt | **Built and deployed 2026-09-27. Waiting on Matt's two-phone numbers** (see "Online: the stage 3 latency test") |
-| 4 | Live online, if stage 3 says it works | not started |
+| 3 | Latency test for online (brief §5), numbers to Matt | **Done 2026-09-27.** Matt ran it on two devices: *"numbers look good, go ahead with stage 4"* (2026-09-28; he did not paste the numbers) |
+| 4 | Live online, if stage 3 says it works | **Done 2026-09-28, deployed devOnly** (see "Online play (stage 4)") |
 
 ## Stats and settings (stage 2)
 
@@ -59,7 +59,7 @@ starting a stage**. It holds the decisions (look, modes, win rule) and the onlin
 | `js/strings.js` | `{ en, es }` |
 | `css/air-hockey.css` | everything under `.ah-root`; cards and buttons are `css/ui.css`'s `.gh-modal` / `.gh-btn` |
 | `js/test.js` | headless engine probe, `node air-hockey/js/test.js` (not deployed) |
-| `js/live.js` | the real-time channel and the puck-ownership protocol (stage 3; stage 4 builds on it) |
+| `js/live.js` | the real-time channel, puck ownership, goals, rounds and rematch (stages 3-4) |
 | `net-test.html` + `js/net-test.js` | the stage 3 latency test page. Dev tool, not on the launcher; in `ASSETS` so it is validated and cached |
 
 ## The physics (correctness-critical)
@@ -165,12 +165,48 @@ WebSockets, so the Firebase SDK fell back to long-polling. Two browsers here, 60
 round trip median ~380 ms (p90 ~450), update gap median ~45 ms, catch-up jump median ~110 units
 (2.5 puck widths), ~60 passes a minute, 0 write failures. That is a worst case for the transport,
 and it proves the protocol works (passes, goals, re-sent handovers). The deciding numbers are
-Matt's, on real phones over WebSockets. **Do not start stage 4 until he has them and says go.**
+Matt's, on real phones over WebSockets; he ran it and said go (stage table above).
 
-**Known cost of this protocol, to fix in stage 4 if the numbers are good**: the ghost waits at the
-centre line for the handover, so a puck crossing to you appears to pause for about a one-way
-delay plus up to one send interval, then jumps. The obvious next step is an optimistic takeover
-(take the puck as soon as the ghost crosses, reconcile if the owner's own mallet hit it first).
+## Online play (stage 4, 2026-09-28)
+
+**Flow** (`ui.js`, "online" section): setup -> **Play online** -> **Create a game** (a 4-letter code
+to share; the host waits on a narrow listener on `rooms/<CODE>/guest`, never `net.onRoom`, which
+would fire on every live message) or type a code and **Join** (the room's `game` is read FIRST and
+must be `'airhockey'`, because `net.joinRoom` writes the guest in before returning). Then a match
+to 7 on `js/live.js`, the opponent's NAME in the score row. Result: `recordResult('airhockey',
+'mp', won)` on both phones; the setup and online cards show "Online: N won, M lost".
+
+- **Rematch = a new ROUND** (`rd`): each phone asks (`r = rd + 1`), and a round starts only on a
+  phone that has asked AND seen the other ask. The LOSER serves. The result card shows "<name>
+  wants a rematch" when they asked first, and "Waiting for <name>..." after you ask.
+- **No pause online.** Hiding the tab just stops this phone's loop; the other phone freezes under
+  **"Waiting for <name>..."** once nothing has arrived for 3 s (`QUIET_MS`), and resumes by itself
+  when messages return. After 30 s quiet (`GIVE_UP_MS`) an **End match** button appears (no result).
+- **Leaving** (Back, End match, the X, hub back, `destroy()`) calls `net.leaveRoom`, which marks the
+  room `ended`; the other phone watches `rooms/<CODE>/status` and shows **"<name> left the match."**
+  No result is recorded for a match that did not reach 7. `isInProgress()` is true in play and
+  while waiting.
+- **No persisted MP state** (no `gamehub.airhockey.mp.v1`): a live match cannot resume, like
+  Yahtzee's.
+- **Takeover without the centre-line pause** (fixes stage 3's known cost): the non-owner's ghost
+  now carries on INTO its own half, and on takeover the phone keeps the puck it was SHOWING if it
+  is within 90 units of the owner's handover state stepped forward (normal case: both ran the same
+  table physics). A bigger gap (their mallet hit it before it crossed) snaps to theirs. Their hits
+  and wall bounces still make sounds on your phone (from the ghost).
+
+**Proof, and its limits** (js/CLAUDE.md, "Multiplayer process rules": never claim "multiplayer
+works" without real devices):
+- `js/test.js` section 6: two sessions over a FAKE network (40 and 150 ms each way, 30% jitter,
+  older messages dropped when several are due), scripted players both sides, 4 matches + rematch
+  each: both phones agree on every score, every goal and match end announced exactly once per
+  phone, the puck NEVER owned by both, never owned by neither for more than 0.2 s, rematch reaches
+  7 again on both.
+- Two separate browser PROFILES against the REAL Firebase (long-polling, ~380 ms round trip, since
+  this container blocks WebSockets), touch-swiping on both: create -> join, names in the score row,
+  a match to 7 in 51 s with both screens agreeing (7-2 / 2-7), `mp` won on one and lost on the
+  other, rematch handshake to 0-0, the guest taken offline -> host shows "Waiting for Guesty..."
+  and recovers, the host closing the game -> guest shows "Hosty left the match."
+- **Not yet verified on two real phones.** That is Matt's check.
 
 ## How to play
 
