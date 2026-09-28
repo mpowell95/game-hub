@@ -152,6 +152,14 @@ ok('the whole rack area is on the table',
   ok('one rerack a turn', !m.canRerack());
   m.startTurn();
   ok('unlimited reracks never run out', m.canRerack());
+  // MAKE YOUR OWN.
+  m = new Match({ first: 'a', reracks: 1 }); m.racks.b = m.racks.b.slice(0, 3); m.startTurn();
+  ok('custom rerack: a cell off the grid is refused', m.rerackCustom([{ c: 0, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0 && m.reracksLeft.a === 1);
+  ok('custom rerack: two cups on one cell is refused', m.rerackCustom([{ c: 1, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0);
+  ok('custom rerack: outside the rack area is refused', m.rerackCustom([{ c: 7, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0);
+  ev = m.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }]);
+  ok('custom rerack: cups need not touch, keep their ids, and it costs a rerack',
+    ev.length === 1 && ev[0].key === 'custom' && ids(m, 'b').join() === 'k0,k1,k2' && m.racks.b[2].r === 3 && m.reracksLeft.a === 0 && !m.canRerack());
   // ISLAND.
   m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();

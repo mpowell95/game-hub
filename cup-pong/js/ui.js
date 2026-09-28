@@ -12,7 +12,7 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
 import { THROW, CUP, RACK_Z0, ROW_H } from './geom.js';
-import { makeRack, cupsXZ, presetsFor, cellXZ } from './rack.js';
+import { makeRack, cupsXZ, presetsFor, cellXZ, AREA } from './rack.js';
 import { Match } from './match.js';
 
 /** The middle of the full rack, along the table: where aim is measured. */
@@ -90,6 +90,18 @@ function presetSVG(spots) {
   return `<svg viewBox="0 0 ${(w * sc).toFixed(1)} ${(h * sc).toFixed(1)}" width="${(w * sc).toFixed(0)}" height="${(h * sc).toFixed(0)}" aria-hidden="true">${
     pts.map((p) => `<circle cx="${((p.x - x0) * sc).toFixed(1)}" cy="${((p.z - z0) * sc).toFixed(1)}" r="${(r * sc * 0.94).toFixed(1)}"/>`).join('')}</svg>`;
 }
+
+/** Every cell of the rack area (brief 4c's grid), far row first: where a custom rack may put a cup. */
+const AREA_CELLS = (() => {
+  const out = [];
+  for (let r = 0; r <= AREA.rMax; r++) for (let c = -AREA.cMax; c <= AREA.cMax; c++) if (Math.abs(c + r) % 2 === 1) out.push({ c, r });
+  return out;
+})();
+
+/** The "make your own" icon: a triangle of dashed spots with one cup lifted off it. */
+const CUSTOM_ICON = `<svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">${
+  [[10, 14], [28, 14], [19, 30], [37, 30]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"/>`).join('')
+}<circle cx="46" cy="14" r="8"/><circle cx="28" cy="46" r="8"/><path d="M40 22 L32 38" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>`;
 
 const escapeHTML = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -952,20 +964,141 @@ class CupPong {
         <h2 class="cp-card-title">${t('rerack')}</h2>
         <div class="cp-presets">${presets.map((p) => `
           <button type="button" class="cp-preset" data-key="${p.key}">${presetSVG(p.spots)}<span>${t('rk_' + p.key)}</span></button>`).join('')}
+          <button type="button" class="cp-preset is-custom" data-role="custom">${CUSTOM_ICON}<span>${t('rk_custom')}</span></button>
         </div>
       </div>`;
     this.root.appendChild(el);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
-    for (const b of el.querySelectorAll('.cp-preset')) {
+    this.on(el.querySelector('[data-role="custom"]'), 'click', () => { el.remove(); this.showCustomRack(); });
+    for (const b of el.querySelectorAll('.cp-preset[data-key]')) {
       this.on(b, 'click', () => {
         el.remove();
-        const ev = m.rerack(b.dataset.key);
-        if (ev.length) this.mpRecord({ k: 'r', key: b.dataset.key });
-        for (const e of ev) this.engine.rend.slideRack(e.side, cupsXZ(e.to));
-        this.engine.rend.setMarks('b', null);
-        this.paintOptions();
+        this.applyRerack(m.rerack(b.dataset.key), { k: 'r', key: b.dataset.key });
       });
     }
+  }
+
+  /** A rerack's events: record it (a challenge), slide the cups, repaint the options. */
+  applyRerack(ev, entry) {
+    if (ev.length) this.mpRecord(entry);
+    for (const e of ev) this.engine.rend.slideRack(e.side, cupsXZ(e.to));
+    this.engine.rend.setMarks('b', null);
+    this.paintOptions();
+  }
+
+  /**
+   * MAKE YOUR OWN (brief 4c). The rack drawn top-down on its hex grid, shooter at the bottom: drag
+   * a cup to any empty spot, or tap a cup and then a spot. Cups snap to cells, two can never share
+   * one, and the grid IS the rack area, so nothing drawn can be illegal. Cups need not touch. Done
+   * spends the rerack; Cancel goes back to the presets with it unspent.
+   */
+  showCustomRack() {
+    const m = this.match;
+    const rack = m.target();
+    // Start from where the cups stand now, each on its nearest free cell (a line preset sits on
+    // exact spots, off the grid).
+    const taken = new Set();
+    const pos = rack.map((k) => {
+      const p = cellXZ(k);
+      let best = -1, bd = Infinity;
+      AREA_CELLS.forEach((cell, i) => {
+        if (taken.has(i)) return;
+        const q = cellXZ(cell), d = (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
+        if (d < bd) { bd = d; best = i; }
+      });
+      taken.add(best);
+      return best;
+    });
+    const start = pos.slice();
+    const pts = AREA_CELLS.map((c) => cellXZ(c));
+    const R = CUP.topR, pad = 0.012;
+    const x0 = Math.min(...pts.map((p) => p.x)) - R - pad, x1 = Math.max(...pts.map((p) => p.x)) + R + pad;
+    const z0 = Math.min(...pts.map((p) => p.z)) - R - pad, z1 = Math.max(...pts.map((p) => p.z)) + R + pad;
+    const W = 1000, sc = W / (x1 - x0), H = (z1 - z0) * sc;
+    const X = (i) => ((pts[i].x - x0) * sc).toFixed(1), Y = (i) => ((pts[i].z - z0) * sc).toFixed(1);
+    const rr = (R * sc * 0.96).toFixed(1);
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal cp-card cp-rerack cp-custom" role="dialog" aria-modal="true" aria-label="${t('rk_custom')}">
+        <h2 class="cp-card-title">${t('rk_custom')}</h2>
+        <p class="cp-custom-say">${t('rkDrag')}</p>
+        <svg class="cp-grid" viewBox="0 0 ${W} ${H.toFixed(1)}" role="img" aria-label="${t('rk_custom')}">
+          ${AREA_CELLS.map((_, i) => `<circle class="cp-spot" data-cell="${i}" cx="${X(i)}" cy="${Y(i)}" r="${rr}"/>`).join('')}
+          ${pos.map((ci, k) => `<g class="cp-cup" data-cup="${k}" transform="translate(${X(ci)} ${Y(ci)})"><circle r="${rr}"/><circle class="cp-cup-in" r="${(R * sc * 0.62).toFixed(1)}"/></g>`).join('')}
+        </svg>
+        <div class="cp-custom-btns">
+          <button type="button" class="gh-btn" data-role="cancel">${t('cancel')}</button>
+          <button type="button" class="gh-btn gh-btn--primary" data-role="done" disabled>${t('rkDone')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    const svg = el.querySelector('.cp-grid');
+    const cups = [...el.querySelectorAll('.cp-cup')];
+    const done = el.querySelector('[data-role="done"]');
+    let sel = -1, drag = null;
+    const toSvg = (e) => {
+      const b = svg.getBoundingClientRect();
+      return { x: (e.clientX - b.left) / b.width * W, y: (e.clientY - b.top) / b.height * H };
+    };
+    const place = (k, x, y) => cups[k].setAttribute('transform', `translate(${(+x).toFixed(1)} ${(+y).toFixed(1)})`);
+    const paint = () => {
+      pos.forEach((ci, k) => { place(k, X(ci), Y(ci)); cups[k].classList.toggle('is-sel', k === sel); });
+      done.disabled = pos.every((ci, k) => ci === start[k]);
+    };
+    // The free cell nearest a point, or the cup's own cell (dropping it back where it was).
+    const nearest = (k, x, y) => {
+      let best = pos[k], bd = Infinity;
+      AREA_CELLS.forEach((_, i) => {
+        if (i !== pos[k] && pos.includes(i)) return;
+        const d = (X(i) - x) ** 2 + (Y(i) - y) ** 2;
+        if (d < bd) { bd = d; best = i; }
+      });
+      return best;
+    };
+    this.on(svg, 'pointerdown', (e) => {
+      const g = e.target.closest && e.target.closest('.cp-cup');
+      const p = toSvg(e);
+      if (g) {
+        const k = +g.dataset.cup;
+        drag = { k, id: e.pointerId, x: p.x, y: p.y, moved: false };
+        try { svg.setPointerCapture(e.pointerId); } catch { /* still works without */ }
+        g.classList.add('is-drag');
+        e.preventDefault();
+        return;
+      }
+      const s = e.target.closest && e.target.closest('.cp-spot');
+      if (s && sel >= 0) {
+        const i = +s.dataset.cell;
+        if (!pos.includes(i)) pos[sel] = i;
+        sel = -1;
+        paint();
+      }
+    });
+    this.on(svg, 'pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const p = toSvg(e);
+      if (!drag.moved && Math.hypot(p.x - drag.x, p.y - drag.y) < R * sc * 0.25) return;
+      drag.moved = true;
+      place(drag.k, p.x, p.y);
+    });
+    const end = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const { k, moved } = drag;
+      cups[k].classList.remove('is-drag');
+      drag = null;
+      if (moved) { const p = toSvg(e); pos[k] = nearest(k, p.x, p.y); sel = -1; }
+      else sel = sel === k ? -1 : k;              // a tap picks it up (or puts it back down)
+      paint();
+    };
+    this.on(svg, 'pointerup', end);
+    this.on(svg, 'pointercancel', (e) => { if (drag && e.pointerId === drag.id) { cups[drag.k].classList.remove('is-drag'); drag = null; paint(); } });
+    this.on(el.querySelector('[data-role="cancel"]'), 'click', () => { el.remove(); this.showRerack(); });
+    this.on(done, 'click', () => {
+      const cells = pos.map((i) => ({ c: AREA_CELLS[i].c, r: AREA_CELLS[i].r }));
+      el.remove();
+      this.applyRerack(m.rerackCustom(cells), { k: 'r', key: 'custom', cells });
+    });
   }
 
   finish() {
