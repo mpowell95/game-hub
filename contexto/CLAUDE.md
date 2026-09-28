@@ -13,7 +13,8 @@ vocabulary is ranked below it. Find rank 1 to win. Solo, no opponent. Built 2026
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../contexto/js/ui.js'`, hub id `contexto`, `released: '2026-09-28'` |
+| Registry | `module: '../contexto/js/ui.js'`, hub id `contexto`, `released: '2026-09-28'` (not `devOnly`) |
+| Released | **To everyone on 2026-09-28**, by Matt's admin-page switch, after a same-day admin-only test. The `released` date already matched, so the "New" badge runs 2026-09-28 to 2026-10-04 |
 | Immersive | **No.** The standard hub header stays, the Sudoku/Nuts & Bolts class |
 | Stats id | `contexto` (recorder `recordContexto(lang, won, {guesses, hints})`) |
 | CSS root / prefix | `.ct-root` / `.ct-` |
