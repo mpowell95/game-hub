@@ -93,14 +93,21 @@ cells; only the line shapes need spots.
 - **The flick is skeeball's** (`skeeball/js/swipe.js`, imported, never copied): speed in
   screen-heights per second clocked with `e.timeStamp`, and its measured natural range
   (`SWIPE_SLOW` 0.65 -> power 0, `SWIPE_FAST` 4.20 -> power 1). Power is NOT clamped.
-- **Power -> launch speed** is `THROW.minSpeed`/`maxSpeed` (2.12 / 4.85 m/s), interpolated as energy
-  (v^2), at a fixed 0.55 rad. Power 0 lands ~0.4 m on, power 0.55 reaches the middle of the rack,
-  power 1 flies off the end.
-- **THE LAUNCH ANGLE WAS MEASURED OFF THE RECORDING.** At 15 fps the GamePigeon ball goes from the
-  serve spot to the front cups in 4-5 frames (~0.3 s) and climbs up the screen almost evenly,
-  never above the rack before it arrives. Projecting candidate arcs through the fitted camera,
-  0.55 rad reaches the cups in 0.33 s on that path; the first build's 0.70 took 0.40 s and 0.62 from
-  a raised release looked like a slow lob.
+- **Power -> launch speed** is `THROW.minSpeed`/`maxSpeed` (1.87 / 3.64 m/s), interpolated as energy
+  (v^2), at a fixed 1.00 rad under `GRAVITY` 6.5. Power 0 lands ~0.46 m on, power 0.55 reaches the
+  middle of the rack, power ~0.65 and up flies off the end. The rack spans roughly power 0.35-0.65.
+- **THE ARC WAS FITTED TO THE RECORDING, and it took three builds (2026-09-27/28).** The GamePigeon
+  ball is a HIGH, FLOATY LOB: at 15 fps it climbs ABOVE the rack on screen, peaks over the front
+  cups around frame 8, and drops in at ~0.67 s. Build 1 designed an arc with no reference; build 2
+  read that peak as an overshoot and flattened the throw to 0.55 rad (Matt: *"It goes too low. It's
+  like a straight line and I can barely get it to hit the top of a cup"*). Build 3 fitted launch
+  angle, speed AND gravity to 11 frames of the ball's screen path, with one extra constraint: the
+  ball must be AT THE RACK when the recording shows it there. **Without that constraint the fit
+  cheats** - from this steep camera a near-vertical toss that never leaves mid-court traces the
+  same path up the screen. Result: 1.00 rad, 3.05 m/s, gravity 6.5, every frame within ~0.02 of
+  the screen, and the same trace measured again in the real browser matches.
+- **Gravity is 6.5, not 9.81, on purpose** (`GRAVITY` in `geom.js`). No real-gravity arc matched
+  both the path and the timing. Do not "correct" it.
 - **AIM FOLLOWS THE FINGER** (`aimFromSwipe` in `ui.js`). The flick's direction on screen is carried
   up from the waiting ball to the rack's row on screen, that point is unprojected onto the table,
   and the heading is the line from the ball to it. A flick that points at a cup sends the ball at
@@ -108,7 +115,8 @@ cells; only the line shapes need spots.
   ball went somewhere other than where the finger pointed.
 
 **If the throw still feels wrong**, in order: `minSpeed`/`maxSpeed` (everything short or long),
-`elev` (too flat or too loopy). Aim has no knob any more: it is where you point. The "Power / Aim"
+`elev` and `GRAVITY` together (too flat, too loopy, too quick or too slow) - and re-fit to the
+recording rather than guessing; the fitting scripts are described above. Aim has no knob any more: it is where you point. The "Power / Aim"
 line bottom right shows the last throw so a report can quote numbers; remove it once the throw is
 settled.
 
@@ -131,15 +139,11 @@ by 35-200 ms, so every scripted flick reads as a slow push. Only a real hand can
   (fell off the table) or `miss` (came to rest, including on top of the cups).
 - **No magnetism, ever** (skeeball's ban). Nothing steers the ball.
 
-Measured on the rebuilt throw, 858-throw power x aim grid over the full rack: every one of the 10
-cups is made (5-9 times each), 8.4% of the even sweep scores, 538 throws touch a cup and stay out,
-none reaches the time cap.
-
-**BOUNCE SHOTS DO NOT GO IN AT THE RECORDED LAUNCH ANGLE: 0 of 969 throws (2026-09-27).** A ball
-thrown at 0.55 rad comes off the table too low to clear a 12 cm rim. The first build's steeper
-lob made them about as often as direct shots. Bounce shots are brief section 5d, stage 4, which
-owns making them possible; `test.js` prints the count as `info` rather than failing, and stage 4
-turns it back into an assertion.
+Measured on the lob (build 3), 858-throw power x aim grid over the full rack: every one of the 10
+cups is made (11-34 times each), 23.9% of the even sweep scores, 445 throws touch a cup and stay
+out, none reaches the time cap (slowest 4.1 s). Soft throws that bounce off the table go in again
+(40 of 403); build 2's flat throw had made that 0 of 969. Bounce shots are still brief section 5d,
+stage 4's; `test.js` prints the count as `info` until then.
 
 ## The look and the camera (fitted to the recording, 2026-09-27)
 

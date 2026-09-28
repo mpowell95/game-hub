@@ -142,10 +142,9 @@ ok('balls really come off the rims (plenty touch a cup and stay out)', rimOut > 
 }
 
 // --- bounce shots: MEASURED, NOT ASSERTED (yet) ------------------------------------------------
-// At the launch angle fitted to Matt's recording (0.55 rad) a ball that bounces off the table comes
-// up too low to clear a 12 cm rim, and none went in over 969 throws (2026-09-27). Bounce shots are
-// brief section 5d, stage 4, and that stage owns making them possible. This prints the number so
-// the change is visible; stage 4 turns it back into an assertion.
+// Bounce shots are brief section 5d, stage 4, and that stage turns this into an assertion. Build 2's
+// flat throw made them impossible (0 of 969); the fitted lob makes them possible again. Printed so
+// a change to the arc that loses them again is visible.
 {
   let bounced = 0, tried = 0;
   for (let p = -0.3; p <= 0.3001; p += 0.02) {
