@@ -615,8 +615,8 @@ body {
    rule above sets `background: none` for exactly that reason. But `:root.gh-dark .hub-top` is
    (0,3,0) to that rule's (0,2,0), so in DARK MODE the panel background won on specificity and
    painted an opaque 86x98 navy rectangle into the top-left corner of every immersive game -
-   Escoba, Mancala, Ball Run, Yahtzee, Hill Climb, Battleship and Pool alike. Invisible for as long
-   as every immersive game was itself dark; Pool's bright green surround is what finally showed it
+   Escoba, Mancala, Ball Run, Yahtzee, Hill Climb and Battleship alike. Invisible for as long
+   as every immersive game was itself dark; a bright green game surround is what finally showed it
    (Matt: "The top left is weird"). The back button below keeps its own dark treatment - that one
    is a real button and is meant to read on a dark game. */
 :root.gh-dark .hub-top:not(.hub-top-immersive) { background: rgba(14, 20, 32, 0.92); }

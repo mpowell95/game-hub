@@ -6,7 +6,7 @@
 // following the conventions Tic Tac Toe's MP pass settled (js/CLAUDE.md's
 // "third consumer" section) -- js/net.js itself is untouched. Deliberately
 // SIMPLER than the reference games in two ways, stated up front:
-//   1. No in-room rematch series (Pool's precedent, js/CLAUDE.md's "seventh
+//   1. No in-room rematch series (js/CLAUDE.md's "seventh
 //      consumer"): one game per room. A rematch is a fresh room.
 //   2. No autosave/rejoin window: destroy() while an MP room is live always
 //      leaves the room (ends it for both sides) rather than persisting a
@@ -26,7 +26,7 @@
 //
 // Move vocabulary (net.appendMove's `move` payload): {t:'roll', dice:[...]},
 // {t:'hold', i}, {t:'commit', cat}. A roll's dice VALUES are random, so --
-// like a Pool shot's physics parameters (js/CLAUDE.md's "seventh consumer")
+// like a physics game's shot parameters (js/CLAUDE.md's "seventh consumer")
 // -- the roller generates them locally and transmits the RESULT; the peer
 // adopts the same values rather than trying to synchronize the RNG itself.
 // Category selection is never synced (it's local-only ghost-preview UI);

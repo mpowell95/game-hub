@@ -415,7 +415,7 @@ class GolfGame {
    *
    *  The hub wraps an immersive game in ~98px of top chrome for its floating back button plus a
    *  gap below, so a game that asks for the whole viewport is that much too tall the moment it is
-   *  mounted - the exact way Pool shipped 138px over with its controls below the fold
+   *  mounted - the exact way an immersive game once shipped 138px over with its controls below the fold
    *  (docs/BUILDING-A-GAME.md, Part 3). Measuring the host covers standalone and the hub with one
    *  rule and no host-specific constant.
    *

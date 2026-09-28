@@ -579,13 +579,18 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   const all = {
     d1: rec({ playerId: 'AR999', name: 'Wizard' }, {
       pinball: { total: { played: 4, won: 4, lost: 0 }, byDiff: { medium: { played: 4, won: 4, lost: 0 } } },
+      pool: comp(5, 3, 2),
+      pipes: { total: { played: 6, won: 6, lost: 0 }, byDiff: {}, pi: { solved: 6, moves: 90, bestLevel: 4, bestByTier: {} } },
       connect4: comp(3, 2, 1),
     }, 100),
   };
   const row = aggregatePlayers(all)[0];
-  ok('an archived game is neither SOLO nor COMPETITIVE', !SOLO.has('pinball') && !COMPETITIVE.includes('pinball'));
+  for (const id of ['pinball', 'pool', 'poolv2', 'pipes']) {
+    ok(`archived "${id}" is neither SOLO nor COMPETITIVE`, !SOLO.has(id) && !COMPETITIVE.includes(id));
+  }
   eq('its plays count in no total', [row.comp.played, row.comp.won, row.totalPlays], [3, 2, 3]);
-  eq('but its stored total is still carried on the row, untouched', row.games.pinball.total.played, 4);
+  eq('but its stored total is still carried on the row, untouched',
+    [row.games.pinball.total.played, row.games.pool.total.played, row.games.pipes.total.played], [4, 5, 6]);
 }
 
 // ---- Brick Breaker's bz sub-counter survives the cross-device combine (THE LAW rule 1) ----

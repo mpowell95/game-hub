@@ -141,7 +141,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/leaderboard-ui.js` | "Leaderboards" overlay; live `watchPlayers` subscription. DOM only — the ranking maths is in `leaderboard-rank.js`; read-only consumer of stored data. Owns one preference key of its own, `gamehub.lb.sort.v1` (the sort choice, alongside `gamehub.favorites.v1`/`gamehub.theme.v1`/`gamehub.lang.v1` — THE LAW rule 2's carve-out) |
 | `js/leaderboard-rank.js` | pure, headless-testable ranking: wins are the stored `won` (a draw is NOT a win, 2026-07-28), difficulty-weighted Wilson rating, solo achievement scoring. See "The leaderboard's rating model" |
 | `js/difficulty-tiers.js` | READ-path mapping of every game's difficulty vocabulary onto the shared 1-4 tier scale + weights. Deliberately separate from `normDiff()`, which is on the write path |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle and Battleship (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below; Battleship's is the tenth consumer, hidden-information). **No longer 2-seat-only as of 2026-07-28** -- it grew an additive N-seat roster (`seats`/`maxSeats`, `joinSeat`, `vacateSeat`, per-seat recovery) used by Chinchón (ninth consumer) and Escoba (eleventh consumer) so far. **Yahtzee also uses `js/net.js`** (2 human seats; root `CLAUDE.md`'s games table documents it) but has no dedicated consumer write-up below yet -- a real, still-open gap, not an oversight to assume is covered |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`, lockstep move log, heartbeat, recovery, SW-version match on join) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Boggle and Battleship (Boggle's own protocol is NOT lockstep -- see the "eighth consumer" section below; Battleship's is the tenth consumer, hidden-information). **No longer 2-seat-only as of 2026-07-28** -- it grew an additive N-seat roster (`seats`/`maxSeats`, `joinSeat`, `vacateSeat`, per-seat recovery) used by Chinchón (ninth consumer) and Escoba (eleventh consumer) so far. **Yahtzee also uses `js/net.js`** (2 human seats; root `CLAUDE.md`'s games table documents it) but has no dedicated consumer write-up below yet -- a real, still-open gap, not an oversight to assume is covered |
 | `js/name-gate.js` | (2026-07-31) the ONE "choose a name" gate, called by the hub AND every standalone game page (`await requireName()` before `init()`); `js/name-gate-auto.js` is the deferred-module form for the two classic-script apps. Undismissable by design — see "Nameless devices" below for why the app is not playable without a name |
 | `js/a2hs.js` | add-to-home-screen bottom sheet; polls hub DOM state to avoid overlay collisions |
 | `js/device-report.js` | (2026-07-22) the profile page's "Device details" diagnostic: `gatherDeviceReport()` reads every localStorage key this app has ever written (both by name - profile, stats, every game's own settings/saves/legacy stats - and exhaustively, a raw `{key, bytes}` dump of literally everything in `localStorage` so nothing is invisible to the page) plus two Firebase reads (`usernames/<name>` and `players/<deviceId>`) that catch a mixed-up profile immediately (registered owner disagrees with this device, or local/remote stats disagree). `uploadDeviceReport()` pushes the whole thing to its own new node, `deviceReports/<deviceId>/<pushId>` - see "The shared profile" for why this exists and why it deliberately excludes `js/challenge/` state |
@@ -575,9 +575,9 @@ reason. What else generalizes or deviates:
   settled convention here** — a third game, a third answer, all correct for their own game's
   shape.
 
-### The seventh consumer: Pool (physics build, not the MP roadmap doc)
+### The seventh consumer: Pool (physics build, not the MP roadmap doc) - ARCHIVED 2026-09-28
 
-Full write-up: `pool/CLAUDE.md`. `js/net.js` was NOT touched. Built alongside Pool's initial
+Full write-up: `archive/pool/CLAUDE.md` (the game was archived 2026-09-28; this section is kept as history). `js/net.js` was NOT touched. Built alongside Pool's initial
 implementation rather than as its own roadmap phase, so it deviates from the others in a way
 worth stating plainly rather than forcing it into their vocabulary:
 
@@ -597,12 +597,12 @@ worth stating plainly rather than forcing it into their vocabulary:
   (`round.n` is still written as `1`) if a series is added later.
 - **The shooter still applies its own shot immediately** (same "don't make the mover wait on a
   round trip to see their own move" principle as every reference game), and the peer applies the
-  identical params on delivery and verifies a state hash (`pool/js/hash.js`) — structurally the
+  identical params on delivery and verifies a state hash (`archive/pool/js/hash.js`) — structurally the
   same mover-applies/peer-verifies shape as the others, just carrying physics parameters instead
   of a board move.
 - **Status: unverified beyond inline reasoning.** No `test-mp-lockstep.mjs` block exists for this
   game yet (unlike all six reference games), and nothing has been played on two real devices or
-  against a `FakeRoom` harness. Flagged honestly in `pool/CLAUDE.md` rather than claimed proven.
+  against a `FakeRoom` harness. Flagged honestly in `archive/pool/CLAUDE.md` rather than claimed proven.
 
 ### The eighth consumer: Boggle (2026-07-28) — deliberately NOT lockstep
 
@@ -674,7 +674,7 @@ Only Chinchón uses it so far. Full game-side write-up: `chinchon/CLAUDE.md`'s "
   gains `opts.seats`; `joinSeat`/`vacateSeat` are new exports rather than changes to
   `joinRoom`/`leaveRoom`; `heartbeat` accepts an integer where it accepted a path fragment;
   `writeRecovery`/`requestRecovery`/`clearRecovery` gain a trailing optional `seat`. **Zero edits
-  were needed in escoba/, tic-tac-toe/, mancala/, filler/, dots-boxes/, pool/, poolv2/ or
+  were needed in escoba/, tic-tac-toe/, mancala/, filler/, dots-boxes/, pool/ (since archived), poolv2/ or
   boggle/**, and C7 asserts the seatless legacy path still behaves as before.
 - **Two genuine correctness bugs exist only at 3+ seats, and both were found by scoping rather
   than by symptoms** — worth stating because neither could ever reproduce on a 2-seat room, so
@@ -889,7 +889,7 @@ Three layers, none a subset of another:
    connection (`effectiveType`/`rtt`/`downlink`/`saveData`), storage quota and usage, **which build
    the service worker is serving** (the version pill's own `GET_VERSION` message), its
    registrations and cache names, the **GPU renderer string** (what actually explains "the 3D games
-   are choppy" for Ball Run / Pool / Hill Climb), and **`recentErrors`** from `js/error-log.js`.
+   are choppy" for Ball Run / Hill Climb), and **`recentErrors`** from `js/error-log.js`.
 
 **Every probe is guarded and records `null` on refusal** — Safari rejects the high-entropy UA call,
 `performance.memory` is Chromium-only, `storage.estimate` is not universal. A diagnostic that can
@@ -1763,7 +1763,7 @@ show/hide. `onViewportResize(cb)` folds all three event sources into one callbac
 most once per animation frame, and skips it entirely when neither dimension actually changed. It is
 semantically transparent because every one of these handlers is an idempotent "re-fit to whatever the
 size is now" — running it once with the settled size is strictly better than five times with
-intermediate ones. Converted: Chinchón, Yahtzee, Escoba, Mancala, Dominoes, Ball Run, Pool, poolv2,
+intermediate ones. Converted: Chinchón, Yahtzee, Escoba, Mancala, Dominoes, Ball Run, Pool and poolv2 (both since archived),
 Nuts & Bolts, Uno, and Hill Climb. The unsubscribe it returns must be called in `destroy()`.
 
 **This rule, and the two below it, are now ENFORCED by `test-game-conventions.mjs`, and the reason
@@ -3012,7 +3012,7 @@ show/hide. `onViewportResize(cb)` folds all three event sources into one callbac
 most once per animation frame, and skips it entirely when neither dimension actually changed. It is
 semantically transparent because every one of these handlers is an idempotent "re-fit to whatever the
 size is now" — running it once with the settled size is strictly better than five times with
-intermediate ones. Converted: Chinchón, Yahtzee, Escoba, Mancala, Dominoes, Ball Run, Pool, poolv2,
+intermediate ones. Converted: Chinchón, Yahtzee, Escoba, Mancala, Dominoes, Ball Run, Pool and poolv2 (both since archived),
 Nuts & Bolts, Uno, and Hill Climb. The unsubscribe it returns must be called in `destroy()`.
 
 **This rule, and the two below it, are now ENFORCED by `test-game-conventions.mjs`, and the reason

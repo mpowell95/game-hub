@@ -198,7 +198,7 @@
 //         sd: { solved, perfect, hints, mistakes,
 //               bestTimeMs: { easy, medium, hard, expert } } },
 //                                                   // a solo puzzle: no opponent, no loss state, so a
-//                                                   // solve is played+1/won+1 same as nutsbolts/pipes.
+//                                                   // solve is played+1/won+1 same as nutsbolts.
 //                                                   // solved/hints/mistakes are lifetime additive
 //                                                   // counters; perfect is a solve with zero mistakes
 //                                                   // AND zero hints. bestTimeMs is LOWER-is-better and
@@ -220,13 +220,14 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-// `pinball` stays in GAMES even though the game is ARCHIVED (Matt, 2026-09-28: "archive all
-// traces"): GAMES is the STORE's shape, and players' recorded games still live under that key, in
-// this store and in players/<id>. Nothing displays it (ARCHIVED_GAMES keeps it out of every total);
-// nothing deletes it (THE LAW). To restore the game, see archive/pinball/CLAUDE.md.
+// `pinball`, `pool`, `poolv2` and `pipes` stay in GAMES even though those games are ARCHIVED (Matt,
+// 2026-09-28: "archive all traces"): GAMES is the STORE's shape, and players' recorded games still
+// live under those keys, in this store and in players/<id>. Nothing displays them (ARCHIVED_GAMES
+// keeps them out of every total); nothing deletes them (THE LAW). To restore one, see
+// archive/<game>/CLAUDE.md.
 const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto'];
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
-const ARCHIVED_GAMES = ['pinball'];
+const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -265,8 +266,6 @@ const storeKeyFor = (code) => 'gamehub.stats.p.' + code;
 const C4_DIFFS = ['easy', 'medium', 'hard', 'expert'];
 // Nuts & Bolts difficulty tiers, lowercased to match normDiff() (its 'extraHard' -> 'extrahard').
 export const NB_TIERS = ['easy', 'medium', 'hard', 'extrahard'];
-/** Pipes uses the same four tiers as Nuts & Bolts; normDiff lowercases, so extraHard -> extrahard. */
-export const PI_TIERS = NB_TIERS;
 /** Sudoku's four tiers already sit lowercase, matching js/difficulty-tiers.js's MAP 1:1. */
 export const SD_TIERS = ['easy', 'medium', 'hard', 'expert'];
 
@@ -415,19 +414,6 @@ function ensureNb(g) {
   if (!Number.isFinite(g.nb.solved)) g.nb.solved = 0;
   if (!Number.isFinite(g.nb.moves)) g.nb.moves = 0;
   if (!Number.isFinite(g.nb.bestLevel)) g.nb.bestLevel = 0;
-}
-
-/** Pipes: the solo-puzzle counters. Deliberately the SAME SHAPE as Nuts & Bolts above, and for
- *  the same reason: there is no fewest-moves best here. Every cross-device combine in
- *  js/players-agg.js is built on Math.max (bests only ever improve, docs/BUILDING-A-GAME.md item
- *  7), so a lower-is-better best would need a Math.min branch contradicting the rule the whole
- *  layer is written to. `moves` is a running TOTAL and `bestLevel` is the hardest tier solved. */
-function ensurePi(g) {
-  if (!g.pi || typeof g.pi !== 'object') g.pi = { solved: 0, moves: 0, bestLevel: 0, bestByTier: {} };
-  if (!Number.isFinite(g.pi.solved)) g.pi.solved = 0;
-  if (!Number.isFinite(g.pi.moves)) g.pi.moves = 0;
-  if (!Number.isFinite(g.pi.bestLevel)) g.pi.bestLevel = 0;
-  if (!g.pi.bestByTier || typeof g.pi.bestByTier !== 'object') g.pi.bestByTier = {};
 }
 
 /** Sudoku: the solo-puzzle counters. `bestTimeMs` is LOWER-is-better, unlike every other best in
@@ -882,7 +868,6 @@ function normalize(raw) {
   ensureGrid(st.games.connect4);
   ensureCc(st.games.chinchon);
   ensureNb(st.games.nutsbolts);
-  ensurePi(st.games.pipes);
   ensureSd(st.games.sudoku);
   ensureEs(st.games.escoba);
   ensureBr(st.games.ballrun);
@@ -1414,31 +1399,6 @@ export function recordChinchon(difficulty, won, extras) {
  *  person's devices for free, and `nb.bestByTier` keeps the furthest level reached in each. Solves
  *  recorded before tiers were tracked simply have no byDiff entry; `nb.solved` stays the true total.
  *  Additive; never overwrites. Its own save (gamehub.nutsbolts.v1) is never read here. */
-/**
- * Pipes: one solved board. WRITES ARE ADDITIVE ONLY (THE LAW rule 2) - counters increment and
- * `bestLevel` takes Math.max. There is no fewest-moves best on purpose; see ensurePi above.
- */
-export function recordPipes(level, moves, tier) {
-  if (tooFast('pipes')) return null;
-  const st = loadStats();
-  const g = st.games.pipes;
-  ensurePi(g);
-  g.total.played += 1;
-  g.total.won += 1;
-  g.pi.solved += 1;
-  g.pi.moves += Math.max(0, moves | 0);
-  g.pi.bestLevel = Math.max(g.pi.bestLevel | 0, level | 0);
-  const t = PI_TIERS.indexOf(normDiff(tier)) >= 0 ? normDiff(tier) : null;
-  if (t) {
-    if (!g.byDiff[t]) g.byDiff[t] = bucket();
-    g.byDiff[t].played += 1; g.byDiff[t].won += 1;
-    if (!g.pi.bestByTier || typeof g.pi.bestByTier !== 'object') g.pi.bestByTier = {};
-    g.pi.bestByTier[t] = Math.max(g.pi.bestByTier[t] | 0, level | 0);
-  }
-  st.updatedAt = new Date().toISOString();
-  persist(st);
-  return st;
-}
 
 /**
  * Sudoku: one solved puzzle. `tooFast` first, before the store is even read (test-rate-guard.mjs's

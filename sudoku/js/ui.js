@@ -6,7 +6,7 @@
 //
 // isInProgress() RETURNS FALSE, DELIBERATELY. Autosave/resume built in (root CLAUDE.md's second
 // isInProgress() meaning): the board is saved after every input, so leaving is lossless - the
-// Nuts & Bolts / Pipes class, not the Ball Run class.
+// Nuts & Bolts class, not the Ball Run class.
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';

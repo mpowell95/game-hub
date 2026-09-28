@@ -70,7 +70,7 @@ const KNOWN_GAPS = {
   // Keep this key: the check is still enforced for every game, there is just nothing excused.
   'no horizontal page scroll': {},
   // Found 2026-08-10, the first time these three were ever put through the `fit` check - it was
-  // built for Pool, and the suite only checks games whose own folder changed, so a game nobody has
+  // built for an immersive game, and the suite only checks games whose own folder changed, so a game nobody has
   // touched since had simply never been measured. ALL THREE PREDATE the check and were verified
   // byte-identical on a stashed, untouched tree before being listed here; nothing in this session
   // caused them. They are real, though: this is exactly the "I couldn't see the full board and the
@@ -349,7 +349,7 @@ const MOTION = {
 
 // --- PLAY: can a human actually play this game? ------------------------------------------------
 //
-// THE FAILURE THIS EXISTS FOR, stated plainly so nobody repeats it. On 2026-08-08 I promoted Pool
+// THE FAILURE THIS EXISTS FOR, stated plainly so nobody repeats it. On 2026-08-08 I promoted a rebuilt game
 // over the old build, merged it, and deployed it to main WITHOUT EVER PLAYING A GAME OF IT. What I
 // had was: it draws, it fits the screen, it throws no errors, in three themes. All true, all
 // green, and none of it "a person can play this". My own screenshot showed the rack sitting
@@ -513,7 +513,7 @@ const PLAY = {
       const sx = pb.x + pb.width * 0.5, sy = pb.y + pb.height * 0.5;
       const tx = pb.x + pb.width * 0.78, ty = pb.y + pb.height * 0.22;
       // A real drag, well inside the 700ms wind-up: dispatched as raw touch (cdp), the same way
-      // pool/battleship/skeeball's own PLAY probes drag - never a synthetic event on the instance.
+      // battleship/skeeball's own PLAY probes drag - never a synthetic event on the instance.
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: sx, y: sy, id: 1 }] });
       for (let i = 1; i <= 6; i++) {
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: sx + (tx - sx) * i / 6, y: sy + (ty - sy) * i / 6, id: 1 }] });
@@ -710,55 +710,6 @@ const PLAY = {
       return { ok: true, why: `drove ${moved.toFixed(0)} yds off the tee, then holed out` };
     },
   },
-  pool: {
-    what: 'break the rack, then get a shot back from the computer',
-    async run(page, cdp, tap) {
-      const start = await page.$('[data-role="start-ai"]');
-      if (!start) return { ok: false, why: 'no "vs. computer" button on the mode screen' };
-      await tap(start);
-      await page.waitForSelector('[data-role="canvas"]', { timeout: 8000 });
-      await page.waitForTimeout(1200);
-      const g = await page.evaluate(() => { const r = document.querySelector('[data-role="canvas"]').getBoundingClientRect(); return { left: r.left, top: r.top, w: r.width, h: r.height }; });
-      const TW = 0.9906, TH = 1.9812;
-      const scale = Math.min(g.w / TW, g.h / TH) * 0.9;
-      // The cue ball starts on the head spot and travels TOWARD the drag, so aiming at the rack
-      // means dragging at the rack (down-screen). Distance from the ball is the power.
-      const cue = { x: g.left + g.w / 2, y: g.top + g.h / 2 + (-TH * 0.25) * scale };
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cue.x, y: cue.y, id: 1 }] });
-      for (let i = 1; i <= 12; i++) {
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cue.x, y: cue.y + (130 * i / 12), id: 1 }] });
-        await page.waitForTimeout(14);
-      }
-      await page.waitForTimeout(60);
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-
-      const read = () => page.evaluate(() => {
-        try {
-          const s = JSON.parse(localStorage.getItem('gamehub.poolv2.save.v1') || 'null');
-          if (!s) return null;
-          const c = s.game.balls.find((x) => x.id === 'cue');
-          return { cx: c.x, cy: c.y, turn: s.game.turnSeat, broken: !!s.game.broken, over: !!s.game.over };
-        } catch { return null; }
-      });
-      // Poll for the settle. The autosave lands AFTER the balls stop; a fixed wait read it too
-      // early once and reported a break that had actually happened as "the rack never moved".
-      let st = null;
-      for (let i = 0; i < 60 && !st; i++) { st = await read(); if (!st) await page.waitForTimeout(250); }
-      if (!st) return { ok: false, why: 'the break never resolved (no game state after 15s)' };
-      const travelled = Math.hypot(st.cx - 0, st.cy - (-TH * 0.25));
-      if (travelled < 0.4) return { ok: false, why: `the cue ball barely moved (${travelled.toFixed(2)}m) - a full-power break should cross the table` };
-      if (!st.broken) return { ok: false, why: 'the shot fired but the game never registered a break' };
-      // and the opponent has to answer, or it is a one-sided game
-      const t0 = Date.now();
-      while (Date.now() - t0 < 25000) {
-        const s = await read();
-        if (!s || s.over || s.turn === 0) return { ok: true, why: `break travelled ${travelled.toFixed(2)}m; computer replied` };
-        await page.waitForTimeout(300);
-      }
-      return { ok: false, why: 'the computer never took its turn within 25s' };
-    },
-  },
-
   skeeball: {
     what: 'swipe real racks up the lane: score, records, and the stats write all have to move',
     async run(page, cdp, tap) {
@@ -1380,7 +1331,7 @@ async function checkPlay(game, probe) {
 
 /** FIT: does the whole game fit ONE screen, in every host and at real phone heights?
  *
- *  This exists because Pool shipped 138px too tall INSIDE THE HUB with its controls up to 98px
+ *  This exists because a game shipped 138px too tall INSIDE THE HUB with its controls up to 98px
  *  below the fold - Matt: "I couldn't see the full board and the controls simultaneously" - while
  *  this very suite reported it clean. It was clean: standalone, at 393x852, which was the only
  *  thing being looked at. The hub wraps an immersive game in ~98px of top padding for the

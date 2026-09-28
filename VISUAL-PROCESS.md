@@ -35,7 +35,7 @@ Your session ends and your eyes go with it. Convert the picture into something d
   ratios port. `reference/battleship/SPEC.md` is the worked example.
 - **Sample the actual colours** and write the hex down.
 - **The picture is an INPUT; `SPEC.md` is the artifact. Delete the media when the work closes.**
-  Battleship and Pool turned their screenshots into 5 KB of fractions and kept nothing else.
+  Battleship and Pool (since archived) turned their screenshots into 5 KB of fractions and kept nothing else.
   Yahtzee's six how-to `.MOV`s (17 MB) and Mancala's seven (20 MB) sat in `reference/` for weeks
   after both games shipped, because nobody did the converting step or the deleting one. Matt,
   2026-08-26: *"They were references for you that were one time use... they can be deleted."*
@@ -90,7 +90,7 @@ go on that list. Fix the game.**
 
 ## 3b. PLAY IT. This is the rule that was broken most recently and most expensively.
 
-**A game is not verified because it rendered.** On 2026-08-08 I promoted Pool over the old build,
+**A game is not verified because it rendered.** On 2026-08-08 I promoted Pool (archived 2026-09-28) over the old build,
 merged it, and deployed it to `main` having never played a single game of it. What I had was: it
 draws, it fits the screen, it throws no errors, in three themes. Every word true. None of it "a
 person can play this."

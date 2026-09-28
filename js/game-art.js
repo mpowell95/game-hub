@@ -250,24 +250,6 @@ export const GAME_ART = {
               <circle cx="140.5" cy="46" r="1.9"/><circle cx="135.5" cy="51" r="1.9"/><circle cx="139.5" cy="57" r="1.9"/>
             </g>
           </svg>`,
-  // Pipes: a run of pipe crossing the frame left to right, half of it already carrying water and
-  // half still dry and mis-turned - the game's whole idea in one picture. Landscape and
-  // full-bleed per checklist item 5; composed FOR 160x90, never a square cropped to fit.
-  'pipes': `<svg viewBox="0 0 160 90" aria-hidden="true">
-    <rect width="160" height="90" fill="#12303f"/>
-    <g fill="none" stroke="#2f4d5e" stroke-width="9" stroke-linecap="round">
-      <path d="M20 66 H44 V26 H70"/>
-      <path d="M96 26 H120 V64 H146"/>
-      <path d="M112 78 H136"/>
-      <path d="M34 14 V34"/>
-    </g>
-    <g fill="none" stroke="#43b6f5" stroke-width="9" stroke-linecap="round">
-      <path d="M20 66 H44 V26 H70"/>
-    </g>
-    <circle cx="20" cy="66" r="7" fill="#F2B705"/>
-    <circle cx="146" cy="64" r="7" fill="#2f4d5e"/>
-    <circle cx="70" cy="26" r="5" fill="#43b6f5"/>
-  </svg>`,
   // Sudoku: a 9x9 grid drawn landscape, thick lines every 3 cells (the box boundaries), a handful
   // of filled-in digits so it reads as "a puzzle" rather than "a grid", and one cell outlined in
   // the app's standing selection accent (#ffce3a, root CLAUDE.md) the way the game itself marks a
@@ -497,37 +479,6 @@ export const GAME_ART = {
                 <path d="M-11,-27 L-6,-18 L-16,-18 Z" fill="#fff"/>
               </g>
             </g>
-          </svg>`,
-  // Repainted 2026-08-10 to match the game it opens. It used to be a pale blue table in a dark red
-  // frame with numbered yellow/blue balls -- the old palette, which the game no longer has
-  // anywhere. Same colours as pool/js/ui.js's TABLE_ART and BALL_ART, off reference/pool/SPEC.md:
-  // salmon surround, brown wood, bright green cushion, deep green cloth, coral and cyan balls.
-  pool: `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#F2A183"/>
-            <rect x="4" y="6" width="152" height="78" rx="9" fill="#0B0B0B"/>
-            <rect x="6" y="8" width="148" height="74" rx="8" fill="#8C5A3F"/>
-            <rect x="13" y="15" width="134" height="60" rx="6" fill="#3FBE63"/>
-            <rect x="19" y="21" width="122" height="48" rx="4" fill="#0F8A3C"/>
-            <g fill="#000">
-              <circle cx="21" cy="23" r="8"/><circle cx="139" cy="23" r="8"/>
-              <circle cx="21" cy="67" r="8"/><circle cx="139" cy="67" r="8"/>
-              <circle cx="80" cy="21" r="7"/><circle cx="80" cy="69" r="7"/>
-            </g>
-            <g stroke="rgba(0,0,0,.3)" stroke-width="1">
-              <circle cx="58" cy="52" r="7" fill="#F2604C"/>
-              <circle cx="74" cy="38" r="7" fill="#33C6F4"/>
-              <circle cx="92" cy="55" r="7" fill="#F2604C"/>
-              <circle cx="108" cy="36" r="7" fill="#33C6F4"/>
-              <circle cx="80" cy="47" r="7" fill="#101010"/>
-              <circle cx="40" cy="36" r="7" fill="#F7EFCB"/>
-            </g>
-            <g fill="rgba(255,255,255,.55)">
-              <circle cx="55.5" cy="49.5" r="2.1"/><circle cx="71.5" cy="35.5" r="2.1"/>
-              <circle cx="89.5" cy="52.5" r="2.1"/><circle cx="105.5" cy="33.5" r="2.1"/>
-              <circle cx="37.5" cy="33.5" r="2.1"/>
-            </g>
-            <text x="80" y="47" font-size="7" font-weight="bold" fill="#fff"
-                  text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif">8</text>
           </svg>`,
   yahtzee: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#0878CE"/>

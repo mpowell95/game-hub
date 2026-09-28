@@ -14,8 +14,8 @@
  *     -btn-ghost/-btn-small set ...................... 9
  *
  * That last line is the point: Boggle, Ball Run, Chinchon, Connect Four, Dots and Boxes,
- * Escoba, Nuts & Bolts, Pool and Tic Tac Toe each define the SAME four button variants under a
- * different 2-3 letter prefix. One component, nine implementations, nine slightly different
+ * Escoba, Nuts & Bolts and Tic Tac Toe each define the SAME four button variants under a
+ * different 2-3 letter prefix. One component, eight implementations, eight slightly different
  * results. Polish spent on any one of them buys exactly one game, which is why the root
  * CLAUDE.md has to name a different reference game per axis: divergence is the default outcome.
  *
