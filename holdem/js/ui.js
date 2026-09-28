@@ -930,8 +930,13 @@ class Game {
     }
     const L = legal(this.pub);
     if (cancelled || d.cancel || !L) { this.raise = d.prev || null; this.actSig = ''; return this._paintActions(); }
-    this.raise = null;
-    this._move(d.to >= L.maxTo ? { a: 'allin' } : { a: 'raise', to: d.to });
+    // Letting go only SETS the amount (2026-09-28, Matt: "it auto places the bet when I let go ...
+    // make the main button into a raise $x so I can confirm it"). The big button now reads
+    // RAISE TO / BET / ALL IN $X and the bet goes in only when that is tapped; the slider panel
+    // opens too, so the amount can still be nudged or the raise cancelled.
+    this.raise = { to: d.to };
+    this.actSig = '';
+    return this._paintActions();
   }
 
   _input(e) {
