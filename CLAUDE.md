@@ -770,7 +770,7 @@ Matt: *"are you sure there's no way to have real notifications or something clos
 the same day and **deployed by Matt on 2026-09-25** - see "Skeeball challenges" below. A fifth,
 `cupPongTurnPush` (Cup Pong challenges, `cuppong/index/<code>/<id>`), was added on 2026-09-28 and
 is **NOT YET DEPLOYED** (as of 2026-09-28) - `cup-pong/CLAUDE.md`, "Challenges". Its rules branch
-`cuppong` is likewise **NOT YET PUBLISHED** (2026-09-28). **A change to `functions/` is
+`cuppong` was **PUBLISHED by Matt on 2026-09-28**. **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
 for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
 `hoopsTurnPush` updated).
