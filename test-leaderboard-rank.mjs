@@ -572,8 +572,12 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     && /if \(playsAt\(tier\) > 0 && hasBoardMetric\(metricAt\(tier\), id\)\) return tier;/.test(rankSrc),
     'Skeeball, Golf and Hill Climb each printed EXPERT on every row without it');
   ok('a tier-blind metric gets no per-tier tiles to claim it can be split',
-    /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'golf', 'holdem'\]\);/.test(src)
+    /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'golf', 'holdem', 'contexto'\]\);/.test(src)
     && /METRIC_IS_TIER_BLIND\.has\(id\) \? ''/.test(src));
+  // Matt, 2026-09-28: "hints can't count the same as getting it with no hints".
+  ok('Contexto\'s board ranks on solves WITHOUT a hint, not on every solve',
+    /if \(id === 'contexto'\) return \(\(\(\(g\.games \|\| \{\}\)\.contexto \|\| \{\}\)\.ct \|\| \{\}\)\.noHint\) \| 0;/.test(src)
+    && /if \(id === 'contexto'\) return 'lb_unit_ct_nohint';/.test(src));
   // ADMIN-ONLY GAMES ARE OFF THE BOARD (2026-09-09). The three things that must NOT be filtered
   // with them are each a rule 1 failure if they ever are - see the comment at the call site.
   ok('By Game lists only the games this person can see on the launcher',
