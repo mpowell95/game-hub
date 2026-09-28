@@ -52,6 +52,11 @@ const HOLD_AI_MS = 750, HOLD_HUMAN_MS = 380;
 // finish, so the total moment stays well under ~1.8s even though the sweep
 // itself now takes longer to register as a sweep rather than a flight.
 const BROOM_MS = 1500, BROOM_TO_FLYOUT_MS = 480, BROOM_TO_BANNER_MS = 720;
+// Card travel (2026-09-28): a played card flies from the hand (or the
+// opponent's pill) to its table slot, and a deal flies each card out of the
+// stock one at a time. FLY_DEAL_GAP_MS is the stagger between dealt cards;
+// HAND_SLIDE_MS is how long the cards left in your hand take to close the gap.
+const FLY_PLAY_MS = 300, FLY_DEAL_MS = 300, FLY_DEAL_GAP_MS = 70, HAND_SLIDE_MS = 220;
 const STORE_SETTINGS = 'escoba-settings';
 const STORE_SAVE = 'escoba-save';
 const SAVE_SCHEMA_V = 1;
@@ -288,6 +293,7 @@ class EscobaUI {
         <div class="eb-modal" data-role="modal" hidden></div>
         <div class="eb-menu" data-role="menu" hidden></div>
         <div class="eb-banner" data-role="banner" hidden></div>
+        <div class="eb-flight" data-role="flight" aria-hidden="true"></div>
       </div>`;
 
     this.root = this.container.querySelector('.eb-root');
@@ -297,13 +303,15 @@ class EscobaUI {
       opponents: q('opponents'), matchinfo: q('matchinfo'), stock: q('stock'), stockcount: q('stockcount'),
       mat: q('mat'), table: q('table'), announce: q('announce'), lasthand: q('lasthand'), sumchip: q('sumchip'), broom: q('broom'),
       self: q('self'), hand: q('hand'), actions: q('actions'),
-      modal: q('modal'), menu: q('menu'), banner: q('banner'),
+      modal: q('modal'), menu: q('menu'), banner: q('banner'), flight: q('flight'),
     };
 
     this.el.broom.style.backgroundImage = `url("${BROOM_URL}")`;
     this.root.addEventListener('click', this._onClick);
     this.root.addEventListener('input', this._onInput);
     this._tableCells = new Map();   // card.id -> .eb-table-cell, kept across renders for the FLIP-ish transition
+    this._handSlots = new Map();    // card.id -> .eb-hand-slot, kept across renders (see _syncHand)
+    this._arriving = null;          // while a deal renders: the new hand slots / table cells to fly in
     if (typeof ResizeObserver !== 'undefined') {
       this._matResizeObserver = new ResizeObserver(() => this._relayoutTable());
       this._matResizeObserver.observe(this.el.mat);
@@ -804,16 +812,22 @@ class EscobaUI {
           catch { this._setMpStatus(t('mp_conn_error_title')); }
         }
         break;
-      case 'deal':
-        this.render();
+      case 'deal': {
+        // The new cards render in place but hidden, then fly out of the stock
+        // (after the checkpoint below, so a save is never delayed by a flight).
+        const arriving = this._flightsOn() ? { hand: [], table: [] } : null;
+        this._arriving = arriving;
+        try { this.render(); } finally { this._arriving = null; }
         // Every deal is a safe checkpoint, the round's first one included:
         // playRound() stamps _nextTurn before emitting and then goes straight
         // into the turn loop, so a restore resumes exactly this deal. (The
         // first deal used to be skipped because the dealer's-luck check ran
         // synchronously after it; that rule is gone, and with it the reason.)
         this._saveSnapshot();
+        if (arriving) await this._animateDeal(arriving);
         if (payload.lastCards) { this.announce(t('announce_last_cards')); await this.beat(BEAT_TURN); }
         break;
+      }
       case 'turnStart':
         this.activePlayerId = payload.playerId;
         this.render();
@@ -887,10 +901,29 @@ class EscobaUI {
   async animatePlay(p, { card, captured, escoba }) {
     if (this._dead) return;
     const isAI = p && !p.isHuman;
+    // Where the card flies FROM, read before anything re-renders: your own
+    // hand slot (still on screen, since the hand only re-renders after this),
+    // or the pill of whoever else played it. The slot is hidden at once so the
+    // card is never in two places.
+    let from = null;
+    if (p && p.id === this._localSeat()) {
+      const slot = this._handSlots.get(card.id);
+      if (slot) { from = slot.getBoundingClientRect(); slot.style.visibility = 'hidden'; }
+    }
     const displayList = captured.length ? [...this.game.table, ...captured, card] : this.game.table;
     this._layoutTable(displayList);
     const playedCell = this._tableCells.get(card.id);
     const playedCardEl = playedCell && playedCell.querySelector('.eb-card');
+    if (p && !from && playedCell) from = this._pillCardRect(p.id, playedCell.getBoundingClientRect().width);
+    if (playedCell && from && this._flightsOn()) {
+      // Fly it in, then show the real card already settled (no drop-in on top
+      // of the flight), wearing the same "just played" ring as before.
+      playedCell.style.visibility = 'hidden';
+      await this._fly(playedCell.innerHTML, from, playedCell.getBoundingClientRect());
+      if (this._dead) return;
+      playedCell.style.visibility = '';
+      if (playedCardEl) playedCardEl.classList.add('is-flown');
+    }
     if (playedCardEl) playedCardEl.classList.add('is-played');
 
     if (isAI) {
@@ -1049,7 +1082,7 @@ class EscobaUI {
     this._layoutTable(this.game.table);
     this._syncSumChip();
     this.el.self.innerHTML = this.renderSelf();
-    this.el.hand.innerHTML = this.renderHand();
+    this._syncHand();
     this.el.actions.innerHTML = this.renderActions();
   }
 
@@ -1072,7 +1105,7 @@ class EscobaUI {
     return g.players.filter((p) => !p.isHuman).map((p) => {
       const active = p.id === this.activePlayerId;
       const dealer = g.dealer === p.id;
-      return `<div class="eb-opp-pill ${active ? 'is-active' : ''}">
+      return `<div class="eb-opp-pill ${active ? 'is-active' : ''}" data-pid="${p.id}">
         <div class="eb-opp-top">
           <span class="eb-opp-av">${p.avatar}${dealer ? `<i class="eb-dealer-dot" title="${esc(t('dealer_title'))}">${esc(t('dealer_letter'))}</i>` : ''}</span>
           <span class="eb-opp-name">${esc(p.name)}</span>
@@ -1261,6 +1294,7 @@ class EscobaUI {
         cell.dataset.id = c.id;
         table.appendChild(cell);
         this._tableCells.set(c.id, cell);
+        if (this._arriving) { cell.classList.add('is-arriving'); this._arriving.table.push(cell); }
       }
       const isSel = this._selTable.has(c.id);
       cell.innerHTML = cardFaceHTML(c, {
@@ -1296,12 +1330,183 @@ class EscobaUI {
     </div>`;
   }
 
-  renderHand() {
-    const h = this._human();
-    return h.hand.map((c) => cardFaceHTML(c, {
-      selected: c.id === this._selHand,
-      value: this._setup.showValues,
-    })).join('');
+  /** Reconciling hand renderer (2026-09-28). The hand used to be rebuilt with
+   *  innerHTML on every render, so nothing in it could ever animate: selecting
+   *  a card snapped it up instead of lifting it (a fresh node has no "before"
+   *  to transition from), and after a play the cards left behind jumped to
+   *  their new spots. Now each card lives in a .eb-hand-slot keyed by card id
+   *  and kept across renders; only its is-selected class changes, so the
+   *  existing .eb-card transition runs. Cards that stay but move (the gap a
+   *  played card leaves) glide over with a FLIP on the SLOT, never the card,
+   *  because the card's own transform is the selection lift.
+   *
+   *  A slot's card is rebuilt only if what it shows changed (the value pip,
+   *  which depends on the deck mode and the "show values" setting), so the
+   *  same id in a later match can never show a stale number. */
+  _syncHand() {
+    const handEl = this.el.hand;
+    const cards = this._human().hand;
+    const showValues = this._setup.showValues;
+    const animate = !reducedMotion() && typeof Element.prototype.animate === 'function';
+
+    const before = new Map();
+    if (animate) for (const [id, slot] of this._handSlots) before.set(id, slot.getBoundingClientRect().left);
+
+    const want = new Set(cards.map((c) => c.id));
+    for (const [id, slot] of this._handSlots) {
+      if (!want.has(id)) { slot.remove(); this._handSlots.delete(id); }
+    }
+    // Anything else in the row (never expected) is dropped, so the row always
+    // holds exactly the hand.
+    for (const node of [...handEl.children]) if (!node.dataset || !this._handSlots.has(node.dataset.id)) node.remove();
+
+    cards.forEach((c, i) => {
+      const sig = `${c.value}|${showValues ? 1 : 0}`;
+      let slot = this._handSlots.get(c.id);
+      if (!slot) {
+        slot = document.createElement('div');
+        slot.className = 'eb-hand-slot';
+        slot.dataset.id = c.id;
+        this._handSlots.set(c.id, slot);
+        if (this._arriving) { slot.classList.add('is-arriving'); this._arriving.hand.push(slot); }
+      }
+      if (slot.dataset.sig !== sig) {
+        slot.innerHTML = cardFaceHTML(c, { value: showValues });
+        slot.dataset.sig = sig;
+      }
+      // A slot is only ever hidden inline while ITS card is flying to the
+      // table, and by then the card has left the hand; one still in the hand
+      // must always show (e.g. a match restarted mid-flight).
+      slot.style.visibility = '';
+      const cardEl = slot.firstElementChild;
+      if (cardEl) cardEl.classList.toggle('is-selected', c.id === this._selHand);
+      if (handEl.children[i] !== slot) handEl.insertBefore(slot, handEl.children[i] || null);
+    });
+
+    if (!animate) return;
+    for (const [id, slot] of this._handSlots) {
+      const was = before.get(id);
+      if (was == null) continue;
+      const dx = was - slot.getBoundingClientRect().left;
+      if (Math.abs(dx) < 1) continue;
+      slot.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }],
+        { duration: HAND_SLIDE_MS, easing: 'cubic-bezier(.2,.8,.3,1)' });
+    }
+  }
+
+  // --- card travel (2026-09-28) ------------------------------------------------
+
+  /** Whether card flights run at all. Off for reduced motion (the state change
+   *  is still instant and complete, exactly as before flights existed), and off
+   *  while a rejoining multiplayer guest fast-forwards through moves. */
+  _flightsOn() {
+    return !this._dead && !reducedMotion() && !(this.mp && this.mp.replayMode)
+      && !!this.el.flight && typeof Element.prototype.animate === 'function';
+  }
+
+  /** Fly one card image from `from` to `to` (viewport rects) in the flight
+   *  layer, then remove it. Resolves when it lands, or at once if it can't run.
+   *  If the module is destroyed mid-flight the promise NEVER resolves, the same
+   *  way a pending beat() does, so a torn-down match can't carry on running
+   *  (and saving) behind the launcher. */
+  _fly(html, from, to, { duration = FLY_PLAY_MS, delay = 0 } = {}) {
+    if (!this._flightsOn() || !from || !to || !from.width || !to.width) return Promise.resolve();
+    const layer = this.el.flight;
+    const box = layer.getBoundingClientRect();
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    const el = tpl.content.firstElementChild;
+    if (!el) return Promise.resolve();
+    el.classList.add('eb-flycard');
+    el.removeAttribute('data-action');
+    Object.assign(el.style, {
+      left: `${from.left - box.left}px`, top: `${from.top - box.top}px`,
+      width: `${from.width}px`, height: `${from.height}px`,
+    });
+    layer.appendChild(el);
+    const dx = to.left - from.left, dy = to.top - from.top, s = to.width / from.width;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        el.remove();
+        if (!this._dead) resolve();
+      };
+      try {
+        const anim = el.animate([
+          { transform: 'translate(0, 0) scale(1)' },
+          { transform: `translate(${dx}px, ${dy}px) scale(${s})` },
+        ], { duration, delay, easing: 'cubic-bezier(.25,.8,.35,1)', fill: 'both' });
+        anim.onfinish = finish;
+        anim.oncancel = finish;
+      } catch { finish(); return; }
+      // Safety net: a backgrounded tab can drop animation events; a clone must
+      // never linger and the match must never stall waiting for one.
+      setTimeout(finish, duration + delay + 400);
+    });
+  }
+
+  /** The rect a card should fly from/to for a player who isn't this device:
+   *  a small card centred on their pill's card-back fan (or the pill itself). */
+  _pillCardRect(playerId, refW) {
+    const pill = this.el.opponents.querySelector(`.eb-opp-pill[data-pid="${playerId}"]`);
+    if (!pill) return null;
+    const anchor = pill.querySelector('.eb-mini-cards') || pill;
+    const r = anchor.getBoundingClientRect();
+    if (!r.width) return null;
+    const w = Math.max(14, (refW || 60) * 0.35), h = w * 1.5;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    return { left: cx - w / 2, top: cy - h / 2, width: w, height: h };
+  }
+
+  /** Deal: every new card flies out of the stock one at a time, round the
+   *  table in dealing order (the players, then the four face-up cards on a
+   *  round's first deal). Your cards fly face up into their slots; other
+   *  players' fly face down to their pill. The cards were already rendered in
+   *  place, hidden, by the render that preceded this; each is revealed as its
+   *  flight lands, and all of them are revealed however this ends. */
+  async _animateDeal(arriving) {
+    const reveal = (el) => el.classList.remove('is-arriving');
+    try {
+      const stockCard = this.el.stock.querySelector('.eb-card') || this.el.stock;
+      const from = stockCard.getBoundingClientRect();
+      if (!this._flightsOn() || !from.width) return;
+      const g = this.game;
+      const n = g.players.length;
+      const local = this._localSeat();
+      const handSlots = arriving.hand.slice();
+      const backHTML = cardFaceHTML({}, { faceDown: true, static: true });
+      const flights = [];
+      let k = 0;
+      // Deal order: starting left of the dealer, one card per player per pass.
+      const passes = Math.max(0, ...g.players.map((p) => p.hand.length));
+      for (let pass = 0; pass < passes; pass++) {
+        for (let o = 1; o <= n; o++) {
+          const p = g.players[(g.dealer + o) % n];
+          if (pass >= p.hand.length) continue;
+          const delay = (k++) * FLY_DEAL_GAP_MS;
+          if (p.id === local) {
+            const slot = handSlots.shift();
+            if (!slot) continue;
+            const cardEl = slot.firstElementChild;
+            flights.push(this._fly(cardEl ? cardEl.outerHTML : backHTML, from, slot.getBoundingClientRect(),
+              { duration: FLY_DEAL_MS, delay }).then(() => reveal(slot)));
+          } else {
+            flights.push(this._fly(backHTML, from, this._pillCardRect(p.id, from.width), { duration: FLY_DEAL_MS, delay }));
+          }
+        }
+      }
+      for (const cell of arriving.table) {
+        const delay = (k++) * FLY_DEAL_GAP_MS;
+        const cardEl = cell.querySelector('.eb-card');
+        flights.push(this._fly(cardEl ? cardEl.outerHTML : backHTML, from, cell.getBoundingClientRect(),
+          { duration: FLY_DEAL_MS, delay }).then(() => reveal(cell)));
+      }
+      await Promise.all(flights);
+    } finally {
+      for (const el of [...arriving.hand, ...arriving.table]) reveal(el);
+    }
   }
 
   /** The action bar IS the instruction: no separate status sentence anywhere.
