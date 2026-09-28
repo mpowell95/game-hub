@@ -168,7 +168,10 @@ Copied from it, top to bottom:
   Min / 1/2 Pot / Pot / All in, slider); the big button then commits the amount.
 - **One-motion raise (2026-09-27, Matt: "click 'Raise' and drag it up to whatever $ amount you
   want in 1 motion").** Press RAISE and slide up: a meter rises from the button with the amount on
-  a bubble, the big button reads RAISE TO $X live, and letting go bets it. The curve is squared
+  a bubble, the big button reads RAISE TO $X live, and letting go SETS the amount - **it does not
+  bet** (2026-09-28, Matt: "it auto places the bet when I let go ... so I can confirm it"). The big
+  button stays RAISE TO / BET / ALL IN $X and the bet goes in only when it is tapped; the slider
+  panel opens with it for nudging, and the tab reads Cancel. The curve is squared
   (fine control low, races to the whole stack high) and the top 4% is ALL IN; sliding back to the
   start cancels. A plain tap still opens the Min / 1/2 Pot / Pot / All in slider panel. The
   pointer is captured on the game ROOT (a repaint can replace the button mid-drag), which
