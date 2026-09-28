@@ -58,6 +58,9 @@
 .pk-root .pk-btn-big { width: 100%; min-height: 52px; font-size: 18px; }
 .pk-root .pk-btn-sm { min-height: 44px; padding: 6px 10px; font-size: 13px; }
 .pk-root .pk-btn-fold { background: #5b1d20; border-color: #8a2d31; }
+.pk-root .pk-leavecol { display: flex; flex-direction: column; gap: 8px; }
+.pk-root .pk-leavecol .pk-hint { margin: -2px 0 4px; }
+.pk-root .pk-resume-sub { display: block; font-size: 13px; font-weight: 600; opacity: 0.85; margin-top: 2px; }
 .pk-root .pk-btn-call { background: #1f5fa8; border-color: #3b7fd0; }
 .pk-root .pk-btn-raise { background: var(--pk-gold); color: #231a00; border-color: var(--pk-gold); }
 .pk-root .pk-link {
