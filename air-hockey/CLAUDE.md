@@ -38,7 +38,10 @@ it should not make any sound ever."*
   saved as `table` in `gamehub.airhockey.v1`; per phone, cosmetic (online, each player sees their
   own choice). The setup card shows four colour dots plus the chosen NAME ("Table: Neon"), since
   the dots alone are colour only.
-- **Feel**: a puck trail when it is moving fast, sparks where a mallet hits (theirs too, online,
+- **Feel**: a puck trail whose LENGTH and STRENGTH both follow the speed (2026-09-28, Matt: *"a
+  barely moving puck should have a short, faint trail, if any"*; none below 150 u/s, full at
+  1900; `TRAIL_MIN`/`TRAIL_FULL` in `render.js`, drawn as one tapered stroke with butt ends so
+  the joints do not bead), sparks where a mallet hits (theirs too, online,
   from the ghost), the scored-in goal mouth lights up, the scorer's number pops. All garnish, all
   off under reduced motion; the puck itself always moves.
 - **Invite a player by name** (online card -> Invite a player -> pick from a list -> Send invite).

@@ -809,7 +809,7 @@ const REST_MANIFEST = {
   './air-hockey/js/ui.js': 'b9f2191963',
   './air-hockey/js/physics.js': 'a8e3192cef',
   './air-hockey/js/ai.js': '05aee99aee',
-  './air-hockey/js/render.js': '7dc03bf99b',
+  './air-hockey/js/render.js': 'b056ca690e',
   './air-hockey/js/strings.js': '9229881c6b',
   './air-hockey/js/live.js': '94988ac956',
   './air-hockey/js/net-test.js': '7037b18203',
