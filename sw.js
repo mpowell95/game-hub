@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v991';
+const CACHE = 'game-hub-v992';
 
 const ASSETS = [
   './',
@@ -834,7 +834,7 @@ const REST_MANIFEST = {
   './air-hockey/css/air-hockey.css': '0e0eb95042',
   './air-hockey/js/ui.js': '21f40fd163',
   './air-hockey/js/physics.js': '0ef349cb2c',
-  './air-hockey/js/ai.js': 'b867d375e6',
+  './air-hockey/js/ai.js': 'ed5a7ae590',
   './air-hockey/js/render.js': '7187dbe241',
   './air-hockey/js/strings.js': '30cd4865ef',
   './air-hockey/js/live.js': 'ec8e13bcab',

@@ -11,14 +11,22 @@ import { TABLE, clampTarget } from './physics.js';
 const { W, H, PUCK_R: PR, MALLET_R: MR } = TABLE;
 const SUM = PR + MR;
 
-// Tuned 2026-09-27 (stage 2) against js/test.js's two scripted players, after Matt played stage
-// 1's single computer (speed 900, react 0.17 - between Medium and Hard below) and called it "a
-// little too hard". Medium is now easier than that; Hard is a little tougher than it. Numbers in
-// air-hockey/CLAUDE.md, "The computer".
+// RETUNED 2026-09-28. Matt, on the stage 2 levels: *"the computer player is way too good. i haven't
+// been able to score a single goal, even on easy."* The stage 2 numbers had been tuned against
+// scripted players that aim like a machine; the test's CHASER (a beginner's thumb: sees the puck
+// late, chases it, whacks it upward, no aiming) reproduces what he saw (1.4 goals a match against
+// the old Easy, never a win). The real cause was DEFENCE: the mallet waited in front of the middle
+// of its goal (it covers about two thirds of the mouth) and slid across at full attack speed.
+// Now each level has its own:
+//   guard  how fast it moves when defending or getting back (was: the attack speed)
+//   shade  how far it follows the puck sideways while waiting (1 = all the way, leaving the far
+//          side of the goal open; was 0.3)
+//   home   how far out it waits (further out = more angle to shoot past it)
+// Numbers in air-hockey/CLAUDE.md, "The computer".
 export const LEVELS = {
-  easy:   { speed: 600, react: 0.26,  aimErr: 0.5,  strike: 0.8,  bank: 0,    misread: 0.4 },
-  medium: { speed: 840, react: 0.19,  aimErr: 0.33, strike: 1.0,  bank: 0.15, misread: 0.3 },
-  hard:   { speed: 950, react: 0.16,  aimErr: 0.27, strike: 1.05, bank: 0.25, misread: 0.25 },
+  easy:   { speed: 430, react: 0.38, aimErr: 0.8,  strike: 0.7, bank: 0,    misread: 0.55, guard: 200, shade: 0.95, home: 170 },
+  medium: { speed: 650, react: 0.28, aimErr: 0.45, strike: 0.85, bank: 0.1, misread: 0.42, guard: 280, shade: 0.8,  home: 145 },
+  hard:   { speed: 840, react: 0.21, aimErr: 0.3,  strike: 1.0, bank: 0.2,  misread: 0.3,  guard: 450, shade: 0.55, home: 125 },
 };
 export const DIFFS = ['easy', 'medium', 'hard'];
 
@@ -34,7 +42,6 @@ export function rng(seed) {
   };
 }
 
-const GUARD_Y = 105;   // how far out from its goal it guards
 const G0 = (W - TABLE.GOAL_W) / 2, G1 = (W + TABLE.GOAL_W) / 2;
 
 /** The x where a puck at (px,py) moving (vx,vy<0) crosses y = line, side walls folded in (a
@@ -51,9 +58,15 @@ function crossX(px, py, vx, vy, line) {
   return Math.max(G0 + 10, Math.min(G1 - 10, x));
 }
 
+/** `guard`, `shade` and `home` arrived with the 2026-09-28 retune; a level (or a scripted test
+ *  player) written without them defends the way every level did before it. */
+function withDefaults(lv) {
+  return { guard: lv.speed, shade: 0.3, home: 105, ...lv };
+}
+
 export function createCpu(level = 'medium', side = 1, seed = 1) {
   return {
-    lv: typeof level === 'object' ? level : (LEVELS[level] || LEVELS.medium), side, rand: rng(seed),
+    lv: withDefaults(typeof level === 'object' ? level : (LEVELS[level] || LEVELS.medium)), side, rand: rng(seed),
     clock: 1e9, sx: W / 2, sy: H / 2, svx: 0, svy: 0, age: 0,
     attacking: false, aimX: W / 2, bankSide: 0,
   };
@@ -93,7 +106,7 @@ export function cpuThink(s, c, dt) {
     if (pvy < -300 && pSpeed > 500 && py > my) {
       // DEFEND: a fast puck coming at the goal. Go where it will cross the guard line.
       c.attacking = false;
-      tx = crossX(px, py, c.svx, pvy, GUARD_Y); ty = GUARD_Y;
+      tx = crossX(px, py, c.svx, pvy, c.lv.home); ty = c.lv.home; speed = c.lv.guard;
     } else {
       // ATTACK: go behind the puck, then drive through it toward the far goal.
       if (!c.attacking) {
@@ -121,11 +134,13 @@ export function cpuThink(s, c, dt) {
     }
   } else {
     c.attacking = false;
+    speed = c.lv.guard;
     if (pvy < 0) {
       // Coming this way: go where it will cross the guard line.
-      tx = crossX(px, py, c.svx, pvy, GUARD_Y); ty = GUARD_Y;
+      tx = crossX(px, py, c.svx, pvy, c.lv.home); ty = c.lv.home;
     } else {
-      tx = W / 2 + (px - W / 2) * 0.3; ty = GUARD_Y;
+      // Waiting: follow the puck across (`shade`), which leaves the far side of the goal open.
+      tx = W / 2 + (px - W / 2) * c.lv.shade; ty = c.lv.home;
     }
   }
 
