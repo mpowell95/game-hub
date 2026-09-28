@@ -8,7 +8,7 @@ import { simulateThrow, launchSpeed } from './physics.js';
 import { makeRack, cupsXZ, validRack, isCell, inArea, cellXZ, PRESETS, AREA } from './rack.js';
 import { CUP, CUP_D, ROW_H, RACK_Z0, TABLE } from './geom.js';
 import { powerOf, SWIPE_SLOW, SWIPE_FAST } from '../../skeeball/js/swipe.js';
-import { Match } from './match.js';
+import { Match, swapSides } from './match.js';
 import { aimAt, cpuThrow, seeded } from './cpu.js';
 
 let fail = 0;
@@ -167,6 +167,34 @@ ok('the whole rack area is on the table',
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9'); m.throwResult(miss); m.startTurn(); m.startTurn();
   ok('island is once per game: calling spends it even on a miss', m.islandUsed.a && !m.canIsland());
+  // A CHALLENGE'S ISLAND: the second cup is OWED, taken by the defender at its own next turn.
+  m = new Match({ first: 'a', async: true });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9');
+  ev = m.throwResult({ made: 'k9' });
+  ok('challenge: an island hit owes a cup instead of waiting for a pick', types(ev).includes('islandOwed') && !m.pendingPick && m.owed.b === 1 && ids(m, 'b').join() === 'k0,k1');
+  m.throwResult(miss);
+  ok('challenge: the turn carries on and passes', m.shooter === 'b');
+  m.startTurn();
+  ok('challenge: the owing side can do nothing until it pays', m.mustPickOwed() && m.throwResult(miss).length === 0 && !m.canRerack());
+  ev = m.pickOwed('k1');
+  ok('challenge: the owed cup comes off its OWN rack', types(ev)[0] === 'owedPicked' && ids(m, 'b').join() === 'k0' && !m.mustPickOwed());
+  m = new Match({ first: 'a', async: true });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9');
+  ev = m.throwResult({ made: 'k9' });
+  ok('challenge: owed cups that are all the cups left clear the rack at once', types(ev).includes('owedCleared') && types(ev).includes('rackCleared') && m.phase === 'rebuttal');
+  // SAVING A MATCH: whole, round trip, and turned round.
+  m = new Match({ first: 'a', reracks: Infinity, async: true, gentlemans: false });
+  m.startTurn(); m.throwResult({ made: 'k0' }); m.throwResult({ made: 'k1' }); m.throwResult({ made: 'k2' });
+  const snap = JSON.parse(JSON.stringify(m.toJSON()));
+  const back = Match.fromJSON(snap);
+  ok('a saved match comes back the same (JSON round trip, unlimited reracks too)',
+    JSON.stringify(back.toJSON()) === JSON.stringify(m.toJSON()) && back.reracksLeft.a === Infinity);
+  const sw = Match.fromJSON(swapSides(snap));
+  ok('turned round, each side keeps its own cups, streaks and turn',
+    ids(sw, 'a').join() === ids(m, 'b').join() && sw.streak.b.join() === m.streak.a.join() && sw.shooter === 'b');
+  ok('turned round twice is the same match', JSON.stringify(swapSides(swapSides(snap))) === JSON.stringify(snap));
 }
 
 // --- the dial --------------------------------------------------------------------------------

@@ -13,6 +13,7 @@
 //   messagePush     messages/index/<code>/<other>    somebody wrote to you (2026-09-24)
 //   bugReportPush   bugReports/<id>                  a new report, to every admin (2026-09-24)
 //   skeeChallengePush skeeChallenges/index/<code>/<id> a Skeeball challenge, or its result (2026-09-24)
+//   cupPongTurnPush cuppong/index/<code>/<id>        a Cup Pong challenge, your turn, the end (2026-09-28)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
@@ -22,7 +23,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport, decideSkee, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, isActive } from './decide.js';
 
 initializeApp();
 
@@ -60,7 +61,7 @@ async function sendTo(db, code, note, tag, open) {
     // The hub is open on this device right now: it already shows the news, so no notification.
     if (isActive(s)) { logger.info('skipped, app open', { code, tag, sub: k }); return; }
     const { title, body } = note.text(s.lang === 'es' ? 'es' : 'en');
-    const payload = JSON.stringify({ title, body, tag, url, game: open.game, with: open.with || '', name: open.name || '' });
+    const payload = JSON.stringify({ title, body, tag, url, game: open.game, with: open.with || '', name: open.name || '', match: open.match || '' });
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, payload,
         { TTL: 60 * 60 * 24 * 3, urgency: 'high' });
@@ -123,4 +124,12 @@ export const skeeChallengePush = onValueWritten({ ref: '/skeeChallenges/index/{c
   const after = event.data.after.exists() ? event.data.after.val() : null;
   const note = decideSkee({ code, id, before, after });
   if (note) await sendTo(getDatabase(), code, note, `skee-${id}`, { game: 'skeeball' });
+});
+
+export const cupPongTurnPush = onValueWritten({ ref: '/cuppong/index/{code}/{id}', ...OPTS }, async (event) => {
+  const { code, id } = event.params;
+  const before = event.data.before.exists() ? event.data.before.val() : null;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  const note = decideCupPong({ code, id, before, after });
+  if (note) await sendTo(getDatabase(), code, note, `cuppong-${id}`, { game: 'cuppong', match: id });
 });

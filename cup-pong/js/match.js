@@ -29,6 +29,13 @@
 //
 // Sides are 'a' (this phone, red cups) and 'b' (the opponent, blue). Each rack is stored in the
 // SHOOTER'S frame. Everything that happens comes back as EVENTS, in order.
+//
+// A CHALLENGE (`async: true`, 2026-09-28) plays the same rules with one difference: the defender
+// is not there when an island goes in, so the second cup is OWED (Matt chose this): `owed[side]`
+// counts it, and that side removes it at the start of its own next turn (`pickOwed`) before any
+// throw or option. If the owed cups are all the cups left, the rack is cleared on the spot. A match
+// is saved and restored whole (`toJSON` / `Match.fromJSON`), and `swapSides` turns a saved match
+// round so the phone playing it is always side 'a'.
 
 import { makeRack, PRESETS, isSpot, presetsFor, applyPreset, islandsOf } from './rack.js';
 
@@ -47,7 +54,9 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2 } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false } = {}) {
+    this.async = !!async;
+    this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
     this.gentlemans = !!gentlemans;
     this.reracks = reracks;
     this.racks = { a: makeRack('tri10'), b: makeRack('tri10') };
@@ -77,6 +86,17 @@ export class Match {
   get spare() { return this.queue.length > 1 ? this.queue[1] : null; }
   /** 0 cold, 1 one make, 2 heating up, 3+ on fire. */
   heat(side, ball) { return this.streak[side][ball] || 0; }
+  /** Challenge: the shooter owes cups off its OWN rack and must take them before anything else. */
+  mustPickOwed() { return !this.over && (this.owed[this.shooter] | 0) > 0; }
+  /** The shooter takes one owed cup off its own rack. */
+  pickOwed(id) {
+    if (!this.mustPickOwed()) return [];
+    const mine = this.racks[this.shooter];
+    if (!mine.some((k) => k.id === id)) return [];
+    this.racks[this.shooter] = mine.filter((k) => k.id !== id);
+    this.owed[this.shooter]--;
+    return [{ type: 'owedPicked', side: this.shooter, id, left: this.owed[this.shooter] }];
+  }
 
   startTurn() {
     const ev = [];
@@ -94,7 +114,7 @@ export class Match {
 
   // --- the shooter's options ----------------------------------------------------------------
   canGentlemans() {
-    if (!this.gentlemans || this.phase !== 'normal' || this.turnThrows > 0 || this.over) return false;
+    if (!this.gentlemans || this.phase !== 'normal' || this.turnThrows > 0 || this.over || this.mustPickOwed()) return false;
     const rack = this.target();
     if (rack.length !== 2) return false;
     return !rack.every((k) => PRESETS.line2.some((s) => sameSpot(k, s)));
@@ -107,7 +127,7 @@ export class Match {
   }
 
   canRerack() {
-    if (this.phase !== 'normal' || this.turnThrows > 0 || this.over || this.rerackedThisTurn) return false;
+    if (this.phase !== 'normal' || this.turnThrows > 0 || this.over || this.rerackedThisTurn || this.mustPickOwed()) return false;
     if (!(this.reracksLeft[this.shooter] > 0)) return false;
     const n = this.target().length;
     return n >= 1 && n < 10 && presetsFor(n).length > 0;
@@ -125,7 +145,7 @@ export class Match {
 
   islands() { return islandsOf(this.target()); }
   canIsland() {
-    return !this.over && this.phase !== 'rebuttal' && !this.islandUsed[this.shooter] && !this.called
+    return !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && !this.islandUsed[this.shooter] && !this.called
       && !this.lastCup && this.queue.length > 0 && this.islands().length > 0;
   }
   callIsland(id) {
@@ -151,7 +171,7 @@ export class Match {
   /** One throw has resolved. `made` is the id of the cup it went in, or null. */
   throwResult({ made = null, bounced = false } = {}) {
     const ev = [];
-    if (this.over || this.pendingPick || !this.queue.length) return ev;
+    if (this.over || this.pendingPick || !this.queue.length || this.mustPickOwed()) return ev;
     this.throwsTaken++;
     this.turnThrows++;
     const side = this.shooter;
@@ -200,7 +220,8 @@ export class Match {
       }
       const leftAfter = rack.length - 1;
       // ISLAND: the called cup went in - two cups, the defender picks the second.
-      if (called && made === called && leftAfter >= 1) {
+      const island = !!(called && made === called && leftAfter >= 1);
+      if (island && !this.async) {
         this.racks[this.defender] = rack.filter((k) => k.id !== made);
         ev.push({ type: 'made', side, ball, id: made, bounced, island: true, left: leftAfter });
         this.pendingPick = { picker: this.defender };
@@ -214,8 +235,21 @@ export class Match {
         return ev;
       }
       this.racks[this.defender] = rack.filter((k) => k.id !== made);
-      ev.push({ type: 'made', side, ball, id: made, bounced, left: leftAfter });
+      ev.push({ type: 'made', side, ball, id: made, bounced, left: leftAfter, ...(island ? { island: true } : {}) });
       if (leftAfter === 0) return ev.concat(this._cleared());
+      // A CHALLENGE'S ISLAND: the second cup is owed, taken by the defender at its next turn.
+      if (island) {
+        this.owed[this.defender]++;
+        ev.push({ type: 'islandOwed', side: this.defender, n: this.owed[this.defender] });
+      }
+      // Owed cups that are every cup left: the rack is cleared now.
+      if (this.owed[this.defender] > 0 && this.racks[this.defender].length <= this.owed[this.defender]) {
+        const ids = this.racks[this.defender].map((k) => k.id);
+        this.racks[this.defender] = [];
+        this.owed[this.defender] = 0;
+        ev.push({ type: 'owedCleared', side: this.defender, ids });
+        return ev.concat(this._cleared());
+      }
       return ev.concat(this._afterThrow());
     }
 
@@ -243,6 +277,7 @@ export class Match {
     const ev = [];
     const side = this.shooter;
     this.queue = [];
+    this.owed = { a: 0, b: 0 };
     if (this.phase === 'rebuttal') {
       this.phase = 'overtime';
       this.racks.a = OVERTIME_CELLS.map((c, i) => ({ id: 'o' + i, ...c }));
@@ -265,9 +300,72 @@ export class Match {
   _finish(winner, how) {
     this.over = true;
     this.winner = winner;
+    this.how = how;
     this.queue = [];
     return [{ type: 'win', side: winner, how }];
   }
+
+  // --- saving a match (challenges) -------------------------------------------------------------
+  /** Everything, as plain JSON. Unlimited reracks (Infinity) travel as 'inf'. */
+  toJSON() {
+    const enc = (n) => (Number.isFinite(n) ? n : 'inf');
+    const cups = (r) => r.map((k) => ({ ...k }));
+    return {
+      v: 1, async: this.async, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
+      shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
+      streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
+      reracksLeft: { a: enc(this.reracksLeft.a), b: enc(this.reracksLeft.b) },
+      islandUsed: { ...this.islandUsed }, owed: { ...this.owed },
+      called: this.called, pendingPick: this.pendingPick ? { ...this.pendingPick } : null,
+      lastCup: this.lastCup, queue: this.queue.slice(), pairRes: this.pairRes.slice(),
+      turnThrows: this.turnThrows, rerackedThisTurn: !!this.rerackedThisTurn,
+      turnNo: this.turnNo, throwsTaken: this.throwsTaken,
+      over: this.over, winner: this.winner, how: this.how || null,
+    };
+  }
+
+  static fromJSON(o) {
+    const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async });
+    const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
+    const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
+    m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };
+    m.shooter = o.shooter === 'b' ? 'b' : 'a';
+    m.phase = ['normal', 'rebuttal', 'overtime'].includes(o.phase) ? o.phase : 'normal';
+    m.clearedBy = o.clearedBy === 'a' || o.clearedBy === 'b' ? o.clearedBy : null;
+    m.streak = { a: arr((o.streak || {}).a, 2, 0).map(Number), b: arr((o.streak || {}).b, 2, 0).map(Number) };
+    m.reracksLeft = { a: dec((o.reracksLeft || {}).a), b: dec((o.reracksLeft || {}).b) };
+    m.islandUsed = { a: !!(o.islandUsed || {}).a, b: !!(o.islandUsed || {}).b };
+    m.owed = { a: ((o.owed || {}).a | 0), b: ((o.owed || {}).b | 0) };
+    m.called = o.called || null;
+    m.pendingPick = o.pendingPick || null;
+    m.lastCup = o.lastCup || null;
+    m.queue = arr(o.queue, 0).map(Number);
+    m.pairRes = arr(o.pairRes, 2, null).map((v) => (v === true ? true : v === false ? false : null));
+    m.turnThrows = o.turnThrows | 0;
+    m.rerackedThisTurn = !!o.rerackedThisTurn;
+    m.turnNo = o.turnNo | 0;
+    m.throwsTaken = o.throwsTaken | 0;
+    m.over = !!o.over;
+    m.winner = o.winner === 'a' || o.winner === 'b' ? o.winner : null;
+    m.how = o.how || null;
+    return m;
+  }
 }
 
-export default { Match, BALLS, OVERTIME_CELLS };
+/** A saved match turned round: side 'a' becomes 'b' and back. The phone playing a challenge is
+ *  always 'a' (its own red cups, near the camera), whichever side it holds in the stored game. */
+export function swapSides(o) {
+  const sw = (s) => (s === 'a' ? 'b' : s === 'b' ? 'a' : s);
+  const pair = (x) => (x && typeof x === 'object' ? { a: x.b, b: x.a } : x);
+  return {
+    ...o,
+    racks: pair(o.racks), streak: pair(o.streak), reracksLeft: pair(o.reracksLeft),
+    islandUsed: pair(o.islandUsed), owed: pair(o.owed),
+    shooter: sw(o.shooter), clearedBy: sw(o.clearedBy), winner: sw(o.winner),
+    pendingPick: o.pendingPick ? { ...o.pendingPick, picker: sw(o.pendingPick.picker) } : null,
+  };
+}
+
+export default { Match, BALLS, OVERTIME_CELLS, swapSides };
