@@ -2,7 +2,7 @@
 // HUD, pause / game-over / how-to-play overlays, input, the clock, and stats. The engine
 // (game.js) owns every rule and every pixel on the canvas.
 //
-// isInProgress(): the LITERAL meaning (no mid-run resume, same class as Snake/Pinball): true while
+// isInProgress(): the LITERAL meaning (no mid-run resume, same class as Snake): true while
 // a run is live, so the hub confirms before navigating away. A run that is left with points on the
 // board is still RECORDED (destroy() finishes it), so a hub back-tap never loses a score.
 

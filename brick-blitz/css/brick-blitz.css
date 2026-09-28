@@ -1,6 +1,6 @@
 /* brick-blitz/css/brick-blitz.css — every rule descendant-scoped under .bx-root (Mancala's
-   discipline, docs/BUILDING-A-GAME.md "CSS scoping"). A fixed neon look in both hub themes, like
-   Pinball: the game is its own dark arcade screen, so .gh-dark changes nothing here. */
+   discipline, docs/BUILDING-A-GAME.md "CSS scoping"). A fixed neon look in both hub themes: the
+   game is its own dark arcade screen, so .gh-dark changes nothing here. */
 
 .bx-root {
   /* Fixed to the viewport: full bleed both standalone and mounted (immersive: true in js/hub.js).

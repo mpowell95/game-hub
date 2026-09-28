@@ -334,7 +334,7 @@ export const GAMES = [
     // rather than js/hub.js knowing what a Connect 4 Hoops challenge is.
     alerts: () => import('../hoops4/js/alert.js'),
     // Owns the whole viewport (a fixed edge-to-edge canvas under a thin HUD), so the hub's header
-    // collapses to the floating back button - the same call as Skeeball and Pinball.
+    // collapses to the floating back button - the same call as Skeeball.
     immersive: true,
     accent: '#1f5fa8',
     art: GAME_ART['hoops4'],
@@ -346,7 +346,7 @@ export const GAMES = [
     devOnly: true,
   },
   {
-    // ADMIN ONLY AGAIN (Matt's ask, 2026-08-23), exactly like Pinball below. It was released
+    // ADMIN ONLY AGAIN (Matt's ask, 2026-08-23), exactly like Baseball. It was released
     // 2026-08-22 and pulled back the next day: work done for POPONGO and HOT SHOT had been
     // landing in the shared engine and changing how THE CLASSIC plays (see skeeball/CLAUDE.md,
     // "work on one machine, change one machine"). `devOnly` keeps the card off the launcher for
@@ -368,7 +368,7 @@ export const GAMES = [
     // the tile when somebody challenged you or answered one you sent. See skeeball/js/alert.js.
     alerts: () => import('../skeeball/js/alert.js'),
     // Owns the whole viewport (fixed edge-to-edge canvas under a marquee HUD), so the hub's
-    // header collapses to the floating back button - same call as Pinball and Hill Climb.
+    // header collapses to the floating back button - same call as Hill Climb.
     immersive: true,
     accent: '#54301a',
     art: GAME_ART["skeeball"],
@@ -444,7 +444,7 @@ export const GAMES = [
   {
     // A clone of "Neon Breakout" (HYPERBRICK): synthwave breakout with five hand-built stages,
     // an Endless mode and four power-ups. Owns the whole viewport (a fixed canvas under its own
-    // HUD row, which shares the floating back button's row), so immersive like Pinball.
+    // HUD row, which shares the floating back button's row), so immersive like Hill Climb.
     id: 'brick-blitz',
     released: '2026-09-23',
     title: 'Brick Breaker',
@@ -504,7 +504,7 @@ export const GAMES = [
       es: 'Tres hoyos. Apunta y calcula el momento de tu golpe.' },
     module: '../golf/js/ui.js',
     // Its own full-bleed chrome (the course view plus the floating HUD), so the hub's header
-    // collapses to the floating back button - same call as Skeeball, Pinball and Hill Climb.
+    // collapses to the floating back button - same call as Skeeball and Hill Climb.
     immersive: true,
     accent: '#2E7D4F',
     art: GAME_ART["golf"],

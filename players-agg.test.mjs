@@ -572,39 +572,20 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Bego' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Bego');
 }
 
-// ---- Pinball's pb sub-counter survives the cross-device combine (THE LAW rule 1) ----
-// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped.
-// Lifetime counters (games, points, jackpots, multiballs, missions, ramps) ADD; BOTH bests take
-// Math.max. Summing a best score would be the worst kind of wrong here: it invents a game nobody
-// played and it can never be undone, since the shared store only ever grows. A device that synced
-// before Pinball existed has no key at all and must combine cleanly.
+// ---- An ARCHIVED game's records are carried but counted nowhere (2026-09-28) ----
+// Pinball was archived: its stored games stay in every record (THE LAW - nothing deletes them) but
+// they must not leak into the competitive totals just because the id is no longer in SOLO.
 {
   const all = {
-    d1: rec({ playerId: 'PB999', name: 'Wizard' }, {
-      pinball: {
-        total: { played: 4, won: 4, lost: 0 },
-        byDiff: { medium: { played: 4, won: 4, lost: 0 } },
-        pb: { games: 4, bestScore: 1250000, points: 3000000, bestBall: 610000, jackpots: 9, multiballs: 2, missions: 5, ramps: 41 },
-      },
+    d1: rec({ playerId: 'AR999', name: 'Wizard' }, {
+      pinball: { total: { played: 4, won: 4, lost: 0 }, byDiff: { medium: { played: 4, won: 4, lost: 0 } } },
+      connect4: comp(3, 2, 1),
     }, 100),
-    d2: rec({ playerId: 'pb999', name: 'Wizard' }, {
-      pinball: {
-        total: { played: 2, won: 2, lost: 0 },
-        byDiff: { hard: { played: 2, won: 2, lost: 0 } },
-        pb: { games: 2, bestScore: 880000, points: 1400000, bestBall: 745000, jackpots: 4, multiballs: 1, missions: 2, ramps: 18 },
-      },
-    }, 200),
-    d3: rec({ playerId: 'PB999', name: 'Wizard' }, { connect4: comp(1, 1, 0) }, 300),
   };
-  const pb = aggregatePlayers(all)[0].games.pinball.pb;
-  eq('pinball: games and points add across devices', [pb.games, pb.points], [6, 4400000]);
-  eq('pinball: best SCORE takes the max, never a sum', pb.bestScore, 1250000);
-  eq('pinball: best BALL takes the max independently of best score', pb.bestBall, 745000);
-  eq('pinball: lifetime counters add', [pb.jackpots, pb.multiballs, pb.missions, pb.ramps], [13, 3, 7, 59]);
-  eq('pinball: total/byDiff still aggregate alongside pb',
-    aggregatePlayers(all)[0].games.pinball.total.played, 6);
-  ok('pinball counts as a SOLO game (no loss axis: a game ends when the last ball drains)',
-    SOLO.has('pinball'));
+  const row = aggregatePlayers(all)[0];
+  ok('an archived game is neither SOLO nor COMPETITIVE', !SOLO.has('pinball') && !COMPETITIVE.includes('pinball'));
+  eq('its plays count in no total', [row.comp.played, row.comp.won, row.totalPlays], [3, 2, 3]);
+  eq('but its stored total is still carried on the row, untouched', row.games.pinball.total.played, 4);
 }
 
 // ---- Brick Breaker's bz sub-counter survives the cross-device combine (THE LAW rule 1) ----
@@ -770,12 +751,14 @@ const OFF_THE_BOARD = {};
   // assertion below would pass vacuously. This floor tracks how many dev-only games there are and
   // nothing more - 2 while Skeeball was admin-only, 1 for the day it was released (2026-08-22),
   // 2 again when it was pulled back on 2026-08-23, and 1 since it was re-released on 2026-08-24
-  // (only Pinball is dev-only now). It is never a statement that a game SHOULD be hidden; the
+  // (several stage-built games are dev-only now). It is never a statement that a game SHOULD be hidden; the
   // OFF_THE_BOARD block above is what asserts that.
   ok('parsed game-stats.js GAMES, leaderboard GAME_META and the hub registry', statsIds.length >= 20 && metaIds.length >= 15 && devOnly.size >= 1);
 
+  // ARCHIVED games are stored, never displayed: correctly absent from GAME_META.
+  const archived = [...literal(read('js/game-stats.js'), 'const ARCHIVED_GAMES = [').matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
   for (const id of statsIds) {
-    if (metaIds.includes(id)) continue;
+    if (metaIds.includes(id) || archived.includes(id)) continue;
     const why = OFF_THE_BOARD[id];
     if (!why) {
       ok(`"${id}" has a leaderboard GAME_META row (without one its wins count as ZERO on the board)`, false);

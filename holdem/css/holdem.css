@@ -1,5 +1,5 @@
 /* holdem/css/holdem.css - Texas Hold'em. Every rule descendant-scoped under .pk-root (Mancala's
-   discipline, docs/BUILDING-A-GAME.md). A fixed casino look in both hub themes, like Pinball and
+   discipline, docs/BUILDING-A-GAME.md). A fixed casino look in both hub themes, like
    Brick Breaker: the table is its own room, so .gh-dark changes nothing.
    2026-09-27: restyled as a clone of Matt's reference recording - a navy opponents strip, flat
    blue felt with sunken card slots, black glossy controls and big realistic cards. */

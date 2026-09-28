@@ -571,12 +571,8 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     /boardRankTier\(metricAt, id, playsAt\)/.test(rankSrc)
     && /if \(playsAt\(tier\) > 0 && hasBoardMetric\(metricAt\(tier\), id\)\) return tier;/.test(rankSrc),
     'Skeeball, Golf and Hill Climb each printed EXPERT on every row without it');
-  ok('[KNOWN-BUG PROBE] Pinball ranks on its POINTS, never on winsAtTier wearing that label',
-    /if \(id === 'pinball'\) return pbPointsAt\(g\);/.test(src)
-    && /function pbPointsAt\(g\) \{[\s\S]{0,200}?pb\.points \| 0/.test(src),
-    'a player with 2,000,000 lifetime points read "2 POINTS" - their number of Tournament games');
   ok('a tier-blind metric gets no per-tier tiles to claim it can be split',
-    /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'pinball', 'golf'\]\);/.test(src)
+    /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'golf'\]\);/.test(src)
     && /METRIC_IS_TIER_BLIND\.has\(id\) \? ''/.test(src));
   // ADMIN-ONLY GAMES ARE OFF THE BOARD (2026-09-09). The three things that must NOT be filtered
   // with them are each a rule 1 failure if they ever are - see the comment at the call site.

@@ -1,10 +1,19 @@
 # Pinball — game documentation
 
-> **ARCHIVED 2026-09-28** (Matt: "remove pinball from the game hub and archive it"). This folder
-> moved from `pinball/` to `archive/pinball/`. It has no launcher entry and is not precached. Player
-> history is untouched: `recordPinball`, the `pinball` stats id, its `GAME_META` row and its My Stats
-> tab (`retired: true`) all stay. To restore: move the folder back, re-add the `GAMES` entry in
-> `js/hub.js` (see git history), re-add its paths to `sw.js` ASSETS, drop `retired` from the TABS row.
+> **ARCHIVED 2026-09-28** (Matt: "remove pinball from the game hub and archive it", then "Remove it
+> from the leaderboard too. Archive all traces"). Moved from `pinball/` to `archive/pinball/`; every
+> other trace was removed from the app (launcher entry, leaderboard row, My Stats tab and screen,
+> tile art, strings, `recordPinball`, `sweep-pinball-rests.mjs` -> `tools/`). **Stored player
+> history was NOT touched**: `'pinball'` stays in `js/game-stats.js`'s `GAMES` (and in
+> `ARCHIVED_GAMES`, which keeps it out of every total), so every recorded game is still on the
+> phones and in `players/<id>`.
+>
+> **To restore:** `git revert` the two archive commits (the ones touching this note), or by hand:
+> move the folder back, bring back the `GAMES` entry in `js/hub.js`, `recordPinball`/`ensurePb` in
+> `js/game-stats.js`, the TABS row + `pinballScreen` in `js/game-stats-ui.js`, the `GAME_META` row +
+> `pbPointsAt` in `js/leaderboard-ui.js`, the `pb` merge and SOLO entry in `js/players-agg.js`,
+> the art in `js/game-art.js`, the strings in `js/strings.js`, and its `sw.js` ASSETS; drop it from
+> `ARCHIVED_GAMES`. The code as it was is in git at commit `3e1dcda`.
 
 > **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. THE LAW
 > and its nine working rules live at the top of the root `CLAUDE.md`, which is always loaded

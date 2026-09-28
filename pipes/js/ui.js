@@ -264,8 +264,8 @@ class PipesUI {
     });
     this.root.querySelector('[data-role="lb"]').addEventListener('click', () => this._openLeaderboard());
 
-    // Dev hook, read-only. Pinball shipped four times on green headless tests while being
-    // unplayable, because every fault lived in the DOM glue no headless test constructs. This is
+    // Dev hook, read-only. A game here once shipped four times on green headless tests while
+    // being unplayable, because every fault lived in the DOM glue no headless test constructs. This is
     // how a browser session can see what the board actually is.
     try { window.__piTest = { ui: this, game: g }; } catch { /* no window */ }
     this._buildBoard();

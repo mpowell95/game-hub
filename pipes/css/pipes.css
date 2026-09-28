@@ -244,8 +244,8 @@
 .pi-root .pi-howto-rules li { margin: 6px 0; }
 
 /* --- reduced motion ------------------------------------------------------------------------------
- * Reduced motion thins garnish, it does NOT freeze gameplay (docs/BUILDING-A-GAME.md Part 0, and
- * pinball/CLAUDE.md states it outright). So the pipe's own rotation - which IS the game - keeps its
+ * Reduced motion thins garnish, it does NOT freeze gameplay (docs/BUILDING-A-GAME.md
+ * Part 0). So the pipe's own rotation - which IS the game - keeps its
  * transition, and only the celebratory water sequence and the nudge are cut to instant. Nothing is
  * display:none'd; every element settles to its final pose. */
 @media (prefers-reduced-motion: reduce) {

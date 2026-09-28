@@ -26,7 +26,7 @@
 //
 //  - SIX CATEGORIES, not four tiers. Easy/Medium/Hard/Expert still mean what they meant, and two
 //    more join them so that EVERY play a person makes lands in exactly one cell: NT (a game with
-//    no difficulty axis at all - Skeeball machines, Pinball tables, Hill Climb stages), counted as
+//    no difficulty axis at all - Skeeball machines, Hill Climb stages), counted as
 //    RUNS, and VS (a win against a real person, the `mp` bucket). Before this, a Skeeball rack or
 //    an online Escoba win counted in the total and appeared in no chip beside it, so the strip
 //    never added up. THE LAW rule 1's spirit: a number the screen can show, it shows.
@@ -183,14 +183,6 @@ const GAME_META = [
   // (THE LAW rule 1) - every play stayed in every device's store and in players/. It is also out
   // of players-agg.test.mjs's OFF_THE_BOARD now; the two can never disagree.
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
-  // Pinball joined the board 2026-08-24, the day the admin control page shipped (js/admin-config.js).
-  // It is still `devOnly` in js/hub.js, but `devOnly` is now only a DEFAULT: Matt can release a game
-  // to everyone from inside the app, with no commit and no deploy - so a game cannot wait for its
-  // GAME_META row to be added by the release commit any more. Without a row here every Pinball score
-  // would be worth zero on the board the moment it was released, while My Stats showed it: THE LAW
-  // rule 1, and exactly how Yahtzee shipped. The row costs nothing while the game is hidden -
-  // gameListHTML only renders a game somebody has actually played.
-  { id: 'pinball', labelKey: 'game_title_pinball' },
   // Brick Breaker (2026-09-23): released with this row in the same commit - the Yahtzee lesson above.
   { id: 'brickblitz', labelKey: 'game_title_brickblitz' },
   // Texas Hold'em (2026-09-27): released with this row in the same commit - the Yahtzee lesson.
@@ -198,13 +190,12 @@ const GAME_META = [
   { id: 'airhockey', labelKey: 'game_title_airhockey' },
   { id: 'cuppong', labelKey: 'game_title_cuppong' },
   // Golf is solo (js/players-agg.js's SOLO set) and ranks by lifetime points, same shape as
-  // Skeeball/Pinball - see golfPointsAt below. The row exists from Part 7 even though the one
-  // course starts admin-gated to 'testing' (js/admin-config.js): same reasoning as Pinball above,
-  // the row costs nothing while nobody but the dev profile can play, and a row added later (after
+  // Skeeball - see golfPointsAt below. The row exists from Part 7 even though the one
+  // course starts admin-gated to 'testing' (js/admin-config.js): the row costs nothing while nobody but the dev profile can play, and a row added later (after
   // someone already has plays) is exactly the Yahtzee bug this comment chain keeps citing.
   { id: 'golf', labelKey: 'game_title_golf' },
   // Phase 0 (BB-0-phase-0-handoff.md): the row exists from the first commit for the same reason
-  // Pinball's does - a game with no row here is worth zero wins and zero plays on every screen of
+  // Golf's does - a game with no row here is worth zero wins and zero plays on every screen of
   // it (root CLAUDE.md, "GAME_META is a registry"), and `devOnly` games are only DEFAULTS now
   // (the admin control page), so a game can go live from inside the app with no commit at all.
   { id: 'baseball', labelKey: 'game_title_baseball' },
@@ -326,7 +317,7 @@ function fieldTiersPresent(list, gameIds) {
 
 // --- the six categories (2026-08-25 handoff) ---------------------------------
 // 1-4 are the shared difficulty tiers. 'NT' is every play in a bucket that maps to NO tier and is
-// not multiplayer - Skeeball's machines, Pinball's tables, Hill Climb's stages, plus 'legacy' and
+// not multiplayer - Skeeball's machines, Hill Climb's stages, plus 'legacy' and
 // any unmapped vocabulary - counted as RUNS, because in a game with no opponent a run is the only
 // honest unit. 'VS' is the `mp` bucket, counted as WINS against real people.
 //
@@ -504,24 +495,6 @@ function skPointsAt(g, machine) {
   if (!machine || machine === 'all') return sk.points | 0;
   return ((sk.boards || {})[machine] || {}).points | 0;
 }
-/** PINBALL'S LIFETIME POINTS, and the same GUARD Skeeball's own note above spells out: NEVER
- *  winsAtTier for this game. `recordPinball` calls `bumpTotals(..., true)`, so every game played is
- *  stored as a "win" and this board fell through to counting them - under a unit label that says
- *  POINTS. Measured 2026-09-08 on a fabricated but real-shaped record: a player with a 900,000 best
- *  and 2,000,000 lifetime points read "2 POINTS", which was their number of Tournament games.
- *  Skeeball had exactly this bug and exactly this fix (Matt: "Points should show lifetime points.
- *  Not your best single round."); Pinball simply never got a case here. `pb.bestScore` is still
- *  stored and still shown on My Stats, so nothing is hidden by ranking on the lifetime total.
- *
- *  Tier-blind, like Skeeball's: `pb` keeps no per-tier points breakdown, so two players on the same
- *  tier compare lifetime totals that include their easier tables. Same documented exception as Tic
- *  Tac Toe's Ultimate/Classic split. Pinball's TIER is still real and still leads the ranking - its
- *  three table settings are stored as easy/medium/hard by recordPinball. */
-function pbPointsAt(g) {
-  const pb = g.games.pinball && g.games.pinball.pb;
-  return pb ? pb.points | 0 : 0;
-}
-
 /** BEST SINGLE RACK - the high score. The same reading it always was; it is just no longer what
  *  "Points" means. The board offers it as its own sort now (see sortItemsFor). */
 function skBestAt(g, machine) {
@@ -558,22 +531,16 @@ function skPlaysAt(g, machine) {
 // filter (which dropped every under-par and every level-par round). See js/leaderboard-rank.js.
 /** THE GAMES WHOSE METRIC IGNORES THE TIER IT IS HANDED - the map two sessions had to rediscover
  *  the hard way (2026-09-08), so it is written down once here rather than re-derived from the
- *  extractors below. Skeeball's number is scoped by MACHINE, golf's by COURSE, Pinball's is one
- *  lifetime total; none of the three has a per-tier breakdown to read.
- *
- *  Skeeball and golf are untiered anyway (their stored buckets are keyed by machine and by course,
- *  which map to no tier). **Pinball is the one that is genuinely tiered AND tier-blind**: its three
- *  table settings are stored as easy/medium/hard, so it ranks tier-first correctly, but there is no
- *  per-tier points figure - which is why it gets no per-tier tiles. Printing the same lifetime
- *  total under Easy, Medium and Hard would claim they were three separate scores. */
-const METRIC_IS_TIER_BLIND = new Set(['skeeball', 'pinball', 'golf']);
+ *  extractors below. Skeeball's number is scoped by MACHINE, golf's by COURSE; neither has a
+ *  per-tier breakdown to read (their stored buckets are keyed by machine and by course, which map
+ *  to no tier), so neither gets per-tier tiles. */
+const METRIC_IS_TIER_BLIND = new Set(['skeeball', 'golf']);
 
 function gameMetricAt(g, id, tier) {
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
   if (id === 'hillclimb') return hcBestAt(g, tier);
   if (id === 'skeeball') return skPointsAt(g, _machine);
-  if (id === 'pinball') return pbPointsAt(g);
   if (id === 'brickblitz') return bzBestAt(g, tier);
   if (id === 'golf') return golfBestAt(g);   // to par, LOWER WINS, null when never played
   // Best time at this difficulty, LOWER WINS, null when that level was never cleared. The tier
@@ -633,7 +600,7 @@ function boardPlaysOf(g, id) {
  *  never won, above a Medium player with forty wins, and print a 0 next to their name. An
  *  achievement is what the spec compares.
  *
- *  `null` = no tier: a game with no difficulty axis at all (Skeeball, Pinball, Golf, Hill Climb -
+ *  `null` = no tier: a game with no difficulty axis at all (Skeeball, Golf, Hill Climb -
  *  every row is null, so those boards are exactly what they were), and legacy/unmapped history in a
  *  game that has one. Their number stays the all-tier number and their row sorts below the tiered
  *  rows - still listed, still showing what they scored (THE LAW rule 1).
@@ -760,7 +727,7 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_solved: 'lb_sort_solved',
   lb_unit_cleared: 'lb_sort_cleared',
   lb_unit_meters: 'lb_sort_meters',
-  // Skeeball and Pinball both rank on points; without this row both sort menus said "Wins".
+  // Skeeball and Brick Breaker rank on points; without this row their sort menus said "Wins".
   lb_unit_points: 'lb_sort_points',
   // Golf ranks on a best round, not on wins or points.
   lb_unit_golf_best: 'lb_sort_golf_best',
@@ -961,7 +928,7 @@ function miniTilesHTML(tiers, valueFn, markTier) {
  *  game board.
  *
  *  The two buckets with no shape are the two that are not difficulties: 'NT' (Skeeball machines,
- *  Pinball tables, Hill Climb stages, plus legacy history) and 'VS' (wins against real people).
+ *  Hill Climb stages, plus legacy history) and 'VS' (wins against real people).
  *  They are drawn with their real WORD, never their initials - they are the last things to fit,
  *  and an unlabelled shape invented for them would claim a difficulty they do not have (rule 4's
  *  habit). Dropping them entirely was the alternative and is worse: 'NT' is the BIGGEST bucket for

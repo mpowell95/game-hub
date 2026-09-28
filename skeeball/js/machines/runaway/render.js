@@ -2168,8 +2168,7 @@ export class Renderer {
     // why two balls in the air, running in two separate cannon worlds, still see one basket.
     //
     // GUARD: this is NOT gated on REDUCED. `prefers-reduced-motion` thins garnish; it does not
-    // freeze gameplay (docs/BUILDING-A-GAME.md, Part 0, and pinball/CLAUDE.md's "a pinball table
-    // that does not move is not a pinball table"). The basket IS this machine - stopping it
+    // freeze gameplay (docs/BUILDING-A-GAME.md, Part 0). The basket IS this machine - stopping it
     // would leave a player aiming at a target the physics is still sliding out from under them.
     // `sweeps` is read again by the shadow gate at the bottom of this method, so it is scoped to
     // the whole of render() rather than to this block.
