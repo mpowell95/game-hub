@@ -17,7 +17,7 @@ this file says which are done.
 | 2 | Rules (brief section 3, confirmed below), settings, Gentleman's, vs CPU, rebuttal, stats | **Built 2026-09-28, deployed devOnly, waiting on Matt's play-test.** The Reracks setting (brief 4a) moved to stage 3, see "Stage 2" below |
 | 3 | Rerack: presets, then custom | **Built and deployed 2026-09-28**: presets, then "Make your own" (Matt: *"build custom rerack next"*). See "Make your own" below |
 | 4 | Bounce shots | not started - brief says show Matt the async design first |
-| 5 | Challenges + push | **Built and deployed 2026-09-28** (Matt: *"I don't see multiplayer? You should be able to challenge someone just like connect 4 hoops"*). See "Challenges" below. **Rules published 2026-09-28; the function deploy is still owed** (dated lines there) |
+| 5 | Challenges + push | **Built and deployed 2026-09-28** (Matt: *"I don't see multiplayer? You should be able to challenge someone just like connect 4 hoops"*). See "Challenges" below. **Rules published and `cupPongTurnPush` deployed, both 2026-09-28** |
 | + | **Solo: clear the rack in the fewest throws**, with a leaderboard (Matt's ask, 2026-09-28) | **Built and deployed 2026-09-28** - see "Solo" below |
 
 ### The GamePigeon rules, CONFIRMED by Matt 2026-09-27 ("1-7: yes")
@@ -228,9 +228,9 @@ under "CHALLENGES").
   write, via the row's `lastBy`). The payload carries `match`, and `sw.js` also reads a
   `cuppong-<id>` tag.
 - **Rules: PUBLISHED by Matt on 2026-09-28** (the full file from main, with `"cuppong"` added).
-- **NOT DONE YET, needs Matt (as of 2026-09-28)**: `firebase deploy --only functions` for
-  `cupPongTurnPush` (he can only run it from his personal laptop). The game works without it, just
-  with no phone notifications. Close this line the day he confirms.
+- **`cupPongTurnPush` DEPLOYED by Matt on 2026-09-28** ("deploy complete", from his laptop, the
+  other four functions updated in the same run). A real phone-to-phone notification is not yet
+  confirmed.
 
 Verified 2026-09-28 in two separate browser profiles against a local stand-in for the Realtime
 Database (the sandbox cannot reach Firebase): challenge, delivery on turn end, the replay, live
