@@ -30,7 +30,7 @@ import { GAMES } from './hub.js';
 import { BOARDS, DEFAULT_BOARD, boardById } from '../skeeball/js/boards.js';
 import { readGoals } from '../skeeball/js/goals.js';
 import SK_STRINGS from '../skeeball/js/strings.js';
-import { statsId, statsKey } from './game-stats.js';
+import { statsId, statsKey, holdemBalance, holdemSuspect } from './game-stats.js';
 import { dayKey } from './arcade-scores.js';
 import { aggregatePlayers, buildIdentity } from './players-agg.js';
 import { ANNOUNCEMENTS, textFor } from './announce.js';
@@ -39,8 +39,9 @@ import {
   readCachedConfig, refreshAdminConfig, resolveGameLive, resolveBoardMode, setGameLive,
   resolveGameAllowed, gameAllowList, setGameAllowed,
   setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
+  resolveHoldemCorrection, setHoldemCorrection,
 } from './admin-config.js';
-import { correctionFor, snapshotOf } from './stats-corrections.js';
+import { correctionFor, snapshotOf, holdemSnapshotOf } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -189,6 +190,7 @@ function ensureCss() {
   .adm-msg { flex: 0 0 auto; margin: var(--gh-sp-3) 0 0; min-height: 1.2em; font-size: var(--gh-fs-sm);
              font-weight: 600; line-height: 1.4; }
   .adm-msg.is-err { color: var(--gh-cb-vermilion); }
+  .adm-note.is-err { color: var(--gh-cb-vermilion); font-weight: 700; }
   .adm-msg.is-ok { color: var(--gh-cb-teal); }
   .adm-id { font-family: var(--gh-font-mono); font-size: var(--gh-fs-xs); word-break: break-all; }
   .adm-busy { opacity: .55; pointer-events: none; }`;
@@ -255,6 +257,7 @@ function render(card, opts = {}) {
       ${sec('games', t('adm_games_title'), gamesSectionHTML(cfg))}
       ${sec('machines', t('adm_skeeball_title'), skeeballSectionHTML(cfg))}
       ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
+      ${sec('poker', t('adm_hb_title'), pokerSectionHTML(cfg))}
       ${sec('announce', t('adm_ann_title'), announceSectionHTML())}
       ${sec('device', t('adm_device_title'), deviceSectionHTML())}
     </div>
@@ -537,6 +540,55 @@ function scoresSectionHTML(cfg) {
   }).join('');
 }
 
+// --- poker bankrolls: the cheat deterrent's other half (2026-09-28) --------------------------------
+
+/**
+ * One entry per PERSON who has played Texas Hold'em for money: their bankroll as everyone sees it
+ * (voids applied), the raw one, whether holdemSuspect() calls the ledger impossible, and the device
+ * records behind it. Grouped by person for the same reason as the scores section: a void that
+ * reached one phone would be undone by the other phone's next sync.
+ */
+function pokerBlocks(cfg) {
+  const all = _players || {};
+  const ident = buildIdentity(all);
+  const idsByKey = new Map();
+  for (const id of Object.keys(all)) {
+    const key = ident.keyFor((all[id] || {}).profile || {}, id);
+    if (!idsByKey.has(key)) idsByKey.set(key, []);
+    idsByKey.get(key).push(id);
+  }
+  const shown = new Map(aggregatePlayers(all, corrections()).map((g) => [g.key, g]));
+  const raw = new Map(aggregatePlayers(all).map((g) => [g.key, g]));
+  const out = [];
+  for (const [key, ids] of idsByKey) {
+    const s = shown.get(key), r = raw.get(key);
+    if (!s || !r) continue;
+    const hbRaw = ((r.games || {}).holdem || {}).hb;
+    if (!hbRaw || !((hbRaw.entries | 0) || (hbRaw.grants | 0))) continue;
+    const hb = ((s.games || {}).holdem || {}).hb || hbRaw;
+    const voided = ids.some((id) => resolveHoldemCorrection(cfg, id));
+    out.push({ key, ids, name: (s.name || '').trim() || t('adm_sc_unnamed'), hb, hbRaw, why: holdemSuspect(hb), voided });
+  }
+  // Anything flagged first, then the biggest bankrolls: the rows worth a look lead.
+  return out.sort((a, b) => (!!b.why - !!a.why) || (holdemBalance(b.hb) - holdemBalance(a.hb)) || a.name.localeCompare(b.name));
+}
+
+function pokerSectionHTML(cfg) {
+  const blocks = pokerBlocks(cfg);
+  if (!blocks.length) return `<p class="adm-note">${esc(t('adm_hb_empty'))}</p>`;
+  const cash = (n) => '$' + Math.max(0, Math.floor(+n || 0)).toLocaleString();
+  return blocks.map((p) => `<div class="adm-player" data-poker="${esc(p.key)}">
+      <div class="adm-phead">${esc(p.name)}</div>
+      <div class="adm-plife">${esc(t('adm_hb_line', { bank: cash(holdemBalance(p.hb)), entries: p.hb.entries | 0, cashes: p.hb.cashes | 0, best: cash(p.hb.best) }))}</div>
+      ${p.why ? `<div class="adm-note is-err">\u26a0 ${esc(t('adm_hb_flag', { why: p.why }))}</div>` : ''}
+      ${p.voided ? `<div class="adm-note">${esc(t('adm_hb_was', { bank: cash(holdemBalance(p.hbRaw)) }))}</div>` : ''}
+      <div class="adm-mact">
+        ${p.voided ? `<button type="button" class="gh-btn gh-btn--sm" data-hbundo="1">${esc(t('adm_hb_undo'))}</button>` : ''}
+        <button type="button" class="gh-btn gh-btn--sm${p.voided ? '' : ' gh-btn--danger'}" data-hbvoid="1">${esc(t(p.voided ? 'adm_hb_revoid' : 'adm_hb_void'))}</button>
+      </div>
+    </div>`).join('');
+}
+
 // --- this device ----------------------------------------------------------------------------------
 
 const ANNOUNCE_KEY = 'gamehub.announce.v1';
@@ -596,9 +648,26 @@ function wire(card) {
     const boardRow = scoreRow ? null : e.target.closest('[data-board]');
 
     let run = null;
+    const pokerRow = e.target.closest('[data-poker]');
     const allowBtn = e.target.closest('[data-allow-code]');
     const allowBox = allowBtn && allowBtn.closest('[data-allow-game]');
-    if (allowBtn && allowBox) {
+    if (pokerRow && (e.target.closest('[data-hbvoid]') || e.target.closest('[data-hbundo]'))) {
+      const undo = !!e.target.closest('[data-hbundo]');
+      const block = pokerBlocks(readCachedConfig()).find((p) => p.key === pokerRow.dataset.poker);
+      if (!block) return;
+      // EVERY device of this person that holds a ledger, for the reason given at pokerBlocks.
+      run = async () => {
+        let last = { ok: true };
+        const cfgNow = readCachedConfig();
+        for (const id of block.ids) {
+          const hb = ((((_players[id] || {}).stats || {}).games || {}).holdem || {}).hb;
+          if (undo ? !resolveHoldemCorrection(cfgNow, id) : !hb) continue;
+          last = await setHoldemCorrection(id, undo ? null : holdemSnapshotOf(hb), undo ? '' : 'admin void');
+          if (!last.ok) return last;
+        }
+        return last;
+      };
+    } else if (allowBtn && allowBox) {
       const on = allowBtn.getAttribute('aria-pressed') !== 'true';
       run = () => setGameAllowed(allowBox.dataset.allowGame, allowBtn.dataset.allowCode, on);
     } else if (seg && gameRow) {

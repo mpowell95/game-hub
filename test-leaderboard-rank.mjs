@@ -576,7 +576,7 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     && /function pbPointsAt\(g\) \{[\s\S]{0,200}?pb\.points \| 0/.test(src),
     'a player with 2,000,000 lifetime points read "2 POINTS" - their number of Tournament games');
   ok('a tier-blind metric gets no per-tier tiles to claim it can be split',
-    /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'pinball', 'golf'\]\);/.test(src)
+    /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'pinball', 'golf', 'holdem'\]\);/.test(src)
     && /METRIC_IS_TIER_BLIND\.has\(id\) \? ''/.test(src));
   // ADMIN-ONLY GAMES ARE OFF THE BOARD (2026-09-09). The three things that must NOT be filtered
   // with them are each a rule 1 failure if they ever are - see the comment at the call site.
@@ -642,7 +642,9 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     /function rankMap\(list, valueOf, cmp\)/.test(src) && /sort\(cmp \|\| \(\(a, b\)/.test(src));
   ok('the metric is printed through the formatter, so a to-par score keeps its sign',
     /metricText\(boardMetricOf\(lead, meta\.id\), meta\.id\)/.test(src)
-    && /const metricStr = metricText\(metric, id\);/.test(src));
+    // Hold'em's "Under review" (a ledger no real play could produce, 2026-09-28) is the one
+    // exception, and it replaces the number rather than formatting a different one.
+    && /const metricStr = (id === 'holdem' && hbReview\(g\) \? t\('lb_hb_review'\) : )?metricText\(metric, id\);/.test(src));
   ok('golf gets its own unit label, so My Stats keeps saying "points"',
     /if \(id === 'golf'\) return 'lb_unit_golf_best';/.test(src));
   // Minesweeper took the same split the day its board started ranking on a best TIME: the board

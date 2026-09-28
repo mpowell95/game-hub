@@ -391,13 +391,30 @@ export function aggregatePlayers(all, corrections) {
         dst.bz.bestCombo = Math.max(dst.bz.bestCombo | 0, src.bz.bestCombo | 0);
         const sbd = src.bz.bestScoreByDiff || {};
         for (const k of Object.keys(sbd)) dst.bz.bestScoreByDiff[k] = Math.max(dst.bz.bestScoreByDiff[k] | 0, sbd[k] | 0);
-      } else if (g === 'holdem' && src.hb) {
+      } else if (g === 'holdem' && (src.hb || src.hs)) {
         // Texas Hold'em's bankroll LEDGER (js/game-stats.js, recordHoldemBank). Every money field
         // is an additive counter, so a person's balance across devices is the SUM of the ledgers;
         // `best` (biggest single prize) takes Math.max, never a sum.
-        if (!dst.hb) dst.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
-        for (const k of ['buyins', 'winnings', 'grants', 'cashes', 'entries']) dst.hb[k] += src.hb[k] | 0;
-        dst.hb.best = Math.max(dst.hb.best | 0, src.hb.best | 0);
+        if (src.hb) {
+          if (!dst.hb) dst.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
+          // Plain numbers, not `| 0`: a bankroll can pass 2^31 at the top tables.
+          for (const k of ['buyins', 'winnings', 'grants', 'cashes', 'entries']) dst.hb[k] += Number.isFinite(+src.hb[k]) ? Math.floor(+src.hb[k]) : 0;
+          dst.hb.best = Math.max(dst.hb.best | 0, src.hb.best | 0);
+        }
+        // Per-hand stats (recordHoldemHand, 2026-09-28): hands/won ADD, bigPot takes Math.max, and
+        // the best hand travels as one unit {best, bestCat, bestCards} so the cards always match
+        // the score they are shown beside.
+        if (src.hs) {
+          if (!dst.hs) dst.hs = { hands: 0, won: 0, bigPot: 0, best: 0, bestCat: -1, bestCards: [] };
+          dst.hs.hands += src.hs.hands | 0;
+          dst.hs.won += src.hs.won | 0;
+          dst.hs.bigPot = Math.max(dst.hs.bigPot | 0, src.hs.bigPot | 0);
+          if ((src.hs.best | 0) > (dst.hs.best | 0)) {
+            dst.hs.best = src.hs.best | 0;
+            dst.hs.bestCat = Number.isFinite(src.hs.bestCat) ? src.hs.bestCat : -1;
+            dst.hs.bestCards = Array.isArray(src.hs.bestCards) ? src.hs.bestCards.slice(0, 5) : [];
+          }
+        }
       } else if (g === 'battleship' && src.bs) {
         // Root CLAUDE.md "Adding a game" item 7's third edit. Counters (played/won/lost/shots/
         // hits/sunk) ADD; bestAccuracy takes Math.max. fewestShotsWin is this repo's first

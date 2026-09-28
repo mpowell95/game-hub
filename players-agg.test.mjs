@@ -655,6 +655,42 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('holdem: the combined balance counts the starting stake once', holdemBalance(hb), HOLDEM_START_BANK + 26500 + 1000 - 11000);
 }
 
+// ---- Texas Hold'em hand stats and bankroll voids (2026-09-28) ----
+{
+  const { holdemBalance, HOLDEM_START_BANK, holdemSuspect } = await import('./js/game-stats.js');
+  const all = {
+    d1: rec({ playerId: 'HS111', name: 'Deuce' }, {
+      holdem: { total: { played: 1, won: 1, lost: 0 }, byDiff: {}, hs: { hands: 30, won: 9, bigPot: 4400, best: 900, bestCat: 2, bestCards: [1, 2, 3, 4, 5] } },
+    }, 100),
+    d2: rec({ playerId: 'HS111', name: 'Deuce' }, {
+      holdem: { total: { played: 1, won: 0, lost: 1 }, byDiff: {}, hs: { hands: 12, won: 2, bigPot: 9000, best: 700, bestCat: 1, bestCards: [6, 7, 8, 9, 10] } },
+    }, 200),
+  };
+  const hs = aggregatePlayers(all)[0].games.holdem.hs;
+  eq('holdem hands: counters add across devices', [hs.hands, hs.won], [42, 11]);
+  eq('holdem hands: biggest pot is the max', hs.bigPot, 9000);
+  eq('holdem hands: the best hand travels with its cards', [hs.best, hs.bestCat, hs.bestCards.join()], [900, 2, '1,2,3,4,5']);
+  // A device with hand stats but no bankroll ledger still counts (it never played for money).
+  eq('holdem hands: no ledger needed', !!aggregatePlayers(all)[0].games.holdem.hs && !aggregatePlayers(all)[0].games.holdem.hb, true);
+
+  // An admin void is a BASELINE overlay: the raw ledger is untouched, the shown one restarts.
+  const cheat = { buyins: 500, winnings: 9000000, grants: 0, best: 975, cashes: 1, entries: 1 };
+  const all2 = {
+    c1: rec({ playerId: 'CH111', name: 'Shark' }, { holdem: { total: { played: 1, won: 1, lost: 0 }, byDiff: {}, hb: cheat } }, 100),
+  };
+  eq('holdem void: the typed-in ledger is flagged', !!holdemSuspect(aggregatePlayers(all2)[0].games.holdem.hb), true);
+  const corr = { holdem: { c1: { buyins: 500, winnings: 9000000, grants: 0, best: 975, cashes: 1, entries: 1 } } };
+  const shown = aggregatePlayers(all2, corr)[0].games.holdem.hb;
+  eq('holdem void: the shown bankroll is back to the starting stake', holdemBalance(shown), HOLDEM_START_BANK);
+  eq('holdem void: and is no longer flagged', holdemSuspect(shown), '');
+  eq('holdem void: the raw record is untouched', all2.c1.stats.games.holdem.hb.winnings, 9000000);
+  // A game played after the void counts normally.
+  all2.c1.stats.games.holdem.hb = { buyins: 1500, winnings: 9001950, grants: 0, best: 1950, cashes: 2, entries: 2 };
+  const after = aggregatePlayers(all2, corr)[0].games.holdem.hb;
+  eq('holdem void: a later game counts', holdemBalance(after), HOLDEM_START_BANK + 1950 - 1000);
+  eq('holdem void: a later bigger prize survives as best', after.best, 1950);
+}
+
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
 //
 // Root CLAUDE.md, "Adding a game" item 7: a per-game sub-counter (`grid`/`cc`/`es`/`nb`/`br`/`tt`/
