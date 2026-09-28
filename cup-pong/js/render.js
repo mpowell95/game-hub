@@ -51,6 +51,20 @@ const LOOK = {
 // upper right, fading. Seconds.
 const LIFT_T = 0.30;
 const AWAY_T = 0.45;
+const SLIDE_T = 0.6;             // Gentleman's: the two cups slide into their line
+const GLIDE_T = 0.7;             // the camera between the two ends
+
+/** A camera pose from a position and a pitch (degrees down), looking along -z or +z. */
+function pose(pos, pitchDeg, facing = -1) {
+  const cam = new THREE.PerspectiveCamera();
+  cam.position.set(...pos);
+  const p = pitchDeg * Math.PI / 180;
+  cam.lookAt(pos[0], pos[1] - Math.sin(p), pos[2] + facing * Math.cos(p));
+  return { pos: cam.position.clone(), quat: cam.quaternion.clone() };
+}
+const SHOOT = pose(CAMERA.pos, CAMERA.pitch, -1);
+// Behind this phone's own cups at the +z end, looking back down the table at the opponent.
+const DEFEND = pose(CAMERA.defend.pos, CAMERA.defend.pitch, -1);
 
 // The floor sits close under the table top, as in the recording, so pale wood shows beside the far
 // end. (A true 0.76 m table height hid it: from this camera the gap is all wall.)
@@ -58,13 +72,12 @@ const FLOOR_Y = -0.32;
 const PANEL_H = 0.45;            // the dark panelling up the wall from the floor
 
 export class Renderer {
-  constructor(canvas, { reducedMotion = false, cupColor = 'blue' } = {}) {
+  constructor(canvas, { reducedMotion = false } = {}) {
     this.soft = isSoftGL();
     this.reduced = reducedMotion;
-    this.cupColor = LOOK.cups[cupColor] || LOOK.cups.blue;
     this.disposed = false;
     this._shadowLive = true;
-    this.cups = new Map();       // id -> { group, t (vanish clock) | null }
+    this.cups = new Map();       // 'side:id' -> { side, group, t (vanish clock) | null, slide }
     this._tex = [];
 
     this.renderer = new THREE.WebGLRenderer({
@@ -82,9 +95,7 @@ export class Renderer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(LOOK.panelDark);
     this.camera = new THREE.PerspectiveCamera(CAMERA.vfov, 1, 0.05, 30);
-    this.camera.position.set(...CAMERA.pos);
-    const p = CAMERA.pitch * Math.PI / 180;
-    this.camera.lookAt(CAMERA.pos[0], CAMERA.pos[1] - Math.sin(p), CAMERA.pos[2] - Math.cos(p));
+    this.setView('shoot');
     this._build();
   }
 
@@ -188,16 +199,24 @@ export class Renderer {
       S.add(bar);
     }
 
-    this._cupProto = this._makeCup();
+    // One cup per side's colour, built once and cloned per cup (geometry and materials shared).
+    this._cupProto = { a: this._makeCup(LOOK.cups.red), b: this._makeCup(LOOK.cups.blue) };
 
     this.ball = new THREE.Mesh(new THREE.SphereGeometry(BALL.r, 24, 16),
       new THREE.MeshStandardMaterial({ color: LOOK.ball, roughness: 0.35, emissive: 0x555555 }));
     this.ball.castShadow = true;
     S.add(this.ball);
+    // THE SPARE BALL, greyed at the left edge: the throw still to come this turn (the recording).
+    this.spare = new THREE.Mesh(this.ball.geometry,
+      new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.5 }));
+    this.spare.position.set(-0.27, BALL.r, 0.06);
+    this.spare.castShadow = true;
+    this.spare.visible = false;
+    S.add(this.spare);
     this.showRestBall();
   }
 
-  _makeCup() {
+  _makeCup(color) {
     const { topR, botR, h } = CUP;
     const outer = [];
     const inner = [];
@@ -209,7 +228,7 @@ export class Renderer {
       inner.push(new THREE.Vector2(r - 0.0014, Math.max(0.004, y)));
     }
     const g = new THREE.Group();
-    const mOut = new THREE.MeshStandardMaterial({ color: this.cupColor, roughness: 0.45, side: THREE.DoubleSide, emissive: this.cupColor, emissiveIntensity: 0.18 });
+    const mOut = new THREE.MeshStandardMaterial({ color, roughness: 0.45, side: THREE.DoubleSide, emissive: color, emissiveIntensity: 0.18 });
     // The inside reads WHITE in the recording, not the grey an unlit back face gives: a little glow.
     const mIn = new THREE.MeshStandardMaterial({ color: LOOK.cupIn, roughness: 0.55, side: THREE.BackSide, emissive: 0xc4c4c4 });
     const wall = new THREE.Mesh(new THREE.LatheGeometry(outer, 40), mOut);
@@ -227,36 +246,89 @@ export class Renderer {
     return g;
   }
 
-  /** Put these cups on the table ([{ id, x, z }]), replacing any that were there. */
-  setCups(cups) {
-    for (const [, c] of this.cups) this.scene.remove(c.group);
-    this.cups.clear();
+  /** SHOOTER FRAME -> WORLD. Every rack and every throw is described as the shooter sees it (the
+   *  target at -z). Side 'b' (the opponent) is shot at by this phone's player, whose frame IS the
+   *  world. Side 'a' (this phone's cups) is shot at from the far end, so its frame is the world
+   *  turned half round: x and z both flip (a rotation, not a mirror - left stays left for them). */
+  toWorld(side, x, z) { return side === 'a' ? { x: -x, z: -z } : { x, z }; }
+
+  /** Put one side's cups on the table ([{ id, x, z }] in the shooter frame), replacing that side's. */
+  setRack(side, cups) {
+    for (const [key, c] of this.cups) if (c.side === side) { this.scene.remove(c.group); this.cups.delete(key); }
     for (const k of cups) {
-      const group = this._cupProto.clone();
-      group.position.set(k.x, 0, k.z);
+      const w = this.toWorld(side, k.x, k.z);
+      const group = this._cupProto[side].clone();
+      group.position.set(w.x, 0, w.z);
       this.scene.add(group);
-      this.cups.set(k.id, { group, t: null, x: k.x, z: k.z });
+      this.cups.set(side + ':' + k.id, { side, group, t: null, x: w.x, z: w.z, slide: null });
     }
     this.renderer.shadowMap.needsUpdate = true;
   }
 
+  /** Back-compatible single-rack call (practice): the opponent's side. */
+  setCups(cups) { this.setRack('b', cups); }
+
+  /** GENTLEMAN'S: slide the named cups to new spots ([{ id, x, z }], shooter frame) - a visible
+   *  slide so nobody thinks they teleported (brief 4b). Instant under reduced motion. */
+  slideRack(side, cups) {
+    for (const k of cups) {
+      const c = this.cups.get(side + ':' + k.id);
+      if (!c) continue;
+      const w = this.toWorld(side, k.x, k.z);
+      if (this.reduced) { c.x = w.x; c.z = w.z; c.group.position.set(w.x, 0, w.z); continue; }
+      c.slide = { fx: c.x, fz: c.z, tx: w.x, tz: w.z, t: 0 };
+    }
+    this.renderer.shadowMap.needsUpdate = true;
+  }
+
+  get sliding() { for (const [, c] of this.cups) if (c.slide) return true; return false; }
+
   /** A made cup lifts out and is carried off. Under reduced motion it is simply gone. */
-  vanish(id) {
-    const c = this.cups.get(id);
+  vanish(side, id) {
+    if (id === undefined) { id = side; side = 'b'; }
+    const key = side + ':' + id;
+    const c = this.cups.get(key);
     if (!c) return;
-    if (this.reduced) { this.scene.remove(c.group); this.cups.delete(id); this.renderer.shadowMap.needsUpdate = true; return; }
+    if (this.reduced) { this.scene.remove(c.group); this.cups.delete(key); this.renderer.shadowMap.needsUpdate = true; return; }
     c.t = 0;
     // Each cup owns its materials from here, so fading it cannot fade every other cup.
     c.group.traverse((o) => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o._own = true; } });
   }
 
-  /** The ball waiting on the table at the serve spot. */
-  showRestBall() {
+  /** The ball waiting on the table at the serve spot, and whether a spare waits beside it. */
+  showRestBall(spare = false) {
     this.ball.visible = true;
     this.ball.position.set(0, THROW.y0, THROW.z0);
     this.ball.quaternion.set(0, 0, 0, 1);
+    this.spare.visible = !!spare;
+    this.renderer.shadowMap.needsUpdate = true;
   }
-  hideBall() { this.ball.visible = false; }
+  hideBall() { this.ball.visible = false; this.spare.visible = false; }
+
+  /**
+   * THE TWO VIEWS. 'shoot' is the camera fitted to the recording. 'defend' is the other end of the
+   * table, behind this phone's own red cups, for the opponent's throws - the recording shows the
+   * opponent's balls coming at you over your own cups, with the table's end and the floor below.
+   * The move between them is a short glide (instant under reduced motion).
+   */
+  setView(view) {
+    const pose = view === 'defend' ? DEFEND : SHOOT;
+    this._view = view;
+    if (this.reduced || !this._pose) {
+      this._pose = { pos: pose.pos.clone(), quat: pose.quat.clone() };
+      this._glide = null;
+      this._applyPose();
+      return;
+    }
+    this._glide = { from: { pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() }, to: pose, t: 0 };
+  }
+  get gliding() { return !!this._glide; }
+
+  _applyPose() {
+    this.camera.position.copy(this._pose.pos);
+    this.camera.quaternion.copy(this._pose.quat);
+    this.camera.updateMatrixWorld(true);
+  }
 
   resize(w, h) {
     if (this.disposed || !w || !h) return;
@@ -293,33 +365,61 @@ export class Renderer {
     return { x: o.x + d.x * k, z: o.z + d.z * k };
   }
 
-  /** `ball` is the physics body (or null). */
-  render(ball, dt = 0.016) {
+  /** `ball` is the physics body (or null); `shooter` is whose throw it is ('b' = the opponent, whose
+   *  frame is turned half round - see toWorld). */
+  render(ball, dt = 0.016, shooter = 'a') {
     if (this.disposed) return;
     let moving = false;
     if (ball) {
+      const w = shooter === 'b' ? { x: -ball.position.x, z: -ball.position.z } : { x: ball.position.x, z: ball.position.z };
       this.ball.visible = true;
-      this.ball.position.set(ball.position.x, ball.position.y, ball.position.z);
+      this.ball.position.set(w.x, ball.position.y, w.z);
       this.ball.quaternion.set(ball.quaternion.x, ball.quaternion.y, ball.quaternion.z, ball.quaternion.w);
       moving = true;
     }
-    for (const [id, c] of this.cups) {
+    if (this._glide) {
+      const G = this._glide;
+      G.t += dt;
+      const f = Math.min(1, G.t / GLIDE_T);
+      const e = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
+      this._pose = {
+        pos: G.from.pos.clone().lerp(G.to.pos, e),
+        quat: G.from.quat.clone().slerp(G.to.quat, e),
+      };
+      this._applyPose();
+      if (f >= 1) this._glide = null;
+      moving = true;
+    }
+    for (const [key, c] of this.cups) {
+      if (c.slide) {
+        const S = c.slide;
+        S.t += dt;
+        const f = Math.min(1, S.t / SLIDE_T);
+        const e = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
+        c.x = S.fx + (S.tx - S.fx) * e;
+        c.z = S.fz + (S.tz - S.fz) * e;
+        c.group.position.set(c.x, 0, c.z);
+        if (f >= 1) c.slide = null;
+        moving = true;
+      }
       if (c.t === null) continue;
       c.t += dt;
       moving = true;
       const g = c.group;
+      // Carried off toward the thrower's right and away from them, whichever end that is.
+      const away = c.side === 'a' ? -1 : 1;
       if (c.t < LIFT_T) {
         const f = c.t / LIFT_T;
         g.position.set(c.x, CUP.h * 1.1 * (1 - (1 - f) * (1 - f)), c.z);
       } else {
         const f = Math.min(1, (c.t - LIFT_T) / AWAY_T);
         const e = f * f;
-        g.position.set(c.x + 0.9 * e, CUP.h * 1.1 + 0.5 * e, c.z - 0.3 * e);
+        g.position.set(c.x + 0.9 * e * away, CUP.h * 1.1 + 0.5 * e, c.z - 0.3 * e * away);
         g.traverse((o) => { if (o._own) o.material.opacity = 1 - f; });
         if (f >= 1) {
           this.scene.remove(g);
           g.traverse((o) => { if (o._own) o.material.dispose(); });
-          this.cups.delete(id);
+          this.cups.delete(key);
         }
       }
     }
@@ -345,7 +445,8 @@ export class Renderer {
       }
     };
     this.scene.traverse(free);
-    this._cupProto.traverse(free);   // may not be in the scene if every cup was made
+    for (const k of ['a', 'b']) this._cupProto[k].traverse(free);   // may be out of the scene
+    try { this.spare.material.dispose(); } catch {}
     for (const t of this._tex) { try { t.dispose(); } catch {} }
     // The context itself is handed back by ui.js (forceContextLoss on `this.renderer`).
   }

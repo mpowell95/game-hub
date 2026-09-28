@@ -8,6 +8,8 @@ import { simulateThrow, launchSpeed } from './physics.js';
 import { makeRack, cupsXZ, validRack, isCell, inArea, cellXZ, PRESETS, AREA } from './rack.js';
 import { CUP, CUP_D, ROW_H, RACK_Z0, TABLE } from './geom.js';
 import { powerOf, SWIPE_SLOW, SWIPE_FAST } from '../../skeeball/js/swipe.js';
+import { Match } from './match.js';
+import { aimAt, cpuThrow, seeded } from './cpu.js';
 
 let fail = 0;
 const ok = (label, cond, extra = '') => {
@@ -67,6 +69,72 @@ ok('every preset is legal', Object.keys(PRESETS).every((p) => validRack(makeRack
 }
 ok('the whole rack area is on the table',
   AREA.cMax * CUP_D / 2 + CUP.topR <= TABLE.width / 2 && RACK_Z0 - CUP.topR >= -TABLE.len / 2);
+
+// --- the rules (match.js), as Matt confirmed them 2026-09-27 ---------------------------------
+{
+  const types = (ev) => ev.map((e) => e.type);
+  const ids = (m, side) => m.racks[side].map((k) => k.id);
+  // A turn is two throws; one miss ends it.
+  let m = new Match({ first: 'a' });
+  m.startTurn();
+  let ev = m.throwResult({ made: 'k0' });
+  ok('a make removes that cup at once', !ids(m, 'b').includes('k0') && types(ev).join() === 'made');
+  ev = m.throwResult({ made: null });
+  ok('two throws, then the turn passes', types(ev).join() === 'miss,turnOver' && m.shooter === 'b');
+  // Balls back: both throws in, and it repeats.
+  m = new Match({ first: 'a' });
+  m.startTurn();
+  m.throwResult({ made: 'k0' });
+  ev = m.throwResult({ made: 'k1' });
+  ok('make both throws: balls back', types(ev).includes('ballsBack') && m.shooter === 'a' && m.throwsLeft === 2);
+  m.throwResult({ made: 'k2' });
+  ev = m.throwResult({ made: 'k3' });
+  ok('balls back repeats', types(ev).includes('ballsBack') && m.shooter === 'a');
+  // Heating up on the 2nd turn running with a make, on fire on the 3rd.
+  m = new Match({ first: 'a' });
+  const turn = (made1, made2, who) => { m.startTurn(); const e1 = m.throwResult({ made: made1 }); const e2 = m.shooter === who && !m.over ? m.throwResult({ made: made2 }) : []; return types(e1.concat(e2)); };
+  turn('k0', null, 'a'); turn(null, null, 'b');
+  const t2 = turn('k1', null, 'a');
+  ok('cups on 2 turns in a row: heating up', t2.includes('heatingUp') && m.heating('a'));
+  turn(null, null, 'b');
+  m.startTurn();
+  ev = m.throwResult({ made: 'k2' });
+  ok('a make on the 3rd turn: on fire', types(ev).includes('onFire') && m.onFire);
+  m.throwResult({ made: 'k3' }); m.throwResult({ made: 'k4' });
+  ok('on fire: keep shooting past two throws', m.shooter === 'a' && m.onFire);
+  ev = m.throwResult({ made: null });
+  ok('on fire: the first miss ends the turn and cools you off', types(ev).join() === 'miss,cooled,turnOver' && m.streak.a === 0 && m.shooter === 'b');
+  // Win, rebuttal and overtime.
+  const clearAll = (mm, side) => { mm.shooter = side; mm.startTurn(); let e = []; for (const id of mm.racks[side === 'a' ? 'b' : 'a'].map((k) => k.id)) { mm.onFire = true; e = e.concat(mm.throwResult({ made: id })); } return e; };
+  m = new Match({ first: 'a', gentlemans: false });
+  ev = clearAll(m, 'a');
+  ok('clearing the rack gives the other side a rebuttal', types(ev).includes('rackCleared') && m.phase === 'rebuttal' && m.shooter === 'b' && !m.over);
+  ev = m.startTurn();
+  ok('the rebuttal is announced', types(ev).includes('rebuttal'));
+  m.throwResult({ made: 'k0' });
+  ev = m.throwResult({ made: null });
+  ok('a miss in the rebuttal: the side that cleared wins', m.over && m.winner === 'a' && types(ev).includes('win'));
+  m = new Match({ first: 'a', gentlemans: false });
+  clearAll(m, 'a');
+  m.startTurn();
+  for (const id of ids(m, 'a')) ev = m.throwResult({ made: id });
+  ok('a rebuttal that clears everything goes to overtime', m.phase === 'overtime' && !m.over && types(ev).includes('overtime'));
+  ok('overtime: 3 cups each in a 2-1 triangle, the first to clear shoots first',
+    m.racks.a.length === 3 && m.racks.b.length === 3 && m.shooter === 'a'
+    && m.racks.a.filter((k) => k.r === 0).length === 2 && m.racks.a.filter((k) => k.r === 1).length === 1);
+  // Gentleman's.
+  m = new Match({ first: 'a', gentlemans: true });
+  m.racks.b = m.racks.b.slice(0, 2);
+  ev = m.startTurn();
+  const g = ev.find((e) => e.type === 'gentlemans');
+  ok('Gentleman\'s: 2 cups left are stood in a line at the start of the shooter\'s turn',
+    !!g && m.racks.b.every((k) => 'u' in k && k.u === 0) && m.racks.b.map((k) => k.id).join() === 'k0,k1');
+  ev = m.startTurn();
+  ok('Gentleman\'s does not re-apply to a line already standing', !ev.some((e) => e.type === 'gentlemans'));
+  m = new Match({ first: 'a', gentlemans: false });
+  m.racks.b = m.racks.b.slice(0, 2);
+  ok('Gentleman\'s off: 2 cups stay where they are', !m.startTurn().some((e) => e.type === 'gentlemans'));
+}
 
 // --- the dial --------------------------------------------------------------------------------
 const cups = cupsXZ(rack);
@@ -139,6 +207,27 @@ ok('balls really come off the rims (plenty touch a cup and stay out)', rimOut > 
   const again = simulateThrow({ power: shot.power, aim: shot.aim, cups: without });
   ok('a made cup is gone: the same throw at the rack without it cannot make it again',
     !(again.outcome.kind === 'made' && again.outcome.id === id), `${id} -> ${JSON.stringify(again.outcome)}`);
+}
+
+// --- the computer (cpu.js): a real throw through the same physics, missed by a skill-sized error --
+{
+  let own = 0;
+  for (const k of cups) {
+    const r = simulateThrow({ ...aimAt(k.x, k.z), cups });
+    if (r.outcome.kind === 'made' && r.outcome.id === k.id) own++;
+  }
+  ok('the computer\'s perfect aim lands in the cup it aimed at, every cup', own === 10, own + '/10');
+  const rate = (skill) => {
+    const rnd = seeded(5); let m = 0; const n = 150;
+    for (let i = 0; i < n; i++) {
+      const th = cpuThrow(skill, cups, rnd);
+      if (simulateThrow({ power: th.power, aim: th.aim, cups }).outcome.kind === 'made') m++;
+    }
+    return m / n;
+  };
+  const e = rate('easy'), me = rate('medium'), h = rate('hard');
+  ok('Easy < Medium < Hard at a full rack', e < me && me < h,
+    `easy ${(e * 100).toFixed(0)}%, medium ${(me * 100).toFixed(0)}%, hard ${(h * 100).toFixed(0)}%`);
 }
 
 // --- bounce shots: MEASURED, NOT ASSERTED (yet) ------------------------------------------------

@@ -9,12 +9,12 @@ A clone of GamePigeon's Cup Pong (the iMessage game), as an in-hub module. The s
 **`docs/CUP-PONG-BRIEF.md`** - read it before changing anything here. It builds in five stages;
 this file says which are done.
 
-## Where it stands (2026-09-27)
+## Where it stands (2026-09-28)
 
 | Stage | What | State |
 |---|---|---|
-| 1 | Table + throw: three.js + cannon-es, the camera, flick to throw, cups vanish when made, rack as hex cells. Solo practice only | **Rebuilt to Matt's GamePigeon recordings (2026-09-27, second pass), deployed devOnly, waiting on his second feel check** |
-| 2 | Rules (brief section 3, confirmed below), settings, Gentleman's, vs CPU, rebuttal, stats | not started - after the feel check |
+| 1 | Table + throw: three.js + cannon-es, the camera, flick to throw, cups vanish when made, rack as hex cells. Solo practice only | **Done.** Matt, 2026-09-28, after the third throw build: *"It feels good now, start stage 2"* |
+| 2 | Rules (brief section 3, confirmed below), settings, Gentleman's, vs CPU, rebuttal, stats | **Built 2026-09-28, deployed devOnly, waiting on Matt's play-test.** The Reracks setting (brief 4a) moved to stage 3, see "Stage 2" below |
 | 3 | Rerack: presets, then custom | not started |
 | 4 | Bounce shots | not started - brief says show Matt the async design first |
 | 5 | Challenges + push | not started |
@@ -39,15 +39,68 @@ reference and was wrong in almost every visible way: a camera low behind the sho
 red cups, the ball hanging in the air near the lens, a slow high lob. The second pass rebuilt it
 from the recordings - see "The look" and "The throw" below. Aim: he was "not sure".
 
+## Stage 2: a match against the computer (2026-09-28)
+
+**The setup screen** (hub skin, `css/ui.css` primitives): Play the computer (Easy / Medium / Hard,
+each with its shape from `js/difficulty-tiers.js`), Gentleman's On/Off, **Play**, and **Practice**
+(stage 1's solo table, unchanged).
+
+**The Reracks setting (brief 4a) is NOT on the setup screen yet, on purpose.** It picks how many
+reracks each player gets, and the rerack itself is stage 3; a setting that does nothing is worse
+than none. It ships with stage 3, frozen into the match exactly like Gentleman's.
+
+**`js/match.js` decides everything**, as events: `made`, `miss`, `ballsBack`, `heatingUp`,
+`onFire`, `cooled`, `rackCleared`, `rebuttal`, `overtime`, `gentlemans`, `turnOver`, `win`. The
+screen only announces them. Five calls the rules left open, made here and written down so they are
+not re-decided differently:
+
+- **On fire** starts on the first make of the third turn running with a make, and from then the
+  shooter throws until a miss, whatever throws the pair had left. **The miss ends the turn AND
+  resets the streak** (you have to heat up again). Without the reset, a player would be back on
+  fire with their very next make.
+- **Balls back** needs both throws of a pair in. It repeats. It does not apply on fire or in a
+  rebuttal, where you throw until you miss anyway.
+- **The rebuttal** is "shoot until you miss" at the rack of the side that just cleared. A miss hands
+  the match to the side that cleared; clearing everything goes to overtime.
+- **Overtime**: 3 cups a side in a 2-1 triangle on the BACK rows (`OVERTIME_CELLS`), normal rules,
+  streaks reset, and the side that cleared first shoots first. A rebuttal applies again at the end
+  of overtime, so overtime can repeat.
+- **Gentleman's** is checked at the start of every turn against the rack being shot at; a rack
+  already standing in the line is left alone. The cups slide into place (`slideRack`, 0.6 s).
+
+**The two ends of the table.** Your turn uses the fitted camera. The computer's turn glides the
+camera to the other end, behind your own RED cups, looking back at it (the recording shows the
+opponent's balls coming at you over your cups). Every rack and every throw is kept in the
+SHOOTER'S frame; `render.js toWorld` turns side `a` (yours) half round for drawing. Physics never
+needs to know whose throw it is.
+
+**The spare ball**: while a pair still has a throw after this one, a greyed ball sits at the left
+edge, as in the recording.
+
+**The computer** (`js/cpu.js`) aims at a cup with the same launch point, angle, gravity and drag as
+`physics.js`, then adds a Gaussian error to power and heading. Easy and Medium pick a cup at random;
+Hard picks the cup with the most neighbours. The throw goes through the real physics, so its makes
+and misses are real. **Measured** (`node cup-pong/js/test.js`, and 30-match simulations per
+pairing, 2026-09-28):
+
+| | sPower | sAim | make rate over whole matches | vs the next level |
+|---|---|---|---|---|
+| Easy | 0.30 | 0.080 | ~13% | lost 29 of 30 to Medium |
+| Medium | 0.15 | 0.040 | ~20% | lost 29 of 30 to Hard |
+| Hard | 0.06 | 0.025 | ~37% | won 30 of 30 against Easy |
+
+Perfect aim (no error) lands in the cup it aimed at for all 10 cups. **Whether Easy loses to a new
+player and Hard is hard is Matt's to say** - the sigmas are the only knob, in `SKILL`.
+
 ## Hub integration
 
 | Thing | Value |
 |---|---|
 | Registry | `module: '../cup-pong/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `cuppong`, **no `released` date** (Matt releases it from the admin page; that day gets the date) |
-| Stats id | `cuppong` - **not registered yet.** Stage 1 records nothing, so it is deliberately NOT in `js/game-stats.js`'s `GAMES`, `js/leaderboard-ui.js`'s `GAME_META` or `js/game-stats-ui.js`'s `TABS`. Stage 2 adds all three in the same commit as the first `recordResult('cuppong', ...)` (brief section 2; `players-agg.test.mjs` then enforces the `GAME_META` row) |
+| Stats id | `cuppong`: plain `recordResult('cuppong', difficulty, won)` once per finished match vs the computer, difficulty `easy`/`medium`/`hard` (`mp` is reserved for challenges, stage 5). **No sub-counter**, so the three-edit rule does not apply. Registered 2026-09-28 in `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META` (on the board even while admin-only, `OFF_THE_BOARD` stays empty) and `js/game-stats-ui.js` `TABS` (devOnly, Air Hockey's shape), label `game_title_cuppong` in `js/strings.js`. Practice records nothing |
 | CSS root / prefix | `.cp-root` / `.cp-` |
-| Settings key | `gamehub.cuppong.v1` - reserved for stage 2, **not written yet** |
-| `isInProgress()` | always `false` in stage 1 (practice: nothing to abandon). Stage 2 switches to the NO MID-GAME RESUME meaning for a vs-CPU match (Hoops' class); a challenge stays `false` because it lives in Firebase |
+| Settings key | `gamehub.cuppong.v1`: `{ diff, gentlemans, nextFirst }` - preferences only, saved on every selection. `nextFirst` alternates after each finished match (the repo's turn-based default) |
+| `isInProgress()` | the NO MID-GAME RESUME meaning (Hoops' class): `true` while a match vs the computer has had a throw and is not over, because a match is not persisted. Practice: `false`. A challenge (stage 5) must answer `false`: it will live in Firebase |
 | Tile art | `GAME_ART.cuppong` in `js/game-art.js` |
 | Strings | `js/strings.js`, `{ en, es }`, `makeT` at render time |
 
@@ -61,7 +114,9 @@ from the recordings - see "The look" and "The throw" below. Aim: he was "not sur
 | `js/render.js` | three.js scene from `geom.js`'s numbers |
 | `js/ui.js` | the shell, the flick, the loop, the module contract |
 | `js/strings.js` | EN/ES |
-| `js/test.js` | `node cup-pong/js/test.js` - ~30 checks, ~15 s. Not in `sw.js` (dev only) |
+| `js/match.js` | **the rules of a match**, pure: turns, balls back, heating up / on fire, rebuttal, overtime, Gentleman's. Everything comes back as events |
+| `js/cpu.js` | **the computer**, pure: aims with the same ballistics, misses by a skill-sized Gaussian error |
+| `js/test.js` | `node cup-pong/js/test.js` - ~50 checks, ~25 s. Not in `sw.js` (dev only) |
 | `css/cup-pong.css` | every rule under `.cp-root` |
 
 ## The rack is a set of hex cells (brief 4c: "build this first")
@@ -172,6 +227,6 @@ container never show them. A phone does.
 
 ## Tests
 
-- `node cup-pong/js/test.js` - the rack model and the real physics (above).
+- `node cup-pong/js/test.js` - the rack model, the rules of a match, the computer and the real physics.
 - `node test-game-conventions.mjs` - the shared checklist.
 - `node check-no-scroll.mjs cup-pong` - no game in the hub may scroll.

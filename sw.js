@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v990';
+const CACHE = 'game-hub-v991';
 
 const ASSETS = [
   './',
@@ -353,6 +353,8 @@ const ASSETS = [
   './cup-pong/js/physics.js',
   './cup-pong/js/render.js',
   './cup-pong/js/strings.js',
+  './cup-pong/js/match.js',
+  './cup-pong/js/cpu.js',
 
   // Connect 4 Hoops. Its engine imports skeeball's vendored three.js and cannon-es rather than
   // carrying a second copy, so nothing new is added for those.
@@ -904,13 +906,15 @@ const REST_MANIFEST = {
   './skeeball/js/ui.js': '50ef7223f1',
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': 'bb54739524',
-  './cup-pong/css/cup-pong.css': '33ff436439',
-  './cup-pong/js/ui.js': '574069fa40',
-  './cup-pong/js/geom.js': 'b4eeca5875',
+  './cup-pong/css/cup-pong.css': '27736859bf',
+  './cup-pong/js/ui.js': '4d2afa8dd4',
+  './cup-pong/js/geom.js': 'cc845f5acf',
   './cup-pong/js/rack.js': 'e4dd78b9f3',
   './cup-pong/js/physics.js': '7dc862ade6',
-  './cup-pong/js/render.js': '767cc0d5c2',
-  './cup-pong/js/strings.js': '9c90b8afba',
+  './cup-pong/js/render.js': '6dcce8dad5',
+  './cup-pong/js/strings.js': '2a6b197d5e',
+  './cup-pong/js/match.js': 'e8414438c1',
+  './cup-pong/js/cpu.js': '2a087a234d',
   './hoops4/index.html': 'dce91b13bd',
   './hoops4/css/hoops4.css': '76c8caa474',
   './hoops4/js/ui.js': '36959f5b7a',
