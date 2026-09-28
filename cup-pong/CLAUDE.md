@@ -15,7 +15,7 @@ this file says which are done.
 |---|---|---|
 | 1 | Table + throw: three.js + cannon-es, the camera, flick to throw, cups vanish when made, rack as hex cells. Solo practice only | **Done.** Matt, 2026-09-28, after the third throw build: *"It feels good now, start stage 2"* |
 | 2 | Rules (brief section 3, confirmed below), settings, Gentleman's, vs CPU, rebuttal, stats | **Built 2026-09-28, deployed devOnly, waiting on Matt's play-test.** The Reracks setting (brief 4a) moved to stage 3, see "Stage 2" below |
-| 3 | Rerack: presets, then custom | not started |
+| 3 | Rerack: presets, then custom | **Built and deployed 2026-09-28**: presets, then "Make your own" (Matt: *"build custom rerack next"*). See "Make your own" below |
 | 4 | Bounce shots | not started - brief says show Matt the async design first |
 | 5 | Challenges + push | **Built and deployed 2026-09-28** (Matt: *"I don't see multiplayer? You should be able to challenge someone just like connect 4 hoops"*). See "Challenges" below. **Rules published 2026-09-28; the function deploy is still owed** (dated lines there) |
 | + | **Solo: clear the rack in the fewest throws**, with a leaderboard (Matt's ask, 2026-09-28) | **Built and deployed 2026-09-28** - see "Solo" below |
@@ -90,8 +90,8 @@ is on offer and gone after the turn's first throw:
   On, not overtime. Free. The cups slide into the line.
 - **Rerack (n)**: before the turn's first throw, one a turn, not in a rebuttal or overtime, while
   the shooter has reracks left. Opens a sheet of the presets for that many cups (`rack.js RERACKS`,
-  each drawn top-down), and the cups slide into the one tapped. **Custom ("make your own", drag
-  the cups) is NOT built yet** - Matt chose presets now, custom next.
+  each drawn top-down), and the cups slide into the one tapped. **Make your own** is the last tile
+  of the same sheet (built 2026-09-28, see below).
 - **Island**: *"if a cup is not touching any other cups, you can call island (once per game). and if
   you hit that cup, you get 2 cups. The opposing player can choose the second cup. If there are
   multiple available islands, you must call the specific one."* The button calls the only island
@@ -100,6 +100,18 @@ is on offer and gone after the turn's first throw:
   computer picks at once (its loneliest cup); when you defend, the camera turns to your cups and you
   tap one. Allowed in overtime (Matt ruled out only reracks and Gentleman's there); not in a
   rebuttal.
+
+**Make your own (2026-09-28, brief 4c).** The last tile on the rerack sheet opens the rack drawn
+top-down on its own hex grid (`showCustomRack` in `ui.js`): all 28 cells of `AREA`, far row at the
+top, dashed rings for free spots. Drag a cup onto a spot, or tap a cup (thick yellow ring) and then
+a spot. It snaps to the nearest free cell, so two cups can never share one and nothing drawn can be
+off the rack area; cups need not touch. **Done** (disabled until a cup has moved) spends the rerack
+through `match.rerackCustom(cells)`, which checks the cells again (`isCell` + `validRack`) and keeps
+every cup's id. **Cancel** goes back to the presets with the rerack unspent. The cups open on the
+cells nearest where they stand (a Line preset sits on spots, off the grid). A full rack of 10 still
+cannot be reracked (`canRerack`). In a challenge it is the log entry
+`{k:'r', key:'custom', cells:[{c,r}...]}`, one cell per standing cup in rack order, and replays like
+any rerack. The computer still only uses presets.
 
 **Preset placement** follows the Gentleman's rule: the shape's FRONT row stands where the triangle's
 point is; a shape deeper than the triangle has its back row on the back row. Every preset was
@@ -179,7 +191,7 @@ under "CHALLENGES").
   row is written then), Hoops' 2026-09-23 lesson.
 - **A match is a LOG, never a snapshot.** Each entry is one action: a throw `{k:'t', p, a, m, b}`
   (launch vector AND the recorded cup it went in, `''` for a miss, bounced), Gentleman's `{k:'g'}`, a
-  rerack `{k:'r', key}`, an island call `{k:'i', id}`, an owed cup given up `{k:'o', id}`.
+  rerack `{k:'r', key}` (a custom one also carries `cells`), an island call `{k:'i', id}`, an owed cup given up `{k:'o', id}`.
   `validateGame` REPLAYS the whole log through `match.js` and refuses the whole document if any entry
   does not replay, or if the stored result is one the log did not produce (a resignation excepted).
 - **Written as it happens, one action at a time** (`appendLog`, idempotent on retry, a log that has
@@ -225,7 +237,7 @@ Database (the sandbox cannot reach Firebase): challenge, delivery on turn end, t
 turns both ways, the launcher bubble, a notification-style `?open=cuppong&match=<id>` load, a
 seeded island leaving Ana owing a cup and her giving it up, a quit, and the result counted once.
 Real Firebase on real phones is unverified. `node test-cuppong-mp.mjs` covers the data layer
-against an in-memory database (29 checks).
+against an in-memory database (37 checks, the custom rerack included).
 
 ## Hub integration
 

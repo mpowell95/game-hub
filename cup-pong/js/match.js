@@ -37,7 +37,7 @@
 // is saved and restored whole (`toJSON` / `Match.fromJSON`), and `swapSides` turns a saved match
 // round so the phone playing it is always side 'a'.
 
-import { makeRack, PRESETS, isSpot, presetsFor, applyPreset, islandsOf } from './rack.js';
+import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf } from './rack.js';
 
 export const BALLS = 2;
 const other = (s) => (s === 'a' ? 'b' : 'a');
@@ -141,6 +141,24 @@ export class Match {
     if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
     this.rerackedThisTurn = true;
     return [{ type: 'rerack', side: this.defender, key, to, left: this.reracksLeft[this.shooter] }];
+  }
+
+  /**
+   * MAKE YOUR OWN (brief 4c, Matt's "custom next", 2026-09-28): the same rerack, to cells the
+   * shooter chose. `cells[i]` is where the i-th standing cup goes; they must be real hex cells,
+   * inside the rack area, one cup per cell. Cups do not have to touch (the brief: Matt did not ask
+   * for that limit). Costs one rerack, exactly like a preset.
+   */
+  rerackCustom(cells) {
+    if (!this.canRerack()) return [];
+    const rack = this.target();
+    if (!Array.isArray(cells) || cells.length !== rack.length) return [];
+    const to = rack.map((k, i) => ({ id: k.id, c: cells[i] && cells[i].c, r: cells[i] && cells[i].r }));
+    if (!to.every(isCell) || !validRack(to)) return [];
+    this.racks[this.defender] = to;
+    if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
+    this.rerackedThisTurn = true;
+    return [{ type: 'rerack', side: this.defender, key: 'custom', to, left: this.reracksLeft[this.shooter] }];
   }
 
   islands() { return islandsOf(this.target()); }

@@ -342,3 +342,22 @@
 }
 .cp-root .cp-preset svg { fill: #2346c2; }
 :root.gh-dark .cp-root .cp-preset svg { fill: #8fa6ff; }
+/* Make your own (brief 4c): the rack's hex grid top-down, shooter at the bottom. Dashed rings are
+   free spots; a picked-up cup gets a thick accent ring AND grows, never colour alone. */
+.cp-root .cp-preset.is-custom svg { fill: #2346c2; color: var(--gh-ink-2, #5b6776); }
+:root.gh-dark .cp-root .cp-preset.is-custom svg { fill: #8fa6ff; }
+.cp-root .cp-custom { width: min(92vw, 420px); }
+.cp-root .cp-custom-say { margin: 2px 0 8px; font-size: 14px; color: var(--gh-ink-2, #5b6776); text-align: center; }
+.cp-root .cp-grid {
+  display: block; width: 100%; height: auto;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  border-radius: 12px; background: #1f6b43;
+}
+.cp-root .cp-spot { fill: rgba(255, 255, 255, 0.06); stroke: rgba(255, 255, 255, 0.55); stroke-width: 4; stroke-dasharray: 10 10; cursor: pointer; }
+.cp-root .cp-cup { cursor: grab; }
+.cp-root .cp-cup circle { fill: #2f5fe0; stroke: #fff; stroke-width: 5; }
+.cp-root .cp-cup .cp-cup-in { fill: #e8eefc; stroke: none; pointer-events: none; }
+.cp-root .cp-cup.is-sel circle:first-child, .cp-root .cp-cup.is-drag circle:first-child { stroke: #ffce3a; stroke-width: 14; }
+.cp-root .cp-cup.is-drag { cursor: grabbing; }
+.cp-root .cp-custom-btns { display: flex; gap: 10px; margin-top: 12px; }
+.cp-root .cp-custom-btns .gh-btn { flex: 1; min-height: 44px; }

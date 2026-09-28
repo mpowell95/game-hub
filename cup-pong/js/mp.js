@@ -122,6 +122,14 @@ export function cleanEntry(e) {
     case 'r': case 'i': case 'o': {
       const v = String(e.k === 'r' ? e.key : e.id || '');
       if (!KEY_RE.test(v)) return null;
+      if (e.k === 'r' && v === 'custom') {
+        // A custom rerack carries the cells, one per standing cup in id order (match.rerackCustom).
+        const src = Array.isArray(e.cells) ? e.cells : (e.cells && typeof e.cells === 'object' ? Object.values(e.cells) : null);
+        if (!src || !src.length || src.length > 10) return null;
+        const cells = src.map((x) => ({ c: +(x && x.c), r: +(x && x.r) }));
+        if (!cells.every((x) => Number.isInteger(x.c) && Number.isInteger(x.r))) return null;
+        return { by: e.by, k: 'r', key: v, cells, at };
+      }
       return e.k === 'r' ? { by: e.by, k: 'r', key: v, at } : { by: e.by, k: e.k, id: v, at };
     }
     default: return null;
@@ -139,7 +147,7 @@ export function applyEntry(match, e) {
   let ev;
   if (e.k === 't') ev = match.throwResult({ made: e.m || null, bounced: !!e.b });
   else if (e.k === 'g') ev = match.applyGentlemans();
-  else if (e.k === 'r') ev = match.rerack(e.key);
+  else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.cells) : match.rerack(e.key);
   else if (e.k === 'i') ev = match.callIsland(e.id);
   else if (e.k === 'o') ev = match.pickOwed(e.id);
   if (!ev || !ev.length) return null;
@@ -514,7 +522,8 @@ export async function appendLog(id, base, entries) {
     if (list.some((e) => e.by !== side)) return fail('bad-entry');
     const have = fresh.log.length;
     // Already landed (a retry after a verify that timed out): nothing to write.
-    const same = (x, y) => x && y && x.k === y.k && x.by === y.by && x.m === y.m && x.key === y.key && x.id === y.id && x.p === y.p && x.a === y.a;
+    const same = (x, y) => x && y && x.k === y.k && x.by === y.by && x.m === y.m && x.key === y.key && x.id === y.id && x.p === y.p && x.a === y.a
+      && JSON.stringify(x.cells || null) === JSON.stringify(y.cells || null);
     let skip = 0;
     while (skip < list.length && base + skip < have && same(fresh.log[base + skip], list[skip])) skip++;
     if (base + skip !== have) return fail('moved-on');       // the log is not where we left it

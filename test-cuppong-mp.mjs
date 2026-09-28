@@ -121,6 +121,30 @@ res = await send('b', [t('b', null), t('b', null)]);
 ok('both rebuttal balls miss: Matt wins', res.ok && res.game.over && res.game.over.winner === 'a' && res.game.over.why === 'rebuttal');
 ok('Ana\'s row: lost, written by her own last throw', getAt(`cuppong/index/ANABB/${id2}`).result === 'lost' && getAt(`cuppong/index/ANABB/${id2}`).lastBy === 'me');
 
+// A custom rerack rides the log with its cells, and replays.
+use('A');
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 2 } });
+const id3 = res.id;
+const { PRESETS } = await import('./cup-pong/js/rack.js');
+// Ten cells spread across the area, none touching: every other cell of rows 0, 2 and 4.
+const spread = [[-5, 0], [-1, 0], [3, 0], [-3, 2], [1, 2], [5, 2], [-5, 4], [-1, 4], [3, 4], [-3, 0]]
+  .map(([c, r]) => ({ c, r: r + ((c + r) % 2 === 0 ? 1 : 0) }));
+// A full rack cannot be reracked: Matt makes one (then misses), Ana misses twice, then his rerack.
+const pre = [t('a', 'k0'), t('a', null)];
+ok('custom rerack setup: a turn each', (await MP.appendLog(id3, 0, pre)).ok);
+use('B'); ok('...', (await MP.appendLog(id3, 2, [t('b', null), t('b', null)])).ok); use('A');
+spread.pop();
+const rr = { by: 'a', k: 'r', key: 'custom', cells: spread };
+ok('cleanEntry keeps a custom rerack with its cells', (MP.cleanEntry(rr) || {}).cells?.length === 9);
+ok('cleanEntry refuses a custom rerack with non-integer cells', MP.cleanEntry({ ...rr, cells: [{ c: 0.5, r: 1 }] }) === null);
+res = await MP.appendLog(id3, 4, [rr]);
+ok('a custom rerack is accepted and stored', res.ok && res.game.log[4].key === 'custom', JSON.stringify(res.reason || ''));
+const lc = MP.buildLocal(await MP.readGame(id3), 'a');
+ok('...and replays to exactly those cells', lc.racks.b.every((k, i) => k.c === spread[i].c && k.r === spread[i].r));
+ok('...costing one rerack', lc.reracksLeft.a === 1);
+ok('a retry of the same custom rerack writes nothing twice', (await MP.appendLog(id3, 4, [rr])).ok && Object.keys(getAt(`cuppong/games/${id3}/log`)).length === 5);
+void PRESETS;
+
 // --- structural -------------------------------------------------------------------------------------
 const rules = JSON.parse(readFileSync('database.rules.json', 'utf8'));
 ok('database.rules.json has the cuppong branch', !!(rules.rules && rules.rules.cuppong));
