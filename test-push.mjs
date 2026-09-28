@@ -5,7 +5,7 @@
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport, isActive, ACTIVE_WINDOW_MS } from './functions/decide.js';
+import { decide, decideMessage, decideBugReport, decideCupPong, isActive, ACTIVE_WINDOW_MS } from './functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -150,6 +150,22 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('the hub checks in while visible and says goodbye when hidden',
     /m\.markActive\(on\)/.test(hub) && /setInterval\(\(\) => m\.markActive/.test(hub));
   check('the check-in uses the SERVER clock', /activeAt: on \? api\.serverTimestamp\(\) : 0/.test(read('./js/push.js')));
+}
+
+// --- Cup Pong challenges (2026-09-28) ----------------------------------------------------------------
+{
+  const row = (x) => ({ name: 'Ana', yourTurn: false, over: false, lastBy: 'them', ...x });
+  const body = (n) => n && n.text('en').body;
+  check('cup pong: a new row that is your turn is a challenge', body(decideCupPong({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) })) === 'Ana challenged you. Your shot!');
+  check('cup pong: the challenger\'s own new row is not news', decideCupPong({ code: 'MATTA', id: 'x', before: null, after: row({ lastBy: 'me' }) }) === null);
+  check('cup pong: the turn coming back is "your turn"', body(decideCupPong({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true }) })) === 'Your turn vs Ana');
+  check('cup pong: after they clear you it says rebuttal', /Rebuttal/.test(body(decideCupPong({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true, rebuttal: true }) }))));
+  check('cup pong: your own throw (turn going away) says nothing', decideCupPong({ code: 'MATTA', id: 'x', before: row({ yourTurn: true, lastBy: 'me' }), after: row({ lastBy: 'me' }) }) === null);
+  check('cup pong: they won', body(decideCupPong({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'lost' }) })) === 'Ana won the game.');
+  check('cup pong: they resigned, you won', /resigned/.test(body(decideCupPong({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
+  check('cup pong: your own winning throw does not notify you', decideCupPong({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
+  check('cup pong: the trigger watches cuppong/index and names the match', /ref: '\/cuppong\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'cuppong', match: id \}/.test(fnSrc));
+  check('sw.js opens the Cup Pong match a notification names', /tag\.startsWith\('cuppong-'\)/.test(sw) && /match: String\(d\.match/.test(sw));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

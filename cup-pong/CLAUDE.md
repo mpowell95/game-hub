@@ -17,7 +17,7 @@ this file says which are done.
 | 2 | Rules (brief section 3, confirmed below), settings, Gentleman's, vs CPU, rebuttal, stats | **Built 2026-09-28, deployed devOnly, waiting on Matt's play-test.** The Reracks setting (brief 4a) moved to stage 3, see "Stage 2" below |
 | 3 | Rerack: presets, then custom | not started |
 | 4 | Bounce shots | not started - brief says show Matt the async design first |
-| 5 | Challenges + push | not started |
+| 5 | Challenges + push | **Built and deployed 2026-09-28** (Matt: *"I don't see multiplayer? You should be able to challenge someone just like connect 4 hoops"*). See "Challenges" below. **Needs Matt: publish the rules and deploy the function** (dated lines there) |
 | + | **Solo: clear the rack in the fewest throws**, with a leaderboard (Matt's ask, 2026-09-28) | **Built and deployed 2026-09-28** - see "Solo" below |
 
 ### The GamePigeon rules, CONFIRMED by Matt 2026-09-27 ("1-7: yes")
@@ -157,7 +157,75 @@ anything, no opponent."*
   the people with a cleared solo rack, lowest first; equal bests share a rank, the one with more racks cleared drawn first; no tier
   chip and no difficulty filter (a solo rack has no difficulty). Wins / Games / Name still list the
   match players as before. The By Game row's leader is still the wins leader.
-- The setup shows **Your best: N throws**; the cleared card says **New best!** when that rack set it.
+- The setup's Solo row shows your best on the right; the cleared card says **New best!** when that rack set it.
+
+## The setup screen (2026-09-28, second layout)
+
+Matt: *"the Solo option at the bottom is bad. There are too many words and it's still not clear what
+it is."* Now Hoops' layout: **Your turn** (a card listing every match waiting on you, only when there
+is one), **Multiplayer** (a card row with an arrow), **Play the computer** (difficulty, Gentleman's,
+Reracks, Play), **Solo** (a card row: "Solo / Clear all 10 cups", your best on the right, an
+arrow). The Reracks hint line went to keep it on one short phone (`check-no-scroll.mjs cup-pong`,
+390x664). With the Your turn card showing it can scroll inside itself, contained, like Hoops'.
+
+## Challenges: turn by turn, by player code (2026-09-28)
+
+Brief 5b, built on Hoops' model with no code shared. Files: `js/mp.js` (data), `js/mp-ui.js`
+(screens), `js/alert.js` (launcher), and the match itself in `js/ui.js` (`mpBegin` and the methods
+under "CHALLENGES").
+
+- **The node**: `cuppong/games/<id>` + `cuppong/index/<CODE>/<id>`. The challenger is side `'a'` and
+  shoots first; the challenge is DELIVERED when the challenger's first turn ends (the other person's
+  row is written then), Hoops' 2026-09-23 lesson.
+- **A match is a LOG, never a snapshot.** Each entry is one action: a throw `{k:'t', p, a, m, b}`
+  (launch vector AND the recorded cup it went in, `''` for a miss, bounced), Gentleman's `{k:'g'}`, a
+  rerack `{k:'r', key}`, an island call `{k:'i', id}`, an owed cup given up `{k:'o', id}`.
+  `validateGame` REPLAYS the whole log through `match.js` and refuses the whole document if any entry
+  does not replay, or if the stored result is one the log did not produce (a resignation excepted).
+- **Written as it happens, one action at a time** (`appendLog`, idempotent on retry, a log that has
+  moved on differently is a conflict and never overwritten). A closed app loses nothing and cannot
+  take a throw back. Unsent throws are kept in `gamehub.cuppong.outbox.v1` and sent before the match
+  is next opened. The index rows change only when the turn passes or the match ends, which is what
+  the push function watches.
+- **Replay**: opening a match shows the other person's latest run of actions with real flights from
+  their vectors; **the recorded outcome decides each one**, whatever the local flight does (brief 5b).
+  How far this phone has shown is `gamehub.cuppong.shown.v1`. While it is their turn the match is
+  WATCHED, so their throws play out live.
+- **This phone is always side `'a'` locally** (`buildLocal`, `toLocal`/`toStored`): its own red cups
+  near the camera, whichever side it holds in the stored match.
+- **The island in a challenge: the second cup is OWED** (Matt chose it, 2026-09-28: "They pick at
+  their turn"). `match.js` `async: true` counts `owed[side]`; at the start of their next turn the
+  owing player taps one of their own cups before anything else (`askOwed`, "Tap one of your cups to
+  give up"). If the owed cups are every cup left, the rack is cleared on the spot (then the rebuttal).
+  Brief 5d's bounce shots, when built, use the same mechanism.
+- **Rules are frozen per challenge**: Gentleman's and Reracks are chosen on the challenge screen
+  (defaults from your own setup) and stored on the match.
+- **Results**: `recordResult('cuppong', 'mp', won)` once per phone, whoever ended it
+  (`gamehub.cuppong.counted.v1` ledger, Hoops' "counted on BOTH phones, exactly once"). A match that
+  ended while you were away shows a GAME OVER popup (`gamehub.cuppong.unseenResults.v1`) and the
+  launcher's 'over' bubble.
+- **Quit** (pause menu) is a resignation: asks first, counts as a loss, deletes nothing.
+- **Screens**: Multiplayer home (Challenge someone, Notify me while off, Your turn, Their turn,
+  History), the picker (by player code, Hoops' `opponentsFrom`), the terms screen, History (record
+  per opponent by code, each finished match with a word and a mark).
+- **Launcher**: `js/hub.js`'s Cup Pong entry declares `alerts: () => import('../cup-pong/js/alert.js')`
+  (a third registrant after Hoops and Skeeball). A tapped bubble or notification opens that match
+  (`armOpen`/`takeOpen`, sessionStorage `gamehub.cuppong.open.v1`).
+- **Push**: `cupPongTurnPush` on `cuppong/index/{code}/{id}`, deciding from the row alone
+  (`decideCupPong`: a challenge, your turn, "rebuttal time", they won / they quit; never your own
+  write, via the row's `lastBy`). The payload carries `match`, and `sw.js` also reads a
+  `cuppong-<id>` tag.
+- **NOT DONE YET, needs Matt (2026-09-28)**: (1) publish `database.rules.json` (it now has
+  `"cuppong"`; until it is published every read is empty and every write says "Challenges are not
+  switched on yet"); (2) `firebase deploy --only functions` for `cupPongTurnPush` (the game works
+  without it, just with no phone notifications). Close each line here the day he confirms.
+
+Verified 2026-09-28 in two separate browser profiles against a local stand-in for the Realtime
+Database (the sandbox cannot reach Firebase): challenge, delivery on turn end, the replay, live
+turns both ways, the launcher bubble, a notification-style `?open=cuppong&match=<id>` load, a
+seeded island leaving Ana owing a cup and her giving it up, a quit, and the result counted once.
+Real Firebase on real phones is unverified. `node test-cuppong-mp.mjs` covers the data layer
+against an in-memory database (29 checks).
 
 ## Hub integration
 
@@ -167,7 +235,7 @@ anything, no opponent."*
 | Stats id | `cuppong`: plain `recordResult('cuppong', difficulty, won)` once per finished match vs the computer, difficulty `easy`/`medium`/`hard` (`mp` is reserved for challenges, stage 5). Solo racks: `recordCupPongSolo(throws)` into the **`cp` sub-counter** (see "Solo"). Registered 2026-09-28 in `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META` (on the board even while admin-only, `OFF_THE_BOARD` stays empty) and `js/game-stats-ui.js` `TABS` (devOnly, Air Hockey's shape), label `game_title_cuppong` in `js/strings.js` |
 | CSS root / prefix | `.cp-root` / `.cp-` |
 | Settings key | `gamehub.cuppong.v1`: `{ diff, gentlemans, nextFirst }` - preferences only, saved on every selection. `nextFirst` alternates after each finished match (the repo's turn-based default) |
-| `isInProgress()` | the NO MID-GAME RESUME meaning (Hoops' class): `true` while a match vs the computer has had a throw and is not over, because a match is not persisted; same for a solo rack with a throw taken and cups left. A challenge (stage 5) must answer `false`: it will live in Firebase |
+| `isInProgress()` | the NO MID-GAME RESUME meaning (Hoops' class): `true` while a match vs the computer has had a throw and is not over, because a match is not persisted; same for a solo rack with a throw taken and cups left. A challenge answers `false`: it lives in Firebase |
 | Tile art | `GAME_ART.cuppong` in `js/game-art.js` |
 | Strings | `js/strings.js`, `{ en, es }`, `makeT` at render time |
 
@@ -183,6 +251,9 @@ anything, no opponent."*
 | `js/strings.js` | EN/ES |
 | `js/match.js` | **the rules of a match**, pure: turns, balls back, heating up / on fire, rebuttal, overtime, Gentleman's. Everything comes back as events |
 | `js/cpu.js` | **the computer**, pure: aims with the same ballistics, misses by a skill-sized Gaussian error |
+| `js/mp.js` | **challenges**: the `cuppong/` node, log validation by replay, verified writes, the outbox, ledger, seen/shown maps |
+| `js/mp-ui.js` | the multiplayer screens (home, picker, terms, history, Game Over popup). DOM only |
+| `js/alert.js` | the launcher's bubble for challenges (`check`/`watch`/`armOpen`) |
 | `js/test.js` | `node cup-pong/js/test.js` - ~50 checks, ~25 s. Not in `sw.js` (dev only) |
 | `css/cup-pong.css` | every rule under `.cp-root` |
 

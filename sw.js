@@ -340,6 +340,9 @@ const ASSETS = [
   './cup-pong/js/render.js',
   './cup-pong/js/strings.js',
   './cup-pong/js/match.js',
+  './cup-pong/js/mp.js',
+  './cup-pong/js/mp-ui.js',
+  './cup-pong/js/alert.js',
   './cup-pong/js/cpu.js',
 
   // Connect 4 Hoops. Its engine imports skeeball's vendored three.js and cannon-es rather than
@@ -881,14 +884,17 @@ const REST_MANIFEST = {
   './skeeball/js/ui.js': '50ef7223f1',
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': 'bb54739524',
-  './cup-pong/css/cup-pong.css': '16945a7b82',
-  './cup-pong/js/ui.js': '4f532a2d1a',
+  './cup-pong/css/cup-pong.css': '02ef944886',
+  './cup-pong/js/ui.js': '39abb3af7d',
   './cup-pong/js/geom.js': 'af6eb8b421',
   './cup-pong/js/rack.js': '495da6d4b0',
   './cup-pong/js/physics.js': '7dc862ade6',
   './cup-pong/js/render.js': '7ed3946e42',
-  './cup-pong/js/strings.js': '6992e08745',
-  './cup-pong/js/match.js': '180d1cdc53',
+  './cup-pong/js/strings.js': 'ea82199451',
+  './cup-pong/js/match.js': '6c703d7d69',
+  './cup-pong/js/mp.js': '4f28721675',
+  './cup-pong/js/mp-ui.js': '9420e7d68a',
+  './cup-pong/js/alert.js': '3f8bb559a5',
   './cup-pong/js/cpu.js': '215682143c',
   './hoops4/index.html': 'dce91b13bd',
   './hoops4/css/hoops4.css': '33421864da',
@@ -1289,7 +1295,7 @@ self.addEventListener('push', (event) => {
     // One notification per match: a second turn in the same game replaces the first.
     tag: String(d.tag || 'game-hub'),
     renotify: true,
-    data: { url: String(d.url || './'), game: String(d.game || ''), with: String(d.with || ''), name: String(d.name || '') },
+    data: { url: String(d.url || './'), game: String(d.game || ''), with: String(d.with || ''), name: String(d.name || ''), match: String(d.match || '') },
   };
   event.waitUntil(self.registration.showNotification(title, opts));
 });
@@ -1306,7 +1312,8 @@ self.addEventListener('notificationclick', (event) => {
   // the id is read from there - no function redeploy needed. `data.match` wins if a later payload
   // carries it. The hub validates it before use.
   const tag = String(event.notification.tag || '');
-  const match = String(data.match || (tag.startsWith('hoops-') ? tag.slice(6) : ''));
+  // Cup Pong's payload names its match outright (`match`, 2026-09-28) and tags it `cuppong-<id>`.
+  const match = String(data.match || (tag.startsWith('hoops-') ? tag.slice(6) : tag.startsWith('cuppong-') ? tag.slice(8) : ''));
   const u0 = new URL(data.url || './', self.registration.scope);
   if (match) u0.searchParams.set('match', match);
   const url = u0.href;

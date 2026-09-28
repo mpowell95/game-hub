@@ -310,6 +310,8 @@ export const GAMES = [
       es: 'Lanza la pelota por la mesa y métela en los vasos.',
     },
     module: '../cup-pong/js/ui.js',
+    // Challenges (2026-09-28): a new one, your turn, or a result you missed, on the launcher.
+    alerts: () => import('../cup-pong/js/alert.js'),
     // Owns the whole viewport (a full-bleed three.js table under a thin HUD), like Hoops.
     immersive: true,
     accent: '#d4252b',

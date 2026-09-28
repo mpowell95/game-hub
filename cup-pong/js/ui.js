@@ -91,6 +91,8 @@ function presetSVG(spots) {
     pts.map((p) => `<circle cx="${((p.x - x0) * sc).toFixed(1)}" cy="${((p.z - z0) * sc).toFixed(1)}" r="${(r * sc * 0.94).toFixed(1)}"/>`).join('')}</svg>`;
 }
 
+const escapeHTML = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 const reducedMotion = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
 };
@@ -139,6 +141,8 @@ class CupPong {
     if (this.disposed) return;
     this.root.classList.add('cp-root');
     this.renderSetup();
+    // A launcher bubble or a tapped notification names a match: open it straight away.
+    import('./alert.js').then((A) => { const o = A.takeOpen(); if (o && !this.disposed) this.openMatch(o.id); }).catch(() => {});
   }
 
   // --- the setup screen ------------------------------------------------------------------------
@@ -154,23 +158,32 @@ class CupPong {
     const s = this.settings;
     const seg = (role, items, cur) => `<div class="gh-seg" role="group" data-role="${role}">${items.map(([v, label, icon]) =>
       `<button type="button" class="gh-seg__item" data-v="${v}" aria-pressed="${v === cur}">${icon || ''}<span>${label}</span></button>`).join('')}</div>`;
+    // HOOPS' LAYOUT (Matt, 2026-09-28: "just like connect 4 hoops"): your turns first, then
+    // Multiplayer as a door, then the computer card, then Solo as a door. Solo was a card with a
+    // heading, a hint, a best and a button - "too many words and it's still not clear what it is".
+    const best = soloBest();
     this.root.innerHTML = `
       <div class="cp-setup">
         <h1 class="cp-title">${t('title')}</h1>
+        <div class="gh-card cp-turns" hidden></div>
+        <button type="button" class="gh-card cp-row" data-role="mp">
+          <span class="cp-row-head">${t('multiplayer')}</span>
+          <span class="cp-row-chev" aria-hidden="true">\u203A</span>
+        </button>
         <div class="gh-card cp-setup-card">
-          <p class="cp-setup-label">${t('vsCpu')}</p>
+          <p class="cp-card-head">${t('vsCpu')}</p>
           ${seg('diff', DIFFS.map((d) => [d, t(d), diffShapeSVG(tierOf(d))]), s.diff)}
           <p class="cp-setup-label">${t('gentlemans')} <span class="cp-setup-hint">${t('gentlemansHint')}</span></p>
           ${seg('gent', [['on', t('on')], ['off', t('off')]], s.gentlemans ? 'on' : 'off')}
-          <p class="cp-setup-label">${t('reracks')} <span class="cp-setup-hint">${t('reracksHint')}</span></p>
+          <p class="cp-setup-label">${t('reracks')}</p>
           ${seg('rr', RERACKS.map((n) => [String(n), n === 'inf' ? '\u221e' : String(n)]), String(s.reracks))}
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block cp-setup-play" data-role="play">${t('play')}</button>
         </div>
-        <button type="button" class="gh-btn gh-btn--primary cp-setup-play" data-role="play">${t('play')}</button>
-        <div class="gh-card cp-setup-card cp-solo-card">
-          <p class="cp-setup-label">${t('solo')} <span class="cp-setup-hint">${t('soloHint')}</span></p>
-          ${soloBest() ? `<p class="cp-solo-best">${t('soloBest', { n: soloBest() })}</p>` : ''}
-          <button type="button" class="gh-btn gh-btn--ghost cp-setup-solo" data-role="solo">${t('soloBtn')}</button>
-        </div>
+        <button type="button" class="gh-card cp-row" data-role="solo">
+          <span class="cp-row-text"><span class="cp-row-head">${t('solo')}</span><span class="cp-row-sub">${t('soloHint')}</span></span>
+          ${best ? `<span class="cp-row-best"><b>${best}</b><span>${t('soloBestShort')}</span></span>` : ''}
+          <span class="cp-row-chev" aria-hidden="true">\u203A</span>
+        </button>
       </div>`;
     const pick = (role, fn) => {
       const g = this.root.querySelector(`[data-role="${role}"]`);
@@ -187,10 +200,12 @@ class CupPong {
     pick('rr', (v) => { this.settings.reracks = v === 'inf' ? 'inf' : Number(v); });
     this.on(this.root.querySelector('[data-role="play"]'), 'click', () => this.start('cpu'));
     this.on(this.root.querySelector('[data-role="solo"]'), 'click', () => this.start('solo'));
+    this.on(this.root.querySelector('[data-role="mp"]'), 'click', () => this.openMultiplayer());
+    this.fillTurns();
   }
 
   // --- starting a game -------------------------------------------------------------------------
-  async start(mode) {
+  async start(mode, opts = {}) {
     this.teardownEngine();
     this.unbindAll();
     this.clearTimers();
@@ -205,6 +220,7 @@ class CupPong {
       this.fit();
       this.offViewport = onViewportResize(() => this.fit());
       if (mode === 'solo') this.newRack();
+      else if (mode === 'mp') this.mpBegin(opts.game);
       else this.newMatch();
       this.startLoop();
       // Read-only hook for headless drivers (skeeball's `__skTest` precedent). Never read by the game.
@@ -212,15 +228,15 @@ class CupPong {
     } catch (err) {
       // Land somewhere recoverable, never on a dead canvas (skeeball, 2026-09-01).
       console.error('[cup-pong] engine failed to load', err);
-      if (!this.disposed) this.renderLoadError(mode);
+      if (!this.disposed) this.renderLoadError(mode, opts);
     }
   }
 
-  renderLoadError(mode) {
+  renderLoadError(mode, opts) {
     this.teardownEngine();
     this.root.innerHTML = `<div class="cp-error"><p>${t('loadError')}</p>
       <button type="button" class="gh-btn gh-btn--primary" data-role="retry">${t('retry')}</button></div>`;
-    this.on(this.root.querySelector('[data-role="retry"]'), 'click', () => this.start(mode));
+    this.on(this.root.querySelector('[data-role="retry"]'), 'click', () => this.start(mode, opts));
   }
 
   renderPlay() {
@@ -273,9 +289,13 @@ class CupPong {
     }
     const m = this.match;
     if (!m) return;
-    mode.textContent = m.shooter === 'a' ? t('yourTurn') : t('cpuTurn');
-    mode.classList.toggle('is-cpu', m.shooter === 'b');
-    const bits = [t('cupsScore', { a: m.racks.a.length, b: m.racks.b.length })];
+    const them = this.mp ? this.mp.themName : '';
+    mode.textContent = (this.mp && this.mp.finished && !m.over) ? t('gameOver')
+      : m.over ? (m.winner === 'a' ? t('youWin') : t('youLose'))
+      : m.shooter === 'a' ? t('yourTurn') : (this.mp ? t('theirTurn', { name: them }) : t('cpuTurn'));
+    mode.classList.toggle('is-cpu', !m.over && m.shooter === 'b');
+    const bits = [this.mp ? t('cupsVs', { a: m.racks.a.length, b: m.racks.b.length, name: them })
+      : t('cupsScore', { a: m.racks.a.length, b: m.racks.b.length })];
     if (m.phase === 'rebuttal') bits.push(t('rebuttal'));
     else if (m.phase === 'overtime') bits.push(t('overtime'));
     if (m.called) bits.push(t('islandCalled'));
@@ -351,8 +371,12 @@ class CupPong {
     R.setMarks('a', null); R.setMarks('b', null);
     this.paintHud();
     R.setView(m.shooter === 'a' ? 'shoot' : 'defend');
-    if (m.shooter === 'a') {
+    if (m.shooter === 'a' && m.mustPickOwed()) {
+      this.askOwed();
+    } else if (m.shooter === 'a') {
       this.serveMatchBall();
+    } else if (this.mp) {
+      this.mpWaiting();
     } else {
       R.hideBall();
       this.busy = true;
@@ -414,7 +438,11 @@ class CupPong {
   applyThrow(outcome, wait) {
     const m = this.match;
     const made = outcome && outcome.kind === 'made' ? outcome.id : null;
+    const shooter = m.shooter;
     const ev = m.throwResult({ made, bounced: !!(outcome && outcome.bounced) });
+    if (ev.length && shooter === 'a' && this.lastShot) {
+      this.mpRecord({ k: 't', p: this.lastShot.power, a: this.lastShot.aim, m: made || '', b: outcome && outcome.bounced ? 1 : 0 });
+    }
     this.showEvents(ev);
     if (m.over) { this.finish(); return; }
     this.paintHud();
@@ -435,7 +463,9 @@ class CupPong {
         else R.vanish(side, e.id);
         if (e.sameCup) this.toast(t('sameCup'), 1600);
         else if (e.island) this.toast(t('islandHit'), 1500);
-      } else if (e.type === 'removed' || e.type === 'picked') R.vanish(e.side, e.id);
+      } else if (e.type === 'removed' || e.type === 'picked' || e.type === 'owedPicked') R.vanish(e.side, e.id);
+      else if (e.type === 'owedCleared') { for (const id of e.ids) R.vanish(e.side, id); }
+      else if (e.type === 'islandOwed') this.toast(e.side === 'a' ? t('youOwe') : t('theyOwe'), 1600);
       else if (e.type === 'ballsBack') this.toast(t('ballsBack'));
       else if (e.type === 'heatingUp') this.toast(t('heatingUp'));
       else if (e.type === 'onFire') this.toast(t('onFire'), 1400);
@@ -484,12 +514,355 @@ class CupPong {
     this.later(() => this.nextStep(ev), SETTLE_MS);
   }
 
+  // --- CHALLENGES: a match played turn by turn with someone else (2026-09-28) --------------------
+  // cup-pong/js/mp.js keeps the match as a LOG; this phone is always side 'a' locally (its own red
+  // cups near the camera), whichever side it holds in the stored match. What happens here:
+  //   - opening a match REPLAYS the other person's latest run of throws from their launch vectors,
+  //     with the RECORDED outcome deciding each one (brief 5b);
+  //   - every action of yours is appended to the log as it happens (mpRecord -> mpFlush), so a
+  //     closed app loses nothing and cannot take a throw back;
+  //   - while it is their turn the match is WATCHED, so their throws arrive while you look at it.
+  async loadMP() { if (!this.MP) this.MP = await import('./mp.js'); return this.MP; }
+
+  async mpBegin(game) {
+    const MP = await this.loadMP();
+    if (this.disposed || !this.engine) return;
+    const side = MP.sideOf(game, MP.myCode());
+    if (!side) { this.renderSetup(); return; }
+    const them = MP.themOf(game, MP.myCode());
+    const other = side === 'a' ? 'b' : 'a';
+    let from = game.log.length ? MP.lastRunStart(game, other) : 0;
+    const shown = MP.readShown(game.id);
+    if (shown > from) from = Math.min(shown, game.log.length);
+    this.mp = { id: game.id, side, game, themName: them.name || '?', themEmoji: them.emoji || '🙂', them,
+      base: game.log.length, applied: from, pending: [], sending: false, stop: null, finished: false };
+    this.match = MP.buildLocal(game, side, from);
+    this.recorded = false;
+    this.throwState = null;
+    this.pickMode = null;
+    const R = this.engine.rend;
+    R.setRack('a', cupsXZ(this.match.racks.a));
+    R.setRack('b', cupsXZ(this.match.racks.b));
+    R.hideBall();
+    const hint = this.root.querySelector('.cp-hint');
+    if (hint) hint.hidden = true;
+    this.busy = true;
+    this.paintHud();
+    this.paintOptions();
+    const stop = await MP.watchGame(game.id, (g) => this.mpOnGame(g));
+    if (!this.mp || this.mp.id !== game.id) { try { stop(); } catch {} return; }
+    this.mp.stop = stop;
+    this.later(() => this.mpCatchUp(), 500);
+  }
+
+  /** Show whatever the board has not shown yet, then play on (or wait). */
+  mpCatchUp() {
+    const mp = this.mp;
+    if (!mp || this.replaying || !this.engine) return;
+    const g = mp.game;
+    if (mp.applied < g.log.length) { this.replayNext(); return; }
+    this.MP.markShown(mp.id, g.log.length);
+    this.MP.markSeen(mp.id, g.updated);
+    if (this.match.over) { this.finish(); return; }
+    if (g.over && g.over.why === 'resign') { this.mpFinish(g.over.winner === mp.side, true); return; }
+    this.mpResume();
+  }
+
+  /** Your turn picks up where it stands (mid-turn on a reopened match, or a fresh turn). */
+  mpResume() {
+    const m = this.match;
+    const R = this.engine.rend;
+    this.waiting = false;
+    if (m.shooter !== 'a') { this.mpWaiting(); return; }
+    if (m.queue.length) {
+      R.setView('shoot');
+      if (m.mustPickOwed()) this.askOwed(); else this.serveMatchBall();
+    } else this.beginTurn();
+  }
+
+  mpWaiting() {
+    const R = this.engine.rend;
+    this.waiting = true;
+    this.busy = true;
+    R.hideBall();
+    R.setView('defend');
+    this.paintHud();
+    this.paintOptions();
+    const hint = this.root.querySelector('.cp-hint');
+    if (hint) { hint.textContent = t('sentWait', { name: this.mp.themName }); hint.hidden = false; }
+  }
+
+  /** One entry of the log onto the board: the other person's throws fly, yours land at once. */
+  replayNext() {
+    const mp = this.mp;
+    const e = this.MP.toLocal(mp.game.log[mp.applied], mp.side);
+    const m = this.match;
+    const R = this.engine.rend;
+    const hint = this.root.querySelector('.cp-hint');
+    if (hint) hint.hidden = true;
+    if (e.by === 'a') {                 // this player's own action, from another phone or a reopen
+      const ev = this.MP.applyEntry(m, e) || [];
+      mp.applied++;
+      this.showEventsQuiet(ev);
+      this.mpCatchUp();
+      return;
+    }
+    this.replaying = true;
+    this.waiting = false;
+    R.setView('defend');
+    if (e.k === 't') {
+      if (!m.queue.length) m.startTurn();
+      const cups = cupsXZ(m.target());
+      this.pendingReplay = e;
+      this.shooter = 'b';
+      R.setBallHeat(m.heat('b', m.ball), 0);
+      this.throwState = this.engine.phys.startThrow({ power: e.p, aim: e.a, cups });
+      return;
+    }
+    const ev = this.MP.applyEntry(m, e) || [];
+    mp.applied++;
+    for (const x of ev) {
+      if (x.type === 'gentlemans' || x.type === 'rerack') R.slideRack(x.side, cupsXZ(x.to));
+    }
+    if (e.k === 'g') this.toast(t('theyGentlemans', { name: mp.themName }), 1300);
+    else if (e.k === 'r') this.toast(t('theyRerack', { name: mp.themName }), 1300);
+    else if (e.k === 'i') { R.setMarks('a', [e.id], 'called'); this.toast(t('theyIsland', { name: mp.themName }), 1300); }
+    else this.showEvents(ev);
+    this.paintHud();
+    this.later(() => { this.replaying = false; this.mpCatchUp(); }, 1100);
+  }
+
+  /** A replayed throw has landed: the RECORDED outcome decides it, whatever the flight did. */
+  replayThrowDone() {
+    const e = this.pendingReplay;
+    this.pendingReplay = null;
+    if (!e || !this.mp) { this.replaying = false; return; }
+    const ev = this.MP.applyEntry(this.match, e) || [];
+    this.mp.applied++;
+    this.engine.rend.hideBall();
+    this.showEvents(ev);
+    this.paintHud();
+    this.replaying = false;
+    if (this.match.over) { this.finish(); return; }
+    this.later(() => this.mpCatchUp(), ev.some((x) => x.type === 'turnOver') ? TURN_PAUSE_MS : 250);
+  }
+
+  /** Events applied without a flight (this player's own actions on reopen): the table only. */
+  showEventsQuiet(ev) {
+    const R = this.engine.rend;
+    for (const e of ev) {
+      if (e.type === 'gentlemans' || e.type === 'rerack') R.setRack(e.side, cupsXZ(e.to));
+    }
+    R.setRack('a', cupsXZ(this.match.racks.a));
+    R.setRack('b', cupsXZ(this.match.racks.b));
+    this.paintHud();
+  }
+
+  /** The watched match changed: new throws from them are shown, our own echoes are ignored. */
+  mpOnGame(g) {
+    const mp = this.mp;
+    if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
+    mp.game = g;
+    if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
+      this.mpFinish(g.over.winner === mp.side, true);
+      return;
+    }
+    if (mp.applied < g.log.length && this.waiting && !this.replaying) this.mpCatchUp();
+  }
+
+  /** One of this player's actions, into the log (local frame 'a' -> the stored side). */
+  mpRecord(e) {
+    const mp = this.mp;
+    if (!mp) return;
+    mp.pending.push(this.MP.toStored({ ...e, by: 'a' }, mp.side));
+    mp.applied++;
+    this.mpFlush();
+  }
+
+  async mpFlush() {
+    const mp = this.mp;
+    const MP = this.MP;
+    if (!mp || mp.sending || !mp.pending.length) return;
+    mp.sending = true;
+    const list = mp.pending.slice();
+    const base = mp.base;
+    MP.savePending(mp.id, base, mp.pending);          // kept on the phone until the server has it
+    const res = await MP.appendLog(mp.id, base, list);
+    if (this.mp !== mp) return;
+    mp.sending = false;
+    if (res.ok) {
+      mp.pending.splice(0, list.length);
+      mp.base = base + list.length;
+      mp.game = res.game;
+      MP.savePending(mp.id, mp.base, mp.pending);
+      MP.markShown(mp.id, mp.base);
+      if (mp.pending.length) this.mpFlush();
+      return;
+    }
+    if (res.retryable) {
+      this.toast(t('notSent'), 1600);
+      this.later(() => this.mpFlush(), 4000);
+    } else {
+      console.error('[cup-pong] a throw could not be sent:', res.reason);
+      this.toast(res.reason === 'denied' ? t('mpDenied') : t('sendFailed'), 2600);
+    }
+  }
+
+  /** A challenge's island: the defender gives up a cup of its own before throwing. */
+  askOwed() {
+    const m = this.match;
+    const R = this.engine.rend;
+    R.hideBall();
+    R.setView('defend');
+    R.setMarks('a', m.racks.a.map((k) => k.id), 'island');
+    this.startPick('defend', t('pickOwed'), (id) => {
+      const ev = m.pickOwed(id);
+      if (!ev.length) return false;
+      this.mpRecord({ k: 'o', id });
+      this.showEvents(ev);
+      if (m.mustPickOwed()) { R.setMarks('a', m.racks.a.map((k) => k.id), 'island'); return false; }
+      this.endPick();
+      R.setMarks('a', null);
+      this.later(() => { R.setView('shoot'); this.serveMatchBall(); }, 700);
+      return false;
+    });
+  }
+
+  mpFinish(won, resigned = false) {
+    const mp = this.mp;
+    if (!mp || mp.finished) return;
+    mp.finished = true;
+    this.busy = true;
+    this.waiting = false;
+    const MP = this.MP;
+    MP.countResult(mp.id, won);                        // once per phone, whoever ended it
+    MP.markResultSeen(mp.id);
+    this.paintHud();
+    this.paintOptions();
+    this.later(() => this.showMpOver(won, resigned), 700);
+  }
+
+  showMpOver(won, resigned) {
+    const mp = this.mp;
+    if (!mp) return;
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    const line = resigned ? (won ? t('theyResigned', { name: mp.themName }) : t('youResigned'))
+      : t('cupsVs', { a: this.match.racks.a.length, b: this.match.racks.b.length, name: mp.themName });
+    el.innerHTML = `
+      <div class="gh-modal cp-card" role="dialog" aria-modal="true" aria-label="${won ? t('youWin') : t('youLose')}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <p class="cp-card-kicker">${t('gameOver')}</p>
+        <h2 class="cp-card-title">${won ? t('youWin') : t('youLose')}</h2>
+        <p class="cp-card-line">${mp.themEmoji} ${escapeHTML(line)}</p>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${t('challengeAgain')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="mphome">${t('backMp')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    const them = mp.them;
+    const rules = mp.game.rules;
+    this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
+    this.on(el.querySelector('[data-role="mphome"]'), 'click', () => { el.remove(); this.openMultiplayer(); });
+    this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.sendChallenge(them, rules); });
+  }
+
+  mpResign() {
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal cp-card" role="dialog" aria-modal="true" aria-label="${t('quitQ')}">
+        <h2 class="cp-card-title">${t('quitQ')}</h2>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${t('quitMatch')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="no">${t('cancel')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    this.on(el.querySelector('[data-role="no"]'), 'click', () => el.remove());
+    this.on(el.querySelector('[data-role="yes"]'), 'click', async () => {
+      const mp = this.mp;
+      if (!mp) { el.remove(); return; }
+      const res = await this.MP.resignGame(mp.id);
+      el.remove();
+      if (!res.ok) { this.toast(res.reason === 'denied' ? t('mpDenied') : t('sendFailed'), 2400); return; }
+      this.MP.countResult(mp.id, false);
+      this.MP.markResultSeen(mp.id);
+      this.openMultiplayer();
+    });
+  }
+
+  // --- the doors to it: the setup screen's turns card and the Multiplayer screen ----------------
+  async openMultiplayer() {
+    this.teardownEngine();
+    this.unbindAll();
+    this.clearTimers();
+    this.mode = null;
+    this.match = null;
+    const [MP, UI] = await Promise.all([this.loadMP(), import('./mp-ui.js')]);
+    if (this.disposed) return;
+    UI.home(this, MP);
+  }
+
+  /** Open one stored match. Throws still waiting on this phone go first, so none is lost. */
+  async openMatch(id) {
+    const MP = await this.loadMP();
+    if (MP.pendingFor(id)) await MP.drainOutbox(id);
+    const game = await MP.readGame(id);
+    if (this.disposed) return;
+    if (!game) { this.toast(t('mpNotFound'), 2000); this.openMultiplayer(); return; }
+    this.start('mp', { game });
+  }
+
+  /** A new challenge: created now, delivered when your first turn is over. */
+  async sendChallenge(them, rules) {
+    const MP = await this.loadMP();
+    const res = await MP.createGame({ them, rules });
+    if (this.disposed) return;
+    if (!res.ok) return res;
+    this.start('mp', { game: res.game });
+    return res;
+  }
+
+  /** YOUR TURN, on the setup screen (Hoops' 2026-09-24 card): every match waiting on you. */
+  async fillTurns() {
+    let MP;
+    try {
+      const { loadProfile } = await import('../../js/profile-store.js');
+      const p = loadProfile();
+      if (!p || !p.playerId) return;
+      MP = await this.loadMP();
+    } catch { return; }
+    const rows = await MP.readMyGames();
+    if (this.disposed || this.mode !== null) return;
+    try { MP.recordFinished(rows); } catch (err) { console.warn('[cup-pong] recordFinished', err); }
+    const box = this.root.querySelector('.cp-turns');
+    const mine = rows.filter((r) => !r.over && r.yourTurn);
+    if (box && mine.length) {
+      box.innerHTML = `<p class="cp-card-head">${t('yourTurn')}</p>` + mine.slice(0, 4).map((r) => `
+        <button type="button" class="cp-trow" data-id="${r.id}">
+          <span class="cp-trow-face" aria-hidden="true">${escapeHTML(r.emoji)}</span>
+          <span class="cp-trow-name">${escapeHTML(r.name)}${r.rebuttal ? `<small>${t('rebuttal')}</small>` : ''}</span>
+          <span class="cp-trow-go">${t('play')}</span>
+        </button>`).join('')
+        + (mine.length > 4 ? `<button type="button" class="cp-trow-more" data-role="more">${t('moreN', { n: mine.length - 4 })}</button>` : '');
+      box.hidden = false;
+      this.on(box, 'click', (e) => {
+        const b = e.target.closest('.cp-trow');
+        if (b) this.openMatch(b.dataset.id);
+        else if (e.target.closest('[data-role="more"]')) this.openMultiplayer();
+      });
+    }
+    import('./mp-ui.js').then((UI) => { if (!this.disposed && this.mode === null) UI.showUnseen(this, MP, rows); }).catch(() => {});
+  }
+
   // --- the shooter's options: buttons on the left, only while on offer -----------------------
   paintOptions() {
     const box = this.root.querySelector('.cp-opts');
     if (!box) return;
     const m = this.match;
-    const mine = this.mode === 'cpu' && m && !m.over && m.shooter === 'a' && !this.busy && !this.pickMode && !m.pendingPick;
+    const mine = (this.mode === 'cpu' || this.mode === 'mp') && m && !m.over && m.shooter === 'a' && !this.busy && !this.pickMode && !m.pendingPick && !m.mustPickOwed();
     const btn = (role, label) => `<button type="button" class="cp-opt" data-role="${role}">${label}</button>`;
     let html = '';
     if (mine && m.canGentlemans()) html += btn('gent', t('gentlemansQ'));
@@ -506,7 +879,9 @@ class CupPong {
     if (!m || this.busy || m.shooter !== 'a') return;
     const R = this.engine.rend;
     if (role === 'gent') {
-      for (const e of m.applyGentlemans()) R.slideRack(e.side, cupsXZ(e.to));
+      const ev = m.applyGentlemans();
+      if (ev.length) this.mpRecord({ k: 'g' });
+      for (const e of ev) R.slideRack(e.side, cupsXZ(e.to));
       this.paintOptions();
     } else if (role === 'rerack') {
       this.showRerack();
@@ -526,7 +901,7 @@ class CupPong {
   }
 
   callIsland(id) {
-    this.match.callIsland(id);
+    if (this.match.callIsland(id).length) this.mpRecord({ k: 'i', id });
     this.engine.rend.setMarks('b', [id], 'called');
     this.toast(t('islandCalled'), 1200);
     this.paintHud();
@@ -584,7 +959,9 @@ class CupPong {
     for (const b of el.querySelectorAll('.cp-preset')) {
       this.on(b, 'click', () => {
         el.remove();
-        for (const e of m.rerack(b.dataset.key)) this.engine.rend.slideRack(e.side, cupsXZ(e.to));
+        const ev = m.rerack(b.dataset.key);
+        if (ev.length) this.mpRecord({ k: 'r', key: b.dataset.key });
+        for (const e of ev) this.engine.rend.slideRack(e.side, cupsXZ(e.to));
         this.engine.rend.setMarks('b', null);
         this.paintOptions();
       });
@@ -594,6 +971,7 @@ class CupPong {
   finish() {
     const m = this.match;
     const won = m.winner === 'a';
+    if (this.mp) { this.mpFinish(won); return; }
     if (!this.recorded) {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
@@ -778,6 +1156,7 @@ class CupPong {
     } else if (ev.type === 'done') {
       const o = ev.outcome;
       const wait = o.kind === 'made' ? SETTLE_MS + 200 : SETTLE_MS;
+      if (this.replaying) { this.throwState = null; this.later(() => this.replayThrowDone(), wait); return; }
       if (this.mode === 'solo') this.later(() => this.serve(), wait);
       else { this.throwState = { done: true, ball: this.throwState && this.throwState.ball, outcome: o }; this.applyThrow(o, wait); }
     }
@@ -831,7 +1210,9 @@ class CupPong {
         <h2 class="cp-card-title">${t('paused')}</h2>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${this.mode === 'solo' ? t('newRack') : t('newGame')}</button>
+          ${this.mp ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="mphome">${t('backMp')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="resign">${t('quitMatch')}</button>`
+    : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${this.mode === 'solo' ? t('newRack') : t('newGame')}</button>`}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="setup">${t('backSetup')}</button>
         </div>
       </div>`;
@@ -845,7 +1226,10 @@ class CupPong {
     this.on(el.querySelector('[data-role="resume"]'), 'click', close);
     // A new game abandons this one, and nothing is recorded until a match ENDS: a restart loses a
     // board and no history (THE LAW rule 2).
-    this.on(el.querySelector('[data-role="new"]'), 'click', () => {
+    if (this.mp) {
+      this.on(el.querySelector('[data-role="mphome"]'), 'click', () => { el.remove(); this.openMultiplayer(); });
+      this.on(el.querySelector('[data-role="resign"]'), 'click', () => { el.remove(); this.mpResign(); });
+    } else this.on(el.querySelector('[data-role="new"]'), 'click', () => {
       el.remove();
       this.clearTimers();
       this.throwState = null;
@@ -858,6 +1242,9 @@ class CupPong {
   teardownEngine() {
     this.stopLoop();
     this.clearTimers();
+    if (this.mp && this.mp.stop) { try { this.mp.stop(); } catch {} }
+    this.mp = null;
+    this.replaying = false;
     if (this.offViewport) { try { this.offViewport(); } catch {} this.offViewport = null; }
     if (this.engine && this.engine.rend) {
       const r = this.engine.rend;

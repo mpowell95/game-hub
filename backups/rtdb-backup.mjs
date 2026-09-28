@@ -69,6 +69,9 @@ export const BRANCHES = [
   // skeeChallenges/ (skeeball/js/challenge.js, 2026-09-24): Skeeball "beat my score" challenges and
   // their per-player index. Same auth shape as hoops/.
   'skeeChallenges',
+  // cuppong/ (cup-pong/js/mp.js, 2026-09-28): Cup Pong's turn-by-turn challenges and their
+  // per-player index. Same auth shape as hoops/.
+  'cuppong',
   // pushSubs/ (2026-09-23, js/push.js): each device's push-notification address, by player code.
   // Readable by any signed-in session; written only by the device that claimed that code.
   'pushSubs',

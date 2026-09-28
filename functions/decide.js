@@ -215,3 +215,50 @@ export function decideSkee({ code, id, before, after }) {
   }
   return null;
 }
+
+// --- CUP PONG CHALLENGES (2026-09-28) --------------------------------------------------------------
+// cup-pong/js/mp.js writes cuppong/index/<code>/<id> from each person's side, with `lastBy` saying
+// whose write it was ('me' = this row's owner). Decided from the row alone, like Skeeball's:
+//   - a NEW row that is your turn           -> a challenge (the challenger's first turn is done)
+//   - your turn coming back                 -> "your turn", or "your rebuttal" after they cleared you
+//   - the match ending by THEIR hand         -> they won / you won (they resigned)
+// Your own writes (lastBy 'me') never notify you.
+const CUP_TEXT = {
+  en: {
+    title: 'Cup Pong',
+    challenge: (w) => `${w} challenged you. Your shot!`,
+    turn: (w) => `Your turn vs ${w}`,
+    rebuttal: (w) => `${w} sank your last cup. Rebuttal time!`,
+    theyWon: (w) => `${w} won the game.`,
+    youWon: (w) => `You won! ${w} resigned.`,
+  },
+  es: {
+    title: 'Cup Pong',
+    challenge: (w) => `${w} te ha retado. ¡Tu tiro!`,
+    turn: (w) => `Te toca contra ${w}`,
+    rebuttal: (w) => `${w} metió tu último vaso. ¡Réplica!`,
+    theyWon: (w) => `${w} ganó la partida.`,
+    youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+  },
+};
+
+export function decideCupPong({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = CUP_TEXT[lang] || CUP_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  if (!before) return mk('challenge', (s) => s.challenge(who));
+  if (before.yourTurn && !before.over) return null;             // it was already your turn
+  if (after.rebuttal) return mk('rebuttal', (s) => s.rebuttal(who));
+  return mk('turn', (s) => s.turn(who));
+}
