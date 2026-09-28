@@ -456,7 +456,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-brickcity-stall.mjs`, `test-brickcity-corner100.mjs`, `test-brickcity-throat.mjs`,
   `test-skeeball-popup.mjs`
 - Air Hockey: `air-hockey/js/test.js` (headless engine probe), `air-hockey/net-test.html` (two-phone online latency test, deployed)
-- Pinball: `sweep-pinball-rests.mjs` · Golf: `sheet-course.mjs`, `measure-hole-strip.mjs` ·
+- Pinball (archived): `archive/pinball/tools/sweep-pinball-rests.mjs` · Golf: `sheet-course.mjs`, `measure-hole-strip.mjs` ·
   Yahtzee: `test-yahtzee-ai.mjs`
 - Matt-only readers: `read-install-state.mjs`, `read-bug-reports.mjs`, `read-device-reports.mjs`
 - Firebase writers (see rules above): `backups/rtdb-backup.mjs`, `clear-skeeball-stats.mjs`,
@@ -541,7 +541,7 @@ working in that folder).
 | Chinchón | in-hub `module:` | `.cc-root` / `.cc-` (many rules still bare-prefixed) | `chinchon-settings` (frozen gen-1) | `recordChinchon` |
 | Course Creator | launch-out `href:` (`hole-editor/?course=new`), **`devOnly`, opened to chosen players by player code from the admin page** (2026-09-24); records no stats, so no GAME_META row | n/a (own page) | its own `golf.holeEditor.*` keys | none |
 | Connect Four | in-hub `module:` | `.cf-root` / `.cf-` (many rules still bare-prefixed) | `gamehub.connect4.v1` (+ `gamehub.connect4.save.v1` autosave) | `recordConnect4` |
-| Cup Pong | in-hub `module:`, immersive, **`devOnly`**, three.js + cannon-es; **stage 2 of 5 (vs computer Easy/Medium/Hard, plus practice)** per `docs/CUP-PONG-BRIEF.md`; folder `cup-pong/`, hub id and stats id `cuppong` | `.cp-root` / `.cp-` | `gamehub.cuppong.v1` | `recordResult('cuppong', …)` |
+| Cup Pong | in-hub `module:`, immersive, **`devOnly`**, three.js + cannon-es; **stage 2 of 5 plus the rerack presets (vs computer Easy/Medium/Hard, practice; Gentleman's/Rerack/Island as buttons)** per `docs/CUP-PONG-BRIEF.md`; folder `cup-pong/`, hub id and stats id `cuppong` | `.cp-root` / `.cp-` | `gamehub.cuppong.v1` | `recordResult('cuppong', …)` |
 | Dominoes | in-hub `module:` | `.dm-root` / `.dm-` | `gamehub.dominoes.v1` | `recordDominoes` |
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive, **multiplayer at 2-4 seats** (save key `escoba-save`, MP field) | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
@@ -553,7 +553,7 @@ working in that folder).
 | Nuts & Bolts | in-hub `module:` | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |
 | Pool | in-hub `module:`, immersive, **multiplayer** (`gamehub.poolv2.mp.v1`) | `.p2-root` / `.p2-` | `gamehub.poolv2.v1` (frozen; see its file) | `recordResult('pool', …)` |
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
-| Pinball | in-hub `module:`, immersive, **admin only** (`devOnly`) | `.pb-root` / `.pb-` | `gamehub.pinball.v1` | `recordPinball` |
+| Pinball | **ARCHIVED 2026-09-28**: no launcher entry; code in `archive/pinball/` (never precached, `archive/` is in `validate-sw-assets.mjs`'s `SCAN_SKIP`). Recorder, stats id, `GAME_META` row and My Stats tab (`retired: true`, like `poolv2`) all kept so recorded plays stay visible | `.pb-root` / `.pb-` | `gamehub.pinball.v1` | `recordPinball` (kept, rule 5) |
 | Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines), plus **"beat my score" challenges** (`skeeChallenges/`, 2026-09-24) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Sudoku | in-hub `module:` | `.sd-root` / `.sd-` | `gamehub.sudoku.v1` | `recordSudoku` |

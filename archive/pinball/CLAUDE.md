@@ -1,5 +1,11 @@
 # Pinball — game documentation
 
+> **ARCHIVED 2026-09-28** (Matt: "remove pinball from the game hub and archive it"). This folder
+> moved from `pinball/` to `archive/pinball/`. It has no launcher entry and is not precached. Player
+> history is untouched: `recordPinball`, the `pinball` stats id, its `GAME_META` row and its My Stats
+> tab (`retired: true`) all stay. To restore: move the folder back, re-add the `GAMES` entry in
+> `js/hub.js` (see git history), re-add its paths to `sw.js` ASSETS, drop `retired` from the TABS row.
+
 > **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. THE LAW
 > and its nine working rules live at the top of the root `CLAUDE.md`, which is always loaded
 > alongside this file; the full rules with rationale are in `js/CLAUDE.md`. Nothing below overrides

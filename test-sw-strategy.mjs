@@ -798,9 +798,9 @@ console.log('\n--- the REST_MANIFEST matches the deployed bytes ---');
     ok('pinball2 files are in ASSETS at all', pb2.length > 0);
     ok('every pinball2 file is excluded from cache-first', pb2.every((a) => re.test(a)),
       pb2.filter((a) => !re.test(a)).join(', '));
-    const pb1 = assets.filter((a) => a.startsWith('./pinball/'));
-    ok('the released pinball is NOT excluded, so it keeps its cache-first open',
-      pb1.length > 0 && pb1.every((a) => !re.test(a)));
+    // The original pinball was archived 2026-09-28 (archive/pinball/): nothing of it ships.
+    ok('the archived pinball has no files in ASSETS',
+      !assets.some((a) => a.startsWith('./pinball/')));
   }
 }
 
