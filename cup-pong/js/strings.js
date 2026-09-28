@@ -71,6 +71,11 @@ export const STRINGS = {
     rk_tri: 'Triangle', rk_diamond: 'Diamond', rk_wall333: '3-3-3', rk_zipper: 'Zipper', rk_r323: '3-2-3',
     rk_honeycomb: 'Honeycomb', rk_wall33: '3-3 wall', rk_house: 'House', rk_r32: '3-2', rk_tri31: '3-1',
     rk_line: 'Line', rk_square: 'Square', rk_side: 'Side by side', rk_center: 'Center',
+    solo: 'Solo',
+    soloHint: 'All 10 cups, fewest throws',
+    soloBtn: 'Play solo',
+    soloBest: 'Your best: {n} throws',
+    soloNewBest: 'New best!',
   },
   es: {
     title: 'Cup Pong',
@@ -141,6 +146,11 @@ export const STRINGS = {
     rk_tri: 'Triángulo', rk_diamond: 'Rombo', rk_wall333: '3-3-3', rk_zipper: 'Cremallera', rk_r323: '3-2-3',
     rk_honeycomb: 'Panal', rk_wall33: 'Muro 3-3', rk_house: 'Casa', rk_r32: '3-2', rk_tri31: '3-1',
     rk_line: 'Línea', rk_square: 'Cuadrado', rk_side: 'Lado a lado', rk_center: 'Centro',
+    solo: 'Solo',
+    soloHint: 'Los 10 vasos, en menos tiros',
+    soloBtn: 'Jugar solo',
+    soloBest: 'Tu récord: {n} tiros',
+    soloNewBest: '¡Nuevo récord!',
   },
 };
 export default STRINGS;
