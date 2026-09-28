@@ -8,7 +8,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen the
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
-import * as gs from '../../js/game-stats.js';
+import { recordContexto } from '../../js/game-stats.js';
 import { loadModel, puzzleNumber, hintRank, band } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -255,7 +255,7 @@ class ContextoUI {
       this._persist();
       const guesses = this.rec.guesses.filter((g) => !g.hint).length;
       const hints = this.rec.guesses.filter((g) => g.hint).length;
-      try { gs.recordContexto?.(this.lang, kind === 'won', { guesses, hints }); }
+      try { recordContexto(this.lang, kind === 'won', { guesses, hints }); }
       catch (err) { console.error('[contexto] recordContexto', err); }
     }
     this._overlay = 'result';
