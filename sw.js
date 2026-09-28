@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1009';
+const CACHE = 'game-hub-v1010';
 
 const ASSETS = [
   './',
@@ -688,15 +688,15 @@ const REST_MANIFEST = {
   './connect-four/js/strings.js': 'c75da9ca32',
   './connect-four/css/connect-four.css': '14251ccb03',
   './chinchon/index.html': '0f90953d5c',
-  './chinchon/css/chinchon.css': '997b115da4',
+  './chinchon/css/chinchon.css': '6278d0d0c6',
   './chinchon/js/deck.js': '2260c3f606',
   './chinchon/js/meld.js': '5166c4b913',
   './chinchon/js/cards.js': '8345ff44a9',
   './chinchon/js/game.js': 'ff23b6d017',
   './chinchon/js/hash.js': '9bbf5d8385',
   './chinchon/js/ai.js': 'd69864fbc2',
-  './chinchon/js/ui.js': 'ababefca1f',
-  './chinchon/js/strings.js': 'ba6eab58b2',
+  './chinchon/js/ui.js': 'ced7e08fe4',
+  './chinchon/js/strings.js': '74a20123ca',
   './parchis/': '45e49dd3f5',
   './parchis/index.html': '45e49dd3f5',
   './filler/': '797ca5a8a2',

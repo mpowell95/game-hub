@@ -47,6 +47,13 @@ const SKILL_TO_DIFF = { 1: 'easy', 2: 'normal', 3: 'hard' };
 const PLAYER_COLORS = ['#d4a017', '#d22f27', '#1f5fd4', '#2e8b57'];
 
 const BEAT_TURN = 700, BEAT_DRAW = 650, BEAT_DISCARD = 550, BEAT_CLOSE = 800;
+// Computer speed (2026-09-28, Matt: "chinchon next, same approach" as Texas Hold'em, Monopoly
+// Deal and Uno). Scales only a COMPUTER's beats in a solo match; an online match, and every
+// beat of yours, keep their pace. Normal is the original pace.
+const PACES = ['slow', 'normal', 'fast'];
+const PACE_MULT = { slow: 1.6, normal: 1, fast: 0.3 };
+// Card travel (2026-09-28): how long a card takes to fly, and the gap between dealt cards.
+const FLY_MS = 340, FLY_DEAL_GAP_MS = 45;
 const STORE_SETTINGS = 'chinchon-settings';
 const STORE_STATS = 'chinchon-stats';
 
@@ -284,12 +291,14 @@ class ChinchonUI {
       // it survives leaving mid-match. Additive; absent on an older save defaults
       // to 0, byte-identical to the pre-alternation behavior (seat 0 always dealt).
       nextStartDealer: saved.nextStartDealer === 1 ? 1 : 0,
+      // Computer speed (2026-09-28). Additive; absent on an older save is Normal.
+      pace: PACES.includes(saved.pace) ? saved.pace : 'normal',
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, config: s.config, mode: s.mode, nextStartDealer: s.nextStartDealer });
+    saveJSON(STORE_SETTINGS, { count: s.count, humanName: s.humanName, humanAvatar: s.humanAvatar, aiNames: s.aiNames, aiDifficulty: s.aiDifficulty, deck: s.deck, dark: s.dark, config: s.config, mode: s.mode, nextStartDealer: s.nextStartDealer, pace: s.pace });
   }
 
   /** Apply the dark-mode class to the root (idempotent; safe before mount). Follows the
@@ -326,6 +335,7 @@ class ChinchonUI {
         <div class="cc-menu" data-role="menu" hidden></div>
         <div class="cc-modal" data-role="help" hidden></div>
         <div class="cc-toast" data-role="toast" hidden></div>
+        <div class="cc-flight" data-role="flight" aria-hidden="true"></div>
       </div>`;
 
     this.root = this.container.querySelector('.cc-root');
@@ -333,7 +343,7 @@ class ChinchonUI {
     this.el = {
       header: q('header'), setup: q('setup'), game: q('game'),
       opponents: q('opponents'), piles: q('piles'), status: q('status'),
-      self: q('self'), handbar: q('handbar'), hand: q('hand'), actions: q('actions'),
+      self: q('self'), handbar: q('handbar'), hand: q('hand'), actions: q('actions'), flight: q('flight'),
       modal: q('modal'), menu: q('menu'), help: q('help'), toast: q('toast'),
     };
 
@@ -465,11 +475,17 @@ class ChinchonUI {
 
     // --- Difficulty row: absent in Host mode (no AI opponents to tune). ---
     const diffLabel = (d) => t(DIFF_LABEL_KEY[d] || DIFF_LABEL_KEY.normal);
-    const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel).join(' · '));
+    // Computer speed lives in this row (2026-09-28): it is about the same computers, and a
+    // row of its own would have cost the setup screen height it was cut down to fit.
+    const diffValue = esc(s.aiDifficulty.slice(0, s.count - 1).map(diffLabel)
+      .concat(s.pace !== 'normal' ? [t('pace_value_' + s.pace)] : []).join(' · '));
     const diffContent = opponentNames.map((name, i) => `<div class="cc-diff-row">
       <span class="cc-diff-name">${esc(name)}</span>
       ${seg('set-aidiff', s.aiDifficulty[i] || 'normal', DIFFICULTIES.map(([v, k]) => [v, diffShapeSVG(tierOf(v)) + t(k)]), ' cc-seg-sm', ` data-i="${i}"`)}
-    </div>`).join('');
+    </div>`).join('') + `<div class="cc-diff-row">
+      <span class="cc-diff-name">${esc(t('label_pace'))}</span>
+      ${seg('set-pace', s.pace, PACES.map((k) => [k, esc(t('pace_' + k))]), ' cc-seg-sm')}
+    </div>`;
 
     // --- Card deck row: replaces the old floating deck button + gallery
     // "See all cards" nudge (M3a A3) -- deck choices are inline here, the
@@ -873,8 +889,12 @@ class ChinchonUI {
     if (this._dead) return;
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
     switch (type) {
-      case 'roundStart':
-        this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this._newCardId = null; this.render();
+      case 'roundStart': {
+        this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this._newCardId = null;
+        // The new hands render hidden, then fly out of the stock (below).
+        const dealing = this._flightsOn() ? new Set(this._human().hand.map((c) => c.id)) : null;
+        this._arriving = dealing;
+        try { this.render(); } finally { this._arriving = null; }
         // Host publishes the round it just built (deck order + dealer) before
         // any turn plays, so the guest can preset its own engine to match.
         // Read right here: lastDeckOrder was just set by startRound(), which
@@ -883,7 +903,12 @@ class ChinchonUI {
           try { await net.startRound(this.mp.code, this.game.round, this.game.lastDeckOrder, this.game.dealerIndex); }
           catch { this._setMpStatus('mp_status_connection_error'); }
         }
+        if (dealing) {
+          const dealt = this._animateDeal(dealing);
+          if (!this.mp) await dealt;   // solo: the first turn waits for the deal; online never waits on a flight
+        }
         break;
+      }
       case 'turnStart':
         this.activePlayerId = payload.playerId; this.render();
         // Guest only: the engine is about to check tryResetStock() (right
@@ -893,7 +918,7 @@ class ChinchonUI {
         // config.presetStockResets already populated instead of falling
         // through to a local (non-deterministic) shuffle.
         if (this.mp && !this.mp.isHost) await this._mpAwaitStockReset();
-        if (p && !p.isHuman) await this.beat(BEAT_TURN);
+        if (p && !p.isHuman) await this.beat(this._paceMs(BEAT_TURN, p));
         break;
       case 'turnEnd':
         // Solo mid-round autosave (batch C, HANDOFF-FB3-SETTINGS-RESUME): game.js's
@@ -910,21 +935,30 @@ class ChinchonUI {
         // round) still restores instead of dropping back to a fresh deal.
         if (!this.mp) this._soloSaveSnapshot();
         break;
-      case 'draw':
+      case 'draw': {
         if (p && p.isHuman) this._newCardId = payload.card.id;
-        this.render();
+        // Card travel: where it comes from is read BEFORE the redraw (the discard's top
+        // node is replaced by the render); where it lands, after.
+        const from = this._drawSource(payload.source);
+        if (p && p.isHuman && from) this._arriving = new Set([payload.card.id]);
+        try { this.render(); } finally { this._arriving = null; }
+        const flown = from ? this._flyDraw(p, payload, from) : Promise.resolve();
         if (this.mp) await this._mpAfterDecision(p, { t: 'draw', src: payload.source });
-        if (p && !p.isHuman) { this.toast(payload.source === 'discard' ? t('toast_drew_discard', { name: p.name }) : t('toast_drew_deck', { name: p.name })); await this.beat(BEAT_DRAW); }
+        if (p && !p.isHuman) { this.toast(payload.source === 'discard' ? t('toast_drew_discard', { name: p.name }) : t('toast_drew_deck', { name: p.name })); await Promise.all([this.beat(this._paceMs(BEAT_DRAW, p)), flown]); }
         break;
-      case 'discard':
+      }
+      case 'discard': {
         if (p && p.isHuman) this._newCardId = null;
+        const from = this._discardSource(p, payload.card);
         this.render();
+        const flown = from ? this._flyDiscard(payload.card, from) : Promise.resolve();
         if (this.mp) await this._mpAfterDecision(p, { t: 'discard', cardId: payload.card.id });
-        if (p && !p.isHuman) await this.beat(BEAT_DISCARD);
+        if (p && !p.isHuman) await Promise.all([this.beat(this._paceMs(BEAT_DISCARD, p)), flown]);
         break;
+      }
       case 'close':
         if (this.mp) await this._mpAfterDecision(p, { t: 'close', kind: true });
-        this.toast(t('toast_closed_round', { name: p.name })); this.render(); await this.beat(BEAT_CLOSE);
+        this.toast(t('toast_closed_round', { name: p.name })); this.render(); await this.beat(this._paceMs(BEAT_CLOSE, p));
         break;
       case 'reset':
         this.toast(t('toast_deck_reshuffled')); this.render();
@@ -975,6 +1009,137 @@ class ChinchonUI {
   beat(ms) {
     const scaled = this.mp && this.mp.replayMode ? ms * 0.25 : ms;
     return new Promise((resolve) => { this._beatTimer = setTimeout(resolve, scaled); });
+  }
+
+  /** A computer's beat in a solo match, scaled by the chosen Computer speed. Online,
+   *  every seat is a person, so nothing is scaled. */
+  _paceMs(ms, p) {
+    if (this.mp || !p || p.isHuman) return ms;
+    return Math.round(ms * (PACE_MULT[this._setup.pace] || 1));
+  }
+
+  // --- card travel (2026-09-28) -------------------------------------------------
+  // Draws, discards and the deal used to be instant redraws: a card simply appeared in
+  // a hand or on the pile, and a computer's move registered only as a toast. Now each
+  // one flies from where it was to where it lands, as a copy in the fixed .cc-flight
+  // layer; the real card stays hidden until the copy arrives. Nothing here touches the
+  // engine, the save or the online protocol; a flight never resolves once the module
+  // is torn down (same as beat()), and a rejoining guest's fast replay skips them.
+
+  _flightsOn() {
+    return !this._dead && !!this.el.flight && typeof Element.prototype.animate === 'function'
+      && !(this.mp && this.mp.replayMode);
+  }
+
+  /** Fly a copy of `visual` (an element) from rect `from` to rect `to`; resolves on landing. */
+  _fly(visual, from, to, { delay = 0, duration = FLY_MS } = {}) {
+    if (!this._flightsOn() || !visual || !from || !to || !from.width || !to.width) return Promise.resolve();
+    const layer = this.el.flight;
+    const box = layer.getBoundingClientRect();
+    visual.removeAttribute('data-action');
+    visual.removeAttribute('data-drag');
+    visual.classList.remove('is-selected', 'is-new', 'is-dimmed');
+    visual.style.visibility = '';
+    Object.assign(visual.style, { left: `${from.left - box.left}px`, top: `${from.top - box.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+    layer.appendChild(visual);
+    return new Promise((resolve) => {
+      let done = false;
+      const end = () => { if (done) return; done = true; visual.remove(); if (!this._dead) resolve(); };
+      try {
+        const a = visual.animate([
+          { transform: 'translate(0,0) scale(1,1)' },
+          { transform: `translate(${to.left - from.left}px,${to.top - from.top}px) scale(${to.width / from.width},${to.height / from.height})` },
+        ], { duration, delay, easing: 'cubic-bezier(.25,.8,.35,1)', fill: 'both' });
+        a.onfinish = end; a.oncancel = end;
+      } catch { end(); return; }
+      setTimeout(end, duration + delay + 400);   // a backgrounded tab can drop the event
+    });
+  }
+
+  /** A small card-sized rect on player `pid`'s pill (their face-down hand). */
+  _pillRect(pid, like) {
+    const pill = this.el.opponents.querySelector(`.cc-opp-pill[data-pid="${pid}"]`);
+    if (!pill) return null;
+    const r = (pill.querySelector('.cc-opp-hand') || pill).getBoundingClientRect();
+    if (!r.width) return null;
+    const w = 14, h = like && like.width ? w * (like.height / like.width) : 21;
+    return { left: r.left + r.width / 2 - w / 2, top: r.top + r.height / 2 - h / 2, width: w, height: h };
+  }
+
+  _backNode() { return this._cardNode({}, { faceDown: true, static: true }); }
+
+  /** Where a draw comes from, read before the render: the stock's back, or the discard's
+   *  top card (a copy, since the render replaces that node). */
+  _drawSource(source) {
+    if (!this._flightsOn() || !this._pilesEl) return null;
+    const el = source === 'discard' ? this._pilesEl.discard.querySelector('.cc-card') : this._pilesEl.stock.querySelector('.cc-card');
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return rect.width ? { rect, node: el.cloneNode(true) } : null;
+  }
+
+  _flyDraw(p, payload, from) {
+    if (p && p.isHuman) {
+      const el = this.el.hand.querySelector(`.cc-card[data-drag="${payload.card.id}"]`);
+      if (!el) return Promise.resolve();
+      // From the stock it leaves as a back and turns face up as it lands.
+      return this._fly(from.node, from.rect, el.getBoundingClientRect()).then(() => { el.style.visibility = ''; });
+    }
+    // Into someone else's hand: a card taken off the discard was public, so it travels
+    // face up; one from the stock travels face down.
+    const vis = payload.source === 'discard' ? from.node : this._backNode();
+    return this._fly(vis, from.rect, this._pillRect(p && p.id, from.rect));
+  }
+
+  /** Where a discard comes from, read before the render: your hand card, or their pill. */
+  _discardSource(p, card) {
+    if (!this._flightsOn()) return null;
+    if (p && p.isHuman) {
+      const el = this.el.hand.querySelector(`.cc-card[data-drag="${card.id}"]`);
+      const rect = el && el.getBoundingClientRect();
+      return rect && rect.width ? { rect } : null;
+    }
+    const top = this._pilesEl && this._pilesEl.discard.querySelector('.cc-card');
+    const rect = this._pillRect(p && p.id, top && top.getBoundingClientRect());
+    return rect ? { rect } : null;
+  }
+
+  _flyDiscard(card, from) {
+    const dest = this._pilesEl && this._pilesEl.discard.querySelector('.cc-card');
+    if (!dest) return Promise.resolve();
+    dest.style.visibility = 'hidden';
+    return this._fly(this._cardNode(card, { static: true }), from.rect, dest.getBoundingClientRect())
+      .then(() => { dest.style.visibility = ''; });
+  }
+
+  /** The deal: your cards (already rendered, hidden) and everyone else's fly out of the
+   *  stock one at a time, round the table. Every hidden card is shown however it ends. */
+  _animateDeal(ids) {
+    const handEls = [...this.el.hand.querySelectorAll('.cc-card[data-drag]')].filter((el) => ids.has(el.dataset.drag));
+    const reveal = () => handEls.forEach((el) => { el.style.visibility = ''; });
+    const stock = this._pilesEl && this._pilesEl.stock.querySelector('.cc-card');
+    const from = stock && stock.getBoundingClientRect();
+    if (!from || !from.width) { reveal(); return Promise.resolve(); }
+    const g = this.game;
+    const n = g.players.length;
+    const flights = [];
+    let k = 0;
+    const mine = handEls.slice();
+    const passes = Math.max(0, ...g.players.map((pl) => pl.hand.length));
+    for (let pass = 0; pass < passes; pass++) {
+      for (let o = 1; o <= n; o++) {
+        const pl = g.players[(g.dealerIndex + o) % n];
+        if (pass >= pl.hand.length) continue;
+        const delay = (k++) * FLY_DEAL_GAP_MS;
+        if (pl.isHuman) {
+          const el = mine.shift();
+          if (el) flights.push(this._fly(this._backNode(), from, el.getBoundingClientRect(), { delay }).then(() => { el.style.visibility = ''; }));
+        } else {
+          flights.push(this._fly(this._backNode(), from, this._pillRect(pl.id, from), { delay }));
+        }
+      }
+    }
+    return Promise.all(flights).then(reveal, reveal);
   }
 
   _commitStats() {
@@ -1057,10 +1222,14 @@ class ChinchonUI {
   renderOpponents() {
     return this.game.players.filter((p) => !p.isHuman).map((p) => {
       const active = p.id === this.activePlayerId;
-      return `<span class="cc-opp-pill ${active ? 'is-active' : ''}">
+      // Their hand, face down (2026-09-28): a few overlapped backs + the exact count, so
+      // a draw or discard has somewhere to fly to and from.
+      const n = p.hand.length;
+      return `<span class="cc-opp-pill ${active ? 'is-active' : ''}" data-pid="${p.id}">
         <span class="cc-opp-av">${p.avatar}</span>
         <span class="cc-opp-name">${esc(p.name)}</span>
         <span class="cc-opp-score">${p.totalScore}</span>
+        <span class="cc-opp-hand" aria-hidden="true">${'<i></i>'.repeat(Math.min(n, 4))}<em>${n}</em></span>
       </span>`;
     }).join('');
   }
@@ -1216,6 +1385,7 @@ class ChinchonUI {
       let el = byId.get(c.id);
       if (!el) el = this._cardNode(c, { draggable: true });
       byId.delete(c.id);
+      if (this._arriving && this._arriving.has(c.id)) el.style.visibility = 'hidden';   // revealed when its flight lands
       el.classList.toggle('is-selected', c.id === this._selectedCardId);
       el.classList.toggle('is-new', c.id === this._newCardId);
       for (const mc of MELD_CLASSES) el.classList.remove(mc);
@@ -1613,6 +1783,7 @@ class ChinchonUI {
     const pend = this._pending;
     switch (act) {
       // setup
+      case 'set-pace': this.syncSetupInputs(); if (PACES.includes(a.dataset.v)) this._setup.pace = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'set-count': this.syncSetupInputs(); this._setup.count = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'open-avatar': this.syncSetupInputs(); this._openAvatarPicker(); break;
       case 'pick-avatar': this._setup.humanAvatar = a.dataset.v; this._saveSetup(); this._closeAvatarPicker(); this.renderSetup(); break;

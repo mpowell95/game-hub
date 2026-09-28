@@ -420,3 +420,31 @@ row worse to fix a problem that had cheaper answers.
 **This says nothing about `.cc-game`**, which is a separate screen and still measures over in the
 hub - see `test-visual.mjs`'s known gaps. That one really is the hand and the mat, and it really
 does need a card-size pass with eyes on screenshots.
+
+## Computer speed, face-down hands and card travel (2026-09-28)
+
+Matt: *"chinchon next, same approach"* (as Texas Hold'em, Monopoly Deal and Uno that day).
+
+- **Computer speed**: Slow / Normal / Fast, `pace` in `chinchon-settings` (additive; absent =
+  Normal, the original pace). It lives INSIDE the Difficulty row (a "Speed" line under the
+  per-opponent pickers, and "fast/slow computers" appended to the row's summary when not Normal):
+  the setup screen was cut to fit a phone on 2026-09-08 and a row of its own would have cost that
+  height. `_paceMs(ms, p)` scales only a computer's beats (turn, draw, discard, close) and only in
+  SOLO - online every seat is a person and nothing is scaled.
+- **Opponents' hands face down**: each pill carries `.cc-opp-hand` (up to 4 overlapped backs plus
+  the exact count) and `data-pid`. The pill used to have no card count on purpose; it now has one
+  because a draw needs somewhere to land.
+- **Card travel** (`_fly` and friends, fixed `.cc-flight` layer, z-index 110 under every modal):
+  a draw flies from the stock (as a back, turning face up as it lands in your hand) or from the
+  discard (face up - it was public) into your hand or the drawer's pill; a discard flies from your
+  hand card or the discarder's pill onto the pile; a round's deal flies every card out of the stock
+  round the table. The start point is read BEFORE the render (the render replaces the discard's top
+  node), the landing card stays hidden until its copy arrives, and the render hides new hand cards
+  through `this._arriving`. A computer's draw/discard awaits the flight together with its beat
+  (`Promise.all`, so no slower at Normal); the SOLO first turn waits for the deal, an online match
+  never waits on a flight; a rejoining guest's `replayMode` skips them. No engine, save or protocol
+  change - `test-mp-lockstep.mjs` mirrors the glue and is unaffected.
+- Verified in Chromium: full matches at Fast with 4 players and Normal with 2 (your side played by
+  the test), nothing left hidden at rest, no errors; `chinchon/js/test.js`,
+  `test-mp-lockstep.mjs`, `test-i18n-strings.mjs`, `test-game-conventions.mjs`,
+  `check-no-scroll.mjs chinchon`. Not yet by eye on a phone, and not yet in a real online match.
