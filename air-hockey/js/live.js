@@ -1,5 +1,5 @@
 // air-hockey/js/live.js - real-time play over Firebase (brief §5). Stage 3 (2026-09-27) built it
-// as the LATENCY TEST (net-test.html); stage 4's live mode is meant to run on this same session.
+// for the LATENCY TEST (net-test.html); stage 4 (2026-09-28) plays real matches on it (ui.js).
 //
 // Nothing else in this repo is real-time: js/net.js sends a lockstep move log for turn games. So
 // this stays inside air-hockey/ (the brief: no real-time layer in js/net.js without Matt's okay).
@@ -26,9 +26,9 @@
 // own frame (itself at the bottom, mallets[0]); the guest turns the table 180 degrees both ways.
 
 import { getStatsApp } from '../../js/firebase-boot.js';
-import { TABLE, createMatch, advance, clampTarget } from './physics.js';
+import { TABLE, PHYS, createMatch, resetMatch, advance, clampTarget } from './physics.js';
 
-const { W, H, PUCK_R } = TABLE;
+const { W, H } = TABLE;
 export const SEND_HZ = 20;
 const PING_EVERY_MS = 500;
 const RING = 128;
@@ -70,7 +70,17 @@ export async function openChannel(code, side, onPeer) {
 }
 
 /** One online match on this phone. `match` is a physics.js match in THIS phone's frame; the caller
- *  moves match.mallets[0] (finger or robot) and calls frame(dt) once per rendered frame. */
+ *  moves match.mallets[0] (finger or robot) and calls frame(dt, now) once per rendered frame.
+ *
+ *  ROUNDS (stage 4): a rematch is a new ROUND (`rd`). Each phone asks for round rd + 1 in its own
+ *  messages (`r`); a phone starts it only once it has asked AND seen the other ask, so both start
+ *  the same round from the same rule: the LOSER of the last match serves. Puck and score fields
+ *  from another round are ignored, and the counters `h` and `g` never go back down.
+ *
+ *  hooks: onGoal(scorer)   scorer 0 = me, 1 = them; the score is already updated
+ *         onOver(winner)   the first time this round reaches WIN on this phone
+ *         onRound()        a new round has started (after a rematch)
+ */
 export function createLiveSession(match, side, channel, hooks = {}) {
   const other = 1 - side;
   const flip = side === 1;
@@ -82,7 +92,11 @@ export function createLiveSession(match, side, channel, hooks = {}) {
   ghost.phase = 'play';
   const out = {};                                  // reused outgoing message (no per-send allocation)
   const S = {
-    own: side === 0,                               // the host serves first
+    own: side === 0,                               // the host serves the first round
+    rd: 1,                                         // round (a rematch is the next round)
+    want: 0,                                       // the round I have asked for (rematch)
+    peerWant: 0,
+    overSent: false,
     h: 0,                                          // handoff counter (shared, only goes up)
     g: 0,                                          // goal counter (shared, only goes up)
     q: 0,
@@ -94,7 +108,7 @@ export function createLiveSession(match, side, channel, hooks = {}) {
     echoId: -1, echoAt: 0,
     rttEst: 150,                                   // ms, smoothed; used for prediction until measured
     cx: 0, cy: 0,                                  // display correction offset, decays to 0
-    peerLive: 1,
+    peerLive: 0,                                   // is the puck on their screen (0 until told)
     handoffs: 0,
     // The puck as I handed it over (shared frame) and when, kept and RE-SENT on every message
     // until the other phone's messages show it took it. A single handoff message can be
@@ -104,12 +118,14 @@ export function createLiveSession(match, side, channel, hooks = {}) {
   };
   const stats = { rtt: ring(), gap: ring(), jump: ring(), msgs: 0, takeovers: 0 };
   match.puckRemote = !S.own;
+  if (!S.own) match.puck.live = false;
 
   function oneWay() { return Math.min(0.25, S.rttEst / 2000); }
 
   function send(now) {
     const m = match.mallets[0], p = match.puck;
     out.q = ++S.q;
+    out.rd = S.rd; out.r = S.want;
     out.mx = X(m.x); out.my = Y(m.y); out.mvx = V(m.vx); out.mvy = V(m.vy);
     out.o = S.own ? side : other;
     out.h = S.h;
@@ -126,7 +142,7 @@ export function createLiveSession(match, side, channel, hooks = {}) {
     S.lastSend = now;
   }
 
-  /** Put a received (shared-frame) puck state into `dst`, local frame, stepped `ahead` seconds. */
+  /** Put a received (shared-frame) puck state into `dst`, local frame. */
   function puckFrom(msg, dst) {
     dst.puck.x = X(msg.px); dst.puck.y = Y(msg.py);
     dst.puck.vx = V(msg.pvx); dst.puck.vy = V(msg.pvy);
@@ -141,9 +157,32 @@ export function createLiveSession(match, side, channel, hooks = {}) {
   function stepGhost(dt) {
     syncGhostMallets();
     ghost.phase = 'play'; ghost.puckRemote = false; ghost.acc = 0;
-    // Tiny fixed-count stepping keeps the ghost deterministic enough; its goals mean nothing.
-    advance(ghost, dt);
+    ghost.ev.hit = 0; ghost.ev.wall = 0;
+    advance(ghost, dt);                             // the ghost's own goals mean nothing
     ghost.score[0] = ghost.score[1] = 0;
+  }
+
+  function checkOver() {
+    if (S.overSent) return;
+    const [a, b] = match.score;
+    if (a >= PHYS.WIN || b >= PHYS.WIN) {
+      S.overSent = true;
+      match.phase = 'over'; match.winner = a >= PHYS.WIN ? 0 : 1; match.puck.live = false;
+      if (hooks.onOver) hooks.onOver(match.winner);
+    }
+  }
+
+  /** Both phones have asked for the next round: start it. The loser of the last one serves. */
+  function startRound(now) {
+    const server = match.winner === 0 ? other : side;   // shared side of the loser
+    S.rd++; S.overSent = false;
+    resetMatch(match, server === side ? 0 : 1);
+    S.own = server === side;
+    match.puckRemote = !S.own;
+    if (!S.own) match.puck.live = false;
+    S.hAt = 0; S.cx = S.cy = 0; S.peerLive = 0;
+    if (hooks.onRound) hooks.onRound();
+    send(now);
   }
 
   function onPeer(msg, now) {
@@ -166,6 +205,12 @@ export function createLiveSession(match, side, channel, hooks = {}) {
     const ahead = oneWay();
     const rm = match.mallets[1];
     clampTarget(rm, X(msg.mx) + V(msg.mvx) * ahead, Y(msg.my) + V(msg.mvy) * ahead);
+    if (msg.h > S.h) S.h = msg.h;
+
+    // Rematch handshake.
+    S.peerWant = msg.r | 0;
+    if (match.phase === 'over' && S.want === S.rd + 1 && S.peerWant === S.rd + 1) { startRound(now); return; }
+    if ((msg.rd | 0) !== S.rd) return;             // anything else from another round is stale
 
     // Score: only ever moves forward, and only from the goal counter.
     if (msg.g > S.g) {
@@ -173,81 +218,99 @@ export function createLiveSession(match, side, channel, hooks = {}) {
       match.score[0] = side === 0 ? msg.s0 : msg.s1;
       match.score[1] = side === 0 ? msg.s1 : msg.s0;
       if (hooks.onGoal) hooks.onGoal(0);           // they were scored on: I scored
+      checkOver();
     }
 
     // They have my handover: stop re-sending it.
     if (S.hAt && msg.o === other && msg.h >= S.h) S.hAt = 0;
 
-    // The puck.
-    if (msg.h > S.h) S.h = msg.h;
-    if (!S.own && msg.o === side && msg.h >= S.h && msg.px != null) {
-      {
-        // Handed to me. Start from their handover state, stepped forward by how old it was when
-        // they sent it plus half the round trip.
-        const shownX = match.puck.x, shownY = match.puck.y;
-        puckFrom(msg, ghost); stepGhost(Math.min(0.5, ahead + (msg.ha || 0) / 1000));
+    if (!S.own && msg.o === side && msg.h >= S.h && msg.px != null && match.phase !== 'over') {
+      // Handed to me. Their handover state, stepped forward by how old it was when they sent it
+      // plus half the round trip...
+      const gx = match.puck.x, gy = match.puck.y, shown = match.puck.live;
+      puckFrom(msg, ghost); stepGhost(Math.min(0.5, ahead + (msg.ha || 0) / 1000));
+      const d = Math.hypot(ghost.puck.x - gx, ghost.puck.y - gy);
+      // ...unless the puck I have been SHOWING is close to it: then carry on from what the player
+      // saw (no jump at all). My ghost has run the same table physics from their states, so near
+      // agreement is the normal case; a big gap means their mallet hit it before it crossed.
+      if (!(shown && d < 90)) {
         match.puck.x = ghost.puck.x; match.puck.y = ghost.puck.y;
-        match.puck.vx = ghost.puck.vx; match.puck.vy = ghost.puck.vy; match.puck.live = true;
-        match.stuckHalf = -1; match.stuckT = 0;
-        stats.jump.push(Math.hypot(match.puck.x - shownX, match.puck.y - shownY));
-        stats.takeovers++;
-        S.cx = S.cy = 0;
-        S.own = true; match.puckRemote = false;
-        send(now);
-        return;
+        match.puck.vx = ghost.puck.vx; match.puck.vy = ghost.puck.vy;
       }
+      stats.jump.push(shown && d < 90 ? 0 : d);
+      match.puck.live = true;
+      match.stuckHalf = -1; match.stuckT = 0;
+      stats.takeovers++;
+      S.cx = S.cy = 0;
+      S.own = true; match.puckRemote = false;
+      send(now);
+      return;
     }
     if (!S.own && msg.px != null) {
       // Keep the ghost on their authoritative state; fold the jump into a decaying offset.
+      const wasLive = S.peerLive && ghost.puck.live;
       const oldX = ghost.puck.x + S.cx, oldY = ghost.puck.y + S.cy;
       puckFrom(msg, ghost); stepGhost(ahead);
       S.cx = oldX - ghost.puck.x; S.cy = oldY - ghost.puck.y;
-      if (Math.hypot(S.cx, S.cy) > 120) S.cx = S.cy = 0;   // a serve or a reset: jump, don't glide
+      if (!wasLive || Math.hypot(S.cx, S.cy) > 120) S.cx = S.cy = 0;   // a serve or a reset: jump
       S.peerLive = msg.pl;
     }
   }
 
-  function frame(dt, now) {
-    if (S.own) {
-      match.puckRemote = false;
-      match.ev.goal = -1;
-      advance(match, dt);
-      if (match.ev.goal === 1) {
-        // Scored on: this phone decides it. physics.js already added the point and will serve
-        // to me after the pause (the scored-on player serves), so I stay the owner.
-        S.g++;
-        if (hooks.onGoal) hooks.onGoal(1);
-        send(now);
-      } else if (match.puck.live && match.phase === 'play' && match.puck.y < H / 2) {
-        // Crossed into their half: hand it over and stop simulating it.
-        const p = match.puck;
-        S.hx = X(p.x); S.hy = Y(p.y); S.hvx = V(p.vx); S.hvy = V(p.vy); S.hAt = now;
-        S.own = false; S.h++; S.handoffs++;
-        send(now);
-        ghost.puck.x = match.puck.x; ghost.puck.y = match.puck.y;
-        ghost.puck.vx = match.puck.vx; ghost.puck.vy = match.puck.vy; ghost.puck.live = true;
-        S.cx = S.cy = 0;
+  /** One rendered frame. `frozen` (the other phone has gone quiet): send only, move nothing. */
+  function frame(dt, now, frozen) {
+    if (!frozen && match.phase !== 'over') {
+      if (S.own) {
+        match.puckRemote = false;
+        match.ev.goal = -1;
+        advance(match, dt);
+        if (match.ev.goal === 1) {
+          // Scored on: this phone decides it. physics.js already added the point and serves to
+          // me after the pause (the scored-on player serves), so I stay the owner.
+          S.g++;
+          if (hooks.onGoal) hooks.onGoal(1);
+          send(now);
+          checkOver();
+        } else if (match.puck.live && match.phase === 'play' && match.puck.y < H / 2) {
+          // Crossed into their half: hand it over and stop simulating it.
+          const p = match.puck;
+          S.hx = X(p.x); S.hy = Y(p.y); S.hvx = V(p.vx); S.hvy = V(p.vy); S.hAt = now;
+          S.own = false; S.h++; S.handoffs++;
+          S.peerLive = 1;
+          send(now);
+          ghost.puck.x = p.x; ghost.puck.y = p.y; ghost.puck.vx = p.vx; ghost.puck.vy = p.vy; ghost.puck.live = true;
+          S.cx = S.cy = 0;
+          match.puckRemote = true;
+        }
+      } else {
         match.puckRemote = true;
+        advance(match, dt);                         // mallets only
+        if (S.peerLive) {
+          stepGhost(dt);
+          if (ghost.ev.hit > match.ev.hit) match.ev.hit = ghost.ev.hit;     // their hits still clack
+          if (ghost.ev.wall > match.ev.wall) match.ev.wall = ghost.ev.wall;
+        }
+        const k = Math.exp(-dt / 0.1);
+        S.cx *= k; S.cy *= k;
+        match.puck.x = ghost.puck.x + S.cx; match.puck.y = ghost.puck.y + S.cy;
+        match.puck.vx = ghost.puck.vx; match.puck.vy = ghost.puck.vy;
+        match.puck.live = !!S.peerLive && ghost.puck.live;
+        // No clamp at the centre line: the ghost carries on into my half so the puck never
+        // pauses there waiting for the handover; the takeover then continues from it.
       }
-    } else {
-      match.puckRemote = true;
-      advance(match, dt);                           // mallets only
-      if (S.peerLive !== 0) stepGhost(dt);
-      const k = Math.exp(-dt / 0.1);
-      S.cx *= k; S.cy *= k;
-      match.puck.x = ghost.puck.x + S.cx; match.puck.y = ghost.puck.y + S.cy;
-      match.puck.vx = ghost.puck.vx; match.puck.vy = ghost.puck.vy;
-      match.puck.live = S.peerLive !== 0 && ghost.puck.live;
-      // The ghost must never be shown in MY half: until they hand it over, it is theirs.
-      if (match.puck.y > H / 2 - PUCK_R * 0.2) match.puck.y = H / 2 - PUCK_R * 0.2;
     }
     if (now - S.lastSend >= 1000 / SEND_HZ) send(now);
   }
 
   return {
     onPeer, frame, stats,
+    /** Ask for a rematch (the next round). It starts when both phones have asked. */
+    rematch(now) { S.want = S.rd + 1; send(now); if (S.peerWant === S.want && match.phase === 'over') startRound(now); },
+    get peerWantsRematch() { return match.phase === 'over' && S.peerWant === S.rd + 1; },
+    get wantsRematch() { return S.want === S.rd + 1; },
     get owns() { return S.own; },
     get handoffs() { return S.handoffs; },
+    get heard() { return S.peerSeen; },
     get sinceHeard() { return S.peerSeen ? performance.now() - S.lastRecv : Infinity; },
   };
 }

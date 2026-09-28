@@ -152,6 +152,23 @@
   white-space: nowrap; margin: -1px; padding: 0; border: 0;
 }
 
+.ah-root.is-online .ah-pause { visibility: hidden; }
+.ah-root .ah-opp { display: inline-block; max-width: 8em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+
+/* ------------------------------------------------------------------- online --- */
+.ah-root .ah-joinrow { display: flex; gap: 8px; }
+.ah-root .ah-code {
+  flex: 1 1 auto; min-width: 0; min-height: 44px; font-size: 18px; /* >= 16px or iOS zooms on focus */
+  text-align: center; text-transform: uppercase; letter-spacing: 0.2em; font-weight: 800;
+}
+.ah-root .ah-joinrow .gh-btn { flex: 0 0 auto; }
+.ah-root .ah-bigcode { margin: 4px 0 6px; font-size: 44px; font-weight: 900; letter-spacing: 0.18em; font-variant-numeric: tabular-nums; user-select: text; -webkit-user-select: text; }
+.ah-root .ah-err { margin: 10px 0 0; min-height: 1.3em; font-size: 14px; font-weight: 700; color: var(--ah-cpu); }
+.ah-root .ah-err:empty { min-height: 0; margin: 0; }
+.ah-root .ah-note { margin: -6px 0 12px; font-size: 14px; font-weight: 700; color: var(--ah-you); }
+/* "Waiting for <name>": the frozen table stays visible under a light veil. */
+.ah-root .ah-ov-soft { background: rgba(9, 16, 28, 0.2); }
+
 @media (prefers-reduced-motion: reduce) {
   .ah-root .ah-banner.is-pop { animation: none; }
 }

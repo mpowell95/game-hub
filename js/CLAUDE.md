@@ -829,6 +829,16 @@ so pk/hole/* is readable from developer tools.** Proven in three browser profile
 RTDB stand-in (the cloud sandbox cannot open Firebase's WebSocket); real Firebase on real phones is
 unverified.
 
+### The thirteenth consumer: Air Hockey (2026-09-28) - real-time, not lockstep
+
+Full write-up: `air-hockey/CLAUDE.md`, "Online play". `js/net.js` was NOT touched: it provides the
+lobby only (createRoom / joinRoom / heartbeat / leaveRoom, room game `'airhockey'`). The match is
+the repo's first REAL-TIME protocol, `air-hockey/js/live.js`: each phone overwrites
+`rooms/<CODE>/ah/s<side>` ~20 times a second; whoever's half the puck is in owns and simulates it;
+the scored-on phone decides each goal (a goal counter that only goes up); rematch is a round
+handshake. Proven headlessly over a fake delayed/lossy network (`air-hockey/js/test.js` section 6)
+and in two browser profiles against real Firebase over long-polling; real phones unverified.
+
 ---
 
 ## Report a bug (2026-08-11)

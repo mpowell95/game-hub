@@ -3,7 +3,14 @@
 //
 // Stage 2 (2026-09-27): setup screen (Easy / Medium / Hard), how to play, and the result recorded
 // with recordResult('airhockey', difficulty, won) when a match ENDS. A match left before 7 records
-// nothing (it was neither won nor lost). Online play is stages 3-4 (docs/AIR-HOCKEY-BRIEF.md).
+// nothing (it was neither won nor lost).
+//
+// Stage 4 (2026-09-28): PLAY ONLINE. Lobby = js/net.js (create / join by code / heartbeat /
+// leave, room game id 'airhockey'); the match itself runs on js/live.js (rooms/<CODE>/ah/). An
+// online result records as recordResult('airhockey', 'mp', won). A quiet peer (no message for 3 s)
+// freezes the table under "Waiting for <name>..."; after 30 s "End match" appears (no result). A
+// peer who leaves (room status 'ended') ends it for both, no result. Leaving (Back, hub back,
+// closing the game) calls leaveRoom, which is what tells the other phone.
 //
 // isInProgress(): the LITERAL meaning (no mid-game resume, Hoops' / Snake's class): true while a
 // match is under way (playing, between goals, or paused). Nothing is persisted mid-match.
@@ -18,6 +25,8 @@ import { onViewportResize } from '../../js/viewport.js';
 import { recordResult, loadStats } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
+import { deviceId } from '../../js/game-stats.js';
+import { getStatsApp } from '../../js/firebase-boot.js';
 
 const t = makeT(STRINGS);
 const { H } = TABLE;
@@ -48,6 +57,10 @@ function recordVs(diff) {
     return { won: b.won | 0, lost: b.lost | 0 };
   } catch { return { won: 0, lost: 0 }; }
 }
+const QUIET_MS = 3000;       // no message from the other phone for this long: freeze and wait
+const GIVE_UP_MS = 30000;    // ...and after this long, offer "End match"
+const ROOM_GAME = 'airhockey';
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /** How to play: the diagram carries the one non-obvious part - your mallet stays in YOUR half and
@@ -125,6 +138,7 @@ class AirHockeyUI {
     this.flash = 0;
     this.goalT = 0;
     this.drag = { id: null };
+    this.online = null;          // { code, side, role, oppName, session, channel, net, ... } while online
     this.reduceMQ = matchMedia('(prefers-reduced-motion: reduce)');
     this.reduce = this.reduceMQ.matches;
     this._onReduce = (e) => { this.reduce = e.matches; };
@@ -136,10 +150,16 @@ class AirHockeyUI {
 
     this._onKey = (e) => {
       if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        if (this.online) return;   // an online match cannot be paused
         if (this.screen === 'game') this._pause(); else if (this.screen === 'paused') this._resume();
       }
     };
-    this._onVis = () => { if (document.hidden) { if (this.screen === 'game') this._pause(); this._stop(); } };
+    // Solo: hiding the tab pauses. Online: nothing can pause the other phone, so the loop simply
+    // stops (it shows "Waiting for you" over there) and restarts when this phone comes back.
+    this._onVis = () => {
+      if (document.hidden) { if (this.screen === 'game' && !this.online) this._pause(); this._stop(); }
+      else if (this.online && (this.screen === 'game' || this.screen === 'wait' || this.screen === 'over')) this._start();
+    };
     document.addEventListener('keydown', this._onKey);
     document.addEventListener('visibilitychange', this._onVis);
     this._offResize = onViewportResize(() => this._layout());
@@ -176,7 +196,7 @@ class AirHockeyUI {
       <div class="ah-root">
         <div class="ah-hud">
           <p class="ah-score" data-role="score" aria-live="off">
-            <span class="ah-sc ah-sc-cpu">${SQ_SVG}<span data-l="cpu"></span><b data-role="s1">0</b></span>
+            <span class="ah-sc ah-sc-cpu">${SQ_SVG}<span class="ah-opp" data-role="oppName"></span><b data-role="s1">0</b></span>
             <span class="ah-sc ah-sc-you">${TRI_SVG}<span data-l="you"></span><b data-role="s0">0</b></span>
           </p>
           <button type="button" class="gh-btn gh-btn--icon ah-pause" data-act="pause" data-la="pause">${PAUSE_SVG}</button>
@@ -197,8 +217,46 @@ class AirHockeyUI {
             <p class="ah-rec" data-role="rec"></p>
             <div class="ah-actions">
               <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play"><span data-l="play"></span></button>
+              <button type="button" class="gh-btn gh-btn--block" data-act="online"><span data-l="play_online"></span></button>
               <button type="button" class="gh-btn gh-btn--block" data-act="howto"><span data-l="howto"></span></button>
             </div>
+          </div>
+        </div>
+
+        <div class="ah-ov" data-ov="online" hidden>
+          <div class="gh-modal ah-card" role="dialog" aria-modal="true">
+            <button type="button" class="gh-modal__close" data-act="onlineClose" data-la="aria_close">${X_SVG}</button>
+            <h2 class="ah-title ah-title-sm" data-l="play_online"></h2>
+            <div data-role="lobbyMain">
+              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="create"><span data-l="create_game"></span></button>
+              <p class="ah-label" data-l="or_join"></p>
+              <div class="ah-joinrow">
+                <input class="gh-input ah-code" data-role="codeIn" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" data-lp="code_ph">
+                <button type="button" class="gh-btn" data-act="join"><span data-l="join"></span></button>
+              </div>
+            </div>
+            <div data-role="lobbyWait" hidden>
+              <p class="ah-label" data-l="share_code"></p>
+              <p class="ah-bigcode" data-role="bigCode"></p>
+              <p class="ah-rec" data-l="waiting_join"></p>
+              <button type="button" class="gh-btn gh-btn--block" data-act="cancelRoom"><span data-l="cancel"></span></button>
+            </div>
+            <p class="ah-err" data-role="lobbyErr" role="alert"></p>
+            <p class="ah-rec" data-role="recOnline"></p>
+          </div>
+        </div>
+
+        <div class="ah-ov ah-ov-soft" data-ov="wait" hidden>
+          <div class="gh-modal ah-card">
+            <h2 class="ah-title ah-title-sm" data-role="waitTitle"></h2>
+            <button type="button" class="gh-btn gh-btn--block" data-act="endMatch" data-role="endMatch" hidden><span data-l="end_match"></span></button>
+          </div>
+        </div>
+
+        <div class="ah-ov" data-ov="left" hidden>
+          <div class="gh-modal ah-card">
+            <h2 class="ah-title ah-title-sm" data-role="leftTitle"></h2>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="leftBack"><span data-l="back"></span></button>
           </div>
         </div>
 
@@ -235,8 +293,9 @@ class AirHockeyUI {
             <h2 class="ah-title" data-role="overTitle"></h2>
             <p class="ah-final" data-role="overScore"></p>
             <p class="ah-rec" data-role="overRec"></p>
+            <p class="ah-note" data-role="overNote" hidden></p>
             <div class="ah-actions">
-              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="rematch"><span data-l="rematch"></span></button>
+              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="rematch"><span data-role="rematchLabel"></span></button>
               <button type="button" class="gh-btn gh-btn--block" data-act="back"><span data-l="back"></span></button>
             </div>
           </div>
@@ -275,8 +334,10 @@ class AirHockeyUI {
   _relabel() {
     this.root.querySelectorAll('[data-l]').forEach((el) => { el.textContent = t(el.dataset.l); });
     this.root.querySelectorAll('[data-la]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.la)); });
+    this.root.querySelectorAll('[data-lp]').forEach((el) => { el.setAttribute('placeholder', t(el.dataset.lp)); el.setAttribute('aria-label', t('code_label')); });
     this.canvas.setAttribute('aria-label', t('aria_canvas'));
     this.root.querySelector('[data-role="helpSvg"]').innerHTML = helpSVG();
+    this._syncOpp();
     const d = this.settings.difficulty;
     const row = this.root.querySelector('[data-role="diffs"]');
     row.setAttribute('aria-label', t('difficulty'));
@@ -289,8 +350,14 @@ class AirHockeyUI {
     if (this.screen === 'help') this._fitHelp();
   }
   _syncRec() {
-    const d = this.settings.difficulty, r = recordVs(d);
+    const d = this.settings.difficulty, r = recordVs(d), o = recordVs('mp');
     this.root.querySelector('[data-role="rec"]').textContent = t('rec_vs', { diff: t('diff_' + d), w: r.won, l: r.lost });
+    this.root.querySelector('[data-role="recOnline"]').textContent = t('rec_online', { w: o.won, l: o.lost });
+  }
+  /** The opponent's label in the score row: CPU, or the other player's name online. */
+  _syncOpp() {
+    this.root.querySelector('[data-role="oppName"]').textContent = this.online ? this.online.oppName : t('cpu');
+    if (this.screen === 'wait') this._fillWait();
   }
   /** Every help line on ONE row (docs/BUILDING-A-GAME.md, "How-to-play screens"): measure, and
    *  step the font down until it fits, never below the 11px floor. */
@@ -311,7 +378,8 @@ class AirHockeyUI {
 
   _showOnly(name) {
     for (const k of Object.keys(this.ov)) this.ov[k].hidden = k !== name;
-    this.root.classList.toggle('is-playing', name === null);
+    this.root.classList.toggle('is-playing', name === null || name === 'wait');
+    this.root.classList.toggle('is-online', !!this.online);
     const focus = name && this.ov[name].querySelector('.gh-btn--primary');
     if (focus) focus.focus({ preventScroll: true });
   }
@@ -355,6 +423,7 @@ class AirHockeyUI {
   _toMenu() {
     this._stop();
     this.screen = 'menu';
+    this._syncOpp();
     resetMatch(this.match, 0);
     this.banner.hidden = true;
     this._syncScore();
@@ -363,13 +432,13 @@ class AirHockeyUI {
     this._showOnly('menu');
   }
   _over() {
-    this._stop();
+    if (!this.online) this._stop();   // online, the loop keeps running: it carries the rematch handshake
     this.screen = 'over';
     this.banner.hidden = true;
     this.renderer.render(this.match, 0);
     // Recorded once, when the match ENDS at 7. Rule 6: a refused or failed write is said loudly.
     try {
-      const st = recordResult('airhockey', this.difficulty, this.match.winner === 0);
+      const st = recordResult('airhockey', this.online ? 'mp' : this.difficulty, this.match.winner === 0);
       if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[airhockey] recording the result failed', err); }
     this._fillOver();
@@ -377,17 +446,26 @@ class AirHockeyUI {
   }
   _fillOver() {
     const [a, b] = this.match.score;
-    const d = this.difficulty || this.settings.difficulty, r = recordVs(d);
-    this.root.querySelector('[data-role="overTitle"]').textContent = t(this.match.winner === 0 ? 'you_win' : 'cpu_wins');
-    this.root.querySelector('[data-role="overScore"]').textContent = `${a} - ${b}`;
-    this.root.querySelector('[data-role="overRec"]').textContent = t('rec_vs', { diff: t('diff_' + d), w: r.won, l: r.lost });
+    const q = (r) => this.root.querySelector(`[data-role="${r}"]`);
+    const on = this.online;
+    const d = on ? 'mp' : (this.difficulty || this.settings.difficulty), r = recordVs(d);
+    q('overTitle').textContent = this.match.winner === 0 ? t('you_win') : on ? t('name_wins', { name: on.oppName }) : t('cpu_wins');
+    q('overScore').textContent = `${a} - ${b}`;
+    q('overRec').textContent = on ? t('rec_online', { w: r.won, l: r.lost }) : t('rec_vs', { diff: t('diff_' + d), w: r.won, l: r.lost });
+    const asked = !!(on && on.session.wantsRematch);
+    q('rematchLabel').textContent = asked ? t('rematch_wait', { name: on.oppName }) : t('rematch');
+    q('rematchLabel').parentElement.disabled = asked;
+    const theyAsked = !!(on && on.session.peerWantsRematch && !asked);
+    q('overNote').hidden = !theyAsked;
+    q('overNote').textContent = theyAsked ? t('rematch_asked', { name: on.oppName }) : '';
   }
 
   _goal(scorer) {
     const [a, b] = this.match.score;
     this._syncScore();
     this.sound.goal(scorer === 0);
-    this.liveEl.textContent = t(scorer === 0 ? 'say_goal_you' : 'say_goal_cpu', { a, b });
+    this.liveEl.textContent = scorer === 0 ? t('say_goal_you', { a, b })
+      : this.online ? t('say_goal_opp', { name: this.online.oppName, a, b }) : t('say_goal_cpu', { a, b });
     if (this.match.phase === 'over') return;
     this.banner.textContent = t('goal');
     this.banner.classList.toggle('is-cpu', scorer === 1);
@@ -413,10 +491,18 @@ class AirHockeyUI {
     if (!b) return;
     const act = b.dataset.act;
     this.sound.unlock();
-    if (act === 'play' || act === 'rematch') { saveSettings(this.settings); this._play(); }
+    if (act === 'rematch' && this.online) { this.online.session.rematch(performance.now()); this._fillOver(); }
+    else if (act === 'play' || act === 'rematch') { saveSettings(this.settings); this._play(); }
+    else if (act === 'online') this._openOnline();
+    else if (act === 'onlineClose') { this._cancelRoom(); this._toMenu(); }
+    else if (act === 'create') this._createRoom();
+    else if (act === 'join') this._joinRoom();
+    else if (act === 'cancelRoom') this._cancelRoom();
+    else if (act === 'endMatch' || act === 'leftBack') { this._leaveOnline(); this._toMenu(); }
+    else if (act === 'back' && this.online) { this._leaveOnline(); this._toMenu(); }
     else if (act === 'howto') { this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
     else if (act === 'helpClose') { this.screen = 'menu'; this._showOnly('menu'); }
-    else if (act === 'pause') { if (this.screen === 'game') this._pause(); else if (this.screen === 'paused') this._resume(); }
+    else if (act === 'pause') { if (this.online) return; if (this.screen === 'game') this._pause(); else if (this.screen === 'paused') this._resume(); }
     else if (act === 'resume') this._resume();
     else if (act === 'quit' || act === 'back') this._toMenu();
   }
@@ -458,7 +544,9 @@ class AirHockeyUI {
   _stop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
   _frame(now) {
     this.raf = 0;
-    if (instance !== this || this.screen !== 'game') return;
+    if (instance !== this) return;
+    if (this.online) { this._onlineFrame(now); return; }
+    if (this.screen !== 'game') return;
     let dt = Math.max(0, (now - this.last) / 1000); this.last = now;
     if (dt > 0.05) dt = 0.05;
     const s = this.match;
@@ -475,7 +563,180 @@ class AirHockeyUI {
     this.raf = requestAnimationFrame((n) => this._frame(n));
   }
 
+  // --- online (stage 4) --------------------------------------------------------------------------
+  async _net() {
+    if (!this._netMod) this._netMod = await import('../../js/net.js');
+    return this._netMod;
+  }
+  _me() {
+    let p = null;
+    try { p = loadProfile(); } catch { /* none */ }
+    return { name: (p && p.name) || t('friend'), avatar: (p && p.emoji) || '', deviceId: deviceId() };
+  }
+  _lobbyView(waiting, code) {
+    const q = (r) => this.root.querySelector(`[data-role="${r}"]`);
+    q('lobbyMain').hidden = !!waiting;
+    q('lobbyWait').hidden = !waiting;
+    if (code) q('bigCode').textContent = code;
+  }
+  _lobbyError(key) {
+    this.root.querySelector('[data-role="lobbyErr"]').textContent = key ? t(key) : '';
+    this.root.querySelectorAll('[data-act="create"], [data-act="join"]').forEach((b) => { b.disabled = false; });
+  }
+  _lobbyBusy() {
+    this.root.querySelector('[data-role="lobbyErr"]').textContent = t('connecting');
+    this.root.querySelectorAll('[data-act="create"], [data-act="join"]').forEach((b) => { b.disabled = true; });
+  }
+  _openOnline() {
+    this.screen = 'online';
+    this._lobbyView(false);
+    this._lobbyError('');
+    this._syncRec();
+    this._showOnly('online');
+  }
+  async _createRoom() {
+    this._lobbyBusy();
+    const net = await this._net();
+    const r = await net.createRoom(ROOM_GAME, {}, this._me());
+    if (instance !== this || this.screen !== 'online') { if (r && r.code) net.leaveRoom(r.code, 'host'); return; }
+    if (!r || r.error) { this._lobbyError(r && r.error === 'busy' ? 'err_busy' : 'err_offline'); return; }
+    this._lobbyError('');
+    this._lobbyView(true, r.code);
+    this._pending = { code: r.code, stop: null };
+    // Wait for the guest. A narrow listener on the guest slot only (never net.onRoom, which would
+    // fire on every live message once the match starts).
+    const app = await getStatsApp();
+    if (!app || !this._pending || this._pending.code !== r.code) return;
+    this._pending.stop = app.api.onValue(app.api.ref(app.db, `rooms/${r.code}/guest`), (snap) => {
+      const g = snap.val();
+      if (g && this._pending && this._pending.code === r.code) {
+        const stop = this._pending.stop; this._pending = null;
+        try { if (stop) stop(); } catch { /* detached */ }
+        this._beginOnline(r.code, 0, g.name);
+      }
+    });
+  }
+  /** Back out of the lobby: close a room nobody has joined yet. */
+  _cancelRoom() {
+    const p = this._pending;
+    if (!p) { this._lobbyView(false); return; }
+    this._pending = null;
+    try { if (p.stop) p.stop(); } catch { /* detached */ }
+    if (this._netMod) this._netMod.leaveRoom(p.code, 'host');
+    this._lobbyView(false);
+  }
+  async _joinRoom() {
+    const input = this.root.querySelector('[data-role="codeIn"]');
+    const code = String(input.value || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{4}$/.test(code)) { this._lobbyError('err_code'); return; }
+    this._lobbyBusy();
+    const net = await this._net();
+    const app = await getStatsApp();
+    if (!app) { this._lobbyError('err_offline'); return; }
+    // Refuse another game's room BEFORE joinRoom writes us into it.
+    try {
+      const g = (await app.api.get(app.api.ref(app.db, `rooms/${code}/game`))).val();
+      if (g !== ROOM_GAME) { this._lobbyError('err_not_found'); return; }
+    } catch { this._lobbyError('err_offline'); return; }
+    const r = await net.joinRoom(code, this._me());
+    if (instance !== this || this.screen !== 'online') return;
+    if (!r || r.error) {
+      const k = { 'not-found': 'err_not_found', full: 'err_full', version: 'err_version' }[r && r.error] || 'err_offline';
+      this._lobbyError(k);
+      return;
+    }
+    this._beginOnline(code, 1, r.room && r.room.host && r.room.host.name);
+  }
+  async _beginOnline(code, side, oppName) {
+    const net = await this._net();
+    const { openChannel, createLiveSession } = await import('./live.js');
+    const app = await getStatsApp();
+    if (instance !== this) return;
+    const on = { code, side, role: side === 0 ? 'host' : 'guest', oppName: String(oppName || t('friend')).slice(0, 24), net };
+    on.channel = await openChannel(code, side, (msg, now) => { if (on.session) on.session.onPeer(msg, now); });
+    if (!on.channel || !app) { this._lobbyError('err_offline'); net.leaveRoom(code, on.role); return; }
+    resetMatch(this.match, side === 0 ? 0 : 1);
+    on.session = createLiveSession(this.match, side, on.channel, {
+      onGoal: (scorer) => this._goal(scorer),
+      onRound: () => this._onlineRound(),
+    });
+    on.startedAt = performance.now();
+    on.quietSince = 0;
+    net.heartbeat(code, on.role);
+    // The other phone leaving (Back, End match, closing the game) marks the room 'ended'.
+    on.stopStatus = app.api.onValue(app.api.ref(app.db, `rooms/${code}/status`), (snap) => {
+      if (snap.val() === 'ended' && this.online === on && !on.leaving) this._peerLeft();
+    });
+    this.online = on;
+    this._syncOpp();
+    this._syncScore();
+    this.flash = 0; this.goalT = 0; this.banner.hidden = true;
+    this.screen = 'game';
+    this._showOnly(null);
+    this._start();
+  }
+  _onlineRound() {
+    this._syncScore();
+    this.flash = 0; this.goalT = 0; this.banner.hidden = true;
+    this.screen = 'game';
+    this._showOnly(null);
+  }
+  _fillWait() {
+    const on = this.online; if (!on) return;
+    this.root.querySelector('[data-role="waitTitle"]').textContent = t('wait_for', { name: on.oppName });
+    this.root.querySelector('[data-role="endMatch"]').hidden = !(on.quietSince && performance.now() - on.quietSince > GIVE_UP_MS);
+  }
+  _onlineFrame(now) {
+    const on = this.online;
+    let dt = Math.max(0, (now - this.last) / 1000); this.last = now;
+    if (dt > 0.05) dt = 0.05;
+    const s = this.match, ses = on.session;
+    // Quiet: nothing heard for QUIET_MS (or nothing at all 1.5 s after starting).
+    const quiet = ses.heard ? ses.sinceHeard > QUIET_MS : now - on.startedAt > 1500;
+    if (quiet && !on.quietSince) on.quietSince = now;
+    if (!quiet) on.quietSince = 0;
+    s.ev.hit = 0; s.ev.wall = 0; s.ev.stuck = -1;
+    ses.frame(dt, now, quiet);
+    if (this.screen === 'game' || this.screen === 'wait') {
+      if (quiet && this.screen === 'game') { this.screen = 'wait'; this._showOnly('wait'); }
+      else if (!quiet && this.screen === 'wait') { this.screen = 'game'; this._showOnly(null); }
+      if (this.screen === 'wait') this._fillWait();
+      if (s.ev.hit > 120) this.sound.hit(s.ev.hit);
+      else if (s.ev.wall > 250) this.sound.wall(s.ev.wall);
+      if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 3);
+      if (this.goalT > 0) { this.goalT -= dt; if (this.goalT <= 0) this.banner.hidden = true; }
+      this.renderer.render(s, this.flash);
+      if (s.phase === 'over') this._over();
+    } else if (this.screen === 'over') {
+      if (this._overWant !== ses.peerWantsRematch) { this._overWant = ses.peerWantsRematch; this._fillOver(); }
+    }
+    if (this.online === on) this.raf = requestAnimationFrame((n) => this._frame(n));
+  }
+  _peerLeft() {
+    const on = this.online;
+    if (!on) return;
+    this._teardownOnline(false);
+    this.root.querySelector('[data-role="leftTitle"]').textContent = t('left', { name: on.oppName });
+    this.screen = 'left';
+    this._showOnly('left');
+  }
+  /** Stop everything online; `announce` also marks the room ended so the other phone knows. */
+  _teardownOnline(announce) {
+    const on = this.online;
+    if (!on) return;
+    on.leaving = true;
+    this.online = null;
+    this._stop();
+    try { if (on.stopStatus) on.stopStatus(); } catch { /* detached */ }
+    try { on.channel.close(); } catch { /* closed */ }
+    if (announce) on.net.leaveRoom(on.code, on.role); else on.net.disconnect();
+    this.match.puckRemote = false;
+  }
+  _leaveOnline() { this._teardownOnline(true); }
+
   destroy() {
+    this._leaveOnline();
+    this._cancelRoom();
     this._stop();
     document.removeEventListener('keydown', this._onKey);
     document.removeEventListener('visibilitychange', this._onVis);
@@ -501,6 +762,6 @@ export function destroy() {
 }
 /** Literal meaning: a match under way (playing, between goals or paused) would be lost by leaving. */
 export function isInProgress() {
-  return !!(instance && (instance.screen === 'game' || instance.screen === 'paused'));
+  return !!(instance && (instance.screen === 'game' || instance.screen === 'paused' || instance.screen === 'wait'));
 }
 export default { init, destroy, isInProgress };

@@ -10,9 +10,13 @@
 //   3b. LEVELS IN ORDER: Easy < Medium < Hard against a scripted new player.
 //   4. A FAST SWIPE IS A HARD SHOT: puck speed off a still-to-moving mallet scales with the swipe.
 //   5. STUCK PUCK: a puck left still in a half moves to that player's serve spot after ~5 s.
+//   6. ONLINE (js/live.js): two sessions over a fake network with delay, jitter and overwritten
+//      messages. Both phones agree on every score, no goal is counted twice, the puck is never
+//      owned by both or by neither for long, the match ends at 7 on both, and a rematch works.
 
 import { TABLE, PHYS, GOAL_X0, GOAL_X1, createMatch, resetMatch, advance, clampTarget } from './physics.js';
-import { createCpu, cpuThink } from './ai.js';
+import { createCpu, cpuThink, rng } from './ai.js';
+import { createLiveSession } from './live.js';
 
 const { W, H, PUCK_R: PR, MALLET_R: MR, CORNER: C } = TABLE;
 let fail = 0;
@@ -164,6 +168,78 @@ function playMatch(levelA, levelB, seed) {
   while (t < 7) { s.ev.stuck = -1; advance(s, 1 / 60); t += 1 / 60; if (s.ev.stuck >= 0) { moved = t; break; } }
   ok('a puck sitting still for ~5 s moves to that half\'s serve spot', moved > 4.9 && moved < 5.2 && Math.abs(s.puck.x - W / 2) < 120,
     `after ${moved.toFixed(2)} s at (${s.puck.x.toFixed(0)},${s.puck.y.toFixed(0)})`);
+}
+
+// ---- 6. online protocol over a fake network -----------------------------------------------------
+// The channel is a VALUE in Firebase (each write overwrites the last), so the fake delivers each
+// message after `delay` +- jitter and, when several are due at once, sometimes only the newest.
+function fakeNet(delayMs, jitterMs, rand) {
+  const q = [[], []];
+  return {
+    channel(side) {
+      return { send(msg) { q[1 - side].push({ at: now + delayMs + (rand() * 2 - 1) * jitterMs, msg: JSON.parse(JSON.stringify(msg)) }); }, failed: 0, close() {} };
+    },
+    deliver(side, session) {
+      const due = q[side].filter((e) => e.at <= now).sort((a, b) => a.msg.q - b.msg.q);
+      q[side] = q[side].filter((e) => e.at > now);
+      due.forEach((e, i) => { if (i === due.length - 1 || rand() > 0.3) session.onPeer(e.msg, now); });
+    },
+  };
+}
+let now = 0;
+function playOnline(delayMs, seed) {
+  const rand = rng(seed);
+  const net = fakeNet(delayMs, delayMs * 0.3, rand);
+  const m = [createMatch(), createMatch()];
+  resetMatch(m[0], 0); resetMatch(m[1], 1);
+  const goals = [0, 0], overs = [0, 0], rounds = [0, 0];
+  const ses = [0, 1].map((side) => createLiveSession(m[side], side, net.channel(side), {
+    onGoal: () => { goals[side]++; }, onOver: () => { overs[side]++; }, onRound: () => { rounds[side]++; },
+  }));
+  const cpu = [createCpu(HUMAN, 0, seed), createCpu(HUMAN, 0, seed + 99)];
+  const dt = 1 / 60;
+  let t = 0, bothOwn = 0, noneRun = 0, noneMax = 0, round2 = false, mismatch = 0;
+  now = 1000;
+  while (t < 2400) {
+    for (let i = 0; i < 2; i++) { cpuThink(m[i], cpu[i], dt); m[i].ev.hit = 0; }
+    now += dt * 1000; t += dt;
+    for (let i = 0; i < 2; i++) { net.deliver(i, ses[i]); ses[i].frame(dt, now, false); }
+    const o0 = ses[0].owns, o1 = ses[1].owns;
+    if (o0 && o1) bothOwn++;
+    if (!o0 && !o1 && m[0].phase !== 'over' && m[1].phase !== 'over') { noneRun += dt; noneMax = Math.max(noneMax, noneRun); } else noneRun = 0;
+    if (m[0].phase === 'over' && m[1].phase === 'over' && (!round2 || (rounds[0] && rounds[1]))) {
+      if (m[0].score[0] !== m[1].score[1] || m[0].score[1] !== m[1].score[0]) mismatch++;
+      if (round2) break;
+      round2 = { a: m[0].score.slice(), b: m[1].score.slice(), goals: goals.slice(), overs: overs.slice() };
+      ses[0].rematch(now); ses[1].rematch(now);
+    }
+  }
+  return { m, goals, overs, rounds, bothOwn, noneMax, round1: round2, t, mismatch, handoffs: ses[0].handoffs + ses[1].handoffs };
+}
+{
+  for (const delay of [40, 150]) {
+    let bad = 0, maxNone = 0, maxBoth = 0, twice = 0, notEnded = 0, noRematch = 0, passes = 0;
+    const N = 4;
+    for (let i = 0; i < N; i++) {
+      const r = playOnline(delay, 500 + i);
+      passes += r.handoffs;
+      maxNone = Math.max(maxNone, r.noneMax); maxBoth = Math.max(maxBoth, r.bothOwn);
+      const r1 = r.round1;
+      if (!r1) { notEnded++; continue; }
+      if (r.mismatch || r1.a[0] !== r1.b[1] || r1.a[1] !== r1.b[0]) bad++;
+      if (Math.max(...r1.a) !== PHYS.WIN) bad++;
+      // Each goal announced exactly once per phone.
+      if (r1.goals[0] !== r1.a[0] + r1.a[1] || r1.goals[1] !== r1.b[0] + r1.b[1]) twice++;
+      if (r1.overs[0] !== 1 || r1.overs[1] !== 1) twice++;
+      if (r.rounds[0] !== 1 || r.rounds[1] !== 1 || r.m[0].phase !== 'over' || Math.max(...r.m[0].score) !== PHYS.WIN) noRematch++;
+    }
+    console.log(`      online, ${delay} ms each way: ${passes} passes in ${N} x 2 matches`);
+    ok(`online ${delay} ms: both phones reach 7 and agree on every score`, bad === 0 && notEnded === 0, `bad=${bad} unfinished=${notEnded}`);
+    ok(`online ${delay} ms: every goal and the match end announced exactly once per phone`, twice === 0, `problems=${twice}`);
+    ok(`online ${delay} ms: the puck is never owned by both phones`, maxBoth === 0, `frames=${maxBoth}`);
+    ok(`online ${delay} ms: never owned by neither for more than 1 s`, maxNone < 1, `longest ${maxNone.toFixed(2)} s`);
+    ok(`online ${delay} ms: a rematch starts a fresh match that also reaches 7 on both`, noRematch === 0, `problems=${noRematch}`);
+  }
 }
 
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
