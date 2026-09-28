@@ -57,7 +57,7 @@ const writeChatSeen = (id, at) => {
 /** Inject the shared primitives (css/ui.css) idempotently, THEN this game's own sheet. Module
  *  stylesheets are never removed on destroy() - they live in the shared document.head for the
  *  life of the page (a hub-wide fact), which is why every rule is scoped under .h4-root. Same
- *  injection marker skeeball/js/ui.js, pipes/js/ui.js and bug-report-ui.js use, so a page that
+ *  injection marker skeeball/js/ui.js and bug-report-ui.js use, so a page that
  *  already loaded css/ui.css for another reason never double-loads it. */
 function ensureCSS() {
   // Matched by RESOLVED HREF as well as by marker attribute: hoops4/index.html links

@@ -3,7 +3,7 @@
 //   node sudoku/js/test.js
 //
 // Not deployed (not in sw.js ASSETS) and not run by run-all-tests.mjs's engine suites in the
-// sense of hitting a browser - it is a plain `node` script, same shape as pipes/js/test.js and
+// sense of hitting a browser - it is a plain `node` script, same shape as
 // nuts-bolts/js/test.js.
 import {
   countSolutions, backtrackSolve, gradeGrid, findNakedSingle, popcount,

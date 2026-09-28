@@ -1,5 +1,17 @@
 # Pool (`pool/`)
 
+> **ARCHIVED 2026-09-28** (Matt: "please do the same for Pool and Pipes", following the Pinball
+> archive). Moved from `pool/` to `archive/pool/`; every other trace was removed from the app
+> (launcher entry, leaderboard rows for `pool` and the retired `poolv2`, My Stats tabs, tile art,
+> strings, its sw.js ASSETS, its engine tests in `run-all-tests.mjs`, its `test-visual.mjs` probe,
+> and its section of `test-mp-lockstep.mjs`, kept verbatim at
+> `tools/test-mp-lockstep-pool-section.js.txt`). **Stored player history was NOT touched**: `'pool'`
+> and `'poolv2'` stay in `js/game-stats.js`'s `GAMES` and are in `ARCHIVED_GAMES` (out of every
+> total); `gamehub.poolv2.*` / `gamehub.pool.save.v1` stay on the phones.
+>
+> **To restore:** revert the archive commit, or by hand bring back everything above from git at
+> `bdbe7ff` and drop both ids from `ARCHIVED_GAMES`.
+
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
 > never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`,
 > which is always loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys,
