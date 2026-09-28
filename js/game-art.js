@@ -668,6 +668,41 @@ export const GAME_ART = {
               <ellipse cx="17" cy="47" rx="10" ry="3.6" fill="#F2B705"/><rect x="7" y="42" width="20" height="5" fill="#F2B705"/><ellipse cx="17" cy="42" rx="10" ry="3.6" fill="#ffd84d" stroke="#fff" stroke-width="0.8" stroke-dasharray="3 3"/>
             </g>
           </svg>`,
+  'hill-climb': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#8fd3f0"/>
+            <path d="M0 58 L34 44 L66 54 L104 34 L136 44 L160 36 L160 90 L0 90 Z" fill="#6fa8c9" opacity="0.55"/>
+            <path d="M0 90 L0 70 L46 70 L110 38 L160 44 L160 90 Z" fill="#8d5a34"/>
+            <g fill="#754828" opacity="0.5">
+              <ellipse cx="16" cy="80" rx="6.5" ry="4.2"/><ellipse cx="44" cy="84" rx="5.5" ry="3.6"/>
+              <ellipse cx="74" cy="76" rx="6" ry="4"/><ellipse cx="104" cy="66" rx="6.5" ry="4.2"/>
+              <ellipse cx="134" cy="76" rx="6" ry="4"/>
+            </g>
+            <path d="M0 70 L46 70 L110 38 L160 44" fill="none" stroke="#4caf3d"
+                  stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+            <g fill="#e0a007" stroke="#231f1c" stroke-width="1.8">
+              <circle cx="118" cy="17" r="5.6"/><circle cx="133" cy="12" r="5.6"/><circle cx="148" cy="16" r="5.6"/>
+            </g>
+            <g transform="translate(73 44) rotate(-26.6)">
+              <path d="M-18 4 L-19 -4 L-7 -4 L-6 -12 L5 -12 L7 -4 L18 -5 L19 3 Z"
+                    fill="#d8382b" stroke="#231f1c" stroke-width="2.6" stroke-linejoin="round"/>
+              <path d="M8 -4 L18 -5 L18.6 0 L8.6 0 Z" fill="#9a1f16" stroke="#231f1c" stroke-width="1.6"/>
+              <rect x="-10" y="-15" width="3.4" height="11" fill="#7b1a12" stroke="#231f1c" stroke-width="1.6"/>
+              <rect x="-6.5" y="-18" width="7" height="10" rx="2.4" fill="#E0532F" stroke="#231f1c" stroke-width="1.8"/>
+              <circle cx="-3" cy="-21" r="4.2" fill="#f0c08a" stroke="#231f1c" stroke-width="1.8"/>
+              <path d="M-7.4 -23 Q-3 -29 1.4 -23 Z" fill="#c1301f" stroke="#231f1c" stroke-width="1.6"/>
+              <path d="M-16 -4 Q-21 -14 -19 -24" fill="none" stroke="#231f1c" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="-19" cy="-25" r="2.2" fill="#E0532F"/>
+              <circle cx="-12" cy="4" r="7.2" fill="#2b2b30" stroke="#231f1c" stroke-width="2.6"/>
+              <circle cx="-12" cy="4" r="3" fill="#e8e2d6"/>
+              <circle cx="12" cy="4" r="7.2" fill="#2b2b30" stroke="#231f1c" stroke-width="2.6"/>
+              <circle cx="12" cy="4" r="3" fill="#e8e2d6"/>
+            </g>
+          </svg>`,
+
+  // Battleship: composed for the 16:9 frame (never a square crop). A peg grid (the hunting board)
+  // fills the left third with one vermilion hit peg and a splash ring reinforcing it; a ship
+  // silhouette in profile, bow to the right, sits on the right two-thirds riding a steel-navy sea
+  // band that matches the hub tile's own accent (#34506E).
   battleship: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#0E2438"/>
             <rect x="0" y="58" width="160" height="32" fill="#1B3B57"/>
