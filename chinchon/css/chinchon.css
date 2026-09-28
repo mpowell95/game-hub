@@ -245,6 +245,24 @@
   max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .cc-opp-pill .cc-opp-score { font-size: 0.74rem; font-weight: 700; color: #8a6a2a; }
+/* Their hand, face down (2026-09-28): up to 4 overlapped backs + the exact count. It is
+   where a computer's draw lands and its discard leaves from (ui.js card travel). */
+.cc-opp-pill .cc-opp-hand { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.cc-opp-pill .cc-opp-hand i {
+  display: block; width: 10px; height: 15px; border-radius: 2px;
+  background: linear-gradient(160deg, #3f6199, #233c5e);
+  border: 1px solid rgba(255, 255, 255, 0.55); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.cc-opp-pill .cc-opp-hand i + i { margin-left: -6px; }
+.cc-opp-pill .cc-opp-hand em { font-style: normal; font-size: 0.72rem; font-weight: 800; color: #5a3e0a; margin-left: 4px; }
+
+/* Card travel (ui.js _fly): a copy flies in this fixed layer, above the table and below
+   every modal/menu (120+); the real card stays hidden until the copy lands. */
+.cc-flight { position: fixed; inset: 0; z-index: 110; pointer-events: none; overflow: hidden; }
+.cc-flight > .cc-card {
+  position: absolute; margin: 0; transform-origin: 0 0; transition: none;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
 .cc-opp-pill.is-active {
   border-color: #ffce3a;
   animation: cc-turn-pulse 1.4s ease-in-out infinite;
