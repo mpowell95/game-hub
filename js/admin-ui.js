@@ -580,7 +580,7 @@ function pokerSectionHTML(cfg) {
   return blocks.map((p) => `<div class="adm-player" data-poker="${esc(p.key)}">
       <div class="adm-phead">${esc(p.name)}</div>
       <div class="adm-plife">${esc(t('adm_hb_line', { bank: cash(holdemBalance(p.hb)), entries: p.hb.entries | 0, cashes: p.hb.cashes | 0, best: cash(p.hb.best) }))}</div>
-      ${p.why ? `<div class="adm-note is-err">\u26a0 ${esc(t('adm_hb_flag', { why: p.why }))}</div>` : ''}
+      ${p.why ? `<div class="adm-note is-err">\u26a0 ${esc(t('adm_hb_flag', { why: p.why.replace(/-/g, ' ') }))}</div>` : ''}
       ${p.voided ? `<div class="adm-note">${esc(t('adm_hb_was', { bank: cash(holdemBalance(p.hbRaw)) }))}</div>` : ''}
       <div class="adm-mact">
         ${p.voided ? `<button type="button" class="gh-btn gh-btn--sm" data-hbundo="1">${esc(t('adm_hb_undo'))}</button>` : ''}

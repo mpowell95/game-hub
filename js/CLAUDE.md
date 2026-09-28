@@ -2325,6 +2325,13 @@ the rails the player sees can never disagree.
 - `sk.balls`, `hundreds`, `fifties`, `tens`..`forties` and `colorSweeps` have no per-machine
   breakdown anywhere in the store, so a per-machine void leaves them exactly as they are (rule 4).
 
+**Texas Hold'em bankrolls use the same overlay (2026-09-28)**: `corrections.holdem.<statsId>` =
+the ledger's counters at the moment of the void (`holdemSnapshotOf`), subtracted at read time by
+`correctHoldemLedger` inside `correctStats`, so every caller that already passes `corrections()`
+(players-agg, My Stats, the leaderboard) gets it for free; `holdem/js/ui.js`'s `bank()` applies it
+too. `normalizeConfig` keeps the `holdem` branch (it used to drop any corrections branch but
+`skeeball`). Money fields there are plain numbers, never `| 0` (a bankroll can pass 2^31).
+
 **The other half is prevention.** A machine set to Testing on the admin page records to
 `sk.practice` (`js/game-stats.js`'s `recordSkeeball`, which returns before touching a single real
 counter) — kept, merged across devices, shown on its own labelled row in My Stats, and counted by

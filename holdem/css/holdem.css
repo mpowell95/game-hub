@@ -582,6 +582,7 @@
 .pk-root .pk-lres small { color: var(--pk-dim); font-weight: 700; font-size: 12px; }
 .pk-root .pk-lshow { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .pk-root .pk-lshow li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
+.pk-root .pk-lshow li.is-first { background: rgba(255, 206, 58, 0.18); box-shadow: inset 0 0 0 1px var(--pk-gold); }
 .pk-root .pk-lnote { font-size: 12px; color: #cdd6e4; text-align: right; flex: 0 1 auto; min-width: 0; }
 .pk-root .pk-lstreet { border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 6px; }
 .pk-root .pk-lsthead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pk-gold); }

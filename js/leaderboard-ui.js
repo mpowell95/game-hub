@@ -578,10 +578,14 @@ function hbOf(g) { return ((g.games && g.games.holdem) || {}).hb || null; }
 function hbReview(g) { const hb = hbOf(g); return !!(hb && holdemSuspect(hb)); }
 function hbBankOf(g) {
   const hb = hbOf(g);
-  if (!hb || !((hb.entries | 0) || (hb.grants | 0))) return null;
-  if (holdemSuspect(hb)) return null;
+  if (!hb || holdemSuspect(hb)) return null;
+  // An untouched (or voided) ledger is the starting stake - which is what this row's own game
+  // shows them. Only rows with Hold'em plays reach this board, so nobody else is given it.
   return Math.max(0, holdemBalance(hb));
 }
+/** Has this person ever moved money? The Standing Records bankroll chip asks this first, or the
+ *  starting stake every device carries would put a non-player on the podium. */
+function hbTouched(g) { const hb = hbOf(g); return !!(hb && ((hb.entries | 0) || (hb.grants | 0))); }
 const bankText = (n) => '$' + Math.max(0, Math.floor(+n || 0)).toLocaleString();
 
 function gameMetricAt(g, id, tier) {
@@ -1412,7 +1416,7 @@ const TEXTURE = {
   // The bankroll is only anyone's once they have played for money; a player with no ledger shows 0
   // rather than the untouched starting stake, which would put every non-player on the podium.
   holdem: [
-    { labelKey: 'lb_tex_hb_bank', get: (g) => hbBankOf(g) || 0, show: (g) => bankText(hbBankOf(g)) },
+    { labelKey: 'lb_tex_hb_bank', get: (g) => (hbTouched(g) ? hbBankOf(g) || 0 : 0), show: (g) => bankText(hbBankOf(g)) },
     { labelKey: 'lb_tex_hb_best', get: (g) => (hbReview(g) ? 0 : ((hbOf(g) || {}).best) | 0), show: (g) => bankText((hbOf(g) || {}).best) },
     // Per-hand stats (2026-09-28, recordHoldemHand). The best hand ranks on its score and prints
     // its NAME ("Four of a Kind"), the way Boggle's longest word does.

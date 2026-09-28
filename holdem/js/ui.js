@@ -1187,8 +1187,12 @@ class Game {
       const who = p.winners.map(nm);
       let line;
       if (p.winners.length > 1) line = t('last_split', { names: who.join(', '), n: money(p.amount) });
-      else if (L.noShow || p.score < 0 || L.scores[p.winners[0]] == null) line = t('last_takes', { name: who[0], n: money(p.amount) });
-      else line = t('last_wins', { name: who[0], n: money(p.amount), hand: handName(L.scores[p.winners[0]]) });
+      else if (L.noShow || p.score < 0 || L.scores[p.winners[0]] == null) {
+        line = p.winners[0] === L.my ? t('last_you_take', { n: money(p.amount) }) : t('last_takes', { name: who[0], n: money(p.amount) });
+      } else {
+        const hand = handName(L.scores[p.winners[0]]);
+        line = p.winners[0] === L.my ? t('last_you_win', { n: money(p.amount), hand }) : t('last_wins', { name: who[0], n: money(p.amount), hand });
+      }
       return `<li>${k ? `<small>${esc(t('last_side'))}</small> ` : ''}${esc(line)}</li>`;
     }).join('');
     const shownIdx = Object.keys(L.reveal).map(Number);
@@ -1198,7 +1202,8 @@ class Game {
       if (!cs) return '';
       const sc = L.scores[i];
       const note = sc != null ? handName(sc) : (L.folded[i] ? t('last_folded') : '');
-      return `<li><span class="pk-lav">${esc((L.names[i] || {}).emoji || '')}</span><span class="pk-lname">${esc(nm(i))}</span><span class="pk-lcards">${tiny(cs)}</span><span class="pk-lnote">${esc(note)}</span></li>`;
+      const win = L.pots.some((p) => p.winners.includes(i));
+      return `<li${win ? ' class="is-first"' : ''}><span class="pk-lav">${esc((L.names[i] || {}).emoji || '')}</span><span class="pk-lname">${esc(nm(i))}</span><span class="pk-lcards">${tiny(cs)}</span><span class="pk-lnote">${esc(note)}</span></li>`;
     }).join('');
     const streets = ['preflop', 'flop', 'turn', 'river'];
     const boardAt = { preflop: [], flop: L.board.slice(0, 3), turn: L.board.slice(3, 4), river: L.board.slice(4, 5) };
@@ -1206,7 +1211,7 @@ class Game {
       const rows = L.log.filter((e) => e.st === st);
       const cards = boardAt[st];
       if (!rows.length && !cards.length) return '';
-      const lines = rows.map((e) => `<li><b>${esc(nm(e.i))}</b> ${esc(t('lg_' + e.a, { n: money(e.amt) }))}</li>`).join('');
+      const lines = rows.map((e) => `<li><b>${esc(nm(e.i))}</b> ${esc(t((e.i === L.my ? 'lgy_' : 'lg_') + e.a, { n: money(e.amt) }))}</li>`).join('');
       return `<div class="pk-lstreet"><div class="pk-lsthead"><span>${esc(t('street_' + st))}</span>${cards.length ? `<span class="pk-lcards">${tiny(cards)}</span>` : ''}</div>${lines ? `<ol class="pk-lacts">${lines}</ol>` : ''}</div>`;
     }).join('');
     return `<div class="pk-modal pk-last" role="dialog" aria-modal="true" aria-label="${esc(t('last_hand'))}">

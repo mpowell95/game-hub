@@ -130,6 +130,79 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
   bankroll"), My Stats (Bankroll, Biggest prize, Won in prizes, Paid in buy-ins), and the
   leaderboard's Texas Hold'em records (Bankroll, Biggest prize).
 
+## Bankroll leaderboard (2026-09-28)
+
+Matt: *"We definitely need"* a bankroll leaderboard. The Texas Hold'em board (`js/leaderboard-ui.js`)
+now RANKS BY BANKROLL: `gameMetricAt('holdem')` is `hbBankOf(g)`, the person's combined ledger
+through `holdemBalance`, voids applied. Pills are **Bankroll** (leftmost, so the board opens on it),
+**Wins** (`hwins`, holdem-only, like Skeeball's `high`), Games, Name. The board is UNTIERED
+(`METRIC_IS_TIER_BLIND`, `boardTierOf` returns null, no difficulty filter): a bankroll has no
+difficulty axis, and ranking it tier-first would have put a $30k Hard player above a $3M Easy one.
+A ledger `holdemSuspect()` calls impossible prints **"Under review"** and sorts last. Standing
+records: Bankroll, Biggest prize, Hands won, Biggest pot won, Best hand ever (ranked on the hand
+score, printed as its name).
+
+## Hand stats (2026-09-28)
+
+Matt picked "more stats: hands won, biggest pot, best hand ever". `recordHoldemHand` in
+`js/game-stats.js` writes `games.holdem.hs = { hands, won, bigPot, best, bestCat, bestCards }`:
+one write per hand THIS player was dealt into (their two cards known), from `_handEnd()` in
+`ui.js`, which solo, host and guest all go through. `amt` is the chips this player collected;
+`best` is `engine.evaluate` of their best five when they saw all five board cards and had not
+folded (`bestCat` 9 = royal flush, its own name). hands/won add, bigPot/best are `Math.max`,
+players-agg merges it (the best hand travels with its cards). Dedupe: `gamehub.holdem.hands.v1`,
+the last 40 `gid:handNo` keys, so a reload on a result screen cannot count a hand twice. Exempt
+from the 30-a-minute gate (`test-rate-guard.mjs`, reason given): a hand is not a result. Shown on
+My Stats (Hands played, Hands won, Biggest pot won, Best hand ever + its five cards) and the
+leaderboard records. Not retroactive: hands before 2026-09-28 were never recorded anywhere.
+
+## Last hand replay (2026-09-28)
+
+A **Last hand** button sits left of the pot once a hand has finished. It opens a sheet with the
+board, who won each pot and with what, everyone's shown cards (and this player's own two, even
+folded; winners outlined in gold), then every action street by street ("Tex raises to $900").
+The actions come from `h.log` in `engine.js` - blinds (`post`), every `act`, and a player leaving
+(`left`) - which is public information, so it rides `publicView` to every seat and guests replay
+exactly what the host dealt. Kept in memory only (`this.lastHand`); after a reload it returns
+with the next finished hand. "You" gets its own verb forms (`lgy_*`, `last_you_*`).
+
+## Computer speed (2026-09-28)
+
+Setup (and the online lobby, when the host added computers): **Computer speed** Slow / Normal /
+Fast, `settings.pace` in `gamehub.holdem.v1`. It sets how long a computer "thinks" before acting
+(`PACES` in `table.js`: 1.5-2.8s / 0.8-1.7s / 0.25-0.6s; Normal is the original pace). Changing
+it mid-game applies from the computers' next move (`Table.setPace`). Rules and decisions are the
+same at every speed. Not the same thing as "Blinds go up", which is the tournament's pace.
+
+## Cheat deterrents (2026-09-28)
+
+Matt asked for "cheat proof" and, offered a Firebase-function dealer (truly cheat-proof, but needs
+internet and a deploy), chose **deterrents only**. So, plainly: **none of this stops a determined
+player** - every number is written by code on their own phone, and hole cards online are still
+readable from `rooms/` with developer tools. What exists:
+
+1. **Impossible amounts are refused at write time** (`recordHoldemBank`): a buy-in that is not a
+   table price (`HOLDEM_BUYINS`), a prize no finish at any table pays (`holdemValidPrize`), a
+   top-up over $25,000. Refusals are counted in `gamehub.rate.v1`'s `blocked['holdem-bank']`,
+   which rides the stats mirror (`rate`), so an attempt is visible to Matt.
+2. **Prizes are rate-capped**: more than 20 in a minute are refused (a heads-up game takes a person
+   10s or more). Calibrated on the fastest human, like the result gate.
+3. **`holdemSuspect(hb)`** (pure, `js/game-stats.js`) names why a ledger could not come from real
+   play (more prizes than games, winnings bigger than prizes x best, an unpayable best prize, too
+   many top-ups...). Every check survives adding two real ledgers, so it runs on a PERSON's
+   combined ledger. `holdem/js/test.js` plays 200 random 60-game careers and asserts none is ever
+   flagged, and that the buy-in and prize lists match `TIERS` and `payout()` exactly.
+4. **Voiding**: the admin page's **Poker bankrolls** section lists everyone who has played for
+   money, flagged ones first, with **Void bankroll** / **Undo void**. A void is an OVERLAY
+   (`adminConfig/v1/corrections/holdem/<statsId>`, `js/stats-corrections.js`
+   `correctHoldemLedger`): a BASELINE of the ledger at that moment, so the bankroll reads $25,000
+   again and later games count normally; the raw ledger on the phone and in `players/` is never
+   touched (THE LAW). It reaches every device of that person, and the game's own `bank()` applies
+   it too, so voided money cannot be spent.
+
+Bankroll maths no longer uses `| 0` anywhere on the money path: the top table pays $52M a win,
+so a bankroll can pass 2^31, where `| 0` wraps negative.
+
 ## Stats
 
 One result per game per device, recorded **the moment the engine decides it** (busting out = loss,
@@ -140,7 +213,9 @@ under the computers' skill (`easy`/`medium`/`hard`), online under `'mp'`. Dedupe
 
 ## Keys
 
-- `gamehub.holdem.v1` - settings (tab, opponents, skill, blind speed, lobby computer count/skill)
+- `gamehub.holdem.v1` - settings (tab, opponents, skill, blind speed, computer speed `pace`,
+  lobby computer count/skill/table)
+- `gamehub.holdem.hands.v1` - the last 40 hands already counted in the hand stats (dedupe)
 - `gamehub.holdem.save.v1` - the solo game in progress (full engine state)
 - `gamehub.holdem.mp.v1` - the online seat for "Back to table" (+ host's state)
 
@@ -224,3 +299,12 @@ Checked with no scroll at 402x874, 390x664 (8 players) and 393x780 (online).
   leaving, the host closing, guest and host reload + "Back to table", a game played to the end
   with exactly one result recorded per device, "New game", and a dead phone marked Away after
   ~39s with the table moving on. **Not yet proven: real Firebase, on real phones.**
+
+**2026-09-28 additions** (bankroll board, hand stats, Last hand, computer speed, deterrents):
+`node holdem/js/test.js` (log, deterrent lists, 200 random careers never flagged),
+`players-agg.test.mjs` (hand-stat merge, voids), `test-rate-guard`, `test-admin-config`,
+`test-leaderboard-rank`, `test-stats-corrections` all pass. Browser: solo at 402x874 and 390x664
+in EN and ES (Last hand sheet scrolls inside itself on the short screen, no page scroll), the
+leaderboard and the admin void against the local RTDB stand-in (void -> $25,000, "Under review"
+gone, raw ledger untouched), and the three-browser online game again (every device counts its own
+hands; host and guest replays agree).
