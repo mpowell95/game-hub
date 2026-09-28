@@ -19,7 +19,7 @@
 // simulateThrow(params) for the tests.
 
 import * as CANNON from '../../skeeball/js/vendor/cannon-es.js';
-import { TABLE, CUP, BALL, THROW, DRAG_K, MAT } from './geom.js';
+import { TABLE, CUP, BALL, THROW, DRAG_K, MAT, GRAVITY } from './geom.js';
 
 // 1/480, not skeeball's 1/240: a cup wall is 6 mm and the ball is fast. At 1/240 a 6 m/s ball
 // moves 2.5 cm per step, which can carry its centre past a wall's mid-plane in one step, and the
@@ -81,7 +81,7 @@ export function innerR(y) {
 }
 
 function buildWorld(cups) {
-  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.81, 0) });
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -GRAVITY, 0) });
   world.broadphase = new CANNON.NaiveBroadphase();   // ~12 bodies: nothing to gain, and stable order
   world.allowSleep = false;
   world.solver.iterations = 12;

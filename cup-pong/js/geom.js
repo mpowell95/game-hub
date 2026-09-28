@@ -36,20 +36,31 @@ export const BALL = { r: BALL_R, mass: 0.0027 };
  *
  *  THE BAND: power 0 (skeeball's measured slowest natural flick) lands ~0.4 m on, power 0.55 crosses
  *  the rim plane at the middle of the rack, power 1 flies off the far end. Flight to the rack is
- *  ~0.33 s, which is what the recording shows (15 fps frames: release to the front cups in 4-5 frames). Re-derive with the landing table test.js prints. */
+ *  ~0.67 s, as in the recording. Re-derive with the landing table test.js prints. */
 export const THROW = {
   z0: 0,
   y0: BALL_R + 0.001,
-  elev: 0.55,                // launch angle: the recording reaches the cups in ~0.33 s without climbing above them on screen
+  // A HIGH, FLOATY LOB: 57 degrees under GRAVITY below. Fitted to the ball's path in Matt's
+  // recording (15 fps, frame by frame, 11 frames matched to within 0.02 of the screen): it climbs
+  // ABOVE the rack on screen, peaks over the front cups, and drops in, ~0.67 s from release to the
+  // rack. The second build's 0.55 rad at real gravity came from misreading that peak as an
+  // overshoot. Matt: "It goes too low. It's like a straight line and I can barely get it to hit the
+  // top of a cup."
+  elev: 1.00,
   // power 0 -> minSpeed, power 1 -> maxSpeed, interpolated as ENERGY (v^2), like skeeball's.
-  minSpeed: 2.12,
-  maxSpeed: 4.85,
+  minSpeed: 1.87,
+  maxSpeed: 3.64,
   aimMax: 0.30,              // heading clamp, radians - well past the table's edge either way
 };
 
 /** Contact materials. A ping pong ball on a table bounces high; on a thin plastic cup it loses
  *  more. `tableRest` is the bounce-shot lever (see cup-pong/CLAUDE.md, "Bounce shots"). */
 export const MAT = { tableRest: 0.78, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
+
+/** GAME GRAVITY, m/s^2 - NOT 9.81, on purpose. GamePigeon's ball is floatier than a real one: the
+ *  only arc that reproduces its screen path AND reaches the cups when the recording shows it there
+ *  needed 6.5 (fitted over 3-10). Real gravity made the lob either too quick or too flat. */
+export const GRAVITY = 6.5;
 
 // Air drag on a ping pong ball is real (terminal velocity ~9 m/s): a = -k |v| v, k = g / vt^2.
 export const DRAG_K = 0.12;
