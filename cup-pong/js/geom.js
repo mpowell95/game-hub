@@ -55,7 +55,7 @@ export const THROW = {
 
 /** Contact materials. A ping pong ball on a table bounces high; on a thin plastic cup it loses
  *  more. `tableRest` is the bounce-shot lever (see cup-pong/CLAUDE.md, "Bounce shots"). */
-export const MAT = { tableRest: 0.78, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
+export const MAT = { tableRest: 0.88, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
 
 /** GAME GRAVITY, m/s^2 - NOT 9.81, on purpose. GamePigeon's ball is floatier than a real one: the
  *  only arc that reproduces its screen path AND reaches the cups when the recording shows it there

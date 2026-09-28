@@ -13,6 +13,7 @@
 
 import { THROW, CUP, GRAVITY, DRAG_K } from './geom.js';
 import { launchSpeed } from './physics.js';
+import { presetsFor, touchingPairs, applyPreset } from './rack.js';
 
 export const SKILL = {
   easy:   { sPower: 0.30, sAim: 0.080 },
@@ -75,11 +76,13 @@ function gauss(rnd) {
  * Pick a target and a throw. `cups` is [{ id, x, z }] in the shooter's frame. `rnd` is a
  * uniform [0, 1) source (Math.random in play; a seeded one in the tests).
  */
-export function cpuThrow(skill, cups, rnd = Math.random) {
+export function cpuThrow(skill, cups, rnd = Math.random, targetId = null) {
   const S = SKILL[skill] || SKILL.medium;
   if (!cups.length) return { power: 0.5, aim: 0, target: null };
-  let target;
-  if (skill === 'hard') {
+  let target = targetId ? cups.find((k) => k.id === targetId) : null;
+  if (target) {
+    // a called island: aim at it
+  } else if (skill === 'hard') {
     // The cup with the most neighbours: a near miss there still lands in a cup.
     const score = (k) => cups.filter((o) => o !== k && Math.hypot(o.x - k.x, o.z - k.z) < 0.11).length;
     const best = Math.max(...cups.map(score));
@@ -96,6 +99,46 @@ export function cpuThrow(skill, cups, rnd = Math.random) {
   };
 }
 
+/**
+ * THE COMPUTER'S OPTIONS at the start of its turn, by the same rules as the player's (brief 5a).
+ * Returns the actions to take, in order, as calls on the Match: Gentleman's whenever it is on offer
+ * (it only ever helps the shooter), a rerack when a preset is clearly tidier than what is standing
+ * ("CPU racks: it picks presets only"), then an island when there is one to call.
+ */
+export function cpuOptions(match) {
+  const out = [];
+  if (match.canGentlemans()) out.push({ type: 'gentlemans' });
+  else if (match.canRerack()) {
+    const rack = match.target();
+    const now = touchingPairs(rack);
+    let best = null;
+    for (const p of presetsFor(rack.length)) {
+      const score = touchingPairs(applyPreset(rack, p.spots));
+      if (!best || score > best.score) best = { key: p.key, score };
+    }
+    if (best && best.score >= now + 2) out.push({ type: 'rerack', key: best.key });
+  }
+  return out;
+}
+
+/** After its options: the island to call, if any (the first one; aimed at by cpuThrow). */
+export function cpuIsland(match) {
+  if (!match.canIsland()) return null;
+  return match.islands()[0] || null;
+}
+
+/** The computer owes a second cup after the player's island: the loneliest of its cups (a cup the
+ *  player would find hardest to hit anyway), the back-most on a tie. */
+export function cpuPick(cups) {
+  const touching = (k) => cups.filter((o) => o !== k && Math.hypot(o.x - k.x, o.z - k.z) < 0.105).length;
+  let best = null;
+  for (const k of cups) {
+    const t = touching(k);
+    if (!best || t < best.t || (t === best.t && k.z < best.k.z)) best = { k, t };
+  }
+  return best ? best.k.id : null;
+}
+
 /** A seeded uniform source, for deterministic tests. */
 export function seeded(seed) {
   let a = seed >>> 0;
@@ -107,4 +150,4 @@ export function seeded(seed) {
   };
 }
 
-export default { SKILL, powerFor, aimAt, cpuThrow, seeded };
+export default { SKILL, powerFor, aimAt, cpuThrow, cpuOptions, cpuIsland, cpuPick, seeded };
