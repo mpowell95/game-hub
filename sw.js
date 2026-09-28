@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1007';
+const CACHE = 'game-hub-v1008';
 
 const ASSETS = [
   './',
@@ -980,11 +980,11 @@ const REST_MANIFEST = {
   './dominoes/js/strings.js': '39b95ab469',
   './uno/': 'b3c3fd664b',
   './uno/index.html': 'b3c3fd664b',
-  './uno/css/uno.css': '1a75c4193d',
-  './uno/js/ui.js': '41a40a7733',
+  './uno/css/uno.css': 'c30de5e6ae',
+  './uno/js/ui.js': '56f575413f',
   './uno/js/game.js': '6ffaaf31b2',
   './uno/js/ai.js': '0edaa2fea7',
-  './uno/js/strings.js': 'bc01059b54',
+  './uno/js/strings.js': 'c98bb9e2a5',
   './yahtzee/': 'cdabc834f1',
   './yahtzee/index.html': 'cdabc834f1',
   './yahtzee/css/yahtzee.css': '53cdf1a8d8',

@@ -223,8 +223,8 @@ these numbers here.
 Landing in sessions: UN-1 tokens + UN-3 fan (this section), UN-2/UN-5 card face and
 fixed geometry, UN-4 motion (below), UN-8 multi-row fan + UN-9 opponent chip ellipsis
 (session 3.5, two defects found in real device testing - see "The fan" and "Fixed geometry"
-below), UN-6 hand sort (not yet landed - no `handSort` control exists in `ui.js` as of this
-writing). The spec (repo root) is the contract for all of it.
+below), UN-6 hand sort (landed 2026-09-28, see "Computer speed, hand sort and card travel" below).
+The spec (repo root) is the contract for all of it.
 
 ### The token system (UN-1)
 
@@ -437,10 +437,8 @@ prevent. `.un-oppname`'s existing `max-width` + ellipsis absorbs long names inst
 Every duration/easing is a named token in `.un-root` (`--un-dur-*`/`--un-ease-*`), each
 comment-tagged with the spec row it belongs to - grep `--un-dur-` in `uno.css` for the full
 list. No rule anywhere in the file carries an inline duration or `cubic-bezier(...)`
-literal. Row 9 (penalty draws arriving 90ms apart) was **not implemented** - it was
-explicitly outside this session's assigned row order and is deferred, not forgotten; a
-multi-card penalty draw currently pops in via row 6's single-card path with no stagger
-between cards.
+literal. Row 9 (penalty draws arriving 90ms apart) landed 2026-09-28: several cards drawn in one
+render fly in `--un-draw-stagger` (90ms) apart.
 
 **The one real conflict with the render architecture: only one `transition` can be active
 on `transform` at a time.** Rows 2 (relayout, 260ms), 7 (legal-card lift, 180ms, staggered),
@@ -617,3 +615,38 @@ The wild-color chooser and win overlay were verified by code review and are exer
 indirectly by `test.js`'s AI-vs-AI games (which choose wild colors and reach
 `phase === 'over'` routinely) but not click-tested end-to-end in the browser this pass -
 worth a manual pass if a report ever suggests that flow is broken.
+
+
+## Computer speed, hand sort and card travel (2026-09-28)
+
+Matt: *"uno next, same approach"* (as Texas Hold'em and Monopoly Deal that day): a computer
+speed setting plus the card-motion gaps a review listed. Reduced motion was left as it was.
+
+- **Computer speed**: Slow / Normal / Fast, a setup row (`row_speed`), `pace` in
+  `gamehub.uno.v1` (additive; absent = Normal, the original pace). `_aiMs()` scales only a
+  computer's think pause and its own draw steps (x1.6 / x1 / x0.3); your auto-draws are unchanged.
+  `saveSettings` now writes `pace` and `handSort` too - every caller goes through `_saveSettings()`.
+- **Hand sort (UN-6)**: `sortedHand(hand, mode)`, modes `draw` (newest left, the old reversal) /
+  `color` / `rank` exactly as the spec orders them, applied to a COPY at render time - the engine,
+  `play()` ids and the save never see it. `handSort` persists in `gamehub.uno.v1`. The control is
+  `.un-sortbtn`, a small pill at the top-right of `.un-handwrap` showing the CURRENT order (a
+  fourth footer button wrapped every label, measured); 28px drawn with a `::before` stretching the
+  tap target past 44px. Hidden while the colour chooser is open. Switching slides every card (row 2).
+- **A played card no longer shows on the pile before it lands.** `this._landing` holds ids still in
+  the air (set before `g.play()` for your play and a computer's); `renderGame` draws that top card
+  `visibility:hidden` and remembers its settle/flip class; `_landDiscard()` reveals it and replays
+  the class. Every failure path of `_flyToDiscard`/`_flyFromChip` still lands, so a card can never
+  stay hidden.
+- **The discard is a stack**: the two cards under the top render as `.un-under` at their own
+  remembered tilt (`_rots`, or a fixed angle from the id after a resume); the top is `.un-top`, the
+  active-colour chip sits above both.
+- **Computers' hands are visible face down**: each chip is two lines (who; then `.un-oppfan`, up to
+  8 tiny backs, and the exact count). `.un-opponents` is 58px (was 44).
+- **Computers' draws fly**: `renderGame` compares each computer seat's hand size with the last
+  render (`_seenCounts`) and flies the difference face down from the draw pile to that chip
+  (`_flyToChip`) - their draws, an eaten +2 stack, a Wild +4, the opening deal. Seeded from the
+  snapshot on resume so nothing replays.
+- Verified in Chromium: full games at every speed with 2-4 players (your side played by the test,
+  sorting mid-game), no top card left hidden at rest, fan backs always matching the count,
+  `uno/js/test.js`, `test-i18n-strings.mjs`, `test-game-conventions.mjs`,
+  `check-no-scroll.mjs uno`. Not yet by eye on a phone.

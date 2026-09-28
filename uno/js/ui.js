@@ -40,6 +40,28 @@ const COLOR_META = {
 };
 
 const DIFF_KEYS = [['easy', 'diff_easy'], ['medium', 'diff_medium'], ['hard', 'diff_hard']];
+// Computer speed (2026-09-28, Matt: "uno next, same approach" as Texas Hold'em and Monopoly
+// Deal). Scales only the waits that belong to a COMPUTER: its think pause and its own
+// draw-until-playable steps. Your auto-draws, the rules and every decision are the same at
+// every speed; Normal is the original pace.
+const PACES = ['slow', 'normal', 'fast'];
+const PACE_MULT = { slow: 1.6, normal: 1, fast: 0.3 };
+// Hand sort (UNO-DESIGN-SPEC.md "Hand sort", UN-6): presentation only, applied to a COPY
+// of the hand at render time; the engine's hand, every id passed to play(), and the save
+// never see it.
+const SORTS = ['draw', 'color', 'rank'];
+const HUE_ORDER = { red: 0, yellow: 1, green: 2, blue: 3, wild: 4 };
+const KIND_ORDER = { number: 0, skip: 1, reverse: 2, draw2: 3, wild: 4, wild4: 5 };
+const rankKey = (c) => (c.kind === 'number' ? c.value : 10 + KIND_ORDER[c.kind]);
+function sortedHand(hand, mode) {
+  const shown = hand.slice().reverse(); // 'draw': newest at the left end (spec §5)
+  if (mode === 'color') {
+    shown.sort((a, b) => (HUE_ORDER[a.color] - HUE_ORDER[b.color]) || (rankKey(a) - rankKey(b)) || (a.id - b.id));
+  } else if (mode === 'rank') {
+    shown.sort((a, b) => (rankKey(a) - rankKey(b)) || (HUE_ORDER[a.color] - HUE_ORDER[b.color]) || (a.id - b.id));
+  }
+  return shown;
+}
 const DIFF_SKILL = { 1: 'easy', 2: 'medium', 3: 'hard' };
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -202,12 +224,15 @@ function loadSettings() {
     if (p >= 2 && p <= 4) out.players = p;
     if (DIFF_KEYS.some(([k]) => k === raw.difficulty)) out.difficulty = raw.difficulty;
     if (Number.isInteger(raw.nextStarter)) out.nextStarter = raw.nextStarter;
+    if (PACES.includes(raw.pace)) out.pace = raw.pace;
+    if (SORTS.includes(raw.handSort)) out.handSort = raw.handSort;
     return Object.keys(out).length ? out : null;
   } catch { return null; }
 }
 
-function saveSettings(players, difficulty, nextStarter) {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ players, difficulty, nextStarter })); } catch { /* ignore */ }
+// `pace` and `handSort` (2026-09-28) are additive fields; absent reads as Normal / newest-first.
+function saveSettings(players, difficulty, nextStarter, pace, handSort) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ players, difficulty, nextStarter, pace, handSort })); } catch { /* ignore */ }
 }
 
 function saveGame(ui) {
@@ -247,6 +272,8 @@ class UnoUI {
     const oppSkill = profile && profile.opponents && profile.opponents[0] && profile.opponents[0].skill;
     this.difficulty = (saved && saved.difficulty) || DIFF_SKILL[oppSkill] || 'medium';
     this.nextStarter = (saved && saved.nextStarter) || 0;
+    this.pace = (saved && saved.pace) || 'normal';
+    this.handSort = (saved && saved.handSort) || 'draw';
 
     this.game = null;
     this.seats = null;
@@ -273,6 +300,11 @@ class UnoUI {
     this._lastHandLen = {};       // row 10: per-seat hand length, to catch the 1-card transition
     this._aiPulsePi = null;       // row 12: which opponent chip is mid-pulse
     this._pulseTimer = null;
+    // 2026-09-28 card travel:
+    this._landing = new Set();    // discard ids still flying to the pile (drawn hidden until they land)
+    this._landingAnim = new Map();// id -> the settle/flip class to replay when it lands
+    this._rots = new Map();       // discard id -> its rest tilt, so the stack under the top keeps its angles
+    this._seenCounts = {};        // per computer seat: hand size at the last render (draw flights)
 
     this._onClick = (e) => this.onClick(e);
     this._onKey = (e) => { if (e.key === 'Escape') this.closeOverlays(); };
@@ -324,6 +356,11 @@ class UnoUI {
     return seats;
   }
 
+  _saveSettings() { saveSettings(this.players, this.difficulty, this.nextStarter, this.pace, this.handSort); }
+
+  /** A wait that belongs to a computer, scaled by the chosen speed. */
+  _aiMs(ms) { return Math.round(ms * (PACE_MULT[this.pace] || 1)); }
+
   // --- setup screen ------------------------------------------------------------
 
   _seg(action, value, opts) {
@@ -353,6 +390,7 @@ class UnoUI {
     this._aiPulsePi = null;
     const playersContent = this._seg('set-players', this.players, [2, 3, 4].map((n) => [n, String(n)]));
     const diffContent = this._seg('set-diff', this.difficulty, DIFF_KEYS.map(([v, k]) => [v, diffShapeSVG(tierOf(v)) + esc(t(k))]));
+    const paceContent = this._seg('set-pace', this.pace, PACES.map((k) => [k, esc(t('pace_' + k))]));
     this.container.innerHTML = `
       <div class="un-root">
         <div class="un-shell un-setup">
@@ -361,6 +399,7 @@ class UnoUI {
           <div class="un-summary">
             ${this._row('players', t('row_players'), t('n_players', { n: this.players }), playersContent)}
             ${this._row('difficulty', t('row_difficulty'), t(DIFF_KEYS.find(([v]) => v === this.difficulty)[1]), diffContent)}
+            ${this._row('pace', t('row_speed'), t('pace_' + this.pace), paceContent)}
           </div>
           <button type="button" class="un-primary" data-action="start">${t('start')}</button>
           <button type="button" class="un-ghost" data-action="help">${t('howto')}</button>
@@ -379,7 +418,7 @@ class UnoUI {
     // mancala/js/ui.js's startGame() alternation).
     const startPlayer = this.nextStarter % this.players;
     this.nextStarter = (startPlayer + 1) % this.players;
-    saveSettings(this.players, this.difficulty, this.nextStarter);
+    this._saveSettings();
     clearGame();
     // The game shell persists across renders now, so the end-of-match overlay is
     // no longer swept away by a full innerHTML rewrite - remove it explicitly.
@@ -394,6 +433,10 @@ class UnoUI {
     this._lastDiscardId = null;
     this._lastPendingDraw = 0;
     this._lastHandLen = {};
+    this._landing.clear(); this._landingAnim.clear(); this._rots.clear();
+    // Every seat starts empty, so the opening deal flies to each computer too.
+    this._seenCounts = {};
+    for (let i = 0; i < this.players; i++) this._seenCounts[i] = 0;
     if (this._flightEl) this._flightEl.innerHTML = '';
     this.seats = this._buildSeats(this.players);
     this.game = new UnoGame({ playerCount: this.players, startPlayer, onEvent: (type, p) => this._onEngineEvent(type, p) });
@@ -415,6 +458,9 @@ class UnoUI {
     this._lastPendingDraw = saved.snap.pendingDraw || 0;
     this._lastHandLen = {};
     saved.snap.players.forEach((p, i) => { this._lastHandLen[i] = p.hand.length; });
+    this._landing.clear(); this._landingAnim.clear(); this._rots.clear();
+    this._seenCounts = {};
+    saved.snap.players.forEach((p, i) => { this._seenCounts[i] = p.hand.length; });
     if (this._flightEl) this._flightEl.innerHTML = '';
     this.game = UnoGame.fromSnapshot(saved.snap, { onEvent: (type, p) => this._onEngineEvent(type, p) });
     this.view = 'game';
@@ -455,7 +501,7 @@ class UnoUI {
     if (this._isAI(pi)) {
       this.busy = true;
       this.renderGame();
-      this.later(() => this._aiStep(), autoDraw ? DRAW_STEP_MS : AI_THINK_MS);
+      this.later(() => this._aiStep(), this._aiMs(autoDraw ? DRAW_STEP_MS : AI_THINK_MS));
     } else if (autoDraw) {
       this.busy = true;
       this.renderGame();
@@ -488,6 +534,7 @@ class UnoUI {
       this._aiPulsePi = null;
       if (this.view === 'game' && this.game) this.renderGame();
     }, AI_PULSE_MS);
+    if (playedCard && chipRect) this._landing.add(playedCard.id);
     g.play(pi, action.cardId, action.color);
     this._afterStateChange();
     if (playedCard && chipRect) this._flyFromChip(chipRect, playedCard);
@@ -535,6 +582,7 @@ class UnoUI {
           <div class="un-mat"></div>
           <div class="un-toastslot"></div>
           <div class="un-handwrap">
+            <button type="button" class="un-sortbtn" data-role="sort" data-action="sort"></button>
             <div class="un-unoslot"></div>
             <div class="un-hand" role="list" aria-label="${esc(this.humanName)}">
               <div class="un-fan"></div>
@@ -555,6 +603,7 @@ class UnoUI {
       mat: q('.un-mat'),
       toast: q('.un-toastslot'),
       uno: q('.un-unoslot'),
+      sort: q('[data-role="sort"]'),
     };
     this._fanEl = q('.un-fan');
     this._flightEl = q('.un-flightlayer');
@@ -586,11 +635,19 @@ class UnoUI {
     if (discardIsNew) {
       this._lastDiscardId = top.id;
       this._discardRot = (Math.random() * 12 - 6).toFixed(2);
+      this._rots.set(top.id, this._discardRot);
     }
     const discardFlip = discardIsNew && (top.color === 'wild' || this._revealPending);
     if (discardIsNew) this._revealPending = false;
     const discardExtra = discardFlip ? 'un-card-flip' : (discardIsNew ? 'un-card-settle' : '');
-    const discardStyle = `--settle-rot:${this._discardRot}deg`;
+    // A card still flying to the pile stays hidden until it lands (see _landing), so the
+    // pile never shows it before the flight arrives; the card under it shows meanwhile.
+    if (discardIsNew && this._landing.has(top.id)) this._landingAnim.set(top.id, discardExtra);
+    const discardStyle = `--settle-rot:${this._discardRot}deg${this._landing.has(top.id) ? ';visibility:hidden' : ''}`;
+    // The two cards beneath the top, each at its own remembered tilt, so the pile reads as
+    // a stack of real cards (and a card mid-flight has the previous one showing under it).
+    const under = g.discard.slice(-3, -1).map((c) =>
+      cardHTML(c, { extraClass: 'un-under', style: `--settle-rot:${this._rotOf(c.id)}deg` })).join('');
 
     // row 8: only pulse on an actual increase, never on a re-render at the same level.
     const pendingGrew = g.pendingDraw > this._lastPendingDraw;
@@ -611,10 +668,15 @@ class UnoUI {
       const pop = unoJustReached(i);
       return `
       <div class="un-oppchip ${g.phase !== 'over' && g.currentPlayer === i ? 'is-turn' : ''} ${this._aiPulsePi === i ? 'un-chip-pulse' : ''}" data-seat="${i}">
-        <span class="un-oppemoji">${esc(this.seats[i].emoji)}</span>
-        <span class="un-oppname">${esc(this.seats[i].name)}</span>
-        <span class="un-oppcount">${g.players[i].hand.length}</span>
-        ${g.players[i].hand.length === 1 ? `<span class="un-unochip ${pop ? 'un-chip-pop' : ''}">${t('uno_banner')}</span>` : ''}
+        <span class="un-opptop">
+          <span class="un-oppemoji">${esc(this.seats[i].emoji)}</span>
+          <span class="un-oppname">${esc(this.seats[i].name)}</span>
+        </span>
+        <span class="un-oppfoot">
+          ${this._oppFanHTML(g.players[i].hand.length)}
+          <span class="un-oppcount">${g.players[i].hand.length}</span>
+          ${g.players[i].hand.length === 1 ? `<span class="un-unochip ${pop ? 'un-chip-pop' : ''}">${t('uno_banner')}</span>` : ''}
+        </span>
       </div>`;
     }).join('');
 
@@ -627,7 +689,8 @@ class UnoUI {
         <span class="un-pilecount">${g.deck.length}</span>
       </button>
       <div class="un-pile un-discardpile" aria-label="${esc(t('aria_discard_pile', { card: cardAriaLabel(top) }))}">
-        ${cardHTML(top, { extraClass: discardExtra, style: discardStyle })}
+        ${under}
+        ${cardHTML(top, { extraClass: `un-top ${discardExtra}`, style: discardStyle })}
         <span class="un-colorchip" data-color="${activeColor || top.color}" aria-hidden="true">${activeColor ? colorGlyphHTML(activeColor, 14) : ''}</span>
       </div>
       ${showDir ? `<span class="un-dir" role="img" aria-label="${esc(t(g.direction === 1 ? 'direction_cw' : 'direction_ccw'))}">${dirArrowSVG(g.direction === 1)}</span>` : ''}
@@ -644,8 +707,25 @@ class UnoUI {
     // the reversed engine order. Presentation only - every data-id and play()
     // call still uses the card's real id. (UN-6's sortedHand() will absorb this
     // reversal as its 'draw' mode.)
-    const displayHand = g.players[HUMAN].hand.slice().reverse();
+    const displayHand = sortedHand(g.players[HUMAN].hand, this.handSort);
     this._syncFan(displayHand, legalIds, humanTurn);
+    if (r.sort) {
+      const mode = t('sort_' + this.handSort);
+      r.sort.innerHTML = `<span aria-hidden="true">⇅</span> ${esc(mode)}`;
+      r.sort.setAttribute('aria-label', t('aria_sort', { mode }));
+      r.sort.hidden = chooserOpen; // the colour chooser is modal; nothing else sits on it
+    }
+
+    // Computers' draws: every card that lands in a computer's hand flies there face down
+    // from the draw pile (their own draws, a +2 stack they eat, a Wild +4 they are hit
+    // with, and the opening deal). Counted per seat against the last render, so it
+    // happens once per real change and never on an unrelated re-render.
+    opponents.forEach((i) => {
+      const len = g.players[i].hand.length;
+      const was = this._seenCounts[i];
+      this._seenCounts[i] = len;
+      if (was != null && len > was) this._flyToChip(i, len - was);
+    });
   }
 
   /** The fan reconciler (UN-3c) - the ONLY code that mutates card DOM outside a
@@ -708,7 +788,8 @@ class UnoUI {
         this._dealPending = false;
         for (const entry of newEntries) this._animateDealEntry(entry.el, entry.i);
       } else {
-        for (const entry of newEntries) this._animateDrawEntry(entry.el);
+        // Several cards at once (a +2 stack, a Wild +4) arrive one after another (row 9).
+        newEntries.forEach((entry, k) => this._animateDrawEntry(entry.el, k));
       }
     }
   }
@@ -784,12 +865,12 @@ class UnoUI {
       if (onDone) onDone();
     };
     clone.addEventListener('animationend', finish);
-    this.later(finish, FLIGHT_SAFETY_MS);
+    this.later(finish, FLIGHT_SAFETY_MS + i * 100); // a staggered clone starts later, so it may end later
   }
 
   /** row 6: a single drawn card arcs from the draw pile into its (already-computed) fan
    *  slot, then reveals the real (till-now-hidden) node and runs its 6a settle glow. */
-  _animateDrawEntry(el) {
+  _animateDrawEntry(el, k = 0) {
     const pile = this._regions && this._regions.mat.querySelector('.un-drawpile');
     if (!pile) { el.classList.remove('un-card-entering'); return; }
     this._spawnFlight({
@@ -797,6 +878,7 @@ class UnoUI {
       srcRect: pile.getBoundingClientRect(),
       destRect: el.getBoundingClientRect(),
       className: 'un-fly-draw',
+      i: k,
       onDone: () => {
         el.classList.remove('un-card-entering');
         el.classList.add('un-card-new');
@@ -826,32 +908,88 @@ class UnoUI {
    *  `sourceEl` was captured beforehand, before _syncFan removed it) and after renderGame
    *  has already picked this render's --settle-rot, so the flight ends at the same tilt
    *  the discard settles to underneath it. */
-  _flyToDiscard(sourceEl) {
-    if (!sourceEl || !this._regions) return;
-    const discardCard = this._regions.mat.querySelector('.un-discardpile .un-card');
-    if (!discardCard) return;
+  _flyToDiscard(sourceEl, cardId) {
+    const land = () => this._landDiscard(cardId);
+    if (!sourceEl || !this._regions) { land(); return; }
+    const discardCard = this._regions.mat.querySelector('.un-discardpile .un-top');
+    if (!discardCard) { land(); return; }
     this._spawnFlight({
       cloneOf: sourceEl,
       srcRect: sourceEl.getBoundingClientRect(),
       destRect: discardCard.getBoundingClientRect(),
       className: 'un-fly-play',
       rotateDeg: Number(this._discardRot) || 0,
+      onDone: land,
     });
+  }
+
+  /** A card that was flying to the pile has landed: show it, and play its settle/flip
+   *  then (it already "played" once while hidden). Safe to call for a card that is no
+   *  longer on top - it simply shows wherever it now sits in the stack. */
+  _landDiscard(cardId) {
+    if (cardId == null || !this._landing.delete(cardId)) return;
+    const cls = this._landingAnim.get(cardId);
+    this._landingAnim.delete(cardId);
+    const el = this._regions && this._regions.mat.querySelector(`.un-discardpile .un-card[data-id="${cardId}"]`);
+    if (!el) return;
+    el.style.visibility = '';
+    if (cls && el.classList.contains('un-top')) {
+      el.classList.remove(cls);
+      void el.offsetWidth;   // restart the settle/flip now that it can be seen
+      el.classList.add(cls);
+    }
+  }
+
+  /** Stable rest tilt for a discard card: the one it landed with, or (a card from before a
+   *  resume) a fixed angle derived from its id, so the stack never jiggles on re-render. */
+  _rotOf(id) {
+    if (this._rots.has(id)) return this._rots.get(id);
+    return (((id * 37) % 13) - 6).toFixed(2);
+  }
+
+  /** A computer's hand, face down: a small overlapped fan (at most 8 backs drawn; the
+   *  count beside it is the exact number). */
+  _oppFanHTML(n) {
+    const shown = Math.min(n, 8);
+    return `<span class="un-oppfan" aria-hidden="true">${'<i></i>'.repeat(shown)}</span>`;
+  }
+
+  /** `count` cards fly face down from the draw pile into computer seat `i`'s fan,
+   *  one after another. */
+  _flyToChip(i, count) {
+    const pile = this._regions && this._regions.mat.querySelector('.un-drawpile');
+    const chip = this._regions && this._regions.opponents.querySelector(`.un-oppchip[data-seat="${i}"]`);
+    if (!pile || !chip) return;
+    const src = (pile.querySelector('.un-card') || pile).getBoundingClientRect();
+    const fan = (chip.querySelector('.un-oppfan') || chip).getBoundingClientRect();
+    const w = 16, h = w * (src.height / (src.width || 1));
+    const dest = { left: fan.right - w, top: fan.top + fan.height / 2 - h / 2, width: w, height: h };
+    for (let k = 0; k < count; k++) {
+      this._spawnFlight({
+        cloneOf: pile.querySelector('.un-card') || pile,
+        srcRect: src,
+        destRect: dest,
+        className: 'un-fly-draw',
+        i: k,
+      });
+    }
   }
 
   /** row 12: an AI's play, opponent chip -> discard. Opponent hands have no per-card DOM
    *  to clone, so the clone is built fresh from cardHTML() - the played card is public
    *  information the instant it lands on the discard, so this reveals nothing hidden. */
   _flyFromChip(srcRect, card) {
-    if (!this._regions) return;
-    const discardCard = this._regions.mat.querySelector('.un-discardpile .un-card');
-    if (!discardCard) return;
+    const land = () => this._landDiscard(card.id);
+    if (!this._regions) { land(); return; }
+    const discardCard = this._regions.mat.querySelector('.un-discardpile .un-top');
+    if (!discardCard) { land(); return; }
     this._spawnFlight({
       cardHTMLStr: cardHTML(card, {}),
       srcRect,
       destRect: discardCard.getBoundingClientRect(),
       className: 'un-fly-play',
       rotateDeg: Number(this._discardRot) || 0,
+      onDone: land,
     });
   }
 
@@ -961,11 +1099,19 @@ class UnoUI {
       this.renderSetup();
     } else if (action === 'set-players') {
       this.players = Number(btn.dataset.v) || 2;
-      saveSettings(this.players, this.difficulty, this.nextStarter);
+      this._saveSettings();
       this.renderSetup();
+    } else if (action === 'set-pace') {
+      if (PACES.includes(btn.dataset.v)) this.pace = btn.dataset.v;
+      this._saveSettings();
+      this.renderSetup();
+    } else if (action === 'sort') {
+      this.handSort = SORTS[(SORTS.indexOf(this.handSort) + 1) % SORTS.length];
+      this._saveSettings();
+      if (this.view === 'game' && this.game) this.renderGame();
     } else if (action === 'set-diff') {
       this.difficulty = btn.dataset.v;
-      saveSettings(this.players, this.difficulty, this.nextStarter);
+      this._saveSettings();
       this.renderSetup();
     } else if (action === 'start' || action === 'rematch') {
       this.startGame();
@@ -1004,9 +1150,10 @@ class UnoUI {
     // immediately once the hand no longer contains this card, so it must be cloned while
     // it still exists (and still sits at its correct, un-touched fan position).
     const sourceEl = this._fanEl && this._fanEl.querySelector(`[data-id="${cardId}"]`);
+    if (sourceEl) this._landing.add(cardId);
     g.play(HUMAN, cardId);
     this._afterStateChange();
-    this._flyToDiscard(sourceEl);
+    this._flyToDiscard(sourceEl, cardId);
   }
 
   _onChooseColor(color) {
@@ -1022,9 +1169,10 @@ class UnoUI {
       // row 3 (wild case): the fan card is still present (disabled) while the chooser is
       // open - capture it before playing, same reasoning as the non-wild path above.
       const sourceEl = this._fanEl && this._fanEl.querySelector(`[data-id="${id}"]`);
+      if (sourceEl) this._landing.add(id);
       g.play(HUMAN, id, color);
       this._afterStateChange();
-      this._flyToDiscard(sourceEl);
+      this._flyToDiscard(sourceEl, id);
     } else if (g.phase === 'chooseColor' && g.pendingWild && g.pendingWild.playerIndex === HUMAN) {
       g.chooseColor(HUMAN, color);
       this._afterStateChange();

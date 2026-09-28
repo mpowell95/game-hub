@@ -64,6 +64,7 @@
   --un-dur-uno:      320ms;  --un-ease-uno:      cubic-bezier(.34, 1.56, .64, 1); /* #10 */
   --un-dur-deal:     420ms;  --un-ease-deal:     cubic-bezier(.16, .84, .44, 1); /* #1 */
   --un-deal-stagger: 55ms;                                                       /* #1 */
+  --un-draw-stagger: 90ms;                                                       /* #9: several cards drawn at once arrive one after another */
   --un-dur-newcard:  400ms;  --un-ease-newcard:  cubic-bezier(.4, 0, .2, 1);     /* #6a */
 
   /* type scale (spec §3) */
@@ -183,10 +184,11 @@
 
 /* --- game screen ----------------------------------------------------------- */
 
-/* height: 44px fixed regardless of 1-3 opponents (spec §4) - nowrap so a long name
+/* height: 58px fixed regardless of 1-3 opponents (spec §4; 44px until 2026-09-28, when each
+   chip gained a second line holding the computer's hand face down) - nowrap so a long name
    never grows the row to a second line, which would violate the fixed height.
    Horizontal padding (UN-9) keeps a chip from ever touching the shell edge. */
-.un-root .un-opponents { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; align-items: center; height: 44px; overflow: hidden; margin-bottom: 10px; padding: 0 4px; box-sizing: border-box; }
+.un-root .un-opponents { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; align-items: center; height: 58px; overflow: hidden; margin-bottom: 10px; padding: 0 4px; box-sizing: border-box; }
 /* UN-9 fix: flex:1 1 0 shares the row equally among 1-4 chips; min-width:0 is the
    standard flexbox ellipsis trap fix - a flex item won't shrink below its content
    width (and text-overflow:ellipsis never triggers) without it. Do NOT "fix" this
@@ -194,11 +196,12 @@
    scale cleanly from 2 to 4 players. */
 .un-root .un-oppchip {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
   flex: 1 1 0;
   min-width: 0;
-  padding: 6px 10px;
+  padding: 5px 8px;
   border-radius: var(--un-r-chip);
   background: var(--un-surface);
   border: 2px solid transparent;
@@ -219,6 +222,19 @@
    name (including a 20+ character custom one) ellipsizes instead of clipping or
    pushing chips past the shell edge. */
 .un-root .un-oppname { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Two lines (2026-09-28): who, then their hand face down + the exact count. */
+.un-root .un-opptop { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.un-root .un-oppfoot { display: flex; align-items: center; gap: 6px; min-width: 0; height: 20px; }
+.un-root .un-oppfan { display: inline-flex; align-items: center; flex: 0 1 auto; min-width: 0; overflow: hidden; padding: 1px; }
+.un-root .un-oppfan i {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 15px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(135deg, var(--un-wild), var(--un-wild) 2px, var(--un-back-stripe) 2px, var(--un-back-stripe) 4px);
+  box-shadow: 0 0 0 1px var(--un-surface);
+}
+.un-root .un-oppfan i + i { margin-left: -5px; }
 .un-root .un-oppcount {
   min-width: 20px;
   height: 20px;
@@ -311,6 +327,10 @@
   line-height: 0;
 }
 .un-root .un-discardpile { position: relative; }
+/* The two cards under the top (2026-09-28): the pile reads as a stack, and while a played
+   card is still in the air the one it will cover is what shows. */
+.un-root .un-discardpile .un-under { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; }
+.un-root .un-discardpile .un-top { z-index: 1; }
 /* row 4: card lands on discard - a stable random rest tilt (--settle-rot, computed once
    per physical card by renderGame and reused across unrelated re-renders of the same
    top card) plus a raised->rest shadow settle. The discard's markup is rebuilt every
@@ -364,6 +384,7 @@
 }
 .un-root .un-colorchip {
   position: absolute;
+  z-index: 2; /* above the top card and the stack under it */
   bottom: -6px;
   right: -6px;
   width: 22px;
@@ -513,6 +534,30 @@
    its row from first paint. */
 .un-root .un-handwrap { display: flex; flex-direction: column; align-items: center; height: 170px; }
 .un-root .un-unoslot { height: 20px; display: flex; align-items: center; justify-content: center; }
+/* Hand sort control (UN-6, 2026-09-28): top-right of the hand, in the band shared with the
+   UNO chip slot and the mat's empty bottom padding, so it costs no height and shifts nothing.
+   The label is the CURRENT order; a tap cycles newest -> color -> number. 28px drawn, and
+   the ::before stretches the tap target past 44px (docs/BUILDING-A-GAME.md, the UX floor). */
+.un-root .un-handwrap { position: relative; }
+.un-root .un-sortbtn {
+  position: absolute;
+  top: -10px;
+  right: 6px;
+  z-index: 3;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--un-border);
+  border-radius: var(--un-r-chip);
+  background: var(--un-surface);
+  color: var(--un-ink);
+  font: inherit;
+  font-size: var(--un-t-label);
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+.un-root .un-sortbtn::before { content: ''; position: absolute; inset: -9px -6px; }
 .un-root .un-hand {
   position: relative;
   height: 150px; /* fan region, spec §4/§5 (UN-8) - identical at every hand size; exactly
@@ -615,8 +660,8 @@
    all" (the flight layer's z-index already sits above the mat, toast, and end-of-match
    overlay). */
 .un-root .un-flightcard.un-fly-play { animation: un-fly var(--un-dur-play) var(--un-ease-play) forwards; }
-/* row 6: draw pile -> new fan slot, single card, no stagger. */
-.un-root .un-flightcard.un-fly-draw { animation: un-fly var(--un-dur-draw) var(--un-ease-draw) forwards; }
+/* row 6: draw pile -> new fan slot (or a computer's chip); several at once stagger by row 9's --un-draw-stagger. */
+.un-root .un-flightcard.un-fly-draw { animation: un-fly var(--un-dur-draw) var(--un-ease-draw) calc(var(--i, 0) * var(--un-draw-stagger)) both; }
 /* row 1: initial deal, draw pile -> each fan slot, 55ms stagger per card (--i is the
    card's position in the dealt hand); `both` so a not-yet-started clone stays parked at
    the draw pile during its delay instead of flashing at its arrival pose. */
