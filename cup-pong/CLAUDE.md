@@ -17,7 +17,7 @@ this file says which are done.
 | 2 | Rules (brief section 3, confirmed below), settings, Gentleman's, vs CPU, rebuttal, stats | **Built 2026-09-28, deployed devOnly, waiting on Matt's play-test.** The Reracks setting (brief 4a) moved to stage 3, see "Stage 2" below |
 | 3 | Rerack: presets, then custom | not started |
 | 4 | Bounce shots | not started - brief says show Matt the async design first |
-| 5 | Challenges + push | **Built and deployed 2026-09-28** (Matt: *"I don't see multiplayer? You should be able to challenge someone just like connect 4 hoops"*). See "Challenges" below. **Needs Matt: publish the rules and deploy the function** (dated lines there) |
+| 5 | Challenges + push | **Built and deployed 2026-09-28** (Matt: *"I don't see multiplayer? You should be able to challenge someone just like connect 4 hoops"*). See "Challenges" below. **Rules published 2026-09-28; the function deploy is still owed** (dated lines there) |
 | + | **Solo: clear the rack in the fewest throws**, with a leaderboard (Matt's ask, 2026-09-28) | **Built and deployed 2026-09-28** - see "Solo" below |
 
 ### The GamePigeon rules, CONFIRMED by Matt 2026-09-27 ("1-7: yes")
@@ -215,10 +215,10 @@ under "CHALLENGES").
   (`decideCupPong`: a challenge, your turn, "rebuttal time", they won / they quit; never your own
   write, via the row's `lastBy`). The payload carries `match`, and `sw.js` also reads a
   `cuppong-<id>` tag.
-- **NOT DONE YET, needs Matt (2026-09-28)**: (1) publish `database.rules.json` (it now has
-  `"cuppong"`; until it is published every read is empty and every write says "Challenges are not
-  switched on yet"); (2) `firebase deploy --only functions` for `cupPongTurnPush` (the game works
-  without it, just with no phone notifications). Close each line here the day he confirms.
+- **Rules: PUBLISHED by Matt on 2026-09-28** (the full file from main, with `"cuppong"` added).
+- **NOT DONE YET, needs Matt (as of 2026-09-28)**: `firebase deploy --only functions` for
+  `cupPongTurnPush` (he can only run it from his personal laptop). The game works without it, just
+  with no phone notifications. Close this line the day he confirms.
 
 Verified 2026-09-28 in two separate browser profiles against a local stand-in for the Realtime
 Database (the sandbox cannot reach Firebase): challenge, delivery on turn end, the replay, live
