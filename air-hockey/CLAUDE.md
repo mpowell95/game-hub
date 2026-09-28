@@ -17,21 +17,64 @@ starting a stage**. It holds the decisions (look, modes, win rule) and the onlin
 | 3 | Latency test for online (brief §5), numbers to Matt | **Done 2026-09-27.** Matt ran it on two devices: *"numbers look good, go ahead with stage 4"* (2026-09-28; he did not paste the numbers) |
 | 4 | Live online, if stage 3 says it works | **Done 2026-09-28, deployed devOnly** (see "Online play (stage 4)") |
 
-## Stats and settings (stage 2)
+## After the stages: Matt's additions (2026-09-28)
 
-- **`recordResult('airhockey', difficulty, won)`** when a match ENDS at 7: `'easy'`/`'medium'`/
-  `'hard'` vs the computer (`'mp'` is reserved for online, stage 4). total/byDiff only, no
-  sub-counter, so `js/players-agg.js` needs no branch. **A match left before 7 records nothing**
-  (quit, Back, hub back): it was neither won nor lost. A refused write logs loudly (rule 6).
+Matt: *"What else could we add?"* then *"I love all of them. Implement them. Except the mute one -
+it should not make any sound ever."*
+
+- **NO SOUND, EVER.** The stage 1 Web Audio (mallet clack, wall tick, goal horn) was REMOVED, and
+  there is deliberately no mute button: there is nothing to mute. Do not add audio back.
+- **Shot speed**: the goal banner shows YOUR shot's speed when you score ("Goal! 19 mph"); the
+  result card shows the match's fastest shot, with "New fastest shot!", "Shutout!" (a 7-0 win) and
+  "N wins in a row" badges. **Measured BEFORE the puck's speed cap** (`ev.shot` in `physics.js`,
+  set in `hit()`, before `capSpeed`): measured after it, nearly every firm hit read the cap (14
+  mph) and the record would have saturated in a game. `js/test.js` section 4 pins that the
+  readout keeps rising past the cap.
+- **mph / km/h are display only.** Stored in table units per second (rule 4). Scale: the 900-unit
+  table is a real 8 ft (2.44 m) table (`shotText` in `ui.js`, same maths in
+  `js/game-stats-ui.js`). EN shows mph, ES km/h.
+- **Expert** level (tier 4, double black diamond) above Hard: roughly the stage 2 Hard.
+- **Tables**: Classic (follows the app theme), Arcade, Neon, Ice. `render.js` `TABLES`/`PALETTE`;
+  saved as `table` in `gamehub.airhockey.v1`; per phone, cosmetic (online, each player sees their
+  own choice). The setup card shows four colour dots plus the chosen NAME ("Table: Neon"), since
+  the dots alone are colour only.
+- **Feel**: a puck trail when it is moving fast, sparks where a mallet hits (theirs too, online,
+  from the ghost), the scored-in goal mouth lights up, the scorer's number pops. All garnish, all
+  off under reduced motion; the puck itself always moves.
+- **Invite a player by name** (online card -> Invite a player -> pick from a list -> Send invite).
+  It creates a room and sends an ordinary **Messages** message ("Want to play Air Hockey? Tap Join,
+  or use code ABCD") carrying `invite: { game: 'air-hockey', code }` (`js/messages.js` `asInvite`,
+  additive; no rules change, no Cloud Function change: the existing `messagePush` notifies). In
+  Messages the recipient's bubble gets a **Join the game** button (`inviteButton` in
+  `js/messages-ui.js`), which puts the code in `sessionStorage['gamehub.airhockey.join']` (session
+  only, never kept) and opens the game the same way a tapped notification does; `ui.js` reads and
+  clears it on init and joins. A failed send says so and leaves the code on screen to share by hand;
+  an invite is never queued in the outbox (a room code goes stale). **Two limits**: while the game
+  is admin-only, only people who can see its tile can open it from Join; and a dev origin
+  (localhost) never sends messages (`writesAllowed`), so the real send was verified only up to
+  that guard. The Join side was verified in two browser profiles.
+- The player list is a `<select>` (`readContacts`, the list Messages uses), so a long list never
+  scrolls the card.
+
+## Stats and settings
+
+- **`recordAirHockey(difficulty, won, { goalsFor, goalsAgainst, shot })`** (since 2026-09-28; it
+  was `recordResult` before, which it still does the same `total/byDiff` bump as) when a match
+  ENDS at 7: `'easy'`/`'medium'`/`'hard'`/`'expert'` vs the computer, `'mp'` online. Sub-counter
+  **`ah`**: `games, goalsFor, goalsAgainst, shutouts` add; `bestShot, bestStreak` Math.max only;
+  `streak` is the one field a loss sets to 0 (live state; the earned part is `bestStreak`, and
+  `players-agg` does not add it up). All three sub-counter surfaces are wired: `ensureAh` +
+  recorder, `airHockeyScreen` in My Stats, the `ah` branch in `js/players-agg.js`
+  (`players-agg.test.mjs` has its case). **A match left before 7 records nothing** (quit, Back,
+  hub back): it was neither won nor lost. A refused write logs loudly (rule 6).
 - Wired in all four registries: `GAMES` in `js/game-stats.js`, `TABS` in `js/game-stats-ui.js`
   (**`devOnly: true`**, Pinball's reasoning: admin-only since birth, so nobody else can have plays)
   plus `HUB_ID` `airhockey -> air-hockey`, `GAME_META` in `js/leaderboard-ui.js`, and
-  `game_title_airhockey` in `js/strings.js`. My Stats uses the generic wins/losses screen
-  (`recordScreen`). **When Matt releases it, drop `devOnly` from the TABS row too.**
+  `game_title_airhockey` in `js/strings.js`. My Stats has its own screen (`airHockeyScreen`). **When Matt releases it, drop `devOnly` from the TABS row too.**
 - **Rule 1 on the game's own screens:** the setup card and the result card both show "Vs <level>:
   N won, M lost", read from the stats store.
-- **`gamehub.airhockey.v1`**: `{ difficulty }`, saved the moment a level is tapped. No saved
-  choice -> the profile's first opponent skill (1/2/3) -> Medium.
+- **`gamehub.airhockey.v1`**: `{ difficulty, table }`, each saved the moment it is tapped. No saved
+  level -> the profile's first opponent skill (1/2/3) -> Medium; no table -> Classic.
 
 ## Hub integration
 
@@ -55,7 +98,7 @@ starting a stage**. It holds the decisions (look, modes, win rule) and the onlin
 | `js/physics.js` | the table, puck and mallets. Pure (no DOM, no clock, no per-step allocation), so the headless test runs the exact game code |
 | `js/ai.js` | the computer's mallet: chooses a target, physics moves it. `LEVELS` easy/medium/hard, `DIFFS` |
 | `js/render.js` | canvas drawing. The table is painted once per layout/theme to an offscreen canvas; a frame is one `drawImage` plus three circles |
-| `js/ui.js` | setup (difficulty), how to play, pause and result cards, score row, input, sound, the clock, recording the result |
+| `js/ui.js` | setup (level, table), how to play, pause and result cards, score row, input, shot speed, the clock, recording the result, online lobby and invites |
 | `js/strings.js` | `{ en, es }` |
 | `css/air-hockey.css` | everything under `.ah-root`; cards and buttons are `css/ui.css`'s `.gh-modal` / `.gh-btn` |
 | `js/test.js` | headless engine probe, `node air-hockey/js/test.js` (not deployed) |
@@ -151,8 +194,8 @@ word beats these numbers, and the CHASER should be made to reproduce what he saw
 - Goal: a "Goal!" banner (pop animation) plus a short white flash on the table. Reduced motion
   drops the pop and the flash; the banner still shows. The puck keeps moving (Part 0: reduced
   motion thins garnish, never gameplay).
-- Sound: a mallet clack (louder and higher for harder hits), a soft wall tick, a two-note goal horn.
-  Web Audio, created on the first tap. No mute button yet.
+- **No sound at all** (see "Matt's additions"). Tables, trail, sparks and the goal moment: same
+  section.
 
 ## Online: the stage 3 latency test (2026-09-27)
 
@@ -204,7 +247,7 @@ to 7 on `js/live.js`, the opponent's NAME in the score row. Result: `recordResul
   now carries on INTO its own half, and on takeover the phone keeps the puck it was SHOWING if it
   is within 90 units of the owner's handover state stepped forward (normal case: both ran the same
   table physics). A bigger gap (their mallet hit it before it crossed) snaps to theirs. Their hits
-  and wall bounces still make sounds on your phone (from the ghost).
+  and wall bounces still throw sparks on your phone (from the ghost).
 
 **Proof, and its limits** (js/CLAUDE.md, "Multiplayer process rules": never claim "multiplayer
 works" without real devices):

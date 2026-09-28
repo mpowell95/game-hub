@@ -29,6 +29,7 @@ const SUITES = [
   { file: 'connect-four/js/test.js' },
   { file: 'nuts-bolts/js/test.js' },
   { file: 'sudoku/js/test.js' },
+  { file: 'contexto/js/test.js' },
   { file: 'tic-tac-toe/js/test.js' },
   { file: 'dots-boxes/js/test.js' },
   { file: 'boggle/js/test.js' },
@@ -40,7 +41,6 @@ const SUITES = [
   { file: 'test-arcade-scores.mjs' },
   { file: 'test-hole-editor.mjs' },
   { file: 'battleship/js/test.js' },
-  { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
   { file: 'pool/js/test-rules.mjs' },
   // Golf's engine suite, rewritten for the 2D game (Stage B). It covers everything measurable

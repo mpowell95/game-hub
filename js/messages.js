@@ -242,7 +242,19 @@ async function ready() {
  *
  * Returns { ok:true, id, atMs } or { ok:false, reason, retryable }.
  */
-export async function sendMessage({ toCode, toName, toEmoji, text }) {
+/** A GAME INVITE riding on a message (2026-09-28, Air Hockey's "invite a player by name"): the
+ *  message is an ordinary one (same node, same push notification, readable text), plus an optional
+ *  `invite: { game, code }` that messages-ui.js turns into a Join button. Only games listed here
+ *  are accepted, and the code must look like a js/net.js room code. Additive: a message without
+ *  it is byte-identical to before, and an older app simply shows the text. */
+export const INVITE_GAMES = ['air-hockey'];
+export function asInvite(v) {
+  if (!v || typeof v !== 'object') return null;
+  const game = String(v.game || ''), code = String(v.code || '').toUpperCase();
+  return INVITE_GAMES.includes(game) && /^[A-Z0-9]{4}$/.test(code) ? { game, code } : null;
+}
+
+export async function sendMessage({ toCode, toName, toEmoji, text, invite }) {
   const me = myCode();
   const to = asCode(toCode);
   const body = normalizeText(text);
@@ -259,7 +271,8 @@ export async function sendMessage({ toCode, toName, toEmoji, text }) {
     const { db, api } = boot;
 
     const ref = api.push(api.ref(db, `messages/threads/${key}/msgs`));
-    await api.set(ref, { from: me, text: body, atMs });
+    const inv = asInvite(invite);
+    await api.set(ref, inv ? { from: me, text: body, atMs, invite: inv } : { from: me, text: body, atMs });
 
     // Verify the MESSAGE landed before touching either index. An index row pointing at a message
     // that is not there is worse than no row: the inbox would show a preview that opens an empty

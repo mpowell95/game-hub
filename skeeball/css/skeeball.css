@@ -2,7 +2,7 @@
    item 3, Mancala's discipline: a prefix alone is not isolation). Custom properties are --sk-*.
 
    Two skins on purpose (Matt, 2026-08-13): the PLAY screen is the warm dark alley in both hub
-   themes (in-game art, Ball Run/Hill Climb/Pinball's class), while the SETUP screen and the
+   themes (in-game art, Ball Run/Hill Climb's class), while the SETUP screen and the
    how-to sheet are hub pages - hub-matching light tokens with a :root.gh-dark override (the
    --sks-* block below), controls from css/ui.css's .gh-* primitives.
 
@@ -14,7 +14,7 @@
 .sk-root {
   /* Fixed to the viewport rather than flowing inside the hub's padded .hub-main - the only way
      to be edge-to-edge both standalone and mounted (`immersive: true` in the hub registry).
-     z-index below the hub's floating back button. Same shape as Pinball and Hill Climb. */
+     z-index below the hub's floating back button. Same shape as Hill Climb. */
   position: fixed;
   inset: 0;
   z-index: 1;
@@ -41,7 +41,7 @@
 }
 
 /* Safari does not reliably inherit user-select into buttons; without this a double tap on the
-   swipe zone summons the Copy/Look Up bubble mid-game (the fix Hill Climb and Pinball needed). */
+   swipe zone summons the Copy/Look Up bubble mid-game (the fix Hill Climb needed). */
 .sk-root,
 .sk-root * {
   -webkit-touch-callout: none;

@@ -52,6 +52,31 @@ const TOL = 2;      // sub-pixel rounding; the same tolerance test-visual's fit 
  *  a screen that grows until it breaks - and, if the way OFF it lives at the bottom, breaks
  *  silently. */
 const EXTRA_SCREENS = {
+  contexto: [
+    {
+      name: 'how to play',
+      async open(page) {
+        await page.waitForSelector('[data-action="howto"]', { timeout: 15000 });
+        await page.click('[data-action="howto"]');
+        await page.waitForSelector('.ct-howto', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'previous games',
+      async open(page) {
+        // The prior extra (how to play) leaves its overlay open on the same page (no reload
+        // between extras, see the comment above EXTRA_SCREENS). Close it via its own close
+        // button directly, in-page - a coordinate click risks landing on the hub's own sticky
+        // header instead of the overlay's scrim, since both are `position: fixed`.
+        await page.evaluate(() => { const b = document.querySelector('.gh-modal__close'); if (b) b.click(); });
+        await page.waitForSelector('[data-action="previous"]', { timeout: 15000 });
+        await page.click('[data-action="previous"]');
+        await page.waitForSelector('.ct-previous', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+  ],
   minesweeper: [
     {
       name: 'how to play',

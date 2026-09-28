@@ -1568,7 +1568,7 @@ export function destroy() {
   try { instance.destroy(); } finally { instance = null; }
 }
 
-/** THE "NO MID-GAME RESUME" MEANING of the contract (Ball Run / Snake / Pinball's class, not
+/** THE "NO MID-GAME RESUME" MEANING of the contract (Ball Run / Snake's class, not
  *  Escoba's): nothing about a match is persisted, so leaving really does abandon it and the hub
  *  should say so. A 3D throw mid-flight and a turn that is mid-shoot-until-you-make-it are not
  *  states worth snapshotting, and skeeball deliberately removed its own mid-rack resume for the

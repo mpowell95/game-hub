@@ -1,9 +1,9 @@
-// arcade-scores.js - the shared high-score + unlock layer for the ARCADE-CABINET games (Skeeball
-// now, Pinball next). Pure: no DOM, no localStorage, no Firebase. Every function takes a stats
-// sub-counter and gives an answer, so it unit-tests headless and both games get identical
-// semantics rather than two hand-written copies that drift.
+// arcade-scores.js - the shared high-score + unlock layer for the ARCADE-CABINET games
+// (Skeeball). Pure: no DOM, no localStorage, no Firebase. Every function takes a stats
+// sub-counter and gives an answer, so it unit-tests headless and any future arcade game gets
+// identical semantics rather than a hand-written copy that drifts.
 //
-// It exists as a SHARED module from day one on purpose. Matt asked for Skeeball and Pinball to
+// It exists as a SHARED module from day one on purpose. Matt asked for the arcade games to
 // work the same way, and this repo's own history (three storage-key generations, two setup-screen
 // patterns) is what happens when "we'll extract it when the second one arrives" meets a fresh
 // session with no memory of the first.
@@ -185,8 +185,8 @@ export function mergeUnlocked(dst, src) {
  *
  * @param {Array} players aggregated rows from js/players-agg.js
  * @param {string} gameId stats id, e.g. 'skeeball'
- * @param {string} subKey the game's sub-counter key within that record - 'sk' for Skeeball, 'pb'
- *   for Pinball. A parameter rather than a guess: an aggregated row is
+ * @param {string} subKey the game's sub-counter key within that record - 'sk' for Skeeball.
+ *   A parameter rather than a guess: an aggregated row is
  *   `games[gameId] = { total, byDiff, <subKey>: {...} }`, and hardcoding one game's key here is
  *   exactly the kind of shared-module assumption that breaks the second consumer silently.
  * @param {string} boardId

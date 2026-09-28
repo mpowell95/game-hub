@@ -348,8 +348,8 @@ export function startThrow(board, { power = 0.5, aim = 0, seed = null, closed = 
     bounces: 0,
     nContacts: 0,             // contact events emitted so far, so the cap below can bite
     airborne: false,
-    // The displacement-anchored stall watchdog (speed thresholds are jitter-blind - the pinball
-    // lesson survives the engine swap). `nudges` lived here until 2026-08-26; this machine no
+    // The displacement-anchored stall watchdog (speed thresholds are jitter-blind - a lesson
+    // that survives the engine swap). `nudges` lived here until 2026-08-26; this machine no
     // longer pops a parked ball, it ends it - see section 6.
     // `t0` is when the ball entered the CURRENT 3cm bubble; `t` is when it was last seen moving
     // inside it. The jam window is measured from `t`, the veto's rope from `t0` - see section 6.
@@ -883,7 +883,7 @@ function substep(st) {
   //
   //    THE DISPLACEMENT ANCHOR IS STILL THE PRIMARY TEST and must stay that way: it is the only
   //    thing that catches a ball JITTERING in a cradle, which is what the 2026-08-26 rewrite was
-  //    written for, and speed alone is jitter-blind (the pinball lesson). Speed only VETOES it.
+  //    written for, and speed alone is jitter-blind (a measured lesson). Speed only VETOES it.
   //    The case the rule exists for is untouched, and that is measured too, not argued: the
   //    -20 cradle kills read a median 0.00 to 0.01 m/s, three orders of magnitude under this
   //    threshold. `t0` bounds the veto - a ball that oscillates inside the bubble without ever

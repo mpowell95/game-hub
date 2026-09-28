@@ -11,7 +11,7 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
 import { THROW, CUP, RACK_Z0, ROW_H } from './geom.js';
-import { makeRack, cupsXZ } from './rack.js';
+import { makeRack, cupsXZ, presetsFor, cellXZ } from './rack.js';
 import { Match } from './match.js';
 
 /** The middle of the full rack, along the table: where aim is measured. */
@@ -24,6 +24,7 @@ const SETTLE_MS = 450;          // after a throw resolves, before anything else 
 const CPU_PAUSE_MS = 900;       // before each computer throw, so it reads as a person lining up
 const TURN_PAUSE_MS = 700;      // between one side's last throw and the camera moving
 const DIFFS = ['easy', 'medium', 'hard'];
+const RERACKS = [0, 1, 2, 3, 'inf'];
 
 let instance = null;
 
@@ -33,10 +34,11 @@ const readSettings = () => {
     return {
       diff: DIFFS.includes(raw.diff) ? raw.diff : 'medium',
       gentlemans: raw.gentlemans !== false,          // default On (brief 4a)
+      reracks: RERACKS.includes(raw.reracks) ? raw.reracks : 2,   // per player per game, default 2
       // Turn-based games alternate who opens (docs/BUILDING-A-GAME.md, setup defaults).
       nextFirst: raw.nextFirst === 'b' ? 'b' : 'a',
     };
-  } catch { return { diff: 'medium', gentlemans: true, nextFirst: 'a' }; }
+  } catch { return { diff: 'medium', gentlemans: true, reracks: 2, nextFirst: 'a' }; }
 };
 const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
 
@@ -69,6 +71,18 @@ function ensureCSS() {
     document.head.appendChild(link);
     setTimeout(res, 2500);
   });
+}
+
+/** A preset, drawn top-down: one circle per cup, the shooter at the bottom. Shape only, one colour. */
+function presetSVG(spots) {
+  const pts = spots.map((sp) => cellXZ(sp));
+  const xs = pts.map((p) => p.x), zs = pts.map((p) => p.z);
+  const r = 0.0485, pad = 0.01;
+  const x0 = Math.min(...xs) - r - pad, x1 = Math.max(...xs) + r + pad;
+  const z0 = Math.min(...zs) - r - pad, z1 = Math.max(...zs) + r + pad;
+  const w = x1 - x0, h = z1 - z0, sc = 56 / Math.max(w, h);
+  return `<svg viewBox="0 0 ${(w * sc).toFixed(1)} ${(h * sc).toFixed(1)}" width="${(w * sc).toFixed(0)}" height="${(h * sc).toFixed(0)}" aria-hidden="true">${
+    pts.map((p) => `<circle cx="${((p.x - x0) * sc).toFixed(1)}" cy="${((p.z - z0) * sc).toFixed(1)}" r="${(r * sc * 0.94).toFixed(1)}"/>`).join('')}</svg>`;
 }
 
 const reducedMotion = () => {
@@ -142,6 +156,8 @@ class CupPong {
           ${seg('diff', DIFFS.map((d) => [d, t(d), diffShapeSVG(tierOf(d))]), s.diff)}
           <p class="cp-setup-label">${t('gentlemans')} <span class="cp-setup-hint">${t('gentlemansHint')}</span></p>
           ${seg('gent', [['on', t('on')], ['off', t('off')]], s.gentlemans ? 'on' : 'off')}
+          <p class="cp-setup-label">${t('reracks')} <span class="cp-setup-hint">${t('reracksHint')}</span></p>
+          ${seg('rr', RERACKS.map((n) => [String(n), n === 'inf' ? '\u221e' : String(n)]), String(s.reracks))}
         </div>
         <button type="button" class="gh-btn gh-btn--primary cp-setup-play" data-role="play">${t('play')}</button>
         <button type="button" class="gh-btn gh-btn--ghost cp-setup-practice" data-role="practice">${t('practiceBtn')}</button>
@@ -158,6 +174,7 @@ class CupPong {
     };
     pick('diff', (v) => { this.settings.diff = v; });
     pick('gent', (v) => { this.settings.gentlemans = v === 'on'; });
+    pick('rr', (v) => { this.settings.reracks = v === 'inf' ? 'inf' : Number(v); });
     this.on(this.root.querySelector('[data-role="play"]'), 'click', () => this.start('cpu'));
     this.on(this.root.querySelector('[data-role="practice"]'), 'click', () => this.start('practice'));
   }
@@ -212,10 +229,17 @@ class CupPong {
           <p class="cp-toast" aria-live="polite"></p>
           <p class="cp-hint">${t('swipeHint')}</p>
           <p class="cp-last" aria-hidden="true"></p>
+          <div class="cp-opts"></div>
+          <div class="cp-pick" hidden><p class="cp-pick-say"></p></div>
         </div>
       </div>`;
     this.bindSwipe();
     this.on(this.root.querySelector('.cp-menu'), 'click', () => this.showPause());
+    this.on(this.root.querySelector('.cp-opts'), 'click', (e) => {
+      const b = e.target.closest('.cp-opt');
+      if (b) this.onOption(b.dataset.role);
+    });
+    this.on(this.root.querySelector('.cp-pick'), 'click', (e) => this.onPickTap(e));
   }
 
   fit() {
@@ -244,8 +268,12 @@ class CupPong {
     const bits = [t('cupsScore', { a: m.racks.a.length, b: m.racks.b.length })];
     if (m.phase === 'rebuttal') bits.push(t('rebuttal'));
     else if (m.phase === 'overtime') bits.push(t('overtime'));
-    if (m.onFire) bits.push(t('onFire'));
-    else if (m.phase !== 'rebuttal' && m.heating(m.shooter)) bits.push(t('heatingUp'));
+    if (m.called) bits.push(t('islandCalled'));
+    else if (m.phase !== 'rebuttal' && m.ball !== null) {
+      const h = m.heat(m.shooter, m.ball);
+      if (h >= 3) bits.push(t('ballOnFire', { n: m.ball + 1 }));
+      else if (h === 2) bits.push(t('ballHeating', { n: m.ball + 1 }));
+    }
     sub.textContent = bits.join(' · ');
   }
 
@@ -281,9 +309,10 @@ class CupPong {
   newMatch() {
     this.clearTimers();
     const first = this.settings.nextFirst;
-    this.match = new Match({ first, gentlemans: this.settings.gentlemans });
+    this.match = new Match({ first, gentlemans: this.settings.gentlemans, reracks: this.settings.reracks === 'inf' ? Infinity : this.settings.reracks });
     this.recorded = false;
     this.throwState = null;
+    this.pickMode = null;
     const R = this.engine.rend;
     R.setRack('a', cupsXZ(this.match.racks.a));
     R.setRack('b', cupsXZ(this.match.racks.b));
@@ -292,82 +321,260 @@ class CupPong {
     const hint = this.root.querySelector('.cp-hint');
     if (hint) hint.hidden = true;
     this.paintHud();
+    this.paintOptions();
     this.toast(first === 'a' ? t('firstYou') : t('firstCpu'), 1400);
     this.busy = true;
     this.later(() => this.beginTurn(), 900);
   }
 
-  /** The shooter's turn starts: Gentleman's, the rebuttal notice, then a ball for whoever throws. */
+  /** The shooter's turn starts: the rebuttal notice, then a ball for whoever throws. */
   beginTurn() {
     const m = this.match;
     if (!m || m.over) return;
     const R = this.engine.rend;
-    const ev = m.startTurn();
-    let wait = 0;
-    for (const e of ev) {
-      if (e.type === 'gentlemans') {
-        R.slideRack(e.side, cupsXZ(e.to));
-        this.toast(t('gentlemansDone'));
-        wait = Math.max(wait, 700);
-      } else if (e.type === 'rebuttal') {
-        this.toast(e.side === 'a' ? t('rebuttalYou') : t('rebuttal'), 1600);
-        wait = Math.max(wait, 900);
-      }
+    for (const e of m.startTurn()) {
+      if (e.type === 'rebuttal') this.toast(e.side === 'a' ? t('rebuttalYou') : t('rebuttal'), 1600);
     }
+    R.setMarks('a', null); R.setMarks('b', null);
     this.paintHud();
     R.setView(m.shooter === 'a' ? 'shoot' : 'defend');
     if (m.shooter === 'a') {
-      R.showRestBall(this.spareShown());
-      this.busy = false;
+      this.serveMatchBall();
     } else {
       R.hideBall();
       this.busy = true;
-      this.later(() => this.cpuShoot(), Math.max(wait, CPU_PAUSE_MS + 300));
+      this.paintOptions();
+      this.later(() => this.cpuTurnStart(), CPU_PAUSE_MS + 300);
     }
   }
 
-  /** The greyed second ball shows while this turn still has a throw after this one. */
-  spareShown() {
+  /** The player's ball on the table, the spare beside it, the options on the left. */
+  serveMatchBall() {
     const m = this.match;
-    return !!m && m.phase !== 'rebuttal' && !m.onFire && m.throwsLeft >= 2;
+    const R = this.engine.rend;
+    R.showRestBall(m.spare !== null);
+    R.setBallHeat(m.heat('a', m.ball), m.spare !== null ? m.heat('a', m.spare) : 0);
+    this.busy = false;
+    this.paintHud();
+    this.paintOptions();
+  }
+
+  /** The computer takes its options (by the same rules), then throws. */
+  cpuTurnStart() {
+    const m = this.match;
+    if (!m || m.over || m.shooter !== 'b') return;
+    const C = this.engine.cpu;
+    let wait = 0;
+    for (const act of C.cpuOptions(m)) {
+      const ev = act.type === 'gentlemans' ? m.applyGentlemans() : m.rerack(act.key);
+      for (const e of ev) {
+        this.engine.rend.slideRack(e.side, cupsXZ(e.to));
+        this.toast(e.type === 'gentlemans' ? t('cpuGentlemans') : t('cpuRerack'), 1400);
+        wait = 1300;
+      }
+    }
+    this.later(() => this.cpuShoot(), wait);
   }
 
   cpuShoot() {
     const m = this.match;
-    if (!m || m.over || m.shooter !== 'b' || !this.engine) return;
+    if (!m || m.over || m.shooter !== 'b' || !this.engine || m.pendingPick) return;
+    const C = this.engine.cpu;
+    // An island first, if it has one to call: announced, marked, then thrown at.
+    const isl = C.cpuIsland(m);
+    if (isl && !m.called) {
+      m.callIsland(isl);
+      this.engine.rend.setMarks('a', [isl], 'called');
+      this.toast(t('cpuIsland'), 1300);
+      this.paintHud();
+      this.later(() => this.cpuShoot(), 1100);
+      return;
+    }
     const cups = cupsXZ(m.target());
-    const th = this.engine.cpu.cpuThrow(this.settings.diff, cups);
+    const th = C.cpuThrow(this.settings.diff, cups, Math.random, m.called);
     this.shooter = 'b';
+    this.engine.rend.setBallHeat(m.heat('b', m.ball), 0);
     this.throwState = this.engine.phys.startThrow({ power: th.power, aim: th.aim, cups });
   }
 
-  /** A throw has resolved and settled: the rules decide what happens next. */
-  applyThrow(outcome) {
+  /** A throw has resolved: the rules decide now; the table shows it now; what comes next waits. */
+  applyThrow(outcome, wait) {
     const m = this.match;
     const made = outcome && outcome.kind === 'made' ? outcome.id : null;
     const ev = m.throwResult({ made, bounced: !!(outcome && outcome.bounced) });
+    this.showEvents(ev);
+    if (m.over) { this.finish(); return; }
+    this.paintHud();
+    this.paintOptions();
+    if (m.pendingPick) { this.later(() => this.askPick(), wait); return; }
+    this.later(() => this.nextStep(ev), wait);
+  }
+
+  /** What the table and the words show for a batch of rule events. */
+  showEvents(ev) {
+    const m = this.match;
     const R = this.engine.rend;
-    let turnOver = false;
     for (const e of ev) {
-      if (e.type === 'ballsBack') this.toast(t('ballsBack'));
+      if (e.type === 'made') {
+        const side = e.side === 'a' ? 'b' : 'a';
+        R.setMarks(side, null);
+        if (e.lastCup) this.toast(t('lastCup'), 1600);              // it stands for the next ball
+        else R.vanish(side, e.id);
+        if (e.sameCup) this.toast(t('sameCup'), 1600);
+        else if (e.island) this.toast(t('islandHit'), 1500);
+      } else if (e.type === 'removed' || e.type === 'picked') R.vanish(e.side, e.id);
+      else if (e.type === 'ballsBack') this.toast(t('ballsBack'));
       else if (e.type === 'heatingUp') this.toast(t('heatingUp'));
       else if (e.type === 'onFire') this.toast(t('onFire'), 1400);
       else if (e.type === 'overtime') {
         this.toast(t('overtime'), 1600);
         R.setRack('a', cupsXZ(m.racks.a));
         R.setRack('b', cupsXZ(m.racks.b));
-      } else if (e.type === 'turnOver') turnOver = true;
-      else if (e.type === 'win') { this.finish(); return; }
+      }
     }
-    this.paintHud();
-    if (turnOver) {
+  }
+
+  nextStep(ev) {
+    const m = this.match;
+    if (!m || m.over) return;
+    if (ev.some((e) => e.type === 'turnOver')) {
       this.busy = true;
       this.later(() => this.beginTurn(), TURN_PAUSE_MS);
     } else if (m.shooter === 'a') {
-      R.showRestBall(this.spareShown());
-      this.busy = false;
+      this.serveMatchBall();
     } else {
       this.later(() => this.cpuShoot(), CPU_PAUSE_MS);
+    }
+  }
+
+  /** ISLAND: the defender owes a second cup. The computer picks at once; the player taps one. */
+  askPick() {
+    const m = this.match;
+    if (!m || !m.pendingPick) return;
+    if (m.pendingPick.picker === 'b') {
+      const id = this.engine.cpu.cpuPick(cupsXZ(m.target()));
+      this.afterPick(m.pickCup(id));
+      return;
+    }
+    // The player is the defender: their own cups, from their end.
+    this.engine.rend.setView('defend');
+    this.engine.rend.setMarks('a', m.target().map((k) => k.id), 'island');
+    this.startPick('defend', t('pickYours'), (id) => this.afterPick(m.pickCup(id)));
+  }
+
+  afterPick(ev) {
+    this.engine.rend.setMarks('a', null);
+    this.engine.rend.setMarks('b', null);
+    this.showEvents(ev);
+    if (this.match.over) { this.finish(); return; }
+    this.paintHud();
+    this.later(() => this.nextStep(ev), SETTLE_MS);
+  }
+
+  // --- the shooter's options: buttons on the left, only while on offer -----------------------
+  paintOptions() {
+    const box = this.root.querySelector('.cp-opts');
+    if (!box) return;
+    const m = this.match;
+    const mine = this.mode === 'cpu' && m && !m.over && m.shooter === 'a' && !this.busy && !this.pickMode && !m.pendingPick;
+    const btn = (role, label) => `<button type="button" class="cp-opt" data-role="${role}">${label}</button>`;
+    let html = '';
+    if (mine && m.canGentlemans()) html += btn('gent', t('gentlemansQ'));
+    if (mine && m.canRerack()) {
+      const n = m.reracksLeft.a;
+      html += btn('rerack', t('rerackQ', { n: Number.isFinite(n) ? n : '∞' }));
+    }
+    if (mine && m.canIsland()) html += btn('island', t('islandQ'));
+    box.innerHTML = html;
+  }
+
+  onOption(role) {
+    const m = this.match;
+    if (!m || this.busy || m.shooter !== 'a') return;
+    const R = this.engine.rend;
+    if (role === 'gent') {
+      for (const e of m.applyGentlemans()) R.slideRack(e.side, cupsXZ(e.to));
+      this.paintOptions();
+    } else if (role === 'rerack') {
+      this.showRerack();
+    } else if (role === 'island') {
+      const isl = m.islands();
+      if (isl.length === 1) this.callIsland(isl[0]);
+      else {
+        // "If there are multiple available islands, you must call the specific one."
+        R.setMarks('b', isl, 'island');
+        this.startPick('shoot', t('pickIsland'), (id) => {
+          if (!isl.includes(id)) return false;
+          this.callIsland(id);
+          return true;
+        });
+      }
+    }
+  }
+
+  callIsland(id) {
+    this.match.callIsland(id);
+    this.engine.rend.setMarks('b', [id], 'called');
+    this.toast(t('islandCalled'), 1200);
+    this.paintHud();
+    this.paintOptions();
+  }
+
+  /** A full-stage tap layer: tap a cup of the given end, `fn(id)` returns false to keep waiting. */
+  startPick(view, prompt, fn) {
+    const side = view === 'defend' ? 'a' : 'b';
+    this.pickMode = { side, fn };
+    this.busy = true;
+    const layer = this.root.querySelector('.cp-pick');
+    const say = this.root.querySelector('.cp-pick-say');
+    if (say) say.textContent = prompt;
+    if (layer) layer.hidden = false;
+    this.paintOptions();
+  }
+
+  endPick() {
+    this.pickMode = null;
+    const layer = this.root.querySelector('.cp-pick');
+    if (layer) layer.hidden = true;
+  }
+
+  onPickTap(e) {
+    const p = this.pickMode;
+    if (!p || !this.engine) return;
+    const cv = this.root.querySelector('.cp-canvas');
+    const box = cv.getBoundingClientRect();
+    const id = this.engine.rend.cupAt(p.side, e.clientX - box.left, e.clientY - box.top);
+    if (!id) return;
+    const was = this.match.pendingPick;
+    if (p.fn(id) === false) return;
+    this.endPick();
+    // Calling an island hands the ball back; a defender's pick carries on from afterPick.
+    if (!was) { this.busy = false; this.paintOptions(); }
+  }
+
+  showRerack() {
+    const m = this.match;
+    const rack = m.target();
+    const presets = presetsFor(rack.length);
+    const el = document.createElement('div');
+    el.className = 'gh-overlay';
+    el.innerHTML = `
+      <div class="gh-modal cp-card cp-rerack" role="dialog" aria-modal="true" aria-label="${t('rerack')}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <h2 class="cp-card-title">${t('rerack')}</h2>
+        <div class="cp-presets">${presets.map((p) => `
+          <button type="button" class="cp-preset" data-key="${p.key}">${presetSVG(p.spots)}<span>${t('rk_' + p.key)}</span></button>`).join('')}
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
+    for (const b of el.querySelectorAll('.cp-preset')) {
+      this.on(b, 'click', () => {
+        el.remove();
+        for (const e of m.rerack(b.dataset.key)) this.engine.rend.slideRack(e.side, cupsXZ(e.to));
+        this.engine.rend.setMarks('b', null);
+        this.paintOptions();
+      });
     }
   }
 
@@ -500,6 +707,7 @@ class CupPong {
     this.busy = true;
     this.shooter = 'a';
     this.lastShot = { power, aim, ...info };
+    this.paintOptions();                 // the options are for before a throw
     const hint = this.root.querySelector('.cp-hint');
     if (hint) hint.hidden = true;
     const last = this.root.querySelector('.cp-last');
@@ -547,12 +755,10 @@ class CupPong {
 
   onEvent(ev) {
     const E = this.engine;
-    // The side whose cups are being shot at.
-    const side = this.shooter === 'a' ? 'b' : 'a';
     if (ev.type === 'made') {
-      E.rend.vanish(side, ev.id);
       this.later(() => E.rend.hideBall(), 60);
       if (this.mode === 'practice') {
+        E.rend.vanish('b', ev.id);
         this.rack = this.rack.filter((k) => k.id !== ev.id);
         this.paintHud();
       }
@@ -560,7 +766,7 @@ class CupPong {
       const o = ev.outcome;
       const wait = o.kind === 'made' ? SETTLE_MS + 200 : SETTLE_MS;
       if (this.mode === 'practice') this.later(() => this.serve(), wait);
-      else this.later(() => { this.throwState = null; this.applyThrow(o); }, wait);
+      else { this.throwState = { done: true, ball: this.throwState && this.throwState.ball, outcome: o }; this.applyThrow(o, wait); }
     }
   }
 

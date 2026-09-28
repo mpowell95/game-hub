@@ -70,70 +70,103 @@ ok('every preset is legal', Object.keys(PRESETS).every((p) => validRack(makeRack
 ok('the whole rack area is on the table',
   AREA.cMax * CUP_D / 2 + CUP.topR <= TABLE.width / 2 && RACK_Z0 - CUP.topR >= -TABLE.len / 2);
 
-// --- the rules (match.js), as Matt confirmed them 2026-09-27 ---------------------------------
+// --- the rules (match.js), as Matt set them 2026-09-27/28 ----------------------------------------
 {
   const types = (ev) => ev.map((e) => e.type);
   const ids = (m, side) => m.racks[side].map((k) => k.id);
-  // A turn is two throws; one miss ends it.
+  const miss = { made: null };
   let m = new Match({ first: 'a' });
   m.startTurn();
   let ev = m.throwResult({ made: 'k0' });
   ok('a make removes that cup at once', !ids(m, 'b').includes('k0') && types(ev).join() === 'made');
-  ev = m.throwResult({ made: null });
-  ok('two throws, then the turn passes', types(ev).join() === 'miss,turnOver' && m.shooter === 'b');
-  // Balls back: both throws in, and it repeats.
+  ev = m.throwResult(miss);
+  ok('two balls, then the turn passes', types(ev).join() === 'miss,turnOver' && m.shooter === 'b');
+  // Balls back.
   m = new Match({ first: 'a' });
-  m.startTurn();
-  m.throwResult({ made: 'k0' });
+  m.startTurn(); m.throwResult({ made: 'k0' });
   ev = m.throwResult({ made: 'k1' });
-  ok('make both throws: balls back', types(ev).includes('ballsBack') && m.shooter === 'a' && m.throwsLeft === 2);
-  m.throwResult({ made: 'k2' });
-  ev = m.throwResult({ made: 'k3' });
-  ok('balls back repeats', types(ev).includes('ballsBack') && m.shooter === 'a');
-  // Heating up on the 2nd turn running with a make, on fire on the 3rd.
+  ok('make both balls: balls back', types(ev).includes('ballsBack') && m.shooter === 'a' && m.queue.join() === '0,1');
+  // HEATING UP AND ON FIRE ARE PER BALL. Matt's own counter-example first.
   m = new Match({ first: 'a' });
-  const turn = (made1, made2, who) => { m.startTurn(); const e1 = m.throwResult({ made: made1 }); const e2 = m.shooter === who && !m.over ? m.throwResult({ made: made2 }) : []; return types(e1.concat(e2)); };
-  turn('k0', null, 'a'); turn(null, null, 'b');
-  const t2 = turn('k1', null, 'a');
-  ok('cups on 2 turns in a row: heating up', t2.includes('heatingUp') && m.heating('a'));
-  turn(null, null, 'b');
-  m.startTurn();
+  m.startTurn(); m.throwResult({ made: 'k0' }); m.throwResult(miss);   // a: ball 1 in, ball 2 out
+  m.startTurn(); m.throwResult(miss); m.throwResult(miss);             // b
+  m.startTurn(); m.throwResult(miss);
+  ev = m.throwResult({ made: 'k1' });                                    // a: ball 1 out, ball 2 in
+  ok('ball 1 in, then ball 2 in next turn: NOT heating up (Matt\'s example)', !types(ev).includes('heatingUp') && m.heat('a', 0) === 0 && m.heat('a', 1) === 1);
+  m = new Match({ first: 'a' });
+  const pass = () => { m.startTurn(); m.throwResult(miss); m.throwResult(miss); };
+  m.startTurn(); m.throwResult({ made: 'k0' }); m.throwResult(miss); pass();
+  m.startTurn(); ev = m.throwResult({ made: 'k1' });
+  ok('the SAME ball in on 2 turns running: heating up', types(ev).includes('heatingUp') && m.heat('a', 0) === 2);
+  m.throwResult(miss); pass();
+  m.startTurn(); ev = m.throwResult({ made: 'k2' });
+  ok('the same ball a 3rd time: on fire, and that ball comes straight back', types(ev).includes('onFire') && m.ball === 0 && m.queue.join() === '0,1');
+  m.throwResult({ made: 'k3' });
+  ok('on fire: it keeps coming back while it makes cups', m.ball === 0);
+  ev = m.throwResult(miss);
+  ok('on fire: a miss cools it, then the other ball throws', types(ev).includes('cooled') && m.heat('a', 0) === 0 && m.ball === 1);
+  m = new Match({ first: 'a' });
+  m.startTurn(); m.throwResult({ made: 'k0' }); m.throwResult({ made: 'k1' });   // balls back
   ev = m.throwResult({ made: 'k2' });
-  ok('a make on the 3rd turn: on fire', types(ev).includes('onFire') && m.onFire);
-  m.throwResult({ made: 'k3' }); m.throwResult({ made: 'k4' });
-  ok('on fire: keep shooting past two throws', m.shooter === 'a' && m.onFire);
-  ev = m.throwResult({ made: null });
-  ok('on fire: the first miss ends the turn and cools you off', types(ev).join() === 'miss,cooled,turnOver' && m.streak.a === 0 && m.shooter === 'b');
-  // Win, rebuttal and overtime.
-  const clearAll = (mm, side) => { mm.shooter = side; mm.startTurn(); let e = []; for (const id of mm.racks[side === 'a' ? 'b' : 'a'].map((k) => k.id)) { mm.onFire = true; e = e.concat(mm.throwResult({ made: id })); } return e; };
-  m = new Match({ first: 'a', gentlemans: false });
-  ev = clearAll(m, 'a');
-  ok('clearing the rack gives the other side a rebuttal', types(ev).includes('rackCleared') && m.phase === 'rebuttal' && m.shooter === 'b' && !m.over);
+  ok('balls-back throws count toward that ball\'s streak (Matt, 2026-09-28)', types(ev).includes('heatingUp') && m.heat('a', 0) === 2);
+  // THE LAST CUP.
+  const oneLeft = (first) => { const mm = new Match({ first }); mm.racks[first === 'a' ? 'b' : 'a'] = [{ id: 'k9', c: 0, r: 3 }]; mm.startTurn(); return mm; };
+  m = oneLeft('a');
+  ev = m.throwResult({ made: 'k9' });
+  ok('the last cup made with ball 1: it stays for ball 2', !m.over && m.lastCup === 'k9' && m.ball === 1 && ids(m, 'b').join() === 'k9');
+  ev = m.throwResult({ made: 'k9' });
+  ok('ball 2 in the SAME last cup: win, no rebuttal', m.over && m.winner === 'a' && ev.some((e) => e.type === 'win' && e.how === 'sameCup'));
+  m = oneLeft('a'); m.throwResult({ made: 'k9' });
+  ev = m.throwResult(miss);
+  ok('ball 2 misses: the cup goes and the other side gets a rebuttal', !m.over && m.phase === 'rebuttal' && m.shooter === 'b' && ids(m, 'b').length === 0 && types(ev).includes('rackCleared'));
+  // THE REBUTTAL: both balls, each until it misses.
   ev = m.startTurn();
   ok('the rebuttal is announced', types(ev).includes('rebuttal'));
   m.throwResult({ made: 'k0' });
-  ev = m.throwResult({ made: null });
-  ok('a miss in the rebuttal: the side that cleared wins', m.over && m.winner === 'a' && types(ev).includes('win'));
-  m = new Match({ first: 'a', gentlemans: false });
-  clearAll(m, 'a');
-  m.startTurn();
+  ok('rebuttal: a make gives that ball back', m.ball === 0);
+  m.throwResult(miss);
+  ok('rebuttal: after ball 1 misses, ball 2 shoots', !m.over && m.ball === 1);
+  m.throwResult({ made: 'k1' }); ev = m.throwResult(miss);
+  ok('rebuttal: both balls missed, the side that cleared wins', m.over && m.winner === 'a');
+  m = oneLeft('a'); m.throwResult({ made: 'k9' }); m.throwResult(miss); m.startTurn();
   for (const id of ids(m, 'a')) ev = m.throwResult({ made: id });
   ok('a rebuttal that clears everything goes to overtime', m.phase === 'overtime' && !m.over && types(ev).includes('overtime'));
-  ok('overtime: 3 cups each in a 2-1 triangle, the first to clear shoots first',
-    m.racks.a.length === 3 && m.racks.b.length === 3 && m.shooter === 'a'
-    && m.racks.a.filter((k) => k.r === 0).length === 2 && m.racks.a.filter((k) => k.r === 1).length === 1);
-  // Gentleman's.
+  ok('overtime: 3 cups each in a 2-1 triangle, the first to clear opens', m.racks.a.length === 3 && m.racks.b.length === 3 && m.shooter === 'a');
+  m.startTurn(); m.racks.b = m.racks.b.slice(0, 2);
+  ok('overtime: no Gentleman\'s and no rerack (Matt)', !m.canGentlemans() && !m.canRerack());
+  // GENTLEMAN'S AND RERACK ARE THE SHOOTER'S OPTIONS.
   m = new Match({ first: 'a', gentlemans: true });
-  m.racks.b = m.racks.b.slice(0, 2);
-  ev = m.startTurn();
-  const g = ev.find((e) => e.type === 'gentlemans');
-  ok('Gentleman\'s: 2 cups left are stood in a line at the start of the shooter\'s turn',
-    !!g && m.racks.b.every((k) => 'u' in k && k.u === 0) && m.racks.b.map((k) => k.id).join() === 'k0,k1');
-  ev = m.startTurn();
-  ok('Gentleman\'s does not re-apply to a line already standing', !ev.some((e) => e.type === 'gentlemans'));
-  m = new Match({ first: 'a', gentlemans: false });
-  m.racks.b = m.racks.b.slice(0, 2);
-  ok('Gentleman\'s off: 2 cups stay where they are', !m.startTurn().some((e) => e.type === 'gentlemans'));
+  m.racks.b = m.racks.b.slice(0, 2); m.startTurn();
+  ok('Gentleman\'s is offered, not applied', m.canGentlemans() && m.racks.b.every((k) => 'c' in k));
+  ev = m.applyGentlemans();
+  ok('Gentleman\'s: taken, the 2 cups stand in a line', types(ev).join() === 'gentlemans' && m.racks.b.every((k) => k.u === 0) && !m.canGentlemans());
+  m = new Match({ first: 'a', gentlemans: false }); m.racks.b = m.racks.b.slice(0, 2); m.startTurn();
+  ok('Gentleman\'s off: never offered', !m.canGentlemans());
+  m = new Match({ first: 'a', reracks: 1 }); m.racks.b = m.racks.b.slice(0, 6); m.startTurn();
+  ok('rerack offered before the first throw', m.canRerack());
+  ev = m.rerack('zipper');
+  ok('rerack: preset applied, ids kept, one spent', types(ev).join() === 'rerack' && m.reracksLeft.a === 0 && ids(m, 'b').join() === 'k0,k1,k2,k3,k4,k5' && !m.canRerack());
+  m = new Match({ first: 'a', reracks: 2 }); m.racks.b = m.racks.b.slice(0, 6); m.startTurn(); m.throwResult(miss);
+  ok('no rerack after the turn\'s first throw', !m.canRerack());
+  m = new Match({ first: 'a', reracks: Infinity }); m.racks.b = m.racks.b.slice(0, 6); m.startTurn(); m.rerack('tri');
+  ok('one rerack a turn', !m.canRerack());
+  m.startTurn();
+  ok('unlimited reracks never run out', m.canRerack());
+  // ISLAND.
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  ok('an island is a cup touching no other', m.islands().join() === 'k9' && m.canIsland());
+  ok('you must call a specific island', m.callIsland('k0').length === 0 && !m.islandUsed.a);
+  m.callIsland('k9');
+  ev = m.throwResult({ made: 'k9' });
+  ok('hit the called island: the defender owes a second cup', types(ev).includes('islandPick') && m.pendingPick.picker === 'b' && ids(m, 'b').join() === 'k0,k1');
+  ok('nothing can be thrown until they pick', m.throwResult({ made: 'k0' }).length === 0);
+  ev = m.pickCup('k1');
+  ok('the defender\'s pick goes too, then play carries on', ids(m, 'b').join() === 'k0' && types(ev)[0] === 'picked' && !m.pendingPick);
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9'); m.throwResult(miss); m.startTurn(); m.startTurn();
+  ok('island is once per game: calling spends it even on a miss', m.islandUsed.a && !m.canIsland());
 }
 
 // --- the dial --------------------------------------------------------------------------------

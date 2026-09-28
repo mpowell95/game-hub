@@ -1,5 +1,5 @@
 // test-arcade-scores.mjs - the shared arcade high-score + unlock layer (js/arcade-scores.js),
-// used by Skeeball and next by Pinball. Run: node test-arcade-scores.mjs (in run-all-tests.mjs).
+// used by Skeeball. Run: node test-arcade-scores.mjs (in run-all-tests.mjs).
 //
 // This module is where THE LAW meets a feature that SOUNDS like it deletes things ("a daily high
 // score that resets every 24 hours"). It does not, and these assertions are what keeps it that way.
@@ -104,9 +104,9 @@ console.log('\n-- the app-wide record --');
     appWideBest(rows, 'skeeball', 'sk', 'nobody'), { score: 0, name: '' });
   eq('no players at all is not a crash', appWideBest([], 'skeeball', 'sk', 'classic'), { score: 0, name: '' });
   eq('neither is undefined', appWideBest(undefined, 'skeeball', 'sk', 'classic'), { score: 0, name: '' });
-  eq('a record from a game that is not this one is ignored', appWideBest(rows, 'pinball', 'pb', 'classic'), { score: 0, name: '' });
-  eq('and the sub-counter key really is per game - Skeeball\'s boards are not read as Pinball\'s',
-    appWideBest(rows, 'skeeball', 'pb', 'classic'), { score: 0, name: '' });
+  eq('a record from a game that is not this one is ignored', appWideBest(rows, 'brickblitz', 'bz', 'classic'), { score: 0, name: '' });
+  eq('and the sub-counter key really is per game - Skeeball\'s boards are not read under another key',
+    appWideBest(rows, 'skeeball', 'bz', 'classic'), { score: 0, name: '' });
 }
 
 console.log('\n-- malformed input never throws --');

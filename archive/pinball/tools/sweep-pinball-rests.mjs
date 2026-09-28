@@ -27,7 +27,7 @@
 // The flipper faces themselves are excluded from the count: a ball resting on a raised paddle is a
 // CRADLE, which is the player aiming and not a fault.
 
-import { step, makeBall, PHYS_DT, BALL_R } from './pinball/js/physics.js';
+import { step, makeBall, PHYS_DT, BALL_R } from '../js/physics.js';
 
 const arg = (n, d) => {
   const i = process.argv.indexOf(n);
@@ -38,8 +38,8 @@ const held = process.argv.includes('--held');
 const GRID = arg('--step', 10);
 
 const T = board === 'starhub'
-  ? await import('./pinball/js/table.js')
-  : await import('./pinball/js/table-rainbow.js');
+  ? await import('../js/table.js')
+  : await import('../js/table-rainbow.js');
 const GRAVITY = 515;
 const SECS = 6;
 const STEPS = Math.round(SECS / PHYS_DT);

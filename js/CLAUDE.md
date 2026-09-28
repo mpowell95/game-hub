@@ -134,7 +134,7 @@ entirely — keep it current when a module is added, split, or merged.
 | `js/game-stats-global.js` | a non-ESM "classic" port of `game-stats.js`'s recorder, exposed as `window.__ghStats` for Monopoly Deal and Parchís — a second, parallel implementation of the stats-write path. **`business-deal/js/game-stats-global.js` is a verbatim-after-header in-scope copy — a 15-line header ending in a marker line, then the canonical file byte-for-byte; enforced by `test-recorder-contract.mjs`** (see "The shared profile" section for why) |
 | `js/firebase-boot.js` | the ONE place that boots the named `'stats'` Firebase app + anonymous auth; `stats-net.js` and `net.js` both call `getStatsApp()` so there is only ever one init in flight, never a race between them |
 | `js/stats-net.js` | Firebase mirror of profile+stats to `players/<deviceId>`; username reservation registry; `syncHealth()` (see "Sync health") |
-| `js/arcade-scores.js` | (2026-08-11) the shared high-score + unlock layer for the arcade-cabinet games (Skeeball now, Pinball next). Pure. Per-board all-time and **date-keyed daily** bests, unlocks, the cross-device merges, and `appWideBest` (derived from synced records - there is deliberately no shared `highscores/` node). The daily best is a MAP keyed by local day, never a value that resets: see its header and `test-arcade-scores.mjs` |
+| `js/arcade-scores.js` | (2026-08-11) the shared high-score + unlock layer for the arcade-cabinet games (Skeeball). Pure. Per-board all-time and **date-keyed daily** bests, unlocks, the cross-device merges, and `appWideBest` (derived from synced records - there is deliberately no shared `highscores/` node). The daily best is a MAP keyed by local day, never a value that resets: see its header and `test-arcade-scores.mjs` |
 | `js/hidden-players.js` | (2026-09-09) WHO NEVER RENDERS: `isHiddenName()` / `isHiddenDeviceId()` and the lists behind them. Dependency-free, so a launcher-path caller can import it instead of copying it. Read by `leaderboard-ui.js`, `messages.js` and `admin-ui.js`; `test-leaderboard-rank.mjs` still MIRRORS it on purpose (that mirror is the regression check) |
 | `js/players-agg.js` | pure identity-graph aggregation (code ∪ name union-find) of synced devices into per-person rows. **A game's sub-counter needs an explicit branch here or it is silently dropped** — see "Adding a game" item 7 |
 | `js/game-stats-ui.js` | "My Stats" overlay: a game-list drill-down (owns `gameListHTML`, reused by the leaderboard's player detail) + per-game tailored screens |
@@ -829,6 +829,14 @@ so pk/hole/* is readable from developer tools.** Proven in three browser profile
 RTDB stand-in (the cloud sandbox cannot open Firebase's WebSocket); real Firebase on real phones is
 unverified.
 
+**Game invites ride on Messages (2026-09-28, Air Hockey).** `sendMessage` takes an optional
+`invite: { game, code }` (validated by `asInvite`; only `INVITE_GAMES`, a 4-character room code),
+stored on the message beside `text`. Additive: no rules change (messages/ validates no fields), no
+Cloud Function change (`messagePush` notifies from the index text as always), and an older app just
+shows the text. `messages-ui.js` `inviteButton` draws **Join the game** on an invite someone ELSE
+sent; it hands the code to the game through `sessionStorage['gamehub.airhockey.join']` and opens the
+game the way a tapped notification does. Full write-up: `air-hockey/CLAUDE.md`, "Matt's additions".
+
 ### The thirteenth consumer: Air Hockey (2026-09-28) - real-time, not lockstep
 
 Full write-up: `air-hockey/CLAUDE.md`, "Online play". `js/net.js` was NOT touched: it provides the
@@ -1420,7 +1428,7 @@ were `devOnly` in `js/hub.js`, on the reasoning that releasing one was a commit 
 row in the same breath. The admin control page ended that reasoning: `devOnly` is now only a
 DEFAULT, and Matt can release a game to everyone from inside the app with no commit and no deploy,
 so a game held off the board "until it ships" would ship without a row and zero every score on it
-from the first minute. Pinball therefore has a row while still being admin-only — it costs nothing,
+from the first minute. Admin-only games therefore have a row from day one — it costs nothing,
 because every leaderboard surface only renders a game somebody has actually played.
 
 One thing the fix does NOT change: Yahtzee records its `byDiff` bucket as `ai` (or `mp`), a MODE,
@@ -1527,12 +1535,11 @@ are read-only to this feature — nothing is stored, migrated or normalized.
     on the card's tier tiles, the difficulty filter still shows any tier's own numbers, Standing
     Records still names the all-time best (King of Games' 51 is still printed on that same screen),
     and the player detail still has the full per-tier table (rule 1).
-  - **HILL CLIMB AND PINBALL ARE FULLY TIERED GAMES, and a session reviewing this got that wrong
+  - **HILL CLIMB IS A FULLY TIERED GAME, and a session reviewing this got that wrong
     once (2026-09-08) by reading `hcBestAt`'s stage keys and assuming the stored bucket matched.**
     It does not: `recordHillClimb` maps the stage INDEX onto `easy|medium|hard|expert` and writes
-    THAT to `byDiff` (countryside -> Easy ... moon -> Expert), and `recordPinball` writes its three
-    table settings (Casual/Standard/Tournament) as `easy|medium|hard`. So both carry real tiers,
-    both offer the difficulty filter, and Hill Climb genuinely ranks furthest-stage-first: a moon
+    THAT to `byDiff` (countryside -> Easy ... moon -> Expert). So it carries real tiers,
+    offers the difficulty filter, and genuinely ranks furthest-stage-first: a moon
     run of 77 m outranks a countryside run of 900 m, which is the rule working, not a bug. **Read
     the recorder, not the display extractor**, when asking whether a game has a difficulty axis.
   - **By Game's leader row carries the same tier as a wordless SHAPE** (`tierMarkHTML`): that row
@@ -2663,7 +2670,7 @@ were `devOnly` in `js/hub.js`, on the reasoning that releasing one was a commit 
 row in the same breath. The admin control page ended that reasoning: `devOnly` is now only a
 DEFAULT, and Matt can release a game to everyone from inside the app with no commit and no deploy,
 so a game held off the board "until it ships" would ship without a row and zero every score on it
-from the first minute. Pinball therefore has a row while still being admin-only — it costs nothing,
+from the first minute. Admin-only games therefore have a row from day one — it costs nothing,
 because every leaderboard surface only renders a game somebody has actually played.
 
 One thing the fix does NOT change: Yahtzee records its `byDiff` bucket as `ai` (or `mp`), a MODE,
@@ -2764,7 +2771,7 @@ are read-only to this feature — nothing is stored, migrated or normalized.
       real boards, 2026-09-08). Their difficulty buckets are keyed by MACHINE / COURSE / STAGE,
       `tierOf()` maps none of those to a tier, so `playsAt` is 0 at every tier and the answer is
       `null` - which is the truth.
-  - **`null` = no tier**: a game with no difficulty axis (Skeeball, Pinball, Golf, Hill Climb -
+  - **`null` = no tier**: a game with no difficulty axis (Skeeball, Golf, Hill Climb -
     every row is null, so those three boards rank on their plain number exactly as they did before
     any of this) and legacy/unmapped history in a game that has one. Those rows keep the all-tier
     number and sort below the tiered rows. **Nothing leaves the board**: the other tiers are still

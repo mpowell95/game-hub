@@ -143,36 +143,33 @@
 //                                                   // hundreds/fifties are lifetime counters (add
 //                                                   // only); bestGame/bestThrow are Math.max only.
 //                                                   // See recordSkeeball
-//       pinball: {
-//         total, byDiff,                           // byDiff keyed easy|medium|hard -- Pinball's three
-//                                                   // TABLE settings (Casual/Standard/Tournament) are
-//                                                   // its difficulty axis, mapped 1:1, so there is no
-//                                                   // second vocabulary to reconcile
-//         pb: { games, bestScore, points, bestBall,
-//               jackpots, multiballs, missions, ramps } },
-//                                                   // a solo score-attack game: no opponent and no loss
-//                                                   // state (a game ends when the last ball drains), so
-//                                                   // every finished game counts as played+won, same as
-//                                                   // ballrun/snake/nutsbolts/hillclimb. `bestScore` and
-//                                                   // `bestBall` are Math.max ONLY; `points` is the
-//                                                   // lifetime score total and `jackpots`/`multiballs`/
-//                                                   // `missions`/`ramps` are lifetime counters, all
-//                                                   // purely additive. There is deliberately no local
-//                                                   // high-score TABLE anywhere: this is the one and
-//                                                   // only record of a pinball score, so it cannot
-//                                                   // disagree with itself; see recordPinball
+//       pinball: {                            // ARCHIVED 2026-09-28: stored only, never shown or
+//         total, byDiff, pb: {...} },              // written. See ARCHIVED_GAMES below.
 //       brickblitz: {
 //         total, byDiff,                           // byDiff keyed easy|medium|hard (the setup screen's
 //                                                   // three difficulties, stored under their own names)
 //         bz: { games, bestScore, bestScoreByDiff: { easy, medium, hard }, points,
 //               bricks, stages, circuits, bestCombo } },
-//                                                   // solo score attack, same family as pinball's pb:
+//                                                   // solo score attack, same family as snake's sn:
 //                                                   // no loss axis, so every run is played+won.
 //                                                   // bestScore/bestScoreByDiff/bestCombo are Math.max
 //                                                   // ONLY; games/points/bricks/stages/circuits are
 //                                                   // lifetime counters, additive. The one home of a
 //                                                   // Brick Breaker score (no local high-score table);
 //                                                   // see recordBrickBlitz
+//       airhockey: {
+//         total, byDiff,                           // byDiff easy|medium|hard|expert vs the computer,
+//                                                   // 'mp' online (2026-09-27/28)
+//         ah: { games, goalsFor, goalsAgainst, shutouts, bestShot, bestStreak, streak } },
+//                                                   // (2026-09-28) games/goals/shutouts are lifetime
+//                                                   // counters, additive; bestShot (fastest shot in
+//                                                   // TABLE UNITS per second, never a converted mph)
+//                                                   // and bestStreak are Math.max ONLY. `streak` is
+//                                                   // the one field that goes back to 0 (on a loss):
+//                                                   // it is live state, not earned history - the
+//                                                   // earned part is bestStreak, which never drops.
+//                                                   // Per device; players-agg does not add it up.
+//                                                   // See recordAirHockey.
 //       holdem: {
 //         total, byDiff,
 //         hb: { buyins, winnings, grants, best, cashes, entries } },
@@ -201,6 +198,12 @@
 //                                                   // its zero is the "never set" sentinel (the same
 //                                                   // convention as battleship's fewestShotsWin) --
 //                                                   // never a real elapsed time. See recordSudoku
+//       contexto: {
+//         total, byDiff,                           // byDiff keyed en|es (the word set, no tier)
+//         ct: { solved, guesses, hints, noHint, fewest } },
+//                                                   // one finished puzzle each; a give-up is a loss.
+//                                                   // guesses sums SOLVED puzzles only; fewest is
+//                                                   // LOWER-is-better, 0 = never set. See recordContexto
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -210,7 +213,13 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong'];
+// `pinball` stays in GAMES even though the game is ARCHIVED (Matt, 2026-09-28: "archive all
+// traces"): GAMES is the STORE's shape, and players' recorded games still live under that key, in
+// this store and in players/<id>. Nothing displays it (ARCHIVED_GAMES keeps it out of every total);
+// nothing deletes it (THE LAW). To restore the game, see archive/pinball/CLAUDE.md.
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto'];
+/** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
+const ARCHIVED_GAMES = ['pinball'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -447,6 +456,16 @@ function ensureMs(g) {
   if (!Number.isFinite(g.ms.flagsRight)) g.ms.flagsRight = 0;
   if (!g.ms.bestTimeMs || typeof g.ms.bestTimeMs !== 'object') g.ms.bestTimeMs = {};
   for (const lv of MS_LEVELS) if (!Number.isFinite(g.ms.bestTimeMs[lv])) g.ms.bestTimeMs[lv] = 0;
+}
+
+/** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
+ *  additive lifetime counters (`guesses` sums the typed guesses of SOLVED puzzles only, so
+ *  guesses/solved is an honest average). `fewest` is the fewest typed guesses in any solve,
+ *  LOWER-is-better with 0 as the "never set" sentinel - Sudoku's bestTimeMs convention. A give-up
+ *  is total.lost; it is not copied here (see ensureMs on second copies). */
+function ensureCt(g) {
+  if (!g.ct || typeof g.ct !== 'object') g.ct = { solved: 0, guesses: 0, hints: 0, noHint: 0, fewest: 0 };
+  for (const k of ['solved', 'guesses', 'hints', 'noHint', 'fewest']) if (!Number.isFinite(g.ct[k])) g.ct[k] = 0;
 }
 
 /** Escoba: the capture-quality counter (escobas the human made). */
@@ -873,8 +892,10 @@ function normalize(raw) {
   ensureGf(st.games.golf);
   ensureBb(st.games.baseball);
   ensureMs(st.games.minesweeper);
+  ensureCt(st.games.contexto);
   ensureBz(st.games.brickblitz);
   ensureHb(st.games.holdem);
+  ensureAh(st.games.airhockey);
   return st;
 }
 
@@ -1272,7 +1293,7 @@ export function loadStats() {
 // bot gets its results counted.
 //
 // **If you ever add a game that records a BATCH of results at once, this gate is what will eat
-// them.** Nothing here does that today (Skeeball records per rack, Pinball per game, and the
+// them.** Nothing here does that today (Skeeball records per rack, Brick Breaker per run, and the
 // offline queue bypasses the recorders entirely) - but Baseball is the obvious candidate, since a
 // simulated season would bank a hundred-plus games in seconds and look exactly like a bot. Give a
 // batch writer its own path through bumpTotals(), the way drainPendingResults() does, rather than
@@ -1439,6 +1460,30 @@ export function recordSudoku(tier, extras = {}) {
       const cur = g.sd.bestTimeMs[t] | 0;
       g.sd.bestTimeMs[t] = cur > 0 ? Math.min(cur, timeMs) : timeMs;
     }
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Contexto: one finished puzzle. `lang` ('en'|'es', the word set played) keys byDiff, so the
+ *  per-language play count is kept; it maps to no difficulty tier. `won` false = gave up.
+ *  `extras` = { guesses, hints }: typed guesses (the winning one included) and hints used.
+ *  WRITES ARE ADDITIVE ONLY (THE LAW rule 2); `fewest` takes Math.min against a nonzero prior. */
+export function recordContexto(lang, won, extras = {}) {
+  if (tooFast('contexto')) return null;
+  const st = loadStats();
+  const g = st.games.contexto;
+  ensureCt(g);
+  const guesses = Math.max(0, extras.guesses | 0);
+  const hints = Math.max(0, extras.hints | 0);
+  bumpTotals(g, lang === 'es' ? 'es' : 'en', won === true);
+  g.ct.hints += hints;
+  if (won === true) {
+    g.ct.solved += 1;
+    g.ct.guesses += guesses;
+    if (hints === 0) g.ct.noHint += 1;
+    if (guesses > 0) g.ct.fewest = g.ct.fewest > 0 ? Math.min(g.ct.fewest, guesses) : guesses;
   }
   st.updatedAt = new Date().toISOString();
   persist(st);
@@ -2012,56 +2057,7 @@ export function unlockSkeeballBoard(boardId) {
   return st;
 }
 
-/** Pinball: a solo score-attack game. Same shape family as Ball Run's `br`, Snake's `sn` and Hill
- *  Climb's `hc` - a game has no opponent and no loss axis (it ends when the last ball drains), so
- *  `pb.games` is the true play count and the score bests are the scoreboard.
- *    bestScore / bestBall   highest game and highest single ball. Math.max ONLY (THE LAW rule 2).
- *    points                 lifetime score total, a pure counter, additive forever.
- *    jackpots / multiballs / missions / ramps
- *                           lifetime counters of the things the game is actually about, so the
- *                           Stats screen can say something more interesting than one number.
- *
- *  NOTE: this is the ONLY place a pinball score is ever stored. pinball/js/store.js deliberately
- *  keeps preferences and nothing else - no local top-ten table - precisely so there is never a
- *  second, unsynced, silently-truncating home for a score somebody earned. */
-function ensurePb(g) {
-  if (!g.pb || typeof g.pb !== 'object') {
-    g.pb = { games: 0, bestScore: 0, points: 0, bestBall: 0, jackpots: 0, multiballs: 0, missions: 0, ramps: 0 };
-  }
-  for (const k of ['games', 'bestScore', 'points', 'bestBall', 'jackpots', 'multiballs', 'missions', 'ramps']) {
-    if (!Number.isFinite(g.pb[k])) g.pb[k] = 0;
-  }
-}
-
-/** Pinball: record one finished game. `score` is the final score, `difficulty` one of
- *  easy|medium|hard (the three table settings, which ARE the difficulty axis), `extras` the
- *  counters from the game. A game has no opponent and no loss state, so it counts as played+won
- *  and `lost` is never touched (mirrors Ball Run / Snake / Hill Climb / Nuts & Bolts).
- *  Additive: the two bests only ever go up, every counter only ever adds. */
-export function recordPinball(score, difficulty, extras) {
-  if (tooFast('pinball')) return null;
-  const st = loadStats();
-  const g = st.games.pinball;
-  const d = normDiff(difficulty);
-  ensurePb(g);
-  const pts = Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
-  const x = extras || {};
-  const n = (v) => (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
-  bumpTotals(g, d, true);
-  g.pb.games += 1;
-  g.pb.points += pts;
-  g.pb.bestScore = Math.max(g.pb.bestScore | 0, pts);
-  g.pb.bestBall = Math.max(g.pb.bestBall | 0, n(x.bestBall));
-  g.pb.jackpots += n(x.jackpots);
-  g.pb.multiballs += n(x.multiballs);
-  g.pb.missions += n(x.missions);
-  g.pb.ramps += n(x.ramps);
-  st.updatedAt = new Date().toISOString();
-  persist(st);
-  return st;
-}
-
-/** Brick Breaker: a solo score-attack breakout. Same shape family as Pinball's `pb` - no opponent,
+/** Brick Breaker: a solo score-attack breakout. Same shape family as Snake's `sn` - no opponent,
  *  no loss axis (a run ends when the last ball is lost, or when the player walks away), so
  *  `bz.games` is the true play count and the score bests are the scoreboard.
  *    bestScore / bestScoreByDiff   highest run overall and per difficulty. Math.max ONLY.
@@ -2083,7 +2079,7 @@ function ensureBz(g) {
 
 /** Brick Breaker: record one finished run. `score` is the final score, `difficulty` one of
  *  easy|medium|hard, `extras` = { bricks, stages, bestCombo, circuit } from the run. Counts as
- *  played+won (no loss state), like Snake / Pinball. Additive: bests only go up, counters only add. */
+ *  played+won (no loss state), like Snake / Hill Climb. Additive: bests only go up, counters only add. */
 export function recordBrickBlitz(score, difficulty, extras) {
   if (tooFast('brickblitz')) return null;
   const st = loadStats();
@@ -2102,6 +2098,41 @@ export function recordBrickBlitz(score, difficulty, extras) {
   g.bz.stages += n(x.stages);
   if (x.circuit === true) g.bz.circuits += 1;
   g.bz.bestCombo = Math.max(g.bz.bestCombo | 0, n(x.bestCombo));
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+// --- Air Hockey records (2026-09-28) -----------------------------------------------------------
+// Matt: "Shot speed and records" - fastest shot, shutouts, longest win streak. One call per
+// finished match (first to 7), vs the computer (easy|medium|hard|expert) or online ('mp').
+
+function ensureAh(g) {
+  if (!g.ah || typeof g.ah !== 'object') g.ah = { games: 0, goalsFor: 0, goalsAgainst: 0, shutouts: 0, bestShot: 0, bestStreak: 0, streak: 0 };
+  for (const k of ['games', 'goalsFor', 'goalsAgainst', 'shutouts', 'bestShot', 'bestStreak', 'streak']) {
+    if (!Number.isFinite(g.ah[k])) g.ah[k] = 0;
+  }
+}
+
+/** Air Hockey: record one finished match. `extras` = { goalsFor, goalsAgainst, shot } where shot
+ *  is this match's fastest shot in table units per second. Additive: counters add, bestShot and
+ *  bestStreak only go up; `streak` (live state) is the only field a loss sets back to 0. */
+export function recordAirHockey(difficulty, won, extras) {
+  if (tooFast('airhockey')) return null;
+  const st = loadStats();
+  const g = st.games.airhockey;
+  ensureAh(g);
+  const n = (v) => (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
+  const x = extras || {};
+  const gf = n(x.goalsFor), ga = n(x.goalsAgainst);
+  bumpTotals(g, normDiff(difficulty), won === true);
+  g.ah.games += 1;
+  g.ah.goalsFor += gf;
+  g.ah.goalsAgainst += ga;
+  if (won === true && ga === 0) g.ah.shutouts += 1;
+  g.ah.bestShot = Math.max(g.ah.bestShot | 0, n(x.shot));
+  g.ah.streak = won === true ? (g.ah.streak | 0) + 1 : 0;
+  g.ah.bestStreak = Math.max(g.ah.bestStreak | 0, g.ah.streak);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
@@ -2202,11 +2233,11 @@ function applyHeadToHead(st, gameId, opponent, won) {
   else if (won === false) row.l += 1;
 }
 
-export { GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
+export { GAMES, ARCHIVED_GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };
 export default {
   deviceId, loadStats, recordResult, recordConnect4, recordChinchon, recordNutsBolts, recordEscoba,
   recordBallRun, recordTicTacToe, recordDotsBoxes, recordBoggle, recordSnake, recordYahtzee,
-  recordDominoes, recordHillClimb, recordBattleship, recordSkeeball, unlockSkeeballBoard, recordPinball, recordHeadToHead,
+  recordDominoes, recordHillClimb, recordBattleship, recordSkeeball, unlockSkeeballBoard, recordHeadToHead,
   statsKey, statsId, statsOwner, activeCode,
   GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor,
 };
