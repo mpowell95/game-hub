@@ -145,6 +145,29 @@ accessibility conventions) — `bandShapeSVG()` in `js/ui.js`:
 The same shapes appear in the how-to-play diagram, so the legend a player learns on the guess list
 is the same one the tutorial teaches — nothing bespoke to either screen.
 
+## The keyboard stays up between guesses (2026-09-28)
+
+Matt: *"When I guess a word, the keyboard minimizes... allow me to immediately begin typing my next
+guess."* Two causes, both fixed in `ui.js`:
+
+- **A guess or a hint must NOT call `renderPlay()`.** That rebuilds the whole screen, which destroys
+  the text field, and a phone closes its keyboard when the focused field disappears. They call
+  `_refreshPlay()`, which updates the counters, message, latest row and list in place and keeps the
+  same `<input>`. Only a genuinely new screen (language switch, loading, a different puzzle) does a
+  full render.
+- **The Go button cancels `pointerdown`**, so tapping it never moves focus off the field (the click
+  still submits). Enter was already fine once the field survived.
+
+Verified in Chromium with touch emulation: the same input element is still `document.activeElement`
+after Enter, after tapping Go, after an unknown word and after a hint. Not yet confirmed on a real
+iPhone.
+
+## Tile art
+
+`GAME_ART.contexto` in `js/game-art.js` is a "word radar": a "?" (the secret) inside rings, with
+three word chips placed nearer or farther from it, each wearing its band's shape. The first tile
+(three ranked bars) was replaced the same day because it read as Brick Breaker's bricks.
+
 ## What is NOT covered by a test
 
 `node contexto/js/test.js` covers the engine (the word model, the ranking, the puzzle-number

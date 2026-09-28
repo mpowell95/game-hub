@@ -13,6 +13,8 @@ import { loadModel, puzzleNumber, hintRank, band } from './engine.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
+/** "1 guess", not "1 guesses": the _1 key when n is exactly one. */
+const countText = (key, n) => (n === 1 ? t(key + '_1') : t(key, { n }));
 const SETTINGS_KEY = 'gamehub.contexto.v1';
 const SAVE_KEY = 'gamehub.contexto.save.v1';
 const WORD_LANGS = ['en', 'es'];
@@ -220,9 +222,9 @@ class ContextoUI {
     const text = String(raw || '').trim();
     if (!text || !this.model) return;
     const idx = this.model.lookup(text);
-    if (idx < 0) { this._msg = t('msg_unknown', { word: text }); this.renderPlay(); return; }
+    if (idx < 0) { this._msg = t('msg_unknown', { word: text }); this._refreshPlay(); return; }
     const canon = this.model.words[idx];
-    if (this.rec.guesses.some((g) => g.w === canon)) { this._msg = t('msg_already', { word: canon }); this.renderPlay(); return; }
+    if (this.rec.guesses.some((g) => g.w === canon)) { this._msg = t('msg_already', { word: canon }); this._refreshPlay(); return; }
     const inflected = text.toLowerCase() !== canon;
     this.rec.guesses.push({ w: canon, hint: false });
     this._lastGuess = canon;
@@ -230,7 +232,7 @@ class ContextoUI {
     this._persist();
     const rank = this.model.rankOf(this.secret, idx);
     if (rank === 1) { this._finish('won'); return; }
-    this.renderPlay();
+    this._refreshPlay();
   }
 
   doHint() {
@@ -238,13 +240,13 @@ class ContextoUI {
     const best = this._bestRank();
     const taken = this._takenRanks();
     const hr = hintRank(best, taken);
-    if (hr == null) { this._msg = t('msg_hint_none'); this.renderPlay(); return; }
+    if (hr == null) { this._msg = t('msg_hint_none'); this._refreshPlay(); return; }
     const w = this.model.wordAt(this.secret, hr);
     this.rec.guesses.push({ w, hint: true });
     this._lastGuess = w;
     this._msg = '';
     this._persist();
-    this.renderPlay();
+    this._refreshPlay();
   }
 
   _finish(kind) {
@@ -312,8 +314,8 @@ class ContextoUI {
       <div class="ct-root">
         <div class="ct-info">
           <span class="ct-pnum">${esc(t('puzzle_label', { n: this.n }))}</span>
-          <span class="ct-stat">${esc(t('guesses_short', { n: guessCount }))}</span>
-          <span class="ct-stat">${esc(t('hints_short', { n: hintCount }))}</span>
+          <span class="ct-stat" data-role="guesses">${esc(countText('guesses_short', guessCount))}</span>
+          <span class="ct-stat" data-role="hints">${esc(countText('hints_short', hintCount))}</span>
           <button type="button" class="ct-langchip" data-action="lang"
             aria-label="${esc(t('lang_chip_aria', { lang: this.lang.toUpperCase() }))}">${esc(this.lang.toUpperCase())}</button>
           <button type="button" class="ct-iconbtn" data-action="howto" aria-label="${esc(t('howto_aria'))}">${ICON_HELP}</button>
@@ -323,7 +325,7 @@ class ContextoUI {
           <input type="text" class="ct-input" data-role="input" autocapitalize="off" autocomplete="off"
             autocorrect="off" spellcheck="false" enterkeyhint="go" inputmode="text"
             placeholder="${esc(t('input_placeholder'))}" aria-label="${esc(t('input_aria'))}">
-          <button type="submit" class="gh-btn gh-btn--primary">${esc(t('go'))}</button>
+          <button type="submit" class="gh-btn gh-btn--primary" data-role="go">${esc(t('go'))}</button>
         </form>
         <p class="ct-msg" data-role="msg">${esc(this._msg || '')}</p>
 
@@ -360,6 +362,10 @@ class ContextoUI {
       this.el.input.value = '';
       this.submitGuess(v);
     });
+    // Matt, 2026-09-28: "When I guess a word, the keyboard minimizes." Pressing Go would move
+    // focus from the input to the button, and a phone closes its keyboard when the text field
+    // loses focus. Cancelling pointerdown keeps focus in the field; the click still submits.
+    this.root.querySelector('[data-role="go"]').addEventListener('pointerdown', (ev) => ev.preventDefault());
     this.root.querySelector('[data-action="lang"]').addEventListener('click', () => this._switchLang());
     this.root.querySelector('[data-action="howto"]').addEventListener('click', () => this.openHowTo());
     this.root.querySelector('[data-action="hint"]').addEventListener('click', () => this.doHint());
@@ -372,6 +378,25 @@ class ContextoUI {
     else if (this._overlay === 'howto') this.openHowTo();
     else if (this._overlay === 'previous') this.openPrevious();
     else if (this._overlay === 'giveup') this.openGiveUp();
+  }
+
+  /** After a guess or a hint: update the numbers, the message, the latest row and the list IN
+   *  PLACE. renderPlay() rebuilds the whole screen, which destroys the text field and so closes
+   *  the phone's keyboard after every guess; this keeps the same field, focused, so the next word
+   *  can be typed straight away. Falls back to a full render if the screen is not up. */
+  _refreshPlay() {
+    if (this._dead || !this.root || !this.root.isConnected || !this.el || !this.el.input) { this.renderPlay(); return; }
+    const rec = this.rec;
+    const ranked = this._rankedGuesses();
+    this._sortedGuesses = ranked.slice().sort((a, b) => (a.rank == null ? Infinity : a.rank) - (b.rank == null ? Infinity : b.rank));
+    const latest = this._lastGuess ? ranked.find((g) => g.w === this._lastGuess) : null;
+    this.root.querySelector('[data-role="guesses"]').textContent = countText('guesses_short', rec.guesses.filter((g) => !g.hint).length);
+    this.root.querySelector('[data-role="hints"]').textContent = countText('hints_short', rec.guesses.filter((g) => g.hint).length);
+    this.root.querySelector('[data-role="msg"]').textContent = this._msg || '';
+    const latestEl = this.root.querySelector('[data-role="latest"]');
+    latestEl.hidden = !latest;
+    latestEl.innerHTML = latest ? this._rowHTML(latest, true) : '';
+    this._rebuildList();
   }
 
   _rowHTML(g, isLatest) {
