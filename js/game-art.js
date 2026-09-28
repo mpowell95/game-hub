@@ -950,27 +950,19 @@ export const GAME_ART = {
             <circle cx="132" cy="44" r="5" fill="#f07d5e"/>
             <rect x="129.8" y="41.8" width="4.4" height="4.4" fill="#ffffff"/>
           </svg>`,
-  // A "word radar" (2026-09-28; the first tile's ranked bars read as Brick Breaker's bricks):
-  // the secret word is the "?" at the centre, and guessed words sit nearer or farther from it,
-  // each with its band's real marker - teal diamond close, yellow circle nearer, vermilion square
-  // far - so distance and shape carry it, never color alone.
+  // A magnifying glass over a scatter of words, the secret "?" in its lens (Matt picked option
+  // "B" of a three-way mockup, 2026-09-28; the ranked-bars tile read as Brick Breaker and the
+  // word-radar tile that followed was also turned down).
   contexto: `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#2b1846"/>
-            <circle cx="80" cy="45" r="40" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="1.5"/>
-            <circle cx="80" cy="45" r="27" fill="none" stroke="#ffffff" stroke-opacity=".18" stroke-width="1.5"/>
-            <circle cx="80" cy="45" r="15" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".28" stroke-width="1.5"/>
-            <rect x="70" y="35" width="20" height="20" rx="5" fill="#ffce3a"/>
-            <text x="80" y="50.5" text-anchor="middle" font-family="system-ui, sans-serif"
-              font-size="15" font-weight="900" fill="#2b1846">?</text>
-            <rect x="97" y="37.5" width="44" height="15" rx="7.5" fill="#178A7A"/>
-            <path d="M104 45 L107.5 41.5 L111 45 L107.5 48.5 Z" fill="#ffffff"/>
-            <text x="114" y="48.5" font-family="system-ui, sans-serif" font-size="9" font-weight="800" fill="#ffffff">kitten</text>
-            <rect x="18" y="16" width="36" height="15" rx="7.5" fill="#F2B705"/>
-            <circle cx="26" cy="23.5" r="3.3" fill="#2b1846"/>
-            <text x="32" y="27" font-family="system-ui, sans-serif" font-size="9" font-weight="800" fill="#2b1846">pet</text>
-            <rect x="112" y="69" width="42" height="15" rx="7.5" fill="#E0532F"/>
-            <rect x="117.5" y="73.5" width="6" height="6" rx="1" fill="#ffffff"/>
-            <text x="127" y="80" font-family="system-ui, sans-serif" font-size="9" font-weight="800" fill="#ffffff">cloud</text>
+            <rect width="160" height="90" fill="#f6efe2"/>
+            <text x="14" y="22" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#9a8f7d">river</text>
+            <text x="112" y="18" font-family="system-ui, sans-serif" font-size="9" font-weight="700" fill="#9a8f7d">cloud</text>
+            <text x="12" y="80" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#9a8f7d">piano</text>
+            <text x="116" y="62" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#9a8f7d">bread</text>
+            <text x="20" y="52" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#6f6553">dog</text>
+            <circle cx="84" cy="42" r="24" fill="#ffffff" stroke="#1F5FA8" stroke-width="7"/>
+            <text x="84" y="52" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="900" fill="#1F5FA8">?</text>
+            <path d="M101 59 L122 80" stroke="#1F5FA8" stroke-width="10" stroke-linecap="round"/>
           </svg>`,
 };
 
