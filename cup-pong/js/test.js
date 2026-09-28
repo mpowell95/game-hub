@@ -194,17 +194,17 @@ ok('the whole rack area is on the table',
   ok('challenge: owed cups that are all the cups left clear the rack at once', types(ev).includes('owedCleared') && types(ev).includes('rackCleared') && m.phase === 'rebuttal');
   // BOUNCE SHOTS (brief 5d): table first, then in = 2 cups, the defender picks the second.
   m = new Match({ first: 'a' }); m.startTurn();
+  m.throwResult({ made: 'k0', bounced: true });
+  ok('bounce shots are OFF by default (Matt): a bounced make is one cup', !m.pendingPick && ids(m, 'b').length === 9);
+  m = new Match({ first: 'a', bounce: true }); m.startTurn();
   ev = m.throwResult({ made: 'k0', bounced: true });
-  ok('bounce: the cup goes and the defender owes a pick', types(ev).includes('islandPick') && m.pendingPick.n === 1 && !ids(m, 'b').includes('k0') && ev[0].bounce === true);
+  ok('bounce (a challenge stored with it on): the cup goes and the defender owes a pick', types(ev).includes('islandPick') && m.pendingPick.n === 1 && !ids(m, 'b').includes('k0') && ev[0].bounce === true);
   ev = m.pickCup('k9');
   ok('bounce: their pick goes too, then play carries on', ids(m, 'b').length === 8 && !m.pendingPick && m.ball === 1);
-  m = new Match({ first: 'a' }); m.startTurn();
+  m = new Match({ first: 'a', bounce: true }); m.startTurn();
   ev = m.throwResult({ made: 'k0', bounced: false });
   ok('a straight make is still one cup', !m.pendingPick && ids(m, 'b').length === 9);
-  m = new Match({ first: 'a', bounce: false }); m.startTurn();
-  m.throwResult({ made: 'k0', bounced: true });
-  ok('bounce off (an old challenge): a bounced make is one cup', !m.pendingPick && ids(m, 'b').length === 9);
-  m = new Match({ first: 'a' });
+  m = new Match({ first: 'a', bounce: true });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k2', c: 1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9');
   ev = m.throwResult({ made: 'k9', bounced: true });
@@ -213,7 +213,7 @@ ok('the whole rack area is on the table',
   ok('...after the first pick, one more is owed', m.pendingPick && m.pendingPick.n === 1 && ev.length === 1);
   ev = m.pickCup('k1');
   ok('...then play carries on', !m.pendingPick && ids(m, 'b').join() === 'k2');
-  m = new Match({ first: 'a' }); m.racks.b = m.racks.b.slice(0, 2); m.startTurn();
+  m = new Match({ first: 'a', bounce: true }); m.racks.b = m.racks.b.slice(0, 2); m.startTurn();
   ev = m.throwResult({ made: 'k0', bounced: true });
   ok('bounce with one cup left after it: both go, no pick, rebuttal', types(ev).includes('extraCleared') && m.phase === 'rebuttal' && !m.pendingPick);
   m = oneLeft('a');
@@ -222,11 +222,11 @@ ok('the whole rack area is on the table',
   m = oneLeft('a'); m.throwResult({ made: 'k9' }); m.throwResult(miss); m.startTurn();
   m.throwResult({ made: 'k0', bounced: true });
   ok('no bounce bonus in a rebuttal', !m.pendingPick && m.racks.a.length === 9);
-  m = new Match({ first: 'a', async: true }); m.startTurn();
+  m = new Match({ first: 'a', async: true, bounce: true }); m.startTurn();
   ev = m.throwResult({ made: 'k0', bounced: true });
   ok('challenge: a bounce owes a cup', types(ev).includes('islandOwed') && m.owed.b === 1 && !m.pendingPick);
-  ok('a saved match keeps the bounce rule', Match.fromJSON(JSON.parse(JSON.stringify(new Match({ bounce: false }).toJSON()))).bounce === false
-    && Match.fromJSON({}).bounce === true);
+  ok('a saved match keeps the bounce rule', Match.fromJSON(JSON.parse(JSON.stringify(new Match({ bounce: true }).toJSON()))).bounce === true
+    && Match.fromJSON({}).bounce === false);
   // SAVING A MATCH: whole, round trip, and turned round.
   m = new Match({ first: 'a', reracks: Infinity, async: true, gentlemans: false });
   m.startTurn(); m.throwResult({ made: 'k0' }); m.throwResult({ made: 'k1' }); m.throwResult({ made: 'k2' });
@@ -335,7 +335,7 @@ ok('balls really come off the rims (plenty touch a cup and stay out)', rimOut > 
 }
 
 // --- bounce shots: they must stay POSSIBLE (stage 4, 2026-09-28) ---------------------------------
-// A bounce is worth 2 cups now. Build 2's flat throw made them impossible (0 of 969); the fitted lob
+// Bounce shots count one cup (Matt turned the 2-cup rule off), but the lob must still allow them. Build 2's flat throw made them impossible (0 of 969); the fitted lob
 // and tableRest 0.88 put them at ~89 of 403. A change to the arc that loses them fails here.
 {
   let bounced = 0, tried = 0;

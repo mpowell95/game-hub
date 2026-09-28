@@ -26,10 +26,12 @@
 //                    and if you hit that cup, you get 2 cups. The opposing player can choose the
 //                    second cup. If there are multiple available islands, you must call the specific
 //                    one." Calling spends it, hit or miss (Matt, 2026-09-28).
-//   - BOUNCE SHOTS (brief 5d, built 2026-09-28): a ball that touches the table and then goes in
-//     counts for 2 cups, the second picked by the defender. An island hit by a bounce is 3 cups.
-//     Not in a rebuttal (as island), and never the last cup (there is no second one). `bounce`
-//     switches it; a challenge made before it existed replays with it off.
+//   - BOUNCE SHOTS ARE OFF (Matt, 2026-09-28, the same day they shipped): "in real life you can
+//     hit a bounced ball away from the table... We won't be able to do that in turn based
+//     multiplayer. so maybe we shouldn't include it." A bounced make is one cup. The rule stays
+//     behind `bounce` (default false): 2 cups, the defender picks the second, island + bounce = 3,
+//     not in a rebuttal, never the last cup. Only a challenge stored with `rules.bo` turns it on,
+//     so the few made while it was live still replay.
 //
 // Sides are 'a' (this phone, red cups) and 'b' (the opponent, blue). Each rack is stored in the
 // SHOOTER'S frame. Everything that happens comes back as EVENTS, in order.
@@ -58,7 +60,7 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = true } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false } = {}) {
     this.async = !!async;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
@@ -361,7 +363,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce !== false });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };

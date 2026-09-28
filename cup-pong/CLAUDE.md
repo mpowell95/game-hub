@@ -16,7 +16,7 @@ this file says which are done.
 | 1 | Table + throw: three.js + cannon-es, the camera, flick to throw, cups vanish when made, rack as hex cells. Solo practice only | **Done.** Matt, 2026-09-28, after the third throw build: *"It feels good now, start stage 2"* |
 | 2 | Rules (brief section 3, confirmed below), settings, Gentleman's, vs CPU, rebuttal, stats | **Built 2026-09-28, deployed devOnly, waiting on Matt's play-test.** The Reracks setting (brief 4a) moved to stage 3, see "Stage 2" below |
 | 3 | Rerack: presets, then custom | **Built and deployed 2026-09-28**: presets, then "Make your own" (Matt: *"build custom rerack next"*). See "Make your own" below |
-| 4 | Bounce shots | **Built and deployed 2026-09-28** (Matt: *"build bounce shots"*, after the owed-cup design was put to him). See "Bounce shots" below |
+| 4 | Bounce shots | **Built 2026-09-28, then turned OFF by Matt the same day** (a bounced make is one cup). See "Bounce shots" below |
 | 5 | Challenges + push | **Built and deployed 2026-09-28** (Matt: *"I don't see multiplayer? You should be able to challenge someone just like connect 4 hoops"*). See "Challenges" below. **Rules published and `cupPongTurnPush` deployed, both 2026-09-28** |
 | + | **Solo: clear the rack in the fewest throws**, with a leaderboard (Matt's ask, 2026-09-28) | **Built and deployed 2026-09-28** - see "Solo" below |
 
@@ -145,9 +145,18 @@ pairing, 2026-09-28):
 Perfect aim (no error) lands in the cup it aimed at for all 10 cups. **Whether Easy loses to a new
 player and Hard is hard is Matt's to say** - the sigmas are the only knob, in `SKILL`.
 
-## Bounce shots (2026-09-28, brief 5d)
+## Bounce shots (2026-09-28, brief 5d): OFF
 
-A ball that touches the TABLE and then goes in counts for **2 cups**: the one it went in, plus one
+**TURNED OFF by Matt, 2026-09-28, an hour after they shipped:** *"actually in real life you can hit a
+bounced ball away from the table, preventing it from going into a cup. We won't be able to do that in
+turn based multiplayer. so maybe we shouldn't include it."* Off everywhere, the computer included
+(you cannot swat there either): **a bounced make is one cup, like any other.** Balls still bounce in
+(that is physics). The rule below stays in `match.js` behind `bounce` (default **false**) and is on
+only for a challenge stored with `rules.bo: true` - the few made while it was live (v1012), whose
+logs may hold the owed cups a bounce made. `createGame` no longer writes `bo`. Do not turn it back on
+without Matt.
+
+What it did while it was on: a ball that touches the TABLE and then goes in counts for **2 cups**: the one it went in, plus one
 the defender picks. `bounced` comes from the physics (`tableHits > 0` when the cup is made), never
 a guess. In `match.js` it is one more "extra" cup beside island's, so **an island hit by a bounce
 is 3 cups** (two picks).
@@ -159,13 +168,10 @@ is 3 cups** (two picks).
 - **Extra cups that are every cup left** (vs the computer): they all go, no pick (`extraCleared`).
 - **Not in a rebuttal** (as island), and **never the last cup** with a ball still to throw (there
   is no second cup; the last-cup rule applies). Solo counts every make as one cup.
-- **Frozen per challenge**: `rules.bo`. Every challenge made from now on has `bo: true`; one made
-  before it existed has no `bo` and replays with bounce OFF, so a bounced make already in its log
-  still means one cup and the log stays valid. `Match({ bounce })`, default on.
+- **Frozen per challenge**: `rules.bo`, read only (see above). `Match({ bounce })`, default off.
 - `test.js` asserts bounce-ins stay POSSIBLE (at least 5% of the soft-throw sweep; 89 of 403 on
   2026-09-28), so an arc change that loses them fails.
-- **Not decided by Matt, a judgement call to confirm with him**: no bonus in a rebuttal, and island +
-  bounce stacking to 3 cups.
+
 
 ## Solo: clear the rack in the fewest throws (2026-09-28)
 
@@ -231,7 +237,7 @@ under "CHALLENGES").
   their turn"). `match.js` `async: true` counts `owed[side]`; at the start of their next turn the
   owing player taps one of their own cups before anything else (`askOwed`, "Tap one of your cups to
   give up"). If the owed cups are every cup left, the rack is cleared on the spot (then the rebuttal).
-  Bounce shots use the same mechanism (see "Bounce shots").
+  Bounce shots used the same mechanism while they were on (see "Bounce shots").
 - **Rules are frozen per challenge**: Gentleman's and Reracks are chosen on the challenge screen
   (defaults from your own setup) and stored on the match.
 - **Results**: `recordResult('cuppong', 'mp', won)` once per phone, whoever ended it
@@ -362,7 +368,7 @@ by 35-200 ms, so every scripted flick reads as a slow push. Only a real hand can
   mid-plane in one step and be pushed out the wrong side, through the cup.
 - **Air drag** (quadratic, `DRAG_K`) and **rolling resistance** on the table (`ROLL_DECEL` in
   `physics.js`). Without the second, a slowly rolling miss never stopped and ran to the 6 s cap.
-- A throw ends as `made` (with `bounced`: it touched the table first - worth 2 cups, see "Bounce shots"), `off`
+- A throw ends as `made` (with `bounced`: it touched the table first - one cup, see "Bounce shots"), `off`
   (fell off the table) or `miss` (came to rest, including on top of the cups).
 - **No magnetism, ever** (skeeball's ban). Nothing steers the ball.
 
