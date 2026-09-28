@@ -8,6 +8,8 @@ import { simulateThrow, launchSpeed } from './physics.js';
 import { makeRack, cupsXZ, validRack, isCell, inArea, cellXZ, PRESETS, AREA } from './rack.js';
 import { CUP, CUP_D, ROW_H, RACK_Z0, TABLE } from './geom.js';
 import { powerOf, SWIPE_SLOW, SWIPE_FAST } from '../../skeeball/js/swipe.js';
+import { Match } from './match.js';
+import { aimAt, cpuThrow, seeded } from './cpu.js';
 
 let fail = 0;
 const ok = (label, cond, extra = '') => {
@@ -67,6 +69,105 @@ ok('every preset is legal', Object.keys(PRESETS).every((p) => validRack(makeRack
 }
 ok('the whole rack area is on the table',
   AREA.cMax * CUP_D / 2 + CUP.topR <= TABLE.width / 2 && RACK_Z0 - CUP.topR >= -TABLE.len / 2);
+
+// --- the rules (match.js), as Matt set them 2026-09-27/28 ----------------------------------------
+{
+  const types = (ev) => ev.map((e) => e.type);
+  const ids = (m, side) => m.racks[side].map((k) => k.id);
+  const miss = { made: null };
+  let m = new Match({ first: 'a' });
+  m.startTurn();
+  let ev = m.throwResult({ made: 'k0' });
+  ok('a make removes that cup at once', !ids(m, 'b').includes('k0') && types(ev).join() === 'made');
+  ev = m.throwResult(miss);
+  ok('two balls, then the turn passes', types(ev).join() === 'miss,turnOver' && m.shooter === 'b');
+  // Balls back.
+  m = new Match({ first: 'a' });
+  m.startTurn(); m.throwResult({ made: 'k0' });
+  ev = m.throwResult({ made: 'k1' });
+  ok('make both balls: balls back', types(ev).includes('ballsBack') && m.shooter === 'a' && m.queue.join() === '0,1');
+  // HEATING UP AND ON FIRE ARE PER BALL. Matt's own counter-example first.
+  m = new Match({ first: 'a' });
+  m.startTurn(); m.throwResult({ made: 'k0' }); m.throwResult(miss);   // a: ball 1 in, ball 2 out
+  m.startTurn(); m.throwResult(miss); m.throwResult(miss);             // b
+  m.startTurn(); m.throwResult(miss);
+  ev = m.throwResult({ made: 'k1' });                                    // a: ball 1 out, ball 2 in
+  ok('ball 1 in, then ball 2 in next turn: NOT heating up (Matt\'s example)', !types(ev).includes('heatingUp') && m.heat('a', 0) === 0 && m.heat('a', 1) === 1);
+  m = new Match({ first: 'a' });
+  const pass = () => { m.startTurn(); m.throwResult(miss); m.throwResult(miss); };
+  m.startTurn(); m.throwResult({ made: 'k0' }); m.throwResult(miss); pass();
+  m.startTurn(); ev = m.throwResult({ made: 'k1' });
+  ok('the SAME ball in on 2 turns running: heating up', types(ev).includes('heatingUp') && m.heat('a', 0) === 2);
+  m.throwResult(miss); pass();
+  m.startTurn(); ev = m.throwResult({ made: 'k2' });
+  ok('the same ball a 3rd time: on fire, and that ball comes straight back', types(ev).includes('onFire') && m.ball === 0 && m.queue.join() === '0,1');
+  m.throwResult({ made: 'k3' });
+  ok('on fire: it keeps coming back while it makes cups', m.ball === 0);
+  ev = m.throwResult(miss);
+  ok('on fire: a miss cools it, then the other ball throws', types(ev).includes('cooled') && m.heat('a', 0) === 0 && m.ball === 1);
+  m = new Match({ first: 'a' });
+  m.startTurn(); m.throwResult({ made: 'k0' }); m.throwResult({ made: 'k1' });   // balls back
+  ev = m.throwResult({ made: 'k2' });
+  ok('balls-back throws count toward that ball\'s streak (Matt, 2026-09-28)', types(ev).includes('heatingUp') && m.heat('a', 0) === 2);
+  // THE LAST CUP.
+  const oneLeft = (first) => { const mm = new Match({ first }); mm.racks[first === 'a' ? 'b' : 'a'] = [{ id: 'k9', c: 0, r: 3 }]; mm.startTurn(); return mm; };
+  m = oneLeft('a');
+  ev = m.throwResult({ made: 'k9' });
+  ok('the last cup made with ball 1: it stays for ball 2', !m.over && m.lastCup === 'k9' && m.ball === 1 && ids(m, 'b').join() === 'k9');
+  ev = m.throwResult({ made: 'k9' });
+  ok('ball 2 in the SAME last cup: win, no rebuttal', m.over && m.winner === 'a' && ev.some((e) => e.type === 'win' && e.how === 'sameCup'));
+  m = oneLeft('a'); m.throwResult({ made: 'k9' });
+  ev = m.throwResult(miss);
+  ok('ball 2 misses: the cup goes and the other side gets a rebuttal', !m.over && m.phase === 'rebuttal' && m.shooter === 'b' && ids(m, 'b').length === 0 && types(ev).includes('rackCleared'));
+  // THE REBUTTAL: both balls, each until it misses.
+  ev = m.startTurn();
+  ok('the rebuttal is announced', types(ev).includes('rebuttal'));
+  m.throwResult({ made: 'k0' });
+  ok('rebuttal: a make gives that ball back', m.ball === 0);
+  m.throwResult(miss);
+  ok('rebuttal: after ball 1 misses, ball 2 shoots', !m.over && m.ball === 1);
+  m.throwResult({ made: 'k1' }); ev = m.throwResult(miss);
+  ok('rebuttal: both balls missed, the side that cleared wins', m.over && m.winner === 'a');
+  m = oneLeft('a'); m.throwResult({ made: 'k9' }); m.throwResult(miss); m.startTurn();
+  for (const id of ids(m, 'a')) ev = m.throwResult({ made: id });
+  ok('a rebuttal that clears everything goes to overtime', m.phase === 'overtime' && !m.over && types(ev).includes('overtime'));
+  ok('overtime: 3 cups each in a 2-1 triangle, the first to clear opens', m.racks.a.length === 3 && m.racks.b.length === 3 && m.shooter === 'a');
+  m.startTurn(); m.racks.b = m.racks.b.slice(0, 2);
+  ok('overtime: no Gentleman\'s and no rerack (Matt)', !m.canGentlemans() && !m.canRerack());
+  // GENTLEMAN'S AND RERACK ARE THE SHOOTER'S OPTIONS.
+  m = new Match({ first: 'a', gentlemans: true });
+  m.racks.b = m.racks.b.slice(0, 2); m.startTurn();
+  ok('Gentleman\'s is offered, not applied', m.canGentlemans() && m.racks.b.every((k) => 'c' in k));
+  ev = m.applyGentlemans();
+  ok('Gentleman\'s: taken, the 2 cups stand in a line', types(ev).join() === 'gentlemans' && m.racks.b.every((k) => k.u === 0) && !m.canGentlemans());
+  m = new Match({ first: 'a', gentlemans: false }); m.racks.b = m.racks.b.slice(0, 2); m.startTurn();
+  ok('Gentleman\'s off: never offered', !m.canGentlemans());
+  m = new Match({ first: 'a', reracks: 1 }); m.racks.b = m.racks.b.slice(0, 6); m.startTurn();
+  ok('rerack offered before the first throw', m.canRerack());
+  ev = m.rerack('zipper');
+  ok('rerack: preset applied, ids kept, one spent', types(ev).join() === 'rerack' && m.reracksLeft.a === 0 && ids(m, 'b').join() === 'k0,k1,k2,k3,k4,k5' && !m.canRerack());
+  m = new Match({ first: 'a', reracks: 2 }); m.racks.b = m.racks.b.slice(0, 6); m.startTurn(); m.throwResult(miss);
+  ok('no rerack after the turn\'s first throw', !m.canRerack());
+  m = new Match({ first: 'a', reracks: Infinity }); m.racks.b = m.racks.b.slice(0, 6); m.startTurn(); m.rerack('tri');
+  ok('one rerack a turn', !m.canRerack());
+  m.startTurn();
+  ok('unlimited reracks never run out', m.canRerack());
+  // ISLAND.
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  ok('an island is a cup touching no other', m.islands().join() === 'k9' && m.canIsland());
+  ok('you must call a specific island', m.callIsland('k0').length === 0 && !m.islandUsed.a);
+  m.callIsland('k9');
+  ev = m.throwResult({ made: 'k9' });
+  ok('hit the called island: the defender owes a second cup', types(ev).includes('islandPick') && m.pendingPick.picker === 'b' && ids(m, 'b').join() === 'k0,k1');
+  ok('nothing can be thrown until they pick', m.throwResult({ made: 'k0' }).length === 0);
+  ev = m.pickCup('k1');
+  ok('the defender\'s pick goes too, then play carries on', ids(m, 'b').join() === 'k0' && types(ev)[0] === 'picked' && !m.pendingPick);
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9'); m.throwResult(miss); m.startTurn(); m.startTurn();
+  ok('island is once per game: calling spends it even on a miss', m.islandUsed.a && !m.canIsland());
+}
 
 // --- the dial --------------------------------------------------------------------------------
 const cups = cupsXZ(rack);
@@ -139,6 +240,27 @@ ok('balls really come off the rims (plenty touch a cup and stay out)', rimOut > 
   const again = simulateThrow({ power: shot.power, aim: shot.aim, cups: without });
   ok('a made cup is gone: the same throw at the rack without it cannot make it again',
     !(again.outcome.kind === 'made' && again.outcome.id === id), `${id} -> ${JSON.stringify(again.outcome)}`);
+}
+
+// --- the computer (cpu.js): a real throw through the same physics, missed by a skill-sized error --
+{
+  let own = 0;
+  for (const k of cups) {
+    const r = simulateThrow({ ...aimAt(k.x, k.z), cups });
+    if (r.outcome.kind === 'made' && r.outcome.id === k.id) own++;
+  }
+  ok('the computer\'s perfect aim lands in the cup it aimed at, every cup', own === 10, own + '/10');
+  const rate = (skill) => {
+    const rnd = seeded(5); let m = 0; const n = 150;
+    for (let i = 0; i < n; i++) {
+      const th = cpuThrow(skill, cups, rnd);
+      if (simulateThrow({ power: th.power, aim: th.aim, cups }).outcome.kind === 'made') m++;
+    }
+    return m / n;
+  };
+  const e = rate('easy'), me = rate('medium'), h = rate('hard');
+  ok('Easy < Medium < Hard at a full rack', e < me && me < h,
+    `easy ${(e * 100).toFixed(0)}%, medium ${(me * 100).toFixed(0)}%, hard ${(h * 100).toFixed(0)}%`);
 }
 
 // --- bounce shots: MEASURED, NOT ASSERTED (yet) ------------------------------------------------

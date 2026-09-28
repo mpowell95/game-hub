@@ -7,7 +7,7 @@
 //   2. THE PUCK STAYS ON THE TABLE: across whole scripted-player-vs-CPU matches it is never outside the
 //      rounded table except inside a goal slot, and nothing goes NaN.
 //   3. MATCHES END: first to 7, the score adds up, both sides score.
-//   3b. LEVELS IN ORDER: Easy < Medium < Hard against a scripted new player.
+//   3b. LEVELS IN ORDER: Easy < Medium < Hard against a scripted beginner (the CHASER).
 //   4. A FAST SWIPE IS A HARD SHOT: puck speed off a still-to-moving mallet scales with the swipe.
 //   5. STUCK PUCK: a puck left still in a half moves to that player's serve spot after ~5 s.
 //   6. ONLINE (js/live.js): two sessions over a fake network with delay, jitter and overwritten
@@ -68,12 +68,11 @@ function onTable(p) {
   return true;
 }
 
-// Two scripted players, driven by the same AI code with human-ish settings:
-//   HUMAN - an "average player": quick hands, slow to read the puck, shoots anywhere at the goal
-//           and banks a third of the time.
-//   NEW   - a new player: slower hands, slower reads, wilder aim, hardly ever banks.
+// HUMAN: a scripted "average player" on the same AI code: quick hands, slow to read the puck,
+// shoots anywhere at the goal, banks a third of the time. It aims like a machine, so it is used for
+// what the engine must survive (whole matches, the online protocol), not for how hard a level
+// feels - that is the CHASER's job, below.
 const HUMAN = { speed: 1800, react: 0.2, aimErr: 0.5, strike: 1.2, bank: 0.3, misread: 0.3 };
-const NEW = { speed: 1300, react: 0.28, aimErr: 0.65, strike: 1.0, bank: 0.1, misread: 0.4 };
 
 function playMatch(levelA, levelB, seed) {
   const s = createMatch();
@@ -117,26 +116,45 @@ function playMatch(levelA, levelB, seed) {
 }
 
 // ---- 3b. the three levels are in order ---------------------------------------------------------
-// Bars (2026-09-27, stage 2): a NEW player beats Easy nearly every time, Medium is a fair fight
-// for them, Hard beats them; and each level concedes a smaller share of the goals than the last.
+// CHASER (2026-09-28): a beginner's thumb. Sees the puck late, chases it and whacks it roughly
+// upward; no aiming, no going round it. Against the stage 2 Easy it scored 1.4 goals a match and
+// never won, which is what Matt reported ("haven't been able to score a single goal, even on
+// easy"), so it is the yardstick the levels are held to - not the scripted players above, which
+// aim like machines and made every level look beatable.
+function chaser(seed, speed = 1100, react = 0.3) {
+  const r = rng(seed); let clock = 9, sx = W / 2, sy = H * 0.7, jit = 0;
+  return (s, dt) => {
+    const m = s.mallets[0], p = s.puck;
+    clock += dt; if (clock >= react) { clock = 0; sx = p.x; sy = p.y; jit = (r() * 2 - 1) * 40; }
+    let tx, ty;
+    if (p.live && sy > H / 2 - 20) { tx = sx + jit; ty = sy + 10; } else { tx = W / 2 + (sx - W / 2) * 0.5; ty = H - 130; }
+    let dx = tx - m.x, dy = ty - m.y; const d = Math.hypot(dx, dy), mx = speed * dt;
+    if (d > mx) { dx *= mx / d; dy *= mx / d; }
+    clampTarget(m, m.x + dx, m.y + dy);
+  };
+}
 {
-  const share = {}, newWins = {};
-  const N = 8;
+  const share = {}, wins = {}, perMatch = {};
+  const N = 10;
   for (const lv of ['easy', 'medium', 'hard']) {
     const g = [0, 0]; let w = 0;
-    for (let i = 0; i < N; i++) {
-      const r = playMatch(NEW, lv, 100 + i);
-      g[0] += r.s.score[0]; g[1] += r.s.score[1]; if (r.s.winner === 0) w++;
+    for (let i = 1; i <= N; i++) {
+      const s = createMatch(); resetMatch(s, i % 2);
+      const a = chaser(i * 7 + 1), b = createCpu(lv, 1, i * 13 + 5);
+      let t = 0;
+      while (s.phase !== 'over' && t < 900) { a(s, 1 / 60); cpuThink(s, b, 1 / 60); advance(s, 1 / 60); t += 1 / 60; }
+      g[0] += s.score[0]; g[1] += s.score[1]; if (s.winner === 0) w++;
     }
-    share[lv] = g[1] / (g[0] + g[1]); newWins[lv] = w;
-    console.log(`      new player vs ${lv.padEnd(6)} goals ${g[0]}-${g[1]}, new player wins ${w}/${N}`);
+    share[lv] = g[1] / (g[0] + g[1]); wins[lv] = w; perMatch[lv] = g[0] / N;
+    console.log(`      beginner vs ${lv.padEnd(6)} goals ${g[0]}-${g[1]}, beginner wins ${w}/${N}`);
   }
   ok('each level scores a bigger share of the goals than the one below',
     share.easy < share.medium && share.medium < share.hard,
     ['easy', 'medium', 'hard'].map((k) => `${k} ${(share[k] * 100).toFixed(0)}%`).join(', '));
-  ok('a new player beats Easy nearly every time', newWins.easy >= N - 1, `${newWins.easy}/${N}`);
-  ok('Medium is a fair fight for a new player (they win some, lose some)', newWins.medium >= 2 && newWins.medium <= N - 1, `${newWins.medium}/${N}`);
-  ok('Hard beats a new player', newWins.hard <= 1, `${newWins.hard}/${N}`);
+  ok('a beginner wins most matches on Easy', wins.easy >= 6, `${wins.easy}/${N}`);
+  ok('Medium is a fair fight for a beginner (wins some, loses some)', wins.medium >= 3 && wins.medium <= 8, `${wins.medium}/${N}`);
+  ok('Hard beats a beginner', wins.hard <= 1, `${wins.hard}/${N}`);
+  ok('...but a beginner still scores on Hard (at least 1.5 goals a match)', perMatch.hard >= 1.5, `${perMatch.hard.toFixed(1)} a match`);
 }
 
 // ---- 4. swipe speed -> shot speed --------------------------------------------------------------

@@ -21,6 +21,7 @@
   --cps-muted: #5b6675;
   --cps-surface: #ffffff;
   --cps-surface-2: #f2f5f9;
+  --cps-bg: #eef2f7;
 
   position: fixed;
   inset: 0;
@@ -44,6 +45,7 @@
   --cps-muted: #9aa7b8;
   --cps-surface: #161d28;
   --cps-surface-2: #1e2734;
+  --cps-bg: #10151d;
 }
 .cp-root .gh-overlay {
   --gh-surface: var(--cps-surface);
@@ -166,3 +168,86 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   padding: 24px; text-align: center;
 }
+
+/* --- setup: a HUB screen on css/ui.css's primitives, light/dark with the hub ------------------- */
+.cp-root .cp-setup {
+  --gh-surface: var(--cps-surface);
+  --gh-surface-2: var(--cps-surface-2);
+  --gh-ink: var(--cps-ink);
+  --gh-muted: var(--cps-muted);
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: calc(64px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+  background: var(--cps-bg);
+  color: var(--cps-ink);
+  text-align: center;
+}
+.cp-root .cp-title { margin: 0; font-size: 30px; font-weight: 900; letter-spacing: 0.01em; }
+.cp-root .cp-setup-card {
+  width: min(380px, 100%);
+  box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 16px;
+}
+.cp-root .cp-setup-label { margin: 4px 0 0; font-size: 15px; font-weight: 800; }
+.cp-root .cp-setup-hint { display: block; font-size: 12px; font-weight: 500; color: var(--cps-muted); }
+.cp-root .cp-setup .gh-seg__item { min-height: 44px; }        /* the 44px tap floor (Part 0) */
+.cp-root .cp-setup .gh-seg__item svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.cp-root .cp-setup-play, .cp-root .cp-setup-practice { width: min(380px, 100%); min-height: 48px; }
+
+/* Whose turn: the opponent's is outlined, yours is plain - a second signal beside the words. */
+.cp-root .cp-mode.is-cpu { padding: 0 10px; border: 2px solid var(--cp-dim); border-radius: 999px; }
+/* Hard's black diamond (js/difficulty-tiers.js) would vanish on the dark skin: same shape, light ink. */
+:root.gh-dark .cp-root .cp-setup .lb-dshape-t3 { fill: #e8edf5; }
+
+/* --- the shooter's options: stacked on the LEFT edge, only while on offer (Matt, 2026-09-28) --- */
+.cp-root .cp-opts {
+  position: absolute;
+  left: 10px;
+  top: 44%;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 3;
+}
+.cp-root .cp-opt {
+  appearance: none;
+  min-height: 44px; min-width: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 2px solid #ffce3a;                 /* the selection accent, with a border as the non-colour cue */
+  background: rgba(20, 26, 38, 0.82);
+  color: #fff;
+  font: inherit; font-size: 14px; font-weight: 800;
+  cursor: pointer; touch-action: manipulation;
+}
+.cp-root .cp-opt:active { background: rgba(40, 48, 66, 0.92); }
+/* Tap-to-pick layer: covers the whole table while a cup is being chosen. */
+.cp-root .cp-pick {
+  position: absolute; inset: 0; z-index: 5;
+  touch-action: manipulation; cursor: pointer;
+}
+.cp-root .cp-pick[hidden] { display: none; }
+.cp-root .cp-pick-say {
+  position: absolute; left: 12px; right: 12px; top: 12px; margin: 0;
+  padding: 8px 12px; border-radius: 12px;
+  background: rgba(20, 26, 38, 0.86); color: #fff;
+  font-size: 15px; font-weight: 800; text-align: center;
+  border: 2px solid #ffce3a;
+  pointer-events: none;
+}
+/* The rerack sheet: preset tiles, each a top-down drawing and its name. */
+.cp-root .cp-presets { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 6px; }
+.cp-root .cp-preset {
+  appearance: none;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 96px; min-height: 96px; padding: 10px;
+  border-radius: 14px; border: 1px solid var(--gh-border, #d6dde6);
+  background: var(--gh-surface-2); color: var(--gh-ink);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; touch-action: manipulation;
+}
+.cp-root .cp-preset svg { fill: #2346c2; }
+:root.gh-dark .cp-root .cp-preset svg { fill: #8fa6ff; }

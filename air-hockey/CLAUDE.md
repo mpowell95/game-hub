@@ -103,22 +103,34 @@ shot); otherwise wait at the guard line, shading toward the puck.
 stood on the line from its goal to the puck, and two of them played 60 s with zero goals. That
 line follows the puck continuously, so the reaction delay never cost it anything.
 
-**Tuning (stage 2, 2026-09-27).** Stage 1 shipped one computer (speed 900, react 0.17, aimErr 0.3,
-misread 0.27); Matt played it and called it *"a little too hard"*. So the new **Medium is easier
-than it and Hard a little tougher**. Measured by `js/test.js` against two scripted players run on
-the same AI code: NEW (a new player) and HUMAN (an average one). Computer's share of the goals:
+**Tuning, round 2 (2026-09-28) - read this before touching a level.** Matt, on the stage 2
+levels: *"the computer player is way too good. i haven't been able to score a single goal, even on
+easy."* Stage 2 had been tuned against scripted players that run the SAME AI code (go behind the
+puck, drive through it at a target), which aim like machines: they beat Easy 8/8 while a real thumb
+could not score. `js/test.js` now holds the levels to the **CHASER**, a beginner's thumb: sees the
+puck late (0.3 s), chases it, whacks it roughly upward, no aiming. Against the stage 2 Easy the
+CHASER scored 1.4 goals a match and never won, which matches what Matt saw, so it is the yardstick.
 
-| Level | speed / react | vs NEW | vs HUMAN |
+**The cause was DEFENCE, not attack.** The mallet waited in front of the MIDDLE of its goal (72
+units wide plus the puck's 44 covers about two thirds of the 170 mouth) and slid across at its full
+attack speed. Three per-level knobs now shape the defence (`ai.js`):
+
+- `guard`: how fast it moves when defending or getting back (was the attack speed)
+- `shade`: how far it follows the puck sideways while waiting; 1 = all the way, which leaves the
+  far side of the goal open (was a fixed 0.3)
+- `home`: how far out it waits (was 105 for every level)
+
+| Level | attack / guard speed, react | shade, home | vs CHASER: computer's share, beginner wins |
 |---|---|---|---|
-| Easy | 600 / 0.26 | 14%, new player wins 8/8 | 9% |
-| Medium | 840 / 0.19 | 42%, new player wins 6/8 | 16% |
-| (stage 1) | 900 / 0.17 | 64% | 30% |
-| Hard | 950 / 0.16 | 88%, new player wins 0/8 | 35% |
+| Easy | 430 / 200, 0.38 s | 0.95, 170 | 42%, 7/10 |
+| Medium | 650 / 280, 0.28 s | 0.8, 145 | 47%, 6/10 |
+| Hard | 840 / 450, 0.21 s | 0.55, 125 | 76%, 0/10 (still ~2 goals a match) |
+| (stage 2 Easy) | 600 / 600, 0.26 s | 0.3, 105 | 83%, 0/10 |
+| (stage 2 Medium) | 840 / 840, 0.19 s | 0.3, 105 | 89%, 0/10 |
 
-**The response is very steep**: a few percent more speed or less reaction swings the share by tens
-of points (an early Hard at 1000 / 0.15 took 61% off HUMAN). Move one knob a little at a time and
-re-run the test. The scripted players are bots, so Matt's own play is the real calibration: he sits
-somewhere just below stage 1's computer.
+The response is steep; move one knob a little at a time and re-run `node air-hockey/js/test.js`
+(its 3b block asserts the bars). The CHASER is still a bot: if Matt says a level feels wrong, his
+word beats these numbers, and the CHASER should be made to reproduce what he saw first (as here).
 
 ## Input
 

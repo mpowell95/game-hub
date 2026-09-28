@@ -55,7 +55,7 @@ export const THROW = {
 
 /** Contact materials. A ping pong ball on a table bounces high; on a thin plastic cup it loses
  *  more. `tableRest` is the bounce-shot lever (see cup-pong/CLAUDE.md, "Bounce shots"). */
-export const MAT = { tableRest: 0.78, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
+export const MAT = { tableRest: 0.88, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
 
 /** GAME GRAVITY, m/s^2 - NOT 9.81, on purpose. GamePigeon's ball is floatier than a real one: the
  *  only arc that reproduces its screen path AND reaches the cups when the recording shows it there
@@ -70,4 +70,10 @@ export const DRAG_K = 0.12;
  *  fit matched the far edge, the far edge's width, where the side edges leave the screen, the
  *  ball, the rack's point and back row, and the rack's width to within a few pixels. render.js
  *  keeps the WIDTH it shows on a taller phone and the HEIGHT on a wider screen. */
-export const CAMERA = { pos: [0, 1.305, 0.803], pitch: 44.0, vfov: 41.8, aspect: 0.5 };
+export const CAMERA = {
+  pos: [0, 1.305, 0.803], pitch: 44.0, vfov: 41.8, aspect: 0.5,
+  // The OPPONENT'S TURN: behind this phone's own cups at the other end, looking back down the
+  // table - the recording shows their balls coming at you over your red cups. Not fitted (the
+  // recording's shot of it is brief); tuned by eye against it.
+  defend: { pos: [0, 1.20, 2.30], pitch: 36 },
+};

@@ -1,0 +1,273 @@
+// cup-pong/js/match.js - THE RULES OF A MATCH. Pure: no DOM, no engine, no clock, no storage.
+//
+// Matt's rules, in his words where he gave them (cup-pong/CLAUDE.md carries the dated record):
+//   - 10 cups a side, 4-3-2-1, point toward the shooter. A made cup is gone at once.
+//   - A turn is TWO BALLS. Make both and you get both back ("balls back"); that repeats.
+//   - HEATING UP / ON FIRE ARE PER BALL (2026-09-28): "it has to be the first ball that gets 2 in a
+//     row for heating up and 3 in a row for on fire. and on fire means you get that ball back and
+//     shoot until you miss." Each ball keeps its own streak across turns; every throw of that ball
+//     counts, balls-back throws included (Matt, same day). The 3rd make in a row lights it, and from
+//     then that ball comes straight back after every make until it misses.
+//   - THE LAST CUP (2026-09-28): make it with a ball and you still throw the ball(s) you have left.
+//     Put another in THE SAME CUP and you win outright, no rebuttal. Otherwise the cup goes and the
+//     other side gets a rebuttal.
+//   - THE REBUTTAL (2026-09-28): "rebuttals is 2 shots as well - each person gets to shoot. And if
+//     the first ball hits a cup, they get that ball back". Both balls, each shooting until it misses.
+//     Clear everything and it goes to OVERTIME (3 cups each, 2-1); otherwise the side that cleared
+//     wins.
+//   - GENTLEMAN'S, RERACK and ISLAND are the SHOOTER'S OPTIONS, not automatic (2026-09-28): each is a
+//     button that appears when it is available. "there should be NO reracks or gentlemans allowed
+//     in OT."
+//       Gentleman's: when the rack being shot at is down to 2 cups not already in a line - free,
+//                    before the turn's first throw. Setting On/Off decides if it exists at all.
+//       Rerack:      a preset for the cups left (rack.js RERACKS), before the turn's first throw,
+//                    using one of the shooter's reracks (the Reracks setting, per player per game).
+//       Island:      "if a cup is not touching any other cups, you can call island (once per game).
+//                    and if you hit that cup, you get 2 cups. The opposing player can choose the
+//                    second cup. If there are multiple available islands, you must call the specific
+//                    one." Calling spends it, hit or miss (Matt, 2026-09-28).
+//
+// Sides are 'a' (this phone, red cups) and 'b' (the opponent, blue). Each rack is stored in the
+// SHOOTER'S frame. Everything that happens comes back as EVENTS, in order.
+
+import { makeRack, PRESETS, isSpot, presetsFor, applyPreset, islandsOf } from './rack.js';
+
+export const BALLS = 2;
+const other = (s) => (s === 'a' ? 'b' : 'a');
+
+/** Overtime's 2-1 triangle, at the back of the rack area, point toward the shooter. */
+export const OVERTIME_CELLS = [{ c: -1, r: 0 }, { c: 1, r: 0 }, { c: 0, r: 1 }];
+
+const sameSpot = (k, s) => isSpot(k) && Math.abs(k.u - s.u) < 1e-9 && Math.abs(k.v - s.v) < 1e-9;
+
+export class Match {
+  /**
+   * @param {object} o
+   * @param {'a'|'b'} [o.first='a']      who shoots first
+   * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
+   * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
+   */
+  constructor({ first = 'a', gentlemans = true, reracks = 2 } = {}) {
+    this.gentlemans = !!gentlemans;
+    this.reracks = reracks;
+    this.racks = { a: makeRack('tri10'), b: makeRack('tri10') };
+    this.shooter = first === 'b' ? 'b' : 'a';
+    this.phase = 'normal';              // 'normal' | 'rebuttal' | 'overtime'
+    this.clearedBy = null;              // who cleared the rack that started the current rebuttal
+    this.streak = { a: [0, 0], b: [0, 0] };
+    this.reracksLeft = { a: reracks, b: reracks };
+    this.islandUsed = { a: false, b: false };
+    this.called = null;                 // the island cup called for the next throw
+    this.pendingPick = null;            // { picker } - the defender owes a second cup (island)
+    this.lastCup = null;                // the last cup, made, still standing for the balls left
+    this.queue = [];                    // balls still to throw this pair, in order
+    this.pairRes = [null, null];        // each ball's last result in this pair
+    this.turnThrows = 0;
+    this.turnNo = 0;
+    this.throwsTaken = 0;
+    this.over = false;
+    this.winner = null;
+  }
+
+  get defender() { return other(this.shooter); }
+  target() { return this.racks[this.defender]; }
+  /** The ball about to be thrown (0 or 1), or null between turns. */
+  get ball() { return this.queue.length ? this.queue[0] : null; }
+  /** The ball waiting behind it this pair, or null. */
+  get spare() { return this.queue.length > 1 ? this.queue[1] : null; }
+  /** 0 cold, 1 one make, 2 heating up, 3+ on fire. */
+  heat(side, ball) { return this.streak[side][ball] || 0; }
+
+  startTurn() {
+    const ev = [];
+    if (this.over) return ev;
+    this.turnNo++;
+    this.queue = [0, 1];
+    this.pairRes = [null, null];
+    this.turnThrows = 0;
+    this.rerackedThisTurn = false;       // one rerack a turn
+    this.called = null;
+    this.lastCup = null;
+    if (this.phase === 'rebuttal') ev.push({ type: 'rebuttal', side: this.shooter });
+    return ev;
+  }
+
+  // --- the shooter's options ----------------------------------------------------------------
+  canGentlemans() {
+    if (!this.gentlemans || this.phase !== 'normal' || this.turnThrows > 0 || this.over) return false;
+    const rack = this.target();
+    if (rack.length !== 2) return false;
+    return !rack.every((k) => PRESETS.line2.some((s) => sameSpot(k, s)));
+  }
+  applyGentlemans() {
+    if (!this.canGentlemans()) return [];
+    const to = applyPreset(this.target(), PRESETS.line2);
+    this.racks[this.defender] = to;
+    return [{ type: 'gentlemans', side: this.defender, to }];
+  }
+
+  canRerack() {
+    if (this.phase !== 'normal' || this.turnThrows > 0 || this.over || this.rerackedThisTurn) return false;
+    if (!(this.reracksLeft[this.shooter] > 0)) return false;
+    const n = this.target().length;
+    return n >= 1 && n < 10 && presetsFor(n).length > 0;
+  }
+  rerack(key) {
+    if (!this.canRerack()) return [];
+    const p = presetsFor(this.target().length).find((x) => x.key === key);
+    if (!p) return [];
+    const to = applyPreset(this.target(), p.spots);
+    this.racks[this.defender] = to;
+    if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
+    this.rerackedThisTurn = true;
+    return [{ type: 'rerack', side: this.defender, key, to, left: this.reracksLeft[this.shooter] }];
+  }
+
+  islands() { return islandsOf(this.target()); }
+  canIsland() {
+    return !this.over && this.phase !== 'rebuttal' && !this.islandUsed[this.shooter] && !this.called
+      && !this.lastCup && this.queue.length > 0 && this.islands().length > 0;
+  }
+  callIsland(id) {
+    if (!this.canIsland() || !this.islands().includes(id)) return [];
+    this.islandUsed[this.shooter] = true;
+    this.called = id;
+    return [{ type: 'islandCalled', side: this.shooter, id }];
+  }
+
+  /** The defender's second cup after an island hit. */
+  pickCup(id) {
+    if (!this.pendingPick) return [];
+    const rack = this.target();
+    if (!rack.some((k) => k.id === id)) return [];
+    this.pendingPick = null;
+    this.racks[this.defender] = rack.filter((k) => k.id !== id);
+    const ev = [{ type: 'picked', side: this.defender, id }];
+    if (this.racks[this.defender].length === 0) return ev.concat(this._cleared());
+    return ev.concat(this._afterThrow());
+  }
+
+  // --- a throw ---------------------------------------------------------------------------------
+  /** One throw has resolved. `made` is the id of the cup it went in, or null. */
+  throwResult({ made = null, bounced = false } = {}) {
+    const ev = [];
+    if (this.over || this.pendingPick || !this.queue.length) return ev;
+    this.throwsTaken++;
+    this.turnThrows++;
+    const side = this.shooter;
+    const ball = this.queue.shift();
+    const called = this.called;
+    this.called = null;
+    const rack = this.target();
+
+    // THE LAST CUP, STILL STANDING: another ball in it wins outright.
+    if (this.lastCup) {
+      if (made === this.lastCup) {
+        ev.push({ type: 'made', side, ball, id: made, bounced, sameCup: true, left: 0 });
+        this.racks[this.defender] = [];
+        this.lastCup = null;
+        return ev.concat(this._finish(side, 'sameCup'));
+      }
+      ev.push({ type: 'miss', side, ball });
+      if (this.queue.length) return ev;               // another ball still to come at it
+      this.racks[this.defender] = rack.filter((k) => k.id !== this.lastCup);
+      ev.push({ type: 'removed', side: this.defender, id: this.lastCup });
+      this.lastCup = null;
+      return ev.concat(this._cleared());
+    }
+
+    const hit = made ? rack.find((k) => k.id === made) : null;
+    if (this.phase === 'rebuttal') {
+      if (hit) {
+        this.racks[this.defender] = rack.filter((k) => k.id !== made);
+        ev.push({ type: 'made', side, ball, id: made, bounced, left: this.racks[this.defender].length });
+        if (!this.racks[this.defender].length) return ev.concat(this._cleared());
+        this.queue.unshift(ball);                        // that ball comes back
+        return ev;
+      }
+      ev.push({ type: 'miss', side, ball });
+      if (this.queue.length) return ev;                  // the other ball's go
+      return ev.concat(this._finish(this.clearedBy, 'rebuttal'));
+    }
+
+    if (hit) {
+      const s = ++this.streak[side][ball];
+      this.pairRes[ball] = true;
+      if (s === 2) ev.push({ type: 'heatingUp', side, ball });
+      if (s >= 3) {
+        if (s === 3) ev.push({ type: 'onFire', side, ball });
+        this.queue.unshift(ball);                        // on fire: that ball comes back
+      }
+      const leftAfter = rack.length - 1;
+      // ISLAND: the called cup went in - two cups, the defender picks the second.
+      if (called && made === called && leftAfter >= 1) {
+        this.racks[this.defender] = rack.filter((k) => k.id !== made);
+        ev.push({ type: 'made', side, ball, id: made, bounced, island: true, left: leftAfter });
+        this.pendingPick = { picker: this.defender };
+        ev.push({ type: 'islandPick', picker: this.defender });
+        return ev;
+      }
+      // THE LAST CUP with a ball still to throw: it stands for that ball.
+      if (leftAfter === 0 && this.queue.length) {
+        this.lastCup = made;
+        ev.push({ type: 'made', side, ball, id: made, bounced, lastCup: true, left: 1 });
+        return ev;
+      }
+      this.racks[this.defender] = rack.filter((k) => k.id !== made);
+      ev.push({ type: 'made', side, ball, id: made, bounced, left: leftAfter });
+      if (leftAfter === 0) return ev.concat(this._cleared());
+      return ev.concat(this._afterThrow());
+    }
+
+    ev.push({ type: 'miss', side, ball });
+    if (this.streak[side][ball] >= 3) ev.push({ type: 'cooled', side, ball });
+    this.streak[side][ball] = 0;
+    this.pairRes[ball] = false;
+    return ev.concat(this._afterThrow());
+  }
+
+  /** After a throw that did not end anything: next ball, balls back, or the turn passes. */
+  _afterThrow() {
+    if (this.queue.length) return [];
+    if (this.pairRes[0] === true && this.pairRes[1] === true) {
+      this.queue = [0, 1];
+      this.pairRes = [null, null];
+      return [{ type: 'ballsBack', side: this.shooter }];
+    }
+    this.shooter = other(this.shooter);
+    return [{ type: 'turnOver', next: this.shooter }];
+  }
+
+  /** The shooter has just emptied the rack. */
+  _cleared() {
+    const ev = [];
+    const side = this.shooter;
+    this.queue = [];
+    if (this.phase === 'rebuttal') {
+      this.phase = 'overtime';
+      this.racks.a = OVERTIME_CELLS.map((c, i) => ({ id: 'o' + i, ...c }));
+      this.racks.b = OVERTIME_CELLS.map((c, i) => ({ id: 'o' + i, ...c }));
+      this.streak = { a: [0, 0], b: [0, 0] };
+      this.shooter = this.clearedBy;                     // the side that cleared first opens overtime
+      this.clearedBy = null;
+      ev.push({ type: 'overtime', next: this.shooter });
+      ev.push({ type: 'turnOver', next: this.shooter });
+      return ev;
+    }
+    this.clearedBy = side;
+    this.phase = 'rebuttal';
+    this.shooter = other(side);
+    ev.push({ type: 'rackCleared', side });
+    ev.push({ type: 'turnOver', next: this.shooter });
+    return ev;
+  }
+
+  _finish(winner, how) {
+    this.over = true;
+    this.winner = winner;
+    this.queue = [];
+    return [{ type: 'win', side: winner, how }];
+  }
+}
+
+export default { Match, BALLS, OVERTIME_CELLS };
