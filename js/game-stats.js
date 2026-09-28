@@ -879,6 +879,7 @@ function normalize(raw) {
   ensureBz(st.games.brickblitz);
   ensureHb(st.games.holdem);
   ensureAh(st.games.airhockey);
+  ensureCp(st.games.cuppong);
   return st;
 }
 
@@ -2092,6 +2093,38 @@ export function recordAirHockey(difficulty, won, extras) {
   g.ah.bestShot = Math.max(g.ah.bestShot | 0, n(x.shot));
   g.ah.streak = won === true ? (g.ah.streak | 0) + 1 : 0;
   g.ah.bestStreak = Math.max(g.ah.bestStreak | 0, g.ah.streak);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Cup Pong SOLO (2026-09-28, Matt: "a solo mode... just the full rack and there's a leaderboard
+ *  for who can clear the full rack with the fewest throws"). One cleared 10-cup rack per call.
+ *  Matches vs the computer stay in `total`/`byDiff` via recordResult; a solo rack has no opponent,
+ *  so it never touches them (a solo clear is not a win over anyone).
+ *
+ *  `soloBest` improves by going DOWN, and 0 is the "never cleared" sentinel - Battleship's
+ *  `fewestShotsWin` convention exactly: a real clear takes at least 10 throws. js/players-agg.js
+ *  guards the same 0 so a device with no clears can never latch a person's best at 0. */
+function ensureCp(g) {
+  if (!g.cp || typeof g.cp !== 'object') g.cp = { soloRacks: 0, soloThrows: 0, soloBest: 0 };
+  for (const k of ['soloRacks', 'soloThrows', 'soloBest']) {
+    if (!Number.isFinite(g.cp[k])) g.cp[k] = 0;
+  }
+}
+
+/** Cup Pong: record one CLEARED solo rack that took `throws` throws. A rack given up part way is
+ *  never recorded (there is nothing to rank). Additive: counters add, the best only improves. */
+export function recordCupPongSolo(throws) {
+  if (tooFast('cuppong')) return null;
+  const n = Number.isFinite(throws) ? Math.floor(throws) : 0;
+  if (n < 1) return null;
+  const st = loadStats();
+  const g = st.games.cuppong;
+  ensureCp(g);
+  g.cp.soloRacks += 1;
+  g.cp.soloThrows += n;
+  g.cp.soloBest = g.cp.soloBest ? Math.min(g.cp.soloBest, n) : n;
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

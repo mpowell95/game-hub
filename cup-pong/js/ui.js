@@ -2,11 +2,12 @@
 //
 // THE LAW applies here. Nothing in this folder stores anything earned: `gamehub.cuppong.v1` holds
 // preferences only (difficulty, Gentleman's, who opens next). A finished match vs the computer goes
-// to the shared recorder, `recordResult('cuppong', difficulty, won)`, exactly once. A match is not
-// persisted - see isInProgress() for which meaning of the contract that is.
+// to the shared recorder, `recordResult('cuppong', difficulty, won)`, exactly once; a CLEARED solo
+// rack goes to `recordCupPongSolo(throws)`, exactly once. Neither is persisted mid-way - see
+// isInProgress() for which meaning of the contract that is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, recordCupPongSolo, loadStats } from '../../js/game-stats.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -27,6 +28,11 @@ const DIFFS = ['easy', 'medium', 'hard'];
 const RERACKS = [0, 1, 2, 3, 'inf'];
 
 let instance = null;
+
+/** This player's fewest throws to clear a solo rack, from their own stats store; 0 = never. */
+function soloBest() {
+  try { return ((((loadStats().games || {}).cuppong || {}).cp || {}).soloBest) | 0; } catch { return 0; }
+}
 
 const readSettings = () => {
   try {
@@ -96,9 +102,9 @@ class CupPong {
     this.disposed = false;
     this.raf = 0;
     this.engine = null;      // { phys, rend, cpu }
-    this.mode = null;        // 'practice' | 'cpu'
+    this.mode = null;        // 'solo' | 'cpu'
     this.match = null;       // Match, in 'cpu' mode
-    this.rack = [];          // practice: the cups still standing
+    this.rack = [];          // solo: the cups still standing
     this.throws = 0;
     this.throwState = null;
     this.shooter = 'a';      // whose throw is in the air
@@ -160,7 +166,11 @@ class CupPong {
           ${seg('rr', RERACKS.map((n) => [String(n), n === 'inf' ? '\u221e' : String(n)]), String(s.reracks))}
         </div>
         <button type="button" class="gh-btn gh-btn--primary cp-setup-play" data-role="play">${t('play')}</button>
-        <button type="button" class="gh-btn gh-btn--ghost cp-setup-practice" data-role="practice">${t('practiceBtn')}</button>
+        <div class="gh-card cp-setup-card cp-solo-card">
+          <p class="cp-setup-label">${t('solo')} <span class="cp-setup-hint">${t('soloHint')}</span></p>
+          ${soloBest() ? `<p class="cp-solo-best">${t('soloBest', { n: soloBest() })}</p>` : ''}
+          <button type="button" class="gh-btn gh-btn--ghost cp-setup-solo" data-role="solo">${t('soloBtn')}</button>
+        </div>
       </div>`;
     const pick = (role, fn) => {
       const g = this.root.querySelector(`[data-role="${role}"]`);
@@ -176,7 +186,7 @@ class CupPong {
     pick('gent', (v) => { this.settings.gentlemans = v === 'on'; });
     pick('rr', (v) => { this.settings.reracks = v === 'inf' ? 'inf' : Number(v); });
     this.on(this.root.querySelector('[data-role="play"]'), 'click', () => this.start('cpu'));
-    this.on(this.root.querySelector('[data-role="practice"]'), 'click', () => this.start('practice'));
+    this.on(this.root.querySelector('[data-role="solo"]'), 'click', () => this.start('solo'));
   }
 
   // --- starting a game -------------------------------------------------------------------------
@@ -194,7 +204,7 @@ class CupPong {
       this.engine = { phys, cpu, rend: new rend.Renderer(canvas, { reducedMotion: reducedMotion() }) };
       this.fit();
       this.offViewport = onViewportResize(() => this.fit());
-      if (mode === 'practice') this.newRack();
+      if (mode === 'solo') this.newRack();
       else this.newMatch();
       this.startLoop();
       // Read-only hook for headless drivers (skeeball's `__skTest` precedent). Never read by the game.
@@ -254,8 +264,8 @@ class CupPong {
     const mode = this.root.querySelector('.cp-mode');
     const sub = this.root.querySelector('.cp-sub');
     if (!mode || !sub) return;
-    if (this.mode === 'practice') {
-      mode.textContent = t('practice');
+    if (this.mode === 'solo') {
+      mode.textContent = t('solo');
       const n = this.rack.length;
       sub.textContent = (n === 1 ? t('oneCupLeft') : t('cupsLeft', { n }))
         + ' · ' + (this.throws === 1 ? t('oneThrow') : t('throws', { n: this.throws }));
@@ -288,10 +298,13 @@ class CupPong {
     this._toastT = setTimeout(() => el.classList.remove('is-on'), ms);
   }
 
-  // --- practice (stage 1, unchanged) -----------------------------------------------------------
+  // --- solo: clear the full rack in the fewest throws --------------------------------------------
+  // Stage 1's practice, now recorded (Matt, 2026-09-28). One ball a throw, no balls back, no
+  // reracks, no opponent. Only a CLEARED rack is recorded; giving up part way records nothing.
   newRack() {
     this.rack = makeRack('tri10');
     this.throws = 0;
+    this.recorded = false;
     this.throwState = null;
     this.busy = false;
     this.shooter = 'a';
@@ -695,7 +708,7 @@ class CupPong {
   shoot(power, aim, info = {}) {
     if (this.busy || !this.engine) return;
     let cups;
-    if (this.mode === 'practice') {
+    if (this.mode === 'solo') {
       if (!this.rack.length) return;
       cups = cupsXZ(this.rack);
       this.throws++;
@@ -757,7 +770,7 @@ class CupPong {
     const E = this.engine;
     if (ev.type === 'made') {
       this.later(() => E.rend.hideBall(), 60);
-      if (this.mode === 'practice') {
+      if (this.mode === 'solo') {
         E.rend.vanish('b', ev.id);
         this.rack = this.rack.filter((k) => k.id !== ev.id);
         this.paintHud();
@@ -765,7 +778,7 @@ class CupPong {
     } else if (ev.type === 'done') {
       const o = ev.outcome;
       const wait = o.kind === 'made' ? SETTLE_MS + 200 : SETTLE_MS;
-      if (this.mode === 'practice') this.later(() => this.serve(), wait);
+      if (this.mode === 'solo') this.later(() => this.serve(), wait);
       else { this.throwState = { done: true, ball: this.throwState && this.throwState.ball, outcome: o }; this.applyThrow(o, wait); }
     }
   }
@@ -778,6 +791,15 @@ class CupPong {
   }
 
   showCleared() {
+    const before = soloBest();
+    if (!this.recorded) {
+      this.recorded = true;
+      try { recordCupPongSolo(this.throws); } catch (err) { console.error('[cup-pong] solo result not recorded', err); }
+    }
+    const best = soloBest();
+    // "New best" only when this rack actually set it (a first clear counts); otherwise the best.
+    const line2 = best && best === this.throws && (!before || this.throws < before)
+      ? t('soloNewBest') : (best ? t('soloBest', { n: best }) : '');
     const el = document.createElement('div');
     el.className = 'gh-overlay';
     el.innerHTML = `
@@ -785,14 +807,17 @@ class CupPong {
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <h2 class="cp-card-title">${t('cleared')}</h2>
         <p class="cp-card-line">${t('clearedIn', { n: this.throws })}</p>
+        ${line2 ? `<p class="cp-card-line cp-card-best">${line2}</p>` : ''}
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${t('again')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="setup">${t('backSetup')}</button>
         </div>
       </div>`;
     this.root.appendChild(el);
     const go = () => { el.remove(); this.newRack(); };
     this.on(el.querySelector('[data-role="close"]'), 'click', go);
     this.on(el.querySelector('[data-role="again"]'), 'click', go);
+    this.on(el.querySelector('[data-role="setup"]'), 'click', () => { el.remove(); this.renderSetup(); });
   }
 
   showPause() {
@@ -806,7 +831,7 @@ class CupPong {
         <h2 class="cp-card-title">${t('paused')}</h2>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${this.mode === 'practice' ? t('newRack') : t('newGame')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${this.mode === 'solo' ? t('newRack') : t('newGame')}</button>
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="setup">${t('backSetup')}</button>
         </div>
       </div>`;
@@ -824,7 +849,7 @@ class CupPong {
       el.remove();
       this.clearTimers();
       this.throwState = null;
-      if (this.mode === 'practice') this.newRack(); else this.newMatch();
+      if (this.mode === 'solo') this.newRack(); else this.newMatch();
       if (!this.disposed) this.startLoop();
     });
     this.on(el.querySelector('[data-role="setup"]'), 'click', () => { el.remove(); this.renderSetup(); });
@@ -871,11 +896,13 @@ export function destroy() {
 }
 
 /** THE "NO MID-GAME RESUME" MEANING of the contract (Hoops', Ball Run's class): a match vs the
- *  computer is not persisted, so leaving one that has started really does abandon it and the hub
- *  should say so. Practice has nothing to lose. A challenge (stage 5) will live in Firebase, so
- *  leaving one will lose nothing and this must answer false for it. */
+ *  computer, or a solo rack, is not persisted, so leaving one that has started really does abandon
+ *  it and the hub should say so. A challenge (stage 5) will live in Firebase, so leaving one will
+ *  lose nothing and this must answer false for it. */
 export function isInProgress() {
-  const m = instance && instance.mode === 'cpu' ? instance.match : null;
+  if (!instance) return false;
+  if (instance.mode === 'solo') return instance.throws > 0 && instance.rack.length > 0;
+  const m = instance.mode === 'cpu' ? instance.match : null;
   return !!(m && !m.over && m.throwsTaken > 0);
 }
 

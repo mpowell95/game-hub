@@ -736,6 +736,17 @@ const UNIT_TO_SORT_LABEL = {
 };
 function sortItemsFor(id) {
   const labelKey = UNIT_TO_SORT_LABEL[lbUnitKeyOf(id)] || 'lb_sort_wins';
+  // CUP PONG ONLY (2026-09-28, Matt): "a leaderboard for who can clear the full rack with the
+  // fewest throws". Solo racks and matches vs the computer are two different records, so this is
+  // its own sort, FIRST so the board opens on it, the way Skeeball's 'high' is its own.
+  if (id === 'cuppong') {
+    return [
+      { sort: 'fewest', labelKey: 'lb_sort_fewest' },
+      { sort: 'wins', labelKey },
+      { sort: 'played', labelKey: 'lb_sort_games_short' },
+      { sort: 'alpha', labelKey: 'lb_sort_name' },
+    ];
+  }
   return [
     { sort: 'wins', labelKey },
     // SKEEBALL ONLY, and only since Points started meaning a lifetime (2026-09-01). Matt: "Another
@@ -762,7 +773,9 @@ function sortItemsFor(id) {
  *  `_boardSort` carried into a game that does not offer it would light no pill at all. */
 function effectiveSort(id) {
   if (id == null) return _sort;
-  return _boardSort === 'high' && id !== 'skeeball' ? 'wins' : _boardSort;
+  if (_boardSort === 'high' && id !== 'skeeball') return 'wins';
+  if (_boardSort === 'fewest' && id !== 'cuppong') return 'wins';
+  return _boardSort;
 }
 // By Game's own three orders, remembered the same way By Player's are (saved default view).
 // 'fav' reads js/favorites.js, the launcher's own favorites list, keyed by HUB id.
@@ -847,7 +860,8 @@ function boardControlsHTML(id, fieldTiers, machineIds) {
     </div>`;
     return `<div class="lb-ctrls">${pills}${selectBtnHTML('machine', t('lb_machine_label', { name: cur }))}${panel}</div>`;
   }
-  if (!fieldTiers.length) return `<div class="lb-ctrls">${pills}</div>`;
+  // A solo Cup Pong rack has no difficulty, so its sort offers no difficulty filter to do nothing.
+  if (!fieldTiers.length || effectiveSort(id) === 'fewest') return `<div class="lb-ctrls">${pills}</div>`;
   const curTier = DIFF_PILLS.find((p) => p.tier === _tier) || DIFF_PILLS[0];
   const panel = _panel !== 'cat' ? '' : `<div class="lb-panel-list" role="listbox" aria-label="${esc(t('lb_diff_filter_aria'))}">
     ${[null, ...fieldTiers].map((tier) => {
@@ -1565,6 +1579,10 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || metric(a, b) || recent(a, b));
     return;
   }
+  if (sort === 'fewest') {
+    rows.sort((a, b) => cmpCpFewest(a, b) || (cpSoloRacks(b) - cpSoloRacks(a)) || recent(a, b));
+    return;
+  }
   // The game's own metric: difficulty first (that is the half Matt does want tiered), then this
   // board's own score order - Tic Tac Toe's Ultimate -> Classic, everyone else's single number.
   // Fewer plays breaks a dead-equal pair, as it always did, and the badges call that pair tied.
@@ -1585,6 +1603,18 @@ function skMachinesPresent(list) {
     .concat([...seen].filter((mid) => !SK_MACHINES[mid]));
 }
 
+/** Cup Pong's fewest throws to clear a solo rack, or null when this person never has. NULL, never
+ *  the stored 0 sentinel - the msBestAt care: a 0 would rank "never cleared" first. */
+function cpSoloBest(g) {
+  const cp = (g.games.cuppong || {}).cp;
+  const v = cp ? cp.soloBest | 0 : 0;
+  return v > 0 ? v : null;
+}
+function cpSoloRacks(g) { return (((g.games.cuppong || {}).cp || {}).soloRacks) | 0; }
+/** Fewer throws first. This is the RANK order, so two equal bests share a badge; sortRows then
+ *  draws the one with more racks cleared first. */
+function cmpCpFewest(a, b) { return cpSoloBest(a) - cpSoloBest(b); }
+
 function gameDetail(list, id) {
   const fieldTiers = id === 'skeeball' ? [] : fieldTiersPresent(list, [id]);
   const machineIds = id === 'skeeball' ? skMachinesPresent(list) : [];
@@ -1603,14 +1633,20 @@ function gameDetail(list, id) {
   </div>`;
   const controls = boardControlsHTML(id, fieldTiers, machineIds);
   const showMp = anyMpPlays(list, id);
-  const rows = list.filter((g) => boardPlaysOf(g, id) > 0);
+  const bSort0 = effectiveSort(id);
+  // The solo board lists exactly the people with a cleared solo rack; every other sort lists the
+  // people with a match, as before. Nobody's record is hidden: each sort is one pill away.
+  const rows = bSort0 === 'fewest'
+    ? list.filter((g) => cpSoloBest(g) !== null)
+    : list.filter((g) => boardPlaysOf(g, id) > 0);
   // Same rule as By Player above: the badge follows the sort when the sort is a measure. This
   // board scrambled identically under "Games Played" - the badge stayed on the game's own metric.
   // The badge follows the sort whenever the sort is a MEASURE (By Player above has the same rule):
   // ranking by lifetime points and then numbering the rows by best rack reads as a broken board.
   const bSort = effectiveSort(id);
   const byMetric = bSort !== 'played' && bSort !== 'high';
-  const { rankOf, tiedAt } = rankMap(rows, bSort === 'played'
+  // Cup Pong's solo board is its own order (fewest first), so it takes its own comparator.
+  const { rankOf, tiedAt } = bSort === 'fewest' ? rankMap(rows, cpSoloBest, cmpCpFewest) : rankMap(rows, bSort === 'played'
     ? (g) => boardPlaysOf(g, id)
     : bSort === 'high'
       ? (g) => skBestAt(g, _machine)
@@ -1640,6 +1676,11 @@ function gameDetail(list, id) {
         // lifetime total on the subline, so the two are never confusable and neither is hidden.
         let big;
         let subText;
+        if (bSort === 'fewest') {
+          // A solo rack has no difficulty, so no tier chip and no tier tiles on this sort.
+          return playerCardHTML(g, chip, { val: cpSoloBest(g), unit: t('lb_unit_fewest') },
+            `${cpSoloRacks(g)} ${t('lb_unit_cleared')}`, '', '', '');
+        }
         if (bSort === 'played') {
           big = { val: played, unit: unitWord('lb_played_count') };
           subText = `${metricStr} ${metricUnit}`;

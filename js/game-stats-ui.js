@@ -1171,6 +1171,7 @@ function hasPlays(id, rec) {
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
   if (id === 'brickblitz') return !!(rec.bz && rec.bz.games);
+  if (id === 'cuppong') return ((rec.total || {}).played | 0) > 0 || !!(rec.cp && rec.cp.soloRacks);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
   if (id === 'sudoku') return !!(rec.sd && rec.sd.solved);
@@ -1345,6 +1346,26 @@ function brickBlitzScreen(rec) {
     </table>`;
 }
 
+// --- Cup Pong (matches vs the computer + solo racks) -------------------------------------------
+/** Two halves. Matches are the ordinary wins/losses screen (recordResult). SOLO is one cleared
+ *  10-cup rack at a time (recordCupPongSolo): its headline is the fewest throws, lower is better,
+ *  and "Not yet" stands in for the 0 sentinel, never a literal 0. */
+function cupPongScreen(rec) {
+  const cp = (rec && rec.cp) || {};
+  const racks = cp.soloRacks | 0;
+  const matches = ((rec && rec.total) || {}).played | 0;
+  if (!racks && !matches) return emptyState('Cup Pong');
+  const solo = racks ? `
+    <h4 class="gs-tbl-h">${t('gs_cp_solo')}</h4>
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${cp.soloBest ? cp.soloBest | 0 : t('gs_bs_no_wins_yet')}</b><span>${t('gs_cp_best')}</span></div>
+      <div class="gs-tally"><b>${racks}</b><span>${t('gs_cp_racks')}</span></div>
+      <div class="gs-tally"><b>${(Math.round(((cp.soloThrows | 0) / racks) * 10) / 10).toLocaleString()}</b><span>${t('gs_cp_avg')}</span></div>
+    </div>` : '';
+  const vs = matches ? `<h4 class="gs-tbl-h">${t('gs_cp_vs')}</h4>${recordScreen('cuppong', rec)}` : '';
+  return solo + vs;
+}
+
 const BB_LEAGUE_LABEL = { little: 'Little League', highschool: 'High School', college: 'College', minors: 'Minors', majors: 'Majors' };
 const BB_TROPHY_LABEL = { 0: 'None', 1: 'Bronze', 2: 'Silver', 3: 'Gold' };
 
@@ -1488,6 +1509,7 @@ function screenFor(id, st) {
   if (id === 'skeeball') return skeeballScreen(rec);
   if (id === 'brickblitz') return brickBlitzScreen(rec);
   if (id === 'airhockey') return airHockeyScreen(rec);
+  if (id === 'cuppong') return cupPongScreen(rec);
   if (id === 'holdem') return holdemScreen(rec);
   if (id === 'golf') return golfScreen(rec);
   return recordScreen(id, rec);   // business, parchis

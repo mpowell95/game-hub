@@ -385,6 +385,15 @@ export function aggregatePlayers(all, corrections) {
         for (const k of ['games', 'goalsFor', 'goalsAgainst', 'shutouts']) dst.ah[k] += src.ah[k] | 0;
         dst.ah.bestShot = Math.max(dst.ah.bestShot | 0, src.ah.bestShot | 0);
         dst.ah.bestStreak = Math.max(dst.ah.bestStreak | 0, src.ah.bestStreak | 0);
+      } else if (g === 'cuppong' && src.cp) {
+        // Cup Pong's SOLO racks (js/game-stats.js, recordCupPongSolo). Counters add; soloBest is
+        // a FEWEST (lower wins) with 0 meaning "never cleared", so it takes the min of the
+        // non-zero values only - Battleship's fewestShotsWin guard above, for the same reason.
+        if (!dst.cp) dst.cp = { soloRacks: 0, soloThrows: 0, soloBest: 0 };
+        dst.cp.soloRacks += src.cp.soloRacks | 0;
+        dst.cp.soloThrows += src.cp.soloThrows | 0;
+        const sb = src.cp.soloBest | 0;
+        if (sb > 0) dst.cp.soloBest = dst.cp.soloBest ? Math.min(dst.cp.soloBest, sb) : sb;
       } else if (g === 'holdem' && src.hb) {
         // Texas Hold'em's bankroll LEDGER (js/game-stats.js, recordHoldemBank). Every money field
         // is an additive counter, so a person's balance across devices is the SUM of the ledgers;
