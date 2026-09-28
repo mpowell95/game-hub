@@ -157,6 +157,19 @@
 //                                                   // lifetime counters, additive. The one home of a
 //                                                   // Brick Breaker score (no local high-score table);
 //                                                   // see recordBrickBlitz
+//       airhockey: {
+//         total, byDiff,                           // byDiff easy|medium|hard|expert vs the computer,
+//                                                   // 'mp' online (2026-09-27/28)
+//         ah: { games, goalsFor, goalsAgainst, shutouts, bestShot, bestStreak, streak } },
+//                                                   // (2026-09-28) games/goals/shutouts are lifetime
+//                                                   // counters, additive; bestShot (fastest shot in
+//                                                   // TABLE UNITS per second, never a converted mph)
+//                                                   // and bestStreak are Math.max ONLY. `streak` is
+//                                                   // the one field that goes back to 0 (on a loss):
+//                                                   // it is live state, not earned history - the
+//                                                   // earned part is bestStreak, which never drops.
+//                                                   // Per device; players-agg does not add it up.
+//                                                   // See recordAirHockey.
 //       holdem: {
 //         total, byDiff,
 //         hb: { buyins, winnings, grants, best, cashes, entries } },
@@ -865,6 +878,7 @@ function normalize(raw) {
   ensureMs(st.games.minesweeper);
   ensureBz(st.games.brickblitz);
   ensureHb(st.games.holdem);
+  ensureAh(st.games.airhockey);
   return st;
 }
 
@@ -2043,6 +2057,41 @@ export function recordBrickBlitz(score, difficulty, extras) {
   g.bz.stages += n(x.stages);
   if (x.circuit === true) g.bz.circuits += 1;
   g.bz.bestCombo = Math.max(g.bz.bestCombo | 0, n(x.bestCombo));
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+// --- Air Hockey records (2026-09-28) -----------------------------------------------------------
+// Matt: "Shot speed and records" - fastest shot, shutouts, longest win streak. One call per
+// finished match (first to 7), vs the computer (easy|medium|hard|expert) or online ('mp').
+
+function ensureAh(g) {
+  if (!g.ah || typeof g.ah !== 'object') g.ah = { games: 0, goalsFor: 0, goalsAgainst: 0, shutouts: 0, bestShot: 0, bestStreak: 0, streak: 0 };
+  for (const k of ['games', 'goalsFor', 'goalsAgainst', 'shutouts', 'bestShot', 'bestStreak', 'streak']) {
+    if (!Number.isFinite(g.ah[k])) g.ah[k] = 0;
+  }
+}
+
+/** Air Hockey: record one finished match. `extras` = { goalsFor, goalsAgainst, shot } where shot
+ *  is this match's fastest shot in table units per second. Additive: counters add, bestShot and
+ *  bestStreak only go up; `streak` (live state) is the only field a loss sets back to 0. */
+export function recordAirHockey(difficulty, won, extras) {
+  if (tooFast('airhockey')) return null;
+  const st = loadStats();
+  const g = st.games.airhockey;
+  ensureAh(g);
+  const n = (v) => (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
+  const x = extras || {};
+  const gf = n(x.goalsFor), ga = n(x.goalsAgainst);
+  bumpTotals(g, normDiff(difficulty), won === true);
+  g.ah.games += 1;
+  g.ah.goalsFor += gf;
+  g.ah.goalsAgainst += ga;
+  if (won === true && ga === 0) g.ah.shutouts += 1;
+  g.ah.bestShot = Math.max(g.ah.bestShot | 0, n(x.shot));
+  g.ah.streak = won === true ? (g.ah.streak | 0) + 1 : 0;
+  g.ah.bestStreak = Math.max(g.ah.bestStreak | 0, g.ah.streak);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
