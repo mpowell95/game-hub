@@ -44,7 +44,7 @@ const KNOWN_GAPS = {
     'boggle/css/boggle.css:242': 'tally count micro-label, pre-existing',
     'chinchon/css/chinchon.css:677': 'stats chart axis label, pre-existing',
     'escoba/css/escoba.css:314': 'card badge, pre-existing',
-    'escoba/css/escoba.css:677': 'stats chart axis label, pre-existing',
+    'escoba/css/escoba.css:696': 'stats chart axis label, pre-existing',
     'filler/css/filler.css:269': 'pre-existing',
     'filler/css/filler.css:312': 'pre-existing',
     'mancala/css/mancala.css:319': 'pre-existing',

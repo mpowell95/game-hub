@@ -316,6 +316,26 @@ the same rows no matter which game you drilled in from, and was removed. See `js
   the in-house preview browser forces `prefers-reduced-motion: reduce` regardless of any
   page setting, so the live sweep can only be confirmed on a real device; verify there
   before assuming a broom-adjacent change looks right.
+- **The hand is reconciled, never rebuilt, and cards travel (2026-09-28).** Matt asked for
+  Escoba's card motion to match its table. `render()` used to set `.eb-hand`'s innerHTML every
+  time, so a selected card snapped up (a fresh node has nothing to transition from) and the cards
+  left after a play jumped. `_syncHand()` now keeps one `.eb-hand-slot` per card id
+  (`this._handSlots`) and only toggles `is-selected`; a slot that moves slides with a FLIP on the
+  SLOT, because the card's own `transform` is the selection lift. A slot's card is rebuilt only if
+  its signature (capture value + the Value-badges setting) changed, so the same id in a match with
+  the other numbering mode never shows a stale badge. **Do not go back to innerHTML for the hand.**
+  Card flights are `_fly()` clones in the fixed `.eb-flight` layer (z-index 200, under every
+  modal): a **deal** renders the new cards in place but hidden (`is-arriving`, collected through
+  `this._arriving` during that one render), saves the checkpoint, then flies each out of the
+  stock in dealing order (face down to another player's pill, `data-pid`) and reveals it on
+  landing; a **play** hides the source (your hand slot, or reads the player's pill) and flies the
+  card to its table cell before the existing hold/capture beats, landing with `is-flown` so the
+  old drop-in doesn't replay on top. Flights are off under reduced motion and during a
+  rejoining guest's `replayMode` (`_flightsOn()`); the state change is then instant, as before.
+  A flight never resolves once `_dead`, same as `beat()`, so a torn-down match can't carry on
+  saving. Cost: about 0.3 s per play and 0.7-1.1 s per deal. Verified in Chromium with motion on
+  and off (full solo rounds, 2 and 3 players, standalone and in-hub, `check-no-scroll.mjs escoba`
+  clean); not yet by eye on a phone.
 - **Round comparison table is one shared column grid**, not a table element: every row
   (`eb-score-head`, `eb-score-row` xN, `eb-score-points-row`, `eb-score-total-row`)
   independently declares `grid-template-columns: var(--eb-score-cols)`, where

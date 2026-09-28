@@ -438,6 +438,21 @@
   from { transform: translateY(-26px) scale(1.12); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
+/* A played card that already flew to its slot lands settled: no drop-in on
+   top of the flight, just the "just played" ring. */
+.eb-card.is-played.is-flown { animation: none; }
+
+/* Card travel (ui.js _fly/_animateDeal). A new card is laid out in its real
+   slot but hidden until its flight lands, so it is never in two places. The
+   flying copy lives in a fixed layer above the game and below every modal. */
+.eb-hand-slot.is-arriving, .eb-table-cell.is-arriving { visibility: hidden; }
+.eb-flight { position: fixed; inset: 0; z-index: 200; pointer-events: none; overflow: hidden; }
+.eb-flight .eb-flycard {
+  position: absolute; margin: 0; transform-origin: 0 0; transition: none;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+.eb-flight .eb-flycard .eb-card-val { display: none; }
+
 .eb-card.is-taken { transform: translateY(-14px) scale(0.82); opacity: 0; }
 /* Escoba capture exit: cards fly off to the right with a rotation, matching
    the broom's left-to-right sweep, as though swept away rather than merely
@@ -559,6 +574,10 @@
   min-height: calc(var(--eb-hand-w) * 1.5 + var(--eb-hand-lift-overhang));
   padding: var(--eb-hand-lift-overhang) 0 2px;
 }
+/* Each hand card sits in a slot kept across renders (ui.js _syncHand): the
+   SLOT carries the slide when a neighbour leaves, the card keeps its own
+   transform for the selection lift, so the two never fight. */
+.eb-hand-slot { display: block; flex: 0 0 auto; }
 .eb-hand .eb-card { width: var(--eb-hand-w); }
 .eb-hand .eb-card:hover { transform: translateY(-4px); }
 .eb-hand .eb-card.is-selected {

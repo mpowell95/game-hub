@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v998';
+const CACHE = 'game-hub-v999';
 
 const ASSETS = [
   './',
@@ -723,13 +723,13 @@ const REST_MANIFEST = {
   './filler/js/hash.js': '3491931082',
   './filler/js/strings.js': '979ddc00fc',
   './escoba/index.html': 'd46f17e5fa',
-  './escoba/css/escoba.css': '4413d8aa5f',
+  './escoba/css/escoba.css': '775b3769cb',
   './escoba/js/deck.js': '82f42af6d3',
   './escoba/js/cards.js': 'bff122678a',
   './escoba/js/game.js': 'd86364718a',
   './escoba/js/hash.js': '032dbfed1a',
   './escoba/js/ai.js': '66a7d1f37a',
-  './escoba/js/ui.js': '2c608aec48',
+  './escoba/js/ui.js': '5b44435dbe',
   './escoba/js/strings.js': '421a633292',
   './escoba/img/broom-sprite.webp': 'c1a0f8a912',
   './mancala/index.html': '0ee5dd765e',
