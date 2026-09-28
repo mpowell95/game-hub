@@ -13,7 +13,7 @@ import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'brickblitz']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -235,6 +235,17 @@ export function aggregatePlayers(all, corrections) {
           const val = mbt[k] | 0;
           if (val > 0) dst.ms.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
         }
+      } else if (g === 'contexto' && src.ct) {
+        // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it every Contexto
+        // counter reads ZERO once a second device syncs (THE LAW rule 1). Counters add; `fewest`
+        // is LOWER-is-better with the writer's zero sentinel (js/game-stats.js recordContexto).
+        if (!dst.ct) dst.ct = { solved: 0, guesses: 0, hints: 0, noHint: 0, fewest: 0 };
+        dst.ct.solved += src.ct.solved | 0;
+        dst.ct.guesses += src.ct.guesses | 0;
+        dst.ct.hints += src.ct.hints | 0;
+        dst.ct.noHint += src.ct.noHint | 0;
+        const f = src.ct.fewest | 0;
+        if (f > 0) dst.ct.fewest = (dst.ct.fewest | 0) > 0 ? Math.min(dst.ct.fewest, f) : f;
       } else if (g === 'ballrun' && src.br) {
         // Fourth-playthrough item 2: Ball Run's shared metric is obstacle count (bestObstacles /
         // bestObstaclesByDiff), not meters. Old meter-shaped records (pre-migration, no

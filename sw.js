@@ -189,6 +189,16 @@ const ASSETS = [
   './minesweeper/js/ui.js',
   './minesweeper/js/engine.js',
   './minesweeper/js/strings.js',
+  './contexto/',
+  './contexto/index.html',
+  './contexto/css/contexto.css',
+  './contexto/js/ui.js',
+  './contexto/js/engine.js',
+  './contexto/js/strings.js',
+  './contexto/data/en.json',
+  './contexto/data/en.bin',
+  './contexto/data/es.json',
+  './contexto/data/es.bin',
   './sudoku/',
   './sudoku/index.html',
   './sudoku/css/sudoku.css',
@@ -583,7 +593,10 @@ const REST = ASSETS.filter((p) => !isShellAsset(p));
 // ONLY put a file here if it is BOTH large AND useless to anyone not playing that one game. Game
 // CODE must never be lazy: a game's modules are what the launcher tile opens, they are small, and
 // making them lazy would just move the 2026-09-01 cache-first win back off a phone.
-const LAZY_REST = /^\.\/boggle\/data\/words[a-z-]*\.txt$/;
+// Contexto's word models (2026-09-28) are the same case: ~3.7 MB per language, useless to anyone
+// not playing it. The game shows its own "couldn't load the words" screen with Retry (and retries
+// on `online`), so a first-time offline player gets an honest answer.
+const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin))$/;
 const isLazyAsset = (p) => LAZY_REST.test(p);
 
 const LAZY = REST.filter(isLazyAsset);
@@ -742,6 +755,16 @@ const REST_MANIFEST = {
   './minesweeper/js/ui.js': '5da9a0a405',
   './minesweeper/js/engine.js': '4f9e1b50d4',
   './minesweeper/js/strings.js': '59423addbe',
+  './contexto/': '249279e291',
+  './contexto/index.html': '249279e291',
+  './contexto/css/contexto.css': '0f05bf729f',
+  './contexto/js/ui.js': '1fcbcb48d8',
+  './contexto/js/engine.js': '01060b503d',
+  './contexto/js/strings.js': '51207f42d2',
+  './contexto/data/en.json': '361a043c15',
+  './contexto/data/en.bin': '5e6b39a78e',
+  './contexto/data/es.json': '5262cc4d43',
+  './contexto/data/es.bin': 'a9d2e833b0',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
   './sudoku/css/sudoku.css': 'd27cef9c33',

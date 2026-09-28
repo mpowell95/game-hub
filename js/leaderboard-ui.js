@@ -162,6 +162,7 @@ const GAME_META = [
   { id: 'pipes', labelKey: 'game_title_pipes' },
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
+  { id: 'contexto', labelKey: 'game_title_contexto' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
