@@ -250,24 +250,6 @@ export const GAME_ART = {
               <circle cx="140.5" cy="46" r="1.9"/><circle cx="135.5" cy="51" r="1.9"/><circle cx="139.5" cy="57" r="1.9"/>
             </g>
           </svg>`,
-  // Pipes: a run of pipe crossing the frame left to right, half of it already carrying water and
-  // half still dry and mis-turned - the game's whole idea in one picture. Landscape and
-  // full-bleed per checklist item 5; composed FOR 160x90, never a square cropped to fit.
-  'pipes': `<svg viewBox="0 0 160 90" aria-hidden="true">
-    <rect width="160" height="90" fill="#12303f"/>
-    <g fill="none" stroke="#2f4d5e" stroke-width="9" stroke-linecap="round">
-      <path d="M20 66 H44 V26 H70"/>
-      <path d="M96 26 H120 V64 H146"/>
-      <path d="M112 78 H136"/>
-      <path d="M34 14 V34"/>
-    </g>
-    <g fill="none" stroke="#43b6f5" stroke-width="9" stroke-linecap="round">
-      <path d="M20 66 H44 V26 H70"/>
-    </g>
-    <circle cx="20" cy="66" r="7" fill="#F2B705"/>
-    <circle cx="146" cy="64" r="7" fill="#2f4d5e"/>
-    <circle cx="70" cy="26" r="5" fill="#43b6f5"/>
-  </svg>`,
   // Sudoku: a 9x9 grid drawn landscape, thick lines every 3 cells (the box boundaries), a handful
   // of filled-in digits so it reads as "a puzzle" rather than "a grid", and one cell outlined in
   // the app's standing selection accent (#ffce3a, root CLAUDE.md) the way the game itself marks a
@@ -498,37 +480,6 @@ export const GAME_ART = {
               </g>
             </g>
           </svg>`,
-  // Repainted 2026-08-10 to match the game it opens. It used to be a pale blue table in a dark red
-  // frame with numbered yellow/blue balls -- the old palette, which the game no longer has
-  // anywhere. Same colours as pool/js/ui.js's TABLE_ART and BALL_ART, off reference/pool/SPEC.md:
-  // salmon surround, brown wood, bright green cushion, deep green cloth, coral and cyan balls.
-  pool: `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#F2A183"/>
-            <rect x="4" y="6" width="152" height="78" rx="9" fill="#0B0B0B"/>
-            <rect x="6" y="8" width="148" height="74" rx="8" fill="#8C5A3F"/>
-            <rect x="13" y="15" width="134" height="60" rx="6" fill="#3FBE63"/>
-            <rect x="19" y="21" width="122" height="48" rx="4" fill="#0F8A3C"/>
-            <g fill="#000">
-              <circle cx="21" cy="23" r="8"/><circle cx="139" cy="23" r="8"/>
-              <circle cx="21" cy="67" r="8"/><circle cx="139" cy="67" r="8"/>
-              <circle cx="80" cy="21" r="7"/><circle cx="80" cy="69" r="7"/>
-            </g>
-            <g stroke="rgba(0,0,0,.3)" stroke-width="1">
-              <circle cx="58" cy="52" r="7" fill="#F2604C"/>
-              <circle cx="74" cy="38" r="7" fill="#33C6F4"/>
-              <circle cx="92" cy="55" r="7" fill="#F2604C"/>
-              <circle cx="108" cy="36" r="7" fill="#33C6F4"/>
-              <circle cx="80" cy="47" r="7" fill="#101010"/>
-              <circle cx="40" cy="36" r="7" fill="#F7EFCB"/>
-            </g>
-            <g fill="rgba(255,255,255,.55)">
-              <circle cx="55.5" cy="49.5" r="2.1"/><circle cx="71.5" cy="35.5" r="2.1"/>
-              <circle cx="89.5" cy="52.5" r="2.1"/><circle cx="105.5" cy="33.5" r="2.1"/>
-              <circle cx="37.5" cy="33.5" r="2.1"/>
-            </g>
-            <text x="80" y="47" font-size="7" font-weight="bold" fill="#fff"
-                  text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif">8</text>
-          </svg>`,
   yahtzee: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#0878CE"/>
             <g transform="translate(38 52) rotate(-10)">
@@ -668,6 +619,41 @@ export const GAME_ART = {
               <ellipse cx="17" cy="47" rx="10" ry="3.6" fill="#F2B705"/><rect x="7" y="42" width="20" height="5" fill="#F2B705"/><ellipse cx="17" cy="42" rx="10" ry="3.6" fill="#ffd84d" stroke="#fff" stroke-width="0.8" stroke-dasharray="3 3"/>
             </g>
           </svg>`,
+  'hill-climb': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#8fd3f0"/>
+            <path d="M0 58 L34 44 L66 54 L104 34 L136 44 L160 36 L160 90 L0 90 Z" fill="#6fa8c9" opacity="0.55"/>
+            <path d="M0 90 L0 70 L46 70 L110 38 L160 44 L160 90 Z" fill="#8d5a34"/>
+            <g fill="#754828" opacity="0.5">
+              <ellipse cx="16" cy="80" rx="6.5" ry="4.2"/><ellipse cx="44" cy="84" rx="5.5" ry="3.6"/>
+              <ellipse cx="74" cy="76" rx="6" ry="4"/><ellipse cx="104" cy="66" rx="6.5" ry="4.2"/>
+              <ellipse cx="134" cy="76" rx="6" ry="4"/>
+            </g>
+            <path d="M0 70 L46 70 L110 38 L160 44" fill="none" stroke="#4caf3d"
+                  stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+            <g fill="#e0a007" stroke="#231f1c" stroke-width="1.8">
+              <circle cx="118" cy="17" r="5.6"/><circle cx="133" cy="12" r="5.6"/><circle cx="148" cy="16" r="5.6"/>
+            </g>
+            <g transform="translate(73 44) rotate(-26.6)">
+              <path d="M-18 4 L-19 -4 L-7 -4 L-6 -12 L5 -12 L7 -4 L18 -5 L19 3 Z"
+                    fill="#d8382b" stroke="#231f1c" stroke-width="2.6" stroke-linejoin="round"/>
+              <path d="M8 -4 L18 -5 L18.6 0 L8.6 0 Z" fill="#9a1f16" stroke="#231f1c" stroke-width="1.6"/>
+              <rect x="-10" y="-15" width="3.4" height="11" fill="#7b1a12" stroke="#231f1c" stroke-width="1.6"/>
+              <rect x="-6.5" y="-18" width="7" height="10" rx="2.4" fill="#E0532F" stroke="#231f1c" stroke-width="1.8"/>
+              <circle cx="-3" cy="-21" r="4.2" fill="#f0c08a" stroke="#231f1c" stroke-width="1.8"/>
+              <path d="M-7.4 -23 Q-3 -29 1.4 -23 Z" fill="#c1301f" stroke="#231f1c" stroke-width="1.6"/>
+              <path d="M-16 -4 Q-21 -14 -19 -24" fill="none" stroke="#231f1c" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="-19" cy="-25" r="2.2" fill="#E0532F"/>
+              <circle cx="-12" cy="4" r="7.2" fill="#2b2b30" stroke="#231f1c" stroke-width="2.6"/>
+              <circle cx="-12" cy="4" r="3" fill="#e8e2d6"/>
+              <circle cx="12" cy="4" r="7.2" fill="#2b2b30" stroke="#231f1c" stroke-width="2.6"/>
+              <circle cx="12" cy="4" r="3" fill="#e8e2d6"/>
+            </g>
+          </svg>`,
+
+  // Battleship: composed for the 16:9 frame (never a square crop). A peg grid (the hunting board)
+  // fills the left third with one vermilion hit peg and a splash ring reinforcing it; a ship
+  // silhouette in profile, bow to the right, sits on the right two-thirds riding a steel-navy sea
+  // band that matches the hub tile's own accent (#34506E).
   battleship: `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#0E2438"/>
             <rect x="0" y="58" width="160" height="32" fill="#1B3B57"/>
@@ -964,20 +950,19 @@ export const GAME_ART = {
             <circle cx="132" cy="44" r="5" fill="#f07d5e"/>
             <rect x="129.8" y="41.8" width="4.4" height="4.4" fill="#ffffff"/>
           </svg>`,
-  // Three ranked guess rows (the game's own closeness bars, teal/yellow/vermilion, each with its
-  // real shape marker - diamond/circle/square, never color alone) shrinking toward a "1" at the
-  // bottom, plus the puzzle-number chip the info row always shows.
+  // A magnifying glass over a scatter of words, the secret "?" in its lens (Matt picked option
+  // "B" of a three-way mockup, 2026-09-28; the ranked-bars tile read as Brick Breaker and the
+  // word-radar tile that followed was also turned down).
   contexto: `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#0f1a2e"/>
-            <rect x="10" y="14" width="140" height="16" rx="8" fill="#178A7A" opacity=".85"/>
-            <path d="M18 22 L23 17 L28 22 L23 27 Z" fill="#eef2f8"/>
-            <rect x="10" y="37" width="96" height="16" rx="8" fill="#F2B705" opacity=".85"/>
-            <circle cx="23" cy="45" r="5" fill="#1a2436"/>
-            <rect x="10" y="60" width="52" height="16" rx="8" fill="#E0532F" opacity=".85"/>
-            <rect x="18.5" y="65" width="9" height="9" rx="1.4" fill="#eef2f8"/>
-            <rect x="122" y="8" width="30" height="16" rx="8" fill="#1e2c48"/>
-            <text x="137" y="19.5" text-anchor="middle" font-family="system-ui, sans-serif"
-              font-size="10" font-weight="800" fill="#eef2f8">#12</text>
+            <rect width="160" height="90" fill="#f6efe2"/>
+            <text x="14" y="22" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#9a8f7d">river</text>
+            <text x="112" y="18" font-family="system-ui, sans-serif" font-size="9" font-weight="700" fill="#9a8f7d">cloud</text>
+            <text x="12" y="80" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#9a8f7d">piano</text>
+            <text x="116" y="62" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#9a8f7d">bread</text>
+            <text x="20" y="52" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#6f6553">dog</text>
+            <circle cx="84" cy="42" r="24" fill="#ffffff" stroke="#1F5FA8" stroke-width="7"/>
+            <text x="84" y="52" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="900" fill="#1F5FA8">?</text>
+            <path d="M101 59 L122 80" stroke="#1F5FA8" stroke-width="10" stroke-linecap="round"/>
           </svg>`,
 };
 

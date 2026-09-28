@@ -249,6 +249,7 @@ class Game {
   _renderSetup() {
     const s = this.settings;
     const mpSave = this._mpSave();
+    const soloSave = this._soloSave();
     const seg = (name, items, cur) => `<div class="pk-seg" role="radiogroup">${items.map(([v, label]) =>
       `<button type="button" role="radio" aria-checked="${String(v) === String(cur)}" class="pk-segbtn${String(v) === String(cur) ? ' is-on' : ''}" data-act="set" data-k="${name}" data-v="${v}">${label}</button>`).join('')}</div>`;
     const speedHint = t('speed_hint', { n: SPEEDS[s.speed] });
@@ -265,7 +266,9 @@ class Game {
         ${seg('speed', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('speed_' + k))]), s.speed)}</div>
       <div class="pk-field"><div class="pk-label">${esc(t('pace'))}</div>
         ${seg('pace', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('pace_' + k))]), s.pace)}</div>
-      <button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="choose">${esc(t('choose_table'))}</button>`;
+      ${soloSave ? `<button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="resume">${esc(t('resume_game'))}<small class="pk-resume-sub">${esc(this._saveLine(soloSave.state))}</small></button>
+      <button type="button" class="pk-link" data-act="giveup-saved">${esc(t('give_up_saved'))}</button>`
+        : `<button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="choose">${esc(t('choose_table'))}</button>`}`;
     const online = `
       ${mpSave ? `<button type="button" class="pk-btn pk-btn-primary" data-act="rejoin">${esc(t('back_to_table', { code: mpSave.code }))}</button>` : ''}
       <button type="button" class="pk-btn ${mpSave ? '' : 'pk-btn-primary'} pk-btn-big" data-act="create" ${this.busy ? 'disabled' : ''}>${esc(t('create_table'))}</button>
@@ -727,12 +730,26 @@ class Game {
     } else if (want === 'last') {
       ov.innerHTML = this._lastHandHTML();
     } else if (want === 'confirm') {
-      const hostClose = this.kind === 'host';
+      // Step away (2026-09-28, Matt: "join a tournament, leave, then resume the same tourney").
+      // The first choice keeps the game: solo it stays saved and "Resume tournament" brings it
+      // back; online the seat stays yours and "Back to table" returns to it. Giving up is the
+      // second, smaller choice, and it says it counts as a loss.
+      const host = this.kind === 'host';
+      const solo = this.kind === 'solo';
       ov.innerHTML = `<div class="pk-modal pk-modal-sm" role="dialog" aria-modal="true">
-          <p class="pk-confirm">${esc(hostClose ? t('close_confirm') : t('leave_confirm'))}</p>
+          <p class="pk-confirm">${esc(t(solo ? 'leave_solo_q' : host ? 'leave_host_q' : 'leave_guest_q'))}</p>
+          <div class="pk-leavecol">
+            <button type="button" class="pk-btn pk-btn-primary" data-act="stepaway">${esc(t(solo ? 'save_leave' : 'step_away'))}</button>
+            <p class="pk-hint pk-center-text">${esc(t(solo ? 'save_leave_hint' : host ? 'step_away_host_hint' : 'step_away_hint'))}</p>
+            <button type="button" class="pk-btn pk-btn-fold" data-act="leave-go">${esc(t(host ? 'close_table' : 'give_up'))}</button>
+            <button type="button" class="pk-btn" data-act="close">${esc(t('cancel'))}</button>
+          </div></div>`;
+    } else if (want === 'giveup') {
+      ov.innerHTML = `<div class="pk-modal pk-modal-sm" role="dialog" aria-modal="true">
+          <p class="pk-confirm">${esc(t('give_up_confirm'))}</p>
           <div class="pk-actrow">
             <button type="button" class="pk-btn" data-act="close">${esc(t('cancel'))}</button>
-            <button type="button" class="pk-btn pk-btn-fold" data-act="leave-go">${esc(t('leave'))}</button>
+            <button type="button" class="pk-btn pk-btn-fold" data-act="giveup-go">${esc(t('give_up'))}</button>
           </div></div>`;
     } else if (want === 'over') {
       const pub = this.pub;
@@ -838,6 +855,10 @@ class Game {
       case 'startnet': return this._startNet();
       case 'leave': return this._leaveAsk();
       case 'leave-go': this.overlay = null; return this._leave();
+      case 'stepaway': this.overlay = null; return this._stepAway();
+      case 'resume': { const sv = this._soloSave(); if (sv) this._startSolo(sv.state); else this.render(true); return undefined; }
+      case 'giveup-saved': this.overlay = 'giveup'; return this._renderOverlay();
+      case 'giveup-go': this.overlay = null; this._forfeitSave(); return this.render(true);
       case 'fold': return this._move({ a: 'fold' });
       case 'raise-toggle': {
         if (this.raise) { this.raise = null; return this._paintActions(); }
@@ -1061,6 +1082,62 @@ class Game {
     this.overlay = null;
     this.pub = null;
     this.render(true);
+  }
+
+  /** The solo tournament saved on this device, if one is still being played. */
+  _soloSave() {
+    const sv = readJSON(SAVE_KEY);
+    return sv && sv.state && !sv.state.over && Array.isArray(sv.state.players) ? sv : null;
+  }
+
+  /** "Buddy's House · hand 12 · $9,400" for the Resume button. */
+  _saveLine(state) {
+    const tier = tierById(state.cfg && state.cfg.tier);
+    const me = state.players.find((p) => !p.bot) || {};
+    const parts = [tier ? t('tier_' + tier.id) : t('title'), t('hand_n', { n: state.handNo || 1 })];
+    if (me.out) parts.push(t('st_out')); else parts.push(t('stack_n', { n: money(me.chips) }));
+    return parts.join(' \u00b7 ');
+  }
+
+  /** Leave the table WITHOUT giving the game up (Matt, 2026-09-28). Solo: the save stays exactly
+   *  as it is (it is written after every change), so "Resume tournament" picks it up at the same
+   *  hand. Online: the seat stays yours - the same as closing the app, which the host already
+   *  treats as "away" (auto check/fold) - and "Back to table" rejoins. A host stepping away pauses
+   *  the table for everyone until they come back, and the confirm says so. Nothing is recorded. */
+  _stepAway() {
+    if (this.kind === 'solo') {
+      if (this.table) writeJSON(SAVE_KEY, { state: this.table.state, at: Date.now() });
+      this._stopTable();
+      this.settings.tab = 'solo';
+    } else if (this.mp) {
+      if (this.mp.host) this._saveMp();
+      this._stopTable();
+      clearTimeout(this.pubTimer); this.pubTimer = null;
+      net.disconnect();
+      this.mp = null;
+      this.settings.tab = 'online';
+    }
+    this.kind = null;
+    this.pub = null;
+    this.screen = 'setup';
+    this.overlay = null;
+    this.raise = null;
+    this.render(true);
+  }
+
+  /** Give up the tournament saved on this device from the setup screen: one loss, no prize (the
+   *  same as walking away mid-game), then the save is cleared. Guarded by the save's own `rec`
+   *  flag, so a game already recorded is never counted twice. */
+  _forfeitSave() {
+    const sv = this._soloSave();
+    if (!sv) return;
+    const st = sv.state;
+    if (!st.rec) {
+      st.rec = true;
+      writeJSON(SAVE_KEY, { state: st, at: Date.now() });
+      try { recordResult('holdem', SKILL_ID[st.skill] || 'medium', false); } catch (e) { console.warn('[holdem] stats write failed', e); }
+    }
+    drop(SAVE_KEY);
   }
 
   /** Solo and host: the dealer changed something. Save, draw, and (host) publish. */

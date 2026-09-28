@@ -372,7 +372,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
 | `js/arcade-scores.js` | shared high-score + unlock layer for the arcade-cabinet games (Skeeball): per-board bests, date-keyed daily bests, unlocks, app-wide records |
-| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee, Battleship, Texas Hold'em and Air Hockey (lobby only; its real-time play is `air-hockey/js/live.js`); its N-seat half (`joinSeat`/`vacateSeat`/seat-addressed recovery) is used by Chinchón, Escoba and Texas Hold'em (8 seats) |
+| `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Boggle, Yahtzee, Battleship, Texas Hold'em and Air Hockey (lobby only; its real-time play is `air-hockey/js/live.js`); its N-seat half (`joinSeat`/`vacateSeat`/seat-addressed recovery) is used by Chinchón, Escoba and Texas Hold'em (8 seats) |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the identity/storage dump. Its profile-page button was RETIRED 2026-08-11 (Report a bug supersedes it and sends the same payload); `gatherDeviceReport()` is still load-bearing, called by every bug report |
 | `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two |
@@ -553,7 +553,6 @@ working in that folder).
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
 | Monopoly Deal | launch-out `href:` (in-repo `business-deal/`, own nested SW) | n/a (own page) | its own keys | `window.__ghStats` → `'business'` |
 | Nuts & Bolts | in-hub `module:` | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |
-| Pool | in-hub `module:`, immersive, **multiplayer** (`gamehub.poolv2.mp.v1`) | `.p2-root` / `.p2-` | `gamehub.poolv2.v1` (frozen; see its file) | `recordResult('pool', …)` |
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
 | Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines), plus **"beat my score" challenges** (`skeeChallenges/`, 2026-09-24) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
@@ -572,16 +571,18 @@ If a later redesign adds or renames a root class, the table follows the code.
 
 ## Archived games (2026-09-28)
 
-**Pinball** was archived at Matt's request (*"remove pinball from the game hub and archive it"*,
-then *"Remove it from the leaderboard too. Archive all traces"*). Its code is in `archive/pinball/`
-(with its own `CLAUDE.md` and restore steps); `archive/` is in `validate-sw-assets.mjs`'s
-`SCAN_SKIP`, so nothing there is precached or linked. No launcher tile, no leaderboard row, no My
-Stats tab, no art, no strings, no recorder.
+**Pinball, Pool and Pipes** were archived at Matt's request (*"remove pinball from the game hub and
+archive it"*, *"Remove it from the leaderboard too. Archive all traces"*, then *"please do the same
+for Pool and Pipes"*). Their code is in `archive/<game>/` (each with its own `CLAUDE.md` and restore
+steps; Pool's multiplayer-lockstep test section is kept at `archive/pool/tools/`); `archive/` is in
+`validate-sw-assets.mjs`'s `SCAN_SKIP`, so nothing there is precached or linked. No launcher tile,
+no leaderboard row, no My Stats tab, no art, no strings, no recorder.
 
-**What deliberately remains, and why (THE LAW):** `'pinball'` stays in `js/game-stats.js`'s
-`GAMES` - that list is the stored SHAPE, and every recorded Pinball game still lives under that key
-on the phones and in `players/<id>`. It is also in `ARCHIVED_GAMES`, which `js/players-agg.js`
-uses to keep it out of every total. Nothing was deleted; restoring the game makes it all visible
+**What deliberately remains, and why (THE LAW):** `'pinball'`, `'pool'`, `'poolv2'` and `'pipes'`
+stay in `js/game-stats.js`'s `GAMES` - that list is the stored SHAPE, and every recorded game still
+lives under those keys on the phones and in `players/<id>`. They are also in `ARCHIVED_GAMES`,
+which `js/players-agg.js` uses to keep them out of every total. Games' own saved settings/saves
+(`gamehub.poolv2.*`, `gamehub.pool.save.v1`, Pipes' keys) are left untouched in storage. Nothing was deleted; restoring the game makes it all visible
 again. **An archived game is hidden, never deleted** - archive the next one the same way.
 
 ## The shared profile
@@ -894,9 +895,9 @@ screen needs it.
   with it, each a rule 1 failure if they ever are**: `GAME_META` itself (`ALL_IDS`/`COMP_IDS` are
   built from it, so filtering there would silently drop those wins out of every cross-game total),
   the player-detail game list, and the stored data. **A RETIRED build is hidden by the same helper**
-  (`retired: true` on its TABS row - `poolv2` is the only one): it has no `js/hub.js` registry entry
-  at all, so `isGameOnLauncher`'s `isGameLive` default assumed a row that does not exist and put the
-  retired Pool build on the board while the current Pool was hidden. That one flag now drives the
+  (`retired: true` on a TABS row - none since Pool's `poolv2` row went with the Pool archive,
+  2026-09-28): such a build has no `js/hub.js` registry entry at all, so `isGameOnLauncher`'s
+  `isGameLive` default assumed a row that does not exist and once put a retired build on the board. That one flag now drives the
   leaderboard, the launcher answer and `gameChoices()`'s bug-report picker, replacing a hardcoded
   id check. It deliberately does NOT hide the My Stats tab. `visibleTabs()` in the same file keeps its own,
   MORE PERMISSIVE rule on purpose - a game hidden by an override still has its My Stats screen, so a
@@ -952,7 +953,7 @@ Full incident narrative and quotes: `docs/CLAUDE-HISTORY.md#the-admin-control-pa
 - **`#ffce3a` is the standing selection/emphasis accent** — for highlighting the currently-selected
   or currently-active thing (not the categorical palette above), always paired with a non-color
   indicator (shape, icon, label, border), never color alone. Live in Ball Run, Chinchón, Connect
-  Four, Escoba, Nuts & Bolts and Pool's CSS plus `js/game-art.js` and `icons/icon.svg`.
+  Four, Escoba and Nuts & Bolts' CSS plus `js/game-art.js` and `icons/icon.svg`.
 - **No em dashes** in user-facing game or profile copy (use commas, colons, or parentheses).
 - **any "you win / you lose" popup gets a close (X) in its top-right corner**, so it can be dismissed without forcing a rematch.
 - **The rest of this repo's UX/UI rules — minimum text size, tap targets, safe-area handling,

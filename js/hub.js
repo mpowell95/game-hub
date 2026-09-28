@@ -171,16 +171,6 @@ export const GAMES = [
     art: GAME_ART["mancala"],
   },
   {
-    id: 'pipes',
-    title: { en: 'Pipes', es: 'Tuberias' },
-    blurb: { en: 'Turn the pipes. Get the water from the inlet to the outlet without a leak.',
-      es: 'Gira las tuberias. Lleva el agua de la entrada a la salida sin fugas.' },
-    module: '../pipes/js/ui.js',
-    accent: '#1f8fd6',
-    released: '2026-08-29',
-    art: GAME_ART['pipes'],
-  },
-  {
     // RELEASED 2026-09-22 (Matt: "I made it live in the admin settings but it didn't work. Please
     // make live."). `devOnly` is gone rather than left with a live override on top of it: an
     // override and a code default that disagree is one decision stored in two places, and only the
@@ -396,7 +386,7 @@ export const GAMES = [
       es: 'Gas y freno, sin volante. Mantén el equilibrio en las colinas, coge combustible y llega lo más lejos posible.' },
     module: '../hill-climb/js/ui.js',
     // Its own full-bleed chrome (a fixed, edge-to-edge canvas plus a pedal HUD), so the hub's
-    // header collapses to the floating back button — same as Ball Run and Pool.
+    // header collapses to the floating back button — same as Ball Run.
     immersive: true,
     accent: '#d8382b',
     art: GAME_ART["hill-climb"],
@@ -409,7 +399,7 @@ export const GAMES = [
       es: 'Coloca tu flota y luego caza la del rival. Tres niveles de IA, o juega con un amigo.' },
     module: '../battleship/js/ui.js',
     // Its own full-bleed chrome (two boards plus the fleet roster and back affordance), same call
-    // as Escoba, Mancala, Ball Run, Yahtzee, Pool and Hill Climb.
+    // as Escoba, Mancala, Ball Run, Yahtzee and Hill Climb.
     immersive: true,
     accent: '#34506E',
     art: GAME_ART["battleship"],
@@ -423,25 +413,6 @@ export const GAMES = [
     immersive: true,
     accent: '#D53922',
     art: GAME_ART["yahtzee"],
-  },
-  {
-    // The from-scratch rebuild, promoted over the original 2026-08-08 and given its name. The
-    // retired build is gone; this one lives in pool/ and records under the 'pool' stats id.
-    // RELEASED to everyone 2026-08-10 (Matt: "Make it visible for everyone so others can play"),
-    // after the wordless play screen and the reference-palette pass. devOnly is gone, not
-    // commented out - a game is either shipped or it is not.
-    id: 'pool',
-    title: { en: 'Pool', es: 'Billar' },
-    blurb: { en: 'Real cue-ball physics: draw, follow, english. 8-ball vs. the computer, a friend, or practice alone.',
-      es: 'Física real de la bola blanca: efecto, retroceso, seguimiento. Bola 8 contra la computadora, un amigo, o práctica libre.' },
-    module: '../pool/js/ui.js',
-    immersive: true,
-    // The wood of the rail the tile art now draws. It was #1a5f78, a teal-blue picked for the old
-    // pale-blue table; --card-accent is the tile's own backing colour, so it has to move with the
-    // art (js/game-art.js's `pool`, repainted the same day).
-    accent: '#8C5A3F',
-    art: GAME_ART["pool"],
-    released: '2026-08-10',
   },
   {
     // A clone of "Neon Breakout" (HYPERBRICK): synthwave breakout with five hand-built stages,
@@ -479,7 +450,7 @@ export const GAMES = [
   {
     // Texas Hold'em (2026-09-27): no-limit tournament poker, vs up to 7 computers or at an online
     // table of up to 8 (host-authoritative: the host's device deals - see holdem/CLAUDE.md). Its
-    // own full-bleed table, so immersive like Pool and Yahtzee.
+    // own full-bleed table, so immersive like Yahtzee.
     id: 'holdem',
     released: '2026-09-27',
     title: "Texas Hold'em",

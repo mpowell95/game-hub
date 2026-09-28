@@ -10,6 +10,13 @@
   --ct-ink: #16243a;
   --ct-muted: #5b6b82;
   --ct-accent: #1769d4;
+  /* Closeness bands: solid bars, blue / yellow / gray, each with a dark shape marker on it. */
+  --ct-close-bar: #5b9be6;
+  --ct-close-mark: #0b2f5e;
+  --ct-near-bar: #F2B705;
+  --ct-near-mark: #5a4300;
+  --ct-far-bar: #9aa1ad;
+  --ct-far-mark: #3a404a;
   box-sizing: border-box;
   /* `position: fixed`, with `top`/`left`/`width`/`height` set INLINE by `_positionRoot()` in
    * ui.js - same reasoning as sudoku/css/sudoku.css: `.hub-game` has no defined CSS height for a
@@ -37,6 +44,12 @@
   --ct-ink: #eef2f8;
   --ct-muted: #a9b7cc;
   --ct-accent: #6db2ff;
+  --ct-close-bar: #2f6fbf;
+  --ct-close-mark: #ffffff;
+  --ct-near-bar: #b88a00;
+  --ct-near-mark: #ffe08a;
+  --ct-far-bar: #5c6370;
+  --ct-far-mark: #c9ced6;
   /* css/ui.css's .gh-* tokens fall back to --hub-* at :root, which resolves once and then just
    * inherits - a game with no hub.css loaded (this game's own standalone page) has to redefine
    * --gh-* directly, same fix sudoku/css/sudoku.css documents. */
@@ -166,7 +179,10 @@
   left: 0; top: 0; bottom: 0;
   border-radius: var(--gh-r-sm, 8px) 0 0 var(--gh-r-sm, 8px);
 }
-.ct-shape { position: relative; width: 15px; height: 15px; flex: none; }
+.ct-root .ct-bar--close { background: var(--ct-close-bar); }
+.ct-root .ct-bar--near { background: var(--ct-near-bar); }
+.ct-root .ct-bar--far { background: var(--ct-far-bar); }
+.ct-shape { position: relative; width: 17px; height: 17px; flex: none; }
 .ct-word {
   position: relative;
   flex: 1;

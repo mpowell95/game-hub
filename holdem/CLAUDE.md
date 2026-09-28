@@ -203,6 +203,28 @@ readable from `rooms/` with developer tools. What exists:
 Bankroll maths no longer uses `| 0` anywhere on the money path: the top table pays $52M a win,
 so a bankroll can pass 2^31, where `| 0` wraps negative.
 
+## Step away and resume (2026-09-28)
+
+Matt: *"make it so I can join a tournament, leave, then resume the same tourney. Otherwise I'm going
+to lose a bunch of tournaments now while testing."* The table's red X no longer only forfeits. It
+asks, with keeping the game as the first (gold) choice:
+
+- **Solo: Save and leave.** The save (`gamehub.holdem.save.v1`, written after every change) is kept
+  and the setup screen's big button becomes **Resume tournament** ("Buddy's House · Hand 3 · Stack:
+  $9800"), which restarts the SAME game at the same hand with the same cards. **Give up this
+  tournament** under it (confirmed) records one loss, no prize, and clears the save
+  (`_forfeitSave`, guarded by the save's own `rec` flag so it can never count twice). Opening the
+  game still resumes a saved tournament straight onto the table, as before.
+- **Online: Step away.** Keeps the seat and the MP save, the same as closing the app: the host
+  folds/checks for an away seat, and **Back to table** rejoins. A host stepping away pauses the
+  table for everyone (the host's phone deals), and the dialog says so.
+- **Give up (counts as a loss)** / **Close the table for everyone** are the second choice and do
+  exactly what the old X did (`_leave`).
+
+Nothing is recorded by stepping away. Checked in a browser: solo leave -> resume (same hand, same
+cards, stats untouched) -> give up (one loss, save gone); online guest and host each stepped away
+and rejoined against the local RTDB stand-in.
+
 ## Stats
 
 One result per game per device, recorded **the moment the engine decides it** (busting out = loss,

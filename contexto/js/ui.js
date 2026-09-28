@@ -13,6 +13,8 @@ import { loadModel, puzzleNumber, hintRank, band } from './engine.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
+/** "1 guess", not "1 guesses": the _1 key when n is exactly one. */
+const countText = (key, n) => (n === 1 ? t(key + '_1') : t(key, { n }));
 const SETTINGS_KEY = 'gamehub.contexto.v1';
 const SAVE_KEY = 'gamehub.contexto.save.v1';
 const WORD_LANGS = ['en', 'es'];
@@ -92,7 +94,10 @@ function barPct(rank, size) {
   return Math.max(4, Math.min(100, pct));
 }
 
-const BAND_COLOR = { close: '#178A7A', near: '#F2B705', far: '#E0532F' };
+// Band colors live in contexto.css as --ct-<band>-bar / --ct-<band>-mark (light and dark), so a
+// theme switch recolors everything. Blue / yellow / gray (Matt, 2026-09-28, option "1" of the
+// color mockup): blue-vs-yellow is the contrast red/green colorblind eyes keep, and gray differs
+// from both in lightness. The old teal/yellow/vermilion at 13% strength was hard for him to see.
 
 /** Shape marker per closeness band - never color alone (root CLAUDE.md, colorblind rule).
  *  `cls` defaults to `ct-shape`, which is sized by CSS (real DOM guess rows, where 1 CSS px is 1
@@ -102,12 +107,13 @@ const BAND_COLOR = { close: '#178A7A', near: '#F2B705', far: '#E0532F' };
  *  overlap the row above/below - explicit width/height attributes (local viewBox units) are what
  *  a nested <svg> needs instead, and CSS would win over them if the class stayed applied. */
 function bandShapeSVG(b, cls = 'ct-shape', size = 16) {
-  const c = BAND_COLOR[b] || BAND_COLOR.far;
+  if (b !== 'close' && b !== 'near') b = 'far';
+  const c = `style="fill:var(--ct-${b}-mark)"`;
   const clsAttr = cls ? ` class="${cls}"` : '';
   const sizeAttr = cls ? '' : ` width="${size}" height="${size}"`;
-  if (b === 'close') return `<svg${clsAttr}${sizeAttr} viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 L15 8 L8 15 L1 8 Z" fill="${c}"/></svg>`;
-  if (b === 'near') return `<svg${clsAttr}${sizeAttr} viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="${c}"/></svg>`;
-  return `<svg${clsAttr}${sizeAttr} viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="${c}"/></svg>`;
+  if (b === 'close') return `<svg${clsAttr}${sizeAttr} viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 L15 8 L8 15 L1 8 Z" ${c}/></svg>`;
+  if (b === 'near') return `<svg${clsAttr}${sizeAttr} viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" ${c}/></svg>`;
+  return `<svg${clsAttr}${sizeAttr} viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5" ${c}/></svg>`;
 }
 
 const ICON_HINT = '<svg class="ct-hicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.6 1.4c0 1.6-2.1 1.9-2.1 3.6"/><path d="M12 17.5v.01"/></svg>';
@@ -220,9 +226,9 @@ class ContextoUI {
     const text = String(raw || '').trim();
     if (!text || !this.model) return;
     const idx = this.model.lookup(text);
-    if (idx < 0) { this._msg = t('msg_unknown', { word: text }); this.renderPlay(); return; }
+    if (idx < 0) { this._msg = t('msg_unknown', { word: text }); this._refreshPlay(); return; }
     const canon = this.model.words[idx];
-    if (this.rec.guesses.some((g) => g.w === canon)) { this._msg = t('msg_already', { word: canon }); this.renderPlay(); return; }
+    if (this.rec.guesses.some((g) => g.w === canon)) { this._msg = t('msg_already', { word: canon }); this._refreshPlay(); return; }
     const inflected = text.toLowerCase() !== canon;
     this.rec.guesses.push({ w: canon, hint: false });
     this._lastGuess = canon;
@@ -230,7 +236,7 @@ class ContextoUI {
     this._persist();
     const rank = this.model.rankOf(this.secret, idx);
     if (rank === 1) { this._finish('won'); return; }
-    this.renderPlay();
+    this._refreshPlay();
   }
 
   doHint() {
@@ -238,13 +244,13 @@ class ContextoUI {
     const best = this._bestRank();
     const taken = this._takenRanks();
     const hr = hintRank(best, taken);
-    if (hr == null) { this._msg = t('msg_hint_none'); this.renderPlay(); return; }
+    if (hr == null) { this._msg = t('msg_hint_none'); this._refreshPlay(); return; }
     const w = this.model.wordAt(this.secret, hr);
     this.rec.guesses.push({ w, hint: true });
     this._lastGuess = w;
     this._msg = '';
     this._persist();
-    this.renderPlay();
+    this._refreshPlay();
   }
 
   _finish(kind) {
@@ -312,8 +318,8 @@ class ContextoUI {
       <div class="ct-root">
         <div class="ct-info">
           <span class="ct-pnum">${esc(t('puzzle_label', { n: this.n }))}</span>
-          <span class="ct-stat">${esc(t('guesses_short', { n: guessCount }))}</span>
-          <span class="ct-stat">${esc(t('hints_short', { n: hintCount }))}</span>
+          <span class="ct-stat" data-role="guesses">${esc(countText('guesses_short', guessCount))}</span>
+          <span class="ct-stat" data-role="hints">${esc(countText('hints_short', hintCount))}</span>
           <button type="button" class="ct-langchip" data-action="lang"
             aria-label="${esc(t('lang_chip_aria', { lang: this.lang.toUpperCase() }))}">${esc(this.lang.toUpperCase())}</button>
           <button type="button" class="ct-iconbtn" data-action="howto" aria-label="${esc(t('howto_aria'))}">${ICON_HELP}</button>
@@ -323,7 +329,7 @@ class ContextoUI {
           <input type="text" class="ct-input" data-role="input" autocapitalize="off" autocomplete="off"
             autocorrect="off" spellcheck="false" enterkeyhint="go" inputmode="text"
             placeholder="${esc(t('input_placeholder'))}" aria-label="${esc(t('input_aria'))}">
-          <button type="submit" class="gh-btn gh-btn--primary">${esc(t('go'))}</button>
+          <button type="submit" class="gh-btn gh-btn--primary" data-role="go">${esc(t('go'))}</button>
         </form>
         <p class="ct-msg" data-role="msg">${esc(this._msg || '')}</p>
 
@@ -360,6 +366,10 @@ class ContextoUI {
       this.el.input.value = '';
       this.submitGuess(v);
     });
+    // Matt, 2026-09-28: "When I guess a word, the keyboard minimizes." Pressing Go would move
+    // focus from the input to the button, and a phone closes its keyboard when the text field
+    // loses focus. Cancelling pointerdown keeps focus in the field; the click still submits.
+    this.root.querySelector('[data-role="go"]').addEventListener('pointerdown', (ev) => ev.preventDefault());
     this.root.querySelector('[data-action="lang"]').addEventListener('click', () => this._switchLang());
     this.root.querySelector('[data-action="howto"]').addEventListener('click', () => this.openHowTo());
     this.root.querySelector('[data-action="hint"]').addEventListener('click', () => this.doHint());
@@ -374,6 +384,25 @@ class ContextoUI {
     else if (this._overlay === 'giveup') this.openGiveUp();
   }
 
+  /** After a guess or a hint: update the numbers, the message, the latest row and the list IN
+   *  PLACE. renderPlay() rebuilds the whole screen, which destroys the text field and so closes
+   *  the phone's keyboard after every guess; this keeps the same field, focused, so the next word
+   *  can be typed straight away. Falls back to a full render if the screen is not up. */
+  _refreshPlay() {
+    if (this._dead || !this.root || !this.root.isConnected || !this.el || !this.el.input) { this.renderPlay(); return; }
+    const rec = this.rec;
+    const ranked = this._rankedGuesses();
+    this._sortedGuesses = ranked.slice().sort((a, b) => (a.rank == null ? Infinity : a.rank) - (b.rank == null ? Infinity : b.rank));
+    const latest = this._lastGuess ? ranked.find((g) => g.w === this._lastGuess) : null;
+    this.root.querySelector('[data-role="guesses"]').textContent = countText('guesses_short', rec.guesses.filter((g) => !g.hint).length);
+    this.root.querySelector('[data-role="hints"]').textContent = countText('hints_short', rec.guesses.filter((g) => g.hint).length);
+    this.root.querySelector('[data-role="msg"]').textContent = this._msg || '';
+    const latestEl = this.root.querySelector('[data-role="latest"]');
+    latestEl.hidden = !latest;
+    latestEl.innerHTML = latest ? this._rowHTML(latest, true) : '';
+    this._rebuildList();
+  }
+
   _rowHTML(g, isLatest) {
     const size = this.model.size;
     const b = g.rank != null ? band(g.rank) : 'far';
@@ -381,7 +410,7 @@ class ContextoUI {
     return `
       <div class="ct-row${isLatest ? ' ct-row--latest' : ''}" role="listitem"
         aria-label="${esc(g.w)}, ${g.rank != null ? esc(t('rank_aria', { rank: g.rank })) : ''}">
-        <div class="ct-bar" style="width:${pct}%; background:${BAND_COLOR[b]}22;"></div>
+        <div class="ct-bar ct-bar--${b}" style="width:${pct}%;"></div>
         ${bandShapeSVG(b)}
         <span class="ct-word">${esc(g.w)}</span>
         ${g.hint ? `<span class="ct-hintmark" aria-label="${esc(t('hint_icon_aria'))}">${ICON_HINT}</span>` : ''}
@@ -462,10 +491,10 @@ class ContextoUI {
     const rowH = 22, gap = 6, shapeSize = 15;
     const body = rows.map((r, i) => {
       const y = i * (rowH + gap);
-      return `<rect x="0" y="${y}" width="200" height="${rowH}" rx="6" fill="var(--ct-surface-2)"/>
-        <rect x="0" y="${y}" width="${r.pct * 2}" height="${rowH}" rx="6" fill="${BAND_COLOR[r.b]}33"/>
+      return `<rect x="0" y="${y}" width="200" height="${rowH}" rx="6" style="fill:var(--ct-surface-2)"/>
+        <rect x="0" y="${y}" width="${r.pct * 2}" height="${rowH}" rx="6" style="fill:var(--ct-${r.b}-bar)"/>
         <g transform="translate(8, ${y + (rowH - shapeSize) / 2})">${bandShapeSVG(r.b, '', shapeSize)}</g>
-        <text x="30" y="${y + rowH / 2 + 4}" font-size="12" fill="var(--ct-ink)">${r.label}</text>`;
+        <text x="30" y="${y + rowH / 2 + 4}" font-size="12" font-weight="700" style="fill:var(--ct-ink)">${r.label}</text>`;
     }).join('');
     const h = rows.length * (rowH + gap) - gap;
     return `<svg viewBox="0 0 200 ${h}" role="img" aria-label="${esc(t('howto_diagram_aria'))}">${body}</svg>`;

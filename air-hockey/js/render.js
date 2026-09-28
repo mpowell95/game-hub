@@ -49,7 +49,9 @@ const PALETTE = {
   },
 };
 
-const TRAIL = 12;       // puck positions remembered for the trail
+const TRAIL = 16;       // puck positions remembered for the trail (one per frame)
+const TRAIL_MIN = 150;  // below this speed (table units/s) there is no trail at all
+const TRAIL_FULL = 1900; // at and above this, the full-length, full-strength trail
 const SPARKS = 32;      // spark pool
 
 export function createRenderer(canvas) {
@@ -193,17 +195,30 @@ export function createRenderer(canvas) {
     }
 
     const p = s.puck;
-    // Trail: where the puck has been, drawn only while it is moving fast.
+    // Trail: where the puck has been. Its LENGTH and its STRENGTH both follow the speed (Matt,
+    // 2026-09-28: "a barely moving puck should have a short, faint trail, if any"). The first
+    // version kept a fixed 12 positions and only faded in above 650 u/s, so every moving puck
+    // wore much the same trail. Now: nothing below TRAIL_MIN; above it the number of past
+    // positions drawn grows from 2 to TRAIL with speed (and each is further back, since a fast
+    // puck travels further per frame), and the opacity grows too. Drawn as one tapered stroke,
+    // segment by segment, so a fast puck's widely spaced samples still read as a streak.
     if (p.live && !reduce) {
       tx[ti] = p.x; ty[ti] = p.y; ti = (ti + 1) % TRAIL; if (tn < TRAIL) tn++;
       const sp = Math.hypot(p.vx, p.vy);
-      if (sp > 650) {
-        const a0 = Math.min(1, (sp - 650) / 1200);
-        for (let k = 1; k < tn; k++) {
-          const i = (ti - 1 - k + TRAIL * 2) % TRAIL, f = 1 - k / TRAIL;
-          ctx.fillStyle = `rgba(${pal.trail},${(0.28 * f * a0).toFixed(3)})`;
-          ctx.beginPath(); ctx.arc(tx[i], ty[i], PUCK_R * (0.45 + 0.5 * f), 0, Math.PI * 2); ctx.fill();
+      const f = Math.max(0, Math.min(1, (sp - TRAIL_MIN) / (TRAIL_FULL - TRAIL_MIN)));
+      if (f > 0) {
+        const n = Math.min(tn, Math.round(2 + (TRAIL - 2) * f));
+        const peak = 0.06 + 0.32 * f;
+        // Butt ends: round ends overlap at every joint and double the opacity there (beads).
+        ctx.lineCap = 'butt';
+        for (let k = 1; k < n; k++) {
+          const i0 = (ti - k + TRAIL * 2) % TRAIL, i1 = (ti - 1 - k + TRAIL * 2) % TRAIL;
+          const fade = 1 - k / n;
+          ctx.strokeStyle = `rgba(${pal.trail},${(peak * fade).toFixed(3)})`;
+          ctx.lineWidth = PUCK_R * 2 * (0.3 + 0.6 * fade);
+          ctx.beginPath(); ctx.moveTo(tx[i0], ty[i0]); ctx.lineTo(tx[i1], ty[i1]); ctx.stroke();
         }
+        ctx.lineCap = 'round';
       }
     } else tn = 0;
     if (p.live) {

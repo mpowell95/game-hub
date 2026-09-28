@@ -138,12 +138,46 @@ accessibility conventions) — `bandShapeSVG()` in `js/ui.js`:
 
 | Band | Rank | Color | Shape |
 |---|---|---|---|
-| close | `<= CLOSE` (300) | teal `#178A7A` | diamond |
-| near | `<= NEAR` (1000) | yellow `#F2B705` | circle |
-| far | everything else | vermilion `#E0532F` | square |
+| close | `<= CLOSE` (300) | blue (`--ct-close-bar`) | diamond |
+| near | `<= NEAR` (1000) | yellow (`--ct-near-bar`) | circle |
+| far | everything else | gray (`--ct-far-bar`) | square |
 
 The same shapes appear in the how-to-play diagram, so the legend a player learns on the guess list
 is the same one the tutorial teaches — nothing bespoke to either screen.
+
+## The keyboard stays up between guesses (2026-09-28)
+
+Matt: *"When I guess a word, the keyboard minimizes... allow me to immediately begin typing my next
+guess."* Two causes, both fixed in `ui.js`:
+
+- **A guess or a hint must NOT call `renderPlay()`.** That rebuilds the whole screen, which destroys
+  the text field, and a phone closes its keyboard when the focused field disappears. They call
+  `_refreshPlay()`, which updates the counters, message, latest row and list in place and keeps the
+  same `<input>`. Only a genuinely new screen (language switch, loading, a different puzzle) does a
+  full render.
+- **The Go button cancels `pointerdown`**, so tapping it never moves focus off the field (the click
+  still submits). Enter was already fine once the field survived.
+
+Verified in Chromium with touch emulation: the same input element is still `document.activeElement`
+after Enter, after tapping Go, after an unknown word and after a hint. Not yet confirmed on a real
+iPhone.
+
+## Tile art
+
+`GAME_ART.contexto` in `js/game-art.js` is a magnifying glass over scattered words, the secret "?"
+in its lens. Third design of 2026-09-28: the ranked-bars tile read as Brick Breaker's bricks, and a
+"word radar" (rings around a "?") was turned down too. Matt picked this one from a three-way mockup.
+
+## Band colors: blue / yellow / gray, solid (2026-09-28)
+
+Matt: *"please make the colors easier for me to see during the game."* The bars were teal / yellow /
+vermilion at 13% strength (`#RRGGBB22`), nearly invisible, and yellow vs vermilion is the pair red/
+green colorblind eyes confuse. He picked option "1" of a mockup: SOLID bars, **blue close, yellow
+medium, gray far**, each with a dark (light-mode) or light (dark-mode) shape marker still on it.
+Blue vs yellow is the contrast that survives red/green colorblindness; gray differs from both in
+lightness. The colors are CSS variables in `contexto.css` (`--ct-<band>-bar` / `--ct-<band>-mark`,
+light and `.gh-dark` sets); `ui.js` only names the band, so the rows, the shape markers and the
+how-to diagram all follow the theme.
 
 ## What is NOT covered by a test
 
