@@ -196,6 +196,7 @@ const GAME_META = [
   // Texas Hold'em (2026-09-27): released with this row in the same commit - the Yahtzee lesson.
   { id: 'holdem', labelKey: 'game_title_holdem' },
   { id: 'airhockey', labelKey: 'game_title_airhockey' },
+  { id: 'cuppong', labelKey: 'game_title_cuppong' },
   // Golf is solo (js/players-agg.js's SOLO set) and ranks by lifetime points, same shape as
   // Skeeball/Pinball - see golfPointsAt below. The row exists from Part 7 even though the one
   // course starts admin-gated to 'testing' (js/admin-config.js): same reasoning as Pinball above,

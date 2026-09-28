@@ -79,6 +79,8 @@ const TABS = [
   { id: 'holdem', labelKey: 'game_title_holdem' },
   // Admin only while it is built in stages (docs/AIR-HOCKEY-BRIEF.md); same reasoning as Pinball's row.
   { id: 'airhockey', labelKey: 'game_title_airhockey', devOnly: true },
+  // Admin only while it is built in stages (docs/CUP-PONG-BRIEF.md); plain total/byDiff vs the computer.
+  { id: 'cuppong', labelKey: 'game_title_cuppong', devOnly: true },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
