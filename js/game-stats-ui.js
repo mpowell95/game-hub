@@ -17,7 +17,7 @@ import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
 import { isGameLive, corrections } from './admin-config.js';
 import { correctStats } from './stats-corrections.js';
-import { makeT } from './i18n.js';
+import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
 import { SOLO } from './players-agg.js';
@@ -1339,6 +1339,32 @@ function pinballScreen(rec) {
 /** No wins or losses (a run ends when the last ball is lost), so the honest numbers are runs,
  *  bests and lifetime counters, like Pinball's screen. Average is derived at render time from
  *  `points` and `games`, never stored. The per-difficulty table shows every stored best. */
+/** Air Hockey (2026-09-28): the usual wins/losses plus the `ah` records. The fastest shot is
+ *  STORED in table units per second and converted only here, on the same scale as the game's own
+ *  readout (air-hockey/js/ui.js shotText: the 900-unit table is an 8 ft / 2.44 m table). */
+function airHockeyScreen(rec) {
+  const total = (rec && rec.total) || { played: 0, won: 0, lost: 0 };
+  const ah = (rec && rec.ah) || {};
+  const played = total.played | 0, won = total.won | 0;
+  if (!played && !(ah.games | 0)) return emptyState(gameLabel('airhockey'));
+  const ms = (ah.bestShot | 0) * 2.44 / 900;
+  const shot = getLang() === 'es' ? `${Math.round(ms * 3.6)} km/h` : `${Math.round(ms * 2.23694)} mph`;
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${won}</b><span>${t('gs_wins')}</span></div>
+      <div class="gs-tally"><b>${total.lost | 0}</b><span>${t('gs_losses')}</span></div>
+      <div class="gs-tally"><b>${played}</b><span>${t('gs_plays')}</span></div>
+      <div class="gs-tally"><b>${pct(won, played)}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${ah.bestShot ? shot : '-'}</b><span>${t('gs_ah_shot')}</span></div>
+      <div class="gs-tally"><b>${ah.shutouts | 0}</b><span>${t('gs_ah_shutouts')}</span></div>
+      <div class="gs-tally"><b>${ah.bestStreak | 0}</b><span>${t('gs_ah_streak')}</span></div>
+      <div class="gs-tally"><b>${ah.goalsFor | 0}-${ah.goalsAgainst | 0}</b><span>${t('gs_ah_goals')}</span></div>
+    </div>
+    ${diffTable(rec && rec.byDiff)}`;
+}
+
 function brickBlitzScreen(rec) {
   const bz = (rec && rec.bz) || {};
   const games = bz.games | 0;
@@ -1508,6 +1534,7 @@ function screenFor(id, st) {
   if (id === 'skeeball') return skeeballScreen(rec);
   if (id === 'pinball') return pinballScreen(rec);
   if (id === 'brickblitz') return brickBlitzScreen(rec);
+  if (id === 'airhockey') return airHockeyScreen(rec);
   if (id === 'holdem') return holdemScreen(rec);
   if (id === 'golf') return golfScreen(rec);
   return recordScreen(id, rec);   // business, parchis

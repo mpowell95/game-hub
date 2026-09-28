@@ -8,7 +8,8 @@
 //      rounded table except inside a goal slot, and nothing goes NaN.
 //   3. MATCHES END: first to 7, the score adds up, both sides score.
 //   3b. LEVELS IN ORDER: Easy < Medium < Hard against a scripted beginner (the CHASER).
-//   4. A FAST SWIPE IS A HARD SHOT: puck speed off a still-to-moving mallet scales with the swipe.
+//   4. A FAST SWIPE IS A HARD SHOT: puck speed off a still-to-moving mallet scales with the swipe,
+//      and the shot-speed readout keeps rising past the puck's speed cap.
 //   5. STUCK PUCK: a puck left still in a half moves to that player's serve spot after ~5 s.
 //   6. ONLINE (js/live.js): two sessions over a fake network with delay, jitter and overwritten
 //      messages. Both phones agree on every score, no goal is counted twice, the puck is never
@@ -136,7 +137,7 @@ function chaser(seed, speed = 1100, react = 0.3) {
 {
   const share = {}, wins = {}, perMatch = {};
   const N = 10;
-  for (const lv of ['easy', 'medium', 'hard']) {
+  for (const lv of ['easy', 'medium', 'hard', 'expert']) {
     const g = [0, 0]; let w = 0;
     for (let i = 1; i <= N; i++) {
       const s = createMatch(); resetMatch(s, i % 2);
@@ -149,8 +150,9 @@ function chaser(seed, speed = 1100, react = 0.3) {
     console.log(`      beginner vs ${lv.padEnd(6)} goals ${g[0]}-${g[1]}, beginner wins ${w}/${N}`);
   }
   ok('each level scores a bigger share of the goals than the one below',
-    share.easy < share.medium && share.medium < share.hard,
-    ['easy', 'medium', 'hard'].map((k) => `${k} ${(share[k] * 100).toFixed(0)}%`).join(', '));
+    share.easy < share.medium && share.medium < share.hard && share.hard < share.expert,
+    ['easy', 'medium', 'hard', 'expert'].map((k) => `${k} ${(share[k] * 100).toFixed(0)}%`).join(', '));
+  ok('Expert beats a beginner every time', wins.expert === 0, `${wins.expert}/${N}`);
   ok('a beginner wins most matches on Easy', wins.easy >= 6, `${wins.easy}/${N}`);
   ok('Medium is a fair fight for a beginner (wins some, loses some)', wins.medium >= 3 && wins.medium <= 8, `${wins.medium}/${N}`);
   ok('Hard beats a beginner', wins.hard <= 1, `${wins.hard}/${N}`);
@@ -165,15 +167,22 @@ function chaser(seed, speed = 1100, react = 0.3) {
     s.puck.x = W / 2; s.puck.y = H * 0.62; s.puck.vx = s.puck.vy = 0;
     m.x = m.fx = m.tx = W / 2; m.y = m.fy = m.ty = H * 0.62 + 140;
     const dt = 1 / 60;
-    let best = 0;
+    let best = 0, read = 0;
     for (let i = 0; i < 30; i++) {
+      s.ev.shot = 0;
       clampTarget(m, W / 2, m.ty - swipe * dt); advance(s, dt);
       best = Math.max(best, Math.hypot(s.puck.vx, s.puck.vy));
+      if (s.ev.shotBy === 0) read = Math.max(read, s.ev.shot);
     }
-    return best;
+    return { best, read };
   };
-  const soft = shot(400), hard = shot(2400);
+  const soft = shot(400).best, hard = shot(2400).best;
   ok('a fast swipe hits much harder than a slow one', hard > soft * 3, `slow=${soft.toFixed(0)} fast=${hard.toFixed(0)}`);
+  // The shot-speed READOUT is taken before the speed cap, so it keeps telling hard from harder
+  // after the puck itself has hit its top speed (else "fastest shot" would saturate).
+  const r1 = shot(1800).read, r2 = shot(3600).read;
+  ok('the shot readout still rises past the puck\'s top speed', r1 > 0 && r2 > r1 * 1.3 && r2 > PHYS.PUCK_MAX,
+    `1800 swipe=${r1.toFixed(0)}, 3600 swipe=${r2.toFixed(0)}, cap ${PHYS.PUCK_MAX}`);
 }
 
 // ---- 5. stuck puck -----------------------------------------------------------------------------

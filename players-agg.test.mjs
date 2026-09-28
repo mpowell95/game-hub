@@ -657,6 +657,23 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
 
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
 //
+// Air Hockey records (2026-09-28): counters add, bestShot/bestStreak take the max, the per-device
+// live `streak` is not summed.
+{
+  const all = {
+    d1: { profile: { name: 'Ah', playerId: 'AHAHA' }, stats: { games: { airhockey: {
+      total: { played: 3, won: 2, lost: 1 }, byDiff: {},
+      ah: { games: 3, goalsFor: 19, goalsAgainst: 9, shutouts: 1, bestShot: 1800, bestStreak: 2, streak: 0 } } } } },
+    d2: { profile: { name: 'Ah', playerId: 'AHAHA' }, stats: { games: { airhockey: {
+      total: { played: 2, won: 2, lost: 0 }, byDiff: {},
+      ah: { games: 2, goalsFor: 14, goalsAgainst: 3, shutouts: 0, bestShot: 2100, bestStreak: 2, streak: 2 } } } } },
+  };
+  const ah = aggregatePlayers(all)[0].games.airhockey.ah;
+  eq('airhockey: counters add across devices', [ah.games, ah.goalsFor, ah.goalsAgainst, ah.shutouts], [5, 33, 12, 1]);
+  eq('airhockey: fastest shot and best streak take the max, never a sum', [ah.bestShot, ah.bestStreak], [2100, 2]);
+  ok('airhockey: the live streak is not summed across devices', !(ah.streak > 2));
+}
+
 // Root CLAUDE.md, "Adding a game" item 7: a per-game sub-counter (`grid`/`cc`/`es`/`nb`/`br`/`tt`/
 // `db`/`bg`/`yz`/`dm`/`hc`) needs THREE edits, and missing the third is a THE LAW rule 1 bug that
 // is INVISIBLE ON A SINGLE DEVICE:

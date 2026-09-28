@@ -829,6 +829,14 @@ so pk/hole/* is readable from developer tools.** Proven in three browser profile
 RTDB stand-in (the cloud sandbox cannot open Firebase's WebSocket); real Firebase on real phones is
 unverified.
 
+**Game invites ride on Messages (2026-09-28, Air Hockey).** `sendMessage` takes an optional
+`invite: { game, code }` (validated by `asInvite`; only `INVITE_GAMES`, a 4-character room code),
+stored on the message beside `text`. Additive: no rules change (messages/ validates no fields), no
+Cloud Function change (`messagePush` notifies from the index text as always), and an older app just
+shows the text. `messages-ui.js` `inviteButton` draws **Join the game** on an invite someone ELSE
+sent; it hands the code to the game through `sessionStorage['gamehub.airhockey.join']` and opens the
+game the way a tapped notification does. Full write-up: `air-hockey/CLAUDE.md`, "Matt's additions".
+
 ### The thirteenth consumer: Air Hockey (2026-09-28) - real-time, not lockstep
 
 Full write-up: `air-hockey/CLAUDE.md`, "Online play". `js/net.js` was NOT touched: it provides the

@@ -68,7 +68,11 @@ export function createMatch() {
     // the puck is in runs its physics).
     puckRemote: false,
     // Events for the UI, reset by it after reading (sound, flash). Numbers only, no allocation.
-    ev: { hit: 0, wall: 0, goal: -1, stuck: -1 },
+    // hit/wall: hardest impact this frame (normal speed). shot/shotBy: the fastest puck speed coming
+    // OFF a mallet this frame, before the speed cap, and whose mallet it was (0/1, -1 none) - the
+    // shot-speed readout and
+    // the "fastest shot" record. hx/hy: where that hit happened (for the sparks).
+    ev: { hit: 0, wall: 0, goal: -1, stuck: -1, shot: 0, shotBy: -1, hx: 0, hy: 0 },
   };
 }
 
@@ -170,6 +174,11 @@ function hit(p, m, nx, ny, s) {
   p.vx -= (1 + PHYS.MALLET_E) * vn * nx;
   p.vy -= (1 + PHYS.MALLET_E) * vn * ny;
   if (-vn > s.ev.hit) s.ev.hit = -vn;
+  // Measured BEFORE the table's speed cap (capSpeed runs after this): how hard the swing hit.
+  // Measured after the cap, almost every firm hit read the same top speed and a "fastest shot"
+  // record would have stopped meaning anything within a game or two.
+  const sp = Math.hypot(p.vx, p.vy);
+  if (sp > s.ev.shot) { s.ev.shot = sp; s.ev.shotBy = m.side; s.ev.hx = p.x - nx * PR; s.ev.hy = p.y - ny * PR; }
 }
 
 function capSpeed(p) {

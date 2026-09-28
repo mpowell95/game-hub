@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v992';
+const CACHE = 'game-hub-v995';
 
 const ASSETS = [
   './',
@@ -831,13 +831,13 @@ const REST_MANIFEST = {
   './brick-blitz/js/strings.js': 'f0c1f0996f',
   './air-hockey/': 'e62c8ea1ee',
   './air-hockey/index.html': 'e62c8ea1ee',
-  './air-hockey/css/air-hockey.css': '0e0eb95042',
-  './air-hockey/js/ui.js': '21f40fd163',
-  './air-hockey/js/physics.js': '0ef349cb2c',
-  './air-hockey/js/ai.js': 'ed5a7ae590',
-  './air-hockey/js/render.js': '7187dbe241',
-  './air-hockey/js/strings.js': '30cd4865ef',
-  './air-hockey/js/live.js': 'ec8e13bcab',
+  './air-hockey/css/air-hockey.css': '0493a413f0',
+  './air-hockey/js/ui.js': 'b9f2191963',
+  './air-hockey/js/physics.js': 'a8e3192cef',
+  './air-hockey/js/ai.js': '05aee99aee',
+  './air-hockey/js/render.js': '7dc03bf99b',
+  './air-hockey/js/strings.js': '9229881c6b',
+  './air-hockey/js/live.js': '94988ac956',
   './air-hockey/js/net-test.js': '7037b18203',
   './air-hockey/net-test.html': 'aff33de9b9',
   './holdem/': 'db36df9867',

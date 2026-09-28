@@ -133,8 +133,9 @@
 .ah-root .ah-seg .gh-seg__item { flex: 1 1 0; min-height: 44px; padding: 0 6px; font-size: 15px; }
 .ah-root .ah-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
 /* Hard's black diamond needs an outline to show on a dark card (shape, not colour, is the marker). */
-:root.gh-dark .ah-root .ah-seg .lb-dshape-t3 { stroke: #e8eef8; stroke-width: 1.6; }
-.ah-root .ah-rec { margin: 10px 0 14px; font-size: 14px; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; }
+:root.gh-dark .ah-root .ah-seg .lb-dshape-t3,
+:root.gh-dark .ah-root .ah-seg .lb-dshape-t4 { stroke: #e8eef8; stroke-width: 1.6; }
+.ah-root .ah-rec { margin: 8px 0 10px; font-size: 13px; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; }
 
 /* How to play (docs/BUILDING-A-GAME.md, "How-to-play screens"): one bold goal line, a diagram,
    then one plain line each. Every line is kept to ONE row by ui.js's _fitHelp (11px floor). */
@@ -155,6 +156,35 @@
 .ah-root.is-online .ah-pause { visibility: hidden; }
 .ah-root .ah-opp { display: inline-block; max-width: 8em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 
+/* Four levels in one row even on a 320px phone: the shape sits ABOVE the word, so an item is
+   only as wide as its word (still 44px tall). */
+.ah-root .ah-seg .gh-seg__item { flex-direction: column; gap: 2px; padding: 2px; font-size: 12px; line-height: 1.1; min-width: 0; }
+.ah-root .ah-seg .gh-seg__item > span { white-space: nowrap; }
+/* Tables: the chosen name, then four dots (each a 44px target). The name is what tells them
+   apart; the dots are colour only. */
+.ah-root .ah-tablerow { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; column-gap: 8px; row-gap: 0; margin: 10px 0 0; }
+.ah-root .ah-tablerow .ah-label { margin: 0; text-align: left; white-space: nowrap; }
+.ah-root .ah-swatches { display: flex; gap: 2px; }
+.ah-root .ah-swbtn { width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; display: grid; place-items: center; cursor: pointer; }
+.ah-root .ah-swbtn[aria-pressed="true"] { box-shadow: inset 0 0 0 3px #ffce3a; }
+.ah-root .ah-swatch { display: block; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid rgba(0, 0, 0, 0.35); }
+.ah-root .ah-swatch-classic { background: linear-gradient(135deg, #eef5fb 50%, #1b2a44 50%); }
+.ah-root .ah-swatch-arcade { background: linear-gradient(135deg, #ffffff 50%, #b3202a 50%); }
+.ah-root .ah-swatch-neon { background: linear-gradient(135deg, #07031a 50%, #ff2e97 50%); }
+.ah-root .ah-swatch-ice { background: linear-gradient(135deg, #f2f9ff 50%, #2a6fb8 50%); }
+/* The setup card carries more now: a little less padding so it fits a 320 x 568 phone. */
+.ah-root .ah-card { padding: 18px 16px; }
+.ah-root .ah-mt { margin-top: 8px; }
+.ah-root .ah-select { width: 100%; min-height: 44px; font-size: 16px; margin-bottom: 4px; }
+
+/* Goal moment: the banner carries the shot speed; the scorer's number pops. */
+.ah-root .ah-banner small { display: block; margin-top: -8px; font-size: 20px; line-height: 26px; letter-spacing: 0.02em; }
+.ah-root .ah-sc b.is-pop { animation: ah-score-pop 0.5s cubic-bezier(.2, .9, .3, 1.4); display: inline-block; }
+@keyframes ah-score-pop { 0% { transform: scale(1); } 40% { transform: scale(1.6); } 100% { transform: scale(1); } }
+.ah-root .ah-shot { margin: -10px 0 6px; font-size: 16px; font-weight: 800; }
+.ah-root .ah-shot:empty { display: none; }
+.ah-root .ah-badges { margin: 0 0 8px; font-size: 15px; font-weight: 800; color: var(--ah-you); }
+
 /* ------------------------------------------------------------------- online --- */
 .ah-root .ah-joinrow { display: flex; gap: 8px; }
 .ah-root .ah-code {
@@ -166,9 +196,11 @@
 .ah-root .ah-err { margin: 10px 0 0; min-height: 1.3em; font-size: 14px; font-weight: 700; color: var(--ah-cpu); }
 .ah-root .ah-err:empty { min-height: 0; margin: 0; }
 .ah-root .ah-note { margin: -6px 0 12px; font-size: 14px; font-weight: 700; color: var(--ah-you); }
+.ah-root .ah-note.is-err { color: var(--ah-cpu); margin-top: 0; }
 /* "Waiting for <name>": the frozen table stays visible under a light veil. */
 .ah-root .ah-ov-soft { background: rgba(9, 16, 28, 0.2); }
 
 @media (prefers-reduced-motion: reduce) {
   .ah-root .ah-banner.is-pop { animation: none; }
+  .ah-root .ah-sc b.is-pop { animation: none; }
 }

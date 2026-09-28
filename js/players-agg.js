@@ -391,6 +391,14 @@ export function aggregatePlayers(all, corrections) {
         dst.bz.bestCombo = Math.max(dst.bz.bestCombo | 0, src.bz.bestCombo | 0);
         const sbd = src.bz.bestScoreByDiff || {};
         for (const k of Object.keys(sbd)) dst.bz.bestScoreByDiff[k] = Math.max(dst.bz.bestScoreByDiff[k] | 0, sbd[k] | 0);
+      } else if (g === 'airhockey' && src.ah) {
+        // Air Hockey records (js/game-stats.js, recordAirHockey). Counters ADD; bestShot and
+        // bestStreak take Math.max, never a sum. `streak` is one device's live state and is not
+        // combined (two devices' current streaks do not add up to anything true).
+        if (!dst.ah) dst.ah = { games: 0, goalsFor: 0, goalsAgainst: 0, shutouts: 0, bestShot: 0, bestStreak: 0 };
+        for (const k of ['games', 'goalsFor', 'goalsAgainst', 'shutouts']) dst.ah[k] += src.ah[k] | 0;
+        dst.ah.bestShot = Math.max(dst.ah.bestShot | 0, src.ah.bestShot | 0);
+        dst.ah.bestStreak = Math.max(dst.ah.bestStreak | 0, src.ah.bestStreak | 0);
       } else if (g === 'holdem' && src.hb) {
         // Texas Hold'em's bankroll LEDGER (js/game-stats.js, recordHoldemBank). Every money field
         // is an additive counter, so a person's balance across devices is the SUM of the ledgers;

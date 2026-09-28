@@ -27,8 +27,11 @@ export const LEVELS = {
   easy:   { speed: 430, react: 0.38, aimErr: 0.8,  strike: 0.7, bank: 0,    misread: 0.55, guard: 200, shade: 0.95, home: 170 },
   medium: { speed: 650, react: 0.28, aimErr: 0.45, strike: 0.85, bank: 0.1, misread: 0.42, guard: 280, shade: 0.8,  home: 145 },
   hard:   { speed: 840, react: 0.21, aimErr: 0.3,  strike: 1.0, bank: 0.2,  misread: 0.3,  guard: 450, shade: 0.55, home: 125 },
+  // Expert (2026-09-28, Matt: "an Expert level above Hard"): roughly the stage 2 Hard, which no
+  // scripted beginner could score on - for once Hard is beaten.
+  expert: { speed: 950, react: 0.16, aimErr: 0.27, strike: 1.05, bank: 0.25, misread: 0.25, guard: 800, shade: 0.35, home: 110 },
 };
-export const DIFFS = ['easy', 'medium', 'hard'];
+export const DIFFS = ['easy', 'medium', 'hard', 'expert'];
 
 /** Small seeded PRNG, so a headless sim is repeatable. */
 export function rng(seed) {
