@@ -10,7 +10,7 @@
  * (.gh-card, .gh-btn, .gh-overlay/.gh-modal). Matt: the old setup screen "looks nothing like the
  * others. it's not on the theme or on brand of the game hub at all." The PLAY screen keeps its
  * own warm dark arcade look (the --h4-* block below) in BOTH hub themes, unchanged - that is
- * in-game art, not hub chrome, exactly like Ball Run/Hill Climb/Pinball/Skeeball's own split.
+ * in-game art, not hub chrome, exactly like Ball Run/Hill Climb/Skeeball's own split.
  *
  * NOTHING HERE SCROLLS, and `overflow-y: auto` would not satisfy that rule - it is the most
  * common way of breaking it, because it makes a screen that does not fit LOOK finished.
@@ -37,7 +37,7 @@
 
   position: fixed;
   inset: 0;
-  z-index: 1;                 /* under the hub's floating back button, like Pinball/Skeeball */
+  z-index: 1;                 /* under the hub's floating back button, like Skeeball */
   overflow: hidden;
   background: var(--h4-bg);
   color: var(--h4-ink);

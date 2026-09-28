@@ -371,7 +371,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23), plus the board comparators the leaderboard DOES use (`compareBoardMetric`, `compareTierFirst`) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
-| `js/arcade-scores.js` | shared high-score + unlock layer for the arcade-cabinet games (Skeeball, Pinball): per-board bests, date-keyed daily bests, unlocks, app-wide records |
+| `js/arcade-scores.js` | shared high-score + unlock layer for the arcade-cabinet games (Skeeball): per-board bests, date-keyed daily bests, unlocks, app-wide records |
 | `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Pool, Boggle, Yahtzee, Battleship, Texas Hold'em and Air Hockey (lobby only; its real-time play is `air-hockey/js/live.js`); its N-seat half (`joinSeat`/`vacateSeat`/seat-addressed recovery) is used by Chinchón, Escoba and Texas Hold'em (8 seats) |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the identity/storage dump. Its profile-page button was RETIRED 2026-08-11 (Report a bug supersedes it and sends the same payload); `gatherDeviceReport()` is still load-bearing, called by every bug report |
@@ -456,7 +456,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-brickcity-stall.mjs`, `test-brickcity-corner100.mjs`, `test-brickcity-throat.mjs`,
   `test-skeeball-popup.mjs`
 - Air Hockey: `air-hockey/js/test.js` (headless engine probe), `air-hockey/net-test.html` (two-phone online latency test, deployed)
-- Pinball (archived): `archive/pinball/tools/sweep-pinball-rests.mjs` · Golf: `sheet-course.mjs`, `measure-hole-strip.mjs` ·
+- Golf: `sheet-course.mjs`, `measure-hole-strip.mjs` ·
   Yahtzee: `test-yahtzee-ai.mjs`
 - Matt-only readers: `read-install-state.mjs`, `read-bug-reports.mjs`, `read-device-reports.mjs`
 - Firebase writers (see rules above): `backups/rtdb-backup.mjs`, `clear-skeeball-stats.mjs`,
@@ -553,7 +553,6 @@ working in that folder).
 | Nuts & Bolts | in-hub `module:` | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |
 | Pool | in-hub `module:`, immersive, **multiplayer** (`gamehub.poolv2.mp.v1`) | `.p2-root` / `.p2-` | `gamehub.poolv2.v1` (frozen; see its file) | `recordResult('pool', …)` |
 | Parchís | launch-out `href:` (built from sibling `../Parchís/`) | n/a (own page) | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
-| Pinball | **ARCHIVED 2026-09-28**: no launcher entry; code in `archive/pinball/` (never precached, `archive/` is in `validate-sw-assets.mjs`'s `SCAN_SKIP`). Recorder, stats id, `GAME_META` row and My Stats tab (`retired: true`, like `poolv2`) all kept so recorded plays stay visible | `.pb-root` / `.pb-` | `gamehub.pinball.v1` | `recordPinball` (kept, rule 5) |
 | Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines), plus **"beat my score" challenges** (`skeeChallenges/`, 2026-09-24) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Sudoku | in-hub `module:` | `.sd-root` / `.sd-` | `gamehub.sudoku.v1` | `recordSudoku` |
@@ -568,6 +567,20 @@ classes — real facts, not typos). Bare-rule counts, for context: Chinchón 246
 Connect Four 99, Filler 68 top-level prefixed rules alongside whatever root class each has —
 which is why the axis table's "a prefix alone is not isolation" warning names the worst of them.
 If a later redesign adds or renames a root class, the table follows the code.
+
+## Archived games (2026-09-28)
+
+**Pinball** was archived at Matt's request (*"remove pinball from the game hub and archive it"*,
+then *"Remove it from the leaderboard too. Archive all traces"*). Its code is in `archive/pinball/`
+(with its own `CLAUDE.md` and restore steps); `archive/` is in `validate-sw-assets.mjs`'s
+`SCAN_SKIP`, so nothing there is precached or linked. No launcher tile, no leaderboard row, no My
+Stats tab, no art, no strings, no recorder.
+
+**What deliberately remains, and why (THE LAW):** `'pinball'` stays in `js/game-stats.js`'s
+`GAMES` - that list is the stored SHAPE, and every recorded Pinball game still lives under that key
+on the phones and in `players/<id>`. It is also in `ARCHIVED_GAMES`, which `js/players-agg.js`
+uses to keep it out of every total. Nothing was deleted; restoring the game makes it all visible
+again. **An archived game is hidden, never deleted** - archive the next one the same way.
 
 ## The shared profile
 
@@ -592,7 +605,7 @@ profile shape — a one-tap convenience, exempt from THE LAW rule 2, and it leav
 untouched.
 
 **Still open (paused by Matt, 2026-08-25): the emoji does not follow the player everywhere.** The
-hub's top-bar pill, Ball Run, Dominoes, Hill Climb, Nuts & Bolts, Snake, Pinball and Skeeball print
+hub's top-bar pill, Ball Run, Dominoes, Hill Climb, Nuts & Bolts, Snake and Skeeball print
 the profile NAME with no avatar beside it (`js/arcade-scores.js` does not even carry an `emoji`
 field next to `name`), and Chinchón/Escoba override it with their own 24-emoji `HUMAN_AVATARS`
 list. The fix is a shared `chipHTML({name, emoji})` primitive plus a sweep, staged so the immersive
@@ -890,8 +903,8 @@ screen needs it.
   person) shows on a game's admin row only while that game is Admin only, and only for ids in
   `ALLOW_PICKER` in `js/admin-ui.js`. **It hides the TILE, not the page**: the editor's URL still
   opens for anyone who has it (nothing client-side could stop that).
-- **`devOnly` is now only a DEFAULT, so a game can go live with no commit.** That is why Pinball has
-  a `GAME_META` row in `js/leaderboard-ui.js` while still being admin-only, and why
+- **`devOnly` is now only a DEFAULT, so a game can go live with no commit.** That is why admin-only games
+  (Cup Pong, Air Hockey, Baseball) have a `GAME_META` row in `js/leaderboard-ui.js`, and why
   `players-agg.test.mjs`'s `OFF_THE_BOARD` list is now empty and must stay that way: a game released
   from inside the app gets no release commit to add its row, and a missing row makes every win on it
   count as zero (rule 1 — how Yahtzee shipped).
