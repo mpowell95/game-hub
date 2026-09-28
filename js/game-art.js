@@ -1040,6 +1040,21 @@ export const GAME_ART = {
             <circle cx="132" cy="44" r="5" fill="#f07d5e"/>
             <rect x="129.8" y="41.8" width="4.4" height="4.4" fill="#ffffff"/>
           </svg>`,
+  // Three ranked guess rows (the game's own closeness bars, teal/yellow/vermilion, each with its
+  // real shape marker - diamond/circle/square, never color alone) shrinking toward a "1" at the
+  // bottom, plus the puzzle-number chip the info row always shows.
+  contexto: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#0f1a2e"/>
+            <rect x="10" y="14" width="140" height="16" rx="8" fill="#178A7A" opacity=".85"/>
+            <path d="M18 22 L23 17 L28 22 L23 27 Z" fill="#eef2f8"/>
+            <rect x="10" y="37" width="96" height="16" rx="8" fill="#F2B705" opacity=".85"/>
+            <circle cx="23" cy="45" r="5" fill="#1a2436"/>
+            <rect x="10" y="60" width="52" height="16" rx="8" fill="#E0532F" opacity=".85"/>
+            <rect x="18.5" y="65" width="9" height="9" rx="1.4" fill="#eef2f8"/>
+            <rect x="122" y="8" width="30" height="16" rx="8" fill="#1e2c48"/>
+            <text x="137" y="19.5" text-anchor="middle" font-family="system-ui, sans-serif"
+              font-size="10" font-weight="800" fill="#eef2f8">#12</text>
+          </svg>`,
 };
 
 export default GAME_ART;

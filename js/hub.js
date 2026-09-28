@@ -556,6 +556,18 @@ export const GAMES = [
     art: GAME_ART["baseball"],
     devOnly: true,
   },
+  {
+    // A Contexto clone. Not immersive - a word-guess grid with the standard hub header, the
+    // Sudoku/Nuts & Bolts class (docs/BUILDING-A-GAME.md, "The module contract").
+    id: 'contexto',
+    title: { en: 'Contexto', es: 'Contexto' },
+    blurb: { en: 'Guess the secret word. Every guess shows how close it is in meaning.',
+      es: 'Adivina la palabra secreta. Cada intento muestra que tan cerca esta en significado.' },
+    module: '../contexto/js/ui.js',
+    accent: '#1769d4',
+    released: '2026-09-28',
+    art: GAME_ART['contexto'],
+  },
 ];
 
 /** How often a foregrounded app may ask for a new build. Long enough that switching apps back
