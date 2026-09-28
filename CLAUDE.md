@@ -557,7 +557,7 @@ working in that folder).
 | Skeeball | in-hub `module:`, immersive, **solo** (unlockable machines), plus **"beat my score" challenges** (`skeeChallenges/`, 2026-09-24) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | in-hub `module:` | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Sudoku | in-hub `module:` | `.sd-root` / `.sd-` | `gamehub.sudoku.v1` | `recordSudoku` |
-| Texas Hold'em | in-hub `module:`, immersive, **multiplayer up to 8, HOST-AUTHORITATIVE** (the host's device deals; `rooms/<CODE>/pk`; `gamehub.holdem.mp.v1`), plus solo vs up to 7 computers | `.pk-root` / `.pk-` | `gamehub.holdem.v1` | `recordResult('holdem', …)` |
+| Texas Hold'em | in-hub `module:`, immersive, **multiplayer up to 8, HOST-AUTHORITATIVE** (the host's device deals; `rooms/<CODE>/pk`; `gamehub.holdem.mp.v1`), plus solo vs up to 7 computers; a **bankroll** (ranked on its own leaderboard), per-hand stats, and deterrent-only cheat checks (`holdem/CLAUDE.md`) | `.pk-root` / `.pk-` | `gamehub.holdem.v1` | `recordResult('holdem', …)` + `recordHoldemBank` / `recordHoldemHand` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 | Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |
 | Yahtzee | in-hub `module:`, immersive, **multiplayer** (`js/net.js`, no persisted MP save key) | `.yz-root` / `.yz-` | none yet (no persisted settings) | `recordYahtzee` |
@@ -920,6 +920,13 @@ screen needs it.
   when numbers are DISPLAYED — editing `players/<id>` by hand cannot work, because every device
   mirrors its whole local store over that node on the next hub load. Full contract, and the two
   things it deliberately cannot do, in `js/stats-corrections.js`.
+- **A Texas Hold'em bankroll can be voided too (2026-09-28)**, from the page's **Poker bankrolls**
+  section: the same BASELINE overlay (`adminConfig/v1/corrections/holdem/<statsId>`,
+  `correctHoldemLedger`), per PERSON, so the bankroll reads $25,000 again everywhere - the
+  leaderboard, My Stats and the game's own spendable balance - while the raw ledger is untouched.
+  Ledgers `holdemSuspect()` calls impossible are listed first and read "Under review" on the board.
+  **These are deterrents, not cheat-proofing** (Matt chose them over a server dealer); see
+  `holdem/CLAUDE.md`, "Cheat deterrents".
 - **A machine set to Testing records to a practice bucket and counts for nothing.** `sk.practice`
   (`js/game-stats.js`) — kept, carried across devices, shown on its own labelled row in My Stats,
   and reachable by no counter, no best, no unlock, no goal and no leaderboard. This is the half that

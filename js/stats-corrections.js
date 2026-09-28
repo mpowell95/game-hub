@@ -127,19 +127,58 @@ export function correctSkeeballRecord(gameRec, corrs) {
   });
 }
 
+// --- Texas Hold'em bankroll voids (2026-09-28) ---------------------------------------------------
+// Matt chose deterrents over a server dealer, and one of them is "void a bankroll from the admin
+// page". Same idea as a Skeeball void, same reason it has to be an overlay: the device mirrors its
+// whole ledger over players/<id> on every hub load, so an edit there would not survive a day.
+//
+// THE SHAPE, per player-device (statsId): the ledger's raw counters at the moment of the void,
+//   { buyins, winnings, grants, best, cashes, entries, at, why }
+// A BASELINE, exactly like correctBoard: everything up to the void stops counting, so the bankroll
+// reads as the starting stake again, and every game played AFTER it counts normally. `best` is a
+// maximum and cannot be un-summed, so it survives only if a later prize beat the voided one (rule 4).
+const HB_FIELDS = ['buyins', 'winnings', 'grants', 'cashes', 'entries'];
+
+/** A Hold'em ledger as it should be SHOWN after a void. Never mutates its input. */
+export function correctHoldemLedger(hb, corr) {
+  const h = hb || {};
+  if (!corr || typeof corr !== 'object') return h;
+  const out = {};
+  const n = (v) => (Number.isFinite(+v) ? Math.floor(+v) : 0);     // not `| 0`: see holdemBalance
+  for (const k of HB_FIELDS) out[k] = Math.max(0, n(h[k]) - n(corr[k]));
+  out.best = (h.best | 0) > (corr.best | 0) ? (h.best | 0) : 0;
+  return out;
+}
+
+/** What a Hold'em void stores for a ledger right now. */
+export function holdemSnapshotOf(hb) {
+  const h = hb || {};
+  const out = {};
+  for (const k of HB_FIELDS) out[k] = Number.isFinite(+h[k]) ? Math.floor(+h[k]) : 0;
+  out.best = h.best | 0;
+  return out;
+}
+
 /**
  * Apply every correction that names this player-device to a whole stats store.
  * @param {object} stats  a `{ version, games }` store (local) or a synced record's `stats`
  * @param {string} id     the statsId this store belongs to
- * @param {object} all    every correction: { skeeball: { <statsId>: { <boardId>: {...} } } }
+ * @param {object} all    every correction: { skeeball: { <statsId>: { <boardId>: {...} } },
+ *                                            holdem: { <statsId>: {...} } }
  */
 export function correctStats(stats, id, all) {
-  const st = stats || {};
+  let st = stats || {};
   const corrs = (((all || {}).skeeball || {})[id]) || null;
-  if (!corrs || !st.games || !st.games.skeeball) return st;
-  const fixed = correctSkeeballRecord(st.games.skeeball, corrs);
-  if (fixed === st.games.skeeball) return st;
-  return Object.assign({}, st, { games: Object.assign({}, st.games, { skeeball: fixed }) });
+  if (corrs && st.games && st.games.skeeball) {
+    const fixed = correctSkeeballRecord(st.games.skeeball, corrs);
+    if (fixed !== st.games.skeeball) st = Object.assign({}, st, { games: Object.assign({}, st.games, { skeeball: fixed }) });
+  }
+  const hc = (((all || {}).holdem || {})[id]) || null;
+  if (hc && st.games && st.games.holdem && st.games.holdem.hb) {
+    const hb = correctHoldemLedger(st.games.holdem.hb, hc);
+    st = Object.assign({}, st, { games: Object.assign({}, st.games, { holdem: Object.assign({}, st.games.holdem, { hb }) }) });
+  }
+  return st;
 }
 
 /** What a void would store for a board right now: its raw totals, plus today. */
@@ -151,4 +190,4 @@ export function snapshotOf(board, day) {
   };
 }
 
-export default { correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf };
+export default { correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf };

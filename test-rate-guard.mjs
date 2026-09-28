@@ -93,7 +93,10 @@ const recorders = [...src.matchAll(/^export function (record[A-Za-z0-9]*)\(/gm)]
 // counted by recordResult('holdem'), which IS gated. Refusing a buy-in would hand out a free game,
 // and refusing a prize would lose money already won - THE LAW's failure, on the one ledger that is
 // a balance (js/game-stats.js, "Texas Hold'em bankroll").
-const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank']);
+// recordHoldemHand (2026-09-28) counts HANDS inside a game (hands won, biggest pot, best hand),
+// not results: a table can finish many hands a minute, and the game those hands belong to is still
+// counted by the gated recordResult('holdem').
+const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand']);
 ok('found the recorders', recorders.length >= 18);
 for (const r of recorders) {
   if (EXEMPT.has(r)) continue;

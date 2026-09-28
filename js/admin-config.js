@@ -103,10 +103,11 @@ export function normalizeConfig(raw) {
   const boards = (sk.boards && typeof sk.boards === 'object') ? sk.boards : {};
   const corr = (src.corrections && typeof src.corrections === 'object') ? src.corrections : {};
   const skCorr = (corr.skeeball && typeof corr.skeeball === 'object') ? corr.skeeball : {};
+  const hbCorr = (corr.holdem && typeof corr.holdem === 'object') ? corr.holdem : {};
   const golf = (src.golf && typeof src.golf === 'object') ? src.golf : {};
   const courses = (golf.courses && typeof golf.courses === 'object') ? golf.courses : {};
   const resets = (src.deviceResets && typeof src.deviceResets === 'object') ? src.deviceResets : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr }, golf: { courses }, deviceResets: resets };
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets };
 }
 
 /**
@@ -613,13 +614,37 @@ export function setSkeeballCorrection(statsIdOf, boardId, snapshot, why) {
   });
 }
 
+/** One player-device's Hold'em bankroll void, or null. */
+export function resolveHoldemCorrection(cfg, statsIdOf) {
+  const row = normalizeConfig(cfg).corrections.holdem[statsIdOf];
+  return row && typeof row === 'object' ? row : null;
+}
+
+/**
+ * Void (or un-void) one player-device's Hold'em bankroll.
+ * @param {string} statsIdOf  the players/<id> key
+ * @param {object|null} snapshot  js/stats-corrections.js's holdemSnapshotOf(hb), or null to undo
+ * @param {string} [why]
+ */
+export function setHoldemCorrection(statsIdOf, snapshot, why) {
+  const keys = ['buyins', 'winnings', 'grants', 'best', 'cashes', 'entries'];
+  const fields = {};
+  for (const k of keys) fields[k] = snapshot === null ? null : (Number.isFinite(+snapshot[k]) ? Math.floor(+snapshot[k]) : 0);
+  fields.why = snapshot === null ? null : String(why || '');
+  return writeNode(`corrections/holdem/${statsIdOf}`, fields, (cfg) => {
+    const got = resolveHoldemCorrection(cfg, statsIdOf);
+    if (snapshot === null) return !got;
+    return !!got && keys.every((k) => +got[k] === Math.floor(+snapshot[k] || 0));
+  });
+}
+
 export default {
   CACHE_KEY, CONFIG_PATH, EVENT, normalizeConfig, resolveGameLive, gameOverride, resolveBoardReleased,
   boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,
   isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,
   setGameLive, gameLiveAt, setBoardMode, resolveCorrections, resolveBoardCorrections, corrections,
   resolveDeviceReset, deviceResetAt, setDeviceReset,
-  myBoardCorrections, setSkeeballCorrection,
+  myBoardCorrections, setSkeeballCorrection, resolveHoldemCorrection, setHoldemCorrection,
   resolveCourseReleased, courseOverride, resolveCourseTesting, courseTestingOverride,
   resolveCourseMode, isCourseReleased, isCourseTesting, courseMode, setCourseMode,
 };

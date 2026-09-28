@@ -242,6 +242,9 @@ export function startHand(state, rand = cryptoRand) {
     sbIdx, bbIdx, sb, bb,
     toAct: -1,
     last: new Array(n).fill(null),   // last action label per player, for the seat bubbles
+    // Every action in order, for the "Last hand" replay (2026-09-28). Public information only (who
+    // did what, and on which street), so it rides publicView to every seat unchanged.
+    log: [],
     result: null,
   };
   state.hand = h;
@@ -271,6 +274,7 @@ function post(state, i, amt, label) {
   p.chips -= pay; h.bets[i] += pay; h.total[i] += pay;
   if (p.chips === 0) h.allIn[i] = true;
   h.last[i] = { a: label, amt: pay };
+  if (h.log) h.log.push({ i, a: label, amt: pay, st: 'preflop' });
 }
 
 const canAct = (h, i) => !h.folded[i] && !h.allIn[i];
@@ -362,6 +366,7 @@ export function act(state, i, move) {
   }
   h.acted[i] = true;
   h.canRaise[i] = true;
+  if (h.log) h.log.push(h.last[i].amt != null ? { i, a: h.last[i].a, amt: h.last[i].amt, st: h.street } : { i, a: h.last[i].a, st: h.street });
   state.k += 1;
   advance(state, i);
   return { ok: true };
@@ -525,6 +530,7 @@ export function leave(state, i) {
     const wasTurn = h.toAct === i;
     h.folded[i] = true;
     h.last[i] = { a: 'fold' };
+    if (h.log) h.log.push({ i, a: 'left', st: h.street });
     if (wasTurn) { state.k += 1; advance(state, i); }
     else {
       const inHandNow = state.players.map((_, j) => j).filter((j) => !h.folded[j]);

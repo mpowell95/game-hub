@@ -109,6 +109,19 @@ export default {
     see_cards: "See everyone's cards",
     tap_next: 'Tap the table to start the next hand',
     tap_skip: 'Tap the table to skip ahead',
+    // Computer speed (2026-09-28)
+    pace: 'Computer speed', pace_slow: 'Slow', pace_normal: 'Normal', pace_fast: 'Fast',
+    // Last hand replay (2026-09-28)
+    last_hand: 'Last hand', last_title: 'Hand {n}', last_none: 'No hand has finished yet.',
+    last_wins: '{name} wins {n} with {hand}', last_takes: '{name} takes {n}', last_split: 'Split: {names} share {n}',
+    last_side: 'Side pot', last_folded: 'folded', last_you: 'You',
+    street_preflop: 'Before the flop', street_flop: 'Flop', street_turn: 'Turn', street_river: 'River',
+    lg_sb: 'small blind {n}', lg_bb: 'big blind {n}', lg_fold: 'folds', lg_check: 'checks', lg_call: 'calls {n}',
+    lg_bet: 'bets {n}', lg_raise: 'raises to {n}', lg_allin: 'all in for {n}', lg_left: 'left the table',
+    // the same, said to "You" (English needs the other verb form)
+    lgy_sb: 'small blind {n}', lgy_bb: 'big blind {n}', lgy_fold: 'fold', lgy_check: 'check', lgy_call: 'call {n}',
+    lgy_bet: 'bet {n}', lgy_raise: 'raise to {n}', lgy_allin: 'go all in for {n}', lgy_left: 'left the table',
+    last_you_win: 'You win {n} with {hand}', last_you_take: 'You take {n}',
     next_soon: 'Next hand coming up',
     stack_n: 'Stack: {n}',
     st_sb: 'POST', st_bb: 'POST', st_fold: 'FOLD', st_check: 'CHECK', st_call: 'CALL', st_bet: 'BET',
@@ -241,6 +254,18 @@ export default {
     see_cards: 'Ver las cartas de todos',
     tap_next: 'Toca la mesa para la siguiente mano',
     tap_skip: 'Toca la mesa para adelantar',
+    // Velocidad de los ordenadores (2026-09-28)
+    pace: 'Velocidad del ordenador', pace_slow: 'Lenta', pace_normal: 'Normal', pace_fast: 'Rápida',
+    // Última mano (2026-09-28)
+    last_hand: 'Última mano', last_title: 'Mano {n}', last_none: 'Todavía no ha terminado ninguna mano.',
+    last_wins: '{name} gana {n} con {hand}', last_takes: '{name} se lleva {n}', last_split: 'Dividido: {names} se reparten {n}',
+    last_side: 'Bote secundario', last_folded: 'no fue', last_you: 'Tú',
+    street_preflop: 'Antes del flop', street_flop: 'Flop', street_turn: 'Turn', street_river: 'River',
+    lg_sb: 'ciega pequeña {n}', lg_bb: 'ciega grande {n}', lg_fold: 'no va', lg_check: 'pasa', lg_call: 'iguala {n}',
+    lg_bet: 'apuesta {n}', lg_raise: 'sube a {n}', lg_allin: 'all in con {n}', lg_left: 'dejó la mesa',
+    lgy_sb: 'ciega pequeña {n}', lgy_bb: 'ciega grande {n}', lgy_fold: 'no vas', lgy_check: 'pasas', lgy_call: 'igualas {n}',
+    lgy_bet: 'apuestas {n}', lgy_raise: 'subes a {n}', lgy_allin: 'vas all in con {n}', lgy_left: 'dejaste la mesa',
+    last_you_win: 'Ganas {n} con {hand}', last_you_take: 'Te llevas {n}',
     next_soon: 'Enseguida la siguiente mano',
     stack_n: 'Fichas: {n}',
     st_sb: 'CIEGA', st_bb: 'CIEGA', st_fold: 'NO VA', st_check: 'PASA', st_call: 'IGUALA', st_bet: 'APUESTA',

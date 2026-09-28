@@ -151,8 +151,6 @@ for (let g = 0; g < 60; g++) {
 }
 ok('bots never make an illegal move', errors === 0, errors);
 
-console.log(`holdem engine: ${pass} passed, ${fail} failed (${games} tournaments, ${hands} hands)`);
-if (fail) process.exit(1);
 {
   // The shipped default: $10,000 stacks, $100/$200 blinds.
   const s = newGame(seat(3));
@@ -171,4 +169,58 @@ ok('heads-up: winner takes the whole pot', payout(1, 2, 5000) === 10000 && payou
 ok('no buy-in, no prize (old saves, free games)', payout(1, 6, 0) === 0);
 for (const [n, b] of [[3, 500], [5, 1000], [7, 5000], [8, 10000000]]) ok(`prizes add up to the pot exactly (${n} x $${b})`, payout(1, n, b) + payout(2, n, b) === n * b);
 ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 5000, tier: 'regional' }).cfg.buyin === 5000);
+
+// ---- the hand log (Last hand replay, 2026-09-28) -----------------------------------------------
+{
+  const s = newGame(seat(3), SMALL);
+  startHand(s, () => 0.4);
+  const h = s.hand;
+  ok('log opens with both blinds', h.log.length === 2 && h.log[0].a === 'sb' && h.log[1].a === 'bb' && h.log[0].amt === 10 && h.log[1].amt === 20, h.log);
+  let moves = 0;
+  while (!h.result && h.toAct >= 0 && moves < 50) { const L = legal(s); act(s, h.toAct, { a: L.canCheck ? 'check' : 'call' }); moves++; }
+  ok('every action is logged, in order, with its street', h.log.length === 2 + moves && h.log.slice(2).every((e) => ['preflop', 'flop', 'turn', 'river'].includes(e.st)), h.log);
+  ok('the log is public (rides publicView)', Array.isArray(publicView(s).hand.log) && publicView(s).hand.log.length === h.log.length);
+}
+
+// ---- the cheat deterrents agree with the game (js/game-stats.js) --------------------------------
+// The stats layer refuses a buy-in that is not a table's price and a prize no finish pays; if the
+// two lists ever drift, real money would be refused. So: every table in ui.js is an accepted buy-in,
+// every prize payout() can produce is accepted, and a ledger built by real play is never "suspect".
+{
+  globalThis.localStorage = globalThis.localStorage || { _m: {}, getItem(k) { return this._m[k] ?? null; }, setItem(k, v) { this._m[k] = String(v); }, removeItem(k) { delete this._m[k]; } };
+  const GS = await import('../../js/game-stats.js');
+  const fs = await import('node:fs');
+  const uiSrc = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  const tiers = [...uiSrc.matchAll(/\{ id: '[a-z]+', buyin: (\d+),/g)].map((m) => +m[1]);
+  ok('ui.js TIERS parsed', tiers.length === 7, tiers);
+  ok('every table price is an accepted buy-in (and nothing else)', tiers.join() === GS.HOLDEM_BUYINS.join(), { tiers, gs: GS.HOLDEM_BUYINS });
+  let bad = 0;
+  for (const b of tiers) for (let n = 2; n <= 8; n++) for (const pl of [1, 2]) { const v = payout(pl, n, b); if (v && !GS.holdemValidPrize(v)) bad++; }
+  ok('every prize a table can pay is accepted', bad === 0, bad);
+  ok('an invented prize is refused', !GS.holdemValidPrize(123456) && !GS.holdemValidPrize(999999999));
+  // A random career of real games: buy in, finish somewhere, top up when broke.
+  for (let trial = 0; trial < 200; trial++) {
+    const hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
+    for (let g = 0; g < 60; g++) {
+      let bal = GS.holdemBalance(hb);
+      if (bal < 500) { const need = Math.min(25000, 25000 - bal); hb.grants += need; bal += need; }
+      const afford = tiers.filter((b) => b <= bal);
+      const b = afford[Math.floor(Math.random() * afford.length)];
+      const n = 2 + Math.floor(Math.random() * 7);
+      hb.buyins += b; hb.entries++;
+      const place = 1 + Math.floor(Math.random() * n);
+      const prize = payout(place, n, b);
+      if (prize) { hb.winnings += prize; hb.cashes++; hb.best = Math.max(hb.best, prize); }
+      const why = GS.holdemSuspect(hb);
+      if (why) { ok('a ledger built by real play is never suspect', false, { why, hb }); break; }
+    }
+  }
+  ok('a typed-in bankroll is flagged', GS.holdemSuspect({ buyins: 500, winnings: 5000000, grants: 0, best: 975, cashes: 1, entries: 1 }) !== '');
+  ok('prizes with no games are flagged', GS.holdemSuspect({ buyins: 0, winnings: 975, grants: 0, best: 975, cashes: 1, entries: 0 }) !== '');
+  ok('an impossible best prize is flagged', GS.holdemSuspect({ buyins: 500, winnings: 777, grants: 0, best: 777, cashes: 1, entries: 1 }) !== '');
+  ok('an empty ledger is fine', GS.holdemSuspect({}) === '' && GS.holdemSuspect(null) === '');
+}
+
+console.log(`holdem engine: ${pass} passed, ${fail} failed (${games} tournaments, ${hands} hands)`);
+if (fail) process.exit(1);
 void E;
