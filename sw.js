@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1001';
+const CACHE = 'game-hub-v1002';
 
 const ASSETS = [
   './',
@@ -758,9 +758,9 @@ const REST_MANIFEST = {
   './contexto/': '249279e291',
   './contexto/index.html': '249279e291',
   './contexto/css/contexto.css': '0f05bf729f',
-  './contexto/js/ui.js': '1fcbcb48d8',
+  './contexto/js/ui.js': '2b2c5f52ea',
   './contexto/js/engine.js': '01060b503d',
-  './contexto/js/strings.js': '51207f42d2',
+  './contexto/js/strings.js': 'b3621a61ec',
   './contexto/data/en.json': '361a043c15',
   './contexto/data/en.bin': '5e6b39a78e',
   './contexto/data/es.json': '5262cc4d43',
