@@ -145,6 +145,16 @@ ok('...costing one rerack', lc.reracksLeft.a === 1);
 ok('a retry of the same custom rerack writes nothing twice', (await MP.appendLog(id3, 4, [rr])).ok && Object.keys(getAt(`cuppong/games/${id3}/log`)).length === 5);
 void PRESETS;
 
+// Bounce shots are frozen per challenge: new ones have them, older ones replay without.
+{
+  const log = [{ by: 'a', k: 't', p: 0.5, a: 0, m: 'k0', b: 1, at: 1 }];
+  const oldM = MP.buildLocal({ rules: { gent: true, rr: 2 }, log }, 'a');
+  const newM = MP.buildLocal({ rules: { gent: true, rr: 2, bo: true }, log }, 'a');
+  ok('an old challenge (no bounce rule) replays a bounced make as one cup', oldM.owed.b === 0 && oldM.racks.b.length === 9);
+  ok('a new challenge: a bounced make owes a second cup', newM.owed.b === 1 && newM.racks.b.length === 9);
+  ok('createGame stamps the bounce rule on every new challenge', getAt(`cuppong/games/${id3}/rules`).bo === true);
+}
+
 // --- structural -------------------------------------------------------------------------------------
 const rules = JSON.parse(readFileSync('database.rules.json', 'utf8'));
 ok('database.rules.json has the cuppong branch', !!(rules.rules && rules.rules.cuppong));

@@ -26,6 +26,10 @@
 //                    and if you hit that cup, you get 2 cups. The opposing player can choose the
 //                    second cup. If there are multiple available islands, you must call the specific
 //                    one." Calling spends it, hit or miss (Matt, 2026-09-28).
+//   - BOUNCE SHOTS (brief 5d, built 2026-09-28): a ball that touches the table and then goes in
+//     counts for 2 cups, the second picked by the defender. An island hit by a bounce is 3 cups.
+//     Not in a rebuttal (as island), and never the last cup (there is no second one). `bounce`
+//     switches it; a challenge made before it existed replays with it off.
 //
 // Sides are 'a' (this phone, red cups) and 'b' (the opponent, blue). Each rack is stored in the
 // SHOOTER'S frame. Everything that happens comes back as EVENTS, in order.
@@ -54,8 +58,9 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = true } = {}) {
     this.async = !!async;
+    this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
     this.gentlemans = !!gentlemans;
     this.reracks = reracks;
@@ -67,7 +72,7 @@ export class Match {
     this.reracksLeft = { a: reracks, b: reracks };
     this.islandUsed = { a: false, b: false };
     this.called = null;                 // the island cup called for the next throw
-    this.pendingPick = null;            // { picker } - the defender owes a second cup (island)
+    this.pendingPick = null;            // { picker, n } - the defender owes n more cups (island, bounce)
     this.lastCup = null;                // the last cup, made, still standing for the balls left
     this.queue = [];                    // balls still to throw this pair, in order
     this.pairRes = [null, null];        // each ball's last result in this pair
@@ -178,10 +183,12 @@ export class Match {
     if (!this.pendingPick) return [];
     const rack = this.target();
     if (!rack.some((k) => k.id === id)) return [];
-    this.pendingPick = null;
+    const n = (this.pendingPick.n | 0) || 1;
     this.racks[this.defender] = rack.filter((k) => k.id !== id);
-    const ev = [{ type: 'picked', side: this.defender, id }];
-    if (this.racks[this.defender].length === 0) return ev.concat(this._cleared());
+    const ev = [{ type: 'picked', side: this.defender, id, left: n - 1 }];
+    if (this.racks[this.defender].length === 0) { this.pendingPick = null; return ev.concat(this._cleared()); }
+    if (n > 1) { this.pendingPick = { ...this.pendingPick, n: n - 1 }; return ev; }   // another to pick
+    this.pendingPick = null;
     return ev.concat(this._afterThrow());
   }
 
@@ -237,15 +244,12 @@ export class Match {
         this.queue.unshift(ball);                        // on fire: that ball comes back
       }
       const leftAfter = rack.length - 1;
-      // ISLAND: the called cup went in - two cups, the defender picks the second.
+      // ISLAND: the called cup went in. BOUNCE: it touched the table first. Each is one more cup,
+      // picked by the defender (a challenge: owed, taken at the defender's next turn).
       const island = !!(called && made === called && leftAfter >= 1);
-      if (island && !this.async) {
-        this.racks[this.defender] = rack.filter((k) => k.id !== made);
-        ev.push({ type: 'made', side, ball, id: made, bounced, island: true, left: leftAfter });
-        this.pendingPick = { picker: this.defender };
-        ev.push({ type: 'islandPick', picker: this.defender });
-        return ev;
-      }
+      const bounce = !!(this.bounce && bounced && leftAfter >= 1);
+      const extra = (island ? 1 : 0) + (bounce ? 1 : 0);
+      const flags = { ...(island ? { island: true } : {}), ...(bounce ? { bounce: true } : {}) };
       // THE LAST CUP with a ball still to throw: it stands for that ball.
       if (leftAfter === 0 && this.queue.length) {
         this.lastCup = made;
@@ -253,12 +257,24 @@ export class Match {
         return ev;
       }
       this.racks[this.defender] = rack.filter((k) => k.id !== made);
-      ev.push({ type: 'made', side, ball, id: made, bounced, left: leftAfter, ...(island ? { island: true } : {}) });
+      ev.push({ type: 'made', side, ball, id: made, bounced, left: leftAfter, ...flags });
       if (leftAfter === 0) return ev.concat(this._cleared());
-      // A CHALLENGE'S ISLAND: the second cup is owed, taken by the defender at its next turn.
-      if (island) {
-        this.owed[this.defender]++;
-        ev.push({ type: 'islandOwed', side: this.defender, n: this.owed[this.defender] });
+      if (extra && !this.async) {
+        // Every cup left is owed: they all go now, no one needs to pick.
+        if (extra >= leftAfter) {
+          const ids = this.racks[this.defender].map((k) => k.id);
+          this.racks[this.defender] = [];
+          ev.push({ type: 'extraCleared', side: this.defender, ids });
+          return ev.concat(this._cleared());
+        }
+        this.pendingPick = { picker: this.defender, n: extra, ...flags };
+        ev.push({ type: 'islandPick', picker: this.defender, n: extra, ...flags });
+        return ev;
+      }
+      // A CHALLENGE: the extra cups are owed, taken by the defender at its next turn.
+      if (extra) {
+        this.owed[this.defender] += extra;
+        ev.push({ type: 'islandOwed', side: this.defender, n: this.owed[this.defender], add: extra, ...flags });
       }
       // Owed cups that are every cup left: the rack is cleared now.
       if (this.owed[this.defender] > 0 && this.racks[this.defender].length <= this.owed[this.defender]) {
@@ -329,7 +345,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -345,7 +361,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce !== false });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };

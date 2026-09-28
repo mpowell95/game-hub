@@ -474,10 +474,12 @@ class CupPong {
         if (e.lastCup) this.toast(t('lastCup'), 1600);              // it stands for the next ball
         else R.vanish(side, e.id);
         if (e.sameCup) this.toast(t('sameCup'), 1600);
+        else if (e.island && e.bounce) this.toast(t('islandBounceHit'), 1600);
         else if (e.island) this.toast(t('islandHit'), 1500);
+        else if (e.bounce) this.toast(t('bounceHit'), 1500);
       } else if (e.type === 'removed' || e.type === 'picked' || e.type === 'owedPicked') R.vanish(e.side, e.id);
-      else if (e.type === 'owedCleared') { for (const id of e.ids) R.vanish(e.side, id); }
-      else if (e.type === 'islandOwed') this.toast(e.side === 'a' ? t('youOwe') : t('theyOwe'), 1600);
+      else if (e.type === 'owedCleared' || e.type === 'extraCleared') { for (const id of e.ids) R.vanish(e.side, id); }
+      else if (e.type === 'islandOwed') this.toast(this.oweWords(e), 1600);
       else if (e.type === 'ballsBack') this.toast(t('ballsBack'));
       else if (e.type === 'heatingUp') this.toast(t('heatingUp'));
       else if (e.type === 'onFire') this.toast(t('onFire'), 1400);
@@ -487,6 +489,14 @@ class CupPong {
         R.setRack('b', cupsXZ(m.racks.b));
       }
     }
+  }
+
+  /** "You owe them a cup" for an island or a bounce in a challenge, or the count when it is more. */
+  oweWords(e) {
+    const mine = e.side === 'a';
+    if ((e.add | 0) > 1) return t(mine ? 'youOweN' : 'theyOweN', { n: e.add });
+    if (e.bounce && !e.island) return t(mine ? 'bounceYouOwe' : 'bounceTheyOwe');
+    return t(mine ? 'youOwe' : 'theyOwe');
   }
 
   nextStep(ev) {
@@ -514,7 +524,9 @@ class CupPong {
     // The player is the defender: their own cups, from their end.
     this.engine.rend.setView('defend');
     this.engine.rend.setMarks('a', m.target().map((k) => k.id), 'island');
-    this.startPick('defend', t('pickYours'), (id) => this.afterPick(m.pickCup(id)));
+    const p = m.pendingPick;
+    const say = (p.n | 0) > 1 ? t('pickN', { n: p.n }) : p.bounce && !p.island ? t('pickBounce') : t('pickYours');
+    this.startPick('defend', say, (id) => this.afterPick(m.pickCup(id)));
   }
 
   afterPick(ev) {
@@ -522,6 +534,7 @@ class CupPong {
     this.engine.rend.setMarks('b', null);
     this.showEvents(ev);
     if (this.match.over) { this.finish(); return; }
+    if (this.match.pendingPick) { this.later(() => this.askPick(), 250); return; }   // an island bounce: 2 picks
     this.paintHud();
     this.later(() => this.nextStep(ev), SETTLE_MS);
   }

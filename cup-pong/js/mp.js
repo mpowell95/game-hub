@@ -95,14 +95,16 @@ const fail = (reason, retryable = false) => ({ ok: false, reason, retryable });
 /** The rules a challenge was made under, frozen for both players. */
 export function cleanRules(r) {
   const rr = RERACK_CHOICES.includes(r && r.rr) ? r.rr : (RERACK_CHOICES.includes(Number(r && r.rr)) ? Number(r.rr) : 2);
-  return { gent: !(r && r.gent === false), rr };
+  // Bounce shots (brief 5d) arrived after the first challenges: a match without `bo` replays with
+  // them off, so a bounced make in its log keeps meaning one cup and the log stays valid.
+  return { gent: !(r && r.gent === false), rr, bo: !!(r && r.bo === true) };
 }
 const reracksOf = (rules) => (rules.rr === 'inf' ? Infinity : rules.rr);
 
 /** A fresh match under `rules`, in the STORED frame (side 'a' is the challenger and shoots first). */
 export function freshMatch(rules) {
   const r = cleanRules(rules);
-  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true });
+  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo });
 }
 
 /** One log entry, cleaned, or null if it is not a well-formed action. */
@@ -164,7 +166,7 @@ export const toStored = (e, mySide) => ({ ...e, by: e.by === 'a' ? mySide : othe
  */
 export function buildLocal(game, mySide, upto = game.log.length) {
   const r = cleanRules(game.rules);
-  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true });
+  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo });
   for (let i = 0; i < upto; i++) {
     if (!applyEntry(m, toLocal(game.log[i], mySide))) break;   // validateGame already proved it replays
   }
@@ -475,7 +477,7 @@ export async function createGame({ them, rules }) {
   const r = cleanRules(rules);
   const doc = {
     v: 1, id, by: me, created: now, updated: now,
-    rules: { gent: r.gent, rr: r.rr },
+    rules: { gent: r.gent, rr: r.rr, bo: true },           // every new challenge has bounce shots
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
