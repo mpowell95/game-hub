@@ -52,7 +52,7 @@ import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
-import { statsId, holdemBalance } from './game-stats.js';
+import { statsId, holdemBalance, holdemSuspect } from './game-stats.js';
 import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
   boardRankTier, formatBoardMetric, GOLF_BOARD_COURSE } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
@@ -535,7 +535,27 @@ function skPlaysAt(g, machine) {
  *  extractors below. Skeeball's number is scoped by MACHINE, golf's by COURSE; neither has a
  *  per-tier breakdown to read (their stored buckets are keyed by machine and by course, which map
  *  to no tier), so neither gets per-tier tiles. */
-const METRIC_IS_TIER_BLIND = new Set(['skeeball', 'golf']);
+const METRIC_IS_TIER_BLIND = new Set(['skeeball', 'golf', 'holdem']);
+
+/** TEXAS HOLD'EM'S BOARD RANKS BY BANKROLL (2026-09-28, Matt: "We definitely need" a bankroll
+ *  leaderboard). The number is the person's combined ledger (js/game-stats.js holdemBalance, summed
+ *  across their devices by players-agg, admin voids already applied). `null` - printed as a dash,
+ *  sorted last - for somebody who never played for money, and for a ledger holdemSuspect() says no
+ *  real play could produce; that row reads "Under review" (metricText) until Matt voids or clears
+ *  it. The bankroll has no difficulty axis, so this board is untiered, like Skeeball's. */
+function hbOf(g) { return ((g.games && g.games.holdem) || {}).hb || null; }
+function hbReview(g) { const hb = hbOf(g); return !!(hb && holdemSuspect(hb)); }
+function hbBankOf(g) {
+  const hb = hbOf(g);
+  if (!hb || holdemSuspect(hb)) return null;
+  // An untouched (or voided) ledger is the starting stake - which is what this row's own game
+  // shows them. Only rows with Hold'em plays reach this board, so nobody else is given it.
+  return Math.max(0, holdemBalance(hb));
+}
+/** Has this person ever moved money? The Standing Records bankroll chip asks this first, or the
+ *  starting stake every device carries would put a non-player on the podium. */
+function hbTouched(g) { const hb = hbOf(g); return !!(hb && ((hb.entries | 0) || (hb.grants | 0))); }
+const bankText = (n) => '$' + Math.max(0, Math.floor(+n || 0)).toLocaleString();
 
 function gameMetricAt(g, id, tier) {
   if (id === 'ballrun') return brBestAt(g, tier);
@@ -549,6 +569,7 @@ function gameMetricAt(g, id, tier) {
   // so a fast Expert clear outranks a faster Easy one (Matt, 2026-09-21: "the fastest time to
   // clear the highest level of difficulty").
   if (id === 'minesweeper') return msBestAt(g, tier);
+  if (id === 'holdem') return hbBankOf(g);
   return winsAtTier(g, [id], tier);
 }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
@@ -556,6 +577,7 @@ function gameMetricAt(g, id, tier) {
  *  maths, this supplies the translated word). A player with no number gets the same em-dash
  *  glyph the empty leader cell already uses, never a literal "null". */
 function metricText(value, id) {
+  if (id === 'holdem') return value == null ? '\u2014' : bankText(value);
   const s = formatBoardMetric(value, id, t('lb_golf_even'));
   return s === null ? '\u2014' : s;
 }
@@ -569,11 +591,13 @@ function lbUnitKeyOf(id) {
   // Same split as golf: this BOARD ranks on a best time, while My Stats' game list still leads
   // with boards cleared, which is the right headline for a list of every game you have played.
   if (id === 'minesweeper') return 'lb_unit_ms_best';
+  if (id === 'holdem') return 'lb_unit_bank';
   return unitKeyOf(id);
 }
 
 /** Plays for one game, honoring whichever filter that game's board actually offers. */
 function boardPlaysOf(g, id) {
+  if (id === 'holdem') return playsAtTier(g, [id], null);   // no difficulty filter on this board
   return id === 'skeeball' ? skPlaysAt(g, _machine) : playsAtTier(g, [id], _tier);
 }
 
@@ -609,6 +633,7 @@ function boardPlaysOf(g, id) {
  *  While a difficulty FILTER is selected it is that tier for every row, so a filtered board is the
  *  pure score board it always was. */
 function boardTierOf(g, id) {
+  if (id === 'holdem') return null;                          // ranked by bankroll alone
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
   // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
@@ -734,6 +759,8 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_golf_best: 'lb_sort_golf_best',
   // Minesweeper ranks on a best time, not on how many boards were cleared.
   lb_unit_ms_best: 'lb_sort_ms_best',
+  // Texas Hold'em ranks on the bankroll.
+  lb_unit_bank: 'lb_sort_bank',
 };
 function sortItemsFor(id) {
   const labelKey = UNIT_TO_SORT_LABEL[lbUnitKeyOf(id)] || 'lb_sort_wins';
@@ -744,6 +771,8 @@ function sortItemsFor(id) {
     // It is offered nowhere else because no other game stores a per-game best AND a lifetime total
     // as two separate numbers - everywhere else the metric already IS the one number there is.
     ...(id === 'skeeball' ? [{ sort: 'high', labelKey: 'lb_sort_high' }] : []),
+    // TEXAS HOLD'EM ONLY: its board leads with the bankroll, and wins stay one tap away.
+    ...(id === 'holdem' ? [{ sort: 'hwins', labelKey: 'lb_sort_wins' }] : []),
     { sort: 'played', labelKey: 'lb_sort_games_short' },
     { sort: 'alpha', labelKey: 'lb_sort_name' },
   ];
@@ -763,6 +792,7 @@ function sortItemsFor(id) {
  *  `_boardSort` carried into a game that does not offer it would light no pill at all. */
 function effectiveSort(id) {
   if (id == null) return _sort;
+  if (_boardSort === 'hwins' && id !== 'holdem') return 'wins';
   return _boardSort === 'high' && id !== 'skeeball' ? 'wins' : _boardSort;
 }
 // By Game's own three orders, remembered the same way By Player's are (saved default view).
@@ -1354,8 +1384,17 @@ const TEXTURE = {
   // The bankroll is only anyone's once they have played for money; a player with no ledger shows 0
   // rather than the untouched starting stake, which would put every non-player on the podium.
   holdem: [
-    { labelKey: 'lb_tex_hb_bank', get: (g) => { const hb = (g.games.holdem || {}).hb; return hb && ((hb.entries | 0) || (hb.grants | 0)) ? Math.max(0, holdemBalance(hb)) : 0; } },
-    { labelKey: 'lb_tex_hb_best', get: (g) => (((g.games.holdem || {}).hb || {}).best) | 0 },
+    { labelKey: 'lb_tex_hb_bank', get: (g) => (hbTouched(g) ? hbBankOf(g) || 0 : 0), show: (g) => bankText(hbBankOf(g)) },
+    { labelKey: 'lb_tex_hb_best', get: (g) => (hbReview(g) ? 0 : ((hbOf(g) || {}).best) | 0), show: (g) => bankText((hbOf(g) || {}).best) },
+    // Per-hand stats (2026-09-28, recordHoldemHand). The best hand ranks on its score and prints
+    // its NAME ("Four of a Kind"), the way Boggle's longest word does.
+    { labelKey: 'lb_tex_hs_won', get: (g) => (((g.games.holdem || {}).hs || {}).won) | 0 },
+    { labelKey: 'lb_tex_hs_pot', get: (g) => (((g.games.holdem || {}).hs || {}).bigPot) | 0, show: (g) => bankText(((g.games.holdem || {}).hs || {}).bigPot) },
+    {
+      labelKey: 'lb_tex_hs_best',
+      get: (g) => (((g.games.holdem || {}).hs || {}).best) | 0,
+      show: (g) => { const c = ((g.games.holdem || {}).hs || {}).bestCat; return c >= 0 && c <= 9 ? t('lb_hb_cat_' + c) : ''; },
+    },
   ],
   brickblitz: [
     { labelKey: 'lb_tex_bz_bricks', get: (g) => (((g.games.brickblitz || {}).bz || {}).bricks) | 0 },
@@ -1566,6 +1605,10 @@ function sortRows(rows, id, sort) {
     rows.sort((a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || metric(a, b) || recent(a, b));
     return;
   }
+  if (sort === 'hwins') {
+    rows.sort((a, b) => (winsAtTier(b, ['holdem'], null) - winsAtTier(a, ['holdem'], null)) || metric(a, b) || recent(a, b));
+    return;
+  }
   // The game's own metric: difficulty first (that is the half Matt does want tiered), then this
   // board's own score order - Tic Tac Toe's Ultimate -> Classic, everyone else's single number.
   // Fewer plays breaks a dead-equal pair, as it always did, and the badges call that pair tied.
@@ -1587,7 +1630,7 @@ function skMachinesPresent(list) {
 }
 
 function gameDetail(list, id) {
-  const fieldTiers = id === 'skeeball' ? [] : fieldTiersPresent(list, [id]);
+  const fieldTiers = id === 'skeeball' || id === 'holdem' ? [] : fieldTiersPresent(list, [id]);
   const machineIds = id === 'skeeball' ? skMachinesPresent(list) : [];
   const totalPlays = list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
   // Screen 3's header: the way back, the game's name at full size, and how much this game has
@@ -1610,12 +1653,14 @@ function gameDetail(list, id) {
   // The badge follows the sort whenever the sort is a MEASURE (By Player above has the same rule):
   // ranking by lifetime points and then numbering the rows by best rack reads as a broken board.
   const bSort = effectiveSort(id);
-  const byMetric = bSort !== 'played' && bSort !== 'high';
+  const byMetric = bSort !== 'played' && bSort !== 'high' && bSort !== 'hwins';
   const { rankOf, tiedAt } = rankMap(rows, bSort === 'played'
     ? (g) => boardPlaysOf(g, id)
     : bSort === 'high'
       ? (g) => skBestAt(g, _machine)
-      : (g) => boardMetricOf(g, id),
+      : bSort === 'hwins'
+        ? (g) => winsAtTier(g, ['holdem'], null)
+        : (g) => boardMetricOf(g, id),
     byMetric ? boardMetricCmp(id) : null);
   sortRows(rows, id, bSort);
   const cardsHtml = rows.length
@@ -1635,7 +1680,8 @@ function gameDetail(list, id) {
           : miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null), rowTier))
           + (showMp ? mpTileHTML(g, id) : '');
         const metricUnit = t(lbUnitKeyOf(id));
-        const metricStr = metricText(metric, id);
+        // A Hold'em ledger no real play could produce says so instead of printing a number.
+        const metricStr = id === 'holdem' && hbReview(g) ? t('lb_hb_review') : metricText(metric, id);
         // THE HEADLINE IS WHAT YOU SORTED BY, the rule this file already keeps for By Player and
         // for Games Played. Skeeball's 'high' sort leads with the best single rack and keeps the
         // lifetime total on the subline, so the two are never confusable and neither is hidden.
@@ -1647,6 +1693,12 @@ function gameDetail(list, id) {
         } else if (bSort === 'high') {
           big = { val: skBestAt(g, _machine), unit: t('lb_unit_high') };
           subText = `${metricStr} ${metricUnit}`;
+        } else if (bSort === 'hwins') {
+          big = { val: winsAtTier(g, ['holdem'], null), unit: t('lb_unit_wins') };
+          subText = `${metricStr} ${metricUnit}`;
+        } else if (id === 'holdem') {
+          big = { val: esc(metricStr), unit: metricUnit };
+          subText = t('lb_played_count', { n: played });
         } else {
           big = { val: metricStr, unit: metricUnit };
           subText = t('lb_played_count', { n: played });
