@@ -71,8 +71,12 @@ const TABS = [
   // leave open: gameListHTML only renders a row for a game with plays, so anyone who never played
   // it sees nothing here either way.
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
-  // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
-  { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
+  // ARCHIVED 2026-09-28 (Matt: "remove pinball from the game hub and archive it"). Its launcher
+  // entry is gone and its code lives in archive/pinball/. The row stays so every recorded play is
+  // still visible (THE LAW rules 1 and 5), exactly like poolv2 above: `retired` keeps it off the
+  // leaderboard and the bug picker, `devOnly` keeps the tab where it always was (Matt and the
+  // tester - the only profiles that could ever play it).
+  { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true, retired: true },
   // Brick Breaker (released 2026-09-23).
   { id: 'brickblitz', labelKey: 'game_title_brickblitz' },
   // Texas Hold'em (released 2026-09-27). total/byDiff only, so the generic screen draws it.

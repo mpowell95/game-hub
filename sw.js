@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v992';
+const CACHE = 'game-hub-v993';
 
 const ASSETS = [
   './',
@@ -280,26 +280,6 @@ const ASSETS = [
   './holdem/js/strings.js',
   // Hill Climb (2026-08-02). Note test.js is deliberately NOT listed: it is a node-only engine
   // suite, never loaded by the page (same convention as every other game's test file).
-  './pinball/',
-  './pinball/index.html',
-  './pinball/css/pinball.css',
-  './pinball/js/ui.js',
-  './pinball/js/game.js',
-  './pinball/js/physics.js',
-  './pinball/js/table.js',
-  './pinball/js/table-royal.js',
-  './pinball/js/royal.js',
-  './pinball/js/render-royal.js',
-  './pinball/js/render3d.js',
-  './pinball/js/table-rainbow.js',
-  './pinball/js/rainbow.js',
-  './pinball/js/render-rainbow.js',
-  './pinball/js/table-design.js',
-  './pinball/js/design.js',
-  './pinball/js/render-design.js',
-  './pinball/design/board.js',
-  './pinball/design/layout.js',
-  './pinball/design/editor.html',
 
   // pinball2: the new engine and its editor. Not a hub game yet (no GAMES entry) - step 2 of the
   // plan in docs/PINBALL2-PLAN.md, which is the bare box the ball feel is judged on.
@@ -319,10 +299,6 @@ const ASSETS = [
   './pinball2/piernine/game.js',
   './pinball2/piernine/rules.js',
   './pinball2/piernine/style.css',
-  './pinball/js/vendor/three.module.min.js',
-  './pinball/js/vendor/three.core.min.js',
-  './pinball/js/store.js',
-  './pinball/js/strings.js',
   './hill-climb/',
   './hill-climb/index.html',
   './hill-climb/css/hill-climb.css',
@@ -849,26 +825,6 @@ const REST_MANIFEST = {
   './holdem/js/table.js': '2455e01459',
   './holdem/js/net-table.js': '287aa65964',
   './holdem/js/strings.js': 'f7dc6f99b0',
-  './pinball/': 'c7d7cf8581',
-  './pinball/index.html': 'c7d7cf8581',
-  './pinball/css/pinball.css': '4d378af4c3',
-  './pinball/js/ui.js': '341325ebf8',
-  './pinball/js/game.js': 'a766c85e3d',
-  './pinball/js/physics.js': '300650adb4',
-  './pinball/js/table.js': '478ac72c5b',
-  './pinball/js/table-royal.js': '2891152338',
-  './pinball/js/royal.js': 'c0b6fb0eed',
-  './pinball/js/render-royal.js': 'd3476b63e3',
-  './pinball/js/render3d.js': 'd9511fc39c',
-  './pinball/js/table-rainbow.js': 'cc0beb43cf',
-  './pinball/js/rainbow.js': '9c6e1c5607',
-  './pinball/js/render-rainbow.js': '63958b8657',
-  './pinball/js/table-design.js': '520ded4c41',
-  './pinball/js/design.js': '7334613a50',
-  './pinball/js/render-design.js': '048007526c',
-  './pinball/design/board.js': '0d1e7c903d',
-  './pinball/design/layout.js': 'd1860f5854',
-  './pinball/design/editor.html': '5cb2244282',
   './pinball2/index.html': '6d09047aef',
   './pinball2/editor/index.html': 'd85ed3028b',
   './pinball2/editor/editor.js': '9c0e423d33',
@@ -883,10 +839,6 @@ const REST_MANIFEST = {
   './pinball2/piernine/game.js': 'f3400a99cc',
   './pinball2/piernine/rules.js': '65c3bec6ae',
   './pinball2/piernine/style.css': 'f94474b195',
-  './pinball/js/vendor/three.module.min.js': '86bcee248b',
-  './pinball/js/vendor/three.core.min.js': '05b2609338',
-  './pinball/js/store.js': 'ee5077e114',
-  './pinball/js/strings.js': '2c7466bb5b',
   './hill-climb/': '527615b38c',
   './hill-climb/index.html': '527615b38c',
   './hill-climb/css/hill-climb.css': '5b33ca4553',
