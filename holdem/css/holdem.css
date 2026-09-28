@@ -564,6 +564,30 @@
 .pk-root .pk-final li.is-first { background: rgba(255, 206, 58, 0.18); box-shadow: inset 0 0 0 1px var(--pk-gold); }
 .pk-root .pk-fplace { width: 32px; font-weight: 900; font-size: 14px; }
 
+/* "Last hand" (2026-09-28): the button on the felt, left of the pot, and the replay sheet. */
+.pk-root .pk-lastbtn {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%); z-index: 2;
+  min-width: 56px; min-height: 48px; padding: 4px 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(10, 20, 40, 0.45); color: #fff;
+  touch-action: manipulation;
+}
+.pk-root .pk-lastbtn span { font-size: 20px; line-height: 1; }
+.pk-root .pk-lastbtn small { font-size: 12px; font-weight: 700; line-height: 1.1; max-width: 64px; text-align: center; }
+.pk-root .pk-last { max-height: calc(100% - 8px); overflow-y: auto; overscroll-behavior: contain; gap: 8px; }
+.pk-root .pk-lboard, .pk-root .pk-lcards { display: flex; gap: 3px; }
+.pk-root .pk-lboard { justify-content: center; }
+.pk-root .pk-lres { list-style: none; margin: 0; padding: 0; font-size: 15px; font-weight: 700; color: #ffe38a; }
+.pk-root .pk-lres small { color: var(--pk-dim); font-weight: 700; font-size: 12px; }
+.pk-root .pk-lshow { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pk-root .pk-lshow li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
+.pk-root .pk-lshow li.is-first { background: rgba(255, 206, 58, 0.18); box-shadow: inset 0 0 0 1px var(--pk-gold); }
+.pk-root .pk-lnote { font-size: 12px; color: #cdd6e4; text-align: right; flex: 0 1 auto; min-width: 0; }
+.pk-root .pk-lstreet { border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 6px; }
+.pk-root .pk-lsthead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pk-gold); }
+.pk-root .pk-lacts { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: #e6ebf3; }
+
 @media (prefers-reduced-motion: reduce) {
   .pk-root .pk-card.is-new,
   .pk-root .pk-modal { animation: none; }

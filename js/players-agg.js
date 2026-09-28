@@ -13,7 +13,7 @@ import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'brickblitz']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -235,6 +235,17 @@ export function aggregatePlayers(all, corrections) {
           const val = mbt[k] | 0;
           if (val > 0) dst.ms.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
         }
+      } else if (g === 'contexto' && src.ct) {
+        // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it every Contexto
+        // counter reads ZERO once a second device syncs (THE LAW rule 1). Counters add; `fewest`
+        // is LOWER-is-better with the writer's zero sentinel (js/game-stats.js recordContexto).
+        if (!dst.ct) dst.ct = { solved: 0, guesses: 0, hints: 0, noHint: 0, fewest: 0 };
+        dst.ct.solved += src.ct.solved | 0;
+        dst.ct.guesses += src.ct.guesses | 0;
+        dst.ct.hints += src.ct.hints | 0;
+        dst.ct.noHint += src.ct.noHint | 0;
+        const f = src.ct.fewest | 0;
+        if (f > 0) dst.ct.fewest = (dst.ct.fewest | 0) > 0 ? Math.min(dst.ct.fewest, f) : f;
       } else if (g === 'ballrun' && src.br) {
         // Fourth-playthrough item 2: Ball Run's shared metric is obstacle count (bestObstacles /
         // bestObstaclesByDiff), not meters. Old meter-shaped records (pre-migration, no
@@ -394,13 +405,30 @@ export function aggregatePlayers(all, corrections) {
         dst.cp.soloThrows += src.cp.soloThrows | 0;
         const sb = src.cp.soloBest | 0;
         if (sb > 0) dst.cp.soloBest = dst.cp.soloBest ? Math.min(dst.cp.soloBest, sb) : sb;
-      } else if (g === 'holdem' && src.hb) {
+      } else if (g === 'holdem' && (src.hb || src.hs)) {
         // Texas Hold'em's bankroll LEDGER (js/game-stats.js, recordHoldemBank). Every money field
         // is an additive counter, so a person's balance across devices is the SUM of the ledgers;
         // `best` (biggest single prize) takes Math.max, never a sum.
-        if (!dst.hb) dst.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
-        for (const k of ['buyins', 'winnings', 'grants', 'cashes', 'entries']) dst.hb[k] += src.hb[k] | 0;
-        dst.hb.best = Math.max(dst.hb.best | 0, src.hb.best | 0);
+        if (src.hb) {
+          if (!dst.hb) dst.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
+          // Plain numbers, not `| 0`: a bankroll can pass 2^31 at the top tables.
+          for (const k of ['buyins', 'winnings', 'grants', 'cashes', 'entries']) dst.hb[k] += Number.isFinite(+src.hb[k]) ? Math.floor(+src.hb[k]) : 0;
+          dst.hb.best = Math.max(dst.hb.best | 0, src.hb.best | 0);
+        }
+        // Per-hand stats (recordHoldemHand, 2026-09-28): hands/won ADD, bigPot takes Math.max, and
+        // the best hand travels as one unit {best, bestCat, bestCards} so the cards always match
+        // the score they are shown beside.
+        if (src.hs) {
+          if (!dst.hs) dst.hs = { hands: 0, won: 0, bigPot: 0, best: 0, bestCat: -1, bestCards: [] };
+          dst.hs.hands += src.hs.hands | 0;
+          dst.hs.won += src.hs.won | 0;
+          dst.hs.bigPot = Math.max(dst.hs.bigPot | 0, src.hs.bigPot | 0);
+          if ((src.hs.best | 0) > (dst.hs.best | 0)) {
+            dst.hs.best = src.hs.best | 0;
+            dst.hs.bestCat = Number.isFinite(src.hs.bestCat) ? src.hs.bestCat : -1;
+            dst.hs.bestCards = Array.isArray(src.hs.bestCards) ? src.hs.bestCards.slice(0, 5) : [];
+          }
+        }
       } else if (g === 'battleship' && src.bs) {
         // Root CLAUDE.md "Adding a game" item 7's third edit. Counters (played/won/lost/shots/
         // hits/sunk) ADD; bestAccuracy takes Math.max. fewestShotsWin is this repo's first

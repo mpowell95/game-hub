@@ -38,6 +38,7 @@ const TABS = [
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
   { id: 'hoops4', labelKey: 'game_title_hoops4' },
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
+  { id: 'contexto', labelKey: 'game_title_contexto' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -98,7 +99,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -279,9 +280,25 @@ function recordScreen(id, rec) {
  *  recordHoldemBank) - the balance it adds up to, the biggest prize, and both sides of the book. */
 function holdemScreen(rec) {
   const hb = (rec && rec.hb) || {};
+  const hs = (rec && rec.hs) || {};
   const total = (rec && rec.total) || { played: 0, won: 0, lost: 0 };
-  if (!(total.played | 0) && !(hb.entries | 0) && !(hb.grants | 0)) return emptyState("Texas Hold'em");
-  const money = (n) => '$' + (n | 0).toLocaleString();
+  if (!(total.played | 0) && !(hb.entries | 0) && !(hb.grants | 0) && !(hs.hands | 0)) return emptyState("Texas Hold'em");
+  const money = (n) => '$' + Math.max(0, Math.floor(+n || 0)).toLocaleString();
+  // Per-hand stats (2026-09-28, recordHoldemHand): only once some exist, so a history from before
+  // they were recorded is not shown as a row of zeros that reads like lost data.
+  const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  const SUITS = ['\u2660', '\u2665', '\u2666', '\u2663'];
+  const cards = Array.isArray(hs.bestCards) && hs.bestCards.length === 5
+    ? hs.bestCards.map((c) => `<span class="gs-pkc${(c & 3) === 1 || (c & 3) === 2 ? ' is-red' : ''}">${RANKS[c >> 2] || '?'}${SUITS[c & 3]}</span>`).join('') : '';
+  const bestName = hs.bestCat >= 0 && hs.bestCat <= 9 ? t('lb_hb_cat_' + hs.bestCat) : '';
+  const hands = (hs.hands | 0) ? `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${hs.hands | 0}</b><span>${t('gs_hs_hands')}</span></div>
+      <div class="gs-tally"><b>${hs.won | 0}</b><span>${t('gs_hs_won')}</span></div>
+      <div class="gs-tally"><b>${money(hs.bigPot)}</b><span>${t('gs_hs_pot')}</span></div>
+      <div class="gs-tally"><b>${bestName ? esc(bestName) : '\u2014'}</b><span>${t('gs_hs_best')}</span></div>
+    </div>
+    ${cards ? `<p class="gs-pkbest">${cards}</p>` : ''}` : '';
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${money(holdemBalance(hb))}</b><span>${t('gs_hb_bank')}</span></div>
@@ -294,6 +311,7 @@ function holdemScreen(rec) {
       <div class="gs-tally"><b>${money(hb.buyins)}</b><span>${t('gs_hb_paid')}</span></div>
       <div class="gs-tally"><b>${hb.cashes | 0}</b><span>${t('gs_hb_cashes')}</span></div>
     </div>
+    ${hands}
     ${diffTable(rec && rec.byDiff)}`;
 }
 
@@ -360,6 +378,34 @@ function sudokuScreen(rec) {
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_pi_solved')}</th><th scope="col">${t('gs_sd_best_time')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/** Contexto: one finished puzzle per play; a give-up is a loss. Average guesses is computed here
+ *  from two stored sums (guesses over SOLVED puzzles / solved), never stored itself. `fewest` is
+ *  0's "never set" sentinel, shown as a dash. The table splits plays by word set (English /
+ *  Spanish), which is what byDiff is keyed by for this game. */
+function contextoScreen(rec) {
+  const ct = (rec && rec.ct) || {};
+  const played = ((rec && rec.total) || {}).played | 0;
+  if (!played) return emptyState('Contexto');
+  const solved = ct.solved | 0;
+  const avg = solved > 0 ? (Math.round(((ct.guesses | 0) / solved) * 10) / 10).toString() : '&mdash;';
+  const byDiff = rec.byDiff || {};
+  const rows = [['en', 'gs_ct_lang_en'], ['es', 'gs_ct_lang_es']].map(([k, labelKey]) => {
+    const b = byDiff[k] || {};
+    return `<tr><th scope="row">${t(labelKey)}</th><td>${b.played | 0}</td><td>${b.won | 0}</td></tr>`;
+  }).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${solved}</b><span>${t('gs_ct_solved')}</span></div>
+      <div class="gs-tally"><b>${avg}</b><span>${t('gs_ct_avg')}</span></div>
+      <div class="gs-tally"><b>${(ct.fewest | 0) > 0 ? ct.fewest | 0 : '&mdash;'}</b><span>${t('gs_ct_fewest')}</span></div>
+      <div class="gs-tally"><b>${ct.noHint | 0}</b><span>${t('gs_ct_nohint')}</span></div>
+    </div>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_ms_played')}</th><th scope="col">${t('gs_ct_solved')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -1176,6 +1222,8 @@ function hasPlays(id, rec) {
   if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
   if (id === 'sudoku') return !!(rec.sd && rec.sd.solved);
   if (id === 'minesweeper') return ((rec.total || {}).played | 0) > 0;
+  // A bankroll top-up or a hand played counts as having played, the same bar holdemScreen uses.
+  if (id === 'holdem') return !!(((rec.total || {}).played | 0) || (rec.hb && ((rec.hb.entries | 0) || (rec.hb.grants | 0))) || (rec.hs && rec.hs.hands));
   if (id === 'skeeball') return !!(rec.sk && rec.sk.played);
   if (id === 'golf') return !!(rec.gf && rec.gf.rounds);
   if (id === 'baseball') return !!(rec.bb && rec.bb.careersStarted);
@@ -1190,6 +1238,7 @@ function headlineOf(id, rec) {
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
   if (id === 'brickblitz') return { n: (rec.bz && rec.bz.bestScore) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'contexto') return { n: (rec.ct && rec.ct.solved) | 0, unitKey: unitKeyOf(id) };
   // Lifetime points, not the best single rack - the same fix leaderboard-ui.js's skPointsAt
   // already made for the Skeeball board's own Points sort (2026-09-01, Matt: "Points should
   // show lifetime points. Not your best single round"). This second call site (My Stats' and
@@ -1496,6 +1545,7 @@ function screenFor(id, st) {
   if (id === 'pipes') return pipesScreen(rec);
   if (id === 'sudoku') return sudokuScreen(rec);
   if (id === 'minesweeper') return minesweeperScreen(rec);
+  if (id === 'contexto') return contextoScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);
@@ -1737,6 +1787,9 @@ function ensureCss() {
     '.gs-gf-cell b{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--hub-ink,#16243a)}',
     '.gs-gf-cell i{font-style:normal;font-size:11px;color:var(--hub-muted,#5b6b82)}',
     '.gs-gf-cell.is-empty b{color:var(--hub-muted,#9aa8bb)}',
+    '.gs-pkbest{display:flex;justify-content:center;gap:6px;margin:-4px 0 14px}',
+    '.gs-pkc{min-width:40px;padding:6px 4px;border-radius:7px;background:#fff;color:#111;border:1px solid #c9d2df;font-weight:800;font-size:1rem;text-align:center}',
+    '.gs-pkc.is-red{color:#c8102e}',
     '.gs-none{margin:0;color:var(--hub-muted,#5b6b82);font-size:.9rem;font-weight:600;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:22px 16px;text-align:center}',
     '.gs-foot{text-align:center;color:var(--hub-muted,#5b6b82);font-size:.78rem;padding:10px 16px 40px;margin:0}',
   ].join('');

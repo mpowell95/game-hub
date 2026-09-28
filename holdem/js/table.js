@@ -12,8 +12,9 @@ import { decide } from './ai.js';
 
 export const RESULT_MS = 4800;        // how long a showdown stays on the table before the next deal
 export const FOLD_WIN_MS = 2400;      // a hand everyone folded to: shorter, nothing to look at
-const BOT_MIN_MS = 800;
-const BOT_MAX_MS = 1700;
+// How long a computer "thinks" before it acts, per the Computer speed setting (2026-09-28, Matt
+// asked for it). Normal is the pace the game shipped with. The rules are the same at every speed.
+export const PACES = { slow: [1500, 2800], normal: [800, 1700], fast: [250, 600] };
 const AUTO_MS = 700;                  // an away / sitting-out player's automatic check or fold
 const FF_MS = 40;                     // fast-forward: a computer's move, no thinking pause
 const FF_RESULT_MS = 350;             // fast-forward through a whole game: each result, briefly
@@ -27,6 +28,7 @@ export class Table {
     // Solo waits for "Tap the table to start the next hand" (the reference app's rule); an online
     // host deals on a timer, because nobody should have to wait on one player's tap.
     this.tapToDeal = !!opts.tapToDeal;
+    this.pace = PACES[opts.pace] ? opts.pace : 'normal';
     // Fast-forward (2026-09-27, Matt: "after i fold ... skip the computer players playing it out").
     // A hand number = race through that hand; 'game' = race through every hand to the end (the
     // player is out). The rules are untouched: the same bots make the same kind of decisions, just
@@ -85,6 +87,14 @@ export class Table {
     this.pump();
   }
 
+  /** Change the computers' thinking time; takes effect from their next move. */
+  setPace(p) {
+    if (!PACES[p] || p === this.pace) return;
+    this.pace = p;
+    const h = this.state.hand;
+    if (h && !h.result && h.toAct >= 0 && this.state.players[h.toAct] && this.state.players[h.toAct].bot) this.pump();
+  }
+
   _fast() {
     return this.ff === 'game' || (this.ff != null && this.ff === this.state.handNo);
   }
@@ -125,7 +135,8 @@ export class Table {
         const p = s.players[i];
         const k = s.k;
         if (p.bot) {
-          const delay = this._fast() ? FF_MS : BOT_MIN_MS + Math.random() * (BOT_MAX_MS - BOT_MIN_MS);
+          const [lo, hi] = PACES[this.pace] || PACES.normal;
+          const delay = this._fast() ? FF_MS : lo + Math.random() * (hi - lo);
           this.timer = setTimeout(() => {
             this.timer = null;
             if (this.dead || s.k !== k) return;

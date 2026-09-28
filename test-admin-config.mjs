@@ -53,13 +53,13 @@ const A = await import('./js/admin-config.js');
 
 // --- normalizeConfig: anything in, the documented shape out ------------------------------------
 console.log('\n--- the shape normalizer ---');
-eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
-eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
+eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
+eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
 eq('junk in the branches is replaced, not trusted',
-  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
+  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
 eq('a real config survives intact',
   A.normalizeConfig({ games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } } }),
-  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
+  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
 
 // --- resolveGameLive: the override sits ON TOP of the code default -----------------------------
 console.log('\n--- is this game live ---');
@@ -140,7 +140,7 @@ console.log('\n--- the local cache ---');
 // boot with, not something it acquires halfway through a session.
 store.set(A.CACHE_KEY, '{ not json');
 eq('a corrupt cache reads as an empty config instead of throwing',
-  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {} }, golf: { courses: {} }, deviceResets: {} });
+  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
 ok('and the code default still decides every game', A.isGameLive('uno', true) === true);
 ok('a devOnly game stays hidden through a corrupt cache', A.isGameLive('cuppong', false) === false);
 ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') === false);

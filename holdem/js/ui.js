@@ -14,7 +14,9 @@
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { deviceId, recordResult, recordHoldemBank, holdemLedger, holdemBalance, HOLDEM_START_BANK, loadStats, statsId } from '../../js/game-stats.js';
+import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, HOLDEM_START_BANK, loadStats, statsId } from '../../js/game-stats.js';
+import { corrections } from '../../js/admin-config.js';
+import { correctHoldemLedger } from '../../js/stats-corrections.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
@@ -24,7 +26,7 @@ import {
   newGame, publicView, legal, blindsOf, SPEEDS, START_CHIPS, MAX_PLAYERS,
   evaluate, bestFive, categoryOf, scoreRanks, RANKS, SUIT_GLYPH, potTotal, payout,
 } from './engine.js';
-import { Table } from './table.js';
+import { Table, PACES } from './table.js';
 import NT from './net-table.js';
 
 const t = makeT(STRINGS);
@@ -32,6 +34,9 @@ const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.holdem.v1';
 const SAVE_KEY = 'gamehub.holdem.save.v1';
 const MP_KEY = 'gamehub.holdem.mp.v1';
+// Which hands this device has already counted in the per-hand stats (recordHoldemHand), so a
+// reload during a result screen cannot count the same hand twice. A short list, newest last.
+const HANDS_KEY = 'gamehub.holdem.hands.v1';
 const CODE_LEN = 4;
 const CLOCK_MS = 45000;          // online turn clock
 const AWAY_MS = 35000;           // no heartbeat change for this long = away (heartbeat is every 10s)
@@ -51,7 +56,7 @@ const TIERS = [
   { id: 'universe', buyin: 10000000, bg: 'linear-gradient(135deg, #8a2fd0, #2a0a5a)' },
 ];
 const tierById = (id) => TIERS.find((x) => x.id === id) || null;
-const bigMoney = (n) => '$' + Math.max(0, n | 0).toLocaleString();
+const bigMoney = (n) => '$' + Math.max(0, Math.floor(+n || 0)).toLocaleString();
 const BANK_TIMEOUT_MS = 8000;
 
 const BOT_NAMES = [
@@ -66,7 +71,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 const fmt = (n) => (n | 0).toLocaleString();
 /** Money the way the reference app prints it: $9200 below ten thousand, then $10.0k, $11.8k. */
 const money = (n) => {
-  n = Math.max(0, n | 0);
+  n = Math.max(0, Math.floor(+n || 0));
   if (n < 10000) return '$' + n;
   if (n < 1000000) return '$' + (n / 1000).toFixed(n < 100000 ? 1 : 0) + 'k';
   return '$' + (n / 1000000).toFixed(1) + 'M';
@@ -84,6 +89,7 @@ function loadSettings() {
     bots: Math.max(1, Math.min(7, s.bots | 0 || 3)),
     skill: [1, 2, 3].includes(s.skill) ? s.skill : profSkill,
     speed: SPEEDS[s.speed] ? s.speed : 'normal',
+    pace: PACES[s.pace] ? s.pace : 'normal',
     netBots: Math.max(0, Math.min(7, s.netBots | 0)),
     netSkill: [1, 2, 3].includes(s.netSkill) ? s.netSkill : 2,
     netTier: typeof s.netTier === 'string' ? s.netTier : null,
@@ -257,6 +263,8 @@ class Game {
         ${seg('skill', [1, 2, 3].map((k) => [k, `<span class="pk-shape">${diffShapeSVG(k)}</span>${esc(t(SKILL_ID[k]))}`]), s.skill)}</div>
       <div class="pk-field"><div class="pk-label">${esc(t('blinds_speed'))} <span class="pk-hint">${esc(speedHint)}</span></div>
         ${seg('speed', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('speed_' + k))]), s.speed)}</div>
+      <div class="pk-field"><div class="pk-label">${esc(t('pace'))}</div>
+        ${seg('pace', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('pace_' + k))]), s.pace)}</div>
       <button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="choose">${esc(t('choose_table'))}</button>`;
     const online = `
       ${mpSave ? `<button type="button" class="pk-btn pk-btn-primary" data-act="rejoin">${esc(t('back_to_table', { code: mpSave.code }))}</button>` : ''}
@@ -313,9 +321,19 @@ class Game {
 
   /** This device's ledger plus (once read) the player's other devices', as one balance. */
   bank() {
-    const l = holdemLedger();
+    const l = this._myLedger();
     const r = this.bankRemote || {};
-    return holdemBalance({ buyins: (l.buyins | 0) + (r.buyins | 0), winnings: (l.winnings | 0) + (r.winnings | 0), grants: (l.grants | 0) + (r.grants | 0) });
+    const n = (v) => (Number.isFinite(+v) ? Math.floor(+v) : 0);
+    return holdemBalance({ buyins: n(l.buyins) + n(r.buyins), winnings: n(l.winnings) + n(r.winnings), grants: n(l.grants) + n(r.grants) });
+  }
+
+  /** This device's ledger as the leaderboard sees it: an admin void (js/stats-corrections.js) is
+   *  applied here too, or the game would keep spending money every other screen says is gone. */
+  _myLedger() {
+    const l = holdemLedger();
+    let corr = null;
+    try { corr = ((corrections() || {}).holdem || {})[statsId()] || null; } catch { corr = null; }
+    return corr ? correctHoldemLedger(l, corr) : l;
   }
 
   /** Read the player's other devices' ledgers (the same cross-device read My Stats uses). The
@@ -325,14 +343,15 @@ class Game {
       const [net, agg] = await Promise.all([import('../../js/stats-net.js'), import('../../js/players-agg.js')]);
       const all = await Promise.race([net.readPlayersOnce(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
       if (!all || this.dead) return;
-      const mine = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats());
+      const mine = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats(), corrections());
       const hb = mine && mine.games && mine.games.holdem && mine.games.holdem.hb;
       if (!hb) return;
-      const l = holdemLedger();
+      const l = this._myLedger();
+      const n = (v) => (Number.isFinite(+v) ? Math.floor(+v) : 0);
       this.bankRemote = {
-        buyins: Math.max(0, (hb.buyins | 0) - (l.buyins | 0)),
-        winnings: Math.max(0, (hb.winnings | 0) - (l.winnings | 0)),
-        grants: Math.max(0, (hb.grants | 0) - (l.grants | 0)),
+        buyins: Math.max(0, n(hb.buyins) - n(l.buyins)),
+        winnings: Math.max(0, n(hb.winnings) - n(l.winnings)),
+        grants: Math.max(0, n(hb.grants) - n(l.grants)),
       };
       if (this.screen === 'setup' || this.screen === 'tiers') this.render();
     } catch { /* offline: this device's own ledger is still exact for this device */ }
@@ -370,6 +389,8 @@ class Game {
           </div></div>
         <div class="pk-field"><div class="pk-label">${esc(t('blinds_speed'))} <span class="pk-hint">${esc(t('speed_hint', { n: SPEEDS[speed] }))}</span></div>
           ${seg('speed', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('speed_' + k))]), speed)}</div>
+        ${mp.bots.length ? `<div class="pk-field"><div class="pk-label">${esc(t('pace'))}</div>
+          ${seg('pace', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('pace_' + k))]), this.settings.pace)}</div>` : ''}
         <button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="startnet" ${count >= 2 ? '' : 'disabled'}>${esc(count >= 2 ? t('start_game') : t('need_two'))}</button>`
       : `<p class="pk-tierline" style="background:${tier ? tier.bg : '#222'}">${esc(tierLine)}</p>
          ${tier && this.bank() < tier.buyin ? `<p class="pk-hint pk-center-text">${esc(t('cant_cover'))}</p>` : ''}
@@ -416,6 +437,7 @@ class Game {
             <div class="pk-msg" aria-live="polite"></div>
             <div class="pk-board"></div>
             <div class="pk-potrow">
+              <button type="button" class="pk-lastbtn" data-act="last" hidden aria-label="${esc(t('last_hand'))}"><span aria-hidden="true">&#x21BA;</span><small>${esc(t('last_hand'))}</small></button>
               <div class="pk-potbox"></div>
               <div class="pk-mybet"></div>
             </div>
@@ -558,6 +580,8 @@ class Game {
     if (canSkip) potHTML += `<span class="pk-skiphint">${esc(t('tap_skip'))}</span>`;
     q('.pk-potbox').innerHTML = potHTML;
     q('.pk-felt').classList.toggle('is-tappable', !!((res && this.kind === 'solo' && !pub.over) || canSkip));
+    const lastBtn = q('.pk-lastbtn');
+    if (lastBtn) lastBtn.hidden = !this.lastHand;
 
     // --- my cards
     const mine = q('.pk-mycards');
@@ -689,7 +713,7 @@ class Game {
       ov.className = 'pk-overlay';
       this.el.appendChild(ov);
     }
-    const sig = want + ':' + (this.pub ? this.pub.k : '') + ':' + (this.confirm || '');
+    const sig = want + ':' + (want === 'last' ? (this.lastHand && this.lastHand.key) : (this.pub ? this.pub.k : '')) + ':' + (this.confirm || '');
     if (ov.dataset.sig === sig) return;
     ov.dataset.sig = sig;
     if (want === 'help') {
@@ -700,6 +724,8 @@ class Game {
           <ol class="pk-ranks">${HELP_HANDS.map((cards, k) => `<li><span class="pk-rname">${esc(t('hn_' + (9 - k)))}</span><span class="pk-rcards">${cards.map(([r, s]) => cardHTML(r * 4 + s, 'is-tiny')).join('')}</span></li>`).join('')}</ol>
           <p class="pk-hint">${esc(t('help_blinds', { chips: money(START_CHIPS) }))}</p>
         </div>`;
+    } else if (want === 'last') {
+      ov.innerHTML = this._lastHandHTML();
     } else if (want === 'confirm') {
       const hostClose = this.kind === 'host';
       ov.innerHTML = `<div class="pk-modal pk-modal-sm" role="dialog" aria-modal="true">
@@ -782,7 +808,8 @@ class Game {
       case 'deal': return this._newSolo(b.dataset.tier);
       case 'to-setup-tab': this.screen = 'setup'; return this.render(true);
       case 'topup': {
-        const need = HOLDEM_START_BANK - this.bank();
+        // Never more than the starting stake in one top-up (the stats layer refuses anything bigger).
+        const need = Math.min(HOLDEM_START_BANK, HOLDEM_START_BANK - this.bank());
         if (need > 0 && this.bank() < TIERS[0].buyin) recordHoldemBank({ grant: need });
         return this.render(true);
       }
@@ -799,6 +826,7 @@ class Game {
         return this.render();
       }
       case 'help': this.overlay = 'help'; return this._renderOverlay();
+      case 'last': if (this.lastHand) { this.overlay = 'last'; this._renderOverlay(); } return undefined;
       case 'close':
         if (this.overlay === 'over') this.overDismissed = this.pub && this.pub.k;
         this.overlay = null; return this._renderOverlay();
@@ -984,6 +1012,7 @@ class Game {
     if (k === 'tab') s.tab = v === 'online' ? 'online' : 'solo';
     else if (k === 'skill' || k === 'netSkill') s[k] = +v;
     else if (k === 'speed' && SPEEDS[v]) s.speed = v;
+    else if (k === 'pace' && PACES[v]) { s.pace = v; if (this.table) this.table.setPace(v); }
     this.error = '';
     this._saveSettings();
     if (this.screen === 'lobby' && this.mp && this.mp.host) this._pushLobby();
@@ -1018,7 +1047,7 @@ class Game {
     this.screen = 'table';
     this.overlay = null;
     this.overDismissed = null;
-    this.table = new Table(state, { tapToDeal: true, onChange: () => this._onLocalChange() });
+    this.table = new Table(state, { tapToDeal: true, pace: this.settings.pace, onChange: () => this._onLocalChange() });
     this.myIdx = state.players.findIndex((p) => !p.bot);
     this.render(true);
     this.table.start();
@@ -1047,6 +1076,7 @@ class Game {
     this.hole = s.hand && s.hand.holes && s.hand.holes[this.myIdx] ? s.hand.holes[this.myIdx] : null;
     this.clockEnd = tb.clockEnd;
     this._maybeRecord();
+    this._handEnd();
     if (this.kind === 'solo') writeJSON(SAVE_KEY, { state: s, at: Date.now() });
     else if (this.kind === 'host') { this._saveMp(); this._schedulePublish(); }
     if (this.screen === 'table') {
@@ -1103,6 +1133,95 @@ class Game {
       return;
     }
     if (this.table) this.table.back(this.myIdx);
+  }
+
+  // ----------------------------------------------------------------------- hands ---
+
+  /** A hand just ended (solo, host and guest all come through here): keep it for the "Last hand"
+   *  replay, and count it once in the per-hand stats (Matt, 2026-09-28: hands won, biggest pot,
+   *  best hand ever). Everything read here is PUBLIC (engine.publicView) plus this device's own
+   *  two cards, so a guest's numbers come from exactly what it was shown. */
+  _handEnd() {
+    const pub = this.pub, h = pub && pub.hand, res = h && h.result;
+    if (!res || this.myIdx < 0) return;
+    const key = `${pub.gid || ''}:${pub.handNo}`;
+    if (this.lastHand && this.lastHand.key === key) return;
+    const my = this.myIdx;
+    const hole = this.hole ? this.hole.slice() : null;
+    this.lastHand = {
+      key, no: pub.handNo, board: (h.board || []).slice(), log: (h.log || []).slice(),
+      pots: res.pots || [], reveal: res.reveal || {}, scores: res.scores || {}, noShow: !!res.noShow,
+      names: pub.players.map((p) => ({ name: p.name, emoji: p.emoji })), folded: (h.folded || []).slice(),
+      my, hole,
+    };
+    if (this.overlay === 'last') this._renderOverlay();
+    // Counted only for a hand this player was actually dealt into (their two cards are known).
+    if (!hole) return;
+    const done = readJSON(HANDS_KEY);
+    const list = Array.isArray(done) ? done : [];
+    if (list.includes(key)) return;
+    list.push(key);
+    if (list.length > 40) list.splice(0, list.length - 40);
+    writeJSON(HANDS_KEY, list);
+    let amt = 0;
+    res.pots.forEach((p) => { if (p.winners.includes(my)) amt += Math.floor(p.amount / p.winners.length); });
+    let score = 0, cat = -1, cards = [];
+    if (!(h.folded && h.folded[my]) && (h.board || []).length === 5) {
+      const bf = bestFive([...hole, ...h.board]);
+      score = bf.score;
+      cat = categoryOf(score);
+      if (cat === 8 && scoreRanks(score)[0] === 12) cat = 9;     // a royal flush gets its own name
+      cards = bf.cards;
+    }
+    try { recordHoldemHand({ won: amt > 0, amt, score, cat, cards }); } catch (e) { console.warn('[holdem] hand stats write failed', e); }
+  }
+
+  /** The "Last hand" sheet: the board, who won what with which hand, everybody's shown cards (and
+   *  this player's own, even folded), then every action street by street. */
+  _lastHandHTML() {
+    const L = this.lastHand;
+    if (!L) return `<div class="pk-modal pk-modal-sm" role="dialog" aria-modal="true"><button type="button" class="pk-x" data-act="close" aria-label="${esc(t('done'))}">&#x2715;</button><p>${esc(t('last_none'))}</p></div>`;
+    const nm = (i) => (i === L.my ? t('last_you') : ((L.names[i] || {}).name || '?'));
+    const tiny = (cs) => cs.map((c) => cardHTML(c, 'is-tiny')).join('');
+    const results = L.pots.map((p, k) => {
+      const who = p.winners.map(nm);
+      let line;
+      if (p.winners.length > 1) line = t('last_split', { names: who.join(', '), n: money(p.amount) });
+      else if (L.noShow || p.score < 0 || L.scores[p.winners[0]] == null) {
+        line = p.winners[0] === L.my ? t('last_you_take', { n: money(p.amount) }) : t('last_takes', { name: who[0], n: money(p.amount) });
+      } else {
+        const hand = handName(L.scores[p.winners[0]]);
+        line = p.winners[0] === L.my ? t('last_you_win', { n: money(p.amount), hand }) : t('last_wins', { name: who[0], n: money(p.amount), hand });
+      }
+      return `<li>${k ? `<small>${esc(t('last_side'))}</small> ` : ''}${esc(line)}</li>`;
+    }).join('');
+    const shownIdx = Object.keys(L.reveal).map(Number);
+    if (L.hole && !shownIdx.includes(L.my)) shownIdx.unshift(L.my);
+    const shows = shownIdx.map((i) => {
+      const cs = L.reveal[i] || (i === L.my ? L.hole : null);
+      if (!cs) return '';
+      const sc = L.scores[i];
+      const note = sc != null ? handName(sc) : (L.folded[i] ? t('last_folded') : '');
+      const win = L.pots.some((p) => p.winners.includes(i));
+      return `<li${win ? ' class="is-first"' : ''}><span class="pk-lav">${esc((L.names[i] || {}).emoji || '')}</span><span class="pk-lname">${esc(nm(i))}</span><span class="pk-lcards">${tiny(cs)}</span><span class="pk-lnote">${esc(note)}</span></li>`;
+    }).join('');
+    const streets = ['preflop', 'flop', 'turn', 'river'];
+    const boardAt = { preflop: [], flop: L.board.slice(0, 3), turn: L.board.slice(3, 4), river: L.board.slice(4, 5) };
+    const acts = streets.map((st) => {
+      const rows = L.log.filter((e) => e.st === st);
+      const cards = boardAt[st];
+      if (!rows.length && !cards.length) return '';
+      const lines = rows.map((e) => `<li><b>${esc(nm(e.i))}</b> ${esc(t((e.i === L.my ? 'lgy_' : 'lg_') + e.a, { n: money(e.amt) }))}</li>`).join('');
+      return `<div class="pk-lstreet"><div class="pk-lsthead"><span>${esc(t('street_' + st))}</span>${cards.length ? `<span class="pk-lcards">${tiny(cards)}</span>` : ''}</div>${lines ? `<ol class="pk-lacts">${lines}</ol>` : ''}</div>`;
+    }).join('');
+    return `<div class="pk-modal pk-last" role="dialog" aria-modal="true" aria-label="${esc(t('last_hand'))}">
+        <button type="button" class="pk-x" data-act="close" aria-label="${esc(t('done'))}">&#x2715;</button>
+        <h2 class="pk-over-title">${esc(t('last_title', { n: L.no }))}</h2>
+        ${L.board.length ? `<div class="pk-lboard">${tiny(L.board)}</div>` : ''}
+        <ul class="pk-lres">${results}</ul>
+        ${shows ? `<ul class="pk-lshow">${shows}</ul>` : ''}
+        ${acts}
+      </div>`;
   }
 
   // ----------------------------------------------------------------------- stats ---
@@ -1259,7 +1378,7 @@ class Game {
         this._attach();
         if (save.state && room.pk && room.pk.pub) {
           this.screen = 'table';
-          this.table = new Table(save.state, { clockMs: CLOCK_MS, onChange: () => this._onLocalChange() });
+          this.table = new Table(save.state, { clockMs: CLOCK_MS, pace: this.settings.pace, onChange: () => this._onLocalChange() });
           this.myIdx = save.state.players.findIndex((p) => p.seat === 0 && !p.bot);
           this.render(true);
           this.table.start();
@@ -1336,7 +1455,7 @@ class Game {
     this.screen = 'table';
     this.overlay = null;
     this.overDismissed = null;
-    this.table = new Table(state, { clockMs: CLOCK_MS, onChange: () => this._onLocalChange() });
+    this.table = new Table(state, { clockMs: CLOCK_MS, pace: this.settings.pace, onChange: () => this._onLocalChange() });
     this.myIdx = state.players.findIndex((p) => p.seat === 0 && !p.bot);
     this.pub = publicView(state);
     this.pub.gid = state.gid;
@@ -1472,6 +1591,7 @@ class Game {
     if (changed) this.sending = false;
     this._stake();
     this._maybeRecord();
+    this._handEnd();
     if (first) { this.screen = 'table'; this.overlay = null; this.render(true); }
     else if (changed || !this.hole !== !this._hadHole) this._paintTable();
     this._hadHole = !!this.hole;

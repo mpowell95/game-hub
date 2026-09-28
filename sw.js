@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v996';
+const CACHE = 'game-hub-v998';
 
 const ASSETS = [
   './',
@@ -189,6 +189,16 @@ const ASSETS = [
   './minesweeper/js/ui.js',
   './minesweeper/js/engine.js',
   './minesweeper/js/strings.js',
+  './contexto/',
+  './contexto/index.html',
+  './contexto/css/contexto.css',
+  './contexto/js/ui.js',
+  './contexto/js/engine.js',
+  './contexto/js/strings.js',
+  './contexto/data/en.json',
+  './contexto/data/en.bin',
+  './contexto/data/es.json',
+  './contexto/data/es.bin',
   './sudoku/',
   './sudoku/index.html',
   './sudoku/css/sudoku.css',
@@ -583,7 +593,10 @@ const REST = ASSETS.filter((p) => !isShellAsset(p));
 // ONLY put a file here if it is BOTH large AND useless to anyone not playing that one game. Game
 // CODE must never be lazy: a game's modules are what the launcher tile opens, they are small, and
 // making them lazy would just move the 2026-09-01 cache-first win back off a phone.
-const LAZY_REST = /^\.\/boggle\/data\/words[a-z-]*\.txt$/;
+// Contexto's word models (2026-09-28) are the same case: ~3.7 MB per language, useless to anyone
+// not playing it. The game shows its own "couldn't load the words" screen with Retry (and retries
+// on `online`), so a first-time offline player gets an honest answer.
+const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin))$/;
 const isLazyAsset = (p) => LAZY_REST.test(p);
 
 const LAZY = REST.filter(isLazyAsset);
@@ -742,6 +755,16 @@ const REST_MANIFEST = {
   './minesweeper/js/ui.js': '5da9a0a405',
   './minesweeper/js/engine.js': '4f9e1b50d4',
   './minesweeper/js/strings.js': '59423addbe',
+  './contexto/': '249279e291',
+  './contexto/index.html': '249279e291',
+  './contexto/css/contexto.css': '0f05bf729f',
+  './contexto/js/ui.js': '1fcbcb48d8',
+  './contexto/js/engine.js': '01060b503d',
+  './contexto/js/strings.js': '51207f42d2',
+  './contexto/data/en.json': '361a043c15',
+  './contexto/data/en.bin': '5e6b39a78e',
+  './contexto/data/es.json': '5262cc4d43',
+  './contexto/data/es.bin': 'a9d2e833b0',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
   './sudoku/css/sudoku.css': 'd27cef9c33',
@@ -818,13 +841,13 @@ const REST_MANIFEST = {
   './air-hockey/net-test.html': 'aff33de9b9',
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
-  './holdem/css/holdem.css': '64ee00e5ba',
-  './holdem/js/ui.js': '86592348dd',
-  './holdem/js/engine.js': 'a3002c977c',
+  './holdem/css/holdem.css': '55fa749646',
+  './holdem/js/ui.js': 'a356d0771e',
+  './holdem/js/engine.js': '8bd655dd05',
   './holdem/js/ai.js': '501a498bec',
-  './holdem/js/table.js': '2455e01459',
+  './holdem/js/table.js': '2f040ebfb9',
   './holdem/js/net-table.js': '287aa65964',
-  './holdem/js/strings.js': 'f7dc6f99b0',
+  './holdem/js/strings.js': 'e747f97b20',
   './pinball2/index.html': '6d09047aef',
   './pinball2/editor/index.html': 'd85ed3028b',
   './pinball2/editor/editor.js': '9c0e423d33',
@@ -858,13 +881,13 @@ const REST_MANIFEST = {
   './skeeball/js/ui.js': '50ef7223f1',
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': 'bb54739524',
-  './cup-pong/css/cup-pong.css': '16945a7b82',
-  './cup-pong/js/ui.js': '4f532a2d1a',
+  './cup-pong/css/cup-pong.css': '5295e5fa3a',
+  './cup-pong/js/ui.js': '7beb2029dd',
   './cup-pong/js/geom.js': 'af6eb8b421',
   './cup-pong/js/rack.js': '495da6d4b0',
   './cup-pong/js/physics.js': '7dc862ade6',
   './cup-pong/js/render.js': '7ed3946e42',
-  './cup-pong/js/strings.js': '6992e08745',
+  './cup-pong/js/strings.js': '7ce05f79ad',
   './cup-pong/js/match.js': '180d1cdc53',
   './cup-pong/js/cpu.js': '215682143c',
   './hoops4/index.html': 'dce91b13bd',

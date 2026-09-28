@@ -172,7 +172,14 @@
 //                                                   // See recordAirHockey.
 //       holdem: {
 //         total, byDiff,
-//         hb: { buyins, winnings, grants, best, cashes, entries } },
+//         hb: { buyins, winnings, grants, best, cashes, entries },
+//         hs: { hands, won, bigPot, best, bestCat, bestCards } },
+//                                                   // hs (2026-09-28): per-HAND counters, one write per
+//                                                   // hand this player was dealt into. hands/won are
+//                                                   // additive; bigPot (chips collected in one hand) and
+//                                                   // best (a hand score, engine.evaluate) are Math.max
+//                                                   // ONLY, and bestCat/bestCards ride with best as one
+//                                                   // unit. See recordHoldemHand.
 //                                                   // the BANKROLL (2026-09-27), kept as a LEDGER of
 //                                                   // additive counters and never as a stored balance:
 //                                                   // balance = HOLDEM_START_BANK + winnings + grants
@@ -198,6 +205,12 @@
 //                                                   // its zero is the "never set" sentinel (the same
 //                                                   // convention as battleship's fewestShotsWin) --
 //                                                   // never a real elapsed time. See recordSudoku
+//       contexto: {
+//         total, byDiff,                           // byDiff keyed en|es (the word set, no tier)
+//         ct: { solved, guesses, hints, noHint, fewest } },
+//                                                   // one finished puzzle each; a give-up is a loss.
+//                                                   // guesses sums SOLVED puzzles only; fewest is
+//                                                   // LOWER-is-better, 0 = never set. See recordContexto
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -211,7 +224,7 @@ const STATS_KEY = 'gamehub.stats';
 // traces"): GAMES is the STORE's shape, and players' recorded games still live under that key, in
 // this store and in players/<id>. Nothing displays it (ARCHIVED_GAMES keeps it out of every total);
 // nothing deletes it (THE LAW). To restore the game, see archive/pinball/CLAUDE.md.
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto'];
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
 const ARCHIVED_GAMES = ['pinball'];
 
@@ -450,6 +463,16 @@ function ensureMs(g) {
   if (!Number.isFinite(g.ms.flagsRight)) g.ms.flagsRight = 0;
   if (!g.ms.bestTimeMs || typeof g.ms.bestTimeMs !== 'object') g.ms.bestTimeMs = {};
   for (const lv of MS_LEVELS) if (!Number.isFinite(g.ms.bestTimeMs[lv])) g.ms.bestTimeMs[lv] = 0;
+}
+
+/** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
+ *  additive lifetime counters (`guesses` sums the typed guesses of SOLVED puzzles only, so
+ *  guesses/solved is an honest average). `fewest` is the fewest typed guesses in any solve,
+ *  LOWER-is-better with 0 as the "never set" sentinel - Sudoku's bestTimeMs convention. A give-up
+ *  is total.lost; it is not copied here (see ensureMs on second copies). */
+function ensureCt(g) {
+  if (!g.ct || typeof g.ct !== 'object') g.ct = { solved: 0, guesses: 0, hints: 0, noHint: 0, fewest: 0 };
+  for (const k of ['solved', 'guesses', 'hints', 'noHint', 'fewest']) if (!Number.isFinite(g.ct[k])) g.ct[k] = 0;
 }
 
 /** Escoba: the capture-quality counter (escobas the human made). */
@@ -876,10 +899,12 @@ function normalize(raw) {
   ensureGf(st.games.golf);
   ensureBb(st.games.baseball);
   ensureMs(st.games.minesweeper);
+  ensureCt(st.games.contexto);
   ensureBz(st.games.brickblitz);
   ensureHb(st.games.holdem);
   ensureAh(st.games.airhockey);
   ensureCp(st.games.cuppong);
+  ensureHs(st.games.holdem);
   return st;
 }
 
@@ -1032,6 +1057,7 @@ function drainPendingResults(st) {
     if (!e || GAMES.indexOf(e.game) < 0) continue;
     if (e.h2h) { applyHeadToHead(st, e.game, e.h2h, e.won); applied++; continue; }
     if (e.bank) { applyHoldemBank(st.games.holdem, e.bank); applied++; continue; }
+    if (e.hand) { applyHoldemHand(st.games.holdem, e.hand); applied++; continue; }
     bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
     if (e.game === 'escoba') {
       ensureEs(st.games.escoba);
@@ -1444,6 +1470,30 @@ export function recordSudoku(tier, extras = {}) {
       const cur = g.sd.bestTimeMs[t] | 0;
       g.sd.bestTimeMs[t] = cur > 0 ? Math.min(cur, timeMs) : timeMs;
     }
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Contexto: one finished puzzle. `lang` ('en'|'es', the word set played) keys byDiff, so the
+ *  per-language play count is kept; it maps to no difficulty tier. `won` false = gave up.
+ *  `extras` = { guesses, hints }: typed guesses (the winning one included) and hints used.
+ *  WRITES ARE ADDITIVE ONLY (THE LAW rule 2); `fewest` takes Math.min against a nonzero prior. */
+export function recordContexto(lang, won, extras = {}) {
+  if (tooFast('contexto')) return null;
+  const st = loadStats();
+  const g = st.games.contexto;
+  ensureCt(g);
+  const guesses = Math.max(0, extras.guesses | 0);
+  const hints = Math.max(0, extras.hints | 0);
+  bumpTotals(g, lang === 'es' ? 'es' : 'en', won === true);
+  g.ct.hints += hints;
+  if (won === true) {
+    g.ct.solved += 1;
+    g.ct.guesses += guesses;
+    if (hints === 0) g.ct.noHint += 1;
+    if (guesses > 0) g.ct.fewest = g.ct.fewest > 0 ? Math.min(g.ct.fewest, guesses) : guesses;
   }
   st.updatedAt = new Date().toISOString();
   persist(st);
@@ -2152,7 +2202,10 @@ function ensureHb(g) {
 /** The bankroll a ledger adds up to. Accepts a partial/missing ledger. */
 export function holdemBalance(hb) {
   const h = hb || {};
-  return HOLDEM_START_BANK + (h.winnings | 0) + (h.grants | 0) - (h.buyins | 0);
+  // Not `| 0`: the top table pays $52M a win, so a bankroll can pass 2^31 and `| 0` would wrap it
+  // negative. Plain numbers are exact far beyond anything this game can reach.
+  const n = (v) => (Number.isFinite(+v) ? Math.floor(+v) : 0);
+  return HOLDEM_START_BANK + n(h.winnings) + n(h.grants) - n(h.buyins);
 }
 
 function applyHoldemBank(g, e) {
@@ -2164,9 +2217,109 @@ function applyHoldemBank(g, e) {
   if (grant) g.hb.grants += grant;
 }
 
+// --- cheat deterrents (2026-09-28) -------------------------------------------------------------
+// Matt asked for Hold'em to be made "cheat proof", and chose DETERRENTS over a server dealer. Say
+// plainly what that means: nothing here stops somebody editing localStorage by hand - there is no
+// server, and every number is written by code the player controls (root CLAUDE.md, "Say plainly
+// what this does not do"). What it does:
+//   1. A write whose AMOUNT the game could never produce is refused (a buy-in that is not a table's
+//      price, a prize that no finish at any table pays, a top-up bigger than the starting stake),
+//      and every refusal is counted into the `rate` diagnostic that rides the stats mirror.
+//   2. Prizes arriving faster than anyone can finish a tournament are refused (HOLDEM_PRIZE_MAX).
+//   3. holdemSuspect() flags a ledger that could not have been produced by play, at READ time, so
+//      the leaderboard can say "under review" instead of ranking it - and Matt can void it from the
+//      admin page (js/stats-corrections.js, an overlay: the raw ledger is never touched).
+// The amounts below MUST match holdem/js/ui.js's TIERS and holdem/js/engine.js's payout();
+// holdem/js/test.js fails if they drift.
+export const HOLDEM_BUYINS = [500, 1000, 5000, 10000, 100000, 1000000, 10000000];
+const HOLDEM_MAX_SEATS = 8;
+const HOLDEM_PRIZE_MAX = 20;           // prizes per minute: a heads-up game takes a person >= 10 s
+function holdemPayout(place, n, b) {
+  if (!b || n < 2 || place < 1) return 0;
+  const pot = b * n;
+  if (n === 2) return place === 1 ? pot : 0;
+  const first = Math.round(pot * 0.65);
+  return place === 1 ? first : place === 2 ? pot - first : 0;
+}
+let _prizeSet = null;
+/** Is this an amount some finish at some table actually pays? */
+export function holdemValidPrize(prize) {
+  if (!_prizeSet) {
+    _prizeSet = new Set();
+    for (const b of HOLDEM_BUYINS) for (let n = 2; n <= HOLDEM_MAX_SEATS; n++) for (const pl of [1, 2]) {
+      const v = holdemPayout(pl, n, b);
+      if (v > 0) _prizeSet.add(v);
+    }
+  }
+  return _prizeSet.has(prize);
+}
+const HOLDEM_MAX_PRIZE = Math.max(...HOLDEM_BUYINS.map((b) => Math.max(...[2, 3, 4, 5, 6, 7, 8].map((n) => holdemPayout(1, n, b)))));
+
+/** Why a ledger could not have come from real play, or '' when it could. Pure; works on one
+ *  device's ledger or a person's combined one (every check survives adding two real ledgers). A
+ *  corrected ledger (after an admin void) passes: its best-based checks only run while best > 0. */
+export function holdemSuspect(hb) {
+  const h = hb || {};
+  const f = ['buyins', 'winnings', 'grants', 'best', 'cashes', 'entries'];
+  for (const k of f) {
+    const v = h[k] == null ? 0 : h[k];
+    if (!Number.isFinite(v) || v < 0 || Math.floor(v) !== v) return 'bad-number';
+  }
+  const { buyins = 0, winnings = 0, grants = 0, best = 0, cashes = 0, entries = 0 } = h;
+  if (cashes > entries) return 'more-prizes-than-games';
+  if (winnings > 0 && !cashes) return 'winnings-without-prize';
+  if (entries && buyins < entries * HOLDEM_BUYINS[0]) return 'buyins-too-small';
+  if (buyins > entries * HOLDEM_BUYINS[HOLDEM_BUYINS.length - 1]) return 'buyins-too-big';
+  if (grants > entries * HOLDEM_START_BANK) return 'too-many-top-ups';
+  if (best > 0) {
+    if (best > HOLDEM_MAX_PRIZE || !holdemValidPrize(best)) return 'impossible-prize';
+    if (winnings > cashes * best) return 'winnings-too-big';
+    if (winnings < best) return 'winnings-too-small';
+  }
+  return '';
+}
+
+function holdemRefuse(why, e) {
+  let rec = null;
+  try { rec = JSON.parse(localStorage.getItem(RATE_KEY) || 'null'); } catch { rec = null; }
+  if (!rec || typeof rec !== 'object') rec = { seen: {}, blocked: {} };
+  if (!rec.seen || typeof rec.seen !== 'object') rec.seen = {};
+  if (!rec.blocked || typeof rec.blocked !== 'object') rec.blocked = {};
+  const now = Date.now();
+  const b = rec.blocked['holdem-bank'] || { n: 0, firstAt: now };
+  b.n = (b.n | 0) + 1; b.lastAt = now; b.firstAt = b.firstAt || now; b.why = why;
+  rec.blocked['holdem-bank'] = b;
+  try { localStorage.setItem(RATE_KEY, JSON.stringify(rec)); } catch { /* the refusal itself stands */ }
+  console.warn(`[game-stats] Hold'em bankroll write REFUSED (${why}): the game never produces`, e);
+  return null;
+}
+
+/** Prizes are rate-limited on their own clock (not the 30/min result gate, which Hold'em's bank
+ *  writes are deliberately outside of). Returns true when this prize is one too many. */
+function holdemPrizeTooFast() {
+  let rec = null;
+  try { rec = JSON.parse(localStorage.getItem(RATE_KEY) || 'null'); } catch { rec = null; }
+  if (!rec || typeof rec !== 'object') rec = { seen: {}, blocked: {} };
+  if (!rec.seen || typeof rec.seen !== 'object') rec.seen = {};
+  const now = Date.now();
+  const recent = (Array.isArray(rec.seen['holdem-prize']) ? rec.seen['holdem-prize'] : []).filter((x) => Number.isFinite(x) && now - x < RATE_WINDOW_MS);
+  if (recent.length >= HOLDEM_PRIZE_MAX) return true;
+  recent.push(now);
+  rec.seen['holdem-prize'] = recent;
+  try { localStorage.setItem(RATE_KEY, JSON.stringify(rec)); } catch { /* a full disk must not block a real prize */ }
+  return false;
+}
+
 /** One bankroll movement: `{ buyin }` when a game starts, `{ prize }` when a paid place is decided,
- *  `{ grant }` for the free top-up. Returns this device's ledger after the write. */
+ *  `{ grant }` for the free top-up. Returns this device's ledger after the write, or null when the
+ *  write was refused as impossible (see the deterrents above). */
 export function recordHoldemBank(e) {
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
+  const buyin = n(e && e.buyin), prize = n(e && e.prize), grant = n(e && e.grant);
+  if (buyin && HOLDEM_BUYINS.indexOf(buyin) < 0) return holdemRefuse('buy-in', e);
+  if (prize && !holdemValidPrize(prize)) return holdemRefuse('prize', e);
+  if (grant > HOLDEM_START_BANK) return holdemRefuse('top-up', e);
+  if (prize && holdemPrizeTooFast()) return holdemRefuse('too-fast', e);
   const st = loadStats();
   applyHoldemBank(st.games.holdem, e || {});
   st.updatedAt = new Date().toISOString();
@@ -2179,6 +2332,49 @@ export function holdemLedger() {
   const g = loadStats().games.holdem;
   ensureHb(g);
   return Object.assign({}, g.hb);
+}
+
+// --- Texas Hold'em hand stats (2026-09-28) ------------------------------------------------------
+// Matt picked "more stats: hands won, biggest pot, best hand ever". One write per HAND this player
+// was dealt into, so it is deliberately NOT behind the 30-results-a-minute gate (a hand is not a
+// result, and a fast-forwarded table can legitimately finish hands quickly). Additive counters and
+// Math.max bests only (rule 2); a failed write is queued like any other.
+function ensureHs(g) {
+  if (!g.hs || typeof g.hs !== 'object') g.hs = { hands: 0, won: 0, bigPot: 0, best: 0, bestCat: -1, bestCards: [] };
+  for (const k of ['hands', 'won', 'bigPot', 'best']) if (!Number.isFinite(g.hs[k])) g.hs[k] = 0;
+  if (!Number.isFinite(g.hs.bestCat)) g.hs.bestCat = -1;
+  if (!Array.isArray(g.hs.bestCards)) g.hs.bestCards = [];
+}
+
+function applyHoldemHand(g, e) {
+  ensureHs(g);
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
+  g.hs.hands += 1;
+  if (e.won) {
+    g.hs.won += 1;
+    g.hs.bigPot = Math.max(g.hs.bigPot | 0, n(e.amt));
+  }
+  const score = n(e.score);
+  if (score > (g.hs.best | 0) && Array.isArray(e.cards) && e.cards.length === 5) {
+    g.hs.best = score;
+    g.hs.bestCat = Number.isFinite(+e.cat) ? Math.floor(+e.cat) : -1;
+    g.hs.bestCards = e.cards.map((c) => c | 0);
+  }
+}
+
+/** One hand this player was dealt into: `{ won, amt, score, cat, cards }` - `amt` the chips they
+ *  collected, `score`/`cat`/`cards` their best five when they saw all five board cards (0 / -1 /
+ *  [] otherwise). */
+export function recordHoldemHand(e) {
+  const hand = {
+    won: !!(e && e.won), amt: (e && e.amt) | 0, score: (e && e.score) | 0,
+    cat: e && Number.isFinite(+e.cat) ? +e.cat : -1, cards: (e && Array.isArray(e.cards)) ? e.cards.slice(0, 5) : [],
+  };
+  const st = loadStats();
+  applyHoldemHand(st.games.holdem, hand);
+  st.updatedAt = new Date().toISOString();
+  persistOrQueue(st, { game: 'holdem', hand });
+  return Object.assign({}, st.games.holdem.hs);
 }
 
 /** Multiplayer head-to-head. CAPTURE ONLY -- nothing displays this yet, and that is deliberate.
