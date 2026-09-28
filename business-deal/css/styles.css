@@ -168,7 +168,7 @@ html, body {
   font-size: 26px; color: rgba(255,255,255,.08); letter-spacing: 1px; pointer-events: none;
 }
 .pile-stack { position: relative; z-index: 1; }
-#draw-pile .cardback {
+#draw-pile .cardback, #bd-flight .cardback {
   width: 70px; height: 98px; border-radius: 9px;
   background: linear-gradient(145deg, #15a07a, #0c6b53);
   border: 2px solid #0a4a39;
@@ -177,9 +177,9 @@ html, body {
   color: #eafff5; box-shadow: 0 3px 8px rgba(0,0,0,.4);
 }
 /* Both words must fit the card width — MONOPOLY (8 chars) is the limit. */
-#draw-pile .cardback span { font-weight: 900; line-height: 1; letter-spacing: -.2px; white-space: nowrap; }
-#draw-pile .cardback span:first-child { font-size: 9px; opacity: .9; }
-#draw-pile .cardback span:last-child { font-size: 10.5px; }
+#draw-pile .cardback span, #bd-flight .cardback span { font-weight: 900; line-height: 1; letter-spacing: -.2px; white-space: nowrap; }
+#draw-pile .cardback span:first-child, #bd-flight .cardback span:first-child { font-size: 9px; opacity: .9; }
+#draw-pile .cardback span:last-child, #bd-flight .cardback span:last-child { font-size: 10.5px; }
 #draw-pile .count, #discard-pile .count {
   text-align: center; font-size: 12px; font-weight: 800; color: var(--ink-soft); margin-top: 3px;
 }
@@ -267,6 +267,21 @@ html, body {
 }
 #hand .cardface { flex: 0 0 auto; transition: transform .12s ease; }
 #hand .cardface:active { transform: translateY(-4px); }
+
+/* Card travel (js/ui.js _flyMoves): whenever a card changes place - a steal,
+   a swap, a payment, a play, a draw - a copy flies from where it was to where
+   it lands, in this fixed layer above the board and below every sheet and
+   the card detail (40). The landing spot stays hidden until the copy arrives. */
+#bd-flight { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+#bd-flight > * {
+  position: absolute; margin: 0 !important; transform-origin: 0 0; transition: none;
+  box-shadow: 0 8px 18px rgba(0,0,0,.45);
+}
+
+/* Computer speed row in the in-game Settings sheet. */
+.pace-row { margin: 2px 0 12px; }
+.pace-row .pace-lbl { font-size: 13px; font-weight: 800; opacity: .85; text-align: center; }
+.count-btn.pace { width: auto; min-width: 84px; height: 46px; padding: 0 12px; font-size: 15px; font-weight: 800; }
 
 #topbar {
   flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;

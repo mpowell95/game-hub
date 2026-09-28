@@ -25,6 +25,7 @@
   const CM = Deck.COLOR_META;
 
   const delay = (ms) => new Promise(r => setTimeout(r, ms));
+  const centred = (r, w, h) => ({ left: r.left + r.width / 2 - w / 2, top: r.top + r.height / 2 - h / 2, width: w, height: h });
   const elNew = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const esc = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
@@ -33,7 +34,7 @@
   // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
   // stamp on the setup screen - the whole point of which is telling you which
   // build you are on - a lie. Resynced to the cache number; keep them equal.
-  const APP_VERSION = 'v33';
+  const APP_VERSION = 'v34';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -105,6 +106,14 @@
   // holds no earned history. Before this the choice lived only in memory, so
   // every fresh open of the app silently reset the difficulty.
   const SETUP_KEY = 'gamehub.bd.setup.v1';
+  // Computer speed (2026-09-28, Matt: "Add a setting for fast computer moves. like we
+  // just did for texas hold em"). Scales only the pauses that wait on a COMPUTER: its
+  // "X's turn" beat, the pause after each of its plays, and the pause after its Just Say
+  // No. Your own feedback, and the "You were attacked!" sheet you tap OK on, are the same
+  // at every speed; so are the rules and every decision. Normal is the original pace.
+  const PACES = ['slow', 'normal', 'fast'];
+  const PACE_MULT = { slow: 1.6, normal: 1, fast: 0.3 };
+  const PACE_LABEL = { slow: 'Slow', normal: 'Normal', fast: 'Fast' };
   function loadSetupPrefs() {
     try {
       const p = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null');
@@ -112,11 +121,19 @@
       return {
         numAI: [1, 2, 3, 4].includes(p.numAI | 0) ? (p.numAI | 0) : null,
         difficulty: DIFF_LABEL[p.difficulty] ? p.difficulty : null,
+        pace: PACES.includes(p.pace) ? p.pace : null,
       };
     } catch (e) { return null; }
   }
-  function saveSetupPrefs(numAI, difficulty) {
-    try { localStorage.setItem(SETUP_KEY, JSON.stringify({ numAI: numAI | 0, difficulty: difficulty })); }
+  /** Merge into the stored choice: each caller saves only the fields it owns, so
+   *  starting a game never forgets the speed and changing the speed mid-game never
+   *  forgets the opponents. `pace` is an additive field; absent reads as Normal. */
+  function saveSetupPrefs(patch) {
+    try {
+      let cur = {};
+      try { cur = JSON.parse(localStorage.getItem(SETUP_KEY) || '{}') || {}; } catch (e) { cur = {}; }
+      localStorage.setItem(SETUP_KEY, JSON.stringify(Object.assign({}, cur, patch)));
+    }
     catch (e) { /* a remembered preference is never worth breaking the game over */ }
   }
   function readHubProfile() {
@@ -348,6 +365,7 @@
       // Pace between AI moves — bumped so the AI's turn is readable, not a blur
       // (players asked to "slow it down a bit").
       this.aiDelay = 1400;
+      this.pace = (loadSetupPrefs() || {}).pace || 'normal';
       this._pendingMove = null;
       this._bubbles = {};
       this.$ = (id) => document.getElementById(id);
@@ -360,6 +378,15 @@
      *  out to /business-deal/). Available on setup + win screens (#11/#12). */
     _toHub() { window.location.href = '/game-hub/'; }
 
+    /** Set and remember the computer speed; applies from the next computer pause. */
+    _setPace(p) {
+      if (!PACES.includes(p)) return;
+      this.pace = p;
+      saveSetupPrefs({ pace: p });
+    }
+    /** A pause that waits on a computer, scaled by the chosen speed. */
+    _aiMs(ms) { return Math.round(ms * (PACE_MULT[this.pace] || 1)); }
+
     _menuItem(id, icon, title, sub) {
       return `<button class="menu-item" id="${id}" type="button">` +
         `<span class="mi-ic">${icon}</span>` +
@@ -370,6 +397,9 @@
     _openSettings() {
       const sheet = this._sheet(
         '<h3>Settings</h3>' +
+        '<div class="pace-row"><div class="pace-lbl">Computer speed</div><div class="count-row">' +
+          PACES.map(k => `<button class="count-btn pace${k === this.pace ? ' sel' : ''}" data-p="${k}" type="button">${PACE_LABEL[k]}</button>`).join('') +
+        '</div></div>' +
         '<div class="menu-list">' +
           this._menuItem('set-new', '🔄', 'New Game', 'Restart with the same opponents') +
           this._menuItem('set-stats', '📊', 'Stats', 'All-time wins, losses and win rate') +
@@ -378,6 +408,10 @@
           this._menuItem('set-credits', '🎉', 'Credits', '') +
         '</div>' +
         '<button class="cta ghost-cta" id="set-close">Close</button>');
+      sheet.querySelectorAll('.count-btn[data-p]').forEach(b => b.addEventListener('click', () => {
+        this._setPace(b.dataset.p);
+        sheet.querySelectorAll('.count-btn[data-p]').forEach(x => x.classList.toggle('sel', x === b));
+      }));
       sheet.querySelector('#set-new').addEventListener('click', () => this._restartGame());
       sheet.querySelector('#set-stats').addEventListener('click', () => this.showStats('settings'));
       sheet.querySelector('#set-setup').addEventListener('click', () => this.showSetup());
@@ -453,6 +487,7 @@
         || (prof && prof.opponents.length ? Math.min(prof.opponents.length, 4) : 2);
       let diff = this._lastDiff || saved.difficulty
         || (prof && prof.opponents[0] ? SKILL_TO_DIFF[prof.opponents[0].skill] : 'normal');
+      let pace = this.pace;
       const root = this.$('setup');
       // Hidden challenge: while unwon, force the qualifying config (2+ opponents at
       // Normal/Hard), gray out the choices, and show a "Begin challenge" bar. Once won,
@@ -476,6 +511,8 @@
           ['easy', 'normal', 'hard'].map(d =>
             `<button class="count-btn diff${d === diff ? ' sel' : ''}" data-d="${d}">` +
             diffShapeSVG(DIFF_TIER[d]) + `<span>${DIFF_LABEL[d]}</span></button>`).join('') +
+          '</div><p style="margin-top:14px">Computer speed</p><div class="count-row">' +
+          PACES.map(k => `<button class="count-btn pace${k === pace ? ' sel' : ''}" data-p="${k}">${PACE_LABEL[k]}</button>`).join('') +
           '</div><button class="cta' + (live ? ' bd-cta-challenge' : '') + '" id="start-btn">' + (live ? 'Begin challenge' : 'Start Game') + '</button>' +
           '<button class="cta ghost-cta" id="setup-stats">Stats</button>' +
           `<div class="setup-version">${APP_VERSION}</div></div>`;
@@ -485,9 +522,12 @@
           root.querySelectorAll('.count-btn[data-d]').forEach(b =>
             b.addEventListener('click', () => { diff = b.dataset.d; render(); }));
         }
+        // Speed is not part of the challenge's fixed config, so it stays live.
+        root.querySelectorAll('.count-btn[data-p]').forEach(b =>
+          b.addEventListener('click', () => { pace = b.dataset.p; this._setPace(pace); render(); }));
         this.$('start-btn').addEventListener('click', () => {
           root.classList.remove('show');
-          saveSetupPrefs(chosen, diff);
+          saveSetupPrefs({ numAI: chosen, difficulty: diff, pace });
           this.newGame(chosen, diff);
         });
         this.$('setup-stats').addEventListener('click', () => this.showStats('setup'));
@@ -504,6 +544,10 @@
       this.$('setup').classList.remove('show');
       this.$('winner').classList.remove('show');
       this._pendingMove = null; this._bubbles = {};
+      // A new game starts from an empty board: the first render deals from the deck.
+      this._owners = null; this._flights = null; this._landing = new Set();
+      this._handEls = new Map(); this.$('hand').innerHTML = '';
+      this.$('bd-flight').innerHTML = '';
       this._resultRecorded = false;   // record this game's win/loss once
       this.difficulty = difficulty || 'normal';
       this._lastNumAI = numAI; this._lastDiff = this.difficulty;   // for Play Again
@@ -536,7 +580,7 @@
           // A clear "AI's turn" beat so attacks don't land on you with no warning,
           // and a moment to review your board after your own turn ends.
           this.toast(`${pl.name}'s turn…`);
-          await delay(1100);
+          await delay(this._aiMs(1100));
         }
       };
       this.game.onAfterPlay = async (pl, mv) => {
@@ -556,6 +600,7 @@
           const act = mv.type === 'action' ? this._actionOfMove(mv) : null;
           const aggressive = act === A.DEAL_BREAKER || act === A.SLY_DEAL || act === A.FORCED_DEAL;
           if (msg && aggressive) {
+            await this._flightsLanded();
             await this._beat(ACTION_LABEL[act] || 'Your move', msg, this._cardOfMove(mv));
           } else if (msg) {
             this.toast(msg); await delay(1100);
@@ -568,7 +613,7 @@
         const who = info.responder.id === 0 ? 'You' : info.responder.name;
         this.toast(`${who} played Just Say No — ${info.actionCard.name} ${info.proceeds ? 'proceeds' : 'is cancelled'}!`);
         this.render();
-        await delay(1500);
+        await delay(info.responder.id === 0 ? 1500 : this._aiMs(1500));
       };
       this.game.onTurnEnd = () => this.render();
 
@@ -596,9 +641,17 @@
       const g = this.game; if (!g) return;
       const me = g.players[0];
       const myTurn = g.currentPlayerIndex === 0 && !g.winner;
+      // Where every card was on the LAST render vs where it is now. Anything that
+      // changed place gets its starting point read off the screen BEFORE the redraw.
+      // The piles go first: the deck is where a draw flies FROM, and on a new
+      // game's first render it has not been drawn yet. (The discard is only ever
+      // a landing place, so redrawing it before reading start points is safe.)
+      this._renderTable();
+      const owners = this._ownerMap();
+      const moves = this._movedSince(this._owners, owners);
+      this._owners = owners;
 
       this._renderOpponents();
-      this._renderTable();
 
       // me area
       this.$('me-area').classList.toggle('active', myTurn);
@@ -622,7 +675,162 @@
       const outOfPlays = myTurn && left === 0 && !!this._pendingMove;
       this.$('plays-label').textContent = myTurn ? (left ? `Plays left: ${left}` : 'No plays left — tap Pass') : '';
       this.$('pass-btn').classList.toggle('hot', outOfPlays);
+
+      if (moves.length) this._flyMoves(moves);
     }
+
+    /* ======================================================================
+     * Card travel (2026-09-28)
+     *
+     * Nothing on this board used to move: every change was an instant redraw, so
+     * a Sly Deal, a Forced Deal or a Deal Breaker had no "this card went to you"
+     * moment at all. Rather than special-case each action, render() compares
+     * where every card was on the last render with where it is now, and anything
+     * that changed place flies there: steals, swaps, whole sets, payments (bank
+     * money AND properties), your plays to bank/properties/discard, a computer's
+     * plays, and draws from the deck. The engine is not touched; this only reads
+     * its state. A flight never blocks the game except where a hook asks for it
+     * (the steal sheets wait for the card to land before covering the board).
+     * ====================================================================*/
+
+    /** card id -> where it is: 'h<i>' hand, 'b<i>' bank, 'p<i>:<color>' properties,
+     *  'd' top of the discard. The deck is simply "not in the map". */
+    _ownerMap() {
+      const m = new Map();
+      const cards = this._cardById = new Map();
+      this.game.players.forEach((p, i) => {
+        p.hand.forEach(c => { m.set(c.id, 'h' + i); cards.set(c.id, c); });
+        p.bank.forEach(c => { m.set(c.id, 'b' + i); cards.set(c.id, c); });
+        Object.keys(p.properties).forEach(color => p.properties[color].cards.forEach(c => {
+          m.set(c.id, 'p' + i + ':' + color); cards.set(c.id, c);
+        }));
+      });
+      const top = this.game.discard[this.game.discard.length - 1];
+      if (top) { m.set(top.id, 'd'); cards.set(top.id, top); }
+      return m;
+    }
+
+    /** Every card whose place changed, with its on-screen starting rect read NOW
+     *  (before the redraw). A card that was nowhere (the deck) only counts if it
+     *  landed in a hand: that is a draw. `prev === null` (a new game) makes the
+     *  opening deal fly out of the deck. */
+    _movedSince(prev, now) {
+      if (prev === undefined) return [];
+      const out = [];
+      const deckEl = this.$('draw-pile').querySelector('.cardback');
+      now.forEach((to, id) => {
+        const from = prev ? prev.get(id) : undefined;
+        if (from === to) return;
+        if (from === undefined && to[0] !== 'h') return;
+        const srcEl = from === undefined ? deckEl : this._placeEl(id, from);
+        if (!srcEl || !srcEl.isConnected) return;
+        const r = srcEl.getBoundingClientRect();
+        if (!r.width) return;
+        out.push({ id, from: from || 'deck', to, srcRect: r, srcClone: this._isCardEl(srcEl) ? srcEl.cloneNode(true) : null });
+      });
+      return out;
+    }
+
+    _isCardEl(el) { return !!el && el.matches && el.matches('.cardface, .mcard, .bank-chip, .cardback'); }
+
+    /** The element that shows card `id` at place `z`: the card itself where the
+     *  board draws one, otherwise the box it lives in (a computer's hand is only a
+     *  count; a computer's bank is only a total). */
+    _placeEl(id, z) {
+      if (z === 'd') return this.$('discard-pile').querySelector('.cardface');
+      const kind = z[0], pi = parseInt(z.slice(1), 10);
+      const sel = `[data-cid="${id}"]`;
+      if (pi === 0) {
+        if (kind === 'h') return this.$('hand').querySelector(sel);
+        const zone = this.$(kind === 'b' ? 'me-bank' : 'me-props');
+        return zone.querySelector(sel) || zone;
+      }
+      const opp = this.$('opponents').querySelector(`.opp[data-pid="${pi}"]`);
+      if (!opp) return null;
+      if (kind === 'h') return opp.querySelector('.opp-hand') || opp;
+      return opp.querySelector(sel) || opp.querySelector(kind === 'b' ? '.opp-bank' : '.opp-body') || opp;
+    }
+
+    _flyMoves(moves) {
+      const layer = this.$('bd-flight');
+      if (!layer || typeof Element.prototype.animate !== 'function') return;
+      const box = layer.getBoundingClientRect();
+      const isDeal = moves.length > 8;
+      const gap = isDeal ? 45 : 70, dur = isDeal ? 360 : 440;
+      const done = [];
+      moves.forEach((mv, k) => {
+        const dstEl = this._placeEl(mv.id, mv.to);
+        if (!dstEl) return;
+        const dstRect = dstEl.getBoundingClientRect();
+        if (!dstRect.width) return;
+        const dstIsCard = this._isCardEl(dstEl);
+        // What flies. Into a computer's hand it is always a card BACK (never
+        // reveal a hidden card); otherwise the card as it looked where it left,
+        // else as it looks where it lands, else a small drawing of it.
+        let vis;
+        if (mv.to[0] === 'h' && mv.to !== 'h0') vis = elNew('div', 'cardback', '<span>MATT\'S</span><span>MONOPOLY</span>');
+        else if (mv.srcClone) vis = mv.srcClone;
+        else if (dstIsCard) vis = dstEl.cloneNode(true);
+        else vis = this._flyDrawing(mv.id, mv.to);
+        if (!vis) return;
+        vis.removeAttribute('id');
+        vis.style.visibility = '';
+        layer.append(vis);
+        // Start at the source's size; a source that is only a box (a computer's
+        // hand count) starts as a small card centred on it. End at the landing
+        // card's size, or the same size centred on a landing box.
+        let w0, h0;
+        if (mv.srcClone) { w0 = mv.srcRect.width; h0 = mv.srcRect.height; }
+        else if (dstIsCard) { w0 = dstRect.width * 0.6; h0 = dstRect.height * 0.6; }
+        else { w0 = vis.offsetWidth || 30; h0 = vis.offsetHeight || 40; }
+        if (vis.classList.contains('cardback') && !mv.srcClone) { w0 = 28; h0 = 39; }
+        const s0 = mv.srcClone ? mv.srcRect : centred(mv.srcRect, w0, h0);
+        const toOppHand = mv.to[0] === 'h' && mv.to !== 'h0';
+        const e = dstIsCard ? dstRect : toOppHand ? centred(dstRect, 28, 39) : centred(dstRect, s0.width, s0.height);
+        Object.assign(vis.style, {
+          left: (s0.left - box.left) + 'px', top: (s0.top - box.top) + 'px',
+          width: s0.width + 'px', height: s0.height + 'px',
+        });
+        // The landing spot stays hidden until the copy arrives - including any
+        // copy of it a later render draws in the meantime (the bank and property
+        // zones are redrawn on every render), hence the id set, not the element.
+        if (!this._landing) this._landing = new Set();
+        if (dstIsCard) { dstEl.style.visibility = 'hidden'; this._landing.add(mv.id); }
+        const reveal = () => {
+          vis.remove();
+          if (!dstIsCard) return;
+          this._landing.delete(mv.id);
+          dstEl.style.visibility = '';
+          document.querySelectorAll(`#app [data-cid="${mv.id}"]`).forEach(x => { x.style.visibility = ''; });
+        };
+        let anim;
+        try {
+          anim = vis.animate([
+            { transform: 'translate(0,0) scale(1,1)' },
+            { transform: `translate(${e.left - s0.left}px,${e.top - s0.top}px) scale(${e.width / s0.width},${e.height / s0.height})` },
+          ], { duration: dur, delay: k * gap, easing: 'cubic-bezier(.25,.8,.35,1)', fill: 'both' });
+        } catch (err) { reveal(); return; }
+        done.push(new Promise(res => {
+          let fin = false;
+          const end = () => { if (fin) return; fin = true; reveal(); res(); };
+          anim.onfinish = end; anim.oncancel = end;
+          setTimeout(end, dur + k * gap + 400);   // a backgrounded tab can drop the event
+        }));
+      });
+      this._flights = Promise.all([this._flights, ...done]);
+    }
+
+    /** A small drawing of a card for a flight between two boxes (e.g. a computer
+     *  banking money: its hand and its bank are both just numbers on screen). */
+    _flyDrawing(id, to) {
+      const c = this._cardById && this._cardById.get(id);
+      if (!c) return null;
+      if (to[0] === 'p') return this._miniCard(c, to.split(':')[1]);
+      return elNew('div', 'bank-chip', `${c.value}M`);
+    }
+
+    /** Resolves once every card now in the air has landed. */
+    _flightsLanded() { return this._flights || Promise.resolve(); }
 
     _bank(p) { return p.bank.reduce((s, c) => s + c.value, 0); }
     _lastLog() { const L = this.game.logs; return L.length ? L[L.length - 1] : ''; }
@@ -634,6 +842,7 @@
         const p = g.players[i];
         const active = g.currentPlayerIndex === i && !g.winner;
         const opp = elNew('div', 'opp' + (active ? ' active' : ''));
+        opp.dataset.pid = i;
         const head = elNew('div', 'opp-head');
         head.style.background = this.meta[i].tint;
         // Name gets the full header width (bank moved to the meta row below) so
@@ -644,7 +853,7 @@
         opp.append(head);
         opp.append(elNew('div', 'opp-meta',
           `<span class="opp-bank"><span class="coin">M</span>${this._bank(p)}M</span>` +
-          `<span>🂠×${p.hand.length}</span>`));
+          `<span class="opp-hand">🂠×${p.hand.length}</span>`));
         const body = elNew('div', 'opp-body');
         this._appendSets(body, p, { detail: true });   // show their cards' values + wildcards
         if (!Object.keys(p.properties).length) body.append(elNew('div', 'opp-empty', 'no property yet'));
@@ -756,6 +965,8 @@
     _miniCard(c, color) {
       const isWild = c.type === T.PROPERTY_WILD;
       const m = elNew('div', 'mcard' + (isWild ? ' wild' : ''));
+      m.dataset.cid = c.id;   // lets a card that changes hands fly from here (_flyMoves)
+      if (this._landing && this._landing.has(c.id)) m.style.visibility = 'hidden';
       // Fill the WHOLE card with its property color so a set reads at a glance
       // (two greens now obviously look like two green cards); value is a small
       // chip. A two-color wild splits; a multi-wild is a rainbow with a "W".
@@ -768,7 +979,10 @@
     }
     _appendBank(container, player) {
       player.bank.slice().sort((a, b) => b.value - a.value).forEach(c => {
-        container.append(elNew('div', 'bank-chip', `${c.value}M`));
+        const chip = elNew('div', 'bank-chip', `${c.value}M`);
+        chip.dataset.cid = c.id;
+        if (this._landing && this._landing.has(c.id)) chip.style.visibility = 'hidden';
+        container.append(chip);
       });
     }
 
@@ -834,6 +1048,8 @@
       disc.innerHTML = '';
       if (top) {
         const f = renderCardFace(top); f.style.setProperty('--fs', '7.6px'); f.style.cursor = 'default';
+        f.dataset.cid = top.id;
+        if (this._landing && this._landing.has(top.id)) f.style.visibility = 'hidden';
         disc.append(f);
         disc.append(elNew('div', 'count', `×${g.discard.length}`));
       } else {
@@ -841,15 +1057,35 @@
       }
     }
 
+    /** The hand is RECONCILED, never rebuilt (2026-09-28). It used to be emptied
+     *  and every card face rebuilt from scratch on every render - and render runs
+     *  many times a turn, the computers' turns included - so the hand flickered and
+     *  cards jumped. Each card's face is now built once and kept (`_handEls`, by card
+     *  id); a render only adds new cards, drops departed ones, re-orders, re-sizes,
+     *  and slides the cards that moved (a FLIP on transform). The tap handler asks
+     *  at tap time whether a move is wanted, so it never has to be re-bound. */
     _renderHand(me, interactive) {
-      const handEl = this.$('hand'); handEl.innerHTML = '';
+      const handEl = this.$('hand');
+      if (!this._handEls) this._handEls = new Map();
+      const els = this._handEls;
       const n = me.hand.length;
+      const before = new Map();
+      els.forEach((el, id) => { if (el.isConnected) before.set(id, el.getBoundingClientRect().left); });
+      const want = new Set(me.hand.map(c => c.id));
+      els.forEach((el, id) => { if (!want.has(id)) { el.remove(); els.delete(id); } });
+      Array.from(handEl.children).forEach(ch => { if (!ch.dataset.cid || !els.has(ch.dataset.cid)) ch.remove(); });
+      const clickable = interactive && !!this._pendingMove;
       const cards = [];
-      me.hand.forEach(card => {
-        const f = renderCardFace(card);
-        if (interactive && this._pendingMove) f.addEventListener('click', () => this._openDetail(card.id));
-        else f.style.cursor = 'default';
-        handEl.append(f);
+      me.hand.forEach((card, i) => {
+        let f = els.get(card.id);
+        if (!f) {
+          f = renderCardFace(card);
+          f.dataset.cid = card.id;
+          f.addEventListener('click', () => { if (this._pendingMove) this._openDetail(card.id); });
+          els.set(card.id, f);
+        }
+        f.style.cursor = clickable ? '' : 'default';
+        if (handEl.children[i] !== f) handEl.insertBefore(f, handEl.children[i] || null);
         cards.push(f);
       });
       if (!n) return;
@@ -879,6 +1115,17 @@
         f.style.zIndex = String(i); // later cards on top so left strips stay tappable
       });
       handEl.style.justifyContent = overlap > 0 ? 'flex-start' : 'center';
+      // Cards that stayed but shifted (a neighbour left or arrived) slide over.
+      if (typeof Element.prototype.animate === 'function') {
+        cards.forEach(f => {
+          const was = before.get(f.dataset.cid);
+          if (was == null) return;
+          const dx = was - f.getBoundingClientRect().left;
+          if (Math.abs(dx) < 1) return;
+          f.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }],
+            { duration: 240, easing: 'cubic-bezier(.2,.8,.3,1)' });
+        });
+      }
     }
 
     _narrate(move) {
@@ -947,12 +1194,12 @@
         else if ((m = l.match(/DEAL BREAKS You's (.+?) set/))) beat = `${atk} played Deal Breaker and took your ${m[1]} set!`;
         else if ((m = l.match(/swaps with You: takes (.+?), gives (.+?)\./))) beat = `${atk} played Forced Deal — took your ${m[1]} and gave you ${m[2]}.`;
       }
-      if (beat) { return this._beat('You were attacked!', beat, this._cardOfMove(mv)); }
+      if (beat) { await this._flightsLanded(); return this._beat('You were attacked!', beat, this._cardOfMove(mv)); }
       // Charged you (rent/debt/birthday)? You already saw the payment screen.
       const paid = fresh.reduce((s, l) => { const x = l.match(/You pays .+? (\d+)M/); return s + (x ? +x[1] : 0); }, 0);
-      if (paid > 0) { this.toast(`You paid ${paid}M to ${atk}`); return delay(this.aiDelay); }
+      if (paid > 0) { this.toast(`You paid ${paid}M to ${atk}`); return delay(this._aiMs(this.aiDelay)); }
       this.toast(this._lastLog());
-      return delay(this.aiDelay);
+      return delay(this._aiMs(this.aiDelay));
     }
 
     /** The card an AI move played — now sitting on top of the discard pile. */

@@ -146,6 +146,38 @@ verified re-read. A button in a game is the wrong home for one.
   one-tap preference holding no earned history, so it is exempt from rule 2, exactly as the hub's
   launcher favorites are. Before it, every fresh open silently reset the difficulty.
 
+## Computer speed, a steady hand, and cards that travel (2026-09-28)
+
+Matt, after the same work on Escoba: *"Add a setting for fast computer moves. like we just did for
+texas hold em"*, plus the two things a review found here: the hand was rebuilt on every render
+(flicker, jumps), and nothing on the board ever MOVED, so a steal had no "this card went to you"
+moment. He also said to keep ignoring reduced motion for this game (it has none, by his call).
+
+- **Computer speed**: Slow / Normal / Fast on the setup screen and in the in-game Settings sheet,
+  stored as `pace` in `gamehub.bd.setup.v1` (additive field; absent = Normal, the original pace).
+  `saveSetupPrefs(patch)` MERGES, so starting a game keeps the speed and changing the speed keeps
+  the opponents. `_aiMs()` scales only pauses that wait on a computer (x1.6 / x1 / x0.3): its
+  "X's turn" beat, the pause after each of its plays, and after its Just Say No. Your own
+  feedback and the "You were attacked!" sheet are the same at every speed; rules and decisions
+  never change. Not locked by the hidden challenge (it is not part of the qualifying config).
+- **The hand is reconciled** (`_renderHand`, `this._handEls` by card id): faces are built once,
+  a render only adds/drops/re-orders/re-sizes, and cards that shift slide (FLIP). The tap handler
+  checks `_pendingMove` at tap time instead of being re-bound. **Do not go back to innerHTML.**
+- **Cards travel, generically.** `render()` compares where every card was on the last render
+  (`_ownerMap()`: hand / bank / property colour / top of discard, per player) with where it is
+  now; anything that changed place flies (`_flyMoves`, the fixed `#bd-flight` layer, z-index 30,
+  under the card detail and every sheet). That one rule covers steals, Forced Deal swaps, Deal
+  Breaker sets, payments in money AND property, your plays, a computer's plays, draws and the
+  opening deal, with no per-action code and no engine change. Mini cards, bank chips, hand faces
+  and the discard face carry `data-cid`; an opponent panel carries `data-pid` and `.opp-hand`.
+  **A card flying INTO a computer's hand is always drawn as a back**, never its face. The landing
+  spot is hidden until the copy arrives, tracked by id in `this._landing` because the bank and
+  property zones are redrawn on every render. The steal sheets `await _flightsLanded()` so the
+  card is seen arriving before the sheet covers the board; nothing else waits on a flight.
+- Verified in Chromium: full games at every speed with 1-4 opponents (the human seat driven by the
+  AI), hand taps and banking by hand, the speed saved from both screens, no card left hidden,
+  `check-no-scroll.mjs business-deal` clean. Not yet by eye on a phone.
+
 ## Notes
 
 Full-screen PWA that lives **in this repo** (`business-deal/`), launched like Parchís; `window.*` globals + its own nested service worker, not ESM. A precedent, not the preferred pattern. The standalone "Just Say No?" prompt (2026-07-22) is now bypassed for the case that has a known cash amount (rent/Debt Collector/Birthday) and the human is the one who'd pay: `HumanAgent.respondToAction` routes that case through `promptPayment(view, ctx, {jsn:true})` instead, adding Just Say No as one more choice alongside Pay/Clear on the normal pay screen (bank + properties + amount already visible). Declining it caches the chosen payment (keyed by creditorId+amount+reason) so the immediately-following `choosePayment()` call reuses it rather than prompting twice - the cache is only ever set for a real (>=1 card) payment, since `_charge()`'s `required<=0` early return never calls `choosePayment` for a "nothing to pay" case and would otherwise leave a stale entry. The property-steal actions (Sly Deal/Forced Deal/Deal Breaker, no cash amount) and the "counter their cancellation of YOUR action" attacker-side case still use the original standalone prompt.
