@@ -58,25 +58,25 @@ eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { ga
 eq('junk in the branches is replaced, not trusted',
   A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
 eq('a real config survives intact',
-  A.normalizeConfig({ games: { pinball: { live: true } }, skeeball: { boards: { popongo: { open: true } } } }),
-  { games: { pinball: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
+  A.normalizeConfig({ games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } } }),
+  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
 
 // --- resolveGameLive: the override sits ON TOP of the code default -----------------------------
 console.log('\n--- is this game live ---');
 ok('no config at all: a released game stays released', A.resolveGameLive(null, 'skeeball', true) === true);
-ok('no config at all: a devOnly game stays hidden', A.resolveGameLive(null, 'pinball', false) === false);
-ok('override true releases a devOnly game', A.resolveGameLive({ games: { pinball: { live: true } } }, 'pinball', false) === true);
+ok('no config at all: a devOnly game stays hidden', A.resolveGameLive(null, 'cuppong', false) === false);
+ok('override true releases a devOnly game', A.resolveGameLive({ games: { cuppong: { live: true } } }, 'cuppong', false) === true);
 ok('override false pulls a released game back for testing',
   A.resolveGameLive({ games: { skeeball: { live: false } } }, 'skeeball', true) === false);
 ok('an override on ANOTHER game does not leak',
-  A.resolveGameLive({ games: { pinball: { live: true } } }, 'skeeball', true) === true);
+  A.resolveGameLive({ games: { cuppong: { live: true } } }, 'skeeball', true) === true);
 ok('a non-boolean live field is ignored, and the code default wins',
-  A.resolveGameLive({ games: { pinball: { live: 'yes' } } }, 'pinball', false) === false);
+  A.resolveGameLive({ games: { cuppong: { live: 'yes' } } }, 'cuppong', false) === false);
 // THE LAW rule 1, stated as a test: a config that is empty, wiped or malformed can never hide a
 // game the code releases. Hiding is only ever an EXPLICIT `live: false`.
 ok('an empty games branch cannot hide anything', A.resolveGameLive({ games: {} }, 'uno', true) === true);
-eq('gameOverride reports null when nothing is set', A.gameOverride({ games: {} }, 'pinball'), null);
-eq('gameOverride reports the set value', A.gameOverride({ games: { pinball: { live: false } } }, 'pinball'), false);
+eq('gameOverride reports null when nothing is set', A.gameOverride({ games: {} }, 'cuppong'), null);
+eq('gameOverride reports the set value', A.gameOverride({ games: { cuppong: { live: false } } }, 'cuppong'), false);
 
 // --- resolveBoardReleased: opt-in only ---------------------------------------------------------
 console.log('\n--- the three machine states ---');
@@ -142,7 +142,7 @@ store.set(A.CACHE_KEY, '{ not json');
 eq('a corrupt cache reads as an empty config instead of throwing',
   A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
 ok('and the code default still decides every game', A.isGameLive('uno', true) === true);
-ok('a devOnly game stays hidden through a corrupt cache', A.isGameLive('pinball', false) === false);
+ok('a devOnly game stays hidden through a corrupt cache', A.isGameLive('cuppong', false) === false);
 ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') === false);
 
 // --- the wiring, checked against the shipped files ----------------------------------------------
@@ -191,8 +191,8 @@ ok('js/game-stats-ui.js gates its tabs on the SAME resolver (a released game kee
 // A game released from inside the app gets no release commit, so its leaderboard row cannot wait
 // for one. players-agg.test.mjs enforces the general rule; this names the case that created it.
 const lb = readFileSync(new URL('./js/leaderboard-ui.js', import.meta.url), 'utf8');
-ok("js/leaderboard-ui.js has a row for the admin-only game, so releasing it cannot zero its scores",
-  /id:\s*'pinball'/.test(lb));
+ok("js/leaderboard-ui.js has a row for an admin-only game, so releasing it cannot zero its scores",
+  /id:\s*'cuppong'/.test(lb));
 
 console.log(`\nAdmin config tests: ${passed} passed, ${failures.length} failed.`);
 if (failures.length) { failures.forEach((f) => console.log(`  - ${f}`)); process.exit(1); }

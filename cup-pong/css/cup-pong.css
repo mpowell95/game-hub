@@ -4,7 +4,7 @@
  * injected, so a collision would be permanent for that session (Mancala's discipline).
  *
  * The PLAY screen keeps its own dark look in BOTH hub themes - it is in-game art, like Hoops',
- * Skeeball's and Pinball's play screens. The overlays use css/ui.css's .gh-* primitives, pointed
+ * Skeeball's play screens. The overlays use css/ui.css's .gh-* primitives, pointed
  * at this file's own tokens below so they flip with the hub theme on the standalone page too.
  *
  * NOTHING HERE SCROLLS. `node check-no-scroll.mjs cup-pong` is the safety net.

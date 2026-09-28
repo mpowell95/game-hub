@@ -572,39 +572,20 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Bego' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Bego');
 }
 
-// ---- Pinball's pb sub-counter survives the cross-device combine (THE LAW rule 1) ----
-// The per-game regression case "Adding a game" item 7 requires, written the day the game shipped.
-// Lifetime counters (games, points, jackpots, multiballs, missions, ramps) ADD; BOTH bests take
-// Math.max. Summing a best score would be the worst kind of wrong here: it invents a game nobody
-// played and it can never be undone, since the shared store only ever grows. A device that synced
-// before Pinball existed has no key at all and must combine cleanly.
+// ---- An ARCHIVED game's records are carried but counted nowhere (2026-09-28) ----
+// Pinball was archived: its stored games stay in every record (THE LAW - nothing deletes them) but
+// they must not leak into the competitive totals just because the id is no longer in SOLO.
 {
   const all = {
-    d1: rec({ playerId: 'PB999', name: 'Wizard' }, {
-      pinball: {
-        total: { played: 4, won: 4, lost: 0 },
-        byDiff: { medium: { played: 4, won: 4, lost: 0 } },
-        pb: { games: 4, bestScore: 1250000, points: 3000000, bestBall: 610000, jackpots: 9, multiballs: 2, missions: 5, ramps: 41 },
-      },
+    d1: rec({ playerId: 'AR999', name: 'Wizard' }, {
+      pinball: { total: { played: 4, won: 4, lost: 0 }, byDiff: { medium: { played: 4, won: 4, lost: 0 } } },
+      connect4: comp(3, 2, 1),
     }, 100),
-    d2: rec({ playerId: 'pb999', name: 'Wizard' }, {
-      pinball: {
-        total: { played: 2, won: 2, lost: 0 },
-        byDiff: { hard: { played: 2, won: 2, lost: 0 } },
-        pb: { games: 2, bestScore: 880000, points: 1400000, bestBall: 745000, jackpots: 4, multiballs: 1, missions: 2, ramps: 18 },
-      },
-    }, 200),
-    d3: rec({ playerId: 'PB999', name: 'Wizard' }, { connect4: comp(1, 1, 0) }, 300),
   };
-  const pb = aggregatePlayers(all)[0].games.pinball.pb;
-  eq('pinball: games and points add across devices', [pb.games, pb.points], [6, 4400000]);
-  eq('pinball: best SCORE takes the max, never a sum', pb.bestScore, 1250000);
-  eq('pinball: best BALL takes the max independently of best score', pb.bestBall, 745000);
-  eq('pinball: lifetime counters add', [pb.jackpots, pb.multiballs, pb.missions, pb.ramps], [13, 3, 7, 59]);
-  eq('pinball: total/byDiff still aggregate alongside pb',
-    aggregatePlayers(all)[0].games.pinball.total.played, 6);
-  ok('pinball counts as a SOLO game (no loss axis: a game ends when the last ball drains)',
-    SOLO.has('pinball'));
+  const row = aggregatePlayers(all)[0];
+  ok('an archived game is neither SOLO nor COMPETITIVE', !SOLO.has('pinball') && !COMPETITIVE.includes('pinball'));
+  eq('its plays count in no total', [row.comp.played, row.comp.won, row.totalPlays], [3, 2, 3]);
+  eq('but its stored total is still carried on the row, untouched', row.games.pinball.total.played, 4);
 }
 
 // ---- Brick Breaker's bz sub-counter survives the cross-device combine (THE LAW rule 1) ----
@@ -693,6 +674,23 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
 
 // ---- [KNOWN-BUG PROBE] every sub-counter reaches all THREE surfaces --------------------------
 //
+// Air Hockey records (2026-09-28): counters add, bestShot/bestStreak take the max, the per-device
+// live `streak` is not summed.
+{
+  const all = {
+    d1: { profile: { name: 'Ah', playerId: 'AHAHA' }, stats: { games: { airhockey: {
+      total: { played: 3, won: 2, lost: 1 }, byDiff: {},
+      ah: { games: 3, goalsFor: 19, goalsAgainst: 9, shutouts: 1, bestShot: 1800, bestStreak: 2, streak: 0 } } } } },
+    d2: { profile: { name: 'Ah', playerId: 'AHAHA' }, stats: { games: { airhockey: {
+      total: { played: 2, won: 2, lost: 0 }, byDiff: {},
+      ah: { games: 2, goalsFor: 14, goalsAgainst: 3, shutouts: 0, bestShot: 2100, bestStreak: 2, streak: 2 } } } } },
+  };
+  const ah = aggregatePlayers(all)[0].games.airhockey.ah;
+  eq('airhockey: counters add across devices', [ah.games, ah.goalsFor, ah.goalsAgainst, ah.shutouts], [5, 33, 12, 1]);
+  eq('airhockey: fastest shot and best streak take the max, never a sum', [ah.bestShot, ah.bestStreak], [2100, 2]);
+  ok('airhockey: the live streak is not summed across devices', !(ah.streak > 2));
+}
+
 // Root CLAUDE.md, "Adding a game" item 7: a per-game sub-counter (`grid`/`cc`/`es`/`nb`/`br`/`tt`/
 // `db`/`bg`/`yz`/`dm`/`hc`) needs THREE edits, and missing the third is a THE LAW rule 1 bug that
 // is INVISIBLE ON A SINGLE DEVICE:
@@ -806,12 +804,14 @@ const OFF_THE_BOARD = {};
   // assertion below would pass vacuously. This floor tracks how many dev-only games there are and
   // nothing more - 2 while Skeeball was admin-only, 1 for the day it was released (2026-08-22),
   // 2 again when it was pulled back on 2026-08-23, and 1 since it was re-released on 2026-08-24
-  // (only Pinball is dev-only now). It is never a statement that a game SHOULD be hidden; the
+  // (several stage-built games are dev-only now). It is never a statement that a game SHOULD be hidden; the
   // OFF_THE_BOARD block above is what asserts that.
   ok('parsed game-stats.js GAMES, leaderboard GAME_META and the hub registry', statsIds.length >= 20 && metaIds.length >= 15 && devOnly.size >= 1);
 
+  // ARCHIVED games are stored, never displayed: correctly absent from GAME_META.
+  const archived = [...literal(read('js/game-stats.js'), 'const ARCHIVED_GAMES = [').matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
   for (const id of statsIds) {
-    if (metaIds.includes(id)) continue;
+    if (metaIds.includes(id) || archived.includes(id)) continue;
     const why = OFF_THE_BOARD[id];
     if (!why) {
       ok(`"${id}" has a leaderboard GAME_META row (without one its wins count as ZERO on the board)`, false);

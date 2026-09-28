@@ -661,7 +661,7 @@ class HillClimb {
    *  wake on two screens that never animate, on a phone, sharing the frame budget with whatever
    *  the player was actually reading. Now the play screen starts it and leaving stops it.
    *
-   *  Idempotent (see Pinball's `_startLoop`, and Skeeball's before that): arming a running loop is
+   *  Idempotent (see Skeeball's `_startLoop`): arming a running loop is
    *  a no-op rather than a second chain. */
   startLoop() {
     if (this.raf) return;

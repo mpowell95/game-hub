@@ -386,7 +386,7 @@ export function boardRankTier(metricAt, id, playsAt) {
  *  metric only breaks a tie WITHIN one tier - so Snake's Hard/10 ranks above Medium/40.
  *
  *  `ta`/`tb` are 1-4 (js/difficulty-tiers.js), or 0 for a row that sits at NO tier: a game with no
- *  difficulty axis at all (Skeeball, Pinball, Golf, Hill Climb - every row is 0, so the order is
+ *  difficulty axis at all (Skeeball, Golf, Hill Climb - every row is 0, so the order is
  *  exactly the score order it always was), and legacy/unmapped history in a game that does have
  *  one. A 0 row sorts BELOW every tiered row rather than off the board - it is still listed, with
  *  its number, which is what THE LAW rule 1 asks for; nothing here reads or writes storage.

@@ -373,7 +373,7 @@ if (CLIPS.Bunt && CLIPS.Bunt.keys.length >= 2 && CLIPS.Bunt.loop === true && CLI
   // range under software GL must not reach real hardware - asserts the cap is GATED on isSoftGL(),
   // not applied unconditionally, so a later edit can't quietly re-cap every real device again.
   const actorsSrc = readFileSync('./baseball/js/actors.js', 'utf8');
-  if (/function isSoftGL\(/.test(actorsSrc)) ok('actors.js: isSoftGL() probe is present (copied from pinball/js/render3d.js)');
+  if (/function isSoftGL\(/.test(actorsSrc)) ok('actors.js: isSoftGL() probe is present (copied from archive/pinball/js/render3d.js)');
   else fail('actors.js isSoftGL', 'no "function isSoftGL(" found');
 
   const startMatch = actorsSrc.match(/\n {2}start\(\) \{[\s\S]*?\n {2}\}\n/);
