@@ -190,6 +190,10 @@ Copied from it, top to bottom:
   the frame starts at 26% on BOTH sides - the upside-down index mirrors it bottom-right, so the
   frame is exactly centred and nothing crosses it. "10" is condensed (`is-ten`) to fit the same
   column instead of widening it.
+  **2026-09-28, Matt: "make the numbers on the cards a little larger".** The index is now bold,
+  rank 0.3cw / suit 0.23cw in a 2%..27% column, and the frame starts at 30% on both sides (centre
+  pip 0.4cw) - same no-overlap, dead-centre rule, just a wider corner. The small showdown/help
+  cards' index went 12px -> 14px.
 - FOLD / SET RAISE tabs are 46px tall at 17px, the big button's label 22px, chips 28px (34px on
   the big button) - all "a little larger", per Matt.
 - **Money is printed the reference's way**: `$9200` under ten thousand, then `$10.0k`.
