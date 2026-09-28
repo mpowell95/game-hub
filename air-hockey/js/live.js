@@ -157,7 +157,7 @@ export function createLiveSession(match, side, channel, hooks = {}) {
   function stepGhost(dt) {
     syncGhostMallets();
     ghost.phase = 'play'; ghost.puckRemote = false; ghost.acc = 0;
-    ghost.ev.hit = 0; ghost.ev.wall = 0;
+    ghost.ev.hit = 0; ghost.ev.wall = 0; ghost.ev.shot = 0; ghost.ev.shotBy = -1;
     advance(ghost, dt);                             // the ghost's own goals mean nothing
     ghost.score[0] = ghost.score[1] = 0;
   }
@@ -287,8 +287,11 @@ export function createLiveSession(match, side, channel, hooks = {}) {
         advance(match, dt);                         // mallets only
         if (S.peerLive) {
           stepGhost(dt);
-          if (ghost.ev.hit > match.ev.hit) match.ev.hit = ghost.ev.hit;     // their hits still clack
+          if (ghost.ev.hit > match.ev.hit) match.ev.hit = ghost.ev.hit;
           if (ghost.ev.wall > match.ev.wall) match.ev.wall = ghost.ev.wall;
+          if (ghost.ev.shot > match.ev.shot) {   // their hits throw sparks here too
+            match.ev.shot = ghost.ev.shot; match.ev.shotBy = ghost.ev.shotBy; match.ev.hx = ghost.ev.hx; match.ev.hy = ghost.ev.hy;
+          }
         }
         const k = Math.exp(-dt / 0.1);
         S.cx *= k; S.cy *= k;

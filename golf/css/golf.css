@@ -393,7 +393,7 @@
 
 /* --- reduced motion ------------------------------------------------------------------------
    Thins garnish, never freezes gameplay: the ball still flies, the meters still sweep. Those ARE
-   the game (pinball/CLAUDE.md). Only the readout's fade is dropped. */
+   the game (docs/BUILDING-A-GAME.md, Part 0). Only the readout's fade is dropped. */
 @media (prefers-reduced-motion: reduce) {
   .gf-root .gf-tc { transition: none; }
 }

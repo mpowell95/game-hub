@@ -2,22 +2,24 @@
 //
 // Display-only: it never writes or merges the stored per-device records, so nothing is lost and
 // per-device counts never double-count (a game is only ever recorded on the device it was played on,
-// so summing across a person's devices is exact). Imports ONLY the GAMES constant from game-stats.js
+// so summing across a person's devices is exact). Imports ONLY the GAMES and ARCHIVED_GAMES constants from game-stats.js
 // (no DOM, no localStorage at import time), so it unit-tests headless with `node`.
 //
 // Identity precedence: a player code (profile.playerId) groups devices across renames; falling back to
 // the (lowercased) profile name, then to the device id. Legacy records with no code group by name,
 // exactly like today, so nothing regresses.
 
-import { GAMES } from './game-stats.js';
+import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'pinball', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
-export const COMPETITIVE = GAMES.filter((g) => !SOLO.has(g));
+// An ARCHIVED game (js/game-stats.js) is still in GAMES because its records are still stored, but
+// it is counted nowhere: not solo, not competitive, not in any total.
+export const COMPETITIVE = GAMES.filter((g) => !SOLO.has(g) && !ARCHIVED_GAMES.includes(g));
 
 const DIFFS = ['easy', 'medium', 'hard', 'expert'];
 const emptyGrid = () => {
@@ -373,22 +375,6 @@ export function aggregatePlayers(all, corrections) {
         dst.hc.bestCoins = Math.max(dst.hc.bestCoins | 0, src.hc.bestCoins | 0);
         const sbs = src.hc.bestDistanceByStage || {};
         for (const k of Object.keys(sbs)) dst.hc.bestDistanceByStage[k] = Math.max(dst.hc.bestDistanceByStage[k] | 0, sbs[k] | 0);
-      } else if (g === 'pinball' && src.pb) {
-        // Root CLAUDE.md "Adding a game" item 7's third edit, present from Pinball's first day
-        // rather than after a bug report: without this branch the game's own Stats screen reads
-        // zeroes the moment a person's second device syncs, even though total/byDiff stay right
-        // and every device's local store is intact. Lifetime counters (games, points, jackpots,
-        // multiballs, missions, ramps) ADD; both bests take Math.max, never a sum - a best score
-        // is one game's result, so adding two devices' bests would invent a game nobody played.
-        if (!dst.pb) dst.pb = { games: 0, bestScore: 0, points: 0, bestBall: 0, jackpots: 0, multiballs: 0, missions: 0, ramps: 0 };
-        dst.pb.games += src.pb.games | 0;
-        dst.pb.points += src.pb.points | 0;
-        dst.pb.jackpots += src.pb.jackpots | 0;
-        dst.pb.multiballs += src.pb.multiballs | 0;
-        dst.pb.missions += src.pb.missions | 0;
-        dst.pb.ramps += src.pb.ramps | 0;
-        dst.pb.bestScore = Math.max(dst.pb.bestScore | 0, src.pb.bestScore | 0);
-        dst.pb.bestBall = Math.max(dst.pb.bestBall | 0, src.pb.bestBall | 0);
       } else if (g === 'brickblitz' && src.bz) {
         // Root CLAUDE.md "Adding a game" item 7's third edit, present from day one. Lifetime
         // counters ADD; every best (overall, per difficulty, combo) takes Math.max, never a sum.
@@ -402,6 +388,14 @@ export function aggregatePlayers(all, corrections) {
         dst.bz.bestCombo = Math.max(dst.bz.bestCombo | 0, src.bz.bestCombo | 0);
         const sbd = src.bz.bestScoreByDiff || {};
         for (const k of Object.keys(sbd)) dst.bz.bestScoreByDiff[k] = Math.max(dst.bz.bestScoreByDiff[k] | 0, sbd[k] | 0);
+      } else if (g === 'airhockey' && src.ah) {
+        // Air Hockey records (js/game-stats.js, recordAirHockey). Counters ADD; bestShot and
+        // bestStreak take Math.max, never a sum. `streak` is one device's live state and is not
+        // combined (two devices' current streaks do not add up to anything true).
+        if (!dst.ah) dst.ah = { games: 0, goalsFor: 0, goalsAgainst: 0, shutouts: 0, bestShot: 0, bestStreak: 0 };
+        for (const k of ['games', 'goalsFor', 'goalsAgainst', 'shutouts']) dst.ah[k] += src.ah[k] | 0;
+        dst.ah.bestShot = Math.max(dst.ah.bestShot | 0, src.ah.bestShot | 0);
+        dst.ah.bestStreak = Math.max(dst.ah.bestStreak | 0, src.ah.bestStreak | 0);
       } else if (g === 'holdem' && src.hb) {
         // Texas Hold'em's bankroll LEDGER (js/game-stats.js, recordHoldemBank). Every money field
         // is an additive counter, so a person's balance across devices is the SUM of the ledgers;
@@ -540,7 +534,7 @@ export function aggregatePlayers(all, corrections) {
         dst.sk.bestGame = Math.max(dst.sk.bestGame | 0, src.sk.bestGame | 0);
         dst.sk.bestThrow = Math.max(dst.sk.bestThrow | 0, src.sk.bestThrow | 0);
         // Per-machine records and unlocks (2026-08-11). js/arcade-scores.js owns both merges so
-        // Skeeball and Pinball can never disagree about them: bests take max, each DAY takes the
+        // every arcade game can never disagree about them: bests take max, each DAY takes the
         // max of that day, and unlocks are a UNION - a second device must never take away a board
         // its owner earned on the first.
         if (!dst.sk.boards) dst.sk.boards = {};

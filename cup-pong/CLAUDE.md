@@ -45,28 +45,68 @@ from the recordings - see "The look" and "The throw" below. Aim: he was "not sur
 each with its shape from `js/difficulty-tiers.js`), Gentleman's On/Off, **Play**, and **Practice**
 (stage 1's solo table, unchanged).
 
-**The Reracks setting (brief 4a) is NOT on the setup screen yet, on purpose.** It picks how many
-reracks each player gets, and the rerack itself is stage 3; a setting that does nothing is worse
-than none. It ships with stage 3, frozen into the match exactly like Gentleman's.
+**Setup** also has **Reracks** (0 / 1 / 2 / 3 / unlimited, default 2, per player per game), since
+2026-09-28 when the rerack itself shipped.
 
-**`js/match.js` decides everything**, as events: `made`, `miss`, `ballsBack`, `heatingUp`,
-`onFire`, `cooled`, `rackCleared`, `rebuttal`, `overtime`, `gentlemans`, `turnOver`, `win`. The
-screen only announces them. Five calls the rules left open, made here and written down so they are
-not re-decided differently:
+**`js/match.js` decides everything**, as events: `made`, `miss`, `ballsBack`, `heatingUp`, `onFire`,
+`cooled`, `removed`, `rackCleared`, `rebuttal`, `overtime`, `gentlemans`, `rerack`, `islandCalled`,
+`islandPick`, `picked`, `turnOver`, `win`. The screen only announces them.
 
-- **On fire** starts on the first make of the third turn running with a make, and from then the
-  shooter throws until a miss, whatever throws the pair had left. **The miss ends the turn AND
-  resets the streak** (you have to heat up again). Without the reset, a player would be back on
-  fire with their very next make.
-- **Balls back** needs both throws of a pair in. It repeats. It does not apply on fire or in a
-  rebuttal, where you throw until you miss anyway.
-- **The rebuttal** is "shoot until you miss" at the rack of the side that just cleared. A miss hands
-  the match to the side that cleared; clearing everything goes to overtime.
-- **Overtime**: 3 cups a side in a 2-1 triangle on the BACK rows (`OVERTIME_CELLS`), normal rules,
-  streaks reset, and the side that cleared first shoots first. A rebuttal applies again at the end
-  of overtime, so overtime can repeat.
-- **Gentleman's** is checked at the start of every turn against the rack being shot at; a rack
-  already standing in the line is left alone. The cups slide into place (`slideRack`, 0.6 s).
+### The rules as Matt set them (2026-09-28, second round, his words where quoted)
+
+The first stage 2 build guessed at several of these; every guess below was corrected by Matt and is
+now his rule. `node cup-pong/js/test.js` has a check for each, his own counter-example included.
+
+- **Heating up and on fire are PER BALL.** *"it has to be the first ball that gets 2 in a row for
+  heating up and 3 in a row for on fire. and on fire means you get that ball back and shoot until
+  you miss."* His counter-example: ball 1 in, ball 2 out, next turn ball 1 out, ball 2 in, is NOT
+  heating up. Each ball keeps its own streak across turns, and **every throw of that ball counts,
+  balls-back throws included** (asked and answered the same day). The 3rd make in a row lights it;
+  that ball then comes straight back after every make, and a miss cools it (streak to 0) and passes
+  to the other ball. The ball itself shows it: amber at 2 in a row, flame orange from 3
+  (`setBallHeat`), and the bar says "Ball 1 heating up" / "Ball 1 on fire".
+- **Balls back**: both balls' last throws of the pair were makes. It repeats.
+- **The last cup**: *"if I have 1 cup left to hit, and I make it with my first ball, I still get to
+  shoot the second ball. If I make that ball too (so both balls are in the same cup) i win the game
+  and the other team does NOT get a rebuttal."* The cup STAYS on the table while a ball is left to
+  throw at it (`lastCup`); the "Last cup! Same cup wins" notice says so. A miss then removes it and
+  the rebuttal follows. This is the one exception to "a made cup is gone at once".
+- **The rebuttal**: *"rebuttals is 2 shots as well - each person gets to shoot. And if the first
+  ball hits a cup, they get that ball back"*. Both balls, each shooting until it misses. Clear
+  everything: overtime. Both missed: the side that cleared wins.
+- **Overtime**: 3 cups a side in a 2-1 triangle on the BACK rows (`OVERTIME_CELLS`), streaks reset,
+  the side that cleared first shoots first, and at its end a rebuttal applies again. Matt: *"nice
+  overtime."* and *"there should be NO reracks or gentlemans allowed in OT"*.
+
+### Gentleman's, Rerack and Island are BUTTONS (2026-09-28)
+
+Matt: *"Gentleman's did work automatically. nice. But let's make it an option. rerack should be like
+that too. when it's available, theres a button on the left..."* So all three are the shooter's
+options, pill buttons stacked on the LEFT edge of the table (`.cp-opts`), each shown only while it
+is on offer and gone after the turn's first throw:
+
+- **Gentleman's**: the rack being shot at is down to 2 cups not already in a line, the setting is
+  On, not overtime. Free. The cups slide into the line.
+- **Rerack (n)**: before the turn's first throw, one a turn, not in a rebuttal or overtime, while
+  the shooter has reracks left. Opens a sheet of the presets for that many cups (`rack.js RERACKS`,
+  each drawn top-down), and the cups slide into the one tapped. **Custom ("make your own", drag
+  the cups) is NOT built yet** - Matt chose presets now, custom next.
+- **Island**: *"if a cup is not touching any other cups, you can call island (once per game). and if
+  you hit that cup, you get 2 cups. The opposing player can choose the second cup. If there are
+  multiple available islands, you must call the specific one."* The button calls the only island
+  at once, or rings every island in yellow and asks you to tap the one you are calling. **Calling
+  spends it, hit or miss** (Matt, 2026-09-28). Hit it and the defender owes a second cup: the
+  computer picks at once (its loneliest cup); when you defend, the camera turns to your cups and you
+  tap one. Allowed in overtime (Matt ruled out only reracks and Gentleman's there); not in a
+  rebuttal.
+
+**Preset placement** follows the Gentleman's rule: the shape's FRONT row stands where the triangle's
+point is; a shape deeper than the triangle has its back row on the back row. Every preset was
+checked legal (touching, no overlaps, on the table).
+
+**The computer** takes Gentleman's whenever offered, reracks when a preset has at least 2 more
+touching pairs than what is standing (a tidier target), and calls the first island it sees and aims
+at it (`cpuOptions`, `cpuIsland`, `cpuPick`).
 
 **The two ends of the table.** Your turn uses the fitted camera. The computer's turn glides the
 camera to the other end, behind your own RED cups, looking back at it (the recording shows the
@@ -195,10 +235,18 @@ by 35-200 ms, so every scripted flick reads as a slow push. Only a real hand can
 - **No magnetism, ever** (skeeball's ban). Nothing steers the ball.
 
 Measured on the lob (build 3), 858-throw power x aim grid over the full rack: every one of the 10
-cups is made (11-34 times each), 23.9% of the even sweep scores, 445 throws touch a cup and stay
-out, none reaches the time cap (slowest 4.1 s). Soft throws that bounce off the table go in again
-(40 of 403); build 2's flat throw had made that 0 of 969. Bounce shots are still brief section 5d,
-stage 4's; `test.js` prints the count as `info` until then.
+cups is made, ~20% of the even sweep scores, and plenty of throws touch a cup and stay out; none
+reaches the time cap.
+
+**BOUNCE SHOTS (2026-09-28).** Matt: *"It's impossible to bounce the ball in."* Measured on a
+power sweep: a ball only bounced in when it first landed within ~30 cm of the front cup; land any
+shorter and the rebound carried it over every cup. Two levers were measured, not guessed: **table
+grip does nothing** (0.22 vs 0.5 vs 0.8, identical to the throw), and **less bounce is worse**
+(0.65 halved the bounce-ins, 0.45 made them zero - the ball cannot get back over a 12 cm rim). More
+bounce widens the band: `MAT.tableRest` 0.78 -> **0.88** (a ping pong ball on a hard table really
+is ~0.9) makes landings up to ~50 cm short bounce in, and soft throws that bounce in went 40 -> 89
+of 403. Direct scoring barely moved. `test.js` prints the bounce count as `info`; stage 4 (bounce
+shots count double, brief 5d) turns it into an assertion.
 
 ## The look and the camera (fitted to the recording, 2026-09-27)
 
@@ -219,11 +267,14 @@ border and a white centre line down its length and NO crosswise line; the oppone
 a striped brown wall over a strip of dark panelling behind the far end (an UNLIT backdrop, because
 the key light stands behind it); a pale plank floor just below the table, so it shows beside the
 far end; black legs; the light high behind the far end on the right, so shadows fall toward the
-player's left. **A made cup lifts out and is carried off** up and to the right, fading - not a
+player's left. **The inside of a cup is SHADED** (a gradient, light at the rim to dark at the
+bottom, `_insideTex`): Matt, 2026-09-28, *"they almost look like they're filled solid with white"* -
+the first cut lit the inside a flat white. **A made cup lifts out and is carried off** up and to the right, fading - not a
 sink. No word pops up for a make or a miss (GamePigeon shows none; "Balls Back" is stage 2).
 
 Headless Chromium is SwiftShader, so `render.js` turns shadows off there: screenshots from the
-container never show them. A phone does.
+container never show them. A phone does. **`window.__cpHardGL = true`** (set before the game loads) forces the real
+renderer anyway, shadows included, for a screenshot probe; the game never sets it.
 
 ## Tests
 

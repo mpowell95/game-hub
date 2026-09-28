@@ -205,8 +205,8 @@ export function startThrow(board, { power = 0.5, aim = 0 } = {}) {
     bounces: 0,
     nContacts: 0,             // contact events emitted so far, so the cap below can bite
     airborne: false,
-    // The displacement-anchored stall watchdog (speed thresholds are jitter-blind - the pinball
-    // lesson survives the engine swap).
+    // The displacement-anchored stall watchdog (speed thresholds are jitter-blind - a lesson
+    // that survives the engine swap).
     anchor: { x: 0, y: 0, z: 0, t: 0 },
     nudges: 0,
     emergencyUsed: false,

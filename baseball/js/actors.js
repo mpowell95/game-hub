@@ -44,7 +44,7 @@ const DPR_CAP = 2;
 // hardware.
 const RENDER_FRAME_MS = 1000 / 20;
 
-/** Is this a SOFTWARE GL context (SwiftShader, llvmpipe)? Copied from `pinball/js/render3d.js`
+/** Is this a SOFTWARE GL context (SwiftShader, llvmpipe)? Copied from `archive/pinball/js/render3d.js`
  *  (lines 78-95 as of this stage - that file's own header: "a software rasteriser cannot afford
  *  [the full cost]... the headless browsers the visual suite runs in are all software"). Memoised,
  *  so the probe happens once per page rather than once per Actors instance, and the probe context

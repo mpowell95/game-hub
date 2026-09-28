@@ -17,7 +17,7 @@ import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
 import { isGameLive, corrections } from './admin-config.js';
 import { correctStats } from './stats-corrections.js';
-import { makeT } from './i18n.js';
+import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
 import { SOLO } from './players-agg.js';
@@ -64,21 +64,17 @@ const TABS = [
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
   { id: 'battleship', labelKey: 'game_title_battleship' },
-  // NOT devOnly, unlike Pinball's row above, and the difference is deliberate. Pinball has been
-  // admin-only since birth, so nobody outside the dev profiles can have plays and gating its tab
-  // costs no one anything. Skeeball was LIVE to the family for a couple of hours on 2026-08-11
+  // NOT devOnly, and the difference is deliberate. Skeeball was LIVE to the family for a couple of hours on 2026-08-11
   // before being pulled back to admin-only, so someone may have real plays recorded - and hiding
   // this row would make their own history invisible to them (THE LAW rule 1). It costs nothing to
   // leave open: gameListHTML only renders a row for a game with plays, so anyone who never played
   // it sees nothing here either way.
   { id: 'skeeball', labelKey: 'game_title_skeeball' },
-  // Unreleased: the tab renders only for Matt and the tester, matching the hub card's devOnly gate.
-  { id: 'pinball', labelKey: 'game_title_pinball', devOnly: true },
   // Brick Breaker (released 2026-09-23).
   { id: 'brickblitz', labelKey: 'game_title_brickblitz' },
   // Texas Hold'em (released 2026-09-27). total/byDiff only, so the generic screen draws it.
   { id: 'holdem', labelKey: 'game_title_holdem' },
-  // Admin only while it is built in stages (docs/AIR-HOCKEY-BRIEF.md); same reasoning as Pinball's row.
+  // Admin only while it is built in stages (docs/AIR-HOCKEY-BRIEF.md); same reasoning as Baseball's row below.
   { id: 'airhockey', labelKey: 'game_title_airhockey', devOnly: true },
   // Admin only while it is built in stages (docs/CUP-PONG-BRIEF.md); plain total/byDiff vs the computer.
   { id: 'cuppong', labelKey: 'game_title_cuppong', devOnly: true },
@@ -103,7 +99,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -1203,7 +1199,6 @@ function hasPlays(id, rec) {
   if (id === 'ballrun') return !!((rec.br && rec.br.runs) || (rec.brOrbital && rec.brOrbital.runs) || rec.brLegacyMeters);
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
-  if (id === 'pinball') return !!(rec.pb && rec.pb.games);
   if (id === 'brickblitz') return !!(rec.bz && rec.bz.games);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
@@ -1222,7 +1217,6 @@ function headlineOf(id, rec) {
   if (id === 'ballrun') return { n: Math.max((rec.br && rec.br.bestObstacles) | 0, (rec.brOrbital && rec.brOrbital.bestObstacles) | 0), unitKey: unitKeyOf(id) };
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
-  if (id === 'pinball') return { n: (rec.pb && rec.pb.bestScore) | 0, unitKey: unitKeyOf(id) };
   if (id === 'brickblitz') return { n: (rec.bz && rec.bz.bestScore) | 0, unitKey: unitKeyOf(id) };
   if (id === 'contexto') return { n: (rec.ct && rec.ct.solved) | 0, unitKey: unitKeyOf(id) };
   // Lifetime points, not the best single rack - the same fix leaderboard-ui.js's skPointsAt
@@ -1293,8 +1287,8 @@ function overviewTotals(games) {
     const tot = (g[tab.id] || {}).total || {};
     plays += tot.played | 0;
     // GOLF'S PLAYS ARE ROUNDS, NOT RUNS (2026-09-09, HANDOFF-GOLF-LAUNCH.md job C1). It is in
-    // SOLO with Ball Run, Snake, Nuts & Bolts, Hill Climb, Pinball and Skeeball, and `runs` is the
-    // right word for all six - which is exactly why golf needs its own and NOT a global rename.
+    // SOLO with Ball Run, Snake, Nuts & Bolts, Hill Climb and Skeeball, and `runs` is the
+    // right word for all of them - which is exactly why golf needs its own and NOT a global rename.
     // A round of golf is not a run at anything, and calling it one is the kind of small wrongness
     // that makes a screen feel like it was written for a different game.
     if (tab.id === 'golf') rounds += tot.played | 0;
@@ -1325,50 +1319,36 @@ function overviewHTML(st) {
     </div>`;
 }
 
-// --- Pinball (solo, score-attack, table-tiered) -----------------------------
-// The three TABLE settings are this game's difficulty axis, so byDiff's easy/medium/hard buckets
-// are shown under the names the game itself uses (Hill Climb's by-stage table is the precedent).
-// Deliberately NOT the shared diffTable(): that renders W-L and a win rate, and a pinball game has
-// no loss axis at all, so every row would read "2-0, 100%" - a true number that means nothing.
-const PB_TABLES = [['easy', 'gs_pb_casual'], ['medium', 'gs_pb_standard'], ['hard', 'gs_pb_tournament']];
-
-
-/** Pinball: no wins or losses (a game ends when the last ball drains), so the honest numbers are
- *  games played and the best score, exactly like Ball Run's, Snake's and Hill Climb's screens.
- *  Best ball gets its own tile because it is the number pinball players actually compare, and the
- *  lifetime jackpot / multiball / mission counts are the only record of HOW a score was built.
- *  Average is derived at render time from `points` and `games`, never stored (a stored average
- *  would be a value that can go DOWN, which has no business in the shared store). */
-function pinballScreen(rec) {
-  const pb = (rec && rec.pb) || {};
-  const games = pb.games | 0;
-  if (!games) return emptyState('Pinball');
-  const avg = games > 0 ? Math.round((pb.points | 0) / games) : 0;
-  return `
-    <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${(pb.bestScore | 0).toLocaleString()}</b><span>${t('gs_pb_best')}</span></div>
-      <div class="gs-tally"><b>${(pb.bestBall | 0).toLocaleString()}</b><span>${t('gs_pb_bestball')}</span></div>
-      <div class="gs-tally"><b>${games}</b><span>${t('gs_played')}</span></div>
-      <div class="gs-tally"><b>${avg.toLocaleString()}</b><span>${t('gs_pb_avg')}</span></div>
-    </div>
-    <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${pb.missions | 0}</b><span>${t('gs_pb_missions')}</span></div>
-      <div class="gs-tally"><b>${pb.multiballs | 0}</b><span>${t('gs_pb_multiballs')}</span></div>
-      <div class="gs-tally"><b>${pb.jackpots | 0}</b><span>${t('gs_pb_jackpots')}</span></div>
-      <div class="gs-tally"><b>${pb.ramps | 0}</b><span>${t('gs_pb_ramps')}</span></div>
-    </div>
-    <h4 class="gs-tbl-h">${t('gs_pb_by_table')}</h4>
-    <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">${t('gs_played')}</th></tr></thead>
-      <tbody>${PB_TABLES.map(([k, labelKey]) =>
-        `<tr><th scope="row">${t(labelKey)}</th><td>${((rec && rec.byDiff && rec.byDiff[k] && rec.byDiff[k].played) | 0)}</td></tr>`).join('')}</tbody>
-    </table>`;
-}
-
 // --- Brick Breaker (solo, score attack, three difficulties) -------------------------------------
 /** No wins or losses (a run ends when the last ball is lost), so the honest numbers are runs,
- *  bests and lifetime counters, like Pinball's screen. Average is derived at render time from
+ *  bests and lifetime counters, like Hill Climb's screen. Average is derived at render time from
  *  `points` and `games`, never stored. The per-difficulty table shows every stored best. */
+/** Air Hockey (2026-09-28): the usual wins/losses plus the `ah` records. The fastest shot is
+ *  STORED in table units per second and converted only here, on the same scale as the game's own
+ *  readout (air-hockey/js/ui.js shotText: the 900-unit table is an 8 ft / 2.44 m table). */
+function airHockeyScreen(rec) {
+  const total = (rec && rec.total) || { played: 0, won: 0, lost: 0 };
+  const ah = (rec && rec.ah) || {};
+  const played = total.played | 0, won = total.won | 0;
+  if (!played && !(ah.games | 0)) return emptyState(gameLabel('airhockey'));
+  const ms = (ah.bestShot | 0) * 2.44 / 900;
+  const shot = getLang() === 'es' ? `${Math.round(ms * 3.6)} km/h` : `${Math.round(ms * 2.23694)} mph`;
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${won}</b><span>${t('gs_wins')}</span></div>
+      <div class="gs-tally"><b>${total.lost | 0}</b><span>${t('gs_losses')}</span></div>
+      <div class="gs-tally"><b>${played}</b><span>${t('gs_plays')}</span></div>
+      <div class="gs-tally"><b>${pct(won, played)}%</b><span>${t('gs_win_rate')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${ah.bestShot ? shot : '-'}</b><span>${t('gs_ah_shot')}</span></div>
+      <div class="gs-tally"><b>${ah.shutouts | 0}</b><span>${t('gs_ah_shutouts')}</span></div>
+      <div class="gs-tally"><b>${ah.bestStreak | 0}</b><span>${t('gs_ah_streak')}</span></div>
+      <div class="gs-tally"><b>${ah.goalsFor | 0}-${ah.goalsAgainst | 0}</b><span>${t('gs_ah_goals')}</span></div>
+    </div>
+    ${diffTable(rec && rec.byDiff)}`;
+}
+
 function brickBlitzScreen(rec) {
   const bz = (rec && rec.bz) || {};
   const games = bz.games | 0;
@@ -1537,8 +1517,8 @@ function screenFor(id, st) {
   if (id === 'hillclimb') return hillClimbScreen(rec);
   if (id === 'battleship') return battleshipScreen(rec);
   if (id === 'skeeball') return skeeballScreen(rec);
-  if (id === 'pinball') return pinballScreen(rec);
   if (id === 'brickblitz') return brickBlitzScreen(rec);
+  if (id === 'airhockey') return airHockeyScreen(rec);
   if (id === 'holdem') return holdemScreen(rec);
   if (id === 'golf') return golfScreen(rec);
   return recordScreen(id, rec);   // business, parchis

@@ -12,7 +12,7 @@
 //
 // THE SHAPE, at `adminConfig/v1` in the shared 'stats' Firebase app:
 //
-//   { games:    { pinball:  { live: true, at: <ms>, by: '<deviceId>' } },
+//   { games:    { golf:     { live: true, at: <ms>, by: '<deviceId>' } },
 //     skeeball: { boards: { popongo: { open: false, testing: false, at: <ms>, by: '<deviceId>' } } },
 //     golf:     { courses: { <courseId>: { open: false, testing: true, at: <ms>, by: '<deviceId>' } } } }
 //
@@ -112,7 +112,7 @@ export function normalizeConfig(raw) {
 /**
  * Is this game on the launcher for ordinary players?
  * @param {object} cfg   a normalized config
- * @param {string} id    the HUB registry id ('pinball', 'skeeball', ...)
+ * @param {string} id    the HUB registry id ('golf', 'skeeball', ...)
  * @param {boolean} codeDefault  what js/hub.js's registry says (`!g.devOnly`)
  * @returns {boolean}
  */
@@ -461,7 +461,7 @@ function fail(msg) { console.error('[admin-config] ' + msg); return { ok: false,
 /**
  * Write one node's override fields and VERIFY THEY LANDED by fresh re-read (THE LAW rule 6).
  * A field whose value is `null` is CLEARED, handing that decision back to the code default.
- * @param {string} path    a path under CONFIG_PATH, e.g. 'games/pinball'
+ * @param {string} path    a path under CONFIG_PATH, e.g. 'games/golf'
  * @param {object} fields  { field: boolean|null, ... } - written together, so a machine's two
  *                         fields can never land half-applied and read as a contradiction
  * @param {(cfg:object)=>boolean} verify  re-read check, run against the freshly fetched config

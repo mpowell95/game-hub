@@ -41,7 +41,6 @@ const SUITES = [
   { file: 'test-arcade-scores.mjs' },
   { file: 'test-hole-editor.mjs' },
   { file: 'battleship/js/test.js' },
-  { file: 'pinball/js/test.js' },
   { file: 'pool/js/test-physics.mjs' },
   { file: 'pool/js/test-rules.mjs' },
   // Golf's engine suite, rewritten for the 2D game (Stage B). It covers everything measurable

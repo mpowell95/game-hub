@@ -50,8 +50,7 @@ anywhere a Skeeball session would see it. That is the whole thesis of this file.
 - **Every animation needs a `prefers-reduced-motion: reduce` branch that is an instant state
   change, and it must never `display: none` anything structural** — settle each element to its
   final pose instead of hiding it (`battleship/CLAUDE.md`). **Exception, and it matters**:
-  reduced motion thins garnish, it does not freeze gameplay. `pinball/CLAUDE.md` states this
-  directly — "a pinball table that does not move is not a pinball table." If the motion you're
+  reduced motion thins garnish, it does not freeze gameplay. If the motion you're
   gating IS the game (a ball, a piece sliding into place, a card being dealt), reduced-motion
   should keep it moving and cut only the decorative extras (particles, screen shake, celebratory
   flourish) around it.
@@ -153,7 +152,7 @@ export default { init, destroy, isInProgress };
 - `isInProgress()` gates the hub's "leave game?" confirm (`hub.js` calls it before
   navigating back to the launcher) and has **two legitimate meanings** depending on whether
   the game can resume:
-  - **No mid-game resume** (Ball Run, Snake, Hill Climb, Pinball): returns `true` while a game/run
+  - **No mid-game resume** (Ball Run, Snake, Hill Climb): returns `true` while a game/run
     is actually in progress, `false` otherwise. The literal meaning. Live-action runs; mid-run
     resume is meaningless.
   - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
@@ -176,7 +175,7 @@ export default { init, destroy, isInProgress };
   When adding a game, decide up front which meaning applies and say so in a comment next to
   `isInProgress()` — don't leave the next session to guess from behavior alone.
 - An `immersive: true` entry in `hub.js`'s `GAMES` array (Escoba, Mancala, Ball Run, Yahtzee, Pool,
-  Hill Climb, Battleship, Skeeball, Pinball) collapses the hub's header to a floating back button
+  Hill Climb, Battleship, Skeeball) collapses the hub's header to a floating back button
   for games with their own full-bleed chrome. It's a de facto fourth registry flag, same status as
   `module`/`href`/`devOnly` — set it when a game wants to own the whole viewport.
 - **Module stylesheets, once injected, are never removed on `destroy()`.** They go into the shared
@@ -256,7 +255,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
    and **bump `CACHE`** (`game-hub-vN` → `vN+1`, past what's on `origin/main` right now — a
    concurrent session may have bumped it since you last checked) — or the new files won't be
    cached for offline. Run `node validate-sw-assets.mjs` before committing.
-7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs`/`sk`/`pb`/`gf`/`bb`/`sd` —
+7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs`/`sk`/`pb`/`gf`/`bb`/`sd`/`bz`/`ah` —
    anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
    third is a THE LAW rule 1 bug that is invisible on a single device:
    - `js/game-stats.js` — an `ensureXx()` + its call in `normalize()`, plus the `recordXx()` writer.
@@ -419,11 +418,10 @@ the game's root, `flex: 1` (never a percentage height) down the chain, a zero-si
 
 ### Preventing physics tunnelling through thin geometry
 
-Reinvented independently in Hill Climb and Pinball, via two related but distinct mechanisms —
+Reinvented independently in Hill Climb and the (now archived) Pinball, via two related but distinct mechanisms —
 write both if you're building a third physics-based game:
 
-- **Cap the distance travelled per physics step below the thinnest collidable feature.** Pinball's
-  rule: `MAX_SPEED / PHYS_DT` is the per-step travel distance, and it must stay well under the
+- **Cap the distance travelled per physics step below the thinnest collidable feature.** The rule (`archive/pinball/`): `MAX_SPEED / PHYS_DT` is the per-step travel distance, and it must stay well under the
   thinnest wall. Raising the speed cap without shortening the timestep re-opens tunnelling.
 - **A fixed timestep needs a bounded catch-up cap**, separately. Hill Climb's `tick()` uses a fixed
   1/120s step with a `MAX_STEPS` cap, so a stalled tab can't make an object teleport through

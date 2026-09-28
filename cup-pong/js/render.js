@@ -73,7 +73,7 @@ const PANEL_H = 0.45;            // the dark panelling up the wall from the floo
 
 export class Renderer {
   constructor(canvas, { reducedMotion = false } = {}) {
-    this.soft = isSoftGL();
+    this.soft = isSoftGL() && !(typeof window !== 'undefined' && window.__cpHardGL);   // __cpHardGL: screenshot probes only
     this.reduced = reducedMotion;
     this.disposed = false;
     this._shadowLive = true;
@@ -229,21 +229,42 @@ export class Renderer {
     }
     const g = new THREE.Group();
     const mOut = new THREE.MeshStandardMaterial({ color, roughness: 0.45, side: THREE.DoubleSide, emissive: color, emissiveIntensity: 0.18 });
-    // The inside reads WHITE in the recording, not the grey an unlit back face gives: a little glow.
-    const mIn = new THREE.MeshStandardMaterial({ color: LOOK.cupIn, roughness: 0.55, side: THREE.BackSide, emissive: 0xc4c4c4 });
+    // THE INSIDE IS SHADED, LIGHT AT THE RIM TO DARK AT THE BOTTOM, so a cup reads as HOLLOW. Matt,
+    // 2026-09-28: "they almost look like they're filled solid with white". The first cut gave the
+    // inside a flat white glow (an unlit back face is grey), which is exactly a white lid.
+    const mIn = new THREE.MeshStandardMaterial({ color: 0xffffff, map: this._insideTex(), roughness: 0.6,
+      side: THREE.BackSide, emissive: 0xffffff, emissiveMap: this._insideTex(), emissiveIntensity: 0.35 });
     const wall = new THREE.Mesh(new THREE.LatheGeometry(outer, 40), mOut);
     wall.castShadow = true;
     const inside = new THREE.Mesh(new THREE.LatheGeometry(inner, 40), mIn);
+    // The cup's own wall shadows its inside: the crescent that says "hollow" on a real GPU.
+    inside.receiveShadow = true;
     const rim = new THREE.Mesh(new THREE.TorusGeometry(topR, 0.0028, 8, 44),
       new THREE.MeshStandardMaterial({ color: LOOK.cupIn, roughness: 0.4 }));
     rim.rotation.x = Math.PI / 2;
     rim.position.y = h;
     const base = new THREE.Mesh(new THREE.CircleGeometry(botR - 0.002, 32),
-      new THREE.MeshStandardMaterial({ color: LOOK.cupIn, roughness: 0.6, emissive: 0xc4c4c4 }));
+      new THREE.MeshStandardMaterial({ color: 0x5a5a58, roughness: 0.8, emissive: 0x1c1c1c }));
+    base.receiveShadow = true;
     base.rotation.x = -Math.PI / 2;
     base.position.y = 0.004;
     g.add(wall, inside, rim, base);
     return g;
+  }
+
+  /** The inside of a cup: a vertical gradient, bright at the rim (v = 1) to shadowed at the bottom. */
+  _insideTex() {
+    if (this._inTex) return this._inTex;
+    this._inTex = this._canvasTex(4, 128, (g, w, h) => {
+      const lin = g.createLinearGradient(0, 0, 0, h);   // canvas top = v 1 = the rim
+      lin.addColorStop(0, '#f6f6f4');
+      lin.addColorStop(0.12, '#dcdcda');
+      lin.addColorStop(0.55, '#9a9a98');
+      lin.addColorStop(1, '#4a4a48');
+      g.fillStyle = lin;
+      g.fillRect(0, 0, w, h);
+    });
+    return this._inTex;
   }
 
   /** SHOOTER FRAME -> WORLD. Every rack and every throw is described as the shooter sees it (the
@@ -260,7 +281,7 @@ export class Renderer {
       const group = this._cupProto[side].clone();
       group.position.set(w.x, 0, w.z);
       this.scene.add(group);
-      this.cups.set(side + ':' + k.id, { side, group, t: null, x: w.x, z: w.z, slide: null });
+      this.cups.set(side + ':' + k.id, { side, key: k.id, group, t: null, x: w.x, z: w.z, slide: null, mark: null });
     }
     this.renderer.shadowMap.needsUpdate = true;
   }
@@ -304,6 +325,51 @@ export class Renderer {
     this.renderer.shadowMap.needsUpdate = true;
   }
   hideBall() { this.ball.visible = false; this.spare.visible = false; }
+
+  /** HEATING UP / ON FIRE shows on the ball itself: amber at 2 in a row, flame orange from 3. The
+   *  brightness steps too, so it reads without colour. `ballHeat` / `spareHeat` are streak counts. */
+  setBallHeat(ballHeat = 0, spareHeat = 0) {
+    const tint = (mesh, h, base) => {
+      const m = mesh.material;
+      if (h >= 3) { m.color.set(0xffd0a0); m.emissive.set(0xff5a14); m.emissiveIntensity = 1.1; }
+      else if (h === 2) { m.color.set(0xfff0d8); m.emissive.set(0xffa53a); m.emissiveIntensity = 0.6; }
+      else { m.color.set(base); m.emissive.set(base === LOOK.ball ? 0x555555 : 0x000000); m.emissiveIntensity = 1; }
+    };
+    tint(this.ball, ballHeat, LOOK.ball);
+    tint(this.spare, spareHeat, 0x9a9a9a);
+  }
+
+  /** Yellow rings on cups: `island` (can be called) or `called`/`pick` (the chosen one, thicker).
+   *  `ids` null clears that side. The ring is the selection accent #ffce3a, with thickness as the
+   *  non-colour signal. */
+  setMarks(side, ids, style = 'island') {
+    for (const [, c] of this.cups) {
+      if (c.side !== side) continue;
+      if (c.mark) { c.group.remove(c.mark); c.mark = null; }
+      if (!ids || !ids.includes(c.key)) continue;
+      const tube = style === 'island' ? 0.004 : 0.007;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(CUP.topR + 0.012, tube, 8, 48),
+        new THREE.MeshBasicMaterial({ color: 0xffce3a }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = CUP.h + 0.004;
+      ring.userData.own = true;
+      c.group.add(ring);
+      c.mark = ring;
+    }
+    this.renderer.shadowMap.needsUpdate = true;
+  }
+
+  /** The cup of `side` under canvas pixel (px, py), or null - nearest rim centre within reach. */
+  cupAt(side, px, py) {
+    let best = null;
+    for (const [, c] of this.cups) {
+      if (c.side !== side || c.t !== null) continue;
+      const s = this.project(c.x, CUP.h * 0.6, c.z);
+      const d = Math.hypot(s.x - px, s.y - py);
+      if (d < 48 && (!best || d < best.d)) best = { d, id: c.key };
+    }
+    return best ? best.id : null;
+  }
 
   /**
    * THE TWO VIEWS. 'shoot' is the camera fitted to the recording. 'defend' is the other end of the
@@ -445,6 +511,7 @@ export class Renderer {
       }
     };
     this.scene.traverse(free);
+    try { this._inTex && this._inTex.dispose(); } catch {}
     for (const k of ['a', 'b']) this._cupProto[k].traverse(free);   // may be out of the scene
     try { this.spare.material.dispose(); } catch {}
     for (const t of this._tex) { try { t.dispose(); } catch {} }

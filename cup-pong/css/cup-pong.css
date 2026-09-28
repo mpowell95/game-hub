@@ -4,7 +4,7 @@
  * injected, so a collision would be permanent for that session (Mancala's discipline).
  *
  * The PLAY screen keeps its own dark look in BOTH hub themes - it is in-game art, like Hoops',
- * Skeeball's and Pinball's play screens. The overlays use css/ui.css's .gh-* primitives, pointed
+ * Skeeball's play screens. The overlays use css/ui.css's .gh-* primitives, pointed
  * at this file's own tokens below so they flip with the hub theme on the standalone page too.
  *
  * NOTHING HERE SCROLLS. `node check-no-scroll.mjs cup-pong` is the safety net.
@@ -204,3 +204,50 @@
 .cp-root .cp-mode.is-cpu { padding: 0 10px; border: 2px solid var(--cp-dim); border-radius: 999px; }
 /* Hard's black diamond (js/difficulty-tiers.js) would vanish on the dark skin: same shape, light ink. */
 :root.gh-dark .cp-root .cp-setup .lb-dshape-t3 { fill: #e8edf5; }
+
+/* --- the shooter's options: stacked on the LEFT edge, only while on offer (Matt, 2026-09-28) --- */
+.cp-root .cp-opts {
+  position: absolute;
+  left: 10px;
+  top: 44%;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 3;
+}
+.cp-root .cp-opt {
+  appearance: none;
+  min-height: 44px; min-width: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 2px solid #ffce3a;                 /* the selection accent, with a border as the non-colour cue */
+  background: rgba(20, 26, 38, 0.82);
+  color: #fff;
+  font: inherit; font-size: 14px; font-weight: 800;
+  cursor: pointer; touch-action: manipulation;
+}
+.cp-root .cp-opt:active { background: rgba(40, 48, 66, 0.92); }
+/* Tap-to-pick layer: covers the whole table while a cup is being chosen. */
+.cp-root .cp-pick {
+  position: absolute; inset: 0; z-index: 5;
+  touch-action: manipulation; cursor: pointer;
+}
+.cp-root .cp-pick[hidden] { display: none; }
+.cp-root .cp-pick-say {
+  position: absolute; left: 12px; right: 12px; top: 12px; margin: 0;
+  padding: 8px 12px; border-radius: 12px;
+  background: rgba(20, 26, 38, 0.86); color: #fff;
+  font-size: 15px; font-weight: 800; text-align: center;
+  border: 2px solid #ffce3a;
+  pointer-events: none;
+}
+/* The rerack sheet: preset tiles, each a top-down drawing and its name. */
+.cp-root .cp-presets { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 6px; }
+.cp-root .cp-preset {
+  appearance: none;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 96px; min-height: 96px; padding: 10px;
+  border-radius: 14px; border: 1px solid var(--gh-border, #d6dde6);
+  background: var(--gh-surface-2); color: var(--gh-ink);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; touch-action: manipulation;
+}
+.cp-root .cp-preset svg { fill: #2346c2; }
+:root.gh-dark .cp-root .cp-preset svg { fill: #8fa6ff; }

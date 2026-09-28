@@ -17,21 +17,64 @@ starting a stage**. It holds the decisions (look, modes, win rule) and the onlin
 | 3 | Latency test for online (brief §5), numbers to Matt | **Done 2026-09-27.** Matt ran it on two devices: *"numbers look good, go ahead with stage 4"* (2026-09-28; he did not paste the numbers) |
 | 4 | Live online, if stage 3 says it works | **Done 2026-09-28, deployed devOnly** (see "Online play (stage 4)") |
 
-## Stats and settings (stage 2)
+## After the stages: Matt's additions (2026-09-28)
 
-- **`recordResult('airhockey', difficulty, won)`** when a match ENDS at 7: `'easy'`/`'medium'`/
-  `'hard'` vs the computer (`'mp'` is reserved for online, stage 4). total/byDiff only, no
-  sub-counter, so `js/players-agg.js` needs no branch. **A match left before 7 records nothing**
-  (quit, Back, hub back): it was neither won nor lost. A refused write logs loudly (rule 6).
+Matt: *"What else could we add?"* then *"I love all of them. Implement them. Except the mute one -
+it should not make any sound ever."*
+
+- **NO SOUND, EVER.** The stage 1 Web Audio (mallet clack, wall tick, goal horn) was REMOVED, and
+  there is deliberately no mute button: there is nothing to mute. Do not add audio back.
+- **Shot speed**: the goal banner shows YOUR shot's speed when you score ("Goal! 19 mph"); the
+  result card shows the match's fastest shot, with "New fastest shot!", "Shutout!" (a 7-0 win) and
+  "N wins in a row" badges. **Measured BEFORE the puck's speed cap** (`ev.shot` in `physics.js`,
+  set in `hit()`, before `capSpeed`): measured after it, nearly every firm hit read the cap (14
+  mph) and the record would have saturated in a game. `js/test.js` section 4 pins that the
+  readout keeps rising past the cap.
+- **mph / km/h are display only.** Stored in table units per second (rule 4). Scale: the 900-unit
+  table is a real 8 ft (2.44 m) table (`shotText` in `ui.js`, same maths in
+  `js/game-stats-ui.js`). EN shows mph, ES km/h.
+- **Expert** level (tier 4, double black diamond) above Hard: roughly the stage 2 Hard.
+- **Tables**: Classic (follows the app theme), Arcade, Neon, Ice. `render.js` `TABLES`/`PALETTE`;
+  saved as `table` in `gamehub.airhockey.v1`; per phone, cosmetic (online, each player sees their
+  own choice). The setup card shows four colour dots plus the chosen NAME ("Table: Neon"), since
+  the dots alone are colour only.
+- **Feel**: a puck trail when it is moving fast, sparks where a mallet hits (theirs too, online,
+  from the ghost), the scored-in goal mouth lights up, the scorer's number pops. All garnish, all
+  off under reduced motion; the puck itself always moves.
+- **Invite a player by name** (online card -> Invite a player -> pick from a list -> Send invite).
+  It creates a room and sends an ordinary **Messages** message ("Want to play Air Hockey? Tap Join,
+  or use code ABCD") carrying `invite: { game: 'air-hockey', code }` (`js/messages.js` `asInvite`,
+  additive; no rules change, no Cloud Function change: the existing `messagePush` notifies). In
+  Messages the recipient's bubble gets a **Join the game** button (`inviteButton` in
+  `js/messages-ui.js`), which puts the code in `sessionStorage['gamehub.airhockey.join']` (session
+  only, never kept) and opens the game the same way a tapped notification does; `ui.js` reads and
+  clears it on init and joins. A failed send says so and leaves the code on screen to share by hand;
+  an invite is never queued in the outbox (a room code goes stale). **Two limits**: while the game
+  is admin-only, only people who can see its tile can open it from Join; and a dev origin
+  (localhost) never sends messages (`writesAllowed`), so the real send was verified only up to
+  that guard. The Join side was verified in two browser profiles.
+- The player list is a `<select>` (`readContacts`, the list Messages uses), so a long list never
+  scrolls the card.
+
+## Stats and settings
+
+- **`recordAirHockey(difficulty, won, { goalsFor, goalsAgainst, shot })`** (since 2026-09-28; it
+  was `recordResult` before, which it still does the same `total/byDiff` bump as) when a match
+  ENDS at 7: `'easy'`/`'medium'`/`'hard'`/`'expert'` vs the computer, `'mp'` online. Sub-counter
+  **`ah`**: `games, goalsFor, goalsAgainst, shutouts` add; `bestShot, bestStreak` Math.max only;
+  `streak` is the one field a loss sets to 0 (live state; the earned part is `bestStreak`, and
+  `players-agg` does not add it up). All three sub-counter surfaces are wired: `ensureAh` +
+  recorder, `airHockeyScreen` in My Stats, the `ah` branch in `js/players-agg.js`
+  (`players-agg.test.mjs` has its case). **A match left before 7 records nothing** (quit, Back,
+  hub back): it was neither won nor lost. A refused write logs loudly (rule 6).
 - Wired in all four registries: `GAMES` in `js/game-stats.js`, `TABS` in `js/game-stats-ui.js`
   (**`devOnly: true`**, Pinball's reasoning: admin-only since birth, so nobody else can have plays)
   plus `HUB_ID` `airhockey -> air-hockey`, `GAME_META` in `js/leaderboard-ui.js`, and
-  `game_title_airhockey` in `js/strings.js`. My Stats uses the generic wins/losses screen
-  (`recordScreen`). **When Matt releases it, drop `devOnly` from the TABS row too.**
+  `game_title_airhockey` in `js/strings.js`. My Stats has its own screen (`airHockeyScreen`). **When Matt releases it, drop `devOnly` from the TABS row too.**
 - **Rule 1 on the game's own screens:** the setup card and the result card both show "Vs <level>:
   N won, M lost", read from the stats store.
-- **`gamehub.airhockey.v1`**: `{ difficulty }`, saved the moment a level is tapped. No saved
-  choice -> the profile's first opponent skill (1/2/3) -> Medium.
+- **`gamehub.airhockey.v1`**: `{ difficulty, table }`, each saved the moment it is tapped. No saved
+  level -> the profile's first opponent skill (1/2/3) -> Medium; no table -> Classic.
 
 ## Hub integration
 
@@ -55,7 +98,7 @@ starting a stage**. It holds the decisions (look, modes, win rule) and the onlin
 | `js/physics.js` | the table, puck and mallets. Pure (no DOM, no clock, no per-step allocation), so the headless test runs the exact game code |
 | `js/ai.js` | the computer's mallet: chooses a target, physics moves it. `LEVELS` easy/medium/hard, `DIFFS` |
 | `js/render.js` | canvas drawing. The table is painted once per layout/theme to an offscreen canvas; a frame is one `drawImage` plus three circles |
-| `js/ui.js` | setup (difficulty), how to play, pause and result cards, score row, input, sound, the clock, recording the result |
+| `js/ui.js` | setup (level, table), how to play, pause and result cards, score row, input, shot speed, the clock, recording the result, online lobby and invites |
 | `js/strings.js` | `{ en, es }` |
 | `css/air-hockey.css` | everything under `.ah-root`; cards and buttons are `css/ui.css`'s `.gh-modal` / `.gh-btn` |
 | `js/test.js` | headless engine probe, `node air-hockey/js/test.js` (not deployed) |
@@ -103,22 +146,34 @@ shot); otherwise wait at the guard line, shading toward the puck.
 stood on the line from its goal to the puck, and two of them played 60 s with zero goals. That
 line follows the puck continuously, so the reaction delay never cost it anything.
 
-**Tuning (stage 2, 2026-09-27).** Stage 1 shipped one computer (speed 900, react 0.17, aimErr 0.3,
-misread 0.27); Matt played it and called it *"a little too hard"*. So the new **Medium is easier
-than it and Hard a little tougher**. Measured by `js/test.js` against two scripted players run on
-the same AI code: NEW (a new player) and HUMAN (an average one). Computer's share of the goals:
+**Tuning, round 2 (2026-09-28) - read this before touching a level.** Matt, on the stage 2
+levels: *"the computer player is way too good. i haven't been able to score a single goal, even on
+easy."* Stage 2 had been tuned against scripted players that run the SAME AI code (go behind the
+puck, drive through it at a target), which aim like machines: they beat Easy 8/8 while a real thumb
+could not score. `js/test.js` now holds the levels to the **CHASER**, a beginner's thumb: sees the
+puck late (0.3 s), chases it, whacks it roughly upward, no aiming. Against the stage 2 Easy the
+CHASER scored 1.4 goals a match and never won, which matches what Matt saw, so it is the yardstick.
 
-| Level | speed / react | vs NEW | vs HUMAN |
+**The cause was DEFENCE, not attack.** The mallet waited in front of the MIDDLE of its goal (72
+units wide plus the puck's 44 covers about two thirds of the 170 mouth) and slid across at its full
+attack speed. Three per-level knobs now shape the defence (`ai.js`):
+
+- `guard`: how fast it moves when defending or getting back (was the attack speed)
+- `shade`: how far it follows the puck sideways while waiting; 1 = all the way, which leaves the
+  far side of the goal open (was a fixed 0.3)
+- `home`: how far out it waits (was 105 for every level)
+
+| Level | attack / guard speed, react | shade, home | vs CHASER: computer's share, beginner wins |
 |---|---|---|---|
-| Easy | 600 / 0.26 | 14%, new player wins 8/8 | 9% |
-| Medium | 840 / 0.19 | 42%, new player wins 6/8 | 16% |
-| (stage 1) | 900 / 0.17 | 64% | 30% |
-| Hard | 950 / 0.16 | 88%, new player wins 0/8 | 35% |
+| Easy | 430 / 200, 0.38 s | 0.95, 170 | 42%, 7/10 |
+| Medium | 650 / 280, 0.28 s | 0.8, 145 | 47%, 6/10 |
+| Hard | 840 / 450, 0.21 s | 0.55, 125 | 76%, 0/10 (still ~2 goals a match) |
+| (stage 2 Easy) | 600 / 600, 0.26 s | 0.3, 105 | 83%, 0/10 |
+| (stage 2 Medium) | 840 / 840, 0.19 s | 0.3, 105 | 89%, 0/10 |
 
-**The response is very steep**: a few percent more speed or less reaction swings the share by tens
-of points (an early Hard at 1000 / 0.15 took 61% off HUMAN). Move one knob a little at a time and
-re-run the test. The scripted players are bots, so Matt's own play is the real calibration: he sits
-somewhere just below stage 1's computer.
+The response is steep; move one knob a little at a time and re-run `node air-hockey/js/test.js`
+(its 3b block asserts the bars). The CHASER is still a bot: if Matt says a level feels wrong, his
+word beats these numbers, and the CHASER should be made to reproduce what he saw first (as here).
 
 ## Input
 
@@ -139,8 +194,8 @@ somewhere just below stage 1's computer.
 - Goal: a "Goal!" banner (pop animation) plus a short white flash on the table. Reduced motion
   drops the pop and the flash; the banner still shows. The puck keeps moving (Part 0: reduced
   motion thins garnish, never gameplay).
-- Sound: a mallet clack (louder and higher for harder hits), a soft wall tick, a two-note goal horn.
-  Web Audio, created on the first tap. No mute button yet.
+- **No sound at all** (see "Matt's additions"). Tables, trail, sparks and the goal moment: same
+  section.
 
 ## Online: the stage 3 latency test (2026-09-27)
 
@@ -192,7 +247,7 @@ to 7 on `js/live.js`, the opponent's NAME in the score row. Result: `recordResul
   now carries on INTO its own half, and on takeover the phone keeps the puck it was SHOWING if it
   is within 90 units of the owner's handover state stepped forward (normal case: both ran the same
   table physics). A bigger gap (their mallet hit it before it crossed) snaps to theirs. Their hits
-  and wall bounces still make sounds on your phone (from the ghost).
+  and wall bounces still throw sparks on your phone (from the ghost).
 
 **Proof, and its limits** (js/CLAUDE.md, "Multiplayer process rules": never claim "multiplayer
 works" without real devices):

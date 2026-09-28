@@ -63,7 +63,7 @@ commit.
 - **Stuck puck**: if the puck sits still in one half for about 5 s, it moves to that player
   (standard rule: the player on that side must play it).
 - **Win**: first to 7. Win/lose popup with X, Rematch, and Back.
-- **Feel**: a hit sound and a small screen flash on goals (`game-audio` skill; respect
+- **Feel** (SOUND REMOVED 2026-09-28, Matt: "it should not make any sound ever"; see `air-hockey/CLAUDE.md`): ~~a hit sound and~~ a small screen flash on goals (`game-audio` skill; respect
   reduced motion). Frame rate is the priority: no per-frame DOM updates or allocations.
 
 ## 4. Vs computer

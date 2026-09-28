@@ -16,7 +16,7 @@
 import {
   MAX_MESSAGE, myCode, readMyThreads, readThread, watchThread, markThreadSeen, hideThread,
   readContacts, sendMessage, sendBroadcast, unreadMessageCount, readAllThreads,
-  queueOutbox, normalizeText, isUnread, authId,
+  queueOutbox, normalizeText, isUnread, authId, asInvite,
 } from './messages.js';
 import { loadProfile } from './profile-store.js';
 import { loadPalette, PHRASES } from './mp-reactions.js';
@@ -202,6 +202,7 @@ function ensureCss() {
      cue, so the two sides stay distinguishable with no colour at all. */
   .msg-bubble--mine { align-self: flex-end; border: 1px solid var(--gh-accent); }
   .msg-bubble--theirs { align-self: flex-start; border: 1px solid var(--gh-border); }
+  .msg-join { display: flex; width: 100%; margin-top: var(--gh-sp-2); min-height: 44px; }
   /* A time under EVERY bubble was three stamps a minute apart repeating down the screen. The
      divider below carries it instead, only where there is a real gap. */
   .msg-daysplit { align-self: center; font-size: var(--gh-fs-xs); color: var(--gh-muted);
@@ -627,6 +628,24 @@ function wireComposer(card, onSend) {
   });
 }
 
+/** A game invite someone else sent (js/messages.js asInvite): a Join button inside the bubble. */
+export function inviteButton(m, me) {
+  const inv = asInvite(m && m.invite);
+  if (!inv || !m || m.from === me) return '';
+  return `<button type="button" class="gh-btn gh-btn--primary gh-btn--sm msg-join" data-join-game="${esc(inv.game)}" data-join-code="${esc(inv.code)}">${esc(t('msg_join_game'))}</button>`;
+}
+/** Join: hand the room code to the game for THIS session only, close Messages, open the game.
+ *  From the hub that is the same path a tapped notification takes; from the profile page (its own
+ *  page) it goes to the hub with ?open=, which takes it from there. */
+function joinInvite(game, code) {
+  if (!asInvite({ game, code })) return;
+  try { sessionStorage.setItem('gamehub.airhockey.join', code); } catch { /* the code is in the text too */ }
+  closeOverlay();
+  const hub = typeof window !== 'undefined' && window.__ghHub;
+  if (hub && typeof hub._openPushedGame === 'function') hub._openPushedGame(game);
+  else location.href = new URL(`../?open=${encodeURIComponent(game)}`, import.meta.url).href;
+}
+
 async function renderThread(card, who) {
   const gen = ++_view;
   _guardClose = null;
@@ -644,7 +663,7 @@ async function renderThread(card, who) {
     const body = msgs.length
       ? `<ul class="msg-thread">${msgs.map((m, i) => `
           ${splitBefore(m, msgs[i - 1]) ? `<li class="msg-daysplit">${esc(splitText(m.atMs))}</li>` : ''}
-          <li class="msg-bubble msg-bubble--${m.from === me ? 'mine' : 'theirs'}">${esc(m.text || '')}</li>`).join('')}</ul>`
+          <li class="msg-bubble msg-bubble--${m.from === me ? 'mine' : 'theirs'}">${esc(m.text || '')}${inviteButton(m, me)}</li>`).join('')}</ul>`
       : `<p class="msg-lead">${esc(t('msg_thread_empty', { name: title }))}</p>`;
     const box = card.querySelector('#msg-text');
     const draft = box ? box.value : '';
@@ -656,6 +675,7 @@ async function renderThread(card, who) {
       footer: composerHTML(t('msg_placeholder', { name: title })),
     });
     card.querySelector('[data-role="back"]').addEventListener('click', leave);
+    card.querySelectorAll('[data-join-game]').forEach((b) => b.addEventListener('click', () => joinInvite(b.dataset.joinGame, b.dataset.joinCode)));
     const scroll = card.querySelector('.msg-scroll');
     if (scroll) scroll.scrollTop = scroll.scrollHeight;
     const fresh = card.querySelector('#msg-text');

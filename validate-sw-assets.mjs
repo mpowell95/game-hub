@@ -108,6 +108,8 @@ const SCAN_SKIP = new Set([
   // The Firebase Cloud Function (push notifications). Server code, deployed to Firebase, never
   // served to a phone - so never precached.
   'functions',
+  // Archived games (archive/pinball/, 2026-09-28): kept in the repo, never linked from the app.
+  'archive',
 ]);
 const SCAN_DIRS = readdirSync('.', { withFileTypes: true })
   .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SCAN_SKIP.has(e.name))
@@ -130,7 +132,6 @@ const EXCLUDED = [
   // games table) - its files are precached by that worker, not by this one.
   { re: /^business-deal\//, why: "launch-out game with its own nested service worker - root CLAUDE.md's games table" },
   // Design tools and mockups: opened by hand on a desktop, never reachable from the app.
-  { re: /^pinball\/design\//, why: 'design tool, opened by hand, never linked from the app' },
   { re: /\/mockup-[^/]+\.html$/, why: 'a mockup, opened by hand, never linked from the app' },
 ];
 function excludedWhy(relPath) {
