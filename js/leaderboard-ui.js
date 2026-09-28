@@ -532,7 +532,7 @@ function skPlaysAt(g, machine) {
  *  extractors below. Skeeball's number is scoped by MACHINE, golf's by COURSE; neither has a
  *  per-tier breakdown to read (their stored buckets are keyed by machine and by course, which map
  *  to no tier), so neither gets per-tier tiles. */
-const METRIC_IS_TIER_BLIND = new Set(['skeeball', 'golf', 'holdem']);
+const METRIC_IS_TIER_BLIND = new Set(['skeeball', 'golf', 'holdem', 'contexto']);
 
 /** TEXAS HOLD'EM'S BOARD RANKS BY BANKROLL (2026-09-28, Matt: "We definitely need" a bankroll
  *  leaderboard). The number is the person's combined ledger (js/game-stats.js holdemBalance, summed
@@ -560,6 +560,10 @@ function gameMetricAt(g, id, tier) {
   if (id === 'hillclimb') return hcBestAt(g, tier);
   if (id === 'skeeball') return skPointsAt(g, _machine);
   if (id === 'brickblitz') return bzBestAt(g, tier);
+  // Contexto ranks on puzzles solved WITHOUT a hint (Matt, 2026-09-28: "hints can't count the same
+  // as getting it with no hints"). A hint solve is still stored and still shown in My Stats and in
+  // this board's detail tiles; it just does not rank.
+  if (id === 'contexto') return ((((g.games || {}).contexto || {}).ct || {}).noHint) | 0;
   if (id === 'golf') return golfBestAt(g);   // to par, LOWER WINS, null when never played
   // Best time at this difficulty, LOWER WINS, null when that level was never cleared. The tier
   // machinery does the rest: a row ranks at the HIGHEST level it has both played and cleared,
@@ -588,6 +592,8 @@ function lbUnitKeyOf(id) {
   // Same split as golf: this BOARD ranks on a best time, while My Stats' game list still leads
   // with boards cleared, which is the right headline for a list of every game you have played.
   if (id === 'minesweeper') return 'lb_unit_ms_best';
+  // Same split: this board counts no-hint solves; My Stats' list still leads with every solve.
+  if (id === 'contexto') return 'lb_unit_ct_nohint';
   if (id === 'holdem') return 'lb_unit_bank';
   return unitKeyOf(id);
 }
@@ -756,6 +762,8 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_golf_best: 'lb_sort_golf_best',
   // Minesweeper ranks on a best time, not on how many boards were cleared.
   lb_unit_ms_best: 'lb_sort_ms_best',
+  // Contexto ranks on solves without a hint.
+  lb_unit_ct_nohint: 'lb_sort_ct_nohint',
   // Texas Hold'em ranks on the bankroll.
   lb_unit_bank: 'lb_sort_bank',
 };
@@ -1371,6 +1379,10 @@ const TEXTURE = {
   sudoku: [
     { labelKey: 'lb_tex_sd_solved', get: (g) => ((g.games.sudoku || {}).sd || {}).solved | 0 },
     { labelKey: 'lb_tex_sd_perfect', get: (g) => ((g.games.sudoku || {}).sd || {}).perfect | 0 },
+  ],
+  contexto: [
+    { labelKey: 'lb_tex_ct_nohint', get: (g) => (((g.games.contexto || {}).ct || {}).noHint) | 0 },
+    { labelKey: 'lb_tex_ct_solved', get: (g) => (((g.games.contexto || {}).ct || {}).solved) | 0 },
   ],
   minesweeper: [
     { labelKey: 'lb_tex_ms_cleared', get: (g) => ((g.games.minesweeper || {}).ms || {}).cleared | 0 },

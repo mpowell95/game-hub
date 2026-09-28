@@ -42,7 +42,7 @@ const KNOWN_GAPS = {
   'no CSS font-size under 11px (docs/BUILDING-A-GAME.md, "The UX floor")': {
     'boggle/css/boggle.css:106': 'score summary micro-label, pre-existing',
     'boggle/css/boggle.css:242': 'tally count micro-label, pre-existing',
-    'chinchon/css/chinchon.css:677': 'stats chart axis label, pre-existing',
+    'chinchon/css/chinchon.css:695': 'stats chart axis label, pre-existing',
     'escoba/css/escoba.css:314': 'card badge, pre-existing',
     'escoba/css/escoba.css:696': 'stats chart axis label, pre-existing',
     'filler/css/filler.css:269': 'pre-existing',

@@ -13,7 +13,8 @@ vocabulary is ranked below it. Find rank 1 to win. Solo, no opponent. Built 2026
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../contexto/js/ui.js'`, hub id `contexto`, `released: '2026-09-28'` |
+| Registry | `module: '../contexto/js/ui.js'`, hub id `contexto`, `released: '2026-09-28'` (not `devOnly`) |
+| Released | **To everyone on 2026-09-28**, by Matt's admin-page switch, after a same-day admin-only test. The `released` date already matched, so the "New" badge runs 2026-09-28 to 2026-10-04 |
 | Immersive | **No.** The standard hub header stays, the Sudoku/Nuts & Bolts class |
 | Stats id | `contexto` (recorder `recordContexto(lang, won, {guesses, hints})`) |
 | CSS root / prefix | `.ct-root` / `.ct-` |
@@ -178,6 +179,15 @@ Blue vs yellow is the contrast that survives red/green colorblindness; gray diff
 lightness. The colors are CSS variables in `contexto.css` (`--ct-<band>-bar` / `--ct-<band>-mark`,
 light and `.gh-dark` sets); `ui.js` only names the band, so the rows, the shape markers and the
 how-to diagram all follow the theme.
+
+## Leaderboard: only solves WITHOUT a hint rank (2026-09-28)
+
+Matt: *"hints can't count the same as getting it with no hints."* Contexto's own board ranks on
+`ct.noHint` (`gameMetricAt` in `js/leaderboard-ui.js`, unit `lb_unit_ct_nohint`, "solved, no hints").
+A hint solve is still recorded exactly as before (`total.won`, `ct.solved`) and still shown: in My
+Stats, in the player-detail game list, and as a detail tile ("Solved (hints included)") on the
+board. It just does not rank. Contexto is in `players-agg.js`'s `SOLO` set, so no Contexto solve,
+hint or not, ever counted toward the cross-game wins total. `test-leaderboard-rank.mjs` pins this.
 
 ## What is NOT covered by a test
 
