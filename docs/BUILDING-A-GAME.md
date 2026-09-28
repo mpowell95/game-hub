@@ -156,16 +156,16 @@ export default { init, destroy, isInProgress };
     is actually in progress, `false` otherwise. The literal meaning. Live-action runs; mid-run
     resume is meaningless.
   - **Autosave/resume built in** (every other module game — Escoba, Mancala, Connect Four,
-    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle (solo), Nuts & Bolts, Uno, Pool
-    (solo/practice), Skeeball): returns `false` for solo play even mid-game, because leaving is
+    Tic Tac Toe, Dots and Boxes, Filler, Chinchón (solo), Boggle (solo), Nuts & Bolts, Uno,
+    Skeeball): returns `false` for solo play even mid-game, because leaving is
     lossless — each game snapshots after every state-changing event and picks up where it left
     off on return. Save keys: `escoba-save`, `gamehub.mancala.game.v1`,
     `gamehub.connect4.save.v1`, `gamehub.tictactoe.save.v1`, `gamehub.dotsboxes.save.v1`,
     `gamehub.filler.save.v1`, `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1`,
-    `gamehub.uno.save.v1`, `gamehub.pool.save.v1`, `gamehub.dominoes.save.v1`,
+    `gamehub.uno.save.v1`, `gamehub.dominoes.save.v1`,
     `gamehub.skeeball.save.v1` (Nuts & Bolts needed no new key — its existing
     `gamehub.nutsbolts.v1` kept-aside board already survived navigation). Escoba's, Chinchón's,
-    Tic Tac Toe's, Mancala's, Dots and Boxes', Pool's and Boggle's MP paths are each the exception
+    Tic Tac Toe's, Mancala's, Dots and Boxes' and Boggle's MP paths are each the exception
     within the exception: `isInProgress()` returns `true` only while an active multiplayer match
     is live (leaving mid-MP genuinely abandons the room), so one function answers two different
     questions depending on solo-vs-MP context. **Yahtzee is a further exception within that
@@ -174,14 +174,13 @@ export default { init, destroy, isInProgress };
     Toe/Chinchón/Escoba, which deliberately do NOT abandon a room on ordinary back-navigation.
   When adding a game, decide up front which meaning applies and say so in a comment next to
   `isInProgress()` — don't leave the next session to guess from behavior alone.
-- An `immersive: true` entry in `hub.js`'s `GAMES` array (Escoba, Mancala, Ball Run, Yahtzee, Pool,
+- An `immersive: true` entry in `hub.js`'s `GAMES` array (Escoba, Mancala, Ball Run, Yahtzee,
   Hill Climb, Battleship, Skeeball) collapses the hub's header to a floating back button
   for games with their own full-bleed chrome. It's a de facto fourth registry flag, same status as
   `module`/`href`/`devOnly` — set it when a game wants to own the whole viewport.
 - **Module stylesheets, once injected, are never removed on `destroy()`.** They go into the shared
   `document.head` and stay there for the life of the page — this is a hub-wide fact, not specific
-  to any one game (`poolv2/CLAUDE.md` is where it's spelled out, arguing for that game's separate
-  CSS prefix). It's why a CSS prefix collision between two games is permanent for that session, not
+  to any one game. It's why a CSS prefix collision between two games is permanent for that session, not
   just "while the game is mounted" — one more reason the `.xx-` prefix + descendant-scoping
   discipline below is load-bearing, not decorative.
 
@@ -385,7 +384,7 @@ more than one game, with no cross-reference between the copies until now.
 ### Fitting a screen to available viewport space, by measurement
 
 Reinvented independently in Dominoes and Battleship, and stated as a rule (without a fix) in
-`VISUAL-PROCESS.md` §3c after Pool shipped 138px too tall inside the hub. The technique:
+`VISUAL-PROCESS.md` §3c after Pool (since archived) shipped 138px too tall inside the hub. The technique:
 
 - **Measure with a PROBE, not a formula.** Dominoes' `_fit()` sets a tall probe height (2000px),
   reads `scrollHeight` against it (now pure content, not clamped by viewport), and computes what's
@@ -410,7 +409,7 @@ Reinvented independently in Dominoes and Battleship, and stated as a rule (witho
 
 `.hub-game` (`css/hub.css`) sets no explicit `height` on the container a module mounts into. A
 game root using `height: 100%` has nothing definite to resolve against, which collapses the whole
-canvas/render chain toward its bare intrinsic size. This has independently sunk Pool, Poolv2, and
+canvas/render chain toward its bare intrinsic size. This has independently sunk Pool and Poolv2 (both since archived) and
 Escoba's layout (each documents hitting the same shared-shell gap). Fix: `min-height: 100dvh` on
 the game's root, `flex: 1` (never a percentage height) down the chain, a zero-size guard plus
 `requestAnimationFrame` retry around any canvas resize, and a `ResizeObserver` (not just

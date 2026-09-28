@@ -334,7 +334,7 @@
 .sd-confirm p { margin: 0 0 12px; font-size: 14px; }
 
 /* `hidden` MUST outrank the display rule that shows an overlay, or it sits over the board from
- * the first frame (pipes/CLAUDE.md documents this exact bug: `.pi-root .pi-done` at specificity
+ * the first frame (archive/pipes/CLAUDE.md documents this exact bug: `.pi-root .pi-done` at specificity
  * (0,2,0) beat the UA's `[hidden] { display: none }` at (0,1,0), because an AUTHOR rule wins a
  * specificity tie against a UA rule). `.sd-overlay` and css/ui.css's shared `.gh-overlay` both set
  * `display: grid` unconditionally, so both need this override here. */

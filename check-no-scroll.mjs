@@ -30,7 +30,7 @@
 // Needs the dev server up (`node server.mjs`).
 //
 //   node check-no-scroll.mjs             every game
-//   node check-no-scroll.mjs golf pool   just these
+//   node check-no-scroll.mjs golf snake  just these
 
 import { chromium } from 'playwright-core';
 import { readdirSync, existsSync } from 'node:fs';

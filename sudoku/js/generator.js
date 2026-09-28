@@ -29,7 +29,7 @@ const TIER_GIVENS = {
 export function tierGivensRange(tier) { return TIER_GIVENS[tier] || TIER_GIVENS.easy; }
 
 /** Deterministic PRNG so a seed reproduces a board exactly (mulberry32-style, matches the
- *  shape used elsewhere in this repo, e.g. pipes/js/generator.js's `rng`). */
+ *  shape used elsewhere in this repo, e.g. archive/pipes/js/generator.js's `rng`). */
 export function rng(seed) {
   let s = (seed >>> 0) || 1;
   return () => {

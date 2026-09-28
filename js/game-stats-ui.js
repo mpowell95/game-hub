@@ -34,7 +34,6 @@ const TABS = [
   { id: 'business', labelKey: 'game_title_business' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
-  { id: 'pipes', labelKey: 'game_title_pipes' },
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
   { id: 'hoops4', labelKey: 'game_title_hoops4' },
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
@@ -48,18 +47,6 @@ const TABS = [
   { id: 'boggle', labelKey: 'game_title_boggle' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'uno', labelKey: 'game_title_uno' },
-  { id: 'pool', labelKey: 'game_title_pool' },
-  // retired: the rebuild was promoted to 'pool'. Kept so anything already recorded here stays
-  // visible (THE LAW rules 1 and 5); hidden automatically for anyone with zero plays.
-  //
-  // `retired: true` (2026-09-09) means NO LAUNCHER ENTRY EXISTS for this id - it is not a game you
-  // can start, only a record of one you used to be able to. It is what `isGameOnLauncher` needs to
-  // answer honestly (its `isGameLive` default assumes a hub registry row, and this id has none, so
-  // it used to default to VISIBLE and put the retired build on the leaderboard while the current
-  // Pool was hidden). It also replaces gameChoices' hardcoded id check below, so one flag now
-  // drives all three surfaces. It deliberately does NOT hide the My Stats tab: that is the screen
-  // keeping those plays reachable, which is the whole reason the row exists.
-  { id: 'poolv2', labelKey: 'game_title_poolv2', retired: true },
   { id: 'yahtzee', labelKey: 'game_title_yahtzee' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
@@ -99,7 +86,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -332,27 +319,9 @@ function nutsBoltsScreen(rec) {
     </div>`;
 }
 
-/** Pipes: a solo puzzle like Nuts & Bolts, so no wins/losses/win-rate - you cannot lose a board,
- *  only keep turning. Boards solved, the hardest tier cleared, and the turns it took.
- *
- *  ITEM 7's SECOND EDIT. Storing a counter is not enough: history no screen shows reads as
- *  deleted (THE LAW rule 1), so a sub-counter without a renderer is a bug, not a shortcut. */
-function pipesScreen(rec) {
-  const pi = (rec && rec.pi) || {};
-  const solved = pi.solved | 0, moves = pi.moves | 0, best = pi.bestLevel | 0;
-  if (!solved) return emptyState('Pipes');
-  return `
-    <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${solved}</b><span>${t('gs_pi_solved')}</span></div>
-      <div class="gs-tally"><b>${best}</b><span>${t('gs_pi_best')}</span></div>
-      <div class="gs-tally"><b>${moves}</b><span>${t('gs_pi_moves')}</span></div>
-      <div class="gs-tally"><b>${Math.round(moves / solved)}</b><span>${t('gs_pi_avg')}</span></div>
-    </div>`;
-}
-
 const SD_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['expert', 'gs_diff_expert']];
 
-/** Sudoku: a solo puzzle like Nuts & Bolts/Pipes, so no wins/losses/win-rate. Four lifetime
+/** Sudoku: a solo puzzle like Nuts & Bolts, so no wins/losses/win-rate. Four lifetime
  *  tallies (solved, perfect, hints, mistakes) plus a per-tier table of solved count and best
  *  time. `bestTimeMs` is 0's "never set" sentinel, shown as an em dash rather than "0:00" —
  *  the same zero-glyph convention `skNum()` uses elsewhere on this screen. */
@@ -1219,7 +1188,6 @@ function hasPlays(id, rec) {
   if (id === 'brickblitz') return !!(rec.bz && rec.bz.games);
   if (id === 'cuppong') return ((rec.total || {}).played | 0) > 0 || !!(rec.cp && rec.cp.soloRacks);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
-  if (id === 'pipes') return !!(rec.pi && rec.pi.solved);
   if (id === 'sudoku') return !!(rec.sd && rec.sd.solved);
   if (id === 'minesweeper') return ((rec.total || {}).played | 0) > 0;
   // A bankroll top-up or a hand played counts as having played, the same bar holdemScreen uses.
@@ -1256,7 +1224,6 @@ function headlineOf(id, rec) {
     return { n: pts >= 0 ? `+${pts}` : String(pts), unitKey: unitKeyOf(id) };
   }
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
-  if (id === 'pipes') return { n: (rec.pi && rec.pi.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'sudoku') return { n: (rec.sd && rec.sd.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'minesweeper') return { n: (rec.ms && rec.ms.cleared) | 0, unitKey: unitKeyOf(id) };
   // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
@@ -1542,7 +1509,6 @@ function screenFor(id, st) {
   if (id === 'connect4') return connect4Screen(rec);
   if (id === 'chinchon') return chinchonScreen(rec);
   if (id === 'nutsbolts') return nutsBoltsScreen(rec);
-  if (id === 'pipes') return pipesScreen(rec);
   if (id === 'sudoku') return sudokuScreen(rec);
   if (id === 'minesweeper') return minesweeperScreen(rec);
   if (id === 'contexto') return contextoScreen(rec);

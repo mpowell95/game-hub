@@ -280,7 +280,7 @@ class MinesweeperUI {
 
   async _openStats() {
     // Lazy: My Stats pulls in the whole stats UI and nobody opening Minesweeper has asked for it
-    // yet. A failure here must never take the game down with it. Same shape as pipes/js/ui.js.
+    // yet. A failure here must never take the game down with it. Same shape as skeeball/js/ui.js.
     try {
       const m = await import('../../js/game-stats-ui.js');
       m.openStatsOverlay();

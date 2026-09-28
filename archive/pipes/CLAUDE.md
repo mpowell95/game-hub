@@ -1,5 +1,16 @@
 # Pipes — game documentation
 
+> **ARCHIVED 2026-09-28** (Matt: "please do the same for Pool and Pipes", following the Pinball
+> archive). Moved from `pipes/` to `archive/pipes/`; every other trace was removed from the app
+> (launcher entry, leaderboard row, My Stats tab and `pipesScreen`, tile art, strings,
+> `recordPipes`/`ensurePi`/`PI_TIERS`, the players-agg `pi` merge, its sw.js ASSETS). **Stored player
+> history was NOT touched**: `'pipes'` stays in `js/game-stats.js`'s `GAMES` and is in
+> `ARCHIVED_GAMES` (out of every total), so every solved board is still on the phones and in
+> `players/<id>`.
+>
+> **To restore:** revert the archive commit, or by hand bring back everything above from git at
+> `bdbe7ff` and drop it from `ARCHIVED_GAMES`.
+
 > **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. THE LAW
 > and its nine working rules live at the top of the root `CLAUDE.md`, which is always loaded
 > alongside this file; the full rules with rationale are in `js/CLAUDE.md`. Nothing below overrides

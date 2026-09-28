@@ -159,7 +159,6 @@ const GAME_META = [
   { id: 'mancala', labelKey: 'game_title_mancala' },
   { id: 'business', labelKey: 'game_title_business' },
   { id: 'nutsbolts', labelKey: 'game_title_nutsbolts' },
-  { id: 'pipes', labelKey: 'game_title_pipes' },
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
   { id: 'contexto', labelKey: 'game_title_contexto' },
@@ -167,8 +166,6 @@ const GAME_META = [
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
   { id: 'uno', labelKey: 'game_title_uno' },
-  { id: 'pool', labelKey: 'game_title_pool' },
-  { id: 'poolv2', labelKey: 'game_title_poolv2' },
   { id: 'dominoes', labelKey: 'game_title_dominoes' },
   { id: 'hillclimb', labelKey: 'game_title_hillclimb' },
   // MISSING until 2026-08-11, and it took a bug report to find: Yahtzee shipped with every other

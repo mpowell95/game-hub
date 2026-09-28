@@ -149,8 +149,8 @@ function browserLabelFrom(uaData, ua) {
   return null;
 }
 
-/** The GPU string - what actually explains "the 3D games are choppy on my phone" (Ball Run, Pool
- *  and Hill Climb all render live). The context is released immediately. */
+/** The GPU string - what actually explains "the 3D games are choppy on my phone" (Ball Run
+ *  and Hill Climb both render live). The context is released immediately. */
 function gpuInfo() {
   return safe(() => {
     const c = document.createElement('canvas');
