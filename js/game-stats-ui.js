@@ -38,6 +38,7 @@ const TABS = [
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
   { id: 'hoops4', labelKey: 'game_title_hoops4' },
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
+  { id: 'contexto', labelKey: 'game_title_contexto' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -102,7 +103,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', pipes: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', pinball: 'lb_unit_points', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -364,6 +365,34 @@ function sudokuScreen(rec) {
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_pi_solved')}</th><th scope="col">${t('gs_sd_best_time')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/** Contexto: one finished puzzle per play; a give-up is a loss. Average guesses is computed here
+ *  from two stored sums (guesses over SOLVED puzzles / solved), never stored itself. `fewest` is
+ *  0's "never set" sentinel, shown as a dash. The table splits plays by word set (English /
+ *  Spanish), which is what byDiff is keyed by for this game. */
+function contextoScreen(rec) {
+  const ct = (rec && rec.ct) || {};
+  const played = ((rec && rec.total) || {}).played | 0;
+  if (!played) return emptyState('Contexto');
+  const solved = ct.solved | 0;
+  const avg = solved > 0 ? (Math.round(((ct.guesses | 0) / solved) * 10) / 10).toString() : '&mdash;';
+  const byDiff = rec.byDiff || {};
+  const rows = [['en', 'gs_ct_lang_en'], ['es', 'gs_ct_lang_es']].map(([k, labelKey]) => {
+    const b = byDiff[k] || {};
+    return `<tr><th scope="row">${t(labelKey)}</th><td>${b.played | 0}</td><td>${b.won | 0}</td></tr>`;
+  }).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${solved}</b><span>${t('gs_ct_solved')}</span></div>
+      <div class="gs-tally"><b>${avg}</b><span>${t('gs_ct_avg')}</span></div>
+      <div class="gs-tally"><b>${(ct.fewest | 0) > 0 ? ct.fewest | 0 : '&mdash;'}</b><span>${t('gs_ct_fewest')}</span></div>
+      <div class="gs-tally"><b>${ct.noHint | 0}</b><span>${t('gs_ct_nohint')}</span></div>
+    </div>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_ms_played')}</th><th scope="col">${t('gs_ct_solved')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -1195,6 +1224,7 @@ function headlineOf(id, rec) {
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
   if (id === 'pinball') return { n: (rec.pb && rec.pb.bestScore) | 0, unitKey: unitKeyOf(id) };
   if (id === 'brickblitz') return { n: (rec.bz && rec.bz.bestScore) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'contexto') return { n: (rec.ct && rec.ct.solved) | 0, unitKey: unitKeyOf(id) };
   // Lifetime points, not the best single rack - the same fix leaderboard-ui.js's skPointsAt
   // already made for the Skeeball board's own Points sort (2026-09-01, Matt: "Points should
   // show lifetime points. Not your best single round"). This second call site (My Stats' and
@@ -1495,6 +1525,7 @@ function screenFor(id, st) {
   if (id === 'pipes') return pipesScreen(rec);
   if (id === 'sudoku') return sudokuScreen(rec);
   if (id === 'minesweeper') return minesweeperScreen(rec);
+  if (id === 'contexto') return contextoScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);

@@ -201,6 +201,12 @@
 //                                                   // its zero is the "never set" sentinel (the same
 //                                                   // convention as battleship's fewestShotsWin) --
 //                                                   // never a real elapsed time. See recordSudoku
+//       contexto: {
+//         total, byDiff,                           // byDiff keyed en|es (the word set, no tier)
+//         ct: { solved, guesses, hints, noHint, fewest } },
+//                                                   // one finished puzzle each; a give-up is a loss.
+//                                                   // guesses sums SOLVED puzzles only; fewest is
+//                                                   // LOWER-is-better, 0 = never set. See recordContexto
 //     updatedAt }
 //
 // `total`/`byDiff` are KEPT for every game (family sync + admin Player Insights read them); the
@@ -210,7 +216,7 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -447,6 +453,16 @@ function ensureMs(g) {
   if (!Number.isFinite(g.ms.flagsRight)) g.ms.flagsRight = 0;
   if (!g.ms.bestTimeMs || typeof g.ms.bestTimeMs !== 'object') g.ms.bestTimeMs = {};
   for (const lv of MS_LEVELS) if (!Number.isFinite(g.ms.bestTimeMs[lv])) g.ms.bestTimeMs[lv] = 0;
+}
+
+/** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
+ *  additive lifetime counters (`guesses` sums the typed guesses of SOLVED puzzles only, so
+ *  guesses/solved is an honest average). `fewest` is the fewest typed guesses in any solve,
+ *  LOWER-is-better with 0 as the "never set" sentinel - Sudoku's bestTimeMs convention. A give-up
+ *  is total.lost; it is not copied here (see ensureMs on second copies). */
+function ensureCt(g) {
+  if (!g.ct || typeof g.ct !== 'object') g.ct = { solved: 0, guesses: 0, hints: 0, noHint: 0, fewest: 0 };
+  for (const k of ['solved', 'guesses', 'hints', 'noHint', 'fewest']) if (!Number.isFinite(g.ct[k])) g.ct[k] = 0;
 }
 
 /** Escoba: the capture-quality counter (escobas the human made). */
@@ -873,6 +889,7 @@ function normalize(raw) {
   ensureGf(st.games.golf);
   ensureBb(st.games.baseball);
   ensureMs(st.games.minesweeper);
+  ensureCt(st.games.contexto);
   ensureBz(st.games.brickblitz);
   ensureHb(st.games.holdem);
   return st;
@@ -1439,6 +1456,30 @@ export function recordSudoku(tier, extras = {}) {
       const cur = g.sd.bestTimeMs[t] | 0;
       g.sd.bestTimeMs[t] = cur > 0 ? Math.min(cur, timeMs) : timeMs;
     }
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Contexto: one finished puzzle. `lang` ('en'|'es', the word set played) keys byDiff, so the
+ *  per-language play count is kept; it maps to no difficulty tier. `won` false = gave up.
+ *  `extras` = { guesses, hints }: typed guesses (the winning one included) and hints used.
+ *  WRITES ARE ADDITIVE ONLY (THE LAW rule 2); `fewest` takes Math.min against a nonzero prior. */
+export function recordContexto(lang, won, extras = {}) {
+  if (tooFast('contexto')) return null;
+  const st = loadStats();
+  const g = st.games.contexto;
+  ensureCt(g);
+  const guesses = Math.max(0, extras.guesses | 0);
+  const hints = Math.max(0, extras.hints | 0);
+  bumpTotals(g, lang === 'es' ? 'es' : 'en', won === true);
+  g.ct.hints += hints;
+  if (won === true) {
+    g.ct.solved += 1;
+    g.ct.guesses += guesses;
+    if (hints === 0) g.ct.noHint += 1;
+    if (guesses > 0) g.ct.fewest = g.ct.fewest > 0 ? Math.min(g.ct.fewest, guesses) : guesses;
   }
   st.updatedAt = new Date().toISOString();
   persist(st);
