@@ -18,6 +18,7 @@ this file says which are done.
 | 3 | Rerack: presets, then custom | not started |
 | 4 | Bounce shots | not started - brief says show Matt the async design first |
 | 5 | Challenges + push | not started |
+| + | **Solo: clear the rack in the fewest throws**, with a leaderboard (Matt's ask, 2026-09-28) | **Built and deployed 2026-09-28** - see "Solo" below |
 
 ### The GamePigeon rules, CONFIRMED by Matt 2026-09-27 ("1-7: yes")
 
@@ -42,8 +43,8 @@ from the recordings - see "The look" and "The throw" below. Aim: he was "not sur
 ## Stage 2: a match against the computer (2026-09-28)
 
 **The setup screen** (hub skin, `css/ui.css` primitives): Play the computer (Easy / Medium / Hard,
-each with its shape from `js/difficulty-tiers.js`), Gentleman's On/Off, **Play**, and **Practice**
-(stage 1's solo table, unchanged).
+each with its shape from `js/difficulty-tiers.js`), Gentleman's On/Off, **Play**, and **Solo**
+(stage 1's practice table, recorded since 2026-09-28 - see "Solo" below).
 
 **Setup** also has **Reracks** (0 / 1 / 2 / 3 / unlimited, default 2, per player per game), since
 2026-09-28 when the rerack itself shipped.
@@ -132,15 +133,41 @@ pairing, 2026-09-28):
 Perfect aim (no error) lands in the cup it aimed at for all 10 cups. **Whether Easy loses to a new
 player and Hard is hard is Matt's to say** - the sigmas are the only knob, in `SKILL`.
 
+## Solo: clear the rack in the fewest throws (2026-09-28)
+
+Matt: *"it'd be cool to have a solo mode or challenge mode where it's just the full rack and
+there's a leaderboard for who can clear the full rack with the fewest throws. No reracks or
+anything, no opponent."*
+
+- **It REPLACED Practice** (same table, same 10-cup triangle): one ball a throw, no balls back, no
+  heating up, no reracks, no islands, no opponent. Two buttons that played identically and differed
+  only in whether it counted would be a choice nobody needs.
+- **Only a CLEARED rack is recorded**, once, by `recordCupPongSolo(throws)` in `js/game-stats.js`.
+  Giving up part way (New rack, Change settings, leaving) records nothing, so `isInProgress()` is
+  `true` while a solo rack has had a throw and still has cups.
+- **Stored in the `cp` sub-counter** of `games.cuppong`: `{ soloRacks, soloThrows, soloBest }`.
+  `soloBest` is a FEWEST with **0 = never cleared** (Battleship's `fewestShotsWin` convention); a
+  real clear is at least 10. All three surfaces of the three-edit rule: `ensureCp`/`recordCupPongSolo`
+  (game-stats.js), `cupPongScreen` (My Stats: a Solo block above the vs-computer record), and the
+  `cuppong` branch in `js/players-agg.js`, which takes the min of NON-ZERO bests only
+  (`players-agg.test.mjs` pins it). Matches vs the computer stay in `total`/`byDiff`: a solo clear
+  is not a win over anyone, so it never touches them.
+- **The leaderboard**: Cup Pong's board has its own first sort, **Fewest throws** (`'fewest'` in
+  `js/leaderboard-ui.js`, the way Skeeball has `'high'`), so the board OPENS on it. It lists exactly
+  the people with a cleared solo rack, lowest first; equal bests share a rank, the one with more racks cleared drawn first; no tier
+  chip and no difficulty filter (a solo rack has no difficulty). Wins / Games / Name still list the
+  match players as before. The By Game row's leader is still the wins leader.
+- The setup shows **Your best: N throws**; the cleared card says **New best!** when that rack set it.
+
 ## Hub integration
 
 | Thing | Value |
 |---|---|
 | Registry | `module: '../cup-pong/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `cuppong`, **no `released` date** (Matt releases it from the admin page; that day gets the date) |
-| Stats id | `cuppong`: plain `recordResult('cuppong', difficulty, won)` once per finished match vs the computer, difficulty `easy`/`medium`/`hard` (`mp` is reserved for challenges, stage 5). **No sub-counter**, so the three-edit rule does not apply. Registered 2026-09-28 in `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META` (on the board even while admin-only, `OFF_THE_BOARD` stays empty) and `js/game-stats-ui.js` `TABS` (devOnly, Air Hockey's shape), label `game_title_cuppong` in `js/strings.js`. Practice records nothing |
+| Stats id | `cuppong`: plain `recordResult('cuppong', difficulty, won)` once per finished match vs the computer, difficulty `easy`/`medium`/`hard` (`mp` is reserved for challenges, stage 5). Solo racks: `recordCupPongSolo(throws)` into the **`cp` sub-counter** (see "Solo"). Registered 2026-09-28 in `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META` (on the board even while admin-only, `OFF_THE_BOARD` stays empty) and `js/game-stats-ui.js` `TABS` (devOnly, Air Hockey's shape), label `game_title_cuppong` in `js/strings.js` |
 | CSS root / prefix | `.cp-root` / `.cp-` |
 | Settings key | `gamehub.cuppong.v1`: `{ diff, gentlemans, nextFirst }` - preferences only, saved on every selection. `nextFirst` alternates after each finished match (the repo's turn-based default) |
-| `isInProgress()` | the NO MID-GAME RESUME meaning (Hoops' class): `true` while a match vs the computer has had a throw and is not over, because a match is not persisted. Practice: `false`. A challenge (stage 5) must answer `false`: it will live in Firebase |
+| `isInProgress()` | the NO MID-GAME RESUME meaning (Hoops' class): `true` while a match vs the computer has had a throw and is not over, because a match is not persisted; same for a solo rack with a throw taken and cups left. A challenge (stage 5) must answer `false`: it will live in Firebase |
 | Tile art | `GAME_ART.cuppong` in `js/game-art.js` |
 | Strings | `js/strings.js`, `{ en, es }`, `makeT` at render time |
 

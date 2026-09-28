@@ -616,6 +616,26 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   ok('brickblitz counts as a SOLO game', SOLO.has('brickblitz'));
 }
 
+// ---- Cup Pong's cp (solo racks) survives the cross-device combine (THE LAW rule 1) ----
+// 2026-09-28. soloBest is a FEWEST with 0 = never cleared: d2 has matches but no clear, and must
+// not latch the person's best at 0 (Battleship's fewestShotsWin trap).
+{
+  const all = {
+    d1: rec({ playerId: 'CP111', name: 'Pong' }, {
+      cuppong: { total: { played: 1, won: 1, lost: 0 }, byDiff: { easy: { played: 1, won: 1, lost: 0 } }, cp: { soloRacks: 2, soloThrows: 40, soloBest: 18 } },
+    }, 100),
+    d2: rec({ playerId: 'CP111', name: 'Pong' }, {
+      cuppong: { total: { played: 2, won: 0, lost: 2 }, byDiff: { hard: { played: 2, won: 0, lost: 2 } }, cp: { soloRacks: 0, soloThrows: 0, soloBest: 0 } },
+    }, 200),
+    d3: rec({ playerId: 'CP111', name: 'Pong' }, {
+      cuppong: { total: { played: 0, won: 0, lost: 0 }, byDiff: {}, cp: { soloRacks: 1, soloThrows: 15, soloBest: 15 } },
+    }, 300),
+  };
+  const cp = aggregatePlayers(all)[0].games.cuppong.cp;
+  eq('cuppong: solo counters add', [cp.soloRacks, cp.soloThrows], [3, 55]);
+  eq('cuppong: soloBest is the fewest non-zero, never the 0 sentinel', cp.soloBest, 15);
+}
+
 // ---- Texas Hold'em's bankroll LEDGER combines across devices (THE LAW rule 1) ----
 // 2026-09-27. The balance is derived (start + winnings + grants - buyins), so a person's bankroll
 // across two phones is the sum of both ledgers; the starting stake is counted ONCE, at read time.

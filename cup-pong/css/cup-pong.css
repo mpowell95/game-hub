@@ -198,7 +198,10 @@
 .cp-root .cp-setup-hint { display: block; font-size: 12px; font-weight: 500; color: var(--cps-muted); }
 .cp-root .cp-setup .gh-seg__item { min-height: 44px; }        /* the 44px tap floor (Part 0) */
 .cp-root .cp-setup .gh-seg__item svg { width: 14px; height: 14px; flex: 0 0 auto; }
-.cp-root .cp-setup-play, .cp-root .cp-setup-practice { width: min(380px, 100%); min-height: 48px; }
+.cp-root .cp-setup-play { width: min(380px, 100%); min-height: 48px; }
+.cp-root .cp-setup-solo { width: 100%; min-height: 48px; }
+.cp-root .cp-solo-best { margin: 0; font-size: 14px; font-weight: 700; }
+.cp-root .cp-card-best { font-weight: 800; }
 
 /* Whose turn: the opponent's is outlined, yours is plain - a second signal beside the words. */
 .cp-root .cp-mode.is-cpu { padding: 0 10px; border: 2px solid var(--cp-dim); border-radius: 999px; }
