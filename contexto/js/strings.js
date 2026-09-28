@@ -60,7 +60,7 @@ const STRINGS = {
     howto_edge_new: 'A new word every day.',
     howto_edge_plural: 'Plurals and verb forms count as the base word (cats counts as cat).',
     howto_close: 'Got it',
-    howto_diagram_aria: 'Three example guess rows: a close word with a nearly full teal bar, a near word with a partial yellow bar, and a far word with a thin vermilion bar',
+    howto_diagram_aria: 'Three example guess rows: a close word with a nearly full blue bar, a near word with a partial yellow bar, and a far word with a thin gray bar',
   },
   es: {
     title: 'Contexto',
@@ -119,7 +119,7 @@ const STRINGS = {
     howto_edge_new: 'Una palabra nueva cada dia.',
     howto_edge_plural: 'Plurales y formas verbales cuentan como la palabra base (gatos cuenta como gato).',
     howto_close: 'Entendido',
-    howto_diagram_aria: 'Tres filas de ejemplo: una palabra cercana con una barra verde azulada casi llena, una palabra media con una barra amarilla parcial y una palabra lejana con una barra bermellon delgada',
+    howto_diagram_aria: 'Tres filas de ejemplo: una palabra cercana con una barra azul casi llena, una palabra media con una barra amarilla parcial y una palabra lejana con una barra gris delgada',
   },
 };
 
