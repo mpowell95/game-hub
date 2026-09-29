@@ -172,6 +172,15 @@ ok('the whole rack area is on the table',
   ev = m.pickCup('k1');
   ok('the defender\'s pick goes too, then play carries on', ids(m, 'b').join() === 'k0' && types(ev)[0] === 'picked' && !m.pendingPick);
   m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9'); m.throwResult(miss);
+  ev = m.throwResult({ made: 'k9' });
+  ok('an island call is for ONE ball: ball 2 into that cup after ball 1 missed is one cup (Matt)', !m.called && !m.pendingPick && !types(ev).includes('islandPick') && ids(m, 'b').join() === 'k0,k1');
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.throwResult(miss);
+  ok('island can be called for the second ball alone', m.canIsland() && m.callIsland('k9').length === 1);
+  m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9'); m.throwResult(miss); m.startTurn(); m.startTurn();
   ok('island is once per game: calling spends it even on a miss', m.islandUsed.a && !m.canIsland());

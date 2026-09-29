@@ -96,7 +96,11 @@ is on offer and gone after the turn's first throw:
   you hit that cup, you get 2 cups. The opposing player can choose the second cup. If there are
   multiple available islands, you must call the specific one."* The button calls the only island
   at once, or rings every island in yellow and asks you to tap the one you are calling. **Calling
-  spends it, hit or miss** (Matt, 2026-09-28). Hit it and the defender owes a second cup: the
+  spends it, hit or miss** (Matt, 2026-09-28). **A call is for ONE ball** (Matt, 2026-09-29: *"You
+  should be able to call island for one ball and not the other. It shouldn't auto apply to the
+  second ball"*): the engine always cleared `called` after the next throw, but the yellow ring stayed
+  on the cup after a miss, so it looked live for ball 2. `showEvents` now takes it off once a throw
+  has used the call, and the button can be used before ball 2 alone. Hit it and the defender owes a second cup: the
   computer picks at once (its loneliest cup); when you defend, the camera turns to your cups and you
   tap one. Allowed in overtime (Matt ruled out only reracks and Gentleman's there); not in a
   rebuttal.

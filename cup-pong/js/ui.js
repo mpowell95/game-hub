@@ -467,6 +467,9 @@ class CupPong {
   showEvents(ev) {
     const m = this.match;
     const R = this.engine.rend;
+    // An island call is for ONE ball (Matt, 2026-09-29: "It shouldn't auto apply to the second
+    // ball"). Once a throw has used it, its ring comes off, hit or miss.
+    if (!m.called && ev.some((e) => e.type === 'miss' || e.type === 'made')) { R.setMarks('a', null); R.setMarks('b', null); }
     for (const e of ev) {
       if (e.type === 'made') {
         const side = e.side === 'a' ? 'b' : 'a';
