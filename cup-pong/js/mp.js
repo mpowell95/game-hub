@@ -98,14 +98,16 @@ export function cleanRules(r) {
   // Bounce shots (brief 5d) were live for challenges for a short while on 2026-09-28, then turned
   // off by Matt. `bo` is only ever read, never written now: a challenge stored with it replays with
   // bounce on (its log may hold the owed cups a bounce made), every other one with it off.
-  return { gent: !(r && r.gent === false), rr, bo: !!(r && r.bo === true) };
+  // Reracks against the back wall (2026-09-29): `bk`. A challenge without it replays with the old
+  // placement, so the cups stand where its players saw them.
+  return { gent: !(r && r.gent === false), rr, bo: !!(r && r.bo === true), bk: !!(r && r.bk === true) };
 }
 const reracksOf = (rules) => (rules.rr === 'inf' ? Infinity : rules.rr);
 
 /** A fresh match under `rules`, in the STORED frame (side 'a' is the challenger and shoots first). */
 export function freshMatch(rules) {
   const r = cleanRules(rules);
-  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo });
+  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk });
 }
 
 /** One log entry, cleaned, or null if it is not a well-formed action. */
@@ -167,7 +169,7 @@ export const toStored = (e, mySide) => ({ ...e, by: e.by === 'a' ? mySide : othe
  */
 export function buildLocal(game, mySide, upto = game.log.length) {
   const r = cleanRules(game.rules);
-  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo });
+  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk });
   for (let i = 0; i < upto; i++) {
     if (!applyEntry(m, toLocal(game.log[i], mySide))) break;   // validateGame already proved it replays
   }
@@ -478,7 +480,7 @@ export async function createGame({ them, rules }) {
   const r = cleanRules(rules);
   const doc = {
     v: 1, id, by: me, created: now, updated: now,
-    rules: { gent: r.gent, rr: r.rr },
+    rules: { gent: r.gent, rr: r.rr, bk: true },           // reracks against the back wall
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,

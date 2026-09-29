@@ -160,6 +160,31 @@ ok('the whole rack area is on the table',
   ev = m.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }]);
   ok('custom rerack: cups need not touch, keep their ids, and it costs a rerack',
     ev.length === 1 && ev[0].key === 'custom' && ids(m, 'b').join() === 'k0,k1,k2' && m.racks.b[2].r === 3 && m.reracksLeft.a === 0 && !m.canRerack());
+  // AGAINST THE BACK WALL (Matt, 2026-09-29): no rerack can pull the cups closer.
+  m = new Match({ first: 'a', reracks: 2 }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
+  ok('custom rerack: an empty back row is refused (Matt\'s 3-2 one row forward)',
+    m.rerackCustom([{ c: -2, r: 1 }, { c: 0, r: 1 }, { c: 2, r: 1 }, { c: -1, r: 2 }, { c: 1, r: 2 }]).length === 0 && m.reracksLeft.a === 2);
+  ok('custom rerack: the same 3-2 on the back row is fine',
+    m.rerackCustom([{ c: -3, r: 0 }, { c: -1, r: 0 }, { c: 1, r: 0 }, { c: -2, r: 1 }, { c: 0, r: 1 }]).length === 1);
+  {
+    const { RERACKS } = await import('./rack.js');
+    const bad = [];
+    for (const [n, list] of Object.entries(RERACKS)) for (const p of list) {
+      if (Math.min(...p.spots.map((s) => s.v)) > 1e-9) bad.push(n + ':' + p.key);
+    }
+    ok('every preset stands against the back wall', bad.length === 0, bad.join(' '));
+    const { applyPreset } = await import('./rack.js');
+    const illegal = [];
+    for (const [n, list] of Object.entries(RERACKS)) for (const p of list) {
+      if (!validRack(applyPreset(Array.from({ length: +n }, (_, i) => ({ id: 'k' + i })), p.spots))) illegal.push(n + ':' + p.key);
+    }
+    ok('every rerack preset is a legal rack (no overlap, on the table)', illegal.length === 0, illegal.join(' '));
+  }
+  m = new Match({ first: 'a', reracks: 2, backRack: false }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
+  ok('an older challenge (no back-wall rule) still replays its forward custom rerack',
+    m.rerackCustom([{ c: -2, r: 1 }, { c: 0, r: 1 }, { c: 2, r: 1 }, { c: -1, r: 2 }, { c: 1, r: 2 }]).length === 1);
+  ok('...and its presets stand where they did (front row on the point)',
+    Math.max(...(await import('./rack.js')).presetsFor(5, false)[1].spots.map((s) => s.v)) > 2.5);
   // ISLAND.
   m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
