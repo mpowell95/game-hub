@@ -38,6 +38,7 @@ const TABS = [
   { id: 'hoops4', labelKey: 'game_title_hoops4' },
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
   { id: 'contexto', labelKey: 'game_title_contexto' },
+  { id: 'murdoku', labelKey: 'game_title_murdoku' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -86,7 +87,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -347,6 +348,24 @@ function sudokuScreen(rec) {
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_pi_solved')}</th><th scope="col">${t('gs_sd_best_time')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/** Murdoku: a solo puzzle recorded through recordResult (total/byDiff only, no sub-counter), one
+ *  play per SOLVED case. Solved in total, then solved per difficulty. */
+function murdokuScreen(rec) {
+  const solved = ((rec && rec.total) || {}).won | 0;
+  if (!solved) return emptyState(t('game_title_murdoku'));
+  const byDiff = rec.byDiff || {};
+  const rows = SD_DIFFS.map(([k, labelKey]) => `<tr><th scope="row">${t(labelKey)}</th><td>${((byDiff[k] || {}).won) | 0}</td></tr>`).join('');
+  return `
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${solved}</b><span>${t('gs_mk_solved')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_pi_solved')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -1529,6 +1548,7 @@ function screenFor(id, st) {
   if (id === 'sudoku') return sudokuScreen(rec);
   if (id === 'minesweeper') return minesweeperScreen(rec);
   if (id === 'contexto') return contextoScreen(rec);
+  if (id === 'murdoku') return murdokuScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);

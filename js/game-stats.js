@@ -228,7 +228,7 @@ const STATS_KEY = 'gamehub.stats';
 // live under those keys, in this store and in players/<id>. Nothing displays them (ARCHIVED_GAMES
 // keeps them out of every total); nothing deletes them (THE LAW). To restore one, see
 // archive/<game>/CLAUDE.md.
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku'];
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
 const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes'];
 

@@ -13,7 +13,7 @@ import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };

@@ -964,6 +964,32 @@ export const GAME_ART = {
             <text x="84" y="52" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="900" fill="#1F5FA8">?</text>
             <path d="M101 59 L122 80" stroke="#1F5FA8" stroke-width="10" stroke-linecap="round"/>
           </svg>`,
+  // Murdoku (2026-09-29): a 5x5 floor plan split into four rooms, one person in every row and
+  // column, and the victim (the white skull token) alone in his room with exactly one other.
+  murdoku: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#2b1d17"/>
+            <rect x="45" y="10" width="28" height="28" fill="#e9dcc3"/>
+            <rect x="45" y="38" width="14" height="14" fill="#e9dcc3"/>
+            <rect x="73" y="10" width="42" height="28" fill="#d5e3d0"/>
+            <path d="M59 38 H87 V66 H73 V80 H45 V52 H59 Z" fill="#d9d4e8"/>
+            <path d="M87 38 H115 V80 H73 V66 H87 Z" fill="#efd2c8"/>
+            <g stroke="#6b5646" stroke-width="0.6" fill="none">
+              <path d="M59 10 V80 M73 10 V80 M87 10 V80 M101 10 V80 M45 24 H115 M45 38 H115 M45 52 H115 M45 66 H115"/>
+            </g>
+            <g stroke="#1b120e" stroke-width="2.4" fill="none" stroke-linecap="square">
+              <rect x="45" y="10" width="70" height="70"/>
+              <path d="M73 10 V38 M59 38 V52 M87 38 V66 M73 66 V80 M59 38 H115 M45 52 H59 M73 66 H87"/>
+            </g>
+            <circle cx="52" cy="17" r="4.5" fill="#3f8f4e"/>
+            <rect x="102.5" y="54" width="11" height="10" rx="1" fill="#8a5a36"/>
+            <g fill="#1F5FA8" stroke="#ffffff" stroke-width="1">
+              <circle cx="94" cy="17" r="5"/><circle cx="52" cy="31" r="5"/>
+              <circle cx="66" cy="59" r="5"/><circle cx="80" cy="73" r="5"/>
+            </g>
+            <circle cx="108" cy="45" r="5.5" fill="#ffffff" stroke="#1b120e" stroke-width="1"/>
+            <circle cx="106" cy="44" r="1.2" fill="#1b120e"/><circle cx="110" cy="44" r="1.2" fill="#1b120e"/>
+            <path d="M106 47.5 H110" stroke="#1b120e" stroke-width="0.9"/>
+          </svg>`,
 };
 
 export default GAME_ART;
