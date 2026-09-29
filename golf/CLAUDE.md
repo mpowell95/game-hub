@@ -24,6 +24,8 @@ Where things actually stand:
   *"dude fuck oasis sands. it's not open yet. Pine Valley ONLY."* Red Mesa and Oasis Sands exist,
   are finished, and are not released - so a test or a difficulty measurement that fails ONLY on
   those two is not a reason to hold anything up.
+- **Coral Cove (2026-09-29) is a fourth course, nine holes, ADMIN ONLY** - hidden from everyone
+  but a dev profile by `COURSE_ADMIN_ONLY_BY_DEFAULT`. See "Coral Cove" at the end of this file.
 - **The swing physics were rebuilt on 2026-09-10.** Four sections at the end of this file carry it:
   the roll back to the approved 8 %, the over-swing shrinking the target, dead centre being dead
   straight with nothing random in a struck ball, and the 250 yd ceiling. If you are about to change
@@ -6156,3 +6158,32 @@ A recipe `lines` entry with `kind: 'hedge'` becomes `hole.hedges = [{pts, h}]` (
 the ground to `h` that stops flight (`hedgeHit`), run-outs and putts. No penalty for a hedge.
 `validateHole` checks hedges. Neither is on a shipped course. Full notes: `hole-editor/CLAUDE.md`,
 "Hedges and out of bounds".
+
+## Coral Cove: the fourth course, nine holes, ADMIN ONLY (2026-09-29)
+
+Matt: *"Can you create a fun new golf course for our golf game? 9 holes and admin only to start."*
+
+`golf/courses/coralcove.js`, id `coralcove`, the **Tropical** look (`render.js` `THEMES.tropical`,
+its first shipped course). Par 35, nine holes: 4 4 3 5 3 4 4 3 5. Built with `makeHole()` in the
+Course Creator's export shape (catalogue `treeTypes`, every type looked up BY NAME through
+`OBSTACLE_INDEX`, so no hand-counted index can drift). Signature holes: 4 Volcano (lava rocks,
+solid to every club, and a creek short of the green), 6 Mangrove Maze (a `swamp` cross band in the
+drive zone - played out of, not a penalty), 7 Tiki Torch (waste band across a short par 4, sand
+all round the green), 8 Shark Bite (the `island` guard), 9 Sunset Lagoon (par 5 round a lagoon,
+water in front of the green).
+
+**Admin only is a CODE DEFAULT, not a config write.** `COURSE_ADMIN_ONLY_BY_DEFAULT` in
+`progress.js` (`{ coralcove: true }`) is read by `ui.js` `_courseTesting` ONLY when the admin
+config has no `golf.courses.<id>.testing` override - so it is a default under the override, the
+same rule as `devOnly` under `games.<id>.live`, never a second switch. Before this, a course that
+was not open was SHOWN locked to everyone (Red Mesa, Oasis Sands); a course in this map is HIDDEN
+from everyone but a dev profile. **To release it:** delete its line from that map and set
+`coralcove: true` in `COURSE_OPEN_BY_DEFAULT` (the admin page has no per-course switches yet).
+Measured in a browser: a non-dev profile gets three course chips, no Coral Cove; with
+`testing: false` in the cached config the fourth chip appears.
+
+Wired in everywhere a nine-hole course has to be (the Oasis Sands list): `rounds.js` `COURSES`,
+`strings.js` `course_coralcove` / `blurb_coralcove` (en + es), `js/leaderboard-rank.js`
+`GOLF_COURSE_PAR` (four keys: `coralcove3/3b/3c/9`), `js/game-stats-ui.js` `GOLF_COURSES` +
+`GOLF_COURSE_HOLES`, `sw.js` `ASSETS`, `sheet-course.mjs`. Rounds Matt plays on it record like any
+other course's (the same as Red Mesa and Oasis Sands today).

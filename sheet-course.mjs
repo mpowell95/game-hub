@@ -15,7 +15,7 @@
 // NO LABELS BY DEFAULT (Matt, 2026-09-08: "we don't need labels. I don't want any text here at
 // all"). Pass `--labels` when the point is identifying a hole rather than reading the set.
 //
-//   node sheet-course.mjs [pinevalley|redmesa|oasissands] [--labels]
+//   node sheet-course.mjs [pinevalley|redmesa|oasissands|coralcove] [--labels]
 //        ->  .visual-out/<course>-holes.png
 
 import { chromium } from 'playwright-core';

@@ -3214,8 +3214,14 @@ console.log('\n-- 21. SWAMP: a hazard you play OUT OF, not a penalty (2026-09-22
   const { OBSTACLE_CATALOG } = await import('./obstacles.js');
 
   ok('swamp is a member of the closed set of surface kinds', SURFACE_KINDS.has('swamp'));
-  ok('...and no shipped hole uses it yet, so nothing existing moved',
-    COURSES.every((c) => c.holes.every((h) => h.base !== 'swamp' && !h.surfaces.some((x) => x.kind === 'swamp'))));
+  // Scoped to the courses that existed when swamp shipped: Coral Cove (2026-09-29) is the first
+  // course built WITH it, on purpose (hole 6's cross band), which moves nothing that existed.
+  const PRE_SWAMP = new Set(['pinevalley', 'redmesa', 'oasissands']);
+  ok('...and no hole that predates it uses it, so nothing existing moved',
+    COURSES.filter((c) => PRE_SWAMP.has(c.id))
+      .every((c) => c.holes.every((h) => h.base !== 'swamp' && !h.surfaces.some((x) => x.kind === 'swamp'))));
+  ok('...and Coral Cove 6 really plays one',
+    COURSES.find((c) => c.id === 'coralcove').holes[5].surfaces.some((x) => x.kind === 'swamp'));
 
   // THE LIE ROW IS THE WHOLE COST. A lake charges a stroke and hands the ball back somewhere dry;
   // a swamp charges nothing and makes you hit it.
