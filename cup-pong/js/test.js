@@ -119,6 +119,23 @@ ok('the whole rack area is on the table',
   m = oneLeft('a'); m.throwResult({ made: 'k9' });
   ev = m.throwResult(miss);
   ok('ball 2 misses: the cup goes and the other side gets a rebuttal', !m.over && m.phase === 'rebuttal' && m.shooter === 'b' && ids(m, 'b').length === 0 && types(ev).includes('rackCleared'));
+  // BALLS BACK ON THE LAST CUP (Matt, 2026-09-29): both balls in with the second on the last cup.
+  const twoLeft = (opts = {}) => { const mm = new Match({ first: 'a', ...opts }); mm.racks.b = [{ id: 'k8', c: -1, r: 2 }, { id: 'k9', c: 0, r: 3 }]; mm.startTurn(); return mm; };
+  m = twoLeft(); m.throwResult({ made: 'k8' });
+  ev = m.throwResult({ made: 'k9' });
+  ok('the last two cups with both balls: balls back, the last cup still stands (Matt)', types(ev).includes('ballsBack') && m.lastCup === 'k9' && m.shooter === 'a' && m.phase === 'normal' && ids(m, 'b').join() === 'k9');
+  ev = m.throwResult({ made: 'k9' });
+  ok('...hit it with a ball back: win, no rebuttal', m.over && m.winner === 'a' && ev.some((e) => e.type === 'win' && e.how === 'sameCup'));
+  m = twoLeft(); m.throwResult({ made: 'k8' }); m.throwResult({ made: 'k9' }); m.throwResult(miss);
+  ok('...the first ball back misses: the second still gets its shot', !m.over && m.lastCup === 'k9' && m.ball === 1);
+  ev = m.throwResult(miss);
+  ok('...both balls back miss: the cup goes and they get their rebuttal', !m.over && m.phase === 'rebuttal' && m.shooter === 'b' && types(ev).includes('rackCleared'));
+  m = twoLeft(); m.throwResult(miss);
+  ev = m.throwResult({ made: 'k9' });
+  ok('ball 1 missed, ball 2 sinks one of two: no balls back, one cup left', !types(ev).includes('ballsBack') && m.shooter === 'b');
+  m = twoLeft({ lastCupBack: false }); m.throwResult({ made: 'k8' });
+  ev = m.throwResult({ made: 'k9' });
+  ok('an older challenge (no such rule) replays as it was: straight to the rebuttal', m.phase === 'rebuttal' && types(ev).includes('rackCleared'));
   // THE REBUTTAL: both balls, each until it misses.
   ev = m.startTurn();
   ok('the rebuttal is announced', types(ev).includes('rebuttal'));

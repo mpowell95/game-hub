@@ -10,7 +10,11 @@
 //     then that ball comes straight back after every make until it misses.
 //   - THE LAST CUP (2026-09-28): make it with a ball and you still throw the ball(s) you have left.
 //     Put another in THE SAME CUP and you win outright, no rebuttal. Otherwise the cup goes and the
-//     other side gets a rebuttal.
+//     other side gets a rebuttal. BALLS BACK COUNT AS BALLS LEFT (Matt, 2026-09-29: "I just beat
+//     king of games by hitting the last two cups. But I didn't get the balls back to shoot again and
+//     end the game"): sink the last cup with the pair's second ball after the first also went in,
+//     and the balls come back with that cup still standing - hit it and win, miss both and it goes
+//     and the rebuttal follows. `lastCupBack` switches it; old challenges replay without it.
 //   - THE REBUTTAL (2026-09-28): "rebuttals is 2 shots as well - each person gets to shoot. And if
 //     the first ball hits a cup, they get that ball back". Both balls, each shooting until it misses.
 //     Clear everything and it goes to OVERTIME (3 cups each, 2-1); otherwise the side that cleared
@@ -63,10 +67,11 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true } = {}) {
     this.async = !!async;
     // Reracks stand against the BACK WALL (Matt, 2026-09-29). Off only for a challenge made before.
     this.backRack = backRack !== false;
+    this.lastCupBack = lastCupBack !== false;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
     this.gentlemans = !!gentlemans;
@@ -259,11 +264,12 @@ export class Match {
       const bounce = !!(this.bounce && bounced && leftAfter >= 1);
       const extra = (island ? 1 : 0) + (bounce ? 1 : 0);
       const flags = { ...(island ? { island: true } : {}), ...(bounce ? { bounce: true } : {}) };
-      // THE LAST CUP with a ball still to throw: it stands for that ball.
-      if (leftAfter === 0 && this.queue.length) {
+      // THE LAST CUP with a ball still to throw - in hand, or coming back as balls back: it stands.
+      const ballsBack = this.lastCupBack && !this.queue.length && this.pairRes[0] === true && this.pairRes[1] === true;
+      if (leftAfter === 0 && (this.queue.length || ballsBack)) {
         this.lastCup = made;
         ev.push({ type: 'made', side, ball, id: made, bounced, lastCup: true, left: 1 });
-        return ev;
+        return ballsBack ? ev.concat(this._afterThrow()) : ev;
       }
       this.racks[this.defender] = rack.filter((k) => k.id !== made);
       ev.push({ type: 'made', side, ball, id: made, bounced, left: leftAfter, ...flags });
@@ -354,7 +360,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -370,7 +376,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };
