@@ -574,10 +574,11 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('a tier-blind metric gets no per-tier tiles to claim it can be split',
     /const METRIC_IS_TIER_BLIND = new Set\(\['skeeball', 'golf', 'holdem', 'contexto'\]\);/.test(src)
     && /METRIC_IS_TIER_BLIND\.has\(id\) \? ''/.test(src));
-  // Matt, 2026-09-28: "hints can't count the same as getting it with no hints".
-  ok('Contexto\'s board ranks on solves WITHOUT a hint, not on every solve',
-    /if \(id === 'contexto'\) return \(\(\(\(g\.games \|\| \{\}\)\.contexto \|\| \{\}\)\.ct \|\| \{\}\)\.noHint\) \| 0;/.test(src)
-    && /if \(id === 'contexto'\) return 'lb_unit_ct_nohint';/.test(src));
+  // Contexto medals (Matt, 2026-09-29): gold = no hints, silver = 1, bronze = 2, 3+ = no medal;
+  // rank golds > silvers > bronzes > plain solves, tie to the LOWER average guesses.
+  ok('Contexto\'s board ranks on the packed medal score and ties on average guesses',
+    /if \(id === 'contexto'\) return ctMedalScore\(ctOf\(g\)\);/.test(src)
+    && /if \(id === 'contexto'\) return \(a, b\) => compareContexto\(ctOf\(a\), ctOf\(b\)\);/.test(src));
   // ADMIN-ONLY GAMES ARE OFF THE BOARD (2026-09-09). The three things that must NOT be filtered
   // with them are each a rule 1 failure if they ever are - see the comment at the call site.
   ok('By Game lists only the games this person can see on the launcher',
@@ -710,5 +711,28 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     bestAt({ easy: 8000, hard: 120000 }, null) === 8000);
 }
 
+// --- Contexto medals: the pure maths (2026-09-29) --------------------------------------------
+{
+  const { ctMedalScore, ctBest, compareContexto } = await import('./js/leaderboard-rank.js');
+  const { contextoMedal } = await import('./js/game-stats.js');
+  console.log('\n--- contexto medals ---');
+  ok('0 hints = gold, 1 = silver, 2 = bronze, 3+ = no medal',
+    contextoMedal(0) === 'gold' && contextoMedal(1) === 'silver' && contextoMedal(2) === 'bronze' && contextoMedal(3) === null && contextoMedal(9) === null);
+  const matt = { solved: 1, noHint: 1, guesses: 23 }, anita = { solved: 1, noHint: 1, guesses: 40 };
+  const king1 = { solved: 1, noHint: 0, silver: 1, guesses: 23 }, king3 = { solved: 1, noHint: 0, guesses: 10 };
+  ok('one gold beats any number of silvers', compareContexto({ solved: 1, noHint: 1, guesses: 99 }, { solved: 50, silver: 50, guesses: 50 }) < 0);
+  ok('a silver beats a bronze beats a plain solve',
+    compareContexto(king1, { solved: 1, bronze: 1, guesses: 1 }) < 0 && compareContexto({ solved: 1, bronze: 1, guesses: 99 }, king3) < 0);
+  ok('equal medals: the LOWER average guesses wins', compareContexto(matt, anita) < 0 && compareContexto(anita, matt) > 0);
+  ok('equal medals AND equal average = tied', compareContexto(matt, { ...matt }) === 0);
+  ok('headline is the best medal and its count',
+    JSON.stringify(ctBest(ctMedalScore(matt))) === '{"medal":"gold","n":1}'
+    && JSON.stringify(ctBest(ctMedalScore(king1))) === '{"medal":"silver","n":1}'
+    && JSON.stringify(ctBest(ctMedalScore(king3))) === '{"medal":"solved","n":1}'
+    && ctBest(0).medal === null);
+  ok('a record with no medals yet (pre-medal store) still ranks its solves', ctMedalScore({ solved: 2, noHint: 1, guesses: 9 }) === 1e12 + 1);
+}
+
 console.log(`\n${fail ? `${fail} FAILED` : 'all leaderboard-rank tests passed'}`);
 process.exit(fail ? 1 : 0);
+

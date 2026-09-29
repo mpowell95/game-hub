@@ -207,7 +207,10 @@
 //                                                   // never a real elapsed time. See recordSudoku
 //       contexto: {
 //         total, byDiff,                           // byDiff keyed en|es (the word set, no tier)
-//         ct: { solved, guesses, hints, noHint, fewest } },
+//         ct: { solved, guesses, hints, noHint, fewest, silver, bronze, medalsV } },
+//                                                   // MEDALS (2026-09-29): noHint = gold solves,
+//                                                   // silver = 1-hint, bronze = 2-hint solves;
+//                                                   // medalsV = the one-time carry-forward ran.
 //                                                   // one finished puzzle each; a give-up is a loss.
 //                                                   // guesses sums SOLVED puzzles only; fewest is
 //                                                   // LOWER-is-better, 0 = never set. See recordContexto
@@ -458,7 +461,39 @@ function ensureMs(g) {
  *  is total.lost; it is not copied here (see ensureMs on second copies). */
 function ensureCt(g) {
   if (!g.ct || typeof g.ct !== 'object') g.ct = { solved: 0, guesses: 0, hints: 0, noHint: 0, fewest: 0 };
-  for (const k of ['solved', 'guesses', 'hints', 'noHint', 'fewest']) if (!Number.isFinite(g.ct[k])) g.ct[k] = 0;
+  for (const k of ['solved', 'guesses', 'hints', 'noHint', 'fewest', 'silver', 'bronze']) if (!Number.isFinite(g.ct[k])) g.ct[k] = 0;
+}
+
+/** Contexto's medal for one solve (Matt, 2026-09-29): gold = no hints, silver = 1 hint, bronze = 2
+ *  hints, 3 or more = solved with no medal (null). The ONE place this rule lives; the game's
+ *  result panel imports it. Gold is stored as `ct.noHint` (it predates medals), silver and bronze
+ *  as `ct.silver` / `ct.bronze`; solves with no medal are `solved - noHint - silver - bronze`. */
+export function contextoMedal(hints) {
+  const h = Math.max(0, hints | 0);
+  return h === 0 ? 'gold' : h === 1 ? 'silver' : h === 2 ? 'bronze' : null;
+}
+
+/** ONE-TIME carry-forward of medals for solves recorded before medals existed (2026-09-29).
+ *  Those solves are already in `solved`/`noHint`, but silver and bronze were not counted. The
+ *  game's own save still holds each puzzle's hints, so contexto/js/ui.js counts them and hands the
+ *  totals here once. Guarded by `ct.medalsV`, so it never adds twice. CAPPED at the hint solves
+ *  this store actually recorded (`solved - noHint`, minus any silver/bronze already counted): the
+ *  save is per DEVICE while this store is per PLAYER, and a second profile on the same phone must
+ *  never be credited with medals for solves it did not record (rule 4, never fabricate). Additive
+ *  only (rule 2). Returns true if it wrote. */
+export function backfillContextoMedals(counts) {
+  const st = loadStats();
+  const g = st.games.contexto;
+  ensureCt(g);
+  if (g.ct.medalsV) return false;
+  let room = Math.max(0, (g.ct.solved | 0) - (g.ct.noHint | 0) - (g.ct.silver | 0) - (g.ct.bronze | 0));
+  const silver = Math.min(room, Math.max(0, (counts && counts.silver) | 0)); room -= silver;
+  const bronze = Math.min(room, Math.max(0, (counts && counts.bronze) | 0));
+  g.ct.silver += silver;
+  g.ct.bronze += bronze;
+  g.ct.medalsV = 1;
+  st.updatedAt = new Date().toISOString();
+  return persist(st);
 }
 
 /** Escoba: the capture-quality counter (escobas the human made). */
@@ -1453,6 +1488,8 @@ export function recordContexto(lang, won, extras = {}) {
     g.ct.solved += 1;
     g.ct.guesses += guesses;
     if (hints === 0) g.ct.noHint += 1;
+    else if (hints === 1) g.ct.silver += 1;
+    else if (hints === 2) g.ct.bronze += 1;
     if (guesses > 0) g.ct.fewest = g.ct.fewest > 0 ? Math.min(g.ct.fewest, guesses) : guesses;
   }
   st.updatedAt = new Date().toISOString();

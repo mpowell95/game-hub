@@ -179,6 +179,7 @@
   left: 0; top: 0; bottom: 0;
   border-radius: var(--gh-r-sm, 8px) 0 0 var(--gh-r-sm, 8px);
 }
+.ct-root .ct-result-medal { margin: 2px 0 6px; font-size: 16px; font-weight: 800; }
 .ct-root .ct-bar--close { background: var(--ct-close-bar); }
 .ct-root .ct-bar--near { background: var(--ct-near-bar); }
 .ct-root .ct-bar--far { background: var(--ct-far-bar); }

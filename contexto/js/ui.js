@@ -8,7 +8,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen the
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
-import { recordContexto } from '../../js/game-stats.js';
+import { recordContexto, contextoMedal, backfillContextoMedals } from '../../js/game-stats.js';
 import { loadModel, puzzleNumber, hintRank, band } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -129,6 +129,19 @@ class ContextoUI {
     this.lang = this.settings.lang || getLang();
     if (!this.settings.lang) this.settings = saveSettings(this.lang);
     this.save = loadSave();
+    // Medals arrived 2026-09-29, after solves had already been recorded. This device's save still
+    // knows each finished puzzle's hints, so hand the counts over ONCE (game-stats guards the
+    // "once" with ct.medalsV and caps it at the hint solves the store actually holds).
+    try {
+      const counts = { silver: 0, bronze: 0 };
+      for (const k in this.save.games) {
+        const g = this.save.games[k];
+        if (!g || g.done !== 'won' || !g.recorded || !Array.isArray(g.guesses)) continue;
+        const m = contextoMedal(g.guesses.filter((x) => x && x.hint).length);
+        if (m === 'silver') counts.silver++; else if (m === 'bronze') counts.bronze++;
+      }
+      backfillContextoMedals(counts);
+    } catch (err) { console.error('[contexto] medal carry-forward', err); }
     this.model = null;
     this.screen = 'loading'; // 'loading' | 'error' | 'play'
     this._overlay = null; // 'howto' | 'previous' | 'result' | 'giveup' | null
@@ -475,6 +488,7 @@ class ContextoUI {
         <p class="ct-howto-example">${esc(t('howto_example'))}</p>
         <p class="ct-howto-edge">${esc(t('howto_edge_new'))}</p>
         <p class="ct-howto-edge">${esc(t('howto_edge_plural'))}</p>
+        <p class="ct-howto-edge">${esc(t('howto_edge_medals'))}</p>
         <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-action="close-overlay">${esc(t('howto_close'))}</button>
       </div>`);
   }
@@ -546,6 +560,7 @@ class ContextoUI {
       <div class="gh-modal ct-result" role="dialog" aria-modal="true">
         <button type="button" class="gh-modal__close" data-action="close-overlay" aria-label="${esc(t('close_aria'))}">&times;</button>
         <h2 class="gh-modal__title">${esc(t(titleKey))}</h2>
+        ${rec.done === 'won' ? `<p class="ct-result-medal">${esc(t('medal_' + (contextoMedal(hints) || 'none')))}</p>` : ''}
         <p class="ct-result-word">${esc(t('result_word', { word: this.word }))}</p>
         <p class="ct-result-detail">${esc(detail)}</p>
         <p class="ct-closest-title">${esc(t('closest_words'))}</p>

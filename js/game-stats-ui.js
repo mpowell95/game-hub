@@ -368,8 +368,13 @@ function contextoScreen(rec) {
   }).join('');
   return `
     <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${ct.noHint | 0}</b><span>${t('gs_ct_nohint')}</span></div>
-      <div class="gs-tally"><b>${Math.max(0, solved - (ct.noHint | 0))}</b><span>${t('gs_ct_withhints')}</span></div>
+      <div class="gs-tally"><b>&#x1F947; ${ct.noHint | 0}</b><span>${t('gs_ct_nohint')}</span></div>
+      <div class="gs-tally"><b>&#x1F948; ${ct.silver | 0}</b><span>${t('gs_ct_silver')}</span></div>
+      <div class="gs-tally"><b>&#x1F949; ${ct.bronze | 0}</b><span>${t('gs_ct_bronze')}</span></div>
+      <div class="gs-tally"><b>${Math.max(0, solved - (ct.noHint | 0) - (ct.silver | 0) - (ct.bronze | 0))}</b><span>${t('gs_ct_nomedal')}</span></div>
+    </div>
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${solved}</b><span>${t('gs_ct_solved')}</span></div>
       <div class="gs-tally"><b>${avg}</b><span>${t('gs_ct_avg')}</span></div>
       <div class="gs-tally"><b>${(ct.fewest | 0) > 0 ? ct.fewest | 0 : '&mdash;'}</b><span>${t('gs_ct_fewest')}</span></div>
     </div>
