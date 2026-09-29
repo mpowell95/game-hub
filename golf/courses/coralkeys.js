@@ -17,7 +17,13 @@
 import { makeHole } from '../js/holegen.js';
 import { OBSTACLE_CATALOG as TREE_TYPES, OBSTACLE_INDEX as T } from '../js/obstacles.js';
 
-/** Every hole: open ocean, a 5 yd beach, a thin collar of rough, no tree belts, no auto-bunkers. */
+/** Every hole: open ocean, a 5 yd beach, a thin collar of rough, no tree belts, no auto-bunkers.
+ *
+ *  AND A SEA BREEZE ON EVERY HOLE (2026-09-29). Matt: *"Add wind though."* Left to the seeded
+ *  derivation (shot.js `windFor`) this course drew THREE dead-calm holes and the lowest average
+ *  wind in the game (0.83, against Pine Valley 1.11 and Oasis Sands 1.39). Each hole now states
+ *  its own: never calm, 1.2 to 2.0 on the game's unchanged 0-2 scale, average 1.6, turning with
+ *  the holes. `deg` 0 blows toward the green, 90 left to right, 180 into your face. */
 export const CK_DEFAULTS = {
   treeTypes: TREE_TYPES,
   base: 'water',
@@ -35,6 +41,7 @@ export const SPEC_1 = {
   nickname: 'Castaway',
   path: [[0, 5], [0, 170], [8, 336]],
   fw: 22,
+  wind: { speed: 1.2, deg: 45 },
   hard: 0,
   seed: 6101,
   greenSeed: 61013,
@@ -56,6 +63,7 @@ export const SPEC_2 = {
   nickname: 'Sandbar',
   path: [[0, 5], [-8, 175], [18, 300], [48, 368]],
   fw: 20,
+  wind: { speed: 1.5, deg: 270 },
   hard: 0.12,
   seed: 6201,
   greenSeed: 62027,
@@ -77,6 +85,7 @@ export const SPEC_3 = {
   nickname: 'Lagoon',
   path: [[0, 5], [0, 70], [-4, 142]],
   fw: 12,
+  wind: { speed: 1.4, deg: 180 },
   hard: 0.22,
   seed: 6301,
   greenSeed: 63031,
@@ -95,6 +104,7 @@ export const SPEC_4 = {
   nickname: 'Stepping Stones',
   path: [[0, 5], [6, 160], [-6, 330], [4, 488]],
   fw: 20,
+  wind: { speed: 1.6, deg: 90 },
   hard: 0.35,
   seed: 6401,
   greenSeed: 64049,
@@ -117,6 +127,7 @@ export const SPEC_5 = {
   nickname: 'Coconut Island',
   path: [[0, 5], [2, 90], [6, 168]],
   fw: 12,
+  wind: { speed: 1.8, deg: 225 },
   hard: 0.45,
   seed: 6501,
   greenSeed: 65061,
@@ -139,6 +150,7 @@ export const SPEC_6 = {
   nickname: 'Shipwreck',
   path: [[0, 5], [0, 180], [-10, 372]],
   fw: 26,
+  wind: { speed: 1.3, deg: 135 },
   hard: 0.55,
   seed: 6601,
   greenSeed: 66081,
@@ -160,6 +172,7 @@ export const SPEC_7 = {
   nickname: 'Reef Run',
   path: [[0, 5], [8, 200], [0, 392]],
   fw: 22,
+  wind: { speed: 2.0, deg: 180 },
   hard: 0.7,
   seed: 6701,
   greenSeed: 67089,
@@ -179,6 +192,7 @@ export const SPEC_8 = {
   nickname: 'Shark Bite',
   path: [[0, 5], [0, 80], [0, 152]],
   fw: 11,
+  wind: { speed: 1.7, deg: 270 },
   hard: 0.85,
   seed: 6801,
   greenSeed: 68111,
@@ -196,6 +210,7 @@ export const SPEC_9 = {
   nickname: 'Treasure Cove',
   path: [[0, 5], [6, 200], [-18, 360], [-54, 500]],
   fw: 20,
+  wind: { speed: 1.9, deg: 315 },
   hard: 1,
   seed: 6901,
   greenSeed: 69123,

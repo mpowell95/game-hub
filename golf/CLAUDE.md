@@ -6178,6 +6178,10 @@ not a new course. What makes one read as new is the GROUND and the SHAPE of a ho
   The first render laid the bands over the land as lakes: striped pools with square cut ends,
   sitting in a sea - which is why the gap form exists.
 - **`islands` (holegen.js)**: extra land in the water (shortcuts on 2 and 9, bail-outs on 3 and 7).
+- **A stated sea breeze on every hole** (Matt: *"Add wind though."*). The seeded derivation had
+  given this course three dead-calm holes and the game's lowest average wind (0.83; Pine Valley
+  1.11, Red Mesa 1.18, Oasis Sands 1.39). Each spec now carries `wind: { speed, deg }`: never calm,
+  1.2-2.0, average 1.6, on the UNCHANGED 0-2 scale - no physics number moved.
 - **render.js**: an ocean base gets swell lines and a pale band of shallows round every island.
   Art only.
 - Neither option changes a hole that does not use it: every Pine Valley, Red Mesa, Oasis Sands and
