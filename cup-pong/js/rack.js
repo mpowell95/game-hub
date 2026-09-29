@@ -118,10 +118,13 @@ if (AREA.cMax * CUP_D / 2 + CUP.topR > TABLE.width / 2) {
 // cannot hold (an aligned 3-3 wall, a 3-1 triangle) is still exact and touching. A row's cups are
 // centred; `step` is the gap to the next row in cup-widths (hex rows are 0.866 apart and half a cup
 // shifted, straight rows are 1.0 apart), `shift` slides one row sideways (the zippers).
-// PLACEMENT, the same rule as the Gentleman's line: the FRONT row stands where the triangle's point
-// is; a shape deeper than the triangle has its BACK row on the back row instead.
+// PLACEMENT: AGAINST THE BACK WALL (Matt, 2026-09-29: "everything is set against the back wall").
+// The shape's BACK row stands on the rack's back row, so a rerack can never pull the cups closer to
+// the shooter. Before that (2026-09-28) the FRONT row stood where the triangle's point is; that
+// placement is kept, as `back = false`, only so a challenge made under it still replays the same.
+// The Gentleman's line (PRESETS.line2) is not a rerack and keeps its own placement.
 const HEX = ROW_H / CUP_D;
-function shape(rows) {
+function shape(rows, back = true) {
   let v = 0;
   const pts = [];
   rows.forEach((row, i) => {
@@ -130,52 +133,63 @@ function shape(rows) {
     if (i < rows.length - 1) v += row.step != null ? row.step : HEX;
   });
   const depth = v;
+  if (back) return pts;                                  // v = 0 is the back row
   const front = Math.max(3 * HEX, depth);
   // v grows toward the shooter; the last row listed is the front row.
   return pts.map((p) => ({ u: p.u, v: p.v + (front - depth) }));
 }
 const R = (n, step, shift) => ({ n, step, shift });
 
+/** A straight line of n touching cups toward the shooter, its back cup on the back row. */
+const backLine = (n) => Array.from({ length: n }, (_, i) => ({ u: 0, v: i }));
+
 /** Preset shapes by cup count: [{ key, label (EN/ES label keys live in strings.js), spots }]. */
-export const RERACKS = {
-  10: [{ key: 'tri', spots: shape([R(4), R(3), R(2), R(1)]) }],
-  9: [
-    { key: 'diamond', spots: shape([R(1), R(2), R(3), R(2), R(1)]) },
-    { key: 'wall333', spots: shape([R(3, 1), R(3, 1), R(3)]) },
-  ],
-  8: [
-    { key: 'zipper', spots: shape([R(2, HEX, -0.25), R(2, HEX, 0.25), R(2, HEX, -0.25), R(2, HEX, 0.25)]) },
-    { key: 'r323', spots: shape([R(3), R(2), R(3)]) },
-  ],
-  7: [{ key: 'honeycomb', spots: shape([R(2), R(3), R(2)]) }],
-  6: [
-    { key: 'tri', spots: shape([R(3), R(2), R(1)]) },
-    { key: 'zipper', spots: shape([R(2, HEX, -0.25), R(2, HEX, 0.25), R(2, HEX, -0.25)]) },
-    { key: 'wall33', spots: shape([R(3, 1), R(3)]) },
-  ],
-  5: [
-    { key: 'house', spots: shape([R(2), R(1), R(2)]) },
-    { key: 'r32', spots: shape([R(3), R(2)]) },
-  ],
-  4: [
-    { key: 'diamond', spots: shape([R(1), R(2), R(1)]) },
-    { key: 'tri31', spots: shape([R(3, 1), R(1)]) },
-    { key: 'line', spots: PRESETS.line4 },
-    { key: 'square', spots: shape([R(2, HEX, -0.25), R(2, HEX, 0.25)]) },
-  ],
-  3: [
-    { key: 'tri', spots: shape([R(2), R(1)]) },
-    { key: 'line', spots: PRESETS.line3 },
-  ],
-  2: [
-    { key: 'line', spots: PRESETS.line2 },
-    { key: 'side', spots: shape([R(2)]) },
-  ],
-  1: [{ key: 'center', spots: shape([R(1)]) }],
+const buildReracks = (back) => {
+  const shape_ = (rows) => shape(rows, back);
+  const line = (n) => (back ? backLine(n) : PRESETS['line' + n]);
+  return {
+    10: [{ key: 'tri', spots: shape_([R(4), R(3), R(2), R(1)]) }],
+    9: [
+      { key: 'diamond', spots: shape_([R(1), R(2), R(3), R(2), R(1)]) },
+      { key: 'wall333', spots: shape_([R(3, 1), R(3, 1), R(3)]) },
+    ],
+    8: [
+      { key: 'zipper', spots: shape_([R(2, HEX, -0.25), R(2, HEX, 0.25), R(2, HEX, -0.25), R(2, HEX, 0.25)]) },
+      { key: 'r323', spots: shape_([R(3), R(2), R(3)]) },
+    ],
+    7: [{ key: 'honeycomb', spots: shape_([R(2), R(3), R(2)]) }],
+    6: [
+      { key: 'tri', spots: shape_([R(3), R(2), R(1)]) },
+      { key: 'zipper', spots: shape_([R(2, HEX, -0.25), R(2, HEX, 0.25), R(2, HEX, -0.25)]) },
+      { key: 'wall33', spots: shape_([R(3, 1), R(3)]) },
+    ],
+    5: [
+      { key: 'house', spots: shape_([R(2), R(1), R(2)]) },
+      { key: 'r32', spots: shape_([R(3), R(2)]) },
+    ],
+    4: [
+      { key: 'diamond', spots: shape_([R(1), R(2), R(1)]) },
+      { key: 'tri31', spots: shape_([R(3, 1), R(1)]) },
+      { key: 'line', spots: line(4) },
+      { key: 'square', spots: shape_([R(2, HEX, -0.25), R(2, HEX, 0.25)]) },
+    ],
+    3: [
+      { key: 'tri', spots: shape_([R(2), R(1)]) },
+      { key: 'line', spots: line(3) },
+    ],
+    2: [
+      { key: 'line', spots: line(2) },
+      { key: 'side', spots: shape_([R(2)]) },
+    ],
+    1: [{ key: 'center', spots: shape_([R(1)]) }],
+  };
 };
+export const RERACKS = buildReracks(true);
+const RERACKS_POINT = buildReracks(false);   // the 2026-09-28 placement, for old challenges
+
 
 /** The presets that fit `n` cups. */
-export const presetsFor = (n) => RERACKS[n] || [];
+export const presetsFor = (n, back = true) => (back ? RERACKS : RERACKS_POINT)[n] || [];
 
 /** Stand these cups (keeping their ids) on a preset's spots. */
 export function applyPreset(cups, spots) {

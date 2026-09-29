@@ -361,3 +361,8 @@
 .cp-root .cp-cup.is-drag { cursor: grabbing; }
 .cp-root .cp-custom-btns { display: flex; gap: 10px; margin-top: 12px; }
 .cp-root .cp-custom-btns .gh-btn { flex: 1; min-height: 44px; }
+/* The back wall along the top of the Make your own grid; the warning when the back row is empty
+   leads with a sign as well as its weight and colour. */
+.cp-root .cp-wall { fill: #6b4a2b; }
+.cp-root .cp-custom-say.is-warn { color: #b3261e; font-weight: 800; }
+:root.gh-dark .cp-root .cp-custom-say.is-warn { color: #ff8a80; }

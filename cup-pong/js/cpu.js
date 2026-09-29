@@ -112,7 +112,7 @@ export function cpuOptions(match) {
     const rack = match.target();
     const now = touchingPairs(rack);
     let best = null;
-    for (const p of presetsFor(rack.length)) {
+    for (const p of presetsFor(rack.length, match.backRack)) {
       const score = touchingPairs(applyPreset(rack, p.spots));
       if (!best || score > best.score) best = { key: p.key, score };
     }

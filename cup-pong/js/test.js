@@ -119,6 +119,23 @@ ok('the whole rack area is on the table',
   m = oneLeft('a'); m.throwResult({ made: 'k9' });
   ev = m.throwResult(miss);
   ok('ball 2 misses: the cup goes and the other side gets a rebuttal', !m.over && m.phase === 'rebuttal' && m.shooter === 'b' && ids(m, 'b').length === 0 && types(ev).includes('rackCleared'));
+  // BALLS BACK ON THE LAST CUP (Matt, 2026-09-29): both balls in with the second on the last cup.
+  const twoLeft = (opts = {}) => { const mm = new Match({ first: 'a', ...opts }); mm.racks.b = [{ id: 'k8', c: -1, r: 2 }, { id: 'k9', c: 0, r: 3 }]; mm.startTurn(); return mm; };
+  m = twoLeft(); m.throwResult({ made: 'k8' });
+  ev = m.throwResult({ made: 'k9' });
+  ok('the last two cups with both balls: balls back, the last cup still stands (Matt)', types(ev).includes('ballsBack') && m.lastCup === 'k9' && m.shooter === 'a' && m.phase === 'normal' && ids(m, 'b').join() === 'k9');
+  ev = m.throwResult({ made: 'k9' });
+  ok('...hit it with a ball back: win, no rebuttal', m.over && m.winner === 'a' && ev.some((e) => e.type === 'win' && e.how === 'sameCup'));
+  m = twoLeft(); m.throwResult({ made: 'k8' }); m.throwResult({ made: 'k9' }); m.throwResult(miss);
+  ok('...the first ball back misses: the second still gets its shot', !m.over && m.lastCup === 'k9' && m.ball === 1);
+  ev = m.throwResult(miss);
+  ok('...both balls back miss: the cup goes and they get their rebuttal', !m.over && m.phase === 'rebuttal' && m.shooter === 'b' && types(ev).includes('rackCleared'));
+  m = twoLeft(); m.throwResult(miss);
+  ev = m.throwResult({ made: 'k9' });
+  ok('ball 1 missed, ball 2 sinks one of two: no balls back, one cup left', !types(ev).includes('ballsBack') && m.shooter === 'b');
+  m = twoLeft({ lastCupBack: false }); m.throwResult({ made: 'k8' });
+  ev = m.throwResult({ made: 'k9' });
+  ok('an older challenge (no such rule) replays as it was: straight to the rebuttal', m.phase === 'rebuttal' && types(ev).includes('rackCleared'));
   // THE REBUTTAL: both balls, each until it misses.
   ev = m.startTurn();
   ok('the rebuttal is announced', types(ev).includes('rebuttal'));
@@ -160,11 +177,36 @@ ok('the whole rack area is on the table',
   ev = m.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }]);
   ok('custom rerack: cups need not touch, keep their ids, and it costs a rerack',
     ev.length === 1 && ev[0].key === 'custom' && ids(m, 'b').join() === 'k0,k1,k2' && m.racks.b[2].r === 3 && m.reracksLeft.a === 0 && !m.canRerack());
+  // AGAINST THE BACK WALL (Matt, 2026-09-29): no rerack can pull the cups closer.
+  m = new Match({ first: 'a', reracks: 2 }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
+  ok('custom rerack: an empty back row is refused (Matt\'s 3-2 one row forward)',
+    m.rerackCustom([{ c: -2, r: 1 }, { c: 0, r: 1 }, { c: 2, r: 1 }, { c: -1, r: 2 }, { c: 1, r: 2 }]).length === 0 && m.reracksLeft.a === 2);
+  ok('custom rerack: the same 3-2 on the back row is fine',
+    m.rerackCustom([{ c: -3, r: 0 }, { c: -1, r: 0 }, { c: 1, r: 0 }, { c: -2, r: 1 }, { c: 0, r: 1 }]).length === 1);
+  {
+    const { RERACKS } = await import('./rack.js');
+    const bad = [];
+    for (const [n, list] of Object.entries(RERACKS)) for (const p of list) {
+      if (Math.min(...p.spots.map((s) => s.v)) > 1e-9) bad.push(n + ':' + p.key);
+    }
+    ok('every preset stands against the back wall', bad.length === 0, bad.join(' '));
+    const { applyPreset } = await import('./rack.js');
+    const illegal = [];
+    for (const [n, list] of Object.entries(RERACKS)) for (const p of list) {
+      if (!validRack(applyPreset(Array.from({ length: +n }, (_, i) => ({ id: 'k' + i })), p.spots))) illegal.push(n + ':' + p.key);
+    }
+    ok('every rerack preset is a legal rack (no overlap, on the table)', illegal.length === 0, illegal.join(' '));
+  }
+  m = new Match({ first: 'a', reracks: 2, backRack: false }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
+  ok('an older challenge (no back-wall rule) still replays its forward custom rerack',
+    m.rerackCustom([{ c: -2, r: 1 }, { c: 0, r: 1 }, { c: 2, r: 1 }, { c: -1, r: 2 }, { c: 1, r: 2 }]).length === 1);
+  ok('...and its presets stand where they did (front row on the point)',
+    Math.max(...(await import('./rack.js')).presetsFor(5, false)[1].spots.map((s) => s.v)) > 2.5);
   // ISLAND.
   m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   ok('an island is a cup touching no other', m.islands().join() === 'k9' && m.canIsland());
-  ok('you must call a specific island', m.callIsland('k0').length === 0 && !m.islandUsed.a);
+  ok('you must call a specific island', m.callIsland('k0').length === 0 && !m.islandUsed.a[0]);
   m.callIsland('k9');
   ev = m.throwResult({ made: 'k9' });
   ok('hit the called island: the defender owes a second cup', types(ev).includes('islandPick') && m.pendingPick.picker === 'b' && ids(m, 'b').join() === 'k0,k1');
@@ -183,7 +225,21 @@ ok('the whole rack area is on the table',
   m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9'); m.throwResult(miss); m.startTurn(); m.startTurn();
-  ok('island is once per game: calling spends it even on a miss', m.islandUsed.a && !m.canIsland());
+  ok('island is once per game PER BALL: ball 1\'s call is spent even on a miss', m.islandUsed.a[0] && !m.islandUsed.a[1]);
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9'); m.throwResult(miss);
+  ok('each ball is its own player: ball 2 can still call island after ball 1 did (Matt)', m.ball === 1 && m.canIsland());
+  m.callIsland('k9'); m.throwResult(miss);
+  m.startTurn(); m.throwResult(miss); m.throwResult(miss); m.startTurn();
+  ok('...and once both balls have called, neither can again', !m.canIsland() && m.islandUsed.a.every(Boolean));
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.throwResult(miss); m.callIsland('k9'); m.throwResult(miss);
+  m.startTurn(); m.throwResult(miss); m.throwResult(miss); m.startTurn();
+  ok('...on different turns: ball 2 called first, ball 1 can still call later', m.ball === 0 && m.canIsland());
+  ok('an older save (one flag a side) reads as both balls used', Match.fromJSON({ islandUsed: { a: true, b: false } }).islandUsed.a.join() === 'true,true'
+    && Match.fromJSON({ islandUsed: { a: true, b: false } }).islandUsed.b.join() === 'false,false');
   // A CHALLENGE'S ISLAND: the second cup is OWED, taken by the defender at its own next turn.
   m = new Match({ first: 'a', async: true });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();

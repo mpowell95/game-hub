@@ -72,6 +72,12 @@ now his rule. `node cup-pong/js/test.js` has a check for each, his own counter-e
   and the other team does NOT get a rebuttal."* The cup STAYS on the table while a ball is left to
   throw at it (`lastCup`); the "Last cup! Same cup wins" notice says so. A miss then removes it and
   the rebuttal follows. This is the one exception to "a made cup is gone at once".
+  **Balls back count as balls left** (Matt, 2026-09-29: *"I just beat king of games by hitting the
+  last two cups. But I didn't get the balls back to shoot again and end the game. It just gave him
+  the rebuttal"*): the last cup made by the pair's second ball, the first having gone in too, stands
+  and the balls come back; a ball in it wins with no rebuttal, both missing removes it and the
+  rebuttal follows. Frozen per challenge as `rules.lc` (`Match({ lastCupBack })`): a challenge made
+  before has no `lc` and replays as it was played, so a finished match is never re-scored.
 - **The rebuttal**: *"rebuttals is 2 shots as well - each person gets to shoot. And if the first
   ball hits a cup, they get that ball back"*. Both balls, each shooting until it misses. Clear
   everything: overtime. Both missed: the side that cleared wins.
@@ -100,7 +106,13 @@ is on offer and gone after the turn's first throw:
   should be able to call island for one ball and not the other. It shouldn't auto apply to the
   second ball"*): the engine always cleared `called` after the next throw, but the yellow ring stayed
   on the cup after a miss, so it looked live for ball 2. `showEvents` now takes it off once a throw
-  has used the call, and the button can be used before ball 2 alone. Hit it and the defender owes a second cup: the
+  has used the call, and the button can be used before ball 2 alone. **EACH BALL IS ITS OWN PLAYER**
+  (Matt, same day: *"each 'player' gets to call island once per game - and it does NOT have to be at
+  the same time as the other 'player'"*): `islandUsed[side]` is `[ball1, ball2]`, so a side has TWO
+  calls a game, each for the ball about to be thrown, on any turns. An older saved match's single
+  flag reads as both used. Challenge logs only gained permission, so every stored log still replays;
+  a phone still on the old build would refuse a log with a second call until it updates (the hub
+  updates itself on the next load). Hit it and the defender owes a second cup: the
   computer picks at once (its loneliest cup); when you defend, the camera turns to your cups and you
   tap one. Allowed in overtime (Matt ruled out only reracks and Gentleman's there); not in a
   rebuttal.
@@ -117,9 +129,20 @@ cannot be reracked (`canRerack`). In a challenge it is the log entry
 `{k:'r', key:'custom', cells:[{c,r}...]}`, one cell per standing cup in rack order, and replays like
 any rerack. The computer still only uses presets.
 
-**Preset placement** follows the Gentleman's rule: the shape's FRONT row stands where the triangle's
-point is; a shape deeper than the triangle has its back row on the back row. Every preset was
-checked legal (touching, no overlaps, on the table).
+**Every rerack stands AGAINST THE BACK WALL (Matt, 2026-09-29):** *"please edit the reracks (custom
+and the presets) so that everything is set against the back wall. Right now you can do custom rerack
+and move everything closer to you. Like I just did a 3-2 rerack, but left the back row empty so it's
+all closer. that shouldn't be possible."*
+- **Presets**: the shape's BACK row stands on the rack's back row (`shape(rows, back)` in `rack.js`;
+  lines too, `backLine`). `test.js` checks every preset starts at the back row and is legal.
+- **Make your own**: at least one cup must be on the back row. The grid draws the back wall as a
+  brown strip along its top; while the back row is empty the line under the title reads
+  "⚠ Put a cup on the back row" and Done stays off. `match.rerackCustom` refuses it too.
+- **The Gentleman's line is not a rerack** and keeps its own placement (front cup on the point).
+- **Old challenges keep the old placement**: `rules.bk` (written on every new challenge) turns this
+  on; a challenge made before has none and replays with the 2026-09-28 rule (front row on the
+  triangle's point, custom anywhere), so its cups stand where its players saw them. `Match({
+  backRack })`, default on; `presetsFor(n, back)`.
 
 **The computer** takes Gentleman's whenever offered, reracks when a preset has at least 2 more
 touching pairs than what is standing (a tidier target), and calls the first island it sees and aims
@@ -172,7 +195,8 @@ is 3 cups** (two picks).
 - **Extra cups that are every cup left** (vs the computer): they all go, no pick (`extraCleared`).
 - **Not in a rebuttal** (as island), and **never the last cup** with a ball still to throw (there
   is no second cup; the last-cup rule applies). Solo counts every make as one cup.
-- **Frozen per challenge**: `rules.bo`, read only (see above). `Match({ bounce })`, default off.
+- **Frozen per challenge**: `rules.bo`, read only (see above). (`rules.bk`, the back-wall rerack
+  rule, is frozen the same way - see "Every rerack stands against the back wall".) `Match({ bounce })`, default off.
 - `test.js` asserts bounce-ins stay POSSIBLE (at least 5% of the soft-throw sweep; 89 of 403 on
   2026-09-28), so an arc change that loses them fails.
 

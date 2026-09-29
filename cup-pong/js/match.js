@@ -10,7 +10,11 @@
 //     then that ball comes straight back after every make until it misses.
 //   - THE LAST CUP (2026-09-28): make it with a ball and you still throw the ball(s) you have left.
 //     Put another in THE SAME CUP and you win outright, no rebuttal. Otherwise the cup goes and the
-//     other side gets a rebuttal.
+//     other side gets a rebuttal. BALLS BACK COUNT AS BALLS LEFT (Matt, 2026-09-29: "I just beat
+//     king of games by hitting the last two cups. But I didn't get the balls back to shoot again and
+//     end the game"): sink the last cup with the pair's second ball after the first also went in,
+//     and the balls come back with that cup still standing - hit it and win, miss both and it goes
+//     and the rebuttal follows. `lastCupBack` switches it; old challenges replay without it.
 //   - THE REBUTTAL (2026-09-28): "rebuttals is 2 shots as well - each person gets to shoot. And if
 //     the first ball hits a cup, they get that ball back". Both balls, each shooting until it misses.
 //     Clear everything and it goes to OVERTIME (3 cups each, 2-1); otherwise the side that cleared
@@ -25,7 +29,10 @@
 //       Island:      "if a cup is not touching any other cups, you can call island (once per game).
 //                    and if you hit that cup, you get 2 cups. The opposing player can choose the
 //                    second cup. If there are multiple available islands, you must call the specific
-//                    one." Calling spends it, hit or miss (Matt, 2026-09-28).
+//                    one." Calling spends it, hit or miss (Matt, 2026-09-28). EACH BALL IS ITS OWN
+//                    PLAYER (Matt, 2026-09-29): "each 'player' gets to call island once per game -
+//                    and it does NOT have to be at the same time as the other 'player'." So a side
+//                    has two calls, one per ball, and a call is for the ball about to be thrown.
 //   - BOUNCE SHOTS ARE OFF (Matt, 2026-09-28, the same day they shipped): "in real life you can
 //     hit a bounced ball away from the table... We won't be able to do that in turn based
 //     multiplayer. so maybe we shouldn't include it." A bounced make is one cup. The rule stays
@@ -60,8 +67,11 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true } = {}) {
     this.async = !!async;
+    // Reracks stand against the BACK WALL (Matt, 2026-09-29). Off only for a challenge made before.
+    this.backRack = backRack !== false;
+    this.lastCupBack = lastCupBack !== false;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
     this.gentlemans = !!gentlemans;
@@ -72,7 +82,7 @@ export class Match {
     this.clearedBy = null;              // who cleared the rack that started the current rebuttal
     this.streak = { a: [0, 0], b: [0, 0] };
     this.reracksLeft = { a: reracks, b: reracks };
-    this.islandUsed = { a: false, b: false };
+    this.islandUsed = { a: [false, false], b: [false, false] };   // per side, per BALL
     this.called = null;                 // the island cup called for the next throw
     this.pendingPick = null;            // { picker, n } - the defender owes n more cups (island, bounce)
     this.lastCup = null;                // the last cup, made, still standing for the balls left
@@ -137,11 +147,11 @@ export class Match {
     if (this.phase !== 'normal' || this.turnThrows > 0 || this.over || this.rerackedThisTurn || this.mustPickOwed()) return false;
     if (!(this.reracksLeft[this.shooter] > 0)) return false;
     const n = this.target().length;
-    return n >= 1 && n < 10 && presetsFor(n).length > 0;
+    return n >= 1 && n < 10 && presetsFor(n, this.backRack).length > 0;
   }
   rerack(key) {
     if (!this.canRerack()) return [];
-    const p = presetsFor(this.target().length).find((x) => x.key === key);
+    const p = presetsFor(this.target().length, this.backRack).find((x) => x.key === key);
     if (!p) return [];
     const to = applyPreset(this.target(), p.spots);
     this.racks[this.defender] = to;
@@ -162,6 +172,8 @@ export class Match {
     if (!Array.isArray(cells) || cells.length !== rack.length) return [];
     const to = rack.map((k, i) => ({ id: k.id, c: cells[i] && cells[i].c, r: cells[i] && cells[i].r }));
     if (!to.every(isCell) || !validRack(to)) return [];
+    // Against the back wall: at least one cup on the back row, so the rack cannot be pulled closer.
+    if (this.backRack && !to.some((k) => k.r === 0)) return [];
     this.racks[this.defender] = to;
     if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
     this.rerackedThisTurn = true;
@@ -170,12 +182,12 @@ export class Match {
 
   islands() { return islandsOf(this.target()); }
   canIsland() {
-    return !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && !this.islandUsed[this.shooter] && !this.called
+    return !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && this.ball !== null && !this.islandUsed[this.shooter][this.ball] && !this.called
       && !this.lastCup && this.queue.length > 0 && this.islands().length > 0;
   }
   callIsland(id) {
     if (!this.canIsland() || !this.islands().includes(id)) return [];
-    this.islandUsed[this.shooter] = true;
+    this.islandUsed[this.shooter][this.ball] = true;
     this.called = id;
     return [{ type: 'islandCalled', side: this.shooter, id }];
   }
@@ -252,11 +264,12 @@ export class Match {
       const bounce = !!(this.bounce && bounced && leftAfter >= 1);
       const extra = (island ? 1 : 0) + (bounce ? 1 : 0);
       const flags = { ...(island ? { island: true } : {}), ...(bounce ? { bounce: true } : {}) };
-      // THE LAST CUP with a ball still to throw: it stands for that ball.
-      if (leftAfter === 0 && this.queue.length) {
+      // THE LAST CUP with a ball still to throw - in hand, or coming back as balls back: it stands.
+      const ballsBack = this.lastCupBack && !this.queue.length && this.pairRes[0] === true && this.pairRes[1] === true;
+      if (leftAfter === 0 && (this.queue.length || ballsBack)) {
         this.lastCup = made;
         ev.push({ type: 'made', side, ball, id: made, bounced, lastCup: true, left: 1 });
-        return ev;
+        return ballsBack ? ev.concat(this._afterThrow()) : ev;
       }
       this.racks[this.defender] = rack.filter((k) => k.id !== made);
       ev.push({ type: 'made', side, ball, id: made, bounced, left: leftAfter, ...flags });
@@ -347,12 +360,12 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
       reracksLeft: { a: enc(this.reracksLeft.a), b: enc(this.reracksLeft.b) },
-      islandUsed: { ...this.islandUsed }, owed: { ...this.owed },
+      islandUsed: { a: this.islandUsed.a.slice(), b: this.islandUsed.b.slice() }, owed: { ...this.owed },
       called: this.called, pendingPick: this.pendingPick ? { ...this.pendingPick } : null,
       lastCup: this.lastCup, queue: this.queue.slice(), pairRes: this.pairRes.slice(),
       turnThrows: this.turnThrows, rerackedThisTurn: !!this.rerackedThisTurn,
@@ -363,7 +376,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };
@@ -372,7 +385,9 @@ export class Match {
     m.clearedBy = o.clearedBy === 'a' || o.clearedBy === 'b' ? o.clearedBy : null;
     m.streak = { a: arr((o.streak || {}).a, 2, 0).map(Number), b: arr((o.streak || {}).b, 2, 0).map(Number) };
     m.reracksLeft = { a: dec((o.reracksLeft || {}).a), b: dec((o.reracksLeft || {}).b) };
-    m.islandUsed = { a: !!(o.islandUsed || {}).a, b: !!(o.islandUsed || {}).b };
+    // Per ball since 2026-09-29; an older save held one flag a side, read as both balls used.
+    const used = (v) => (Array.isArray(v) || (v && typeof v === 'object') ? arr(v, 2, false).slice(0, 2).map(Boolean) : [!!v, !!v]);
+    m.islandUsed = { a: used((o.islandUsed || {}).a), b: used((o.islandUsed || {}).b) };
     m.owed = { a: ((o.owed || {}).a | 0), b: ((o.owed || {}).b | 0) };
     m.called = o.called || null;
     m.pendingPick = o.pendingPick || null;

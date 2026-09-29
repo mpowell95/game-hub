@@ -971,7 +971,7 @@ class CupPong {
   showRerack() {
     const m = this.match;
     const rack = m.target();
-    const presets = presetsFor(rack.length);
+    const presets = presetsFor(rack.length, m.backRack);
     const el = document.createElement('div');
     el.className = 'gh-overlay';
     el.innerHTML = `
@@ -1040,6 +1040,7 @@ class CupPong {
         <h2 class="cp-card-title">${t('rk_custom')}</h2>
         <p class="cp-custom-say">${t('rkDrag')}</p>
         <svg class="cp-grid" viewBox="0 0 ${W} ${H.toFixed(1)}" role="img" aria-label="${t('rk_custom')}">
+          <rect class="cp-wall" x="0" y="0" width="${W}" height="16"/>
           ${AREA_CELLS.map((_, i) => `<circle class="cp-spot" data-cell="${i}" cx="${X(i)}" cy="${Y(i)}" r="${rr}"/>`).join('')}
           ${pos.map((ci, k) => `<g class="cp-cup" data-cup="${k}" transform="translate(${X(ci)} ${Y(ci)})"><circle r="${rr}"/><circle class="cp-cup-in" r="${(R * sc * 0.62).toFixed(1)}"/></g>`).join('')}
         </svg>
@@ -1052,6 +1053,7 @@ class CupPong {
     const svg = el.querySelector('.cp-grid');
     const cups = [...el.querySelectorAll('.cp-cup')];
     const done = el.querySelector('[data-role="done"]');
+    const say = el.querySelector('.cp-custom-say');
     let sel = -1, drag = null;
     const toSvg = (e) => {
       const b = svg.getBoundingClientRect();
@@ -1060,8 +1062,13 @@ class CupPong {
     const place = (k, x, y) => cups[k].setAttribute('transform', `translate(${(+x).toFixed(1)} ${(+y).toFixed(1)})`);
     const paint = () => {
       pos.forEach((ci, k) => { place(k, X(ci), Y(ci)); cups[k].classList.toggle('is-sel', k === sel); });
-      done.disabled = pos.every((ci, k) => ci === start[k]);
+      // Against the back wall (Matt, 2026-09-29): the back row may not be left empty.
+      const back = !m.backRack || pos.some((ci) => AREA_CELLS[ci].r === 0);
+      done.disabled = !back || pos.every((ci, k) => ci === start[k]);
+      say.textContent = back ? t('rkDrag') : t('rkBack');
+      say.classList.toggle('is-warn', !back);
     };
+    paint();
     // The free cell nearest a point, or the cup's own cell (dropping it back where it was).
     const nearest = (k, x, y) => {
       let best = pos[k], bd = Infinity;
