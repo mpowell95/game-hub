@@ -100,7 +100,13 @@ is on offer and gone after the turn's first throw:
   should be able to call island for one ball and not the other. It shouldn't auto apply to the
   second ball"*): the engine always cleared `called` after the next throw, but the yellow ring stayed
   on the cup after a miss, so it looked live for ball 2. `showEvents` now takes it off once a throw
-  has used the call, and the button can be used before ball 2 alone. Hit it and the defender owes a second cup: the
+  has used the call, and the button can be used before ball 2 alone. **EACH BALL IS ITS OWN PLAYER**
+  (Matt, same day: *"each 'player' gets to call island once per game - and it does NOT have to be at
+  the same time as the other 'player'"*): `islandUsed[side]` is `[ball1, ball2]`, so a side has TWO
+  calls a game, each for the ball about to be thrown, on any turns. An older saved match's single
+  flag reads as both used. Challenge logs only gained permission, so every stored log still replays;
+  a phone still on the old build would refuse a log with a second call until it updates (the hub
+  updates itself on the next load). Hit it and the defender owes a second cup: the
   computer picks at once (its loneliest cup); when you defend, the camera turns to your cups and you
   tap one. Allowed in overtime (Matt ruled out only reracks and Gentleman's there); not in a
   rebuttal.
