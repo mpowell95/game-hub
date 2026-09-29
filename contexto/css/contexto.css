@@ -216,11 +216,25 @@
 .ct-list { flex: none; }
 .ct-more {
   flex: none;
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: var(--ct-muted);
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 6px 0 0;
+  padding: 0 12px;
+  border: 1px solid var(--ct-line);
+  border-radius: var(--gh-r-sm, 8px);
+  background: var(--ct-surface);
+  color: var(--ct-accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
   text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
 }
+.ct-more[hidden] { display: none; }
+.ct-root .ct-all-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.ct-root .ct-all-list .ct-row + .ct-row { margin-top: 0; }
 
 /* --- action row ------------------------------------------------------------------------------- */
 .ct-actions {

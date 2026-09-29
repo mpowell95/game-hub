@@ -203,6 +203,20 @@ breaker ... should go to the person whose average number of guesses is lower."*
   old hint solves rank as plain solves.
 - Contexto is in `players-agg.js`'s `SOLO` set, so its solves never count toward cross-game wins.
 
+## Every guess is reachable, and the screen is sized to the LAYOUT viewport (2026-09-29)
+
+Matt, with a screenshot of one guess and "+2 more" on a half-empty screen: *"I can't see the 2 other
+guesses even after clicking on the +2. I should always be able to see all my guesses if I want to."*
+
+- **"+N more, show all" is a button** (44px) that opens **All guesses**: every guess, best first,
+  ten to a page with a pager (`openAll` / `_renderAll`). Paged, never scrolled.
+- **The half-empty screen**: `_positionRoot` sized the root to `visualViewport.height`. On an
+  iPhone the keyboard shrinks only the visual viewport, and `js/viewport.js` fires on WINDOW size
+  changes, so a full render while the keyboard was up (the win panel) left the game sized to the
+  half screen above the keyboard, and closing the keyboard never grew it back. It now sizes to
+  `window.innerHeight`, which the keyboard does not change; the input is at the top, so the keyboard
+  never covers it. Sudoku uses the old formula safely only because it has no text field.
+
 ## What is NOT covered by a test
 
 `node contexto/js/test.js` covers the engine (the word model, the ranking, the puzzle-number

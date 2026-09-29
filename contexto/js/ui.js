@@ -20,7 +20,8 @@ const SAVE_KEY = 'gamehub.contexto.save.v1';
 const WORD_LANGS = ['en', 'es'];
 const CLOSEST_PER_PAGE = 10;
 const CLOSEST_MAX_RANK = 100;
-const LIST_MORE_H = 24; // px reserved for the "+N more" line once truncation kicks in
+const LIST_MORE_H = 50; // px reserved for the "+N more" button (44px tap target + margin) once truncation kicks in
+const ALL_PER_PAGE = 10;
 
 const esc = (str) => String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -354,7 +355,7 @@ class ContextoUI {
           <div class="ct-list" data-role="list">
             ${sorted.map((g) => this._rowHTML(g, false)).join('')}
           </div>
-          <p class="ct-more" data-role="more" hidden></p>
+          <button type="button" class="ct-more" data-role="more" data-action="all" hidden></button>
         </div>
 
         <div class="ct-actions">
@@ -388,12 +389,14 @@ class ContextoUI {
     this.root.querySelector('[data-action="hint"]').addEventListener('click', () => this.doHint());
     this.root.querySelector('[data-action="giveup"]').addEventListener('click', () => this.openGiveUp());
     this.root.querySelector('[data-action="previous"]').addEventListener('click', () => this.openPrevious());
+    this.el.more.addEventListener('click', () => this.openAll());
 
     requestAnimationFrame(() => this._rebuildList());
 
     if (this._overlay === 'result') this.openResult();
     else if (this._overlay === 'howto') this.openHowTo();
     else if (this._overlay === 'previous') this.openPrevious();
+    else if (this._overlay === 'all') this.openAll();
     else if (this._overlay === 'giveup') this.openGiveUp();
   }
 
@@ -581,6 +584,41 @@ class ContextoUI {
     if (againBtn) againBtn.addEventListener('click', () => { this.closeOverlay(); this._playAnother(); });
   }
 
+  /** Every guess, best first, ten to a page (Matt, 2026-09-29: "I should always be able to see
+   *  all my guesses if I want to"). The main list only shows what fits on one screen; its "+N
+   *  more" button opens this. Paged, never scrolled (the repo's no-scroll rule). */
+  openAll() {
+    this._overlay = 'all';
+    this._allPage = 0;
+    this._openOverlay('', () => {});
+    this._renderAll();
+  }
+
+  _renderAll() {
+    const sorted = this._sortedGuesses || [];
+    const pages = Math.max(1, Math.ceil(sorted.length / ALL_PER_PAGE));
+    this._allPage = Math.min(Math.max(0, this._allPage | 0), pages - 1);
+    const from = this._allPage * ALL_PER_PAGE;
+    const rows = sorted.slice(from, from + ALL_PER_PAGE).map((g) => this._rowHTML(g, false)).join('');
+    const to = Math.min(from + ALL_PER_PAGE, sorted.length);
+    this._overlayEl.innerHTML = `
+      <div class="gh-modal ct-all" role="dialog" aria-modal="true">
+        <button type="button" class="gh-modal__close" data-action="close-overlay" aria-label="${esc(t('close_aria'))}">&times;</button>
+        <h2 class="gh-modal__title">${esc(t('all_title', { n: sorted.length }))}</h2>
+        <div class="ct-all-list" role="list">${rows}</div>
+        ${pages > 1 ? `<div class="ct-pager">
+          <button type="button" class="gh-btn--icon gh-btn" data-action="all-prev" aria-label="${esc(t('all_prev_aria'))}" ${this._allPage > 0 ? '' : 'disabled'}>&larr;</button>
+          <span class="ct-page-label">${esc(t('all_page', { from: from + 1, to, total: sorted.length }))}</span>
+          <button type="button" class="gh-btn--icon gh-btn" data-action="all-next" aria-label="${esc(t('all_next_aria'))}" ${this._allPage < pages - 1 ? '' : 'disabled'}>&rarr;</button>
+        </div>` : ''}
+      </div>`;
+    this._overlayEl.querySelector('[data-action="close-overlay"]').addEventListener('click', () => this.closeOverlay());
+    const prev = this._overlayEl.querySelector('[data-action="all-prev"]');
+    const next = this._overlayEl.querySelector('[data-action="all-next"]');
+    if (prev) prev.addEventListener('click', () => { this._allPage--; this._renderAll(); });
+    if (next) next.addEventListener('click', () => { this._allPage++; this._renderAll(); });
+  }
+
   openPrevious() {
     this._overlay = 'previous';
     this._prevViewedN = this.n;
@@ -635,7 +673,13 @@ class ContextoUI {
   _positionRoot() {
     if (!this.root || !this.container) return;
     const r = this.container.getBoundingClientRect();
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
+    // window.innerHeight, NOT visualViewport.height (2026-09-29). On an iPhone the keyboard shrinks
+    // only the VISUAL viewport, and js/viewport.js fires on window size changes, so a render done
+    // while the keyboard was up (e.g. the win panel) sized the game to the half screen above it and
+    // nothing ever grew it back when the keyboard closed: Matt's screenshot showed one guess and
+    // "+2 more" on a half-empty screen. The layout viewport does not change with the keyboard, so
+    // sizing to it is right in both states; the input sits at the top, so it is never covered.
+    const vh = window.innerHeight || 0;
     if (!vh) return;
     this.root.style.left = Math.round(r.left) + 'px';
     this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
