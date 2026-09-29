@@ -417,7 +417,55 @@ export function formatBoardMetric(value, id, evenLabel = 'E') {
   return value > 0 ? `+${value}` : String(value);
 }
 
+// --- Contexto medals (Matt, 2026-09-29) -------------------------------------------------------
+// "gold being no hints, silver being 1 and bronze being 2, then more than 2 hints is a win, but not
+// an award. And the leaderboard should show the number of their most impressive score ... Tie
+// breaker ... should go to the person whose average number of guesses is lower."
+//
+// A row ranks by golds, then silvers, then bronzes, then solves with no medal - packed into ONE
+// number so the board's ordinary more-is-better machinery (hasBoardMetric, compareBoardMetric,
+// the By Game leader) handles it unchanged. Each count is capped at 9999 so the packing stays an
+// exact integer (a player would need 27 years of daily puzzles to reach the cap).
+const CT_CAP = 9999;
+const ctCount = (n) => Math.min(CT_CAP, Math.max(0, n | 0));
+
+/** The packed medal score for a Contexto `ct` sub-counter. 0 = never solved. */
+export function ctMedalScore(ct) {
+  const c = ct || {};
+  const gold = ctCount(c.noHint), silver = ctCount(c.silver), bronze = ctCount(c.bronze);
+  const plain = ctCount((c.solved | 0) - gold - silver - bronze);
+  return gold * 1e12 + silver * 1e8 + bronze * 1e4 + plain;
+}
+
+/** The headline of a packed score: the player's most impressive medal and how many of it.
+ *  `{ medal: 'gold'|'silver'|'bronze'|'solved'|null, n }`. */
+export function ctBest(score) {
+  const v = Math.max(0, Math.floor(+score || 0));
+  const gold = Math.floor(v / 1e12), silver = Math.floor(v / 1e8) % 1e4;
+  const bronze = Math.floor(v / 1e4) % 1e4, plain = v % 1e4;
+  if (gold) return { medal: 'gold', n: gold };
+  if (silver) return { medal: 'silver', n: silver };
+  if (bronze) return { medal: 'bronze', n: bronze };
+  if (plain) return { medal: 'solved', n: plain };
+  return { medal: null, n: 0 };
+}
+
+/** Average guesses per solve, or Infinity with no solve (so it never wins a tie-break). */
+export function ctAvgGuesses(ct) {
+  const c = ct || {};
+  return (c.solved | 0) > 0 ? (c.guesses | 0) / (c.solved | 0) : Infinity;
+}
+
+/** Board order: medal score (higher first), then the LOWER average guesses. Equal on both = tied. */
+export function compareContexto(ctA, ctB) {
+  const d = ctMedalScore(ctB) - ctMedalScore(ctA);
+  if (d) return d;
+  const a = ctAvgGuesses(ctA), b = ctAvgGuesses(ctB);
+  return a === b ? 0 : (a < b ? -1 : 1);
+}
+
 export default {
+  ctMedalScore, ctBest, ctAvgGuesses, compareContexto,
   record, bucketsOf, tierMix, tierRows, wilsonLower, competitiveRating,
   fieldMaxOf, soloRating, ratePlayer, rankPlayers, cmp, PROVISIONAL_PLAYS,
   golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst, boardRankTier,

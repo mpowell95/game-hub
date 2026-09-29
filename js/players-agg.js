@@ -231,6 +231,8 @@ export function aggregatePlayers(all, corrections) {
         dst.ct.guesses += src.ct.guesses | 0;
         dst.ct.hints += src.ct.hints | 0;
         dst.ct.noHint += src.ct.noHint | 0;
+        dst.ct.silver = (dst.ct.silver | 0) + (src.ct.silver | 0);   // medals, 2026-09-29
+        dst.ct.bronze = (dst.ct.bronze | 0) + (src.ct.bronze | 0);
         const f = src.ct.fewest | 0;
         if (f > 0) dst.ct.fewest = (dst.ct.fewest | 0) > 0 ? Math.min(dst.ct.fewest, f) : f;
       } else if (g === 'ballrun' && src.br) {

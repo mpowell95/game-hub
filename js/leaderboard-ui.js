@@ -53,6 +53,7 @@ import { corrections } from './admin-config.js';
 import { watchPlayers } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId, holdemBalance, holdemSuspect } from './game-stats.js';
+import { ctMedalScore, ctBest, ctAvgGuesses, compareContexto } from './leaderboard-rank.js';
 import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
   boardRankTier, formatBoardMetric, GOLF_BOARD_COURSE } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
@@ -560,10 +561,10 @@ function gameMetricAt(g, id, tier) {
   if (id === 'hillclimb') return hcBestAt(g, tier);
   if (id === 'skeeball') return skPointsAt(g, _machine);
   if (id === 'brickblitz') return bzBestAt(g, tier);
-  // Contexto ranks on puzzles solved WITHOUT a hint (Matt, 2026-09-28: "hints can't count the same
-  // as getting it with no hints"). A hint solve is still stored and still shown in My Stats and in
-  // this board's detail tiles; it just does not rank.
-  if (id === 'contexto') return ((((g.games || {}).contexto || {}).ct || {}).noHint) | 0;
+  // Contexto ranks on MEDALS (Matt, 2026-09-29): golds, then silvers, then bronzes, then solves
+  // with no medal, packed into one number by ctMedalScore (js/leaderboard-rank.js). Ties go to
+  // the lower average guesses in boardMetricCmp below. Every solve is still stored and shown.
+  if (id === 'contexto') return ctMedalScore(ctOf(g));
   if (id === 'golf') return golfBestAt(g);   // to par, LOWER WINS, null when never played
   // Best time at this difficulty, LOWER WINS, null when that level was never cleared. The tier
   // machinery does the rest: a row ranks at the HIGHEST level it has both played and cleared,
@@ -577,7 +578,19 @@ function gameMetricAt(g, id, tier) {
  *  always did; golf takes a sign and shows level par as "E" (js/leaderboard-rank.js does the
  *  maths, this supplies the translated word). A player with no number gets the same em-dash
  *  glyph the empty leader cell already uses, never a literal "null". */
+/** A row's Contexto sub-counter, or {} (never undefined). */
+function ctOf(g) { return (((g && g.games) || {}).contexto || {}).ct || {}; }
+const CT_MEDAL_GLYPH = { gold: '\u{1F947}', silver: '\u{1F948}', bronze: '\u{1F949}', solved: '\u2713' };
+/** The unit word under a board number. Contexto's changes per row with the medal it shows
+ *  ("gold", "silver", ...), so it cannot be one static key like every other game's. */
+function unitTextOf(id, metric) {
+  if (id === 'contexto') { const b = ctBest(metric); return t(b.medal ? 'lb_ct_unit_' + b.medal : 'lb_ct_unit_solved'); }
+  return t(lbUnitKeyOf(id));
+}
 function metricText(value, id) {
+  // Contexto: the medal glyph (it carries 1/2/3 in its own face, so it reads without colour) and
+  // how many of the player's BEST medal they hold. Not the packed number.
+  if (id === 'contexto') { const b = ctBest(value); return b.medal ? `${CT_MEDAL_GLYPH[b.medal]} ${b.n}` : '\u2014'; }
   if (id === 'holdem') return value == null ? '\u2014' : bankText(value);
   const s = formatBoardMetric(value, id, t('lb_golf_even'));
   return s === null ? '\u2014' : s;
@@ -592,8 +605,8 @@ function lbUnitKeyOf(id) {
   // Same split as golf: this BOARD ranks on a best time, while My Stats' game list still leads
   // with boards cleared, which is the right headline for a list of every game you have played.
   if (id === 'minesweeper') return 'lb_unit_ms_best';
-  // Same split: this board counts no-hint solves; My Stats' list still leads with every solve.
-  if (id === 'contexto') return 'lb_unit_ct_nohint';
+  // Same split: this board ranks medals; My Stats' list still leads with every solve.
+  if (id === 'contexto') return 'lb_unit_ct_medals';
   if (id === 'holdem') return 'lb_unit_bank';
   return unitKeyOf(id);
 }
@@ -680,6 +693,9 @@ function boardMetricCmp(id) {
         || (ttVariantWins(tb.classic) - ttVariantWins(ta.classic));
     };
   }
+  // Contexto: medals, then the LOWER average guesses (Matt, 2026-09-29). Only a pair equal on
+  // both is tied, so the rank badges agree with the order (see the note above).
+  if (id === 'contexto') return (a, b) => compareContexto(ctOf(a), ctOf(b));
   return (a, b) => compareBoardRow(a, b, id);
 }
 
@@ -762,8 +778,8 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_golf_best: 'lb_sort_golf_best',
   // Minesweeper ranks on a best time, not on how many boards were cleared.
   lb_unit_ms_best: 'lb_sort_ms_best',
-  // Contexto ranks on solves without a hint.
-  lb_unit_ct_nohint: 'lb_sort_ct_nohint',
+  // Contexto ranks on medals.
+  lb_unit_ct_medals: 'lb_sort_ct_medals',
   // Texas Hold'em ranks on the bankroll.
   lb_unit_bank: 'lb_sort_bank',
 };
@@ -1335,7 +1351,7 @@ function gameListHTML(list) {
       ? `<span class="lb-glead">${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span>${tierMarkHTML(boardTierOf(lead, meta.id))}</span>`
       : `<span class="lb-glead lb-glead-empty">${esc(t('lb_no_games_yet'))}</span>`;
     const metric = lead
-      ? `<span class="lb-gnum"><b>${esc(metricText(boardMetricOf(lead, meta.id), meta.id))}</b><span>${esc(t(lbUnitKeyOf(meta.id)))}</span></span>`
+      ? `<span class="lb-gnum"><b>${esc(metricText(boardMetricOf(lead, meta.id), meta.id))}</b><span>${esc(unitTextOf(meta.id, boardMetricOf(lead, meta.id)))}</span></span>`
       : `<span class="lb-gnum is-empty"><b>&mdash;</b><span>${esc(t('lb_no_games_yet'))}</span></span>`;
     return `<button type="button" class="lb-grow${lead ? '' : ' is-empty'}" data-game="${meta.id}">
       <span class="lb-gart">${art}</span>
@@ -1381,8 +1397,9 @@ const TEXTURE = {
     { labelKey: 'lb_tex_sd_perfect', get: (g) => ((g.games.sudoku || {}).sd || {}).perfect | 0 },
   ],
   contexto: [
-    { labelKey: 'lb_tex_ct_nohint', get: (g) => (((g.games.contexto || {}).ct || {}).noHint) | 0 },
-    { labelKey: 'lb_tex_ct_solved', get: (g) => (((g.games.contexto || {}).ct || {}).solved) | 0 },
+    { labelKey: 'lb_tex_ct_gold', get: (g) => ctOf(g).noHint | 0 },
+    { labelKey: 'lb_tex_ct_silver', get: (g) => ctOf(g).silver | 0 },
+    { labelKey: 'lb_tex_ct_bronze', get: (g) => ctOf(g).bronze | 0 },
   ],
   minesweeper: [
     { labelKey: 'lb_tex_ms_cleared', get: (g) => ((g.games.minesweeper || {}).ms || {}).cleared | 0 },
@@ -1723,7 +1740,7 @@ function gameDetail(list, id) {
         const tiles = (METRIC_IS_TIER_BLIND.has(id) ? ''
           : miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null), rowTier))
           + (showMp ? mpTileHTML(g, id) : '');
-        const metricUnit = t(lbUnitKeyOf(id));
+        const metricUnit = unitTextOf(id, metric);
         // A Hold'em ledger no real play could produce says so instead of printing a number.
         const metricStr = id === 'holdem' && hbReview(g) ? t('lb_hb_review') : metricText(metric, id);
         // THE HEADLINE IS WHAT YOU SORTED BY, the rule this file already keeps for By Player and
@@ -1751,12 +1768,15 @@ function gameDetail(list, id) {
         } else {
           big = { val: metricStr, unit: metricUnit };
           subText = t('lb_played_count', { n: played });
-          // Contexto ranks on no-hint solves only, so a row reading "0" beside "1 played" looked
-          // like a bug to Matt (2026-09-29: "It's displayed confusingly"). Say where the solve went.
+          // Contexto: every medal the player holds, and the average guesses that breaks a tie,
+          // so the order on the board can be read straight off the rows (2026-09-29).
           if (id === 'contexto') {
-            const ct = ((g.games || {}).contexto || {}).ct || {};
-            const withHints = Math.max(0, (ct.solved | 0) - (ct.noHint | 0));
-            if (withHints > 0) subText += ` \u00b7 ${t('lb_ct_hint_solves', { n: withHints })}`;
+            const ct = ctOf(g);
+            const parts = [['gold', ct.noHint], ['silver', ct.silver], ['bronze', ct.bronze]]
+              .filter(([, n]) => (n | 0) > 0).map(([m, n]) => `${CT_MEDAL_GLYPH[m]}${n | 0}`);
+            const avg = ctAvgGuesses(ct);
+            if (parts.length) subText += ` \u00b7 ${parts.join(' ')}`;
+            if (Number.isFinite(avg)) subText += ` \u00b7 ${t('lb_ct_avg', { n: Math.round(avg * 10) / 10 })}`;
           }
         }
         return playerCardHTML(g, chip, big, subText, tiles, '', tierChipHTML(rowTier));

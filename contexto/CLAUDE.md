@@ -180,14 +180,28 @@ lightness. The colors are CSS variables in `contexto.css` (`--ct-<band>-bar` / `
 light and `.gh-dark` sets); `ui.js` only names the band, so the rows, the shape markers and the
 how-to diagram all follow the theme.
 
-## Leaderboard: only solves WITHOUT a hint rank (2026-09-28)
+## Leaderboard: MEDALS (2026-09-29; replaces the 2026-09-28 "no-hint solves only" board)
 
-Matt: *"hints can't count the same as getting it with no hints."* Contexto's own board ranks on
-`ct.noHint` (`gameMetricAt` in `js/leaderboard-ui.js`, unit `lb_unit_ct_nohint`, "solved, no hints").
-A hint solve is still recorded exactly as before (`total.won`, `ct.solved`) and still shown: in My
-Stats, in the player-detail game list, and as a detail tile ("Solved (hints included)") on the
-board. It just does not rank. **Since 2026-09-29 the board row SAYS so** (Matt: *"It's displayed confusingly"*, after a player who had solved with hints sat at 0 under "1 played"): a row with hint solves reads "1 played · 1 solved with hints" (`lb_ct_hint_solves`), and My Stats' tallies are "Solved, no hints" and "Solved with hints" instead of "Solved" and "No hints". Contexto is in `players-agg.js`'s `SOLO` set, so no Contexto solve,
-hint or not, ever counted toward the cross-game wins total. `test-leaderboard-rank.mjs` pins this.
+Matt: *"gold being no hints, silver being 1 and bronze being 2, then more than 2 hints is a win, but
+not an award. And the leaderboard should show the number of their most impressive score ... Tie
+breaker ... should go to the person whose average number of guesses is lower."*
+
+- **The rule lives once**: `contextoMedal(hints)` in `js/game-stats.js` (0 gold, 1 silver, 2 bronze,
+  3+ null). The recorder counts gold as `ct.noHint` (it predates medals) and `ct.silver` /
+  `ct.bronze`; a solve with no medal is `solved - noHint - silver - bronze`. The result panel shows
+  the medal won; How to Play has a one-line legend.
+- **Board order** (`js/leaderboard-rank.js`, pure and tested): golds, then silvers, then bronzes,
+  then plain solves (`ctMedalScore` packs them into one number so the ordinary board machinery
+  works), then the LOWER average guesses (`compareContexto`, wired in `boardMetricCmp`). Equal on
+  both = tied badge. The row's big number is the player's BEST medal and how many of it
+  (`ctBest`, e.g. "🥇 2 gold"); the subline lists every medal and the average guesses so the
+  order can be read off the rows. The medal emoji carry 1/2/3 in their faces, so no colour is needed.
+- **Solves recorded before medals were carried forward, not guessed** (rule 3/4):
+  `backfillContextoMedals` runs ONCE per store (`ct.medalsV`) from `ui.js` init, counting 1- and
+  2-hint wins in this device's own save, CAPPED at the hint solves the store actually recorded (the
+  save is per device, the store per player). Until a device opens Contexto on the new build, its
+  old hint solves rank as plain solves.
+- Contexto is in `players-agg.js`'s `SOLO` set, so its solves never count toward cross-game wins.
 
 ## What is NOT covered by a test
 
