@@ -211,7 +211,11 @@ const EXTRA_SCREENS = {
  *  previous extra left the page, then start a case at `tier`. */
 async function muReset(page) {
   await page.evaluate(() => { const b = document.querySelector('.mu-overlay [data-ov="close"]'); if (b) b.click(); });
-  await page.evaluate(() => { const b = document.querySelector('.mu-root [data-action="menu"]'); if (b) b.click(); });
+  // The board's menu lives in the new-case dialog (the HUD shares the hub back button's row).
+  if (!(await page.$('[data-tier]'))) {
+    await page.evaluate(() => { const b = document.querySelector('.mu-root [data-action="new"]'); if (b) b.click(); });
+    await page.evaluate(() => { const b = document.querySelector('.mu-overlay [data-ov="menu"]'); if (b) b.click(); });
+  }
   await page.waitForSelector('[data-tier]', { timeout: 8000 });
 }
 async function muBoard(page, tier, placeAll) {

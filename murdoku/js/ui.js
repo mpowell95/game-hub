@@ -101,7 +101,6 @@ function clueText(puz, cl) {
 // --- inline icons --------------------------------------------------------------------------------
 
 const SVG_ATTR = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
-const ICON_BACK = `<svg ${SVG_ATTR}><path d="M15 5l-7 7 7 7"/></svg>`;
 const ICON_HELP = `<svg ${SVG_ATTR}><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.6 1.4c0 1.6-2.1 1.9-2.1 3.6"/><path d="M12 17.5v.01"/></svg>`;
 const ICON_NEW = `<svg ${SVG_ATTR}><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></svg>`;
 
@@ -236,7 +235,6 @@ class MurdokuUI {
     this.container.innerHTML = `
       <div class="mu-root mu-play">
         <div class="mu-hud" data-role="hud">
-          <button type="button" class="mu-iconbtn" data-action="menu" aria-label="${esc(t('back_aria'))}">${ICON_BACK}</button>
           <span class="mu-hud-mid">
             <span class="mu-hud-case">${esc(t('case_label', { n: p.seed % 10000 }))}</span>
             <span class="mu-hud-tier">${diffShapeSVG(tierOf(p.tier))}${esc(t(TIER_LABEL_KEY[p.tier]))}</span>
@@ -286,6 +284,21 @@ class MurdokuUI {
     if (!vh) return;
     this.root.style.left = Math.round(r.left) + 'px';
     this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
+    // IMMERSIVE in the hub (js/hub.js): the hub's header collapses to one floating back button, so
+    // the root takes the whole height and the HUD row sits BESIDE that button instead of below it.
+    // That band is the ~90px an Expert board needed on a small phone (murdoku/CLAUDE.md, "Space").
+    // Measured, not assumed: the button's size and the top inset differ by device and language.
+    const back = document.querySelector('.hub-top-immersive .hub-back');
+    const b = back && back.getBoundingClientRect();
+    if (b && b.width && b.height) {
+      this.root.classList.add('is-immersive');
+      this.root.style.top = '0px';
+      this.root.style.height = Math.max(200, Math.round(vh)) + 'px';
+      this.root.style.setProperty('--mu-top', Math.max(0, Math.round(b.top + (b.height - 44) / 2)) + 'px');
+      this.root.style.setProperty('--mu-hud-inset', Math.max(0, Math.round(b.right - r.left + 6)) + 'px');
+      return;
+    }
+    this.root.classList.remove('is-immersive');
     this.root.style.top = Math.round(r.top) + 'px';
     this.root.style.height = Math.max(200, Math.round(vh - r.top)) + 'px';
   }
@@ -575,8 +588,9 @@ class MurdokuUI {
         break;
       case 'howto': this._openHowto(); break;
       case 'new':
-        if (this.solved || (this._placedCount() === 0 && this.marks.size === 0)) this._startFresh();
-        else this._openConfirm();
+        // One button for "new case" and "change difficulty": the HUD shares its row with the hub's
+        // floating back button (immersive), so there is no room for a separate menu button.
+        this._openConfirm(!this.solved && (this._placedCount() > 0 || this.marks.size > 0));
         break;
       default: break;
     }
@@ -701,12 +715,13 @@ class MurdokuUI {
     else if (a === 'menu') { this._closeOverlay(true); this._pauseTimer(); this._save(); this.renderSetup(); }
   }
 
-  _openConfirm() {
+  _openConfirm(progress) {
     this._openOverlay('confirm', `
-      <p class="mu-confirm-text">${esc(t('new_confirm'))}</p>
+      <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>
+      ${progress ? `<p class="mu-confirm-text">${esc(t('new_confirm'))}</p>` : ''}
       <div class="gh-modal__actions">
-        <button type="button" class="gh-btn" data-ov="close">${esc(t('cancel'))}</button>
-        <button type="button" class="gh-btn gh-btn--primary" data-ov="confirm-new">${esc(t('new_case'))}</button>
+        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-ov="confirm-new">${esc(t('new_case'))}</button>
+        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-ov="menu">${esc(t('menu'))}</button>
       </div>`);
   }
 

@@ -147,6 +147,10 @@
 
 /* --- HUD ------------------------------------------------------------------------------------ */
 .mu-root .mu-hud { flex: none; display: flex; align-items: center; gap: 6px; height: 44px; }
+/* Immersive in the hub: the root starts at the very top and the HUD sits beside the hub's
+   floating back button. Both numbers are measured by _positionRoot() in ui.js. */
+.mu-root.is-immersive { padding-top: var(--mu-top, 54px); }
+.mu-root.is-immersive .mu-hud { padding-left: var(--mu-hud-inset, 0px); }
 .mu-root .mu-iconbtn {
   flex: none;
   width: 44px;
@@ -248,12 +252,18 @@
 .mu-root .mu-badge {
   position: absolute;
   top: 1px;
-  left: 2px;
+  left: 1px;
   z-index: 0;
-  font-size: 11px;
+  /* Big enough to FIND: every "in the Kitchen" clue sends the player looking for this icon. */
+  font-size: clamp(11px, calc(var(--mu-cell, 30px) * .36), 20px);
   line-height: 1;
+  padding: 1px 2px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .8);
+  box-shadow: 0 0 0 1px rgba(22, 36, 58, .25);
   pointer-events: none;
 }
+.gh-dark .mu-root .mu-badge { background: rgba(16, 25, 43, .8); box-shadow: 0 0 0 1px rgba(230, 235, 245, .3); }
 /* Rows and columns a placed person already fills are dimmed. */
 .mu-root .mu-cell.is-taken::after {
   content: '';

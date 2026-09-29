@@ -10,8 +10,8 @@ from online if available. Make sure this is Admin only to begin"*).
 
 ## Hub integration
 
-- In-hub `module: '../murdoku/js/ui.js'`, **not immersive** (a grid puzzle under the ordinary hub
-  header, the Sudoku class). Hub id and stats id are both `murdoku`. Prefix `.mu-root` / `.mu-`.
+- In-hub `module: '../murdoku/js/ui.js'`, **immersive** (see "Space" below for why, unlike
+  Sudoku). Hub id and stats id are both `murdoku`. Prefix `.mu-root` / `.mu-`.
 - **Admin only** (`devOnly: true`, no `released` date). Matt releases it from the admin page with
   no commit; the `released` date is added the day it actually goes live (it is the only input to
   the New pill). Its `GAME_META` row shipped with the game on purpose (the Yahtzee lesson);
@@ -86,7 +86,7 @@ The rules this game uses, stated once (they are also in `js/engine.js`'s header)
 - **Setup**: difficulty (shape marker + size), New case, Continue case (with tier and elapsed time,
   only while an unfinished save exists), How to play. Opening the game with an unfinished save
   resumes straight onto the board; a finished case is never resumed.
-- **Play**: header (menu, `Case #<seed % 10000>`, tier marker, timer, how to play, new case), the
+- **Play**: header (`Case #<seed % 10000>`, tier marker, timer, how to play, new case / menu), the
   floor plan, a Place / ✕ Mark tool toggle, and the suspect list. Tap a suspect (gold ring + ▶ +
   bold clues), then a square. Tap a placed token to lift it off (and select that person, so the
   next tap moves them). In Mark mode a tap on an empty square toggles a ✕.
@@ -108,37 +108,27 @@ The board only ever says "not quite, N clues don't fit": it never says which pla
 
 ### Space (the hard part of this game)
 
-Expert is 8x8 plus eight suspect rows on a phone with no scrolling, and mounted in the hub the
-standard header (about 131px in the test browser) takes a fifth of the screen. `_fit()` in
-`js/ui.js` therefore chooses among three arrangements by MEASUREMENT, preferring the most readable
-one that gives the board a comfortable size (`min(width, N * 40)`): the list font 12.5px down to the
-11px floor; the list as two columns of run-in cards instead of one row per suspect; the tool
-buttons in a column beside the board instead of a row under it. If none reaches the comfortable
-size the largest board wins. Landscape / wide (`width / height >= 1.3`) puts tools and list beside
-the board.
+Expert is 8x8 plus eight suspect rows on a phone with no scrolling. **The game is IMMERSIVE in the
+hub** (changed the same day it was built): with the ordinary hub header the Expert squares were
+25-28px on a 375x667 phone. Now the hub header collapses to its floating back button and the
+game's HUD sits in the SAME row, beside it (`_positionRoot()` measures the button and sets
+`--mu-top` / `--mu-hud-inset`; the root takes the full height). That is also why the HUD has no
+separate menu button: "change difficulty" lives in the new-case dialog (the ↻ button), which
+always opens and only asks "abandon this case?" when there is progress.
 
-**Tap-target exception, documented and measured** (`docs/BUILDING-A-GAME.md` Part 0, the dots-boxes
-precedent): 64 squares, eight suspect rows and a header cannot all be 44px on a 667px screen with no
-scrolling. Smallest board square over 8 random cases per tier and language, worst case with the
-board full and clue warnings showing (Expert / Hard):
+`_fit()` in `js/ui.js` then chooses among arrangements by MEASUREMENT, preferring the most
+readable one that gives the board a comfortable size (`min(width, N * 40)`): the list font 12.5px
+down to the 11px floor; the list as two columns of run-in cards instead of one row per suspect;
+the tool buttons in a column beside the board. If none reaches the comfortable size the largest
+board wins. Landscape / wide (`width / height >= 1.3`) puts tools and list beside the board.
 
-| Screen | Expert | Hard |
-|---|---|---|
-| standalone 375x667 | 39px | 42-44px |
-| standalone 375x600 | 34px | 39px |
-| standalone 390x844 | 46px | 52px |
-| hub 375x667 | 25px | 30-35px |
-| hub 375x600 | 22-25px | 28-30px |
-| hub 390x664 | 28px | 32px |
-| hub 390x844 | 39-42px | 46-48px |
-
-Easy and Medium are 35px and up everywhere. The header buttons, tool buttons, overlay buttons and
-the suspect rows' width are all 44px+; only the suspect rows' HEIGHT (19-40px) and the Expert / Hard
-squares in the hub are under. Below 375px wide it stops fitting: at a hub 320x568 Spanish Expert
-overflows the screen by up to 20px (the board hits its floor of `N * 12`), which is outside the
-supported range. The way to give Expert real room in the hub is `immersive: true` in `js/hub.js` (the
-header collapses to a floating back button and frees roughly 90px), which is a registry decision,
-not a game one.
+Measured board squares after the immersive change (hub, 3 people placed): Expert 40px at 375x667,
+42px at 390x844 (width-bound); Hard 43px at 375x667; Medium 54px; Easy 67px at 390x844.
+**Tap-target exception** (`docs/BUILDING-A-GAME.md` Part 0, the dots-boxes precedent): Expert and
+Hard squares on small phones are a few px under 44, because 64 squares, eight suspect rows and a
+header cannot all be 44px on a 667px screen with no scrolling. The suspect rows' HEIGHT (19-40px)
+is also under; their width, and every button, is 44px+. `node check-no-scroll.mjs murdoku` passes
+all 24 screens.
 
 ### Save details
 
