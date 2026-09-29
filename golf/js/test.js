@@ -3214,14 +3214,8 @@ console.log('\n-- 21. SWAMP: a hazard you play OUT OF, not a penalty (2026-09-22
   const { OBSTACLE_CATALOG } = await import('./obstacles.js');
 
   ok('swamp is a member of the closed set of surface kinds', SURFACE_KINDS.has('swamp'));
-  // Scoped to the courses that existed when swamp shipped: Coral Cove (2026-09-29) is the first
-  // course built WITH it, on purpose (hole 6's cross band), which moves nothing that existed.
-  const PRE_SWAMP = new Set(['pinevalley', 'redmesa', 'oasissands']);
-  ok('...and no hole that predates it uses it, so nothing existing moved',
-    COURSES.filter((c) => PRE_SWAMP.has(c.id))
-      .every((c) => c.holes.every((h) => h.base !== 'swamp' && !h.surfaces.some((x) => x.kind === 'swamp'))));
-  ok('...and Coral Cove 6 really plays one',
-    COURSES.find((c) => c.id === 'coralcove').holes[5].surfaces.some((x) => x.kind === 'swamp'));
+  ok('...and no shipped hole uses it yet, so nothing existing moved',
+    COURSES.every((c) => c.holes.every((h) => h.base !== 'swamp' && !h.surfaces.some((x) => x.kind === 'swamp'))));
 
   // THE LIE ROW IS THE WHOLE COST. A lake charges a stroke and hands the ball back somewhere dry;
   // a swamp charges nothing and makes you hit it.
@@ -3438,6 +3432,32 @@ console.log('\n-- 25. POWER LINES: a wire is a BAND of heights, not a wall (2026
   const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
   ok('ui.js banners a wire block', /blocked\.wire != null[^\n]*_showBanner\(t\('blocked_wire'\)/.test(ui));
   ok('...and only a TREE block opens the drop prompt', /a\.res\.blocked && a\.res\.blocked\.tree\)/.test(ui));
+}
+
+console.log('\n-- 26. ISLAND HOLES: an ocean base, beaches and islands (2026-09-29, Coral Keys) --');
+{
+  const ck = COURSES.find((c) => c.id === 'coralkeys');
+  const h1 = ck.holes[0];
+  ok('Coral Keys plays on an ocean', ck.holes.every((h) => h.base === 'water'));
+  ok('...every hole validates', ck.holes.every((h) => validateHole(h).length === 0));
+  // A cross band on an island hole is a GAP in the land, not a lake laid over it: the middle of
+  // hole 1's first channel (58 yds) is sea, and the land either side of it is land.
+  ok('a channel is open sea', surfaceAt(h1, 0, 58) === 'water');
+  ok('...the tee stands on land', surfaceAt(h1, h1.tee[0], h1.tee[1]) === 'tee');
+  ok('...and the island past it is fairway', surfaceAt(h1, 0, 150) === 'fairway');
+  // Walking out sideways from the fairway: rough, then BEACH (sand), then sea - in that order.
+  const seq = [];
+  for (let x = 0; x <= 60; x += 0.5) { const k = surfaceAt(h1, x, 150); if (seq[seq.length - 1] !== k) seq.push(k); }
+  ok('fairway -> rough -> beach -> sea, walking off the island',
+    seq.join(',') === 'fairway,lightRough,fairwayBunker,water', seq.join(','));
+  // `islands` really puts land in the water: hole 2's shortcut island.
+  const h2 = ck.holes[1];
+  const isl = h2.surfaces.filter((x) => x.kind === 'fairway').length;
+  ok('an extra island is land, laid out in the water', isl >= 3, `${isl} fairway pieces`);
+  // Absent, neither option adds a thing: the same spec with and without `beach: 0` builds the same.
+  const plain = { n: 4, par: 4, path: [[0, 5], [0, 360]], cross: [{ yd: 200, depth: 30 }] };
+  ok('a hole with no beach builds exactly as before',
+    JSON.stringify(makeHole(plain)) === JSON.stringify(makeHole({ ...plain, beach: 0, islands: [] })));
 }
 
 console.log(`\n${fail ? `${fail} FAILED` : 'all golf engine tests passed'}`);

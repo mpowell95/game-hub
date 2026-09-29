@@ -598,6 +598,12 @@ function place(stations, at, side, off) {
  *   treeTypes         the specimen table
  *   lines             power lines [{pts: [[x, y], ...], h}] in world yards, h the wire height
  *                     (default 10): a pole tree at every point plus `hole.lines[i] = {pts, lo, hi}`
+ *   beach             (yards) an ISLAND HOLE: sand that plays as a fairway bunker rings all the land,
+ *                     the tee and the green get islands of their own, and each WATER `cross` band
+ *                     becomes a gap between islands instead of a lake over the corridor. Meant for
+ *                     `base: 'water'` (Coral Keys). Absent, nothing changes.
+ *   islands           [{yd|at, side, off, rx, ry, seed, fairway}] - extra land out in the water:
+ *                     beach (if `beach`), rough, and a fairway core unless `fairway: false`.
  *   decor             art only, never consulted for anything: either {poly, kind} (a cart path, the
  *                     default kind) or {at:[x,y], kind:'bench'|'sign'|'flagpole', rot} - a sprite.
  *                     Carried through verbatim; only the bounds pass reads it.
@@ -736,8 +742,59 @@ export function makeHole(spec) {
   const rgTo = length;
 
   const surfaces = [];
-  surfaces.push({ kind: 'lightRough', poly: corridor(stations, roughAt, Math.max(0, fwFrom - 8), rgTo) });
-  surfaces.push({ kind: 'fairway', poly: corridor(stations, fwAt, fwFrom, fwTo) });
+  // ISLANDS AND BEACHES (2026-09-29, Coral Keys). Matt wanted a course that "looks new and is a
+  // new experience"; the answer he chose was island hopping - the OCEAN is the ground (`base:
+  // 'water'`) and every piece of land is an island. `beach` (yards) rings the land in sand that
+  // plays as a fairway bunker, so a shot that just misses an island finishes on the beach rather
+  // than in the sea. Absent (every hole before this), nothing below changes: no surface is added
+  // and every existing hole builds byte for byte as before.
+  const beachW = spec.beach > 0 ? +spec.beach : 0;
+  // On such a hole a WATER cross band is not a pool laid over the land - the sea is already there.
+  // It is a GAP: the corridor is built as separate islands between the bands, each with rounded,
+  // beached ends. (A lake painted over a corridor on an ocean reads as a pool in the sea, with
+  // square cut ends and no beach on them - measured on the first render.)
+  const gaps = beachW ? (spec.cross || [])
+    .filter((cx) => (cx.kind || 'water') === 'water')
+    .map((cx) => { const at = cx.yd != null ? cx.yd : cx.at * length; const d = cx.depth == null ? 22 : cx.depth; return [at - d / 2, at + d / 2]; })
+    .sort((a, b) => a[0] - b[0]) : [];
+  // The stretches of land left between the gaps, from the tee to the pin.
+  const spans = [];
+  { let a = 0; for (const [g0, g1] of gaps) { if (g0 > a) spans.push([a, g0]); a = Math.max(a, g1); } if (a < rgTo) spans.push([a, rgTo]); }
+  // A width that closes to nothing at a span's ends in an ellipse over `cap` yards: a rounded end.
+  // The tee end and the pin end are not capped - the tee island and the green's island close them.
+  const capped = (w, a, b, capA, capB, cap) => (t, s2, sd, st) => {
+    const ua = capA ? (s2 - a) / cap : 1; const ub = capB ? (b - s2) / cap : 1;
+    const u = Math.max(0, Math.min(1, ua, ub));
+    return w(t, s2, sd, st) * Math.sqrt(1 - (1 - u) * (1 - u));
+  };
+  if (beachW) {
+    // THE TEE ISLAND. When the first gap starts close to the tee, the land before it is one small
+    // oval island round the tee box rather than a stub of corridor with a flat end.
+    let tRy = 10; let tCy = tee[1] - 3;
+    if (spans.length && spans[0][0] === 0 && spans[0][1] < 70) {
+      const g0 = spans.shift()[1];
+      tRy = Math.max(10, (g0 - (tee[1] - 12)) / 2); tCy = tee[1] - 12 + tRy;
+    }
+    surfaces.push({ kind: 'fairwayBunker', poly: blob(tee[0], tCy, 14 + beachW, tRy + beachW, seed0 + 5, 14) });
+    surfaces.push({ kind: 'lightRough', poly: blob(tee[0], tCy, 14, tRy, seed0 + 5, 14) });
+    for (const [a, b] of spans) {
+      const cA = a > 0; const cB = b < rgTo;
+      const beachAt = (t, s2, sd, st) => roughAt(t, s2, sd, st) + beachW;
+      surfaces.push({ kind: 'fairwayBunker', poly: corridor(stations, capped(beachAt, a - (cA ? beachW : 0), b + (cB ? beachW : 0), cA, cB, 16 + beachW), a - (cA ? beachW : 0), b + (cB ? beachW : 0)) });
+    }
+    for (const [a, b] of spans) {
+      const cA = a > 0; const cB = b < rgTo;
+      surfaces.push({ kind: 'lightRough', poly: corridor(stations, capped(roughAt, a, b, cA, cB, 16), Math.max(a, cA ? a : fwFrom - 8), b) });
+    }
+    for (const [a, b] of spans) {
+      const f0 = Math.max(a + (a > 0 ? 5 : 0), fwFrom); const f1 = Math.min(b - (b < rgTo ? 5 : 0), fwTo);
+      if (f1 - f0 < 12) continue;
+      surfaces.push({ kind: 'fairway', poly: corridor(stations, capped(fwAt, f0, f1, f0 > fwFrom, f1 < fwTo, 12), f0, f1) });
+    }
+  } else {
+    surfaces.push({ kind: 'lightRough', poly: corridor(stations, roughAt, Math.max(0, fwFrom - 8), rgTo) });
+    surfaces.push({ kind: 'fairway', poly: corridor(stations, fwAt, fwFrom, fwTo) });
+  }
 
   // Tree belts / scrub: a ribbon outside the rough on each side, and the SAME polygon is both the
   // `trees` lie surface and the belt the trunks are scattered through. One polygon, so the woods a
@@ -965,6 +1022,22 @@ export function makeHole(spec) {
     }
   }
 
+  // THE GREEN'S ISLAND (Coral Keys): rough then beach round the collar, UNDER everything else
+  // (unshift), so the corridor, the fringe and the guards all paint over it.
+  if (beachW) {
+    const ring = (pad) => {
+      const out = [];
+      for (let i = 0; i < 40; i++) {
+        const bg = (i / 40) * TAU;
+        const d = edgeAt(bg) + fringeAt(bg) + pad + 1.2 * Math.sin(bg * 3 + greenSeed);
+        out.push([+(pin[0] + Math.cos(gBase + bg) * d).toFixed(2), +(pin[1] + Math.sin(gBase + bg) * d).toFixed(2)]);
+      }
+      return out;
+    };
+    surfaces.unshift({ kind: 'lightRough', poly: ring(4) });
+    surfaces.unshift({ kind: 'fairwayBunker', poly: ring(4 + beachW) });
+  }
+
   // ---- CROSS HAZARDS: the thing that forces a LAYUP ------------------------------------------
   //
   // Matt: *"Holes must force layups."* Nothing in the old generator could: every hazard was a blob
@@ -1015,7 +1088,7 @@ export function makeHole(spec) {
       return at + (which ? +1 : -1) * (depth / 2) * Math.max(0.35, k);
     };
     const NC = 13;
-    const edgeW = (st, side) => roughAt(st.t, st.s, side, st) + (cx.over == null ? 8 : cx.over);
+    const edgeW = (st, side) => roughAt(st.t, st.s, side, st) + beachW + (cx.over == null ? 8 : cx.over);
     const across = (which, rev) => {
       const out = [];
       for (let i = 0; i <= NC; i++) {
@@ -1030,6 +1103,7 @@ export function makeHole(spec) {
     if (at - depth / 2 < stations[0].s || at + depth / 2 > stations[stations.length - 1].s) continue;
     const poly = [...across(0, false), ...across(1, true)];
     const ck = cx.kind || 'water';
+    if (beachW && ck === 'water') continue;          // an island hole: the gap IS the band (above)
     // A swamp band rides the SAME list as a water band - it is a surface laid at the water layer,
     // and the only thing that differs is which `kind` the surface carries (2026-09-22).
     if (ck === 'water' || ck === 'swamp' || ck === 'tallGrass') specWater.push({ poly, ...(ck !== 'water' ? { kind: ck } : {}) });
@@ -1085,6 +1159,18 @@ export function makeHole(spec) {
     if (w.poly) { surfaces.push({ kind: wk, poly: w.poly }); continue; }
     const [cx, cy] = place(stations, w.at, w.side == null ? 0 : w.side, w.off || 0);
     surfaces.push({ kind: wk, poly: blob(cx, cy, w.rx, w.ry == null ? w.rx : w.ry, w.seed || (seed0 + 40 + i), w.n || 12) });
+  }
+
+  // ISLANDS (Coral Keys): land out in the water - `[{yd|at, side, off, rx, ry, seed}]`, placed like
+  // everything else. Beach, then rough, then a fairway core, laid OVER the water layer so an island
+  // can stand in the middle of a cross band. `fairway: false` leaves it a rough island.
+  for (const [i, il] of (spec.islands || []).map(byYd).entries()) {
+    const [cx, cy] = place(stations, il.at, il.side == null ? 0 : il.side, il.off || 0);
+    const rx = il.rx || 20; const ry = il.ry == null ? rx : il.ry;
+    const sd = il.seed || (seed0 + 700 + i * 13);
+    if (beachW) surfaces.push({ kind: 'fairwayBunker', poly: blob(cx, cy, rx + 4 + beachW, ry + 4 + beachW, sd, 14) });
+    surfaces.push({ kind: 'lightRough', poly: blob(cx, cy, rx + 4, ry + 4, sd, 14) });
+    if (il.fairway !== false) surfaces.push({ kind: 'fairway', poly: blob(cx, cy, rx, ry, sd, 14) });
   }
 
   // Fairway bunkers go under the fringe; greenside bunkers go over it, so sand still wins where a
