@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1018';
+const CACHE = 'game-hub-v1019';
 
 const ASSETS = [
   './',
@@ -736,10 +736,10 @@ const REST_MANIFEST = {
   './minesweeper/js/strings.js': '59423addbe',
   './contexto/': '249279e291',
   './contexto/index.html': '249279e291',
-  './contexto/css/contexto.css': 'a7dee897dc',
-  './contexto/js/ui.js': '290205ba6a',
+  './contexto/css/contexto.css': 'ebc397db3f',
+  './contexto/js/ui.js': '1ccb7ca81b',
   './contexto/js/engine.js': '01060b503d',
-  './contexto/js/strings.js': 'd8ff393132',
+  './contexto/js/strings.js': '1656f62be8',
   './contexto/data/en.json': '361a043c15',
   './contexto/data/en.bin': '5e6b39a78e',
   './contexto/data/es.json': '5262cc4d43',
