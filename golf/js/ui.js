@@ -27,7 +27,7 @@ import { STRINGS } from './strings.js';
 import TUTORIAL_COURSE from '../courses/tutorial.js';
 import { Coach } from './tutorial.js';
 import { gfOf, roundState, modeUnlocked, tutorialDone, practisableHoles, ladderProgress,
-  courseOpenByDefault } from './progress.js';
+  courseOpenByDefault, courseAdminOnlyByDefault } from './progress.js';
 import { isCourseReleased, courseTestingOverride, readCachedConfig } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 
@@ -728,7 +728,10 @@ class GolfGame {
    *  how a game ends up shipped hidden by accident, and this is that failure in miniature. The
    *  OVERRIDE reader returns null when nothing is set, so an absent config changes nothing. */
   _courseTesting(courseId) {
-    return courseTestingOverride(readCachedConfig(), courseId) === true;
+    // An explicit override always wins; with none set, a course listed in
+    // COURSE_ADMIN_ONLY_BY_DEFAULT (progress.js) is hidden, and every other course is not.
+    const o = courseTestingOverride(readCachedConfig(), courseId);
+    return o == null ? courseAdminOnlyByDefault(courseId) : o === true;
   }
 
   _courseOpen(courseId) {

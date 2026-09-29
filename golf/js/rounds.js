@@ -7,8 +7,9 @@
 import PINE_VALLEY from '../courses/pinevalley.js';
 import RED_MESA from '../courses/redmesa.js';
 import OASIS_SANDS from '../courses/oasissands.js';
+import CORAL_COVE from '../courses/coralcove.js';
 
-export const COURSES = [PINE_VALLEY, RED_MESA, OASIS_SANDS];
+export const COURSES = [PINE_VALLEY, RED_MESA, OASIS_SANDS, CORAL_COVE];
 // A Course Creator preview (golf/index.html, `?editor=custom`) is a course that exists nowhere
 // else: index.html pushes its override onto this list for that page load only, AFTER the static
 // import graph (this file included) has evaluated - so nothing here can see it at module time.

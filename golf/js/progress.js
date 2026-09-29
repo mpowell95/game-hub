@@ -55,9 +55,19 @@ export const TUTORIAL_HOLE_KEY = `${TUTORIAL_COURSE_ID}:1`;
  *  since 2026-09-03, waiting for exactly this caller. So releasing Red Mesa is a tap on the admin
  *  page rather than a deploy - the same rule the game's own `devOnly` follows, and the same reason:
  *  two switches for one decision is how a game ends up shipped hidden by accident. */
-export const COURSE_OPEN_BY_DEFAULT = { pinevalley: true, redmesa: false, oasissands: false };
+export const COURSE_OPEN_BY_DEFAULT = { pinevalley: true, redmesa: false, oasissands: false, coralcove: false };
 
 export function courseOpenByDefault(courseId) { return COURSE_OPEN_BY_DEFAULT[courseId] === true; }
+
+/** WHICH COURSES ARE ADMIN ONLY IN THE CODE (2026-09-29). Matt, on Coral Cove: *"9 holes and admin
+ *  only to start."* A course that is merely not open is SHOWN, locked, to everyone; a course listed
+ *  here is HIDDEN from everyone but a dev profile, exactly as the admin config's `testing` override
+ *  would hide it. It is a DEFAULT under that override, never a second switch: an explicit
+ *  `golf.courses.<id>.testing` written by the admin page wins either way (ui.js `_courseTesting`).
+ *  Opening the course to everyone is deleting its line here (and adding it to the map above). */
+export const COURSE_ADMIN_ONLY_BY_DEFAULT = { coralcove: true };
+
+export function courseAdminOnlyByDefault(courseId) { return COURSE_ADMIN_ONLY_BY_DEFAULT[courseId] === true; }
 
 /** The `gf` object out of a stats store, defaulted so every reader below can assume a shape. A
  *  missing or malformed store means "has played nothing", never a crash - the same contract the
