@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1023';
+const CACHE = 'game-hub-v1024';
 
 const ASSETS = [
   './',
@@ -192,6 +192,12 @@ const ASSETS = [
   './contexto/data/en.bin',
   './contexto/data/es.json',
   './contexto/data/es.bin',
+  './murdoku/',
+  './murdoku/index.html',
+  './murdoku/css/murdoku.css',
+  './murdoku/js/ui.js',
+  './murdoku/js/engine.js',
+  './murdoku/js/strings.js',
   './sudoku/',
   './sudoku/index.html',
   './sudoku/css/sudoku.css',
@@ -744,6 +750,12 @@ const REST_MANIFEST = {
   './contexto/data/en.bin': '5e6b39a78e',
   './contexto/data/es.json': '5262cc4d43',
   './contexto/data/es.bin': 'a9d2e833b0',
+  './murdoku/': '027318da6e',
+  './murdoku/index.html': '027318da6e',
+  './murdoku/css/murdoku.css': '954bf87fa1',
+  './murdoku/js/ui.js': '66658152b0',
+  './murdoku/js/engine.js': 'f3fb55d138',
+  './murdoku/js/strings.js': '2648d0b08e',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
   './sudoku/css/sudoku.css': '146887ebaf',

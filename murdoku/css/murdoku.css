@@ -1,0 +1,469 @@
+/* murdoku/css/murdoku.css - EVERY rule is descendant-scoped under .mu-root (docs/BUILDING-A-GAME.md,
+ * "Adding a game" item 3: a prefix alone is not isolation). Chrome (buttons, cards, the modal)
+ * comes from css/ui.css's .gh-* primitives; the floor plan, the suspect list and the HUD are
+ * bespoke here. Dark mode is a `.gh-dark` override, never a prefers-color-scheme query. */
+
+.mu-root {
+  --mu-bg: #f4f6fb;
+  --mu-surface: #ffffff;
+  --mu-line: #b9c3d3;            /* the thin grid between squares */
+  --mu-wall: #16243a;            /* the thick walls between rooms: THE meaning of the plan */
+  --mu-ink: #16243a;
+  --mu-muted: #56657c;
+  --mu-select: #ffce3a;          /* the standing selection accent, always paired with a shape */
+  --mu-select-tint: rgba(255, 206, 58, .2);
+  --mu-warn: #c0392b;
+  --mu-taken: rgba(22, 36, 58, .10);
+  --mu-hatch: rgba(22, 36, 58, .26);
+  --mu-token-bg: #ffffff;
+  --mu-victim-bg: #2a2f3d;
+  --mu-rug-line: #8a5a3c;
+  --mu-rug-a: #d9b48f;
+  --mu-rug-b: #f0dcc6;
+  --mu-accent: #8a1c1c;
+  --mu-hero-bg: linear-gradient(135deg, rgba(138, 28, 28, .16), rgba(138, 28, 28, .05));
+  /* Seven pastel room tints, one per possible room. The tint is only a SECOND cue: the walls carry
+   * the rooms, so a colour-blind player loses nothing. */
+  --mu-r0: #d9e7fa;
+  --mu-r1: #f9e7c4;
+  --mu-r2: #d8f0d6;
+  --mu-r3: #eedcf3;
+  --mu-r4: #fbd9cc;
+  --mu-r5: #cdeef0;
+  --mu-r6: #ece9bf;
+  box-sizing: border-box;
+  /* `position: fixed`, with top/left/width/height set INLINE by `_positionRoot()` in ui.js - the
+   * same technique, and the same reason, as sudoku/css/sudoku.css: a CSS-only `inset: 0` fills
+   * whichever box is its containing block, which mounted in the hub is the viewport (`.hub-game`
+   * has no defined height), so it would slide under the hub's sticky header. Only JS can measure
+   * where the mount point really is. `inset: 0` here is only the one-frame fallback. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--mu-bg);
+  color: var(--mu-ink);
+  font-family: var(--gh-font, system-ui, sans-serif);
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  gap: 6px;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.mu-root * { box-sizing: border-box; }
+
+.gh-dark .mu-root {
+  --mu-bg: #10192b;
+  --mu-surface: #17233b;
+  --mu-line: #34455f;
+  --mu-wall: #e6ebf5;
+  --mu-ink: #eef2f8;
+  --mu-muted: #a9b7cc;
+  --mu-select-tint: rgba(255, 206, 58, .24);
+  --mu-warn: #ff8a70;
+  --mu-taken: rgba(6, 10, 20, .32);
+  --mu-hatch: rgba(238, 242, 248, .3);
+  --mu-token-bg: #eef2f8;
+  --mu-victim-bg: #0b1220;
+  --mu-rug-line: #c99a78;
+  --mu-rug-a: #6d4a33;
+  --mu-rug-b: #503725;
+  --mu-hero-bg: linear-gradient(135deg, rgba(255, 138, 112, .28), rgba(255, 138, 112, .08));
+  --mu-r0: #24405f;
+  --mu-r1: #5a4a22;
+  --mu-r2: #2a5033;
+  --mu-r3: #54335e;
+  --mu-r4: #5e3628;
+  --mu-r5: #21525a;
+  --mu-r6: #55522a;
+  /* css/ui.css's .gh-* primitives read --gh-surface/-ink/-muted, declared once at :root, so
+   * redefining --mu-* alone would leave the modal light. Redefine --gh-* here directly. */
+  --gh-surface: #17233b;
+  --gh-surface-2: #1e2c48;
+  --gh-ink: #eef2f8;
+  --gh-muted: #a9b7cc;
+  --gh-border: rgba(190, 214, 244, .18);
+  --gh-border-strong: rgba(190, 214, 244, .34);
+}
+/* The ski-slope diamonds are drawn near-black; on a dark surface they vanish (css/hub.css fixes
+ * this for the launcher, and a standalone page never loads hub.css). */
+.gh-dark .mu-root .lb-dshape-t3, .gh-dark .mu-root .lb-dshape-t4 { fill: #e6e9f0; }
+
+/* --- setup and building screens ------------------------------------------------------------ */
+.mu-root.mu-setup {
+  justify-content: center;
+  align-items: stretch;
+  max-width: 420px;
+  margin: 0 auto;
+  gap: 12px;
+}
+.mu-root .mu-hero {
+  align-self: center;
+  flex: none;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  line-height: 1;
+  border-radius: var(--gh-r-lg, 16px);
+  background: var(--mu-hero-bg);
+}
+.mu-root .mu-setup-head { text-align: center; }
+.mu-root .mu-setup-head h1 { margin: 0 0 4px; font-size: 24px; font-weight: 800; letter-spacing: -.2px; }
+.mu-root .mu-setup-head p { margin: 0; color: var(--mu-muted); font-size: 13px; }
+.mu-root .mu-setup-card { display: flex; flex-direction: column; gap: 12px; }
+.mu-root .mu-building-text { margin: 0; text-align: center; font-size: 15px; font-weight: 700; }
+.mu-root.mu-building { align-items: center; }
+
+.mu-root .mu-seg-wrap { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.mu-root .mu-seg {
+  flex: 1 1 40%;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--gh-border, var(--mu-line));
+  border-radius: var(--gh-r-md, 12px);
+  background: var(--mu-surface);
+  color: var(--mu-ink);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+.mu-root .mu-seg.is-selected {
+  outline: 2px solid var(--mu-select);
+  border-color: var(--mu-select);
+  background: var(--mu-select-tint);
+}
+.mu-root .mu-seg-label { display: flex; align-items: center; gap: 6px; }
+.mu-root .mu-seg-size { font-size: 11px; color: var(--mu-muted); }
+.mu-root .mu-seg svg.lb-dshape, .mu-root .mu-hud-tier svg.lb-dshape { width: 15px; height: 15px; flex: none; }
+.mu-root .mu-seg svg.lb-dshape-x2, .mu-root .mu-hud-tier svg.lb-dshape-x2 { width: 26px; height: 15px; }
+
+/* --- HUD ------------------------------------------------------------------------------------ */
+.mu-root .mu-hud { flex: none; display: flex; align-items: center; gap: 6px; height: 44px; }
+/* Immersive in the hub: the root starts at the very top and the HUD sits beside the hub's
+   floating back button. Both numbers are measured by _positionRoot() in ui.js. */
+.mu-root.is-immersive { padding-top: var(--mu-top, 54px); }
+.mu-root.is-immersive .mu-hud { padding-left: var(--mu-hud-inset, 0px); }
+.mu-root .mu-iconbtn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--gh-border, var(--mu-line));
+  border-radius: 50%;
+  background: var(--mu-surface);
+  color: var(--mu-ink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mu-root .mu-iconbtn svg { width: 22px; height: 22px; }
+.mu-root .mu-hud-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.mu-root .mu-hud-case { font-size: 14px; font-weight: 800; white-space: nowrap; }
+.mu-root .mu-hud-tier { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--mu-muted); }
+.mu-root .mu-hud-timer { flex: none; min-width: 46px; text-align: center; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* --- the main area: the stage (board and tools), then the suspects --------------------------- */
+.mu-root .mu-main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+/* Three arrangements, chosen by `_fit()` in ui.js by measurement:
+ *   default   the board, then the tool row under it;
+ *   .is-beside  the tool buttons in a column to the RIGHT of the board (when the board is narrower
+ *               than the screen because HEIGHT is what is scarce);
+ *   .mu-wide  (landscape / desktop) board, tool column and suspect list side by side, so the list
+ *             gets the full height (the stage is then always `.is-beside`). */
+.mu-root .mu-stage { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.mu-root .mu-stage.is-beside { flex-direction: row; align-items: flex-start; }
+.mu-root .mu-boardcol { flex: none; width: 240px; height: 240px; }
+.mu-root.mu-wide .mu-main { flex-direction: row; align-items: flex-start; }
+.mu-root.mu-wide .mu-list { flex: 1; min-width: 0; }
+
+/* The floor plan. Its outer border IS the outer wall (BOARD_BORDER in ui.js must match). Cell
+ * size is measured, not assumed: `--mu-cell` is set by `_fit()`. On an 8x8 board the squares end
+ * up well under the 44px tap floor (measured 30-36px on a 375x667 phone, see the fit comment in
+ * ui.js): docs/BUILDING-A-GAME.md Part 0 allows a documented, measured exception, and this is the
+ * dots-boxes precedent - 64 squares plus eight suspect rows plus a header cannot all be 44px on a
+ * 667px screen with no scrolling. The suspect rows and the controls are full width and stay >= 44px
+ * wide; only their HEIGHT follows the content. */
+.mu-root .mu-board {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--mu-n, 5), 1fr);
+  grid-template-rows: repeat(var(--mu-n, 5), 1fr);
+  border: 3px solid var(--mu-wall);
+  border-radius: 4px;
+  background: var(--mu-surface);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.mu-root .mu-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--mu-r0);
+  box-shadow: inset -1px -1px 0 var(--mu-line);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mu-root .mu-cell:focus-visible { outline: 3px solid var(--mu-select); outline-offset: -3px; z-index: 6; }
+.mu-root .mu-r0 { background-color: var(--mu-r0); }
+.mu-root .mu-r1 { background-color: var(--mu-r1); }
+.mu-root .mu-r2 { background-color: var(--mu-r2); }
+.mu-root .mu-r3 { background-color: var(--mu-r3); }
+.mu-root .mu-r4 { background-color: var(--mu-r4); }
+.mu-root .mu-r5 { background-color: var(--mu-r5); }
+.mu-root .mu-r6 { background-color: var(--mu-r6); }
+
+/* A blocked square: diagonal hatching AND a furniture emoji, so it reads as "not standable"
+ * without relying on colour. */
+.mu-root .mu-cell.is-blocker {
+  background-image: repeating-linear-gradient(135deg, var(--mu-hatch) 0 2px, transparent 2px 6px);
+}
+.mu-root .mu-obj {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(11px, calc(var(--mu-cell, 30px) * .52), 28px);
+  line-height: 1;
+  pointer-events: none;
+}
+/* A rug can be stood on: a patterned inset, no emoji. */
+.mu-root .mu-rug {
+  position: absolute;
+  inset: 16%;
+  z-index: 1;
+  border: 2px solid var(--mu-rug-line);
+  border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--mu-rug-a) 0 3px, var(--mu-rug-b) 3px 6px);
+  pointer-events: none;
+}
+.mu-root .mu-badge {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  z-index: 0;
+  /* Big enough to FIND: every "in the Kitchen" clue sends the player looking for this icon. */
+  font-size: clamp(11px, calc(var(--mu-cell, 30px) * .36), 20px);
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .8);
+  box-shadow: 0 0 0 1px rgba(22, 36, 58, .25);
+  pointer-events: none;
+}
+.gh-dark .mu-root .mu-badge { background: rgba(16, 25, 43, .8); box-shadow: 0 0 0 1px rgba(230, 235, 245, .3); }
+/* Rows and columns a placed person already fills are dimmed. */
+.mu-root .mu-cell.is-taken::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--mu-taken);
+  pointer-events: none;
+}
+.mu-root .mu-dyn {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.mu-root .mu-mark {
+  font-size: clamp(11px, calc(var(--mu-cell, 30px) * .42), 20px);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--mu-muted);
+}
+.mu-root .mu-token {
+  width: 82%;
+  height: 82%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--mu-ink);
+  border-radius: 50%;
+  background: var(--mu-token-bg);
+  font-size: clamp(11px, calc(var(--mu-cell, 30px) * .46), 26px);
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+}
+.mu-root .mu-token.is-victim { background: var(--mu-victim-bg); border-color: var(--mu-wall); }
+.mu-root .mu-token.is-sel { outline: 3px solid var(--mu-select); outline-offset: 1px; }
+/* A clash or a blocked square: a dashed outline AND a warning triangle, never colour alone. */
+.mu-root .mu-token.is-warn { outline: 3px dashed var(--mu-warn); outline-offset: 0; }
+.mu-root .mu-token:focus-visible { outline: 3px solid var(--mu-select); outline-offset: 1px; }
+.mu-root .mu-warnicon {
+  position: absolute;
+  top: 0;
+  right: 1px;
+  z-index: 4;
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+}
+.mu-root .mu-walls {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+}
+.mu-root .mu-walls path {
+  fill: none;
+  stroke: var(--mu-wall);
+  stroke-width: 3px;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+}
+
+/* --- the tool row -------------------------------------------------------------------------- */
+.mu-root .mu-tools { flex: none; width: 100%; height: 44px; display: flex; align-items: center; gap: 8px; }
+.mu-root .mu-tool-seg {
+  flex: none;
+  display: flex;
+  border: 1px solid var(--gh-border-strong, var(--mu-line));
+  border-radius: var(--gh-r-md, 12px);
+  overflow: hidden;
+}
+.mu-root .mu-toolbtn {
+  min-width: 76px;
+  height: 42px;
+  padding: 0 10px;
+  border: 0;
+  background: var(--mu-surface);
+  color: var(--mu-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mu-root .mu-toolbtn + .mu-toolbtn { border-left: 1px solid var(--gh-border-strong, var(--mu-line)); }
+/* The active tool: thicker gold inset ring, bolder text and a tinted fill (shape + weight, not
+ * only colour). */
+.mu-root .mu-toolbtn[aria-pressed="true"] {
+  font-weight: 800;
+  background: var(--mu-select-tint);
+  box-shadow: inset 0 0 0 3px var(--mu-select);
+}
+.mu-root .mu-status {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--mu-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Beside the board: the two buttons stack, the status runs underneath. */
+.mu-root .mu-stage.is-beside .mu-tools { flex-direction: column; align-items: stretch; height: auto; gap: 6px; }
+.mu-root .mu-stage.is-beside .mu-tool-seg { flex-direction: column; }
+.mu-root .mu-stage.is-beside .mu-toolbtn { width: 100%; min-width: 0; height: 44px; }
+.mu-root .mu-stage.is-beside .mu-toolbtn + .mu-toolbtn { border-left: 0; border-top: 1px solid var(--gh-border-strong, var(--mu-line)); }
+.mu-root .mu-stage.is-beside .mu-status { flex: none; -webkit-line-clamp: 5; }
+
+/* --- the suspect list ---------------------------------------------------------------------- */
+/* Rows are full width but only as tall as their clues (about 21-40px): with up to eight rows on a
+ * 667px screen they cannot all be 44px tall (same documented exception as the board squares). The
+ * font is set by `_fit()` through --mu-fs, shrinking toward the 11px floor before the board is
+ * allowed to get small. */
+.mu-root .mu-list { flex: none; display: flex; flex-direction: column; gap: 2px; font-size: var(--mu-fs, 12px); }
+.mu-root .mu-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--gh-border-strong, var(--mu-line));
+  border-radius: 10px;
+  background: var(--mu-surface);
+  line-height: 1.2;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.mu-root .mu-row:focus-visible { outline: 3px solid var(--mu-select); outline-offset: 1px; }
+/* The selected suspect: a thick gold ring, a tinted fill, a ▶ marker and bolder clues. */
+.mu-root .mu-row.is-sel {
+  background: var(--mu-select-tint);
+  outline: 3px solid var(--mu-select);
+  outline-offset: -1px;
+  font-weight: 700;
+}
+.mu-root .mu-row-cur { flex: none; width: 9px; font-size: 11px; visibility: hidden; }
+.mu-root .mu-row.is-sel .mu-row-cur { visibility: visible; }
+.mu-root .mu-row-ok { flex: none; width: 12px; font-weight: 800; visibility: hidden; }
+.mu-root .mu-row.is-placed .mu-row-ok { visibility: visible; }
+.mu-root .mu-who { flex: none; width: 6.2em; display: flex; flex-wrap: wrap; align-items: center; column-gap: 3px; }
+.mu-root .mu-face { font-size: 1.2em; line-height: 1; }
+.mu-root .mu-name { font-weight: 800; }
+.mu-root .mu-vic { flex-basis: 100%; font-size: 11px; font-weight: 500; line-height: 1.1; color: var(--mu-muted); }
+.mu-root .mu-frags { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+/* A clue the finished board breaks: a warning triangle and a wavy underline (not bold: bolder text
+ * wraps more and would make the board jump in size the moment a board is completed). */
+.mu-root .mu-frag.is-bad { text-decoration: underline wavy var(--mu-warn); text-underline-offset: 2px; }
+.mu-root .mu-fragwarn { font-size: 11px; }
+
+/* The list as two columns of run-in cards (the name runs straight into the clues). Chosen by
+ * `_fit()` only when one full-width row per suspect leaves the board too small; the victim is
+ * always last, so with an odd number of suspects it takes the whole last row. */
+.mu-root .mu-list.is-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.mu-root .mu-list.is-grid .mu-row { display: block; padding: 2px 5px; }
+.mu-root .mu-list.is-grid .mu-row:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.mu-root .mu-list.is-grid .mu-row-cur { display: none; width: auto; margin-right: 2px; }
+.mu-root .mu-list.is-grid .mu-row.is-sel .mu-row-cur { display: inline; }
+.mu-root .mu-list.is-grid .mu-who { display: inline; width: auto; }
+.mu-root .mu-list.is-grid .mu-face { margin-right: 2px; }
+.mu-root .mu-list.is-grid .mu-vic { display: inline; margin-left: 3px; }
+.mu-root .mu-list.is-grid .mu-frags { display: inline; margin-left: 3px; }
+.mu-root .mu-list.is-grid .mu-row-ok { display: none; width: auto; margin-left: 3px; }
+.mu-root .mu-list.is-grid .mu-row.is-placed .mu-row-ok { display: inline; }
+
+/* --- overlays: how to play, the new-case confirm, the result panel --------------------------- */
+.mu-root .mu-modal--howto { width: min(400px, 100%); padding: 14px 16px 16px; }
+.mu-root .mu-modal--howto .gh-modal__title { margin: 0 44px 8px 0; font-size: 18px; }
+.mu-root .mu-line {
+  margin: 0 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 1.3;
+}
+.mu-root .mu-line--goal { font-weight: 800; }
+.mu-root .mu-line--caption { text-align: center; color: var(--mu-muted); margin-bottom: 8px; }
+.mu-root .mu-line--example { text-align: center; font-weight: 700; margin-bottom: 8px; }
+.mu-root .mu-howto-diagram { display: flex; justify-content: center; margin: 4px 0 6px; }
+.mu-root .mu-howto-diagram svg { width: 150px; height: auto; }
+.mu-root .mu-modal--howto .gh-modal__actions { margin-top: 10px; }
+.mu-root .mu-confirm-text { margin: 0 0 4px; font-size: 14px; }
+.mu-root .mu-modal--confirm { width: min(360px, 100%); }
+.mu-root .mu-modal--win { text-align: center; }
+.mu-root .mu-modal--win .gh-modal__title { margin: 0 44px 8px 44px; }
+.mu-root .mu-win-who { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 4px 0 8px; font-size: 18px; }
+.mu-root .mu-win-face { font-size: 48px; line-height: 1.1; }
+.mu-root .mu-win-line { margin: 0 0 4px; font-size: 15px; }
+.mu-root .mu-win-time { margin: 0; font-size: 13px; color: var(--mu-muted); }
+.mu-root .mu-modal--win .gh-modal__actions { flex-direction: column; margin-top: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mu-root * { transition-duration: 1ms !important; }
+}

@@ -163,6 +163,9 @@ const GAME_META = [
   { id: 'sudoku', labelKey: 'game_title_sudoku' },
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
   { id: 'contexto', labelKey: 'game_title_contexto' },
+  // Murdoku (2026-09-29): admin only at first, but the row ships with the game - the Yahtzee
+  // lesson above. isGameOnLauncher keeps its board hidden until Matt releases it.
+  { id: 'murdoku', labelKey: 'game_title_murdoku' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },

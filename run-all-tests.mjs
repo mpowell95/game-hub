@@ -29,6 +29,7 @@ const SUITES = [
   { file: 'connect-four/js/test.js' },
   { file: 'nuts-bolts/js/test.js' },
   { file: 'sudoku/js/test.js' },
+  { file: 'murdoku/js/test.js' },
   { file: 'contexto/js/test.js' },
   { file: 'tic-tac-toe/js/test.js' },
   { file: 'dots-boxes/js/test.js' },

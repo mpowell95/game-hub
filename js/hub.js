@@ -522,6 +522,25 @@ export const GAMES = [
     released: '2026-09-28',
     art: GAME_ART['contexto'],
   },
+  {
+    // Murdoku (2026-09-29): place every suspect on a floor plan, one per row and column, from
+    // their clues; the one left alone with the victim did it. Every case is generated on the
+    // device and proved to have exactly one answer (murdoku/CLAUDE.md). IMMERSIVE, unlike Sudoku:
+    // an 8x8 board plus eight suspects' clues does not fit a small phone under the full hub header,
+    // so the game's own HUD shares the floating back button's row (murdoku/CLAUDE.md, "Space").
+    id: 'murdoku',
+    title: { en: 'Murdoku', es: 'Murdoku' },
+    blurb: { en: 'A murder mystery logic puzzle. Place every suspect from their clues and find who was alone with the victim.',
+      es: 'Un misterio de lógica. Coloca a cada sospechoso según sus pistas y descubre quién estaba a solas con la víctima.' },
+    module: '../murdoku/js/ui.js',
+    immersive: true,
+    accent: '#8a1c1c',
+    art: GAME_ART['murdoku'],
+    // ADMIN ONLY while Matt plays it in (his ask, 2026-09-29). No `released` date on purpose: it
+    // is the only input to the launcher's New pill and must be the day he releases it, which he
+    // does from the admin page with no commit (root CLAUDE.md, "The admin control page").
+    devOnly: true,
+  },
 ];
 
 /** How often a foregrounded app may ask for a new build. Long enough that switching apps back

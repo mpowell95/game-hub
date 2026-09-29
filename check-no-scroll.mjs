@@ -52,6 +52,58 @@ const TOL = 2;      // sub-pixel rounding; the same tolerance test-visual's fit 
  *  a screen that grows until it breaks - and, if the way OFF it lives at the bottom, breaks
  *  silently. */
 const EXTRA_SCREENS = {
+  // Murdoku: the setup screen is the default one; the four below are the ones a player reaches by
+  // tapping. Each runs on the SAME page as the one before it (see the note above), so each starts by
+  // closing whatever overlay is up and going back to the setup screen. The board screens are the
+  // point: every tier, a full board with warnings showing, and the result panel. Expert 8x8 with
+  // eight clue rows is the tightest screen in the game, so the assert also holds its squares above
+  // a floor (measured 28-39px on these two phone heights; under 24px means the layout regressed).
+  murdoku: [
+    {
+      name: 'how to play',
+      async open(page) {
+        await muReset(page);
+        await page.click('[data-action="howto"]');
+        await page.waitForSelector('.mu-modal--howto', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'easy board',
+      async open(page) { await muBoard(page, 'easy', false); },
+    },
+    {
+      name: 'expert board, all placed with warnings',
+      async open(page) { await muBoard(page, 'expert', true); },
+      async assert(page) {
+        return page.evaluate(() => {
+          const board = document.querySelector('.mu-board');
+          const cell = parseFloat(getComputedStyle(board).getPropertyValue('--mu-cell'));
+          const list = document.querySelector('.mu-list').getBoundingClientRect();
+          const root = document.querySelector('.mu-root').getBoundingClientRect();
+          if (list.bottom > root.bottom + 2) return `the suspect list runs ${Math.round(list.bottom - root.bottom)}px past the bottom of the screen`;
+          return cell >= 24 ? null : `the squares are only ${cell}px`;
+        });
+      },
+    },
+    {
+      name: 'how to play, in a case',
+      async open(page) {
+        await page.click('[data-action="howto"]');
+        await page.waitForSelector('.mu-modal--howto', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'result panel',
+      async open(page) {
+        await page.evaluate(() => { const b = document.querySelector('.mu-overlay [data-ov="close"]'); if (b) b.click(); });
+        await page.evaluate(() => window.__muTest.solve());
+        await page.waitForSelector('.mu-modal--win', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+  ],
   contexto: [
     {
       name: 'how to play',
@@ -154,6 +206,35 @@ const EXTRA_SCREENS = {
     },
   ],
 };
+
+/** Murdoku-only helpers (see EXTRA_SCREENS.murdoku): back to the setup screen from wherever the
+ *  previous extra left the page, then start a case at `tier`. */
+async function muReset(page) {
+  await page.evaluate(() => { const b = document.querySelector('.mu-overlay [data-ov="close"]'); if (b) b.click(); });
+  // The board's menu lives in the new-case dialog (the HUD shares the hub back button's row).
+  if (!(await page.$('[data-tier]'))) {
+    await page.evaluate(() => { const b = document.querySelector('.mu-root [data-action="new"]'); if (b) b.click(); });
+    await page.evaluate(() => { const b = document.querySelector('.mu-overlay [data-ov="menu"]'); if (b) b.click(); });
+  }
+  await page.waitForSelector('[data-tier]', { timeout: 8000 });
+}
+async function muBoard(page, tier, placeAll) {
+  await muReset(page);
+  await page.click(`[data-tier="${tier}"]`);
+  await page.click('[data-action="start"]');
+  await page.waitForSelector('.mu-board .mu-cell', { timeout: 10000 });
+  await page.waitForTimeout(250);
+  if (placeAll) {
+    // Everyone placed but two swapped: the not-quite state, with broken clues marked.
+    await page.evaluate(() => {
+      const t = window.__muTest;
+      const sol = t.puzzle.solution.slice();
+      [sol[0], sol[1]] = [sol[1], sol[0]];
+      sol.forEach((c, p) => t.place(p, c));
+    });
+    await page.waitForTimeout(250);
+  }
+}
 
 /** Baseball-only helper (see the comment above): if the player screen (either mode - Quick Play's
  *  own or a career one) is currently up from a previous extra, tap its Done button to return to
