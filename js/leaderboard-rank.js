@@ -310,8 +310,12 @@ export const GOLF_COURSE_PAR = {
   // Oasis Sands (par 34 over NINE): 3 4 4 5 3 4 3 4 4. A nine-hole course has no back nine and no
   // eighteen, so it has FOUR round keys rather than nine - see roundsFor() in golf/js/rounds.js.
   oasissands3: 11, oasissands3b: 12, oasissands3c: 11, oasissands9: 34,
-  // Coral Cove (par 35 over NINE, 2026-09-29): 4 4 3 5 3 4 4 3 5. Four round keys, like Oasis Sands.
+  // Coral Cove (par 35 over NINE, 2026-09-29): 4 4 3 5 3 4 4 3 5. RETIRED the same day, admin only
+  // throughout, for Coral Keys below. Its rows stay so any round recorded on it still reads right
+  // (THE LAW rules 1 and 5); `coralcove` is never reused as an id.
   coralcove3: 11, coralcove3b: 12, coralcove3c: 12, coralcove9: 35,
+  // Coral Keys (par 35 over NINE, 2026-09-29): 4 4 3 5 3 4 4 3 5. Island hopping.
+  coralkeys3: 11, coralkeys3b: 12, coralkeys3c: 12, coralkeys9: 35,
 };
 
 /** Golf's board number: the player's best round on the named course, as a score to par.

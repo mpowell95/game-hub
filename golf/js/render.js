@@ -444,6 +444,30 @@ const SEAM_PX = 0.7;                        // in MAP_PPY units, so ~1.7 map px
  *  Seeded per surface, so the same hole grows the same grass on every device and in every test run
  *  - the same reason `expandBelt` is seeded. A pattern that reshuffled per load would make the
  *  course look subtly different every visit for no gain at all. */
+/** Open-sea swell for an ocean base: short, shallow arcs, sparse and jittered so they never read
+ *  as a grid. The water counterpart of `scatterTufts`. */
+function scatterWaves(ctx, bb, toPx, colour, seed) {
+  const rnd = mulberry32(seed);
+  const STEP = 7;
+  ctx.save();
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = Math.max(1, MAP_PPY * 0.4);
+  ctx.lineCap = 'round';
+  for (let y = bb.minY; y < bb.maxY; y += STEP) {
+    for (let x = bb.minX; x < bb.maxX; x += STEP) {
+      if (rnd() < 0.45) continue;
+      const [px, py] = toPx(x + (rnd() - 0.5) * STEP, y + (rnd() - 0.5) * STEP);
+      const a = (1.6 + rnd() * 1.4) * MAP_PPY;
+      ctx.beginPath();
+      ctx.moveTo(px - a, py);
+      ctx.quadraticCurveTo(px - a / 2, py - a * 0.45, px, py);
+      ctx.quadraticCurveTo(px + a / 2, py - a * 0.45, px + a, py);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 function scatterTufts(ctx, bb, toPx, colour, seed) {
   const rnd = mulberry32(seed);
   const STEP = 3.4;                          // yards between tufts, before jitter
@@ -1074,6 +1098,22 @@ export function buildMap(hole, theme) {
   // this cheap: a tuft that lands where the fairway will be is simply covered up.
   if (hole.base === 'lightRough' || hole.base === 'heavyRough' || hole.base === 'trees') {
     scatterTufts(ctx, b, toPx, tintOf(FILL[hole.base] || pal.heavyRough, 1.18), (hole.n | 0) * 733 + 11);
+  }
+  // AN OCEAN BASE (2026-09-29, Coral Keys): swell lines across the open water, and a band of pale
+  // SHALLOWS round every island, drawn as a wide stroke of each land outline before the land is
+  // painted over its inner half. Art only - the lie is still `water` everywhere no land covers.
+  if (hole.base === 'water') {
+    scatterWaves(ctx, b, toPx, tintOf(FILL.water, 0.86), (hole.n | 0) * 733 + 17);
+    ctx.save();
+    ctx.strokeStyle = tintOf(FILL.water, 1.22);
+    ctx.lineWidth = 9 * MAP_PPY;
+    ctx.lineJoin = 'round';
+    for (const s of hole.surfaces) {
+      if (s.kind === 'water' || s.poly === 'green') continue;
+      tracePoly(ctx, polyOf(s, hole), toPx);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   for (const s of hole.surfaces) {

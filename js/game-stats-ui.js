@@ -768,10 +768,17 @@ const GOLF_COURSES = {
   coralcove3b: 'Coral Cove (holes 4-6)',
   coralcove3c: 'Coral Cove (holes 7-9)',
   coralcove9: 'Coral Cove (all 9)',
+  // Coral Cove above was retired the same day it shipped (admin only); its names stay so any round
+  // recorded on it still reads. Coral Keys replaced it.
+  coralkeys3: 'Coral Keys (holes 1-3)',
+  coralkeys3b: 'Coral Keys (holes 4-6)',
+  coralkeys3c: 'Coral Keys (holes 7-9)',
+  coralkeys9: 'Coral Keys (all 9)',
   pinevalley: 'Pine Valley',
   redmesa: 'Red Mesa',
   oasissands: 'Oasis Sands',
   coralcove: 'Coral Cove',
+  coralkeys: 'Coral Keys',
 };
 function golfCourseName(id) { return GOLF_COURSES[id] || String(id).toUpperCase(); }
 
@@ -806,7 +813,7 @@ function compareGolfRounds(a, b) {
 // 1-3 are open - so the record is real, earned and load-bearing, and a record no screen shows
 // reads as deleted (THE LAW rule 1). It gets a name here and a length of one, which is what stops
 // the row printing "TUTORIAL" with seventeen dashes after it.
-const GOLF_COURSE_HOLES = { pinevalley: 18, redmesa: 18, oasissands: 9, coralcove: 9, tutorial: 1 };
+const GOLF_COURSE_HOLES = { pinevalley: 18, redmesa: 18, oasissands: 9, coralcove: 9, coralkeys: 9, tutorial: 1 };
 function golfCourseHoles(id) { return GOLF_COURSE_HOLES[id] || 18; }
 
 /** Rounds played on a course the admin page has set to TESTING (Part 8, §14) - stored in

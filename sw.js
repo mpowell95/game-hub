@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1015';
+const CACHE = 'game-hub-v1016';
 
 const ASSETS = [
   './',
@@ -405,7 +405,7 @@ const ASSETS = [
   './golf/courses/pinevalley.js',
   './golf/courses/redmesa.js',
   './golf/courses/oasissands.js',
-  './golf/courses/coralcove.js',
+  './golf/courses/coralkeys.js',
   './golf/courses/tutorial.js',
 
   // Baseball, phase 0 (BB-0-phase-0-handoff.md): a devOnly placeholder tile, no game yet.
@@ -916,24 +916,24 @@ const REST_MANIFEST = {
   './golf/index.html': 'ca3b3b7acc',
   './golf/css/golf.css': '8264a76361',
   './golf/js/ui.js': 'c668ae7251',
-  './golf/js/strings.js': 'fe65b2a9f3',
+  './golf/js/strings.js': '1f268783ae',
   './golf/js/holes.js': '6011b2a797',
   './golf/js/obstacles.js': '96c7fbf66c',
   './golf/js/club-art.js': 'b501cf9342',
   './golf/js/clubs.js': '5de8b3cac0',
   './golf/js/swing.js': '50dfc9ca97',
   './golf/js/shot.js': '04cb5ce654',
-  './golf/js/render.js': '7adb4b483e',
-  './golf/js/holegen.js': '4c1d27a587',
-  './golf/js/rounds.js': '19de483998',
+  './golf/js/render.js': 'd9a7f0b4de',
+  './golf/js/holegen.js': 'f5ad10ce1d',
+  './golf/js/rounds.js': 'b6455879b1',
   './golf/js/board.js': 'f6c1612123',
   './golf/js/save.js': '0126d36c18',
-  './golf/js/progress.js': '9cbb02ef79',
+  './golf/js/progress.js': '47d04c9fd5',
   './golf/js/tutorial.js': '750f5299f7',
   './golf/courses/pinevalley.js': 'aabb5248b9',
   './golf/courses/redmesa.js': 'c5eaf0e55b',
   './golf/courses/oasissands.js': 'b26e3a67c2',
-  './golf/courses/coralcove.js': '103c7cfdf6',
+  './golf/courses/coralkeys.js': '3753a90437',
   './golf/courses/tutorial.js': '5f72833828',
   './baseball/': '62e2408169',
   './baseball/index.html': '62e2408169',
