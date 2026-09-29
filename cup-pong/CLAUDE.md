@@ -72,6 +72,12 @@ now his rule. `node cup-pong/js/test.js` has a check for each, his own counter-e
   and the other team does NOT get a rebuttal."* The cup STAYS on the table while a ball is left to
   throw at it (`lastCup`); the "Last cup! Same cup wins" notice says so. A miss then removes it and
   the rebuttal follows. This is the one exception to "a made cup is gone at once".
+  **Balls back count as balls left** (Matt, 2026-09-29: *"I just beat king of games by hitting the
+  last two cups. But I didn't get the balls back to shoot again and end the game. It just gave him
+  the rebuttal"*): the last cup made by the pair's second ball, the first having gone in too, stands
+  and the balls come back; a ball in it wins with no rebuttal, both missing removes it and the
+  rebuttal follows. Frozen per challenge as `rules.lc` (`Match({ lastCupBack })`): a challenge made
+  before has no `lc` and replays as it was played, so a finished match is never re-scored.
 - **The rebuttal**: *"rebuttals is 2 shots as well - each person gets to shoot. And if the first
   ball hits a cup, they get that ball back"*. Both balls, each shooting until it misses. Clear
   everything: overtime. Both missed: the side that cleared wins.
