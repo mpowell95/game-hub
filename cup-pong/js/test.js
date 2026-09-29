@@ -164,7 +164,7 @@ ok('the whole rack area is on the table',
   m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   ok('an island is a cup touching no other', m.islands().join() === 'k9' && m.canIsland());
-  ok('you must call a specific island', m.callIsland('k0').length === 0 && !m.islandUsed.a);
+  ok('you must call a specific island', m.callIsland('k0').length === 0 && !m.islandUsed.a[0]);
   m.callIsland('k9');
   ev = m.throwResult({ made: 'k9' });
   ok('hit the called island: the defender owes a second cup', types(ev).includes('islandPick') && m.pendingPick.picker === 'b' && ids(m, 'b').join() === 'k0,k1');
@@ -183,7 +183,21 @@ ok('the whole rack area is on the table',
   m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9'); m.throwResult(miss); m.startTurn(); m.startTurn();
-  ok('island is once per game: calling spends it even on a miss', m.islandUsed.a && !m.canIsland());
+  ok('island is once per game PER BALL: ball 1\'s call is spent even on a miss', m.islandUsed.a[0] && !m.islandUsed.a[1]);
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9'); m.throwResult(miss);
+  ok('each ball is its own player: ball 2 can still call island after ball 1 did (Matt)', m.ball === 1 && m.canIsland());
+  m.callIsland('k9'); m.throwResult(miss);
+  m.startTurn(); m.throwResult(miss); m.throwResult(miss); m.startTurn();
+  ok('...and once both balls have called, neither can again', !m.canIsland() && m.islandUsed.a.every(Boolean));
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.throwResult(miss); m.callIsland('k9'); m.throwResult(miss);
+  m.startTurn(); m.throwResult(miss); m.throwResult(miss); m.startTurn();
+  ok('...on different turns: ball 2 called first, ball 1 can still call later', m.ball === 0 && m.canIsland());
+  ok('an older save (one flag a side) reads as both balls used', Match.fromJSON({ islandUsed: { a: true, b: false } }).islandUsed.a.join() === 'true,true'
+    && Match.fromJSON({ islandUsed: { a: true, b: false } }).islandUsed.b.join() === 'false,false');
   // A CHALLENGE'S ISLAND: the second cup is OWED, taken by the defender at its own next turn.
   m = new Match({ first: 'a', async: true });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();

@@ -25,7 +25,10 @@
 //       Island:      "if a cup is not touching any other cups, you can call island (once per game).
 //                    and if you hit that cup, you get 2 cups. The opposing player can choose the
 //                    second cup. If there are multiple available islands, you must call the specific
-//                    one." Calling spends it, hit or miss (Matt, 2026-09-28).
+//                    one." Calling spends it, hit or miss (Matt, 2026-09-28). EACH BALL IS ITS OWN
+//                    PLAYER (Matt, 2026-09-29): "each 'player' gets to call island once per game -
+//                    and it does NOT have to be at the same time as the other 'player'." So a side
+//                    has two calls, one per ball, and a call is for the ball about to be thrown.
 //   - BOUNCE SHOTS ARE OFF (Matt, 2026-09-28, the same day they shipped): "in real life you can
 //     hit a bounced ball away from the table... We won't be able to do that in turn based
 //     multiplayer. so maybe we shouldn't include it." A bounced make is one cup. The rule stays
@@ -72,7 +75,7 @@ export class Match {
     this.clearedBy = null;              // who cleared the rack that started the current rebuttal
     this.streak = { a: [0, 0], b: [0, 0] };
     this.reracksLeft = { a: reracks, b: reracks };
-    this.islandUsed = { a: false, b: false };
+    this.islandUsed = { a: [false, false], b: [false, false] };   // per side, per BALL
     this.called = null;                 // the island cup called for the next throw
     this.pendingPick = null;            // { picker, n } - the defender owes n more cups (island, bounce)
     this.lastCup = null;                // the last cup, made, still standing for the balls left
@@ -170,12 +173,12 @@ export class Match {
 
   islands() { return islandsOf(this.target()); }
   canIsland() {
-    return !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && !this.islandUsed[this.shooter] && !this.called
+    return !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && this.ball !== null && !this.islandUsed[this.shooter][this.ball] && !this.called
       && !this.lastCup && this.queue.length > 0 && this.islands().length > 0;
   }
   callIsland(id) {
     if (!this.canIsland() || !this.islands().includes(id)) return [];
-    this.islandUsed[this.shooter] = true;
+    this.islandUsed[this.shooter][this.ball] = true;
     this.called = id;
     return [{ type: 'islandCalled', side: this.shooter, id }];
   }
@@ -352,7 +355,7 @@ export class Match {
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
       reracksLeft: { a: enc(this.reracksLeft.a), b: enc(this.reracksLeft.b) },
-      islandUsed: { ...this.islandUsed }, owed: { ...this.owed },
+      islandUsed: { a: this.islandUsed.a.slice(), b: this.islandUsed.b.slice() }, owed: { ...this.owed },
       called: this.called, pendingPick: this.pendingPick ? { ...this.pendingPick } : null,
       lastCup: this.lastCup, queue: this.queue.slice(), pairRes: this.pairRes.slice(),
       turnThrows: this.turnThrows, rerackedThisTurn: !!this.rerackedThisTurn,
@@ -372,7 +375,9 @@ export class Match {
     m.clearedBy = o.clearedBy === 'a' || o.clearedBy === 'b' ? o.clearedBy : null;
     m.streak = { a: arr((o.streak || {}).a, 2, 0).map(Number), b: arr((o.streak || {}).b, 2, 0).map(Number) };
     m.reracksLeft = { a: dec((o.reracksLeft || {}).a), b: dec((o.reracksLeft || {}).b) };
-    m.islandUsed = { a: !!(o.islandUsed || {}).a, b: !!(o.islandUsed || {}).b };
+    // Per ball since 2026-09-29; an older save held one flag a side, read as both balls used.
+    const used = (v) => (Array.isArray(v) || (v && typeof v === 'object') ? arr(v, 2, false).slice(0, 2).map(Boolean) : [!!v, !!v]);
+    m.islandUsed = { a: used((o.islandUsed || {}).a), b: used((o.islandUsed || {}).b) };
     m.owed = { a: ((o.owed || {}).a | 0), b: ((o.owed || {}).b | 0) };
     m.called = o.called || null;
     m.pendingPick = o.pendingPick || null;
