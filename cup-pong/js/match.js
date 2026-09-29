@@ -63,8 +63,10 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true } = {}) {
     this.async = !!async;
+    // Reracks stand against the BACK WALL (Matt, 2026-09-29). Off only for a challenge made before.
+    this.backRack = backRack !== false;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
     this.gentlemans = !!gentlemans;
@@ -140,11 +142,11 @@ export class Match {
     if (this.phase !== 'normal' || this.turnThrows > 0 || this.over || this.rerackedThisTurn || this.mustPickOwed()) return false;
     if (!(this.reracksLeft[this.shooter] > 0)) return false;
     const n = this.target().length;
-    return n >= 1 && n < 10 && presetsFor(n).length > 0;
+    return n >= 1 && n < 10 && presetsFor(n, this.backRack).length > 0;
   }
   rerack(key) {
     if (!this.canRerack()) return [];
-    const p = presetsFor(this.target().length).find((x) => x.key === key);
+    const p = presetsFor(this.target().length, this.backRack).find((x) => x.key === key);
     if (!p) return [];
     const to = applyPreset(this.target(), p.spots);
     this.racks[this.defender] = to;
@@ -165,6 +167,8 @@ export class Match {
     if (!Array.isArray(cells) || cells.length !== rack.length) return [];
     const to = rack.map((k, i) => ({ id: k.id, c: cells[i] && cells[i].c, r: cells[i] && cells[i].r }));
     if (!to.every(isCell) || !validRack(to)) return [];
+    // Against the back wall: at least one cup on the back row, so the rack cannot be pulled closer.
+    if (this.backRack && !to.some((k) => k.r === 0)) return [];
     this.racks[this.defender] = to;
     if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
     this.rerackedThisTurn = true;
@@ -350,7 +354,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -366,7 +370,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };

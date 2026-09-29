@@ -123,9 +123,20 @@ cannot be reracked (`canRerack`). In a challenge it is the log entry
 `{k:'r', key:'custom', cells:[{c,r}...]}`, one cell per standing cup in rack order, and replays like
 any rerack. The computer still only uses presets.
 
-**Preset placement** follows the Gentleman's rule: the shape's FRONT row stands where the triangle's
-point is; a shape deeper than the triangle has its back row on the back row. Every preset was
-checked legal (touching, no overlaps, on the table).
+**Every rerack stands AGAINST THE BACK WALL (Matt, 2026-09-29):** *"please edit the reracks (custom
+and the presets) so that everything is set against the back wall. Right now you can do custom rerack
+and move everything closer to you. Like I just did a 3-2 rerack, but left the back row empty so it's
+all closer. that shouldn't be possible."*
+- **Presets**: the shape's BACK row stands on the rack's back row (`shape(rows, back)` in `rack.js`;
+  lines too, `backLine`). `test.js` checks every preset starts at the back row and is legal.
+- **Make your own**: at least one cup must be on the back row. The grid draws the back wall as a
+  brown strip along its top; while the back row is empty the line under the title reads
+  "⚠ Put a cup on the back row" and Done stays off. `match.rerackCustom` refuses it too.
+- **The Gentleman's line is not a rerack** and keeps its own placement (front cup on the point).
+- **Old challenges keep the old placement**: `rules.bk` (written on every new challenge) turns this
+  on; a challenge made before has none and replays with the 2026-09-28 rule (front row on the
+  triangle's point, custom anywhere), so its cups stand where its players saw them. `Match({
+  backRack })`, default on; `presetsFor(n, back)`.
 
 **The computer** takes Gentleman's whenever offered, reracks when a preset has at least 2 more
 touching pairs than what is standing (a tidier target), and calls the first island it sees and aims
@@ -178,7 +189,8 @@ is 3 cups** (two picks).
 - **Extra cups that are every cup left** (vs the computer): they all go, no pick (`extraCleared`).
 - **Not in a rebuttal** (as island), and **never the last cup** with a ball still to throw (there
   is no second cup; the last-cup rule applies). Solo counts every make as one cup.
-- **Frozen per challenge**: `rules.bo`, read only (see above). `Match({ bounce })`, default off.
+- **Frozen per challenge**: `rules.bo`, read only (see above). (`rules.bk`, the back-wall rerack
+  rule, is frozen the same way - see "Every rerack stands against the back wall".) `Match({ bounce })`, default off.
 - `test.js` asserts bounce-ins stay POSSIBLE (at least 5% of the soft-throw sweep; 89 of 403 on
   2026-09-28), so an arc change that loses them fails.
 
