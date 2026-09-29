@@ -1751,6 +1751,13 @@ function gameDetail(list, id) {
         } else {
           big = { val: metricStr, unit: metricUnit };
           subText = t('lb_played_count', { n: played });
+          // Contexto ranks on no-hint solves only, so a row reading "0" beside "1 played" looked
+          // like a bug to Matt (2026-09-29: "It's displayed confusingly"). Say where the solve went.
+          if (id === 'contexto') {
+            const ct = ((g.games || {}).contexto || {}).ct || {};
+            const withHints = Math.max(0, (ct.solved | 0) - (ct.noHint | 0));
+            if (withHints > 0) subText += ` \u00b7 ${t('lb_ct_hint_solves', { n: withHints })}`;
+          }
         }
         return playerCardHTML(g, chip, big, subText, tiles, '', tierChipHTML(rowTier));
       }).join('')}</div>`

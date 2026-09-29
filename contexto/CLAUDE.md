@@ -186,7 +186,7 @@ Matt: *"hints can't count the same as getting it with no hints."* Contexto's own
 `ct.noHint` (`gameMetricAt` in `js/leaderboard-ui.js`, unit `lb_unit_ct_nohint`, "solved, no hints").
 A hint solve is still recorded exactly as before (`total.won`, `ct.solved`) and still shown: in My
 Stats, in the player-detail game list, and as a detail tile ("Solved (hints included)") on the
-board. It just does not rank. Contexto is in `players-agg.js`'s `SOLO` set, so no Contexto solve,
+board. It just does not rank. **Since 2026-09-29 the board row SAYS so** (Matt: *"It's displayed confusingly"*, after a player who had solved with hints sat at 0 under "1 played"): a row with hint solves reads "1 played · 1 solved with hints" (`lb_ct_hint_solves`), and My Stats' tallies are "Solved, no hints" and "Solved with hints" instead of "Solved" and "No hints". Contexto is in `players-agg.js`'s `SOLO` set, so no Contexto solve,
 hint or not, ever counted toward the cross-game wins total. `test-leaderboard-rank.mjs` pins this.
 
 ## What is NOT covered by a test
