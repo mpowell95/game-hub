@@ -135,17 +135,19 @@ ok('the whole rack area is on the table',
   m.throwResult({ made: 'k0' }); m.throwResult({ made: 'k1' });
   ev = m.throwResult(miss);
   ok('an older challenge replays as it was played (the turn passed)', m.shooter === 'b');
-  // A BONUS THROW (Matt, 2026-09-30): thrown first, then the normal pair.
-  m = new Match({ first: 'a' }); m.streak.a = [2, 0]; m.startTurn();
-  ev = m.grantExtra();
-  ok('a bonus throw is granted at the start of a turn and thrown first', ev[0].type === 'extra' && m.queue.join() === '2,0,1');
+  // A BONUS THROW (Matt, 2026-09-30): granted to a side any time, taken first at its next turn.
+  m = new Match({ first: 'b' }); m.streak.a = [2, 0]; m.startTurn();
+  ev = m.grantExtra('a');
+  ok('a bonus throw can be granted during the other side\'s turn', ev[0].type === 'extra' && m.bonus.a === 1 && m.queue.join() === '0,1');
+  m.throwResult(miss); m.throwResult(miss); m.startTurn();
+  ok('...and is thrown first at that side\'s next turn', m.shooter === 'a' && m.queue.join() === '2,0,1' && m.bonus.a === 0);
   m.throwResult({ made: 'k0' });
   ok('...it makes a cup, touches no streak and the pair follows', ids(m, 'b').length === 9 && m.heat('a', 0) === 2 && m.queue.join() === '0,1');
   ev = m.throwResult({ made: 'k1' });
   ok('...and the pair plays as normal (ball 1 lights on fire and comes back)', types(ev).includes('onFire') && m.heat('a', 0) === 3 && m.ball === 0);
-  m = new Match({ first: 'a' }); m.startTurn(); m.grantExtra(); m.throwResult(miss);
+  m = new Match({ first: 'a' }); m.grantExtra('a'); m.startTurn(); m.throwResult(miss);
   ok('a missed bonus throw changes nothing: the pair still comes', m.shooter === 'a' && m.queue.join() === '0,1');
-  ok('no bonus throw once the turn has started', m.grantExtra().length === 0);
+  ok('a saved match keeps a waiting bonus', Match.fromJSON(JSON.parse(JSON.stringify((() => { const x = new Match(); x.grantExtra('b'); return x.toJSON(); })()))).bonus.b === 1);
   // BALLS BACK ON THE LAST CUP (Matt, 2026-09-29): both balls in with the second on the last cup.
   const twoLeft = (opts = {}) => { const mm = new Match({ first: 'a', ...opts }); mm.racks.b = [{ id: 'k8', c: -1, r: 2 }, { id: 'k9', c: 0, r: 3 }]; mm.startTurn(); return mm; };
   m = twoLeft(); m.throwResult({ made: 'k8' });

@@ -148,6 +148,8 @@ export function cleanEntry(e) {
  */
 export function applyEntry(match, e) {
   if (match.over) return null;
+  // A granted bonus throw is for a side, not an action on the turn: it may sit anywhere in the log.
+  if (e.k === 'x') { const ev = match.grantExtra(e.by); return ev.length ? ev : null; }
   const pre = match.queue.length ? [] : match.startTurn();
   if (e.by !== match.shooter) return null;
   let ev;
@@ -156,7 +158,6 @@ export function applyEntry(match, e) {
   else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.cells) : match.rerack(e.key);
   else if (e.k === 'i') ev = match.callIsland(e.id);
   else if (e.k === 'o') ev = match.pickOwed(e.id);
-  else if (e.k === 'x') ev = match.grantExtra();
   if (!ev || !ev.length) return null;
   return pre.concat(ev);
 }
