@@ -106,6 +106,16 @@ save or the test seam now), then "the clues marked ⚠️ are not true yet" on a
 how-to gained a line for the clue ⚠️. The taken-row dimming was also too faint to see in dark mode
 (0.32 -> 0.58; light 0.10 -> 0.22).
 
+**The clue list fills the screen (2026-09-30, same day).** Matt: *"Make the clues for the people
+(bottom part) better. The bottom quarter of the screen is blank (aka wasted)."* On a tall phone the
+board is held back by the WIDTH, so the height under the list was empty. `_fit()` now spends it on
+the list after the board is sized (the board never gives up a pixel): first **roomy cards**
+(`.is-roomy`: face and name on top, each clue on its own capitalised line, 13-17px), else the
+one-line rows with bigger type (13-16px), then taller rows via `--mu-row-pad` (capped). Outside
+the two-column compact grid, every clue is on its own line (a "·" between two clues read as one
+long, oddly wrapped sentence). Measured at 390x844: Easy cards at 15-17px; Medium, Hard and
+Expert rows at 16px; spare height 6-30px; board sizes unchanged (67/56/48/42px).
+
 Space cost, measured: a hint bar is 1-2 lines. Expert with a hint up is still 42px squares at
 390x844; on a 375x600-667 phone it drops to 26-31px while the hint is showing (40px without).
 

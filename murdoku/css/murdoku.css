@@ -444,9 +444,9 @@
 .mu-root .mu-list { flex: none; display: flex; flex-direction: column; gap: 2px; font-size: var(--mu-fs, 12px); }
 .mu-root .mu-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 4px;
-  padding: 2px 6px;
+  padding: var(--mu-row-pad, 2px) 6px;
   border: 1px solid var(--gh-border-strong, var(--mu-line));
   border-radius: 10px;
   background: var(--mu-surface);
@@ -473,6 +473,12 @@
 .mu-root .mu-name { font-weight: 800; }
 .mu-root .mu-vic { flex-basis: 100%; font-size: 11px; font-weight: 500; line-height: 1.1; color: var(--mu-muted); }
 .mu-root .mu-frags { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+/* One clue per line (two clues run together with a dot read as one long, oddly wrapped
+ * sentence). The two-column compact list (.is-grid) keeps them inline: it only exists because
+ * there is no room. */
+.mu-root .mu-list:not(.is-grid) .mu-frag { display: block; }
+.mu-root .mu-list:not(.is-grid) .mu-frag::first-letter { text-transform: uppercase; }
+.mu-root .mu-list:not(.is-grid) .mu-sep { display: none; }
 /* A clue the finished board breaks: a warning triangle and a wavy underline (not bold: bolder text
  * wraps more and would make the board jump in size the moment a board is completed). */
 .mu-root .mu-frag.is-bad { text-decoration: underline wavy var(--mu-warn); text-underline-offset: 2px; }
@@ -492,6 +498,26 @@
 .mu-root .mu-list.is-grid .mu-frags { display: inline; margin-left: 3px; }
 .mu-root .mu-list.is-grid .mu-row-ok { display: none; width: auto; margin-left: 3px; }
 .mu-root .mu-list.is-grid .mu-row.is-placed .mu-row-ok { display: inline; }
+
+/* ROOMY: when the screen has height to spare (ui.js _fit), each suspect is a card: face and name
+ * on top, then every clue on its own line, capitalised, in bigger type. Rows grow taller through
+ * --mu-row-pad to fill what is left. */
+.mu-root .mu-list.is-roomy { gap: 5px; }
+.mu-root .mu-list.is-roomy .mu-row {
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 2px;
+  padding: var(--mu-row-pad, 6px) 10px;
+  border-radius: 12px;
+}
+.mu-root .mu-list.is-roomy .mu-who { flex: 1; width: auto; column-gap: 6px; }
+.mu-root .mu-list.is-roomy .mu-face { font-size: 1.45em; }
+.mu-root .mu-list.is-roomy .mu-vic { flex-basis: auto; font-size: .8em; }
+.mu-root .mu-list.is-roomy .mu-row-ok { order: 3; width: auto; font-size: 1.1em; }
+.mu-root .mu-list.is-roomy .mu-frags { order: 4; flex-basis: 100%; padding-left: calc(13px + 1.45em + 6px); }
+.mu-root .mu-list.is-roomy .mu-frag { display: block; line-height: 1.3; }
+.mu-root .mu-list.is-roomy .mu-frag::first-letter { text-transform: uppercase; }
+.mu-root .mu-list.is-roomy .mu-sep { display: none; }
 
 /* --- overlays: how to play, the new-case confirm, the result panel --------------------------- */
 .mu-root .mu-modal--howto { width: min(400px, 100%); padding: 14px 16px 16px; }
