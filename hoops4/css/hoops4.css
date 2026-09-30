@@ -378,6 +378,25 @@
   transition: opacity 160ms ease, transform 160ms ease;
 }
 .h4-root .h4-toast.is-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* (2026-09-30) The replay of the other person's shot can be skipped. Bottom centre, over the
+   swipe pad (which is dead while it shows - the replay holds `busy`). */
+.h4-root .h4-skip {
+  appearance: none;
+  position: absolute;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 4;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.72);
+  color: #ffffff;
+  font: inherit; font-size: 17px; font-weight: 800;
+  cursor: pointer; touch-action: manipulation;
+}
+.h4-root .h4-skip[hidden] { display: none; }
 .h4-root .h4-toast.is-made { border-color: #ffce3a; color: #ffffff; }
 .h4-root .h4-toast.is-miss { border-color: rgba(255, 255, 255, 0.45); color: rgba(255, 255, 255, 0.85); font-size: 22px; }
 

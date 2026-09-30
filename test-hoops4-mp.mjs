@@ -711,5 +711,33 @@ check('a player code is normalised and validated',
   check('a nameless or "You" record is never offered', !fromT1.some((o) => o.code === 'ABCDE' || o.code === 'FGHJK'));
 }
 
+// --- the replay's throws (2026-09-30): optional, and never a reason to refuse a match ------------
+{
+  const withT = { ...doc(), moves: {
+    '0000': { by: 'a', col: 3, shots: 2, at: 10, t: [{ p: 0.5, a: -0.2, s: 123 }, { p: 0.61, a: 0.1, s: 99 }] },
+    '0001': { by: 'b', col: 4, shots: 1, at: 20, t: { 0: { p: 0.4, a: 0.3, s: 7 } } },
+  } };
+  const g = MP.validateGame(withT);
+  check('a move\'s throws are kept, oldest first', !!g && g.moves[0].t.length === 2 && g.moves[0].t[1].s === 99);
+  check('throws stored as an object (how Firebase can hand an array back) read the same', !!g && g.moves[1].t[0].p === 0.4);
+  const bad = MP.validateGame({ ...doc(), moves: { '0000': { by: 'a', col: 3, shots: 1, t: [{ p: 'x', a: 0, s: 1 }] } } });
+  check('a bad trail does NOT refuse the match - that move just has no replay', !!bad && !bad.moves[0].t);
+  check('an old move with no trail has none', !MP.validateGame(doc()).moves[0].t);
+  const many = Array.from({ length: 10 }, (_, i) => ({ p: 0.5, a: 0, s: i }));
+  const tr = MP.trailFrom(many);
+  check('only the last TRAIL_MAX throws are kept', tr.length === MP.TRAIL_MAX && tr[tr.length - 1].s === 9);
+  // replayFrom: the other person's moves since this player's own last one, less what was shown.
+  const rg = MP.validateGame(doc());   // a:col3, b:col3
+  check('replay starts after my own last move', MP.replayFrom(rg, 'a') === 1 && MP.replayFrom(rg, 'b') === 2);
+  check('a move already shown is not replayed again', MP.replayFrom(rg, 'a', 2) === 2);
+  check('a first game with nothing of mine replays from the start', MP.replayFrom({ moves: [{ by: 'a' }] }, 'b') === 0);
+  // The replay must reach the SAME position as the plain replay, however it is cut.
+  const full = MP.replay(new Match({}), rg);
+  const part = MP.replay(new Match({}), { moves: rg.moves.slice(0, 1) });
+  part.land(rg.moves[1].col);
+  check('building up to the cut then landing the rest gives the same board',
+    JSON.stringify(full.cells()) === JSON.stringify(part.cells()) && full.turn === part.turn);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

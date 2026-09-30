@@ -235,10 +235,12 @@ export function validateGame(raw) {
     const m = src[key];
     if (!m || typeof m !== 'object') return null;
     if (m.by !== 'a' && m.by !== 'b') return null;
-    if (m.miss) { moves.push({ by: m.by, col: null, miss: true, shots: 1, at: ms(m.at) }); continue; }
+    // `t` (2026-09-30, OPTIONAL) is the throw itself, for the replay: see `trailFrom`.
+    const t = trailFrom(m.t);
+    if (m.miss) { moves.push({ by: m.by, col: null, miss: true, shots: 1, at: ms(m.at), ...(t ? { t } : {}) }); continue; }
     const col = +m.col;
     if (!Number.isInteger(col) || col < 0 || col >= COLS) return null;
-    moves.push({ by: m.by, col, miss: false, shots: Math.max(1, ms(m.shots) || 1), at: ms(m.at) });
+    moves.push({ by: m.by, col, miss: false, shots: Math.max(1, ms(m.shots) || 1), at: ms(m.at), ...(t ? { t } : {}) });
   }
   if (moves.length > MAX_MOVES) return null;
 
@@ -285,6 +287,66 @@ export function validateGame(raw) {
     // OPTIONAL, and never a reason to refuse the match: see `chatFrom`.
     chat: chatFrom(raw.chat),
   };
+}
+
+/**
+ * THE THROW, KEPT FOR THE REPLAY (2026-09-30). Matt: "Connect 4 hoops should show a fast motion
+ * replay of the opponents shot when you open the challenge. The same way cup pong does."
+ *
+ * A move's optional `t` is the launch of each shot that made it - `{ p: power, a: aim, s: seed }`,
+ * the three numbers `physics.js startThrow` needs to fly the same ball again - the last
+ * `TRAIL_MAX` of them, oldest first. It is DECORATION, never the move: the recorded `col` still
+ * decides where the disc goes, whatever the replayed flight does (Cup Pong's rule, brief 5b).
+ *
+ * So a bad or missing trail is never a reason to refuse a match - it only means that move is shown
+ * the old way, a disc dropping in. Every move written before this has none.
+ */
+export const TRAIL_MAX = 6;
+export function trailFrom(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const list = Array.isArray(raw) ? raw : Object.keys(raw).sort((x, y) => +x - +y).map((k) => raw[k]);
+  const out = [];
+  for (const e of list.slice(-TRAIL_MAX)) {
+    if (!e || typeof e !== 'object') return null;
+    const p = +e.p, a = +e.a, s = +e.s;
+    if (!Number.isFinite(p) || p < -5 || p > 50) return null;   // power is unclamped (startThrow)
+    if (!Number.isFinite(a) || a < -1 || a > 1) return null;
+    if (!Number.isInteger(s) || s < 0 || s > 0x7fffffff) return null;
+    out.push({ p, a, s });
+  }
+  return out.length ? out : null;
+}
+
+/**
+ * Where the replay starts: the other person's moves since this player's own last one, minus any
+ * this phone has already shown (`readShown`). Returns an index into `game.moves`; equal to its
+ * length means nothing to show.
+ */
+export function replayFrom(game, side, shown = 0) {
+  const moves = (game && game.moves) || [];
+  let from = 0;
+  for (let i = moves.length - 1; i >= 0; i--) if (moves[i].by === side) { from = i + 1; break; }
+  return Math.min(moves.length, Math.max(from, shown | 0));
+}
+
+// How far this phone has SHOWN each match, so a replay plays once (Cup Pong's shown.v1). A one-tap
+// convenience (THE LAW rule 2's exemption): losing it replays one shot again, nothing more.
+const SHOWN_KEY = 'gamehub.hoops4.shown.v1';
+export function readShown(id) {
+  try { const m = JSON.parse(localStorage.getItem(SHOWN_KEY) || '{}'); return (m && +m[id]) || 0; } catch { return 0; }
+}
+export function markShown(id, n) {
+  if (!id) return;
+  try {
+    let m = JSON.parse(localStorage.getItem(SHOWN_KEY) || '{}');
+    if (!m || typeof m !== 'object' || Array.isArray(m)) m = {};
+    if ((+m[id] || 0) >= n) return;
+    delete m[id];
+    m[id] = n;
+    const keys = Object.keys(m);
+    for (const k of keys.slice(0, Math.max(0, keys.length - 100))) delete m[k];
+    localStorage.setItem(SHOWN_KEY, JSON.stringify(m));
+  } catch { /* private mode: the replay just plays again */ }
 }
 
 /** Which side of `game` this player is, or null if it is not their match. */
@@ -747,7 +809,7 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
  * the server rather than from the local copy: two moves can never share a key, and a stale local
  * copy cannot overwrite the other person's move.
  */
-export async function pushMove(id, { col, shots = 1, passed = false, over = null } = {}) {
+export async function pushMove(id, { col, shots = 1, passed = false, over = null, t = null } = {}) {
   const me = myCode();
   if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
   if (!writesAllowed('pushMove')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
@@ -767,14 +829,15 @@ export async function pushMove(id, { col, shots = 1, passed = false, over = null
     const patch = { updated: now };
     const landed = Number.isInteger(col) && col >= 0 && col < COLS;
     const key = String(fresh.moves.length).padStart(4, '0');
+    const trail = trailFrom(t);                        // the replay's throws; optional, see trailFrom
     if (landed) {
       await api.set(api.ref(db, `hoops/games/${id}/moves/${key}`), {
-        by: side, col, shots: Math.max(1, ms(shots) || 1), at: now,
+        by: side, col, shots: Math.max(1, ms(shots) || 1), at: now, ...(trail ? { t: trail } : {}),
       });
     } else if (passed) {
       // A one-shot miss IS an entry. Without it the other device replays a log in which this
       // player never shot, and the two boards disagree about whose turn it is from then on.
-      await api.set(api.ref(db, `hoops/games/${id}/moves/${key}`), { by: side, miss: true, at: now });
+      await api.set(api.ref(db, `hoops/games/${id}/moves/${key}`), { by: side, miss: true, at: now, ...(trail ? { t: trail } : {}) });
     }
     if (landed || passed) patch.turn = other;
     if (over) patch.over = { winner: over.winner == null ? null : over.winner, why: String(over.why || 'four'), at: now };
@@ -1066,7 +1129,7 @@ export function replay(match, game) {
 }
 
 export default {
-  asCode, myCode, meLabel, mintGameId, validateGame, replay, sideOf, isMyTurn, otherLabel,
+  asCode, myCode, meLabel, mintGameId, validateGame, replay, trailFrom, replayFrom, readShown, markShown, sideOf, isMyTurn, otherLabel,
   countMyTurns, sortRows, readMyGames, readGame, readOpponents,
   createGame, nextInSeries, pushMove, resignGame, outboxCount, queueMove, drainOutbox,
   cleanChat, chatFrom, unseenChat, sendChat, watchChat, resultOf, recordsFrom,

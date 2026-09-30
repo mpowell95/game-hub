@@ -14,6 +14,8 @@ import { BOARD, COLS } from './boarddef.js';
 import { Match, RED, YELLOW } from './game.js';
 import { Cpu } from './cpu.js';
 
+// The other person's shot, replayed on opening a challenge, runs this much faster than real time.
+const REPLAY_SPEED = 2.5;
 const CPU_OPEN_KEY = 'gamehub.hoops4.cpuOpen.v1';   // setup screen: is the computer card open
 const t = makeT(STRINGS);
 // Other players' names go into innerHTML (the notify prompt): escaped.
@@ -530,8 +532,30 @@ class Hoops4 {
     // watch below applies only what is new - and never this device's own move a second time.
     this.mp = { kind: 'async', id: game.id, side, game, MP, sent: false, review, applied: game.moves.length };
     this.myPlayer = side === 'a' ? RED : YELLOW;
-    await this.start({ vsCpu: false, oneShot: !!game.oneShot, keepMp: true, replay: (m) => MP.replay(m, game) });
+    this._trail = [];
+    // THE REPLAY (2026-09-30). Matt: "Connect 4 hoops should show a fast motion replay of the
+    // opponents shot when you open the challenge. The same way cup pong does... You should be able
+    // to skip if you want." The board is built WITHOUT the other person's moves this phone has not
+    // shown yet; those are then flown from their recorded throws (`_runReplay`). A finished match
+    // too (a tapped "they won" notification opens its review): the winning shot, then the card.
+    const from = MP.replayFrom(game, side, MP.readShown(game.id));
+    const upto = game.moves.length;
+    await this.start({ vsCpu: false, oneShot: !!game.oneShot, keepMp: true,
+      replay: (m) => MP.replay(m, { moves: game.moves.slice(0, from) }) });
     if (this.disposed || !this.match) return;
+    if (from < upto) {
+      this._runReplay(game.moves.slice(from), upto, () => this._afterOpen(game, review));
+      return;
+    }
+    MP.markShown(game.id, upto);
+    this._afterOpen(game, review);
+  }
+
+  /** The rest of opening a turn-by-turn match, once the board shows everything that happened. */
+  _afterOpen(game, review) {
+    const mp = this.mp, MP = mp && mp.MP;
+    if (this.disposed || !mp || !this.match || mp.id !== game.id) return;
+    const side = mp.side;
     if (game.over) { if (review) this.recorded = true; this.finish(); return; }
     // The match is on the server, so leaving really is free - say so rather than leaving the
     // player to discover it. This is the reassurance half of the isInProgress() fix below.
@@ -554,24 +578,138 @@ class Hoops4 {
     const mp = this.mp, m = this.match;
     if (this.disposed || !mp || mp.kind !== 'async' || mp.review || !m || g.id !== mp.id) return;
     const fresh = g.moves.slice(mp.applied);
-    let last = null;
+    const theirs = [];
     for (const e of fresh) {
       mp.applied++;
       if (e.by === mp.side) continue;                 // our own move, already on this board
-      if (m.over) break;
-      if (e.miss) { last = m.miss(); continue; }
-      for (let i = 1; i < e.shots; i++) m.miss();     // misses before a make never pass the turn
-      last = m.land(e.col);
+      theirs.push(e);
     }
     mp.game = g;
-    if (last) {
-      this._paintShot(last);
-      if (m.over) { this._whenLanded(() => { if (!this.disposed) this.finish(); }); return; }
-      if (this.isMyShot()) this._whenLanded(() => { if (!this.disposed) this.toast(t('turnYou')); });
+    // Their move arriving while you watch is shown the same way as on opening: flown, skippable.
+    if (theirs.length && !m.over) {
+      if (this._rp) { this._rp.q.push(...theirs); this._rp.upto = mp.applied; return; }
+      this._runReplay(theirs, mp.applied, () => {
+        if (this.disposed || !this.match) return;
+        if (this.match.over) { this.finish(); return; }
+        if (this.mp && this.mp.game.over && !this.recorded) { this.finish(); return; }
+        if (this.isMyShot()) this.toast(t('turnYou'));
+      });
       return;
     }
     // THEY QUIT: the match is over on the server while this board is not.
-    if (g.over && !m.over && !this.recorded) this.finish();
+    if (g.over && !m.over && !this.recorded && !this._rp) this.finish();
+  }
+
+  // --- the replay: the other person's shots, flown again from their recorded throws ------------
+  //
+  // Each move may carry `t` (hoops4/js/mp.js `trailFrom`): the power, aim and seed of the shots
+  // that made it, which `startThrow` flies again at REPLAY_SPEED. THE RECORDED MOVE DECIDES, never
+  // the flight (Cup Pong's rule): every shot but the last is scored a miss, the last lands in the
+  // stored column, and a disc only falls on `through` when the flight agrees with that column.
+  // A move with no `t` (every move before 2026-09-30) is shown as before, its disc dropping in.
+  // SKIP applies whatever is left at once and hands the board over.
+
+  _runReplay(entries, upto, done) {
+    const rp = { q: entries.slice(), upto, done, cur: null };
+    this._rp = rp;
+    this.busy = true;
+    const skip = this.root.querySelector('.h4-skip');
+    if (skip) skip.hidden = false;
+    this.paintHud();
+    this._rpLater(rp, () => this._rpNext(rp), 450);
+  }
+
+  /** A timer that dies with its replay (a skip, a teardown), so nothing from it fires late. */
+  _rpLater(rp, fn, ms) {
+    setTimeout(() => { if (!this.disposed && this._rp === rp) fn(); }, ms);
+  }
+
+  _rpNext(rp) {
+    const m = this.match;
+    if (!rp.q.length || !m || m.over) { this._rpEnd(rp); return; }
+    const e = rp.q[0];
+    const trail = Array.isArray(e.t) ? e.t : [];
+    const k = Math.min(trail.length, e.miss ? 1 : e.shots);
+    // Shots older than the kept trail are charged silently, exactly as MP.replay charges them.
+    const total = e.miss ? 1 : e.shots;
+    for (let i = 0; i < total - (k || 1); i++) m.miss();
+    if (!k) {
+      rp.q.shift();
+      this._paintShot(e.miss ? m.miss() : m.land(e.col));
+      this._whenLanded(() => this._rpLater(rp, () => this._rpNext(rp), 500));
+      return;
+    }
+    rp.cur = { e, flights: trail.slice(-k), i: 0 };
+    this._rpFly(rp);
+  }
+
+  _rpFly(rp) {
+    const f = rp.cur.flights[rp.cur.i];
+    if (!this.engine || !this.match) return;
+    if (this.rend) this.rend.setBallColor(this.match.turn === RED ? BOARD.look.red : BOARD.look.yellow);
+    this.throwState = this.engine.phys.startThrow(BOARD, { power: f.p, aim: f.a, seed: f.s, closed: this.closedHoles() });
+    this.throwState.replay = true;
+    this.captured = null;
+  }
+
+  /** May the disc start falling on this `through`? Only for the recorded make, in its column. */
+  _rpDropOk(hole) {
+    const c = this._rp && this._rp.cur;
+    const H = hole && BOARD.geom.holes[hole];
+    return !!(c && H && !c.e.miss && c.i === c.flights.length - 1 && H.value - 1 === c.e.col);
+  }
+
+  /** A replayed flight has settled: the recorded move decides it. */
+  _rpResolve() {
+    const rp = this._rp, c = rp && rp.cur, m = this.match;
+    if (!c || !m) return;
+    const last = c.i === c.flights.length - 1;
+    const res = (!last || c.e.miss) ? m.miss() : m.land(c.e.col);
+    this._paintShot(res);
+    if (!last) { c.i++; this._rpLater(rp, () => this._rpFly(rp), 300); return; }
+    rp.cur = null;
+    rp.q.shift();
+    this._whenLanded(() => this._rpLater(rp, () => this._rpNext(rp), 500));
+  }
+
+  /** SKIP: everything still to show goes onto the board at once. */
+  _rpSkip() {
+    const rp = this._rp, m = this.match;
+    if (!rp || !m) return;
+    this.throwState = null;
+    this.captured = null;
+    if (rp.cur) {
+      const { e, flights, i } = rp.cur;
+      for (let j = i; j < flights.length - 1; j++) m.miss();
+      if (!m.over) { if (e.miss) m.miss(); else m.land(e.col); }
+      rp.q.shift();
+      rp.cur = null;
+    }
+    for (const e of rp.q) {
+      if (m.over) break;
+      if (e.miss) { m.miss(); continue; }
+      for (let i = 1; i < e.shots; i++) m.miss();
+      m.land(e.col);
+    }
+    rp.q = [];
+    this._predicted = null; this._dropping = false; this._afterDrop = null;
+    if (this.rend) {
+      this.rend.cancelDrop(m.cells(), m.over ? m.winCells : null);
+      this.rend.setClosed(this.closedHoles());
+      this.rend.setBallColor(m.turn === RED ? BOARD.look.red : BOARD.look.yellow);
+    }
+    this._rpEnd(rp);
+  }
+
+  _rpEnd(rp) {
+    if (this._rp !== rp) return;
+    this._rp = null;
+    this.busy = false;
+    const skip = this.root.querySelector('.h4-skip');
+    if (skip) skip.hidden = true;
+    if (this.mp && this.mp.MP) this.mp.MP.markShown(this.mp.id, rp.upto);
+    this.paintHud();
+    rp.done();
   }
 
   /** May this device shoot right now? Solo and two-players-on-one-phone: always. Multiplayer:
@@ -643,6 +781,8 @@ class Hoops4 {
       ? { winner: m.winner === null ? null : (m.winner === RED ? 'a' : 'b'), why: m.winner === null ? 'full' : 'four' }
       : null;
     const payload = { col: landed ? col : null, shots: res.shots || 1, passed, over };
+    if (this._trail && this._trail.length) payload.t = this._trail.slice();
+    this._trail = [];
     mp.applied++;                                     // this entry is already on our board
     const r = await mp.MP.pushMove(mp.id, payload);
     if (!r.ok) {
@@ -974,11 +1114,13 @@ class Hoops4 {
           <canvas class="h4-canvas"></canvas>
           <div class="h4-swipe" aria-label="${t('swipeHint')}"></div>
           <p class="h4-toast" aria-live="polite"></p>
+          <button type="button" class="h4-skip" hidden>${t('replaySkip')}</button>
         </div>
       </div>`;
     this.paintHud();
     this.bindSwipe();
     this.on(this.root.querySelector('.h4-menu'), 'click', () => this._showPause());
+    this.on(this.root.querySelector('.h4-skip'), 'click', () => this._rpSkip());
     if (this.mp) this._mountChat();
   }
 
@@ -1268,6 +1410,11 @@ class Hoops4 {
     // off it and cannot score there. The same list paints the lids (paintHud -> setClosed).
     this.throwState = this.engine.phys.startThrow(BOARD, { power, aim, seed, closed: this.closedHoles() });
     this.captured = null;
+    // The throw is KEPT for the other person's replay (mp.js trailFrom): sent with the move.
+    if (this.mp && this.mp.kind === 'async') {
+      (this._trail || (this._trail = [])).push({ p: power, a: aim, s: seed });
+      if (this._trail.length > 6) this._trail.shift();
+    }
   }
 
   maybeCpu() {
@@ -1304,10 +1451,10 @@ class Hoops4 {
   tick(dt) {
     // THE DISC FALLING DOWN ITS COLUMN, advanced by the game's own loop. A no-op unless one is
     // in the air - see render.js's startDrop.
-    if (this.rend) this.rend.stepDrop(dt);
+    if (this.rend) this.rend.stepDrop(this._rp ? dt * REPLAY_SPEED : dt);
     const st = this.throwState;
     if (st && !st.done) {
-      this.engine.phys.step(BOARD, st, dt);
+      this.engine.phys.step(BOARD, st, st.replay ? dt * REPLAY_SPEED : dt);
       for (const ev of this.engine.phys.takeEvents(st)) {
         // THE DISC FALLS ON `through`, NOT ON `capture` (2026-09-22). Matt: "A ball can bounce
         // around on a rim and the ball falls down the column while the ball is still bouncing
@@ -1319,6 +1466,7 @@ class Hoops4 {
         if (ev.type === 'rimout') this.captured = null;
         if (ev.type === 'through') {
           this.captured = ev.hole;
+          if (st.replay && !this._rpDropOk(ev.hole)) continue;   // the record says otherwise
           this.rend && this.rend.flashRim(ev.hole);
           this._dropOnCapture(ev.hole);
         }
@@ -1336,6 +1484,7 @@ class Hoops4 {
   }
 
   resolve(st) {
+    if (st.replay) { this._rpResolve(); return; }
     const m = this.match;
     const hole = st.outcome && st.outcome.hole;
     const H = BOARD.geom.holes[hole];
@@ -1541,6 +1690,7 @@ class Hoops4 {
       this.rend = null;
     }
     this.throwState = null;
+    this._rp = null;
     this.engine = null;
     this.busy = false;
   }

@@ -21,6 +21,7 @@ column. Four in a row wins.
 | Settings key | `gamehub.hoops4.v1` (two preferences: the opponent, and `shots`: `'until'` \| `'one'`) |
 | Multiplayer | LIVE via `js/net.js` (`rooms/<CODE>`); TURN BY TURN via `hoops4/js/mp.js` (`hoops/games/<id>`, a NEW top-level node) |
 | Outbox key | `gamehub.hoops4.outbox.v1` (turn-by-turn moves waiting on a signal) |
+| Replay shown key | `gamehub.hoops4.shown.v1` (per match: how many moves this phone has replayed; a convenience, losing it replays a shot again) |
 | Difficulty axis | the CPU skill — `easy` / `medium` / `hard`, plus `'mp'` for a multiplayer match (the repo's own convention — `'mp'` is unmapped in `js/difficulty-tiers.js`, so `tierOf('mp')` is null and it never lands in a difficulty tier). A two-player-on-one-phone match records nothing, because there is no "you" in it |
 | `isInProgress()` | the **no mid-game resume** meaning (Ball Run / Snake / Pinball's class) |
 
@@ -552,6 +553,34 @@ both `{a:1,b:0}` with the opponent as side 'a', and no game 3 existed anywhere.*
 - **Reaching the owed game 3**: a finished match opened from History (review) used to NEVER offer
   "Next game" (fear of forking the series). It now offers it when no later game of that series
   exists yet. The series line also uses the STORED winner, so a resignation scores right.
+
+### The other person's shot is REPLAYED, fast, and can be skipped (2026-09-30)
+
+Matt: *"Connect 4 hoops should show a fast motion replay of the opponents shot when you open the
+challenge. The same way cup pong does. Please implement. You should be able to skip if you want."*
+
+- **A move now carries its throws.** Optional `t: [{p, a, s}]` on a move entry (power, aim, seed:
+  exactly what `physics.js startThrow` needs to fly the same ball again), the last `TRAIL_MAX` (6)
+  shots of that turn, oldest first. Recorded in `shoot()` (`this._trail`), sent by `_sendShot`,
+  parsed by `mp.js trailFrom`. **A bad or missing trail never refuses a match** - that move is just
+  shown the old way (its disc drops in). Every move before this date has none.
+- **The recorded move decides, never the flight** (Cup Pong's rule): every replayed shot but the
+  last is scored a miss, the last lands in the stored `col`, and a disc only starts falling on
+  `through` when the flight agrees with that column (`_rpDropOk`). Otherwise `_paintShot` drops it
+  in the right column once the flight settles.
+- **What replays**: the other person's moves since your own last one (`replayFrom`), less what this
+  phone has shown (`gamehub.hoops4.shown.v1`), so it plays ONCE. On opening a match (a finished
+  one too: the winning shot, then the card) and when their move arrives while you watch.
+  `startAsync` builds the board WITHOUT those moves, then `_runReplay` flies them.
+- **Fast motion**: `REPLAY_SPEED` (2.5x) on the physics step and the disc drop. Median throw 1.6 s
+  real, so about 0.7 s replayed.
+- **Skip**: a "Skip replay" pill at the bottom centre (`.h4-skip`), only while a replay runs. It
+  applies whatever is left at once (`_rpSkip`) and hands the board over. `busy` is held for the
+  whole replay, so nobody can shoot into a board that is still catching up.
+- Verified in Chromium with the database stubbed: a two-shot move (a miss, then a make) flew both
+  shots and landed in the stored column; Skip at 0.9 s gave the identical board and shot counts;
+  a reopen did not replay again; a move arriving live replayed. `test-hoops4-mp.mjs` covers the
+  trail and `replayFrom`.
 
 ### Their move arrives while you watch; names on the bubble; the card once (2026-09-23)
 
