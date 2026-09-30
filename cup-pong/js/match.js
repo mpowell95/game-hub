@@ -7,7 +7,10 @@
 //     row for heating up and 3 in a row for on fire. and on fire means you get that ball back and
 //     shoot until you miss." Each ball keeps its own streak across turns; every throw of that ball
 //     counts, balls-back throws included (Matt, same day). The 3rd make in a row lights it, and from
-//     then that ball comes straight back after every make until it misses.
+//     then that ball comes straight back after every make until it misses. A FIRE RUN KEEPS BALLS
+//     BACK (Matt, 2026-09-30): "I should get to shoot my made fire shot until I miss, then we get
+//     balls back and each get another shot." The miss that ends a fire run does not undo that ball's
+//     make in this pair. `fireBallsBack` switches it; old challenges replay without it.
 //   - THE LAST CUP (2026-09-28): make it with a ball and you still throw the ball(s) you have left.
 //     Put another in THE SAME CUP and you win outright, no rebuttal. Otherwise the cup goes and the
 //     other side gets a rebuttal. BALLS BACK COUNT AS BALLS LEFT (Matt, 2026-09-29: "I just beat
@@ -67,11 +70,12 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true } = {}) {
     this.async = !!async;
     // Reracks stand against the BACK WALL (Matt, 2026-09-29). Off only for a challenge made before.
     this.backRack = backRack !== false;
     this.lastCupBack = lastCupBack !== false;
+    this.fireBallsBack = fireBallsBack !== false;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
     this.gentlemans = !!gentlemans;
@@ -182,8 +186,20 @@ export class Match {
 
   islands() { return islandsOf(this.target()); }
   canIsland() {
-    return !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && this.ball !== null && !this.islandUsed[this.shooter][this.ball] && !this.called
+    return !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && this.ball !== null && this.ball !== 2 && !this.islandUsed[this.shooter][this.ball] && !this.called
       && !this.lastCup && this.queue.length > 0 && this.islands().length > 0;
+  }
+  /**
+   * A BONUS THROW, granted by Matt to put right a turn the rules got wrong (2026-09-30: "give me an
+   * extra throw in my next move against king of games"). Only at the very start of the shooter's
+   * turn. It is ball 2 and is thrown first: it can make a cup (the last-cup rule applies), but it has
+   * no streak, never counts toward balls back and cannot call island. No screen offers it; it is a
+   * challenge log entry, `{ k: 'x' }`.
+   */
+  grantExtra() {
+    if (this.over || this.phase !== 'normal' || this.turnThrows > 0 || this.queue.length !== 2 || this.mustPickOwed()) return [];
+    this.queue.unshift(2);
+    return [{ type: 'extra', side: this.shooter }];
   }
   callIsland(id) {
     if (!this.canIsland() || !this.islands().includes(id)) return [];
@@ -250,8 +266,9 @@ export class Match {
     }
 
     if (hit) {
-      const s = ++this.streak[side][ball];
-      this.pairRes[ball] = true;
+      const bonus = ball === 2;                          // a granted bonus throw: no streak, no balls back
+      const s = bonus ? 0 : ++this.streak[side][ball];
+      if (!bonus) this.pairRes[ball] = true;
       if (s === 2) ev.push({ type: 'heatingUp', side, ball });
       if (s >= 3) {
         if (s === 3) ev.push({ type: 'onFire', side, ball });
@@ -303,9 +320,11 @@ export class Match {
     }
 
     ev.push({ type: 'miss', side, ball });
+    if (ball === 2) return ev.concat(this._afterThrow());          // a bonus throw's miss changes nothing else
     if (this.streak[side][ball] >= 3) ev.push({ type: 'cooled', side, ball });
     this.streak[side][ball] = 0;
-    this.pairRes[ball] = false;
+    // The miss that ends a fire run keeps this ball's make in the pair: balls back still come.
+    if (!(this.fireBallsBack && this.pairRes[ball] === true)) this.pairRes[ball] = false;
     return ev.concat(this._afterThrow());
   }
 
@@ -360,7 +379,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -376,7 +395,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };

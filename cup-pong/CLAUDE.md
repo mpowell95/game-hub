@@ -67,6 +67,17 @@ now his rule. `node cup-pong/js/test.js` has a check for each, his own counter-e
   to the other ball. The ball itself shows it: amber at 2 in a row, flame orange from 3
   (`setBallHeat`), and the bar says "Ball 1 heating up" / "Ball 1 on fire".
 - **Balls back**: both balls' last throws of the pair were makes. It repeats.
+  **A fire run keeps balls back** (Matt, 2026-09-30: *"I should get to shoot my made fire shot until
+  I miss, then we get balls back and each get another shot"*): the miss that ends a fire run does
+  not undo that ball's make in the pair, so the fire ball shoots until it misses and THEN the balls
+  come back if the other ball made its shot too. Before, that miss passed the turn. Frozen per
+  challenge as `rules.fb` (`Match({ fireBallsBack })`); an older challenge replays as it was.
+  **A bonus throw** (`{ k: 'x' }` in a challenge log, `match.grantExtra()`): Matt asked for one in
+  his match vs King of Games (`mun9hjrulielgqfw`) to make up for the fire turn above, which could
+  not be replayed under the new rule because King had already played after it. It is granted only
+  at the very start of a turn, thrown first as ball 2 (no streak, never counts toward balls back, no
+  island call), then the normal pair. No screen offers it: it was written into that one match by
+  hand, on Matt's request, after a backup of the node.
 - **The last cup**: *"if I have 1 cup left to hit, and I make it with my first ball, I still get to
   shoot the second ball. If I make that ball too (so both balls are in the same cup) i win the game
   and the other team does NOT get a rebuttal."* The cup STAYS on the table while a ball is left to
