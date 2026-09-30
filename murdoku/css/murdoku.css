@@ -331,6 +331,16 @@
 /* A clash or a blocked square: a dashed outline AND a warning triangle, never colour alone. */
 .mu-root .mu-token.is-warn { outline: 3px dashed var(--mu-warn); outline-offset: 0; }
 .mu-root .mu-token:focus-visible { outline: 3px solid var(--mu-select); outline-offset: 1px; }
+/* The victim changes every case, so her token carries a skull badge (plus the dark token). */
+.mu-root .mu-skull {
+  position: absolute;
+  top: 0;
+  left: 1px;
+  z-index: 4;
+  font-size: clamp(11px, calc(var(--mu-cell, 30px) * .3), 18px);
+  line-height: 1;
+  pointer-events: none;
+}
 .mu-root .mu-warnicon {
   position: absolute;
   top: 0;

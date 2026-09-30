@@ -157,7 +157,7 @@ function plan(x0, y0, rows, cols, room, put = {}, ring = [], mark = {}) {
   return out;
 }
 const svgBox = (w, h, body) => `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${body}</svg>`;
-const FACE = { ada: '\u{1F469}', bruno: '\u{1F9D4}', clara: '\u{1F475}', skull: '\u{1F480}' };
+const FACE = { ana: '\u{1F469}\u200D\u{1F373}', elena: '\u{1F469}\u200D\u{1F3A8}', natalia: '\u{1F469}\u200D\u{1F52C}', skull: '\u{1F480}' };
 const one = () => 0;
 
 const HOWTO_PAGES = [
@@ -165,23 +165,23 @@ const HOWTO_PAGES = [
     title: 'ht1_title', lines: ['ht1_a', 'ht1_b'],
     svg: () => svgBox(236, 110,
       `<text x="118" y="44" text-anchor="middle" font-size="40">${FACE.skull}</text>`
-      + `<text x="118" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="var(--mu-ink)">Victor</text>`
-      + [FACE.ada, FACE.bruno, FACE.clara].map((f, k) => `<circle cx="${62 + k * 56}" cy="92" r="15" fill="var(--mu-token-bg)" stroke="var(--mu-ink)" stroke-width="2"/><text x="${62 + k * 56}" y="98" text-anchor="middle" font-size="17">${f}</text>`).join('')
+      + `<text x="118" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="var(--mu-ink)">${esc(t('ht1_victim'))}</text>`
+      + [FACE.ana, FACE.elena, FACE.natalia].map((f, k) => `<circle cx="${62 + k * 56}" cy="92" r="15" fill="var(--mu-token-bg)" stroke="var(--mu-ink)" stroke-width="2"/><text x="${62 + k * 56}" y="98" text-anchor="middle" font-size="17">${f}</text>`).join('')
       + `<text x="${62 + 28}" y="98" text-anchor="middle" font-size="16" font-weight="800" fill="var(--mu-muted)">?</text><text x="${62 + 84}" y="98" text-anchor="middle" font-size="16" font-weight="800" fill="var(--mu-muted)">?</text>`),
   },
   { // 2. One per row and column
     title: 'ht2_title', lines: ['ht2_a', 'ht2_b', 'ht2_c'],
     svg: () => svgBox(236, 118,
-      plan(6, 12, 3, 3, one, { '0,0': FACE.ada, '1,2': FACE.bruno, '2,1': FACE.clara }, [], { '0,2': 'yes' })
-      + plan(128, 12, 3, 3, one, { '0,0': FACE.ada, '0,2': FACE.bruno }, [], { '0,1': 'no' })),
+      plan(6, 12, 3, 3, one, { '0,0': FACE.ana, '1,2': FACE.elena, '2,1': FACE.natalia }, [], { '0,2': 'yes' })
+      + plan(128, 12, 3, 3, one, { '0,0': FACE.ana, '0,2': FACE.elena }, [], { '0,1': 'no' })),
   },
   { // 3. Clues, and what "beside" means
     title: 'ht3_title', lines: ['ht3_a', 'ht3_b', 'ht3_c'],
     svg: () => svgBox(236, 118,
       `<rect x="4" y="2" width="228" height="26" rx="13" fill="var(--mu-surface)" stroke="var(--mu-line)"/>`
-      + `<text x="118" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="var(--mu-ink)">${FACE.ada} Ada: ${esc(t('frag_by', { obj: t('obj_plant') }))} \u{1FAB4}</text>`
-      + plan(6, 42, 2, 3, one, { '0,1': 'obj:\u{1FAB4}', '0,0': FACE.ada }, [], { '0,0': 'yes' })
-      + plan(128, 42, 2, 3, (r, c) => (c === 0 ? 0 : 1), { '0,1': 'obj:\u{1FAB4}', '0,0': FACE.ada }, [], { '0,0': 'no' })),
+      + `<text x="118" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="var(--mu-ink)">${FACE.ana} Ana: ${esc(t('frag_by', { obj: t('obj_plant') }))} \u{1FAB4}</text>`
+      + plan(6, 42, 2, 3, one, { '0,1': 'obj:\u{1FAB4}', '0,0': FACE.ana }, [], { '0,0': 'yes' })
+      + plan(128, 42, 2, 3, (r, c) => (c === 0 ? 0 : 1), { '0,1': 'obj:\u{1FAB4}', '0,0': FACE.ana }, [], { '0,0': 'no' })),
   },
   { // 4. Where people can stand
     title: 'ht4_title', lines: ['ht4_a', 'ht4_b'],
@@ -207,14 +207,14 @@ const HOWTO_PAGES = [
   { // 5. Who did it
     title: 'ht5_title', lines: ['ht5_a', 'ht5_b', 'ht5_c'],
     svg: () => svgBox(236, 118,
-      plan(67, 8, 3, 3, (r, c) => (r < 2 && c < 2 ? 0 : 1), { '0,0': FACE.skull, '1,1': FACE.bruno, '2,2': FACE.ada }, ['1,1'])
+      plan(67, 8, 3, 3, (r, c) => (r < 2 && c < 2 ? 0 : 1), { '0,0': FACE.skull, '1,1': FACE.elena, '2,2': FACE.ana }, ['1,1'])
       + `<text x="${67 + 3 * CELL + 6}" y="${8 + 1.5 * CELL + 4}" font-size="12" font-weight="800" fill="var(--mu-ink)">\u2190 ${esc(t('ht5_tag'))}</text>`),
   },
   { // 6. How to play it here
     title: 'ht6_title', lines: ['ht6_a', 'ht6_b', 'ht6_c'],
     svg: () => svgBox(236, 96,
       `<rect x="8" y="22" width="112" height="34" rx="10" fill="var(--mu-select-tint)" stroke="var(--mu-select)" stroke-width="2.5"/>`
-      + `<text x="22" y="45" font-size="16">${FACE.ada}</text><text x="44" y="44" font-size="14" font-weight="800" fill="var(--mu-ink)">Ada</text>`
+      + `<text x="20" y="45" font-size="16">${FACE.ana}</text><text x="44" y="44" font-size="14" font-weight="800" fill="var(--mu-ink)">Ana</text>`
       + `<text x="64" y="88" text-anchor="middle" font-size="13" font-weight="800" fill="var(--mu-ink)">1</text>`
       + `<path d="M128 39h26" stroke="var(--mu-muted)" stroke-width="2.5" marker-end="url(#mu-arrow)"/>`
       + `<defs><marker id="mu-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="var(--mu-muted)"/></marker></defs>`
@@ -547,6 +547,7 @@ class MurdokuUI {
         if (clash.has(who)) alt += ' ' + t('warn_clash') + '.';
         if (blocked.has(who)) alt += ' ' + t('warn_blocked') + '.';
         html = `<div class="${cls}" role="button" tabindex="0" data-p="${who}" aria-label="${esc(alt)}">${info.face}</div>`
+          + (info.victim ? '<span class="mu-skull" aria-hidden="true">\u{1F480}</span>' : '')
           + (warn ? '<span class="mu-warnicon" aria-hidden="true">⚠️</span>' : '');
       } else if (this.marks.has(s)) {
         html = `<span class="mu-mark" aria-hidden="true">✕</span>`;
@@ -1001,7 +1002,7 @@ class MurdokuUI {
       <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>
       <h2 class="gh-modal__title">${esc(t('win_title'))}</h2>
       <div class="mu-win-who"><span class="mu-win-face" aria-hidden="true">${killer.face}</span><b>${esc(killer.name)}</b></div>
-      <p class="mu-win-line">${esc(t('win_line', { name: killer.name, room }))}</p>
+      <p class="mu-win-line">${esc(t('win_line', { name: killer.name, victim: personInfo(p, p.victim).name, room }))}</p>
       <p class="mu-win-time">${esc(t('win_time', { time: fmtTime(this.elapsedMs) }))}</p>
       <div class="gh-modal__actions">
         <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-ov="new">${esc(t('new_case'))}</button>
