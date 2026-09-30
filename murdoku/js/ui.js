@@ -449,7 +449,7 @@ class MurdokuUI {
       const frags = by[i].map((ci) => {
         const bad = broken.has(ci);
         return `<span class="mu-frag${bad ? ' is-bad' : ''}">${bad ? `<span class="mu-fragwarn" role="img" aria-label="${esc(t('warn_clue'))}">⚠️</span> ` : ''}${esc(clueText(p, p.clues[ci]))}</span>`;
-      }).join(' · ');
+      }).join('<span class="mu-sep"> · </span>');
       const state = selected ? t('row_selected') : placed ? t('row_placed') : t('row_waiting');
       return `<div class="mu-row${selected ? ' is-sel' : ''}${placed ? ' is-placed' : ''}${info.victim ? ' is-victim' : ''}" role="button" tabindex="0" data-p="${i}" aria-pressed="${selected}" aria-label="${esc(`${info.name}, ${state}`)}">
         <span class="mu-row-cur" aria-hidden="true">▶</span>
@@ -563,6 +563,8 @@ class MurdokuUI {
       this.el.boardcol.style.height = side + 'px';
       this.el.board.style.setProperty('--mu-cell', ((side - 2 * BOARD_BORDER) / n).toFixed(2) + 'px');
     };
+    list.classList.remove('is-roomy');
+    root.style.removeProperty('--mu-row-pad');
     const apply = (grid, fs, beside) => {
       list.classList.toggle('is-grid', grid);
       root.style.setProperty('--mu-fs', fs + 'px');
@@ -590,6 +592,39 @@ class MurdokuUI {
       const side = Math.floor(Math.max(n * 12, best.side));
       tools.style.width = best.beside ? Math.floor(innerW - side - gap) + 'px' : '';
       setBoard(side);
+      // ROOMY (Matt, 2026-09-30: "The bottom quarter of the screen is blank (aka wasted)"). When
+      // the board is held back by the WIDTH, not the height (Easy and Medium on a tall phone),
+      // the height left over goes to the clues: bigger type, one clue per line, then taller rows.
+      // The board never gives up a pixel for it - every size is checked against `side`.
+      if (!best.grid && !best.beside) {
+        const room = () => mainH - 44 - 2 * gap - list.offsetHeight - side;
+        list.classList.add('is-roomy');
+        let fit = false;
+        for (const fs of [17, 16, 15, 14, 13]) {
+          root.style.setProperty('--mu-fs', fs + 'px');
+          if (room() >= 0) { fit = true; break; }
+        }
+        if (!fit) {
+          // Cards do not fit: keep one line per suspect, but still grow the type into the space.
+          list.classList.remove('is-roomy');
+          root.style.setProperty('--mu-fs', best.fs + 'px');
+          for (const fs of [16, 15, 14, 13]) {
+            if (fs <= best.fs) break;
+            root.style.setProperty('--mu-fs', fs + 'px');
+            if (room() >= 0) { fit = true; break; }
+            root.style.setProperty('--mu-fs', best.fs + 'px');
+          }
+        }
+        // Whatever is still left becomes row height (easier to tap, easier to read), capped so a
+        // short list does not turn into a few giant slabs.
+        const rows = list.querySelectorAll('.mu-row').length || 1;
+        let pad = Math.min(12, Math.floor(room() / rows / 2));
+        for (; pad > 0; pad--) {
+          root.style.setProperty('--mu-row-pad', (4 + pad) + 'px');
+          if (room() >= 0) break;
+        }
+        if (pad <= 0) root.style.removeProperty('--mu-row-pad');
+      }
     } else {
       // Wide: [board][tool column][suspect list], left to right, so the list gets the full height.
       tools.style.width = TOOLS_MIN_W + 'px';

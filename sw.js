@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1031';
+const CACHE = 'game-hub-v1032';
 
 const ASSETS = [
   './',
@@ -752,8 +752,8 @@ const REST_MANIFEST = {
   './contexto/data/es.bin': 'a9d2e833b0',
   './murdoku/': '027318da6e',
   './murdoku/index.html': '027318da6e',
-  './murdoku/css/murdoku.css': 'e7dd256338',
-  './murdoku/js/ui.js': 'c515f0c6b3',
+  './murdoku/css/murdoku.css': '95c6121a6b',
+  './murdoku/js/ui.js': '305a3025c0',
   './murdoku/js/engine.js': 'a09b5f5a2c',
   './murdoku/js/strings.js': '2ab345574e',
   './sudoku/': '802a47aafa',
