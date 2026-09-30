@@ -78,7 +78,8 @@ now his rule. `node cup-pong/js/test.js` has a check for each, his own counter-e
   SIDE (`by`) and may sit anywhere in the log (`applyEntry` handles it before the turn checks); it
   waits in `match.bonus[side]` and is taken at that side's next normal turn, thrown first as ball 2
   (no streak, never counts toward balls back, no island call), then the normal pair. No screen
-  offers it: it was written into that one match by hand, on Matt's request, after a full backup.
+  offers it: it was written into that one match by hand, on Matt's request, after a full backup. The
+  other player's phone applies it SILENTLY (Matt: *"Don't explain anything on his phone"*).
 - **The last cup**: *"if I have 1 cup left to hit, and I make it with my first ball, I still get to
   shoot the second ball. If I make that ball too (so both balls are in the same cup) i win the game
   and the other team does NOT get a rebuttal."* The cup STAYS on the table while a ball is left to
