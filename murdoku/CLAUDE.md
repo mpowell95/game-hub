@@ -116,6 +116,16 @@ the two-column compact grid, every clue is on its own line (a "·" between two c
 long, oddly wrapped sentence). Measured at 390x844: Easy cards at 15-17px; Medium, Hard and
 Expert rows at 16px; spare height 6-30px; board sizes unchanged (67/56/48/42px).
 
+**How to play is a six-page guide (2026-09-30, same day).** Matt, of the one-screen version with a
+diagram and six rule lines: *"This isn't easy to understand."* `HOWTO_PAGES` in `js/ui.js`: one rule
+per page, each with its own SVG picture and one to three short lines, Back / Next and dots, a steady
+height so Next stays under the thumb. Pages: who killed Victor; one per row and column (a right and
+a wrong board); follow the clues, "beside" = touching in the same room (the clue written out, then a
+right board and one with a wall); where people can stand; who did it (the one in the skull's room);
+how to tap (name, then square, 💡 when stuck). Yes/no is a tick in a CIRCLE vs a cross in a SQUARE,
+never colour alone. The guided first case opens with the same pages, its last button "Let's go";
+the old four-step intro card is gone. Lines still fit one row each (`_fitLines`).
+
 Space cost, measured: a hint bar is 1-2 lines. Expert with a hint up is still 42px squares at
 390x844; on a 375x600-667 phone it drops to 26-31px while the hint is showing (40px without).
 

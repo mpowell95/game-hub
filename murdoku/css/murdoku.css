@@ -531,14 +531,22 @@
 .mu-root .mu-line--goal { font-weight: 800; }
 .mu-root .mu-line--caption { text-align: center; color: var(--mu-muted); margin-bottom: 8px; }
 .mu-root .mu-line--example { text-align: center; font-weight: 700; margin-bottom: 8px; }
-.mu-root .mu-howto-diagram { display: flex; justify-content: center; margin: 4px 0 6px; }
-.mu-root .mu-howto-diagram svg { width: 150px; height: auto; }
+.mu-root .mu-howto-diagram { display: flex; justify-content: center; margin: 6px 0 10px; }
+.mu-root .mu-howto-diagram > svg { width: min(100%, 280px); height: auto; }
+/* A steady height, so Next stays under the thumb from page to page. */
+.mu-root .mu-howto { display: flex; flex-direction: column; min-height: min(420px, calc(100dvh - 120px)); }
+.mu-root .mu-howto .mu-dots { margin-top: auto; }
+/* The step-by-step guide (ui.js HOWTO_PAGES): one rule per page, Back / Next, dots. */
+.mu-root .mu-howto-step { margin: 0 44px 2px 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--mu-muted); }
+.mu-root .mu-howto .mu-line { text-align: center; }
+.mu-root .mu-dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 12px; }
+.mu-root .mu-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--mu-muted); }
+.mu-root .mu-dot.is-on { background: var(--mu-ink); border-color: var(--mu-ink); width: 20px; border-radius: 4px; }
+.mu-root .mu-howto-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mu-root .mu-howto-nav .gh-btn { min-height: 48px; }
 .mu-root .mu-modal--howto .gh-modal__actions { margin-top: 10px; }
 .mu-root .mu-confirm-text { margin: 0 0 4px; font-size: 14px; }
 .mu-root .mu-modal--confirm { width: min(360px, 100%); }
-.mu-root .mu-modal--guided { width: min(400px, 100%); }
-.mu-root .mu-modal--guided .gh-modal__title { margin: 0 44px 8px 0; }
-.mu-root .mu-guided-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.35; }
 .mu-root .mu-modal--win { text-align: center; }
 .mu-root .mu-modal--win .gh-modal__title { margin: 0 44px 8px 44px; }
 .mu-root .mu-win-who { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 4px 0 8px; font-size: 18px; }
