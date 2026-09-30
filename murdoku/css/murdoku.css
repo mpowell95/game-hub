@@ -17,9 +17,9 @@
   --mu-hatch: rgba(22, 36, 58, .26);
   --mu-token-bg: #ffffff;
   --mu-victim-bg: #2a2f3d;
-  --mu-rug-line: #8a5a3c;
-  --mu-rug-a: #d9b48f;
-  --mu-rug-b: #f0dcc6;
+  --mu-rug-fringe: #b08a4f;
+  --mu-rug-a: #a3453b;
+  --mu-rug-b: #f1d48a;
   --mu-accent: #8a1c1c;
   --mu-hero-bg: linear-gradient(135deg, rgba(138, 28, 28, .16), rgba(138, 28, 28, .05));
   /* Seven pastel room tints, one per possible room. The tint is only a SECOND cue: the walls carry
@@ -64,9 +64,9 @@
   --mu-hatch: rgba(238, 242, 248, .3);
   --mu-token-bg: #eef2f8;
   --mu-victim-bg: #0b1220;
-  --mu-rug-line: #c99a78;
-  --mu-rug-a: #6d4a33;
-  --mu-rug-b: #503725;
+  --mu-rug-fringe: #d9b877;
+  --mu-rug-a: #b5544a;
+  --mu-rug-b: #f1d48a;
   --mu-hero-bg: linear-gradient(135deg, rgba(255, 138, 112, .28), rgba(255, 138, 112, .08));
   --mu-r0: #24405f;
   --mu-r1: #5a4a22;
@@ -239,31 +239,53 @@
   line-height: 1;
   pointer-events: none;
 }
-/* A rug can be stood on: a patterned inset, no emoji. */
+/* A rug can be stood on: a flat fringed rug drawn in SVG (ui.js RUG_SVG), no emoji. */
 .mu-root .mu-rug {
   position: absolute;
-  inset: 16%;
+  inset: 12% 6%;
   z-index: 1;
-  border: 2px solid var(--mu-rug-line);
-  border-radius: 3px;
-  background: repeating-linear-gradient(90deg, var(--mu-rug-a) 0 3px, var(--mu-rug-b) 3px 6px);
+  display: flex;
   pointer-events: none;
 }
-.mu-root .mu-badge {
+.mu-root .mu-rug svg { width: 100%; height: 100%; }
+/* Each room's name, on the board (ui.js _roomLabels). Above the furniture and the "taken" dimming,
+ * under the people and the walls. */
+.mu-root .mu-roomlabel {
   position: absolute;
-  top: 1px;
-  left: 1px;
-  z-index: 0;
-  /* Big enough to FIND: every "in the Kitchen" clue sends the player looking for this icon. */
-  font-size: clamp(11px, calc(var(--mu-cell, 30px) * .36), 20px);
-  line-height: 1;
-  padding: 1px 2px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, .8);
-  box-shadow: 0 0 0 1px rgba(22, 36, 58, .25);
+  left: calc(var(--mu-cell, 30px) * var(--c));
+  top: calc(var(--mu-cell, 30px) * var(--r));
+  max-width: calc(var(--mu-cell, 30px) * var(--w) - 3px);
+  z-index: 3;
+  padding: 1px 4px 1px 3px;
+  border-radius: 0 0 6px 0;
+  background: rgba(255, 255, 255, .86);
+  box-shadow: 0 0 0 1px rgba(22, 36, 58, .22);
+  color: var(--mu-ink);
+  font-size: clamp(11px, calc(var(--mu-cell, 30px) * .24), 14px);
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
-.gh-dark .mu-root .mu-badge { background: rgba(16, 25, 43, .8); box-shadow: 0 0 0 1px rgba(230, 235, 245, .3); }
+.gh-dark .mu-root .mu-roomlabel { background: rgba(16, 25, 43, .86); box-shadow: 0 0 0 1px rgba(230, 235, 245, .3); }
+/* A hint's squares: a dashed gold ring (shape, not only colour) that gently pulses; the revealed
+ * answer is a thicker solid ring. Above the dimming, under the people. */
+.mu-root .mu-cell.is-hint::before,
+.mu-root .mu-cell.is-hint-answer::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  z-index: 3;
+  border: 3px dashed var(--mu-select);
+  border-radius: 6px;
+  background: rgba(255, 206, 58, .22);
+  pointer-events: none;
+  animation: mu-hint-glow 1.2s ease-in-out infinite alternate;
+}
+.mu-root .mu-cell.is-hint-answer::before { border: 4px solid var(--mu-select); background: rgba(255, 206, 58, .4); }
+@keyframes mu-hint-glow { from { opacity: .55; } to { opacity: 1; } }
 /* Rows and columns a placed person already fills are dimmed. */
 .mu-root .mu-cell.is-taken::after {
   content: '';
@@ -276,7 +298,7 @@
 .mu-root .mu-dyn {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -364,6 +386,21 @@
   background: var(--mu-select-tint);
   box-shadow: inset 0 0 0 3px var(--mu-select);
 }
+.mu-root .mu-hintbtn {
+  flex: none;
+  min-width: 64px;
+  height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--gh-border-strong, var(--mu-line));
+  border-radius: var(--gh-r-md, 12px);
+  background: var(--mu-surface);
+  color: var(--mu-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
 .mu-root .mu-status {
   flex: 1;
   min-width: 0;
@@ -381,6 +418,21 @@
 .mu-root .mu-stage.is-beside .mu-toolbtn { width: 100%; min-width: 0; height: 44px; }
 .mu-root .mu-stage.is-beside .mu-toolbtn + .mu-toolbtn { border-left: 0; border-top: 1px solid var(--gh-border-strong, var(--mu-line)); }
 .mu-root .mu-stage.is-beside .mu-status { flex: none; -webkit-line-clamp: 5; }
+.mu-root .mu-stage.is-beside .mu-hintbtn { width: 100%; }
+
+/* The hint, at the top of the suspect list (inside it, so the fit measures it). */
+.mu-root .mu-hintbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 2px solid var(--mu-select);
+  border-radius: 10px;
+  background: var(--mu-select-tint);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.mu-root .mu-list.is-grid .mu-hintbar { grid-column: 1 / -1; }
 
 /* --- the suspect list ---------------------------------------------------------------------- */
 /* Rows are full width but only as tall as their clues (about 21-40px): with up to eight rows on a
@@ -456,6 +508,9 @@
 .mu-root .mu-modal--howto .gh-modal__actions { margin-top: 10px; }
 .mu-root .mu-confirm-text { margin: 0 0 4px; font-size: 14px; }
 .mu-root .mu-modal--confirm { width: min(360px, 100%); }
+.mu-root .mu-modal--guided { width: min(400px, 100%); }
+.mu-root .mu-modal--guided .gh-modal__title { margin: 0 44px 8px 0; }
+.mu-root .mu-guided-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.35; }
 .mu-root .mu-modal--win { text-align: center; }
 .mu-root .mu-modal--win .gh-modal__title { margin: 0 44px 8px 44px; }
 .mu-root .mu-win-who { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 4px 0 8px; font-size: 18px; }
@@ -466,4 +521,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mu-root * { transition-duration: 1ms !important; }
+  /* The ring stays, fully visible; only the pulse goes. */
+  .mu-root .mu-cell.is-hint::before, .mu-root .mu-cell.is-hint-answer::before { animation: none; opacity: 1; }
 }

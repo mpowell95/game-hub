@@ -281,15 +281,16 @@ export function countSolutions(puz, clues, limit = 2) {
  *  one possible square; a row or column only one person can reach) plus the consequences of
  *  each placement. level 2: adds clue-chain reasoning (arc consistency on two-person clues).
  *  Returns { solved, pos, steps }. Sound, so `solved` also proves the answer is unique. */
-export function humanSolve(puz, clues, level) {
+export function humanSolve(puz, clues, level, given) {
   const n = puz.n, P = puz.people.length;
   const doms = staticDomains(puz, clues).map((d) => new Set(d));
   const pos = new Array(P).fill(-1);
   const binary = clues.filter((cl) => BINARY.has(cl.k));
   const alones = clues.filter((cl) => cl.k === 'alone');
+  const order = [];   // who was placed, in the order the deductions placed them
   let steps = 0;
   function place(p, s) {
-    pos[p] = s; doms[p] = new Set([s]); steps++;
+    pos[p] = s; doms[p] = new Set([s]); steps++; order.push(p);
     const r = rowOf(n, s), c = colOf(n, s);
     for (let q = 0; q < P; q++) {
       if (q === p || pos[q] >= 0) continue;
@@ -304,6 +305,8 @@ export function humanSolve(puz, clues, level) {
       }
     }
   }
+  // Placements the player has already made (and got right) are taken as known.
+  if (given) given.forEach((s, p) => { if (s >= 0 && doms[p].has(s)) place(p, s); });
   for (let guard = 0; guard < 500; guard++) {
     let progress = false;
     // naked single
@@ -377,7 +380,7 @@ export function humanSolve(puz, clues, level) {
     if (!progress) break;
   }
   const solved = pos.every((s) => s >= 0) && clues.every((cl) => holds(puz, cl, pos) === true);
-  return { solved, pos, steps };
+  return { solved, pos, steps, order };
 }
 
 // ---- layout ------------------------------------------------------------------------------------
@@ -559,6 +562,69 @@ export function validPuzzle(puz) {
     if (!Array.isArray(puz.clues) || !puz.clues.length) return false;
     return true;
   } catch { return false; }
+}
+
+// ---- hints -------------------------------------------------------------------------------------
+/** The squares each unplaced person could still take, judged only by what is VISIBLE on the board
+ *  right now: their own clues, the blockers, the rows and columns already used, and every clue
+ *  that links them to somebody already placed. This is what a player can check by eye. */
+export function visibleDomains(puz, placed) {
+  const n = puz.n, P = puz.people.length;
+  const doms = staticDomains(puz, puz.clues);
+  const rows = new Set(), cols = new Set(), cells = new Set();
+  placed.forEach((s) => { if (s >= 0) { rows.add(rowOf(n, s)); cols.add(colOf(n, s)); cells.add(s); } });
+  const linked = puz.clues.filter((cl) => !UNARY.has(cl.k));
+  const pos = placed.slice();
+  return doms.map((d, p) => {
+    if (placed[p] >= 0) return [placed[p]];
+    const out = [];
+    for (const s of d) {
+      if (cells.has(s) || rows.has(rowOf(n, s)) || cols.has(colOf(n, s))) continue;
+      pos[p] = s;
+      const ok = linked.every((cl) => (cl.p !== p && cl.b !== p && cl.k !== 'alone') || holds(puz, cl, pos) !== false);
+      pos[p] = -1;
+      if (ok) out.push(s);
+    }
+    return out;
+  });
+}
+
+/** The next step a player could take from `pos` (their board), as plainly as it can be put:
+ *    { k: 'wrong', p }            somebody is on a square that is not theirs (fix that first);
+ *    { k: 'only', p, cells:[s] }  only one square left fits this person;
+ *    { k: 'row'|'col', p, cells } this row/column still needs someone and only p can go there;
+ *    { k: 'look', p, cells }      p is the next person logic pins down: these are their
+ *                                 possible squares, and the other clues decide between them.
+ *  null when the board is already solved. Every hint names ONE person, so the UI can select them. */
+export function nextHint(puz, pos) {
+  const n = puz.n, P = puz.people.length;
+  for (let p = 0; p < P; p++) if (pos[p] >= 0 && pos[p] !== puz.solution[p]) return { k: 'wrong', p, cells: [pos[p]] };
+  if (pos.every((s) => s >= 0)) return null;
+  const doms = visibleDomains(puz, pos);
+  for (let p = 0; p < P; p++) if (pos[p] < 0 && doms[p].length === 1) return { k: 'only', p, cells: doms[p] };
+  for (const byRow of [true, false]) {
+    const line = (s) => (byRow ? rowOf(n, s) : colOf(n, s));
+    const used = new Set(pos.filter((s) => s >= 0).map(line));
+    for (let i = 0; i < n; i++) {
+      if (used.has(i)) continue;
+      const who = [];
+      for (let p = 0; p < P; p++) if (pos[p] < 0 && doms[p].some((s) => line(s) === i)) who.push(p);
+      if (who.length === 1) {
+        const p = who[0];
+        return { k: byRow ? 'row' : 'col', p, cells: doms[p].filter((s) => line(s) === i) };
+      }
+    }
+  }
+  // Nothing is forced by sight alone: point at the person with the FEWEST squares left (the easiest
+  // to test one by one), ties going to whoever the logic pins down first.
+  const hs = humanSolve(puz, puz.clues, 3, pos);
+  const rank = (q) => { const i = hs.order.indexOf(q); return i < 0 ? P : i; };
+  let p = -1;
+  for (let q = 0; q < P; q++) {
+    if (pos[q] >= 0) continue;
+    if (p < 0 || doms[q].length < doms[p].length || (doms[q].length === doms[p].length && rank(q) < rank(p))) p = q;
+  }
+  return { k: 'look', p, cells: doms[p].length ? doms[p] : [puz.solution[p]] };
 }
 
 export default { generate, countSolutions, humanSolve, checkBoard, holds, personInfo, validPuzzle };
