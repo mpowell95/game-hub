@@ -120,7 +120,7 @@ class MurdokuUI {
     this.puz = null; this.pos = []; this.marks = new Set();
     this.elapsedMs = 0; this.solved = false; this.recorded = false;
     this.sel = -1; this.mode = 'place';
-    this.guided = false; this.hint = null;
+    this.guided = false; this.hint = null; this.notice = '';
     this.check = null;
     this._runStart = null; this._timerInterval = null;
     this._genTimer = null; this._building = false;
@@ -466,8 +466,23 @@ class MurdokuUI {
 
   /** The hint bar at the top of the suspect list (inside it, so `_fit()` measures it for free). */
   _hintHTML() {
+    if (this.solved) return '';
+    // Anything marked ⚠️ is explained here in words first (Matt, 2026-09-30: "It doesn't even
+    // explain what this alert symbol means"). Order: a move that was refused, a rule the board
+    // breaks, then clues a full board breaks, then the hint.
+    const chk = this.check || checkBoard(this.puz, this.pos);
+    const bar = (icon, msg, cls) => `<div class="mu-hintbar${cls ? ' ' + cls : ''}" role="status"><span aria-hidden="true">${icon}</span><span>${esc(msg)}</span></div>`;
+    if (this.notice) return bar('✋', this.notice, 'is-warn');
+    if (chk.blocked.length) {
+      const q = chk.blocked[0];
+      return bar('⚠️', t('bar_blocked', { name: personInfo(this.puz, q).name, obj: t('obj_' + this.puz.objects[this.pos[q]]) }), 'is-warn');
+    }
+    if (chk.clash.length) return bar('⚠️', t('bar_clash', { name: personInfo(this.puz, chk.clash[0]).name }), 'is-warn');
+    if (chk.full && chk.broken.length && !this.hint) {
+      return bar('⚠️', t(chk.broken.length === 1 ? 'bar_broken_one' : 'bar_broken_many', { n: chk.broken.length }), 'is-warn');
+    }
     const h = this.hint;
-    if (!h || this.solved) return '';
+    if (!h) return '';
     const name = personInfo(this.puz, h.p).name;
     // The reason first, then (once revealed) where. A one-square hint is its own answer.
     let msg = h.k === 'look' ? t('hint_look', { name, k: h.cells.length }) : t('hint_' + h.k, { name });
@@ -480,6 +495,7 @@ class MurdokuUI {
    *  square. The hinted person is selected, so the next tap on a square places them. */
   _hintTap() {
     if (this.solved || !this.puz) return;
+    this.notice = '';
     const h = this.hint;
     if (h && !h.reveal && h.k !== 'wrong' && h.cells.length > 1) {
       this.hint = { ...h, reveal: true };
@@ -611,7 +627,7 @@ class MurdokuUI {
     }
     if (this.screen !== 'play') return;
     const tool = target.closest('[data-tool]');
-    if (tool) { this.mode = tool.dataset.tool; if (this.mode === 'mark') this.sel = -1; this._paint(); this._fit(); return; }
+    if (tool) { this.mode = tool.dataset.tool; this.notice = ''; if (this.mode === 'mark') this.sel = -1; this._paint(); this._fit(); return; }
     const tok = target.closest('.mu-token');
     if (tok) { this._liftPerson(Number(tok.dataset.p)); return; }
     const cell = target.closest('.mu-cell');
@@ -677,6 +693,7 @@ class MurdokuUI {
 
   _rowTap(p) {
     if (this.solved) return;
+    this.notice = '';
     this.sel = this.sel === p ? -1 : p;
     if (this.sel >= 0) this.mode = 'place';
     this._paint(); this._fit();
@@ -700,7 +717,24 @@ class MurdokuUI {
     }
     if (who >= 0) { this._liftPerson(who); return; }
     if (this.sel < 0) { this._paint(); return; }
+    const why = this._whyNot(this.sel, cell);
+    if (why) { this.notice = why; this._paint(); this._fit(); return; }
     this._place(this.sel, cell);
+  }
+
+  /** A tap that would break a placement rule is REFUSED and explained, rather than allowed and
+   *  marked with a warning a new player cannot read. Returns the explanation, or '' if allowed. */
+  _whyNot(p, cell) {
+    const puz = this.puz, n = puz.n;
+    const obj = puz.objects[cell];
+    if (isBlocker(obj)) return t('no_blocked', { obj: t('obj_' + obj) });
+    for (let q = 0; q < this.pos.length; q++) {
+      const s = this.pos[q];
+      if (q === p || s < 0) continue;
+      if (((s / n) | 0) === ((cell / n) | 0)) return t('no_row', { name: personInfo(puz, q).name });
+      if (s % n === cell % n) return t('no_col', { name: personInfo(puz, q).name });
+    }
+    return '';
   }
 
   /** Put person p on a square (moving them if they were placed). The one path every placement
@@ -717,6 +751,7 @@ class MurdokuUI {
   }
 
   _afterChange() {
+    this.notice = '';
     const chk = checkBoard(this.puz, this.pos);
     if (chk.solved) { this.hint = null; this._win(); return; }
     if (this.guided) this._autoHint(); else this.hint = null;
@@ -850,6 +885,7 @@ class MurdokuUI {
       <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line3'))}</p>
       <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line4'))}</p>
       <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line5'))}</p>
+      <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line6'))}</p>
       <div class="gh-modal__actions">
         <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-ov="close">${esc(t('howto_close'))}</button>
       </div>`);
