@@ -380,6 +380,7 @@ class CupPong {
     for (const e of m.startTurn()) {
       if (e.type === 'rebuttal') this.toast(e.side === 'a' ? t('rebuttalYou') : t('rebuttal'), 1600);
     }
+    if (m.shooter === 'a' && m.ball === 2) this.toast(t('extraYou'), 1600);
     R.setMarks('a', null); R.setMarks('b', null);
     this.paintHud();
     R.setView(m.shooter === 'a' ? 'shoot' : 'defend');
@@ -604,6 +605,7 @@ class CupPong {
     if (m.shooter !== 'a') { this.mpWaiting(); return; }
     if (m.queue.length) {
       R.setView('shoot');
+      if (m.ball === 2) this.toast(t('extraYou'), 1600);
       if (m.mustPickOwed()) this.askOwed(); else this.serveMatchBall();
     } else this.beginTurn();
   }
@@ -679,7 +681,6 @@ class CupPong {
   /** Events applied without a flight (this player's own actions on reopen): the table only. */
   showEventsQuiet(ev) {
     const R = this.engine.rend;
-    if (ev.some((e) => e.type === 'extra' && e.side === 'a')) this.toast(t('extraYou'), 1600);
     for (const e of ev) {
       if (e.type === 'gentlemans' || e.type === 'rerack') R.setRack(e.side, cupsXZ(e.to));
     }

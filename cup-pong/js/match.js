@@ -78,6 +78,7 @@ export class Match {
     this.fireBallsBack = fireBallsBack !== false;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
+    this.bonus = { a: 0, b: 0 };        // granted bonus throws waiting for that side's next turn (grantExtra)
     this.gentlemans = !!gentlemans;
     this.reracks = reracks;
     this.racks = { a: makeRack('tri10'), b: makeRack('tri10') };
@@ -127,6 +128,10 @@ export class Match {
     this.pairRes = [null, null];
     this.turnThrows = 0;
     this.rerackedThisTurn = false;       // one rerack a turn
+    if (this.phase === 'normal' && (this.bonus[this.shooter] | 0) > 0) {   // a granted bonus throw goes first
+      this.bonus[this.shooter]--;
+      this.queue.unshift(2);
+    }
     this.called = null;
     this.lastCup = null;
     if (this.phase === 'rebuttal') ev.push({ type: 'rebuttal', side: this.shooter });
@@ -191,15 +196,15 @@ export class Match {
   }
   /**
    * A BONUS THROW, granted by Matt to put right a turn the rules got wrong (2026-09-30: "give me an
-   * extra throw in my next move against king of games"). Only at the very start of the shooter's
-   * turn. It is ball 2 and is thrown first: it can make a cup (the last-cup rule applies), but it has
-   * no streak, never counts toward balls back and cannot call island. No screen offers it; it is a
-   * challenge log entry, `{ k: 'x' }`.
+   * extra throw in my next move against king of games"). Granted to a SIDE at any time; it is taken
+   * at the start of that side's next normal turn, as ball 2, thrown first: it can make a cup (the
+   * last-cup rule applies), but it has no streak, never counts toward balls back and cannot call
+   * island. No screen offers it; it is a challenge log entry, `{ k: 'x', by: <the side it is for> }`.
    */
-  grantExtra() {
-    if (this.over || this.phase !== 'normal' || this.turnThrows > 0 || this.queue.length !== 2 || this.mustPickOwed()) return [];
-    this.queue.unshift(2);
-    return [{ type: 'extra', side: this.shooter }];
+  grantExtra(side) {
+    if (this.over || (side !== 'a' && side !== 'b')) return [];
+    this.bonus[side] = (this.bonus[side] | 0) + 1;
+    return [{ type: 'extra', side }];
   }
   callIsland(id) {
     if (!this.canIsland() || !this.islands().includes(id)) return [];
@@ -384,7 +389,7 @@ export class Match {
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
       reracksLeft: { a: enc(this.reracksLeft.a), b: enc(this.reracksLeft.b) },
-      islandUsed: { a: this.islandUsed.a.slice(), b: this.islandUsed.b.slice() }, owed: { ...this.owed },
+      islandUsed: { a: this.islandUsed.a.slice(), b: this.islandUsed.b.slice() }, owed: { ...this.owed }, bonus: { ...this.bonus },
       called: this.called, pendingPick: this.pendingPick ? { ...this.pendingPick } : null,
       lastCup: this.lastCup, queue: this.queue.slice(), pairRes: this.pairRes.slice(),
       turnThrows: this.turnThrows, rerackedThisTurn: !!this.rerackedThisTurn,
@@ -408,6 +413,7 @@ export class Match {
     const used = (v) => (Array.isArray(v) || (v && typeof v === 'object') ? arr(v, 2, false).slice(0, 2).map(Boolean) : [!!v, !!v]);
     m.islandUsed = { a: used((o.islandUsed || {}).a), b: used((o.islandUsed || {}).b) };
     m.owed = { a: ((o.owed || {}).a | 0), b: ((o.owed || {}).b | 0) };
+    m.bonus = { a: ((o.bonus || {}).a | 0), b: ((o.bonus || {}).b | 0) };
     m.called = o.called || null;
     m.pendingPick = o.pendingPick || null;
     m.lastCup = o.lastCup || null;
@@ -432,7 +438,7 @@ export function swapSides(o) {
   return {
     ...o,
     racks: pair(o.racks), streak: pair(o.streak), reracksLeft: pair(o.reracksLeft),
-    islandUsed: pair(o.islandUsed), owed: pair(o.owed),
+    islandUsed: pair(o.islandUsed), owed: pair(o.owed), bonus: pair(o.bonus),
     shooter: sw(o.shooter), clearedBy: sw(o.clearedBy), winner: sw(o.winner),
     pendingPick: o.pendingPick ? { ...o.pendingPick, picker: sw(o.pendingPick.picker) } : null,
   };
