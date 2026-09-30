@@ -630,7 +630,9 @@ class CupPong {
     const R = this.engine.rend;
     const hint = this.root.querySelector('.cp-hint');
     if (hint) hint.hidden = true;
-    if (e.by === 'a') {                 // this player's own action, from another phone or a reopen
+    // This player's own action (another phone or a reopen), or a bonus throw: applied silently -
+    // Matt, 2026-09-30: "Don't explain anything on his phone."
+    if (e.by === 'a' || e.k === 'x') {
       const ev = this.MP.applyEntry(m, e) || [];
       mp.applied++;
       this.showEventsQuiet(ev);
@@ -657,7 +659,6 @@ class CupPong {
     if (e.k === 'g') this.toast(t('theyGentlemans', { name: mp.themName }), 1300);
     else if (e.k === 'r') this.toast(t('theyRerack', { name: mp.themName }), 1300);
     else if (e.k === 'i') { R.setMarks('a', [e.id], 'called'); this.toast(t('theyIsland', { name: mp.themName }), 1300); }
-    else if (e.k === 'x') this.toast(t('theyExtra', { name: mp.themName }), 1500);
     else this.showEvents(ev);
     this.paintHud();
     this.later(() => { this.replaying = false; this.mpCatchUp(); }, 1100);
