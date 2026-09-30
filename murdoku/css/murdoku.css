@@ -13,7 +13,7 @@
   --mu-select: #ffce3a;          /* the standing selection accent, always paired with a shape */
   --mu-select-tint: rgba(255, 206, 58, .2);
   --mu-warn: #c0392b;
-  --mu-taken: rgba(22, 36, 58, .10);
+  --mu-taken: rgba(22, 36, 58, .22);
   --mu-hatch: rgba(22, 36, 58, .26);
   --mu-token-bg: #ffffff;
   --mu-victim-bg: #2a2f3d;
@@ -60,7 +60,7 @@
   --mu-muted: #a9b7cc;
   --mu-select-tint: rgba(255, 206, 58, .24);
   --mu-warn: #ff8a70;
-  --mu-taken: rgba(6, 10, 20, .32);
+  --mu-taken: rgba(6, 10, 20, .58);
   --mu-hatch: rgba(238, 242, 248, .3);
   --mu-token-bg: #eef2f8;
   --mu-victim-bg: #0b1220;
@@ -433,6 +433,8 @@
   line-height: 1.3;
 }
 .mu-root .mu-list.is-grid .mu-hintbar { grid-column: 1 / -1; }
+/* A refused move or a rule the board breaks: a dashed border and a ⚠️/✋ lead (not colour alone). */
+.mu-root .mu-hintbar.is-warn { border-style: dashed; border-color: var(--mu-warn); background: var(--mu-surface); }
 
 /* --- the suspect list ---------------------------------------------------------------------- */
 /* Rows are full width but only as tall as their clues (about 21-40px): with up to eight rows on a

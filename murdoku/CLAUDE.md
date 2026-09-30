@@ -97,6 +97,15 @@ changes, all live the same day:
   the hint, WITH its square, is always on screen and re-computed after every move. "Learn to play"
   on the setup screen replays it. `guided` rides the save; a guided solve records like any other.
 
+**Every ⚠️ is explained in words (2026-09-30, same day).** Matt: *"It doesn't even explain what this
+alert symbol on the top right means."* Two changes: a tap that would break a placement rule (a
+blocker, or a row/column somebody else is in) is now REFUSED and explained in the bar at the top of
+the list (`_whyNot()`, a dashed ✋ bar), so a clash can no longer be made by tapping; and the bar
+explains, in order, a refused tap, a person on a blocker, a clash (both only reachable from an old
+save or the test seam now), then "the clues marked ⚠️ are not true yet" on a full wrong board. The
+how-to gained a line for the clue ⚠️. The taken-row dimming was also too faint to see in dark mode
+(0.32 -> 0.58; light 0.10 -> 0.22).
+
 Space cost, measured: a hint bar is 1-2 lines. Expert with a hint up is still 42px squares at
 390x844; on a 375x600-667 phone it drops to 26-31px while the hint is showing (40px without).
 
