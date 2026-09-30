@@ -109,6 +109,120 @@ const ICON_HELP = `<svg ${SVG_ATTR}><circle cx="12" cy="12" r="9"/><path d="M9.5
 const RUG_SVG = `<svg viewBox="0 0 40 30" aria-hidden="true"><path d="M2 8H6M2 12H6M2 16H6M2 20H6M2 24H6M34 8H38M34 12H38M34 16H38M34 20H38M34 24H38" stroke="var(--mu-rug-fringe)" stroke-width="1.4" stroke-linecap="round"/><rect x="6" y="5" width="28" height="22" rx="2" fill="var(--mu-rug-a)"/><rect x="9.5" y="8.5" width="21" height="15" rx="1.5" fill="none" stroke="var(--mu-rug-b)" stroke-width="1.4" stroke-dasharray="2.6 2"/><path d="M20 11.5L24.5 16L20 20.5L15.5 16Z" fill="var(--mu-rug-b)"/></svg>`;
 const ICON_NEW = `<svg ${SVG_ATTR}><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></svg>`;
 
+// --- how to play: the pictures --------------------------------------------------------------------
+// Small floor plans drawn in SVG from the theme's own variables (so dark mode is free). Meaning is
+// carried by shapes: a tick in a CIRCLE for "yes", a cross in a SQUARE for "no", a dashed ring for
+// "this one" - never colour alone (Matt is red/green colourblind).
+
+const CELL = 34;
+function yesBadge(x, y) {
+  return `<circle cx="${x}" cy="${y}" r="9" fill="#178A7A" stroke="var(--mu-surface)" stroke-width="2"/>`
+    + `<path d="M${x - 4.5} ${y}l3 3l6-6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+function noBadge(x, y) {
+  return `<rect x="${x - 9}" y="${y - 9}" width="18" height="18" rx="3" fill="#E0532F" stroke="var(--mu-surface)" stroke-width="2"/>`
+    + `<path d="M${x - 4} ${y - 4}l8 8M${x + 4} ${y - 4}l-8 8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`;
+}
+/** A mini floor plan at (x0, y0). `room(r, c)` gives a room index (tint + walls); `put` maps
+ *  "r,c" to an emoji (a person in a token, `obj:` prefix for furniture); `ring` cells get the
+ *  dashed "this one" ring; `mark` maps "r,c" to 'yes' / 'no'. */
+function plan(x0, y0, rows, cols, room, put = {}, ring = [], mark = {}) {
+  const S = CELL;
+  let out = '';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      out += `<rect x="${x0 + c * S}" y="${y0 + r * S}" width="${S}" height="${S}" fill="var(--mu-r${room(r, c) % 7})" stroke="var(--mu-line)" stroke-width="1"/>`;
+    }
+  }
+  let d = '';
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols - 1; c++) if (room(r, c) !== room(r, c + 1)) d += `M${x0 + (c + 1) * S} ${y0 + r * S}v${S}`;
+  for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols; c++) if (room(r, c) !== room(r + 1, c)) d += `M${x0 + c * S} ${y0 + (r + 1) * S}h${S}`;
+  out += `<path d="${d}" stroke="var(--mu-wall)" stroke-width="3.5" stroke-linecap="square" fill="none"/>`;
+  out += `<rect x="${x0}" y="${y0}" width="${cols * S}" height="${rows * S}" fill="none" stroke="var(--mu-wall)" stroke-width="3.5"/>`;
+  for (const [k, v] of Object.entries(put)) {
+    const [r, c] = k.split(',').map(Number);
+    const cx = x0 + c * S + S / 2, cy = y0 + r * S + S / 2;
+    if (v.startsWith('obj:')) out += `<text x="${cx}" y="${cy + 7}" text-anchor="middle" font-size="19">${v.slice(4)}</text>`;
+    else out += `<circle cx="${cx}" cy="${cy}" r="14" fill="var(--mu-token-bg)" stroke="var(--mu-ink)" stroke-width="2"/><text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="17">${v}</text>`;
+  }
+  for (const k of ring) {
+    const [r, c] = k.split(',').map(Number);
+    out += `<rect x="${x0 + c * S + 1.5}" y="${y0 + r * S + 1.5}" width="${S - 3}" height="${S - 3}" rx="5" fill="none" stroke="var(--mu-select)" stroke-width="3" stroke-dasharray="6 4"/>`;
+  }
+  for (const [k, v] of Object.entries(mark)) {
+    const [r, c] = k.split(',').map(Number);
+    const bx = x0 + (c + 1) * S - 3, by = y0 + r * S + 3;
+    out += v === 'yes' ? yesBadge(bx, by) : noBadge(bx, by);
+  }
+  return out;
+}
+const svgBox = (w, h, body) => `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${body}</svg>`;
+const FACE = { ada: '\u{1F469}', bruno: '\u{1F9D4}', clara: '\u{1F475}', skull: '\u{1F480}' };
+const one = () => 0;
+
+const HOWTO_PAGES = [
+  { // 1. The goal
+    title: 'ht1_title', lines: ['ht1_a', 'ht1_b'],
+    svg: () => svgBox(236, 110,
+      `<text x="118" y="44" text-anchor="middle" font-size="40">${FACE.skull}</text>`
+      + `<text x="118" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="var(--mu-ink)">Victor</text>`
+      + [FACE.ada, FACE.bruno, FACE.clara].map((f, k) => `<circle cx="${62 + k * 56}" cy="92" r="15" fill="var(--mu-token-bg)" stroke="var(--mu-ink)" stroke-width="2"/><text x="${62 + k * 56}" y="98" text-anchor="middle" font-size="17">${f}</text>`).join('')
+      + `<text x="${62 + 28}" y="98" text-anchor="middle" font-size="16" font-weight="800" fill="var(--mu-muted)">?</text><text x="${62 + 84}" y="98" text-anchor="middle" font-size="16" font-weight="800" fill="var(--mu-muted)">?</text>`),
+  },
+  { // 2. One per row and column
+    title: 'ht2_title', lines: ['ht2_a', 'ht2_b', 'ht2_c'],
+    svg: () => svgBox(236, 118,
+      plan(6, 12, 3, 3, one, { '0,0': FACE.ada, '1,2': FACE.bruno, '2,1': FACE.clara }, [], { '0,2': 'yes' })
+      + plan(128, 12, 3, 3, one, { '0,0': FACE.ada, '0,2': FACE.bruno }, [], { '0,1': 'no' })),
+  },
+  { // 3. Clues, and what "beside" means
+    title: 'ht3_title', lines: ['ht3_a', 'ht3_b', 'ht3_c'],
+    svg: () => svgBox(236, 118,
+      `<rect x="4" y="2" width="228" height="26" rx="13" fill="var(--mu-surface)" stroke="var(--mu-line)"/>`
+      + `<text x="118" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="var(--mu-ink)">${FACE.ada} Ada: ${esc(t('frag_by', { obj: t('obj_plant') }))} \u{1FAB4}</text>`
+      + plan(6, 42, 2, 3, one, { '0,1': 'obj:\u{1FAB4}', '0,0': FACE.ada }, [], { '0,0': 'yes' })
+      + plan(128, 42, 2, 3, (r, c) => (c === 0 ? 0 : 1), { '0,1': 'obj:\u{1FAB4}', '0,0': FACE.ada }, [], { '0,0': 'no' })),
+  },
+  { // 4. Where people can stand
+    title: 'ht4_title', lines: ['ht4_a', 'ht4_b'],
+    svg: () => {
+      const yes = [['', 'floor'], ['\u{1FA91}', ''], ['rug', '']];
+      const no = ['\u{1FAB4}', '\u{1F4DA}', '\u{1F3B9}', '\u{1F4FA}'];
+      let b = '';
+      yes.forEach(([e, kind], k) => {
+        const x = 30 + k * 62;
+        b += `<rect x="${x}" y="8" width="${CELL}" height="${CELL}" rx="3" fill="var(--mu-r0)" stroke="var(--mu-line)"/>`;
+        if (e === 'rug') b += RUG_SVG.replace('<svg ', `<svg x="${x + 3}" y="14" width="${CELL - 6}" height="${CELL - 12}" `);
+        else if (e) b += `<text x="${x + CELL / 2}" y="${8 + CELL / 2 + 7}" text-anchor="middle" font-size="19">${e}</text>`;
+        b += yesBadge(x + CELL - 2, 10);
+      });
+      no.forEach((e, k) => {
+        const x = 14 + k * 54;
+        b += `<rect x="${x}" y="62" width="${CELL}" height="${CELL}" rx="3" fill="var(--mu-r1)" stroke="var(--mu-line)"/>`
+          + `<text x="${x + CELL / 2}" y="${62 + CELL / 2 + 7}" text-anchor="middle" font-size="19">${e}</text>` + noBadge(x + CELL - 2, 64);
+      });
+      return svgBox(236, 104, b);
+    },
+  },
+  { // 5. Who did it
+    title: 'ht5_title', lines: ['ht5_a', 'ht5_b', 'ht5_c'],
+    svg: () => svgBox(236, 118,
+      plan(67, 8, 3, 3, (r, c) => (r < 2 && c < 2 ? 0 : 1), { '0,0': FACE.skull, '1,1': FACE.bruno, '2,2': FACE.ada }, ['1,1'])
+      + `<text x="${67 + 3 * CELL + 6}" y="${8 + 1.5 * CELL + 4}" font-size="12" font-weight="800" fill="var(--mu-ink)">\u2190 ${esc(t('ht5_tag'))}</text>`),
+  },
+  { // 6. How to play it here
+    title: 'ht6_title', lines: ['ht6_a', 'ht6_b', 'ht6_c'],
+    svg: () => svgBox(236, 96,
+      `<rect x="8" y="22" width="112" height="34" rx="10" fill="var(--mu-select-tint)" stroke="var(--mu-select)" stroke-width="2.5"/>`
+      + `<text x="22" y="45" font-size="16">${FACE.ada}</text><text x="44" y="44" font-size="14" font-weight="800" fill="var(--mu-ink)">Ada</text>`
+      + `<text x="64" y="88" text-anchor="middle" font-size="13" font-weight="800" fill="var(--mu-ink)">1</text>`
+      + `<path d="M128 39h26" stroke="var(--mu-muted)" stroke-width="2.5" marker-end="url(#mu-arrow)"/>`
+      + `<defs><marker id="mu-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="var(--mu-muted)"/></marker></defs>`
+      + plan(164, 5, 2, 2, one, {}, ['0,1'])
+      + `<text x="${164 + CELL}" y="88" text-anchor="middle" font-size="13" font-weight="800" fill="var(--mu-ink)">2</text>`),
+  },
+];
+
 // --- the UI --------------------------------------------------------------------------------------
 
 class MurdokuUI {
@@ -859,6 +973,7 @@ class MurdokuUI {
     const act = t0.closest('[data-ov]');
     if (!act) return;
     const a = act.dataset.ov;
+    if (a === 'next' || a === 'prev') { this._howtoPage += a === 'next' ? 1 : -1; this._renderHowtoPage(); return; }
     if (a === 'close') this._closeOverlay();
     else if (a === 'confirm-new') { this._closeOverlay(true); this._startFresh(); }
     else if (a === 'new') { this._closeOverlay(true); this._startFresh(); }
@@ -875,20 +990,8 @@ class MurdokuUI {
       </div>`);
   }
 
-  _openGuidedIntro() {
-    this._openOverlay('guided', `
-      <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>
-      <h2 class="gh-modal__title">${esc(t('guided_title'))}</h2>
-      <ol class="mu-guided-steps">
-        <li>${esc(t('guided_1'))}</li>
-        <li>${esc(t('guided_2'))}</li>
-        <li>${esc(t('guided_3'))}</li>
-        <li>${esc(t('guided_4'))}</li>
-      </ol>
-      <div class="gh-modal__actions">
-        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-ov="close">${esc(t('guided_go'))}</button>
-      </div>`);
-  }
+  /** The guided first case opens with the same step-by-step guide, ending on "Start". */
+  _openGuidedIntro() { this._openHowto({ guided: true }); }
 
   _openWin() {
     const p = this.puz;
@@ -906,24 +1009,37 @@ class MurdokuUI {
       </div>`);
   }
 
-  _openHowto() {
-    this._openOverlay('howto', `
+  /** HOW TO PLAY, one rule per page (Matt, 2026-09-30, of the one-screen version: "This isn't
+   *  easy to understand"). Six pages, each a picture of ONE rule plus one or two short lines,
+   *  with Back / Next. The same pages open the guided first case, whose last button says Start.
+   *  Every line still fits on one row (docs/BUILDING-A-GAME.md Part 2, `_fitLines`). */
+  _openHowto(opts) {
+    this._howtoPage = 0;
+    this._howtoGuided = !!(opts && opts.guided);
+    this._openOverlay('howto', '<div class="mu-howto" data-role="howto"></div>');
+    this._renderHowtoPage();
+  }
+
+  _renderHowtoPage() {
+    const box = this._overlay && this._overlay.querySelector('[data-role="howto"]');
+    if (!box) return;
+    const pages = HOWTO_PAGES;
+    const i = Math.max(0, Math.min(pages.length - 1, this._howtoPage | 0));
+    const pg = pages[i];
+    const last = i === pages.length - 1;
+    const dots = pages.map((_, k) => `<span class="mu-dot${k === i ? ' is-on' : ''}"></span>`).join('');
+    box.innerHTML = `
       <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>
-      <h2 class="gh-modal__title">${esc(t('howto_title'))}</h2>
-      <p class="mu-line mu-line--goal" data-fs="16" data-group="goal">${esc(t('howto_goal_a'))}</p>
-      <p class="mu-line mu-line--goal" data-fs="16" data-group="goal">${esc(t('howto_goal_b'))}</p>
-      <div class="mu-howto-diagram">${this._howtoSVG()}</div>
-      <p class="mu-line mu-line--caption" data-fs="13" data-group="body">${esc(t('howto_caption'))}</p>
-      <p class="mu-line mu-line--example" data-fs="13" data-group="example">${esc(t('howto_example'))}</p>
-      <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line1'))}</p>
-      <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line2'))}</p>
-      <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line3'))}</p>
-      <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line4'))}</p>
-      <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line5'))}</p>
-      <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line6'))}</p>
-      <div class="gh-modal__actions">
-        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-ov="close">${esc(t('howto_close'))}</button>
-      </div>`);
+      <p class="mu-howto-step">${esc(t(this._howtoGuided ? 'guided_title' : 'howto_title'))} · ${i + 1} / ${pages.length}</p>
+      <h2 class="gh-modal__title">${esc(t(pg.title))}</h2>
+      <div class="mu-howto-diagram" role="img" aria-label="${esc(t(pg.title))}">${pg.svg()}</div>
+      ${pg.lines.map((k) => `<p class="mu-line" data-fs="16" data-group="body">${esc(t(k))}</p>`).join('')}
+      <div class="mu-dots" aria-hidden="true">${dots}</div>
+      <div class="mu-howto-nav">
+        ${i > 0 ? `<button type="button" class="gh-btn gh-btn--ghost" data-ov="prev">${esc(t('howto_back'))}</button>` : '<span></span>'}
+        <button type="button" class="gh-btn gh-btn--primary" data-ov="${last ? 'close' : 'next'}">${esc(t(last ? (this._howtoGuided ? 'guided_go' : 'howto_close') : 'howto_next'))}</button>
+      </div>`;
+    this._fitLines(box);
   }
 
   /** Every line of the how-to must fit on ONE row (docs/BUILDING-A-GAME.md Part 2): measure the
@@ -945,38 +1061,6 @@ class MurdokuUI {
       });
       els.forEach((el) => { el.style.fontSize = fs + 'px'; });
     });
-  }
-
-  /** A 3x3 plan: two rooms and a wall between them; the skull and one person share the top left
-   *  room (dashed square = the one alone with the victim); the third is in the other room; one
-   *  person per row and column (the arrows). Shapes, outlines and arrows carry the meaning, never
-   *  colour alone. Drawn from the theme's own variables so it repaints in dark mode for free. */
-  _howtoSVG() {
-    const X = 30, Y = 22, S = 36;
-    let cells = '';
-    for (let r = 0; r < 3; r++) {
-      for (let c = 0; c < 3; c++) {
-        const inA = r < 2 && c < 2;
-        cells += `<rect x="${X + c * S}" y="${Y + r * S}" width="${S}" height="${S}" fill="var(${inA ? '--mu-r0' : '--mu-r1'})" stroke="var(--mu-line)" stroke-width="1"/>`;
-      }
-    }
-    const ctr = (r, c) => [X + c * S + S / 2, Y + r * S + S / 2];
-    const tok = (r, c, face) => {
-      const [cx, cy] = ctr(r, c);
-      return `<circle cx="${cx}" cy="${cy}" r="14" fill="var(--mu-token-bg)" stroke="var(--mu-ink)" stroke-width="2"/>`
-        + `<text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="18">${face}</text>`;
-    };
-    const arrows = [0, 1, 2].map((i) => `<text x="${X - 9}" y="${Y + i * S + S / 2 + 4}" text-anchor="middle" font-size="13" fill="var(--mu-muted)">→</text>`
-      + `<text x="${X + i * S + S / 2}" y="${Y - 7}" text-anchor="middle" font-size="13" fill="var(--mu-muted)">↓</text>`).join('');
-    const [kx, ky] = ctr(1, 1);
-    return `<svg viewBox="0 0 142 136" role="img" aria-label="${esc(t('howto_diagram_aria'))}">
-      ${cells}
-      <path d="M${X + 2 * S} ${Y}V${Y + 2 * S}H${X}" fill="none" stroke="var(--mu-wall)" stroke-width="3.5" stroke-linecap="square"/>
-      <rect x="${X}" y="${Y}" width="${3 * S}" height="${3 * S}" fill="none" stroke="var(--mu-wall)" stroke-width="3.5"/>
-      ${arrows}
-      ${tok(0, 0, '\u{1F480}')}${tok(1, 1, '\u{1F9D4}')}${tok(2, 2, '\u{1F469}')}
-      <rect x="${kx - 17}" y="${ky - 17}" width="34" height="34" rx="4" fill="none" stroke="var(--mu-select)" stroke-width="3" stroke-dasharray="6 4"/>
-    </svg>`;
   }
 
   // --- test seam -----------------------------------------------------------------------------
