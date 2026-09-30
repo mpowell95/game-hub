@@ -531,15 +531,14 @@ export const GAMES = [
     id: 'murdoku',
     title: { en: 'Murdoku', es: 'Murdoku' },
     blurb: { en: 'A murder mystery logic puzzle. Place every suspect from their clues and find who was alone with the victim.',
-      es: 'Un misterio de lógica. Coloca a cada sospechoso según sus pistas y descubre quién estaba a solas con la víctima.' },
+      es: 'Un misterio de lógica. Coloca a cada sospechosa según sus pistas y descubre quién estaba a solas con la víctima.' },
     module: '../murdoku/js/ui.js',
     immersive: true,
     accent: '#8a1c1c',
     art: GAME_ART['murdoku'],
-    // ADMIN ONLY while Matt plays it in (his ask, 2026-09-29). No `released` date on purpose: it
-    // is the only input to the launcher's New pill and must be the day he releases it, which he
-    // does from the admin page with no commit (root CLAUDE.md, "The admin control page").
-    devOnly: true,
+    // Admin only from 2026-09-29; RELEASED to everyone 2026-09-30 (Matt: "make it live for
+    // everyone"). The date feeds the launcher's New pill.
+    released: '2026-09-30',
   },
 ];
 
