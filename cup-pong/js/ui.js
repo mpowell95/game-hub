@@ -655,6 +655,7 @@ class CupPong {
     if (e.k === 'g') this.toast(t('theyGentlemans', { name: mp.themName }), 1300);
     else if (e.k === 'r') this.toast(t('theyRerack', { name: mp.themName }), 1300);
     else if (e.k === 'i') { R.setMarks('a', [e.id], 'called'); this.toast(t('theyIsland', { name: mp.themName }), 1300); }
+    else if (e.k === 'x') this.toast(t('theyExtra', { name: mp.themName }), 1500);
     else this.showEvents(ev);
     this.paintHud();
     this.later(() => { this.replaying = false; this.mpCatchUp(); }, 1100);
@@ -678,6 +679,7 @@ class CupPong {
   /** Events applied without a flight (this player's own actions on reopen): the table only. */
   showEventsQuiet(ev) {
     const R = this.engine.rend;
+    if (ev.some((e) => e.type === 'extra' && e.side === 'a')) this.toast(t('extraYou'), 1600);
     for (const e of ev) {
       if (e.type === 'gentlemans' || e.type === 'rerack') R.setRack(e.side, cupsXZ(e.to));
     }

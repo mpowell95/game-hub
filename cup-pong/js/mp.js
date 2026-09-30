@@ -100,14 +100,14 @@ export function cleanRules(r) {
   // bounce on (its log may hold the owed cups a bounce made), every other one with it off.
   // Reracks against the back wall (2026-09-29): `bk`. A challenge without it replays with the old
   // placement, so the cups stand where its players saw them.
-  return { gent: !(r && r.gent === false), rr, bo: !!(r && r.bo === true), bk: !!(r && r.bk === true), lc: !!(r && r.lc === true) };
+  return { gent: !(r && r.gent === false), rr, bo: !!(r && r.bo === true), bk: !!(r && r.bk === true), lc: !!(r && r.lc === true), fb: !!(r && r.fb === true) };
 }
 const reracksOf = (rules) => (rules.rr === 'inf' ? Infinity : rules.rr);
 
 /** A fresh match under `rules`, in the STORED frame (side 'a' is the challenger and shoots first). */
 export function freshMatch(rules) {
   const r = cleanRules(rules);
-  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc });
+  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, fireBallsBack: r.fb });
 }
 
 /** One log entry, cleaned, or null if it is not a well-formed action. */
@@ -124,6 +124,7 @@ export function cleanEntry(e) {
       return { by: e.by, k: 't', p: Math.round(p * 1e5) / 1e5, a: Math.round(a * 1e5) / 1e5, m, b: e.b ? 1 : 0, at };
     }
     case 'g': return { by: e.by, k: 'g', at };
+    case 'x': return { by: e.by, k: 'x', at };            // a bonus throw Matt granted (match.grantExtra)
     case 'r': case 'i': case 'o': {
       const v = String(e.k === 'r' ? e.key : e.id || '');
       if (!KEY_RE.test(v)) return null;
@@ -155,6 +156,7 @@ export function applyEntry(match, e) {
   else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.cells) : match.rerack(e.key);
   else if (e.k === 'i') ev = match.callIsland(e.id);
   else if (e.k === 'o') ev = match.pickOwed(e.id);
+  else if (e.k === 'x') ev = match.grantExtra();
   if (!ev || !ev.length) return null;
   return pre.concat(ev);
 }
@@ -169,7 +171,7 @@ export const toStored = (e, mySide) => ({ ...e, by: e.by === 'a' ? mySide : othe
  */
 export function buildLocal(game, mySide, upto = game.log.length) {
   const r = cleanRules(game.rules);
-  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc });
+  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, fireBallsBack: r.fb });
   for (let i = 0; i < upto; i++) {
     if (!applyEntry(m, toLocal(game.log[i], mySide))) break;   // validateGame already proved it replays
   }
@@ -480,7 +482,7 @@ export async function createGame({ them, rules }) {
   const r = cleanRules(rules);
   const doc = {
     v: 1, id, by: me, created: now, updated: now,
-    rules: { gent: r.gent, rr: r.rr, bk: true, lc: true }, // back-wall reracks; balls back on the last cup
+    rules: { gent: r.gent, rr: r.rr, bk: true, lc: true, fb: true }, // rules added since: back-wall reracks, balls back on the last cup and after a fire run
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
