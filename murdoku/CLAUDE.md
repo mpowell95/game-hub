@@ -12,10 +12,10 @@ from online if available. Make sure this is Admin only to begin"*).
 
 - In-hub `module: '../murdoku/js/ui.js'`, **immersive** (see "Space" below for why, unlike
   Sudoku). Hub id and stats id are both `murdoku`. Prefix `.mu-root` / `.mu-`.
-- **Admin only** (`devOnly: true`, no `released` date). Matt releases it from the admin page with
-  no commit; the `released` date is added the day it actually goes live (it is the only input to
-  the New pill). Its `GAME_META` row shipped with the game on purpose (the Yahtzee lesson);
-  `isGameOnLauncher` keeps the board hidden while it is admin only.
+- **Released to everyone on 2026-09-30** (Matt: *"make it live for everyone"*): `devOnly` removed and
+  `released: '2026-09-30'` set (the New pill's date). It was admin only from 2026-09-29. Its
+  `GAME_META` row had shipped with the game, so its board and every solve already recorded appear
+  the moment it is released.
 - `isInProgress()` is always `false`: every change autosaves, so leaving is lossless.
 
 ## Files
