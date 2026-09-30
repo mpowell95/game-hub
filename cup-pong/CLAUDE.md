@@ -214,6 +214,40 @@ is 3 cups** (two picks).
   2026-09-28), so an arc change that loses them fails.
 
 
+## Series and Straight up (challenges, 2026-09-30)
+
+Matt: *"Make it so you can challenge someone to a series (same as connect 4 hoops). And add a
+challenge mode that is "straight up" and has no gentleman's, no reracks, no balls back, no heating
+up or fire, no bouncing. It's just 10 cups in the starting rack and whoever can get them all first
+with no assists at all."*
+
+- **The challenge screen** (`mp-ui.js terms`): Series (1 game / Best of 3 / Best of 5) and Rules
+  (Classic / Straight up). Straight up hides the Gentleman's and Reracks rows and shows one line
+  instead, since it has no assists to choose.
+- **Straight up** is `rules.su` on the match and `Match({ straight: true })`: two balls a turn, a
+  made cup is gone, the turn passes after both, and **the first side to clear the rack wins on the
+  spot**. No Gentleman's, reracks, balls back, heating up / fire, island, bounce bonus, last-cup
+  rule, rebuttal or overtime. **The "no rebuttal" part is a reading of "whoever can get them all
+  first", not Matt's words** - confirm it with him if it ever comes up.
+- **A series is Hoops' model** (hoops4/CLAUDE.md, "A series, and the terms of a challenge"): each
+  game is its own match linked by `seriesOf`, with `series`, `seriesNo` and `seriesWins` (by SIDE)
+  on the document, all OPTIONAL (an old challenge reads as a single game). `seriesAfter` is pure.
+  The index rows carry `series`, `seriesNo`, `seriesOf` and `su`, so lists can say "Game 2 of 3 ·
+  Straight up".
+- **The next game is a BUTTON, only for whoever LOST the last one** (`seriesStarter`), so the two
+  phones never both create it: on the Game Over card ("Start game 2") and in the multiplayer home's
+  Your turn list; the winner sees "Series 1-0 · Ana starts game 2". `nextInSeries` swaps the sides
+  AND the score (Hoops' 2026-09-23 bug), and whoever did not shoot first last game shoots first.
+  When the other person shoots first, `createGame({ first: 'them' })` makes them side 'a' and writes
+  both rows at once; otherwise the game reaches them when the first turn ends, like any challenge.
+- The HUD's second line adds "Game 2 of 3" and "Straight up". A finished series' card offers
+  Challenge again with the same rules and length.
+- Verified in two browser profiles against the local stand-in database: the terms screen, a
+  straight-up best of 3 created and stored (`su`, `gent: false`, `rr: 0`), no option buttons in
+  play, the owed "Start game 2" for the loser and the waiting line for the winner, game 2 with the
+  sides and score swapped, and both end cards. `test-cuppong-mp.mjs` plays a straight-up game to the
+  end through the rules and starts game 2 (49 checks).
+
 ## Solo: clear the rack in the fewest throws (2026-09-28)
 
 Matt: *"it'd be cool to have a solo mode or challenge mode where it's just the full rack and
@@ -306,7 +340,7 @@ Database (the sandbox cannot reach Firebase): challenge, delivery on turn end, t
 turns both ways, the launcher bubble, a notification-style `?open=cuppong&match=<id>` load, a
 seeded island leaving Ana owing a cup and her giving it up, a quit, and the result counted once.
 Real Firebase on real phones is unverified. `node test-cuppong-mp.mjs` covers the data layer
-against an in-memory database (37 checks, the custom rerack included).
+against an in-memory database (49 checks, the custom rerack and a series included).
 
 ## Hub integration
 

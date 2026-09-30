@@ -156,6 +156,36 @@ void PRESETS;
   ok('new challenges are made WITHOUT bounce shots', getAt(`cuppong/games/${id3}/rules`).bo === undefined);
 }
 
+// A SERIES of STRAIGHT UP games (Matt, 2026-09-30).
+use('A');
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { su: true, gent: true, rr: 3 }, series: 3 });
+const s1 = res.id;
+ok('a best-of-3 straight-up challenge is created', res.ok && res.game.series === 3 && res.game.seriesNo === 1 && res.game.rules.su === true && res.game.rules.gent === false && res.game.rules.rr === 0);
+let sn = 0;
+const sSend = async (who, list) => { use(who === 'a' ? 'A' : 'B'); const r = await MP.appendLog(s1, sn, list); if (r.ok) sn += list.length; return r; };
+for (let i = 0; i < 10; i += 2) {
+  res = await sSend('a', [t('a', 'k' + i), t('a', 'k' + (i + 1))]);
+  if (!res.ok) { ok('straight up: every throw lands', false, res.reason); break; }
+  if (res.game.over) break;
+  res = await sSend('b', [t('b', null), t('b', null)]);
+}
+ok('straight up: Matt clears 10 in five turns and wins with no rebuttal', res.ok && res.game.over && res.game.over.winner === 'a');
+const rowS = getAt(`cuppong/index/ANABB/${s1}`);
+ok('the rows carry the series and the mode', rowS.series === 3 && rowS.seriesNo === 1 && rowS.su === true);
+const g1 = await MP.readGame(s1);
+ok('after game 1: 1-0 to Matt, not done, and Ana (who lost) starts game 2', MP.seriesAfter(g1).wins.a === 1 && !MP.seriesAfter(g1).done && MP.seriesStarter(g1) === 'b');
+use('B');
+res = await MP.nextInSeries(g1);
+const s2 = res.id;
+ok('game 2 is created: Ana is side a and shoots first, the score swapped', res.ok && res.game.a.code === 'ANABB' && res.game.seriesNo === 2 && res.game.seriesWins.b === 1 && res.game.seriesWins.a === 0 && res.game.seriesOf === s1 && res.game.rules.su === true);
+ok('...Ana shoots first, so like any challenge it reaches Matt when her first turn ends', getAt(`cuppong/index/ANABB/${s2}`).yourTurn === true && !getAt(`cuppong/index/MATTA/${s2}`));
+res = await MP.appendLog(s2, 0, [t('a', null), t('a', null)]);
+ok('...and then it does, as his turn, marked game 2 of 3', res.ok && getAt(`cuppong/index/MATTA/${s2}`).yourTurn === true && getAt(`cuppong/index/MATTA/${s2}`).seriesNo === 2);
+use('A');
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: {}, series: 3, seriesNo: 2, seriesOf: s1, first: 'them' });
+ok('a series game where the OTHER person shoots first writes both rows at once', res.ok && res.game.a.code === 'ANABB' && getAt(`cuppong/index/ANABB/${res.id}`).yourTurn === true && getAt(`cuppong/index/MATTA/${res.id}`).yourTurn === false);
+ok('an old challenge (no series fields) reads as a single game', MP.validateGame({ ...clone(getAt(`cuppong/games/${id}`)) }).series === 1);
+
 // --- structural -------------------------------------------------------------------------------------
 const rules = JSON.parse(readFileSync('database.rules.json', 'utf8'));
 ok('database.rules.json has the cuppong branch', !!(rules.rules && rules.rules.cuppong));

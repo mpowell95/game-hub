@@ -43,6 +43,11 @@
 //     not in a rebuttal, never the last cup. Only a challenge stored with `rules.bo` turns it on,
 //     so the few made while it was live still replay.
 //
+// STRAIGHT UP (Matt, 2026-09-30): "no gentleman's, no reracks, no balls back, no heating up or
+// fire, no bouncing. It's just 10 cups in the starting rack and whoever can get them all first with
+// no assists at all." Two balls a turn, a made cup is gone, and the first side to clear the rack
+// wins on the spot: no island, no last-cup rule, no rebuttal, no overtime. `straight: true`.
+//
 // Sides are 'a' (this phone, red cups) and 'b' (the opponent, blue). Each rack is stored in the
 // SHOOTER'S frame. Everything that happens comes back as EVENTS, in order.
 //
@@ -70,8 +75,10 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false } = {}) {
     this.async = !!async;
+    this.straight = !!straight;
+    if (this.straight) { gentlemans = false; reracks = 0; }
     // Reracks stand against the BACK WALL (Matt, 2026-09-29). Off only for a challenge made before.
     this.backRack = backRack !== false;
     this.lastCupBack = lastCupBack !== false;
@@ -191,7 +198,7 @@ export class Match {
 
   islands() { return islandsOf(this.target()); }
   canIsland() {
-    return !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && this.ball !== null && this.ball !== 2 && !this.islandUsed[this.shooter][this.ball] && !this.called
+    return !this.straight && !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && this.ball !== null && this.ball !== 2 && !this.islandUsed[this.shooter][this.ball] && !this.called
       && !this.lastCup && this.queue.length > 0 && this.islands().length > 0;
   }
   /**
@@ -239,6 +246,19 @@ export class Match {
     const called = this.called;
     this.called = null;
     const rack = this.target();
+
+    // STRAIGHT UP: a make takes the cup, the first to clear the rack wins, two balls and it passes.
+    if (this.straight) {
+      const hitS = made ? rack.find((k) => k.id === made) : null;
+      if (hitS) {
+        this.racks[this.defender] = rack.filter((k) => k.id !== made);
+        ev.push({ type: 'made', side, ball, id: made, bounced, left: this.racks[this.defender].length });
+        if (!this.racks[this.defender].length) return ev.concat(this._finish(side, 'cups'));
+      } else ev.push({ type: 'miss', side, ball });
+      if (this.queue.length) return ev;
+      this.shooter = other(this.shooter);
+      return ev.concat([{ type: 'turnOver', next: this.shooter }]);
+    }
 
     // THE LAST CUP, STILL STANDING: another ball in it wins outright.
     if (this.lastCup) {
@@ -384,7 +404,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -400,7 +420,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false, straight: o.straight === true });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };
