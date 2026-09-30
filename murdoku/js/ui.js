@@ -14,7 +14,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { recordResult } from '../../js/game-stats.js';
 import {
-  generate, checkBoard, personInfo, validPuzzle, TIERS, TIER_N, ROOM_ICON, OBJ_ICON, isBlocker, SAVE_V,
+  generate, checkBoard, personInfo, validPuzzle, nextHint, TIERS, TIER_N, ROOM_ICON, OBJ_ICON, isBlocker, SAVE_V,
 } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -30,16 +30,18 @@ const esc = (str) => String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<'
 
 // --- persistence ---------------------------------------------------------------------------------
 
+/** `learned`: this device has been given the guided first case. It is only ever set to true, so a
+ *  player is walked through it once, automatically, and can replay it from "Learn to play". */
 function loadSettings() {
   try {
     const v = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {};
-    return { tier: TIERS.includes(v.tier) ? v.tier : 'easy' };
-  } catch { return { tier: 'easy' }; }
+    return { tier: TIERS.includes(v.tier) ? v.tier : 'easy', learned: v.learned === true };
+  } catch { return { tier: 'easy', learned: false }; }
 }
 /** Saved on SELECTION, not on start (docs/BUILDING-A-GAME.md, "Setup-screen defaults"). */
 function saveSettings(patch) {
   const next = { ...loadSettings(), ...(patch || {}) };
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ tier: next.tier })); } catch (err) { console.error('[murdoku] settings', err); }
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ tier: next.tier, learned: !!next.learned })); } catch (err) { console.error('[murdoku] settings', err); }
   return next;
 }
 
@@ -56,7 +58,7 @@ function readSave() {
     return {
       puzzle: s.puzzle, pos: s.pos.slice(), marks,
       elapsedMs: Number.isFinite(s.elapsedMs) && s.elapsedMs > 0 ? s.elapsedMs : 0,
-      solved: !!s.solved, recorded: !!s.recorded,
+      solved: !!s.solved, recorded: !!s.recorded, guided: !!s.guided,
     };
   } catch { return null; }
 }
@@ -64,7 +66,7 @@ function writeSaveObj(o) {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: SAVE_V, puzzle: o.puzzle, pos: o.pos, marks: o.marks, elapsedMs: Math.round(o.elapsedMs),
-      solved: !!o.solved, recorded: !!o.recorded,
+      solved: !!o.solved, recorded: !!o.recorded, guided: !!o.guided,
     }));
     return true;
   } catch (err) { console.error('[murdoku] save', err); return false; }
@@ -102,6 +104,9 @@ function clueText(puz, cl) {
 
 const SVG_ATTR = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
 const ICON_HELP = `<svg ${SVG_ATTR}><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.6 1.4c0 1.6-2.1 1.9-2.1 3.6"/><path d="M12 17.5v.01"/></svg>`;
+/** A rug CAN be stood on, so it must not look like furniture: a flat woven rug with a fringe at
+ *  both ends (the old striped box read as a crate). Colours come from the theme tokens. */
+const RUG_SVG = `<svg viewBox="0 0 40 30" aria-hidden="true"><path d="M2 8H6M2 12H6M2 16H6M2 20H6M2 24H6M34 8H38M34 12H38M34 16H38M34 20H38M34 24H38" stroke="var(--mu-rug-fringe)" stroke-width="1.4" stroke-linecap="round"/><rect x="6" y="5" width="28" height="22" rx="2" fill="var(--mu-rug-a)"/><rect x="9.5" y="8.5" width="21" height="15" rx="1.5" fill="none" stroke="var(--mu-rug-b)" stroke-width="1.4" stroke-dasharray="2.6 2"/><path d="M20 11.5L24.5 16L20 20.5L15.5 16Z" fill="var(--mu-rug-b)"/></svg>`;
 const ICON_NEW = `<svg ${SVG_ATTR}><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></svg>`;
 
 // --- the UI --------------------------------------------------------------------------------------
@@ -115,6 +120,7 @@ class MurdokuUI {
     this.puz = null; this.pos = []; this.marks = new Set();
     this.elapsedMs = 0; this.solved = false; this.recorded = false;
     this.sel = -1; this.mode = 'place';
+    this.guided = false; this.hint = null;
     this.check = null;
     this._runStart = null; this._timerInterval = null;
     this._genTimer = null; this._building = false;
@@ -131,6 +137,8 @@ class MurdokuUI {
     const saved = readSave();
     if (saved && saved.solved && !saved.recorded) this._recordOnce(saved);
     if (saved && !saved.solved) this._enter(saved);
+    // A first-time player is walked through a case instead of being dropped on a menu.
+    else if (!this.settings.learned) this._startFresh({ guided: true });
     else this.renderSetup();
   }
 
@@ -178,6 +186,7 @@ class MurdokuUI {
           ${canContinue ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-action="continue">${contLabel}</button>` : ''}
           <button type="button" class="gh-btn gh-btn--block ${canContinue ? 'gh-btn--ghost' : 'gh-btn--primary'}" data-action="start">${esc(t('new_case'))}</button>
         </div>
+        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-action="guided">${esc(t('learn'))}</button>
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-action="howto">${esc(t('howto'))}</button>
       </div>`;
     this._bindRoot();
@@ -200,7 +209,11 @@ class MurdokuUI {
     this._bindRoot();
   }
 
-  _startFresh() {
+  /** A new case. `guided`: an Easy case where the next step is shown after every move (the
+   *  first case every player gets, and "Learn to play"). */
+  _startFresh(opts) {
+    const guided = !!(opts && opts.guided);
+    if (guided) this.settings = saveSettings({ learned: true });
     if (this._building) return;
     this._building = true;
     this._renderBuilding(false);
@@ -210,8 +223,9 @@ class MurdokuUI {
       this._building = false;
       try {
         const seed = Math.floor(Math.random() * 1e9);
-        const puz = generate(this.selectedTier, seed);
-        this._enter({ puzzle: puz, pos: new Array(puz.n).fill(-1), marks: [], elapsedMs: 0, solved: false, recorded: false });
+        const puz = generate(guided ? 'easy' : this.selectedTier, seed);
+        this._enter({ puzzle: puz, pos: new Array(puz.n).fill(-1), marks: [], elapsedMs: 0, solved: false, recorded: false, guided });
+        if (guided) this._openGuidedIntro();
       } catch (err) {
         console.error('[murdoku] generate failed', err);
         this._renderBuilding(true);
@@ -223,8 +237,10 @@ class MurdokuUI {
     this.puz = s.puzzle; this.pos = s.pos.slice(); this.marks = new Set(s.marks);
     this.elapsedMs = s.elapsedMs; this.solved = s.solved; this.recorded = s.recorded;
     this.sel = -1; this.mode = 'place';
-    this.selectedTier = s.puzzle.tier;
+    this.guided = !!s.guided; this.hint = null;
+    if (!s.guided) this.selectedTier = s.puzzle.tier;
     this._save();
+    if (this.guided) this._autoHint();
     this.renderPlay();
   }
 
@@ -236,7 +252,7 @@ class MurdokuUI {
       <div class="mu-root mu-play">
         <div class="mu-hud" data-role="hud">
           <span class="mu-hud-mid">
-            <span class="mu-hud-case">${esc(t('case_label', { n: p.seed % 10000 }))}</span>
+            <span class="mu-hud-case">${esc(this.guided ? t('case_guided') : t('case_label', { n: p.seed % 10000 }))}</span>
             <span class="mu-hud-tier">${diffShapeSVG(tierOf(p.tier))}${esc(t(TIER_LABEL_KEY[p.tier]))}</span>
           </span>
           <span class="mu-hud-timer" data-role="timer" role="timer" aria-label="${esc(t('timer_aria'))}">0:00</span>
@@ -253,6 +269,7 @@ class MurdokuUI {
                 <button type="button" class="mu-toolbtn" data-tool="place">${esc(t('tool_place'))}</button>
                 <button type="button" class="mu-toolbtn" data-tool="mark">${esc(t('tool_mark'))}</button>
               </div>
+              <button type="button" class="mu-hintbtn" data-action="hint" aria-label="${esc(t('hint_aria'))}">${esc(t('hint_btn'))}</button>
               <div class="mu-status" data-role="status" role="status" aria-live="polite"></div>
             </div>
           </div>
@@ -316,10 +333,6 @@ class MurdokuUI {
 
   _buildBoard() {
     const p = this.puz, n = p.n;
-    // One badge per room, on the first cell in reading order that carries no furniture.
-    const badge = new Map();
-    for (let s = 0; s < n * n; s++) if (!badge.has(p.rooms[s]) && !p.objects[s]) badge.set(p.rooms[s], s);
-    for (let s = 0; s < n * n; s++) if (!badge.has(p.rooms[s])) badge.set(p.rooms[s], s);
     this.cellEls = new Array(n * n);
     let html = '';
     for (let s = 0; s < n * n; s++) {
@@ -330,15 +343,39 @@ class MurdokuUI {
       if (blocker) label += ', ' + t('cell_blocked', { obj: t('obj_' + obj) });
       else if (obj) label += ', ' + t('obj_' + obj);
       html += `<div class="mu-cell mu-r${room % N_ROOM_TINTS}${blocker ? ' is-blocker' : ''}" data-i="${s}" role="gridcell" tabindex="${s === 0 ? 0 : -1}" aria-label="${esc(label)}">`
-        + (badge.get(room) === s ? `<span class="mu-badge" aria-hidden="true">${roomIcon(p, room)}</span>` : '')
-        + (obj === 'rug' ? '<span class="mu-rug" aria-hidden="true"></span>'
+        + (obj === 'rug' ? `<span class="mu-rug" aria-hidden="true">${RUG_SVG}</span>`
           : obj ? `<span class="mu-obj" aria-hidden="true">${OBJ_ICON[obj]}</span>` : '')
         + '<span class="mu-dyn"></span></div>';
     }
+    html += this._roomLabels();
     html += this._wallsSVG();
     this.el.board.style.setProperty('--mu-n', String(n));
     this.el.board.innerHTML = html;
     this.el.board.querySelectorAll('.mu-cell').forEach((c) => { this.cellEls[Number(c.dataset.i)] = c; });
+  }
+
+  /** Each room's NAME, printed on the board (Matt, 2026-09-30: a bare icon in a corner told a
+   *  first-time player nothing). It sits along the room's widest row of squares, topmost first, so
+   *  it has the most room to be read; a name that still does not fit ends in an ellipsis, and the
+   *  icon beside it is the same one every clue about that room carries. */
+  _roomLabels() {
+    const p = this.puz, n = p.n;
+    let html = '';
+    for (const room of p.roomIds) {
+      let best = null;
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n;) {
+          if (p.rooms[r * n + c] !== room) { c++; continue; }
+          let e = c;
+          while (e < n && p.rooms[r * n + e] === room) e++;
+          if (!best || e - c > best.w) best = { r, c, w: e - c };
+          c = e;
+        }
+      }
+      if (!best) continue;
+      html += `<span class="mu-roomlabel" style="--r:${best.r};--c:${best.c};--w:${best.w}" aria-hidden="true">${roomIcon(p, room)} ${esc(t('rname_' + p.roomNames[room]))}</span>`;
+    }
+    return html;
   }
 
   /** The walls: a thick line wherever two neighbouring squares are in different rooms. Drawn as ONE
@@ -374,6 +411,8 @@ class MurdokuUI {
     const clash = new Set(chk.clash), blocked = new Set(chk.blocked);
     const showBroken = chk.full && !chk.solved;
     const broken = new Set(showBroken ? chk.broken : []);
+    const hintCells = new Set(this.hint ? this.hint.cells : []);
+    const hintAnswer = this.hint && (this.hint.reveal || (this.hint.k === 'only')) ? p.solution[this.hint.p] : -1;
     const takenRow = new Set(), takenCol = new Set();
     this.pos.forEach((s) => { if (s >= 0) { takenRow.add((s / n) | 0); takenCol.add(s % n); } });
 
@@ -382,6 +421,8 @@ class MurdokuUI {
       const who = this._personAt(s);
       const r = (s / n) | 0, c = s % n;
       el.classList.toggle('is-taken', who < 0 && (takenRow.has(r) || takenCol.has(c)));
+      el.classList.toggle('is-hint', hintCells.has(s) && s !== hintAnswer);
+      el.classList.toggle('is-hint-answer', s === hintAnswer);
       const dyn = el.lastElementChild;
       let html = '';
       if (who >= 0) {
@@ -402,7 +443,7 @@ class MurdokuUI {
     // the suspect list
     const by = p.people.map(() => []);
     p.clues.forEach((cl, i) => by[cl.p].push(i));
-    this.el.list.innerHTML = p.people.map((_, i) => {
+    this.el.list.innerHTML = this._hintHTML() + p.people.map((_, i) => {
       const info = personInfo(p, i);
       const placed = this.pos[i] >= 0, selected = i === this.sel;
       const frags = by[i].map((ci) => {
@@ -423,12 +464,48 @@ class MurdokuUI {
     this._tickTimer();
   }
 
+  /** The hint bar at the top of the suspect list (inside it, so `_fit()` measures it for free). */
+  _hintHTML() {
+    const h = this.hint;
+    if (!h || this.solved) return '';
+    const name = personInfo(this.puz, h.p).name;
+    // The reason first, then (once revealed) where. A one-square hint is its own answer.
+    let msg = h.k === 'look' ? t('hint_look', { name, k: h.cells.length }) : t('hint_' + h.k, { name });
+    if (h.k !== 'wrong' && h.k !== 'only' && h.cells.length > 1) msg += ' ' + (h.reveal ? t('hint_answer', { name }) : t('hint_more'));
+    else if (h.k !== 'wrong' && h.k !== 'only') msg += ' ' + t('hint_answer', { name });
+    return `<div class="mu-hintbar" role="status"><span aria-hidden="true">💡</span><span>${esc(msg)}</span></div>`;
+  }
+
+  /** Hint button: the first tap shows the next step; a second tap on the same step shows the exact
+   *  square. The hinted person is selected, so the next tap on a square places them. */
+  _hintTap() {
+    if (this.solved || !this.puz) return;
+    const h = this.hint;
+    if (h && !h.reveal && h.k !== 'wrong' && h.cells.length > 1) {
+      this.hint = { ...h, reveal: true };
+    } else {
+      const next = nextHint(this.puz, this.pos);
+      this.hint = next ? { ...next, reveal: false } : null;
+    }
+    if (this.hint && this.hint.k !== 'wrong') { this.sel = this.hint.p; this.mode = 'place'; }
+    this._paint(); this._fit();
+  }
+
+  /** Guided case: the next step is always on screen, WITH its square - a first-time player is
+   *  being shown how the reasoning goes, not tested on it. */
+  _autoHint() {
+    const next = this.solved ? null : nextHint(this.puz, this.pos);
+    this.hint = next ? { ...next, reveal: true } : null;
+    if (this.hint && this.hint.k !== 'wrong') { this.sel = this.hint.p; this.mode = 'place'; }
+  }
+
   _paintStatus(chk) {
     let msg;
     if (this.solved) msg = t('solved_status');
     else if (chk.full && chk.broken.length) msg = t(chk.broken.length === 1 ? 'not_quite_one' : 'not_quite_many', { n: chk.broken.length });
     else if (chk.full && (chk.clash.length || chk.blocked.length)) msg = t('not_quite_rules');
     else if (this.mode === 'mark') msg = t('status_mark');
+    else if (this.hint) msg = t('status_placed', { n: this._placedCount(), total: this.puz.n });
     else if (this.sel >= 0) msg = t('status_place', { name: personInfo(this.puz, this.sel).name });
     else if (this._placedCount() === 0) msg = t('status_pick');
     else msg = t('status_placed', { n: this._placedCount(), total: this.puz.n });
@@ -587,6 +664,8 @@ class MurdokuUI {
         this.renderSetup();
         break;
       case 'howto': this._openHowto(); break;
+      case 'hint': this._hintTap(); break;
+      case 'guided': this._startFresh({ guided: true }); break;
       case 'new':
         // One button for "new case" and "change difficulty": the HUD shares its row with the hub's
         // floating back button (immersive), so there is no room for a separate menu button.
@@ -639,7 +718,8 @@ class MurdokuUI {
 
   _afterChange() {
     const chk = checkBoard(this.puz, this.pos);
-    if (chk.solved) { this._win(); return; }
+    if (chk.solved) { this.hint = null; this._win(); return; }
+    if (this.guided) this._autoHint(); else this.hint = null;
     this._save();
     this._paint();
     this._fit();
@@ -652,7 +732,7 @@ class MurdokuUI {
     this.sel = -1;
     this._pauseTimer();
     this._save();
-    this._recordOnce({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: this.elapsedMs, solved: true, recorded: this.recorded }, this);
+    this._recordOnce({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: this.elapsedMs, solved: true, recorded: this.recorded, guided: this.guided }, this);
     this._paint();
     this._fit();
     this._openWin();
@@ -677,7 +757,7 @@ class MurdokuUI {
   _save() {
     if (!this.puz) return;
     const elapsed = this._elapsed();
-    writeSaveObj({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: elapsed, solved: this.solved, recorded: this.recorded });
+    writeSaveObj({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: elapsed, solved: this.solved, recorded: this.recorded, guided: this.guided });
   }
 
   // --- overlays ------------------------------------------------------------------------------
@@ -725,6 +805,21 @@ class MurdokuUI {
       </div>`);
   }
 
+  _openGuidedIntro() {
+    this._openOverlay('guided', `
+      <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>
+      <h2 class="gh-modal__title">${esc(t('guided_title'))}</h2>
+      <ol class="mu-guided-steps">
+        <li>${esc(t('guided_1'))}</li>
+        <li>${esc(t('guided_2'))}</li>
+        <li>${esc(t('guided_3'))}</li>
+        <li>${esc(t('guided_4'))}</li>
+      </ol>
+      <div class="gh-modal__actions">
+        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-ov="close">${esc(t('guided_go'))}</button>
+      </div>`);
+  }
+
   _openWin() {
     const p = this.puz;
     const killer = personInfo(p, p.killer);
@@ -754,6 +849,7 @@ class MurdokuUI {
       <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line2'))}</p>
       <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line3'))}</p>
       <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line4'))}</p>
+      <p class="mu-line" data-fs="13" data-group="body">${esc(t('howto_line5'))}</p>
       <div class="gh-modal__actions">
         <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-ov="close">${esc(t('howto_close'))}</button>
       </div>`);
@@ -825,6 +921,7 @@ class MurdokuUI {
         get ui() { return ui; },
         place(p, cell) { if (cell < 0) { ui.pos[p] = -1; ui._afterChange(); } else ui._place(p, cell); },
         solve() { if (ui.puz) ui.puz.solution.forEach((cell, p) => ui._place(p, cell)); },
+        hint() { ui._hintTap(); return ui.hint; },
       };
     } catch { /* no window */ }
   }

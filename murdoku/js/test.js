@@ -5,7 +5,7 @@
 // Not deployed (not in sw.js ASSETS); run by run-all-tests.mjs as a plain node script.
 import {
   generate, countSolutions, humanSolve, checkBoard, holds, validPuzzle, personInfo,
-  TIERS, TIER_N, isBlocker, SAVE_V,
+  TIERS, TIER_N, isBlocker, SAVE_V, nextHint, visibleDomains,
 } from './engine.js';
 
 let pass = 0, fail = 0;
@@ -107,7 +107,41 @@ for (const tier of TIERS) {
   ok('victim is flagged and never in a same-room clue (that would give the answer away)', fine);
 }
 
-// 6. Speed: generation must be fast enough for a phone (expert is the slow one).
+// 6. Hints. A player who only ever follows the hint (placing the named person on the true square)
+//    reaches the solved board, and every hint's squares include the true one. 'only' is exactly
+//    one square and it is the right one. A misplaced person is reported first.
+for (const tier of TIERS) {
+  let finished = 0, honest = true, onlyRight = true, kinds = {};
+  for (let i = 1; i <= 15; i++) {
+    const p = generate(tier, i * 7907 + 3);
+    const pos = p.solution.map(() => -1);
+    for (let step = 0; step < p.n + 2; step++) {
+      const h = nextHint(p, pos);
+      if (!h) break;
+      kinds[h.k] = (kinds[h.k] | 0) + 1;
+      if (!h.cells.includes(p.solution[h.p])) honest = false;
+      if (h.k === 'only' && (h.cells.length !== 1 || h.cells[0] !== p.solution[h.p])) onlyRight = false;
+      pos[h.p] = p.solution[h.p];
+    }
+    if (checkBoard(p, pos).solved) finished++;
+  }
+  ok(`${tier}: following the hints solves the case (${JSON.stringify(kinds)})`, finished === 15, `${finished}/15`);
+  ok(`${tier}: every hint includes the true square`, honest);
+  ok(`${tier}: an "only one square" hint is exactly the right square`, onlyRight);
+}
+{
+  const p = generate('medium', 55);
+  const pos = p.solution.map(() => -1);
+  const wrong = p.solution.find((s, q) => q !== 0 && s !== p.solution[0]);
+  pos[0] = wrong;
+  const h = nextHint(p, pos);
+  ok('hint: a misplaced person is named first', h && h.k === 'wrong' && h.p === 0);
+  ok('hint: none on a solved board', nextHint(p, p.solution.slice()) === null);
+  const d = visibleDomains(p, p.solution.map(() => -1));
+  ok('visibleDomains: everyone can reach their true square on an empty board', d.every((cells, q) => cells.includes(p.solution[q])));
+}
+
+// 7. Speed: generation must be fast enough for a phone (expert is the slow one).
 {
   const t0 = Date.now();
   for (let i = 1; i <= 10; i++) generate('expert', 900 + i);

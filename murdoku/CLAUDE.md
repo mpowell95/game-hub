@@ -71,10 +71,39 @@ The rules this game uses, stated once (they are also in `js/engine.js`'s header)
   (max ~30), expert ~30 ms median (max ~120 ms). A phone is a few times slower; the UI paints a
   "building" state before it generates.
 
+## Teaching the game (2026-09-30)
+
+Matt opened it cold and said: *"I've never played this game and I have no idea what's going on from
+either of these screenshots"*, then: *"do whatever makes this game easier to understand"*. Four
+changes, all live the same day:
+
+- **Room names on the board** (`_roomLabels()` in `js/ui.js`): icon + name on a chip along each
+  room's widest row of squares, topmost first. It replaced an icon-only corner badge that told a
+  first-time player nothing. A one-square-wide room ellipsises to its icon, which is the same
+  icon every clue about it carries.
+- **Rugs look like rugs** (`RUG_SVG`): a flat fringed rug. The striped box before it read as a crate,
+  and a rug is the one piece of furniture you CAN stand on, so it must not look like a blocker.
+- **💡 Hint** (tool row). `nextHint(puz, pos)` in `js/engine.js` returns ONE step, in the order a
+  person would find it: someone on a wrong square (`wrong`); a person with one square left
+  (`only`); a row/column only one person can still reach (`row`/`col`); otherwise the person with
+  the FEWEST visible squares (`look`, ties to whoever the human solver places first). "Visible"
+  is `visibleDomains()`: own clues, blockers, used rows/columns, and clues linking to people
+  already placed, which is what a player can check by eye. The first tap shows the candidate
+  squares (dashed gold ring) and selects that person; a second tap marks the true square (solid
+  ring). The hint is text at the top of the suspect list (inside it, so `_fit()` measures it).
+  A hint is spent by the next move. Tested: following hints alone solves every tier.
+- **The guided first case.** A device that has never had it (`learned` in `gamehub.murdoku.v1`,
+  only ever set true) opens straight into an Easy "Guided case" with a four-step intro card, and
+  the hint, WITH its square, is always on screen and re-computed after every move. "Learn to play"
+  on the setup screen replays it. `guided` rides the save; a guided solve records like any other.
+
+Space cost, measured: a hint bar is 1-2 lines. Expert with a hint up is still 42px squares at
+390x844; on a 375x600-667 phone it drops to 26-31px while the hint is showing (40px without).
+
 ## Persistence and stats
 
-- Settings: `gamehub.murdoku.v1` (`{tier}`), saved on selection.
-- Progress: `gamehub.murdoku.save.v1` (`{v, puzzle, pos, marks, elapsedMs, solved, recorded}`),
+- Settings: `gamehub.murdoku.v1` (`{tier, learned}`), saved on selection.
+- Progress: `gamehub.murdoku.save.v1` (`{v, puzzle, pos, marks, elapsedMs, solved, recorded, guided}`),
   the whole puzzle stored as-is.
 - Stats: `recordResult('murdoku', tier, true)` once per solved case (the `recorded` flag guards
   it). **No sub-counter** (total/byDiff only), so the three-edit sub-counter rule does not apply;
