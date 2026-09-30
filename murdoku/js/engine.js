@@ -18,22 +18,32 @@
 export const SAVE_V = 1;
 
 // ---- the cast ----------------------------------------------------------------------------------
-// Names are not translated (they are names). Every initial is distinct so the grid can fall back
-// to a letter. Faces are single code points on purpose: ZWJ sequences render as two glyphs on
-// older phones.
+// Matt, 2026-09-30: "Make the characters names Ana, Elena, Natalia, Alba, and Sandra. Change who the
+// dead person is each time. And use better emojis. And all female emojis." The first CORE_CAST are
+// in EVERY case (an Easy case is exactly them); a bigger board adds from the rest. The victim is
+// one of them, a different one each case (always LAST in `people`, so she ends the suspect list).
+// Each woman has her own profession, so the faces tell apart at token size by the prop (hat,
+// palette, goggles...). Names are not translated (they are names).
 export const CAST = [
-  { id: 'ada', name: 'Ada', face: '\u{1F469}' },      // woman
-  { id: 'bruno', name: 'Bruno', face: '\u{1F9D4}' },  // bearded man
-  { id: 'clara', name: 'Clara', face: '\u{1F475}' },  // old woman
-  { id: 'dante', name: 'Dante', face: '\u{1F474}' },  // old man
-  { id: 'elena', name: 'Elena', face: '\u{1F467}' },  // girl
-  { id: 'felix', name: 'Felix', face: '\u{1F466}' },  // boy
-  { id: 'greta', name: 'Greta', face: '\u{1F478}' },  // princess
-  { id: 'hugo', name: 'Hugo', face: '\u{1F934}' },    // prince
-  { id: 'iris', name: 'Iris', face: '\u{1F9D5}' },    // headscarf
-  { id: 'jonas', name: 'Jonas', face: '\u{1F473}' },  // turban
+  { id: 'ana', name: 'Ana', face: '\u{1F469}\u200D\u{1F373}' },          // chef
+  { id: 'elena', name: 'Elena', face: '\u{1F469}\u200D\u{1F3A8}' },      // artist
+  { id: 'natalia', name: 'Natalia', face: '\u{1F469}\u200D\u{1F52C}' },  // scientist
+  { id: 'alba', name: 'Alba', face: '\u{1F469}\u200D\u{1F3EB}' },        // teacher
+  { id: 'sandra', name: 'Sandra', face: '\u{1F469}\u200D\u2708\uFE0F' }, // pilot
+  { id: 'lucia', name: 'Lucía', face: '\u{1F469}\u200D\u{1F3A4}' },      // singer
+  { id: 'carmen', name: 'Carmen', face: '\u{1F469}\u200D\u2695\uFE0F' }, // doctor
+  { id: 'marta', name: 'Marta', face: '\u{1F469}\u200D\u{1F33E}' },      // farmer
 ];
-export const VICTIM = { id: 'victor', name: 'Victor', face: '\u{1F480}' }; // skull
+export const CORE_CAST = 5;
+/** The first cast (to 2026-09-30), kept ONLY so a case saved before the change still shows its
+ *  people. Never picked for a new case. */
+const LEGACY_CAST = [
+  { id: 'ada', name: 'Ada', face: '\u{1F469}' }, { id: 'bruno', name: 'Bruno', face: '\u{1F9D4}' },
+  { id: 'clara', name: 'Clara', face: '\u{1F475}' }, { id: 'dante', name: 'Dante', face: '\u{1F474}' },
+  { id: 'felix', name: 'Felix', face: '\u{1F466}' }, { id: 'greta', name: 'Greta', face: '\u{1F478}' },
+  { id: 'hugo', name: 'Hugo', face: '\u{1F934}' }, { id: 'iris', name: 'Iris', face: '\u{1F9D5}' },
+  { id: 'jonas', name: 'Jonas', face: '\u{1F473}' }, { id: 'victor', name: 'Victor', face: '\u{1F480}' },
+];
 
 // ---- rooms and objects -------------------------------------------------------------------------
 export const ROOMS = ['kitchen', 'library', 'hall', 'study', 'lounge', 'ballroom', 'dining', 'garden', 'bedroom', 'cellar'];
@@ -433,8 +443,10 @@ function tryGenerate(r, tier, seed) {
 
   // Solution: a random permutation (row -> column); people shuffled onto rows.
   const cols = shuffle(r, Array.from({ length: n }, (_, i) => i));
-  const cast = shuffle(r, CAST.slice()).slice(0, n - 1);
-  const people = [...cast.map((c) => c.id), VICTIM.id];
+  // The core five always, the rest topped up at random; the shuffle then decides who is the
+  // victim (the last one).
+  const cast = shuffle(r, [...CAST.slice(0, CORE_CAST), ...shuffle(r, CAST.slice(CORE_CAST)).slice(0, n - CORE_CAST)]);
+  const people = cast.map((c) => c.id);
   const victim = n - 1;
   const rowsFor = shuffle(r, Array.from({ length: n }, (_, i) => i));
   const solution = people.map((_, p) => rowsFor[p] * n + cols[rowsFor[p]]);
@@ -545,8 +557,8 @@ export function roomMates(puz, pos, p) {
 
 export function personInfo(puz, p) {
   const id = puz.people[p];
-  if (id === VICTIM.id) return { ...VICTIM, victim: true };
-  return { ...(CAST.find((c) => c.id === id) || { id, name: id, face: '?' }), victim: false };
+  const who = CAST.find((c) => c.id === id) || LEGACY_CAST.find((c) => c.id === id) || { id, name: id, face: '?' };
+  return { ...who, victim: p === puz.victim };
 }
 
 /** A puzzle from a save must be structurally whole before the UI touches it. */

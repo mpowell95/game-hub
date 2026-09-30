@@ -39,7 +39,8 @@ work anyway. Every case here is generated on the device.
 
 The rules this game uses, stated once (they are also in `js/engine.js`'s header):
 
-- N x N floor plan, split into rooms by walls. N people, one of them the victim (Victor, a skull).
+- N x N floor plan, split into rooms by walls. N people, one of them the victim (a different woman
+  each case, marked with a 💀 badge).
 - Exactly one person in every row and every column.
 - Blocking objects (plant, bookshelf, piano, TV) cannot be stood on; a chair or a rug can.
 - "Beside" = orthogonally touching AND in the same room (a wall breaks it). This matches the
@@ -119,12 +120,24 @@ Expert rows at 16px; spare height 6-30px; board sizes unchanged (67/56/48/42px).
 **How to play is a six-page guide (2026-09-30, same day).** Matt, of the one-screen version with a
 diagram and six rule lines: *"This isn't easy to understand."* `HOWTO_PAGES` in `js/ui.js`: one rule
 per page, each with its own SVG picture and one to three short lines, Back / Next and dots, a steady
-height so Next stays under the thumb. Pages: who killed Victor; one per row and column (a right and
+height so Next stays under the thumb. Pages: who is the murderer; one per row and column (a right and
 a wrong board); follow the clues, "beside" = touching in the same room (the clue written out, then a
-right board and one with a wall); where people can stand; who did it (the one in the skull's room);
+right board and one with a wall); where people can stand; who did it (the one in the victim's room);
 how to tap (name, then square, 💡 when stuck). Yes/no is a tick in a CIRCLE vs a cross in a SQUARE,
 never colour alone. The guided first case opens with the same pages, its last button "Let's go";
 the old four-step intro card is gone. Lines still fit one row each (`_fitLines`).
+
+**The cast (2026-09-30, same day).** Matt: *"Make the characters names Ana, Elena, Natalia, Alba, and
+Sandra. Change who the dead person is each time. And use better emojis. And all female emojis."*
+`CAST` in `js/engine.js`: those five are `CORE_CAST` and are in every case (an Easy case is exactly
+them); Medium/Hard/Expert top up from Lucía, Carmen and Marta (names Claude chose, since the bigger
+boards need 6-8 people). Every face is a woman with a profession (chef, artist, scientist, teacher,
+pilot, singer, doctor, farmer) so they tell apart at token size. **The victim is one of them, a
+different one each case**: the shuffled cast's LAST person (`victim = n - 1` is unchanged, so she
+ends the suspect list), marked by a 💀 badge on her token (`.mu-skull`) and "💀 the victim" in the
+list; `personInfo().victim` is now `p === puz.victim`. The old cast and "Victor" live on in
+`LEGACY_CAST` only so a case saved before the change still shows its people. Spanish copy that
+referred to a person became feminine (quitarla, colocada, con ella).
 
 Space cost, measured: a hint bar is 1-2 lines. Expert with a hint up is still 42px squares at
 390x844; on a 375x600-667 phone it drops to 26-31px while the hint is showing (40px without).
