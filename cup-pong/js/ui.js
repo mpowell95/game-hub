@@ -308,6 +308,9 @@ class CupPong {
     mode.classList.toggle('is-cpu', !m.over && m.shooter === 'b');
     const bits = [this.mp ? t('cupsVs', { a: m.racks.a.length, b: m.racks.b.length, name: them })
       : t('cupsScore', { a: m.racks.a.length, b: m.racks.b.length })];
+    const sg = this.mp && this.mp.game;
+    if (sg && sg.series > 1) bits.push(t('gameOf', { n: sg.seriesNo, m: sg.series }));
+    if (sg && sg.rules && sg.rules.su) bits.push(t('straightUp'));
     if (m.phase === 'rebuttal') bits.push(t('rebuttal'));
     else if (m.phase === 'overtime') bits.push(t('overtime'));
     if (m.called) bits.push(t('islandCalled'));
@@ -781,14 +784,23 @@ class CupPong {
     el.className = 'gh-overlay';
     const line = resigned ? (won ? t('theyResigned', { name: mp.themName }) : t('youResigned'))
       : t('cupsVs', { a: this.match.racks.a.length, b: this.match.racks.b.length, name: mp.themName });
+    // A SERIES: the running score, then the next game (only for whoever lost this one) or the result.
+    const g = { ...mp.game, over: mp.game.over || { winner: won ? mp.side : (mp.side === 'a' ? 'b' : 'a') } };
+    const st = g.series > 1 ? this.MP.seriesAfter(g) : null;
+    const mineW = st ? (mp.side === 'a' ? st.wins.a : st.wins.b) : 0, theirW = st ? (mp.side === 'a' ? st.wins.b : st.wins.a) : 0;
+    const iStart = st && !st.done && this.MP.seriesStarter(g) === mp.side;
+    const seriesLine = !st ? '' : st.done ? (st.winner === mp.side ? t('seriesWon') : t('seriesLost', { name: mp.themName }))
+      : iStart ? t('seriesScore', { a: mineW, b: theirW }) : `${t('seriesScore', { a: mineW, b: theirW })} · ${t('waitGameN', { name: mp.themName, n: st.no + 1 })}`;
     el.innerHTML = `
       <div class="gh-modal cp-card" role="dialog" aria-modal="true" aria-label="${won ? t('youWin') : t('youLose')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <p class="cp-card-kicker">${t('gameOver')}</p>
         <h2 class="cp-card-title">${won ? t('youWin') : t('youLose')}</h2>
         <p class="cp-card-line">${mp.themEmoji} ${escapeHTML(line)}</p>
+        ${seriesLine ? `<p class="cp-card-line"><b>${escapeHTML(seriesLine)}</b></p>` : ''}
         <div class="gh-modal__actions">
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${t('challengeAgain')}</button>
+          ${iStart ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="next">${t('startGameN', { n: st.no + 1 })}</button>`
+            : st && !st.done ? '' : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${t('challengeAgain')}</button>`}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="mphome">${t('backMp')}</button>
         </div>
       </div>`;
@@ -797,7 +809,15 @@ class CupPong {
     const rules = mp.game.rules;
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
     this.on(el.querySelector('[data-role="mphome"]'), 'click', () => { el.remove(); this.openMultiplayer(); });
-    this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.sendChallenge(them, rules); });
+    const again = el.querySelector('[data-role="again"]');
+    if (again) this.on(again, 'click', () => { el.remove(); this.sendChallenge(them, rules, { series: mp.game.series || 1 }); });
+    const next = el.querySelector('[data-role="next"]');
+    if (next) this.on(next, 'click', async () => {
+      next.disabled = true;
+      const res = await this.startNextGame(g);
+      if (res && res.ok) el.remove();
+      else { next.disabled = false; this.toast(t('sendFailed'), 2400); }
+    });
   }
 
   mpResign() {
@@ -838,6 +858,15 @@ class CupPong {
   }
 
   /** Open one stored match. Throws still waiting on this phone go first, so none is lost. */
+  /** The next game of a series (only offered to whoever lost the last one). */
+  async startNextGame(game) {
+    const MP = await this.loadMP();
+    const res = await MP.nextInSeries(game);
+    if (this.disposed) return res;
+    if (res.ok) this.start('mp', { game: res.game });
+    return res;
+  }
+
   async openMatch(id) {
     const MP = await this.loadMP();
     if (MP.pendingFor(id)) await MP.drainOutbox(id);
@@ -848,9 +877,9 @@ class CupPong {
   }
 
   /** A new challenge: created now, delivered when your first turn is over. */
-  async sendChallenge(them, rules) {
+  async sendChallenge(them, rules, opts = {}) {
     const MP = await this.loadMP();
-    const res = await MP.createGame({ them, rules });
+    const res = await MP.createGame({ them, rules, series: opts.series || 1 });
     if (this.disposed) return;
     if (!res.ok) return res;
     this.start('mp', { game: res.game });

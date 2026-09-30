@@ -38,6 +38,11 @@ const ID_RE = /^[a-z0-9]{6,24}$/;
 const KEY_RE = /^[a-z0-9_-]{1,12}$/i;           // cup ids, preset keys
 const MAX_LOG = 3000;                            // a ceiling against a runaway writer, not a rule
 export const RERACK_CHOICES = [0, 1, 2, 3, 'inf'];
+// A SERIES IS 1, 3 OR 5 GAMES (Matt, 2026-09-30: "challenge someone to a series (same as connect 4
+// hoops)"). Hoops' model: each game is its own match, linked by `seriesOf`, with the running score
+// carried in `seriesWins` (by SIDE, swapped each game because the sides swap), and the next game
+// started by a BUTTON (nextInSeries), never automatically. All the fields are OPTIONAL.
+export const SERIES_LENGTHS = [1, 3, 5];
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 const other = (s) => (s === 'a' ? 'b' : 'a');
 
@@ -100,14 +105,15 @@ export function cleanRules(r) {
   // bounce on (its log may hold the owed cups a bounce made), every other one with it off.
   // Reracks against the back wall (2026-09-29): `bk`. A challenge without it replays with the old
   // placement, so the cups stand where its players saw them.
-  return { gent: !(r && r.gent === false), rr, bo: !!(r && r.bo === true), bk: !!(r && r.bk === true), lc: !!(r && r.lc === true), fb: !!(r && r.fb === true) };
+  return { gent: !(r && r.gent === false), rr, bo: !!(r && r.bo === true), bk: !!(r && r.bk === true), lc: !!(r && r.lc === true), fb: !!(r && r.fb === true),
+    su: !!(r && r.su === true) };                        // STRAIGHT UP: no assists at all (match.js)
 }
 const reracksOf = (rules) => (rules.rr === 'inf' ? Infinity : rules.rr);
 
 /** A fresh match under `rules`, in the STORED frame (side 'a' is the challenger and shoots first). */
 export function freshMatch(rules) {
   const r = cleanRules(rules);
-  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, fireBallsBack: r.fb });
+  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, fireBallsBack: r.fb, straight: r.su });
 }
 
 /** One log entry, cleaned, or null if it is not a well-formed action. */
@@ -172,7 +178,7 @@ export const toStored = (e, mySide) => ({ ...e, by: e.by === 'a' ? mySide : othe
  */
 export function buildLocal(game, mySide, upto = game.log.length) {
   const r = cleanRules(game.rules);
-  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, fireBallsBack: r.fb });
+  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, fireBallsBack: r.fb, straight: r.su });
   for (let i = 0; i < upto; i++) {
     if (!applyEntry(m, toLocal(game.log[i], mySide))) break;   // validateGame already proved it replays
   }
@@ -213,7 +219,13 @@ export function validateGame(raw) {
     over = { winner: m.winner, why: m.how || 'cups', at: ms(raw.updated) };
   }
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
+  const series = SERIES_LENGTHS.includes(+raw.series) ? +raw.series : 1;
+  const sw = raw.seriesWins && typeof raw.seriesWins === 'object' ? raw.seriesWins : {};
   return {
+    series,
+    seriesNo: Math.min(series, Math.max(1, ms(raw.seriesNo) || 1)),
+    seriesWins: { a: Math.max(0, ms(sw.a) | 0), b: Math.max(0, ms(sw.b) | 0) },
+    seriesOf: typeof raw.seriesOf === 'string' && ID_RE.test(raw.seriesOf) ? raw.seriesOf : id,
     v: 1, id,
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -361,6 +373,8 @@ function rowsFromIndex(val) {
       updated: ms(r.updated), yourTurn: !!r.yourTurn, over: !!r.over, rebuttal: !!r.rebuttal,
       result: RESULTS.includes(r.result) ? r.result : null, why: typeof r.why === 'string' ? r.why : '',
       mine: ms(r.mine), theirs: ms(r.theirs),
+      series: SERIES_LENGTHS.includes(+r.series) ? +r.series : 1, seriesNo: Math.max(1, ms(r.seriesNo) || 1),
+      seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id, su: r.su === true,
     };
   }).filter((r) => ID_RE.test(r.id) && r.with));
 }
@@ -458,6 +472,8 @@ function rowFor(game, side, writer) {
     over: !!game.over,
     mine: game.cups[side], theirs: game.cups[other(side)],
     lastBy: writer === side ? 'me' : 'them',
+    series: game.series || 1, seriesNo: game.seriesNo || 1, seriesOf: game.seriesOf || game.id,
+    ...(game.rules && game.rules.su ? { su: true } : {}),
     ...(game.over ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
   };
 }
@@ -466,12 +482,36 @@ async function writeRows(api, db, game, writer, only = null) {
   if (only !== 'a') await api.update(api.ref(db, `${NODE}/index/${game.b.code}/${game.id}`), rowFor(game, 'b', writer));
 }
 
+/** How many games one side must win to take a series of `len`. 1 -> 1, 3 -> 2, 5 -> 3. */
+export function seriesTarget(len) { return ((SERIES_LENGTHS.includes(+len) ? +len : 1) + 1) / 2; }
+
+/** Where a series stands AFTER this game (pure; Hoops' seriesAfter, which has no draws here). */
+export function seriesAfter(game) {
+  const len = SERIES_LENGTHS.includes(+(game && game.series)) ? +game.series : 1;
+  const before = (game && game.seriesWins) || { a: 0, b: 0 };
+  const w = game && game.over ? game.over.winner : null;
+  const wins = { a: (before.a | 0) + (w === 'a' ? 1 : 0), b: (before.b | 0) + (w === 'b' ? 1 : 0) };
+  const target = seriesTarget(len);
+  const champion = wins.a >= target ? 'a' : wins.b >= target ? 'b' : null;
+  const no = Math.max(1, (game && game.seriesNo) | 0 || 1);
+  const done = !!champion || no >= len;
+  return { len, no, wins, target, done, winner: champion || (done && wins.a !== wins.b ? (wins.a > wins.b ? 'a' : 'b') : null) };
+}
+
+/** Who starts the next game of a series: whoever LOST this one, so the two phones never both do. */
+export function seriesStarter(game) {
+  const w = game && game.over && game.over.winner;
+  return w === 'a' ? 'b' : 'a';
+}
+
 /**
- * Start a challenge against `them` ({code, name, emoji}) under `rules` ({gent, rr}). The challenger
- * is side 'a' and shoots first. Only the challenger's own row is written here; the other person's
- * arrives when the first turn passes to them (appendLog). Returns { ok, id, game } or a failure.
+ * Start a challenge against `them` ({code, name, emoji}) under `rules` ({gent, rr, su}). Side 'a'
+ * shoots first: normally the challenger, whose own row is the only one written here (the other
+ * person's arrives when the first turn passes, appendLog). A series game where the OTHER person
+ * shoots first (`first: 'them'`) makes them side 'a' and writes both rows now, since it is already
+ * their turn. Returns { ok, id, game } or a failure.
  */
-export async function createGame({ them, rules }) {
+export async function createGame({ them, rules, series = 1, seriesNo = 1, seriesWins = null, seriesOf = null, first = 'me' }) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
@@ -483,11 +523,20 @@ export async function createGame({ them, rules }) {
   const r = cleanRules(rules);
   const doc = {
     v: 1, id, by: me, created: now, updated: now,
-    rules: { gent: r.gent, rr: r.rr, bk: true, lc: true, fb: true }, // rules added since: back-wall reracks, balls back on the last cup and after a fire run
+    rules: { gent: r.su ? false : r.gent, rr: r.su ? 0 : r.rr, bk: true, lc: true, fb: true, ...(r.su ? { su: true } : {}) },
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
   };
+  const len = SERIES_LENGTHS.includes(+series) ? +series : 1;
+  if (len > 1) {
+    doc.series = len;
+    doc.seriesNo = Math.min(len, Math.max(1, seriesNo | 0 || 1));
+    doc.seriesWins = { a: Math.max(0, (seriesWins && seriesWins.a) | 0), b: Math.max(0, (seriesWins && seriesWins.b) | 0) };
+    doc.seriesOf = typeof seriesOf === 'string' && ID_RE.test(seriesOf) ? seriesOf : id;
+  }
+  const theyFirst = first === 'them';
+  if (theyFirst) { const x = doc.a; doc.a = doc.b; doc.b = x; }
   try {
     const boot = await ready();
     if (!boot) return fail('offline', true);
@@ -497,7 +546,8 @@ export async function createGame({ them, rules }) {
     const game = back && back.exists() ? validateGame(back.val()) : null;
     if (!game) { console.error(`[cup-pong] write VERIFY FAILED for ${NODE}/games/${id}`); return fail('did-not-land', true); }
     game.id = id;
-    await writeRows(api, db, game, 'a', 'a');
+    if (theyFirst) await writeRows(api, db, game, 'b');         // their turn already: both rows now
+    else await writeRows(api, db, game, 'a', 'a');
     markSeen(id, game.updated);
     return { ok: true, id, game };
   } catch (err) {
@@ -566,6 +616,29 @@ export async function appendLog(id, base, entries) {
 
 /** Give the match up: the other person wins, nothing is deleted. A challenge never delivered (the
  *  other person has no row yet) is not handed to them as a win they never saw. */
+/**
+ * THE NEXT GAME OF A SERIES, from a finished one (Hoops' nextInSeries). Only whoever lost the last
+ * game is offered it (seriesStarter), so the two phones cannot both create it. The sides swap and
+ * so does the score, and whoever did NOT shoot first last game shoots first now.
+ */
+export async function nextInSeries(game) {
+  const me = myCode();
+  if (!game || !game.over) return fail('not-over');
+  const side = sideOf(game, me);
+  if (!side) return fail('not-your-game');
+  const st = seriesAfter(game);
+  if (st.done) return fail('series-over');
+  return createGame({
+    them: side === 'a' ? game.b : game.a,
+    rules: game.rules,
+    series: st.len,
+    seriesNo: st.no + 1,
+    seriesWins: { a: st.wins.b, b: st.wins.a },
+    seriesOf: game.seriesOf || game.id,
+    first: side === 'a' ? 'them' : 'me',
+  });
+}
+
 export async function resignGame(id) {
   const me = myCode();
   if (!me) return fail('no-player-code');
@@ -655,5 +728,5 @@ export function recordsFrom(rows, code) {
 
 export default {
   asCode, myCode, meLabel, validateGame, applyEntry, buildLocal, readMyGames, readGame, watchGame,
-  watchMyGames, readOpponents, createGame, appendLog, resignGame, recordsFrom,
+  watchMyGames, readOpponents, createGame, appendLog, resignGame, recordsFrom, seriesAfter, seriesStarter, nextInSeries,
 };

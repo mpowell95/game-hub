@@ -148,6 +148,18 @@ ok('the whole rack area is on the table',
   m = new Match({ first: 'a' }); m.grantExtra('a'); m.startTurn(); m.throwResult(miss);
   ok('a missed bonus throw changes nothing: the pair still comes', m.shooter === 'a' && m.queue.join() === '0,1');
   ok('a saved match keeps a waiting bonus', Match.fromJSON(JSON.parse(JSON.stringify((() => { const x = new Match(); x.grantExtra('b'); return x.toJSON(); })()))).bonus.b === 1);
+  // STRAIGHT UP (Matt, 2026-09-30): no assists at all.
+  m = new Match({ first: 'a', straight: true }); m.streak.a = [2, 2]; m.startTurn();
+  ev = m.throwResult({ made: 'k0' }).concat(m.throwResult({ made: 'k1' }));
+  ok('straight up: both balls in, no balls back, no fire, the turn passes', !types(ev).includes('ballsBack') && !types(ev).includes('onFire') && m.shooter === 'b');
+  m.racks.b = m.racks.b.slice(0, 2); m.startTurn(); m.throwResult(miss); m.throwResult(miss); m.startTurn();
+  ok('straight up: no Gentleman\'s, no rerack, no island', !m.canGentlemans() && !m.canRerack() && !m.canIsland());
+  m.throwResult({ made: m.racks.b[0].id });
+  ev = m.throwResult({ made: m.racks.b[0].id });
+  ok('straight up: first to clear the rack wins on the spot, no rebuttal', m.over && m.winner === 'a' && !types(ev).includes('rebuttal'));
+  m = new Match({ first: 'a', straight: true }); m.racks.b = [{ id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.throwResult({ made: 'k9' });
+  ok('straight up: the last cup goes at once (no last-cup rule)', m.over && m.winner === 'a');
   // BALLS BACK ON THE LAST CUP (Matt, 2026-09-29): both balls in with the second on the last cup.
   const twoLeft = (opts = {}) => { const mm = new Match({ first: 'a', ...opts }); mm.racks.b = [{ id: 'k8', c: -1, r: 2 }, { id: 'k9', c: 0, r: 3 }]; mm.startTurn(); return mm; };
   m = twoLeft(); m.throwResult({ made: 'k8' });
