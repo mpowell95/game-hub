@@ -126,10 +126,10 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
   turn, Their turn, History. Files: `js/mp.js` (data), `js/mp-ui.js` (the list screens, lazily
   imported), `js/alert.js` (the launcher bubble; `alerts:` on the hub entry).
 - **The node:** `darts/games/<id>` + `darts/index/<CODE>/<id>`, addressed by PLAYER CODE. Added to
-  `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **The rules branch was NOT yet
-  published when this was written (2026-10-01): Matt said he could paste it "now"**. Until it is,
-  every online call fails softly ("Online play is not switched on yet"). Close this line the moment
-  he confirms.
+  `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **PUBLISHED by Matt on
+  2026-10-01** (he pasted the whole file; verified the same day: `darts/` reads, where it was
+  refused before, and every other branch reads exactly as it did that morning, same 289 device
+  records and 8597 plays).
 - **A match is a LOG of darts**, each the point it landed on (x, y in R units, rounded to 1/10000),
   never a snapshot. `validateGame` replays it through `engine.js` and refuses the whole document if
   one dart does not replay (a dart out of turn, a claimed win the darts never produced). The phone
