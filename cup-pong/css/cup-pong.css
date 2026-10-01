@@ -366,3 +366,25 @@
 .cp-root .cp-wall { fill: #6b4a2b; }
 .cp-root .cp-custom-say.is-warn { color: #b3261e; font-weight: 800; }
 :root.gh-dark .cp-root .cp-custom-say.is-warn { color: #ff8a80; }
+/* STRAIGHT UP comes across the screen when such a match opens (2026-10-01). Words, not colour, carry
+   it; the accent edges are decoration. pointer-events: none so it never eats a flick. */
+.cp-root .cp-sweep {
+  position: absolute; inset: 0; z-index: 40;
+  display: flex; align-items: center; overflow: hidden; pointer-events: none;
+}
+.cp-root .cp-sweep-band {
+  width: 100%; padding: 14px 16px; text-align: center; color: #fff;
+  background: linear-gradient(90deg, rgba(16, 20, 30, 0) 0%, rgba(16, 20, 30, 0.92) 10%, rgba(16, 20, 30, 0.92) 90%, rgba(16, 20, 30, 0) 100%);
+  border-top: 3px solid #ffce3a; border-bottom: 3px solid #ffce3a;
+  animation: cp-sweep 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.cp-root .cp-sweep-band b { display: block; font-size: 44px; font-weight: 900; letter-spacing: 0.06em; line-height: 1.05; }
+.cp-root .cp-sweep-band span { display: block; margin-top: 4px; font-size: 16px; font-weight: 700; opacity: 0.92; }
+.cp-root .cp-sweep.is-still .cp-sweep-band { animation-name: cp-sweep-fade; }
+@keyframes cp-sweep {
+  0% { transform: translateX(110%); }
+  16% { transform: translateX(0); }
+  82% { transform: translateX(0); }
+  100% { transform: translateX(-110%); }
+}
+@keyframes cp-sweep-fade { 0% { opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }

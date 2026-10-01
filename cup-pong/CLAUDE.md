@@ -242,6 +242,14 @@ with no assists at all."*
   AND the score (Hoops' 2026-09-23 bug), and whoever did not shoot first last game shoots first.
   When the other person shoots first, `createGame({ first: 'them' })` makes them side 'a' and writes
   both rows at once; otherwise the game reaches them when the first turn ends, like any challenge.
+- **Straight up is impossible to miss** (Matt, 2026-10-01: *"Make it clear when you've been
+  challenged to a straight up match. Maybe something written on the table? Something that comes
+  across the screen?"*): a banner sweeps across the screen every time such a match is opened
+  ("STRAIGHT UP / No assists. First to sink all 10 wins", `sweepBanner`, fades under reduced
+  motion), the words are painted on the felt for the whole match (`render.setTableText`, one
+  upright copy between the waiting ball and the rack; both camera views look the same way down the
+  table, so a mirrored second copy read upside down and was removed), and the setup screen's Your
+  turn row says "Straight up". The launcher bubble and the push text do not say it yet.
 - The HUD's second line adds "Game 2 of 3" and "Straight up". A finished series' card offers
   Challenge again with the same rules and length.
 - Verified in two browser profiles against the local stand-in database: the terms screen, a
