@@ -60,36 +60,47 @@ let go moving upward.
 
 ## How the dart FLIES (2026-10-01, `js/flight.js`)
 
-Matt, after playing it: *"The darts go more like a line drive than in the example video."* The first
-build slid a shrinking picture of a dart straight to the landing point. GamePigeon's, filmed at 60
-fps, flies AWAY from a camera behind the thrower: it rises up the screen big and upright, is nearly
-over its target while still big, then tips over onto its flights and sticks showing them end-on.
+Three models in one day. Matt, after the first build: *"The darts go more like a line drive than in
+the example video."* Then, after a "bigger arc": *"Something has gone horribly wrong."* He asked for
+a side view of every throw in both videos, then *"make it match game pigeon"*. What ships now is
+COPIED from GamePigeon's video, not reasoned out.
 
-- **A 3D model, seen through a pinhole camera** at 2.37 m (the regulation oche) with the focal
-  length set so the board lands exactly where it is drawn. Every dart (in the hand, in flight,
-  falling off the wall, stuck in the board) is a world tip point plus an axis, projected to a
-  screen tip and tail; `render.js drawDart` draws from those two points and blends the flights to an
-  end-on cross as the projected length shrinks below the dart's width.
-- **Paced to the video, not a stopwatch.** A true constant-speed throw shrank fourfold in the first
-  third, went end-on as soon as it was level with its target, then crawled (filmed and rejected the
-  same day). So: the screen position moves evenly and slows into the board (`ease`); depth lags it
-  (the dart stays big until late); a small rise (`ARC`) bows the path; and the axis is STEERED,
-  side-on along the path until `TIP_FROM` and then onto `STUCK_AXIS`.
-- **A bigger arc, on request** (Matt, same day: *"Yes I want a bigger one"*): every flight is now
-  a LOB that peaks `ARC` (0.45) board radii ABOVE its landing point, whatever the target (the rise
-  is solved per flight in `makeFlight`), then drops in nose-first. `FLIGHT_T` 0.34 s (was 0.2 s,
-  the reference's own pace, when the arc was a small bow); `TIP_FROM` 70%. The dart points along its
-  path ON SCREEN (corrected for perspective, or off-centre darts lean sideways), and at the top of
-  the lob, where it nearly stops on screen, it noses over THROUGH end-on rather than swinging round.
-  One number makes it bigger or smaller: `ARC`.
+- **A 3D dart seen through a pinhole camera** at 2.37 m (the regulation oche), focal length set so
+  the board lands exactly where it is drawn. Every dart (in the hand, in flight, falling off the
+  wall, stuck in the board) is a world tip point plus an axis, projected to a screen tip and tail;
+  `render.js drawDart` draws from those two points and blends the flights to an end-on cross as the
+  projected length shrinks below the dart's width.
+- **The flight, measured.** Twelve GamePigeon throws were tracked at 60 fps (the dart's position on
+  screen, and its size, which gives its depth). Every one takes about 0.47 s (`FLIGHT_T`) and does
+  two things. **Climb** (first 60%, `CLIMB`): it rushes up the screen and slows (1-(1-k)^3) to a
+  point ABOVE its target, `APEX` (0.33) board radii above plus `APEX_SLOPE` (0.128) per radius the
+  target sits below the bull (measured: 0.24R aimed high, 0.33R mid, 0.43R low, 0.52R very low);
+  its depth starts slow and speeds up (k^1.8), so it stays big off the hand. **Settle** (last 40%):
+  small and end-on, nearly at the board, it drops straight down onto its target, gathering speed.
+  Physically impossible (it slides down the face of the board) and exactly what the video shows.
+  Both halves are written in screen terms (x/z, y/z) plus a depth, then lifted into the world.
+- **The axis turns steadily, it is never derived from the path**: side-on in the hand (`REST_AXIS`)
+  to end-on (`STUCK_AXIS`) by 42% of the flight (`TURN`), slow at first. Neither axis has a sideways
+  part, so the dart only ever leans the way perspective leans it.
+- **What went "horribly wrong" (v1041), so nobody brings it back:** a lob solved on screen with the
+  axis STEERED along the screen path. At the top of the lob the screen path reversed, the steered
+  axis swung through it, and for a frame the dart was drawn as a big sideways cross by the bull, then
+  popped up by the 20 pointing down before falling onto its target. The side view also showed the
+  "bigger arc" was the wrong fix: GamePigeon's real path is a gentle climb with almost no arc; the
+  lob is what a camera behind the thrower makes of it.
+- **End-on flights are drawn the size GamePigeon draws them**: the cross spans about what the
+  flights span side-on (`a = u * 0.24` in `drawDart`, was 0.34, which made the stuck dart and the
+  last half of every flight look too big).
 - **It never decides where the dart lands.** The flight always ends exactly on the point the rules
   already chose (flick, computer, or an online log entry), so scoring and online replay are
   untouched; every stuck dart sits on `STUCK_AXIS`, so a replayed or restored dart looks the same as
-  a fresh one. Tests in `darts/js/test.js` section 5 (lands exactly, no lob, upright a third of the
-  way, end-on when stuck, the hand dart's size).
+  a fresh one. Tests in `darts/js/test.js` section 5 (lands exactly, climbs to the measured apex,
+  climb then settle with no reversal, upright early, end-on by `TURN`, never sideways).
+- How it was checked: GamePigeon frames and Game Hub frames (headless Chromium, `_tick(1/60)`)
+  side by side, every second frame, same target. The tracking scripts are not in the repo; the
+  method is: red pixels that are not red in the still frames, blob centre and width per frame.
 - Online search for a reusable darts engine (2026-10-01) found only three.js/cannon physics demos,
-  nothing that fits a no-dependency canvas game; the published dart physics (5-6 m/s, 15-20 degrees
-  up, lands nose-down) informed the model instead.
+  nothing that fits a no-dependency canvas game.
 
 ## Screens
 

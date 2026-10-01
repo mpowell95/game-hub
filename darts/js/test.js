@@ -133,7 +133,7 @@ ok('a faster flick lands higher', flickLanding(0, 1.6, 0, -500, FLICK_MID * 1.3)
 ok('a slower flick lands lower', flickLanding(0, 1.6, 0, -500, FLICK_MID * 0.8).y > 0.3);
 ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID).x > 0.2);
 
-// 5. The 3D throw (flight.js): it lands exactly where the rules said, on an arc, nose down.
+// 5. The 3D throw (flight.js): it lands exactly where the rules said, the way GamePigeon's does.
 {
   const F = await import('./flight.js');
   const cam = F.makeCamera(195, 285, 147);
@@ -152,37 +152,46 @@ ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID
   }
   ok('every flight ends exactly on its landing point', lands);
   const fl = F.makeFlight(from, 0, 0);
-  let minY = Infinity;
-  for (let i = 0; i <= 40; i++) minY = Math.min(minY, F.project(cam, F.at(fl, fl.T * i / 40).tip).y);
-  ok('a lob: aimed at the bull it peaks ARC board radii above it, then drops in', Math.abs(minY - (285 - F.ARC * 147)) < 3, String(minY));
+  // GamePigeon's two halves: a climb to a point above the target, then a settle straight down onto it.
+  const ys = [];
+  for (let i = 0; i <= 60; i++) ys.push(F.project(cam, F.at(fl, fl.T * i / 60).tip).y);
+  const top = Math.min(...ys), topAt = ys.indexOf(top) / 60;
+  const want = 285 - (F.APEX + F.APEX_SLOPE * 0.45) * 147;
+  ok('it climbs to just above its target (GamePigeon: a third of a radius above the bull)', Math.abs(top - want) < 2, top.toFixed(1));
+  ok('the climb ends about 60% of the way through the flight', Math.abs(topAt - F.CLIMB) < 0.05, String(topAt));
+  let mono = true;
+  for (let i = 1; i < ys.length; i++) if (i / 60 <= F.CLIMB ? ys[i] > ys[i - 1] + 1e-9 : ys[i] < ys[i - 1] - 1e-9) mono = false;
+  ok('up the screen while it climbs, only down while it settles (no jump, no reversal)', mono);
   {
-    const hi = F.makeFlight(from, 0, -0.95);
-    let top = Infinity;
-    for (let i = 0; i <= 60; i++) top = Math.min(top, F.project(cam, F.at(hi, hi.T * i / 60).tip).y);
-    ok('aimed at the top double it still peaks ARC above it, and stays on screen', Math.abs(top - (285 - (0.95 + F.ARC) * 147)) < 3 && top > 0, String(top));
+    const hi = F.makeFlight(from, 0, -0.95), lo = F.makeFlight(from, 0, 0.9);
+    const peak = (f) => { let m = Infinity; for (let i = 0; i <= 60; i++) m = Math.min(m, F.project(cam, F.at(f, f.T * i / 60).tip).y); return m; };
+    const above = (f, by) => (285 + by * 147) - peak(f);
+    ok('aimed high it climbs less above its target than aimed low (as in the video)', above(hi, -0.95) < above(lo, 0.9) && above(hi, -0.95) > 0.1 * 147, above(hi, -0.95).toFixed(1) + ' / ' + above(lo, 0.9).toFixed(1));
+    ok('aimed at the top double it stays on screen', peak(hi) > 0);
   }
   const arrive = F.at(fl, fl.T).axis;
   const deg = Math.atan2(arrive[1], arrive[2]) * 180 / Math.PI;
   ok('it arrives pointing into the board, nose a little down (STUCK_AXIS)', arrive[2] > 0.9 && deg > 0 && deg < 25, deg.toFixed(1));
-  // Early in the flight it still points UP the screen (side-on); it tips onto its flights late.
-  const mid = F.at(fl, fl.T * 0.35), pm = F.pose(cam, mid.tip, mid.axis, F.solveLength(cam, hand.x, hand.y, 180));
-  ok('a third of the way it is still upright on screen, not end-on', pm.tail.y - pm.tip.y > 30, String(pm.tail.y - pm.tip.y));
-  // Screen speed falls as it nears the board (perspective): the first tenth covers far more screen than the last.
-  const sp = (a, b) => { const p = F.project(cam, F.at(fl, a).tip), q = F.project(cam, F.at(fl, b).tip); return Math.hypot(p.x - q.x, p.y - q.y); };
+  const Lr = F.solveLength(cam, hand.x, hand.y, 180);
+  const len = (k) => { const a = F.at(fl, fl.T * k), p = F.pose(cam, a.tip, a.axis, Lr); return { up: p.tail.y - p.tip.y, side: Math.abs(p.tail.x - p.tip.x) }; };
+  ok('a sixth of the way it is still upright on screen, not end-on', len(1 / 6).up > 40, String(len(1 / 6).up));
+  ok('it is end-on (a stub) by the end of the turn', Math.hypot(len(F.TURN).up, len(F.TURN).side) < 25, JSON.stringify(len(F.TURN)));
+  let sideways = 0;
+  for (let i = 0; i <= 40; i++) sideways = Math.max(sideways, len(i / 40).side);
+  ok('it never turns sideways on screen (the old "big X" frame)', sideways < 1e-6, String(sideways));
   {
-    // Off-centre throws: on screen the dart points along its own path (never sideways against it).
-    const side = F.makeFlight(from, -0.7, -0.2), Ls = F.solveLength(cam, hand.x, hand.y, 180);
-    let worst = 1;
-    for (let i = 2; i <= 12; i++) {
-      const k = side.T * i / 20, a = F.at(side, k), p = F.pose(cam, a.tip, a.axis, Ls);
-      const n = F.project(cam, F.at(side, k + side.T * 0.02).tip), c = F.project(cam, a.tip);
-      const dir = [p.tip.x - p.tail.x, p.tip.y - p.tail.y], mv = [n.x - c.x, n.y - c.y];
-      const cos = (dir[0] * mv[0] + dir[1] * mv[1]) / (Math.hypot(...dir) * Math.hypot(...mv) || 1);
-      worst = Math.min(worst, cos);
+    // Off-centre: perspective leans it a little toward the middle, never flat.
+    const side = F.makeFlight(from, -0.7, -0.2);
+    let worst = 0;
+    for (let i = 0; i <= 20; i++) {
+      const a = F.at(side, side.T * i / 20 * F.TURN), p = F.pose(cam, a.tip, a.axis, Lr);
+      const dx = Math.abs(p.tail.x - p.tip.x), dy = Math.abs(p.tail.y - p.tip.y);
+      if (dy > 8) worst = Math.max(worst, dx / dy);
     }
-    ok('an off-centre dart points along its path on screen while it climbs', worst > 0.9, worst.toFixed(2));
+    ok('an off-centre dart stays upright while it turns (leans less than 45 degrees)', worst < 1, worst.toFixed(2));
   }
-  ok('fast off the hand, slow into the board', sp(0, fl.T * 0.1) > 3 * sp(fl.T * 0.9, fl.T));
+  const sp = (a, b) => { const p = F.project(cam, F.at(fl, a).tip), q = F.project(cam, F.at(fl, b).tip); return Math.hypot(p.x - q.x, p.y - q.y); };
+  ok('fast off the hand, slowing as it climbs', sp(0, fl.T * 0.1) > 3 * sp(fl.T * 0.5, fl.T * 0.6));
   const L = F.solveLength(cam, hand.x, hand.y, 180);
   const rest = F.pose(cam, from, F.REST_AXIS, L);
   ok('in the hand the dart points UP the screen and is the size asked for',
