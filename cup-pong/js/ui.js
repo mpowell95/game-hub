@@ -569,6 +569,11 @@ class CupPong {
     this.mp = { id: game.id, side, game, themName: them.name || '?', themEmoji: them.emoji || '🙂', them,
       base: game.log.length, applied: from, pending: [], sending: false, stop: null, finished: false };
     this.match = MP.buildLocal(game, side, from);
+    // STRAIGHT UP has to be impossible to miss (Matt, 2026-10-01): the words on the felt for the
+    // whole match, and a banner across the screen every time it is opened.
+    const su = !!(game.rules && game.rules.su);
+    this.engine.rend.setTableText(su ? t('straightUpBig') : null);
+    if (su) this.sweepBanner();
     this.recorded = false;
     this.throwState = null;
     this.pickMode = null;
@@ -598,6 +603,16 @@ class CupPong {
     if (this.match.over) { this.finish(); return; }
     if (g.over && g.over.why === 'resign') { this.mpFinish(g.over.winner === mp.side, true); return; }
     this.mpResume();
+  }
+
+  /** STRAIGHT UP, across the screen as a match of that mode opens. Reduced motion: it fades. */
+  sweepBanner() {
+    const el = document.createElement('div');
+    el.className = 'cp-sweep' + (reducedMotion() ? ' is-still' : '');
+    el.setAttribute('role', 'status');
+    el.innerHTML = `<div class="cp-sweep-band"><b>${t('straightUpBig')}</b><span>${t('straightHint')}</span></div>`;
+    this.root.appendChild(el);
+    this.later(() => el.remove(), 2900);
   }
 
   /** Your turn picks up where it stands (mid-turn on a reopened match, or a fresh turn). */
@@ -904,7 +919,7 @@ class CupPong {
       box.innerHTML = `<p class="cp-card-head">${t('yourTurn')}</p>` + mine.slice(0, 4).map((r) => `
         <button type="button" class="cp-trow" data-id="${r.id}">
           <span class="cp-trow-face" aria-hidden="true">${escapeHTML(r.emoji)}</span>
-          <span class="cp-trow-name">${escapeHTML(r.name)}${r.rebuttal ? `<small>${t('rebuttal')}</small>` : ''}</span>
+          <span class="cp-trow-name">${escapeHTML(r.name)}${r.rebuttal || r.su || r.series > 1 ? `<small>${escapeHTML([r.rebuttal ? t('rebuttal') : '', r.series > 1 ? t('gameOf', { n: r.seriesNo, m: r.series }) : '', r.su ? t('straightUp') : ''].filter(Boolean).join(' · '))}</small>` : ''}</span>
           <span class="cp-trow-go">${t('play')}</span>
         </button>`).join('')
         + (mine.length > 4 ? `<button type="button" class="cp-trow-more" data-role="more">${t('moreN', { n: mine.length - 4 })}</button>` : '');

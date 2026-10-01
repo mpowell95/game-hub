@@ -377,6 +377,45 @@ export class Renderer {
    * opponent's balls coming at you over your own cups, with the table's end and the floor below.
    * The move between them is a short glide (instant under reduced motion).
    */
+  /**
+   * Words painted on the felt (Matt, 2026-10-01: "Make it clear when you've been challenged to a
+   * straight up match. Maybe something written on the table?"). One copy on the far half, between
+   * the waiting ball and the rack: both camera views look down the table the same way, so it reads
+   * upright in each (a mirrored second copy read upside down). `null` takes it off. Paint only.
+   */
+  setTableText(text) {
+    for (const m of this._tableText || []) {
+      this.scene.remove(m);
+      try { m.geometry.dispose(); m.material.map.dispose(); m.material.dispose(); } catch {}
+    }
+    this._tableText = [];
+    if (!text) return;
+    const W = 1024, H = 200;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    g.font = '900 150px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const s = Math.min(1, (W - 40) / g.measureText(text).width);
+    g.save(); g.translate(W / 2, H / 2 + 6); g.scale(s, 1);
+    g.lineWidth = 14; g.strokeStyle = 'rgba(0,60,25,0.35)'; g.strokeText(text, 0, 0);
+    g.fillStyle = 'rgba(255,255,255,0.78)'; g.fillText(text, 0, 0);
+    g.restore();
+    for (const end of [1]) {
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const w = TABLE.width * 0.86;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, w * H / W), mat);
+      mesh.rotation.set(-Math.PI / 2, 0, end > 0 ? 0 : Math.PI);
+      mesh.position.set(0, 0.0015, -end * TABLE.len * 0.17);   // between the waiting ball and each rack
+      mesh.renderOrder = 1;
+      this.scene.add(mesh);
+      this._tableText.push(mesh);
+    }
+  }
+
   setView(view) {
     const pose = view === 'defend' ? DEFEND : SHOOT;
     this._view = view;
