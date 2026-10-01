@@ -191,6 +191,9 @@ const GAME_META = [
   { id: 'holdem', labelKey: 'game_title_holdem' },
   { id: 'airhockey', labelKey: 'game_title_airhockey' },
   { id: 'cuppong', labelKey: 'game_title_cuppong' },
+  // Darts (2026-10-01): admin only at first; the row ships with the game (the Yahtzee lesson
+  // above). isGameOnLauncher keeps its board hidden until Matt releases it.
+  { id: 'darts', labelKey: 'game_title_darts' },
   // Golf is solo (js/players-agg.js's SOLO set) and ranks by lifetime points, same shape as
   // Skeeball - see golfPointsAt below. The row exists from Part 7 even though the one
   // course starts admin-gated to 'testing' (js/admin-config.js): the row costs nothing while nobody but the dev profile can play, and a row added later (after

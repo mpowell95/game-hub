@@ -30,6 +30,7 @@ const SUITES = [
   { file: 'nuts-bolts/js/test.js' },
   { file: 'sudoku/js/test.js' },
   { file: 'murdoku/js/test.js' },
+  { file: 'darts/js/test.js' },
   { file: 'contexto/js/test.js' },
   { file: 'tic-tac-toe/js/test.js' },
   { file: 'dots-boxes/js/test.js' },

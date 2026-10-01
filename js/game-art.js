@@ -990,6 +990,42 @@ export const GAME_ART = {
             <circle cx="106" cy="44" r="1.2" fill="#1b120e"/><circle cx="110" cy="44" r="1.2" fill="#1b120e"/>
             <path d="M106 47.5 H110" stroke="#1b120e" stroke-width="0.9"/>
           </svg>`,
+  // Darts (2026-10-01): the board on the wooden wall with a red dart in the treble 20 and another
+  // flying in, its flights crossed.
+  darts: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#6b3a20"/>
+            <path d="M0 0H160V90H0Z M20 0V90 M58 0V90 M104 0V90 M140 0V90" stroke="#4e2814" stroke-width="1.4" fill="none" opacity="0.6"/>
+            <circle cx="72" cy="45" r="40" fill="#151515"/>
+            <circle cx="72" cy="45" r="31" fill="#f1ebdc"/>
+            <g fill="#1d1b1a">
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(36 72 45)"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(72 72 45)"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(108 72 45)"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(144 72 45)"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(180 72 45)"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(216 72 45)"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(252 72 45)"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(288 72 45)"/>
+              <path d="M72 45 L67.15 14.38 A31 31 0 0 1 76.85 14.38 Z" transform="rotate(324 72 45)"/>
+            </g>
+            <circle cx="72" cy="45" r="31" fill="none" stroke="#d42a2a" stroke-width="2.6"/>
+            <circle cx="72" cy="45" r="18.5" fill="none" stroke="#1d8a3c" stroke-width="2"/>
+            <circle cx="72" cy="45" r="3.6" fill="#1d8a3c"/>
+            <circle cx="72" cy="45" r="1.6" fill="#d42a2a"/>
+            <text x="72" y="10.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="7" font-weight="800" fill="#fff">20</text>
+            <g transform="translate(72 26)">
+              <path d="M0 0 L5 -4" stroke="#b8bec4" stroke-width="1.6"/>
+              <path d="M2 -9 L9 -2 M9 -9 L2 -2" stroke="#d8262c" stroke-width="2.6" stroke-linecap="round"/>
+            </g>
+            <g transform="translate(124 22) rotate(-24) scale(0.92)">
+              <path d="M0 0 L1.2 9 L-1.2 9 Z" fill="#c9ced3"/>
+              <rect x="-2.4" y="9" width="4.8" height="16" rx="1.5" fill="#dfe3e7"/>
+              <rect x="-1.4" y="25" width="2.8" height="14" fill="#d8262c"/>
+              <path d="M0 34 L-9 48 L-6 52 L0 46 Z M0 34 L9 48 L6 52 L0 46 Z" fill="#d8262c"/>
+              <path d="M0 36 L-2.5 50 L0 53 L2.5 50 Z" fill="#8f1418"/>
+            </g>
+          </svg>`,
 };
 
 export default GAME_ART;

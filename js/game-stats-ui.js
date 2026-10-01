@@ -66,6 +66,10 @@ const TABS = [
   { id: 'airhockey', labelKey: 'game_title_airhockey', devOnly: true },
   // Admin only while it is built in stages (docs/CUP-PONG-BRIEF.md); plain total/byDiff vs the computer.
   { id: 'cuppong', labelKey: 'game_title_cuppong', devOnly: true },
+  // Darts (2026-10-01): admin only at first, but NOT devOnly here (Murdoku's reasoning): a row only
+  // renders for a game with plays, and a devOnly tab would stay hidden after Matt releases it from
+  // the admin page. total/byDiff only, so the generic screen draws it.
+  { id: 'darts', labelKey: 'game_title_darts' },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
