@@ -106,7 +106,9 @@ options, pill buttons stacked on the LEFT edge of the table (`.cp-opts`), each s
 is on offer and gone after the turn's first throw:
 
 - **Gentleman's**: the rack being shot at is down to 2 cups not already in a line, the setting is
-  On, not overtime. Free. The cups slide into the line.
+  On, not overtime. Free. The cups slide into the line. **Also in a REBUTTAL, any time a ball is in hand** (Matt,
+  2026-10-01: a rebuttal make left 2 cups, "Gentleman's is offered" should happen before the ball
+  that comes back). A normal turn still offers it only before the turn's first throw.
 - **Rerack (n)**: before the turn's first throw, one a turn, not in a rebuttal or overtime, while
   the shooter has reracks left. Opens a sheet of the presets for that many cups (`rack.js RERACKS`,
   each drawn top-down), and the cups slide into the one tapped. **Make your own** is the last tile
