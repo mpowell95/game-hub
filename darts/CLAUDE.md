@@ -74,8 +74,14 @@ over its target while still big, then tips over onto its flights and sticks show
   third, went end-on as soon as it was level with its target, then crawled (filmed and rejected the
   same day). So: the screen position moves evenly and slows into the board (`ease`); depth lags it
   (the dart stays big until late); a small rise (`ARC`) bows the path; and the axis is STEERED,
-  side-on along the path until `TIP_FROM` (55%) and then onto `STUCK_AXIS`. `FLIGHT_T` is 0.2 s,
-  measured from the reference.
+  side-on along the path until `TIP_FROM` and then onto `STUCK_AXIS`.
+- **A bigger arc, on request** (Matt, same day: *"Yes I want a bigger one"*): every flight is now
+  a LOB that peaks `ARC` (0.45) board radii ABOVE its landing point, whatever the target (the rise
+  is solved per flight in `makeFlight`), then drops in nose-first. `FLIGHT_T` 0.34 s (was 0.2 s,
+  the reference's own pace, when the arc was a small bow); `TIP_FROM` 70%. The dart points along its
+  path ON SCREEN (corrected for perspective, or off-centre darts lean sideways), and at the top of
+  the lob, where it nearly stops on screen, it noses over THROUGH end-on rather than swinging round.
+  One number makes it bigger or smaller: `ARC`.
 - **It never decides where the dart lands.** The flight always ends exactly on the point the rules
   already chose (flick, computer, or an online log entry), so scoring and online replay are
   untouched; every stuck dart sits on `STUCK_AXIS`, so a replayed or restored dart looks the same as
