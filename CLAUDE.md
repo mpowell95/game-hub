@@ -774,8 +774,9 @@ the same day and **deployed by Matt on 2026-09-25** - see "Skeeball challenges" 
 was **DEPLOYED by Matt on 2026-09-28** - `cup-pong/CLAUDE.md`, "Challenges". Its rules branch
 `cuppong` was **PUBLISHED by Matt on 2026-09-28**. A sixth, `dartsTurnPush` (Darts challenges,
 `darts/index/<code>/<id>`), was added on 2026-10-01 and was **NOT yet deployed** that day (Matt: "i
-can't do the notification code until tonight"); its rules branch `darts` was **NOT yet published**
-when written (he said he would paste it "now"). Close both lines when he confirms -
+can't do the notification code until tonight"); its rules branch `darts` was **PUBLISHED by Matt on
+2026-10-01** (verified: `darts/` reads, every other branch unchanged). Close the deploy line when he
+confirms it -
 `darts/CLAUDE.md`, "Online challenges". **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
 for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
