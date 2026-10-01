@@ -160,7 +160,7 @@ export function drawDart(g, tip, tail, unit, seat, spin = 0, alpha = 1, shadow =
     g.lineWidth = u * 0.05;
     g.beginPath(); g.moveTo(tip.x, tip.y); g.lineTo(tail.x + sx, tail.y + sy + len * 0.2); g.stroke();
     g.lineWidth = u * 0.07;
-    const fx = tail.x + sx, fy = tail.y + sy + len * 0.2, a = u * 0.17;
+    const fx = tail.x + sx, fy = tail.y + sy + len * 0.2, a = u * 0.12;
     g.beginPath(); g.moveTo(fx - a, fy - a); g.lineTo(fx + a, fy + a); g.moveTo(fx + a, fy - a); g.lineTo(fx - a, fy + a); g.stroke();
   }
   // Local frame: tip at the origin, the dart running down +y to `len`.
@@ -214,10 +214,11 @@ export function drawDart(g, tip, tail, unit, seat, spin = 0, alpha = 1, shadow =
     g.globalAlpha = alpha * endOn;
     g.translate(0, L);
     g.rotate(spin + Math.PI / 4);
-    const a = u * 0.34;
-    g.strokeStyle = dark; g.lineWidth = u * 0.13;
+    // Sized off GamePigeon's video: end-on, its flights span about what they do side-on (0.5u).
+    const a = u * 0.24;
+    g.strokeStyle = dark; g.lineWidth = u * 0.1;
     g.beginPath(); g.moveTo(-a, 0); g.lineTo(a, 0); g.stroke();
-    g.strokeStyle = col; g.lineWidth = u * 0.12;
+    g.strokeStyle = col; g.lineWidth = u * 0.09;
     g.beginPath(); g.moveTo(0, -a); g.lineTo(0, a); g.stroke();
   }
   g.restore();
