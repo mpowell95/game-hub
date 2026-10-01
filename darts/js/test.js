@@ -133,5 +133,44 @@ ok('a faster flick lands higher', flickLanding(0, 1.6, 0, -500, FLICK_MID * 1.3)
 ok('a slower flick lands lower', flickLanding(0, 1.6, 0, -500, FLICK_MID * 0.8).y > 0.3);
 ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID).x > 0.2);
 
+// 5. The 3D throw (flight.js): it lands exactly where the rules said, on an arc, nose down.
+{
+  const F = await import('./flight.js');
+  const cam = F.makeCamera(195, 285, 147);
+  const hand = { x: 195, y: 560 };
+  const from = F.unproject(cam, hand.x, hand.y, F.HAND_Z);
+  const back = F.project(cam, from);
+  ok('unproject and project are inverses', Math.abs(back.x - hand.x) < 1e-6 && Math.abs(back.y - hand.y) < 1e-6);
+  const bull = F.project(cam, F.boardPoint(0, 0)), edge = F.project(cam, F.boardPoint(1, 0));
+  ok('the camera draws the board where it is drawn (bull at centre, R px to the double)', Math.abs(bull.x - 195) < 1e-6 && Math.abs(edge.x - 195 - 147) < 1e-6);
+  let lands = true;
+  for (const [bx, by] of [[0, 0], [0, -0.6], [0.8, 0.3], [-1.1, 0.9], [0, -2]]) {
+    const fl = F.makeFlight(from, bx, by);
+    const end = F.project(cam, F.at(fl, fl.T).tip);
+    const want = F.project(cam, F.boardPoint(bx, by));
+    if (Math.hypot(end.x - want.x, end.y - want.y) > 1e-6) lands = false;
+  }
+  ok('every flight ends exactly on its landing point', lands);
+  const fl = F.makeFlight(from, 0, 0);
+  let minY = Infinity;
+  for (let i = 0; i <= 40; i++) minY = Math.min(minY, F.project(cam, F.at(fl, fl.T * i / 40).tip).y);
+  ok('aimed at the bull it never overshoots far above it (not a lob)', minY > 285 - 40, String(minY));
+  const arrive = F.at(fl, fl.T).axis;
+  const deg = Math.atan2(arrive[1], arrive[2]) * 180 / Math.PI;
+  ok('it arrives pointing into the board, nose a little down (STUCK_AXIS)', arrive[2] > 0.9 && deg > 0 && deg < 25, deg.toFixed(1));
+  // Early in the flight it still points UP the screen (side-on); it tips onto its flights late.
+  const mid = F.at(fl, fl.T * 0.35), pm = F.pose(cam, mid.tip, mid.axis, F.solveLength(cam, hand.x, hand.y, 180));
+  ok('a third of the way it is still upright on screen, not end-on', pm.tail.y - pm.tip.y > 30, String(pm.tail.y - pm.tip.y));
+  // Screen speed falls as it nears the board (perspective): the first tenth covers far more screen than the last.
+  const sp = (a, b) => { const p = F.project(cam, F.at(fl, a).tip), q = F.project(cam, F.at(fl, b).tip); return Math.hypot(p.x - q.x, p.y - q.y); };
+  ok('fast off the hand, slow into the board', sp(0, fl.T * 0.1) > 3 * sp(fl.T * 0.9, fl.T));
+  const L = F.solveLength(cam, hand.x, hand.y, 180);
+  const rest = F.pose(cam, from, F.REST_AXIS, L);
+  ok('in the hand the dart points UP the screen and is the size asked for',
+    rest.tail.y > rest.tip.y && Math.abs(Math.hypot(rest.tip.x - rest.tail.x, rest.tip.y - rest.tail.y) - 180) < 0.5);
+  const stuck = F.pose(cam, F.boardPoint(0, 0), F.stuckAxis(), L);
+  ok('stuck in the board it shrinks to a stub (flights end-on)', Math.hypot(stuck.tip.x - stuck.tail.x, stuck.tip.y - stuck.tail.y) < 40);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

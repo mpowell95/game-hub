@@ -58,6 +58,33 @@ let go moving upward.
   yet on a real phone**. If Matt finds throws all landing high, raise `FLICK_MID`; all low, lower
   it; too twitchy, lower `FLICK_GAIN`.
 
+## How the dart FLIES (2026-10-01, `js/flight.js`)
+
+Matt, after playing it: *"The darts go more like a line drive than in the example video."* The first
+build slid a shrinking picture of a dart straight to the landing point. GamePigeon's, filmed at 60
+fps, flies AWAY from a camera behind the thrower: it rises up the screen big and upright, is nearly
+over its target while still big, then tips over onto its flights and sticks showing them end-on.
+
+- **A 3D model, seen through a pinhole camera** at 2.37 m (the regulation oche) with the focal
+  length set so the board lands exactly where it is drawn. Every dart (in the hand, in flight,
+  falling off the wall, stuck in the board) is a world tip point plus an axis, projected to a
+  screen tip and tail; `render.js drawDart` draws from those two points and blends the flights to an
+  end-on cross as the projected length shrinks below the dart's width.
+- **Paced to the video, not a stopwatch.** A true constant-speed throw shrank fourfold in the first
+  third, went end-on as soon as it was level with its target, then crawled (filmed and rejected the
+  same day). So: the screen position moves evenly and slows into the board (`ease`); depth lags it
+  (the dart stays big until late); a small rise (`ARC`) bows the path; and the axis is STEERED,
+  side-on along the path until `TIP_FROM` (55%) and then onto `STUCK_AXIS`. `FLIGHT_T` is 0.2 s,
+  measured from the reference.
+- **It never decides where the dart lands.** The flight always ends exactly on the point the rules
+  already chose (flick, computer, or an online log entry), so scoring and online replay are
+  untouched; every stuck dart sits on `STUCK_AXIS`, so a replayed or restored dart looks the same as
+  a fresh one. Tests in `darts/js/test.js` section 5 (lands exactly, no lob, upright a third of the
+  way, end-on when stuck, the hand dart's size).
+- Online search for a reusable darts engine (2026-10-01) found only three.js/cannon physics demos,
+  nothing that fits a no-dependency canvas game; the published dart physics (5-6 m/s, 15-20 degrees
+  up, lands nose-down) informed the model instead.
+
 ## Screens
 
 - Setup (a cream card over the lower half, the board above it): Play Computer / 2 players / Online,
