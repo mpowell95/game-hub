@@ -14,6 +14,7 @@
 //   bugReportPush   bugReports/<id>                  a new report, to every admin (2026-09-24)
 //   skeeChallengePush skeeChallenges/index/<code>/<id> a Skeeball challenge, or its result (2026-09-24)
 //   cupPongTurnPush cuppong/index/<code>/<id>        a Cup Pong challenge, your turn, the end (2026-09-28)
+//   dartsTurnPush   darts/index/<code>/<id>          a Darts challenge, your turn, the end (2026-10-01)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
@@ -23,7 +24,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, isActive } from './decide.js';
 
 initializeApp();
 
@@ -132,4 +133,12 @@ export const cupPongTurnPush = onValueWritten({ ref: '/cuppong/index/{code}/{id}
   const after = event.data.after.exists() ? event.data.after.val() : null;
   const note = decideCupPong({ code, id, before, after });
   if (note) await sendTo(getDatabase(), code, note, `cuppong-${id}`, { game: 'cuppong', match: id });
+});
+
+export const dartsTurnPush = onValueWritten({ ref: '/darts/index/{code}/{id}', ...OPTS }, async (event) => {
+  const { code, id } = event.params;
+  const before = event.data.before.exists() ? event.data.before.val() : null;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  const note = decideDarts({ code, id, before, after });
+  if (note) await sendTo(getDatabase(), code, note, `darts-${id}`, { game: 'darts', match: id });
 });

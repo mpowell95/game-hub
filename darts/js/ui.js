@@ -4,7 +4,8 @@
 //
 // isInProgress(): the AUTOSAVE meaning. The match is saved after every dart and every turn change
 // (gamehub.darts.save.v1) and picks up where it left off, so leaving is lossless and this returns
-// false. A match is only recorded once it is won.
+// false. A match is only recorded once it is won. An ONLINE match (2026-10-01, mp.js) lives on the
+// server, every dart written as it lands, so leaving one loses nothing either.
 
 import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING } from './engine.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
@@ -18,7 +19,8 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.darts.v1';
 const SAVE_KEY = 'gamehub.darts.save.v1';
-const MODES = ['cpu', 'pass'];
+const MODES = ['cpu', 'pass', 'online'];
+const LOCAL_MODES = ['cpu', 'pass'];      // the ones a saved match can be (online lives on the server)
 const FIRSTS = ['alt', 'me', 'them'];
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -120,6 +122,8 @@ class DartsUI {
     this._layout();
     this._showSetup();
     this._start();
+    // A tapped launcher bubble or notification names a match: open it straight away.
+    import('./alert.js').then((A) => { const o = A.takeOpen(); if (o && instance === this) this._openMatch(o.id); }).catch(() => {});
   }
 
   _ensureCss() {
@@ -166,15 +170,18 @@ class DartsUI {
               <span class="dt-label" data-l="difficulty"></span>
               <div class="gh-seg dt-seg" role="group" data-role="diffs"></div>
             </div>
-            <div class="dt-field">
+            <div class="dt-field" data-role="firstField">
               <span class="dt-label" data-l="first"></span>
               <div class="gh-seg dt-seg" role="group" data-role="firsts"></div>
             </div>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="play" data-role="playBtn"><span data-l="play"></span></button>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="play" data-role="playBtn"><span data-role="playLabel"></span></button>
+            <p class="dt-online-note" data-role="onlineNote" hidden></p>
             <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="howto"><span data-l="howto"></span></button>
           </div>
         </div>
+
+        <div class="dt-ov dt-ov-mp" data-ov="mp" hidden></div>
 
         <div class="dt-ov" data-ov="menu" hidden>
           <div class="dt-card dt-card-sm" role="dialog" aria-modal="true">
@@ -182,7 +189,9 @@ class DartsUI {
             <h2 class="dt-h2" data-l="menu"></h2>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="resume"><span data-l="resume"></span></button>
             <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="howto"><span data-l="howto"></span></button>
-            <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="quit"><span data-l="quit"></span></button>
+            <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="quit" data-local><span data-l="quit"></span></button>
+            <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="mpHome" data-online><span data-l="mp_back"></span></button>
+            <button type="button" class="gh-btn gh-btn--block dt-alt dt-danger" data-act="resign" data-online><span data-l="mp_resign"></span></button>
           </div>
         </div>
 
@@ -199,8 +208,8 @@ class DartsUI {
             <p class="dt-res-ava" data-role="resAva"></p>
             <h2 class="dt-h2" data-role="resTitle"></h2>
             <p class="dt-res-line" data-role="resLine"></p>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="again"><span data-l="play_again"></span></button>
-            <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="toSetup"><span data-l="menu"></span></button>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="again"><span data-role="againLabel"></span></button>
+            <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="toSetup"><span data-role="toSetupLabel"></span></button>
           </div>
         </div>
 
@@ -218,6 +227,14 @@ class DartsUI {
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="helpClose"><span data-l="help_close"></span></button>
           </div>
         </div>
+        <div class="dt-ov" data-ov="resign" hidden>
+          <div class="dt-card dt-card-sm" role="dialog" aria-modal="true">
+            <h2 class="dt-h2" data-l="mp_resign_q"></h2>
+            <button type="button" class="gh-btn gh-btn--block dt-danger" data-act="resignYes"><span data-l="mp_resign_yes"></span></button>
+            <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="menu"><span data-l="mp_cancel"></span></button>
+          </div>
+        </div>
+        <p class="dt-toast" data-role="toast" role="status" hidden></p>
         <p class="dt-sr" aria-live="polite" data-role="live"></p>
       </div>`;
     const q = (s) => this.host.querySelector(s);
@@ -262,7 +279,14 @@ class DartsUI {
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
     seg('firsts', 'first', FIRSTS, s.first, (id) => id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t(s.mode === 'pass' ? 'first_them_pass' : 'first_them_cpu'));
     this.root.querySelector('[data-role="diffField"]').hidden = s.mode !== 'cpu';
-    this.root.querySelector('[data-role="continueBtn"]').hidden = !this._savedMatch();
+    this.root.querySelector('[data-role="firstField"]').hidden = s.mode === 'online';
+    this.root.querySelector('[data-role="playLabel"]').textContent = t(s.mode === 'online' ? 'online_go' : 'play');
+    const sv = this._savedMatch();
+    this.root.querySelector('[data-role="continueBtn"]').hidden = !sv || s.mode === 'online';
+    this._paintOnlineNote();
+    const online = this.mode === 'mp';
+    this.root.querySelectorAll('[data-online]').forEach((el) => { el.hidden = !online; });
+    this.root.querySelectorAll('[data-local]').forEach((el) => { el.hidden = online; });
     if (this.seats) this._seatsHud();
     this._dartsLeftHud();
     if (this.screen === 'result') this._fillResult();
@@ -282,7 +306,7 @@ class DartsUI {
 
   _savedMatch() {
     const s = readJSON(SAVE_KEY);
-    if (!s || !MODES.includes(s.mode) || !validMatch(s.match) || s.match.winner != null) return null;
+    if (!s || !LOCAL_MODES.includes(s.mode) || !validMatch(s.match) || s.match.winner != null) return null;
     return s;
   }
 
@@ -290,11 +314,13 @@ class DartsUI {
 
   _showOnly(name) {
     for (const k of Object.keys(this.ov)) this.ov[k].hidden = k !== name;
-    this.root.classList.toggle('is-setup', name === 'setup' || (name === 'help' && !this.match));
+    this.root.classList.toggle('is-setup', name === 'setup' || name === 'mp' || (name === 'help' && !this.match));
   }
   _showSetup() {
+    this._mpLeave();
     this.screen = 'setup';
     this.match = null;
+    this.mode = null;
     this.seats = null;
     this.hand = null; this.flying = null; this.falling = null; this.flash = null;
     this.timers = [];
@@ -304,6 +330,7 @@ class DartsUI {
     this.hintEl.classList.remove('is-show');
     this._relabel();
     this._showOnly('setup');
+    if (this.settings.mode === 'online') this._countOnline();
   }
 
   // --- layout ----------------------------------------------------------------------------------
@@ -366,7 +393,10 @@ class DartsUI {
     this.mode = g.mode;
     this.diff = g.diff;
     this.match = g.match;
-    this.seats = this._seatsFor(g.mode, g.diff);
+    this.seats = g.seats || this._seatsFor(g.mode, g.diff);
+    // Online, you sit on the LEFT whichever side of the stored match you are (mp.js: 'a' is seat 0).
+    this.root.classList.toggle('is-flip', g.mode === 'mp' && this.mp && this.mp.mySeat === 1);
+    this._relabel();
     this.screen = 'play';
     this.timers = [];
     this.flying = null; this.falling = null; this.flash = null;
@@ -381,7 +411,7 @@ class DartsUI {
   }
 
   _save() {
-    if (!this.match) return;
+    if (!this.match || this.mode === 'mp') return;
     if (this.match.winner != null) { try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ } return; }
     writeJSON(SAVE_KEY, { mode: this.mode, diff: this.diff, match: this.match });
   }
@@ -425,7 +455,8 @@ class DartsUI {
       return;
     }
     if (announce) {
-      this._bannerShow(s.human && this.mode === 'cpu' ? t('your_turn') : t('turn_of', { name: s.name }), '', 'turn');
+      const mine = this.mode === 'mp' ? this.match.turn === this.mp.mySeat : s.human && this.mode === 'cpu';
+      this._bannerShow(mine ? t('your_turn') : t('turn_of', { name: s.name }), '', 'turn');
       this._say(t('say_turn', { name: s.name }));
     }
     this._nextDart();
@@ -438,6 +469,8 @@ class DartsUI {
 
   _nextDart() {
     const s = this._seat();
+    // Online, the other person's darts are not thrown here: they are SHOWN from the log.
+    if (this.mode === 'mp' && this.match.turn !== this.mp.mySeat) { this.hand = null; this.phase = 'idle'; this._mpCatchUp(); return; }
     this.hand = { x: this.handRest.x, y: this.handRest.y, len: this.handLen, seat: this.match.turn, spin: this.spin, alpha: 1, rise: 0 };
     if (s.human) {
       this.phase = 'aim';
@@ -461,6 +494,9 @@ class DartsUI {
 
   /** The dart leaves the hand at `from` (CSS px, the tip) for board point (x, y). */
   _launch(from, x, y) {
+    // Kept to the precision an online match stores (mp.js cleanEntry), so a dart on a wire scores the
+    // same here as on the other phone.
+    x = Math.round(x * 1e4) / 1e4; y = Math.round(y * 1e4) / 1e4;
     this.phase = 'flying';
     this.hintEl.classList.remove('is-show');
     const to = this.r.toPx(x, y);
@@ -478,6 +514,10 @@ class DartsUI {
     const res = throwDart(m, f.bx, f.by);
     const hit = res.hit;
     this._thrown = (this._thrown | 0) + 1;
+    if (this.mode === 'mp') {
+      this.mp.applied++;
+      if (seat === this.mp.mySeat) this._mpRecord(f.bx, f.by);
+    }
     if (hit.ring === 'off') {
       this.falling = { x: f.tx, y: f.ty, len: Math.max(14, f.len), seat, spin: f.spin, vy: 0, a: 1 };
       this.flying = null;
@@ -542,6 +582,7 @@ class DartsUI {
   _finish() {
     const m = this.match;
     if (!m || m.winner == null) return;
+    if (this.mode === 'mp') { this._mpFinish(m.winner === this.mp.mySeat, false); return; }
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
@@ -563,12 +604,18 @@ class DartsUI {
     const m = this.match;
     if (!m || m.winner == null) return;
     const w = this.seats[m.winner];
-    const title = this.mode === 'cpu' ? t(m.winner === 0 ? 'win_you' : 'lose_you') : t('win_name', { name: w.name });
+    const mp = this.mode === 'mp' ? this.mp : null;
+    const iWon = mp ? m.winner === mp.mySeat : m.winner === 0;
+    const title = this.mode === 'pass' ? t('win_name', { name: w.name }) : t(iWon ? 'win_you' : 'lose_you');
     this.root.querySelector('[data-role="resAva"]').textContent = w.emoji;
     this.root.querySelector('[data-role="resTitle"]').textContent = title;
     // Turns the winner took: their own visits to the oche.
     const visits = m.winner === m.starter ? Math.floor(m.turns / 2) + 1 : Math.floor((m.turns + 1) / 2);
-    this.root.querySelector('[data-role="resLine"]').textContent = t('result_line', { n: visits });
+    let line = t('result_line', { n: visits });
+    if (mp && mp.resigned) line = iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
+    this.root.querySelector('[data-role="resLine"]').textContent = line;
+    this.root.querySelector('[data-role="againLabel"]').textContent = t(mp ? 'mp_again' : 'play_again');
+    this.root.querySelector('[data-role="toSetupLabel"]').textContent = t(mp ? 'mp_back' : 'menu');
   }
 
   // --- effects ---------------------------------------------------------------------------------
@@ -610,19 +657,245 @@ class DartsUI {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'play') this._newMatch();
+    if (act === 'play') { if (this.settings.mode === 'online') this._openOnline(); else this._newMatch(); }
     else if (act === 'continue') this._continue();
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
     else if (act === 'helpClose') {
       if (this._helpFrom === 'menu') { this.screen = 'menu'; this._showOnly('menu'); }
       else this._showSetup();
     }
-    else if (act === 'menu') { if (this.screen === 'play') { this.screen = 'menu'; this._showOnly('menu'); this.drag = null; } }
+    else if (act === 'menu') { if (this.screen === 'play' || this.screen === 'resign') { this.screen = 'menu'; this._showOnly('menu'); this.drag = null; } }
     else if (act === 'resume') { this.screen = 'play'; this._showOnly(null); }
     else if (act === 'quit') { this._save(); this._showSetup(); }
+    else if (act === 'mpHome') this._openOnline();
+    else if (act === 'resign') { this.screen = 'resign'; this._showOnly('resign'); }
+    else if (act === 'resignYes') this._mpResign();
     else if (act === 'ready') { this.screen = 'play'; this._showOnly(null); this._startTurn(false); this._bannerShow(t('turn_of', { name: this._seat().name }), '', 'turn'); }
-    else if (act === 'again') this._newMatch();
-    else if (act === 'toSetup') this._showSetup();
+    else if (act === 'again') { if (this.mode === 'mp') this._sendChallenge(this.mp.them); else this._newMatch(); }
+    else if (act === 'toSetup') { if (this.mode === 'mp') this._openOnline(); else this._showSetup(); }
+  }
+
+  // --- online (darts/js/mp.js keeps the match; darts/js/mp-ui.js draws the lists) ----------------
+  // The local match is the STORED one (seat 0 = side 'a', the challenger). What happens here:
+  //   - opening a match replays the log up to the other person's latest run of darts, then FLIES
+  //     that run, one dart at a time, to the points they landed on;
+  //   - every dart of yours is appended to the log as it lands (_mpRecord -> _mpFlush), so a closed
+  //     app loses nothing and cannot take a dart back;
+  //   - while it is their turn the match is WATCHED, so their darts arrive while you look at it.
+  async _loadMP() { if (!this.MP) this.MP = await import('./mp.js'); return this.MP; }
+
+  _toast(msg, ms = 1800) {
+    const el = this.root.querySelector('[data-role="toast"]');
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+  }
+
+  /** "2 waiting on you" under the Online matches button. Painted from the last count; the count is
+   *  re-read every time the setup screen shows (`_countOnline`). */
+  _paintOnlineNote() {
+    const el = this.root.querySelector('[data-role="onlineNote"]');
+    const n = this._onlineWaiting | 0;
+    el.hidden = this.settings.mode !== 'online' || !n;
+    el.textContent = n === 1 ? t('online_waiting1') : t('online_waiting', { n });
+  }
+  async _countOnline() {
+    try {
+      const MP = await this._loadMP();
+      const rows = await MP.readMyGames();
+      if (instance !== this) return;
+      try { MP.recordFinished(rows); } catch { /* counted on the next open instead */ }
+      this._onlineWaiting = rows.filter((r) => !r.over && r.yourTurn).length;
+      this._paintOnlineNote();
+    } catch { /* offline: no count */ }
+  }
+
+  async _openOnline() {
+    this._mpLeave();
+    this.match = null; this.seats = null; this.mode = null;
+    this.hand = null; this.flying = null; this.falling = null; this.flash = null;
+    this.timers = [];
+    this.phase = 'idle';
+    this.fx.innerHTML = '';
+    this.hintEl.classList.remove('is-show');
+    this.root.classList.remove('is-flip');
+    const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
+    if (instance !== this) return;
+    this.UI = UI;
+    UI.home(this, MP);
+  }
+
+  /** Open one stored match. Darts still waiting on this phone go first, so none is lost. */
+  async _openMatch(id) {
+    const MP = await this._loadMP();
+    if (MP.pendingFor(id)) await MP.drainOutbox(id);
+    const game = await MP.readGame(id);
+    if (instance !== this) return;
+    if (!game) { this._toast(t('mp_not_found'), 2200); this._openOnline(); return; }
+    this._mpBegin(game);
+  }
+
+  /** A new challenge: created now, delivered when your first turn is over. */
+  async _sendChallenge(them) {
+    const MP = await this._loadMP();
+    const res = await MP.createGame({ them });
+    if (instance !== this) return res;
+    if (!res.ok) {
+      if (this.screen !== 'mp') this._toast((this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed')), 2400);
+      return res;
+    }
+    this._mpBegin(res.game);
+    return res;
+  }
+
+  _mpBegin(game) {
+    const MP = this.MP;
+    const me = MP.myCode();
+    const side = MP.sideOf(game, me);
+    if (!side) { this._openOnline(); return; }
+    this._mpLeave();
+    const theirSide = side === 'a' ? 'b' : 'a';
+    let from = game.log.length ? MP.lastRunStart(game, theirSide) : 0;
+    const shown = MP.readShown(game.id);
+    if (shown > from) from = Math.min(shown, game.log.length);
+    const them = MP.themOf(game, me);
+    this.mp = { id: game.id, side, mySeat: side === 'b' ? 1 : 0, game, them, applied: from, base: game.log.length,
+      pending: [], sending: false, stop: null, finished: false, resigned: false };
+    const seat = (who) => ({ name: who.name || '?', emoji: who.emoji || '🙂', human: true });
+    const match = MP.buildMatch(game, from);
+    this._begin({ mode: 'mp', diff: 'mp', match, seats: [seat(game.a), seat(game.b)] }, false);
+    const mp = this.mp;
+    MP.watchGame(game.id, (g) => this._mpOnGame(g)).then((stop) => {
+      if (this.mp === mp) mp.stop = stop; else { try { stop(); } catch { /* detached */ } }
+    });
+  }
+
+  /** Show whatever the board has not shown yet, then play on (or wait). Called whenever the match
+   *  is ready for its next dart (`_nextDart`) and it is not this phone's to throw. */
+  _mpCatchUp() {
+    const mp = this.mp;
+    if (!mp || this.mode !== 'mp' || mp.finished) return;
+    const g = mp.game;
+    const m = this.match;
+    if (mp.applied < g.log.length) {
+      const e = g.log[mp.applied];
+      if (e.by === mp.side) {
+        // Your own dart from another phone (or before a reopen): onto the board without a flight.
+        this.MP.applyEntry(m, e);
+        mp.applied++;
+        this.shown = m.scores.slice();
+        this._seatsHud();
+        this._mpCatchUp();
+        return;
+      }
+      // Theirs: the dart appears in their hand, then flies to where it landed.
+      this.hintEl.classList.remove('is-show');
+      this.phase = 'replay';
+      this.hand = { x: this.handRest.x, y: this.handRest.y, len: this.handLen, seat: m.turn, spin: this.spin, alpha: 1 };
+      this._after(0.6, () => { if (this.mp === mp && this.phase === 'replay') this._launch({ x: this.hand.x, y: this.hand.y }, e.x, e.y); });
+      return;
+    }
+    this.MP.markShown(mp.id, g.log.length);
+    this.MP.markSeen(mp.id, g.updated);
+    if (m.winner != null) { this._finish(); return; }
+    if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
+    if (m.turn === mp.mySeat) { this._nextDart(); return; }
+    this._mpWaiting();
+  }
+
+  _mpWaiting() {
+    this.phase = 'waiting';
+    this.hand = null;
+    this.hintEl.textContent = t('mp_waiting', { name: this.mp.them.name || '?' });
+    this.hintEl.classList.add('is-show');
+  }
+
+  /** The watched match changed: new darts from them are shown, our own echoes are ignored. */
+  _mpOnGame(g) {
+    const mp = this.mp;
+    if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
+    mp.game = g;
+    if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
+      this._mpFinish(g.over.winner === mp.side, true);
+      return;
+    }
+    if (mp.applied < g.log.length && this.phase === 'waiting') this._mpCatchUp();
+  }
+
+  /** One of your darts, into the log. */
+  _mpRecord(x, y) {
+    const mp = this.mp;
+    // Where this dart sits in the log: `applied` already counts it. Set only when nothing is queued,
+    // so a run of queued darts stays contiguous (the flush moves `base` on as each batch lands).
+    if (!mp.pending.length && !mp.sending) mp.base = mp.applied - 1;
+    mp.pending.push({ by: mp.side, x, y });
+    this._mpFlush();
+  }
+
+  async _mpFlush() {
+    const mp = this.mp;
+    const MP = this.MP;
+    if (!mp || mp.sending || !mp.pending.length) return;
+    mp.sending = true;
+    const list = mp.pending.slice();
+    const base = mp.base;
+    MP.savePending(mp.id, base, mp.pending);          // kept on the phone until the server has it
+    const res = await MP.appendLog(mp.id, base, list);
+    if (this.mp !== mp) return;
+    mp.sending = false;
+    if (res.ok) {
+      mp.pending.splice(0, list.length);
+      mp.base = base + list.length;
+      mp.game = res.game;
+      MP.savePending(mp.id, mp.base, mp.pending);
+      MP.markShown(mp.id, mp.base);
+      if (mp.pending.length) this._mpFlush();
+      return;
+    }
+    if (res.retryable) {
+      this._toast(t('mp_not_sent'), 1800);
+      setTimeout(() => { if (this.mp === mp) this._mpFlush(); }, 4000);
+    } else {
+      console.error('[darts] a dart could not be sent:', res.reason);
+      this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2600);
+    }
+  }
+
+  _mpFinish(won, resigned) {
+    const mp = this.mp;
+    if (!mp || mp.finished) return;
+    mp.finished = true;
+    mp.resigned = !!resigned;
+    if (resigned) this.match.winner = won ? mp.mySeat : mp.mySeat ^ 1;
+    this.MP.countResult(mp.id, won);                   // once per phone, whoever ended it
+    this.MP.markResultSeen(mp.id);
+    this._say(t('say_win', { name: this.seats[this.match.winner].name }));
+    this.screen = 'result';
+    this.phase = 'idle';
+    this.hand = null;
+    this.hintEl.classList.remove('is-show');
+    this._seatsHud();
+    this._fillResult();
+    this._showOnly('result');
+  }
+
+  async _mpResign() {
+    const mp = this.mp;
+    if (!mp) return;
+    const res = await this.MP.resignGame(mp.id);
+    if (this.mp !== mp) return;
+    if (!res.ok) { this.screen = 'menu'; this._showOnly('menu'); this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400); return; }
+    mp.game = res.game;
+    this._mpFinish(false, true);
+  }
+
+  /** Stop watching the open online match (darts not yet sent stay in the outbox). */
+  _mpLeave() {
+    const mp = this.mp;
+    if (!mp) return;
+    this.mp = null;
+    if (mp.stop) { try { mp.stop(); } catch { /* detached */ } }
   }
 
   _local(e) {
@@ -760,7 +1033,9 @@ class DartsUI {
 
   destroy() {
     this._stop();
+    this._mpLeave();
     clearTimeout(this._bannerTimer);
+    clearTimeout(this._toastTimer);
     this._save();
     document.removeEventListener('visibilitychange', this._onVis);
     if (this.reduceMQ.removeEventListener) this.reduceMQ.removeEventListener('change', this._onReduce);

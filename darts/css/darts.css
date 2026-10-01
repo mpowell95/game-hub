@@ -326,3 +326,92 @@
   .dt-root .dt-banner.is-show[data-kind="bust"] { animation: dt-pop-still 1.1s linear forwards; }
   .dt-root .dt-hint { transition: none; }
 }
+
+/* ------------------------------------------------------------------ online (2026-10-01) --- */
+/* Online, you sit on the left whichever side of the stored match you are. */
+.dt-root.is-flip .dt-seat-0 { left: auto; right: 8px; flex-direction: row-reverse; }
+.dt-root.is-flip .dt-seat-1 { right: auto; left: 8px; flex-direction: row-reverse; }
+.dt-root.is-flip .dt-seat-0 .dt-turn { transform: scaleX(-1); }
+.dt-root.is-flip .dt-seat-1 .dt-turn { transform: none; }
+
+.dt-root .dt-online-note { margin: -4px 0 0; text-align: center; font-size: 13px; font-weight: 800; color: #b8282d; }
+.dt-root .dt-danger { background: #fff; color: #a3161b; border-color: #e3b9b9; }
+
+/* Clear of the hub's floating back button (top-left, ~54-90px down): the card starts below it. */
+.dt-root .dt-ov-mp { align-items: flex-start; padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.dt-root .dt-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
+.dt-root .dt-mp-top { display: flex; align-items: center; gap: 6px; }
+.dt-root .dt-mp-back {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #efe3cb;
+  color: var(--dt-ink);
+}
+.dt-root .dt-mp-back svg { width: 22px; height: 22px; }
+.dt-root .dt-mp-title { margin: 0; text-align: left; flex: 1 1 auto; min-width: 0; }
+.dt-root .dt-mp-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.dt-root .dt-mp-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.dt-root .dt-mp-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7a6048;
+}
+.dt-root .dt-mp-h span { padding: 1px 7px; border-radius: 999px; background: #b8282d; color: #fff; font-size: 11px; }
+.dt-root .dt-mp-note { margin: 0; text-align: center; font-size: 14px; font-weight: 600; color: #6b5440; }
+.dt-root .dt-mp-err { color: #a3161b; font-weight: 800; }
+.dt-root .dt-mp-vs { margin: 6px 0 0; text-align: center; font-size: 22px; font-weight: 900; color: var(--dt-ink); }
+.dt-root .dt-mp-vs span { font-size: 30px; margin-right: 4px; }
+.dt-root .dt-mp-search { font-size: 16px; }
+.dt-root .dt-mrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 2px solid #e6d6b4;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--dt-ink);
+  font: inherit;
+  text-align: left;
+}
+.dt-root .dt-mrow.is-mine { border-color: #b8282d; box-shadow: 0 0 0 1px #b8282d inset; }
+.dt-root .dt-mrow.is-static { cursor: default; }
+.dt-root .dt-mrow-face { flex: 0 0 auto; width: 34px; font-size: 26px; line-height: 1; text-align: center; }
+.dt-root .dt-mrow-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.dt-root .dt-mrow-name { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-root .dt-mrow-sub { font-size: 12px; font-weight: 600; color: #6b5440; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-root .dt-mrow-chev { flex: 0 0 auto; font-size: 24px; color: #b8282d; }
+.dt-root .dt-rec { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dt-root .dt-hmark { flex: 0 0 auto; width: 34px; text-align: center; font-size: 20px; font-weight: 900; color: #6b5440; }
+.dt-root .dt-mrow.is-won .dt-hmark { color: #1f6b3a; }
+
+.dt-root .dt-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(20, 10, 4, 0.9);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}

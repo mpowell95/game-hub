@@ -320,6 +320,8 @@ export const GAMES = [
     blurb: { en: 'Flick the dart at the board. Count down from 301 and land exactly on zero.',
       es: 'Lanza el dardo a la diana. Cuenta atrás desde 301 y llega justo a cero.' },
     module: '../darts/js/ui.js',
+    // Online challenges (2026-10-01): a new one, your turn, or a result you missed, on the launcher.
+    alerts: () => import('../darts/js/alert.js'),
     immersive: true,
     accent: '#b8282d',
     art: GAME_ART['darts'],
