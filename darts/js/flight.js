@@ -27,13 +27,13 @@ export const BOARD_R = 0.17;
 /** How much nearer the camera the dart in the hand is than the board (depth of the hand). */
 export const HAND_Z = 0.55;
 /** The flight, start to board, in seconds. */
-export const FLIGHT_T = 0.2;
+export const FLIGHT_T = 0.34;
 /** The dart in the hand: seen side-on, pointing up the screen (and a little into the board). */
 export const REST_AXIS = norm([0, -1, 0.35]);
 /** The dart in the board: pointing straight in, nose a touch down, so it shows its flights end-on. */
 export const STUCK_AXIS = norm([0, 0.1, 1]);
 /** When the dart tips over: the fraction of the flight where it starts turning onto its flights. */
-export const TIP_FROM = 0.55;
+export const TIP_FROM = 0.7;
 
 export function norm(v) {
   const l = Math.hypot(v[0], v[1], v[2]) || 1;
@@ -86,15 +86,36 @@ export function solveLength(cam, px, py, screenLen) {
  * makes the screen position and size move evenly, and its speed away from the camera (dz/dt grows
  * with z squared) is small at first and large at the end - so the axis, which follows the velocity,
  * points up the screen early and swings into the board late: the pitch-over in the video.
- * A small rise (ARC of the board's radius) bows the path up before it drops in.
+ * A LOB (Matt, 2026-10-01: "Yes I want a bigger one"): the path always peaks ARC board radii ABOVE
+ * its landing point, whatever the target, then drops onto it nose-first. The rise needed for that
+ * is solved per flight (`makeFlight`), since a dart aimed low has further to climb than one aimed at
+ * the top of the board.
  */
-export const ARC = 0.18;
+export const ARC = 0.45;
 /** Screen pace: eased out, so it slows into the board, but never to a dead stop - it still has the
  *  last of its drop when it hits, so it lands nose-down. */
 const ease = (u) => 0.65 * (1 - Math.pow(1 - u, 1.8)) + 0.35 * u;
 
 export function makeFlight(from, bx, by, T = FLIGHT_T) {
-  return { from, to: boardPoint(bx, by), T };
+  const to = boardPoint(bx, by);
+  const b0 = from[1] / from[2], b1 = to[1] / to[2];
+  // The highest point of b0 + (b1 - b0) s - H sin(pi s) must sit ARC board radii above b1: solve H.
+  const want = b1 - ARC * (BOARD_R / OCHE);
+  const peak = (H) => { let m = Infinity; for (let i = 0; i <= 60; i++) { const q = i / 60; m = Math.min(m, b0 + (b1 - b0) * q - H * Math.sin(Math.PI * q)); } return m; };
+  let lo = 0, hi = 4 * (BOARD_R / OCHE) + Math.abs(b0 - b1) * 2;
+  for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (peak(mid) > want) lo = mid; else hi = mid; }
+  const fl = { from, to, T, H: (lo + hi) / 2 };
+  // The typical screen speed of this flight, so the apex (where the dart all but stops on screen)
+  // can be recognised and drawn nose-over, pointing INTO the board, rather than turned sideways.
+  let sum = 0;
+  for (let i = 0; i < 50; i++) sum += screenStep(fl, i / 50, (i + 1) / 50).d;
+  fl.dMean = sum / 50;
+  return fl;
+}
+function screenStep(fl, q1, q2) {
+  const p1 = pointAt(fl, q1), p2 = pointAt(fl, q2);
+  const da = p2[0] / p2[2] - p1[0] / p1[2], db = p2[1] / p2[2] - p1[1] / p1[2];
+  return { da, db, d: Math.hypot(da, db) };
 }
 function pointAt(fl, k) {
   const s = ease(Math.max(0, Math.min(1, k)));
@@ -106,7 +127,7 @@ function pointAt(fl, k) {
   // Screen-plane coordinates (x/z, y/z) move evenly between the two ends, with the rise added.
   const a0 = fl.from[0] / z0, a1 = fl.to[0] / z1;
   const b0 = fl.from[1] / z0, b1 = fl.to[1] / z1;
-  const rise = ARC * (BOARD_R / OCHE) * Math.sin(Math.PI * s);
+  const rise = (fl.H || 0) * Math.sin(Math.PI * s);
   return [(a0 + (a1 - a0) * s) * z, (b0 + (b1 - b0) * s - rise) * z, z];
 }
 export function at(fl, t) {
@@ -114,12 +135,18 @@ export function at(fl, t) {
   const tip = pointAt(fl, k);
   // THE AXIS IS STEERED, NOT DERIVED. In true perspective a dart pointing at the board is seen
   // end-on the moment it is level with its target, so it flattened a third of the way up the screen.
-  // GamePigeon keeps it side-on, pointing along its path up the screen, and tips it over onto its
-  // flights only in the last stretch (from TIP_FROM): that is what reads as an arc.
-  const a0 = fl.from[0] / fl.from[2], a1 = fl.to[0] / fl.to[2];
-  const b0 = fl.from[1] / fl.from[2], b1 = fl.to[1] / fl.to[2];
-  const d = Math.hypot(a1 - a0, b1 - b0);
-  const up = d > 1e-6 && b1 < b0 ? norm([(a1 - a0) / d, (b1 - b0) / d, REST_AXIS[2] / -REST_AXIS[1]]) : REST_AXIS;
+  // GamePigeon keeps it side-on, pointing along its path on screen - up while it climbs, nose over
+  // and down as the lob falls - and tips it onto its flights only in the last stretch (TIP_FROM).
+  const q2 = Math.min(1, k + 0.02), q1 = q2 - 0.02;
+  const { da, db, d } = screenStep(fl, q1, q2);
+  // Along the path on screen, with a fixed lean into the board - which takes over as the dart slows
+  // at the top of the lob, so it noses over THROUGH end-on instead of swinging round sideways.
+  const floor = 0.6 * ((fl.dMean || 0) * 0.02 / 0.02);
+  const lean = (REST_AXIS[2] / -REST_AXIS[1]) * Math.max(d, floor);
+  // In world terms: a vector with depth component `lean` projects at (vx - a*lean, vy - b*lean) for
+  // a dart at screen-plane position (a, b), so add that back or off-centre darts lean sideways.
+  const a = tip[0] / tip[2], b = tip[1] / tip[2];
+  const up = d + lean > 1e-12 ? norm([da + a * lean, db + b * lean, lean]) : REST_AXIS;
   const u = Math.max(0, Math.min(1, (k - TIP_FROM) / (1 - TIP_FROM)));
   const w = u * u * (3 - 2 * u);
   const start = k < 0.12 ? norm(REST_AXIS.map((v, i) => v + (up[i] - v) * (k / 0.12))) : up;

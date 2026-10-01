@@ -154,7 +154,13 @@ ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID
   const fl = F.makeFlight(from, 0, 0);
   let minY = Infinity;
   for (let i = 0; i <= 40; i++) minY = Math.min(minY, F.project(cam, F.at(fl, fl.T * i / 40).tip).y);
-  ok('aimed at the bull it never overshoots far above it (not a lob)', minY > 285 - 40, String(minY));
+  ok('a lob: aimed at the bull it peaks ARC board radii above it, then drops in', Math.abs(minY - (285 - F.ARC * 147)) < 3, String(minY));
+  {
+    const hi = F.makeFlight(from, 0, -0.95);
+    let top = Infinity;
+    for (let i = 0; i <= 60; i++) top = Math.min(top, F.project(cam, F.at(hi, hi.T * i / 60).tip).y);
+    ok('aimed at the top double it still peaks ARC above it, and stays on screen', Math.abs(top - (285 - (0.95 + F.ARC) * 147)) < 3 && top > 0, String(top));
+  }
   const arrive = F.at(fl, fl.T).axis;
   const deg = Math.atan2(arrive[1], arrive[2]) * 180 / Math.PI;
   ok('it arrives pointing into the board, nose a little down (STUCK_AXIS)', arrive[2] > 0.9 && deg > 0 && deg < 25, deg.toFixed(1));
@@ -163,6 +169,19 @@ ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID
   ok('a third of the way it is still upright on screen, not end-on', pm.tail.y - pm.tip.y > 30, String(pm.tail.y - pm.tip.y));
   // Screen speed falls as it nears the board (perspective): the first tenth covers far more screen than the last.
   const sp = (a, b) => { const p = F.project(cam, F.at(fl, a).tip), q = F.project(cam, F.at(fl, b).tip); return Math.hypot(p.x - q.x, p.y - q.y); };
+  {
+    // Off-centre throws: on screen the dart points along its own path (never sideways against it).
+    const side = F.makeFlight(from, -0.7, -0.2), Ls = F.solveLength(cam, hand.x, hand.y, 180);
+    let worst = 1;
+    for (let i = 2; i <= 12; i++) {
+      const k = side.T * i / 20, a = F.at(side, k), p = F.pose(cam, a.tip, a.axis, Ls);
+      const n = F.project(cam, F.at(side, k + side.T * 0.02).tip), c = F.project(cam, a.tip);
+      const dir = [p.tip.x - p.tail.x, p.tip.y - p.tail.y], mv = [n.x - c.x, n.y - c.y];
+      const cos = (dir[0] * mv[0] + dir[1] * mv[1]) / (Math.hypot(...dir) * Math.hypot(...mv) || 1);
+      worst = Math.min(worst, cos);
+    }
+    ok('an off-centre dart points along its path on screen while it climbs', worst > 0.9, worst.toFixed(2));
+  }
   ok('fast off the hand, slow into the board', sp(0, fl.T * 0.1) > 3 * sp(fl.T * 0.9, fl.T));
   const L = F.solveLength(cam, hand.x, hand.y, 180);
   const rest = F.pose(cam, from, F.REST_AXIS, L);
