@@ -147,7 +147,11 @@ export class Match {
 
   // --- the shooter's options ----------------------------------------------------------------
   canGentlemans() {
-    if (!this.gentlemans || this.phase !== 'normal' || this.turnThrows > 0 || this.over || this.mustPickOwed()) return false;
+    if (!this.gentlemans || this.over || this.mustPickOwed()) return false;
+    // A normal turn: before its first throw. A REBUTTAL: any time a ball is in hand, so a make that
+    // leaves 2 cups offers it before the ball that comes back (Matt, 2026-10-01). Never in overtime.
+    const when = this.phase === 'normal' ? this.turnThrows === 0 : this.phase === 'rebuttal' && this.queue.length > 0;
+    if (!when) return false;
     const rack = this.target();
     if (rack.length !== 2) return false;
     return !rack.every((k) => PRESETS.line2.some((s) => sameSpot(k, s)));

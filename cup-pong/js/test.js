@@ -177,6 +177,14 @@ ok('the whole rack area is on the table',
   m = twoLeft({ lastCupBack: false }); m.throwResult({ made: 'k8' });
   ev = m.throwResult({ made: 'k9' });
   ok('an older challenge (no such rule) replays as it was: straight to the rebuttal', m.phase === 'rebuttal' && types(ev).includes('rackCleared'));
+  // GENTLEMAN'S IN A REBUTTAL (Matt, 2026-10-01): a make leaving 2 cups offers it for the ball back.
+  m = oneLeft('a'); m.throwResult({ made: 'k9' }); m.throwResult(miss); m.startTurn();
+  m.racks.a = [{ id: 'k0', c: -3, r: 0 }, { id: 'k5', c: 0, r: 1 }, { id: 'k9', c: 0, r: 3 }];
+  ok('rebuttal: no Gentleman\'s while 3 cups stand', !m.canGentlemans());
+  m.throwResult({ made: 'k5' });
+  ok('rebuttal: a make leaves 2 cups, the ball comes back AND Gentleman\'s is offered', m.ball === 0 && m.canGentlemans());
+  ev = m.applyGentlemans();
+  ok('...taking it lines them up for that ball', types(ev).join() === 'gentlemans' && m.racks.a.every((k) => k.u === 0) && m.ball === 0);
   // THE REBUTTAL: both balls, each until it misses.
   ev = m.startTurn();
   ok('the rebuttal is announced', types(ev).includes('rebuttal'));
