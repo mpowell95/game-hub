@@ -38,6 +38,7 @@ const DICTS = [
   { name: 'baseball/js/strings.js', path: './baseball/js/strings.js' },
   { name: 'contexto/js/strings.js', path: './contexto/js/strings.js' },
   { name: 'murdoku/js/strings.js', path: './murdoku/js/strings.js' },
+  { name: 'darts/js/strings.js', path: './darts/js/strings.js' },
 ];
 
 const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;

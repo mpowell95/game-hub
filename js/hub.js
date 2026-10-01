@@ -312,6 +312,23 @@ export const GAMES = [
     devOnly: true,
   },
   {
+    // Darts (2026-10-01): a clone of GamePigeon's Darts. 301 down to exactly zero, three darts a
+    // turn, flick the dart up to throw; vs the computer (Easy/Medium/Hard) or pass and play
+    // (darts/CLAUDE.md). Owns the whole viewport: a wooden wall and a full-width board.
+    id: 'darts',
+    title: { en: 'Darts', es: 'Dardos' },
+    blurb: { en: 'Flick the dart at the board. Count down from 301 and land exactly on zero.',
+      es: 'Lanza el dardo a la diana. Cuenta atrás desde 301 y llega justo a cero.' },
+    module: '../darts/js/ui.js',
+    immersive: true,
+    accent: '#b8282d',
+    art: GAME_ART['darts'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it, which he does from
+    // the admin page with no commit.
+    devOnly: true,
+  },
+  {
     id: 'hoops4',
     title: 'Connect 4 Hoops',
     blurb: {

@@ -1,0 +1,328 @@
+/* darts/css/darts.css - every rule descendant-scoped under .dt-root (Mancala's discipline,
+   docs/BUILDING-A-GAME.md "CSS scoping"). A fixed pub look in both hub themes: a wooden wall and
+   cream cards, so .gh-dark changes nothing here (the Hard shape is a black diamond and needs the
+   light card). */
+
+.dt-root {
+  /* Fixed to the viewport: full bleed both standalone and mounted (immersive: true in js/hub.js).
+     z-index sits below the hub's floating back button. */
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+  background: #5a2f1a;
+  color: #fff;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --dt-ink: #2a1a10;
+  --dt-cream: #fbf5e8;
+  --dt-wood: #6b3a20;
+  --dt-plaque: #1f6b3a;
+  --dt-seat: #d8262c;
+  --gh-accent: #b8282d;
+}
+.dt-root,
+.dt-root * {
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.dt-root button { font: inherit; cursor: pointer; touch-action: manipulation; }
+.dt-root button > span,
+.dt-root button > b,
+.dt-root button > svg { pointer-events: none; }
+.dt-root :focus-visible { outline: 3px solid #ffce3a; outline-offset: 3px; }
+.dt-root [hidden] { display: none !important; }
+
+.dt-root .dt-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ------------------------------------------------------------------ top row --- */
+/* Shares its row with the hub's floating back button (top-left), so it keeps to the right. */
+.dt-root .dt-top {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 50px);
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  z-index: 3;
+}
+.dt-root .dt-left { display: flex; gap: 3px; color: var(--dt-seat); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+.dt-root .dt-left i { display: block; width: 12px; height: 34px; opacity: 0.28; }
+.dt-root .dt-left i.is-on { opacity: 1; }
+.dt-root .dt-left svg { width: 100%; height: 100%; display: block; }
+.dt-root.is-setup .dt-top { visibility: hidden; }
+.dt-root .dt-ibtn {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 10, 4, 0.72);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.dt-root .dt-ibtn svg { width: 22px; height: 22px; }
+
+/* ------------------------------------------------------------------ seats --- */
+.dt-root .dt-seat {
+  position: absolute;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+  max-width: 46%;
+  pointer-events: none;
+}
+.dt-root .dt-seat-0 { left: 8px; }
+.dt-root .dt-seat-1 { right: 8px; }
+.dt-root.is-setup .dt-seat { visibility: hidden; }
+.dt-root .dt-ava {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  line-height: 1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  border: 3px solid rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.dt-root .dt-seat.is-turn .dt-ava { border-color: var(--dt-seat); box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(0, 0, 0, 0.45); }
+.dt-root .dt-plaque {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  padding: 3px 10px 5px;
+  border-radius: 8px;
+  background: var(--dt-plaque);
+  border: 2px solid #fff;
+  box-shadow: inset 0 0 0 2px var(--dt-plaque), inset 0 0 0 3px rgba(255, 255, 255, 0.5), 0 2px 6px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.dt-root .dt-plaque small {
+  max-width: 100px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.92;
+}
+.dt-root .dt-plaque b { font-size: 24px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.dt-root .dt-turn { width: 14px; height: 14px; color: #fff; opacity: 0; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
+.dt-root .dt-seat-1 .dt-turn { transform: scaleX(-1); }
+.dt-root .dt-seat.is-turn .dt-turn { opacity: 1; }
+.dt-root .dt-turn svg { width: 100%; height: 100%; display: block; }
+
+/* ------------------------------------------------------------------ effects --- */
+.dt-root .dt-fx { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.dt-root .dt-pop {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  animation: dt-pop 1.25s ease-out forwards;
+}
+.dt-root .dt-pop b {
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 2px #1a1a1a;
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+.dt-root .dt-pop span {
+  margin-top: 2px;
+  font-size: 16px;
+  font-weight: 900;
+  color: #ffce3a;
+  -webkit-text-stroke: 1px #1a1a1a;
+  paint-order: stroke fill;
+}
+@keyframes dt-pop {
+  0% { opacity: 0; transform: translate(-50%, -60%) scale(0.5); }
+  14% { opacity: 1; transform: translate(-50%, -100%) scale(1.15); }
+  26% { transform: translate(-50%, -100%) scale(1); }
+  70% { opacity: 1; transform: translate(-50%, -150%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -190%) scale(1); }
+}
+.dt-root .dt-pop.is-still { animation: dt-pop-still 1.25s linear forwards; }
+@keyframes dt-pop-still { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+
+.dt-root .dt-banner {
+  position: absolute;
+  left: 50%;
+  top: var(--dt-banner-y, 60%);
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+}
+.dt-root .dt-banner b {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #fff;
+  -webkit-text-stroke: 2px #1a1a1a;
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+.dt-root .dt-banner span {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.dt-root .dt-banner span:empty { display: none; }
+.dt-root .dt-banner[data-kind="turn"] b { font-size: 26px; }
+.dt-root .dt-banner.is-show { animation: dt-banner 1.1s ease-out forwards; }
+.dt-root .dt-banner.is-show[data-kind="bust"] { animation-duration: 1.6s; }
+@keyframes dt-banner {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+  25% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.dt-root .dt-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--dt-hint-y, 60%);
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 0.3s;
+}
+.dt-root .dt-hint.is-show { opacity: 0.95; }
+
+/* ------------------------------------------------------------------ overlays --- */
+.dt-root .dt-ov {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(env(safe-area-inset-top, 0px), 50px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: rgba(20, 8, 2, 0.5);
+  overscroll-behavior: contain;
+}
+/* Setup sits over the lower half: the board stays in view above it. */
+.dt-root .dt-ov-setup { align-items: flex-end; background: linear-gradient(180deg, rgba(20, 8, 2, 0) 30%, rgba(20, 8, 2, 0.55) 100%); }
+.dt-root .dt-card {
+  position: relative;
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  border-radius: 18px;
+  background: var(--dt-cream);
+  color: var(--dt-ink);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+  border: 3px solid #e6d6b4;
+}
+.dt-root .dt-card-sm { width: min(320px, 100%); align-items: stretch; text-align: center; }
+.dt-root .dt-logo {
+  margin: 0;
+  text-align: center;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  color: #b8282d;
+  letter-spacing: 0.02em;
+}
+.dt-root .dt-tag { margin: -4px 0 2px; text-align: center; font-size: 14px; font-weight: 600; color: #6b5440; }
+.dt-root .dt-field { display: flex; flex-direction: column; gap: 4px; }
+.dt-root .dt-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6048; }
+.dt-root .dt-seg { display: flex; width: 100%; background: #efe3cb; border-color: #e0cfae; }
+.dt-root .dt-seg .dt-seg-item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 6px; color: #6b5440; font-size: 14px; }
+.dt-root .dt-seg .dt-seg-item[aria-pressed="true"] { background: #fff; color: var(--dt-ink); box-shadow: 0 0 0 2px #b8282d; }
+.dt-root .dt-seg .dt-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-root .dt-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
+.dt-root .dt-go { font-size: 17px; font-weight: 800; }
+.dt-root .dt-alt { background: #fff; color: var(--dt-ink); border-color: #d9c7a3; }
+.dt-root .dt-h2 { margin: 0 40px 4px; text-align: center; font-size: 22px; font-weight: 900; color: var(--dt-ink); }
+.dt-root .dt-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #efe3cb;
+  color: #6b5440;
+}
+.dt-root .dt-x svg { width: 20px; height: 20px; }
+.dt-root .dt-res-ava { margin: 4px 0 0; font-size: 46px; line-height: 1; }
+.dt-root .dt-res-line { margin: -4px 0 4px; font-size: 14px; font-weight: 700; color: #6b5440; }
+.dt-root .dt-pass {
+  min-height: 160px;
+  justify-content: center;
+  align-items: center;
+  font-family: inherit;
+  cursor: pointer;
+}
+.dt-root .dt-pass b { font-size: 22px; font-weight: 900; color: var(--dt-ink); }
+.dt-root .dt-pass span { font-size: 14px; font-weight: 700; color: #6b5440; }
+
+/* How to play: one line per rule, each kept to a single row (docs/BUILDING-A-GAME.md). */
+.dt-root .dt-help { width: min(360px, 100%); gap: 8px; text-align: center; }
+.dt-root .dt-help-goal { margin: 0; font-size: 14px; font-weight: 800; white-space: nowrap; }
+.dt-root .dt-help-svg { display: block; width: 100%; max-width: 280px; margin: 0 auto; background: var(--dt-wood); border-radius: 12px; }
+.dt-root .dt-help-line { margin: 0; font-size: 12.5px; font-weight: 600; color: #4a3626; white-space: nowrap; }
+.dt-root .dt-help-ex { font-weight: 800; color: #b8282d; }
+
+.dt-root .dt-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-root .dt-banner.is-show,
+  .dt-root .dt-banner.is-show[data-kind="bust"] { animation: dt-pop-still 1.1s linear forwards; }
+  .dt-root .dt-hint { transition: none; }
+}

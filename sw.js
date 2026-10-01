@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1037';
+const CACHE = 'game-hub-v1038';
 
 const ASSETS = [
   './',
@@ -198,6 +198,13 @@ const ASSETS = [
   './murdoku/js/ui.js',
   './murdoku/js/engine.js',
   './murdoku/js/strings.js',
+  './darts/',
+  './darts/index.html',
+  './darts/css/darts.css',
+  './darts/js/ui.js',
+  './darts/js/engine.js',
+  './darts/js/render.js',
+  './darts/js/strings.js',
   './sudoku/',
   './sudoku/index.html',
   './sudoku/css/sudoku.css',
@@ -756,6 +763,13 @@ const REST_MANIFEST = {
   './murdoku/js/ui.js': '49446a4207',
   './murdoku/js/engine.js': '46518c0de8',
   './murdoku/js/strings.js': 'e744e28e32',
+  './darts/': '20312df57d',
+  './darts/index.html': '20312df57d',
+  './darts/css/darts.css': '8d9544fedc',
+  './darts/js/ui.js': '325aa1de3a',
+  './darts/js/engine.js': '914c7fc272',
+  './darts/js/render.js': '5f4c8a2575',
+  './darts/js/strings.js': 'cd20e6423b',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
   './sudoku/css/sudoku.css': '146887ebaf',

@@ -58,6 +58,36 @@ const EXTRA_SCREENS = {
   // point: every tier, a full board with warnings showing, and the result panel. Expert 8x8 with
   // eight clue rows is the tightest screen in the game, so the assert also holds its squares above
   // a floor (measured 28-39px on these two phone heights; under 24px means the layout regressed).
+  // Darts: how to play from the setup screen, the play screen, and the pass-and-play hand-over.
+  darts: [
+    {
+      name: 'how to play',
+      async open(page) {
+        await page.click('[data-ov="setup"] [data-act="howto"]');
+        await page.waitForSelector('[data-ov="help"]:not([hidden])', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'play screen',
+      async open(page) {
+        await page.click('[data-ov="help"] .dt-x');
+        await page.click('[data-ov="setup"] [data-act="play"]');
+        await page.waitForTimeout(600);
+      },
+    },
+    {
+      name: 'result',
+      async open(page) {
+        await page.evaluate(() => {
+          const ui = window.__dtTest.ui;
+          ui.match.winner = 0; ui.match.recorded = true;
+          ui._finish();
+        });
+        await page.waitForSelector('[data-ov="result"]:not([hidden])', { timeout: 8000 });
+      },
+    },
+  ],
   murdoku: [
     {
       name: 'how to play',
