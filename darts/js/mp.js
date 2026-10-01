@@ -1,4 +1,5 @@
-// darts/js/mp.js - DARTS CHALLENGES, turn by turn (2026-10-01). A 301 match two people play hours or
+// darts/js/mp.js - DARTS CHALLENGES, turn by turn (2026-10-01). A match (301, 201, 101 or Cricket,
+// `kind`, chosen by the challenger) two people play hours or
 // days apart, the way GamePigeon's Darts is played over iMessage. cup-pong/js/mp.js is the model
 // (and hoops4/js/mp.js before it); no code is shared with either.
 //
@@ -30,7 +31,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { readPlayersOnce } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { recordResult } from '../../js/game-stats.js';
-import { newMatch, throwDart, nextTurn, START } from './engine.js';
+import { newMatch, throwDart, nextTurn, KINDS, isCricket } from './engine.js';
 
 const NODE = 'darts';
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
@@ -92,6 +93,9 @@ function reasonOf(err) {
 }
 const fail = (reason, retryable = false) => ({ ok: false, reason, retryable });
 
+/** Which game a match is. `kind` is OPTIONAL: every match made before 2026-10-01 has none and is 301. */
+export const kindOfGame = (raw) => (raw && KINDS.includes(raw.kind) ? raw.kind : '301');
+
 // --- the log --------------------------------------------------------------------------------------
 
 /** One dart, cleaned, or null if it is not a well-formed dart. Landing points are kept to 1/10000 R. */
@@ -116,7 +120,7 @@ export function applyEntry(m, e) {
 
 /** Replay the first `upto` darts. */
 export function buildMatch(game, upto = game.log.length) {
-  const m = newMatch(0, START);
+  const m = newMatch(0, kindOfGame(game));
   for (let i = 0; i < upto; i++) if (!applyEntry(m, game.log[i])) break;   // validateGame proved it replays
   return m;
 }
@@ -136,7 +140,8 @@ export function validateGame(raw) {
   const keys = Object.keys(src).sort();
   if (keys.length > MAX_LOG) return null;
   const log = [];
-  const m = newMatch(0, START);
+  const kind = kindOfGame(raw);
+  const m = newMatch(0, kind);
   for (const k of keys) {
     const e = cleanEntry(src[k]);
     if (!e) return null;
@@ -151,11 +156,11 @@ export function validateGame(raw) {
     // A result the log did not produce is only allowed for a resignation.
     if (over.why !== 'resign' && (m.winner == null || sideOfSeat(m.winner) !== w)) return null;
   } else if (m.winner != null) {
-    over = { winner: sideOfSeat(m.winner), why: 'zero', at: ms(raw.updated) };
+    over = { winner: sideOfSeat(m.winner), why: isCricket(kind) ? 'closed' : 'zero', at: ms(raw.updated) };
   }
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
   return {
-    v: 1, id,
+    v: 1, id, kind,
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -301,7 +306,7 @@ function rowsFromIndex(val) {
       id, with: asCode(r.with), name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
       updated: ms(r.updated), yourTurn: !!r.yourTurn, over: !!r.over,
       result: RESULTS.includes(r.result) ? r.result : null, why: typeof r.why === 'string' ? r.why : '',
-      mine: ms(r.mine), theirs: ms(r.theirs),
+      mine: ms(r.mine), theirs: ms(r.theirs), kind: KINDS.includes(r.kind) ? r.kind : '301',
     };
   }).filter((r) => ID_RE.test(r.id) && r.with));
 }
@@ -398,6 +403,7 @@ function rowFor(game, side, writer) {
     over: !!game.over,
     mine: game.scores[side], theirs: game.scores[other(side)],
     lastBy: writer === side ? 'me' : 'them',
+    kind: game.kind || '301',
     ...(game.over ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
   };
 }
@@ -411,17 +417,18 @@ async function writeRows(api, db, game, writer, only = null) {
  * first; only their own row is written here (the other person's arrives when the first turn passes,
  * appendLog). Returns { ok, id, game } or a failure.
  */
-export async function createGame({ them }) {
+export async function createGame({ them, kind = '301' }) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
   if (!to || to === me) return fail('bad-opponent');
   if (!allowed('createGame')) return fail('dev-origin-blocked');
+  if (!KINDS.includes(kind)) return fail('bad-kind');
   const mine = meLabel();
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, by: me, created: now, updated: now,
+    v: 1, id, kind, by: me, created: now, updated: now,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -477,12 +484,12 @@ export async function appendLog(id, base, entries) {
     if (!todo.length) return { ok: true, game: fresh };
     if (fresh.over) return fail('already-over');
     // Check the rules accept them before anything is written.
-    const m = newMatch(0, START);
+    const m = newMatch(0, fresh.kind);
     for (const e of fresh.log.concat(todo)) if (!applyEntry(m, e)) return fail('rules-refused');
     const now = Date.now();
     const patch = { updated: now };
     todo.forEach((e, i) => { patch[`log/${String(have + i).padStart(4, '0')}`] = { ...e, at: now }; });
-    if (m.winner != null) patch.over = { winner: sideOfSeat(m.winner), why: 'zero', at: now };
+    if (m.winner != null) patch.over = { winner: sideOfSeat(m.winner), why: isCricket(fresh.kind) ? 'closed' : 'zero', at: now };
     await api.update(api.ref(db, `${NODE}/games/${id}`), patch);
     const back = await readGame(id);
     if (!back || back.log.length !== have + todo.length) {

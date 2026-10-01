@@ -180,6 +180,8 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('darts: they won', body(decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'lost' }) })) === 'Ana won the game.');
   check('darts: they resigned, you won', /resigned/.test(body(decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
   check('darts: your own winning dart does not notify you', decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
+  check('darts: a cricket challenge names the game', body(decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, kind: 'cricket-order' }) })) === 'Ana challenged you to Cricket (in order). Your throw!');
+  check('darts: a 101 challenge names the game', body(decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, kind: '101' }) })) === 'Ana challenged you to 101. Your throw!');
   check('darts: Spanish wording', decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Dardos');
   check('darts: the trigger watches darts/index and names the match', /ref: '\/darts\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'darts', match: id \}/.test(fnSrc));
 }
