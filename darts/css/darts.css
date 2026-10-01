@@ -134,6 +134,53 @@
 .dt-root .dt-seat.is-turn .dt-turn { opacity: 1; }
 .dt-root .dt-turn svg { width: 100%; height: 100%; display: block; }
 
+/* ------------------------------------------------------------------ cricket marks --- */
+/* Each seat's chalkboard sits above its own plaque, either side of the dart in the hand. Rows are
+   sized by ui.js _layout (--dt-mk-h) to the room between the board and the plaques. */
+.dt-root .dt-marks {
+  position: absolute;
+  top: var(--dt-marks-top, 60%);
+  display: flex;
+  flex-direction: column;
+  padding: 3px 6px;
+  border-radius: 10px;
+  background: rgba(20, 10, 4, 0.62);
+  border-top: 3px solid var(--dt-seat);
+  z-index: 2;
+  pointer-events: none;
+}
+.dt-root .dt-marks-0 { left: 8px; }
+.dt-root .dt-marks-1 { right: 8px; }
+.dt-root.is-flip .dt-marks-0 { left: auto; right: 8px; }
+.dt-root.is-flip .dt-marks-1 { right: auto; left: 8px; }
+.dt-root.is-setup .dt-marks { visibility: hidden; }
+.dt-root .dt-mk-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--dt-mk-h, 20px);
+}
+.dt-root .dt-marks-1 .dt-mk-row { flex-direction: row-reverse; }
+.dt-root.is-flip .dt-marks-0 .dt-mk-row { flex-direction: row-reverse; }
+.dt-root.is-flip .dt-marks-1 .dt-mk-row { flex-direction: row; }
+.dt-root .dt-mk-row b {
+  position: relative;
+  min-width: 2.2em;
+  font-size: calc(var(--dt-mk-h, 20px) * 0.62);
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.dt-root .dt-mk-row i { display: block; width: calc(var(--dt-mk-h, 20px) - 3px); height: calc(var(--dt-mk-h, 20px) - 3px); color: #fff; }
+.dt-root .dt-mk-row i svg { width: 100%; height: 100%; display: block; }
+/* In order: the number this player is on, ringed in the selection accent, never colour alone. */
+.dt-root .dt-mk-row.is-next b { color: #ffce3a; border-radius: 6px; box-shadow: 0 0 0 2px #ffce3a; }
+/* Closed by both: dead, struck through. */
+.dt-root .dt-mk-row.is-dead { opacity: 0.42; }
+.dt-root .dt-mk-row.is-dead b { text-decoration: line-through; }
+
 /* ------------------------------------------------------------------ effects --- */
 .dt-root .dt-fx { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .dt-root .dt-pop {
@@ -170,6 +217,8 @@
   100% { opacity: 0; transform: translate(-50%, -190%) scale(1); }
 }
 .dt-root .dt-pop.is-still { animation: dt-pop-still 1.25s linear forwards; }
+/* Cricket: a bed that counts for nothing (7, or 19 while 20 is open in order) pops up dimmed. */
+.dt-root .dt-pop.is-dim b { font-size: 30px; color: #cfc6bb; opacity: 0.8; }
 @keyframes dt-pop-still { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
 
 .dt-root .dt-banner {
@@ -308,6 +357,7 @@
 .dt-root .dt-help { width: min(360px, 100%); gap: 8px; text-align: center; }
 .dt-root .dt-help-goal { margin: 0; font-size: 14px; font-weight: 800; white-space: nowrap; }
 .dt-root .dt-help-svg { display: block; width: 100%; max-width: 280px; margin: 0 auto; background: var(--dt-wood); border-radius: 12px; }
+.dt-root .dt-help-lines { display: flex; flex-direction: column; gap: 8px; }
 .dt-root .dt-help-line { margin: 0; font-size: 12.5px; font-weight: 600; color: #4a3626; white-space: nowrap; }
 .dt-root .dt-help-ex { font-weight: 800; color: #b8282d; }
 

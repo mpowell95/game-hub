@@ -25,9 +25,41 @@ green score plaques in the bottom corners, a menu button top right, 301 counting
 - `isInProgress()` is always `false`: the match autosaves after every dart and every hand-over
   (`gamehub.darts.save.v1`) and the setup screen offers **Continue match**. Leaving is lossless.
 
+## The games (2026-10-01)
+
+Matt, after the first build: *"Please add 201 and 101. And add cricket. With options of in order or
+any order."* Setup has a **Game** row (301 / 201 / 101 / Cricket) and, for Cricket, an **Order** row
+(Any order / In order); both persist in `gamehub.darts.v1` (`game`, `order`). The match carries
+`kind` (engine.js `KINDS`: `'301' | '201' | '101' | 'cricket' | 'cricket-order'`). **A match with no
+`kind` is 301**: every save and every online match made before this has none, and `validMatch` /
+`mp.js kindOfGame` read it that way, so nothing saved is lost or misread.
+
+- **201 and 101**: 301's rules from a lower start.
+- **Cricket** (`throwCricket`): 20 down to 15 and the bull. A single is one mark, a double two, a
+  treble three; the outer bull one, the bullseye two. Three marks close a number. Marks past the
+  third score the number's value (the bull 25) while the other player has it open. **Win: every
+  number closed and at least as many points**, checked after every dart (so a player who closes
+  everything while behind keeps throwing to score). No bust in Cricket.
+- **In order** (`cricket-order`): only the number you are on takes marks, 20, 19, 18, 17, 16, 15,
+  then the bull (`cricketNext`). A number you have already closed still scores points. **This
+  reading was my choice** (in-order cricket has several house rules); if Matt plays it another way,
+  it is `cricketCounts` in engine.js.
+- **The chalkboard** (`_marksHud`): each seat's marks (/ X circled X) above its own plaque, either
+  side of the dart; in order, the number each player is on is ringed in `#ffce3a`; a number both
+  have closed is struck through. The plaques show points. On a short phone the board shrinks a
+  little so seven rows of at least 15px fit (`_layout`).
+- **A dart on a bed that counts for nothing** (7, or 19 while 20 is open in order) pops up dimmed
+  with no flash; a counting dart pops up its bed (T20, D16, BULL) and `+points` if it scored.
+- **The computer** (`chooseCricketTarget`): behind on points with a number it can score on, it
+  scores there; otherwise it goes for its next number (in order: the one it is on; any order: the
+  highest open). Easy aims at singles and never chases points. Hard vs hard: ~14 turns a game.
+- **Stats**: every game records into the same `recordResult('darts', ...)` buckets (one Darts record;
+  no per-game split). Online: the challenger's setup choice is sent as the match's `kind`; a rematch
+  is the same game; the match rows and the push say which game it is.
+
 ## Rules (engine.js, pure, tested by `node darts/js/test.js`)
 
-- **301, down to exactly zero. No double-out**: any dart that lands on zero wins. **Below zero is
+- **301 (and 201, 101), down to exactly zero. No double-out**: any dart that lands on zero wins. **Below zero is
   a bust**: the score goes back to where that turn started and the turn ends. I could not confirm
   from the recording whether GamePigeon requires a double to finish (no finish was filmed); no
   double-out is the simpler rule and the one GamePigeon is generally described with. If Matt says
@@ -127,8 +159,8 @@ It is a competitive game, so it is NOT in `js/players-agg.js`'s `SOLO` set.
 ## Tests
 
 - `node darts/js/test.js`: geometry (every target scores its value, wedge edges), the match (bust,
-  win, no double-out, hand-over), the computer (never aims past what is left, harder scores more,
-  games finish), the flick mapping.
+  win, no double-out, hand-over), 201 and 101, Cricket (marks, scoring, winning while behind does
+  not count, in order, the computer finishing every game), the flick mapping, the flight.
 - `node check-no-scroll.mjs darts`: setup, how to play, play screen, result, both hosts, both phone
   heights.
 - `window.__dtTest.ui` is the test seam (`_launch(from, x, y)` throws a dart at board point x, y).
@@ -142,6 +174,8 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
   matches" (with "N waiting on you" under it) and opens the online home: Challenge someone, Your
   turn, Their turn, History. Files: `js/mp.js` (data), `js/mp-ui.js` (the list screens, lazily
   imported), `js/alert.js` (the launcher bubble; `alerts:` on the hub entry).
+- **Which game:** `kind` on the match and on both index rows (optional; absent = 301). `validateGame`
+  replays the log with that game's rules.
 - **The node:** `darts/games/<id>` + `darts/index/<CODE>/<id>`, addressed by PLAYER CODE. Added to
   `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **PUBLISHED by Matt on
   2026-10-01** (he pasted the whole file; verified the same day: `darts/` reads, where it was
@@ -172,11 +206,11 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
   finish. The player picker narrows by search instead of growing.
 - **Notifications:** `dartsTurnPush` in `functions/index.js` (decided by `decideDarts` in
   `functions/decide.js`): a challenge, your turn coming back (with the score), and a match the other
-  person ended. **Written 2026-10-01, NOT yet deployed** (Matt: "i can't do the notification code
+  person ended; a challenge names the game ("challenged you to Cricket (in order)"). **Written 2026-10-01, NOT yet deployed** (Matt: "i can't do the notification code
   until tonight"). It is live only after `firebase deploy --only functions`. The app half needs no
   change: `sw.js` opens any match a payload names (`data.match`), and the hub hands it to
   `alert.js`'s `armOpen`.
-- **Tests:** `node test-darts-mp.mjs` (31 checks, two phones against an in-memory database);
+- **Tests:** `node test-darts-mp.mjs` (39 checks, including a 101 and a whole in-order Cricket match, two phones against an in-memory database);
   `node test-push.mjs` (the `decideDarts` cases). The screens were checked in headless Chromium with
   two browser "phones" against a stand-in database server, a whole match played to zero.
 

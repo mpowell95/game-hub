@@ -273,19 +273,23 @@ export function decideCupPong({ code, id, before, after }) {
 const DARTS_TEXT = {
   en: {
     title: 'Darts',
-    challenge: (w) => `${w} challenged you to 301. Your throw!`,
+    game: { cricket: 'Cricket', 'cricket-order': 'Cricket (in order)' },
+    challenge: (w, g) => `${w} challenged you to ${g}. Your throw!`,
     turn: (w, a, b) => `Your turn vs ${w}. You ${a}, ${w} ${b}`,
     theyWon: (w) => `${w} won the game.`,
     youWon: (w) => `You won! ${w} resigned.`,
   },
   es: {
     title: 'Dardos',
-    challenge: (w) => `${w} te ha retado a 301. ¡Te toca!`,
+    game: { cricket: 'Cricket', 'cricket-order': 'Cricket (en orden)' },
+    challenge: (w, g) => `${w} te ha retado a ${g}. ¡Te toca!`,
     turn: (w, a, b) => `Te toca contra ${w}. Tú ${a}, ${w} ${b}`,
     theyWon: (w) => `${w} ganó la partida.`,
     youWon: (w) => `¡Ganaste! ${w} se rindió.`,
   },
 };
+/** The game a row names (darts/js/mp.js rowFor `kind`, 2026-10-01); a row without one is 301. */
+const dartsGame = (s, kind) => s.game[kind] || (['201', '101'].includes(kind) ? kind : '301');
 
 export function decideDarts({ code, id, before, after }) {
   if (!after || !code || !id) return null;
@@ -302,7 +306,7 @@ export function decideDarts({ code, id, before, after }) {
     return null;
   }
   if (!after.yourTurn) return null;
-  if (!before) return mk('challenge', (s) => s.challenge(who));
+  if (!before) return mk('challenge', (s) => s.challenge(who, dartsGame(s, after.kind)));
   if (before.yourTurn && !before.over) return null;             // it was already your turn
   const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
   return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));

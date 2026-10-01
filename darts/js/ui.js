@@ -7,7 +7,7 @@
 // false. A match is only recorded once it is won. An ONLINE match (2026-10-01, mp.js) lives on the
 // server, every dart written as it lands, so leaving one loses nothing either.
 
-import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING } from './engine.js';
+import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel } from './engine.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
 import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, stuckAxis, boardPoint, norm, HAND_Z, REST_AXIS } from './flight.js';
 import { STRINGS } from './strings.js';
@@ -23,6 +23,11 @@ const SAVE_KEY = 'gamehub.darts.save.v1';
 const MODES = ['cpu', 'pass', 'online'];
 const LOCAL_MODES = ['cpu', 'pass'];      // the ones a saved match can be (online lives on the server)
 const FIRSTS = ['alt', 'me', 'them'];
+const GAMES = ['301', '201', '101', 'cricket'];
+const ORDERS = ['any', 'order'];
+/** The match kind (engine.js KINDS) the setup screen's Game and Order choices make. */
+const kindFrom = (s) => (s.game === 'cricket' ? (s.order === 'order' ? 'cricket-order' : 'cricket') : s.game);
+
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function writeJSON(k, v) {
@@ -45,6 +50,8 @@ function loadSettings() {
     difficulty,
     first: FIRSTS.includes(s.first) ? s.first : 'alt',
     nextStarter: s.nextStarter === 1 ? 1 : 0,
+    game: GAMES.includes(s.game) ? s.game : '301',
+    order: ORDERS.includes(s.order) ? s.order : 'any',
   };
 }
 
@@ -54,6 +61,17 @@ const MENU_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
 const MINI_DART = '<svg viewBox="0 0 10 30" aria-hidden="true" focusable="false"><path d="M5 0 L6 6 L6.4 13 L5.6 18 L9.5 27 L5 25 L0.5 27 L4.4 18 L3.6 13 L4 6 Z" fill="currentColor"/></svg>';
 /** The active-seat marker: a triangle, so whose turn it is never rests on colour alone. */
 const TURN_SVG = '<svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2 1 L11 6 L2 11 Z" fill="currentColor"/></svg>';
+/** Cricket marks, the way a chalkboard keeps them: / one, X two, a circled X closed. */
+const MARK_SVG = [
+  '',
+  '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 16 L15 4" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" fill="none"/></svg>',
+  '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 16 L15 4 M5 4 L15 16" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" fill="none"/></svg>',
+  '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="8.2" stroke="currentColor" stroke-width="2.2" fill="none"/><path d="M6.2 13.8 L13.8 6.2 M6.2 6.2 L13.8 13.8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>',
+];
+/** The how-to lines for each game, in order. */
+const helpKeys = (kind) => (isCricket(kind)
+  ? ['help_c_marks', 'help_c_bull', 'help_c_points', kind === 'cricket-order' ? 'help_c_order' : 'help_c_any', 'help_c_win', 'help_flick']
+  : ['help_cap', 'help_example', 'help_bull', 'help_bust', 'help_flick']);
 
 /** How to play: the board's rings with their multipliers, drawn rather than described. */
 function helpSvg() {
@@ -148,6 +166,8 @@ class DartsUI {
         <div class="dt-fx" data-role="fx" aria-hidden="true"></div>
         <div class="dt-banner" data-role="banner" aria-hidden="true"><b data-role="bannerMain"></b><span data-role="bannerSub"></span></div>
         <p class="dt-hint" data-role="hint" aria-hidden="true"></p>
+        <div class="dt-marks dt-marks-0" data-role="marks0" role="img" hidden></div>
+        <div class="dt-marks dt-marks-1" data-role="marks1" role="img" hidden></div>
         <div class="dt-seat dt-seat-0" data-seat="0">
           <span class="dt-turn">${TURN_SVG}</span>
           <span class="dt-ava" data-role="ava0"></span>
@@ -162,10 +182,18 @@ class DartsUI {
         <div class="dt-ov dt-ov-setup" data-ov="setup" hidden>
           <div class="dt-card">
             <h2 class="dt-logo" data-l="title"></h2>
-            <p class="dt-tag" data-l="tagline"></p>
+            <p class="dt-tag" data-role="tagline"></p>
             <div class="dt-field">
               <span class="dt-label" data-l="mode"></span>
               <div class="gh-seg dt-seg" role="group" data-role="modes"></div>
+            </div>
+            <div class="dt-field">
+              <span class="dt-label" data-l="game"></span>
+              <div class="gh-seg dt-seg" role="group" data-role="games"></div>
+            </div>
+            <div class="dt-field" data-role="orderField">
+              <span class="dt-label" data-l="order"></span>
+              <div class="gh-seg dt-seg" role="group" data-role="orders"></div>
             </div>
             <div class="dt-field" data-role="diffField">
               <span class="dt-label" data-l="difficulty"></span>
@@ -218,13 +246,9 @@ class DartsUI {
           <div class="dt-card dt-help" role="dialog" aria-modal="true">
             <button type="button" class="dt-x" data-act="helpClose" data-la="aria_close">${X_SVG}</button>
             <h2 class="dt-h2" data-l="howto"></h2>
-            <p class="dt-help-goal" data-l="help_goal"></p>
+            <p class="dt-help-goal" data-role="helpGoal"></p>
             <div data-role="helpSvg"></div>
-            <p class="dt-help-line" data-l="help_cap"></p>
-            <p class="dt-help-line dt-help-ex" data-l="help_example"></p>
-            <p class="dt-help-line" data-l="help_bull"></p>
-            <p class="dt-help-line" data-l="help_bust"></p>
-            <p class="dt-help-line" data-l="help_flick"></p>
+            <div class="dt-help-lines" data-role="helpLines"></div>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="helpClose"><span data-l="help_close"></span></button>
           </div>
         </div>
@@ -249,6 +273,7 @@ class DartsUI {
     this.ov = {};
     this.root.querySelectorAll('[data-ov]').forEach((el) => { this.ov[el.dataset.ov] = el; });
     this.seatEls = [q('[data-seat="0"]'), q('[data-seat="1"]')];
+    this.marksEls = [q('[data-role="marks0"]'), q('[data-role="marks1"]')];
 
     this.root.addEventListener('click', (e) => this._click(e));
     this._onDown = (e) => this._pointerDown(e);
@@ -271,12 +296,19 @@ class DartsUI {
     this.canvas.setAttribute('aria-label', t('aria_board'));
     this.root.querySelector('[data-role="helpSvg"]').innerHTML = helpSvg();
     const s = this.settings;
+    this._paintHelp();
     const seg = (role, key, ids, cur, label, extra) => {
       const el = this.root.querySelector(`[data-role="${role}"]`);
       el.setAttribute('aria-label', t(key));
       el.innerHTML = ids.map((id) => `<button type="button" class="gh-seg__item dt-seg-item" data-${role}="${id}" aria-pressed="${cur === id}">${extra ? extra(id) : ''}<span>${esc(label(id))}</span></button>`).join('');
     };
     seg('modes', 'mode', MODES, s.mode, (id) => t('mode_' + id));
+    seg('games', 'game', GAMES, s.game, (id) => (id === 'cricket' ? t('game_cricket') : id));
+    seg('orders', 'order', ORDERS, s.order, (id) => t('order_' + id));
+    this.root.querySelector('[data-role="orderField"]').hidden = s.game !== 'cricket';
+    const kind = kindFrom(s);
+    this.root.querySelector('[data-role="tagline"]').textContent = isCricket(kind)
+      ? t(kind === 'cricket-order' ? 'tagline_cricket_order' : 'tagline_cricket') : t('tagline_x01', { n: kind });
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
     seg('firsts', 'first', FIRSTS, s.first, (id) => id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t(s.mode === 'pass' ? 'first_them_pass' : 'first_them_cpu'));
     this.root.querySelector('[data-role="diffField"]').hidden = s.mode !== 'cpu';
@@ -288,11 +320,20 @@ class DartsUI {
     const online = this.mode === 'mp';
     this.root.querySelectorAll('[data-online]').forEach((el) => { el.hidden = !online; });
     this.root.querySelectorAll('[data-local]').forEach((el) => { el.hidden = online; });
-    if (this.seats) this._seatsHud();
+    if (this.seats) this._seatsHud(); else this._marksHud();
     this._dartsLeftHud();
     if (this.screen === 'result') this._fillResult();
     if (this.screen === 'pass') this._fillPass();
     if (this.screen === 'help') this._fitHelp();
+  }
+
+  /** The how-to for the game being played, or the one chosen on the setup screen. */
+  _paintHelp() {
+    const kind = this.match ? kindOf(this.match) : kindFrom(this.settings);
+    const cricket = isCricket(kind);
+    this.root.querySelector('[data-role="helpGoal"]').textContent = cricket ? t('help_c_goal') : t('tagline_x01', { n: kind });
+    this.root.querySelector('[data-role="helpLines"]').innerHTML = helpKeys(kind)
+      .map((k) => `<p class="dt-help-line${k === 'help_example' ? ' dt-help-ex' : ''}">${esc(t(k))}</p>`).join('');
   }
 
   /** Every how-to line on one row: measured, shrunk until it fits, never below 11px
@@ -336,7 +377,8 @@ class DartsUI {
 
   // --- layout ----------------------------------------------------------------------------------
   /** Board as big as the width allows, under the top row; the dart in the hand below it; the
-   *  plaques in the bottom corners. Everything is measured from the root's real size. */
+   *  plaques in the bottom corners (and, in Cricket, each seat's marks above its plaque, either side
+   *  of the dart). Everything is measured from the root's real size. */
   _layout() {
     const w = this.root.clientWidth, h = this.root.clientHeight;
     if (!w || !h) { requestAnimationFrame(() => { if (instance === this) this._layout(); }); return; }
@@ -348,7 +390,14 @@ class DartsUI {
     // Height left for board + hand: the hand dart needs about a fifth of the screen.
     const handSpace = Math.max(120, h * 0.24);
     const avail = h - topBottom - seatH - 18 - handSpace;
-    const R = Math.max(60, Math.min((w / 2 - 8) / RING.frame, (avail / 2) / RING.frame));
+    let R = Math.max(60, Math.min((w / 2 - 8) / RING.frame, (avail / 2) / RING.frame));
+    // Cricket's marks need 7 rows of at least 15px between the board and the plaques: on a short
+    // phone the board gives up the difference.
+    if (this.root.classList.contains('is-cricket')) {
+      const room = (h - 10 - seatH - 8) - (topBottom + 4 + 2 * R * RING.frame + 6);
+      const need = CRICKET.length * 15 + 12;
+      if (room < need) R = Math.max(60, R - (need - room) / (2 * RING.frame));
+    }
     const cx = w / 2;
     const cy = topBottom + 4 + R * RING.frame;
     this.r.layout(w, h, cx, cy, Math.round(R));
@@ -368,6 +417,11 @@ class DartsUI {
     // cover nothing; on a short screen with no gap, over the board's lower edge instead.
     const gapMid = (boardBottom + this.handRest.y) / 2;
     this.root.style.setProperty('--dt-banner-y', Math.round(this.handRest.y - boardBottom > 70 ? gapMid : boardBottom - 40) + 'px');
+    // Cricket's marks: between the board and the plaques, rows sized to the room there.
+    const marksTop = boardBottom + 6;
+    const marksRoom = Math.max(0, (h - 10 - seatH - 8) - marksTop);
+    this.root.style.setProperty('--dt-marks-top', Math.round(marksTop) + 'px');
+    this.root.style.setProperty('--dt-mk-h', Math.max(14, Math.min(26, Math.floor((marksRoom - 12) / CRICKET.length))) + 'px');
     this._draw();
   }
 
@@ -387,7 +441,18 @@ class DartsUI {
     else if (s.first === 'them') starter = 1;
     else { starter = s.nextStarter; s.nextStarter = starter ^ 1; }
     writeJSON(SETTINGS_KEY, s);
-    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter) }, true);
+    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter, kindFrom(s)) }, true);
+  }
+
+  /** The game the setup screen has chosen (an online challenge is sent as this). */
+  _kind() { return kindFrom(this.settings); }
+
+  /** Play again: the same game as the one just finished, whatever the setup screen now says. */
+  _rematch() {
+    const kind = kindOf(this.match);
+    const s = this.settings;
+    if (isCricket(kind)) { s.game = 'cricket'; s.order = kind === 'cricket-order' ? 'order' : 'any'; } else s.game = kind;
+    this._newMatch();
   }
 
   _continue() {
@@ -436,6 +501,32 @@ class DartsUI {
       this.seatEls[i].style.setProperty('--dt-seat', SEAT_COLOR[i]);
     }
     this._dartsLeftHud();
+    this._marksHud();
+  }
+
+  /** Cricket's chalkboard: each seat's marks on 20-15 and the bull, beside its own plaque. In order,
+   *  the number each player is on carries a ring and a triangle; a number both have closed is dead. */
+  _marksHud() {
+    const m = this.match;
+    const on = !!m && isCricket(m.kind) && !!this.seats;
+    if (this.root.classList.contains('is-cricket') !== on) {
+      this.root.classList.toggle('is-cricket', on);
+      this._layout();                                  // the board makes room for the marks, or takes it back
+    }
+    for (let i = 0; i < 2; i++) {
+      const el = this.marksEls[i];
+      el.hidden = !on;
+      if (!on) continue;
+      const next = m.kind === 'cricket-order' ? cricketNext(m, i) : -1;
+      el.style.setProperty('--dt-seat', SEAT_COLOR[i]);
+      el.innerHTML = CRICKET.map((n, k) => {
+        const mk = m.marks[i][k];
+        const dead = mk >= 3 && m.marks[i ^ 1][k] >= 3;
+        return `<div class="dt-mk-row${dead ? ' is-dead' : ''}${k === next ? ' is-next' : ''}"><b>${n === 25 ? esc(t('lbl_bull')) : n}</b><i>${MARK_SVG[mk]}</i></div>`;
+      }).join('');
+      const list = CRICKET.map((n, k) => `${n === 25 ? t('lbl_bull') : n} ${m.marks[i][k] >= 3 ? t('aria_mark_closed') : t('aria_mark_n', { n: m.marks[i][k] })}`).join(', ');
+      el.setAttribute('aria-label', t('aria_marks', { name: this.seats[i].name, list }));
+    }
   }
 
   _dartsLeftHud() {
@@ -494,7 +585,7 @@ class DartsUI {
 
   _cpuThrow() {
     if (!this.match || this.phase !== 'cpu') return;
-    const p = computerThrow(this.match.scores[this.match.turn], this.diff);
+    const p = computerThrow(this.match, this.diff);
     const from = { x: this.hand.x, y: this.hand.y };
     this._launch(from, p.x, p.y);
   }
@@ -532,7 +623,14 @@ class DartsUI {
       this.falling = { tip: end.tip.slice(), axis: end.axis, seat, spin: f.spin, vy: 0, a: 1 };
     }
     this.flying = null;
-    if (hit.pts > 0) {
+    const cricket = isCricket(m.kind);
+    if (cricket && hit.num > 0) {
+      // Cricket: the bed it hit, and the points if it scored any. A bed that counts for nothing
+      // (7, or 19 while 20 is still open in order) shows dimmed, with no flash.
+      if (hit.counted) this.flash = { x: f.bx, y: f.by, a: 1 };
+      this._popup(f.tx, f.ty, bedLabel(hit), hit.pts > 0 ? '+' + hit.pts : '', !hit.counted);
+      this._marksHud();
+    } else if (hit.pts > 0) {
       this.flash = { x: f.bx, y: f.by, a: 1 };
       this._popup(f.tx, f.ty, String(hit.pts), hit.ring === 'bull' ? t('bull') : '');
     } else {
@@ -548,7 +646,8 @@ class DartsUI {
       this._after(1.6, () => this._endTurn(false));
       return;
     }
-    if (hit.pts > 0) this._say(t('say_hit', { name, pts: hit.pts, left: m.scores[seat] }));
+    if (cricket && hit.num > 0) this._say(t(hit.counted ? 'say_c_hit' : 'say_c_none', { name, bed: bedLabel(hit), score: m.scores[seat] }));
+    else if (hit.pts > 0) this._say(t('say_hit', { name, pts: hit.pts, left: m.scores[seat] }));
     else this._say(t('say_miss', { name }));
     if (res.event === 'win') {
       this._save();
@@ -627,9 +726,9 @@ class DartsUI {
   }
 
   // --- effects ---------------------------------------------------------------------------------
-  _popup(x, y, txt, sub) {
+  _popup(x, y, txt, sub, dim = false) {
     const el = document.createElement('div');
-    el.className = 'dt-pop' + (this.reduce ? ' is-still' : '');
+    el.className = 'dt-pop' + (this.reduce ? ' is-still' : '') + (dim ? ' is-dim' : '');
     el.style.left = Math.round(x) + 'px';
     el.style.top = Math.round(y) + 'px';
     el.innerHTML = `<b>${esc(txt)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`;
@@ -653,10 +752,12 @@ class DartsUI {
 
   // --- input -----------------------------------------------------------------------------------
   _click(e) {
-    const seg = e.target.closest('[data-modes], [data-diffs], [data-firsts]');
+    const seg = e.target.closest('[data-modes], [data-diffs], [data-firsts], [data-games], [data-orders]');
     if (seg) {
       if (seg.dataset.modes) this.settings.mode = seg.dataset.modes;
       else if (seg.dataset.diffs) this.settings.difficulty = seg.dataset.diffs;
+      else if (seg.dataset.games) this.settings.game = seg.dataset.games;
+      else if (seg.dataset.orders) this.settings.order = seg.dataset.orders;
       else this.settings.first = seg.dataset.firsts;
       writeJSON(SETTINGS_KEY, this.settings);
       this._relabel();
@@ -667,7 +768,7 @@ class DartsUI {
     const act = b.dataset.act;
     if (act === 'play') { if (this.settings.mode === 'online') this._openOnline(); else this._newMatch(); }
     else if (act === 'continue') this._continue();
-    else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
+    else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._paintHelp(); this._showOnly('help'); this._fitHelp(); }
     else if (act === 'helpClose') {
       if (this._helpFrom === 'menu') { this.screen = 'menu'; this._showOnly('menu'); }
       else this._showSetup();
@@ -679,7 +780,11 @@ class DartsUI {
     else if (act === 'resign') { this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
     else if (act === 'ready') { this.screen = 'play'; this._showOnly(null); this._startTurn(false); this._bannerShow(t('turn_of', { name: this._seat().name }), '', 'turn'); }
-    else if (act === 'again') { if (this.mode === 'mp') this._sendChallenge(this.mp.them); else this._newMatch(); }
+    else if (act === 'again') {
+      if (this.mode === 'mp') this._sendChallenge(this.mp.them, kindOf(this.match));
+      else if (this.match) this._rematch();
+      else this._newMatch();
+    }
     else if (act === 'toSetup') { if (this.mode === 'mp') this._openOnline(); else this._showSetup(); }
   }
 
@@ -728,6 +833,7 @@ class DartsUI {
     this.fx.innerHTML = '';
     this.hintEl.classList.remove('is-show');
     this.root.classList.remove('is-flip');
+    this._marksHud();
     const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
     if (instance !== this) return;
     this.UI = UI;
@@ -745,9 +851,9 @@ class DartsUI {
   }
 
   /** A new challenge: created now, delivered when your first turn is over. */
-  async _sendChallenge(them) {
+  async _sendChallenge(them, kind = kindFrom(this.settings)) {
     const MP = await this._loadMP();
-    const res = await MP.createGame({ them });
+    const res = await MP.createGame({ them, kind });
     if (instance !== this) return res;
     if (!res.ok) {
       if (this.screen !== 'mp') this._toast((this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed')), 2400);

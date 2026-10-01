@@ -7,6 +7,7 @@
 import {
   ORDER, RING, scoreAt, targetPoint, newMatch, throwDart, nextTurn, validMatch,
   chooseTarget, computerThrow, flickLanding, FLICK_MID, SPREAD,
+  CRICKET, cricketNext, chooseCricketTarget, bedLabel, KINDS,
 } from './engine.js';
 
 let pass = 0, fail = 0;
@@ -123,6 +124,90 @@ const turnsToWin = (diff, seed) => {
 let ht = 0; for (let s = 1; s <= 30; s++) ht += turnsToWin('hard', s);
 ok('hard vs hard: a 301 game ends in a reasonable number of turns', ht / 30 < 30, (ht / 30).toFixed(1));
 ok('spread is tighter on harder levels', SPREAD.hard < SPREAD.medium && SPREAD.medium < SPREAD.easy);
+
+// 3b. 201 and 101 (2026-10-01): the same game from a lower start.
+{
+  const m2 = newMatch(0, '201'), m1 = newMatch(1, '101');
+  ok('201 starts both players on 201', m2.scores[0] === 201 && m2.scores[1] === 201 && m2.kind === '201');
+  ok('101 starts both on 101, and the right seat throws', m1.scores.join() === '101,101' && m1.turn === 1);
+  const m = newMatch(0, '101');
+  throwDart(m, 0, -0.6); throwDart(m, 0, 0.4);        // treble 20 + 3 = 63, 38 left
+  ok('101: 38 left after T20 and 3', m.scores[0] === 38);
+  const ev = throwDart(m, 0, -0.97).event;            // double 20 = 40: over, bust
+  ok('101: going under zero busts back to 101', ev === 'bust' && m.scores[0] === 101);
+  ok('an old save with no kind is read as 301', validMatch({ ...newMatch(0), kind: undefined }).kind === '301');
+  ok('every game makes a valid match', KINDS.every((k) => !!validMatch(newMatch(0, k))));
+}
+
+// 3c. Cricket.
+{
+  const T = (num, ring) => targetPoint(num, ring);
+  const hitAt = (m, num, ring) => { const p = T(num, ring); return throwDart(m, p.x, p.y); };
+  const m = newMatch(0, 'cricket');
+  ok('cricket starts on 0 points, nothing marked', m.scores.join() === '0,0' && m.marks.every((a) => a.every((n) => n === 0)));
+  let r = hitAt(m, 20, 'treble');
+  ok('a treble 20 closes 20 in one dart', m.marks[0][0] === 3 && r.hit.marks === 3 && r.hit.pts === 0);
+  r = hitAt(m, 20, 'double');
+  ok('marks past the third score the number while the other side has it open (D20 = 40)', m.scores[0] === 40 && r.hit.pts === 40);
+  r = hitAt(m, 7, 'treble');
+  ok('a number outside 15-20 counts for nothing', r.hit.marks === 0 && r.hit.pts === 0 && !r.hit.counted && r.event === 'end');
+  nextTurn(m);
+  hitAt(m, 20, 'treble');
+  ok('closing it stops the other side scoring on it', m.marks[1][0] === 3);
+  nextTurn(m);
+  r = hitAt(m, 20, 'treble');
+  ok('a number closed by both scores nothing', r.hit.pts === 0 && m.scores[0] === 40);
+  r = hitAt(m, 25, 'bull');
+  ok('the inner bull is two marks, the outer bull one', m.marks[0][6] === 2 && (hitAt(m, 25, 'obull'), m.marks[0][6] === 3));
+
+  // Win: everything closed with at least as many points.
+  const w = newMatch(0, 'cricket');
+  w.marks[0] = [3, 3, 3, 3, 3, 3, 2]; w.scores = [10, 0];
+  r = hitAt(w, 25, 'obull');
+  ok('closing the last number while ahead wins', r.event === 'win' && w.winner === 0);
+  const b = newMatch(0, 'cricket');
+  b.marks[0] = [3, 3, 3, 3, 3, 3, 2]; b.scores = [0, 60];
+  r = hitAt(b, 25, 'obull');
+  ok('closing everything while behind does not win: keep scoring', r.event !== 'win' && b.winner == null);
+
+  // In order.
+  const o = newMatch(0, 'cricket-order');
+  r = hitAt(o, 19, 'treble');
+  ok('in order: 19 counts for nothing while 20 is open', r.hit.marks === 0 && o.marks[0][1] === 0);
+  hitAt(o, 20, 'treble');
+  ok('in order: after 20 closes, 19 is next', cricketNext(o, 0) === 1);
+  r = hitAt(o, 19, 'single');
+  ok('in order: now 19 takes marks', o.marks[0][1] === 1);
+  ok('in order: the bull is last', CRICKET[6] === 25);
+  const o2 = newMatch(0, 'cricket-order'); o2.marks[0] = [3, 0, 0, 0, 0, 0, 0];
+  r = hitAt(o2, 20, 'treble');
+  ok('in order: a number already closed still scores', r.hit.pts === 60);
+
+  // The computer.
+  eq('cricket computer, fresh: treble 20', chooseCricketTarget(newMatch(0, 'cricket'), 'hard'), { num: 20, ring: 'treble' });
+  const c = newMatch(0, 'cricket'); c.marks[0] = [3, 0, 0, 0, 0, 0, 0]; c.scores = [0, 30];
+  eq('cricket computer, behind with 20 to score on: treble 20', chooseCricketTarget(c, 'hard'), { num: 20, ring: 'treble' });
+  c.scores = [30, 0];
+  eq('cricket computer, ahead: close 19 next', chooseCricketTarget(c, 'hard'), { num: 19, ring: 'treble' });
+  const co = newMatch(0, 'cricket-order'); co.marks[0] = [3, 3, 3, 3, 3, 3, 0];
+  eq('in order, everything else closed: the bull', chooseCricketTarget(co, 'medium'), { num: 25, ring: 'bull' });
+  eq('bed labels', ['treble', 'double', 'single', 'bull', 'obull'].map((ring) => bedLabel({ ring, num: 20 })), ['T20', 'D20', '20', 'BULL', '25']);
+  for (const kind of ['cricket', 'cricket-order']) {
+    for (const diff of ['easy', 'hard']) {
+      let turns = 0, done = 0;
+      for (let seed = 1; seed <= 20; seed++) {
+        const r2 = rng(seed); const g = newMatch(0, kind); let n = 0;
+        while (g.winner == null && n < 600) {
+          const p = computerThrow(g, diff, r2);
+          if (throwDart(g, p.x, p.y).event === 'end') { nextTurn(g); n++; }
+        }
+        if (g.winner != null) done++;
+        turns += n;
+      }
+      ok(`${kind}, ${diff} vs ${diff}: every game finishes (avg ${(turns / 20).toFixed(0)} turns)`, done === 20 && turns / 20 < (diff === 'easy' ? 200 : 40));
+    }
+  }
+}
 
 // 4. The flick.
 eq('too slow is not a throw', flickLanding(0, 1.6, 0, -100, 0.3), null);

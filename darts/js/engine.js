@@ -1,5 +1,5 @@
-// darts/js/engine.js - the rules, with no DOM: board geometry and scoring, the 301 match, and the
-// computer's aim. Pure, so darts/js/test.js runs it headless with `node`.
+// darts/js/engine.js - the rules, with no DOM: board geometry and scoring, the match (301, 201, 101
+// and Cricket, 2026-10-01), and the computer's aim. Pure, so darts/js/test.js runs it headless.
 //
 // Coordinates are in units of R, the board's scoring radius (the outer edge of the double ring),
 // with the bull at (0, 0), x to the right and y DOWN (canvas convention).
@@ -21,6 +21,14 @@ export const RING = {
 
 export const START = 301;
 export const DARTS_PER_TURN = 3;
+/** Every game a match can be (Matt, 2026-10-01: "Please add 201 and 101. And add cricket. With
+ *  options of in order or any order"). A match without `kind` is 301: every save and online match
+ *  made before this has none. */
+export const KINDS = ['301', '201', '101', 'cricket', 'cricket-order'];
+export const isCricket = (kind) => kind === 'cricket' || kind === 'cricket-order';
+export const kindOf = (m) => (m && KINDS.includes(m.kind) ? m.kind : '301');
+/** Cricket's numbers, in the order "in order" closes them: 20 down to 15, then the bull (25). */
+export const CRICKET = [20, 19, 18, 17, 16, 15, 25];
 export const DIFFS = ['easy', 'medium', 'hard'];
 
 /** Index into ORDER of the wedge an angle falls in. `deg` is clockwise from straight up. */
@@ -60,20 +68,40 @@ export function targetPoint(num, ring) {
 
 // --- the match -------------------------------------------------------------------------------
 
-/** A fresh 301 match. `starter` is the seat that throws first (0 or 1). */
-export function newMatch(starter = 0, start = START) {
+/** A fresh match. `starter` is the seat that throws first (0 or 1); `kind` one of KINDS. */
+export function newMatch(starter = 0, kind = '301') {
   const s = starter === 1 ? 1 : 0;
-  return { start, scores: [start, start], turn: s, starter: s, turnStart: start, darts: [], winner: null, turns: 0 };
+  const k = KINDS.includes(String(kind)) ? String(kind) : '301';
+  if (isCricket(k)) {
+    return { kind: k, start: 0, scores: [0, 0], marks: [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]], turn: s, starter: s, turnStart: 0, darts: [], winner: null, turns: 0 };
+  }
+  const start = Number(k);
+  return { kind: k, start, scores: [start, start], turn: s, starter: s, turnStart: start, darts: [], winner: null, turns: 0 };
+}
+
+/** Cricket: the index (into CRICKET) a seat must close next "in order", or -1 when all are closed. */
+export function cricketNext(m, seat) {
+  return m.marks[seat].findIndex((n) => n < 3);
+}
+/** Cricket: which CRICKET indexes a dart may MARK for `seat`. Any order: every open one. In order:
+ *  only the one being worked on. A number already closed always takes points (if the other side
+ *  has not closed it), in either variant. */
+function cricketCounts(m, seat, i) {
+  if (m.marks[seat][i] >= 3) return true;
+  return m.kind === 'cricket-order' ? cricketNext(m, seat) === i : true;
 }
 
 /** Throw one dart for the seat whose turn it is. Mutates and returns the match plus what happened:
  *    'score'  the dart counted and the turn goes on
  *    'end'    the dart counted and it was the third: the turn is over (call nextTurn)
- *    'bust'   it would have gone below zero: this turn's darts are void and the turn is over
- *    'win'    exactly zero
- *  There is no double-out: any dart that lands exactly on zero wins. */
+ *    'bust'   (x01) it would have gone below zero: this turn's darts are void and the turn is over
+ *    'win'    x01: exactly zero. Cricket: every number closed and at least as many points
+ *  There is no double-out: any dart that lands exactly on zero wins.
+ *  `hit` is the bed it landed in; in Cricket also `marks` (marks it added) and `pts` (points it
+ *  scored, which is not the bed's value). */
 export function throwDart(m, x, y) {
   if (m.winner != null) return { m, event: 'over', hit: null };
+  if (isCricket(m.kind)) return throwCricket(m, x, y);
   const hit = scoreAt(x, y);
   m.darts.push({ x, y, pts: hit.pts, ring: hit.ring });
   const left = m.scores[m.turn] - hit.pts;
@@ -83,6 +111,25 @@ export function throwDart(m, x, y) {
   }
   m.scores[m.turn] = left;
   if (left === 0) { m.winner = m.turn; return { m, event: 'win', hit }; }
+  return { m, event: m.darts.length >= DARTS_PER_TURN ? 'end' : 'score', hit };
+}
+
+function throwCricket(m, x, y) {
+  const bed = scoreAt(x, y);
+  const me = m.turn, them = me ^ 1;
+  const i = CRICKET.indexOf(bed.num);
+  let marks = 0, pts = 0;
+  if (i >= 0 && cricketCounts(m, me, i)) {
+    const add = Math.min(bed.mult, 3 - m.marks[me][i]);
+    m.marks[me][i] += add;
+    marks = add;
+    // Marks past the third score the number, unless the other side has closed it too.
+    if (m.marks[them][i] < 3) pts = (bed.mult - add) * CRICKET[i];
+    m.scores[me] += pts;
+  }
+  const hit = { ...bed, marks, pts, counted: marks > 0 || pts > 0 };
+  m.darts.push({ x, y, pts, ring: bed.ring, mk: marks });
+  if (m.marks[me].every((n) => n >= 3) && m.scores[me] >= m.scores[them]) { m.winner = me; return { m, event: 'win', hit }; }
   return { m, event: m.darts.length >= DARTS_PER_TURN ? 'end' : 'score', hit };
 }
 
@@ -98,10 +145,17 @@ export function nextTurn(m) {
 /** A saved match, checked before it is trusted. Returns the match or null. */
 export function validMatch(m) {
   if (!m || typeof m !== 'object') return null;
-  const okScore = (v) => Number.isInteger(v) && v >= 0 && v <= 1001;
+  if (m.kind == null) m.kind = '301';                  // saved before 2026-10-01: 301 was the only game
+  if (!KINDS.includes(m.kind)) return null;
+  const cricket = isCricket(m.kind);
+  const okScore = cricket ? (v) => Number.isInteger(v) && v >= 0 && v <= 100000 : (v) => Number.isInteger(v) && v >= 0 && v <= 1001;
   if (!Array.isArray(m.scores) || m.scores.length !== 2 || !m.scores.every(okScore)) return null;
   if (m.turn !== 0 && m.turn !== 1) return null;
   if (!okScore(m.turnStart) || !okScore(m.start)) return null;
+  if (cricket) {
+    const okMarks = (a) => Array.isArray(a) && a.length === CRICKET.length && a.every((n) => Number.isInteger(n) && n >= 0 && n <= 3);
+    if (!Array.isArray(m.marks) || m.marks.length !== 2 || !m.marks.every(okMarks)) return null;
+  }
   if (!Array.isArray(m.darts) || m.darts.length > DARTS_PER_TURN) return null;
   for (const d of m.darts) if (!d || !Number.isFinite(d.x) || !Number.isFinite(d.y)) return null;
   if (m.winner != null && m.winner !== 0 && m.winner !== 1) return null;
@@ -139,13 +193,40 @@ function gauss2(rnd) {
   return [k * Math.cos(2 * Math.PI * v), k * Math.sin(2 * Math.PI * v)];
 }
 
-/** Where the computer's next dart lands, and what it aimed at. */
-export function computerThrow(left, diff, rnd = Math.random) {
-  const tgt = chooseTarget(left, diff);
+/** Cricket: where the computer aims. Behind on points with a number it can score on (closed by it,
+ *  open for the other side): score there. Otherwise close its next number (in order: the one it is
+ *  on; any order: the highest still open). Easy never thinks about points. */
+export function chooseCricketTarget(m, diff) {
+  const me = m.turn, them = me ^ 1;
+  const aim = (i) => (CRICKET[i] === 25 ? { num: 25, ring: 'bull' } : { num: CRICKET[i], ring: diff === 'easy' ? 'single' : 'treble' });
+  const scoring = CRICKET.map((_, i) => i).filter((i) => m.marks[me][i] >= 3 && m.marks[them][i] < 3);
+  const open = m.kind === 'cricket-order' ? [cricketNext(m, me)].filter((i) => i >= 0) : CRICKET.map((_, i) => i).filter((i) => m.marks[me][i] < 3);
+  if (diff !== 'easy' && scoring.length && (m.scores[me] < m.scores[them] || !open.length)) return aim(scoring[0]);
+  if (open.length) return aim(open[0]);
+  return { num: 25, ring: 'bull' };
+}
+
+/** Where the computer's next dart lands, and what it aimed at. `state` is the match (any game), or
+ *  for 301-style games just the points left. */
+export function computerThrow(state, diff, rnd = Math.random) {
+  const tgt = typeof state === 'object' && state
+    ? (isCricket(state.kind) ? chooseCricketTarget(state, diff) : chooseTarget(state.scores[state.turn], diff))
+    : chooseTarget(state, diff);
   const p = targetPoint(tgt.num, tgt.ring);
   const s = SPREAD[diff] || SPREAD.medium;
   const [gx, gy] = gauss2(rnd);
   return { x: p.x + gx * s, y: p.y + gy * s, aim: tgt };
+}
+
+/** A short name for the bed a dart landed in: T20, D16, 7, 25, BULL. */
+export function bedLabel(hit) {
+  if (!hit) return '';
+  if (hit.ring === 'bull') return 'BULL';
+  if (hit.ring === 'obull') return '25';
+  if (hit.ring === 'treble') return 'T' + hit.num;
+  if (hit.ring === 'double') return 'D' + hit.num;
+  if (hit.ring === 'single') return String(hit.num);
+  return '';
 }
 
 // --- the player's flick --------------------------------------------------------------------

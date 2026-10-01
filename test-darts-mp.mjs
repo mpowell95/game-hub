@@ -135,6 +135,35 @@ MP.savePending(res.id, 0, [dart('a')]);
 ok('a pending dart is kept on the phone', !!MP.pendingFor(res.id));
 ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendingFor(res.id) && (await MP.readGame(res.id)).log.length === 1);
 
+// Other games (2026-10-01): the challenger picks 201, 101 or Cricket; the match carries `kind`.
+use('A');
+ok('a match made before games had a kind is read as 301',
+  MP.validateGame({ a: { code: 'MATTA' }, b: { code: 'ANABB' }, log: { '0000': dart('a') } }).scores.a === 241);
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: '101' });
+ok('a 101 challenge starts on 101', res.ok && res.game.kind === '101' && res.game.scores.a === 101);
+res = await MP.appendLog(res.id, 0, [dart('a')]);
+ok('101: T20 leaves 41', res.ok && res.game.scores.a === 41);
+ok('a made-up game is refused', (await MP.createGame({ them: { code: 'ANABB', name: 'Ana' }, kind: '999' })).reason === 'bad-kind');
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: 'cricket-order' });
+const cid = res.id;
+ok('a cricket (in order) challenge starts at 0 points', res.ok && res.game.kind === 'cricket-order' && res.game.scores.a === 0);
+const T19 = targetPoint(19, 'treble');
+res = await MP.appendLog(cid, 0, [dart('a'), dart('a'), dart('a', T19)]);
+ok('in order: T20 closes 20, T20 scores 60, T19 counts', res.ok && res.game.scores.a === 60 && res.game.turn === 'b');
+const crow = getAt(`darts/index/ANABB/${cid}`);
+ok('the other person\'s row says which game it is', crow && crow.kind === 'cricket-order' && crow.theirs === 60);
+// A whole cricket game to the end, replayed by validateGame on every write.
+use('B');
+const bulls = targetPoint(25, 'bull');
+const T = (n) => targetPoint(n, 'treble');
+let base = 3;
+const turn = async (side, pts) => { use(side === 'a' ? 'A' : 'B'); const r = await MP.appendLog(cid, base, pts.map((p) => dart(side, p))); base += pts.length; return r; };
+await turn('b', [{ x: 0, y: -2 }, { x: 0, y: -2 }, { x: 0, y: -2 }]);
+await turn('a', [T(18), T(17), T(16)]);
+await turn('b', [{ x: 0, y: -2 }, { x: 0, y: -2 }, { x: 0, y: -2 }]);
+res = await turn('a', [T(15), bulls, bulls]);
+ok('closing every number while ahead wins the cricket match', res.ok && res.game.over && res.game.over.winner === 'a' && res.game.over.why === 'closed', JSON.stringify(res.game && res.game.over));
+
 // Structural.
 const rules = JSON.parse(readFileSync('./database.rules.json', 'utf8'));
 ok('`darts` is in database.rules.json, signed-in read and write', rules.rules.darts && rules.rules.darts['.read'] === 'auth != null' && rules.rules.darts['.write'] === 'auth != null');

@@ -74,12 +74,14 @@ function fitList(card, list, extra) {
   list.dataset.dropped = String(dropped);
 }
 const cardOf = (el) => el.closest('.dt-mp');
+/** What a match kind is called (darts/js/engine.js KINDS); a row without one is 301. */
+const gameName = (kind) => (kind === 'cricket' ? t('game_cricket') : kind === 'cricket-order' ? t('game_cricket_order') : String(kind || '301'));
 
 const rowHTML = (r) => `
   <button type="button" class="dt-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
     <span class="dt-mrow-face" aria-hidden="true">${esc(r.emoji)}</span>
     <span class="dt-mrow-text"><span class="dt-mrow-name">${esc(r.name)}</span>
-      <span class="dt-mrow-sub">${esc(t('mp_scores', { a: r.mine, b: r.theirs, name: r.name }))}</span></span>
+      <span class="dt-mrow-sub">${esc(gameName(r.kind) + ' · ' + t('mp_scores', { a: r.mine, b: r.theirs, name: r.name }))}</span></span>
     <span class="dt-mrow-chev" aria-hidden="true">›</span>
   </button>`;
 
@@ -162,7 +164,7 @@ async function picker(ui, MP) {
 function confirm(ui, MP, them) {
   const body = page(ui, t('mp_challenge'), 'home', `
     <p class="dt-mp-vs"><span aria-hidden="true">${esc(them.emoji)}</span> ${esc(them.name)}</p>
-    <p class="dt-mp-note">${esc(t('mp_send_note', { name: them.name }))}</p>
+    <p class="dt-mp-note">${esc(t('mp_game_note', { game: gameName(ui._kind()), name: them.name }))}</p>
     <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-mp="send">${esc(t('mp_send', { name: them.name }))}</button>
     <p class="dt-mp-note dt-mp-err" aria-live="polite" hidden></p>`);
   const send = body.querySelector('[data-mp="send"]');
