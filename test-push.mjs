@@ -5,7 +5,7 @@
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport, decideCupPong, isActive, ACTIVE_WINDOW_MS } from './functions/decide.js';
+import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, isActive, ACTIVE_WINDOW_MS } from './functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -166,6 +166,22 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('cup pong: your own winning throw does not notify you', decideCupPong({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
   check('cup pong: the trigger watches cuppong/index and names the match', /ref: '\/cuppong\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'cuppong', match: id \}/.test(fnSrc));
   check('sw.js opens the Cup Pong match a notification names', /tag\.startsWith\('cuppong-'\)/.test(sw) && /match: String\(d\.match/.test(sw));
+}
+
+// --- Darts challenges (2026-10-01) -----------------------------------------------------------------
+{
+  const row = (x) => ({ name: 'Ana', yourTurn: false, over: false, lastBy: 'them', mine: 301, theirs: 301, ...x });
+  const body = (n) => n && n.text('en').body;
+  check('darts: a new row that is your turn is a challenge', body(decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) })) === 'Ana challenged you to 301. Your throw!');
+  check('darts: the challenger\'s own new row is not news', decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ lastBy: 'me' }) }) === null);
+  check('darts: the turn coming back says the score', body(decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true, mine: 121, theirs: 141 }) })) === 'Your turn vs Ana. You 121, Ana 141');
+  check('darts: your own darts (turn going away) say nothing', decideDarts({ code: 'MATTA', id: 'x', before: row({ yourTurn: true, lastBy: 'me' }), after: row({ lastBy: 'me' }) }) === null);
+  check('darts: already your turn is not news again', decideDarts({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ yourTurn: true }) }) === null);
+  check('darts: they won', body(decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'lost' }) })) === 'Ana won the game.');
+  check('darts: they resigned, you won', /resigned/.test(body(decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
+  check('darts: your own winning dart does not notify you', decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
+  check('darts: Spanish wording', decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Dardos');
+  check('darts: the trigger watches darts/index and names the match', /ref: '\/darts\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'darts', match: id \}/.test(fnSrc));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

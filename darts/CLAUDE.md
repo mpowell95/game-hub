@@ -19,7 +19,7 @@ green score plaques in the bottom corners, a menu button top right, 301 counting
 - In-hub `module: '../darts/js/ui.js'`, **immersive** (the wall is full bleed; the top row keeps
   right of the hub's floating back button). Hub id and stats id are both `darts`. Prefix
   `.dt-root` / `.dt-`.
-- **ADMIN ONLY at first** (`devOnly: true`, no `released` date). Matt releases it from the admin
+- **ADMIN ONLY at first** (`devOnly: true`, no `released` date; still admin only on 2026-10-01). Matt releases it from the admin
   page with no commit; its `GAME_META` row, My Stats tab and leaderboard wiring already ship, so
   every result recorded before the release shows the moment it is released.
 - `isInProgress()` is always `false`: the match autosaves after every dart and every hand-over
@@ -60,7 +60,7 @@ let go moving upward.
 
 ## Screens
 
-- Setup (a cream card over the lower half, the board above it): Vs computer / Pass and play,
+- Setup (a cream card over the lower half, the board above it): Play Computer / 2 players / Online,
   Computer Easy/Medium/Hard (with the shared shape markers), First throw Alternate/Me/Them
   (Alternate is the default and flips every match, `nextStarter`), Play, Continue match, How to
   play. Settings persist on every tap (`gamehub.darts.v1`).
@@ -89,9 +89,53 @@ It is a competitive game, so it is NOT in `js/players-agg.js`'s `SOLO` set.
   heights.
 - `window.__dtTest.ui` is the test seam (`_launch(from, x, y)` throws a dart at board point x, y).
 
+## Online challenges (2026-10-01)
+
+Matt, after the first build: *"yes"* to turn-by-turn online play, GamePigeon's iMessage way. Cup
+Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with them.
+
+- **Where:** setup screen, Play: Computer / 2 players / **Online**. Online turns Play into "Online
+  matches" (with "N waiting on you" under it) and opens the online home: Challenge someone, Your
+  turn, Their turn, History. Files: `js/mp.js` (data), `js/mp-ui.js` (the list screens, lazily
+  imported), `js/alert.js` (the launcher bubble; `alerts:` on the hub entry).
+- **The node:** `darts/games/<id>` + `darts/index/<CODE>/<id>`, addressed by PLAYER CODE. Added to
+  `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **The rules branch was NOT yet
+  published when this was written (2026-10-01): Matt said he could paste it "now"**. Until it is,
+  every online call fails softly ("Online play is not switched on yet"). Close this line the moment
+  he confirms.
+- **A match is a LOG of darts**, each the point it landed on (x, y in R units, rounded to 1/10000),
+  never a snapshot. `validateGame` replays it through `engine.js` and refuses the whole document if
+  one dart does not replay (a dart out of turn, a claimed win the darts never produced). The phone
+  rounds its own landing point the same way BEFORE scoring it (`_launch`), so a dart on a wire scores
+  the same on both phones.
+- **Written dart by dart** (`appendLog`, verified by re-read, idempotent on retry, a stale base is a
+  conflict and never an overwrite), and kept in an outbox (`gamehub.darts.outbox.v1`) until the
+  server has it. The index rows change only when the turn passes or the match ends.
+- **The challenge is delivered when the challenger's first turn ends**: the other person's row is
+  written only once it is their turn.
+- **Opening a match** replays the log silently up to the other person's latest run, then FLIES that
+  run one dart at a time to where each landed (`_mpCatchUp`). While it is their turn the match is
+  watched, so their darts arrive live. You always sit on the LEFT (`.is-flip` when you are side 'b').
+- **Counting:** each finished match is recorded once per phone (`gamehub.darts.counted.v1`) as
+  `recordResult('darts', 'mp', won)`, whoever ended it. A match that ended while you were away
+  gets a Game Over popup the next time you open online play.
+- **Resign:** menu, Resign. The other person wins; a challenge never delivered is not handed to
+  them as a win they never saw. Nothing is ever deleted.
+- **No series yet** (Cup Pong and Hoops have 1/3/5); GamePigeon Darts is one game. Easy to add from
+  Cup Pong's `seriesAfter` / `nextInSeries` if Matt asks.
+- **No scrolling:** every list is drawn, then trimmed by measurement to what the card holds, with
+  "+N more" (`fitList` in `mp-ui.js`). Matches beyond the cut are reached as the ones above them
+  finish. The player picker narrows by search instead of growing.
+- **Notifications:** `dartsTurnPush` in `functions/index.js` (decided by `decideDarts` in
+  `functions/decide.js`): a challenge, your turn coming back (with the score), and a match the other
+  person ended. **Written 2026-10-01, NOT yet deployed** (Matt: "i can't do the notification code
+  until tonight"). It is live only after `firebase deploy --only functions`. The app half needs no
+  change: `sw.js` opens any match a payload names (`data.match`), and the hub hands it to
+  `alert.js`'s `armOpen`.
+- **Tests:** `node test-darts-mp.mjs` (31 checks, two phones against an in-memory database);
+  `node test-push.mjs` (the `decideDarts` cases). The screens were checked in headless Chromium with
+  two browser "phones" against a stand-in database server, a whole match played to zero.
+
 ## Not built yet
 
-- **Online / turn-by-turn challenges** like GamePigeon's iMessage play. That needs a new Firebase
-  node (rules published by Matt) and, for notifications, a Cloud Function deploy by Matt - the
-  same shape as Cup Pong's challenges (`cup-pong/CLAUDE.md`, "Challenges").
 - Sound.

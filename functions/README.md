@@ -1,7 +1,8 @@
 # Push notifications - the server half
 
 `index.js` holds the Firebase Cloud Functions (Hoops, Messages, bug reports, Skeeball and, since
-2026-09-28, `cupPongTurnPush` on `cuppong/index/<code>/<id>`). The first watches `hoops/index/<code>/<gameId>` and, when the
+2026-09-28, `cupPongTurnPush` on `cuppong/index/<code>/<id>`; since 2026-10-01, `dartsTurnPush` on
+`darts/index/<code>/<id>`). The first watches `hoops/index/<code>/<gameId>` and, when the
 other person has just done something you need to answer (a challenge, your turn, they won or
 resigned), sends a Web Push to every phone you turned notifications on for (`pushSubs/<code>`).
 The decision is `decide.js` (pure; `node test-push.mjs` at the repo root tests it).

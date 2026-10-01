@@ -262,3 +262,48 @@ export function decideCupPong({ code, id, before, after }) {
   if (after.rebuttal) return mk('rebuttal', (s) => s.rebuttal(who));
   return mk('turn', (s) => s.turn(who));
 }
+
+// --- DARTS CHALLENGES (2026-10-01) -------------------------------------------------------------------
+// darts/js/mp.js writes darts/index/<code>/<id> from each person's side, with `lastBy` saying whose
+// write it was ('me' = this row's owner). Cup Pong's rules, without the rebuttal:
+//   - a NEW row that is your turn           -> a challenge (the challenger's first turn is done)
+//   - your turn coming back                 -> "your turn", with the score
+//   - the match ending by THEIR hand         -> they won / you won (they resigned)
+// Your own writes (lastBy 'me') never notify you.
+const DARTS_TEXT = {
+  en: {
+    title: 'Darts',
+    challenge: (w) => `${w} challenged you to 301. Your throw!`,
+    turn: (w, a, b) => `Your turn vs ${w}. You ${a}, ${w} ${b}`,
+    theyWon: (w) => `${w} won the game.`,
+    youWon: (w) => `You won! ${w} resigned.`,
+  },
+  es: {
+    title: 'Dardos',
+    challenge: (w) => `${w} te ha retado a 301. ¡Te toca!`,
+    turn: (w, a, b) => `Te toca contra ${w}. Tú ${a}, ${w} ${b}`,
+    theyWon: (w) => `${w} ganó la partida.`,
+    youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+  },
+};
+
+export function decideDarts({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = DARTS_TEXT[lang] || DARTS_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  if (!before) return mk('challenge', (s) => s.challenge(who));
+  if (before.yourTurn && !before.over) return null;             // it was already your turn
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
+}
