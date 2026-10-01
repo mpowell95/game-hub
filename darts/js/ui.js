@@ -9,6 +9,7 @@
 
 import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING } from './engine.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
+import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, stuckAxis, boardPoint, norm, HAND_Z, REST_AXIS } from './flight.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -357,6 +358,12 @@ class DartsUI {
     const floor = h - 10 - this.handLen;
     this.handRest = { x: cx, y: Math.min(floor, boardBottom + Math.max(16, (h - boardBottom - this.handLen) * 0.32)) };
     this.root.style.setProperty('--dt-hint-y', Math.round(this.handRest.y - 30) + 'px');
+    // The 3D throw (darts/js/flight.js): a camera behind the thrower, sized so the board is exactly
+    // where it is drawn, and a dart long enough to be `handLen` px on screen when it rests in the hand.
+    this.cam = makeCamera(cx, cy, Math.round(R));
+    this.dartLen = solveLength(this.cam, this.handRest.x, this.handRest.y, this.handLen);
+    const rest = pose(this.cam, unproject(this.cam, this.handRest.x, this.handRest.y, HAND_Z), REST_AXIS, this.dartLen);
+    this.unitW = (this.handLen * rest.zMid) / this.cam.f;     // world size whose projection is the dart's width unit
     // Banners (MISS!, BUST!, whose turn) sit in the gap between the board and the dart, where they
     // cover nothing; on a short screen with no gap, over the board's lower edge instead.
     const gapMid = (boardBottom + this.handRest.y) / 2;
@@ -500,8 +507,9 @@ class DartsUI {
     this.phase = 'flying';
     this.hintEl.classList.remove('is-show');
     const to = this.r.toPx(x, y);
-    const dist = Math.hypot(to.x - from.x, to.y - from.y);
-    this.flying = { fx: from.x, fy: from.y, tx: to.x, ty: to.y, bx: x, by: y, t: 0, dur: Math.min(0.42, 0.2 + dist / 2600), seat: this.match.turn, startLen: this.hand ? this.hand.len : this.handLen, x: from.x, y: from.y, len: this.handLen, spin: this.spin, stuckBlend: 0 };
+    // A real arc in 3D from the hand to the landing point the rules already decided.
+    const fl = makeFlight(unproject(this.cam, from.x, from.y, HAND_Z), x, y);
+    this.flying = { fl, t: 0, tx: to.x, ty: to.y, bx: x, by: y, seat: this.match.turn, spin: this.spin };
     this.hand = null;
   }
 
@@ -519,11 +527,11 @@ class DartsUI {
       if (seat === this.mp.mySeat) this._mpRecord(f.bx, f.by);
     }
     if (hit.ring === 'off') {
-      this.falling = { x: f.tx, y: f.ty, len: Math.max(14, f.len), seat, spin: f.spin, vy: 0, a: 1 };
-      this.flying = null;
-    } else {
-      this.flying = null;
+      // Missed the board: it hits the wall and drops away, fading.
+      const end = flightAt(f.fl, f.fl.T);
+      this.falling = { tip: end.tip.slice(), axis: end.axis, seat, spin: f.spin, vy: 0, a: 1 };
     }
+    this.flying = null;
     if (hit.pts > 0) {
       this.flash = { x: f.bx, y: f.by, a: 1 };
       this._popup(f.tx, f.ty, String(hit.pts), hit.ring === 'bull' ? t('bull') : '');
@@ -981,21 +989,14 @@ class DartsUI {
     const f = this.flying;
     if (f) {
       f.t += dt;
-      const k = Math.min(1, f.t / f.dur);
-      const e = 1 - Math.pow(1 - k, 2);
-      const dist = Math.hypot(f.tx - f.fx, f.ty - f.fy);
-      f.x = f.fx + (f.tx - f.fx) * e;
-      f.y = f.fy + (f.ty - f.fy) * e - Math.sin(Math.PI * k) * dist * 0.1;
-      const endLen = this.r.R * 0.2;
-      f.len = f.startLen + (endLen - f.startLen) * Math.pow(k, 0.6);
       f.spin += dt * 22;
-      f.stuckBlend = k < 0.82 ? 0 : (k - 0.82) / 0.18;
-      if (k >= 1) this._land();
+      if (f.t >= f.fl.T) this._land();
     }
     const fl = this.falling;
     if (fl) {
-      fl.vy += 1800 * dt; fl.y += fl.vy * dt; fl.a -= dt * 2.2;
-      if (fl.a <= 0 || fl.y > this.r.h + 40) this.falling = null;
+      fl.vy += 9.8 * dt; fl.tip[1] += fl.vy * dt; fl.a -= dt * 2.2;
+      fl.axis = norm([fl.axis[0], fl.axis[1] + dt * 3, fl.axis[2]]);
+      if (fl.a <= 0) this.falling = null;
     }
     if (this.flash) { this.flash.a -= dt * 1.4; if (this.flash.a <= 0) this.flash = null; }
     if (this._fadeOut) { this._fadeOut.t += dt; this.stuckAlpha = Math.max(0, 1 - this._fadeOut.t / this._fadeOut.dur); }
@@ -1014,21 +1015,38 @@ class DartsUI {
     }
   }
 
+  /** A dart's screen pose for the renderer, from its world tip and axis. */
+  _dartPose(tip, axis, seat, spin, alpha, shadow) {
+    const p = pose(this.cam, tip, axis, this.dartLen);
+    return { tip: p.tip, tail: p.tail, unit: (this.unitW * this.cam.f) / p.zMid, seat, spin, alpha, shadow };
+  }
+  _handPose(x, y, seat, alpha = 1) {
+    return this._dartPose(unproject(this.cam, x, y, HAND_Z), REST_AXIS, seat, this.reduce ? 0 : this.spin, alpha, false);
+  }
+
   _draw() {
-    if (!this.r || !this.r.w) return;
+    if (!this.r || !this.r.w || !this.cam) return;
     const m = this.match;
-    const stuck = [];
-    if (m && (this.screen === 'play' || this.screen === 'menu' || this.screen === 'result' || this.screen === 'help')) {
-      // The dart in flight is already in m.darts only after it lands, so every listed dart is stuck.
-      for (const d of m.darts) if (d.ring !== 'off') stuck.push({ x: d.x, y: d.y, seat: m.turn, alpha: this.stuckAlpha });
+    const darts = [];
+    if (m && (this.screen === 'play' || this.screen === 'menu' || this.screen === 'result' || this.screen === 'help' || this.screen === 'resign')) {
+      // Stuck darts sit the way they arrived from the hand's resting point (flight.stuckAxis), so a
+      // dart replayed from an online log or a save sits exactly like a fresh one.
+      for (const d of m.darts) {
+        if (d.ring === 'off') continue;
+        darts.push(this._dartPose(boardPoint(d.x, d.y), stuckAxis(), m.turn, Math.PI / 4, this.stuckAlpha, true));
+      }
     }
-    const scene = { stuck, flash: this.flash, hand: null, flying: null };
-    if (this.flying) scene.flying = this.flying;
-    if (this.falling) scene.hand = { x: this.falling.x, y: this.falling.y, len: this.falling.len, seat: this.falling.seat, spin: this.falling.spin, alpha: Math.max(0, this.falling.a) };
-    else if (this.hand && this.screen !== 'pass') scene.hand = this.hand;
+    const f = this.flying;
+    if (f) {
+      const now = flightAt(f.fl, f.t);
+      darts.push(this._dartPose(now.tip, now.axis, f.seat, f.spin, 1, f.t >= f.fl.T * 0.97));
+    }
+    const fa = this.falling;
+    if (fa) darts.push(this._dartPose(fa.tip, fa.axis, fa.seat, fa.spin, Math.max(0, fa.a), false));
+    else if (this.hand && this.screen !== 'pass') darts.push(this._handPose(this.hand.x, this.hand.y, this.hand.seat, this.hand.alpha == null ? 1 : this.hand.alpha));
     // Setup: a dart waits in the hand, turning, so the screen reads as darts at a glance.
-    if (this.screen === 'setup' || (this.screen === 'help' && !m)) scene.hand = { x: this.handRest.x, y: this.handRest.y, len: this.handLen, seat: 0, spin: this.spin };
-    this.r.draw(scene);
+    if (this.screen === 'setup' || (this.screen === 'help' && !m)) darts.push(this._handPose(this.handRest.x, this.handRest.y, 0));
+    this.r.draw({ flash: this.flash, darts });
   }
 
   destroy() {

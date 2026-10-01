@@ -137,79 +137,89 @@ function bedPath(g, x, y, R) {
   return true;
 }
 
-/** A dart pointing up, its tip at (x, y), `len` px long. `spin` turns the flights about the shaft
- *  (radians); `alpha` fades it. Drawn from behind and below, the GamePigeon hand view. */
-export function drawDart(g, x, y, len, seat, spin = 0, alpha = 1) {
+/**
+ * One dart, from its projected tip and tail (darts/js/flight.js). `unit` is the dart's on-screen
+ * size at its depth: widths scale with it, while the length along the screen is whatever the
+ * projection makes it. A dart seen side-on shows its barrel, shaft and flights; as it turns to point
+ * into the board its projected length shrinks below its width and the flights are seen END-ON, as a
+ * cross (blended in by `endOn`). `spin` turns the flights about the shaft.
+ */
+export function drawDart(g, tip, tail, unit, seat, spin = 0, alpha = 1, shadow = false) {
   const col = SEAT_COLOR[seat] || SEAT_COLOR[0], dark = SEAT_DARK[seat] || SEAT_DARK[0];
-  g.save();
-  g.globalAlpha = alpha;
-  g.translate(x, y);
-  const L = len;
-  // Flights: two crossed pairs. Each pair's visible width is the cosine of its angle, so the
-  // flights appear to turn as the dart spins in the hand.
-  const fy0 = L * 0.56, fy1 = L * 1.0, fw = L * 0.25;
-  const pair = (phase, shade) => {
-    // Never fully edge-on: a sliver of the far pair always shows, so the flights read as a cross.
-    const w = fw * (0.16 + 0.84 * Math.abs(Math.cos(phase)));
-    g.fillStyle = shade;
-    for (const s of [-1, 1]) {
-      g.beginPath();
-      g.moveTo(0, fy0);
-      g.lineTo(s * w * 0.55, fy0 + L * 0.12);
-      g.lineTo(s * w, fy1 - L * 0.06);
-      g.lineTo(s * w * 0.75, fy1);
-      g.lineTo(0, fy1 - L * 0.04);
-      g.closePath();
-      g.fill();
-    }
-  };
-  const p1 = spin, p2 = spin + Math.PI / 2;
-  // The pair nearer edge-on is behind: draw the wider (front-facing) pair last.
-  if (Math.abs(Math.cos(p1)) > Math.abs(Math.cos(p2))) { pair(p2, dark); pair(p1, col); }
-  else { pair(p1, dark); pair(p2, col); }
-  // Shaft.
-  g.fillStyle = col;
-  g.fillRect(-L * 0.022, L * 0.36, L * 0.044, L * 0.42);
-  // Barrel: knurled silver.
-  const bg = g.createLinearGradient(-L * 0.04, 0, L * 0.04, 0);
-  bg.addColorStop(0, '#6e7378'); bg.addColorStop(0.45, '#eef1f4'); bg.addColorStop(1, '#5f6469');
-  g.fillStyle = bg;
-  g.beginPath();
-  g.moveTo(-L * 0.026, L * 0.12); g.lineTo(L * 0.026, L * 0.12);
-  g.lineTo(L * 0.038, L * 0.2); g.lineTo(L * 0.03, L * 0.38); g.lineTo(-L * 0.03, L * 0.38);
-  g.lineTo(-L * 0.038, L * 0.2); g.closePath(); g.fill();
-  g.strokeStyle = 'rgba(40,44,48,0.5)'; g.lineWidth = Math.max(0.5, L * 0.004);
-  for (let i = 1; i < 6; i++) { const yy = L * (0.2 + i * 0.03); g.beginPath(); g.moveTo(-L * 0.034, yy); g.lineTo(L * 0.034, yy); g.stroke(); }
-  // Point.
-  g.fillStyle = '#c9ced3';
-  g.beginPath(); g.moveTo(0, 0); g.lineTo(L * 0.012, L * 0.12); g.lineTo(-L * 0.012, L * 0.12); g.closePath(); g.fill();
-  g.restore();
-}
-
-/** A dart stuck in the board, seen from in front: the flights end-on as an X above the point, and
- *  its shadow on the board below and to the right. `s` is the dart's on-board size in px. */
-export function drawStuck(g, x, y, s, seat, alpha = 1) {
-  const col = SEAT_COLOR[seat] || SEAT_COLOR[0], dark = SEAT_DARK[seat] || SEAT_DARK[0];
+  const dx = tail.x - tip.x, dy = tail.y - tip.y;
+  const len = Math.hypot(dx, dy);
+  const u = Math.max(2, unit);
+  const endOn = Math.max(0, Math.min(1, (0.85 - len / u) / 0.55));
   g.save();
   g.globalAlpha = alpha;
   g.lineCap = 'round';
-  // Shadow.
-  g.strokeStyle = 'rgba(0,0,0,0.32)';
-  g.lineWidth = s * 0.16;
-  g.beginPath(); g.moveTo(x, y); g.lineTo(x + s * 0.45, y + s * 0.9); g.stroke();
+  if (shadow) {
+    // On the board, light from the top left: a soft dark copy below and to the right of the shaft.
+    const sx = u * 0.18, sy = u * 0.32;
+    g.strokeStyle = 'rgba(0,0,0,0.30)';
+    g.lineWidth = u * 0.05;
+    g.beginPath(); g.moveTo(tip.x, tip.y); g.lineTo(tail.x + sx, tail.y + sy + len * 0.2); g.stroke();
+    g.lineWidth = u * 0.07;
+    const fx = tail.x + sx, fy = tail.y + sy + len * 0.2, a = u * 0.17;
+    g.beginPath(); g.moveTo(fx - a, fy - a); g.lineTo(fx + a, fy + a); g.moveTo(fx + a, fy - a); g.lineTo(fx - a, fy + a); g.stroke();
+  }
+  // Local frame: tip at the origin, the dart running down +y to `len`.
+  g.translate(tip.x, tip.y);
+  g.rotate(Math.atan2(dy, dx) - Math.PI / 2);
+  const L = len;
+  // Side-on flights: two crossed pairs, each as wide as the cosine of its angle, so they turn.
+  if (endOn < 1) {
+    g.save();
+    g.globalAlpha = alpha * (1 - endOn);
+    const fy0 = L * 0.56, fy1 = L, fw = u * 0.25;
+    const pair = (phase, shade) => {
+      const w = fw * (0.16 + 0.84 * Math.abs(Math.cos(phase)));
+      g.fillStyle = shade;
+      for (const sgn of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(0, fy0);
+        g.lineTo(sgn * w * 0.55, fy0 + L * 0.12);
+        g.lineTo(sgn * w, fy1 - L * 0.06);
+        g.lineTo(sgn * w * 0.75, fy1);
+        g.lineTo(0, fy1 - L * 0.04);
+        g.closePath();
+        g.fill();
+      }
+    };
+    const p1 = spin, p2 = spin + Math.PI / 2;
+    if (Math.abs(Math.cos(p1)) > Math.abs(Math.cos(p2))) { pair(p2, dark); pair(p1, col); }
+    else { pair(p1, dark); pair(p2, col); }
+    g.restore();
+  }
+  // Shaft.
+  g.fillStyle = col;
+  g.fillRect(-u * 0.022, L * 0.36, u * 0.044, L * 0.42);
+  // Barrel: knurled silver.
+  const bg = g.createLinearGradient(-u * 0.04, 0, u * 0.04, 0);
+  bg.addColorStop(0, '#6e7378'); bg.addColorStop(0.45, '#eef1f4'); bg.addColorStop(1, '#5f6469');
+  g.fillStyle = bg;
   g.beginPath();
-  g.moveTo(x + s * 0.2, y + s * 0.62); g.lineTo(x + s * 0.7, y + s * 1.12);
-  g.moveTo(x + s * 0.7, y + s * 0.62); g.lineTo(x + s * 0.2, y + s * 1.12);
-  g.stroke();
-  // Shaft, a short stub angled up toward the viewer.
-  g.strokeStyle = '#b8bec4'; g.lineWidth = s * 0.14;
-  g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - s * 0.32); g.stroke();
-  // Flights.
-  const cy = y - s * 0.5;
-  g.strokeStyle = dark; g.lineWidth = s * 0.26;
-  g.beginPath(); g.moveTo(x - s * 0.32, cy - s * 0.32); g.lineTo(x + s * 0.32, cy + s * 0.32); g.stroke();
-  g.strokeStyle = col; g.lineWidth = s * 0.24;
-  g.beginPath(); g.moveTo(x + s * 0.32, cy - s * 0.32); g.lineTo(x - s * 0.32, cy + s * 0.32); g.stroke();
+  g.moveTo(-u * 0.026, L * 0.12); g.lineTo(u * 0.026, L * 0.12);
+  g.lineTo(u * 0.038, L * 0.2); g.lineTo(u * 0.03, L * 0.38); g.lineTo(-u * 0.03, L * 0.38);
+  g.lineTo(-u * 0.038, L * 0.2); g.closePath(); g.fill();
+  if (L > u * 0.4) {
+    g.strokeStyle = 'rgba(40,44,48,0.5)'; g.lineWidth = Math.max(0.5, u * 0.004);
+    for (let i = 1; i < 6; i++) { const yy = L * (0.2 + i * 0.03); g.beginPath(); g.moveTo(-u * 0.034, yy); g.lineTo(u * 0.034, yy); g.stroke(); }
+  }
+  // Point.
+  g.fillStyle = '#c9ced3';
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(u * 0.012, L * 0.12); g.lineTo(-u * 0.012, L * 0.12); g.closePath(); g.fill();
+  // End-on flights: a cross at the tail, turned by the spin.
+  if (endOn > 0) {
+    g.globalAlpha = alpha * endOn;
+    g.translate(0, L);
+    g.rotate(spin + Math.PI / 4);
+    const a = u * 0.34;
+    g.strokeStyle = dark; g.lineWidth = u * 0.13;
+    g.beginPath(); g.moveTo(-a, 0); g.lineTo(a, 0); g.stroke();
+    g.strokeStyle = col; g.lineWidth = u * 0.12;
+    g.beginPath(); g.moveTo(0, -a); g.lineTo(0, a); g.stroke();
+  }
   g.restore();
 }
 
@@ -233,8 +243,8 @@ export function createRenderer(canvas) {
     toPx(x, y) { return { x: r.cx + x * r.R, y: r.cy + y * r.R }; },
     /** CSS px -> board units. */
     toBoard(px, py) { return { x: (px - r.cx) / r.R, y: (py - r.cy) / r.R }; },
-    /** One frame. `scene` = { stuck: [{x,y,seat,alpha}], flash: {x,y,a}|null, hand: {x,y,len,seat,spin,alpha}|null,
-     *  flying: {x,y,len,seat,spin,stuckBlend}|null }, positions in CSS px. */
+    /** One frame. `scene` = { flash: {x,y,a}|null, darts: [{tip, tail, unit, seat, spin, alpha, shadow}] },
+     *  tip and tail in CSS px. */
     draw(scene) {
       const { dpr } = r;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -249,18 +259,9 @@ export function createRenderer(canvas) {
         }
         g.restore();
       }
-      const s = r.R * 0.11;
-      for (const d of scene.stuck || []) {
-        const p = r.toPx(d.x, d.y);
-        drawStuck(g, p.x, p.y, s, d.seat, d.alpha == null ? 1 : d.alpha);
-      }
-      const f = scene.flying;
-      if (f) {
-        if (f.stuckBlend > 0) drawStuck(g, f.x, f.y, s, f.seat, f.stuckBlend);
-        if (f.stuckBlend < 1) drawDart(g, f.x, f.y, f.len, f.seat, f.spin, 1 - f.stuckBlend);
-      }
-      const hd = scene.hand;
-      if (hd) drawDart(g, hd.x, hd.y, hd.len, hd.seat, hd.spin, hd.alpha == null ? 1 : hd.alpha);
+      // Every dart is a projected pose from darts/js/flight.js: stuck ones (with their shadow), the
+      // one in flight, and the one in the hand, drawn far to near.
+      for (const d of scene.darts || []) drawDart(g, d.tip, d.tail, d.unit, d.seat, d.spin || 0, d.alpha == null ? 1 : d.alpha, !!d.shadow);
     },
   };
   return r;
