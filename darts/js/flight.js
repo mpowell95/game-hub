@@ -106,9 +106,20 @@ export const CLIMB = 0.6;
 /** The axis is end-on by this fraction of the flight. */
 export const TURN = 0.42;
 
+/** The least a throw climbs on screen before it settles, in board radii (2026-10-02). */
+export const MIN_RISE = 0.3;
+
 export function makeFlight(from, bx, by, T = FLIGHT_T) {
   const to = boardPoint(bx, by);
-  const off = Math.max(0.12, APEX + APEX_SLOPE * (by + 0.45)) * (BOARD_R / OCHE);
+  const k = BOARD_R / OCHE;
+  let off = Math.max(0.12, APEX + APEX_SLOPE * (by + 0.45)) * k;
+  // EVERY THROW CLIMBS FIRST (Matt, 2026-10-02: "If I drag the dart up instead of doing a very quick
+  // flick, it reverts to do that weird impossible trajectory"). A dart dragged up the screen can be
+  // let go ABOVE the point it climbs to, so the "climb" ran DOWN the screen into the board. Now the
+  // climb always ends at least MIN_RISE above where the dart was let go, and the settle drops the
+  // rest of the way: the same two halves as every other throw, just a longer drop.
+  const b0 = from[1] / from[2], b1 = to[1] / to[2];
+  if (b1 - off > b0 - MIN_RISE * k) off = b1 - (b0 - MIN_RISE * k);
   return { from, to, T, off };
 }
 function pointAt(fl, k) {

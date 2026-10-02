@@ -242,6 +242,8 @@ export const FLICK_MID = 3.1;
 /** How many R the dart rises for each doubling of flick speed. Logarithmic, so a hard flick and a
  *  soft one are equally forgiving. */
 export const FLICK_GAIN = 1.45;
+/** How far above or below the bull a flick can land, in R: just off the board. */
+export const FLICK_CAP = 1.5;
 /** Below this the throw is not a throw: the dart drops back into the hand. */
 export const FLICK_MIN = 0.55;
 
@@ -252,7 +254,10 @@ export const FLICK_MIN = 0.55;
  *  flick too slow or not upward. */
 export function flickLanding(ox, oy, vx, vy, speed, jitter = [0, 0]) {
   if (!(vy < 0) || !(speed >= FLICK_MIN)) return null;
-  const y = -FLICK_GAIN * Math.log2(speed / FLICK_MID) + jitter[1];
+  // A throw too soft (or too hard) to reach the board misses JUST past its edge, not far down the
+  // wall: the flight drops onto that point, and a long drop read as sliding down the wall
+  // (2026-10-02). Either way it is off the board (RING.frame is 1.27) and scores nothing.
+  const y = Math.max(-FLICK_CAP, Math.min(FLICK_CAP, -FLICK_GAIN * Math.log2(speed / FLICK_MID) + jitter[1]));
   const x = ox + (vx / -vy) * (oy - y) + jitter[0];
   return { x, y };
 }
