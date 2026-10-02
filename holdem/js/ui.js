@@ -209,7 +209,8 @@ class Game {
     // One-motion raise: press RAISE and slide up (the reference app's control). Bound to the game's
     // own root, never document; the root holds the pointer capture so a repaint that replaces the
     // button mid-drag cannot drop the gesture.
-    this.onPDown = (e) => this._dragStart(e);
+    // A new press means a new tap: never swallow ITS click (see _dragEnd's noClickUntil).
+    this.onPDown = (e) => { this.noClickUntil = 0; this._dragStart(e); };
     this.onPMove = (e) => this._dragMove(e);
     this.onPUp = (e) => this._dragEnd(e, false);
     this.onPCancel = (e) => this._dragEnd(e, true);
@@ -998,6 +999,9 @@ class Game {
     try { this.el.releasePointerCapture(d.id); } catch { /* already released */ }
     // Pointer capture on the root re-targets the click, so a plain tap is handled HERE (open the
     // slider panel) and the click that follows is swallowed - same result by mouse or by touch.
+    // Only THAT click: the next pointerdown clears this (2026-10-02, Matt: "if I raise, it makes
+    // me click the raise button twice"). A 500ms window alone also ate a quick tap on RAISE TO
+    // right after the RAISE tab, and every tap after a slide (no click follows one) for 500ms.
     this.noClickUntil = Date.now() + 500;
     if (!d.moved) {
       if (cancelled) return undefined;
