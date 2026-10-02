@@ -636,8 +636,15 @@ class CupPong {
     R.setView('defend');
     this.paintHud();
     this.paintOptions();
-    const hint = this.root.querySelector('.cp-hint');
-    if (hint) { hint.textContent = t('sentWait', { name: this.mp.themName }); hint.hidden = false; }
+    this.mpWaitHint();
+  }
+
+  /** "Sent!" only once it really is: throws still on this phone say so instead. */
+  mpWaitHint() {
+    const hint = this.root && this.root.querySelector('.cp-hint');
+    if (!hint || !this.mp) return;
+    hint.textContent = this.mp.pending.length ? t('notSent') : t('sentWait', { name: this.mp.themName });
+    hint.hidden = false;
   }
 
   /** One entry of the log onto the board: the other person's throws fly, yours land at once. */
@@ -735,7 +742,9 @@ class CupPong {
     if (!mp || mp.sending || !mp.pending.length) return;
     mp.sending = true;
     const list = mp.pending.slice();
-    const base = mp.base;
+    // Where these throws sit in the log: everything shown so far, less what is still unsent. Not a
+    // base counted when the match opened - the other person's throws watched since are on top of it.
+    const base = mp.applied - mp.pending.length;
     MP.savePending(mp.id, base, mp.pending);          // kept on the phone until the server has it
     const res = await MP.appendLog(mp.id, base, list);
     if (this.mp !== mp) return;
@@ -747,6 +756,7 @@ class CupPong {
       MP.savePending(mp.id, mp.base, mp.pending);
       MP.markShown(mp.id, mp.base);
       if (mp.pending.length) this.mpFlush();
+      else if (this.waiting) this.mpWaitHint();
       return;
     }
     if (res.retryable) {
@@ -756,6 +766,7 @@ class CupPong {
       console.error('[cup-pong] a throw could not be sent:', res.reason);
       this.toast(res.reason === 'denied' ? t('mpDenied') : t('sendFailed'), 2600);
     }
+    if (this.waiting) this.mpWaitHint();
   }
 
   /** A challenge's island: the defender gives up a cup of its own before throwing. */

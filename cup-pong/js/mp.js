@@ -582,9 +582,16 @@ export async function appendLog(id, base, entries) {
     // Already landed (a retry after a verify that timed out): nothing to write.
     const same = (x, y) => x && y && x.k === y.k && x.by === y.by && x.m === y.m && x.key === y.key && x.id === y.id && x.p === y.p && x.a === y.a
       && JSON.stringify(x.cells || null) === JSON.stringify(y.cells || null);
+    // The OTHER person's throws after `base` are ones this phone already watched land before taking
+    // its own (Matt, 2026-10-02: two cups refused as "moved on" because the base was counted before
+    // King of Games' throws arrived). Step past them; the full replay below still has to accept the
+    // result, so nothing out of turn can get in this way.
+    let start = Math.min(base, have);
+    while (start < have && (fresh.log[start].by !== side || fresh.log[start].k === 'x')) start++;
     let skip = 0;
-    while (skip < list.length && base + skip < have && same(fresh.log[base + skip], list[skip])) skip++;
-    if (base + skip !== have) return fail('moved-on');       // the log is not where we left it
+    while (skip < list.length && start + skip < have && same(fresh.log[start + skip], list[skip])) skip++;
+    if (skip === list.length) return { ok: true, game: fresh };  // all landed already, whatever came after
+    if (start + skip !== have) return fail('moved-on');      // the log is not where we left it
     const todo = list.slice(skip);
     const turnBefore = fresh.turn;
     if (!todo.length) return { ok: true, game: fresh };
@@ -692,7 +699,7 @@ export function savePending(id, base, entries) {
 }
 export function pendingFor(id) { const x = readOutbox().find((y) => y.id === id); return x ? x : null; }
 export function outboxCount() { return readOutbox().length; }
-/** Send everything waiting. A match that can never take them (moved on, over) drops them loudly. */
+/** Send everything waiting. Only a match that is OVER drops them (loudly); anything else is kept. */
 export async function drainOutbox(onlyId = null) {
   const q = readOutbox();
   if (!q.length) return 0;
@@ -702,7 +709,7 @@ export async function drainOutbox(onlyId = null) {
     if (onlyId && item.id !== onlyId) { left.push(item); continue; }
     const res = await appendLog(item.id, item.base, item.entries);
     if (res.ok) sent++;
-    else if (res.retryable) left.push(item);
+    else if (res.retryable || res.reason !== 'already-over') { left.push(item); if (!res.retryable) console.error('[cup-pong] queued throws refused, KEPT:', res.reason, item); }
     else console.warn('[cup-pong] dropping queued throws that can no longer be sent:', res.reason, item);
   }
   writeOutbox(left);

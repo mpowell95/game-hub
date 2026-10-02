@@ -186,6 +186,30 @@ res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' },
 ok('a series game where the OTHER person shoots first writes both rows at once', res.ok && res.game.a.code === 'ANABB' && getAt(`cuppong/index/ANABB/${res.id}`).yourTurn === true && getAt(`cuppong/index/MATTA/${res.id}`).yourTurn === false);
 ok('an old challenge (no series fields) reads as a single game', MP.validateGame({ ...clone(getAt(`cuppong/games/${id}`)) }).series === 1);
 
+// --- a stale base: the other person's throws were WATCHED before this phone threw (2026-10-02) -----
+use('A');
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { su: true } });
+const sb = res.id;
+ok('stale base: Matt\'s first turn', (await MP.appendLog(sb, 0, [t('a', null), t('a', null)])).ok);
+use('B');
+ok('stale base: Ana\'s turn lands', (await MP.appendLog(sb, 2, [t('b', 'k9'), t('b', 'k8')])).ok);
+use('A');
+// Matt's phone opened the match at length 2, then watched Ana's two throws arrive: base 2, log 4.
+res = await MP.appendLog(sb, 2, [t('a', 'k9'), t('a', 'k8')]);
+ok('throws built on top of the other person\'s watched throws are accepted, not "moved on"', res.ok && res.game.log.length === 6 && res.game.log[4].m === 'k9', JSON.stringify(res.reason));
+ok('...and a retry of them at the stale base writes nothing twice', (await MP.appendLog(sb, 2, [t('a', 'k9'), t('a', 'k8')])).ok && Object.keys(getAt(`cuppong/games/${sb}/log`)).length === 6);
+ok('...but Matt still cannot throw on Ana\'s turn that way', !(await MP.appendLog(sb, 2, [t('a', 'k7')])).ok);
+use('B');
+ok('stale base: Ana throws again', (await MP.appendLog(sb, 6, [t('b', null), t('b', null)])).ok);
+use('A');
+ok('a different throw of Matt\'s own already in the log is still a conflict', (await MP.appendLog(sb, 2, [t('a', 'k5')])).reason === 'moved-on');
+// The phone's outbox: a refused send is KEPT, not dropped.
+localStorage.removeItem(MP.OUTBOX_KEY);
+MP.savePending(sb, 2, [t('a', 'k5')]);
+await MP.drainOutbox(sb);
+ok('the outbox keeps throws the server refused (only an OVER match drops them)', !!MP.pendingFor(sb));
+localStorage.removeItem(MP.OUTBOX_KEY);
+
 // --- structural -------------------------------------------------------------------------------------
 const rules = JSON.parse(readFileSync('database.rules.json', 'utf8'));
 ok('database.rules.json has the cuppong branch', !!(rules.rules && rules.rules.cuppong));

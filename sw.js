@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1049';
+const CACHE = 'game-hub-v1050';
 
 const ASSETS = [
   './',
@@ -895,14 +895,14 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': 'bb54739524',
   './cup-pong/css/cup-pong.css': 'e78eb18aca',
-  './cup-pong/js/ui.js': 'fc5f23b433',
+  './cup-pong/js/ui.js': '2fe550e249',
   './cup-pong/js/geom.js': 'f34a79f8d4',
   './cup-pong/js/rack.js': '6346bceb94',
   './cup-pong/js/physics.js': '7dc862ade6',
   './cup-pong/js/render.js': '905aee5064',
   './cup-pong/js/strings.js': 'eb5af23b3c',
   './cup-pong/js/match.js': '7b9b30f0d7',
-  './cup-pong/js/mp.js': 'f4a88ba189',
+  './cup-pong/js/mp.js': '07db2b3d2a',
   './cup-pong/js/mp-ui.js': '15d81c7abc',
   './cup-pong/js/alert.js': '3f8bb559a5',
   './cup-pong/js/cpu.js': '03725812df',
