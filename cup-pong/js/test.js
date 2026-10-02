@@ -460,7 +460,10 @@ ok('balls really come off the rims (plenty touch a cup and stay out)', rimOut > 
       if (r.outcome.kind === 'made' && r.outcome.bounced) bounced++;
     }
   }
-  ok('bounce shots can go in (at least 5% of soft throws)', bounced >= tried * 0.05, `${bounced} of ${tried}`);
+  // 2026-10-02: tableRest 0.65 made bounce-ins rarer on purpose (a bounced ball must not beat a
+  // regular throw, cup-pong/CLAUDE.md "The table's bounce"); 16 of 403 then. The floor only proves
+  // they are still POSSIBLE.
+  ok('bounce shots can still go in (at least 2% of soft throws)', bounced >= tried * 0.02, `${bounced} of ${tried}`);
 }
 
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');

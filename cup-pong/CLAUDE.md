@@ -471,6 +471,25 @@ is ~0.9) makes landings up to ~50 cm short bounce in, and soft throws that bounc
 of 403. Direct scoring barely moved. `test.js` prints the bounce count as `info`; stage 4 (bounce
 shots count double, brief 5d) turns it into an assertion.
 
+**The table's bounce, turned DOWN (2026-10-02): `MAT.tableRest` 0.88 -> 0.65.** Matt asked how much
+likelier a bounce shot is to go in, counting only balls that come down ONTO the cups (first cup
+contact at the rim, or a clean drop) on a full rack: bounced 47.8% against regular 41.9%. Told the
+number, he said *"Why didn't you fix that??"* - a bounced ball must not beat a regular throw. Swept
+on the same 7,881-throw grid (regular throws 950/2267 = 41.9% at every value):
+
+| tableRest | bounced balls that went in | vs regular |
+|---|---|---|
+| 0.88 (was) | 942/1969 = 47.8% | 1.14x |
+| 0.75 | 696/1342 = 51.9% | 1.24x |
+| 0.70 | 485/1172 = 41.4% | even |
+| **0.65 (shipped)** | **334/926 = 36.1%** | **0.86x** |
+| 0.60 | 204/687 = 29.7% | 0.71x |
+| 0.45 | 0/198 | impossible again |
+
+Not monotonic, so never interpolate: re-measure (`rim-grid` probe, described here, run per value).
+Bounce-ins stay possible but rarer (soft-throw sweep 16 of 403, was 89); `test.js`'s floor is now
+2%. The computer and regular throws are unaffected. Solo bests already set stand as they are.
+
 ## The look and the camera (fitted to the recording, 2026-09-27)
 
 **The camera is FITTED, not designed.** `CAMERA` in `geom.js`: 1.305 m above the table, over
