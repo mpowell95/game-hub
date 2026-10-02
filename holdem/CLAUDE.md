@@ -274,6 +274,10 @@ Copied from it, top to bottom:
   pointer is captured on the game ROOT (a repaint can replace the button mid-drag), which
   re-targets the click - so `_dragEnd` handles a no-move tap itself and swallows the click that
   follows; otherwise a mouse tap did nothing while a touch tap worked.
+  **2026-10-02, Matt: "if I raise, it makes me click the raise button twice".** That swallow was
+  a 500ms window, so it also ate a quick tap on RAISE TO right after the RAISE tab (and, since a
+  slide fires no click, any tap within 500ms of letting go). Now any new pointerdown clears it:
+  only the click of the SAME gesture is swallowed. Verified by mouse and touch, tap and slide.
 - **Check / Fold pre-action.** While it is someone else's turn and you are in the hand, the big
   button is a CHECK / FOLD tick-box. Ticked, it checks whenever nothing is owed and folds the
   moment there is a bet, for the rest of that hand (it resets on the next deal; tap again to
