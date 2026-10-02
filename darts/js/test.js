@@ -192,6 +192,19 @@ ok('spread is tighter on harder levels', SPREAD.hard < SPREAD.medium && SPREAD.m
   const co = newMatch(0, 'cricket-order'); co.marks[0] = [3, 3, 3, 3, 3, 3, 0];
   eq('in order, everything else closed: the bull', chooseCricketTarget(co, 'medium'), { num: 25, ring: 'bull' });
   eq('bed labels', ['treble', 'double', 'single', 'bull', 'obull'].map((ring) => bedLabel({ ring, num: 20 })), ['T20', 'D20', '20', 'BULL', '25']);
+  // How many Cricket marks a computer makes in a turn (marks per round), aiming at 19.
+  const mpr = (diff) => {
+    const r3 = rng(11); let marks = 0;
+    for (let i = 0; i < 6000; i++) {
+      const g = newMatch(0, 'cricket'); g.marks[0] = [3, 0, 0, 0, 0, 0, 0];
+      const p = computerThrow(g, diff, r3), h = scoreAt(p.x, p.y);
+      if (h.num === 19) marks += h.mult;
+    }
+    return 3 * marks / 6000;
+  };
+  const me = mpr('easy'), mm = mpr('medium'), mh = mpr('hard');
+  ok(`cricket marks a turn: easy ${me.toFixed(2)}, medium ${mm.toFixed(2)}, hard ${mh.toFixed(2)}`, me < mm && mm < mh);
+  ok('medium is an ordinary player in Cricket, about one mark a turn (Matt, 2026-10-02: it "basically didn\'t miss" at 1.5)', mm > 0.8 && mm < 1.25, mm.toFixed(2));
   for (const kind of ['cricket', 'cricket-order']) {
     for (const diff of ['easy', 'hard']) {
       let turns = 0, done = 0;

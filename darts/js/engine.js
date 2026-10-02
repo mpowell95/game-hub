@@ -166,7 +166,10 @@ export function validMatch(m) {
 
 /** How far a computer dart strays from where it aimed: the standard deviation of a 2D gaussian,
  *  in units of R. Hard groups tightly around the treble; Easy lands somewhere on the board. */
-export const SPREAD = { easy: 0.30, medium: 0.17, hard: 0.085 };
+// 2026-10-02 (Matt: "A robot on medium just smoked me at cricket... He basically didn't miss"):
+// medium was 0.17 (1.5 Cricket marks a turn, a strong pub player), now 0.24 (about 1.0). Easy and
+// Hard moved with it to keep the steps even: easy 0.30 -> 0.36, hard 0.085 -> 0.10.
+export const SPREAD = { easy: 0.36, medium: 0.24, hard: 0.10 };
 
 /** Where the computer aims with `left` points to go. Exact finishes first, by the size of the
  *  target (a single is easier than a double, which is easier than a treble or the bull); otherwise
@@ -232,7 +235,10 @@ export function bedLabel(hit) {
 // --- the player's flick --------------------------------------------------------------------
 
 /** The flick speed (screen heights per second, upward) that lands at the height of the bull. */
-export const FLICK_MID = 2.3;
+// 2026-10-02 (Matt: "difficult for the human thrower to throw soft enough to hit the bottom of the
+// board... I think the dart needs to feel heavier"): 2.3 -> 3.1, so the same flick lands about
+// 0.6 R lower and the bottom of the board takes a flick a soft hand can actually make.
+export const FLICK_MID = 3.1;
 /** How many R the dart rises for each doubling of flick speed. Logarithmic, so a hard flick and a
  *  soft one are equally forgiving. */
 export const FLICK_GAIN = 1.45;

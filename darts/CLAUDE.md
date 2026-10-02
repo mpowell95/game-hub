@@ -52,7 +52,7 @@ any order."* Setup has a **Game** row (301 / 201 / 101 / Cricket) and, for Crick
   with no flash; a counting dart pops up its bed (T20, D16, BULL) and `+points` if it scored.
 - **The computer** (`chooseCricketTarget`): behind on points with a number it can score on, it
   scores there; otherwise it goes for its next number (in order: the one it is on; any order: the
-  highest open). Easy aims at singles and never chases points. Hard vs hard: ~14 turns a game.
+  highest open). Easy aims at singles and never chases points. Hard vs hard: ~18 turns a game.
 - **Stats**: every game records into the same `recordResult('darts', ...)` buckets (one Darts record;
   no per-game split). Online: the challenger's setup choice is sent as the match's `kind`; a rematch
   is the same game; the match rows and the push say which game it is.
@@ -69,10 +69,13 @@ any order."* Setup has a **Game** row (301 / 201 / 101 / Cricket) and, for Crick
   the black number ring: a dart there sticks and scores nothing ("MISS!"); beyond it the dart
   falls off the wall.
 - **The computer** (`computerThrow`) aims (`chooseTarget`) and then misses by a 2D gaussian
-  (`SPREAD`: easy 0.30R, medium 0.17R, hard 0.085R). Aim: an exact one-dart finish if there is one
+  (`SPREAD`: easy 0.36R, medium 0.24R, hard 0.10R; until 2026-10-02 0.30 / 0.17 / 0.085, when
+  Matt lost at Cricket to Medium, who "basically didn't miss": it made 1.5 marks a turn, now ~1.0;
+  Hard ~2.7, Easy ~0.4, pinned by `darts/js/test.js`). Aim: an exact one-dart finish if there is one
   (single, then double, then treble or bull); otherwise treble 20 above 80; otherwise a single
   that leaves 20 or less. Easy has no plan and throws at the bull. Measured averages per dart
-  (4000 darts, seeded): easy 12.2, medium 14.1, hard 22.1. Hard usually finishes 301 in 4-6 turns.
+  aimed at the treble 20 (seeded): easy 12.0, medium 12.2, hard 19.4 (medium's edge in 301 is its
+  finishing plan, not its aim).
 
 ## The throw (the one thing to tune on a real phone)
 
@@ -82,7 +85,7 @@ let go moving upward.
 - **Left/right**: the dart flies along the flick's line from where it was let go, so swiping toward
   a number aims at it.
 - **Height**: the flick's upward speed alone, in screen heights per second, measured over the last
-  ~90 ms before release. `FLICK_MID` (2.3) lands at the height of the bull; `FLICK_GAIN` (1.45R per
+  ~90 ms before release. `FLICK_MID` (3.1; 2.3 until 2026-10-02, when Matt found the bottom of the board too hard to reach: *"I think the dart needs to feel heavier"*) lands at the height of the bull; `FLICK_GAIN` (1.45R per
   doubling of speed) is logarithmic, so a soft flick and a hard one are equally forgiving. Below
   `FLICK_MIN` (0.55) or a drag shorter than 24 px it is not a throw and the dart drops back.
 - A tiny random wobble (gaussian, 0.02R) so two identical flicks do not land on the same pixel.
