@@ -55,7 +55,13 @@ export const THROW = {
 
 /** Contact materials. A ping pong ball on a table bounces high; on a thin plastic cup it loses
  *  more. `tableRest` is the bounce-shot lever (see cup-pong/CLAUDE.md, "Bounce shots"). */
-export const MAT = { tableRest: 0.88, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
+// tableRest 0.88 -> 0.65 (Matt, 2026-10-02: a bounced ball must NOT go in more often than a regular
+// throw). Measured on the full-rack 7,881-throw grid, counting only balls whose first cup contact
+// is at the rim or that drop in clean: bounced 47.8% vs regular 41.9% at 0.88; 41.4% at 0.70 (even);
+// 36.1% at 0.65 (shipped, bounced ~14% less likely, 334 bounce-ins vs 942); 29.7% at 0.60; 0 at
+// 0.45 (bounce-ins impossible, Matt's 2026-09-28 complaint). Not monotonic (0.75 gave 51.9%), so
+// re-measure rather than interpolate. Regular throws are untouched: 950/2267 at every value.
+export const MAT = { tableRest: 0.65, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
 
 /** GAME GRAVITY, m/s^2 - NOT 9.81, on purpose. GamePigeon's ball is floatier than a real one: the
  *  only arc that reproduces its screen path AND reaches the cups when the recording shows it there
