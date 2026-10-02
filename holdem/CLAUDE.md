@@ -299,6 +299,13 @@ Copied from it, top to bottom:
   suit 0.32cw, small cards' suit 15px), ink pure black, and `--pk-red` brightened from `#c4281c`
   to `#f2311f`. Measured with a protanopia simulation (Matt is red/green colourblind): the old red
   sat 2.4:1 from black, the new ~3.4:1, while still 3.9:1 on the white card.
+- **Every opponent's move is shown (2026-10-02, Matt: "add 'check' somewhere when the computer
+  checks ... it's not obvious that they did anything. Same with call and fold and anything").** The
+  seat stamp is now a pill (dark, white border). A NEW move turns it gold and pops in once, for
+  `MOVE_MS` (1.8s), then it settles to the dark pill until the round ends. Read from the hand's
+  public `h.log`, NOT `h.last`: the move that closes a betting round is wiped by `nextStreet` in
+  the same engine call, so a closing check or call was never on screen. A resume replays nothing
+  (`moveSeen` starts at the log's current length). Works online too (the log is in `pub`).
 - FOLD / SET RAISE tabs are 46px tall at 17px, the big button's label 22px, chips 28px (34px on
   the big button) - all "a little larger", per Matt.
 - **Money is printed the reference's way**: `$9200` under ten thousand, then `$10.0k`.

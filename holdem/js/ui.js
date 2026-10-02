@@ -39,6 +39,7 @@ const MP_KEY = 'gamehub.holdem.mp.v1';
 const HANDS_KEY = 'gamehub.holdem.hands.v1';
 const CODE_LEN = 4;
 const CLOCK_MS = 45000;          // online turn clock
+const MOVE_MS = 1800;            // an opponent's move is highlighted this long (then stays plain until the round ends)
 const AWAY_MS = 35000;           // no heartbeat change for this long = away (heartbeat is every 10s)
 const MP_SAVE_TTL = 12 * 3600 * 1000;
 const SKILL_ID = { 1: 'easy', 2: 'medium', 3: 'hard' };
@@ -186,6 +187,8 @@ class Game {
     this.seen = new Set();
     this.seenHand = -1;
     this.oppX = {};              // opponent column centres, filled by _layout (empty until measured)
+    this.moveSeen = null;        // {hand, n}: how much of the hand's public log has been shown
+    this.moves = {};             // seat -> {a, until, popped}: an opponent's move, held on screen
     this.bankRemote = null;      // the bankroll ledger of this player's OTHER devices, once read
     this.dead = false;
     this.timers = new Set();
@@ -512,6 +515,25 @@ class Game {
     const bestSet = new Set(best ? best.cards : []);
     const everyone = this.revealAll === pub.handNo && this.table ? this.table.state.hand && this.table.state.hand.holes : null;
 
+    // --- every opponent's move, read from the hand's public log (2026-10-02, Matt: "add 'check'
+    // somewhere when the computer checks ... it's not obvious that they did anything"). h.last
+    // alone could not show it: the move that ENDS a betting round is cleared by nextStreet in the
+    // same call that made it, so a closing check or call was never on screen at all. Each new
+    // log entry is held for MOVE_MS whatever the engine does next; a first paint (a resume)
+    // replays nothing.
+    const now = Date.now();
+    if (h && this.moveSeen && this.moveSeen.hand !== pub.handNo) { this.moves = {}; this.moveSeen = { hand: pub.handNo, n: 0 }; }
+    const log = (h && h.log) || [];
+    if (!this.moveSeen) this.moveSeen = { hand: pub.handNo, n: log.length };
+    if (log.length > this.moveSeen.n) {
+      for (let x = this.moveSeen.n; x < log.length; x++) {
+        const e = log[x];
+        if (e && e.i !== this.myIdx && e.a !== 'left') this.moves[e.i] = { a: e.a, until: now + MOVE_MS, popped: false };
+      }
+      this._later(() => this._paintTable(), MOVE_MS + 30);
+    }
+    this.moveSeen.n = log.length;
+
     // --- opponents strip
     const opps = this._opps();
     const sig = `${pub.players.length}:${this.myIdx}`;
@@ -530,11 +552,16 @@ class Game {
       const folded = h && h.folded && h.folded[j] && !p.out;
       const isTurn = h && !res && h.toAct === j;
       const isWin = res && winners.has(j);
-      let stamp = '';
+      let stamp = '', stampCls = '';
+      const mv = this.moves[j];
       if (isWin) stamp = t('st_win');
       else if (p.out) stamp = p.left ? t('st_left') : t('st_out');
       else if (p.away || p.sitOut) stamp = t('st_away');
-      else if (h && h.last && h.last[j]) stamp = t('st_' + h.last[j].a);
+      else if (mv && mv.until > now) {
+        stamp = t('st_' + mv.a);
+        stampCls = mv.popped ? ' is-fresh' : ' is-fresh is-pop';   // the pop plays once, not every repaint
+        mv.popped = true;
+      } else if (h && h.last && h.last[j]) stamp = t('st_' + h.last[j].a);
       const shown = (res && res.reveal && res.reveal[j]) || (everyone && everyone[j]);
       let cards = '';
       if (shown) cards = `<span class="pk-ocards is-up">${shown.map((c) => cardHTML(c, 'is-mini' + (bestSet.has(c) ? ' is-best' : ''))).join('')}</span>`;
@@ -543,7 +570,7 @@ class Game {
       el.className = `pk-opp${folded || p.out ? ' is-dim' : ''}${isTurn ? ' is-turn' : ''}${isWin ? ' is-winner' : ''}${shown ? ' has-cards' : ''}`;
       el.innerHTML = `
         <span class="pk-oname">${esc(p.name)}</span>
-        <span class="pk-oav"><span class="pk-oemoji">${esc(p.emoji)}</span>${cards}${stamp ? `<span class="pk-stamp">${esc(stamp)}</span>` : ''}</span>
+        <span class="pk-oav"><span class="pk-oemoji">${esc(p.emoji)}</span>${cards}${stamp ? `<span class="pk-stamp${stampCls}">${esc(stamp)}</span>` : ''}</span>
         <span class="pk-ostack">${isWin ? '+' + money(won[j]) : money(p.chips)}</span>${clock}`;
     });
 
