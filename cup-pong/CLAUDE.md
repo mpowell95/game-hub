@@ -312,6 +312,13 @@ under "CHALLENGES").
   take a throw back. Unsent throws are kept in `gamehub.cuppong.outbox.v1` and sent before the match
   is next opened. The index rows change only when the turn passes or the match ends, which is what
   the push function watches.
+- **Where a send goes in the log (fixed 2026-10-02).** Matt made two cups against King of Games and
+  got "Could not send that" while the screen said "Sent!". The send's position (`base`) was counted
+  when the match OPENED, so throws taken after watching the other person's turn land live were
+  refused as "moved on". Now: `mpFlush` uses `applied - pending.length` (what the board has shown);
+  `appendLog` steps past the OTHER side's entries after `base` (the full rules replay still has to
+  accept the result, so nothing out of turn gets in); `drainOutbox` keeps refused throws (only an
+  over match drops them); and the waiting line says "Not sent yet" while any are unsent.
 - **Replay**: opening a match shows the other person's latest run of actions with real flights from
   their vectors; **the recorded outcome decides each one**, whatever the local flight does (brief 5b).
   How far this phone has shown is `gamehub.cuppong.shown.v1`. While it is their turn the match is
