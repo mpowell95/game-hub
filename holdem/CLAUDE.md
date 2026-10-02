@@ -294,6 +294,11 @@ Copied from it, top to bottom:
   rank 0.3cw / suit 0.23cw in a 2%..27% column, and the frame starts at 30% on both sides (centre
   pip 0.4cw) - same no-overlap, dead-centre rule, just a wider corner. The small showdown/help
   cards' index went 12px -> 14px.
+  **2026-10-02, Matt: "The suit symbol is small. And the red and black cards look the same".**
+  Suits ~40% bigger (corner 0.32cw, centre pip 0.6cw so it fills the frame's width, court-card
+  suit 0.32cw, small cards' suit 15px), ink pure black, and `--pk-red` brightened from `#c4281c`
+  to `#f2311f`. Measured with a protanopia simulation (Matt is red/green colourblind): the old red
+  sat 2.4:1 from black, the new ~3.4:1, while still 3.9:1 on the white card.
 - FOLD / SET RAISE tabs are 46px tall at 17px, the big button's label 22px, chips 28px (34px on
   the big button) - all "a little larger", per Matt.
 - **Money is printed the reference's way**: `$9200` under ten thousand, then `$10.0k`.
