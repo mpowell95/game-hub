@@ -229,6 +229,8 @@ const mid = flickLanding(0, 1.6, 0, -500, FLICK_MID);
 ok('a mid-speed straight flick lands on the bull', Math.abs(mid.x) < 1e-9 && Math.abs(mid.y) < 1e-9, JSON.stringify(mid));
 ok('a faster flick lands higher', flickLanding(0, 1.6, 0, -500, FLICK_MID * 1.3).y < -0.3);
 ok('a slower flick lands lower', flickLanding(0, 1.6, 0, -500, FLICK_MID * 0.8).y > 0.3);
+ok('a very soft flick misses just below the board, not far down the wall', flickLanding(0, 1.6, 0, -500, 0.6).y === 1.5);
+ok('a very hard flick misses just over the top', flickLanding(0, 1.6, 0, -500, 40).y === -1.5);
 ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID).x > 0.2);
 
 // 5. The 3D throw (flight.js): it lands exactly where the rules said, the way GamePigeon's does.
@@ -266,6 +268,19 @@ ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID
     const above = (f, by) => (285 + by * 147) - peak(f);
     ok('aimed high it climbs less above its target than aimed low (as in the video)', above(hi, -0.95) < above(lo, 0.9) && above(hi, -0.95) > 0.1 * 147, above(hi, -0.95).toFixed(1) + ' / ' + above(lo, 0.9).toFixed(1));
     ok('aimed at the top double it stays on screen', peak(hi) > 0);
+  }
+  {
+    // Dragged up the screen, let go above the point it would climb to, aimed low: it still climbs
+    // first, then drops (Matt, 2026-10-02: dragging "reverts to do that weird impossible trajectory").
+    const high = F.unproject(cam, 195, 285 + 0.6 * 147 * 1.27, F.HAND_Z);
+    for (const by of [0.9, 0.4, -0.3]) {
+      const f2 = F.makeFlight(high, 0.1, by);
+      const ys2 = []; for (let i = 0; i <= 60; i++) ys2.push(F.project(cam, F.at(f2, f2.T * i / 60).tip).y);
+      const start = ys2[0], top2 = Math.min(...ys2), at2 = ys2.indexOf(top2) / 60;
+      ok(`let go high and aimed at y=${by}: it climbs at least ${F.MIN_RISE}R first, then drops onto the target`,
+        start - top2 >= F.MIN_RISE * 147 - 1 && Math.abs(at2 - F.CLIMB) < 0.05 && Math.abs(ys2[60] - (285 + by * 147)) < 1e-6,
+        `start ${start.toFixed(0)} top ${top2.toFixed(0)} at ${at2}`);
+    }
   }
   const arrive = F.at(fl, fl.T).axis;
   const deg = Math.atan2(arrive[1], arrive[2]) * 180 / Math.PI;

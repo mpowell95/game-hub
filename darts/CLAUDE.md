@@ -114,6 +114,14 @@ COPIED from GamePigeon's video, not reasoned out.
   small and end-on, nearly at the board, it drops straight down onto its target, gathering speed.
   Physically impossible (it slides down the face of the board) and exactly what the video shows.
   Both halves are written in screen terms (x/z, y/z) plus a depth, then lifted into the world.
+- **Every throw climbs first, wherever it is let go** (2026-10-02, Matt: *"If I drag the dart up
+  instead of doing a very quick flick, it reverts to do that weird impossible trajectory"*). A dart
+  dragged up the screen could be let go ABOVE the point it climbs to, so the climb ran DOWN into the
+  board. `makeFlight` now makes the climb end at least `MIN_RISE` (0.3R) above the release point and
+  lets the settle drop the rest. Also: the dart in the hand stops following the finger at 60% down
+  the board (`_pointerMove`; the finger's speed still throws), and a flick too soft or too hard to
+  reach the board lands just past its edge (`FLICK_CAP`, 1.5R) rather than far down the wall, which
+  read as a long slide down the wall. Both are misses either way.
 - **The axis turns steadily, it is never derived from the path**: side-on in the hand (`REST_AXIS`)
   to end-on (`STUCK_AXIS`) by 42% of the flight (`TURN`), slow at first. Neither axis has a sideways
   part, so the dart only ever leans the way perspective leans it.

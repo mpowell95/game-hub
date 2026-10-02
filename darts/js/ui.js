@@ -1032,8 +1032,12 @@ class DartsUI {
     const p = this._local(e);
     d.samples.push(p);
     if (d.samples.length > 30) d.samples.shift();
-    // The dart follows the finger.
-    if (this.hand) { this.hand.x = d.hx + (p.x - d.sx); this.hand.y = d.hy + (p.y - d.sy); }
+    // The dart follows the finger, but not up over the board: past its lower part the finger keeps
+    // going (its speed is what throws) while the dart waits there (2026-10-02).
+    if (this.hand) {
+      this.hand.x = d.hx + (p.x - d.sx);
+      this.hand.y = Math.max(this.r.cy + this.r.R * RING.frame * 0.6, d.hy + (p.y - d.sy));
+    }
   }
   _pointerUp(e) {
     const d = this.drag;
