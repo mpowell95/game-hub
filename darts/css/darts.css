@@ -384,7 +384,23 @@
 .dt-root.is-flip .dt-seat-0 .dt-turn { transform: scaleX(-1); }
 .dt-root.is-flip .dt-seat-1 .dt-turn { transform: none; }
 
-.dt-root .dt-online-note { margin: -4px 0 0; text-align: center; font-size: 13px; font-weight: 800; color: #b8282d; }
+/* Multiplayer, the setup card's first row (2026-10-03): Cup Pong and Hoops' row, in Darts' colours. */
+.dt-root .dt-mprow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid #e0cfae;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--dt-ink);
+  text-align: left;
+}
+.dt-root .dt-mprow b { flex: 1 1 auto; font-size: 17px; font-weight: 800; }
+.dt-root .dt-mprow-badge { flex: 0 0 auto; padding: 3px 9px; border-radius: 999px; background: #b8282d; color: #fff; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.dt-root .dt-mprow-chev { flex: 0 0 auto; font-size: 24px; line-height: 1; color: #b8282d; }
 .dt-root .dt-danger { background: #fff; color: #a3161b; border-color: #e3b9b9; }
 
 /* Clear of the hub's floating back button (top-left, ~54-90px down): the card starts below it. */

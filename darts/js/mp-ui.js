@@ -89,10 +89,12 @@ const rowHTML = (r) => `
 export async function home(ui, MP) {
   const body = page(ui, t('mp_title'), 'setup', `
     <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-mp="challenge">${esc(t('mp_challenge'))}</button>
+    <button type="button" class="gh-btn gh-btn--block dt-alt" data-mp="pass">${esc(t('mp_pass'))}</button>
     <div class="dt-mp-push" hidden></div>
     <div class="dt-mp-list"><p class="dt-mp-note">${esc(t('mp_loading'))}</p></div>
     <button type="button" class="gh-btn gh-btn--block dt-alt" data-mp="history">${esc(t('mp_history'))}</button>`);
   body.querySelector('[data-mp="challenge"]').addEventListener('click', () => picker(ui, MP));
+  body.querySelector('[data-mp="pass"]').addEventListener('click', () => ui._passPlay());
   body.querySelector('[data-mp="history"]').addEventListener('click', () => history(ui, MP));
   pushRow(body.querySelector('.dt-mp-push'), () => fitList(cardOf(body), body.querySelector('.dt-mp-list')));
   const rows = await MP.readMyGames();

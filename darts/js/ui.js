@@ -20,7 +20,11 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.darts.v1';
 const SAVE_KEY = 'gamehub.darts.save.v1';
-const MODES = ['cpu', 'pass', 'online'];
+// The setup screen (2026-10-03, Matt: "there's 2 player and online? where's the challenge button
+// like all the other apps?") has Multiplayer at the top, like Cup Pong and Hoops: Challenge
+// someone, your matches and Pass & play live behind it. `mode` is the LOCAL kind a match is played
+// as; a stored 'online' from before reads as 'cpu'.
+const MODES = ['cpu', 'pass'];
 const LOCAL_MODES = ['cpu', 'pass'];      // the ones a saved match can be (online lives on the server)
 const FIRSTS = ['alt', 'me', 'them'];
 const GAMES = ['301', '201', '101', 'cricket'];
@@ -183,10 +187,11 @@ class DartsUI {
           <div class="dt-card">
             <h2 class="dt-logo" data-l="title"></h2>
             <p class="dt-tag" data-role="tagline"></p>
-            <div class="dt-field">
-              <span class="dt-label" data-l="mode"></span>
-              <div class="gh-seg dt-seg" role="group" data-role="modes"></div>
-            </div>
+            <button type="button" class="dt-mprow" data-act="multi">
+              <b data-l="multiplayer"></b>
+              <span class="dt-mprow-badge" data-role="onlineNote" hidden></span>
+              <span class="dt-mprow-chev" aria-hidden="true">›</span>
+            </button>
             <div class="dt-field">
               <span class="dt-label" data-l="game"></span>
               <div class="gh-seg dt-seg" role="group" data-role="games"></div>
@@ -204,8 +209,7 @@ class DartsUI {
               <div class="gh-seg dt-seg" role="group" data-role="firsts"></div>
             </div>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="play" data-role="playBtn"><span data-role="playLabel"></span></button>
-            <p class="dt-online-note" data-role="onlineNote" hidden></p>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="play" data-role="playBtn"><span data-l="play"></span></button>
             <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="howto"><span data-l="howto"></span></button>
           </div>
         </div>
@@ -302,7 +306,6 @@ class DartsUI {
       el.setAttribute('aria-label', t(key));
       el.innerHTML = ids.map((id) => `<button type="button" class="gh-seg__item dt-seg-item" data-${role}="${id}" aria-pressed="${cur === id}">${extra ? extra(id) : ''}<span>${esc(label(id))}</span></button>`).join('');
     };
-    seg('modes', 'mode', MODES, s.mode, (id) => t('mode_' + id));
     seg('games', 'game', GAMES, s.game, (id) => (id === 'cricket' ? t('game_cricket') : id));
     seg('orders', 'order', ORDERS, s.order, (id) => t('order_' + id));
     this.root.querySelector('[data-role="orderField"]').hidden = s.game !== 'cricket';
@@ -310,12 +313,9 @@ class DartsUI {
     this.root.querySelector('[data-role="tagline"]').textContent = isCricket(kind)
       ? t(kind === 'cricket-order' ? 'tagline_cricket_order' : 'tagline_cricket') : t('tagline_x01', { n: kind });
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
-    seg('firsts', 'first', FIRSTS, s.first, (id) => id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t(s.mode === 'pass' ? 'first_them_pass' : 'first_them_cpu'));
-    this.root.querySelector('[data-role="diffField"]').hidden = s.mode !== 'cpu';
-    this.root.querySelector('[data-role="firstField"]').hidden = s.mode === 'online';
-    this.root.querySelector('[data-role="playLabel"]').textContent = t(s.mode === 'online' ? 'online_go' : 'play');
+    seg('firsts', 'first', FIRSTS, s.first, (id) => id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t('first_them_cpu'));
     const sv = this._savedMatch();
-    this.root.querySelector('[data-role="continueBtn"]').hidden = !sv || s.mode === 'online';
+    this.root.querySelector('[data-role="continueBtn"]').hidden = !sv;
     this._paintOnlineNote();
     const online = this.mode === 'mp';
     this.root.querySelectorAll('[data-online]').forEach((el) => { el.hidden = !online; });
@@ -372,7 +372,7 @@ class DartsUI {
     this.hintEl.classList.remove('is-show');
     this._relabel();
     this._showOnly('setup');
-    if (this.settings.mode === 'online') this._countOnline();
+    this._countOnline();
   }
 
   // --- layout ----------------------------------------------------------------------------------
@@ -443,6 +443,9 @@ class DartsUI {
     writeJSON(SETTINGS_KEY, s);
     this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter, kindFrom(s)) }, true);
   }
+
+  /** Pass & play, from the Multiplayer screen: two people, this phone, the chosen game. */
+  _passPlay() { this.settings.mode = 'pass'; this._newMatch(); }
 
   /** The game the setup screen has chosen (an online challenge is sent as this). */
   _kind() { return kindFrom(this.settings); }
@@ -752,10 +755,9 @@ class DartsUI {
 
   // --- input -----------------------------------------------------------------------------------
   _click(e) {
-    const seg = e.target.closest('[data-modes], [data-diffs], [data-firsts], [data-games], [data-orders]');
+    const seg = e.target.closest('[data-diffs], [data-firsts], [data-games], [data-orders]');
     if (seg) {
-      if (seg.dataset.modes) this.settings.mode = seg.dataset.modes;
-      else if (seg.dataset.diffs) this.settings.difficulty = seg.dataset.diffs;
+      if (seg.dataset.diffs) this.settings.difficulty = seg.dataset.diffs;
       else if (seg.dataset.games) this.settings.game = seg.dataset.games;
       else if (seg.dataset.orders) this.settings.order = seg.dataset.orders;
       else this.settings.first = seg.dataset.firsts;
@@ -766,7 +768,8 @@ class DartsUI {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'play') { if (this.settings.mode === 'online') this._openOnline(); else this._newMatch(); }
+    if (act === 'play') { this.settings.mode = 'cpu'; this._newMatch(); }
+    else if (act === 'multi') this._openOnline();
     else if (act === 'continue') this._continue();
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._paintHelp(); this._showOnly('help'); this._fitHelp(); }
     else if (act === 'helpClose') {
@@ -810,7 +813,7 @@ class DartsUI {
   _paintOnlineNote() {
     const el = this.root.querySelector('[data-role="onlineNote"]');
     const n = this._onlineWaiting | 0;
-    el.hidden = this.settings.mode !== 'online' || !n;
+    el.hidden = !n;
     el.textContent = n === 1 ? t('online_waiting1') : t('online_waiting', { n });
   }
   async _countOnline() {

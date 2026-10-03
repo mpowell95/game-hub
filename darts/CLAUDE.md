@@ -147,10 +147,12 @@ COPIED from GamePigeon's video, not reasoned out.
 
 ## Screens
 
-- Setup (a cream card over the lower half, the board above it): Play Computer / 2 players / Online,
-  Computer Easy/Medium/Hard (with the shared shape markers), First throw Alternate/Me/Them
-  (Alternate is the default and flips every match, `nextStarter`), Play, Continue match, How to
-  play. Settings persist on every tap (`gamehub.darts.v1`).
+- Setup (a cream card over the lower half, the board above it): **Multiplayer ›**, Game (301 / 201 /
+  101 / Cricket, plus Order for Cricket), Play the computer Easy/Medium/Hard (with the shared shape
+  markers), First throw Alternate/Me/Computer (Alternate is the default and flips every match,
+  `nextStarter`), Continue match, Play, How to play. Settings persist on every tap
+  (`gamehub.darts.v1`; its `mode` is now only the LOCAL kind, 'cpu' or 'pass', and an old 'online'
+  reads as 'cpu').
 - Play: canvas board and darts (`render.js`, wall and board cached per layout), DOM for the
   plaques, darts-left icons, popups and banners. Banners sit in the gap between board and dart, or
   over the board's lower edge on a short screen. Seat colours red/blue, never red/green, and the
@@ -181,9 +183,12 @@ It is a competitive game, so it is NOT in `js/players-agg.js`'s `SOLO` set.
 Matt, after the first build: *"yes"* to turn-by-turn online play, GamePigeon's iMessage way. Cup
 Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with them.
 
-- **Where:** setup screen, Play: Computer / 2 players / **Online**. Online turns Play into "Online
-  matches" (with "N waiting on you" under it) and opens the online home: Challenge someone, Your
-  turn, Their turn, History. Files: `js/mp.js` (data), `js/mp-ui.js` (the list screens, lazily
+- **Where (2026-10-03):** the setup card's first row, **Multiplayer ›** (with a "N waiting on you"
+  badge), the same row Cup Pong and Hoops have. Matt: *"Why is darts so confusing? there's 2 player
+  and online? where's the challenge button like all the other apps?"* - the first build hid it behind
+  a Play: Computer / 2 players / Online segment, now gone. Behind it: Challenge someone, **Pass &
+  play** (two people, this phone), the notify row, Your turn, Their turn, History. A challenge and a
+  pass-and-play match use the Game chosen on the setup card. Files: `js/mp.js` (data), `js/mp-ui.js` (the list screens, lazily
   imported), `js/alert.js` (the launcher bubble; `alerts:` on the hub entry).
 - **Which game:** `kind` on the match and on both index rows (optional; absent = 301). `validateGame`
   replays the log with that game's rules.
@@ -217,10 +222,9 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
   finish. The player picker narrows by search instead of growing.
 - **Notifications:** `dartsTurnPush` in `functions/index.js` (decided by `decideDarts` in
   `functions/decide.js`): a challenge, your turn coming back (with the score), and a match the other
-  person ended; a challenge names the game ("challenged you to Cricket (in order)"). **Written 2026-10-01, NOT yet deployed** (Matt: "i can't do the notification code
-  until tonight"). It is live only after `firebase deploy --only functions`. The app half needs no
-  change: `sw.js` opens any match a payload names (`data.match`), and the hub hands it to
-  `alert.js`'s `armOpen`.
+  person ended; a challenge names the game ("challenged you to Cricket (in order)"). **Written
+  2026-10-01, DEPLOYED by Matt on 2026-10-03.** The app half needed no change: `sw.js` opens any match
+  a payload names (`data.match`), and the hub hands it to `alert.js`'s `armOpen`.
 - **Tests:** `node test-darts-mp.mjs` (39 checks, including a 101 and a whole in-order Cricket match, two phones against an in-memory database);
   `node test-push.mjs` (the `decideDarts` cases). The screens were checked in headless Chromium with
   two browser "phones" against a stand-in database server, a whole match played to zero.
