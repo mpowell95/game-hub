@@ -820,7 +820,10 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
 - **Matt's local `Game-Hub/` folder is stale** (he works through cloud sessions on GitHub now), so
   deploy from a separate sparse clone, `C:\Users\powel\game-hub-deploy` (steps in
   `functions/README.md`). **Give Matt deploy steps in the chat, in full, not as a pointer to that
-  file** - he asked for exactly that. The masked prompt of `functions:secrets:set` ignored a paste
+  file** - he asked for exactly that. **And as ONE numbered list of exact commands, one per line, to
+  send in order** (Matt, 2026-10-03: *"You should have just said 'send these in order'. not 'if this
+  folder exists blah blah blah'"*). No "if X, do Y" branches up front; at most one short line at the
+  end for a likely error. The masked prompt of `functions:secrets:set` ignored a paste
   in PowerShell (saved an empty value, refused); `--data-file` from a temp file worked.
 - **Opening the hub clears them** (2026-09-24, Matt: "Can the notifications auto dismiss if i go to
   the game hub?"): `clearShownNotifications()` in `js/push.js` closes every notification this app is
