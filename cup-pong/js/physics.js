@@ -90,7 +90,8 @@ function buildWorld(cups) {
   const matTable = new CANNON.Material('table');
   const matCup = new CANNON.Material('cup');
   // A ping pong ball on a table bounces high (e ~0.8); on a thin plastic cup it loses more.
-  world.addContactMaterial(new CANNON.ContactMaterial(matBall, matTable, { friction: MAT.tableFric, restitution: MAT.tableRest }));
+  const cmTable = new CANNON.ContactMaterial(matBall, matTable, { friction: MAT.tableFric, restitution: MAT.tableRest });
+  world.addContactMaterial(cmTable);
   world.addContactMaterial(new CANNON.ContactMaterial(matBall, matCup, { friction: MAT.cupFric, restitution: MAT.cupRest }));
 
   const table = new CANNON.Body({ mass: 0, material: matTable });
@@ -113,7 +114,7 @@ function buildWorld(cups) {
   ball.linearDamping = 0;          // drag is applied by hand below: it is quadratic, not linear
   ball.angularDamping = 0.05;
   world.addBody(ball);
-  return { world, ball, cupBodies };
+  return { world, ball, cupBodies, cmTable };
 }
 
 /** Swipe power -> launch speed, m/s. Power is NOT clamped to 0..1: those are the ends of the
@@ -133,7 +134,7 @@ export const heading = (aim) => Math.max(-THROW.aimMax, Math.min(THROW.aimMax, a
  * `power` and `aim` come from the swipe (ui.js); `aim` is the HEADING in radians.
  */
 export function startThrow({ power = 0.5, aim = 0, cups = [] } = {}) {
-  const { world, ball, cupBodies } = buildWorld(cups);
+  const { world, ball, cupBodies, cmTable } = buildWorld(cups);
   const v = launchSpeed(power);
   const a = heading(aim);
   ball.position.set(0, THROW.y0, THROW.z0);
@@ -161,6 +162,9 @@ export function startThrow({ power = 0.5, aim = 0, cups = [] } = {}) {
       // bounced ball kept its full speed and skimmed across small racks instead of dropping in.
       const keep = MAT.tableSkid == null ? 1 : MAT.tableSkid;
       if (keep !== 1) { ball.velocity.x *= keep; ball.velocity.z *= keep; }
+      // Only the FIRST bounce is the lively one (the bounce shot); after it the table goes back to
+      // a dead bounce, or a ball dribbling on a 0.95 table never comes to rest.
+      if (MAT.tableRestLater != null) cmTable.restitution = MAT.tableRestLater;
       st.tableHits++;
       st.events.push({ type: 'table', v: vn, x: ball.position.x, z: ball.position.z });
     } else if (u.kind === 'cup') {

@@ -69,7 +69,20 @@ export const THROW = {
 // 0.80 at the old 0.65/no skid -> 0.91 and 0.98 (seeds 777, 4242) here, every rack size 0.92-1.05.
 // 0.70/0.9 was 0.97 and 1.01 - too close to "more often". The fixed full-rack grid above ALIASES
 // (it said 0.99 at a setting a random sample put at 0.80): measure with random throws.
-export const MAT = { tableRest: 0.68, tableSkid: 0.9, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
+//
+// 2026-10-03, later (Matt: "Feels like more than 4% less" ... "I want the ball to bounce better"):
+// the numbers above count only bounced balls that come DOWN onto a cup. Counting every bounced ball
+// that touches a cup at all, 2 in 3 hit a cup's SIDE (a low skimming ball) and the bounce went in
+// 11% against regular 28%. So the ball now comes off the table STEEPER: tableRest 0.68 -> 0.95,
+// tableSkid 0.9 -> 0.6, and `tableRestLater` 0.68 for every bounce after the first. Counting every
+// ball that touches a cup, random throws at random 1-10 cup racks (seed 5151, 60k): bounced 24.7%
+// vs regular 29.1% (0.85x; 10 cups 33/38, 7-9 29/32, 4-6 22/25, 1-3 17/20). Was 11% vs 28%.
+// Counting only balls that come DOWN onto a cup, a bounce now beats a regular throw (42% vs 33%);
+// Matt chose the every-touch count. Regular throws unchanged at every setting. Swept 0.80-1.0 x
+// 0.4-0.9: nothing realistic got past ~0.90x - a bounced ball into a full rack meets the front
+// cups' sides. Probe: rand-rack2 (cup-pong/CLAUDE.md, "Bounce shots").
+// `tableRestLater` 0.68: every table bounce after the first, so a dribbling ball still comes to rest.
+export const MAT = { tableRest: 0.95, tableRestLater: 0.68, tableSkid: 0.6, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
 
 /** GAME GRAVITY, m/s^2 - NOT 9.81, on purpose. GamePigeon's ball is floatier than a real one: the
  *  only arc that reproduces its screen path AND reaches the cups when the recording shows it there
