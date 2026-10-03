@@ -568,3 +568,12 @@ renderer anyway, shadows included, for a screenshot probe; the game never sets i
 - `node cup-pong/js/test.js` - the rack model, the rules of a match, the computer and the real physics.
 - `node test-game-conventions.mjs` - the shared checklist.
 - `node check-no-scroll.mjs cup-pong` - no game in the hub may scroll.
+
+## The Tuesday question (a joke for one player, 2026-10-03)
+
+Matt: *"anytime King of games plays me back, it says Tuesdays > Mondays then asks yes or no, but
+the no button doesn't work. when he clicks yes, it says Correct! then he can shoot."* `TUESDAY` in
+`ui.js` (King of Games `3VN33`, only in matches against Matt `QZCC4`): `mpResume` asks before his
+turn (`askTuesday`), keyed per match and log position so it shows once per turn (again on a
+mid-turn reopen). "No" only shakes. Nothing is written anywhere; delete `TUESDAY`, `tuesdayOwed`,
+`askTuesday`, the `.cp-tuesday` CSS and the `tuesday*` strings to retire it.

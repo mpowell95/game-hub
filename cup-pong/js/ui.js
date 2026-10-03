@@ -26,6 +26,9 @@ const CPU_PAUSE_MS = 900;       // before each computer throw, so it reads as a 
 const TURN_PAUSE_MS = 700;      // between one side's last throw and the camera moving
 const DIFFS = ['easy', 'medium', 'hard'];
 const RERACKS = [0, 1, 2, 3, 'inf'];
+// A joke for one player, at Matt's request (2026-10-03): every time King of Games (3VN33) takes a
+// turn against Matt (QZCC4), he must first agree that Tuesdays beat Mondays. "No" does not work.
+const TUESDAY = { who: '3VN33', vs: 'QZCC4' };
 
 let instance = null;
 
@@ -621,11 +624,49 @@ class CupPong {
     const R = this.engine.rend;
     this.waiting = false;
     if (m.shooter !== 'a') { this.mpWaiting(); return; }
+    if (this.tuesdayOwed()) { this.askTuesday(() => this.mpResume()); return; }
     if (m.queue.length) {
       R.setView('shoot');
       if (m.ball === 2) this.toast(t('extraYou'), 1600);
       if (m.mustPickOwed()) this.askOwed(); else this.serveMatchBall();
     } else this.beginTurn();
+  }
+
+  /** Is this King of Games, on a turn against Matt he has not yet answered the question for? */
+  tuesdayOwed() {
+    const mp = this.mp;
+    if (!mp || !this.MP || this.MP.myCode() !== TUESDAY.who || !mp.them || mp.them.code !== TUESDAY.vs) return false;
+    return this.tuesdayFor !== `${mp.id}:${mp.applied}`;
+  }
+
+  askTuesday(then) {
+    const mp = this.mp;
+    this.busy = true;
+    const el = document.createElement('div');
+    el.className = 'gh-overlay cp-tuesday';
+    el.innerHTML = `
+      <div class="gh-modal cp-card" role="dialog" aria-modal="true" aria-label="${t('tuesdayQ')}">
+        <h2 class="cp-card-title cp-tuesday-q">${t('tuesdayQ')}</h2>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${t('yes')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="no">${t('no')}</button>
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    const no = el.querySelector('[data-role="no"]');
+    // "No" does nothing. It only shakes its head.
+    this.on(no, 'click', () => {
+      no.classList.remove('is-nope');
+      void no.offsetWidth;
+      no.classList.add('is-nope');
+    });
+    this.on(el.querySelector('[data-role="yes"]'), 'click', () => {
+      el.remove();
+      if (!this.mp || this.mp !== mp) return;
+      this.tuesdayFor = `${mp.id}:${mp.applied}`;
+      this.toast(t('tuesdayYes'), 1400);
+      this.later(then, 900);
+    });
   }
 
   mpWaiting() {
