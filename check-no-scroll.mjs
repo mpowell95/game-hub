@@ -87,13 +87,12 @@ const EXTRA_SCREENS = {
         await page.waitForSelector('[data-ov="result"]:not([hidden])', { timeout: 8000 });
       },
     },
-    // Cricket (2026-10-01): the setup screen at its fullest (vs computer, Cricket, Order showing),
+    // Cricket (2026-10-01): the setup screen at its fullest (Cricket, Order showing),
     // its how-to, and the play screen with both chalkboards.
     {
       name: 'setup, cricket vs computer',
       async open(page) {
         await page.click('[data-ov="result"] .dt-x');
-        await page.click('[data-modes="cpu"]');
         await page.click('[data-games="cricket"]');
         await page.click('[data-orders="order"]');
         await page.waitForTimeout(200);
