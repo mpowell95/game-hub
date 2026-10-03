@@ -392,7 +392,7 @@ ok('power is spent as energy: launch speed rises with power, and is defined past
 
 // --- reach: the full grid --------------------------------------------------------------------
 const per = {};
-let n = 0, made = 0, rimOut = 0, capped = 0, maxT = 0;
+let n = 0, made = 0, rimOut = 0, capped = 0, maxT = 0, bouncedIn = 0;
 const firstMake = {};
 for (let p = 0.30; p <= 0.8001; p += 0.02) {
   for (let a = -0.20; a <= 0.20001; a += 0.0125) {
@@ -402,6 +402,7 @@ for (let p = 0.30; p <= 0.8001; p += 0.02) {
     if (r.outcome.capped) capped++;
     if (r.outcome.kind === 'made') {
       made++;
+      if (r.outcome.bounced) bouncedIn++;
       per[r.outcome.id] = (per[r.outcome.id] || 0) + 1;
       if (!firstMake[r.outcome.id]) firstMake[r.outcome.id] = { power: p, aim: a };
     } else if (r.touchedCup) rimOut++;
@@ -413,8 +414,12 @@ ok(`every one of the 10 cups can be made (${n}-throw power x aim grid)`, missing
 ok('every throw resolves on its own (none hit the 6 s cap)', capped === 0, `slowest ${maxT.toFixed(2)} s`);
 ok('balls really come off the rims (plenty touch a cup and stay out)', rimOut > made, `${rimOut} touched and missed, ${made} made`);
 {
-  const rate = made / n;
-  ok('the grid is not a gimme: under a quarter of an even sweep scores', rate < 0.25, (rate * 100).toFixed(1) + '%');
+  // Split 2026-10-03: Matt asked for bounce shots that go in more ("I want the ball to bounce
+  // better"), which took bounced makes on this sweep from 19 to 56 and the total past 25%. Regular
+  // throws keep the old quarter; everything together gets a ceiling.
+  const direct = (made - bouncedIn) / n, rate = made / n;
+  ok('the grid is not a gimme: under a quarter of an even sweep scores without a bounce', direct < 0.25, (direct * 100).toFixed(1) + '%');
+  ok('...and under 30% with bounce shots counted', rate < 0.30, (rate * 100).toFixed(1) + '%');
 }
 
 // --- a made cup is gone ----------------------------------------------------------------------

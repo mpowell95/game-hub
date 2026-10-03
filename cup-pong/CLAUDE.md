@@ -517,6 +517,24 @@ Probe: random throws (power -0.30..0.80, aim +-0.14) at a random 1-10 cup subset
 seeded. **Never use `(seed * 1103515245 + 12345) & 0x7fffffff` in JS**: the multiply passes 2^53
 and the stream is garbage (it moved the full-rack result by 6 points).
 
+**Bounce better (2026-10-03, later): `tableRest` 0.95, `tableRestLater` 0.68, `tableSkid` 0.6.**
+Matt: *"Feels like more than 4% less"*, then *"I want the ball to bounce better."* He was right:
+the table above counts only balls that come DOWN onto a cup. Counting every ball that touches a
+cup at all, 2 in 3 bounced balls hit a cup's SIDE (a low ball skimming off the table) against 1 in
+8 regular throws, and a bounce went in 11% against 28%. The ball now leaves the table steeper (a
+livelier first bounce that keeps 60% of its forward speed); every LATER table bounce is dead
+(0.68), or a ball dribbling on a 0.95 table hit the 6 s cap. Every-touch counting, random racks:
+
+| setting | bounced | regular |
+|---|---|---|
+| 0.68 / skid 0.9 (was) | 11.1% | 28.4% |
+| **0.95 / 0.6 + later 0.68 (shipped)** | **24.7%** | **29.1%** (10 cups 33/38, 1-3 cups 17/20) |
+
+Swept tableRest 0.80-1.0 x skid 0.4-0.9: nothing realistic passed ~0.90x (1.0 is a perfectly
+elastic table). Side effect, accepted: counting only balls that come down onto a cup, a bounce now
+goes in MORE (42% vs 33%). `test.js`'s "not a gimme" check was split: regular makes under 25% of
+the sweep (18.6%), everything under 30% (25.2%; bounce-ins went 19 -> 56 of 858).
+
 ## The look and the camera (fitted to the recording, 2026-09-27)
 
 **The camera is FITTED, not designed.** `CAMERA` in `geom.js`: 1.305 m above the table, over
