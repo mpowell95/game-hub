@@ -497,6 +497,26 @@ Not monotonic, so never interpolate: re-measure (`rim-grid` probe, described her
 Bounce-ins stay possible but rarer (soft-throw sweep 16 of 403, was 89); `test.js`'s floor is now
 2%. The computer and regular throws are unaffected. Solo bests already set stand as they are.
 
+**Closer to even (2026-10-03): `tableRest` 0.65 -> 0.68, plus `tableSkid` 0.9.** Matt: *"Make a
+bounced ball closer to a regular throw."* **The grid above was misleading**: a regular grid of
+throws at regularly spaced cups ALIASES, and random throws put 0.65 at 0.80x, not 0.86x (and a
+6-cup rack at 1.12x). `tableFric` changes nothing on a bounce in cannon-es, so a new lever:
+`MAT.tableSkid`, the share of forward speed a ball keeps through each table bounce (physics.js's
+collide handler), which is what lets a bounced ball drop into a small rack instead of skimming it.
+Measured with random throws at random leftover racks (1-10 cups), only balls that come down onto
+a cup, regular throws untouched at every setting:
+
+| tableRest / skid | bounced vs regular (seed 777, 40k) | (seed 4242, 80k) |
+|---|---|---|
+| 0.65 / none (was) | 0.80x | - |
+| 0.65 / 0.9 | 0.86x | - |
+| **0.68 / 0.9 (shipped)** | **0.91x** | **0.98x** (every rack size 0.92-1.05x) |
+| 0.70 / 0.9 | 0.97x | 1.01x (too close to "more often") |
+
+Probe: random throws (power -0.30..0.80, aim +-0.14) at a random 1-10 cup subset, mulberry32
+seeded. **Never use `(seed * 1103515245 + 12345) & 0x7fffffff` in JS**: the multiply passes 2^53
+and the stream is garbage (it moved the full-rack result by 6 points).
+
 ## The look and the camera (fitted to the recording, 2026-09-27)
 
 **The camera is FITTED, not designed.** `CAMERA` in `geom.js`: 1.305 m above the table, over

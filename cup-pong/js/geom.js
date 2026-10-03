@@ -61,7 +61,15 @@ export const THROW = {
 // 36.1% at 0.65 (shipped, bounced ~14% less likely, 334 bounce-ins vs 942); 29.7% at 0.60; 0 at
 // 0.45 (bounce-ins impossible, Matt's 2026-09-28 complaint). Not monotonic (0.75 gave 51.9%), so
 // re-measure rather than interpolate. Regular throws are untouched: 950/2267 at every value.
-export const MAT = { tableRest: 0.65, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
+//
+// 2026-10-03 (Matt: "Make a bounced ball closer to a regular throw"): tableRest 0.65 -> 0.68 plus
+// `tableSkid` 0.9 (each table bounce keeps 90% of the ball's forward speed, read in physics.js's
+// collide handler; `tableFric` does nothing measurable to a bounce in cannon-es). Measured with
+// RANDOM throws at RANDOM leftover racks (1-10 cups), two seeds, 120,000 throws: bounced vs regular
+// 0.80 at the old 0.65/no skid -> 0.91 and 0.98 (seeds 777, 4242) here, every rack size 0.92-1.05.
+// 0.70/0.9 was 0.97 and 1.01 - too close to "more often". The fixed full-rack grid above ALIASES
+// (it said 0.99 at a setting a random sample put at 0.80): measure with random throws.
+export const MAT = { tableRest: 0.68, tableSkid: 0.9, tableFric: 0.22, cupRest: 0.52, cupFric: 0.12 };
 
 /** GAME GRAVITY, m/s^2 - NOT 9.81, on purpose. GamePigeon's ball is floatier than a real one: the
  *  only arc that reproduces its screen path AND reaches the cups when the recording shows it there

@@ -157,6 +157,10 @@ export function startThrow({ power = 0.5, aim = 0, cups = [] } = {}) {
     try { vn = Math.abs(e.contact.getImpactVelocityAlongNormal()); } catch {}
     if (vn < 0.08) return;                        // resting contact, not a bounce
     if (u.kind === 'table') {
+      // A real ball bounce scrubs off forward speed (it grips and starts to spin). Without this a
+      // bounced ball kept its full speed and skimmed across small racks instead of dropping in.
+      const keep = MAT.tableSkid == null ? 1 : MAT.tableSkid;
+      if (keep !== 1) { ball.velocity.x *= keep; ball.velocity.z *= keep; }
       st.tableHits++;
       st.events.push({ type: 'table', v: vn, x: ball.position.x, z: ball.position.z });
     } else if (u.kind === 'cup') {
