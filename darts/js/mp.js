@@ -170,6 +170,9 @@ export function validateGame(raw) {
     log,
     over,
     scores: { a: m.scores[0], b: m.scores[1] },
+    // Cricket: how many of its seven numbers each side has closed (2026-10-04). Points alone read as
+    // "You 0, them 0" for most of a game, which Matt took for a broken notification.
+    closed: isCricket(kind) ? { a: m.marks[0].filter((n) => n >= 3).length, b: m.marks[1].filter((n) => n >= 3).length } : null,
     dartsThisTurn: m.darts.length,
   };
 }
@@ -307,6 +310,8 @@ function rowsFromIndex(val) {
       updated: ms(r.updated), yourTurn: !!r.yourTurn, over: !!r.over,
       result: RESULTS.includes(r.result) ? r.result : null, why: typeof r.why === 'string' ? r.why : '',
       mine: ms(r.mine), theirs: ms(r.theirs), kind: KINDS.includes(r.kind) ? r.kind : '301',
+      mineClosed: Number.isFinite(+r.mineClosed) ? +r.mineClosed : null,
+      theirsClosed: Number.isFinite(+r.theirsClosed) ? +r.theirsClosed : null,
     };
   }).filter((r) => ID_RE.test(r.id) && r.with));
 }
@@ -402,6 +407,7 @@ function rowFor(game, side, writer) {
     yourTurn: !game.over && game.turn === side,
     over: !!game.over,
     mine: game.scores[side], theirs: game.scores[other(side)],
+    ...(game.closed ? { mineClosed: game.closed[side], theirsClosed: game.closed[other(side)] } : {}),
     lastBy: writer === side ? 'me' : 'them',
     kind: game.kind || '301',
     ...(game.over ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),

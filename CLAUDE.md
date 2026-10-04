@@ -774,7 +774,9 @@ the same day and **deployed by Matt on 2026-09-25** - see "Skeeball challenges" 
 was **DEPLOYED by Matt on 2026-09-28** - `cup-pong/CLAUDE.md`, "Challenges". Its rules branch
 `cuppong` was **PUBLISHED by Matt on 2026-09-28**. A sixth, `dartsTurnPush` (Darts challenges,
 `darts/index/<code>/<id>`), was added on 2026-10-01 and **DEPLOYED by Matt on 2026-10-03** ("done",
-after `firebase deploy --only functions` from `game-hub-deploy`); its rules branch `darts` was
+after `firebase deploy --only functions` from `game-hub-deploy`); its Cricket wording ("Closed: you 3, them 2"
+instead of points that read "0, 0") changed `functions/decide.js` on 2026-10-04 and is **NOT yet
+redeployed**; its rules branch `darts` was
 **PUBLISHED by Matt on 2026-10-01** (verified: `darts/` reads, every other branch unchanged) -
 `darts/CLAUDE.md`, "Online challenges". **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing

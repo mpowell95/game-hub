@@ -229,7 +229,12 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
 - **Notifications:** `dartsTurnPush` in `functions/index.js` (decided by `decideDarts` in
   `functions/decide.js`): a challenge, your turn coming back (with the score), and a match the other
   person ended; a challenge names the game ("challenged you to Cricket (in order)"). **Written
-  2026-10-01, DEPLOYED by Matt on 2026-10-03.** The app half needed no change: `sw.js` opens any match
+  2026-10-01, DEPLOYED by Matt on 2026-10-03.** **Cricket wording (2026-10-04, NOT yet redeployed):**
+  Matt got "Your turn vs aa King of Games. You 0, aa King of Games 0" mid-game - Cricket points stay 0
+  until somebody scores past a closed number. Rows now carry `mineClosed`/`theirsClosed` (numbers
+  closed, from `validateGame`'s `closed`), and a Cricket turn reads "Closed: you 3, them 2", adding
+  "Points: ..." once either has some; the match list rows say the same. A row with no counts gets the
+  old line. The app half needed no change: `sw.js` opens any match
   a payload names (`data.match`), and the hub hands it to `alert.js`'s `armOpen`.
 - **Tests:** `node test-darts-mp.mjs` (39 checks, including a 101 and a whole in-order Cricket match, two phones against an in-memory database);
   `node test-push.mjs` (the `decideDarts` cases). The screens were checked in headless Chromium with
