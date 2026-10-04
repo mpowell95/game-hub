@@ -1178,10 +1178,32 @@
     // -- Messages ------------------------------------------------------------------
     // Same lazy import as the two buttons below: this page pays nothing for it until it is
     // pressed. The label picks up an unread count once we can see one.
+    //
+    // HOLD THE CARD'S SIZE while it loads (Matt, 2026-10-04: "It always takes messages a second to
+    // load when I go to my profile and I accidentally click it when I'm trying to click admin").
+    // The rows arrive a second after the page paints, the card grows by two rows, and everything
+    // under it (Admin, Settings) jumps down - so a tap aimed at Admin landed on "All messages".
+    // The card's last rendered height is remembered on this device and reserved before the first
+    // paint, so nothing below it moves. A one-tap-recreatable layout hint, not player data.
+    const MSGS_H_KEY = 'gamehub.pfMsgsHeight.v1';
+    try {
+      const h = Number(localStorage.getItem(MSGS_H_KEY));
+      if (h > 0 && h < 1000) $('#pf-msgs').style.minHeight = h + 'px';
+    } catch { /* no storage: it just loads unreserved, as before */ }
     async function paintMessageCount() {
+      const host = $('#pf-msgs');
       try {
         const m = await import('../js/messages-ui.js');
-        await m.renderProfileMessages($('#pf-msgs'));
+        await m.renderProfileMessages(host);
+        // Measure only once css/ui.css (which messages-ui.js adds) has applied: measured before
+        // it, the button is unstyled and the remembered height came out at half its real size.
+        const css = document.querySelector('link[data-gh-ui-css="1"]');
+        if (css && !css.sheet) {
+          await new Promise((res) => { css.addEventListener('load', res, { once: true });
+            css.addEventListener('error', res, { once: true }); setTimeout(res, 3000); });
+        }
+        host.style.minHeight = '';
+        try { localStorage.setItem(MSGS_H_KEY, String(host.offsetHeight)); } catch {}
       } catch (e) { console.error('Messages failed to load', e); }
     }
     paintMessageCount();
