@@ -74,6 +74,11 @@ function fitList(card, list, extra) {
   list.dataset.dropped = String(dropped);
 }
 const cardOf = (el) => el.closest('.dt-mp');
+/** The score part of a match row: points left in 301-style games; in Cricket the numbers each side
+ *  has closed, plus points once somebody has some (2026-10-04). */
+const scoreLine = (r) => (String(r.kind || '').startsWith('cricket') && r.mineClosed != null
+  ? t('mp_closed', { a: r.mineClosed, b: r.theirsClosed, name: r.name }) + (r.mine || r.theirs ? ' · ' + t('mp_pts', { a: r.mine, b: r.theirs }) : '')
+  : t('mp_scores', { a: r.mine, b: r.theirs, name: r.name }));
 /** What a match kind is called (darts/js/engine.js KINDS); a row without one is 301. */
 const gameName = (kind) => (kind === 'cricket' ? t('game_cricket') : kind === 'cricket-order' ? t('game_cricket_order') : String(kind || '301'));
 
@@ -81,7 +86,7 @@ const rowHTML = (r) => `
   <button type="button" class="dt-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
     <span class="dt-mrow-face" aria-hidden="true">${esc(r.emoji)}</span>
     <span class="dt-mrow-text"><span class="dt-mrow-name">${esc(r.name)}</span>
-      <span class="dt-mrow-sub">${esc(gameName(r.kind) + ' · ' + t('mp_scores', { a: r.mine, b: r.theirs, name: r.name }))}</span></span>
+      <span class="dt-mrow-sub">${esc(gameName(r.kind) + ' · ' + scoreLine(r))}</span></span>
     <span class="dt-mrow-chev" aria-hidden="true">›</span>
   </button>`;
 

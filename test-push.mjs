@@ -182,6 +182,8 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('darts: your own winning dart does not notify you', decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
   check('darts: a cricket challenge names the game', body(decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, kind: 'cricket-order' }) })) === 'Ana challenged you to Cricket (in order). Your throw!');
   check('darts: a 101 challenge names the game', body(decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, kind: '101' }) })) === 'Ana challenged you to 101. Your throw!');
+  check('darts: a cricket turn says what is closed, not "0, 0"', body(decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true, kind: 'cricket', mine: 0, theirs: 0, mineClosed: 3, theirsClosed: 2 }) })) === 'Your turn vs Ana. Closed: you 3, Ana 2');
+  check('darts: ...and the points once somebody has some', body(decideDarts({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true, kind: 'cricket-order', mine: 40, theirs: 0, mineClosed: 4, theirsClosed: 2 }) })) === 'Your turn vs Ana. Closed: you 4, Ana 2. Points: you 40, Ana 0');
   check('darts: Spanish wording', decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Dardos');
   check('darts: the trigger watches darts/index and names the match', /ref: '\/darts\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'darts', match: id \}/.test(fnSrc));
 }

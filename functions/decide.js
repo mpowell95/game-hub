@@ -276,6 +276,7 @@ const DARTS_TEXT = {
     game: { cricket: 'Cricket', 'cricket-order': 'Cricket (in order)' },
     challenge: (w, g) => `${w} challenged you to ${g}. Your throw!`,
     turn: (w, a, b) => `Your turn vs ${w}. You ${a}, ${w} ${b}`,
+    turnCricket: (w, ca, cb, pa, pb) => `Your turn vs ${w}. Closed: you ${ca}, ${w} ${cb}` + (pa || pb ? `. Points: you ${pa}, ${w} ${pb}` : ''),
     theyWon: (w) => `${w} won the game.`,
     youWon: (w) => `You won! ${w} resigned.`,
   },
@@ -284,6 +285,7 @@ const DARTS_TEXT = {
     game: { cricket: 'Cricket', 'cricket-order': 'Cricket (en orden)' },
     challenge: (w, g) => `${w} te ha retado a ${g}. ¡Te toca!`,
     turn: (w, a, b) => `Te toca contra ${w}. Tú ${a}, ${w} ${b}`,
+    turnCricket: (w, ca, cb, pa, pb) => `Te toca contra ${w}. Cerrados: tú ${ca}, ${w} ${cb}` + (pa || pb ? `. Puntos: tú ${pa}, ${w} ${pb}` : ''),
     theyWon: (w) => `${w} ganó la partida.`,
     youWon: (w) => `¡Ganaste! ${w} se rindió.`,
   },
@@ -309,5 +311,10 @@ export function decideDarts({ code, id, before, after }) {
   if (!before) return mk('challenge', (s) => s.challenge(who, dartsGame(s, after.kind)));
   if (before.yourTurn && !before.over) return null;             // it was already your turn
   const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  // Cricket rows carry how many numbers each side has closed (darts/js/mp.js, 2026-10-04): say that,
+  // and the points only once somebody has some. A row from before has no counts: the old line.
+  if (Number.isFinite(+after.mineClosed) && after.mineClosed !== null && String(after.kind || '').startsWith('cricket')) {
+    return mk('turn', (s) => s.turnCricket(who, n(after.mineClosed), n(after.theirsClosed), n(after.mine), n(after.theirs)));
+  }
   return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
 }

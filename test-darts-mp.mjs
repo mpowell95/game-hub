@@ -152,6 +152,7 @@ res = await MP.appendLog(cid, 0, [dart('a'), dart('a'), dart('a', T19)]);
 ok('in order: T20 closes 20, T20 scores 60, T19 counts', res.ok && res.game.scores.a === 60 && res.game.turn === 'b');
 const crow = getAt(`darts/index/ANABB/${cid}`);
 ok('the other person\'s row says which game it is', crow && crow.kind === 'cricket-order' && crow.theirs === 60);
+ok('...and how many numbers each side has closed (T20 closed 20; T19 counts 3 marks on 19)', crow.theirsClosed === 2 && crow.mineClosed === 0, JSON.stringify(crow));
 // A whole cricket game to the end, replayed by validateGame on every write.
 use('B');
 const bulls = targetPoint(25, 'bull');
