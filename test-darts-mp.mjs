@@ -164,6 +164,30 @@ await turn('b', [{ x: 0, y: -2 }, { x: 0, y: -2 }, { x: 0, y: -2 }]);
 res = await turn('a', [T(15), bulls, bulls]);
 ok('closing every number while ahead wins the cricket match', res.ok && res.game.over && res.game.over.winner === 'a' && res.game.over.why === 'closed', JSON.stringify(res.game && res.game.over));
 
+// The launcher bubble (darts/js/alert.js) says "Your turn" for as long as it IS your turn (2026-10-04).
+{
+  const AL = await import('./darts/js/alert.js');
+  const pause = () => new Promise((r) => setTimeout(r, 3));
+  use('A');
+  let r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const gid = r.id;
+  const one = async () => AL.decideAlert((await MP.readMyGames()).filter((x) => x.id === gid), MP.readSeen(), MP.readUnseen());
+  await pause(); await MP.appendLog(gid, 0, [dart('a'), dart('a'), dart('a')]);
+  ok('after your own turn: no bubble on your launcher', !(await one()));
+  use('B'); await pause(); await MP.appendLog(gid, 3, [dart('b'), dart('b'), dart('b')]);
+  use('A');
+  ok('they played back: "Your turn"', (await one() || {}).kind === 'turn');
+  await pause(); await MP.appendLog(gid, 6, [dart('a')]);
+  ok('one dart thrown and left mid-turn: still "Your turn"', (await one() || {}).kind === 'turn');
+  await pause(); await MP.appendLog(gid, 7, [dart('a'), dart('a')]);
+  ok('turn finished: the bubble goes', !(await one()));
+  use('B'); await pause(); await MP.appendLog(gid, 9, [dart('b'), dart('b'), dart('b')]);
+  use('A');
+  const al = await one();
+  AL.markSeen(gid, (await MP.readMyGames()).find((x) => x.id === gid).updated);                // the bubble's X (js/hub.js _dismissGameAlert)
+  ok('the X puts it away for this turn', al && al.kind === 'turn' && !(await one()));
+}
+
 // Structural.
 const rules = JSON.parse(readFileSync('./database.rules.json', 'utf8'));
 ok('`darts` is in database.rules.json, signed-in read and write', rules.rules.darts && rules.rules.darts['.read'] === 'auth != null' && rules.rules.darts['.write'] === 'auth != null');

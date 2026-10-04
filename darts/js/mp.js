@@ -498,7 +498,9 @@ export async function appendLog(id, base, entries) {
     }
     back.id = id;
     if (back.over || back.turn !== turnBefore || have === 0) await writeRows(api, db, back, side, back.over || back.turn !== side ? null : side);
-    markSeen(id, back.updated);
+    // Only a FINISHED turn is "seen" (2026-10-04): a player who throws one dart and leaves still
+    // owes the rest, so the launcher keeps saying "Your turn" (darts/js/alert.js).
+    if (back.over || back.turn !== side) markSeen(id, back.updated);
     return { ok: true, game: back };
   } catch (err) {
     console.error('[darts] could not send the dart', err);

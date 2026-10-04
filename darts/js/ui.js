@@ -914,7 +914,11 @@ class DartsUI {
       return;
     }
     this.MP.markShown(mp.id, g.log.length);
-    this.MP.markSeen(mp.id, g.updated);
+    // NOT markSeen (2026-10-04, Matt: "I don't see the 'your turn' badge inside the hub after King of
+    // Games plays me back"). Watching their darts land used to count as having seen the turn, so a
+    // player who watched them throw, or opened the match and left without throwing, got no launcher
+    // bubble although it was still their turn. The turn is "seen" when they finish it (mp.js
+    // appendLog) or put the bubble away.
     if (m.winner != null) { this._finish(); return; }
     if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
     if (m.turn === mp.mySeat) { this._nextDart(); return; }
