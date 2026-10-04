@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1055';
+const CACHE = 'game-hub-v1056';
 
 const ASSETS = [
   './',
@@ -770,12 +770,12 @@ const REST_MANIFEST = {
   './darts/': '20312df57d',
   './darts/index.html': '20312df57d',
   './darts/css/darts.css': '517e08b034',
-  './darts/js/ui.js': 'b525f029c4',
+  './darts/js/ui.js': '62ca950d56',
   './darts/js/engine.js': '201a89ec87',
   './darts/js/render.js': 'd05671e727',
   './darts/js/flight.js': '60b3524662',
   './darts/js/strings.js': 'c3224b249a',
-  './darts/js/mp.js': '1a93d324f5',
+  './darts/js/mp.js': '31a018566d',
   './darts/js/mp-ui.js': 'f25ab2fcdf',
   './darts/js/alert.js': '4a254e3025',
   './sudoku/': '802a47aafa',

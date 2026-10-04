@@ -210,6 +210,12 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
 - **Opening a match** replays the log silently up to the other person's latest run, then FLIES that
   run one dart at a time to where each landed (`_mpCatchUp`). While it is their turn the match is
   watched, so their darts arrive live. You always sit on the LEFT (`.is-flip` when you are side 'b').
+- **The launcher's "Your turn" bubble stays up for as long as it IS your turn** (2026-10-04, Matt: *"I
+  don't see the 'your turn' badge inside the hub after King of Games plays me back"*). The match data
+  was right (read from the live database: his row said `yourTurn`). What hid the bubble: watching the
+  other person's darts land (`_mpCatchUp`) and throwing a single dart (`appendLog`) both marked the
+  turn as seen. Now only a FINISHED turn (or the bubble's X, or opening the game from the bubble) does.
+  Pinned in `test-darts-mp.mjs`. Same seen-map design as Cup Pong and Hoops, which were not changed.
 - **Counting:** each finished match is recorded once per phone (`gamehub.darts.counted.v1`) as
   `recordResult('darts', 'mp', won)`, whoever ended it. A match that ended while you were away
   gets a Game Over popup the next time you open online play.
