@@ -1125,6 +1125,13 @@ Player-to-player messages, threaded. Two modules, one new Firebase node, one new
 LAW has no surface here by construction**: every path is new, and nothing in it writes to a stats
 key, a profile field or a `players/` record.
 
+**The profile page's Messages card must not change size while it loads (2026-10-04).** Its rows
+arrive about a second after the page paints; the card grew by two rows and pushed Admin down, so
+Matt's tap on Admin landed on "All messages". `profile/index.html` remembers the card's last
+height (`gamehub.pfMsgsHeight.v1`, a layout hint, not player data) and reserves it before the first
+paint; `renderProfileMessages` keeps the rows it shows during a repaint instead of dropping back to
+the lone button first. Only the very first visit on a device can still shift.
+
 ### The node
 
 ```

@@ -87,11 +87,19 @@ export async function renderProfileMessages(host) {
     if (all) all.addEventListener('click', () => open(null));
   };
 
-  draw(`<button type="button" class="gh-btn gh-btn--block" data-role="all">${esc(t('msg_btn'))}</button>`);
+  // A repaint (the gamehub:messages event) keeps the rows it already shows until the fresh ones
+  // arrive: dropping back to the lone button first shrank the card for a moment, and everything
+  // below it jumped up and back down (Matt, 2026-10-04, a tap meant for Admin hit "All messages").
+  if (!me || !host.firstElementChild) {
+    draw(`<button type="button" class="gh-btn gh-btn--block" data-role="all">${esc(t('msg_btn'))}</button>`);
+  }
   if (!me) return;
 
   const rows = (await readMyThreads()).slice(0, 2);
-  if (!rows.length) return;
+  if (!rows.length) {
+    draw(`<button type="button" class="gh-btn gh-btn--block" data-role="all">${esc(t('msg_btn'))}</button>`);
+    return;
+  }
   const unread = rows.filter((r) => isUnread(r, me)).length;
   draw(`<ul class="msg-list">${rows.map((r) => `
       <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}"
