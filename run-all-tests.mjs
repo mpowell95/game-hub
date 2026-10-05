@@ -63,6 +63,7 @@ const SUITES = [
   { file: 'test-bug-report.mjs' },
   { file: 'test-admin-config.mjs' },
   { file: 'test-messages.mjs' },
+  { file: 'test-challenges.mjs' },
   { file: 'test-career-sync.mjs' },
   // R15-A: the career loop's own rules (pure, no engine) plus its persistence round trip against
   // the same fake-boot seam test-career-sync.mjs uses. Node, no browser, a few seconds.
