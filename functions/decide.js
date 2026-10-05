@@ -273,7 +273,7 @@ export function decideCupPong({ code, id, before, after }) {
 const DARTS_TEXT = {
   en: {
     title: 'Darts',
-    game: { cricket: 'Cricket', 'cricket-order': 'Cricket (in order)' },
+    game: { cricket: 'Cricket', 'cricket-order': 'Cricket (in order)', 'cricket-np': 'Cricket (no points)', 'cricket-order-np': 'Cricket (in order, no points)' },
     challenge: (w, g) => `${w} challenged you to ${g}. Your throw!`,
     turn: (w, a, b) => `Your turn vs ${w}. You ${a}, ${w} ${b}`,
     turnCricket: (w, ca, cb, pa, pb) => `Your turn vs ${w}. Closed: you ${ca}, ${w} ${cb}` + (pa || pb ? `. Points: you ${pa}, ${w} ${pb}` : ''),
@@ -282,7 +282,7 @@ const DARTS_TEXT = {
   },
   es: {
     title: 'Dardos',
-    game: { cricket: 'Cricket', 'cricket-order': 'Cricket (en orden)' },
+    game: { cricket: 'Cricket', 'cricket-order': 'Cricket (en orden)', 'cricket-np': 'Cricket (sin puntos)', 'cricket-order-np': 'Cricket (en orden, sin puntos)' },
     challenge: (w, g) => `${w} te ha retado a ${g}. ¡Te toca!`,
     turn: (w, a, b) => `Te toca contra ${w}. Tú ${a}, ${w} ${b}`,
     turnCricket: (w, ca, cb, pa, pb) => `Te toca contra ${w}. Cerrados: tú ${ca}, ${w} ${cb}` + (pa || pb ? `. Puntos: tú ${pa}, ${w} ${pb}` : ''),

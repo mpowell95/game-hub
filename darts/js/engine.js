@@ -24,8 +24,13 @@ export const DARTS_PER_TURN = 3;
 /** Every game a match can be (Matt, 2026-10-01: "Please add 201 and 101. And add cricket. With
  *  options of in order or any order"). A match without `kind` is 301: every save and online match
  *  made before this has none. */
-export const KINDS = ['301', '201', '101', 'cricket', 'cricket-order'];
-export const isCricket = (kind) => kind === 'cricket' || kind === 'cricket-order';
+export const KINDS = ['301', '201', '101', 'cricket', 'cricket-order', 'cricket-np', 'cricket-order-np'];
+export const isCricket = (kind) => KINDS.includes(kind) && String(kind).startsWith('cricket');
+/** Cricket closed 20, 19 ... 15, bull in that order ('cricket-order', 'cricket-order-np'). */
+export const inOrder = (kind) => String(kind || '').startsWith('cricket-order');
+/** Cricket with no points (Matt, 2026-10-05: "Add the on/off option"): the first to close all seven
+ *  wins, and marks past the third count for nothing ('cricket-np', 'cricket-order-np'). */
+export const noPoints = (kind) => isCricket(kind) && String(kind).endsWith('-np');
 export const kindOf = (m) => (m && KINDS.includes(m.kind) ? m.kind : '301');
 /** Cricket's numbers, in the order "in order" closes them: 20 down to 15, then the bull (25). */
 export const CRICKET = [20, 19, 18, 17, 16, 15, 25];
@@ -88,7 +93,7 @@ export function cricketNext(m, seat) {
  *  has not closed it), in either variant. */
 function cricketCounts(m, seat, i) {
   if (m.marks[seat][i] >= 3) return true;
-  return m.kind === 'cricket-order' ? cricketNext(m, seat) === i : true;
+  return inOrder(m.kind) ? cricketNext(m, seat) === i : true;
 }
 
 /** Throw one dart for the seat whose turn it is. Mutates and returns the match plus what happened:
@@ -123,8 +128,9 @@ function throwCricket(m, x, y) {
     const add = Math.min(bed.mult, 3 - m.marks[me][i]);
     m.marks[me][i] += add;
     marks = add;
-    // Marks past the third score the number, unless the other side has closed it too.
-    if (m.marks[them][i] < 3) pts = (bed.mult - add) * CRICKET[i];
+    // Marks past the third score the number, unless the other side has closed it too (or the game
+    // is played with no points).
+    if (m.marks[them][i] < 3 && !noPoints(m.kind)) pts = (bed.mult - add) * CRICKET[i];
     m.scores[me] += pts;
   }
   const hit = { ...bed, marks, pts, counted: marks > 0 || pts > 0 };
@@ -203,8 +209,8 @@ export function chooseCricketTarget(m, diff) {
   const me = m.turn, them = me ^ 1;
   const aim = (i) => (CRICKET[i] === 25 ? { num: 25, ring: 'bull' } : { num: CRICKET[i], ring: diff === 'easy' ? 'single' : 'treble' });
   const scoring = CRICKET.map((_, i) => i).filter((i) => m.marks[me][i] >= 3 && m.marks[them][i] < 3);
-  const open = m.kind === 'cricket-order' ? [cricketNext(m, me)].filter((i) => i >= 0) : CRICKET.map((_, i) => i).filter((i) => m.marks[me][i] < 3);
-  if (diff !== 'easy' && scoring.length && (m.scores[me] < m.scores[them] || !open.length)) return aim(scoring[0]);
+  const open = inOrder(m.kind) ? [cricketNext(m, me)].filter((i) => i >= 0) : CRICKET.map((_, i) => i).filter((i) => m.marks[me][i] < 3);
+  if (diff !== 'easy' && !noPoints(m.kind) && scoring.length && (m.scores[me] < m.scores[them] || !open.length)) return aim(scoring[0]);
   if (open.length) return aim(open[0]);
   return { num: 25, ring: 'bull' };
 }

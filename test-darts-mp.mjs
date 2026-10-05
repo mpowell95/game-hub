@@ -143,6 +143,10 @@ res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' },
 ok('a 101 challenge starts on 101', res.ok && res.game.kind === '101' && res.game.scores.a === 101);
 res = await MP.appendLog(res.id, 0, [dart('a')]);
 ok('101: T20 leaves 41', res.ok && res.game.scores.a === 41);
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: 'cricket-np' });
+const npid = res.id;
+res = await MP.appendLog(npid, 0, [dart('a'), dart('a'), dart('a')]);
+ok('a no-points cricket challenge replays with no points (T20 x3 scores 0)', res.ok && res.game.kind === 'cricket-np' && res.game.scores.a === 0 && res.game.closed.a === 1);
 ok('a made-up game is refused', (await MP.createGame({ them: { code: 'ANABB', name: 'Ana' }, kind: '999' })).reason === 'bad-kind');
 res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: 'cricket-order' });
 const cid = res.id;

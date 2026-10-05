@@ -80,7 +80,7 @@ const scoreLine = (r) => (String(r.kind || '').startsWith('cricket') && r.mineCl
   ? t('mp_closed', { a: r.mineClosed, b: r.theirsClosed, name: r.name }) + (r.mine || r.theirs ? ' · ' + t('mp_pts', { a: r.mine, b: r.theirs }) : '')
   : t('mp_scores', { a: r.mine, b: r.theirs, name: r.name }));
 /** What a match kind is called (darts/js/engine.js KINDS); a row without one is 301. */
-const gameName = (kind) => (kind === 'cricket' ? t('game_cricket') : kind === 'cricket-order' ? t('game_cricket_order') : String(kind || '301'));
+const gameName = (kind) => (String(kind || '').startsWith('cricket') ? t('game_' + String(kind).replace(/-/g, '_')) : String(kind || '301'));
 
 const rowHTML = (r) => `
   <button type="button" class="dt-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">

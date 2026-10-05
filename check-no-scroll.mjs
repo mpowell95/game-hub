@@ -95,6 +95,7 @@ const EXTRA_SCREENS = {
         await page.click('[data-ov="result"] .dt-x');
         await page.click('[data-games="cricket"]');
         await page.click('[data-orders="order"]');
+        await page.click('[data-pointsseg="off"]');
         await page.waitForTimeout(200);
       },
     },
