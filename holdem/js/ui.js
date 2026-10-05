@@ -79,6 +79,8 @@ const money = (n) => {
 };
 const rid = () => Math.random().toString(36).slice(2, 10);
 const rankText = (r) => (RANKS[r] === 'T' ? '10' : RANKS[r]);
+/** "Rosa", "Rosa and Tex", "Rosa, Tex and Lucky". */
+const joinNames = (list) => (list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t('and') + ' ' + list[list.length - 1]);
 const placeText = (n) => (n === 1 ? t('place_1') : n === 2 ? t('place_2') : n === 3 ? t('place_3') : t('place_n', { n }));
 
 function loadSettings() {
@@ -507,9 +509,20 @@ class Game {
     if (this.mp) { codeEl.hidden = false; codeEl.textContent = this.mp.code; } else codeEl.hidden = true;
 
     // --- the winner(s) and, at a showdown, the five cards that won
+    // A pot that is only someone's own uncalled bet coming back (`back`) is not a win (2026-10-05,
+    // Matt: Rosa showed WIN +$9,500 on a hand Tex won; $2,050 of it was her own chips). A player who
+    // only shared pots gets SPLIT, not WIN.
     const winners = new Set();
+    const soloWin = new Set();
     const won = {};
-    if (res) res.pots.forEach((p) => p.winners.forEach((w) => { winners.add(w); won[w] = (won[w] || 0) + Math.floor(p.amount / p.winners.length); }));
+    if (res) res.pots.forEach((p) => {
+      if (p.back) return;
+      p.winners.forEach((w) => {
+        winners.add(w);
+        if (p.winners.length === 1) soloWin.add(w);
+        won[w] = (won[w] || 0) + Math.floor(p.amount / p.winners.length);
+      });
+    });
     const mainWinner = res && res.pots.length ? res.pots[0].winners[0] : -1;
     let best = null;
     if (res && !res.noShow && res.reveal && res.reveal[mainWinner]) best = bestFive([...res.reveal[mainWinner], ...h.board]);
@@ -555,7 +568,7 @@ class Game {
       const isWin = res && winners.has(j);
       let stamp = '', stampCls = '';
       const mv = this.moves[j];
-      if (isWin) stamp = t('st_win');
+      if (isWin) stamp = t(soloWin.has(j) ? 'st_win' : 'st_split');
       else if (p.out) stamp = p.left ? t('st_left') : t('st_out');
       else if (p.away || p.sitOut) stamp = t('st_away');
       else if (mv && mv.until > now) {
@@ -597,14 +610,14 @@ class Game {
       && (meP.out || (h.folded && h.folded[this.myIdx])) && !this.table._fast();
     const msg = this._message();
     const msgEl = q('.pk-msg');
-    msgEl.textContent = msg;
-    msgEl.hidden = !msg;
+    msgEl.innerHTML = msg.map((m) => `<span class="pk-ml${m.mine ? ' is-mine' : ''}">${esc(m.text)}</span>`).join('');
+    msgEl.hidden = !msg.length;
+    msgEl.classList.toggle('is-multi', msg.length > 1);
     // 2026-10-05, Matt: "The only way you can tell I won this hand is the tiny 'you win' in
     // regular text". A hand this player won gets a gold message, a YOU WIN stamp on their own
     // cards and the chips won beside their stack - the same three cues an opponent's win has.
     const iWon = !!(res && meP && winners.has(this.myIdx));
-    msgEl.classList.toggle('is-mine', iWon);
-    betsEl.hidden = !!msg && !!res;
+    betsEl.hidden = msg.length > 0 && !!res;
     const board = (h && h.board) || [];
     let bd = '';
     for (let k = 0; k < 5; k++) bd += k < board.length ? this._card(board[k], bestSet.size ? (bestSet.has(board[k]) ? 'is-best' : 'is-dim') : '', k) : '<div class="pk-slot"></div>';
@@ -628,7 +641,7 @@ class Game {
       if (iWon) {
         const pop = this.winPopped !== `${pub.gid || ''}:${pub.handNo}`;
         this.winPopped = `${pub.gid || ''}:${pub.handNo}`;
-        winStamp = `<span class="pk-mywin${pop ? ' is-pop' : ''}">${esc(t('st_you_win'))}</span>`;
+        winStamp = `<span class="pk-mywin${pop ? ' is-pop' : ''}">${esc(t(soloWin.has(this.myIdx) ? 'st_you_win' : 'st_split'))}</span>`;
       }
       mine.innerHTML = this.hole.map((c) => this._card(c, 'is-big' + (dim ? ' is-dim' : (bestSet.size ? (bestSet.has(c) ? ' is-best' : ' is-dim') : '')))).join('') + winStamp;
     } else if (!meP) {
@@ -650,19 +663,39 @@ class Game {
     return cardHTML(c, (cls || '') + anim).replace('<div class="pk-card', `<div${delay} class="pk-card`);
   }
 
+  /** The result, one line per pot that was actually won (2026-10-05, Matt: only the main pot was
+   *  ever named, so a side pot you split with Rosa showed nowhere). Uncalled chips coming back are
+   *  not a pot anybody won and get no line. Each line: { text, mine }. */
   _message() {
     const pub = this.pub, h = pub && pub.hand;
-    if (!h || !h.result) return '';
+    if (!h || !h.result) return [];
     const res = h.result;
-    const p0 = res.pots[0];
-    const total = res.pots.reduce((a, p) => a + p.amount, 0);
-    const w = p0.winners[0];
-    const mine = w === this.myIdx;
-    const name = pub.players[w] ? pub.players[w].name : '';
-    if (res.noShow) return mine ? t('msg_you_take', { n: fmt(total) }) : t('msg_takes', { name, n: fmt(total) });
-    if (p0.winners.length > 1) return t('msg_split', { n: fmt(p0.amount) });
-    const hand = handName(res.scores[w]);
-    return mine ? t('msg_you_win', { n: fmt(p0.amount), hand }) : t('msg_wins', { name, n: fmt(p0.amount), hand });
+    const name = (j) => (pub.players[j] ? pub.players[j].name : '');
+    const pots = res.pots.filter((p) => !p.back);
+    const lines = pots.map((p, k) => {
+      const mine = p.winners.includes(this.myIdx);
+      const w = p.winners[0];
+      let text;
+      if (res.noShow) text = w === this.myIdx ? t('msg_you_take', { n: fmt(p.amount) }) : t('msg_takes', { name: name(w), n: fmt(p.amount) });
+      else if (p.winners.length > 1) {
+        const names = (mine ? [t('msg_you')] : []).concat(p.winners.filter((j) => j !== this.myIdx).map(name));
+        text = t('msg_split_names', { names: joinNames(names), n: fmt(p.amount) });
+      } else if (res.scores[w] == null) text = w === this.myIdx ? t('msg_you_take', { n: fmt(p.amount) }) : t('msg_takes', { name: name(w), n: fmt(p.amount) });
+      else if (k > 0) text = w === this.myIdx ? t('msg_you_win_n', { n: fmt(p.amount) }) : t('msg_wins_n', { name: name(w), n: fmt(p.amount) });
+      else {
+        const hand = handName(res.scores[w]);
+        text = w === this.myIdx ? t('msg_you_win', { n: fmt(p.amount), hand }) : t('msg_wins', { name: name(w), n: fmt(p.amount), hand });
+      }
+      if (k > 0) text = t('side_pot') + ': ' + text;
+      return { text, mine };
+    });
+    // Room on the felt for three lines; the rest are in the Last hand sheet. A pot this player won
+    // is never the one folded away.
+    if (lines.length <= 3) return lines;
+    const keep = [lines[0], ...lines.slice(1).filter((l) => l.mine)].slice(0, 2);
+    if (keep.length < 2) keep.push(lines[1]);
+    keep.push({ text: t('msg_more_pots', { n: lines.length - 2 }), mine: false });
+    return keep;
   }
 
   _paintBanner() {
@@ -1308,7 +1341,7 @@ class Game {
     if (list.length > 40) list.splice(0, list.length - 40);
     writeJSON(HANDS_KEY, list);
     let amt = 0;
-    res.pots.forEach((p) => { if (p.winners.includes(my)) amt += Math.floor(p.amount / p.winners.length); });
+    res.pots.forEach((p) => { if (!p.back && p.winners.includes(my)) amt += Math.floor(p.amount / p.winners.length); });
     let score = 0, cat = -1, cards = [];
     if (!(h.folded && h.folded[my]) && (h.board || []).length === 5) {
       const bf = bestFive([...hole, ...h.board]);
@@ -1330,14 +1363,15 @@ class Game {
     const results = L.pots.map((p, k) => {
       const who = p.winners.map(nm);
       let line;
-      if (p.winners.length > 1) line = t('last_split', { names: who.join(', '), n: money(p.amount) });
+      if (p.back) line = p.winners[0] === L.my ? t('last_you_back', { n: money(p.amount) }) : t('last_back', { name: who[0], n: money(p.amount) });
+      else if (p.winners.length > 1) line = t('last_split', { names: who.join(', '), n: money(p.amount) });
       else if (L.noShow || p.score < 0 || L.scores[p.winners[0]] == null) {
         line = p.winners[0] === L.my ? t('last_you_take', { n: money(p.amount) }) : t('last_takes', { name: who[0], n: money(p.amount) });
       } else {
         const hand = handName(L.scores[p.winners[0]]);
         line = p.winners[0] === L.my ? t('last_you_win', { n: money(p.amount), hand }) : t('last_wins', { name: who[0], n: money(p.amount), hand });
       }
-      return `<li>${k ? `<small>${esc(t('last_side'))}</small> ` : ''}${esc(line)}</li>`;
+      return `<li>${k && !p.back ? `<small>${esc(t('last_side'))}</small> ` : ''}${esc(line)}</li>`;
     }).join('');
     const shownIdx = Object.keys(L.reveal).map(Number);
     if (L.hole && !shownIdx.includes(L.my)) shownIdx.unshift(L.my);
@@ -1346,7 +1380,7 @@ class Game {
       if (!cs) return '';
       const sc = L.scores[i];
       const note = sc != null ? handName(sc) : (L.folded[i] ? t('last_folded') : '');
-      const win = L.pots.some((p) => p.winners.includes(i));
+      const win = L.pots.some((p) => !p.back && p.winners.includes(i));
       return `<li${win ? ' class="is-first"' : ''}><span class="pk-lav">${esc((L.names[i] || {}).emoji || '')}</span><span class="pk-lname">${esc(nm(i))}</span><span class="pk-lcards">${tiny(cs)}</span><span class="pk-lnote">${esc(note)}</span></li>`;
     }).join('');
     const streets = ['preflop', 'flop', 'turn', 'river'];

@@ -47,8 +47,11 @@ shape; the Game Hub has no server, so **the host's phone is the server.**
   raise does not reopen the betting**: players who already acted may only call or fold
   (`canRaise[]`). `test.js` pins this.
 - Side pots: `buildPots()` levels contributions by every non-folded player's all-in cap; a folded
-  player's chips stay in whatever pots they reached. Uncalled chips come back as a one-player pot.
-  Odd chips in a split go to the first winner left of the button.
+  player's chips stay in whatever pots they reached. Uncalled chips come back as a one-player pot,
+  flagged **`back: true`** (only one player put chips in it; since 2026-10-05). When one live
+  player is left with chips over everyone else's, the levelling stops first at the most any folded
+  player put in, so a real win and a refund never share a pot. Odd chips in a split go to the first
+  winner left of the button.
 - Everyone all-in: the board runs out (`h.runout` counts the streets, the dealer waits longer).
 - A player who leaves folds at once and forfeits their stack; nobody is paid it.
 
@@ -190,9 +193,27 @@ after the final result, ~0.16 s after a tap.
 
 Matt: *"The only way you can tell I won this hand is the tiny 'you win' in regular text."* An
 opponent's win already had a WIN stamp, a glow and "+chips"; yours had one plain line. Now a hand
-this player won (any pot) gets: the message as a gold pill (`.pk-msg.is-mine`), a gold **YOU WIN**
+this player won (any pot) gets: their line of the message as a gold pill (`.pk-ml.is-mine`), a gold **YOU WIN**
 stamp on their own hole cards (`.pk-mywin`, pops once per hand, `st_you_win`), and the chips won in
 green above the stack line (`.pk-mygain`). Word first, colour second (red/green colorblind rule).
+
+## Every pot is named, splits say SPLIT, refunds are not wins (2026-10-05)
+
+Matt, on a hand where Tex won the main pot and he and Rosa tied the side pot: *"Why did Rosa win
+anything here?"* ... *"NONE of that is clear when actually playing."* The screen named only the
+main pot, his own half of the side pot showed nowhere, and Rosa wore WIN +$9,500, of which $2,050
+was her own uncalled bet coming back. Now:
+
+- **One message line per pot actually won** (`_message()` returns `[{ text, mine }]`): the main pot
+  with the hand name, then `Side pot: You and Rosa split 14,900 chips` / `Side pot: Rosa wins
+  10,600 chips` (no hand name on side lines, for room). A line this player won is the gold pill.
+  Two or more lines drop to 13px (`.pk-msg.is-multi`). **At most three lines**: past that, the
+  third reads "N more side pots: see Last hand" and a pot this player won is never the one cut.
+  Measured at 375x667: three lines with two pills end 1px above the board.
+- **SPLIT, not WIN**, on a seat (and on your own cards, instead of YOU WIN) that only shared pots.
+- **A `back` pot is not a win anywhere**: no stamp, no "+chips", no message line, not counted as a
+  hand won or a biggest pot in `recordHoldemHand`, no gold outline in Last hand. The Last hand sheet
+  lists it as "Rosa gets 2,050 back (nobody called it)".
 
 ## Cheat deterrents (2026-09-28)
 
