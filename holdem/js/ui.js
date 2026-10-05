@@ -599,6 +599,11 @@ class Game {
     const msgEl = q('.pk-msg');
     msgEl.textContent = msg;
     msgEl.hidden = !msg;
+    // 2026-10-05, Matt: "The only way you can tell I won this hand is the tiny 'you win' in
+    // regular text". A hand this player won gets a gold message, a YOU WIN stamp on their own
+    // cards and the chips won beside their stack - the same three cues an opponent's win has.
+    const iWon = !!(res && meP && winners.has(this.myIdx));
+    msgEl.classList.toggle('is-mine', iWon);
     betsEl.hidden = !!msg && !!res;
     const board = (h && h.board) || [];
     let bd = '';
@@ -619,13 +624,19 @@ class Game {
     const shownMine = res && res.reveal && res.reveal[this.myIdx];
     if (meP && this.hole && h && (shownMine || (!meP.out && (h.inHand[this.myIdx] || h.folded[this.myIdx])))) {
       const dim = !shownMine && h.folded[this.myIdx];
-      mine.innerHTML = this.hole.map((c) => this._card(c, 'is-big' + (dim ? ' is-dim' : (bestSet.size ? (bestSet.has(c) ? ' is-best' : ' is-dim') : '')))).join('');
+      let winStamp = '';
+      if (iWon) {
+        const pop = this.winPopped !== `${pub.gid || ''}:${pub.handNo}`;
+        this.winPopped = `${pub.gid || ''}:${pub.handNo}`;
+        winStamp = `<span class="pk-mywin${pop ? ' is-pop' : ''}">${esc(t('st_you_win'))}</span>`;
+      }
+      mine.innerHTML = this.hole.map((c) => this._card(c, 'is-big' + (dim ? ' is-dim' : (bestSet.size ? (bestSet.has(c) ? ' is-best' : ' is-dim') : '')))).join('') + winStamp;
     } else if (!meP) {
       mine.innerHTML = `<p class="pk-note">${esc(t('next_game_wait'))}</p>`;
     } else if (meP.out) {
       mine.innerHTML = `<p class="pk-note">${esc(t('you_are_out', { place: placeText(meP.place) }))}</p>`;
     } else mine.innerHTML = '';
-    q('.pk-stackline').textContent = meP ? t('stack_n', { n: money(meP.chips) }) : '';
+    q('.pk-stackline').innerHTML = meP ? (iWon ? `<b class="pk-mygain">+${esc(money(won[this.myIdx] || 0))}</b>` : '') + esc(t('stack_n', { n: money(meP.chips) })) : '';
 
     this._paintBanner();
     this._paintActions();

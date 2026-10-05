@@ -186,6 +186,14 @@ the table to see the results" (`tap_results`) instead of "start the next hand". 
 already over (an online rejoin) shows the results at once. Measured in Chromium: popup at ~5.9 s
 after the final result, ~0.16 s after a tap.
 
+## Your own win is as visible as an opponent's (2026-10-05)
+
+Matt: *"The only way you can tell I won this hand is the tiny 'you win' in regular text."* An
+opponent's win already had a WIN stamp, a glow and "+chips"; yours had one plain line. Now a hand
+this player won (any pot) gets: the message as a gold pill (`.pk-msg.is-mine`), a gold **YOU WIN**
+stamp on their own hole cards (`.pk-mywin`, pops once per hand, `st_you_win`), and the chips won in
+green above the stack line (`.pk-mygain`). Word first, colour second (red/green colorblind rule).
+
 ## Cheat deterrents (2026-09-28)
 
 Matt asked for "cheat proof" and, offered a Firebase-function dealer (truly cheat-proof, but needs
