@@ -29,7 +29,7 @@ export function getTopRun(stack) {
 }
 
 export class NutsBoltsGame {
-  constructor(tier, levelNumber, savedBoard) {
+  constructor(tier, levelNumber, savedBoard, rampFrom) {
     this.tier = tier;
     this.level = levelNumber;
     if (savedBoard) {
@@ -39,7 +39,7 @@ export class NutsBoltsGame {
       this.history = savedBoard.history || [];
       this.revealedIds = new Set(savedBoard.revealedIds || []);
     } else {
-      const gen = generateLevel(tier, levelNumber);
+      const gen = generateLevel(tier, levelNumber, rampFrom);
       this.stacks = gen.stacks;
       this.initial = gen.initial;
       this.moves = 0;

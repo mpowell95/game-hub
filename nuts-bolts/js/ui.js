@@ -1,5 +1,5 @@
 import { NutsBoltsGame, getTopRun } from './game.js';
-import { CAP, PALETTE, isBoltComplete, TIER_ORDER } from './generator.js';
+import { CAP, PALETTE, isBoltComplete, TIER_ORDER, rampStart } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { recordNutsBolts } from '../../js/game-stats.js';
@@ -122,7 +122,26 @@ function ensureStylesheet() {
 }
 
 function freshState() {
-  return { version: 2, currentDifficulty: 'easy', levels: { ...DEFAULT_LEVELS }, board: null, settings: {} };
+  const levels = { ...DEFAULT_LEVELS };
+  return { version: 2, currentDifficulty: 'easy', levels, rampFrom: deriveRampFrom(levels, null), board: null, settings: {} };
+}
+
+// `rampFrom` (2026-10-05, additive field, see generator.js "THE RAMP"): per tier,
+// the level the difficulty ramp counts from. A tier with no valid entry (every
+// save written before the ramp shipped) gets max(its CURRENT level, the ramp's
+// first level), once, so a player 300 levels in carries on at exactly today's
+// difficulty and it climbs from there. Never touches `levels`.
+function deriveRampFrom(levels, stored) {
+  const out = {};
+  for (const tier of TIER_ORDER) {
+    const v = stored && typeof stored === 'object' ? stored[tier] : undefined;
+    if (typeof v === 'number' && Number.isFinite(v) && v >= 1) out[tier] = v;
+    else {
+      const lv = typeof levels[tier] === 'number' && Number.isFinite(levels[tier]) ? levels[tier] : 1;
+      out[tier] = Math.max(lv, rampStart(tier));
+    }
+  }
+  return out;
 }
 
 // Persistence schema v2 (see WP2d). Migrates a v1 blob (single endless level,
@@ -142,6 +161,7 @@ function loadSaved() {
       if (parsed.board && typeof parsed.board === 'object') {
         migrated.board = { difficulty: 'easy', ...parsed.board };
       }
+      migrated.rampFrom = deriveRampFrom(migrated.levels, null);
       return { fresh: false, data: migrated };
     }
 
@@ -150,7 +170,8 @@ function loadSaved() {
       const levels = { ...fresh.levels, ...(parsed.levels && typeof parsed.levels === 'object' ? parsed.levels : {}) };
       const currentDifficulty = TIER_ORDER.includes(parsed.currentDifficulty) ? parsed.currentDifficulty : 'easy';
       const board = parsed.board && typeof parsed.board === 'object' ? parsed.board : null;
-      return { fresh: false, data: { version: 2, currentDifficulty, levels, board, settings: {} } };
+      const rampFrom = deriveRampFrom(levels, parsed.rampFrom);
+      return { fresh: false, data: { version: 2, currentDifficulty, levels, rampFrom, board, settings: {} } };
     }
 
     return { fresh: true, data: freshState() };
@@ -162,7 +183,7 @@ function loadSaved() {
 function saveState(ui) {
   try {
     const board = ui.game && ui.game.moves > 0 && !ui.game.isWon() ? ui.game.toSaved() : null;
-    const data = { version: 2, currentDifficulty: ui.currentDifficulty, levels: ui.levels, board, settings: {} };
+    const data = { version: 2, currentDifficulty: ui.currentDifficulty, levels: ui.levels, rampFrom: ui.rampFrom, board, settings: {} };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {
     // Storage can fail (quota, private mode); the game continues in-memory.
@@ -177,6 +198,7 @@ class NutsBoltsUI {
 
     const saved = loadSaved();
     this.levels = saved.data.levels;
+    this.rampFrom = saved.data.rampFrom;
     this.currentDifficulty = saved.data.currentDifficulty;
     this.showHelpOnStart = saved.fresh;
     this._winRecorded = false;
@@ -368,7 +390,7 @@ class NutsBoltsUI {
       this.game = new NutsBoltsGame(tier, this.levels[tier], this.savedBoard);
       this._winRecorded = false;
     } else if (!resumingInMemory) {
-      this.game = new NutsBoltsGame(tier, this.levels[tier], null);
+      this.game = new NutsBoltsGame(tier, this.levels[tier], null, this.rampFrom[tier]);
       this._winRecorded = false;
     }
     this.savedBoard = null; // consumed either way; a fresh level replaces it either way
@@ -627,7 +649,7 @@ class NutsBoltsUI {
       case 'next-level':
         this.winOverlay.hidden = true;
         this.levels[this.currentDifficulty] += 1;
-        this.game = new NutsBoltsGame(this.currentDifficulty, this.levels[this.currentDifficulty], null);
+        this.game = new NutsBoltsGame(this.currentDifficulty, this.levels[this.currentDifficulty], null, this.rampFrom[this.currentDifficulty]);
         this._winRecorded = false;
         this.persist();
         this.renderBoard();

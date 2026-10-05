@@ -77,14 +77,39 @@ canonical; `ui.js` maps each onto a translated display string via local key tabl
 importing `generator.js`'s own English `TIER_LABELS`/`TIER_DESCRIPTIONS`/`PALETTE` names, which
 stay untouched (that file is a pure, DOM-free engine module, same discipline as `game.js`/`ai.js`).
 
-## OPEN: difficulty stops rising at level 16 (Matt, 2026-10-05)
+## Difficulty keeps rising: THE RAMP (shipped 2026-10-05)
 
-`TIERS` in `js/generator.js` ends every tier with a `maxLevel: Infinity` band, so a tier stops
-getting harder at its last band (Expert/`extraHard`: level 16; Medium: 31). Matt: *"why would it
-stop getting more difficult at level 16!??... Of course it should continue to get more and more
-difficult."* Measured the same day: the two most devoted players are past level 300 (Unai) and
-200 (Lili) on Expert, so both have played hundreds of levels at one flat difficulty. **The ramp
-must keep rising with the level number.** Matt chose **ramp up from where each player is now**
-(not a jump to their level number's difficulty). Build brief: `docs/NUTS-BOLTS-RAMP-HANDOFF.md`. Not yet built; when it is, replace this section with
-what shipped. Any change is generator-only: the per-tier level counters in `gamehub.nutsbolts.v1`
-are never reset or renumbered (THE LAW).
+Matt: *"why would it stop getting more difficult at level 16!??... Of course it should continue to
+get more and more difficult."* Every tier used to end in a flat `maxLevel: Infinity` band (Easy,
+Hard, Expert from level 16; Medium from 31), and the two most devoted players were 200-300 levels
+into Expert at one flat difficulty. Build brief: `docs/NUTS-BOLTS-RAMP-HANDOFF.md`.
+
+- **The ramp** (`generator.js`, "THE RAMP", `RAMP_CEILING`/`rampSteps()`/`getDifficulty()`): past a
+  tier's last band (its plateau) difficulty rises one small step every `RAMP_EVERY` = 10 levels,
+  taking turns between more bolts (F), more colors (C) and more hidden nuts (H, +0.05 a step);
+  scramble (S) rises in proportion. E stays 2. It then holds at the tier's ceiling.
+- **Ceilings (Matt's call, 2026-10-05: a lower tier climbs up to the next tier's TOP, never past
+  it):** Easy -> Medium's top (F11, S48, H0.15) but C stays 7 (Easy never leaves its 7-color
+  colorblind-safe pool); Medium -> Hard's top (F13 C10 S64 H0.20); Hard -> Expert's old top (F15
+  C12 S80 H0.25); Expert -> F18 C12 S104 H0.50. Steps to the ceiling: Easy 7, Medium 4, Hard 5,
+  Expert 8 (so Expert tops out 80 levels after the ramp starts).
+- **Why Expert stops at 18 full bolts (20 total):** measured 2026-10-05 with `fitToViewport()` at
+  its 0.6 floor. At 375x667, 17-20 bolts are 5 rows of 4 with nothing to scroll; 21 makes a 6th row
+  and overflows by 82px. Each bolt (the tap target) stays 56x76px. Colors are already 12 (all of
+  `PALETTE`); more needs new colors AND new symbols (Matt is red/green colorblind).
+  **Known, NOT caused by the ramp:** at 360x640 the board overflows by 26px both at today's
+  17-bolt plateau and at the 20-bolt top (same 5 rows); that predates this change.
+- **"Ramp up from where each player is now" (Matt's choice):** the save gained ONE additive field,
+  `rampFrom: { easy, medium, hard, extraHard }` in `gamehub.nutsbolts.v1` (still schema v2). A save
+  with no entry for a tier (every save from before 2026-10-05) gets
+  `max(that tier's current level, the tier's ramp start)`, once (`deriveRampFrom()` in `ui.js`), so
+  a player on Expert level 317 plays exactly the old plateau at 317 and it climbs from 327. A new
+  player ramps from 16 (31 on Medium). The level counters are never touched, a board in progress
+  resumes unchanged (it is stored as stacks). If an old cached build saves over the blob before
+  the new one loads, `rampFrom` is dropped and re-derived from the then-current level: the ramp
+  restarts from there, nothing else changes.
+- **Verified:** `node js/test.js` (from `nuts-bolts/`) generates 200 boards at levels 50/100/300/1000
+  on every tier (all solvable, no complete bolt at start, 0 gate fallbacks, slowest ~7ms in node)
+  and checks the ramp never eases, `rampFrom` 317 plays the plateau, and no tier passes the next.
+  The migration was checked against the real pre-ramp `saveState()` from git (levels, board and
+  tier unchanged; `rampFrom` = current level).

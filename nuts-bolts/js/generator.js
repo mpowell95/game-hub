@@ -79,10 +79,79 @@ const QUALITY_GATES = {
   extraHard: { minAvgT: 1.6, maxMono: 1, probeMoves: 50, probeTrials: 3 },
 };
 
-export function getDifficulty(tier, level) {
+// THE RAMP (2026-10-05, Matt: "Of course it should continue to get more and
+// more difficult."). Every tier's last TIERS band used to be flat for ever.
+// Past it, difficulty now climbs one small step every RAMP_EVERY levels from
+// that band (the PLATEAU) toward a CEILING, then holds there:
+// - Easy, Medium, Hard climb to the NEXT tier's hardest band, never past it
+//   (Matt's call, 2026-10-05), so the tiers never swap order.
+// - Expert climbs to the biggest board a phone fits. Measured 2026-10-05 with
+//   fitToViewport() at its 0.6 floor: 20 bolts (18 full + 2 empty) is 5 rows of
+//   4 at 375x667 with nothing to scroll, the same 5 rows as today's 17; 21 bolts
+//   makes a 6th row and overflows by 82px. Each bolt (the tap target) stays
+//   56x76px. Colors are already 12, the whole PALETTE (more would need new
+//   colors AND new symbols). Hidden nuts top out at half.
+// - Easy never leaves EASY_POOL (7 colorblind-safe colors), so its C stops at 7.
+// - E stays 2 everywhere: dropping to 1 is a cliff, not a step.
+// Steps take turns between levers (F, C, H); scramble S rises in proportion.
+//
+// "Ramp up from where each player is now" (Matt): the ramp counts from
+// `rampFrom`, stored per tier in the player's save (ui.js), not from the
+// plateau's first level. A player already 300 levels in starts the ramp where
+// they stand instead of jumping to its top. Without a rampFrom (tests, new
+// players) it counts from the plateau's first level.
+const RAMP_EVERY = 10;
+const H_STEP = 0.05;
+const RAMP_CEILING = {
+  easy: { F: 11, C: 7, E: 2, S: 48, H: 0.15 },
+  medium: { F: 13, C: 10, E: 2, S: 64, H: 0.20 },
+  hard: { F: 15, C: 12, E: 2, S: 80, H: 0.25 },
+  extraHard: { F: 18, C: 12, E: 2, S: 104, H: 0.50 },
+};
+
+// The first level of a tier's last (flat) band: where the ramp begins.
+export function rampStart(tier) {
+  const rows = TIERS[tier] || TIERS.easy;
+  return rows.length > 1 ? rows[rows.length - 2].maxLevel + 1 : 1;
+}
+
+// The ordered list of ramp states for a tier, plateau first, ceiling last.
+function rampSteps(tier) {
+  const rows = TIERS[tier] || TIERS.easy;
+  const plat = rows[rows.length - 1];
+  const ceil = RAMP_CEILING[tier] || RAMP_CEILING.easy;
+  const left = {
+    F: ceil.F - plat.F,
+    C: ceil.C - plat.C,
+    H: Math.round((ceil.H - plat.H) / H_STEP),
+  };
+  const total = left.F + left.C + left.H;
+  const cur = { F: plat.F, C: plat.C, E: plat.E, H: plat.H };
+  const steps = [{ ...cur, S: plat.S }];
+  const order = ['F', 'C', 'H'];
+  for (let i = 0; steps.length <= total; i++) {
+    const lever = order[i % order.length];
+    if (left[lever] <= 0) continue;
+    left[lever] -= 1;
+    if (lever === 'H') cur.H = Math.round((cur.H + H_STEP) * 100) / 100;
+    else cur[lever] += 1;
+    const k = steps.length;
+    steps.push({ ...cur, S: Math.round(plat.S + ((ceil.S - plat.S) * k) / total) });
+  }
+  return steps;
+}
+
+const RAMP_STEPS = Object.fromEntries(Object.keys(TIERS).map((tier) => [tier, rampSteps(tier)]));
+
+export function getDifficulty(tier, level, rampFrom) {
   const rows = TIERS[tier] || TIERS.easy;
   const row = rows.find((r) => level <= r.maxLevel);
-  return { F: row.F, C: row.C, E: row.E, S: row.S, H: row.H };
+  if (row.maxLevel !== Infinity) return { F: row.F, C: row.C, E: row.E, S: row.S, H: row.H };
+  const steps = RAMP_STEPS[tier] || RAMP_STEPS.easy;
+  const from = Number.isFinite(rampFrom) ? Math.max(rampFrom, rampStart(tier)) : rampStart(tier);
+  const k = Math.min(steps.length - 1, Math.max(0, Math.floor((level - from) / RAMP_EVERY)));
+  const st = steps[k];
+  return { F: st.F, C: st.C, E: st.E, S: st.S, H: st.H };
 }
 
 function cloneStacks(stacks) {
@@ -334,8 +403,8 @@ const MAX_GEN_ATTEMPTS = 25;
 // scrambles.
 const MIN_STEP_RATIO = 0.3;
 
-export function generateLevel(tier, level) {
-  const diff = getDifficulty(tier, level);
+export function generateLevel(tier, level, rampFrom) {
+  const diff = getDifficulty(tier, level, rampFrom);
   const gate = QUALITY_GATES[tier] || QUALITY_GATES.easy;
   const minSteps = Math.ceil(diff.S * MIN_STEP_RATIO);
 
