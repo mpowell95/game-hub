@@ -82,8 +82,14 @@ any order."* Setup has a **Game** row (301 / 201 / 101 / Cricket) and, for Crick
 `flickLanding()`: touch anywhere below the board (or on the dart), the dart follows the finger,
 let go moving upward.
 
-- **Left/right**: the dart flies along the flick's line from where it was let go, so swiping toward
-  a number aims at it.
+- **Left/right**: from where the dart is let go, it carries on in the direction of the WHOLE swipe
+  (touch-down to release), so swiping toward a number aims at it. Until 2026-10-05 the direction was
+  the last ~90 ms of the finger; a swipe straightens at the very end, so Matt's diagonal swipes
+  "moved right only until I take my finger off the screen. Then it goes straight from there."
+  Measured with real drags in Chromium: drift right then finish straight up, 1.43 -> 1.89 R right;
+  a steady diagonal and a straight-up swipe unchanged. The price: a sideways reposition before an
+  upward flick now counts as aim. (Anchoring the line at touch-down instead was tried and rejected
+  the same day: a long swipe ends past the landing height, so the dart came back toward the middle.)
 - **Height**: the flick's upward speed alone, in screen heights per second, measured over the last
   ~90 ms before release. `FLICK_MID` (3.1; 2.3 until 2026-10-02, when Matt found the bottom of the board too hard to reach: *"I think the dart needs to feel heavier"*) lands at the height of the bull; `FLICK_GAIN` (1.45R per
   doubling of speed) is logarithmic, so a soft flick and a hard one are equally forgiving. Below

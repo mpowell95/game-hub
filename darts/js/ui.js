@@ -1062,9 +1062,17 @@ class DartsUI {
     const vx = (end.x - st.x) / dt, vy = (end.y - st.y) / dt;
     const travel = d.sy - end.y;
     const speed = -vy / (this.r.h || 1);
+    // LEFT/RIGHT FOLLOWS THE WHOLE SWIPE (2026-10-05, Matt: "If I try to hit the outer right edge...
+    // it moves right only until I take my finger off the screen. Then it goes straight from there").
+    // The DIRECTION used to be the last ~90 ms of the finger; a swipe straightens at the very end, so
+    // everything sideways before that was lost and the dart flew straight up from where it was let
+    // go. Now it carries on from where it is let go in the direction of the WHOLE swipe (touch-down
+    // to release). Anchoring that line at the touch-down point was tried and rejected the same day:
+    // a long swipe ends past the landing height, so the dart came back toward the middle. Height is
+    // unchanged: the release speed alone (flickLanding).
     const o = this.r.toBoard(this.hand.x, this.hand.y);
     const jitter = [gauss() * 0.02, gauss() * 0.02];
-    const land = travel > 24 ? flickLanding(o.x, o.y, vx, vy, speed, jitter) : null;
+    const land = travel > 24 ? flickLanding(o.x, o.y, end.x - d.sx, end.y - d.sy, speed, jitter) : null;
     if (!land) { this._springBack(); return; }
     this._launch({ x: this.hand.x, y: this.hand.y }, land.x, land.y);
   }
