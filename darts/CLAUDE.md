@@ -95,9 +95,10 @@ let go moving upward.
   doubling of speed) is logarithmic, so a soft flick and a hard one are equally forgiving. Below
   `FLICK_MIN` (0.55) or a drag shorter than 24 px it is not a throw and the dart drops back.
 - A tiny random wobble (gaussian, 0.02R) so two identical flicks do not land on the same pixel.
-- These three constants were set by reasoning and a synthetic flick in headless Chromium, **not
-  yet on a real phone**. If Matt finds throws all landing high, raise `FLICK_MID`; all low, lower
-  it; too twitchy, lower `FLICK_GAIN`.
+- These constants started from reasoning and a synthetic flick in headless Chromium; **since then
+  Matt has tuned them on his own phone after real games** (confirmed 2026-10-05: "we've been playing
+  real games. I've been tuning it after games on my phone"). If throws all land high, raise
+  `FLICK_MID`; all low, lower it; too twitchy, lower `FLICK_GAIN`.
 
 ## How the dart FLIES (2026-10-01, `js/flight.js`)
 
@@ -248,4 +249,5 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
 
 ## Not built yet
 
-- Sound.
+- **A series (best of 3/5) for online challenges** - Matt wants it (2026-10-05), in its own session.
+- **No sound, and none is ever to be added** unless Matt asks for it himself (root `CLAUDE.md`, "No sound, ever").

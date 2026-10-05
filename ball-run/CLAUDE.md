@@ -44,14 +44,15 @@ af8c212 pager's `|←` was skip-to-first with no prev at all, which read as "bri
 first page every time" (Matt's bug report). Right button is **next** (disabled on the last
 slide); **OK** always closes. `SEEN_HELP_KEY` first-open-auto-opens-help behavior is unchanged.
 
-## Second map: Orbital (BALLRUNMAP2ORBITALSPEC.md, Phase 1 shipped 2026-07-29)
+## Second map: Orbital (BALLRUNMAP2ORBITALSPEC.md, all four phases shipped 2026-07-29)
 
 Build brief: the uploaded `BALLRUNMAP2ORBITALSPEC.md` (source: `HANDOFF-BALLRUN-NEWMAP.md`).
-Four phases; only **Phase 1 (map plumbing)** is done. Orbital is selectable and fully playable,
-but its rules are byte-identical to Classic's — same `DIFFICULTIES`, same event-type pool
+**All four phases shipped 2026-07-29** (Split, Jump and Pickups each have their own section below;
+"Build status: complete" closes the file). The rest of this section describes Phase 1 as it
+shipped, when Orbital's rules were still byte-identical to Classic's — same `DIFFICULTIES`, same event-type pool
 (straight/narrow/obstacle/tunnel), same geometry constants. It is a **pure color re-skin** on
 purpose (spec section 7: "Orbital exists but is a pure visual re-skin of Classic's rules. Ship
-it."). Phase 2 (Split) and Phase 3 (Jump) are what make it mechanically different — not built yet.
+it."). Phase 2 (Split) and Phase 3 (Jump) are what make it mechanically different; both shipped later that day.
 
 - **`config.js`'s `MAPS` registry** (`{ classic, orbital }`, `mapConfig(key)`, `DEFAULT_MAP =
   'classic'`) is the map's single source of truth: `baseTrackWidth`/`minTrackWidth` (both equal
@@ -112,8 +113,8 @@ it."). Phase 2 (Split) and Phase 3 (Jump) are what make it mechanically differen
     genuinely untouched. A standalone headless check of `migrateBestScoresToMaps()`'s exact logic
     (old key untouched, new key created once, a real post-migration value never clobbered by a
     re-run) is in this milestone's session notes, not committed as a repo script.
-- **What was NOT done in Phase 1 (now done, see Phase 2 and Phase 3 below):** Split, Jump. **Still
-  not done:** pickups (spec's Phase 4, deliberately deferred). Orbital's own difficulty/geometry
+- **What was NOT done in Phase 1 (now done, see Phase 2 and Phase 3 below):** Split, Jump. Pickups
+  (Phase 4) shipped too; see "Pickups" below. Orbital's own difficulty/geometry
   tuning is also still Classic's numbers verbatim outside of Split's/Jump's own constants —
   retuning the rest is explicitly out of scope (spec section 6).
 

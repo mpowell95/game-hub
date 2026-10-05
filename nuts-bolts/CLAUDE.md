@@ -76,3 +76,14 @@ i18n: `nuts-bolts/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render 
 canonical; `ui.js` maps each onto a translated display string via local key tables rather than
 importing `generator.js`'s own English `TIER_LABELS`/`TIER_DESCRIPTIONS`/`PALETTE` names, which
 stay untouched (that file is a pure, DOM-free engine module, same discipline as `game.js`/`ai.js`).
+
+## OPEN: difficulty stops rising at level 16 (Matt, 2026-10-05)
+
+`TIERS` in `js/generator.js` ends every tier with a `maxLevel: Infinity` band, so a tier stops
+getting harder at its last band (Expert/`extraHard`: level 16; Medium: 31). Matt: *"why would it
+stop getting more difficult at level 16!??... Of course it should continue to get more and more
+difficult."* Measured the same day: the two most devoted players are past level 300 (Unai) and
+200 (Lili) on Expert, so both have played hundreds of levels at one flat difficulty. **The ramp
+must keep rising with the level number.** Not yet built; when it is, replace this section with
+what shipped. Any change is generator-only: the per-tier level counters in `gamehub.nutsbolts.v1`
+are never reset or renumbered (THE LAW).
