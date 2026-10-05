@@ -416,7 +416,9 @@ function nextStreet(state) {
   h.toAct = firstToAct(state, state.button);
 }
 
-/** Split the committed chips into a main pot and side pots. Each pot lists who may win it. */
+/** Split the committed chips into a main pot and side pots. Each pot lists who may win it.
+ *  A pot only ONE player put chips into is their own uncalled bet coming back (`back: true`,
+ *  2026-10-05): it is paid like any pot, but it is not a win and is never shown as one. */
 export function buildPots(h) {
   const n = h.total.length;
   const rem = h.total.slice();
@@ -425,18 +427,26 @@ export function buildPots(h) {
   while (rem.some((x) => x > 0) && guard++ < 20) {
     const liveCaps = [];
     for (let j = 0; j < n; j++) if (!h.folded[j] && rem[j] > 0) liveCaps.push(rem[j]);
-    const level = liveCaps.length ? Math.min(...liveCaps) : Math.max(...rem);
-    let amount = 0;
+    let level = liveCaps.length ? Math.min(...liveCaps) : Math.max(...rem);
+    // One player left with chips over everyone else's: stop first at the most any FOLDED player
+    // put in, so what that player won and what is just their own bet coming back stay apart.
+    if (liveCaps.length === 1) {
+      const foldedRem = rem.filter((x, j) => h.folded[j] && x > 0);
+      if (foldedRem.length) level = Math.min(level, Math.max(...foldedRem));
+    }
+    let amount = 0, givers = 0;
     const eligible = [];
     for (let j = 0; j < n; j++) {
       const take = Math.min(rem[j], level);
       amount += take; rem[j] -= take;
+      if (take > 0) givers++;
       if (take === level && !h.folded[j] && level > 0) eligible.push(j);
     }
     if (amount <= 0) break;
+    const back = givers === 1 && eligible.length === 1;
     const prev = pots[pots.length - 1];
-    if (prev && prev.eligible.join() === eligible.join()) prev.amount += amount;
-    else pots.push({ amount, eligible });
+    if (prev && prev.eligible.join() === eligible.join() && !!prev.back === back) prev.amount += amount;
+    else pots.push(back ? { amount, eligible, back } : { amount, eligible });
   }
   return pots;
 }
@@ -465,6 +475,7 @@ function showdown(state) {
   });
   const pots = buildPots(h).map((pot) => {
     const contenders = pot.eligible.filter((j) => scores[j] != null);
+    if (pot.back) return { amount: pot.amount, winners: pot.eligible.slice(), score: -1, back: true };
     if (!contenders.length) return { amount: pot.amount, winners: pot.eligible.slice(0, 1), score: -1 };
     const best = Math.max(...contenders.map((j) => scores[j]));
     const winners = contenders.filter((j) => scores[j] === best);

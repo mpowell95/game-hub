@@ -47,6 +47,11 @@ ok('quads kicker', cmp('9s 9d 9h 9c As', '9s 9d 9h 9c Ks') === 1);
   ok('main pot: everyone who put in 50', pots[0].amount === 200 && pots[0].eligible.join() === '0,2,3', pots[0]);
   ok('first side pot excludes the short all-in', pots[1].eligible.join() === '0,2', pots[1]);
   ok('the folded player\'s extra chips go to whoever is still in', pots[pots.length - 1].eligible.join() === '2', pots);
+  ok('chips a folded player put in are a real pot, not a refund', pots.length === 4 && !pots[2].back && pots[2].amount === 400, pots);
+  ok('...and the rest of the big stack\'s bet comes back on its own', pots[3].back === true && pots[3].amount === 600, pots);
+  const p2 = buildPots({ total: [4800, 200, 14300, 12250], folded: [false, true, false, false] });
+  ok('an uncalled bet comes back as its own pot, flagged', p2.length === 3 && p2[2].back === true && p2[2].amount === 2050 && p2[2].eligible.join() === '2', p2);
+  ok('the contested pots are not flagged', !p2[0].back && !p2[1].back && p2[1].amount === 14900, p2);
 }
 
 // ---- betting order -------------------------------------------------------------------------
