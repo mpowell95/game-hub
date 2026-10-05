@@ -428,6 +428,14 @@
   position: absolute; left: 8px; right: 8px; top: 10px;
   text-align: center; font-size: 15px; line-height: 1.3; color: #fff; text-shadow: 0 1px 2px #000;
 }
+/* A hand YOU won (2026-10-05): the line turns into a gold pill, so it reads at a glance. */
+.pk-root .pk-msg.is-mine {
+  left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: calc(100% - 16px);
+  padding: 6px 16px; border-radius: 999px;
+  background: var(--pk-gold); color: #111; text-shadow: none;
+  font-size: 18px; font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5), 0 0 18px rgba(255, 206, 58, 0.85);
+}
 .pk-root .pk-board { display: flex; gap: 6px; justify-content: center; }
 .pk-root .pk-potrow { position: relative; width: 100%; display: flex; justify-content: center; }
 .pk-root .pk-potbox {
@@ -522,6 +530,18 @@
 .pk-root .pk-mycards { position: relative; flex: 1; min-height: 0; --pk-cw: var(--pk-hw); }
 .pk-root .pk-mycards .pk-card { position: absolute; top: 0; left: 0; }
 .pk-root .pk-mycards .pk-card + .pk-card { left: calc(var(--pk-hw) * 0.72); top: -2px; }
+/* YOU WIN on your own cards, the same stamp an opponent's win gets, bigger. */
+.pk-root .pk-mywin {
+  position: absolute; z-index: 3; left: calc(var(--pk-hw) * 0.86); top: 42%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  font: 900 26px / 1 "Arial Black", Arial, sans-serif; letter-spacing: 0.02em; white-space: nowrap;
+  padding: 8px 16px; border-radius: 999px;
+  background: var(--pk-gold); color: #111; border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 24px rgba(255, 206, 58, 0.95);
+  pointer-events: none;
+}
+.pk-root .pk-mywin.is-pop { animation: pk-stamp-pop 260ms cubic-bezier(.2, .9, .3, 1.3) both; }
+.pk-root .pk-mygain { display: block; color: #7ddf2a; font-weight: 800; }
 .pk-root .pk-mycards .pk-note { margin: 10px 0 0; font-size: 14px; color: #c9d2de; }
 .pk-root .pk-right { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; }
 .pk-root .pk-bigbtn {
@@ -612,5 +632,6 @@
 @media (prefers-reduced-motion: reduce) {
   .pk-root .pk-card.is-new,
   .pk-root .pk-stamp.is-pop,
+  .pk-root .pk-mywin.is-pop,
   .pk-root .pk-modal { animation: none; }
 }
