@@ -1131,6 +1131,9 @@ Matt's tap on Admin landed on "All messages". `profile/index.html` remembers the
 height (`gamehub.pfMsgsHeight.v1`, a layout hint, not player data) and reserves it before the first
 paint; `renderProfileMessages` keeps the rows it shows during a repaint instead of dropping back to
 the lone button first. Only the very first visit on a device can still shift.
+**And Admin sits ABOVE Messages since 2026-10-05** (Matt: *"Can you put Admin above Messages
+instead?"*), unhidden at first paint from the cached `gamehub.adminDevice.v1` answer, so it can
+never be pushed by the Messages card or push it.
 
 ### The node
 
