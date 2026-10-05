@@ -146,7 +146,12 @@ class DartsUI {
     this._showSetup();
     this._start();
     // A tapped launcher bubble or notification names a match: open it straight away.
-    import('./alert.js').then((A) => { const o = A.takeOpen(); if (o && instance === this) this._openMatch(o.id); }).catch(() => {});
+    // The hub's Challenges screen can also hand over a person to challenge ('pick').
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || instance !== this) return;
+      if (o.kind === 'pick') this._openOnline(o.them); else this._openMatch(o.id);
+    }).catch(() => {});
   }
 
   _ensureCss() {
@@ -827,7 +832,9 @@ class DartsUI {
     } catch { /* offline: no count */ }
   }
 
-  async _openOnline() {
+  /** `pickFor` ({code, name, emoji}, from the hub's Challenges screen) opens straight onto the
+   *  "challenge them" card instead of the online home. */
+  async _openOnline(pickFor = null) {
     this._mpLeave();
     this.match = null; this.seats = null; this.mode = null;
     this.hand = null; this.flying = null; this.falling = null; this.flash = null;
@@ -840,7 +847,8 @@ class DartsUI {
     const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
     if (instance !== this) return;
     this.UI = UI;
-    UI.home(this, MP);
+    if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
+    else UI.home(this, MP);
   }
 
   /** Open one stored match. Darts still waiting on this phone go first, so none is lost. */

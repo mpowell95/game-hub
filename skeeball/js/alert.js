@@ -76,6 +76,11 @@ export function rowFor(id) {
   return lastRows.find((r) => r && r.id === id) || null;
 }
 
+/** How many challenges are waiting on you, from the last read: the hub's Challenges button badge. */
+export function myTurnCount(now = Date.now()) {
+  return lastRows.filter((r) => r && !r.over && r.yourTurn && !isExpired(r, now)).length;
+}
+
 /** A result bubble is acknowledged by the game's own result card (or the bubble's X). */
 export function markResultSeen(id) {
   const r = rowFor(id);
@@ -94,13 +99,31 @@ export function armCeremony(alert) {
   } catch { /* the game simply opens on its gallery */ }
 }
 
+/** A tapped notification or the hub's Challenges screen names a challenge: open straight onto it. */
+export function armOpen(id) {
+  try { if (id) sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: 'open', id: String(id) })); } catch { /* gallery */ }
+}
+
+/** The hub's Challenges screen (2026-10-05): open straight onto a new challenge to `them`. */
+export function armChallenge(them) {
+  try {
+    if (!them || !them.code) return;
+    sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: 'pick', id: '',
+      them: { code: String(them.code), name: String(them.name || ''), emoji: String(them.emoji || '🙂') } }));
+  } catch { /* the game simply opens on its gallery */ }
+}
+
 export function takeCeremony() {
   try {
     const raw = sessionStorage.getItem(ARM_KEY);
     sessionStorage.removeItem(ARM_KEY);
     if (!raw) return null;
     const a = JSON.parse(raw);
-    if (!a || !['challenge', 'turn', 'over'].includes(a.kind)) return null;
+    if (!a || !['challenge', 'turn', 'over', 'open', 'pick'].includes(a.kind)) return null;
+    if (a.kind === 'pick') {
+      if (!a.them || !a.them.code) return null;
+      return { kind: 'pick', id: '', them: { code: String(a.them.code), name: String(a.them.name || ''), emoji: String(a.them.emoji || '🙂') } };
+    }
     return { kind: a.kind, id: String(a.id || '') };
   } catch { return null; }
 }

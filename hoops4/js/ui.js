@@ -138,6 +138,14 @@ class Hoops4 {
     let armed = null;
     try { const A = await import('./alert.js'); armed = A.takeCeremony(); } catch { return; }
     if (!armed || this.disposed) return;
+    // FROM THE HUB'S CHALLENGES SCREEN (2026-10-05): a person to challenge, straight onto the terms.
+    if (armed.kind === 'pick') {
+      try {
+        const mod = await import('./mp-ui.js');
+        if (!this.disposed) mod.openMultiplayer(this, { pickFor: { code: armed.code, name: armed.name, emoji: armed.emoji } });
+      } catch (err) { console.error('[hoops4] could not open the challenge', err); }
+      return;
+    }
     // FROM A NOTIFICATION (2026-09-24): straight onto that match's board, no card. A match that
     // has already ended opens as its read-only review, which shows the Game Over card.
     if (armed.kind === 'open') {

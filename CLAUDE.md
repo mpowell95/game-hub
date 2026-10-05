@@ -378,6 +378,8 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two |
 | `js/bug-report.js` | (2026-08-11) "Report a bug": the device/browser/PWA/network/SW picture plus the whole Device Details payload, written to `bugReports/` (screenshots to `bugReportShots/`), with an offline outbox that retries itself. Since 2026-08-13 it also carries Matt's **replies** — written to the report AND to `bugReplies/<reporterDeviceId>/`, which is the copy the player reads — and a soft delete that clears his inbox without touching either record |
 | `js/messages.js` | (2026-08-31) player-to-player **Messages**: the `messages/` node, addressed by PLAYER CODE so a message follows a person to every device they own. Pure helpers (`pairKey`, unread, hide) plus the verified writes and the offline outbox. Since 2026-09-28 a message can carry a game invite (`invite: {game, code}`, Air Hockey), drawn as a Join button by `js/messages-ui.js` |
+| `js/challenges.js` | (2026-10-05) the DATA half of the hub's **Challenges** screen: reads the four challenge games' own indexes (Hoops, Skeeball, Cup Pong, Darts) through each game's reader and folds them into one list plus records (by person, by game). Writes nothing. See "The Challenges screen" below |
+| `js/challenges-ui.js` | (2026-10-05) the Challenges screen: Live (your turn / their turn), Records (total, by game, by player, recent results), a player's page, and New challenge (person, then game). Opening a match or a challenge is handed to the game (`js/challenges-strings.js` holds its words) |
 | `js/messages-ui.js` | (2026-08-31) the Messages screen: conversation list, one thread with chat bubbles and a quick-chat preset row, the recipient picker (Matt also gets **Everyone**), and Matt's read-only view of every conversation |
 | `js/bug-report-ui.js` | the report form, Matt's inbox (reply / mark done / delete), and the player's own "what Matt wrote back" screen. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
 | `js/error-log.js` | ring buffer of the last 20 uncaught JS errors (`gamehub.errorlog.v1`), installed by `hub.js` at load so a report carries what actually threw |
@@ -444,7 +446,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-stats-replay.mjs`, `test-stats-identity.mjs`, `test-stats-corrections.mjs`,
   `test-rate-guard.mjs`, `test-leaderboard-rank.mjs`, `test-admin-config.mjs`
 - Hub features: `test-new-badge.mjs`, `test-emoji.mjs`, `test-messages.mjs`,
-  `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`, `test-skee-challenge.mjs`,
+  `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`, `test-skee-challenge.mjs`, `test-challenges.mjs`,
   `test-cuppong-mp.mjs`, `test-darts-mp.mjs`
 - Cross-game: `test-game-conventions.mjs`, `test-visual.mjs`, `check-no-scroll.mjs`,
   `test-mp-lockstep.mjs`, `run-all-tests.mjs`
@@ -844,6 +846,33 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
   redeploy was needed. A game without `armOpen` falls back to the old bubble-or-launch path.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
+
+## The Challenges screen (2026-10-05)
+
+Matt: *"a button you can press where you can see all your live challenges - if it's your turn vs
+theirs, more info on your records total and against specific players, etc. You should also be able
+to send challenges and jump into games from this page."*
+
+- **Where:** a full-width **Challenges** button above the game grid (not a fourth top-bar button:
+  four wrap on a phone). It only appears when a game on that player's launcher has challenges (a
+  registry entry with an `alerts` module), and says "N your turn" in words, summed from each alerts
+  module's `myTurnCount()` off the rows its own check/watch already read (no extra read).
+- **What:** `js/challenges-ui.js`. Live tab (your turn first, then theirs), Records tab (total
+  won/lost/drawn, by game, by player, recent results), a player's page (record vs them, live games
+  with them, a Challenge button), and New challenge (pick a person, then a game).
+- **Every game keeps its own challenges.** `js/challenges.js` only READS `hoops/`,
+  `skeeChallenges/`, `cuppong/` and `darts/` indexes through each game's own reader. It writes
+  nothing, so THE LAW has no surface here. Records come from FINISHED index rows, grouped by player
+  CODE; an old Hoops row with no stored result counts as played and in no column (rule 4), and an
+  expired Skeeball challenge is listed but not counted.
+- **Jumping in is the game's job.** Every challenge game's alerts module now exports
+  `armOpen(id)` (open that match on mount), `armChallenge({code,name,emoji})` (open the game's own
+  "challenge this person" screen with them already picked) and `myTurnCount()`. `js/hub.js`'s
+  `openChallengeMatch` / `challengeIn` arm one and `launch()` the game, so every option and rule of a
+  challenge stays the game's own. **A fifth challenge game needs those three exports** (and its
+  `SOURCES` entry in `js/challenges.js`); `test-challenges.mjs` checks all four have them.
+- Only games on the player's launcher are shown, so for the family that is Skeeball until Matt
+  releases the others from the admin page.
 
 ## Skeeball challenges (2026-09-24)
 

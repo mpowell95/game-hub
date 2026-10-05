@@ -160,6 +160,9 @@ async function picker(game, MP) {
   });
 }
 
+/** Straight onto `them`'s terms: the hub's Challenges screen hands a person over (2026-10-05). */
+export function challengeTo(game, MP, them) { terms(game, MP, them); }
+
 /** The rules of this challenge, frozen for both players (brief 4a). */
 function terms(game, MP, them) {
   const s = game.settings;
@@ -265,4 +268,4 @@ export function showUnseen(game, MP, rows) {
   game.on(el.querySelector('[data-role="close"]'), 'click', done);
 }
 
-export default { home, showUnseen };
+export default { home, showUnseen, challengeTo };

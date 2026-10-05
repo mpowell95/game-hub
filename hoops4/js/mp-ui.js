@@ -28,7 +28,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
  * `on()` (so every listener is unbound by destroy()), `settings`, `startLive()` and
  * `startAsync()`.
  */
-export function openMultiplayer(ui) {
+export function openMultiplayer(ui, { pickFor = null } = {}) {
   const el = document.createElement('div');
   el.className = 'gh-overlay h4-sheet';
   ui.root.appendChild(el);
@@ -543,7 +543,9 @@ export function openMultiplayer(ui) {
     ui.start({ vsCpu: false });
   }
 
-  go('home');
+  // The hub's Challenges screen hands over a person: straight onto their terms (Back goes to the list).
+  if (pickFor && pickFor.code && MP.myCode()) { state.view = 'terms'; state.them = pickFor; viewTerms(pickFor); }
+  else go('home');
   // Read-only hook for the headless drivers, the same precedent as `window.__skTest` and
   // `window.__h4Test`. The opponent list comes from Firebase, which a local probe has no access
   // to, so there is no other way to reach the terms screen and LOOK at it. The game never reads

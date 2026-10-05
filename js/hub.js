@@ -928,6 +928,7 @@ class Hub {
           + `</div></div>`
         : '')
       + restGames.map((g) => this.cardHTML(g, false)).join('');
+    const chGames = this._challengeGames();
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
@@ -951,6 +952,18 @@ class Hub {
           </div>
         </header>
         <main class="hub-main">
+          <!-- CHALLENGES (2026-10-05). Matt: "a button you can press where you can see all your live
+               challenges". Its own row above the games, not a fourth top-bar button: four buttons
+               wrap to a second row on a phone (measured, 2026-08-31). Shown only when a game the
+               player can see has challenges (an alerts module in the registry). -->
+          ${chGames.length ? `<button type="button" class="hub-chbar" data-role="challenges">
+            <svg class="hub-chbar-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+                 stroke-width="2.4" stroke-linecap="round"><path d="M5 4 L16 16"/><path d="M19 4 L8 16"/>
+                 <path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>
+            <span class="hub-chbar-label">${t('hub_challenges_btn')}</span>
+            <span class="hub-chbar-count" data-role="challenges-count" hidden></span>
+            <span class="hub-chbar-chev" aria-hidden="true">›</span>
+          </button>` : ''}
           <section class="hub-grid" data-role="grid" aria-label="${t('hub_games_aria')}">
             ${gridHTML}
           </section>
@@ -984,6 +997,7 @@ class Hub {
       title: this.root.querySelector('[data-role="title"]'),
       grid: this.root.querySelector('[data-role="grid"]'),
       extra: this.root.querySelector('.hub-extra'),
+      chbar: this.root.querySelector('[data-role="challenges"]'),
       game: this.root.querySelector('[data-role="game"]'),
       confirm: this.root.querySelector('[data-role="confirm"]'),
       profile: this.root.querySelector('[data-role="profile"]'),
@@ -1087,6 +1101,8 @@ class Hub {
         .catch((err) => console.error('[hub] messages failed to load', err));
     });
 
+    if (this.el.chbar) this.el.chbar.addEventListener('click', () => this.openChallenges());
+
     this.el.leaderboard.addEventListener('click', () => {
       import('./leaderboard-ui.js').then((m) => m.openLeaderboard()).catch(() => {});
     });
@@ -1124,6 +1140,7 @@ class Hub {
     // render() rewrites the grid, so a bubble already decided has to be redrawn. The NETWORK
     // check is separate (_checkGameAlerts) and only runs on the launcher; this is pure DOM.
     this._paintGameAlert();
+    this._paintChallengeCount();
   }
 
   // --- a game saying somebody is waiting on you -------------------------------------------------
@@ -1151,6 +1168,7 @@ class Hub {
       try {
         const mod = await g.alerts();
         const alert = await mod.check();
+        (this._alertMods = this._alertMods || {})[g.id] = mod;
         if (alert) found.push({ game: g.id, alert, mod });
       } catch (err) {
         console.warn('[hub] alert check failed for', g.id, err);
@@ -1161,6 +1179,7 @@ class Hub {
     // half of why Matt's bubble survived him playing the turn.
     this._gameAlerts = found;
     this._paintGameAlert();
+    this._paintChallengeCount();
     this._watchGameAlerts();
     // A tile the player cannot see is not "super obvious". Bring it into view ONCE per alert,
     // gently, and never fight a scroll they have already started.
@@ -1190,7 +1209,10 @@ class Hub {
       try {
         const mod = await g.alerts();
         if (typeof mod.watch !== 'function') continue;
+        (this._alertMods = this._alertMods || {})[g.id] = mod;
         this._alertWatches[g.id] = await mod.watch((alert) => {
+          // The Challenges button's count moves with every change, bubble or not.
+          this._paintChallengeCount();
           const list = this._gameAlerts || [];
           const had = list.some((x) => x.game === g.id);
           if (!alert && !had) return;
@@ -1204,6 +1226,75 @@ class Hub {
         console.warn('[hub] alert watch failed for', g.id, err);
       }
     }
+  }
+
+  // --- the Challenges screen (2026-10-05, js/challenges-ui.js) -------------------------------------
+  /** The games on THIS player's launcher that have challenges: every registry entry with an
+   *  `alerts` module (Connect 4 Hoops, Skeeball, Cup Pong, Darts). In registry order, named. */
+  _challengeGames() {
+    const shown = new Set((this.games || []).map((g) => g.id));
+    return GAMES.filter((g) => typeof g.alerts === 'function' && shown.has(g.id))
+      .map((g) => ({ id: g.id, name: titleText(g) }));
+  }
+
+  /** "2 your turn" on the Challenges button: summed from each game's alerts module, off the rows
+   *  its own check()/watch() already read. No read of its own. */
+  _paintChallengeCount() {
+    const el = this.root && this.root.querySelector('[data-role="challenges-count"]');
+    if (!el) return;
+    let n = 0;
+    for (const g of this._challengeGames()) {
+      const mod = this._alertMods && this._alertMods[g.id];
+      try { if (mod && typeof mod.myTurnCount === 'function') n += mod.myTurnCount() | 0; } catch { /* that game adds nothing */ }
+    }
+    el.hidden = n <= 0;
+    el.textContent = n > 0 ? t('hub_challenges_turns', { n }) : '';
+    if (this.el && this.el.chbar) this.el.chbar.classList.toggle('is-turn', n > 0);
+  }
+
+  openChallenges() {
+    if (this.current) return;
+    import('./challenges-ui.js')
+      .then((m) => m.openChallenges({
+        games: this._challengeGames(),
+        onOpen: (game, id) => this.openChallengeMatch(game, id),
+        onChallenge: (game, them) => this.challengeIn(game, them),
+      }))
+      .catch((err) => console.error('[hub] challenges failed to load', err));
+  }
+
+  /** Straight into one match: the game's alerts module arms it, the game opens it on mount (the same
+   *  handoff a tapped notification uses). A bubble for that very match is answered by this. */
+  async openChallengeMatch(gameId, matchId) {
+    if (this.current) return;
+    const g = GAMES.find((x) => x.id === gameId);
+    if (!g || typeof g.alerts !== 'function') return;
+    try {
+      const mod = await g.alerts();
+      if (typeof mod.armOpen === 'function') mod.armOpen(matchId);
+      const st = this._alertFor(gameId);
+      if (st && st.alert.id === matchId) {
+        if (st.alert.kind === 'over') {
+          // The game's own result card is what acknowledges a result; just take the bubble down.
+          this._gameAlerts = (this._gameAlerts || []).filter((x) => x !== st);
+          this._paintGameAlert();
+        } else this._dismissGameAlert(gameId);
+      }
+    } catch (err) { console.warn('[hub] could not arm the challenge', err); }
+    if (!this.current) this.launch(gameId);
+  }
+
+  /** A new challenge to `them` in `gameId`: the game opens on its own challenge screen with that
+   *  person already picked, so every rule and option stays the game's. */
+  async challengeIn(gameId, them) {
+    if (this.current) return;
+    const g = GAMES.find((x) => x.id === gameId);
+    if (!g || typeof g.alerts !== 'function') return;
+    try {
+      const mod = await g.alerts();
+      if (typeof mod.armChallenge === 'function') mod.armChallenge(them);
+    } catch (err) { console.warn('[hub] could not arm the new challenge', err); }
+    if (!this.current) this.launch(gameId);
   }
 
   /** A notification tapped with no hub open arrives as `?open=<game>`: take it once, then drop the
@@ -1887,6 +1978,7 @@ class Hub {
     this.el.back.hidden = false;
     this.el.grid.hidden = true;
     if (this.el.extra) this.el.extra.hidden = true;
+    if (this.el.chbar) this.el.chbar.hidden = true;
     this.el.game.hidden = false;
     this.el.profile.hidden = true;
     if (this.el.topRight) this.el.topRight.hidden = true;
@@ -1922,6 +2014,7 @@ class Hub {
     this.el.game.hidden = true;
     this.el.grid.hidden = false;
     if (this.el.extra) this.el.extra.hidden = false;
+    if (this.el.chbar) this.el.chbar.hidden = false;
     this.el.back.hidden = true;
     this.el.title.textContent = "Matt's Game Hub";
     this._setImmersive(false);

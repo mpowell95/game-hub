@@ -67,6 +67,9 @@ export async function watch(cb) {
 
 export function rowFor(id) { return lastRows.find((r) => r && r.id === id) || null; }
 
+/** How many matches are waiting on you, from the last read: the hub's Challenges button badge. */
+export function myTurnCount() { return lastRows.filter((r) => r && !r.over && r.yourTurn).length; }
+
 // The handoff to the game's next mount: which match to open (sessionStorage, taken once).
 const ARM_KEY = 'gamehub.darts.open.v1';
 export function armCeremony(alert) {
@@ -76,12 +79,24 @@ export function armCeremony(alert) {
 export function armOpen(id) {
   try { if (id) sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: 'open', id: String(id) })); } catch { /* opens on setup */ }
 }
-/** Take it, once: { kind, id } or null. */
+/** The hub's Challenges screen (js/challenges-ui.js, 2026-10-05): open straight onto "challenge
+ *  <them>" with that person already picked. `them` is { code, name, emoji }. */
+export function armChallenge(them) {
+  try {
+    if (!them || !them.code) return;
+    sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: 'pick',
+      them: { code: String(them.code), name: String(them.name || ''), emoji: String(them.emoji || '🙂') } }));
+  } catch { /* opens on setup */ }
+}
+/** Take it, once: { kind, id } or { kind: 'pick', them } or null. */
 export function takeOpen() {
   try {
     const raw = sessionStorage.getItem(ARM_KEY);
     sessionStorage.removeItem(ARM_KEY);
     const a = raw ? JSON.parse(raw) : null;
+    if (a && a.kind === 'pick' && a.them && a.them.code) {
+      return { kind: 'pick', them: { code: String(a.them.code), name: String(a.them.name || ''), emoji: String(a.them.emoji || '🙂') } };
+    }
     return a && a.id ? { kind: String(a.kind || 'open'), id: String(a.id) } : null;
   } catch { return null; }
 }

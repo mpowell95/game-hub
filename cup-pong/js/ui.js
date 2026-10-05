@@ -157,7 +157,12 @@ class CupPong {
     this.root.classList.add('cp-root');
     this.renderSetup();
     // A launcher bubble or a tapped notification names a match: open it straight away.
-    import('./alert.js').then((A) => { const o = A.takeOpen(); if (o && !this.disposed) this.openMatch(o.id); }).catch(() => {});
+    // The hub's Challenges screen can also hand over a person to challenge ('pick').
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || this.disposed) return;
+      if (o.kind === 'pick') this.openMultiplayer(o.them); else this.openMatch(o.id);
+    }).catch(() => {});
   }
 
   // --- the setup screen ------------------------------------------------------------------------
@@ -913,7 +918,9 @@ class CupPong {
   }
 
   // --- the doors to it: the setup screen's turns card and the Multiplayer screen ----------------
-  async openMultiplayer() {
+  /** `pickFor` ({code, name, emoji}, from the hub's Challenges screen) opens straight onto that
+   *  person's challenge terms instead of the Multiplayer home. */
+  async openMultiplayer(pickFor = null) {
     this.teardownEngine();
     this.unbindAll();
     this.clearTimers();
@@ -921,7 +928,8 @@ class CupPong {
     this.match = null;
     const [MP, UI] = await Promise.all([this.loadMP(), import('./mp-ui.js')]);
     if (this.disposed) return;
-    UI.home(this, MP);
+    if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
+    else UI.home(this, MP);
   }
 
   /** Open one stored match. Throws still waiting on this phone go first, so none is lost. */
