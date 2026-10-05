@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1060';
+const CACHE = 'game-hub-v1061';
 
 const ASSETS = [
   './',
@@ -855,7 +855,7 @@ const REST_MANIFEST = {
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
   './holdem/css/holdem.css': 'e0b1e48266',
-  './holdem/js/ui.js': '8ffd8bd249',
+  './holdem/js/ui.js': 'a9788eb60b',
   './holdem/js/engine.js': '33419bd015',
   './holdem/js/ai.js': '501a498bec',
   './holdem/js/table.js': '2f040ebfb9',
