@@ -174,6 +174,18 @@ Fast, `settings.pace` in `gamehub.holdem.v1`. It sets how long a computer "think
 it mid-game applies from the computers' next move (`Table.setPace`). Rules and decisions are the
 same at every speed. Not the same thing as "Blinds go up", which is the tournament's pace.
 
+## The last hand is shown before the results (2026-10-05)
+
+Matt: *"I went all in. Then this appeared. I didn't see the last card, I didn't see the opponent
+even call."* The engine ends the game (`finishGame`) in the same call that settles the hand, so
+`_checkOver` used to put the "You finished" popup straight over the runout and the showdown. Now
+`_checkOver` holds the popup for `RESULT_MS + 350 * runout` (the same pause the table gives any
+other result) when this device watched the game while it was still live (`this.overHold`). A tap
+on the felt skips the wait (and reopens the results if they were closed); the pot box says "Tap
+the table to see the results" (`tap_results`) instead of "start the next hand". A game first seen
+already over (an online rejoin) shows the results at once. Measured in Chromium: popup at ~5.9 s
+after the final result, ~0.16 s after a tap.
+
 ## Cheat deterrents (2026-09-28)
 
 Matt asked for "cheat proof" and, offered a Firebase-function dealer (truly cheat-proof, but needs

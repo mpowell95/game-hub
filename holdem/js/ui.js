@@ -26,7 +26,7 @@ import {
   newGame, publicView, legal, blindsOf, SPEEDS, START_CHIPS, MAX_PLAYERS,
   evaluate, bestFive, categoryOf, scoreRanks, RANKS, SUIT_GLYPH, potTotal, payout,
 } from './engine.js';
-import { Table, PACES } from './table.js';
+import { Table, PACES, RESULT_MS } from './table.js';
 import NT from './net-table.js';
 
 const t = makeT(STRINGS);
@@ -606,11 +606,11 @@ class Game {
     q('.pk-board').innerHTML = bd;
     const pot = h ? potTotal(h) : 0;
     let potHTML = '';
-    if (res) potHTML = `<span class="pk-tapnext">${esc(this.kind === 'solo' ? t('tap_next') : t('next_soon'))}</span>`;
+    if (res) potHTML = `<span class="pk-tapnext">${esc(pub.over ? t('tap_results') : this.kind === 'solo' ? t('tap_next') : t('next_soon'))}</span>`;
     else if (pot > 0) potHTML = `<span class="pk-potchips" aria-hidden="true"><i class="pk-chip"></i><i class="pk-chip"></i><i class="pk-chip"></i></span><span class="pk-potamt">${money(pot)}</span>`;
     if (canSkip) potHTML += `<span class="pk-skiphint">${esc(t('tap_skip'))}</span>`;
     q('.pk-potbox').innerHTML = potHTML;
-    q('.pk-felt').classList.toggle('is-tappable', !!((res && this.kind === 'solo' && !pub.over) || canSkip));
+    q('.pk-felt').classList.toggle('is-tappable', !!((res && (pub.over || this.kind === 'solo')) || canSkip));
     const lastBtn = q('.pk-lastbtn');
     if (lastBtn) lastBtn.hidden = !this.lastHand;
 
@@ -920,6 +920,13 @@ class Game {
       }
       case 'felt':
         // "Tap the table to start the next hand" (solo). Online the host deals on a timer.
+        if (this.pub && this.pub.over) {
+          // the last hand is on show (or the results were closed): bring the results up now
+          if (this.overHold) this.overHold.until = 0;
+          this.overDismissed = null;
+          this._checkOver();
+          return undefined;
+        }
         if (this.kind !== 'solo' || !this.table || !this.pub || !this.pub.hand || this.pub.over) return undefined;
         if (this.pub.hand.result) { this.table.next(); return undefined; }
         {
@@ -1194,7 +1201,25 @@ class Game {
   }
 
   _checkOver() {
-    if (this.pub && this.pub.over && this.overDismissed !== this.pub.k && this.overlay !== 'over') {
+    const pub = this.pub;
+    if (pub && !pub.over) this.overHold = { key: null, until: 0, live: true };
+    if (pub && pub.over && this.overDismissed !== pub.k && this.overlay !== 'over') {
+      // The hand that ends the game must be SEEN before the results cover it (2026-10-05, Matt:
+      // "I went all in. Then this appeared. I didn't see the last card"). The engine ends the game
+      // in the same call that settles the hand, so the popup used to land on top of the runout and
+      // the showdown. Hold it for the same pause the table gives any other result; a tap on the
+      // felt skips the wait. A game first seen already over (a rejoin) shows it at once.
+      const h = pub.hand;
+      const hold = this.overHold;
+      const key = `${pub.gid || ''}:${pub.handNo}`;
+      if (hold && hold.live && h && h.result) {
+        if (hold.key !== key) {
+          hold.key = key;
+          hold.until = Date.now() + RESULT_MS + 350 * (h.runout | 0);
+          this._later(() => this._checkOver(), hold.until - Date.now() + 30);
+        }
+        if (Date.now() < hold.until) return;
+      }
       this.overlay = 'over';
       this._renderOverlay();
     } else if (this.overlay === 'over' && this.pub && !this.pub.over) {
