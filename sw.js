@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1060';
+const CACHE = 'game-hub-v1061';
 
 const ASSETS = [
   './',
@@ -58,6 +58,9 @@ const ASSETS = [
   // a message written offline has to be able to queue itself on the device that is offline.
   './js/messages.js',
   './js/messages-ui.js',
+  './js/challenges.js',
+  './js/challenges-ui.js',
+  './js/challenges-strings.js',
   './js/push.js',
   // Baseball's career sync (BB-0-phase-0-handoff.md step 9). SHELL for the same reason: it must be
   // reachable offline the moment a career-mode game imports it, on the same device that just
@@ -649,6 +652,8 @@ const NETWORK_FIRST = [
   // Decides whether that data is SHOWN. A device on an old visibility gate hides history the rest
   // of the family can see, which is THE LAW rule 1 whether or not a byte was lost.
   './js/game-stats-ui.js', './js/leaderboard-ui.js', './js/messages-ui.js', './js/bug-report-ui.js',
+  // The Challenges screen (2026-10-05): shows every challenge record; lazily imported, so fresh is free.
+  './js/challenges.js', './js/challenges-ui.js', './js/challenges-strings.js',
   // leaderboard-rank.js is leaderboard-ui.js's OWN maths, split out only so it can be tested
   // headlessly. Leaving it cache-first while its only caller is network-first means a device can
   // run NEW ranking code against an OLD formatter for one launch - which is what happened on
@@ -770,14 +775,14 @@ const REST_MANIFEST = {
   './darts/': '20312df57d',
   './darts/index.html': '20312df57d',
   './darts/css/darts.css': '517e08b034',
-  './darts/js/ui.js': '996580a07b',
+  './darts/js/ui.js': '0470f7cad6',
   './darts/js/engine.js': '201a89ec87',
   './darts/js/render.js': 'd05671e727',
   './darts/js/flight.js': '60b3524662',
   './darts/js/strings.js': 'd452f2aa54',
   './darts/js/mp.js': 'd50d02d746',
-  './darts/js/mp-ui.js': '971a4863f9',
-  './darts/js/alert.js': '4a254e3025',
+  './darts/js/mp-ui.js': 'f5c0d3965c',
+  './darts/js/alert.js': '6d7c2d2cf0',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
   './sudoku/css/sudoku.css': '146887ebaf',
@@ -855,7 +860,7 @@ const REST_MANIFEST = {
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
   './holdem/css/holdem.css': 'e0b1e48266',
-  './holdem/js/ui.js': '8ffd8bd249',
+  './holdem/js/ui.js': 'a9788eb60b',
   './holdem/js/engine.js': '33419bd015',
   './holdem/js/ai.js': '501a498bec',
   './holdem/js/table.js': '2f040ebfb9',
@@ -891,11 +896,11 @@ const REST_MANIFEST = {
   './skeeball/trajectory.html': '7b1b56365a',
   './skeeball/trajectory-map.json': 'fd7c177d36',
   './skeeball/css/skeeball.css': 'cceb2e47e7',
-  './skeeball/js/ui.js': '50ef7223f1',
+  './skeeball/js/ui.js': '474c6929d0',
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': 'bb54739524',
   './cup-pong/css/cup-pong.css': '1889214737',
-  './cup-pong/js/ui.js': '8f9b2ae387',
+  './cup-pong/js/ui.js': 'b671a92228',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': '6346bceb94',
   './cup-pong/js/physics.js': '68829cc511',
@@ -903,12 +908,12 @@ const REST_MANIFEST = {
   './cup-pong/js/strings.js': '0b7f65479b',
   './cup-pong/js/match.js': '7b9b30f0d7',
   './cup-pong/js/mp.js': '07db2b3d2a',
-  './cup-pong/js/mp-ui.js': '15d81c7abc',
-  './cup-pong/js/alert.js': '3f8bb559a5',
+  './cup-pong/js/mp-ui.js': '18cafcfc3d',
+  './cup-pong/js/alert.js': 'd71546586b',
   './cup-pong/js/cpu.js': '03725812df',
   './hoops4/index.html': 'dce91b13bd',
   './hoops4/css/hoops4.css': '38efeef410',
-  './hoops4/js/ui.js': 'e25e839aba',
+  './hoops4/js/ui.js': '5cc5d83098',
   './hoops4/js/boarddef.js': 'd1214c250c',
   './hoops4/js/machine.js': '657e6330a1',
   './hoops4/js/physics.js': 'a5793407ee',
@@ -916,14 +921,14 @@ const REST_MANIFEST = {
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/cpu.js': 'f1b8a3e68b',
   './hoops4/js/mp.js': '7c78d60252',
-  './hoops4/js/mp-ui.js': '119b0d409d',
-  './hoops4/js/alert.js': '26e25c8d5e',
+  './hoops4/js/mp-ui.js': 'de0ecd9402',
+  './hoops4/js/alert.js': '18ae0c4d78',
   './hoops4/js/strings.js': 'ff8af8114d',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/challenge.js': 'fc13ee6017',
   './skeeball/js/challenge-ui.js': '05730f90fc',
-  './skeeball/js/alert.js': 'b9a8f792a0',
+  './skeeball/js/alert.js': 'cd28161c70',
   './skeeball/js/boards.js': '8cf226684b',
   './skeeball/js/engines.js': '9d1dd1cf73',
   './skeeball/js/picstore.js': '59ba228dd4',

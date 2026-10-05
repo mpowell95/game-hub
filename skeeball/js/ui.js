@@ -469,7 +469,9 @@ export class SkeeballUI {
     let armed = null;
     import('./alert.js').then((m) => { armed = m.takeCeremony(); }).catch(() => {}).then(() => {
       if (this.disposed) return;
-      if (armed && this.screen === 'setup') openChallenges(this, { focus: armed });
+      if (armed && this.screen === 'setup') {
+        openChallenges(this, armed.kind === 'pick' ? { pickFor: armed.them } : { focus: armed });
+      }
     });
     // A challenge game left unfinished by a closed app (no destroy() ever ran) is OVER, at the
     // score it had after its last ball: one attempt, and leaving counts. Safe here because nothing

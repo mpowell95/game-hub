@@ -167,7 +167,8 @@ async function picker(ui, MP) {
   });
 }
 
-/** One tap to send: who, and that you throw first. */
+/** One tap to send: who, and that you throw first. Exported for the hub's Challenges screen. */
+export function challengeTo(ui, MP, them) { confirm(ui, MP, them); }
 function confirm(ui, MP, them) {
   const body = page(ui, t('mp_challenge'), 'home', `
     <p class="dt-mp-vs"><span aria-hidden="true">${esc(them.emoji)}</span> ${esc(them.name)}</p>

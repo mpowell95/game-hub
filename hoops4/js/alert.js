@@ -142,6 +142,9 @@ export function rowFor(id) {
   return lastRows.find((r) => r && r.id === id) || null;
 }
 
+/** How many matches are waiting on you, from the last read: the hub's Challenges button badge. */
+export function myTurnCount() { return lastRows.filter((r) => r && !r.over && r.yourTurn).length; }
+
 // --- the ceremony handoff ----------------------------------------------------------------------
 // ARMED, NEVER BACKFILLED - the same shape as skeeball's key ceremony. The launcher arms this when
 // the player taps the bubble or the tile; hoops4's ui.js takes it on mount and shows the
@@ -168,6 +171,16 @@ export function armOpen(id) {
   } catch { /* no session storage: the game opens on its setup screen, as before */ }
 }
 
+/** The hub's Challenges screen (js/challenges-ui.js, 2026-10-05): open straight onto the terms of a
+ *  new challenge to `them` ({ code, name, emoji }). Same handoff key, kind 'pick'. */
+export function armChallenge(them) {
+  try {
+    if (!them || !them.code) return;
+    sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: 'pick', id: '', name: String(them.name || ''),
+      emoji: String(them.emoji || '🙂'), count: 0, code: String(them.code) }));
+  } catch { /* the game opens on its setup screen */ }
+}
+
 /** Take it, once. Returns the armed alert or null, and clears it either way. */
 export function takeCeremony() {
   try {
@@ -175,8 +188,9 @@ export function takeCeremony() {
     sessionStorage.removeItem(ARM_KEY);
     if (!raw) return null;
     const a = JSON.parse(raw);
-    if (!a || (a.kind !== 'challenge' && a.kind !== 'turn' && a.kind !== 'open')) return null;
+    if (!a || (a.kind !== 'challenge' && a.kind !== 'turn' && a.kind !== 'open' && a.kind !== 'pick')) return null;
+    if (a.kind === 'pick' && !a.code) return null;
     return { kind: a.kind, id: String(a.id || ''), name: String(a.name || ''),
-      emoji: String(a.emoji || '🙂'), count: a.count | 0 };
+      emoji: String(a.emoji || '🙂'), count: a.count | 0, ...(a.kind === 'pick' ? { code: String(a.code) } : {}) };
   } catch { return null; }
 }
