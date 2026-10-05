@@ -7,7 +7,7 @@
 // index is the TOP (the end a player can select, move, or that gets revealed).
 
 import { NutsBoltsGame, getTopRun } from './game.js';
-import { generateLevel, replaySolutionBackward, isSolved, isBoltComplete, CAP } from './generator.js';
+import { generateLevel, replaySolutionBackward, isSolved, isBoltComplete, CAP, getDifficulty, rampStart, TIER_ORDER } from './generator.js';
 
 let pass = 0;
 let fail = 0;
@@ -236,12 +236,14 @@ console.log('\n=== Generator: solvability + integrity + quality-gate self-test =
 
 const RUNS_PER_ROW = Number(process.env.NB_TEST_RUNS || 200);
 
-// One representative level per row, matching the maxLevel breakpoints.
+// One representative level per row, matching the maxLevel breakpoints, plus
+// levels up THE RAMP (2026-10-05): 50 and 100 are mid/top of it, 300 and 1000
+// sit at its ceiling.
 const ROW_LEVELS = {
-  easy: [1, 4, 9, 16],
-  medium: [1, 6, 16, 31],
-  hard: [1, 6, 16],
-  extraHard: [1, 6, 16],
+  easy: [1, 4, 9, 16, 50, 100, 300, 1000],
+  medium: [1, 6, 16, 31, 50, 100, 300, 1000],
+  hard: [1, 6, 16, 50, 100, 300, 1000],
+  extraHard: [1, 6, 16, 50, 100, 300, 1000],
 };
 
 let genRuns = 0;
@@ -250,11 +252,16 @@ let genFailures = 0;
 for (const tier of Object.keys(ROW_LEVELS)) {
   for (const level of ROW_LEVELS[tier]) {
     let regenerated = 0;
+    let fallbacks = 0;
+    let slowest = 0;
     for (let i = 0; i < RUNS_PER_ROW; i++) {
       genRuns++;
       try {
+        const t0 = performance.now();
         const lvl = generateLevel(tier, level);
+        slowest = Math.max(slowest, performance.now() - t0);
         if (lvl.regenAttempts > 1) regenerated++;
+        if (lvl.gateFallback) fallbacks++;
 
         const counts = {};
         for (const stack of lvl.stacks) {
@@ -290,11 +297,53 @@ for (const tier of Object.keys(ROW_LEVELS)) {
     }
     const regenRate = regenerated / RUNS_PER_ROW;
     const flag = regenRate > 0.3 ? '  <-- FLAG: regenerating >30% of the time' : '';
-    console.log(`${tier} L${level}: ${RUNS_PER_ROW} runs, regenerated ${regenerated} (${(regenRate * 100).toFixed(0)}%)${flag}`);
+    const d = getDifficulty(tier, level);
+    console.log(`${tier} L${level} (F${d.F} C${d.C} S${d.S} H${d.H}): ${RUNS_PER_ROW} runs, regenerated ${regenerated} (${(regenRate * 100).toFixed(0)}%), gate fallbacks ${fallbacks}, slowest ${slowest.toFixed(1)}ms${flag}`);
   }
 }
 
 console.log(`\nGenerator checks: ${genRuns} runs, ${genFailures} failures.`);
+
+console.log('\n=== The ramp (2026-10-05) ===\n');
+{
+  const keys = ['F', 'C', 'S', 'H'];
+  for (const tier of TIER_ORDER) {
+    // Never gets easier as the level rises, from a new player's start or from a
+    // player who was already deep in when the ramp shipped.
+    for (const from of [undefined, 317]) {
+      let prev = getDifficulty(tier, from || 1, from);
+      let rose = false;
+      for (let level = (from || 1) + 1; level <= (from || 1) + 400; level++) {
+        const d = getDifficulty(tier, level, from);
+        ok(keys.every((k) => d[k] >= prev[k]), `ramp: ${tier} from ${from} L${level} got easier than L${level - 1}`);
+        ok(d.E === 2 || level < rampStart(tier), `ramp: ${tier} L${level} E is ${d.E}, must stay 2`);
+        if (keys.some((k) => d[k] > prev[k])) rose = true;
+        prev = d;
+      }
+      ok(rose, `ramp: ${tier} from ${from} never rose over 400 levels`);
+    }
+    // "Ramp up from where they are": a player at level 317 when the ramp shipped
+    // plays exactly the old plateau, then climbs.
+    const plateau = getDifficulty(tier, rampStart(tier));
+    const at = getDifficulty(tier, 317, 317);
+    ok(JSON.stringify(at) === JSON.stringify(plateau), `ramp: ${tier} rampFrom 317 at L317 is not the plateau`);
+    const later = getDifficulty(tier, 317 + 10, 317);
+    ok(keys.some((k) => later[k] > plateau[k]), `ramp: ${tier} rampFrom 317 did not rise by L327`);
+    // Levels below the ramp are untouched by rampFrom.
+    ok(JSON.stringify(getDifficulty(tier, 3, 317)) === JSON.stringify(getDifficulty(tier, 3)), `ramp: ${tier} L3 changed by rampFrom`);
+  }
+  // A lower tier never climbs past the next tier's hardest band (Matt, 2026-10-05).
+  for (let i = 0; i < TIER_ORDER.length - 1; i++) {
+    const top = getDifficulty(TIER_ORDER[i], 100000);
+    const next = getDifficulty(TIER_ORDER[i + 1], rampStart(TIER_ORDER[i + 1]));
+    ok(keys.every((k) => top[k] <= next[k]), `ramp: ${TIER_ORDER[i]} ceiling passes ${TIER_ORDER[i + 1]}'s plateau`);
+  }
+  // Expert's ceiling is the measured phone fit: 18 full + 2 empty = 20 bolts.
+  const x = getDifficulty('extraHard', 100000);
+  ok(x.F + x.E <= 20, `ramp: extraHard ceiling has ${x.F + x.E} bolts, over the measured 20`);
+  ok(getDifficulty('easy', 100000).C <= 7, 'ramp: easy ceiling leaves the 7-color colorblind-safe pool');
+  console.log('ramp checks done');
+}
 
 const allOk = fail === 0 && genFailures === 0;
 console.log(`\n=== Overall: ${allOk ? 'ALL PASS' : 'FAILURES PRESENT'} ===`);
