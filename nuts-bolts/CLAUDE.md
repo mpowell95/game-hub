@@ -84,6 +84,7 @@ getting harder at its last band (Expert/`extraHard`: level 16; Medium: 31). Matt
 stop getting more difficult at level 16!??... Of course it should continue to get more and more
 difficult."* Measured the same day: the two most devoted players are past level 300 (Unai) and
 200 (Lili) on Expert, so both have played hundreds of levels at one flat difficulty. **The ramp
-must keep rising with the level number.** Not yet built; when it is, replace this section with
+must keep rising with the level number.** Matt chose **ramp up from where each player is now**
+(not a jump to their level number's difficulty). Build brief: `docs/NUTS-BOLTS-RAMP-HANDOFF.md`. Not yet built; when it is, replace this section with
 what shipped. Any change is generator-only: the per-tier level counters in `gamehub.nutsbolts.v1`
 are never reset or renumbered (THE LAW).
