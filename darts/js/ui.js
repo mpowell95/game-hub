@@ -7,7 +7,7 @@
 // false. A match is only recorded once it is won. An ONLINE match (2026-10-01, mp.js) lives on the
 // server, every dart written as it lands, so leaving one loses nothing either.
 
-import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel } from './engine.js';
+import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints } from './engine.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
 import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, stuckAxis, boardPoint, norm, HAND_Z, REST_AXIS } from './flight.js';
 import { STRINGS } from './strings.js';
@@ -29,8 +29,11 @@ const LOCAL_MODES = ['cpu', 'pass'];      // the ones a saved match can be (onli
 const FIRSTS = ['alt', 'me', 'them'];
 const GAMES = ['301', '201', '101', 'cricket'];
 const ORDERS = ['any', 'order'];
-/** The match kind (engine.js KINDS) the setup screen's Game and Order choices make. */
-const kindFrom = (s) => (s.game === 'cricket' ? (s.order === 'order' ? 'cricket-order' : 'cricket') : s.game);
+const POINTS = ['on', 'off'];
+/** The match kind (engine.js KINDS) the setup screen's Game, Order and Points choices make. */
+const kindFrom = (s) => (s.game === 'cricket'
+  ? 'cricket' + (s.order === 'order' ? '-order' : '') + (s.points === 'off' ? '-np' : '')
+  : s.game);
 
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -56,6 +59,7 @@ function loadSettings() {
     nextStarter: s.nextStarter === 1 ? 1 : 0,
     game: GAMES.includes(s.game) ? s.game : '301',
     order: ORDERS.includes(s.order) ? s.order : 'any',
+    points: POINTS.includes(s.points) ? s.points : 'on',
   };
 }
 
@@ -74,7 +78,8 @@ const MARK_SVG = [
 ];
 /** The how-to lines for each game, in order. */
 const helpKeys = (kind) => (isCricket(kind)
-  ? ['help_c_marks', 'help_c_bull', 'help_c_points', kind === 'cricket-order' ? 'help_c_order' : 'help_c_any', 'help_c_win', 'help_flick']
+  ? ['help_c_marks', 'help_c_bull', noPoints(kind) ? 'help_c_nopoints' : 'help_c_points', inOrder(kind) ? 'help_c_order' : 'help_c_any',
+    noPoints(kind) ? 'help_c_win_np' : 'help_c_win', 'help_flick']
   : ['help_cap', 'help_example', 'help_bull', 'help_bust', 'help_flick']);
 
 /** How to play: the board's rings with their multipliers, drawn rather than described. */
@@ -201,9 +206,15 @@ class DartsUI {
               <span class="dt-label" data-l="game"></span>
               <div class="gh-seg dt-seg" role="group" data-role="games"></div>
             </div>
-            <div class="dt-field" data-role="orderField">
-              <span class="dt-label" data-l="order"></span>
-              <div class="gh-seg dt-seg" role="group" data-role="orders"></div>
+            <div class="dt-pair" data-role="orderField">
+              <div class="dt-field">
+                <span class="dt-label" data-l="order"></span>
+                <div class="gh-seg dt-seg" role="group" data-role="orders"></div>
+              </div>
+              <div class="dt-field">
+                <span class="dt-label" data-l="points"></span>
+                <div class="gh-seg dt-seg" role="group" data-role="pointsSeg"></div>
+              </div>
             </div>
             <div class="dt-field" data-role="diffField">
               <span class="dt-label" data-l="difficulty"></span>
@@ -313,10 +324,11 @@ class DartsUI {
     };
     seg('games', 'game', GAMES, s.game, (id) => (id === 'cricket' ? t('game_cricket') : id));
     seg('orders', 'order', ORDERS, s.order, (id) => t('order_' + id));
+    seg('pointsSeg', 'points', POINTS, s.points, (id) => t('points_' + id));
     this.root.querySelector('[data-role="orderField"]').hidden = s.game !== 'cricket';
     const kind = kindFrom(s);
     this.root.querySelector('[data-role="tagline"]').textContent = isCricket(kind)
-      ? t(kind === 'cricket-order' ? 'tagline_cricket_order' : 'tagline_cricket') : t('tagline_x01', { n: kind });
+      ? t('tagline_' + kind.replace(/-/g, '_')) : t('tagline_x01', { n: kind });
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
     seg('firsts', 'first', FIRSTS, s.first, (id) => id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t('first_them_cpu'));
     const sv = this._savedMatch();
@@ -459,7 +471,7 @@ class DartsUI {
   _rematch() {
     const kind = kindOf(this.match);
     const s = this.settings;
-    if (isCricket(kind)) { s.game = 'cricket'; s.order = kind === 'cricket-order' ? 'order' : 'any'; } else s.game = kind;
+    if (isCricket(kind)) { s.game = 'cricket'; s.order = inOrder(kind) ? 'order' : 'any'; s.points = noPoints(kind) ? 'off' : 'on'; } else s.game = kind;
     this._newMatch();
   }
 
@@ -482,7 +494,7 @@ class DartsUI {
     this.flying = null; this.falling = null; this.flash = null;
     this.stuckAlpha = 1;
     this.fx.innerHTML = '';
-    this.shown = this.match.scores.slice();
+    this.shown = this._plaques();
     this._showOnly(null);
     this._seatsHud();
     this._save();
@@ -497,6 +509,14 @@ class DartsUI {
   }
 
   _seat() { return this.seats[this.match.turn]; }
+
+  /** What each plaque shows: the score, or in Cricket with no points (2026-10-05) the numbers closed,
+   *  since the points there are always 0. */
+  _plaques() {
+    const m = this.match;
+    if (!m) return [0, 0];
+    return noPoints(m.kind) ? m.marks.map((a) => a.filter((n) => n >= 3).length) : m.scores.slice();
+  }
 
   _seatsHud() {
     const m = this.match;
@@ -525,7 +545,7 @@ class DartsUI {
       const el = this.marksEls[i];
       el.hidden = !on;
       if (!on) continue;
-      const next = m.kind === 'cricket-order' ? cricketNext(m, i) : -1;
+      const next = inOrder(m.kind) ? cricketNext(m, i) : -1;
       el.style.setProperty('--dt-seat', SEAT_COLOR[i]);
       el.innerHTML = CRICKET.map((n, k) => {
         const mk = m.marks[i][k];
@@ -654,7 +674,7 @@ class DartsUI {
       this._after(1.6, () => this._endTurn(false));
       return;
     }
-    if (cricket && hit.num > 0) this._say(t(hit.counted ? 'say_c_hit' : 'say_c_none', { name, bed: bedLabel(hit), score: m.scores[seat] }));
+    if (cricket && hit.num > 0) this._say(t(!hit.counted ? 'say_c_none' : noPoints(m.kind) ? 'say_c_hit_np' : 'say_c_hit', { name, bed: bedLabel(hit), score: m.scores[seat] }));
     else if (hit.pts > 0) this._say(t('say_hit', { name, pts: hit.pts, left: m.scores[seat] }));
     else this._say(t('say_miss', { name }));
     if (res.event === 'win') {
@@ -683,7 +703,7 @@ class DartsUI {
       if (!m) return;
       delete m.turnOver;
       nextTurn(m);
-      this.shown = m.scores.slice();
+      this.shown = this._plaques();
       this.stuckAlpha = 1;
       this._save();
       this._startTurn(true);
@@ -760,11 +780,12 @@ class DartsUI {
 
   // --- input -----------------------------------------------------------------------------------
   _click(e) {
-    const seg = e.target.closest('[data-diffs], [data-firsts], [data-games], [data-orders]');
+    const seg = e.target.closest('[data-diffs], [data-firsts], [data-games], [data-orders], [data-pointsseg]');
     if (seg) {
       if (seg.dataset.diffs) this.settings.difficulty = seg.dataset.diffs;
       else if (seg.dataset.games) this.settings.game = seg.dataset.games;
       else if (seg.dataset.orders) this.settings.order = seg.dataset.orders;
+      else if (seg.dataset.pointsseg) this.settings.points = seg.dataset.pointsseg;
       else this.settings.first = seg.dataset.firsts;
       writeJSON(SETTINGS_KEY, this.settings);
       this._relabel();
@@ -909,7 +930,7 @@ class DartsUI {
         // Your own dart from another phone (or before a reopen): onto the board without a flight.
         this.MP.applyEntry(m, e);
         mp.applied++;
-        this.shown = m.scores.slice();
+        this.shown = this._plaques();
         this._seatsHud();
         this._mpCatchUp();
         return;
@@ -1137,7 +1158,7 @@ class DartsUI {
     const m = this.match;
     if (m) {
       for (let i = 0; i < 2; i++) {
-        const target = m.scores[i];
+        const target = this._plaques()[i];
         if (this.shown[i] !== target) {
           const step = Math.max(1, Math.abs(this.shown[i] - target) * dt * 6);
           this.shown[i] = this.shown[i] > target ? Math.max(target, this.shown[i] - step) : Math.min(target, this.shown[i] + step);

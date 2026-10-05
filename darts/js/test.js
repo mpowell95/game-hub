@@ -7,7 +7,7 @@
 import {
   ORDER, RING, scoreAt, targetPoint, newMatch, throwDart, nextTurn, validMatch,
   chooseTarget, computerThrow, flickLanding, FLICK_MID, SPREAD,
-  CRICKET, cricketNext, chooseCricketTarget, bedLabel, KINDS,
+  CRICKET, cricketNext, chooseCricketTarget, bedLabel, KINDS, noPoints, inOrder,
 } from './engine.js';
 
 let pass = 0, fail = 0;
@@ -183,6 +183,19 @@ ok('spread is tighter on harder levels', SPREAD.hard < SPREAD.medium && SPREAD.m
   r = hitAt(o2, 20, 'treble');
   ok('in order: a number already closed still scores', r.hit.pts === 60);
 
+  // No points (2026-10-05): extra hits score nothing, and the first to close all seven wins.
+  const np = newMatch(0, 'cricket-np');
+  ok('no points is a Cricket game that scores nothing', noPoints('cricket-np') && noPoints('cricket-order-np') && !noPoints('cricket') && inOrder('cricket-order-np') && !inOrder('cricket-np'));
+  hitAt(np, 20, 'treble'); r = hitAt(np, 20, 'treble');
+  ok('no points: a treble on a closed 20 scores 0', r.hit.pts === 0 && np.scores[0] === 0 && !r.hit.counted);
+  const npw = newMatch(0, 'cricket-np'); npw.marks[0] = [3, 3, 3, 3, 3, 3, 2]; npw.marks[1] = [3, 3, 3, 3, 3, 3, 0];
+  r = hitAt(npw, 25, 'obull');
+  ok('no points: closing the seventh number wins', r.event === 'win' && npw.winner === 0);
+  const npo = newMatch(0, 'cricket-order-np');
+  ok('no points, in order: 19 still waits for 20', hitAt(npo, 19, 'treble').hit.marks === 0 && (hitAt(npo, 20, 'treble'), cricketNext(npo, 0) === 1));
+  const npc = newMatch(0, 'cricket-np'); npc.marks[0] = [3, 0, 0, 0, 0, 0, 0];
+  eq('no points: the computer never chases points, it closes 19', chooseCricketTarget(npc, 'hard'), { num: 19, ring: 'treble' });
+
   // The computer.
   eq('cricket computer, fresh: treble 20', chooseCricketTarget(newMatch(0, 'cricket'), 'hard'), { num: 20, ring: 'treble' });
   const c = newMatch(0, 'cricket'); c.marks[0] = [3, 0, 0, 0, 0, 0, 0]; c.scores = [0, 30];
@@ -205,7 +218,7 @@ ok('spread is tighter on harder levels', SPREAD.hard < SPREAD.medium && SPREAD.m
   const me = mpr('easy'), mm = mpr('medium'), mh = mpr('hard');
   ok(`cricket marks a turn: easy ${me.toFixed(2)}, medium ${mm.toFixed(2)}, hard ${mh.toFixed(2)}`, me < mm && mm < mh);
   ok('medium is an ordinary player in Cricket, about one mark a turn (Matt, 2026-10-02: it "basically didn\'t miss" at 1.5)', mm > 0.8 && mm < 1.25, mm.toFixed(2));
-  for (const kind of ['cricket', 'cricket-order']) {
+  for (const kind of ['cricket', 'cricket-order', 'cricket-np', 'cricket-order-np']) {
     for (const diff of ['easy', 'hard']) {
       let turns = 0, done = 0;
       for (let seed = 1; seed <= 20; seed++) {

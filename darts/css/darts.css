@@ -318,6 +318,9 @@
 }
 .dt-root .dt-tag { margin: -4px 0 2px; text-align: center; font-size: 14px; font-weight: 600; color: #6b5440; }
 .dt-root .dt-field { display: flex; flex-direction: column; gap: 4px; }
+/* Cricket's Order and Points side by side (2026-10-05), so the setup card still fits a short phone. */
+.dt-root .dt-pair { display: flex; gap: 8px; }
+.dt-root .dt-pair > .dt-field { flex: 1 1 0; min-width: 0; }
 .dt-root .dt-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6048; }
 .dt-root .dt-seg { display: flex; width: 100%; background: #efe3cb; border-color: #e0cfae; }
 .dt-root .dt-seg .dt-seg-item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 6px; color: #6b5440; font-size: 14px; }

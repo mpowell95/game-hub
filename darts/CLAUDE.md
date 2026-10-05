@@ -44,6 +44,13 @@ any order."* Setup has a **Game** row (301 / 201 / 101 / Cricket) and, for Crick
   then the bull (`cricketNext`). A number you have already closed still scores points. **This
   reading was my choice** (in-order cricket has several house rules); if Matt plays it another way,
   it is `cricketCounts` in engine.js.
+- **Points: On / Off** (2026-10-05, Matt: *"Points are on by default? Is there a setting to turn them
+  off?"* then *"Add the on/off option"*): a third Cricket choice beside Order on the setup card (the
+  two share one row, `.dt-pair`, so the card still fits a short phone). Off makes the kind
+  `cricket-np` / `cricket-order-np` (`noPoints`, `inOrder` in engine.js): marks past the third count
+  for nothing and the first to close all seven wins. The plaques then show numbers closed instead of a
+  points total that would always read 0 (`_plaques`). Carried online like any kind (old matches and
+  saves are untouched: a kind they never had cannot appear in them).
 - **The chalkboard** (`_marksHud`): each seat's marks (/ X circled X) above its own plaque, either
   side of the dart; in order, the number each player is on is ringed in `#ffce3a`; a number both
   have closed is struck through. The plaques show points. On a short phone the board shrinks a
@@ -150,7 +157,11 @@ COPIED from GamePigeon's video, not reasoned out.
   side by side, every second frame, same target. The tracking scripts are not in the repo; the
   method is: red pixels that are not red in the still frames, blob centre and width per frame.
 - Online search for a reusable darts engine (2026-10-01) found only three.js/cannon physics demos,
-  nothing that fits a no-dependency canvas game.
+  nothing that fits a no-dependency canvas game. **Searched again 2026-10-05** at Matt's request, code
+  read, not just READMEs: `erandybcepeda67/golden-dart` (the only swipe-to-throw one; flat 2D, the
+  dart moves along the swipe vector with fake gravity and shrinks, no perspective, NO LICENSE so not
+  reusable), `raulr/darts` (MIT, Pixi.js; tap to stop moving crosshairs, no swipe),
+  `opensand3/DartsClone` (Unity, click to fire). None is closer to GamePigeon than this one.
 
 ## Screens
 
