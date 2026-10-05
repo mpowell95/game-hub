@@ -117,6 +117,7 @@ export default {
     big_check: 'CHECK', big_call: 'CALL {n}', big_bet: 'BET {n}', big_raise: 'RAISE TO {n}', big_allin: 'ALL IN {n}',
     see_cards: "See everyone's cards",
     tap_next: 'Tap the table to start the next hand',
+    tap_results: 'Tap the table to see the results',
     tap_skip: 'Tap the table to skip ahead',
     // Computer speed (2026-09-28)
     pace: 'Computer speed', pace_slow: 'Slow', pace_normal: 'Normal', pace_fast: 'Fast',
@@ -270,6 +271,7 @@ export default {
     big_check: 'PASAR', big_call: 'IGUALAR {n}', big_bet: 'APOSTAR {n}', big_raise: 'SUBIR A {n}', big_allin: 'ALL IN {n}',
     see_cards: 'Ver las cartas de todos',
     tap_next: 'Toca la mesa para la siguiente mano',
+    tap_results: 'Toca la mesa para ver los resultados',
     tap_skip: 'Toca la mesa para adelantar',
     // Velocidad de los ordenadores (2026-09-28)
     pace: 'Velocidad del ordenador', pace_slow: 'Lenta', pace_normal: 'Normal', pace_fast: 'Rápida',
