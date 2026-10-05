@@ -356,6 +356,20 @@
         <button type="button" class="pf-linkbtn" id="pf-stats-btn" data-i18n="hub_stats_btn">My Stats</button>
       </section>
 
+      <!-- Admin (js/admin-ui.js). Matt, 2026-09-01: the launcher's Admin button "should be moved
+           into my profile or something instead of all the way down there" - it sat under the game
+           grid, past every tile. HIGH on this page on purpose, for the same reason Messages is:
+           being on the profile page is only an improvement if it is not another scroll away.
+           ABOVE Messages since 2026-10-05 (Matt: "Can you put Admin above Messages instead?"): the
+           Messages rows load a second late and grow that card, so a tap aimed at an Admin button
+           sitting BELOW it landed on "All messages".
+           Hidden for everyone else (`hidden` until js/hub.js's own isAdmin() says otherwise), so
+           nobody but Matt ever downloads js/admin-ui.js or knows the section exists. -->
+      <section class="pf-section" id="pf-admin-sec" hidden>
+        <h2 data-i18n="adm_title">Admin controls</h2>
+        <button type="button" class="pf-linkbtn" id="pf-admin-btn" data-i18n="adm_btn">🛠️ Admin</button>
+      </section>
+
       <!-- Messages (js/messages-ui.js). Near the TOP, not in the footer beside Report a bug: the
            launcher's profile pill carries the unread badge and this is where that badge sends
            people, so it must not be a scroll away. Rendered always, count or no count. -->
@@ -364,17 +378,6 @@
         <!-- Filled by js/messages-ui.js's renderProfileMessages: the newest two conversations plus
              an All messages button, or just the button when there is nothing to show. -->
         <div id="pf-msgs"></div>
-      </section>
-
-      <!-- Admin (js/admin-ui.js). Matt, 2026-09-01: the launcher's Admin button "should be moved
-           into my profile or something instead of all the way down there" - it sat under the game
-           grid, past every tile. HIGH on this page on purpose, for the same reason Messages is:
-           being on the profile page is only an improvement if it is not another scroll away.
-           Hidden for everyone else (`hidden` until js/hub.js's own isAdmin() says otherwise), so
-           nobody but Matt ever downloads js/admin-ui.js or knows the section exists. -->
-      <section class="pf-section" id="pf-admin-sec" hidden>
-        <h2 data-i18n="adm_title">Admin controls</h2>
-        <button type="button" class="pf-linkbtn" id="pf-admin-btn" data-i18n="adm_btn">🛠️ Admin</button>
       </section>
 
       <!-- SETTINGS. Everything that changes how the app behaves for this person, as ONE list of
@@ -1243,6 +1246,17 @@
     // The section ships `hidden` and only ever unhides after isAdmin() says so, so a non-admin
     // device never renders it and never imports js/admin-ui.js. Same gate js/hub.js used for the
     // launcher button it replaces: a profile-name hash, which is a SCREEN, not a lock.
+    // Unhide at once from this device's cached answer (the same key isAdminDevice() reads), so
+    // the section is there at first paint. Left for the import below, it appeared a beat late and
+    // pushed Messages down under a finger already on its way to it.
+    try { if (localStorage.getItem('gamehub.adminDevice.v1') === '1') $('#pf-admin-sec').hidden = false; }
+    catch { /* no storage: the async gate below still decides */ }
+    // Wired up front too, so a tap the moment it shows works. Inert for everyone else: the
+    // section stays hidden, so the button can never be pressed.
+    $('#pf-admin-btn').addEventListener('click', async () => {
+      try { (await import('../js/admin-ui.js')).openAdmin(); }
+      catch (e) { console.error('Admin controls failed to load', e); }
+    });
     (async () => {
       try {
         // Gated on the ADMINS ALLOWLIST, not on the profile name (2026-09-01). Matt: "nobody else
@@ -1254,10 +1268,6 @@
         if (!ok) ok = (await refreshAdminDevice()) === true;
         if (!ok) return;
         $('#pf-admin-sec').hidden = false;
-        $('#pf-admin-btn').addEventListener('click', async () => {
-          try { (await import('../js/admin-ui.js')).openAdmin(); }
-          catch (e) { console.error('Admin controls failed to load', e); }
-        });
       } catch (e) { console.error('admin gate failed', e); }
     })();
 
