@@ -349,14 +349,14 @@ under "CHALLENGES").
   `cuppong-<id>` tag.
 - **Rules: PUBLISHED by Matt on 2026-09-28** (the full file from main, with `"cuppong"` added).
 - **`cupPongTurnPush` DEPLOYED by Matt on 2026-09-28** ("deploy complete", from his laptop, the
-  other four functions updated in the same run). A real phone-to-phone notification is not yet
-  confirmed.
+  other four functions updated in the same run). **Phone-to-phone notifications CONFIRMED WORKING by
+  Matt (2026-10-05: "Cup pong notifications work just fine").**
 
 Verified 2026-09-28 in two separate browser profiles against a local stand-in for the Realtime
 Database (the sandbox cannot reach Firebase): challenge, delivery on turn end, the replay, live
 turns both ways, the launcher bubble, a notification-style `?open=cuppong&match=<id>` load, a
 seeded island leaving Ana owing a cup and her giving it up, a quit, and the result counted once.
-Real Firebase on real phones is unverified. `node test-cuppong-mp.mjs` covers the data layer
+Real phones on real Firebase have since been played on by Matt and family, notifications included (confirmed 2026-10-05). `node test-cuppong-mp.mjs` covers the data layer
 against an in-memory database (49 checks, the custom rerack and a series included).
 
 ## Hub integration

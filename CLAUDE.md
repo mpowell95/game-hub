@@ -148,6 +148,15 @@ leave it there.
 
 Full incident: `docs/CLAUDE-HISTORY.md#answer-about-the-game-you-were-asked-about`
 
+## No sound, ever (Matt, 2026-10-05)
+
+**No game in this hub plays sound. Do not add sound, music, sound effects or an audio option to any
+game, new or old, unless Matt asks for it himself, in his own words, for that game.** Matt: *"NO
+SOUND FROM ANY GAME EVER. UNLESS SPECIFICALLY DIRECTED TO BY ME. NEVER SOUND."* That covers
+suggesting it as polish, too. As of that date nothing in the repo constructs an `AudioContext` or an
+`Audio` element, and it stays that way. (Pinball's sound option was deleted on 2026-08-11 for the
+same reason.)
+
 ## Subagents: save USAGE (Matt, 2026-09-22)
 
 The goal is lower usage (tokens billed), not a roomier context. Every subagent re-reads this file
