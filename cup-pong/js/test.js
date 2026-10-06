@@ -264,6 +264,18 @@ ok('the whole rack area is on the table',
   ok('the defender\'s pick goes too, then play carries on', ids(m, 'b').join() === 'k0' && types(ev)[0] === 'picked' && !m.pendingPick);
   m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9');
+  ev = m.throwResult({ made: 'k0' });
+  ok('a called island: any other cup is a MISS and stays (Matt, 2026-10-06)', types(ev).join() === 'miss' && ev[0].wrongCup === 'k0' && ids(m, 'b').join() === 'k0,k1,k9' && !m.called && m.streak.a[0] === 0);
+  ev = m.throwResult({ made: 'k0' });
+  ok('...and the next ball (no call) counts as normal', types(ev).includes('made') && ids(m, 'b').join() === 'k1,k9');
+  m = new Match({ first: 'a', islandOnly: false });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.callIsland('k9'); ev = m.throwResult({ made: 'k0' });
+  ok('an older challenge (no islandOnly) replays as played: the other cup counted', types(ev).includes('made') && ids(m, 'b').join() === 'k1,k9');
+  ok('islandOnly survives a save', Match.fromJSON(new Match().toJSON()).islandOnly && !Match.fromJSON(new Match({ islandOnly: false }).toJSON()).islandOnly);
+  m = new Match({ first: 'a' });
+  m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9'); m.throwResult(miss);
   ev = m.throwResult({ made: 'k9' });
   ok('an island call is for ONE ball: ball 2 into that cup after ball 1 missed is one cup (Matt)', !m.called && !m.pendingPick && !types(ev).includes('islandPick') && ids(m, 'b').join() === 'k0,k1');
