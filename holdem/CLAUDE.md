@@ -235,6 +235,12 @@ the bankroll bar on the table picker open `screen = 'bank'` (`_renderBank` in `u
 - `readPlayersOnce` answers `{}` when Firebase is unreachable, so an empty read is treated as
   offline: the list says so with a **Try again** button (your own numbers still show).
 - Read-only: writes nothing.
+- **Tap a player to see their numbers in the top card** (2026-10-06, Matt: *"When I click on
+  another player, show me their stats there"*). `this.bankPick` = that row's person key; the card
+  gets a name line (emoji + name, or "You") and a **Show mine** button; tapping the same row or
+  your own row also goes back. The shown row has a white outline and a ▸ by its rank, and
+  `_fitBank` never drops it. A "Under review" ledger shows only that label, no numbers. Rows are
+  `role="button"` divs-in-list (Enter/Space work), not `<button>`s, per the UX floor.
 
 ## Cheat deterrents (2026-09-28)
 
