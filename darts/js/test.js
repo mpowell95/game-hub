@@ -8,6 +8,7 @@ import {
   ORDER, RING, scoreAt, targetPoint, newMatch, throwDart, nextTurn, validMatch,
   chooseTarget, computerThrow, flickLanding, FLICK_MID, SPREAD,
   CRICKET, cricketNext, chooseCricketTarget, bedLabel, KINDS, noPoints, inOrder,
+  assistTargets, assistLanding, ASSIST_NUMS,
 } from './engine.js';
 
 let pass = 0, fail = 0;
@@ -324,6 +325,30 @@ ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID
     rest.tail.y > rest.tip.y && Math.abs(Math.hypot(rest.tip.x - rest.tail.x, rest.tip.y - rest.tail.y) - 180) < 0.5);
   const stuck = F.pose(cam, F.boardPoint(0, 0), F.stuckAxis(), L);
   ok('stuck in the board it shrinks to a stub (flights end-on)', Math.hypot(stuck.tip.x - stuck.tail.x, stuck.tip.y - stuck.tail.y) < 40);
+}
+
+// Matt's aim help on the bottom numbers (engine.js, assistLanding).
+{
+  const at = (deg, r) => [r * Math.sin(deg * Math.PI / 180), -r * Math.cos(deg * Math.PI / 180)];
+  const num = (p) => scoreAt(p.x, p.y).num;
+  for (const n of ASSIST_NUMS) {
+    const c = ORDER.indexOf(n) * 18;
+    for (const d of [-17, -10, 10, 17]) eq(`help: ${d} deg off ${n} counts as ${n}`, num(assistLanding(...at(c + d, 0.75), [n])), n);
+    ok(`help: 19 deg off ${n} is left alone`, num(assistLanding(...at(c + 19, 0.75), [n])) !== n);
+    eq(`help: frame just past ${n} comes back onto its outer single`, scoreAt(...Object.values(assistLanding(...at(c, 1.15), [n]))).ring, 'single');
+  }
+  eq('help: off the board stays off', scoreAt(...Object.values(assistLanding(...at(162, 1.4), [17]))).ring, 'off');
+  eq('help: the bull is never moved', assistLanding(0.02, 0.05, [17]), { x: 0.02, y: 0.05 });
+  eq('help: no targets, no change', assistLanding(0.35, 0.43, []), { x: 0.35, y: 0.43 });
+  const p = assistLanding(...at(162 + 12, 0.6), [17]);
+  eq('help: keeps the ring it landed in (treble stays treble)', scoreAt(p.x, p.y).ring, 'treble');
+  const m = newMatch(0, 'cricket-order');
+  eq('help targets: in order at 20, none', assistTargets(m, 0), []);
+  m.marks[0] = [3, 3, 3, 0, 0, 0, 0];
+  eq('help targets: in order at 17, just 17', assistTargets(m, 0), [17]);
+  const a = newMatch(0, 'cricket'); a.marks[0] = [0, 3, 0, 1, 0, 3, 0];
+  eq('help targets: any order, the open bottom numbers', assistTargets(a, 0), [17, 16]);
+  eq('help targets: never in 301', assistTargets(newMatch(0, '301'), 0), []);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
