@@ -131,6 +131,13 @@ is on offer and gone after the turn's first throw:
   computer picks at once (its loneliest cup); when you defend, the camera turns to your cups and you
   tap one. Allowed in overtime (Matt ruled out only reracks and Gentleman's there); not in a
   rebuttal.
+  **ONLY THE CALLED CUP COUNTS** (Matt, 2026-10-06: *"I just called island, missed it, but made a
+  different cup. The game counted it. It shouldnt have. if you call island, you can only hit that
+  cup"*). `throwResult` turns a called ball that lands in any other cup into a MISS (event carries
+  `wrongCup`, toast "Not the island, no cup"); that cup stays, the streak resets like any miss.
+  Behind `islandOnly` (default on); challenges carry it as `rules.io`, written by `createGame`
+  from that date, so a challenge made before replays exactly as it was played. A phone still on
+  the old build would count the cup when replaying a new challenge until it updates.
 
 **Make your own (2026-09-28, brief 4c).** The last tile on the rerack sheet opens the rack drawn
 top-down on its own hex grid (`showCustomRack` in `ui.js`): all 28 cells of `AREA`, far row at the

@@ -492,7 +492,8 @@ class CupPong {
         else if (e.island && e.bounce) this.toast(t('islandBounceHit'), 1600);
         else if (e.island) this.toast(t('islandHit'), 1500);
         else if (e.bounce) this.toast(t('bounceHit'), 1500);
-      } else if (e.type === 'removed' || e.type === 'picked' || e.type === 'owedPicked') R.vanish(e.side, e.id);
+      } else if (e.type === 'miss' && e.wrongCup) this.toast(t('wrongCup'), 1500);
+      else if (e.type === 'removed' || e.type === 'picked' || e.type === 'owedPicked') R.vanish(e.side, e.id);
       else if (e.type === 'owedCleared' || e.type === 'extraCleared') { for (const id of e.ids) R.vanish(e.side, id); }
       else if (e.type === 'islandOwed') this.toast(this.oweWords(e), 1600);
       else if (e.type === 'ballsBack') this.toast(t('ballsBack'));

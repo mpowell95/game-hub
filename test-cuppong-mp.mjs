@@ -47,6 +47,8 @@ use('A');
 let res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: true, rr: 'inf' } });
 ok('the challenger can create a match', res.ok, JSON.stringify(res));
 const id = res.id;
+ok('a new challenge is made under "only the called island counts" (io)', res.game.rules.io === true && MP.freshMatch(res.game.rules).islandOnly === true);
+ok('an older challenge without io replays without it', MP.freshMatch({ gent: true, rr: 2 }).islandOnly === false);
 ok('created: only the challenger has a row until the first turn is over',
   !!getAt(`cuppong/index/MATTA/${id}`) && !getAt(`cuppong/index/ANABB/${id}`));
 

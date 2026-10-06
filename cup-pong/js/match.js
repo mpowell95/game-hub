@@ -36,6 +36,9 @@
 //                    PLAYER (Matt, 2026-09-29): "each 'player' gets to call island once per game -
 //                    and it does NOT have to be at the same time as the other 'player'." So a side
 //                    has two calls, one per ball, and a call is for the ball about to be thrown.
+//                    ONLY THE CALLED CUP COUNTS (Matt, 2026-10-06: "if you call island, you can only
+//                    hit that cup"): a called ball that lands in any other cup is a MISS, and that
+//                    cup stays. `islandOnly` switches it; challenges made before replay without it.
 //   - BOUNCE SHOTS ARE OFF (Matt, 2026-09-28, the same day they shipped): "in real life you can
 //     hit a bounced ball away from the table... We won't be able to do that in turn based
 //     multiplayer. so maybe we shouldn't include it." A bounced make is one cup. The rule stays
@@ -75,7 +78,7 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false, islandOnly = true } = {}) {
     this.async = !!async;
     this.straight = !!straight;
     if (this.straight) { gentlemans = false; reracks = 0; }
@@ -83,6 +86,7 @@ export class Match {
     this.backRack = backRack !== false;
     this.lastCupBack = lastCupBack !== false;
     this.fireBallsBack = fireBallsBack !== false;
+    this.islandOnly = islandOnly !== false;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
     this.bonus = { a: 0, b: 0 };        // granted bonus throws waiting for that side's next turn (grantExtra)
@@ -250,6 +254,11 @@ export class Match {
     const called = this.called;
     this.called = null;
     const rack = this.target();
+    // A CALLED ISLAND: only that cup counts. Any other cup is a miss, and it stays on the table.
+    // (Island cannot be called in straight up, a rebuttal or on the last cup, so only the
+    // ordinary miss below can carry `wrongCup`.)
+    const wrongCup = called && this.islandOnly && made && made !== called ? made : null;
+    if (wrongCup) made = null;
 
     // STRAIGHT UP: a make takes the cup, the first to clear the rack wins, two balls and it passes.
     if (this.straight) {
@@ -348,7 +357,7 @@ export class Match {
       return ev.concat(this._afterThrow());
     }
 
-    ev.push({ type: 'miss', side, ball });
+    ev.push({ type: 'miss', side, ball, ...(wrongCup ? { wrongCup } : {}) });
     if (ball === 2) return ev.concat(this._afterThrow());          // a bonus throw's miss changes nothing else
     if (this.streak[side][ball] >= 3) ev.push({ type: 'cooled', side, ball });
     this.streak[side][ball] = 0;
@@ -408,7 +417,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, islandOnly: this.islandOnly, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -424,7 +433,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false, straight: o.straight === true });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false, islandOnly: o.islandOnly !== false, straight: o.straight === true });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };
