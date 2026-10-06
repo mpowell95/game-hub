@@ -7,7 +7,8 @@
 // false. A match is only recorded once it is won. An ONLINE match (2026-10-01, mp.js) lives on the
 // server, every dart written as it lands, so leaving one loses nothing either.
 
-import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints } from './engine.js';
+import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding } from './engine.js';
+import { isAdmin } from '../../js/challenge/hooks.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
 import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, stuckAxis, boardPoint, norm, HAND_Z, REST_AXIS } from './flight.js';
 import { STRINGS } from './strings.js';
@@ -509,6 +510,15 @@ class DartsUI {
   }
 
   _seat() { return this.seats[this.match.turn]; }
+  /** Matt's aim help on 19, 17, 16 and 15 (engine.js, assistLanding): his own darts only, so never
+   *  the other seat in pass and play, never the computer, never the other person online. */
+  _aimHelp() {
+    const m = this.match;
+    if (!m || !isCricket(m.kind)) return false;
+    const mine = this.mode === 'mp' ? !!this.mp && m.turn === this.mp.mySeat : m.turn === 0;
+    if (!mine) return false;
+    try { const p = profile(); return !!(p && p.name && isAdmin(p.name)); } catch { return false; }
+  }
 
   /** What each plaque shows: the score, or in Cricket with no points (2026-10-05) the numbers closed,
    *  since the points there are always 0. */
@@ -1101,8 +1111,9 @@ class DartsUI {
     // unchanged: the release speed alone (flickLanding).
     const o = this.r.toBoard(this.hand.x, this.hand.y);
     const jitter = [gauss() * 0.02, gauss() * 0.02];
-    const land = travel > 24 ? flickLanding(o.x, o.y, end.x - d.sx, end.y - d.sy, speed, jitter) : null;
+    let land = travel > 24 ? flickLanding(o.x, o.y, end.x - d.sx, end.y - d.sy, speed, jitter) : null;
     if (!land) { this._springBack(); return; }
+    if (this._aimHelp()) land = assistLanding(land.x, land.y, assistTargets(this.match, this.match.turn));
     this._launch({ x: this.hand.x, y: this.hand.y }, land.x, land.y);
   }
   _springBack() {

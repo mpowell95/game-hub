@@ -107,6 +107,30 @@ let go moving upward.
   real games. I've been tuning it after games on my phone"). If throws all land high, raise
   `FLICK_MID`; all low, lower it; too twitchy, lower `FLICK_GAIN`.
 
+### Matt's aim help on 19, 17, 16 and 15 (2026-10-06, MATT ONLY)
+
+Matt: *"leave it as is for everyone other than me. BUT why is it so difficult for me to hit the 19
+and 17? make it easier"*, then *"same with 16 and 15 too"*.
+
+- **Why they were hard (his own in-order Cricket darts, read from the live `darts/games`):** 19 hit
+  35% (15/43), 17 25% (11/44), 16 26% (7/28), 15 13% (4/30), against 20 at 35% and 18 at 43%. Two
+  causes: (1) the dart in the hand stops at 0.76 R below the bull (`_pointerMove`'s clamp), level
+  with those numbers, so the swipe's angle has almost no lever there and left/right is simply where
+  the finger is let go, which is on top of the numbers being aimed at; (2) a flick a touch too soft
+  runs past the bottom edge: 23 of his darts went off the bottom into the frame, 8 off the top.
+- **What it does:** `assistLanding()` in `engine.js`. In Cricket only, a dart of HIS that lands
+  within 9 degrees (half a bed) either side of a bottom number he still needs (`assistTargets`: in
+  order, the current number; any order, every one he has not closed) is moved just inside that
+  number's edge, keeping its ring; one in the frame beside it comes back onto the outer single.
+  The bull, darts off the board, 20 and 18, x01 games, the computer, the second seat in pass and
+  play and every other player are untouched. Replayed on his real darts: 19 to 60%, 17 to 59%, 16
+  to 65%, 15 to 47%. Real-browser check: the same throw (0.40 R right, speed 2.2) counted 17 for
+  MattyIce and 2 for test1.
+- **Who:** `_aimHelp()` in `ui.js`, gated on `isAdmin(profile name)` (the same check as the hub's
+  Admin button) and on the dart being his seat (online: `mySeat`; otherwise seat 0).
+- **Online it applies too**, to his darts only: the moved point is what is thrown and logged, so
+  `validateGame` replays it like any other dart, and the opponent sees it land in the number.
+
 ## How the dart FLIES (2026-10-01, `js/flight.js`)
 
 Three models in one day. Matt, after the first build: *"The darts go more like a line drive than in

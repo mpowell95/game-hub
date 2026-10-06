@@ -238,6 +238,50 @@ export function bedLabel(hit) {
   return '';
 }
 
+// --- Matt's aim help on the bottom numbers ------------------------------------------------------
+
+/** MATT ONLY (2026-10-06, Matt: "leave it as is for everyone other than me. BUT why is it so
+ *  difficult for me to hit the 19 and 17? make it easier", then "same with 16 and 15 too"). His own
+ *  in-order Cricket darts from the live matches: 19 hit 35%, 17 25%, 16 26%, 15 13%, against 20 at
+ *  35% and 18 at 43%. Why: those four sit at or below the height the dart is held at (the hand
+ *  stops at 0.76 R below the bull), so the swipe's angle has almost no lever there and left/right is
+ *  wherever the finger is let go, under his own thumb; and a soft flick that is a touch too soft
+ *  goes past the bottom edge into the frame (23 of his darts, against 8 off the top).
+ *
+ *  So for HIM, in Cricket, a dart that lands within half a bed either side of a bottom number he
+ *  still needs counts as that number (moved just inside its edge), and one that ends in the frame
+ *  beside it comes back onto the outer single. Replayed on his real darts: 19 to 60%, 17 to 59%,
+ *  16 to 65%, 15 to 47%. Nothing else changes: the bull, darts off the board, every other number,
+ *  every other player and every x01 game are exactly as before. The moved point is what is thrown
+ *  and logged, so an online match replays it like any other dart. */
+export const ASSIST_NUMS = [19, 17, 16, 15];
+const ASSIST_GRACE = 9;   // degrees past each edge of the bed: half the neighbouring bed
+
+/** The bottom numbers `seat` still needs: in order, only the current one. */
+export function assistTargets(m, seat) {
+  if (!m || !isCricket(m.kind)) return [];
+  const open = inOrder(m.kind) ? [cricketNext(m, seat)] : CRICKET.map((_, i) => i).filter((i) => m.marks[seat][i] < 3);
+  return open.filter((i) => i >= 0).map((i) => CRICKET[i]).filter((n) => ASSIST_NUMS.includes(n));
+}
+
+/** Where a dart at (x, y) counts with the aim help toward `targets` (numbers). Pure. */
+export function assistLanding(x, y, targets) {
+  const r = Math.hypot(x, y);
+  if (!targets || !targets.length || r <= RING.bullOut + 0.04 || r > RING.frame) return { x, y };
+  const deg = Math.atan2(x, -y) * 180 / Math.PI;
+  let best = null;
+  for (const n of targets) {
+    const c = ORDER.indexOf(n) * 18;
+    if (c < 0) continue;
+    const d = ((deg - c + 540) % 360) - 180;
+    if (Math.abs(d) <= 9 + ASSIST_GRACE && (!best || Math.abs(d) < Math.abs(best.d))) best = { c, d };
+  }
+  if (!best) return { x, y };
+  const a = (best.c + Math.max(-8, Math.min(8, best.d))) * Math.PI / 180;
+  const nr = r > RING.dblOut ? RING.dblIn - 0.02 : r;
+  return { x: Math.round(nr * Math.sin(a) * 1e4) / 1e4, y: Math.round(-nr * Math.cos(a) * 1e4) / 1e4 };
+}
+
 // --- the player's flick --------------------------------------------------------------------
 
 /** The flick speed (screen heights per second, upward) that lands at the height of the bull. */
