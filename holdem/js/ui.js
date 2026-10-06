@@ -14,7 +14,7 @@
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, HOLDEM_START_BANK, loadStats, statsId } from '../../js/game-stats.js';
+import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_START_BANK, loadStats, statsId } from '../../js/game-stats.js';
 import { corrections } from '../../js/admin-config.js';
 import { correctHoldemLedger } from '../../js/stats-corrections.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
@@ -245,6 +245,7 @@ class Game {
     if (this.dead) return;
     if (this.screen === 'setup') this._renderSetup();
     else if (this.screen === 'tiers') this._renderTiers();
+    else if (this.screen === 'bank') this._renderBank();
     else if (this.screen === 'lobby') this._renderLobby();
     else this._renderTable(full);
     this._renderOverlay();
@@ -290,7 +291,7 @@ class Game {
         <div class="pk-brand">
           <div class="pk-brand-cards">${cardHTML(48)}${cardHTML(45)}</div>
           <h1 class="pk-title">${esc(t('title'))}</h1>
-          <div class="pk-bankchip"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))} <b>${esc(bigMoney(this.bank()))}</b></div>
+          <button type="button" class="pk-bankchip" data-act="bank"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))} <b>${esc(bigMoney(this.bank()))}</b><span class="pk-bankgo">${esc(t('bank_see'))} &#x203A;</span></button>
         </div>
         <div class="pk-tabs" role="tablist">
           <button type="button" role="tab" aria-selected="${s.tab === 'solo'}" class="pk-tab${s.tab === 'solo' ? ' is-on' : ''}" data-act="set" data-k="tab" data-v="solo">${esc(t('tab_solo'))}</button>
@@ -311,7 +312,7 @@ class Game {
       <div class="pk-tiers">
         <div class="pk-tierhead">
           <button type="button" class="pk-btn pk-btn-sm" data-act="to-setup-tab">&#x2039; ${esc(t('back'))}</button>
-          <div class="pk-bankbar"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))}: <b>${esc(bigMoney(bal))}</b></div>
+          <button type="button" class="pk-bankbar" data-act="bank"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))}: <b>${esc(bigMoney(bal))}</b> &#x203A;</button>
         </div>
         ${broke ? `<button type="button" class="pk-btn pk-btn-primary" data-act="topup">${esc(t('topup', { n: bigMoney(HOLDEM_START_BANK - bal) }))}</button>` : ''}
         <div class="pk-tiergrid">
@@ -361,9 +362,121 @@ class Game {
         buyins: Math.max(0, n(hb.buyins) - n(l.buyins)),
         winnings: Math.max(0, n(hb.winnings) - n(l.winnings)),
         grants: Math.max(0, n(hb.grants) - n(l.grants)),
+        cashes: Math.max(0, n(hb.cashes) - n(l.cashes)),
+        entries: Math.max(0, n(hb.entries) - n(l.entries)),
+        best: n(hb.best),
       };
-      if (this.screen === 'setup' || this.screen === 'tiers') this.render();
+      if (this.screen === 'setup' || this.screen === 'tiers' || this.screen === 'bank') this.render();
     } catch { /* offline: this device's own ledger is still exact for this device */ }
+  }
+
+  /** This device's ledger plus the other devices' part, every field (the Bankrolls page). */
+  _myBankFull() {
+    const l = this._myLedger();
+    const r = this.bankRemote || {};
+    const n = (v) => (Number.isFinite(+v) ? Math.floor(+v) : 0);
+    const out = {};
+    for (const k of ['buyins', 'winnings', 'grants', 'cashes', 'entries']) out[k] = n(l[k]) + n(r[k]);
+    out.best = Math.max(n(l.best), n(r.best));
+    return out;
+  }
+
+  /** The Bankrolls page (2026-10-06, Matt: "a leaderboard or chip count ... so you can see current
+   *  bank roll and lifetime earnings"). Your own numbers on top - always there, offline too - and
+   *  everyone who has played for money below, ranked by bankroll or by lifetime winnings. Read-only:
+   *  it reads the same ledgers the hub leaderboard does and writes nothing. */
+  _renderBank() {
+    const mine = this._myBankFull();
+    const profit = mine.winnings - mine.buyins;
+    const sort = this.bankSort === 'won' ? 'won' : 'bank';
+    const signed = (v) => (v < 0 ? '-' : '+') + bigMoney(Math.abs(v));
+    const L = this.bankList;
+    let list = '';
+    if (L === 'loading' || L == null) list = `<p class="pk-hint pk-center-text">${esc(t('bank_loading'))}</p>`;
+    else if (L === 'offline') list = `<p class="pk-hint pk-center-text">${esc(t('bank_offline'))}</p><button type="button" class="pk-btn pk-btn-sm" data-act="bank-retry">${esc(t('bank_retry'))}</button>`;
+    else {
+      const rows = L.slice().sort((a, b) => {
+        if (a.review !== b.review) return a.review ? 1 : -1;
+        return sort === 'won' ? (b.won - a.won) || (b.bank - a.bank) : (b.bank - a.bank) || (b.won - a.won);
+      });
+      list = `<ol class="pk-bklist">${rows.map((r, i) => `
+          <li class="pk-bkrow${r.me ? ' is-me' : ''}" data-me="${r.me ? 1 : 0}">
+            <span class="pk-bkrank">${r.review ? '-' : i + 1}</span>
+            <span class="pk-lav">${esc(r.emoji || '\u{1F642}')}</span>
+            <span class="pk-bkname">${esc(r.me ? t('you') : r.name)}</span>
+            ${r.review ? `<span class="pk-bkval is-review">${esc(t('bank_review'))}</span>` : `<span class="pk-bkval"><b>${esc(bigMoney(sort === 'won' ? r.won : r.bank))}</b><small>${esc(sort === 'won' ? t('bankroll') + ' ' + bigMoney(r.bank) : t('bank_won_short') + ' ' + bigMoney(r.won))}</small></span>`}
+          </li>`).join('')}</ol>`;
+    }
+    this.el.innerHTML = `
+      <div class="pk-tiers pk-bankpage">
+        <div class="pk-tierhead">
+          <button type="button" class="pk-btn pk-btn-sm" data-act="bank-back">&#x2039; ${esc(t('back'))}</button>
+          <h2 class="pk-bktitle">${esc(t('bank_title'))}</h2>
+        </div>
+        <div class="pk-bkme">
+          <div class="pk-bkbig"><span class="pk-bankicon" aria-hidden="true">$</span><span>${esc(t('bankroll'))}</span><b>${esc(bigMoney(holdemBalance(mine)))}</b></div>
+          <div class="pk-bkgrid">
+            <div><small>${esc(t('bank_lifetime'))}</small><b>${esc(bigMoney(mine.winnings))}</b></div>
+            <div><small>${esc(t('bank_profit'))}</small><b class="${profit < 0 ? 'is-neg' : 'is-pos'}">${esc(signed(profit))}</b></div>
+            <div><small>${esc(t('bank_best'))}</small><b>${esc(bigMoney(mine.best))}</b></div>
+            <div><small>${esc(t('bank_prizes'))}</small><b>${esc(t('bank_prizes_n', { a: mine.cashes, b: mine.entries }))}</b></div>
+          </div>
+        </div>
+        <div class="pk-seg pk-bksort" role="radiogroup">
+          <button type="button" role="radio" aria-checked="${sort === 'bank'}" class="pk-segbtn${sort === 'bank' ? ' is-on' : ''}" data-act="bank-sort" data-v="bank">${esc(t('bankroll'))}</button>
+          <button type="button" role="radio" aria-checked="${sort === 'won'}" class="pk-segbtn${sort === 'won' ? ' is-on' : ''}" data-act="bank-sort" data-v="won">${esc(t('bank_lifetime'))}</button>
+        </div>
+        <div class="pk-bkwrap">${list}</div>
+      </div>`;
+    this._fitBank();
+  }
+
+  /** The page never scrolls (UX floor): drop rows from the bottom until the list fits, but never
+   *  your own row - you always see where you stand. */
+  _fitBank() {
+    const wrap = this.el.querySelector('.pk-bkwrap');
+    if (!wrap) return;
+    const rows = [...wrap.querySelectorAll('.pk-bkrow')];
+    for (let i = rows.length - 1; i >= 0 && wrap.scrollHeight > wrap.clientHeight + 1; i--) {
+      if (rows[i].dataset.me !== '1') rows[i].remove();
+    }
+  }
+
+  /** Read everyone's ledgers once (the hub leaderboard's own read and filters). */
+  async _loadBankList() {
+    this.bankList = 'loading';
+    if (this.screen === 'bank') this.render();
+    try {
+      const [netMod, agg, hidden] = await Promise.all([import('../../js/stats-net.js'), import('../../js/players-agg.js'), import('../../js/hidden-players.js')]);
+      const raw = await Promise.race([netMod.readPlayersOnce(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
+      if (this.dead) return;
+      if (!raw || !Object.keys(raw).length) throw new Error('offline');   // readPlayersOnce answers {} when it cannot reach Firebase
+      const all = {};
+      for (const id of Object.keys(raw)) if (!hidden.HIDDEN_DEVICE_PREFIX.some((p) => id.startsWith(p))) all[id] = raw[id];
+      const corr = corrections();
+      let meKey = null;
+      try { meKey = agg.buildIdentity(all).keyFor(loadProfile() || {}, statsId()); } catch { meKey = null; }
+      const rows = [];
+      let meSeen = false;
+      for (const g of agg.aggregatePlayers(all, corr)) {
+        if (hidden.isHiddenName(g.name)) continue;
+        const hb = ((g.games && g.games.holdem) || {}).hb;
+        const me = g.key === meKey;
+        if (!me && !(hb && ((hb.entries | 0) || (hb.grants | 0)))) continue;   // never played for money
+        if (me) meSeen = true;
+        const src = me ? this._myBankFull() : hb;
+        rows.push({ name: g.name, emoji: g.emoji, me, review: !me && !!holdemSuspect(hb), bank: Math.max(0, holdemBalance(src)), won: Math.max(0, Math.floor(+src.winnings || 0)) });
+      }
+      if (!meSeen) {
+        const p = loadProfile() || {};
+        const src = this._myBankFull();
+        rows.push({ name: p.name || '', emoji: p.emoji || '', me: true, review: false, bank: Math.max(0, holdemBalance(src)), won: src.winnings });
+      }
+      this.bankList = rows;
+    } catch {
+      this.bankList = 'offline';
+    }
+    if (this.screen === 'bank' && !this.dead) this.render();
   }
 
   _renderLobby() {
@@ -847,6 +960,7 @@ class Game {
    *  Opponents sit on a shallow arc (edges lower, names and stacks tilted with it) like the
    *  reference; the board cards size to whatever height the felt actually has. */
   _layout() {
+    if (this.screen === 'bank') { this.render(); return; }   // re-fit the list to the new height
     const strip = this.el.querySelector('.pk-strip');
     const felt = this.el.querySelector('.pk-felt');
     const bottom = this.el.querySelector('.pk-bottom');
@@ -894,6 +1008,15 @@ class Game {
       case 'set': return this._set(b.dataset.k, b.dataset.v);
       case 'bots': this.settings.bots = Math.max(1, Math.min(7, this.settings.bots + (+b.dataset.d))); this._saveSettings(); return this.render();
       case 'choose': this.screen = 'tiers'; this._refreshBank(); return this.render(true);
+      case 'bank':
+        this.bankFrom = this.screen;
+        this.screen = 'bank';
+        this._refreshBank();
+        this._loadBankList();
+        return this.render(true);
+      case 'bank-back': this.screen = this.bankFrom === 'tiers' ? 'tiers' : 'setup'; return this.render(true);
+      case 'bank-sort': this.bankSort = b.dataset.v === 'won' ? 'won' : 'bank'; return this.render();
+      case 'bank-retry': this._loadBankList(); return undefined;
       case 'deal': return this._newSolo(b.dataset.tier);
       case 'to-setup-tab': this.screen = 'setup'; return this.render(true);
       case 'topup': {

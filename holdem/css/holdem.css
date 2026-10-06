@@ -149,6 +149,37 @@
   background: linear-gradient(180deg, #3fae3a, #1d6b1a); color: #fff; font-weight: 900; font-size: 15px;
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
+/* The bankroll chip and bar open the Bankrolls page (2026-10-06). */
+.pk-root button.pk-bankchip, .pk-root button.pk-bankbar {
+  min-height: 44px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.25); font: inherit; font-size: 15px;
+  touch-action: manipulation;
+}
+.pk-root .pk-bankgo { font-size: 13px; font-weight: 700; color: var(--pk-gold); }
+/* The Bankrolls page: your numbers, a sort switch, everyone ranked. Never scrolls (_fitBank). */
+.pk-root .pk-bankpage { overflow: hidden; }
+.pk-root .pk-bktitle { margin: 0; font-size: 20px; font-weight: 900; color: #fff; }
+.pk-root .pk-bkme { background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 10px 12px; }
+.pk-root .pk-bkbig { display: flex; align-items: center; gap: 8px; font-size: 15px; color: #e6ebf3; }
+.pk-root .pk-bkbig b { margin-left: auto; font-size: 26px; color: #7ddf2a; }
+.pk-root .pk-bkgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-top: 8px; }
+.pk-root .pk-bkgrid div { display: flex; flex-direction: column; min-width: 0; }
+.pk-root .pk-bkgrid small { font-size: 12px; color: #aeb7c6; }
+.pk-root .pk-bkgrid b { font-size: 16px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-root .pk-bkgrid b.is-pos { color: #7ddf2a; }
+.pk-root .pk-bkgrid b.is-neg { color: #ff9a9a; }
+.pk-root .pk-bksort { margin: 0; }
+.pk-root .pk-bkwrap { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+.pk-root .pk-bklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pk-root .pk-bkrow { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 3px 10px; background: rgba(255, 255, 255, 0.06); border-radius: 10px; }
+.pk-root .pk-bkrow.is-me { background: rgba(255, 206, 58, 0.16); box-shadow: inset 0 0 0 1px var(--pk-gold); }
+.pk-root .pk-bkrank { width: 22px; text-align: center; font-size: 15px; font-weight: 900; color: #aeb7c6; }
+.pk-root .pk-bkname { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-root .pk-bkval { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.pk-root .pk-bkval b { font-size: 16px; color: #7ddf2a; }
+.pk-root .pk-bkval small { font-size: 11px; color: #aeb7c6; white-space: nowrap; }
+.pk-root .pk-bkval.is-review { font-size: 12px; font-weight: 700; color: var(--pk-gold); }
+
 /* The table picker: the reference menu's tournament tiles, two to a row. */
 .pk-root .pk-tiers {
   flex: 1; display: flex; flex-direction: column; gap: 10px;

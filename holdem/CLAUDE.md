@@ -215,6 +215,27 @@ was her own uncalled bet coming back. Now:
   hand won or a biggest pot in `recordHoldemHand`, no gold outline in Last hand. The Last hand sheet
   lists it as "Rosa gets 2,050 back (nobody called it)".
 
+## The Bankrolls page (2026-10-06)
+
+Matt: *"Add a leaderboard or chip count or some page like that to Texas hold em so you can see
+current bank roll and lifetime earnings."* The bankroll chip on the setup screen ("See all ›") and
+the bankroll bar on the table picker open `screen = 'bank'` (`_renderBank` in `ui.js`):
+
+- **Your numbers on top**, from this device's ledger plus the other devices' part
+  (`_myBankFull`; `bankRemote` now also carries `cashes`, `entries`, `best`): Bankroll, **Lifetime
+  winnings** (= `hb.winnings`, every prize ever won, gross), Profit (`winnings - buyins`, can be
+  negative), Biggest prize, Prizes ("3 of 12 games"). Shown offline too.
+- **Everyone below**, one row per person, from the same read and filters the hub leaderboard uses
+  (`readPlayersOnce` -> hidden device prefixes -> `aggregatePlayers(all, corrections())` ->
+  `isHiddenName`), only people who ever played for money (`entries || grants`), plus always you.
+  Sort switch: **Bankroll** or **Lifetime winnings**. A `holdemSuspect()` ledger reads "Under
+  review" and sorts last, like the board. Your row is gold-outlined AND says "You".
+- **Never scrolls**: `_fitBank` drops rows from the bottom until the list fits, never your own row;
+  `_layout` re-renders it on resize.
+- `readPlayersOnce` answers `{}` when Firebase is unreachable, so an empty read is treated as
+  offline: the list says so with a **Try again** button (your own numbers still show).
+- Read-only: writes nothing.
+
 ## Cheat deterrents (2026-09-28)
 
 Matt asked for "cheat proof" and, offered a Firebase-function dealer (truly cheat-proof, but needs
