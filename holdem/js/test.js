@@ -2,7 +2,7 @@
 // Hand ranking, pots and side pots, betting-order rules, and whole tournaments played out by the
 // computer players with the chip count checked after every single action.
 
-import E, { evaluate, categoryOf, CAT, newGame, startHand, act, legal, leave, buildPots, publicView, payout } from './engine.js';
+import E, { evaluate, categoryOf, CAT, newGame, startHand, act, legal, leave, buildPots, publicView, payout, blindsOf } from './engine.js';
 import { decide } from './ai.js';
 
 let pass = 0, fail = 0;
@@ -233,6 +233,45 @@ ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 50
   ok('prizes with no games are flagged', GS.holdemSuspect({ buyins: 0, winnings: 975, grants: 0, best: 975, cashes: 1, entries: 0 }) !== '');
   ok('an impossible best prize is flagged', GS.holdemSuspect({ buyins: 500, winnings: 777, grants: 0, best: 777, cashes: 1, entries: 1 }) !== '');
   ok('an empty ledger is fine', GS.holdemSuspect({}) === '' && GS.holdemSuspect(null) === '');
+  // Behind the Dumpster (2026-10-08): a bottle cap in, $250 to the winner, two wins = the cheapest seat.
+  ok('two dumpster wins buy the cheapest seat', GS.HOLDEM_ALLEY_PRIZE * 2 === tiers[0], GS.HOLDEM_ALLEY_PRIZE);
+  ok('a dumpster win of any other size is refused', GS.recordHoldemBank({ grant: 500, alley: true }) === null && GS.recordHoldemBank({ grant: 250, alley: true, buyin: 500 }) === null);
+  const before = GS.holdemLedger();
+  const after = GS.recordHoldemBank({ grant: GS.HOLDEM_ALLEY_PRIZE, alley: true });
+  ok('a dumpster win adds $250 and counts one alley win', after && after.grants === before.grants + 250 && after.alley === (before.alley | 0) + 1, { before, after });
+  ok('a player who only ever won behind the dumpster is not suspect', GS.holdemSuspect({ buyins: 0, winnings: 0, grants: 750, best: 0, cashes: 0, entries: 0, alley: 3 }) === '');
+  ok('dumpster money with no dumpster wins is still flagged', GS.holdemSuspect({ buyins: 0, winnings: 0, grants: 750, best: 0, cashes: 0, entries: 0, alley: 0 }) !== '');
+  // A career that goes broke and climbs back out behind the dumpster is never suspect.
+  for (let trial = 0; trial < 200; trial++) {
+    const hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0, alley: 0 };
+    for (let g = 0; g < 80; g++) {
+      const bal = GS.holdemBalance(hb);
+      if (bal < 500 || Math.random() < 0.1) { if (Math.random() < 0.4) { hb.grants += 250; hb.alley++; } continue; }
+      const afford = tiers.filter((b) => b <= bal);
+      const b = afford[Math.floor(Math.random() * afford.length)];
+      const n = 2 + Math.floor(Math.random() * 7);
+      hb.buyins += b; hb.entries++;
+      const prize = payout(1 + Math.floor(Math.random() * n), n, b);
+      if (prize) { hb.winnings += prize; hb.cashes++; hb.best = Math.max(hb.best, prize); }
+      const why = GS.holdemSuspect(hb);
+      if (why) { ok('a career with dumpster wins is never suspect', false, { why, hb }); break; }
+    }
+  }
+}
+
+// ---- stack = buy-in, blinds in proportion (2026-10-08) -----------------------------------------
+{
+  const players = [{ name: 'a' }, { name: 'b' }, { name: 'c' }];
+  for (const [chips, sb] of [[100, 1], [500, 5], [1000, 10], [10000, 100], [10000000, 100000]]) {
+    const g = newGame(players, { chips, scale: chips / 1000 });
+    ok(`a ${chips} table deals ${chips} chips`, g.players.every((p) => p.chips === chips), g.players);
+    ok(`a ${chips} table opens at ${sb}/${sb * 2}`, blindsOf(g).sb === sb && blindsOf(g).bb === sb * 2, blindsOf(g));
+    let whole = true;
+    for (let lv = 0; lv < 20; lv++) { g.level = lv; const b = blindsOf(g); if (b.sb !== Math.floor(b.sb) || b.sb < 1) whole = false; }
+    ok(`a ${chips} table's blinds are whole chips at every level`, whole);
+  }
+  const plain = newGame(players, {});
+  ok('no buy-in still deals the $10,000 game at 100/200', plain.players[0].chips === 10000 && blindsOf(plain).sb === 100);
 }
 
 console.log(`holdem engine: ${pass} passed, ${fail} failed (${games} tournaments, ${hands} hands)`);

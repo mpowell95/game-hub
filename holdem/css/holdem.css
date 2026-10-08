@@ -191,7 +191,7 @@
 
 /* The table picker: the reference menu's tournament tiles, two to a row. */
 .pk-root .pk-tiers {
-  flex: 1; display: flex; flex-direction: column; gap: 10px;
+  flex: 1; display: flex; flex-direction: column; gap: 8px;
   padding: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px) max(12px, calc(50% - 230px)) calc(env(safe-area-inset-bottom, 0px) + 10px);
   background: linear-gradient(180deg, #213656 0%, #14223a 45%, #0b1322 100%);
 }
@@ -216,6 +216,17 @@
 }
 .pk-root .pk-tier.is-locked { filter: grayscale(0.85) brightness(0.55); opacity: 1; }
 .pk-root .pk-tier.is-locked .pk-tierwin { color: #fff; }
+/* Behind the Dumpster: its bottle caps, full ones filled and gold-rimmed, spent ones an empty
+   outline (shape and fill, not colour alone). */
+.pk-root .pk-caps { display: inline-flex; align-items: center; gap: 3px; line-height: 1; }
+.pk-root .pk-capico { width: 16px; height: 16px; }
+.pk-root .pk-capnext { margin-left: 4px; font-size: 12px; font-weight: 700; color: #fff; }
+.pk-root .pk-capnext:empty { display: none; }
+.pk-root .pk-capico path { fill: none; stroke: #cfd6e0; stroke-width: 1.4; stroke-linejoin: round; }
+.pk-root .pk-capico circle { fill: none; stroke: none; }
+.pk-root .pk-capico.is-full path { fill: #c8102e; stroke: #f5d76e; }
+.pk-root .pk-capico.is-full circle { fill: #e8e8e8; stroke: #9a9a9a; stroke-width: 1; }
+.pk-root .pk-broke { margin: 0; padding: 8px 12px; border-radius: 4px; background: #3a1010; border: 1px solid #7a2020; font-size: 14px; text-align: center; }
 .pk-root .pk-tierstep { display: flex; align-items: center; gap: 8px; }
 .pk-root .pk-tierstepval, .pk-root .pk-tierline {
   flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; text-align: center;
@@ -525,35 +536,23 @@
 }
 .pk-root .pk-opp.has-cards .pk-ostack { margin-top: 14px; }
 .pk-root .pk-barpot { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; color: #fff; }
-.pk-root .pk-raisehandle { touch-action: none; min-width: 108px; }
+.pk-root .pk-raisehandle { touch-action: none; min-width: 108px; padding: 0 10px; white-space: nowrap; }
 .pk-root .pk-raisehandle.is-on { background: linear-gradient(180deg, #3a3000, #120e00); }
-/* The one-motion raise meter: a vertical track above the RAISE button, filled from the bottom as
-   the finger slides up, with the amount riding on top of the fill. Transform-only animation. */
-.pk-root .pk-dragmeter {
-  position: absolute; z-index: 30; width: 46px; transform: translateX(-50%);
-  pointer-events: none;
+/* The raise drag (2026-10-08, a copy of the reference app's): a dark box picked up off SET RAISE
+   that follows the finger up the table, the amount riding on top of it. Placed with a transform
+   only, once per animation frame. The tab itself is hidden while the box is out. */
+.pk-root .pk-ghost {
+  position: absolute; left: 0; top: 0; z-index: 30; pointer-events: none; will-change: transform;
+  border-radius: 4px; background: rgba(0, 0, 0, 0.62); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  display: flex; justify-content: center; align-items: flex-start;
 }
-.pk-root .pk-dm-track {
-  position: absolute; left: 50%; top: 0; bottom: 0; width: 16px; transform: translateX(-50%);
-  border-radius: 8px; background: rgba(0, 0, 0, 0.6); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
-  overflow: hidden;
+.pk-root .pk-ghost-amt {
+  margin-top: -14px; padding: 2px 10px; border-radius: 3px; background: rgba(0, 0, 0, 0.8);
+  font-size: 19px; font-weight: 800; color: #fff; white-space: nowrap; text-shadow: 0 1px 2px #000;
 }
-.pk-root .pk-dm-track i {
-  position: absolute; inset: 0; transform-origin: bottom center; transform: scaleY(0);
-  background: linear-gradient(0deg, #7ddf2a, var(--pk-gold));
-}
-.pk-root .pk-dm-top {
-  position: absolute; left: 50%; top: -22px; transform: translateX(-50%);
-  font-size: 11px; font-weight: 800; color: #fff; white-space: nowrap; text-shadow: 0 1px 2px #000;
-}
-.pk-root .pk-dm-bubble {
-  position: absolute; left: 50%; bottom: 0; margin-bottom: -14px;
-  min-width: 64px; padding: 4px 10px; border-radius: 999px;
-  background: #000; border: 2px solid var(--pk-gold); color: #fff;
-  font-size: 16px; font-weight: 800; text-align: center; white-space: nowrap;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.6);
-}
-.pk-root .pk-dragmeter.is-allin .pk-dm-bubble { background: #9d0f14; }
+.pk-root .pk-ghost.is-no .pk-ghost-amt { font-size: 15px; text-transform: uppercase; color: #cfd6e0; }
+.pk-root .pk-ghost.is-allin .pk-ghost-amt { background: #9d0f14; text-transform: uppercase; }
+.pk-root.is-raisedrag .pk-raisehandle { visibility: hidden; }
 .pk-root .pk-bigbtn.is-pre { flex-direction: row; gap: 10px; }
 .pk-root .pk-cfbox {
   width: 28px; height: 28px; flex: 0 0 28px; border-radius: 4px; border: 2px solid #cfd6e0;

@@ -14,7 +14,7 @@
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_REFILL, loadStats, statsId } from '../../js/game-stats.js';
+import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_ALLEY_PRIZE, loadStats, statsId } from '../../js/game-stats.js';
 import { corrections } from '../../js/admin-config.js';
 import { correctHoldemLedger } from '../../js/stats-corrections.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
@@ -62,6 +62,62 @@ const TIERS = [
   { id: 'universe', buyin: 10000000, skill: 3, bg: 'linear-gradient(135deg, #8a2fd0, #2a0a5a)' },
 ];
 const tierById = (id) => TIERS.find((x) => x.id === id) || null;
+
+// Behind the Dumpster (2026-10-08, Matt): "an illegal game between homeless people in an alley or
+// behind a dumpster", the table for when you're broke. It costs a BOTTLE CAP, not money (no `buyin`
+// field on purpose: holdem/js/test.js reads the money tables out of TIERS by that shape), and the
+// winner alone gets HOLDEM_ALLEY_PRIZE ($250: "make it 2 wins" to afford Buddy's House). Always on
+// the table picker, broke or not. Solo only - online tables are money tables or just for fun.
+const ALLEY = { id: 'alley', stack: 100, skill: 1, bg: 'linear-gradient(135deg, #5b5446, #1c1a15)' };
+/** A table by id, the dumpster included (TIERS alone is the money tables). */
+const tableById = (id) => (id === ALLEY.id ? ALLEY : tierById(id));
+/** The stack a table deals and its blind scale: the buy-in itself, so every table opens at the same
+ *  50 big blinds (2026-10-08, Matt: "you have the buy in amount to gamble with. Blinds and stuff are
+ *  increased accordingly/proportionally"). null = the plain $10,000 game. */
+function stackOf(table) {
+  const chips = table ? (table.id === ALLEY.id ? ALLEY.stack : table.buyin) : 0;
+  return chips > 0 ? { chips, scale: chips / 1000 } : null;
+}
+
+// Bottle caps: the dumpster's buy-in. Hold at most CAPS_MAX; one comes back every CAPS_EVERY_MS
+// (Matt: "you can hold at most 3, and sure on 2 hours"). Stored as ONE timestamp, `at`: the caps
+// you hold are how many whole refill periods have passed since it, up to the max. Spending a cap
+// moves `at` forward one period (from "full" if more than full had built up). This is an allowance
+// that refills itself, not earned history (THE LAW rule 2 is about history), and it lives on this
+// device only. Honest limit: a phone whose clock is wound forward refills early.
+const CAPS_KEY = 'gamehub.holdem.caps.v1';
+const CAPS_MAX = 3;
+const CAPS_EVERY_MS = 2 * 3600 * 1000;
+function capsState(now = Date.now()) {
+  const v = readJSON(CAPS_KEY);
+  const at = v && Number.isFinite(+v.at) ? Math.min(+v.at, now) : now - CAPS_MAX * CAPS_EVERY_MS;
+  const n = Math.max(0, Math.min(CAPS_MAX, Math.floor((now - at) / CAPS_EVERY_MS)));
+  const next = n >= CAPS_MAX ? 0 : CAPS_EVERY_MS - ((now - at) % CAPS_EVERY_MS);
+  return { n, next, at };
+}
+function spendCap() {
+  const now = Date.now();
+  const c = capsState(now);
+  if (c.n < 1) return false;
+  const base = Math.max(c.at, now - CAPS_MAX * CAPS_EVERY_MS);
+  return writeJSON(CAPS_KEY, { at: base + CAPS_EVERY_MS });
+}
+/** "1h 12m" / "8m" until the next cap. */
+const untilText = (ms) => {
+  const m = Math.max(1, Math.ceil(ms / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+};
+/** A bottle cap: a crimped disc. Full or empty by FILL and outline, never colour alone. */
+const capSVG = (full) => `<svg class="pk-capico${full ? ' is-full' : ''}" viewBox="0 0 24 24" aria-hidden="true"><path d="${CAP_PATH}"/><circle cx="12" cy="12" r="6.2"/></svg>`;
+const CAP_PATH = (() => {
+  const pts = [];
+  for (let i = 0; i < 42; i++) {
+    const a = (i / 42) * Math.PI * 2;
+    const r = i % 2 ? 9.6 : 11.4;
+    pts.push(`${(12 + r * Math.cos(a)).toFixed(2)} ${(12 + r * Math.sin(a)).toFixed(2)}`);
+  }
+  return 'M' + pts.join(' L') + ' Z';
+})();
 /** One Bankrolls-page row: who, and their whole ledger as plain whole numbers. */
 function bankRow(key, name, emoji, me, review, hb) {
   const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
@@ -78,6 +134,28 @@ const BOT_NAMES = [
   ['Lucky', '\u{1F340}'], ['Rosa', '\u{1F339}'], ['Tex', '\u{1F920}'], ['Chip', '\u{1F43F}️'],
   ['Maverick', '\u{1F985}'], ['Lola', '\u{1F98A}'], ['Duke', '\u{1F3A9}'], ['Olive', '\u{1F989}'],
 ];
+
+// Who you play at each table (2026-10-08, after the reference app: dogs at Buddy's House, people at
+// the big tables). Seven per table, the most opponents a table can have. Solo only: online, the
+// host's computers keep the plain list.
+const THEMES = {
+  alley: [['Trash Panda', '\u{1F99D}'], ['Sewer Rat', '\u{1F400}'], ['Pigeon Pete', '\u{1F426}'], ['Roach', '\u{1FAB3}'],
+    ['Stinky', '\u{1F9A8}'], ['Alley Cat', '\u{1F408}\u200D\u2B1B'], ['Dumpster Dan', '\u{1F5D1}\uFE0F']],
+  buddy: [['Cooper', '\u{1F436}'], ['Lady', '\u{1F429}'], ['Mocha', '\u{1F415}'], ['Buster', '\u{1F9AE}'],
+    ['Daisy', '\u{1F415}\u200D\u{1F9BA}'], ['Frank', '\u{1F32D}'], ['Wolfie', '\u{1F43A}']],
+  vegas: [['Elvis', '\u{1F57A}'], ['Roxy', '\u{1F483}'], ['Tex', '\u{1F920}'], ['Lucky', '\u{1F340}'],
+    ['Ace', '\u{1F3B0}'], ['Diamond', '\u{1F48E}'], ['Duke', '\u{1F3A9}']],
+  regional: [['Rosa', '\u{1F469}'], ['Big Al', '\u{1F9D4}'], ['Gus', '\u{1F474}'], ['Linda', '\u{1F469}\u200D\u{1F9B0}'],
+    ['Marco', '\u{1F9D1}'], ['Tina', '\u{1F471}\u200D\u2640\uFE0F'], ['Ray', '\u{1F9E2}']],
+  world: [['Maverick', '\u{1F60E}'], ['The Shark', '\u{1F988}'], ['Ice', '\u{1F9CA}'], ['Viper', '\u{1F40D}'],
+    ['Professor', '\u{1F9D0}'], ['Queenie', '\u{1F451}'], ['Lola', '\u{1F98A}']],
+  solar: [['Commander', '\u{1F9D1}\u200D\u{1F680}'], ['Luna', '\u{1F319}'], ['Rocket', '\u{1F680}'], ['Comet', '\u2604\uFE0F'],
+    ['Orbit', '\u{1F6F0}\uFE0F'], ['Sol', '\u2600\uFE0F'], ['Saturn', '\u{1FA90}']],
+  galaxy: [['Zorg', '\u{1F47D}'], ['Bleep', '\u{1F916}'], ['Glorp', '\u{1F47E}'], ['Nebula', '\u{1F30C}'],
+    ['Xan', '\u{1F6F8}'], ['Krill', '\u{1F991}'], ['Vex', '\u{1F419}']],
+  universe: [['The Oracle', '\u{1F52E}'], ['Dragon', '\u{1F409}'], ['Unicorn', '\u{1F984}'], ['Wizard', '\u{1F9D9}'],
+    ['Phoenix', '\u{1F525}'], ['Titan', '\u{1F5FF}'], ['Infinity', '\u267E\uFE0F']],
+};
 
 const readJSON = (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { console.warn('[holdem] save failed', k, e); return false; } };
@@ -118,8 +196,11 @@ function me() {
   return { name: (p && p.name) || t('you'), avatar: (p && p.emoji) || '\u{1F642}', deviceId: deviceId() };
 }
 
-/** Computer players: the profile's own opponents first (name + emoji), then the house list. */
-function botRoster(n, skill) {
+/** Computer players. At a table with a theme, that table's crowd in a random order; otherwise the
+ *  profile's own opponents first (name + emoji), then the house list. */
+function botRoster(n, skill, tableId) {
+  const theme = THEMES[tableId];
+  if (theme) return shuffle(theme.slice()).slice(0, n).map(([name, emoji]) => ({ name, emoji, bot: skill }));
   const prof = loadProfile();
   const out = [];
   const used = new Set();
@@ -327,8 +408,9 @@ class Game {
           <button type="button" class="pk-btn pk-btn-sm" data-act="to-setup-tab">&#x2039; ${esc(t('back'))}</button>
           <button type="button" class="pk-bankbar" data-act="bank"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))}: <b>${esc(bigMoney(bal))}</b> &#x203A;</button>
         </div>
-        ${broke ? `<button type="button" class="pk-btn pk-btn-primary" data-act="topup">${esc(t('topup', { n: bigMoney(TIERS[0].buyin - Math.max(0, bal)) }))}</button>` : ''}
+        ${broke ? `<p class="pk-broke">${esc(t('broke_hint', { n: bigMoney(HOLDEM_ALLEY_PRIZE) }))}</p>` : ''}
         <div class="pk-tiergrid">
+          ${this._alleyTile()}
           ${TIERS.map((x) => {
             const locked = bal < x.buyin;
             return `<button type="button" class="pk-tier${locked ? ' is-locked' : ''}" data-act="deal" data-tier="${x.id}" style="background:${x.bg}" ${locked ? 'disabled' : ''}>
@@ -339,8 +421,26 @@ class Game {
             </button>`;
           }).join('')}
         </div>
-        <p class="pk-hint pk-center-text">${esc(t('prize_rule', { n }))}</p>
+        ${broke ? '' : `<p class="pk-hint pk-center-text">${esc(t('prize_rule', { n }))}</p>`}
       </div>`;
+  }
+
+  /** Behind the Dumpster's tile: the bottle caps you hold, and when the next one comes back. */
+  _alleyTile() {
+    const c = capsState();
+    const none = c.n < 1;
+    const caps = Array.from({ length: CAPS_MAX }, (_, i) => capSVG(i < c.n)).join('');
+    return `<button type="button" class="pk-tier pk-tier-alley${none ? ' is-locked' : ''}" data-act="deal" data-tier="${ALLEY.id}" style="background:${ALLEY.bg}" ${none ? 'disabled' : ''} aria-label="${esc(t('tier_alley') + '. ' + t('caps_n', { n: c.n, max: CAPS_MAX }))}">
+      <span class="pk-tiername">${esc(t('tier_alley'))}</span>
+      <span class="pk-tierbuy">${esc(t('alley_buy'))}</span>
+      <span class="pk-caps">${caps}<span class="pk-capnext" data-role="caps-next" aria-label="${esc(this._capsLine(c))}">${esc(c.n < CAPS_MAX ? untilText(c.next) : '')}</span></span>
+      <span class="pk-tierwin">${esc(t('alley_wins', { n: bigMoney(HOLDEM_ALLEY_PRIZE) }))}</span>
+    </button>`;
+  }
+
+  /** "next cap in 1h 12m" (spoken; the tile shows just the time beside the empty cap). */
+  _capsLine(c) {
+    return c.n < CAPS_MAX ? t('cap_next', { t: untilText(c.next) }) : '';
   }
 
   /** This device's ledger plus (once read) the player's other devices', as one balance. */
@@ -627,7 +727,7 @@ class Game {
 
     // --- banner
     if (h && h.sb) q('.pk-ban-blinds').textContent = `${money(h.sb)}/${money(h.bb)}`;
-    const tierNow = tierById(pub.cfg && pub.cfg.tier);
+    const tierNow = tableById(pub.cfg && pub.cfg.tier);
     q('.pk-ban-title').textContent = tierNow ? t('tier_' + tierNow.id) : t('title');
     q('.pk-ban-hand').textContent = String(pub.handNo || 0);
     const alive = pub.players.filter((p) => !p.out);
@@ -875,14 +975,14 @@ class Game {
         if (L2 && L2.i === this.myIdx && this.precf === handKey) this._move({ a: L2.canCheck ? 'check' : 'fold' });
       }, 350);
     }
-    const sig = `${mode}:${pub.k}:${r ? 1 : 0}:${this.revealAll === pub.handNo}:${preOn}:${this.drag ? 1 : 0}`;
+    const sig = `${mode}:${pub.k}:${r ? (r.panel ? 2 : 1) : 0}:${this.revealAll === pub.handNo}:${preOn}:${this.drag ? 1 : 0}`;
     if (sig !== this.actSig) {
       this.actSig = sig;
       const inHand = meP && h && !h.result && h.inHand && h.inHand[this.myIdx];
       tabs.innerHTML = inHand || L ? `
         <button type="button" class="pk-tab2" data-act="fold" ${L && !L.canCheck ? '' : 'disabled'}>${esc(t('fold'))}</button>
-        ${L && L.canRaise ? `<button type="button" class="pk-tab2 pk-raisehandle${r ? ' is-on' : ''}" data-act="raise-toggle" data-drag="raise" aria-label="${esc(t('raise_aria'))}">${esc(r && !this.drag ? t('cancel') : t('raise_drag'))}</button>` : ''}` : '';
-      if (r && L && !this.drag) {
+        ${L && L.canRaise ? `<button type="button" class="pk-tab2 pk-raisehandle${r ? ' is-on' : ''}" data-act="raise-toggle" data-drag="raise" aria-label="${esc(t('raise_aria'))}">${esc(r && r.panel && !this.drag ? t('cancel') : t('raise_drag'))}</button>` : ''}` : '';
+      if (r && r.panel && L && !this.drag) {
         bar.hidden = false;
         bar.innerHTML = `
           <div class="pk-barpot"><i class="pk-chip" aria-hidden="true"></i>${esc(t('pot', { n: money(L.pot) }))}</div>
@@ -903,11 +1003,8 @@ class Game {
     let label = '';
     if (mode === 'check') label = `<span class="pk-biglbl">${esc(t('big_check'))}</span><svg class="pk-tick" viewBox="0 0 48 40" aria-hidden="true"><path d="M4 22 L17 34 L44 5" fill="none" stroke="#1f7a12" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 22 L17 34 L44 5" fill="none" stroke="#7ddf2a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     else if (mode === 'call') label = `<span class="pk-biglbl">${esc(L.callAmt >= meP.chips ? t('big_allin', { n: money(L.callAmt) }) : t('big_call', { n: money(L.callAmt) }))}</span>${chips}`;
-    else if (mode === 'raise') {
-      const to = Math.max(L.minTo, Math.min(L.maxTo, r.to));
-      const key = to >= L.maxTo ? 'big_allin' : (L.isBet ? 'big_bet' : 'big_raise');
-      label = `<span class="pk-biglbl">${esc(t(key, { n: money(to) }))}</span>${chips}`;
-    } else if (mode === 'reveal') label = `<span class="pk-biglbl is-small">${esc(t('see_cards'))}</span><svg class="pk-gem" viewBox="0 0 40 32" aria-hidden="true"><path d="M8 2 H32 L39 11 L20 31 L1 11 Z" fill="#2fd07a" stroke="#0f7a3e" stroke-width="2"/><path d="M1 11 H39 M14 2 L10 11 L20 31 L30 11 L26 2" fill="none" stroke="#0f7a3e" stroke-width="1.5"/></svg>`;
+    else if (mode === 'raise') label = `<span class="pk-biglbl">${esc(this._raiseText(L, Math.max(L.minTo, Math.min(L.maxTo, r.to))))}</span>${chips}`;
+    else if (mode === 'reveal') label = `<span class="pk-biglbl is-small">${esc(t('see_cards'))}</span><svg class="pk-gem" viewBox="0 0 40 32" aria-hidden="true"><path d="M8 2 H32 L39 11 L20 31 L1 11 Z" fill="#2fd07a" stroke="#0f7a3e" stroke-width="2"/><path d="M1 11 H39 M14 2 L10 11 L20 31 L30 11 L26 2" fill="none" stroke="#0f7a3e" stroke-width="1.5"/></svg>`;
     else if (mode === 'back') label = `<span class="pk-biglbl">${esc(t('im_back'))}</span>`;
     else if (mode === 'precf') label = `<span class="pk-cfbox${preOn ? ' is-on' : ''}" aria-hidden="true">${preOn ? '&#x2714;' : ''}</span><span class="pk-biglbl">${esc(t('check_fold'))}</span>`;
     big.classList.toggle('is-pre', mode === 'precf');
@@ -972,7 +1069,7 @@ class Game {
           <button type="button" class="pk-x" data-act="close" aria-label="${esc(t('done'))}">&#x2715;</button>
           <h2 class="pk-over-title">${esc(title)}</h2>
           ${this._myPrize() ? `<p class="pk-prize">${esc(t('prize_won', { n: bigMoney(this._myPrize()) }))}</p>` : ''}
-          ${pub.cfg && pub.cfg.buyin > 0 ? `<p class="pk-hint">${esc(t('bankroll'))}: ${esc(bigMoney(this.bank()))}</p>` : ''}
+          ${pub.cfg && (pub.cfg.buyin > 0 || pub.cfg.tier === ALLEY.id) ? `<p class="pk-hint">${esc(t('bankroll'))}: ${esc(bigMoney(this.bank()))}</p>` : ''}
           <ol class="pk-final">${ranked.map((p) => `<li class="${p.id === pub.winner ? 'is-first' : ''}"><span class="pk-fplace">${esc(placeText(p.place || 0))}</span><span class="pk-lav">${esc(p.emoji)}</span><span class="pk-lname">${esc(p.id === this.myIdx ? t('you') : p.name)}</span></li>`).join('')}</ol>
           <div class="pk-actrow">${btns}</div>
         </div>`;
@@ -1050,14 +1147,6 @@ class Game {
       }
       case 'deal': return this._newSolo(b.dataset.tier);
       case 'to-setup-tab': this.screen = 'setup'; return this.render(true);
-      case 'topup': {
-        // Broke: exactly enough for the cheapest seat, and only then (2026-10-08). The stats layer
-        // refuses a grant bigger than HOLDEM_REFILL.
-        const bal = this.bank();
-        const need = Math.min(HOLDEM_REFILL, TIERS[0].buyin - Math.max(0, bal));
-        if (need > 0 && bal < TIERS[0].buyin) recordHoldemBank({ grant: need });
-        return this.render(true);
-      }
       case 'nettier': {
         // The host can only choose a table they can afford themselves; none = just for fun.
         const bal = this.bank();
@@ -1089,12 +1178,15 @@ class Game {
       case 'giveup-go': this.overlay = null; this._forfeitSave(); return this.render(true);
       case 'fold': return this._move({ a: 'fold' });
       case 'raise-toggle': {
-        if (this.raise) { this.raise = null; return this._paintActions(); }
+        // Tap SET RAISE: open the Min / 1/2 Pot / Pot / All in panel (with a dragged amount, if one
+        // is set); tap it again (it reads Cancel) to drop the raise.
+        if (this.raise && this.raise.panel) { this.raise = null; return this._paintActions(); }
+        if (this.raise) { this.raise.panel = true; return this._paintActions(); }
         const L = legal(this.pub);
         if (!L) return;
         const pot = L.pot;
         const def = L.isBet ? Math.round(pot * 0.5) : this.pub.hand.currentBet * 2 + (pot - this.pub.hand.currentBet);
-        this.raise = { to: Math.max(L.minTo, Math.min(L.maxTo, this._snap(def))) };
+        this.raise = { to: Math.max(L.minTo, Math.min(L.maxTo, this._snap(def))), panel: true };
         return this._paintActions();
       }
       case 'preset': return this._preset(b.dataset.p);
@@ -1144,83 +1236,126 @@ class Game {
     }
   }
 
-  /** Raise amount for a drag fraction 0..1. Squared, so the first half of the slide gives fine
-   *  control over small raises and the top of it races to the whole stack. */
+  /** Raise amount for a drag fraction 0..1. Straight-line, like the reference app: the higher the
+   *  box, the bigger the bet, at the same rate all the way up; the top 3% is the whole stack. */
   _dragAmount(f, L) {
-    if (f >= 0.96) return L.maxTo;
-    const raw = L.minTo + (L.maxTo - L.minTo) * f * f;
+    if (f >= 0.97) return L.maxTo;
+    const raw = L.minTo + (L.maxTo - L.minTo) * f;
     return Math.max(L.minTo, Math.min(L.maxTo, this._snap(raw)));
   }
 
+  /** What the big button says for a raise to `to`. */
+  _raiseText(L, to) {
+    const key = to >= L.maxTo ? 'big_allin' : (L.isBet ? 'big_bet' : 'big_raise');
+    return t(key, { n: money(to) });
+  }
+
+  // The raise drag, rebuilt 2026-10-08 as a copy of the reference app's (Matt: "Our raise drag is
+  // objectively worse than the example's. That one is smooth and nice, while ours is choppy and
+  // clunky"). Press SET RAISE and a dark box picks up under your finger; it follows the finger up
+  // the table with the amount on top of it, and the big button reads BET / RAISE TO $X as it goes.
+  // Back down at the start it reads NO RAISE. Letting go SETS the amount (2026-09-28: the bet goes
+  // in only when the big button is tapped); letting go on NO RAISE puts it back. A plain tap still
+  // opens the Min / 1/2 Pot / Pot / All in panel.
+  // Why the old one was choppy: every pointermove repainted the action area (_paintActions rebuilds
+  // the tabs and the big button), and the meter's amount was squared, so it crawled then jumped.
+  // Now a move only records the finger; one requestAnimationFrame moves the box (transform only)
+  // and rewrites two text nodes. The action area is repainted only when NO RAISE flips.
   _dragStart(e) {
     const handle = e.target.closest && e.target.closest('[data-drag="raise"]');
     if (!handle || this.drag || e.button > 0) return;
     const L = legal(this.pub);
     if (!L || !L.canRaise) return;
     const table = this.el.querySelector('.pk-table');
-    const felt = this.el.querySelector('.pk-felt');
-    if (!table || !felt) return;
-    const tb = table.getBoundingClientRect(), hb = handle.getBoundingClientRect(), fb = felt.getBoundingClientRect();
-    const travel = Math.max(140, Math.min(420, hb.top - fb.top - 16));
-    const meter = document.createElement('div');
-    meter.className = 'pk-dragmeter';
-    meter.setAttribute('aria-hidden', 'true');
-    meter.style.left = Math.round(hb.left - tb.left + hb.width / 2) + 'px';
-    meter.style.bottom = Math.round(tb.bottom - hb.top + 6) + 'px';
-    meter.style.height = Math.round(travel) + 'px';
-    meter.innerHTML = `<span class="pk-dm-top">${esc(t('allin'))}</span><span class="pk-dm-track"><i></i></span><span class="pk-dm-bubble"></span>`;
-    table.appendChild(meter);
-    this.drag = { id: e.pointerId, y0: e.clientY, travel, moved: false, meter, prev: this.raise };
+    if (!table) return;
+    const tb = table.getBoundingClientRect(), hb = handle.getBoundingClientRect();
+    const w = Math.round(Math.max(110, Math.min(150, hb.width + 24)));
+    const h = 64;
+    const cx = hb.left - tb.left + hb.width / 2;
+    const x = Math.round(Math.max(4, Math.min(tb.width - w - 4, cx - w / 2)));
+    const startY = hb.top - tb.top + hb.height / 2;           // the box's centre at rest, table coords
+    // The highest the box's centre goes: its label just under the info banner, over the opponents.
+    const strip = this.el.querySelector('.pk-strip');
+    const topY = (strip ? strip.getBoundingClientRect().top - tb.top : 0) + 22 + h / 2;
+    const ghost = document.createElement('div');
+    ghost.className = 'pk-ghost';
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.style.width = w + 'px';
+    ghost.style.height = h + 'px';
+    ghost.innerHTML = '<span class="pk-ghost-amt"></span>';
+    table.appendChild(ghost);
+    this.drag = {
+      id: e.pointerId, y0: e.clientY, y: e.clientY, moved: false, no: true, to: 0,
+      ghost, amt: ghost.firstChild, x, h, startY, topY, travel: Math.max(120, startY - topY), raf: 0,
+    };
+    this.el.classList.add('is-raisedrag');
     try { this.el.setPointerCapture(e.pointerId); } catch { /* the gesture still works without capture */ }
-    this._dragMove(e);
+    this._dragFrame();
   }
 
   _dragMove(e) {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
+    d.y = e.clientY;
+    if (Math.abs(d.y0 - d.y) > 6) d.moved = true;
+    if (d.moved) e.preventDefault();
+    if (!d.raf) d.raf = requestAnimationFrame(() => { if (this.drag === d) { d.raf = 0; this._dragFrame(); } });
+  }
+
+  /** One frame of the drag: place the box under the finger and say what it would bet. */
+  _dragFrame() {
+    const d = this.drag;
+    if (!d) return;
     const L = legal(this.pub);
-    if (!L) return this._dragEnd(e, true);
-    const dy = d.y0 - e.clientY;
-    if (Math.abs(dy) > 10) d.moved = true;
-    const f = Math.max(0, Math.min(1, dy / d.travel));
-    const to = this._dragAmount(f, L);
-    d.to = to;
-    d.cancel = d.moved && dy < 14;
-    if (d.moved) {
-      if (!this.raise || this.raise.to !== to) { this.raise = { to }; this._paintActions(); }
-      e.preventDefault();
+    if (!L) { this._dragEnd({ pointerId: d.id }, true); return; }
+    const NO_PX = 26;                                          // this close to the start = NO RAISE
+    const dy = Math.max(0, d.y0 - d.y);
+    const cy = Math.max(d.topY, d.startY - dy);
+    d.ghost.style.transform = `translate3d(${d.x}px, ${(cy - d.h / 2).toFixed(1)}px, 0)`;
+    const no = !d.moved || dy < NO_PX;
+    const f = Math.max(0, Math.min(1, (dy - NO_PX) / Math.max(1, d.travel - NO_PX)));
+    const to = no ? 0 : this._dragAmount(f, L);
+    d.ghost.classList.toggle('is-no', no);
+    d.ghost.classList.toggle('is-allin', !no && to >= L.maxTo);
+    d.amt.textContent = no ? t('no_raise') : (to >= L.maxTo ? t('allin') : money(to));
+    if (no !== d.no) {
+      // The only repaint during a drag: the big button swaps between CHECK / CALL and BET $X.
+      d.no = no;
+      this.raise = no ? null : { to };
+      d.to = to;
+      this._paintActions();
+      return;
     }
-    const fill = d.meter.querySelector('.pk-dm-track i');
-    const bubble = d.meter.querySelector('.pk-dm-bubble');
-    fill.style.transform = `scaleY(${f.toFixed(3)})`;
-    bubble.style.transform = `translate(-50%, ${(-f * d.travel).toFixed(1)}px)`;
-    bubble.textContent = d.cancel ? t('cancel') : (to >= L.maxTo ? t('allin') : money(to));
-    d.meter.classList.toggle('is-allin', to >= L.maxTo && !d.cancel);
+    if (!no && to !== d.to) {
+      d.to = to;
+      this.raise = { to };
+      const lbl = this.el.querySelector('.pk-bigbtn .pk-biglbl');
+      if (lbl) lbl.textContent = this._raiseText(L, to);
+    }
   }
 
   _dragEnd(e, cancelled) {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
     this.drag = null;
-    d.meter.remove();
+    if (d.raf) cancelAnimationFrame(d.raf);
+    d.ghost.remove();
+    this.el.classList.remove('is-raisedrag');
     try { this.el.releasePointerCapture(d.id); } catch { /* already released */ }
     // Pointer capture on the root re-targets the click, so a plain tap is handled HERE (open the
-    // slider panel) and the click that follows is swallowed - same result by mouse or by touch.
+    // preset panel) and the click that follows is swallowed - same result by mouse or by touch.
     // Only THAT click: the next pointerdown clears this (2026-10-02, Matt: "if I raise, it makes
-    // me click the raise button twice"). A 500ms window alone also ate a quick tap on RAISE TO
-    // right after the RAISE tab, and every tap after a slide (no click follows one) for 500ms.
+    // me click the raise button twice").
     this.noClickUntil = Date.now() + 500;
     if (!d.moved) {
-      if (cancelled) return undefined;
+      if (cancelled) { this.actSig = ''; return this._paintActions(); }
       this.actSig = '';
       return this._click({ target: { closest: () => ({ dataset: { act: 'raise-toggle' }, disabled: false }) }, fromDrag: true });
     }
     const L = legal(this.pub);
-    if (cancelled || d.cancel || !L) { this.raise = d.prev || null; this.actSig = ''; return this._paintActions(); }
-    // Letting go only SETS the amount (2026-09-28, Matt: "it auto places the bet when I let go ...
-    // make the main button into a raise $x so I can confirm it"). The big button now reads
-    // RAISE TO / BET / ALL IN $X and the bet goes in only when that is tapped; the slider panel
-    // opens too, so the amount can still be nudged or the raise cancelled.
+    // Let go on NO RAISE (or the turn went away): back to CHECK / CALL, like the reference.
+    if (cancelled || d.no || !L) { this.raise = null; this.actSig = ''; return this._paintActions(); }
+    // Letting go only SETS the amount; the big button commits it.
     this.raise = { to: d.to };
     this.actSig = '';
     return this._paintActions();
@@ -1284,17 +1419,20 @@ class Game {
 
   _newSolo(tierId) {
     const s = this.settings;
-    const tier = tierById(tierId);
-    if (tierId && (!tier || this.bank() < tier.buyin)) { this.screen = 'tiers'; return this.render(true); }
+    const alley = tierId === ALLEY.id;
+    const tier = alley ? ALLEY : tierById(tierId);
+    if (tierId && (!tier || (alley ? capsState().n < 1 : this.bank() < tier.buyin))) { this.screen = 'tiers'; return this.render(true); }
     const prof = loadProfile();
     const human = { name: (prof && prof.name) || t('you'), emoji: (prof && prof.emoji) || '\u{1F642}', bot: 0, dev: deviceId() };
     const skill = tier ? tier.skill : s.skill;
-    const players = [human, ...botRoster(s.bots, skill)];
-    const state = newGame(players, { speed: s.speed, buyin: tier ? tier.buyin : 0, tier: tier ? tier.id : null });
+    const players = [human, ...botRoster(s.bots, skill, tier && tier.id)];
+    const state = newGame(players, { speed: s.speed, buyin: alley || !tier ? 0 : tier.buyin, tier: tier ? tier.id : null, ...(stackOf(tier) || {}) });
     state.gid = rid();
     state.skill = skill;
-    // The seat is paid for the moment the cards are dealt, before anything else can happen.
-    if (tier) recordHoldemBank({ buyin: tier.buyin });
+    // The seat is paid for the moment the cards are dealt, before anything else can happen: money
+    // at a real table, a bottle cap behind the dumpster.
+    if (alley) { if (!spendCap()) { this.screen = 'tiers'; return this.render(true); } }
+    else if (tier) recordHoldemBank({ buyin: tier.buyin });
     this._saveSettings();
     this._startSolo(state);
   }
@@ -1331,7 +1469,7 @@ class Game {
 
   /** "Buddy's House · hand 12 · $9,400" for the Resume button. */
   _saveLine(state) {
-    const tier = tierById(state.cfg && state.cfg.tier);
+    const tier = tableById(state.cfg && state.cfg.tier);
     const me = state.players.find((p) => !p.bot) || {};
     const parts = [tier ? t('tier_' + tier.id) : t('title'), t('hand_n', { n: state.handNo || 1 })];
     if (me.out) parts.push(t('st_out')); else parts.push(t('stack_n', { n: money(me.chips) }));
@@ -1582,11 +1720,13 @@ class Game {
       const s = this.table && this.table.state;
       if (!s || s.rec) return;
       s.rec = true;
-      const prize = this._prizeFor(won);
+      const alley = s.cfg && s.cfg.tier === ALLEY.id;
+      const prize = alley ? (won ? HOLDEM_ALLEY_PRIZE : 0) : this._prizeFor(won);
       if (prize) s.prize = prize;
       writeJSON(SAVE_KEY, { state: s, at: Date.now() });
       try { recordResult('holdem', SKILL_ID[s.skill] || 'medium', won); } catch (e) { console.warn('[holdem] stats write failed', e); }
-      if (prize) recordHoldemBank({ prize });
+      // Behind the Dumpster pays the winner a grant, not a prize: nobody bought in, so there is no pot.
+      if (prize) recordHoldemBank(alley ? { grant: prize, alley: true } : { prize });
       return;
     }
     const key = `${this.mp.code}:${pub.gid}`;
@@ -1802,7 +1942,7 @@ class Game {
       return this.render();
     }
     this.error = '';
-    const state = newGame(players, { speed: this.settings.speed, buyin: tier.buyin, tier: tier.id });
+    const state = newGame(players, { speed: this.settings.speed, buyin: tier.buyin, tier: tier.id, ...(stackOf(tier.buyin > 0 ? tier : null) || {}) });
     state.gid = rid();
     this._stopTable();
     this.screen = 'table';
@@ -2025,6 +2165,17 @@ class Game {
   /** Once a second: turn clock bar, away detection, publish retries. */
   _tick() {
     if (this.dead) return;
+    // The table picker's bottle caps count down live, and a cap that comes back unlocks the tile.
+    if (this.screen === 'tiers' && !this.overlay) {
+      const c = capsState();
+      const tile = this.el.querySelector('.pk-tier-alley');
+      if (tile && tile.classList.contains('is-locked') !== (c.n < 1)) this.render();
+      else if (tile && tile.querySelectorAll('.pk-capico.is-full').length !== c.n) this.render();
+      else {
+        const ln = this.el.querySelector('[data-role="caps-next"]');
+        if (ln) { ln.textContent = c.n < CAPS_MAX ? untilText(c.next) : ''; ln.setAttribute('aria-label', this._capsLine(c)); }
+      }
+    }
     const mp = this.mp;
     if (mp && mp.host && this.table) {
       const s = this.table.state;
