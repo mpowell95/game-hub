@@ -195,8 +195,10 @@ COPIED from GamePigeon's video, not reasoned out.
   starts at the top padding rather than being cut off at both ends): **Multiplayer ›**, Game (301 / 201 /
   101 / Cricket, plus Order for Cricket), Play the computer Easy/Medium/Hard (with the shared shape
   markers), Computer speed Slow/Normal/Fast (see below), First throw Alternate/Me/Computer (Alternate
-  is the default and flips every match, `nextStarter`), Continue match, then How to play and Play
-  side by side. Settings persist on every tap
+  is the default and flips every match, `nextStarter`), Continue match, then **Practice** and Play
+  side by side. How to play is the **?** circle in the card's top-right corner (since 2026-10-08,
+  when its button gave its place to Practice; the in-game menu still has it as a labelled button).
+  Settings persist on every tap
   (`gamehub.darts.v1`; its `mode` is now only the LOCAL kind, 'cpu' or 'pass', and an old 'online'
   reads as 'cpu').
 - Play: canvas board and darts (`render.js`, wall and board cached per layout), DOM for the
@@ -208,6 +210,30 @@ COPIED from GamePigeon's video, not reasoned out.
   X, Play again, Menu.
 - How to play: one goal line, a ring diagram (x2, x3, 25/50), one-line rules, each measured to fit
   one row (`_fitHelp`, 11px floor).
+
+## Practice (2026-10-08)
+
+Matt: *"add a practice mode. where you can play against yourself or just keep throwing as many darts
+in a row as you want. make it fit nicely on the setup screen"*.
+
+- **Where:** Practice sits beside Play on the setup card (How to play moved to a "?" in the card's
+  corner to make the room, so the card's height did not change: 587px with Continue match showing on
+  a short phone, as before). It opens a small card with two choices.
+- **Against yourself** (`mode: 'self'`): the game chosen on the setup card (301 / 201 / 101 /
+  Cricket with its Order and Points), you on both seats ("Tester" and "Tester 2", same emoji), no
+  pass card between turns. The result names the winner; Play again is another practice game.
+  Matt's aim help applies to both seats, since every dart is his.
+- **Free throw** (`mode: 'free'`, `_landFree`): no rules and no end. Three darts a round; each dart
+  pops up its bed (T20, D16, BULL) and points; after the third the round's total shows, the board
+  clears and the next round starts. The plaques show **3-dart avg** (points per dart x 3) and
+  **Best round**. It runs on a 301 match as a container; `throwDart` is never called. Leave from
+  the menu.
+- **Nothing recorded, nothing saved.** Neither mode calls `recordResult`, and `_save()` returns at
+  once for both, because the one save slot (`gamehub.darts.save.v1`) holds the match vs the computer:
+  a practice game that saved, or that FINISHED (a finished match clears the slot), would wipe it.
+  Verified in Chromium with a seeded computer match: after a whole "against yourself" game and seven
+  free-throw darts, the save and `gamehub.stats` were byte-identical and Continue match still showed.
+- `check-no-scroll.mjs darts` measures the practice chooser and the free-throw screen too.
 
 ## Computer speed (2026-10-08)
 
@@ -267,8 +293,8 @@ It is a competitive game, so it is NOT in `js/players-agg.js`'s `SOLO` set.
 - `node darts/js/test.js`: geometry (every target scores its value, wedge edges), the match (bust,
   win, no double-out, hand-over), 201 and 101, Cricket (marks, scoring, winning while behind does
   not count, in order, the computer finishing every game), the flick mapping, the flight.
-- `node check-no-scroll.mjs darts`: setup, how to play, play screen, result, both hosts, both phone
-  heights.
+- `node check-no-scroll.mjs darts`: setup, how to play, play screen, result, the practice chooser,
+  free throw, both hosts, both phone heights.
 - `window.__dtTest.ui` is the test seam (`_launch(from, x, y)` throws a dart at board point x, y).
 
 ## Online challenges (2026-10-01)

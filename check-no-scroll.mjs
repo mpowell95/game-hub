@@ -123,6 +123,22 @@ const EXTRA_SCREENS = {
         });
       },
     },
+    // Practice (2026-10-08): its chooser, and the free-throw play screen with its two plaques.
+    {
+      name: 'practice chooser',
+      async open(page) {
+        await page.evaluate(() => window.__dtTest.ui._showSetup());
+        await page.click('[data-ov="setup"] [data-act="practice"]');
+        await page.waitForSelector('[data-ov="practice"]:not([hidden])', { timeout: 8000 });
+      },
+    },
+    {
+      name: 'free throw',
+      async open(page) {
+        await page.click('[data-ov="practice"] [data-act="practiceFree"]');
+        await page.waitForTimeout(600);
+      },
+    },
   ],
   murdoku: [
     {

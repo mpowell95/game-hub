@@ -359,6 +359,29 @@
   color: #6b5440;
 }
 .dt-root .dt-x svg { width: 20px; height: 20px; }
+/* How to play, as a "?" in the setup card's corner (2026-10-08): its button gave its place beside
+   Play to Practice. Same circle as the close X on the other cards. */
+.dt-root .dt-q { font-family: inherit; font-size: 22px; font-weight: 900; line-height: 1; color: #6b5440; }
+/* Practice's two choices: a bold name and one line under it. */
+.dt-root .dt-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  border: 2px solid #e0cfae;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--dt-ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dt-root .dt-pick b { font-size: 17px; font-weight: 800; }
+.dt-root .dt-pick span { font-size: 13px; font-weight: 600; color: #6b5440; }
 .dt-root .dt-res-ava { margin: 4px 0 0; font-size: 46px; line-height: 1; }
 .dt-root .dt-res-line { margin: -4px 0 4px; font-size: 14px; font-weight: 700; color: #6b5440; }
 .dt-root .dt-pass {
