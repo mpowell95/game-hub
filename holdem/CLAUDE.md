@@ -115,6 +115,9 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
   Vegas Casino $1,000, Regional $5,000, World Championship $10,000, Solar System $100,000, Galaxy
   Championship $1,000,000, Universe Championship $10,000,000. A table is locked until the
   bankroll covers it. The chips at the table are always $10,000 tournament chips.
+- **Each table decides its computers' skill** (2026-10-08, `TIERS[].skill`): Buddy's House and
+  Las Vegas Easy, Regional and World Championship Medium, Solar System and up Hard. See "Bigger
+  tables, tougher computers" below.
 - **Money moves at exactly two moments**: the buy-in when the cards are dealt (solo `_newSolo`;
   online `_stake`, once per game per device, keyed `code:gid:stake`), and the prize when this
   player's place is decided - `payout()` in `engine.js`: everyone at the table (computers too)
@@ -132,6 +135,29 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
 - **Visible**: the setup screen and table picker, the end-of-game card ("+$X to your
   bankroll"), My Stats (Bankroll, Biggest prize, Won in prizes, Paid in buy-ins), and the
   leaderboard's Texas Hold'em records (Bankroll, Biggest prize).
+
+## Bigger tables, tougher computers (2026-10-08)
+
+Matt: *"the goal is to have the most money - the biggest bankroll... so why would anyone play on
+any difficulty other than easy?"* Nobody would: `payout()` depends only on the buy-in and the
+number of players, never on the computers' skill, so an Easy win paid exactly what a Hard win paid.
+Of the three fixes offered he chose this one:
+
+- **The table decides the computers' skill**, `skill` on each `TIERS` row: Easy at Buddy's House
+  and Las Vegas, Medium at Regional and World Championship, **Hard at Solar System and up**. The
+  big money is only ever behind Hard computers.
+- **Solo**: the setup screen's Skill row is gone; each table tile says who you are playing (shape
+  + "Hard computers", `tier_bots`). `_newSolo` deals `tier.skill`, and the result still records
+  under that skill (`state.skill`), so My Stats keeps its Easy/Medium/Hard split.
+- **Online**: on a table with a buy-in, the lobby's skill picker is replaced by the table's skill
+  and every computer plays at it (`_netBots()`, used by the lobby list, the published lobby and
+  `_startNet`). "No buy-in (just for fun)" keeps the host's own pick. The host's chosen bots are
+  stored unchanged; only what is dealt follows the table.
+- `settings.skill` in `gamehub.holdem.v1` is still written and kept (rule 5); nothing reads it for
+  a table game any more.
+- Nothing already earned changed: a game saved before this keeps the computers it was dealt.
+- `holdem/js/test.js` fails if a bigger table ever gets easier computers, or a money table
+  (Solar System and up) is anything but Hard.
 
 ## Bankroll leaderboard (2026-09-28)
 
@@ -303,8 +329,8 @@ under the computers' skill (`easy`/`medium`/`hard`), online under `'mp'`. Dedupe
 
 ## Keys
 
-- `gamehub.holdem.v1` - settings (tab, opponents, skill, blind speed, computer speed `pace`,
-  lobby computer count/skill/table)
+- `gamehub.holdem.v1` - settings (tab, opponents, skill (unread since 2026-10-08: the table
+  decides), blind speed, computer speed `pace`, lobby computer count/skill/table)
 - `gamehub.holdem.hands.v1` - the last 40 hands already counted in the hand stats (dedupe)
 - `gamehub.holdem.save.v1` - the solo game in progress (full engine state)
 - `gamehub.holdem.mp.v1` - the online seat for "Back to table" (+ host's state)

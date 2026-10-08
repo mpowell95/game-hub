@@ -47,14 +47,18 @@ const SKILL_ID = { 1: 'easy', 2: 'medium', 3: 'hard' };
 // The tables you can buy into with your bankroll (2026-09-27), cheapest first - the tournament
 // tiles on the reference app's menu. A table is locked until the bankroll covers its buy-in. The
 // chips AT the table are always $10,000 tournament chips; the buy-in is what the seat costs.
+// `skill` is the computers' skill at that table (2026-10-08, Matt chose "bigger tables get tougher
+// computers"): the prize depends only on the buy-in, so while the player picked the skill, Easy
+// paid exactly what Hard paid and nobody had a reason to play anything else. A table's skill never
+// goes DOWN as the buy-in goes up (holdem/js/test.js checks it).
 const TIERS = [
-  { id: 'buddy', buyin: 500, bg: 'linear-gradient(135deg, #c0582f, #6e2412)' },
-  { id: 'vegas', buyin: 1000, bg: 'linear-gradient(135deg, #7b3fb8, #34105e)' },
-  { id: 'regional', buyin: 5000, bg: 'linear-gradient(135deg, #2f9a3e, #0f4d1a)' },
-  { id: 'world', buyin: 10000, bg: 'linear-gradient(135deg, #c42f7d, #5e0f3a)' },
-  { id: 'solar', buyin: 100000, bg: 'linear-gradient(135deg, #e0892a, #7a3c05)' },
-  { id: 'galaxy', buyin: 1000000, bg: 'linear-gradient(135deg, #2f6fd0, #0f2a66)' },
-  { id: 'universe', buyin: 10000000, bg: 'linear-gradient(135deg, #8a2fd0, #2a0a5a)' },
+  { id: 'buddy', buyin: 500, skill: 1, bg: 'linear-gradient(135deg, #c0582f, #6e2412)' },
+  { id: 'vegas', buyin: 1000, skill: 1, bg: 'linear-gradient(135deg, #7b3fb8, #34105e)' },
+  { id: 'regional', buyin: 5000, skill: 2, bg: 'linear-gradient(135deg, #2f9a3e, #0f4d1a)' },
+  { id: 'world', buyin: 10000, skill: 2, bg: 'linear-gradient(135deg, #c42f7d, #5e0f3a)' },
+  { id: 'solar', buyin: 100000, skill: 3, bg: 'linear-gradient(135deg, #e0892a, #7a3c05)' },
+  { id: 'galaxy', buyin: 1000000, skill: 3, bg: 'linear-gradient(135deg, #2f6fd0, #0f2a66)' },
+  { id: 'universe', buyin: 10000000, skill: 3, bg: 'linear-gradient(135deg, #8a2fd0, #2a0a5a)' },
 ];
 const tierById = (id) => TIERS.find((x) => x.id === id) || null;
 /** One Bankrolls-page row: who, and their whole ledger as plain whole numbers. */
@@ -277,8 +281,6 @@ class Game {
           <span class="pk-stepval">${s.bots}</span>
           <button type="button" class="pk-stepbtn" data-act="bots" data-d="1" aria-label="+" ${s.bots >= 7 ? 'disabled' : ''}>+</button>
         </div></div>
-      <div class="pk-field"><div class="pk-label">${esc(t('skill'))}</div>
-        ${seg('skill', [1, 2, 3].map((k) => [k, `<span class="pk-shape">${diffShapeSVG(k)}</span>${esc(t(SKILL_ID[k]))}`]), s.skill)}</div>
       <div class="pk-field"><div class="pk-label">${esc(t('blinds_speed'))} <span class="pk-hint">${esc(speedHint)}</span></div>
         ${seg('speed', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('speed_' + k))]), s.speed)}</div>
       <div class="pk-field"><div class="pk-label">${esc(t('pace'))}</div>
@@ -331,6 +333,7 @@ class Game {
             return `<button type="button" class="pk-tier${locked ? ' is-locked' : ''}" data-act="deal" data-tier="${x.id}" style="background:${x.bg}" ${locked ? 'disabled' : ''}>
               <span class="pk-tiername">${esc(t('tier_' + x.id))}</span>
               <span class="pk-tierbuy">${esc(t('buy_in', { n: bigMoney(x.buyin) }))}</span>
+              <span class="pk-tierbots"><span class="pk-shape">${diffShapeSVG(x.skill)}</span>${esc(t('tier_bots', { skill: t(SKILL_ID[x.skill]) }))}</span>
               <span class="pk-tierwin">${locked ? '&#x1F512; ' + esc(t('locked')) : esc(t('first_wins', { n: bigMoney(payout(1, n, x.buyin)) }))}</span>
             </button>`;
           }).join('')}
@@ -498,7 +501,7 @@ class Game {
     const mp = this.mp;
     const room = mp.room || {};
     const humans = this._roster(room);
-    const bots = mp.host ? mp.bots : ((NT.parse(room.pk && room.pk.lobby) || {}).bots || []);
+    const bots = mp.host ? this._netBots() : ((NT.parse(room.pk && room.pk.lobby) || {}).bots || []);
     const speed = mp.host ? this.settings.speed : ((NT.parse(room.pk && room.pk.lobby) || {}).speed || 'normal');
     const count = humans.length + bots.length;
     const lobbyCfg = mp.host ? null : (NT.parse(room.pk && room.pk.lobby) || {});
@@ -516,7 +519,8 @@ class Game {
     const hostControls = mp.host ? `
         <div class="pk-lobby-tools">
           <button type="button" class="pk-btn" data-act="addbot" ${count >= MAX_PLAYERS ? 'disabled' : ''}>+ ${esc(t('add_bot'))}</button>
-          ${seg('netSkill', [1, 2, 3].map((k) => [k, `<span class="pk-shape">${diffShapeSVG(k)}</span><span class="pk-sr">${esc(t(SKILL_ID[k]))}</span>`]), this.settings.netSkill)}
+          ${tier ? `<span class="pk-lobbyskill"><span class="pk-shape">${diffShapeSVG(tier.skill)}</span>${esc(t(SKILL_ID[tier.skill]))}</span>`
+            : seg('netSkill', [1, 2, 3].map((k) => [k, `<span class="pk-shape">${diffShapeSVG(k)}</span><span class="pk-sr">${esc(t(SKILL_ID[k]))}</span>`]), this.settings.netSkill)}
         </div>
         <div class="pk-field"><div class="pk-label">${esc(t('table_label'))}</div>
           <div class="pk-tierstep">
@@ -1278,10 +1282,11 @@ class Game {
     if (tierId && (!tier || this.bank() < tier.buyin)) { this.screen = 'tiers'; return this.render(true); }
     const prof = loadProfile();
     const human = { name: (prof && prof.name) || t('you'), emoji: (prof && prof.emoji) || '\u{1F642}', bot: 0, dev: deviceId() };
-    const players = [human, ...botRoster(s.bots, s.skill)];
+    const skill = tier ? tier.skill : s.skill;
+    const players = [human, ...botRoster(s.bots, skill)];
     const state = newGame(players, { speed: s.speed, buyin: tier ? tier.buyin : 0, tier: tier ? tier.id : null });
     state.gid = rid();
-    state.skill = s.skill;
+    state.skill = skill;
     // The seat is paid for the moment the cards are dealt, before anything else can happen.
     if (tier) recordHoldemBank({ buyin: tier.buyin });
     this._saveSettings();
@@ -1742,6 +1747,14 @@ class Game {
     return x && this.bank() >= x.buyin ? x : { id: null, buyin: 0 };
   }
 
+  /** The computers as they will actually play. A table with a buy-in decides their skill (TIERS),
+   *  so a host cannot fill a money table with Easy computers; "no buy-in" keeps the host's pick. */
+  _netBots() {
+    const tier = this._netTier();
+    const sk = tier.buyin > 0 ? tier.skill : 0;
+    return (this.mp ? this.mp.bots : []).map((b) => (sk ? { ...b, bot: sk } : b));
+  }
+
   _addBot() {
     const mp = this.mp;
     const count = this._roster(mp.room).length + mp.bots.length;
@@ -1760,7 +1773,7 @@ class Game {
   _pushLobby() {
     const mp = this.mp;
     if (!mp || !mp.host) return;
-    NT.pkUpdate(mp.code, { lobby: JSON.stringify({ bots: mp.bots, speed: this.settings.speed, tier: this._netTier().id }) }).catch((e) => console.warn('[holdem] lobby publish failed', e));
+    NT.pkUpdate(mp.code, { lobby: JSON.stringify({ bots: this._netBots(), speed: this.settings.speed, tier: this._netTier().id }) }).catch((e) => console.warn('[holdem] lobby publish failed', e));
   }
 
   /** Host: deal a new game to everyone sitting in the room right now, plus the computers. */
@@ -1770,7 +1783,7 @@ class Game {
     if (!humans.some((h) => h.seat === 0)) humans.unshift({ ...me(), emoji: me().avatar, bot: 0, seat: 0, dev: deviceId() });
     // People first, computers fill what is left, THEN shuffle the seating: a full room must never
     // lose a person to a computer.
-    const players = shuffle([...humans, ...mp.bots.map((b) => ({ ...b }))].slice(0, MAX_PLAYERS));
+    const players = shuffle([...humans, ...this._netBots().map((b) => ({ ...b }))].slice(0, MAX_PLAYERS));
     if (players.length < 2) return;
     const tier = this._netTier();
     const state = newGame(players, { speed: this.settings.speed, buyin: tier.buyin, tier: tier.id });

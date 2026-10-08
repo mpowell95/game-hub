@@ -135,6 +135,7 @@
 .pk-root .pk-lobby-tools .pk-btn { flex: 1.4; }
 .pk-root .pk-lobby-tools .pk-seg { flex: 1; }
 .pk-root .pk-lobby-tools .pk-shape { margin: 0; }
+.pk-root .pk-lobby-tools .pk-lobbyskill .pk-shape { margin-right: 6px; }
 .pk-root .pk-waiting { text-align: center; color: var(--pk-dim); font-size: 15px; margin: 6px 0; }
 
 /* ------------------------------------------------------------ bankroll --- */
@@ -205,6 +206,13 @@
 .pk-root .pk-tiername { font-size: 16px; font-weight: 900; line-height: 1.1; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
 .pk-root .pk-tierbuy { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
 .pk-root .pk-tierwin { font-size: 12px; color: #fff3b0; }
+.pk-root .pk-tierbots { font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; }
+.pk-root .pk-tierbots .pk-shape { width: 14px; height: 14px; margin-right: 4px; vertical-align: 0; }
+.pk-root .pk-tierbots .pk-shape svg { width: 14px; height: 14px; }
+.pk-root .pk-lobbyskill {
+  flex: 1; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px; border: 1px solid var(--pk-gold); background: rgba(0, 0, 0, 0.3); font-size: 14px; font-weight: 700;
+}
 .pk-root .pk-tier.is-locked { filter: grayscale(0.85) brightness(0.55); opacity: 1; }
 .pk-root .pk-tier.is-locked .pk-tierwin { color: #fff; }
 .pk-root .pk-tierstep { display: flex; align-items: center; gap: 8px; }
