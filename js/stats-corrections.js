@@ -133,11 +133,12 @@ export function correctSkeeballRecord(gameRec, corrs) {
 // whole ledger over players/<id> on every hub load, so an edit there would not survive a day.
 //
 // THE SHAPE, per player-device (statsId): the ledger's raw counters at the moment of the void,
-//   { buyins, winnings, grants, best, cashes, entries, at, why }
+//   { buyins, winnings, grants, best, cashes, entries, alley, at, why }   (alley: 2026-10-08; a void
+//   stored before then has none, which reads as 0)
 // A BASELINE, exactly like correctBoard: everything up to the void stops counting, so the bankroll
 // reads as the starting stake again, and every game played AFTER it counts normally. `best` is a
 // maximum and cannot be un-summed, so it survives only if a later prize beat the voided one (rule 4).
-const HB_FIELDS = ['buyins', 'winnings', 'grants', 'cashes', 'entries'];
+const HB_FIELDS = ['buyins', 'winnings', 'grants', 'cashes', 'entries', 'alley'];
 
 /** A Hold'em ledger as it should be SHOWN after a void. Never mutates its input. */
 export function correctHoldemLedger(hb, corr) {

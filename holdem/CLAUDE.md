@@ -115,7 +115,9 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
 - **Tables** (`TIERS` in `ui.js`, the reference app's tournament tiles): Buddy's House $500, Las
   Vegas Casino $1,000, Regional $5,000, World Championship $10,000, Solar System $100,000, Galaxy
   Championship $1,000,000, Universe Championship $10,000,000. A table is locked until the
-  bankroll covers it. The chips at the table are always $10,000 tournament chips.
+  bankroll covers it. **Since 2026-10-08 the chips at the table ARE the buy-in** ($500 at Buddy's
+  House, $10M at Universe), blinds in proportion: see "Stack = buy-in" below. Plus **Behind the
+  Dumpster**, the bottle-cap table for broke players, always shown first (see its own section).
 - **Each table decides its computers' skill** (2026-10-08, `TIERS[].skill`): Buddy's House and
   Las Vegas Easy, Regional and World Championship Medium, Solar System and up Hard. See "Bigger
   tables, tougher computers" below.
@@ -128,9 +130,9 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
 - **Online**: the host picks the table in the lobby (only ones they can afford, or "no buy-in").
   **No seat at a money table is free** (2026-10-08, see "No free seats" below): a guest whose
   bankroll does not cover the buy-in is not dealt in and watches.
-- **Broke**: below the cheapest table, the table picker offers exactly enough for the cheapest seat
-  ($500, `HOLDEM_REFILL`) and nothing more (`grants`). It was up to $25,000 until 2026-10-08; see
-  "No free seats" below.
+- **Broke**: there is no handout any more (2026-10-08). The table picker says "Broke? Win $250
+  behind the dumpster. Win twice to buy back in." See "Behind the Dumpster" below. (It offered
+  exactly $500, `HOLDEM_REFILL`, earlier that day, and up to $25,000 before.)
 - **Not behind the rate gate**, deliberately (`test-rate-guard.mjs` EXEMPT, with the reason): a
   refused buy-in would be a free game and a refused prize would be money lost. The game result
   itself is still gated. A failed write is queued and replayed (`persistOrQueue`).
@@ -180,11 +182,60 @@ and that's it."*
   "Can't cover", and Start needs two people who can pay (`need_two_paying`). `_stake` always
   charges a dealt-in seat; a `:free` key in an old MP save is still honoured so a game in progress
   is never charged twice. "No buy-in" tables still deal everyone, and pay nobody.
-- **The refill is the cheapest buy-in, $500** (`HOLDEM_REFILL` in `js/game-stats.js`, which refuses
-  a bigger grant). Grants already in a ledger are untouched (THE LAW); `holdemSuspect`'s top-up
-  check still allows $25,000 a game so no existing ledger is flagged.
+- **The refill was the cheapest buy-in, $500** (`HOLDEM_REFILL` in `js/game-stats.js`, which still
+  refuses a bigger grant). The game stopped offering it later the same day, when Behind the Dumpster
+  replaced it. Grants already in a ledger are untouched (THE LAW); `holdemSuspect`'s top-up check
+  still allows $25,000 a game so no existing ledger is flagged.
 - Playing yourself online in any game, Hold'em included, is now blocked at the room layer: root
   `CLAUDE.md`, "Online play needs an account Matt has let in".
+
+## Behind the Dumpster (2026-10-08)
+
+Matt, after a second reference recording (`/Claude Code Refs/ScreenRecording_10-08-2026
+09-31-58_1.MP4`, whose broke-player table is "AI Grandma's", paid in cookies): *"call it something
+more insulting. it's more like an illegal game between homeless people in an alley or behind a
+dumpster. Use bottle caps instead of cookies. And no- the table should ALWAYS be visible."* Then:
+*"make it 2 wins. Bottle caps, you can hold at most 3, and sure on 2 hours."*
+
+- **`ALLEY` in `ui.js`**, deliberately NOT in `TIERS` (it has no `buyin`; `test.js` reads the money
+  tables out of TIERS by that shape). The first tile on the picker, broke or not, solo only. Easy
+  computers, $100 stacks at $1/$2 (`stackOf`).
+- **The buy-in is a bottle cap.** `gamehub.holdem.caps.v1 = { at }`, ONE timestamp: caps held =
+  whole 2-hour periods since `at`, max 3 (`capsState`); spending moves `at` forward one period,
+  from "full" if more had built up (`spendCap`). A new device starts full. The cap is spent the
+  moment the cards are dealt (`_newSolo`), like a real buy-in. The tile shows the caps as filled or
+  empty discs (fill and outline, not colour alone) and the time to the next one, live (`_tick`).
+  **A refilling allowance, not earned history**, so it is device-local and THE LAW rule 2 does not
+  apply to it. **Honest limit: a phone clock wound forward refills early.**
+- **The winner alone gets $250** (`HOLDEM_ALLEY_PRIZE`, half the cheapest seat, so two wins buy back
+  in). Recorded as `recordHoldemBank({ grant: 250, alley: true })`: a GRANT, not a prize, because
+  nobody bought in and there is no pot - so it is not a cash, not a Biggest prize, and the money
+  board's prize checks are untouched. `alley: true` also counts **`hb.alley`** (a new additive
+  counter, summed by `players-agg.js`, part of a void baseline in `js/stats-corrections.js`), and
+  `holdemSuspect` allows `grants <= entries * $25,000 + alley * $250`, so a player who has only ever
+  won behind the dumpster is not flagged. `recordHoldemBank` refuses an `alley` write of any other
+  amount, and alley wins share the 20-a-minute prize rate cap.
+- The result still records under Easy (`recordResult('holdem', 'easy', won)`).
+- Its opponents are alley critters (Trash Panda, Sewer Rat, Pigeon Pete...): see "Who you play".
+
+## Stack = buy-in (2026-10-08)
+
+Matt: *"you have the buy in amount to gamble with. Blinds and stuff are increased
+accordingly/proportionally."* `stackOf(table)` gives `{ chips: buyin, scale: buyin / 1000 }`, so
+every table opens at 50 big blinds: Buddy's House $500 at $5/$10, World $10,000 at $100/$200 (the
+old game), Universe $10M at $100k/$200k. Online money tables too (`_startNet`); a no-buy-in online
+table keeps the plain $10,000 game. `engine.js` takes a fractional `scale` now and ROUNDS each blind
+level (`blindsOf`), so a whole-number scale - every game saved before this - deals exactly what it
+did. **Hand stats' Biggest pot won is in table chips**, so since this change a pot at a big table
+is genuinely bigger than one at Buddy's House; old values are kept as they were (`Math.max`).
+
+## Who you play (2026-10-08)
+
+`THEMES` in `ui.js`, seven per table, dealt in a random order (`botRoster(n, skill, tableId)`):
+alley critters behind the dumpster, dogs at Buddy's House, Vegas characters, ordinary people at
+Regional, card sharks at the World Championship, astronauts at Solar System, aliens at Galaxy,
+cosmic beings at Universe. Solo only; online the host's computers keep the old house list (and the
+profile's own opponents). The profile's opponents are no longer used at solo tables.
 
 ## Bankroll leaderboard (2026-09-28)
 
@@ -304,7 +355,8 @@ readable from `rooms/` with developer tools. What exists:
 
 1. **Impossible amounts are refused at write time** (`recordHoldemBank`): a buy-in that is not a
    table price (`HOLDEM_BUYINS`), a prize no finish at any table pays (`holdemValidPrize`), a
-   top-up over $500 (`HOLDEM_REFILL`; it was $25,000 until 2026-10-08). Refusals are counted in `gamehub.rate.v1`'s `blocked['holdem-bank']`,
+   top-up over $500 (`HOLDEM_REFILL`; it was $25,000 until 2026-10-08), a dumpster win that is not
+   exactly $250 (`HOLDEM_ALLEY_PRIZE`). Refusals are counted in `gamehub.rate.v1`'s `blocked['holdem-bank']`,
    which rides the stats mirror (`rate`), so an attempt is visible to Matt.
 2. **Prizes are rate-capped**: more than 20 in a minute are refused (a heads-up game takes a person
    10s or more). Calibrated on the fastest human, like the result gate.
@@ -361,6 +413,8 @@ under the computers' skill (`easy`/`medium`/`hard`), online under `'mp'`. Dedupe
 - `gamehub.holdem.hands.v1` - the last 40 hands already counted in the hand stats (dedupe)
 - `gamehub.holdem.save.v1` - the solo game in progress (full engine state)
 - `gamehub.holdem.mp.v1` - the online seat for "Back to table" (+ host's state)
+- `gamehub.holdem.caps.v1` - `{ at }`, the bottle caps for Behind the Dumpster (2026-10-08;
+  device-local, a refilling allowance, not history)
 
 ## Layout: a clone of Matt's reference recording (2026-09-27)
 
@@ -385,14 +439,21 @@ Copied from it, top to bottom:
   chips), and "Stack: $10.8k" under it. SET RAISE opens a bar over the bottom of the felt (pot,
   Min / 1/2 Pot / Pot / All in, slider); the big button then commits the amount.
 - **One-motion raise (2026-09-27, Matt: "click 'Raise' and drag it up to whatever $ amount you
-  want in 1 motion").** Press RAISE and slide up: a meter rises from the button with the amount on
-  a bubble, the big button reads RAISE TO $X live, and letting go SETS the amount - **it does not
-  bet** (2026-09-28, Matt: "it auto places the bet when I let go ... so I can confirm it"). The big
-  button stays RAISE TO / BET / ALL IN $X and the bet goes in only when it is tapped; the slider
-  panel opens with it for nudging, and the tab reads Cancel. The curve is squared
-  (fine control low, races to the whole stack high) and the top 4% is ALL IN; sliding back to the
-  start cancels. A plain tap still opens the Min / 1/2 Pot / Pot / All in slider panel. The
-  pointer is captured on the game ROOT (a repaint can replace the button mid-drag), which
+  want in 1 motion"), REBUILT 2026-10-08** as a copy of the reference's (Matt: *"Our raise drag is
+  objectively worse than the example's. That one is smooth and nice, while ours is choppy and
+  clunky"*). Press **SET RAISE** and a dark box (`.pk-ghost`) picks up off the tab and follows the
+  finger up the table with the amount on top of it; the tab hides while it is out. The amount is a
+  **straight line** from the minimum raise just above the start to the whole stack just under the
+  info banner (top 3% = ALL IN); within 26px of the start it reads **NO RAISE**, and the big button
+  goes back to CHECK / CALL. Letting go SETS the amount - **it does not bet** (2026-09-28, Matt:
+  "it auto places the bet when I let go ... so I can confirm it") - and the big button reads
+  RAISE TO / BET / ALL IN $X until tapped; letting go on NO RAISE drops it. No panel opens after a
+  drag (the reference opens none); `this.raise.panel` marks the tap-opened Min / 1/2 Pot / Pot /
+  All in panel, whose tab reads Cancel. **Why the old one was choppy:** every pointermove re-ran
+  `_paintActions` (rebuilding the tabs and the big button), and the amount was SQUARED, so it
+  crawled then jumped. Now a move only stores the finger; one `requestAnimationFrame` moves the box
+  by transform and rewrites two text nodes, and the action area repaints only when NO RAISE flips.
+  The pointer is captured on the game ROOT (a repaint can replace the tab mid-drag), which
   re-targets the click - so `_dragEnd` handles a no-move tap itself and swallows the click that
   follows; otherwise a mouse tap did nothing while a touch tap worked.
   **2026-10-02, Matt: "if I raise, it makes me click the raise button twice".** That swallow was
@@ -439,8 +500,9 @@ Copied from it, top to bottom:
   button offers **"See everyone's cards"** (the reference's "replay the last hand and see all the
   opponents' cards"): it reveals every computer's hole cards from the dealer's own state. It is
   never offered online, where it would show other people's cards.
-- **Stacks are $10,000 with $100/$200 blinds** (`cfg.scale = 10`), as in the reference. A game
-  saved before this has no `cfg.scale` and keeps its 1,000-chip, 10/20 numbers.
+- **Stacks were $10,000 with $100/$200 blinds** (`cfg.scale = 10`), as in the first reference. A
+  game saved before this has no `cfg.scale` and keeps its 1,000-chip, 10/20 numbers. Since
+  2026-10-08 the stack is the table's buy-in (see "Stack = buy-in").
 - Online, the quick-chat button is moved to the felt's lower-left corner (it defaults to the
   bottom-right, which is the big action button).
 

@@ -399,9 +399,9 @@ export function aggregatePlayers(all, corrections) {
         // is an additive counter, so a person's balance across devices is the SUM of the ledgers;
         // `best` (biggest single prize) takes Math.max, never a sum.
         if (src.hb) {
-          if (!dst.hb) dst.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
+          if (!dst.hb) dst.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0, alley: 0 };
           // Plain numbers, not `| 0`: a bankroll can pass 2^31 at the top tables.
-          for (const k of ['buyins', 'winnings', 'grants', 'cashes', 'entries']) dst.hb[k] += Number.isFinite(+src.hb[k]) ? Math.floor(+src.hb[k]) : 0;
+          for (const k of ['buyins', 'winnings', 'grants', 'cashes', 'entries', 'alley']) dst.hb[k] += Number.isFinite(+src.hb[k]) ? Math.floor(+src.hb[k]) : 0;
           dst.hb.best = Math.max(dst.hb.best | 0, src.hb.best | 0);
         }
         // Per-hand stats (recordHoldemHand, 2026-09-28): hands/won ADD, bigPot takes Math.max, and

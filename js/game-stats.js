@@ -172,7 +172,7 @@
 //                                                   // See recordAirHockey.
 //       holdem: {
 //         total, byDiff,
-//         hb: { buyins, winnings, grants, best, cashes, entries },
+//         hb: { buyins, winnings, grants, best, cashes, entries, alley },
 //         hs: { hands, won, bigPot, best, bestCat, bestCards } },
 //                                                   // hs (2026-09-28): per-HAND counters, one write per
 //                                                   // hand this player was dealt into. hands/won are
@@ -2192,8 +2192,8 @@ export function recordCupPongSolo(throws) {
 export const HOLDEM_START_BANK = 25000;
 
 function ensureHb(g) {
-  if (!g.hb || typeof g.hb !== 'object') g.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
-  for (const k of ['buyins', 'winnings', 'grants', 'best', 'cashes', 'entries']) if (!Number.isFinite(g.hb[k])) g.hb[k] = 0;
+  if (!g.hb || typeof g.hb !== 'object') g.hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0, alley: 0 };
+  for (const k of ['buyins', 'winnings', 'grants', 'best', 'cashes', 'entries', 'alley']) if (!Number.isFinite(g.hb[k])) g.hb[k] = 0;
 }
 
 /** The bankroll a ledger adds up to. Accepts a partial/missing ledger. */
@@ -2212,6 +2212,9 @@ function applyHoldemBank(g, e) {
   if (buyin) { g.hb.buyins += buyin; g.hb.entries += 1; }
   if (prize) { g.hb.winnings += prize; g.hb.cashes += 1; g.hb.best = Math.max(g.hb.best | 0, prize); }
   if (grant) g.hb.grants += grant;
+  // A win Behind the Dumpster (2026-10-08) is a grant that was EARNED: counted, so holdemSuspect
+  // can tell it from a handout.
+  if (grant && e.alley) g.hb.alley = (g.hb.alley | 0) + 1;
 }
 
 // --- cheat deterrents (2026-09-28) -------------------------------------------------------------
@@ -2233,6 +2236,11 @@ export const HOLDEM_BUYINS = [500, 1000, 5000, 10000, 100000, 1000000, 10000000]
 // "If someone is broke, they can get enough to sit for the cheapest game there is and that's it").
 // It was up to $25,000 before that day; grants already in a ledger are untouched (THE LAW).
 export const HOLDEM_REFILL = HOLDEM_BUYINS[0];
+// Behind the Dumpster (2026-10-08, Matt): the free table for broke players. A bottle cap is the
+// buy-in, so no money goes in; the winner gets this much and nobody else gets anything. Matt: "make
+// it 2 wins" to reach the cheapest real seat. Recorded as `{ grant, alley: true }`. The free $500
+// handout (HOLDEM_REFILL) is no longer offered by the game; the cap on a grant still stands.
+export const HOLDEM_ALLEY_PRIZE = HOLDEM_BUYINS[0] / 2;
 const HOLDEM_MAX_SEATS = 8;
 const HOLDEM_PRIZE_MAX = 20;           // prizes per minute: a heads-up game takes a person >= 10 s
 function holdemPayout(place, n, b) {
@@ -2261,17 +2269,17 @@ const HOLDEM_MAX_PRIZE = Math.max(...HOLDEM_BUYINS.map((b) => Math.max(...[2, 3,
  *  corrected ledger (after an admin void) passes: its best-based checks only run while best > 0. */
 export function holdemSuspect(hb) {
   const h = hb || {};
-  const f = ['buyins', 'winnings', 'grants', 'best', 'cashes', 'entries'];
+  const f = ['buyins', 'winnings', 'grants', 'best', 'cashes', 'entries', 'alley'];
   for (const k of f) {
     const v = h[k] == null ? 0 : h[k];
     if (!Number.isFinite(v) || v < 0 || Math.floor(v) !== v) return 'bad-number';
   }
-  const { buyins = 0, winnings = 0, grants = 0, best = 0, cashes = 0, entries = 0 } = h;
+  const { buyins = 0, winnings = 0, grants = 0, best = 0, cashes = 0, entries = 0, alley = 0 } = h;
   if (cashes > entries) return 'more-prizes-than-games';
   if (winnings > 0 && !cashes) return 'winnings-without-prize';
   if (entries && buyins < entries * HOLDEM_BUYINS[0]) return 'buyins-too-small';
   if (buyins > entries * HOLDEM_BUYINS[HOLDEM_BUYINS.length - 1]) return 'buyins-too-big';
-  if (grants > entries * HOLDEM_START_BANK) return 'too-many-top-ups';
+  if (grants > entries * HOLDEM_START_BANK + alley * HOLDEM_ALLEY_PRIZE) return 'too-many-top-ups';
   if (best > 0) {
     if (best > HOLDEM_MAX_PRIZE || !holdemValidPrize(best)) return 'impossible-prize';
     if (winnings > cashes * best) return 'winnings-too-big';
@@ -2312,19 +2320,22 @@ function holdemPrizeTooFast() {
 }
 
 /** One bankroll movement: `{ buyin }` when a game starts, `{ prize }` when a paid place is decided,
- *  `{ grant }` for the refill to the cheapest seat (HOLDEM_REFILL). Returns this device's ledger after the write, or null when the
+ *  `{ grant }` for the refill to the cheapest seat (HOLDEM_REFILL), `{ grant, alley: true }` for a
+ *  win Behind the Dumpster (HOLDEM_ALLEY_PRIZE). Returns this device's ledger after the write, or null when the
  *  write was refused as impossible (see the deterrents above). */
 export function recordHoldemBank(e) {
   const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
   const buyin = n(e && e.buyin), prize = n(e && e.prize), grant = n(e && e.grant);
+  const alley = !!(e && e.alley);
   if (buyin && HOLDEM_BUYINS.indexOf(buyin) < 0) return holdemRefuse('buy-in', e);
   if (prize && !holdemValidPrize(prize)) return holdemRefuse('prize', e);
   if (grant > HOLDEM_REFILL) return holdemRefuse('top-up', e);
-  if (prize && holdemPrizeTooFast()) return holdemRefuse('too-fast', e);
+  if (alley && (grant !== HOLDEM_ALLEY_PRIZE || buyin || prize)) return holdemRefuse('alley', e);
+  if ((prize || alley) && holdemPrizeTooFast()) return holdemRefuse('too-fast', e);
   const st = loadStats();
   applyHoldemBank(st.games.holdem, e || {});
   st.updatedAt = new Date().toISOString();
-  persistOrQueue(st, { game: 'holdem', bank: { buyin: e && e.buyin, prize: e && e.prize, grant: e && e.grant } });
+  persistOrQueue(st, { game: 'holdem', bank: { buyin: e && e.buyin, prize: e && e.prize, grant: e && e.grant, alley: alley || undefined } });
   return Object.assign({}, st.games.holdem.hb);
 }
 

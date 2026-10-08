@@ -23,6 +23,11 @@ export const SUIT_GLYPH = ['♠', '♥', '♦', '♣'];
 // 2026-09-27: new games are $10,000 stacks with $100/$200 blinds (scale 10), matching the app the
 // look was cloned from. A game saved before that has no `cfg.scale` and keeps playing at scale 1
 // with its 1,000-chip stacks, so a resumed game never changes size under a player.
+//
+// 2026-10-08 (Matt: "you have the buy in amount to gamble with. Blinds and stuff are increased
+// accordingly/proportionally"): a table's stack IS its buy-in, and its scale is buy-in / 1,000, so
+// every table opens at the same 50 big blinds. ui.js passes `chips` and `scale`; the default below
+// is still the $10,000 game (a no-buy-in online table).
 export const BLINDS = [10, 15, 25, 40, 60, 100, 150, 250, 400, 600, 1000, 1500, 2500, 4000, 6000, 10000];
 export const SPEEDS = { slow: 15, normal: 10, fast: 6 };
 export const START_CHIPS = 10000;
@@ -163,7 +168,9 @@ export function bestFive(cards) {
 export function newGame(players, cfg = {}) {
   const speed = SPEEDS[cfg.speed] ? cfg.speed : 'normal';
   const chips = cfg.chips > 0 ? cfg.chips | 0 : START_CHIPS;
-  const scale = cfg.scale > 0 ? cfg.scale | 0 : START_SCALE;
+  // Not `| 0`: since 2026-10-08 a table's stack is its buy-in, so the cheap tables play BELOW the
+  // original scale (Behind the Dumpster: $100 stacks, scale 0.1).
+  const scale = cfg.scale > 0 ? +cfg.scale : START_SCALE;
   return {
     v: 1,
     cfg: { speed, chips, scale, buyin: cfg.buyin > 0 ? Math.floor(cfg.buyin) : 0, tier: cfg.tier || null },
@@ -191,7 +198,9 @@ export function newGame(players, cfg = {}) {
 }
 
 export const blindsOf = (state) => {
-  const sb = BLINDS[Math.min(state.level, BLINDS.length - 1)] * ((state.cfg && state.cfg.scale) || 1);
+  // Rounded so a fractional scale still deals whole chips (scale 0.5: 5/10, 8/16, 13/26 ...); a
+  // whole-number scale (every game before 2026-10-08) gives exactly what it always did.
+  const sb = Math.max(1, Math.round(BLINDS[Math.min(state.level, BLINDS.length - 1)] * ((state.cfg && state.cfg.scale) || 1)));
   return { sb, bb: sb * 2 };
 };
 
