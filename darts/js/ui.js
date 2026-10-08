@@ -31,6 +31,11 @@ const FIRSTS = ['alt', 'me', 'them'];
 const GAMES = ['301', '201', '101', 'cricket'];
 const ORDERS = ['any', 'order'];
 const POINTS = ['on', 'off'];
+// Computer speed (2026-10-08, Matt: "Just like the computer player speed setting in texas hold em. I
+// want the computer to play on fast forward so i don't have to wait"). How fast GAME TIME runs while
+// it is the computer's turn: its pause before each dart, the flight, the gaps, the hand-over. Normal
+// is the pace the game shipped with. Where it lands is decided the same way at every speed.
+const PACES = { slow: 0.6, normal: 1, fast: 3 };
 /** The match kind (engine.js KINDS) the setup screen's Game, Order and Points choices make. */
 const kindFrom = (s) => (s.game === 'cricket'
   ? 'cricket' + (s.order === 'order' ? '-order' : '') + (s.points === 'off' ? '-np' : '')
@@ -61,6 +66,7 @@ function loadSettings() {
     game: GAMES.includes(s.game) ? s.game : '301',
     order: ORDERS.includes(s.order) ? s.order : 'any',
     points: POINTS.includes(s.points) ? s.points : 'on',
+    pace: PACES[s.pace] ? s.pace : 'normal',
   };
 }
 
@@ -221,13 +227,19 @@ class DartsUI {
               <span class="dt-label" data-l="difficulty"></span>
               <div class="gh-seg dt-seg" role="group" data-role="diffs"></div>
             </div>
+            <div class="dt-field">
+              <span class="dt-label" data-l="pace"></span>
+              <div class="gh-seg dt-seg" role="group" data-role="paces"></div>
+            </div>
             <div class="dt-field" data-role="firstField">
               <span class="dt-label" data-l="first"></span>
               <div class="gh-seg dt-seg" role="group" data-role="firsts"></div>
             </div>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="play" data-role="playBtn"><span data-l="play"></span></button>
-            <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="howto"><span data-l="howto"></span></button>
+            <div class="dt-go-row">
+              <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="howto"><span data-l="howto"></span></button>
+              <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="play" data-role="playBtn"><span data-l="play"></span></button>
+            </div>
           </div>
         </div>
 
@@ -237,6 +249,10 @@ class DartsUI {
           <div class="dt-card dt-card-sm" role="dialog" aria-modal="true">
             <button type="button" class="dt-x" data-act="resume" data-la="aria_close">${X_SVG}</button>
             <h2 class="dt-h2" data-l="menu"></h2>
+            <div class="dt-field dt-menu-pace" data-cpu>
+              <span class="dt-label" data-l="pace"></span>
+              <div class="gh-seg dt-seg" role="group" data-role="paces"></div>
+            </div>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="resume"><span data-l="resume"></span></button>
             <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="howto"><span data-l="howto"></span></button>
             <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="quit" data-local><span data-l="quit"></span></button>
@@ -332,6 +348,12 @@ class DartsUI {
       ? t('tagline_' + kind.replace(/-/g, '_')) : t('tagline_x01', { n: kind });
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
     seg('firsts', 'first', FIRSTS, s.first, (id) => id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t('first_them_cpu'));
+    // Computer speed: on the setup card and in the in-game menu, one setting.
+    this.root.querySelectorAll('[data-role="paces"]').forEach((el) => {
+      el.setAttribute('aria-label', t('pace'));
+      el.innerHTML = Object.keys(PACES).map((id) => `<button type="button" class="gh-seg__item dt-seg-item" data-paces="${id}" aria-pressed="${s.pace === id}"><span>${esc(t('pace_' + id))}</span></button>`).join('');
+    });
+    this.root.querySelectorAll('[data-cpu]').forEach((el) => { el.hidden = this.mode !== 'cpu'; });
     const sv = this._savedMatch();
     this.root.querySelector('[data-role="continueBtn"]').hidden = !sv;
     this._paintOnlineNote();
@@ -770,6 +792,9 @@ class DartsUI {
     el.style.left = Math.round(x) + 'px';
     el.style.top = Math.round(y) + 'px';
     el.innerHTML = `<b>${esc(txt)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`;
+    // It is removed on game time, so a fast-forwarded one plays its animation at the same rate.
+    const pace = this._pace();
+    if (pace !== 1) el.style.animationDuration = (1.25 / pace).toFixed(2) + 's';
     this.fx.appendChild(el);
     this._after(1.3, () => el.remove());
   }
@@ -790,9 +815,10 @@ class DartsUI {
 
   // --- input -----------------------------------------------------------------------------------
   _click(e) {
-    const seg = e.target.closest('[data-diffs], [data-firsts], [data-games], [data-orders], [data-pointsseg]');
+    const seg = e.target.closest('[data-diffs], [data-firsts], [data-games], [data-orders], [data-pointsseg], [data-paces]');
     if (seg) {
       if (seg.dataset.diffs) this.settings.difficulty = seg.dataset.diffs;
+      else if (seg.dataset.paces) this.settings.pace = seg.dataset.paces;
       else if (seg.dataset.games) this.settings.game = seg.dataset.games;
       else if (seg.dataset.orders) this.settings.order = seg.dataset.orders;
       else if (seg.dataset.pointsseg) this.settings.points = seg.dataset.pointsseg;
@@ -1133,10 +1159,18 @@ class DartsUI {
     let dt = Math.max(0, (now - this.last) / 1000); this.last = now;
     if (dt > 0.05) dt = 0.05;
     const running = this.screen === 'play' || this.screen === 'result';
-    if (running) this._tick(dt);
+    if (running) this._tick(dt * this._pace());
     else if (!this.reduce) this.spin += dt * 1.4;
     this._draw();
     this.raf = requestAnimationFrame((n) => this._frame(n));
+  }
+
+  /** How fast game time runs right now: the Computer speed setting while it is the computer's turn,
+   *  real time otherwise (your own turn, pass and play, online). */
+  _pace() {
+    const m = this.match;
+    if (this.mode !== 'cpu' || !m || m.winner != null || !this.seats || this.seats[m.turn].human) return 1;
+    return PACES[this.settings.pace] || 1;
   }
 
   _tick(dt) {

@@ -191,8 +191,9 @@ COPIED from GamePigeon's video, not reasoned out.
 
 - Setup (a cream card over the lower half, the board above it): **Multiplayer ›**, Game (301 / 201 /
   101 / Cricket, plus Order for Cricket), Play the computer Easy/Medium/Hard (with the shared shape
-  markers), First throw Alternate/Me/Computer (Alternate is the default and flips every match,
-  `nextStarter`), Continue match, Play, How to play. Settings persist on every tap
+  markers), Computer speed Slow/Normal/Fast (see below), First throw Alternate/Me/Computer (Alternate
+  is the default and flips every match, `nextStarter`), Continue match, then How to play and Play
+  side by side. Settings persist on every tap
   (`gamehub.darts.v1`; its `mode` is now only the LOCAL kind, 'cpu' or 'pass', and an old 'online'
   reads as 'cpu').
 - Play: canvas board and darts (`render.js`, wall and board cached per layout), DOM for the
@@ -204,6 +205,29 @@ COPIED from GamePigeon's video, not reasoned out.
   X, Play again, Menu.
 - How to play: one goal line, a ring diagram (x2, x3, 25/50), one-line rules, each measured to fit
   one row (`_fitHelp`, 11px floor).
+
+## Computer speed (2026-10-08)
+
+Matt: *"add a new setting to Darts for the computer. Computer Speed. Just like the computer player
+speed setting in texas hold em. I want the computer to play on fast forward so i don't have to wait"*.
+
+- **Slow / Normal / Fast** (`PACES` in `ui.js`: 0.6x, 1x, 3x), stored as `pace` in
+  `gamehub.darts.v1` (absent = Normal, the pace the game shipped with). On the setup card under
+  "Play the computer", and in the in-game menu during a match vs the computer (hidden in pass and
+  play and online), so it can be changed mid-match. One setting; both rows show it.
+- **How:** `_pace()` scales GAME TIME (`_tick(dt * pace)`) only while it is the computer's turn in a
+  vs-computer match: its pause before each dart, the flight, the gaps, the hand-over. Your own turn,
+  pass and play and online always run at real time. A score popup thrown during it gets a matching
+  `animationDuration`, since popups are removed on game time. Where the computer aims and lands is
+  untouched (same `computerThrow`), so stats and difficulty mean the same at every speed.
+- **Measured** (headless Chromium, real frames, one hard computer turn): Slow 10.3 s, Normal 6.2 s,
+  Fast 2.1 s.
+- **Room for it:** the setup card was already the full height of a short phone (390x664) in
+  Cricket. How to play now sits beside Play (`.dt-go-row`), the option bars have 2px inner padding
+  (buttons still 44px) and the card gap is 9px; the card measures the same height as before in
+  every case, and `check-no-scroll.mjs darts` passes. (With Continue match showing, in Cricket, on a
+  short phone, the card already reached the top of the screen before this change, and still does,
+  by the same amount.)
 
 ## Stats
 
