@@ -30,9 +30,10 @@ import { getStatsApp } from '../../js/firebase-boot.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readPlayersOnce } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
+import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { newMatch, throwDart, nextTurn, KINDS, isCricket } from './engine.js';
+import { newMatch, throwDart, nextTurn, KINDS, isCricket, DRAW } from './engine.js';
 
 const NODE = 'darts';
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
@@ -42,6 +43,11 @@ const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 const other = (s) => (s === 'a' ? 'b' : 'a');
 const seatOf = (side) => (side === 'b' ? 1 : 0);
 const sideOfSeat = (seat) => (seat === 1 ? 'b' : 'a');
+/** The stored `over.winner` for a finished replay: a side, or 'draw' (equal turns, 2026-10-08). */
+const winnerOf = (m) => (m.winner === DRAW ? 'draw' : sideOfSeat(m.winner));
+const whyOf = (m, kind) => (m.winner === DRAW ? 'tie' : isCricket(kind) ? 'closed' : 'zero');
+/** Equal turns is OPTIONAL on a match: true on every match made from 2026-10-08, absent before. */
+const eqOf = (raw) => !!raw && raw.eq === true;
 
 export function asCode(v) {
   const s = String(v == null ? '' : v).trim().toUpperCase();
@@ -115,13 +121,13 @@ export function applyEntry(m, e) {
   if (m.winner != null) return null;
   if (seatOf(e.by) !== m.turn) return null;
   const res = throwDart(m, e.x, e.y);
-  if (res.event === 'end' || res.event === 'bust') nextTurn(m);
+  if ((res.event === 'end' || res.event === 'bust' || res.event === 'out') && m.winner == null) nextTurn(m);
   return res.event;
 }
 
 /** Replay the first `upto` darts. */
 export function buildMatch(game, upto = game.log.length) {
-  const m = newMatch(0, kindOfGame(game));
+  const m = newMatch(0, kindOfGame(game), eqOf(game));
   for (let i = 0; i < upto; i++) if (!applyEntry(m, game.log[i])) break;   // validateGame proved it replays
   return m;
 }
@@ -142,7 +148,8 @@ export function validateGame(raw) {
   if (keys.length > MAX_LOG) return null;
   const log = [];
   const kind = kindOfGame(raw);
-  const m = newMatch(0, kind);
+  const eq = eqOf(raw);
+  const m = newMatch(0, kind, eq);
   for (const k of keys) {
     const e = cleanEntry(src[k]);
     if (!e) return null;
@@ -152,16 +159,17 @@ export function validateGame(raw) {
   let over = null;
   if (raw.over && typeof raw.over === 'object') {
     const w = raw.over.winner;
-    if (w !== 'a' && w !== 'b') return null;
+    if (w !== 'a' && w !== 'b' && w !== 'draw') return null;
     over = { winner: w, why: String(raw.over.why || ''), at: ms(raw.over.at) };
-    // A result the log did not produce is only allowed for a resignation.
-    if (over.why !== 'resign' && (m.winner == null || sideOfSeat(m.winner) !== w)) return null;
+    // A result the log did not produce is only allowed for a resignation (and nobody resigns a draw).
+    if (over.why === 'resign' ? w === 'draw' : (m.winner == null || winnerOf(m) !== w)) return null;
   } else if (m.winner != null) {
-    over = { winner: sideOfSeat(m.winner), why: isCricket(kind) ? 'closed' : 'zero', at: ms(raw.updated) };
+    over = { winner: winnerOf(m), why: whyOf(m, kind), at: ms(raw.updated) };
   }
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
   return {
     v: 1, id, kind,
+    ...(eq ? { eq: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -196,9 +204,10 @@ export function lastRunStart(game, theirSide) {
 }
 
 // --- results ------------------------------------------------------------------------------------
-export const RESULTS = ['won', 'lost'];
+export const RESULTS = ['won', 'lost', 'draw'];
 export function resultOf(game, side) {
   if (!game || !game.over || (side !== 'a' && side !== 'b')) return null;
+  if (game.over.winner === 'draw') return 'draw';
   return game.over.winner === side ? 'won' : 'lost';
 }
 
@@ -266,17 +275,35 @@ export function markCounted(id) {
   return true;
 }
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice). Online
- *  results go in the 'mp' bucket (docs/BUILDING-A-GAME.md, "Multiplayer save-key convention"). */
+ *  results go in the 'mp' bucket (docs/BUILDING-A-GAME.md, "Multiplayer save-key convention").
+ *  `won`: true, false, or null for a draw (equal turns). A VOIDED match (js/stats-corrections.js)
+ *  is never counted, and is not marked counted either, so it can never be noted as voided below. */
 export function countResult(id, won) {
+  if (isVoidedMatch('darts', id)) return false;
   if (!markCounted(id)) return false;
-  try { recordResult('darts', 'mp', !!won); } catch (err) { console.error('[darts] recordResult failed', err); }
+  try { recordResult('darts', 'mp', won == null ? null : !!won); } catch (err) { console.error('[darts] recordResult failed', err); }
   return true;
+}
+const wonOf = (result) => (result === 'won' ? true : result === 'lost' ? false : null);
+/** A voided match this phone HAD counted: noted once, so the stats screens take it back out
+ *  (js/game-stats.js noteVoidedResult). Runs wherever finished matches are counted. */
+export function noteVoided() {
+  const me = myCode();
+  if (!me) return 0;
+  const ledger = readLedger();
+  let n = 0;
+  for (const id of ledger) {
+    const res = voidedResultFor('darts', id, me);
+    if (res) { try { if (noteVoidedResult('darts', id, res)) n++; } catch (err) { console.error('[darts] noting a voided match failed', err); } }
+  }
+  return n;
 }
 /** Count every finished row not yet counted here, and queue it for the Game Over popup. */
 export function recordFinished(rows) {
+  try { noteVoided(); } catch (err) { console.warn('[darts] noteVoided', err); }
   const ledger = readLedger();
-  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id));
-  for (const r of todo) countResult(r.id, r.result === 'won');
+  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch('darts', r.id));
+  for (const r of todo) countResult(r.id, wonOf(r.result));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -314,7 +341,8 @@ function rowsFromIndex(val) {
       mineClosed: Number.isFinite(+r.mineClosed) ? +r.mineClosed : null,
       theirsClosed: Number.isFinite(+r.theirsClosed) ? +r.theirsClosed : null,
     };
-  }).filter((r) => ID_RE.test(r.id) && r.with));
+    // A voided match (js/stats-corrections.js) is left out of every list and record built from here.
+  }).filter((r) => ID_RE.test(r.id) && r.with && !isVoidedMatch('darts', r.id)));
 }
 export async function readMyGames() {
   const me = myCode();
@@ -440,7 +468,7 @@ export async function createGame({ them, kind = '301' }) {
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, kind, by: me, created: now, updated: now,
+    v: 1, id, kind, eq: true, by: me, created: now, updated: now,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -496,12 +524,12 @@ export async function appendLog(id, base, entries) {
     if (!todo.length) return { ok: true, game: fresh };
     if (fresh.over) return fail('already-over');
     // Check the rules accept them before anything is written.
-    const m = newMatch(0, fresh.kind);
+    const m = newMatch(0, fresh.kind, eqOf(fresh));
     for (const e of fresh.log.concat(todo)) if (!applyEntry(m, e)) return fail('rules-refused');
     const now = Date.now();
     const patch = { updated: now };
     todo.forEach((e, i) => { patch[`log/${String(have + i).padStart(4, '0')}`] = { ...e, at: now }; });
-    if (m.winner != null) patch.over = { winner: sideOfSeat(m.winner), why: isCricket(fresh.kind) ? 'closed' : 'zero', at: now };
+    if (m.winner != null) patch.over = { winner: winnerOf(m), why: whyOf(m, fresh.kind), at: now };
     await api.update(api.ref(db, `${NODE}/games/${id}`), patch);
     const back = await readGame(id);
     if (!back || back.log.length !== have + todo.length) {
@@ -595,9 +623,9 @@ export function recordsFrom(rows, code) {
   const by = new Map();
   for (const r of finished) {
     let o = by.get(r.with);
-    if (!o) { o = { code: r.with, name: r.name, emoji: r.emoji, won: 0, lost: 0, played: 0, last: ms(r.updated) }; by.set(r.with, o); }
+    if (!o) { o = { code: r.with, name: r.name, emoji: r.emoji, won: 0, lost: 0, draw: 0, played: 0, last: ms(r.updated) }; by.set(r.with, o); }
     o.played++;
-    if (r.result === 'won') o.won++; else if (r.result === 'lost') o.lost++;
+    if (r.result === 'won') o.won++; else if (r.result === 'lost') o.lost++; else if (r.result === 'draw') o.draw++;
   }
   return { opponents: [...by.values()].sort((x, y) => (y.played - x.played) || (y.last - x.last)), finished };
 }

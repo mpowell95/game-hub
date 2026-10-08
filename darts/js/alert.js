@@ -29,7 +29,7 @@ export function decideAlert(rows, seen, unseen = []) {
   if (ended.length && !fresh.length) {
     const r = ended[0];
     return { kind: 'over', id: r.id, name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
-      result: r.result === 'won' ? 'won' : 'lost', names: [], count: ended.length };
+      result: r.result === 'won' || r.result === 'draw' ? r.result : 'lost', names: [], count: ended.length };
   }
   const pick = fresh[0] || mine[0];
   if (!pick) return null;

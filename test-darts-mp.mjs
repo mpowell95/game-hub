@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 
 // --- a browser-ish global: localStorage, one per "phone" ---------------------------------------
-const stores = { A: new Map(), B: new Map() };
+const stores = { A: new Map(), B: new Map(), C: new Map() };
 let phone = 'A';
 globalThis.localStorage = {
   getItem: (k) => (stores[phone].has(k) ? stores[phone].get(k) : null),
@@ -98,7 +98,14 @@ use('A');
 // Matt: T20 (61), T20 (1), single 1 (0) -> wins.
 const S1 = targetPoint(1, 'single');
 res = await MP.appendLog(id, res.game.log.length, [dart('a'), dart('a'), dart('a', S1)]);
-ok('exactly zero ends it: Matt wins', res.ok && res.game.over && res.game.over.winner === 'a' && res.game.over.why === 'zero');
+// Equal turns (2026-10-08): Matt threw first, so his finish gives Ana one last turn.
+ok('equal turns: the match is made with eq', MP.validateGame(getAt(`darts/games/${id}`)).eq === true);
+ok('equal turns: Matt is out, Ana gets one last turn', res.ok && !res.game.over && res.game.turn === 'b' && res.game.scores.a === 0
+  && getAt(`darts/index/ANABB/${id}`).yourTurn === true);
+use('B');
+const OFF = { x: 0, y: -2 };
+res = await MP.appendLog(id, res.game.log.length, [dart('b', OFF), dart('b', OFF), dart('b', OFF)]);
+ok('her last turn ends without a finish: Matt wins', res.ok && res.game.over && res.game.over.winner === 'a' && res.game.over.why === 'zero', JSON.stringify(res.game && res.game.over));
 ok('both rows say it is over, with the right result', getAt(`darts/index/MATTA/${id}`).result === 'won' && getAt(`darts/index/ANABB/${id}`).result === 'lost');
 ok('no more darts after it is over', (await MP.appendLog(id, res.game.log.length, [dart('b')])).ok === false);
 
@@ -171,7 +178,74 @@ await turn('b', [{ x: 0, y: -2 }, { x: 0, y: -2 }, { x: 0, y: -2 }]);
 await turn('a', [T(18), T(17), T(16)]);
 await turn('b', [{ x: 0, y: -2 }, { x: 0, y: -2 }, { x: 0, y: -2 }]);
 res = await turn('a', [T(15), bulls, bulls]);
-ok('closing every number while ahead wins the cricket match', res.ok && res.game.over && res.game.over.winner === 'a' && res.game.over.why === 'closed', JSON.stringify(res.game && res.game.over));
+ok('cricket, equal turns: closing everything while ahead gives the other side a last turn', res.ok && !res.game.over && res.game.turn === 'b');
+res = await turn('b', [{ x: 0, y: -2 }, { x: 0, y: -2 }, { x: 0, y: -2 }]);
+ok('...which misses: the cricket match is won', res.ok && res.game.over && res.game.over.winner === 'a' && res.game.over.why === 'closed', JSON.stringify(res.game && res.game.over));
+
+// Equal turns: a DRAW, the second player winning outright, and an old match on the old rules.
+{
+  const D20 = targetPoint(20, 'double');
+  use('A');
+  let r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: '101' });
+  const did = r.id;
+  r = await MP.appendLog(did, 0, [dart('a'), dart('a', targetPoint(1, 'single')), dart('a', D20)]);
+  ok('101: T20, 1, D20 is out on the first turn', r.ok && !r.game.over && r.game.turn === 'b');
+  use('B');
+  r = await MP.appendLog(did, 3, [dart('b'), dart('b', targetPoint(1, 'single')), dart('b', D20)]);
+  ok('both out in the same round: a draw', r.ok && r.game.over && r.game.over.winner === 'draw' && r.game.over.why === 'tie', JSON.stringify(r.game && r.game.over));
+  ok('...both rows say draw', getAt(`darts/index/MATTA/${did}`).result === 'draw' && getAt(`darts/index/ANABB/${did}`).result === 'draw');
+  const rows = (await MP.readMyGames()).filter((x) => x.id === did);
+  ok('...counted on her phone as a draw (played, neither won nor lost)', MP.recordFinished(rows) === 1);
+  const st = JSON.parse(stores.B.get('gamehub.stats')).games.darts.byDiff.mp;
+  ok('...in her stats', st.played === 2 && st.lost === 1 && st.won === 0, JSON.stringify(st));
+  const rd = MP.recordsFrom(await MP.readMyGames(), 'ANABB').opponents[0];
+  ok('...and in the records', rd.draw === 1, JSON.stringify(rd));
+  ok('a claimed draw the darts never produced is refused', MP.validateGame({ ...clone(getAt(`darts/games/${did}`)), log: { '0000': dart('a') } }) === null);
+  ok('a resignation cannot claim a draw', MP.validateGame({ ...clone(getAt(`darts/games/${did}`)), over: { winner: 'draw', why: 'resign', at: 1 } }) === null);
+
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: '101' });
+  const sid = r.id;
+  await MP.appendLog(sid, 0, [dart('a', OFF), dart('a', OFF), dart('a', OFF)]);
+  use('B');
+  r = await MP.appendLog(sid, 3, [dart('b'), dart('b', targetPoint(1, 'single')), dart('b', D20)]);
+  ok('the SECOND player finishing first wins at once', r.ok && r.game.over && r.game.over.winner === 'b');
+
+  const old = { a: { code: 'MATTA' }, b: { code: 'ANABB' }, kind: '101',
+    log: { '0000': dart('a'), '0001': dart('a', targetPoint(1, 'single')), '0002': dart('a', D20) } };
+  const og = MP.validateGame(old);
+  ok('a match made before equal turns (no eq) still ends on the first finish', og && og.over && og.over.winner === 'a' && !og.eq);
+}
+
+// A VOIDED match (js/stats-corrections.js, 2026-10-08): left out of every list, never counted, and
+// taken back out of the stats of a phone that had already counted it.
+{
+  const VID = 'muzgz01qh0z10nqo';
+  const SC = await import('./js/stats-corrections.js');
+  ok('the 101 King of Games won is voided', SC.isVoidedMatch('darts', VID) && SC.voidedResultFor('darts', VID, 'QZCC4') === 'lost' && SC.voidedResultFor('darts', VID, '3VN33') === 'won');
+  stores.C.set('gamehub.profile', JSON.stringify({ name: 'MattyIce', emoji: '🐙', playerId: 'QZCC4' }));
+  use('C');
+  setAt(`darts/index/QZCC4/${VID}`, { with: '3VN33', name: 'King', emoji: '👑', updated: 5, yourTurn: false, over: true, result: 'lost', why: 'zero', kind: '101' });
+  setAt('darts/index/QZCC4/aaaaaaaaaaaa', { with: '3VN33', name: 'King', emoji: '👑', updated: 4, yourTurn: false, over: true, result: 'won', why: 'zero', kind: '301' });
+  // This phone had counted it before the void: a loss in the store and the id in the ledger.
+  const { recordResult } = await import('./js/game-stats.js');
+  recordResult('darts', 'mp', false);
+  stores.C.set(MP.LEDGER_KEY, JSON.stringify([VID]));
+  const rowsC = await MP.readMyGames();
+  ok('the voided match is in no list', rowsC.length === 1 && rowsC[0].id === 'aaaaaaaaaaaa');
+  ok('...and not in the records', MP.recordsFrom(rowsC, 'QZCC4').opponents[0].lost === 0);
+  ok('the other finished match is still counted', MP.recordFinished(rowsC) === 1);
+  ok('countResult refuses the voided match', MP.countResult(VID, false) === false);
+  const raw = JSON.parse(stores.C.get('gamehub.stats'));
+  ok('the raw store keeps every counter (nothing subtracted on the phone)', raw.games.darts.byDiff.mp.lost === 1 && raw.games.darts.byDiff.mp.won === 1);
+  ok('...and notes the voided loss', raw.games.darts.vd && raw.games.darts.vd[VID] === 'lost', JSON.stringify(raw.games.darts.vd));
+  const shown = SC.correctStats(raw, 'dev', {}).games.darts;
+  ok('shown: the voided loss is gone, the real win stays', shown.byDiff.mp.lost === 0 && shown.byDiff.mp.won === 1 && shown.byDiff.mp.played === 1
+    && shown.total.lost === 0 && shown.total.played === 1, JSON.stringify(shown));
+  ok('the input store is not mutated', raw.games.darts.byDiff.mp.lost === 1);
+  MP.recordFinished(rowsC);
+  ok('noting is idempotent', Object.keys(JSON.parse(stores.C.get('gamehub.stats')).games.darts.vd).length === 1);
+}
 
 // The launcher bubble (darts/js/alert.js) says "Your turn" for as long as it IS your turn (2026-10-04).
 {

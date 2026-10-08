@@ -71,6 +71,28 @@ any order."* Setup has a **Game** row (301 / 201 / 101 / Cricket) and, for Crick
   from the recording whether GamePigeon requires a double to finish (no finish was filmed); no
   double-out is the simpler rule and the one GamePigeon is generally described with. If Matt says
   otherwise, it is one branch in `throwDart()`.
+- **Equal turns (2026-10-08)**, on every match made from that day (`eq: true` on the match; absent =
+  the old rules, so every older save and online match replays unchanged). Matt lost a 101 challenge
+  to King of Games, who threw first and finished on his fourth dart while Matt sat on 16: *"I had a
+  better first round than him and I lose? That doesn't seem right"*, then chose equal turns over
+  double-out. When the player who threw FIRST finishes (x01 zero, or Cricket closed out level or
+  ahead), the engine returns `'out'` instead of `'win'`: the turn passes and the other player gets one
+  last turn ("Last turn / Finish to draw" banner). Finish too = **a draw** (`m.winner === DRAW`, -1);
+  bust or three darts without finishing = the first player wins (the event stays `'bust'`/`'end'`
+  with `m.winner` set, so BUST still shows). The SECOND player finishing first wins at once. Applies
+  to vs computer, pass and play, practice against yourself and online. Online a draw is stored as
+  `over: { winner: 'draw', why: 'tie' }`, rows say `result: 'draw'`, and it counts as a played game
+  in the `mp` bucket with no win or loss (`recordResult(..., null)`). **Push gap, not fixed:**
+  `decideDarts` (functions/) only notifies on the other person's LOSS or a resign, so a match the
+  first player wins on the other's last turn, or a draw, sends no push; the launcher's Game over
+  bubble still shows it. Fixing that is a `functions/decide.js` change plus Matt's
+  `firebase deploy --only functions`.
+- **One voided match (2026-10-08):** that same 101 (`muzgz01qh0z10nqo`), at Matt's request
+  (*"remove that game from both of our records"*). Listed in `VOIDED_MATCHES` in
+  `js/stats-corrections.js`; nothing was deleted. `mp.js` leaves it out of every list built from
+  the index (Your turn, History, the hub's Challenges screen) and never counts it; a phone that HAD
+  counted it notes `games.darts.vd[<id>]` once (`noteVoided` -> `noteVoidedResult`) and
+  `correctStats` subtracts it wherever stats are shown. Pinned in `test-darts-mp.mjs`.
 - Board geometry is the standard board in units of R (the double's outer wire): bull 50 inside
   0.0374R, 25 inside 0.0935R, treble 0.5824-0.6294R, double 0.9529-1R. `RING.frame` (1.27R) is
   the black number ring: a dart there sticks and scores nothing ("MISS!"); beyond it the dart
