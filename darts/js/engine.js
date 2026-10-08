@@ -89,9 +89,7 @@ export function newMatch(starter = 0, kind = '301', eq = false) {
   return m;
 }
 
-/** EQUAL TURNS (Matt, 2026-10-08). King of Games threw first in 101 and finished on his fourth dart
- *  while Matt, on 16, never got his second turn: "I had a better first round than him and I lose?
- *  That doesn't seem right". With `m.eq`, when the player who threw FIRST finishes, the other gets
+/** EQUAL TURNS (2026-10-08). With `m.eq`, when the player who threw FIRST finishes, the other gets
  *  one last turn: finish too and it is a draw (`DRAW`), fail and the first player wins. The second
  *  player finishing first wins at once, since both have had the same number of turns.
  *  Called when the seat whose turn it is has just finished the game. */
