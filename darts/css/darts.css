@@ -298,7 +298,7 @@
   width: min(380px, 100%);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
   padding: 18px 16px 16px;
   border-radius: 18px;
   background: var(--dt-cream);
@@ -322,12 +322,19 @@
 .dt-root .dt-pair { display: flex; gap: 8px; }
 .dt-root .dt-pair > .dt-field { flex: 1 1 0; min-width: 0; }
 .dt-root .dt-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6048; }
-.dt-root .dt-seg { display: flex; width: 100%; background: #efe3cb; border-color: #e0cfae; }
+.dt-root .dt-seg { display: flex; width: 100%; padding: 2px; background: #efe3cb; border-color: #e0cfae; }
 .dt-root .dt-seg .dt-seg-item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 6px; color: #6b5440; font-size: 14px; }
 .dt-root .dt-seg .dt-seg-item[aria-pressed="true"] { background: #fff; color: var(--dt-ink); box-shadow: 0 0 0 2px #b8282d; }
 .dt-root .dt-seg .dt-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dt-root .dt-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
 .dt-root .dt-go { font-size: 17px; font-weight: 800; }
+/* How to play beside Play (2026-10-08), which made the room for Computer speed: the card was already
+   the full height of a short phone in Cricket. */
+.dt-root .dt-go-row { display: flex; gap: 8px; }
+.dt-root .dt-go-row > .dt-alt { flex: 0 0 auto; width: auto; white-space: nowrap; padding-inline: 16px; }
+.dt-root .dt-go-row > .dt-go { flex: 1 1 0; min-width: 0; }
+/* The in-game menu's Computer speed row, left-aligned like the setup card's. */
+.dt-root .dt-menu-pace { text-align: left; margin-bottom: 4px; }
 .dt-root .dt-alt { background: #fff; color: var(--dt-ink); border-color: #d9c7a3; }
 .dt-root .dt-h2 { margin: 0 40px 4px; text-align: center; font-size: 22px; font-weight: 900; color: var(--dt-ink); }
 .dt-root .dt-x {
