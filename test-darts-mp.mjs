@@ -217,16 +217,16 @@ ok('...which misses: the cricket match is won', res.ok && res.game.over && res.g
   ok('a match made before equal turns (no eq) still ends on the first finish', og && og.over && og.over.winner === 'a' && !og.eq);
 }
 
-// A VOIDED match (js/stats-corrections.js, 2026-10-08): left out of every list, never counted, and
-// taken back out of the stats of a phone that had already counted it.
+// A VOIDED match (js/stats-corrections.js): left out of every list, never counted, and taken back
+// out of the stats of a phone that had already counted it.
 {
   const VID = 'muzgz01qh0z10nqo';
   const SC = await import('./js/stats-corrections.js');
-  ok('the 101 King of Games won is voided', SC.isVoidedMatch('darts', VID) && SC.voidedResultFor('darts', VID, 'QZCC4') === 'lost' && SC.voidedResultFor('darts', VID, '3VN33') === 'won');
-  stores.C.set('gamehub.profile', JSON.stringify({ name: 'MattyIce', emoji: '🐙', playerId: 'QZCC4' }));
+  ok('the listed match is voided', SC.isVoidedMatch('darts', VID) && SC.voidedResultFor('darts', VID, 'QZCC4') === 'lost' && SC.voidedResultFor('darts', VID, '3VN33') === 'won');
+  stores.C.set('gamehub.profile', JSON.stringify({ name: 'Cee', emoji: '🐙', playerId: 'QZCC4' }));
   use('C');
-  setAt(`darts/index/QZCC4/${VID}`, { with: '3VN33', name: 'King', emoji: '👑', updated: 5, yourTurn: false, over: true, result: 'lost', why: 'zero', kind: '101' });
-  setAt('darts/index/QZCC4/aaaaaaaaaaaa', { with: '3VN33', name: 'King', emoji: '👑', updated: 4, yourTurn: false, over: true, result: 'won', why: 'zero', kind: '301' });
+  setAt(`darts/index/QZCC4/${VID}`, { with: '3VN33', name: 'Dee', emoji: '🙂', updated: 5, yourTurn: false, over: true, result: 'lost', why: 'zero', kind: '101' });
+  setAt('darts/index/QZCC4/aaaaaaaaaaaa', { with: '3VN33', name: 'Dee', emoji: '🙂', updated: 4, yourTurn: false, over: true, result: 'won', why: 'zero', kind: '301' });
   // This phone had counted it before the void: a loss in the store and the id in the ledger.
   const { recordResult } = await import('./js/game-stats.js');
   recordResult('darts', 'mp', false);

@@ -140,27 +140,27 @@ ok('spread is tighter on harder levels', SPREAD.hard < SPREAD.medium && SPREAD.m
   ok('every game makes a valid match', KINDS.every((k) => !!validMatch(newMatch(0, k))));
 }
 
-// 3b2. Equal turns (2026-10-08): Matt's 101 against King of Games, replayed.
+// 3b2. Equal turns (2026-10-08).
 {
   const P = (num, ring) => targetPoint(num, ring);
   const OFF = { x: 0, y: -2 };
   const play = (m, pts) => { let r; for (const p of pts) { r = throwDart(m, p.x, p.y); if (r.event === 'end' || r.event === 'bust' || r.event === 'out') { if (m.winner == null) nextTurn(m); break; } } return r; };
-  // King: 1, T20, 20 (20 left). Matt: D20, 20, 25 (16 left). King: 20 -> out.
+  // First: 1, T20, 20 (20 left). Second: D20, 20, 25 (16 left). First: 20 -> out.
   let m = newMatch(0, '101', true);
   play(m, [P(1, 'single'), P(20, 'treble'), P(20, 'single')]);
   play(m, [P(20, 'double'), P(20, 'single'), P(25, 'obull')]);
-  ok('equal turns: the real game, 20 and 16 left', m.scores.join() === '20,16');
+  ok('equal turns: 20 and 16 left', m.scores.join() === '20,16');
   let r = play(m, [P(20, 'single')]);
   ok('the first player finishing is OUT, not a win: the other gets a last turn', r.event === 'out' && m.winner == null && m.turn === 1 && m.out === 0);
   const save = JSON.parse(JSON.stringify(m));
   r = play(m, [P(8, 'double')]);
-  ok('Matt hits D8 on his last turn: a draw', r.event === 'win' && m.winner === DRAW);
+  ok('the second player hits D8 on the last turn: a draw', r.event === 'win' && m.winner === DRAW);
   m = JSON.parse(JSON.stringify(save));
   r = play(m, [OFF, OFF, OFF]);
-  ok('Matt misses all three: King wins, and it is the turn that ended it', r.event === 'end' && m.winner === 0);
+  ok('the second player misses all three: the first wins, and it is the turn that ended it', r.event === 'end' && m.winner === 0);
   m = JSON.parse(JSON.stringify(save));
   r = play(m, [P(20, 'single')]);
-  ok('Matt busts on his last turn: King wins', r.event === 'bust' && m.winner === 0 && m.scores[1] === 16);
+  ok('the second player busts on the last turn: the first wins', r.event === 'bust' && m.winner === 0 && m.scores[1] === 16);
   m = newMatch(0, '101', true);
   play(m, [OFF, OFF, OFF]);
   r = play(m, [P(20, 'treble'), P(1, 'single'), P(20, 'double')]);

@@ -1390,7 +1390,7 @@ export function recordResult(gameId, difficulty, won) {
   return st;
 }
 
-/** An online match Matt VOIDED (js/stats-corrections.js, VOIDED_MATCHES) that this device had
+/** A voided online match (js/stats-corrections.js, VOIDED_MATCHES) that this device had
  *  already counted. Noted as `games.<gameId>.vd[<matchId>] = 'won' | 'lost' | 'draw'` so the display
  *  layer (correctStats) can take it back out. ADDITIVE and idempotent: no counter is touched (THE LAW
  *  rule 2), the note is never removed, and un-voiding the match makes it count again. Not rate-gated:

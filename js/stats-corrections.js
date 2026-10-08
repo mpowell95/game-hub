@@ -36,22 +36,10 @@
 //     are left exactly as they are rather than guessed at (THE LAW rule 4: never fabricate a
 //     conversion between things the store does not actually relate).
 
-// --- voided online matches (2026-10-08) -----------------------------------------------------------
-// Matt: "remove that game from both of our records". A Darts 101 challenge King of Games won on his
-// fourth dart before Matt had a second turn (the reason Darts got EQUAL TURNS the same day). Listed
-// HERE, in code, rather than in adminConfig: one match, and no Firebase write is needed to ship it.
-//
-// What a void does, all of it at READ time, nothing deleted:
-//   - darts/js/mp.js leaves the match out of every list and record it builds from the index rows
-//     (Your turn, History, the hub's Challenges screen), and never counts it on a phone that has not;
-//   - a phone that HAD counted it notes that once (js/game-stats.js noteVoidedResult), and
-//     `correctStats` below takes the noted result back out of that game's totals wherever stats are
-//     shown (My Stats, the leaderboard, both through js/players-agg.js).
-// The match itself (`darts/games/<id>`), both index rows and every counter stay exactly as stored.
-// Taking an id out of this list makes the match count again everywhere.
+// --- voided online matches -------------------------------------------------------------------------
+// Left out of every list and record, and taken back out of the stats of a phone that had counted it.
 export const VOIDED_MATCHES = {
   darts: {
-    // 2026-10-08, 101: *King of Games* (3VN33) beat MattyIce (QZCC4), 0 to 16.
     muzgz01qh0z10nqo: { winner: '3VN33', loser: 'QZCC4' },
   },
 };
