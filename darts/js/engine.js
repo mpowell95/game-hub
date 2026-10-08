@@ -73,15 +73,40 @@ export function targetPoint(num, ring) {
 
 // --- the match -------------------------------------------------------------------------------
 
-/** A fresh match. `starter` is the seat that throws first (0 or 1); `kind` one of KINDS. */
-export function newMatch(starter = 0, kind = '301') {
+/** `winner` when both players finished in the same round of an equal-turns match. */
+export const DRAW = -1;
+
+/** A fresh match. `starter` is the seat that throws first (0 or 1); `kind` one of KINDS; `eq` turns
+ *  on EQUAL TURNS (2026-10-08, see `finished`). `eq` is only ever stored when true, so a match made
+ *  before it (every save and online match) has none and plays exactly as it always did. */
+export function newMatch(starter = 0, kind = '301', eq = false) {
   const s = starter === 1 ? 1 : 0;
   const k = KINDS.includes(String(kind)) ? String(kind) : '301';
-  if (isCricket(k)) {
-    return { kind: k, start: 0, scores: [0, 0], marks: [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]], turn: s, starter: s, turnStart: 0, darts: [], winner: null, turns: 0 };
-  }
-  const start = Number(k);
-  return { kind: k, start, scores: [start, start], turn: s, starter: s, turnStart: start, darts: [], winner: null, turns: 0 };
+  const m = isCricket(k)
+    ? { kind: k, start: 0, scores: [0, 0], marks: [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]], turn: s, starter: s, turnStart: 0, darts: [], winner: null, turns: 0 }
+    : { kind: k, start: Number(k), scores: [Number(k), Number(k)], turn: s, starter: s, turnStart: Number(k), darts: [], winner: null, turns: 0 };
+  if (eq) { m.eq = true; m.out = null; }
+  return m;
+}
+
+/** EQUAL TURNS (Matt, 2026-10-08). King of Games threw first in 101 and finished on his fourth dart
+ *  while Matt, on 16, never got his second turn: "I had a better first round than him and I lose?
+ *  That doesn't seem right". With `m.eq`, when the player who threw FIRST finishes, the other gets
+ *  one last turn: finish too and it is a draw (`DRAW`), fail and the first player wins. The second
+ *  player finishing first wins at once, since both have had the same number of turns.
+ *  Called when the seat whose turn it is has just finished the game. */
+function finished(m, hit) {
+  const me = m.turn;
+  if (m.eq && m.out == null && me === m.starter) { m.out = me; return { m, event: 'out', hit }; }
+  // In Cricket the last turn cannot score past the first player (they have closed everything), so
+  // finishing it means level on points: a draw, like x01. `>` is only there to be safe.
+  m.winner = m.out == null ? me : (m.scores[me] > m.scores[m.out] && isCricket(m.kind) ? me : DRAW);
+  return { m, event: 'win', hit };
+}
+/** The last turn of an equal-turns match is over without a finish: the first player has won. The
+ *  event stays what it was ('bust' or 'end'), with `m.winner` set, so the screen still says BUST. */
+function lastTurnOver(m) {
+  if (m.out != null && m.turn !== m.out) m.winner = m.out;
 }
 
 /** Cricket: the index (into CRICKET) a seat must close next "in order", or -1 when all are closed. */
@@ -100,7 +125,11 @@ function cricketCounts(m, seat, i) {
  *    'score'  the dart counted and the turn goes on
  *    'end'    the dart counted and it was the third: the turn is over (call nextTurn)
  *    'bust'   (x01) it would have gone below zero: this turn's darts are void and the turn is over
- *    'win'    x01: exactly zero. Cricket: every number closed and at least as many points
+ *    'win'    x01: exactly zero. Cricket: every number closed and at least as many points.
+ *             `m.winner` is the seat that won, or DRAW
+ *    'out'    (equal turns) the first player finished: the turn is over, the other gets a last one
+ *  A 'bust' or 'end' that closes an equal-turns last turn also sets `m.winner` (the first player):
+ *  the match is over, so do not call nextTurn.
  *  There is no double-out: any dart that lands exactly on zero wins.
  *  `hit` is the bed it landed in; in Cricket also `marks` (marks it added) and `pts` (points it
  *  scored, which is not the bed's value). */
@@ -112,11 +141,13 @@ export function throwDart(m, x, y) {
   const left = m.scores[m.turn] - hit.pts;
   if (left < 0) {
     m.scores[m.turn] = m.turnStart;
+    lastTurnOver(m);
     return { m, event: 'bust', hit };
   }
   m.scores[m.turn] = left;
-  if (left === 0) { m.winner = m.turn; return { m, event: 'win', hit }; }
-  return { m, event: m.darts.length >= DARTS_PER_TURN ? 'end' : 'score', hit };
+  if (left === 0) return finished(m, hit);
+  if (m.darts.length >= DARTS_PER_TURN) { lastTurnOver(m); return { m, event: 'end', hit }; }
+  return { m, event: 'score', hit };
 }
 
 function throwCricket(m, x, y) {
@@ -135,8 +166,9 @@ function throwCricket(m, x, y) {
   }
   const hit = { ...bed, marks, pts, counted: marks > 0 || pts > 0 };
   m.darts.push({ x, y, pts, ring: bed.ring, mk: marks });
-  if (m.marks[me].every((n) => n >= 3) && m.scores[me] >= m.scores[them]) { m.winner = me; return { m, event: 'win', hit }; }
-  return { m, event: m.darts.length >= DARTS_PER_TURN ? 'end' : 'score', hit };
+  if (m.marks[me].every((n) => n >= 3) && m.scores[me] >= m.scores[them]) return finished(m, hit);
+  if (m.darts.length >= DARTS_PER_TURN) { lastTurnOver(m); return { m, event: 'end', hit }; }
+  return { m, event: 'score', hit };
 }
 
 /** Hand the board to the other seat. */
@@ -164,7 +196,9 @@ export function validMatch(m) {
   }
   if (!Array.isArray(m.darts) || m.darts.length > DARTS_PER_TURN) return null;
   for (const d of m.darts) if (!d || !Number.isFinite(d.x) || !Number.isFinite(d.y)) return null;
-  if (m.winner != null && m.winner !== 0 && m.winner !== 1) return null;
+  if (m.winner != null && m.winner !== 0 && m.winner !== 1 && m.winner !== DRAW) return null;
+  if (m.eq != null && m.eq !== true) return null;
+  if (m.out != null && m.out !== 0 && m.out !== 1) return null;
   return m;
 }
 

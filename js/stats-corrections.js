@@ -36,6 +36,54 @@
 //     are left exactly as they are rather than guessed at (THE LAW rule 4: never fabricate a
 //     conversion between things the store does not actually relate).
 
+// --- voided online matches (2026-10-08) -----------------------------------------------------------
+// Matt: "remove that game from both of our records". A Darts 101 challenge King of Games won on his
+// fourth dart before Matt had a second turn (the reason Darts got EQUAL TURNS the same day). Listed
+// HERE, in code, rather than in adminConfig: one match, and no Firebase write is needed to ship it.
+//
+// What a void does, all of it at READ time, nothing deleted:
+//   - darts/js/mp.js leaves the match out of every list and record it builds from the index rows
+//     (Your turn, History, the hub's Challenges screen), and never counts it on a phone that has not;
+//   - a phone that HAD counted it notes that once (js/game-stats.js noteVoidedResult), and
+//     `correctStats` below takes the noted result back out of that game's totals wherever stats are
+//     shown (My Stats, the leaderboard, both through js/players-agg.js).
+// The match itself (`darts/games/<id>`), both index rows and every counter stay exactly as stored.
+// Taking an id out of this list makes the match count again everywhere.
+export const VOIDED_MATCHES = {
+  darts: {
+    // 2026-10-08, 101: *King of Games* (3VN33) beat MattyIce (QZCC4), 0 to 16.
+    muzgz01qh0z10nqo: { winner: '3VN33', loser: 'QZCC4' },
+  },
+};
+export function isVoidedMatch(gameId, matchId) {
+  return !!(VOIDED_MATCHES[gameId] && Object.prototype.hasOwnProperty.call(VOIDED_MATCHES[gameId], matchId));
+}
+/** What a voided match was for `code`: 'won' | 'lost', or null when that code did not play it. */
+export function voidedResultFor(gameId, matchId, code) {
+  const v = isVoidedMatch(gameId, matchId) ? VOIDED_MATCHES[gameId][matchId] : null;
+  if (!v || !code) return null;
+  return v.winner === code ? 'won' : v.loser === code ? 'lost' : null;
+}
+/** A game record with its noted, still-voided online results taken back out of `total` and the
+ *  'mp' bucket. Never mutates its input; returns it unchanged when there is nothing to take out. */
+export function correctVoidedResults(gameRec, gameId) {
+  const g = gameRec || {};
+  const vd = g.vd && typeof g.vd === 'object' ? g.vd : null;
+  if (!vd) return g;
+  const n = { won: 0, lost: 0, draw: 0 };
+  for (const id of Object.keys(vd)) if (isVoidedMatch(gameId, id) && n[vd[id]] != null) n[vd[id]] += 1;
+  const played = n.won + n.lost + n.draw;
+  if (!played) return g;
+  const less = (b) => Object.assign({}, b || {}, {
+    played: Math.max(0, ((b || {}).played | 0) - played),
+    won: Math.max(0, ((b || {}).won | 0) - n.won),
+    lost: Math.max(0, ((b || {}).lost | 0) - n.lost),
+  });
+  const byDiff = Object.assign({}, g.byDiff || {});
+  if (byDiff.mp) byDiff.mp = less(byDiff.mp);
+  return Object.assign({}, g, { total: less(g.total), byDiff });
+}
+
 /** Correction for one board, or null. Pure over a plain corrections map: `{ <boardId>: {...} }`. */
 export function correctionFor(corrs, boardId) {
   const c = corrs && corrs[boardId];
@@ -169,6 +217,11 @@ export function holdemSnapshotOf(hb) {
  */
 export function correctStats(stats, id, all) {
   let st = stats || {};
+  for (const gid of Object.keys(VOIDED_MATCHES)) {
+    const rec = st.games && st.games[gid];
+    const fixed = rec ? correctVoidedResults(rec, gid) : rec;
+    if (fixed !== rec) st = Object.assign({}, st, { games: Object.assign({}, st.games, { [gid]: fixed }) });
+  }
   const corrs = (((all || {}).skeeball || {})[id]) || null;
   if (corrs && st.games && st.games.skeeball) {
     const fixed = correctSkeeballRecord(st.games.skeeball, corrs);
@@ -191,4 +244,4 @@ export function snapshotOf(board, day) {
   };
 }
 
-export default { correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf };
+export default { VOIDED_MATCHES, isVoidedMatch, voidedResultFor, correctVoidedResults, correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf };

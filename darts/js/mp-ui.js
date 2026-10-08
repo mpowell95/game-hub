@@ -199,15 +199,15 @@ async function history(ui, MP) {
   const { opponents, finished } = MP.recordsFrom(rows, MP.myCode());
   const list = body.querySelector('.dt-mp-list');
   if (!finished.length) { list.innerHTML = `<p class="dt-mp-note">${esc(t('mp_no_history'))}</p>`; return; }
-  const word = (r) => (r.result === 'won' ? (r.resigned === 'them' ? t('mp_won_quit') : t('mp_won')) : (r.resigned === 'me' ? t('mp_you_quit') : t('mp_lost')));
-  // Win and loss are told apart by a mark (check or cross), never by colour alone.
-  const mark = (r) => (r.result === 'won' ? '✓' : '✗');
+  const word = (r) => (r.result === 'draw' ? t('mp_draw') : r.result === 'won' ? (r.resigned === 'them' ? t('mp_won_quit') : t('mp_won')) : (r.resigned === 'me' ? t('mp_you_quit') : t('mp_lost')));
+  // Win, loss and draw are told apart by a mark (check, cross, equals), never by colour alone.
+  const mark = (r) => (r.result === 'draw' ? '=' : r.result === 'won' ? '✓' : '✗');
   const opp = opponents.slice(0, 3), fin = finished.slice(0, 10);
   list.innerHTML = `<h3 class="dt-mp-h">${esc(t('mp_records'))}</h3>` + opp.map((o) => `
       <div class="dt-mrow is-static">
         <span class="dt-mrow-face" aria-hidden="true">${esc(o.emoji)}</span>
         <span class="dt-mrow-text"><span class="dt-mrow-name">${esc(o.name)}</span></span>
-        <span class="dt-rec"><b>${o.won}</b>-<b>${o.lost}</b></span>
+        <span class="dt-rec"><b>${o.won}</b>-<b>${o.lost}</b>${o.draw ? `-<b>${o.draw}</b>` : ''}</span>
       </div>`).join('')
     + `<h3 class="dt-mp-h">${esc(t('mp_matches'))}</h3>` + fin.map((r) => `
       <div class="dt-mrow is-static${r.result === 'won' ? ' is-won' : ''}">
@@ -226,14 +226,15 @@ export function showUnseen(ui, MP, rows) {
   if (!ended.length || ui.root.querySelector('.dt-unseen')) return;
   const r = ended[0];
   const won = r.result === 'won';
+  const draw = r.result === 'draw';
   const el = document.createElement('div');
   el.className = 'dt-ov dt-unseen';
   el.innerHTML = `
     <div class="dt-card dt-card-sm" role="dialog" aria-modal="true" aria-label="${esc(t('mp_game_over'))}">
       <button type="button" class="dt-x" data-mp="close" aria-label="${esc(t('aria_close'))}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg></button>
       <p class="dt-res-ava" aria-hidden="true">${esc(r.emoji)}</p>
-      <h2 class="dt-h2">${esc(won ? t('win_you') : t('lose_you'))}</h2>
-      <p class="dt-res-line">${esc(t(won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name }))}${r.why === 'resign' ? ` · ${esc(won ? t('mp_they_resigned', { name: r.name }) : t('mp_you_resigned'))}` : ''}</p>
+      <h2 class="dt-h2">${esc(draw ? t('draw_title') : won ? t('win_you') : t('lose_you'))}</h2>
+      <p class="dt-res-line">${esc(t(draw ? 'mp_drew_vs' : won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name }))}${r.why === 'resign' ? ` · ${esc(won ? t('mp_they_resigned', { name: r.name }) : t('mp_you_resigned'))}` : ''}</p>
       ${ended.length > 1 ? `<p class="dt-res-line">${esc(t('mp_more', { n: ended.length - 1 }))}</p>` : ''}
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-mp="ok">${esc(t('mp_ok'))}</button>
     </div>`;

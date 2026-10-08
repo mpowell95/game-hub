@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1075';
+const CACHE = 'game-hub-v1076';
 
 const ASSETS = [
   './',
@@ -779,14 +779,14 @@ const REST_MANIFEST = {
   './darts/': '20312df57d',
   './darts/index.html': '20312df57d',
   './darts/css/darts.css': '7e813cf12c',
-  './darts/js/ui.js': 'b5abf82442',
-  './darts/js/engine.js': 'a909669817',
+  './darts/js/ui.js': '9e254ed39e',
+  './darts/js/engine.js': 'df5a9cb8a4',
   './darts/js/render.js': 'd05671e727',
   './darts/js/flight.js': '60b3524662',
-  './darts/js/strings.js': '19cddb63dc',
-  './darts/js/mp.js': '67e20275f2',
-  './darts/js/mp-ui.js': '48e66d6c6b',
-  './darts/js/alert.js': '6d7c2d2cf0',
+  './darts/js/strings.js': '3dfcdc55f1',
+  './darts/js/mp.js': '42b39dd216',
+  './darts/js/mp-ui.js': 'b3d38e434e',
+  './darts/js/alert.js': 'c8ce53e4a8',
   './sudoku/': '802a47aafa',
   './sudoku/index.html': '802a47aafa',
   './sudoku/css/sudoku.css': '146887ebaf',
@@ -864,7 +864,7 @@ const REST_MANIFEST = {
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
   './holdem/css/holdem.css': '266019e4e1',
-  './holdem/js/ui.js': '0d7c509270',
+  './holdem/js/ui.js': 'b226e15f5f',
   './holdem/js/engine.js': '3f433f33c7',
   './holdem/js/ai.js': '501a498bec',
   './holdem/js/table.js': '2f040ebfb9',

@@ -7,7 +7,7 @@
 // false. A match is only recorded once it is won. An ONLINE match (2026-10-01, mp.js) lives on the
 // server, every dart written as it lands, so leaving one loses nothing either.
 
-import { newMatch, throwDart, nextTurn, validMatch, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding } from './engine.js';
+import { newMatch, throwDart, nextTurn, validMatch, DRAW, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding } from './engine.js';
 import { isAdmin } from '../../js/challenge/hooks.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
 import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, stuckAxis, boardPoint, norm, HAND_Z, REST_AXIS } from './flight.js';
@@ -86,8 +86,8 @@ const MARK_SVG = [
 /** The how-to lines for each game, in order. */
 const helpKeys = (kind) => (isCricket(kind)
   ? ['help_c_marks', 'help_c_bull', noPoints(kind) ? 'help_c_nopoints' : 'help_c_points', inOrder(kind) ? 'help_c_order' : 'help_c_any',
-    noPoints(kind) ? 'help_c_win_np' : 'help_c_win', 'help_flick']
-  : ['help_cap', 'help_example', 'help_bull', 'help_bust', 'help_flick']);
+    noPoints(kind) ? 'help_c_win_np' : 'help_c_win', 'help_equal', 'help_flick']
+  : ['help_cap', 'help_example', 'help_bull', 'help_bust', 'help_equal', 'help_flick']);
 
 /** How to play: the board's rings with their multipliers, drawn rather than described. */
 function helpSvg() {
@@ -496,7 +496,7 @@ class DartsUI {
     else if (s.first === 'them') starter = 1;
     else { starter = s.nextStarter; s.nextStarter = starter ^ 1; }
     writeJSON(SETTINGS_KEY, s);
-    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter, kindFrom(s)) }, true);
+    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter, kindFrom(s), true) }, true);
   }
 
   /** Practice (2026-10-08, Matt: "play against yourself or just keep throwing as many darts in a row
@@ -508,7 +508,7 @@ class DartsUI {
     if (which === 'free') {
       this.free = { darts: 0, points: 0, round: 0, best: 0 };
       this._begin({ mode: 'free', diff: s.difficulty, match: newMatch(0, '301') }, true);
-    } else this._begin({ mode: 'self', diff: s.difficulty, match: newMatch(0, kindFrom(s)) }, true);
+    } else this._begin({ mode: 'self', diff: s.difficulty, match: newMatch(0, kindFrom(s), true) }, true);
   }
 
   /** Pass & play, from the Multiplayer screen: two people, this phone, the chosen game. */
@@ -643,10 +643,18 @@ class DartsUI {
     }
     if (announce && this.mode !== 'free') {
       const mine = this.mode === 'mp' ? this.match.turn === this.mp.mySeat : s.human && this.mode === 'cpu';
-      this._bannerShow(mine ? t('your_turn') : t('turn_of', { name: s.name }), '', 'turn');
+      this._turnBanner(mine ? t('your_turn') : t('turn_of', { name: s.name }));
       this._say(t('say_turn', { name: s.name }));
     }
     this._nextDart();
+  }
+
+  /** Whose turn it is, or (equal turns) that this is the other player's LAST turn. */
+  _turnBanner(main) {
+    const m = this.match;
+    const last = !!m && m.out != null && m.out !== m.turn;
+    if (!last) { this._bannerShow(main, '', 'turn'); return; }
+    this._bannerShow(t('last_turn'), t(isCricket(m.kind) ? 'last_turn_sub_c' : 'last_turn_sub'), 'turn');
   }
 
   _fillPass() {
@@ -733,7 +741,8 @@ class DartsUI {
       this._say(t('say_bust', { name, n: m.turnStart }));
       this._save();
       this.phase = 'wait';
-      this._after(1.6, () => this._endTurn(false));
+      // An equal-turns last turn that busts: the match is over (engine.js lastTurnOver).
+      this._after(1.6, () => (m.winner != null ? this._finish() : this._endTurn(false)));
       return;
     }
     if (cricket && hit.num > 0) this._say(t(!hit.counted ? 'say_c_none' : noPoints(m.kind) ? 'say_c_hit_np' : 'say_c_hit', { name, bed: bedLabel(hit), score: m.scores[seat] }));
@@ -746,11 +755,22 @@ class DartsUI {
       this._after(1.1, () => this._finish());
       return;
     }
+    if (res.event === 'out') {
+      // Equal turns: the first player finished; the other gets one last turn.
+      const other = this.seats[seat ^ 1].name;
+      m.turnOver = true;
+      this._bannerShow(t('out'), t('out_sub', { name: other }), 'turn');
+      this._say(t('say_out', { name, other }));
+      this._save();
+      this.phase = 'wait';
+      this._after(1.6, () => this._endTurn(false));
+      return;
+    }
     if (res.event === 'end') {
       m.turnOver = true;
       this._save();
       this.phase = 'wait';
-      this._after(1.15, () => this._endTurn(false));
+      this._after(1.15, () => (m.winner != null ? this._finish() : this._endTurn(false)));
       return;
     }
     this._save();
@@ -815,16 +835,16 @@ class DartsUI {
   _finish() {
     const m = this.match;
     if (!m || m.winner == null) return;
-    if (this.mode === 'mp') { this._mpFinish(m.winner === this.mp.mySeat, false); return; }
+    if (this.mode === 'mp') { this._mpFinish(m.winner === DRAW ? null : m.winner === this.mp.mySeat, false); return; }
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = recordResult('darts', this.diff, m.winner === 0);
+        const st = recordResult('darts', this.diff, m.winner === DRAW ? null : m.winner === 0);
         if (!st) console.warn('[darts] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[darts] recording the result failed', err); }
     }
     this._save();
-    this._say(t('say_win', { name: this.seats[m.winner].name }));
+    this._say(this._winSay());
     this.screen = 'result';
     this.phase = 'idle';
     this.hand = null;
@@ -833,18 +853,24 @@ class DartsUI {
     this.root.querySelector('[data-ov="result"] [data-act="again"]').focus({ preventScroll: true });
   }
 
+  _winSay() {
+    const m = this.match;
+    return m.winner === DRAW ? t('say_draw') : t('say_win', { name: this.seats[m.winner].name });
+  }
+
   _fillResult() {
     const m = this.match;
     if (!m || m.winner == null) return;
-    const w = this.seats[m.winner];
+    const draw = m.winner === DRAW;
+    const w = draw ? null : this.seats[m.winner];
     const mp = this.mode === 'mp' ? this.mp : null;
     const iWon = mp ? m.winner === mp.mySeat : m.winner === 0;
-    const title = this.mode === 'pass' || this.mode === 'self' ? t('win_name', { name: w.name }) : t(iWon ? 'win_you' : 'lose_you');
-    this.root.querySelector('[data-role="resAva"]').textContent = w.emoji;
+    const title = draw ? t('draw_title') : this.mode === 'pass' || this.mode === 'self' ? t('win_name', { name: w.name }) : t(iWon ? 'win_you' : 'lose_you');
+    this.root.querySelector('[data-role="resAva"]').textContent = draw ? '🤝' : w.emoji;
     this.root.querySelector('[data-role="resTitle"]').textContent = title;
-    // Turns the winner took: their own visits to the oche.
-    const visits = m.winner === m.starter ? Math.floor(m.turns / 2) + 1 : Math.floor((m.turns + 1) / 2);
-    let line = t('result_line', { n: visits });
+    // Turns the winner took: their own visits to the oche. A draw ends on the second player's turn.
+    const visits = !draw && m.winner === m.starter ? Math.floor(m.turns / 2) + 1 : Math.floor((m.turns + 1) / 2);
+    let line = t((draw ? 'draw_line' : 'result_line') + (visits === 1 ? '1' : ''), { n: visits });
     if (mp && mp.resigned) line = iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
     this.root.querySelector('[data-role="resLine"]').textContent = line;
     this.root.querySelector('[data-role="againLabel"]').textContent = t(mp ? 'mp_again' : 'play_again');
@@ -914,7 +940,7 @@ class DartsUI {
     else if (act === 'mpHome') this._openOnline();
     else if (act === 'resign') { this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
-    else if (act === 'ready') { this.screen = 'play'; this._showOnly(null); this._startTurn(false); this._bannerShow(t('turn_of', { name: this._seat().name }), '', 'turn'); }
+    else if (act === 'ready') { this.screen = 'play'; this._showOnly(null); this._startTurn(false); this._turnBanner(t('turn_of', { name: this._seat().name })); }
     else if (act === 'again') {
       if (this.mode === 'mp') this._sendChallenge(this.mp.them, kindOf(this.match));
       else if (this.match) this._rematch();
@@ -1124,9 +1150,9 @@ class DartsUI {
     mp.finished = true;
     mp.resigned = !!resigned;
     if (resigned) this.match.winner = won ? mp.mySeat : mp.mySeat ^ 1;
-    this.MP.countResult(mp.id, won);                   // once per phone, whoever ended it
+    this.MP.countResult(mp.id, won);                   // once per phone, whoever ended it (null: a draw)
     this.MP.markResultSeen(mp.id);
-    this._say(t('say_win', { name: this.seats[this.match.winner].name }));
+    this._say(this._winSay());
     this.screen = 'result';
     this.phase = 'idle';
     this.hand = null;
