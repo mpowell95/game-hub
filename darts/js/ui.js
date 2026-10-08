@@ -202,6 +202,7 @@ class DartsUI {
 
         <div class="dt-ov dt-ov-setup" data-ov="setup" hidden>
           <div class="dt-card">
+            <button type="button" class="dt-x dt-q" data-act="howto" data-la="howto">?</button>
             <h2 class="dt-logo" data-l="title"></h2>
             <p class="dt-tag" data-role="tagline"></p>
             <button type="button" class="dt-mprow" data-act="multi">
@@ -237,13 +238,22 @@ class DartsUI {
             </div>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
             <div class="dt-go-row">
-              <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="howto"><span data-l="howto"></span></button>
+              <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="practice"><span data-l="practice"></span></button>
               <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="play" data-role="playBtn"><span data-l="play"></span></button>
             </div>
           </div>
         </div>
 
         <div class="dt-ov dt-ov-mp" data-ov="mp" hidden></div>
+
+        <div class="dt-ov" data-ov="practice" hidden>
+          <div class="dt-card dt-card-sm" role="dialog" aria-modal="true">
+            <button type="button" class="dt-x" data-act="practiceClose" data-la="aria_close">${X_SVG}</button>
+            <h2 class="dt-h2" data-l="practice"></h2>
+            <button type="button" class="dt-pick" data-act="practiceSelf"><b data-l="practice_self"></b><span data-role="practiceSelfSub"></span></button>
+            <button type="button" class="dt-pick" data-act="practiceFree"><b data-l="practice_free"></b><span data-l="practice_free_sub"></span></button>
+          </div>
+        </div>
 
         <div class="dt-ov" data-ov="menu" hidden>
           <div class="dt-card dt-card-sm" role="dialog" aria-modal="true">
@@ -346,6 +356,7 @@ class DartsUI {
     const kind = kindFrom(s);
     this.root.querySelector('[data-role="tagline"]').textContent = isCricket(kind)
       ? t('tagline_' + kind.replace(/-/g, '_')) : t('tagline_x01', { n: kind });
+    this.root.querySelector('[data-role="practiceSelfSub"]').textContent = t('practice_self_sub', { game: isCricket(kind) ? t('game_' + kind.replace(/-/g, '_')) : kind });
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
     seg('firsts', 'first', FIRSTS, s.first, (id) => id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t('first_them_cpu'));
     // Computer speed: on the setup card and in the in-game menu, one setting.
@@ -396,7 +407,7 @@ class DartsUI {
 
   _showOnly(name) {
     for (const k of Object.keys(this.ov)) this.ov[k].hidden = k !== name;
-    this.root.classList.toggle('is-setup', name === 'setup' || name === 'mp' || (name === 'help' && !this.match));
+    this.root.classList.toggle('is-setup', name === 'setup' || name === 'mp' || name === 'practice' || (name === 'help' && !this.match));
   }
   _showSetup() {
     this._mpLeave();
@@ -470,6 +481,10 @@ class DartsUI {
     const p = profile();
     const me = { name: (p && p.name) || t('you'), emoji: (p && p.emoji) || '🙂', human: true };
     if (mode === 'pass') return [me, { name: t('player2'), emoji: '🙂', human: true }];
+    // Practice: against yourself is you on both seats; free throw uses the two plaques for its
+    // running numbers (3-dart average and best round), so their names are those labels.
+    if (mode === 'self') return [me, { name: me.name + ' 2', emoji: me.emoji, human: true }];
+    if (mode === 'free') return [{ name: t('free_avg'), emoji: me.emoji, human: true }, { name: t('free_best'), emoji: '🏆', human: true }];
     const o = p && p.opponents && p.opponents[0];
     return [me, { name: (o && o.name) || t('computer'), emoji: (o && o.emoji) || '🤖', human: false, diff }];
   }
@@ -484,6 +499,18 @@ class DartsUI {
     this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter, kindFrom(s)) }, true);
   }
 
+  /** Practice (2026-10-08, Matt: "play against yourself or just keep throwing as many darts in a row
+   *  as you want"). 'self': the chosen game with you on both seats. 'free': no rules and no end, three
+   *  darts a round, the board cleared between rounds. Neither records a result, and neither saves:
+   *  the one save slot keeps the match you have against the computer. */
+  _practice(which) {
+    const s = this.settings;
+    if (which === 'free') {
+      this.free = { darts: 0, points: 0, round: 0, best: 0 };
+      this._begin({ mode: 'free', diff: s.difficulty, match: newMatch(0, '301') }, true);
+    } else this._begin({ mode: 'self', diff: s.difficulty, match: newMatch(0, kindFrom(s)) }, true);
+  }
+
   /** Pass & play, from the Multiplayer screen: two people, this phone, the chosen game. */
   _passPlay() { this.settings.mode = 'pass'; this._newMatch(); }
 
@@ -495,6 +522,7 @@ class DartsUI {
     const kind = kindOf(this.match);
     const s = this.settings;
     if (isCricket(kind)) { s.game = 'cricket'; s.order = inOrder(kind) ? 'order' : 'any'; s.points = noPoints(kind) ? 'off' : 'on'; } else s.game = kind;
+    if (this.mode === 'self') { writeJSON(SETTINGS_KEY, s); this._practice('self'); return; }
     this._newMatch();
   }
 
@@ -526,7 +554,7 @@ class DartsUI {
   }
 
   _save() {
-    if (!this.match || this.mode === 'mp') return;
+    if (!this.match || this.mode === 'mp' || this.mode === 'self' || this.mode === 'free') return;
     if (this.match.winner != null) { try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ } return; }
     writeJSON(SAVE_KEY, { mode: this.mode, diff: this.diff, match: this.match });
   }
@@ -537,7 +565,7 @@ class DartsUI {
   _aimHelp() {
     const m = this.match;
     if (!m || !isCricket(m.kind)) return false;
-    const mine = this.mode === 'mp' ? !!this.mp && m.turn === this.mp.mySeat : m.turn === 0;
+    const mine = this.mode === 'mp' ? !!this.mp && m.turn === this.mp.mySeat : this.mode === 'self' || m.turn === 0;
     if (!mine) return false;
     try { const p = profile(); return !!(p && p.name && isAdmin(p.name)); } catch { return false; }
   }
@@ -547,6 +575,7 @@ class DartsUI {
   _plaques() {
     const m = this.match;
     if (!m) return [0, 0];
+    if (this.mode === 'free') { const f = this.free; return [f.darts ? Math.round(3 * f.points / f.darts) : 0, f.best]; }
     return noPoints(m.kind) ? m.marks.map((a) => a.filter((n) => n >= 3).length) : m.scores.slice();
   }
 
@@ -612,7 +641,7 @@ class DartsUI {
       this._showOnly('pass');
       return;
     }
-    if (announce) {
+    if (announce && this.mode !== 'free') {
       const mine = this.mode === 'mp' ? this.match.turn === this.mp.mySeat : s.human && this.mode === 'cpu';
       this._bannerShow(mine ? t('your_turn') : t('turn_of', { name: s.name }), '', 'turn');
       this._say(t('say_turn', { name: s.name }));
@@ -670,6 +699,7 @@ class DartsUI {
     const m = this.match;
     const seat = m.turn;
     const name = this.seats[seat].name;
+    if (this.mode === 'free') { this._landFree(f); return; }
     const res = throwDart(m, f.bx, f.by);
     const hit = res.hit;
     this._thrown = (this._thrown | 0) + 1;
@@ -728,6 +758,42 @@ class DartsUI {
     this._after(0.5, () => this._nextDart());
   }
 
+  /** Free throw: the bed and its points pop up, three darts make a round, the round's total is
+   *  shown, then the board is cleared and the next round starts. It never ends. */
+  _landFree(f) {
+    const m = this.match, fr = this.free;
+    const hit = scoreAt(f.bx, f.by);
+    this._thrown = (this._thrown | 0) + 1;
+    m.darts.push({ x: f.bx, y: f.by, pts: hit.pts, ring: hit.ring });
+    if (hit.ring === 'off') {
+      const end = flightAt(f.fl, f.fl.T);
+      this.falling = { tip: end.tip.slice(), axis: end.axis, seat: 0, spin: f.spin, vy: 0, a: 1 };
+    }
+    this.flying = null;
+    fr.darts++; fr.points += hit.pts; fr.round += hit.pts;
+    if (hit.pts > 0) {
+      this.flash = { x: f.bx, y: f.by, a: 1 };
+      const lbl = bedLabel(hit);
+      this._popup(f.tx, f.ty, lbl, lbl === String(hit.pts) ? '' : String(hit.pts));
+    } else this._bannerShow(t('miss'), '', 'miss');
+    this._dartsLeftHud();
+    this._say(hit.pts > 0 ? t('say_free', { bed: bedLabel(hit), n: fr.round }) : t('say_miss', { name: this.seats[0].name }));
+    this.phase = 'wait';
+    if (m.darts.length < DARTS_PER_TURN) { this._after(0.5, () => this._nextDart()); return; }
+    fr.best = Math.max(fr.best, fr.round);
+    this._after(0.6, () => this._bannerShow(String(fr.round), t('free_round'), 'turn'));
+    this._after(1.6, () => {
+      this._fadeOut = this.reduce ? null : { t: 0, dur: 0.3 };
+      this._after(this.reduce ? 0 : 0.32, () => {
+        this._fadeOut = null;
+        m.darts = []; fr.round = 0;
+        this.stuckAlpha = 1;
+        this._seatsHud();
+        this._nextDart();
+      });
+    });
+  }
+
   /** Pull the darts out and hand the board over. */
   _endTurn(instant) {
     const go = () => {
@@ -773,7 +839,7 @@ class DartsUI {
     const w = this.seats[m.winner];
     const mp = this.mode === 'mp' ? this.mp : null;
     const iWon = mp ? m.winner === mp.mySeat : m.winner === 0;
-    const title = this.mode === 'pass' ? t('win_name', { name: w.name }) : t(iWon ? 'win_you' : 'lose_you');
+    const title = this.mode === 'pass' || this.mode === 'self' ? t('win_name', { name: w.name }) : t(iWon ? 'win_you' : 'lose_you');
     this.root.querySelector('[data-role="resAva"]').textContent = w.emoji;
     this.root.querySelector('[data-role="resTitle"]').textContent = title;
     // Turns the winner took: their own visits to the oche.
@@ -832,6 +898,10 @@ class DartsUI {
     const act = b.dataset.act;
     if (act === 'play') { this.settings.mode = 'cpu'; this._newMatch(); }
     else if (act === 'multi') this._openOnline();
+    else if (act === 'practice') { this.screen = 'practice'; this._showOnly('practice'); }
+    else if (act === 'practiceClose') this._showSetup();
+    else if (act === 'practiceSelf') this._practice('self');
+    else if (act === 'practiceFree') this._practice('free');
     else if (act === 'continue') this._continue();
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._paintHelp(); this._showOnly('help'); this._fitHelp(); }
     else if (act === 'helpClose') {
@@ -1244,7 +1314,7 @@ class DartsUI {
     if (fa) darts.push(this._dartPose(fa.tip, fa.axis, fa.seat, fa.spin, Math.max(0, fa.a), false));
     else if (this.hand && this.screen !== 'pass') darts.push(this._handPose(this.hand.x, this.hand.y, this.hand.seat, this.hand.alpha == null ? 1 : this.hand.alpha));
     // Setup: a dart waits in the hand, turning, so the screen reads as darts at a glance.
-    if (this.screen === 'setup' || (this.screen === 'help' && !m)) darts.push(this._handPose(this.handRest.x, this.handRest.y, 0));
+    if (this.screen === 'setup' || this.screen === 'practice' || (this.screen === 'help' && !m)) darts.push(this._handPose(this.handRest.x, this.handRest.y, 0));
     this.r.draw({ flash: this.flash, darts });
   }
 
