@@ -199,6 +199,12 @@ ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 50
   const tiers = [...uiSrc.matchAll(/\{ id: '[a-z]+', buyin: (\d+),/g)].map((m) => +m[1]);
   ok('ui.js TIERS parsed', tiers.length === 7, tiers);
   ok('every table price is an accepted buy-in (and nothing else)', tiers.join() === GS.HOLDEM_BUYINS.join(), { tiers, gs: GS.HOLDEM_BUYINS });
+  // Bigger tables, tougher computers (2026-10-08): the prize depends only on the buy-in, so a table
+  // whose computers were easier than a cheaper table's would be the one everybody farms.
+  const skills = [...uiSrc.matchAll(/\{ id: '[a-z]+', buyin: \d+, skill: (\d),/g)].map((m) => +m[1]);
+  ok('every table names its computers\' skill', skills.length === 7 && skills.every((k) => k >= 1 && k <= 3), skills);
+  ok('a bigger table never has easier computers', skills.every((k, i) => !i || k >= skills[i - 1]), skills);
+  ok('the money tables (Solar System and up) are Hard', skills.slice(4).every((k) => k === 3), skills);
   let bad = 0;
   for (const b of tiers) for (let n = 2; n <= 8; n++) for (const pl of [1, 2]) { const v = payout(pl, n, b); if (v && !GS.holdemValidPrize(v)) bad++; }
   ok('every prize a table can pay is accepted', bad === 0, bad);
