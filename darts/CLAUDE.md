@@ -222,7 +222,14 @@ speed setting in texas hold em. I want the computer to play on fast forward so i
   untouched (same `computerThrow`), so stats and difficulty mean the same at every speed.
 - **Measured** (headless Chromium, real frames, one hard computer turn): Slow 10.3 s, Normal 6.2 s,
   Fast 2.1 s.
-- **Room for it:** the setup card was already the full height of a short phone (390x664) in
+- **Smaller pills (2026-10-08, the same day):** Matt: *"the pills are all prettttttyyy big... the
+  pills are WAY larger than the text inside them"*. Every option pill is now DRAWN 32px tall (14px
+  text), and still TAPS 44px tall: a `::after` on each reaches 6px above and below, into the label
+  and the gap, where nothing is tappable. That is this game's documented exception to the 44px
+  floor (docs/BUILDING-A-GAME.md, Part 0): verified by `elementFromPoint` at every visible pill's
+  centre and +-15/21px, on the setup card in Cricket and in the in-game menu, 0 misses. The setup
+  card went from 594px to 534px tall on a short phone.
+- **Room for it (before the smaller pills):** the setup card was already the full height of a short phone (390x664) in
   Cricket. How to play now sits beside Play (`.dt-go-row`), the option bars have 2px inner padding
   (buttons still 44px) and the card gap is 9px; the card measures the same height as before in
   every case, and `check-no-scroll.mjs darts` passes. (With Continue match showing, in Cricket, on a

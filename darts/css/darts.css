@@ -323,7 +323,11 @@
 .dt-root .dt-pair > .dt-field { flex: 1 1 0; min-width: 0; }
 .dt-root .dt-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #7a6048; }
 .dt-root .dt-seg { display: flex; width: 100%; padding: 2px; background: #efe3cb; border-color: #e0cfae; }
-.dt-root .dt-seg .dt-seg-item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 6px; color: #6b5440; font-size: 14px; }
+/* The pills are DRAWN 32px tall (2026-10-08, Matt: "the pills are WAY larger than the text inside
+   them"), and each still TAPS 44px tall: the ::after reaches 6px above and below, into the label
+   and the gap, which hold nothing tappable. Checked by elementFromPoint at every pill's centre +-21px. */
+.dt-root .dt-seg .dt-seg-item { position: relative; flex: 1 1 0; min-width: 0; min-height: 32px; padding: 0 6px; color: #6b5440; font-size: 14px; }
+.dt-root .dt-seg .dt-seg-item::after { content: ''; position: absolute; inset: -6px 0; }
 .dt-root .dt-seg .dt-seg-item[aria-pressed="true"] { background: #fff; color: var(--dt-ink); box-shadow: 0 0 0 2px #b8282d; }
 .dt-root .dt-seg .dt-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dt-root .dt-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
