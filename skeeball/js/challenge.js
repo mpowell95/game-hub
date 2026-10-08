@@ -38,6 +38,7 @@ import { getStatsApp } from '../../js/firebase-boot.js';
 // Player codes, id minting and the per-CODE opponent list are Connect 4 Hoops' own, reused rather
 // than copied (root CLAUDE.md, "USE WHAT EXISTS"). mp.js is pure at load: no side effects.
 import { asCode, myCode, meLabel, mintGameId, opponentsFrom } from '../../hoops4/js/mp.js';
+import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 
 export { asCode, myCode, meLabel, opponentsFrom };
 
@@ -472,6 +473,10 @@ export async function createChallenge({ them, legs, scoring = 'games', all = fal
   const to = asCode(them && them.code);
   if (!me) return { ok: false, reason: 'no-player-code' };
   if (!to || to === me) return { ok: false, reason: 'bad-opponent' };
+  // Both people must be allowed online (2026-10-08, the play-yourself cheat): js/online-gate.js.
+  const gate = onlineGate();
+  if (gate) return { ok: false, reason: gate };
+  if (!codeMayPlayOnline(to)) return { ok: false, reason: 'them-not-approved' };
   if (!Array.isArray(legs) || !legs.length || legs.length > MAX_LEGS
     || !legs.every((l) => l && BOARD_RE.test(String(l.board || '')))) return { ok: false, reason: 'bad-challenge' };
   if (!writesAllowed('createChallenge')) return { ok: false, reason: 'dev-origin-blocked' };

@@ -2286,6 +2286,14 @@ behind. A dev origin refuses to write at all unless `gamehub.devAllowSync.v1` is
 guard, and the same opt-in key, as `js/stats-net.js`, for the same reason: this node is shared by
 every device in the family.
 
+**`online/<CODE>` (2026-10-08) is the online-play list's override**: `true` lets a player code
+play online, `false` shuts one out, absent = `ONLINE_BEFORE` (every code that existed that day).
+`resolveOnlineAllowed` / `isOnlineAllowed` read it; `js/online-gate.js` is the only caller that
+gates on it, from inside `js/net.js` and each challenge's `createGame`. That was a deliberate,
+cross-game change to `js/net.js` (a gate before any write, and the player code stamped on each seat
+record, additive), not a side effect of one game's work - the protocol rule above still holds.
+Root `CLAUDE.md`, "Online play needs an account Matt has let in".
+
 **Adding a third switch** is four edits: a resolver + its `*Override` reader in
 `js/admin-config.js`, a `setX()` on top of `writeOverride()`, a section in `js/admin-ui.js`, and a
 case in `test-admin-config.mjs` (including the structural check that the READER is actually wired

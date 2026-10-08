@@ -107,7 +107,49 @@ export function normalizeConfig(raw) {
   const golf = (src.golf && typeof src.golf === 'object') ? src.golf : {};
   const courses = (golf.courses && typeof golf.courses === 'object') ? golf.courses : {};
   const resets = (src.deviceResets && typeof src.deviceResets === 'object') ? src.deviceResets : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets };
+  const online = (src.online && typeof src.online === 'object') ? src.online : {};
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online };
+}
+
+// --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
+//
+// Matt: "Get rid of the play yourself cheat." Nothing checked that the two players in an online game
+// are different people, so a second phone or a private browser window with a made-up name was a
+// free opponent: lose to yourself on purpose and every win counted on the leaderboard. Nothing
+// client-side can tell two people from one person with two windows, but every made-up player is a
+// NEW player code, and that is something this app can gate.
+//
+// So: a player code may play online (create or join a room, send or be sent a challenge) only when
+// it is on this list. Everyone who already had a code when this shipped is on it by default (the
+// set below, read from players/ that morning), so nobody who was already playing notices anything.
+// A code minted after that day needs Matt to turn it on from the admin page (Online play), one tap.
+// `online/<CODE>` in the config is the override: true lets a code in, false shuts a listed code out.
+//
+// What it does NOT do, said plainly: somebody Matt has let in can still play a FRIEND who loses on
+// purpose. That is two real people colluding, not one person playing themselves, and it shows on
+// the board as a person with a long losing record against one opponent.
+export const ONLINE_BEFORE = new Set([
+  'QZCC4', '3VN33', 'K99MB', '3G2EC', 'MQMVP', 'C5PXN', 'X279T', 'AXAT9', 'DREG5', '7FM6N', 'FBMY4',
+  'TGW5J', 'KWJDB', '4NFG7', 'S4SK5', 'S2BEP', 'JM8ZU', 'Y3D55', 'XV382', 'SDSDV', 'X5SDH', '8FKDC',
+  '9F7FB', 'JTJEF', 'ZZZZ2', 'SYAQR', '2Z7NB', 'Z64CX', 'SC6XQ', 'Z6GF9', '3TYF5', '6VCRJ', '89N3N',
+  'Q7FEF', '32Y8X', 'MCWKP', 'PRFJD', '4XR5R', 'EK977', '6PZYT', 'WN9VB', 'XXQ5R', '28RDR', '54RRG',
+  'MQ4Q9',
+]);
+
+const codeOf = (code) => (typeof code === 'string' ? code.trim().toUpperCase() : '');
+
+/** Matt's own choice for this code, or null when he has made none (the default list decides). */
+export function onlineOverride(cfg, code) {
+  const v = normalizeConfig(cfg).online[codeOf(code)];
+  return typeof v === 'boolean' ? v : null;
+}
+
+/** May this player code play online? An explicit choice wins; otherwise the default list. */
+export function resolveOnlineAllowed(cfg, code) {
+  const c = codeOf(code);
+  if (!c) return false;
+  const o = onlineOverride(cfg, c);
+  return o === null ? ONLINE_BEFORE.has(c) : o;
 }
 
 /**
@@ -334,6 +376,9 @@ export function corrections() { return resolveCorrections(readCachedConfig()); }
 
 /** This player-device's Skeeball corrections, from the cache. */
 export function myBoardCorrections(statsIdOf) { return resolveBoardCorrections(readCachedConfig(), statsIdOf); }
+
+/** May this player code play online? Synchronous cache read; see ONLINE_BEFORE above. */
+export function isOnlineAllowed(code) { return resolveOnlineAllowed(readCachedConfig(), code); }
 
 /** Subscribe to config changes (a refresh that actually changed something). Returns an unsubscribe. */
 export function onAdminConfig(cb) {
@@ -638,7 +683,19 @@ export function setHoldemCorrection(statsIdOf, snapshot, why) {
   });
 }
 
+/**
+ * Let a player code play online, shut it out, or (null) hand it back to the default list.
+ * Verified by fresh re-read, like every writer here.
+ */
+export function setOnlineAllowed(code, on) {
+  const c = codeOf(code);
+  if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));
+  const want = on === null ? null : !!on;
+  return writeNode('online', { [c]: want }, (cfg) => onlineOverride(cfg, c) === want, { stamp: false });
+}
+
 export default {
+  ONLINE_BEFORE, onlineOverride, resolveOnlineAllowed, isOnlineAllowed, setOnlineAllowed,
   CACHE_KEY, CONFIG_PATH, EVENT, normalizeConfig, resolveGameLive, gameOverride, resolveBoardReleased,
   boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,
   isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,

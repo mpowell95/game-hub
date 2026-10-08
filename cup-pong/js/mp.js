@@ -30,6 +30,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { readPlayersOnce } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { recordResult } from '../../js/game-stats.js';
+import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { Match } from './match.js';
 
 const NODE = 'cuppong';
@@ -457,7 +458,8 @@ export function opponentsFrom(all, me) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 export async function readOpponents() {
-  try { return opponentsFrom(await readPlayersOnce(), myCode()); }
+  // Only people who may play online (js/online-gate.js): a made-up second account is never offered.
+  try { return opponentsFrom(await readPlayersOnce(), myCode()).filter((r) => codeMayPlayOnline(r.code)); }
   catch (err) { console.warn('[cup-pong] could not read the player list', err); return []; }
 }
 
@@ -519,6 +521,10 @@ export async function createGame({ them, rules, series = 1, seriesNo = 1, series
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
   if (!to || to === me) return fail('bad-opponent');
+  // Both people must be allowed online (2026-10-08, the play-yourself cheat): js/online-gate.js.
+  const gate = onlineGate();
+  if (gate) return fail(gate);
+  if (!codeMayPlayOnline(to)) return fail('them-not-approved');
   if (!writesAllowed('createGame')) return fail('dev-origin-blocked');
   const mine = meLabel();
   const now = Date.now();

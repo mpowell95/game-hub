@@ -382,6 +382,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
 | `js/arcade-scores.js` | shared high-score + unlock layer for the arcade-cabinet games (Skeeball): per-board bests, date-keyed daily bests, unlocks, app-wide records |
 | `js/net.js` | multiplayer room layer (`rooms/<CODE>`) used by Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes, Boggle, Yahtzee, Battleship, Texas Hold'em and Air Hockey (lobby only; its real-time play is `air-hockey/js/live.js`); its N-seat half (`joinSeat`/`vacateSeat`/seat-addressed recovery) is used by Chinchón, Escoba and Texas Hold'em (8 seats) |
+| `js/online-gate.js` | (2026-10-08) who may play ONLINE: `onlineGate()` for this device, `codeMayPlayOnline(code)` for an opponent, `onlineGateText(err)` for the words. Checked inside `js/net.js`'s create/join and every challenge `createGame`; the list itself is `ONLINE_BEFORE` + `online/<CODE>` in `js/admin-config.js`. See "Online play needs an account Matt has let in" below |
 | `js/a2hs.js` | add-to-home-screen bottom sheet |
 | `js/device-report.js` | the identity/storage dump. Its profile-page button was RETIRED 2026-08-11 (Report a bug supersedes it and sends the same payload); `gatherDeviceReport()` is still load-bearing, called by every bug report |
 | `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two |
@@ -855,6 +856,39 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
   redeploy was needed. A game without `armOpen` falls back to the old bubble-or-launch path.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
+
+## Online play needs an account Matt has let in (2026-10-08)
+
+Matt: *"Get rid of the play yourself cheat."* Nothing checked that the two players in an online game
+were different people, so a second phone or a private browser window with a made-up name was a free
+opponent: lose to yourself on purpose and every win counted on the leaderboard (about 15 seconds a
+win in Tic Tac Toe; about 30 in a Hoops, Cup Pong or Darts challenge, where the fake account just
+taps Quit). **Checked against the live data that day: nobody had done it** - every online challenge
+King of Games had played was against Matt.
+
+- **The rule:** a player code may play online only if it is on the list. `ONLINE_BEFORE` in
+  `js/admin-config.js` is every code that existed that morning (45, read from `players/`), so nobody
+  already playing noticed anything. A code minted later needs Matt to tap it on the admin page's
+  **Online play** section (`adminConfig/v1/online/<CODE>`: true lets a code in, false shuts a listed
+  one out). Matt's own devices (`isAdminDevice`) always may.
+- **Where it is checked, so no game has to remember it:** `js/net.js`'s `createRoom` / `joinRoom` /
+  `joinSeat`, BEFORE any network call (every live room: Chinchón, Escoba, Tic Tac Toe, Mancala,
+  Filler, Dots and Boxes, Boggle, Battleship, Yahtzee, Hoops, Air Hockey, Hold'em); every challenge
+  `createGame` (Hoops, Cup Pong, Darts, Skeeball), which also refuses an opponent who is not allowed;
+  and every challenge picker and Air Hockey's invite list, which only offer allowed people.
+- **Two devices on ONE code are one person**: `net.js` stamps the player code on each seat record
+  (additive) and refuses a join into a room that already holds that code on another device
+  (`'same-player'`).
+- **The refusals** are `'no-code'`, `'not-approved'`, `'same-player'` and `'them-not-approved'`;
+  each game shows `onlineGateText(err)` in its own error slot ("Online play is not turned on for
+  your account yet. Ask Matt to turn it on.").
+- **What it does not stop, said plainly:** two REAL people who are both let in, one losing to the
+  other on purpose (collusion, not self-play; it shows on the board as a long losing record against
+  one person), and someone with developer tools lying to their own phone (no server, like every
+  check here). It also means **a new family member cannot play online until Matt taps them in.**
+- `test-admin-config.mjs` pins the resolver and that every gate site actually calls it;
+  `test-cuppong-mp.mjs` / `test-darts-mp.mjs` let their two made-up test codes in through the same
+  config cache.
 
 ## The Challenges screen (2026-10-05)
 

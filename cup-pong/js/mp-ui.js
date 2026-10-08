@@ -5,6 +5,7 @@
 // (hoops4/CLAUDE.md, "The multiplayer home, reorganised"): one primary button, then "Your turn",
 // then "Their turn", then History.
 import { makeT } from '../../js/i18n.js';
+import { onlineGateText } from '../../js/online-gate.js';
 import { STRINGS } from './strings.js';
 
 const t = makeT(STRINGS);
@@ -28,6 +29,8 @@ function page(game, title, backRole, body) {
 }
 
 function reasonText(reason) {
+  const gate = onlineGateText(reason);
+  if (gate) return gate;
   if (reason === 'denied') return t('mpDenied');
   if (reason === 'offline') return t('mpOffline');
   if (reason === 'dev-origin-blocked') return t('mpDevBlocked');

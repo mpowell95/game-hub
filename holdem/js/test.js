@@ -209,12 +209,15 @@ ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 50
   for (const b of tiers) for (let n = 2; n <= 8; n++) for (const pl of [1, 2]) { const v = payout(pl, n, b); if (v && !GS.holdemValidPrize(v)) bad++; }
   ok('every prize a table can pay is accepted', bad === 0, bad);
   ok('an invented prize is refused', !GS.holdemValidPrize(123456) && !GS.holdemValidPrize(999999999));
+  // Broke = enough for the cheapest seat and nothing more (2026-10-08).
+  ok('the refill is the cheapest buy-in', GS.HOLDEM_REFILL === 500 && GS.HOLDEM_REFILL === tiers[0], GS.HOLDEM_REFILL);
+  ok('a refill bigger than the cheapest seat is refused', GS.recordHoldemBank({ grant: 25000 }) === null && GS.recordHoldemBank({ grant: 501 }) === null);
   // A random career of real games: buy in, finish somewhere, top up when broke.
   for (let trial = 0; trial < 200; trial++) {
     const hb = { buyins: 0, winnings: 0, grants: 0, best: 0, cashes: 0, entries: 0 };
     for (let g = 0; g < 60; g++) {
       let bal = GS.holdemBalance(hb);
-      if (bal < 500) { const need = Math.min(25000, 25000 - bal); hb.grants += need; bal += need; }
+      if (bal < 500) { const need = 500 - Math.max(0, bal); hb.grants += need; bal += need; }
       const afford = tiers.filter((b) => b <= bal);
       const b = afford[Math.floor(Math.random() * afford.length)];
       const n = 2 + Math.floor(Math.random() * 7);

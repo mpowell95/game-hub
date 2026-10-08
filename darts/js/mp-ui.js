@@ -7,6 +7,7 @@
 // NOTHING HERE SCROLLS (docs/BUILDING-A-GAME.md, Part 0): every list is capped to what fits, and the
 // player picker narrows by search instead of growing.
 import { makeT } from '../../js/i18n.js';
+import { onlineGateText } from '../../js/online-gate.js';
 import { STRINGS } from './strings.js';
 
 const t = makeT(STRINGS);
@@ -14,6 +15,8 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&':
 const BACK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
 
 export function reasonText(reason) {
+  const gate = onlineGateText(reason);
+  if (gate) return gate;
   if (reason === 'denied') return t('mp_denied');
   if (reason === 'offline') return t('mp_offline');
   if (reason === 'dev-origin-blocked') return t('mp_dev');

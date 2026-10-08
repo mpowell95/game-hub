@@ -28,6 +28,7 @@ import { readPlayersOnce } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { COLS, ROWS } from './game.js';
 import { recordResult } from '../../js/game-stats.js';
+import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 
 export const OUTBOX_KEY = 'gamehub.hoops4.outbox.v1';
 export const MAX_OUTBOX = 20;
@@ -680,7 +681,8 @@ export function opponentsFrom(all, me) {
 
 export async function readOpponents() {
   try {
-    return opponentsFrom(await readPlayersOnce(), myCode());
+    // Only people who may play online (js/online-gate.js): a made-up second account is never offered.
+    return opponentsFrom(await readPlayersOnce(), myCode()).filter((r) => codeMayPlayOnline(r.code));
   } catch (err) {
     console.warn('[hoops4] could not read the player list', err);
     return [];
@@ -741,6 +743,10 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
   const to = asCode(them && them.code);
   if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
   if (!to || to === me) return { ok: false, reason: 'bad-opponent', retryable: false };
+  // Both people must be allowed online (2026-10-08, the play-yourself cheat): js/online-gate.js.
+  const gate = onlineGate();
+  if (gate) return { ok: false, reason: gate, retryable: false };
+  if (!codeMayPlayOnline(to)) return { ok: false, reason: 'them-not-approved', retryable: false };
   if (!writesAllowed('createGame')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
 
   const mine = meLabel();

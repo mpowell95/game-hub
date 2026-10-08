@@ -14,11 +14,12 @@
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_START_BANK, loadStats, statsId } from '../../js/game-stats.js';
+import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_REFILL, loadStats, statsId } from '../../js/game-stats.js';
 import { corrections } from '../../js/admin-config.js';
 import { correctHoldemLedger } from '../../js/stats-corrections.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
+import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
@@ -326,7 +327,7 @@ class Game {
           <button type="button" class="pk-btn pk-btn-sm" data-act="to-setup-tab">&#x2039; ${esc(t('back'))}</button>
           <button type="button" class="pk-bankbar" data-act="bank"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))}: <b>${esc(bigMoney(bal))}</b> &#x203A;</button>
         </div>
-        ${broke ? `<button type="button" class="pk-btn pk-btn-primary" data-act="topup">${esc(t('topup', { n: bigMoney(HOLDEM_START_BANK - bal) }))}</button>` : ''}
+        ${broke ? `<button type="button" class="pk-btn pk-btn-primary" data-act="topup">${esc(t('topup', { n: bigMoney(TIERS[0].buyin - Math.max(0, bal)) }))}</button>` : ''}
         <div class="pk-tiergrid">
           ${TIERS.map((x) => {
             const locked = bal < x.buyin;
@@ -507,9 +508,12 @@ class Game {
     const lobbyCfg = mp.host ? null : (NT.parse(room.pk && room.pk.lobby) || {});
     const tier = tierById(mp.host ? this._netTier().id : lobbyCfg.tier);
     const tierLine = tier ? `${t('tier_' + tier.id)} · ${t('buy_in', { n: bigMoney(tier.buyin) })}` : t('no_buyin');
+    // Only people who can pay are dealt in (no seat is free); the host sees who will watch instead.
+    const pays = (h) => !mp.host || this._payingSeat(h, tier ? tier.buyin : 0, room);
+    const dealt = humans.filter(pays).length + bots.length;
     const rows = humans.map((h) => `
         <li class="pk-lrow"><span class="pk-lav">${esc(h.avatar || '\u{1F642}')}</span><span class="pk-lname">${esc(h.name)}</span>
-          ${h.seat === 0 ? `<span class="pk-badge">${esc(t('host'))}</span>` : ''}${h.seat === mp.seat ? `<span class="pk-badge is-you">${esc(t('you'))}</span>` : ''}</li>`).join('')
+          ${h.seat === 0 ? `<span class="pk-badge">${esc(t('host'))}</span>` : ''}${h.seat === mp.seat ? `<span class="pk-badge is-you">${esc(t('you'))}</span>` : ''}${pays(h) ? '' : `<span class="pk-badge is-short">${esc(t('cant_cover_badge'))}</span>`}</li>`).join('')
       + bots.map((b, i) => `
         <li class="pk-lrow"><span class="pk-lav">${esc(b.emoji)}</span><span class="pk-lname">${esc(b.name)}</span>
           <span class="pk-shape" title="${esc(t(SKILL_ID[b.bot]))}">${diffShapeSVG(b.bot)}</span>
@@ -532,7 +536,7 @@ class Game {
           ${seg('speed', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('speed_' + k))]), speed)}</div>
         ${mp.bots.length ? `<div class="pk-field"><div class="pk-label">${esc(t('pace'))}</div>
           ${seg('pace', ['slow', 'normal', 'fast'].map((k) => [k, esc(t('pace_' + k))]), this.settings.pace)}</div>` : ''}
-        <button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="startnet" ${count >= 2 ? '' : 'disabled'}>${esc(count >= 2 ? t('start_game') : t('need_two'))}</button>`
+        <button type="button" class="pk-btn pk-btn-primary pk-btn-big" data-act="startnet" ${dealt >= 2 ? '' : 'disabled'}>${esc(dealt >= 2 ? t('start_game') : count >= 2 ? t('need_two_paying') : t('need_two'))}</button>`
       : `<p class="pk-tierline" style="background:${tier ? tier.bg : '#222'}">${esc(tierLine)}</p>
          ${tier && this.bank() < tier.buyin ? `<p class="pk-hint pk-center-text">${esc(t('cant_cover'))}</p>` : ''}
          <p class="pk-waiting">${esc(t('waiting_host'))}</p>`;
@@ -1047,9 +1051,11 @@ class Game {
       case 'deal': return this._newSolo(b.dataset.tier);
       case 'to-setup-tab': this.screen = 'setup'; return this.render(true);
       case 'topup': {
-        // Never more than the starting stake in one top-up (the stats layer refuses anything bigger).
-        const need = Math.min(HOLDEM_START_BANK, HOLDEM_START_BANK - this.bank());
-        if (need > 0 && this.bank() < TIERS[0].buyin) recordHoldemBank({ grant: need });
+        // Broke: exactly enough for the cheapest seat, and only then (2026-10-08). The stats layer
+        // refuses a grant bigger than HOLDEM_REFILL.
+        const bal = this.bank();
+        const need = Math.min(HOLDEM_REFILL, TIERS[0].buyin - Math.max(0, bal));
+        if (need > 0 && bal < TIERS[0].buyin) recordHoldemBank({ grant: need });
         return this.render(true);
       }
       case 'nettier': {
@@ -1639,6 +1645,8 @@ class Game {
   }
 
   _errText(code) {
+    const gate = onlineGateText(code);
+    if (gate) return gate;
     return code === 'not-found' ? t('err_notfound') : code === 'full' ? t('err_full') : code === 'version' ? t('err_version')
       : code === 'busy' ? t('err_busy') : code === 'wrong' ? t('err_wrong_game') : t('err_offline');
   }
@@ -1776,16 +1784,24 @@ class Game {
     NT.pkUpdate(mp.code, { lobby: JSON.stringify({ bots: this._netBots(), speed: this.settings.speed, tier: this._netTier().id }) }).catch((e) => console.warn('[holdem] lobby publish failed', e));
   }
 
-  /** Host: deal a new game to everyone sitting in the room right now, plus the computers. */
+  /** Host: deal a new game to everyone sitting in the room right now who can pay for it, plus the
+   *  computers. Someone whose bankroll does not cover the buy-in stays in the room and watches. */
   _startNet() {
     const mp = this.mp;
-    const humans = this._roster(mp.room).map((h) => ({ name: h.name, emoji: h.avatar || '\u{1F642}', bot: 0, seat: h.seat, dev: h.deviceId }));
+    const tier = this._netTier();
+    const humans = this._roster(mp.room).filter((h) => this._payingSeat(h, tier.buyin, mp.room))
+      .map((h) => ({ name: h.name, emoji: h.avatar || '\u{1F642}', bot: 0, seat: h.seat, dev: h.deviceId }));
     if (!humans.some((h) => h.seat === 0)) humans.unshift({ ...me(), emoji: me().avatar, bot: 0, seat: 0, dev: deviceId() });
     // People first, computers fill what is left, THEN shuffle the seating: a full room must never
     // lose a person to a computer.
     const players = shuffle([...humans, ...this._netBots().map((b) => ({ ...b }))].slice(0, MAX_PLAYERS));
-    if (players.length < 2) return;
-    const tier = this._netTier();
+    if (players.length < 2) {
+      this.error = t('need_two_paying');
+      this.flash = t('need_two_paying');
+      this._later(() => { this.flash = ''; this._paintBanner(); }, 6000);
+      return this.render();
+    }
+    this.error = '';
     const state = newGame(players, { speed: this.settings.speed, buyin: tier.buyin, tier: tier.id });
     state.gid = rid();
     this._stopTable();
@@ -1801,18 +1817,43 @@ class Game {
     this.table.start();
   }
 
-  /** Online: pay this device's own buy-in once per game. A player whose bankroll cannot cover it
-   *  plays that game just for fun (no buy-in, no prize) rather than going below zero. */
+  /** Online: pay this device's own buy-in once per game. EVERY seat at a money table pays
+   *  (2026-10-08, Matt: "OBVIOUSLY NO SEAT SHOULD BE FREE"). A player who cannot cover the buy-in is
+   *  never dealt in - the host deals only seats whose published bankroll covers it (`_payingSeat`) -
+   *  so anyone holding cards here has bought in. Before that day a short bankroll was dealt in "for
+   *  fun" while its seat still counted toward the pot, which printed money for everyone else. A
+   *  ':free' key from an old save is still honoured so a game in progress is never charged twice. */
   _stake() {
     const pub = this.pub, mp = this.mp;
     if (!pub || !mp || this.myIdx < 0 || !(pub.cfg && pub.cfg.buyin > 0)) return;
     const base = `${mp.code}:${pub.gid}`;
     const rec = mp.rec || (mp.rec = []);
     if (rec.includes(base + ':stake') || rec.includes(base + ':free')) return;
-    if (this.bank() >= pub.cfg.buyin) { recordHoldemBank({ buyin: pub.cfg.buyin }); rec.push(base + ':stake'); }
-    else { rec.push(base + ':free'); this.flash = t('playing_free'); this._later(() => { this.flash = ''; this._paintBanner(); }, 6000); }
+    recordHoldemBank({ buyin: pub.cfg.buyin });
+    rec.push(base + ':stake');
     if (rec.length > 60) rec.splice(0, rec.length - 60);
     this._saveMp();
+  }
+
+  /** Guest: tell the host what this device's bankroll is, so it is only dealt into a money table it
+   *  can pay for. Written to its own `pk/bank/<seat>` only when the number changes. */
+  _publishBank() {
+    const mp = this.mp;
+    if (!mp || mp.host || mp.seat == null) return;
+    const b = Math.max(0, Math.floor(this.bank()));
+    if (mp.bankSent === b) return;
+    mp.bankSent = b;
+    NT.pkUpdate(mp.code, { [`bank/${mp.seat}`]: b }).catch((e) => { mp.bankSent = null; console.warn('[holdem] bankroll publish failed', e); });
+  }
+
+  /** Host: may this person be dealt into a game with this buy-in? The host's own seat is covered by
+   *  `_netTier()` (a table the host cannot afford is no table). A guest needs a published bankroll
+   *  that covers it; a guest on an older build publishes none, so it watches. */
+  _payingSeat(h, buyin, room) {
+    if (!(buyin > 0) || h.seat === 0) return true;
+    const banks = (room && room.pk && room.pk.bank) || {};
+    const b = +banks[h.seat];
+    return Number.isFinite(b) && b >= buyin;
   }
 
   _toLobby() {
@@ -1911,6 +1952,7 @@ class Game {
     const h0 = seats[0] && seats[0].lastSeen;
     const o = mp.seen[0];
     if (!o || o.v !== h0) mp.seen[0] = { v: h0, t: Date.now() };
+    this._publishBank();
     const pk = room.pk || {};
     const pub = NT.parse(pk.pub);
     if (!pub) {

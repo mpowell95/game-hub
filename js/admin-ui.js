@@ -39,7 +39,7 @@ import {
   readCachedConfig, refreshAdminConfig, resolveGameLive, resolveBoardMode, setGameLive,
   resolveGameAllowed, gameAllowList, setGameAllowed,
   setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
-  resolveHoldemCorrection, setHoldemCorrection,
+  resolveHoldemCorrection, setHoldemCorrection, resolveOnlineAllowed, setOnlineAllowed,
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
@@ -98,6 +98,9 @@ function ensureCss() {
                   border: 1px solid var(--gh-border); background: var(--gh-surface, transparent); color: inherit;
                   touch-action: manipulation; cursor: pointer; }
   .adm-allow__p[aria-pressed="true"] { border: 2px solid #ffce3a; background: rgba(255,206,58,.18); font-weight: 700; }
+  .adm-code { font-size: 11px; font-weight: 400; opacity: .7; letter-spacing: .04em; }
+  .adm-sub { margin-top: var(--gh-sp-2, 8px); }
+  .adm-sub > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
   .adm-sec:last-of-type { border-bottom: 1px solid var(--gh-border); }
   /* The headings carried gh-sp-4 top AND bottom on top of a 44px min-height, so five collapsed
      sections filled the sheet with gaps. The 44px target is untouched; only the padding went. */
@@ -254,6 +257,7 @@ function render(card, opts = {}) {
     <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('adm_close'))}">&times;</button>
     <h2 class="gh-modal__title">🛠️ ${esc(t('adm_title'))}</h2>
     <div class="adm-scroll">
+      ${sec('online', t('adm_online_title'), onlineSectionHTML(cfg))}
       ${sec('games', t('adm_games_title'), gamesSectionHTML(cfg))}
       ${sec('machines', t('adm_skeeball_title'), skeeballSectionHTML(cfg))}
       ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
@@ -316,6 +320,42 @@ function allowPickerHTML(cfg, g) {
       <div class="adm-note">${esc(t('adm_allow_title', { n: allowed.size }))}</div>
       <div class="adm-allow__list">${chips || `<span class="adm-note">${esc(t('adm_allow_none'))}</span>`}</div>
     </div>`;
+}
+
+// --- online play (2026-10-08) ----------------------------------------------------------------------
+
+/** One row per PLAYER CODE (not per person: two codes of one person are two accounts, and a made-up
+ *  second account is exactly what this section exists to catch), newest first: {code, name, emoji, at}. */
+function codesSeen() {
+  const out = new Map();
+  for (const rec of Object.values(_players || {})) {
+    const p = (rec && rec.profile) || {};
+    const code = String(p.playerId || '').trim().toUpperCase();
+    if (!code) continue;
+    const at = Number(rec.updatedAt) || 0;
+    const cur = out.get(code);
+    if (!cur || at >= cur.at) out.set(code, { code, name: String(p.name || '').trim() || code, emoji: p.emoji || '', at });
+  }
+  return [...out.values()].sort((a, b) => b.at - a.at);
+}
+
+/** Who may play online. Not yet allowed first (that is what Matt opens this for), then everyone
+ *  allowed, folded. One tap flips a code; js/online-gate.js reads the answer. */
+function onlineSectionHTML(cfg) {
+  const rows = codesSeen();
+  const chip = (p) => {
+    const on = resolveOnlineAllowed(cfg, p.code);
+    return `<button type="button" class="adm-allow__p" data-online-code="${esc(p.code)}" aria-pressed="${on}"
+      >${on ? '✓ ' : ''}${p.emoji ? esc(p.emoji) + ' ' : ''}${esc(p.name)} <span class="adm-code">${esc(p.code)}</span></button>`;
+  };
+  const waiting = rows.filter((p) => !resolveOnlineAllowed(cfg, p.code));
+  const allowed = rows.filter((p) => resolveOnlineAllowed(cfg, p.code));
+  return `<div class="adm-note">${esc(t('adm_online_note'))}</div>
+    <div class="adm-note">${esc(t('adm_online_waiting', { n: waiting.length }))}</div>
+    <div class="adm-allow__list">${waiting.map(chip).join('') || `<span class="adm-note">${esc(t('adm_online_none'))}</span>`}</div>
+    <details class="adm-sub"><summary>${esc(t('adm_online_allowed', { n: allowed.length }))}</summary>
+      <div class="adm-allow__list">${allowed.map(chip).join('')}</div>
+    </details>`;
 }
 
 function gamesSectionHTML(cfg) {
@@ -667,6 +707,10 @@ function wire(card) {
         }
         return last;
       };
+    } else if (e.target.closest('[data-online-code]')) {
+      const b = e.target.closest('[data-online-code]');
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      run = () => setOnlineAllowed(b.dataset.onlineCode, on);
     } else if (allowBtn && allowBox) {
       const on = allowBtn.getAttribute('aria-pressed') !== 'true';
       run = () => setGameAllowed(allowBox.dataset.allowGame, allowBtn.dataset.allowCode, on);
