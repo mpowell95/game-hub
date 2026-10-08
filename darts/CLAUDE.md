@@ -189,7 +189,10 @@ COPIED from GamePigeon's video, not reasoned out.
 
 ## Screens
 
-- Setup (a cream card over the lower half, the board above it): **Multiplayer ›**, Game (301 / 201 /
+- Setup (a cream card CENTRED on the screen over a light scrim, since 2026-10-08, Matt: *"the whole
+  setup card is weirdly on the bottom. It should fit comfortably, not be crammed at the bottom"*;
+  it used to sit on the bottom edge. Centred by auto margins, so a card taller than the screen
+  starts at the top padding rather than being cut off at both ends): **Multiplayer ›**, Game (301 / 201 /
   101 / Cricket, plus Order for Cricket), Play the computer Easy/Medium/Hard (with the shared shape
   markers), Computer speed Slow/Normal/Fast (see below), First throw Alternate/Me/Computer (Alternate
   is the default and flips every match, `nextStarter`), Continue match, then How to play and Play
@@ -233,8 +236,25 @@ speed setting in texas hold em. I want the computer to play on fast forward so i
   Cricket. How to play now sits beside Play (`.dt-go-row`), the option bars have 2px inner padding
   (buttons still 44px) and the card gap is 9px; the card measures the same height as before in
   every case, and `check-no-scroll.mjs darts` passes. (With Continue match showing, in Cricket, on a
-  short phone, the card already reached the top of the screen before this change, and still does,
-  by the same amount.)
+  short phone, the card reached the top of the screen; since the smaller pills it fits, top at
+  55px of 664.)
+
+## How often the computer hits trebles (measured 2026-10-08, nothing changed)
+
+Matt, playing Medium Cricket: *"he just got triple 18 and triple 17 in 2 throws. don't change the
+skill of the computer, but tell me how likely that is"*. Monte Carlo through the real
+`computerThrow` + `scoreAt` (400,000 darts per number; 20,000 computer-vs-computer games per level,
+any order, points on). The computer aims at the treble of its number (Easy at the single):
+
+| | Easy | Medium | Hard |
+|---|---|---|---|
+| treble with one dart, going for 18 (or 17) | 0.8% | 2.4% | 12.2% |
+| hits the 18 at all (any ring), going for 18 | 11.5% | 28.0% | 65.6% |
+| T18 then T17, back to back | 1 in 14,600 | 1 in 1,700 | 1 in 68 |
+| games with two trebles in a row at least once | 2.6% | 3.6% | 17.4% |
+
+So it was rare luck for Medium, not a bug: Matt's aim help (`_aimHelp`) runs only in the flick path
+for his own seat, never on `_cpuThrow`.
 
 ## Stats
 

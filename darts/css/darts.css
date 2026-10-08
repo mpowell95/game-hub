@@ -291,8 +291,12 @@
   background: rgba(20, 8, 2, 0.5);
   overscroll-behavior: contain;
 }
-/* Setup sits over the lower half: the board stays in view above it. */
-.dt-root .dt-ov-setup { align-items: flex-end; background: linear-gradient(180deg, rgba(20, 8, 2, 0) 30%, rgba(20, 8, 2, 0.55) 100%); }
+/* Setup is centred on the screen (2026-10-08, Matt: "the whole setup card is weirdly on the bottom.
+   It should fit comfortably, not be crammed at the bottom"). Until then it sat on the bottom edge
+   over the lower half of the board. Auto margins centre it SAFELY: a card taller than the screen
+   starts at the top padding instead of being cut off at both ends, as align-items: center would. */
+.dt-root .dt-ov-setup { align-items: flex-start; background: rgba(20, 8, 2, 0.35); }
+.dt-root .dt-ov-setup > .dt-card { margin-block: auto; }
 .dt-root .dt-card {
   position: relative;
   width: min(380px, 100%);
