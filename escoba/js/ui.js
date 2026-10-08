@@ -20,6 +20,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordEscoba, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import * as net from '../../js/net.js';
+import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import { makeT } from '../../js/i18n.js';
@@ -2420,6 +2421,7 @@ class EscobaUI {
     if (this._dead) return;
     if (res.error) {
       this._mpError = res.error === 'busy' ? t('mp_could_not_create_room') : t('mp_offline');
+      this._mpError = onlineGateText(res.error) || this._mpError;
       this.renderSetup();
       return;
     }
@@ -2473,6 +2475,7 @@ class EscobaUI {
         : res.error === 'full' ? t('mp_room_full')
         : res.error === 'version' ? 'version'
         : t('mp_offline');
+      this._mpError = onlineGateText(res.error) || this._mpError;
       this.renderSetup();
       return;
     }

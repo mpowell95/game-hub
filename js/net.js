@@ -14,6 +14,26 @@
 // is only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
 import { getStatsApp } from './firebase-boot.js';
+// Who may play online at all (2026-10-08, Matt: "Get rid of the play yourself cheat"). Checked
+// before ANY write in createRoom/joinRoom/joinSeat, so a made-up second account never gets a seat;
+// see js/online-gate.js. The two new refusals are 'not-approved' / 'no-code' and 'same-player';
+// every caller already shows an `error` it does not recognise, and each game now names these.
+import { onlineGate, myPlayerCode } from './online-gate.js';
+
+/** `me` with this device's player code stamped on it (additive: no reader depends on it except the
+ *  same-person check below). */
+function withCode(me) {
+  const code = myPlayerCode();
+  return code ? { ...me, code } : { ...me };
+}
+
+/** Is this seat record the same PERSON on a different device? Two devices on one code are one
+ *  person, so a win between them is a win against yourself. A record from an older build carries
+ *  no code and is never matched. */
+function samePerson(rec, me) {
+  const code = myPlayerCode();
+  return !!(rec && code && rec.code === code && rec.deviceId !== me.deviceId);
+}
 
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
@@ -119,6 +139,9 @@ function getSwVersion() {
  *  carries the host's own seat (always 0). Omit `opts` for a classic 2-seat
  *  room -- the written record is then byte-identical to what this always wrote. */
 export async function createRoom(game, config, me, opts) {
+  const gate = onlineGate();
+  if (gate) return { error: gate };
+  me = withCode(me);
   if (!(await init())) return { error: 'offline' };
   const want = opts && opts.seats ? Math.max(2, Math.min(MAX_SEATS, opts.seats | 0)) : 0;
   const swv = await getSwVersion();
@@ -176,12 +199,16 @@ async function readJoinableRoom(CODE, label) {
 /** Join (or rejoin) `code` as `me` = {name, avatar, deviceId}. The classic
  *  2-seat path, unchanged: one guest slot, first-come. */
 export async function joinRoom(code, me) {
+  const allowed = onlineGate();
+  if (allowed) return { error: allowed };
+  me = withCode(me);
   if (!(await init())) return { error: 'offline' };
   const CODE = String(code || '').trim().toUpperCase();
   try {
     const gate = await readJoinableRoom(CODE, 'joinRoom');
     if (gate.error) return { error: gate.error };
     const room = gate.room;
+    if (samePerson(room.host, me)) return { error: 'same-player' };
     const now = Date.now();
     const rejoined = !!(room.guest && room.guest.deviceId === me.deviceId);
     if (room.guest && !rejoined) return { error: 'full' };
@@ -206,6 +233,9 @@ export async function joinRoom(code, me) {
  *  A room created WITHOUT `opts.seats` has no roster to claim, so it is
  *  reported as 'version' (the caller is a newer build than the room). */
 export async function joinSeat(code, me) {
+  const allowed = onlineGate();
+  if (allowed) return { error: allowed };
+  me = withCode(me);
   if (!(await init())) return { error: 'offline' };
   const CODE = String(code || '').trim().toUpperCase();
   try {
@@ -214,6 +244,8 @@ export async function joinSeat(code, me) {
     const room = gate.room;
     const maxSeats = room.maxSeats | 0;
     if (!maxSeats) return { error: 'version' };
+    const seated = room.seats || {};
+    if (Object.keys(seated).some((k) => samePerson(seated[k], me))) return { error: 'same-player' };
 
     const res = await _api.runTransaction(_api.ref(_db, `rooms/${CODE}/seats`), (seats) => {
       const s = seats || {};

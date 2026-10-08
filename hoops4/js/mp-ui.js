@@ -18,6 +18,7 @@ import { loadPalette, paletteItems, reactionText } from '../../js/mp-reactions.j
 import { STRINGS } from './strings.js';
 import { deviceId } from '../../js/game-stats.js';
 import * as MP from './mp.js';
+import { onlineGateText } from '../../js/online-gate.js';
 
 const t = makeT(STRINGS);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
@@ -287,7 +288,7 @@ export function openMultiplayer(ui, { pickFor = null } = {}) {
     const net = await import('../../js/net.js');
     const me = { name: MP.meLabel().name, avatar: MP.meLabel().emoji, emoji: MP.meLabel().emoji, deviceId: deviceId() };
     const res = await net.createRoom('hoops4', { oneShot: oneShot() }, me);
-    if (res.error || !res.code) { shell(t('mpHost'), note(t('mpLost'), 'warn'), 'home'); return; }
+    if (res.error || !res.code) { shell(t('mpHost'), note(onlineGateText(res.error) || t('mpLost'), 'warn'), 'home'); return; }
     state.room = { code: res.code, role: 'host', started: false };
     shell(t('mpHost'), `
       <p class="h4-mp-sub">${t('mpCodeHint')}</p>
@@ -328,7 +329,7 @@ export function openMultiplayer(ui, { pickFor = null } = {}) {
       const me = { name: MP.meLabel().name, avatar: MP.meLabel().emoji, emoji: MP.meLabel().emoji, deviceId: deviceId() };
       const res = await net.joinRoom(String(input.value || '').trim().toUpperCase(), me);
       state.busy = false;
-      if (res.error || !res.room) { err.textContent = t('mpBadCode'); return; }
+      if (res.error || !res.room) { err.textContent = onlineGateText(res.error) || t('mpBadCode'); return; }
       const code = String(input.value || '').trim().toUpperCase();
       net.heartbeat(code, 'guest');
       el.remove();
@@ -519,6 +520,8 @@ export function openMultiplayer(ui, { pickFor = null } = {}) {
     // 'denied' means database.rules.json has not been published yet, and 'dev-origin-blocked'
     // means this is localhost. Neither is "lost the connection", and saying so would send Matt
     // looking for a network problem that is not there.
+    const gate = onlineGateText(reason);
+    if (gate) return gate;
     if (reason === 'denied' || reason === 'dev-origin-blocked') return t('mpUnavailable');
     if (reason === 'offline' || reason === 'did-not-land') return t('mpOffline');
     if (reason === 'no-player-code') return t('mpNeedName');

@@ -17,6 +17,10 @@ globalThis.localStorage = {
 const use = (p) => { phone = p; };
 stores.A.set('gamehub.profile', JSON.stringify({ name: 'Matt', emoji: '🐙', playerId: 'MATTA' }));
 stores.B.set('gamehub.profile', JSON.stringify({ name: 'Ana', emoji: '🦊', playerId: 'ANABB' }));
+// Both test players are allowed to play online (js/online-gate.js, 2026-10-08); a made-up code is not.
+const ONLINE = JSON.stringify({ online: { MATTA: true, ANABB: true } });
+stores.A.set('gamehub.adminConfig.v1', ONLINE);
+stores.B.set('gamehub.adminConfig.v1', ONLINE);
 
 const MP = await import('./darts/js/mp.js');
 const { targetPoint } = await import('./darts/js/engine.js');

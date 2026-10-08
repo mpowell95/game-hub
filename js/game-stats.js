@@ -2229,6 +2229,10 @@ function applyHoldemBank(g, e) {
 // The amounts below MUST match holdem/js/ui.js's TIERS and holdem/js/engine.js's payout();
 // holdem/js/test.js fails if they drift.
 export const HOLDEM_BUYINS = [500, 1000, 5000, 10000, 100000, 1000000, 10000000];
+// A broke player is given enough to sit at the cheapest table and nothing more (Matt, 2026-10-08:
+// "If someone is broke, they can get enough to sit for the cheapest game there is and that's it").
+// It was up to $25,000 before that day; grants already in a ledger are untouched (THE LAW).
+export const HOLDEM_REFILL = HOLDEM_BUYINS[0];
 const HOLDEM_MAX_SEATS = 8;
 const HOLDEM_PRIZE_MAX = 20;           // prizes per minute: a heads-up game takes a person >= 10 s
 function holdemPayout(place, n, b) {
@@ -2308,14 +2312,14 @@ function holdemPrizeTooFast() {
 }
 
 /** One bankroll movement: `{ buyin }` when a game starts, `{ prize }` when a paid place is decided,
- *  `{ grant }` for the free top-up. Returns this device's ledger after the write, or null when the
+ *  `{ grant }` for the refill to the cheapest seat (HOLDEM_REFILL). Returns this device's ledger after the write, or null when the
  *  write was refused as impossible (see the deterrents above). */
 export function recordHoldemBank(e) {
   const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
   const buyin = n(e && e.buyin), prize = n(e && e.prize), grant = n(e && e.grant);
   if (buyin && HOLDEM_BUYINS.indexOf(buyin) < 0) return holdemRefuse('buy-in', e);
   if (prize && !holdemValidPrize(prize)) return holdemRefuse('prize', e);
-  if (grant > HOLDEM_START_BANK) return holdemRefuse('top-up', e);
+  if (grant > HOLDEM_REFILL) return holdemRefuse('top-up', e);
   if (prize && holdemPrizeTooFast()) return holdemRefuse('too-fast', e);
   const st = loadStats();
   applyHoldemBank(st.games.holdem, e || {});

@@ -72,6 +72,7 @@ claim), `heartbeat`, `vacateSeat`, `leaveRoom`, `onRoom`, `sendReaction`. It has
 | `pk/hole/<seat>` | host | JSON `{g, h, c}`: that seat's two cards for game `g`, hand `h` |
 | `pk/act/<seat>` | that seat | JSON `{g, h, k, a, to, n}`: one move, or `leave` / `back` |
 | `pk/clock` | host | `{k, ms}`: time left on the current turn |
+| `pk/bank/<seat>` | that seat | number: that guest's bankroll, so the host deals it into a money table only if it can pay (2026-10-08) |
 
 - **Values are JSON strings** because the Realtime Database drops empty arrays and nulls and turns
   sparse arrays into objects, and the engine state is full of both.
@@ -125,10 +126,11 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
   heads-up. It rides the same once-per-game dedupe as the win/loss result (`state.rec` solo,
   `code:gid` online), so a reload can never pay twice. Walking away pays nothing.
 - **Online**: the host picks the table in the lobby (only ones they can afford, or "no buy-in").
-  A guest whose bankroll cannot cover it plays that game just for fun (no buy-in, no prize), so a
-  balance never goes below zero.
-- **Broke**: below the cheapest table, the table picker offers free chips back up to $25,000
-  (`grants`).
+  **No seat at a money table is free** (2026-10-08, see "No free seats" below): a guest whose
+  bankroll does not cover the buy-in is not dealt in and watches.
+- **Broke**: below the cheapest table, the table picker offers exactly enough for the cheapest seat
+  ($500, `HOLDEM_REFILL`) and nothing more (`grants`). It was up to $25,000 until 2026-10-08; see
+  "No free seats" below.
 - **Not behind the rate gate**, deliberately (`test-rate-guard.mjs` EXEMPT, with the reason): a
   refused buy-in would be a free game and a refused prize would be money lost. The game result
   itself is still gated. A failed write is queued and replayed (`persistOrQueue`).
@@ -158,6 +160,31 @@ Of the three fixes offered he chose this one:
 - Nothing already earned changed: a game saved before this keeps the computers it was dealt.
 - `holdem/js/test.js` fails if a bigger table ever gets easier computers, or a money table
   (Solar System and up) is anything but Hard.
+
+## No free seats, and broke means $500 (2026-10-08)
+
+Matt, on learning both of these existed: *"OBVIOUSLY NO SEAT SHOULD BE FREE"* and *"The free
+refill is fucked... If someone is broke, they can get enough to sit for the cheapest game there is
+and that's it."*
+
+- **The hole that was closed:** a guest who could not cover the buy-in was dealt in "just for fun",
+  but `payout()` sizes the pot from EVERY seat (`pub.players.length`), so that seat put money in the
+  pot nobody paid. With a second browser window under a made-up name, sitting at your own table and
+  leaving at once, the host won twice the buy-in having paid it once: about +$10M every 20 seconds
+  at the Universe table. **Checked against the live data the same day: nobody had ever played an
+  online Hold'em game for money**, so it was never used.
+- **Now every seat at a money table pays.** A guest writes its bankroll to `pk/bank/<seat>`
+  (`_publishBank`, only when it changes); the host deals in only seats that cover the buy-in
+  (`_payingSeat`; the host's own seat is covered by `_netTier()`). A guest on an older build
+  publishes nothing and so watches at money tables. The host's lobby marks a short guest
+  "Can't cover", and Start needs two people who can pay (`need_two_paying`). `_stake` always
+  charges a dealt-in seat; a `:free` key in an old MP save is still honoured so a game in progress
+  is never charged twice. "No buy-in" tables still deal everyone, and pay nobody.
+- **The refill is the cheapest buy-in, $500** (`HOLDEM_REFILL` in `js/game-stats.js`, which refuses
+  a bigger grant). Grants already in a ledger are untouched (THE LAW); `holdemSuspect`'s top-up
+  check still allows $25,000 a game so no existing ledger is flagged.
+- Playing yourself online in any game, Hold'em included, is now blocked at the room layer: root
+  `CLAUDE.md`, "Online play needs an account Matt has let in".
 
 ## Bankroll leaderboard (2026-09-28)
 
@@ -277,7 +304,7 @@ readable from `rooms/` with developer tools. What exists:
 
 1. **Impossible amounts are refused at write time** (`recordHoldemBank`): a buy-in that is not a
    table price (`HOLDEM_BUYINS`), a prize no finish at any table pays (`holdemValidPrize`), a
-   top-up over $25,000. Refusals are counted in `gamehub.rate.v1`'s `blocked['holdem-bank']`,
+   top-up over $500 (`HOLDEM_REFILL`; it was $25,000 until 2026-10-08). Refusals are counted in `gamehub.rate.v1`'s `blocked['holdem-bank']`,
    which rides the stats mirror (`rate`), so an attempt is visible to Matt.
 2. **Prizes are rate-capped**: more than 20 in a minute are refused (a heads-up game takes a person
    10s or more). Calibrated on the fastest human, like the result gate.

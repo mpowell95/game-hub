@@ -18,6 +18,7 @@ import { showCodeReveal } from '../../js/challenge/reveal.js';
 import { recordChinchon, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
+import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import { makeT } from '../../js/i18n.js';
@@ -2470,6 +2471,7 @@ class ChinchonUI {
     if (this._dead) return;
     if (res.error) {
       this._mpError = res.error === 'busy' ? t('mp_err_could_not_create_room') : t('mp_err_offline');
+      this._mpError = onlineGateText(res.error) || this._mpError;
       this.renderSetup();
       return;
     }
@@ -2532,6 +2534,7 @@ class ChinchonUI {
         : res.error === 'full' ? t('mp_err_room_full')
         : res.error === 'version' ? 'version'
         : t('mp_err_offline');
+      this._mpError = onlineGateText(res.error) || this._mpError;
       this.renderSetup();
       return;
     }

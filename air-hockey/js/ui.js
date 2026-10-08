@@ -33,6 +33,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { recordAirHockey, loadStats } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
+import { onlineGateText, codeMayPlayOnline } from '../../js/online-gate.js';
 import { deviceId } from '../../js/game-stats.js';
 import { getStatsApp } from '../../js/firebase-boot.js';
 
@@ -656,8 +657,9 @@ class AirHockeyUI {
     if (mode !== 'wait') q('invitedLine').hidden = true;
     if (code) q('bigCode').textContent = code;
   }
-  _lobbyError(key) {
-    this.root.querySelector('[data-role="lobbyErr"]').textContent = key ? t(key) : '';
+  /** `text` (already in words, from js/online-gate.js) wins over `key` when given. */
+  _lobbyError(key, text) {
+    this.root.querySelector('[data-role="lobbyErr"]').textContent = text || (key ? t(key) : '');
     this.root.querySelectorAll('[data-act="create"], [data-act="join"], [data-act="invite"], [data-act="sendInvite"]').forEach((b) => { b.disabled = false; });
   }
   _lobbyBusy() {
@@ -676,7 +678,7 @@ class AirHockeyUI {
     const net = await this._net();
     const r = await net.createRoom(ROOM_GAME, {}, this._me());
     if (instance !== this || this.screen !== 'online') { if (r && r.code) net.leaveRoom(r.code, 'host'); return null; }
-    if (!r || r.error) { this._lobbyError(r && r.error === 'busy' ? 'err_busy' : 'err_offline'); return null; }
+    if (!r || r.error) { this._lobbyError(r && r.error === 'busy' ? 'err_busy' : 'err_offline', onlineGateText(r && r.error)); return null; }
     this._lobbyError('');
     this._lobbyView('wait', r.code);
     this._pending = { code: r.code, stop: null };
@@ -703,6 +705,8 @@ class AirHockeyUI {
     sel.innerHTML = `<option value="">${esc(t('loading_players'))}</option>`;
     let list = [];
     try { list = await (await import('../../js/messages.js')).readContacts(); } catch { list = []; }
+    // Only people who may play online (js/online-gate.js): an invite to anyone else could never be joined.
+    list = list.filter((c) => c && codeMayPlayOnline(c.code));
     if (instance !== this || this.screen !== 'online') return;
     this._contacts = list;
     if (!list.length) { sel.innerHTML = ''; this._lobbyError('invite_none'); return; }
@@ -756,7 +760,7 @@ class AirHockeyUI {
     if (instance !== this || this.screen !== 'online') return;
     if (!r || r.error) {
       const k = { 'not-found': 'err_not_found', full: 'err_full', version: 'err_version' }[r && r.error] || 'err_offline';
-      this._lobbyError(k);
+      this._lobbyError(k, onlineGateText(r && r.error));
       return;
     }
     this._beginOnline(code, 1, r.room && r.room.host && r.room.host.name);

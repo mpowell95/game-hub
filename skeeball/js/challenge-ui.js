@@ -11,6 +11,7 @@ import { isBoardReleased, isBoardTesting } from '../../js/admin-config.js';
 import { loadStats } from '../../js/game-stats.js';
 import { readPlayersOnce } from '../../js/stats-net.js';
 import * as CH from './challenge.js';
+import { onlineGateText, codeMayPlayOnline } from '../../js/online-gate.js';
 
 const t = makeT(STRINGS);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
@@ -198,7 +199,8 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     if (state.players) return state.players;
     const all = await readPlayersOnce().catch(() => ({}));
     state.recs = all || {};
-    state.players = CH.opponentsFrom(state.recs, CH.myCode());
+    // Only people who may play online (js/online-gate.js): a made-up second account is never offered.
+    state.players = CH.opponentsFrom(state.recs, CH.myCode()).filter((r) => codeMayPlayOnline(r.code));
     return state.players;
   };
   const viewPick = async () => {
@@ -272,8 +274,8 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
       state.busy = false;
       if (closed) return;
       if (!res.ok) {
-        return viewTerms(them, res.reason === 'denied' ? t('ch_err_off') : res.reason === 'dev-origin-blocked'
-          ? t('ch_err_dev') : t('ch_err_start'));
+        return viewTerms(them, onlineGateText(res.reason) || (res.reason === 'denied' ? t('ch_err_off') : res.reason === 'dev-origin-blocked'
+          ? t('ch_err_dev') : t('ch_err_start')));
       }
       close();
       ui._startChallengeLeg({ id: res.game.id, side: 'a', leg: 0, game: res.game });

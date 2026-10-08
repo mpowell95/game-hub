@@ -53,13 +53,13 @@ const A = await import('./js/admin-config.js');
 
 // --- normalizeConfig: anything in, the documented shape out ------------------------------------
 console.log('\n--- the shape normalizer ---');
-eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
-eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
+eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {} });
+eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {} });
 eq('junk in the branches is replaced, not trusted',
-  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
+  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {} });
 eq('a real config survives intact',
   A.normalizeConfig({ games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } } }),
-  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
+  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {} });
 
 // --- resolveGameLive: the override sits ON TOP of the code default -----------------------------
 console.log('\n--- is this game live ---');
@@ -140,7 +140,7 @@ console.log('\n--- the local cache ---');
 // boot with, not something it acquires halfway through a session.
 store.set(A.CACHE_KEY, '{ not json');
 eq('a corrupt cache reads as an empty config instead of throwing',
-  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {} });
+  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {} });
 ok('and the code default still decides every game', A.isGameLive('uno', true) === true);
 ok('a devOnly game stays hidden through a corrupt cache', A.isGameLive('cuppong', false) === false);
 ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') === false);
@@ -193,6 +193,38 @@ ok('js/game-stats-ui.js gates its tabs on the SAME resolver (a released game kee
 const lb = readFileSync(new URL('./js/leaderboard-ui.js', import.meta.url), 'utf8');
 ok("js/leaderboard-ui.js has a row for an admin-only game, so releasing it cannot zero its scores",
   /id:\s*'cuppong'/.test(lb));
+
+// --- online play: only accounts Matt has let in (2026-10-08, the play-yourself cheat) ----------
+console.log('\n-- online play (js/online-gate.js) --');
+{
+  ok('everyone who had a code on 2026-10-08 is on the default list', A.ONLINE_BEFORE.size === 45 && A.ONLINE_BEFORE.has('QZCC4') && A.ONLINE_BEFORE.has('3VN33'));
+  eq('an existing account may play online', A.resolveOnlineAllowed(null, '3VN33'), true);
+  eq('...matched case-blind', A.resolveOnlineAllowed(null, ' 3vn33 '), true);
+  eq('a NEW account may not, until Matt lets it in', A.resolveOnlineAllowed(null, 'NEW99'), false);
+  eq('Matt lets a new account in', A.resolveOnlineAllowed({ online: { NEW99: true } }, 'NEW99'), true);
+  eq('Matt can shut an existing account out', A.resolveOnlineAllowed({ online: { '3VN33': false } }, '3VN33'), false);
+  eq('only a real boolean is a choice', A.resolveOnlineAllowed({ online: { NEW99: 'yes' } }, 'NEW99'), false);
+  eq('no code, no online play', A.resolveOnlineAllowed(null, ''), false);
+  eq('junk config falls back to the list', A.resolveOnlineAllowed({ online: 7 }, 'QZCC4'), true);
+
+  // The wiring: a resolver nobody calls protects nothing.
+  const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
+  const net = read('./js/net.js');
+  for (const fn of ['createRoom', 'joinRoom', 'joinSeat']) {
+    const body = net.slice(net.indexOf(`export async function ${fn}(`), net.indexOf('\n}\n', net.indexOf(`export async function ${fn}(`)));
+    ok(`net.js ${fn} checks the gate before any network call`, body.indexOf('onlineGate()') > -1 && body.indexOf('onlineGate()') < body.indexOf('init()'));
+  }
+  ok('net.js joinRoom refuses the same person on another device', /samePerson\(room\.host, me\)/.test(net));
+  ok('net.js joinSeat refuses the same person on another device', /samePerson\(seated\[k\], me\)/.test(net));
+  for (const p of ['./hoops4/js/mp.js', './cup-pong/js/mp.js', './darts/js/mp.js']) {
+    const s = read(p);
+    const body = s.slice(s.indexOf('export async function createGame('), s.indexOf('export async function createGame(') + 1200);
+    ok(`${p} createGame checks both people`, /onlineGate\(\)/.test(body) && /codeMayPlayOnline\(to\)/.test(body));
+    ok(`${p} only offers allowed opponents`, /readOpponents[\s\S]{0,400}codeMayPlayOnline/.test(s));
+  }
+  const sk = read('./skeeball/js/challenge.js');
+  ok('skeeball challenges check both people', /onlineGate\(\)/.test(sk) && /codeMayPlayOnline\(to\)/.test(sk));
+}
 
 console.log(`\nAdmin config tests: ${passed} passed, ${failures.length} failed.`);
 if (failures.length) { failures.forEach((f) => console.log(`  - ${f}`)); process.exit(1); }

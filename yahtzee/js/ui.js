@@ -35,6 +35,7 @@
 // already-synced state, so both sides compute the identical result deterministically.
 
 import * as net from '../../js/net.js';
+import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -647,7 +648,7 @@ async function mpHostCreate(){
   mpBusy = false;
   if(destroyed) return;
   if(res.error){
-    mpError = res.error==='busy' ? t('err_busy') : t('err_offline');
+    mpError = onlineGateText(res.error) || (res.error==='busy' ? t('err_busy') : t('err_offline'));
     lobby = null;
     renderSetupScreen();
     return;
@@ -669,10 +670,10 @@ async function mpJoinSubmit(){
   mpBusy = false;
   if(destroyed) return;
   if(res.error){
-    mpError = res.error==='not-found' ? t('err_notfound')
+    mpError = onlineGateText(res.error) || (res.error==='not-found' ? t('err_notfound')
       : res.error==='full' ? t('err_full')
       : res.error==='version' ? t('err_version')
-      : t('err_offline');
+      : t('err_offline'));
     renderSetupScreen();
     return;
   }

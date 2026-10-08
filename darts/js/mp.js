@@ -31,6 +31,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { readPlayersOnce } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { recordResult } from '../../js/game-stats.js';
+import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, throwDart, nextTurn, KINDS, isCricket } from './engine.js';
 
 const NODE = 'darts';
@@ -391,7 +392,8 @@ export function opponentsFrom(all, me) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 export async function readOpponents() {
-  try { return opponentsFrom(await readPlayersOnce(), myCode()); }
+  // Only people who may play online (js/online-gate.js): a made-up second account is never offered.
+  try { return opponentsFrom(await readPlayersOnce(), myCode()).filter((r) => codeMayPlayOnline(r.code)); }
   catch (err) { console.warn('[darts] could not read the player list', err); return []; }
 }
 
@@ -428,6 +430,10 @@ export async function createGame({ them, kind = '301' }) {
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
   if (!to || to === me) return fail('bad-opponent');
+  // Both people must be allowed online (2026-10-08, the play-yourself cheat): js/online-gate.js.
+  const gate = onlineGate();
+  if (gate) return fail(gate);
+  if (!codeMayPlayOnline(to)) return fail('them-not-approved');
   if (!allowed('createGame')) return fail('dev-origin-blocked');
   if (!KINDS.includes(kind)) return fail('bad-kind');
   const mine = meLabel();
