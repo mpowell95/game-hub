@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1077';
+const CACHE = 'game-hub-v1078';
 
 const ASSETS = [
   './',
@@ -864,10 +864,10 @@ const REST_MANIFEST = {
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
   './holdem/css/holdem.css': '266019e4e1',
-  './holdem/js/ui.js': 'b226e15f5f',
-  './holdem/js/engine.js': '3f433f33c7',
-  './holdem/js/ai.js': '501a498bec',
-  './holdem/js/table.js': '2f040ebfb9',
+  './holdem/js/ui.js': 'b06609c526',
+  './holdem/js/engine.js': '8ac5eaad71',
+  './holdem/js/ai.js': '3d8353f25c',
+  './holdem/js/table.js': '1bd3d97111',
   './holdem/js/net-table.js': '287aa65964',
   './holdem/js/strings.js': 'e86e225893',
   './pinball2/index.html': '6d09047aef',

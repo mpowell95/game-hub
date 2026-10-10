@@ -237,6 +237,31 @@ Regional, card sharks at the World Championship, astronauts at Solar System, ali
 cosmic beings at Universe. Solo only; online the host's computers keep the old house list (and the
 profile's own opponents). The profile's opponents are no longer used at solo tables.
 
+## The shove exploit, the fix, and the rig (2026-10-10)
+
+Matt: *"King of games has $50m. What have you done? Either he's cheating or it's WAY too easy."*
+Then: *"Fix it and over correct it to begin and rig it against him."*
+
+- **What happened:** `ai.js` made a bot want `0.12 x skill` extra equity before calling off most of
+  its stack, so Hard needed ~90% to call an all-in and folded nearly every hand to one. Going all in
+  every hand beat one Hard computer **91%** of the time (200-game simulation) and seven Hard
+  computers 41% (fair: 13%). His live record fit it exactly: 92 games, 920 hands (short games), 8 of
+  10 Hard games won, best prize $20M (a heads-up Universe win), and `holdemSuspect` clean. An
+  exploit, not edited numbers. The bug was in `ai.js` since 2026-09-29, not from the 10-08 changes.
+- **The fix:** `commit` is per skill now (Easy 0.08, Medium 0.02, Hard 0) and the call margins are
+  looser (Medium -0.02, Hard -0.05), so a better bot is LESS scared of a shove. All-in-every-hand vs
+  one Hard computer is now ~47%, vs seven ~9%. `test.js` fails above 62% heads-up.
+- **The rig** (`RIGGED_CODES` in `ui.js`, currently `3VN33`, *King of Games*): when the device running
+  the computers (solo, or the host online) seats a rigged code, the `Table` gets `rig: <seat>` and
+  (1) every computer plays **Brutal** (skill 4 in `ai.js`) and reads that seat's real cards
+  (`decide(..., { peek })`, `equity(..., known)`), and (2) every deal is rigged (`rigDeal` in
+  `engine.js`): that seat keeps the weaker of two starting hands, and the run-out is the worst for it
+  of three orderings of the rest of the deck. Measured: rigged, all-in-every-hand wins 3% heads-up
+  vs Hard and ~0% vs a full table; a tight player wins 0%. `test.js` fails above 20%, and checks a
+  rigged deal is still one real 52-card deck. Nothing about it is saved in the game state or shown.
+  Remove the code from `RIGGED_CODES` to make that player's games fair again.
+- **His $50M was NOT touched.** Voiding it is the admin page's **Void bankroll**, Matt's call.
+
 ## Bankroll leaderboard (2026-09-28)
 
 Matt: *"We definitely need"* a bankroll leaderboard. The Texas Hold'em board (`js/leaderboard-ui.js`)

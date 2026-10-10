@@ -216,7 +216,7 @@ function nextIdx(state, from, pred) {
 }
 
 /** Deal the next hand: move the button, post blinds, deal two cards each. */
-export function startHand(state, rand = cryptoRand) {
+export function startHand(state, rand = cryptoRand, opts = {}) {
   if (state.over) return state;
   const live = alive(state);
   if (live.length < 2) return finishGame(state);
@@ -267,6 +267,8 @@ export function startHand(state, rand = cryptoRand) {
     }
   }
 
+  if (opts && Number.isInteger(opts.rig) && h.holes[opts.rig]) rigDeal(state, opts.rig, rand, opts.boards || 3);
+
   post(state, sbIdx, sb, 'sb');
   post(state, bbIdx, bb, 'bb');
   h.currentBet = Math.max(...h.bets);
@@ -275,6 +277,46 @@ export function startHand(state, rand = cryptoRand) {
   state.k += 1;
   autoAdvance(state);
   return state;
+}
+
+// THE RIG (2026-10-10, Matt: "Fix it and over correct it to begin and rig it against him").
+// Used only for a seat ui.js names (RIGGED_CODES there); every other game deals a fair deck.
+// Two things, both applied to the deck right after the deal, before anyone acts:
+//   1. Two hands are drawn for that seat and it keeps the WEAKER one (the other goes back).
+//   2. `boards` orderings of the rest of the deck are tried and the one where that seat does worst
+//      at a showdown against everyone dealt in is used. The board is still five real cards from
+//      this deck; it is only the order that is chosen.
+// Nothing about it is visible on the table. Tuned against holdem/js/test.js's rig probe.
+function rigDeal(state, idx, rand, boards) {
+  const h = state.hand;
+  const deck = h.deck;
+  const shuffleTail = () => { for (let k = deck.length - 1; k > 0; k--) { const j = Math.floor(rand() * (k + 1)); [deck[k], deck[j]] = [deck[j], deck[k]]; } };
+  // 1. the weaker of two starting hands
+  const alt = [deck.pop(), deck.pop()];
+  const strength = (pair) => {
+    const a = pair[0] >> 2, b = pair[1] >> 2;
+    return (a === b ? 30 + a * 2 : Math.max(a, b) * 1.5 + Math.min(a, b)) + ((pair[0] & 3) === (pair[1] & 3) ? 2 : 0) + (Math.abs(a - b) === 1 ? 1 : 0);
+  };
+  if (strength(alt) < strength(h.holes[idx])) { deck.push(...h.holes[idx]); h.holes[idx] = alt; } else deck.push(...alt);
+  shuffleTail();
+  // 2. the worst of `boards` run-outs for that seat. Board cards come off the END of the deck:
+  // burn, three, burn, one, burn, one (see nextStreet).
+  const others = Object.keys(h.holes).map(Number).filter((j) => j !== idx);
+  const outcome = () => {
+    const n = deck.length;
+    const board = [deck[n - 2], deck[n - 3], deck[n - 4], deck[n - 6], deck[n - 8]];
+    const mine = evaluate([...h.holes[idx], ...board]);
+    let best = -1;
+    for (const j of others) best = Math.max(best, evaluate([...h.holes[j], ...board]));
+    return mine > best ? 2 : mine === best ? 1 : 0;
+  };
+  let keep = deck.slice(), worst = outcome();
+  for (let t = 1; t < boards && worst > 0; t++) {
+    shuffleTail();
+    const o = outcome();
+    if (o < worst) { worst = o; keep = deck.slice(); }
+  }
+  deck.length = 0; deck.push(...keep);
 }
 
 function post(state, i, amt, label) {
