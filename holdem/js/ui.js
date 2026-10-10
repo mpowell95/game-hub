@@ -63,6 +63,14 @@ const TIERS = [
 ];
 const tierById = (id) => TIERS.find((x) => x.id === id) || null;
 
+// RIGGED (2026-10-10). Matt: "Fix it and over correct it to begin and rig it against him." King of
+// Games ran a $25,000 bankroll to $50M by going all in every hand, which the Hard computers folded to
+// (holdem/js/ai.js, `commit`). Against these player codes the computers play Brutal and read the
+// player's cards, and the deck is dealt against them (engine.js rigDeal). Matt's call, per player;
+// remove a code here to make that player's games fair again.
+const RIGGED_CODES = new Set(['3VN33']);   // *King of Games*
+const isRigged = (code) => RIGGED_CODES.has(String(code || '').trim().toUpperCase());
+
 // Behind the Dumpster (2026-10-08, Matt): "an illegal game between homeless people in an alley or
 // behind a dumpster", the table for when you're broke. It costs a BOTTLE CAP, not money (no `buyin`
 // field on purpose: holdem/js/test.js reads the money tables out of TIERS by that shape), and the
@@ -1445,7 +1453,7 @@ class Game {
     this.screen = 'table';
     this.overlay = null;
     this.overDismissed = null;
-    this.table = new Table(state, { tapToDeal: true, pace: this.settings.pace, onChange: () => this._onLocalChange() });
+    this.table = new Table(state, { tapToDeal: true, pace: this.settings.pace, rig: this._rigSeat(state), onChange: () => this._onLocalChange() });
     this.myIdx = state.players.findIndex((p) => !p.bot);
     this.render(true);
     this.table.start();
@@ -1777,6 +1785,23 @@ class Game {
     writeJSON(MP_KEY, body);
   }
 
+  /** The seat at this table that is RIGGED against (RIGGED_CODES), or -1. Solo: this device's own
+   *  player. Hosting: any human whose seat record carries a rigged code (js/net.js stamps the code on
+   *  every seat). Only the device running the computers can rig, so a guest's own table never does. */
+  _rigSeat(state) {
+    try {
+      if (!state || !Array.isArray(state.players)) return -1;
+      if (this.kind === 'solo' || !this.mp) {
+        const me = (loadProfile() || {}).playerId;
+        return isRigged(me) ? state.players.findIndex((p) => !p.bot) : -1;
+      }
+      const seats = (this.mp.room && this.mp.room.seats) || {};
+      const own = (loadProfile() || {}).playerId;
+      return state.players.findIndex((p) => !p.bot && p.seat != null
+        && isRigged(p.seat === this.mp.seat ? own : (seats[p.seat] || {}).code));
+    } catch { return -1; }
+  }
+
   _roster(room) {
     const seats = (room && room.seats) || {};
     const out = [];
@@ -1855,7 +1880,7 @@ class Game {
         this._attach();
         if (save.state && room.pk && room.pk.pub) {
           this.screen = 'table';
-          this.table = new Table(save.state, { clockMs: CLOCK_MS, pace: this.settings.pace, onChange: () => this._onLocalChange() });
+          this.table = new Table(save.state, { clockMs: CLOCK_MS, pace: this.settings.pace, rig: this._rigSeat(save.state), onChange: () => this._onLocalChange() });
           this.myIdx = save.state.players.findIndex((p) => p.seat === 0 && !p.bot);
           this.render(true);
           this.table.start();
@@ -1948,7 +1973,7 @@ class Game {
     this.screen = 'table';
     this.overlay = null;
     this.overDismissed = null;
-    this.table = new Table(state, { clockMs: CLOCK_MS, pace: this.settings.pace, onChange: () => this._onLocalChange() });
+    this.table = new Table(state, { clockMs: CLOCK_MS, pace: this.settings.pace, rig: this._rigSeat(state), onChange: () => this._onLocalChange() });
     this.myIdx = state.players.findIndex((p) => p.seat === 0 && !p.bot);
     this.pub = publicView(state);
     this.pub.gid = state.gid;

@@ -35,17 +35,23 @@ export class Table {
     // with no thinking pause between them.
     this.ff = null;
     this.onChange = opts.onChange || (() => {});
+    // The seat of a RIGGED player (ui.js decides; -1 = a fair game): the computers play Brutal
+    // against it and read its cards, and its deals are rigged (engine.js rigDeal). Not stored in the
+    // state, so a save carries no trace of it.
+    this.rig = Number.isInteger(opts.rig) && opts.rig >= 0 ? opts.rig : -1;
     this.timer = null;
     this.clockEnd = 0;
     this.dead = false;
   }
+
+  _rigOpts() { return this.rig >= 0 && !this.state.players[this.rig].out ? { rig: this.rig } : {}; }
 
   /** Begin (or resume) play: deal if no hand is running, otherwise pick up where it stopped. */
   start() {
     const s = this.state;
     if (!s.over && (!s.hand || s.hand.result)) {
       if (s.hand && s.hand.result) return this.pump();   // show the last result, then deal
-      startHand(s);
+      startHand(s, undefined, this._rigOpts());
     }
     this.pump();
   }
@@ -103,7 +109,7 @@ export class Table {
   next() {
     const s = this.state;
     if (this.dead || s.over || (s.hand && !s.hand.result)) return;
-    startHand(s);
+    startHand(s, undefined, this._rigOpts());
     this.pump();
   }
 
@@ -126,10 +132,10 @@ export class Table {
       if (h && h.result && this.tapToDeal && this.ff !== 'game') {
         // nothing scheduled: next() deals
       } else if (h && h.result && this.ff === 'game') {
-        this.timer = setTimeout(() => { this.timer = null; if (this.dead || s.over) return; startHand(s); this.pump(); }, FF_RESULT_MS);
+        this.timer = setTimeout(() => { this.timer = null; if (this.dead || s.over) return; startHand(s, undefined, this._rigOpts()); this.pump(); }, FF_RESULT_MS);
       } else if (!h || h.result) {
         const wait = !h ? 0 : (h.result.noShow ? FOLD_WIN_MS : RESULT_MS + 350 * (h.runout | 0));
-        this.timer = setTimeout(() => { this.timer = null; if (this.dead || s.over) return; startHand(s); this.pump(); }, wait);
+        this.timer = setTimeout(() => { this.timer = null; if (this.dead || s.over) return; startHand(s, undefined, this._rigOpts()); this.pump(); }, wait);
       } else if (h.toAct >= 0) {
         const i = h.toAct;
         const p = s.players[i];
@@ -141,7 +147,7 @@ export class Table {
             this.timer = null;
             if (this.dead || s.k !== k) return;
             let mv;
-            try { mv = decide(s, p.bot); } catch { mv = null; }
+            try { mv = decide(s, p.bot, Math.random, this.rig >= 0 ? { peek: this.rig } : {}); } catch { mv = null; }
             const r = mv ? act(s, i, mv) : { error: 'no-move' };
             if (!r.ok) act(s, i, { a: (legal(s) || {}).canCheck ? 'check' : 'fold' });
             this.pump();

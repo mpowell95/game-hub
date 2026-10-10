@@ -274,6 +274,40 @@ ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 50
   ok('no buy-in still deals the $10,000 game at 100/200', plain.players[0].chips === 10000 && blindsOf(plain).sb === 100);
 }
 
+// ---- the computers can't be beaten by shoving every hand (2026-10-10) --------------------------
+// King of Games ran $25,000 to $50M by going all in every hand: the Hard computers wanted ~90%
+// equity to call off their stack, so they folded nearly everything and "all in" beat one Hard
+// computer 91% of the time (measured). And the rig against a named player (ui.js RIGGED_CODES).
+{
+  const shove = (s) => { const L = legal(s); return L.canRaise ? { a: 'allin' } : { a: 'call' }; };
+  const playOne = (rig) => {
+    const s = newGame([{ name: 'hero', bot: 0 }, { name: 'cpu', bot: 3 }], { chips: 10000, scale: 10 });
+    for (let guard = 0; !s.over && guard < 400; guard++) {
+      startHand(s, undefined, rig ? { rig: 0 } : {});
+      for (let m = 0; s.hand && !s.hand.result && s.hand.toAct >= 0 && m < 300; m++) {
+        const i = s.hand.toAct;
+        act(s, i, s.players[i].bot ? decide(s, s.players[i].bot, Math.random, rig ? { peek: 0 } : {}) : shove(s));
+      }
+      if (s.players[0].out) return false;
+    }
+    return s.winner === 0;
+  };
+  const N = 150;
+  let fair = 0, rigged = 0;
+  for (let g = 0; g < N; g++) { if (playOne(false)) fair++; if (playOne(true)) rigged++; }
+  ok('all in every hand no longer beats a Hard computer (heads-up, under 62%)', fair / N < 0.62, { won: fair, of: N });
+  ok('rigged: all in every hand loses to a Hard computer (under 20%)', rigged / N < 0.2, { won: rigged, of: N });
+  // A rigged deal is still one real deck: 52 different cards between the hands and what is left.
+  let deckOk = true;
+  for (let t = 0; t < 200 && deckOk; t++) {
+    const s = newGame([{ name: 'a' }, { name: 'b', bot: 3 }, { name: 'c', bot: 3 }], {});
+    startHand(s, undefined, { rig: 0 });
+    const all = [...Object.values(s.hand.holes).flat(), ...s.hand.deck];
+    deckOk = all.length === 52 && new Set(all).size === 52 && all.every((c) => c >= 0 && c < 52);
+  }
+  ok('a rigged deal is still one real 52-card deck', deckOk);
+}
+
 console.log(`holdem engine: ${pass} passed, ${fail} failed (${games} tournaments, ${hands} hands)`);
 if (fail) process.exit(1);
 void E;
