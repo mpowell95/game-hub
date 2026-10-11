@@ -1026,6 +1026,29 @@ export const GAME_ART = {
               <path d="M0 36 L-2.5 50 L0 53 L2.5 50 Z" fill="#8f1418"/>
             </g>
           </svg>`,
+  // Flick Soccer (2026-10-11): a mown pitch side-on, the blue triangle discs attacking the goal on
+  // the right, the vermilion square discs defending it, the ball on its way in. Shape, not hue,
+  // tells the teams apart.
+  'flick-soccer': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#2a7d37"/>
+            <g fill="#2f8a3e"><rect x="0" y="0" width="20" height="90"/><rect x="40" y="0" width="20" height="90"/><rect x="80" y="0" width="20" height="90"/><rect x="120" y="0" width="20" height="90"/></g>
+            <g fill="none" stroke="#fff" stroke-opacity="0.85" stroke-width="1.6">
+              <rect x="6" y="6" width="148" height="78"/>
+              <path d="M80 6V84"/><circle cx="80" cy="45" r="13"/>
+              <rect x="128" y="26" width="26" height="38"/><rect x="6" y="26" width="26" height="38"/>
+            </g>
+            <rect x="154" y="33" width="6" height="24" fill="#fff" fill-opacity="0.3" stroke="#fff" stroke-width="1.6"/>
+            <g>
+              <circle cx="58" cy="30" r="9" fill="#103a6b"/><circle cx="58" cy="30" r="7.4" fill="#1F5FA8"/><path d="M58 25.5 L62.4 33 L53.6 33 Z" fill="#fff"/>
+              <circle cx="96" cy="58" r="9" fill="#103a6b"/><circle cx="96" cy="58" r="7.4" fill="#1F5FA8"/><path d="M96 53.5 L100.4 61 L91.6 61 Z" fill="#fff"/>
+              <circle cx="34" cy="62" r="9" fill="#103a6b"/><circle cx="34" cy="62" r="7.4" fill="#1F5FA8"/><path d="M34 57.5 L38.4 65 L29.6 65 Z" fill="#fff"/>
+              <circle cx="122" cy="28" r="9" fill="#8a2a12"/><circle cx="122" cy="28" r="7.4" fill="#E0532F"/><rect x="118.6" y="24.6" width="6.8" height="6.8" fill="#fff"/>
+              <circle cx="140" cy="62" r="9" fill="#8a2a12"/><circle cx="140" cy="62" r="7.4" fill="#E0532F"/><rect x="136.6" y="58.6" width="6.8" height="6.8" fill="#fff"/>
+            </g>
+            <path d="M104 50 Q124 46 140 44" stroke="#ffce3a" stroke-width="2.2" stroke-dasharray="4 3" fill="none"/>
+            <circle cx="145" cy="44" r="5" fill="#fbfbfb" stroke="#222" stroke-width="0.8"/>
+            <path d="M145 41.6 l2 1.4 -0.8 2.4 h-2.4 l-0.8 -2.4 z" fill="#222"/>
+          </svg>`,
   // Arrow Maze (2026-10-11, hub id 'way-out'): the game's own board - lavender arrows on navy over a dot grid, one
   // arrow sliding out to the right in teal with its trail of sparks.
   'way-out': `<svg viewBox="0 0 160 90" aria-hidden="true">

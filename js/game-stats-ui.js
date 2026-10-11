@@ -71,6 +71,9 @@ const TABS = [
   // renders for a game with plays, and a devOnly tab would stay hidden after Matt releases it from
   // the admin page. total/byDiff only, so the generic screen draws it.
   { id: 'darts', labelKey: 'game_title_darts' },
+  // Flick Soccer (2026-10-11): admin only at first, NOT devOnly here (Darts' reasoning above).
+  // total/byDiff only, so the generic screen draws it.
+  { id: 'flicksoccer', labelKey: 'game_title_flicksoccer' },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
@@ -90,7 +93,7 @@ const HUB_ID = {
   connect4: 'connect-four', nutsbolts: 'nuts-bolts', tictactoe: 'tic-tac-toe',
   dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
-  wayout: 'way-out',
+  wayout: 'way-out', flicksoccer: 'flick-soccer',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
 const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };

@@ -331,6 +331,23 @@ export const GAMES = [
     devOnly: true,
   },
   {
+    // Flick Soccer (2026-10-11): table soccer with flicked discs (the Soccer Stars kind). Pull back
+    // on one of your five discs and let go to hit the ball; first to the goal target wins. Vs the
+    // computer (Easy/Medium/Hard) or two players on one phone (flick-soccer/CLAUDE.md). Hub id is
+    // the folder; stats id is `flicksoccer`. Owns the whole viewport: a portrait pitch.
+    id: 'flick-soccer',
+    title: { en: 'Flick Soccer', es: 'Fútbol de Chapas' },
+    blurb: { en: 'Flick your players into the ball and score. First to the goal target wins.',
+      es: 'Lanza tus chapas contra el balón y marca. Gana quien llegue antes a los goles.' },
+    module: '../flick-soccer/js/ui.js',
+    immersive: true,
+    accent: '#1f7a3a',
+    art: GAME_ART['flick-soccer'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
+  },
+  {
     id: 'hoops4',
     title: 'Connect 4 Hoops',
     blurb: {
