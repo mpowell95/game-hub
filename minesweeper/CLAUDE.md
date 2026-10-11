@@ -229,6 +229,10 @@ one (golf's to-par is legitimately 0). A raw 0 would read as an instant clear an
 ever. `test-leaderboard-rank.mjs` carries this as a `[KNOWN-BUG PROBE]` plus the behavioural cases
 around it.
 
+**The per-level tiles print times too (2026-10-11).** The tiles under each row went through
+`gameMetricAt` raw, so they read `248338` beside a headline of `4:08`. They now pass through
+`formatBoardMetric`, the same as the headline (`js/leaderboard-ui.js`, the board card's tiles).
+
 Boards cleared and correct flags stay as the Standing-records chips, which is what they always
 should have been: texture, not the headline.
 

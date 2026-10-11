@@ -1744,7 +1744,10 @@ function gameDetail(list, id) {
         // the tiles rather than a number from nowhere. Every other tier is still printed beside
         // it - nothing about a player's record leaves this card (THE LAW rule 1).
         const tiles = (METRIC_IS_TIER_BLIND.has(id) ? ''
-          : miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0 ? gameMetricAt(g, id, tier) : null), rowTier))
+          // Printed through formatBoardMetric like the headline, or a time board's tiles show raw
+          // milliseconds (Minesweeper read "248338" beside a headline of "4:08", 2026-10-11).
+          : miniTilesHTML(fieldTiers, (tier) => (playsAtTier(g, [id], tier) > 0
+            ? formatBoardMetric(gameMetricAt(g, id, tier), id, t('lb_golf_even')) : null), rowTier))
           + (showMp ? mpTileHTML(g, id) : '');
         const metricUnit = unitTextOf(id, metric);
         // A Hold'em ledger no real play could produce says so instead of printing a number.
