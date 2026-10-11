@@ -166,6 +166,8 @@ const GAME_META = [
   // Murdoku (2026-09-29): admin only at first, but the row ships with the game - the Yahtzee
   // lesson above. isGameOnLauncher keeps its board hidden until Matt releases it.
   { id: 'murdoku', labelKey: 'game_title_murdoku' },
+  // Way Out (2026-10-11): admin only at first; the row ships with the game, as Murdoku's did.
+  { id: 'wayout', labelKey: 'game_title_wayout' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },

@@ -1,0 +1,461 @@
+/* way-out/css/way-out.css - every rule descendant-scoped under .wo-root.
+ *
+ * ONE PALETTE, DARK, IN BOTH THEMES. The reference (Pointers) has no light mode, and the colours
+ * below are sampled from Matt's recordings: board #1f1f2d, arrows #b3b4e0, header band #181923,
+ * progress #4471a3 on #262f44, hearts #ae2420, hint #ffb527, level text #944d6b. The How to play
+ * card is the one light surface, mint with dark arrows, as it is there too. */
+.wo-root {
+  --wo-bg: #1f1f2d;
+  --wo-band: #181923;
+  --wo-home-bg: #1d1e20;
+  --wo-hero: #1f5654;
+  --wo-ink: #ffffff;
+  --wo-muted: #8d8fa8;
+  --wo-dot: #3a3b55;
+  --wo-arrow: #b3b4e0;
+  --wo-red: #d8343f;
+  --wo-go: #3fd6bd;
+  --wo-win: #2bd27a;
+  --wo-level: #b0577d;
+  --wo-heart: #ae2420;
+  --wo-heart-lost: #101018;
+  --wo-bar: #4471a3;
+  --wo-bar-track: #262f44;
+  --wo-btn: #141520;
+  --wo-purple: #8a4f91;
+  --wo-hint: #ffb527;
+  box-sizing: border-box;
+  /* position: fixed with top/left/width/height set inline by _positionRoot() in ui.js, the
+   * murdoku/sudoku technique: `.hub-game` has no defined height, so only JS can measure where the
+   * mount point really is. inset: 0 is the one-frame fallback. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--wo-bg);
+  color: var(--wo-ink);
+  font-family: var(--gh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.wo-root * {
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.wo-root button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+.wo-root button svg, .wo-root button span, .wo-root button b { pointer-events: none; }
+
+/* --- HOME ------------------------------------------------------------------------------------ */
+.wo-root .wo-home {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--wo-home-bg);
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+}
+.wo-root .wo-hero {
+  position: relative;
+  width: 100%;
+  flex: none;
+  padding: calc(var(--wo-top, 10px) + 4px) 18px 80px;
+  text-align: center;
+  background-color: var(--wo-hero);
+  /* the reference's faint giant arrows behind the title */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 200'%3E%3Cg fill='none' stroke='%23123d3c' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M30 190V40h90v60'/%3E%3Cpath d='M210 30h80'/%3E%3Cpath d='M290 90h-70'/%3E%3Cpath d='M180 180h110'/%3E%3Cpath d='M80 120v70'/%3E%3C/g%3E%3Cg fill='%23123d3c'%3E%3Cpath d='M120 112l-14-22h28z'/%3E%3Cpath d='M300 30l-22-14v28z'/%3E%3Cpath d='M210 90l22-14v28z'/%3E%3Cpath d='M170 180l22-14v28z'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: cover;
+  background-position: center;
+}
+.wo-root .wo-title {
+  margin: 0 0 10px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.wo-root .wo-intro {
+  margin: 0 auto;
+  max-width: 420px;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 800;
+}
+.wo-root .wo-face {
+  flex: none;
+  width: 124px;
+  height: 124px;
+  margin-top: -62px;
+  border-radius: 50%;
+  background: #0b0b0e;
+  border: 12px solid #2c2b30;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.wo-root .wo-face svg { width: 96px; height: 96px; }
+.wo-root .wo-tiername {
+  margin-top: clamp(10px, 4vh, 34px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 40px;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: var(--wo-tier);
+}
+.wo-root .wo-tiername svg { width: 26px; height: 26px; flex: none; }
+.wo-root .wo-tiername svg.lb-dshape-x2 { width: 44px; }
+.wo-root .wo-tiername svg.lb-dshape-t3, .wo-root .wo-tiername svg.lb-dshape-t4 { fill: #f2f2f6; }
+.wo-root .wo-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: clamp(14px, 4vh, 36px);
+  width: min(78%, 360px);
+  height: 52px;
+  background: transparent;
+  touch-action: none;
+}
+.wo-root .wo-slider::-webkit-slider-runnable-track {
+  height: 28px;
+  border-radius: 999px;
+  border: 5px solid #2c2b30;
+  background:
+    linear-gradient(90deg, var(--wo-tier) 0, var(--wo-tier) var(--wo-fill), transparent var(--wo-fill)),
+    linear-gradient(90deg, #1a1a1d 70%, #2b2f9a 100%);
+}
+.wo-root .wo-slider::-moz-range-track {
+  height: 18px;
+  border-radius: 999px;
+  border: 5px solid #2c2b30;
+  background:
+    linear-gradient(90deg, var(--wo-tier) 0, var(--wo-tier) var(--wo-fill), transparent var(--wo-fill)),
+    linear-gradient(90deg, #1a1a1d 70%, #2b2f9a 100%);
+}
+.wo-root .wo-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 48px;
+  height: 48px;
+  margin-top: -15px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--wo-tier) 0 13px, #ffffff 14px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+.wo-root .wo-slider::-moz-range-thumb {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--wo-tier) 0 13px, #ffffff 14px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+.wo-root .wo-slider:focus-visible { outline: 3px solid #ffce3a; outline-offset: 4px; border-radius: 999px; }
+.wo-root .wo-playrow {
+  margin-top: auto;
+  padding-top: 16px;
+  display: grid;
+  grid-template-columns: 56px auto 56px;
+  align-items: center;
+  gap: 16px;
+}
+.wo-root .wo-playbtn {
+  grid-column: 2;
+  min-width: 190px;
+  min-height: 72px;
+  padding: 8px 24px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--wo-tier);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.05;
+}
+.wo-root .wo-playbtn b { font-size: 34px; font-weight: 900; text-transform: uppercase; }
+.wo-root .wo-playbtn span { font-size: 15px; font-weight: 800; }
+.wo-root .wo-helpbtn {
+  grid-column: 3;
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--wo-purple);
+  font-size: 30px;
+  font-weight: 900;
+}
+
+/* --- PLAY ------------------------------------------------------------------------------------ */
+.wo-root .wo-game {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.wo-root .wo-hud {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: calc(var(--wo-top, 8px) + 50px);
+  padding: var(--wo-top, 8px) 10px 0;
+  background: var(--wo-band);
+}
+/* The level title is centred on the SCREEN, not in the space the buttons leave (in the hub the
+   floating back button takes the left of this row). */
+.wo-root .wo-hud .wo-restart { margin-left: auto; }
+.wo-root.is-immersive .wo-hud { padding-left: var(--wo-inset, 10px); }
+.wo-root .wo-iconbtn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wo-btn);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.wo-root .wo-iconbtn svg { width: 22px; height: 22px; }
+.wo-root .wo-restart.is-idle { opacity: .45; }
+.wo-root .wo-hud-mid {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--wo-top, 8px) - 2px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.wo-root .wo-tierpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: #0f0f16;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.wo-root .wo-tierpill svg { width: 11px; height: 11px; flex: none; }
+.wo-root .wo-tierpill svg.lb-dshape-x2 { width: 19px; }
+.wo-root .wo-tierpill svg.lb-dshape-t3, .wo-root .wo-tierpill svg.lb-dshape-t4 { fill: #f2f2f6; }
+.wo-root .wo-level { font-size: 22px; font-weight: 900; color: var(--wo-level); white-space: nowrap; }
+.wo-root .wo-hearts {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0 8px;
+  background: var(--wo-band);
+}
+.wo-root .wo-heart { width: 26px; height: 24px; display: block; }
+.wo-root .wo-heart svg { width: 100%; height: 100%; fill: var(--wo-heart); display: block; }
+.wo-root .wo-heart.is-lost svg { fill: var(--wo-heart-lost); stroke: #2a2a38; stroke-width: 1.2; }
+.wo-root .wo-heart.is-pop { animation: wo-pop .45s ease-out; }
+@keyframes wo-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.45) translateY(-4px); }
+  100% { transform: scale(1); }
+}
+.wo-root .wo-progress {
+  flex: none;
+  height: 5px;
+  background: var(--wo-bar-track);
+  overflow: hidden;
+}
+.wo-root .wo-progress i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--wo-bar);
+  transform-origin: left center;
+  transform: scaleX(var(--wo-done, 0));
+  transition: transform .25s ease-out;
+}
+.wo-root .wo-stage { flex: 1; min-height: 0; position: relative; }
+.wo-root .wo-canvas { position: absolute; left: 0; top: 0; display: block; touch-action: manipulation; }
+.wo-root .wo-foot {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+}
+.wo-root .wo-hint {
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wo-hint);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .15);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.wo-root .wo-hint svg { width: 36px; height: 36px; }
+
+/* The win word: slides in from the right over a purple wash, as in the reference. */
+.wo-root .wo-banner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: rgba(74, 44, 96, 0);
+  visibility: hidden;
+}
+.wo-root .wo-banner span {
+  font-size: 46px;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: #f5b52e;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, .25);
+  white-space: nowrap;
+  transform: translateX(120vw);
+}
+.wo-root .wo-banner.is-on { visibility: visible; animation: wo-wash 1.65s ease-in-out forwards; }
+.wo-root .wo-banner.is-on span { animation: wo-slide 1.65s cubic-bezier(.2, .8, .3, 1) forwards; }
+@keyframes wo-wash {
+  0% { background: rgba(74, 44, 96, 0); }
+  15%, 85% { background: rgba(74, 44, 96, .72); }
+  100% { background: rgba(74, 44, 96, .72); }
+}
+@keyframes wo-slide {
+  0% { transform: translateX(120vw); }
+  25%, 80% { transform: translateX(0); }
+  100% { transform: translateX(-120vw); }
+}
+
+/* --- modal: How to play, Out of lives -------------------------------------------------------- */
+.wo-root .wo-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: rgba(8, 8, 12, .72);
+}
+.wo-root .wo-modal[hidden] { display: none; }
+.wo-root .wo-card {
+  position: relative;
+  width: min(100%, 360px);
+  padding: 14px 12px 14px;
+  border-radius: 18px;
+  background: #222128;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.wo-root .wo-card-h { margin: 2px 0 0; font-size: 22px; font-weight: 900; text-transform: uppercase; }
+.wo-root .wo-how-pic {
+  width: 100%;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 8px;
+}
+.wo-root .wo-how-hearts {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 0 8px;
+  background: #d4ebe4;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid #c1d8d0;
+}
+.wo-root .wo-how-hearts svg { width: 14px; height: 13px; fill: #ae2420; }
+.wo-root .wo-mini { display: block; width: 100%; height: auto; background: #d4ebe4; border-radius: 0 0 6px 6px; padding: 10px 16px; }
+.wo-root .wo-mini-dot { fill: #9fb6ae; }
+.wo-root .wo-mini-idle path { stroke: #2b3240; fill: #2b3240; }
+.wo-root .wo-mini-idle path:first-child, .wo-root .wo-mini-go path:first-child,
+.wo-root .wo-mini-red path:first-child, .wo-root .wo-mini-block path:first-child { fill: none; }
+.wo-root .wo-mini-go path { stroke: #178a7a; fill: #178a7a; }
+.wo-root .wo-mini-red path { stroke: #ae2420; fill: #ae2420; }
+.wo-root .wo-mini-block path { stroke: #2b3240; fill: #2b3240; }
+.wo-root .wo-mini-way { stroke: #178a7a; stroke-width: 2.6; stroke-dasharray: 4 5; fill: none; stroke-linecap: round; }
+.wo-root .wo-mini-tap { fill: none; stroke: #e0532f; stroke-width: 3; stroke-dasharray: 5 3; }
+.wo-root .wo-mini-bump { fill: #e0532f; }
+.wo-root .wo-mini-num { fill: #1f5fa8; }
+.wo-root .wo-mini-numtxt { fill: #fff; font-size: 12px; font-weight: 900; }
+.wo-root .wo-how-txt {
+  margin: 0;
+  min-height: 3.9em;
+  padding: 0 6px;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
+}
+.wo-root .wo-dots { display: flex; gap: 6px; }
+.wo-root .wo-dots i { width: 10px; height: 10px; border-radius: 50%; background: #f3d3a8; }
+.wo-root .wo-dots i.is-on { background: #f07a35; transform: scale(1.15); }
+.wo-root .wo-card-row { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; }
+.wo-root .wo-sqbtn {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--wo-purple);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.wo-root .wo-sqbtn svg { width: 22px; height: 22px; }
+.wo-root .wo-sqbtn:disabled { background: #3d4a4a; opacity: .7; cursor: default; }
+.wo-root .wo-okbtn {
+  min-width: 130px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--wo-purple);
+  font-size: 19px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.wo-root .wo-xbtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.wo-root .wo-xbtn svg { width: 22px; height: 22px; }
+.wo-root .wo-fail-hearts { display: flex; gap: 8px; }
+.wo-root .wo-fail-hearts svg { width: 30px; height: 28px; fill: var(--wo-heart-lost); stroke: #3a3a4a; stroke-width: 1.2; }
+
+/* Short phones: the home screen tightens rather than scrolls. */
+@media (max-height: 640px) {
+  .wo-root .wo-hero { padding-bottom: 66px; }
+  .wo-root .wo-intro { font-size: 14px; }
+  .wo-root .wo-face { width: 104px; height: 104px; margin-top: -52px; border-width: 10px; }
+  .wo-root .wo-face svg { width: 80px; height: 80px; }
+  .wo-root .wo-tiername { font-size: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wo-root .wo-heart.is-pop { animation: none; }
+  .wo-root .wo-progress i { transition: none; }
+  .wo-root .wo-banner.is-on { animation: none; background: rgba(74, 44, 96, .72); }
+  .wo-root .wo-banner.is-on span { animation: none; transform: translateX(0); }
+}

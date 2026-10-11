@@ -559,6 +559,25 @@ export const GAMES = [
     // everyone"). The date feeds the launcher's New pill.
     released: '2026-09-30',
   },
+  {
+    // Way Out (2026-10-11): a clone of "Pointers" (Offline Games) from Matt's two screen
+    // recordings - tap an arrow and it slides off the board along its own path, unless another
+    // arrow is in the way (way-out/CLAUDE.md). Hub id is the folder; stats id is `wayout`.
+    // IMMERSIVE: the Hard and Expert boards want every pixel, and the game's own top bar shares
+    // the floating back button's row.
+    id: 'way-out',
+    title: { en: 'Way Out', es: 'La Salida' },
+    blurb: { en: 'Tap the arrows to send them off the board. Pick the right order: some block others.',
+      es: 'Toca las flechas para sacarlas del tablero. Elige bien el orden: unas bloquean a otras.' },
+    module: '../way-out/js/ui.js',
+    immersive: true,
+    accent: '#4471a3',
+    art: GAME_ART['way-out'],
+    // ADMIN ONLY at first, like every new game here (Matt: "add it to the hub as admin only").
+    // No `released` date on purpose: it is the only input to the launcher's New pill and must be
+    // the day Matt releases it, which he does from the admin page with no commit.
+    devOnly: true,
+  },
 ];
 
 /** How often a foregrounded app may ask for a new build. Long enough that switching apps back
