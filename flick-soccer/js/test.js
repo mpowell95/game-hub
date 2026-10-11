@@ -87,6 +87,17 @@ const ok = (label, cond, extra = '') => { if (!cond) { fails++; console.log('FAI
     ok('a match saved before line-ups lines up balanced', E.validMatch(old) && (E.settle(old, 1), old.b[4].y === E.FORMATIONS.balanced[3][1]));
     ok('an unknown line-up reads as balanced', E.cleanForms(['constructor', 'nope']).join() === 'balanced,balanced');
   }
+  // A ball that STOPS more than halfway into the net is a goal (2026-10-11).
+  {
+    const L = E.lineUp();
+    L[E.BALL].x = 50; L[E.BALL].y = -1; L[E.BALL].vx = 0; L[E.BALL].vy = 0;
+    for (let i = 1; i < L.length; i++) { L[i].vx = 0; L[i].vy = 0; }
+    ok('a ball at rest with its centre over the line is a goal', E.runToRest(L).scorer === 0 && E.restScorer(L) === 0);
+    L[E.BALL].y = 1;
+    ok('one with its centre short of the line is not', E.runToRest(L).scorer === -1);
+    L[E.BALL].y = E.H + 1;
+    ok('the bottom net counts for the other side', E.runToRest(L).scorer === 1);
+  }
   // Easy's bounce line: off the side wall, and it ends in a goal mouth when it gets there.
   {
     const L = E.lineUp();

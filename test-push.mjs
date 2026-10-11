@@ -193,12 +193,13 @@ check('opening the hub, or coming back to it, clears the notifications already s
 {
   const row = (x) => ({ name: 'Ana', yourTurn: false, over: false, lastBy: 'them', mine: 0, theirs: 0, goals: 2, ...x });
   const body = (n) => n && n.text('en').body;
-  check('flick soccer: a new row that is your turn is a challenge', body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, goals: 3 }) })) === 'Ana challenged you, first to 3. Your kick!');
+  check('flick soccer: a new row that is your turn is a challenge', body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, goals: 3 }) })) === 'Ana challenged you, first to 3. Your turn!');
   check('flick soccer: the challenger\'s own new row is not news', decideFlickSoccer({ code: 'MATTA', id: 'x', before: null, after: row({ lastBy: 'me' }) }) === null);
   check('flick soccer: the turn coming back says the score', body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true, mine: 1, theirs: 2 }) })) === 'Your turn vs Ana. You 1, Ana 2');
   check('flick soccer: already your turn is not news again', decideFlickSoccer({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ yourTurn: true }) }) === null);
   check('flick soccer: they won', body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'lost' }) })) === 'Ana won the game.');
   check('flick soccer: they resigned, you won', /resigned/.test(body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
+  check('flick soccer: their own goal ends it, the winner is told', body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'goals', mine: 2, theirs: 1 }) })) === 'You beat Ana, 2 to 1!');
   check('flick soccer: your own winning shot does not notify you', decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
   check('flick soccer: Spanish wording', decideFlickSoccer({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Fútbol de Chapas');
   check('flick soccer: the trigger watches flicksoccer/index and names the match', /ref: '\/flicksoccer\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'flick-soccer', match: id \}/.test(fnSrc));

@@ -347,9 +347,12 @@ function rowsFromIndex(val) {
       updated: ms(r.updated), yourTurn: !!r.yourTurn, over: !!r.over,
       result: RESULTS.includes(r.result) ? r.result : null, why: typeof r.why === 'string' ? r.why : '',
       mine: ms(r.mine), theirs: ms(r.theirs), goals: GOAL_OPTIONS.includes(+r.goals) ? +r.goals : 2,
+      cancelled: r.result === 'cancelled',
     };
-    // A voided match (js/stats-corrections.js) is left out of every list and record built from here.
-  }).filter((r) => ID_RE.test(r.id) && r.with && !isVoidedMatch(STATS_ID, r.id)));
+    // A voided match (js/stats-corrections.js) is left out of every list and record built from here,
+    // and so is a challenge its sender called off before it was ever delivered (resignGame): the row
+    // stays stored, it is just not a match anybody played.
+  }).filter((r) => ID_RE.test(r.id) && r.with && !r.cancelled && !isVoidedMatch(STATS_ID, r.id)));
 }
 export async function readMyGames() {
   const me = myCode();
@@ -436,6 +439,24 @@ export async function readOpponents() {
 
 /** The index row one person gets: what the match looks like from `side`. `lastBy` says whose write
  *  this is from that row's point of view, which is what the push function reads. */
+/** The match as stored right now, read inside a write. Unlike readGame, a network failure THROWS
+ *  (so the caller's catch calls it retryable) and a document that is there but does not validate is
+ *  told apart from one that is not there at all: neither of those will ever start working, so
+ *  neither may be retried for ever. */
+async function readFresh(api, db, id) {
+  const snap = await api.get(api.ref(db, `${NODE}/games/${id}`));
+  if (!snap || !snap.exists()) return { game: null, why: 'not-found' };
+  const game = validateGame(snap.val());
+  if (!game) { console.error(`[flick-soccer] ${NODE}/games/${id} did not validate; refusing to write to it.`); return { game: null, why: 'invalid-match' }; }
+  game.id = id;
+  return { game, why: null };
+}
+/** Has the other person been handed this match yet? Side 'a' (the challenger) delivers it the moment
+ *  its first turn ends; until then only the challenger's own row exists. */
+function delivered(game, side) {
+  return side === 'b' || !!game.over || game.turn !== side || game.log.some((e) => e.by !== side);
+}
+
 function rowFor(game, side, writer) {
   const them = side === 'a' ? game.b : game.a;
   return {
@@ -514,8 +535,8 @@ export async function appendLog(id, base, entries) {
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
-    const fresh = await readGame(id);
-    if (!fresh) return fail('not-found', true);
+    const { game: fresh, why } = await readFresh(api, db, id);
+    if (!fresh) return fail(why);
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
     if (list.some((e) => e.by !== side)) return fail('bad-entry');
@@ -526,8 +547,14 @@ export async function appendLog(id, base, entries) {
     while (skip < list.length && base + skip < have && same(fresh.log[base + skip], list[skip])) skip++;
     if (base + skip !== have) return fail('moved-on');       // the log is not where we left it
     const todo = list.slice(skip);
-    const turnBefore = fresh.turn;
-    if (!todo.length) return { ok: true, game: fresh };
+    if (!todo.length) {
+      // The flicks landed but this phone never heard (the verify, or the index rows after it, did not
+      // finish). Write the rows again: the same values, so a row already right is unchanged, and the
+      // other person is told even when the first attempt dropped between the log and their row.
+      await writeRows(api, db, fresh, side, delivered(fresh, side) ? null : side);
+      if (fresh.over || fresh.turn !== side) markSeen(id, fresh.updated);
+      return { ok: true, game: fresh };
+    }
     if (fresh.over) return fail('already-over');
     // Check the rules accept them before anything is written.
     const m = newMatch(fresh.goals, 0, fresh.forms);
@@ -543,7 +570,10 @@ export async function appendLog(id, base, entries) {
       return fail('did-not-land', true);
     }
     back.id = id;
-    if (back.over || back.turn !== turnBefore || have === 0) await writeRows(api, db, back, side, back.over || back.turn !== side ? null : side);
+    // Every flick rewrites the rows, so the lists always show the real score (an own goal keeps the
+    // turn with the shooter and still changes it). The other person's row is written only once the
+    // match is theirs to see; a row whose turn did not move notifies nobody (functions/decide.js).
+    await writeRows(api, db, back, side, delivered(back, side) ? null : side);
     // Only a FINISHED turn is "seen" (Darts' lesson, 2026-10-04): the bubble stays while it is yours.
     if (back.over || back.turn !== side) markSeen(id, back.updated);
     return { ok: true, game: back };
@@ -555,7 +585,9 @@ export async function appendLog(id, base, entries) {
 }
 
 /** Give the match up: the other person wins, nothing is deleted. A challenge never delivered (the
- *  other person has no row yet) is not handed to them as a win they never saw. */
+ *  other person has no row yet) is CALLED OFF instead: they are not handed a win they never saw, the
+ *  sender is not charged a loss for a match nobody played, and the sender's row is marked
+ *  'cancelled' so no list or record shows it (rowsFromIndex). Returns { ok, game, cancelled }. */
 export async function resignGame(id) {
   const me = myCode();
   if (!me) return fail('no-player-code');
@@ -564,20 +596,28 @@ export async function resignGame(id) {
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
-    const fresh = await readGame(id);
-    if (!fresh) return fail('not-found', true);
+    const { game: fresh, why } = await readFresh(api, db, id);
+    if (!fresh) return fail(why);
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
-    if (fresh.over) return { ok: true, game: fresh };
-    const now = Date.now();
-    await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: other(side), why: 'resign', at: now }, updated: now });
-    const back = await readGame(id);
-    if (!back || !back.over) return fail('did-not-land', true);
-    back.id = id;
+    const mineResign = (g) => g.over && g.over.why === 'resign' && g.over.winner === other(side);
+    // Already over. If it was this resignation (a retry after the rows did not land), write the rows
+    // again so the other person is told; any other ending is left exactly as it is.
+    if (fresh.over && !mineResign(fresh)) return { ok: true, game: fresh };
+    let back = fresh;
+    if (!fresh.over) {
+      const now = Date.now();
+      await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: other(side), why: 'resign', at: now }, updated: now });
+      const again = await readFresh(api, db, id);
+      back = again.game;
+      if (!back || !back.over) return fail('did-not-land', true);
+    }
     const r = await api.get(api.ref(db, `${NODE}/index/${back[other(side)].code}/${id}`));
-    await writeRows(api, db, back, side, r && r.exists() ? null : side);
+    const handed = !!(r && r.exists());
+    await writeRows(api, db, back, side, handed ? null : side);
+    if (!handed) await api.update(api.ref(db, `${NODE}/index/${me}/${id}`), { result: 'cancelled' });
     markSeen(id, back.updated);
-    return { ok: true, game: back };
+    return { ok: true, game: back, cancelled: !handed };
   } catch (err) {
     console.error('[flick-soccer] could not resign', err);
     const reason = reasonOf(err);
@@ -602,19 +642,24 @@ export function savePending(id, base, entries) {
 export function pendingFor(id) { const x = readOutbox().find((y) => y.id === id); return x ? x : null; }
 export function outboxCount() { return readOutbox().length; }
 /** Send everything waiting. A match that can never take them (moved on, over) drops them loudly. */
-export async function drainOutbox(onlyId = null) {
+/** The only refusals that drop a queued flick: the MATCH says no, so no retry will ever land it.
+ *  Anything about this phone or the connection (offline, denied, a dev server, no player code yet)
+ *  keeps it queued: those can change, and a flick is never thrown away on a maybe. */
+export const NEVER_SENDABLE = ['moved-on', 'already-over', 'rules-refused', 'not-your-game', 'bad-entry', 'not-found', 'invalid-match'];
+export async function drainOutbox(onlyId = null, exceptId = null) {
   const q = readOutbox();
   if (!q.length) return 0;
-  const left = [];
+  const done = new Set();
   let sent = 0;
   for (const item of q) {
-    if (onlyId && item.id !== onlyId) { left.push(item); continue; }
+    if ((onlyId && item.id !== onlyId) || (exceptId && item.id === exceptId)) continue;
     const res = await appendLog(item.id, item.base, item.entries);
-    if (res.ok) sent++;
-    else if (res.retryable) left.push(item);
-    else console.warn('[flick-soccer] dropping queued flicks that can no longer be sent:', res.reason, item);
+    if (res.ok) { sent++; done.add(item.id); }
+    else if (NEVER_SENDABLE.includes(res.reason)) { done.add(item.id); console.warn('[flick-soccer] dropping queued flicks that can no longer be sent:', res.reason, item); }
   }
-  writeOutbox(left);
+  // Re-read before writing: the open match may have queued more while this ran, and that entry must
+  // not be overwritten by the copy read at the start.
+  if (done.size) writeOutbox(readOutbox().filter((x) => !done.has(x.id)));
   return sent;
 }
 

@@ -48,7 +48,11 @@ Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap gam
 - **One flick a turn**, then the turn passes, whatever happened. Drag back from one of your discs and
   let go: the further back, the harder (full strength at `PULL_MAX`, 34 pitch units). A pull inside
   the dead zone, or weaker than `MIN_POWER`, is a cancelled aim, not a shot.
-- **A goal is the ball wholly over the line** (`ball.y + BALL_R < 0`, or past `H`). It counts for
+- **A goal is the ball wholly over the line** (`ball.y + BALL_R < 0`, or past `H`), **or a ball that
+  STOPS more than halfway over it** (its centre past the line: `restScorer`, applied when a shot comes
+  to rest or its clock runs out, in `runToRest` and the screen's own loop alike). The second half was
+  added 2026-10-11 after testing found about 1 shot in 80 stopping visibly in the net and being called
+  "no goal". It counts for
   whoever's goal it went in, so **an own goal counts for the other side**. Both teams line up again
   and **the side that conceded kicks off**.
 - **First to the target wins**: 1, 2 (default) or 3 goals, chosen on the setup screen. There is no
@@ -146,7 +150,7 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
 | Key | What |
 |---|---|
 | `gamehub.flicksoccer.v1` | `{ mode: 'cpu'|'pass', difficulty, goals: 1|2|3, first: 'alt'|'me'|'them', lineup, nextStarter }`, saved the moment a control changes (`lineup` added 2026-10-11, absent reads Balanced) |
-| `gamehub.flicksoccer.save.v1` | `{ mode, diff, match }` at rest; removed once the match is won |
+| `gamehub.flicksoccer.save.v1` | `{ mode, diff, match, shot? }` at rest; removed once the match is won. `shot` (`{i, dx, dy, power}`, 2026-10-11) is written the moment a flick is taken: an app killed, reloaded or backgrounded while it rolls (or during the GOAL! banner) replays that same flick on Continue, so a shot can never be taken back. Menu > Save and quit still plays it out on the spot (`_settleNow`) |
 
 The difficulty default follows the shared profile's first opponent skill (1/2/3 -> Easy/Medium/Hard)
 until a choice is saved.
@@ -195,8 +199,19 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   real check, and a divergence would show as the two phones disagreeing about a goal.
 - **Written at the moment of the flick** (`appendLog`, verified by re-read, idempotent on retry, a
   stale base is a conflict and never an overwrite), and kept in an outbox
-  (`gamehub.flicksoccer.outbox.v1`) until the server has it. Rows change only when the turn passes or
-  the match ends. The challenge reaches the other person when the challenger's first turn ends.
+  (`gamehub.flicksoccer.outbox.v1`) until the server has it. Both index rows are rewritten on EVERY
+  flick (an own goal changes the score without passing the turn), and again on a retry that finds the
+  flick already landed: a connection lost between the log and the rows used to leave the other
+  person never told. The challenge reaches the other person when the challenger's first turn ends.
+- **The outbox (2026-10-11 bug hunt):** drained for EVERY match on mount, on the `online` event, on
+  leaving a match, and every 6 s while anything is still waiting, not only when that match is opened
+  (a match-ending flick made offline used to sit there). A flick is dropped ONLY when the match
+  itself refuses it (`NEVER_SENDABLE` in `mp.js`: moved on, already over, rules, not yours); a
+  phone-side failure (offline, denied, a dev server, no code) keeps it. Reopening a match with
+  flicks still queued shows them on the pitch and retries them instead of offering the turn again.
+- **The same player on two phones:** a log change that arrives while this phone is aiming is
+  caught up (you played on the other phone), and a flick the server refuses as stale reopens the
+  match from the server instead of leaving this phone on a different pitch.
 - **Opening a match** replays the log silently up to the other person's latest run, then PLAYS that
   run on the pitch (their aim arrow grows, then the flick rolls), reusing the computer's path
   (`this.cpu` with `replay: true`). While it is their turn the match is watched, so their flick plays
@@ -207,22 +222,53 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
 - **Counting:** each finished match is recorded once per phone (`gamehub.flicksoccer.counted.v1`) as
   `recordResult('flicksoccer', 'mp', won)`. A match that ended while you were away gets a Game Over
   popup the next time you open Multiplayer. No draws exist.
-- **Resign:** menu, Resign, confirm. The other person wins; a challenge never delivered is not handed
-  to them as a win they never saw. Nothing is ever deleted.
+- **Resign:** menu, Resign, confirm. The other person wins. A challenge never delivered is CALLED OFF
+  instead: no row for them, no loss for the sender, and the sender's row is marked
+  `result: 'cancelled'` so no list, record or Challenges screen shows it (the row stays stored).
+  Nothing is ever deleted. "Challenge again" keeps the finished match's goals and line-up, and a
+  double tap makes one match, not two.
 - **Notifications:** `flickSoccerTurnPush` in `functions/index.js` (`decideFlickSoccer` in
   `functions/decide.js`): a challenge ("challenged you, first to 2"), your turn coming back (with the
-  score), a match the other person ended. **DEPLOYED by Matt on 2026-10-11** ("done").
+  score), a match the other person ended (resigning, or **their own goal ending it**, which told
+  nobody until 2026-10-11: `youWonGoals`). **DEPLOYED by Matt on 2026-10-11** ("done"); **the
+  own-goal-win wording and "Your turn!" in place of "Your kick!" were written later that day and are
+  NOT yet redeployed.**
   Not yet seen arriving on a phone; the first real challenge is the test. A tap opens that match (`sw.js` reads `data.match`;
   the hub hands it to `alert.js`'s `armOpen`).
 - **The hub:** the registry entry has `alerts:` (launcher bubble, Challenges button count), and
   `js/challenges.js` lists `flick-soccer`, so the hub's Challenges screen shows these matches.
-- **Tests:** `node test-flicksoccer-mp.mjs` (42 checks: stored-shot rounding, a whole computer-played
+- **Tests:** `node test-flicksoccer-mp.mjs` (58 checks, including the 2026-10-11 bug hunt's: rows
+  rewritten on retry, resign retried, an undelivered challenge called off, the outbox keeping
+  phone-side failures; also stored-shot rounding, a whole computer-played
   match replayed to the same pitch on both phones, delivery, retries, conflicts, own goal, resign,
   counting once, the outbox, the launcher bubble, rules/backup/push wiring, the determinism guard);
   `node test-push.mjs` (the `decideFlickSoccer` cases); `test-challenges.mjs` and
   `test-admin-config.mjs` (the online gate) include it. Driven in two Chromium "phones" against a
   shared stand-in database: challenge, Ana's phone replays Matt's flick on a turned-round pitch, her
   reply reaches Matt, both pitches identical after two flicks, resign, the win counted as `mp`.
+
+## The bug hunt (2026-10-11)
+
+Matt, before release: *"test play it or have a more efficient agent test it and provide feedback. I
+want ALL bugs and glitches discovered and fixed."* Two testers (offline, and online with two
+browser "phones" on a stand-in database), plus 48 computer-vs-computer matches across every
+line-up pairing and 16,000 random full-power shots checked mid-flight (no escapes, overlaps, stuck
+balls or discs in a goal). Fixed, beyond the rules and online items above:
+
+- **Landscape:** every overlay scrolls when its card is taller than the screen (it was cut off with
+  Play out of reach on a phone on its side); upright phones still never scroll.
+- **The scoreboard counts a goal with the GOAL! banner**, not 1.7 s after it (`goalScores`).
+- **The status line shrinks to fit** (never below 11px) instead of cutting off its last word, which
+  is the team colour.
+- **Only the main mouse button or one finger aims**; a right click, a middle click or a second
+  finger does nothing, and a lost pointer or the app going to the background clears the aim.
+- **Online lists page** (`+N more` shows the next page; the last page goes back to the first), so
+  every live match is reachable without the card scrolling. History dates follow the hub language.
+
+**Looked at and left alone, on purpose:** Play with a saved match starts a new one (Continue is the
+button that keeps it, as in the other games); the setup card covers most of the line-up drawn
+behind it (each Lineup pill draws its own five discs); a long name is cut short on the scoreboard
+at 320px (the team chip, avatar and score are what that space is for).
 
 ## Not built yet
 
