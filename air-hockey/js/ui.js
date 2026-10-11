@@ -710,12 +710,14 @@ class AirHockeyUI {
     if (instance !== this || this.screen !== 'online') return;
     this._contacts = list;
     if (!list.length) { sel.innerHTML = ''; this._lobbyError('invite_none'); return; }
-    sel.innerHTML = list.map((c, i) => `<option value="${i}">${esc((c.emoji ? c.emoji + ' ' : '') + c.name)}</option>`).join('');
+    // Starts on "Choose a player" so the box reads as a list, not as one fixed name.
+    sel.innerHTML = `<option value="" disabled selected>${esc(t('pick_player'))}</option>`
+      + list.map((c, i) => `<option value="${i}">${esc((c.emoji ? c.emoji + ' ' : '') + c.name)}</option>`).join('');
   }
   async _sendInvite() {
     const sel = this.root.querySelector('[data-role="who"]');
-    const who = (this._contacts || [])[Number(sel.value)];
-    if (!who) return;
+    const who = sel.value === '' ? null : (this._contacts || [])[Number(sel.value)];
+    if (!who) { this._lobbyError('pick_first'); return; }
     const code = await this._createRoom();
     if (!code) return;
     // The invite is an ordinary Messages message (so it notifies like one, and reads fine on an
