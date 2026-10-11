@@ -1026,7 +1026,7 @@ export const GAME_ART = {
               <path d="M0 36 L-2.5 50 L0 53 L2.5 50 Z" fill="#8f1418"/>
             </g>
           </svg>`,
-  // Way Out (2026-10-11): the game's own board - lavender arrows on navy over a dot grid, one
+  // Arrow Maze (2026-10-11, hub id 'way-out'): the game's own board - lavender arrows on navy over a dot grid, one
   // arrow sliding out to the right in teal with its trail of sparks.
   'way-out': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#1f1f2d"/>

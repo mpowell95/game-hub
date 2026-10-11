@@ -2,9 +2,10 @@
 // contract. The puzzle (sizes, generator, the "is the way out clear" rule) lives in engine.js;
 // nothing here decides anything about it.
 //
-// A clone of "Pointers" (Offline Games), from Matt's two screen recordings of 2026-10-11 (way-out/
-// CLAUDE.md). Two screens, as there: HOME (difficulty face, slider, Play "Level N", ?) and PLAY
-// (level, three hearts, progress bar, the board, a hint bulb).
+// ARROW MAZE (folder and ids still `way-out` / `wayout`: it shipped as "Way Out", way-out/CLAUDE.md).
+// A clone of "Pointers" (Offline Games), from Matt's two screen recordings of 2026-10-11. Two
+// screens: SETUP, in the hub's own card style (difficulty, Play level N, How to play), and PLAY, the
+// reference's dark board (level, hearts with the hint beside them, progress bar, the board).
 //
 // THE MODULE CONTRACT: init / destroy / isInProgress (docs/BUILDING-A-GAME.md).
 // isInProgress() RETURNS FALSE, DELIBERATELY: the level is written to `gamehub.wayout.save.v1`
@@ -23,7 +24,6 @@ const SAVE_KEY = 'gamehub.wayout.save.v1';
 const STATS_ID = 'wayout';
 const LIVES = 3;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
-const TIER_HUE = { easy: '#2bae3a', medium: '#2f7fd8', hard: '#e0353f', expert: '#5b4fd6' };
 
 const reduceMotion = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
@@ -75,30 +75,16 @@ function clearSave() {
 const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
 const ICON_MENU = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 4v4.5h4.5"/></svg>`;
-const ICON_PREV = `<svg ${SVGA}><path d="M6 5v14"/><path d="M19 12H10"/><path d="M13 8l-4 4l4 4"/></svg>`;
-const ICON_NEXT = `<svg ${SVGA}><path d="M18 5v14"/><path d="M5 12h9"/><path d="M11 8l4 4l-4 4"/></svg>`;
-const ICON_X = `<svg ${SVGA}><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 const ICON_BULB = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 28c-3-2.4-4.6-5.6-4.6-9a11.6 11.6 0 0 1 23.2 0c0 3.4-1.6 6.6-4.6 9v4H17z"/><path d="M19 37h10"/><path d="M24 2.5v3M8 9l2.2 2.2M40 9l-2.2 2.2M3.5 19h3M41.5 19h3"/></g></svg>`;
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21L2.6 11.6A5.6 5.6 0 0 1 12 3.9a5.6 5.6 0 0 1 9.4 7.7z"/></svg>';
 
-/** The difficulty face over the slider (the reference's mascot): one per tier, told apart by
- *  expression and horns as well as colour. */
-function faceSVG(tier) {
-  const c = TIER_HUE[tier];
-  const horns = tier === 'hard' || tier === 'expert'
-    ? `<path d="M24 30L14 8L38 22Z M76 30L86 8L62 22Z" fill="${c}"/>` : '';
-  const brows = tier === 'hard' || tier === 'expert'
-    ? '<path d="M28 38L45 45M72 38L55 45" stroke="#0b0b0e" stroke-width="5" stroke-linecap="round"/>' : '';
-  const mouth = {
-    easy: '<path d="M38 70q12 10 26 0" stroke="#0b0b0e" stroke-width="5" fill="none" stroke-linecap="round"/>',
-    medium: '<path d="M38 70h24" stroke="#0b0b0e" stroke-width="5" stroke-linecap="round"/>',
-    hard: '<path d="M38 72q12 -8 24 0" stroke="#0b0b0e" stroke-width="5" fill="none" stroke-linecap="round"/>',
-    expert: '<path d="M36 74l7-5l7 5l7-5l7 5" stroke="#0b0b0e" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
-  }[tier];
-  return `<svg viewBox="0 0 100 100" aria-hidden="true">${horns}<circle cx="50" cy="54" r="34" fill="${c}"/>`
-    + `<circle cx="38" cy="50" r="8" fill="#0b0b0e"/><circle cx="62" cy="50" r="8" fill="#0b0b0e"/>`
-    + `<circle cx="40" cy="47.5" r="2.6" fill="#fff"/><circle cx="64" cy="47.5" r="2.6" fill="#fff"/>${brows}${mouth}</svg>`;
-}
+/** The setup screen's header tile: a corner of the game's own board, in the game's own colours
+ *  (the Sudoku / Minesweeper pattern of a small tinted picture over the title). */
+const HERO_SVG = `<svg viewBox="0 0 88 88" aria-hidden="true"><rect width="88" height="88" rx="14" fill="#1f1f2d"/>`
+  + `<g fill="none" stroke="#b3b4e0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">`
+  + `<path d="M16 72V18H40V30"/><path d="M28 60V40"/><path d="M52 72V56H70V40"/><path d="M40 72H30"/><path d="M58 18H74"/></g>`
+  + `<g fill="#b3b4e0"><path d="M40 37l-4.5-7h9z"/><path d="M28 34l-4.5 7h9z"/><path d="M70 33l-4.5 7h9z"/><path d="M24 72l7-4.5v9z"/><path d="M80 18l-7-4.5v9z"/></g>`
+  + `<path d="M28 48H62" fill="none" stroke="#3fd6bd" stroke-width="3.2" stroke-linecap="round"/><path d="M70 48l-8-5v10z" fill="#3fd6bd"/></svg>`;
 
 /** A small board for How to play, drawn in SVG from the same geometry as the game. `arrows`:
  *  [{ cells, kind: 'idle' | 'go' | 'red' | 'block' }]. Meaning is carried by shape too (a dashed
@@ -166,10 +152,8 @@ class WayOut {
     this.container.innerHTML = '<div class="wo-root"></div>';
     this.root = this.container.querySelector('.wo-root');
     this._onClick = (ev) => this._handleClick(ev);
-    this._onInput = (ev) => this._handleInput(ev);
     this._onKey = (ev) => { if (ev.key === 'Escape' && !this.root.querySelector('.wo-modal').hidden) this._closeModal(); };
     this.root.addEventListener('click', this._onClick);
-    this.root.addEventListener('input', this._onInput);
     document.addEventListener('keydown', this._onKey);
     this.offResize = onViewportResize(() => { this._positionRoot(); this._layout(); });
     this.offLang = onLangChange(() => this.render());
@@ -184,7 +168,6 @@ class WayOut {
     document.removeEventListener('keydown', this._onKey);
     if (this.root) {
       this.root.removeEventListener('click', this._onClick);
-      this.root.removeEventListener('input', this._onInput);
     }
     if (this.canvas && this._onDown) this.canvas.removeEventListener('pointerdown', this._onDown);
     if (this.ro) { this.ro.disconnect(); this.ro = null; }
@@ -234,29 +217,40 @@ class WayOut {
     if (this.canvas && this._onDown) this.canvas.removeEventListener('pointerdown', this._onDown);
     if (this.ro) { this.ro.disconnect(); this.ro = null; }
     this.canvas = null;
-    const modal = '<div class="wo-modal" hidden></div>';
+    const modal = '<div class="gh-overlay wo-modal" hidden></div>';
     this.root.innerHTML = (this.screen === 'play' ? this._playHTML() : this._homeHTML()) + modal;
+    this.root.classList.toggle('is-home', this.screen !== 'play');
     this._positionRoot();
     if (this.screen === 'play') this._bindBoard();
   }
 
+  /** The setup screen, in the hub's own style (the Sudoku / Minesweeper layout and css/ui.css's
+   *  .gh-* primitives): picture, title, a Difficulty card whose four buttons each show the level
+   *  that tier is on, then Play and How to play. */
   _homeHTML() {
     const tier = this.settings.tier;
-    const idx = TIERS.indexOf(tier);
     const level = this.settings.levels[tier];
+    const resume = !!readSave(tier, level, 1e6);
+    const segs = TIERS.map((k) => `
+      <button type="button" class="wo-seg${k === tier ? ' is-selected' : ''}" data-act="tier" data-tier="${k}" role="radio" aria-checked="${k === tier}">
+        <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b></span>
+        <span class="wo-seg-sub">${t('level_n', { n: this.settings.levels[k] })}</span>
+      </button>`).join('');
     return `
-      <div class="wo-home" style="--wo-tier:${TIER_HUE[tier]};--wo-fill:${(idx / 3) * 100}%">
-        <div class="wo-hero">
-          <h1 class="wo-title">${t('title')}</h1>
-          <p class="wo-intro">${t('intro')}</p>
+      <div class="wo-home">
+        <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
+        <div class="wo-head">
+          <h1>${t('title')}</h1>
+          <p>${t('tagline')}</p>
         </div>
-        <div class="wo-face">${faceSVG(tier)}</div>
-        <div class="wo-tiername">${diffShapeSVG(TIER_NUM[tier])}<span>${t('tier_' + tier)}</span></div>
-        <input class="wo-slider" type="range" min="0" max="3" step="1" value="${idx}" aria-label="${t('diff_aria')}" aria-valuetext="${t('tier_' + tier)}">
-        <div class="wo-playrow">
-          <button type="button" class="wo-playbtn" data-act="play"><b>${t('play')}</b><span>${t('level_n', { n: level })}</span></button>
-          <button type="button" class="wo-helpbtn" data-act="help" aria-label="${t('help_aria')}">?</button>
+        <div class="gh-card wo-menu-card">
+          <div class="gh-field">
+            <span class="gh-field__label" id="wo-difflabel">${t('diff_label')}</span>
+            <div class="wo-segs" role="radiogroup" aria-labelledby="wo-difflabel">${segs}</div>
+          </div>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play">${t(resume ? 'continue_level' : 'play_level', { n: level })}</button>
         </div>
+        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="help">${t('how_title')}</button>
       </div>`;
   }
 
@@ -272,37 +266,25 @@ class WayOut {
           </div>
           <button type="button" class="wo-iconbtn wo-restart" data-act="restart" aria-label="${t('restart_aria')}">${ICON_RESTART}</button>
         </div>
-        <div class="wo-hearts" role="img"></div>
-        <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
-        <div class="wo-stage"><canvas class="wo-canvas" role="img"></canvas></div>
-        <div class="wo-foot">
+        <div class="wo-lifebar">
+          <div class="wo-hearts" role="img"></div>
           <button type="button" class="wo-hint" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
         </div>
+        <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
+        <div class="wo-stage"><canvas class="wo-canvas" role="img"></canvas></div>
         <div class="wo-banner" aria-live="polite"><span></span></div>
       </div>`;
   }
 
   // --- home -------------------------------------------------------------------------------------
 
-  _handleInput(ev) {
-    if (!ev.target.classList.contains('wo-slider')) return;
-    const tier = TIERS[Math.max(0, Math.min(3, ev.target.value | 0))];
-    if (tier === this.settings.tier) return;
-    this.settings = saveSettings({ tier });   // saved on selection
-    const home = this.root.querySelector('.wo-home');
-    home.style.setProperty('--wo-tier', TIER_HUE[tier]);
-    home.style.setProperty('--wo-fill', (TIERS.indexOf(tier) / 3) * 100 + '%');
-    home.querySelector('.wo-face').innerHTML = faceSVG(tier);
-    home.querySelector('.wo-tiername').innerHTML = `${diffShapeSVG(TIER_NUM[tier])}<span>${t('tier_' + tier)}</span>`;
-    home.querySelector('.wo-playbtn span').textContent = t('level_n', { n: this.settings.levels[tier] });
-    ev.target.setAttribute('aria-valuetext', t('tier_' + tier));
-  }
-
   _handleClick(ev) {
     const btn = ev.target.closest('[data-act]');
     if (!btn || !this.root.contains(btn)) return;
     const act = btn.dataset.act;
-    if (act === 'play') this._startLevel(this.settings.tier, this.settings.levels[this.settings.tier]);
+    if (act === 'tier') {
+      if (btn.dataset.tier !== this.settings.tier) { this.settings = saveSettings({ tier: btn.dataset.tier }); this.render(); }   // saved on selection
+    } else if (act === 'play') this._startLevel(this.settings.tier, this.settings.levels[this.settings.tier]);
     else if (act === 'help') { this.helpPage = 0; this._openHelp(); }
     else if (act === 'menu') { this.screen = 'home'; this.settings = loadSettings(); this.render(); }
     else if (act === 'restart') this._restart();
@@ -317,23 +299,24 @@ class WayOut {
   _openHelp() {
     const pages = helpPages();
     const p = pages[this.helpPage];
+    const last = this.helpPage === pages.length - 1;
     const dots = pages.map((_, i) => `<i class="${i === this.helpPage ? 'is-on' : ''}"></i>`).join('');
     const m = this.root.querySelector('.wo-modal');
     m.innerHTML = `
-      <div class="wo-card" role="dialog" aria-modal="true" aria-label="${t('how_title')}">
-        <h2 class="wo-card-h">${t('how_title')}</h2>
+      <div class="gh-modal wo-dialog" role="dialog" aria-modal="true" aria-labelledby="wo-how-h">
+        <button type="button" class="gh-modal__close" data-act="close" aria-label="${t('close_aria')}">&times;</button>
+        <h2 class="gh-modal__title" id="wo-how-h">${t('how_title')}</h2>
         <div class="wo-how-pic"><div class="wo-how-hearts">${HEART.repeat(3)}</div>${p.svg}</div>
         <p class="wo-how-txt">${t(p.key)}</p>
         <div class="wo-dots" aria-hidden="true">${dots}</div>
-        <div class="wo-card-row">
-          <button type="button" class="wo-sqbtn" data-act="how-prev" aria-label="${t('how_prev_aria')}" ${this.helpPage === 0 ? 'disabled' : ''}>${ICON_PREV}</button>
-          <button type="button" class="wo-okbtn" data-act="close">${t('ok')}</button>
-          <button type="button" class="wo-sqbtn" data-act="how-next" aria-label="${t('how_next_aria')}" ${this.helpPage === 2 ? 'disabled' : ''}>${ICON_NEXT}</button>
+        <div class="wo-how-nav">
+          <button type="button" class="gh-btn" data-act="how-prev" ${this.helpPage === 0 ? 'disabled' : ''}>${t('how_prev')}</button>
+          <button type="button" class="gh-btn gh-btn--primary" data-act="${last ? 'close' : 'how-next'}">${t(last ? 'got_it' : 'how_next')}</button>
         </div>
       </div>`;
     m.hidden = false;
-    const ok = m.querySelector('.wo-okbtn');
-    if (ok) ok.focus({ preventScroll: true });
+    const go = m.querySelector('.gh-btn--primary');
+    if (go) go.focus({ preventScroll: true });
   }
 
   _closeModal() {
@@ -466,7 +449,21 @@ class WayOut {
     this.lw = Math.max(1.3, Math.min(3.4, pitch * 0.078));
     this.headL = Math.max(4.5, Math.min(11, pitch * 0.27));
     this.pts = this.lvl.arrows.map((cells) => cells.map((c) => this._xy(c)));
+    this._fitHud();
     this._draw();
+  }
+
+  /** The level title is centred on the screen unless that would put it against the buttons beside
+   *  it (a narrow phone, with the hub's back button taking the left of the row). Measured. */
+  _fitHud() {
+    const mid = this.root.querySelector('.wo-hud-mid');
+    const left = this.root.querySelector('.wo-hud [data-act="menu"]');
+    const right = this.root.querySelector('.wo-hud .wo-restart');
+    if (!mid || !left || !right) return;
+    this.root.classList.remove('is-tight');
+    const m = mid.getBoundingClientRect();
+    const tight = m.left < left.getBoundingClientRect().right + 6 || m.right > right.getBoundingClientRect().left - 6;
+    this.root.classList.toggle('is-tight', tight);
   }
 
   _xy(c) {
@@ -625,15 +622,18 @@ class WayOut {
     const m = this.root.querySelector('.wo-modal');
     if (!m) return;
     m.innerHTML = `
-      <div class="wo-card wo-fail" role="dialog" aria-modal="true" aria-label="${t('fail_title')}">
-        <button type="button" class="wo-xbtn" data-act="fail-close" aria-label="${t('close_aria')}">${ICON_X}</button>
-        <h2 class="wo-card-h">${t('fail_title')}</h2>
-        <div class="wo-fail-hearts">${HEART.repeat(3)}</div>
-        <p class="wo-how-txt">${t('fail_body')}</p>
-        <div class="wo-card-row"><button type="button" class="wo-okbtn" data-act="retry">${t('try_again')}</button></div>
+      <div class="gh-modal wo-dialog" role="dialog" aria-modal="true" aria-labelledby="wo-fail-h">
+        <button type="button" class="gh-modal__close" data-act="fail-close" aria-label="${t('close_aria')}">&times;</button>
+        <h2 class="gh-modal__title" id="wo-fail-h">${t('fail_title')}</h2>
+        <div class="wo-fail-hearts" aria-hidden="true">${HEART.repeat(3)}</div>
+        <p class="wo-fail-txt">${t('fail_body')}</p>
+        <div class="gh-modal__actions">
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="retry">${t('try_again')}</button>
+          <button type="button" class="gh-btn gh-btn--block" data-act="fail-close">${t('change_diff')}</button>
+        </div>
       </div>`;
     m.hidden = false;
-    m.querySelector('.wo-okbtn').focus({ preventScroll: true });
+    m.querySelector('.gh-btn--primary').focus({ preventScroll: true });
   }
 
   // --- drawing ------------------------------------------------------------------------------------
@@ -772,6 +772,13 @@ let instance = null;
 
 export function init(container) {
   if (instance) instance.destroy();
+  if (!document.querySelector('link[data-gh-ui-css="1"]')) {
+    const ui = document.createElement('link');
+    ui.rel = 'stylesheet';
+    ui.href = new URL('../../css/ui.css', import.meta.url).href;
+    ui.setAttribute('data-gh-ui-css', '1');
+    document.head.appendChild(ui);
+  }
   const href = new URL('../css/way-out.css', import.meta.url).href;
   if (!document.querySelector(`link[data-wo-css]`)) {
     const link = document.createElement('link');
