@@ -1687,6 +1687,30 @@ still reads it for POPONGO's rail, and My Stats still shows it as "Color sweeps"
 block where the machine context makes it legible. Only the leaderboard record and its two i18n
 strings are gone.
 
+### The leaderboard's spacing (2026-10-11)
+
+A blind spacing audit (measured with `getBoundingClientRect`, 390x844 and 320x568) found seven
+different gaps between the control rows, the tab bar sitting ON the header line (0px), a game
+board's first player at 37% of the screen, the filter panel pushing the list down 360px, and rows
+on one board differing in height because a long name pushed the tier chip onto its own line.
+What it settled, so a later edit does not drift back:
+
+- **One scale: 4 / 8 / 12 / 16 / 24.** 8 between control rows and between cards, 12 before the
+  content, 16 above a section heading (`.lb-h4`) and 8 below it, 24 above Standing records (`.lb-h3`).
+- **Controls stay 44px tall.** The audit proposed 40px to save room; the UX floor's tap target is
+  44, so the room came from elsewhere.
+- **A board's header is one row** (`.lb-board-head`): an icon-only back chevron (`backBtnHTML(...,
+  true)`, label kept as `aria-label`), the title at 24px, the games count. Every back control goes
+  through `backBtnHTML`, so they share one chevron and one 44px target.
+- **The filter panel floats** (`.lb-panel-list` is absolute under `.lb-ctrls`, z-index 1, below the
+  sticky header's 2). The outside-tap close that already existed is what makes that safe.
+- **Name, YOU badge and tier chip share one no-wrap `.lb-pline`**; the name truncates. The chip
+  wrapping under a long name was the row-height drift.
+- **At 360px and below** the rank chip, avatar, gaps and score number shrink; the name does not.
+- The player page's message button sits at the row's right edge, after the wins number; the
+  tagline (`.lb-pmsg`) is a quote with a left rule, not a box, so it no longer reads as a field.
+- Favorites with none picked says so (`lb_fav_none`) instead of silently showing A to Z.
+
 ### My Stats and the leaderboard's player page — the shared game-list drill-down (2026-07-24)
 
 HANDOFF-FB2-STATS-NAV.md. Matt: the old My Stats 13-tab strip was "useless… difficult
