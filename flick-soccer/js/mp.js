@@ -34,7 +34,7 @@ import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/player
 import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { newMatch, flick, runToRest, settle, GOAL_OPTIONS, DISCS } from './engine.js';
+import { newMatch, flick, runToRest, settle, cleanForms, GOAL_OPTIONS, DISCS } from './engine.js';
 
 const NODE = 'flicksoccer';
 const STATS_ID = 'flicksoccer';
@@ -99,6 +99,8 @@ const fail = (reason, retryable = false) => ({ ok: false, reason, retryable });
 
 /** Goals to win. Absent or junk reads as 2, the default. */
 export const goalsOfGame = (raw) => (raw && GOAL_OPTIONS.includes(+raw.goals) ? +raw.goals : 2);
+/** The two line-ups [side a, side b] (optional field, added 2026-10-11; absent reads as balanced). */
+export const formsOfGame = (raw) => cleanForms(raw && raw.forms);
 
 // --- the log --------------------------------------------------------------------------------------
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -144,7 +146,7 @@ export function applyEntry(m, e) {
 
 /** Replay the first `upto` flicks. */
 export function buildMatch(game, upto = game.log.length) {
-  const m = newMatch(goalsOfGame(game), 0);
+  const m = newMatch(goalsOfGame(game), 0, formsOfGame(game));
   for (let i = 0; i < upto; i++) if (!applyEntry(m, game.log[i])) break;   // validateGame proved it replays
   return m;
 }
@@ -165,7 +167,8 @@ export function validateGame(raw) {
   if (keys.length > MAX_LOG) return null;
   const log = [];
   const goals = goalsOfGame(raw);
-  const m = newMatch(goals, 0);
+  const forms = formsOfGame(raw);
+  const m = newMatch(goals, 0, forms);
   for (const key of keys) {
     const e = cleanEntry(src[key]);
     if (!e) return null;
@@ -184,7 +187,7 @@ export function validateGame(raw) {
   }
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
   return {
-    v: 1, id, goals,
+    v: 1, id, goals, forms,
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -456,7 +459,7 @@ async function writeRows(api, db, game, writer, only = null) {
  * only their own row is written here (the other person's arrives when the first turn passes,
  * appendLog). Returns { ok, id, game } or a failure.
  */
-export async function createGame({ them, goals = 2 }) {
+export async function createGame({ them, goals = 2, forms }) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
@@ -471,7 +474,7 @@ export async function createGame({ them, goals = 2 }) {
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, goals: +goals, by: me, created: now, updated: now,
+    v: 1, id, goals: +goals, forms: cleanForms(forms), by: me, created: now, updated: now,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -527,7 +530,7 @@ export async function appendLog(id, base, entries) {
     if (!todo.length) return { ok: true, game: fresh };
     if (fresh.over) return fail('already-over');
     // Check the rules accept them before anything is written.
-    const m = newMatch(fresh.goals, 0);
+    const m = newMatch(fresh.goals, 0, fresh.forms);
     for (const e of fresh.log.concat(todo)) if (!applyEntry(m, e)) return fail('rules-refused');
     const now = Date.now();
     const patch = { updated: now };

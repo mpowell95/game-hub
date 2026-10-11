@@ -133,6 +133,14 @@ const stL = JSON.parse(stores[L === 'a' ? 'A' : 'B'].get('gamehub.stats') || '{}
 ok('...as an mp loss in their stats', stL.games && stL.games.flicksoccer && stL.games.flicksoccer.byDiff.mp.lost === 1, JSON.stringify(stL.games && stL.games.flicksoccer));
 ok('...and queued for their Game Over popup', MP.readUnseen().includes(id));
 
+// Line-ups ride the document: both phones replay the same start, and a match from before reads balanced.
+{
+  const g = { goals: 2, forms: ['attack', 'attack'], log: [] };
+  const m = MP.buildMatch(g);
+  ok('a challenge\'s line-up is replayed on both sides', m.b[4].y === E.FORMATIONS.attack[3][1] && m.b[9].y === E.H - E.FORMATIONS.attack[3][1]);
+  ok('a challenge with no line-up reads balanced', MP.formsOfGame({}).join() === 'balanced,balanced' && MP.formsOfGame({ forms: ['x', 1] }).join() === 'balanced,balanced');
+}
+
 // Own goal: a goal counts for whoever's goal it went in.
 {
   const m = E.newMatch(2, 0);
@@ -147,9 +155,11 @@ ok('...and queued for their Game Over popup', MP.readUnseen().includes(id));
 
 // Resign.
 use('A');
-res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, forms: ['diamond', 'diamond'] });
 const id2 = res.id;
-await MP.appendLog(id2, 0, [straight('a')]);
+ok('a challenge stores its line-up', res.ok && res.game.forms.join() === 'diamond,diamond' && getAt(`flicksoccer/games/${id2}`).forms.join() === 'diamond,diamond');
+res = await MP.appendLog(id2, 0, [straight('a')]);
+ok('...and a flick from that line-up is accepted', res.ok && res.game.log.length === 1, JSON.stringify(res));
 use('B');
 res = await MP.resignGame(id2);
 ok('resigning hands the other person the win', res.ok && res.game.over.winner === 'a' && res.game.over.why === 'resign');

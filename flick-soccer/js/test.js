@@ -66,6 +66,37 @@ const ok = (label, cond, extra = '') => { if (!cond) { fails++; console.log('FAI
   ok('first to the target wins', E.settle(m, 0) === 'win' && m.winner === 0);
   ok('saved shape is valid', E.validMatch(JSON.parse(JSON.stringify(E.newMatch(3, 1)))));
   ok('junk is not', !E.validMatch({ v: 1, b: [] }) && !E.validMatch(null));
+  // Line-ups (2026-10-11): every one legal, mirrored, kept after a goal, and old saves read balanced.
+  for (const f of E.FORM_IDS) {
+    const L = E.lineUp([f, f]);
+    let clear = true;
+    for (let i = 1; i < L.length; i++) {
+      const o = L[i];
+      if (o.x < o.r || o.x > E.W - o.r || Math.hypot(o.x - E.W / 2, o.y - E.H / 2) < 20) clear = false;
+      if (E.teamOf(i) === 0 ? o.y <= E.H / 2 : o.y >= E.H / 2) clear = false;
+      for (let j = i + 1; j < L.length; j++) if (Math.hypot(o.x - L[j].x, o.y - L[j].y) < 2 * E.DISC_R + 1) clear = false;
+    }
+    ok(`line-up ${f}: in its own half, clear of the centre and of each other`, clear);
+  }
+  {
+    const m2 = E.newMatch(3, 0, ['attack', 'defend']);
+    ok('each side gets its own line-up', m2.b[4].y === E.FORMATIONS.attack[3][1] && m2.b[9].y === E.H - E.FORMATIONS.defend[3][1]);
+    E.settle(m2, 0);
+    ok('...and lines up the same way after a goal', m2.b[4].y === E.FORMATIONS.attack[3][1] && m2.b[9].y === E.H - E.FORMATIONS.defend[3][1]);
+    const old = E.newMatch(2, 0); delete old.forms;
+    ok('a match saved before line-ups lines up balanced', E.validMatch(old) && (E.settle(old, 1), old.b[4].y === E.FORMATIONS.balanced[3][1]));
+    ok('an unknown line-up reads as balanced', E.cleanForms(['constructor', 'nope']).join() === 'balanced,balanced');
+  }
+  // Easy's bounce line: off the side wall, and it ends in a goal mouth when it gets there.
+  {
+    const L = E.lineUp();
+    for (let i = 1; i < L.length; i++) { L[i].x = 4 + i * 8.5; L[i].y = 150; }   // all out of the way
+    L[E.BALL].x = 50; L[E.BALL].y = 60;
+    const st = E.ballPath(L, -1, { x: 50, y: 70 }, 200);
+    ok('a straight bounce line ends in the goal', st.stop === 'goal' && st.pts[st.pts.length - 1].y === 0, JSON.stringify(st));
+    const off = E.ballPath(L, -1, { x: 45, y: 65 }, 200, 2);
+    ok('an angled one comes back off the wall', off.pts.length >= 3 && off.pts[1].x > 90, JSON.stringify(off));
+  }
   // A ball rolled straight into the top goal is a goal for seat 0.
   const b = E.lineUp();
   for (let i = 1; i < b.length; i++) b[i].x = 5 + (i % 2) * 90;   // clear the middle

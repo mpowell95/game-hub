@@ -55,6 +55,19 @@ Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap gam
   draw and no clock.
 - **Discs cannot enter a goal.** Each goal line is a wall for discs only (`discOnly` in `SEGS`), so
   nobody can park a keeper in the net. The ball passes.
+- **Line-ups (2026-10-11)**, Matt: *"Let people have options of starting lineups. Offensive or
+  defensive too."* `FORMATIONS` in `engine.js`: **Balanced** (the original: keeper, two defenders, two
+  forwards), **Attack** (keeper, one back, three up), **Defend** (keeper, three back, one up) and
+  **Diamond**. Picked on the setup card's **Lineup** row (each pill draws its five discs); the pitch
+  behind the card shows the pick. Both teams line up the same way again after every goal
+  (`match.forms`, `[seat 0, seat 1]`). **Vs the computer it picks its own at random**; pass and play
+  uses the one choice for both teams; an online challenge stores the challenger's choice for BOTH
+  sides (`forms` on the document, OPTIONAL: a match without it, or with an unknown id, reads as
+  Balanced, so every match and save from before line-ups replays exactly as it did). Every line-up
+  keeps each disc in its own half, clear of the centre circle and of each other; `test.js` pins that.
+  A phone still on the build before line-ups replays a non-Balanced challenge from the Balanced
+  start, so the two pitches differ until it updates (the hub applies a new build on its own on the
+  launcher); harmless while the game is admin only, and gone once both phones are current.
 - Kick-off follows the repo convention: **Alternate** by default (`nextStarter` flips each match), or
   You / Computer (Blue / Red in two-player).
 
@@ -101,10 +114,24 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
 
 ## The screen
 
-- **Aim guide**: while dragging, a dotted line from the disc to the first thing it will touch, a
-  ghost circle where it touches, and (if that is the ball) a short accent line showing which way the
-  ball will go. A power ring around the disc fills to full strength. It is the same for every
-  player, and it is the one thing to turn down if Matt finds the game too easy.
+- **Aiming help depends on the difficulty (2026-10-11)**, Matt: *"on easy it should show the power,
+  aim arrow, and bounce line of the ball on medium, just the power and aim arrow and on hard just
+  power"*. `AIDS` in `ui.js`:
+
+  | | power ring | aim arrow | guide + ball's bounce line |
+  |---|---|---|---|
+  | Easy | yes | yes | yes |
+  | Medium | yes | yes | no |
+  | Hard | yes | no | no |
+
+  **Pass and play and online are Medium** (there is no difficulty there, and online both players
+  should get the same help). The thin pull string from the disc to the finger shows on every level:
+  it is the drag itself. The **guide** is a dotted line from the disc to the first thing it will
+  touch and a ghost circle there; the **bounce line** (`ballPath` in `engine.js`) is where the ball
+  heads from that touch, reflected off the walls up to twice, ending at the first disc in its way or
+  in a goal mouth, longer the harder the pull. It is a guide for the eye, not a prediction: no spin,
+  friction or follow-through, and it is never on the physics path. The computer's own aim (and a
+  replayed online flick) always draws its arrow, so you can see what it did.
 - **Teams carry a SHAPE as well as a colour** (colourblind rule): blue discs a white triangle, red
   discs a white square, and the same chips sit on the scoreboard and the result line.
 - **Whose turn** is shown three ways: the scoreboard side gets an accent border and underline bar,
@@ -118,7 +145,7 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
 
 | Key | What |
 |---|---|
-| `gamehub.flicksoccer.v1` | `{ mode: 'cpu'|'pass', difficulty, goals: 1|2|3, first: 'alt'|'me'|'them', nextStarter }`, saved the moment a control changes |
+| `gamehub.flicksoccer.v1` | `{ mode: 'cpu'|'pass', difficulty, goals: 1|2|3, first: 'alt'|'me'|'them', lineup, nextStarter }`, saved the moment a control changes (`lineup` added 2026-10-11, absent reads Balanced) |
 | `gamehub.flicksoccer.save.v1` | `{ mode, diff, match }` at rest; removed once the match is won |
 
 The difficulty default follows the shared profile's first opponent skill (1/2/3 -> Easy/Medium/Hard)
@@ -150,7 +177,8 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
 - **Where:** the setup card's first row is **Multiplayer ›** (with a "N waiting on you" badge), as in
   Darts and Cup Pong. Behind it: Challenge someone, **Pass & play** (two people, this phone; it used
   to be the setup card's Opponent row, which is gone), the notify row, Your turn, Their turn,
-  History. A challenge uses the Goals to win chosen on the setup card; the challenger kicks off.
+  History. A challenge uses the Goals to win and the Lineup chosen on the setup card (the line-up for
+  both sides, optional `forms` on the document); the challenger kicks off.
 - **The node:** `flicksoccer/games/<id>` + `flicksoccer/index/<CODE>/<id>`, addressed by PLAYER CODE.
   In `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **NOT yet published (written
   2026-10-11): until Matt pastes the rules file, every online call fails softly ("Online play is not

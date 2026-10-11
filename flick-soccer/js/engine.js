@@ -54,8 +54,19 @@ export const SEGS = [
   [GX0, 0, GX1, 0, 1], [GX0, H, GX1, H, 1],
 ].map(([ax, ay, bx, by, discOnly]) => ({ ax, ay, bx, by, discOnly: !!discOnly }));
 
-/** Seat 0's line-up (bottom half): keeper, two defenders, two forwards. Seat 1 mirrors it. */
-const FORM = [[50, 149], [27, 133], [73, 133], [33, 107], [67, 107]];
+/** Starting line-ups, as seat 0 stands them (bottom half). Seat 1 mirrors its own choice. Every
+ *  one has a keeper, keeps each disc in its own half and clear of the centre circle, so a kick-off
+ *  is never blocked. 'balanced' is the original, and what any match saved before line-ups read as. */
+export const FORMATIONS = {
+  balanced: [[50, 149], [27, 133], [73, 133], [33, 107], [67, 107]],
+  attack:   [[50, 149], [50, 128], [20, 100], [50, 101], [80, 100]],
+  defend:   [[50, 149], [22, 134], [50, 132], [78, 134], [50, 108]],
+  diamond:  [[50, 149], [50, 128], [24, 115], [76, 115], [50, 102]],
+};
+export const FORM_IDS = Object.keys(FORMATIONS);
+const formOf = (id) => (FORM_IDS.includes(id) ? FORMATIONS[id] : FORMATIONS.balanced);
+/** A pair of line-up ids [seat 0, seat 1], unknown ids read as 'balanced'. */
+export const cleanForms = (f) => [0, 1].map((k) => (Array.isArray(f) && FORM_IDS.includes(f[k]) ? f[k] : 'balanced'));
 export const KICKOFF_BALL = [W / 2, H / 2];
 export const GOAL_OPTIONS = [1, 2, 3];
 
@@ -67,15 +78,18 @@ export const discsOf = (seat) => Array.from({ length: DISCS }, (_, k) => 1 + sea
 export const attackGoal = (seat) => (seat === 0 ? { x: W / 2, y: 0, dir: -1 } : { x: W / 2, y: H, dir: 1 });
 export const ownGoal = (seat) => attackGoal(seat ^ 1);
 
-export function lineUp() {
+/** Both teams at kick-off. `forms` is [seat 0's line-up id, seat 1's]; absent means balanced. */
+export function lineUp(forms) {
+  const [f0, f1] = cleanForms(forms);
   const b = [{ x: KICKOFF_BALL[0], y: KICKOFF_BALL[1], vx: 0, vy: 0, r: BALL_R, m: BALL_M }];
-  for (const [x, y] of FORM) b.push({ x, y, vx: 0, vy: 0, r: DISC_R, m: DISC_M });
-  for (const [x, y] of FORM) b.push({ x: W - x, y: H - y, vx: 0, vy: 0, r: DISC_R, m: DISC_M });
+  for (const [x, y] of formOf(f0)) b.push({ x, y, vx: 0, vy: 0, r: DISC_R, m: DISC_M });
+  for (const [x, y] of formOf(f1)) b.push({ x: W - x, y: H - y, vx: 0, vy: 0, r: DISC_R, m: DISC_M });
   return b;
 }
 
-/** A new match. `goals` to win (1-3); `starter` kicks off. */
-export function newMatch(goals = 2, starter = 0) {
+/** A new match. `goals` to win (1-3); `starter` kicks off; `forms` [seat 0, seat 1] line-ups,
+ *  used again after every goal. */
+export function newMatch(goals = 2, starter = 0, forms) {
   return {
     v: 1,
     goals: GOAL_OPTIONS.includes(goals) ? goals : 2,
@@ -84,7 +98,8 @@ export function newMatch(goals = 2, starter = 0) {
     turn: starter ? 1 : 0,
     shots: 0,
     winner: null,
-    b: lineUp(),
+    forms: cleanForms(forms),
+    b: lineUp(forms),
   };
 }
 
@@ -213,7 +228,7 @@ export function settle(m, scorer) {
   if (scorer === 0 || scorer === 1) {
     m.scores[scorer]++;
     if (m.scores[scorer] >= m.goals) { m.winner = scorer; freeze(m.b); return 'win'; }
-    m.b = lineUp();
+    m.b = lineUp(m.forms);
     m.turn = scorer ^ 1;
     return 'goal';
   }
@@ -263,4 +278,50 @@ export function aimContact(b, i, dx, dy, range = 70) {
   }
   if (hit === -2) return null;
   return { x: o.x + dx * best, y: o.y + dy * best, hit };
+}
+
+/**
+ * Easy's "bounce line" (2026-10-11): where the ball heads after the disc at `contact` strikes it,
+ * traced straight and reflected off the side and end walls, up to `bounces` times, for `len`
+ * pitch units. It stops at the first disc in the way (`stop: 'disc'`) or in a goal mouth
+ * (`stop: 'goal'`). A guide for the eye, not a prediction: it ignores spin, friction and the
+ * shooter following through. Display only, never on the physics path.
+ */
+export function ballPath(b, shooter, contact, len = 80, bounces = 2) {
+  const q = b[BALL];
+  let dx = q.x - contact.x, dy = q.y - contact.y;
+  const dl = Math.sqrt(dx * dx + dy * dy) || 1; dx /= dl; dy /= dl;
+  let x = q.x, y = q.y, left = len;
+  const pts = [{ x, y }];
+  const x0 = BALL_R, x1 = W - BALL_R, y0 = BALL_R, y1 = H - BALL_R;
+  for (let n = 0; n <= bounces && left > 0; n++) {
+    // The first disc this leg would touch.
+    let tDisc = Infinity;
+    for (let j = 1; j < b.length; j++) {
+      if (j === shooter) continue;
+      const o = b[j], rr = o.r + BALL_R;
+      const fx = o.x - x, fy = o.y - y;
+      const along = fx * dx + fy * dy;
+      if (along <= 0) continue;
+      const perp2 = fx * fx + fy * fy - along * along;
+      if (perp2 >= rr * rr) continue;
+      const t = along - Math.sqrt(rr * rr - perp2);
+      if (t >= 0 && t < tDisc) tDisc = t;
+    }
+    // The first wall.
+    const tx = dx > 0 ? (x1 - x) / dx : dx < 0 ? (x0 - x) / dx : Infinity;
+    const ty = dy > 0 ? (y1 - y) / dy : dy < 0 ? (y0 - y) / dy : Infinity;
+    const tWall = Math.min(tx, ty);
+    const t = Math.min(tDisc, tWall, left);
+    x += dx * t; y += dy * t;
+    pts.push({ x, y });
+    if (t === left && t < tDisc && t < tWall) return { pts, stop: 'end' };
+    left -= t;
+    if (tDisc <= tWall) return { pts, stop: 'disc' };
+    if (ty <= tx) {
+      if (x > GX0 && x < GX1) { pts[pts.length - 1] = { x, y: dy < 0 ? 0 : H }; return { pts, stop: 'goal' }; }
+      dy = -dy;
+    } else dx = -dx;
+  }
+  return { pts, stop: 'end' };
 }

@@ -10,8 +10,8 @@
 // written the moment it is made, so leaving one loses nothing either.
 
 import {
-  newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest,
-  maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, W, H,
+  newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, lineUp,
+  ballPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
 } from './engine.js';
 import { planShot, DIFFS } from './ai.js';
 import { createRenderer, TEAM } from './render.js';
@@ -62,6 +62,7 @@ function loadSettings() {
     difficulty,
     goals: GOAL_OPTIONS.includes(s.goals) ? s.goals : 2,
     first: FIRSTS.includes(s.first) ? s.first : 'alt',
+    lineup: FORM_IDS.includes(s.lineup) ? s.lineup : 'balanced',
     nextStarter: s.nextStarter === 1 ? 1 : 0,
   };
 }
@@ -73,6 +74,17 @@ const MENU_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
 const teamChip = (seat) => `<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="9" fill="${TEAM[seat].fill}" stroke="#fff" stroke-width="1.5"/>${seat === 0
   ? '<path d="M10 4.6 L15 13.4 L5 13.4 Z" fill="#fff"/>'
   : '<rect x="6" y="6" width="8" height="8" fill="#fff"/>'}</svg>`;
+/** A line-up's little picture: its five discs as dots on a half pitch, goal at the bottom. */
+const formSVG = (id) => `<svg class="fs-form-ico" viewBox="0 0 30 26" aria-hidden="true" focusable="false"><rect x="1" y="1" width="28" height="24" rx="2" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>${
+  FORMATIONS[id].map(([x, y]) => `<circle cx="${(1 + (x / W) * 28).toFixed(1)}" cy="${(1 + ((y - H / 2) / (H / 2)) * 24).toFixed(1)}" r="2.3" fill="currentColor"/>`).join('')}</svg>`;
+/** How much aiming help each difficulty gets (Matt, 2026-10-11): Easy shows the power ring, the
+ *  aim arrow and the ball's bounce line; Medium the power ring and the arrow; Hard the power ring
+ *  only. Pass and play and online are Medium. */
+const AIDS = {
+  easy: { arrow: true, guide: true },
+  medium: { arrow: true, guide: false },
+  hard: { arrow: false, guide: false },
+};
 
 /** How to play: a disc pulled back, the flick, the ball on its way to goal. Shape and arrows carry
  *  it, not colour (docs/BUILDING-A-GAME.md, "How-to-play screens"). */
@@ -122,7 +134,7 @@ class FlickSoccerUI {
     this._ensureCss();
     this._build();
     this.r = createRenderer(this.canvas);
-    this.preview = newMatch(2, 0).b;   // the line-up drawn behind the setup screen
+    this.preview = lineUp([this.settings.lineup, this.settings.lineup]);   // drawn behind the setup screen
 
     this._onVis = () => { if (document.hidden) { this._stop(); this._save(); } else this._start(); };
     document.addEventListener('visibilitychange', this._onVis);
@@ -199,6 +211,10 @@ class FlickSoccerUI {
             <div class="fs-field">
               <span class="fs-label" data-l="goals"></span>
               <div class="gh-seg fs-seg" role="group" data-role="goalsSeg"></div>
+            </div>
+            <div class="fs-field">
+              <span class="fs-label" data-l="lineup"></span>
+              <div class="gh-seg fs-seg fs-seg-form" role="group" data-role="forms"></div>
             </div>
             <div class="fs-field">
               <span class="fs-label" data-l="first"></span>
@@ -297,6 +313,8 @@ class FlickSoccerUI {
     };
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
     seg('goalsSeg', 'goals', GOAL_OPTIONS.map(String), String(s.goals), (id) => id);
+    seg('forms', 'lineup', FORM_IDS, s.lineup, (id) => t('form_' + id), formSVG);
+    this.preview = lineUp([s.lineup, s.lineup]);
     seg('firsts', 'first', FIRSTS, s.first, (id) => (id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t('first_them_cpu')));
     this.root.querySelector('[data-role="continueBtn"]').hidden = !this._savedMatch();
     this._paintOnlineNote();
@@ -398,7 +416,9 @@ class FlickSoccerUI {
     else if (s.first === 'them') starter = 1;
     else { starter = s.nextStarter; s.nextStarter = starter ^ 1; }
     writeJSON(SETTINGS_KEY, s);
-    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(s.goals, starter) });
+    // Vs the computer it picks its own line-up; pass and play is one choice for both teams.
+    const theirs = s.mode === 'cpu' ? FORM_IDS[Math.floor(Math.random() * FORM_IDS.length)] : s.lineup;
+    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(s.goals, starter, [s.lineup, theirs]) });
   }
 
   _continue() {
@@ -500,7 +520,7 @@ class FlickSoccerUI {
     if (this.phase === 'cpuaim') {
       const k = this.reduce ? 1 : Math.min(1, (this.clock - c.aimAt) / CPU_AIM_SECS);
       const sh = c.shot;
-      this.aim = { i: sh.i, dx: sh.dx, dy: sh.dy, power: sh.power * k, contact: null };
+      this.aim = { i: sh.i, dx: sh.dx, dy: sh.dy, power: sh.power * k, contact: null, arrow: true };
       if (k >= 1) {
         this.aim = null;
         this.cpu = null;
@@ -656,11 +676,12 @@ class FlickSoccerUI {
 
   // --- input -----------------------------------------------------------------------------------
   _click(e) {
-    const seg = e.target.closest('[data-diffs], [data-goalsseg], [data-firsts]');
+    const seg = e.target.closest('[data-diffs], [data-goalsseg], [data-forms], [data-firsts]');
     if (seg) {
       const s = this.settings;
       if (seg.dataset.diffs) s.difficulty = seg.dataset.diffs;
       else if (seg.dataset.goalsseg) s.goals = Number(seg.dataset.goalsseg);
+      else if (seg.dataset.forms) s.lineup = seg.dataset.forms;
       else s.first = seg.dataset.firsts;
       writeJSON(SETTINGS_KEY, s);
       this._relabel();
@@ -757,7 +778,8 @@ class FlickSoccerUI {
   /** A new challenge: created now, delivered when your first turn is over. */
   async _sendChallenge(them, goals = this.settings.goals) {
     const MP = await this._loadMP();
-    const res = await MP.createGame({ them, goals });
+    const lu = this.settings.lineup;
+    const res = await MP.createGame({ them, goals, forms: [lu, lu] });
     if (instance !== this) return res;
     if (!res.ok) {
       if (this.screen !== 'mp') this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400);
@@ -941,7 +963,10 @@ class FlickSoccerUI {
     if (len < PULL_DEAD) { this.aim = { i: this.drag.i, dx: 0, dy: -1, power: 0, fx: p.x, fy: p.y, contact: null, idle: true }; return; }
     const dx = px / len, dy = py / len;
     const power = Math.min(1, (len - PULL_DEAD) / (PULL_MAX - PULL_DEAD));
-    this.aim = { i: this.drag.i, dx, dy, power, fx: p.x, fy: p.y, contact: aimContact(m.b, this.drag.i, dx, dy) };
+    const aids = AIDS[this.mode === 'cpu' ? this.diff : 'medium'] || AIDS.medium;
+    const contact = aids.guide ? aimContact(m.b, this.drag.i, dx, dy) : null;
+    const path = contact && contact.hit === BALL ? ballPath(m.b, this.drag.i, contact, 30 + 90 * power) : null;
+    this.aim = { i: this.drag.i, dx, dy, power, fx: p.x, fy: p.y, contact, path, arrow: aids.arrow };
   }
 
   _pointerUp(e, cancel) {
