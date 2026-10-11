@@ -35,7 +35,10 @@ anywhere a Skeeball session would see it. That is the whole thesis of this file.
   cannot fit non-overlapping 44px hit zones inside a 540px board — and it verifies the alternative
   by testing `elementFromPoint` at all 220 centers for zero mismatches. That is the model: 44×44 is
   the default, and a real, verified, documented reason is how you depart from it — not a silent
-  smaller number.
+  smaller number. **Second exception (Matt, 2026-10-11): the Leaderboard's menu controls are 40px
+  tall** (its By Player/By Game tabs, sort pills, filter dropdown and its options), at a blind
+  review's recommendation, to give the boards more room. Matt: *"Override that rule to resize the
+  menus as recommended."* Its back buttons stay 44px. Scope is `js/leaderboard-ui.js` only.
 - **`safe-area-inset-bottom` on any screen with bottom-anchored controls.** A primary button
   pinned to the bottom edge can render under the home-indicator bar on notched devices without it.
 - **Nothing stays in the accessibility tree, invisible, after it's done.** An element faded to

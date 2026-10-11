@@ -1282,11 +1282,15 @@ function emptyAll() { return `<p class="gs-none">${t('lb_empty_all')}</p>`; }
  *  local viewer's `st.games` (My Stats) or an aggregated player's `games`
  *  (Leaderboard's player detail, players-agg.js) — both are the same canonical shape, so this one
  *  function renders identically either way. */
-export function gameListHTML(games) {
+export function gameListHTML(games, opts) {
   const g = games || {};
+  // `order: 'plays'` (the leaderboard's player page, 2026-10-11 review) puts a person's most-played
+  // games first; My Stats keeps the A-Z order it has always had.
+  const plays = (id) => (((g[id] || {}).total || {}).played) | 0;
+  const byPlays = !!(opts && opts.order === 'plays');
   const rows = visibleTabs()
     .filter((tab) => hasPlays(tab.id, g[tab.id] || {}))
-    .sort((a, b) => t(a.labelKey).localeCompare(t(b.labelKey)))
+    .sort((a, b) => (byPlays ? plays(b.id) - plays(a.id) : 0) || t(a.labelKey).localeCompare(t(b.labelKey)))
     .map((tab) => {
       const rec = g[tab.id] || {};
       const head = headlineOf(tab.id, rec);
