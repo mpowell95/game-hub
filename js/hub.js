@@ -560,13 +560,15 @@ export const GAMES = [
     released: '2026-09-30',
   },
   {
-    // Way Out (2026-10-11): a clone of "Pointers" (Offline Games) from Matt's two screen
+    // Arrow Maze (2026-10-11): a clone of "Pointers" (Offline Games) from Matt's two screen
     // recordings - tap an arrow and it slides off the board along its own path, unless another
-    // arrow is in the way (way-out/CLAUDE.md). Hub id is the folder; stats id is `wayout`.
+    // arrow is in the way (way-out/CLAUDE.md). It shipped as "Way Out" and was renamed the same
+    // day (Matt: "New name please"); the hub id `way-out` (the folder) and the stats id `wayout`
+    // KEEP the first name on purpose - they key stored history and settings (THE LAW rule 5).
     // IMMERSIVE: the Hard and Expert boards want every pixel, and the game's own top bar shares
     // the floating back button's row.
     id: 'way-out',
-    title: { en: 'Way Out', es: 'La Salida' },
+    title: { en: 'Arrow Maze', es: 'Laberinto de flechas' },
     blurb: { en: 'Tap the arrows to send them off the board. Pick the right order: some block others.',
       es: 'Toca las flechas para sacarlas del tablero. Elige bien el orden: unas bloquean a otras.' },
     module: '../way-out/js/ui.js',
