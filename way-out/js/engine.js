@@ -244,12 +244,14 @@ export function occupancy(lvl, gone) {
 }
 
 /** An arrow that can go right now (for the hint), preferring one the player has not already
- *  bumped. -1 only when the board is empty. */
-export function hintArrow(lvl, gone, red) {
+ *  bumped. -1 when none can (an empty board, or every clear arrow is mid-animation). */
+export function hintArrow(lvl, gone, red, skip) {
+  // `skip[id]`: never suggest this one (it is mid-animation), but it still BLOCKS - an arrow
+  // bumping and springing back is on the board, so it must stay in the occupancy.
   const occ = occupancy(lvl, gone);
   let fallback = -1;
   for (let id = 0; id < lvl.arrows.length; id++) {
-    if (gone[id]) continue;
+    if (gone[id] || (skip && skip[id])) continue;
     if (!blockerOf(lvl.arrows[id], occ, lvl.cols, lvl.rows, id)) {
       if (!red || !red[id]) return id;
       if (fallback < 0) fallback = id;

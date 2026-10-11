@@ -152,7 +152,12 @@ class WayOut {
     this.container.innerHTML = '<div class="wo-root"></div>';
     this.root = this.container.querySelector('.wo-root');
     this._onClick = (ev) => this._handleClick(ev);
-    this._onKey = (ev) => { if (ev.key === 'Escape' && !this.root.querySelector('.wo-modal').hidden) this._closeModal(); };
+    this._onKey = (ev) => {
+      const m = this.root && this.root.querySelector('.wo-modal');
+      if (ev.key !== 'Escape' || !m || m.hidden) return;
+      // On Out of lives, Escape is its X: hiding the popup alone left a board nobody could play.
+      if (m.querySelector('[data-act="fail-close"]')) this._toSetup(true); else this._closeModal();
+    };
     this.root.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
     this.offResize = onViewportResize(() => { this._positionRoot(); this._layout(); });
@@ -286,14 +291,33 @@ class WayOut {
       if (btn.dataset.tier !== this.settings.tier) { this.settings = saveSettings({ tier: btn.dataset.tier }); this.render(); }   // saved on selection
     } else if (act === 'play') this._startLevel(this.settings.tier, this.settings.levels[this.settings.tier]);
     else if (act === 'help') { this.helpPage = 0; this._openHelp(); }
-    else if (act === 'menu') { this.screen = 'home'; this.settings = loadSettings(); this.render(); }
+    else if (act === 'menu') this._toSetup(false);
     else if (act === 'restart') this._restart();
     else if (act === 'hint') this._hint();
     else if (act === 'how-prev') { this.helpPage = Math.max(0, this.helpPage - 1); this._openHelp(); }
     else if (act === 'how-next') { this.helpPage = Math.min(2, this.helpPage + 1); this._openHelp(); }
     else if (act === 'close') this._closeModal();
     else if (act === 'retry') { this._closeModal(); this._restart(); }
-    else if (act === 'fail-close') { this._closeModal(); this._restart(true); this.screen = 'home'; this.render(); }
+    else if (act === 'fail-close') this._toSetup(true);
+  }
+
+  /** Back to the setup screen from a level. Cancels the level's timers and frames first: a pending
+   *  "next level" (win) or "Out of lives" (loss) must never fire over the setup screen. `dropSave`
+   *  after a loss, so the level starts fresh next time. */
+  _stopLevel() {
+    for (const id of this.timers) clearTimeout(id);
+    this.timers = [];
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.anims = [];
+    this.parts = [];
+  }
+  _toSetup(dropSave) {
+    this._stopLevel();
+    if (dropSave) clearSave();
+    this.screen = 'home';
+    this.settings = loadSettings();
+    this.render();
   }
 
   _openHelp() {
@@ -349,21 +373,24 @@ class WayOut {
     this.won = false;
     this.failed = false;
     this.wave = null;
+    this.geomWas = null;
     this.screen = 'play';
     this.render();
+    // Every arrow already gone: the player left (or the app was closed) while the LAST arrow was
+    // still sliding out, so the win was never counted. Count it now instead of showing an empty
+    // board with nothing left to tap.
+    if (!this._left()) { this.won = true; this._kick(); }
   }
 
-  _restart(silent) {
-    if (!this.lvl) return;
+  _restart() {
+    if (!this.lvl || this.won) return;
     clearSave();
-    if (silent) return;
-    for (const id of this.timers) clearTimeout(id);
-    this.timers = [];
+    this._stopLevel();
     this._startLevel(this.tier, this.level);
   }
 
   _save() {
-    if (this.won) return;
+    if (this.won || this.failed) return;
     const ids = (arr) => arr.reduce((a, v, i) => (v ? (a.push(i), a) : a), []);
     writeSave({ tier: this.tier, level: this.level, gone: ids(this.gone), red: ids(this.red), lives: this.lives });
   }
@@ -410,12 +437,13 @@ class WayOut {
       this.ro.observe(this.root.querySelector('.wo-stage'));
     }
     this._layout();
+    if (this.anims.length || this.parts.length || this.won || this.hintId >= 0) this._kick();
     // Test seam for test-visual.mjs's PLAY probe (the sudoku pattern): read-only state, and where
     // on screen an arrow is, so the probe can tap it through the real input path.
     try {
       window.__woTest = {
         state: () => ({ left: this._left(), lives: this.lives, level: this.level, tier: this.tier }),
-        clearId: () => hintArrow(this.lvl, this.gone.map((g, i) => g || this.busy[i]), null),
+        clearId: () => hintArrow(this.lvl, this.gone, null, this.busy),
         blockedId: () => this.lvl.arrows.findIndex((c, id) => !this.gone[id] && blockerOf(c, this.occ, this.lvl.cols, this.lvl.rows, id)),
         pointOf: (id) => {
           const p = this.pts[id], r = this.canvas.getBoundingClientRect();
@@ -448,7 +476,19 @@ class WayOut {
     this.oy = (r.height - H * pitch) / 2 + pitch / 2;
     this.lw = Math.max(1.3, Math.min(3.4, pitch * 0.078));
     this.headL = Math.max(4.5, Math.min(11, pitch * 0.27));
+    // Only a real change of geometry counts (a ResizeObserver also calls once on observe).
+    const geom = `${pitch}|${this.ox}|${this.oy}`, moved = this.geomWas && this.geomWas !== geom;
+    this.geomWas = geom;
     this.pts = this.lvl.arrows.map((cells) => cells.map((c) => this._xy(c)));
+    if (moved && this.anims.length) {
+      for (const a of this.anims) {
+        if (a.kind === 'bump' && !a.hit) { a.hit = true; this._bumped(a.id); }
+        this.busy[a.id] = false;
+      }
+      this.anims = [];
+      this.parts = [];
+      this._kick();
+    }
     this._fitHud();
     this._draw();
   }
@@ -526,8 +566,7 @@ class WayOut {
 
   _hint() {
     if (this.won || this.failed || !this.lvl) return;
-    const busyGone = this.gone.map((g, i) => g || this.busy[i]);
-    const id = hintArrow(this.lvl, busyGone, this.red);
+    const id = hintArrow(this.lvl, this.gone, this.red, this.busy);
     if (id < 0) return;
     this.hintId = id;
     this.hintT0 = performance.now();
@@ -555,7 +594,7 @@ class WayOut {
     }
     this.anims = live;
     this.parts = this.parts.filter((q) => now - q.t0 < q.life);
-    if (this.won && !this.anims.length && !this.wave) this._celebrate(now);
+    if (this.won && !this.failed && !this.anims.length && !this.wave) this._celebrate(now);
     this._draw(now);
     const hintOn = this.hintId >= 0 && now - this.hintT0 < 2600;
     if (!hintOn && this.hintId >= 0 && now - this.hintT0 >= 2600) this.hintId = -1;
@@ -564,6 +603,7 @@ class WayOut {
   }
 
   _bumped(id) {
+    if (this.failed) return;   // a second bump in flight after the last heart: nothing more to lose
     this.red[id] = true;
     this.lives = Math.max(0, this.lives - 1);
     this._paintHud(true);
