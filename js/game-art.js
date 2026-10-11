@@ -964,32 +964,103 @@ export const GAME_ART = {
             <text x="84" y="52" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="900" fill="#1F5FA8">?</text>
             <path d="M101 59 L122 80" stroke="#1F5FA8" stroke-width="10" stroke-linecap="round"/>
           </svg>`,
-  // Murdoku (2026-09-29): a 5x5 floor plan split into four rooms, one person in every row and
-  // column, and the victim (the white skull token) alone in his room with exactly one other.
+  // Murdoku (2026-10-11, replacing the 2026-09-29 mini floor plan): a close crop of the real board
+  // in the game's dark-theme colours. The victim's room is lit, the rest veiled; the 💀 token is the
+  // victim and the yellow ? beside her is the one person alone with her. No ids, so the art can
+  // appear more than once on a page (launcher + leaderboard).
   murdoku: `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#2b1d17"/>
-            <rect x="45" y="10" width="28" height="28" fill="#e9dcc3"/>
-            <rect x="45" y="38" width="14" height="14" fill="#e9dcc3"/>
-            <rect x="73" y="10" width="42" height="28" fill="#d5e3d0"/>
-            <path d="M59 38 H87 V66 H73 V80 H45 V52 H59 Z" fill="#d9d4e8"/>
-            <path d="M87 38 H115 V80 H73 V66 H87 Z" fill="#efd2c8"/>
-            <g stroke="#6b5646" stroke-width="0.6" fill="none">
-              <path d="M59 10 V80 M73 10 V80 M87 10 V80 M101 10 V80 M45 24 H115 M45 38 H115 M45 52 H115 M45 66 H115"/>
+            <rect width="160" height="90" fill="#3b4150"/>
+            <rect x="-5" y="0" width="30" height="30" fill="#20385a"/>
+            <rect x="25" y="0" width="30" height="30" fill="#20385a"/>
+            <rect x="55" y="0" width="30" height="30" fill="#264a31"/>
+            <rect x="85" y="0" width="30" height="30" fill="#264a31"/>
+            <rect x="115" y="0" width="30" height="30" fill="#264a31"/>
+            <rect x="145" y="0" width="30" height="30" fill="#4b3260"/>
+            <rect x="-5" y="30" width="30" height="30" fill="#20385a"/>
+            <rect x="25" y="30" width="30" height="30" fill="#574a26"/>
+            <rect x="55" y="30" width="30" height="30" fill="#574a26"/>
+            <rect x="85" y="30" width="30" height="30" fill="#264a31"/>
+            <rect x="115" y="30" width="30" height="30" fill="#4b3260"/>
+            <rect x="145" y="30" width="30" height="30" fill="#4b3260"/>
+            <rect x="-5" y="60" width="30" height="30" fill="#574a26"/>
+            <rect x="25" y="60" width="30" height="30" fill="#574a26"/>
+            <rect x="55" y="60" width="30" height="30" fill="#574a26"/>
+            <rect x="85" y="60" width="30" height="30" fill="#3b4150"/>
+            <rect x="115" y="60" width="30" height="30" fill="#4b3260"/>
+            <rect x="145" y="60" width="30" height="30" fill="#4b3260"/>
+            <g stroke="#2f3b52" stroke-width="0.7">
+            <path d="M25 0V90"/>
+            <path d="M55 0V90"/>
+            <path d="M85 0V90"/>
+            <path d="M115 0V90"/>
+            <path d="M145 0V90"/>
+            <path d="M-5 30H175"/>
+            <path d="M-5 60H175"/>
             </g>
-            <g stroke="#1b120e" stroke-width="2.4" fill="none" stroke-linecap="square">
-              <rect x="45" y="10" width="70" height="70"/>
-              <path d="M73 10 V38 M59 38 V52 M87 38 V66 M73 66 V80 M59 38 H115 M45 52 H59 M73 66 H87"/>
+            <g stroke="#e9eef6" stroke-width="2.6" stroke-linecap="square">
+            <path d="M55 0V30"/>
+            <path d="M25 30H55"/>
+            <path d="M55 30H85"/>
+            <path d="M145 0V30"/>
+            <path d="M115 30H145"/>
+            <path d="M25 30V60"/>
+            <path d="M-5 60H25"/>
+            <path d="M85 30V60"/>
+            <path d="M115 30V60"/>
+            <path d="M85 60H115"/>
+            <path d="M85 60V90"/>
+            <path d="M115 60V90"/>
             </g>
-            <circle cx="52" cy="17" r="4.5" fill="#3f8f4e"/>
-            <rect x="102.5" y="54" width="11" height="10" rx="1" fill="#8a5a36"/>
-            <g fill="#1F5FA8" stroke="#ffffff" stroke-width="1">
-              <circle cx="94" cy="17" r="5"/><circle cx="52" cy="31" r="5"/>
-              <circle cx="66" cy="59" r="5"/><circle cx="80" cy="73" r="5"/>
+            <g fill="#0b1120" opacity="0.5">
+            <rect x="-5" y="0" width="30" height="30"/>
+            <rect x="25" y="0" width="30" height="30"/>
+            <rect x="145" y="0" width="30" height="30"/>
+            <rect x="-5" y="30" width="30" height="30"/>
+            <rect x="25" y="30" width="30" height="30"/>
+            <rect x="55" y="30" width="30" height="30"/>
+            <rect x="115" y="30" width="30" height="30"/>
+            <rect x="145" y="30" width="30" height="30"/>
+            <rect x="-5" y="60" width="30" height="30"/>
+            <rect x="25" y="60" width="30" height="30"/>
+            <rect x="55" y="60" width="30" height="30"/>
+            <rect x="85" y="60" width="30" height="30"/>
+            <rect x="115" y="60" width="30" height="30"/>
+            <rect x="145" y="60" width="30" height="30"/>
             </g>
-            <circle cx="108" cy="45" r="5.5" fill="#ffffff" stroke="#1b120e" stroke-width="1"/>
-            <circle cx="106" cy="44" r="1.2" fill="#1b120e"/><circle cx="110" cy="44" r="1.2" fill="#1b120e"/>
-            <path d="M106 47.5 H110" stroke="#1b120e" stroke-width="0.9"/>
-          </svg>`,
+            <g opacity="0.6">
+            <path d="M-5 56L-1 60M-5 48L7 60M-5 40L15 60M-5 32L23 60M1 30L25 54M9 30L25 46M17 30L25 38" stroke="#8d98ad" stroke-width="1.4" opacity="0.55"/>
+            <text x="10" y="45" text-anchor="middle" dominant-baseline="central" font-size="17" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">🎹</text>
+            <path d="M25 56L29 60M25 48L37 60M25 40L45 60M25 32L53 60M31 30L55 54M39 30L55 46M47 30L55 38" stroke="#8d98ad" stroke-width="1.4" opacity="0.55"/>
+            <text x="40" y="45" text-anchor="middle" dominant-baseline="central" font-size="17" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">📚</text>
+            <path d="M145 86L149 90M145 78L157 90M145 70L165 90M145 62L173 90M151 60L175 84M159 60L175 76M167 60L175 68" stroke="#8d98ad" stroke-width="1.4" opacity="0.55"/>
+            <text x="160" y="75" text-anchor="middle" dominant-baseline="central" font-size="17" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">🪴</text>
+            <text x="40" y="75" text-anchor="middle" dominant-baseline="central" font-size="16" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">🪑</text>
+            <circle cx="40" cy="15" r="12.5" fill="#ffffff" stroke="#0f1626" stroke-width="1.6"/>
+            <text x="40" y="15.8" text-anchor="middle" dominant-baseline="central" font-size="15" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">👩‍🍳</text>
+            <circle cx="160" cy="45" r="12.5" fill="#ffffff" stroke="#0f1626" stroke-width="1.6"/>
+            <text x="160" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="15" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">👩‍🔬</text>
+            </g>
+            <g stroke="#e9eef6" stroke-width="2.6" stroke-linecap="square">
+            <path d="M55 0V30"/>
+            <path d="M25 30H55"/>
+            <path d="M55 30H85"/>
+            <path d="M145 0V30"/>
+            <path d="M115 30H145"/>
+            <path d="M25 30V60"/>
+            <path d="M-5 60H25"/>
+            <path d="M85 30V60"/>
+            <path d="M115 30V60"/>
+            <path d="M85 60H115"/>
+            <path d="M85 60V90"/>
+            <path d="M115 60V90"/>
+            </g>
+            <circle cx="130" cy="15" r="12.5" fill="#ffffff" stroke="#0f1626" stroke-width="1.6"/>
+            <text x="130" y="15.8" text-anchor="middle" dominant-baseline="central" font-size="15" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">👩‍🎨</text>
+            <circle cx="140" cy="6" r="6.2" fill="#ffffff" stroke="#162033" stroke-width="1.1"/>
+            <text x="140" y="6.4" text-anchor="middle" dominant-baseline="central" font-size="8" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">💀</text>
+            <circle cx="100" cy="45" r="12.5" fill="#162033" stroke="#ffce3a" stroke-width="2.4"/>
+            <text x="100" y="50.5" text-anchor="middle" font-size="16" font-weight="900" fill="#ffce3a" font-family="system-ui,-apple-system,'Segoe UI',sans-serif">?</text>
+            </svg>`,
   // Darts (2026-10-01): the board on the wooden wall with a red dart in the treble 20 and another
   // flying in, its flights crossed.
   darts: `<svg viewBox="0 0 160 90" aria-hidden="true">
