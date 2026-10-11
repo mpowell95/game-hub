@@ -15,6 +15,7 @@
 //   skeeChallengePush skeeChallenges/index/<code>/<id> a Skeeball challenge, or its result (2026-09-24)
 //   cupPongTurnPush cuppong/index/<code>/<id>        a Cup Pong challenge, your turn, the end (2026-09-28)
 //   dartsTurnPush   darts/index/<code>/<id>          a Darts challenge, your turn, the end (2026-10-01)
+//   flickSoccerTurnPush flicksoccer/index/<code>/<id> a Flick Soccer challenge, your turn, the end (2026-10-11)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
@@ -24,7 +25,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, isActive } from './decide.js';
 
 initializeApp();
 
@@ -141,4 +142,12 @@ export const dartsTurnPush = onValueWritten({ ref: '/darts/index/{code}/{id}', .
   const after = event.data.after.exists() ? event.data.after.val() : null;
   const note = decideDarts({ code, id, before, after });
   if (note) await sendTo(getDatabase(), code, note, `darts-${id}`, { game: 'darts', match: id });
+});
+
+export const flickSoccerTurnPush = onValueWritten({ ref: '/flicksoccer/index/{code}/{id}', ...OPTS }, async (event) => {
+  const { code, id } = event.params;
+  const before = event.data.before.exists() ? event.data.before.val() : null;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  const note = decideFlickSoccer({ code, id, before, after });
+  if (note) await sendTo(getDatabase(), code, note, `flicksoccer-${id}`, { game: 'flick-soccer', match: id });
 });

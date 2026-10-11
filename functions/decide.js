@@ -318,3 +318,48 @@ export function decideDarts({ code, id, before, after }) {
   }
   return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
 }
+
+// --- FLICK SOCCER CHALLENGES (2026-10-11) -------------------------------------------------------------
+// flick-soccer/js/mp.js writes flicksoccer/index/<code>/<id> from each person's side, with `lastBy`
+// saying whose write it was ('me' = this row's owner). Darts' rules:
+//   - a NEW row that is your turn           -> a challenge (the challenger's kick-off is done)
+//   - your turn coming back                 -> "your turn", with the score
+//   - the match ending by THEIR hand         -> they won / you won (they resigned)
+// Your own writes (lastBy 'me') never notify you. There are no draws.
+const FLICK_TEXT = {
+  en: {
+    title: 'Flick Soccer',
+    challenge: (w, g) => `${w} challenged you, first to ${g}. Your kick!`,
+    turn: (w, a, b) => `Your turn vs ${w}. You ${a}, ${w} ${b}`,
+    theyWon: (w) => `${w} won the game.`,
+    youWon: (w) => `You won! ${w} resigned.`,
+  },
+  es: {
+    title: 'Fútbol de Chapas',
+    challenge: (w, g) => `${w} te ha retado, a ${g}. ¡Te toca!`,
+    turn: (w, a, b) => `Te toca contra ${w}. Tú ${a}, ${w} ${b}`,
+    theyWon: (w) => `${w} ganó la partida.`,
+    youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+  },
+};
+
+export function decideFlickSoccer({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = FLICK_TEXT[lang] || FLICK_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  if (!before) return mk('challenge', (s) => s.challenge(who, [1, 2, 3].includes(+after.goals) ? +after.goals : 2));
+  if (before.yourTurn && !before.over) return null;             // it was already your turn
+  return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
+}

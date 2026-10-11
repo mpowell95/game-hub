@@ -340,6 +340,8 @@ export const GAMES = [
     blurb: { en: 'Flick your players into the ball and score. First to the goal target wins.',
       es: 'Lanza tus chapas contra el balón y marca. Gana quien llegue antes a los goles.' },
     module: '../flick-soccer/js/ui.js',
+    // Online challenges (2026-10-11): a new one, your turn, or a result you missed, on the launcher.
+    alerts: () => import('../flick-soccer/js/alert.js'),
     immersive: true,
     accent: '#1f7a3a',
     art: GAME_ART['flick-soccer'],

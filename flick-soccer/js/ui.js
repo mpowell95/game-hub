@@ -6,7 +6,8 @@
 // (gamehub.flicksoccer.save.v1) and the setup screen offers Continue match, so leaving is lossless
 // and this returns false. Leaving while a shot is still rolling plays that shot out first
 // (_settleNow), so a goal in flight is never lost or taken back. A match is recorded once it is won,
-// against the computer only.
+// against the computer only. An ONLINE challenge (2026-10-11, mp.js) lives on the server, every flick
+// written the moment it is made, so leaving one loses nothing either.
 
 import {
   newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest,
@@ -14,6 +15,7 @@ import {
 } from './engine.js';
 import { planShot, DIFFS } from './ai.js';
 import { createRenderer, TEAM } from './render.js';
+import { roundShot } from './mp.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -135,6 +137,13 @@ class FlickSoccerUI {
     this._layout();
     this._showSetup();
     this._start();
+    // A tapped launcher bubble or notification names a match: open it straight away. The hub's
+    // Challenges screen can also hand over a person to challenge ('pick').
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || instance !== this) return;
+      if (o.kind === 'pick') this._openOnline(o.them); else this._openMatch(o.id);
+    }).catch(() => {});
   }
 
   _ensureCss() {
@@ -178,10 +187,11 @@ class FlickSoccerUI {
             <button type="button" class="fs-x fs-q" data-act="howto" data-la="howto">?</button>
             <h2 class="fs-logo" data-l="title"></h2>
             <p class="fs-tag" data-l="tagline"></p>
-            <div class="fs-field">
-              <span class="fs-label" data-l="opponent"></span>
-              <div class="gh-seg fs-seg" role="group" data-role="modes"></div>
-            </div>
+            <button type="button" class="fs-mprow" data-act="multi">
+              <b data-l="multiplayer"></b>
+              <span class="fs-mprow-badge" data-role="onlineNote" hidden></span>
+              <span class="fs-mprow-chev" aria-hidden="true">›</span>
+            </button>
             <div class="fs-field" data-role="diffField">
               <span class="fs-label" data-l="difficulty"></span>
               <div class="gh-seg fs-seg" role="group" data-role="diffs"></div>
@@ -205,7 +215,19 @@ class FlickSoccerUI {
             <h2 class="fs-h2" data-l="menu"></h2>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="resume"><span data-l="resume"></span></button>
             <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="howto"><span data-l="howto"></span></button>
-            <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="quit"><span data-l="quit"></span></button>
+            <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="quit" data-local><span data-l="quit"></span></button>
+            <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="mpHome" data-online><span data-l="mp_back"></span></button>
+            <button type="button" class="gh-btn gh-btn--block fs-danger" data-act="resign" data-online><span data-l="mp_resign"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-ov fs-ov-mp" data-ov="mp" hidden></div>
+
+        <div class="fs-ov fs-ov-confirm" data-ov="resign" hidden>
+          <div class="fs-card fs-card-sm" role="dialog" aria-modal="true">
+            <h2 class="fs-h2" data-l="mp_resign_q"></h2>
+            <button type="button" class="gh-btn gh-btn--block fs-danger" data-act="resignYes"><span data-l="mp_resign_yes"></span></button>
+            <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="menu"><span data-l="mp_cancel"></span></button>
           </div>
         </div>
 
@@ -215,8 +237,8 @@ class FlickSoccerUI {
             <p class="fs-res-ava" data-role="resAva"></p>
             <h2 class="fs-h2" data-role="resTitle"></h2>
             <p class="fs-res-line" data-role="resLine"></p>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="again"><span data-l="play_again"></span></button>
-            <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="toSetup"><span data-l="to_menu"></span></button>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="again"><span data-role="againLabel"></span></button>
+            <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="toSetup"><span data-role="toSetupLabel"></span></button>
           </div>
         </div>
 
@@ -234,6 +256,7 @@ class FlickSoccerUI {
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="helpClose"><span data-l="help_close"></span></button>
           </div>
         </div>
+        <p class="fs-toast" data-role="toast" role="status" hidden></p>
         <p class="fs-sr" aria-live="polite" data-role="live"></p>
       </div>`;
     const q = (s) => this.host.querySelector(s);
@@ -272,15 +295,15 @@ class FlickSoccerUI {
       el.setAttribute('aria-label', t(key));
       el.innerHTML = ids.map((id) => `<button type="button" class="gh-seg__item fs-seg-item" data-${role.toLowerCase()}="${id}" aria-pressed="${cur === id}">${extra ? extra(id) : ''}<span>${esc(label(id))}</span></button>`).join('');
     };
-    seg('modes', 'opponent', MODES, s.mode, (id) => t('opp_' + id));
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
     seg('goalsSeg', 'goals', GOAL_OPTIONS.map(String), String(s.goals), (id) => id);
-    const pass = s.mode === 'pass';
-    seg('firsts', 'first', FIRSTS, s.first, (id) => (id === 'alt' ? t('first_alt') : id === 'me'
-      ? t(pass ? 'first_p1' : 'first_me') : t(pass ? 'first_p2' : 'first_them_cpu')));
-    this.root.querySelector('[data-role="diffField"]').hidden = pass;
+    seg('firsts', 'first', FIRSTS, s.first, (id) => (id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t('first_them_cpu')));
     this.root.querySelector('[data-role="continueBtn"]').hidden = !this._savedMatch();
-    if (this.seats) { this.seats = this._seatsFor(this.mode, this.diff); this._hud(); }
+    this._paintOnlineNote();
+    const online = this.mode === 'mp';
+    this.root.querySelectorAll('[data-online]').forEach((el) => { el.hidden = !online; });
+    this.root.querySelectorAll('[data-local]').forEach((el) => { el.hidden = online; });
+    if (this.seats) { if (!online) this.seats = this._seatsFor(this.mode, this.diff); this._hud(); }
     if (this.screen === 'result') this._fillResult();
     if (this.screen === 'help') this._fitHelp();
     if (this.screen === 'play') this._status();
@@ -306,10 +329,12 @@ class FlickSoccerUI {
 
   _showOnly(name) {
     for (const k of Object.keys(this.ov)) this.ov[k].hidden = k !== name;
-    this.root.classList.toggle('is-setup', name === 'setup' || (name === 'help' && !this.match));
+    this.root.classList.toggle('is-setup', name === 'setup' || name === 'mp' || (name === 'help' && !this.match));
   }
 
   _showSetup() {
+    this._mpLeave();
+    this._setFlip(false);
     this.screen = 'setup';
     this.match = null;
     this.seats = null;
@@ -323,6 +348,13 @@ class FlickSoccerUI {
     this._relabel();
     this._showOnly('setup');
     this._draw();
+    this._countOnline();
+  }
+
+  /** Online, the player on side b sees the pitch turned round, so their own team is at the bottom. */
+  _setFlip(on) {
+    this.r.flip = !!on;
+    this.root.classList.toggle('is-flip', !!on);
   }
 
   // --- layout ----------------------------------------------------------------------------------
@@ -380,7 +412,9 @@ class FlickSoccerUI {
     this.diff = g.diff;
     this.match = g.match;
     freeze(this.match.b);
-    this.seats = this._seatsFor(g.mode, g.diff);
+    this.seats = g.seats || this._seatsFor(g.mode, g.diff);
+    this._setFlip(g.mode === 'mp' && this.mp && this.mp.mySeat === 1);
+    this._relabel();
     this.screen = 'play';
     this.timers = [];
     this.aim = null; this.drag = null; this.cpu = null;
@@ -392,7 +426,7 @@ class FlickSoccerUI {
 
   _save() {
     const m = this.match;
-    if (!m || !this.mode) return;
+    if (!m || !this.mode || this.mode === 'mp') return;     // an online match lives on the server
     if (m.winner != null) { try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ } return; }
     // Only a position at rest is a position (a rolling shot is played out first: _settleNow).
     if (!atRest(m.b) || this.phase === 'goal') return;
@@ -421,6 +455,8 @@ class FlickSoccerUI {
     const team = t(m.turn === 0 ? 'team_blue' : 'team_red');
     let txt;
     if (this.phase === 'moving' || this.phase === 'goal') txt = t('status_wait');
+    else if (this.mode === 'mp' && m.turn !== this.mp.mySeat) txt = t(this.phase === 'waiting' ? 'status_mp_wait' : 'status_mp_them', { name: s.name });
+    else if (this.mode === 'mp') txt = t('status_you', { team });
     else if (!s.human) txt = t('status_cpu', { name: s.name });
     else if (this.mode === 'cpu') txt = t('status_you', { team });
     else txt = t('status_team', { name: s.name, team });
@@ -435,6 +471,7 @@ class FlickSoccerUI {
     this.drag = null;
     this._hud();
     if (announce) this._say(t('say_turn', { name: s.name }));
+    if (this.mode === 'mp') { this._mpCatchUp(); return; }
     if (s.human) {
       this.phase = 'aim';
     } else {
@@ -467,14 +504,27 @@ class FlickSoccerUI {
       if (k >= 1) {
         this.aim = null;
         this.cpu = null;
-        this._shoot(sh.i, sh.dx, sh.dy, sh.power);
+        this._shoot(sh.i, sh.dx, sh.dy, sh.power, { replay: !!c.replay });
       }
     }
   }
 
-  _shoot(i, dx, dy, power) {
+  _shoot(i, dx, dy, power, opts = {}) {
     const m = this.match;
     if (!m || teamOf(i) !== m.turn) return;
+    if (this.mode === 'mp') {
+      const mp = this.mp;
+      if (!opts.replay) {
+        // Your flick, rounded to exactly what is stored, and written NOW (before it has rolled), so
+        // what this phone plays is what the other phone will replay.
+        const k = i - 1 - mp.mySeat * 5;
+        const r = roundShot(k, dx, dy, power);
+        if (!r) return;
+        dx = r.dx; dy = r.dy; power = r.p;
+        this._mpRecord({ by: mp.side, k, dx, dy, p: power });
+      }
+      mp.applied++;
+    }
     this._save();                       // the position the shot was taken from
     flick(m.b, i, dx, dy, power);
     this.phase = 'moving';
@@ -557,6 +607,7 @@ class FlickSoccerUI {
   _finish() {
     const m = this.match;
     if (!m || m.winner == null) return;
+    if (this.mode === 'mp') { this._mpFinish(m.winner === this.mp.mySeat, false); return; }
     this._record();
     this._save();
     this._say(t('say_win', { name: this.seats[m.winner].name, sa: m.scores[m.winner], sb: m.scores[m.winner ^ 1] }));
@@ -573,12 +624,19 @@ class FlickSoccerUI {
     const m = this.match;
     if (!m || m.winner == null) return;
     const w = this.seats[m.winner];
-    const title = this.mode === 'pass' ? t('win_name', { name: w.name }) : t(m.winner === 0 ? 'win_you' : 'lose_you');
+    const mp = this.mode === 'mp' ? this.mp : null;
+    const iWon = mp ? m.winner === mp.mySeat : m.winner === 0;
+    const title = this.mode === 'pass' ? t('win_name', { name: w.name }) : t(iWon ? 'win_you' : 'lose_you');
+    this.root.querySelector('[data-role="againLabel"]').textContent = t(mp ? 'mp_again' : 'play_again');
+    this.root.querySelector('[data-role="toSetupLabel"]').textContent = t(mp ? 'mp_back' : 'to_menu');
     this.root.querySelector('[data-role="resAva"]').textContent = w.emoji;
     this.root.querySelector('[data-role="resTitle"]').textContent = title;
     this.root.querySelector('[data-role="resLine"]').innerHTML =
       `<span class="fs-res-team">${teamChip(0)}<b>${m.scores[0]}</b></span><span aria-hidden="true">&ndash;</span><span class="fs-res-team"><b>${m.scores[1]}</b>${teamChip(1)}</span>`;
     this.root.querySelector('[data-role="resLine"]').setAttribute('aria-label', t('result_line', { a: m.scores[0], b: m.scores[1] }));
+    if (mp && mp.resigned) {
+      this.root.querySelector('[data-role="resLine"]').textContent = iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
+    }
   }
 
   // --- effects ---------------------------------------------------------------------------------
@@ -598,11 +656,10 @@ class FlickSoccerUI {
 
   // --- input -----------------------------------------------------------------------------------
   _click(e) {
-    const seg = e.target.closest('[data-modes], [data-diffs], [data-goalsseg], [data-firsts]');
+    const seg = e.target.closest('[data-diffs], [data-goalsseg], [data-firsts]');
     if (seg) {
       const s = this.settings;
-      if (seg.dataset.modes) s.mode = seg.dataset.modes;
-      else if (seg.dataset.diffs) s.difficulty = seg.dataset.diffs;
+      if (seg.dataset.diffs) s.difficulty = seg.dataset.diffs;
       else if (seg.dataset.goalsseg) s.goals = Number(seg.dataset.goalsseg);
       else s.first = seg.dataset.firsts;
       writeJSON(SETTINGS_KEY, s);
@@ -612,18 +669,243 @@ class FlickSoccerUI {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'play') this._newMatch();
+    if (act === 'play') { this.settings.mode = 'cpu'; this._newMatch(); }
+    else if (act === 'multi') this._openOnline();
     else if (act === 'continue') this._continue();
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
     else if (act === 'helpClose') {
       if (this._helpFrom === 'menu') { this.screen = 'menu'; this._showOnly('menu'); }
       else this._showSetup();
     }
-    else if (act === 'menu') { if (this.screen === 'play') { this.screen = 'menu'; this.drag = null; if (this.phase === 'aim') this.aim = null; this._showOnly('menu'); } }
+    else if (act === 'menu') { if (this.screen === 'play' || this.screen === 'resign') { this.screen = 'menu'; this.drag = null; if (this.phase === 'aim') this.aim = null; this._showOnly('menu'); } }
     else if (act === 'resume') { this.screen = 'play'; this._showOnly(null); }
     else if (act === 'quit') { this._settleNow(); this._save(); if (this.match && this.match.winner != null) this._finish(); else this._showSetup(); }
-    else if (act === 'again') this._newMatch();
-    else if (act === 'toSetup') this._showSetup();
+    else if (act === 'mpHome') this._openOnline();
+    else if (act === 'resign') { this.screen = 'resign'; this._showOnly('resign'); }
+    else if (act === 'resignYes') this._mpResign();
+    else if (act === 'again') {
+      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals);
+      else this._newMatch();
+    }
+    else if (act === 'toSetup') { if (this.mode === 'mp') this._openOnline(); else this._showSetup(); }
+  }
+
+  // --- online (mp.js keeps the match; mp-ui.js draws the lists) ------------------------------------
+  // The local match is the STORED one (seat 0 = side 'a', the challenger). What happens here:
+  //   - opening a match replays the log up to the other person's latest run of flicks, then PLAYS
+  //     that run on the pitch, one flick at a time, aim arrow and all;
+  //   - every flick of yours is appended to the log the moment you let go (_mpRecord -> _mpFlush),
+  //     so a closed app loses nothing and cannot take a shot back;
+  //   - while it is their turn the match is WATCHED, so their flick arrives while you look at it.
+  async _loadMP() { if (!this.MP) this.MP = await import('./mp.js'); return this.MP; }
+
+  _toast(msg, ms = 1800) {
+    const el = this.root.querySelector('[data-role="toast"]');
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+  }
+
+  /** "2 waiting on you" on the Multiplayer row. Re-read every time the setup screen shows. */
+  _paintOnlineNote() {
+    const el = this.root.querySelector('[data-role="onlineNote"]');
+    const n = this._onlineWaiting | 0;
+    el.hidden = !n;
+    el.textContent = n === 1 ? t('online_waiting1') : t('online_waiting', { n });
+  }
+  async _countOnline() {
+    try {
+      const MP = await this._loadMP();
+      const rows = await MP.readMyGames();
+      if (instance !== this) return;
+      try { MP.recordFinished(rows); } catch { /* counted on the next open instead */ }
+      this._onlineWaiting = rows.filter((r) => !r.over && r.yourTurn).length;
+      this._paintOnlineNote();
+    } catch { /* offline: no count */ }
+  }
+
+  /** Pass & play, from the Multiplayer screen: two people, this phone. */
+  _passPlay() { this.settings.mode = 'pass'; this._newMatch(); }
+
+  /** The Multiplayer home. `pickFor` ({code, name, emoji}, from the hub's Challenges screen) opens
+   *  straight onto "challenge them". */
+  async _openOnline(pickFor = null) {
+    this._mpLeave();
+    this._setFlip(false);
+    this.match = null; this.seats = null; this.mode = null;
+    this.timers = []; this.cpu = null; this.aim = null; this.drag = null;
+    this.phase = 'idle';
+    this.banner.classList.remove('is-show');
+    const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
+    if (instance !== this) return;
+    this.UI = UI;
+    if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
+    else UI.home(this, MP);
+  }
+
+  /** Open one stored match. Flicks still waiting on this phone go first, so none is lost. */
+  async _openMatch(id) {
+    const MP = await this._loadMP();
+    if (MP.pendingFor(id)) await MP.drainOutbox(id);
+    const game = await MP.readGame(id);
+    if (instance !== this) return;
+    if (!game) { this._toast(t('mp_not_found'), 2200); this._openOnline(); return; }
+    this._mpBegin(game);
+  }
+
+  /** A new challenge: created now, delivered when your first turn is over. */
+  async _sendChallenge(them, goals = this.settings.goals) {
+    const MP = await this._loadMP();
+    const res = await MP.createGame({ them, goals });
+    if (instance !== this) return res;
+    if (!res.ok) {
+      if (this.screen !== 'mp') this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400);
+      return res;
+    }
+    this._mpBegin(res.game);
+    return res;
+  }
+
+  _mpBegin(game) {
+    const MP = this.MP;
+    const me = MP.myCode();
+    const side = MP.sideOf(game, me);
+    if (!side) { this._openOnline(); return; }
+    this._mpLeave();
+    const theirSide = side === 'a' ? 'b' : 'a';
+    let from = game.log.length ? MP.lastRunStart(game, theirSide) : 0;
+    const shown = MP.readShown(game.id);
+    if (shown > from) from = Math.min(shown, game.log.length);
+    const them = MP.themOf(game, me);
+    this.mp = { id: game.id, side, mySeat: side === 'b' ? 1 : 0, game, them, applied: from, base: game.log.length,
+      pending: [], sending: false, stop: null, finished: false, resigned: false };
+    const seat = (who) => ({ name: who.name || '?', emoji: who.emoji || '🙂', human: true });
+    const match = MP.buildMatch(game, from);
+    this._begin({ mode: 'mp', diff: 'mp', match, seats: [seat(game.a), seat(game.b)] });
+    const mp = this.mp;
+    MP.watchGame(game.id, (g) => this._mpOnGame(g)).then((stop) => {
+      if (this.mp === mp) mp.stop = stop; else { try { stop(); } catch { /* detached */ } }
+    });
+  }
+
+  /** The pitch is at rest: show whatever the log has that this phone has not played yet, then play
+   *  on (your turn) or wait (theirs). */
+  _mpCatchUp() {
+    const mp = this.mp;
+    if (!mp || this.mode !== 'mp' || mp.finished) return;
+    const g = mp.game;
+    const m = this.match;
+    if (m.winner != null) { this._finish(); return; }
+    if (mp.applied < g.log.length) {
+      const e = g.log[mp.applied];
+      const i = this.MP.bodyOf(e.by, e.k);
+      if (e.by === mp.side) {
+        // Your own flick from another phone (or before a reopen): played out off screen.
+        this.MP.applyEntry(m, e);
+        mp.applied++;
+        this._hud();
+        this._mpCatchUp();
+        return;
+      }
+      // Theirs: their aim grows on the pitch, then the flick plays out for real.
+      this.phase = 'cpu';
+      this.cpu = { started: this.clock, shot: { i, dx: e.dx, dy: e.dy, power: e.p }, replay: true };
+      this._status();
+      return;
+    }
+    this.MP.markShown(mp.id, g.log.length);
+    if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
+    if (m.turn === mp.mySeat) { this.phase = 'aim'; this._status(); return; }
+    this.phase = 'waiting';
+    this._status();
+  }
+
+  /** The watched match changed: new flicks from them are played, our own echoes are ignored. */
+  _mpOnGame(g) {
+    const mp = this.mp;
+    if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
+    mp.game = g;
+    if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
+      this._mpFinish(g.over.winner === mp.side, true);
+      return;
+    }
+    if (mp.applied < g.log.length && this.phase === 'waiting') this._mpCatchUp();
+  }
+
+  /** One of your flicks, into the log. */
+  _mpRecord(entry) {
+    const mp = this.mp;
+    // Where this flick sits in the log: `applied` is its index (the caller counts it next). Set only
+    // when nothing is queued, so a run of queued flicks stays contiguous.
+    if (!mp.pending.length && !mp.sending) mp.base = mp.applied;
+    mp.pending.push(entry);
+    this._mpFlush();
+  }
+
+  async _mpFlush() {
+    const mp = this.mp;
+    const MP = this.MP;
+    if (!mp || mp.sending || !mp.pending.length) return;
+    mp.sending = true;
+    const list = mp.pending.slice();
+    const base = mp.base;
+    MP.savePending(mp.id, base, mp.pending);          // kept on the phone until the server has it
+    const res = await MP.appendLog(mp.id, base, list);
+    if (this.mp !== mp) return;
+    mp.sending = false;
+    if (res.ok) {
+      mp.pending.splice(0, list.length);
+      mp.base = base + list.length;
+      mp.game = res.game;
+      MP.savePending(mp.id, mp.base, mp.pending);
+      MP.markShown(mp.id, mp.base);
+      if (mp.pending.length) this._mpFlush();
+      return;
+    }
+    if (res.retryable) {
+      this._toast(t('mp_not_sent'), 1800);
+      setTimeout(() => { if (this.mp === mp) this._mpFlush(); }, 4000);
+    } else {
+      console.error('[flick-soccer] a flick could not be sent:', res.reason);
+      this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2600);
+    }
+  }
+
+  _mpFinish(won, resigned) {
+    const mp = this.mp;
+    if (!mp || mp.finished) return;
+    mp.finished = true;
+    mp.resigned = !!resigned;
+    const m = this.match;
+    if (resigned) m.winner = won ? mp.mySeat : mp.mySeat ^ 1;
+    this.MP.countResult(mp.id, won);                   // once per phone, whoever ended it
+    this.MP.markResultSeen(mp.id);
+    this._say(t('say_win', { name: this.seats[m.winner].name, sa: m.scores[m.winner], sb: m.scores[m.winner ^ 1] }));
+    this.screen = 'result';
+    this.phase = 'idle';
+    this._hud();
+    this._status();
+    this._fillResult();
+    this._showOnly('result');
+  }
+
+  async _mpResign() {
+    const mp = this.mp;
+    if (!mp) return;
+    const res = await this.MP.resignGame(mp.id);
+    if (this.mp !== mp) return;
+    if (!res.ok) { this.screen = 'menu'; this._showOnly('menu'); this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400); return; }
+    mp.game = res.game;
+    this._mpFinish(false, true);
+  }
+
+  /** Stop watching the open online match (flicks not yet sent stay in the outbox). */
+  _mpLeave() {
+    const mp = this.mp;
+    if (!mp) return;
+    this.mp = null;
+    if (mp.stop) { try { mp.stop(); } catch { /* detached */ } }
   }
 
   _pt(e) {
@@ -634,6 +916,7 @@ class FlickSoccerUI {
   _pointerDown(e) {
     const m = this.match;
     if (this.screen !== 'play' || this.phase !== 'aim' || !m || !this.seats[m.turn].human) return;
+    if (this.mode === 'mp' && m.turn !== this.mp.mySeat) return;
     const p = this._pt(e);
     const reach = Math.max(DISC_R * 1.6, 26 / this.r.s);
     const i = discAt(m.b, m.turn, p.x, p.y, reach);
@@ -716,6 +999,8 @@ class FlickSoccerUI {
 
   destroy() {
     this._stop();
+    this._mpLeave();
+    clearTimeout(this._toastTimer);
     this._settleNow();
     this._save();
     clearTimeout(this._bannerTimer);

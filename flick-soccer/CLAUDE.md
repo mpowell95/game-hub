@@ -7,7 +7,7 @@
 Table soccer with flicked discs, the kind usually called *soccer pool*, *finger soccer* or *table
 soccer* on phones (Miniclip's Soccer Stars is the best-known one). Matt, 2026-10-11: *"Build a full
 new game hub game"*, after picking this one from a list. He chose **offline first** (vs the computer
-and two players on one phone; online challenges are a later stage) and **admin only** at release.
+and two players on one phone; online challenges are a later stage) and **admin only** at release. Stage 2, online challenges, followed the same day (below).
 Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap game).
 
 ## Hub integration
@@ -34,6 +34,9 @@ Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap gam
 | `js/render.js` | the canvas: pitch (cached offscreen per size), discs, ball, aim guide |
 | `js/ui.js` | setup, play screen, input, turn flow, menus, autosave, stats, the module contract, `window.__fsTest` |
 | `js/strings.js` | EN/ES, every visible string and aria-label |
+| `js/mp.js` | online challenges: the node, validation by replay, verified writes, the outbox, counting once |
+| `js/mp-ui.js` | the Multiplayer screens (home, picker, history, Game Over), lazily imported |
+| `js/alert.js` | what the launcher says about challenges (bubble, Challenges count, armOpen) |
 | `js/test.js` | headless checks, `node flick-soccer/js/test.js` (~12 s; not precached) |
 | `css/flick-soccer.css` | all styling |
 | `index.html` | the standalone page (name gate before `init`) |
@@ -139,8 +142,62 @@ sub-counter, so the generic My Stats screen draws it and `players-agg.js` needs 
   a whole match to the result (recorded as one Easy win), two players, quitting mid-shot (the shot
   is played out and saved at rest) and Continue match, Spanish.
 
-## Not built yet (stage 2, when Matt asks)
+## Online challenges (stage 2, 2026-10-11)
 
-- **Online challenges**, turn by turn like Darts / Cup Pong: a flick is four numbers (disc, angle,
-  strength) and the engine is deterministic, so a match can be a log of flicks replayed on each
-  phone. Needs a new Firebase node (rules pasted by Matt) and a push function deploy, like Darts.
+Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). Darts' challenges
+(`darts/js/mp.js`, `mp-ui.js`, `alert.js`) are the model; no code is shared with them.
+
+- **Where:** the setup card's first row is **Multiplayer ›** (with a "N waiting on you" badge), as in
+  Darts and Cup Pong. Behind it: Challenge someone, **Pass & play** (two people, this phone; it used
+  to be the setup card's Opponent row, which is gone), the notify row, Your turn, Their turn,
+  History. A challenge uses the Goals to win chosen on the setup card; the challenger kicks off.
+- **The node:** `flicksoccer/games/<id>` + `flicksoccer/index/<CODE>/<id>`, addressed by PLAYER CODE.
+  In `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **NOT yet published (written
+  2026-10-11): until Matt pastes the rules file, every online call fails softly ("Online play is not
+  switched on yet").**
+- **A match is a LOG of flicks**: `{ by, k (disc 0-4 of that side), dx, dy (unit vector, 6 dp), p
+  (strength, 4 dp) }`. `validateGame` replays it through `engine.js` and refuses the whole document if
+  one flick does not replay (out of turn, a claimed win the flicks never produced). The flicking phone
+  plays its own shot from the ROUNDED numbers (`roundShot`, in `_shoot`), so what it saw is exactly
+  what the other phone replays.
+- **Why replay is safe across phones:** the physics path uses only + - * / and `Math.sqrt`, which
+  IEEE 754 requires to round exactly, so JavaScriptCore (iPhone) and V8 (Android, Chrome) produce the
+  same bits. `Math.hypot` was taken off the physics path for this (it is not required to agree).
+  `test-flicksoccer-mp.mjs` fails if any other `Math.` function appears there. **Proven in one engine
+  (V8) only: both "phones" in the tests ran Chromium.** An iPhone against an Android phone is the
+  real check, and a divergence would show as the two phones disagreeing about a goal.
+- **Written at the moment of the flick** (`appendLog`, verified by re-read, idempotent on retry, a
+  stale base is a conflict and never an overwrite), and kept in an outbox
+  (`gamehub.flicksoccer.outbox.v1`) until the server has it. Rows change only when the turn passes or
+  the match ends. The challenge reaches the other person when the challenger's first turn ends.
+- **Opening a match** replays the log silently up to the other person's latest run, then PLAYS that
+  run on the pitch (their aim arrow grows, then the flick rolls), reusing the computer's path
+  (`this.cpu` with `replay: true`). While it is their turn the match is watched, so their flick plays
+  as it lands.
+- **You are always at the bottom**: the player on side b sees the pitch turned half round
+  (`render.js` `flip`; a rotation, not a mirror, and the pitch is symmetric) and their own side of
+  the scoreboard on the left (`.is-flip`). Team colours stay with the side: the challenger is blue.
+- **Counting:** each finished match is recorded once per phone (`gamehub.flicksoccer.counted.v1`) as
+  `recordResult('flicksoccer', 'mp', won)`. A match that ended while you were away gets a Game Over
+  popup the next time you open Multiplayer. No draws exist.
+- **Resign:** menu, Resign, confirm. The other person wins; a challenge never delivered is not handed
+  to them as a win they never saw. Nothing is ever deleted.
+- **Notifications:** `flickSoccerTurnPush` in `functions/index.js` (`decideFlickSoccer` in
+  `functions/decide.js`): a challenge ("challenged you, first to 2"), your turn coming back (with the
+  score), a match the other person ended. **NOT yet deployed (written 2026-10-11): live only after
+  Matt runs `firebase deploy --only functions`.** A tap opens that match (`sw.js` reads `data.match`;
+  the hub hands it to `alert.js`'s `armOpen`).
+- **The hub:** the registry entry has `alerts:` (launcher bubble, Challenges button count), and
+  `js/challenges.js` lists `flick-soccer`, so the hub's Challenges screen shows these matches.
+- **Tests:** `node test-flicksoccer-mp.mjs` (42 checks: stored-shot rounding, a whole computer-played
+  match replayed to the same pitch on both phones, delivery, retries, conflicts, own goal, resign,
+  counting once, the outbox, the launcher bubble, rules/backup/push wiring, the determinism guard);
+  `node test-push.mjs` (the `decideFlickSoccer` cases); `test-challenges.mjs` and
+  `test-admin-config.mjs` (the online gate) include it. Driven in two Chromium "phones" against a
+  shared stand-in database: challenge, Ana's phone replays Matt's flick on a turned-round pitch, her
+  reply reaches Matt, both pitches identical after two flicks, resign, the win counted as `mp`.
+
+## Not built yet
+
+- A series (best of 3/5) for online challenges, if Matt wants one (Cup Pong's `seriesAfter` is the
+  model).

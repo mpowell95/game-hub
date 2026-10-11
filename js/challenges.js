@@ -5,10 +5,10 @@
 // challenges - if it's your turn vs theirs, more info on your records total and against specific
 // players, etc. You should also be able to send challenges and jump into games from this page."
 //
-// EVERY GAME KEEPS ITS OWN CHALLENGES. Four games have turn-by-turn challenges, each in its own
+// EVERY GAME KEEPS ITS OWN CHALLENGES. Five games have turn-by-turn challenges, each in its own
 // Firebase node, each with a per-player index (`<node>/index/<CODE>/<id>`): Connect 4 Hoops
-// (`hoops/`), Skeeball (`skeeChallenges/`), Cup Pong (`cuppong/`) and Darts (`darts/`). This module
-// READS those four indexes through each game's own reader and folds them into one list. It writes
+// (`hoops/`), Skeeball (`skeeChallenges/`), Cup Pong (`cuppong/`), Darts (`darts/`) and Flick Soccer
+// (`flicksoccer/`, 2026-10-11). This module READS those indexes through each game's own reader and folds them into one list. It writes
 // nothing - no Firebase node, no `gamehub.*` key - so it cannot put any player data at risk (THE
 // LAW). Opening a match or starting a challenge is handed to the game itself (its alerts module's
 // armOpen / armChallenge), which is where every write already lives.
@@ -40,6 +40,11 @@ export const SOURCES = {
   },
   darts: {
     load: () => import('../darts/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+  },
+  'flick-soccer': {
+    load: () => import('../flick-soccer/js/mp.js'),
     read: (M) => M.readMyGames(),
     watch: (M, cb) => M.watchMyGames(cb),
   },

@@ -15,7 +15,10 @@ export const VIEW = { x0: -3, y0: -GOAL_D - 3, w: W + 6, h: H + 2 * GOAL_D + 6 }
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
-  const r = { w: 0, h: 0, dpr: 1, s: 1, ox: 0, oy: 0 };
+  // `flip`: the pitch turned round (online, for the player on side b, who always sits at the BOTTOM).
+  // A half-turn, not a mirror, so left and right stay true; the pitch itself is symmetric, so only
+  // the pieces and the input need to know.
+  const r = { w: 0, h: 0, dpr: 1, s: 1, ox: 0, oy: 0, flip: false };
 
   /** The canvas covers (cssW x cssH); the pitch is drawn inside `box` {x, y, w, h} (CSS px). */
   r.layout = (cssW, cssH, box) => {
@@ -29,8 +32,11 @@ export function createRenderer(canvas) {
     r._pitch = null;
   };
   /** CSS px -> pitch units, and back. */
-  r.toPitch = (px, py) => ({ x: (px - r.ox) / r.s, y: (py - r.oy) / r.s });
-  r.toPx = (x, y) => ({ x: r.ox + x * r.s, y: r.oy + y * r.s });
+  r.toPitch = (px, py) => {
+    const x = (px - r.ox) / r.s, y = (py - r.oy) / r.s;
+    return r.flip ? { x: W - x, y: H - y } : { x, y };
+  };
+  r.toPx = (x, y) => (r.flip ? { x: r.ox + (W - x) * r.s, y: r.oy + (H - y) * r.s } : { x: r.ox + x * r.s, y: r.oy + y * r.s });
   /** The pitch's on-screen rectangle (CSS px), goals excluded. */
   r.pitchRect = () => ({ x: r.ox, y: r.oy, w: W * r.s, h: H * r.s });
 
@@ -95,7 +101,10 @@ export function createRenderer(canvas) {
 
   function shape(kind, x, y, s) {
     ctx.beginPath();
-    if (kind === 'tri') {
+    if (kind === 'tri' && r.flip) {
+      // Drawn upside down so that, turned round with the pitch, it reads the right way up.
+      ctx.moveTo(x, y + s * 1.05); ctx.lineTo(x + s * 0.95, y - s * 0.62); ctx.lineTo(x - s * 0.95, y - s * 0.62); ctx.closePath();
+    } else if (kind === 'tri') {
       ctx.moveTo(x, y - s * 1.05); ctx.lineTo(x + s * 0.95, y + s * 0.62); ctx.lineTo(x - s * 0.95, y + s * 0.62); ctx.closePath();
     } else {
       ctx.rect(x - s * 0.72, y - s * 0.72, s * 1.44, s * 1.44);
@@ -107,7 +116,8 @@ export function createRenderer(canvas) {
     const T = TEAM[team];
     // Shadow.
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.beginPath(); ctx.ellipse(o.x + 0.8, o.y + 1.1, DISC_R, DISC_R * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+    const sd = r.flip ? -1 : 1;
+    ctx.beginPath(); ctx.ellipse(o.x + 0.8 * sd, o.y + 1.1 * sd, DISC_R, DISC_R * 0.92, 0, 0, Math.PI * 2); ctx.fill();
     if (glow > 0) {
       ctx.strokeStyle = ACCENT;
       ctx.globalAlpha = glow;
@@ -119,19 +129,20 @@ export function createRenderer(canvas) {
     }
     ctx.fillStyle = T.rim;
     ctx.beginPath(); ctx.arc(o.x, o.y, DISC_R, 0, Math.PI * 2); ctx.fill();
-    const grd = ctx.createRadialGradient(o.x - 1.8, o.y - 2.2, 0.5, o.x, o.y, DISC_R * 0.9);
+    const grd = ctx.createRadialGradient(o.x - 1.8 * sd, o.y - 2.2 * sd, 0.5, o.x, o.y, DISC_R * 0.9);
     grd.addColorStop(0, lighten(T.fill)); grd.addColorStop(1, T.fill);
     ctx.fillStyle = grd;
     ctx.beginPath(); ctx.arc(o.x, o.y, DISC_R * 0.84, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 0.45;
     ctx.beginPath(); ctx.arc(o.x, o.y, DISC_R * 0.66, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = '#ffffff';
-    shape(T.shape, o.x, o.y + (T.shape === 'tri' ? 0.4 : 0), 2.1);
+    shape(T.shape, o.x, o.y + (T.shape === 'tri' ? (r.flip ? -0.4 : 0.4) : 0), 2.1);
   }
 
   function ball(o, spin) {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.arc(o.x + 0.6, o.y + 0.9, BALL_R, 0, Math.PI * 2); ctx.fill();
+    const sd = r.flip ? -1 : 1;
+    ctx.beginPath(); ctx.arc(o.x + 0.6 * sd, o.y + 0.9 * sd, BALL_R, 0, Math.PI * 2); ctx.fill();
     ctx.save();
     ctx.beginPath(); ctx.arc(o.x, o.y, BALL_R, 0, Math.PI * 2);
     ctx.fillStyle = '#fbfbfb'; ctx.fill();
@@ -214,7 +225,8 @@ export function createRenderer(canvas) {
     ctx.drawImage(pitchLayer(), 0, 0);
     const b = st.b;
     if (!b) return;
-    ctx.setTransform(r.dpr * r.s, 0, 0, r.dpr * r.s, r.dpr * r.ox, r.dpr * r.oy);
+    if (r.flip) ctx.setTransform(-r.dpr * r.s, 0, 0, -r.dpr * r.s, r.dpr * (r.ox + W * r.s), r.dpr * (r.oy + H * r.s));
+    else ctx.setTransform(r.dpr * r.s, 0, 0, r.dpr * r.s, r.dpr * r.ox, r.dpr * r.oy);
     for (let i = 1; i < b.length; i++) {
       const team = teamOf(i);
       disc(b[i], team, team === st.glowTeam && (!st.aim || st.aim.i === i) ? (st.aim && st.aim.i === i ? 1 : st.glow) : 0);
