@@ -47,8 +47,9 @@ const api = {
   ref: (db, path) => ({ path }),
   get: async (r) => { const v = clone(getAt(r.path)); return { exists: () => v !== undefined && v !== null, val: () => v }; },
   set: async (r, v) => setAt(r.path, v),
-  update: async (r, patch) => { for (const k of Object.keys(patch)) setAt(r.path + '/' + k, patch[k]); },
+  update: async (r, patch) => { if (faultOn && faultOn(r.path)) throw new Error('offline'); for (const k of Object.keys(patch)) setAt(r.path + '/' + k, patch[k]); },
 };
+let faultOn = null;   // (path) => true makes that write throw, like a phone losing signal mid-turn
 MP.__setBootForTest(async () => ({ db: {}, api }), { allowDev: true });
 
 /** A flick, as stored: the computer's choice for `side` from the current position, rounded. */
@@ -201,6 +202,53 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
   ok('they played back: "Your turn"', (await one() || {}).kind === 'turn');
   AL.markSeen(gid, (await MP.readMyGames()).find((x) => x.id === gid).updated);
   ok('the X puts it away for this turn', !(await one()));
+}
+
+// Bug-hunt fixes (2026-10-11).
+{
+  // The log lands but the other person's row does not: the retry must still tell them.
+  use('A');
+  const c = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  faultOn = (path) => path.startsWith('flicksoccer/index/ANABB/');
+  const r1 = await MP.appendLog(c.id, 0, [straight('a')]);
+  faultOn = null;
+  ok('a dropped row write is reported retryable', !r1.ok && r1.retryable, JSON.stringify(r1));
+  ok('...the flick itself did land', getAt(`flicksoccer/games/${c.id}/log/0000`) && !getAt(`flicksoccer/index/ANABB/${c.id}`));
+  const r2 = await MP.appendLog(c.id, 0, [straight('a')]);
+  ok('the retry writes the row it missed, without a second flick', r2.ok && (getAt(`flicksoccer/index/ANABB/${c.id}`) || {}).yourTurn === true
+    && Object.keys(getAt(`flicksoccer/games/${c.id}/log`)).length === 1);
+
+  // A resign whose rows did not land: tapping Resign again tells the other person.
+  use('B');
+  faultOn = (path) => path.startsWith('flicksoccer/index/MATTA/');
+  const q1 = await MP.resignGame(c.id);
+  faultOn = null;
+  ok('a resign whose row write failed is retryable', !q1.ok && q1.retryable);
+  const q2 = await MP.resignGame(c.id);
+  use('A');
+  ok('...and the retry tells them', q2.ok && (getAt(`flicksoccer/index/MATTA/${c.id}`) || {}).over === true);
+
+  // A challenge called off before it was ever delivered: no row for them, no loss, not listed.
+  const d = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const statsBefore = stores.A.get('gamehub.stats');
+  const rr = await MP.resignGame(d.id);
+  ok('resigning an undelivered challenge calls it off', rr.ok && rr.cancelled && !getAt(`flicksoccer/index/ANABB/${d.id}`));
+  ok('...it is not listed', !(await MP.readMyGames()).some((x) => x.id === d.id) && stores.A.get('gamehub.stats') === statsBefore);
+  MP.recordFinished(await MP.readMyGames());
+  ok('...and never counted', !MP.readLedger().has(d.id));
+
+  // The outbox only gives up on a flick when the MATCH refuses it.
+  MP.savePending(d.id, 0, [straight('a')]);
+  await MP.drainOutbox();
+  ok('a flick for a finished match is dropped from the outbox', !MP.pendingFor(d.id));
+  const e = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  MP.savePending(e.id, 0, [straight('a')]);
+  faultOn = () => true;
+  await MP.drainOutbox();
+  faultOn = null;
+  ok('a flick that failed for want of signal stays queued', !!MP.pendingFor(e.id));
+  ok('...and goes out on the next drain', (await MP.drainOutbox()) === 1 && !MP.pendingFor(e.id) && getAt(`flicksoccer/games/${e.id}/log/0000`));
+  ok('NEVER_SENDABLE never names a phone-side reason', !['offline', 'denied', 'dev-origin-blocked', 'no-player-code'].some((x) => MP.NEVER_SENDABLE.includes(x)));
 }
 
 // The hub's Challenges handoff.

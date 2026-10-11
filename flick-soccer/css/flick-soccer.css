@@ -207,10 +207,12 @@
   background: rgba(2, 14, 6, 0.55);
   overscroll-behavior: contain;
 }
-/* Auto margins centre the setup card SAFELY: one taller than the screen starts at the top padding
-   instead of being cut off at both ends, as align-items: center would. */
-.fs-root .fs-ov-setup { align-items: flex-start; background: rgba(2, 14, 6, 0.4); }
-.fs-root .fs-ov-setup > .fs-card { margin-block: auto; }
+/* Auto margins centre every card SAFELY: one taller than the screen (a phone on its side) starts at
+   the top padding and the overlay scrolls to the rest, instead of the card being cut off with Play
+   out of reach. On a phone held upright every card fits and nothing scrolls. */
+.fs-root .fs-ov { align-items: flex-start; overflow-y: auto; touch-action: pan-y; }
+.fs-root .fs-ov > .fs-card { margin-block: auto; flex-shrink: 0; }
+.fs-root .fs-ov-setup { background: rgba(2, 14, 6, 0.4); }
 .fs-root .fs-card {
   position: relative;
   width: min(380px, 100%);
@@ -425,3 +427,5 @@
 @media (prefers-reduced-motion: reduce) {
   .fs-root .fs-banner.is-show { animation: fs-still 1.6s linear forwards; }
 }
+/* "+N more" on the online home is a button: the next page of matches. */
+.fs-root button.fs-mp-more { min-height: 44px; border: 0; background: transparent; color: var(--fs-green); text-decoration: underline; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; }

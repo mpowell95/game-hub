@@ -231,6 +231,7 @@ const CUP_TEXT = {
     rebuttal: (w) => `${w} sank your last cup. Rebuttal time!`,
     theyWon: (w) => `${w} won the game.`,
     youWon: (w) => `You won! ${w} resigned.`,
+    youWonGoals: (w, a, b) => `You beat ${w}, ${a} to ${b}!`,
   },
   es: {
     title: 'Cup Pong',
@@ -239,6 +240,7 @@ const CUP_TEXT = {
     rebuttal: (w) => `${w} metió tu último vaso. ¡Réplica!`,
     theyWon: (w) => `${w} ganó la partida.`,
     youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+    youWonGoals: (w, a, b) => `¡Has ganado a ${w}, ${a} a ${b}!`,
   },
 };
 
@@ -279,6 +281,7 @@ const DARTS_TEXT = {
     turnCricket: (w, ca, cb, pa, pb) => `Your turn vs ${w}. Closed: you ${ca}, ${w} ${cb}` + (pa || pb ? `. Points: you ${pa}, ${w} ${pb}` : ''),
     theyWon: (w) => `${w} won the game.`,
     youWon: (w) => `You won! ${w} resigned.`,
+    youWonGoals: (w, a, b) => `You beat ${w}, ${a} to ${b}!`,
   },
   es: {
     title: 'Dardos',
@@ -288,6 +291,7 @@ const DARTS_TEXT = {
     turnCricket: (w, ca, cb, pa, pb) => `Te toca contra ${w}. Cerrados: tú ${ca}, ${w} ${cb}` + (pa || pb ? `. Puntos: tú ${pa}, ${w} ${pb}` : ''),
     theyWon: (w) => `${w} ganó la partida.`,
     youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+    youWonGoals: (w, a, b) => `¡Has ganado a ${w}, ${a} a ${b}!`,
   },
 };
 /** The game a row names (darts/js/mp.js rowFor `kind`, 2026-10-01); a row without one is 301. */
@@ -329,10 +333,11 @@ export function decideDarts({ code, id, before, after }) {
 const FLICK_TEXT = {
   en: {
     title: 'Flick Soccer',
-    challenge: (w, g) => `${w} challenged you, first to ${g}. Your kick!`,
+    challenge: (w, g) => `${w} challenged you, first to ${g}. Your turn!`,
     turn: (w, a, b) => `Your turn vs ${w}. You ${a}, ${w} ${b}`,
     theyWon: (w) => `${w} won the game.`,
     youWon: (w) => `You won! ${w} resigned.`,
+    youWonGoals: (w, a, b) => `You beat ${w}, ${a} to ${b}!`,
   },
   es: {
     title: 'Fútbol de Chapas',
@@ -340,6 +345,7 @@ const FLICK_TEXT = {
     turn: (w, a, b) => `Te toca contra ${w}. Tú ${a}, ${w} ${b}`,
     theyWon: (w) => `${w} ganó la partida.`,
     youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+    youWonGoals: (w, a, b) => `¡Has ganado a ${w}, ${a} a ${b}!`,
   },
 };
 
@@ -351,14 +357,16 @@ export function decideFlickSoccer({ code, id, before, after }) {
     kind, who,
     text: (lang) => { const s = FLICK_TEXT[lang] || FLICK_TEXT.en; return { title: s.title, body: body(s) }; },
   });
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
   if (after.over) {
     if (before && before.over) return null;
     if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    // Won by THEIR flick (an own goal ends it): lastBy is them, so it is news to the winner.
+    if (after.result === 'won') return mk('over', (s) => s.youWonGoals(who, n(after.mine), n(after.theirs)));
     if (after.result === 'lost') return mk('over', (s) => s.theyWon(who));
     return null;
   }
   if (!after.yourTurn) return null;
-  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
   if (!before) return mk('challenge', (s) => s.challenge(who, [1, 2, 3].includes(+after.goals) ? +after.goals : 2));
   if (before.yourTurn && !before.over) return null;             // it was already your turn
   return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));

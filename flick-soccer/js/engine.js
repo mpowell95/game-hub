@@ -209,10 +209,21 @@ export function runToRest(b, maxSecs = MAX_SHOT_SECS) {
   for (let k = 1; k <= max; k++) {
     const g = step(b);
     if (g >= 0) return { scorer: g, steps: k };
-    if (atRest(b)) return { scorer: -1, steps: k };
+    if (atRest(b)) { freeze(b); return { scorer: restScorer(b), steps: k }; }
   }
   for (const o of b) { o.vx = 0; o.vy = 0; }
-  return { scorer: -1, steps: max };
+  return { scorer: restScorer(b), steps: max };
+}
+
+/** A shot that STOPS with the ball more than halfway over a goal line (its centre past the line,
+ *  so inside the mouth: the walls allow nowhere else) is a goal (2026-10-11). The flying rule in
+ *  step() still wants the whole ball over; this only settles a ball that came to rest in the net,
+ *  which read as a goal to everyone watching and was being called "no goal". */
+export function restScorer(b) {
+  const q = b[BALL];
+  if (q.y < 0) return 0;
+  if (q.y > H) return 1;
+  return -1;
 }
 export const maxShotSteps = () => Math.round(MAX_SHOT_SECS / DT);
 

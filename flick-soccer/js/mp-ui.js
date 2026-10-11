@@ -6,7 +6,7 @@
 //
 // NOTHING HERE SCROLLS (docs/BUILDING-A-GAME.md, Part 0): every list is capped to what fits, and the
 // player picker narrows by search instead of growing.
-import { makeT } from '../../js/i18n.js';
+import { makeT, getLang } from '../../js/i18n.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { STRINGS } from './strings.js';
 
@@ -59,7 +59,13 @@ function fitList(card, list, extra) {
   const paintNote = () => {
     let note = list.querySelector('.fs-mp-more');
     const n = base + dropped;
-    if (n > 0 && !note) { note = document.createElement('p'); note.className = 'fs-mp-note fs-mp-more'; list.appendChild(note); }
+    if (n > 0 && !note) {
+      // A list that pages (home) makes this a button: the rows that did not fit are one tap away.
+      note = document.createElement(list.dataset.pages === '1' ? 'button' : 'p');
+      if (note.tagName === 'BUTTON') { note.type = 'button'; note.dataset.mp = 'more'; }
+      note.className = 'fs-mp-note fs-mp-more';
+      list.appendChild(note);
+    }
     if (note) note.textContent = t('mp_more', { n });
   };
   paintNote();
@@ -99,21 +105,36 @@ export async function home(ui, MP) {
   body.querySelector('[data-mp="challenge"]').addEventListener('click', () => picker(ui, MP));
   body.querySelector('[data-mp="pass"]').addEventListener('click', () => ui._passPlay());
   body.querySelector('[data-mp="history"]').addEventListener('click', () => history(ui, MP));
-  pushRow(body.querySelector('.fs-mp-push'), () => fitList(cardOf(body), body.querySelector('.fs-mp-list')));
+  let repaint = null;
+  pushRow(body.querySelector('.fs-mp-push'), () => { if (repaint) repaint(); else fitList(cardOf(body), body.querySelector('.fs-mp-list')); });
   const rows = await MP.readMyGames();
   if (!body.isConnected) return;
   try { MP.recordFinished(rows); } catch (err) { console.warn('[flick-soccer] recordFinished', err); }
   const live = rows.filter((r) => !r.over);
   const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
-  // At most 12 drawn; fitList then trims to what the screen holds.
-  const showMine = mine.slice(0, 8), showTheirs = theirs.slice(0, 12 - showMine.length);
-  const hidden = live.length - showMine.length - showTheirs.length;
+  const all = mine.concat(theirs);
   const list = body.querySelector('.fs-mp-list');
-  list.innerHTML = (mine.length ? `<h3 class="fs-mp-h">${esc(t('mp_your_turn'))} <span>${mine.length}</span></h3>${showMine.map(rowHTML).join('')}` : '')
-    + (theirs.length ? `<h3 class="fs-mp-h">${esc(t('mp_their_turn'))} <span>${theirs.length}</span></h3>${showTheirs.map(rowHTML).join('')}` : '')
-    + (live.length ? '' : `<p class="fs-mp-note">${esc(t('mp_none'))}</p>`);
-  fitList(cardOf(body), list, hidden);
+  list.dataset.pages = '1';
+  // Pages, not a scroll (the card never scrolls): as many rows as fit, then "+N more" shows the
+  // next page, and the last page's button goes back to the first. Every match is reachable.
+  let start = 0;
+  const paint = () => {
+    const page = all.slice(start);
+    const pm = page.filter((r) => r.yourTurn), pt = page.filter((r) => !r.yourTurn);
+    list.innerHTML = (pm.length ? `<h3 class="fs-mp-h">${esc(t('mp_your_turn'))} <span>${mine.length}</span></h3>${pm.map(rowHTML).join('')}` : '')
+      + (pt.length ? `<h3 class="fs-mp-h">${esc(t('mp_their_turn'))} <span>${theirs.length}</span></h3>${pt.map(rowHTML).join('')}` : '')
+      + (live.length ? '' : `<p class="fs-mp-note">${esc(t('mp_none'))}</p>`);
+    fitList(cardOf(body), list, start);
+  };
+  paint();
+  repaint = paint;
   list.addEventListener('click', (e) => {
+    if (e.target.closest('[data-mp="more"]')) {
+      const shown = list.querySelectorAll('.fs-mrow').length;
+      start = start + shown >= all.length ? 0 : start + shown;
+      paint();
+      return;
+    }
     const b = e.target.closest('.fs-mrow[data-id]');
     if (b) ui._openMatch(b.dataset.id);
   });
@@ -208,7 +229,7 @@ async function history(ui, MP) {
       <div class="fs-mrow is-static${r.result === 'won' ? ' is-won' : ''}">
         <span class="fs-hmark" aria-hidden="true">${mark(r)}</span>
         <span class="fs-mrow-text"><span class="fs-mrow-name">${esc(r.name)}</span>
-          <span class="fs-mrow-sub">${esc([word(r), new Date(r.updated).toLocaleDateString()].join(' · '))}</span></span>
+          <span class="fs-mrow-sub">${esc([word(r), new Date(r.updated).toLocaleDateString(getLang() === 'es' ? 'es-ES' : undefined)].join(' · '))}</span></span>
       </div>`).join('');
   fitList(cardOf(list), list, finished.length - fin.length);
 }

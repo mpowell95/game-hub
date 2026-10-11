@@ -10,7 +10,7 @@
 // written the moment it is made, so leaving one loses nothing either.
 
 import {
-  newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, lineUp,
+  newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, lineUp, restScorer,
   ballPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
 } from './engine.js';
 import { planShot, DIFFS } from './ai.js';
@@ -136,7 +136,10 @@ class FlickSoccerUI {
     this.r = createRenderer(this.canvas);
     this.preview = lineUp([this.settings.lineup, this.settings.lineup]);   // drawn behind the setup screen
 
-    this._onVis = () => { if (document.hidden) { this._stop(); this._save(); } else this._start(); };
+    this._onVis = () => {
+      if (document.hidden) { this.drag = null; if (this.phase === 'aim') this.aim = null; this._stop(); this._save(); }
+      else this._start();
+    };
     document.addEventListener('visibilitychange', this._onVis);
     this._offResize = onViewportResize(() => this._layout());
     this._size = '';
@@ -145,6 +148,10 @@ class FlickSoccerUI {
     }) : null;
     if (this._ro) this._ro.observe(this.root);
     this._offLang = onLangChange(() => this._relabel());
+    // Flicks queued while offline go out on mount and the moment the connection comes back.
+    this._onOnline = () => this._drainAll();
+    window.addEventListener('online', this._onOnline);
+    setTimeout(() => { if (instance === this) this._drainAll(); }, 0);
 
     this._layout();
     this._showSetup();
@@ -295,6 +302,8 @@ class FlickSoccerUI {
     this.canvas.addEventListener('pointermove', this._onMove);
     this.canvas.addEventListener('pointerup', this._onUp);
     this.canvas.addEventListener('pointercancel', this._onCancel);
+    this.canvas.addEventListener('lostpointercapture', this._onCancel);
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     // Scroll-leak guard, root-scoped (never document: root CLAUDE.md, "Scroll and touch rules").
     this._onTouchMove = (e) => { if (this.screen === 'play') e.preventDefault(); };
     this.root.addEventListener('touchmove', this._onTouchMove, { passive: false });
@@ -351,7 +360,9 @@ class FlickSoccerUI {
   }
 
   _showSetup() {
+    const leftOnline = !!this.mp;
     this._mpLeave();
+    if (leftOnline) this._drainAll();
     this._setFlip(false);
     this.screen = 'setup';
     this.match = null;
@@ -382,6 +393,7 @@ class FlickSoccerUI {
     const w = this.root.clientWidth, h = this.root.clientHeight;
     if (!w || !h) { requestAnimationFrame(() => { if (instance === this) this._layout(); }); return; }
     this._size = w + 'x' + h;
+    this._fitStatus();
     const rootTop = this.root.getBoundingClientRect().top;
     const statusBottom = this.statusEl.getBoundingClientRect().bottom - rootTop;
     const safe = this.root.querySelector('[data-role="safe"]').offsetHeight || 0;
@@ -424,7 +436,17 @@ class FlickSoccerUI {
   _continue() {
     const sv = this._savedMatch();
     if (!sv) { this._newMatch(); return; }
-    this._begin({ mode: sv.mode, diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', match: sv.match });
+    const m = sv.match;
+    const sh = sv.shot;
+    // A shot that was still rolling when the app went away: play it out now, exactly as it would have.
+    let replayed = false;
+    if (sh && Number.isInteger(sh.i) && teamOf(sh.i) === m.turn && [sh.dx, sh.dy, sh.power].every(Number.isFinite)) {
+      flick(m.b, sh.i, sh.dx, sh.dy, sh.power);
+      settle(m, runToRest(m.b).scorer);
+      replayed = true;
+    }
+    this._begin({ mode: sv.mode, diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', match: m });
+    if (replayed && m.winner != null) this._finish();
   }
 
   _begin(g) {
@@ -440,31 +462,36 @@ class FlickSoccerUI {
     this.aim = null; this.drag = null; this.cpu = null;
     this._showOnly(null);
     this._hud();
+    if (this.match.winner != null && this.mode !== 'mp') return;   // replayed to a win: _continue shows the result
     this._save();
     this._startTurn(true);
   }
 
-  _save() {
+  /** `shot` (from _shoot): the flick about to be played from this position. Saved WITH the position,
+   *  so an app killed or reloaded while the shot rolls (or during the goal banner) replays that same
+   *  flick on Continue (the engine is deterministic) instead of handing the shot back. */
+  _save(shot = null) {
     const m = this.match;
     if (!m || !this.mode || this.mode === 'mp') return;     // an online match lives on the server
     if (m.winner != null) { try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ } return; }
     // Only a position at rest is a position (a rolling shot is played out first: _settleNow).
     if (!atRest(m.b) || this.phase === 'goal') return;
-    writeJSON(SAVE_KEY, { mode: this.mode, diff: this.diff, match: m });
+    writeJSON(SAVE_KEY, shot ? { mode: this.mode, diff: this.diff, match: m, shot } : { mode: this.mode, diff: this.diff, match: m });
   }
 
   _hud() {
     const m = this.match;
+    const sc = m ? (this.phase === 'goal' && this.goalScores) || m.scores : [0, 0];
     for (let i = 0; i < 2; i++) {
       const s = this.seats[i];
       this.root.querySelector(`[data-role="ava${i}"]`).textContent = s.emoji;
       this.root.querySelector(`[data-role="name${i}"]`).textContent = s.name;
-      this.root.querySelector(`[data-role="score${i}"]`).textContent = String(m ? m.scores[i] : 0);
+      this.root.querySelector(`[data-role="score${i}"]`).textContent = String(sc[i]);
       this.sideEls[i].classList.toggle('is-turn', !!m && m.turn === i && m.winner == null);
-      this.sideEls[i].setAttribute('aria-label', t('aria_score', { name: s.name, n: m ? m.scores[i] : 0 }));
+      this.sideEls[i].setAttribute('aria-label', t('aria_score', { name: s.name, n: sc[i] }));
     }
     if (m) {
-      this.canvas.setAttribute('aria-label', t('aria_pitch', { a: this.seats[0].name, sa: m.scores[0], b: this.seats[1].name, sb: m.scores[1] }));
+      this.canvas.setAttribute('aria-label', t('aria_pitch', { a: this.seats[0].name, sa: sc[0], b: this.seats[1].name, sb: sc[1] }));
     }
   }
 
@@ -482,6 +509,18 @@ class FlickSoccerUI {
     else txt = t('status_team', { name: s.name, team });
     this.statusEl.textContent = txt;
     this.statusEl.dataset.seat = String(m.turn);
+    this._fitStatus();
+  }
+
+  /** The status line keeps its whole sentence (the team word is at the END, and it is the part that
+   *  says which discs to drag): shrunk to fit, never below 11px (docs/BUILDING-A-GAME.md, Part 0). */
+  _fitStatus() {
+    const el = this.statusEl;
+    if (!el) return;
+    el.style.fontSize = '';
+    if (!el.clientWidth) return;
+    let fs = parseFloat(getComputedStyle(el).fontSize) || 14;
+    while (el.scrollWidth > el.clientWidth + 0.5 && fs > 11) { fs -= 0.5; el.style.fontSize = fs + 'px'; }
   }
 
   _startTurn(announce) {
@@ -545,7 +584,7 @@ class FlickSoccerUI {
       }
       mp.applied++;
     }
-    this._save();                       // the position the shot was taken from
+    this._save({ i, dx, dy, power });   // the position the shot was taken from, and the shot
     flick(m.b, i, dx, dy, power);
     this.phase = 'moving';
     this.acc = 0;
@@ -566,7 +605,11 @@ class FlickSoccerUI {
       this.spin += Math.hypot(ball.x - bx, ball.y - by) / BALL_R;
       this.shotSteps++;
       if (g >= 0) { this._goal(g); return; }
-      if (atRest(m.b) || this.shotSteps >= maxShotSteps()) { this._rest(); return; }
+      if (atRest(m.b) || this.shotSteps >= maxShotSteps()) {
+        const r = restScorer(m.b);            // stopped more than halfway into a net
+        if (r >= 0) { freeze(m.b); this._goal(r); } else this._rest();
+        return;
+      }
     }
   }
 
@@ -584,11 +627,14 @@ class FlickSoccerUI {
     // The shooter put it in their own net: say so.
     const own = m.turn !== scorer;
     const sc = m.scores.slice(); sc[scorer]++;
+    this.goalScores = sc;                  // the scoreboard counts it now, with the banner
+    this._hud();
     this._bannerShow(t('goal'), (own ? t('own_goal') + ' · ' : '') + t('goal_sub', { a: sc[0], b: sc[1] }), scorer);
     this._say(t('say_goal', { a: this.seats[0].name, sa: sc[0], b: this.seats[1].name, sb: sc[1] }));
     this._status();
     this._after(1.7, () => {
       const res = settle(m, scorer);
+      this.goalScores = null;
       this._hud();
       if (res === 'win') { this._finish(); return; }
       this._save();
@@ -705,7 +751,7 @@ class FlickSoccerUI {
     else if (act === 'resign') { this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
     else if (act === 'again') {
-      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals);
+      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals, this.match.forms);
       else this._newMatch();
     }
     else if (act === 'toSetup') { if (this.mode === 'mp') this._openOnline(); else this._showSetup(); }
@@ -751,8 +797,29 @@ class FlickSoccerUI {
 
   /** The Multiplayer home. `pickFor` ({code, name, emoji}, from the hub's Challenges screen) opens
    *  straight onto "challenge them". */
+  /** Send flicks still queued on this phone for ANY match (not just the one open): a match-ending
+   *  flick made offline must reach the other person without anybody reopening that match. */
+  async _drainAll() {
+    if (this._draining) return;
+    this._draining = true;
+    try {
+      const MP = await this._loadMP();
+      if (!MP.outboxCount()) return;
+      const sent = await MP.drainOutbox(null, this.mp ? this.mp.id : null);
+      if (sent && instance === this && this.screen === 'setup') this._countOnline();
+    } catch (err) { console.warn('[flick-soccer] could not send queued flicks yet', err); }
+    finally { this._draining = false; }
+    // Still something waiting (no signal, or a server that is not answering): try again shortly,
+    // for as long as the game is open. The open match retries on its own timer (_mpFlush).
+    if (instance === this && this.MP && this.MP.outboxCount() > (this.mp && this.MP.pendingFor(this.mp.id) ? 1 : 0)) {
+      clearTimeout(this._drainTimer);
+      this._drainTimer = setTimeout(() => { if (instance === this) this._drainAll(); }, 6000);
+    }
+  }
+
   async _openOnline(pickFor = null) {
     this._mpLeave();
+    this._drainAll();                  // after leaving: the match just left may be the one waiting
     this._setFlip(false);
     this.match = null; this.seats = null; this.mode = null;
     this.timers = []; this.cpu = null; this.aim = null; this.drag = null;
@@ -776,10 +843,15 @@ class FlickSoccerUI {
   }
 
   /** A new challenge: created now, delivered when your first turn is over. */
-  async _sendChallenge(them, goals = this.settings.goals) {
-    const MP = await this._loadMP();
-    const lu = this.settings.lineup;
-    const res = await MP.createGame({ them, goals, forms: [lu, lu] });
+  async _sendChallenge(them, goals = this.settings.goals, forms = null) {
+    if (this._challenging) return { ok: false, reason: 'busy' };      // a double tap makes ONE match
+    this._challenging = true;
+    let res;
+    try {
+      const MP = await this._loadMP();
+      const lu = this.settings.lineup;
+      res = await MP.createGame({ them, goals, forms: forms || [lu, lu] });
+    } finally { this._challenging = false; }
     if (instance !== this) return res;
     if (!res.ok) {
       if (this.screen !== 'mp') this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400);
@@ -800,8 +872,13 @@ class FlickSoccerUI {
     const shown = MP.readShown(game.id);
     if (shown > from) from = Math.min(shown, game.log.length);
     const them = MP.themOf(game, me);
+    // Flicks this phone made that never reached the server are still this phone's flicks: shown on
+    // the pitch and retried, never re-taken (a second flick would have replaced them in the outbox).
+    const q = MP.pendingFor(game.id);
+    const queued = q && q.base === game.log.length && Array.isArray(q.entries) ? q.entries.map(MP.cleanEntry).filter(Boolean) : [];
+    if (q && !queued.length) MP.savePending(game.id, 0, []);           // left behind by a match that moved on
     this.mp = { id: game.id, side, mySeat: side === 'b' ? 1 : 0, game, them, applied: from, base: game.log.length,
-      pending: [], sending: false, stop: null, finished: false, resigned: false };
+      pending: queued.slice(), unshown: queued.slice(), sending: false, stop: null, finished: false, resigned: false };
     const seat = (who) => ({ name: who.name || '?', emoji: who.emoji || '🙂', human: true });
     const match = MP.buildMatch(game, from);
     this._begin({ mode: 'mp', diff: 'mp', match, seats: [seat(game.a), seat(game.b)] });
@@ -809,6 +886,7 @@ class FlickSoccerUI {
     MP.watchGame(game.id, (g) => this._mpOnGame(g)).then((stop) => {
       if (this.mp === mp) mp.stop = stop; else { try { stop(); } catch { /* detached */ } }
     });
+    if (mp.pending.length) this._mpFlush();
   }
 
   /** The pitch is at rest: show whatever the log has that this phone has not played yet, then play
@@ -836,6 +914,13 @@ class FlickSoccerUI {
       this._status();
       return;
     }
+    if (mp.unshown.length) {
+      for (const e of mp.unshown) this.MP.applyEntry(m, e);
+      mp.applied += mp.unshown.length;
+      mp.unshown = [];
+      this._hud();
+      if (m.winner != null) { this._finish(); return; }
+    }
     this.MP.markShown(mp.id, g.log.length);
     if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
     if (m.turn === mp.mySeat) { this.phase = 'aim'; this._status(); return; }
@@ -852,7 +937,14 @@ class FlickSoccerUI {
       this._mpFinish(g.over.winner === mp.side, true);
       return;
     }
-    if (mp.applied < g.log.length && this.phase === 'waiting') this._mpCatchUp();
+    if (mp.applied >= g.log.length) return;
+    if (this.phase === 'waiting') this._mpCatchUp();
+    else if (this.phase === 'aim' && !mp.pending.length && !mp.sending) {
+      // Your turn here, but the log moved: you played it on another phone. Catch this one up rather
+      // than letting it take a second, different shot from a position that is no longer the match.
+      this.drag = null; this.aim = null;
+      this._mpCatchUp();
+    }
   }
 
   /** One of your flicks, into the log. */
@@ -890,7 +982,22 @@ class FlickSoccerUI {
       setTimeout(() => { if (this.mp === mp) this._mpFlush(); }, 4000);
     } else {
       console.error('[flick-soccer] a flick could not be sent:', res.reason);
-      this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2600);
+      // Only the MATCH refusing it drops the flick (mp.js NEVER_SENDABLE). Anything about this phone
+      // (denied, a dev server, no player code) keeps it queued for the next try.
+      if (!MP.NEVER_SENDABLE.includes(res.reason)) {
+        this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2600);
+        return;
+      }
+      mp.pending = [];
+      MP.savePending(mp.id, 0, []);
+      if (['moved-on', 'already-over', 'rules-refused'].includes(res.reason)) {
+        // The match moved on without this flick (played on another phone, or already finished):
+        // what the server has is the match. Open it again from there.
+        this._toast(t('mp_moved_on'), 2600);
+        this._openMatch(mp.id);
+      } else {
+        this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2600);
+      }
     }
   }
 
@@ -919,6 +1026,13 @@ class FlickSoccerUI {
     if (this.mp !== mp) return;
     if (!res.ok) { this.screen = 'menu'; this._showOnly('menu'); this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400); return; }
     mp.game = res.game;
+    if (res.cancelled) {
+      // They never saw it: nothing to count, nobody to tell. Back to the list.
+      mp.finished = true;
+      this._toast(t('mp_cancelled'), 2200);
+      this._openOnline();
+      return;
+    }
     this._mpFinish(false, true);
   }
 
@@ -937,6 +1051,7 @@ class FlickSoccerUI {
 
   _pointerDown(e) {
     const m = this.match;
+    if (e.button !== 0 || this.drag) return;   // the main button / one finger; a second touch is ignored
     if (this.screen !== 'play' || this.phase !== 'aim' || !m || !this.seats[m.turn].human) return;
     if (this.mode === 'mp' && m.turn !== this.mp.mySeat) return;
     const p = this._pt(e);
@@ -1030,6 +1145,8 @@ class FlickSoccerUI {
     this._save();
     clearTimeout(this._bannerTimer);
     document.removeEventListener('visibilitychange', this._onVis);
+    window.removeEventListener('online', this._onOnline);
+    clearTimeout(this._drainTimer);
     if (this.reduceMQ.removeEventListener) this.reduceMQ.removeEventListener('change', this._onReduce);
     if (this._offResize) this._offResize();
     if (this._ro) this._ro.disconnect();
