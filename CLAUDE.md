@@ -574,6 +574,7 @@ working in that folder).
 | Texas Hold'em | in-hub `module:`, immersive, **multiplayer up to 8, HOST-AUTHORITATIVE** (the host's device deals; `rooms/<CODE>/pk`; `gamehub.holdem.mp.v1`), plus solo vs up to 7 computers; a **bankroll** (ranked on its own leaderboard; stacks equal the buy-in; broke players climb back at the bottle-cap table Behind the Dumpster, 2026-10-08), per-hand stats, and deterrent-only cheat checks (`holdem/CLAUDE.md`) | `.pk-root` / `.pk-` | `gamehub.holdem.v1` | `recordResult('holdem', …)` + `recordHoldemBank` / `recordHoldemHand` |
 | Tic Tac Toe | in-hub `module:`, **multiplayer** (`gamehub.tictactoe.mp.v1`) | `.ttt-root` / `.ttt-` | `gamehub.tictactoe.v1` | `recordTicTacToe` |
 | Uno | in-hub `module:` | `.un-root` / `.un-` | `gamehub.uno.v1` | `recordResult('uno', …)` |
+| Way Out | in-hub `module:`, immersive, **`devOnly`**, clone of "Pointers" (Offline Games): tap arrows off the board in the right order, 3 lives, Easy to Expert, endless seeded levels (2026-10-11); hub id `way-out`, stats id `wayout` | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ `gamehub.wayout.save.v1` progress) | `recordResult('wayout', …)` |
 | Yahtzee | in-hub `module:`, immersive, **multiplayer** (`js/net.js`, no persisted MP save key) | `.yz-root` / `.yz-` | none yet (no persisted settings) | `recordYahtzee` |
 
 The root-class/prefix cells were verified against each game's actual CSS on 2026-07-23 (note

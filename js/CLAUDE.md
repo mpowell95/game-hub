@@ -1617,8 +1617,9 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   filter. **By Game's top-level tab has no sort control at all** (D3) — it stays alphabetical by
   title, as it always has; a game's own drill-in board gets both filter AND sort, the third sort
   option labeled by that game's own metric (`unitKeyOf(id)` → the matching `lb_sort_*` string).
-  Tic Tac Toe's and Snake's two-number split cards (`ttCardHTML`/`snCardHTML`) are left
-  structurally alone — no big/small swap — but Alphabetical/Games Played still reorder them.
+  Tic Tac Toe's and Snake's cards (`ttCardHTML`/`snCardHTML`) were two-number split cards left
+  structurally alone here; since 2026-10-11 they use the standard one-number row (see "The
+  leaderboard's blind-review pass").
 - **The card itself is two rows now** (`playerCardHTML`, replacing the old three-ish stack): row 1
   is rank/avatar/name/the metric CURRENTLY SORTED BY (large, its unit stacked underneath); row 2 is
   the tier tiles (unchanged — always wins-per-tier, never follows the sort) plus the OTHER metric,
@@ -1697,8 +1698,10 @@ What it settled, so a later edit does not drift back:
 
 - **One scale: 4 / 8 / 12 / 16 / 24.** 8 between control rows and between cards, 12 before the
   content, 16 above a section heading (`.lb-h4`) and 8 below it, 24 above Standing records (`.lb-h3`).
-- **Controls stay 44px tall.** The audit proposed 40px to save room; the UX floor's tap target is
-  44, so the room came from elsewhere.
+- **Menu controls are 40px tall** (tabs, sort pills, filter dropdown and its options). This
+  first shipped at 44px for the UX floor; Matt overrode it the same day (*"Override that rule to
+  resize the menus as recommended"*), recorded as the floor's second exception in
+  `docs/BUILDING-A-GAME.md`. Back buttons stay 44px.
 - **A board's header is one row** (`.lb-board-head`): an icon-only back chevron (`backBtnHTML(...,
   true)`, label kept as `aria-label`), the title at 24px, the games count. Every back control goes
   through `backBtnHTML`, so they share one chevron and one 44px target.
@@ -1710,6 +1713,44 @@ What it settled, so a later edit does not drift back:
 - The player page's message button sits at the row's right edge, after the wins number; the
   tagline (`.lb-pmsg`) is a quote with a left rule, not a box, so it no longer reads as a field.
 - Favorites with none picked says so (`lb_fav_none`) instead of silently showing A to Z.
+
+### The leaderboard's blind-review pass (2026-10-11)
+
+Two reviewers with no context critiqued the leaderboard from screenshots alone; Matt: *"Implement
+everything."* What changed, and the decisions a later session must not quietly undo:
+
+- **The board says how it is ordered.** One muted `.lb-note` line under a board's controls, only
+  the parts that apply: "Ranked by hardest difficulty first, then score." (a metric sort, no filter
+  selected, and at least one row has a tier), "Lowest score wins." (`LOWER_IS_BETTER`), and
+  "T = tied." whenever a badge shows a tie (By Player too). The reviewer read a Hard 6 above an
+  Easy 110 as a bug; the rule was right and simply invisible.
+- **A shape key** (`legendHTML`) under By Player's and By Game's controls: each tier's shape
+  beside its word. Shapes on rows went 10px -> 12px (21px for the double diamond).
+- **Plain words.** `lb_cat_nt` "No tier" -> "No difficulty", `lb_cat_vs` "Versus" -> "vs people",
+  `lb_showing` "Showing:" -> "Filter:", `lb_unit_longest` "longest" -> "length" (shared with My
+  Stats), By Game's leader row is labelled "Top", and the player page's breakdown shows each tier's
+  shape and word instead of the E/M/H/X and NT/VS letter codes. The tie letter is `lb_tie_mark`
+  (T / E). Every new key renders through `tx(key, englishFallback)`, because `js/strings.js` is
+  cache-first and can be one build behind for a visit (see "A NEW key can be missing").
+- **One row skeleton on every board.** Tic Tac Toe and Snake used to draw their own 114px card with
+  two big numbers under the name. They now go through `playerCardHTML` like every other game:
+  Tic Tac Toe leads with Ultimate wins (the board orders by it) with Classic on the subline; Snake
+  leads with its best at the row's tier with the walls split on the subline. **This reverses the
+  2026-07-29 "left structurally alone" note** in the rating-model section below.
+- **Unit labels 12px** (were 11px). **Tier tiles start under the name** (`.lb-pfoot` padding
+  96px) on wide screens; at 360px and below they go back to the card edge, because indented they
+  wrapped onto a second line.
+- **Player page:** the message button says "Message" (icon-only at 360px and below), games are
+  listed most-played first (`gameListHTML(games, { order: 'plays' })`; My Stats keeps A-Z), rows are
+  56px in this overlay only.
+- **By Player opens on Wins** for anyone who never chose a sort (`loadSort()`'s default was
+  `'played'`, D5). A saved choice is untouched.
+- **The phone's Back button goes up one level** instead of leaving the app. Opening pushes one
+  history entry (`armHistory`); `onPop` steps up through `stepBack()` (shared with Esc: panel, then
+  a player's game, then a player, then a board) and re-arms, and closes at the top. Closing any
+  other way pops the entry itself, so history never grows. The URL never changes.
+- **Not done, on purpose:** no "minimum games to appear" rule. Hiding a player with one game would
+  make that play invisible (THE LAW rule 1).
 
 ### My Stats and the leaderboard's player page — the shared game-list drill-down (2026-07-24)
 
@@ -2898,8 +2939,9 @@ are read-only to this feature — nothing is stored, migrated or normalized.
   filter. **By Game's top-level tab has no sort control at all** (D3) — it stays alphabetical by
   title, as it always has; a game's own drill-in board gets both filter AND sort, the third sort
   option labeled by that game's own metric (`unitKeyOf(id)` → the matching `lb_sort_*` string).
-  Tic Tac Toe's and Snake's two-number split cards (`ttCardHTML`/`snCardHTML`) are left
-  structurally alone — no big/small swap — but Alphabetical/Games Played still reorder them.
+  Tic Tac Toe's and Snake's cards (`ttCardHTML`/`snCardHTML`) were two-number split cards left
+  structurally alone here; since 2026-10-11 they use the standard one-number row (see "The
+  leaderboard's blind-review pass").
 - **The card itself is two rows now** (`playerCardHTML`, replacing the old three-ish stack): row 1
   is rank/avatar/name/the metric CURRENTLY SORTED BY (large, its unit stacked underneath); row 2 is
   the tier tiles (unchanged — always wins-per-tier, never follows the sort) plus the OTHER metric,

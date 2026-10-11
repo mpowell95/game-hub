@@ -1026,6 +1026,34 @@ export const GAME_ART = {
               <path d="M0 36 L-2.5 50 L0 53 L2.5 50 Z" fill="#8f1418"/>
             </g>
           </svg>`,
+  // Way Out (2026-10-11): the game's own board - lavender arrows on navy over a dot grid, one
+  // arrow sliding out to the right in teal with its trail of sparks.
+  'way-out': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#1f1f2d"/>
+            <g fill="#3a3b55">
+              <circle cx="34" cy="12" r="1.3"/><circle cx="46" cy="12" r="1.3"/><circle cx="58" cy="12" r="1.3"/><circle cx="70" cy="12" r="1.3"/><circle cx="82" cy="12" r="1.3"/><circle cx="94" cy="12" r="1.3"/><circle cx="106" cy="12" r="1.3"/>
+              <circle cx="34" cy="78" r="1.3"/><circle cx="46" cy="78" r="1.3"/><circle cx="58" cy="78" r="1.3"/><circle cx="70" cy="78" r="1.3"/><circle cx="82" cy="78" r="1.3"/><circle cx="94" cy="78" r="1.3"/><circle cx="106" cy="78" r="1.3"/>
+            </g>
+            <g fill="none" stroke="#b3b4e0" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M34 66V24H58V38"/>
+              <path d="M46 52V36"/>
+              <path d="M70 66V52H94V30"/>
+              <path d="M58 66H46"/>
+              <path d="M106 66V40H118"/>
+              <path d="M82 24H118"/>
+            </g>
+            <g fill="#b3b4e0">
+              <path d="M58 45l-4-7h8z"/>
+              <path d="M46 29l-4 7h8z"/>
+              <path d="M94 23l-4 7h8z"/>
+              <path d="M39 66l7-4v8z"/>
+              <path d="M125 40l-7-4v8z"/>
+              <path d="M125 24l-7-4v8z"/>
+            </g>
+            <path d="M70 38H136" fill="none" stroke="#3fd6bd" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M144 38l-8-4.6v9.2z" fill="#3fd6bd"/>
+            <g fill="#2fd3c0"><circle cx="64" cy="35" r="1.6"/><circle cx="58" cy="41" r="1.1"/><circle cx="54" cy="36" r="1.3"/></g>
+          </svg>`,
 };
 
 export default GAME_ART;
