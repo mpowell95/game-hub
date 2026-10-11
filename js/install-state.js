@@ -97,8 +97,30 @@ export async function appVersion() {
 }
 
 /**
+ * The phone's size in CSS pixels (2026-10-11). Matt: *"find all phones used... If nobody has ever
+ * used a 'small phone' then we can stop accounting for it."* `deviceLabel()` cannot answer that: an
+ * iPhone's user agent says only "iPhone", and Chrome on Android reports every model as "K". The
+ * screen is the fact the layout work actually needs.
+ *
+ * `w` / `h` are the screen, portrait-normalised (short side first), so a phone held sideways at sync
+ * time still reads as the same phone. `vw` / `vh` are the usable page at that moment (smaller than
+ * the screen in a browser tab, where the toolbars take their share). Never throws; unknowns are null.
+ */
+export function screenSize() {
+  const sw = safe(() => screen.width, null), sh = safe(() => screen.height, null);
+  const both = Number.isFinite(sw) && Number.isFinite(sh) && sw > 0 && sh > 0;
+  return {
+    w: both ? Math.min(sw, sh) : null,
+    h: both ? Math.max(sw, sh) : null,
+    vw: safe(() => window.innerWidth, null),
+    vh: safe(() => window.innerHeight, null),
+    dpr: safe(() => window.devicePixelRatio, null),
+  };
+}
+
+/**
  * The whole picture in one small object, safe to mirror on every sync:
- * `{ installed, mode, browser, device, a2hsDismissed }`. Never throws; unknown fields are null.
+ * `{ installed, mode, browser, device, screen, a2hsDismissed }`. Never throws; unknown fields are null.
  *
  * `a2hsDismissed` is the tell for Ana's exact case: someone who was ASKED to install and said no,
  * as opposed to someone who was never asked.
@@ -109,8 +131,9 @@ export function installState() {
     mode: displayMode(),
     browser: browserLabel(),
     device: deviceLabel(),
+    screen: screenSize(),
     a2hsDismissed: safe(() => localStorage.getItem('hub-a2hs-dismissed-v1') === '1', null),
   };
 }
 
-export default { installState, isInstalled, displayMode, browserLabel, deviceLabel, swCacheName, appVersion };
+export default { installState, isInstalled, displayMode, browserLabel, deviceLabel, screenSize, swCacheName, appVersion };
