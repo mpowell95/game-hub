@@ -168,8 +168,9 @@ export function createRenderer(canvas) {
     ctx.closePath(); ctx.fill();
   }
 
-  /** The aim: a pull string back to the finger, a power ring, an arrow, and the guide line to the
-   *  first thing the disc will touch (with the ball's way out if that is the ball). */
+  /** The aim: a pull string back to the finger, a power ring, and, as the difficulty allows
+   *  (ui.js AIDS), an arrow (`a.arrow`), the guide line to the first thing the disc will touch
+   *  (`a.contact`), and the ball's bounce line if that is the ball (`a.path`, engine ballPath). */
   function aim(a, b) {
     const o = b[a.i];
     const len = DISC_R + 3 + a.power * 22;
@@ -182,13 +183,19 @@ export function createRenderer(canvas) {
       ctx.beginPath(); ctx.moveTo(o.x + ux * DISC_R, o.y + uy * DISC_R); ctx.lineTo(a.contact.x, a.contact.y); ctx.stroke();
       ctx.setLineDash([]);
       ctx.beginPath(); ctx.arc(a.contact.x, a.contact.y, DISC_R, 0, Math.PI * 2); ctx.stroke();
-      if (a.contact.hit === BALL) {
-        const q = b[BALL];
-        let nx = q.x - a.contact.x, ny = q.y - a.contact.y;
-        const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
-        ctx.strokeStyle = ACCENT; ctx.lineWidth = 0.7;
-        ctx.beginPath(); ctx.moveTo(q.x + nx * BALL_R, q.y + ny * BALL_R); ctx.lineTo(q.x + nx * (BALL_R + 16), q.y + ny * (BALL_R + 16)); ctx.stroke();
-      }
+    }
+    // The ball's bounce line.
+    if (a.path && a.path.pts.length > 1) {
+      const pts = a.path.pts;
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); pts.forEach((p, k) => (k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke();
+      ctx.strokeStyle = ACCENT; ctx.lineWidth = 0.8;
+      ctx.setLineDash([2.4, 1.6]);
+      ctx.beginPath(); pts.forEach((p, k) => (k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke();
+      ctx.setLineDash([]);
+      const e = pts[pts.length - 1];
+      ctx.fillStyle = ACCENT;
+      ctx.beginPath(); ctx.arc(e.x, e.y, a.path.stop === 'goal' ? 1.8 : 1.1, 0, Math.PI * 2); ctx.fill();
     }
     // Pull string.
     if (a.fx != null) {
@@ -200,6 +207,7 @@ export function createRenderer(canvas) {
     ctx.beginPath(); ctx.arc(o.x, o.y, DISC_R + 3, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.4;
     ctx.beginPath(); ctx.arc(o.x, o.y, DISC_R + 3, -Math.PI / 2, -Math.PI / 2 + a.power * Math.PI * 2); ctx.stroke();
+    if (!a.arrow) return;
     // Arrow.
     const bx = o.x + ux * (DISC_R + 1), by = o.y + uy * (DISC_R + 1);
     const tx = o.x + ux * (len + 4), ty = o.y + uy * (len + 4);

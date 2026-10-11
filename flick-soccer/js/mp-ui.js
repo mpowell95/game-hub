@@ -170,7 +170,7 @@ export function challengeTo(ui, MP, them) { confirm(ui, MP, them); }
 function confirm(ui, MP, them) {
   const body = page(ui, t('mp_challenge'), 'home', `
     <p class="fs-mp-vs"><span aria-hidden="true">${esc(them.emoji)}</span> ${esc(them.name)}</p>
-    <p class="fs-mp-note">${esc(t('mp_game_note', { n: ui.settings.goals, name: them.name }))}</p>
+    <p class="fs-mp-note">${esc(t('mp_game_note', { n: ui.settings.goals, name: them.name, form: t('form_' + ui.settings.lineup).toLowerCase() }))}</p>
     <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-mp="send">${esc(t('mp_send', { name: them.name }))}</button>
     <p class="fs-mp-note fs-mp-err" aria-live="polite" hidden></p>`);
   const send = body.querySelector('[data-mp="send"]');
