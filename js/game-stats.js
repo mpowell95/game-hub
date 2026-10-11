@@ -1367,7 +1367,68 @@ function tooFast(gameId) {
   recent.push(now);
   rec.seen[gameId] = recent;
   try { localStorage.setItem(RATE_KEY, JSON.stringify(rec)); } catch { /* a full disk must not block a real play */ }
+  if (GAMES.indexOf(gameId) >= 0) noteActivity(gameId, now);
   return false;
+}
+
+// --- WHEN each game is played (2026-10-11) ---------------------------------------------------------
+//
+// Matt: *"I want trends data. What game has the most traction right now? What game do people come
+// back to the most?"* The stats store only ever held LIFETIME counters, so "when" had no answer for
+// any game but Skeeball. This adds it, in its OWN key so the stats store's shape is untouched:
+//
+//   localStorage['gamehub.activity.v1'] = { <statsKey()>: { <gameId>: { first, last, w: { <week>: n } } } }
+//
+// `first`/`last` are ms timestamps; `w` counts plays per week, keyed by that week's MONDAY as a local
+// YYYY-MM-DD (bounded: ~52 rows a year per game). Keyed by the store key so two players sharing one
+// phone keep separate activity, exactly like their stats. Stamped here, at the one gate EVERY live
+// recorder passes (a refused result is not stamped; a replayed queued result is not re-stamped,
+// because the drain never calls tooFast). ADDITIVE ONLY: counts increment, `first` never moves
+// later, `last` never moves earlier, nothing is pruned. It is a REPORT riding the stats mirror as
+// `players/<id>/activity` (js/stats-net.js); no gameplay or stats path reads it back, so it cannot
+// change a counter on anybody's phone. js/game-stats-global.js stamps Monopoly Deal and Parchís the
+// same way. Read it with `node read-activity.mjs`.
+const ACTIVITY_KEY = 'gamehub.activity.v1';
+
+/** Monday of `now`'s local week as YYYY-MM-DD. */
+export function activityWeek(now) {
+  const d = new Date(now);
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Pure: fold one play of `gameId` at `now` into an activity slice ({ <gameId>: {...} }). */
+export function stampActivity(slice, gameId, now) {
+  const a = (slice && typeof slice === 'object' && !Array.isArray(slice)) ? slice : {};
+  const g = (a[gameId] && typeof a[gameId] === 'object') ? a[gameId] : (a[gameId] = {});
+  if (!g.w || typeof g.w !== 'object' || Array.isArray(g.w)) g.w = {};
+  const wk = activityWeek(now);
+  g.w[wk] = (g.w[wk] | 0) + 1;
+  if (!(+g.first > 0) || now < +g.first) g.first = now;
+  if (!(+g.last > 0) || now > +g.last) g.last = now;
+  return a;
+}
+
+function noteActivity(gameId, now) {
+  try {
+    const key = statsKey();
+    let all = readJSON(ACTIVITY_KEY);
+    if (!all || typeof all !== 'object' || Array.isArray(all)) all = {};
+    all[key] = stampActivity(all[key], gameId, now);
+    localStorage.setItem(ACTIVITY_KEY, JSON.stringify(all));
+  } catch (err) {
+    console.warn('[game-stats] could not note when this game was played (the result itself is unaffected)', err);
+  }
+}
+
+/** The ACTIVE player's activity slice, for the stats mirror. `null` until they have played
+ *  something since this shipped, so the caller can leave the node alone rather than blank it. */
+export function activityReport() {
+  const all = readJSON(ACTIVITY_KEY);
+  const a = all && typeof all === 'object' ? all[statsKey()] : null;
+  return (a && typeof a === 'object' && Object.keys(a).length) ? a : null;
 }
 
 /** What this device has refused, for the stats mirror (js/stats-net.js). `null` when nothing has
