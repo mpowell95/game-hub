@@ -1859,6 +1859,27 @@ own root element instead, which loses no coverage (a `touchmove` is dispatched a
 touch STARTED on and bubbles from there). See `snake/CLAUDE.md` for the full note. If a future game
 needs a scroll guard, scope it to the game root — never to `document`.
 
+### When each game is played: the activity log (2026-10-11)
+
+Matt: *"I want trends data. What game has the most traction right now? What game do people come back
+to the most? What do people play once then never again?"* The stats store holds lifetime counters
+only, so none of that had an answer. `js/game-stats.js` now keeps `gamehub.activity.v1` =
+`{ <statsKey()>: { <gameId>: { first, last, w: { <Monday YYYY-MM-DD local>: plays } } } }`.
+
+- **Stamped inside `tooFast()`**, on the allowed branch only: the one gate every live recorder
+  passes, so no recorder needed editing, a refused result is never stamped, and the pending-queue
+  drain (which never calls `tooFast`) cannot double-stamp. `js/game-stats-global.js` (and its
+  byte-identical Monopoly Deal copy) stamps the same shape for Monopoly Deal and Parchís.
+- **Its own key, never inside the stats store**, so no migration, no normalizer and no sync count
+  can be affected. Keyed by store key, so two players on one phone stay apart.
+- **Additive only** (rule 2): weekly counts increment, `first` only moves earlier, `last` only
+  later, nothing is pruned (~52 rows a year per game).
+- **Mirrored as `players/<id>/activity`**, the same REPORT shape as `rate`/`device`/`announce`.
+  `activityReport()` returns `null` when empty and `syncMyStats` then OMITS the key, so a fresh or
+  cleared phone cannot blank what is already there. Read by `read-activity.mjs` only.
+- **Not retroactive.** It starts the day it shipped. A person with no activity is "not seen yet".
+- `test-activity.mjs` pins all of the above.
+
 ### Sync health, and why a leaderboard absence is not proof of anything (2026-07-22)
 
 A player asked where their game history had gone: they were not on the leaderboard. The leaderboard
