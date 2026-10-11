@@ -1,0 +1,313 @@
+/* flick-soccer/css/flick-soccer.css - every rule descendant-scoped under .fs-root (Mancala's
+   discipline, docs/BUILDING-A-GAME.md "CSS scoping"). A fixed stadium look in both hub themes
+   (night-green surround, white cards), so .gh-dark changes nothing here: the Hard shape is a black
+   diamond and needs the light card. */
+
+.fs-root {
+  /* Fixed to the viewport: full bleed both standalone and mounted (immersive: true in js/hub.js).
+     z-index sits below the hub's floating back button. */
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+  background: #0d2a1a;
+  color: #fff;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --fs-ink: #14261b;
+  --fs-muted: #4b6355;
+  --fs-card: #f7faf6;
+  --fs-line: #d5e2d8;
+  --fs-green: #1f7a3a;
+  --gh-accent: #1f7a3a;
+  --fs-top: max(env(safe-area-inset-top, 0px), 50px);
+}
+.fs-root,
+.fs-root * {
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.fs-root button { font: inherit; cursor: pointer; touch-action: manipulation; }
+.fs-root button > span,
+.fs-root button > b,
+.fs-root button > svg { pointer-events: none; }
+.fs-root :focus-visible { outline: 3px solid #ffce3a; outline-offset: 3px; }
+.fs-root [hidden] { display: none !important; }
+
+.fs-root .fs-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+/* Measures env(safe-area-inset-bottom) for ui.js _layout. */
+.fs-root .fs-safe {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: env(safe-area-inset-bottom, 0px);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+/* ------------------------------------------------------------------ top row --- */
+/* Shares its row with the hub's floating back button (top-left), so it keeps to the right. */
+.fs-root .fs-top {
+  position: absolute;
+  top: var(--fs-top);
+  right: 10px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  z-index: 3;
+}
+.fs-root.is-setup .fs-top { visibility: hidden; }
+.fs-root .fs-ibtn {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(4, 20, 10, 0.72);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.fs-root .fs-ibtn svg { width: 22px; height: 22px; }
+
+/* ------------------------------------------------------------------ scoreboard --- */
+.fs-root .fs-board {
+  position: absolute;
+  top: calc(var(--fs-top) + 50px);
+  left: 8px;
+  right: 8px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  z-index: 2;
+  pointer-events: none;
+}
+.fs-root .fs-side {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: rgba(4, 20, 10, 0.62);
+  border: 2px solid transparent;
+}
+.fs-root .fs-side-0 { justify-content: flex-start; }
+.fs-root .fs-side-1 { justify-content: flex-end; }
+/* Whose turn: the selection accent AS A BORDER plus a thick underline bar (never colour alone). */
+.fs-root .fs-side.is-turn { border-color: #ffce3a; box-shadow: inset 0 -4px 0 #ffce3a; }
+.fs-root .fs-chip { flex: 0 0 auto; width: 20px; height: 20px; }
+.fs-root .fs-chip svg { width: 100%; height: 100%; display: block; }
+.fs-root .fs-ava { flex: 0 0 auto; font-size: 20px; line-height: 1; }
+.fs-root .fs-nm {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fs-root .fs-side-1 .fs-nm { text-align: right; }
+.fs-root .fs-sc { flex: 0 0 auto; font-size: 26px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.fs-root .fs-dash { flex: 0 0 auto; font-size: 20px; font-weight: 900; opacity: 0.8; }
+.fs-root.is-setup .fs-board,
+.fs-root.is-setup .fs-status { visibility: hidden; }
+
+.fs-root .fs-status {
+  position: absolute;
+  top: calc(var(--fs-top) + 98px);
+  left: 8px;
+  right: 8px;
+  margin: 0;
+  min-height: 18px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #e9f3ec;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ goal banner --- */
+.fs-root .fs-banner {
+  position: absolute;
+  left: 50%;
+  top: var(--fs-banner-y, 50%);
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+}
+.fs-root .fs-banner b {
+  font-size: 54px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  color: #fff;
+  -webkit-text-stroke: 3px #10220f;
+  paint-order: stroke fill;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+}
+.fs-root .fs-banner span {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(4, 20, 10, 0.78);
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+.fs-root .fs-banner span:empty { display: none; }
+.fs-root .fs-banner.is-show { animation: fs-banner 1.6s ease-out forwards; }
+@keyframes fs-banner {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  24% { transform: translate(-50%, -50%) scale(1); }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes fs-still { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ------------------------------------------------------------------ overlays --- */
+.fs-root .fs-ov {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--fs-top) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: rgba(2, 14, 6, 0.55);
+  overscroll-behavior: contain;
+}
+/* Auto margins centre the setup card SAFELY: one taller than the screen starts at the top padding
+   instead of being cut off at both ends, as align-items: center would. */
+.fs-root .fs-ov-setup { align-items: flex-start; background: rgba(2, 14, 6, 0.4); }
+.fs-root .fs-ov-setup > .fs-card { margin-block: auto; }
+.fs-root .fs-card {
+  position: relative;
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  border-radius: 18px;
+  background: var(--fs-card);
+  color: var(--fs-ink);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+  border: 3px solid var(--fs-line);
+}
+.fs-root .fs-card-sm { width: min(320px, 100%); align-items: stretch; text-align: center; }
+.fs-root .fs-logo {
+  margin: 0 40px;
+  text-align: center;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.05;
+  color: var(--fs-green);
+  letter-spacing: 0.01em;
+}
+.fs-root .fs-tag { margin: -4px 0 2px; text-align: center; font-size: 14px; font-weight: 600; color: var(--fs-muted); }
+.fs-root .fs-field { display: flex; flex-direction: column; gap: 4px; }
+.fs-root .fs-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fs-muted); }
+.fs-root .fs-seg { display: flex; width: 100%; padding: 2px; background: #e6efe8; border-color: var(--fs-line); }
+/* The pills are DRAWN 34px tall and each TAPS 44px tall: the ::after reaches 5px above and below
+   into the label and the gap, which hold nothing tappable (Darts' measured pattern). */
+.fs-root .fs-seg .fs-seg-item { position: relative; flex: 1 1 0; min-width: 0; min-height: 34px; padding: 0 6px; color: var(--fs-muted); font-size: 14px; }
+.fs-root .fs-seg .fs-seg-item::after { content: ''; position: absolute; inset: -5px 0; }
+.fs-root .fs-seg .fs-seg-item[aria-pressed="true"] { background: #fff; color: var(--fs-ink); box-shadow: 0 0 0 2px var(--fs-green); }
+.fs-root .fs-seg .fs-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-root .fs-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
+.fs-root .fs-go { font-size: 17px; font-weight: 800; }
+.fs-root .fs-alt { background: #fff; color: var(--fs-ink); border-color: var(--fs-line); }
+.fs-root .fs-h2 { margin: 0 40px 4px; text-align: center; font-size: 22px; font-weight: 900; color: var(--fs-ink); }
+.fs-root .fs-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #e6efe8;
+  color: var(--fs-muted);
+}
+.fs-root .fs-x svg { width: 20px; height: 20px; }
+.fs-root .fs-q { font-family: inherit; font-size: 22px; font-weight: 900; line-height: 1; }
+.fs-root .fs-res-ava { margin: 4px 0 0; font-size: 46px; line-height: 1; }
+.fs-root .fs-res-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: -2px 0 6px;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--fs-ink);
+}
+.fs-root .fs-res-team { display: inline-flex; align-items: center; gap: 6px; }
+.fs-root .fs-res-team svg { width: 22px; height: 22px; display: block; }
+
+/* How to play: one line per rule, each kept to a single row (docs/BUILDING-A-GAME.md). */
+.fs-root .fs-help { width: min(360px, 100%); gap: 8px; text-align: center; }
+.fs-root .fs-help-goal { margin: 0; font-size: 14px; font-weight: 800; white-space: nowrap; }
+.fs-root .fs-help-svg { display: block; width: 100%; max-width: 300px; margin: 0 auto; border-radius: 10px; }
+.fs-root .fs-help-line { margin: 0; font-size: 13px; font-weight: 600; color: #2f4637; white-space: nowrap; }
+.fs-root .fs-help-cap { font-weight: 700; color: var(--fs-ink); }
+.fs-root .fs-help-ex { font-weight: 800; color: var(--fs-green); }
+
+.fs-root .fs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Narrow phones: the three-way pills keep their whole word ("Medium", "Computer"). */
+@media (max-width: 360px) {
+  .fs-root .fs-seg .fs-seg-item { padding: 0 4px; font-size: 13px; gap: 3px; }
+  .fs-root .fs-tag { font-size: 13px; }
+  .fs-root .fs-logo { font-size: 26px; }
+}
+/* Short phones: a tighter card so setup never scrolls. */
+@media (max-height: 620px) {
+  .fs-root .fs-card { gap: 7px; padding: 14px 14px 12px; }
+  .fs-root .fs-logo { font-size: 26px; }
+  .fs-root .fs-tag { font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fs-root .fs-banner.is-show { animation: fs-still 1.6s linear forwards; }
+}

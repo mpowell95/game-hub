@@ -468,6 +468,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `sweep-mover.mjs`, `measure-gallery.mjs`, `test-runaway-capped.mjs`,
   `test-brickcity-stall.mjs`, `test-brickcity-corner100.mjs`, `test-brickcity-throat.mjs`,
   `test-skeeball-popup.mjs`
+- Flick Soccer: `flick-soccer/js/test.js` (headless physics, rules and computer probe)
 - Air Hockey: `air-hockey/js/test.js` (headless engine probe), `air-hockey/net-test.html` (two-phone online latency test, deployed)
 - Golf: `sheet-course.mjs`, `measure-hole-strip.mjs` ·
   Yahtzee: `test-yahtzee-ai.mjs`
@@ -561,6 +562,7 @@ working in that folder).
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive, **multiplayer at 2-4 seats** (save key `escoba-save`, MP field) | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
 | Filler | in-hub `module:`, **multiplayer** (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
+| Flick Soccer | in-hub `module:`, immersive, **`devOnly`**, table soccer with flicked discs (Soccer Stars kind): five discs a side, one flick a turn, first to 1/2/3 goals; vs computer Easy/Medium/Hard (simulates its shots with the real physics) or 2 players on one phone; autosave `gamehub.flicksoccer.save.v1`; hub id `flick-soccer`, stats id `flicksoccer` (2026-10-11) | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` | `recordResult('flicksoccer', …)` |
 | Connect 4 Hoops | in-hub `module:`, immersive, **multiplayer, two protocols** (live rooms via `js/net.js`; turn-by-turn via `hoops/games/<id>`, its own node), **admin only** (`devOnly`) | `.h4-root` / `.h4-` | `gamehub.hoops4.v1` | `recordResult('hoops4', …)` |
 | Hill Climb | in-hub `module:`, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
