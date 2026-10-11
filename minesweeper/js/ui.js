@@ -377,7 +377,7 @@ class MinesweeperUI {
       </div>
       <div class="ms-boardwrap">
         <div class="ms-board" role="grid" aria-label="${esc(t('title'))}"></div>
-        <div class="ms-loupe" hidden><div class="ms-zc"></div></div>
+        <div class="ms-loupe" hidden><div class="ms-zc"></div><span class="ms-lbadge" aria-hidden="true">${FLAG_SVG('#ffffff')}</span></div>
       </div>
       <div class="ms-bar">
         <button type="button" class="gh-btn gh-btn--icon ms-backbtn" data-act="tomenu" aria-label="${esc(t('back'))}">${BACK_SVG}</button>
@@ -411,6 +411,7 @@ class MinesweeperUI {
     this.faceEl = this.root.querySelector('.ms-face');
 
     this._buildBoard();
+    this._syncMode();
     this._fit();
     // Two extra passes: the first measurement can land before flex has settled, which is the
     // .hub-game height trap in its mildest form.
@@ -531,10 +532,16 @@ class MinesweeperUI {
     if (this.faceEl) this.faceEl.innerHTML = FACE_SVG(g.dead ? 'dead' : g.won ? 'win' : 'ok');
   }
 
+  // Flag mode is made impossible to miss (Matt, 2026-10-11: Ana dug a mine twice thinking she was
+  // flagging): the board gets a vermilion frame, the Flag button turns vermilion instead of the
+  // Dig button's blue, and the loupe under the finger carries a flag badge. Shape and label go
+  // with every colour, never colour alone.
   _syncMode() {
     this.root.querySelectorAll('[data-mode]').forEach((b) => {
       b.setAttribute('aria-pressed', String(b.dataset.mode === this.mode));
     });
+    const play = this.root.querySelector('.ms-play');
+    if (play) play.classList.toggle('is-flagmode', this.mode === 'flag');
   }
 
   /* ---- input --------------------------------------------------------------------------------
