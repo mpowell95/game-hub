@@ -130,6 +130,12 @@ banks the elapsed time with it) and renders the menu, where the button now reads
 board comes back exactly as it was. That is the same property `isInProgress()` returns `false` for:
 leaving this game costs nothing, so a confirm would be asking about a risk that does not exist.
 
+**The face button asks first on a started board (2026-10-11).** It is the classic "new game"
+face, and it used to throw a board away with no question; Matt lost a good Medium round to it.
+`_askNewGame()` now shows "Start a new board?" (Keep playing / New board) with the clock paused,
+but ONLY when the board has been started and is not finished. An untouched or finished board
+still restarts at once, since there is nothing to lose.
+
 ## The explosion
 
 Matt, 2026-09-21: *"add a huge explosion animation for if someone hits a mine"*.
