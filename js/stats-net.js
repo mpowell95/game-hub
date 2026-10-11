@@ -12,7 +12,7 @@
 // The named app + auth are booted through js/firebase-boot.js, shared with net.js, so there is
 // only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
-import { statsId, statsKey, loadStats, rateReport } from './game-stats.js';
+import { statsId, statsKey, loadStats, rateReport, activityReport } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
@@ -217,6 +217,11 @@ export async function syncMyStats() {
       rate: rateReport(),
       updatedAt: _api.serverTimestamp(),
     };
+    // WHEN EACH GAME WAS PLAYED (2026-10-11): game-stats.js's activityReport(). Same additive
+    // REPORT shape as `rate`, read by `read-activity.mjs` only. Omitted (never sent as null) while
+    // this player has nothing local yet, so a fresh or cleared phone cannot blank what is there.
+    const activity = activityReport();
+    if (activity) rec.activity = activity;
     await _api.update(_api.ref(_db, 'players/' + id), rec);
     // Verify by fresh re-read (THE LAW rule 6's reference pattern, as used by game-stats.js persist()).
     const snap = await _api.get(_api.ref(_db, 'players/' + id));

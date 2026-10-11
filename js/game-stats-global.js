@@ -86,6 +86,28 @@
       else if (won === false) { g.total.lost += 1; b.lost += 1; }
       st.updatedAt = new Date().toISOString();
       localStorage.setItem(key, JSON.stringify(st));
+      noteActivity(key, gameId, Date.now());
+    } catch (e) { /* never break the game */ }
+  }
+
+  // WHEN this game was played: the same `gamehub.activity.v1` stamp as game-stats.js's
+  // stampActivity()/activityWeek() (2026-10-11). Keep in step with it.
+  function noteActivity(key, gameId, now) {
+    try {
+      var all = readJSON('gamehub.activity.v1');
+      if (!all || typeof all !== 'object' || Array.isArray(all)) all = {};
+      var a = all[key] && typeof all[key] === 'object' ? all[key] : (all[key] = {});
+      var g = a[gameId] && typeof a[gameId] === 'object' ? a[gameId] : (a[gameId] = {});
+      if (!g.w || typeof g.w !== 'object' || Array.isArray(g.w)) g.w = {};
+      var d = new Date(now);
+      d.setHours(12, 0, 0, 0);
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+      var wk = d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+      g.w[wk] = (g.w[wk] | 0) + 1;
+      if (!(+g.first > 0) || now < +g.first) g.first = now;
+      if (!(+g.last > 0) || now > +g.last) g.last = now;
+      localStorage.setItem('gamehub.activity.v1', JSON.stringify(all));
     } catch (e) { /* never break the game */ }
   }
 
