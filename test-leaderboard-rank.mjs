@@ -559,8 +559,10 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('[KNOWN-BUG PROBE] the tier chip is on the NAME line, never beside the plays count',
     // (2026-10-11) the name, YOU badge and chip share one no-wrap .lb-pline, so a long name
     // truncates instead of pushing the chip onto a line of its own.
-    /\$\{youBadge\(g\)\}\$\{tierChipHTML\(rowTier\)\}<\/span><span class="lb-psubline">/.test(src)
-    && /\$\{youBadge\(g\)\}\$\{tierHtml \|\| ''\}<\/span><span class="lb-psubline">/.test(src)
+    // Since the 2026-10-11 review every board card (Tic Tac Toe's and Snake's included) is built by
+    // playerCardHTML, so this one line is where the chip sits for all of them.
+    /\$\{youBadge\(g\)\}\$\{tierHtml \|\| ''\}<\/span><span class="lb-psubline">/.test(src)
+    && !/class="lb-pcard\$\{me\}"[\s\S]{0,400}lb-tt-split/.test(src)
     && !/lb-psubline">\$\{esc\(t\('lb_played_count'[^}]*\}\)\)\}\$\{tierChipHTML/.test(src),
     '"22 played  MEDIUM" reads as "22 games played on Medium"');
   ok('compareBoardRow is the tier-first comparator over the tier\'s OWN score',
@@ -626,7 +628,7 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   // BOTH of their shapes (the split card, and the "Games" shape that leads with the play count).
   // Drop the chip from any one of them and this fails, which is the point.
   ok('every card still names the tier it ranks at',
-    (src.match(/tierChipHTML\(rowTier\)/g) || []).length === 5 && /\.lb-tierchip\{/.test(src));
+    (src.match(/tierChipHTML\(rowTier\)/g) || []).length === 6 && /\.lb-tierchip\{/.test(src));
   // THE HEADLINE IS WHAT YOU SORTED BY, on the two games with a bespoke card as well. Matt, on the
   // Snake board sorted by Games: rank 1 printed 39 and rank 3 printed 43, because these two cards
   // took no sort argument and always led with the score.
