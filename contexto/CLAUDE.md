@@ -217,6 +217,30 @@ guesses even after clicking on the +2. I should always be able to see all my gue
   `window.innerHeight`, which the keyboard does not change; the input is at the top, so the keyboard
   never covers it. Sudoku uses the old formula safely only because it has no text field.
 
+## Only COMMON words are ranked (2026-10-11)
+
+Matt: *"It seems more difficult than the real website game."* Measured on the old data: 58% of
+every secret's 300 closest words were outside the 10,000 most common words ("gneiss", "tuff" and
+"quartzite" for rock, "sagacity" for wisdom). Nobody guesses those, but each one pushed the words
+people DO guess further down the list (ocean: fish #141, wave #252).
+
+- **`RANKED = 15000`** in `build-contexto-data.mjs`: only the 15,000 most frequent words, plus every
+  secret, have a rank of their own. The data file carries it as `ranked`. Measured after: an
+  everyday guess's rank roughly halves (ocean: fish 141 -> 90; cat: animal 52 -> 23, lion 130 -> 62).
+- **A rarer word is still a legal guess.** `engine.js` `rankOf()` places it among the ranked words
+  by compressed closeness (2 + how many ranked words are closer), so it can share a number with a
+  ranked word. Hints and "Closest words" only ever show ranked words.
+- **`words`, `forms` and `secrets` were byte-identical before and after the regeneration**, so every
+  puzzle number keeps its word and every save still resolves. Ranks shown for guesses in old saves
+  change (they are recomputed on every render, see "Persistence"); finished results and stats do
+  not.
+- `model.size` is now the RANKED count (the bar widths use it); `model.words.length` is the whole
+  vocabulary. A data file without `ranked` ranks every word, as before.
+- **Considered and NOT done (Matt chose fix 1 only):** ranks past 1,000 come from 64-d compressed
+  vectors and are often off by 1.5x, sometimes 4x (measured: p50 1.4-1.6x, p90 3.9-7.3x across the
+  exact range). More exact neighbours (K 1000 -> ~3000) and/or 128-d vectors would fix it at roughly
+  6-7 MB per language (estimate, not built).
+
 ## What is NOT covered by a test
 
 `node contexto/js/test.js` covers the engine (the word model, the ranking, the puzzle-number
