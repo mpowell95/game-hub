@@ -219,7 +219,7 @@
   transition: transform .25s ease-out;
 }
 .wo-root .wo-stage { flex: 1; min-height: 0; position: relative; margin-bottom: env(safe-area-inset-bottom, 0px); }
-.wo-root .wo-canvas { position: absolute; left: 0; top: 0; display: block; touch-action: manipulation; }
+.wo-root .wo-canvas { position: absolute; left: 0; top: 0; display: block; touch-action: manipulation; outline: none; }
 /* The hint sits at the right end of the hearts row. It used to have a row of its own under the
    board, which cost every phone ~70px of board (Matt, 2026-10-11: make sure the game fits). */
 .wo-root .wo-hint {
@@ -250,7 +250,9 @@
   visibility: hidden;
 }
 .wo-root .wo-banner span {
-  font-size: 46px;
+  /* Scales with the screen: at a flat 46px the Spanish words ("¡Enhorabuena!", "Siguiente nivel",
+     ~400px) ran off every phone 390px wide or narrower (QA, 2026-10-11). */
+  font-size: min(46px, 9.6vw);
   font-weight: 900;
   text-transform: uppercase;
   color: #f5b52e;
@@ -324,3 +326,6 @@
   .wo-root .wo-banner.is-on { animation: none; background: rgba(74, 44, 96, .72); }
   .wo-root .wo-banner.is-on span { animation: none; transform: translateX(0); }
 }
+
+/* Keyboard play (2026-10-11): the board shows it has focus; the selected arrow wears a halo. */
+.wo-root .wo-canvas:focus-visible { outline: 2px solid #ffce3a; outline-offset: -3px; }

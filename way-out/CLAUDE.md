@@ -16,7 +16,7 @@ Our name is **Arrow Maze** (es *Laberinto de flechas*).
 It shipped on 2026-10-11 as **Way Out** and Matt asked for a new name the same day (*"New name
 please"*). Only what a player SEES changed: the hub title, `game_title_wayout`, the game's own
 `title`, the page `<title>`. **The folder `way-out/`, hub id `way-out`, stats id `wayout`, prefix
-`.wo-` and the keys `gamehub.wayout.v1` / `gamehub.wayout.save.v1` keep the first name on
+`.wo-` and the keys `gamehub.wayout.v1` / `gamehub.wayout.save.v1` / `gamehub.wayout.saves.v1` keep the first name on
 purpose**: the stats id keys every level already cleared in `gamehub.stats` and `players/<id>`,
 and the keys hold each tier's level (THE LAW rule 5, old keys are never renamed). Same shape as
 Monopoly Deal's `business-deal/` split. A directory name is not a display name.
@@ -128,13 +128,55 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
 ## Persistence and stats
 
 - Settings `gamehub.wayout.v1`: `{ tier, levels: { easy, medium, hard, expert } }`, the NEXT level
-  per tier. Saved on selection; `levels` only ever go up (`Math.max`).
-- Progress `gamehub.wayout.save.v1`: `{ v, tier, level, gone[], red[], lives }`, written after every
-  tap that changes the level, cleared on a win or a restart. Trusted only for the exact tier and
-  level being opened; anything malformed starts the level fresh.
+  per tier. Saved on selection; `levels` only ever go up (`Math.max`), capped at 1,000,000 (a
+  corrupt value once read "Level 1e+21").
+- Progress `gamehub.wayout.saves.v1` (since the 2026-10-11 QA pass): ONE SAVE PER TIER,
+  `{ easy: save|null, medium, hard, expert, migrated: 1 }`, each save `{ v, tier, level, gone[],
+  red[], lives }`, written after every tap that changes the level, set to null on a win, a restart
+  or a loss. Trusted only for the exact tier and level being opened; anything malformed starts the
+  level fresh. **The first build's single slot, `gamehub.wayout.save.v1`, is read ONCE into its
+  tier's slot (`migrated: 1`) and then left untouched, never written or deleted (rule 5).** One
+  shared slot meant playing Easy wiped an unfinished Medium level.
+- "Continue level N" shows only when the save holds real progress (an arrow gone or red, or a heart
+  lost), not merely when a save exists.
+- **A save with every arrow gone is a win that was never counted** (the player left while the last
+  arrow was still sliding out): opening it runs the win sequence, records it and moves on, instead
+  of an empty board.
 - Stats: `recordResult('wayout', tier, true)` once per level cleared. **No sub-counter**, so the
   three-edit rule does not apply. My Stats shares `murdokuScreen` (solved in total and per tier);
   `wayout` is in `js/players-agg.js`'s SOLO set; leaderboard unit "solved".
+
+## The QA pass (2026-10-11)
+
+Matt: *"test play it ... I want ALL bugs and glitches discovered and fixed."* A Sonnet QA agent
+played it in the hub and standalone (5 phone sizes, light/dark, EN/ES, rapid and abusive input,
+corrupt storage, 300 generated levels per tier) and a code read ran alongside. Fixed, each
+re-checked with the agent's own repro scripts:
+
+1. Leaving (back, reload, hub back, phone lock) while the LAST arrow slid out lost the win and left
+   an empty, unwinnable board behind "Continue". Now counted on reopen (Persistence, above).
+2. Back to setup during the win sequence pulled the player into the next level 2.5 s later, and
+   during the 650 ms before "Out of lives" put that popup over the setup screen. `_toSetup()` /
+   `_stopLevel()` cancel every timer and frame of the level first.
+3. The hint treated an arrow mid-bump as gone, so it could point at an arrow that was really
+   blocked (and following it cost a heart). `hintArrow(lvl, gone, red, skip)`: a busy arrow is never
+   suggested but still blocks.
+4. Escape on "Out of lives" closed the popup and left a dead board; it now acts as the X.
+5. The Spanish win words ran off phones 390px wide or narrower; the banner scales (`min(46px, 9.6vw)`).
+6. Restart during the win sequence replayed the won level (counted twice); Restart is ignored once won.
+7. A second bump in flight after the last heart wrote `lives: 0` back, which reads as 3 lives on
+   reload, and could leave more than 3 red arrows. Nothing is saved or bumped once the level is lost.
+8. A re-render mid-level (language change) froze arrows mid-animation and lost a pending win; the
+   frame loop restarts after binding, and a lost level re-shows "Out of lives".
+9. A resize/rotate mid-animation slid the arrow across its OLD pixels; in-flight animations finish
+   at once on a real geometry change (a bump still costs its heart).
+10. `window.__woTest` outlived the play screen; a right-click sent an arrow (primary button only now).
+11. Keyboard: arrow keys move between the difficulty radios; popups trap Tab and give focus back on
+    close; **the board is playable by keyboard** (focus it, arrow keys pick an arrow, shown with a
+    yellow halo, Enter/Space sends it).
+
+Not changed, on purpose: taps fire on `pointerdown` (instant, as in the reference); the standalone
+page's `/favicon.ico` 404 is shared with every game's standalone page.
 
 ## Tests
 
