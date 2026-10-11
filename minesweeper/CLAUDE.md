@@ -104,6 +104,12 @@ leaves the board still deliver its move and up events.
 A press that wanders more than 14px cancels the pending long press: that is a drag, not a hold.
 Retargeting cancels it too, because the hold belonged to the cell it started on.
 
+**Flag mode is impossible to miss (2026-10-11).** Ana dug a mine twice thinking she was flagging.
+In Flag mode the Flag button turns vermilion (Dig stays blue), the board gets a vermilion frame
+(`outline`, so the measured cell size is untouched), and the loupe carries a flag badge.
+`_syncMode()` sets `.is-flagmode` on `.ms-play`; `renderGame()` calls it, so a resumed board in
+Flag mode shows it too. Matt chose this over a "safe hold" and a "forgive one mine" option.
+
 **Chording can kill you**, and that is correct — a flag in the wrong place is the player's own
 mistake, and the engine test covers exactly that case. Do not "fix" it.
 

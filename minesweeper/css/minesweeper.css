@@ -493,6 +493,30 @@
   color: #ffffff;
 }
 
+/* FLAG MODE IS IMPOSSIBLE TO MISS (Matt, 2026-10-11: Ana dug a mine twice thinking she was
+ * flagging). Three signals, each with a shape or label as well as the colour: the Flag button
+ * turns vermilion (Dig stays blue), the board gets a vermilion frame, and the loupe under the
+ * finger carries a flag badge. `outline` takes no layout space, so the measured cell size is
+ * unchanged; the 7px it reaches out sits inside the screen's 12px padding. */
+.ms-root .ms-play.is-flagmode .ms-bar .gh-seg__item[aria-pressed="true"] { background: var(--ms-flag); }
+.ms-root .ms-play.is-flagmode .ms-board {
+  outline: 3px solid var(--ms-flag);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.ms-root .ms-play.is-flagmode .ms-loupe,
+.ms-root .ms-play.is-flagmode .ms-loupe:after { border-color: var(--ms-flag); }
+.ms-root .ms-lbadge {
+  display: none;
+  position: absolute; top: -10px; right: -10px;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--ms-flag);
+  border: 2px solid var(--ms-surface);
+  align-items: center; justify-content: center;
+}
+.ms-root .ms-lbadge svg { width: 16px; height: 16px; }
+.ms-root .ms-play.is-flagmode .ms-lbadge { display: flex; }
+
 /* =================================================================================================
  * THE EXPLOSION (2026-09-21, Matt: "add a huge explosion animation for if someone hits a mine")
  *
