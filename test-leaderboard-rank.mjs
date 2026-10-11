@@ -368,7 +368,7 @@ console.log('\n-- who is allowed on the board: no test accounts, no nameless dev
   ok('...and backing out of it returns to the board, not to a list they never chose',
     /lb-pgame-back[\s\S]{0,220}?if \(_game\) \{ _player = null; _playerGame = null; \}/.test(src));
   ok('...and the back button names where it actually goes',
-    /data-role="lb-pgame-back">\$\{_game \? t\('lb_back_game'/.test(src));
+    /backBtnHTML\('lb-pgame-back', _game \? t\('lb_back_game'/.test(src));
   // From By Player there is no game in hand, so that path must still open the player's game list.
   ok('the By Player path is unchanged (no game in hand means the list)',
     /_playerGame = _game \|\| null/.test(src) && /\} else \{ _playerGame = null; \}/.test(src));
@@ -557,8 +557,10 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     && /function comparePlainMetric\(a, b, id\) \{\s*\n\s*return compareBoardMetric\(gameMetricAt\(a, id, _tier\), gameMetricAt\(b, id, _tier\), id\);/.test(src),
     'a volume order must not consult a tier');
   ok('[KNOWN-BUG PROBE] the tier chip is on the NAME line, never beside the plays count',
-    /\$\{youBadge\(g\)\}\$\{tierChipHTML\(rowTier\)\}<span class="lb-psubline">/.test(src)
-    && /\$\{youBadge\(g\)\}\$\{tierHtml \|\| ''\}<span class="lb-psubline">/.test(src)
+    // (2026-10-11) the name, YOU badge and chip share one no-wrap .lb-pline, so a long name
+    // truncates instead of pushing the chip onto a line of its own.
+    /\$\{youBadge\(g\)\}\$\{tierChipHTML\(rowTier\)\}<\/span><span class="lb-psubline">/.test(src)
+    && /\$\{youBadge\(g\)\}\$\{tierHtml \|\| ''\}<\/span><span class="lb-psubline">/.test(src)
     && !/lb-psubline">\$\{esc\(t\('lb_played_count'[^}]*\}\)\)\}\$\{tierChipHTML/.test(src),
     '"22 played  MEDIUM" reads as "22 games played on Medium"');
   ok('compareBoardRow is the tier-first comparator over the tier\'s OWN score',

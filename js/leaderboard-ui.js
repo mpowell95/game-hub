@@ -1216,7 +1216,7 @@ function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml, tierHtml) {
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierHtml || ''}<span class="lb-psubline">${sub}</span></span>
+      <span class="lb-pid"><span class="lb-pline"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierHtml || ''}</span><span class="lb-psubline">${sub}</span></span>
       <span class="lb-pnum"><b>${big.val}</b><span>${esc(big.unit)}</span></span>
     </div>
     ${footer}
@@ -1369,7 +1369,12 @@ function gameListHTML(list) {
     </button>`;
   });
   if (!cards.length) return emptyState(t('lb_empty_all'));
-  return `<div class="lb-ctrls">${sortPillsHTML(GAME_SORTS, _gameSort, 'gsort')}</div><div class="lb-glist">${cards.join('')}</div>`;
+  // Favorites with none picked used to just show the alphabetical list, which read as a broken
+  // tab. Say why, once. (A new key can be missing for one visit after a deploy - js/strings.js is
+  // cache-first - and makeT then returns the key itself, so that case shows nothing.)
+  const favNote = _gameSort === 'fav' && !rows.some((r) => r.fav) && t('lb_fav_none') !== 'lb_fav_none'
+    ? `<p class="lb-note">${esc(t('lb_fav_none'))}</p>` : '';
+  return `<div class="lb-ctrls">${sortPillsHTML(GAME_SORTS, _gameSort, 'gsort')}</div>${favNote}<div class="lb-glist">${cards.join('')}</div>`;
 }
 
 // --- game detail (drill-in from By Game) -------------------------------------
@@ -1586,7 +1591,7 @@ function ttCardHTML(g, chip, bSort) {
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierChipHTML(rowTier)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'tictactoe') }))}</span></span>
+      <span class="lb-pid"><span class="lb-pline"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierChipHTML(rowTier)}</span><span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'tictactoe') }))}</span></span>
     </div>
     <div class="lb-tt-split">
       <span class="lb-tt-val"><b>${ultimate}</b><span>${esc(t('lb_tt_ultimate'))}</span></span>
@@ -1619,7 +1624,7 @@ function snCardHTML(g, chip, bSort) {
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
-      <span class="lb-pid"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierChipHTML(rowTier)}<span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'snake') }))}</span></span>
+      <span class="lb-pid"><span class="lb-pline"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierChipHTML(rowTier)}</span><span class="lb-psubline">${esc(t('lb_played_count', { n: boardPlaysOf(g, 'snake') }))}</span></span>
     </div>
     <div class="lb-tt-split">
       <span class="lb-tt-val"><b>${off}</b><span>${esc(t('lb_sn_walls_off'))}</span></span>
@@ -1690,17 +1695,26 @@ function cpSoloRacks(g) { return (((g.games.cuppong || {}).cp || {}).soloRacks) 
  *  draws the one with more racks cleared first. */
 function cmpCpFewest(a, b) { return cpSoloBest(a) - cpSoloBest(b); }
 
+/** Every back control on these screens: the same chevron, the same 44px target. `label` is
+ *  already-escaped markup (some strings carry an arrow entity, dropped here so the chevron is
+ *  the only arrow). `iconOnly` keeps the label for screen readers only. */
+function backBtnHTML(role, label, iconOnly) {
+  const text = String(label).replace(/^&larr;\s*/, '');
+  return `<button type="button" class="lb-back${iconOnly ? ' is-icon' : ''}" data-role="${role}"${iconOnly ? ` aria-label="${text}"` : ''}>`
+    + '<svg class="lb-back-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>'
+    + `${iconOnly ? '' : `<span>${text}</span>`}</button>`;
+}
+
 function gameDetail(list, id) {
   const fieldTiers = id === 'skeeball' || id === 'holdem' ? [] : fieldTiersPresent(list, [id]);
   const machineIds = id === 'skeeball' ? skMachinesPresent(list) : [];
   const totalPlays = list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
   // Screen 3's header: the way back, the game's name at full size, and how much this game has
   // been played by everyone, which is the one number that says whether the board means anything.
+  // One row (2026-10-11 spacing pass): the back chevron sits beside the title instead of on a row
+  // of its own, which was 44px of a phone screen spent before the first player.
   const head = `<div class="lb-board-head">
-    <button type="button" class="lb-back" data-role="lb-back">
-      <svg class="lb-back-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
-      ${esc(t('lb_by_game'))}
-    </button>
+    ${backBtnHTML('lb-back', esc(t('lb_by_game')), true)}
     <div class="lb-board-id">
       <h3 class="lb-board-h">${esc(labelOf(id))}</h3>
       <span class="lb-board-n"><b>${totalPlays}</b><span>${esc(t('lb_games_unit'))}</span></span>
@@ -1811,7 +1825,7 @@ function playerDetail(list, key) {
   // that game's own page.
   const backLabel = _game ? t('lb_back_game', { title: labelOf(_game) }) : t('lb_back_players');
   const g = list.find((x) => x.key === key);
-  if (!g) return `<div class="lb-detail-top"><button type="button" class="lb-back" data-role="lb-player-back">${backLabel}</button></div>` + emptyState(t('lb_empty_all'));
+  if (!g) return `<div class="lb-detail-top">${backBtnHTML('lb-player-back', backLabel)}</div>` + emptyState(t('lb_empty_all'));
   // THE DRILL-IN SAYS WHOSE PAGE IT IS AND WHICH GAME (2026-09-02). It used to be a bare
   // "< Games" link above a wall of numbers: the overlay's own title says "Leaderboard", the
   // player's name was two screens back, and the game's name appeared nowhere at all. Matt, on a
@@ -1820,7 +1834,7 @@ function playerDetail(list, key) {
   // name, game - fixes that for every game's screen at once, since they all render through here.
   if (_playerGame) {
     return `<div class="lb-detail-top">
-      <button type="button" class="lb-back" data-role="lb-pgame-back">${_game ? t('lb_back_game', { title: labelOf(_game) }) : t('lb_back_games')}</button>
+      ${backBtnHTML('lb-pgame-back', _game ? t('lb_back_game', { title: labelOf(_game) }) : t('lb_back_games'))}
     </div>
     <div class="lb-ctx">
       ${avatarHTML(g)}
@@ -1838,7 +1852,7 @@ function playerDetail(list, key) {
   // The same six-cell strip By Player shows, so a person's whole mix reads identically on both
   // screens - and every play they have made is on it, not just the four tiered ones.
   const head = `<div class="lb-detail-top">
-    <button type="button" class="lb-back" data-role="lb-player-back">${backLabel}</button>
+    ${backBtnHTML('lb-player-back', backLabel)}
   </div>
   <div class="lb-pdetail-head">
     ${avatarHTML(g)}
@@ -1846,8 +1860,8 @@ function playerDetail(list, key) {
       <span class="lb-pdetail-name">${rankName(g)}${youBadge(g)}</span>
       <span class="lb-pdetail-meta">${t('lb_played_count', { n: played })}</span>
     </span>
-    ${sendMsgHTML(g)}
     <span class="lb-pnum"><b>${wins}</b><span>${t('lb_wins_unit')}</span></span>
+    ${sendMsgHTML(g)}
   </div>
   ${catGridHTML(g)}`;
   return head + messageHTML(g) + `<h4 class="lb-h4">${esc(t('lb_pd_games_h'))}</h4>` + gsGameListHTML(g.games);
@@ -2210,7 +2224,7 @@ function ensureCss() {
     '.lb-top h2{margin:0;font-size:28px;font-weight:800;letter-spacing:-.025em;line-height:1;color:var(--lb-ink)}',
     '.lb-x{appearance:none;border:0;background:none;color:var(--lb-muted);font-size:26px;line-height:1;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer}',
     // The two segments, as one hairline-joined control (never a scrolling rail).
-    '.lb-segs{display:flex;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:9px;overflow:hidden;margin:0 16px 12px}',
+    '.lb-segs{display:flex;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:9px;overflow:hidden;margin:8px 16px 12px}',
     '.lb-seg{flex:1 1 0;appearance:none;cursor:pointer;border:0;min-height:44px;font-size:13px;font-weight:800;color:var(--lb-muted);background:var(--lb-surface)}',
     '.lb-seg.is-active{color:var(--lb-surface);background:var(--lb-ink)}',
     // css/hub.css paints the active segment with --hub-accent in dark, which predates these
@@ -2220,7 +2234,7 @@ function ensureCss() {
     ':root.gh-dark .lb-panel .lb-seg.is-active{background:var(--lb-ink);border-color:var(--lb-ink);color:var(--lb-surface)}',
     '.lb-body{padding:0 16px 24px}',
     // --- controls: three sort pills, then a full-width select that opens IN PLACE ---------------
-    '.lb-ctrls{display:flex;flex-direction:column;gap:7px;margin:0 0 12px}',
+    '.lb-ctrls{position:relative;display:flex;flex-direction:column;gap:8px;margin:0 0 12px}',
     '.lb-pills{display:flex;gap:6px}',
     // #ffce3a marks the selected pill and nothing else on these screens; the pressed state also
     // carries weight and an inset ring, so it is never colour alone.
@@ -2231,7 +2245,7 @@ function ensureCss() {
     '.lb-select.is-open{border-radius:8px 8px 0 0}',
     '.lb-caret{width:15px;height:15px;flex:none}',
     '.lb-select.is-open .lb-caret{transform:rotate(180deg)}',
-    '.lb-panel-list{display:flex;flex-direction:column;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-top:0;border-radius:0 0 10px 10px;overflow:hidden;margin-top:-7px}',
+    '.lb-panel-list{display:flex;flex-direction:column;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-top:0;border-radius:0 0 10px 10px;overflow:hidden;position:absolute;left:0;right:0;top:100%;z-index:1;box-shadow:0 10px 24px rgba(9,24,48,.18)}',
     '.lb-opt{width:100%;min-height:44px;display:flex;align-items:center;gap:9px;padding:0 12px;cursor:pointer;font-size:13px;font-weight:600;color:var(--lb-ink);background:var(--lb-surface);border:0;text-align:left}',
     '.lb-opt.is-sel{font-weight:800;background:var(--lb-surface-2);box-shadow:inset 3px 0 0 var(--lb-sel)}',
     '.lb-opt-nm{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -2261,6 +2275,8 @@ function ensureCss() {
     '.lb-av{flex:none;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:var(--lb-surface-2);border:1px solid var(--lb-line);font-size:21px;line-height:1}',
     '.lb-av.is-initial{font-size:17px;font-weight:800;color:var(--lb-ink)}',
     '.lb-pid{flex:1 1 auto;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:0 6px}',
+    '.lb-pline{flex:1 0 100%;min-width:0;display:flex;align-items:center;gap:6px}',
+    '.lb-pline .lb-pname{flex:0 1 auto;min-width:0}',
     '.lb-pname{max-width:100%;font-size:15px;font-weight:700;color:var(--lb-ink);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-pcard.is-me .lb-pname{font-weight:800}',
     '.lb-you{flex:none;font-style:normal;font-size:11px;font-weight:800;letter-spacing:.1em;background:var(--lb-ink);color:var(--lb-surface);padding:3px 5px;border-radius:3px}',
@@ -2319,7 +2335,7 @@ function ensureCss() {
     // The full six, on the player detail screen only (see catGridHTML).
     // A SECTION HEADING. Both blocks on this screen (the breakdown, the game list) had none,
     // which is most of why the screen did not say what it was showing.
-    '.lb-h4{margin:15px 0 7px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--lb-muted)}',
+    '.lb-h4{margin:16px 0 8px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--lb-muted)}',
     '.lb-grid6{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:10px;overflow:hidden;width:100%}',
     '.lb-grid6.is-4{grid-template-columns:repeat(4,minmax(0,1fr))}',
     '.lb-grid6.is-2{grid-template-columns:repeat(2,minmax(0,1fr))}',
@@ -2337,6 +2353,7 @@ function ensureCss() {
     '.lb-tile2{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;background:var(--lb-surface-2);border:1.5px solid transparent;font-size:12px;font-weight:800;color:var(--lb-muted)}',
     '.lb-tile2 .lb-dshape{fill:var(--lb-pill-color,#5b6b82)}',
     '.lb-tile2.is-sel{border-color:var(--lb-pill-color,#1c2430);color:var(--lb-ink);background:var(--lb-surface)}',
+    ':root.gh-dark .lb-tile2.is-sel{border-color:var(--lb-ink)}',
     '.lb-tile2.is-empty{opacity:.55}',
     '.lb-tile-mp .lb-mp-tag{font-style:normal;font-size:11px;font-weight:900;letter-spacing:.04em;color:var(--lb-muted)}',
     '.lb-dshape{width:11px;height:11px;display:block}',
@@ -2367,16 +2384,20 @@ function ensureCss() {
     '.lb-gnum span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--lb-muted);margin-top:3px}',
     '.lb-gnum.is-empty b{color:var(--lb-muted)}',
     // --- a game board (screen 3) ----------------------------------------------------------------
-    '.lb-board-head{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}',
-    '.lb-back{align-self:flex-start;appearance:none;cursor:pointer;min-height:44px;display:flex;align-items:center;gap:7px;background:none;border:0;padding:0 6px 0 0;color:var(--lb-accent-text);font-size:14px;font-weight:600}',
+    '.lb-board-head{display:flex;align-items:center;gap:4px;margin:0 0 12px}',
+    '.lb-back{align-self:flex-start;appearance:none;cursor:pointer;min-height:44px;display:flex;align-items:center;gap:6px;background:none;border:0;padding:0 8px 0 0;color:var(--lb-accent-text);font-size:14px;font-weight:600}',
+    // Icon-only beside a title: still a 44px target; the negative margin puts the chevron on the
+    // 16px gutter instead of indenting the title.
+    '.lb-back.is-icon{flex:none;align-self:center;width:44px;justify-content:flex-start;padding:0;margin:0 -10px 0 -6px}',
+    '.lb-back.is-icon .lb-back-i{width:22px;height:22px}',
     '.lb-back-i{width:16px;height:16px;flex:none}',
-    '.lb-board-id{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}',
-    '.lb-board-h{margin:0;font-size:28px;font-weight:800;letter-spacing:-.025em;color:var(--lb-ink);line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-board-id{flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:12px}',
+    '.lb-board-h{margin:0;min-width:0;font-size:24px;font-weight:800;letter-spacing:-.025em;color:var(--lb-ink);line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-board-n{flex:none;display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1}',
     '.lb-board-n b{font-size:19px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums}',
     '.lb-board-n span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--lb-muted);margin-top:3px}',
     // --- standing records -----------------------------------------------------------------------
-    '.lb-h3{margin:20px 0 9px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:var(--lb-muted)}',
+    '.lb-h3{margin:24px 0 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:var(--lb-muted)}',
     '.lb-recs{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:10px;overflow:hidden}',
     '.lb-rec{background:var(--lb-surface);padding:12px 13px 13px;min-width:0}',
     '.lb-rec.is-wide{grid-column:span 2}',
@@ -2386,18 +2407,18 @@ function ensureCss() {
     '.lb-rec .lb-av{width:18px;height:18px;font-size:12px;border:0;background:transparent}',
     // --- player detail (screen 4) ----------------------------------------------------------------
     '.lb-detail-top{display:flex;align-items:center;gap:10px;min-height:44px}',
-    '.lb-pdetail-head{display:flex;align-items:center;gap:11px;margin:4px 0 11px}',
+    '.lb-pdetail-head{display:flex;align-items:center;gap:12px;margin:8px 0 8px}',
     '.lb-pdetail-head .lb-av{width:42px;height:42px;font-size:22px}',
     '.lb-pdetail-id{flex:0 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}',
     '.lb-pdetail-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:18px;font-weight:800;color:var(--lb-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-pdetail-meta{font-size:11.5px;font-weight:600;color:var(--lb-muted)}',
-    '.lb-pmsg{margin:12px 0 0;padding:11px 13px;border-radius:12px;background:var(--lb-surface-2);border:1px solid var(--lb-line);color:var(--lb-ink);font-size:14px;line-height:1.4;overflow-wrap:anywhere}',
-    // Send message, beside the player's name in the detail header. Built from this overlay's own
+    // A quote, not a field: no box around it, so it does not read as somewhere to type.
+    '.lb-pmsg{margin:12px 0 0;padding:2px 0 2px 12px;border-left:3px solid var(--lb-line);color:var(--lb-ink);font-size:14px;font-style:italic;line-height:1.4;overflow-wrap:anywhere}',
+    // Send message, at the RIGHT EDGE of the detail header, after the wins number (2026-10-11
+    // spacing pass; it used to hug the name, floating mid-row). Built from this overlay's own
     // --lb-* tokens rather than css/ui.css's .gh-* set, because the leaderboard does not inject
-    // that stylesheet. What keeps it BESIDE THE NAME is that the name block no longer grows
-    // (`.lb-pdetail-id` is `flex:0 1 auto`) and the wins number takes the slack instead
-    // (`margin-left:auto` below) - so the button hugs the name whether or not it is rendered, and
-    // the wins number stays pinned right either way. 44x44 is the tap-target floor, not a style.
+    // that stylesheet. The wins number takes the slack (`margin-left:auto` below), so it stays
+    // right-aligned whether or not the button is rendered. 44x44 is the tap-target floor.
     '.lb-pdetail-head .lb-pnum{margin-left:auto}',
     '.lb-msgbtn{flex:0 0 auto;width:44px;height:44px;display:inline-flex;'
       + 'align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--lb-line);'
@@ -2406,12 +2427,17 @@ function ensureCss() {
     '.lb-msgbtn:active{transform:translateY(1px)}',
     // The drill-in's context strip: whose page, which game. Quiet by design - it is orientation,
     // not a headline, and the game's own numbers start immediately under it.
-    '.lb-ctx{display:flex;align-items:center;gap:10px;margin:2px 0 12px;padding-bottom:11px;border-bottom:1px solid var(--lb-line)}',
+    '.lb-ctx{display:flex;align-items:center;gap:12px;margin:8px 0 12px;padding-bottom:12px;border-bottom:1px solid var(--lb-line)}',
     '.lb-ctx .lb-av{width:34px;height:34px;font-size:18px}',
     '.lb-ctx-id{min-width:0;display:flex;flex-direction:column;gap:1px}',
     '.lb-ctx-name{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;font-weight:700;color:var(--lb-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-ctx-game{font-size:19px;font-weight:800;letter-spacing:-.02em;color:var(--lb-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.lb-pgame{margin-top:10px}',
+    '.lb-pgame{margin-top:8px}',
+    '.lb-note{margin:0 0 12px;font-size:13px;line-height:1.4;color:var(--lb-muted)}',
+    // Small phones: the score had eaten the name. Shrink the fixed-width pieces, not the name.
+    '@media (max-width:360px){.lb-pcard{padding:12px 10px}.lb-pcard-row{gap:8px}.lb-chip{width:28px;height:28px;font-size:12px}'
+      + '.lb-av{width:32px;height:32px;font-size:17px}.lb-pnum b{font-size:20px}.lb-tt-split{margin-left:36px}'
+      + '.lb-pill{padding:0 4px;font-size:12px}.lb-board-h{font-size:22px}}',
     // --- skeleton + empty -------------------------------------------------------------------------
     '.lb-sk{display:inline-block;width:100%;height:11px;border-radius:5px;background:var(--lb-surface-2);vertical-align:middle}',
     '.lb-sk-n{width:14px}', '.lb-sk-w{width:60%}',
