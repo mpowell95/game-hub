@@ -1097,6 +1097,34 @@ const PLAY = {
       return { ok: true, why: `cell ${emptyIndex} went from blank to ${after.cells[emptyIndex]}` };
     },
   },
+  'way-out': {
+    what: 'tap Play, tap a clear arrow (it leaves), tap a blocked one (a life goes)',
+    async run(page, cdp, tap) {
+      const play = await page.waitForSelector('[data-act="play"]', { timeout: 8000 }).catch(() => null);
+      if (!play) return { ok: false, why: 'no Play button on the home screen' };
+      await tap(play);
+      await page.waitForSelector('.wo-canvas', { timeout: 8000 }).catch(() => null);
+      await page.waitForTimeout(300);
+      const s0 = await page.evaluate(() => (window.__woTest ? window.__woTest.state() : null));
+      if (!s0) return { ok: false, why: 'the game exposed no state to drive (window.__woTest)' };
+      const clear = await page.evaluate(() => window.__woTest.clearId());
+      if (clear < 0) return { ok: false, why: 'no clear arrow on a fresh level' };
+      const pc = await page.evaluate((id) => window.__woTest.pointOf(id), clear);
+      await page.touchscreen.tap(pc.x, pc.y);
+      await page.waitForTimeout(200);
+      const s1 = await page.evaluate(() => window.__woTest.state());
+      if (s1.left !== s0.left - 1) return { ok: false, why: `tapped a clear arrow and ${s0.left - s1.left} arrows left the board` };
+      await page.waitForTimeout(600);   // let it finish leaving: a leaving arrow is not tappable
+      const blocked = await page.evaluate(() => window.__woTest.blockedId());
+      if (blocked < 0) return { ok: true, why: `a clear arrow left (${s1.left} to go); no blocked arrow to try` };
+      const pb = await page.evaluate((id) => window.__woTest.pointOf(id), blocked);
+      await page.touchscreen.tap(pb.x, pb.y);
+      await page.waitForTimeout(600);
+      const s2 = await page.evaluate(() => window.__woTest.state());
+      if (s2.lives !== s0.lives - 1 || s2.left !== s1.left) return { ok: false, why: `tapped a blocked arrow: lives ${s0.lives} -> ${s2.lives}, arrows ${s1.left} -> ${s2.left}` };
+      return { ok: true, why: `a clear arrow left (${s1.left} to go), a blocked one bounced and cost a life (${s2.lives} left)` };
+    },
+  },
 };
 
 // --- harness ----------------------------------------------------------------------------------

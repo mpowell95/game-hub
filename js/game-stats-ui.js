@@ -39,6 +39,7 @@ const TABS = [
   { id: 'minesweeper', labelKey: 'game_title_minesweeper' },
   { id: 'contexto', labelKey: 'game_title_contexto' },
   { id: 'murdoku', labelKey: 'game_title_murdoku' },
+  { id: 'wayout', labelKey: 'game_title_wayout' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -89,9 +90,10 @@ const HUB_ID = {
   connect4: 'connect-four', nutsbolts: 'nuts-bolts', tictactoe: 'tic-tac-toe',
   dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
+  wayout: 'way-out',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -357,10 +359,11 @@ function sudokuScreen(rec) {
 }
 
 /** Murdoku: a solo puzzle recorded through recordResult (total/byDiff only, no sub-counter), one
- *  play per SOLVED case. Solved in total, then solved per difficulty. */
-function murdokuScreen(rec) {
+ *  play per SOLVED case. Solved in total, then solved per difficulty. Way Out records the same
+ *  shape (one play per level cleared) and shares this screen; `titleKey` names the game. */
+function murdokuScreen(rec, titleKey = 'game_title_murdoku') {
   const solved = ((rec && rec.total) || {}).won | 0;
-  if (!solved) return emptyState(t('game_title_murdoku'));
+  if (!solved) return emptyState(t(titleKey));
   const byDiff = rec.byDiff || {};
   const rows = SD_DIFFS.map(([k, labelKey]) => `<tr><th scope="row">${t(labelKey)}</th><td>${((byDiff[k] || {}).won) | 0}</td></tr>`).join('');
   return `
@@ -1557,6 +1560,7 @@ function screenFor(id, st) {
   if (id === 'minesweeper') return minesweeperScreen(rec);
   if (id === 'contexto') return contextoScreen(rec);
   if (id === 'murdoku') return murdokuScreen(rec);
+  if (id === 'wayout') return murdokuScreen(rec, 'game_title_wayout');
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);
