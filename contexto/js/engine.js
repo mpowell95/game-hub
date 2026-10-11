@@ -5,6 +5,11 @@
 // secret is 1, the closest other word 2, and so on. Ranks 2..K+1 come straight from the exact
 // neighbour list the generator computed at full precision; everything past that is ordered by the
 // compressed vectors, where a few hundred places either way cannot be seen.
+//
+// (2026-10-11) Only the RANKED words have a place of their own: the most common words plus the
+// secrets (`json.ranked`, see build-contexto-data.mjs's RANKED). A rarer word is still a legal
+// guess and gets the rank it would take among them, so it can share a number with a ranked word.
+// Data files without `ranked` rank every word, as before.
 
 // Puzzle #1 is 2026-09-28, counted in the player's LOCAL calendar so a new word arrives at their
 // midnight, not UTC's.
@@ -42,6 +47,10 @@ export function buildModel(json, buf) {
   const formFold = new Map();
   for (const f in forms) { const ff = fold(f); if (!formFold.has(ff)) formFold.set(ff, forms[f]); }
   const secretPos = new Map(secrets.map((w, si) => [w, si]));
+  const cut = json.ranked || N;
+  const isRanked = (i) => i < cut || secretPos.has(i);
+  let R = 0;
+  for (let i = 0; i < N; i++) if (isRanked(i)) R++;
 
   let unit = null;   // dequantized, unit-length vectors; built on first far-rank request
   function units() {
@@ -57,7 +66,10 @@ export function buildModel(json, buf) {
   }
 
   const rankCache = new Map();
-  /** Int32Array: rank (1-based) of every word index against this secret word index. */
+  const dot = (u, a, b) => { let d = 0; for (let j = 0; j < dim; j++) d += u[a * dim + j] * u[b * dim + j]; return d; };
+
+  /** Rank (1-based) of every RANKED word index against this secret word index (0 for the rest),
+   *  plus what an unranked guess needs to be placed among them. */
   function ranks(secret) {
     if (rankCache.has(secret)) return rankCache.get(secret);
     const si = secretPos.get(secret);
@@ -69,17 +81,20 @@ export function buildModel(json, buf) {
     const rest = [];
     const sims = new Float32Array(N);
     for (let i = 0; i < N; i++) {
-      if (r[i]) continue;
-      let d = 0;
-      for (let j = 0; j < dim; j++) d += u[i * dim + j] * u[secret * dim + j];
-      sims[i] = d;
+      if (r[i] || !isRanked(i)) continue;
+      sims[i] = dot(u, i, secret);
       rest.push(i);
     }
     rest.sort((a, b) => sims[b] - sims[a] || a - b);
     rest.forEach((i, j) => { r[i] = k + 2 + j; });
-    const byRank = new Int32Array(N + 1);
-    for (let i = 0; i < N; i++) byRank[r[i]] = i;
-    const out = { r, byRank };
+    const byRank = new Int32Array(R + 1);
+    for (let i = 0; i < N; i++) if (r[i]) byRank[r[i]] = i;
+    // For an unranked guess: every ranked word's compressed closeness, best first.
+    const ladder = new Float32Array(R - 1);
+    let n = 0;
+    for (let i = 0; i < N; i++) if (r[i] > 1) ladder[n++] = dot(u, i, secret);
+    ladder.sort().reverse();
+    const out = { r, byRank, ladder };
     rankCache.clear();   // one secret at a time is all a player ever needs
     rankCache.set(secret, out);
     return out;
@@ -87,7 +102,7 @@ export function buildModel(json, buf) {
 
   return {
     lang: json.lang,
-    size: N,
+    size: R,
     count: secrets.length,
     words,
     /** Word index for what the player typed, or -1. Inflected forms map to their lemma. */
@@ -104,7 +119,17 @@ export function buildModel(json, buf) {
     /** The secret word index for a puzzle number. */
     secretFor(n) { return secrets[(((n - 1) % secrets.length) + secrets.length) % secrets.length]; },
     isSecret(i) { return secretPos.has(i); },
-    rankOf(secret, i) { return ranks(secret).r[i]; },
+    rankOf(secret, i) {
+      const { r, ladder } = ranks(secret);
+      if (r[i]) return r[i];
+      // An unranked guess: 2 + how many ranked words are closer (binary search, best first).
+      const d = dot(units(), i, secret);
+      let lo = 0, hi = ladder.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (ladder[mid] > d) lo = mid + 1; else hi = mid; }
+      return lo + 2;
+    },
+    /** True when a word has a rank of its own (not just a place among the ranked words). */
+    isRanked,
     wordAt(secret, rank) { return words[ranks(secret).byRank[rank]]; },
     indexAt(secret, rank) { return ranks(secret).byRank[rank]; },
   };

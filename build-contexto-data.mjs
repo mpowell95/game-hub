@@ -27,6 +27,8 @@
 //   <lang>.json  { v, dim, k, words: [...], forms: {form: lemmaIndex}, secrets: [wordIndex...] }
 //                words are LEMMAS only, most frequent first. A guess that is an inflected form is
 //                mapped to its lemma, so "cats" and "cat" are one guess, not two.
+//                `ranked` (2026-10-11): only words[0..ranked-1], plus the secrets, are RANKED. Every
+//                other word is still a legal guess, but takes the place it would have among them.
 //   <lang>.bin   [ scales: dim x Float32 ][ vectors: N x dim x Int8 ][ neighbours: S x K x Uint16 ]
 //                vectors are the full 300-d vectors projected onto their top `dim` principal
 //                components and quantized per component (scales[] turns an int8 back into a float).
@@ -57,6 +59,14 @@ const TOP = Number(arg('--top', 200000));
 const DIM = 64;       // PCA components shipped
 const K = 1000;       // exact neighbours per secret
 const MAX_VOCAB = 40000;
+// (2026-10-11) Only the most common RANKED words get a place in the ranking. Matt: "It seems more
+// difficult than the real website game." Measured on the old data: 58% of every secret's 300
+// closest words were outside the 10,000 most common ("gneiss" and "tuff" for rock, "sagacity" for
+// wisdom). Nobody guesses those, but every one of them pushed the words people DO guess further
+// down. Ranking only the common ones roughly halves an everyday guess's rank (ocean: fish 141 ->
+// ~90, cat: animal 52 -> ~23). A rarer word is still accepted as a guess; it is placed among the
+// ranked words by closeness (contexto/js/engine.js), so it can share a number with one of them.
+const RANKED = 15000;
 
 const SRC = {
   vec: (l) => `https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.${l}.300.vec.gz`,
@@ -312,7 +322,8 @@ async function build(lang) {
   const forms = {};
   for (const [f, l] of pendingForms) if (index.has(l) && !index.has(f)) forms[f] = index.get(l);
   const N = vocab.length;
-  console.log(`  vocab ${N} lemmas, ${Object.keys(forms).length} forms mapped`);
+  const ranked = Math.min(RANKED, N);
+  console.log(`  vocab ${N} lemmas (${ranked} ranked), ${Object.keys(forms).length} forms mapped`);
 
   // Secrets: must be vocabulary words. A missing one is reported and skipped, never guessed at.
   const secrets = [];
@@ -351,7 +362,11 @@ async function build(lang) {
   const q = new Int8Array(N * DIM);
   for (let i = 0; i < N; i++) for (let j = 0; j < DIM; j++) q[i * DIM + j] = Math.max(-127, Math.min(127, Math.round(proj[i * DIM + j] / scales[j])));
 
-  // Exact neighbours at full precision.
+  // Exact neighbours at full precision, among the RANKED words only (the common ones and the
+  // secrets; see RANKED above).
+  const isRanked = new Uint8Array(N);
+  for (let i = 0; i < ranked; i++) isRanked[i] = 1;
+  for (const s of secrets) isRanked[s] = 1;
   const nb = new Uint16Array(secrets.length * K);
   const sims = new Float32Array(N);
   const idx = new Uint32Array(N);
@@ -359,13 +374,14 @@ async function build(lang) {
     const sv = vocab[s].v;
     for (let i = 0; i < N; i++) { const v = vocab[i].v; let d = 0; for (let k = 0; k < D; k++) d += v[k] * sv[k]; sims[i] = d; idx[i] = i; }
     sims[s] = Infinity;
+    for (let i = 0; i < N; i++) if (!isRanked[i]) sims[i] = -Infinity;
     const top = Array.from(idx).sort((a, b) => sims[b] - sims[a] || a - b).slice(1, K + 1);
     nb.set(top, si * K);
   });
 
   const outDir = path.join(ROOT, 'contexto/data');
   fs.mkdirSync(outDir, { recursive: true });
-  const json = { v: 1, lang, dim: DIM, k: K, words: vocab.map((c) => c.w), forms, secrets };
+  const json = { v: 1, lang, dim: DIM, k: K, ranked, words: vocab.map((c) => c.w), forms, secrets };
   fs.writeFileSync(path.join(outDir, `${lang}.json`), JSON.stringify(json));
   const bin = Buffer.concat([Buffer.from(scales.buffer), Buffer.from(q.buffer), Buffer.from(nb.buffer)]);
   fs.writeFileSync(path.join(outDir, `${lang}.bin`), bin);

@@ -22,15 +22,30 @@ function load(lang) {
 
 for (const lang of ['en', 'es']) {
   const m = load(lang);
-  console.log(`\n--- ${lang}: ${m.size} words, ${m.count} secrets ---`);
-  ok(`${lang}: a real vocabulary`, m.size > 20000 && m.count > 300, `${m.size} / ${m.count}`);
+  const N = m.words.length;
+  console.log(`\n--- ${lang}: ${N} words (${m.size} ranked), ${m.count} secrets ---`);
+  ok(`${lang}: a real vocabulary`, N > 20000 && m.size >= 15000 && m.count > 300, `${N} / ${m.size} / ${m.count}`);
 
-  // Every secret is a word, and its ranking is a permutation of 1..N.
+  // Every secret is a word, and its ranking is a permutation of 1..size over the RANKED words.
   const s = m.secretFor(1);
   const seen = new Uint8Array(m.size + 1);
-  let perm = true;
-  for (let i = 0; i < m.size; i++) { const r = m.rankOf(s, i); if (r < 1 || r > m.size || seen[r]) { perm = false; break; } seen[r] = 1; }
-  ok(`${lang}: puzzle #1 ranks every word exactly once`, perm);
+  let perm = true, nRanked = 0;
+  for (let i = 0; i < N; i++) {
+    if (!m.isRanked(i)) continue;
+    nRanked++;
+    const r = m.rankOf(s, i); if (r < 1 || r > m.size || seen[r]) { perm = false; break; } seen[r] = 1;
+  }
+  ok(`${lang}: puzzle #1 ranks every ranked word exactly once`, perm && nRanked === m.size);
+  ok(`${lang}: every secret is ranked`, Array.from({ length: m.count }, (_, i) => m.secretFor(i + 1)).every((w) => m.isRanked(w)));
+
+  // A rarer word is still a guess, placed among the ranked words (never 1, never past the end).
+  let unrankedOk = true, nUnranked = 0;
+  for (let i = 0; i < N; i += 7) {
+    if (m.isRanked(i)) continue;
+    nUnranked++;
+    const r = m.rankOf(s, i); if (!(r >= 2 && r <= m.size + 1)) { unrankedOk = false; break; }
+  }
+  ok(`${lang}: a rarer word still gets a rank`, unrankedOk && nUnranked > 0, `${nUnranked} checked`);
   ok(`${lang}: the secret is rank 1`, m.rankOf(s, s) === 1 && m.wordAt(s, 1) === m.words[s]);
   ok(`${lang}: wordAt and rankOf agree`, [2, 50, 999, 1001, 1002, 5000, m.size].every((r) => m.rankOf(s, m.lookup(m.wordAt(s, r))) === r));
 
