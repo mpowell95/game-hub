@@ -166,15 +166,20 @@ class MinesweeperUI {
   // box happens to be the containing block, and in the hub that is the wrong box (.hub-game has no
   // defined height), which puts this screen over the hub's own sticky header. Only JS can measure
   // the actual offset. Copied from sudoku/js/ui.js, which hit this exact bug.
+  //
+  // The BOTTOM is pinned with `bottom: 0`, never a height computed from the viewport. It used to be
+  // `height = visualViewport.height - top`, measured once at mount: on an iPhone that measurement
+  // could land mid-transition with a short viewport, and the setup screen was cut off below "Your
+  // best time" for the rest of the visit (Matt, 2026-10-11, screenshot). `bottom: 0` follows the
+  // real screen edge with nothing to re-measure. It is also re-run on every screen render.
   _positionRoot() {
     if (!this.root || !this.container) return;
     const r = this.container.getBoundingClientRect();
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
-    if (!vh) return;
     this.root.style.left = Math.round(r.left) + 'px';
     this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
-    this.root.style.top = Math.round(r.top) + 'px';
-    this.root.style.height = Math.max(200, Math.round(vh - r.top)) + 'px';
+    this.root.style.top = Math.max(0, Math.round(r.top)) + 'px';
+    this.root.style.bottom = '0px';
+    this.root.style.height = 'auto';
   }
 
   // Cell size is MEASURED, never a vh formula: the wrap is the flex child that owns whatever is
@@ -235,6 +240,7 @@ class MinesweeperUI {
       <span class="ms-sw"><i></i></span>
     </button>`;
 
+    this._positionRoot();
     this.root.innerHTML = `<div class="ms-screen ms-setup">
       <h2 class="ms-title">${esc(t('title'))}</h2>
       <div class="ms-card"><h3>${esc(t('difficulty'))}</h3><div class="ms-diffs">${diffs}</div></div>
@@ -313,6 +319,7 @@ class MinesweeperUI {
     // the content, so the moment the content was a line too tall the button was the thing clipped
     // off the bottom - and the only way out of this screen was to leave the game entirely.
     // Anchored in a fixed-height header it cannot be pushed anywhere by anything below it.
+    this._positionRoot();
     this.root.innerHTML = `<div class="ms-screen ms-help">
       <div class="ms-hhead">
         <button type="button" class="gh-btn gh-btn--sm ms-hback" data-act="back">${esc(t('back'))}</button>
@@ -361,6 +368,7 @@ class MinesweeperUI {
   renderGame() {
     this.screen = 'play';
     const g = this.game;
+    this._positionRoot();
     this.root.innerHTML = `<div class="ms-screen ms-play">
       <div class="ms-hdr">
         <div class="ms-readout" data-role="mines" aria-live="off">${FLAG_SVG('#e0532f')}<span data-role="mines-n">000</span></div>
