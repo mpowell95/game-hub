@@ -389,7 +389,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two |
 | `js/bug-report.js` | (2026-08-11) "Report a bug": the device/browser/PWA/network/SW picture plus the whole Device Details payload, written to `bugReports/` (screenshots to `bugReportShots/`), with an offline outbox that retries itself. Since 2026-08-13 it also carries Matt's **replies** — written to the report AND to `bugReplies/<reporterDeviceId>/`, which is the copy the player reads — and a soft delete that clears his inbox without touching either record |
 | `js/messages.js` | (2026-08-31) player-to-player **Messages**: the `messages/` node, addressed by PLAYER CODE so a message follows a person to every device they own. Pure helpers (`pairKey`, unread, hide) plus the verified writes and the offline outbox. Since 2026-09-28 a message can carry a game invite (`invite: {game, code}`, Air Hockey), drawn as a Join button by `js/messages-ui.js` |
-| `js/challenges.js` | (2026-10-05) the DATA half of the hub's **Challenges** screen: reads the four challenge games' own indexes (Hoops, Skeeball, Cup Pong, Darts) through each game's reader and folds them into one list plus records (by person, by game). Writes nothing. See "The Challenges screen" below |
+| `js/challenges.js` | (2026-10-05) the DATA half of the hub's **Challenges** screen: reads the five challenge games' own indexes (Hoops, Skeeball, Cup Pong, Darts, Flick Soccer) through each game's reader and folds them into one list plus records (by person, by game). Writes nothing. See "The Challenges screen" below |
 | `js/challenges-ui.js` | (2026-10-05) the Challenges screen: Live (your turn / their turn), Records (total, by game, by player, recent results), a player's page, and New challenge (person, then game). Opening a match or a challenge is handed to the game (`js/challenges-strings.js` holds its words) |
 | `js/messages-ui.js` | (2026-08-31) the Messages screen: conversation list, one thread with chat bubbles and a quick-chat preset row, the recipient picker (Matt also gets **Everyone**), and Matt's read-only view of every conversation |
 | `js/bug-report-ui.js` | the report form, Matt's inbox (reply / mark done / delete), and the player's own "what Matt wrote back" screen. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
@@ -458,7 +458,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-rate-guard.mjs`, `test-activity.mjs`, `test-leaderboard-rank.mjs`, `test-admin-config.mjs`
 - Hub features: `test-new-badge.mjs`, `test-emoji.mjs`, `test-messages.mjs`,
   `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`, `test-skee-challenge.mjs`, `test-challenges.mjs`,
-  `test-cuppong-mp.mjs`, `test-darts-mp.mjs`
+  `test-cuppong-mp.mjs`, `test-darts-mp.mjs`, `test-flicksoccer-mp.mjs`
 - Cross-game: `test-game-conventions.mjs`, `test-visual.mjs`, `check-no-scroll.mjs`,
   `test-mp-lockstep.mjs`, `run-all-tests.mjs`
 - Generators: `build-emoji-data.mjs`, `build-boggle-es.mjs`, `build-contexto-data.mjs`, `convert-kenney.mjs`
@@ -564,7 +564,7 @@ working in that folder).
 | Dots and Boxes | in-hub `module:`, **multiplayer** (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
 | Escoba | in-hub `module:`, immersive, **multiplayer at 2-4 seats** (save key `escoba-save`, MP field) | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
 | Filler | in-hub `module:`, **multiplayer** (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
-| Flick Soccer | in-hub `module:`, immersive, **`devOnly`**, table soccer with flicked discs (Soccer Stars kind): five discs a side, one flick a turn, first to 1/2/3 goals; vs computer Easy/Medium/Hard (simulates its shots with the real physics) or 2 players on one phone; autosave `gamehub.flicksoccer.save.v1`; hub id `flick-soccer`, stats id `flicksoccer` (2026-10-11) | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` | `recordResult('flicksoccer', …)` |
+| Flick Soccer | in-hub `module:`, immersive, **`devOnly`**, table soccer with flicked discs (Soccer Stars kind): five discs a side, one flick a turn, first to 1/2/3 goals; vs computer Easy/Medium/Hard (simulates its shots with the real physics) or 2 players on one phone; autosave `gamehub.flicksoccer.save.v1`; plus **turn-by-turn online challenges** (`flicksoccer/`, a log of flicks replayed on each phone; `flick-soccer/CLAUDE.md`, "Online challenges"); hub id `flick-soccer`, stats id `flicksoccer` (2026-10-11) | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` | `recordResult('flicksoccer', …)` |
 | Connect 4 Hoops | in-hub `module:`, immersive, **multiplayer, two protocols** (live rooms via `js/net.js`; turn-by-turn via `hoops/games/<id>`, its own node), **admin only** (`devOnly`) | `.h4-root` / `.h4-` | `gamehub.hoops4.v1` | `recordResult('hoops4', …)` |
 | Hill Climb | in-hub `module:`, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
@@ -794,7 +794,10 @@ after `firebase deploy --only functions` from `game-hub-deploy`); its Cricket wo
 instead of points that read "0, 0") changed `functions/decide.js` on 2026-10-04 and is **NOT yet
 redeployed**; its rules branch `darts` was
 **PUBLISHED by Matt on 2026-10-01** (verified: `darts/` reads, every other branch unchanged) -
-`darts/CLAUDE.md`, "Online challenges". **A change to `functions/` is
+`darts/CLAUDE.md`, "Online challenges". A seventh, `flickSoccerTurnPush` (Flick Soccer challenges,
+`flicksoccer/index/<code>/<id>`), was added on 2026-10-11 and is **NOT yet deployed**; its rules
+branch `flicksoccer` is **NOT yet published** (both written 2026-10-11) - `flick-soccer/CLAUDE.md`,
+"Online challenges". **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
 for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
 `hoopsTurnPush` updated).
@@ -878,7 +881,7 @@ King of Games had played was against Matt.
 - **Where it is checked, so no game has to remember it:** `js/net.js`'s `createRoom` / `joinRoom` /
   `joinSeat`, BEFORE any network call (every live room: Chinchón, Escoba, Tic Tac Toe, Mancala,
   Filler, Dots and Boxes, Boggle, Battleship, Yahtzee, Hoops, Air Hockey, Hold'em); every challenge
-  `createGame` (Hoops, Cup Pong, Darts, Skeeball), which also refuses an opponent who is not allowed;
+  `createGame` (Hoops, Cup Pong, Darts, Flick Soccer, Skeeball), which also refuses an opponent who is not allowed;
   and every challenge picker and Air Hockey's invite list, which only offer allowed people.
 - **Two devices on ONE code are one person**: `net.js` stamps the player code on each seat record
   (additive) and refuses a join into a room that already holds that code on another device
@@ -908,7 +911,7 @@ to send challenges and jump into games from this page."*
   won/lost/drawn, by game, by player, recent results), a player's page (record vs them, live games
   with them, a Challenge button), and New challenge (pick a person, then a game).
 - **Every game keeps its own challenges.** `js/challenges.js` only READS `hoops/`,
-  `skeeChallenges/`, `cuppong/` and `darts/` indexes through each game's own reader. It writes
+  `skeeChallenges/`, `cuppong/`, `darts/` and `flicksoccer/` (2026-10-11) indexes through each game's own reader. It writes
   nothing, so THE LAW has no surface here. Records come from FINISHED index rows, grouped by player
   CODE; an old Hoops row with no stored result counts as played and in no column (rule 4), and an
   expired Skeeball challenge is listed but not counted.
@@ -916,8 +919,8 @@ to send challenges and jump into games from this page."*
   `armOpen(id)` (open that match on mount), `armChallenge({code,name,emoji})` (open the game's own
   "challenge this person" screen with them already picked) and `myTurnCount()`. `js/hub.js`'s
   `openChallengeMatch` / `challengeIn` arm one and `launch()` the game, so every option and rule of a
-  challenge stays the game's own. **A fifth challenge game needs those three exports** (and its
-  `SOURCES` entry in `js/challenges.js`); `test-challenges.mjs` checks all four have them.
+  challenge stays the game's own. **A new challenge game needs those three exports** (and its
+  `SOURCES` entry in `js/challenges.js`); `test-challenges.mjs` checks all five have them.
 - Only games on the player's launcher are shown, so for the family that is Skeeball until Matt
   releases the others from the admin page.
 

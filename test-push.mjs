@@ -5,7 +5,7 @@
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, isActive, ACTIVE_WINDOW_MS } from './functions/decide.js';
+import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, isActive, ACTIVE_WINDOW_MS } from './functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -187,6 +187,21 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('darts: a no-points challenge names the game', body(decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, kind: 'cricket-order-np' }) })) === 'Ana challenged you to Cricket (in order, no points). Your throw!');
   check('darts: Spanish wording', decideDarts({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Dardos');
   check('darts: the trigger watches darts/index and names the match', /ref: '\/darts\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'darts', match: id \}/.test(fnSrc));
+}
+
+// --- Flick Soccer challenges (2026-10-11) ----------------------------------------------------------
+{
+  const row = (x) => ({ name: 'Ana', yourTurn: false, over: false, lastBy: 'them', mine: 0, theirs: 0, goals: 2, ...x });
+  const body = (n) => n && n.text('en').body;
+  check('flick soccer: a new row that is your turn is a challenge', body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, goals: 3 }) })) === 'Ana challenged you, first to 3. Your kick!');
+  check('flick soccer: the challenger\'s own new row is not news', decideFlickSoccer({ code: 'MATTA', id: 'x', before: null, after: row({ lastBy: 'me' }) }) === null);
+  check('flick soccer: the turn coming back says the score', body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true, mine: 1, theirs: 2 }) })) === 'Your turn vs Ana. You 1, Ana 2');
+  check('flick soccer: already your turn is not news again', decideFlickSoccer({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ yourTurn: true }) }) === null);
+  check('flick soccer: they won', body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'lost' }) })) === 'Ana won the game.');
+  check('flick soccer: they resigned, you won', /resigned/.test(body(decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
+  check('flick soccer: your own winning shot does not notify you', decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
+  check('flick soccer: Spanish wording', decideFlickSoccer({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Fútbol de Chapas');
+  check('flick soccer: the trigger watches flicksoccer/index and names the match', /ref: '\/flicksoccer\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'flick-soccer', match: id \}/.test(fnSrc));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

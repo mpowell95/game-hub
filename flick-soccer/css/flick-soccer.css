@@ -234,6 +234,9 @@
   color: var(--fs-green);
   letter-spacing: 0.01em;
 }
+/* The logo row is at least as tall as the "?" in the card's corner, so the tagline under it is never
+   covered by that button (it was, at 320px wide). */
+.fs-root .fs-ov-setup .fs-logo { min-height: 44px; display: flex; align-items: center; justify-content: center; }
 .fs-root .fs-tag { margin: -4px 0 2px; text-align: center; font-size: 14px; font-weight: 600; color: var(--fs-muted); }
 .fs-root .fs-field { display: flex; flex-direction: column; gap: 4px; }
 .fs-root .fs-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fs-muted); }
@@ -294,6 +297,113 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Multiplayer, the setup card's first row (2026-10-03): Darts' row, in this game's colours. */
+.fs-root .fs-mprow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid var(--fs-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--fs-ink);
+  text-align: left;
+}
+.fs-root .fs-mprow b { flex: 1 1 auto; font-size: 17px; font-weight: 800; }
+.fs-root .fs-mprow-badge { flex: 0 0 auto; padding: 3px 9px; border-radius: 999px; background: var(--fs-green); color: #fff; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.fs-root .fs-mprow-chev { flex: 0 0 auto; font-size: 24px; line-height: 1; color: var(--fs-green); }
+.fs-root .fs-danger { background: #fff; color: #a3161b; border-color: #e3b9b9; }
+
+/* Clear of the hub's floating back button (top-left, ~54-90px down): the card starts below it. */
+.fs-root .fs-ov-mp { align-items: flex-start; padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.fs-root .fs-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
+.fs-root .fs-mp-top { display: flex; align-items: center; gap: 6px; }
+.fs-root .fs-mp-back {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #e6efe8;
+  color: var(--fs-ink);
+}
+.fs-root .fs-mp-back svg { width: 22px; height: 22px; }
+.fs-root .fs-mp-title { margin: 0; text-align: left; flex: 1 1 auto; min-width: 0; }
+.fs-root .fs-mp-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.fs-root .fs-mp-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.fs-root .fs-mp-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fs-muted);
+}
+.fs-root .fs-mp-h span { padding: 1px 7px; border-radius: 999px; background: var(--fs-green); color: #fff; font-size: 11px; }
+.fs-root .fs-mp-note { margin: 0; text-align: center; font-size: 14px; font-weight: 600; color: var(--fs-muted); }
+.fs-root .fs-mp-err { color: #a3161b; font-weight: 800; }
+.fs-root .fs-mp-vs { margin: 6px 0 0; text-align: center; font-size: 22px; font-weight: 900; color: var(--fs-ink); }
+.fs-root .fs-mp-vs span { font-size: 30px; margin-right: 4px; }
+.fs-root .fs-mp-search { font-size: 16px; }
+.fs-root .fs-mrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 2px solid var(--fs-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--fs-ink);
+  font: inherit;
+  text-align: left;
+}
+.fs-root .fs-mrow.is-mine { border-color: var(--fs-green); box-shadow: 0 0 0 1px var(--fs-green) inset; }
+.fs-root .fs-mrow.is-static { cursor: default; }
+.fs-root .fs-mrow-face { flex: 0 0 auto; width: 34px; font-size: 26px; line-height: 1; text-align: center; }
+.fs-root .fs-mrow-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.fs-root .fs-mrow-name { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-root .fs-mrow-sub { font-size: 12px; font-weight: 600; color: var(--fs-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-root .fs-mrow-chev { flex: 0 0 auto; font-size: 24px; color: var(--fs-green); }
+.fs-root .fs-rec { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.fs-root .fs-hmark { flex: 0 0 auto; width: 34px; text-align: center; font-size: 20px; font-weight: 900; color: var(--fs-muted); }
+.fs-root .fs-mrow.is-won .fs-hmark { color: var(--fs-green); }
+
+.fs-root .fs-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(4, 20, 10, 0.92);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Online: you always sit at the BOTTOM of the pitch (the renderer turns it round for side b), so your
+   side of the scoreboard is the left one too. */
+.fs-root.is-flip .fs-board { flex-direction: row-reverse; }
+.fs-root.is-flip .fs-side-0 { flex-direction: row-reverse; }
+.fs-root.is-flip .fs-side-1 { flex-direction: row-reverse; }
+.fs-root.is-flip .fs-side-0 .fs-nm { text-align: right; }
+.fs-root.is-flip .fs-side-1 .fs-nm { text-align: left; }
+.fs-root .fs-ov-confirm .fs-card { gap: 10px; }
 
 /* Narrow phones: the three-way pills keep their whole word ("Medium", "Computer"). */
 @media (max-width: 360px) {

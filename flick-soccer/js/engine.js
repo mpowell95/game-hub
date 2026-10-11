@@ -2,6 +2,12 @@
 // rules. Pure, no DOM, deterministic (the same shot from the same position always ends the same
 // way), so the computer can try shots by simulating them and the headless test can replay a match.
 //
+// CROSS-DEVICE DETERMINISM (2026-10-11, online challenges): the physics uses only + - * / and
+// Math.sqrt, which IEEE 754 requires to be correctly rounded, so an iPhone (JavaScriptCore) and an
+// Android phone (V8) step a shot to the very same bits. Math.hypot, Math.exp, Math.sin/cos are NOT
+// required to agree across engines, so they never appear on the physics path. An online match is a
+// log of flicks replayed on each phone; one differing last bit can grow into a different goal.
+//
 // Units are "pitch units": the playing area is W x H with seat 0 at the BOTTOM attacking the top
 // goal, seat 1 at the top attacking the bottom goal. Bodies: index 0 is the ball, 1-5 are seat 0's
 // discs, 6-10 are seat 1's.
@@ -97,7 +103,7 @@ export const atRest = (b) => b.every((o) => o.vx === 0 && o.vy === 0);
 
 /** Put `i` in motion: the flick. `power` 0-1 of MAX_SPEED along unit (dx, dy). */
 export function flick(b, i, dx, dy, power) {
-  const len = Math.hypot(dx, dy) || 1;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const p = Math.max(0, Math.min(1, power)) * MAX_SPEED;
   b[i].vx = (dx / len) * p;
   b[i].vy = (dy / len) * p;
@@ -153,7 +159,7 @@ export function step(b) {
       let d = Math.sqrt(d2), nx, ny;
       if (d < 1e-9) {
         // Centre exactly on the line: push back the way it came.
-        const sp = Math.hypot(o.vx, o.vy) || 1;
+        const sp = Math.sqrt(o.vx * o.vx + o.vy * o.vy) || 1;
         nx = -o.vx / sp; ny = -o.vy / sp; d = 0;
       } else { nx = dx / d; ny = dy / d; }
       o.x += nx * (o.r - d); o.y += ny * (o.r - d);
@@ -169,7 +175,7 @@ export function step(b) {
     const o = b[i];
     if (o.vx === 0 && o.vy === 0) continue;
     const f = i === BALL ? FRICTION.ball : FRICTION.disc;
-    const sp = Math.hypot(o.vx, o.vy);
+    const sp = Math.sqrt(o.vx * o.vx + o.vy * o.vy);
     let ns = sp * (1 - f.damp * DT) - f.drag * DT;
     if (ns > SPEED_CAP) ns = SPEED_CAP;
     if (ns < STOP) { o.vx = 0; o.vy = 0; continue; }

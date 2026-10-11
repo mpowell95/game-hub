@@ -59,7 +59,7 @@ const EXTRA_SCREENS = {
   // eight clue rows is the tightest screen in the game, so the assert also holds its squares above
   // a floor (measured 28-39px on these two phone heights; under 24px means the layout regressed).
   // Darts: how to play from the setup screen, the play screen, and the pass-and-play hand-over.
-  // Flick Soccer: how to play from the setup screen, the play screen, and the result.
+  // Flick Soccer: how to play from the setup screen, the play screen, the result, and Multiplayer.
   'flick-soccer': [
     {
       name: 'how to play',
@@ -86,6 +86,15 @@ const EXTRA_SCREENS = {
           ui._finish();
         });
         await page.waitForSelector('[data-ov="result"]:not([hidden])', { timeout: 8000 });
+      },
+    },
+    {
+      name: 'multiplayer',
+      async open(page) {
+        await page.click('[data-ov="result"] .fs-x');
+        await page.click('[data-ov="setup"] [data-act="multi"]');
+        await page.waitForSelector('[data-ov="mp"]:not([hidden])', { timeout: 8000 });
+        await page.waitForTimeout(600);
       },
     },
   ],
