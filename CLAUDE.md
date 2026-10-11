@@ -791,12 +791,13 @@ was **DEPLOYED by Matt on 2026-09-28** - `cup-pong/CLAUDE.md`, "Challenges". Its
 `cuppong` was **PUBLISHED by Matt on 2026-09-28**. A sixth, `dartsTurnPush` (Darts challenges,
 `darts/index/<code>/<id>`), was added on 2026-10-01 and **DEPLOYED by Matt on 2026-10-03** ("done",
 after `firebase deploy --only functions` from `game-hub-deploy`); its Cricket wording ("Closed: you 3, them 2"
-instead of points that read "0, 0") changed `functions/decide.js` on 2026-10-04 and is **NOT yet
-redeployed**; its rules branch `darts` was
+instead of points that read "0, 0") changed `functions/decide.js` on 2026-10-04 and was **redeployed by Matt on
+2026-10-11** (with Flick Soccer's); its rules branch `darts` was
 **PUBLISHED by Matt on 2026-10-01** (verified: `darts/` reads, every other branch unchanged) -
 `darts/CLAUDE.md`, "Online challenges". A seventh, `flickSoccerTurnPush` (Flick Soccer challenges,
-`flicksoccer/index/<code>/<id>`), was added on 2026-10-11 and is **NOT yet deployed**; its rules
-branch `flicksoccer` is **NOT yet published** (both written 2026-10-11) - `flick-soccer/CLAUDE.md`,
+`flicksoccer/index/<code>/<id>`), was added on 2026-10-11 and **DEPLOYED by Matt on 2026-10-11** ("done"); its
+rules branch `flicksoccer` was **PUBLISHED by Matt on 2026-10-11** (verified the same day: `flicksoccer/`
+reads, every other branch reads as before, an unlisted branch is still refused) - `flick-soccer/CLAUDE.md`,
 "Online challenges". **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
 for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
