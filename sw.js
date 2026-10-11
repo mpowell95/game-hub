@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1094';
+const CACHE = 'game-hub-v1095';
 
 const ASSETS = [
   './',
@@ -795,10 +795,10 @@ const REST_MANIFEST = {
   './murdoku/js/strings.js': 'e744e28e32',
   './way-out/': 'dc6c9178ea',
   './way-out/index.html': 'dc6c9178ea',
-  './way-out/css/way-out.css': '23fa901906',
-  './way-out/js/ui.js': '5e9d614ae0',
-  './way-out/js/engine.js': '702407fb4b',
-  './way-out/js/strings.js': 'c6ce42c15f',
+  './way-out/css/way-out.css': 'd83c88a580',
+  './way-out/js/ui.js': '08a071ff3c',
+  './way-out/js/engine.js': '0aff444fcc',
+  './way-out/js/strings.js': 'c5e9056572',
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
   './flick-soccer/css/flick-soccer.css': '123fe19abc',

@@ -20,7 +20,13 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.wayout.v1';
-const SAVE_KEY = 'gamehub.wayout.save.v1';
+// ONE save PER TIER (2026-10-11 QA: with one shared slot, playing Easy wiped an unfinished
+// Medium level). `gamehub.wayout.saves.v1` = { easy: save|null, ..., migrated: 1 }. The first
+// key, `gamehub.wayout.save.v1` (a single save), is read ONCE into its tier's slot and then left
+// exactly as it is, never written again and never deleted (THE LAW rule 5).
+const OLD_SAVE_KEY = 'gamehub.wayout.save.v1';
+const SAVES_KEY = 'gamehub.wayout.saves.v1';
+const MAX_LEVEL = 1000000;   // a sane ceiling: corrupt settings once showed "Level 1e+21"
 const STATS_ID = 'wayout';
 const LIVES = 3;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
@@ -39,7 +45,7 @@ function loadSettings() {
     const levels = {};
     for (const k of TIERS) {
       const n = v.levels && Number(v.levels[k]);
-      levels[k] = Number.isInteger(n) && n >= 1 ? n : 1;
+      levels[k] = Number.isInteger(n) && n >= 1 && n <= MAX_LEVEL ? n : 1;
     }
     return { tier: TIERS.includes(v.tier) ? v.tier : 'easy', levels };
   } catch { return { tier: 'easy', levels: { easy: 1, medium: 1, hard: 1, expert: 1 } }; }
@@ -47,27 +53,58 @@ function loadSettings() {
 function saveSettings(patch) {
   const cur = loadSettings();
   const next = { tier: (patch && patch.tier) || cur.tier, levels: { ...cur.levels } };
-  if (patch && patch.levels) for (const k of TIERS) next.levels[k] = Math.max(cur.levels[k], patch.levels[k] | 0);
+  if (patch && patch.levels) {
+    for (const k of TIERS) {
+      const n = Math.floor(Number(patch.levels[k]) || 0);
+      next.levels[k] = Math.min(MAX_LEVEL, Math.max(cur.levels[k], n));
+    }
+  }
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch (err) { console.error('[way-out] settings NOT saved', err); }
   return next;
+}
+
+function loadSaves() {
+  let map = {};
+  try { map = JSON.parse(localStorage.getItem(SAVES_KEY) || '{}') || {}; } catch { map = {}; }
+  if (typeof map !== 'object' || Array.isArray(map)) map = {};
+  if (!map.migrated) {
+    // Carry the single save of the first build forward into its tier's slot, once.
+    try {
+      const old = JSON.parse(localStorage.getItem(OLD_SAVE_KEY) || 'null');
+      if (old && TIERS.includes(old.tier) && !map[old.tier]) map[old.tier] = old;
+    } catch { /* a malformed old save is simply not carried */ }
+    map.migrated = 1;
+    try { localStorage.setItem(SAVES_KEY, JSON.stringify(map)); } catch (err) { console.error('[way-out] save', err); }
+  }
+  return map;
 }
 
 /** A save is trusted only when it is whole and belongs to the level asked for; anything else
  *  reads as "no save" and the level starts fresh (never a crash). */
 function readSave(tier, level, nArrows) {
   try {
-    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    const s = loadSaves()[tier];
     if (!s || s.v !== SAVE_V || s.tier !== tier || s.level !== level) return null;
     const ids = (a) => (Array.isArray(a) ? a.filter((i) => Number.isInteger(i) && i >= 0 && i < nArrows) : []);
     const lives = Number.isInteger(s.lives) && s.lives >= 1 && s.lives <= LIVES ? s.lives : LIVES;
     return { gone: ids(s.gone), red: ids(s.red), lives };
   } catch { return null; }
 }
-function writeSave(o) {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: SAVE_V, ...o })); } catch (err) { console.error('[way-out] save', err); }
+/** "Continue level N" only when the save holds real progress (QA: an empty or malformed save
+ *  used to offer Continue on a fresh board). */
+function hasProgress(tier, level) {
+  const s = readSave(tier, level, 1e6);
+  return !!s && (s.gone.length > 0 || s.red.length > 0 || s.lives < LIVES);
 }
-function clearSave() {
-  try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+function writeSave(o) {
+  const map = loadSaves();
+  map[o.tier] = { v: SAVE_V, ...o };
+  try { localStorage.setItem(SAVES_KEY, JSON.stringify(map)); } catch (err) { console.error('[way-out] save', err); }
+}
+function clearSave(tier) {
+  const map = loadSaves();
+  map[tier] = null;
+  try { localStorage.setItem(SAVES_KEY, JSON.stringify(map)); } catch (err) { console.error('[way-out] save', err); }
 }
 
 // --- icons and pictures --------------------------------------------------------------------------
@@ -152,7 +189,7 @@ class WayOut {
     this.container.innerHTML = '<div class="wo-root"></div>';
     this.root = this.container.querySelector('.wo-root');
     this._onClick = (ev) => this._handleClick(ev);
-    this._onKey = (ev) => { if (ev.key === 'Escape' && !this.root.querySelector('.wo-modal').hidden) this._closeModal(); };
+    this._onKey = (ev) => this._handleKey(ev);
     this.root.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
     this.offResize = onViewportResize(() => { this._positionRoot(); this._layout(); });
@@ -175,6 +212,63 @@ class WayOut {
     if (this.offLang) this.offLang();
     try { delete window.__woTest; } catch { /* no window */ }
     this.container.innerHTML = '';
+  }
+
+  /** Keyboard (QA 2026-10-11): Escape and a Tab trap in popups, arrow keys on the difficulty
+   *  radios, and the board itself - arrow keys pick an arrow, Enter or Space sends it. */
+  _handleKey(ev) {
+    if (!this.root) return;
+    const m = this.root.querySelector('.wo-modal');
+    if (m && !m.hidden) {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        // On Out of lives, Escape is its X: hiding the popup alone left a board nobody could play.
+        if (m.querySelector('[data-act="fail-close"]')) this._toSetup(true); else this._closeModal();
+      } else if (ev.key === 'Tab') {
+        const f = [...m.querySelectorAll('button:not([disabled])')];
+        if (!f.length) return;
+        const at = f.indexOf(document.activeElement);
+        const next = ev.shiftKey ? (at <= 0 ? f.length - 1 : at - 1) : (at < 0 || at === f.length - 1 ? 0 : at + 1);
+        ev.preventDefault();
+        f[next].focus();
+      }
+      return;
+    }
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[ev.key];
+    const seg = ev.target && ev.target.closest && ev.target.closest('.wo-seg');
+    if (seg && step && this.root.contains(seg)) {
+      ev.preventDefault();
+      const k = TIERS[(TIERS.indexOf(this.settings.tier) + step + TIERS.length) % TIERS.length];
+      this.settings = saveSettings({ tier: k });
+      this.render();
+      const now = this.root.querySelector(`.wo-seg[data-tier="${k}"]`);
+      if (now) now.focus();
+      return;
+    }
+    if (this.screen === 'play' && this.canvas && document.activeElement === this.canvas) {
+      if (step) { ev.preventDefault(); this._kbMove(step); }
+      else if ((ev.key === 'Enter' || ev.key === ' ') && this.kbSel >= 0) {
+        ev.preventDefault();
+        if (!this.won && !this.failed && !this.gone[this.kbSel] && !this.busy[this.kbSel]) {
+          const id = this.kbSel;
+          this._send(id);
+          this._kbMove(1);
+          if (this.kbSel === id) this.kbSel = -1;
+        }
+      }
+    }
+  }
+
+  /** Move the keyboard selection to the next / previous arrow still on the board. */
+  _kbMove(step) {
+    const n = this.lvl.arrows.length;
+    let id = this.kbSel >= 0 ? this.kbSel : (step > 0 ? -1 : n);
+    for (let k = 0; k < n; k++) {
+      id = (id + step + n) % n;
+      if (!this.gone[id] && !this.busy[id]) { this.kbSel = id; break; }
+    }
+    if (this.canvas) this.canvas.setAttribute('aria-label', t('board_kb_aria', { n: this._left(), i: this.kbSel + 1 }));
+    this._kick();
   }
 
   _later(fn, ms) {
@@ -221,7 +315,12 @@ class WayOut {
     this.root.innerHTML = (this.screen === 'play' ? this._playHTML() : this._homeHTML()) + modal;
     this.root.classList.toggle('is-home', this.screen !== 'play');
     this._positionRoot();
-    if (this.screen === 'play') this._bindBoard();
+    if (this.screen === 'play') {
+      this._bindBoard();
+      if (this.failed && !this.timers.length) this._showFail();
+    } else {
+      try { delete window.__woTest; } catch { /* no window */ }
+    }
   }
 
   /** The setup screen, in the hub's own style (the Sudoku / Minesweeper layout and css/ui.css's
@@ -230,7 +329,7 @@ class WayOut {
   _homeHTML() {
     const tier = this.settings.tier;
     const level = this.settings.levels[tier];
-    const resume = !!readSave(tier, level, 1e6);
+    const resume = hasProgress(tier, level);
     const segs = TIERS.map((k) => `
       <button type="button" class="wo-seg${k === tier ? ' is-selected' : ''}" data-act="tier" data-tier="${k}" role="radio" aria-checked="${k === tier}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b></span>
@@ -271,7 +370,7 @@ class WayOut {
           <button type="button" class="wo-hint" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
-        <div class="wo-stage"><canvas class="wo-canvas" role="img"></canvas></div>
+        <div class="wo-stage"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
         <div class="wo-banner" aria-live="polite"><span></span></div>
       </div>`;
   }
@@ -286,14 +385,33 @@ class WayOut {
       if (btn.dataset.tier !== this.settings.tier) { this.settings = saveSettings({ tier: btn.dataset.tier }); this.render(); }   // saved on selection
     } else if (act === 'play') this._startLevel(this.settings.tier, this.settings.levels[this.settings.tier]);
     else if (act === 'help') { this.helpPage = 0; this._openHelp(); }
-    else if (act === 'menu') { this.screen = 'home'; this.settings = loadSettings(); this.render(); }
+    else if (act === 'menu') this._toSetup(false);
     else if (act === 'restart') this._restart();
     else if (act === 'hint') this._hint();
     else if (act === 'how-prev') { this.helpPage = Math.max(0, this.helpPage - 1); this._openHelp(); }
     else if (act === 'how-next') { this.helpPage = Math.min(2, this.helpPage + 1); this._openHelp(); }
     else if (act === 'close') this._closeModal();
     else if (act === 'retry') { this._closeModal(); this._restart(); }
-    else if (act === 'fail-close') { this._closeModal(); this._restart(true); this.screen = 'home'; this.render(); }
+    else if (act === 'fail-close') this._toSetup(true);
+  }
+
+  /** Back to the setup screen from a level. Cancels the level's timers and frames first: a pending
+   *  "next level" (win) or "Out of lives" (loss) must never fire over the setup screen. `dropSave`
+   *  after a loss, so the level starts fresh next time. */
+  _stopLevel() {
+    for (const id of this.timers) clearTimeout(id);
+    this.timers = [];
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.anims = [];
+    this.parts = [];
+  }
+  _toSetup(dropSave) {
+    this._stopLevel();
+    if (dropSave && this.tier) clearSave(this.tier);
+    this.screen = 'home';
+    this.settings = loadSettings();
+    this.render();
   }
 
   _openHelp() {
@@ -314,6 +432,7 @@ class WayOut {
           <button type="button" class="gh-btn gh-btn--primary" data-act="${last ? 'close' : 'how-next'}">${t(last ? 'got_it' : 'how_next')}</button>
         </div>
       </div>`;
+    if (m.hidden) this._opener = document.activeElement;
     m.hidden = false;
     const go = m.querySelector('.gh-btn--primary');
     if (go) go.focus({ preventScroll: true });
@@ -323,6 +442,9 @@ class WayOut {
     const m = this.root.querySelector('.wo-modal');
     m.hidden = true;
     m.innerHTML = '';
+    const back = this._opener;
+    this._opener = null;
+    if (back && back.isConnected && back.focus) back.focus({ preventScroll: true });
   }
 
   // --- a level ----------------------------------------------------------------------------------
@@ -346,24 +468,28 @@ class WayOut {
     this.anims = [];
     this.parts = [];
     this.hintId = -1;
+    this.kbSel = -1;
     this.won = false;
     this.failed = false;
     this.wave = null;
+    this.geomWas = null;
     this.screen = 'play';
     this.render();
+    // Every arrow already gone: the player left (or the app was closed) while the LAST arrow was
+    // still sliding out, so the win was never counted. Count it now instead of showing an empty
+    // board with nothing left to tap.
+    if (!this._left()) { this.won = true; this._kick(); }
   }
 
-  _restart(silent) {
-    if (!this.lvl) return;
-    clearSave();
-    if (silent) return;
-    for (const id of this.timers) clearTimeout(id);
-    this.timers = [];
+  _restart() {
+    if (!this.lvl || this.won) return;
+    clearSave(this.tier);
+    this._stopLevel();
     this._startLevel(this.tier, this.level);
   }
 
   _save() {
-    if (this.won) return;
+    if (this.won || this.failed) return;
     const ids = (arr) => arr.reduce((a, v, i) => (v ? (a.push(i), a) : a), []);
     writeSave({ tier: this.tier, level: this.level, gone: ids(this.gone), red: ids(this.red), lives: this.lives });
   }
@@ -410,12 +536,13 @@ class WayOut {
       this.ro.observe(this.root.querySelector('.wo-stage'));
     }
     this._layout();
+    if (this.anims.length || this.parts.length || this.won || this.hintId >= 0) this._kick();
     // Test seam for test-visual.mjs's PLAY probe (the sudoku pattern): read-only state, and where
     // on screen an arrow is, so the probe can tap it through the real input path.
     try {
       window.__woTest = {
         state: () => ({ left: this._left(), lives: this.lives, level: this.level, tier: this.tier }),
-        clearId: () => hintArrow(this.lvl, this.gone.map((g, i) => g || this.busy[i]), null),
+        clearId: () => hintArrow(this.lvl, this.gone, null, this.busy),
         blockedId: () => this.lvl.arrows.findIndex((c, id) => !this.gone[id] && blockerOf(c, this.occ, this.lvl.cols, this.lvl.rows, id)),
         pointOf: (id) => {
           const p = this.pts[id], r = this.canvas.getBoundingClientRect();
@@ -448,7 +575,19 @@ class WayOut {
     this.oy = (r.height - H * pitch) / 2 + pitch / 2;
     this.lw = Math.max(1.3, Math.min(3.4, pitch * 0.078));
     this.headL = Math.max(4.5, Math.min(11, pitch * 0.27));
+    // Only a real change of geometry counts (a ResizeObserver also calls once on observe).
+    const geom = `${pitch}|${this.ox}|${this.oy}`, moved = this.geomWas && this.geomWas !== geom;
+    this.geomWas = geom;
     this.pts = this.lvl.arrows.map((cells) => cells.map((c) => this._xy(c)));
+    if (moved && this.anims.length) {
+      for (const a of this.anims) {
+        if (a.kind === 'bump' && !a.hit) { a.hit = true; this._bumped(a.id); }
+        this.busy[a.id] = false;
+      }
+      this.anims = [];
+      this.parts = [];
+      this._kick();
+    }
     this._fitHud();
     this._draw();
   }
@@ -476,6 +615,7 @@ class WayOut {
    *  arrow wins, so a tap anywhere close still lands, the dots-boxes approach (way-out/CLAUDE.md). */
   _tap(ev) {
     if (this.won || this.failed || this.screen !== 'play') return;
+    if (ev.button !== undefined && ev.button !== 0) return;   // primary button / touch / pen only
     ev.preventDefault();
     const r = this.canvas.getBoundingClientRect();
     const px = ev.clientX - r.left, py = ev.clientY - r.top;
@@ -526,8 +666,7 @@ class WayOut {
 
   _hint() {
     if (this.won || this.failed || !this.lvl) return;
-    const busyGone = this.gone.map((g, i) => g || this.busy[i]);
-    const id = hintArrow(this.lvl, busyGone, this.red);
+    const id = hintArrow(this.lvl, this.gone, this.red, this.busy);
     if (id < 0) return;
     this.hintId = id;
     this.hintT0 = performance.now();
@@ -555,7 +694,7 @@ class WayOut {
     }
     this.anims = live;
     this.parts = this.parts.filter((q) => now - q.t0 < q.life);
-    if (this.won && !this.anims.length && !this.wave) this._celebrate(now);
+    if (this.won && !this.failed && !this.anims.length && !this.wave) this._celebrate(now);
     this._draw(now);
     const hintOn = this.hintId >= 0 && now - this.hintT0 < 2600;
     if (!hintOn && this.hintId >= 0 && now - this.hintT0 >= 2600) this.hintId = -1;
@@ -564,13 +703,14 @@ class WayOut {
   }
 
   _bumped(id) {
+    if (this.failed) return;   // a second bump in flight after the last heart: nothing more to lose
     this.red[id] = true;
     this.lives = Math.max(0, this.lives - 1);
     this._paintHud(true);
     this._save();
     if (this.lives === 0) {
       this.failed = true;
-      clearSave();
+      clearSave(this.tier);
       this._later(() => this._showFail(), 650);
     }
   }
@@ -605,7 +745,7 @@ class WayOut {
     } catch (err) {
       console.error('[way-out] recordResult failed - the level was NOT recorded', err);
     }
-    clearSave();
+    clearSave(this.tier);
     this.settings = saveSettings({ levels: { [this.tier]: this.level + 1 } });
     this._later(() => this._banner(), motion ? 650 : 100);
     this._later(() => this._startLevel(this.tier, this.level + 1), motion ? 2300 : 1500);
@@ -675,6 +815,9 @@ class WayOut {
       let color = this.red[id] ? cRed : cArrow;
       if (a && a.kind === 'go') color = cGo;
       const hinted = id === this.hintId;
+      if (id === this.kbSel && !a && document.activeElement === this.canvas) {
+        drawArrow(ctx, p, s0, s0 + len, cHint, this.lw * 3.4, this.headL * 1.4);
+      }
       if (hinted) {
         ctx.save();
         ctx.shadowColor = cHint;
