@@ -123,7 +123,11 @@
 }
 
 /* ---------------- setup ---------------- */
-.ms-root .ms-setup { gap: 8px; }
+/* Sized for a real iPhone with the hub header above it and the home-indicator inset below: the
+ * whole menu, How to play and My stats included, must fit 393x852 with ~118px of hub chrome and a
+ * 34px bottom inset. Rows are 44px (the Part 0 tap floor), not more; at 52px the bottom row was
+ * pushed off the screen (Matt, 2026-10-11). */
+.ms-root .ms-setup { gap: 6px; padding-top: 6px; }
 .ms-root .ms-title {
   font-size: 23px;
   font-weight: 800;
@@ -135,10 +139,10 @@
   border: 1px solid var(--ms-border);
   border-radius: 16px;
   box-shadow: 0 1px 2px rgba(16, 30, 54, .08);
-  padding: 12px;
+  padding: 10px 12px;
 }
 .ms-root .ms-card h3 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: .07em;
@@ -147,7 +151,7 @@
 }
 .ms-root .ms-diffs { display: flex; flex-direction: column; gap: 6px; }
 .ms-root .ms-diff {
-  height: 52px;
+  height: 44px;
   border-radius: 12px;
   border: 1px solid var(--ms-border);
   background: var(--ms-surface-2);
@@ -183,7 +187,7 @@
   background: var(--ms-surface-2);
   border: 1px solid var(--ms-border);
   border-radius: 12px;
-  padding: 7px 5px;
+  padding: 5px;
   text-align: center;
 }
 .ms-root .ms-bests b {
@@ -194,7 +198,7 @@
 }
 .ms-root .ms-bests span { display: block; font-size: 11px; color: var(--ms-muted); margin-top: 3px; font-weight: 600; }
 
-.ms-root .ms-opts { display: flex; flex-direction: column; gap: 6px; }
+.ms-root .ms-opts { display: flex; flex-direction: column; gap: 2px; }
 .ms-root .ms-opt {
   display: flex;
   align-items: center;

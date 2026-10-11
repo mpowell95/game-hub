@@ -55,6 +55,13 @@ The DENSITIES track the classic ladder (12.3 / 15.6 / 20.6%). The GRIDS do not: 
 30 x 16, which on a phone is either unreadable or needs pan and zoom, and a game in this hub must
 fit one screen with no scrolling of any kind.
 
+**The root's BOTTOM is `bottom: 0`, never a measured height (2026-10-11).** `_positionRoot()` used
+to set `height = visualViewport.height - top` once at mount; on an iPhone that could land on a short
+viewport mid-transition and clip the setup screen below "Your best time" for the whole visit. It now
+pins `bottom: 0` and re-runs on every screen render. The setup rows were tightened at the same time
+(difficulty rows 44px, the Part 0 floor) so the whole menu fits 393x852 under the hub header with a
+34px home-indicator inset.
+
 **Cell size is measured, never computed from a `vh` formula.** `_fit()` reads the board wrap's own
 client box (it is the flex child that owns whatever is left after the HUD and the bar) and divides.
 That is the only thing that is correct in BOTH hosts, because the hub adds chrome a standalone page
