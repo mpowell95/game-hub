@@ -180,9 +180,8 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   History. A challenge uses the Goals to win and the Lineup chosen on the setup card (the line-up for
   both sides, optional `forms` on the document); the challenger kicks off.
 - **The node:** `flicksoccer/games/<id>` + `flicksoccer/index/<CODE>/<id>`, addressed by PLAYER CODE.
-  In `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **NOT yet published (written
-  2026-10-11): until Matt pastes the rules file, every online call fails softly ("Online play is not
-  switched on yet").**
+  In `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **PUBLISHED by Matt on
+  2026-10-11** (verified the same day: `flicksoccer/` reads, every other branch reads as before).
 - **A match is a LOG of flicks**: `{ by, k (disc 0-4 of that side), dx, dy (unit vector, 6 dp), p
   (strength, 4 dp) }`. `validateGame` replays it through `engine.js` and refuses the whole document if
   one flick does not replay (out of turn, a claimed win the flicks never produced). The flicking phone
@@ -212,8 +211,8 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   to them as a win they never saw. Nothing is ever deleted.
 - **Notifications:** `flickSoccerTurnPush` in `functions/index.js` (`decideFlickSoccer` in
   `functions/decide.js`): a challenge ("challenged you, first to 2"), your turn coming back (with the
-  score), a match the other person ended. **NOT yet deployed (written 2026-10-11): live only after
-  Matt runs `firebase deploy --only functions`.** A tap opens that match (`sw.js` reads `data.match`;
+  score), a match the other person ended. **DEPLOYED by Matt on 2026-10-11** ("done").
+  Not yet seen arriving on a phone; the first real challenge is the test. A tap opens that match (`sw.js` reads `data.match`;
   the hub hands it to `alert.js`'s `armOpen`).
 - **The hub:** the registry entry has `alerts:` (launcher bubble, Challenges button count), and
   `js/challenges.js` lists `flick-soccer`, so the hub's Challenges screen shows these matches.
