@@ -424,7 +424,8 @@ class MinesweeperUI {
       const act = ev.target.closest('[data-act]');
       if (!act) return;
       if (act.dataset.act === 'tomenu') this._backToMenu();
-      else if (act.dataset.act === 'new') this.newGame();
+      else if (act.dataset.act === 'new') this._askNewGame();
+      else if (act.dataset.act === 'newyes') this.newGame();
       else if (act.dataset.act === 'howto') this.renderHowTo();
       else if (act.dataset.act === 'close') this._dismissResult();
       else if (act.dataset.act === 'again') this.newGame();
@@ -897,6 +898,32 @@ class MinesweeperUI {
   _dismissResult() {
     const ov = this.root.querySelector('.ms-ov');
     if (ov) ov.remove();
+    const g = this.game;
+    if (this.screen === 'play' && g && g.generated && !g.dead && !g.won) this._startTimer();
+  }
+
+  /** The face is the classic "new game" button, and it used to throw a board away with no
+   *  question (Matt, 2026-10-11: "I was doing well on a medium round and lost everything"). A
+   *  board that has been started now asks first, with the clock paused while it asks; an
+   *  untouched or finished board still restarts at once, because there is nothing to lose. */
+  _askNewGame() {
+    const g = this.game;
+    if (!g || !g.generated || g.dead || g.won) { this.newGame(); return; }
+    if (this.root.querySelector('.ms-ov')) return;
+    this._stopTimer();
+    this._persist();
+    const ov = document.createElement('div');
+    ov.className = 'ms-ov';
+    ov.innerHTML = `<div class="ms-modal" role="dialog" aria-modal="true" aria-label="${esc(t('new_ask'))}">
+      <button type="button" class="ms-x" data-act="close" aria-label="${esc(t('close'))}">${X_SVG}</button>
+      <div class="ms-big">${esc(t('new_ask'))}</div>
+      <div class="ms-sub">${esc(t('new_ask_sub'))}</div>
+      <div class="ms-mbtns">
+        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="close">${esc(t('keep_playing'))}</button>
+        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="newyes">${esc(t('new_board'))}</button>
+      </div>
+    </div>`;
+    this.root.querySelector('.ms-play').appendChild(ov);
   }
 
   async _openLeaderboard() {
