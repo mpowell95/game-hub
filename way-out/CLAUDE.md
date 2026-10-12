@@ -84,6 +84,30 @@ Monopoly Deal's `business-deal/` split. A directory name is not a display name.
   (matching the reference's first board), then 6-10 x 5-13; Medium 10-14 x 13-19; Hard 20-24 x 26-32;
   Expert 24-28 x 32-38. Builds take under 10 ms.
 
+## Harder boards: generator 2 (2026-10-12)
+
+Matt, on Medium level 3: *"This seems way too easy. Can you make it more challenging without
+increasing the size and making the arrows smaller/harder to press?"* Measured: generator 1 let ~50-70%
+of a Medium board's arrows leave at the first tap and cleared in 3-5 ROUNDS (a round = remove every
+arrow free right now; `peel()` in `engine.js`). Building middle-outwards left most edge arrows
+pointing straight off the board.
+
+Generator 2 (`buildLevel(tier, level, gen = GEN_LATEST)`), same grid sizes and arrow sizes:
+1. flips every arrow that is free at the start (same points, head at the other end, so it points
+   INTO the board), keeping a flip only if `peel()` still empties the board and it got harder;
+2. builds K candidate boards per level (Easy 3, Medium 6, Hard 4, Expert 3) and keeps the hardest
+   (`layers - 20 x share free at start`).
+
+Measured, levels 2-21: free at the first tap Easy 24% / Medium 23% / Hard 27% / Expert 30% (from
+~45-55%), rounds Easy 8.5 / Medium 12.3 / Hard 17.9 / Expert 17.9 (from 3.6 / 5.0 / 6.8 / ~7). Slowest
+build ~28 ms on a desktop. `way-out/js/test.js` fails if those averages slide back (`FLOOR`).
+**Easy level 1 stays generator 1**: the first board anyone sees is a gentle start.
+
+**Generator 1 is kept, byte for byte.** A save records `gen`; a level saved before generator 2 (no
+`gen`) is rebuilt on generator 1, so its saved "which arrows are gone" still means the same arrows.
+`test.js` pins that `buildLevel(t, l, 1)` equals the original `generate()`. Never change `generate()`
+without bumping `GEN_LATEST` and keeping the old path, or every level in progress scrambles.
+
 ## Input and the tap-target exception
 
 Hard and Expert boards are 20-28 dots across a phone, so a dot is 12-16px apart and a 44px tap
@@ -131,8 +155,8 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
   per tier. Saved on selection; `levels` only ever go up (`Math.max`), capped at 1,000,000 (a
   corrupt value once read "Level 1e+21").
 - Progress `gamehub.wayout.saves.v1` (since the 2026-10-11 QA pass): ONE SAVE PER TIER,
-  `{ easy: save|null, medium, hard, expert, migrated: 1 }`, each save `{ v, tier, level, gone[],
-  red[], lives }`, written after every tap that changes the level, set to null on a win, a restart
+  `{ easy: save|null, medium, hard, expert, migrated: 1 }`, each save `{ v, tier, level, gen, gone[],
+  red[], lives }` (`gen`: the board generator it was played on, none = 1), written after every tap that changes the level, set to null on a win, a restart
   or a loss. Trusted only for the exact tier and level being opened; anything malformed starts the
   level fresh. **The first build's single slot, `gamehub.wayout.save.v1`, is read ONCE into its
   tier's slot (`migrated: 1`) and then left untouched, never written or deleted (rule 5).** One
