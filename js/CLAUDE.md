@@ -300,6 +300,12 @@ sure people see the new games."* A gold **NEW** / **NUEVO** pill on the launcher
   replaces a tile's contents for a screen reader, so a visible-only pill would be silent.
   Colorblind rule holds by construction: the pill spells the word out, the gold (`#F2B705`, the
   palette's yellow) is emphasis and never the signal.
+- **`added` is the Newest sort's fallback, never the pill's (2026-10-12).** Matt: *"Why does sorting
+  by new not work for admin games?"* An admin-only game has no `released` date (that date IS the
+  pill), so the launcher's Newest order (`js/launcher-sort.js`) dropped every one of them to the
+  bottom. Each admin-only `GAMES` entry now carries `added: 'YYYY-MM-DD'`, read only through
+  `sortMsOf()` (release date, else the admin release stamp, else `added`); `isNewGame` never reads
+  it. `test-new-badge.mjs` pins both halves.
 - **Not done, on purpose:** the launcher's ordering is untouched (favorites first, then
   alphabetical) — a new game does not jump the queue. If the pill alone turns out not to be
   enough, sorting new games to the top of "All games" is the next lever, and it changes a

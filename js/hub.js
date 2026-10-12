@@ -24,7 +24,7 @@ import { getLang, setLang, makeT } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { GAME_ART } from './game-art.js';
-import { isNewGame, releaseMsOf } from './new-badge.js';
+import { isNewGame, sortMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
 import { pendingAnnouncement } from './announce.js';
@@ -67,6 +67,13 @@ const titleText = (g) => (g.title && typeof g.title === 'object') ? (g.title[get
 // per folder is NOT a release date — most of this repo's early history lands on one import day
 // (2026-07-25) and several games' folders predate their launch. If a pre-existing game ever
 // wants the pill (a big relaunch, say), give it a real date by hand.
+//
+// `added: 'YYYY-MM-DD'` (2026-10-12, Matt: "Why does sorting by new not work for admin games?") is
+// the day an ADMIN-ONLY game first went on the launcher, and is read by ONE thing: the launcher's
+// Newest sort, as a fallback when a game has no release date. It never drives the New pill, so an
+// admin game still announces itself on its real release day. Only admin-only games carry it (they
+// are only on Matt's launcher), and its dates were taken from each game's own CLAUDE.md, not git
+// (this repo's history is shallow). Keep it when a game is released: `released` wins anyway.
 export const GAMES = [
   {
     id: 'connect-four',
@@ -294,6 +301,7 @@ export const GAMES = [
   },
   {
     id: 'cuppong',
+    added: '2026-09-28',            // sort-only (the launcher's Newest order); never the New pill
     title: 'Cup Pong',
     blurb: {
       en: 'Flick the ball down the table and sink it in the cups.',
@@ -316,6 +324,7 @@ export const GAMES = [
     // turn, flick the dart up to throw; vs the computer (Easy/Medium/Hard) or pass and play
     // (darts/CLAUDE.md). Owns the whole viewport: a wooden wall and a full-width board.
     id: 'darts',
+    added: '2026-10-01',            // sort-only (the launcher's Newest order); never the New pill
     title: { en: 'Darts', es: 'Dardos' },
     blurb: { en: 'Flick the dart at the board. Count down from 301 and land exactly on zero.',
       es: 'Lanza el dardo a la diana. Cuenta atrás desde 301 y llega justo a cero.' },
@@ -336,6 +345,7 @@ export const GAMES = [
     // computer (Easy/Medium/Hard) or two players on one phone (flick-soccer/CLAUDE.md). Hub id is
     // the folder; stats id is `flicksoccer`. Owns the whole viewport: a portrait pitch.
     id: 'flick-soccer',
+    added: '2026-10-11',            // sort-only (the launcher's Newest order); never the New pill
     title: { en: 'Flick Soccer', es: 'Fútbol de Chapas' },
     blurb: { en: 'Flick your players into the ball and score. First to the goal target wins.',
       es: 'Lanza tus chapas contra el balón y marca. Gana quien llegue antes a los goles.' },
@@ -351,6 +361,7 @@ export const GAMES = [
   },
   {
     id: 'hoops4',
+    added: '2026-09-21',            // sort-only (the launcher's Newest order); never the New pill
     title: 'Connect 4 Hoops',
     blurb: {
       en: 'Shoot a basketball at seven hoops. Sink one and your disc drops down that column. Four in a row wins.',
@@ -473,6 +484,7 @@ export const GAMES = [
     // immersive like Brick Breaker. Hub id = the folder (the dev tools assume it); stats id
     // `airhockey`.
     id: 'air-hockey',
+    added: '2026-09-27',            // sort-only (the launcher's Newest order); never the New pill
     title: 'Air Hockey',
     blurb: { en: 'Arcade air hockey. Slam the puck past the computer. First to 7 wins.',
       es: 'Hockey de aire de arcade. Mete el disco en la portería de la CPU. Gana quien llegue a 7.' },
@@ -527,6 +539,7 @@ export const GAMES = [
     // launcher; the admin page's Games section opens it to chosen players by code. It records no
     // stats, so it needs no GAME_META row. Its "Back to Game Hub" button returns here.
     id: 'course-creator',
+    added: '2026-09-24',            // sort-only (the launcher's Newest order); never the New pill
     title: { en: 'Course Creator', es: 'Creador de campos' },
     blurb: { en: 'Design your own golf holes.', es: 'Diseña tus propios hoyos de golf.' },
     href: 'hole-editor/?course=new',
@@ -540,6 +553,7 @@ export const GAMES = [
     // admin config's "live/testing" distinction to be meaningful about. No `released` date: that
     // belongs to whichever phase actually ships the game.
     id: 'baseball',
+    added: '2026-09-12',            // sort-only (the launcher's Newest order); never the New pill
     title: { en: 'Baseball', es: 'Béisbol' },
     blurb: { en: 'Coming soon.', es: 'Próximamente.' },
     module: '../baseball/js/ui.js',
@@ -587,6 +601,7 @@ export const GAMES = [
     // IMMERSIVE: the Hard and Expert boards want every pixel, and the game's own top bar shares
     // the floating back button's row.
     id: 'way-out',
+    added: '2026-10-11',            // sort-only (the launcher's Newest order); never the New pill
     title: { en: 'Arrow Maze', es: 'Laberinto de flechas' },
     blurb: { en: 'Tap the arrows to send them off the board. Pick the right order: some block others.',
       es: 'Toca las flechas para sacarlas del tablero. Elige bien el orden: unas bloquean a otras.' },
@@ -939,7 +954,7 @@ class Hub {
     const restGames = sortGames(
       visible.filter((g) => !favIdSet.has(g.id)),
       sort,
-      (g) => releaseMsOf(g, gameLiveAt(g.id)),
+      (g) => sortMsOf(g, gameLiveAt(g.id)),
       (g) => titleText(g),
     );
     this._sort = sort;
