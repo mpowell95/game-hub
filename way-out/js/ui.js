@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordResult } from '../../js/game-stats.js';
-import { TIERS, SAVE_V, buildLevel, occupancy, blockerOf, dirOf, hintArrow } from './engine.js';
+import { TIERS, SAVE_V, GEN_LATEST, buildLevel, occupancy, blockerOf, dirOf, hintArrow } from './engine.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -87,7 +87,9 @@ function readSave(tier, level, nArrows) {
     if (!s || s.v !== SAVE_V || s.tier !== tier || s.level !== level) return null;
     const ids = (a) => (Array.isArray(a) ? a.filter((i) => Number.isInteger(i) && i >= 0 && i < nArrows) : []);
     const lives = Number.isInteger(s.lives) && s.lives >= 1 && s.lives <= LIVES ? s.lives : LIVES;
-    return { gone: ids(s.gone), red: ids(s.red), lives };
+    // `gen`: which board generator this level was played on (none = generator 1, before 2026-10-12).
+    const gen = Number.isInteger(s.gen) && s.gen >= 1 && s.gen <= GEN_LATEST ? s.gen : 1;
+    return { gone: ids(s.gone), red: ids(s.red), lives, gen };
   } catch { return null; }
 }
 /** "Continue level N" only when the save holds real progress (QA: an empty or malformed save
@@ -452,7 +454,11 @@ class WayOut {
   _startLevel(tier, level) {
     this.tier = tier;
     this.level = level;
-    this.lvl = buildLevel(tier, level);
+    // A level already in progress is rebuilt on the generator it was played on (engine.js,
+    // "harder boards"), so its saved arrows still mean the same arrows.
+    const pre = readSave(tier, level, 1e6);
+    this.gen = pre ? pre.gen : GEN_LATEST;
+    this.lvl = buildLevel(tier, level, this.gen);
     const n = this.lvl.arrows.length;
     const saved = readSave(tier, level, n);
     this.gone = new Array(n).fill(false);
@@ -491,7 +497,7 @@ class WayOut {
   _save() {
     if (this.won || this.failed) return;
     const ids = (arr) => arr.reduce((a, v, i) => (v ? (a.push(i), a) : a), []);
-    writeSave({ tier: this.tier, level: this.level, gone: ids(this.gone), red: ids(this.red), lives: this.lives });
+    writeSave({ tier: this.tier, level: this.level, gen: this.gen, gone: ids(this.gone), red: ids(this.red), lives: this.lives });
   }
 
   _left() { return this.gone.reduce((n, g) => n + (g ? 0 : 1), 0); }

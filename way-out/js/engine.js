@@ -230,10 +230,86 @@ export function generate(spec, seed) {
   return { cols: W, rows: H, arrows };
 }
 
-/** The level a player actually plays. */
-export function buildLevel(tier, level) {
+// --- harder boards (generator 2, 2026-10-12) -------------------------------------------------------
+//
+// Matt, on Medium level 3: *"This seems way too easy. Can you make it more challenging without
+// increasing the size and making the arrows smaller/harder to press?"* Measured, generator 1's
+// Medium boards let ~50-70% of the arrows leave at the very first tap and cleared in 3-5 "rounds"
+// (a round = remove every arrow that is free right now). Building middle-outwards leaves most edge
+// arrows pointing straight off the board.
+//
+// Generator 2 keeps the SAME grid sizes and the same generator, then:
+//   1. FLIPS arrows that are free at the start (same points, head at the other end, so it now
+//      points INTO the board), keeping a flip only if the board stays solvable and gets harder;
+//   2. builds several candidate boards per level and keeps the hardest.
+// "Harder" = more rounds, fewer arrows free at the start. Measured over levels 1-20 (desktop):
+//   Medium: free at start 0.46 -> ~0.22, rounds 5 -> ~12;  Hard: 0.46 -> ~0.26, rounds 7 -> ~18.
+//
+// SOLVABILITY IS STILL PROVED, not assumed: a flip is kept only if `peel()` (remove every free
+// arrow, repeat) empties the board. That is a proof for the same reason as before - removing an
+// arrow only ever frees points, so any order of free taps finishes a board that peel finishes.
+//
+// GENERATOR 1 IS KEPT, UNCHANGED: a level already in progress (a save from before this) is rebuilt
+// with the generator it was played on, or its saved "which arrows are gone" would point at
+// different arrows (`gen` in the save; a save with none is generator 1).
+export const GEN_LATEST = 2;
+const HARDEN = { easy: { k: 3, passes: 2 }, medium: { k: 6, passes: 4 }, hard: { k: 4, passes: 4 }, expert: { k: 3, passes: 4 } };
+
+/** Peel the board: returns { layers, layer[], clear0 } or null when it cannot be emptied. */
+export function peel(W, H, arrows) {
+  const n = arrows.length;
+  const occ = new Int16Array(W * H).fill(-1);
+  arrows.forEach((c, id) => { for (const p of c) occ[p] = id; });
+  const gone = new Uint8Array(n), layer = new Int16Array(n);
+  let left = n, L = 0;
+  while (left) {
+    L++;
+    const now = [];
+    for (let id = 0; id < n; id++) if (!gone[id] && !blockerOf(arrows[id], occ, W, H, id)) now.push(id);
+    if (!now.length) return null;
+    for (const id of now) { gone[id] = 1; layer[id] = L; for (const p of arrows[id]) occ[p] = -1; }
+    left -= now.length;
+  }
+  let free0 = 0;
+  for (let id = 0; id < n; id++) if (layer[id] === 1) free0++;
+  return { layers: L, layer, clear0: n ? free0 / n : 0 };
+}
+const hardness = (m) => m.layers - m.clear0 * 20;
+
+/** Flip arrows that are free at the start while that makes the board harder and keeps it solvable. */
+function harden(W, H, arrows, seed, passes) {
+  const R = rng((seed ^ 0x9e3779b9) >>> 0);
+  let cur = peel(W, H, arrows);
+  for (let pass = 0; pass < passes; pass++) {
+    const ids = arrows.map((_, i) => i);
+    for (let k = ids.length - 1; k > 0; k--) { const j = (R() * (k + 1)) | 0; [ids[k], ids[j]] = [ids[j], ids[k]]; }
+    let changed = false;
+    for (const id of ids) {
+      if (cur.layer[id] !== 1) continue;
+      arrows[id].reverse();
+      const m = peel(W, H, arrows);
+      if (m && hardness(m) > hardness(cur)) { cur = m; changed = true; } else arrows[id].reverse();
+    }
+    if (!changed) break;
+  }
+  return cur;
+}
+
+/** The level a player actually plays. `gen` picks the generator (see above); default the latest. */
+export function buildLevel(tier, level, gen = GEN_LATEST) {
   const t = TIERS.includes(tier) ? tier : 'easy';
-  return generate(levelSpec(t, level), seedOf(t, level));
+  const spec = levelSpec(t, level), seed = seedOf(t, level);
+  // Generator 1, and Easy level 1 (the first board anyone sees: it stays a gentle start).
+  if (gen === 1 || (t === 'easy' && level <= 1)) return generate(spec, seed);
+  const { k, passes } = HARDEN[t];
+  let best = null;
+  for (let i = 0; i < k; i++) {
+    const s = (seed + i * 7919) >>> 0;
+    const lvl = generate(spec, s);
+    const m = harden(lvl.cols, lvl.rows, lvl.arrows, s, passes);
+    if (m && (!best || hardness(m) > best.score)) best = { lvl, score: hardness(m) };
+  }
+  return best.lvl;
 }
 
 /** Point -> arrow id for the arrows still on the board (`gone[id]` true = already sent out). */
