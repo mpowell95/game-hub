@@ -1,8 +1,8 @@
 /* flick-soccer/css/flick-soccer.css - every rule descendant-scoped under .fs-root (Mancala's
    discipline, docs/BUILDING-A-GAME.md "CSS scoping"). A fixed stadium look in both hub themes
-   (night-green surround, white cards). The one thing .gh-dark reaches in here is css/hub.css's
-   pale Hard/Expert shape (meant for dark surfaces), which vanished on the white card until it was
-   pinned back below (2026-10-12, Matt's dark-mode screenshot). */
+   (night-green surround). The cards are light in light mode and DARK in dark mode (2026-10-12,
+   Matt: "the setup screen is bright white"): the whole switch is the token block at the end of
+   this file, `:root.gh-dark .fs-root`. The pitch and the scoreboard are the same in both. */
 
 .fs-root {
   /* Fixed to the viewport: full bleed both standalone and mounted (immersive: true in js/hub.js).
@@ -251,8 +251,6 @@
 .fs-root .fs-seg .fs-seg-item[aria-pressed="true"] { background: #fff; color: var(--fs-ink); box-shadow: 0 0 0 2px var(--fs-green); }
 .fs-root .fs-seg .fs-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fs-root .fs-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
-/* The cards stay white in dark mode, so the Hard/Expert diamond keeps its light-theme ink. */
-:root.gh-dark .fs-root .lb-dshape-t3, :root.gh-dark .fs-root .lb-dshape-t4 { fill: #1c2430; }
 /* Line-ups: a little picture of the five discs over the word, so four fit across a narrow phone. */
 .fs-root .fs-seg-form .fs-seg-item { flex-direction: column; gap: 1px; min-height: 44px; padding: 3px 2px; font-size: 12px; }
 .fs-root .fs-seg-form .fs-seg-item::after { inset: 0; }
@@ -432,3 +430,30 @@
 }
 /* "+N more" on the online home is a button: the next page of matches. */
 .fs-root button.fs-mp-more { min-height: 44px; border: 0; background: transparent; color: var(--fs-green); text-decoration: underline; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; }
+
+/* ---------------------------------------------------------------- dark mode --- */
+/* Every card (setup, how to play, menu, result, multiplayer) goes dark. Text green is lifted for
+   contrast; filled green chips keep the deep green so their white text stays readable. The Hard
+   and Expert shapes take the pale dark-mode fill (last rule), which is right on these cards. */
+:root.gh-dark .fs-root {
+  --fs-ink: #e6f0e8;
+  --fs-muted: #a3b9aa;
+  --fs-card: #15211a;
+  --fs-line: #2e4436;
+  --fs-green: #56c27a;
+}
+:root.gh-dark .fs-root .fs-card { box-shadow: 0 16px 44px rgba(0, 0, 0, 0.7); }
+:root.gh-dark .fs-root .fs-seg { background: #0d1711; }
+:root.gh-dark .fs-root .fs-seg .fs-seg-item[aria-pressed="true"] { background: #24392c; }
+:root.gh-dark .fs-root .fs-alt,
+:root.gh-dark .fs-root .fs-mprow,
+:root.gh-dark .fs-root .fs-mrow { background: #1d2d23; }
+:root.gh-dark .fs-root .fs-x,
+:root.gh-dark .fs-root .fs-mp-back { background: #24392c; }
+:root.gh-dark .fs-root .fs-help-line { color: #c3d6c8; }
+:root.gh-dark .fs-root .fs-danger { background: #1d2d23; color: #ff9b9b; border-color: #6e3434; }
+:root.gh-dark .fs-root .fs-mp-err { color: #ff9b9b; }
+:root.gh-dark .fs-root .fs-mprow-badge,
+:root.gh-dark .fs-root .fs-mp-h span { background: #1f7a3a; color: #fff; }
+/* css/hub.css carries this too, but the standalone page does not load hub.css. */
+:root.gh-dark .fs-root .lb-dshape-t3, :root.gh-dark .fs-root .lb-dshape-t4 { fill: #e6e9f0; }

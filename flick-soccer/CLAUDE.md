@@ -143,6 +143,11 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   dashed accent ring (pulsing, steady under reduced motion).
 - GOAL! banner over the centre circle for 1.7 s of game time, with "Own goal" when the shooter put
   it in their own net. Reduced motion keeps the banner and drops the zoom.
+- **Dark mode (2026-10-12)**, Matt: *"the setup screen is bright white"*. Every card goes dark
+  under `.gh-dark` (the token block at the end of `css/flick-soccer.css`); the pitch and the
+  scoreboard are the same in both themes. `js/ui.js` imports `js/theme.js` so the standalone page
+  themes too, and the Hard/Expert shape's pale dark fill is repeated there because the standalone
+  page does not load `css/hub.css`.
 - No sound (root `CLAUDE.md`, "No sound, ever").
 
 ## Settings and storage
