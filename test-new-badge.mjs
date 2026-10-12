@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const { NEW_DAYS, parseReleaseDate, daysSinceRelease, isNewGame } = await import('./js/new-badge.js');
+const { NEW_DAYS, parseReleaseDate, daysSinceRelease, isNewGame, sortMsOf } = await import('./js/new-badge.js');
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 let fail = 0;
@@ -65,6 +65,19 @@ eq('accepts a bare date string too', isNewGame('2026-08-01', day('2026-08-02')),
   eq('at least one GAMES entry carries a released date (the scrape still matches the file)',
     dates.length > 0, true);
   eq('every released date in js/hub.js parses', dates.filter((d) => parseReleaseDate(d) === null), []);
+}
+
+// ---- `added` (2026-10-12): orders an admin-only game in Newest, never makes it New ----
+{
+  const g = { added: '2026-10-11' };
+  eq('an added date is a sort time', sortMsOf(g), Date.UTC(2026, 9, 11));
+  eq('...but never a New pill', isNewGame(g, day('2026-10-12')), false);
+  eq('a release date wins over added', sortMsOf({ released: '2026-10-01', added: '2026-10-11' }), Date.UTC(2026, 9, 1));
+  eq('an admin release stamp wins over added', sortMsOf({ added: '2026-10-11' }, 5), 5);
+  eq('no date at all is still no date', sortMsOf({}), null);
+  const src = readFileSync(join(ROOT, 'js/hub.js'), 'utf8');
+  const added = [...src.matchAll(/^ {4}added: '([^']*)',/gm)].map((m) => m[1]);
+  eq('every added date in js/hub.js parses', added.length > 0 && added.every((d) => parseReleaseDate(d) !== null), true);
 }
 
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');

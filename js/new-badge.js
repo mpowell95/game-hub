@@ -65,6 +65,14 @@ export function releaseMsOf(game, liveAtMs = 0) {
   return Number.isFinite(liveAtMs) && liveAtMs > 0 ? liveAtMs : null;
 }
 
+/** The time the launcher's Newest sort orders by: the release time if there is one, else the
+ *  entry's `added` date (an admin-only game's day on the launcher, 2026-10-12). Never read by the
+ *  New pill: `isNewGame` uses releaseMsOf alone, so `added` cannot make a tile say New. */
+export function sortMsOf(game, liveAtMs = 0) {
+  const ms = releaseMsOf(game, liveAtMs);
+  return ms !== null ? ms : parseReleaseDate(game && game.added);
+}
+
 /** Is this GAMES entry inside its New window? Accepts the whole entry (or a bare date string) so
  *  call sites read as `isNewGame(g)`.
  *
@@ -77,4 +85,4 @@ export function isNewGame(game, now = Date.now(), liveAtMs = 0) {
   return Math.floor((now - ms) / DAY_MS) < NEW_DAYS;
 }
 
-export default { NEW_DAYS, parseReleaseDate, daysSinceRelease, releaseMsOf, isNewGame };
+export default { NEW_DAYS, parseReleaseDate, daysSinceRelease, releaseMsOf, sortMsOf, isNewGame };
