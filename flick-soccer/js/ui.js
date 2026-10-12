@@ -19,6 +19,7 @@ import { roundShot } from './mp.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
+import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
 import { recordResult } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
