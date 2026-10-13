@@ -226,7 +226,8 @@ export function createRenderer(canvas) {
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
 
-  /** state: { b (bodies) or null, glowTeam (-1 none), glow 0-1, aim (or null), spin, dim } */
+  /** state: { b (bodies) or null, glowTeam (-1 none), glow 0-1, aim (or null), spin, dim,
+   *  hideTeam (a seat whose discs are not drawn: an online opponent still choosing a line-up) } */
   r.draw = (st) => {
     if (!r.w) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -237,6 +238,7 @@ export function createRenderer(canvas) {
     else ctx.setTransform(r.dpr * r.s, 0, 0, r.dpr * r.s, r.dpr * r.ox, r.dpr * r.oy);
     for (let i = 1; i < b.length; i++) {
       const team = teamOf(i);
+      if (team === st.hideTeam) continue;
       disc(b[i], team, team === st.glowTeam && (!st.aim || st.aim.i === i) ? (st.aim && st.aim.i === i ? 1 : st.glow) : 0);
     }
     ball(b[BALL], st.spin || 0);
