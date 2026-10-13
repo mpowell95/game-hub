@@ -148,6 +148,13 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
   390x844 and 430x932: every button, the board and the popups on screen, none overlapping each other
   or the hub's back button, no page scroll. Expert's board pitch is ~11px at 320 wide, ~13-14px on
   ordinary phones (it was ~2px less before the hint moved).
+- **The phones that matter, measured 2026-10-13** (`node read-install-state.mjs --screens`, sizes
+  in CSS px from the 10 most active players): 402x874 (King of Games, Matt, Natalia), 414x896
+  (Anita), 390x844 (Ele), 360x804 Android in a browser tab (Unai, a 360x724 page). Still unreported:
+  TP, HDJ (an older bug report said 384x832), Jojopow, Lili. **So the floor to design for is 360px
+  wide and ~724px tall, not 320x568: nobody who plays has a 320-wide phone, and 320x568 checks are
+  dropped.** 375x667 (iPhone SE size) stays a check until Lili's phone reports; re-run the command
+  and drop it too if nobody active has one.
 
 ## Persistence and stats
 
