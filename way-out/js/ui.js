@@ -14,8 +14,9 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordResult } from '../../js/game-stats.js';
-import { TIERS, SAVE_V, GEN_LATEST, buildLevel, occupancy, blockerOf, dirOf, hintArrow } from './engine.js';
+import { recordWayOut } from '../../js/game-stats.js';
+import { woMistakeMs, woHintMs, woFinishScore, woClock } from '../../js/wayout-score.js';
+import { TIERS, SAVE_V, GEN_LATEST, buildLevel, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -26,8 +27,14 @@ const SETTINGS_KEY = 'gamehub.wayout.v1';
 // exactly as it is, never written again and never deleted (THE LAW rule 5).
 const OLD_SAVE_KEY = 'gamehub.wayout.save.v1';
 const SAVES_KEY = 'gamehub.wayout.saves.v1';
+// THE CLOCK (2026-10-13, Matt: "add a timer"), ONE PER TIER, kept apart from the save on purpose:
+// the save is cleared by Restart and by Out of lives, and the time must NOT be. A level's clock runs
+// from its first open until it is cleared, through every Restart and Try again, so replaying a
+// board you have already seen costs the time it took to see it. { <tier>: { level, gen, ms, pen,
+// mistakes, hints, partial } }; `partial` = the level was started before the timer existed, so it
+// has no honest time and counts as solved only.
+const CLOCKS_KEY = 'gamehub.wayout.clocks.v1';
 const MAX_LEVEL = 1000000;   // a sane ceiling: corrupt settings once showed "Level 1e+21"
-const STATS_ID = 'wayout';
 const LIVES = 3;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
 
@@ -102,6 +109,21 @@ function writeSave(o) {
   const map = loadSaves();
   map[o.tier] = { v: SAVE_V, ...o };
   try { localStorage.setItem(SAVES_KEY, JSON.stringify(map)); } catch (err) { console.error('[way-out] save', err); }
+}
+function loadClock(tier) {
+  try {
+    const c = (JSON.parse(localStorage.getItem(CLOCKS_KEY) || '{}') || {})[tier];
+    if (!c || typeof c !== 'object') return null;
+    const n = (v) => (Number.isFinite(v) && v >= 0 ? v : 0);
+    return { level: c.level, gen: c.gen, ms: n(c.ms), pen: n(c.pen), mistakes: n(c.mistakes) | 0, hints: n(c.hints) | 0, partial: !!c.partial };
+  } catch { return null; }
+}
+function writeClock(tier, c) {
+  let map = {};
+  try { map = JSON.parse(localStorage.getItem(CLOCKS_KEY) || '{}') || {}; } catch { map = {}; }
+  if (typeof map !== 'object' || Array.isArray(map)) map = {};
+  map[tier] = c;
+  try { localStorage.setItem(CLOCKS_KEY, JSON.stringify(map)); } catch (err) { console.error('[way-out] clock NOT saved', err); }
 }
 function clearSave(tier) {
   const map = loadSaves();
@@ -194,12 +216,17 @@ class WayOut {
     this._onKey = (ev) => this._handleKey(ev);
     this.root.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
+    // The clock stops while the app is in the background (phone locked, another app in front).
+    this._onVis = () => { if (document.hidden) this._clockPause(); else this._clockRun(); };
+    document.addEventListener('visibilitychange', this._onVis);
     this.offResize = onViewportResize(() => { this._positionRoot(); this._layout(); });
     this.offLang = onLangChange(() => this.render());
     this.render();
   }
 
   destroy() {
+    this._clockPause();
+    if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     for (const id of this.timers) clearTimeout(id);
@@ -368,12 +395,14 @@ class WayOut {
           <button type="button" class="wo-iconbtn wo-restart" data-act="restart" aria-label="${t('restart_aria')}">${ICON_RESTART}</button>
         </div>
         <div class="wo-lifebar">
+          <span class="wo-timer" role="timer" aria-label="${t('timer_aria')}">0:00</span>
+          <span class="wo-pen" aria-hidden="true"></span>
           <div class="wo-hearts" role="img"></div>
           <button type="button" class="wo-hint" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
         <div class="wo-stage"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
-        <div class="wo-banner" aria-live="polite"><span></span></div>
+        <div class="wo-banner" aria-live="polite"><span></span><b></b></div>
       </div>`;
   }
 
@@ -401,6 +430,7 @@ class WayOut {
    *  "next level" (win) or "Out of lives" (loss) must never fire over the setup screen. `dropSave`
    *  after a loss, so the level starts fresh next time. */
   _stopLevel() {
+    this._clockPause();
     for (const id of this.timers) clearTimeout(id);
     this.timers = [];
     cancelAnimationFrame(this.raf);
@@ -460,6 +490,7 @@ class WayOut {
     this.gen = pre ? pre.gen : GEN_LATEST;
     this.lvl = buildLevel(tier, level, this.gen);
     const n = this.lvl.arrows.length;
+    this.rounds = (peel(this.lvl.cols, this.lvl.rows, this.lvl.arrows) || {}).layers || 1;
     const saved = readSave(tier, level, n);
     this.gone = new Array(n).fill(false);
     this.red = new Array(n).fill(false);
@@ -479,8 +510,16 @@ class WayOut {
     this.failed = false;
     this.wave = null;
     this.geomWas = null;
+    this.winSub = '';
+    // The clock carries on through Restart and Try again on the same level; a new level starts at 0.
+    // A level with progress but no clock was started before the timer existed: no honest time.
+    const c = loadClock(tier);
+    this.clock = c && c.level === level && c.gen === this.gen ? c
+      : { level, gen: this.gen, ms: 0, pen: 0, mistakes: 0, hints: 0, partial: !!(saved && (saved.gone.length || saved.red.length || saved.lives < LIVES)) };
+    writeClock(tier, this.clock);
     this.screen = 'play';
     this.render();
+    this._clockRun();
     // Every arrow already gone: the player left (or the app was closed) while the LAST arrow was
     // still sliding out, so the win was never counted. Count it now instead of showing an empty
     // board with nothing left to tap.
@@ -498,6 +537,54 @@ class WayOut {
     if (this.won || this.failed) return;
     const ids = (arr) => arr.reduce((a, v, i) => (v ? (a.push(i), a) : a), []);
     writeSave({ tier: this.tier, level: this.level, gen: this.gen, gone: ids(this.gone), red: ids(this.red), lives: this.lives });
+    this._clockStore();
+  }
+
+  // --- the clock ------------------------------------------------------------------------------------
+  // Runs only while a level is on screen, unfinished, and the app is in front. Shown with penalties
+  // already added, so the number on screen is the number that is scored.
+
+  _clockMs() {
+    if (!this.clock) return 0;
+    return this.clock.ms + (this.clockT0 ? performance.now() - this.clockT0 : 0);
+  }
+  _clockRun() {
+    if (!this.clock || this.clockT0 || this.screen !== 'play' || this.won || this.failed) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    this.clockT0 = performance.now();
+    if (!this.tick) this.tick = setInterval(() => this._paintClock(), 250);
+    this._paintClock();
+  }
+  _clockPause() {
+    if (this.tick) { clearInterval(this.tick); this.tick = 0; }
+    if (!this.clock || !this.clockT0) return;
+    this.clock.ms = this._clockMs();
+    this.clockT0 = 0;
+    this._clockStore();
+  }
+  _clockStore() {
+    if (!this.clock || !this.tier) return;
+    writeClock(this.tier, { ...this.clock, ms: Math.round(this._clockMs()) });
+  }
+  _paintClock() {
+    const el = this.root && this.root.querySelector('.wo-timer');
+    if (el && this.clock) el.textContent = woClock(this._clockMs() + this.clock.pen);
+  }
+  /** Add a time penalty and show it beside the clock ("+20s"). */
+  _penalty(ms) {
+    if (!this.clock || ms <= 0) return;
+    this.clock.pen += ms;
+    this._clockStore();
+    this._paintClock();
+    this._flashPen(`+${Math.round(ms / 1000)}s`);
+  }
+  _flashPen(text) {
+    const el = this.root && this.root.querySelector('.wo-pen');
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('is-on');
+    void el.offsetWidth;   // restart the animation
+    el.classList.add('is-on');
   }
 
   _left() { return this.gone.reduce((n, g) => n + (g ? 0 : 1), 0); }
@@ -524,6 +611,7 @@ class WayOut {
     const restart = this.root.querySelector('.wo-restart');
     if (restart) restart.classList.toggle('is-idle', done === 0 && this.lives === LIVES && !this.red.some(Boolean));
     if (this.canvas) this.canvas.setAttribute('aria-label', t('board_aria', { n: total - done }));
+    this._paintClock();
   }
 
   // --- the board ----------------------------------------------------------------------------------
@@ -672,10 +760,14 @@ class WayOut {
 
   _hint() {
     if (this.won || this.failed || !this.lvl) return;
+    // A hint still pulsing is the same hint: tapping again does not charge again.
+    if (this.hintId >= 0 && performance.now() - this.hintT0 < 2600) return;
     const id = hintArrow(this.lvl, this.gone, this.red, this.busy);
     if (id < 0) return;
     this.hintId = id;
     this.hintT0 = performance.now();
+    if (this.clock) this.clock.hints += 1;
+    this._penalty(woHintMs(this.tier));
     this._kick();
   }
 
@@ -712,10 +804,15 @@ class WayOut {
     if (this.failed) return;   // a second bump in flight after the last heart: nothing more to lose
     this.red[id] = true;
     this.lives = Math.max(0, this.lives - 1);
+    if (this.clock) this.clock.mistakes += 1;
+    // The first heart lost costs the tier's base time, the second double (Matt, 2026-10-13). The
+    // third ends the attempt; the clock keeps running into the retry, which is its own cost.
+    if (this.lives > 0) this._penalty(woMistakeMs(this.tier, LIVES - this.lives));
     this._paintHud(true);
     this._save();
     if (this.lives === 0) {
       this.failed = true;
+      this._clockPause();
       clearSave(this.tier);
       this._later(() => this._showFail(), 650);
     }
@@ -745,12 +842,22 @@ class WayOut {
         });
       }
     }
-    // Record once, then move the player on (the level number only ever goes up).
+    // Record once, then move the player on (the level number only ever goes up). The clock stops
+    // at the last arrow; the time and the board's size go to the score (js/wayout-score.js).
+    this._clockPause();
+    const c = this.clock || { ms: 0, pen: 0, mistakes: 0, hints: 0, partial: true };
+    const fin = { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds, mistakes: c.mistakes, hints: c.hints, timed: !c.partial };
     try {
-      recordResult(STATS_ID, this.tier, true);
+      recordWayOut(this.tier, fin);
     } catch (err) {
-      console.error('[way-out] recordResult failed - the level was NOT recorded', err);
+      console.error('[way-out] recordWayOut failed - the level was NOT recorded', err);
     }
+    this._paintClock();
+    // Shown under the win word: the time (penalties in) and, when timed, this level's score.
+    this.winSub = woClock(c.ms + c.pen) + (fin.timed
+      ? ` \u00b7 ${t('score_n', { n: Math.round(woFinishScore({ t: c.ms + c.pen, a: fin.arrows, r: fin.rounds })) })}` : '');
+    writeClock(this.tier, null);
+    this.clock = null;
     clearSave(this.tier);
     this.settings = saveSettings({ levels: { [this.tier]: this.level + 1 } });
     this._later(() => this._banner(), motion ? 650 : 100);
@@ -761,6 +868,8 @@ class WayOut {
     const b = this.root.querySelector('.wo-banner');
     if (!b) return;
     b.querySelector('span').textContent = t('win_' + (1 + ((Math.random() * 5) | 0)));
+    const sub = b.querySelector('b');
+    if (sub) sub.textContent = this.winSub || '';
     b.classList.add('is-on');
   }
 
