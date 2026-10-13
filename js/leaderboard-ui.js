@@ -436,8 +436,8 @@ function msBestAt(g, tier) {
   return v > 0 ? v : null;
 }
 
-/** Arrow Maze (2026-10-13): the player's score at this tier, their best 10 of their last 15 (100 =
- *  par; js/wayout-score.js), or null when they have no timed finish there. With no tier, the score at
+/** Arrow Maze (2026-10-13): the player's score at this tier in arrows per minute, their best 10 of
+ *  their last 15 (js/wayout-score.js), or null when they have no timed finish there. With no tier, the score at
  *  the hardest tier they have one - the same "their own number" fallback every board uses. Levels
  *  cleared before the timer have no score; they still count in plays, My Stats and the tiles. */
 function woAt(g, tier) {
@@ -1847,7 +1847,7 @@ function gameDetail(list, id) {
   const notes = [];
   if (byMetric && _tier == null && rows.some((g) => boardTierOf(g, id) != null)) notes.push(tx('lb_note_tier', 'Ranked by hardest difficulty first, then score.'));
   if (byMetric && LOWER_IS_BETTER.has(id)) notes.push(tx('lb_note_low', 'Lowest score wins.'));
-  if (byMetric && id === 'wayout') notes.push(tx('lb_note_wo', 'Score: your best 10 of your last 15 levels, each timed against its board\'s par (100 = par). Mistakes and hints add time.'));
+  if (byMetric && id === 'wayout') notes.push(tx('lb_note_wo', 'Score: arrows cleared per minute (mistakes and hints add time), averaged over your best 10 of your last 15 levels.'));
   if (rows.some((g) => tiedAt(g.key))) notes.push(tx('lb_note_tie', 'T = tied.'));
   const note = notes.length ? `<p class="lb-note">${esc(notes.join(' '))}</p>` : '';
   return head + controls + note + cardsHtml + recordsHTML(list, id);
