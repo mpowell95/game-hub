@@ -210,11 +210,14 @@
 //                                                   // play+won per level cleared (recordWayOut)
 //         wo: { timed: { easy, medium, hard, expert }, mistakes, hints,
 //               recent: { <tier>: [{t, a, r}] }, best: { <tier>: [{t, a, r}] } } },
+//                                                   // RANKED BY recent: the best 10 of the last 15
+//                                                   // (woRating). best = the best 10-in-a-row run
+//                                                   // ever, kept up to date and not ranked.
 //                                                   // (2026-10-13) the timed score. A finish is
 //                                                   // stored RAW: t = ms including penalties, a =
 //                                                   // arrows, r = rounds; js/wayout-score.js scores
 //                                                   // it against par at read time. recent = the last
-//                                                   // up-to-10 timed finishes; best = the run of up to
+//                                                   // up-to-15 timed finishes; best = the run of up to
 //                                                   // 10 with the highest score, replaced only by a
 //                                                   // higher-scoring run (rule 2). Levels cleared
 //                                                   // before the timer, or resumed from a save made
@@ -234,7 +237,7 @@
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
-import { WO_TIERS, WO_RUN, woList, woRunScore } from './wayout-score.js';
+import { WO_TIERS, WO_RUN, WO_RECENT, woList, woRunScore } from './wayout-score.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
@@ -1667,10 +1670,13 @@ export function recordWayOut(tier, f = {}) {
     g.wo.timed[d] += 1;
     g.wo.mistakes += Math.max(0, f.mistakes | 0);
     g.wo.hints += Math.max(0, f.hints | 0);
-    const recent = woList(g.wo.recent[d]).concat([{ t, a, r }]).slice(-WO_RUN);
+    const recent = woList(g.wo.recent[d]).concat([{ t, a, r }]).slice(-WO_RECENT);
     g.wo.recent[d] = recent;
+    // `best` = the best run of 10 IN A ROW ever (the first rule, shipped and replaced the same day);
+    // still kept up to date, never shrunk (rules 2 and 5). The ranking reads `recent`: best 10 of the last 15 (woRating).
+    const run = recent.slice(-WO_RUN);
     const was = woRunScore(g.wo.best[d]);
-    if (was === null || woRunScore(recent) > was) g.wo.best[d] = recent.slice();
+    if (was === null || woRunScore(run) > was) g.wo.best[d] = run;
   }
   st.updatedAt = new Date().toISOString();
   persist(st);

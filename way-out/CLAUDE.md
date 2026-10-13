@@ -231,7 +231,7 @@ Matt (with Ana): *"first by difficulty (1 finish on hard is always ranked higher
 easy); add a timer (like minesweeper); if someone messes up, they lose a heart, but their time also
 increases ... BUT with the above and the current system, it rewards new players and hurts better
 longer time players ... some calculation to take all of this into consideration?"* Then, choosing
-from options: rank on the **average of 10 vs par**; mistakes **climb** ("losing 1 heart on easy is
+from options: rank on the **average of 10 vs par** (then refined to the best 10 of the last 15, below); mistakes **climb** ("losing 1 heart on easy is
 +10, losing a second is +20. On medium it's +15, +30, hard +20, +40, expert +30s, +60s"); a hint
 costs **the same as a mistake**.
 
@@ -250,10 +250,20 @@ costs **the same as a mistake**.
   first guess with no play data behind it.** Finishes are stored RAW (`{t, a, r}`) and scored at
   read time, so retuning the two constants re-scores every stored finish with no migration.
 - **A finish's score** = 100 x par / time, capped at 300. **A player's score at a difficulty** = the
-  best run of 10 finishes in a row there, averaged, with finishes not yet played counting as par
-  (100). So a newcomer's two lucky boards average out near 100 instead of beating ten good ones,
-  and a long-time player is judged on a run, not one board. The best run is only ever replaced by a
-  higher-scoring one (rule 2); `recent` is the last 10.
+  **best 10 of their last 15** finishes there, averaged, with any of the 10 not yet played counting
+  as par (100) (`woFormScore`, read from `recent`, which keeps the last 15). Matt, same day: *"I
+  don't want to penalize someone who puts the phone down mid play or is distracted by someone or
+  something. So ... maybe we take the best 10 of the most recent 15."* So up to five slow levels are
+  simply dropped, a newcomer's two lucky boards average out near 100 instead of beating ten good
+  ones, and the number reflects how someone plays NOW. **It shipped first (the same morning) as
+  "best run of 10 in a row ever"**; that run is still kept up to date in `best` (only ever replaced
+  by a higher-scoring run, rules 2 and 5) but nothing ranks on it any more.
+- **Difficulty vs level** (Matt: *"hard lvl 1 is way easier than easy lvl 30, right?"*). Measured, it
+  is the other way round: Hard 1 is 20x26 with 68 arrows and 14 rounds (par 2:17); Easy 30 is 10x13
+  with 22 arrows and 10 rounds (par 0:58). Every tier's level 1 is at least as big as the tier
+  below's biggest board (Medium 1 = 10x13, 19 arrows, 10 rounds, about Easy's cap). Within a tier,
+  par grows with the board, so a later, harder level is not a slower score. Across tiers, Matt's
+  rule: any finish on a harder tier outranks any on an easier one.
 - **The leaderboard** ranks hardest difficulty first (the existing tier-first rule), then this
   score; its note explains it in one line. Per-difficulty tiles show the score at each.
 - **Not timed, honestly:** a level resumed from a save made before the timer shipped has no honest
