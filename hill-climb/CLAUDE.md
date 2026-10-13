@@ -407,3 +407,26 @@ block in `hill-climb.css` is scoped `@media (max-height: 720px)`.
 height is four rows of card; trimming 34px off each one would have taken the note text with it.
 Two columns makes it two rows and costs nothing but width, which this screen has - it is the same
 grid the existing 620px-wide rule already switches to, asked for by height instead.
+
+## Every garage tab fits, on a 360-wide phone too (2026-10-13)
+
+Matt asked whether every game works on Unai's phone (Android, 360x804 screen, 360x724 page: the
+narrowest an active player uses, from `node read-install-state.mjs --screens`). Hill Climb did not,
+and neither did three of its four tabs on phones it had been "checked" on: `check-no-scroll.mjs`
+only ever measured the default Vehicle tab, so Shop, Stage and Tune were never looked at.
+
+Measured `.hc-body` overflow before the fix: Vehicle 34px (360x804) and 95px (360x724); Shop 14-159px
+at EVERY size tested, including 393x852; Stage 69px at 393x852; Tune 56px at 390x664 and 360x724.
+
+- **Vehicle and Stage cards are two columns at every size** (were one column unless the screen was
+  under 720px tall or over 620px wide). At 360px wide every note wraps an extra line, so one column
+  is four tall rows.
+- **Shop is three tiles across per section** (`.hc-shopgrid`, name over price), not one row per item.
+  Each section is at most three things (three vehicles, three stages to buy), so it is one row.
+- **Tune is a 2x2 grid of tiles** (name, note, pips, button), the pips shrinking to fit.
+- Every buy button in those tiles is held to 44px tall (the UX floor).
+- The short-screen block (`max-height: 720px`) also applies at `max-width: 380px` now, and tightens
+  the tune tiles and shop headings.
+
+`check-no-scroll.mjs` now measures all three other tabs (`EXTRA_SCREENS['hill-climb']`) and both
+360-wide sizes, so none of this can come back unnoticed.
