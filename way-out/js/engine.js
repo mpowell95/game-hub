@@ -252,8 +252,21 @@ export function generate(spec, seed) {
 // GENERATOR 1 IS KEPT, UNCHANGED: a level already in progress (a save from before this) is rebuilt
 // with the generator it was played on, or its saved "which arrows are gone" would point at
 // different arrows (`gen` in the save; a save with none is generator 1).
-export const GEN_LATEST = 2;
+//
+// GENERATOR 3 (2026-10-13, Matt: "Expert should be more difficult than hard"): generator 2 made Expert
+// BIGGER than Hard but no DEEPER (17.9 rounds each). Generator 3 changes Expert only: shorter, more
+// winding arrows (more of them on the same grid) and 10 candidates at 8 passes. Measured, levels
+// 1-60: 25.9 rounds (fewest 21, above Hard's AVERAGE of 18), 48 ms per build on a desktop. Same grid
+// size, so the dots are no smaller. Every other tier builds exactly as generator 2.
+export const GEN_LATEST = 3;
 const HARDEN = { easy: { k: 3, passes: 2 }, medium: { k: 6, passes: 4 }, hard: { k: 4, passes: 4 }, expert: { k: 3, passes: 4 } };
+const GEN3 = { expert: { k: 10, passes: 8, spec: { maxLen: 12, straight: 0.3, jitter: 0.1 } } };
+
+/** The spec a generator actually builds with: `levelSpec`, plus generator 3's Expert changes. */
+export function specFor(tier, level, gen = GEN_LATEST) {
+  const spec = levelSpec(tier, level), g3 = gen >= 3 && GEN3[tier];
+  return g3 ? { ...spec, ...g3.spec } : spec;
+}
 
 /** Peel the board: returns { layers, layer[], clear0 } or null when it cannot be emptied. */
 export function peel(W, H, arrows) {
@@ -298,10 +311,11 @@ function harden(W, H, arrows, seed, passes) {
 /** The level a player actually plays. `gen` picks the generator (see above); default the latest. */
 export function buildLevel(tier, level, gen = GEN_LATEST) {
   const t = TIERS.includes(tier) ? tier : 'easy';
-  const spec = levelSpec(t, level), seed = seedOf(t, level);
+  const seed = seedOf(t, level);
   // Generator 1, and Easy level 1 (the first board anyone sees: it stays a gentle start).
-  if (gen === 1 || (t === 'easy' && level <= 1)) return generate(spec, seed);
-  const { k, passes } = HARDEN[t];
+  if (gen === 1 || (t === 'easy' && level <= 1)) return generate(levelSpec(t, level), seed);
+  const spec = specFor(t, level, gen);
+  const { k, passes } = (gen >= 3 && GEN3[t]) || HARDEN[t];
   let best = null;
   for (let i = 0; i < k; i++) {
     const s = (seed + i * 7919) >>> 0;
