@@ -122,6 +122,9 @@ export default {
     tap_skip: 'Tap the table to skip ahead',
     // Computer speed (2026-09-28)
     pace: 'Computer speed', pace_slow: 'Slow', pace_normal: 'Normal', pace_fast: 'Fast',
+    // Table settings (2026-10-13)
+    tset: 'Settings', on: 'On', off: 'Off', casino_floor: 'Go to casino floor',
+    cf_split: 'Separate Check / Fold button', cf_split_hint: 'A small button of its own, so a raise can never turn it into Call.',
     // Last hand replay (2026-09-28)
     last_hand: 'Last hand', last_title: 'Hand {n}', last_none: 'No hand has finished yet.',
     last_wins: '{name} wins {n} with {hand}', last_takes: '{name} takes {n}', last_split: 'Split: {names} share {n}',
@@ -289,6 +292,9 @@ export default {
     tap_skip: 'Toca la mesa para adelantar',
     // Velocidad de los ordenadores (2026-09-28)
     pace: 'Velocidad del ordenador', pace_slow: 'Lenta', pace_normal: 'Normal', pace_fast: 'Rápida',
+    // Ajustes de la mesa (2026-10-13)
+    tset: 'Ajustes', on: 'Sí', off: 'No', casino_floor: 'Ir a la sala del casino',
+    cf_split: 'Botón Pasar / No ir aparte', cf_split_hint: 'Un botón pequeño propio, para que una subida nunca lo convierta en Igualar.',
     // Última mano (2026-09-28)
     last_hand: 'Última mano', last_title: 'Mano {n}', last_none: 'Todavía no ha terminado ninguna mano.',
     last_wins: '{name} gana {n} con {hand}', last_takes: '{name} se lleva {n}', last_split: 'Dividido: {names} se reparten {n}',

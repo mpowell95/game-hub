@@ -193,6 +193,8 @@ function loadSettings() {
     skill: [1, 2, 3].includes(s.skill) ? s.skill : profSkill,
     speed: SPEEDS[s.speed] ? s.speed : 'normal',
     pace: PACES[s.pace] ? s.pace : 'normal',
+    // Check / Fold as its own small button under the big one (2026-10-13), off unless chosen.
+    cfSplit: s.cfSplit === true,
     netBots: Math.max(0, Math.min(7, s.netBots | 0)),
     netSkill: [1, 2, 3].includes(s.netSkill) ? s.netSkill : 2,
     netTier: typeof s.netTier === 'string' ? s.netTier : null,
@@ -681,6 +683,7 @@ class Game {
             </div>
           </div>
           <div class="pk-strip">
+            <button type="button" class="pk-gear" data-act="tset" aria-label="${esc(t('tset'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.5 7.5 0 0 0-1.7-1L14.9 3h-4l-.4 2.7a7.5 7.5 0 0 0-1.7 1l-2.5-1-2 3.5L6.4 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.5 7.5 0 0 0 1.7 1l.4 2.9h4l.4-2.9a7.5 7.5 0 0 0 1.7-1l2.5 1 2-3.5zM12.9 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
             <span class="pk-topcode" data-role="mp-code" hidden></span>
             <button type="button" class="pk-redx" data-act="leave" aria-label="${esc(t('leave_table'))}">&#x2715;</button>
             <div class="pk-opps"></div>
@@ -704,6 +707,7 @@ class Game {
             </div>
             <div class="pk-right">
               <button type="button" class="pk-bigbtn" data-act="big" disabled></button>
+              <button type="button" class="pk-cfbtn" data-act="precf" disabled hidden></button>
               <div class="pk-stackline"></div>
             </div>
           </div>
@@ -968,10 +972,15 @@ class Game {
     const handKey = `${pub.gid || ''}:${pub.handNo}`;
     const canPre = !!(meP && h && !h.result && !myTurn && h.inHand && h.inHand[this.myIdx] && !(h.allIn && h.allIn[this.myIdx]) && !meP.sitOut && !meP.away);
     const preOn = this.precf === handKey;
+    const split = this.settings.cfSplit;
+    this.canPre = canPre;
     let mode = 'idle';
     if (meP && (meP.sitOut || meP.away) && !meP.out) mode = 'back';
+    // Ticked and the turn has come round: it acts by itself in a moment, so the big button stays
+    // dead until it has (a tap there could otherwise land on CALL).
+    else if (L && preOn && !r && this.autoDone !== pub.k) mode = 'idle';
     else if (L) mode = r ? 'raise' : (L.canCheck ? 'check' : 'call');
-    else if (canPre) mode = 'precf';
+    else if (canPre && !split) mode = 'precf';
     else if (h && h.result && this.kind === 'solo' && this.revealAll !== pub.handNo && !pub.over) mode = 'reveal';
     // "Check / Fold" ticked and the turn has come round: check if nothing is owed, otherwise fold.
     // It stays on for the rest of the hand, so it keeps checking until somebody bets.
@@ -979,8 +988,10 @@ class Game {
       this.autoK = pub.k;
       const k = pub.k;
       this._later(() => {
+        this.autoDone = k;
         const L2 = this.pub && this.pub.k === k ? legal(this.pub) : null;
         if (L2 && L2.i === this.myIdx && this.precf === handKey) this._move({ a: L2.canCheck ? 'check' : 'fold' });
+        else if (this.pub) this._paintActions();
       }, 350);
     }
     const sig = `${mode}:${pub.k}:${r ? (r.panel ? 2 : 1) : 0}:${this.revealAll === pub.handNo}:${preOn}:${this.drag ? 1 : 0}`;
@@ -1018,6 +1029,28 @@ class Game {
     big.classList.toggle('is-pre', mode === 'precf');
     big.setAttribute('aria-pressed', mode === 'precf' ? String(preOn) : 'false');
     big.innerHTML = label;
+    // The separate Check / Fold button (setting): live only while it is someone else's turn, so the
+    // big button changing to CALL under a finger can never be the one that was aimed at.
+    const cf = this.el.querySelector('.pk-cfbtn');
+    if (cf) {
+      cf.hidden = !split;
+      cf.disabled = !split || !canPre;
+      cf.classList.toggle('is-on', split && preOn);
+      cf.setAttribute('aria-pressed', String(split && preOn));
+      const cfSig = `${preOn}`;
+      if (cf.dataset.sig !== cfSig) {
+        cf.dataset.sig = cfSig;
+        cf.innerHTML = `<span class="pk-cfbox${preOn ? ' is-on' : ''}" aria-hidden="true">${preOn ? '&#x2714;' : ''}</span><span>${esc(t('check_fold'))}</span>`;
+      }
+      this.el.querySelector('.pk-right').classList.toggle('is-split', split);
+    }
+  }
+
+  _togglePre() {
+    const key = `${this.pub.gid || ''}:${this.pub.handNo}`;
+    this.precf = this.precf === key ? null : key;
+    this.actSig = '';
+    return this._paintActions();
   }
 
   _renderOverlay() {
@@ -1029,7 +1062,7 @@ class Game {
       ov.className = 'pk-overlay';
       this.el.appendChild(ov);
     }
-    const sig = want + ':' + (want === 'last' ? (this.lastHand && this.lastHand.key) : (this.pub ? this.pub.k : '')) + ':' + (this.confirm || '');
+    const sig = want + ':' + (want === 'last' ? (this.lastHand && this.lastHand.key) : want === 'tset' ? `${this.settings.cfSplit}:${this.settings.pace}` : (this.pub ? this.pub.k : '')) + ':' + (this.confirm || '');
     if (ov.dataset.sig === sig) return;
     ov.dataset.sig = sig;
     if (want === 'help') {
@@ -1042,6 +1075,23 @@ class Game {
         </div>`;
     } else if (want === 'last') {
       ov.innerHTML = this._lastHandHTML();
+    } else if (want === 'tset') {
+      // The table's own settings (2026-10-13). Computer speed only where this device runs the
+      // computers (solo, or the host); a guest's computers are the host's.
+      const s = this.settings;
+      const on = s.cfSplit;
+      const pace = this.table ? `<div class="pk-field"><div class="pk-label">${esc(t('pace'))}</div>
+          <div class="pk-seg" role="radiogroup">${['slow', 'normal', 'fast'].map((k) => `<button type="button" role="radio" aria-checked="${s.pace === k}" class="pk-segbtn${s.pace === k ? ' is-on' : ''}" data-act="set" data-k="pace" data-v="${k}">${esc(t('pace_' + k))}</button>`).join('')}</div></div>` : '';
+      ov.innerHTML = `<div class="pk-modal pk-modal-sm" role="dialog" aria-modal="true" aria-label="${esc(t('tset'))}">
+          <button type="button" class="pk-x" data-act="close" aria-label="${esc(t('done'))}">&#x2715;</button>
+          <h2 class="pk-over-title">${esc(t('tset'))}</h2>
+          <button type="button" class="pk-switchrow" role="switch" aria-checked="${on}" data-act="cfsplit">
+            <span class="pk-switchtxt"><b>${esc(t('cf_split'))}</b><small>${esc(t('cf_split_hint'))}</small></span>
+            <span class="pk-switch${on ? ' is-on' : ''}" aria-hidden="true"><i></i><em>${esc(t(on ? 'on' : 'off'))}</em></span>
+          </button>
+          ${pace}
+          <button type="button" class="pk-btn pk-btn-primary" data-act="floor">${esc(t('casino_floor'))}</button>
+        </div>`;
     } else if (want === 'confirm') {
       // Step away (2026-09-28, Matt: "join a tournament, leave, then resume the same tourney").
       // The first choice keeps the game: solo it stays saved and "Resume tournament" brings it
@@ -1210,14 +1260,23 @@ class Game {
         }
         if (mode === 'reveal') { this.revealAll = this.pub.handNo; this.actSig = ''; return this._paintTable(); }
         if (mode === 'back') return this._back();
-        if (mode === 'precf') {
-          const key = `${this.pub.gid || ''}:${this.pub.handNo}`;
-          this.precf = this.precf === key ? null : key;
-          this.actSig = '';
-          return this._paintActions();
-        }
+        if (mode === 'precf') return this._togglePre();
         return undefined;
       }
+      case 'precf': if (this.canPre) this._togglePre(); return undefined;
+      case 'tset': this.overlay = 'tset'; return this._renderOverlay();
+      case 'cfsplit':
+        this.settings.cfSplit = !this.settings.cfSplit;
+        this._saveSettings();
+        this.actSig = '';
+        this._paintActions();
+        return this._renderOverlay();
+      case 'floor':
+        // The casino floor: the game's own front screen. Solo keeps the tournament saved (Resume
+        // tournament brings it back); online asks first, as the red X does.
+        this.overlay = null;
+        if (this.kind === 'solo') return this.pub && this.pub.over ? this._endSolo() : this._stepAway();
+        return this._leaveAsk();
       case 'felt':
         // "Tap the table to start the next hand" (solo). Online the host deals on a timer.
         if (this.pub && this.pub.over) {

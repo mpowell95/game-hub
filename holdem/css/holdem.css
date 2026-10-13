@@ -359,8 +359,18 @@
   color: #fff; font-size: 17px; font-weight: 700;
 }
 .pk-root .pk-redx { font-size: 0; }
+/* The table's settings gear, mirroring the red X in the other corner. */
+.pk-root .pk-gear {
+  position: absolute; left: 0; top: 0; z-index: 3; width: 44px; height: 44px; padding: 0;
+  background: none; border: 0; display: flex; align-items: flex-start; justify-content: flex-start; color: #fff;
+}
+.pk-root .pk-gear svg {
+  width: 28px; height: 28px; margin: 3px 0 0 3px; padding: 3px; box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.pk-root .pk-gear:active svg { filter: brightness(1.4); }
 .pk-root .pk-topcode {
-  position: absolute; left: 6px; top: 4px; z-index: 3;
+  position: absolute; left: 36px; top: 4px; z-index: 3;
   font-size: 13px; font-weight: 900; letter-spacing: 0.14em; padding: 4px 8px; min-height: 28px;
   border-radius: 6px; background: rgba(0, 0, 0, 0.45); color: var(--pk-gold); cursor: pointer;
 }
@@ -615,6 +625,21 @@
 .pk-root .pk-bigchips { display: inline-flex; }
 .pk-root .pk-bigchips .pk-chip { width: 34px; height: 34px; }
 .pk-root .pk-bigchips .pk-chip + .pk-chip { margin-left: -6px; }
+/* The separate Check / Fold button (2026-10-13, a table setting): small, under the big one. */
+.pk-root .pk-right.is-split { gap: 6px; }
+.pk-root .pk-right.is-split .pk-bigbtn { min-height: 80px; }
+.pk-root .pk-cfbtn {
+  flex: 0 0 auto; min-height: 44px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid #2b2b2b; border-radius: 4px; background: linear-gradient(180deg, #262626, #000);
+  color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 0.01em; line-height: 1.1; padding: 0 6px; gap: 6px;
+}
+.pk-root .pk-cfbtn[hidden] { display: none; }
+.pk-root .pk-cfbtn .pk-cfbox { width: 22px; height: 22px; flex-basis: 22px; font-size: 16px; }
+.pk-root .pk-cfbtn:disabled { color: #6f7a8a; cursor: default; }
+.pk-root .pk-cfbtn:disabled .pk-cfbox { border-color: #4a5566; }
+.pk-root .pk-cfbtn.is-on { box-shadow: inset 0 0 0 2px #7ddf2a; }
+.pk-root .pk-cfbtn:not(:disabled):active { filter: brightness(1.3); }
+.pk-root .pk-right.is-split .pk-stackline { padding-top: 0; }
 .pk-root .pk-stackline { flex: 0 0 auto; padding: 8px 2px 2px; text-align: right; font-size: 17px; color: #fff; white-space: nowrap; }
 
 .pk-root.is-online .pk-bottom { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); }
@@ -651,6 +676,22 @@
 .pk-root .pk-rcards { display: flex; gap: 2px; }
 .pk-root .pk-rcards .pk-card { height: 28px; }
 .pk-root .pk-confirm { margin: 6px 0; font-size: 16px; font-weight: 700; text-align: center; }
+/* Table settings: an on/off row whose state is written, not only coloured. */
+.pk-root .pk-switchrow {
+  display: flex; align-items: center; gap: 12px; min-height: 56px; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); color: #fff;
+}
+.pk-root .pk-switchtxt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pk-root .pk-switchtxt b { font-size: 15px; }
+.pk-root .pk-switchtxt small { font-size: 13px; color: var(--pk-dim); line-height: 1.3; }
+.pk-root .pk-switch {
+  position: relative; flex: 0 0 64px; height: 32px; border-radius: 999px; border: 2px solid #8c96a5; background: rgba(0, 0, 0, 0.35);
+}
+.pk-root .pk-switch i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #cfd6e0; transition: left 150ms ease; }
+.pk-root .pk-switch em { position: absolute; top: 0; bottom: 0; right: 8px; display: flex; align-items: center; font-style: normal; font-size: 13px; font-weight: 800; text-transform: uppercase; }
+.pk-root .pk-switch.is-on { border-color: var(--pk-gold); background: rgba(255, 206, 58, 0.2); }
+.pk-root .pk-switch.is-on i { left: 35px; background: var(--pk-gold); }
+.pk-root .pk-switch.is-on em { right: auto; left: 8px; }
 .pk-root .pk-over-title { margin: 0 34px 0 0; font-size: 22px; font-weight: 900; color: var(--pk-gold); }
 .pk-root .pk-final { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .pk-root .pk-final li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
@@ -686,4 +727,5 @@
   .pk-root .pk-stamp.is-pop,
   .pk-root .pk-mywin.is-pop,
   .pk-root .pk-modal { animation: none; }
+  .pk-root .pk-switch i { transition: none; }
 }
