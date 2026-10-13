@@ -194,6 +194,43 @@
   background: var(--wo-band);
 }
 .wo-root .wo-hearts { display: flex; justify-content: center; gap: 8px; }
+/* The clock (2026-10-13): left end of the hearts row, as the hint is the right end. Penalties are
+   already in it; the "+20s" that flashes above it says why it jumped (a word, never colour alone). */
+.wo-root .wo-timer {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 64px;
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  color: #e9e9f6;
+}
+.wo-root .wo-pen {
+  position: absolute;
+  left: 12px;
+  top: -14px;
+  z-index: 1;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e0532f;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+}
+.wo-root .wo-pen.is-on { animation: wo-pen 1.6s ease-out forwards; }
+.wo-root .wo-pen.is-score { opacity: 1; background: #178a7a; }
+@keyframes wo-pen {
+  0% { opacity: 0; transform: translateY(6px); }
+  12% { opacity: 1; transform: none; }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
 .wo-root .wo-heart { width: 26px; height: 24px; display: block; }
 .wo-root .wo-heart svg { width: 100%; height: 100%; fill: var(--wo-heart); display: block; }
 .wo-root .wo-heart.is-lost svg { fill: var(--wo-heart-lost); stroke: #2a2a38; stroke-width: 1.2; }
@@ -320,8 +357,10 @@
   .wo-root .wo-seg { min-height: 50px; }
 }
 
+@keyframes wo-pen-still { 0% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .wo-root .wo-heart.is-pop { animation: none; }
+  .wo-root .wo-pen.is-on { animation: wo-pen-still 1.6s step-end forwards; }
   .wo-root .wo-progress i { transition: none; }
   .wo-root .wo-banner.is-on { animation: none; background: rgba(74, 44, 96, .72); }
   .wo-root .wo-banner.is-on span { animation: none; transform: translateX(0); }
