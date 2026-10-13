@@ -402,7 +402,7 @@ class WayOut {
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
         <div class="wo-stage"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
-        <div class="wo-banner" aria-live="polite"><span></span></div>
+        <div class="wo-banner" aria-live="polite"><span></span><b></b></div>
       </div>`;
   }
 
@@ -510,6 +510,7 @@ class WayOut {
     this.failed = false;
     this.wave = null;
     this.geomWas = null;
+    this.winSub = '';
     // The clock carries on through Restart and Try again on the same level; a new level starts at 0.
     // A level with progress but no clock was started before the timer existed: no honest time.
     const c = loadClock(tier);
@@ -575,15 +576,15 @@ class WayOut {
     this.clock.pen += ms;
     this._clockStore();
     this._paintClock();
-    this._flashPen(`+${Math.round(ms / 1000)}s`, false);
+    this._flashPen(`+${Math.round(ms / 1000)}s`);
   }
-  _flashPen(text, keep) {
+  _flashPen(text) {
     const el = this.root && this.root.querySelector('.wo-pen');
     if (!el) return;
     el.textContent = text;
-    el.classList.remove('is-on', 'is-score');
+    el.classList.remove('is-on');
     void el.offsetWidth;   // restart the animation
-    el.classList.add(keep ? 'is-score' : 'is-on');
+    el.classList.add('is-on');
   }
 
   _left() { return this.gone.reduce((n, g) => n + (g ? 0 : 1), 0); }
@@ -852,7 +853,9 @@ class WayOut {
       console.error('[way-out] recordWayOut failed - the level was NOT recorded', err);
     }
     this._paintClock();
-    if (fin.timed) this._flashPen(t('score_n', { n: Math.round(woFinishScore({ t: c.ms + c.pen, a: fin.arrows, r: fin.rounds })) }), true);
+    // Shown under the win word: the time (penalties in) and, when timed, this level's score.
+    this.winSub = woClock(c.ms + c.pen) + (fin.timed
+      ? ` \u00b7 ${t('score_n', { n: Math.round(woFinishScore({ t: c.ms + c.pen, a: fin.arrows, r: fin.rounds })) })}` : '');
     writeClock(this.tier, null);
     this.clock = null;
     clearSave(this.tier);
@@ -865,6 +868,8 @@ class WayOut {
     const b = this.root.querySelector('.wo-banner');
     if (!b) return;
     b.querySelector('span').textContent = t('win_' + (1 + ((Math.random() * 5) | 0)));
+    const sub = b.querySelector('b');
+    if (sub) sub.textContent = this.winSub || '';
     b.classList.add('is-on');
   }
 

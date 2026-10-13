@@ -621,6 +621,29 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   ok('brickblitz counts as a SOLO game', SOLO.has('brickblitz'));
 }
 
+// ---- Arrow Maze's wo (timed score) survives the cross-device combine (THE LAW rule 1) ----
+// 2026-10-13. Counters add. A run cannot be summed across phones, so the person keeps the
+// best-scoring run any device holds; d2's best arrives as a Firebase object keyed 0..n.
+{
+  const fin = (t) => ({ t, a: 40, r: 10 });   // par = 40*1.5s + 10*2.5s = 85s
+  const all = {
+    d1: rec({ playerId: 'WO111', name: 'Arrows' }, {
+      wayout: { total: { played: 3, won: 3, lost: 0 }, byDiff: { hard: { played: 3, won: 3, lost: 0 } },
+        wo: { timed: { hard: 2 }, mistakes: 1, hints: 2, recent: { hard: [fin(85000), fin(85000)] }, best: { hard: [fin(85000), fin(85000)] } } },
+    }, 100),
+    d2: rec({ playerId: 'WO111', name: 'Arrows' }, {
+      wayout: { total: { played: 1, won: 1, lost: 0 }, byDiff: { hard: { played: 1, won: 1, lost: 0 } },
+        wo: { timed: { hard: 1 }, mistakes: 0, hints: 0, recent: { hard: { 0: fin(42500) } }, best: { hard: { 0: fin(42500) } } } },
+    }, 200),
+  };
+  const wo = aggregatePlayers(all)[0].games.wayout.wo;
+  eq('wayout: counters add', [wo.timed.hard, wo.mistakes, wo.hints], [3, 1, 2]);
+  // d1's run: two finishes at par = (100+100+8*100)/10 = 100. d2's: one at twice par = (200+900)/10 = 110.
+  eq('wayout: the best-scoring run wins, never a mix', wo.best.hard.length, 1);
+  eq('wayout: recent comes from the device with most timed finishes', wo.recent.hard.length, 2);
+  ok('wayout counts as a SOLO game', SOLO.has('wayout'));
+}
+
 // ---- Cup Pong's cp (solo racks) survives the cross-device combine (THE LAW rule 1) ----
 // 2026-09-28. soloBest is a FEWEST with 0 = never cleared: d2 has matches but no clear, and must
 // not latch the person's best at 0 (Battleship's fewestShotsWin trap).

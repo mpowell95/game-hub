@@ -210,26 +210,26 @@
 }
 .wo-root .wo-pen {
   position: absolute;
-  left: 12px;
-  top: -14px;
+  left: 78px;
+  top: 50%;
+  margin-top: -12px;
   z-index: 1;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: #e0532f;
   color: #fff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
 }
 .wo-root .wo-pen.is-on { animation: wo-pen 1.6s ease-out forwards; }
-.wo-root .wo-pen.is-score { opacity: 1; background: #178a7a; }
 @keyframes wo-pen {
-  0% { opacity: 0; transform: translateY(6px); }
+  0% { opacity: 0; transform: translateX(-6px); }
   12% { opacity: 1; transform: none; }
   75% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 0; }
 }
 .wo-root .wo-heart { width: 26px; height: 24px; display: block; }
 .wo-root .wo-heart svg { width: 100%; height: 100%; fill: var(--wo-heart); display: block; }
@@ -282,6 +282,8 @@
   inset: 0;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 14px;
   pointer-events: none;
   background: rgba(74, 44, 96, 0);
   visibility: hidden;
@@ -299,6 +301,18 @@
 }
 .wo-root .wo-banner.is-on { visibility: visible; animation: wo-wash 1.65s ease-in-out forwards; }
 .wo-root .wo-banner.is-on span { animation: wo-slide 1.65s cubic-bezier(.2, .8, .3, 1) forwards; }
+/* The level's time and score under the win word (2026-10-13). */
+.wo-root .wo-banner b {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .3);
+  opacity: 0;
+}
+.wo-root .wo-banner b:empty { display: none; }
+.wo-root .wo-banner.is-on b { animation: wo-sub 1.65s ease-out forwards; }
+@keyframes wo-sub { 0%, 20% { opacity: 0; } 35%, 85% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes wo-wash {
   0% { background: rgba(74, 44, 96, 0); }
   15%, 85% { background: rgba(74, 44, 96, .72); }
@@ -364,6 +378,7 @@
   .wo-root .wo-progress i { transition: none; }
   .wo-root .wo-banner.is-on { animation: none; background: rgba(74, 44, 96, .72); }
   .wo-root .wo-banner.is-on span { animation: none; transform: translateX(0); }
+  .wo-root .wo-banner.is-on b { animation: none; opacity: 1; }
 }
 
 /* Keyboard play (2026-10-11): the board shows it has focus; the selected arrow wears a halo. */
