@@ -208,6 +208,7 @@ class FlickSoccerUI {
         <p class="fs-status" data-role="status"></p>
         <div class="fs-banner" data-role="banner" aria-hidden="true"><b data-role="bannerMain"></b><span data-role="bannerSub"></span></div>
         <span class="fs-safe" data-role="safe" aria-hidden="true"></span>
+        <button type="button" class="fs-skip" data-act="skip" data-role="skip" hidden><span data-l="mp_skip"></span></button>
 
         <div class="fs-ov fs-ov-setup" data-ov="setup" hidden>
           <div class="fs-card">
@@ -508,6 +509,7 @@ class FlickSoccerUI {
   }
 
   _status() {
+    this._paintSkip();
     const m = this.match;
     if (!m || this.screen === 'setup' || m.winner != null) { this.statusEl.textContent = ''; return; }
     const s = this.seats[m.turn];
@@ -765,6 +767,7 @@ class FlickSoccerUI {
     else if (act === 'resume') { this.screen = 'play'; this._showOnly(null); }
     else if (act === 'quit') { this._settleNow(); this._save(); if (this.match && this.match.winner != null) this._finish(); else this._showSetup(); }
     else if (act === 'mpHome') this._openOnline();
+    else if (act === 'skip') this._mpSkip();
     else if (act === 'resign') { this._paintResign(); this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
     else if (act === 'again') {
@@ -923,13 +926,18 @@ class FlickSoccerUI {
     this._mpLeave();
     const theirSide = side === 'a' ? 'b' : 'a';
     let from = game.log.length ? MP.lastRunStart(game, theirSide) : 0;
-    const shown = MP.readShown(game.id);
-    if (shown > from) from = Math.min(shown, game.log.length);
     const them = MP.themOf(game, me);
     // Flicks this phone made that never reached the server are still this phone's flicks: shown on
     // the pitch and retried, never re-taken (a second flick would have replaced them in the outbox).
     const q = MP.pendingFor(game.id);
     const queued = q && q.base === game.log.length && Array.isArray(q.entries) ? q.entries.map(MP.cleanEntry).filter(Boolean) : [];
+    // Their last move is replayed EVERY time you open the match while it is your turn (Matt,
+    // 2026-10-13: he left and came back to screen-record it, and it did not play again); Skip jumps
+    // past it. Otherwise (their turn, or the match over) a run already shown is not shown twice.
+    const now = from < game.log.length && !queued.length && !game.over ? MP.buildMatch(game) : null;
+    const myTurn = !!now && now.winner == null && now.turn === (side === 'b' ? 1 : 0);
+    const shown = MP.readShown(game.id);
+    if (!myTurn && shown > from) from = Math.min(shown, game.log.length);
     if (q && !queued.length) MP.savePending(game.id, 0, []);           // left behind by a match that moved on
     this.mp = { id: game.id, side, mySeat: side === 'b' ? 1 : 0, game, them, applied: from, base: game.log.length,
       pending: queued.slice(), unshown: queued.slice(), sending: false, stop: null, finished: false, resigned: false };
@@ -963,11 +971,13 @@ class FlickSoccerUI {
         return;
       }
       // Theirs: their aim grows on the pitch, then the flick plays out for real.
+      mp.replaying = true;
       this.phase = 'cpu';
       this.cpu = { started: this.clock, shot: { i, dx: e.dx, dy: e.dy, power: e.p }, replay: true };
       this._status();
       return;
     }
+    mp.replaying = false;
     if (mp.unshown.length) {
       for (const e of mp.unshown) this.MP.applyEntry(m, e);
       mp.applied += mp.unshown.length;
@@ -982,6 +992,35 @@ class FlickSoccerUI {
     this.phase = 'waiting';
     this._status();
     this._mpSentNote();
+  }
+
+  /** Skip (Matt, 2026-10-13: "add a skip button on the bottom for someone if they don't wanna
+   *  rewatch it"): jump straight to the position after their last flick. The pitch is rebuilt from
+   *  the stored log, which is exactly what the replay would have ended on (the engine is
+   *  deterministic, and validateGame already proved the log replays). */
+  _mpSkip() {
+    const mp = this.mp, MP = this.MP;
+    if (!mp || !MP || !mp.replaying || this.mode !== 'mp' || this.screen !== 'play') return;
+    const g = mp.game;
+    mp.replaying = false;
+    this.cpu = null; this.aim = null; this.drag = null;
+    this.timers = [];
+    this.goalScores = null;
+    clearTimeout(this._bannerTimer);
+    this.banner.classList.remove('is-show');
+    this.match = MP.buildMatch(g, g.log.length);
+    freeze(this.match.b);
+    mp.applied = g.log.length;
+    this.phase = 'idle';
+    this._startTurn(false);
+  }
+
+  /** The Skip button shows only while the other person's flicks are being replayed. */
+  _paintSkip() {
+    const el = this.root && this.root.querySelector('[data-role="skip"]');
+    if (!el) return;
+    const on = this.mode === 'mp' && !!this.mp && !!this.mp.replaying && this.screen === 'play';
+    if (el.hidden === on) el.hidden = !on;
   }
 
   /** "SENT!" (Matt, 2026-10-13: "Need a 'turn sent' or something after I play"). Shown once per
@@ -1078,6 +1117,7 @@ class FlickSoccerUI {
   }
 
   _mpFinish(won, resigned) {
+    if (this.mp) this.mp.replaying = false;
     const mp = this.mp;
     if (!mp || mp.finished) return;
     mp.finished = true;
@@ -1113,7 +1153,7 @@ class FlickSoccerUI {
   /** A challenge called off before anybody answered, or expired: counts for nobody, back to the list. */
   _mpCalledOff(text = t('mp_cancelled')) {
     const mp = this.mp;
-    if (mp) { mp.finished = true; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    if (mp) { mp.finished = true; mp.replaying = false; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
     this._toast(text || t('mp_cancelled'), 3200);
     this._openOnline();
   }
@@ -1267,6 +1307,7 @@ class FlickSoccerUI {
 
   _frame(dt) {
     this._camTick(dt);
+    this._paintSkip();
     const live = this.screen === 'play';
     if (live) {
       this.clock += dt;
