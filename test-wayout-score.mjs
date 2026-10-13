@@ -27,7 +27,7 @@ ok('15 recent, best 10 count', S.WO_RECENT === 15 && S.WO_RUN === 10);
 ok('par: arrows and rounds', S.woParMs(40, 10) === 40 * 1500 + 10 * 2500);
 ok('a finish at par scores 100', Math.round(S.woFinishScore({ t: 85000, a: 40, r: 10 })) === 100);
 ok('twice as fast as par scores 200', Math.round(S.woFinishScore({ t: 42500, a: 40, r: 10 })) === 200);
-ok('a fluke is capped', S.woFinishScore({ t: 1000, a: 40, r: 10 }) === S.WO_SCORE_CAP);
+ok('no cap: 10x faster than par scores 1000', Math.round(S.woFinishScore({ t: 8500, a: 40, r: 10 })) === 1000 && S.WO_SCORE_CAP === undefined);
 ok('junk is not a finish', S.woFinishScore({ t: 0, a: 40, r: 10 }) === null && S.woFinishScore(null) === null);
 ok('no finishes, no run score', S.woRunScore([]) === null);
 ok('one finish at 200 counts the other 9 as par: 110', Math.round(S.woRunScore([{ t: 42500, a: 40, r: 10 }])) === 110);
