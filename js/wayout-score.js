@@ -30,8 +30,6 @@ export const WO_RECENT = 15;
  *  free at that moment). A first guess with no play data behind it; retune here. */
 export const WO_PAR_ARROW_MS = 1500;
 export const WO_PAR_ROUND_MS = 2500;
-/** One finish can score at most this much, so a fluke (or a typed number) cannot carry a run. */
-export const WO_SCORE_CAP = 300;
 /** The base time a mistake or a hint costs, per difficulty, in seconds (Matt, 2026-10-13). */
 export const WO_PENALTY_S = { easy: 10, medium: 15, hard: 20, expert: 30 };
 
@@ -65,7 +63,9 @@ export function woList(x) {
 export function woFinishScore(f) {
   const g = asFinish(f);
   if (!g) return null;
-  return Math.min(WO_SCORE_CAP, (100 * woParMs(g.a, g.r)) / Math.max(1000, g.t));
+  // No cap (Matt, 2026-10-13: "Remove the cap"). The 1 s floor on the time only stops a divide by
+  // zero on a junk record; no real level is cleared in under a second.
+  return (100 * woParMs(g.a, g.r)) / Math.max(1000, g.t);
 }
 
 /** A run's score: the average of its last WO_RUN finishes, with any not yet played counting as par.

@@ -249,7 +249,7 @@ costs **the same as a mistake**.
 - **Par** = 1.5 s per arrow + 2.5 s per round (`peel()`'s layers), worked out for each board. **A
   first guess with no play data behind it.** Finishes are stored RAW (`{t, a, r}`) and scored at
   read time, so retuning the two constants re-scores every stored finish with no migration.
-- **A finish's score** = 100 x par / time, capped at 300. **A player's score at a difficulty** = the
+- **A finish's score** = 100 x par / time, **uncapped** (it was capped at 300 until Matt said *"Remove the cap"* the same day; best 10 of 15 already limits what one level can do). **A player's score at a difficulty** = the
   **best 10 of their last 15** finishes there, averaged, with any of the 10 not yet played counting
   as par (100) (`woFormScore`, read from `recent`, which keeps the last 15). Matt, same day: *"I
   don't want to penalize someone who puts the phone down mid play or is distracted by someone or
