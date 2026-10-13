@@ -412,14 +412,18 @@ class Game {
     const bal = this.bank();
     const n = this.settings.bots + 1;
     const broke = bal < TIERS[0].buyin;
+    const sv = this._soloSave();
     this.el.innerHTML = `
       <div class="pk-tiers">
         <div class="pk-tierhead">
           <button type="button" class="pk-btn pk-btn-sm" data-act="to-setup-tab">&#x2039; ${esc(t('back'))}</button>
           <button type="button" class="pk-bankbar" data-act="bank"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))}: <b>${esc(bigMoney(bal))}</b> &#x203A;</button>
         </div>
-        ${broke ? `<p class="pk-broke">${esc(t('broke_hint', { n: bigMoney(HOLDEM_ALLEY_PRIZE) }))}</p>` : ''}
-        <div class="pk-tiergrid">
+        ${sv ? `<button type="button" class="pk-btn pk-btn-primary" data-act="resume">${esc(t('resume_game'))}<small class="pk-resume-sub">${esc(this._saveLine(sv.state))}</small></button>
+        <p class="pk-hint pk-center-text">${esc(t('tiers_saved'))}</p>
+        <button type="button" class="pk-link" data-act="giveup-saved">${esc(t('give_up_saved'))}</button>`
+          : broke ? `<p class="pk-broke">${esc(t('broke_hint', { n: bigMoney(HOLDEM_ALLEY_PRIZE) }))}</p>` : ''}
+        <div class="pk-tiergrid${sv ? ' is-held' : ''}">
           ${this._alleyTile()}
           ${TIERS.map((x) => {
             const locked = bal < x.buyin;
@@ -1120,7 +1124,9 @@ class Game {
       const meP = this.myIdx >= 0 ? pub.players[this.myIdx] : null;
       const title = meP ? (pub.winner === this.myIdx ? t('you_win') : t('you_place', { place: placeText(meP.place) })) : t('winner_is', { name: pub.players[pub.winner] ? pub.players[pub.winner].name : '' });
       let btns;
-      if (this.kind === 'solo') btns = `<button type="button" class="pk-btn" data-act="to-setup">${esc(t('setup'))}</button><button type="button" class="pk-btn pk-btn-primary" data-act="again">${esc(t('play_again'))}</button>`;
+      // Solo (2026-10-13, Matt: the way back read "Settings"): play again, the casino floor (the
+      // table picker), or the game's own menu (the setup screen).
+      if (this.kind === 'solo') btns = `<button type="button" class="pk-btn" data-act="to-tiers">${esc(t('floor'))}</button><button type="button" class="pk-btn" data-act="to-setup">${esc(t('menu'))}</button></div><div class="pk-actrow"><button type="button" class="pk-btn pk-btn-primary" data-act="again">${esc(t('play_again'))}</button>`;
       else if (this.kind === 'host') btns = `<button type="button" class="pk-btn" data-act="to-lobby">${esc(t('change_players'))}</button><button type="button" class="pk-btn pk-btn-primary" data-act="again-net">${esc(t('new_game'))}</button>`;
       else btns = `<p class="pk-waiting">${esc(t('waiting_host'))}</p>`;
       ov.innerHTML = `<div class="pk-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
@@ -1275,7 +1281,7 @@ class Game {
         // The casino floor: the game's own front screen. Solo keeps the tournament saved (Resume
         // tournament brings it back); online asks first, as the red X does.
         this.overlay = null;
-        if (this.kind === 'solo') return this.pub && this.pub.over ? this._endSolo() : this._stepAway();
+        if (this.kind === 'solo') { this._refreshBank(); return this.pub && this.pub.over ? this._endSolo('tiers') : this._stepAway('tiers'); }
         return this._leaveAsk();
       case 'felt':
         // "Tap the table to start the next hand" (solo). Online the host deals on a timer.
@@ -1297,6 +1303,7 @@ class Game {
       case 'back': return this._back();
       case 'again': return this._newSolo((this.table && this.table.state.cfg.tier) || null);
       case 'to-setup': this._endSolo(); return;
+      case 'to-tiers': this._refreshBank(); this._endSolo('tiers'); return;
       case 'again-net': return this._startNet();
       case 'to-lobby': return this._toLobby();
       default:
@@ -1489,6 +1496,9 @@ class Game {
     const alley = tierId === ALLEY.id;
     const tier = alley ? ALLEY : tierById(tierId);
     if (tierId && (!tier || (alley ? capsState().n < 1 : this.bank() < tier.buyin))) { this.screen = 'tiers'; return this.render(true); }
+    // A tournament saved on this device is resumed or given up first, never dealt over (its buy-in
+    // is already paid, and its result would be lost without a trace).
+    if (this._soloSave()) { this.screen = 'tiers'; return this.render(true); }
     const prof = loadProfile();
     const human = { name: (prof && prof.name) || t('you'), emoji: (prof && prof.emoji) || '\u{1F642}', bot: 0, dev: deviceId() };
     const skill = tier ? tier.skill : s.skill;
@@ -1518,11 +1528,11 @@ class Game {
     this.table.start();
   }
 
-  _endSolo() {
+  _endSolo(to) {
     this._stopTable();
     drop(SAVE_KEY);
     this.kind = null;
-    this.screen = 'setup';
+    this.screen = to || 'setup';
     this.overlay = null;
     this.pub = null;
     this.render(true);
@@ -1548,7 +1558,7 @@ class Game {
    *  hand. Online: the seat stays yours - the same as closing the app, which the host already
    *  treats as "away" (auto check/fold) - and "Back to table" rejoins. A host stepping away pauses
    *  the table for everyone until they come back, and the confirm says so. Nothing is recorded. */
-  _stepAway() {
+  _stepAway(to) {
     if (this.kind === 'solo') {
       if (this.table) writeJSON(SAVE_KEY, { state: this.table.state, at: Date.now() });
       this._stopTable();
@@ -1563,7 +1573,7 @@ class Game {
     }
     this.kind = null;
     this.pub = null;
-    this.screen = 'setup';
+    this.screen = to || 'setup';
     this.overlay = null;
     this.raise = null;
     this.render(true);
