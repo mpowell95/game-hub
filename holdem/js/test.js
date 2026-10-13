@@ -170,6 +170,19 @@ ok('bots never make an illegal move', errors === 0, errors);
 ok('6 players at $1,000: 1st takes 65% of $6,000', payout(1, 6, 1000) === 3900);
 ok('6 players at $1,000: 2nd takes the rest', payout(2, 6, 1000) === 2100);
 ok('3rd and below get nothing', payout(3, 6, 1000) === 0 && payout(6, 6, 1000) === 0);
+// A copy of a saved game cannot see the board coming (2026-10-13, the two-tab trick): the cards
+// still to come are reshuffled before each street, so two copies of one state deal different flops.
+{
+  let differ = 0;
+  for (let t = 0; t < 40; t++) {
+    const g = newGame([{ name: 'A' }, { name: 'B' }], { buyin: 500 });
+    startHand(g);
+    const copy = JSON.parse(JSON.stringify(g));
+    const flop = (st) => { for (let n = 0; n < 6 && st.hand.street === 'preflop'; n++) { const L = legal(st); act(st, L.i, { a: L.canCheck ? 'check' : 'call' }); } return st.hand.board.join(); };
+    if (flop(g) !== flop(copy)) differ++;
+  }
+  ok('two copies of one saved hand deal different flops', differ >= 35, differ);
+}
 ok('heads-up: winner gets 1.5x the buy-in (2026-10-13)', payout(1, 2, 5000) === 7500 && payout(2, 2, 5000) === 0);
 ok('heads-up, a game dealt before then: winner still takes the whole pot', payout(1, 2, 5000, 1) === 10000 && payout(2, 2, 5000, 1) === 0);
 ok('a new game is stamped with the current prize rules', newGame([{ name: 'A' }, { name: 'B' }], { buyin: 500 }).cfg.pv === 2);

@@ -444,6 +444,23 @@ readable from `rooms/` with developer tools. What exists:
    touched (THE LAW). It reaches every device of that person, and the game's own `bank()` applies
    it too, so voided money cannot be spent.
 
+5. **The two-tab trick is closed (2026-10-13).** Matt asked *"Is there a way to abuse this
+   game?"*; the worst answer needed no skill: open Hold'em in a second tab. The save holds the whole
+   deck, so the copy dealt the same board (tested: identical five cards), letting a player call in
+   one tab, watch the cards, then choose in the other; and each copy kept its own "already paid"
+   flag (`state.rec`), so two winning copies paid two prizes for one buy-in. Two fixes:
+   - **One window per tournament**: `gamehub.holdem.tab.v1 = { id, at }`. `_startSolo` (and giving
+     up a saved tournament) claims it; the newest window wins. Any other copy, on the `storage`
+     event or on its next change, stops at once (`_yieldTab`) WITHOUT saving or recording, and goes
+     to the menu with "This tournament was opened in another window" and Resume tournament, which
+     re-reads the save. Checked in Chromium with two tabs: the old copy stopped, the ledger was
+     unchanged, Resume took it back the other way.
+   - **The cards still to come are reshuffled before every street** (`nextStreet` in `engine.js`),
+     so a save says nothing about the flop, turn or river. A rigged hand (`RIGGED_CODES`) keeps the
+     run-out `rigDeal` chose; that mark is a WeakSet in memory, never in the state. `test.js`: two
+     copies of one hand deal different flops.
+   Still open, and needing developer tools: reading the computers' hole cards in the save.
+
 Bankroll maths no longer uses `| 0` anywhere on the money path: the top table pays $52M a win,
 so a bankroll can pass 2^31, where `| 0` wraps negative.
 
@@ -484,6 +501,8 @@ under the computers' skill (`easy`/`medium`/`hard`), online under `'mp'`. Dedupe
 - `gamehub.holdem.hands.v1` - the last 40 hands already counted in the hand stats (dedupe)
 - `gamehub.holdem.save.v1` - the solo game in progress (full engine state)
 - `gamehub.holdem.mp.v1` - the online seat for "Back to table" (+ host's state)
+- `gamehub.holdem.tab.v1` - `{ id, at }`, which window is playing the solo tournament (2026-10-13;
+  a lock, not history)
 - `gamehub.holdem.caps.v1` - `{ at }`, the bottle caps for Behind the Dumpster (2026-10-08;
   device-local, a refilling allowance, not history)
 

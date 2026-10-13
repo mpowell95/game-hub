@@ -34,6 +34,10 @@ const t = makeT(STRINGS);
 
 const SETTINGS_KEY = 'gamehub.holdem.v1';
 const SAVE_KEY = 'gamehub.holdem.save.v1';
+// Which window is playing the saved solo tournament (2026-10-13, the two-tab trick): { id, at }.
+// The newest window to open it wins; any other copy stops at once, without writing the save or
+// recording anything, and "Resume tournament" picks it up from the save. A lock, not history.
+const TAB_KEY = 'gamehub.holdem.tab.v1';
 const MP_KEY = 'gamehub.holdem.mp.v1';
 // Which hands this device has already counted in the per-hand stats (recordHoldemHand), so a
 // reload during a result screen cannot count the same hand twice. A short list, newest last.
@@ -299,6 +303,7 @@ class Game {
     this.bankRemote = null;      // the bankroll ledger of this player's OTHER devices, once read
     this.dead = false;
     this.timers = new Set();
+    this.tabId = rid();          // this window, for the one-window lock (TAB_KEY)
 
     root.innerHTML = '';
     this.el = document.createElement('div');
@@ -326,6 +331,8 @@ class Game {
     this.el.addEventListener('pointermove', this.onPMove);
     this.el.addEventListener('pointerup', this.onPUp);
     this.el.addEventListener('pointercancel', this.onPCancel);
+    this.onStorage = (e) => { if (e.key === TAB_KEY && this.kind === 'solo' && !this._ownsTab()) this._yieldTab(); };
+    window.addEventListener('storage', this.onStorage);
     this.offCopy = enableCodeCopy(this.el);
     this.offView = onViewportResize(() => this._layout());
     // The table area also changes size without the viewport doing so (the hub's chrome settling,
@@ -1516,6 +1523,7 @@ class Game {
 
   _startSolo(state) {
     this._stopTable();
+    this._claimTab();
     this.kind = 'solo';
     this.mp = null;
     this.error = '';
@@ -1585,6 +1593,7 @@ class Game {
   _forfeitSave() {
     const sv = this._soloSave();
     if (!sv) return;
+    this._claimTab();          // a window still playing it stops before the loss is counted
     const st = sv.state;
     if (!st.rec) {
       st.rec = true;
@@ -1598,6 +1607,8 @@ class Game {
   _onLocalChange() {
     const tb = this.table;
     if (!tb || this.dead) return;
+    // Another window took this tournament over: stop BEFORE recording or saving anything.
+    if (this.kind === 'solo' && !this._ownsTab()) return this._yieldTab();
     const s = tb.state;
     this.pub = publicView(s);
     // The game id rides the public view the guests get (_publish); the host's own copy needs it
@@ -1642,6 +1653,24 @@ class Game {
       this.overlay = null;
       this._renderOverlay();
     }
+  }
+
+  _claimTab() { writeJSON(TAB_KEY, { id: this.tabId, at: Date.now() }); }
+  _ownsTab() { const v = readJSON(TAB_KEY); return !v || v.id === this.tabId; }
+
+  /** This window's copy of the tournament is out of date (another window opened it): drop it
+   *  without saving or recording, and go to the menu, whose Resume tournament reads the save. */
+  _yieldTab() {
+    this.timers.forEach((id) => clearTimeout(id));
+    this.timers.clear();
+    this._stopTable();
+    this.kind = null;
+    this.pub = null;
+    this.overlay = null;
+    this.settings.tab = 'solo';
+    this.screen = 'setup';
+    this.error = t('tab_elsewhere');
+    this.render(true);
   }
 
   _stopTable() {
@@ -1796,6 +1825,7 @@ class Game {
     if (this.kind === 'solo') {
       const s = this.table && this.table.state;
       if (!s || s.rec) return;
+      if (!this._ownsTab()) { this._yieldTab(); return; }
       s.rec = true;
       const alley = s.cfg && s.cfg.tier === ALLEY.id;
       const prize = alley ? (won ? HOLDEM_ALLEY_PRIZE : 0) : this._prizeFor(won);
@@ -2313,6 +2343,7 @@ class Game {
     this.el.removeEventListener('click', this.onClick);
     this.el.removeEventListener('input', this.onInput);
     this.el.removeEventListener('keydown', this.onKey);
+    window.removeEventListener('storage', this.onStorage);
     this.el.removeEventListener('pointerdown', this.onPDown);
     this.el.removeEventListener('pointermove', this.onPMove);
     this.el.removeEventListener('pointerup', this.onPUp);
