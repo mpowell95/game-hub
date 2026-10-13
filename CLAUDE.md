@@ -1045,6 +1045,10 @@ screen needs it.
   id check. It deliberately does NOT hide the My Stats tab. `visibleTabs()` in the same file keeps its own,
   MORE PERMISSIVE rule on purpose - a game hidden by an override still has its My Stats screen, so a
   player's own record of a game Matt has pulled back stays reachable. Do not unify the two.
+- **A game can be held back from NAMED PLAYERS too (2026-10-13)**: `hideFrom: ['<CODE>']` on a
+  `GAMES` entry in `js/hub.js` (`hiddenFromPlayer()`), a code edit rather than an admin switch.
+  Hides the tile and makes `launch()` refuse the game; never applies to Matt's devices or a dev
+  profile; touches no data. First use: Arrow Maze held back from King of Games (`way-out/CLAUDE.md`).
 - **A hidden game can be opened to NAMED PLAYERS (2026-09-24, the Course Creator).**
   `games/<id>/allow/<PLAYER CODE> = true`, written by `setGameAllowed` (verified re-read, no
   `at`/`by` stamp inside the map), read by `isGameAllowed(id, code)`; the launcher shows a tile when

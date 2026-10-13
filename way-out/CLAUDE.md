@@ -28,6 +28,11 @@ Monopoly Deal's `business-deal/` split. A directory name is not a display name.
 - **Admin only** (`devOnly: true`, no `released` date: that is the New pill's input and must be the
   day Matt releases it from the admin page). Its `GAME_META` row shipped with the game, so the board
   and every level already cleared appear the moment it is released.
+- **Held back from King of Games (3VN33) since 2026-10-13** (Matt: *"Leave it open for everyone else
+  but make it admin only for him rn. Until we decide on this calculation"*): `hideFrom: ['3VN33']`
+  on the `GAMES` entry hides his tile and makes `launch()` refuse it (deep links, pushes, the
+  Challenges screen); Matt's devices and dev profiles are exempt. His solves and timed levels are
+  untouched and still on the leaderboard. **Delete that line to give it back.**
 - `isInProgress()` is always `false`: every tap that changes the level autosaves, so leaving is
   lossless.
 - Immersive layout copies Murdoku's `_positionRoot()`: a `position: fixed` root measured against the

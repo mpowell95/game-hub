@@ -613,8 +613,23 @@ export const GAMES = [
     // No `released` date on purpose: it is the only input to the launcher's New pill and must be
     // the day Matt releases it, which he does from the admin page with no commit.
     devOnly: true,
+    // HELD BACK FROM ONE PLAYER (Matt, 2026-10-13, while the timed score is being settled: "Leave it
+    // open for everyone else but make it admin only for him rn. Until we decide on this
+    // calculation"). 3VN33 is King of Games. His tile is hidden and launch() refuses the game for
+    // that code; Matt's devices and dev profiles still see it. Nothing he has played is touched:
+    // his solves and timed levels stay stored, synced and on the leaderboard. Delete this line
+    // to give it back.
+    hideFrom: ['3VN33'],
   },
 ];
+
+/** A game held back from this player's code (a `GAMES` entry's `hideFrom`, 2026-10-13). Never for
+ *  Matt's devices or a dev profile. Pure, so the launcher and launch() cannot disagree. */
+function hiddenFromPlayer(g, code, dev) {
+  if (dev || !g || !Array.isArray(g.hideFrom) || !code) return false;
+  if (isAdminDevice()) return false;
+  return g.hideFrom.includes(String(code).toUpperCase());
+}
 
 /** How often a foregrounded app may ask for a new build. Long enough that switching apps back
  *  and forth costs nothing; short enough that a phone kept alive all day still catches the day's
@@ -944,7 +959,8 @@ class Hub {
     // A hidden game can also be opened to named PLAYERS from the admin page (games/<id>/allow,
     // keyed by player code, 2026-09-24) - the Course Creator's "select who can see it".
     const myCode = (prof && prof.playerId) || '';
-    const visible = GAMES.filter((g) => isGameLive(g.id, !g.devOnly) || dev || isGameAllowed(g.id, myCode));
+    const visible = GAMES.filter((g) => (isGameLive(g.id, !g.devOnly) || dev || isGameAllowed(g.id, myCode))
+      && !hiddenFromPlayer(g, myCode, dev));
     const storedFavIds = loadFavorites();
     const favIdSet = new Set(storedFavIds);
     // FAVORITES ARE NEVER TOUCHED BY THE SORT. They stay above, in the player's own custom order
@@ -1983,6 +1999,12 @@ class Hub {
   async launch(id) {
     const game = this.games.find((g) => g.id === id);
     if (!game || game.comingSoon) return;
+    // A game held back from this player (`hideFrom`) cannot be opened by a deep link, a push or
+    // the Challenges screen either, only the tile is not enough.
+    {
+      const prof = loadProfile();
+      if (hiddenFromPlayer(game, prof && prof.playerId, !!(prof && isDevProfile(prof.name)))) return;
+    }
     // Remembered for the report form's "Where did it happen?" picker, opened from the launcher
     // AFTER the player comes back out of the game they had trouble with. Set before the import so
     // a game that fails to LOAD is still the one preselected.
