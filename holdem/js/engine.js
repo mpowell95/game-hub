@@ -173,7 +173,7 @@ export function newGame(players, cfg = {}) {
   const scale = cfg.scale > 0 ? +cfg.scale : START_SCALE;
   return {
     v: 1,
-    cfg: { speed, chips, scale, buyin: cfg.buyin > 0 ? Math.floor(cfg.buyin) : 0, tier: cfg.tier || null },
+    cfg: { speed, chips, scale, buyin: cfg.buyin > 0 ? Math.floor(cfg.buyin) : 0, tier: cfg.tier || null, pv: PAYOUT_V },
     players: players.slice(0, MAX_PLAYERS).map((p, i) => ({
       id: i,
       name: String(p.name || 'Player').slice(0, 20),
@@ -630,11 +630,18 @@ export function publicView(state) {
  *  Everyone at the table (computers too) puts the buy-in in the pot; with three or more players 1st
  *  takes 65% and 2nd the rest, heads-up the winner takes it all. Whole dollars; nothing is lost to
  *  rounding (1st + 2nd == the pot exactly). */
-export function payout(place, n, buyin) {
+/** Prize rules version, stamped on every new game (cfg.pv). v2 (2026-10-13, Matt: "the payout
+ *  shouldn't be the full payout if you play against only 1 person"): a heads-up winner gets
+ *  HEADS_UP_SHARE of the pot, 1.5x the buy-in, instead of all of it. A game saved before then has no
+ *  cfg.pv and still pays what it promised when it was dealt (v1). */
+export const PAYOUT_V = 2;
+export const HEADS_UP_SHARE = 0.75;
+
+export function payout(place, n, buyin, v = PAYOUT_V) {
   const b = Math.max(0, Math.floor(buyin || 0));
   if (!b || n < 2 || place < 1) return 0;
   const pot = b * n;
-  if (n === 2) return place === 1 ? pot : 0;
+  if (n === 2) return place === 1 ? (v >= 2 ? Math.round(pot * HEADS_UP_SHARE) : pot) : 0;
   const first = Math.round(pot * 0.65);
   if (place === 1) return first;
   if (place === 2) return pot - first;

@@ -1824,7 +1824,7 @@ class Game {
     const meP = pub && this.myIdx >= 0 ? pub.players[this.myIdx] : null;
     if (!meP || !(pub.cfg && pub.cfg.buyin > 0)) return 0;
     const place = won ? 1 : (meP.place | 0);
-    return payout(place, pub.players.length, pub.cfg.buyin);
+    return payout(place, pub.players.length, pub.cfg.buyin, pub.cfg.pv || 1);
   }
 
   /** The prize this device was paid for the game on screen, for the end-of-game card. */

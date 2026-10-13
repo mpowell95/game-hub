@@ -170,7 +170,10 @@ ok('bots never make an illegal move', errors === 0, errors);
 ok('6 players at $1,000: 1st takes 65% of $6,000', payout(1, 6, 1000) === 3900);
 ok('6 players at $1,000: 2nd takes the rest', payout(2, 6, 1000) === 2100);
 ok('3rd and below get nothing', payout(3, 6, 1000) === 0 && payout(6, 6, 1000) === 0);
-ok('heads-up: winner takes the whole pot', payout(1, 2, 5000) === 10000 && payout(2, 2, 5000) === 0);
+ok('heads-up: winner gets 1.5x the buy-in (2026-10-13)', payout(1, 2, 5000) === 7500 && payout(2, 2, 5000) === 0);
+ok('heads-up, a game dealt before then: winner still takes the whole pot', payout(1, 2, 5000, 1) === 10000 && payout(2, 2, 5000, 1) === 0);
+ok('a new game is stamped with the current prize rules', newGame([{ name: 'A' }, { name: 'B' }], { buyin: 500 }).cfg.pv === 2);
+ok('a heads-up win pays less than winning any bigger table', [3, 4, 5, 6, 7, 8].every((n) => payout(1, n, 1000) > payout(1, 2, 1000)));
 ok('no buy-in, no prize (old saves, free games)', payout(1, 6, 0) === 0);
 for (const [n, b] of [[3, 500], [5, 1000], [7, 5000], [8, 10000000]]) ok(`prizes add up to the pot exactly (${n} x $${b})`, payout(1, n, b) + payout(2, n, b) === n * b);
 ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 5000, tier: 'regional' }).cfg.buyin === 5000);
@@ -208,6 +211,9 @@ ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 50
   let bad = 0;
   for (const b of tiers) for (let n = 2; n <= 8; n++) for (const pl of [1, 2]) { const v = payout(pl, n, b); if (v && !GS.holdemValidPrize(v)) bad++; }
   ok('every prize a table can pay is accepted', bad === 0, bad);
+  // THE LAW: ledgers already holding a prize from the old heads-up rule (the whole pot) stay valid.
+  ok('an old heads-up prize (the whole pot) is still accepted', tiers.every((b) => GS.holdemValidPrize(2 * b)));
+  ok('King of Games\' real $20M heads-up Universe prize is not flagged', GS.holdemSuspect({ alley: 0, best: 20000000, buyins: 141405500, cashes: 60, entries: 95, grants: 74800, winnings: 151312700 }) === '');
   ok('an invented prize is refused', !GS.holdemValidPrize(123456) && !GS.holdemValidPrize(999999999));
   // Broke = enough for the cheapest seat and nothing more (2026-10-08).
   ok('the refill is the cheapest buy-in', GS.HOLDEM_REFILL === 500 && GS.HOLDEM_REFILL === tiers[0], GS.HOLDEM_REFILL);
