@@ -76,7 +76,7 @@ const teamChip = (seat) => `<svg viewBox="0 0 20 20" aria-hidden="true" focusabl
   ? '<path d="M10 4.6 L15 13.4 L5 13.4 Z" fill="#fff"/>'
   : '<rect x="6" y="6" width="8" height="8" fill="#fff"/>'}</svg>`;
 /** A line-up's little picture: its five discs as dots on a half pitch, goal at the bottom. */
-const formSVG = (id) => `<svg class="fs-form-ico" viewBox="0 0 30 26" aria-hidden="true" focusable="false"><rect x="1" y="1" width="28" height="24" rx="2" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>${
+export const formSVG = (id) => `<svg class="fs-form-ico" viewBox="0 0 30 26" aria-hidden="true" focusable="false"><rect x="1" y="1" width="28" height="24" rx="2" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>${
   FORMATIONS[id].map(([x, y]) => `<circle cx="${(1 + (x / W) * 28).toFixed(1)}" cy="${(1 + ((y - H / 2) / (H / 2)) * 24).toFixed(1)}" r="2.3" fill="currentColor"/>`).join('')}</svg>`;
 /** How much aiming help each difficulty gets (Matt, 2026-10-11): Easy shows the power ring, the
  *  aim arrow and the ball's bounce line; Medium the power ring and the arrow; Hard the power ring
@@ -480,6 +480,8 @@ class FlickSoccerUI {
     writeJSON(SAVE_KEY, shot ? { mode: this.mode, diff: this.diff, match: m, shot } : { mode: this.mode, diff: this.diff, match: m });
   }
 
+  _saveSettings() { writeJSON(SETTINGS_KEY, this.settings); }
+
   _hud() {
     const m = this.match;
     const sc = m ? (this.phase === 'goal' && this.goalScores) || m.scores : [0, 0];
@@ -503,6 +505,7 @@ class FlickSoccerUI {
     const team = t(m.turn === 0 ? 'team_blue' : 'team_red');
     let txt;
     if (this.phase === 'moving' || this.phase === 'goal') txt = t('status_wait');
+    else if (this.mode === 'mp' && this.mp.game.pick) txt = t('status_mp_picking', { name: this.mp.them.name || '?' });
     else if (this.mode === 'mp' && m.turn !== this.mp.mySeat) {
       const sending = this.phase === 'waiting' && (this.mp.pending.length || this.mp.sending);
       txt = t(this.phase !== 'waiting' ? 'status_mp_them' : sending ? 'status_mp_sending' : 'status_mp_wait', { name: s.name });
@@ -756,7 +759,7 @@ class FlickSoccerUI {
     else if (act === 'resign') { this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
     else if (act === 'again') {
-      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals, this.match.forms);
+      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals, this.match.forms[this.mp.mySeat]);
       else this._newMatch();
     }
     else if (act === 'toSetup') { if (this.mode === 'mp') this._openOnline(); else this._showSetup(); }
@@ -824,6 +827,7 @@ class FlickSoccerUI {
 
   async _openOnline(pickFor = null) {
     this._mpLeave();
+    this.preview = lineUp([this.settings.lineup, this.settings.lineup]);
     this._drainAll();                  // after leaving: the match just left may be the one waiting
     this._setFlip(false);
     this.match = null; this.seats = null; this.mode = null;
@@ -848,14 +852,13 @@ class FlickSoccerUI {
   }
 
   /** A new challenge: created now, delivered when your first turn is over. */
-  async _sendChallenge(them, goals = this.settings.goals, forms = null) {
+  async _sendChallenge(them, goals = this.settings.goals, form = this.settings.lineup) {
     if (this._challenging) return { ok: false, reason: 'busy' };      // a double tap makes ONE match
     this._challenging = true;
     let res;
     try {
       const MP = await this._loadMP();
-      const lu = this.settings.lineup;
-      res = await MP.createGame({ them, goals, forms: forms || [lu, lu] });
+      res = await MP.createGame({ them, goals, form });
     } finally { this._challenging = false; }
     if (instance !== this) return res;
     if (!res.ok) {
@@ -863,6 +866,8 @@ class FlickSoccerUI {
       return res;
     }
     this._mpBegin(res.game);
+    // Their move first now (they pick a line-up and kick off): say the challenge has gone.
+    this._bannerShow(t('mp_sent'), t('mp_sent_sub', { name: (them && them.name) || '?' }), 0);
     return res;
   }
 
@@ -871,6 +876,7 @@ class FlickSoccerUI {
     const me = MP.myCode();
     const side = MP.sideOf(game, me);
     if (!side) { this._openOnline(); return; }
+    if (game.pick === 'b' && side === 'b') { this._mpPick(game); return; }
     this._mpLeave();
     const theirSide = side === 'a' ? 'b' : 'a';
     let from = game.log.length ? MP.lastRunStart(game, theirSide) : 0;
@@ -927,6 +933,7 @@ class FlickSoccerUI {
       if (m.winner != null) { this._finish(); return; }
     }
     this.MP.markShown(mp.id, g.log.length);
+    if (g.over && !g.log.length) { this._mpCalledOff(); return; }
     if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
     if (m.turn === mp.mySeat) { this.phase = 'aim'; this._status(); return; }
     this.phase = 'waiting';
@@ -951,7 +958,9 @@ class FlickSoccerUI {
   _mpOnGame(g) {
     const mp = this.mp;
     if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
+    if (mp.game.pick && !g.pick && !g.over) { this._mpBegin(g); return; }   // they chose: both line-ups now
     mp.game = g;
+    if (g.over && !g.log.length && !mp.finished) { this._mpCalledOff(); return; }
     if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
       this._mpFinish(g.over.winner === mp.side, true);
       return;
@@ -1057,6 +1066,25 @@ class FlickSoccerUI {
     this._mpFinish(false, true);
   }
 
+  /** A challenge called off before anybody flicked: counts for nobody, back to the list. */
+  _mpCalledOff() {
+    const mp = this.mp;
+    if (mp) mp.finished = true;
+    this._toast(t('mp_cancelled'), 2200);
+    this._openOnline();
+  }
+
+  /** Side b of an own-lineup challenge: see their line-up and your role, pick yours, kick off. The
+   *  pitch behind the card shows both teams as they will stand, you at the bottom. */
+  async _mpPick(game) {
+    this._mpLeave();
+    this.match = null; this.seats = null; this.mode = null; this.phase = 'idle';
+    this._setFlip(true);
+    const UI = this.UI || (this.UI = await import('./mp-ui.js'));
+    if (instance !== this) return;
+    UI.pickLineup(this, this.MP, game);
+  }
+
   /** Stop watching the open online match (flicks not yet sent stay in the outbox). */
   _mpLeave() {
     const mp = this.mp;
@@ -1155,6 +1183,7 @@ class FlickSoccerUI {
       glow,
       aim: this.aim && !this.aim.idle ? this.aim : null,
       spin: this.spin,
+      hideTeam: m && this.mode === 'mp' && this.mp && this.mp.game.pick ? 1 : -1,
     });
   }
 
