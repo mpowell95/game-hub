@@ -306,6 +306,26 @@ Fast, `settings.pace` in `gamehub.holdem.v1`. It sets how long a computer "think
 it mid-game applies from the computers' next move (`Table.setPace`). Rules and decisions are the
 same at every speed. Not the same thing as "Blinds go up", which is the tournament's pace.
 
+## Table settings gear, and a separate Check / Fold button (2026-10-13)
+
+Matt: *"Having the check or fold button be part of the main button is dangerous. I go to press it,
+and the computer has raised and I end up clicking Call on accident."*
+
+- **A gear at the felt's top-left** (`.pk-gear`, mirroring the red X) opens `overlay = 'tset'`:
+  - **Separate Check / Fold button** (on/off switch, the word ON/OFF on it, not colour alone),
+    `settings.cfSplit` in `gamehub.holdem.v1`, **off by default** (the old one-button layout).
+    On: the big button never turns into CHECK / FOLD; a small 44px `.pk-cfbtn` under it is the
+    tick-box instead. It is live ONLY while it is someone else's turn and you are in the hand
+    (`this.canPre`), and disabled on your own turn, so a finger aimed at it can never land on CALL.
+  - **Computer speed** (the same `settings.pace` as setup), shown only where this device runs the
+    computers (solo or the host; `this.table`).
+  - **Go to casino floor**: solo = Save and leave (`_stepAway`, Resume tournament brings it back;
+    a finished game just ends); online = the red X's own Step away / Give up dialog.
+- **Both layouts**: once Check / Fold is ticked and your turn arrives, the big button stays dead
+  (`mode = 'idle'`) for the 350ms until the auto check/fold has gone (`this.autoDone`), so a late tap
+  cannot call a raise either. If the auto move cannot go, the button comes back.
+- Online the room code pill moved right to `left: 36px` to make room for the gear.
+
 ## The last hand is shown before the results (2026-10-05)
 
 Matt: *"I went all in. Then this appeared. I didn't see the last card, I didn't see the opponent
@@ -486,7 +506,8 @@ Copied from it, top to bottom:
   slide fires no click, any tap within 500ms of letting go). Now any new pointerdown clears it:
   only the click of the SAME gesture is swallowed. Verified by mouse and touch, tap and slide.
 - **Check / Fold pre-action.** While it is someone else's turn and you are in the hand, the big
-  button is a CHECK / FOLD tick-box. Ticked, it checks whenever nothing is owed and folds the
+  button is a CHECK / FOLD tick-box (a small button of its own under it since 2026-10-13, if the
+  table setting is on: see "Table settings gear"). Ticked, it checks whenever nothing is owed and folds the
   moment there is a bet, for the rest of that hand (it resets on the next deal; tap again to
   untick). It acts 350ms after the turn arrives, through the normal move path, so online it is
   just an ordinary move.
