@@ -33,11 +33,11 @@ const FIRSTS = ['alt', 'me', 'them'];
 /** How far back (pitch units) a full-strength pull goes, and the dead zone round the disc. */
 const PULL_MAX = 34;
 const PULL_DEAD = DISC_R * 0.5;
-/** The edge zoom (`_edgeZoom`): how close to the screen's edge a finger may be asked to reach (px),
- *  how near that it has to be pressed before the view zooms out (px), the furthest it zooms out,
- *  and how quickly the view eases there and back (per second). */
+/** The edge zoom (`_edgeCam`): how close to the screen's edge a finger may be asked to reach (px),
+ *  how far from the disc toward that edge the finger goes before the view starts zooming out (a
+ *  share of the way), the furthest it zooms out, and how quickly it eases back on release (per s). */
 const EDGE_M = 12;
-const EDGE_BAND = 36;
+const ZOOM_FROM = 0.35;
 const ZOOM_MIN = 0.6;
 const CAM_RATE = 14;
 /** The weakest flick that counts; anything less is a cancelled aim. */
@@ -408,7 +408,7 @@ class FlickSoccerUI {
     const top = Math.max(0, statusBottom) + 4;
     const box = { x: 6, y: top, w: w - 12, h: Math.max(120, h - top - 8 - safe) };
     this._safe = safe;
-    this.cam = this.camTo = null;
+    this._setCam(null);
     this.canvas.style.width = w + 'px';
     this.canvas.style.height = h + 'px';
     this.r.layout(w, h, box);
@@ -1162,65 +1162,70 @@ class FlickSoccerUI {
     e.preventDefault();
     this.drag.cx = e.clientX; this.drag.cy = e.clientY;
     this._aimFrom(this._pt(e));
-    this._edgeZoom();
+    // The camera follows the finger, then the aim is read again under it.
+    this._setCam(this._edgeCam());
+    this._aimFrom(this._pt(e));
   }
 
   /** The edge zoom (Matt, 2026-10-13: a disc near the side of the phone could not be pulled back far
-   *  enough for a full-strength flick, because the finger ran off the screen first). When the finger
-   *  is pressed near an edge of the screen short of full strength, the view zooms out just enough
-   *  that a full pull in that direction fits on screen. It zooms about a point on the line of the
-   *  pull, beyond the disc, so the aim keeps its direction while the disc slides away from the
-   *  finger (the ring fills as it goes); the pitch stays whole inside its own box. It never zooms back
-   *  in during a drag, and eases back once the finger is lifted (`_camTick`). Strength is still
-   *  measured in pitch units (PULL_MAX), so a flick is exactly as strong as it always was. */
-  _edgeZoom() {
+   *  enough for a full-strength flick, because the finger ran off the screen first; then, on the
+   *  first version: "make it zoom in and out depending on how hard you're pulling"). The zoom is a
+   *  function of where the finger is, nothing else: along the line of the pull, from ZOOM_FROM of
+   *  the way between the disc and the screen's edge, it zooms out evenly until, with the finger at
+   *  the edge, a FULL pull fits exactly. Pull back less and it zooms back in; a disc whose full pull
+   *  already fits never zooms. It zooms about the point where that line, run back through the disc,
+   *  leaves the pitch's box, so the aim keeps its direction, the whole pitch stays in its box, and a
+   *  further finger always means a harder flick. Strength is still measured in pitch units
+   *  (PULL_MAX), so a flick is exactly as strong as it always was. Returns the camera, or null for
+   *  the fitted layout. */
+  _edgeCam() {
     const a = this.aim, d = this.drag, r = this.r;
-    if (!a || a.idle || a.power >= 1 || !d || !this.match || !r.box) return;
-    const rc = this.canvas.getBoundingClientRect();
-    const fx = d.cx - rc.left, fy = d.cy - rc.top;
+    if (!a || a.idle || !d || !this.match || !r.box) return null;
     const x0 = EDGE_M, y0 = EDGE_M, x1 = r.w - EDGE_M, y1 = r.h - EDGE_M - (this._safe || 0);
-    if (fx > x0 + EDGE_BAND && fx < x1 - EDGE_BAND && fy > y0 + EDGE_BAND && fy < y1 - EDGE_BAND) return;
-    const inside = (p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
     const o = this.match.b[a.i];
     const bo = r.toPxBase(o.x, o.y);
     const bF = r.toPxBase(o.x - a.dx * PULL_MAX, o.y - a.dy * PULL_MAX);   // the full pull, fitted layout
-    const cur = this.camTo;
-    const under = (c) => ({ x: c.ox + (bF.x - r.ox0) * c.k, y: c.oy + (bF.y - r.oy0) * c.k });
-    if (inside(cur ? under(cur) : bF)) return;
-    // The anchor: where the line from the full pull through the disc leaves the pitch's box.
-    const L = Math.sqrt((bo.x - bF.x) ** 2 + (bo.y - bF.y) ** 2);
-    if (!(L > 0)) return;
-    const ux = (bo.x - bF.x) / L, uy = (bo.y - bF.y) / L, B = r.box;
+    if (bF.x >= x0 && bF.x <= x1 && bF.y >= y0 && bF.y <= y1) return null;
+    const full = Math.sqrt((bF.x - bo.x) ** 2 + (bF.y - bo.y) ** 2);
+    if (!(full > 0)) return null;
+    const ux = (bF.x - bo.x) / full, uy = (bF.y - bo.y) / full, B = r.box;   // toward the finger
+    // The anchor: back from the disc, away from the finger, to the edge of the pitch's box.
     let t = Infinity;
-    if (ux > 0) t = Math.min(t, (B.x + B.w - bo.x) / ux); else if (ux < 0) t = Math.min(t, (B.x - bo.x) / ux);
-    if (uy > 0) t = Math.min(t, (B.y + B.h - bo.y) / uy); else if (uy < 0) t = Math.min(t, (B.y - bo.y) / uy);
+    if (ux < 0) t = Math.min(t, (B.x + B.w - bo.x) / -ux); else if (ux > 0) t = Math.min(t, (bo.x - B.x) / ux);
+    if (uy < 0) t = Math.min(t, (B.y + B.h - bo.y) / -uy); else if (uy > 0) t = Math.min(t, (bo.y - B.y) / uy);
     t = Math.max(0, Number.isFinite(t) ? t : 0);
-    const ax = bo.x + ux * t, ay = bo.y + uy * t;
-    let k = 1;
-    while (k > ZOOM_MIN && !inside({ x: ax + (bF.x - ax) * k, y: ay + (bF.y - ay) * k })) k -= 0.01;
-    k = Math.max(ZOOM_MIN, Math.min(k, cur ? cur.k : 1));
-    this.camTo = { k, ox: ax + (r.ox0 - ax) * k, oy: ay + (r.oy0 - ay) * k };
+    const ax = bo.x - ux * t, ay = bo.y - uy * t;
+    // Distances along the line from the anchor: the disc (D), the screen's edge (E), the finger (F).
+    let e = Infinity;
+    if (ux > 0) e = Math.min(e, (x1 - ax) / ux); else if (ux < 0) e = Math.min(e, (x0 - ax) / ux);
+    if (uy > 0) e = Math.min(e, (y1 - ay) / uy); else if (uy < 0) e = Math.min(e, (y0 - ay) / uy);
+    const D = t;
+    if (!(e > D + 1)) return null;
+    const kFull = Math.max(ZOOM_MIN, Math.min(1, e / (D + full)));
+    if (kFull >= 1) return null;
+    const rc = this.canvas.getBoundingClientRect();
+    const F = (d.cx - rc.left - ax) * ux + (d.cy - rc.top - ay) * uy;
+    const from = D + ZOOM_FROM * (e - D);
+    const f = Math.max(0, Math.min(1, (F - from) / (e - from)));
+    if (f <= 0) return null;
+    const k = 1 - (1 - kFull) * f;
+    return { k, ox: ax + (r.ox0 - ax) * k, oy: ay + (r.oy0 - ay) * k };
   }
 
-  /** Eases the view toward the edge zoom's target, or back to the fitted layout when no finger is
-   *  down. The aim is re-read every step, since the pitch moves under a finger that has not. */
-  _camTick(dt) {
+  _setCam(c) {
+    this.cam = c;
     const r = this.r;
-    if (!r || !r.box) return;
-    if (!this.drag) this.camTo = null;
-    const base = { k: 1, ox: r.ox0, oy: r.oy0 };
-    const to = this.camTo || base, cur = this.cam || base;
-    if (cur.k === to.k && cur.ox === to.ox && cur.oy === to.oy) return;
+    if (r && r.box) r.setCam(c ? c.k : 1, c ? c.ox : r.ox0, c ? c.oy : r.oy0);
+  }
+
+  /** Once the finger is lifted, eases the view back to the fitted layout (at once under reduced
+   *  motion). While it is down the camera is set straight from the finger (`_pointerMove`). */
+  _camTick(dt) {
+    const c = this.cam, r = this.r;
+    if (this.drag || !c || !r || !r.box) return;
     const f = this.reduce ? 1 : 1 - Math.exp(-dt * CAM_RATE);
-    let n = { k: cur.k + (to.k - cur.k) * f, ox: cur.ox + (to.ox - cur.ox) * f, oy: cur.oy + (to.oy - cur.oy) * f };
-    if (Math.abs(n.k - to.k) < 0.001 && Math.abs(n.ox - to.ox) < 0.3 && Math.abs(n.oy - to.oy) < 0.3) n = to;
-    this.cam = n === base ? null : n;
-    r.setCam(n.k, n.ox, n.oy);
-    if (this.drag && this.aim) {
-      const rc = this.canvas.getBoundingClientRect();
-      this._aimFrom(r.toPitch(this.drag.cx - rc.left, this.drag.cy - rc.top));
-      this._edgeZoom();
-    }
+    const n = { k: c.k + (1 - c.k) * f, ox: c.ox + (r.ox0 - c.ox) * f, oy: c.oy + (r.oy0 - c.oy) * f };
+    this._setCam(Math.abs(1 - n.k) < 0.001 && Math.abs(n.ox - r.ox0) < 0.3 && Math.abs(n.oy - r.oy0) < 0.3 ? null : n);
   }
 
   _aimFrom(p) {
