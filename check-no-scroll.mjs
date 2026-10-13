@@ -14,7 +14,7 @@
 // WHY THIS IS NOT JUST `test-visual.mjs --all`: that suite screenshots every game in three themes,
 // runs motion probes and PLAYS the ones with play probes, which is minutes of work and (Matt's own
 // rule, 2026-08-08) something to ask before doing. This asks ONE question, needs no screenshots,
-// and covers every game in both hosts at both phone heights in well under a minute.
+// and covers every game in both hosts at all four phone sizes in a couple of minutes.
 //
 // WHAT IT MEASURES, per game x host x height:
 //   * the PAGE overflowing the viewport, and
@@ -37,9 +37,15 @@ import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BASE = process.env.BB_BASE || 'http://localhost:8123';
+// The two 360-wide sizes are a REAL phone (2026-10-13): Unai's Android, 360x804 screen and 360x724
+// page, the narrowest an active player uses (`node read-install-state.mjs --screens`). Neither
+// 390-wide size made a line wrap that 360 does, and that is how Hill Climb and Chinchon shipped
+// not fitting it.
 const SIZES = [
   { w: 393, h: 852, why: 'tall' },
   { w: 390, h: 664, why: 'short' },
+  { w: 360, h: 804, why: 'narrow' },
+  { w: 360, h: 724, why: 'narrow short' },
 ];
 const TOL = 2;      // sub-pixel rounding; the same tolerance test-visual's fit check uses
 
@@ -98,6 +104,15 @@ const EXTRA_SCREENS = {
       },
     },
   ],
+  // Hill Climb: the garage's other three tabs. Only Vehicle (the default) was ever measured, and
+  // Shop, Stage and Tune each scrolled on some phone until 2026-10-13.
+  'hill-climb': ['shop', 'stage', 'tune'].map((tab) => ({
+    name: `${tab} tab`,
+    async open(page) {
+      await page.click(`.hc-tab[data-tab="${tab}"]`);
+      await page.waitForTimeout(300);
+    },
+  })),
   darts: [
     {
       name: 'how to play',
@@ -499,6 +514,6 @@ if (bad.length) {
   const byGame = {};
   for (const b of bad) (byGame[b.game] ||= []).push(b);
   console.log('\nGames that scroll:');
-  for (const [g, rows] of Object.entries(byGame)) console.log(`  ${g}: ${rows.length} of 4 screens`);
+  for (const [g, rows] of Object.entries(byGame)) console.log(`  ${g}: ${rows.length} screens`);
 }
 process.exit(bad.length ? 1 : 0);

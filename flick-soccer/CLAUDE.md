@@ -65,9 +65,10 @@ Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap gam
   **Diamond**. Picked on the setup card's **Lineup** row (each pill draws its five discs); the pitch
   behind the card shows the pick. Both teams line up the same way again after every goal
   (`match.forms`, `[seat 0, seat 1]`). **Vs the computer it picks its own at random**; pass and play
-  uses the one choice for both teams; an online challenge stores the challenger's choice for BOTH
-  sides (`forms` on the document, OPTIONAL: a match without it, or with an unknown id, reads as
-  Balanced, so every match and save from before line-ups replays exactly as it did). Every line-up
+  uses the one choice for both teams; **an online challenge lets each player pick their own** (see
+  "Own-lineup challenges" below; `forms` on the document is OPTIONAL: a match without it, or with an
+  unknown id, reads as Balanced, so every match and save from before line-ups replays exactly as it
+  did). Every line-up
   keeps each disc in its own half, clear of the centre circle and of each other; `test.js` pins that.
   A phone still on the build before line-ups replays a non-Balanced challenge from the Balanced
   start, so the two pitches differ until it updates (the hub applies a new build on its own on the
@@ -186,8 +187,22 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
 - **Where:** the setup card's first row is **Multiplayer ›** (with a "N waiting on you" badge), as in
   Darts and Cup Pong. Behind it: Challenge someone, **Pass & play** (two people, this phone; it used
   to be the setup card's Opponent row, which is gone), the notify row, Your turn, Their turn,
-  History. A challenge uses the Goals to win and the Lineup chosen on the setup card (the line-up for
-  both sides, optional `forms` on the document); the challenger kicks off.
+  History. A challenge uses the Goals to win chosen on the setup card.
+- **Own-lineup challenges (2026-10-13)**, Matt: *"When I challenge someone, can I pick my lineup?
+  Can they?"* then *"Make sure they know their role before selecting"*. The challenger picks THEIR
+  line-up on the challenge screen, which says the role first ("Ana sees your lineup, picks theirs and
+  kicks off, so you start on defense"). The other person opens it to a **Pick your lineup** card
+  ("Matt picked Attack. You kick off, so you attack first. Matt starts on defense."), picks, and
+  taps **Kick off**: `pickLineup` writes `forms[1]` and clears `pick` (verified by re-read). The doc
+  carries two OPTIONAL fields: `starter: 1` (side b kicks off; absent = 0, the challenger, as every
+  earlier match) and `pick: 'b'` (honoured only while the log is empty; `appendLog` refuses a flick
+  with `'not-picked'`). Both rows are written at creation, so the challenge reaches them at once.
+  While they pick, the challenger's pitch hides their discs (`hideTeam` in `render.js`) and says
+  "Ana is picking a lineup"; when the pick lands the watch rebuilds the pitch. **Declining or
+  calling off before anybody has flicked** (resign with an empty log) marks BOTH rows
+  `cancelled`: counted for nobody, listed for nobody, notified to nobody. "Challenge again" sends
+  your own line-up from that match. A phone still on the build before this replays such a match
+  from the challenger's kick-off, so the two disagree until it updates (admin only, so harmless).
 - **The node:** `flicksoccer/games/<id>` + `flicksoccer/index/<CODE>/<id>`, addressed by PLAYER CODE.
   In `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **PUBLISHED by Matt on
   2026-10-11** (verified the same day: `flicksoccer/` reads, every other branch reads as before).

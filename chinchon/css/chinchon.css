@@ -99,8 +99,12 @@
    padding (-62), the mode chips held to one line (-22) and the settings labels held to one line
    (-17, "Closing rules" was wrapping and standing 17px taller than its six neighbours). The
    summary rows themselves are UNTOUCHED at 42px - they are the tap targets, and they were already
-   the tightest thing on the screen. */
-@media (max-height: 760px) {
+   the tightest thing on the screen.
+
+   AND ON A NARROW PHONE AT ANY HEIGHT (2026-10-13): at 360px wide (Unai's Android, 360x804) "Host
+   online" and "Closing rules" wrap, and the hub page stood 12px over at 804 tall, a height the
+   760px rule never reached. The same trims fit it. */
+@media (max-height: 760px), (max-width: 380px) {
   .hub-main .cc-root { padding: 4px 6px 6px; }
   .hub-main .cc-root .cc-header { margin-bottom: 6px; }
   .hub-main .cc-root .cc-title { font-size: 1.25rem; }

@@ -162,8 +162,7 @@
 
 .hc-root .hc-intro { margin: 4px 2px 10px; color: var(--hc-dim); font-size: 0.86rem; line-height: 1.4; }
 
-.hc-root .hc-cards { display: grid; gap: 8px; grid-template-columns: 1fr; }
-@media (min-width: 620px) { .hc-root .hc-cards { grid-template-columns: 1fr 1fr; } }
+.hc-root .hc-cards { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
 
 .hc-root .hc-card {
   border: 2px solid var(--hc-line);
@@ -209,18 +208,29 @@
   padding: 7px 9px 7px 12px; margin-bottom: 7px;
 }
 .hc-root .hc-shopname { font-weight: 700; font-size: 0.94rem; }
-
-.hc-root .hc-tunes { display: grid; gap: 8px; }
-.hc-root .hc-tune {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  border: 2px solid var(--hc-line); border-radius: 14px; background: var(--hc-navy-2);
-  padding: 9px 11px;
+/* Three across: each section is at most three things, so it is one row of tiles, not three rows.
+   See "Every garage tab fits" below the short-screen block. */
+.hc-root .hc-shopgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.hc-root .hc-shopgrid .hc-shoprow {
+  flex-direction: column; align-items: stretch; justify-content: space-between; gap: 6px;
+  margin: 0; padding: 7px 6px 6px; text-align: center;
 }
+.hc-root .hc-shopgrid .hc-shopname { font-size: 0.86rem; line-height: 1.2; overflow-wrap: anywhere; }
+.hc-root .hc-shopgrid .hc-buy { justify-content: center; min-height: 44px; padding: 6px 4px; gap: 4px; }
+
+.hc-root .hc-tunes { display: grid; gap: 6px; grid-template-columns: 1fr 1fr; }
+.hc-root .hc-tune {
+  display: flex; flex-direction: column; justify-content: space-between; gap: 6px;
+  border: 2px solid var(--hc-line); border-radius: 14px; background: var(--hc-navy-2);
+  padding: 8px 9px;
+}
+.hc-root .hc-tune .hc-buy { justify-content: center; min-height: 44px; }
+.hc-root .hc-tune .hc-maxed { min-height: 44px; display: flex; align-items: center; justify-content: center; }
 .hc-root .hc-tune-h { font-weight: 800; font-size: 0.95rem; }
 .hc-root .hc-tune-note { color: var(--hc-dim); font-size: 0.8rem; margin: 1px 0 5px; }
 .hc-root .hc-pips { display: flex; gap: 4px; }
 .hc-root .hc-pip {
-  width: 20px; height: 9px; border-radius: 3px;
+  flex: 0 1 20px; min-width: 0; height: 9px; border-radius: 3px;
   border: 2px solid var(--hc-line); background: var(--hc-navy-3);
 }
 .hc-root .hc-pip.is-on { background: var(--hc-gold); }
@@ -522,9 +532,16 @@
    TWO COLUMNS RATHER THAN SMALLER CARDS, and that is the point: this screen is FOUR cards, so the
    height is four rows of card, and trimming 34px off each one would have taken the note text with
    it. Two columns makes it two rows and costs nothing but width, which this screen has - the same
-   grid the 620px rule above already switches to, asked for by height instead. */
-@media (max-height: 720px) {
-  .hc-root .hc-cards { grid-template-columns: 1fr 1fr; gap: 6px; }
+   grid the 620px rule above already switches to, asked for by height instead.
+
+   AND ON A NARROW PHONE AT ANY HEIGHT (2026-10-13). At 360px wide (Unai's Android, 360x804 screen,
+   360x724 page) every card's note wraps to an extra line, so the one-column list overflowed
+   `.hc-body` by 34px at 804 tall and 95px at 724 - heights the 720px rule above never reached. */
+@media (max-height: 720px), (max-width: 380px) {
+  .hc-root .hc-cards { gap: 6px; }
   .hc-root .hc-intro { margin: 2px 2px 6px; }
   .hc-root .hc-card { padding: 7px 9px; }
+  .hc-root .hc-tune { padding: 6px 8px; gap: 4px; }
+  .hc-root .hc-tune-note { margin: 0 0 4px; }
+  .hc-root .hc-shoph { margin: 8px 2px 4px; }
 }
