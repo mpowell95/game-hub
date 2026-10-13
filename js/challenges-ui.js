@@ -5,9 +5,10 @@
 // theirs, more info on your records total and against specific players, etc. You should also be
 // able to send challenges and jump into games from this page."
 //
-// THE LAW: this screen renders. It writes nothing. Opening a match and starting a challenge are
-// handed back to js/hub.js (`onOpen` / `onChallenge`), which arms the GAME's own handoff and mounts
-// it; every write a challenge makes still happens inside that game, where it always has.
+// THE LAW: this screen renders and writes nothing itself. Opening a match and starting a challenge
+// are handed back to js/hub.js (`onOpen` / `onChallenge`), which arms the GAME's own handoff and
+// mounts it. Cancel / Decline / Resign (2026-10-13) go through js/challenges.js `endMatch` to the
+// game's own mp.js writer, which verifies by re-read and deletes nothing.
 //
 // Built on css/ui.css's `.gh-*` primitives, like js/messages-ui.js. Results are told apart by a MARK
 // (check, cross, equals) and a WORD, never by colour alone (Matt is red/green colourblind).
@@ -15,7 +16,7 @@
 // Entry point (lazily imported by js/hub.js):
 //   openChallenges({ games: [{id, name}], onOpen(gameId, matchId), onChallenge(gameId, them) })
 
-import { summarize, loadAll, watchAll, readOpponents, myCode } from './challenges.js';
+import { summarize, loadAll, watchAll, readOpponents, myCode, endAction, endMatch } from './challenges.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './challenges-strings.js';
 
@@ -104,6 +105,20 @@ function ensureCss() {
   .cx-game-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cx-game-rec { flex: 0 0 auto; color: var(--gh-muted); font-variant-numeric: tabular-nums; font-weight: 700; }
   .cx-search { width: 100%; margin: 0 0 var(--gh-sp-3); }
+  /* A live row and its Cancel / Decline / Resign button side by side (2026-10-13). The button is a
+     quiet outline with a WORD, never a colour alone, and always asks before it does anything. */
+  .cx-live { display: flex; align-items: stretch; gap: 6px; }
+  .cx-live .cx-row { flex: 1 1 auto; min-width: 0; }
+  .cx-end { flex: 0 0 auto; min-width: 72px; min-height: var(--gh-tap, 44px); padding: 0 10px;
+            border: 1px solid var(--gh-border-strong); border-radius: var(--gh-r-md); background: transparent;
+            color: var(--gh-ink); font-family: var(--gh-font); font-size: var(--gh-fs-xs); font-weight: 800;
+            cursor: pointer; touch-action: manipulation; }
+  .cx-flash { margin: 0 0 var(--gh-sp-3); padding: 10px var(--gh-sp-3); border: 1px solid var(--gh-border);
+              border-left: 4px solid var(--gh-accent); border-radius: var(--gh-r-md); background: var(--gh-surface-2);
+              font-size: var(--gh-fs-sm); font-weight: 700; }
+  .cx-confirm { font-size: var(--gh-fs-sm); line-height: 1.5; margin: 0 0 var(--gh-sp-3); }
+  .cx-err { font-size: var(--gh-fs-sm); font-weight: 700; margin: 0 0 var(--gh-sp-3); }
+  .cx-acts .gh-btn + .gh-btn { margin-top: var(--gh-sp-2); }
   .cx-acts { padding-top: var(--gh-sp-3); }
   `;
   document.head.appendChild(style);
@@ -168,12 +183,28 @@ function subLine(r, gameName) {
   }
   if (i.su) bits.push(t('cx_straight_up'));
   if (i.series > 1) bits.push(t('cx_game_of', { n: i.seriesNo, m: i.series }));
+  const left = untilText(r.expires);
+  if (left) bits.push(t('cx_expires_in', { n: left }));
   return bits.filter(Boolean).join(' · ');
 }
 
+/** "2d" / "5h" until a live match stops waiting (js/challenge-life.js), or '' when it never will. */
+function untilText(at, now = Date.now()) {
+  const left = (Number(at) || 0) - now;
+  if (!(Number(at) > 0) || left <= 0) return '';
+  const h = Math.ceil(left / 3600000);
+  return h >= 24 ? t('cx_d', { n: Math.ceil(h / 24) }) : t('cx_h', { n: h });
+}
+
+/** What the end button on a live row offers, from the row (the confirm screen re-reads the match):
+ *  you sent it and they have not answered -> cancel; sent to you, unplayed -> decline; else resign. */
+const endHint = (r) => (r.open === 'sent' ? 'cancel' : r.open === 'got' ? 'decline' : 'resign');
+
 function liveRowHTML(r, gameName, { showName = true } = {}) {
   const yours = r.state === 'yours';
-  return `<li><button type="button" class="cx-row${yours ? ' is-yours' : ''}" data-game="${esc(r.game)}" data-id="${esc(r.id)}">
+  const hint = endHint(r);
+  const who = r.name || t('cx_someone');
+  return `<li class="cx-live"><button type="button" class="cx-row${yours ? ' is-yours' : ''}" data-game="${esc(r.game)}" data-id="${esc(r.id)}">
       <span class="cx-row-emoji" aria-hidden="true">${esc(r.emoji)}</span>
       <span class="cx-row-main">
         <span class="cx-row-name">${esc(showName ? (r.name || t('cx_someone')) : gameName(r.game))}</span>
@@ -181,13 +212,21 @@ function liveRowHTML(r, gameName, { showName = true } = {}) {
       </span>
       ${yours ? `<span class="cx-pill">${esc(t('cx_play'))}</span>`
         : `<span class="cx-row-end">${esc(t('cx_waiting_on', { name: r.name || t('cx_someone') }))}</span>`}
-    </button></li>`;
+    </button><button type="button" class="cx-end" data-end-game="${esc(r.game)}" data-end-id="${esc(r.id)}"
+      aria-label="${esc(t(`cx_end_${hint}_aria`, { name: who }))}">${esc(t(`cx_end_${hint}`))}</button></li>`;
 }
 
 function resultRowHTML(r, gameName) {
   const name = r.name || t('cx_someone');
-  const key = r.state === 'expired' ? 'cx_res_expired' : r.result === 'won' ? 'cx_res_won'
-    : r.result === 'lost' ? 'cx_res_lost' : r.result === 'draw' ? 'cx_res_draw' : 'cx_res_done';
+  // Called off or expired (2026-10-13): say who did it. A cancel is always the sender's and a
+  // decline always the receiver's, so `sent` says whether it was you. An expired row from before
+  // that date carries no `sent`, and keeps its old words.
+  const mine = (sent) => (sent ? 'me' : 'them');
+  const key = r.ended === 'cancelled' ? `cx_res_cancelled_${mine(r.sent)}`
+    : r.ended === 'declined' ? `cx_res_declined_${mine(!r.sent)}`
+      : r.state === 'expired' ? (r.game === 'skeeball' ? 'cx_res_expired' : `cx_res_expired_${r.sent ? 'them' : 'me'}`)
+        : r.result === 'won' ? 'cx_res_won'
+          : r.result === 'lost' ? 'cx_res_lost' : r.result === 'draw' ? 'cx_res_draw' : 'cx_res_done';
   const mark = r.result === 'won' ? '✓' : r.result === 'lost' ? '✗' : r.result === 'draw' ? '=' : '·';
   const quit = r.resigned && (r.result === 'won' || r.result === 'lost')
     ? ` (${t(r.result === 'won' ? 'cx_quit_them' : 'cx_quit_me')})` : '';
@@ -229,14 +268,26 @@ export async function openChallenges(opts = {}) {
   const nameOf = (id) => (games.find((g) => g.id === id) || {}).name || id;
   const card = mountOverlay();
   const gen0 = _view;
-  const S = { rows: null, failed: [], tab: 'live', view: 'home', opp: null, people: null };
+  const S = { rows: null, failed: [], tab: 'live', view: 'home', opp: null, people: null, flash: '' };
 
   const open = (game, id) => { closeChallenges(); if (opts.onOpen) opts.onOpen(game, id); };
   const challenge = (game, them) => { closeChallenges(); if (opts.onChallenge) opts.onChallenge(game, them); };
+  // The screen a row was tapped from, so Back (and a finished cancel) returns there.
+  const backTo = () => (S.view === 'opp' && S.opp ? () => renderOpponent(S.opp) : () => renderHome());
   const bindRows = (root) => {
     for (const b of root.querySelectorAll('.cx-row[data-game][data-id]')) {
       b.addEventListener('click', () => open(b.dataset.game, b.dataset.id));
     }
+    for (const b of root.querySelectorAll('.cx-end[data-end-game][data-end-id]')) {
+      b.addEventListener('click', () => renderEnd(b.dataset.endGame, b.dataset.endId, backTo()));
+    }
+  };
+  /** One line at the top of the screen saying what just happened (a cancel, a resignation), once. */
+  const flashHTML = () => {
+    if (!S.flash) return '';
+    const html = `<p class="cx-flash" role="status">${esc(S.flash)}</p>`;
+    S.flash = '';
+    return html;
   };
 
   shell(card, { title: t('cx_title'), body: `<p class="cx-note">${esc(t('cx_loading'))}</p>` });
@@ -283,7 +334,7 @@ export async function openChallenges(opts = {}) {
     }
     shell(card, {
       title: t('cx_title'),
-      body: tabs + warn + body,
+      body: flashHTML() + tabs + warn + body,
       footer: `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="new">${esc(t('cx_new'))}</button>`,
     });
     if (!current(gen)) return;
@@ -304,7 +355,7 @@ export async function openChallenges(opts = {}) {
     const live = sum.yours.concat(sum.theirs);
     shell(card, {
       title: name, emoji: o.emoji, back: () => renderHome(),
-      body: `<h3 class="cx-h">${esc(t('cx_vs_record', { name }))}</h3>
+      body: `${flashHTML()}<h3 class="cx-h">${esc(t('cx_vs_record', { name }))}</h3>
         ${statsHTML(o)}
         ${byGameHTML(o.byGame || {}, games)}
         ${live.length ? `<h3 class="cx-h">${esc(t('cx_live_with', { name }))} <span class="cx-h-n">${live.length}</span></h3>
@@ -369,6 +420,59 @@ export async function openChallenges(opts = {}) {
     for (const b of card.querySelectorAll('[data-g]')) {
       b.addEventListener('click', () => challenge(b.dataset.g, { code: them.code, name: them.name, emoji: them.emoji }));
     }
+  }
+
+  // --- cancel / decline / resign one live match (2026-10-13) ---
+  // The row's button says what it expects; this screen RE-READS the match, because the row can be a
+  // turn behind (they may have just played, so a cancel has become a resignation). Nothing happens
+  // until the second tap, and the button says what that tap does.
+  async function renderEnd(game, id, back) {
+    const gen = ++_view;
+    S.view = 'end';
+    const row = (S.rows || []).find((r) => r.game === game && r.id === id) || { name: '', emoji: '🙂' };
+    const name = row.name || t('cx_someone');
+    shell(card, { title: name, emoji: row.emoji, back, body: `<p class="cx-note">${esc(t('cx_loading'))}</p>` });
+    const action = await endAction(game, id);
+    if (!current(gen)) return;
+    if (!action) {
+      shell(card, { title: name, emoji: row.emoji, back, body: `<p class="cx-note">${esc(t('cx_end_gone'))}</p>` });
+      return;
+    }
+    const paint = (err = '') => {
+      shell(card, {
+        title: name, emoji: row.emoji, back,
+        body: `<p class="cx-confirm"><strong>${esc(t(`cx_end_q_${action}`))}</strong></p>
+          <p class="cx-confirm">${esc(t(`cx_end_b_${action}`, { game: nameOf(game), name }))}</p>
+          ${err ? `<p class="cx-err" role="alert">${esc(err)}</p>` : ''}`,
+        footer: `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(t(`cx_end_yes_${action}`))}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="no">${esc(t(action === 'resign' ? 'cx_end_keep_playing' : 'cx_end_keep'))}</button>`,
+      });
+      if (!current(gen)) return;
+      card.querySelector('[data-role="no"]').addEventListener('click', back);
+      const yes = card.querySelector('[data-role="yes"]');
+      yes.addEventListener('click', async () => {
+        yes.disabled = true;
+        const res = await endMatch(game, id, action);
+        if (!current(gen)) return;
+        if (res && res.ok) {
+          // A resign on a match that turned out to be unanswered was called off instead (mp.js).
+          const why = res.cancelled ? String((res.game && res.game.over && res.game.over.why) || (action === 'decline' ? 'declined' : 'cancelled')) : '';
+          S.flash = why ? t(why === 'declined' ? 'cx_end_done_decline' : 'cx_end_done_cancel') : t('cx_end_done_resign', { name });
+          // The list catches up from the game's own watch; until then, show it as ended here.
+          S.rows = (S.rows || []).map((r) => (r.game === game && r.id === id
+            ? { ...r, state: why ? 'cancelled' : 'done', ended: why, result: why ? null : 'lost', resigned: !why,
+              sent: why === 'cancelled' ? true : why === 'declined' ? false : r.sent, open: '', expires: 0, updated: Date.now() }
+            : r));
+          back();
+          return;
+        }
+        const reason = res && res.reason;
+        paint(reason === 'accepted' ? t('cx_end_err_accepted', { name })
+          : reason === 'offline' ? t('cx_end_err_offline')
+            : reason === 'already-over' ? t('cx_end_gone') : t('cx_end_err'));
+      });
+    };
+    paint();
   }
 
   // A live change repaints the screen that shows challenges; the pickers are left alone.

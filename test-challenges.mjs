@@ -113,5 +113,80 @@ const data = src('./js/challenges.js') + src('./js/challenges-ui.js');
 ok('the Challenges screen writes no gamehub.* key and no Firebase node',
   !/localStorage\.setItem|sessionStorage\.setItem|api\.(set|update|push|remove)\(/.test(data));
 
+// --- cancel, decline, resign, expire (2026-10-13, js/challenge-life.js) -----------------------------
+{
+  ok('a cancelled row is "cancelled": listed, no result, in no record', (() => {
+    const r = n('darts', { id: 'x1', with: 'ANABB', over: true, ended: 'cancelled', sent: true });
+    const T = C.summarize([r]);
+    return r.state === 'cancelled' && r.result === null && T.finished.length === 1 && T.total.played === 0;
+  })());
+  ok('a declined row is "cancelled" too, and says it was declined', n('hoops4', { id: 'x2', with: 'ANABB', over: true, ended: 'declined' }).ended === 'declined');
+  ok('an expired row from any game is "expired"', n('cuppong', { id: 'x3', with: 'ANABB', over: true, ended: 'expired' }).state === 'expired');
+  ok('a live row carries open and its deadline', (() => { const r = n('flick-soccer', { id: 'x4', with: 'ANABB', yourTurn: true, open: 'got', expires: 99 }); return r.open === 'got' && r.expires === 99; })());
+  ok('a finished row carries no open or deadline', (() => { const r = n('darts', { id: 'x5', with: 'ANABB', over: true, result: 'won', open: 'got', expires: 9 }); return r.open === '' && r.expires === 0; })());
+  ok('a Skeeball resignation reads as resigned', n('skeeball', { id: 'x6', with: 'ANABB', over: true, result: 'won', ended: 'resign' }).resigned === true);
+
+  // Every challenge game says what may be done to a match and does it through its own writer.
+  ok('every source has action and end', C.CHALLENGE_GAMES.every((g) => typeof C.SOURCES[g].action === 'function' && typeof C.SOURCES[g].end === 'function'));
+  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js']]) {
+    const M = await import(path);
+    ok(`${g}: mp.js exports cancelGame, resignGame, lifeOf, recipientOf, isCalledOff, readGame, sideOf, myCode`,
+      ['cancelGame', 'resignGame', 'lifeOf', 'recipientOf', 'isCalledOff', 'readGame', 'sideOf', 'myCode'].every((k) => typeof M[k] === 'function'));
+  }
+  const SK = await import('./skeeball/js/challenge.js');
+  ok('skeeball: challenge.js exports cancelChallenge, resignChallenge, isOpen, isCalledOff',
+    ['cancelChallenge', 'resignChallenge', 'isOpen', 'isCalledOff', 'readChallenge', 'isExpired'].every((k) => typeof SK[k] === 'function'));
+
+  // End to end through Darts, against an in-memory database (the same module instance the hub loads).
+  const D = await import('./darts/js/mp.js');
+  const root = {};
+  const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  const parts = (p) => p.split('/').filter(Boolean);
+  const getAt = (p) => { let x = root; for (const k of parts(p)) { if (!x || typeof x !== 'object') return undefined; x = x[k]; } return x; };
+  const setAt = (p, v) => { const ks = parts(p); let x = root; for (const k of ks.slice(0, -1)) { if (!x[k] || typeof x[k] !== 'object') x[k] = {}; x = x[k]; } if (v == null) delete x[ks[ks.length - 1]]; else x[ks[ks.length - 1]] = clone(v); };
+  const api = {
+    ref: (db, path) => ({ path }),
+    get: async (r) => { const v = clone(getAt(r.path)); return { exists: () => v != null, val: () => v }; },
+    set: async (r, v) => setAt(r.path, v),
+    update: async (r, patch) => { for (const k of Object.keys(patch)) setAt(r.path + '/' + k, patch[k]); },
+  };
+  D.__setBootForTest(async () => ({ db: {}, api }), { allowDev: true });
+  mem.set('gamehub.adminConfig.v1', JSON.stringify({ online: { MATTA: true, ANABB: true } }));
+  const asMatt = () => mem.set('gamehub.profile', JSON.stringify({ name: 'Matt', emoji: '🐙', playerId: 'MATTA' }));
+  const asAna = () => mem.set('gamehub.profile', JSON.stringify({ name: 'Ana', emoji: '🦊', playerId: 'ANABB' }));
+  const miss = { x: 0, y: -2 };
+  asMatt();
+  let r = await D.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const g1 = r.id;
+  await D.appendLog(g1, 0, [{ by: 'a', ...miss }, { by: 'a', ...miss }, { by: 'a', ...miss }]);
+  ok('the sender is offered Cancel', (await C.endAction('darts', g1)) === 'cancel');
+  asAna();
+  ok('the receiver is offered Decline', (await C.endAction('darts', g1)) === 'decline');
+  asMatt();
+  r = await C.endMatch('darts', g1, 'cancel');
+  ok('Cancel through the hub calls it off', r.ok && r.cancelled && getAt(`darts/games/${g1}/over/why`) === 'cancelled');
+  ok('...and then nothing more is offered', (await C.endAction('darts', g1)) === null);
+  r = await D.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const g2 = r.id;
+  await D.appendLog(g2, 0, [{ by: 'a', ...miss }, { by: 'a', ...miss }, { by: 'a', ...miss }]);
+  asAna();
+  await D.appendLog(g2, 3, [{ by: 'b', ...miss }]);
+  asMatt();
+  ok('once answered, the sender is offered Resign', (await C.endAction('darts', g2)) === 'resign');
+  const before = JSON.parse(mem.get('gamehub.stats') || '{}');
+  const lostBefore = (((before.games || {}).darts || {}).byDiff || {}).mp ? before.games.darts.byDiff.mp.lost || 0 : 0;
+  r = await C.endMatch('darts', g2, 'resign');
+  const after = JSON.parse(mem.get('gamehub.stats') || '{}');
+  ok('Resign through the hub: Ana wins, and the loss is counted on this phone once', r.ok && !r.cancelled
+    && getAt(`darts/games/${g2}/over/winner`) === 'b' && after.games.darts.byDiff.mp.lost === lostBefore + 1, JSON.stringify(after.games && after.games.darts));
+  ok('...and is not queued as a "Game over" popup for your own resignation', !D.readUnseen().includes(g2));
+  D.__setBootForTest(null);
+  ok('a made-up action is refused', (await C.endMatch('darts', g2, 'explode')).ok === false);
+
+  const ui = src('./js/challenges-ui.js');
+  ok('the screen puts a Cancel / Decline / Resign button on every live row', /class="cx-end"/.test(ui) && /cx_end_\$\{hint\}/.test(ui));
+  ok('...and it asks before it does anything (a confirm screen that re-reads the match)', /async function renderEnd/.test(ui) && /await endAction\(game, id\)/.test(ui) && /endMatch\(game, id, action\)/.test(ui));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -216,6 +216,58 @@ await MP.drainOutbox(sb);
 ok('the outbox keeps throws the server refused (only an OVER match drops them)', !!MP.pendingFor(sb));
 localStorage.removeItem(MP.OUTBOX_KEY);
 
+// --- cancel, decline, expire (2026-10-13, js/challenge-life.js) ------------------------------------
+{
+  const { ANSWER_MS } = await import('./js/challenge-life.js');
+  use('A');
+  let r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 0 } });
+  const cx = r.id;
+  ok('cancel: a new challenge carries lapse', getAt(`cuppong/games/${cx}`).lapse === true);
+  await MP.appendLog(cx, 0, [t('a', null), t('a', null)]);
+  ok('cancel: delivered rows say sent / got with a 3-day deadline',
+    getAt(`cuppong/index/MATTA/${cx}`).open === 'sent' && getAt(`cuppong/index/ANABB/${cx}`).open === 'got'
+    && getAt(`cuppong/index/ANABB/${cx}`).expires === getAt(`cuppong/games/${cx}`).updated + ANSWER_MS);
+  r = await MP.cancelGame(cx);
+  ok('cancel: the sender calls it off', r.ok && r.cancelled && r.game.over.winner === 'none' && r.game.over.why === 'cancelled');
+  ok('cancel: rows say cancelled, stored with over:false (no push fires)', getAt(`cuppong/index/ANABB/${cx}`).ended === 'cancelled'
+    && getAt(`cuppong/index/ANABB/${cx}`).over === false && getAt(`cuppong/index/ANABB/${cx}`).yourTurn === false);
+  use('B');
+  const rb = (await MP.readMyGames()).find((x) => x.id === cx);
+  ok('cancel: Ana\'s list reads it finished, no result, nothing counted', rb.over && rb.ended === 'cancelled' && rb.result === null && MP.recordFinished([rb]) === 0);
+  ok('cancel: no throw gets in after', !(await MP.appendLog(cx, 2, [t('b', null)])).ok);
+
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 0 } });
+  const dx = r.id;
+  await MP.appendLog(dx, 0, [t('a', null), t('a', null)]);
+  use('B');
+  r = await MP.resignGame(dx);
+  ok('decline: quitting an unanswered challenge declines it (nobody wins)', r.ok && r.cancelled && r.game.over.why === 'declined');
+
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 0 } });
+  const ax = r.id;
+  await MP.appendLog(ax, 0, [t('a', null), t('a', null)]);
+  use('B');
+  await MP.appendLog(ax, 2, [t('b', null)]);
+  ok('answered: one throw clears open and the deadline on both rows at once',
+    getAt(`cuppong/index/ANABB/${ax}`).open === '' && getAt(`cuppong/index/MATTA/${ax}`).open === '' && getAt(`cuppong/index/ANABB/${ax}`).expires === 0);
+  use('A');
+  ok('answered: it can no longer be cancelled', (await MP.cancelGame(ax)).reason === 'accepted');
+
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 0 } });
+  const ex = r.id;
+  await MP.appendLog(ex, 0, [t('a', null), t('a', null)]);
+  for (const p of [`cuppong/games/${ex}`, `cuppong/index/MATTA/${ex}`, `cuppong/index/ANABB/${ex}`]) {
+    const o = getAt(p); o.updated -= ANSWER_MS + 1000; if (o.expires) o.expires -= ANSWER_MS + 1000;
+  }
+  use('B');
+  const er = (await MP.readMyGames()).find((x) => x.id === ex);
+  ok('expire: 3 days unanswered reads as expired, finished, no result', er.ended === 'expired' && er.over && er.result === null);
+  ok('expire: a late throw is refused', (await MP.appendLog(ex, 2, [t('b', null)])).reason === 'expired');
+  ok('expire: a called-off game 1 owes no game 2', MP.seriesAfter({ series: 3, seriesNo: 1, seriesWins: { a: 0, b: 0 }, over: { winner: 'none', why: 'cancelled' } }).done === true);
+}
+
 // --- structural -------------------------------------------------------------------------------------
 const rules = JSON.parse(readFileSync('database.rules.json', 'utf8'));
 ok('database.rules.json has the cuppong branch', !!(rules.rules && rules.rules.cuppong));

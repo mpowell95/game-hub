@@ -124,6 +124,8 @@ res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } 
 const id2 = res.id;
 await MP.appendLog(id2, 0, [dart('a'), dart('a'), dart('a')]);
 use('B');
+// She ANSWERS it first (one dart): from then on giving up is a resignation, not a decline.
+await MP.appendLog(id2, 3, [dart('b', { x: 0, y: -2 })]);
 res = await MP.resignGame(id2);
 ok('resigning hands the other person the win', res.ok && res.game.over.winner === 'a' && res.game.over.why === 'resign');
 ok('...and both rows record it', getAt(`darts/index/MATTA/${id2}`).result === 'won' && getAt(`darts/index/MATTA/${id2}`).why === 'resign');
@@ -134,10 +136,97 @@ res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } 
 const id3 = res.id;
 await MP.resignGame(id3);
 ok('a never-delivered challenge, given up, writes no row for the other person', !getAt(`darts/index/ANABB/${id3}`));
+ok('...and it is called off, not lost', res.ok !== false && MP.isCalledOff(await MP.readGame(id3)) && !getAt(`darts/index/MATTA/${id3}`).result);
+
+// --- cancel, decline, expire (2026-10-13, js/challenge-life.js) ------------------------------------
+{
+  const { ANSWER_MS } = await import('./js/challenge-life.js');
+  use('A');
+  let r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const cx = r.id;
+  ok('a new challenge carries lapse (it can expire)', getAt(`darts/games/${cx}`).lapse === true);
+  await MP.appendLog(cx, 0, [dart('a'), dart('a'), dart('a')]);
+  ok('delivered: Matt\'s row says sent, Ana\'s says got, both with a deadline 3 days on',
+    getAt(`darts/index/MATTA/${cx}`).open === 'sent' && getAt(`darts/index/ANABB/${cx}`).open === 'got'
+    && getAt(`darts/index/ANABB/${cx}`).expires === getAt(`darts/games/${cx}`).updated + ANSWER_MS);
+  r = await MP.cancelGame(cx);
+  ok('the sender cancels it', r.ok && r.cancelled && r.game.over.winner === 'none' && r.game.over.why === 'cancelled', JSON.stringify(r));
+  const mr = getAt(`darts/index/MATTA/${cx}`), ar = getAt(`darts/index/ANABB/${cx}`);
+  ok('...both rows say cancelled, stored over:false so no push function fires', mr.ended === 'cancelled' && ar.ended === 'cancelled'
+    && mr.over === false && ar.over === false && ar.yourTurn === false && !('result' in ar), JSON.stringify(ar));
+  use('B');
+  const rowsB = await MP.readMyGames();
+  const rb = rowsB.find((x) => x.id === cx);
+  ok('...Ana\'s list reads it as finished, no result', rb && rb.over && rb.ended === 'cancelled' && rb.result === null && !rb.yourTurn);
+  ok('...nothing is counted for it', MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 0);
+  ok('...and it is in nobody\'s record', !MP.recordsFrom(rowsB.filter((x) => x.id === cx), 'ANABB').finished.length);
+  ok('...and no dart can be thrown into it', !(await MP.appendLog(cx, 3, [dart('b')])).ok);
+  ok('the match document is kept, log and all', Object.keys(getAt(`darts/games/${cx}/log`)).length === 3);
+
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const dx = r.id;
+  await MP.appendLog(dx, 0, [dart('a'), dart('a'), dart('a')]);
+  use('B');
+  r = await MP.resignGame(dx);
+  ok('the receiver giving up an unanswered challenge DECLINES it (nobody wins)', r.ok && r.cancelled && r.game.over.why === 'declined' && r.game.over.winner === 'none');
+  ok('...Matt\'s row says declined', getAt(`darts/index/MATTA/${dx}`).ended === 'declined');
+
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const ax = r.id;
+  await MP.appendLog(ax, 0, [dart('a'), dart('a'), dart('a')]);
+  use('B');
+  await MP.appendLog(ax, 3, [dart('b', { x: 0, y: -2 })]);
+  ok('one dart from the receiver answers it: the rows stop saying open at once',
+    getAt(`darts/index/ANABB/${ax}`).open === '' && getAt(`darts/index/MATTA/${ax}`).open === '' && getAt(`darts/index/ANABB/${ax}`).expires === 0);
+  use('A');
+  r = await MP.cancelGame(ax);
+  ok('...and can no longer be cancelled', !r.ok && r.reason === 'accepted');
+  // A cancel that raced her first dart (written over a log that already has it) is void on read.
+  getAt(`darts/games/${ax}`).over = { winner: 'none', why: 'cancelled', at: 1 };
+  const g = await MP.readGame(ax);
+  ok('a cancel that raced the first answer is void: the match plays on', g && !g.over && g.turn === 'b');
+  getAt(`darts/games/${ax}`).over = null;
+
+  // Expiry: 3 days on the receiver with no answer.
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const ex = r.id;
+  await MP.appendLog(ex, 0, [dart('a'), dart('a'), dart('a')]);
+  const doc = getAt(`darts/games/${ex}`);
+  const lateG = await MP.readGame(ex);
+  ok('lifeOf: waiting, not yet expired', MP.lifeOf(lateG).waiting && !MP.lifeOf(lateG).expired);
+  ok('lifeOf: expired after 3 days', MP.lifeOf(lateG, doc.updated + ANSWER_MS).expired);
+  // Age it by moving every stamp back 3 days.
+  const back3 = (o) => { o.updated -= ANSWER_MS + 1000; if (o.expires) o.expires -= ANSWER_MS + 1000; };
+  back3(doc); back3(getAt(`darts/index/MATTA/${ex}`)); back3(getAt(`darts/index/ANABB/${ex}`));
+  use('B');
+  const er = (await MP.readMyGames()).find((x) => x.id === ex);
+  ok('an unanswered challenge 3 days old reads as expired, finished, no result', er && er.ended === 'expired' && er.over && er.result === null && !er.yourTurn);
+  r = await MP.appendLog(ex, 3, [dart('b')]);
+  ok('...and refuses a late dart', !r.ok && r.reason === 'expired');
+  use('A');
+  const ea = (await MP.readMyGames()).find((x) => x.id === ex);
+  ok('...the sender\'s list says expired too', ea && ea.ended === 'expired');
+
+  // A match made before this (no lapse) never expires, but can still be cancelled.
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const ox = r.id;
+  delete getAt(`darts/games/${ox}`).lapse;
+  await MP.appendLog(ox, 0, [dart('a'), dart('a'), dart('a')]);
+  getAt(`darts/games/${ox}`).updated -= 10 * ANSWER_MS;
+  const og = await MP.readGame(ox);
+  ok('an older match (no lapse) never expires', MP.lifeOf(og).waiting && !MP.lifeOf(og).expired && getAt(`darts/index/ANABB/${ox}`).expires === 0);
+  ok('...but can still be cancelled', (await MP.cancelGame(ox)).ok);
+  ok('a called-off document read by validateGame refuses an unknown why', MP.validateGame({ ...clone(getAt(`darts/games/${ox}`)), over: { winner: 'none', why: 'whatever' } }) === null);
+}
 
 // Records.
 const rec = MP.recordsFrom(await MP.readMyGames(), 'MATTA');
-ok('records: one opponent, wins and losses per code', rec.opponents.length === 1 && rec.opponents[0].won === 2 && rec.opponents[0].lost === 1, JSON.stringify(rec.opponents));
+// Two wins (the match and Ana's resignation). The challenge Matt gave up before delivering it is
+// CALLED OFF since 2026-10-13, not a loss, and the cancelled/declined/expired ones count for nobody.
+ok('records: one opponent, wins and losses per code', rec.opponents.length === 1 && rec.opponents[0].won === 2 && rec.opponents[0].lost === 0 && rec.opponents[0].played === 2, JSON.stringify(rec.opponents));
 
 // The outbox keeps darts until the server has them.
 use('A');

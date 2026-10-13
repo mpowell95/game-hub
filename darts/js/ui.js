@@ -953,11 +953,11 @@ class DartsUI {
       if (this._helpFrom === 'menu') { this.screen = 'menu'; this._showOnly('menu'); }
       else this._showSetup();
     }
-    else if (act === 'menu') { if (this.screen === 'play' || this.screen === 'resign') { this.screen = 'menu'; this._showOnly('menu'); this.drag = null; } }
+    else if (act === 'menu') { if (this.screen === 'play' || this.screen === 'resign') { this._paintResign(); this.screen = 'menu'; this._showOnly('menu'); this.drag = null; } }
     else if (act === 'resume') { this.screen = 'play'; this._showOnly(null); }
     else if (act === 'quit') { this._save(); this._showSetup(); }
     else if (act === 'mpHome') this._openOnline();
-    else if (act === 'resign') { this.screen = 'resign'; this._showOnly('resign'); }
+    else if (act === 'resign') { this._paintResign(); this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
     else if (act === 'ready') { this.screen = 'play'; this._showOnly(null); this._startTurn(false); this._turnBanner(t('turn_of', { name: this._seat().name })); }
     else if (act === 'again') {
@@ -1051,6 +1051,9 @@ class DartsUI {
     const me = MP.myCode();
     const side = MP.sideOf(game, me);
     if (!side) { this._openOnline(); return; }
+    // Cancelled, declined or expired (2026-10-13): there is no match to show.
+    const endText = this._mpEndText(game, side);
+    if (endText) { this._mpLeave(); this._openOnline(); this._toast(endText, 3200); return; }
     this._mpLeave();
     const theirSide = side === 'a' ? 'b' : 'a';
     let from = game.log.length ? MP.lastRunStart(game, theirSide) : 0;
@@ -1099,6 +1102,7 @@ class DartsUI {
     // player who watched them throw, or opened the match and left without throwing, got no launcher
     // bubble although it was still their turn. The turn is "seen" when they finish it (mp.js
     // appendLog) or put the bubble away.
+    if (this.MP.isCalledOff(g)) { this._mpEndedNoResult(this._mpEndText(g, mp.side)); return; }
     if (m.winner != null) { this._finish(); return; }
     if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
     if (m.turn === mp.mySeat) { this._nextDart(); return; }
@@ -1117,6 +1121,8 @@ class DartsUI {
     const mp = this.mp;
     if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
     mp.game = g;
+    // Called off by the other person while this phone had it open (2026-10-13).
+    if (this.MP.isCalledOff(g) && !mp.finished) { this._mpEndedNoResult(this._mpEndText(g, mp.side)); return; }
     if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
       this._mpFinish(g.over.winner === mp.side, true);
       return;
@@ -1157,6 +1163,10 @@ class DartsUI {
     if (res.retryable) {
       this._toast(t('mp_not_sent'), 1800);
       setTimeout(() => { if (this.mp === mp) this._mpFlush(); }, 4000);
+    } else if (res.reason === 'expired') {
+      // Nobody answered it in 3 days: it lapsed before this dart got there.
+      this.MP.savePending(mp.id, mp.base, []);
+      this._mpEndedNoResult(t('mp_expired'));
     } else {
       console.error('[darts] a dart could not be sent:', res.reason);
       this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2600);
@@ -1188,7 +1198,44 @@ class DartsUI {
     if (this.mp !== mp) return;
     if (!res.ok) { this.screen = 'menu'; this._showOnly('menu'); this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400); return; }
     mp.game = res.game;
+    // Nobody had answered it, so it was called off (cancelled or declined), not lost.
+    if (res.cancelled) { this._mpEndedNoResult(this._mpEndText(res.game, mp.side)); return; }
     this._mpFinish(false, true);
+  }
+
+  /** Resign, or CANCEL / DECLINE while the other person has not answered (2026-10-13,
+   *  js/challenge-life.js): the menu button and its question say which one the tap will do. */
+  _paintResign() {
+    const mp = this.mp;
+    if (!mp || !this.MP || !mp.game) return;
+    const life = this.MP.lifeOf(mp.game);
+    const kind = !life.open ? 'resign' : mp.side === this.MP.recipientOf(mp.game) ? 'decline' : 'cancel';
+    const set = (sel, key) => { const el = this.host.querySelector(sel); if (el) el.textContent = t(key); };
+    set('[data-act="resign"] span', kind === 'resign' ? 'mp_resign' : `mp_${kind}_ch`);
+    set('[data-ov="resign"] h2', kind === 'resign' ? 'mp_resign_q' : `mp_${kind}_q`);
+    set('[data-act="resignYes"] span', kind === 'resign' ? 'mp_resign_yes' : `mp_${kind}_ch`);
+  }
+
+  /** What to say about a match that ended with no result: called off by either side, or expired
+   *  unanswered (js/challenge-life.js). '' for a match that is neither. */
+  _mpEndText(game, side) {
+    const MP = this.MP;
+    if (!game || !MP) return '';
+    if (MP.lifeOf(game).expired) return t('mp_expired');
+    if (!MP.isCalledOff(game)) return '';
+    const why = game.over.why === 'declined' ? 'declined' : 'cancelled';
+    // A cancel is always the sender's, a decline always the receiver's.
+    const iSent = side !== MP.recipientOf(game);
+    const mine = why === 'cancelled' ? iSent : !iSent;
+    const them = MP.themOf(game, MP.myCode());
+    return t(mine ? `mp_you_${why}` : `mp_they_${why}`, { name: (them && them.name) || '?' });
+  }
+  /** Leave a match that has ended with no result, saying so. */
+  _mpEndedNoResult(text) {
+    const mp = this.mp;
+    if (mp) { mp.finished = true; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    this._openOnline();
+    this._toast(text, 3200);
   }
 
   /** Stop watching the open online match (darts not yet sent stay in the outbox). */

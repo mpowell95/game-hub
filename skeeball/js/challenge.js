@@ -39,6 +39,7 @@ import { getStatsApp } from '../../js/firebase-boot.js';
 // than copied (root CLAUDE.md, "USE WHAT EXISTS"). mp.js is pure at load: no side effects.
 import { asCode, myCode, meLabel, mintGameId, opponentsFrom } from '../../hoops4/js/mp.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
+import { isNoResult } from '../../js/challenge-life.js';
 
 export { asCode, myCode, meLabel, opponentsFrom };
 
@@ -115,10 +116,11 @@ export function decide(game) {
   return { done: true, winner: t.aTotal > t.bTotal ? 'a' : t.bTotal > t.aTotal ? 'b' : null };
 }
 
-/** 'won' | 'lost' | 'draw' | null from one side's point of view. */
+/** 'won' | 'lost' | 'draw' | null from one side's point of view. null for a called-off challenge. */
 export function resultFor(game, side) {
   if (!game || !game.over || (side !== 'a' && side !== 'b')) return null;
   const w = game.over.winner;
+  if (w === 'none') return null;
   if (w !== 'a' && w !== 'b') return 'draw';
   return w === side ? 'won' : 'lost';
 }
@@ -149,6 +151,17 @@ export function isExpired(x, now = Date.now()) {
   return !!x && !x.over && ms(x.expires) > 0 && now >= ms(x.expires);
 }
 
+// --- cancel, decline, resign (2026-10-13, js/challenge-life.js) -----------------------------------
+// Matt: "a way to cancel sent challenge requests, and a way to resign/forfeit". Every turn here
+// already expires after 3 days (EXPIRE_MS, 2026-09-24), which is what he asked for the other games.
+/** Is this challenge still unanswered? Not over and the challenged player (side 'b') has played no
+ *  game. While it is, the challenger can CANCEL it and the challenged player can DECLINE it. */
+export function isOpen(game) {
+  return !!game && !game.over && scoresOf(game, 'b').every((x) => x == null);
+}
+/** Was it called off (cancelled or declined) rather than played to a result? */
+export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
+
 /** Build the legs for a new challenge. `count` is 1/3/5 on one board, or `all` for every board. */
 export function makeLegs({ count = 1, all = false, board = null, boards = [] } = {}) {
   const pick = (b) => ({ board: String(b.id), boardName: String(b.name || '').slice(0, 40) });
@@ -175,10 +188,19 @@ export function validateChallenge(raw) {
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
   const created = ms(raw.created);
   let over = null;
-  if (raw.over && typeof raw.over === 'object') {
+  if (raw.over && typeof raw.over === 'object' && raw.over.winner === 'none') {
+    // CALLED OFF (2026-10-13): cancelled by the challenger or declined by the other person, before
+    // they had played a game. Counts for nobody. A cancel that raced their first score is void
+    // below, once the scores are read, and the challenge plays on.
+    const why = String(raw.over.why || '');
+    if (!isNoResult(why)) return null;
+    over = { winner: 'none', why, at: ms(raw.over.at) };
+  } else if (raw.over && typeof raw.over === 'object') {
     const w = raw.over.winner;
     if (w !== 'a' && w !== 'b' && w !== null && w !== undefined) return null;
     over = { winner: w == null ? null : w, at: ms(raw.over.at) };
+    // A RESIGNATION (2026-10-13) keeps the winner it names: the scores never decided it.
+    if (raw.over.why === 'resign' && (w === 'a' || w === 'b')) over.why = 'resign';
   }
   const base = {
     id, by: asCode(raw.by) || a, created, updated: ms(raw.updated) || created,
@@ -225,15 +247,18 @@ export function validateChallenge(raw) {
     sides[side] = { ...who(raw[side]), s };
   }
   const stage = ['a', 'b', 'over'].includes(raw.stage) ? raw.stage : (over ? 'over' : 'a');
+  // A cancel that landed after the challenged player's first score is void: the challenge plays on.
+  if (over && over.winner === 'none' && Object.keys(sides.b.s).length) over = null;
   // THE RESULT IS RE-DERIVED FROM THE SCORES, never trusted from the stored winner. Firebase drops a
   // null, so a draw and a missing winner look identical on disk - and matches finished while
   // decide() had its total bug (above) were stored with no winner at all. Nothing is rewritten.
-  if (over) {
+  // A called-off or resigned challenge was not decided by its scores, so it keeps what it says.
+  if (over && over.winner !== 'none' && over.why !== 'resign') {
     const d = decide({ legs, scoring: SCORINGS.includes(raw.scoring) ? raw.scoring : 'games', a: sides.a, b: sides.b });
     if (d.done) over.winner = d.winner;
   }
   return {
-    ...base, v: 2,
+    ...base, v: 2, over,
     scoring: SCORINGS.includes(raw.scoring) ? raw.scoring : 'games',
     all: !!raw.all, legs,
     expires: ms(raw.expires),
@@ -241,6 +266,7 @@ export function validateChallenge(raw) {
     a: sides.a, b: sides.b,
   };
 }
+
 
 /** Which side this player is on, or null. */
 export function sideOf(game, code) {
@@ -257,6 +283,11 @@ export function rowFor(game, side) {
   const mine = side === 'a' ? game.a : game.b;
   const them = side === 'a' ? game.b : game.a;
   const my = scoresOf(game, side).filter((x) => x != null).length;
+  // Cancelled, declined or resigned (2026-10-13): stored over:false / yourTurn:false with `ended`
+  // saying how, because the deployed push function (functions/decide.js decideSkee) would otherwise
+  // tell somebody "it's a tie" or tell the resigner their own result. rowsFromIndex turns it back
+  // into a finished row. No push is sent for any of these.
+  const ended = !game.over ? '' : isCalledOff(game) ? game.over.why : game.over.why === 'resign' ? 'resign' : '';
   return {
     with: them.code,
     name: them.name,
@@ -271,7 +302,9 @@ export function rowFor(game, side) {
     updated: game.updated,
     expires: game.expires || 0,
     yourTurn: !game.over && game.stage === side,
-    over: !!game.over,
+    over: !!game.over && !ended,
+    ended,
+    open: isOpen(game) ? (side === 'a' ? 'sent' : 'got') : '',
     played: my,
     theirPlayed: scoresOf(game, side === 'a' ? 'b' : 'a').filter((x) => x != null).length,
     // Totals and games won, from this row's side. `theirs` is what a single game has to beat.
@@ -279,7 +312,7 @@ export function rowFor(game, side) {
     theirs: side === 'a' ? t.bTotal : t.aTotal,
     myWins: side === 'a' ? t.aWins : t.bWins,
     theirWins: side === 'a' ? t.bWins : t.aWins,
-    ...(game.over ? { result: resultFor(game, side) } : {}),
+    ...(game.over && !isCalledOff(game) ? { result: resultFor(game, side) } : {}),
   };
 }
 
@@ -304,8 +337,12 @@ export function rowsFromIndex(val) {
       sent: !!r.sent,
       updated: ms(r.updated),
       expires: ms(r.expires),
-      yourTurn: !!r.yourTurn,
-      over: !!r.over,
+      // Cancelled, declined or resigned (2026-10-13): stored over:false so no push fires (rowFor);
+      // read back here as finished.
+      ended: ENDED.includes(r.ended) ? r.ended : '',
+      open: ENDED.includes(r.ended) ? '' : (r.open === 'sent' || r.open === 'got' ? r.open : ''),
+      yourTurn: !ENDED.includes(r.ended) && !!r.yourTurn,
+      over: !!r.over || ENDED.includes(r.ended),
       played: ms(r.played),
       theirPlayed: ms(r.theirPlayed),
       mine: r.mine == null ? null : score(r.mine),
@@ -323,8 +360,12 @@ export function rowsFromIndex(val) {
  * GUARD in decide: some rows were stored as 'draw' when the other person had won). Most wins: games
  * won, then total. Total: total. Falls back to the stored value for a row without the numbers.
  */
+const ENDED = ['cancelled', 'declined', 'resign'];
 export function rowResult(r) {
-  if (!r || !r.over) return null;
+  if (!r || (!r.over && !ENDED.includes(r.ended))) return null;
+  // Called off: nobody's result. Resigned: the stored result (the scores never decided it).
+  if (r.ended === 'cancelled' || r.ended === 'declined') return null;
+  if (r.ended === 'resign') return r.result === 'won' || r.result === 'lost' ? r.result : null;
   const mine = ms(r.mine); const theirs = ms(r.theirs);
   const cmp = (x, y) => (x > y ? 'won' : x < y ? 'lost' : 'draw');
   if (r.mine != null && r.theirs != null) {
@@ -394,8 +435,11 @@ function writesAllowed(what) {
   return false;
 }
 
+// TEST SEAM (2026-10-13): test-skee-challenge.mjs hands in an in-memory database, like Darts'.
+let bootFn = getStatsApp;
+export function __setBootForTest(fn) { bootFn = fn || getStatsApp; }
 async function ready() {
-  try { return await getStatsApp(); } catch { return null; }
+  try { return await bootFn(); } catch { return null; }
 }
 function reasonOf(err) {
   const s = String((err && (err.code || err.message)) || err);
@@ -561,6 +605,85 @@ export async function postLeg(id, side, leg, sc) {
     return { ok: true, game: back };
   } catch (err) {
     console.error('[skeeball] could not post your score', err);
+    const reason = reasonOf(err);
+    return { ok: false, reason, retryable: reason !== 'denied' };
+  }
+}
+
+/**
+ * CALL OFF a challenge the other person has not answered (2026-10-13, js/challenge-life.js): the
+ * challenger CANCELS it, the challenged player DECLINES it. Counts for nobody, notifies nobody,
+ * deletes nothing. Refused with 'accepted' once the challenged player has a score in; from then on
+ * the way out is resignChallenge. Returns { ok:true, game, cancelled:true } or { ok:false, reason }.
+ */
+export async function cancelChallenge(id) {
+  const me = myCode();
+  if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
+  if (!writesAllowed('cancelChallenge')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
+  try {
+    const boot = await ready();
+    if (!boot) return { ok: false, reason: 'offline', retryable: true };
+    const { db, api } = boot;
+    const fresh = await readChallenge(id);
+    if (!fresh) return { ok: false, reason: 'not-found', retryable: true };
+    const side = sideOf(fresh, me);
+    if (!side) return { ok: false, reason: 'not-yours', retryable: false };
+    let back = fresh;
+    if (fresh.over) {
+      // A retry after the rows did not land rewrites them; any real result stands as it is.
+      if (!isCalledOff(fresh)) return { ok: false, reason: 'already-over', retryable: false };
+    } else {
+      if (!isOpen(fresh)) return { ok: false, reason: 'accepted', retryable: false };
+      const now = Date.now();
+      const why = side === 'b' ? 'declined' : 'cancelled';
+      await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: 'none', why, at: now }, updated: now });
+      back = await readChallenge(id);
+      if (!back) return { ok: false, reason: 'did-not-land', retryable: true };
+      if (!isCalledOff(back)) return { ok: false, reason: back.over ? 'already-over' : 'accepted', retryable: false };
+    }
+    await writeRows(api, db, back);
+    markSeen(id, back.updated);
+    return { ok: true, game: back, cancelled: true };
+  } catch (err) {
+    console.error('[skeeball] could not call the challenge off', err);
+    const reason = reasonOf(err);
+    return { ok: false, reason, retryable: reason !== 'denied' };
+  }
+}
+
+/**
+ * GIVE IT UP (2026-10-13): the other person wins, whatever the scores say so far. Nothing is
+ * deleted, every score stays on the match. A challenge the other person has not answered is
+ * CALLED OFF instead (cancelChallenge), so nobody is handed a win for a match never played.
+ * Returns { ok:true, game, cancelled? } or { ok:false, reason }.
+ */
+export async function resignChallenge(id) {
+  const me = myCode();
+  if (!me) return { ok: false, reason: 'no-player-code', retryable: false };
+  if (!writesAllowed('resignChallenge')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
+  try {
+    const boot = await ready();
+    if (!boot) return { ok: false, reason: 'offline', retryable: true };
+    const { db, api } = boot;
+    const fresh = await readChallenge(id);
+    if (!fresh) return { ok: false, reason: 'not-found', retryable: true };
+    const side = sideOf(fresh, me);
+    if (!side) return { ok: false, reason: 'not-yours', retryable: false };
+    const mine = (g) => g.over && g.over.why === 'resign' && g.over.winner === other(side);
+    if (fresh.over && !mine(fresh)) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
+    if (!fresh.over && isOpen(fresh)) return cancelChallenge(id);
+    let back = fresh;
+    if (!fresh.over) {
+      const now = Date.now();
+      await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: other(side), why: 'resign', at: now }, updated: now });
+      back = await readChallenge(id);
+      if (!back || !mine(back)) return { ok: false, reason: 'did-not-land', retryable: true };
+    }
+    await writeRows(api, db, back);
+    markSeen(id, back.updated);
+    return { ok: true, game: back };
+  } catch (err) {
+    console.error('[skeeball] could not resign the challenge', err);
     const reason = reasonOf(err);
     return { ok: false, reason, retryable: reason !== 'denied' };
   }

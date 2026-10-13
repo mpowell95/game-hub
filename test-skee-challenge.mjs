@@ -190,5 +190,87 @@ check('the ordinary Play button drops any challenge', /data-role="play"\]'\)\.ad
 check('challenge games are recorded like any other (the recorder call is untouched)', (ui.match(/recordSkeeball\(board\.id, \{ \.\.\./g) || []).length === 2);
 check('the rack start token is still initialised', /this\._startToken = 0;/.test(ui));
 
+// --- cancel, decline, resign (2026-10-13) ----------------------------------------------------------
+{
+  // Pure: the document and the rows.
+  const off = CH.validateChallenge(doc({ a: { code: A, name: 'Matt', emoji: '😎', s: { 0: 120 } }, stage: 'b', over: { winner: 'none', why: 'cancelled', at: 5 } }));
+  check('cancel: a called-off challenge is over with winner none, nobody\'s result',
+    off && off.over.winner === 'none' && CH.isCalledOff(off) && CH.resultFor(off, 'a') === null && CH.resultFor(off, 'b') === null);
+  check('cancel: an unknown reason is refused', CH.validateChallenge(doc({ over: { winner: 'none', why: 'meh' } })) === null);
+  const raced = CH.validateChallenge(doc({ legs: [leg(), leg(), leg()], a: { code: A, s: { 0: 120 } }, b: { code: B, s: { 0: 90 } }, stage: 'a', over: { winner: 'none', why: 'declined' } }));
+  check('cancel: one that raced the first answer is void, the challenge plays on', raced && !raced.over);
+  const rs = CH.validateChallenge(doc({ legs: [leg(), leg(), leg()], a: { code: A, s: { 0: 50 } }, b: { code: B, s: { 0: 300 } }, stage: 'a', over: { winner: 'b', why: 'resign' } }));
+  check('resign: the named winner stands even when the scores say otherwise', rs && rs.over.winner === 'b' && rs.over.why === 'resign');
+  const wouldFlip = CH.validateChallenge(doc({ legs: [leg(), leg(), leg()], a: { code: A, s: { 0: 500, 1: 500 } }, b: { code: B, s: { 0: 1, 1: 1 } }, stage: 'over', over: { winner: 'b', why: 'resign' } }));
+  check('resign: never re-derived from the scores', wouldFlip && wouldFlip.over.winner === 'b');
+  const open0 = CH.validateChallenge(doc({ a: { code: A, s: { 0: 120 } }, stage: 'b' }));
+  check('isOpen until the challenged player has a score in', CH.isOpen(open0) && !CH.isOpen(raced));
+  const rowB = CH.rowFor(off, 'b');
+  check('a called-off row is stored over:false (no push), with ended', rowB.over === false && rowB.yourTurn === false && rowB.ended === 'cancelled' && !('result' in rowB));
+  check('...the push function stays silent for it', decideSkee({ code: B, id: 'x', before: { yourTurn: true, over: false }, after: rowB }) === null);
+  const rows = CH.rowsFromIndex({ mabc12345xyz: rowB });
+  check('...and it reads back finished, no result', rows[0].over && rows[0].ended === 'cancelled' && rows[0].result === null && !rows[0].yourTurn);
+  check('...and raises no launcher bubble', decideAlert(rows, {}) === null);
+  const rowA = CH.rowFor(rs, 'a');
+  const rr = CH.rowsFromIndex({ mabc12345xyz: rowA });
+  check('a resigned row reads back with the stored result, not the scores', rowA.over === false && rr[0].over && rr[0].result === 'lost' && rr[0].ended === 'resign');
+  check('the open row says sent / got', CH.rowFor(open0, 'a').open === 'sent' && CH.rowFor(open0, 'b').open === 'got' && CH.rowFor(raced, 'b').open === '');
+
+  // The writes, against an in-memory database.
+  const root = {};
+  const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  const parts = (p) => p.split('/').filter(Boolean);
+  const getAt = (p) => { let n = root; for (const k of parts(p)) { if (!n || typeof n !== 'object') return undefined; n = n[k]; } return n; };
+  const setAt = (p, v) => {
+    const ks = parts(p); let n = root;
+    for (const k of ks.slice(0, -1)) { if (!n[k] || typeof n[k] !== 'object') n[k] = {}; n = n[k]; }
+    if (v === null || v === undefined) delete n[ks[ks.length - 1]]; else n[ks[ks.length - 1]] = clone(v);
+  };
+  const api = {
+    ref: (db, path) => ({ path }),
+    get: async (r) => { const v = clone(getAt(r.path)); return { exists: () => v !== undefined && v !== null, val: () => v }; },
+    set: async (r, v) => setAt(r.path, v),
+    update: async (r, patch) => { for (const k of Object.keys(patch)) setAt(r.path + '/' + k, patch[k]); },
+  };
+  CH.__setBootForTest(async () => ({ db: {}, api }));
+  const as = (code, name) => { store['gamehub.profile'] = JSON.stringify({ name, emoji: '🙂', playerId: code }); };
+  store['gamehub.adminConfig.v1'] = JSON.stringify({ online: { [A]: true, [B]: true } });
+  as(A, 'Matt');
+  let r = await CH.createChallenge({ them: { code: B, name: 'Anita' }, legs: [leg(), leg(), leg()] });
+  const id1 = r.game && r.game.id;
+  check('write: a challenge is made', r.ok && id1);
+  await CH.postLeg(id1, 'a', 0, 120);
+  check('write: game 1 in, delivered', !!getAt(`skeeChallenges/index/${B}/${id1}`) && getAt(`skeeChallenges/index/${B}/${id1}`).open === 'got');
+  r = await CH.cancelChallenge(id1);
+  check('write: the challenger cancels it', r.ok && r.cancelled && r.game.over.why === 'cancelled'
+    && getAt(`skeeChallenges/index/${B}/${id1}`).ended === 'cancelled' && getAt(`skeeChallenges/index/${A}/${id1}`).ended === 'cancelled');
+  as(B, 'Anita');
+  check('write: no score gets in after', (await CH.postLeg(id1, 'b', 0, 90)).reason === 'already-over');
+
+  as(A, 'Matt');
+  r = await CH.createChallenge({ them: { code: B, name: 'Anita' }, legs: [leg(), leg(), leg()] });
+  const id2 = r.game.id;
+  await CH.postLeg(id2, 'a', 0, 120);
+  as(B, 'Anita');
+  r = await CH.resignChallenge(id2);
+  check('write: giving up an unanswered challenge DECLINES it', r.ok && r.cancelled && r.game.over.why === 'declined');
+
+  as(A, 'Matt');
+  r = await CH.createChallenge({ them: { code: B, name: 'Anita' }, legs: [leg(), leg(), leg()] });
+  const id3 = r.game.id;
+  await CH.postLeg(id3, 'a', 0, 120);
+  as(B, 'Anita');
+  await CH.postLeg(id3, 'b', 0, 300);
+  as(A, 'Matt');
+  check('write: once answered it cannot be cancelled', (await CH.cancelChallenge(id3)).reason === 'accepted');
+  r = await CH.resignChallenge(id3);
+  check('write: Matt resigns, Anita wins', r.ok && !r.cancelled && r.game.over.winner === 'b' && r.game.over.why === 'resign');
+  as(B, 'Anita');
+  const mine = (await CH.readMyChallenges()).find((x) => x.id === id3);
+  check('write: her list says she won, finished', mine && mine.over && mine.result === 'won' && mine.ended === 'resign');
+  check('write: the scores stay on the match', getAt(`skeeChallenges/games/${id3}/a/s/0`) === 120 && getAt(`skeeChallenges/games/${id3}/b/s/0`) === 300);
+  CH.__setBootForTest(null);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -60,6 +60,7 @@ const ASSETS = [
   './js/messages-ui.js',
   './js/challenges.js',
   './js/challenges-ui.js',
+  './js/challenge-life.js',
   './js/challenges-strings.js',
   './js/push.js',
   // Baseball's career sync (BB-0-phase-0-handoff.md step 9). SHELL for the same reason: it must be
@@ -675,6 +676,9 @@ const NETWORK_FIRST = [
   './js/game-stats-ui.js', './js/leaderboard-ui.js', './js/messages-ui.js', './js/bug-report-ui.js',
   // The Challenges screen (2026-10-05): shows every challenge record; lazily imported, so fresh is free.
   './js/challenges.js', './js/challenges-ui.js', './js/challenges-strings.js',
+  // How a challenge ends without a result (cancel, decline, expire; 2026-10-13): every challenge game
+  // reads it to decide what a match is, so a stale copy would disagree with its game about a deadline.
+  './js/challenge-life.js',
   // leaderboard-rank.js is leaderboard-ui.js's OWN maths, split out only so it can be tested
   // headlessly. Leaving it cache-first while its only caller is network-first means a device can
   // run NEW ranking code against an OLD formatter for one launch - which is what happened on

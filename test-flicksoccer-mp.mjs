@@ -176,6 +176,8 @@ ok('a challenge stores its line-up', res.ok && res.game.forms.join() === 'diamon
 res = await MP.appendLog(id2, 0, [straight('a')]);
 ok('...and a flick from that line-up is accepted', res.ok && res.game.log.length === 1, JSON.stringify(res));
 use('B');
+// She ANSWERS it first (one flick): from then on giving up is a resignation, not a decline.
+await MP.appendLog(id2, 1, [straight('b')]);
 res = await MP.resignGame(id2);
 ok('resigning hands the other person the win', res.ok && res.game.over.winner === 'a' && res.game.over.why === 'resign');
 ok('...and both rows record it', getAt(`flicksoccer/index/MATTA/${id2}`).result === 'won' && getAt(`flicksoccer/index/MATTA/${id2}`).why === 'resign');
@@ -234,6 +236,7 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
 
   // A resign whose rows did not land: tapping Resign again tells the other person.
   use('B');
+  await MP.appendLog(c.id, 1, [straight('b')]);       // she answers first, so this is a real resignation
   faultOn = (path) => path.startsWith('flicksoccer/index/MATTA/');
   const q1 = await MP.resignGame(c.id);
   faultOn = null;
@@ -246,8 +249,13 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
   const d = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
   const statsBefore = stores.A.get('gamehub.stats');
   const rr = await MP.resignGame(d.id);
-  ok('resigning an undelivered challenge calls it off', rr.ok && rr.cancelled && (getAt(`flicksoccer/index/ANABB/${d.id}`) || {}).result === 'cancelled');
-  ok('...it is not listed', !(await MP.readMyGames()).some((x) => x.id === d.id) && stores.A.get('gamehub.stats') === statsBefore);
+  ok('resigning an undelivered challenge calls it off', rr.ok && rr.cancelled && !getAt(`flicksoccer/index/ANABB/${d.id}`)
+    && getAt(`flicksoccer/index/MATTA/${d.id}`).ended === 'cancelled', JSON.stringify(rr));
+  // Since 2026-10-13 it IS listed (the hub's Challenges screen says "Cancelled"), as finished with no
+  // result, and it is in no record.
+  const dl = (await MP.readMyGames()).find((x) => x.id === d.id);
+  ok('...it is finished with no result, in no record, nothing recorded', dl && dl.over && dl.ended === 'cancelled' && dl.result === null
+    && !MP.recordsFrom([dl], 'MATTA').finished.length && stores.A.get('gamehub.stats') === statsBefore);
   MP.recordFinished(await MP.readMyGames());
   ok('...and never counted', !MP.readLedger().has(d.id));
 
@@ -292,9 +300,44 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
   const d = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, form: 'diamond' });
   use('B');
   const q = await MP.resignGame(d.id);
-  ok('Ana declining before she plays calls it off', q.ok && q.cancelled && getAt(`flicksoccer/index/MATTA/${d.id}`).result === 'cancelled' && getAt(`flicksoccer/index/ANABB/${d.id}`).result === 'cancelled');
+  ok('Ana declining before she plays calls it off', q.ok && q.cancelled && q.game.over.why === 'declined'
+    && getAt(`flicksoccer/index/MATTA/${d.id}`).ended === 'declined' && getAt(`flicksoccer/index/ANABB/${d.id}`).ended === 'declined');
   MP.recordFinished(await MP.readMyGames());
-  ok('...nobody lists it, and it is never counted', !(await MP.readMyGames()).some((x) => x.id === d.id) && !MP.readLedger().has(d.id));
+  const dr = (await MP.readMyGames()).find((x) => x.id === d.id);
+  ok('...it is finished with no result, in no record, and never counted', dr && dr.over && dr.result === null
+    && !MP.recordsFrom([dr], 'ANABB').finished.length && !MP.readLedger().has(d.id));
+  // Picking a line-up is not an answer: she can still decline after it, and it still expires.
+  use('A');
+  const pk = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, form: 'attack' });
+  ok('a new challenge carries lapse and waits on Ana with a 3-day deadline', getAt(`flicksoccer/games/${pk.id}`).lapse === true
+    && getAt(`flicksoccer/index/ANABB/${pk.id}`).open === 'got' && getAt(`flicksoccer/index/MATTA/${pk.id}`).open === 'sent'
+    && getAt(`flicksoccer/index/ANABB/${pk.id}`).expires > 0);
+  const cn = await MP.cancelGame(pk.id);
+  ok('Matt cancels it before she has answered', cn.ok && cn.game.over.why === 'cancelled' && getAt(`flicksoccer/index/ANABB/${pk.id}`).ended === 'cancelled');
+  use('B');
+  ok('...and she can no longer pick or flick', (await MP.pickLineup(pk.id, 'defend')).reason === 'already-over');
+  // Expired: three days on her with no answer.
+  use('A');
+  const { ANSWER_MS } = await import('./js/challenge-life.js');
+  const ex = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, form: 'attack' });
+  for (const pth of [`flicksoccer/games/${ex.id}`, `flicksoccer/index/MATTA/${ex.id}`, `flicksoccer/index/ANABB/${ex.id}`]) {
+    const o = getAt(pth); o.updated -= ANSWER_MS + 1000; if (o.expires) o.expires -= ANSWER_MS + 1000;
+  }
+  use('B');
+  const er = (await MP.readMyGames()).find((x) => x.id === ex.id);
+  ok('an unanswered challenge 3 days old reads as expired', er && er.ended === 'expired' && er.over && !er.yourTurn);
+  ok('...her late line-up is refused', (await MP.pickLineup(ex.id, 'defend')).reason === 'expired');
+  // Answered: her first flick clears open on both rows.
+  use('A');
+  const an = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, form: 'attack' });
+  use('B');
+  await MP.pickLineup(an.id, 'defend');
+  ok('picking a line-up does not answer it', getAt(`flicksoccer/index/ANABB/${an.id}`).open === 'got');
+  await MP.appendLog(an.id, 0, [straight('b')]);
+  ok('her first flick does: both rows stop saying open', getAt(`flicksoccer/index/ANABB/${an.id}`).open === '' && getAt(`flicksoccer/index/MATTA/${an.id}`).open === '');
+  use('A');
+  ok('...and it can no longer be cancelled', (await MP.cancelGame(an.id)).reason === 'accepted');
+  use('B');
   const { decideFlickSoccer } = await import('./functions/decide.js');
   ok('...and nobody is notified', decideFlickSoccer({ code: 'MATTA', id: d.id, before: { yourTurn: false }, after: getAt(`flicksoccer/index/MATTA/${d.id}`) }) === null);
   use('A');

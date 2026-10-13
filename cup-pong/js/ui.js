@@ -609,6 +609,7 @@ class CupPong {
     if (mp.applied < g.log.length) { this.replayNext(); return; }
     this.MP.markShown(mp.id, g.log.length);
     this.MP.markSeen(mp.id, g.updated);
+    if (this.MP.isCalledOff(g)) { this.mpEndedNoResult(this.mpEndText(g, mp.side)); return; }
     if (this.match.over) { this.finish(); return; }
     if (g.over && g.over.why === 'resign') { this.mpFinish(g.over.winner === mp.side, true); return; }
     this.mpResume();
@@ -767,6 +768,8 @@ class CupPong {
     const mp = this.mp;
     if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
     mp.game = g;
+    // Called off by the other person while this phone had it open (2026-10-13).
+    if (this.MP.isCalledOff(g) && !mp.finished) { this.mpEndedNoResult(this.mpEndText(g, mp.side)); return; }
     if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
       this.mpFinish(g.over.winner === mp.side, true);
       return;
@@ -809,6 +812,11 @@ class CupPong {
     if (res.retryable) {
       this.toast(t('notSent'), 1600);
       this.later(() => this.mpFlush(), 4000);
+    } else if (res.reason === 'expired') {
+      // Nobody answered it in 3 days: it lapsed before this throw got there.
+      MP.savePending(mp.id, mp.base, []);
+      this.mpEndedNoResult(t('mpExpired'));
+      return;
     } else {
       console.error('[cup-pong] a throw could not be sent:', res.reason);
       this.toast(res.reason === 'denied' ? t('mpDenied') : t('sendFailed'), 2600);
@@ -894,13 +902,17 @@ class CupPong {
   }
 
   mpResign() {
+    // Nobody has answered it yet: the same button CANCELS (or DECLINES) it, counting for nobody.
+    const kind = this.mpEndKind();
+    const q = kind === 'resign' ? t('quitQ') : t(kind === 'cancel' ? 'cancelChQ' : 'declineChQ');
+    const yes = kind === 'resign' ? t('quitMatch') : t(kind === 'cancel' ? 'cancelCh' : 'declineCh');
     const el = document.createElement('div');
     el.className = 'gh-overlay';
     el.innerHTML = `
-      <div class="gh-modal cp-card" role="dialog" aria-modal="true" aria-label="${t('quitQ')}">
-        <h2 class="cp-card-title">${t('quitQ')}</h2>
+      <div class="gh-modal cp-card" role="dialog" aria-modal="true" aria-label="${q}">
+        <h2 class="cp-card-title">${q}</h2>
         <div class="gh-modal__actions">
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${t('quitMatch')}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${yes}</button>
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="no">${t('cancel')}</button>
         </div>
       </div>`;
@@ -912,6 +924,8 @@ class CupPong {
       const res = await this.MP.resignGame(mp.id);
       el.remove();
       if (!res.ok) { this.toast(res.reason === 'denied' ? t('mpDenied') : t('sendFailed'), 2400); return; }
+      // Called off (nobody had answered): no loss to count.
+      if (res.cancelled) { this.mpEndedNoResult(this.mpEndText(res.game, mp.side)); return; }
       this.MP.countResult(mp.id, false);
       this.MP.markResultSeen(mp.id);
       this.openMultiplayer();
@@ -949,7 +963,41 @@ class CupPong {
     const game = await MP.readGame(id);
     if (this.disposed) return;
     if (!game) { this.toast(t('mpNotFound'), 2000); this.openMultiplayer(); return; }
+    // Cancelled, declined or expired (2026-10-13): there is no match to show.
+    const endText = this.mpEndText(game, MP.sideOf(game, MP.myCode()));
+    if (endText) { this.toast(endText, 3200); this.openMultiplayer(); return; }
     this.start('mp', { game });
+  }
+
+  /** 'resign', or 'cancel' / 'decline' while the other person has not answered (js/challenge-life.js).
+   *  Says what the pause sheet's quit button will do. */
+  mpEndKind() {
+    const mp = this.mp;
+    if (!mp || !this.MP || !mp.game || !this.MP.lifeOf(mp.game).open) return 'resign';
+    return mp.side === this.MP.recipientOf(mp.game) ? 'decline' : 'cancel';
+  }
+
+  /** What to say about a match that ended with no result: called off by either side, or expired
+   *  unanswered (js/challenge-life.js). '' for a match that is neither. */
+  mpEndText(game, side) {
+    const MP = this.MP;
+    if (!game || !MP) return '';
+    if (MP.lifeOf(game).expired) return t('mpExpired');
+    if (!MP.isCalledOff(game)) return '';
+    const why = game.over.why === 'declined' ? 'declined' : 'cancelled';
+    // A cancel is always the sender's, a decline always the receiver's.
+    const iSent = side !== MP.recipientOf(game);
+    const mine = why === 'cancelled' ? iSent : !iSent;
+    const them = MP.themOf(game, MP.myCode());
+    return t(mine ? (why === 'cancelled' ? 'mpYouCancelled' : 'mpYouDeclined') : (why === 'cancelled' ? 'mpTheyCancelled' : 'mpTheyDeclined'),
+      { name: (them && them.name) || '?' });
+  }
+  /** Leave a match that has ended with no result, saying so. */
+  mpEndedNoResult(text) {
+    const mp = this.mp;
+    if (mp) { mp.finished = true; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    this.toast(text, 3200);
+    this.openMultiplayer();
   }
 
   /** A new challenge: created now, delivered when your first turn is over. */
@@ -1476,7 +1524,7 @@ class CupPong {
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
           ${this.mp ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="mphome">${t('backMp')}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="resign">${t('quitMatch')}</button>`
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="resign">${t({ resign: 'quitMatch', cancel: 'cancelCh', decline: 'declineCh' }[this.mpEndKind()])}</button>`
     : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${this.mode === 'solo' ? t('newRack') : t('newGame')}</button>`}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="setup">${t('backSetup')}</button>
         </div>
