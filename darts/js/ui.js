@@ -7,7 +7,7 @@
 // false. A match is only recorded once it is won. An ONLINE match (2026-10-01, mp.js) lives on the
 // server, every dart written as it lands, so leaving one loses nothing either.
 
-import { newMatch, throwDart, nextTurn, validMatch, DRAW, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding } from './engine.js';
+import { newMatch, throwDart, nextTurn, validMatch, DRAW, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding, inOvertime, dartsPerTurn } from './engine.js';
 import { isAdmin } from '../../js/challenge/hooks.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
 import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, stuckAxis, boardPoint, norm, HAND_Z, REST_AXIS } from './flight.js';
@@ -496,7 +496,7 @@ class DartsUI {
     else if (s.first === 'them') starter = 1;
     else { starter = s.nextStarter; s.nextStarter = starter ^ 1; }
     writeJSON(SETTINGS_KEY, s);
-    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter, kindFrom(s), true) }, true);
+    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter, kindFrom(s), true, true) }, true);
   }
 
   /** Practice (2026-10-08, Matt: "play against yourself or just keep throwing as many darts in a row
@@ -508,7 +508,7 @@ class DartsUI {
     if (which === 'free') {
       this.free = { darts: 0, points: 0, round: 0, best: 0 };
       this._begin({ mode: 'free', diff: s.difficulty, match: newMatch(0, '301') }, true);
-    } else this._begin({ mode: 'self', diff: s.difficulty, match: newMatch(0, kindFrom(s), true) }, true);
+    } else this._begin({ mode: 'self', diff: s.difficulty, match: newMatch(0, kindFrom(s), true, true) }, true);
   }
 
   /** Pass & play, from the Multiplayer screen: two people, this phone, the chosen game. */
@@ -620,10 +620,11 @@ class DartsUI {
 
   _dartsLeftHud() {
     const m = this.match;
-    const left = m ? (m.turnOver ? 0 : DARTS_PER_TURN - m.darts.length) : DARTS_PER_TURN;
+    const per = m ? dartsPerTurn(m) : DARTS_PER_TURN;
+    const left = m ? (m.turnOver ? 0 : per - m.darts.length) : per;
     const seat = m ? m.turn : 0;
     this.leftEl.style.setProperty('--dt-seat', SEAT_COLOR[seat]);
-    this.leftEl.innerHTML = Array.from({ length: DARTS_PER_TURN }, (_, i) => `<i class="${i < left ? 'is-on' : ''}">${MINI_DART}</i>`).join('');
+    this.leftEl.innerHTML = Array.from({ length: per }, (_, i) => `<i class="${i < left ? 'is-on' : ''}">${MINI_DART}</i>`).join('');
     this.leftEl.setAttribute('aria-label', t('aria_darts_left', { n: left }));
     this.leftEl.setAttribute('role', 'img');
   }
@@ -652,9 +653,10 @@ class DartsUI {
   /** Whose turn it is, or (equal turns) that this is the other player's LAST turn. */
   _turnBanner(main) {
     const m = this.match;
+    if (inOvertime(m)) { this._bannerShow(t('ot_title'), main, 'turn'); return; }
     const last = !!m && m.out != null && m.out !== m.turn;
     if (!last) { this._bannerShow(main, '', 'turn'); return; }
-    this._bannerShow(t('last_turn'), t(isCricket(m.kind) ? 'last_turn_sub_c' : 'last_turn_sub'), 'turn');
+    this._bannerShow(t('last_turn'), t((isCricket(m.kind) ? 'last_turn_sub_c' : 'last_turn_sub') + (m.ot ? '_ot' : '')), 'turn');
   }
 
   _fillPass() {
@@ -722,7 +724,11 @@ class DartsUI {
     }
     this.flying = null;
     const cricket = isCricket(m.kind);
-    if (cricket && hit.num > 0) {
+    if (res.ot) {
+      // Overtime: only how close to the bull counts, so the bed is shown without points.
+      if (hit.ring === 'off' || hit.ring === 'frame') this._bannerShow(t('miss'), '', 'miss');
+      else { this.flash = { x: f.bx, y: f.by, a: 1 }; this._popup(f.tx, f.ty, bedLabel(hit), ''); }
+    } else if (cricket && hit.num > 0) {
       // Cricket: the bed it hit, and the points if it scored any. A bed that counts for nothing
       // (7, or 19 while 20 is still open in order) shows dimmed, with no flash.
       if (hit.counted) this.flash = { x: f.bx, y: f.by, a: 1 };
@@ -745,7 +751,8 @@ class DartsUI {
       this._after(1.6, () => (m.winner != null ? this._finish() : this._endTurn(false)));
       return;
     }
-    if (cricket && hit.num > 0) this._say(t(!hit.counted ? 'say_c_none' : noPoints(m.kind) ? 'say_c_hit_np' : 'say_c_hit', { name, bed: bedLabel(hit), score: m.scores[seat] }));
+    if (res.ot) this._say(t('say_ot', { name, bed: bedLabel(hit) || t('miss') }));
+    else if (cricket && hit.num > 0) this._say(t(!hit.counted ? 'say_c_none' : noPoints(m.kind) ? 'say_c_hit_np' : 'say_c_hit', { name, bed: bedLabel(hit), score: m.scores[seat] }));
     else if (hit.pts > 0) this._say(t('say_hit', { name, pts: hit.pts, left: m.scores[seat] }));
     else this._say(t('say_miss', { name }));
     if (res.event === 'win') {
@@ -766,8 +773,20 @@ class DartsUI {
       this._after(1.6, () => this._endTurn(false));
       return;
     }
+    if (res.event === 'tie') {
+      // Overtime (2026-10-13): no draws. One dart each, closest to the bull wins.
+      m.turnOver = true;
+      this._bannerShow(t('tie'), t('tie_sub'), 'turn');
+      this._say(t('say_tie'));
+      this._seatsHud();
+      this._save();
+      this.phase = 'wait';
+      this._after(1.8, () => this._endTurn(false));
+      return;
+    }
     if (res.event === 'end') {
       m.turnOver = true;
+      if (res.ot && res.ot.again) this._after(0.6, () => this._bannerShow(t('ot_again'), t('ot_again_sub'), 'turn'));
       this._save();
       this.phase = 'wait';
       this._after(1.15, () => (m.winner != null ? this._finish() : this._endTurn(false)));
@@ -870,7 +889,7 @@ class DartsUI {
     this.root.querySelector('[data-role="resTitle"]').textContent = title;
     // Turns the winner took: their own visits to the oche. A draw ends on the second player's turn.
     const visits = !draw && m.winner === m.starter ? Math.floor(m.turns / 2) + 1 : Math.floor((m.turns + 1) / 2);
-    let line = t((draw ? 'draw_line' : 'result_line') + (visits === 1 ? '1' : ''), { n: visits });
+    let line = inOvertime(m) ? t('ot_line') : t((draw ? 'draw_line' : 'result_line') + (visits === 1 ? '1' : ''), { n: visits });
     if (mp && mp.resigned) line = iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
     this.root.querySelector('[data-role="resLine"]').textContent = line;
     this.root.querySelector('[data-role="againLabel"]').textContent = t(mp ? 'mp_again' : 'play_again');
@@ -1330,6 +1349,9 @@ class DartsUI {
         if (d.ring === 'off') continue;
         darts.push(this._dartPose(boardPoint(d.x, d.y), stuckAxis(), m.turn, Math.PI / 4, this.stuckAlpha, true));
       }
+      // Overtime: the other player's dart stays in the board, so there is something to beat.
+      const ob = inOvertime(m) ? m.bo[m.turn ^ 1] : null;
+      if (ob && scoreAt(ob.x, ob.y).ring !== 'off') darts.push(this._dartPose(boardPoint(ob.x, ob.y), stuckAxis(), m.turn ^ 1, Math.PI / 4, 1, true));
     }
     const f = this.flying;
     if (f) {

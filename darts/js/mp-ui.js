@@ -234,7 +234,7 @@ export function showUnseen(ui, MP, rows) {
       <button type="button" class="dt-x" data-mp="close" aria-label="${esc(t('aria_close'))}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg></button>
       <p class="dt-res-ava" aria-hidden="true">${esc(r.emoji)}</p>
       <h2 class="dt-h2">${esc(draw ? t('draw_title') : won ? t('win_you') : t('lose_you'))}</h2>
-      <p class="dt-res-line">${esc(t(draw ? 'mp_drew_vs' : won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name }))}${r.why === 'resign' ? ` · ${esc(won ? t('mp_they_resigned', { name: r.name }) : t('mp_you_resigned'))}` : ''}</p>
+      <p class="dt-res-line">${esc(t(draw ? 'mp_drew_vs' : won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name }))}${r.why === 'resign' ? ` · ${esc(won ? t('mp_they_resigned', { name: r.name }) : t('mp_you_resigned'))}` : r.why === 'overtime' ? ` · ${esc(t('ot_title'))}` : ''}</p>
       ${ended.length > 1 ? `<p class="dt-res-line">${esc(t('mp_more', { n: ended.length - 1 }))}</p>` : ''}
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-mp="ok">${esc(t('mp_ok'))}</button>
     </div>`;

@@ -77,15 +77,17 @@ export function targetPoint(num, ring) {
 export const DRAW = -1;
 
 /** A fresh match. `starter` is the seat that throws first (0 or 1); `kind` one of KINDS; `eq` turns
- *  on EQUAL TURNS (2026-10-08, see `finished`). `eq` is only ever stored when true, so a match made
- *  before it (every save and online match) has none and plays exactly as it always did. */
-export function newMatch(starter = 0, kind = '301', eq = false) {
+ *  on EQUAL TURNS (2026-10-08, see `finished`); `ot` turns a tie into OVERTIME instead of a draw
+ *  (2026-10-13, see `throwOvertime`). Each is only ever stored when true, so a match made before it
+ *  (every save and online match) has none and plays exactly as it always did. */
+export function newMatch(starter = 0, kind = '301', eq = false, ot = false) {
   const s = starter === 1 ? 1 : 0;
   const k = KINDS.includes(String(kind)) ? String(kind) : '301';
   const m = isCricket(k)
     ? { kind: k, start: 0, scores: [0, 0], marks: [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]], turn: s, starter: s, turnStart: 0, darts: [], winner: null, turns: 0 }
     : { kind: k, start: Number(k), scores: [Number(k), Number(k)], turn: s, starter: s, turnStart: Number(k), darts: [], winner: null, turns: 0 };
   if (eq) { m.eq = true; m.out = null; }
+  if (eq && ot) m.ot = true;
   return m;
 }
 
@@ -99,8 +101,30 @@ function finished(m, hit) {
   // In Cricket the last turn cannot score past the first player (they have closed everything), so
   // finishing it means level on points: a draw, like x01. `>` is only there to be safe.
   m.winner = m.out == null ? me : (m.scores[me] > m.scores[m.out] && isCricket(m.kind) ? me : DRAW);
+  // OVERTIME (2026-10-13, Matt: "Draws shouldn't be allowed"): a tie is not the end.
+  if (m.winner === DRAW && m.ot) { m.winner = null; m.bo = [null, null]; return { m, event: 'tie', hit }; }
   return { m, event: 'win', hit };
 }
+
+/** OVERTIME: one dart each, the player who threw first going first; the dart closest to the middle
+ *  of the bull wins. Exactly level (or both off the wall the same distance) throws again. Scores and
+ *  marks are frozen; `m.bo[seat]` is that seat's overtime dart this round ({x, y, d}). */
+function throwOvertime(m, x, y) {
+  const hit = scoreAt(x, y);
+  const me = m.turn, them = me ^ 1;
+  const d = Math.round(Math.hypot(x, y) * 1e6) / 1e6;
+  m.darts.push({ x, y, pts: 0, ring: hit.ring });
+  m.bo[me] = { x, y, d };
+  const ot = { d };
+  if (!m.bo[them]) return { m, event: 'end', hit, ot };
+  if (d === m.bo[them].d) { m.bo = [null, null]; return { m, event: 'end', hit, ot: { d, again: true } }; }
+  m.winner = d < m.bo[them].d ? me : them;
+  return { m, event: 'win', hit, ot };
+}
+/** True while a match is in overtime. */
+export const inOvertime = (m) => !!m && Array.isArray(m.bo);
+/** Darts a turn holds: one in overtime. */
+export const dartsPerTurn = (m) => (inOvertime(m) ? 1 : DARTS_PER_TURN);
 /** The last turn of an equal-turns match is over without a finish: the first player has won. The
  *  event stays what it was ('bust' or 'end'), with `m.winner` set, so the screen still says BUST. */
 function lastTurnOver(m) {
@@ -126,6 +150,9 @@ function cricketCounts(m, seat, i) {
  *    'win'    x01: exactly zero. Cricket: every number closed and at least as many points.
  *             `m.winner` is the seat that won, or DRAW
  *    'out'    (equal turns) the first player finished: the turn is over, the other gets a last one
+ *    'tie'    (overtime matches) the last turn tied it: the turn is over and overtime begins
+ *             (call nextTurn; `m.bo` is set). In overtime every turn is one dart, and the result
+ *             carries `ot: { d, again }` (its distance from the bull; `again` when level)
  *  A 'bust' or 'end' that closes an equal-turns last turn also sets `m.winner` (the first player):
  *  the match is over, so do not call nextTurn.
  *  There is no double-out: any dart that lands exactly on zero wins.
@@ -133,6 +160,7 @@ function cricketCounts(m, seat, i) {
  *  scored, which is not the bed's value). */
 export function throwDart(m, x, y) {
   if (m.winner != null) return { m, event: 'over', hit: null };
+  if (inOvertime(m)) return throwOvertime(m, x, y);
   if (isCricket(m.kind)) return throwCricket(m, x, y);
   const hit = scoreAt(x, y);
   m.darts.push({ x, y, pts: hit.pts, ring: hit.ring });
@@ -197,6 +225,11 @@ export function validMatch(m) {
   if (m.winner != null && m.winner !== 0 && m.winner !== 1 && m.winner !== DRAW) return null;
   if (m.eq != null && m.eq !== true) return null;
   if (m.out != null && m.out !== 0 && m.out !== 1) return null;
+  if (m.ot != null && m.ot !== true) return null;
+  if (m.bo != null) {
+    const okBo = (b) => b === null || (b && Number.isFinite(b.x) && Number.isFinite(b.y) && Number.isFinite(b.d));
+    if (!m.ot || !Array.isArray(m.bo) || m.bo.length !== 2 || !m.bo.every(okBo) || m.darts.length > 1) return null;
+  }
   return m;
 }
 
@@ -251,7 +284,7 @@ export function chooseCricketTarget(m, diff) {
  *  for 301-style games just the points left. */
 export function computerThrow(state, diff, rnd = Math.random) {
   const tgt = typeof state === 'object' && state
-    ? (isCricket(state.kind) ? chooseCricketTarget(state, diff) : chooseTarget(state.scores[state.turn], diff))
+    ? (inOvertime(state) ? { num: 25, ring: 'bull' } : isCricket(state.kind) ? chooseCricketTarget(state, diff) : chooseTarget(state.scores[state.turn], diff))
     : chooseTarget(state, diff);
   const p = targetPoint(tgt.num, tgt.ring);
   const s = SPREAD[diff] || SPREAD.medium;
