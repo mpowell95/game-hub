@@ -18,7 +18,9 @@ export function createRenderer(canvas) {
   // `flip`: the pitch turned round (online, for the player on side b, who always sits at the BOTTOM).
   // A half-turn, not a mirror, so left and right stay true; the pitch itself is symmetric, so only
   // the pieces and the input need to know.
-  const r = { w: 0, h: 0, dpr: 1, s: 1, ox: 0, oy: 0, flip: false };
+  // `s0/ox0/oy0` is the fitted layout; `s/ox/oy` is what is drawn, which differs only while ui.js's
+  // edge zoom has the view pulled back (setCam).
+  const r = { w: 0, h: 0, dpr: 1, s: 1, ox: 0, oy: 0, s0: 1, ox0: 0, oy0: 0, box: null, flip: false };
 
   /** The canvas covers (cssW x cssH); the pitch is drawn inside `box` {x, y, w, h} (CSS px). */
   r.layout = (cssW, cssH, box) => {
@@ -26,11 +28,21 @@ export function createRenderer(canvas) {
     r.w = cssW; r.h = cssH;
     canvas.width = Math.round(cssW * r.dpr);
     canvas.height = Math.round(cssH * r.dpr);
-    r.s = Math.min(box.w / VIEW.w, box.h / VIEW.h);
-    r.ox = box.x + (box.w - VIEW.w * r.s) / 2 - VIEW.x0 * r.s;
-    r.oy = box.y + (box.h - VIEW.h * r.s) / 2 - VIEW.y0 * r.s;
+    r.s0 = r.s = Math.min(box.w / VIEW.w, box.h / VIEW.h);
+    r.ox0 = r.ox = box.x + (box.w - VIEW.w * r.s) / 2 - VIEW.x0 * r.s;
+    r.oy0 = r.oy = box.y + (box.h - VIEW.h * r.s) / 2 - VIEW.y0 * r.s;
+    r.box = box;
     r._pitch = null;
   };
+  /** The camera: the view zoomed out by k (<= 1) with the pitch's origin at (ox, oy) CSS px. */
+  r.setCam = (k, ox, oy) => {
+    const s = r.s0 * k;
+    if (s === r.s && ox === r.ox && oy === r.oy) return;
+    r.s = s; r.ox = ox; r.oy = oy;
+    r._pitchKey = '';
+  };
+  /** Pitch units -> CSS px in the fitted layout, whatever the camera is doing. */
+  r.toPxBase = (x, y) => (r.flip ? { x: r.ox0 + (W - x) * r.s0, y: r.oy0 + (H - y) * r.s0 } : { x: r.ox0 + x * r.s0, y: r.oy0 + y * r.s0 });
   /** CSS px -> pitch units, and back. */
   r.toPitch = (px, py) => {
     const x = (px - r.ox) / r.s, y = (py - r.oy) / r.s;
@@ -40,10 +52,11 @@ export function createRenderer(canvas) {
   /** The pitch's on-screen rectangle (CSS px), goals excluded. */
   r.pitchRect = () => ({ x: r.ox, y: r.oy, w: W * r.s, h: H * r.s });
 
-  // The static pitch is drawn once per size into an offscreen canvas.
+  // The static pitch is drawn once per size (and per camera) into an offscreen canvas.
   function pitchLayer() {
-    if (r._pitch) return r._pitch;
-    const c = document.createElement('canvas');
+    const key = r.s + ',' + r.ox + ',' + r.oy;
+    if (r._pitch && r._pitchKey === key) return r._pitch;
+    const c = r._pitch || document.createElement('canvas');
     c.width = canvas.width; c.height = canvas.height;
     const g = c.getContext('2d');
     g.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
@@ -96,6 +109,7 @@ export function createRenderer(canvas) {
       for (const x of [GX0, GX1]) { g.beginPath(); g.arc(x, y, 1.1, 0, Math.PI * 2); g.fill(); }
     }
     r._pitch = c;
+    r._pitchKey = key;
     return c;
   }
 

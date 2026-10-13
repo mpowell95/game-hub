@@ -137,6 +137,22 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   in a goal mouth, longer the harder the pull. It is a guide for the eye, not a prediction: no spin,
   friction or follow-through, and it is never on the physics path. The computer's own aim (and a
   replayed online flick) always draws its arrow, so you can see what it did.
+- **The edge zoom (2026-10-13)**, Matt (with a screen recording of a red disc on the left edge he
+  could not pull back to full strength): *"If a player/tile/piece thing is too close to the edge of
+  the phone, it's impossible to pull back far enough to achieve full power. Other games achieve this
+  by zooming out slightly"*. Measured before the fix at 402x874: a disc on a side wall maxed out at
+  22-27% pulling sideways, ~50-70% pulling diagonally, and a keeper pulled straight back ~65%.
+  `_edgeZoom` in `ui.js`: when the finger is pressed within `EDGE_BAND` (36px) of a screen edge short
+  of full strength, the view zooms out (no further than `ZOOM_MIN`, 0.6) just enough that the FULL
+  pull in that direction lands `EDGE_M` (12px) inside the screen (the bottom edge also clears the
+  home bar). It zooms about the point where the line from the full pull through the disc leaves the
+  pitch's box, so the aim keeps its direction while the disc slides away from the finger (the ring
+  fills as it does), and the whole pitch stays inside its box. It never zooms back in mid-drag, and
+  `_camTick` eases back to the fitted layout once the finger lifts (instantly under reduced motion).
+  **Strength is still pitch units (`PULL_MAX`)**, so every flick is as strong as before and online
+  replays are untouched; the camera is pixels only (`render.js` `setCam`, `s0/ox0/oy0` is the
+  fitted layout). Measured after: 100% in every one of those cases, zoom 0.80-0.93 at 402 wide, and
+  no zoom at all for a disc away from the edges.
 - **Teams carry a SHAPE as well as a colour** (colourblind rule): blue discs a white triangle, red
   discs a white square, and the same chips sit on the scoreboard and the result line.
 - **Whose turn** is shown three ways: the scoreboard side gets an accent border and underline bar,
