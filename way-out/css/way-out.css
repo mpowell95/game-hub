@@ -301,7 +301,7 @@
 }
 .wo-root .wo-banner.is-on { visibility: visible; animation: wo-wash 1.65s ease-in-out forwards; }
 .wo-root .wo-banner.is-on span { animation: wo-slide 1.65s cubic-bezier(.2, .8, .3, 1) forwards; }
-/* The level's time and score under the win word (2026-10-13). */
+/* The level's time (penalties in) under the win word (2026-10-13). */
 .wo-root .wo-banner b {
   font-size: 22px;
   font-weight: 800;

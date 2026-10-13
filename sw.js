@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1118';
+const CACHE = 'game-hub-v1119';
 
 const ASSETS = [
   './',
@@ -96,7 +96,7 @@ const ASSETS = [
   './js/hidden-players.js',
   './js/leaderboard-ui.js',
   './js/leaderboard-rank.js',
-  './js/wayout-score.js',
+  './js/arrow-maze-time.js',
   './js/difficulty-tiers.js',
   './js/net.js',
   './js/online-gate.js',
@@ -690,7 +690,7 @@ const NETWORK_FIRST = [
   // it costs nothing at launch (the leaderboard is lazily imported).
   './js/leaderboard-rank.js',
   // Arrow Maze's score (2026-10-13): what is stored, merged and SHOWN for every timed level.
-  './js/wayout-score.js',
+  './js/arrow-maze-time.js',
   './js/admin-ui.js',
   // Retired, lazily loaded, and it clears `gamehub.challenge` on its tester-only reset path. Free
   // to keep fresh (nothing imports it at load) and it is a gamehub.* write, so the structural
@@ -802,10 +802,10 @@ const REST_MANIFEST = {
   './murdoku/js/strings.js': 'e744e28e32',
   './way-out/': 'dc6c9178ea',
   './way-out/index.html': 'dc6c9178ea',
-  './way-out/css/way-out.css': 'dda0fc6ec6',
-  './way-out/js/ui.js': '3465f79dfe',
+  './way-out/css/way-out.css': '4f1072faec',
+  './way-out/js/ui.js': 'dc585162d6',
   './way-out/js/engine.js': '775afc876c',
-  './way-out/js/strings.js': '37d7c90082',
+  './way-out/js/strings.js': '06e49ce555',
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
   './flick-soccer/css/flick-soccer.css': 'b4a306008b',

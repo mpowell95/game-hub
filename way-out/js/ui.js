@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut } from '../../js/game-stats.js';
-import { woMistakeMs, woHintMs, woFinishScore, woClock } from '../../js/wayout-score.js';
+import { woMistakeMs, woHintMs, woClock } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, buildLevel, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -542,7 +542,7 @@ class WayOut {
 
   // --- the clock ------------------------------------------------------------------------------------
   // Runs only while a level is on screen, unfinished, and the app is in front. Shown with penalties
-  // already added, so the number on screen is the number that is scored.
+  // already added, so the number on screen is the number that is recorded.
 
   _clockMs() {
     if (!this.clock) return 0;
@@ -843,7 +843,7 @@ class WayOut {
       }
     }
     // Record once, then move the player on (the level number only ever goes up). The clock stops
-    // at the last arrow; the time and the board's size go to the score (js/wayout-score.js).
+    // at the last arrow; its time (penalties in) is recorded with the finish.
     this._clockPause();
     const c = this.clock || { ms: 0, pen: 0, mistakes: 0, hints: 0, partial: true };
     const fin = { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds, mistakes: c.mistakes, hints: c.hints, timed: !c.partial };
@@ -853,9 +853,8 @@ class WayOut {
       console.error('[way-out] recordWayOut failed - the level was NOT recorded', err);
     }
     this._paintClock();
-    // Shown under the win word: the time (penalties in) and, when timed, this level's score.
-    this.winSub = woClock(c.ms + c.pen) + (fin.timed
-      ? ` \u00b7 ${t('score_n', { n: Math.round(woFinishScore({ t: c.ms + c.pen, a: fin.arrows, r: fin.rounds })) })}` : '');
+    // Shown under the win word: the level's time, penalties in.
+    this.winSub = woClock(c.ms + c.pen);
     writeClock(this.tier, null);
     this.clock = null;
     clearSave(this.tier);

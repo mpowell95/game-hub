@@ -22,7 +22,6 @@ import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
 import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
-import { woRating } from './wayout-score.js';
 
 const t = makeT(STRINGS);
 
@@ -381,29 +380,24 @@ function murdokuScreen(rec, titleKey = 'game_title_murdoku') {
     </table>`;
 }
 
-/** Arrow Maze (2026-10-13): levels solved, as Murdoku's screen shows them, plus the timed score
- *  per difficulty (js/wayout-score.js). Levels cleared before the timer count as solved and have
- *  no score, so a difficulty with solves but no timed level shows a dash, never a 0. */
+/** Arrow Maze (2026-10-13): levels solved, as Murdoku's screen shows them, plus how many of them
+ *  were timed, per difficulty. */
 function wayoutScreen(rec) {
   const solved = ((rec && rec.total) || {}).won | 0;
   if (!solved) return emptyState(t('game_title_wayout'));
   const byDiff = rec.byDiff || {};
-  const wo = (rec && rec.wo) || {};
-  const timed = wo.timed || {};
-  const rows = SD_DIFFS.map(([k, labelKey]) => {
-    const score = woRating(wo, k);
-    return `<tr><th scope="row">${t(labelKey)}</th><td>${((byDiff[k] || {}).won) | 0}</td><td>${timed[k] | 0}</td><td>${score === null ? '&mdash;' : score}</td></tr>`;
-  }).join('');
+  const timed = ((rec && rec.wo) || {}).timed || {};
+  const rows = SD_DIFFS.map(([k, labelKey]) =>
+    `<tr><th scope="row">${t(labelKey)}</th><td>${((byDiff[k] || {}).won) | 0}</td><td>${timed[k] | 0}</td></tr>`).join('');
   return `
     <div class="gs-tallies">
-      <div class="gs-tally"><b>${solved}</b><span>${t('gs_mk_solved')}</span></div>
+      <div class="gs-tally"><b>${solved}</b><span>${t('lb_tex_wo_cleared')}</span></div>
     </div>
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">${t('gs_pi_solved')}</th><th scope="col">${t('gs_wo_timed')}</th><th scope="col">${t('gs_wo_score')}</th></tr></thead>
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_cleared')}</th><th scope="col">${t('gs_wo_timed')}</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>
-    <p class="gs-note">${t('gs_wo_note')}</p>`;
+    </table>`;
 }
 
 /** Contexto: one finished puzzle per play; a give-up is a loss. Average guesses is computed here
@@ -1770,8 +1764,6 @@ function ensureCss() {
     '.gs-sk-k{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;opacity:.72}',
     '.gs-sk-hero-a b,.gs-sk-hero-b b{display:block;font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.035em;line-height:1;margin-top:5px}',
     '.gs-sk-note{display:block;font-size:11px;opacity:.7;margin-top:5px;line-height:1.3;overflow-wrap:anywhere}',
-    // Arrow Maze's one-line explanation of its score, under its table (2026-10-13).
-    '.gs-note{font-size:13px;opacity:.75;margin:10px 2px 0;line-height:1.35}',
     // A SUB-LABEL, not a second heading. The lifetime block is three even rows under one heading;
     // this names the middle one without competing with it (h4 is 15px ink, this is 11px muted).
     '.gs-sk-sub{margin:11px 0 -2px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--hub-muted,#5b6b82)}',

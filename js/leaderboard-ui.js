@@ -58,7 +58,7 @@ import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, com
   boardRankTier, formatBoardMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
-import { WO_TIERS, woRating } from './wayout-score.js';
+import { WO_TIERS } from './arrow-maze-time.js';
 import { loadFavorites } from './favorites.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
@@ -436,21 +436,6 @@ function msBestAt(g, tier) {
   return v > 0 ? v : null;
 }
 
-/** Arrow Maze (2026-10-13): the player's score at this tier in arrows per minute, their best 10 of
- *  their last 15 (js/wayout-score.js), or null when they have no timed finish there. With no tier, the score at
- *  the hardest tier they have one - the same "their own number" fallback every board uses. Levels
- *  cleared before the timer have no score; they still count in plays, My Stats and the tiles. */
-function woAt(g, tier) {
-  const wo = (g.games.wayout || {}).wo;
-  if (!wo) return null;
-  if (tier == null) {
-    for (let i = WO_TIERS.length - 1; i >= 0; i--) { const v = woRating(wo, WO_TIERS[i]); if (v !== null) return v; }
-    return null;
-  }
-  const key = WO_TIERS[tier - 1];
-  return key ? woRating(wo, key) : null;
-}
-
 function snBestAt(g, tier) {
   const sn = (g.games.snake || {}).sn;
   if (!sn) return 0;
@@ -598,8 +583,6 @@ function gameMetricAt(g, id, tier) {
   // so a fast Expert clear outranks a faster Easy one (Matt, 2026-09-21: "the fastest time to
   // clear the highest level of difficulty").
   if (id === 'minesweeper') return msBestAt(g, tier);
-  // Arrow Maze: the timed score, HIGHER WINS, tier first like every board (2026-10-13).
-  if (id === 'wayout') return woAt(g, tier);
   if (id === 'holdem') return hbBankOf(g);
   return winsAtTier(g, [id], tier);
 }
@@ -634,8 +617,6 @@ function lbUnitKeyOf(id) {
   // Same split as golf: this BOARD ranks on a best time, while My Stats' game list still leads
   // with boards cleared, which is the right headline for a list of every game you have played.
   if (id === 'minesweeper') return 'lb_unit_ms_best';
-  // Same split: this board ranks the timed score; My Stats' list still leads with levels solved.
-  if (id === 'wayout') return 'lb_unit_wo_score';
   // Same split: this board ranks medals; My Stats' list still leads with every solve.
   if (id === 'contexto') return 'lb_unit_ct_medals';
   if (id === 'holdem') return 'lb_unit_bank';
@@ -809,8 +790,6 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_golf_best: 'lb_sort_golf_best',
   // Minesweeper ranks on a best time, not on how many boards were cleared.
   lb_unit_ms_best: 'lb_sort_ms_best',
-  // Arrow Maze ranks on its timed score.
-  lb_unit_wo_score: 'lb_sort_wo_score',
   // Contexto ranks on medals.
   lb_unit_ct_medals: 'lb_sort_ct_medals',
   // Texas Hold'em ranks on the bankroll.
@@ -1847,7 +1826,6 @@ function gameDetail(list, id) {
   const notes = [];
   if (byMetric && _tier == null && rows.some((g) => boardTierOf(g, id) != null)) notes.push(tx('lb_note_tier', 'Ranked by hardest difficulty first, then score.'));
   if (byMetric && LOWER_IS_BETTER.has(id)) notes.push(tx('lb_note_low', 'Lowest score wins.'));
-  if (byMetric && id === 'wayout') notes.push(tx('lb_note_wo', 'Score: arrows cleared per minute (mistakes and hints add time), averaged over your best 10 of your last 15 levels.'));
   if (rows.some((g) => tiedAt(g.key))) notes.push(tx('lb_note_tie', 'T = tied.'));
   const note = notes.length ? `<p class="lb-note">${esc(notes.join(' '))}</p>` : '';
   return head + controls + note + cardsHtml + recordsHTML(list, id);
