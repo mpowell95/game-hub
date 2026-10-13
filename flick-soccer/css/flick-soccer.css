@@ -186,6 +186,7 @@
   color: #fff;
 }
 .fs-root .fs-banner span:empty { display: none; }
+.fs-root .fs-banner.is-long b { font-size: 40px; }
 .fs-root .fs-banner.is-show { animation: fs-banner 1.6s ease-out forwards; }
 @keyframes fs-banner {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }

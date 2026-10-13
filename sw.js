@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1101';
+const CACHE = 'game-hub-v1102';
 
 const ASSETS = [
   './',
@@ -801,12 +801,12 @@ const REST_MANIFEST = {
   './way-out/js/strings.js': 'c5e9056572',
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
-  './flick-soccer/css/flick-soccer.css': 'b6af8a09b5',
-  './flick-soccer/js/ui.js': '65ef9291f8',
+  './flick-soccer/css/flick-soccer.css': '2a309ecaab',
+  './flick-soccer/js/ui.js': '3a39462721',
   './flick-soccer/js/engine.js': 'a44800e5fa',
   './flick-soccer/js/ai.js': 'c7ff2b0f5b',
   './flick-soccer/js/render.js': 'ae4ec55d78',
-  './flick-soccer/js/strings.js': '9692b6197c',
+  './flick-soccer/js/strings.js': '3e59991477',
   './flick-soccer/js/mp.js': 'a7960bed16',
   './flick-soccer/js/mp-ui.js': '478f79bc12',
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
