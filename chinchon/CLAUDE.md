@@ -448,3 +448,10 @@ Matt: *"chinchon next, same approach"* (as Texas Hold'em, Monopoly Deal and Uno 
   the test), nothing left hidden at rest, no errors; `chinchon/js/test.js`,
   `test-mp-lockstep.mjs`, `test-i18n-strings.mjs`, `test-game-conventions.mjs`,
   `check-no-scroll.mjs chinchon`. Not yet by eye on a phone, and not yet in a real online match.
+
+## The setup screen on a 360-wide phone (2026-10-13)
+
+In the hub at 360x804 (Unai's Android) the page stood 12px over: at that width "Host online" and
+"Closing rules" wrap, and the trims above were scoped to `max-height: 760px`, which an 804px screen
+never reaches. The same block now also applies at `max-width: 380px`; nothing else changed.
+`check-no-scroll.mjs` measures both 360-wide sizes now.

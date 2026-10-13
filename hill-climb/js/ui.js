@@ -288,9 +288,9 @@ class HillClimb {
     };
     return `<p class="hc-intro">${esc(t('shop_intro'))}</p>
       ${vehRows.length ? `<h4 class="hc-shoph">${esc(t('shop_vehicles'))}</h4>
-        ${vehRows.map((v) => row(esc(t(v.nameKey)), v.price, `data-buy-veh="${v.id}"`)).join('')}` : ''}
+        <div class="hc-shopgrid">${vehRows.map((v) => row(esc(t(v.nameKey)), v.price, `data-buy-veh="${v.id}"`)).join('')}</div>` : ''}
       ${stRows.length ? `<h4 class="hc-shoph">${esc(t('shop_stages'))}</h4>
-        ${stRows.map((st) => row(esc(t(st.nameKey)), st.price, `data-buy-stage="${st.id}"`)).join('')}` : ''}`;
+        <div class="hc-shopgrid">${stRows.map((st) => row(esc(t(st.nameKey)), st.price, `data-buy-stage="${st.id}"`)).join('')}</div>` : ''}`;
   }
 
   helpHTML() {
