@@ -133,13 +133,18 @@ function candidatePlacements(shots, lengths, hits) {
   return targeted.length ? targeted : all;
 }
 
-function densityMap(shots, placements) {
+function densityMap(shots, placements, hitSet) {
   const density = new Map();
   for (const cells of placements) {
+    // Target mode: a placement explaining TWO of the live hits is far likelier than one explaining
+    // one, so weight by hits covered, squared. Lines get finished instead of probed sideways
+    // (measured: about one shot a game better on 10x10).
+    let w = 1;
+    if (hitSet) { let k = 0; for (const [r, c] of cells) if (hitSet.has(`${r},${c}`)) k++; w = k ? k * k : 1; }
     for (const [r, c] of cells) {
       if (cellAt(shots, r, c) !== CELL_UNKNOWN) continue;
       const key = `${r},${c}`;
-      density.set(key, (density.get(key) || 0) + 1);
+      density.set(key, (density.get(key) || 0) + w);
     }
   }
   return density;
@@ -150,7 +155,7 @@ function choosePro(shots, lengths, rng) {
   if (!untried.length) return null;
   const hits = activeHitCells(shots);
   const placements = candidatePlacements(shots, lengths, hits);
-  const density = densityMap(shots, placements);
+  const density = densityMap(shots, placements, hits.length ? new Set(hits.map(([r, c]) => `${r},${c}`)) : null);
 
   // Parity pruning for the shortest remaining ship, PURE-HUNT MODE ONLY (no active hits): any
   // ship of length >= 2 must occupy at least one cell of each checkerboard color, so restricting

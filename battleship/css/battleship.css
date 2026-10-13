@@ -152,6 +152,9 @@
 /* --- screen 1: the mode screen ---------------------------------------------------------------- */
 
 .bs-mode { display: grid; gap: 10px; }
+/* the card rides UP over the header panel (margin-top below), so the panel needs that much room
+   under its tagline -- without it the card sat on top of the second half of the sentence */
+.bs-mode .bs-headerpanel { padding-bottom: 34px; }
 .bs-modecard {
   background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 18px;
   padding: 16px 16px 12px; display: grid; gap: 10px; justify-items: center;
@@ -224,6 +227,7 @@
 @media (max-height: 760px) {
   .hub-main .bs-root .bs-shell { padding: 6px 10px 8px; gap: 8px; }
   .hub-main .bs-root .bs-headerpanel { padding: 10px 16px; gap: 4px; }
+  .hub-main .bs-root .bs-mode .bs-headerpanel { padding-bottom: 26px; }
   .hub-main .bs-root .bs-title { font-size: 1.15rem; }
   .hub-main .bs-root .bs-modecard { padding: 10px 14px 8px; gap: 7px; margin-top: -20px; }
   .hub-main .bs-root .bs-avatar { width: 52px; height: 52px; font-size: 1.6rem; border-width: 2px; }
@@ -297,6 +301,10 @@
    not the drag source, so it opts out of the fixed height that keeps the deploy board still */
 .bs-tray-loose { height: auto; flex-wrap: wrap; gap: 10px; overflow: visible; }
 .bs-tray-loose .bs-trayship { background: none; }
+/* ...and its chips keep the width the markup gives them. They inherited the deploy tray's
+   `flex: 0 1 0`, which only works with the flex-grow that tray sets inline -- without it every
+   chip resolved to zero and the bot's fleet was an empty pill. */
+.bs-tray-loose .bs-trayship { flex: none; }
 
 /* the wordless header controls (exit / clear / help). Same thumb target as a pill, no label. */
 .bs-iconbtn {
@@ -307,6 +315,13 @@
   touch-action: manipulation; box-shadow: 0 2px 6px rgba(10, 20, 40, .28);
 }
 .bs-ico { width: 19px; height: 19px; display: block; }
+/* 44px TAP TARGETS without 44px discs (the UX floor). The header row has no room to grow and the
+   battle screen's fit is measured to the pixel, so the discs keep their drawn size and an invisible
+   ring around each one takes the rest of the touch. */
+.bs-iconbtn { position: relative; }
+.bs-iconbtn::after, .bs-x::after { content: ''; position: absolute; inset: -3px; border-radius: 999px; }
+.bs-iconbtn-sm::after { inset: -6px; }
+.bs-x::after { inset: -5px; }
 /* Text that exists only for a screen reader / the aria-live region. Never `display:none` -- that
    removes it from the accessibility tree too, which is the opposite of the point. */
 .bs-sr {
@@ -477,7 +492,7 @@
 .bs-firebtn {
   appearance: none; cursor: pointer; border: 0; border-radius: 999px; font: inherit;
   background: var(--bs-hit); color: #fff; font-weight: 900; letter-spacing: .1em;
-  text-transform: uppercase; font-size: .92rem; padding: 10px 26px;
+  text-transform: uppercase; font-size: .92rem; padding: 0 26px; height: 44px;
   display: inline-flex; align-items: center; gap: 8px; touch-action: manipulation;
   /* the pulse is a GLOW, never a scale: a button that keeps changing size is a button whose edge
      keeps moving out from under a thumb that is already on its way down */
@@ -488,7 +503,11 @@
   0%, 100% { box-shadow: 0 3px 0 rgba(0, 0, 0, .28), 0 0 0 0 rgba(224, 83, 47, .55); }
   60% { box-shadow: 0 3px 0 rgba(0, 0, 0, .28), 0 0 0 9px rgba(224, 83, 47, 0); }
 }
-.bs-board.bs-target .bs-cell:not(:disabled):hover { outline: 1px solid var(--bs-gold); outline-offset: -1px; }
+/* Pointer devices only. On a phone :hover STICKS to the last square touched, so a gold box was left
+   sitting on a square nobody had aimed at -- right next to the real gold aim marker. */
+@media (hover: hover) {
+  .bs-board.bs-target .bs-cell:not(:disabled):hover { outline: 1px solid var(--bs-gold); outline-offset: -1px; }
+}
 /* Whose turn it is: the OTHER board is washed out in the colour of the water/deck around it, the
    way the reference dims the half of the screen that isn't being fought over. A wash, not a gold
    ring -- and it sits UNDER the cannon (z-index 4 vs 7), so the gun on a quiet board still reads
@@ -560,14 +579,19 @@
 }
 .bs-roster-silhouette { display: block; height: 16px; }
 
-.bs-actions { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+/* FIXED HEIGHT: FIRE is taller than the shot counter it replaces, and the boards are fitted to
+   whatever this row measures -- so a row that grew when you aimed shrank both boards under your
+   thumb on every aim. */
+.bs-actions { display: flex; gap: 16px; justify-content: center; align-items: center; flex-wrap: nowrap; height: 44px; }
 /* the battle screen's own smaller icon discs (help / restart) */
 .bs-iconbtn-sm { width: 32px; height: 32px; }
 .bs-iconbtn-sm .bs-ico { width: 17px; height: 17px; }
-.bs-iconbtn.is-confirm {
+/* armed, waiting for the confirming tap. A GLOW, never a scale (docs/BUILDING-A-GAME.md, the UX
+   floor): this is the one button the thumb is already on its way back to. */
+.bs-iconbtn.is-confirm, .bs-exitdisc.is-confirm {
   background: var(--bs-invalid); color: #fff; animation: bs-confirm-pulse .9s ease-in-out infinite;
 }
-@keyframes bs-confirm-pulse { 50% { transform: scale(1.12); } }
+@keyframes bs-confirm-pulse { 50% { box-shadow: 0 0 0 7px rgba(224, 83, 47, .35), 0 2px 8px rgba(10, 20, 40, .3); } }
 .bs-shell-battle .bs-btn-small { padding: 4px 10px; font-size: .72rem; }
 
 /* The overlay the cannonball flies across. It spans BOTH boards -- the whole point of the shot is
@@ -791,6 +815,13 @@
 .bs-card-title { margin: 0; font-size: 1.2rem; font-weight: 900; }
 .bs-card-sub { margin: 0; color: var(--bs-muted); font-size: .85rem; font-weight: 700; }
 .bs-card-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+.bs-card-stats {
+  margin: 0; display: flex; gap: 14px; justify-content: center; align-items: center;
+  font-size: .95rem; font-weight: 900; color: var(--bs-ink);
+}
+.bs-card-stats span { display: inline-flex; align-items: center; gap: 5px; }
+.bs-card-stats .bs-ico { width: 17px; height: 17px; }
+.bs-card-stats-acc { color: var(--bs-muted); }
 .bs-card-wait { margin: 0; color: var(--bs-muted); font-size: .85rem; font-weight: 700; }
 
 .bs-help-lines { display: grid; gap: 6px; text-align: left; width: 100%; }
@@ -835,6 +866,7 @@
   .bs-board-enemy .bs-cell::before,
   .bs-trayship.is-spinning .bs-trayship-art,
   .bs-iconbtn.is-confirm,
+  .bs-exitdisc.is-confirm,
   .bs-board.bs-shake,
   .bs-wait-dots {
     animation: none !important;

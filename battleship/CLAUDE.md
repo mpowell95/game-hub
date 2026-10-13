@@ -920,3 +920,45 @@ Worth noting for the next time this screen grows: the three OPTION chips ("Board
 "First shot: Alternate", "Bonus shot: Off") each take a line of their own at phone width, so they
 are 102px of the screen for three settings. Making them fit two-across would be the next 36px, and
 it needs shorter labels rather than a smaller font - they are already at .72rem.
+
+## Review and bug pass (2026-10-13)
+
+Matt: *"Test and review battleship. Graphics and gameplay. Improve it... Find bugs. Fix them."*
+Played end to end in a real browser (390x844, touch). What was wrong, and the fix:
+
+- **Restart during the bot's turn brought the old battle back.** `startGame()` never cancelled the
+  bot's two-beat shot timer or the settle timer, and never cleared `this.state`, so a second after
+  Restart the old battle repainted over the fresh deploy screen and the bot shot at it.
+  `_stopGameTimers()` now stops every per-game timer (`aiTimer`, `_settleTimer`, `_bannerTimer`,
+  `_botPlaceTimer`, `_endTimer`) and is called from `startGame`, `renderSetup` and
+  `_mpApplyPlacementRound`. **Any new per-game timer goes in that list.**
+- **The bot's fleet was invisible on "Bot is placing ships".** `.bs-tray-loose` chips inherited the
+  deploy tray's `flex: 0 1 0`, which relies on an inline `flex-grow` the loose tray does not set, so
+  every chip was 0px wide. `flex: none` on the loose tray.
+- **Tapping a square near the edge did nothing.** Tap-to-place used the tapped square as the ship's
+  start with no clamp, so a carrier tapped in the last columns was refused silently (and
+  `_placeInvalid` was stored but never drawn). A tap now clamps onto the board like a drag
+  (`_anchorFor(..., 0)`), and a refused tap (overlap) leaves its dashed red ghost on the board.
+- **The aim crosshair carried into the next game**, with FIRE already up on turn one. `_aimCell` is
+  cleared whenever a battle starts, resumes, or the setup screen opens.
+- **The win/lose card covered the winning shot.** It went up the instant the state said "over", over
+  the ball still in the air and the final sink. `finish()` writes the stats immediately (unchanged)
+  and holds only the CARD back by `_shotSettleMs` (`_endTimer`). The card now also shows your shots
+  and accuracy for the game.
+- **Exit (✕) threw a game away on one tap**, and Restart's two-tap guard rarely worked: the armed
+  flag lived on the button, and the battle re-renders every time a shot settles, so the confirming
+  tap usually just armed a fresh button. The armed state is on the instance now (`this._armed`,
+  drawn by `_armedBtn`), and Exit takes two taps mid-battle like Restart (in MP too, since it ends
+  the match for the other player). The armed pulse is a glow, not a scale (UX floor).
+- **Sticky hover**: a phone leaves `:hover` on the last square touched, which drew a gold box on the
+  enemy board next to the real gold aim. The hover outline is `@media (hover: hover)` only.
+- **The mode screen's card covered the tagline** ("...before they sink yours."). The header panel
+  has room under it now; `check-no-scroll.mjs battleship` still fits all four screens.
+- **Tap targets**: the battle screen's help/restart discs were 32px and the deploy row's 38px. The
+  discs keep their drawn size; an invisible `::after` ring makes each touch target 44px.
+- **The boards shrank when you aimed.** FIRE is taller than the shot counter it replaces and the
+  boards are fitted to the actions row, so every aim resized both boards. `.bs-actions` has a fixed
+  44px height.
+- **Hard (Pro) AI**: target-mode placements are weighted by how many live hits they cover, squared,
+  so it finishes a line instead of probing sideways. Measured over 300 games: 46.2 -> 45.2 shots on
+  10x10, 30.2 -> 29.8 on 8x8. Easy ~71 and Medium ~60 on 10x10 are unchanged.
