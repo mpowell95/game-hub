@@ -23,6 +23,7 @@ const S = await import('./js/wayout-score.js');
 const G = await import('./js/game-stats.js');
 
 // --- the maths ---
+ok('15 recent, best 10 count', S.WO_RECENT === 15 && S.WO_RUN === 10);
 ok('par: arrows and rounds', S.woParMs(40, 10) === 40 * 1500 + 10 * 2500);
 ok('a finish at par scores 100', Math.round(S.woFinishScore({ t: 85000, a: 40, r: 10 })) === 100);
 ok('twice as fast as par scores 200', Math.round(S.woFinishScore({ t: 42500, a: 40, r: 10 })) === 200);
@@ -58,13 +59,24 @@ ok('an untimed level counts as solved, adds no score', g.total.won === 4 && g.wo
 G.recordWayOut('hard', { timeMs: 170000, penaltyMs: 0, arrows: 40, rounds: 10, timed: true });   // score 50
 g = G.loadStats().games.wayout;
 ok('a slow level joins recent', g.wo.recent.hard.length === 2);
-ok('...but the best run never gets worse (rule 2)', S.woRating(g.wo, 'hard') === 100 && g.wo.best.hard.length === 1);
+// recent [100, 50] -> best 10 of them, the other 8 as par: (150 + 800)/10 = 95
+ok('under 10 levels, a slow one counts (nothing to drop yet)', S.woRating(g.wo, 'hard') === 95);
+ok('...but the stored best 10-in-a-row run never gets worse (rule 2)', S.woRunScore(g.wo.best.hard) === 100);
 
 for (let i = 0; i < 3; i++) G.recordWayOut('hard', { timeMs: 42500, penaltyMs: 0, arrows: 40, rounds: 10, timed: true });
 g = G.loadStats().games.wayout;
-// recent = [100, 50, 200, 200, 200] -> (750 + 5*100)/10 = 125
-ok('a better run replaces the best', S.woRating(g.wo, 'hard') === 125 && g.wo.best.hard.length === 5);
+// recent [100, 50, 200, 200, 200] -> (750 + 500)/10 = 125
+ok('fast levels lift the score', S.woRating(g.wo, 'hard') === 125);
 ok('tiers are separate', S.woRating(g.wo, 'easy') === null);
+
+// Matt: "I don't want to penalize someone who puts the phone down mid play." 10 at par and 5
+// distracted ones: the 5 are dropped, the score stays 100.
+const par = { t: 85000, a: 40, r: 10 }, slow = { t: 425000, a: 40, r: 10 };   // slow = 20
+ok('best 10 of the last 15: five bad levels are dropped', Math.round(S.woFormScore([...Array(10).fill(par), ...Array(5).fill(slow)])) === 100);
+ok('...a sixth bad one is not', Math.round(S.woFormScore([...Array(9).fill(par), ...Array(6).fill(slow)])) === 92);
+ok('only the last 15 count', Math.round(S.woFormScore([...Array(5).fill(slow), ...Array(15).fill(par)])) === 100);
+for (let i = 0; i < 20; i++) G.recordWayOut('medium', { timeMs: 85000, penaltyMs: 0, arrows: 40, rounds: 10, timed: true });
+ok('recent keeps the last 15', G.loadStats().games.wayout.wo.recent.medium.length === 15);
 
 console.log(`\nArrow Maze score tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

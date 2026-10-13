@@ -226,9 +226,10 @@ export function aggregatePlayers(all, corrections) {
       } else if (g === 'wayout' && src.wo) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it Arrow Maze's
         // timed score reads as nothing the moment a second device syncs (THE LAW rule 1). Counters
-        // add. A RUN cannot be added across devices (each phone's finishes are its own sequence),
-        // so per difficulty the person keeps the best-scoring run any of their devices holds, and
-        // the recent list of the device with the most timed finishes there (js/wayout-score.js).
+        // add. Finish lists cannot be added across devices (each phone's are its own sequence), so
+        // per difficulty the person keeps the recent list (what the score is ranked on: best 10 of
+        // the last 15) of the device with the most timed finishes there, and the best-scoring
+        // 10-in-a-row run any device holds (js/wayout-score.js).
         if (!dst.wo) dst.wo = { timed: {}, mistakes: 0, hints: 0, recent: {}, best: {}, _n: {} };
         dst.wo.mistakes += src.wo.mistakes | 0;
         dst.wo.hints += src.wo.hints | 0;
