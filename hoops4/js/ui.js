@@ -485,11 +485,11 @@ class Hoops4 {
 
   /** The multiplayer sheet: host or join a live game, or hand a turn-by-turn match over.
    *  Lazily imported so a solo player never downloads it. */
-  async showMultiplayer() {
+  async showMultiplayer(flash = '') {
     try {
       const mod = await import('./mp-ui.js');
       if (this.disposed) return;
-      mod.openMultiplayer(this);
+      mod.openMultiplayer(this, { flash });
     } catch (err) {
       console.error('[hoops4] could not open multiplayer', err);
       this.toast(t('mpLost'));
@@ -531,6 +531,9 @@ class Hoops4 {
     if (this.disposed) return;
     const side = MP.sideOf(game, MP.myCode());
     if (!side) { this.renderSetup(); return; }
+    // Cancelled, declined or expired (2026-10-13): there is no board to show, and nothing to count.
+    const endText = this._endText(MP, game, side);
+    if (endText) { this.showMultiplayer(endText); return; }
     // `review` is a FINISHED match opened from the challenge history: a replay with its result
     // card, READ ONLY. Nobody may shoot in it (isMyShot) and nothing is recorded again - every
     // write in js/game-stats.js is additive, so re-recording on each look would inflate the
@@ -557,6 +560,37 @@ class Hoops4 {
     }
     MP.markShown(game.id, upto);
     this._afterOpen(game, review);
+  }
+
+  /** What to say about a match that ended with no result: called off by either side, or expired
+   *  unanswered (js/challenge-life.js). '' for a match that is neither. */
+  _endText(MP, game, side) {
+    if (!game || !MP) return '';
+    if (MP.lifeOf(game).expired) return t('mpExpired');
+    if (!MP.isCalledOff(game)) return '';
+    const why = game.over.why === 'declined' ? 'declined' : 'cancelled';
+    // A cancel is always the sender's, a decline always the receiver's.
+    const iSent = side !== MP.recipientOf(game);
+    const mine = why === 'cancelled' ? iSent : !iSent;
+    const them = side === 'a' ? game.b : game.a;
+    return t(mine ? (why === 'cancelled' ? 'mpYouCancelled' : 'mpYouDeclined') : (why === 'cancelled' ? 'mpTheyCancelled' : 'mpTheyDeclined'),
+      { who: (them && them.name) || '?' });
+  }
+  /** Leave the open match because it ended with no result (called off, or expired), saying so. */
+  _leaveNoResult(text) {
+    const mp = this.mp;
+    if (mp && mp.MP) { try { mp.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    if (this._gameStop) { try { this._gameStop(); } catch { /* detached */ } this._gameStop = null; }
+    this.recorded = true;                              // nothing to count, ever
+    this.teardownEngine();
+    this.showMultiplayer(text);
+  }
+
+  /** Resign, or CANCEL / DECLINE while the other person has not shot (2026-10-13). */
+  _quitKind() {
+    const mp = this.mp;
+    if (!mp || mp.kind !== 'async' || !mp.MP || !mp.game || !mp.MP.lifeOf(mp.game).open) return 'resign';
+    return mp.side === mp.MP.recipientOf(mp.game) ? 'decline' : 'cancel';
   }
 
   /** The rest of opening a turn-by-turn match, once the board shows everything that happened. */
@@ -593,6 +627,8 @@ class Hoops4 {
       theirs.push(e);
     }
     mp.game = g;
+    // Called off by the other person while this board was open (2026-10-13): nothing to count.
+    if (mp.MP.isCalledOff(g)) { this._leaveNoResult(this._endText(mp.MP, g, mp.side)); return; }
     // Their move arriving while you watch is shown the same way as on opening: flown, skippable.
     if (theirs.length && !m.over) {
       if (this._rp) { this._rp.q.push(...theirs); this._rp.upto = mp.applied; return; }
@@ -798,7 +834,10 @@ class Hoops4 {
       // SAYS SO - the first cut toasted "Sent. They play next." on top of the failure message a
       // line later, which is a silent write failure wearing a confirmation (THE LAW rule 6).
       if (r.retryable) { mp.MP.queueMove(mp.id, payload); this.toast(t('mpOffline')); }
-      else this.toast(t('mpUnavailable'));
+      else if (r.reason === 'expired') this._leaveNoResult(t('mpExpired'));
+      else if (r.reason === 'already-over' && mp.MP.isCalledOff(await mp.MP.readGame(mp.id).catch(() => null))) {
+        this._leaveNoResult(t('mpTheyCancelled', { who: this.themName() }));
+      } else this.toast(t('mpUnavailable'));
       return;
     }
     mp.game = r.game;
@@ -1170,7 +1209,7 @@ class Hoops4 {
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>
           ${this.mp ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="new">${t('newGame')}</button>`}
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="leave">${isAsync ? t('backMp') : t('backSetup')}</button>
-          ${isAsync && !(this.mp && this.mp.review) ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="quit">${t('mpQuitQ').replace('?', '').replace('\u00bf', '')}</button>` : ''}
+          ${isAsync && !(this.mp && this.mp.review) ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="quit">${this._quitKind() === 'resign' ? t('mpQuitQ').replace('?', '').replace('\u00bf', '') : t(this._quitKind() === 'cancel' ? 'mpCancelCh' : 'mpDeclineCh')}</button>` : ''}
         </div>
         <p class="h4-mp-note" data-role="qerr" hidden></p>
       </div>`;
@@ -1194,21 +1233,27 @@ class Hoops4 {
     // (the second tap says it counts as a loss). Nothing is deleted; the match ends for both.
     const qb = el.querySelector('[data-role="quit"]');
     if (qb) this.on(qb, 'click', async () => {
+      const kind = this._quitKind();
       if (!qb.dataset.armed) {
         qb.dataset.armed = '1';
         const g = this.mp && this.mp.game;
         const other = g ? (this.mp.side === 'a' ? g.b : g.a) : null;
-        qb.textContent = t('mpQuitYes') + ': ' + t('mpQuitBody', { who: (other && other.name) || '?' });
+        const who = (other && other.name) || '?';
+        qb.textContent = kind === 'resign' ? t('mpQuitYes') + ': ' + t('mpQuitBody', { who })
+          : t(kind === 'cancel' ? 'mpCancelCh' : 'mpDeclineCh') + ': ' + t('mpNobodyBody');
         return;
       }
       qb.disabled = true;
-      const res = await this.mp.MP.resignGame(this.mp.id);
+      const mp = this.mp;
+      const res = await mp.MP.resignGame(mp.id);
       if (!res || !res.ok) {
         qb.disabled = false;
         const e = el.querySelector('[data-role="qerr"]'); e.hidden = false; e.textContent = t('mpQuitFail');
         return;
       }
       if (el.parentNode) el.parentNode.removeChild(el);
+      // Nobody had shot back: it was called off, not lost. Say so.
+      if (res.cancelled) { this._leaveNoResult(this._endText(mp.MP, res.game, mp.side)); return; }
       this.teardownEngine();
       this.showMultiplayer();
     });
@@ -1606,7 +1651,10 @@ class Hoops4 {
         // A TURN-BY-TURN match: counted once per device through the ledger (mp.js), and scored
         // from the STORED winner when there is one - a resignation replays into an unfinished
         // board, whose m.winner would have scored the winner a loss.
-        if (this.mp && this.mp.kind === 'async') {
+        if (this.mp && this.mp.kind === 'async' && this.mp.game && this.mp.game.over && this.mp.game.over.winner === 'none') {
+          // Called off (js/challenge-life.js): counts for nobody. Never reached in practice (the
+          // board is left before this), and never allowed to score a loss if it is.
+        } else if (this.mp && this.mp.kind === 'async') {
           const g = this.mp.game || {};
           const won = g.over && (g.over.winner === 'a' || g.over.winner === 'b')
             ? g.over.winner === this.mp.side : m.winner === this.myPlayer;

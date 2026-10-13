@@ -752,11 +752,11 @@ class FlickSoccerUI {
       if (this._helpFrom === 'menu') { this.screen = 'menu'; this._showOnly('menu'); }
       else this._showSetup();
     }
-    else if (act === 'menu') { if (this.screen === 'play' || this.screen === 'resign') { this.screen = 'menu'; this.drag = null; if (this.phase === 'aim') this.aim = null; this._showOnly('menu'); } }
+    else if (act === 'menu') { if (this.screen === 'play' || this.screen === 'resign') { this._paintResign(); this.screen = 'menu'; this.drag = null; if (this.phase === 'aim') this.aim = null; this._showOnly('menu'); } }
     else if (act === 'resume') { this.screen = 'play'; this._showOnly(null); }
     else if (act === 'quit') { this._settleNow(); this._save(); if (this.match && this.match.winner != null) this._finish(); else this._showSetup(); }
     else if (act === 'mpHome') this._openOnline();
-    else if (act === 'resign') { this.screen = 'resign'; this._showOnly('resign'); }
+    else if (act === 'resign') { this._paintResign(); this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
     else if (act === 'again') {
       if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals, this.match.forms[this.mp.mySeat]);
@@ -851,6 +851,37 @@ class FlickSoccerUI {
     this._mpBegin(game);
   }
 
+  /** Resign, or CANCEL / DECLINE while the other person has not answered (2026-10-13,
+   *  js/challenge-life.js): the menu button and its question say which one the tap will do. */
+  _paintResign() {
+    const mp = this.mp;
+    if (!mp || !this.MP || !mp.game) return;
+    const life = this.MP.lifeOf(mp.game);
+    const kind = !life.open ? 'resign' : mp.side === this.MP.recipientOf(mp.game) ? 'decline' : 'cancel';
+    const set = (sel, key) => { const el = this.host.querySelector(sel); if (el) el.textContent = t(key); };
+    set('[data-act="resign"] span', kind === 'resign' ? 'mp_resign' : `mp_${kind}_ch`);
+    set('[data-ov="resign"] h2', kind === 'resign' ? 'mp_resign_q' : `mp_${kind}_q`);
+    set('[data-act="resignYes"] span', kind === 'resign' ? 'mp_resign_yes' : `mp_${kind}_ch`);
+    // "Cancel" beside "Cancel challenge" would say two opposite things: the way back says what it keeps.
+    set('[data-ov="resign"] [data-act="menu"] span', kind === 'resign' ? 'mp_cancel' : 'mp_keep');
+  }
+
+  /** What to say about a match that ended with no result: called off by either side, or expired
+   *  unanswered (js/challenge-life.js). '' for a match that is neither. A match from the first form
+   *  of calling off (a resignation with no flick in it) reads as cancelled. */
+  _mpEndText(game, side) {
+    const MP = this.MP;
+    if (!game || !MP) return '';
+    if (MP.lifeOf(game).expired) return t('mp_expired');
+    if (!MP.isCalledOff(game)) return game.over && !game.log.length ? t('mp_cancelled') : '';
+    const why = game.over.why === 'declined' ? 'declined' : 'cancelled';
+    // A cancel is always the sender's, a decline always the receiver's.
+    const iSent = side !== MP.recipientOf(game);
+    const mine = why === 'cancelled' ? iSent : !iSent;
+    const them = MP.themOf(game, MP.myCode());
+    return t(mine ? `mp_you_${why}` : `mp_they_${why}`, { name: (them && them.name) || '?' });
+  }
+
   /** A new challenge: created now, delivered when your first turn is over. */
   async _sendChallenge(them, goals = this.settings.goals, form = this.settings.lineup) {
     if (this._challenging) return { ok: false, reason: 'busy' };      // a double tap makes ONE match
@@ -876,6 +907,9 @@ class FlickSoccerUI {
     const me = MP.myCode();
     const side = MP.sideOf(game, me);
     if (!side) { this._openOnline(); return; }
+    // Cancelled, declined or expired (2026-10-13): there is no match to show.
+    const endText = this._mpEndText(game, side);
+    if (endText) { this._mpLeave(); this._toast(endText, 3200); this._openOnline(); return; }
     if (game.pick === 'b' && side === 'b') { this._mpPick(game); return; }
     this._mpLeave();
     const theirSide = side === 'a' ? 'b' : 'a';
@@ -933,7 +967,7 @@ class FlickSoccerUI {
       if (m.winner != null) { this._finish(); return; }
     }
     this.MP.markShown(mp.id, g.log.length);
-    if (g.over && !g.log.length) { this._mpCalledOff(); return; }
+    if (g.over && (this.MP.isCalledOff(g) || !g.log.length)) { this._mpCalledOff(this._mpEndText(g, mp.side)); return; }
     if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
     if (m.turn === mp.mySeat) { this.phase = 'aim'; this._status(); return; }
     this.phase = 'waiting';
@@ -960,7 +994,7 @@ class FlickSoccerUI {
     if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
     if (mp.game.pick && !g.pick && !g.over) { this._mpBegin(g); return; }   // they chose: both line-ups now
     mp.game = g;
-    if (g.over && !g.log.length && !mp.finished) { this._mpCalledOff(); return; }
+    if (g.over && (this.MP.isCalledOff(g) || !g.log.length) && !mp.finished) { this._mpCalledOff(this._mpEndText(g, mp.side)); return; }
     if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
       this._mpFinish(g.over.winner === mp.side, true);
       return;
@@ -1020,7 +1054,10 @@ class FlickSoccerUI {
       }
       mp.pending = [];
       MP.savePending(mp.id, 0, []);
-      if (['moved-on', 'already-over', 'rules-refused'].includes(res.reason)) {
+      if (res.reason === 'expired') {
+        // Nobody answered it in 3 days: it lapsed before this flick got there.
+        this._mpCalledOff(t('mp_expired'));
+      } else if (['moved-on', 'already-over', 'rules-refused'].includes(res.reason)) {
         // The match moved on without this flick (played on another phone, or already finished):
         // what the server has is the match. Open it again from there.
         this._toast(t('mp_moved_on'), 2600);
@@ -1057,20 +1094,18 @@ class FlickSoccerUI {
     if (!res.ok) { this.screen = 'menu'; this._showOnly('menu'); this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400); return; }
     mp.game = res.game;
     if (res.cancelled) {
-      // They never saw it: nothing to count, nobody to tell. Back to the list.
-      mp.finished = true;
-      this._toast(t('mp_cancelled'), 2200);
-      this._openOnline();
+      // Nobody had answered it: called off (cancelled or declined), nothing to count. Back to the list.
+      this._mpCalledOff(this._mpEndText(res.game, mp.side));
       return;
     }
     this._mpFinish(false, true);
   }
 
-  /** A challenge called off before anybody flicked: counts for nobody, back to the list. */
-  _mpCalledOff() {
+  /** A challenge called off before anybody answered, or expired: counts for nobody, back to the list. */
+  _mpCalledOff(text = t('mp_cancelled')) {
     const mp = this.mp;
-    if (mp) mp.finished = true;
-    this._toast(t('mp_cancelled'), 2200);
+    if (mp) { mp.finished = true; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    this._toast(text || t('mp_cancelled'), 3200);
     this._openOnline();
   }
 

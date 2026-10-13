@@ -29,7 +29,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
  * `on()` (so every listener is unbound by destroy()), `settings`, `startLive()` and
  * `startAsync()`.
  */
-export function openMultiplayer(ui, { pickFor = null } = {}) {
+export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
   const el = document.createElement('div');
   el.className = 'gh-overlay h4-sheet';
   ui.root.appendChild(el);
@@ -128,7 +128,10 @@ export function openMultiplayer(ui, { pickFor = null } = {}) {
     // a Quit (a resignation - nothing is deleted, see MP.resignGame).
     const tile = (go, icon, label) => `
       <button type="button" class="h4-mp-tile" data-go="${go}"><span class="h4-mp-ico" aria-hidden="true">${icon}</span><span>${esc(label)}</span></button>`;
-    shell(t('mpHome'), `
+    // What just happened to the match you left (cancelled, declined, expired), said once on top.
+    const flashNote = flash ? note(flash) : '';
+    flash = '';
+    shell(t('mpHome'), `${flashNote}
       <button type="button" class="h4-mp-act is-primary h4-mp-big" data-go="pick"><span aria-hidden="true">&#9876;&#65039;</span> ${esc(t('mpChallengeBig'))}</button>
       <div class="h4-mp-tiles">
         ${tile('host', '&#128225;', t('mpHostShort'))}
@@ -191,7 +194,7 @@ export function openMultiplayer(ui, { pickFor = null } = {}) {
           <span class="h4-mp-txt"><span class="h4-mp-name">${esc(r.name || '?')}</span>
             <span class="h4-mp-meta">${esc(bits.join(' · '))}</span></span>
         </button>
-        <button type="button" class="h4-mp-quit" data-quit="${esc(r.id)}" aria-label="${esc(t('mpQuitAria', { who: r.name || '?' }))}">${esc(t('mpQuit'))}</button>
+        <button type="button" class="h4-mp-quit" data-quit="${esc(r.id)}" aria-label="${esc(t(r.open === 'sent' ? 'mpCancelAria' : r.open === 'got' ? 'mpDeclineAria' : 'mpQuitAria', { who: r.name || '?' }))}">${esc(t(r.open === 'sent' ? 'mpCancel' : r.open === 'got' ? 'mpDecline' : 'mpQuit'))}</button>
       </div>`;
   }
 
@@ -252,16 +255,23 @@ export function openMultiplayer(ui, { pickFor = null } = {}) {
   function confirmQuit(id) {
     const row = (state.games || []).find((r) => r && r.id === id);
     const who = (row && row.name) || '?';
+    // Nobody has shot back yet (2026-10-13, js/challenge-life.js): the same button CANCELS a
+    // challenge you sent or DECLINES one sent to you, and it counts for nobody. mp.js decides
+    // again from the match itself, so a row a turn behind can never turn a resignation into a cancel.
+    const kind = row && row.open === 'sent' ? 'cancel' : row && row.open === 'got' ? 'decline' : 'resign';
+    const q = kind === 'resign' ? t('mpQuitQ') : t(kind === 'cancel' ? 'mpCancelQ' : 'mpDeclineQ');
+    const body = kind === 'resign' ? t('mpQuitBody', { who }) : t('mpNobodyBody');
+    const yesText = kind === 'resign' ? t('mpQuitYes') : t(kind === 'cancel' ? 'mpCancelCh' : 'mpDeclineCh');
     const ov = document.createElement('div');
     ov.className = 'gh-overlay';
     ov.innerHTML = `
-      <div class="gh-modal" role="dialog" aria-modal="true" aria-label="${esc(t('mpQuitQ'))}">
-        <h2 class="gh-modal__title">${esc(t('mpQuitQ'))}</h2>
-        <p class="h4-sheet-body">${esc(t('mpQuitBody', { who }))}</p>
+      <div class="gh-modal" role="dialog" aria-modal="true" aria-label="${esc(q)}">
+        <h2 class="gh-modal__title">${esc(q)}</h2>
+        <p class="h4-sheet-body">${esc(body)}</p>
         <p class="h4-mp-note" data-role="err" hidden></p>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--block" data-role="no">${esc(t('mpQuitNo'))}</button>
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(t('mpQuitYes'))}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(yesText)}</button>
         </div>
       </div>`;
     ui.root.appendChild(ov);

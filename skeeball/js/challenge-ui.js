@@ -148,7 +148,10 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     const fmt = esc(formatLine(r));
     let line; let side = '';
     const multi = r.n > 1 || r.all;
-    if (r.over) {
+    if (r.over && (r.ended === 'cancelled' || r.ended === 'declined')) {
+      // Called off before it was answered (2026-10-13): no result and no score line.
+      line = `${esc(t(r.ended === 'declined' ? 'ch_row_declined' : 'ch_row_cancelled'))} · ${fmt}`;
+    } else if (r.over) {
       const head = r.result === 'won' ? t('ch_row_won') : r.result === 'lost' ? t('ch_row_lost') : t('ch_row_draw');
       line = `${esc(head)} · ${fmt}`;
       side = multi && r.scoring !== 'total' ? `${r.myWins} : ${r.theirWins}` : `${num(r.mine)} : ${num(r.theirs)}`;
@@ -297,12 +300,24 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     const expired = CH.isExpired({ over: g.over, expires: g.expires });
     const next = expired ? -1 : CH.nextLeg(g, side, (i) => CH.legPlayed(id, side, i));
     const res = CH.resultFor(g, side);
-    const title = res ? (res === 'won' ? t('ch_won') : res === 'lost' ? t('ch_lost') : t('ch_draw'))
-      : side === 'a' ? t('ch_yours_to', { name: them.name || t('ch_someone') })
-        : t('ch_from', { name: them.name || t('ch_someone') });
+    const who = them.name || t('ch_someone');
+    const calledOff = CH.isCalledOff(g);
+    const title = calledOff ? t(g.over.why === 'declined' ? 'ch_declined' : 'ch_cancelled')
+      : res ? (res === 'won' ? t('ch_won') : res === 'lost' ? t('ch_lost') : t('ch_draw'))
+        : side === 'a' ? t('ch_yours_to', { name: who })
+          : t('ch_from', { name: who });
     let status = '';
-    if (!g.over && expired) status = t('ch_expired_long');
-    else if (!g.over && next < 0) status = g.stage === side ? t('ch_queued') : t('ch_waiting_on', { name: them.name || t('ch_someone') });
+    if (calledOff) {
+      // A cancel is always the challenger's (side a), a decline always the other person's.
+      const why = g.over.why === 'declined' ? 'declined' : 'cancelled';
+      const mine = (why === 'cancelled') === (side === 'a');
+      status = t(mine ? `ch_you_${why}` : `ch_they_${why}`, { name: who });
+    } else if (g.over && g.over.why === 'resign') status = g.over.winner === side ? t('ch_they_resigned', { name: who }) : t('ch_you_resigned');
+    else if (!g.over && expired) status = t('ch_expired_long');
+    else if (!g.over && next < 0) status = g.stage === side ? t('ch_queued') : t('ch_waiting_on', { name: who });
+    // CANCEL / DECLINE / RESIGN (2026-10-13): a live, unexpired challenge can always be left. Before
+    // the other person has played a game it is called off (counts for nobody); after, a resignation.
+    const endKind = g.over || expired ? '' : CH.isOpen(g) ? (side === 'a' ? 'cancel' : 'decline') : 'resign';
     const play = next >= 0 ? `
       ${note(t('ch_one_rack'))}
       ${side === 'b' && g.expires ? `<p class="sk-ch-left">${esc(timeLeft(g.expires))}</p>` : ''}
@@ -315,7 +330,26 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
       ${legsTable(g, side)}
       ${status ? note(status) : ''}
       ${play}
+      ${endKind ? `<p class="sk-ch-err" role="alert" data-role="enderr" hidden></p>
+        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="end">${esc(t(`ch_end_${endKind}`))}</button>` : ''}
       ${g.over ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="again">${esc(t('ch_rematch'))}</button>` : ''}`, viewList);
+    const end = el.querySelector('[data-act="end"]');
+    if (end) end.addEventListener('click', async () => {
+      // Two taps: the first says what the second will do.
+      if (!end.dataset.armed) { end.dataset.armed = '1'; end.textContent = t(`ch_end_sure_${endKind}`, { name: who }); return; }
+      if (state.busy) return;
+      state.busy = true;
+      end.disabled = true;
+      const out = endKind === 'resign' ? await CH.resignChallenge(id) : await CH.cancelChallenge(id);
+      state.busy = false;
+      if (closed || state.view !== 'match') return;
+      if (!out || !out.ok) {
+        end.disabled = false; delete end.dataset.armed; end.textContent = t(`ch_end_${endKind}`);
+        const e = el.querySelector('[data-role="enderr"]'); if (e) { e.hidden = false; e.textContent = t('ch_end_err'); }
+        return;
+      }
+      viewMatch(id);
+    });
     const cap = el.querySelector('[data-role="cap"]');
     if (cap && g.caption) cap.textContent = `“${g.caption}”`;
     const go = el.querySelector('[data-act="go"]');

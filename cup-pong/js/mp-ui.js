@@ -35,6 +35,7 @@ function reasonText(reason) {
   if (reason === 'offline') return t('mpOffline');
   if (reason === 'dev-origin-blocked') return t('mpDevBlocked');
   if (reason === 'no-player-code') return t('mpNoCode');
+  if (reason === 'expired') return t('mpExpired');
   return t('sendFailed');
 }
 

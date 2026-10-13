@@ -9,9 +9,10 @@
 // Firebase node, each with a per-player index (`<node>/index/<CODE>/<id>`): Connect 4 Hoops
 // (`hoops/`), Skeeball (`skeeChallenges/`), Cup Pong (`cuppong/`), Darts (`darts/`) and Flick Soccer
 // (`flicksoccer/`, 2026-10-11). This module READS those indexes through each game's own reader and folds them into one list. It writes
-// nothing - no Firebase node, no `gamehub.*` key - so it cannot put any player data at risk (THE
-// LAW). Opening a match or starting a challenge is handed to the game itself (its alerts module's
-// armOpen / armChallenge), which is where every write already lives.
+// nothing itself - no Firebase node, no `gamehub.*` key. Opening a match or starting a challenge is
+// handed to the game (its alerts module's armOpen / armChallenge), and CANCEL / DECLINE / RESIGN
+// (2026-10-13, Matt: "a way to cancel sent challenge requests, and a way to resign/forfeit") call
+// the game's own mp.js (`endAction` / `endMatch` below), so every write still lives in the game.
 //
 // The records are worked out from FINISHED index rows only, grouped by the other person's PLAYER
 // CODE (a name can change, a code cannot). A row with no stored result (Hoops rows from before
@@ -21,51 +22,126 @@
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 
 /** Each challenge game's reader. Keyed by the HUB id (js/hub.js GAMES). Lazily imported. */
+/**
+ * What may be done to one live match of a turn-by-turn game, read FRESH from the match itself (not
+ * from the list row, which can be a turn behind): 'cancel' (you sent it and they have not
+ * answered), 'decline' (it was sent to you and you have not played), 'resign' (it is under way), or
+ * null (over, expired, unreadable, or not yours). js/challenge-life.js has the rules.
+ */
+async function logGameAction(M, id) {
+  const g = await M.readGame(id);
+  const me = M.myCode();
+  const side = g && me ? M.sideOf(g, me) : null;
+  if (!g || g.over || !side) return null;
+  const life = M.lifeOf(g);
+  if (life.expired) return null;
+  if (!life.open) return 'resign';
+  return side === M.recipientOf(g) ? 'decline' : 'cancel';
+}
+async function logGameEnd(M, id, action) {
+  const res = action === 'resign' ? await M.resignGame(id) : await M.cancelGame(id);
+  // A resignation is a loss, counted here once through the game's own ledger, exactly as the game's
+  // own Resign button does (Darts, Cup Pong, Flick Soccer). Left to the next list read instead, it
+  // would also queue a "Game over" popup for your own resignation. Hoops has no countResult: its
+  // own Quit leaves the count to recordFinished too, and so does this.
+  if (res && res.ok && action === 'resign' && !res.cancelled && typeof M.countResult === 'function') {
+    try { M.countResult(id, false); } catch (err) { console.error('[challenges] could not count the resignation', err); }
+  }
+  return res;
+}
+
 export const SOURCES = {
   hoops4: {
     load: () => import('../hoops4/js/mp.js'),
     read: (M) => M.readMyGames(),
     watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
   },
   skeeball: {
     load: () => import('../skeeball/js/challenge.js'),
     read: async (M) => { try { await M.flushOutbox(); } catch { /* sent next time */ } return M.readMyChallenges(); },
     watch: (M, cb) => M.watchMyChallenges(cb),
     expired: (M, r, now) => !r.over && M.isExpired(r, now),
+    action: async (M, id) => {
+      const g = await M.readChallenge(id);
+      const me = M.myCode();
+      const side = g && me ? M.sideOf(g, me) : null;
+      if (!g || g.over || !side || M.isExpired(g)) return null;
+      if (!M.isOpen(g)) return 'resign';
+      return side === 'b' ? 'decline' : 'cancel';
+    },
+    end: (M, id, action) => (action === 'resign' ? M.resignChallenge(id) : M.cancelChallenge(id)),
   },
   cuppong: {
     load: () => import('../cup-pong/js/mp.js'),
     read: (M) => M.readMyGames(),
     watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
   },
   darts: {
     load: () => import('../darts/js/mp.js'),
     read: (M) => M.readMyGames(),
     watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
   },
   'flick-soccer': {
     load: () => import('../flick-soccer/js/mp.js'),
     read: (M) => M.readMyGames(),
     watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
   },
 };
+
+/** What may be done to a live match right now ('cancel' | 'decline' | 'resign' | null). Never rejects. */
+export async function endAction(game, id) {
+  try { const src = SOURCES[game]; if (!src) return null; return await src.action(await src.load(), id); }
+  catch (err) { console.warn('[challenges] could not read that match', err); return null; }
+}
+
+/** Cancel, decline or resign one match, through the GAME's own writer. Returns its result:
+ *  { ok, cancelled? } or { ok:false, reason }. Never rejects. */
+export async function endMatch(game, id, action) {
+  try {
+    const src = SOURCES[game];
+    if (!src || !['cancel', 'decline', 'resign'].includes(action)) return { ok: false, reason: 'bad-action' };
+    return await src.end(await src.load(), id, action);
+  } catch (err) {
+    console.error('[challenges] could not end that match', err);
+    return { ok: false, reason: String((err && err.message) || err) };
+  }
+}
 export const CHALLENGE_GAMES = Object.keys(SOURCES);
 
 const RESULTS = ['won', 'lost', 'draw'];
 
 /**
  * PURE. One game's index row as the Challenges screen sees it:
- * { game, id, with, name, emoji, updated, state:'yours'|'theirs'|'done'|'expired', result, info }.
- * `info` carries the few game-specific facts the row's subtitle names (series, darts game, machine).
+ * { game, id, with, name, emoji, updated, state:'yours'|'theirs'|'done'|'expired'|'cancelled',
+ *   result, ended, open, sent, info }.
+ * `ended` is how a match ended without a result ('cancelled' | 'declined' | 'expired', from each
+ * game's row: js/challenge-life.js), `open` whether it is still unanswered ('sent' | 'got' | ''),
+ * `sent` whether this player sent it. `info` carries the few game-specific facts the row's subtitle
+ * names (series, darts game, machine).
  */
 export function normalizeRow(game, r, expired = false) {
   if (!r || !r.id || !r.with) return null;
-  const state = r.over ? 'done' : expired ? 'expired' : r.yourTurn ? 'yours' : 'theirs';
+  const ended = ['cancelled', 'declined', 'expired'].includes(r.ended) ? r.ended : (expired ? 'expired' : '');
+  const state = ended === 'cancelled' || ended === 'declined' ? 'cancelled'
+    : ended === 'expired' ? 'expired'
+      : r.over ? 'done' : r.yourTurn ? 'yours' : 'theirs';
   return {
     game, id: String(r.id), with: String(r.with), name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
-    updated: ms(r.updated), state,
-    result: r.over && RESULTS.includes(r.result) ? r.result : null,
-    resigned: r.over && r.why === 'resign',
+    updated: ms(r.updated), state, ended,
+    open: state === 'yours' || state === 'theirs' ? (r.open === 'sent' || r.open === 'got' ? r.open : '') : '',
+    sent: !!r.sent,
+    // When a live match stops waiting on somebody (js/challenge-life.js; Skeeball: every turn). 0 = never.
+    expires: state === 'yours' || state === 'theirs' ? ms(r.expires) : 0,
+    result: state === 'done' && RESULTS.includes(r.result) ? r.result : null,
+    resigned: state === 'done' && (r.why === 'resign' || r.ended === 'resign'),
     info: {
       series: ms(r.series) > 1 ? ms(r.series) : 0,
       seriesNo: Math.max(1, ms(r.seriesNo) || 1),
@@ -122,7 +198,9 @@ export function summarize(rows) {
   return {
     yours: list.filter((r) => r.state === 'yours'),
     theirs: list.filter((r) => r.state === 'theirs'),
-    finished: list.filter((r) => r.state === 'done' || r.state === 'expired'),
+    // Expired and called-off matches are listed (so a player sees what became of a challenge) and
+    // counted in no record: nobody played them.
+    finished: list.filter((r) => r.state === 'done' || r.state === 'expired' || r.state === 'cancelled'),
     total, byGame, opponents,
   };
 }

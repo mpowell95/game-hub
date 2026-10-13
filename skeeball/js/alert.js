@@ -27,7 +27,8 @@ export function decideAlert(rows, seen, now = Date.now()) {
     .sort((a, b) => ms(b.updated) - ms(a.updated));
   // A finished match this device has not acknowledged. Every write this device makes stamps the
   // seen map, so a match you finished yourself never raises this; one the other person finished does.
-  const ended = rows.filter((r) => r && r.id && r.over && unseen(r))
+  // A cancelled or declined challenge (2026-10-13) is not a result: it raises no bubble.
+  const ended = rows.filter((r) => r && r.id && r.over && unseen(r) && r.ended !== 'cancelled' && r.ended !== 'declined')
     .sort((a, b) => ms(b.updated) - ms(a.updated));
   // A brand-new challenge to you outranks a returned turn; a turn names everyone waiting on you.
   const isNew = (r) => !r.sent && !(seen && seen[r.id]);

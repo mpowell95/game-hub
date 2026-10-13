@@ -523,7 +523,7 @@ check('a player code is normalised and validated',
   // New finished rows carry the result, optionally; an unfinished row writes no result field.
   const src = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
   check('a finished index row carries its result; an unfinished one writes no such field',
-    /\.\.\.\(game\.over \? \{ result: resultOf\(game, side\)/.test(src));
+    /\.\.\.\(game\.over && !ended \? \{ result: resultOf\(game, side\)/.test(src));
   const mpui = readFileSync(new URL('./hoops4/js/mp-ui.js', import.meta.url), 'utf8');
   check('the history opens a finished match READ ONLY',
     /openGame\(b\.dataset\.past, \{ review: true \}\)/.test(mpui));
@@ -573,7 +573,7 @@ check('a player code is normalised and validated',
   check('every active game row has a Quit that resigns (and asks first)',
     /data-quit=/.test(mpui) && /MP\.resignGame\(id\)/.test(mpui) && /mpQuitQ/.test(mpui));
   check('the multiplayer screen counts finished matches when it loads', /MP\.recordFinished\(rows\)/.test(mpui));
-  check('the pause sheet can quit a turn-by-turn match', /data-role="quit"/.test(ui) && /resignGame\(this\.mp\.id\)/.test(ui));
+  check('the pause sheet can quit a turn-by-turn match', /data-role="quit"/.test(ui) && /resignGame\(mp\.id\)/.test(ui));
   // A MATCH THAT ENDED WHILE THIS PHONE WAS AWAY (2026-09-24): "the game just disappears".
   const mem = {};
   globalThis.localStorage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
@@ -737,6 +737,43 @@ check('a player code is normalised and validated',
   part.land(rg.moves[1].col);
   check('building up to the cut then landing the rest gives the same board',
     JSON.stringify(full.cells()) === JSON.stringify(part.cells()) && full.turn === part.turn);
+}
+
+// --- cancel, decline, expire (2026-10-13, js/challenge-life.js) ------------------------------------
+{
+  const { ANSWER_MS } = await import('./js/challenge-life.js');
+  // Matt made it (by: A) and shot once; Anita has not answered.
+  const sent = (extra = {}) => ({ ...doc(), by: A, lapse: true, turn: 'b', updated: 1000,
+    moves: { '0000': { by: 'a', col: 3, shots: 1, at: 10 } }, ...extra });
+  const g = MP.validateGame(sent());
+  check('lifeOf: a delivered, unanswered challenge is open and waiting on its receiver',
+    MP.recipientOf(g) === 'b' && MP.lifeOf(g, 1001).open && MP.lifeOf(g, 1001).waiting && MP.lifeOf(g, 1001).expires === 1000 + ANSWER_MS);
+  check('lifeOf: it has expired 3 days on', MP.lifeOf(g, 1000 + ANSWER_MS).expired && !MP.lifeOf(g, 999 + ANSWER_MS).expired);
+  check('lifeOf: a match made before (no lapse) never expires', MP.lifeOf(MP.validateGame(sent({ lapse: undefined })), 1e15).expires === 0);
+  check('lifeOf: game 2 of a series is never open (the series was agreed to)', !MP.lifeOf(MP.validateGame(sent({ series: 3, seriesNo: 2 }))).open);
+  check('lifeOf: answered once the receiver has a move', !MP.lifeOf(MP.validateGame(doc())).open);
+  const off = MP.validateGame(sent({ over: { winner: 'none', why: 'cancelled', at: 5 } }));
+  check('a cancelled match is over with winner none (NOT a draw), counts for nobody',
+    off && off.over.winner === 'none' && MP.isCalledOff(off) && MP.resultOf(off, 'a') === null && MP.resultOf(off, 'b') === null);
+  check('a called-off game 1 owes no game 2', MP.seriesAfter({ ...off, series: 3, seriesNo: 1 }).done === true);
+  check('a cancel with an unknown reason is refused', MP.validateGame(sent({ over: { winner: 'none', why: 'nope' } })) === null);
+  const raced = MP.validateGame({ ...doc(), by: A, over: { winner: 'none', why: 'cancelled', at: 5 } });
+  check('a cancel that raced the receiver\'s first shot is void: the match plays on', raced && !raced.over);
+  const rows = (() => {
+    const out = [];
+    const r = (over, ended, res, extra = {}) => ({ id: 'r' + out.length + 'abcdef', with: B, name: 'Anita', updated: 1, over, ended, result: res, ...extra });
+    out.push(r(true, 'cancelled', null), r(true, 'expired', null), r(true, '', 'won'));
+    return out;
+  })();
+  const rec = MP.recordsFrom(rows, A);
+  check('called-off and expired rows are in no record', rec.finished.length === 1 && rec.opponents[0].played === 1 && rec.opponents[0].won === 1);
+  check('a called-off row is never counted', MP.rowsToCount(rows.slice(0, 2).map((x) => ({ ...x, updated: Date.now() })), new Set()).length === 0);
+  const src2 = readFileSync(new URL('./hoops4/js/mp.js', import.meta.url), 'utf8');
+  check('a called-off row is stored over:false (the deployed push function would call it a win)',
+    /over: !!game\.over && !ended/.test(src2) && /yourTurn: !game\.over && game\.turn === side/.test(src2));
+  check('pushMove refuses a shot into an expired challenge', /lifeOf\(fresh\)\.expired\) return \{ ok: false, reason: 'expired'/.test(src2));
+  check('resignGame calls off a challenge nobody has answered', /if \(lifeOf\(fresh\)\.open\) return cancelGame\(id\);/.test(src2));
+  check('createGame stamps lapse on every new challenge', /oneShot: !!oneShot, lapse: true/.test(src2));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

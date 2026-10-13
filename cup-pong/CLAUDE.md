@@ -344,6 +344,12 @@ under "CHALLENGES").
   ended while you were away shows a GAME OVER popup (`gamehub.cuppong.unseenResults.v1`) and the
   launcher's 'over' bubble.
 - **Quit** (pause menu) is a resignation: asks first, counts as a loss, deletes nothing.
+- **Cancel, decline, expire (2026-10-13)**, root `CLAUDE.md`, "Cancel, decline, resign, expire":
+  until the receiver takes their first throw, Quit reads **Cancel challenge** / **Decline
+  challenge** and calls game 1 off for nobody (`cancelGame`; `resignGame` does the same on an open
+  match). A later game of a series is never open. A challenge made from 2026-10-13 (`lapse: true`)
+  **expires 3 days after delivery** if the receiver never threw; a called-off game 1 owes no game 2
+  (`seriesAfter` says done). An expired refusal is dropped from the outbox like `already-over`.
 - **Screens**: Multiplayer home (Challenge someone, Notify me while off, Your turn, Their turn,
   History), the picker (by player code, Hoops' `opponentsFrom`), the terms screen, History (record
   per opponent by code, each finished match with a word and a mark).

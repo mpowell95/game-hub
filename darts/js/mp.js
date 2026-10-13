@@ -34,6 +34,7 @@ import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, throwDart, nextTurn, KINDS, isCricket, DRAW, inOvertime } from './engine.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
 
 const NODE = 'darts';
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
@@ -51,6 +52,9 @@ const eqOf = (raw) => !!raw && raw.eq === true;
 /** Overtime instead of a draw is OPTIONAL too: true on every match made from 2026-10-13, absent before
  *  (an older match that tied stays the draw it was). */
 const otOf = (raw) => eqOf(raw) && raw.ot === true;
+/** Who a match was SENT to: the side that is not its maker (`by`). Every Darts challenge is made by
+ *  side 'a', so this is 'b' unless a document says otherwise. */
+const recipientOfRaw = (aCode, bCode, by) => (by && by === bCode && by !== aCode ? 'a' : 'b');
 
 export function asCode(v) {
   const s = String(v == null ? '' : v).trim().toUpperCase();
@@ -161,7 +165,15 @@ export function validateGame(raw) {
     log.push(e);
   }
   let over = null;
-  if (raw.over && typeof raw.over === 'object') {
+  const to = recipientOfRaw(a, b, asCode(raw.by));
+  // CALLED OFF before its receiver answered (2026-10-13, js/challenge-life.js): counts for nobody.
+  // Only honoured while the receiver has thrown nothing. A cancel that raced their first dart is
+  // void and the match plays on, the same answer on both phones because both replay the same log.
+  const calledOff = !!raw.over && typeof raw.over === 'object' && raw.over.winner === 'none';
+  if (calledOff && !isNoResult(String(raw.over.why || ''))) return null;
+  if (calledOff && !log.some((e) => e.by === to)) {
+    over = { winner: 'none', why: String(raw.over.why), at: ms(raw.over.at) };
+  } else if (raw.over && typeof raw.over === 'object' && !calledOff) {
     const w = raw.over.winner;
     if (w !== 'a' && w !== 'b' && w !== 'draw') return null;
     over = { winner: w, why: String(raw.over.why || ''), at: ms(raw.over.at) };
@@ -178,6 +190,9 @@ export function validateGame(raw) {
     v: 1, id, kind,
     ...(eq ? { eq: true } : {}),
     ...(ot ? { ot: true } : {}),
+    // OPTIONAL (2026-10-13): this challenge expires if its receiver has not answered in 3 days.
+    // Absent on every match made before, which never expires (js/challenge-life.js).
+    ...(raw.lapse === true ? { lapse: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -202,6 +217,23 @@ export function sideOf(game, code) {
   return null;
 }
 export function isMyTurn(game, code) { return !!game && !game.over && sideOf(game, code) === game.turn; }
+
+// --- before the challenge is answered (2026-10-13, js/challenge-life.js) ---------------------------
+/** The side the challenge was sent to. */
+export function recipientOf(game) { return game ? recipientOfRaw(game.a.code, game.b.code, game.by) : 'b'; }
+/** PURE. { open, waiting, expires, expired }: open = not over and the receiver has thrown nothing;
+ *  waiting = open and it is the receiver's turn (it has been delivered); expires = when a waiting
+ *  challenge lapses (0 = never: a match made before 2026-10-13, or one not yet delivered). */
+export function lifeOf(game, now = Date.now()) {
+  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false };
+  const to = recipientOf(game);
+  const open = !game.log.some((e) => e.by === to);
+  const waiting = open && game.turn === to;
+  const expires = expiresAt(game.lapse, waiting, game.updated);
+  return { open, waiting, expires, expired: expires > 0 && now >= expires };
+}
+/** Was this match called off (cancelled or declined) rather than played to a result? */
+export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
 export function themOf(game, code) { const s = sideOf(game, code); return (s === 'a' ? game.b : game.a) || { code: null, name: '', emoji: '🙂' }; }
 
 /** Where the opponent's latest run of darts starts: what this phone should SHOW them throwing. */
@@ -215,6 +247,7 @@ export function lastRunStart(game, theirSide) {
 export const RESULTS = ['won', 'lost', 'draw'];
 export function resultOf(game, side) {
   if (!game || !game.over || (side !== 'a' && side !== 'b')) return null;
+  if (game.over.winner === 'none') return null;             // called off: counts for nobody
   if (game.over.winner === 'draw') return 'draw';
   return game.over.winner === side ? 'won' : 'lost';
 }
@@ -337,14 +370,18 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
-function rowsFromIndex(val) {
+function rowsFromIndex(val, now = Date.now()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
     const r = val[id] || {};
+    // Cancelled, declined or expired (js/challenge-life.js): finished, with no result for anybody.
+    const ended = rowEnding(r, now);
     return {
       id, with: asCode(r.with), name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
-      updated: ms(r.updated), yourTurn: !!r.yourTurn, over: !!r.over,
-      result: RESULTS.includes(r.result) ? r.result : null, why: typeof r.why === 'string' ? r.why : '',
+      updated: ms(r.updated), yourTurn: !ended && !!r.yourTurn, over: !!r.over || !!ended,
+      result: !ended && RESULTS.includes(r.result) ? r.result : null,
+      why: ended || (typeof r.why === 'string' ? r.why : ''),
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
       mine: ms(r.mine), theirs: ms(r.theirs), kind: KINDS.includes(r.kind) ? r.kind : '301',
       mineClosed: Number.isFinite(+r.mineClosed) ? +r.mineClosed : null,
       theirsClosed: Number.isFinite(+r.theirsClosed) ? +r.theirsClosed : null,
@@ -439,16 +476,27 @@ export async function readOpponents() {
  *  this is from that row's point of view, which is what the push function reads. */
 function rowFor(game, side, writer) {
   const them = side === 'a' ? game.b : game.a;
+  const life = lifeOf(game);
+  // A called-off match is stored over:false / yourTurn:false with `ended` saying why, so the deployed
+  // push function (functions/decide.js, which knows no "cancelled") sends nothing for it. Every
+  // reader turns it back into a finished row (rowsFromIndex, js/challenge-life.js rowEnding).
+  const ended = isCalledOff(game) ? game.over.why : '';
   return {
     with: them.code, name: them.name, emoji: them.emoji,
     updated: game.updated,
     yourTurn: !game.over && game.turn === side,
-    over: !!game.over,
+    over: !!game.over && !ended,
+    // Written on EVERY row write, so an answered challenge clears what its unanswered rows said.
+    open: life.open ? (side === recipientOf(game) ? 'got' : 'sent') : '',
+    expires: life.expires,
+    ended,
+    sent: side !== recipientOf(game),           // this row's owner sent the challenge (2026-10-13)
     mine: game.scores[side], theirs: game.scores[other(side)],
     ...(game.closed ? { mineClosed: game.closed[side], theirsClosed: game.closed[other(side)] } : {}),
     lastBy: writer === side ? 'me' : 'them',
     kind: game.kind || '301',
-    ...(game.over ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
+    ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
+    ...(ended ? { why: ended } : {}),
   };
 }
 async function writeRows(api, db, game, writer, only = null) {
@@ -476,7 +524,7 @@ export async function createGame({ them, kind = '301' }) {
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, kind, eq: true, ot: true, by: me, created: now, updated: now,
+    v: 1, id, kind, eq: true, ot: true, lapse: true, by: me, created: now, updated: now,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -531,6 +579,8 @@ export async function appendLog(id, base, entries) {
     const turnBefore = fresh.turn;
     if (!todo.length) return { ok: true, game: fresh };
     if (fresh.over) return fail('already-over');
+    // Nobody answered it for 3 days, so it lapsed (js/challenge-life.js): no dart can revive it.
+    if (lifeOf(fresh).expired) return fail('expired');
     // Check the rules accept them before anything is written.
     const m = newMatch(0, fresh.kind, eqOf(fresh), otOf(fresh));
     for (const e of fresh.log.concat(todo)) if (!applyEntry(m, e)) return fail('rules-refused');
@@ -545,7 +595,10 @@ export async function appendLog(id, base, entries) {
       return fail('did-not-land', true);
     }
     back.id = id;
-    if (back.over || back.turn !== turnBefore || have === 0) await writeRows(api, db, back, side, back.over || back.turn !== side ? null : side);
+    // The receiver's first dart ANSWERS the challenge: the rows stop saying it is waiting (and can
+    // no longer expire) at once, not only when their turn ends.
+    const answered = lifeOf(fresh).open && !lifeOf(back).open;
+    if (back.over || back.turn !== turnBefore || have === 0 || answered) await writeRows(api, db, back, side, back.over || back.turn !== side || answered ? null : side);
     // Only a FINISHED turn is "seen" (2026-10-04): a player who throws one dart and leaves still
     // owes the rest, so the launcher keeps saying "Your turn" (darts/js/alert.js).
     if (back.over || back.turn !== side) markSeen(id, back.updated);
@@ -557,8 +610,55 @@ export async function appendLog(id, base, entries) {
   }
 }
 
-/** Give the match up: the other person wins, nothing is deleted. A challenge never delivered (the
- *  other person has no row yet) is not handed to them as a win they never saw. */
+/**
+ * CALL OFF a challenge its receiver has not answered (2026-10-13, js/challenge-life.js): the sender
+ * CANCELS it, the receiver DECLINES it. It counts for nobody, nobody is notified, nothing is deleted:
+ * the match keeps its document and its log, and both rows say how it ended. Refused with 'accepted'
+ * once the receiver has thrown a dart; from then on the only way out is resignGame.
+ * Returns { ok, game, cancelled: true } or a failure.
+ */
+export async function cancelGame(id) {
+  const me = myCode();
+  if (!me) return fail('no-player-code');
+  if (!allowed('cancelGame')) return fail('dev-origin-blocked');
+  try {
+    const boot = await ready();
+    if (!boot) return fail('offline', true);
+    const { db, api } = boot;
+    const fresh = await readGame(id);
+    if (!fresh) return fail('not-found', true);
+    const side = sideOf(fresh, me);
+    if (!side) return fail('not-your-game');
+    let back = fresh;
+    if (fresh.over) {
+      // Already called off (a retry after the rows did not land): write them again. Any real result
+      // stands exactly as it is.
+      if (!isCalledOff(fresh)) return fail('already-over');
+    } else {
+      if (!lifeOf(fresh).open) return fail('accepted');
+      const now = Date.now();
+      const why = side === recipientOf(fresh) ? 'declined' : 'cancelled';
+      await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: 'none', why, at: now }, updated: now });
+      back = await readGame(id);
+      // validateGame voids a cancel that raced the receiver's first dart: then the match plays on.
+      if (!back) return fail('did-not-land', true);
+      if (!isCalledOff(back)) return back.over ? fail('already-over') : fail('accepted');
+    }
+    back.id = id;
+    const r = await api.get(api.ref(db, `${NODE}/index/${back[other(side)].code}/${id}`));
+    await writeRows(api, db, back, side, r && r.exists() ? null : side);
+    markSeen(id, back.updated);
+    return { ok: true, game: back, cancelled: true };
+  } catch (err) {
+    console.error('[darts] could not call the challenge off', err);
+    const reason = reasonOf(err);
+    return fail(reason, reason !== 'denied');
+  }
+}
+
+/** Give the match up: the other person wins, nothing is deleted. A challenge its receiver has not
+ *  answered yet is CALLED OFF instead (cancelGame): nobody is handed a win for a match that was
+ *  never played, and the result says { cancelled: true }. */
 export async function resignGame(id) {
   const me = myCode();
   if (!me) return fail('no-player-code');
@@ -571,7 +671,8 @@ export async function resignGame(id) {
     if (!fresh) return fail('not-found', true);
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
-    if (fresh.over) return { ok: true, game: fresh };
+    if (fresh.over) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
+    if (lifeOf(fresh).open) return cancelGame(id);
     const now = Date.now();
     await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: other(side), why: 'resign', at: now }, updated: now });
     const back = await readGame(id);
@@ -625,7 +726,8 @@ export async function drainOutbox(onlyId = null) {
 /** Records per opponent (by CODE), and the finished rows newest first. Pure. */
 export function recordsFrom(rows, code) {
   const me = asCode(code);
-  const finished = (Array.isArray(rows) ? rows : []).filter((r) => r && r.over && asCode(r.with) && asCode(r.with) !== me)
+  // A cancelled, declined or expired challenge was never played: it is in no record (js/challenge-life.js).
+  const finished = (Array.isArray(rows) ? rows : []).filter((r) => r && r.over && !r.ended && asCode(r.with) && asCode(r.with) !== me)
     .map((r) => ({ ...r, resigned: r.why === 'resign' ? (r.result === 'won' ? 'them' : 'me') : null }))
     .sort((x, y) => ms(y.updated) - ms(x.updated));
   const by = new Map();

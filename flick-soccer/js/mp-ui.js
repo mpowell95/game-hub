@@ -23,6 +23,7 @@ export function reasonText(reason) {
   if (reason === 'offline') return t('mp_offline');
   if (reason === 'dev-origin-blocked') return t('mp_dev');
   if (reason === 'no-player-code') return t('mp_no_code');
+  if (reason === 'expired') return t('mp_expired');
   return t('mp_send_failed');
 }
 
