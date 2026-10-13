@@ -82,7 +82,9 @@ Monopoly Deal's `business-deal/` split. A directory name is not a display name.
 - `seedOf(tier, level)` makes "Easy, level 12" the same board on every device and for Restart.
 - Level sizes (`levelSpec`, points across x down, then holds at the cap): Easy 8x4 at level 1
   (matching the reference's first board), then 6-10 x 5-13; Medium 10-14 x 13-19; Hard 20-24 x 26-32;
-  Expert 24-28 x 32-38. Builds take under 20 ms (Expert ~80 ms since generator 3).
+  Expert 24-28 x 32-38. **The board stops growing at level 13 in every tier**; generator 4's ramp is
+  what keeps later levels getting harder. Builds take under 20 ms (Hard/Expert up to ~120 ms since
+  generators 3-4).
 
 ## Harder boards: generator 2 (2026-10-12)
 
@@ -116,11 +118,38 @@ per level. Tried and rejected: more candidates alone (16 candidates gave only 22
 longer arrows (fewer rounds). Easy, Medium and Hard build exactly as on generator 2; `test.js` pins
 that, pins generator 2's boards by hash, and fails if Expert is not at least 4 rounds deeper than Hard.
 
+## Later levels keep getting harder: generator 4 (2026-10-13)
+
+Matt: *"does each difficulty level get more and more difficult as you beat games?"* Measured: no. The
+board stops growing at **level 13** in every tier and, on generators 2-3, so did the rounds (Easy ~9,
+Medium ~14, Hard ~18.5, Expert ~26 from level 14 to 120). Matt: *"Yes, make later levels keep getting
+harder."*
+
+Generator 4 (`GEN_LATEST = 4`) leaves levels 1-13 exactly as generator 3. From level 14 each board
+aims at a **rounds target** (`rampTarget(tier, level)`) that climbs from the old plateau to a ceiling
+over 60 levels (full at level 73) and then holds: Easy 9 -> 11, Medium 14 -> 19, Hard 18.5 -> 27,
+Expert 26 -> 32 (`RAMP`). It gets there by letting `harden()` flip ANY arrow, not only the ones free
+at the start (that alone took Hard's plateau from ~18 to ~27), and stops as soon as the target is met,
+so a level is no harder than its place on the ramp. Up to `RAMP_K` candidates (8, Expert 6); the first
+to reach the target wins, else the deepest. Measured rounds, levels 14-23 -> 64-73: Easy 9.1 -> 11.2,
+Medium 15.1 -> 18.5, Hard 19.4 -> 26.4, Expert 27.1 -> 31.6. Builds: average 1-32 ms, slowest ~120 ms
+on a desktop. The ceilings are what 8 candidates reliably reach; 12 added under 1 round for 1.5x the
+time. `test.js` pins generator 3 by hash, checks generator 4 = 3 for levels 1-13, that levels 64-73
+beat 14-23 by 1.5+ rounds, and that the target never drops.
+
+**Asked for and NOT done (needs Matt's example):** *"The hardest ones are the ones that travel across
+the board ... if [it] hit an arrow at the end and if there was even more distance between them."*
+The screenshot attached to that message was the Minesweeper leaderboard, so the shape he meant was
+not seen. Measured for it: boards are ~90% packed, so at the START a blocked arrow's blocker is almost
+always the very next dot (average 1.2 dots; scoring for distance changed nothing). Long-distance blocks
+only appear mid-game, once arrows have left. Making them from the start would mean emptier lanes,
+i.e. fewer arrows.
+
 **Generator 1 is kept, byte for byte.** A save records `gen`; a level saved before generator 2 (no
 `gen`) is rebuilt on generator 1, so its saved "which arrows are gone" still means the same arrows.
-`test.js` pins that `buildLevel(t, l, 1)` equals the original `generate()`, and generator 2 by hash.
+`test.js` pins that `buildLevel(t, l, 1)` equals the original `generate()`, and generators 2 and 3 by hash.
 Never change `generate()` or an existing generator's output without bumping `GEN_LATEST` and keeping
-the old path, or every level in progress scrambles. (Generator 3 is the worked example.)
+the old path, or every level in progress scrambles. (Generators 3 and 4 are the worked examples.)
 
 ## Input and the tap-target exception
 

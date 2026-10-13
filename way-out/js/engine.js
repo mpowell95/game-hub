@@ -258,7 +258,24 @@ export function generate(spec, seed) {
 // winding arrows (more of them on the same grid) and 10 candidates at 8 passes. Measured, levels
 // 1-60: 25.9 rounds (fewest 21, above Hard's AVERAGE of 18), 48 ms per build on a desktop. Same grid
 // size, so the dots are no smaller. Every other tier builds exactly as generator 2.
-export const GEN_LATEST = 3;
+//
+// GENERATOR 4 (2026-10-13, Matt: "make later levels keep getting harder"): the board stops growing
+// at level 13 in every tier, and on generators 2-3 so did the difficulty. From level 14 generator 4
+// aims each board at a ROUNDS TARGET that climbs from the tier's old plateau to its ceiling over
+// RAMP_LEVELS levels, then holds (`rampTarget`). It reaches it by flipping ANY arrow, not only the ones
+// free at the start (`harden(..., all)`), which is what makes the deeper boards possible, and stops
+// as soon as the target is met so a level is no harder than its place on the ramp. Levels 1-13 are
+// exactly generator 3's boards. Same grid, same arrow sizes.
+export const GEN_LATEST = 4;
+const RAMP_FROM = 14, RAMP_LEVELS = 60;
+const RAMP = { easy: [9, 11], medium: [14, 19], hard: [18.5, 27], expert: [26, 32] };
+const RAMP_K = { easy: 8, medium: 8, hard: 8, expert: 6 };
+/** The rounds a level of generator 4 aims for: null before the ramp starts (levels 1-13). */
+export function rampTarget(tier, level) {
+  if (!RAMP[tier] || level < RAMP_FROM) return null;
+  const [lo, hi] = RAMP[tier], r = Math.min(1, (level - RAMP_FROM + 1) / RAMP_LEVELS);
+  return Math.round(lo + r * (hi - lo));
+}
 const HARDEN = { easy: { k: 3, passes: 2 }, medium: { k: 6, passes: 4 }, hard: { k: 4, passes: 4 }, expert: { k: 3, passes: 4 } };
 const GEN3 = { expert: { k: 10, passes: 8, spec: { maxLen: 12, straight: 0.3, jitter: 0.1 } } };
 
@@ -290,18 +307,19 @@ export function peel(W, H, arrows) {
 const hardness = (m) => m.layers - m.clear0 * 20;
 
 /** Flip arrows that are free at the start while that makes the board harder and keeps it solvable. */
-function harden(W, H, arrows, seed, passes) {
+function harden(W, H, arrows, seed, passes, all = false, target = Infinity) {
   const R = rng((seed ^ 0x9e3779b9) >>> 0);
   let cur = peel(W, H, arrows);
-  for (let pass = 0; pass < passes; pass++) {
+  for (let pass = 0; pass < passes && cur.layers < target; pass++) {
     const ids = arrows.map((_, i) => i);
     for (let k = ids.length - 1; k > 0; k--) { const j = (R() * (k + 1)) | 0; [ids[k], ids[j]] = [ids[j], ids[k]]; }
     let changed = false;
     for (const id of ids) {
-      if (cur.layer[id] !== 1) continue;
+      if (!all && cur.layer[id] !== 1) continue;
       arrows[id].reverse();
       const m = peel(W, H, arrows);
       if (m && hardness(m) > hardness(cur)) { cur = m; changed = true; } else arrows[id].reverse();
+      if (cur.layers >= target) break;
     }
     if (!changed) break;
   }
@@ -315,6 +333,19 @@ export function buildLevel(tier, level, gen = GEN_LATEST) {
   // Generator 1, and Easy level 1 (the first board anyone sees: it stays a gentle start).
   if (gen === 1 || (t === 'easy' && level <= 1)) return generate(levelSpec(t, level), seed);
   const spec = specFor(t, level, gen);
+  const target = gen >= 4 ? rampTarget(t, level) : null;
+  if (target !== null) {
+    // Generator 4's ramp: the first candidate that reaches the target, else the deepest one.
+    let best = null;
+    for (let i = 0; i < RAMP_K[t]; i++) {
+      const s = (seed + i * 7919) >>> 0;
+      const lvl = generate(spec, s);
+      const m = harden(lvl.cols, lvl.rows, lvl.arrows, s, 8, true, target);
+      if (m && (!best || m.layers > best.layers)) best = { lvl, layers: m.layers };
+      if (best && best.layers >= target) break;
+    }
+    return best.lvl;
+  }
   const { k, passes } = (gen >= 3 && GEN3[t]) || HARDEN[t];
   let best = null;
   for (let i = 0; i < k; i++) {

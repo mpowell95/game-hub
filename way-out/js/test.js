@@ -5,7 +5,7 @@
 // and a player who only ever taps clear arrows clears it (engine.js's header says why that greedy
 // check is a proof of solvability, not a sample of it).
 import { createHash } from 'node:crypto';
-import { TIERS, buildLevel, levelSpec, occupancy, blockerOf, hintArrow, generate, seedOf, peel } from './engine.js';
+import { TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel } from './engine.js';
 
 let fails = 0;
 const ok = (label, cond) => { if (!cond) { fails++; console.log('FAIL ', label); } };
@@ -109,6 +109,27 @@ ok('expert takes more rounds than hard', avgRounds.expert >= avgRounds.hard + 4)
 }
 for (const tier of ['easy', 'medium', 'hard']) for (const level of [2, 9, 30]) {
   ok(`${tier} ${level}: generator 3 = generator 2`, JSON.stringify(buildLevel(tier, level, 3)) === JSON.stringify(buildLevel(tier, level, 2)));
+}
+// Generator 3 is kept unchanged too (pinned the day generator 4 shipped), and generator 4 is
+// generator 3 for levels 1-13 (2026-10-13).
+{
+  const h = createHash('sha256');
+  for (const tier of TIERS) for (let level = 1; level <= 30; level++) h.update(JSON.stringify(buildLevel(tier, level, 3)));
+  ok('generator 3 unchanged', h.digest('hex').slice(0, 16) === '64c5cd7f026bc693');
+}
+for (const tier of TIERS) for (const level of [1, 7, 13]) {
+  ok(`${tier} ${level}: generator 4 = generator 3 before the ramp`, JSON.stringify(buildLevel(tier, level, 4)) === JSON.stringify(buildLevel(tier, level, 3)));
+}
+// Generator 4's ramp (Matt: "make later levels keep getting harder"): levels 64-73 must take clearly
+// more rounds than levels 14-23, and the target never goes down as the level goes up.
+for (const tier of TIERS) {
+  const avg = (a, b) => { let s = 0; for (let l = a; l <= b; l++) { const v = buildLevel(tier, l); s += peel(v.cols, v.rows, v.arrows).layers; } return s / (b - a + 1); };
+  const early = avg(14, 23), late = avg(64, 73);
+  console.log(`${tier}: rounds at levels 14-23 ${early.toFixed(1)}, at 64-73 ${late.toFixed(1)}`);
+  ok(`${tier}: later levels are harder`, late >= early + 1.5);
+  let up = true;
+  for (let l = 14; l < 200; l++) if (rampTarget(tier, l + 1) < rampTarget(tier, l)) up = false;
+  ok(`${tier}: the ramp never goes down`, up && rampTarget(tier, 13) === null);
 }
 ok('easy 1 stays the gentle generator-1 board', JSON.stringify(buildLevel('easy', 1)) === JSON.stringify(buildLevel('easy', 1, 1)));
 
