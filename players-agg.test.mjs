@@ -621,27 +621,31 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   ok('brickblitz counts as a SOLO game', SOLO.has('brickblitz'));
 }
 
-// ---- Arrow Maze's wo (timed score) survives the cross-device combine (THE LAW rule 1) ----
-// 2026-10-13. Counters add. A run cannot be summed across phones, so the person keeps the
-// best-scoring run any device holds; d2's best arrives as a Firebase object keyed 0..n.
+// ---- Arrow Maze's wo (timer) survives the cross-device combine (THE LAW rule 1) ----
+// 2026-10-13. Counters add. A finish log cannot be summed across phones, so per difficulty the
+// person keeps the log of the device with the most timed finishes there; d2's arrives as a Firebase
+// object keyed 0..n, and d3 is from the first timed build (`recent`, no `log`).
 {
-  const fin = (t) => ({ t, a: 40, r: 10 });   // 40 arrows: 85 s = 28 arrows/min, 42.5 s = 56
+  const fin = (t) => ({ t, a: 40, r: 10 });
   const all = {
     d1: rec({ playerId: 'WO111', name: 'Arrows' }, {
       wayout: { total: { played: 3, won: 3, lost: 0 }, byDiff: { hard: { played: 3, won: 3, lost: 0 } },
-        wo: { timed: { hard: 2 }, mistakes: 1, hints: 2, recent: { hard: [fin(85000), fin(85000)] }, best: { hard: [fin(85000), fin(85000)] } } },
+        wo: { timed: { hard: 2 }, mistakes: 1, hints: 2, log: { hard: [fin(85000), fin(85000)] } } },
     }, 100),
     d2: rec({ playerId: 'WO111', name: 'Arrows' }, {
       wayout: { total: { played: 1, won: 1, lost: 0 }, byDiff: { hard: { played: 1, won: 1, lost: 0 } },
-        wo: { timed: { hard: 1 }, mistakes: 0, hints: 0, recent: { hard: { 0: fin(42500) } }, best: { hard: { 0: fin(42500) } } } },
+        wo: { timed: { hard: 1, easy: 3 }, mistakes: 0, hints: 0, log: { hard: { 0: fin(42500) }, easy: { 0: fin(1), 1: fin(2), 2: fin(3) } } } },
     }, 200),
+    d3: rec({ playerId: 'WO111', name: 'Arrows' }, {
+      wayout: { total: { played: 1, won: 1, lost: 0 }, byDiff: { medium: { played: 1, won: 1, lost: 0 } },
+        wo: { timed: { medium: 1 }, mistakes: 0, hints: 1, recent: { medium: [fin(50000)] }, best: { medium: [fin(50000)] } } },
+    }, 300),
   };
   const wo = aggregatePlayers(all)[0].games.wayout.wo;
-  eq('wayout: counters add', [wo.timed.hard, wo.mistakes, wo.hints], [3, 1, 2]);
-  // d1's run: two at 28.2 arrows/min, the other 8 as 0 = 5.6. d2's: one at 56.5 = 5.6, a tie, and a
-  // tie keeps the run already held (d1's), which is still never a mix of the two.
-  eq('wayout: one device\'s run, never a mix', wo.best.hard.length, 2);
-  eq('wayout: recent comes from the device with most timed finishes', wo.recent.hard.length, 2);
+  eq('wayout: counters add', [wo.timed.hard, wo.timed.easy, wo.timed.medium, wo.mistakes, wo.hints], [3, 3, 1, 1, 3]);
+  eq('wayout: the log comes from the device with most timed finishes', wo.log.hard.length, 2);
+  eq('wayout: a Firebase object log reads as a list', wo.log.easy.map((f) => f.t), [1, 2, 3]);
+  eq('wayout: a first-build record offers its recent list', wo.log.medium.length, 1);
   ok('wayout counts as a SOLO game', SOLO.has('wayout'));
 }
 

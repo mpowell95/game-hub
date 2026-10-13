@@ -209,19 +209,16 @@
 //         total, byDiff,                           // byDiff keyed easy|medium|hard|expert; one
 //                                                   // play+won per level cleared (recordWayOut)
 //         wo: { timed: { easy, medium, hard, expert }, mistakes, hints,
-//               recent: { <tier>: [{t, a, r}] }, best: { <tier>: [{t, a, r}] } } },
-//                                                   // RANKED BY recent: the best 10 of the last 15
-//                                                   // (woRating). best = the best 10-in-a-row run
-//                                                   // ever, kept up to date and not ranked.
-//                                                   // (2026-10-13) the timed score. A finish is
-//                                                   // stored RAW: t = ms including penalties, a =
-//                                                   // arrows, r = rounds; js/wayout-score.js scores
-//                                                   // it (arrows per minute) at read time. recent = the last
-//                                                   // up-to-15 timed finishes; best = the run of up to
-//                                                   // 10 with the highest score, replaced only by a
-//                                                   // higher-scoring run (rule 2). Levels cleared
-//                                                   // before the timer, or resumed from a save made
-//                                                   // before it, count in total/byDiff only.
+//               log: { <tier>: [{t, a, r, m, h}] }, recent, best } },
+//                                                   // (2026-10-13) the timer. log = EVERY timed
+//                                                   // finish, in order, stored RAW: t = ms including
+//                                                   // penalties, a = arrows, r = rounds, m = hearts
+//                                                   // lost, h = hints. recent/best: the first build's
+//                                                   // finish lists ({t, a, r}), no longer written,
+//                                                   // kept (rule 5); log was seeded from recent.
+//                                                   // Levels cleared before the timer, or resumed
+//                                                   // from a save made before it, count in
+//                                                   // total/byDiff only.
 //       contexto: {
 //         total, byDiff,                           // byDiff keyed en|es (the word set, no tier)
 //         ct: { solved, guesses, hints, noHint, fewest, silver, bronze, medalsV } },
@@ -237,7 +234,7 @@
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
-import { WO_TIERS, WO_RUN, WO_RECENT, woList, woRunScore } from './wayout-score.js';
+import { WO_TIERS, woList } from './arrow-maze-time.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
@@ -472,17 +469,18 @@ function ensureMs(g) {
   for (const lv of MS_LEVELS) if (!Number.isFinite(g.ms.bestTimeMs[lv])) g.ms.bestTimeMs[lv] = 0;
 }
 
-/** Arrow Maze's timed score (2026-10-13; js/wayout-score.js has the maths). Finishes are kept RAW
- *  so the formula can change without a migration. Lists may come back from Firebase as objects keyed
- *  0..n; woList reads both. */
+/** Arrow Maze's timed finishes (2026-10-13). Lists may come back from Firebase as objects keyed
+ *  0..n; woList reads both. `log` is seeded once from the first build's `recent` list, so a finish
+ *  timed before `log` existed is not lost; `recent` and `best` themselves are left as stored. */
 function ensureWo(g) {
-  if (!g.wo || typeof g.wo !== 'object') g.wo = { timed: {}, mistakes: 0, hints: 0, recent: {}, best: {} };
+  if (!g.wo || typeof g.wo !== 'object') g.wo = { timed: {}, mistakes: 0, hints: 0, log: {} };
   for (const k of ['mistakes', 'hints']) if (!Number.isFinite(g.wo[k])) g.wo[k] = 0;
-  for (const k of ['timed', 'recent', 'best']) if (!g.wo[k] || typeof g.wo[k] !== 'object' || Array.isArray(g.wo[k])) g.wo[k] = {};
+  if (!g.wo.timed || typeof g.wo.timed !== 'object' || Array.isArray(g.wo.timed)) g.wo.timed = {};
+  const seed = !g.wo.log || typeof g.wo.log !== 'object' || Array.isArray(g.wo.log);
+  if (seed) g.wo.log = {};
   for (const tier of WO_TIERS) {
     if (!Number.isFinite(g.wo.timed[tier])) g.wo.timed[tier] = 0;
-    g.wo.recent[tier] = woList(g.wo.recent[tier]);
-    g.wo.best[tier] = woList(g.wo.best[tier]);
+    g.wo.log[tier] = woList(seed ? (g.wo.recent || {})[tier] : g.wo.log[tier]);
   }
 }
 
@@ -1652,11 +1650,11 @@ export function recordMinesweeper(level, won, extras = {}) {
 
 /** Arrow Maze: one level cleared (2026-10-13). Counts exactly what recordResult('wayout', tier,
  *  true) always counted (one play and one win, in total and in that tier's bucket), and, when the
- *  level was TIMED from its first tap, adds the finish to the `wo` score.
+ *  level was TIMED from its first tap, appends the finish to that tier's `log`.
  *
  *  `f` = { timeMs, penaltyMs, arrows, rounds, mistakes, hints, timed }. A level resumed from a save
  *  made before the timer existed has no honest time, so `timed` is false and only the solve counts
- *  (rule 4: never invent a number). The best run only ever moves to a HIGHER-scoring run (rule 2). */
+ *  (rule 4: never invent a number). */
 export function recordWayOut(tier, f = {}) {
   if (tooFast('wayout')) return null;
   const st = loadStats();
@@ -1667,16 +1665,11 @@ export function recordWayOut(tier, f = {}) {
   const t = Math.round(Math.max(0, +f.timeMs || 0) + Math.max(0, +f.penaltyMs || 0));
   const a = Math.max(0, f.arrows | 0), r = Math.max(0, f.rounds | 0);
   if (f.timed && WO_TIERS.includes(d) && t > 0 && a > 0 && r > 0) {
+    const m = Math.max(0, f.mistakes | 0), h = Math.max(0, f.hints | 0);
     g.wo.timed[d] += 1;
-    g.wo.mistakes += Math.max(0, f.mistakes | 0);
-    g.wo.hints += Math.max(0, f.hints | 0);
-    const recent = woList(g.wo.recent[d]).concat([{ t, a, r }]).slice(-WO_RECENT);
-    g.wo.recent[d] = recent;
-    // `best` = the best run of 10 IN A ROW ever (the first rule, shipped and replaced the same day);
-    // still kept up to date, never shrunk (rules 2 and 5). The ranking reads `recent`: best 10 of the last 15 (woRating).
-    const run = recent.slice(-WO_RUN);
-    const was = woRunScore(g.wo.best[d]);
-    if (was === null || woRunScore(run) > was) g.wo.best[d] = run;
+    g.wo.mistakes += m;
+    g.wo.hints += h;
+    g.wo.log[d] = g.wo.log[d].concat([{ t, a, r, m, h }]);
   }
   st.updatedAt = new Date().toISOString();
   persist(st);
