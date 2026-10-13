@@ -82,7 +82,7 @@ Monopoly Deal's `business-deal/` split. A directory name is not a display name.
 - `seedOf(tier, level)` makes "Easy, level 12" the same board on every device and for Restart.
 - Level sizes (`levelSpec`, points across x down, then holds at the cap): Easy 8x4 at level 1
   (matching the reference's first board), then 6-10 x 5-13; Medium 10-14 x 13-19; Hard 20-24 x 26-32;
-  Expert 24-28 x 32-38. Builds take under 10 ms.
+  Expert 24-28 x 32-38. Builds take under 20 ms (Expert ~80 ms since generator 3).
 
 ## Harder boards: generator 2 (2026-10-12)
 
@@ -103,10 +103,24 @@ Measured, levels 2-21: free at the first tap Easy 24% / Medium 23% / Hard 27% / 
 build ~28 ms on a desktop. `way-out/js/test.js` fails if those averages slide back (`FLOOR`).
 **Easy level 1 stays generator 1**: the first board anyone sees is a gentle start.
 
+## Expert deeper than Hard: generator 3 (2026-10-13)
+
+Matt, after asking how many rounds each tier takes: *"Expert should be more difficult than hard,
+don't you think?"* Generator 2 made Expert BIGGER than Hard but no DEEPER: 17.9 rounds each.
+Generator 3 (`GEN_LATEST = 3`, `GEN3` in `engine.js`) changes **Expert only**: shorter, more winding
+arrows (`maxLen 12, straight 0.3, jitter 0.1` over `levelSpec`, applied by `specFor()`) on the SAME
+grid, so ~112 arrows instead of ~91 and the dots are no smaller; and 10 candidates at 8 passes
+instead of 3 at 4. Measured: levels 2-21 average **25.1 rounds** (Hard 17.9); levels 1-60 average
+25.9 and the fewest is 21, above Hard's average. Slowest build ~78 ms on a desktop (was ~47), once
+per level. Tried and rejected: more candidates alone (16 candidates gave only 22.4 rounds, 112 ms),
+longer arrows (fewer rounds). Easy, Medium and Hard build exactly as on generator 2; `test.js` pins
+that, pins generator 2's boards by hash, and fails if Expert is not at least 4 rounds deeper than Hard.
+
 **Generator 1 is kept, byte for byte.** A save records `gen`; a level saved before generator 2 (no
 `gen`) is rebuilt on generator 1, so its saved "which arrows are gone" still means the same arrows.
-`test.js` pins that `buildLevel(t, l, 1)` equals the original `generate()`. Never change `generate()`
-without bumping `GEN_LATEST` and keeping the old path, or every level in progress scrambles.
+`test.js` pins that `buildLevel(t, l, 1)` equals the original `generate()`, and generator 2 by hash.
+Never change `generate()` or an existing generator's output without bumping `GEN_LATEST` and keeping
+the old path, or every level in progress scrambles. (Generator 3 is the worked example.)
 
 ## Input and the tap-target exception
 

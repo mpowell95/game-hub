@@ -4,6 +4,7 @@
 // adjacent, distinct points; no point is used twice), it is the same board every time it is built,
 // and a player who only ever taps clear arrows clears it (engine.js's header says why that greedy
 // check is a proof of solvability, not a sample of it).
+import { createHash } from 'node:crypto';
 import { TIERS, buildLevel, levelSpec, occupancy, blockerOf, hintArrow, generate, seedOf, peel } from './engine.js';
 
 let fails = 0;
@@ -80,7 +81,9 @@ for (const tier of TIERS) {
 // Generator 2 is HARD (2026-10-12, Matt: "way too easy"): averaged over levels 2-21, at most this
 // share of arrows may be free at the first tap, and the board must take at least this many rounds.
 // Generator 1's Medium measured 0.46 / 5.0. A future change that quietly makes boards easy fails here.
-const FLOOR = { easy: [0.36, 5], medium: [0.32, 8], hard: [0.34, 12], expert: [0.36, 11] };
+// Expert's floor is generator 3's (2026-10-13): it must be DEEPER than Hard, not just bigger.
+const FLOOR = { easy: [0.36, 5], medium: [0.32, 8], hard: [0.34, 12], expert: [0.32, 22] };
+const avgRounds = {};
 for (const tier of TIERS) {
   let c0 = 0, ly = 0;
   for (let level = 2; level <= 21; level++) {
@@ -88,13 +91,24 @@ for (const tier of TIERS) {
     const m = peel(l.cols, l.rows, l.arrows);
     c0 += m.clear0; ly += m.layers;
   }
-  c0 /= 20; ly /= 20;
-  console.log(`${tier}: generator 2 averages ${(c0 * 100).toFixed(0)}% free at the start, ${ly.toFixed(1)} rounds`);
+  c0 /= 20; ly /= 20; avgRounds[tier] = ly;
+  console.log(`${tier}: the latest generator averages ${(c0 * 100).toFixed(0)}% free at the start, ${ly.toFixed(1)} rounds`);
   ok(`${tier}: hard enough (free ${c0.toFixed(2)} <= ${FLOOR[tier][0]}, rounds ${ly.toFixed(1)} >= ${FLOOR[tier][1]})`, c0 <= FLOOR[tier][0] && ly >= FLOOR[tier][1]);
 }
 // Generator 1 is kept unchanged, so a level saved before generator 2 rebuilds to the same board.
 for (const tier of TIERS) for (const level of [1, 5, 17]) {
   ok(`${tier} ${level}: generator 1 unchanged`, JSON.stringify(buildLevel(tier, level, 1)) === JSON.stringify(generate(levelSpec(tier, level), seedOf(tier, level))));
+}
+ok('expert takes more rounds than hard', avgRounds.expert >= avgRounds.hard + 4);
+// Generator 2 is kept unchanged too (a level saved on it rebuilds to the same board), and generator 3
+// changes Expert only. The hash is of generator 2's levels 1-30 of every tier, taken when 3 shipped.
+{
+  const h = createHash('sha256');
+  for (const tier of TIERS) for (let level = 1; level <= 30; level++) h.update(JSON.stringify(buildLevel(tier, level, 2)));
+  ok('generator 2 unchanged', h.digest('hex').slice(0, 16) === 'b7ea80d6596f2252');
+}
+for (const tier of ['easy', 'medium', 'hard']) for (const level of [2, 9, 30]) {
+  ok(`${tier} ${level}: generator 3 = generator 2`, JSON.stringify(buildLevel(tier, level, 3)) === JSON.stringify(buildLevel(tier, level, 2)));
 }
 ok('easy 1 stays the gentle generator-1 board', JSON.stringify(buildLevel('easy', 1)) === JSON.stringify(buildLevel('easy', 1, 1)));
 
