@@ -142,17 +142,23 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   the phone, it's impossible to pull back far enough to achieve full power. Other games achieve this
   by zooming out slightly"*. Measured before the fix at 402x874: a disc on a side wall maxed out at
   22-27% pulling sideways, ~50-70% pulling diagonally, and a keeper pulled straight back ~65%.
-  `_edgeZoom` in `ui.js`: when the finger is pressed within `EDGE_BAND` (36px) of a screen edge short
-  of full strength, the view zooms out (no further than `ZOOM_MIN`, 0.6) just enough that the FULL
-  pull in that direction lands `EDGE_M` (12px) inside the screen (the bottom edge also clears the
-  home bar). It zooms about the point where the line from the full pull through the disc leaves the
-  pitch's box, so the aim keeps its direction while the disc slides away from the finger (the ring
-  fills as it does), and the whole pitch stays inside its box. It never zooms back in mid-drag, and
+  **The zoom follows the finger (second version, same day)**, Matt on the first: *"make it zoom in
+  and out depending on how hard you're pulling? Right now I don't see a way to zoom back in"* (the
+  first version zoomed out once the finger neared an edge and stayed out for the whole drag).
+  `_edgeCam` in `ui.js` makes the camera a function of the finger's position alone: along the line of
+  the pull, from `ZOOM_FROM` (35%) of the way between the disc and the screen's edge, the view zooms
+  out evenly until, with the finger at the edge (`EDGE_M`, 12px in; the bottom edge also clears the
+  home bar), a FULL pull fits exactly. Ease off and it zooms back in; a disc whose full pull already
+  fits never zooms; never further out than `ZOOM_MIN` (0.6). It zooms about the point where that
+  line, run back through the disc, leaves the pitch's box, so the aim keeps its direction, the whole
+  pitch stays in its box, and a further finger is always a harder flick (pull length is F/k, F up
+  and k down). Set straight from the finger on every move, so the power shown is the power flicked;
   `_camTick` eases back to the fitted layout once the finger lifts (instantly under reduced motion).
   **Strength is still pitch units (`PULL_MAX`)**, so every flick is as strong as before and online
   replays are untouched; the camera is pixels only (`render.js` `setCam`, `s0/ox0/oy0` is the
-  fitted layout). Measured after: 100% in every one of those cases, zoom 0.80-0.93 at 402 wide, and
-  no zoom at all for a disc away from the edges.
+  fitted layout). Measured after: 100% in every one of those cases, zoom 0.80-0.94 at 402 wide with
+  the finger at the edge, back to 1.00 by a quarter of the way back, and none at all for a disc away
+  from the edges.
 - **Teams carry a SHAPE as well as a colour** (colourblind rule): blue discs a white triangle, red
   discs a white square, and the same chips sit on the scoreboard and the result line.
 - **Whose turn** is shown three ways: the scoreboard side gets an accent border and underline bar,
