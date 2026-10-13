@@ -188,6 +188,9 @@ ok('...which misses: the cricket match is won', res.ok && res.game.over && res.g
   use('A');
   let r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: '101' });
   const did = r.id;
+  ok('overtime: the match is made with ot', getAt(`darts/games/${did}`).ot === true);
+  // A match made between 2026-10-08 and 2026-10-13 (equal turns, no overtime) still ends in a draw.
+  delete getAt(`darts/games/${did}`).ot;
   r = await MP.appendLog(did, 0, [dart('a'), dart('a', targetPoint(1, 'single')), dart('a', D20)]);
   ok('101: T20, 1, D20 is out on the first turn', r.ok && !r.game.over && r.game.turn === 'b');
   use('B');
@@ -202,6 +205,30 @@ ok('...which misses: the cricket match is won', res.ok && res.game.over && res.g
   ok('...and in the records', rd.draw === 1, JSON.stringify(rd));
   ok('a claimed draw the darts never produced is refused', MP.validateGame({ ...clone(getAt(`darts/games/${did}`)), log: { '0000': dart('a') } }) === null);
   ok('a resignation cannot claim a draw', MP.validateGame({ ...clone(getAt(`darts/games/${did}`)), over: { winner: 'draw', why: 'resign', at: 1 } }) === null);
+
+  // Overtime (2026-10-13): the same tie on a new match is not a draw.
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: '101' });
+  const oid = r.id;
+  await MP.appendLog(oid, 0, [dart('a'), dart('a', targetPoint(1, 'single')), dart('a', D20)]);
+  use('B');
+  r = await MP.appendLog(oid, 3, [dart('b'), dart('b', targetPoint(1, 'single')), dart('b', D20)]);
+  ok('overtime: a tie goes to overtime, the challenger throws first', r.ok && !r.game.over && r.game.turn === 'a', JSON.stringify(r.game && { over: r.game.over, turn: r.game.turn }));
+  use('A');
+  r = await MP.appendLog(oid, 6, [dart('a', { x: 0.3, y: 0 })]);
+  ok('overtime: one dart and it is her turn', r.ok && !r.game.over && r.game.turn === 'b');
+  use('B');
+  r = await MP.appendLog(oid, 7, [dart('b', { x: 0, y: 0.05 })]);
+  ok('overtime: closer to the bull wins, stored as overtime', r.ok && r.game.over && r.game.over.winner === 'b' && r.game.over.why === 'overtime', JSON.stringify(r.game && r.game.over));
+  ok('...rows say won / lost', getAt(`darts/index/ANABB/${oid}`).result === 'won' && getAt(`darts/index/MATTA/${oid}`).result === 'lost');
+  ok('overtime: a second overtime dart in one turn is refused', MP.validateGame({ ...clone(getAt(`darts/games/${oid}`)), over: null, log: { ...clone(getAt(`darts/games/${oid}`)).log, '0007': dart('a') } }) === null);
+  // (Her stats above stay as they were: this win is counted only when she opens online play.)
+  const oldPhone = clone(getAt(`darts/games/${oid}`));
+  for (const k of ['0006', '0007']) delete oldPhone.log[k];
+  oldPhone.over = { winner: 'draw', why: 'tie', at: 1 };
+  const kept = MP.validateGame(oldPhone);
+  ok('overtime: a tie a not-yet-updated phone ended as a draw is kept as that draw, not hidden', kept && kept.over.winner === 'draw' && kept.turn === null);
+  ok('...but a draw claimed in the middle of overtime is refused', MP.validateGame({ ...oldPhone, log: { ...oldPhone.log, '0006': dart('a') } }) === null);
 
   use('A');
   r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, kind: '101' });

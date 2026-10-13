@@ -79,8 +79,21 @@ any order."* Setup has a **Game** row (301 / 201 / 101 / Cricket) and, for Crick
   player wins (the event stays `'bust'`/`'end'` with `m.winner` set, so BUST still shows). The
   SECOND player finishing first wins at once. Online a draw is stored as
   `over: { winner: 'draw', why: 'tie' }`, rows say `result: 'draw'`, and it counts as a played game
-  in the `mp` bucket with no win or loss. **Push gap:** `decideDarts` (functions/) only notifies on
+  in the `mp` bucket with no win or loss. **Since 2026-10-13 a new match never draws: see Overtime
+  below**; the draw rules above still apply to every match made before then (no `ot`). **Push gap:** `decideDarts` (functions/) only notifies on
   the other person's loss or a resign, so a win on the other's last turn, or a draw, sends no push.
+- **Overtime (2026-10-13)**, Matt: *"Draws shouldn't be allowed. It should go over time"*. On every
+  match made from that day (`ot: true`, only with `eq`; absent = a tie stays a draw, so older saves
+  and online matches replay unchanged), the tie that used to be a draw returns `'tie'`, sets
+  `m.bo = [null, null]` and hands the board to the player who threw first. **Overtime is one dart
+  each, closest to the middle of the bull wins** (`throwOvertime`; a dart off the wall still has a
+  distance, so it loses to anything on the board). Exactly level throws again ("Still tied").
+  Scores and marks are frozen; every overtime turn is one dart (`dartsPerTurn`); the computer aims
+  at the bull. The first thrower's dart stays drawn in the board while the second throws. **This
+  rule was my choice** (Matt asked for overtime, not its form): it is the standard darts tiebreak
+  (the bull throw), works for every game, and ends in two darts. Online it is stored as
+  `over.why: 'overtime'`; the result says "Won in overtime". Pinned by `darts/js/test.js` 3b3 and
+  `test-darts-mp.mjs`.
 - `VOIDED_MATCHES` (`js/stats-corrections.js`) is honoured by `mp.js` (left out of every list, never
   counted; a phone that had counted one notes `games.darts.vd[<id>]` and `correctStats` subtracts it).
 - Board geometry is the standard board in units of R (the double's outer wire): bull 50 inside

@@ -8,7 +8,7 @@ import {
   ORDER, RING, scoreAt, targetPoint, newMatch, throwDart, nextTurn, validMatch,
   chooseTarget, computerThrow, flickLanding, FLICK_MID, SPREAD,
   CRICKET, cricketNext, chooseCricketTarget, bedLabel, KINDS, noPoints, inOrder,
-  assistTargets, assistLanding, ASSIST_NUMS, DRAW,
+  assistTargets, assistLanding, ASSIST_NUMS, DRAW, inOvertime, dartsPerTurn,
 } from './engine.js';
 
 let pass = 0, fail = 0;
@@ -175,6 +175,41 @@ ok('spread is tighter on harder levels', SPREAD.hard < SPREAD.medium && SPREAD.m
   const all = [P(20, 'treble'), P(19, 'treble'), P(18, 'treble'), P(17, 'treble'), P(16, 'treble'), P(15, 'treble'), P(25, 'bull'), P(25, 'bull')];
   for (let i = 0; i < 4; i++) for (let seat = 0; seat < 2; seat++) play(c, all.slice(i * 2, i * 2 + 2).concat([OFF]));
   ok('cricket: both close everything in the same round, no points: a draw', c.winner === DRAW, JSON.stringify({ w: c.winner, out: c.out, m: c.marks }));
+}
+
+// 3b3. Overtime (2026-10-13): a tie is never a draw on a match made with `ot`.
+{
+  const P = (num, ring) => targetPoint(num, ring);
+  const OFF = { x: 0, y: -2 };
+  const play = (m, pts) => { let r; for (const p of pts) { r = throwDart(m, p.x, p.y); if (['end', 'bust', 'out', 'tie'].includes(r.event)) { if (m.winner == null) nextTurn(m); break; } } return r; };
+  const tied = () => {
+    const m = newMatch(1, '101', true, true);
+    play(m, [P(20, 'treble'), P(1, 'single'), P(20, 'double')]);    // seat 1 (first) finishes: out
+    return { m, r: play(m, [P(20, 'treble'), P(1, 'single'), P(20, 'double')]) };
+  };
+  let { m, r } = tied();
+  ok('overtime: a tie on the last turn is not a draw', r.event === 'tie' && m.winner == null && Array.isArray(m.bo), JSON.stringify({ e: r.event, w: m.winner }));
+  ok('overtime: the player who threw first throws first', m.turn === 1 && dartsPerTurn(m) === 1 && inOvertime(m));
+  ok('overtime: a saved match in overtime is valid', !!validMatch(JSON.parse(JSON.stringify(m))));
+  r = play(m, [{ x: 0.2, y: 0 }]);
+  ok('overtime: one dart and the turn passes, scores frozen', r.event === 'end' && m.turn === 0 && m.winner == null && m.scores.join() === '0,0');
+  ok('overtime: computer aims at the bull', computerThrow(m, 'hard', () => 0.5).aim.ring === 'bull');
+  r = play(m, [{ x: 0, y: 0.1 }]);
+  ok('overtime: closer to the bull wins', r.event === 'win' && m.winner === 0);
+  ({ m } = tied());
+  play(m, [{ x: 0.1, y: 0 }]);
+  r = play(m, [{ x: 0, y: -0.1 }]);
+  ok('overtime: exactly level throws again', r.event === 'end' && r.ot.again && m.winner == null && m.bo.every((b) => b === null) && m.turn === 1);
+  play(m, [OFF]);
+  r = play(m, [{ x: 0.9, y: 0 }]);
+  ok('overtime: off the wall loses to anything on the board', r.event === 'win' && m.winner === 0);
+  // Cricket ties go to overtime too.
+  const c = newMatch(0, 'cricket-np', true, true);
+  const all = [P(20, 'treble'), P(19, 'treble'), P(18, 'treble'), P(17, 'treble'), P(16, 'treble'), P(15, 'treble'), P(25, 'bull'), P(25, 'bull')];
+  let last;
+  for (let i = 0; i < 4; i++) for (let seat = 0; seat < 2; seat++) last = play(c, all.slice(i * 2, i * 2 + 2).concat([OFF]));
+  ok('overtime: cricket closed level goes to overtime', last.event === 'tie' && c.winner == null && inOvertime(c) && c.turn === 0);
+  ok('overtime: never without equal turns', !('ot' in newMatch(0, '301', false, true)));
 }
 
 // 3c. Cricket.

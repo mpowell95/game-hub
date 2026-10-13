@@ -33,7 +33,7 @@ import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/player
 import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { newMatch, throwDart, nextTurn, KINDS, isCricket, DRAW } from './engine.js';
+import { newMatch, throwDart, nextTurn, KINDS, isCricket, DRAW, inOvertime } from './engine.js';
 
 const NODE = 'darts';
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
@@ -45,9 +45,12 @@ const seatOf = (side) => (side === 'b' ? 1 : 0);
 const sideOfSeat = (seat) => (seat === 1 ? 'b' : 'a');
 /** The stored `over.winner` for a finished replay: a side, or 'draw' (equal turns, 2026-10-08). */
 const winnerOf = (m) => (m.winner === DRAW ? 'draw' : sideOfSeat(m.winner));
-const whyOf = (m, kind) => (m.winner === DRAW ? 'tie' : isCricket(kind) ? 'closed' : 'zero');
+const whyOf = (m, kind) => (m.winner === DRAW ? 'tie' : inOvertime(m) ? 'overtime' : isCricket(kind) ? 'closed' : 'zero');
 /** Equal turns is OPTIONAL on a match: true on every match made from 2026-10-08, absent before. */
 const eqOf = (raw) => !!raw && raw.eq === true;
+/** Overtime instead of a draw is OPTIONAL too: true on every match made from 2026-10-13, absent before
+ *  (an older match that tied stays the draw it was). */
+const otOf = (raw) => eqOf(raw) && raw.ot === true;
 
 export function asCode(v) {
   const s = String(v == null ? '' : v).trim().toUpperCase();
@@ -121,13 +124,13 @@ export function applyEntry(m, e) {
   if (m.winner != null) return null;
   if (seatOf(e.by) !== m.turn) return null;
   const res = throwDart(m, e.x, e.y);
-  if ((res.event === 'end' || res.event === 'bust' || res.event === 'out') && m.winner == null) nextTurn(m);
+  if ((res.event === 'end' || res.event === 'bust' || res.event === 'out' || res.event === 'tie') && m.winner == null) nextTurn(m);
   return res.event;
 }
 
 /** Replay the first `upto` darts. */
 export function buildMatch(game, upto = game.log.length) {
-  const m = newMatch(0, kindOfGame(game), eqOf(game));
+  const m = newMatch(0, kindOfGame(game), eqOf(game), otOf(game));
   for (let i = 0; i < upto; i++) if (!applyEntry(m, game.log[i])) break;   // validateGame proved it replays
   return m;
 }
@@ -149,7 +152,8 @@ export function validateGame(raw) {
   const log = [];
   const kind = kindOfGame(raw);
   const eq = eqOf(raw);
-  const m = newMatch(0, kind, eq);
+  const ot = otOf(raw);
+  const m = newMatch(0, kind, eq, ot);
   for (const k of keys) {
     const e = cleanEntry(src[k]);
     if (!e) return null;
@@ -161,8 +165,11 @@ export function validateGame(raw) {
     const w = raw.over.winner;
     if (w !== 'a' && w !== 'b' && w !== 'draw') return null;
     over = { winner: w, why: String(raw.over.why || ''), at: ms(raw.over.at) };
+    // A phone still on the build before overtime (2026-10-13) ends a tied `ot` match as a draw. Keep
+    // it as the draw it wrote rather than refusing the whole match (THE LAW rule 1: never hide it).
+    const oldDraw = w === 'draw' && over.why === 'tie' && m.winner == null && inOvertime(m) && m.bo.every((x) => x === null) && m.darts.length === 0;
     // A result the log did not produce is only allowed for a resignation (and nobody resigns a draw).
-    if (over.why === 'resign' ? w === 'draw' : (m.winner == null || winnerOf(m) !== w)) return null;
+    if (!oldDraw && (over.why === 'resign' ? w === 'draw' : (m.winner == null || winnerOf(m) !== w))) return null;
   } else if (m.winner != null) {
     over = { winner: winnerOf(m), why: whyOf(m, kind), at: ms(raw.updated) };
   }
@@ -170,6 +177,7 @@ export function validateGame(raw) {
   return {
     v: 1, id, kind,
     ...(eq ? { eq: true } : {}),
+    ...(ot ? { ot: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -468,7 +476,7 @@ export async function createGame({ them, kind = '301' }) {
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, kind, eq: true, by: me, created: now, updated: now,
+    v: 1, id, kind, eq: true, ot: true, by: me, created: now, updated: now,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -524,7 +532,7 @@ export async function appendLog(id, base, entries) {
     if (!todo.length) return { ok: true, game: fresh };
     if (fresh.over) return fail('already-over');
     // Check the rules accept them before anything is written.
-    const m = newMatch(0, fresh.kind, eqOf(fresh));
+    const m = newMatch(0, fresh.kind, eqOf(fresh), otOf(fresh));
     for (const e of fresh.log.concat(todo)) if (!applyEntry(m, e)) return fail('rules-refused');
     const now = Date.now();
     const patch = { updated: now };
