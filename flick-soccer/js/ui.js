@@ -33,6 +33,13 @@ const FIRSTS = ['alt', 'me', 'them'];
 /** How far back (pitch units) a full-strength pull goes, and the dead zone round the disc. */
 const PULL_MAX = 34;
 const PULL_DEAD = DISC_R * 0.5;
+/** The edge zoom (`_edgeZoom`): how close to the screen's edge a finger may be asked to reach (px),
+ *  how near that it has to be pressed before the view zooms out (px), the furthest it zooms out,
+ *  and how quickly the view eases there and back (per second). */
+const EDGE_M = 12;
+const EDGE_BAND = 36;
+const ZOOM_MIN = 0.6;
+const CAM_RATE = 14;
 /** The weakest flick that counts; anything less is a cancelled aim. */
 const MIN_POWER = 0.04;
 /** Physics steps allowed per frame, so a stalled tab cannot teleport anything (Part 3). */
@@ -400,6 +407,8 @@ class FlickSoccerUI {
     const safe = this.root.querySelector('[data-role="safe"]').offsetHeight || 0;
     const top = Math.max(0, statusBottom) + 4;
     const box = { x: 6, y: top, w: w - 12, h: Math.max(120, h - top - 8 - safe) };
+    this._safe = safe;
+    this.cam = this.camTo = null;
     this.canvas.style.width = w + 'px';
     this.canvas.style.height = h + 'px';
     this.r.layout(w, h, box);
@@ -1144,14 +1153,74 @@ class FlickSoccerUI {
     if (i < 0) return;
     e.preventDefault();
     try { this.canvas.setPointerCapture(e.pointerId); } catch { /* not supported: moves still arrive */ }
-    this.drag = { id: e.pointerId, i };
+    this.drag = { id: e.pointerId, i, cx: e.clientX, cy: e.clientY };
     this._aimFrom(p);
   }
 
   _pointerMove(e) {
     if (!this.drag || e.pointerId !== this.drag.id) return;
     e.preventDefault();
+    this.drag.cx = e.clientX; this.drag.cy = e.clientY;
     this._aimFrom(this._pt(e));
+    this._edgeZoom();
+  }
+
+  /** The edge zoom (Matt, 2026-10-13: a disc near the side of the phone could not be pulled back far
+   *  enough for a full-strength flick, because the finger ran off the screen first). When the finger
+   *  is pressed near an edge of the screen short of full strength, the view zooms out just enough
+   *  that a full pull in that direction fits on screen. It zooms about a point on the line of the
+   *  pull, beyond the disc, so the aim keeps its direction while the disc slides away from the
+   *  finger (the ring fills as it goes); the pitch stays whole inside its own box. It never zooms back
+   *  in during a drag, and eases back once the finger is lifted (`_camTick`). Strength is still
+   *  measured in pitch units (PULL_MAX), so a flick is exactly as strong as it always was. */
+  _edgeZoom() {
+    const a = this.aim, d = this.drag, r = this.r;
+    if (!a || a.idle || a.power >= 1 || !d || !this.match || !r.box) return;
+    const rc = this.canvas.getBoundingClientRect();
+    const fx = d.cx - rc.left, fy = d.cy - rc.top;
+    const x0 = EDGE_M, y0 = EDGE_M, x1 = r.w - EDGE_M, y1 = r.h - EDGE_M - (this._safe || 0);
+    if (fx > x0 + EDGE_BAND && fx < x1 - EDGE_BAND && fy > y0 + EDGE_BAND && fy < y1 - EDGE_BAND) return;
+    const inside = (p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
+    const o = this.match.b[a.i];
+    const bo = r.toPxBase(o.x, o.y);
+    const bF = r.toPxBase(o.x - a.dx * PULL_MAX, o.y - a.dy * PULL_MAX);   // the full pull, fitted layout
+    const cur = this.camTo;
+    const under = (c) => ({ x: c.ox + (bF.x - r.ox0) * c.k, y: c.oy + (bF.y - r.oy0) * c.k });
+    if (inside(cur ? under(cur) : bF)) return;
+    // The anchor: where the line from the full pull through the disc leaves the pitch's box.
+    const L = Math.sqrt((bo.x - bF.x) ** 2 + (bo.y - bF.y) ** 2);
+    if (!(L > 0)) return;
+    const ux = (bo.x - bF.x) / L, uy = (bo.y - bF.y) / L, B = r.box;
+    let t = Infinity;
+    if (ux > 0) t = Math.min(t, (B.x + B.w - bo.x) / ux); else if (ux < 0) t = Math.min(t, (B.x - bo.x) / ux);
+    if (uy > 0) t = Math.min(t, (B.y + B.h - bo.y) / uy); else if (uy < 0) t = Math.min(t, (B.y - bo.y) / uy);
+    t = Math.max(0, Number.isFinite(t) ? t : 0);
+    const ax = bo.x + ux * t, ay = bo.y + uy * t;
+    let k = 1;
+    while (k > ZOOM_MIN && !inside({ x: ax + (bF.x - ax) * k, y: ay + (bF.y - ay) * k })) k -= 0.01;
+    k = Math.max(ZOOM_MIN, Math.min(k, cur ? cur.k : 1));
+    this.camTo = { k, ox: ax + (r.ox0 - ax) * k, oy: ay + (r.oy0 - ay) * k };
+  }
+
+  /** Eases the view toward the edge zoom's target, or back to the fitted layout when no finger is
+   *  down. The aim is re-read every step, since the pitch moves under a finger that has not. */
+  _camTick(dt) {
+    const r = this.r;
+    if (!r || !r.box) return;
+    if (!this.drag) this.camTo = null;
+    const base = { k: 1, ox: r.ox0, oy: r.oy0 };
+    const to = this.camTo || base, cur = this.cam || base;
+    if (cur.k === to.k && cur.ox === to.ox && cur.oy === to.oy) return;
+    const f = this.reduce ? 1 : 1 - Math.exp(-dt * CAM_RATE);
+    let n = { k: cur.k + (to.k - cur.k) * f, ox: cur.ox + (to.ox - cur.ox) * f, oy: cur.oy + (to.oy - cur.oy) * f };
+    if (Math.abs(n.k - to.k) < 0.001 && Math.abs(n.ox - to.ox) < 0.3 && Math.abs(n.oy - to.oy) < 0.3) n = to;
+    this.cam = n === base ? null : n;
+    r.setCam(n.k, n.ox, n.oy);
+    if (this.drag && this.aim) {
+      const rc = this.canvas.getBoundingClientRect();
+      this._aimFrom(r.toPitch(this.drag.cx - rc.left, this.drag.cy - rc.top));
+      this._edgeZoom();
+    }
   }
 
   _aimFrom(p) {
@@ -1192,6 +1261,7 @@ class FlickSoccerUI {
   _stop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
 
   _frame(dt) {
+    this._camTick(dt);
     const live = this.screen === 'play';
     if (live) {
       this.clock += dt;
