@@ -124,8 +124,8 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
 - **Money moves at exactly two moments**: the buy-in when the cards are dealt (solo `_newSolo`;
   online `_stake`, once per game per device, keyed `code:gid:stake`), and the prize when this
   player's place is decided - `payout()` in `engine.js`: everyone at the table (computers too)
-  puts the buy-in in the pot, 1st 65% and 2nd the rest with 3+ players, winner takes all
-  heads-up. It rides the same once-per-game dedupe as the win/loss result (`state.rec` solo,
+  puts the buy-in in the pot, 1st 65% and 2nd the rest with 3+ players; heads-up the winner
+  gets 1.5x the buy-in (whole pot until 2026-10-13, see "Heads-up pays less" below). It rides the same once-per-game dedupe as the win/loss result (`state.rec` solo,
   `code:gid` online), so a reload can never pay twice. Walking away pays nothing.
 - **Online**: the host picks the table in the lobby (only ones they can afford, or "no buy-in").
   **No seat at a money table is free** (2026-10-08, see "No free seats" below): a guest whose
@@ -139,6 +139,24 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
 - **Visible**: the setup screen and table picker, the end-of-game card ("+$X to your
   bankroll"), My Stats (Bankroll, Biggest prize, Won in prizes, Paid in buy-ins), and the
   leaderboard's Texas Hold'em records (Bankroll, Biggest prize).
+
+## Heads-up pays less (2026-10-13)
+
+Matt: *"the payout shouldn't be the full payout if you play against only 1 person."* A heads-up
+winner now gets **75% of the pot = 1.5x the buy-in** (`HEADS_UP_SHARE` in `engine.js`); the loser
+still gets nothing, and 3+ player tables are unchanged. So a fair heads-up game now loses money on
+average, and the money is at full tables.
+
+- **Versioned, so nothing already promised changes**: every new game is stamped `cfg.pv = 2`
+  (`PAYOUT_V`); `_prizeFor` passes `pub.cfg.pv || 1`, so a tournament saved before this (no `pv`)
+  still pays the whole pot when it finishes.
+- **`js/game-stats.js`'s valid-prize set accepts BOTH rules for ever** (THE LAW rule 1): every
+  ledger already holding an old heads-up prize (King of Games' $20M) must never read "Under
+  review", and a phone on an older cached build still pays v1 for a while. `HOLDEM_MAX_PRIZE` is
+  computed from v1. Checked against all 20 live ledgers on the day: none flagged before or after.
+- Asked first: *"Can you check how many times he's done this?"* It cannot be counted: no record
+  stores a game's table size (the ledger is totals; `gamehub.activity.v1` only began 10-11). His
+  ledger did show 60 cashes for 59 wins, so 2nd-place money at most once.
 
 ## Bigger tables, tougher computers (2026-10-08)
 
