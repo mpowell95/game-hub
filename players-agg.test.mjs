@@ -625,7 +625,7 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
 // 2026-10-13. Counters add. A run cannot be summed across phones, so the person keeps the
 // best-scoring run any device holds; d2's best arrives as a Firebase object keyed 0..n.
 {
-  const fin = (t) => ({ t, a: 40, r: 10 });   // par = 40*1.5s + 10*2.5s = 85s
+  const fin = (t) => ({ t, a: 40, r: 10 });   // 40 arrows: 85 s = 28 arrows/min, 42.5 s = 56
   const all = {
     d1: rec({ playerId: 'WO111', name: 'Arrows' }, {
       wayout: { total: { played: 3, won: 3, lost: 0 }, byDiff: { hard: { played: 3, won: 3, lost: 0 } },
@@ -638,8 +638,9 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   };
   const wo = aggregatePlayers(all)[0].games.wayout.wo;
   eq('wayout: counters add', [wo.timed.hard, wo.mistakes, wo.hints], [3, 1, 2]);
-  // d1's run: two finishes at par = (100+100+8*100)/10 = 100. d2's: one at twice par = (200+900)/10 = 110.
-  eq('wayout: the best-scoring run wins, never a mix', wo.best.hard.length, 1);
+  // d1's run: two at 28.2 arrows/min, the other 8 as 0 = 5.6. d2's: one at 56.5 = 5.6, a tie, and a
+  // tie keeps the run already held (d1's), which is still never a mix of the two.
+  eq('wayout: one device\'s run, never a mix', wo.best.hard.length, 2);
   eq('wayout: recent comes from the device with most timed finishes', wo.recent.hard.length, 2);
   ok('wayout counts as a SOLO game', SOLO.has('wayout'));
 }

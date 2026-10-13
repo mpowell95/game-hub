@@ -216,7 +216,7 @@
 //                                                   // (2026-10-13) the timed score. A finish is
 //                                                   // stored RAW: t = ms including penalties, a =
 //                                                   // arrows, r = rounds; js/wayout-score.js scores
-//                                                   // it against par at read time. recent = the last
+//                                                   // it (arrows per minute) at read time. recent = the last
 //                                                   // up-to-15 timed finishes; best = the run of up to
 //                                                   // 10 with the highest score, replaced only by a
 //                                                   // higher-scoring run (rule 2). Levels cleared
@@ -473,7 +473,7 @@ function ensureMs(g) {
 }
 
 /** Arrow Maze's timed score (2026-10-13; js/wayout-score.js has the maths). Finishes are kept RAW
- *  so par can be retuned without a migration. Lists may come back from Firebase as objects keyed
+ *  so the formula can change without a migration. Lists may come back from Firebase as objects keyed
  *  0..n; woList reads both. */
 function ensureWo(g) {
   if (!g.wo || typeof g.wo !== 'object') g.wo = { timed: {}, mistakes: 0, hints: 0, recent: {}, best: {} };
