@@ -101,6 +101,9 @@ const fail = (reason, retryable = false) => ({ ok: false, reason, retryable });
 export const goalsOfGame = (raw) => (raw && GOAL_OPTIONS.includes(+raw.goals) ? +raw.goals : 2);
 /** The two line-ups [side a, side b] (optional field, added 2026-10-11; absent reads as balanced). */
 export const formsOfGame = (raw) => cleanForms(raw && raw.forms);
+/** Who kicks off (optional field, 2026-10-13): 1 = side b. Absent reads 0, the challenger, which is
+ *  how every match before own-lineup challenges was played. */
+export const starterOfGame = (raw) => (raw && +raw.starter === 1 ? 1 : 0);
 
 // --- the log --------------------------------------------------------------------------------------
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -146,7 +149,7 @@ export function applyEntry(m, e) {
 
 /** Replay the first `upto` flicks. */
 export function buildMatch(game, upto = game.log.length) {
-  const m = newMatch(goalsOfGame(game), 0, formsOfGame(game));
+  const m = newMatch(goalsOfGame(game), starterOfGame(game), formsOfGame(game));
   for (let i = 0; i < upto; i++) if (!applyEntry(m, game.log[i])) break;   // validateGame proved it replays
   return m;
 }
@@ -168,7 +171,8 @@ export function validateGame(raw) {
   const log = [];
   const goals = goalsOfGame(raw);
   const forms = formsOfGame(raw);
-  const m = newMatch(goals, 0, forms);
+  const starter = starterOfGame(raw);
+  const m = newMatch(goals, starter, forms);
   for (const key of keys) {
     const e = cleanEntry(src[key]);
     if (!e) return null;
@@ -186,8 +190,11 @@ export function validateGame(raw) {
     over = { winner: sideOfSeat(m.winner), why: 'goals', at: ms(raw.updated) };
   }
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
+  // Side b still has to choose a line-up (own-lineup challenges, 2026-10-13). Only meaningful before
+  // the first flick: nobody can flick until it is done, so a log with entries has no pick pending.
+  const pick = raw.pick === 'b' && !log.length && !over ? 'b' : null;
   return {
-    v: 1, id, goals, forms,
+    v: 1, id, goals, forms, starter, pick,
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -476,11 +483,12 @@ async function writeRows(api, db, game, writer, only = null) {
 }
 
 /**
- * Start a challenge against `them` ({code, name, emoji}). The challenger is side 'a' and kicks off;
- * only their own row is written here (the other person's arrives when the first turn passes,
- * appendLog). Returns { ok, id, game } or a failure.
+ * Start a challenge against `them` ({code, name, emoji}). Own-lineup challenges (2026-10-13, Matt:
+ * "Make sure they know their role before selecting"): the challenger (side 'a') picks THEIR line-up
+ * (`form`); the other person sees it, picks theirs (pickLineup) and KICKS OFF. So the match is
+ * theirs from the start and both rows are written now. Returns { ok, id, game } or a failure.
  */
-export async function createGame({ them, goals = 2, forms }) {
+export async function createGame({ them, goals = 2, form }) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
@@ -495,7 +503,8 @@ export async function createGame({ them, goals = 2, forms }) {
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, goals: +goals, forms: cleanForms(forms), by: me, created: now, updated: now,
+    v: 1, id, goals: +goals, forms: cleanForms([form, 'balanced']), starter: 1, pick: 'b',
+    by: me, created: now, updated: now,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -509,11 +518,45 @@ export async function createGame({ them, goals = 2, forms }) {
     const game = back && back.exists() ? validateGame(back.val()) : null;
     if (!game) { console.error(`[flick-soccer] write VERIFY FAILED for ${NODE}/games/${id}`); return fail('did-not-land', true); }
     game.id = id;
-    await writeRows(api, db, game, 'a', 'a');
+    await writeRows(api, db, game, 'a');
     markSeen(id, game.updated);
     return { ok: true, id, game };
   } catch (err) {
     console.error('[flick-soccer] could not start the match', err);
+    const reason = reasonOf(err);
+    return fail(reason, reason !== 'denied');
+  }
+}
+
+/**
+ * Side b chooses its line-up (own-lineup challenges). Allowed once, before any flick; verified by a
+ * fresh re-read. Returns { ok, game } or a failure.
+ */
+export async function pickLineup(id, form) {
+  const me = myCode();
+  if (!me) return fail('no-player-code');
+  if (!allowed('pickLineup')) return fail('dev-origin-blocked');
+  const f = cleanForms([form, form])[0];
+  try {
+    const boot = await ready();
+    if (!boot) return fail('offline', true);
+    const { db, api } = boot;
+    const { game: fresh, why } = await readFresh(api, db, id);
+    if (!fresh) return fail(why);
+    if (sideOf(fresh, me) !== 'b') return fail('not-your-game');
+    if (!fresh.pick) return { ok: true, game: fresh };          // already chosen (a retry)
+    const now = Date.now();
+    await api.update(api.ref(db, `${NODE}/games/${id}`), { 'forms/1': f, pick: null, updated: now });
+    const again = await readFresh(api, db, id);
+    const back = again.game;
+    if (!back || back.pick || back.forms[1] !== f) {
+      console.error(`[flick-soccer] VERIFY FAILED: line-up for ${NODE}/games/${id}`);
+      return fail('did-not-land', true);
+    }
+    await writeRows(api, db, back, 'b');
+    return { ok: true, game: back };
+  } catch (err) {
+    console.error('[flick-soccer] could not save the line-up', err);
     const reason = reasonOf(err);
     return fail(reason, reason !== 'denied');
   }
@@ -557,7 +600,8 @@ export async function appendLog(id, base, entries) {
     }
     if (fresh.over) return fail('already-over');
     // Check the rules accept them before anything is written.
-    const m = newMatch(fresh.goals, 0, fresh.forms);
+    if (fresh.pick) return fail('not-picked');
+    const m = newMatch(fresh.goals, fresh.starter, fresh.forms);
     for (const e of fresh.log.concat(todo)) if (!applyEntry(m, e)) return fail('rules-refused');
     const now = Date.now();
     const patch = { updated: now };
@@ -614,10 +658,16 @@ export async function resignGame(id) {
     }
     const r = await api.get(api.ref(db, `${NODE}/index/${back[other(side)].code}/${id}`));
     const handed = !!(r && r.exists());
-    await writeRows(api, db, back, side, handed ? null : side);
-    if (!handed) await api.update(api.ref(db, `${NODE}/index/${me}/${id}`), { result: 'cancelled' });
+    // Nobody has flicked yet (a challenge declined, or called off before it was played): it counts
+    // for nobody and is listed for nobody. Both rows are kept, marked 'cancelled'.
+    const cancelled = !back.log.length;
+    await writeRows(api, db, back, side, handed || cancelled ? null : side);
+    if (cancelled) {
+      await api.update(api.ref(db, `${NODE}/index/${me}/${id}`), { result: 'cancelled' });
+      await api.update(api.ref(db, `${NODE}/index/${back[other(side)].code}/${id}`), { result: 'cancelled' });
+    }
     markSeen(id, back.updated);
-    return { ok: true, game: back, cancelled: !handed };
+    return { ok: true, game: back, cancelled };
   } catch (err) {
     console.error('[flick-soccer] could not resign', err);
     const reason = reasonOf(err);

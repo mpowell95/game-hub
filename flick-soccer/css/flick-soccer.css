@@ -429,6 +429,10 @@
 @media (prefers-reduced-motion: reduce) {
   .fs-root .fs-banner.is-show { animation: fs-still 1.6s linear forwards; }
 }
+/* Own-lineup challenges: the other side's pick, shown with its picture, and your role. */
+.fs-root .fs-mp-pick-theirs { margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 800; color: var(--fs-ink); }
+.fs-root .fs-mp-pick-theirs .fs-form-ico { width: 30px; height: 26px; flex: 0 0 auto; }
+.fs-root .fs-mp-role { color: var(--fs-ink); font-weight: 700; }
 /* "+N more" on the online home is a button: the next page of matches. */
 .fs-root button.fs-mp-more { min-height: 44px; border: 0; background: transparent; color: var(--fs-green); text-decoration: underline; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; }
 

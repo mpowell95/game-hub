@@ -63,6 +63,20 @@ function shotFor(game, side, diff = 'hard') {
 }
 const straight = (side, k = 3) => ({ by: side, ...MP.roundShot(k, 0, side === 'a' ? -1 : 1, 0.3) });
 
+/** A match in the shape every challenge had BEFORE own-lineup challenges (2026-10-13): no `starter`,
+ *  no `pick`, the challenger kicks off and only their row exists until their first turn is over.
+ *  Most checks below run on this shape, which is also the proof such matches still play. */
+async function legacyGame({ them, goals, forms } = {}) {
+  const r = await MP.createGame({ them, goals, form: forms ? forms[0] : undefined });
+  if (!r.ok) return r;
+  setAt(`flicksoccer/games/${r.id}/starter`, null);
+  setAt(`flicksoccer/games/${r.id}/pick`, null);
+  if (forms) setAt(`flicksoccer/games/${r.id}/forms`, forms);
+  setAt(`flicksoccer/index/${them.code}/${r.id}`, null);
+  r.game = await MP.readGame(r.id);
+  return r;
+}
+
 // --- the stored shot ------------------------------------------------------------------------------
 {
   const r = MP.roundShot(2, 3, 4, 0.123456);
@@ -74,7 +88,7 @@ const straight = (side, k = 3) => ({ by: side, ...MP.roundShot(k, 0, side === 'a
 
 // --- a whole challenge, both phones ----------------------------------------------------------------
 use('A');
-let res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, goals: 1 });
+let res = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, goals: 1 });
 ok('the challenger can create a match', res.ok, JSON.stringify(res));
 const id = res.id;
 ok('created: only the challenger has a row until the first turn is over',
@@ -156,7 +170,7 @@ ok('...and queued for their Game Over popup', MP.readUnseen().includes(id));
 
 // Resign.
 use('A');
-res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, forms: ['diamond', 'diamond'] });
+res = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, forms: ['diamond', 'diamond'] });
 const id2 = res.id;
 ok('a challenge stores its line-up', res.ok && res.game.forms.join() === 'diamond,diamond' && getAt(`flicksoccer/games/${id2}`).forms.join() === 'diamond,diamond');
 res = await MP.appendLog(id2, 0, [straight('a')]);
@@ -168,10 +182,10 @@ ok('...and both rows record it', getAt(`flicksoccer/index/MATTA/${id2}`).result 
 
 // A challenge resigned before delivery does not reach the other person.
 use('A');
-res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+res = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
 const id3 = res.id;
 await MP.resignGame(id3);
-ok('a never-delivered challenge, given up, writes no row for the other person', !getAt(`flicksoccer/index/ANABB/${id3}`));
+ok('a never-delivered challenge, given up, is called off for the other person too', !getAt(`flicksoccer/index/ANABB/${id3}`) || getAt(`flicksoccer/index/ANABB/${id3}`).result === 'cancelled');
 ok('a made-up goal target is refused', (await MP.createGame({ them: { code: 'ANABB', name: 'Ana' }, goals: 7 })).reason === 'bad-goals');
 ok('a match with no goal target reads as 2', MP.validateGame({ a: { code: 'MATTA' }, b: { code: 'ANABB' } }).goals === 2);
 
@@ -181,7 +195,7 @@ ok('records: one opponent, per code', rec.opponents.length === 1 && rec.opponent
 
 // The outbox keeps flicks until the server has them.
 use('A');
-res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+res = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
 MP.savePending(res.id, 0, [straight('a')]);
 ok('a pending flick is kept on the phone', !!MP.pendingFor(res.id));
 ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendingFor(res.id) && (await MP.readGame(res.id)).log.length === 1);
@@ -190,7 +204,7 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
 {
   const pause = () => new Promise((r) => setTimeout(r, 3));
   use('A');
-  let r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  let r = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
   const gid = r.id;
   const one = async () => AL.decideAlert((await MP.readMyGames()).filter((x) => x.id === gid), MP.readSeen(), MP.readUnseen());
   await pause(); await MP.appendLog(gid, 0, [straight('a')]);
@@ -208,7 +222,7 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
 {
   // The log lands but the other person's row does not: the retry must still tell them.
   use('A');
-  const c = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const c = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
   faultOn = (path) => path.startsWith('flicksoccer/index/ANABB/');
   const r1 = await MP.appendLog(c.id, 0, [straight('a')]);
   faultOn = null;
@@ -229,10 +243,10 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
   ok('...and the retry tells them', q2.ok && (getAt(`flicksoccer/index/MATTA/${c.id}`) || {}).over === true);
 
   // A challenge called off before it was ever delivered: no row for them, no loss, not listed.
-  const d = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const d = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
   const statsBefore = stores.A.get('gamehub.stats');
   const rr = await MP.resignGame(d.id);
-  ok('resigning an undelivered challenge calls it off', rr.ok && rr.cancelled && !getAt(`flicksoccer/index/ANABB/${d.id}`));
+  ok('resigning an undelivered challenge calls it off', rr.ok && rr.cancelled && (getAt(`flicksoccer/index/ANABB/${d.id}`) || {}).result === 'cancelled');
   ok('...it is not listed', !(await MP.readMyGames()).some((x) => x.id === d.id) && stores.A.get('gamehub.stats') === statsBefore);
   MP.recordFinished(await MP.readMyGames());
   ok('...and never counted', !MP.readLedger().has(d.id));
@@ -241,7 +255,7 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
   MP.savePending(d.id, 0, [straight('a')]);
   await MP.drainOutbox();
   ok('a flick for a finished match is dropped from the outbox', !MP.pendingFor(d.id));
-  const e = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const e = await legacyGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
   MP.savePending(e.id, 0, [straight('a')]);
   faultOn = () => true;
   await MP.drainOutbox();
@@ -249,6 +263,42 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
   ok('a flick that failed for want of signal stays queued', !!MP.pendingFor(e.id));
   ok('...and goes out on the next drain', (await MP.drainOutbox()) === 1 && !MP.pendingFor(e.id) && getAt(`flicksoccer/games/${e.id}/log/0000`));
   ok('NEVER_SENDABLE never names a phone-side reason', !['offline', 'denied', 'dev-origin-blocked', 'no-player-code'].some((x) => MP.NEVER_SENDABLE.includes(x)));
+}
+
+// Own-lineup challenges (2026-10-13): the challenger picks theirs, the other person sees it, picks
+// theirs and kicks off.
+{
+  use('A');
+  const c = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, goals: 2, form: 'attack' });
+  ok('a new challenge waits for Ana\'s line-up, and she kicks off', c.ok && c.game.pick === 'b' && c.game.starter === 1 && c.game.turn === 'b' && c.game.forms[0] === 'attack');
+  const rowB = getAt(`flicksoccer/index/ANABB/${c.id}`);
+  ok('it reaches Ana at once, as her turn, from Matt', rowB && rowB.yourTurn === true && rowB.lastBy === 'them');
+  ok('Matt cannot flick first', !(await MP.appendLog(c.id, 0, [straight('a')])).ok);
+  use('B');
+  ok('Ana cannot flick before she has picked', (await MP.appendLog(c.id, 0, [straight('b')])).reason === 'not-picked');
+  const p = await MP.pickLineup(c.id, 'defend');
+  ok('Ana picks her own line-up', p.ok && !p.game.pick && p.game.forms.join() === 'attack,defend');
+  ok('...once (a retry changes nothing)', (await MP.pickLineup(c.id, 'diamond')).ok && (await MP.readGame(c.id)).forms[1] === 'defend');
+  const m0 = MP.buildMatch(p.game);
+  ok('each side starts in its own line-up', m0.b[4].y === E.FORMATIONS.attack[3][1] && m0.b[9].y === E.H - E.FORMATIONS.defend[3][1] && m0.turn === 1);
+  const f1 = await MP.appendLog(c.id, 0, [straight('b')]);
+  ok('Ana kicks off, then it is Matt\'s turn', f1.ok && f1.game.turn === 'a');
+  use('A');
+  ok('Matt\'s row says it is his turn', getAt(`flicksoccer/index/MATTA/${c.id}`).yourTurn === true);
+  ok('both phones replay the same pitch', JSON.stringify(MP.buildMatch(await MP.readGame(c.id)).b) === JSON.stringify(MP.buildMatch(f1.game).b));
+  ok('Matt cannot pick Ana\'s line-up', (await MP.pickLineup(c.id, 'attack')).reason === 'not-your-game');
+
+  // Declined (or called off) before anybody flicked: counts for nobody, listed for nobody, no push.
+  const d = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, form: 'diamond' });
+  use('B');
+  const q = await MP.resignGame(d.id);
+  ok('Ana declining before she plays calls it off', q.ok && q.cancelled && getAt(`flicksoccer/index/MATTA/${d.id}`).result === 'cancelled' && getAt(`flicksoccer/index/ANABB/${d.id}`).result === 'cancelled');
+  MP.recordFinished(await MP.readMyGames());
+  ok('...nobody lists it, and it is never counted', !(await MP.readMyGames()).some((x) => x.id === d.id) && !MP.readLedger().has(d.id));
+  const { decideFlickSoccer } = await import('./functions/decide.js');
+  ok('...and nobody is notified', decideFlickSoccer({ code: 'MATTA', id: d.id, before: { yourTurn: false }, after: getAt(`flicksoccer/index/MATTA/${d.id}`) }) === null);
+  use('A');
+  ok('a match from before own-lineup challenges still has the challenger kick off', MP.starterOfGame({}) === 0 && MP.validateGame({ a: { code: 'MATTA' }, b: { code: 'ANABB' } }).pick === null);
 }
 
 // The hub's Challenges handoff.
