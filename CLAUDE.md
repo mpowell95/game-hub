@@ -391,7 +391,8 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/bug-report.js` | (2026-08-11) "Report a bug": the device/browser/PWA/network/SW picture plus the whole Device Details payload, written to `bugReports/` (screenshots to `bugReportShots/`), with an offline outbox that retries itself. Since 2026-08-13 it also carries Matt's **replies** — written to the report AND to `bugReplies/<reporterDeviceId>/`, which is the copy the player reads — and a soft delete that clears his inbox without touching either record |
 | `js/messages.js` | (2026-08-31) player-to-player **Messages**: the `messages/` node, addressed by PLAYER CODE so a message follows a person to every device they own. Pure helpers (`pairKey`, unread, hide) plus the verified writes and the offline outbox. Since 2026-09-28 a message can carry a game invite (`invite: {game, code}`, Air Hockey), drawn as a Join button by `js/messages-ui.js` |
 | `js/challenges.js` | (2026-10-05) the DATA half of the hub's **Challenges** screen: reads the five challenge games' own indexes (Hoops, Skeeball, Cup Pong, Darts, Flick Soccer) through each game's reader and folds them into one list plus records (by person, by game). Writes nothing. See "The Challenges screen" below |
-| `js/challenges-ui.js` | (2026-10-05) the Challenges screen: Live (your turn / their turn), Records (total, by game, by player, recent results), a player's page, and New challenge (person, then game). Opening a match or a challenge is handed to the game (`js/challenges-strings.js` holds its words) |
+| `js/challenges-ui.js` | (2026-10-05) the Challenges screen: Live (your turn / their turn), Records (total, by game, by player, recent results), a player's page, and New challenge (person, then game). Opening a match or a challenge is handed to the game (`js/challenges-strings.js` holds its words). Since 2026-10-13 every live row has a Cancel / Decline / Resign button (see "Cancel, decline, resign, expire" below) |
+| `js/challenge-life.js` | (2026-10-13) the few PURE rules all five challenge games share about a challenge that ends without a result: `ANSWER_MS` (3 days), `rowEnding` (cancelled / declined / expired / Skeeball's resign, read off an index row), `rowOpen`, `expiresAt`. No storage, no network |
 | `js/messages-ui.js` | (2026-08-31) the Messages screen: conversation list, one thread with chat bubbles and a quick-chat preset row, the recipient picker (Matt also gets **Everyone**), and Matt's read-only view of every conversation |
 | `js/bug-report-ui.js` | the report form, Matt's inbox (reply / mark done / delete), and the player's own "what Matt wrote back" screen. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
 | `js/error-log.js` | ring buffer of the last 20 uncaught JS errors (`gamehub.errorlog.v1`), installed by `hub.js` at load so a report carries what actually threw |
@@ -913,11 +914,13 @@ to send challenges and jump into games from this page."*
 - **What:** `js/challenges-ui.js`. Live tab (your turn first, then theirs), Records tab (total
   won/lost/drawn, by game, by player, recent results), a player's page (record vs them, live games
   with them, a Challenge button), and New challenge (pick a person, then a game).
-- **Every game keeps its own challenges.** `js/challenges.js` only READS `hoops/`,
+- **Every game keeps its own challenges.** `js/challenges.js` READS `hoops/`,
   `skeeChallenges/`, `cuppong/`, `darts/` and `flicksoccer/` (2026-10-11) indexes through each game's own reader. It writes
-  nothing, so THE LAW has no surface here. Records come from FINISHED index rows, grouped by player
+  nothing itself, so THE LAW has no surface here. Records come from FINISHED index rows, grouped by player
   CODE; an old Hoops row with no stored result counts as played and in no column (rule 4), and an
-  expired Skeeball challenge is listed but not counted.
+  expired, cancelled or declined challenge is listed but not counted. Cancel / Decline / Resign
+  (2026-10-13) are the one thing this screen starts, and it calls the GAME's own writer for them
+  (`endAction` / `endMatch`), so it still writes nothing itself (see "Cancel, decline, resign, expire").
 - **Jumping in is the game's job.** Every challenge game's alerts module now exports
   `armOpen(id)` (open that match on mount), `armChallenge({code,name,emoji})` (open the game's own
   "challenge this person" screen with them already picked) and `myTurnCount()`. `js/hub.js`'s
@@ -926,6 +929,53 @@ to send challenges and jump into games from this page."*
   `SOURCES` entry in `js/challenges.js`); `test-challenges.mjs` checks all five have them.
 - Only games on the player's launcher are shown, so for the family that is Skeeball until Matt
   releases the others from the admin page.
+
+## Cancel, decline, resign, expire (2026-10-13)
+
+Matt: *"Please implement a way to cancel sent challenge requests, and a way to resign/forfeit. Maybe
+challenges expire if they aren't accepted in 3 days?"* All five challenge games (Hoops, Skeeball, Cup
+Pong, Darts, Flick Soccer). The shared rules are `js/challenge-life.js`; each game's own `mp.js`
+(Skeeball: `challenge.js`) does the writes, verified by re-read, deleting nothing.
+
+- **A challenge is OPEN until its receiver plays their first move** (Hoops a shot, Cup Pong a throw,
+  Darts a dart, Flick Soccer a flick - picking a line-up is not an answer - Skeeball a game's score).
+  A later game of a Hoops or Cup Pong series is never open: the series was already agreed to.
+- **While open, the sender can CANCEL and the receiver can DECLINE.** It counts for nobody (no win,
+  no loss, no record). `cancelGame(id)` / Skeeball `cancelChallenge(id)` write
+  `over: { winner: 'none', why: 'cancelled' | 'declined' }`. **`resignGame` on an open match calls it
+  off instead** (`{ cancelled: true }`), so nobody is handed a win for a match never played - this
+  changed Hoops', Cup Pong's and Darts' old "quit before answered = a loss" (Flick Soccer already
+  called it off). A cancel that races the receiver's first move is VOID on read (`validateGame`), so
+  both phones agree the match plays on.
+- **Once answered, the only way out is RESIGN**: the other person wins (unchanged in the four log
+  games; NEW in Skeeball, `resignChallenge(id)`, `over: { winner, why: 'resign' }`, never re-derived
+  from the scores).
+- **EXPIRY: a challenge that waits 3 days on its receiver with no answer lapses** and counts for
+  nobody. Only matches made from 2026-10-13 carry `lapse: true`; an older one never expires (it can
+  still be cancelled). Nothing is written when one expires: every phone works it out from the stored
+  time (the rows carry `expires`), and a late move is refused (`'expired'`). **Skeeball already
+  expired every turn after 3 days** (2026-09-24) and is unchanged.
+- **Rows of a called-off match (and a Skeeball resignation) are stored `over: false, yourTurn:
+  false` with `ended: <why>`.** On purpose: the deployed push functions (`functions/decide.js`) do
+  not know "cancelled" - Hoops' would tell the other person "<you> won", Skeeball's "it's a tie" - and
+  a functions change needs Matt's manual redeploy. For that shape no function sends anything, and
+  every reader turns it back into a finished row (`rowEnding`). **So no push is sent for a cancel, a
+  decline or a Skeeball resignation.** A function change could add "Ana declined your challenge"
+  later. Rows also carry `open` ('sent' | 'got' | ''), `expires` and `sent`, written on every row
+  write.
+- **Where a player does it:** every live row on the hub's Challenges screen has a Cancel / Decline /
+  Resign button (`js/challenges-ui.js`), with a confirm screen that RE-READS the match (the row can
+  be a turn behind). In each game, the existing Resign / Quit control says "Cancel challenge" /
+  "Decline challenge" while the match is open (Hoops' multiplayer rows too); Skeeball's challenge
+  page has the button (two taps). Lists show "You cancelled · Ana", "Ana declined", "Expired: Ana
+  never played"; a live row shows "Expires in 2d".
+- A resignation made from the hub is counted as a loss at once through the game's own ledger
+  (Darts, Cup Pong, Flick Soccer `countResult`; Hoops leaves it to `recordFinished`, as its own Quit
+  does).
+- Tests: `test-challenges.mjs` (the hub, end to end through Darts), and each game's suite
+  (`test-darts-mp.mjs`, `test-cuppong-mp.mjs`, `test-flicksoccer-mp.mjs`, `test-hoops4-mp.mjs`,
+  `test-skee-challenge.mjs`). Checked in Chromium: the hub screen (cancel, resign confirm, records)
+  and Darts' in-game decline, against an in-memory database.
 
 ## Skeeball challenges (2026-09-24)
 

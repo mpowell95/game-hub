@@ -1214,6 +1214,8 @@ class DartsUI {
     set('[data-act="resign"] span', kind === 'resign' ? 'mp_resign' : `mp_${kind}_ch`);
     set('[data-ov="resign"] h2', kind === 'resign' ? 'mp_resign_q' : `mp_${kind}_q`);
     set('[data-act="resignYes"] span', kind === 'resign' ? 'mp_resign_yes' : `mp_${kind}_ch`);
+    // "Cancel" beside "Cancel challenge" would say two opposite things: the way back says what it keeps.
+    set('[data-ov="resign"] [data-act="menu"] span', kind === 'resign' ? 'mp_cancel' : 'mp_keep');
   }
 
   /** What to say about a match that ended with no result: called off by either side, or expired

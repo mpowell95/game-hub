@@ -247,11 +247,17 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
 - **Counting:** each finished match is recorded once per phone (`gamehub.flicksoccer.counted.v1`) as
   `recordResult('flicksoccer', 'mp', won)`. A match that ended while you were away gets a Game Over
   popup the next time you open Multiplayer. No draws exist.
-- **Resign:** menu, Resign, confirm. The other person wins. A challenge never delivered is CALLED OFF
-  instead: no row for them, no loss for the sender, and the sender's row is marked
-  `result: 'cancelled'` so no list, record or Challenges screen shows it (the row stays stored).
-  Nothing is ever deleted. "Challenge again" keeps the finished match's goals and line-up, and a
-  double tap makes one match, not two.
+- **Resign:** menu, Resign, confirm. The other person wins. Nothing is ever deleted.
+- **Cancel, decline, expire (2026-10-13)**, root `CLAUDE.md`, "Cancel, decline, resign, expire". This
+  REPLACES the morning's "resign with an empty log = called off" form: until the receiver's first
+  flick (picking a line-up is not an answer) the menu reads **Cancel challenge** / **Decline
+  challenge** and `cancelGame` writes `over: { winner: 'none', why }`; rows say `ended`, are
+  listed (the hub's Challenges screen shows "Ana declined") and are in no record. Old rows marked
+  `result: 'cancelled'` still read as cancelled. A challenge made from 2026-10-13 (`lapse: true`)
+  **expires 3 days after it was made** if the receiver never flicked (`pickLineup` and `appendLog`
+  refuse with `'expired'`, which is in `NEVER_SENDABLE`).
+- "Challenge again" keeps the finished match's goals and line-up, and a double tap makes one match,
+  not two.
 - **Notifications:** `flickSoccerTurnPush` in `functions/index.js` (`decideFlickSoccer` in
   `functions/decide.js`): a challenge ("challenged you, first to 2"), your turn coming back (with the
   score), a match the other person ended (resigning, or **their own goal ending it**, which told

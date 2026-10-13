@@ -509,8 +509,8 @@ had already "sent" it, and nothing ever reminded them.
   `updated`: a known id (never "a challenge") that is still owed (a live turn), so the launcher
   says "Your turn vs <them>" until the shot is taken or the bubble is closed.
 - **Quit before the first shot** writes no row for the other person (`resignGame` checks theirs
-  exists first), so nobody is handed "won, they resigned" for a match they never saw. It still
-  counts as the sender's loss, as the Quit dialog says.
+  exists first), so nobody is handed "won, they resigned" for a match they never saw. **Since
+  2026-10-13 it is CALLED OFF, not a loss** (see "Cancel, decline, expire" below).
 - **Matches made before this** (the King's challenge to Matt is one) are re-armed ONCE per match
   by `alert.js` `rearmUnshot` on the sender's next hub load: a first game, this device on side 'a',
   its turn, zero moves, `updated` before `UNSHOT_BEFORE` (2026-09-24). Only those are read, and
@@ -581,6 +581,21 @@ challenge. The same way cup pong does. Please implement. You should be able to s
   shots and landed in the stored column; Skip at 0.9 s gave the identical board and shot counts;
   a reopen did not replay again; a move arriving live replayed. `test-hoops4-mp.mjs` covers the
   trail and `replayFrom`.
+
+### Cancel, decline, expire (2026-10-13)
+
+Root `CLAUDE.md`, "Cancel, decline, resign, expire". Until the receiver of game 1 has shot, the
+multiplayer row's Quit reads **Cancel** (you sent it) or **Decline** (sent to you), and the pause
+sheet's Quit reads **Cancel challenge** / **Decline challenge**: `cancelGame` writes
+`over: { winner: 'none', why }` - NOT `winner: null`, which here means a DRAW - and it counts for
+nobody. `resignGame` does the same on an open match. A challenge made from 2026-10-13 carries
+`lapse: true` and **expires 3 days after its first shot** if the receiver never shot back
+(`pushMove` refuses with `'expired'`). `validateGame` now keeps `by` (who made it), because the
+match needs it to know who it was sent to. Rows of a called-off match are stored `over: false`
+because the deployed `decide()` would otherwise push "<you> won" to the other person. Opening a
+called-off or expired match (`startAsync`), or having it called off while you watch
+(`_onAsyncGame`), leaves for the multiplayer sheet with a one-line note (`openMultiplayer(ui,
+{ flash })`); `finish()` never records a called-off match.
 
 ### Their move arrives while you watch; names on the bubble; the card once (2026-09-23)
 

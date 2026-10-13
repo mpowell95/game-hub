@@ -363,8 +363,15 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
 - **Counting:** each finished match is recorded once per phone (`gamehub.darts.counted.v1`) as
   `recordResult('darts', 'mp', won)`, whoever ended it. A match that ended while you were away
   gets a Game Over popup the next time you open online play.
-- **Resign:** menu, Resign. The other person wins; a challenge never delivered is not handed to
-  them as a win they never saw. Nothing is ever deleted.
+- **Resign:** menu, Resign. The other person wins. Nothing is ever deleted.
+- **Cancel, decline, expire (2026-10-13)**, root `CLAUDE.md`, "Cancel, decline, resign, expire":
+  until the receiver throws their first dart the menu button reads **Cancel challenge** (the
+  sender) or **Decline challenge** (the receiver) and calls it off for nobody (`cancelGame`; Resign
+  on such a match does the same, `{ cancelled: true }`). Until that date a sender quitting before
+  delivering it took a loss. A match made from 2026-10-13 carries `lapse: true` and **expires 3 days
+  after it was delivered** if the receiver never threw (`lifeOf`; `appendLog` refuses a late dart
+  with `'expired'`). The receiver's first dart rewrites both rows at once so they stop saying
+  `open`. Opening a called-off or expired match says so and goes back to the list.
 - **No series yet** (Cup Pong and Hoops have 1/3/5); GamePigeon Darts is one game. Easy to add from
   Cup Pong's `seriesAfter` / `nextInSeries` if Matt asks.
 - **No scrolling:** every list is drawn, then trimmed by measurement to what the card holds, with

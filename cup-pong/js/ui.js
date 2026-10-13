@@ -913,7 +913,7 @@ class CupPong {
         <h2 class="cp-card-title">${q}</h2>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${yes}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="no">${t('cancel')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="no">${kind === 'resign' ? t('cancel') : t('keepIt')}</button>
         </div>
       </div>`;
     this.root.appendChild(el);

@@ -2332,6 +2332,17 @@ out with nothing thrown posts 0 and delivers; a force-closed game posts its last
 next open. That run also caught two real bugs before shipping (one internal flag doing two jobs
 made every challenge "All machines"; a shared phone could block the other player's game).
 
+**Cancel, decline, resign (2026-10-13)**, root `CLAUDE.md`, "Cancel, decline, resign, expire". A
+challenge's own page has one more button, two taps: **Cancel challenge** (the challenger) or
+**Decline challenge** (the other person) while the other person has no score in (`isOpen`,
+`cancelChallenge`: `over: { winner: 'none', why }`, counts for nobody), and **Resign** after
+(`resignChallenge`: `over: { winner: <other>, why: 'resign' }`, the named winner stands, never
+re-derived from the scores; every score stays on the match). Both are stored on the rows as
+`over: false` + `ended`, because `decideSkee` would otherwise push "it's a tie" or tell the resigner
+their own result; so no push is sent for either. A cancelled or declined challenge raises no launcher
+bubble. The existing per-turn 3-day expiry is unchanged. `__setBootForTest` is a test seam (an
+in-memory database for `test-skee-challenge.mjs`).
+
 **Rules PUBLISHED by Matt 2026-09-24; `skeeChallengePush` DEPLOYED by Matt 2026-09-25.** Nothing
 outstanding. A later change to `functions/` still needs his `firebase deploy --only functions`. Root `CLAUDE.md`,
 "Skeeball challenges", tracks both - close them there when done.

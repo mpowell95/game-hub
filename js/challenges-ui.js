@@ -200,6 +200,8 @@ function untilText(at, now = Date.now()) {
  *  you sent it and they have not answered -> cancel; sent to you, unplayed -> decline; else resign. */
 const endHint = (r) => (r.open === 'sent' ? 'cancel' : r.open === 'got' ? 'decline' : 'resign');
 
+// "Waiting on <name>" left the row on 2026-10-13 to make room for the Cancel / Resign button: the
+// section heading ("Their turn") already says it, and the row's own subtitle needs the space.
 function liveRowHTML(r, gameName, { showName = true } = {}) {
   const yours = r.state === 'yours';
   const hint = endHint(r);
@@ -210,8 +212,7 @@ function liveRowHTML(r, gameName, { showName = true } = {}) {
         <span class="cx-row-name">${esc(showName ? (r.name || t('cx_someone')) : gameName(r.game))}</span>
         <span class="cx-row-sub">${esc(showName ? subLine(r, gameName) : subLine(r, () => ''))}</span>
       </span>
-      ${yours ? `<span class="cx-pill">${esc(t('cx_play'))}</span>`
-        : `<span class="cx-row-end">${esc(t('cx_waiting_on', { name: r.name || t('cx_someone') }))}</span>`}
+      ${yours ? `<span class="cx-pill">${esc(t('cx_play'))}</span>` : ''}
     </button><button type="button" class="cx-end" data-end-game="${esc(r.game)}" data-end-id="${esc(r.id)}"
       aria-label="${esc(t(`cx_end_${hint}_aria`, { name: who }))}">${esc(t(`cx_end_${hint}`))}</button></li>`;
 }
