@@ -43,6 +43,7 @@ Monopoly Deal's `business-deal/` split. A directory name is not a display name.
 | `js/test.js` | headless checks, `node way-out/js/test.js` (not precached; `validate-sw-assets.mjs` skips `test.js`) |
 | `js/ui.js` | the setup and play screens, the canvas board, input, animation, autosave, the module contract, the `window.__woTest` seam |
 | `js/strings.js` | EN/ES, every visible string and aria-label |
+| `../js/wayout-score.js` | the timed score (shared: the stats store, the merge, My Stats and the leaderboard use it too) |
 | `css/way-out.css` | all styling |
 | `index.html` | the standalone page (name gate before `init`) |
 
@@ -216,9 +217,64 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
 - **A save with every arrow gone is a win that was never counted** (the player left while the last
   arrow was still sliding out): opening it runs the win sequence, records it and moves on, instead
   of an empty board.
-- Stats: `recordResult('wayout', tier, true)` once per level cleared. **No sub-counter**, so the
-  three-edit rule does not apply. My Stats shares `murdokuScreen` (solved in total and per tier);
-  `wayout` is in `js/players-agg.js`'s SOLO set; leaderboard unit "solved".
+- Stats: **`recordWayOut(tier, finish)`** once per level cleared (since 2026-10-13; it was
+  `recordResult('wayout', tier, true)`, and it still counts exactly that: one play and one win in
+  total and in the tier). It also feeds the **`wo` sub-counter** (see "Timer and score"), so the
+  three-edit rule applies and all three are done: `js/game-stats.js` (`ensureWo`, `recordWayOut`),
+  My Stats (`wayoutScreen`: solved, timed and score per difficulty), `js/players-agg.js` (counters
+  add; per difficulty the best-scoring run any device holds). `wayout` is in the SOLO set.
+- The clock `gamehub.wayout.clocks.v1`: `{ <tier>: { level, gen, ms, pen, mistakes, hints, partial } | null }`.
+
+## Timer and score (2026-10-13)
+
+Matt (with Ana): *"first by difficulty (1 finish on hard is always ranked higher than a finish on
+easy); add a timer (like minesweeper); if someone messes up, they lose a heart, but their time also
+increases ... BUT with the above and the current system, it rewards new players and hurts better
+longer time players ... some calculation to take all of this into consideration?"* Then, choosing
+from options: rank on the **average of 10 vs par** (then refined to the best 10 of the last 15, below); mistakes **climb** ("losing 1 heart on easy is
++10, losing a second is +20. On medium it's +15, +30, hard +20, +40, expert +30s, +60s"); a hint
+costs **the same as a mistake**.
+
+- **The clock** sits at the left end of the hearts row and shows time WITH penalties, so the number
+  on screen is the number scored. It runs only while a level is on screen, unfinished, and the app
+  is in front (`visibilitychange`). It lives in its own key, not in the save, because the save is
+  cleared by Restart and Out of lives and **the clock is not**: a level's time runs from its first
+  open until it is cleared, through every Restart and Try again. Otherwise Restart would be a free
+  second look at the same seeded board.
+- **Penalties** (`WO_PENALTY_S`): the first heart lost in an attempt costs the tier's base, the
+  second double; the third ends the attempt with no extra charge (the clock keeps running into the
+  retry, which is its own cost). **A hint costs the base once**, a flat cost rather than a climbing
+  one, because hints are unlimited and a climbing cost would run away; tapping the bulb again while
+  the same hint is still pulsing does not charge again. A "+20s" badge flashes beside the clock.
+- **Par** = 1.5 s per arrow + 2.5 s per round (`peel()`'s layers), worked out for each board. **A
+  first guess with no play data behind it.** Finishes are stored RAW (`{t, a, r}`) and scored at
+  read time, so retuning the two constants re-scores every stored finish with no migration.
+- **A finish's score** = 100 x par / time, capped at 300. **A player's score at a difficulty** = the
+  **best 10 of their last 15** finishes there, averaged, with any of the 10 not yet played counting
+  as par (100) (`woFormScore`, read from `recent`, which keeps the last 15). Matt, same day: *"I
+  don't want to penalize someone who puts the phone down mid play or is distracted by someone or
+  something. So ... maybe we take the best 10 of the most recent 15."* So up to five slow levels are
+  simply dropped, a newcomer's two lucky boards average out near 100 instead of beating ten good
+  ones, and the number reflects how someone plays NOW. **It shipped first (the same morning) as
+  "best run of 10 in a row ever"**; that run is still kept up to date in `best` (only ever replaced
+  by a higher-scoring run, rules 2 and 5) but nothing ranks on it any more.
+- **Difficulty vs level** (Matt: *"hard lvl 1 is way easier than easy lvl 30, right?"*). Measured, it
+  is the other way round: Hard 1 is 20x26 with 68 arrows and 14 rounds (par 2:17); Easy 30 is 10x13
+  with 22 arrows and 10 rounds (par 0:58). Every tier's level 1 is at least as big as the tier
+  below's biggest board (Medium 1 = 10x13, 19 arrows, 10 rounds, about Easy's cap). Within a tier,
+  par grows with the board, so a later, harder level is not a slower score. Across tiers, Matt's
+  rule: any finish on a harder tier outranks any on an easier one.
+- **The leaderboard** ranks hardest difficulty first (the existing tier-first rule), then this
+  score; its note explains it in one line. Per-difficulty tiles show the score at each.
+- **Not timed, honestly:** a level resumed from a save made before the timer shipped has no honest
+  time (`partial`), and levels cleared before it have none either. Both still count as solved
+  everywhere; they just have no score (rule 4: never invent a number), so a player with only those
+  shows a dash and sorts below everyone with a score, still listed with their plays.
+- **The win banner** shows the level's time and score under the win word.
+- Tests: `test-wayout-score.mjs` (maths and the recorder on top of the old writer's store),
+  `players-agg.test.mjs` (the two-phone merge). Checked in a browser at 360x724 and 402x874: the
+  clock ticks, +10s on a mistake and on a hint (not twice), Restart keeps the time, a cleared level
+  records a timed finish, and the board ranks an Expert 98 above a Hard 120.
 
 ## The QA pass (2026-10-11)
 
@@ -254,7 +310,7 @@ page's `/favicon.ico` 404 is shared with every game's standalone page.
 
 ## Tests
 
-- `node way-out/js/test.js` (engine).
+- `node way-out/js/test.js` (engine); `node test-wayout-score.mjs` (the timed score).
 - `node test-visual.mjs way-out` has a PLAY probe: Play, tap a clear arrow (it leaves), tap a
   blocked one (it bounces and a heart goes), through real touch.
 - `node check-no-scroll.mjs way-out`, `node test-game-conventions.mjs`.

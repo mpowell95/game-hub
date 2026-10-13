@@ -12,6 +12,7 @@
 import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
+import { WO_TIERS, woList, woRunScore } from './wayout-score.js';
 
 export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout']);  // solo: win-only (no loss axis) or score-based
 
@@ -221,6 +222,24 @@ export function aggregatePlayers(all, corrections) {
           const cur = dst.ms.bestTimeMs[k] | 0;
           const val = mbt[k] | 0;
           if (val > 0) dst.ms.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
+        }
+      } else if (g === 'wayout' && src.wo) {
+        // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it Arrow Maze's
+        // timed score reads as nothing the moment a second device syncs (THE LAW rule 1). Counters
+        // add. Finish lists cannot be added across devices (each phone's are its own sequence), so
+        // per difficulty the person keeps the recent list (what the score is ranked on: best 10 of
+        // the last 15) of the device with the most timed finishes there, and the best-scoring
+        // 10-in-a-row run any device holds (js/wayout-score.js).
+        if (!dst.wo) dst.wo = { timed: {}, mistakes: 0, hints: 0, recent: {}, best: {}, _n: {} };
+        dst.wo.mistakes += src.wo.mistakes | 0;
+        dst.wo.hints += src.wo.hints | 0;
+        for (const tier of WO_TIERS) {
+          const n = ((src.wo.timed || {})[tier]) | 0;
+          dst.wo.timed[tier] = (dst.wo.timed[tier] | 0) + n;
+          const best = woList((src.wo.best || {})[tier]);
+          const had = woRunScore(dst.wo.best[tier]);
+          if (best.length && (had === null || woRunScore(best) > had)) dst.wo.best[tier] = best;
+          if (n > (dst.wo._n[tier] | 0)) { dst.wo._n[tier] = n; dst.wo.recent[tier] = woList((src.wo.recent || {})[tier]); }
         }
       } else if (g === 'contexto' && src.ct) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it every Contexto
