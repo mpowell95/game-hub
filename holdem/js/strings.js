@@ -124,6 +124,7 @@ export default {
     pace: 'Computer speed', pace_slow: 'Slow', pace_normal: 'Normal', pace_fast: 'Fast',
     // Table settings (2026-10-13)
     tset: 'Settings', on: 'On', off: 'Off', casino_floor: 'Go to casino floor',
+    floor: 'Casino floor', menu: 'Menu', tiers_saved: 'Finish or give up your tournament to start a new one.',
     cf_split: 'Separate Check / Fold button', cf_split_hint: 'A small button of its own, so a raise can never turn it into Call.',
     // Last hand replay (2026-09-28)
     last_hand: 'Last hand', last_title: 'Hand {n}', last_none: 'No hand has finished yet.',
@@ -294,6 +295,7 @@ export default {
     pace: 'Velocidad del ordenador', pace_slow: 'Lenta', pace_normal: 'Normal', pace_fast: 'Rápida',
     // Ajustes de la mesa (2026-10-13)
     tset: 'Ajustes', on: 'Sí', off: 'No', casino_floor: 'Ir a la sala del casino',
+    floor: 'Sala del casino', menu: 'Menú', tiers_saved: 'Termina o abandona tu torneo para empezar otro.',
     cf_split: 'Botón Pasar / No ir aparte', cf_split_hint: 'Un botón pequeño propio, para que una subida nunca lo convierta en Igualar.',
     // Última mano (2026-09-28)
     last_hand: 'Última mano', last_title: 'Mano {n}', last_none: 'Todavía no ha terminado ninguna mano.',

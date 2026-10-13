@@ -226,6 +226,10 @@
 .pk-root .pk-capico circle { fill: none; stroke: none; }
 .pk-root .pk-capico.is-full path { fill: #c8102e; stroke: #f5d76e; }
 .pk-root .pk-capico.is-full circle { fill: #e8e8e8; stroke: #9a9a9a; stroke-width: 1; }
+/* A tournament is saved: the tables wait until it is resumed or given up (2026-10-13). */
+.pk-root .pk-tiergrid.is-held .pk-tier { opacity: 0.4; pointer-events: none; }
+.pk-root .pk-actrow { display: flex; gap: 8px; }
+.pk-root .pk-actrow .pk-btn { flex: 1; }
 .pk-root .pk-broke { margin: 0; padding: 8px 12px; border-radius: 4px; background: #3a1010; border: 1px solid #7a2020; font-size: 14px; text-align: center; }
 .pk-root .pk-tierstep { display: flex; align-items: center; gap: 8px; }
 .pk-root .pk-tierstepval, .pk-root .pk-tierline {

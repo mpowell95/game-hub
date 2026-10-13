@@ -319,8 +319,16 @@ and the computer has raised and I end up clicking Call on accident."*
     (`this.canPre`), and disabled on your own turn, so a finger aimed at it can never land on CALL.
   - **Computer speed** (the same `settings.pace` as setup), shown only where this device runs the
     computers (solo or the host; `this.table`).
-  - **Go to casino floor**: solo = Save and leave (`_stepAway`, Resume tournament brings it back;
-    a finished game just ends); online = the red X's own Step away / Give up dialog.
+  - **Go to casino floor**: the CASINO FLOOR is the table picker (`screen = 'tiers'`), the MENU is
+    the setup screen (Matt's words, 2026-10-13). Solo = Save and leave onto the casino floor
+    (`_stepAway('tiers')`; a finished game just ends, `_endSolo('tiers')`); online = the red X's own
+    Step away / Give up dialog.
+- **The solo end-of-game card** says **Casino floor** / **Menu** over **Play again** (it said
+  "Settings" for the setup screen before, Matt: *"That's weird"*). Online's buttons are unchanged.
+- **The casino floor with a tournament saved** shows Resume tournament + Give up this tournament on
+  top and dims the tables (`.is-held`); `_newSolo` refuses to deal over a saved tournament, whose
+  buy-in is already paid and whose result would otherwise vanish. The setup screen already worked
+  this way (Resume replaces Choose a table).
 - **Both layouts**: once Check / Fold is ticked and your turn arrives, the big button stays dead
   (`mode = 'idle'`) for the 350ms until the auto check/fold has gone (`this.autoDone`), so a late tap
   cannot call a raise either. If the auto move cannot go, the button comes back.
