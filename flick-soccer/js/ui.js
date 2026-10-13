@@ -503,7 +503,10 @@ class FlickSoccerUI {
     const team = t(m.turn === 0 ? 'team_blue' : 'team_red');
     let txt;
     if (this.phase === 'moving' || this.phase === 'goal') txt = t('status_wait');
-    else if (this.mode === 'mp' && m.turn !== this.mp.mySeat) txt = t(this.phase === 'waiting' ? 'status_mp_wait' : 'status_mp_them', { name: s.name });
+    else if (this.mode === 'mp' && m.turn !== this.mp.mySeat) {
+      const sending = this.phase === 'waiting' && (this.mp.pending.length || this.mp.sending);
+      txt = t(this.phase !== 'waiting' ? 'status_mp_them' : sending ? 'status_mp_sending' : 'status_mp_wait', { name: s.name });
+    }
     else if (this.mode === 'mp') txt = t('status_you', { team });
     else if (!s.human) txt = t('status_cpu', { name: s.name });
     else if (this.mode === 'cpu') txt = t('status_you', { team });
@@ -711,6 +714,7 @@ class FlickSoccerUI {
     this.root.querySelector('[data-role="bannerMain"]').textContent = main;
     this.root.querySelector('[data-role="bannerSub"]').textContent = sub || '';
     this.banner.dataset.seat = String(seat);
+    this.banner.classList.toggle('is-long', main.length > 6);   // "¡ENVIADO!" is wider than "GOAL!"
     this.banner.classList.remove('is-show');
     void this.banner.offsetWidth;
     this.banner.classList.add('is-show');
@@ -927,6 +931,20 @@ class FlickSoccerUI {
     if (m.turn === mp.mySeat) { this.phase = 'aim'; this._status(); return; }
     this.phase = 'waiting';
     this._status();
+    this._mpSentNote();
+  }
+
+  /** "SENT!" (Matt, 2026-10-13: "Need a 'turn sent' or something after I play"). Shown once per
+   *  hand-over, only for a turn played on THIS phone, and only once the server HAS it: while a flick
+   *  is still queued the status line says "Sending your turn..." instead, and the banner waits for
+   *  the flush that lands it (_mpFlush calls this again). */
+  _mpSentNote() {
+    const mp = this.mp;
+    if (!mp || this.phase !== 'waiting' || !mp.flickedHere || mp.pending.length || mp.sending) return;
+    if (mp.sentFor === mp.base) return;
+    mp.sentFor = mp.base;
+    this._bannerShow(t('mp_sent'), t('mp_sent_sub', { name: mp.them.name || '?' }), mp.mySeat);
+    this._say(t('mp_sent_sub', { name: mp.them.name || '?' }));
   }
 
   /** The watched match changed: new flicks from them are played, our own echoes are ignored. */
@@ -954,6 +972,7 @@ class FlickSoccerUI {
     // Where this flick sits in the log: `applied` is its index (the caller counts it next). Set only
     // when nothing is queued, so a run of queued flicks stays contiguous.
     if (!mp.pending.length && !mp.sending) mp.base = mp.applied;
+    mp.flickedHere = true;
     mp.pending.push(entry);
     this._mpFlush();
   }
@@ -975,7 +994,8 @@ class FlickSoccerUI {
       mp.game = res.game;
       MP.savePending(mp.id, mp.base, mp.pending);
       MP.markShown(mp.id, mp.base);
-      if (mp.pending.length) this._mpFlush();
+      if (mp.pending.length) { this._mpFlush(); return; }
+      if (this.phase === 'waiting') { this._status(); this._mpSentNote(); }
       return;
     }
     if (res.retryable) {

@@ -221,6 +221,11 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   run on the pitch (their aim arrow grows, then the flick rolls), reusing the computer's path
   (`this.cpu` with `replay: true`). While it is their turn the match is watched, so their flick plays
   as it lands.
+- **"SENT!" (2026-10-13)**, Matt: *"Need a 'turn sent' or something after I play and send it to
+  whoever I'm playing"*. When your turn passes to them, a SENT! banner ("Ana's turn now") shows over
+  the pitch, once per hand-over, only for a turn played on this phone, and only once the server HAS
+  it (`_mpSentNote`). Until then the status line says "Sending your turn..."; afterwards "Sent.
+  Waiting for Ana to play". Reopening a match does not repeat it.
 - **You are always at the bottom**: the player on side b sees the pitch turned half round
   (`render.js` `flip`; a rotation, not a mirror, and the pitch is symmetric) and their own side of
   the scoreboard on the left (`.is-flip`). Team colours stay with the side: the challenger is blue.
