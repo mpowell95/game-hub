@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1106';
+const CACHE = 'game-hub-v1107';
 
 const ASSETS = [
   './',
@@ -1073,14 +1073,14 @@ const REST_MANIFEST = {
   './yahtzee/js/hash.js': '14b905be65',
   './battleship/': 'a5f89e6614',
   './battleship/index.html': 'a5f89e6614',
-  './battleship/css/battleship.css': '87c8dfc4b5',
-  './battleship/js/ui.js': 'a3ca45b37c',
+  './battleship/css/battleship.css': 'e0f411836a',
+  './battleship/js/ui.js': 'bf46758ee5',
   './battleship/js/game.js': 'd60d57f119',
   './battleship/js/fleet.js': 'b2c03f8517',
-  './battleship/js/ai.js': '1506117532',
+  './battleship/js/ai.js': 'c31bd9837a',
   './battleship/js/hash.js': 'aed473aee9',
   './battleship/js/ship-art.js': '11ea9db668',
-  './battleship/js/strings.js': '7a22a524a3',
+  './battleship/js/strings.js': 'cc7c8db117',
   './chinchon/decks/baraja-libre/oros-1.webp': '740f863677',
   './chinchon/decks/baraja-libre/oros-2.webp': '1de2771991',
   './chinchon/decks/baraja-libre/oros-3.webp': '2f904d4399',

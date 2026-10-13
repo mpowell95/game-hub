@@ -198,6 +198,8 @@ class BattleshipUI {
     this._fxPending = null;       // a shot whose cannonball still has to be thrown this render
     this._cannons = { mine: null, theirs: null };
     this._aimTimer = null;
+    this._armed = null;           // 'restart' | 'exit-battle' | 'mp-leave' awaiting its confirming tap
+    this._endTimer = null;        // holds the end card back until the last shot has landed
 
     this.mp = null;
 
@@ -222,6 +224,7 @@ class BattleshipUI {
     if (this._mpDelayTimer) { clearTimeout(this._mpDelayTimer); this._mpDelayTimer = null; }
     if (this._bannerTimer) { clearTimeout(this._bannerTimer); this._bannerTimer = null; }
     if (this._botPlaceTimer) { clearTimeout(this._botPlaceTimer); this._botPlaceTimer = null; }
+    if (this._endTimer) { clearTimeout(this._endTimer); this._endTimer = null; }
     if (this._mpRestoreTimer) { clearTimeout(this._mpRestoreTimer); this._mpRestoreTimer = null; }
     // Same reasoning as every other MP game: destroy() runs for any hub teardown (including just
     // navigating back), so a live room is preserved for the 30-minute rejoin window. A hosted room
@@ -353,6 +356,7 @@ class BattleshipUI {
     this._statsCommitted = false;
     this.state = saved.state;
     this.view = 'battle';
+    this._aimCell = null;
     this._lastShot = null;
     this._sunkShips = {};
     this._sinkPlayed = new Set();
@@ -436,9 +440,8 @@ class BattleshipUI {
     this.view = 'setup';
     this.state = null;
     this._botFleet = null;
-    if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
-    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
-    if (this._botPlaceTimer) { clearTimeout(this._botPlaceTimer); this._botPlaceTimer = null; }
+    this._stopGameTimers();
+    this._aimCell = null;
     const id = this._identity();
     const s = this._setup;
     const stats = this._statsLine();
@@ -544,6 +547,19 @@ class BattleshipUI {
 
   // --- starting a match ------------------------------------------------------------------------
 
+  /** Stops every timer that belongs to the game on screen. A timer left running across a restart
+   *  fires into the NEXT screen: the bot's two-beat shot timer used to land a second after Restart
+   *  and repaint the old battle over the fresh deploy screen, then shoot at the old board. */
+  _stopGameTimers() {
+    for (const k of ['aiTimer', '_settleTimer', '_bannerTimer', '_botPlaceTimer', '_endTimer']) {
+      if (this[k]) { clearTimeout(this[k]); this[k] = null; }
+    }
+    this._sunkBanner = '';
+    this._botAiming = false;
+    this.busy = false;
+    this._armed = null;
+  }
+
   _resolveStarter() {
     const s = this._setup;
     let starter;
@@ -561,6 +577,9 @@ class BattleshipUI {
     const starter = this._resolveStarter();
     this._soloStarterSeat = starter === 'you' ? 0 : 1;
     clearGame();
+    this._stopGameTimers();
+    this.state = null;
+    this._aimCell = null;
     this._statsCommitted = false;
     this._newPlacement(this._setup.size);
     this.view = 'placement';
@@ -676,6 +695,7 @@ class BattleshipUI {
     this.state = s;
     this.view = 'battle';
     this._statsCommitted = false;
+    this._aimCell = null;
     this._lastShot = null;
     this._cannonPlayed = null;
     this._aimBySide = { mine: null, theirs: null };
@@ -892,7 +912,11 @@ class BattleshipUI {
       </div>`;
     }).join('');
 
-    const preview = this._placePreview;
+    // A tap that could not place the ship leaves its dashed ghost where it was refused, so the tap
+    // visibly did SOMETHING. It used to be stored and never drawn: the tap simply did nothing.
+    const inv = this._placeInvalid;
+    const preview = this._placePreview
+      || (inv && inv.shipId === this._placeSelected && inv.dir === (this._placeDir[inv.shipId] || 'h') ? inv : null);
     const selDef = this._placeSelected && this._placeShipSet.find((d) => d.id === this._placeSelected);
     const ghostCells = new Map();
     let ghostLegal = false;
@@ -1726,8 +1750,7 @@ class BattleshipUI {
             <div class="bs-rosterrow bs-rosterrow-theirs ${theirsLive ? '' : 'is-dim'}">${this._rosterItems(s.shots[this._remoteSeat()].sunkIds)}</div>
             <div class="bs-rosterrow bs-rosterrow-mine ${theirsLive ? 'is-dim' : ''}">${this._rosterItems(s.shots[this._localSeat()].sunkIds)}</div>
           </div>
-          <button type="button" class="bs-exitdisc" data-action="${this.mp ? 'mp-leave' : 'change-settings'}"
-            aria-label="${esc(t('exit'))}" title="${esc(t('exit'))}">${ICON_CLOSE}</button>
+          ${this._armedBtn('bs-exitdisc', this.mp ? 'mp-leave' : 'exit-battle', 'exit')}
         </div>
         <div class="bs-boardpanel bs-boardpanel-own ${ownLive ? 'is-live' : ''}">
           <div class="bs-board-wrap">${this._boardHtml('own', ownLive)}</div>
@@ -1741,7 +1764,7 @@ class BattleshipUI {
             : `<span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>`}
           ${this.mp
             ? ''
-            : `<button type="button" class="bs-iconbtn bs-iconbtn-sm" data-role="restart" data-action="restart" aria-label="${esc(t('restart_game'))}" title="${esc(t('restart_game'))}">${ICON_RESTART}</button>`}
+            : this._armedBtn('bs-iconbtn bs-iconbtn-sm', 'restart', 'restart_game')}
         </div>
       </div>`;
     this._fitBattleBoards();
@@ -1776,32 +1799,42 @@ class BattleshipUI {
     return t('mp_series', { me: mp.series.wins[this._localSeat()] | 0, them: mp.series.wins[this._remoteSeat()] | 0, opp: id.oppName });
   }
 
-  /** Restart is a two-tap control. It used to swap its own LABEL to "Tap again to confirm"; the
-   *  button is a bare icon now, so arming it turns the disc red and pulses it instead, and the
-   *  accessible name changes with it. Swapping textContent on an icon button would have thrown the
-   *  SVG away and never got it back. */
+  /** Restart and Exit are two-tap controls mid-battle: one stray tap on either used to throw a
+   *  whole game away. Arming turns the disc red and glows it, and the accessible name changes with
+   *  it. The ARMED state lives on the instance, not on the button, because the battle re-renders
+   *  every time a shot settles -- an armed flag kept on the element was wiped by the next render,
+   *  so the confirming tap just armed it again. */
+  _armedBtn(cls, action, labelKey) {
+    const armed = this._armed === action;
+    const label = esc(t(armed ? 'tap_again_confirm' : labelKey));
+    const icon = action === 'restart' ? ICON_RESTART : ICON_CLOSE;
+    return `<button type="button" class="${cls} ${armed ? 'is-confirm' : ''}" data-action="${action}" data-armable="1"
+      aria-label="${label}" title="${label}">${icon}</button>`;
+  }
+
   confirmDestructive(btn, action) {
-    if (!this.state || this.state.over) { action(); return; }
-    if (btn.dataset.armed === '1') { this.resetConfirms(); action(); return; }
+    const key = btn.dataset.action;
+    if (!this.state || this.state.over || this._armed === key) { this.resetConfirms(); action(); return; }
     this.resetConfirms();
-    btn.dataset.armed = '1';
-    btn.dataset.label = btn.getAttribute('aria-label') || '';
+    this._armed = key;
+    btn.classList.add('is-confirm');
     btn.setAttribute('aria-label', t('tap_again_confirm'));
     btn.setAttribute('title', t('tap_again_confirm'));
-    btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
 
   resetConfirms() {
     clearTimeout(this._confirmTimer);
-    if (!this.shell) return;
-    const b = this.shell.querySelector('[data-role="restart"]');
-    if (b && b.dataset.armed === '1') {
-      b.setAttribute('aria-label', b.dataset.label);
-      b.setAttribute('title', b.dataset.label);
-      b.dataset.armed = '';
-      b.classList.remove('is-confirm');
-    }
+    this._confirmTimer = null;
+    const was = this._armed;
+    this._armed = null;
+    if (!was || !this.shell) return;
+    const b = this.shell.querySelector(`[data-armable][data-action="${was}"]`);
+    if (!b) return;
+    const label = t(was === 'restart' ? 'restart_game' : 'exit');
+    b.classList.remove('is-confirm');
+    b.setAttribute('aria-label', label);
+    b.setAttribute('title', label);
   }
 
   // --- stats + finish ------------------------------------------------------------------------
@@ -1827,11 +1860,25 @@ class BattleshipUI {
   }
 
   finish() {
-    const s = this.state;
-    const won = s.winner === this._localSeat();
     this._commitStats();
     if (this.mp) this._mpAfterGameEnd();
+    // THE LAST SHOT GETS SEEN. The card used to go up the instant the state said "over", on top of
+    // the winning ball still in the air -- so the final sink, the one shot of the game that matters
+    // most, played out underneath a modal. The stats are written above, immediately; only the CARD
+    // waits for the shot to land. A restart or exit in that window cancels it (_stopGameTimers).
+    if (this._endTimer) { clearTimeout(this._endTimer); this._endTimer = null; }
+    const wait = this._shotSettleMs(this._lastShot);
+    if (wait <= 0) { this._showEndCard(); return; }
+    this._endTimer = setTimeout(() => {
+      this._endTimer = null;
+      if (!this._dead && this.state && this.state.over && this.view === 'battle') this._showEndCard();
+    }, wait);
+  }
 
+  _showEndCard() {
+    const s = this.state;
+    const won = s.winner === this._localSeat();
+    this.closeOverlays();
     const id = this._identity();
     const title = won ? t('you_win') : t('opp_wins', { opp: id.oppName });
     const emoji = won ? '🏆' : id.oppEmoji;
@@ -1854,9 +1901,23 @@ class BattleshipUI {
         <span class="bs-card-emoji">${esc(emoji)}</span>
         <h3 class="bs-card-title">${esc(title)}</h3>
         <p class="bs-card-sub">${this.mp ? esc(this._seriesLine()) : t(DIFF_LABEL_KEY[this._setup.difficulty])}</p>
+        ${this._endStatsHtml()}
         <div class="bs-card-actions">${actions}</div>
       </div>`;
     this.root.appendChild(overlay);
+  }
+
+  /** Your shots and accuracy for the game just played, from the public grid -- the same numbers
+   *  _commitStats records. */
+  _endStatsHtml() {
+    const s = this.state;
+    const shots = s.shotCount[this._localSeat()] | 0;
+    if (!shots) return '';
+    let hits = 0;
+    for (const v of s.shots[this._remoteSeat()].cells) if (v === CELL_HIT || v === CELL_SUNK) hits++;
+    const acc = Math.round((hits / shots) * 100);
+    return `<p class="bs-card-stats" role="img" aria-label="${esc(t('end_stats_aria', { n: shots, acc }))}">
+      <span>${ICON_TARGET}${shots}</span><span class="bs-card-stats-acc">${acc}%</span></p>`;
   }
 
   // ==============================================================================================
@@ -1952,6 +2013,8 @@ class BattleshipUI {
     this.busy = false;
     this._mpStatusMsg = '';
     this._lastShot = null;
+    this._aimCell = null;
+    this._stopGameTimers();
     this.closeOverlays();
     this._mpSaveSnapshot();
     this._mpRefreshReadySeats();
@@ -2807,7 +2870,11 @@ class BattleshipUI {
   onClick(e) {
     const cell = e.target.closest('[data-role="place-cell"]');
     if (cell && this.view === 'placement' && this._placeSelected && !this._dragging) {
-      this._tryPlaceAt(this._placeSelected, Number(cell.dataset.r), Number(cell.dataset.c));
+      // The tapped square is where the ship STARTS, slid back onto the board if it would hang off
+      // the edge -- the same clamp a drag uses. A five-long carrier tapped into the last column used
+      // to be silently refused, which read as the tap not working.
+      const at = this._anchorFor(this._placeSelected, { r: Number(cell.dataset.r), c: Number(cell.dataset.c) }, 0);
+      this._tryPlaceAt(this._placeSelected, at.r, at.c);
       return;
     }
     const btn = e.target.closest('[data-action]');
@@ -2860,6 +2927,8 @@ class BattleshipUI {
       this._confirmFire();
     } else if (action === 'restart') {
       this.confirmDestructive(btn, () => this.startGame());
+    } else if (action === 'exit-battle') {
+      this.confirmDestructive(btn, () => { this.closeOverlays(); this.renderSetup(); });
     } else if (action === 'rematch') {
       this.closeOverlays(); this.startGame();
     } else if (action === 'change-settings') {
@@ -2879,6 +2948,9 @@ class BattleshipUI {
     } else if (action === 'mp-next-game') {
       this.closeOverlays(); this._mpStartNextGame();
     } else if (action === 'mp-leave') {
+      // The battle screen's exit disc ends the match for the OTHER player too, so it takes the same
+      // two taps as solo's; the lobby, waiting screen and end card leave on one.
+      if (btn.dataset.armable) { this.confirmDestructive(btn, () => { this.closeOverlays(); this._mpLeaveToSetup(); }); return; }
       this.closeOverlays(); this._mpLeaveToSetup();
     } else if (action === 'mp-end-ok') {
       this.closeOverlays(); this.renderSetup();
