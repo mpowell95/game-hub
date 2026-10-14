@@ -269,7 +269,7 @@ Then: *"Fix it and over correct it to begin and rig it against him."*
 - **The fix:** `commit` is per skill now (Easy 0.08, Medium 0.02, Hard 0) and the call margins are
   looser (Medium -0.02, Hard -0.05), so a better bot is LESS scared of a shove. All-in-every-hand vs
   one Hard computer is now ~47%, vs seven ~9%. `test.js` fails above 62% heads-up.
-- **The rig** (`RIGGED_CODES` in `ui.js`, currently `3VN33`, *King of Games*): when the device running
+- **The rig** (`RIGGED_CODES` in `ui.js`, `3VN33`, *King of Games*, until 2026-10-14; empty now): when the device running
   the computers (solo, or the host online) seats a rigged code, the `Table` gets `rig: <seat>` and
   (1) every computer plays **Brutal** (skill 4 in `ai.js`) and reads that seat's real cards
   (`decide(..., { peek })`, `equity(..., known)`), and (2) every deal is rigged (`rigDeal` in
@@ -279,6 +279,10 @@ Then: *"Fix it and over correct it to begin and rig it against him."*
   rigged deal is still one real 52-card deck. Nothing about it is saved in the game state or shown.
   Remove the code from `RIGGED_CODES` to make that player's games fair again.
 - **His $50M was NOT touched.** Voiding it is the admin page's **Void bankroll**, Matt's call.
+- **The rig was taken off on 2026-10-14** (Matt: *"Take off the fix against the king of games"*):
+  `RIGGED_CODES` is empty, so his games deal fair and the computers play their table's normal
+  skill. The mechanism (`rig` in `Table`, `rigDeal`, skill 4 / `peek` in `ai.js`) stays for a future
+  name, and `test.js` still measures it directly. Nothing was saved by the rig, so nothing to undo.
 
 ## Bankroll leaderboard (2026-09-28)
 
