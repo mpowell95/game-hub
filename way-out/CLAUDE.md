@@ -349,12 +349,13 @@ and harder, maybe points should do something"*, *"I want easy level 50 to be bas
 time ... keep all data from all plays by everyone."*
 
 **One ladder, four difficulties.** Levels are numbered 1, 2, 3 ... for ever. Easy is 1-50, Medium
-51-100, Hard 101-150, Expert 151 on (never ends). A player picks any difficulty and plays its levels
-in order; each difficulty remembers its own next level (`ladder[band]`). Finishing level 50, 100 or
-150 completes that difficulty: back to the setup screen, which says "Complete" and disables Play.
+51-100, **Hard 101-200, Expert 201 on** (never ends; see "The bands moved" below: it was Hard 101-150,
+Expert 151 on until the evening it shipped). A player picks any difficulty and plays its levels in
+order; each difficulty remembers its own next level (settings `ladder2[band]`). Finishing level 50,
+100 or 200 completes that difficulty: back to the setup screen, which says "Complete" and disables Play.
 
 **Why not "highest level" on the leaderboard:** with "start anywhere", a new player picks Expert,
-clears 151 and passes everyone who climbed 1-150. So the board counts POINTS for levels cleared.
+clears 201 and passes everyone who climbed 1-200. So the board counts POINTS for levels cleared.
 
 **Points** (`js/arrow-maze-time.js`, `WO_BAND_POINTS`): **flat per difficulty, Easy 1, Medium 2, Hard 4,
 Expert 6 a level**, the scheme Matt agreed to (set from how long each difficulty's levels take in the
@@ -363,7 +364,8 @@ agreed to** (1 for levels 1-25, +1 every 25 levels, up to 8, so Expert was 7-8);
 board and it was replaced the same day: *"Change it to what we agreed to."* Do not reintroduce a
 per-level ramp without his say. A player's points = the sum over every level they have cleared. **They are read from the per-band
 cleared counts** (`byDiff[band].won`), not from a per-level log: inside a band levels are always
-played in order, so "cleared 27 of Hard" means exactly ladder 101-127. That covers every level ever
+played in order, so "cleared 27 of Hard" means exactly ladder 101-127. Moving the bands changed no
+count and no point: counts are per band. That covers every level ever
 cleared, timed or not, from the day the game shipped. Old-tier levels count as their band's levels in
 order (old Hard 27 = ladder 101-127). A count past a band's 50 (only possible from the old endless
 tiers) earns the same per level. **Ties stay tied.** The board (`js/leaderboard-
@@ -410,3 +412,91 @@ test-arrow-maze-time.mjs` (bands, points, the real players' totals, the recorder
 Checked in Chromium (402x874, light and dark): the carried-over old level (its board, its gone arrow,
 its 12 s clock), the move onto ladder boards, Easy 50 completing the band, a new player starting at
 Expert 151, and the leaderboard with the real synced data.
+
+## The bands moved: Hard 101-200, Expert 201 on, generator 6 (2026-10-14, the same evening)
+
+The first real play on the ladder showed **its Expert was the old HARD tier**: Matt's Expert 152-156
+had 79-92 arrows and 23-27 rounds, King of Games' old Hard boards ~84 arrows and 19-20 rounds, and
+Anita's new Hard 101-104 had 50-61 arrows, closer to old Medium. Generator 5's keyframes put old Hard
+sizes at 150 and old Expert sizes only at 200. Matt: *"maybe we spread it out more and add more hard
+levels in and keep expert as expert? You came up with the bands so you should just make it work."*
+
+- **Bands** (`js/arrow-maze-time.js`): Easy 1-50, Medium 51-100, **Hard 101-200 (100 levels), Expert
+  201 on.** Points unchanged (1/2/4/6 a level, from the per-band counts, so no total moved).
+- **Ladder generator 6** (`buildLadder(n, gen)`, `LADDER_GEN = 6`, `KEYS6`): levels 1-100 are
+  generator 5's boards EXACTLY (`test.js` checks all 100), so Easy and Medium did not change. From 100
+  it climbs through the old Hard tier (its 20x26 first grid by 125) to the old EXPERT tier's first
+  board at 200 (24x32, short winding arrows), then grows to the old Expert's largest and deepest
+  (28x38, 32 rounds) by 260 and holds. Measured: Hard 101-110 19.6 rounds / 56 arrows, 191-200 26.9 /
+  85; **Expert 201-210 27.4 rounds / 95 arrows** (the old Expert tier's levels 1-10: 23.9 / 100),
+  251-260 31.9 / 124 (old Expert 64-73: 31.6 / 123). Up to 10 candidates above level 100 (6 left a
+  big Hard board 4+ rounds short of its neighbours); builds median 18 ms, slowest ~150-200 ms on a
+  desktop. Seamless at 100/101 and 200/201. Pinned by hash in `test.js`; generator 5 stays pinned too.
+- **Moving everyone across, nothing lost (THE LAW):**
+  - Positions: settings gained **`ladder2`** (today's numbering). It is derived once from the first
+    ladder's `ladder` (same place in the same band: only Expert moved, 151 -> 201, so Matt's next
+    Expert 157 became 207) or, for a player who never opened the first ladder, from the old tiers'
+    `levels`. **`ladder` and `levels` are written back exactly as stored.** A first-ladder Hard 151
+    ("Complete" then) is now simply Hard level 151, playable.
+  - Levels in progress: new keys **`gamehub.wayout.ladder2.saves.v1` / `.ladder2.clocks.v1`**
+    (`migrateToLadder2()`, once per device). A first-ladder level in progress is finished **on its own
+    first-ladder board** (`src: {k:'L', n, g: 5}`, its old number) with its arrows and clock; an
+    old-tier level in progress (`src.k 'T'`) likewise. The first ladder's keys
+    (`gamehub.wayout.ladder.saves.v1` / `.clocks.v1`) are now only READ, never written.
+  - The log: `l` + `g` name the BOARD. For `g` 5 `l` is the first ladder's number (a carried board
+    keeps it); for `g` 6 it is today's number; for `g` 1-4 (old tiers) it is the ladder position.
+- Checked in Chromium with real-shaped stores (rule 7): Matt's (Expert 157 in progress -> Continue
+  level 207 on board 157 with its 2 arrows, red arrow, 2 lives and 1:10 clock; cleared as l 157 g 5;
+  then 208 on generator 6), a first-ladder Hard save on an old-tier board, King of Games' shape (never
+  opened the ladder, old Hard 28 in progress -> Continue level 128 on that board), a first-ladder
+  "Hard complete" (-> Hard 151 playable), and a new player (1 / 51 / 101 / 201). The old keys were
+  byte-identical afterwards.
+
+## Rush (2026-10-14)
+
+Matt: *"a new game mode where you only have a second or two ... Like those chess games where you
+start with a few seconds and get a second back for every move"*, then: *"don't stop the clock. If
+someone leaves the app, they lose that round"*, *"try getting just half a second"*, *"10 seconds is
+fine to start, but it feels like way too long"*, *"boards keep coming? ... Go ahead with this and
+we'll see"*, mistakes 3 s ("Ok"), *"a separate game mode"*, *"a weekly game and have a history tab
+where you can look at results from previous weeks"*, Easy/Hard ("Sure"). He also said no game should
+ever take minutes: the times logged are seconds per board.
+
+- **Where:** a **Levels / Rush** switch under the title on the setup screen (settings `mode`,
+  `rushMode`: remembered choices). Rush has Easy and Hard, **Play Rush**, the rules line, and
+  **Results**.
+- **The clock** (`js/arrow-maze-time.js`, `RUSH_*`): starts at **10 s** and counts DOWN; every arrow
+  sent off gives **+0.5 s**, every bump **-3 s** (the arrow turns red; no hearts, no hint, no
+  restart). **It never pauses.** When it reaches zero the run ends ("Time's up!").
+- **Leaving loses the run:** the menu button, the hub's back button (`destroy()`), or the app going
+  to the background (`visibilitychange`) ends it as `left`. It is STORED (THE LAW) and never counted.
+- **Boards keep coming:** clear one and the next is on screen at once, the clock still running.
+  `buildRush(mode, i, seed)` in `engine.js`: board `i` is built like ladder level `rushLevel(mode, i)`
+  (Easy 3, 9, 15 ... up to 50; Hard 51, 59, 67 ... up to 120, i.e. from the MEDIUM band: Hard-band
+  boards start at ~56 arrows, more than a first board can hold at this clock), with a **random seed
+  per run** so a run cannot be learned by heart (the seed is stored with the run; same seed, same
+  boards). The next board is built while the current one is played (builds < 25 ms on a desktop).
+- **Score = arrows cleared in the run.** Its own branch, **`wo.rush`** (`recordWayOutRush` in
+  `js/game-stats.js`): `runs[mode]` = EVERY run raw `{s, b, ms, m, d, w, sd, left?}`, and
+  `best[mode][<Monday>]` = the best COUNTED run of each week (Math.max only). A run is not a level:
+  `total` / `byDiff` / points are untouched. The three-edit rule is done: the recorder, My Stats
+  (`wayoutScreen`: this week, best week, runs per version; a player with only Rush runs is no longer
+  "empty"), and `js/players-agg.js` (a week's best = the best on any of the person's phones; the
+  longest run list).
+- **Weeks** (`woWeekKey`): the Monday's date in **UTC**, one clock for everyone (Sunday evening in the
+  US, early Monday in Spain). Stamped on each run when it ends.
+- **Results** (inside the game, not the hub leaderboard): Easy / Hard, **This week** and **Past
+  weeks** (each past week with its winner; tap for the full table). Read once per opening from
+  `players/` (`readPlayersOnce`), this phone's own fresh store standing in for itself, combined per
+  person by `aggregatePlayers`; test accounts hidden as on the leaderboard, except from themselves.
+  Ties share a place. Offline it shows only this phone's runs and says so.
+- **Tuning:** 10 s / 0.5 s / 3 s and the board steps are a first guess; every run is stored raw so
+  they can be set from real runs. At ~1 arrow a second a run lasts ~20 s; at 1.5 a second, ~40 s.
+- Tests: `way-out/js/test.js` (Rush boards: well formed, solvable, seeded, climbing), `node
+  test-arrow-maze-time.mjs` (weeks, the recorder: every run kept, a left run never counts, a new
+  week starts its own best, a run is not a level), `players-agg.test.mjs` (the two-phone merge).
+  Checked in Chromium: a whole run (+0.5 s, -3 s, board 2 arriving with the clock running, time
+  running out, the popup, the stored run and week best), leaving by the menu and by backgrounding
+  (stored as `left`, not counted), the results screen, and the setup and play screens in the hub at
+  402x874, 360x724, 390x664 and 375x667 (no scroll, clear of the Hub button).
+
