@@ -47,7 +47,7 @@ export function woClock(ms) {
 // --- THE LADDER AND ITS POINTS (2026-10-14) -----------------------------------------------------------
 //
 // Matt replaced the timed score with the shape most level apps use: ONE ladder of levels, cut into
-// four difficulties of 50 (Easy 1-50, Medium 51-100, Hard 101-150, Expert 151 on, for ever), any of
+// four difficulties (Easy 1-50, Medium 51-100, Hard 101-200, Expert 201 on, for ever; see below), any of
 // which a player may start, and a leaderboard of POINTS for levels cleared. Points are FLAT PER
 // DIFFICULTY, the 1 / 2 / 4 / 6 Matt agreed to (WO_BAND_POINTS, set from how long each difficulty's
 // levels take in the real saved times). A first build used 1 + 1 every 25 levels (Expert 7-8); Matt
@@ -60,16 +60,21 @@ export function woClock(ms) {
 // every level ever cleared, timed or not. Levels cleared before the ladder (2026-10-14) were the old
 // tiers' levels and count as that band's levels in order; nothing is lost and nothing is invented.
 // The timed finish log (`wo.log`) is kept, untouched by any of this, for when time comes back in.
-export const BAND_SIZE = 50;
+// (2026-10-14, the same evening) The bands MOVED: Hard is 101-200 and Expert 201 on (it was Hard
+// 101-150, Expert 151 on). Real play showed Expert 152-156 were boards the size of the old HARD tier;
+// Matt: "maybe we spread it out more and add more hard levels in and keep expert as expert". Nothing
+// stored is renumbered by this file: the counts (byDiff) are per band, so points do not change; the
+// game carries each player's place across (way-out/js/ui.js, `ladder2`).
 /** Where each band starts on the ladder. Expert never ends. */
-export const BAND_START = { easy: 1, medium: 51, hard: 101, expert: 151 };
+export const BAND_START = { easy: 1, medium: 51, hard: 101, expert: 201 };
+const BAND_LAST = { easy: 50, medium: 100, hard: 200 };
 /** The band (tier name) a ladder level belongs to. */
 export function bandOf(n) {
   return n >= BAND_START.expert ? 'expert' : n >= BAND_START.hard ? 'hard' : n >= BAND_START.medium ? 'medium' : 'easy';
 }
 /** The last ladder level of a band, or Infinity for Expert. */
 export function bandEnd(band) {
-  return band === 'expert' ? Infinity : BAND_START[band] + BAND_SIZE - 1;
+  return band === 'expert' ? Infinity : BAND_LAST[band];
 }
 /** What one cleared level of each difficulty is worth. */
 export const WO_BAND_POINTS = { easy: 1, medium: 2, hard: 4, expert: 6 };

@@ -20,7 +20,7 @@
 // the board fill up densely: a middle arrow's way out runs through the still-empty outer ring, and
 // the outer arrows placed later are the ones that block it.
 
-import { BAND_SIZE, BAND_START, bandOf, bandEnd } from '../../js/arrow-maze-time.js';
+import { BAND_START, bandOf, bandEnd } from '../../js/arrow-maze-time.js';
 
 export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 export const SAVE_V = 1;
@@ -380,10 +380,10 @@ export function buildLevel(tier, level, gen = GEN_LATEST) {
 //
 // Its own seeds (`seedOf('ladder', n)`), so it shares no board with the tier generators, which are
 // kept unchanged for levels already in progress on them (ui.js carries those through).
-export const LADDER_GEN = 5;
 // The bands themselves (where each starts, where it ends) live in js/arrow-maze-time.js, beside the
 // points, because the stats screens and the leaderboard need them and must not import the game.
-export { BAND_SIZE, BAND_START, bandOf, bandEnd };
+export { BAND_START, bandOf, bandEnd };
+// Generator 5's top: from here its boards stop growing. Kept for levels in progress on it.
 export const LADDER_TOP = 200;
 // n, cols, rows, minLen, maxLen, density, straight, jitter, target rounds
 const KEYS = [
@@ -394,29 +394,52 @@ const KEYS = [
   [150, 23, 30, 3, 12, 0.97, 0.45, 0.2, 25],
   [LADDER_TOP, 28, 38, 3, 12, 0.98, 0.3, 0.1, 31],
 ];
-function ladderKey(n) {
-  const x = Math.max(KEYS[0][0], Math.min(LADDER_TOP, n));
+
+// GENERATOR 6 (2026-10-14, Matt, after real play showed Expert 152-156 were old-HARD-sized boards:
+// *"maybe we spread it out more and add more hard levels in and keep expert as expert ... You came
+// up with the bands so you should just make it work"*). The bands moved (js/arrow-maze-time.js):
+// Hard is 101-200, Expert 201 on. Levels 1-100 are generator 5's boards exactly (Easy and Medium
+// did not change). From 100 the ladder climbs through the old Hard tier's boards (its 20x26 first
+// grid by 125) to the old EXPERT tier's first board at 200 (24x32, its short winding arrows, old
+// Hard's deepest rounds), so Expert starts where the old Expert started and grows to the old
+// Expert's largest and deepest board (28x38, 32 rounds), where it holds.
+export const LADDER_GEN = 6;
+export const LADDER6_TOP = 260;
+const KEYS6 = [
+  [100, 17, 23, 2, 10, 0.95, 0.5, 0.22, 19],      // = generator 5's level 100, Medium's last board
+  [125, 20, 26, 3, 12, 0.97, 0.5, 0.22, 21],      // the old Hard tier's first grid
+  [200, 24, 32, 3, 12, 0.98, 0.32, 0.12, 27],     // the old Expert tier's first grid, old Hard's deepest
+  [225, 28, 38, 3, 12, 0.98, 0.3, 0.1, 29],       // the old Expert tier's largest grid
+  [LADDER6_TOP, 28, 38, 3, 12, 0.98, 0.3, 0.1, 32], // and its deepest boards
+];
+function ladderKey(n, keys = KEYS) {
+  const x = Math.max(keys[0][0], Math.min(keys[keys.length - 1][0], n));
   let i = 0;
-  while (i < KEYS.length - 2 && x > KEYS[i + 1][0]) i++;
-  const a = KEYS[i], b = KEYS[i + 1], u = (x - a[0]) / (b[0] - a[0]);
+  while (i < keys.length - 2 && x > keys[i + 1][0]) i++;
+  const a = keys[i], b = keys[i + 1], u = (x - a[0]) / (b[0] - a[0]);
   return a.map((v, k) => v + (b[k] - v) * u);
 }
-/** The spec and rounds target of ladder level n (n >= 2; level 1 is the gentle first board). */
-export function ladderSpec(n) {
-  const [, cols, rows, minLen, maxLen, density, straight, jitter, target] = ladderKey(n | 0);
+/** The spec and rounds target of ladder level n (n >= 2; level 1 is the gentle first board) on
+ *  ladder generator `gen` (5 or 6). Generator 6 is generator 5 up to level 100. */
+export function ladderSpec(n, gen = LADDER_GEN) {
+  const [, cols, rows, minLen, maxLen, density, straight, jitter, target] = ladderKey(n | 0, gen >= 6 && (n | 0) > 100 ? KEYS6 : KEYS);
   return {
     spec: { cols: Math.round(cols), rows: Math.round(rows), minLen: Math.round(minLen), maxLen: Math.round(maxLen),
       density: +density.toFixed(3), straight: +straight.toFixed(3), jitter: +jitter.toFixed(3) },
     target: Math.round(target),
   };
 }
-/** Ladder level n, the board a player plays. Deterministic: the same board on every device. */
-export function buildLadder(n) {
+/** Ladder level n on ladder generator `gen` (5 or 6), the board a player plays. Deterministic: the
+ *  same board on every device. Both generators share seeds, so they agree wherever their specs do
+ *  (levels 1-100). */
+export function buildLadder(n, gen = LADDER_GEN) {
   const L = Math.max(1, n | 0);
   if (L === 1) return generate(levelSpec('easy', 1), seedOf('easy', 1));
-  const { spec, target } = ladderSpec(L);
+  const { spec, target } = ladderSpec(L, gen === 5 ? 5 : 6);
   const seed = seedOf('ladder', L);
-  const K = spec.cols * spec.rows > 600 ? 6 : 8;
+  // Above level 100 generator 6 may try up to 10 boards (it stops at the first on target, so most
+  // levels try 1-3): with 6, a big Hard board could come out 4 rounds short of its neighbours.
+  const K = gen !== 5 && L > 100 ? 10 : spec.cols * spec.rows > 600 ? 6 : 8;
   // The candidate nearest the target wins: short of it counts double, so a board is deeper than its
   // place on the ladder only when no candidate lands on it (a candidate can come out of `generate`
   // already past it). Stops at the first one that lands on the target or one above.

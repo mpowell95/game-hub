@@ -43,6 +43,21 @@ const CLOCKS_KEY = 'gamehub.wayout.clocks.v1';
 // finished on its own board first so not one tapped arrow is lost.
 const LSAVES_KEY = 'gamehub.wayout.ladder.saves.v1';
 const LCLOCKS_KEY = 'gamehub.wayout.ladder.clocks.v1';
+// THE BANDS MOVED (2026-10-14, the same evening): Hard is 101-200 and Expert 201 on (it was Hard
+// 101-150, Expert 151 on), and new boards come from ladder generator 6 (engine.js). So the first
+// ladder's numbers (settings `ladder`, the two keys above) are only READ now, once, to carry each
+// player's place across; nothing renumbers them in place (THE LAW rule 5). The settings key gained
+// `ladder2` = the next level per band in the NEW numbering, and these are its save and clock keys.
+// A save names its board: { k: 'L', n, g } is ladder board n of ladder generator g (5 = the first
+// ladder, numbered the old way, kept for a level that was in progress on it; 6 = today's), or
+// { k: 'T', tier, level, gen } a level still in progress from the old tiers.
+const LSAVES2_KEY = 'gamehub.wayout.ladder2.saves.v1';
+const LCLOCKS2_KEY = 'gamehub.wayout.ladder2.clocks.v1';
+/** Where each band started on the FIRST ladder, to read its numbers. */
+const V1_START = { easy: 1, medium: 51, hard: 101, expert: 151 };
+/** A first-ladder position, in today's numbering: the same place in the same band. Only Expert
+ *  moved (151 -> 201); Hard's 151 was "complete" and is now simply Hard's 51st level. */
+const v1ToV2 = (band, n) => (band === 'expert' ? n - V1_START.expert + BAND_START.expert : n);
 const MAX_LEVEL = 1000000;   // a sane ceiling: corrupt settings once showed "Level 1e+21"
 const LIVES = 3;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
@@ -60,16 +75,18 @@ function readSettingsRaw() {
   } catch { return {}; }
 }
 /** The ladder position a band starts at for a player who played the OLD tiers: their next old level
- *  becomes the same place in the band (old Medium level 10 -> ladder 60). A band whose 50 levels the
+ *  becomes the same place in the band (old Medium level 10 -> ladder 60). A band whose levels the
  *  old count already covers is complete. */
 function ladderFromLegacy(levels, band) {
-  const old = Math.max(1, Math.min(BAND_START.medium, levels[band] | 0 || 1));
-  if (band === 'expert') return Math.min(MAX_LEVEL, BAND_START.expert - 1 + Math.max(1, levels.expert | 0 || 1));
-  return BAND_START[band] - 1 + old;
+  const old = Math.max(1, levels[band] | 0 || 1);
+  if (band === 'expert') return Math.min(MAX_LEVEL, BAND_START.expert - 1 + old);
+  return BAND_START[band] - 1 + Math.min(old, bandEnd(band) - BAND_START[band] + 2);
 }
-/** `levels[tier]` is the OLD tiers' next level (frozen since the ladder, kept as stored);
- *  `ladder[band]` is the NEXT ladder level to play in that band. Both only ever go up (Math.max): a
- *  level reached is progress, and progress is never taken back. */
+/** `levels[tier]` is the OLD tiers' next level and `ladder[band]` the first ladder's (both frozen,
+ *  kept as stored); `ladder2[band]` is the NEXT level to play in that band, today's numbering, and is
+ *  what `ladder` means below. A band with no `ladder2` yet is carried from the first ladder (same
+ *  place in the band), else from the old tiers. It only ever goes up (Math.max): a level reached is
+ *  progress, and progress is never taken back. */
 function loadSettings() {
   const v = readSettingsRaw();
   const levels = {};
@@ -77,22 +94,25 @@ function loadSettings() {
     const n = v.levels && Number(v.levels[k]);
     levels[k] = Number.isInteger(n) && n >= 1 && n <= MAX_LEVEL ? n : 1;
   }
-  const ladder = {}, fromLegacy = !(v.ladder && typeof v.ladder === 'object');
+  const obj = (o) => o && typeof o === 'object' && !Array.isArray(o);
+  const ladder = {}, stored = obj(v.ladder2);
   for (const k of TIERS) {
-    const n = !fromLegacy && Number(v.ladder[k]);
-    ladder[k] = Number.isInteger(n) && n >= BAND_START[k] && n <= MAX_LEVEL ? n : ladderFromLegacy(levels, k);
+    const n2 = stored && Number(v.ladder2[k]), n1 = obj(v.ladder) && Number(v.ladder[k]);
+    ladder[k] = Number.isInteger(n2) && n2 >= BAND_START[k] && n2 <= MAX_LEVEL ? n2
+      : Number.isInteger(n1) && n1 >= V1_START[k] && n1 <= MAX_LEVEL ? Math.min(MAX_LEVEL, v1ToV2(k, n1))
+      : ladderFromLegacy(levels, k);
   }
-  return { tier: TIERS.includes(v.tier) ? v.tier : 'easy', levels, ladder, fromLegacy };
+  return { tier: TIERS.includes(v.tier) ? v.tier : 'easy', levels, ladder, stored };
 }
 function saveSettings(patch) {
   const raw = readSettingsRaw(), cur = loadSettings();
-  // Everything already stored is written back as it was (the old `levels` included); only `tier`
-  // and `ladder` change.
-  const next = { ...raw, tier: (patch && patch.tier) || cur.tier, ladder: { ...cur.ladder } };
+  // Everything already stored is written back as it was (the old `levels` and the first ladder's
+  // `ladder` included); only `tier` and `ladder2` change.
+  const next = { ...raw, tier: (patch && patch.tier) || cur.tier, ladder2: { ...cur.ladder } };
   if (patch && patch.ladder) {
     for (const k of TIERS) {
       const n = Math.floor(Number(patch.ladder[k]) || 0);
-      next.ladder[k] = Math.min(MAX_LEVEL, Math.max(cur.ladder[k], n));
+      next.ladder2[k] = Math.min(MAX_LEVEL, Math.max(cur.ladder[k], n));
     }
   }
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch (err) { console.error('[way-out] settings NOT saved', err); }
@@ -137,53 +157,75 @@ function readJSON(key) {
 function writeJSON(key, v, what) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch (err) { console.error(`[way-out] ${what} NOT saved`, err); }
 }
-/** Which board a save or clock is for, as one comparable string. */
+/** Which board a save or clock is for, as one comparable string. (A first-ladder board was
+ *  `L:<n>:5` then too, so its clock carries across unchanged.) */
 function srcKey(src) {
-  return src && src.k === 'T' ? `T:${src.tier}:${src.level}:${src.gen}` : `L:${src && src.n}:${LADDER_GEN}`;
+  return src && src.k === 'T' ? `T:${src.tier}:${src.level}:${src.gen}` : `L:${src && src.n}:${(src && src.g) || LADDER_GEN}`;
 }
 function validSrc(src, band, n) {
-  if (!src || typeof src !== 'object') return { k: 'L', n };
+  if (!src || typeof src !== 'object') return { k: 'L', n, g: LADDER_GEN };
   if (src.k === 'T' && src.tier === band && Number.isInteger(src.level) && src.level >= 1
     && Number.isInteger(src.gen) && src.gen >= 1 && src.gen <= GEN_LATEST) return { k: 'T', tier: band, level: src.level, gen: src.gen };
-  return { k: 'L', n };
+  if (src.k === 'L' && Number.isInteger(src.n) && src.n >= 1 && (src.g === 5 || src.g === LADDER_GEN)) return { k: 'L', n: src.n, g: src.g };
+  return { k: 'L', n, g: LADDER_GEN };
 }
 
-/** ONCE per device, the first time the ladder opens: a level that was IN PROGRESS on an old tier
- *  (arrows already sent, or a heart lost) becomes that band's current ladder level, on its own old
- *  board, with its own clock, so nothing a player did is thrown away. The old keys are only read. */
-function migrateToLadder() {
-  const map = readJSON(LSAVES_KEY);
+/** ONCE per device, the first time this version opens: a level that was IN PROGRESS - on the first
+ *  ladder, or (for a player who never opened it) on an old tier - with arrows already sent or a heart
+ *  lost, becomes that band's current level, ON ITS OWN BOARD, with its own clock, so nothing a player
+ *  did is thrown away. The first ladder's keys and the old tiers' keys are only read. */
+function migrateToLadder2() {
+  const map = readJSON(LSAVES2_KEY);
   if (map.migrated) return;
   const set = loadSettings();
-  const clocks = readJSON(LCLOCKS_KEY);
+  const clocks = readJSON(LCLOCKS2_KEY);
+  const v1 = readJSON(LSAVES_KEY), v1Clocks = readJSON(LCLOCKS_KEY);
   let oldClocks = {};
   try { oldClocks = JSON.parse(localStorage.getItem(CLOCKS_KEY) || '{}') || {}; } catch { oldClocks = {}; }
+  const ids = (a) => (Array.isArray(a) ? a.filter((i) => Number.isInteger(i) && i >= 0) : []);
+  const livesOf = (l) => (Number.isInteger(l) && l >= 1 && l <= LIVES ? l : LIVES);
   for (const band of TIERS) {
-    if (!set.fromLegacy || map[band]) continue;
+    if (map[band]) continue;
     const n = set.ladder[band];
     if (n > bandEnd(band)) continue;
-    const old = readOldSave(band, set.levels[band]);
-    if (!old || !(old.gone.length || old.red.length || old.lives < LIVES)) continue;
-    const src = { k: 'T', tier: band, level: set.levels[band], gen: old.gen };
-    map[band] = { v: 2, band, n, src, gone: old.gone, red: old.red, lives: old.lives };
-    const c = oldClocks && oldClocks[band];
-    if (c && typeof c === 'object' && c.level === src.level && c.gen === src.gen) {
-      clocks[band] = { n, key: srcKey(src), ms: +c.ms || 0, pen: +c.pen || 0, mistakes: c.mistakes | 0, hints: c.hints | 0, partial: !!c.partial };
+    if (v1.migrated) {
+      // Played the first ladder: carry its level in progress, numbered today's way.
+      const s1 = v1[band];
+      if (!s1 || s1.v !== 2 || s1.band !== band || !Number.isInteger(s1.n) || v1ToV2(band, s1.n) !== n) continue;
+      const gone = ids(s1.gone), red = ids(s1.red), lives = livesOf(s1.lives);
+      if (!(gone.length || red.length || lives < LIVES)) continue;
+      const src = s1.src && s1.src.k === 'T' ? validSrc(s1.src, band, n) : { k: 'L', n: s1.n, g: 5 };
+      if (src.k === 'L' && src.g !== 5) continue;   // a malformed first-ladder save: start the level fresh
+      map[band] = { v: 3, band, n, src, gone, red, lives };
+      const c = v1Clocks[band];
+      if (c && typeof c === 'object' && c.n === s1.n && c.key === srcKey(src)) {
+        clocks[band] = { n, key: srcKey(src), ms: +c.ms || 0, pen: +c.pen || 0, mistakes: c.mistakes | 0, hints: c.hints | 0, partial: !!c.partial };
+      }
+    } else {
+      // Never opened the first ladder: carry an old-tier level in progress (as the first ladder did).
+      const old = readOldSave(band, set.levels[band]);
+      if (!old || !(old.gone.length || old.red.length || old.lives < LIVES)) continue;
+      const src = { k: 'T', tier: band, level: set.levels[band], gen: old.gen };
+      map[band] = { v: 3, band, n, src, gone: old.gone, red: old.red, lives: old.lives };
+      const c = oldClocks && oldClocks[band];
+      if (c && typeof c === 'object' && c.level === src.level && c.gen === src.gen) {
+        clocks[band] = { n, key: srcKey(src), ms: +c.ms || 0, pen: +c.pen || 0, mistakes: c.mistakes | 0, hints: c.hints | 0, partial: !!c.partial };
+      }
     }
   }
   map.migrated = 1;
-  writeJSON(LCLOCKS_KEY, clocks, 'clock');
-  writeJSON(LSAVES_KEY, map, 'save');
-  // Write the ladder positions down, so they stop being derived from the old levels.
-  if (set.fromLegacy) saveSettings({});
+  writeJSON(LCLOCKS2_KEY, clocks, 'clock');
+  writeJSON(LSAVES2_KEY, map, 'save');
+  // Write the positions down in today's numbering, so they stop being derived.
+  if (!set.stored) saveSettings({});
 }
 
 /** A ladder save is trusted only when it is whole and belongs to the level asked for; anything else
  *  reads as "no save" and the level starts fresh (never a crash). */
 function readSave(band, n, nArrows) {
   try {
-    const s = readJSON(LSAVES_KEY)[band];
-    if (!s || s.v !== 2 || s.band !== band || s.n !== n) return null;
+    const s = readJSON(LSAVES2_KEY)[band];
+    if (!s || s.v !== 3 || s.band !== band || s.n !== n) return null;
     const ids = (a) => (Array.isArray(a) ? a.filter((i) => Number.isInteger(i) && i >= 0 && i < nArrows) : []);
     const lives = Number.isInteger(s.lives) && s.lives >= 1 && s.lives <= LIVES ? s.lives : LIVES;
     return { gone: ids(s.gone), red: ids(s.red), lives, src: validSrc(s.src, band, n) };
@@ -196,9 +238,9 @@ function hasProgress(band, n) {
   return !!s && (s.gone.length > 0 || s.red.length > 0 || s.lives < LIVES);
 }
 function writeSave(o) {
-  const map = readJSON(LSAVES_KEY);
-  map[o.band] = { v: 2, ...o };
-  writeJSON(LSAVES_KEY, map, 'save');
+  const map = readJSON(LSAVES2_KEY);
+  map[o.band] = { v: 3, ...o };
+  writeJSON(LSAVES2_KEY, map, 'save');
 }
 /** Restart, Out of lives: the same board again with nothing gone. The board itself is kept, so a
  *  level carried over from the old tiers is still that board. */
@@ -207,20 +249,20 @@ function resetSave(band, n, src) {
 }
 /** A win: the level is done, nothing to keep. */
 function clearSave(band) {
-  const map = readJSON(LSAVES_KEY);
+  const map = readJSON(LSAVES2_KEY);
   map[band] = null;
-  writeJSON(LSAVES_KEY, map, 'save');
+  writeJSON(LSAVES2_KEY, map, 'save');
 }
 function loadClock(band) {
-  const c = readJSON(LCLOCKS_KEY)[band];
+  const c = readJSON(LCLOCKS2_KEY)[band];
   if (!c || typeof c !== 'object') return null;
   const n = (v) => (Number.isFinite(v) && v >= 0 ? v : 0);
   return { n: c.n, key: c.key, ms: n(c.ms), pen: n(c.pen), mistakes: n(c.mistakes) | 0, hints: n(c.hints) | 0, partial: !!c.partial };
 }
 function writeClock(band, c) {
-  const map = readJSON(LCLOCKS_KEY);
+  const map = readJSON(LCLOCKS2_KEY);
   map[band] = c;
-  writeJSON(LCLOCKS_KEY, map, 'clock');
+  writeJSON(LCLOCKS2_KEY, map, 'clock');
 }
 
 // --- icons and pictures --------------------------------------------------------------------------
@@ -325,7 +367,7 @@ function helpPages() {
 class WayOut {
   constructor(container) {
     this.container = container;
-    migrateToLadder();
+    migrateToLadder2();
     this.settings = loadSettings();
     this.screen = 'home';
     this.raf = 0;
@@ -637,9 +679,9 @@ class WayOut {
     this.level = level;
     this._helpPaused = false;
     const pre = readSave(tier, level, 1e6);
-    this.src = pre ? pre.src : { k: 'L', n: level };
-    this.gen = this.src.k === 'T' ? this.src.gen : LADDER_GEN;
-    this.lvl = this.src.k === 'T' ? buildLevel(this.src.tier, this.src.level, this.src.gen) : buildLadder(level);
+    this.src = pre ? pre.src : { k: 'L', n: level, g: LADDER_GEN };
+    this.gen = this.src.k === 'T' ? this.src.gen : this.src.g;
+    this.lvl = this.src.k === 'T' ? buildLevel(this.src.tier, this.src.level, this.src.gen) : buildLadder(this.src.n, this.src.g);
     const n = this.lvl.arrows.length;
     this.rounds = (peel(this.lvl.cols, this.lvl.rows, this.lvl.arrows) || {}).layers || 1;
     const saved = readSave(tier, level, n);
@@ -1004,7 +1046,9 @@ class WayOut {
     this._clockPause();
     const c = this.clock || { ms: 0, pen: 0, mistakes: 0, hints: 0, partial: true };
     const fin = { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds, mistakes: c.mistakes, hints: c.hints, timed: !c.partial,
-      level: this.level, gen: this.gen };
+      // The log's `l` names the BOARD with `g`: for a ladder board it is that generator's own number
+      // (a first-ladder board carried across keeps its first-ladder number), so (l, g) rebuilds it.
+      level: this.src.k === 'L' ? this.src.n : this.level, gen: this.gen };
     try {
       recordWayOut(this.tier, fin);
     } catch (err) {

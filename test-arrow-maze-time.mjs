@@ -67,13 +67,13 @@ ok('its recent and best stay as stored (rule 5)', g.wo.recent.hard.length === 2 
 ok('counters carry on', g.wo.timed.hard === 3 && g.wo.mistakes === 1 && g.total.won === 2);
 
 // --- the ladder and its points (2026-10-14) ---
-ok('bands: Easy 1-50, Medium 51-100, Hard 101-150, Expert 151 on', T.bandOf(1) === 'easy' && T.bandOf(50) === 'easy'
-  && T.bandOf(51) === 'medium' && T.bandOf(100) === 'medium' && T.bandOf(101) === 'hard' && T.bandOf(150) === 'hard'
-  && T.bandOf(151) === 'expert' && T.bandOf(9999) === 'expert');
-ok('band ends', T.bandEnd('easy') === 50 && T.bandEnd('hard') === 150 && T.bandEnd('expert') === Infinity);
+ok('bands: Easy 1-50, Medium 51-100, Hard 101-200, Expert 201 on', T.bandOf(1) === 'easy' && T.bandOf(50) === 'easy'
+  && T.bandOf(51) === 'medium' && T.bandOf(100) === 'medium' && T.bandOf(101) === 'hard' && T.bandOf(200) === 'hard'
+  && T.bandOf(201) === 'expert' && T.bandOf(9999) === 'expert');
+ok('band ends', T.bandEnd('easy') === 50 && T.bandEnd('medium') === 100 && T.bandEnd('hard') === 200 && T.bandEnd('expert') === Infinity);
 ok('points per level: Easy 1, Medium 2, Hard 4, Expert 6', T.woLevelPoints(1) === 1 && T.woLevelPoints(50) === 1
-  && T.woLevelPoints(51) === 2 && T.woLevelPoints(100) === 2 && T.woLevelPoints(101) === 4 && T.woLevelPoints(150) === 4
-  && T.woLevelPoints(151) === 6 && T.woLevelPoints(5000) === 6);
+  && T.woLevelPoints(51) === 2 && T.woLevelPoints(100) === 2 && T.woLevelPoints(101) === 4 && T.woLevelPoints(200) === 4
+  && T.woLevelPoints(201) === 6 && T.woLevelPoints(5000) === 6);
 ok('a band\'s points are its cleared count times its points', T.woBandPoints('easy', 26) === 26 && T.woBandPoints('medium', 1) === 2
   && T.woBandPoints('hard', 27) === 108 && T.woBandPoints('expert', 2) === 12 && T.woBandPoints('easy', 0) === 0 && T.woBandPoints('nope', 5) === 0);
 ok('an old count past a band\'s 50 keeps earning the same per level', T.woBandPoints('easy', 52) === 52);
