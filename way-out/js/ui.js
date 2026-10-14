@@ -281,7 +281,8 @@ const ICON_BULB = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" st
 // for "+0.5s", a red arrow for "-3s" (always with the sign and the word, never colour alone), a
 // stopwatch for the start.
 const RUSH_ARROW = (c) => `<svg viewBox="0 0 28 16" aria-hidden="true"><path d="M3 12V5h15" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 5l-7-4.5v9z" fill="${c}"/></svg>`;
-const RUSH_WATCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 13.5V9M9.5 2.5h5M12 2.5v3M18.5 6.5l1.6-1.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+// The hand is its own element so the picture's stopwatch can spin it (`.wo-watch-hand`).
+const RUSH_WATCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M9.5 2.5h5M12 2.5v3M18.5 6.5l1.6-1.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path class="wo-watch-hand" d="M12 13.5V8.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="13.5" r="1.4" fill="currentColor"/></svg>';
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21L2.6 11.6A5.6 5.6 0 0 1 12 3.9a5.6 5.6 0 0 1 9.4 7.7z"/></svg>';
 
 /** The setup screen's header picture (2026-10-14, Matt: "Make the top image thing cooler and
@@ -644,7 +645,7 @@ class WayOut {
     else if (act === 'rush-again') { const m = this.rush ? this.rush.mode : this.settings.rushMode; this._closeModal(); this._startRush(m); }
     else if (act === 'rush-close') this._toSetup(false);
     else if (act === 'rush-ready') this._rushReady();
-    else if (act === 'rush-board') this._openRushBoard();
+    else if (act === 'rush-board') this._openRushBoard(btn.dataset.rmode || (this.rush && this.rush.mode));
     else if (act === 'rb-back') { this.screen = 'home'; this.render(); }
     else if (act === 'rb-tab') { this.rb.tab = btn.dataset.tab; this.rb.week = null; this.render(); }
     else if (act === 'rb-mode') { this.rb.mode = btn.dataset.rmode; this.render(); }
@@ -1176,26 +1177,22 @@ class WayOut {
     try { return loadStats().games.wayout; } catch { return null; }
   }
 
-  /** The Rush setup card (2026-10-14, Matt's review: the rules as tiles instead of a sentence, what
-   *  Easy and Hard mean, where you stand this week and when it resets, a selected state and a switch
-   *  that read as selected, and a Rush look: teal Play, a stopwatch on the picture). */
+  /** The Rush setup card (2026-10-14, after Matt's second review): Easy / Hard with nothing under
+   *  them, the rules as two short lines with the numbers in pills, Play Rush, and below the card the
+   *  selected version's leader this week with a "See all results" pill. */
   _rushHomeHTML(modeTabs) {
-    const rm = this.settings.rushMode, mine = this._myWayout();
-    const segs = RUSH_MODES.map((m) => {
-      const b = woRushBest(mine, m);
-      return `
-      <button type="button" class="wo-seg${m === rm ? ' is-selected' : ''}" data-act="rush-mode" data-rmode="${m}" role="radio" aria-checked="${m === rm}">
+    const rm = this.settings.rushMode;
+    const segs = RUSH_MODES.map((m) => `
+      <button type="button" class="wo-seg wo-seg--slim${m === rm ? ' is-selected' : ''}" data-act="rush-mode" data-rmode="${m}" role="radio" aria-checked="${m === rm}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[m])}<b>${t('tier_' + m)}</b></span>
-        <span class="wo-seg-sub">${b == null ? t('rush_week_none') : t('rush_week_best', { n: b })}</span>
-        <span class="wo-seg-range">${t(m === 'hard' ? 'rush_boards_big' : 'rush_boards_small')}</span>
-      </button>`;
-    }).join('');
-    const tiles = `
-      <ul class="wo-rush-tiles" aria-label="${t('rush_rules_aria')}">
-        <li class="is-start">${RUSH_WATCH}<b>${RUSH_START_MS / 1000}s</b><span>${t('rush_tile_start')}</span></li>
-        <li class="is-gain">${RUSH_ARROW('currentColor')}<b>+${RUSH_GAIN_MS / 1000}s</b><span>${t('rush_tile_gain')}</span></li>
-        <li class="is-miss">${RUSH_ARROW('currentColor')}<b>\u2212${RUSH_MISS_MS / 1000}s</b><span>${t('rush_tile_miss')}</span></li>
-      </ul>`;
+      </button>`).join('');
+    const pill = (cls, icon, txt) => `<span class="wo-rp ${cls}">${icon}<b>${txt}</b></span>`;
+    const rules = `
+      <div class="wo-rush-rules">
+        <p>${t('rush_line_start', { v: pill('is-start', RUSH_WATCH, `${RUSH_START_MS / 1000}s`) })}</p>
+        <p>${t('rush_line_gain', { v: pill('is-gain', RUSH_ARROW('currentColor'), `+${RUSH_GAIN_MS / 1000}s`) })}</p>
+        <p>${t('rush_line_miss', { v: pill('is-miss', RUSH_ARROW('currentColor'), `\u2212${RUSH_MISS_MS / 1000}s`) })}</p>
+      </div>`;
     return `
       <div class="wo-home is-rush">
         <div class="wo-hero is-rush" aria-hidden="true">${HERO_SVG}<span class="wo-hero-badge">${RUSH_WATCH}</span></div>
@@ -1204,55 +1201,55 @@ class WayOut {
         </div>
         ${modeTabs}
         <div class="gh-card wo-menu-card">
-          <div class="gh-field">
-            <span class="gh-field__label" id="wo-rushlabel">${t('diff_label')}</span>
-            <div class="wo-segs wo-segs--two" role="radiogroup" aria-labelledby="wo-rushlabel">${segs}</div>
-          </div>
-          ${tiles}
+          <div class="wo-segs wo-segs--two" role="radiogroup" aria-label="${t('diff_label')}">${segs}</div>
+          ${rules}
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-rush-play" data-act="rush-play">${t('rush_play')}</button>
-          <p class="wo-rush-standing">${this._rushStandingText(rm)}</p>
         </div>
-        <button type="button" class="gh-btn wo-howbtn" data-act="rush-board">${t('rush_results')}</button>
+        <div class="wo-rush-leader">${this._rushLeaderHTML(rm)}</div>
       </div>`;
   }
 
-  /** "Leader: Ana 52 · You: 2nd · Resets in 4 days", for the selected version. Everyone's rows are
-   *  read in the background (the same read as Results, at most once a minute); until they arrive,
-   *  or offline, only the reset is shown. This phone's own best is always its fresh local one. */
-  _rushStandingText(mode) {
-    const left = Math.max(0, woWeekEnd() - Date.now());
-    const days = Math.floor(left / 86400000), hours = Math.max(1, Math.ceil(left / 3600000));
-    const resets = days >= 1 ? t('rush_resets_days', { n: days }) : t('rush_resets_hours', { n: hours });
+  /** The leader of the selected version this week, read in the background (the Results read, at
+   *  most once a minute); this phone's own best is always its fresh local one. Ties are all named.
+   *  Then the "See all results" pill, which opens Results on that version. */
+  _rushLeaderHTML(mode) {
     const st = this.rushStanding;
     if (!st || Date.now() - st.at > 60000) this._loadRushStanding();
-    if (!st || !st.rows) return resets;
     const week = woWeekKey(), mine = woRushBest(this._myWayout(), mode);
-    const rows = st.rows.map((r) => {
-      let s = r.best[mode] && r.best[mode][week];
-      if (r.me && mine != null) s = Math.max(s == null ? -1 : s, mine);
-      return { ...r, s: s == null ? null : s };
-    }).filter((r) => r.s != null).sort((a, b) => b.s - a.s);
-    if (!rows.some((r) => r.me) && mine != null) rows.push({ me: true, s: mine, name: '' });
-    rows.sort((a, b) => b.s - a.s);
-    if (!rows.length) return `${t('rush_nobody_short')} · ${resets}`;
-    const me = rows.find((r) => r.me);
-    const place = me ? rows.filter((r) => r.s > me.s).length + 1 : 0;
-    const top = rows[0];
-    if (me && place === 1) return `🏆 ${t('rush_you_lead', { n: me.s })} · ${resets}`;
-    const leader = `${t('rush_leader')}: ${esc(top.emoji || '')} ${esc(top.name || '')} ${top.s}`;
-    return `${leader}${me ? ` · ${t('rush_you_place', { p: t('rush_ord', { n: place }) })}` : ''} · ${resets}`;
+    let body;
+    if (!st) body = `<span class="wo-rl-name is-muted">${t('rush_loading')}</span>`;
+    else {
+      const rows = (st.rows || []).map((r) => {
+        let v = r.best[mode] && r.best[mode][week];
+        if (r.me && mine != null) v = Math.max(v == null ? -1 : v, mine);
+        return { ...r, s: v == null ? null : v };
+      }).filter((r) => r.s != null);
+      if (!rows.some((r) => r.me) && mine != null) rows.push({ me: true, s: mine, name: '', emoji: '' });
+      const topS = rows.reduce((m, r) => Math.max(m, r.s), -1);
+      const top = rows.filter((r) => r.s === topS);
+      body = !top.length ? `<span class="wo-rl-name is-muted">${t('rush_nobody_short')}</span>`
+        : `<span class="wo-rl-name">${top.map((r) => (r.me ? t('rush_you') : `${esc(r.emoji || '')} ${esc(r.name || '')}`.trim())).join(' & ')}</span>
+           <b class="wo-rl-score">${topS}</b>`;
+    }
+    return `
+      <div class="wo-rl-who">
+        <span class="wo-rl-label">🏆 ${t('rush_leader_label', { name: t('tier_' + mode) })}</span>
+        <span class="wo-rl-row">${body}</span>
+      </div>
+      <button type="button" class="wo-rl-all" data-act="rush-board" data-rmode="${mode}">${t('rush_see_all')}</button>`;
   }
   _loadRushStanding() {
     if (this._standingBusy) return;
     this._standingBusy = true;
-    this._loadRushRows().then((res) => {
+    const done = (rows) => {
       this._standingBusy = false;
-      this.rushStanding = { at: Date.now(), rows: res.offline && !res.rows.length ? null : res.rows };
+      this.rushStanding = { at: Date.now(), rows };
       if (this.root && this.screen === 'home' && this.settings.mode === 'rush') {
-        const el = this.root.querySelector('.wo-rush-standing');
-        if (el) el.innerHTML = this._rushStandingText(this.settings.rushMode);
+        const el = this.root.querySelector('.wo-rush-leader');
+        if (el) el.innerHTML = this._rushLeaderHTML(this.settings.rushMode);
       }
-    }, () => { this._standingBusy = false; this.rushStanding = { at: Date.now(), rows: null }; });
+    };
+    this._loadRushRows().then((res) => done(res.rows || []), () => done([]));
   }
 
   _rushPlayHTML() {
@@ -1483,12 +1480,12 @@ class WayOut {
   // per PERSON by js/players-agg.js (a week's best is the best on any of their phones). Read once
   // per opening. Offline: only this phone's own runs.
 
-  _openRushBoard() {
+  _openRushBoard(mode) {
     if (this.rush && !this.rush.over) return;
     this._stopLevel();
     this.rush = null;
     const keep = this.rb || {};
-    this.rb = { tab: 'week', mode: keep.mode || this.settings.rushMode, week: null, rows: null, offline: false };
+    this.rb = { tab: 'week', mode: (mode && RUSH_MODES.includes(mode)) ? mode : (keep.mode || this.settings.rushMode), week: null, rows: null, offline: false };
     this.screen = 'rushboard';
     this.render();
     const rb = this.rb;
