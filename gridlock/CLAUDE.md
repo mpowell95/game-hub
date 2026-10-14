@@ -34,6 +34,7 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
 |---|---|
 | `js/engine.js` | the whole puzzle, pure: board notation, legal slides (`range`, `moves`), the solver (`solve`, breadth-first, one slide = one move). Used by the game, the level maker and the tests |
 | `js/levels.js` | **GENERATED** by `build-gridlock-levels.mjs` (repo root). One line per ladder level: board + fewest moves. **APPEND-ONLY once shipped**, never hand-edited |
+| `js/art.js` | the drawings: wooden blocks (grain, knots, bevel, shine; eight wood tones) and cars (sedan, sports, hatch, sunroof, taxi) and trucks (box truck, bus, tanker), top-down with tyres, glass, lights and mirrors. Pure, returns SVG |
 | `js/ui.js` | setup and play screens, the board (DOM blocks moved by `transform`), dragging, undo / restart / hint, the win popup, autosave, the module contract, the `window.__glTest` seam |
 | `js/strings.js` | EN/ES, every visible string and aria-label |
 | `js/test.js` | headless checks: `node gridlock/js/test.js` (not precached) |
@@ -61,13 +62,32 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
 - Expert levels (151 on) may contain fixed **walls** (metal plates on wood, a striped barrier in the
   car park).
 
+## The play screen's controls (Matt, 2026-10-14)
+
+The top row holds only the level title, centred (in the hub it shares the floating Hub button's row).
+**The way back to the setup screen is Menu, the first button of the bottom bar** (Menu · Undo ·
+Restart · Hint). It used to be a back arrow on the top row, right beside the Hub button; Matt: *"I do
+not like how you've been doing this recently. The back (to the setup screen) is on the same row and
+basically touching the Hub back button."* The Levels screen's Back is a full-width button under its
+pager for the same reason. The rule is in docs/BUILDING-A-GAME.md, Part 0.
+
 ## The two looks (Matt, 2026-10-14)
 
 **Wood** (default: Unblock Me is the best-known version) and **Cars** (Rush Hour's parking lot).
 Same levels, stars and points; the choice is `look` in the settings key, per phone, picked on the
 setup screen (two thumbnails, the selected one wears the `#ffce3a` outline and a check mark, never
 colour alone). The wood play screen follows the hub's light/dark theme; the car park is dark in
-both. **The red piece carries a shape** (a white arrow badge on the wooden block, a white star on
+both.
+
+**The art was redrawn the same day** (Matt: *"Make the blocks and the cars look cooler. They're
+bland"*): `js/art.js` draws every piece as SVG. Wood: a lit top edge and shaded bottom (bevel), a
+soft shine, long wavy grain and sometimes a knot, in eight wood tones, inside a grained tray with
+recessed holes. Cars: a rounded body shaded like a cylinder, tyres at the corners, tinted glass with
+a reflection, roof, mirrors, headlights and tail lights; models vary (sedan, sports with stripes,
+hatchback, sunroof, taxi on yellow cars; trucks are a box truck, a bus or a tanker whose tank carries
+a band in the cab's colour so it reads as one vehicle). The car park is asphalt with grit, painted bay
+lines and a concrete curb. The variety is seeded by level and piece, so a level always looks the
+same. Upright pieces are the same drawing turned a quarter (front up, light from the left). **The red piece carries a shape** (a white arrow badge on the wooden block, a white star on
 the red car), because Matt is red/green colourblind.
 
 ## The ladder, stars and points

@@ -160,9 +160,9 @@
   padding: calc(var(--gl-top, 0px) + 6px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
 }
 .gl-root.is-immersive .gl-levels { padding-top: var(--gl-top, 6px); }
-.gl-root.is-immersive .gl-lv-head { padding-left: calc(var(--gl-inset, 12px) - 16px); }
 .gl-root .gl-lv-head { display: flex; align-items: center; gap: 8px; min-height: 44px; }
-.gl-root .gl-lv-head .gl-iconbtn { background: var(--gh-surface, #fff); color: var(--gh-ink, #16243a); }
+.gl-root .gl-lv-back { gap: 6px; }
+.gl-root .gl-lv-back svg { width: 18px; height: 18px; }
 .gl-root .gl-lv-title { flex: 1; display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center; column-gap: 6px; }
 .gl-root .gl-lv-title svg { width: 15px; height: 15px; }
 .gl-root .gl-lv-title svg.lb-dshape-x2 { width: 26px; }
@@ -170,7 +170,7 @@
 .gl-root .gl-lv-title span { grid-column: 1 / -1; text-align: center; font-size: 12px; font-weight: 600; color: var(--gh-muted, #5b6b82); }
 /* Grid and pager sit together in the middle of the screen (auto margins), not at opposite ends. */
 .gl-root .gl-grid { flex: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: auto; }
-.gl-root .gl-pager { margin-bottom: auto; }
+.gl-root .gl-lv-back { margin-bottom: auto; }
 .gl-root .gl-tile {
   position: relative;
   min-height: 64px;
@@ -232,39 +232,23 @@
 }
 .gl-root .gl-hud {
   flex: none;
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   min-height: 56px;
-  padding: calc(var(--gl-top, 0px) + 6px) 12px 4px 12px;
+  padding: calc(var(--gl-top, 0px) + 6px) 12px 4px;
 }
-.gl-root.is-immersive .gl-hud { padding-left: var(--gl-inset, 12px); padding-top: var(--gl-top, 6px); }
-.gl-root .gl-iconbtn, .gl-root .gl-hud-pad {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border: 0;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  background: var(--gl-chip);
-  color: var(--gl-play-ink);
-  box-shadow: 0 1px 2px rgba(16, 30, 54, .12);
-}
-.gl-root .gl-hud-pad { visibility: hidden; }
-.gl-root .gl-iconbtn svg { width: 22px; height: 22px; }
+/* In the hub the title shares the floating Hub button's row, centred on the screen. The game's own
+   way back to its menu is NOT on this row (Matt, 2026-10-14: "The back (to the setup screen) is on
+   the same row and basically touching the Hub back button"): it is Menu, in the bottom bar. */
+.gl-root.is-immersive .gl-hud { padding-top: var(--gl-top, 6px); }
 .gl-root .gl-hud-mid {
-  position: absolute;
-  left: 50%;
-  bottom: 4px;
-  transform: translateX(-50%);
   display: grid;
   grid-template-columns: auto auto;
   column-gap: 6px;
   align-items: center;
   justify-items: center;
-  height: 44px;
+  min-height: 44px;
   align-content: center;
   white-space: nowrap;
 }
@@ -308,11 +292,41 @@
 .gl-root.gl-look-wood .gl-cell::after {
   content: '';
   position: absolute;
-  inset: 2px;
-  border-radius: 4px;
+  inset: 3px;
+  border-radius: 6px;
   background: var(--gl-hole);
+  box-shadow: inset 0 3px 5px rgba(0, 0, 0, .55), inset 0 -1px 0 rgba(255, 255, 255, .06);
 }
-.gl-root.gl-look-cars .gl-cell { border-top: 2px dashed rgba(255, 255, 255, .14); }
+/* The wooden tray: grain in the frame, a recessed bed. */
+.gl-root.gl-look-wood .gl-frame {
+  background:
+    repeating-linear-gradient(176deg, transparent 0 7px, rgba(60, 30, 10, .16) 7px 9px, transparent 9px 15px),
+    linear-gradient(#9a6535, #6b4220);
+  box-shadow: 0 8px 22px rgba(16, 24, 40, .35), inset 0 2px 0 rgba(255, 255, 255, .22), inset 0 -3px 0 rgba(0, 0, 0, .25);
+}
+.gl-root.gl-look-wood .gl-bed { box-shadow: inset 0 4px 10px rgba(0, 0, 0, .7); }
+/* The car park: asphalt with a little grit, painted bay lines, a concrete curb. */
+.gl-root.gl-look-cars .gl-bed {
+  background:
+    radial-gradient(rgba(255, 255, 255, .06) 1px, transparent 1.6px) 0 0 / 7px 7px,
+    radial-gradient(rgba(0, 0, 0, .25) 1px, transparent 1.6px) 3px 4px / 9px 9px,
+    linear-gradient(#41464f, #353a42);
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, .55);
+}
+.gl-root.gl-look-cars .gl-cell::after {
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: -1px;
+  height: 2px;
+  background: rgba(255, 255, 255, .32);
+  border-radius: 1px;
+}
+.gl-root.gl-look-cars .gl-frame {
+  background: linear-gradient(#d3d6db, #aeb3bb);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45), inset 0 2px 0 rgba(255, 255, 255, .5), inset 0 -3px 0 rgba(0, 0, 0, .2);
+}
 /* The exit: a gap in the frame on row 2's right edge, with a chevron pointing out. */
 .gl-root .gl-exit {
   left: calc(var(--gl-frame) + var(--gl-cell) * 6 - 2px);
@@ -358,34 +372,8 @@
 .gl-root .gl-piece.is-anim { transition: transform .16s cubic-bezier(.2, .7, .3, 1); }
 .gl-root .gl-piece.is-out { transition: transform .45s cubic-bezier(.5, 0, .9, .4), opacity .45s ease-in; }
 .gl-root .gl-piece.is-drag { z-index: 3; cursor: grabbing; }
-.gl-root.gl-look-wood .gl-piece::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: calc(var(--gl-cell) * .2);
-  background-color: var(--gl-c);
-  background-image:
-    linear-gradient(rgba(255, 255, 255, .22), rgba(0, 0, 0, .12)),
-    repeating-linear-gradient(0deg, transparent 0 9px, rgba(90, 50, 20, .14) 9px 11px);
-  box-shadow: 0 3px 0 rgba(0, 0, 0, .35), inset 0 0 0 2px rgba(255, 255, 255, .22);
-}
-.gl-root.gl-look-wood .gl-piece.is-v::before {
-  background-image:
-    linear-gradient(90deg, rgba(255, 255, 255, .22), rgba(0, 0, 0, .12)),
-    repeating-linear-gradient(90deg, transparent 0 9px, rgba(90, 50, 20, .14) 9px 11px);
-}
-.gl-root.gl-look-wood .gl-piece.is-drag::before { box-shadow: 0 6px 12px rgba(0, 0, 0, .4), inset 0 0 0 2px rgba(255, 255, 255, .3); }
-.gl-root .gl-mark {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: calc(var(--gl-cell) * .62);
-  height: calc(var(--gl-cell) * .62);
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12h12M12 6l6 6-6 6' fill='none' stroke='%23d23b2a' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 72% no-repeat;
-}
-.gl-root .gl-art { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .4)); }
+.gl-root .gl-art { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 3px 2px rgba(0, 0, 0, .38)); }
+.gl-root .gl-piece.is-drag .gl-art { filter: drop-shadow(0 7px 6px rgba(0, 0, 0, .45)) brightness(1.06); }
 .gl-root .gl-piece:focus-visible::after {
   content: '';
   position: absolute;
@@ -417,11 +405,13 @@
   flex: none;
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   padding: 8px 12px calc(14px + env(safe-area-inset-bottom, 0px));
 }
 .gl-root .gl-tool {
-  width: 88px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 88px;
   height: 60px;
   border: 0;
   border-radius: 14px;
