@@ -103,6 +103,10 @@ const sw = read('./sw.js');
 const pushHandler = sw.slice(sw.indexOf("addEventListener('push'"), sw.indexOf("addEventListener('notificationclick'"));
 check('sw.js shows a notification for every push (iOS revokes a silent one)',
   /event\.waitUntil\(self\.registration\.showNotification\(/.test(pushHandler) && !/return;/.test(pushHandler));
+check('sw.js badges the app icon only AFTER the notification shows, and never throws',
+  /showNotification\(title, opts\)\.then\(syncBadge\)/.test(pushHandler) && /async function syncBadge\(\) \{\n  try \{/.test(sw));
+const pushJs = read('./js/push.js');
+check('opening the hub clears the app icon badge', /clearAppBadge\(\)/.test(pushJs.slice(pushJs.indexOf('export async function clearShownNotifications'))));
 check('sw.js opens or focuses the hub on a tap', /addEventListener\('notificationclick'/.test(sw) && /openWindow\(url\)/.test(sw) && /type: 'OPEN_GAME'/.test(sw));
 const nf = sw.slice(sw.indexOf('const NETWORK_FIRST = ['), sw.indexOf('const SHELL_CACHE_FIRST'));
 check('js/push.js is network-first (it writes a gamehub.* key)', nf.includes("'./js/push.js'"));
