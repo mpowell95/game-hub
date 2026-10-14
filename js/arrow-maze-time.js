@@ -121,6 +121,11 @@ export function woWeekKey(ms = Date.now()) {
   const back = (d.getUTCDay() + 6) % 7;
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - back)).toISOString().slice(0, 10);
 }
+/** When the week that `ms` is in ends: the next Monday 00:00 UTC, in epoch ms. */
+export function woWeekEnd(ms = Date.now()) {
+  const [y, m, d] = woWeekKey(ms).split('-').map(Number);
+  return Date.UTC(y, m - 1, d + 7);
+}
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A list of runs in array or Firebase-object form; anything that is not a run is left out. A run is

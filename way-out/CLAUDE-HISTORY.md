@@ -523,3 +523,24 @@ ever take minutes: the times logged are seconds per board.
   (stored as `left`, not counted), the results screen, and the setup and play screens in the hub at
   402x874, 360x724, 390x664 and 375x667 (no scroll, clear of the Hub button).
 
+
+
+## Rush setup card, after Matt's review (2026-10-14, added after the trim)
+
+Moved here word for word from the `CLAUDE.md` edit made on main the same day:
+
+- **The Rush setup card, after Matt's review (2026-10-14, *"#1 was my chief concern. Fix all"*):**
+  1. the rules are **three tiles**, not a sentence: stopwatch **10s** "to start", teal arrow
+     **+0.5s** "per arrow", red arrow **−3s** "per mistake" (`.wo-rush-tiles`; a sign and a word on
+     each, colour third; a real minus sign, the hyphen left a gap);
+  2. each version says what it is: "Smaller boards" / "Bigger boards";
+  3. **dark mode's selected difficulty** is a lifted dark surface with the yellow outline (the yellow
+     tint went olive), Levels too;
+  4. **the Levels / Rush switch** has a darker track and the BRIGHTEST tab is the chosen one (it read
+     backwards in dark mode);
+  5. Rush looks like itself: **Play Rush is the Ready button's teal**, and a **stopwatch badge** sits
+     on the picture;
+  6. a standing line under Play: "🏆 You lead this week (41)" or "Leader: Ana 52 · You: 2nd", then
+     "Resets in N days" (`_rushStandingText`; everyone's rows are the Results read, done in the
+     background at most once a minute; this phone's own best is always its fresh local one; until
+     the read lands, or offline, only the reset shows). `woWeekEnd()` is the next Monday 00:00 UTC.

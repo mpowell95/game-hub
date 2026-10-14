@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1148';
+const CACHE = 'game-hub-v1150';
 
 const ASSETS = [
   './',
@@ -831,10 +831,10 @@ const REST_MANIFEST = {
   './murdoku/js/strings.js': 'e744e28e32',
   './way-out/': 'dc6c9178ea',
   './way-out/index.html': 'dc6c9178ea',
-  './way-out/css/way-out.css': 'e72148a898',
-  './way-out/js/ui.js': 'c8b1205fb9',
+  './way-out/css/way-out.css': '751c0f50b5',
+  './way-out/js/ui.js': '1f178d7b20',
   './way-out/js/engine.js': 'eca564b673',
-  './way-out/js/strings.js': '373df5ec69',
+  './way-out/js/strings.js': 'dc70014b43',
   './gridlock/': '0c0b6bd30e',
   './gridlock/index.html': '0c0b6bd30e',
   './gridlock/css/gridlock.css': '2414e7d81d',
@@ -856,10 +856,10 @@ const REST_MANIFEST = {
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
   './archery/': 'ed61e13ce1',
   './archery/index.html': 'ed61e13ce1',
-  './archery/css/archery.css': '1b8d29d79c',
-  './archery/js/ui.js': 'd9b6fc36e5',
+  './archery/css/archery.css': 'f3fe18f480',
+  './archery/js/ui.js': 'd064bd7d2f',
   './archery/js/engine.js': '3ed3c62225',
-  './archery/js/render.js': '7f1ab8f46f',
+  './archery/js/render.js': '08f62b3d71',
   './archery/js/strings.js': 'f4440bfad7',
   './archery/js/mp.js': 'eed6eb18c5',
   './archery/js/mp-ui.js': 'fa3e106752',

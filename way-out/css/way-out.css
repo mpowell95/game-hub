@@ -138,6 +138,9 @@
 }
 /* Selected: the standing #ffce3a accent, paired with a thicker outline (never colour alone). */
 .wo-root .wo-seg.is-selected { outline: 2px solid #ffce3a; border-color: #ffce3a; background: rgba(255, 206, 58, .18); }
+/* Dark: the yellow tint went olive on the dark card (Matt's review, 2026-10-14). A lifted dark
+   surface with the same yellow outline instead; the outline and its thickness carry the selection. */
+.gh-dark .wo-root .wo-seg.is-selected { background: #2c3446; box-shadow: 0 0 0 4px rgba(255, 206, 58, .12); }
 .wo-root .wo-seg-top { display: flex; align-items: center; gap: 6px; font-size: 15px; }
 .wo-root .wo-seg-top b { font-weight: 800; }
 .wo-root .wo-seg-top svg { width: 14px; height: 14px; flex: none; }
@@ -695,4 +698,59 @@
 @media (prefers-reduced-motion: reduce) {
   .wo-root .wo-ready, .wo-root .wo-ready-btn { animation: none; }
 }
+
+/* --- The Rush setup card (2026-10-14, Matt's review) --------------------------------------------- */
+/* The switch: the selected tab is the BRIGHTEST thing in it (it read backwards in dark mode, the
+   chosen tab darker than its track). */
+.gh-dark .wo-root .wo-modes { background: rgba(0, 0, 0, .32); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.gh-dark .wo-root button.wo-mode { color: #9aa8bf; }
+.gh-dark .wo-root button.wo-mode.is-on { background: #3a4660; color: #fff; }
+/* The rules as three tiles: the start, the gain, the cost. Sign and word on each, colour third. */
+.wo-root .wo-rush-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.wo-root .wo-rush-tiles li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 8px 4px 7px;
+  border-radius: 12px;
+  background: var(--gh-surface-2, #eef2f8);
+  text-align: center;
+  line-height: 1.1;
+}
+.wo-root .wo-rush-tiles svg { width: 26px; height: 16px; flex: none; margin-bottom: 2px; }
+.wo-root .wo-rush-tiles .is-start svg { width: 18px; height: 18px; }
+.wo-root .wo-rush-tiles b { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.wo-root .wo-rush-tiles span { font-size: 12px; color: var(--gh-muted, #5b6b82); }
+.wo-root .wo-rush-tiles .is-start { color: var(--gh-ink, #16243a); }
+.wo-root .wo-rush-tiles .is-gain { color: #178a7a; }
+.wo-root .wo-rush-tiles .is-miss { color: #c2412a; }
+.gh-dark .wo-root .wo-rush-tiles .is-gain { color: #3fd6bd; }
+.gh-dark .wo-root .wo-rush-tiles .is-miss { color: #ff7a7f; }
+.wo-root .wo-rush-standing { margin: -4px 0 0; text-align: center; font-size: 13px; line-height: 1.35; color: var(--gh-muted, #5b6b82); }
+/* Play Rush is the Ready button's teal, so the mode looks like itself. */
+.wo-root button.wo-rush-play {
+  background: linear-gradient(180deg, #4fe6cc 0%, #2fbfa7 100%);
+  border-color: transparent;
+  color: #0f2a26;
+  font-weight: 900;
+  box-shadow: 0 6px 16px rgba(47, 191, 167, .3), inset 0 -3px 0 rgba(0, 0, 0, .15);
+}
+.wo-root button.wo-rush-play:focus-visible { outline: 3px solid #ffce3a; outline-offset: 3px; }
+/* A stopwatch on the picture in Rush. */
+.wo-root .wo-hero { position: relative; }
+.wo-root .wo-hero-badge {
+  position: absolute;
+  right: 7%;
+  bottom: 7%;
+  width: 26%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #3fd6bd;
+  color: #10262a;
+  box-shadow: 0 0 0 3px #1a1b2b, 0 4px 14px rgba(63, 214, 189, .45);
+}
+.wo-root .wo-hero-badge svg { width: 62%; height: 62%; }
 

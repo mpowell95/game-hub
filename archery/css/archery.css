@@ -47,6 +47,14 @@
 
 /* ------------------------------------------------------------------ the bow and the arm --- */
 /* An SVG laid over the canvas; ui.js moves its origin (the sight's centre) onto the aim point. */
+.ar-root .ar-arm {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+.ar-root .ar-arm-svg { position: absolute; left: 0; top: 0; display: block; }
 .ar-root .ar-bow {
   position: absolute;
   left: 0;
@@ -61,7 +69,7 @@
 .ar-root .ar-bow-svg {
   position: absolute;
   left: -260px;
-  top: -560px;
+  top: -1000px;
   display: block;
   overflow: visible;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25));

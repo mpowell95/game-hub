@@ -66,11 +66,37 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 
 Touch and hold anywhere on the range: the bow comes up in 0.18 s with the target magnified in the
 sight (a second camera drawn into a disc under the ring). Drag to aim (about a ring per 6 px of
-finger at phone width). Let go: the camera chases the arrow for 0.75 s, cuts to the target, the
-number pops 0.6 s later with stars, and the target stays up 2 s. After the other player's round
+finger at phone width). Let go: the bow kicks (0.1 s), the camera glides to the target with the
+arrow for 0.75 s (below), the number pops 0.6 s later with stars, and the target stays up 2 s. After the other player's round
 (the computer's, or the other person's online), their arrows land in the target one by one with red
 tiles, then the yellow **Your Turn** button takes you to the line, as in the recording. Pass and
 play hands over with a **Pass to <name>** card instead.
+
+## The look, matched to the recording (2026-10-14, Matt: *"yes fix all"*)
+
+A side-by-side pass against the video's frames. Original art, the recording's proportions, colours,
+positions and motion:
+
+- **The flight is ONE shot, no cut**: the bow kicks up and the arrow leaps off it (`JOLT_T` 0.1 s,
+  `ui.js`), then the camera glides down the lane from the line into the close-up in `FLIGHT_T`
+  (`render.js setFlight`, `CLOSE_POS` / `CLOSE_LOOK`). The arrow is placed FROM THE CAMERA
+  (`_tipAt`): it shows big at the top right, rides up and right of the target and drops onto it from
+  the right, with a white trail; its arc varies a little shot to shot. It is framed like a film, not
+  simulated; the rules decided where it lands before it left.
+- **The close-up**: the board about 45% of the width, a little right of the middle, stands behind.
+  Arrows arrive from the right (`inDir`), so they stick out long, up and to the right. The board and
+  face are unlit (bright white).
+- **The sight** shows the face at about a third of its radius, the board round it (zoom `/0.34`).
+  The sight's inner radius is 0.082 of the screen width (`this.k`).
+- **The bow** (`bowSVG`): a chunky metallic-blue riser with black parts and an opening at the top, a
+  thick black sight bar with a small foot, a blue shelf, a thick black grip, the lower limb blue. The
+  hand is a fist seen from the back, thumb over the top under the shelf. The arrow (thick blue, dark
+  rear, silver point) rests on the shelf and turns about `REST`: flatter with the bow down
+  (`ARROW_DEG.idle` 37), steeper drawn (60). The bow tilts and swings left on the way up.
+- **The sleeve** (`armSVG` / `_drawArm`) is drawn in screen pixels from the wrist to past the
+  bottom-left corner: long and straight with the forearm showing when down, big and puffy drawn.
+- **The stadium**: a sky dome with clouds, the far end of a bowl (`BOWL_Z`): a curved blue barrier, a
+  narrow soft band of crowd (no stairways), and a curved white steel-and-glass roof with sky above it.
 
 **The point under the sight's crosshair IS the aim.** `render.js setScope` draws the zoomed view
 at the screen point `ui.js` puts the ring at, from the same numbers, so they cannot disagree.
