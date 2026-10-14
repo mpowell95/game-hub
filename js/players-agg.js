@@ -13,8 +13,9 @@ import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
 import { WO_TIERS, woList } from './arrow-maze-time.js';
+import { glBest } from './gridlock-points.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -237,6 +238,19 @@ export function aggregatePlayers(all, corrections) {
           dst.wo.timed[tier] = (dst.wo.timed[tier] | 0) + n;
           const log = woList(((src.wo.log || src.wo.recent) || {})[tier]);
           if (n > (dst.wo._n[tier] | 0)) { dst.wo._n[tier] = n; dst.wo.log[tier] = log; }
+        }
+      } else if (g === 'gridlock' && src.gl) {
+        // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it Gridlock's
+        // levels, stars and points read as nothing the moment a second device syncs (THE LAW rule
+        // 1). A level cleared on two phones is ONE level: per level the best of each field
+        // (fewest moves, most stars, no-hint), never a sum. Hints add.
+        if (!dst.gl) dst.gl = { lv: {}, hints: 0 };
+        dst.gl.hints += src.gl.hints | 0;
+        const lv = (src.gl.lv && typeof src.gl.lv === 'object') ? src.gl.lv : {};
+        for (const k of Object.keys(lv)) {
+          if (!/^L\d+$/.test(k)) continue;
+          const best = glBest(dst.gl.lv[k], lv[k]);
+          if (best) dst.gl.lv[k] = best;
         }
       } else if (g === 'contexto' && src.ct) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it every Contexto

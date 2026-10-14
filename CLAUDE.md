@@ -379,6 +379,7 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/game-stats-ui.js` | "My Stats" overlay |
 | `js/leaderboard-ui.js` | "Leaderboards" overlay (DOM only); wins-only display, rating retired from it (2026-07-23); multiplayer wins show as a per-game VS chip on that game's board, NOT as head-to-head on the player detail (2026-08-11 - this row said the opposite until 2026-09-09); a game's own board ranks by DIFFICULTY TIER first and score second (2026-09-08); an admin-only game is off By Game and has no board, while its wins still count in every cross-game total (2026-09-09); it OPENS on By Game / Most played, and a board opens on its own leftmost sort (2026-09-11); on EVERY board the headline number is the one you sorted by, Tic Tac Toe's and Snake's bespoke split cards included (2026-09-11) |
 | `js/arrow-maze-time.js` | (2026-10-13) Arrow Maze's timer, pure: the mistake/hint time penalties, the m:ss clock and the finish-list reader; since 2026-10-14 also the LADDER's bands (Easy 1-50 ... Expert 151 on) and POINTS (`woLevelPoints`, `woPoints`), the leaderboard's number. Used by the game, `js/game-stats.js`, `js/players-agg.js`, My Stats and the leaderboard. Network-first (`way-out/CLAUDE.md`, "The ladder and points") |
+| `js/gridlock-points.js` | (2026-10-14) Gridlock's ladder bands, stars (`glStars`) and points (`glPoints`), read from the per-level `gl.lv` map, so a replay or a second phone never adds points. Used by the game, `js/game-stats.js`, `js/players-agg.js`, My Stats and the leaderboard. Network-first (`gridlock/CLAUDE.md`) |
 | `js/leaderboard-rank.js` | pure, headless-testable rating/ranking maths (kept for a future rating page; not shown on the leaderboard since 2026-07-23), plus the board comparators the leaderboard DOES use (`compareBoardMetric`, `compareTierFirst`) |
 | `js/game-art.js` | single source of every hub tile's inline SVG art, keyed by hub id; `hub.js` and `leaderboard-ui.js` both read it |
 | `js/difficulty-tiers.js` | READ-path mapping of difficulty vocabularies onto the 1-4 tier scale |
@@ -450,7 +451,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `delete-test-players.mjs`, `delete-device-record.mjs`, `fix-natalia-record.mjs`). Never run
   them with `--write` on your own judgement.
 - **Never hand-edit generated files** (`js/emoji-data.js`, `js/emoji-search-*.js`,
-  `boggle/data/words-es.txt`, `contexto/data/*`, `baseball/models/*`, sw.js's `REST_MANIFEST`); re-run the generator.
+  `boggle/data/words-es.txt`, `contexto/data/*`, `baseball/models/*`, `gridlock/js/levels.js`, sw.js's `REST_MANIFEST`); re-run the generator.
 
 **Index:**
 - Server: `server.mjs`
@@ -458,13 +459,13 @@ a tool's row there before running or changing it. Add a new tool there AND here.
 - Stats / data safety: `players-agg.test.mjs`, `test-recorder-contract.mjs`,
   `test-stats-replay.mjs`, `test-stats-identity.mjs`, `test-stats-corrections.mjs`,
   `test-rate-guard.mjs`, `test-activity.mjs`, `test-leaderboard-rank.mjs`, `test-admin-config.mjs`,
-  `test-arrow-maze-time.mjs`
+  `test-arrow-maze-time.mjs`, `test-gridlock.mjs`
 - Hub features: `test-new-badge.mjs`, `test-emoji.mjs`, `test-messages.mjs`,
   `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`, `test-skee-challenge.mjs`, `test-challenges.mjs`,
   `test-cuppong-mp.mjs`, `test-darts-mp.mjs`, `test-flicksoccer-mp.mjs`
 - Cross-game: `test-game-conventions.mjs`, `test-visual.mjs`, `check-no-scroll.mjs`,
   `test-mp-lockstep.mjs`, `run-all-tests.mjs`
-- Generators: `build-emoji-data.mjs`, `build-boggle-es.mjs`, `build-contexto-data.mjs`, `convert-kenney.mjs`
+- Generators: `build-emoji-data.mjs`, `build-boggle-es.mjs`, `build-contexto-data.mjs`, `build-gridlock-levels.mjs`, `convert-kenney.mjs`
 - Boggle: `tune-boggle-es.mjs`, `test-boggle-es.mjs`
 - Baseball: `sim-baseball.mjs`, `sim-baseball-career.mjs`, `glb-info.mjs`, `render-actor.mjs`,
   `test-baseball-actors.mjs`, `test-baseball-career.mjs`
@@ -568,6 +569,7 @@ working in that folder).
 | Escoba | in-hub `module:`, immersive, **multiplayer at 2-4 seats** (save key `escoba-save`, MP field) | `.eb-root` / `.eb-` | `escoba-settings` (frozen gen-1) | `recordEscoba` |
 | Filler | in-hub `module:`, **multiplayer** (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (pre-convention root class, frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Flick Soccer | in-hub `module:`, immersive, **`devOnly`**, table soccer with flicked discs (Soccer Stars kind): five discs a side, one flick a turn, first to 1/2/3 goals; vs computer Easy/Medium/Hard (simulates its shots with the real physics) or 2 players on one phone; autosave `gamehub.flicksoccer.save.v1`; plus **turn-by-turn online challenges** (`flicksoccer/`, a log of flicks replayed on each phone; `flick-soccer/CLAUDE.md`, "Online challenges"); hub id `flick-soccer`, stats id `flicksoccer` (2026-10-11) | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` | `recordResult('flicksoccer', …)` |
+| Gridlock | in-hub `module:`, immersive, **`devOnly`**, the sliding-block "traffic jam" puzzle (Unblock Me / Rush Hour, 2026-10-14): drag blocks so the red one leaves through the exit; Arrow Maze's numbered ladder (Easy 1-50 ... Expert 151 on, with walls), stars against the fewest moves, points for distinct levels cleared; **two looks, Wood or Cars, picked per phone** (`gridlock/CLAUDE.md`). Levels GENERATED by `build-gridlock-levels.mjs` into `gridlock/js/levels.js` (append-only) | `.gl-root` / `.gl-` | `gamehub.gridlock.v1` (+ `gamehub.gridlock.save.v1` progress, one per difficulty) | `recordGridlock` (sub-counter `gl`: per level fewest moves, stars, no-hint) |
 | Connect 4 Hoops | in-hub `module:`, immersive, **multiplayer, two protocols** (live rooms via `js/net.js`; turn-by-turn via `hoops/games/<id>`, its own node), **admin only** (`devOnly`) | `.h4-root` / `.h4-` | `gamehub.hoops4.v1` | `recordResult('hoops4', …)` |
 | Hill Climb | in-hub `module:`, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | in-hub `module:`, immersive, **multiplayer** (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (pre-convention root class, frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |

@@ -40,6 +40,7 @@ const DICTS = [
   { name: 'contexto/js/strings.js', path: './contexto/js/strings.js' },
   { name: 'murdoku/js/strings.js', path: './murdoku/js/strings.js' },
   { name: 'way-out/js/strings.js', path: './way-out/js/strings.js' },
+  { name: 'gridlock/js/strings.js', path: './gridlock/js/strings.js' },
   { name: 'darts/js/strings.js', path: './darts/js/strings.js' },
   { name: 'flick-soccer/js/strings.js', path: './flick-soccer/js/strings.js' },
 ];

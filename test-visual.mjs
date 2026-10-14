@@ -1125,6 +1125,33 @@ const PLAY = {
       return { ok: true, why: `a clear arrow left (${s1.left} to go), a blocked one bounced and cost a life (${s2.lives} left)` };
     },
   },
+  gridlock: {
+    what: 'tap Play, drag the first block of the solution with a real touch, it moves one move',
+    async run(page, cdp, tap) {
+      const play = await page.waitForSelector('[data-act="play"]', { timeout: 8000 }).catch(() => null);
+      if (!play) return { ok: false, why: 'no Play button on the home screen' };
+      await tap(play);
+      await page.waitForSelector('.gl-piece', { timeout: 8000 }).catch(() => null);
+      await page.waitForTimeout(300);
+      const s0 = await page.evaluate(() => (window.__glTest ? window.__glTest.state() : null));
+      if (!s0) return { ok: false, why: 'the game exposed no state to drive (window.__glTest)' };
+      const sol = await page.evaluate(() => window.__glTest.solution());
+      if (!sol || !sol.length) return { ok: false, why: 'the level has no solution' };
+      const [i, q] = sol[0];
+      const box = await page.evaluate((k) => { const r = document.querySelector(`.gl-piece[data-i="${k}"]`).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }, i);
+      const horiz = box.w > box.h, cell = horiz ? box.h : box.w;
+      const d = (q - s0.pos[i]) * cell;
+      const x0 = box.x + box.w / 2, y0 = box.y + box.h / 2;
+      const pt = (x, y) => [{ x, y, id: 1 }];
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(x0, y0) });
+      for (let k = 1; k <= 8; k++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(x0 + (horiz ? d * k / 8 : 0), y0 + (horiz ? 0 : d * k / 8)) });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.waitForTimeout(300);
+      const s1 = await page.evaluate(() => window.__glTest.state());
+      if (s1.moves !== s0.moves + 1 || s1.pos[i] !== q) return { ok: false, why: `dragged block ${i} to ${q}: moves ${s0.moves} -> ${s1.moves}, it sits at ${s1.pos[i]}` };
+      return { ok: true, why: `dragged block ${i} from ${s0.pos[i]} to ${q}: one move, ${sol.length - 1} to go` };
+    },
+  },
 };
 
 // --- harness ----------------------------------------------------------------------------------

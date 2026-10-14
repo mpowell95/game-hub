@@ -1149,6 +1149,31 @@ export const GAME_ART = {
             <path d="M144 38l-8-4.6v9.2z" fill="#3fd6bd"/>
             <g fill="#2fd3c0"><circle cx="65" cy="34" r="1.6"/><circle cx="66" cy="42" r="1.1"/><circle cx="62" cy="30" r="1.3"/></g>
           </svg>`,
+  // Gridlock (2026-10-14): the game's wood look - a 6x6 board of sliding blocks, the red one leaving through
+  // the exit gap on the right, white arrow on it (the red block is marked by shape, never colour alone).
+  'gridlock': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#2f5d6b"/>
+            <rect x="40" y="6" width="78" height="78" rx="7" fill="#7a4a22"/>
+            <rect x="45" y="11" width="68" height="68" rx="3" fill="#3c2614"/>
+            <rect x="112" y="35" width="7" height="9" fill="#3c2614"/>
+            <g>
+              <rect x="47" y="13" width="20" height="9" rx="2.5" fill="#d9a866"/>
+              <rect x="69" y="13" width="9" height="20" rx="2.5" fill="#c98f4e"/>
+              <rect x="80" y="46" width="9" height="31" rx="2.5" fill="#e2b878"/>
+              <rect x="47" y="68" width="31" height="9" rx="2.5" fill="#c5904f"/>
+              <rect x="102" y="13" width="9" height="20" rx="2.5" fill="#deb070"/>
+              <rect x="91" y="68" width="20" height="9" rx="2.5" fill="#d49c5c"/>
+              <rect x="47" y="46" width="9" height="20" rx="2.5" fill="#bf8a4c"/>
+              <rect x="91" y="46" width="9" height="20" rx="2.5" fill="#d6a160"/>
+              <rect x="80" y="24" width="20" height="9" rx="2.5" fill="#e0b474"/>
+            </g>
+            <g stroke="#ffce3a" stroke-width="1.6" stroke-linecap="round" opacity=".85">
+              <path d="M92 38h7M89 41h9M92 44h7"/>
+            </g>
+            <rect x="106" y="35" width="20" height="9" rx="2.5" fill="#d23b2a"/>
+            <circle cx="116" cy="39.5" r="3.4" fill="#fff"/>
+            <path d="M114 39.5h4M117 37.5l2 2-2 2" stroke="#d23b2a" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>`,
 };
 
 export default GAME_ART;

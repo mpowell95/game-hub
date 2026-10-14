@@ -1,0 +1,410 @@
+/* gridlock/css/gridlock.css - every rule descendant-scoped under .gl-root.
+ *
+ * TWO LOOKS, one game (chosen on the setup screen, gridlock/js/ui.js): WOOD (.gl-look-wood, the
+ * default: blocks on a wooden board, the play screen follows the hub's light/dark theme) and CARS
+ * (.gl-look-cars: cars and trucks in a parking lot, a dark lot in both themes). The SETUP screen
+ * and the popups follow the hub's theme through css/ui.css's --gh-* tokens.
+ *
+ * The red block is told apart by SHAPE as well as colour (a white arrow badge on wood, a white star
+ * on the red car): Matt is red/green colourblind. */
+.gl-root {
+  --gl-play-bg: var(--gh-bg, #f4f6fb);
+  --gl-play-ink: var(--gh-ink, #16243a);
+  --gl-play-muted: var(--gh-muted, #5b6b82);
+  --gl-chip: var(--gh-surface, #fff);
+  --gl-frame-a: #8a5a2e;
+  --gl-frame-b: #6b4220;
+  --gl-bed: #3c2614;
+  --gl-hole: #4a3019;
+  --gl-sel: #ffce3a;
+  --gl-cell: 46px;
+  --gl-frame: 16px;
+  box-sizing: border-box;
+  /* position: fixed with top/left/width/height set inline by _positionRoot() in ui.js (the Arrow
+   * Maze / Murdoku technique: `.hub-game` has no defined height). inset: 0 is the fallback. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--gl-play-bg);
+  color: var(--gl-play-ink);
+  font-family: var(--gh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.gl-root.gl-look-cars {
+  --gl-play-bg: #262b33;
+  --gl-play-ink: #f2f4f8;
+  --gl-play-muted: #aab3c2;
+  --gl-chip: #363d48;
+  --gl-frame-a: #c9ccd2;
+  --gl-frame-b: #b4b8c0;
+  --gl-bed: #3d434d;
+}
+.gl-root * {
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.gl-root button { cursor: pointer; touch-action: manipulation; }
+.gl-root button:not(.gh-btn) { font: inherit; color: inherit; }
+.gl-root button svg, .gl-root button span, .gl-root button b { pointer-events: none; }
+/* The standalone page has no css/hub.css, so css/ui.css's --gh-* tokens would stay light under
+   .gh-dark. Give them the hub's own dark values here (in the hub these are the same numbers). */
+:root.gh-dark .gl-root {
+  --gh-bg: var(--hub-bg, #0e1420);
+  --gh-surface: var(--hub-surface, #1b2333);
+  --gh-surface-2: var(--hub-surface-2, #2b3547);
+  --gh-ink: var(--hub-ink, #e9eef6);
+  --gh-muted: var(--hub-muted, #9db0c9);
+}
+:root.gh-dark .gl-root .lb-dshape-t3, :root.gh-dark .gl-root .lb-dshape-t4 { fill: #e8edf5; }
+.gl-root.gl-look-cars .gl-hud .lb-dshape-t3, .gl-root.gl-look-cars .gl-hud .lb-dshape-t4 { fill: #e8edf5; }
+
+/* --- HOME: the setup screen, in the hub's own style ---------------------------------------- */
+.gl-root.is-home { background: var(--gh-bg, #f4f6fb); color: var(--gh-ink, #16243a); }
+.gl-root .gl-home {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: calc(var(--gl-top, 0px) + 12px) 16px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.gl-root.is-immersive .gl-home { padding-top: calc(var(--gl-top, 0px) + 52px); }
+.gl-root .gl-head { text-align: center; }
+.gl-root .gl-head h1 { margin: 0 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -.2px; }
+.gl-root .gl-head p { margin: 0 auto; max-width: 320px; color: var(--gh-muted, #5b6b82); font-size: 14px; line-height: 1.35; }
+.gl-root .gl-points { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; }
+.gl-root .gl-points span { font-weight: 700; color: var(--gh-muted, #5b6b82); font-size: 15px; }
+.gl-root .gl-points b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.gl-root .gl-menu-card { display: flex; flex-direction: column; gap: 12px; }
+.gl-root .gl-looks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gl-root .gl-look {
+  position: relative;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--gh-border, rgba(16, 36, 58, .14));
+  border-radius: 12px;
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #16243a);
+  font-size: 15px;
+}
+.gl-root .gl-look b { font-weight: 800; }
+.gl-root .gl-thumb { width: 54px; height: 40px; flex: none; display: block; }
+.gl-root .gl-check {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--gl-sel);
+  color: #1d2330;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 900;
+}
+.gl-root .gl-segs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gl-root .gl-seg {
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--gh-border, rgba(16, 36, 58, .14));
+  border-radius: 12px;
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #16243a);
+}
+/* Selected: the standing #ffce3a accent, paired with a thicker outline (never colour alone). */
+.gl-root .gl-seg.is-selected, .gl-root .gl-look.is-selected { outline: 2px solid var(--gl-sel); border-color: var(--gl-sel); background: rgba(255, 206, 58, .18); }
+.gl-root .gl-seg-top { display: flex; align-items: center; gap: 6px; font-size: 15px; }
+.gl-root .gl-seg-top b { font-weight: 800; }
+.gl-root .gl-seg-top svg { width: 14px; height: 14px; flex: none; }
+.gl-root .gl-seg-top svg.lb-dshape-x2 { width: 24px; }
+.gl-root .gl-seg-sub { font-size: 12px; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; }
+.gl-root .gl-seg-range { font-size: 12px; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; opacity: .8; }
+.gl-root .gl-worth { margin: -4px 0 0; text-align: center; font-size: 13px; color: var(--gh-muted, #5b6b82); }
+
+/* --- PLAY ------------------------------------------------------------------------------------ */
+.gl-root .gl-game {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.gl-root .gl-hud {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: calc(var(--gl-top, 0px) + 6px) 12px 4px 12px;
+}
+.gl-root.is-immersive .gl-hud { padding-left: var(--gl-inset, 12px); padding-top: var(--gl-top, 6px); }
+.gl-root .gl-iconbtn, .gl-root .gl-hud-pad {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--gl-chip);
+  color: var(--gl-play-ink);
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .12);
+}
+.gl-root .gl-hud-pad { visibility: hidden; }
+.gl-root .gl-iconbtn svg { width: 22px; height: 22px; }
+.gl-root .gl-hud-mid {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  justify-items: center;
+  height: 44px;
+  align-content: center;
+  white-space: nowrap;
+}
+.gl-root .gl-hud-mid svg { width: 15px; height: 15px; }
+.gl-root .gl-hud-mid svg.lb-dshape-x2 { width: 26px; }
+.gl-root .gl-hud-mid b { font-size: 18px; font-weight: 800; }
+.gl-root .gl-hud-mid span { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: var(--gl-play-muted); line-height: 1; }
+
+.gl-root .gl-strip { flex: none; display: flex; justify-content: center; gap: 10px; padding: 6px 12px 4px; }
+.gl-root .gl-chip {
+  min-width: 96px;
+  padding: 5px 14px;
+  border-radius: 12px;
+  text-align: center;
+  background: var(--gl-chip);
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .1);
+}
+.gl-root .gl-chip small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--gl-play-muted); }
+.gl-root .gl-chip b { font-size: 22px; font-variant-numeric: tabular-nums; }
+
+.gl-root .gl-stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: 4px 6px; }
+.gl-root .gl-board { position: relative; touch-action: none; }
+.gl-root .gl-board > * { position: absolute; left: 0; top: 0; }
+.gl-root .gl-frame {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--gl-frame) * 1.1);
+  background: linear-gradient(var(--gl-frame-a), var(--gl-frame-b));
+  box-shadow: 0 6px 18px rgba(16, 24, 40, .28);
+}
+.gl-root .gl-bed {
+  left: calc(var(--gl-frame) - 3px);
+  top: calc(var(--gl-frame) - 3px);
+  width: calc(var(--gl-cell) * 6 + 6px);
+  height: calc(var(--gl-cell) * 6 + 6px);
+  border-radius: 8px;
+  background: var(--gl-bed);
+}
+.gl-root .gl-cell { width: var(--gl-cell); height: var(--gl-cell); }
+.gl-root.gl-look-wood .gl-cell::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 4px;
+  background: var(--gl-hole);
+}
+.gl-root.gl-look-cars .gl-cell { border-top: 2px dashed rgba(255, 255, 255, .14); }
+/* The exit: a gap in the frame on row 2's right edge, with a chevron pointing out. */
+.gl-root .gl-exit {
+  left: calc(var(--gl-frame) + var(--gl-cell) * 6 - 2px);
+  width: calc(var(--gl-frame) + var(--gl-cell) * .42);
+  height: var(--gl-cell);
+  background: var(--gl-bed);
+  border-radius: 0 6px 6px 0;
+}
+.gl-root .gl-exit::after {
+  content: '';
+  position: absolute;
+  right: calc(var(--gl-cell) * .06);
+  top: 50%;
+  width: calc(var(--gl-cell) * .2);
+  height: calc(var(--gl-cell) * .2);
+  border-top: 3px solid var(--gl-sel);
+  border-right: 3px solid var(--gl-sel);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* Walls (Expert): fixed metal plates on wood, striped barriers in the car park. */
+.gl-root .gl-wall { width: var(--gl-cell); height: var(--gl-cell); padding: 3px; }
+.gl-root .gl-wall::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 22% 22%, #4b525c 0 7%, transparent 8%),
+    radial-gradient(circle at 78% 22%, #4b525c 0 7%, transparent 8%),
+    radial-gradient(circle at 22% 78%, #4b525c 0 7%, transparent 8%),
+    radial-gradient(circle at 78% 78%, #4b525c 0 7%, transparent 8%),
+    linear-gradient(#a3abb6, #858e9a);
+  box-shadow: inset 0 0 0 2px #5f6874;
+}
+.gl-root.gl-look-cars .gl-wall::before {
+  background: repeating-linear-gradient(135deg, #e0532f 0 8px, #f4f4f4 8px 16px);
+  box-shadow: inset 0 0 0 2px #7d828b;
+}
+
+/* Blocks. Positioned by transform (set in ui.js); only transform and opacity ever animate. */
+.gl-root .gl-piece { z-index: 2; cursor: grab; outline: none; }
+.gl-root .gl-piece.is-anim { transition: transform .16s cubic-bezier(.2, .7, .3, 1); }
+.gl-root .gl-piece.is-out { transition: transform .45s cubic-bezier(.5, 0, .9, .4), opacity .45s ease-in; }
+.gl-root .gl-piece.is-drag { z-index: 3; cursor: grabbing; }
+.gl-root.gl-look-wood .gl-piece::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: calc(var(--gl-cell) * .2);
+  background-color: var(--gl-c);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .22), rgba(0, 0, 0, .12)),
+    repeating-linear-gradient(0deg, transparent 0 9px, rgba(90, 50, 20, .14) 9px 11px);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .35), inset 0 0 0 2px rgba(255, 255, 255, .22);
+}
+.gl-root.gl-look-wood .gl-piece.is-v::before {
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, .22), rgba(0, 0, 0, .12)),
+    repeating-linear-gradient(90deg, transparent 0 9px, rgba(90, 50, 20, .14) 9px 11px);
+}
+.gl-root.gl-look-wood .gl-piece.is-drag::before { box-shadow: 0 6px 12px rgba(0, 0, 0, .4), inset 0 0 0 2px rgba(255, 255, 255, .3); }
+.gl-root .gl-mark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--gl-cell) * .62);
+  height: calc(var(--gl-cell) * .62);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12h12M12 6l6 6-6 6' fill='none' stroke='%23d23b2a' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 72% no-repeat;
+}
+.gl-root .gl-art { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .4)); }
+.gl-root .gl-piece:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--gl-cell) * .22);
+  box-shadow: 0 0 0 3px var(--gl-sel);
+}
+/* The hint: the block to move wears a glowing outline (glow, never scale), and a dashed ghost
+   shows where it goes. */
+.gl-root .gl-piece.is-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--gl-cell) * .22);
+  box-shadow: 0 0 0 3px var(--gl-sel);
+  animation: gl-glow 1.2s ease-in-out infinite;
+}
+.gl-root .gl-ghost {
+  z-index: 1;
+  border-radius: calc(var(--gl-cell) * .22);
+  border: 3px dashed var(--gl-sel);
+  background: rgba(255, 206, 58, .18);
+  pointer-events: none;
+}
+.gl-root .gl-ghost[hidden] { display: none; }
+@keyframes gl-glow { 0%, 100% { box-shadow: 0 0 0 3px var(--gl-sel); } 50% { box-shadow: 0 0 0 3px var(--gl-sel), 0 0 16px 4px rgba(255, 206, 58, .75); } }
+
+.gl-root .gl-tools {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+}
+.gl-root .gl-tool {
+  width: 88px;
+  height: 60px;
+  border: 0;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: var(--gl-chip);
+  color: var(--gl-play-ink);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(16, 30, 54, .15);
+}
+.gl-root .gl-tool svg { width: 22px; height: 22px; }
+.gl-root .gl-tool:disabled { opacity: .4; cursor: default; }
+.gl-root .gl-tool.is-on { outline: 3px solid var(--gl-sel); }
+
+/* --- popups: How to play and the win (css/ui.css's .gh-overlay / .gh-modal) ------------------
+ * In the hub the floating back button stays above the overlay, so the popup is pushed below it. */
+.gl-root .gl-modal[hidden] { display: none; }
+.gl-root.is-immersive .gl-modal { padding-top: calc(var(--gl-top, 0px) + 56px); }
+.gl-root .gl-dialog { display: flex; flex-direction: column; gap: 12px; max-height: none; overflow: visible; text-align: center; }
+.gl-root .gl-dialog .gh-modal__title { margin: 0 32px 0; }
+.gl-root .gl-how-goal { margin: 0; font-size: 16px; font-weight: 800; line-height: 1.3; }
+.gl-root .gl-how-pic svg { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
+.gl-root .gl-how-frame { fill: #7a4a22; }
+.gl-root .gl-how-bed { fill: #3c2614; }
+.gl-root .gl-how-block { fill: #d9a866; }
+.gl-root .gl-how-move { stroke: var(--gh-ink, #16243a); stroke-width: 2.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.gl-root .gl-how-way { stroke: #e0a400; stroke-width: 3; fill: none; stroke-dasharray: 5 4; stroke-linecap: round; stroke-linejoin: round; }
+.gl-root .gl-how-txt { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; }
+.gl-root .gl-how-ex { margin: 0; font-size: 14px; color: var(--gh-muted, #5b6b82); }
+.gl-root .gl-stars { display: flex; justify-content: center; gap: 6px; }
+.gl-root .gl-star { width: 48px; height: 48px; }
+.gl-root .gl-star path { fill: var(--gh-surface-2, #dfe4ec); stroke: var(--gh-border-strong, #c4cbd6); stroke-width: 2; stroke-linejoin: round; }
+.gl-root .gl-star.is-on path { fill: #F2B705; stroke: #b98a00; }
+.gl-root .gl-crown {
+  align-self: center;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 12px;
+  border: 2px solid #F2B705;
+  border-radius: 999px;
+  background: rgba(242, 183, 5, .16);
+  font-size: 14px;
+  font-weight: 800;
+}
+.gl-root .gl-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.gl-root .gl-nums div { padding: 6px 4px; border-radius: 12px; background: var(--gh-surface-2, #eef2f8); }
+.gl-root .gl-nums small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--gh-muted, #5b6b82); }
+.gl-root .gl-nums b { font-size: 20px; font-variant-numeric: tabular-nums; }
+
+/* Short phones: the setup screen tightens rather than scrolls. */
+@media (max-height: 680px) {
+  .gl-root .gl-home { gap: 8px; }
+  .gl-root .gl-head h1 { font-size: 22px; }
+  .gl-root .gl-seg, .gl-root .gl-look { min-height: 50px; }
+  .gl-root .gl-tools { padding-top: 4px; }
+  .gl-root .gl-tool { height: 54px; }
+}
+
+/* Reduced motion: the slide itself is the game and stays; the glow and the easing go. */
+@media (prefers-reduced-motion: reduce) {
+  .gl-root .gl-piece.is-anim { transition: none; }
+  .gl-root .gl-piece.is-out { transition: opacity .2s linear; }
+  .gl-root .gl-piece.is-hint::after { animation: none; }
+}

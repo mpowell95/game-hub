@@ -97,6 +97,7 @@ const ASSETS = [
   './js/leaderboard-ui.js',
   './js/leaderboard-rank.js',
   './js/arrow-maze-time.js',
+  './js/gridlock-points.js',
   './js/difficulty-tiers.js',
   './js/net.js',
   './js/online-gate.js',
@@ -210,6 +211,13 @@ const ASSETS = [
   './way-out/js/ui.js',
   './way-out/js/engine.js',
   './way-out/js/strings.js',
+  './gridlock/',
+  './gridlock/index.html',
+  './gridlock/css/gridlock.css',
+  './gridlock/js/ui.js',
+  './gridlock/js/engine.js',
+  './gridlock/js/levels.js',
+  './gridlock/js/strings.js',
   './flick-soccer/',
   './flick-soccer/index.html',
   './flick-soccer/css/flick-soccer.css',
@@ -691,6 +699,8 @@ const NETWORK_FIRST = [
   './js/leaderboard-rank.js',
   // Arrow Maze's score (2026-10-13): what is stored, merged and SHOWN for every timed level.
   './js/arrow-maze-time.js',
+  // Gridlock's ladder, stars and points (2026-10-14): what is stored, merged and SHOWN per level.
+  './js/gridlock-points.js',
   './js/admin-ui.js',
   // Retired, lazily loaded, and it clears `gamehub.challenge` on its tester-only reset path. Free
   // to keep fresh (nothing imports it at load) and it is a gamehub.* write, so the structural

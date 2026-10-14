@@ -219,6 +219,17 @@
 //                                                   // Levels cleared before the timer, or resumed
 //                                                   // from a save made before it, count in
 //                                                   // total/byDiff only.
+//       gridlock: {
+//         total, byDiff,                           // byDiff keyed easy|medium|hard|expert; one
+//                                                   // play+won per level solved (replays too)
+//         gl: { lv: { L<n>: { m, s, c } }, hints } },
+//                                                   // (2026-10-14) per LADDER level n: m = fewest
+//                                                   // moves solved in (lower is better, never 0),
+//                                                   // s = best stars 1-3, c = 1 once solved with no
+//                                                   // hint. Each only improves. Keyed 'L<n>' so
+//                                                   // Firebase never turns it into an array.
+//                                                   // POINTS come from this map, never from byDiff
+//                                                   // (js/gridlock-points.js). See recordGridlock
 //       contexto: {
 //         total, byDiff,                           // byDiff keyed en|es (the word set, no tier)
 //         ct: { solved, guesses, hints, noHint, fewest, silver, bronze, medalsV } },
@@ -235,6 +246,7 @@
 
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 import { WO_TIERS, woList } from './arrow-maze-time.js';
+import { glBest } from './gridlock-points.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
@@ -243,7 +255,7 @@ const STATS_KEY = 'gamehub.stats';
 // live under those keys, in this store and in players/<id>. Nothing displays them (ARCHIVED_GAMES
 // keeps them out of every total); nothing deletes them (THE LAW). To restore one, see
 // archive/<game>/CLAUDE.md.
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer', 'gridlock'];
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
 const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes'];
 
@@ -482,6 +494,14 @@ function ensureWo(g) {
     if (!Number.isFinite(g.wo.timed[tier])) g.wo.timed[tier] = 0;
     g.wo.log[tier] = woList(seed ? (g.wo.recent || {})[tier] : g.wo.log[tier]);
   }
+}
+
+/** Gridlock (2026-10-14): the per-level map and a lifetime hint count. A malformed map or entry is
+ *  left out of the map rather than guessed at; every well formed entry is kept as stored. */
+function ensureGl(g) {
+  if (!g.gl || typeof g.gl !== 'object' || Array.isArray(g.gl)) g.gl = { lv: {}, hints: 0 };
+  if (!Number.isFinite(g.gl.hints)) g.gl.hints = 0;
+  if (!g.gl.lv || typeof g.gl.lv !== 'object' || Array.isArray(g.gl.lv)) g.gl.lv = {};
 }
 
 /** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
@@ -951,6 +971,7 @@ function normalize(raw) {
   ensureMs(st.games.minesweeper);
   ensureCt(st.games.contexto);
   ensureWo(st.games.wayout);
+  ensureGl(st.games.gridlock);
   ensureBz(st.games.brickblitz);
   ensureHb(st.games.holdem);
   ensureAh(st.games.airhockey);
@@ -1677,6 +1698,31 @@ export function recordWayOut(tier, f = {}) {
     if ((f.gen | 0) > 0) e.g = f.gen | 0;
     e.d = Date.now();
     g.wo.log[d] = g.wo.log[d].concat([e]);
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Gridlock: one level solved (2026-10-14). One play and one win in total and in the level's band
+ *  (a replay counts again there: it was played and solved), and the level's entry in `gl.lv` only
+ *  ever IMPROVES: fewest moves (Math.min), stars (Math.max), no-hint (once 1, always 1). Points are
+ *  read from that map (js/gridlock-points.js), so a replay or a second phone never adds points.
+ *
+ *  `f` = { level, moves, stars, hints }. A level number that is not a positive integer, or a solve
+ *  with no moves, records the play but writes no level entry (rule 4: never invent a level). */
+export function recordGridlock(band, f = {}) {
+  if (tooFast('gridlock')) return null;
+  const st = loadStats();
+  const g = st.games.gridlock;
+  ensureGl(g);
+  bumpTotals(g, normDiff(band), true);
+  const n = Math.floor(Number(f.level) || 0), m = Math.floor(Number(f.moves) || 0);
+  const h = Math.max(0, Math.floor(Number(f.hints) || 0));
+  g.gl.hints += h;
+  if (n >= 1 && m >= 1) {
+    const s = Math.max(1, Math.min(3, Math.floor(Number(f.stars) || 1)));
+    g.gl.lv['L' + n] = glBest(g.gl.lv['L' + n], { m, s, c: h === 0 ? 1 : 0 });
   }
   st.updatedAt = new Date().toISOString();
   persist(st);

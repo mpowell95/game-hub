@@ -59,6 +59,7 @@ import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, com
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { WO_TIERS, woPoints } from './arrow-maze-time.js';
+import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.js';
 import { loadFavorites } from './favorites.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
@@ -169,6 +170,8 @@ const GAME_META = [
   { id: 'murdoku', labelKey: 'game_title_murdoku' },
   // Arrow Maze (2026-10-11, stats id 'wayout'): admin only at first; the row ships with the game, as Murdoku's did.
   { id: 'wayout', labelKey: 'game_title_wayout' },
+  // Gridlock (2026-10-14): admin only at first; the row ships with the game, as Arrow Maze's did.
+  { id: 'gridlock', labelKey: 'game_title_gridlock' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
@@ -587,6 +590,8 @@ function gameMetricAt(g, id, tier) {
   // Arrow Maze ranks on POINTS for levels cleared (2026-10-14, the ladder: js/arrow-maze-time.js),
   // all four difficulties added together; at a tier, that difficulty's own points.
   if (id === 'wayout') return woPoints(g.games.wayout, tier == null ? null : WO_TIERS[tier - 1]);
+  // Gridlock ranks on POINTS for distinct levels cleared (js/gridlock-points.js), the same shape.
+  if (id === 'gridlock') return glPoints(g.games.gridlock, tier == null ? null : GL_TIERS[tier - 1]);
   return winsAtTier(g, [id], tier);
 }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
@@ -668,7 +673,7 @@ function boardTierOf(g, id) {
   // Arrow Maze: ONE number across all four difficulties, never hardest-difficulty-first (Matt,
   // 2026-10-14: a slow Expert player must not outrank a good Hard one; the points already make a
   // harder level worth more). A filter still shows one difficulty's own points.
-  if (id === 'wayout' && _tier == null) return null;
+  if ((id === 'wayout' || id === 'gridlock') && _tier == null) return null;
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
   // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
@@ -1444,6 +1449,11 @@ const TEXTURE = {
   wayout: [
     { labelKey: 'lb_tex_wo_cleared', get: (g) => ((g.games.wayout || {}).total || {}).won | 0 },
     { labelKey: 'lb_tex_wo_timed', get: (g) => { const tm = (((g.games.wayout || {}).wo || {}).timed) || {}; return WO_TIERS.reduce((n, k) => n + (tm[k] | 0), 0); } },
+  ],
+  // Gridlock (2026-10-14): distinct levels cleared, and how many of them in the fewest moves.
+  gridlock: [
+    { labelKey: 'lb_tex_gl_cleared', get: (g) => glCleared(g.games.gridlock) },
+    { labelKey: 'lb_tex_gl_three', get: (g) => glThreeStars(g.games.gridlock) },
   ],
   minesweeper: [
     { labelKey: 'lb_tex_ms_cleared', get: (g) => ((g.games.minesweeper || {}).ms || {}).cleared | 0 },
