@@ -467,10 +467,22 @@ ever take minutes: the times logged are seconds per board.
   **Results**.
 - **The clock** (`js/arrow-maze-time.js`, `RUSH_*`): starts at **10 s** and counts DOWN; every arrow
   sent off gives **+0.5 s**, every bump **-3 s** (the arrow turns red; no hearts, no hint, no
-  restart). **It never pauses.** When it reaches zero the run ends ("Time's up!").
+  restart). It runs while a board is being played and when it reaches zero the run ends ("Time's
+  up!"). **It pauses only between boards** (below).
 - **Leaving loses the run:** the menu button, the hub's back button (`destroy()`), or the app going
   to the background (`visibilitychange`) ends it as `left`. It is STORED (THE LAW) and never counted.
-- **Boards keep coming:** clear one and the next is on screen at once, the clock still running.
+- **Between boards (2026-10-14, Matt: *"When you finish a board it should do the normal finish
+  thing and pause the clock. Say you have x seconds going into the next board ... and say ready?
+  When the player clicks ready. Do a fun 3,2,1, go! countdown then show the new board and start the
+  clock again"*):** a cleared board gets the levels' finish (green wave, confetti, the purple banner,
+  here saying "Board N cleared!") with the clock STOPPED; then a popup: "Board N cleared!", the
+  seconds carried into the next board, "Every arrow gives you half a second back. Mistakes take away 3
+  seconds.", "Ready?" and a **Ready** button (no X, and Escape does nothing: the run is still on).
+  Ready plays **3, 2, 1, Go!** (`.wo-count`) over the cleared board, and only at Go! does the next
+  board appear and the clock restart, so a paused player never sees the next board. Leaving during
+  the pause still loses the run. The run's stored `ms` is PLAY time, without the pauses
+  (`_rushBoardDone`, `_showRushReady`, `_rushReady`, `_rushGo`).
+- **Boards keep coming**, each a little harder.
   `buildRush(mode, i, seed)` in `engine.js`: board `i` is built like ladder level `rushLevel(mode, i)`
   (Easy 3, 9, 15 ... up to 50; Hard 51, 59, 67 ... up to 120, i.e. from the MEDIUM band: Hard-band
   boards start at ~56 arrows, more than a first board can hold at this clock), with a **random seed
@@ -495,8 +507,9 @@ ever take minutes: the times logged are seconds per board.
 - Tests: `way-out/js/test.js` (Rush boards: well formed, solvable, seeded, climbing), `node
   test-arrow-maze-time.mjs` (weeks, the recorder: every run kept, a left run never counts, a new
   week starts its own best, a run is not a level), `players-agg.test.mjs` (the two-phone merge).
-  Checked in Chromium: a whole run (+0.5 s, -3 s, board 2 arriving with the clock running, time
-  running out, the popup, the stored run and week best), leaving by the menu and by backgrounding
+  Checked in Chromium: a whole run (+0.5 s, -3 s, the clock stopping at a cleared board and staying
+  stopped on the Ready screen, the seconds shown matching it, 3-2-1-Go! with the board hidden, board 2
+  and the clock starting at Go!, time running out, the popup, the stored run and week best), leaving by the menu and by backgrounding
   (stored as `left`, not counted), the results screen, and the setup and play screens in the hub at
   402x874, 360x724, 390x664 and 375x667 (no scroll, clear of the Hub button).
 
