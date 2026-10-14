@@ -261,6 +261,10 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   ("Time's up!"). **It pauses only between boards.**
 - **Leaving loses the run**: menu button, the hub back button (`destroy()`), or backgrounding
   (`visibilitychange`) ends it as `left`: STORED (THE LAW), never counted.
+  **Except on Matt's devices** (`isAdminDevice()`, 2026-10-14: *"get rid of it for me. I need to be
+  able to screenshot... then go back into the game"*): backgrounding HOLDS the run (`_rushHold`: the
+  clock stops, runs again on return; a countdown finishing while away freezes at once). Menu and
+  hub back still end it. Held time is not in the stored `ms`.
 - **Between boards**: a cleared board gets the finish ("Board N cleared!") with the clock STOPPED, then
   the Ready popup (`.wo-ready`: seconds carried, the two rules as chips with sign and word, **Ready**
   button, no X, Escape does nothing), then **3, 2, 1, Go!** (`.wo-count`) over the cleared board; the
