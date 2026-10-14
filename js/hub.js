@@ -358,7 +358,27 @@ export const GAMES = [
     // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
     // input to the launcher's New pill and must be the day Matt releases it from the admin page.
     devOnly: true,
+  },  {
+    // Archery (2026-10-14): a clone of the archery game in Snapchat's Games (Matt's recording,
+    // docs/ARCHERY-BRIEF.md). 3 rounds of 3 arrows; touch and hold to draw, drag to aim through
+    // the sight, let go; the wind gets stronger each round. Vs the computer, two players on one
+    // phone, or turn-by-turn challenges (archery/CLAUDE.md). Owns the whole viewport: a stadium.
+    id: 'archery',
+    added: '2026-10-14',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Archery', es: 'Tiro con arco' },
+    blurb: { en: 'Hold to draw, aim through the sight and let fly. Mind the wind. Most points in three rounds wins.',
+      es: 'Mantén para tensar, apunta con el visor y suelta. Ojo con el viento. Gana quien más puntos haga en tres rondas.' },
+    module: '../archery/js/ui.js',
+    // Online challenges: a new one, your turn, or a result you missed, on the launcher.
+    alerts: () => import('../archery/js/alert.js'),
+    immersive: true,
+    accent: '#1f6fe5',
+    art: GAME_ART['archery'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
   },
+
   {
     id: 'hoops4',
     added: '2026-09-21',            // sort-only (the launcher's Newest order); never the New pill
