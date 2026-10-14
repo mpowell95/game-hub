@@ -1555,3 +1555,9 @@
 .sk-root .sk-ch-table .sk-ch-foot td { font-weight: 800; border-top-width: 2px; }
 .sk-root .sk-ch-mark { font-weight: 900; }
 .sk-root .sk-ch-opt { padding: 0 8px; }
+
+/* Quick chat (js/match-chat-ui.js, 2026-10-14). On a challenge card the chat button docks beside
+   the card's own close X (ui.js _chatDockTo), so the title gives up the room it would have used:
+   X 44px + gap 4px + chat 44px + gap 4px. Smaller type, so a name still fits on one line at 320. */
+.sk-root .sk-ch-title--chat { margin-right: 96px; font-size: 17px; }
+.sk-root .sk-ch-over .sk-over-title { margin: 0 96px 0 0; font-size: 20px; }

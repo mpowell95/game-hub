@@ -522,3 +522,9 @@
   text-align: center;
   pointer-events: none;
 }
+
+/* Quick chat (js/match-chat-ui.js, 2026-10-14). The root is touch-action: none, which would stop
+   the panel scrolling on a very short phone; the free-text box must stay typeable under the
+   root's user-select: none (iOS Safari will not type into an input that has it). */
+.dt-root .ghc-panel { touch-action: pan-y; }
+.dt-root .ghc-input { -webkit-user-select: text; user-select: text; }

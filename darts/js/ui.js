@@ -116,6 +116,11 @@ function annulus(cx, cy, r0, r1) {
 
 let instance = null;
 
+/** Where the quick-chat button sits (js/match-chat-ui.js `place`): on the top row, LEFT of the
+ *  darts-left icons and the menu button (the row is `right: 10px`, icons 42px + gap 10 + menu 44),
+ *  so it overlaps neither; the bubbles come down under that row. */
+const CHAT_PLACE = { top: 'max(env(safe-area-inset-top, 0px), 50px)', right: '118px', popsTop: 'calc(max(env(safe-area-inset-top, 0px), 50px) + 54px)' };
+
 class DartsUI {
   constructor(container) {
     this.host = container;
@@ -1066,6 +1071,7 @@ class DartsUI {
     const match = MP.buildMatch(game, from);
     this._begin({ mode: 'mp', diff: 'mp', match, seats: [seat(game.a), seat(game.b)] }, false);
     const mp = this.mp;
+    this._mpMountChat();
     MP.watchGame(game.id, (g) => this._mpOnGame(g)).then((stop) => {
       if (this.mp === mp) mp.stop = stop; else { try { stop(); } catch { /* detached */ } }
     });
@@ -1240,8 +1246,50 @@ class DartsUI {
     this._toast(text, 3200);
   }
 
+  // --- quick chat inside a challenge (2026-10-14) ---------------------------------------------
+  // js/match-chat-ui.js is the panel, js/match-chat.js the data (`darts/chat/<id>`, BESIDE the
+  // match, never inside it, so watchGame and validateGame never see a chat line). Mounted while a
+  // stored match is on screen (playing, watching their darts land, a finished one, the result card)
+  // and torn down in _mpLeave. `side` is the STORED side (mp.side). Lazy-imported, so a vs-computer
+  // or pass-and-play player downloads none of it.
+  async _mpMountChat() {
+    this._mpUnmountChat();
+    const mp = this.mp;
+    if (!mp) return;
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (instance !== this || this.mp !== mp || this._chat) return;
+    const node = 'darts';
+    const side = mp.side;
+    const seenAt = DATA.readChatSeen(node, mp.id);
+    const chat = UI.createMatchChat({
+      root: this.root,
+      send: (p) => DATA.sendChat({ node, id: mp.id, side }, p),
+      them: () => ({ name: mp.them.name || '?', emoji: mp.them.emoji || '' }),
+      place: CHAT_PLACE,
+    });
+    this._chat = chat;
+    const stop = await DATA.watchChat({ node, id: mp.id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === side;
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(node, mp.id, newest);
+    });
+    if (instance !== this || this.mp !== mp || this._chat !== chat) { try { stop(); } catch { /* detached */ } return; }
+    this._chatStop = stop;
+  }
+
+  _mpUnmountChat() {
+    if (this._chatStop) { try { this._chatStop(); } catch { /* detached */ } this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch { /* gone */ } this._chat = null; }
+  }
+
   /** Stop watching the open online match (darts not yet sent stay in the outbox). */
   _mpLeave() {
+    this._mpUnmountChat();
     const mp = this.mp;
     if (!mp) return;
     this.mp = null;

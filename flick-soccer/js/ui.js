@@ -117,6 +117,12 @@ function helpSvg() {
 
 let instance = null;
 
+/** Where the quick-chat button sits (js/match-chat-ui.js `place`): on the top row, left of the
+ *  Menu button (which is `right: 10px`, 44px wide), exactly the default spot. The bubbles come
+ *  down UNDER the scoreboard and the status line (board at top row + 50..94px, status +98..116px),
+ *  so a line from them never covers the score or whose turn it is. */
+const CHAT_PLACE = { top: 'var(--fs-top)', right: '64px', popsTop: 'calc(var(--fs-top) + 122px)' };
+
 class FlickSoccerUI {
   constructor(container) {
     this.host = container;
@@ -945,6 +951,7 @@ class FlickSoccerUI {
     const match = MP.buildMatch(game, from);
     this._begin({ mode: 'mp', diff: 'mp', match, seats: [seat(game.a), seat(game.b)] });
     const mp = this.mp;
+    this._mpMountChat({ id: game.id, side, them });
     MP.watchGame(game.id, (g) => this._mpOnGame(g)).then((stop) => {
       if (this.mp === mp) mp.stop = stop; else { try { stop(); } catch { /* detached */ } }
     });
@@ -1164,13 +1171,58 @@ class FlickSoccerUI {
     this._mpLeave();
     this.match = null; this.seats = null; this.mode = null; this.phase = 'idle';
     this._setFlip(true);
+    this._mpMountChat({ id: game.id, side: 'b', them: game.a });   // the challenge is on screen: say hello before picking
     const UI = this.UI || (this.UI = await import('./mp-ui.js'));
     if (instance !== this) return;
     UI.pickLineup(this, this.MP, game);
   }
 
+  // --- quick chat inside a challenge (2026-10-14) ---------------------------------------------
+  // js/match-chat-ui.js is the panel, js/match-chat.js the data (`flicksoccer/chat/<id>`, BESIDE
+  // the match, never inside it, so watchGame and validateGame never see a chat line). Mounted while
+  // a stored match is on screen (playing, watching their flicks, a finished one, the result card)
+  // and torn down in _mpLeave. `side` is the STORED side (mp.side). Lazy-imported, so a vs-computer
+  // or two-players-on-one-phone game downloads none of it. The line-up card (_mpPick) is the
+  // challenge on screen too, so chat mounts there as well (`desc` is { id, side, them }).
+  async _mpMountChat(desc) {
+    this._mpUnmountChat();
+    if (!desc || !desc.id) return;
+    this._chatDesc = desc;
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (instance !== this || this._chatDesc !== desc || this._chat) return;
+    const node = 'flicksoccer';
+    const { id, side } = desc;
+    const seenAt = DATA.readChatSeen(node, id);
+    const chat = UI.createMatchChat({
+      root: this.root,
+      send: (p) => DATA.sendChat({ node, id, side }, p),
+      them: () => ({ name: (desc.them && desc.them.name) || '?', emoji: (desc.them && desc.them.emoji) || '' }),
+      place: CHAT_PLACE,
+    });
+    this._chat = chat;
+    const stop = await DATA.watchChat({ node, id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === side;
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(node, id, newest);
+    });
+    if (instance !== this || this._chatDesc !== desc || this._chat !== chat) { try { stop(); } catch { /* detached */ } return; }
+    this._chatStop = stop;
+  }
+
+  _mpUnmountChat() {
+    this._chatDesc = null;
+    if (this._chatStop) { try { this._chatStop(); } catch { /* detached */ } this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch { /* gone */ } this._chat = null; }
+  }
+
   /** Stop watching the open online match (flicks not yet sent stay in the outbox). */
   _mpLeave() {
+    this._mpUnmountChat();
     const mp = this.mp;
     if (!mp) return;
     this.mp = null;
