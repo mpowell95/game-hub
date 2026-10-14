@@ -394,9 +394,9 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/install-state.js` | (2026-08-11) installed-app vs browser tab, in one small object. Shared by `stats-net.js` (mirrors it to `players/<id>/device` every sync) and `bug-report.js` - one answer, never two. **Since 2026-10-11 it also carries the phone's SIZE** (`screen: {w, h, vw, vh, dpr}`, CSS px, short side first) - an iPhone's user agent says only "iPhone" and Chrome calls every Android "K", so this is the only way to know what phones people play on. `node read-install-state.mjs --screens` lists every person by games played with their phones' sizes; read it before spending effort on (or dropping) a phone size |
 | `js/bug-report.js` | (2026-08-11) "Report a bug": the device/browser/PWA/network/SW picture plus the whole Device Details payload, written to `bugReports/` (screenshots to `bugReportShots/`), with an offline outbox that retries itself. Since 2026-08-13 it also carries Matt's **replies** — written to the report AND to `bugReplies/<reporterDeviceId>/`, which is the copy the player reads — and a soft delete that clears his inbox without touching either record |
 | `js/messages.js` | (2026-08-31) player-to-player **Messages**: the `messages/` node, addressed by PLAYER CODE so a message follows a person to every device they own. Pure helpers (`pairKey`, unread, hide) plus the verified writes and the offline outbox. Since 2026-09-28 a message can carry a game invite (`invite: {game, code}`, Air Hockey), drawn as a Join button by `js/messages-ui.js` |
-| `js/challenges.js` | (2026-10-05) the DATA half of the hub's **Challenges** screen: reads the five challenge games' own indexes (Hoops, Skeeball, Cup Pong, Darts, Flick Soccer) through each game's reader and folds them into one list plus records (by person, by game). Writes nothing. See "The Challenges screen" below |
+| `js/challenges.js` | (2026-10-05) the DATA half of the hub's **Challenges** screen: reads the six challenge games' own indexes (Hoops, Skeeball, Cup Pong, Darts, Flick Soccer, Archery) through each game's reader and folds them into one list plus records (by person, by game). Writes nothing. See "The Challenges screen" below |
 | `js/challenges-ui.js` | (2026-10-05) the Challenges screen: Live (your turn / their turn), Records (total, by game, by player, recent results), a player's page, and New challenge (person, then game). Opening a match or a challenge is handed to the game (`js/challenges-strings.js` holds its words). Since 2026-10-13 every live row has a Cancel / Decline / Resign button (see "Cancel, decline, resign, expire" below) |
-| `js/challenge-life.js` | (2026-10-13) the few PURE rules all five challenge games share about a challenge that ends without a result: `ANSWER_MS` (3 days), `rowEnding` (cancelled / declined / expired / Skeeball's resign, read off an index row), `rowOpen`, `expiresAt`. No storage, no network |
+| `js/challenge-life.js` | (2026-10-13) the few PURE rules all six challenge games share about a challenge that ends without a result: `ANSWER_MS` (3 days), `rowEnding` (cancelled / declined / expired / Skeeball's resign, read off an index row), `rowOpen`, `expiresAt`. No storage, no network |
 | `js/match-chat.js` | (2026-10-14) in-match quick chat, the data half, for EVERY online game: `sendChat`/`watchChat` for a turn-by-turn match at `<node>/chat/<matchId>` (BESIDE the match, never inside it; verified by re-read, deletes nothing), `watchRoomReactions` for a live room, and the "since you were last here" marks (`gamehub.matchChatSeen.v1`). Network-first |
 | `js/match-chat-ui.js` | (2026-10-14) in-match quick chat, the screen half: `createMatchChat({ root, send, them, place })`, Connect 4 Hoops' chat panel made generic. Used by Cup Pong, Darts, Flick Soccer, Skeeball challenges and Air Hockey; a new online game uses it too (`docs/BUILDING-A-GAME.md`) |
 | `js/messages-ui.js` | (2026-08-31) the Messages screen: conversation list, one thread with chat bubbles and a quick-chat preset row, the recipient picker (Matt also gets **Everyone**), and Matt's read-only view of every conversation |
@@ -467,7 +467,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-arrow-maze-time.mjs`, `test-gridlock.mjs`
 - Hub features: `test-new-badge.mjs`, `test-emoji.mjs`, `test-messages.mjs`, `test-match-chat.mjs`,
   `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`, `test-skee-challenge.mjs`, `test-challenges.mjs`,
-  `test-cuppong-mp.mjs`, `test-darts-mp.mjs`, `test-flicksoccer-mp.mjs`
+  `test-cuppong-mp.mjs`, `test-darts-mp.mjs`, `test-flicksoccer-mp.mjs`, `test-archery-mp.mjs`
 - Cross-game: `test-game-conventions.mjs`, `test-visual.mjs`, `check-no-scroll.mjs`,
   `test-mp-lockstep.mjs`, `run-all-tests.mjs`
 - Generators: `build-emoji-data.mjs`, `build-boggle-es.mjs`, `build-contexto-data.mjs`, `build-gridlock-levels.mjs`, `convert-kenney.mjs`
@@ -479,6 +479,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-brickcity-stall.mjs`, `test-brickcity-corner100.mjs`, `test-brickcity-throat.mjs`,
   `test-skeeball-popup.mjs`
 - Flick Soccer: `flick-soccer/js/test.js` (headless physics, rules and computer probe)
+- Archery: `archery/js/test.js` (headless rules: scoring, wind, turn order, shoot-off, the ring, panic, the computer)
 - Air Hockey: `air-hockey/js/test.js` (headless engine probe), `air-hockey/net-test.html` (two-phone online latency test, deployed)
 - Golf: `sheet-course.mjs`, `measure-hole-strip.mjs` ·
   Yahtzee: `test-yahtzee-ai.mjs`
@@ -557,6 +558,7 @@ working in that folder).
 
 | Game | Integration | CSS root / prefix | Settings key | Stats recorder |
 |---|---|---|---|---|
+| Archery | in-hub `module:`, immersive, **`devOnly`**, a clone of the archery game in Matt's Snapchat recording (2026-10-14, `docs/ARCHERY-BRIEF.md`): 3 rounds of 3 arrows, hold to draw and aim through a magnified sight, wind stronger each round, panic when the ring runs out, shoot-off on a tie; vs computer Easy/Medium/Hard, pass and play, practice, and **turn-by-turn online challenges** (`archery/`; rules and push NOT yet published/deployed) | `.ar-root` / `.ar-` | `gamehub.archery.v1` (+ `gamehub.archery.save.v1` match vs computer) | `recordResult('archery', …)` |
 | Air Hockey | in-hub `module:`, immersive, **`devOnly`, all 4 stages built** (vs computer Easy/Medium/Hard, and **live online** by code: real-time over `rooms/<CODE>/ah/`, lobby via `js/net.js`; `docs/AIR-HOCKEY-BRIEF.md`); hub id `air-hockey`, stats id `airhockey` | `.ah-root` / `.ah-` | `gamehub.airhockey.v1` | `recordAirHockey` (sub-counter `ah`: shots, shutouts, streaks) |
 | Arrow Maze | in-hub `module:`, immersive, **`devOnly`**, clone of "Pointers" (Offline Games): tap arrows off the board in the right order, 3 lives (2026-10-11). **Since 2026-10-14 ONE numbered ladder** (Easy 1-50, Medium 51-100, Hard 101-200, Expert 201 on, since that evening; start any difficulty) and a leaderboard of **points** for levels cleared, one number across all difficulties, NOT hardest-difficulty-first (`way-out/CLAUDE.md`, "The ladder and points"). **Shipped as "Way Out" and renamed the same day: folder `way-out/`, hub id `way-out`, stats id `wayout` and the `gamehub.wayout.*` keys keep the first name on purpose** (THE LAW rule 5, the Monopoly Deal split) | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ `gamehub.wayout.saves.v1` progress, one per tier; the first build's `gamehub.wayout.save.v1` is read once and left alone; `gamehub.wayout.clocks.v1` the level timer, 2026-10-13; since the ladder those two are read-only; the first ladder's `gamehub.wayout.ladder.saves.v1` / `.ladder.clocks.v1` are read-only too since the bands moved, and `gamehub.wayout.ladder2.saves.v1` / `.ladder2.clocks.v1` + settings `ladder2` are live) | `recordWayOut` (sub-counter `wo`: every timed finish, stored raw, with ladder level, generator and date since 2026-10-14) + `recordWayOutRush` (`wo.rush`: **Rush**, a separate timed mode, every run raw and each week's best; `way-out/CLAUDE.md`, "Rush") |
 | Baseball | in-hub `module:`, immersive, **a real three.js stadium with the reference game's three cameras (R1, 2026-09-20, being rebuilt as a clone of Baseball 9's mechanics per `docs/BASEBALL-REFERENCE-B9.md`); career is phase 4; `devOnly`** | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
@@ -809,7 +811,7 @@ instead of points that read "0, 0") changed `functions/decide.js` on 2026-10-04 
 `flicksoccer/index/<code>/<id>`), was added on 2026-10-11 and **DEPLOYED by Matt on 2026-10-11** ("done"); its
 rules branch `flicksoccer` was **PUBLISHED by Matt on 2026-10-11** (verified the same day: `flicksoccer/`
 reads, every other branch reads as before, an unlisted branch is still refused) - `flick-soccer/CLAUDE.md`,
-"Online challenges". **A change to `functions/` is
+"Online challenges". An eighth, `archeryTurnPush` (Archery challenges, `archery/index/<code>/<id>`), was added on 2026-10-14 and is **NOT YET DEPLOYED**, nor is its rules branch `archery` **published** (both as of 2026-10-14: until then Archery's online play is refused and no push is sent) - `archery/CLAUDE.md`, "Online challenges". **A change to `functions/` is
 live only after Matt re-runs `firebase deploy --only functions`** - merging to main does nothing
 for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bugReportPush` created,
 `hoopsTurnPush` updated).
@@ -875,6 +877,19 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
   redeploy was needed. A game without `armOpen` falls back to the old bubble-or-launch path.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
+- **A tap must survive a reload (2026-10-14).** Matt: *"lately when i click a notification that it's
+  my turn... it brings me to the hub, but doesn't necessarily open the challenge."* Tapping brings
+  the app to the front, which is also when `_onResume` finds a new build and reloads the launcher
+  (several deploys a day), and the in-memory `OPEN_GAME` died with the page. Now `js/hub.js` writes
+  the tap to sessionStorage (`hub.pushOpen`, 2-minute life) BEFORE acting, the next load takes it
+  (`_openFromUrl` -> `_peekPushOpen`), and it is cleared only once the game is MOUNTED;
+  `_applyUpdate` waits 1.2 s so a tap arriving with the resume opens its game first (the refresh
+  then waits for the launcher). A cold start (`?open=`) no longer waits for the network alert
+  check. **With the SAME game already open**, the hub arms the match and calls the module's
+  optional `openArmed()` export (Flick Soccer has it); another game open still means nothing
+  happens. `sw.js` reads the match from any challenge tag (`<node>-<id>`) as a fallback.
+  `test-push.mjs` pins it; checked in Chromium (launcher, same game open, reload mid-open, cold
+  start, stale tap ignored, a vs-computer game not interrupted).
 
 ## Online play needs an account Matt has let in (2026-10-08)
 
@@ -923,7 +938,7 @@ to send challenges and jump into games from this page."*
   won/lost/drawn, by game, by player, recent results), a player's page (record vs them, live games
   with them, a Challenge button), and New challenge (pick a person, then a game).
 - **Every game keeps its own challenges.** `js/challenges.js` READS `hoops/`,
-  `skeeChallenges/`, `cuppong/`, `darts/` and `flicksoccer/` (2026-10-11) indexes through each game's own reader. It writes
+  `skeeChallenges/`, `cuppong/`, `darts/`, `flicksoccer/` (2026-10-11) and `archery/` (2026-10-14) indexes through each game's own reader. It writes
   nothing itself, so THE LAW has no surface here. Records come from FINISHED index rows, grouped by player
   CODE; an old Hoops row with no stored result counts as played and in no column (rule 4), and an
   expired, cancelled or declined challenge is listed but not counted. Cancel / Decline / Resign
@@ -941,8 +956,8 @@ to send challenges and jump into games from this page."*
 ## Cancel, decline, resign, expire (2026-10-13)
 
 Matt: *"Please implement a way to cancel sent challenge requests, and a way to resign/forfeit. Maybe
-challenges expire if they aren't accepted in 3 days?"* All five challenge games (Hoops, Skeeball, Cup
-Pong, Darts, Flick Soccer). The shared rules are `js/challenge-life.js`; each game's own `mp.js`
+challenges expire if they aren't accepted in 3 days?"* All the challenge games (Hoops, Skeeball, Cup
+Pong, Darts, Flick Soccer; Archery was built with it from the start, 2026-10-14). The shared rules are `js/challenge-life.js`; each game's own `mp.js`
 (Skeeball: `challenge.js`) does the writes, verified by re-read, deleting nothing.
 
 - **A challenge is OPEN until its receiver plays their first move** (Hoops a shot, Cup Pong a throw,
