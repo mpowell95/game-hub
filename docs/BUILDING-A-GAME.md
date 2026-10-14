@@ -304,9 +304,12 @@ When restructuring an old game, migrate it toward the reference for each axis in
     apply to newly rendered UI; live re-render via `onLangChange` is optional (unsubscribe in
     `destroy()`). `snake/js/strings.js` + `snake/js/ui.js` are the reference implementation; the
     full mechanism doc is in `js/CLAUDE.md` ("Language support").
-11. **Run `node test-game-conventions.mjs`, then `node run-all-tests.mjs`.** It discovers game
+11. **If the game plays online in ANY way, it has quick chat inside a match** (Matt, 2026-10-14).
+    Not optional, not a later polish item: see "Multiplayer: quick chat is part of the game" in
+    Part 2. `test-game-conventions.mjs` fails an online game without it.
+12. **Run `node test-game-conventions.mjs`, then `node run-all-tests.mjs`.** It discovers game
     folders from disk, so your new game is checked automatically — listener hygiene, the module
-    contract, translation plumbing, folder layout, and (as of this file) the 11px text-size floor
+    contract, translation plumbing, folder layout, quick chat in every online game, and (as of this file) the 11px text-size floor
     from Part 0. **If it fails, fix the game — do not add the game to its `KNOWN_GAPS` list.**
     That list is for pre-existing debt only, and a brand-new entry there is a shortcut, not an
     exception.
@@ -383,6 +386,48 @@ settled by Tic Tac Toe, never whatever local AI-tier was last selected. Never ch
 protocol as a side effect of one game's MP work — a protocol change gets its own handoff, review,
 and real-device verification pass, not a drive-by edit. See `js/CLAUDE.md`'s numbered MP-consumer
 sections for the deep mechanics.
+
+### Multiplayer: quick chat is part of the game
+
+Matt, 2026-10-14: *"Why don't the new games with multiplayer have the quick chat stuff?"* ... *"add
+it to whatever documentation you need to add it to so that it's automatically built into new
+multiplayer games going forward."* Five games (Cup Pong, Darts, Flick Soccer, Skeeball challenges,
+Air Hockey) shipped online play without chat, because the chat lived inside `hoops4/` and nothing
+told the next game it existed. **Every game that plays online has in-match quick chat, built in
+the same change as the online play.** `test-game-conventions.mjs` enforces it: a game whose files
+reach `js/net.js` or `js/firebase-boot.js` must use the chat.
+
+**Use the shared pair, never a copy:** `js/match-chat-ui.js` (`createMatchChat`: the 💬 button,
+the panel with the player's own palette from the profile page, free text, the big "they said"
+card, the unread count) and `js/match-chat.js` (the transport). Lazy-import both, so a solo player
+downloads neither.
+
+| The game's online play is | Send | Receive |
+|---|---|---|
+| **turn by turn** (a challenge node like `cuppong/`, `darts/`) | `sendChat({ node, id, side }, payload)` writes `<node>/chat/<matchId>/<key>` | `watchChat({ node, id }, list => chat.add(...))`, plus `readChatSeen` / `markChatSeen` so lines said while you were away pop once |
+| **a live room** (`js/net.js`) | `net.sendReaction(code, seat, payload)`, wrapped to return `{ ok: true }` | the room callback's `room.reactions`, or `watchRoomReactions(code, cb)` if the game does not get the whole room, into `chat.onReactions(rx, mySeat)` |
+
+The rules that make it safe, each from a real game:
+
+- **Chat is never part of the match.** A turn-by-turn line lives BESIDE the match
+  (`<node>/chat/<id>`), never inside `<node>/games/<id>`: a line there would wake the game's
+  `watchGame` handler and has to be ignored by `validateGame`. A live line rides the room's
+  `reactions` child, never the move log (a chat entry there would stall the lockstep). Nothing
+  about chat touches `updated`, the turn, either index row or the push functions. No rules change
+  is needed: every challenge node and `rooms/` is `auth != null` with no per-child rules.
+- **`side` is the device's STORED side** of the stored match (`sideOf(game, myCode())`), not a
+  game's local frame where "me" is always 'a'.
+- **Mount only in a real online match** (never solo, vs computer, or pass and play), unmount when
+  the match leaves the screen, and call `chat.destroy()` in the game's `destroy()`.
+- **Place the button by measuring**, with `createMatchChat`'s `place: { top, right, popsTop }`.
+  It must overlap no other control, never sit in the top left (the hub's floating chip), never sit
+  on a swipe or drag surface, and be tested with a simulated 59px top inset (a headless browser
+  has none; see `hoops4/CLAUDE.md`, "Two buttons in one place").
+
+**Connect 4 Hoops keeps its own older copy** (`hoops4/js/mp-ui.js` `createMatchChat`, chat inside
+`hoops/games/<id>/chat`): it came first and works. Do not copy it; use the shared pair. The
+live-room card games (Chinchón, Escoba, Tic Tac Toe and the rest) use `js/mp-reactions-ui.js`'s
+floating reactions button, which also passes the check.
 
 ---
 
