@@ -315,6 +315,8 @@ console.log('\n--- minesLeft / clearedPct / correctFlags ---');
   won.opened = 3;
   eq('clearedPct: 100 on a won board', E.clearedPct(won), 100);
   eq('correctFlags: counts only flags actually on a mine', E.correctFlags(g), 0); // both flags here are on safe cells
+  eq('wrongFlags: counts only flags on a safe cell', E.wrongFlags(g), 2);
+  eq('wrongFlags: 0 on a fresh board', E.wrongFlags(winBoard()), 0);
 }
 
 // =================================================================================================
