@@ -284,6 +284,32 @@
   transition: transform .25s ease-out;
 }
 .wo-root .wo-stage { flex: 1; min-height: 0; position: relative; margin-bottom: env(safe-area-inset-bottom, 0px); }
+/* EASY only (Matt's mock-up, 2026-10-14): counters under the bar, a How to play pill under the board. */
+.wo-root .wo-counts {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--wo-ink);
+}
+.wo-root .wo-game.is-easy .wo-stage { margin-bottom: 0; }
+.wo-root .wo-playfoot {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.wo-root .wo-playfoot .wo-howbtn {
+  min-width: 180px;
+  background: rgba(255, 255, 255, .06);
+  border: 1.5px solid rgba(255, 255, 255, .45);
+  color: var(--wo-ink);
+  box-shadow: none;
+}
 .wo-root .wo-canvas { position: absolute; left: 0; top: 0; display: block; touch-action: manipulation; outline: none; }
 /* The hint sits at the right end of the hearts row. It used to have a row of its own under the
    board, which cost every phone ~70px of board (Matt, 2026-10-11: make sure the game fits). */
