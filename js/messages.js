@@ -36,6 +36,7 @@ import { isHiddenName as isTestName } from './hidden-players.js';
 import { getStatsApp } from './firebase-boot.js';
 import { readPlayersOnce } from './stats-net.js';
 import { aggregatePlayers, isPlaceholderName } from './players-agg.js';
+import { hubThreadRow, withHubRow } from './hub-messages.js';
 
 // --- limits ---------------------------------------------------------------------------------
 
@@ -312,10 +313,16 @@ export async function sendBroadcast(recipients, text) {
 
 // --- reading --------------------------------------------------------------------------------
 
-/** My conversations, newest first, already filtered for hidden ones. `[]` offline - never throws. */
+/** My conversations, newest first, already filtered for hidden ones. Never throws. The Game Hub
+ *  conversation (js/hub-messages.js) is merged in here, so the badge, the inbox and the profile card
+ *  all count and show it - offline too, since it comes from code, not from Firebase. */
 export async function readMyThreads() {
   const me = myCode();
   if (!me) return [];
+  return withHubRow(await readFirebaseThreads(me), hubThreadRow(me));
+}
+
+async function readFirebaseThreads(me) {
   try {
     const boot = await ready();
     if (!boot) return [];

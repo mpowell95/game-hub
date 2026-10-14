@@ -19,6 +19,7 @@ import {
   queueOutbox, normalizeText, isUnread, authId, asInvite,
 } from './messages.js';
 import { loadProfile } from './profile-store.js';
+import { HUB_CODE, hubMessagesFor, hubText, playOf, markHubSeen } from './hub-messages.js';
 import { loadPalette, PHRASES } from './mp-reactions.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -47,6 +48,13 @@ function announceChange() {
   try { window.dispatchEvent(new CustomEvent(MESSAGES_CHANGED)); }
   catch { /* no window (or no CustomEvent): a badge is not worth throwing over */ }
 }
+
+/** The Game Hub's own app icon (the Connect Four one on the home screen), for its messages. */
+const HUB_ICON = new URL('../icons/icon.svg', import.meta.url).href;
+const hubIconHTML = () => `<img class="msg-hub-icon" src="${esc(HUB_ICON)}" alt="">`;
+/** A list row's picture: the hub icon on the Game Hub row, the person's emoji on every other. */
+const rowIconHTML = (r) => `<span class="msg-row-emoji" aria-hidden="true">${
+  r && r.hub ? hubIconHTML() : esc((r && r.emoji) || '🙂')}</span>`;
 
 /**
  * Stamp a thread read, SERIALISED, and announce it once the write has actually landed.
@@ -104,7 +112,7 @@ export async function renderProfileMessages(host) {
   draw(`<ul class="msg-list">${rows.map((r) => `
       <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}"
             data-code="${esc(r.code)}" data-name="${esc(r.name || r.code)}" data-emoji="${esc(r.emoji || '🙂')}">
-        <span class="msg-row-emoji" aria-hidden="true">${esc(r.emoji || '🙂')}</span>
+        ${rowIconHTML(r)}
         <span class="msg-row-main">
           <span class="msg-row-name">${esc(r.name || r.code)}</span>
           <span class="msg-row-prev">${esc((r.from === me ? t('msg_you_prefix') : '') + (r.preview || ''))}</span>
@@ -157,6 +165,7 @@ function ensureCss() {
   .msg-back { flex: 0 0 auto; width: 34px; padding: 0; font-size: 20px; line-height: 1;
               white-space: nowrap; }
   .msg-head-emoji { font-size: 22px; line-height: 1; flex: 0 0 auto; }
+  .msg-hub-icon { display: block; width: 1em; height: 1em; border-radius: 22%; }
   /* The name is the only thing here that may shrink, and it runs at the modal title's --gh-fs-xl
      (24px) by default, which is far too big for a row that also holds three controls: at that size
      "Alec king of games" - the longest name on the real board - clipped to "Alec ki…" on a 393px
@@ -325,7 +334,7 @@ function whenText(atMs) {
   return d.toLocaleDateString(getLang() === 'es' ? 'es-ES' : 'en-GB', { day: 'numeric', month: 'short' });
 }
 
-function shellHTML(card, { title, sub, backable, body, footer, emoji, hide }) {
+function shellHTML(card, { title, sub, backable, body, footer, emoji, iconHTML, hide }) {
   // Back is a CHEVRON, not "‹ Back". With the word, four things competed for a 393px row - back,
   // emoji, name, Hide - and the loser was the name: "King of Games" truncated to "Kin…" while the
   // back button itself wrapped onto two lines. The word costs about 45px and says nothing the
@@ -334,7 +343,8 @@ function shellHTML(card, { title, sub, backable, body, footer, emoji, hide }) {
     ? `<span class="msg-head">
          <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm msg-back" data-role="back"
                  aria-label="${esc(t('msg_back'))}" title="${esc(t('msg_back'))}">&#8249;</button>
-         ${emoji ? `<span class="msg-head-emoji" aria-hidden="true">${esc(emoji)}</span>` : ''}
+         ${iconHTML ? `<span class="msg-head-emoji" aria-hidden="true">${iconHTML}</span>`
+    : emoji ? `<span class="msg-head-emoji" aria-hidden="true">${esc(emoji)}</span>` : ''}
          <span class="msg-head-name">${esc(title)}</span>
          ${hide ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm msg-head-hide" data-role="hide">${esc(t('msg_hide'))}</button>` : ''}
        </span>`
@@ -389,6 +399,7 @@ export async function openMessages(opts = {}) {
     shellHTML(card, { title: t('msg_title'), body: `<p class="msg-lead">${esc(t('msg_no_code'))}</p>` });
     return;
   }
+  if (opts.to === HUB_CODE) return renderHubThread(card);
   if (opts.to) return renderThread(card, { code: opts.to, name: opts.toName || '', emoji: opts.toEmoji || '🙂' });
   return renderList(card);
 }
@@ -446,7 +457,7 @@ async function renderList(card) {
     ? `<ul class="msg-list">${rows.map((r) => `
         <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}"
               data-code="${esc(r.code)}" data-name="${esc(r.name || r.code)}" data-emoji="${esc(r.emoji || '🙂')}">
-          <span class="msg-row-emoji" aria-hidden="true">${esc(r.emoji || '🙂')}</span>
+          ${rowIconHTML(r)}
           <span class="msg-row-main">
             <span class="msg-row-name">${esc(r.name || r.code)}</span>
             <span class="msg-row-prev">${esc((r.from === me ? t('msg_you_prefix') : '') + (r.preview || ''))}</span>
@@ -469,9 +480,9 @@ async function renderList(card) {
   card.querySelector('[data-role="new"]').addEventListener('click', () => renderPicker(card));
   addAdminButtons(card, gen);
   addPushRow(card, gen);
-  card.querySelectorAll('.msg-row').forEach((b) => b.addEventListener('click', () => renderThread(card, {
-    code: b.dataset.code, name: b.dataset.name, emoji: b.dataset.emoji,
-  })));
+  card.querySelectorAll('.msg-row').forEach((b) => b.addEventListener('click', () => (b.dataset.code === HUB_CODE
+    ? renderHubThread(card)
+    : renderThread(card, { code: b.dataset.code, name: b.dataset.name, emoji: b.dataset.emoji }))));
 }
 
 /**
@@ -652,6 +663,48 @@ function joinInvite(game, code) {
   const hub = typeof window !== 'undefined' && window.__ghHub;
   if (hub && typeof hub._openPushedGame === 'function') hub._openPushedGame(game);
   else location.href = new URL(`../?open=${encodeURIComponent(game)}`, import.meta.url).href;
+}
+
+/**
+ * The Game Hub conversation (js/hub-messages.js): the hub's messages to this player, oldest first,
+ * each with a Play button when it names a game. No reply box and no Hide (Matt: "No reply box.
+ * Just a notification from the hub."). Opening it marks it read on this device.
+ */
+function renderHubThread(card) {
+  ++_view;
+  if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
+  _guardClose = null;
+  const me = myCode();
+  const msgs = hubMessagesFor(me);
+  const body = msgs.length
+    ? `<ul class="msg-thread">${msgs.map((m, i) => `
+        ${splitBefore(m, msgs[i - 1]) ? `<li class="msg-daysplit">${esc(splitText(m.atMs))}</li>` : ''}
+        <li class="msg-bubble msg-bubble--theirs">${esc(hubText(m))}${playOf(m)
+          ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--sm msg-join" data-play="${esc(playOf(m))}">${esc(t('msg_hub_play'))}</button>`
+          : ''}</li>`).join('')}</ul>`
+    : `<p class="msg-lead">${esc(t('msg_empty'))}</p>`;
+  shellHTML(card, { title: 'Game Hub', iconHTML: hubIconHTML(), backable: true, body });
+  card.querySelector('[data-role="back"]').addEventListener('click', () => renderList(card));
+  card.querySelectorAll('[data-play]').forEach((b) => b.addEventListener('click', () => playFresh(b.dataset.play, b)));
+  const scroll = card.querySelector('.msg-scroll');
+  if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  if (msgs.length) { markHubSeen(me, msgs[msgs.length - 1].atMs); announceChange(); }
+}
+
+/** Play: the newest build and the game's newest files first, then the game (js/hub.js
+ *  openGameFresh). The button reads Loading for the wait and Messages closes only as the game
+ *  opens. From the profile page (its own page) it goes to the hub with ?open=&fresh=1. */
+function playFresh(game, btn) {
+  if (!game) return;
+  if (btn) { btn.disabled = true; btn.textContent = t('msg_loading'); }
+  const hub = typeof window !== 'undefined' && window.__ghHub;
+  if (hub && typeof hub.openGameFresh === 'function') {
+    hub.openGameFresh(game, { beforeOpen: closeOverlay })
+      .catch((err) => console.error('[messages] could not open the game', err))
+      .then(() => { if (btn && btn.isConnected) closeOverlay(); });
+  } else {
+    location.href = new URL(`../?open=${encodeURIComponent(game)}&fresh=1`, import.meta.url).href;
+  }
 }
 
 async function renderThread(card, who) {
