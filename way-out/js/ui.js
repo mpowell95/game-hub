@@ -1311,22 +1311,29 @@ class WayOut {
     this._later(() => this._banner(), motion ? 650 : 100);
     this._later(() => this._showRushReady(), motion ? 2000 : 700);
   }
+  /** The Ready popup, in the play screen's own look (Matt, 2026-10-14: "More on theme"): the dark
+   *  board colours, the seconds in the leaving-arrow teal, the two rules as arrow chips (teal arrow
+   *  +0.5s, red arrow -3s: a sign and a word, never colour alone), then Ready. */
   _showRushReady() {
     const r = this.rush, m = this.root && this.root.querySelector('.wo-modal');
     if (!r || r.over || !r.paused || r.counting || !m) return;
     const secs = (Math.floor(r.bank / 100) / 10).toFixed(1);
+    const arrow = (c) => `<svg viewBox="0 0 28 16" aria-hidden="true"><path d="M3 12V5h15" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 5l-7-4.5v9z" fill="${c}"/></svg>`;
     m.innerHTML = `
-      <div class="gh-modal wo-dialog" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
-        <h2 class="gh-modal__title" id="wo-ready-h">${t('rush_board_cleared', { n: r.boards })}</h2>
-        <p class="wo-rush-big"><b>${secs}</b><span>${t('rush_next_secs')}</span></p>
-        <p class="wo-fail-txt">${t('rush_reminder', { gain: RUSH_GAIN_MS / 1000, miss: RUSH_MISS_MS / 1000 })}</p>
-        <p class="wo-rush-ask">${t('rush_ready_q')}</p>
-        <div class="gh-modal__actions">
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="rush-ready">${t('rush_ready_btn')}</button>
-        </div>
+      <div class="wo-ready" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
+        <p class="wo-ready-done" id="wo-ready-h"><span aria-hidden="true">✓</span>${t('rush_board_cleared', { n: r.boards })}</p>
+        <p class="wo-ready-secs"><b>${secs}</b><i>s</i></p>
+        <p class="wo-ready-sub">${t('rush_next_secs')}</p>
+        <ul class="wo-ready-rules">
+          <li class="is-gain">${arrow('#3fd6bd')}<span>${t('rush_rule_gain', { gain: RUSH_GAIN_MS / 1000 })}</span><b>+${RUSH_GAIN_MS / 1000}s</b></li>
+          <li class="is-miss">${arrow('#e0484f')}<span>${t('rush_rule_miss', { miss: RUSH_MISS_MS / 1000 })}</span><b>-${RUSH_MISS_MS / 1000}s</b></li>
+        </ul>
+        <p class="wo-ready-stats">${t('rush_arrows', { n: r.arrows })}</p>
+        <p class="wo-ready-ask">${t('rush_ready_q')}</p>
+        <button type="button" class="wo-ready-btn" data-act="rush-ready">${t('rush_ready_btn')}</button>
       </div>`;
     m.hidden = false;
-    m.querySelector('.gh-btn--primary').focus({ preventScroll: true });
+    m.querySelector('.wo-ready-btn').focus({ preventScroll: true });
   }
   /** Ready: 3, 2, 1, Go!, then the next board and the clock again. The board stays hidden until Go. */
   _rushReady() {

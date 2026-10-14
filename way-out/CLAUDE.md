@@ -481,7 +481,14 @@ ever take minutes: the times logged are seconds per board.
   Ready plays **3, 2, 1, Go!** (`.wo-count`) over the cleared board, and only at Go! does the next
   board appear and the clock restart, so a paused player never sees the next board. Leaving during
   the pause still loses the run. The run's stored `ms` is PLAY time, without the pauses
-  (`_rushBoardDone`, `_showRushReady`, `_rushReady`, `_rushGo`).
+  (`_rushBoardDone`, `_showRushReady`, `_rushReady`, `_rushGo`). **The popup is in the board's own
+  look** (Matt: *"Make the ready popup better. More on theme"*; `.wo-ready`): the play screen's dark
+  gradient in both hub themes, a green "✓ BOARD N CLEARED!" pill, the seconds big in the leaving-arrow
+  teal, the two rules as chips with a teal arrow / "+0.5s" and a red arrow / "-3s" (sign and word,
+  never colour alone), the arrows so far, "Ready?" and a teal Ready pill that pulses (still under
+  reduced motion: no pulse, no pop-in). **Its buttons are `button.wo-*`**: `.wo-root button:not(.gh-btn)` resets every
+  game button's font and colour and outranks a plain class rule, which had left the Ready text thin
+  and white (the same fix went on `.wo-mode` and `.wo-rb-week`).
 - **Boards keep coming**, each a little harder.
   `buildRush(mode, i, seed)` in `engine.js`: board `i` is built like ladder level `rushLevel(mode, i)`
   (Easy 3, 9, 15 ... up to 50; Hard 51, 59, 67 ... up to 120, i.e. from the MEDIUM band: Hard-band

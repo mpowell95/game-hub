@@ -460,7 +460,7 @@
   border-radius: 999px;
   background: var(--gh-surface-2, #e6ebf3);
 }
-.wo-root .wo-mode {
+.wo-root button.wo-mode {
   min-height: 44px;
   border: 0;
   border-radius: 999px;
@@ -471,7 +471,7 @@
   font-weight: 600;
   touch-action: manipulation;
 }
-.wo-root .wo-mode.is-on { background: var(--gh-surface, #fff); color: var(--gh-ink, #16243a); font-weight: 800; box-shadow: inset 0 0 0 2px #ffce3a; }
+.wo-root button.wo-mode.is-on { background: var(--gh-surface, #fff); color: var(--gh-ink, #16243a); font-weight: 800; box-shadow: inset 0 0 0 2px #ffce3a; }
 .wo-root .wo-segs--two .wo-seg { min-height: 60px; }
 
 /* The play screen: a big countdown clock in the middle of the bar, the arrow count to its right.
@@ -551,7 +551,7 @@
 .wo-root .wo-rb-place { min-width: 22px; font-weight: 800; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; }
 .wo-root .wo-rb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .wo-root .wo-rb-score { font-size: 18px; font-variant-numeric: tabular-nums; }
-.wo-root .wo-rb-week {
+.wo-root button.wo-rb-week {
   width: 100%;
   min-height: 52px;
   display: flex;
@@ -605,5 +605,94 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .wo-root .wo-count b { animation: none; }
+}
+/* The Ready popup in the board's own look (2026-10-14, Matt: "Make the ready popup better. More on
+   theme"): the play screen's dark colours whatever the hub theme, the carried seconds in the
+   leaving-arrow teal, the rules as arrow chips, a teal Ready pill. */
+.wo-root .wo-ready {
+  position: relative;
+  width: min(340px, calc(100% - 32px));
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 18px 18px;
+  border-radius: 24px;
+  background: radial-gradient(120% 90% at 30% 0%, #30324f 0%, #1f2033 55%, #151622 100%);
+  border: 1px solid rgba(179, 180, 224, .22);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55), 0 0 0 1px rgba(63, 214, 189, .08), 0 0 40px rgba(63, 214, 189, .14);
+  color: #f2f2f6;
+  text-align: center;
+  animation: wo-ready-in .35s cubic-bezier(.2, .9, .3, 1.2) both;
+}
+.wo-root .wo-ready p { margin: 0; }
+.wo-root .wo-ready-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(43, 210, 122, .14);
+  border: 1px solid rgba(43, 210, 122, .45);
+  color: #7ff0b2;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.wo-root .wo-ready-done span { font-size: 14px; }
+.wo-root .wo-ready-secs { display: flex; align-items: baseline; justify-content: center; gap: 2px; margin-top: 6px !important; line-height: 1; }
+.wo-root .wo-ready-secs b {
+  font-size: 68px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #3fd6bd;
+  text-shadow: 0 0 26px rgba(63, 214, 189, .45);
+}
+.wo-root .wo-ready-secs i { font-style: normal; font-size: 26px; font-weight: 800; color: #3fd6bd; opacity: .85; }
+.wo-root .wo-ready-sub { font-size: 14px; color: #a9abcf; }
+.wo-root .wo-ready-rules { list-style: none; margin: 10px 0 2px; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.wo-root .wo-ready-rules li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid rgba(179, 180, 224, .14);
+  font-size: 14px;
+  line-height: 1.25;
+  text-align: left;
+}
+.wo-root .wo-ready-rules svg { width: 28px; height: 16px; flex: none; }
+.wo-root .wo-ready-rules span { flex: 1; color: #e2e3f3; }
+.wo-root .wo-ready-rules b { flex: none; font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.wo-root .wo-ready-rules .is-gain b { color: #3fd6bd; }
+.wo-root .wo-ready-rules .is-miss b { color: #ff7a7f; }
+.wo-root .wo-ready-stats { font-size: 13px; font-weight: 700; color: #8d8fa8; }
+.wo-root .wo-ready-ask { margin-top: 6px !important; font-size: 26px; font-weight: 900; color: #fff; }
+.wo-root button.wo-ready-btn {
+  width: 100%;
+  min-height: 54px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #4fe6cc 0%, #2fbfa7 100%);
+  color: #0f2a26;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  box-shadow: 0 6px 18px rgba(63, 214, 189, .35), inset 0 -3px 0 rgba(0, 0, 0, .15);
+  touch-action: manipulation;
+  animation: wo-ready-pulse 1.6s ease-in-out .6s infinite;
+}
+.wo-root .wo-ready-btn:focus-visible { outline: 3px solid #ffce3a; outline-offset: 3px; }
+.wo-root .wo-ready-btn:active { transform: translateY(1px); }
+@keyframes wo-ready-in { from { transform: scale(.9) translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wo-ready-pulse { 0%, 100% { box-shadow: 0 6px 18px rgba(63, 214, 189, .35), inset 0 -3px 0 rgba(0, 0, 0, .15); } 50% { box-shadow: 0 6px 30px rgba(63, 214, 189, .7), inset 0 -3px 0 rgba(0, 0, 0, .15); } }
+@media (prefers-reduced-motion: reduce) {
+  .wo-root .wo-ready, .wo-root .wo-ready-btn { animation: none; }
 }
 
