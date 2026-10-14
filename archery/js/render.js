@@ -5,9 +5,9 @@
 // keep the sight's ring exactly over the magnified view drawn here.
 //
 // THREE CAMERAS, as in the recording (docs/ARCHERY-BRIEF.md section 2):
-//   'line'  - the shooter's eye on the line, the target small and far off;
-//   'chase' - behind the arrow in flight, stopping a few metres short of the target;
-//   'close' - a few metres in front of the target, a little to the left, for the hit and the replay.
+//   'line'   - the shooter's eye on the line, the target small and far off;
+//   'flight' - the glide from the line to the close-up while the arrow flies in (one shot, no cut);
+//   'close'  - several metres in front of the target, a little to the left, for the hit and replays.
 // Plus the SIGHT: while drawing, a narrow camera looks at the aim point and is drawn into a disc
 // under the sight's ring (setScope). The point under the sight's crosshair IS the aim.
 //
@@ -39,12 +39,20 @@ const EYE = new THREE.Vector3(0, 1.62, 0);
 const FACE_Z = TARGET.z + 0.09;                 // the front of the boss
 export const ARROW_COLORS = { me: '#1f6fe5', them: '#e0362b', plain: '#f0c419' };
 const FLIGHT_T = 0.75;                          // seconds, measured off the recording
+const BOWL_Z = 10;                              // the centre of the stadium's curve
+const LINE_LOOK = new THREE.Vector3(TARGET.x, TARGET.y - 2.2, TARGET.z);
+// The close-up: the board about 45% of the screen's width, right of the middle, stands behind it.
+const CLOSE_POS = new THREE.Vector3(TARGET.x - 0.9, TARGET.y + 0.1, TARGET.z + 7.6);
+const CLOSE_LOOK = new THREE.Vector3(TARGET.x - 0.12, TARGET.y - 0.2, TARGET.z);
+/** The way an arrow travels into the face at (x, y): from the right and a little above, so in the
+ *  close-up it sticks out long, up and to the right (the recording). */
+function inDir(x, y) { return new THREE.Vector3(-0.42 - x * 0.04, -0.15 - y * 0.03, -1).normalize(); }
 export { FLIGHT_T };
 
 const LOOK = {
   grassA: '#3fa83a', grassB: '#4bb945', line: '#ffffff', wall: '#1d5fb8', wallTop: '#3b86e0',
-  seat: '#1c3f78', wood: '#9a6a3a', woodDark: '#6d4724', boss: '#f4f2ec',
-  ring: ['#f6f6f4', '#f6f6f4', '#202020', '#202020', '#2ea7e8', '#2ea7e8', '#e8342b', '#e8342b', '#ffd21f', '#ffd21f'],
+  seat: '#1c3f78', wood: '#9a6a3a', woodDark: '#6d4724', boss: '#fbfbf8',
+  ring: ['#fbfbf8', '#fbfbf8', '#202020', '#202020', '#2ea7e8', '#2ea7e8', '#e8342b', '#e8342b', '#ffd21f', '#ffd21f'],
 };
 
 export class Renderer {
@@ -91,11 +99,12 @@ export class Renderer {
   // --- the range ---------------------------------------------------------------------------------
   _build() {
     const S = this.scene;
-    S.background = this._canvasTex(4, 512, (c, w, h) => {
-      const g = c.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, '#3f8fe0'); g.addColorStop(0.55, '#8cc4f2'); g.addColorStop(1, '#dff0fc');
-      c.fillStyle = g; c.fillRect(0, 0, w, h);
-    });
+    // The sky: a dome with clouds (the recording shows blue sky above the roof, never a flat colour).
+    S.background = new THREE.Color('#8cc4f2');
+    const sky = this._canvasTex(2048, 1024, (c, w, h) => paintSky(c, w, h));
+    const dome = new THREE.Mesh(this._g(new THREE.SphereGeometry(300, 48, 24)), this._m(new THREE.MeshBasicMaterial({ map: sky, side: THREE.BackSide, fog: false, depthWrite: false })));
+    dome.renderOrder = -1;
+    S.add(dome);
     S.fog = new THREE.Fog('#cfe6f8', 90, 260);
     S.add(new THREE.HemisphereLight(0xffffff, 0x5f8a45, 1.15));
     const sun = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -131,61 +140,44 @@ export class Renderer {
     addLine(-9, -1.1, 9, -1.1, 0.12);                      // the shooting line
     addLine(-1.6, 3, 0, -0.2, 0.08); addLine(1.6, 3, 0, -0.2, 0.08);   // the V at your feet
 
-    // The blue barrier behind the target, and the stands behind that.
-    const wall = new THREE.Mesh(this._g(new THREE.BoxGeometry(200, 1.3, 0.4)), this._m(new THREE.MeshLambertMaterial({ color: LOOK.wall })));
-    wall.position.set(0, 0.65, -36);
-    S.add(wall);
-    const wallTop = new THREE.Mesh(this._g(new THREE.BoxGeometry(200, 0.12, 0.42)), this._m(new THREE.MeshLambertMaterial({ color: LOOK.wallTop })));
-    wallTop.position.set(0, 1.32, -36);
-    S.add(wallTop);
+    // The far end of a bowl: everything below is a slice of a circle round (0, BOWL_Z), so the
+    // barrier, the stands and the roof curve away at the sides as in the recording.
+    const arc = (r0, r1, y0, y1, mat, seg = 72) => {
+      const m = new THREE.Mesh(this._g(new THREE.CylinderGeometry(r1, r0, y1 - y0, seg, 1, true, Math.PI - 0.9, 1.8)), mat);
+      m.position.set(0, (y0 + y1) / 2, BOWL_Z);
+      S.add(m);
+      return m;
+    };
+    // The blue barrier behind the target.
+    arc(46, 46, 0, 1.3, this._m(new THREE.MeshLambertMaterial({ color: LOOK.wall, side: THREE.BackSide })));
+    arc(46.2, 46.2, 1.26, 1.38, this._m(new THREE.MeshLambertMaterial({ color: LOOK.wallTop, side: THREE.BackSide })));
     const board = new THREE.Mesh(this._g(new THREE.BoxGeometry(6, 2.4, 0.5)), this._m(new THREE.MeshLambertMaterial({ color: '#2a6fc4' })));
-    board.position.set(9, 1.2, -35.5);
+    board.position.set(9, 1.2, BOWL_Z - Math.sqrt(46 * 46 - 81) + 0.6);
+    board.rotation.y = -Math.asin(9 / 46);
     S.add(board);
 
-    // The stands: a slope of seats and people from the barrier up and back, then sky, then the
-    // roof's glass canopy across the top of the picture (the recording's framing).
-    const crowd = this._canvasTex(512, 256, (c, w, h) => paintCrowd(c, w, h), [22, 6]);
-    const y0 = 1.4, z0 = -36.5, y1 = 16, z1 = -62;
-    const len = Math.hypot(y1 - y0, z1 - z0);
-    const stand = new THREE.Mesh(this._g(new THREE.PlaneGeometry(220, len)), this._m(new THREE.MeshLambertMaterial({ map: crowd })));
-    stand.position.set(0, (y0 + y1) / 2, (z0 + z1) / 2);
-    stand.rotation.x = -Math.atan2(z0 - z1, y1 - y0);
-    S.add(stand);
-    // Stairways down the stands.
-    const aisleMat = this._m(new THREE.MeshLambertMaterial({ color: '#7d8796', polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
-    for (const x of [-46, -22, 2, 26, 50]) {
-      const a = new THREE.Mesh(this._g(new THREE.PlaneGeometry(0.7, len)), aisleMat);
-      a.position.set(x, stand.position.y, stand.position.z);
-      a.rotation.copy(stand.rotation);
-      S.add(a);
-    }
-    // The back wall of the stand, where the seats stop.
-    const back = new THREE.Mesh(this._g(new THREE.BoxGeometry(220, 2.4, 0.6)), this._m(new THREE.MeshLambertMaterial({ color: '#e8edf2' })));
-    back.position.set(0, y1 + 1.1, z1 - 0.3);
-    S.add(back);
-    // The roof: a white lattice of glass, unlit so it reads bright from below.
+    // The stands: a narrow band of seats and people from the barrier up and back (z -36.5 to -50),
+    // soft at this distance, then the roof.
+    const crowd = this._canvasTex(512, 256, (c, w, h) => paintCrowd(c, w, h), [8, 2.4]);
+    arc(46.5, 60, 1.4, 6.3, this._m(new THREE.MeshLambertMaterial({ map: crowd, side: THREE.BackSide })), 96);
+    // The shadowed back of the stand, under the roof.
+    arc(60, 61, 6.3, 7.6, this._m(new THREE.MeshLambertMaterial({ color: '#25344d', side: THREE.BackSide })));
+    // The roof: white steel ribs and pale glass, seen from below, rising to its inner edge (12.6 m
+    // up, 42 m out), with sky above it. Unlit so it reads bright.
     const lattice = this._canvasTex(256, 256, (c, w, h) => {
-      c.fillStyle = '#dfe9f2'; c.fillRect(0, 0, w, h);
-      c.fillStyle = 'rgba(150, 190, 225, 0.55)';
-      for (let i = 0; i < w; i += 64) for (let j = 0; j < h; j += 32) c.fillRect(i + 5, j + 4, 54, 24);
-      c.strokeStyle = '#ffffff'; c.lineWidth = 5;
-      for (let i = 0; i <= w; i += 64) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i, h); c.stroke(); }
-      c.lineWidth = 2.5; c.strokeStyle = '#f4f7fa';
-      for (let i = -h; i <= w + h; i += 32) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + h * 0.6, h); c.stroke(); }
-    }, [30, 5]);
-    const roofGeo = this._g(new THREE.PlaneGeometry(260, 50));
-    const roof = new THREE.Mesh(roofGeo, this._m(new THREE.MeshBasicMaterial({ map: lattice, side: THREE.DoubleSide, fog: false })));
-    // From 21 m up at 30 m out to 25 m up at 75 m out: the top tenth of the line camera's picture.
-    roof.position.set(0, 23, -52.5);
-    roof.rotation.x = Math.PI / 2 + Math.atan2(4, 45);
-    S.add(roof);
-    const beamMat = this._m(new THREE.MeshBasicMaterial({ color: '#f5f7fa', fog: false }));
-    for (const x of [-60, -30, 0, 30, 60]) {
-      const beam = new THREE.Mesh(this._g(new THREE.BoxGeometry(0.8, 0.8, 50)), beamMat);
-      beam.position.set(x, 22.6, -52.5);
-      beam.rotation.x = Math.atan2(4, 45);
-      S.add(beam);
-    }
+      const g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#a9c2da'); g.addColorStop(1, '#d6e3ef');
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#ffffff'; c.lineWidth = 12;
+      c.beginPath(); c.moveTo(w / 2, 0); c.lineTo(w / 2, h); c.stroke();
+      c.lineWidth = 4; c.strokeStyle = 'rgba(255,255,255,0.9)';
+      c.beginPath(); c.moveTo(0, h); c.lineTo(w / 2, 0); c.lineTo(w, h); c.stroke();
+      c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,0.7)';
+      for (const j of [h * 0.34, h * 0.68]) { c.beginPath(); c.moveTo(0, j); c.lineTo(w, j); c.stroke(); }
+    }, [44, 1]);
+    arc(61, 52, 7.6, 12.6, this._m(new THREE.MeshBasicMaterial({ map: lattice, side: THREE.DoubleSide, fog: false })), 128);
+    // The white ring beam along the roof's inner edge.
+    arc(52.2, 51.8, 12.4, 13.3, this._m(new THREE.MeshBasicMaterial({ color: '#f7f9fb', side: THREE.DoubleSide, fog: false })), 128);
 
     this._buildTarget();
   }
@@ -196,16 +188,16 @@ export class Renderer {
     const g = new THREE.Group();
     // The boss: a white square board with a dark edge.
     const bossSide = T.face * BOSS * 2 * 1.04;
-    const boss = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide, bossSide, 0.16)), this._m(new THREE.MeshLambertMaterial({ color: LOOK.boss })));
+    const boss = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide, bossSide, 0.16)), this._m(new THREE.MeshBasicMaterial({ color: LOOK.boss })));
     boss.position.set(T.x, T.y, T.z);
     g.add(boss);
-    const edge = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide + 0.05, bossSide + 0.05, 0.12)), this._m(new THREE.MeshLambertMaterial({ color: '#3a3a3a' })));
+    const edge = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide + 0.05, bossSide + 0.05, 0.12)), this._m(new THREE.MeshLambertMaterial({ color: '#5a3c22' })));
     edge.position.set(T.x, T.y, T.z - 0.03);
     g.add(edge);
     // The face: ten rings, painted.
     const face = this._canvasTex(1024, 1024, (c, w) => {
       const cx = w / 2, R = w / 2 - 2;
-      c.fillStyle = '#f4f2ec'; c.fillRect(0, 0, w, w);
+      c.fillStyle = '#fbfbf8'; c.fillRect(0, 0, w, w);
       for (let i = 0; i < 10; i++) {
         const r = R * (1 - i / 10);
         c.beginPath(); c.arc(cx, cx, r, 0, Math.PI * 2); c.fillStyle = LOOK.ring[i]; c.fill();
@@ -222,7 +214,7 @@ export class Renderer {
         c.fillText(String(i), cx + r, cx + 8);
       }
     });
-    const faceMesh = new THREE.Mesh(this._g(new THREE.CircleGeometry(T.face, 96)), this._m(new THREE.MeshLambertMaterial({ map: face })));
+    const faceMesh = new THREE.Mesh(this._g(new THREE.CircleGeometry(T.face, 96)), this._m(new THREE.MeshBasicMaterial({ map: face })));
     faceMesh.position.set(T.x, T.y, FACE_Z);
     g.add(faceMesh);
     // The wooden easel: two front legs, two back legs, a ledge under the board.
@@ -238,7 +230,7 @@ export class Renderer {
       m.rotateX(Math.PI / 2);
       g.add(m);
     };
-    leg(-bossSide * 0.36, 0.12, 0.42, wood); leg(bossSide * 0.36, 0.12, 0.42, wood);
+    leg(-bossSide * 0.47, 0.12, 0.42, wood); leg(bossSide * 0.47, 0.12, 0.42, wood);
     leg(-bossSide * 0.3, -0.12, -0.9, woodDark); leg(bossSide * 0.3, -0.12, -0.9, woodDark);
     const ledge = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide * 0.95, 0.07, 0.24)), wood);
     ledge.position.set(T.x, T.y - bossSide / 2 - 0.04, T.z + 0.1);
@@ -260,8 +252,8 @@ export class Renderer {
   /** An arrow pointing along -z with its tip at the origin. */
   _arrow(color) {
     const g = new THREE.Group();
-    const L = 0.82, r = 0.011;
-    const shaftMat = this._m(new THREE.MeshLambertMaterial({ color }));
+    const L = 0.95, r = 0.018;
+    const shaftMat = this._m(new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.45 }));
     const shaft = new THREE.Mesh(this._g(new THREE.CylinderGeometry(r, r, L, 10)), shaftMat);
     shaft.rotation.x = Math.PI / 2;
     shaft.position.z = L / 2;
@@ -275,14 +267,14 @@ export class Renderer {
     nock.position.z = L + 0.02;
     g.add(nock);
     const vaneShape = new THREE.Shape();
-    vaneShape.moveTo(0, 0); vaneShape.lineTo(0.13, 0); vaneShape.lineTo(0.13, 0.045); vaneShape.quadraticCurveTo(0.05, 0.04, 0, 0.012); vaneShape.lineTo(0, 0);
+    vaneShape.moveTo(0, 0); vaneShape.lineTo(0.15, 0); vaneShape.lineTo(0.15, 0.055); vaneShape.quadraticCurveTo(0.06, 0.05, 0, 0.014); vaneShape.lineTo(0, 0);
     const vaneGeo = this._g(new THREE.ShapeGeometry(vaneShape));
     const vaneMats = [this._m(new THREE.MeshLambertMaterial({ color: '#ffffff', side: THREE.DoubleSide })), this._m(new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }))];
     for (let i = 0; i < 3; i++) {
       const v = new THREE.Mesh(vaneGeo, vaneMats[i === 0 ? 1 : 0]);
       const holder = new THREE.Group();
       v.rotation.y = -Math.PI / 2;
-      v.position.set(0, r, L - 0.16);
+      v.position.set(0, r, L - 0.18);
       holder.add(v);
       holder.rotation.z = (i * 2 * Math.PI) / 3;
       g.add(holder);
@@ -300,7 +292,7 @@ export class Renderer {
       if (Math.max(Math.abs(a.x), Math.abs(a.y)) > BOSS) continue;
       const m = this._arrow(a.color);
       const tip = this.facePoint(a.x, a.y, FACE_Z - 0.05);
-      const dir = a.dir ? a.dir.clone().normalize() : new THREE.Vector3(-0.05 + (a.x * 0.02), -0.04, -1).normalize();
+      const dir = a.dir ? a.dir.clone().normalize() : inDir(a.x, a.y);
       m.position.copy(tip);
       m.lookAt(tip.clone().sub(dir));             // +z (the shaft) points back the way it came
       this.stuck.add(m);
@@ -322,14 +314,13 @@ export class Renderer {
 
   setView(view) {
     this.view = view;
-    const T = TARGET;
     if (view === 'line') {
       this.cam.position.copy(EYE);
       // The target sits a little above the middle of the screen, as in the recording.
-      this.cam.lookAt(T.x, T.y - 2.2, T.z);
+      this.cam.lookAt(LINE_LOOK);
     } else if (view === 'close') {
-      this.cam.position.set(T.x - 0.75, T.y + 0.05, T.z + 4.6);
-      this.cam.lookAt(T.x + 0.14, T.y - 0.12, T.z);
+      this.cam.position.copy(CLOSE_POS);
+      this.cam.lookAt(CLOSE_LOOK);
     }
   }
 
@@ -356,45 +347,107 @@ export class Renderer {
   }
 
   // --- the arrow in flight ----------------------------------------------------------------------
-  /** Start a shot: from the bow (just under the eye) at the aim point, landing at `hit` (face
-   *  radii). `color`: the arrow's. */
+  // As in the recording: the camera glides down the lane from the shooting line to the close-up of
+  // the target (no cut), while the arrow, seen from the side, leaves big at the top right, arcs
+  // over and drops into the target from the right, a white trail behind it.
+  /** Start a shot landing at `hit` (face radii). `color`: the arrow's. Nothing moves until setFlight. */
   startFlight(aim, hit, color) {
     this.loose.clear();
-    const S0 = EYE.clone().add(new THREE.Vector3(0.06, -0.14, -0.9));
-    const A = this.facePoint(aim.x, aim.y);
     const H = this.facePoint(hit.x, hit.y, FACE_Z - 0.05);
+    const dIn = inDir(hit.x, hit.y);
+    // Where the arrow first shows (screen, -1..1) and how high its arc rides: a little different
+    // shot to shot, as the recording's arrows are.
+    const n0 = new THREE.Vector2(0.26 + Math.random() * 0.08, 0.42 + Math.random() * 0.12);
+    const arc = 0.04 + Math.random() * 0.08;
     const arrow = this._arrow(color);
-    this.loose.add(arrow);
-    this.flight = { S0, A, H, arrow, u: 0 };
-    this.setFlight(0);
+    arrow.visible = false;
+    const trail = this._trail();
+    this.loose.add(arrow, trail.mesh);
+    this.fc = this.fc || new THREE.PerspectiveCamera();
+    this.flight = { H, dIn, n0, arc, arrow, trail, u: 0 };
   }
-  _pathAt(u) {
-    const f = this.flight;
-    const p = f.S0.clone().add(f.A.clone().sub(f.S0).multiplyScalar(u)).add(f.H.clone().sub(f.A).multiplyScalar(u * u));
-    p.y += 0.45 * Math.sin(Math.PI * u);
-    return p;
+  /** The flight camera at u, into `cam`: quick off the line, easing into the close-up. */
+  _camAt(u, cam) {
+    const c = 1 - Math.pow(1 - u, 1.7);
+    cam.position.copy(EYE).lerp(CLOSE_POS, c);
+    cam.lookAt(LINE_LOOK.clone().lerp(CLOSE_LOOK, c));
+    cam.updateMatrixWorld();
   }
-  /** The flight at u (0..1): the arrow along its path, the camera chasing it. */
+  /** The arrow's tip at u. It is placed from the camera, as a film would frame it: always up and
+   *  right of the target on screen, sliding down onto it, closing from a couple of metres in
+   *  front of the lens to the face. */
+  _tipAt(u) {
+    const f = this.flight, fc = this.fc;
+    fc.fov = this.cam.fov; fc.aspect = this.cam.aspect; fc.near = this.cam.near; fc.far = this.cam.far;
+    fc.updateProjectionMatrix();
+    this._camAt(u, fc);
+    const hc = f.H.clone().applyMatrix4(fc.matrixWorldInverse);       // the hit, camera space
+    const ty = Math.tan((fc.fov * Math.PI) / 360), tx = ty * fc.aspect;
+    const hn = new THREE.Vector2(hc.x / (-hc.z * tx), hc.y / (-hc.z * ty));
+    const e = Math.pow(u, 1.5);
+    const n = f.n0.clone().lerp(hn, e);
+    n.y += f.arc * Math.sin(Math.PI * u) * (1 - u);
+    const d = 2.4 + (-hc.z - 2.4) * Math.pow(u, 1.6);
+    return new THREE.Vector3(n.x * d * tx, n.y * d * ty, -d).applyMatrix4(fc.matrixWorld);
+  }
+  /** The way the arrow points at u: nearly along the lane at first, coming round to arrive from
+   *  the right (dIn), so it is seen from the side as it drops in. */
+  _dirAt(u) {
+    const d0 = new THREE.Vector3(-0.12, -0.06, -1);
+    return d0.lerp(this.flight.dIn, Math.min(1, u * 1.3)).normalize();
+  }
+  /** A white ribbon that follows the path behind the arrow, fading to nothing. */
+  _trail() {
+    const N = 18;
+    const geo = this._g(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 2 * 3), 3));
+    const col = new Float32Array(N * 2 * 4);
+    for (let i = 0; i < N; i++) {
+      const a = 0.7 * (1 - i / (N - 1));
+      col.set([1, 1, 1, a, 1, 1, 1, a], i * 8);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
+    const idx = [];
+    for (let i = 0; i < N - 1; i++) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, this._m(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false })));
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    return { mesh, geo, N };
+  }
+  /** The trail: from the arrow's tail straight back along the way it points, tapering. */
+  _setTrail(p, dir, u) {
+    const t = this.flight.trail;
+    const pos = t.geo.attributes.position;
+    const len = 2.6 * Math.min(1, u * 6 + 0.25) * (1 - 0.5 * u);
+    const camP = this.cam.position;
+    const tail = p.clone().sub(dir.clone().multiplyScalar(0.95));
+    for (let i = 0; i < t.N; i++) {
+      const k = i / (t.N - 1);
+      const q = tail.clone().sub(dir.clone().multiplyScalar(len * k));
+      const side = dir.clone().cross(camP.clone().sub(q)).normalize();
+      const wdt = 0.09 * (1 - k) + 0.004;
+      pos.setXYZ(i * 2, q.x + side.x * wdt, q.y + side.y * wdt, q.z + side.z * wdt);
+      pos.setXYZ(i * 2 + 1, q.x - side.x * wdt, q.y - side.y * wdt, q.z - side.z * wdt);
+    }
+    pos.needsUpdate = true;
+    t.mesh.visible = u < 0.995;
+  }
+  /** The flight at u (0..1): the camera on its glide, the arrow on its way in. */
   setFlight(u) {
     const f = this.flight;
     if (!f) return;
     u = Math.max(0, Math.min(1, u));
     f.u = u;
-    const p = this._pathAt(u);
-    const q = this._pathAt(Math.min(1, u + 0.01));
-    const dir = q.clone().sub(p);
-    if (dir.lengthSq() < 1e-10) dir.set(0, 0, -1);
-    dir.normalize();
+    this.view = 'flight';
+    this._camAt(u, this.cam);
+    const p = this._tipAt(u);
+    const dir = this._dirAt(u);
+    f.arrow.visible = true;
     f.arrow.position.copy(p);
     f.arrow.lookAt(p.clone().sub(dir));
-    f.dir = dir;
-    // The camera rides behind the whole arrow (it is 0.82 m long) and a touch above, and stops
-    // 4.5 m short of the target.
-    const cam = p.clone().sub(dir.clone().multiplyScalar(1.45)).add(new THREE.Vector3(0.05, 0.14, 0));
-    cam.z = Math.max(cam.z, TARGET.z + 4.5);
-    this.view = 'chase';
-    this.cam.position.copy(cam);
-    this.cam.lookAt(p.clone().add(dir.clone().multiplyScalar(2.5)));
+    f.dir = u >= 1 ? f.dIn.clone() : dir;
+    this._setTrail(p, dir, u);
   }
   /** The direction the flight arrived from (for its stuck arrow). */
   flightDir() { return this.flight && this.flight.dir ? this.flight.dir.clone() : null; }
@@ -408,9 +461,9 @@ export class Renderer {
       this.loose.add(this._incoming.arrow);
     }
     const H = this.facePoint(hit.x, hit.y, FACE_Z - 0.05);
-    const from = H.clone().add(new THREE.Vector3(0.4, 0.22, 3.4));
+    const dir = inDir(hit.x, hit.y);
+    const from = H.clone().sub(dir.clone().multiplyScalar(3.6));
     const p = from.clone().lerp(H, Math.max(0, Math.min(1, u)));
-    const dir = H.clone().sub(from).normalize();
     const a = this._incoming.arrow;
     a.position.copy(p);
     a.lookAt(p.clone().sub(dir));
@@ -428,8 +481,8 @@ export class Renderer {
       this.zoomCam.position.copy(this.cam.position);
       const P = this.facePoint(s.ax, s.ay);
       const dist = this.cam.position.distanceTo(P);
-      // The face fills a little over half of the sight, as in the recording.
-      this.zoomCam.fov = (2 * Math.atan((TARGET.face / 0.56) / dist) * 180) / Math.PI;
+      // The face fills about a third of the sight, the board round it showing, as in the recording.
+      this.zoomCam.fov = (2 * Math.atan((TARGET.face / 0.34) / dist) * 180) / Math.PI;
       this.zoomCam.aspect = 1;
       this.zoomCam.updateProjectionMatrix();
       this.zoomCam.lookAt(P);
@@ -478,6 +531,28 @@ function paintCrowd(c, w, h) {
       c.fillStyle = skin[(rnd() * skin.length) | 0];
       c.beginPath(); c.arc(x + 3, y + rowH * 0.36, 2.8, 0, Math.PI * 2); c.fill();
       if (rnd() < 0.12) { c.fillStyle = shirts[(rnd() * shirts.length) | 0]; c.fillRect(x + 0.5, y + rowH * 0.14, 5, 2.5); }
+    }
+  }
+  // Soft at this distance: a thin wash of the seats' blue over everyone.
+  c.fillStyle = 'rgba(28, 63, 120, 0.22)'; c.fillRect(0, 0, w, h);
+}
+
+/** The sky dome's picture (an equirectangular strip): deep blue overhead, pale at the horizon,
+ *  soft white clouds in the band the cameras see. */
+function paintSky(c, w, h) {
+  const g = c.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#2c74d6'); g.addColorStop(0.36, '#4f97e6'); g.addColorStop(0.5, '#cfe7fa'); g.addColorStop(1, '#e6f3fd');
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
+  let seed = 11;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 70; i++) {
+    const cx = rnd() * w, cy = h * (0.3 + rnd() * 0.17), sw = 20 + rnd() * 50;
+    for (let j = 0; j < 7; j++) {
+      const x = cx + (rnd() - 0.5) * sw * 1.6, y = cy + (rnd() - 0.6) * sw * 0.35, r = sw * (0.25 + rnd() * 0.3);
+      const gr = c.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, 'rgba(255,255,255,0.85)'); gr.addColorStop(0.6, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = gr;
+      c.beginPath(); c.ellipse(x, y, r, r * 0.55, 0, 0, Math.PI * 2); c.fill();
     }
   }
 }
