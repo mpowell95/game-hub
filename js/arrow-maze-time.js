@@ -48,10 +48,11 @@ export function woClock(ms) {
 //
 // Matt replaced the timed score with the shape most level apps use: ONE ladder of levels, cut into
 // four difficulties of 50 (Easy 1-50, Medium 51-100, Hard 101-150, Expert 151 on, for ever), any of
-// which a player may start, and a leaderboard of POINTS for levels cleared. Each level is worth more
-// the further up the ladder it is (Matt: "Since they get progressively harder and harder, maybe points
-// should do something"): 1 for levels 1-25, then 1 more every 25 levels, up to WO_POINTS_MAX, where
-// the boards stop getting harder (way-out/js/engine.js, LADDER_TOP). Ties stay tied.
+// which a player may start, and a leaderboard of POINTS for levels cleared. Points are FLAT PER
+// DIFFICULTY, the 1 / 2 / 4 / 6 Matt agreed to (WO_BAND_POINTS, set from how long each difficulty's
+// levels take in the real saved times). A first build used 1 + 1 every 25 levels (Expert 7-8); Matt
+// had never agreed to it and it was replaced the same day ("Change it to what we agreed to"). Ties
+// stay tied.
 //
 // Inside a band a player always plays the next level, so HOW MANY levels of a band they have cleared
 // says exactly WHICH: the first `cleared` of it. The points are therefore read from the per-band
@@ -70,23 +71,18 @@ export function bandOf(n) {
 export function bandEnd(band) {
   return band === 'expert' ? Infinity : BAND_START[band] + BAND_SIZE - 1;
 }
-export const WO_POINTS_STEP = 25;
-export const WO_POINTS_MAX = 8;
-/** What ladder level n is worth. */
+/** What one cleared level of each difficulty is worth. */
+export const WO_BAND_POINTS = { easy: 1, medium: 2, hard: 4, expert: 6 };
+/** What ladder level n is worth: its difficulty's points. */
 export function woLevelPoints(n) {
   const L = Math.max(1, Math.floor(Number(n) || 1));
-  return Math.min(WO_POINTS_MAX, 1 + Math.floor((L - 1) / WO_POINTS_STEP));
+  return WO_BAND_POINTS[bandOf(L)];
 }
-/** Points for the first `cleared` levels of a band. A count past the band's 50 (possible only from
- *  the old endless tiers) keeps earning the band's last level's points: never dropped, never more. */
+/** Points for `cleared` levels of a band. A count past the band's 50 (possible only from the old
+ *  endless tiers) earns the same per level: never dropped, never more. */
 export function woBandPoints(band, cleared) {
   const c = Math.max(0, Math.floor(Number(cleared) || 0));
-  const start = BAND_START[band];
-  if (!start || !c) return 0;
-  const last = bandEnd(band);
-  let pts = 0;
-  for (let i = 0; i < c; i++) pts += woLevelPoints(Math.min(start + i, last));
-  return pts;
+  return WO_BAND_POINTS[band] ? c * WO_BAND_POINTS[band] : 0;
 }
 /** A player's Arrow Maze points from their stats record (`games.wayout`): one band, or all four. */
 export function woPoints(rec, band = null) {

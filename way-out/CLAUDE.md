@@ -348,18 +348,21 @@ in order; each difficulty remembers its own next level (`ladder[band]`). Finishi
 **Why not "highest level" on the leaderboard:** with "start anywhere", a new player picks Expert,
 clears 151 and passes everyone who climbed 1-150. So the board counts POINTS for levels cleared.
 
-**Points** (`js/arrow-maze-time.js`, `woLevelPoints`): 1 for levels 1-25, then 1 more every 25 levels,
-up to 8 (levels 176 on), where the boards stop getting harder. Never more than +1 between neighbours.
-A player's points = the sum over every level they have cleared. **They are read from the per-band
+**Points** (`js/arrow-maze-time.js`, `WO_BAND_POINTS`): **flat per difficulty, Easy 1, Medium 2, Hard 4,
+Expert 6 a level**, the scheme Matt agreed to (set from how long each difficulty's levels take in the
+real saved times: ~20 s, ~45 s, ~1.5 min, ~2 min). **The first build shipped a different rule nobody
+agreed to** (1 for levels 1-25, +1 every 25 levels, up to 8, so Expert was 7-8); Matt caught it on the
+board and it was replaced the same day: *"Change it to what we agreed to."* Do not reintroduce a
+per-level ramp without his say. A player's points = the sum over every level they have cleared. **They are read from the per-band
 cleared counts** (`byDiff[band].won`), not from a per-level log: inside a band levels are always
 played in order, so "cleared 27 of Hard" means exactly ladder 101-127. That covers every level ever
 cleared, timed or not, from the day the game shipped. Old-tier levels count as their band's levels in
 order (old Hard 27 = ladder 101-127). A count past a band's 50 (only possible from the old endless
-tiers) keeps earning the band's last level's points. **Ties stay tied.** The board (`js/leaderboard-
+tiers) earns the same per level. **Ties stay tied.** The board (`js/leaderboard-
 ui.js`) is ONE number across all four difficulties and is **deliberately not hardest-difficulty-first**
 (Matt: a slow Expert player must not outrank a good Hard one); `boardTierOf` returns null for
 `wayout` unless a filter is picked, and a filter shows that difficulty's own points. On 2026-10-14
-(real synced data): King of Games 164, Anita Bonita 57, MattyIce 56, Ele 27.
+(real synced data): King of Games 134, Anita Bonita 47, MattyIce 41, Ele 26.
 
 **The boards: generator 5, "the ladder"** (`buildLadder(n)` in `engine.js`). Every setting of a
 board (grid size, arrow lengths, density, straightness, the rounds target) is interpolated by ladder

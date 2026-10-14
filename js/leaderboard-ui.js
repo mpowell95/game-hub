@@ -672,7 +672,7 @@ function boardTierOf(g, id) {
   if (id === 'holdem') return null;                          // ranked by bankroll alone
   // Arrow Maze: ONE number across all four difficulties, never hardest-difficulty-first (Matt,
   // 2026-10-14: a slow Expert player must not outrank a good Hard one; the points already make a
-  // harder level worth more). A filter still shows one difficulty's own points.
+  // harder difficulty worth more: 1/2/4/6 a level). A filter still shows one difficulty's own points.
   if ((id === 'wayout' || id === 'gridlock') && _tier == null) return null;
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
