@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1161';
+const CACHE = 'game-hub-v1162';
 
 const ASSETS = [
   './',
@@ -58,6 +58,7 @@ const ASSETS = [
   // a message written offline has to be able to queue itself on the device that is offline.
   './js/messages.js',
   './js/messages-ui.js',
+  './js/hub-messages.js',
   './js/challenges.js',
   './js/challenges-ui.js',
   './js/challenge-life.js',
@@ -697,6 +698,9 @@ const NETWORK_FIRST = [
   // Decides whether that data is SHOWN. A device on an old visibility gate hides history the rest
   // of the family can see, which is THE LAW rule 1 whether or not a byte was lost.
   './js/game-stats-ui.js', './js/leaderboard-ui.js', './js/messages-ui.js', './js/bug-report-ui.js',
+  // Messages from the Game Hub itself (2026-10-14): the list of what was sent, and its read state
+  // (gamehub.hubMessages.v1). Fresh, so a message sent by a deploy reaches the next open.
+  './js/hub-messages.js',
   // The Challenges screen (2026-10-05): shows every challenge record; lazily imported, so fresh is free.
   './js/challenges.js', './js/challenges-ui.js', './js/challenges-strings.js',
   // How a challenge ends without a result (cancel, decline, expire; 2026-10-13): every challenge game
@@ -1328,6 +1332,51 @@ async function warmRest() {
   await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
 }
 
+// ONE GAME'S FILES, NOW (2026-10-14). A Game Hub message's Play button (js/hub.js openGameFresh)
+// opens a game right after a new build took over, which is exactly when warmRest() above has not
+// reached that game yet: until it does, the game's CHANGED files are answered from the previous
+// build's cache (the fetch handler's caches.match fallback). This does warmRest's job for one game
+// folder, first: same carry-forward by content hash, same `cache: 'reload'`, same skip of LAZY data.
+// Additive only - it puts files into the CURRENT cache and deletes nothing; warmRest later finds
+// them present and skips them. Replies {ok, fetched, carried, failed}.
+async function warmGame(dir) {
+  const d = String(dir || '');
+  if (!/^[a-z0-9-]{2,40}$/.test(d)) return { ok: false, fetched: 0, carried: 0, failed: 0 };
+  const prefix = `./${d}/`;
+  const queue = REST.filter((p) => p.startsWith(prefix) && !isLazyAsset(p));
+  const cache = await caches.open(CACHE);
+  const oldCaches = [];
+  for (const k of await caches.keys()) {
+    if (k !== CACHE && k.startsWith('game-hub-')) oldCaches.push(await caches.open(k));
+  }
+  let stored = null;
+  for (const c of [cache, ...oldCaches]) {
+    try { const res = await c.match(MANIFEST_KEY); if (res) { stored = await res.json(); break; } } catch { /* absent */ }
+  }
+  let fetched = 0, carried = 0, failed = 0;
+  const worker = async () => {
+    for (;;) {
+      const path = queue.shift();
+      if (path === undefined) return;
+      try {
+        if (await cache.match(path, { ignoreSearch: true })) continue;
+        if (stored && stored[path] && REST_MANIFEST[path] && stored[path] === REST_MANIFEST[path]) {
+          let copied = false;
+          for (const c of oldCaches) {
+            const prev = await c.match(path, { ignoreSearch: true });
+            if (prev) { await cache.put(path, prev); carried++; copied = true; break; }
+          }
+          if (copied) continue;
+        }
+        const res = await fetch(new Request(path, { cache: 'reload' }));
+        if (res && res.ok) { await cache.put(path, res.clone()); fetched++; } else failed++;
+      } catch { failed++; }
+    }
+  };
+  await Promise.all(Array.from({ length: WARM_CONCURRENCY }, worker));
+  return { ok: failed === 0, fetched, carried, failed };
+}
+
 // ONE-TIME FULL PURGE (2026-08-04). Normally `activate` deletes only caches whose name DIFFERS
 // from CACHE, which is right: it makes a deploy cheap and lets an interrupted warm resume. But it
 // also means a cache entry that is stale, truncated or half-written under its CURRENT name is
@@ -1376,6 +1425,11 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'GET_VERSION') {
     const port = event.ports && event.ports[0];
     if (port) port.postMessage({ type: 'VERSION', cache: CACHE });
+  }
+  if (event.data && event.data.type === 'WARM_GAME') {
+    const port = event.ports && event.ports[0];
+    const reply = (r) => { if (port) port.postMessage(Object.assign({ type: 'WARMED' }, r)); };
+    event.waitUntil(warmGame(event.data.dir).then(reply, () => reply({ ok: false, failed: 1 })));
   }
 });
 

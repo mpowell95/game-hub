@@ -1424,9 +1424,11 @@ class Hub {
     try {
       const u = new URL(location.href);
       id = u.searchParams.get('open');
-      extra = { with: u.searchParams.get('with') || '', match: u.searchParams.get('match') || '' };
+      extra = { with: u.searchParams.get('with') || '', match: u.searchParams.get('match') || '',
+        fresh: u.searchParams.get('fresh') === '1' ? '1' : '' };
       if (id) {
         u.searchParams.delete('open'); u.searchParams.delete('with'); u.searchParams.delete('match');
+        u.searchParams.delete('fresh');
         history.replaceState(history.state, '', u.pathname + u.search + u.hash);
         this._queuePushOpen(id, extra);
       }
@@ -1447,7 +1449,8 @@ class Hub {
   _queuePushOpen(id, extra = {}) {
     try {
       sessionStorage.setItem(PUSH_OPEN_KEY, JSON.stringify({ id: String(id || ''), at: Date.now(),
-        extra: { with: String(extra.with || ''), name: String(extra.name || ''), match: String(extra.match || '') } }));
+        extra: { with: String(extra.with || ''), name: String(extra.name || ''), match: String(extra.match || ''),
+          fresh: extra.fresh ? '1' : '' } }));
     } catch { /* no sessionStorage: the in-memory path still runs */ }
   }
   _peekPushOpen() {
@@ -1510,6 +1513,13 @@ class Hub {
         const tm = setTimeout(() => { stop(); resolve(); }, 6000);
       });
       if (this.current || !this.games.some((x) => x.id === id)) { this._clearPushOpen(); return; }
+    }
+    // A GAME HUB MESSAGE'S PLAY BUTTON, arriving by URL from the profile page or after the reload
+    // onto a new build (openGameFresh). Newest build first, then the game's newest files.
+    if (extra.fresh) {
+      if (await this._ensureNewestBuild()) return;      // reloading; the queued open survives it
+      await this._warmGame(id);
+      if (this.current) { this._clearPushOpen(); return; }
     }
     // STRAIGHT INTO THE MATCH THE NOTIFICATION IS ABOUT (2026-09-24), when it names one and the
     // game's alerts module can open a match directly (hoops4 `armOpen`). Before this a tap only
@@ -1696,6 +1706,76 @@ class Hub {
   }
 
   // --- version pill: shows the running build; tap = update check + reload ----
+
+  /**
+   * PLAY, FROM A GAME HUB MESSAGE (2026-10-14, js/hub-messages.js). Matt: "It should make sure the
+   * newest code/data is loaded, then open it." Three steps, each best-effort and bounded, so a bad
+   * connection still ends in the game (on whatever this phone has) rather than on a spinner:
+   *   1. The newest BUILD: ask the worker for an update and wait for it to take over; if it does,
+   *      or this page is older than the worker, reload. The open is queued first (_queuePushOpen,
+   *      `fresh`), so the next page carries on from step 2.
+   *   2. The game's newest FILES: a just-updated worker fills its new cache in the background
+   *      (warmRest), and until it reaches a game, that game's changed files are still answered from
+   *      the previous build's cache. WARM_GAME fetches that one game's missing files first.
+   *   3. Open it: the same path a tapped notification takes (launcher only, never over a game).
+   * `beforeOpen` runs just before step 3 (Messages closes there, so the Play button says Loading
+   * for the whole wait instead of leaving a bare launcher on screen).
+   */
+  async openGameFresh(id, { beforeOpen } = {}) {
+    if (this.current || !GAMES.some((x) => x.id === id)) return;
+    this._queuePushOpen(id, { fresh: '1' });
+    if (await this._ensureNewestBuild()) return;
+    await this._warmGame(id);
+    if (typeof beforeOpen === 'function') { try { beforeOpen(); } catch { /* still open the game */ } }
+    await this._openPushedGame(id);
+  }
+
+  /** Get this page onto the newest deployed build. Resolves true when a reload is under way (the
+   *  caller stops), false when this page is already newest or nothing more can be learned (offline,
+   *  no worker, or a build that did not land within `ms`). */
+  async _ensureNewestBuild(ms = 20000) {
+    if (!('serviceWorker' in navigator) || this._destroyed) return false;
+    if (this._reloaded) return true;
+    const landed = this._awaitNewBuild(ms);     // armed BEFORE asking, as in _forceUpdate
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+    } catch { /* offline: the version check below decides */ }
+    let [running, latest] = await Promise.all([this._runningVersion(), this._latestVersion()]);
+    if (running && latest && latest !== running) {
+      if (await landed) running = await this._runningVersion();
+      else console.warn(`[hub] ${latest} did not take over in time; opening on ${running}`);
+    }
+    // The WORKER being newest is not enough; the page must be too (see _forceUpdate).
+    if (running && this._loadedVersion && running !== this._loadedVersion) {
+      noteLifecycle(`play: page on ${this._loadedVersion}, worker on ${running}; reloading first`);
+      this._applyUpdate();
+      return true;
+    }
+    return false;
+  }
+
+  /** Ask the worker to fetch one game's files into the current cache now (sw.js WARM_GAME).
+   *  Resolves when done or after `ms`; never throws. A launch-out game has nothing to warm. */
+  _warmGame(id, ms = 8000) {
+    const g = GAMES.find((x) => x.id === id);
+    const m = g && /^\.\.\/([a-z0-9-]+)\//.exec(String(g.module || ''));
+    const ctrl = typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!m || !ctrl) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      try {
+        const ch = new MessageChannel();
+        const t = setTimeout(() => resolve(false), ms);
+        ch.port1.onmessage = (e) => {
+          clearTimeout(t);
+          const r = (e && e.data) || {};
+          if (r.failed) console.warn(`[hub] ${r.failed} of ${id}'s files could not be refreshed (offline?)`);
+          resolve(!!r.ok);
+        };
+        ctrl.postMessage({ type: 'WARM_GAME', dir: m[1] }, [ch.port2]);
+      } catch { resolve(false); }
+    });
+  }
 
   /** THE APP UPDATES ITSELF, AND THE CHIP TELLS THE TRUTH ABOUT IT (2026-09-01).
    *

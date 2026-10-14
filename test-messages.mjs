@@ -155,5 +155,45 @@ const missingFromRules = BRANCHES.filter((b) => !ruleBranches.includes(b));
 eq(missingFromBackup.join(','), '', 'every ruled branch is in the backup BRANCHES list');
 eq(missingFromRules.join(','), '', 'every backed-up branch has a rule (or it is unreadable)');
 
+// --- messages from the Game Hub (js/hub-messages.js, 2026-10-14) ---------------------------------
+{
+  const H = await import('./js/hub-messages.js');
+  const list = [
+    { id: 'a', to: ['3VN33'], atMs: 2000, text: { en: 'two', es: 'dos' }, play: 'way-out' },
+    { id: 'b', to: ['3vn33', 'ABCDE'], atMs: 1000, text: { en: 'one' } },
+    { id: 'c', to: ['ZZZZZ'], atMs: 3000, text: { en: 'not yours' } },
+    { id: 'd', to: ['3VN33'], atMs: 0, text: { en: 'no time' } },
+  ];
+  eq(H.hubMessagesFor('3VN33', list).map((m) => m.id).join(','), 'b,a', 'hub: only this code, oldest first, timeless dropped');
+  eq(H.hubMessagesFor('QQQQQ', list).length, 0, 'hub: nothing for someone not addressed');
+  eq(H.hubMessagesFor(null, list).length, 0, 'hub: nothing without a code');
+  eq(H.hubText(list[1], 'es'), 'one', 'hub: falls back to English');
+  eq(H.playOf(list[0]), 'way-out', 'hub: Play names the hub id');
+  eq(H.playOf({ play: '../evil' }), '', 'hub: a malformed play id shows no button');
+  eq(asCode(H.HUB_CODE), null, 'hub: the sender code is never a player code');
+  const row = H.hubThreadRow('3VN33', { list, lang: 'en', seenAt: 0 });
+  eq(row.at, 2000, 'hub: the row carries the newest message time');
+  eq(row.preview, 'two', 'hub: the row previews the newest message');
+  ok(isUnread(row, '3VN33'), 'hub: an unseen hub row is unread');
+  ok(!isUnread(H.hubThreadRow('3VN33', { list, lang: 'en', seenAt: 2000 }), '3VN33'), 'hub: read once seen up to the newest');
+  eq(H.hubThreadRow('QQQQQ', { list }), null, 'hub: no row for someone not addressed');
+  const merged = H.withHubRow([{ code: 'AAAAA', at: 3000, seenAt: 3000 }, { code: 'BBBBB', at: 1000, seenAt: 1000 }], row);
+  eq(merged.map((r) => r.code).join(','), 'AAAAA,HUB,BBBBB', 'hub: merged newest first');
+  eq(countUnreadThreads(merged, '3VN33'), 1, 'hub: the badge counts the hub row');
+  eq(H.withHubRow(merged, row).filter((r) => r.hub).length, 1, 'hub: never merged twice');
+  // The real list: every entry well formed, ids unique (append-only, never reused).
+  const ids = H.HUB_MESSAGES.map((m) => m.id);
+  eq(new Set(ids).size, ids.length, 'hub: message ids are unique');
+  for (const m of H.HUB_MESSAGES) {
+    ok(Array.isArray(m.to) && m.to.length && m.to.every((c) => asCode(c)), `hub ${m.id}: every recipient is a player code`);
+    ok(Number(m.atMs) > Date.UTC(2026, 0, 1), `hub ${m.id}: a real send time`);
+    ok(m.text && m.text.en && m.text.es, `hub ${m.id}: English and Spanish`);
+    ok(!/\u2014/.test(m.text.en + m.text.es), `hub ${m.id}: no em dash`);
+    if (m.play) eq(H.playOf(m), m.play, `hub ${m.id}: Play id is well formed`);
+  }
+  const sw = readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
+  ok(sw.includes("type === 'WARM_GAME'"), 'hub: the worker answers WARM_GAME (Play loads the newest files)');
+}
+
 console.log(`  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

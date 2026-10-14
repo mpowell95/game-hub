@@ -210,6 +210,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `device-report.js` / `install-state.js` | device dump used by every bug report; installed-vs-tab plus phone size (`read-install-state.mjs --screens`) |
 | `bug-report.js` / `bug-report-ui.js` | Report a bug, offline outbox, Matt's replies (`bugReplies/<deviceId>/`), soft delete |
 | `messages.js` / `messages-ui.js` | player-to-player Messages (see "Messages") |
+| `hub-messages.js` | messages FROM the Game Hub (`HUB_MESSAGES`, in code; see "Messages") |
 | `challenges.js` / `challenges-ui.js` / `challenge-life.js` | the Challenges screen (reads only) and the shared cancel/expire rules (`ANSWER_MS` 3 days) |
 | `match-chat.js` / `match-chat-ui.js` | in-match quick chat for EVERY online game, at `<node>/chat/<matchId>` (beside the match, never inside) |
 | `error-log.js` | last 20 uncaught errors (`gamehub.errorlog.v1`) |
@@ -370,6 +371,11 @@ never crash.
   profile pill badge = bug-report replies.
 - "Send message" on a leaderboard detail screen; hidden on your own row and on records with no
   code. Full contract: `js/CLAUDE.md`, "Messages".
+- **Messages from the Game Hub (2026-10-14)**: `js/hub-messages.js` `HUB_MESSAGES`, append-only, by
+  player code; sending = appending an entry + deploying. One "Game Hub" conversation with the hub
+  icon, no reply box, no Hide; read state local (`gamehub.hubMessages.v1`). `play: '<hubId>'` adds a
+  Play button: newest build, then that game's newest files (`sw.js` `WARM_GAME`), then the game
+  (`hub.openGameFresh`). No phone notification (would need a Cloud Function).
 
 ## The profile page's structure (2026-08-31)
 
