@@ -96,7 +96,10 @@ const recorders = [...src.matchAll(/^export function (record[A-Za-z0-9]*)\(/gm)]
 // recordHoldemHand (2026-09-28) counts HANDS inside a game (hands won, biggest pot, best hand),
 // not results: a table can finish many hands a minute, and the game those hands belong to is still
 // counted by the gated recordResult('holdem').
-const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand']);
+// recordGridlockHint (2026-10-14) notes that a hint was used on a level, which HALVES that level's
+// points: it is a cost, not a play. Gating it would let a fast run of hints go unrecorded and earn
+// full points, the very exploit it exists to close.
+const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint']);
 ok('found the recorders', recorders.length >= 18);
 for (const r of recorders) {
   if (EXEMPT.has(r)) continue;

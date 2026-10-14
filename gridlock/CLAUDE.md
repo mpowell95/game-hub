@@ -49,18 +49,26 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
 - **A move is one block slid any distance in one go** (how Unblock Me and Fogleman count). The
   "Moves" chip is the length of the player's current path: Undo takes one back.
 - Stars against the level's **fewest moves** (`glStars`): the fewest = 3, within a quarter of it
-  (never less than 2 moves of slack) = 2, any solve = 1. A solve with no hint wears the **crown**.
+  (never less than 2 moves of slack) = 2, any solve = 1.
 - **Hint**: the game's own solver finds the best next move from where the player is; the block
-  glows and a dashed ghost shows where it goes. It costs the crown for that level (the attempt's
-  hint count is saved with the attempt, so leaving and coming back does not clear it). Tapping Hint
-  again on the same position does not count twice.
+  glows and a dashed ghost shows where it goes. Tapping Hint again on the same position does not
+  count twice.
+- **A hint costs that level its crown and HALF its points, for good** (Matt, 2026-10-14, after a
+  review of how the leaderboard could be gamed: free unlimited hints let anyone clear every level by
+  following them, for full points). The first hint on a level is recorded per LEVEL in the stats
+  store (`gl.hint`, synced), not just in the attempt, so leaving the level, switching levels or
+  replaying it later cannot clear it (that was the "crown trick"). A level already solved with no
+  hint keeps its crown and full points whatever happens after. Across phones it is decided by time:
+  a clean solve on one phone AFTER a hint on another still pays half (`glCrowned`). The win popup
+  says "Hint used: half points, no crown".
 - Restart puts every block back (moves 0); the hint count stays.
 - **Levels** (the setup screen, beside How to play): the selected difficulty's levels, 25 a page
   (5 x 5, pager underneath, never a scroll). A cleared level shows its best stars and its crown and
   can be replayed for more stars; the next level wears the `#ffce3a` outline; later ones are locked,
   because a difficulty is played in order. Replaying never adds points (they count distinct levels).
-- Expert levels (151 on) may contain fixed **walls** (metal plates on wood, a striped barrier in the
-  car park).
+- Hard and Expert levels (2001 on) may contain fixed **walls** (metal plates on wood, a striped
+  barrier in the car park).
+- The Levels screen has a pager of 40 pages per difficulty: `‹ ›` one page, `« »` ten.
 
 ## The play screen's controls (Matt, 2026-10-14)
 
@@ -92,13 +100,25 @@ the red car), because Matt is red/green colourblind.
 
 ## The ladder, stars and points
 
-Arrow Maze's ladder (way-out/CLAUDE.md, "The ladder and points"), on purpose, so the family meets
-one system: levels 1, 2, 3...; **Easy 1-50, Medium 51-100, Hard 101-150, Expert 151 to the last
-level shipped**. Pick any difficulty; each remembers its own next level (`next[band]`), which only
-goes up and is never behind the highest level the stats store says was cleared in that band.
+**LADDER 2 (2026-10-14, Matt: *"Add more levels. If other games have 18,000+, we should have more
+than 400. Especially if half of the expert ones are basically unsolvable by normal people."*):
+Easy 1-1000, Medium 1001-2000, Hard 2001-3000, Expert 3001-4000** (Expert can grow at the end).
+Shaped like Arrow Maze's ladder (numbered levels, bands, start anywhere), ten times bigger. Each
+difficulty's NEXT level is not stored: it is the lowest level of that band not yet cleared (a band is
+played in order), and any cleared level stays playable from the Levels screen.
 
-**Points = the sum of `glLevelPoints(n)` over every DISTINCT level cleared** (1 for levels 1-25, one
-more every 25 levels, up to 8). Read from the per-level map, **not** from `byDiff` counts like Arrow
+**Ladder 1** (the first build: 400 levels in bands of 50, shipped admin only the same morning) is
+FROZEN in `gridlock/data/levels-v1.txt`. **Every one of its boards is on ladder 2**, and
+`js/gridlock-v1map.js` (generated) says where; `glLevels()` reads a ladder 1 entry (`gl.lv`) as that
+board's ladder 2 level, so nothing anyone cleared on ladder 1 is lost or hidden (THE LAW rules 1, 3,
+5: the old keys keep their old meaning, the reading is done at display time, nothing is rewritten).
+An attempt in progress on ladder 1 (`gamehub.gridlock.save.v1`) is carried once into the new save key
+as the same board; the old key is never written again. The settings key's old `next` field is kept
+as stored and not read.
+
+**Points = the sum over every DISTINCT level cleared** of `glLevelPoints(n)` (1 for levels 1-500,
+one more every 500, up to 8: Easy 1-2, Medium 3-4, Hard 5-6, Expert 7-8), or HALF of it (rounded up)
+for a level a hint was used on. Read from the per-level map, **not** from `byDiff` counts like Arrow
 Maze: here a level can be replayed (Play again, to earn more stars), and a replay must not add points,
 nor may a second phone double them. The leaderboard ranks on points, one number across the four
 difficulties (not hardest-difficulty-first), exactly as Arrow Maze's board does; a difficulty filter
@@ -106,17 +126,20 @@ shows that difficulty's points. Standing records: levels cleared, three-star lev
 
 ## Persistence and stats
 
-- Settings `gamehub.gridlock.v1`: `{ look: 'wood'|'cars', band, next: { easy, medium, hard, expert } }`.
+- Settings `gamehub.gridlock.v1`: `{ look: 'wood'|'cars', band }` (+ ladder 1's `next`, kept, unread).
   Saved on selection.
-- Progress `gamehub.gridlock.save.v1`: `{ <band>: { v: 1, n, hist: [[piece, from, to], ...], hints } | null }`,
+- Progress `gamehub.gridlock.save.v2` (ladder 2 numbers; `.v1` is ladder 1's, read once):
+  `{ <band>: { v: 1, n, hist: [[piece, from, to], ...], hints } | null, migrated: 1 }`,
   one attempt per difficulty, written after every move. **It is replayed move by move on load and
   trusted only if every move is legal on that level's board**; anything else starts the level fresh.
   A save whose last move already solved the level (the app closed during the slide out) is counted
   as the win on reopening, not shown as a finished board.
 - Stats: **`recordGridlock(band, { level, moves, stars, hints })`**, once per solve (replays too).
   One play and one win in total and in the band, plus the **`gl` sub-counter**:
-  `gl.lv['L<n>'] = { m, s, c }` (fewest moves solved in, best stars, 1 once solved with no hint) and
-  `gl.hints`. Every field only improves (`glBest`). **Keys are `L<n>`, never bare numbers**:
+  `gl.lv2['L<n>'] = { m, s, c, t }` (fewest moves solved in, best stars, `c` 1 once solved with no
+  hint ever used on the level, `t` when), `gl.hint['L<n>']` (the first hint's time, written by
+  `recordGridlockHint` the moment Hint is tapped), `gl.hints`, and ladder 1's `gl.lv` (frozen). Every
+  field only improves (`glBest`; hint times keep the earliest). **Keys are `L<n>`, never bare numbers**:
   Firebase turns an object with mostly numeric keys into an ARRAY. The three-edit rule is done:
   `js/game-stats.js` (`ensureGl`, `recordGridlock`), My Stats (`gridlockScreen`), `js/players-agg.js`
   (per level the best of each field; a level on two phones counts once; hints add). `gridlock` is
@@ -132,16 +155,17 @@ solved arrangement; the farthest one is the level, and its distance is its exact
 (Michael Fogleman's method, https://michaelfogleman.com/rush; his database was not used because
 nothing says it can be reused). So a level never has a shortcut start. Long puzzles are rare, so
 most of the search EDITS the deepest layouts found so far (add, remove, swap or shift a block, move a
-wall), one process per CPU. Easy to Hard (1-150, no walls) take the unused puzzle nearest a target
-that rises smoothly; Expert takes the hardest puzzles found (walls or not), spread evenly through
-their sorted depths so it climbs to the longest one and never steps back.
+wall), one process per CPU. Easy to Hard (1-3000; walls from Hard on) take the unused puzzle nearest
+a target that rises smoothly (Easy 3 -> 12 moves, Medium 12 -> 20, Hard 20 -> 28), preferring few
+blocks early (5 at level 1 to 13 at 3000) and ladder 1's boards when they are the right length;
+Expert takes the longest puzzles (see below) and every ladder 1 board of that length.
 
-**APPEND-ONLY once shipped.** A player's progress is "levels 1..n", so a changed line would change
-what they cleared. `gridlock/js/test.js` re-solves every level (its fewest moves must be exact), and
-pins the shipped lines by hash (`PINNED`). To add levels: `node build-gridlock-levels.mjs --append
---count <new total>`, which keeps every existing line; leave the pin alone.
+**APPEND-ONLY once shipped.** A player's progress is per level number, so a changed line would
+change what they cleared. `gridlock/js/test.js` re-solves every level (its fewest moves must be
+exact), checks every ladder 1 board is where the map says, and pins the shipped lines by hash
+(`PINNED`). Expert can grow by appending; Easy to Hard are full.
 
-**Measured (the shipped 400, 2026-10-14):** a 15-minute search on 4 CPUs (one without walls, three
+**Measured (ladder 1, the first 400, kept for the record):** a 15-minute search on 4 CPUs (one without walls, three
 with) found ~42,000 distinct puzzles, the longest 51 moves without walls (the known maximum for a
 wall-free 6x6, Fogleman) and 47 with walls. Fewest moves by band: Easy 3-14 (average 9.5), Medium
 14-22 (18.1), Hard 22-30 (26.1), Expert 30-51 (35.2; 157 of its 250 levels have walls). No level is

@@ -98,6 +98,7 @@ const ASSETS = [
   './js/leaderboard-rank.js',
   './js/arrow-maze-time.js',
   './js/gridlock-points.js',
+  './js/gridlock-v1map.js',
   './js/difficulty-tiers.js',
   './js/net.js',
   './js/online-gate.js',
@@ -702,6 +703,8 @@ const NETWORK_FIRST = [
   './js/arrow-maze-time.js',
   // Gridlock's ladder, stars and points (2026-10-14): what is stored, merged and SHOWN per level.
   './js/gridlock-points.js',
+  // ...and where the first ladder's levels sit on ladder 2 (it decides which levels a player SEES as cleared).
+  './js/gridlock-v1map.js',
   './js/admin-ui.js',
   // Retired, lazily loaded, and it clears `gamehub.challenge` on its tester-only reset path. Free
   // to keep fresh (nothing imports it at load) and it is a gamehub.* write, so the structural
@@ -819,12 +822,12 @@ const REST_MANIFEST = {
   './way-out/js/strings.js': 'ee82a3322d',
   './gridlock/': '0c0b6bd30e',
   './gridlock/index.html': '0c0b6bd30e',
-  './gridlock/css/gridlock.css': 'a4697153aa',
-  './gridlock/js/ui.js': '0998ff906e',
+  './gridlock/css/gridlock.css': 'bac319bed3',
+  './gridlock/js/ui.js': 'a27e5a1793',
   './gridlock/js/engine.js': 'bc7b7b12e0',
   './gridlock/js/art.js': 'a53e8b878b',
-  './gridlock/js/levels.js': 'f618257e5f',
-  './gridlock/js/strings.js': '527fc70f6e',
+  './gridlock/js/levels.js': '5f6c8c3115',
+  './gridlock/js/strings.js': '0532c0ae55',
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
   './flick-soccer/css/flick-soccer.css': 'd886602798',

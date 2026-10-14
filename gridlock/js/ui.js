@@ -14,16 +14,25 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordGridlock, loadStats } from '../../js/game-stats.js';
-import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glLevelPoints, glStars, glLevels, glPoints } from '../../js/gridlock-points.js';
+import { recordGridlock, recordGridlockHint, loadStats } from '../../js/game-stats.js';
+import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glLevelPoints, glStars, glLevels, glHints, glCrowned, glPointsFor, glPoints } from '../../js/gridlock-points.js';
+import { V1_TO_V2 } from '../../js/gridlock-v1map.js';
 import { N, EXIT_ROW, SOLVED_POS, parse, positions, range, solve, isSolved, cellOf } from './engine.js';
 import { LEVELS } from './levels.js';
 import { pieceArt, RED, WOOD_TONES, CAR_COLORS } from './art.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
-const SETTINGS_KEY = 'gamehub.gridlock.v1';     // { look, band, next: { easy, medium, hard, expert } }
-const SAVE_KEY = 'gamehub.gridlock.save.v1';     // { <band>: { v, n, hist: [[piece, from, to]], hints } | null }
+const SETTINGS_KEY = 'gamehub.gridlock.v1';     // { look, band } (+ the first build's `next`, kept as stored, unread)
+// Progress, one attempt per difficulty: { <band>: { v, n, hist: [[piece, from, to]], hints } | null }.
+// `.v2` holds LADDER 2 level numbers (2026-10-14). The first build's `.v1` key held ladder 1 numbers;
+// it is read ONCE (an attempt in progress is carried across as the same board, js/gridlock-v1map.js)
+// and never written again (THE LAW rule 5).
+const OLD_SAVE_KEY = 'gamehub.gridlock.save.v1';
+const SAVE_KEY = 'gamehub.gridlock.save.v2';
+// The test seam (window.__glTest: the solution and a move function) exists only on a dev server:
+// on the live site it would let anyone solve every level from the browser console (Matt, 2026-10-14).
+const DEV_HOST = (() => { try { return /^(localhost|127\.0\.0\.1)$/.test(location.hostname); } catch { return false; } })();
 const SAVE_V = 1;
 const TOTAL = LEVELS.length;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
@@ -55,23 +64,28 @@ function writeJSON(key, v, what) {
   try { localStorage.setItem(key, JSON.stringify(v)); return true; } catch (err) { console.error(`[gridlock] ${what} NOT saved`, err); return false; }
 }
 
-/** The levels this player has cleared (this device's store), as { n: {m, s, c} }. */
+/** The levels this player has cleared (this device's store), as { n: {m, s, c, t} } on ladder 2. */
 function clearedLevels() {
   try { return glLevels(loadStats().games.gridlock); } catch { return {}; }
 }
+/** When a hint was first used on each level (this device's store): { n: ms }. */
+function hintTimes() {
+  try { return glHints(loadStats().games.gridlock); } catch { return {}; }
+}
 
-/** Settings. `next[band]` is the next level to play in that band; it only ever goes up, and it is
- *  never behind what the stats store says was cleared (so a lost settings key costs no progress). */
+/** Settings: { look, band }. The next level of each band is not stored: it is the LOWEST level of
+ *  that band not yet cleared (a band is played in order, so for a player who cleared 1..k it is
+ *  k + 1; a level carried over from ladder 1 can be cleared further on, and stays playable). The
+ *  first build stored ladder 1 numbers in `next`; that field is written back exactly as stored and
+ *  never read (THE LAW rule 5). */
 function loadSettings() {
   const v = readJSON(SETTINGS_KEY);
   const cleared = clearedLevels();
   const next = {};
   for (const k of GL_TIERS) {
-    const lo = GL_BAND_START[k], hi = bandEnd(k) + 1;
-    let n = Number(v.next && v.next[k]);
-    n = Number.isInteger(n) && n >= lo && n <= hi ? n : lo;
-    // Levels in a band are played in order, so the next one is past the highest cleared.
-    for (const key of Object.keys(cleared)) { const c = +key; if (glBandOf(c) === k && c + 1 > n) n = Math.min(hi, c + 1); }
+    let n = GL_BAND_START[k];
+    const end = bandEnd(k);
+    while (n <= end && cleared[n]) n++;
     next[k] = n;
   }
   return {
@@ -82,16 +96,32 @@ function loadSettings() {
 }
 function saveSettings(patch = {}) {
   const raw = readJSON(SETTINGS_KEY), cur = loadSettings();
-  const next = { ...cur.next };
-  if (patch.next) for (const k of GL_TIERS) next[k] = Math.max(cur.next[k], Math.floor(Number(patch.next[k]) || 0));
-  writeJSON(SETTINGS_KEY, { ...raw, look: patch.look || cur.look, band: patch.band || cur.band, next }, 'settings');
+  writeJSON(SETTINGS_KEY, { ...raw, look: patch.look || cur.look, band: patch.band || cur.band }, 'settings');
   return loadSettings();
+}
+
+/** The saves, carrying the first build's attempts (ladder 1 numbers) across ONCE, as the same
+ *  boards on ladder 2, into the band each now belongs to. The old key is never written. */
+function loadSaves() {
+  const all = readJSON(SAVE_KEY);
+  if (all.migrated) return all;
+  const old = readJSON(OLD_SAVE_KEY);
+  for (const band of GL_TIERS) {
+    const sv = old[band];
+    const n2 = sv && V1_TO_V2[Math.floor(Number(sv.n)) - 1];
+    if (!n2) continue;
+    const b2 = glBandOf(n2);
+    if (!all[b2]) all[b2] = { ...sv, n: n2 };
+  }
+  all.migrated = 1;
+  writeJSON(SAVE_KEY, all, 'level progress');
+  return all;
 }
 
 /** The saved attempt for a band's level n, re-played from the start so it is trusted only when every
  *  move in it is legal on that board. Anything else starts the level fresh. */
 function readSave(band, n, pz) {
-  const s = readJSON(SAVE_KEY)[band];
+  const s = loadSaves()[band];
   if (!s || s.v !== SAVE_V || s.n !== n || !Array.isArray(s.hist)) return null;
   const pos = positions(pz);
   const hist = [];
@@ -107,12 +137,12 @@ function readSave(band, n, pz) {
   return { pos, hist, hints: Math.max(0, Math.floor(Number(s.hints) || 0)) };
 }
 function writeSave(band, data) {
-  const all = readJSON(SAVE_KEY);
+  const all = loadSaves();
   all[band] = data;
   writeJSON(SAVE_KEY, all, 'level progress');
 }
 function hasProgress(band, n) {
-  const s = readJSON(SAVE_KEY)[band];
+  const s = loadSaves()[band];
   return !!(s && s.v === SAVE_V && s.n === n && Array.isArray(s.hist) && s.hist.length);
 }
 
@@ -315,15 +345,15 @@ class Gridlock {
     const pages = Math.max(1, Math.ceil((last - first + 1) / PAGE));
     this.page = Math.max(0, Math.min(pages - 1, this.page | 0));
     const a = first + this.page * PAGE, z = Math.min(last, a + PAGE - 1);
-    const cleared = clearedLevels();
+    const cleared = clearedLevels(), hints = hintTimes();
     let tiles = '';
     for (let n = a; n <= z; n++) {
       const e = cleared[n];
-      const open = n <= next;
+      const open = n <= next || !!e;
       const stars = e ? [0, 1, 2].map((k) => `<i class="${k < e.s ? 'is-on' : ''}"></i>`).join('') : '';
       const label = !open ? t('level_locked_aria', { n }) : e ? t('level_tile_aria', { n, s: e.s }) : t('level_n', { n });
       tiles += `<button type="button" class="gl-tile${e ? ' is-done' : ''}${n === next ? ' is-next' : ''}" data-act="pick" data-n="${n}" ${open ? '' : 'disabled'} aria-label="${label}">
-        <b>${n}</b>${open ? `<span class="gl-tile-stars" aria-hidden="true">${stars}</span>` : '<span class="gl-lock" aria-hidden="true"></span>'}${e && e.c ? '<span class="gl-tile-crown" aria-hidden="true">&#128081;</span>' : ''}
+        <b>${n}</b>${open ? `<span class="gl-tile-stars" aria-hidden="true">${stars}</span>` : '<span class="gl-lock" aria-hidden="true"></span>'}${glCrowned(e, hints[n]) ? '<span class="gl-tile-crown" aria-hidden="true">&#128081;</span>' : ''}
       </button>`;
     }
     return `
@@ -333,9 +363,11 @@ class Gridlock {
         </div>
         <div class="gl-grid">${tiles}</div>
         <div class="gl-pager">
+          <button type="button" class="gh-btn" data-act="page" data-step="-10" ${this.page === 0 ? 'disabled' : ''} aria-label="${t('page_back10')}">&laquo;</button>
           <button type="button" class="gh-btn" data-act="page" data-step="-1" ${this.page === 0 ? 'disabled' : ''} aria-label="${t('page_prev')}">&lsaquo;</button>
           <span>${t('page_of', { p: this.page + 1, n: pages })}</span>
           <button type="button" class="gh-btn" data-act="page" data-step="1" ${this.page >= pages - 1 ? 'disabled' : ''} aria-label="${t('page_next')}">&rsaquo;</button>
+          <button type="button" class="gh-btn" data-act="page" data-step="10" ${this.page >= pages - 1 ? 'disabled' : ''} aria-label="${t('page_fwd10')}">&raquo;</button>
         </div>
         <button type="button" class="gh-btn gh-btn--block gl-lv-back" data-act="home">${ICON_BACK}<span>${t('back_setup')}</span></button>
       </div>`;
@@ -377,7 +409,7 @@ class Gridlock {
     } else if (act === 'help') this._openHelp();
     else if (act === 'levels') { this.screen = 'levels'; this.page = Math.floor((Math.min(this.settings.next[this.settings.band], bandEnd(this.settings.band)) - GL_BAND_START[this.settings.band]) / PAGE); this.render(); }
     else if (act === 'page') { this.page += +btn.dataset.step; this.render(); }
-    else if (act === 'pick') { const n = +btn.dataset.n; if (n >= 1 && n <= this.settings.next[this.settings.band] && n <= bandEnd(this.settings.band)) this._startLevel(this.settings.band, n); }
+    else if (act === 'pick') { const n = +btn.dataset.n, b = this.settings.band; if (n >= GL_BAND_START[b] && n <= bandEnd(b) && (n <= this.settings.next[b] || clearedLevels()[n])) this._startLevel(b, n); }
     else if (act === 'home') { this.screen = 'home'; this.render(); }
     else if (act === 'menu') this._toSetup();
     else if (act === 'undo') this._undo();
@@ -507,6 +539,7 @@ class Gridlock {
     this.winShown = false;
     this.drag = null;
     this.prevBest = clearedLevels()[n] || null;
+    this.prevHint = hintTimes()[n];
     this.settings = saveSettings({ band });
     this.screen = 'play';
     this._save();
@@ -552,6 +585,10 @@ class Gridlock {
     this.hintMove = path[0];
     this.hintKey = key;
     this.hints += 1;
+    // Remembered per LEVEL in the stats store (and synced), not just in this attempt: leaving the
+    // level and coming back must not forget it (Matt, 2026-10-14). From now on this level earns half
+    // its points and no crown, unless it was already solved with no hint.
+    recordGridlockHint(this.n);
     this._save();
     this._paintHint();
     this._paintHud();
@@ -584,11 +621,15 @@ class Gridlock {
     const moves = this.hist.length;
     const stars = glStars(moves, this.fewest);
     // Record first, then everything else: the solve must be counted even if the app closes now.
+    const prevPts = this.prevBest ? glPointsFor(this.n, this.prevBest, this.prevHint) : 0;
     const res = recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints });
     if (!res) console.warn('[gridlock] the solve was not recorded (rate gate)');
     writeSave(this.band, null);
-    if (this.n + 1 > this.settings.next[this.band]) this.settings = saveSettings({ next: { [this.band]: this.n + 1 } });
-    this.result = { moves, stars, crown: this.hints === 0, first: !this.prevBest, better: !!(this.prevBest && (moves < this.prevBest.m || stars > this.prevBest.s)) };
+    this.settings = loadSettings();
+    const now = clearedLevels()[this.n], hintAt = hintTimes()[this.n];
+    const crown = glCrowned(now, hintAt);
+    const gained = now ? glPointsFor(this.n, now, hintAt) - prevPts : 0;
+    this.result = { moves, stars, crown, hinted: !crown, gained, first: !this.prevBest, better: !!(this.prevBest && (moves < this.prevBest.m || stars > this.prevBest.s)) };
     // The red block leaves through the exit, then the popup.
     this._place(0, false);
     this._paintHud();
@@ -599,8 +640,8 @@ class Gridlock {
     const r = this.result || { moves: this.hist.length, stars: 1, crown: false, first: false };
     const starRow = [0, 1, 2].map((k) => `<svg viewBox="0 0 46 46" class="gl-star${k < r.stars ? ' is-on' : ''}" aria-hidden="true"><path d="${star(23, 24, 20)}"/></svg>`).join('');
     const end = this.n >= bandEnd(this.band);
-    const third = r.first
-      ? `<div><small>${t('points')}</small><b>+${glLevelPoints(this.n)}</b></div>`
+    const third = r.gained > 0
+      ? `<div><small>${t('points')}</small><b>+${r.gained}</b></div>`
       : `<div><small>${r.better ? t('new_best') : t('fewest')}</small><b>${r.better ? r.moves : this.fewest}</b></div>`;
     const m = this.root.querySelector('.gl-modal');
     m.innerHTML = `
@@ -608,7 +649,7 @@ class Gridlock {
         <button type="button" class="gh-modal__close" data-act="win-close" aria-label="${t('close_aria')}">&times;</button>
         <h2 class="gh-modal__title" id="gl-win-h">${t('cleared', { n: this.n })}</h2>
         <div class="gl-stars" role="img" aria-label="${t('stars_aria', { n: r.stars })}">${starRow}</div>
-        ${r.crown ? `<div class="gl-crown"><span aria-hidden="true">&#128081;</span>${t('no_hints')}</div>` : ''}
+        ${r.crown ? `<div class="gl-crown"><span aria-hidden="true">&#128081;</span>${t('no_hints')}</div>` : `<p class="gl-hint-note">${t('hint_half')}</p>`}
         ${end ? `<p class="gl-how-txt">${this.band === 'expert' ? t('all_done') : t('band_finished', { name: t('tier_' + this.band) })}</p>` : ''}
         <div class="gl-nums">
           <div><small>${t('moves')}</small><b>${r.moves}</b></div>
@@ -796,6 +837,7 @@ class Gridlock {
 
   /** A seam for headless checks (test-visual.mjs and QA): read the state and make a move. */
   _installTestSeam() {
+    if (!DEV_HOST) return;
     try {
       window.__glTest = {
         state: () => ({ band: this.band, n: this.n, pos: this.pos.slice(), moves: this.hist.length, fewest: this.fewest, won: this.won, hints: this.hints }),

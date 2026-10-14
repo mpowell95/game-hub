@@ -222,12 +222,15 @@
 //       gridlock: {
 //         total, byDiff,                           // byDiff keyed easy|medium|hard|expert; one
 //                                                   // play+won per level solved (replays too)
-//         gl: { lv: { L<n>: { m, s, c } }, hints } },
+//         gl: { lv: { L<n>: { m, s, c } }, lv2: { L<n>: { m, s, c, t } }, hint: { L<n>: ms }, hints } },
 //                                                   // (2026-10-14) per LADDER level n: m = fewest
 //                                                   // moves solved in (lower is better, never 0),
 //                                                   // s = best stars 1-3, c = 1 once solved with no
-//                                                   // hint. Each only improves. Keyed 'L<n>' so
-//                                                   // Firebase never turns it into an array.
+//                                                   // hint (t = when). Each only improves. Keyed
+//                                                   // 'L<n>' so Firebase never turns it into an array.
+//                                                   // lv = ladder 1 (400 levels, FROZEN, read through
+//                                                   // js/gridlock-v1map.js); lv2 = ladder 2; hint =
+//                                                   // first hint time per ladder 2 level.
 //                                                   // POINTS come from this map, never from byDiff
 //                                                   // (js/gridlock-points.js). See recordGridlock
 //       contexto: {
@@ -499,9 +502,11 @@ function ensureWo(g) {
 /** Gridlock (2026-10-14): the per-level map and a lifetime hint count. A malformed map or entry is
  *  left out of the map rather than guessed at; every well formed entry is kept as stored. */
 function ensureGl(g) {
-  if (!g.gl || typeof g.gl !== 'object' || Array.isArray(g.gl)) g.gl = { lv: {}, hints: 0 };
+  if (!g.gl || typeof g.gl !== 'object' || Array.isArray(g.gl)) g.gl = { lv: {}, lv2: {}, hint: {}, hints: 0 };
   if (!Number.isFinite(g.gl.hints)) g.gl.hints = 0;
-  if (!g.gl.lv || typeof g.gl.lv !== 'object' || Array.isArray(g.gl.lv)) g.gl.lv = {};
+  // `lv` is LADDER 1 (frozen, kept as stored and read through js/gridlock-v1map.js); `lv2` and `hint`
+  // are ladder 2 (2026-10-14). See js/gridlock-points.js.
+  for (const k of ['lv', 'lv2', 'hint']) if (!g.gl[k] || typeof g.gl[k] !== 'object' || Array.isArray(g.gl[k])) g.gl[k] = {};
 }
 
 /** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
@@ -1705,9 +1710,11 @@ export function recordWayOut(tier, f = {}) {
 }
 
 /** Gridlock: one level solved (2026-10-14). One play and one win in total and in the level's band
- *  (a replay counts again there: it was played and solved), and the level's entry in `gl.lv` only
- *  ever IMPROVES: fewest moves (Math.min), stars (Math.max), no-hint (once 1, always 1). Points are
- *  read from that map (js/gridlock-points.js), so a replay or a second phone never adds points.
+ *  (a replay counts again there: it was played and solved), and the level's ladder 2 entry in
+ *  `gl.lv2` only ever IMPROVES: fewest moves (Math.min), stars (Math.max), and the crown: `c` = 1
+ *  only for a solve with no hint in the attempt AND no hint ever used on that level here (`gl.hint`),
+ *  stamped with the time `t` it was first earned. Points are read from these maps
+ *  (js/gridlock-points.js), so a replay or a second phone never adds points.
  *
  *  `f` = { level, moves, stars, hints }. A level number that is not a positive integer, or a solve
  *  with no moves, records the play but writes no level entry (rule 4: never invent a level). */
@@ -1722,8 +1729,29 @@ export function recordGridlock(band, f = {}) {
   g.gl.hints += h;
   if (n >= 1 && m >= 1) {
     const s = Math.max(1, Math.min(3, Math.floor(Number(f.stars) || 1)));
-    g.gl.lv['L' + n] = glBest(g.gl.lv['L' + n], { m, s, c: h === 0 ? 1 : 0 });
+    const c = h === 0 && !(Number(g.gl.hint['L' + n]) > 0) ? 1 : 0;
+    const e = { m, s, c };
+    if (c) e.t = Date.now();
+    g.gl.lv2['L' + n] = glBest(g.gl.lv2['L' + n], e);
   }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Gridlock: a hint was used on ladder 2 level n. Keeps the FIRST time only (it never moves later,
+ *  THE LAW rule 2's direction for this field: the earliest hint is the fact). Not a play, so not
+ *  rate-gated. From then on that level earns half its points and no crown, unless it had already been
+ *  solved with no hint before (js/gridlock-points.js glCrowned). */
+export function recordGridlockHint(level) {
+  const n = Math.floor(Number(level) || 0);
+  if (n < 1) return null;
+  const st = loadStats();
+  const g = st.games.gridlock;
+  ensureGl(g);
+  const k = 'L' + n;
+  if (Number(g.gl.hint[k]) > 0) return st;
+  g.gl.hint[k] = Date.now();
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

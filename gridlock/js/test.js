@@ -9,7 +9,9 @@
 import { createHash } from 'node:crypto';
 import { parse, positions, solve, range, moves, isSolved, serialize, N, EXIT_ROW, SOLVED_POS } from './engine.js';
 import { LEVELS } from './levels.js';
+import { readFileSync } from 'node:fs';
 import { GL_BAND_START, glBandOf } from '../../js/gridlock-points.js';
+import { V1_TO_V2 } from '../../js/gridlock-v1map.js';
 
 let fails = 0;
 const ok = (label, cond) => { if (!cond) { fails++; console.log('FAIL ', label); } };
@@ -39,7 +41,7 @@ for (const bad of ['', 'x'.repeat(36), 'oooooooooooooAoooooooooooooooooooooo', '
 }
 
 // --- the shipped levels -----------------------------------------------------------------------
-ok('levels: at least 150 (Easy to Hard) exist', LEVELS.length >= 150);
+ok('levels: Easy, Medium and Hard are full (3000) and Expert has some', LEVELS.length > 3000);
 const seen = new Set();
 let worst = 0, prev = 0, biggestDrop = 0;
 const t0 = performance.now();
@@ -53,7 +55,7 @@ LEVELS.forEach((line, k) => {
   const pos = positions(pz);
   ok(`level ${n}: not already solved`, !isSolved(pos));
   ok(`level ${n}: nothing but red lies across the exit row`, pz.pieces.every((p, i) => i === 0 || !p.h || p.line !== EXIT_ROW));
-  ok(`level ${n}: walls only from Expert`, (pz.walls.length > 0) === (n >= GL_BAND_START.expert) || pz.walls.length === 0);
+  ok(`level ${n}: walls only from Hard on`, pz.walls.length === 0 || n >= GL_BAND_START.hard);
   const s = performance.now();
   const path = solve(pz, pos);
   worst = Math.max(worst, performance.now() - s);
@@ -70,14 +72,25 @@ const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 for (const b of Object.keys(byBand)) console.log(`${b}: ${byBand[b].length} levels, fewest moves ${Math.min(...byBand[b])}..${Math.max(...byBand[b])}, average ${avg(byBand[b]).toFixed(1)}`);
 console.log(`slowest solve (the hint) ${worst.toFixed(1)} ms; biggest drop between neighbours ${biggestDrop}`);
 ok('ladder: each band is harder on average than the one before', ['easy', 'medium', 'hard', 'expert'].filter((b) => byBand[b]).map((b) => avg(byBand[b])).every((v, i, a) => i === 0 || v > a[i - 1]));
-ok('ladder: no level is more than 3 moves easier than the one before it', biggestDrop <= 3);
-ok('hint: the slowest solve stays under 300 ms', worst < 300);
+ok('ladder: no level is more than 1 move easier than the one before it', biggestDrop <= 1);
+ok('hint: the slowest solve stays under 150 ms', worst < 150);
+
+// --- ladder 1 is frozen, and every one of its boards is on ladder 2 where the map says ----------
+// (2026-10-14: the first build's 400 levels became part of the 4000-level ladder 2; a level a player
+// cleared on ladder 1 is read as the same board, js/gridlock-points.js.)
+{
+  const v1 = readFileSync(new URL('../data/levels-v1.txt', import.meta.url), 'utf8').split('\n').filter((l) => l && !l.startsWith('#'));
+  const h1 = createHash('sha256').update(v1.join('\n')).digest('hex').slice(0, 16);
+  ok(`ladder 1: the frozen 400 levels are unchanged (${h1})`, v1.length === 400 && h1 === 'da9ad67d1c763857');
+  ok('ladder 1: the map has one ladder 2 level for each', V1_TO_V2.length === 400 && new Set(V1_TO_V2).size === 400);
+  ok('ladder 1: every board is where the map says, with the same fewest moves', v1.every((line, k) => LEVELS[V1_TO_V2[k] - 1] === line));
+}
 
 // --- the pin: shipped levels never change ----------------------------------------------------
-// PINNED = how many levels have shipped. To add levels, APPEND (build-gridlock-levels.mjs
-// --append) and leave this hash alone; it covers only the first PINNED lines.
-const PINNED = 400;
-const PIN_HASH = 'da9ad67d1c763857';
+// PINNED = how many ladder 2 levels have shipped. To add Expert levels, APPEND (keep every existing
+// line) and leave this hash alone; it covers only the first PINNED lines.
+const PINNED = 0;
+const PIN_HASH = '';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).join('\n')).digest('hex').slice(0, 16);
   ok(`pin: the first ${PINNED} shipped levels are unchanged (${h})`, h === PIN_HASH);
