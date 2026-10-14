@@ -5,19 +5,17 @@
 > loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
-Hub integration: in-hub `module:`. `isInProgress()` is mode-split (batch 9, 2026-07-23,
-HANDOFF-FB-RESUME): **solo** now has autosave/resume built in (see "Solo autosave" below), so it
-returns `false` for a live solo match — leaving is lossless; **MP** keeps the literal "no resume"
-meaning (`instance.mp && instance._inProgress()`) since leaving mid-match is consequential for
-the live opponent. See the root CLAUDE.md's games table and module-contract section for the
-two-meanings list.
+**Keep this file short.** A new rule goes here in one or two lines; the story behind it goes in `CLAUDE-HISTORY.md` (append a dated section). Full original text: `CLAUDE-HISTORY.md`.
+
+Hub integration: in-hub `module:`. `isInProgress()` is mode-split: **solo** returns `false` for a live
+match (autosave/resume, "Solo autosave"); **MP** keeps the literal "no resume" meaning
+(`instance.mp && instance._inProgress()`).
 
 ## Chinchón (`chinchon/`)
 
-Spanish rummy (Rummy/Gin family). Build runs/sets, keep your hand light, and **close**
-when your leftover is small; lowest cumulative score wins. Built to the spec in
-`../ChinChon/docs/chinchon-game-spec.md`. Cards use a real **Baraja Española** deck —
-open, freely-licensed images (CC BY-SA 3.0), rendered from `cards.js`. See "Card decks".
+Spanish rummy (Rummy/Gin family): build runs/sets, keep your hand light, **close** when your leftover
+is small; lowest cumulative score wins. Spec: `../ChinChon/docs/chinchon-game-spec.md`. Cards are a real
+**Baraja Española** deck (CC BY-SA 3.0) rendered from `cards.js`; default deck is `anita`.
 
 ### Layout & responsibilities
 
@@ -28,430 +26,194 @@ chinchon/js/game.js   async turn/round/match state machine + agent interface (no
 chinchon/js/ai.js     synchronous heuristic AIAgent (blunder-rate tiers)
 chinchon/js/ui.js     DOM, HumanAgent, render loop, modals, avatar picker, hub init/destroy contract
 chinchon/js/cards.js  card-face renderer + deck registry (image decks); preload + joker fallback
-chinchon/js/test.js   headless engine assertions (node) — not deployed/precached
-chinchon/js/sim.js    headless all-AI match simulation (node) — not deployed/precached
+chinchon/js/test.js   headless engine assertions (node) - not deployed/precached
+chinchon/js/sim.js    headless all-AI match simulation (node) - not deployed/precached
 chinchon/decks/<id>/  per-deck card-face images (WebP: <suit>-<rank>, back) + CREDITS.md
 ```
 
 ### Key design decisions
 
-- **No Web Worker.** The AI is light heuristic evaluation over `meld.js` (sub-ms on a
-  ≤8-card hand). `meld.js` and `game.js` are kept **pure and DOM-free** as a deliberate
-  seam, so a future deep AI *could* move to a worker with no refactor.
-- **Agent-driven engine.** The engine `await`s `player.agent.chooseDraw/chooseDiscard/
-  decideClose(view)` uniformly — the AI resolves instantly; the human agent (in `ui.js`)
-  resolves a promise on tap. Pacing (AI "thinking" delays, the end-of-round modal pause)
-  lives only in the UI's awaited `game.onEvent(type, payload)` hook, never in the engine.
-- **Config-driven from day one.** `DEFAULT_CONFIG` (in `game.js`) holds all ~11 rules.
-  Pass 1 hardcodes defaults; Pass 2 just adds the settings UI that produces that object.
+- **No Web Worker**: the AI is light heuristic evaluation over `meld.js` (sub-ms on <=8 cards).
+  `meld.js` and `game.js` stay **pure and DOM-free** as a seam.
+- **Agent-driven engine**: the engine `await`s `player.agent.chooseDraw/chooseDiscard/decideClose(view)`;
+  pacing lives only in the UI's awaited `game.onEvent(type, payload)` hook, never in the engine.
+- **Config-driven**: `DEFAULT_CONFIG` (in `game.js`) holds all ~11 rules; the settings UI produces that object.
 
-### UI notes (2026-07-24)
+### UI notes (rules still in force)
 
-- **Starting-dealer alternation (solo only).** `startGame()` now alternates which seat deals the
-  OPENING round of a fresh solo match (0/1), banking the flip in a new additive
-  `chinchon-settings` field, `nextStartDealer`, immediately (survives leaving mid-match), mirroring
-  `mancala/js/ui.js`'s `nextStarter` pattern. Plumbed through `Game`'s new `startDealerIndex`
-  constructor option, consumed only by `initMatch()` (`this.dealerIndex = this._startDealerIndex`);
-  the existing per-ROUND rotation (`playMatch()`'s loop, `finishRoundAfterPlay`, the MP resume
-  branches) is untouched. Announced with a new toast string (`toast_dealer`, "{name} deals" /
-  "Reparte {name}"). **This is local solo-vs-AI only** — `_mpHostStart()`/`_mpGuestStartMatch()`
-  never read `nextStartDealer` and always construct `Game` with the default `startDealerIndex`
-  (0, the host's seat), matching the pre-existing "dealer rotation is fully deterministic" comment
-  near `_mpGuestStartMatch`; verified green against `test-mp-lockstep.mjs` (C1-C4) after the change.
-- **Difficulty display labels standardized to the shared scale** (Matt, 2026-07-24): Easy/Average/
-  Hard now display as Easy/Medium/Hard (`diff_easy`/`diff_average`/`diff_hard` strings) —
-  **the stored ids (`easy`/`normal`/`hard`) are unchanged**, this is a label-only change. (Same-day
-  batch A reversed the initial Beginner/Intermediate/Pro rename before it shipped anywhere else;
-  the values above are the final ones.) The setup screen's per-opponent difficulty picker also now
-  renders `js/difficulty-tiers.js`'s `diffShapeSVG(tierOf(id))` (circle/square/diamond, each with
-  its own inline color fill) before each label, same shape vocabulary as the leaderboard's tier
-  pills. New CSS (`chinchon.css`): `.cc-root .lb-dshape` / `.lb-dshape-x2`.
+- **Starting-dealer alternation (solo only)**: `startGame()` alternates the OPENING dealer (0/1), banked
+  immediately in `chinchon-settings.nextStartDealer` (`Game`'s `startDealerIndex` option, consumed only by
+  `initMatch()`; per-round rotation untouched; toast `toast_dealer`). **`_mpHostStart()`/
+  `_mpGuestStartMatch()` never read it** (always seat 0; dealer rotation in MP is deterministic).
+- **Difficulty labels** Easy/Medium/Hard are label-only (stored ids `easy`/`normal`/`hard`); the per-
+  opponent picker renders `diffShapeSVG(tierOf(id))` (`.cc-root .lb-dshape`).
+- **Auto-close on a fully melded hand**: `promptClose()` calls `meld.shouldAutoClose(hand, cfg)`
+  (`classifyClosingHand(hand, cfg).leftover.length === 0`, pure); true for chinchón and double meld, it
+  resolves `true` with no prompt. Prompt layer only: `game.js` flow, events and MP emission are
+  byte-identical to a fast human tap. Partial closes (1-3 leftover) still prompt. `test.js` asserts it.
+- The "Ana Banana" setup header is gone (the `anita` deck keeps that display name in the deck row).
+- The players accordion row re-opening was NOT reproducible (`_setupExpanded` resets in `showSetup()`);
+  if it recurs, get a screen recording.
+- **Per-opponent difficulty selector**: `_seg()`'s index (`data-i`) lives on the WRAPPING `.cc-segmented`
+  div; the click handler must use `a.closest('.cc-segmented').dataset.i` (reading it off the button gave
+  `NaN`).
+- End-game modal has a `.cc-sheet-x` close (just hides it); "New Game" is separate.
+- **Hand row split is player-controlled**: `_handBreak` (top-row count) is persisted, changes only when a
+  drag crosses the row boundary (`_dropRow`/`_applyDrop`), resets on a fresh hand or resort; a row may
+  hold 0-8. `--cc-hand-overlap` is computed per render when a row exceeds 4. A `PHONE_WIDTH_MAX` (699)
+  guard keeps a wide desktop out of the row-fit logic.
+- **Highlight-sets groups, it does not paint**: each melded card lifts (`translateY`, no layout shift)
+  and gets a thin `#ffce3a` bar along its bottom edge; the numbered badge (`data-meld-num`, `::after`) is
+  the non-colour differentiator between melds; non-melded cards dim (`grayscale(0.55)`/`opacity: 0.72`).
+  Never both green and red (rule 9).
 
-### UI notes (2026-07-23)
+### How-to-play sheet (2026-07-24)
 
-- **Auto-close on a fully melded hand.** `promptClose()` (`ui.js:767`) calls
-  `meld.shouldAutoClose(humanHand, config)` before creating the Close/Keep-playing prompt;
-  if it returns `true` (zero leftover cards, category `chinchon` or `doubleMeld` — there is
-  no rational reason to keep playing either: chinchón ends or dominates the match, and a
-  doubleMeld's −10 can't be improved by drawing), it resolves `true` immediately with no
-  prompt shown. This is implemented entirely at the prompt layer — `game.js`'s
-  `decideClose`-driven flow, event order, and MP move emission are byte-identical to a fast
-  human tap, so the lockstep invariants and `test-mp-lockstep.mjs`'s mirror are untouched.
-  Partial closes (1-3 leftover, under `maxClose`) still prompt as before. AI `decideClose`
-  policy is unchanged.
-  - **`shouldAutoClose(hand, cfg)` (2026-07-25, `meld.js`, next to `classifyClosingHand`)**
-    is a pure extraction of that decision — `classifyClosingHand(hand, cfg).leftover.length
-    === 0` — out of `promptClose()`. No DOM/`this`, plain hand array + config in, boolean
-    out. This is the fix for "QA couldn't engineer a real hand to trigger the two-meld
-    auto-close in play, so it was never verified": `chinchon/js/test.js` now asserts it
-    directly against a genuine chinchón (`shouldAutoClose` true), a 3-set+4-run double meld
-    (true), and a close-eligible-but-one-leftover hand under the normal `canClose` threshold
-    (false), proving the rule without needing a played-out example. `promptClose()` just
-    calls the helper now; behavior is unchanged (byte-identical extraction, confirmed against
-    `node chinchon/js/test.js` and `node test-mp-lockstep.mjs`, both green).
-- **The "Ana Banana" title rebrand is gone** (was `ui.js`'s themed `<h1>` + `.cc-title-anita`/
-  `.cc-title-bonita` CSS, Matt: "remove Ana banana"). The `anita` deck keeps its own display
-  name ("Ana Banana") in the Card deck row and `cards.js` — only the setup screen's giant
-  gold header text was removed.
-- **The players accordion row re-opening was NOT reproducible** (2026-07-23 investigation,
-  browser-driven repro across every path the feedback could plausibly mean): changing player
-  count, switching Solo/Host/Join, quitting mid-match to setup, and completing a full match
-  and tapping "New game" all left the row collapsed (`_setupExpanded` resets to `null` in
-  `showSetup()`, which every one of those paths already calls). No code path was found that
-  sets `_setupExpanded` to `'players'` outside an explicit user tap on that row. Left as-is;
-  if it recurs, get a repro video/screen-recording rather than a static screenshot — a static
-  screenshot of an open row is indistinguishable from Matt having just tapped it to check
-  names.
-- Setup screen at 375×812 (both languages, with and without the lifetime-stats line): zero
-  page scroll with every row collapsed, confirmed after the title removal above (which also
-  shaved a few px off the header). No further compaction was needed.
-
-### UI notes (2026-07-22)
-
-- **Per-opponent difficulty selector**: `_seg()`'s per-instance index (`data-i`) lives on the WRAPPING `.cc-segmented` div, not the button - the click handler must climb to it (`a.closest('.cc-segmented').dataset.i`, matching Escoba's own handler) rather than read `a.dataset.i` directly off the clicked button. Reading it directly (the bug, now fixed) always resolved to `NaN`, so the selection never actually changed and the highlight never moved.
-- **End-game modal** (`_renderMatchModal`) has a `.cc-sheet-x` close button (mirrors Escoba's `.eb-sheet-x`) that just hides the modal and re-renders the board underneath - "New Game" is a separate, unrelated action.
-- **Hand row split is player-controlled, not a fixed formula.** `ui.js`'s `_handBreak` (top-row card count) used to be recomputed every render as `order.length - 4` (always exactly 4 cards on the bottom), which silently undid any row a player dragged a card into. It's now a persisted value that only changes when a drag crosses the row boundary (`_dropRow`/`_applyDrop`), or resets to that same default split on a fresh hand or a resort - so 7 or 8 cards can sit in either row, including all of them in one row and none in the other. Because a row can now hold more than 4, `--cc-hand-overlap` is also computed dynamically per render (measured against the real container/card widths) whenever the largest row exceeds 4, so a full row still lays out on one visible line instead of silently wrapping onto a second line within itself.
-- **Highlight-sets groups, it does not paint (batch 10 revision).** The `cc-meld-c0..c5` classes used to each carry a different hue (including both green and red, a THE LAW rule 9 violation), then a first fix rang every meld in one shared color - which fixed the colorblind issue but kept the "painted" look Matt disliked without being able to name why. The current treatment (`chinchon/css/chinchon.css`'s CH-1 block) drops the ring: each melded card lifts slightly (`transform: translateY`, so toggling highlight-sets on/off never shifts layout) and gets a thin `#ffce3a` accent bar along its own bottom edge (inside the card, since `.cc-card` is `overflow: hidden` for its rounded corners - reads the same at this size); the small numbered badge (`data-meld-num`, a card's own `::after`) stays as the actual non-color differentiator between simultaneous melds, since lift+bar alone don't distinguish which meld a card belongs to. Non-melded cards dim by a lighter notch than before (`grayscale(0.55)`/`opacity: 0.72`, was full grayscale at 0.5 opacity - read as harsh).
-- Both fixes are phone-viewport / narrow-hand concerns; a `PHONE_WIDTH_MAX` (699) guard keeps a short-but-wide desktop window from triggering the row-fit logic, matching this file's own `@media (min-width: 700px)` desktop breakpoint.
-
-### How-to-play sheet (2026-07-24, batch D/FB3-HOWTO3)
-
-Chinchón had no how-to-play entry point at all before this. Added the standard
-repo-wide sheet, reachable from BOTH the setup screen (`data-action="help"`, a
-`.cc-btn-ghost` under the start button) and the in-game hamburger menu
-(`data-action="menu-help"`, alongside the Dark mode toggle) — mid-game is where QA
-flagged confusion striking. `_openHelp()`/`_closeHelp()`/`_helpDiagram()` in `ui.js`
-reuse the existing `.cc-modal`/`.cc-scrim`/`.cc-sheet` shell (the match-result dialog's
-own pattern) under a distinct `data-role="help"`, so it never collides with the
-hamburger `.cc-menu`. Diagram: a generic 7-card hand split into a highlighted run of 4
-(solid accent outline) and a set of 3 (dashed good-color outline) — no suit vocabulary
-in the diagram itself (generic pip numbers only). Content verified against the engine
-before writing (see the root handoff's verification requirement):
-- **Close threshold**: `DEFAULT_CONFIG.maxClose = 3` (`chinchon/js/game.js:31`, "inclusive
-  leftover threshold to close"), consumed by `meld.js`'s `canClose()` (`threshold = cfg.maxClose
-  != null ? cfg.maxClose : 3`, line ~200) — the sheet says "3 points or fewer" to match the
-  actual default.
-- **Menos diez / automatic close**: `meld.js`'s `isDoubleMeld()` (line ~222, "exactly 7 cards
-  split into two complete melds (3+4), no leftover") and `classifyClosingHand()`'s
-  `doubleMeld` branch (line ~251, `score: -10`) — the sheet's "two complete groups is an
-  automatic close" bullet matches this directly.
-- **Chinchón**: `meld.js`'s `isChinchon()` (line ~205, "7 natural cards of one suit in an
-  unbroken ladder sequence (no wild)") and `classifyClosingHand()`'s chinchón branch (line
-  ~239) — the sheet's "7-card same-suit run is chinchón and wins outright" bullet.
-Strings: `howto`/`help_lead`/`help_diagram_aria`/`help_caption`/`help_rule_close`/
-`help_rule_menos_diez`/`help_rule_chinchon` in `strings.js`.
+Reachable from setup (`data-action="help"`) and the in-game menu (`menu-help`); `_openHelp()`/
+`_closeHelp()`/`_helpDiagram()` reuse `.cc-modal`/`.cc-scrim`/`.cc-sheet` under `data-role="help"`.
+Diagram: a generic 7-card hand split into a run of 4 and a set of 3 (no suit vocabulary). Verified
+against the engine: close threshold `DEFAULT_CONFIG.maxClose = 3` ("3 points or fewer", via `canClose()`),
+`isDoubleMeld()` (7 cards = 3+4, -10, automatic close), `isChinchon()` (7 natural same-suit unbroken
+ladder wins outright). Strings `howto`/`help_*` in `strings.js`. Re-verify if those rules change.
 
 ### Rules engine notes (correctness-critical)
 
-- **Partition search**: `generateMelds` enumerates all candidate sets/runs as bitmasks;
-  a backtracking exact-cover (each card is covered by one meld or left as deadwood)
-  finds the minimum-deadwood arrangement. Fast at ≤8 cards.
-- **Run adjacency is positional in the config rank ladder, never `rank-1`.** 40-card
-  ladder `[1..7,10,11,12]` → **7 and 10 are adjacent**; 48-card `[1..12]` → they are not.
-  No wrap-around (12 does not join 1).
-- **`figuresFaceValue` affects scoring values only, not adjacency** — `cardValue()` and
-  `rankOrderMap()` are independent derivations of the config.
-- **`canClose` is about leftover COUNT, not just deadwood**: a hand can have deadwood ≤
-  threshold yet not be closeable (≥2 leftover cards). Threshold is inclusive (`≤ maxClose`).
-- **Scoring priority (strict order)** in `classifyClosingHand`: chinchón → double-meld
-  (−10) → six-and-one (leftover value) → standard (deadwood). Non-closers always score
-  standard deadwood. **Chinchón is natural-only** (no wild completes it). Ace-of-Oros (if
-  enabled as wild) is enumerated both as a wild and as its natural 1-of-oros.
-- **Place-cards on ending** (`attachableCards`) only applies on a *normal* close (not
-  chinchón/−10), greedily chaining run extensions to shed deadwood.
+- **Partition search**: `generateMelds` enumerates candidate sets/runs as bitmasks; a backtracking
+  exact-cover finds the minimum-deadwood arrangement.
+- **Run adjacency is positional in the config rank ladder, never `rank-1`**: 40-card ladder
+  `[1..7,10,11,12]` makes **7 and 10 adjacent**; 48-card `[1..12]` does not. No wrap-around.
+- **`figuresFaceValue` affects scoring values only, not adjacency** (`cardValue()` and `rankOrderMap()`
+  are independent derivations).
+- **`canClose` is about leftover COUNT, not just deadwood**: deadwood <= threshold with >= 2 leftover
+  cards is not closeable. Threshold is inclusive (`<= maxClose`).
+- **Scoring priority (strict)** in `classifyClosingHand`: chinchón -> double-meld (-10) -> six-and-one
+  (leftover value) -> standard. Non-closers score standard deadwood. **Chinchón is natural-only.**
+  Ace-of-Oros (if enabled as wild) is enumerated both as a wild and as its natural 1-of-oros.
+- **Place-cards on ending** (`attachableCards`) applies only on a *normal* close, greedily chaining run
+  extensions.
 
 ### Card decks (`cards.js` + `decks/`)
 
-Card faces are **images**, rendered by `cards.js` through a small **deck registry**
-(`DECKS`) so more decks can be added and offered in a picker later. The default deck,
-`baraja-libre`, is a real Spanish (Baraja Española) deck under **CC BY-SA 3.0**
-(attribution in `decks/baraja-libre/CREDITS.md` + a visible credit on the setup screen;
-the game *code* is unaffected — bundled images are a collection, not a derivative).
+Faces are **images** through a deck registry (`DECKS`); default `anita` (`DEFAULT_DECK` in cards.js,
+`DEFAULT_DECK_ID` in ui.js: flip both to change it); `baraja-libre` is CC BY-SA 3.0 (attribution in
+`decks/baraja-libre/CREDITS.md` + a visible setup credit). `renderCardFace(card, opts)` builds
+`<div class="cc-card"><img>`; assets `decks/<id>/<suit>-<rank>.webp` (`oros/copas/espadas/bastos`, 1-12) +
+`back.webp`; jokers get a styled fallback. **Cards are opaque** (`object-fit: cover` on white); do NOT
+rely on transparency. A registry entry may set `base` + `own: Set` (`ownerDeck()` resolves each face to
+the deck holding the file); `anita` now owns all 48 faces + back. Escoba reuses `anita` directly.
+**Adding a deck**: rasterize every card **at a fixed width and flatten onto white** (`resvg` ->
+`sharp.flatten({background:'#fff'}).webp()`); do NOT crop to the content bbox or ship transparent cards;
+~400px WebP; register in `cards.js`, add files to `sw.js` ASSETS, bump `CACHE`. The `anita` deck is a
+personal friends deck (Ana + Matt court cards, Betty win/lose screens `decks/anita/betty-{win,loss}.webp`
+gated in `ui.js`, deck picker `open-deck`/`pick-deck`/`close-deck`, `deck` persisted in
+`chinchon-settings`).
 
-- `renderCardFace(card, opts)` builds `<div class="cc-card"><img …></div>`; the image IS
-  the whole face (no drawn overlays). `preloadDeck()` warms the cache; jokers have no
-  face in this deck → a styled fallback. Assets: `decks/<id>/<suit>-<rank>.webp`
-  (`oros/copas/espadas/bastos`, ranks 1–12) + `back.webp`.
-- **Cards are opaque** — `.cc-card` uses `object-fit: cover` on a white background. Do
-  NOT rely on transparency.
-- **Decks can be thin overrides.** A registry entry may set `base: '<deckId>'` plus an
-  `own: Set` of the face names it actually ships (`'oros-1'`, `'back'`, …). `ownerDeck()`
-  resolves every face to the deck that holds the file, so a *skin* can swap a few cards
-  and inherit the rest from its base — no asset duplication. `anita` started as an Española
-  skin (only `oros-1..9`) and grew card-by-card until it now owns **all 48 faces + back** (a
-  full custom deck), so its `baraja-libre` fallback no longer fires. Plain decks (no
-  `base`/`own`) resolve to themselves, so existing behaviour is unchanged.
-
-**Adding a deck (gotcha — learned the hard way):** source card art is usually framed
-inconsistently (each card in a different-sized transparent canvas). Rasterize every card
-**at a fixed width and flatten onto white** (`resvg` → `sharp.flatten({background:'#fff'}).webp()`)
-for uniform opaque cards. Do NOT crop to the content bbox (per-card extents vary wildly
-→ inconsistent shapes) and do NOT ship transparent cards (the margin shows the table
-colour as a grey band). ~400px WebP, ~1.5 MB / 49 files. Then register it in `cards.js`,
-add the files to `sw.js` ASSETS, and bump `CACHE`.
-
-### Scope status
-
-- **Pass 1 (done):** rules/meld engine, full turn loop (draw/discard/close/deck-resets),
-  end-of-round + end-of-match modals with score tables, in-hub + standalone.
-- **Pass 2 (done):** full settings/rules panel for all ~11 rules + player count + human
-  name + per-AI difficulty, persisted to `localStorage` (`chinchon-settings`); inline-SVG
-  scoreboard chart; closer meld breakdown; place-cards auto/manual/off (manual prompts
-  the human via `agent.choosePlacements`); session stats (`chinchon-stats`).
-- **Pass 3 (done):** authentic **Baraja Española** deck (real WebP faces via the `cards.js`
-  registry, CC BY-SA 3.0); Spanish avatars with a **pop-up picker grid** (was a random
-  cycle); opponents by count (1 = full banner, 2 = corners, 3 = across the top); larger
-  two-row hand with drag-to-reorder, sort (suit/rank) + highlight-melds toggles; in-game ☰ menu.
-- **Pass 4 (done):** a full second deck **`anita`** — a personal "friends" deck, complete.
-  **Pips (1–9, all suits):** Oros = a supplied gold "Ana" coin, Copas = a beer mug, Bastos =
-  a golf driver, Espadas = a pickleball paddle (original SVG emblems). **Court cards (10–12,
-  all suits):** 12 AI-illustrated *baraja española* court cards of real friends (Ana + Matt)
-  in period costume matched to each suit's theme, generated in ChatGPT/Gemini from a
-  face-first portrait + a pose reference, then fit to 400×616. **Back:** Ana's photo
-  (background-removed) on an original green/gold 180°-symmetric design. **Betty win/lose
-  screens:** the end-of-match modal shows a toddler-reaction photo when the Anita deck is
-  active (`decks/anita/betty-{win,loss}.webp`, gated in `ui.js`). A **deck picker** in setup
-  (`open-deck`/`pick-deck`/`close-deck`) calls `setDeck()` + `preloadDeck()`, persists `deck`
-  in `chinchon-settings`, and shows each deck by its full card back. `sw.js` precaches every
-  anita asset; the default deck is `anita`
-  (`DEFAULT_DECK` in cards.js, `DEFAULT_DECK_ID` in ui.js — flip both to change it). Pip/back art was built by scratch
-  `sharp` scripts (not in-repo); court cards were AI-generated per the prompts in
-  `../ChinChon/court-card-prompts.md`.
-- **Roadmap (not built):** optionally unify the flat pip style with the illustrated court
-  cards; one-undo affordance; sound.
+Roadmap (not built): unify pip style with the court cards; one-undo; sound.
 
 ### Tests
 
 ```
-node chinchon/js/test.js   # engine unit assertions (deck + meld)
-node chinchon/js/sim.js     # 30 all-AI matches; checks termination, scoring, no exceptions
+node chinchon/js/test.js   # engine unit assertions (deck + meld), incl. shouldAutoClose and M2c turnEnd resume
+node chinchon/js/sim.js    # 30 all-AI matches
+node test-mp-lockstep.mjs  # C1-C7
 ```
-Run requires Node ≥22.7 (ESM syntax detection; there is no package.json).
+Needs Node >= 22.7 (no package.json).
 
-i18n: `chinchon/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Difficulty ids
-(`easy`/`normal`/`hard`), all rule/config values (`victoryCondition`, `figuresFaceValue`,
-`placeOnEnding`, deck ids, etc.) and MP protocol fields stay canonical; only their display labels
-translate. Card-suit terms (Oros/Copas/Espadas/Bastos) and the deck-gallery's Spanish card-rank
-names (As/Sota/Caballo/Rey, via `galleryLabel()`) are the game's real vocabulary in both
-languages and are never routed through `t()`; "Chinchón" (the game name and the winning hand)
-likewise stays the Spanish term in both languages.
+i18n: `chinchon/js/strings.js`, `t()` at render time. Difficulty ids, rule/config values and MP protocol
+fields stay canonical; only display labels translate. Suit terms, the gallery's rank names
+(`galleryLabel()`), and "Chinchón" stay Spanish in both languages.
 
 ---
 
 ## An online match records under 'mp', not under an AI tier (2026-09-09)
 
-`_commitStats` wrote `opp0.difficulty || _setup.aiDifficulty[0] || 'normal'`. A remote seat has no
-`difficulty` at all, so **every online match was filed as a Medium win over an AI that was not at the
-table** - counted in every total, but indistinguishable from solo play on every screen that shows a
-difficulty, and absent from the leaderboard's Versus category. It now writes `MP_DIFFICULTY` ('mp')
-whenever `this.mp` is set; solo play is untouched and still reads the opponent AI's tier.
-
-This is the repo-wide convention and Chinchón was the LAST game without it: Escoba had the identical
-bug and fixed it on 2026-08-11 (`MP_DIFFICULTY` in `escoba/js/ui.js` carries the full write-up), and
-tic-tac-toe, boggle, dots-boxes, filler, mancala and battleship all define the same constant.
-**It survived here for four weeks because Escoba's fix got a test assertion and Chinchón's had
-none** - `test-mp-lockstep.mjs`'s C1 block now mirrors this branch and fails if it is reverted
-(verified born red).
-
-**NOT RETROACTIVE, deliberately** (THE LAW rule 5): matches played before this stay in the `normal`
-bucket exactly as recorded. Nothing is moved, rewritten or deleted; only what future matches record
-changes.
+`_commitStats` writes `MP_DIFFICULTY` ('mp') whenever `this.mp` is set (it used to file every online match
+as a Medium win over a non-existent AI); solo still reads the opponent AI's tier. `test-mp-lockstep.mjs`'s
+C1 block mirrors the branch and fails if reverted. **NOT RETROACTIVE, deliberately** (rule 5): earlier
+matches stay in `normal`.
 
 ## Hub notes
 
-Chinchón: in-hub `module:` — Spanish rummy vs AI. No worker (light heuristic AI). See the rest of this file.
+In-hub `module:`; Spanish rummy vs AI; no worker.
 
-## Solo autosave (batch 9, 2026-07-23, HANDOFF-FB-RESUME; extended to mid-round in batch C,
-2026-07-24, HANDOFF-FB3-SETTINGS-RESUME)
+## Solo autosave (batch 9, 2026-07-23; mid-round in batch C, 2026-07-24)
 
-Solo play mirrors the existing MP autosave mechanism (`_mpSaveSnapshot`/`_tryRestoreMP`, below)
-rather than inventing a new model. Key: `gamehub.chinchon.solo.v1` — separate from the frozen
-`chinchon-settings` key and from the MP save key `gamehub.chinchon.mp.v1`; none of the three is
-ever read or written by either of the other two paths.
+Key `gamehub.chinchon.solo.v1`, separate from the frozen `chinchon-settings` and the MP key
+`gamehub.chinchon.mp.v1` (none read or written by another's path). Shape `{ v: 1, at, snap:
+this.game.snapshot() }`.
 
-**Mid-round coverage (batch C).** Batch 9 only saved at the `'roundScored'` round boundary
-(mirroring MP, which is round-boundary-only for a genuine lockstep reason). QA found that a
-solo match abandoned before round 1's first round boundary had no save at all, and any
-mid-round exit in a later round lost everything back to the last round boundary. Solo has no
-MP lockstep constraint forcing round-granularity, so it now also saves on `game.js`'s new
-`'turnEnd'` event — emitted only once a turn is genuinely complete (drawn, discarded, and
-either not eligible to close or declined to). **`'turnStart'` was tried first and found
-unsound**: `game.js`'s `_nextTurn` checkpoint is set to `(currentPlayerIndex+1)%n` at the TOP
-of a turn and holds that same value for the turn's whole duration, so a snapshot taken at
-`'turnStart'` resumes at `_nextTurn`'s player — the one AFTER whoever was actually about to
-act — silently skipping that player's entire turn. Caught live in the browser (a save taken at
-the human's own `'turnStart'` resumed straight into the next AI's turn) before it shipped;
-`chinchon/js/test.js`'s M2c block is the regression test (compares a `'turnEnd'`-anchored
-resume's full turn-order sequence against an uninterrupted control run — `T4.2`'s older
-snapshot-roundtrip test only proves two clones of one snapshot agree with each other, which
-would have stayed green even with the `'turnStart'` bug). Everything else about the mechanism
-(30-minute freshness window, silent restore, clearing rules) is unchanged from batch 9 below.
-
-- **Shape**: `{ v: 1, at: Date.now(), snap: this.game.snapshot() }` — identical to the MP save's
-  `snap` field, minus the MP-only `code`/`role`/`seq`. `game.snapshot()` already carries both
-  players' match scores (`totalScore`/`scoreHistory`) and the live round state (hands, stock,
-  discard, phase, dealer, etc.).
-- **Written** only at the same safe point MP uses: the `'roundScored'` onEvent hook (a round
-  boundary), never mid-turn — `game.js`'s `snapshot()` doc comment explains why (a snapshot
-  taken between a draw and its discard has no defined resume behavior). Never written for a
-  concluded match.
-- **Freshness**: same 30-minute window as MP (`MP_RESTORE_MAX_AGE_MS`, reused as-is). A save
-  older than that is treated as absent and wiped on the next mount, never restored.
-- **Restored** silently on mount (`_trySoloRestore()`, called before `_tryRestoreMP()` in the
-  constructor — it's synchronous/local, no room to rejoin, so it gets first claim on the mount;
-  if it restores, the MP restore is skipped for that load) straight into the live game screen,
-  no dialog. A malformed/corrupt save (bad JSON, wrong shape, too few players) is treated as "no
-  save" and wiped, never crashes the mount.
-- **Cleared** on: match end (`matchEnd`'s solo branch), quitting to setup mid-match
-  (`showSetup()`, when a game was live and `this.mp` is falsy), and the in-game menu's "new
-  game" restart (`startGame()`, which bypasses `showSetup()`). Never cleared on hub navigation
-  or `destroy()` — that's the point of the feature.
-- **MP is untouched**: every solo method (`_soloSaveSnapshot`/`_soloLoadSave`/`_soloClearSave`/
-  `_trySoloRestore`) either no-ops or returns "no save" whenever `this.mp` is set, and none of
-  the MP methods read `STORE_SOLO_SAVE`. Verified green against `test-mp-lockstep.mjs` after
-  the change.
-- Stats recording is untouched — a resumed solo game records exactly as an uninterrupted one
-  (same `_commitStats()` call, same recorder).
+- **Written** at `'roundScored'` AND on `game.js`'s `'turnEnd'` event (emitted once a turn is genuinely
+  complete). **Never save on `'turnStart'`**: `_nextTurn` is set to the NEXT player at the top of a turn,
+  so a snapshot there resumes past whoever was about to act and skips their whole turn.
+  `chinchon/js/test.js` M2c compares a `'turnEnd'` resume's full turn order against an uninterrupted run
+  (`T4.2` alone would stay green with the bug). Never written for a concluded match.
+- **Freshness** 30 minutes (`MP_RESTORE_MAX_AGE_MS`); older = absent, wiped on mount.
+- **Restored** silently on mount (`_trySoloRestore()`, called BEFORE `_tryRestoreMP()`; if it restores
+  the MP restore is skipped). A malformed save is "no save" and wiped.
+- **Cleared** on match end (solo branch), quitting to setup mid-match (`showSetup()`, `this.mp` falsy),
+  and the menu's "new game" (`startGame()`). Never on hub navigation or `destroy()`.
+- Every solo method no-ops when `this.mp` is set; no MP method reads `STORE_SOLO_SAVE`. Stats recording
+  is untouched.
 
 ## Multiplayer at 3-4 seats (2026-07-28)
 
-Matt: "Chinchón only allows 2 players to play in multiplayer. It should be up to 4." The host
-now picks the table size (2/3/4, the same selector solo already used — Host mode used to render
-a hardcoded, non-interactive "2"), and the lobby lists every seat until the table is full.
+(Full story: CLAUDE-HISTORY.md.) The host picks the table size (2/3/4); the lobby lists every seat.
+**Humans only**: an unfilled seat is never an AI and **Start stays disabled until every seat is filled**.
+**The engine needed ZERO changes** (`game.js` loops `this.players` everywhere); the change is the network
+layer and this file's MP glue.
 
-**Humans only.** An unfilled seat is never played by an AI, and **Start stays disabled until
-every seat is filled** — the host chose the size up front, so a half-full room means somebody is
-still on their way. Backing out changes the size; there is no "start early with who's here".
+- **`mp.seat` (integer) replaced the host/guest binary**; the room's seat index IS the engine's player id
+  on every device. `mp.isHost` is `seat === 0`; `=== 'guest'` became `!mp.isHost`.
+- **`_makeRemoteAgent(seatId)`** closes over its own seat (`_remotePlayer()` is gone; its first-remote-
+  seat answer is wrong at 3+ seats because `p.id` steers recovery addressing).
+- **`_mpBuildPlayers(room, mySeat, count)`** builds the table in seat order on every device, `isHuman`
+  only for our own seat (invariant 2); names/avatars come from the roster and are cosmetic (`hash.js`
+  hashes cards and scores).
+- **`config.seats` rides the room config** so a joining/REJOINING device can size its players. The MP
+  save has `seat` and still writes `role`; a rejoin on a different seat than the save claims is abandoned.
+- **Head-to-head records EVERY opponent** (`_commitStats` loops `mp.opps`); `won` = finished ahead of the
+  whole table, not pairwise.
+- **Leaving mid-match ends the match for the whole table** (a decision). Backing out of the LOBBY frees
+  only that seat (`net.vacateSeat`); only the host leaving takes the room.
+- Two `js/net.js` fixes (transactional `joinSeat`, seat-addressed recovery): `js/CLAUDE.md`, "The ninth
+  consumer".
+- Tests: `test-mp-lockstep.mjs` C5 (four-seat match, hashes identical), C6 (desync -> recovery to the
+  authoring seat), C7 (per-seat recovery records cannot clobber each other). **Not verified on real
+  devices.**
 
-**The engine needed ZERO changes.** `game.js` was already N-generic and this was verified rather
-than assumed before any code was written: dealing (`:244`), turn rotation (`advance()` `:180`),
-round-open seat (`:255`), dealer rotation (`:395`), the `everyoneHadTurn()` close gate (`:181`),
-`resolveRoundScoring()`'s closer-vs-everyone-else loop (`:478-521`), `checkMatchEnd()` (`:530`),
-`finalizeStandings()` (`:542`) and `snapshot()`/`fromSnapshot` all loop `this.players`. Solo has
-offered 2-4 players since Pass 2, so all of it was already exercised daily. The whole change is
-in the NETWORK layer and this file's MP glue.
+## MP invariants (July 2026 hardening — full list in `js/CLAUDE.md`, "Multiplayer lockstep — invariants")
 
-- **`mp.seat` (an integer) replaced the host/guest binary.** The room's seat index IS the
-  engine's player id, on every device, for the whole match — that single identity is what the
-  rest of the seat model rests on. `mp.isHost` is `seat === 0`. Everything that asked
-  `mp.role === 'host'` asks `mp.isHost`; everything that asked `=== 'guest'` asks `!mp.isHost`,
-  because with three guests "guest" stopped naming one device.
-- **`_makeRemoteAgent(seatId)`** closes over its own seat, and `_remotePlayer()` is gone. That
-  helper returned `players.find(p => !p.isHuman)` — the FIRST remote seat, correct only when
-  there is exactly one. It was harmlessly wrong before (its one caller, the declined-close path,
-  only read the `isHuman` flag, which every remote seat shares); it is not harmless now that
-  `p.id` steers recovery addressing.
-- **`_mpBuildPlayers(room, mySeat, count)`** builds the table from the room's seat roster in seat
-  order on every device, setting `isHuman` only for our own seat (invariant 2, by construction).
-  Names/avatars come from the roster so every device labels the table identically — and they are
-  cosmetic to the protocol anyway (`hash.js` hashes cards and scores, never names), so a missing
-  roster entry degrades to a placeholder instead of desyncing.
-- **`config.seats` rides the room config** so a joining or REJOINING device can size its players
-  array from the room record alone. The MP save gained `seat`; it still writes the old `role`
-  too, so a match live across the deploy window resumes either way, and a rejoin that lands on a
-  different seat than the save claims is abandoned rather than resumed wrong.
-- **Head-to-head now records EVERY opponent** (`_commitStats` looped `mp.opps`, was a single
-  `mp.opp`). At 3-4 seats the old code silently dropped one or two people's records. `won` means
-  "I finished ahead of the whole table", not a pairwise result — stated here because the counters
-  are per-opponent and could be misread as pairwise later.
-- **Leaving mid-match still ends the match for the whole table** (unchanged behaviour, now a
-  documented decision): the engine cannot drop a seat from a live match without every other
-  device diverging on the next deal. Backing out of the LOBBY is different — a non-host frees
-  only its own seat (`net.vacateSeat`), because one person changing their mind must not evict
-  the other three. Only the host leaving takes the room with it.
-- **Two real 3+-seat bugs were fixed in `js/net.js`**, neither reachable with two seats: seat
-  claiming is now transactional (`joinSeat`), and recovery records are seat-addressed. See
-  `js/CLAUDE.md`'s "The ninth consumer" section for both.
+Chinchón-side obligations: the engine decides the match end BEFORE emitting `roundScored` and announces
+it as `payload.matchOver` (every MP gate keys on that, never `this.game.winner`); `config.presetStockResets`
+is a shift()-consumed queue, never indexed by `resetsUsed`; `_mpApplyRecovery` remaps `isHuman` by seat;
+a round-boundary snapshot (`midRound:false`) resumes via `_resumeNextRound` (never `initMatch()`, which
+zeroes scores), a restoring guest awaiting the host's round record (`_mpAwaitNextRound`).
 
-Tests: `test-mp-lockstep.mjs` C5 (four-seat full match, all four hashes identical, each device
-owning exactly its own seat, plus the remote-agent-knows-its-seat probe), C6 (four-seat desync →
-recovery addressed to the seat that authored the diverging move, then whole-table convergence),
-C7 (per-seat recovery records cannot clobber each other, and the seatless legacy path is
-provably unchanged). C1-C4 are unchanged in substance and still green.
+## The setup screen fits (2026-09-08, 2026-10-13)
 
-**Not verified on real devices.** Everything above is proven headlessly against a `FakeRoom`;
-nothing has been played by three or four actual phones. Same honest caveat Pool and Boggle carry.
+Matt: *"I don't want any game in the gamehub to be scrollable at all. Everything MUST fit on a single
+screen. Always."*
 
-## MP invariants (July 2026 hardening — full list + rationale in `js/CLAUDE.md`,
-"Multiplayer lockstep — invariants"; regression tripwires in `test-mp-lockstep.mjs`)
-
-The Chinchón-side obligations: the engine decides the match end BEFORE emitting `roundScored` and
-announces it as `payload.matchOver` — every MP gate keys on that field, never `this.game.winner`
-(null at that moment for points/rounds endings); `config.presetStockResets` is a shift()-consumed
-queue, never indexed by the per-round `resetsUsed` counter; `_mpApplyRecovery` remaps the
-transmitted snapshot's device-relative `isHuman` flags by seat before rebuilding; and a
-round-boundary snapshot (`midRound:false`) resumes via `_resumeNextRound` (never `initMatch()`,
-which zeroes every score), with a restoring guest awaiting the host's published round record
-(`_mpAwaitNextRound`) before playing.
-## The setup screen: 31px sideways, 141px too tall, and neither was the card sizes (2026-09-08)
-
-Matt: *"I've told you several times before that I don't want any game in the gamehub to be
-scrollable at all. Everything MUST fit on a single screen. Always."*
-
-Two separate bugs, found by `check-no-scroll.mjs`, and the interesting part is that this file (and
-`test-visual.mjs`'s known-gaps list) had blamed both on *"246 bare top-level prefixed CSS rules and
-the widest setup screen in the repo... a real fix is a layout pass"*. Neither needed one.
-
-### The sideways scroll was ONE line, in `index.html`
-
-`body` is `display: flex`, so `#chinchon` is a flex item - and **a flex item's default
-`min-width: auto` is its min-content**. Measured at a 390px viewport, `.cc-root` laid itself out
-**452px wide** and the page scrolled 31px sideways: not because anything inside is too wide to fit,
-but because the game was allowed to refuse to shrink. `#chinchon { min-width: 0 }` and the whole
-page measures 390 of 390, with nothing overflowing anywhere.
-
-### The height came off spacing and one button row, not the cards
-
-141px, in the hub at 390x664 (`.cc-root` 634px against 493px of room). Standalone fits at every
-size tested. In order of size:
-
-- **The two foot buttons share one row** (-43). "Start game" and "How to play" were stacked;
-  `.cc-setup-foot` is a column by default - the tall-screen layout is untouched - and a row on the
-  short hub screen. Golf's setup screen does exactly this and for the same reason.
-- **The panel's own gaps and padding** (-62).
-- **The mode chips held to one line** (-22): "Host online" was wrapping.
-- **The settings labels held to one line** (-17): "Closing rules" wrapped, so that row stood 17px
-  taller than its six neighbours.
-
-**The seven summary rows are UNTOUCHED at 42px.** They are the tap targets and they were already
-the tightest thing on the screen; taking height out of them would have made an existing sub-44px
-row worse to fix a problem that had cheaper answers.
-
-**This says nothing about `.cc-game`**, which is a separate screen and still measures over in the
-hub - see `test-visual.mjs`'s known gaps. That one really is the hand and the mat, and it really
-does need a card-size pass with eyes on screenshots.
+- **Sideways scroll was ONE line in `index.html`**: `body` is `display: flex`, so a flex item's default
+  `min-width: auto` made `.cc-root` 452px wide at 390. **`#chinchon { min-width: 0 }`** fixes it.
+- **Height** (hub at 390x664, 141px over): the two foot buttons share one row (Start game / How to play)
+  on a short screen, tighter panel gaps/padding, mode chips and settings labels held to one line. **The
+  seven summary rows stay at 42px** (tap targets). Scoped to `max-height: 760px` AND (since 2026-10-13,
+  360x804 Unai's Android) `max-width: 380px` inside `.hub-main`. `check-no-scroll.mjs` measures both.
+- `.cc-game` (the hand and the mat) is a separate screen and still measures over in the hub
+  (`test-visual.mjs` known gaps); that needs a card-size pass with eyes on screenshots.
 
 ## Computer speed, face-down hands and card travel (2026-09-28)
 
-Matt: *"chinchon next, same approach"* (as Texas Hold'em, Monopoly Deal and Uno that day).
-
-- **Computer speed**: Slow / Normal / Fast, `pace` in `chinchon-settings` (additive; absent =
-  Normal, the original pace). It lives INSIDE the Difficulty row (a "Speed" line under the
-  per-opponent pickers, and "fast/slow computers" appended to the row's summary when not Normal):
-  the setup screen was cut to fit a phone on 2026-09-08 and a row of its own would have cost that
-  height. `_paceMs(ms, p)` scales only a computer's beats (turn, draw, discard, close) and only in
-  SOLO - online every seat is a person and nothing is scaled.
-- **Opponents' hands face down**: each pill carries `.cc-opp-hand` (up to 4 overlapped backs plus
-  the exact count) and `data-pid`. The pill used to have no card count on purpose; it now has one
-  because a draw needs somewhere to land.
-- **Card travel** (`_fly` and friends, fixed `.cc-flight` layer, z-index 110 under every modal):
-  a draw flies from the stock (as a back, turning face up as it lands in your hand) or from the
-  discard (face up - it was public) into your hand or the drawer's pill; a discard flies from your
-  hand card or the discarder's pill onto the pile; a round's deal flies every card out of the stock
-  round the table. The start point is read BEFORE the render (the render replaces the discard's top
-  node), the landing card stays hidden until its copy arrives, and the render hides new hand cards
-  through `this._arriving`. A computer's draw/discard awaits the flight together with its beat
-  (`Promise.all`, so no slower at Normal); the SOLO first turn waits for the deal, an online match
-  never waits on a flight; a rejoining guest's `replayMode` skips them. No engine, save or protocol
-  change - `test-mp-lockstep.mjs` mirrors the glue and is unaffected.
-- Verified in Chromium: full matches at Fast with 4 players and Normal with 2 (your side played by
-  the test), nothing left hidden at rest, no errors; `chinchon/js/test.js`,
-  `test-mp-lockstep.mjs`, `test-i18n-strings.mjs`, `test-game-conventions.mjs`,
-  `check-no-scroll.mjs chinchon`. Not yet by eye on a phone, and not yet in a real online match.
-
-## The setup screen on a 360-wide phone (2026-10-13)
-
-In the hub at 360x804 (Unai's Android) the page stood 12px over: at that width "Host online" and
-"Closing rules" wrap, and the trims above were scoped to `max-height: 760px`, which an 804px screen
-never reaches. The same block now also applies at `max-width: 380px`; nothing else changed.
-`check-no-scroll.mjs` measures both 360-wide sizes now.
+- **Computer speed** Slow/Normal/Fast, `pace` in `chinchon-settings` (absent = Normal), inside the
+  Difficulty row (a "Speed" line; row cost height). `_paceMs(ms, p)` scales only a computer's beats and
+  only in SOLO.
+- **Opponents' hands face down**: pill carries `.cc-opp-hand` (up to 4 backs + exact count) and
+  `data-pid`.
+- **Card travel** (`_fly`, fixed `.cc-flight` layer z-index 110 under every modal): draw from stock
+  (back, turning face up) or discard into your hand / the drawer's pill; discard to the pile; the deal
+  flies every card from the stock. **Read the start point BEFORE the render** (it replaces the discard's
+  top node); the landing card stays hidden until its copy arrives (`this._arriving`); a computer's
+  draw/discard awaits flight + beat together (`Promise.all`); the SOLO first turn waits for the deal;
+  online never waits on a flight; a rejoining guest's `replayMode` skips them. No engine, save or
+  protocol change. Not yet checked by eye on a phone or in a real online match.

@@ -1,0 +1,515 @@
+> **Not auto-loaded.** This is the full text of `escoba/CLAUDE.md` as it stood on 2026-10-14, moved here word for word when that file was trimmed. `CLAUDE.md` holds the current rules in short form; this file holds the incidents, measurements and reasoning behind them. Read the relevant section here before changing anything it covers in depth. Section headings are unchanged, so references like `escoba/CLAUDE.md, "Some heading"` can be found here.
+
+# Escoba (`escoba/`)
+
+> **THE LAW applies to every file in this folder.** Player data is never deleted, never lost,
+> never put at risk — THE LAW and its nine working rules sit at the top of the root `CLAUDE.md`, which is always
+> loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
+> it: writes additive, keys never repurposed, no silent write failures.
+
+Spanish fishing/capture game (the Escoba/Scopa family): capture table cards that sum to
+**15** with one card from your hand; clearing the whole table is an **escoba** ("broom").
+Built to the Fournier rules in the PDF Matt supplied (no in-repo copy; see "Rules
+implemented" below for the parts that mattered for correctness). 2-3 players vs AI solo,
+**2-4 human players online** (see "Multiplayer at 2-4 seats"),
+**in-hub `module:`**, **immersive** (see "Hub integration"). Card faces are **not** its
+own asset: it reuses the shared **Anita** deck from `chinchon/decks/anita/` directly
+(no deck registry, no picker, no copied files, one fewer thing to keep in sync).
+
+## Layout & responsibilities
+
+```
+escoba/js/deck.js    pure card data: SUITS, makeDeck(mode), shuffle, captureValue, captureOptions, sumValues
+escoba/js/game.js    async turn/round/match state machine + agent interface (no DOM); snapshot()/fromSnapshot()
+escoba/js/ai.js      synchronous AIAgent, three tiers (random / greedy / card-counting)
+escoba/js/ui.js      DOM, HumanAgent, render loop, modals, broom sequencing, hub init/destroy contract
+escoba/js/cards.js   card-face renderer only (no registry): reads chinchon/decks/anita/ via a relative URL
+escoba/js/test.js    headless engine assertions incl. a snapshot/resume round-trip (node), not deployed/precached
+escoba/css/escoba.css all styles, .eb- prefixed, scoped under .eb-root
+escoba/img/broom-sprite.webp  10-frame sweep spritesheet (480x360/frame), the only asset this module owns
+escoba/index.html    standalone host (calls init() directly, same contract as in-hub)
+```
+
+There is no `escoba/decks/`: unlike Chinchón, this game deliberately ships **zero** card
+art of its own. `cards.js`'s `BASE` constant resolves `../../chinchon/decks/anita/`
+relative to the module, so it rides on whatever Chinchón's `sw.js` precache already
+covers: if Anita's asset set ever changes, Escoba needs nothing extra.
+
+## Hub integration
+
+- **`immersive: true`** on its `GAMES` entry in `js/hub.js`. Escoba's own setup/game
+  screens already show a title and a way back, so the hub's own header row would be
+  pure wasted space; immersive mode collapses it to a small floating back button (see
+  `hub-top-immersive` in `css/hub.css`) instead of a sticky full bar, and `.hub-main`
+  gets extra top padding while it's active so that floating button never overlaps the
+  game's own content. This is opt-in per game; every other game's hub chrome is untouched.
+- **`isInProgress()` returns `false` for all solo play** — Escoba persists the live match on every state-changing engine event (see "Resume
+  via engine snapshot" below), so leaving via the hub's own `‹ Hub` button never loses solo
+  progress, and the hub's "you'll lose your progress" confirm would be actively wrong. The one
+  exception is multiplayer: it returns `true` while an MP match is live and unfinished
+  (`instance.mp && !_matchEnded`), because leaving mid-MP genuinely abandons the room. The in-game
+  menu's own "Quit to setup" is a separate, deliberate abandon: it warns and clears the save.
+
+## Key design decisions
+
+- **Agent-driven engine, same pattern as Chinchón.** The engine `await`s
+  `player.agent.chooseMove(view)` uniformly; the AI resolves instantly, the human agent
+  (in `ui.js`) resolves a promise on tap. All pacing (AI "thinking" delays, the escoba
+  banner, the broom sequence) lives in the UI's awaited `game.onEvent(type, payload)`
+  hook, never in the engine. `game.js` has zero DOM/timing concerns.
+- **Two numbering modes, one deck shape.** `spanish` (default: ranks 1-7 + figures 10/11/
+  12 counting 8/9/10) and `american` (ranks 1-9 + Sota, every card counts what's printed,
+  no Caballo/Rey) both deal exactly one card of each capture value 1-10 per suit, so the
+  capture math, scoring, and AI are mode-agnostic: `deck.js`'s `makeDeck(mode)` is the
+  only place the mode matters. **American only sticks when explicitly chosen** (a
+  `deckModeChosen` flag in `escoba-settings`): an earlier build defaulted to American and
+  wrote it as if it were a choice, so the loader now migrates that back to Spanish unless
+  the flag is set. Matt is Ana's Spanish-deck-literate; American exists for players who
+  don't already know the traditional Sota/Caballo/Rey mapping (see the `card-values-as-
+  printed` memory: default stays Spanish, American is opt-in, never the default).
+- **Zero-layout-shift UI, an explicit design rule, not an accident.** No sentence in
+  gameplay ever explains what to do (the active-player ring + the action button's own
+  label are the whole instruction); every region below the top bar has fixed geometry.
+  Transient state (the running capture sum, opponent-move announcements, the last-hand
+  flag) lives either in an always-reserved fixed-height slot or an absolutely-positioned
+  overlay inside the fixed-height mat, never in flow content that could push siblings
+  around. This was retrofitted twice (see "Scope status"): once to remove instructional
+  text and give the mat/hand/actions fixed heights, and again to fix the clipping that
+  fixed-height introduced (see "Overhang budget" below).
+- **Resume via engine snapshot, not UI-side replay.** `Game.snapshot()`/
+  `Game.fromSnapshot()` serialize/restore the *entire* match (config, round, dealer,
+  table, stock, every player's hand/captured/score); cards are already plain JSON-safe
+  objects, no id-based rehydration needed. `playRound()`'s turn loop is split out as
+  `runTurnLoop(startTurn)` so a restored mid-round match re-enters at the saved player
+  index (`_nextTurn`, checkpointed at the top of each loop iteration and again right
+  before a turn plays out) instead of replaying the round from scratch. The UI
+  (`ui.js`) autosaves to `localStorage['escoba-save']` after every state-changing event
+  and offers "Resume game" from setup when a save exists. See "Rules engine notes" for
+  the exact safe/unsafe checkpoints.
+
+## Multiplayer at 2-4 seats (2026-08-11)
+
+Matt: "Multiplayer needs to be expanded to up to 4 human players." The host picks the table
+size in the Host-online setup screen (2/3/4) and the lobby lists every seat until it is full.
+This is Chinchón's phase-3 seat model (`js/CLAUDE.md`, "The ninth consumer") ported to Escoba;
+`js/net.js` needed **zero** changes — `joinSeat`/`vacateSeat`/seat-addressed recovery were all
+already there and unused by this game.
+
+**Humans only.** An unfilled seat is never played by an AI, and **Start stays disabled until
+every seat is filled** (`_mpHostStart` re-checks, so the disabled button is not the only guard).
+Backing out changes the size; there is no "start early with who's here".
+
+**The engine needed ZERO changes**, verified before any code was written rather than assumed:
+`game.js` loops `this.players` for dealing (`dealHands`), turn rotation (`runTurnLoop`), the
+round-open seat, dealer rotation (`finishRoundAfterPlay`), `scoreRound`, `checkMatchEnd` and
+`snapshot`/`fromSnapshot`. 40 cards also divide evenly at 4 seats — 4 face up plus 3 each per
+deal, so a 4-seat round is exactly three deals with nothing stranded in the stock
+(`test-mp-lockstep.mjs` E5 asserts it). The two rules that read the seat count already do so
+explicitly and correctly: the under-10-cards bonus and whitewash are both `twoPlayer`-gated.
+
+- **`mp.seat` (an integer) replaced the host/guest binary.** The room's seat index IS the
+  engine's player id, on every device, for the whole match. `mp.isHost` is `seat === 0`;
+  everything that asked `mp.role === 'host'` asks `mp.isHost`, and `=== 'guest'` became
+  `!mp.isHost`, because with three guests "guest" stopped naming one device. `mp.localSeat`
+  survives as an alias of `mp.seat` — `_localSeat()`/`_human()` and the save format already
+  spoke that word.
+- **`_makeRemoteAgent(seatId)`** closes over its own seat. Without it, `_mpHandleMismatch`
+  could only address recovery at "the" remote seat, which is unambiguous at two seats and
+  wrong at four: `_mpAfterPlay` now passes `p.id` (the authoring seat) through.
+- **`_mpBuildPlayers(room, mySeat, count)`** builds the table from the room's seat roster in
+  seat order on every device, setting `isHuman` only for our own seat (invariant 2, satisfied
+  by construction). Names/avatars come from the roster so every device labels the table
+  identically; they are cosmetic to the protocol (`hash.js` hashes cards and scores, never
+  names), so a missing roster entry degrades to a placeholder instead of desyncing.
+- **`config.seats` rides the room config** so a joining or REJOINING device can size its
+  players array from the room record alone. The MP autosave gained `seat`; it still writes the
+  old `role` too, so a match live across the deploy window resumes either way, and a rejoin
+  landing on a different seat than the save claims is abandoned rather than resumed wrong.
+- **`mpSeats` is a SEPARATE setting from solo's `count`** (both in `escoba-settings`). Solo
+  tops out at 3 because it only carries two AI identities; sharing one field would let a
+  4-seat room ask solo for a third AI that does not exist, and would move the solo picker
+  every time somebody hosted.
+- **Head-to-head records EVERY opponent** (`_commitStats` loops `mp.opps`, was a single
+  `mp.opp`). At 3-4 seats the old code silently dropped one or two people's records. `won`
+  means "I finished ahead of the whole table", not a pairwise result — stated here because the
+  counters are per-opponent and could be misread as pairwise later.
+- **Leaving mid-match still ends the match for the whole table** (unchanged behaviour, now a
+  documented decision): the engine cannot drop a seat from a live match without every other
+  device diverging on the next deal. Backing out of the LOBBY is different — a non-host frees
+  only its own seat (`net.vacateSeat`), because one person changing their mind must not evict
+  the other three. Only the host leaving takes the room with it.
+- **Top bar at 3 opponents**: `renderOpponents()` has always stamped `.eb-opp-nN`; until 4
+  seats existed no CSS read it. `.eb-opp-n3` re-lays the pill (name on its own full-width
+  line, tighter type, hand-count fan dropped) — see the CSS comment for why the hand count is
+  the right thing to drop and why wrapping the foot is not an option.
+
+Tests: `test-mp-lockstep.mjs` E5 (four-seat full match, all four hashes identical, each device
+owning exactly its own seat, plus the remote-agent-knows-its-seat probe and the whole-deck
+check), E6 (four-seat desync → recovery addressed to the pleading seat only, then whole-table
+convergence). E1-E4 are unchanged in substance and still green.
+
+**Not verified on real devices.** Everything above is proven headlessly against a `FakeRoom`;
+nothing has been played by three or four actual phones. Same honest caveat Chinchón, Pool and
+Boggle carry.
+
+## Multiplayer results are recorded, and cannot be lost (2026-08-11)
+
+Matt: "I don't think multiplayer wins and losses are being recorded." Three parts.
+
+### 1. The wrong bucket, fixed for future matches
+
+`_commitStats` read `opp0.difficulty || 'normal'`, and a REMOTE seat has no `difficulty` at all —
+so every online match was filed as an Intermediate win over the AI. Recorded, but indistinguishable
+from solo play on every screen. MP now records under `MP_DIFFICULTY` (`'mp'`), the repo-wide
+convention. `tierOf('mp')` is null (`js/difficulty-tiers.js`), so those plays count in every total
+and in the leaderboard's All filter and claim no tier pill.
+
+### 2. The historical matches, extracted
+
+Fixing the writer does nothing for matches already misfiled. `splitEscobaMp()` in
+`js/game-stats.js` moves them, once per store, using `h2h.escoba` as evidence — the head-to-head
+row was written by the SAME `_commitStats` call on every online match, one increment per match at
+two seats, so its `w`/`l` totals ARE this store's multiplayer record. Totals are never touched
+(byDiff is a partition of them), every move is clamped, the result is verified by fresh re-read,
+and the pre-migration numbers are archived on `escoba.esMpSplit` and never pruned.
+
+**Matches older than head-to-head capture are deliberately left alone.** They left no trace on
+either device, so an Intermediate play that is really an old online play cannot be told from a
+genuine one, and splitting them would be fabrication (THE LAW rule 4). They stay in `normal`, fully
+visible, exactly where they have always been.
+
+Verified against the REAL records of the only five devices in `players/` with head-to-head history
+(`test-stats-replay.mjs` scenario D — rule 7 with actual data, not a fixture): 32 matches recovered,
+every one fitting inside its own `normal` bucket with nothing unresolved.
+
+### 3. The result can no longer be lost at all
+
+The original defect: `_commitStats` ran in the `'matchEnd'` hook, several awaits after the engine
+had decided the match, with a human tapping "Next round" on the final round modal in between. If
+the other player tapped through first and left, `net.leaveRoom` set the room to `status:'ended'`
+with no `result`, `_mpOnRoomUpdate` read that as an abandon, `_mpEndDueToOpponentLeft` aborted the
+engine, and `matchEnd` never fired — the winner's own win was never written anywhere. Asymmetric,
+so it bit whichever device was slower.
+
+Matt: *"Make it so that is impossible. Nothing should ever be able to be lost. That's the rule."*
+So the fix is structural rather than a patched gap:
+
+- **`game.js`'s `checkMatchEnd()` fires a synchronous `onDecided` hook** in the same statement that
+  sets `winner`, before any `emit`, any await or any abort check. `_bindGame` points it at
+  `_commitStats`. There is no gap left to lose a result in.
+- **The escoba tally moved into the engine** (`player.matchEscobas`, folded in `scoreRound()`,
+  which runs before `checkMatchEnd`). The UI's own accumulator was one round behind at exactly the
+  moment the match is decided, so recording there would have been right about everything except the
+  escoba count. `_matchEscobasNow()` reads it; `_seedMatchEscobas()` carries a pre-2026-08-11
+  save's number onto a restored engine.
+- **A failed WRITE is queued, not dropped** (`js/game-stats.js`'s `persistOrQueue` →
+  `gamehub.pendingResults.v1`, replayed by `loadStats`). Wired into `recordEscoba` and
+  `recordHeadToHead`.
+
+Probes: `test-mp-lockstep.mjs` E7 (the bucket, both sides recording exactly once, neither recording
+the other's result) and E8 (the peer leaves at the decided moment — born red);
+`test-stats-replay.mjs` D/E/F (the extraction against real devices, its edges, and the queue).
+
+### Where the numbers show
+
+**My Stats** gives Escoba its own **Multiplayer** block — wins, losses, plays, win rate — separate
+from the by-difficulty table, because online play is not a difficulty and reading it as one is the
+mistake that made these plays invisible. It reads `byDiff.mp`, the same single stored source the
+migration writes to, so the two can never disagree. Hidden entirely for a solo-only player.
+**The leaderboard's Escoba board** gives every player card an **MP** chip beside its difficulty
+chips, showing that player's multiplayer Escoba wins — per game, on the game's own page. (A first
+attempt put a cross-game "Multiplayer wins against" block on the player detail instead; it rendered
+the same rows no matter which game you drilled in from, and was removed. See `js/CLAUDE.md`,
+"Multiplayer on the leaderboard".)
+
+## Rules engine notes (correctness-critical)
+
+- **Capture value vs. printed rank** only diverges in `spanish` mode:
+  `captureValue(rank, mode)` returns `rank` directly in `american`, and maps figures
+  (10/11/12 → 8/9/10) in `spanish`. Every other rule (escoba, scoring, AI) reasons purely
+  in **capture value**, never rank, so it's mode-agnostic by construction.
+- **Escoba scoring is additive, not compared**: unlike "most cards"/"most coins"/"most
+  sevens" (each computed via a strict sole-max, ties score nobody), each player's escoba
+  count scores 1 point per escoba regardless of the other players' counts. The UI's round
+  comparison table (see "Round comparison table" below) deliberately never highlights the
+  Escobas row for this reason.
+- **Scoring stacks in a specific way**: a player with all four 7s gets `allSevens` (3pts)
+  **and** `sevens` (1pt, "most 7s", trivially true if you have all four), i.e. 4 points
+  total, not 3. `guindis` (the lone 7-of-Oros point) only fires when `allSevens` didn't
+  (mutually exclusive on that one line, but `sevens`/"most" stacks with either).
+  `cardsBonus` (opponent under 10 cards) only applies in 2-player matches.
+- **Whitewash**: a player who captures zero cards all round loses the match outright,
+  2-player only (`_whitewash` in `scoreRound()`), checked before the normal target-score
+  win condition in `checkMatchEnd()`.
+- **Removed: the dealer's-luck opening escoba (2026-08-31).** Matt, shown a round where
+  the opening four cards totalled 30 and handed the dealer two free points: *"I don't like
+  that rule... it should just be deleted."* Fournier's rules give the dealer the opening
+  table when those four cards sum to 15 (one escoba) or 30 (two), and `playRound()` used
+  to resolve that between the first `deal` and the turn loop, emitting an `initialEscoba`
+  event the UI answered with a broom sweep and a banner. **All of it is gone**: the
+  opening table is now always played against, whatever it sums to. Do not re-add it as
+  "the real rules" — this was a deliberate house-rule call, and `escoba/js/test.js`
+  carries a `[KNOWN-BUG PROBE]` asserting no `initialEscoba` event is ever emitted and
+  that nobody holds an escoba before a card is played.
+  - The rule was worth about 1 opening deal in 16 (3.41% sum exactly 15, 2.73% sum 30),
+    and the double payout for 30 was a flat rule rather than two real sweeps: only 35% of
+    the 2,492 possible 30-sum tables even contain a subset that makes 15.
+  - Two things it also silently did, now also gone: it seeded `lastCapturer` with the
+    dealer before a card was played (so the round's leftover cards defaulted to them),
+    and it put 4 cards in the dealer's pile toward "most cards"/coins/sevens.
+- **Every `deal` is a resumable checkpoint, the round's first one included.** The UI used
+  to skip the snapshot on `payload.first === true`, because the dealer's-luck check ran
+  synchronously right after it and a restore from that instant would have skipped the
+  check. With the rule deleted, `playRound()` goes straight from the first deal into the
+  turn loop with `_nextTurn` already stamped, so that save is now both safe and useful:
+  leaving right after a round is dealt resumes exactly that deal instead of the previous
+  round boundary. `test.js`'s resume test and `test-mp-lockstep.mjs`'s glue mirror it.
+- **`finishRoundAfterPlay()` orders things deliberately** for resume correctness: it
+  scores the round, resolves `checkMatchEnd()`, and advances the dealer for the *next*
+  round **before** emitting `roundScored`, so a snapshot taken while the round-end modal
+  is showing already has the dealer/winner state a fresh restore should continue from,
+  and the normal `playMatch()` while-loop (not a special "between-rounds" resume path)
+  handles it correctly on its own.
+
+## UI/CSS architecture
+
+- **Overhang budget system** (`--eb-lift-overhang`, `--eb-badge-overhang`, `--eb-hand-
+  lift-overhang` in `escoba.css`): selected cards lift and ring *outside* their own box,
+  and every card's value badge bleeds past its corner. Rather than patch each clipping
+  symptom, `.eb-table`/`.eb-hand` reserve padding sized to these named constants up
+  front, and the mat's own fixed-height formula includes them so two full card rows
+  still fit. The hinted-card dashed outline sits at `inset: -2px` (just inside the card),
+  not floating outside it, specifically so two adjacent hinted cards can't collide: the
+  6px table gap alone is enough clearance at that inset.
+- **The mat is a fixed floor, not a fixed ceiling.** `.eb-mat` uses `min-height` (not
+  `height`) and `flex: 1 1 auto` inside `.eb-game`'s column so it absorbs any leftover
+  viewport height on a taller phone (extra felt, not a dead gap below the actions row).
+  `.eb-table`'s own height stays a **hard** `height` (always exactly two card rows'
+  worth) regardless of how tall the mat grows, so table-card layout never changes shape.
+  The `.eb-game` container's own `min-height: calc(100dvh - Npx)` constant is a rough,
+  empirically-tuned chrome budget (calibrated against the *hub-immersive* context at
+  390x844, its primary target): if the overall vertical budget changes again (font
+  sizes, card sizing, hub chrome), re-measure via `document.documentElement.scrollHeight`
+  vs `window.innerHeight` rather than guessing; that constant is the one thing in this
+  file not derived from a principled formula.
+- **Mat-anchored overlays, each solving a "feedback lives where the eyes already are"
+  problem**: the running capture sum (`.eb-sum-chip`, bottom-center), the persistent
+  "last hand" state flag (`.eb-lasthand-chip`, top-right, `#ffce3a` + bold text + icon,
+  never color alone, stays lit for the rest of the round rather than fading), and the
+  broom sweep (`.eb-broom`) all live absolutely-positioned *inside* the fixed-height mat,
+  so none of them can ever cause a reflow. The opponent-move announcement is the one
+  exception: it's a **dedicated fixed-height flow row** between the top bar and the mat
+  (`.eb-announce-row`), not an overlay on the mat, because it's tall enough that overlap-
+  based placement collided with the card zone at the mat's actual proportions: the row
+  always occupies the same space, only the pill's opacity/transform inside it changes.
+- **Broom sweep** (`_startBroomSweep`/`.eb-broom` in `ui.js`/`escoba.css`): a 10-frame
+  spritesheet cycled via `steps(9)` on `background-position`. The sprite's own baked-in
+  motion reads as an in-place swish/dust flourish, not a true left-edge-to-right-edge
+  traversal (confirmed by inspecting the actual asset), so the container's `left`
+  property is animated separately to supply the real across-the-felt travel; the two
+  animations run concurrently at the same duration (`BROOM_MS`). Triggered on `play`
+  events where `payload.escoba === true`, and only there since the dealer's-luck opening
+  escoba was deleted (2026-08-31; that path re-showed the swept cards briefly because the
+  engine had already moved them into the dealer's pile before the event fired).
+  Captured cards get a directional `is-swept` exit (fly right +
+  rotate + fade) instead of the plain `is-taken` lift-and-fade, timed so cards start
+  flying ~150ms into the sweep and the escoba banner pops ~450ms in. Skipped entirely
+  under `prefers-reduced-motion` (falls back to the ordinary capture exit). **Note**:
+  the in-house preview browser forces `prefers-reduced-motion: reduce` regardless of any
+  page setting, so the live sweep can only be confirmed on a real device; verify there
+  before assuming a broom-adjacent change looks right.
+- **The hand is reconciled, never rebuilt, and cards travel (2026-09-28).** Matt asked for
+  Escoba's card motion to match its table. `render()` used to set `.eb-hand`'s innerHTML every
+  time, so a selected card snapped up (a fresh node has nothing to transition from) and the cards
+  left after a play jumped. `_syncHand()` now keeps one `.eb-hand-slot` per card id
+  (`this._handSlots`) and only toggles `is-selected`; a slot that moves slides with a FLIP on the
+  SLOT, because the card's own `transform` is the selection lift. A slot's card is rebuilt only if
+  its signature (capture value + the Value-badges setting) changed, so the same id in a match with
+  the other numbering mode never shows a stale badge. **Do not go back to innerHTML for the hand.**
+  Card flights are `_fly()` clones in the fixed `.eb-flight` layer (z-index 200, under every
+  modal): a **deal** renders the new cards in place but hidden (`is-arriving`, collected through
+  `this._arriving` during that one render), saves the checkpoint, then flies each out of the
+  stock in dealing order (face down to another player's pill, `data-pid`) and reveals it on
+  landing; a **play** hides the source (your hand slot, or reads the player's pill) and flies the
+  card to its table cell before the existing hold/capture beats, landing with `is-flown` so the
+  old drop-in doesn't replay on top. Flights are off under reduced motion and during a
+  rejoining guest's `replayMode` (`_flightsOn()`); the state change is then instant, as before.
+  A flight never resolves once `_dead`, same as `beat()`, so a torn-down match can't carry on
+  saving. Cost: about 0.3 s per play and 0.7-1.1 s per deal. Verified in Chromium with motion on
+  and off (full solo rounds, 2 and 3 players, standalone and in-hub, `check-no-scroll.mjs escoba`
+  clean); not yet by eye on a phone.
+- **Round comparison table is one shared column grid**, not a table element: every row
+  (`eb-score-head`, `eb-score-row` xN, `eb-score-points-row`, `eb-score-total-row`)
+  independently declares `grid-template-columns: var(--eb-score-cols)`, where
+  `--eb-score-cols` (`minmax(0, 1.3fr) repeat(var(--eb-players), minmax(0, 1fr))`) is set
+  once on the wrapper and inherited via normal CSS custom-property inheritance. Because
+  every track's minimum is `0` (a bare fr-share, not content-sized), independently-
+  declared grids with the same template and the same container width compute pixel-
+  identical column positions regardless of each row's own label length; this deliberately
+  avoids CSS `subgrid` (correct browser support isn't guaranteed everywhere
+  this hub needs to run). The total-score band is intentionally horizontal-padding-free
+  for the same reason: any inset there shifts its numbers out of line with the rows
+  above it, which is exactly what the acceptance bar for this table was about.
+
+## Settings & persistence
+
+- **`escoba-settings`** (last-used setup): `count`, `mpSeats`, `humanName`, `humanAvatar`,
+  `aiNames`, `aiDifficulty`, `targetScore`, `deckMode`, `deckModeChosen`, `assist`, `showValues`,
+  `mode`.
+  Precedence is last-used > shared hub profile > built-in default, same as every other game
+  module. `count` is the SOLO table (2-3); `mpSeats` is the ONLINE table (2-4) and is
+  deliberately its own field (see "Multiplayer at 2-4 seats"). Both are additive-only reads:
+  an older save with no `mpSeats` simply defaults to 2. `showValues` (2026-08-11) is the
+  **Value badges** row on the setup screen, and is the same kind of additive read: absent means
+  on, so nobody's screen changed on the deploy. Matt wants the badges, Ana does not, and they
+  share devices as separate profiles, so it had to be a setting rather than a call either way.
+  Unlike `assist` it is **NOT frozen into the match** (there is no `_matchShowValues`): it is
+  a pure display preference, so `renderTable`/`renderHand` read `this._setup.showValues` live
+  and a flip applies to the next render, including a resumed match. It is per device and never
+  travels over the room -- it reveals nothing an opponent could act on that the card faces do
+  not already say, so MP needs no agreement about it. The How-to-play diagram
+  (`_howtoDiagram()`) keeps its badges unconditionally: they are the annotation that makes
+  7+5+3=15 readable, and honouring the setting there would leave the one diagram that teaches
+  the capture rule showing three unexplained cards.
+  **The row's control is `_valuePicker()`, not a segmented control**, and it has no hint
+  paragraph. Matt: *"Instead of words describing the difference, show the difference with an
+  example card. I've stated many times that you should always defer to visual instructions over
+  prose."* So the two OPTIONS ARE the example: one real card face rendered both ways, side by
+  side, and tapping one is the choice. The card is the **Sota de oros**, picked because it is the
+  card the badge does the most work on (Spanish numbering prints 10 and captures 8, so the two
+  options genuinely differ); it exists in both numbering modes and its value goes through
+  `captureValue()` rather than being hardcoded, so American mode shows the 10 that mode really
+  plays. Selection is a border plus a check glyph, never hue alone. The old `hint_values_on`/
+  `hint_values_off` string keys were deleted with the prose they carried.
+- **`escoba-save`** (resumable match, schema `v: 1`): `{ v, matchEscobas, assist, snap }`
+  plus an MP-only `mp: { code, seat, role, seq, at }` (absent in solo, so the solo shape is
+  unchanged; `role` is written alongside `seat` only so a save survives the 3-4-seat deploy
+  window in both directions), where
+  `snap` is exactly `Game.snapshot()`'s output plus a `midRound` flag. Cleared on
+  `matchEnd` and on the in-game menu's "Quit to setup"/"New game"; **never** cleared by
+  `destroy()` (that's the whole point: navigating away via the hub must preserve it).
+- **MP invariants (July 2026 hardening — full list + rationale in `js/CLAUDE.md`,
+  "Multiplayer lockstep — invariants"; regression tripwires in `test-mp-lockstep.mjs`):**
+  the `'play'` hook saves AFTER `_mpAfterPlay` so the autosave's `mp.seq` matches the
+  play already in its snapshot; `_mpApplyRecovery` remaps the transmitted snapshot's
+  device-relative `isHuman` flags by seat (`mp.seat`) before rebuilding; and a
+  guest restoring or recovering from a round-BOUNDARY snapshot (`midRound:false`)
+  awaits the host's published round record (`_mpAwaitNextRound`) before playing, so
+  the next round's deck+dealer come from the host, never a stale `presetDeck`.
+- **`recordEscoba(difficulty, won, { escobas })`** in `js/game-stats.js` feeds the shared
+  per-device stats (`gamehub.stats`), tab `escoba` in the Stats overlay
+  (`js/game-stats-ui.js`). `difficulty` is the opponent AI's tier in solo and the literal
+  `'mp'` in multiplayer — see "Multiplayer results are recorded" for why, and for the two
+  defects that section exists to record. `recordHeadToHead('escoba', opp, won)` runs once
+  per opponent alongside it, MP only.
+- i18n: `escoba/js/strings.js` (`{ en, es }`), `ui.js` builds `t()` at render time. Difficulty ids
+  (`easy`/`normal`/`hard`), `deckMode` (`spanish`/`american`), and setup `mode`
+  (`solo`/`host`/`join`) stay canonical; only their display labels translate. Card-suit terms
+  (Oros/Copas/Espadas/Bastos), the figure names Sota/Caballo/Rey, and "Escoba"/"Escobas"/"¡ESCOBA!"
+  itself are deliberately identical in both dictionaries (the game's own real vocabulary). The
+  round-modal bonus footnotes ("Opponent under 10 cards", "All the coins", "All four 7s") are
+  generated by `game.js` (the engine, out of scope for this pass) and stay English regardless of
+  the hub's language setting -- a known gap, not an oversight.
+
+## How-to-play sheet (2026-07-24, batch D/FB3-HOWTO3): trimmed to the repo-wide pattern
+
+QA rated the old sheet a "reference manual": 540px wide, an internal scroll, a 3-slide
+scroll-snap pager, an 8-row scoring table, and 3 accordion paragraph sections. All of that
+is gone, replaced with ONE sheet (`.eb-howto`, `max-width: 340px`, no internal scroll):
+a goal line, one diagram (a played card + two table cards, mini-sized, annotated summing
+to 15), a caption, a compact 4-line scoring list, and an optional one-line figure-value
+note. `_openHowTo()`/`_howtoDiagram()` in `js/ui.js`; the old `_howtoPanels()`/
+`_howtoDetailRow()`/`_wireHowtoPanels()`/`_howtoDemoCards()` methods, the `_howtoOpen`
+tracking field, and the `howto-dot`/`howto-toggle` click cases are all deleted, along with
+every now-orphaned string key (`howto_caption_1..3`, `howto_fine_1`, `aria_panel`,
+`row_*`, `pt_1`/`pts_plus2`/`pts_3`, `detail_*`) and CSS rule (`.eb-howto-track`,
+`.eb-howto-dots`/`.eb-howto-dot`, `.eb-howto-details`/`.eb-howto-detail*`,
+`.eb-howto-table`, `.eb-howto-minicards`, `.eb-howto-broom`). `howto_title`/`btn_done`
+survive unchanged.
+
+**Scoring list verified against `escoba/js/game.js`'s `scoreRound()` (lines ~341-388)
+before writing**, since the engine actually has 8 line items (some conditional bonuses),
+not 4 — compressed to 4 lines that still cover every one of them:
+- `add('escobas', ...)` (line 366): 1 point per escoba, unconditional → "Escobas: 1 point
+  each".
+- `add('cards', ...)` + the 2-player `cardsBonus` (lines 367-372): most cards 1 point, +2
+  if the opponent has under 10 cards (2-player only) → "Most cards: 1 point (+2 if the
+  opponent has fewer than 10, 2 players)".
+- `allCoins`/`coins` (lines 374-375): all 10 oros +2, most oros 1 point → "Most oros: 1
+  point (+2 for all 10)".
+- `allSevens`/`guindis`/`sevens` (lines 376-378): all four 7s = 3 points (subsumes the
+  guindis point), else the lone 7-of-Oros (guindis) = 1 point, plus most-7s 1 point,
+  stacking → "Sevens: 1 point for most, 3 for all four (or 1 for the lone 7 of Oros)".
+This is a compression, not a 1:1 restatement of the old 8-row table — flagged here in
+case a future session wants the full breakdown back on a different screen.
+
+**Figure-value note**: `deck.js`'s `captureValue(rank, mode)` (line 30) returns `rank`
+directly in `american` mode but maps `rank >= 10 ? rank - 2 : rank` in `spanish` mode
+(the default) — so Sota/Caballo/Rey (printed 10/11/12) actually capture as 8/9/10, NOT
+their printed number. The one-line note (`howto_figures_note`) only renders when
+`deckMode !== 'american'` (i.e. whenever figures exist at all) and says exactly this:
+"Sota, Caballo and Rey count 8, 9 and 10, not their printed number."
+
+## Known open items
+
+- A `TypeError: Cannot read properties of null (reading 'avatar')` was seen once in
+  `_renderMatchModal` during manual testing with a hand-built synthetic snapshot (an AI
+  with an unrealistically sparse hand): `showMatchModal()` was reached with
+  `this.game.winner` still `null`. Not reproduced from a normal game or the 25k-check
+  automated suite in `test.js`, and not chased further (out of scope for the session
+  that found it: engine work wasn't on the table that day). Worth a look if it ever
+  recurs from ordinary play: it would mean `checkMatchEnd()` let `matchEnd` fire without
+  a winner under some real, reachable condition, not just a hand-rolled test state.
+- The broom sweep's *feel* (timing, whether the travel distance/size reads right) has
+  only been confirmed by geometry (bounding-rect math) and code review, never by eye, for
+  the reduced-motion reason above.
+
+## Scope status
+
+- **Initial build:** full Fournier ruleset (capture-to-15, escobas incl. the dealer's
+  initial-table escoba (deleted 2026-08-31, see "Rules engine notes"), last-cards/leftover
+  sweep, complete round scoring incl. guindis/
+  all-sevens/all-coins/under-10 bonus, whitewash instant win), three AI tiers, 2-3
+  players, play to 21 or 31, reusing the Anita deck. Round-end modal, match modal with a
+  cumulative-score chart, How to Play sheet, profile prefill.
+- **Numbering fix:** added the `american` mode after Matt couldn't parse the traditional
+  Sota/Caballo/Rey capture-value mapping mid-game; briefly defaulted to American, then
+  reverted the default to Spanish per Matt's explicit call (American stays opt-in).
+- **Professional polish pass:** removed all instructional/status text, gave every region
+  fixed geometry (zero layout shift), moved the running toast off the page-bottom onto a
+  mat-anchored/reserved-row system, rebuilt the round modal as a comparison table,
+  added a close (X) + Results/New-game reopen on the match modal, and added the whole
+  resume/snapshot system described above. Also gave the hub shell its `immersive` mode
+  (an opt-in, not escoba-specific in itself, but escoba is its first and so-far-only user).
+- **Broom + round-2 fixes:** added the sweep animation and directional capture exit;
+  fixed the clipping the fixed-geometry pass had introduced (the overhang-budget
+  system); rebuilt the round modal's alignment as a single shared grid; redesigned the
+  top bar (big score anchor, mini card-back fan, full-word round/target, the persistent
+  last-hand chip); added the mat-anchored running-sum chip and over-15 tap rejection;
+  and re-tuned the vertical space budget to fill the viewport without a dead band.
+  Along the way, fixed a latent (pre-existing, not introduced that session) bug where
+  `startGame()`/`_resumeGame()` never aborted a previously-live `this.game`, letting a
+  zombie match loop keep calling the same UI instance's `onEvent` after "New game" from
+  the in-game menu.
+- **3-4 player online + MP result recording (2026-08-11):** the two sections above. The
+  online table goes to 4 humans (Chinchón's seat model, no engine change, no net.js change),
+  and multiplayer results now record under their own `'mp'` bucket and can no longer be lost
+  to a peer leaving first.
+- **Value badges (2026-08-11):** the per-card capture-value badge was invisible in dark mode
+  (`.eb-card-val` drew with `--eb-ink`, which the dark theme flips to near-white, on a hardcoded
+  white pill: ~1.16:1). Fixed with `--eb-card-ink`, a token for anything drawn ON a card face,
+  fixed in both themes because the card art never darkens. The badge itself then became a setting
+  (`showValues`, above).
+- **Roadmap (not built):** 4-player TEAM play is still out of scope (Escoba's team variant
+  wasn't part of what Matt asked for, and is a rules change, not a seat count); no sound; the
+  whitewash/null-winner item above.
+
+## Tests
+
+```
+node escoba/js/test.js
+```
+Deck construction (both numbering modes), ~85 full AI-vs-AI matches' worth of capture/
+escoba/scoring invariants, and a kill-and-resume round-trip (JSON-serialized, mirroring
+`localStorage`, up to 3 resumes per match). Run requires Node >= 22.7 (ESM syntax
+detection; there is no package.json), same as Chinchón's `test.js`/`sim.js`.
