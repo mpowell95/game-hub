@@ -102,6 +102,19 @@
   box-shadow: 0 4px 14px rgba(16, 24, 40, .18);
 }
 .wo-root .wo-hero svg { display: block; width: 100%; height: 100%; }
+.wo-root .wo-hero { box-shadow: 0 10px 30px rgba(63, 214, 189, .16), 0 4px 14px rgba(0, 0, 0, .35); }
+/* The picture plays itself (2026-10-14): the free teal arrow waits, slides off the right edge with a
+   trail and sparks, vanishes, and fades back in. CSS px on an SVG element are user units here. */
+.wo-root .wo-hero-go { animation: wo-hero-go 3.6s infinite; }
+.wo-root .wo-hero-trail, .wo-root .wo-hero-spark { opacity: 0; animation: wo-hero-fx 3.6s infinite; }
+@keyframes wo-hero-go {
+  0%, 38% { transform: translateX(0); opacity: 1; animation-timing-function: cubic-bezier(.55, 0, .85, .35); }
+  70% { transform: translateX(104px); opacity: 1; }
+  70.5% { transform: translateX(104px); opacity: 0; }
+  71%, 84% { transform: translateX(0); opacity: 0; animation-timing-function: ease-out; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes wo-hero-fx { 0%, 40% { opacity: 0; } 52%, 68% { opacity: 1; } 71%, 100% { opacity: 0; } }
 .wo-root .wo-head { text-align: center; }
 .wo-root .wo-head h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -.2px; }
 /* How to play is a real pill (css/ui.css's plain .gh-btn: outlined, rounded), centred under the card. */
@@ -388,6 +401,7 @@
 
 @keyframes wo-pen-still { 0% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
+  .wo-root .wo-hero-go, .wo-root .wo-hero-trail, .wo-root .wo-hero-spark { animation: none; }
   .wo-root .wo-heart.is-pop { animation: none; }
   .wo-root .wo-pen.is-on { animation: wo-pen-still 1.6s step-end forwards; }
   .wo-root .wo-progress i { transition: none; }

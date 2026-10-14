@@ -231,13 +231,46 @@ const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 
 const ICON_BULB = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 28c-3-2.4-4.6-5.6-4.6-9a11.6 11.6 0 0 1 23.2 0c0 3.4-1.6 6.6-4.6 9v4H17z"/><path d="M19 37h10"/><path d="M24 2.5v3M8 9l2.2 2.2M40 9l-2.2 2.2M3.5 19h3M41.5 19h3"/></g></svg>`;
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21L2.6 11.6A5.6 5.6 0 0 1 12 3.9a5.6 5.6 0 0 1 9.4 7.7z"/></svg>';
 
-/** The setup screen's header tile: a corner of the game's own board, in the game's own colours
- *  (the Sudoku / Minesweeper pattern of a small tinted picture over the title). */
-const HERO_SVG = `<svg viewBox="0 0 88 88" aria-hidden="true"><rect width="88" height="88" rx="14" fill="#1f1f2d"/>`
-  + `<g fill="none" stroke="#b3b4e0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">`
-  + `<path d="M16 72V18H40V30"/><path d="M28 60V40"/><path d="M52 72V56H70V40"/><path d="M40 72H30"/><path d="M58 18H74"/></g>`
-  + `<g fill="#b3b4e0"><path d="M40 37l-4.5-7h9z"/><path d="M28 34l-4.5 7h9z"/><path d="M70 33l-4.5 7h9z"/><path d="M24 72l7-4.5v9z"/><path d="M80 18l-7-4.5v9z"/></g>`
-  + `<path d="M28 48H62" fill="none" stroke="#3fd6bd" stroke-width="3.2" stroke-linecap="round"/><path d="M70 48l-8-5v10z" fill="#3fd6bd"/></svg>`;
+/** The setup screen's header picture (2026-10-14, Matt: "Make the top image thing cooler and
+ *  better"): a little board that plays itself. A 7x7 grid of dots, arrows locked into each other the
+ *  way a real level is (the red one has bumped into the teal one's body, the lavender one at the top
+ *  left waits for it too), and the free teal arrow glows, slides off the edge with a
+ *  trail and sparks, and comes back. Pure SVG + CSS (`.wo-hero-go` in way-out.css); reduced motion
+ *  shows it standing still. Built from grid points so every arrow sits on the dots. */
+const HERO_SVG = (() => {
+  const P = (i) => 18 + i * 14;                       // grid index -> coordinate
+  const pts = (cells) => cells.map(([x, y]) => [P(x), P(y)]);
+  const arrow = (cells, color, w = 4.2) => {
+    const q = pts(cells);
+    const [hx, hy] = q[q.length - 1], [px, py] = q[q.length - 2];
+    const dx = Math.sign(hx - px), dy = Math.sign(hy - py);
+    const tip = [hx + dx * 7, hy + dy * 7], b = [hx - dx * 1.5, hy - dy * 1.5];
+    const head = `M${tip[0]} ${tip[1]}L${b[0] - dy * 5.5} ${b[1] + dx * 5.5}L${b[0] + dy * 5.5} ${b[1] - dx * 5.5}Z`;
+    return `<path d="M${q.map((p) => p.join(' ')).join('L')}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`
+      + `<path d="${head}" fill="${color}"/>`;
+  };
+  let dots = '';
+  for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) dots += `<circle cx="${P(x)}" cy="${P(y)}" r="1.6"/>`;
+  const lav = '#b3b4e0';
+  return `<svg viewBox="0 0 120 120" aria-hidden="true">`
+    + `<defs><radialGradient id="woHeroBg" cx="30%" cy="22%" r="95%"><stop offset="0" stop-color="#30324f"/><stop offset=".55" stop-color="#1f2033"/><stop offset="1" stop-color="#131420"/></radialGradient>`
+    + `<linearGradient id="woHeroTrail" x1="0" x2="1"><stop offset="0" stop-color="#3fd6bd" stop-opacity="0"/><stop offset="1" stop-color="#3fd6bd" stop-opacity=".55"/></linearGradient>`
+    + `<filter id="woHeroGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`
+    + `<rect width="120" height="120" fill="url(#woHeroBg)"/>`
+    + `<g fill="#4a4c70">${dots}</g>`
+    + arrow([[0, 5], [0, 4], [0, 3], [0, 2], [0, 1], [1, 1], [2, 1], [2, 2]], lav)
+    + arrow([[2, 0], [3, 0], [4, 0], [5, 0], [6, 0]], lav)
+    + arrow([[4, 6], [5, 6], [6, 6], [6, 5], [6, 4]], lav)
+    + arrow([[3, 2], [4, 2], [4, 1]], lav)
+    + arrow([[1, 6], [2, 6], [3, 6], [3, 5], [3, 4]], '#e0484f')
+    + `<g class="wo-hero-go" filter="url(#woHeroGlow)">`
+    + `<rect class="wo-hero-trail" x="-30" y="${P(3) - 2.5}" width="${P(1) + 30}" height="5" rx="2.5" fill="url(#woHeroTrail)"/>`
+    + arrow([[1, 3], [2, 3], [3, 3], [4, 3]], '#3fd6bd', 4.8)
+    + `<g class="wo-hero-spark" fill="#c9fff4"><circle cx="${P(4) - 6}" cy="${P(3) - 6}" r="1.4"/><circle cx="${P(3) + 2}" cy="${P(3) + 6}" r="1.1"/><circle cx="${P(2)}" cy="${P(3) - 5}" r=".9"/></g>`
+    + `</g>`
+    + `<rect x=".75" y=".75" width="118.5" height="118.5" rx="26" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1.5"/>`
+    + `</svg>`;
+})();
 
 /** A small board for How to play, drawn in SVG from the same geometry as the game. `arrows`:
  *  [{ cells, kind: 'idle' | 'go' | 'red' | 'block' }]. Meaning is carried by shape too (a dashed
