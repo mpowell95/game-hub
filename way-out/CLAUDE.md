@@ -250,6 +250,9 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
     trying sentence lines with pills: *"i liked the horizontal layout"*); footer **"🏆 Easy leader
     this week"** (follows the Easy / Hard choice) with name and score, **"-" and "-" when nobody has
     a run** (not "No runs yet"), and **See all results ›**, which opens Results on that version.
+  - **Both footers name the leader by emoji + username, never "You"** (Matt, 2026-10-14; `_leadName`,
+    profile name until the combined read lands). Font sizes are the same on both; the score sits
+    further left on Rush only because See all results is a wider pill (equal widths truncated names).
   - Leaders come from the Results read (`_loadRushRows`, rows now carry `pts`), in the background at
     most once a minute, refreshed in place; ties all named; "You" for this phone's person.
   - The Rush picture's stopwatch hand spins (`.wo-watch-hand`, 3 s a turn; stands still under
