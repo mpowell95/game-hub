@@ -113,6 +113,54 @@ const EXTRA_SCREENS = {
       await page.waitForTimeout(300);
     },
   })),
+  // Archery (2026-10-14): how to play, the shooting line, the hit close-up with the Your Turn bar,
+  // the result, the pass-and-play hand-over and practice.
+  archery: [
+    {
+      name: 'how to play',
+      async open(page) {
+        await page.click('[data-ov="setup"] [data-act="howto"]');
+        await page.waitForSelector('[data-ov="help"]:not([hidden])', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'shooting line',
+      async open(page) {
+        await page.click('[data-ov="help"] .ar-x');
+        await page.evaluate(() => { const u = window.__arTest.ui; u.settings.first = 'me'; u._newMatch('cpu'); });
+        await page.waitForTimeout(1800);
+      },
+    },
+    {
+      name: 'your turn bar',
+      async open(page) {
+        await page.evaluate(() => { const u = window.__arTest.ui; u.r.setView('close'); u.phase = 'yourturn'; u._goNext = () => {}; u._bottom('go'); });
+        await page.waitForTimeout(200);
+      },
+    },
+    {
+      name: 'result',
+      async open(page) {
+        await page.evaluate(() => { const u = window.__arTest.ui; u.match.winner = 0; u.match.recorded = true; u._finish(); });
+        await page.waitForSelector('[data-ov="result"]:not([hidden])', { timeout: 8000 });
+      },
+    },
+    {
+      name: 'pass and play hand-over',
+      async open(page) {
+        await page.evaluate(() => { const u = window.__arTest.ui; u._showSetup(); u._passPlay(); u._passCard(false, 'turn'); });
+        await page.waitForSelector('[data-ov="pass"]:not([hidden])', { timeout: 8000 });
+      },
+    },
+    {
+      name: 'practice',
+      async open(page) {
+        await page.evaluate(() => { const u = window.__arTest.ui; u._showSetup(); u._practiceStart(); });
+        await page.waitForTimeout(1200);
+      },
+    },
+  ],
   darts: [
     {
       name: 'how to play',

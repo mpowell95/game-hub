@@ -371,3 +371,56 @@ export function decideFlickSoccer({ code, id, before, after }) {
   if (before.yourTurn && !before.over) return null;             // it was already your turn
   return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
 }
+
+// --- ARCHERY CHALLENGES (2026-10-14) ----------------------------------------------------------------
+// archery/js/mp.js writes archery/index/<code>/<id> from each person's side, with `lastBy` saying
+// whose write it was ('me' = this row's owner). Darts' rules:
+//   - a NEW row that is your turn           -> a challenge (the challenger's first round is done)
+//   - your turn coming back                 -> "your turn", with the round and the score
+//   - the match ending by THEIR hand         -> they won / you won (they resigned or they lost)
+// Your own writes (lastBy 'me') never notify you. There are no draws (a tie is a shoot-off).
+const ARCHERY_TEXT = {
+  en: {
+    title: 'Archery',
+    challenge: (w) => `${w} challenged you to Archery. Your turn to shoot!`,
+    turn: (w, r, a, b) => `Your turn vs ${w}, round ${r}. You ${a}, ${w} ${b}`,
+    shootoff: (w) => `Shoot-off vs ${w}! One arrow each.`,
+    theyWon: (w, a, b) => `${w} won, ${b} to ${a}.`,
+    youWon: (w) => `You won! ${w} resigned.`,
+    youBeat: (w, a, b) => `You beat ${w}, ${a} to ${b}!`,
+  },
+  es: {
+    title: 'Tiro con arco',
+    challenge: (w) => `${w} te ha retado al tiro con arco. ¡Te toca tirar!`,
+    turn: (w, r, a, b) => `Te toca contra ${w}, ronda ${r}. Tú ${a}, ${w} ${b}`,
+    shootoff: (w) => `¡Desempate contra ${w}! Una flecha cada uno.`,
+    theyWon: (w, a, b) => `${w} ganó, ${b} a ${a}.`,
+    youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+    youBeat: (w, a, b) => `¡Has ganado a ${w}, ${a} a ${b}!`,
+  },
+};
+
+export function decideArchery({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = ARCHERY_TEXT[lang] || ARCHERY_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    // Won by THEIR last arrow (they shot second and fell short): news to the winner.
+    if (after.result === 'won') return mk('over', (s) => s.youBeat(who, n(after.mine), n(after.theirs)));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who, n(after.mine), n(after.theirs)));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  if (!before) return mk('challenge', (s) => s.challenge(who));
+  if (before.yourTurn && !before.over) return null;             // it was already your turn
+  const round = n(after.round) || 1;
+  if (round > 3) return mk('turn', (s) => s.shootoff(who));
+  return mk('turn', (s) => s.turn(who, round, n(after.mine), n(after.theirs)));
+}

@@ -77,6 +77,9 @@ const TABS = [
   // Flick Soccer (2026-10-11): admin only at first, NOT devOnly here (Darts' reasoning above).
   // total/byDiff only, so the generic screen draws it.
   { id: 'flicksoccer', labelKey: 'game_title_flicksoccer' },
+  // Archery (2026-10-14): admin only at first, NOT devOnly here (Darts' reasoning above).
+  // total/byDiff only, so the generic screen draws it.
+  { id: 'archery', labelKey: 'game_title_archery' },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.

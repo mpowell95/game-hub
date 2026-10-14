@@ -60,13 +60,14 @@ ok('someone waiting on you sorts first', S.opponents[0].code === 'LILIC');
 ok('a person with only live games is still listed', S.opponents.some((o) => o.code === 'UNAID' && o.live === 1 && o.played === 0));
 ok('finished newest first', S.finished[0].updated >= S.finished[S.finished.length - 1].updated);
 ok('summarize does not mutate its input', rows[0].id === 'd1' && rows.length === 7);
-ok('every registry source is one of the five challenge games',
-  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['cuppong', 'darts', 'flick-soccer', 'hoops4', 'skeeball']));
+ok('every registry source is one of the six challenge games',
+  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'cuppong', 'darts', 'flick-soccer', 'hoops4', 'skeeball']));
 
 // --- the handoff contract, per game ---------------------------------------------------------------
 const them = { code: 'ANABB', name: 'Ana', emoji: '🦊' };
 for (const [game, path, take] of [
   ['darts', './darts/js/alert.js', 'takeOpen'],
+  ['archery', './archery/js/alert.js', 'takeOpen'],
   ['flick-soccer', './flick-soccer/js/alert.js', 'takeOpen'],
   ['cuppong', './cup-pong/js/alert.js', 'takeOpen'],
   ['hoops4', './hoops4/js/alert.js', 'takeCeremony'],
@@ -95,6 +96,8 @@ ok('darts: a pick opens the challenge card', /o\.kind === 'pick'\) this\._openOn
 ok('darts: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./darts/js/mp-ui.js')));
 ok('flick soccer: a pick opens the challenge card', /o\.kind === 'pick'\) this\._openOnline\(o\.them\)/.test(src('./flick-soccer/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./flick-soccer/js/ui.js')));
 ok('flick soccer: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./flick-soccer/js/mp-ui.js')));
+ok('archery: a pick opens the challenge card', /o\.kind === 'pick'\) this\._openOnline\(o\.them\)/.test(src('./archery/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./archery/js/ui.js')));
+ok('archery: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./archery/js/mp-ui.js')));
 ok('cup pong: a pick opens the terms', /o\.kind === 'pick'\) this\.openMultiplayer\(o\.them\)/.test(src('./cup-pong/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./cup-pong/js/ui.js')));
 ok('cup pong: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./cup-pong/js/mp-ui.js')));
 ok('hoops: a pick opens multiplayer on the terms', /armed\.kind === 'pick'/.test(src('./hoops4/js/ui.js')) && /pickFor/.test(src('./hoops4/js/mp-ui.js')));
@@ -128,7 +131,7 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
 
   // Every challenge game says what may be done to a match and does it through its own writer.
   ok('every source has action and end', C.CHALLENGE_GAMES.every((g) => typeof C.SOURCES[g].action === 'function' && typeof C.SOURCES[g].end === 'function'));
-  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js']]) {
+  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js']]) {
     const M = await import(path);
     ok(`${g}: mp.js exports cancelGame, resignGame, lifeOf, recipientOf, isCalledOff, readGame, sideOf, myCode`,
       ['cancelGame', 'resignGame', 'lifeOf', 'recipientOf', 'isCalledOff', 'readGame', 'sideOf', 'myCode'].every((k) => typeof M[k] === 'function'));

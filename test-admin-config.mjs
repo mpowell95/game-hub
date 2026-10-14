@@ -216,7 +216,7 @@ console.log('\n-- online play (js/online-gate.js) --');
   }
   ok('net.js joinRoom refuses the same person on another device', /samePerson\(room\.host, me\)/.test(net));
   ok('net.js joinSeat refuses the same person on another device', /samePerson\(seated\[k\], me\)/.test(net));
-  for (const p of ['./hoops4/js/mp.js', './cup-pong/js/mp.js', './darts/js/mp.js', './flick-soccer/js/mp.js']) {
+  for (const p of ['./hoops4/js/mp.js', './cup-pong/js/mp.js', './darts/js/mp.js', './flick-soccer/js/mp.js', './archery/js/mp.js']) {
     const s = read(p);
     const body = s.slice(s.indexOf('export async function createGame('), s.indexOf('export async function createGame(') + 1200);
     ok(`${p} createGame checks both people`, /onlineGate\(\)/.test(body) && /codeMayPlayOnline\(to\)/.test(body));
