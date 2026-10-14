@@ -220,7 +220,7 @@ ms = { cleared, flagsRight, bestTimeMs: { easy, medium, hard, expert } }
   (`minesweeperScreen`), and an explicit `players-agg.js` branch.
 
 **It is in `players-agg.js`'s `SOLO` set**, following Sudoku. A cleared board is a RUN, not a win
-over a person, so it does not inflate the cross-game wins number (HANDOFF-LB-SOLO-RUNS.md, still in
+over a person, so it does not inflate the cross-game wins number (docs/archive/HANDOFF-LB-SOLO-RUNS.md, still in
 force). It is the first SOLO game with a real loss axis, which is why its My Stats screen shows a
 win/loss record where Sudoku's shows none.
 

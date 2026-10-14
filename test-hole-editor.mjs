@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // test-hole-editor.mjs - headless tests for the Red Mesa hole editor, section 12 of
-// HANDOFF-GOLF-HOLE-EDITOR.md. No browser. Step 1 covers model.js: the normalise round-trip is
+// docs/archive/HANDOFF-GOLF-HOLE-EDITOR.md. No browser. Step 1 covers model.js: the normalise round-trip is
 // the correctness contract of the whole tool (section 3.2) - if it fails, nothing else matters.
 // Export-round-trip and structural checks are added once js/export.js exists (step 2).
 

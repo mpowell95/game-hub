@@ -123,7 +123,7 @@ Newest sort (`sortMsOf()` in `js/launcher-sort.js`), never the pill (`test-new-b
 `aria-hidden`; `aria-label` starts "New game.". NEW does not reorder the launcher; sorting new games
 first would be Matt's call.
 
-### Theme support (Phase 1, 2026-07-24 — HANDOFF-FB-THEME.md, batch 10)
+### Theme support (Phase 1, 2026-07-24 — docs/archive/HANDOFF-FB-THEME.md, batch 10)
 
 - `js/theme.js`: **`gamehub.theme.v1`** (`light|dark|auto`, default auto), `resolvedTheme`,
   `onThemeChange`; stamps **`.gh-dark` on `<html>`**, the ONLY thing CSS keys off. A preference.

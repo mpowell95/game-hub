@@ -174,7 +174,7 @@ if (mountErr) {
     }
   }
 
-  // 1b. R2 (HANDOFF-BASEBALL-3B.md section 5, Matt's second complaint on the v834 recording: "the
+  // 1b. R2 (docs/archive/HANDOFF-BASEBALL-3B.md section 5, Matt's second complaint on the v834 recording: "the
   // time between pitches ignores the tuned value"): the gap from one pitch's VERDICT to the NEXT
   // pitch's RELEASE is resultMs + betweenMs + windupMs, measured on the real hub mount rather than
   // inferred from the code. No input is given, so every pitch is a take (ball or strike) and no

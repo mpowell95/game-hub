@@ -1,5 +1,5 @@
 // test-recorder-contract.mjs - contract test between the TWO implementations of the
-// stats-write path (ARCH-REVIEW.md S3-1 / S5-8):
+// stats-write path (docs/archive/ARCH-REVIEW.md S3-1 / S5-8):
 //
 //   js/game-stats.js         the ES-module recorder (hub + module games)
 //   js/game-stats-global.js  the classic window.__ghStats port (Business Deal, Parchis)
@@ -24,7 +24,7 @@
 //       duplicates" item 3)
 //
 //   EXCLUDED (documented, deliberate - do not "fix" a failure by widening this list
-//   without reading ARCH-REVIEW.md S3-1 first):
+//   without reading docs/archive/ARCH-REVIEW.md S3-1 first):
 //     - ESM-only migrations and extras: the Ball Run metric migration
 //       (_brMetricMigrated/_brRunsRefolded/brLegacyMeters), chinchon cc seeding
 //       (_ccSeeded), connect4 grid, nutsbolts nb, escoba es, per-game ensure* shapes

@@ -18,7 +18,7 @@ for it.
 
 Hub integration: in-hub `module:` (`snake/js/ui.js`), not immersive. `isInProgress()` uses the
 LITERAL meaning (no mid-run resume, same class as Ball Run only — every other module game
-autosaves/resumes since batch 9, HANDOFF-FB-RESUME.md, 2026-07-23): `true` while a run is live
+autosaves/resumes since batch 9, docs/archive/HANDOFF-FB-RESUME.md, 2026-07-23): `true` while a run is live
 and not over, so the hub confirms before navigating away mid-run. Snake is deliberately
 EXCLUDED from the autosave/resume convention — a live-action run cannot meaningfully pause
 across a hub navigation; do not "finish" this by adding a save key.

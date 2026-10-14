@@ -27,31 +27,31 @@ it was found in.
 | `README.md` | 67 | HISTORY | Public repo README describing only 3 games and a 2-folder layout; badly stale against the 16-game hub. |
 | `RESTORE.md` | 115 | BINDING | Device-restore runbook and monthly Firebase `players/` export procedure — THE LAW's operational counterpart, absent from root. |
 | `RESTORE.md`-adjacent: `database.rules.README.md` | 35 | BINDING | The `database.rules.json` MERGE-don't-replace rule and why RTDB rules are intentionally wide open. |
-| `ARCH-REVIEW.md` | 392 | HISTORY | July-2026 point-in-time architecture review; most of its S5 roadmap has since shipped. |
-| `BUILD_INSTRUCTIONS.md` | 118 | REFERENCE | Yahtzee pixel-reproduction build brief; the "shared two-player scorecard" invariant is still relevant if anyone touches scoring. |
-| `ConnectFour_Session1_Kickoff_Prompt.md` | 40 | DISPOSABLE | One-off CF bitboard-engine kickoff prompt; fully superseded. |
-| `game-hub-and-connect-four-spec.md` | 124 | HISTORY | Pre-build planning spec for the hub shell + CF ("planning only, not yet built"); realized and partly reversed since. |
-| `game-hub-audit.md` | 136 | HISTORY | Point-in-time recon audit (commit `739341f`, sw v151); superseded by later CLAUDE.md updates. |
-| `HANDOFF-NEXT-SESSION.md` | 113 | HISTORY | 2026-07-23 state-of-play handoff; 3+ weeks stale, and its "commit ≠ push" claim is dead per current practice. |
+| `docs/archive/ARCH-REVIEW.md` | 392 | HISTORY | July-2026 point-in-time architecture review; most of its S5 roadmap has since shipped. |
+| `docs/archive/BUILD_INSTRUCTIONS.md` | 118 | REFERENCE | Yahtzee pixel-reproduction build brief; the "shared two-player scorecard" invariant is still relevant if anyone touches scoring. |
+| `docs/archive/ConnectFour_Session1_Kickoff_Prompt.md` | 40 | DISPOSABLE | One-off CF bitboard-engine kickoff prompt; fully superseded. |
+| `docs/archive/game-hub-and-connect-four-spec.md` | 124 | HISTORY | Pre-build planning spec for the hub shell + CF ("planning only, not yet built"); realized and partly reversed since. |
+| `docs/archive/game-hub-audit.md` | 136 | HISTORY | Point-in-time recon audit (commit `739341f`, sw v151); superseded by later CLAUDE.md updates. |
+| `docs/archive/HANDOFF-NEXT-SESSION.md` | 113 | HISTORY | 2026-07-23 state-of-play handoff; 3+ weeks stale, and its "commit ≠ push" claim is dead per current practice. |
 | `HANDOFF.md` | 207 | DISPOSABLE | Gitignored 2026-07-03 snapshot of a 2-game hub; everything in it has changed. |
-| `3am 7.22/00_README_START_HERE.md` | 158 | HISTORY | Cover sheet for a completed 8-batch feedback bundle (2026-07-22); defines a batch-local "THE LAW" restatement including the `#ffce3a` accent rule (see §4). |
-| `3am 7.22/01_repo_context.md` | 67 | HISTORY | Pre-briefed repo facts + 5 confirmations, all answered and closed. |
-| `3am 7.22/02_bugs_ballrun_difficulty.md` | 49 | HISTORY | Ball Run replay black-screen + Chinchón difficulty-selector bugs, both fixed. |
-| `3am 7.22/03_modal_close_buttons.md` | 45 | HISTORY | Adds X-close to Filler/Chinchón modals; later generalized hub-wide. |
-| `3am 7.22/04_filler_ai_and_board.md` | 64 | HISTORY | Filler AI stall + unfair-board bugs, both fixed. |
-| `3am 7.22/05_layout_viewport_fixes.md` | 47 | HISTORY | Nuts & Bolts / Chinchón mobile viewport-overflow fixes. |
-| `3am 7.22/06_monopoly_deal.md` | 87 | HISTORY | Four shipped Monopoly Deal fixes. |
-| `3am 7.22/07_chinchon_interaction.md` | 52 | HISTORY | Chinchón "highlight sets" + 7-8 card row freedom; decided later in batch 10. |
-| `3am 7.22/08_leaderboard_redesign.md` | 54 | HISTORY | An early leaderboard redesign proposal, superseded by the shipped wins-only + difficulty-pill design. |
-| `3am 7.22/09_connect_four_overhaul.md` | 107 | HISTORY | CF bug/overhaul batch; the "weak evaluator" item was later resolved by a real solver. |
-| `3am 7.22/10_designed_followups.md` | 116 | HISTORY | Closing decisions for the arc: hub-wide close-X, real CF solver, Chinchón meld treatment. |
-| `3am 7.22/RAW_FEEDBACK.md` | 164 | HISTORY | Verbatim 20-item source feedback the whole `3am 7.22/` bundle was built from; all items dispositioned. |
+| `docs/archive/3am 7.22/00_README_START_HERE.md` | 158 | HISTORY | Cover sheet for a completed 8-batch feedback bundle (2026-07-22); defines a batch-local "THE LAW" restatement including the `#ffce3a` accent rule (see §4). |
+| `docs/archive/3am 7.22/01_repo_context.md` | 67 | HISTORY | Pre-briefed repo facts + 5 confirmations, all answered and closed. |
+| `docs/archive/3am 7.22/02_bugs_ballrun_difficulty.md` | 49 | HISTORY | Ball Run replay black-screen + Chinchón difficulty-selector bugs, both fixed. |
+| `docs/archive/3am 7.22/03_modal_close_buttons.md` | 45 | HISTORY | Adds X-close to Filler/Chinchón modals; later generalized hub-wide. |
+| `docs/archive/3am 7.22/04_filler_ai_and_board.md` | 64 | HISTORY | Filler AI stall + unfair-board bugs, both fixed. |
+| `docs/archive/3am 7.22/05_layout_viewport_fixes.md` | 47 | HISTORY | Nuts & Bolts / Chinchón mobile viewport-overflow fixes. |
+| `docs/archive/3am 7.22/06_monopoly_deal.md` | 87 | HISTORY | Four shipped Monopoly Deal fixes. |
+| `docs/archive/3am 7.22/07_chinchon_interaction.md` | 52 | HISTORY | Chinchón "highlight sets" + 7-8 card row freedom; decided later in batch 10. |
+| `docs/archive/3am 7.22/08_leaderboard_redesign.md` | 54 | HISTORY | An early leaderboard redesign proposal, superseded by the shipped wins-only + difficulty-pill design. |
+| `docs/archive/3am 7.22/09_connect_four_overhaul.md` | 107 | HISTORY | CF bug/overhaul batch; the "weak evaluator" item was later resolved by a real solver. |
+| `docs/archive/3am 7.22/10_designed_followups.md` | 116 | HISTORY | Closing decisions for the arc: hub-wide close-X, real CF solver, Chinchón meld treatment. |
+| `docs/archive/3am 7.22/RAW_FEEDBACK.md` | 164 | HISTORY | Verbatim 20-item source feedback the whole `docs/archive/3am 7.22/` bundle was built from; all items dispositioned. |
 | `CC-1-tokens-and-fan.md` | 69 | HISTORY | Session 1/4 of the **Uno** visual rebuild (despite "CC" prefix — not Chinchón): token system + `_syncFan`. |
 | `CC-2-card-face.md` | 63 | HISTORY | Session 2/4 Uno rebuild: pressed-plastic card face + fixed geometry. |
 | `CC-3-motion.md` | 65 | HISTORY | Session 3/4 Uno rebuild: CSS motion/animation system. |
 | `CC-4-sort-toggle.md` | 69 | HISTORY | Session 4/4 Uno rebuild: display-only hand-sort toggle. |
-| `UNO-DESIGN-SPEC.md` | 377 | REFERENCE | Approved Uno visual spec: fan geometry formula, motion timing table, sort-is-presentation-only invariant — content since folded into `uno/CLAUDE.md`. |
-| `YAHTZEE_CLONE_SPEC.md` | 534 | HISTORY | Original pixel-exact Yahtzee build brief; superseded by `yahtzee/CLAUDE.md` for architecture, though see §4 for the Joker-rule cross-check. |
+| `docs/archive/UNO-DESIGN-SPEC.md` | 377 | REFERENCE | Approved Uno visual spec: fan geometry formula, motion timing table, sort-is-presentation-only invariant — content since folded into `uno/CLAUDE.md`. |
+| `docs/archive/YAHTZEE_CLONE_SPEC.md` | 534 | HISTORY | Original pixel-exact Yahtzee build brief; superseded by `yahtzee/CLAUDE.md` for architecture, though see §4 for the Joker-rule cross-check. |
 | `8ball-pool-build-spec.md` | 376 | REFERENCE | Original standalone 8-ball layout/physics/rules spec; still the source for fraction tables/geometry except where later handoffs override it. |
 | `POOL-REBUILD-PROMPT.md` | 212 | HISTORY | Kickoff prompt for the Pool visual rebuild; mission complete, mostly duplicated by `HANDOFF-POOL-VISUAL-REBUILD.md`. |
 | `HANDOFF-POOL-VISUAL-REBUILD.md` | 430 | HISTORY | The binding integration handoff for the (now-completed) 2026-07-29 Pool visual rebuild; folded into `pool/CLAUDE.md`. |
@@ -59,54 +59,54 @@ it was found in.
 | `poolv2/CLAUDE.md` | 341 | BINDING/REFERENCE | Current auto-loaded doc for `poolv2/` — naming isolation, physics, controls, AI, MP. `poolv2` is confirmed live in `js/hub.js` (devOnly, alongside `pool`), not dead code. |
 | `pool/CLAUDE.md` | 332 | BINDING/REFERENCE | Current auto-loaded doc for `pool/` — rulebook, visual-rebuild details, physics, controls, AI, MP, known limitations. |
 | `pool/README.md` | 50 | REFERENCE | Practical run/controls doc; states the physics-constants-live-only-in-`physics.js` rule that isn't restated in `pool/CLAUDE.md` itself. |
-| `HANDOFF-FB-BOGGLE.md` | 55 | HISTORY | Boggle haptics + shorter timers; haptics superseded by FB2-BOGGLE-CUE. |
-| `HANDOFF-FB-CHINCHON.md` | 75 | HISTORY | Auto-close on fully-melded hand + setup-screen cleanup. |
-| `HANDOFF-FB-CONNECT4-HINTS.md` | 102 | HISTORY | "Best Moves" panel solver-coverage expansion. |
-| `HANDOFF-FB-DOTSBOXES.md` | 58 | HISTORY | Beginner capture highlight, 10x10 Large size, menu rename. |
-| `HANDOFF-FB-FAVORITES-ORDER.md` | 42 | BINDING (contradicts root text) | Makes favorites custom-ordered via arrows — confirmed shipped (`moveFavorite` exists in `js/favorites.js`, `js/hub.js` only alphabetizes the non-favorites group). Root `CLAUDE.md`'s "favorites first, then alphabetically" line is incomplete/misleading as a result — see §4. |
-| `HANDOFF-FB-HOWTO.md` | 83 | HISTORY | Round-1 How-to-play rewrites to the TTT pattern. |
-| `HANDOFF-FB-INDEX.md` | 69 | HISTORY | Batch map for the 2026-07-23 feedback arc. |
-| `HANDOFF-FB-LEADERBOARD.md` | 77 | HISTORY | Player drill-down design (superseded by FB2-STATS-NAV), Snake unit-label bug, TTT split. |
-| `HANDOFF-FB-RESUME.md` | 65 | HISTORY | Autosave/resume added to 6 games; matches root's `isInProgress()` table exactly. |
-| `HANDOFF-FB-SETUP-CONVENTIONS.md` | 107 | BINDING (partly superseded) | Alternate-first-player default (still current, see §4); its Beginner/Intermediate/Pro tier vocabulary was reversed the next day by FB2-DIFFICULTY. |
-| `HANDOFF-FB-SNAKE.md` | 74 | HISTORY | Scroll-leak fix, wrap-around walls mode. |
-| `HANDOFF-FB-THEME.md` | 89 | REFERENCE | Design + rollout plan for hub-wide light/dark theme. |
-| `HANDOFF-FB2-BOGGLE-CUE.md` | 46 | HISTORY | Removes dead iOS haptics hack, adds gold visual valid-word cue. |
-| `HANDOFF-FB2-DIFFICULTY.md` | 91 | BINDING | Reverses tier vocabulary to Easy/Medium/Hard/Expert — see §4. |
+| `docs/archive/HANDOFF-FB-BOGGLE.md` | 55 | HISTORY | Boggle haptics + shorter timers; haptics superseded by FB2-BOGGLE-CUE. |
+| `docs/archive/HANDOFF-FB-CHINCHON.md` | 75 | HISTORY | Auto-close on fully-melded hand + setup-screen cleanup. |
+| `docs/archive/HANDOFF-FB-CONNECT4-HINTS.md` | 102 | HISTORY | "Best Moves" panel solver-coverage expansion. |
+| `docs/archive/HANDOFF-FB-DOTSBOXES.md` | 58 | HISTORY | Beginner capture highlight, 10x10 Large size, menu rename. |
+| `docs/archive/HANDOFF-FB-FAVORITES-ORDER.md` | 42 | BINDING (contradicts root text) | Makes favorites custom-ordered via arrows — confirmed shipped (`moveFavorite` exists in `js/favorites.js`, `js/hub.js` only alphabetizes the non-favorites group). Root `CLAUDE.md`'s "favorites first, then alphabetically" line is incomplete/misleading as a result — see §4. |
+| `docs/archive/HANDOFF-FB-HOWTO.md` | 83 | HISTORY | Round-1 How-to-play rewrites to the TTT pattern. |
+| `docs/archive/HANDOFF-FB-INDEX.md` | 69 | HISTORY | Batch map for the 2026-07-23 feedback arc. |
+| `docs/archive/HANDOFF-FB-LEADERBOARD.md` | 77 | HISTORY | Player drill-down design (superseded by FB2-STATS-NAV), Snake unit-label bug, TTT split. |
+| `docs/archive/HANDOFF-FB-RESUME.md` | 65 | HISTORY | Autosave/resume added to 6 games; matches root's `isInProgress()` table exactly. |
+| `docs/archive/HANDOFF-FB-SETUP-CONVENTIONS.md` | 107 | BINDING (partly superseded) | Alternate-first-player default (still current, see §4); its Beginner/Intermediate/Pro tier vocabulary was reversed the next day by FB2-DIFFICULTY. |
+| `docs/archive/HANDOFF-FB-SNAKE.md` | 74 | HISTORY | Scroll-leak fix, wrap-around walls mode. |
+| `docs/archive/HANDOFF-FB-THEME.md` | 89 | REFERENCE | Design + rollout plan for hub-wide light/dark theme. |
+| `docs/archive/HANDOFF-FB2-BOGGLE-CUE.md` | 46 | HISTORY | Removes dead iOS haptics hack, adds gold visual valid-word cue. |
+| `docs/archive/HANDOFF-FB2-DIFFICULTY.md` | 91 | BINDING | Reverses tier vocabulary to Easy/Medium/Hard/Expert — see §4. |
 | `HANDOFF-FB2-HOWTO2.md` | 100 | HISTORY | How-to round 2: Mancala overhaul, Ball Run slideshow restored. |
-| `HANDOFF-FB2-INDEX.md` | 62 | HISTORY | Batch map for the 2026-07-24 arc; confirms the tier-name reversal. |
-| `HANDOFF-FB2-PARCHIS.md` | 68 | HISTORY | Hub language now controls Parchís (now documented in `parchis/CLAUDE.md`). |
+| `docs/archive/HANDOFF-FB2-INDEX.md` | 62 | HISTORY | Batch map for the 2026-07-24 arc; confirms the tier-name reversal. |
+| `docs/archive/HANDOFF-FB2-PARCHIS.md` | 68 | HISTORY | Hub language now controls Parchís (now documented in `parchis/CLAUDE.md`). |
 | `HANDOFF-FB2-STATS-NAV.md` | 66 | HISTORY | My Stats redesigned as leaderboard-style drill-down. |
 | `HANDOFF-FB3-HOWTO3.md` | 80 | HISTORY | QA round 3: missing How-to sheets, TTT variant bug. |
 | `HANDOFF-FB3-HUB-LB-FIXES.md` | 67 | HISTORY | Dark-mode contrast, reorder-arrow overlap, version-pill fixes. |
 | `HANDOFF-FB3-I18N-SWEEP.md` | 52 | HISTORY | Untranslated fallback strings, Spanish overflow bugs. |
 | `HANDOFF-FB3-SETTINGS-RESUME.md` | 62 | BINDING | Settings-persist-on-selection for all 12 games — see §4. |
 | `HANDOFF-FB4-QA-POLISH.md` | 95 | BINDING | CF/Uno fixes; hub knobs hidden on all mounted screens incl. setup — see §4. |
-| `HANDOFF-LAW-DEDUP.md` | 70 | HISTORY | Reduces THE LAW from 10 repeats to 1 in root; confirmed executed. |
-| `HANDOFF-I18N-EXTRACTION.md` | 149 | HISTORY | The big EN/ES extraction mechanism/rollout plan; largely executed (Boggle/Parchís exclusions later reversed). |
-| `HANDOFF-CLAUDEMD-SPLIT.md` | 399 | HISTORY | Plan to split monolithic CLAUDE.md into root + per-game files; confirmed executed, current structure matches. |
-| `HANDOFF-HUB-FAVORITES-TILES.md` | 416 | HISTORY | Original 3-phase landscape-tiles + favorites spec; all phases shipped. |
-| `HANDOFF-HUB-TILES-PHASE3.md` | 291 | HISTORY | Marked "STATUS: COMPLETE"; archive of Phase 3 art-recomposition rationale + a reusable screenshot-verification technique. |
-| `HUB-HANDOFF-1.md` | 96 | HISTORY | Completed build record for the shared profile page; contract now in root's "shared profile" section. |
-| `HUB-HANDOFF-2.md` | 105 | REFERENCE | Completed wiring record; still-accurate per-game profile precedence table (CF/Chinchón/Business Deal). |
-| `HUB-HANDOFF-3.md` | 58 | HISTORY | Completed copy-pass/QA/deploy record for the profile feature. |
-| `HANDOFF-LEADERBOARD-CORRECTION.md` | 338 | HISTORY | The Ana/Natalia incident; matches root's pointer, already applied via `fix-natalia-record.mjs`. |
-| `HANDOFF-LEADERBOARD-REDESIGN.md` | 219 | BINDING (partly superseded) | Approved 2026-07-23 redesign: unified chrome band spec (`--gh-band-*`) still binding; its Beginner/Intermediate/Pro pill labels were superseded by the Easy/Medium/Hard/Expert reversal — see §4. |
-| `HANDOFF-LB-SOLO-RUNS.md` | 377 | BINDING | 2026-07-28 follow-on: solo games (Ball Run/Snake/Nuts & Bolts) count as "runs," not "wins" — see §4. |
+| `docs/archive/HANDOFF-LAW-DEDUP.md` | 70 | HISTORY | Reduces THE LAW from 10 repeats to 1 in root; confirmed executed. |
+| `docs/archive/HANDOFF-I18N-EXTRACTION.md` | 149 | HISTORY | The big EN/ES extraction mechanism/rollout plan; largely executed (Boggle/Parchís exclusions later reversed). |
+| `docs/archive/HANDOFF-CLAUDEMD-SPLIT.md` | 399 | HISTORY | Plan to split monolithic CLAUDE.md into root + per-game files; confirmed executed, current structure matches. |
+| `docs/archive/HANDOFF-HUB-FAVORITES-TILES.md` | 416 | HISTORY | Original 3-phase landscape-tiles + favorites spec; all phases shipped. |
+| `docs/archive/HANDOFF-HUB-TILES-PHASE3.md` | 291 | HISTORY | Marked "STATUS: COMPLETE"; archive of Phase 3 art-recomposition rationale + a reusable screenshot-verification technique. |
+| `docs/archive/HUB-HANDOFF-1.md` | 96 | HISTORY | Completed build record for the shared profile page; contract now in root's "shared profile" section. |
+| `docs/archive/HUB-HANDOFF-2.md` | 105 | REFERENCE | Completed wiring record; still-accurate per-game profile precedence table (CF/Chinchón/Business Deal). |
+| `docs/archive/HUB-HANDOFF-3.md` | 58 | HISTORY | Completed copy-pass/QA/deploy record for the profile feature. |
+| `docs/archive/HANDOFF-LEADERBOARD-CORRECTION.md` | 338 | HISTORY | The Ana/Natalia incident; matches root's pointer, already applied via `fix-natalia-record.mjs`. |
+| `docs/archive/HANDOFF-LEADERBOARD-REDESIGN.md` | 219 | BINDING (partly superseded) | Approved 2026-07-23 redesign: unified chrome band spec (`--gh-band-*`) still binding; its Beginner/Intermediate/Pro pill labels were superseded by the Easy/Medium/Hard/Expert reversal — see §4. |
+| `docs/archive/HANDOFF-LB-SOLO-RUNS.md` | 377 | BINDING | 2026-07-28 follow-on: solo games (Ball Run/Snake/Nuts & Bolts) count as "runs," not "wins" — see §4. |
 | `HANDOFF-LB-FILTER-SORT.md` | 503 | HISTORY | Leaderboard filter/sort redesign — confirmed shipped in `js/leaderboard-ui.js` today. |
-| `HANDOFF-MP-LOCAL-MACHINE.md` | 504 | REFERENCE | Real-device MP verification playbook; the two-profile (not two-tab) methodology is still the only spec for this, and Parchís MP + N-player testing are still open. |
-| `HANDOFF-MP-ROADMAP.md` | 324 | BINDING | Sequenced MP plan; phases 0-2 done, but the N-player (2-4 seat) decision and phase 4 (Uno/Escoba 2-4/Chinchón 2-4/Monopoly Deal/Parchís MP) are still open work — see §4. |
-| `HANDOFF-MP-WEB-SESSION.md` | 455 | BINDING | The `js/net.js` protocol contract + 5 invariants + per-game MP briefs; still-live briefs for Uno, Connect Four, Monopoly Deal (never built) — see §4. |
+| `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md` | 504 | REFERENCE | Real-device MP verification playbook; the two-profile (not two-tab) methodology is still the only spec for this, and Parchís MP + N-player testing are still open. |
+| `docs/archive/HANDOFF-MP-ROADMAP.md` | 324 | BINDING | Sequenced MP plan; phases 0-2 done, but the N-player (2-4 seat) decision and phase 4 (Uno/Escoba 2-4/Chinchón 2-4/Monopoly Deal/Parchís MP) are still open work — see §4. |
+| `docs/archive/HANDOFF-MP-WEB-SESSION.md` | 455 | BINDING | The `js/net.js` protocol contract + 5 invariants + per-game MP briefs; still-live briefs for Uno, Connect Four, Monopoly Deal (never built) — see §4. |
 | `HANDOFF-BALLRUN-NEWMAP.md` | 242 | REFERENCE/BINDING | Architecture explainer for building a second Ball Run map; contains 4 correctness landmines not confirmed present in `ball-run/CLAUDE.md` — see §4. |
-| `HANDOFF-BOGGLE-SPANISH.md` | 176 | HISTORY | Completed bilingual-Boggle-UI fix (gameplay stays English); its `translate="no"` + lang-stamp fix is confirmed folded into `boggle/CLAUDE.md`/`js/CLAUDE.md`. |
+| `docs/archive/HANDOFF-BOGGLE-SPANISH.md` | 176 | HISTORY | Completed bilingual-Boggle-UI fix (gameplay stays English); its `translate="no"` + lang-stamp fix is confirmed folded into `boggle/CLAUDE.md`/`js/CLAUDE.md`. |
 | `HANDOFF-DB-LASTMOVE.md` | 274 | HISTORY | Completed last-drawn-edge glow feature for Dots and Boxes; cosmetic-field-outside-hashed-state pattern not independently re-confirmed in `dots-boxes/CLAUDE.md`. |
-| `HANDOFF-BOGGLE.md` | 555 | HISTORY (contains one live error) | Original Boggle build spec, now shipped. Section 9.5 incorrectly claims `players-agg.js` needs no change for Boggle — this is the likely source of the exact bug root `CLAUDE.md` says was caught "twice... Dots and Boxes, then Boggle." Still sitting uncorrected in this file — see §4. |
-| `HANDOFF-DOTS-BOXES.md` | 464 | HISTORY | Original Dots and Boxes build spec, now shipped. |
+| `docs/archive/HANDOFF-BOGGLE.md` | 555 | HISTORY (contains one live error) | Original Boggle build spec, now shipped. Section 9.5 incorrectly claims `players-agg.js` needs no change for Boggle — this is the likely source of the exact bug root `CLAUDE.md` says was caught "twice... Dots and Boxes, then Boggle." Still sitting uncorrected in this file — see §4. |
+| `docs/archive/HANDOFF-DOTS-BOXES.md` | 464 | HISTORY | Original Dots and Boxes build spec, now shipped. |
 | `HANDOFF-PROFILE-MESSAGE.md` | 272 | HISTORY | Completed profile "message" field; folded into root's "shared profile" section. |
-| `HANDOFF-PROFILE-UNTANGLING.md` | 201 | BINDING | Part 1 of the Ana/Natalia diagnosis: the no-per-play-event-log-except-Ball-Run architecture fact, and the explicit-permission-required norm for touching live player data — see §4. |
-| `HANDOFF-SNAKE-DPAD.md` | 138 | HISTORY | Completed on-screen D-pad feature for Snake. |
-| `HANDOFF-TICTACTOE.md` | 507 | BINDING | Full TTT/Ultimate build spec; the "Pro Classic is unbeatable by design" and "don't cut the AI's send-penalty term" warnings were **not** found in `tic-tac-toe/CLAUDE.md` by the batch that read it in full — see §4. |
-| `HANDOFF-UNO-VISUAL.md` | 235 | HISTORY | Uno visual-rebuild task list; its `_syncFan` exemption and sort-invariant warnings are confirmed present in `uno/CLAUDE.md` today. |
+| `docs/archive/HANDOFF-PROFILE-UNTANGLING.md` | 201 | BINDING | Part 1 of the Ana/Natalia diagnosis: the no-per-play-event-log-except-Ball-Run architecture fact, and the explicit-permission-required norm for touching live player data — see §4. |
+| `docs/archive/HANDOFF-SNAKE-DPAD.md` | 138 | HISTORY | Completed on-screen D-pad feature for Snake. |
+| `docs/archive/HANDOFF-TICTACTOE.md` | 507 | BINDING | Full TTT/Ultimate build spec; the "Pro Classic is unbeatable by design" and "don't cut the AI's send-penalty term" warnings were **not** found in `tic-tac-toe/CLAUDE.md` by the batch that read it in full — see §4. |
+| `docs/archive/HANDOFF-UNO-VISUAL.md` | 235 | HISTORY | Uno visual-rebuild task list; its `_syncFan` exemption and sort-invariant warnings are confirmed present in `uno/CLAUDE.md` today. |
 | `HANDOFF-UNO.md` | 137 | HISTORY | Original Uno build handoff; its frozen ruleset is confirmed carried into `uno/CLAUDE.md`. |
 | `escoba/escoba-broom-handoff.md` | 112 | DISPOSABLE | Broom-sweep/round-2 UI spec; every item confirmed re-described in `escoba/CLAUDE.md` today. |
 | `ball-run/CLAUDE.md` | 520 | BINDING/REFERENCE | Authoritative Ball Run doc: renderer context-loss/teardown rule, Orbital map's shared `DIFFICULTIES` reference landmine. Does not appear to restate `HANDOFF-BALLRUN-NEWMAP.md`'s 4 landmines — see §4. |
@@ -154,14 +154,14 @@ because it's still a real, current rule worth having in one place. Everything ma
   JSON). **ORPHANED.**
 
 - **Writes to `players/`, `usernames/`, or anyone's profile/stats are explicit-permission-required, not scriptable unilaterally.**
-  `HANDOFF-PROFILE-UNTANGLING.md:171-175` — *"treat writes to `players/`, `usernames/`, or
+  `docs/archive/HANDOFF-PROFILE-UNTANGLING.md:171-175` — *"treat writes to `players/`, `usernames/`, or
   anyone's `gamehub.profile`/`gamehub.stats` as high-stakes and explicit-permission-required...
   Show him exactly what you intend to change and why, get a yes, then do it."* **Likely
   ORPHANED** — not confirmed present in `js/CLAUDE.md`'s Ana/Natalia section by the pass that
   read it; needs a direct check.
 
 - **No per-play event log exists for any game except Ball Run.**
-  `HANDOFF-PROFILE-UNTANGLING.md:27-36` — *"there is no per-play event log for any game except
+  `docs/archive/HANDOFF-PROFILE-UNTANGLING.md:27-36` — *"there is no per-play event log for any game except
   Ball Run... for every other game, the best available fix is at the level of 'whose bucket
   does this device's CURRENT total belong in,' not 'which specific game was whose.'"*
   **Likely ORPHANED** — a hard architectural ceiling on any future identity-correction work;
@@ -170,7 +170,7 @@ because it's still a real, current rule worth having in one place. Everything ma
 ### 2.2 Colorblind / accessibility (a second convention beyond root's 4-hue palette)
 
 - **`#ffce3a` is the standing selection/emphasis accent, always paired with a non-color indicator.**
-  `3am 7.22/00_README_START_HERE.md:81` — *"Selection/attention color is `#ffce3a`, ALWAYS
+  `docs/archive/3am 7.22/00_README_START_HERE.md:81` — *"Selection/attention color is `#ffce3a`, ALWAYS
   paired with a non-color indicator (shape, icon, label, border)."* Confirmed still live: a
   repo-wide grep hits 21 files including current CSS in Pool, Ball Run, Chinchón, Connect Four,
   Escoba, Nuts & Bolts, Poolv2, plus `js/hub.js`, `js/game-art.js`, `icons/icon.svg`.
@@ -193,7 +193,7 @@ because it's still a real, current rule worth having in one place. Everything ma
   (the non-favorite set), not to favorites. **Root `CLAUDE.md`'s own text — "favorites first,
   then alphabetically by display title within each group" — is therefore incomplete: it's true
   of the *whole grid's grouping* but not of *how favorites are ordered within their group*.**
-  Source of the original design: `HANDOFF-FB-FAVORITES-ORDER.md:19-23`.
+  Source of the original design: `docs/archive/HANDOFF-FB-FAVORITES-ORDER.md:19-23`.
 
 - **`.hub-game` sets no explicit height**, so any `immersive`-style full-bleed canvas game can
   silently collapse toward the browser's intrinsic canvas size unless the game's own CSS sets
@@ -213,7 +213,7 @@ because it's still a real, current rule worth having in one place. Everything ma
 
 - **Unified chrome "band" spec** shared by the hub top bar, Leaderboard, and My Stats overlays:
   `--gh-band-title: 44px; --gh-band-controls: 36px; --gh-band-filter: 34px` as CSS custom
-  properties in `css/hub.css`. `HANDOFF-LEADERBOARD-REDESIGN.md:44-56`. **Needs a direct check
+  properties in `css/hub.css`. `docs/archive/HANDOFF-LEADERBOARD-REDESIGN.md:44-56`. **Needs a direct check
   against `css/hub.css`** to confirm it shipped as specified; not restated anywhere else.
 
 ### 2.4 Settings / setup-screen conventions
@@ -224,7 +224,7 @@ because it's still a real, current rule worth having in one place. Everything ma
 
 - **Turn-based games default to "Alternate who goes first."** An explicit saved you/opponent
   choice always wins over the default; "Alternate" swaps on every completed game including
-  rematches. Origin: `HANDOFF-FB-SETUP-CONVENTIONS.md:13-32`. **Properly placed** — confirmed
+  rematches. Origin: `docs/archive/HANDOFF-FB-SETUP-CONVENTIONS.md:13-32`. **Properly placed** — confirmed
   restated, with the concrete `nextStarter`-flip mechanism, in `connect-four/CLAUDE.md:65-76`,
   `dots-boxes/CLAUDE.md:37-51`, `filler/CLAUDE.md:25-35`, `mancala/CLAUDE.md:61-71`, and a
   solo-only variant in `chinchon/CLAUDE.md:50-60`. Root `CLAUDE.md` doesn't mention this
@@ -232,11 +232,11 @@ because it's still a real, current rule worth having in one place. Everything ma
 
 - **Difficulty display vocabulary is Easy/Medium/Hard/Expert, never Beginner/Intermediate/Pro.**
   This *reversed* an initial decision from the day before. Origin:
-  `HANDOFF-FB2-DIFFICULTY.md:8-9,32-36`, confirmed final by `HANDOFF-FB2-INDEX.md:44-45`.
+  `docs/archive/HANDOFF-FB2-DIFFICULTY.md:8-9,32-36`, confirmed final by `docs/archive/HANDOFF-FB2-INDEX.md:44-45`.
   **Properly placed** — confirmed current in `chinchon/CLAUDE.md:61-64`,
   `connect-four/CLAUDE.md:77-79`, `dots-boxes/CLAUDE.md:55-57`, `nuts-bolts/CLAUDE.md:28-31`.
-  Root `CLAUDE.md` states no tier vocabulary at all. Note: `HANDOFF-LEADERBOARD-REDESIGN.md`
-  and `HANDOFF-FB-SETUP-CONVENTIONS.md` still describe the superseded Beginner/Intermediate/Pro
+  Root `CLAUDE.md` states no tier vocabulary at all. Note: `docs/archive/HANDOFF-LEADERBOARD-REDESIGN.md`
+  and `docs/archive/HANDOFF-FB-SETUP-CONVENTIONS.md` still describe the superseded Beginner/Intermediate/Pro
   names — a reader hitting those files first without also finding the reversal would get it
   wrong.
 
@@ -245,7 +245,7 @@ because it's still a real, current rule worth having in one place. Everything ma
 - **MP save-key convention going forward: a separate `gamehub.<game>.mp.v1` key**, not Escoba's
   sub-object-inside-the-solo-key shape (which is frozen gen-1, THE LAW rule 5, not a model to
   copy). `dots-boxes/CLAUDE.md:145-148`, `filler/CLAUDE.md:158-160`,
-  `mancala/CLAUDE.md:102-104`, echoed by `HANDOFF-MP-WEB-SESSION.md:121-137` ("follow
+  `mancala/CLAUDE.md:102-104`, echoed by `docs/archive/HANDOFF-MP-WEB-SESSION.md:121-137` ("follow
   Chinchón, not Escoba"). **Properly placed**, consistent across 3+ per-game docs.
 
 - **MP results always record under the `'mp'` difficulty bucket**, settled by Tic Tac Toe, not
@@ -254,21 +254,21 @@ because it's still a real, current rule worth having in one place. Everything ma
 
 - **Never change `js/net.js`'s protocol as a side effect of one game's MP work** — any protocol
   change gets its own handoff, review, and real-device verification pass.
-  `HANDOFF-MP-WEB-SESSION.md:164-167`. **ORPHANED.**
+  `docs/archive/HANDOFF-MP-WEB-SESSION.md:164-167`. **ORPHANED.**
 
 - **MP must support 2-4 players for multi-seat games, not 2** (Matt, 2026-07-26) — reverses an
-  earlier 2-player-cap recommendation. `HANDOFF-MP-ROADMAP.md:14-17`. Confirmed still
+  earlier 2-player-cap recommendation. `docs/archive/HANDOFF-MP-ROADMAP.md:14-17`. Confirmed still
   unimplemented outside Chinchón (which now has 2-4 seat support per `chinchon/CLAUDE.md`) —
   Uno, Escoba beyond 2, Monopoly Deal, and Parchís MP remain unbuilt. **ORPHANED**, and still
   live open work.
 
 - **"A session ships MP code and headless proof; it never reports 'multiplayer works.'"**
-  `HANDOFF-MP-WEB-SESSION.md:50-56`. A standing process/reporting rule for any future MP build
+  `docs/archive/HANDOFF-MP-WEB-SESSION.md:50-56`. A standing process/reporting rule for any future MP build
   session without real-device access. **ORPHANED.**
 
 - **B0 verification methodology: two separate browser profiles, never two tabs in one profile**
   (tabs share `localStorage`/`deviceId`, hiding exactly the seat/stats bugs the pass exists to
-  find). `HANDOFF-MP-LOCAL-MACHINE.md:78-95`. **ORPHANED** — a reusable technique for anyone
+  find). `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md:78-95`. **ORPHANED** — a reusable technique for anyone
   verifying Parchís MP or the N-player extension whenever those ship.
 
 - **Yahtzee genuinely uses `js/net.js` for multiplayer** (confirmed: `yahtzee/js/ui.js` imports
@@ -281,7 +281,7 @@ because it's still a real, current rule worth having in one place. Everything ma
 - **Connect Four's settings-key row in root `CLAUDE.md`'s games table is stale.** Root still
   reads *"none (persists nothing — see its file)"*; confirmed via grep that
   `connect-four/js/ui.js` defines both `SETTINGS_KEY = 'gamehub.connect4.v1'` and
-  `GAME_KEY = 'gamehub.connect4.save.v1'`. `HANDOFF-MP-WEB-SESSION.md:274-281` flagged this
+  `GAME_KEY = 'gamehub.connect4.save.v1'`. `docs/archive/HANDOFF-MP-WEB-SESSION.md:274-281` flagged this
   exact bug in 2026-07 and it is still uncorrected today. This is a live, currently-true
   documentation error in the always-loaded root file.
 
@@ -342,9 +342,9 @@ it in full):
   Not confirmed present in `ball-run/CLAUDE.md`, which documents different (also real) landmines.
 - **Tic Tac Toe's AI correctness notes**: "Pro Classic is unbeatable by construction... do not
   weaken it," and the Ultimate AI's 4th eval term (the "send penalty") is the one term that must
-  never be cut. `HANDOFF-TICTACTOE.md:153-155,179-181`. Not found in `tic-tac-toe/CLAUDE.md` by
+  never be cut. `docs/archive/HANDOFF-TICTACTOE.md:153-155,179-181`. Not found in `tic-tac-toe/CLAUDE.md` by
   the pass that read the whole file.
-- **A live, uncorrected error**: `HANDOFF-BOGGLE.md:381-384` (§9.5) states Boggle needs *no*
+- **A live, uncorrected error**: `docs/archive/HANDOFF-BOGGLE.md:381-384` (§9.5) states Boggle needs *no*
   `players-agg.js` change beyond adding it to `GAMES` — this directly contradicts root
   `CLAUDE.md`'s own account of a real bug ("missed twice... Dots and Boxes, then Boggle") and is
   very plausibly the literal source of that historical miss. The file is never auto-loaded, so
@@ -363,7 +363,7 @@ it in full):
 ### 2.7 Leaderboard / stats display
 
 - **Solo games (Ball Run, Snake, Nuts & Bolts) contribute a separate "runs" count, not "wins."**
-  `HANDOFF-LB-SOLO-RUNS.md:51-54` (2026-07-28, later than root's "wins-only... 2026-07-23"
+  `docs/archive/HANDOFF-LB-SOLO-RUNS.md:51-54` (2026-07-28, later than root's "wins-only... 2026-07-23"
   note). **Likely properly placed** in `js/CLAUDE.md`'s leaderboard section (each source handoff
   explicitly instructs writing it there) but not independently re-confirmed by name in this
   audit — worth a direct check since it postdates the date root cites.
@@ -395,16 +395,16 @@ a pattern.
   followed per-task, not a documentation problem.
 
 - **The Escoba setup-screen accordion / "copy Escoba, not Connect Four" instruction** — the
-  task prompt's own example. Appears (at minimum) in `3am 7.22/00_README_START_HERE.md:76`,
-  `3am 7.22/01_repo_context.md:26`, `3am 7.22/05_layout_viewport_fixes.md:4`,
-  `3am 7.22/07_chinchon_interaction.md:5-6`, `3am 7.22/09_connect_four_overhaul.md:4`,
-  `3am 7.22/10_designed_followups.md:7-8,92-93`, `HANDOFF-BOGGLE.md:63`,
-  `HANDOFF-DOTS-BOXES.md:59`, and `dots-boxes/CLAUDE.md:14`. Best wording: root `CLAUDE.md`'s
+  task prompt's own example. Appears (at minimum) in `docs/archive/3am 7.22/00_README_START_HERE.md:76`,
+  `docs/archive/3am 7.22/01_repo_context.md:26`, `docs/archive/3am 7.22/05_layout_viewport_fixes.md:4`,
+  `docs/archive/3am 7.22/07_chinchon_interaction.md:5-6`, `docs/archive/3am 7.22/09_connect_four_overhaul.md:4`,
+  `docs/archive/3am 7.22/10_designed_followups.md:7-8,92-93`, `docs/archive/HANDOFF-BOGGLE.md:63`,
+  `docs/archive/HANDOFF-DOTS-BOXES.md:59`, and `dots-boxes/CLAUDE.md:14`. Best wording: root `CLAUDE.md`'s
   own "Adding a game" axis table — it's the one place this is stated as policy rather than as a
   per-task instruction, though as noted in §2.7, none of the *implementation* detail lives
   anywhere.
 
-- **The `#ffce3a` colorblind accent rule** — `3am 7.22/00_README_START_HERE.md:81`,
+- **The `#ffce3a` colorblind accent rule** — `docs/archive/3am 7.22/00_README_START_HERE.md:81`,
   `02_bugs_ballrun_difficulty.md:21`, `07_chinchon_interaction.md:21`,
   `08_leaderboard_redesign.md:39`, `10_designed_followups.md:7-10,80-81,100`. Best wording:
   `00_README_START_HERE.md:81` (states the hex, the pairing rule, and a concrete example).
@@ -446,8 +446,8 @@ a pattern.
   cumulative cross-referencing (each game's fix cites the pattern), not accidental copy-paste.
 
 - **"The protocol is proven headlessly against `FakeRoom`; real-room behavior is unverified"
-  status line** — defined once in `HANDOFF-MP-WEB-SESSION.md:52-56`, then repeated near-verbatim
-  across `HANDOFF-MP-LOCAL-MACHINE.md` (4 occurrences) and `HANDOFF-MP-ROADMAP.md` (2
+  status line** — defined once in `docs/archive/HANDOFF-MP-WEB-SESSION.md:52-56`, then repeated near-verbatim
+  across `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md` (4 occurrences) and `docs/archive/HANDOFF-MP-ROADMAP.md` (2
   occurrences), and echoed independently by `pool/CLAUDE.md`, `boggle/CLAUDE.md`, and
   `chinchon/CLAUDE.md`'s own MP sections for their respective unverified-on-real-devices status.
   This reflects a real, still-true state (most MP games remain real-device-unverified) more than
@@ -455,7 +455,7 @@ a pattern.
 
 - **"Sessions commit but do not push" vs. current practice** — a genuine *contradiction*, not
   just duplication. `HANDOFF.md:88-97` (2026-07-03) has the session push directly;
-  `3am 7.22/00_README_START_HERE.md:75` and `HANDOFF-NEXT-SESSION.md:99` both assert the
+  `docs/archive/3am 7.22/00_README_START_HERE.md:75` and `docs/archive/HANDOFF-NEXT-SESSION.md:99` both assert the
   opposite ("commit ≠ push"). Neither matches current practice — per the user's own standing
   preference, sessions now commit *and* push. Flagging so this contradiction isn't mistaken for
   a live rule if only one of these files is read.
@@ -471,29 +471,29 @@ audit's scope and deserve a direct look before treating them as gaps.)
 
 1. `database.rules.README.md` — the `database.rules.json` MERGE-not-replace rule.
 2. `RESTORE.md` — the device-relink restore procedure and the monthly `players/` export steps.
-3. `3am 7.22/00_README_START_HERE.md` (+ 4 duplicate locations) — the `#ffce3a` colorblind
+3. `docs/archive/3am 7.22/00_README_START_HERE.md` (+ 4 duplicate locations) — the `#ffce3a` colorblind
    selection/emphasis accent rule.
-4. `HANDOFF-PROFILE-UNTANGLING.md` — explicit-permission-required for writes to live player
+4. `docs/archive/HANDOFF-PROFILE-UNTANGLING.md` — explicit-permission-required for writes to live player
    data; the no-per-play-event-log-except-Ball-Run architectural ceiling. *(needs cross-check
    against `js/CLAUDE.md`'s Ana/Natalia section)*
 5. `HANDOFF-FB3-SETTINGS-RESUME.md` — settings must persist on selection, not only at game start.
 6. `HANDOFF-FB4-QA-POLISH.md` — hub language/theme/version knobs must stay hidden on every
    mounted screen, setup included.
-7. `HANDOFF-MP-WEB-SESSION.md` — never touch `js/net.js`'s protocol as a side effect of one
+7. `docs/archive/HANDOFF-MP-WEB-SESSION.md` — never touch `js/net.js`'s protocol as a side effect of one
    game's work; the "ship code + headless proof, never claim MP works" reporting rule; the
    Chinchón-not-Escoba MP save-key recommendation for new games.
-8. `HANDOFF-MP-ROADMAP.md` — the 2026-07-26 "MP must support 2-4 players, not 2" decision, and
+8. `docs/archive/HANDOFF-MP-ROADMAP.md` — the 2026-07-26 "MP must support 2-4 players, not 2" decision, and
    the concrete list of still-unbuilt MP work (Uno, Monopoly Deal, Parchís, Escoba beyond 2).
-9. `HANDOFF-MP-LOCAL-MACHINE.md` — the two-browser-profiles (not two tabs) verification
+9. `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md` — the two-browser-profiles (not two tabs) verification
    methodology.
 10. `HANDOFF-BALLRUN-NEWMAP.md` — the 4 Ball Run map-building landmines (local-frame math,
     camera-roll ban, curves-off, `minSpacingFor()` reuse). *(needs cross-check — confirmed
     absent from `ball-run/CLAUDE.md` by the pass that read it, but that pass did not treat this
     as exhaustive)*
-11. `HANDOFF-TICTACTOE.md` — the "Pro Classic is unbeatable by design" and "don't cut the
+11. `docs/archive/HANDOFF-TICTACTOE.md` — the "Pro Classic is unbeatable by design" and "don't cut the
     Ultimate AI's send-penalty term" correctness warnings. *(needs cross-check — confirmed
     absent from `tic-tac-toe/CLAUDE.md` by the pass that read it)*
-12. `HANDOFF-BOGGLE.md` §9.5 — contains a **live, uncorrected wrong claim** (Boggle needs no
+12. `docs/archive/HANDOFF-BOGGLE.md` §9.5 — contains a **live, uncorrected wrong claim** (Boggle needs no
     `players-agg.js` change), sitting undiscoverable in a file nobody auto-loads, that looks
     like the actual origin of a bug root `CLAUDE.md` documents as already having happened.
 13. `pool/README.md` / `HANDOFF-POOL-VISUAL-REBUILD.md` / `POOL-REBUILD-PROMPT.md` — "physics
@@ -562,12 +562,12 @@ root:
    instruction (and its mirror in `poolv2/CLAUDE.md`), and Dots and Boxes' cosmetic-field
    save-safety pattern.
 
-7. **A correction, not a new file**: fix `HANDOFF-BOGGLE.md` §9.5's wrong `players-agg.js`
+7. **A correction, not a new file**: fix `docs/archive/HANDOFF-BOGGLE.md` §9.5's wrong `players-agg.js`
    claim (or add a note pointing to the correction) so a future reader skimming it for
    reference doesn't reintroduce the exact bug it's suspected of having caused — and fix root
    `CLAUDE.md`'s two live documentation bugs found in §4 (Connect Four's settings-key row, the
    favorites-ordering sentence).
 
-Everything else in the `HANDOFF-*.md`/`3am 7.22/`/`CC-*.md`/build-spec corpus can stay exactly
+Everything else in the `HANDOFF-*.md`/`docs/archive/3am 7.22/`/`CC-*.md`/build-spec corpus can stay exactly
 where it is, as HISTORY or REFERENCE — the rules worth promoting are the relatively small list
 above, not the bulk of the ~21,000 lines.

@@ -9,7 +9,7 @@
 
 Hub integration: in-hub `module:`, immersive. `isInProgress()` uses the LITERAL meaning: `true` while
 a run is live. Ball Run is deliberately EXCLUDED from the repo-wide autosave/resume convention
-(batch 9, HANDOFF-FB-RESUME.md, 2026-07-23; the only other exclusion is Snake): a live-action run
+(batch 9, docs/archive/HANDOFF-FB-RESUME.md, 2026-07-23; the only other exclusion is Snake): a live-action run
 cannot pause across a hub navigation; **do not "finish" this by adding a save key.**
 
 ## Notes

@@ -233,7 +233,7 @@ via the real (pure) engine and asserts the stats store's `played` count incremen
 
 **Status line (2026-07-27, web-session pass): protocol proven headlessly against `FakeRoom`, all
 six M-series probes green (`test-mp-lockstep.mjs`); real-room behaviour is unverified.** Real
-devices are required for `HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment
+devices are required for `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment
 cannot reach Firebase at all (see that doc's "why these four categories can't move to the
 cloud"). Nothing here has been played on a real phone yet.
 ## The setup screen fit nothing, and its own page was 56px of that (2026-09-08)

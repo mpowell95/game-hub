@@ -1,4 +1,4 @@
-// test-hole-editor-play.mjs - HANDOFF-GOLF-HOLE-EDITOR.md section 9 (phase 2)'s own test: a
+// test-hole-editor-play.mjs - docs/archive/HANDOFF-GOLF-HOLE-EDITOR.md section 9 (phase 2)'s own test: a
 // test-visual.mjs-style Playwright run that opens golf/?editor=1 with an edited document already
 // in localStorage and asserts the setup screen's course strip shows the EDITED hole 1, not the
 // shipped one - proving `globalThis.__gfCourseOverride` actually reached the setup screen, not

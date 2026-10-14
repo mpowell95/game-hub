@@ -8,7 +8,7 @@
 // code 89N3N - which is why Natalia's brand-new phone told her the name was taken when she first
 // tried to claim it.
 //
-// WHAT IT DOES (see HANDOFF-LEADERBOARD-CORRECTION.md, the "TONIGHT" section, which supersedes the
+// WHAT IT DOES (see docs/archive/HANDOFF-LEADERBOARD-CORRECTION.md, the "TONIGHT" section, which supersedes the
 // earlier subtract-from-Ana plan):
 //   1. Creates ONE new players/<uuid> record for Natalia, with a fresh player code, holding the 8
 //      plays reconstructed as hers.

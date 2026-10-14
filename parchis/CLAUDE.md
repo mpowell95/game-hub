@@ -22,7 +22,7 @@ and rebuild.
   and skills from `profile.opponents`. Its own last-used prefs (`parchis_r2_prefs`) take precedence, same as
   every other game (rule 9 below is the ONE deliberate exception, for language only). Do not add a reader
   on the hub side.
-- **Language (2026-07-24, batch E, HANDOFF-FB2-PARCHIS.md), rule 9: the hub's `gamehub.lang.v1` wins.**
+- **Language (2026-07-24, batch E, docs/archive/HANDOFF-FB2-PARCHIS.md), rule 9: the hub's `gamehub.lang.v1` wins.**
   `game.js`'s `getLang()` reads the hub key first (raw string, `'en'`/`'es'` only, malformed/missing =
   absent), then falls back to `parchis_r2_prefs.lang`, then `'en'` - a DELIBERATE reversal of "own prefs
   beat hub" for language only (Matt: the hub toggle should control every game, including this one).
