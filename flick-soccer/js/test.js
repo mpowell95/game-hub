@@ -102,7 +102,7 @@ const ok = (label, cond, extra = '') => { if (!cond) { fails++; console.log('FAI
     const saved = JSON.parse(JSON.stringify(m));
     E.settle(saved, 1);
     ok('a saved match keeps its offense and defense line-ups', saved.forms.join() === 'attack,balanced' && E.validMatch(saved));
-    ok('no line-up pairs: the fixed line-ups, as every match before', !('lineups' in E.newMatch(2, 0, ['attack', 'defend'])) && E.cleanLineups(['attack', 'defend']) === null);
+    ok('no line-up pairs: the fixed line-ups, as every match before', !('pairs' in E.newMatch(2, 0, ['attack', 'defend'])) && E.cleanPairs(['attack', 'defend']) === null);
   }
   // A ball that STOPS more than halfway into the net is a goal (2026-10-11).
   {

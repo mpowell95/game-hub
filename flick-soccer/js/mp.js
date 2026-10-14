@@ -34,7 +34,7 @@ import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/player
 import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { newMatch, flick, runToRest, settle, cleanForms, cleanLineups, GOAL_OPTIONS, DISCS } from './engine.js';
+import { newMatch, flick, runToRest, settle, cleanForms, cleanPairs, GOAL_OPTIONS, DISCS } from './engine.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
 
 const NODE = 'flicksoccer';
@@ -108,27 +108,16 @@ export const formsOfGame = (raw) => cleanForms(raw && raw.forms);
 /** Who kicks off (optional field, 2026-10-13): 1 = side b. Absent reads 0, the challenger, which is
  *  how every match before own-lineup challenges was played. */
 export const starterOfGame = (raw) => (raw && +raw.starter === 1 ? 1 : 0);
-/** Offense and defense line-ups (optional field, 2026-10-14): `lineups: { a: {off, def}, b: {off,
- *  def} }` on the document, [[a off, a def], [b off, b def]] once validated. Null until BOTH sides
- *  have theirs (side b adds its own in pickLineup, before the first flick), and on every match from
- *  before, which plays on its fixed `forms` exactly as it did. */
-export function lineupsOfGame(raw) {
-  const l = raw && raw.lineups;
-  if (Array.isArray(l)) return cleanLineups(l);
-  if (!l || typeof l !== 'object') return null;
-  const pair = (x) => (x && typeof x === 'object' && typeof x.off === 'string' && typeof x.def === 'string' ? [x.off, x.def] : null);
-  const a = pair(l.a), b = pair(l.b);
-  return a && b ? cleanLineups([a, b]) : null;
-}
-/** A line-up pair as given ([off, def] or {off, def}), cleaned to { off, def }; null if neither. */
-export function asPair(x) {
-  const p = Array.isArray(x) ? x : x && typeof x === 'object' ? [x.off, x.def] : null;
-  if (!p || p.length !== 2) return null;
-  const [off, def] = cleanForms(p);
-  return { off, def };
-}
-/** The position a match starts from: goals, kick-off and line-ups. */
-export const startOf = (game) => newMatch(goalsOfGame(game), starterOfGame(game), formsOfGame(game), lineupsOfGame(game));
+/** Each side's two line-ups (optional field, 2026-10-14): `pairs: { a: [kick-off, defending], b: [...] }`,
+ *  as [[side a], [side b]] for engine.js, or null for a match without it (one line-up per side for
+ *  the whole match, `forms`). Side b's is written when b first opens the match (`pickLineup`); until
+ *  then, and for a phone that wrote only `forms/1`, b's line-up is its `forms` entry. */
+export const pairsOfGame = (raw) => {
+  const p = raw && raw.pairs;
+  if (!p || typeof p !== 'object') return null;
+  const one = (x) => (Array.isArray(x) || (x && typeof x === 'object') ? [x[0], x[1]] : null);
+  return cleanPairs([one(p.a), one(p.b)]);
+};
 
 // --- the log --------------------------------------------------------------------------------------
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -174,7 +163,7 @@ export function applyEntry(m, e) {
 
 /** Replay the first `upto` flicks. */
 export function buildMatch(game, upto = game.log.length) {
-  const m = startOf(game);
+  const m = newMatch(goalsOfGame(game), starterOfGame(game), formsOfGame(game), game.pairs || pairsOfGame(game));
   for (let i = 0; i < upto; i++) if (!applyEntry(m, game.log[i])) break;   // validateGame proved it replays
   return m;
 }
@@ -197,8 +186,8 @@ export function validateGame(raw) {
   const goals = goalsOfGame(raw);
   const forms = formsOfGame(raw);
   const starter = starterOfGame(raw);
-  const lineups = lineupsOfGame(raw);
-  const m = newMatch(goals, starter, forms, lineups);
+  const pairs = pairsOfGame(raw);
+  const m = newMatch(goals, starter, forms, pairs);
   for (const key of keys) {
     const e = cleanEntry(src[key]);
     if (!e) return null;
@@ -228,10 +217,7 @@ export function validateGame(raw) {
   // the first flick: nobody can flick until it is done, so a log with entries has no pick pending.
   const pick = raw.pick === 'b' && !log.length && !over ? 'b' : null;
   return {
-    v: 1, id, goals, forms, starter, pick,
-    ...(lineups ? { lineups } : {}),
-    // Side a's own pair, kept while side b has not added theirs (pickLineup reads it).
-    ...(raw.lineups && typeof raw.lineups === 'object' && !Array.isArray(raw.lineups) && asPair(raw.lineups.a) ? { lineupA: asPair(raw.lineups.a) } : {}),
+    v: 1, id, goals, forms, starter, pick, ...(pairs ? { pairs } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -563,7 +549,7 @@ async function writeRows(api, db, game, writer, only = null) {
  * (`form`); the other person sees it, picks theirs (pickLineup) and KICKS OFF. So the match is
  * theirs from the start and both rows are written now. Returns { ok, id, game } or a failure.
  */
-export async function createGame({ them, goals = 2, form, lineups }) {
+export async function createGame({ them, goals = 2, form, pair }) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
@@ -577,12 +563,11 @@ export async function createGame({ them, goals = 2, form, lineups }) {
   const mine = meLabel();
   const now = Date.now();
   const id = mintGameId();
-  // Offense and defense line-ups (2026-10-14): side b kicks off, so side a starts in its DEFENSE
-  // line-up. `forms` is still written, as it stands at kick-off, for a phone on an older build.
-  const mineL = asPair(lineups);
+  const myPair = cleanForms(Array.isArray(pair) ? pair : [form, form]);
   const doc = {
-    v: 1, id, goals: +goals, forms: cleanForms([mineL ? mineL.def : form, 'balanced']), starter: 1, pick: 'b',
-    ...(mineL ? { lineups: { a: mineL } } : {}),
+    // Since 2026-10-14 each side brings TWO line-ups (`pair`: [kicking off, defending]); side b kicks
+    // off, so side a starts on its defending one. A caller with one `form` uses it for both.
+    v: 1, id, goals: +goals, forms: cleanForms([myPair[1], 'balanced']), pairs: { a: myPair }, starter: 1, pick: 'b',
     by: me, created: now, updated: now, lapse: true,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
@@ -615,10 +600,8 @@ export async function pickLineup(id, form) {
   const me = myCode();
   if (!me) return fail('no-player-code');
   if (!allowed('pickLineup')) return fail('dev-origin-blocked');
-  // A pair ([off, def] or {off, def}): offense and defense line-ups (2026-10-14). A plain id: the
-  // fixed line-up of 2026-10-13.
-  const pair = typeof form === 'string' ? null : asPair(form);
-  let f = cleanForms([form, form])[0];
+  // `form` is side b's pair [kicking off, defending] (2026-10-14), or one line-up for both roles.
+  const pair = cleanForms(Array.isArray(form) ? form : [form, form]);
   try {
     const boot = await ready();
     if (!boot) return fail('offline', true);
@@ -630,17 +613,11 @@ export async function pickLineup(id, form) {
     if (!fresh.pick) return { ok: true, game: fresh };          // already chosen (a retry)
     if (lifeOf(fresh).expired) return fail('expired');
     const now = Date.now();
-    const patch = { pick: null, updated: now };
-    if (pair && fresh.lineupA) {
-      // Side b stands at kick-off in its offense line-up when it kicks off (it always does: starter 1).
-      f = fresh.starter === 1 ? pair.off : pair.def;
-      patch['lineups/b'] = pair;
-    }
-    patch['forms/1'] = f;
-    await api.update(api.ref(db, `${NODE}/games/${id}`), patch);
+    const f = pair[fresh.starter === 1 ? 0 : 1];                 // what b stands at the kick-off
+    await api.update(api.ref(db, `${NODE}/games/${id}`), { 'forms/1': f, 'pairs/b': pair, pick: null, updated: now });
     const again = await readFresh(api, db, id);
     const back = again.game;
-    if (!back || back.pick || back.forms[1] !== f || (patch['lineups/b'] && !back.lineups)) {
+    if (!back || back.pick || back.forms[1] !== f) {
       console.error(`[flick-soccer] VERIFY FAILED: line-up for ${NODE}/games/${id}`);
       return fail('did-not-land', true);
     }
@@ -694,7 +671,7 @@ export async function appendLog(id, base, entries) {
     if (lifeOf(fresh).expired) return fail('expired');
     // Check the rules accept them before anything is written.
     if (fresh.pick) return fail('not-picked');
-    const m = startOf(fresh);
+    const m = newMatch(fresh.goals, fresh.starter, fresh.forms, fresh.pairs);
     for (const e of fresh.log.concat(todo)) if (!applyEntry(m, e)) return fail('rules-refused');
     const now = Date.now();
     const patch = { updated: now };

@@ -67,15 +67,20 @@ export const FORM_IDS = Object.keys(FORMATIONS);
 const formOf = (id) => (FORM_IDS.includes(id) ? FORMATIONS[id] : FORMATIONS.balanced);
 /** A pair of line-up ids [seat 0, seat 1], unknown ids read as 'balanced'. */
 export const cleanForms = (f) => [0, 1].map((k) => (Array.isArray(f) && FORM_IDS.includes(f[k]) ? f[k] : 'balanced'));
-/** Line-ups by ROLE (Matt, 2026-10-14: "two different types of lineups that you have to assign in
- *  the start menu. Offense and defense ... that will be your lineup every time"). `lineups` is
- *  [[seat 0 offense, seat 0 defense], [seat 1 offense, seat 1 defense]]; null when not a valid pair
- *  of pairs, which is every match from before (it plays on its fixed `forms`, exactly as it did). */
-export const cleanLineups = (l) => (Array.isArray(l) && l.length === 2 && l.every((p) => Array.isArray(p) && p.length === 2)
-  ? [cleanForms(l[0]), cleanForms(l[1])] : null);
-/** Who stands how when `kicker` kicks off: the kicker in their offense line-up, the other side in
- *  its defense one. */
-export const roleForms = (lineups, kicker) => [0, 1].map((s) => lineups[s][s === kicker ? 0 : 1]);
+/** A seat's two line-ups (2026-10-14, Matt: "two different types of lineups that you have to
+ *  assign in the start menu. Offense and defense ... that will be your lineup every time"):
+ *  [when this seat kicks off, when the other seat does]. A role not known reads null. */
+const cleanPair = (p) => [0, 1].map((k) => (Array.isArray(p) && FORM_IDS.includes(p[k]) ? p[k] : null));
+/** Both seats' pairs [[off0, def0], [off1, def1]], or null for a match without them (every match
+ *  before 2026-10-14, which keeps one line-up per seat for the whole match, `forms`). */
+export const cleanPairs = (p) => (Array.isArray(p) && p.some((x) => Array.isArray(x)) ? [cleanPair(p[0]), cleanPair(p[1])] : null);
+/** The line-ups for a kick-off by seat `kicker`: each seat its kick-off line-up when it is the one
+ *  kicking off, its defending one when not. A role with none falls back to that seat's `forms`. */
+export function kickoffForms(pairs, forms, kicker) {
+  const f = cleanForms(forms);
+  if (!pairs) return f;
+  return [0, 1].map((s) => (pairs[s] && pairs[s][s === kicker ? 0 : 1]) || f[s]);
+}
 export const KICKOFF_BALL = [W / 2, H / 2];
 export const GOAL_OPTIONS = [1, 2, 3];
 
@@ -96,23 +101,25 @@ export function lineUp(forms) {
   return b;
 }
 
-/** A new match. `goals` to win (1-3); `starter` kicks off; `forms` [seat 0, seat 1] line-ups,
- *  used again after every goal. With `lineups` (cleanLineups) the line-ups follow the kick-off
- *  instead: at the start and after every goal (`settle`), and `forms` is what is standing now. */
-export function newMatch(goals = 2, starter = 0, forms, lineups) {
-  const L = cleanLineups(lineups);
-  if (L) forms = roleForms(L, starter ? 1 : 0);
+/** A new match. `goals` to win (1-3); `starter` kicks off; `forms` [seat 0, seat 1] line-ups.
+ *  With `pairs` (2026-10-14) each seat stands its kick-off line-up when it kicks off and its
+ *  defending one otherwise, at the start and after every goal, and `forms` is what is standing now.
+ *  Without, `forms` is used again after every goal, as every match before. */
+export function newMatch(goals = 2, starter = 0, forms, pairs) {
+  const pr = cleanPairs(pairs);
+  const st = starter ? 1 : 0;
+  const fm = kickoffForms(pr, forms, st);
   return {
     v: 1,
     goals: GOAL_OPTIONS.includes(goals) ? goals : 2,
     scores: [0, 0],
-    starter: starter ? 1 : 0,
-    turn: starter ? 1 : 0,
+    starter: st,
+    turn: st,
     shots: 0,
     winner: null,
-    forms: cleanForms(forms),
-    ...(L ? { lineups: L } : {}),
-    b: lineUp(forms),
+    forms: fm,
+    ...(pr ? { pairs: pr } : {}),
+    b: lineUp(fm),
   };
 }
 
@@ -252,10 +259,9 @@ export function settle(m, scorer) {
   if (scorer === 0 || scorer === 1) {
     m.scores[scorer]++;
     if (m.scores[scorer] >= m.goals) { m.winner = scorer; freeze(m.b); return 'win'; }
-    m.turn = scorer ^ 1;
-    const L = cleanLineups(m.lineups);
-    if (L) m.forms = roleForms(L, m.turn);         // the side that conceded kicks off, in its offense
+    if (m.pairs) m.forms = kickoffForms(cleanPairs(m.pairs), m.forms, scorer ^ 1);
     m.b = lineUp(m.forms);
+    m.turn = scorer ^ 1;
     return 'goal';
   }
   freeze(m.b);

@@ -983,7 +983,7 @@ class FlickSoccerUI {
     let res;
     try {
       const MP = await this._loadMP();
-      res = await MP.createGame({ them, goals, lineups });
+      res = await MP.createGame({ them, goals, pair: lineups });
     } finally { this._challenging = false; }
     if (instance !== this) return res;
     if (!res.ok) {

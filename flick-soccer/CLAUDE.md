@@ -80,9 +80,11 @@ Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap gam
   **Defense** line-up (`settings.offense` / `settings.defense`), and **whoever kicks off stands in
   their offense line-up while the other side stands in its defense one**, at the start AND after
   every goal (the side that conceded kicks off in ITS offense). Engine: `newMatch(goals, starter,
-  forms, lineups)` with `lineups` [[seat 0 off, def], [seat 1 off, def]] (`cleanLineups`,
-  `roleForms`); `settle` re-lines up by role. Without `lineups` (every match and save before) a match
-  plays on its fixed `forms`, exactly as it did, and `test.js` pins both. Vs the computer it picks a
+  forms, pairs)` with `pairs` [[seat 0 off, def], [seat 1 off, def]] (`cleanPairs`, `kickoffForms`;
+  a role with no line-up falls back to that seat's `forms`); `settle` re-lines up by role. Without
+  `pairs` (every match and save before) a match plays on its fixed `forms`, exactly as it did, and
+  `test.js` pins both. (The engine and `mp.js` half first reached main inside an Arrow Maze commit,
+  `e4d34cb`, from another session; the screens, tests and docs followed in the next change.) Vs the computer it picks a
   random pair; pass and play uses your pair for both teams. **The screens:** one row of two buttons
   (Offense, Defense; each its little pitch and name) on the start menu and on both challenge cards; a
   tap opens a picker (`_luPicker`) with the four line-ups as real little pitches, two by two, the
@@ -231,12 +233,12 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
 - **Offense and defense line-ups online (2026-10-14; this REPLACES the per-challenge line-up pick
   below).** The challenge card is: who, "First to 2 · They kick off", YOUR LINEUPS (the two buttons,
   changeable there), Send challenge. The challenged player's card is: who, "First to 2 · You kick
-  off", YOUR LINEUPS, Kick off. The document carries an OPTIONAL `lineups: { a: {off, def}, b: {off,
-  def} }`: `createGame({ lineups })` writes side a's pair (and `forms[0]` = a's DEFENSE line-up, as it
-  stands at kick-off); `pickLineup(id, [off, def])` adds side b's (and `forms[1]` = b's offense
-  line-up). `lineupsOfGame` reads it as null until BOTH pairs are there, and every reader goes
-  through `startOf(game)` (validateGame, buildMatch, appendLog), so a match from before plays on its
-  fixed `forms` exactly as it did. "Challenge again" sends your current pair, and the other person
+  off", YOUR LINEUPS, Kick off. The document carries an OPTIONAL `pairs: { a: [off, def], b: [off,
+  def] }`: `createGame({ pair })` writes side a's (and `forms[0]` = a's DEFENSE line-up, as it stands
+  at kick-off); `pickLineup(id, [off, def])` adds side b's (and `forms[1]` = b's offense line-up).
+  `pairsOfGame` reads it; validateGame, buildMatch and appendLog all pass it to `newMatch`, so a match
+  from before plays on its fixed `forms` exactly as it did, and a side with no pair yet stands on its
+  `forms` entry. "Challenge again" sends your current pair, and the other person
   kicks off, as before. **A phone still on the build before** replays such a match on its fixed
   `forms` and disagrees after the first goal until it updates (admin only, so harmless). Tested in
   `test-flicksoccer-mp.mjs` (87 checks); the old string forms of `createGame`/`pickLineup` still
