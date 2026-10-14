@@ -420,6 +420,9 @@ None of this makes the hub cheat-proof; never describe it that way.
 - Never notify about your own action (`by` on the match). No push to a device with the hub open
   (`activeAt` heartbeat, decided on the SERVER in `isActive`). Opening the hub clears shown
   notifications.
+- **App icon badge** (2026-10-14): `sw.js` `syncBadge()` sets it to the number of our notifications
+  showing, only after one shows; `clearShownNotifications()` clears it. iPhone Home Screen app,
+  installed desktop Chrome/Edge; a no-op elsewhere.
 - **A tap opens THAT match** and survives a reload: the tap is written to sessionStorage
   (`hub.pushOpen`, 2 min) before acting, cleared only once mounted; same game open → `openArmed()`.
 - If notifications stop around late December 2026, check whether Blaze's free-trial billing needs
