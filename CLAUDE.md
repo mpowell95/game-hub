@@ -493,6 +493,10 @@ Full contract: `js/CLAUDE.md`, "The admin config".
 - **Colorblind-safe** (Matt is red/green colorblind): pair every hue with a shape. Palette: yellow
   `#F2B705` circle, blue `#1F5FA8` triangle, vermilion `#E0532F` square, teal `#178A7A` diamond.
 - **`#ffce3a`** is the selection/emphasis accent, always with a non-colour indicator.
+- **Name every player by their PROFILE NAME, never "You"** (Matt, 2026-10-14, after telling two
+  sessions: *"Stop using 'You'. Use profile names. Don't make me tell you again"*): lists, rankings,
+  badges, result lines, logs and results cards print the player's own name like anyone else's.
+  Instructions spoken TO the player ("Tap the table...") are not names and are fine.
 - **No em dashes** in user-facing game or profile copy.
 - **Every "you win / you lose" popup gets a close (X) top-right.**
 - Text size, tap targets, safe areas, motion: `docs/BUILDING-A-GAME.md`, "Part 0 — The UX floor".

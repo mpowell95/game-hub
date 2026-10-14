@@ -185,6 +185,15 @@ rigged deal is one real 52-card deck). Nothing about it is saved in state. His $
   the card moved when switching players): an "Under review" card keeps the numbers' space hidden
   (`.pk-bknums`) with the label laid over it. Measured 173px for every row.
 
+## Profile names, never "You" (2026-10-14)
+
+Matt: *"Stop using 'You'. Use profile names."* Every place that named this player "You" prints
+their profile name: Bankrolls list and card, result lines and splits, the Last hand sheet
+(third-person verbs; the `lgy_*` / `last_you_*` / `msg_you*` strings are unused now), the results
+card title and ranking, "finished 2nd. Watching the rest", and the stamp on their own cards (WIN /
+SPLIT, like everyone's). The online lobby's "You" badge is gone. Checked in Chromium: a full game's
+results card, result line and Last hand show the profile name and no "You".
+
 ## Hand stats (2026-09-28)
 
 `recordHoldemHand` writes `games.holdem.hs = { hands, won, bigPot, best, bestCat, bestCards }`, one
