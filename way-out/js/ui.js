@@ -520,8 +520,12 @@ class WayOut {
 
   _playHTML() {
     const tier = this.tier;
+    // EASY (Matt's mock-up, 2026-10-14): counters under the bar and a How to play pill at the
+    // bottom. Easy boards are small, so the room is there; Hard and Expert keep every pixel for
+    // the board (way-out/CLAUDE.md, "Fitting the screen").
+    const easy = tier === 'easy';
     return `
-      <div class="wo-game">
+      <div class="wo-game${easy ? ' is-easy' : ''}">
         <div class="wo-hud">
           <button type="button" class="wo-iconbtn" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}</button>
           <div class="wo-hud-mid">
@@ -537,7 +541,9 @@ class WayOut {
           <button type="button" class="wo-hint" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
+        ${easy ? '<div class="wo-counts" aria-hidden="true"><span class="wo-count-left"></span><span class="wo-count-done"></span></div>' : ''}
         <div class="wo-stage"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
+        ${easy ? `<div class="wo-playfoot"><button type="button" class="gh-btn wo-howbtn" data-act="help">${t('how_title')}</button></div>` : ''}
         <div class="wo-banner" aria-live="polite"><span></span><b></b></div>
       </div>`;
   }
@@ -604,6 +610,8 @@ class WayOut {
         </div>
       </div>`;
     if (m.hidden) this._opener = document.activeElement;
+    // Opened from a level (Easy's How to play pill): the clock stops while the rules are read.
+    if (m.hidden && this.screen === 'play' && !this.won && !this.failed) { this._clockPause(); this._helpPaused = true; }
     m.hidden = false;
     const go = m.querySelector('.gh-btn--primary');
     if (go) go.focus({ preventScroll: true });
@@ -613,6 +621,7 @@ class WayOut {
     const m = this.root.querySelector('.wo-modal');
     m.hidden = true;
     m.innerHTML = '';
+    if (this._helpPaused) { this._helpPaused = false; this._clockRun(); }
     const back = this._opener;
     this._opener = null;
     if (back && back.isConnected && back.focus) back.focus({ preventScroll: true });
@@ -626,6 +635,7 @@ class WayOut {
   _startLevel(tier, level) {
     this.tier = tier;
     this.level = level;
+    this._helpPaused = false;
     const pre = readSave(tier, level, 1e6);
     this.src = pre ? pre.src : { k: 'L', n: level };
     this.gen = this.src.k === 'T' ? this.src.gen : LADDER_GEN;
@@ -690,7 +700,7 @@ class WayOut {
     return this.clock.ms + (this.clockT0 ? performance.now() - this.clockT0 : 0);
   }
   _clockRun() {
-    if (!this.clock || this.clockT0 || this.screen !== 'play' || this.won || this.failed) return;
+    if (!this.clock || this.clockT0 || this.screen !== 'play' || this.won || this.failed || this._helpPaused) return;
     if (typeof document !== 'undefined' && document.hidden) return;
     this.clockT0 = performance.now();
     if (!this.tick) this.tick = setInterval(() => this._paintClock(), 250);
@@ -749,6 +759,9 @@ class WayOut {
       bar.setAttribute('aria-valuenow', String(done));
       bar.setAttribute('aria-label', t('progress_aria', { n: done, total }));
     }
+    const left = this.root.querySelector('.wo-count-left'), cleared = this.root.querySelector('.wo-count-done');
+    if (left) left.textContent = t('count_left', { n: total - done });
+    if (cleared) cleared.textContent = t('count_done', { n: done });
     const restart = this.root.querySelector('.wo-restart');
     if (restart) restart.classList.toggle('is-idle', done === 0 && this.lives === LIVES && !this.red.some(Boolean));
     if (this.canvas) this.canvas.setAttribute('aria-label', t('board_aria', { n: total - done }));
@@ -804,12 +817,15 @@ class WayOut {
     const { cols: W, rows: H } = this.lvl;
     // The reference leaves a margin either side on small boards (the 40px cap) and runs edge to
     // edge on big ones.
-    const pitch = Math.min((r.width - 10) / W, (r.height - 10) / H, 40);
+    // Small boards may grow to fill the width (Matt's Easy mock-up, 2026-10-14; the cap was 40px).
+    const pitch = Math.min((r.width - 10) / W, (r.height - 10) / H, 72);
     this.pitch = pitch;
     this.ox = (r.width - W * pitch) / 2 + pitch / 2;
     this.oy = (r.height - H * pitch) / 2 + pitch / 2;
-    this.lw = Math.max(1.3, Math.min(3.4, pitch * 0.078));
-    this.headL = Math.max(4.5, Math.min(11, pitch * 0.27));
+    // Thicker arrows (Matt, 2026-10-14: "a little thicker"); still scaled to the pitch so a dense
+    // Expert board stays readable.
+    this.lw = Math.max(1.7, Math.min(6, pitch * 0.092));
+    this.headL = Math.max(5, Math.min(17, pitch * 0.28));
     // Only a real change of geometry counts (a ResizeObserver also calls once on observe).
     const geom = `${pitch}|${this.ox}|${this.oy}`, moved = this.geomWas && this.geomWas !== geom;
     this.geomWas = geom;
