@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
-import { woMistakeMs, woHintMs, woClock, woLevelPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, woRushBest, woRushBestMap, woWeekKey } from '../../js/arrow-maze-time.js';
+import { woMistakeMs, woHintMs, woClock, woLevelPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -277,6 +277,11 @@ const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width
 const ICON_MENU = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 4v4.5h4.5"/></svg>`;
 const ICON_BULB = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 28c-3-2.4-4.6-5.6-4.6-9a11.6 11.6 0 0 1 23.2 0c0 3.4-1.6 6.6-4.6 9v4H17z"/><path d="M19 37h10"/><path d="M24 2.5v3M8 9l2.2 2.2M40 9l-2.2 2.2M3.5 19h3M41.5 19h3"/></g></svg>`;
+// Rush's rule icons (2026-10-14): the same marks on the setup card and the Ready popup. A teal arrow
+// for "+0.5s", a red arrow for "-3s" (always with the sign and the word, never colour alone), a
+// stopwatch for the start.
+const RUSH_ARROW = (c) => `<svg viewBox="0 0 28 16" aria-hidden="true"><path d="M3 12V5h15" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 5l-7-4.5v9z" fill="${c}"/></svg>`;
+const RUSH_WATCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 13.5V9M9.5 2.5h5M12 2.5v3M18.5 6.5l1.6-1.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21L2.6 11.6A5.6 5.6 0 0 1 12 3.9a5.6 5.6 0 0 1 9.4 7.7z"/></svg>';
 
 /** The setup screen's header picture (2026-10-14, Matt: "Make the top image thing cooler and
@@ -1171,6 +1176,9 @@ class WayOut {
     try { return loadStats().games.wayout; } catch { return null; }
   }
 
+  /** The Rush setup card (2026-10-14, Matt's review: the rules as tiles instead of a sentence, what
+   *  Easy and Hard mean, where you stand this week and when it resets, a selected state and a switch
+   *  that read as selected, and a Rush look: teal Play, a stopwatch on the picture). */
   _rushHomeHTML(modeTabs) {
     const rm = this.settings.rushMode, mine = this._myWayout();
     const segs = RUSH_MODES.map((m) => {
@@ -1179,11 +1187,18 @@ class WayOut {
       <button type="button" class="wo-seg${m === rm ? ' is-selected' : ''}" data-act="rush-mode" data-rmode="${m}" role="radio" aria-checked="${m === rm}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[m])}<b>${t('tier_' + m)}</b></span>
         <span class="wo-seg-sub">${b == null ? t('rush_week_none') : t('rush_week_best', { n: b })}</span>
+        <span class="wo-seg-range">${t(m === 'hard' ? 'rush_boards_big' : 'rush_boards_small')}</span>
       </button>`;
     }).join('');
+    const tiles = `
+      <ul class="wo-rush-tiles" aria-label="${t('rush_rules_aria')}">
+        <li class="is-start">${RUSH_WATCH}<b>${RUSH_START_MS / 1000}s</b><span>${t('rush_tile_start')}</span></li>
+        <li class="is-gain">${RUSH_ARROW('currentColor')}<b>+${RUSH_GAIN_MS / 1000}s</b><span>${t('rush_tile_gain')}</span></li>
+        <li class="is-miss">${RUSH_ARROW('currentColor')}<b>\u2212${RUSH_MISS_MS / 1000}s</b><span>${t('rush_tile_miss')}</span></li>
+      </ul>`;
     return `
-      <div class="wo-home">
-        <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
+      <div class="wo-home is-rush">
+        <div class="wo-hero is-rush" aria-hidden="true">${HERO_SVG}<span class="wo-hero-badge">${RUSH_WATCH}</span></div>
         <div class="wo-head">
           <h1>${t('title')}</h1>
         </div>
@@ -1193,11 +1208,51 @@ class WayOut {
             <span class="gh-field__label" id="wo-rushlabel">${t('diff_label')}</span>
             <div class="wo-segs wo-segs--two" role="radiogroup" aria-labelledby="wo-rushlabel">${segs}</div>
           </div>
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="rush-play">${t('rush_play')}</button>
-          <p class="wo-worth">${t('rush_rules', { start: RUSH_START_MS / 1000, gain: RUSH_GAIN_MS / 1000, miss: RUSH_MISS_MS / 1000 })}</p>
+          ${tiles}
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-rush-play" data-act="rush-play">${t('rush_play')}</button>
+          <p class="wo-rush-standing">${this._rushStandingText(rm)}</p>
         </div>
         <button type="button" class="gh-btn wo-howbtn" data-act="rush-board">${t('rush_results')}</button>
       </div>`;
+  }
+
+  /** "Leader: Ana 52 · You: 2nd · Resets in 4 days", for the selected version. Everyone's rows are
+   *  read in the background (the same read as Results, at most once a minute); until they arrive,
+   *  or offline, only the reset is shown. This phone's own best is always its fresh local one. */
+  _rushStandingText(mode) {
+    const left = Math.max(0, woWeekEnd() - Date.now());
+    const days = Math.floor(left / 86400000), hours = Math.max(1, Math.ceil(left / 3600000));
+    const resets = days >= 1 ? t('rush_resets_days', { n: days }) : t('rush_resets_hours', { n: hours });
+    const st = this.rushStanding;
+    if (!st || Date.now() - st.at > 60000) this._loadRushStanding();
+    if (!st || !st.rows) return resets;
+    const week = woWeekKey(), mine = woRushBest(this._myWayout(), mode);
+    const rows = st.rows.map((r) => {
+      let s = r.best[mode] && r.best[mode][week];
+      if (r.me && mine != null) s = Math.max(s == null ? -1 : s, mine);
+      return { ...r, s: s == null ? null : s };
+    }).filter((r) => r.s != null).sort((a, b) => b.s - a.s);
+    if (!rows.some((r) => r.me) && mine != null) rows.push({ me: true, s: mine, name: '' });
+    rows.sort((a, b) => b.s - a.s);
+    if (!rows.length) return `${t('rush_nobody_short')} · ${resets}`;
+    const me = rows.find((r) => r.me);
+    const place = me ? rows.filter((r) => r.s > me.s).length + 1 : 0;
+    const top = rows[0];
+    if (me && place === 1) return `🏆 ${t('rush_you_lead', { n: me.s })} · ${resets}`;
+    const leader = `${t('rush_leader')}: ${esc(top.emoji || '')} ${esc(top.name || '')} ${top.s}`;
+    return `${leader}${me ? ` · ${t('rush_you_place', { p: t('rush_ord', { n: place }) })}` : ''} · ${resets}`;
+  }
+  _loadRushStanding() {
+    if (this._standingBusy) return;
+    this._standingBusy = true;
+    this._loadRushRows().then((res) => {
+      this._standingBusy = false;
+      this.rushStanding = { at: Date.now(), rows: res.offline && !res.rows.length ? null : res.rows };
+      if (this.root && this.screen === 'home' && this.settings.mode === 'rush') {
+        const el = this.root.querySelector('.wo-rush-standing');
+        if (el) el.innerHTML = this._rushStandingText(this.settings.rushMode);
+      }
+    }, () => { this._standingBusy = false; this.rushStanding = { at: Date.now(), rows: null }; });
   }
 
   _rushPlayHTML() {
@@ -1292,7 +1347,7 @@ class WayOut {
     this.red[id] = true;
     r.mistakes += 1;
     r.bank -= RUSH_MISS_MS;
-    this._flashPen(`-${RUSH_MISS_MS / 1000}s`, true);
+    this._flashPen(`\u2212${RUSH_MISS_MS / 1000}s`, true);
     this._rushPaint();
     if (this._rushLeft() <= 0) this._rushEnd('time');
   }
@@ -1318,7 +1373,7 @@ class WayOut {
     const r = this.rush, m = this.root && this.root.querySelector('.wo-modal');
     if (!r || r.over || !r.paused || r.counting || !m) return;
     const secs = (Math.floor(r.bank / 100) / 10).toFixed(1);
-    const arrow = (c) => `<svg viewBox="0 0 28 16" aria-hidden="true"><path d="M3 12V5h15" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 5l-7-4.5v9z" fill="${c}"/></svg>`;
+    const arrow = RUSH_ARROW;
     m.innerHTML = `
       <div class="wo-ready" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
         <p class="wo-ready-done" id="wo-ready-h"><span aria-hidden="true">✓</span>${t('rush_board_cleared', { n: r.boards })}</p>
@@ -1326,7 +1381,7 @@ class WayOut {
         <p class="wo-ready-sub">${t('rush_next_secs')}</p>
         <ul class="wo-ready-rules">
           <li class="is-gain">${arrow('#3fd6bd')}<span>${t('rush_rule_gain', { gain: RUSH_GAIN_MS / 1000 })}</span><b>+${RUSH_GAIN_MS / 1000}s</b></li>
-          <li class="is-miss">${arrow('#e0484f')}<span>${t('rush_rule_miss', { miss: RUSH_MISS_MS / 1000 })}</span><b>-${RUSH_MISS_MS / 1000}s</b></li>
+          <li class="is-miss">${arrow('#e0484f')}<span>${t('rush_rule_miss', { miss: RUSH_MISS_MS / 1000 })}</span><b>\u2212${RUSH_MISS_MS / 1000}s</b></li>
         </ul>
         <p class="wo-ready-stats">${t('rush_arrows', { n: r.arrows })}</p>
         <p class="wo-ready-ask">${t('rush_ready_q')}</p>
