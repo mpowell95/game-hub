@@ -108,8 +108,23 @@ const nf = sw.slice(sw.indexOf('const NETWORK_FIRST = ['), sw.indexOf('const SHE
 check('js/push.js is network-first (it writes a gamehub.* key)', nf.includes("'./js/push.js'"));
 
 const hub = read('./js/hub.js');
+// (2026-10-14) With a game open, the ONLY thing a tap may do is hand a match to that SAME game
+// (`openArmed`); any other game open means nothing happens.
+const busy = hub.slice(hub.indexOf('async _openPushedGameNow('), hub.indexOf("if (id === 'messages')"));
 check('the hub takes a tapped notification to its game, and never from inside another game',
-  /async _openPushedGame\(id, extra = \{\}\) \{\n    if \(this\.current\) return;/.test(hub) && /searchParams\.get\('open'\)/.test(hub));
+  /if \(this\.current\) \{/.test(busy) && /this\.current\.id === id/.test(busy) && /\n      return;\n    \}/.test(busy)
+  && !/this\.launch\(/.test(busy) && /searchParams\.get\('open'\)/.test(hub));
+// (2026-10-14) Matt: a tap "brings me to the hub, but doesn't necessarily open the challenge". A new
+// build reloads the launcher on resume, which is when a tap arrives. The tap is written to
+// sessionStorage before anything else and cleared only once the game is mounted.
+check('a tapped notification survives a reload (queued first, cleared only once the game is open)',
+  /this\._queuePushOpen\(e\.data\.game, e\.data\);\n\s*this\._openPushedGame/.test(hub)
+  && /await this\.launch\(id\);\n\s*if \(this\.current && this\.current\.id === id\) this\._clearPushOpen\(\);/.test(hub)
+  && /const q = this\._peekPushOpen\(\);/.test(hub));
+check('a cold start opens the notified game without waiting on the network alert check',
+  /this\._afterPaint\(\(\) => this\._openFromUrl\(\)\);/.test(hub));
+check('the launcher refresh gives a tapped notification a moment to open its game first',
+  /setTimeout\(\(\) => \{[\s\S]{0,120}if \(this\.current\) \{ this\._reloaded = false; this\._updateWaiting = true;/.test(hub));
 check('the hub refreshes this device\'s address on load', /import\('\.\/push\.js'\)\.then\(\(m\) => m\.refreshPush\(\)\)/.test(hub));
 
 const rules = JSON.parse(read('./database.rules.json'));
@@ -165,7 +180,7 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('cup pong: they resigned, you won', /resigned/.test(body(decideCupPong({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
   check('cup pong: your own winning throw does not notify you', decideCupPong({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
   check('cup pong: the trigger watches cuppong/index and names the match', /ref: '\/cuppong\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'cuppong', match: id \}/.test(fnSrc));
-  check('sw.js opens the Cup Pong match a notification names', /tag\.startsWith\('cuppong-'\)/.test(sw) && /match: String\(d\.match/.test(sw));
+  check('sw.js opens the Cup Pong match a notification names', /\(\?:hoops\|cuppong\|darts\|flicksoccer/.test(sw) && /match: String\(d\.match/.test(sw));
 }
 
 // --- Darts challenges (2026-10-01) -----------------------------------------------------------------

@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1147';
+const CACHE = 'game-hub-v1148';
 
 const ASSETS = [
   './',
@@ -846,7 +846,7 @@ const REST_MANIFEST = {
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
   './flick-soccer/css/flick-soccer.css': 'ea109292e1',
-  './flick-soccer/js/ui.js': '32766d3979',
+  './flick-soccer/js/ui.js': '41aecfad98',
   './flick-soccer/js/engine.js': 'a44800e5fa',
   './flick-soccer/js/ai.js': 'c7ff2b0f5b',
   './flick-soccer/js/render.js': 'e9222e7e77',
@@ -1415,7 +1415,10 @@ self.addEventListener('notificationclick', (event) => {
   // carries it. The hub validates it before use.
   const tag = String(event.notification.tag || '');
   // Cup Pong's payload names its match outright (`match`, 2026-09-28) and tags it `cuppong-<id>`.
-  const match = String(data.match || (tag.startsWith('hoops-') ? tag.slice(6) : tag.startsWith('cuppong-') ? tag.slice(8) : ''));
+  // Every challenge game's tag is `<node>-<matchId>` (2026-10-14: Darts, Flick Soccer and the rest
+  // too, as a fallback should a payload ever arrive without `match`).
+  const tagged = /^(?:hoops|cuppong|darts|flicksoccer|archery|skee)-([A-Za-z0-9_-]{4,40})$/.exec(tag);
+  const match = String(data.match || (tagged ? tagged[1] : ''));
   const u0 = new URL(data.url || './', self.registration.scope);
   if (match) u0.searchParams.set('match', match);
   const url = u0.href;

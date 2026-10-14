@@ -296,7 +296,11 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   own-goal-win wording and "Your turn!" in place of "Your kick!" were written later that day and are
   NOT yet redeployed.**
   Not yet seen arriving on a phone; the first real challenge is the test. A tap opens that match (`sw.js` reads `data.match`;
-  the hub hands it to `alert.js`'s `armOpen`).
+  the hub hands it to `alert.js`'s `armOpen`). **Since 2026-10-14 a tap also works with Flick Soccer
+  already open** (the module's `openArmed` export takes the armed match and opens it, unless a
+  vs-computer / pass-and-play game is under way or a shot is rolling; the armed id is always
+  consumed), and **survives the launcher reloading onto a new build** mid-tap (root `CLAUDE.md`,
+  "Push notifications", "A tap must survive a reload").
 - **The hub:** the registry entry has `alerts:` (launcher bubble, Challenges button count), and
   `js/challenges.js` lists `flick-soccer`, so the hub's Challenges screen shows these matches.
 - **Tests:** `node test-flicksoccer-mp.mjs` (58 checks, including the 2026-10-11 bug hunt's: rows

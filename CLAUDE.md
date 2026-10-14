@@ -877,6 +877,19 @@ for it. **All three were deployed by Matt on 2026-09-24** (`messagePush` and `bu
   redeploy was needed. A game without `armOpen` falls back to the old bubble-or-launch path.
 - A subscription is a delivery address, not player history: the function removes one the phone
   has dropped (404/410), and the player recreates it with one tap.
+- **A tap must survive a reload (2026-10-14).** Matt: *"lately when i click a notification that it's
+  my turn... it brings me to the hub, but doesn't necessarily open the challenge."* Tapping brings
+  the app to the front, which is also when `_onResume` finds a new build and reloads the launcher
+  (several deploys a day), and the in-memory `OPEN_GAME` died with the page. Now `js/hub.js` writes
+  the tap to sessionStorage (`hub.pushOpen`, 2-minute life) BEFORE acting, the next load takes it
+  (`_openFromUrl` -> `_peekPushOpen`), and it is cleared only once the game is MOUNTED;
+  `_applyUpdate` waits 1.2 s so a tap arriving with the resume opens its game first (the refresh
+  then waits for the launcher). A cold start (`?open=`) no longer waits for the network alert
+  check. **With the SAME game already open**, the hub arms the match and calls the module's
+  optional `openArmed()` export (Flick Soccer has it); another game open still means nothing
+  happens. `sw.js` reads the match from any challenge tag (`<node>-<id>`) as a fallback.
+  `test-push.mjs` pins it; checked in Chromium (launcher, same game open, reload mid-open, cold
+  start, stale tap ignored, a vs-computer game not interrupted).
 
 ## Online play needs an account Matt has let in (2026-10-08)
 
