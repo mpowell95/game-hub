@@ -22,6 +22,11 @@
 //
 // Re-running it once the record is already gone just (re-)stamps the reset, so the durable half
 // can be repaired without a record to delete.
+//
+// SINCE 2026-10-14 THE RESET HALF IS REFUSED from here: `adminConfig/` is writable only by a uid in
+// `admins/` (database.rules.README.md, "Admin-only writes"), and this script signs in anonymously.
+// The delete would land and the reset would not, which is the useless half on its own. Stamp the
+// reset from the Admin page or the Firebase console instead.
 
 import { signInAnonymously, readPath } from './backups/rtdb-backup.mjs';
 import { firebaseConfig } from './js/firebase-config.js';
