@@ -134,15 +134,15 @@ for (const tier of TIERS) {
 ok('easy 1 stays the gentle generator-1 board', JSON.stringify(buildLevel('easy', 1)) === JSON.stringify(buildLevel('easy', 1, 1)));
 
 // THE LADDER (2026-10-14, Matt: "I want easy level 50 to be basically medium level 51. There
-// shouldn't be a big jump between individual levels"). Every ladder level 1-230: well formed,
-// deterministic, solvable by the player's own hint; the grid never shrinks and grows by at most one
-// dot a level; neighbouring levels differ by at most 4 rounds; and the band edges are seamless.
-{
-  const info = [];
+// shouldn't be a big jump between individual levels"). For each ladder generator, every level in its
+// range: well formed, deterministic, solvable by the player's own hint; the grid never shrinks and
+// grows by at most one dot a level; neighbouring levels differ by at most 4 rounds.
+function checkLadder(gen, from, to) {
+  const info = {};
   let worstMs = 0;
-  for (let n = 1; n <= 230; n++) {
+  for (let n = from; n <= to; n++) {
     const t0 = performance.now();
-    const lvl = buildLadder(n);
+    const lvl = buildLadder(n, gen);
     worstMs = Math.max(worstMs, performance.now() - t0);
     const { cols: W, rows: H, arrows } = lvl;
     const seen = new Set();
@@ -155,39 +155,65 @@ ok('easy 1 stays the gentle generator-1 board', JSON.stringify(buildLevel('easy'
         if (k && Math.abs((cells[k - 1] % W) - (cells[k] % W)) + Math.abs(((cells[k - 1] / W) | 0) - ((cells[k] / W) | 0)) !== 1) formed = false;
       }
     }
-    ok(`ladder ${n}: well formed`, formed);
-    ok(`ladder ${n}: deterministic`, JSON.stringify(buildLadder(n)) === JSON.stringify(lvl));
+    ok(`ladder g${gen} ${n}: well formed`, formed);
+    ok(`ladder g${gen} ${n}: deterministic`, JSON.stringify(buildLadder(n, gen)) === JSON.stringify(lvl));
     const gone = new Array(arrows.length).fill(false);
     let left = arrows.length, guard = 0;
     while (left && guard++ < 100000) { const id = hintArrow(lvl, gone, null); if (id < 0) break; gone[id] = true; left--; }
-    ok(`ladder ${n}: solvable`, left === 0);
-    info.push({ n, W, H, a: arrows.length, r: peel(W, H, arrows).layers });
+    ok(`ladder g${gen} ${n}: solvable`, left === 0);
+    info[n] = { n, W, H, a: arrows.length, r: peel(W, H, arrows).layers, json: JSON.stringify(lvl) };
   }
   let grow = true, roundsClose = true;
-  for (let i = 2; i < info.length; i++) {   // from level 2: level 1 is the special 8x4 first board
-    const p = info[i - 1], q = info[i];
-    if (i > 2 && (q.W < p.W || q.H < p.H || q.W - p.W > 1 || q.H - p.H > 1)) grow = false;
+  for (let n = Math.max(3, from + 1); n <= to; n++) {   // level 1 is the special 8x4 first board
+    const p = info[n - 1], q = info[n];
+    if (q.W < p.W || q.H < p.H || q.W - p.W > 1 || q.H - p.H > 1) grow = false;
     if (Math.abs(q.r - p.r) > 4) roundsClose = false;
   }
-  ok('ladder: the grid never shrinks, and grows by at most one dot a level', grow);
-  ok('ladder: neighbouring levels are within 4 rounds', roundsClose);
-  for (const edge of [50, 100, 150]) {
-    const a = info[edge - 1], b = info[edge];
-    ok(`ladder: ${edge} -> ${edge + 1} is seamless`, Math.abs(a.W - b.W) <= 1 && Math.abs(a.H - b.H) <= 1 && Math.abs(a.r - b.r) <= 3);
-  }
-  const avg = (lo, hi) => { const s = info.slice(lo - 1, hi); return s.reduce((x, y) => x + y.r, 0) / s.length; };
-  ok('ladder: each band is deeper than the one before', avg(41, 50) < avg(91, 100) && avg(91, 100) < avg(141, 150) && avg(141, 150) < avg(191, 200));
-  ok('ladder: it stops getting harder at the top', avg(201, 230) <= avg(191, 200) + 1.5);
-  ok('ladder: level 1 is the gentle first board', JSON.stringify(buildLadder(1)) === JSON.stringify(buildLevel('easy', 1, 1)));
-  ok('ladder: bands', bandOf(50) === 'easy' && bandOf(51) === 'medium' && bandOf(151) === 'expert' && BAND_START.hard === 101 && bandEnd('hard') === 150);
-  console.log(`ladder: 230 levels ok-checked; rounds ${info[1].r} at 2, ${avg(41, 50).toFixed(1)} at 41-50, ${avg(91, 100).toFixed(1)} at 91-100, ${avg(141, 150).toFixed(1)} at 141-150, ${avg(191, 200).toFixed(1)} at 191-200; slowest build ${worstMs.toFixed(0)} ms`);
-  // A level in progress must rebuild to the SAME board, so the ladder is pinned the day it shipped.
+  ok(`ladder g${gen}: the grid never shrinks, and grows by at most one dot a level`, grow);
+  ok(`ladder g${gen}: neighbouring levels are within 4 rounds`, roundsClose);
+  const avg = (lo, hi, k = 'r') => { let s = 0; for (let n = lo; n <= hi; n++) s += info[n][k]; return s / (hi - lo + 1); };
+  const seamless = (edge) => { const a = info[edge], b = info[edge + 1]; return Math.abs(a.W - b.W) <= 1 && Math.abs(a.H - b.H) <= 1 && Math.abs(a.r - b.r) <= 3; };
+  return { info, avg, seamless, worstMs };
+}
+// Generator 5, the first ladder (Hard 101-150, Expert 151 on). Kept unchanged for levels in progress
+// on it, so it is pinned the day it shipped.
+{
+  const { avg, seamless, worstMs } = checkLadder(5, 1, 230);
+  for (const edge of [50, 100, 150]) ok(`ladder g5: ${edge} -> ${edge + 1} is seamless`, seamless(edge));
+  ok('ladder g5: each old band is deeper than the one before', avg(41, 50) < avg(91, 100) && avg(91, 100) < avg(141, 150) && avg(141, 150) < avg(191, 200));
+  ok('ladder g5: it stops getting harder at the top', avg(201, 230) <= avg(191, 200) + 1.5);
+  ok('ladder: level 1 is the gentle first board', JSON.stringify(buildLadder(1, 5)) === JSON.stringify(buildLevel('easy', 1, 1)));
+  console.log(`ladder g5: 230 levels; rounds ${avg(41, 50).toFixed(1)} at 41-50, ${avg(91, 100).toFixed(1)} at 91-100, ${avg(141, 150).toFixed(1)} at 141-150, ${avg(191, 200).toFixed(1)} at 191-200; slowest build ${worstMs.toFixed(0)} ms`);
   // Never change it without a new ladder generator and keeping this one (see engine.js).
   const h = createHash('sha256');
-  for (let n = 1; n <= 60; n++) h.update(JSON.stringify(buildLadder(n)));
-  for (const n of [101, 151, 200]) h.update(JSON.stringify(buildLadder(n)));
+  for (let n = 1; n <= 60; n++) h.update(JSON.stringify(buildLadder(n, 5)));
+  for (const n of [101, 151, 200]) h.update(JSON.stringify(buildLadder(n, 5)));
   const pin = h.digest('hex').slice(0, 16);
-  ok(`ladder unchanged (${pin})`, pin === 'a3349c761be93816');
+  ok(`ladder g5 unchanged (${pin})`, pin === 'a3349c761be93816');
+}
+// Generator 6 (2026-10-14, the bands moved: Hard 101-200, Expert 201 on). Levels 1-100 are generator
+// 5's boards exactly; Hard climbs through the old Hard tier's boards; Expert starts where the old
+// Expert tier started and grows to its largest, deepest boards.
+{
+  let same = true;
+  for (let n = 1; n <= 100; n++) if (JSON.stringify(buildLadder(n, 6)) !== JSON.stringify(buildLadder(n, 5))) same = false;
+  ok('ladder g6: levels 1-100 are generator 5\'s boards exactly (Easy and Medium unchanged)', same);
+  ok('ladder: the default is generator 6', JSON.stringify(buildLadder(151)) === JSON.stringify(buildLadder(151, 6)));
+  const { avg, seamless, worstMs } = checkLadder(6, 99, 300);
+  for (const edge of [100, 200]) ok(`ladder g6: ${edge} -> ${edge + 1} is seamless`, seamless(edge));
+  const tierAvg = (t, lo, hi, k) => { let s = 0; for (let n = lo; n <= hi; n++) { const l = buildLevel(t, n); s += k === 'a' ? l.arrows.length : peel(l.cols, l.rows, l.arrows).layers; } return s / (hi - lo + 1); };
+  ok('ladder g6: Hard keeps getting deeper', avg(101, 110) < avg(141, 150) && avg(141, 150) < avg(191, 200));
+  ok('ladder g6: Expert starts at least as big and deep as the old Expert tier started',
+    avg(201, 210, 'a') >= tierAvg('expert', 1, 10, 'a') * 0.9 && avg(201, 210) >= tierAvg('expert', 1, 10));
+  ok('ladder g6: Expert goes on to the old Expert tier\'s deepest boards', avg(251, 260) >= tierAvg('expert', 64, 73) - 1);
+  ok('ladder g6: it stops getting harder at the top', avg(271, 300) <= avg(251, 260) + 1.5);
+  ok('ladder: bands', bandOf(50) === 'easy' && bandOf(51) === 'medium' && bandOf(200) === 'hard' && bandOf(201) === 'expert'
+    && BAND_START.hard === 101 && bandEnd('hard') === 200 && BAND_START.expert === 201);
+  console.log(`ladder g6: 99-300; rounds ${avg(101, 110).toFixed(1)} at 101-110, ${avg(141, 150).toFixed(1)} at 141-150, ${avg(191, 200).toFixed(1)} at 191-200, ${avg(201, 210).toFixed(1)} at 201-210 (${avg(201, 210, 'a').toFixed(0)} arrows), ${avg(251, 260).toFixed(1)} at 251-260; slowest build ${worstMs.toFixed(0)} ms`);
+  const h = createHash('sha256');
+  for (const n of [101, 125, 150, 175, 200, 201, 225, 260, 300]) h.update(JSON.stringify(buildLadder(n, 6)));
+  const pin = h.digest('hex').slice(0, 16);
+  ok(`ladder g6 unchanged (${pin})`, pin === '5b8571064bfd2397');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall way-out engine checks passed');
