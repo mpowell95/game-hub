@@ -113,7 +113,20 @@ what they cleared. `gridlock/js/test.js` re-solves every level (its fewest moves
 pins the shipped lines by hash (`PINNED`). To add levels: `node build-gridlock-levels.mjs --append
 --count <new total>`, which keeps every existing line; leave the pin alone.
 
-MEASURED: see "Measured" below.
+**Measured (the shipped 400, 2026-10-14):** a 15-minute search on 4 CPUs (one without walls, three
+with) found ~42,000 distinct puzzles, the longest 51 moves without walls (the known maximum for a
+wall-free 6x6, Fogleman) and 47 with walls. Fewest moves by band: Easy 3-14 (average 9.5), Medium
+14-22 (18.1), Hard 22-30 (26.1), Expert 30-51 (35.2; 157 of its 250 levels have walls). No level is
+easier than the one before it. Early levels prefer few blocks (7 at level 1, rising to ~12 by 150),
+and boards with a row or column of blocks that can never move are skipped. The slowest hint (a full
+solve from the start of the hardest level) is ~35 ms on a desktop.
+
+**Expert is spread by the square root of supply, not by a target.** Long puzzles are rare (a few
+hundred at 30-35 moves, a handful past 42), so each fewest-moves value gets a share of Expert's
+levels in proportion to the square root of how many puzzles have it. Plain proportion spent the
+first fifty Expert levels on 30-move puzzles (tried and rejected: no climb at all); a fixed target
+ran out of long puzzles. With the square root Expert climbs about one move every 20 levels, then
+faster at the top, and ends on the 51-move puzzle at level 400.
 
 ## Tests
 
@@ -122,3 +135,18 @@ MEASURED: see "Measured" below.
 - `node test-visual.mjs gridlock` has a PLAY probe: Play, then a real touch drag of the first block
   of the solution (one move).
 - `node check-no-scroll.mjs gridlock`, `node test-game-conventions.mjs`.
+- Checked in Chromium (2026-10-14), standalone and in the hub, light and dark, English and Spanish,
+  at 402x874, 375x667 and 360x724: setup, play and the win popup all on screen, nothing under the
+  hub's back button, no page scroll; a real touch drag moves a block one move.
+
+## Layout notes
+
+- The root is `bottom: 0`, never a height from `visualViewport` (Arrow Maze's iPhone fix of the same
+  day), and the setup column centres with auto margins, so a short phone can never push it up under
+  the Hub button.
+- The board is sized by measurement in `_layout()` (a `ResizeObserver` on the stage plus
+  `onViewportResize`): cell = min(width / 7.68, height / 6.68, 76px). On a 402-wide phone a cell is
+  50px, at 360 wide 45px; blocks are therefore always well over the 44px tap floor.
+- Blocks are DOM elements moved by `transform` only; a drag follows the finger along the block's
+  own line, clamped to where it can actually go, and snaps to the nearest cell on release (one move
+  if it ended somewhere new). `touch-action: none` on the board, pointer capture on the block.

@@ -409,7 +409,8 @@ function wayoutScreen(rec) {
  *  never counted twice; total.won (every solve, replays included) gates the empty state. */
 function gridlockScreen(rec) {
   const solved = ((rec && rec.total) || {}).won | 0;
-  if (!solved && !glCleared(rec)) return emptyState(t('game_title_gridlock'));
+  const gl = (rec && rec.gl) || {};
+  if (!solved && !Object.keys(gl.lv || {}).length) return emptyState(t('game_title_gridlock'));
   const rows = SD_DIFFS.filter(([k]) => GL_TIERS.includes(k)).map(([k, labelKey]) =>
     `<tr><th scope="row">${t(labelKey)}</th><td>${glCleared(rec, k)}</td><td>${glPoints(rec, k)}</td><td>${glThreeStars(rec, k)}</td></tr>`).join('');
   return `

@@ -233,14 +233,17 @@ class Gridlock {
   }
 
   /** Arrow Maze's / Murdoku's technique: a fixed root measured against the mount point; in the
-   *  hub's immersive mode it runs edge to edge and the top bar shares the floating back button's row. */
+   *  hub's immersive mode it runs edge to edge and the top bar shares the floating back button's row.
+   *  The BOTTOM is `bottom: 0`, never a height measured from the viewport: an iPhone can report a
+   *  short visualViewport mid-transition and nothing re-measures it (Arrow Maze, 2026-10-14: the
+   *  setup screen was cut off half way down). */
   _positionRoot() {
     if (!this.root || !this.container) return;
     const r = this.container.getBoundingClientRect();
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
-    if (!vh) return;
     this.root.style.left = Math.round(r.left) + 'px';
     this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
+    this.root.style.bottom = '0px';
+    this.root.style.height = 'auto';
     const back = document.querySelector('.hub-top-immersive .hub-back');
     const b = back && back.getBoundingClientRect();
     if (b && b.width && b.height) {
@@ -248,14 +251,12 @@ class Gridlock {
       this.root.style.left = '0px';
       this.root.style.width = (document.documentElement.clientWidth || window.innerWidth || 0) + 'px';
       this.root.style.top = '0px';
-      this.root.style.height = Math.max(200, Math.round(vh)) + 'px';
       this.root.style.setProperty('--gl-top', Math.max(0, Math.round(b.top + (b.height - 44) / 2)) + 'px');
       this.root.style.setProperty('--gl-inset', Math.max(0, Math.round(b.right + 6)) + 'px');
       return;
     }
     this.root.classList.remove('is-immersive');
-    this.root.style.top = Math.round(r.top) + 'px';
-    this.root.style.height = Math.max(200, Math.round(vh - r.top)) + 'px';
+    this.root.style.top = Math.max(0, Math.round(r.top)) + 'px';
   }
 
   // --- rendering ----------------------------------------------------------------------------------

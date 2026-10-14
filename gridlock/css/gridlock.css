@@ -77,6 +77,11 @@
   gap: 12px;
   padding: calc(var(--gl-top, 0px) + 12px) 16px calc(12px + env(safe-area-inset-bottom, 0px));
 }
+/* Centred with auto margins rather than `justify-content: center`, which overflows BOTH ways on a
+   short screen and pushed Arrow Maze's setup up beside the hub's back button (2026-10-14). */
+.gl-root .gl-home { justify-content: flex-start; }
+.gl-root .gl-home > :first-child { margin-top: auto; }
+.gl-root .gl-home > :last-child { margin-bottom: auto; }
 .gl-root.is-immersive .gl-home { padding-top: calc(var(--gl-top, 0px) + 52px); }
 .gl-root .gl-head { text-align: center; }
 .gl-root .gl-head h1 { margin: 0 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -.2px; }
