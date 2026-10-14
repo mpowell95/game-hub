@@ -222,6 +222,9 @@ export async function markActive(on) {
  */
 export async function clearShownNotifications() {
   try {
+    // The app icon's badge (set by sw.js syncBadge, 2026-10-14) goes too, first, so a phone that
+    // cannot list its notifications still loses the number.
+    try { if (typeof navigator.clearAppBadge === 'function') await navigator.clearAppBadge(); } catch { /* unsupported */ }
     if (!('serviceWorker' in navigator)) return 0;
     const reg = await navigator.serviceWorker.getRegistration();
     if (!reg || typeof reg.getNotifications !== 'function') return 0;

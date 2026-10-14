@@ -36,11 +36,11 @@ Built 2026-09-21. Design artifacts: `reference/minesweeper/mockup.html` (all eig
 |---|---|
 | `js/engine.js` | pure board logic: generation, flood fill, flags, chording, win detection, serialize/deserialize. No DOM, no storage, no timers, no imports |
 | `js/ui.js` | the DOM shell, input, timer, the three screens, the module contract |
-| `js/strings.js` | EN/ES, 51 keys |
+| `js/strings.js` | EN/ES, 53 keys |
 | `css/minesweeper.css` | `.ms-root` / `.ms-` prefix, every rule descendant-scoped |
 | `index.html` | the standalone page, name-gated before `init()` |
 
-Tests: `test-minesweeper-engine.mjs` (86 assertions, headless, no browser).
+Tests: `test-minesweeper-engine.mjs` (88 assertions, headless, no browser).
 
 ## The board ladder, and why it is not the classic one
 
@@ -174,6 +174,27 @@ on-screen position frame by frame and fails if the debris is too brief to follow
 (measured: 113px over 1135ms, 70 frames). Verified born red by making `_explode` a no-op. A static
 check cannot see any of this - the board screenshots identically a second later, which is exactly
 the failure the probe system exists for.
+
+## Wrong flags after a loss (2026-10-14)
+
+Matt: *"If you hit a mine and die, is it obvious if you mis-marked any squares?"* It was not: a
+wrong flag was a small struck-through pennant, the same colour as every other hidden square, and
+the Boom popup dimmed it. Mockup (dark): https://claude.ai/artifact/SbNC6XWSy8b2JrjqUcDbJb. Matt:
+*"I think it should glow/pulse"* (most players use dark mode).
+
+- **`.is-wrong` on the cell** (`_paintCell`, only when `g.dead` and the flag is on a safe cell):
+  a `#ffce3a` border and tinted fill, the glyph's X in `--ms-wrong-x`, and a `::after` glow whose
+  box-shadow is FIXED and only its `opacity` pulses (1.1s, infinite; Part 0). Reduced motion keeps
+  the glow, steady, because it is information, not garnish.
+- **It shows THROUGH the popup's dim.** The dim is `.ms-ov::before` (z 10), a wrong cell is z 11,
+  the card is z 12. **`.ms-ov` must have NO z-index**: one would make it a stacking context and no
+  cell could sit between its dim and its card. The board's shake (`is-blasting`) is a transform,
+  which also makes a stacking context; this only works because ui.js removes that class after the
+  shake, so never leave it on. Squares directly under the card stay hidden.
+- **The popup's fourth tile, "Flags wrong"** (`E.wrongFlags()`), on every loss, zero included.
+  Display only: nothing new is recorded.
+- Colour is never alone: the X shape carries it (Matt is red/green colorblind), and yellow keeps it
+  apart from the vermilion boom square and the right flags.
 
 ## Stats
 

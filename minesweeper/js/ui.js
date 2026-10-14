@@ -51,7 +51,7 @@ const fill = (str, vals) => String(str).replace(/\{(\w+)\}/g, (m, k) => (k in va
  * ------------------------------------------------------------------------------------------- */
 const FLAG_SVG = (c) => `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 22V3" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/><path d="M6.6 4.2 19 8.4 6.6 12.6Z" fill="${c}"/></svg>`;
 const MINE_SVG = (c) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="${c}"><rect x="11" y="1.5" width="2" height="21" rx="1"/><rect x="1.5" y="11" width="21" height="2" rx="1"/><rect x="4" y="4" width="2" height="16" rx="1" transform="rotate(-45 5 12)"/><rect x="18" y="4" width="2" height="16" rx="1" transform="rotate(45 19 12)"/><circle cx="12" cy="12" r="6.2"/><circle cx="9.7" cy="9.7" r="1.5" fill="rgba(255,255,255,.85)"/></svg>`;
-const WRONG_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V3" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M6.6 4.2 19 8.4 6.6 12.6Z" fill="currentColor" opacity=".35"/><path d="M3 3 21 21M21 3 3 21" stroke="#e0532f" stroke-width="2.8" stroke-linecap="round"/></svg>`;
+const WRONG_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V3" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M6.6 4.2 19 8.4 6.6 12.6Z" fill="currentColor" opacity=".35"/><path class="ms-wx" d="M3 3 21 21M21 3 3 21" stroke="#e0532f" stroke-width="2.8" stroke-linecap="round"/></svg>`;
 const CLOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="2"/><path d="M12 6.8V12l3.6 2.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 const X_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>`;
 const TICK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12.6 9.6 18 20 6.4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -500,8 +500,12 @@ class MinesweeperUI {
     } else if (st === FLAGGED) {
       // After a loss a flag on a safe cell is shown struck through: the flag was wrong, and
       // saying so is the whole point of the reveal.
-      inner = (g.dead && !g.mine[i]) ? WRONG_SVG : FLAG_SVG(g.won ? '#178a7a' : '#e0532f');
-      aria = fill(t('cell_aria_flag'), { r: y + 1, c: x + 1 });
+      // (2026-10-14, Matt) It also GLOWS: `.is-wrong` rings it in the #ffce3a accent and pulses
+      // it, and lifts it above the result popup's dim, so a mis-marked square cannot be missed.
+      const wrong = g.dead && !g.mine[i];
+      if (wrong) cls += ' is-wrong';
+      inner = wrong ? WRONG_SVG : FLAG_SVG(g.won ? '#178a7a' : '#e0532f');
+      aria = fill(t(wrong ? 'cell_aria_wrong' : 'cell_aria_flag'), { r: y + 1, c: x + 1 });
     } else {
       aria = fill(t('cell_aria_hidden'), { r: y + 1, c: x + 1 });
     }
@@ -851,12 +855,13 @@ class MinesweeperUI {
     const timeMs = this.elapsedMs;
     const cleared = E.clearedPct(g);
     const flagsRight = E.correctFlags(g);
+    const flagsWrong = E.wrongFlags(g);
     // Record BEFORE reading the wins total back, so the number on the screen includes this game.
     try {
       recordMinesweeper(level, won, { timeMs, cleared, flagsRight, mines: g.mines });
     } catch (err) { console.error('[minesweeper] record', err); }
     const isBest = won && timeMs > 0 && (prevBest <= 0 || timeMs < prevBest);
-    this._result = { won, timeMs, cleared, flagsRight, level, prevBest, isBest, wins: winsSoFar() };
+    this._result = { won, timeMs, cleared, flagsRight, flagsWrong, level, prevBest, isBest, wins: winsSoFar() };
 
     // A LOSS EARNS THE BLAST. Note the ordering: the result is RECORDED above, synchronously, before
     // a single pixel moves. Nothing about the animation can cost a player their play, even if they
@@ -874,7 +879,7 @@ class MinesweeperUI {
   _showResult(fresh) {
     const r = this._result || (this._result = {
       won: !!this.game.won, timeMs: this.elapsedMs, cleared: E.clearedPct(this.game),
-      flagsRight: E.correctFlags(this.game), level: this.game.level, prevBest: 0, isBest: false, wins: winsSoFar(),
+      flagsRight: E.correctFlags(this.game), flagsWrong: E.wrongFlags(this.game), level: this.game.level, prevBest: 0, isBest: false, wins: winsSoFar(),
     });
     const L = LEVELS[r.level] || LEVELS.medium;
     const sub = fill(t('result_sub_fmt'), { level: t(r.level), n: L.mines });
@@ -884,7 +889,9 @@ class MinesweeperUI {
          [String(r.wins), t('stat_wins')]]
       : [[fmtTime(r.timeMs), t('stat_time')],
          [r.cleared + '%', t('stat_cleared')],
-         [String(r.flagsRight), t('stat_flags')]];
+         [String(r.flagsRight), t('stat_flags')],
+         // Flags wrong: the struck-through squares glowing on the board behind this card.
+         [String(r.flagsWrong | 0), t('stat_flags_wrong'), 'is-wrong', WRONG_SVG]];
     const ov = document.createElement('div');
     ov.className = 'ms-ov';
     ov.innerHTML = `<div class="ms-modal" role="dialog" aria-modal="true" aria-label="${esc(r.won ? t('cleared') : t('boom'))}">
@@ -892,7 +899,7 @@ class MinesweeperUI {
       <div class="ms-big">${esc(r.won ? t('cleared') : t('boom'))}</div>
       <div class="ms-sub">${esc(sub)}</div>
       ${r.isBest ? `<div class="ms-pb">${TICK_SVG}${esc(t('new_best'))}</div>` : ''}
-      <div class="ms-stats">${stats.map(([b, s]) => `<div><b>${esc(b)}</b><span>${esc(s)}</span></div>`).join('')}</div>
+      <div class="ms-stats${stats.length > 3 ? ' is-four' : ''}">${stats.map(([b, s, cls, icon]) => `<div${cls ? ` class="${cls}"` : ''}><b>${icon || ''}${esc(b)}</b><span>${esc(s)}</span></div>`).join('')}</div>
       <div class="ms-mbtns">
         <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="again">${esc(t('play_again'))}</button>
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="${r.won ? 'board' : 'menu'}">${esc(r.won ? t('leaderboard') : t('change_difficulty'))}</button>

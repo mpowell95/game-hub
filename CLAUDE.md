@@ -150,6 +150,11 @@ Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HI
   lists, Contexto data) is in `ASSETS` but never fetched by the warm, only on first play. **Only
   large, single-game DATA goes in LAZY, never game code.** The `isLazyAsset` check sits BELOW the
   carry-forward in the warm loop (a `[KNOWN-BUG PROBE]` pins it).
+- **HELD BACK (2026-10-14): an admin-only game warms only onto phones that show it.** GENERATED
+  `HELD_BACK` (by `validate-sw-assets.mjs`): per `devOnly` hub id (+ `pinball2`), its files that
+  nothing outside held-back folders imports. The hub posts `SHOWN_GAMES` (its visible list) after
+  each launcher paint; the warm skips the rest, BELOW the carry-forward. Challenge games' alert/mp
+  modules stay warm (the hub imports them on every phone). Saves ~4.3 MB per phone.
 - **Network-first with a deadline** (`NET_TIMEOUT_MS` 2.5 s) plus a `SLOW_LATCH_MS` (10 s) "network
   is bad" latch. A request with nothing cached is never short-circuited.
 - **Unchanged files are carried forward across a CACHE bump** via the GENERATED `REST_MANIFEST`
@@ -246,7 +251,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   on your own judgement.
 - **Never hand-edit generated files** (`js/emoji-data.js`, `js/emoji-search-*.js`,
   `boggle/data/words-es.txt`, `contexto/data/*`, `baseball/models/*`, `gridlock/js/levels.js`,
-  `js/gridlock-v1map.js`, sw.js's `REST_MANIFEST`); re-run the generator.
+  `js/gridlock-v1map.js`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
 
 Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
 (`players-agg.test`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`,
@@ -420,6 +425,9 @@ None of this makes the hub cheat-proof; never describe it that way.
 - Never notify about your own action (`by` on the match). No push to a device with the hub open
   (`activeAt` heartbeat, decided on the SERVER in `isActive`). Opening the hub clears shown
   notifications.
+- **App icon badge** (2026-10-14): `sw.js` `syncBadge()` sets it to the number of our notifications
+  showing, only after one shows; `clearShownNotifications()` clears it. iPhone Home Screen app,
+  installed desktop Chrome/Edge; a no-op elsewhere.
 - **A tap opens THAT match** and survives a reload: the tap is written to sessionStorage
   (`hub.pushOpen`, 2 min) before acting, cleared only once mounted; same game open → `openArmed()`.
 - If notifications stop around late December 2026, check whether Blaze's free-trial billing needs

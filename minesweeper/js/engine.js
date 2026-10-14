@@ -282,6 +282,14 @@ export function correctFlags(state) {
   return n;
 }
 
+/** How many of the player's flags sit on a SAFE cell: the ones a loss shows struck through. */
+export function wrongFlags(state) {
+  let n = 0;
+  const total = state.w * state.h;
+  for (let i = 0; i < total; i++) if (state.cell[i] === FLAGGED && !state.mine[i]) n++;
+  return n;
+}
+
 /** A plain, JSON-safe snapshot. The state object is already built entirely from plain values, so
  *  this just copies the arrays (never hand the live arrays out — a caller mutating the "snapshot"
  *  must not mutate the real game). */
@@ -351,6 +359,6 @@ export default {
   LEVELS, HIDDEN, OPEN, FLAGGED,
   idx, inBounds,
   createGame, generate, openCell, toggleFlag, chord,
-  isWon, revealAll, minesLeft, clearedPct, correctFlags,
+  isWon, revealAll, minesLeft, clearedPct, correctFlags, wrongFlags,
   serialize, deserialize,
 };

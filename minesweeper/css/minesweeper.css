@@ -20,6 +20,12 @@
   --ms-boom: #e0532f;
   --ms-flag: #e0532f;
   --ms-flag-ok: #178a7a;
+  /* A WRONG FLAG after a loss (2026-10-14): the hub's #ffce3a emphasis accent, always with the
+   * struck-through glyph, never colour alone. The X itself is darker in light mode, where the
+   * accent on a white cell would not read. */
+  --ms-wrong: #ffce3a;
+  --ms-wrong-fill: #fff3c4;
+  --ms-wrong-x: #9a6a00;
   /* The digit IS the shape here, so hue is redundant information and nothing depends on telling
    * one colour from another. 2 and 3 are the classic green/red pair; they are teal and vermilion
    * instead, which is this repo's own colorblind-safe pair (root CLAUDE.md, accessibility). */
@@ -74,6 +80,8 @@
   --ms-cell-top: #36425a;
   --ms-open: #1b2431;
   --ms-grid: rgba(190, 214, 244, .10);
+  --ms-wrong-fill: #3a3216;
+  --ms-wrong-x: #ffce3a;
   --ms-n1: #6fa8e8; --ms-n2: #3fbfa8; --ms-n3: #ff8a63; --ms-n4: #a98bf0;
   --ms-n5: #e0a93a; --ms-n6: #46b5ce; --ms-n7: #e6edf7; --ms-n8: #9fb0c6;
   /* css/ui.css's .gh-* primitives (the buttons on the setup and how-to screens, the result modal)
@@ -307,6 +315,31 @@
 .ms-root .ms-c.n7 { color: var(--ms-n7); } .ms-root .ms-c.n8 { color: var(--ms-n8); }
 .ms-root .ms-c.is-target { outline: 3px solid var(--ms-accent); outline-offset: 1px; z-index: 3; }
 
+/* A WRONG FLAG after a loss glows and pulses (Matt, 2026-10-14: "I think it should glow/pulse").
+ * The glow is a pseudo-element with a FIXED box-shadow and only its OPACITY animates (Part 0:
+ * transform/opacity/filter only). z-index 11 lifts it above the result popup's dim (z 10, the
+ * .ms-ov::before below) and under its card (z 12), so it still shows while the popup is up. */
+.ms-root .ms-c.is-wrong {
+  position: relative;
+  z-index: 11;
+  background: var(--ms-wrong-fill);
+  border-color: var(--ms-wrong);
+  box-shadow: none;
+}
+.ms-root .ms-c.is-wrong .ms-wx { stroke: var(--ms-wrong-x); }
+.ms-root .ms-c.is-wrong::after {
+  content: '';
+  position: absolute; inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--ms-wrong), 0 0 16px 6px rgba(255, 206, 58, .75);
+  pointer-events: none;
+  animation: ms-wrongpulse 1100ms ease-in-out infinite;
+}
+@keyframes ms-wrongpulse {
+  0%, 100% { opacity: .3; }
+  50%      { opacity: 1; }
+}
+
 /* The loupe. Every cell below Easy's 44px is under Part 0's tap floor, and this is the documented
  * mitigation: while a finger is down the bubble shows the cell actually targeted, well clear of
  * the thumb, and the tap commits on RELEASE so a slide can correct it. */
@@ -356,9 +389,16 @@
 /* ---------------- overlay ---------------- */
 .ms-root .ms-ov {
   position: absolute; inset: 0;
-  background: rgba(9, 15, 26, .55);
   display: flex; align-items: center; justify-content: center;
   padding: 22px;
+  /* NO z-index here, on purpose: that would make the overlay its own stacking context, and a
+   * wrong flag (.ms-c.is-wrong, z 11) could then never sit between the dim and the card. The dim
+   * is the ::before (z 10) and the card is lifted to z 12. */
+}
+.ms-root .ms-ov::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: rgba(9, 15, 26, .55);
   z-index: 10;
 }
 .ms-root .ms-modal {
@@ -369,6 +409,7 @@
   box-shadow: 0 16px 44px rgba(16, 30, 54, .22);
   padding: 22px 18px 18px;
   position: relative;
+  z-index: 12;
   text-align: center;
 }
 /* Every win/lose popup in this hub gets a close (X) top-right, so it can be dismissed without
@@ -400,6 +441,14 @@
   font-size: 21px; font-variant-numeric: tabular-nums;
 }
 .ms-root .ms-stats span { display: block; font-size: 11px; color: var(--ms-muted); margin-top: 3px; font-weight: 600; }
+/* A loss shows four tiles (Flags wrong is the fourth), so they tighten to fit a 393px phone. */
+.ms-root .ms-stats.is-four { gap: 6px; }
+.ms-root .ms-stats.is-four > div { padding: 10px 3px; min-width: 0; }
+.ms-root .ms-stats.is-four b { font-size: 18px; }
+.ms-root .ms-stats .is-wrong { border-color: var(--ms-wrong); }
+.ms-root .ms-stats .is-wrong b { display: flex; align-items: center; justify-content: center; gap: 3px; color: var(--ms-wrong-x); }
+.ms-root .ms-stats .is-wrong b svg { width: 17px; height: 17px; color: var(--ms-ink); }
+.ms-root .ms-stats .is-wrong .ms-wx { stroke: var(--ms-wrong-x); }
 .ms-root .ms-pb {
   display: inline-flex; align-items: center; gap: 6px;
   background: rgba(242, 183, 5, .16);
@@ -639,4 +688,6 @@
   .ms-root .ms-board.is-blasting { animation: none; transform: none; }
   .ms-root .ms-c.is-revealing { animation: none; transform: none; opacity: 1; }
   .ms-root .ms-c.is-boom { animation: none; box-shadow: 0 0 10px 2px rgba(224, 83, 47, .45); }
+  /* The wrong-flag glow stays, steady: it is information, not garnish. */
+  .ms-root .ms-c.is-wrong::after { animation: none; opacity: .8; }
 }
