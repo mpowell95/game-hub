@@ -104,6 +104,8 @@ const ASSETS = [
   './js/mp-code-copy.js',
   './js/mp-reactions.js',
   './js/mp-reactions-ui.js',
+  './js/match-chat.js',
+  './js/match-chat-ui.js',
   // Profile page (profile project)
   './profile/',
   './profile/index.html',
@@ -689,6 +691,9 @@ const NETWORK_FIRST = [
   // How a challenge ends without a result (cancel, decline, expire; 2026-10-13): every challenge game
   // reads it to decide what a match is, so a stale copy would disagree with its game about a deadline.
   './js/challenge-life.js',
+  // In-match quick chat (2026-10-14): writes `<node>/chat/<id>` and the gamehub.matchChatSeen.v1
+  // marks. Its DOM half, js/match-chat-ui.js, touches no storage and stays cache-first.
+  './js/match-chat.js',
   // leaderboard-rank.js is leaderboard-ui.js's OWN maths, split out only so it can be tested
   // headlessly. Leaving it cache-first while its only caller is network-first means a device can
   // run NEW ranking code against an OLD formatter for one launch - which is what happened on
