@@ -1283,8 +1283,12 @@ class Hub {
     // doesn't take up the entire screen?" One alert draws the big bubble; two or more draw a small
     // pill on each tile (_paintGameAlert).
     const found = [];
+    // Only games on THIS launcher (2026-10-14): a game the player cannot see has nothing to show,
+    // and importing its alerts module would make an unreleased game's code part of every phone's
+    // launcher (so every edit to it would update every phone; sw.js HELD_BACK).
+    const onLauncher = new Set((this.games || []).map((g) => g.id));
     for (const g of GAMES) {
-      if (typeof g.alerts !== 'function') continue;
+      if (typeof g.alerts !== 'function' || !onLauncher.has(g.id)) continue;
       try {
         const mod = await g.alerts();
         const alert = await mod.check();
@@ -1323,8 +1327,9 @@ class Hub {
    */
   async _watchGameAlerts() {
     this._alertWatches = this._alertWatches || {};
+    const onLauncher = new Set((this.games || []).map((g) => g.id));
     for (const g of GAMES) {
-      if (typeof g.alerts !== 'function' || this._alertWatches[g.id]) continue;
+      if (typeof g.alerts !== 'function' || this._alertWatches[g.id] || !onLauncher.has(g.id)) continue;
       this._alertWatches[g.id] = 'pending';
       try {
         const mod = await g.alerts();

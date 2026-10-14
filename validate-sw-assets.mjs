@@ -226,42 +226,8 @@ function hashAsset(abs) {
   return createHash('sha256').update(body).digest('hex').slice(0, 10);
 }
 
-let manifestFailed = false;
-{
-  const { REST } = new Function(`${buildSrc}\nreturn { SHELL, REST };`)();
-  const expected = {};
-  for (const entry of REST) {
-    const rel = resolveAssetPath(entry);
-    const abs = join(ROOT, rel);
-    if (!existsSync(abs)) continue; // already reported as an offender in step 2
-    expected[entry] = hashAsset(abs);
-  }
-  const START = '// __REST_MANIFEST_START__';
-  const END = '// __REST_MANIFEST_END__';
-  const a = swSrc.indexOf(START);
-  const b = swSrc.indexOf(END);
-  if (a < 0 || b < 0 || b <= a) {
-    console.log('\nFAIL: could not locate the REST_MANIFEST markers in sw.js (markers moved?)');
-    manifestFailed = true;
-  } else {
-    let current = {};
-    try {
-      const block = swSrc.slice(a, b);
-      current = new Function(`${block.split('\n').filter((l) => !l.startsWith('//')).join('\n')}\nreturn REST_MANIFEST;`)();
-    } catch { /* unparseable block: treat as fully stale and rewrite */ }
-    const changed = REST.filter((p) => current[p] !== expected[p]);
-    const removed = Object.keys(current).filter((p) => !(p in expected));
-    if (changed.length || removed.length) {
-      const lines = REST.filter((p) => p in expected).map((p) => `  '${p}': '${expected[p]}',`);
-      const block = `${START}\nconst REST_MANIFEST = {\n${lines.join('\n')}\n};\n${END}`;
-      writeFileSync(SW_PATH, swSrc.slice(0, a) + block + swSrc.slice(b + END.length));
-      console.log(`\nok   REST_MANIFEST rewritten: ${changed.length} added/changed, ${removed.length} removed - commit sw.js`);
-    } else {
-      console.log('ok   REST_MANIFEST matches the bytes on disk');
-    }
-  }
-}
-
+const heldPaths = new Set();
+let heldFailed = false;
 // --- HELD_BACK: an admin-only game is not warmed onto a phone that cannot see it (2026-10-14) ---
 //
 // Matt: "we have the users phone download everything... Should we change this?" Measured that day:
@@ -320,6 +286,10 @@ const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody
     for (const re of SPEC) {
       for (const m of text.matchAll(re)) {
         if (/^(?:[a-z]+:)?\/\//i.test(m[1])) continue; // another origin (CDN, data:)
+        // `alerts: () => import(…)` (js/hub.js) and `load: () => import(…)` (js/challenges.js) run
+        // only for games on this phone's launcher (2026-10-14), so they do not make a game's code
+        // part of every phone.
+        if (/(?:alerts|load):\s*\(\)\s*=>\s*$/.test(text.slice(Math.max(0, m.index - 30), m.index))) continue;
         let target;
         try { target = './' + new URL(m[1], base).pathname.slice(1); } catch { continue; }
         if (target.endsWith('/')) { for (const q of known) if (q.startsWith(target)) reach(q); }
@@ -327,6 +297,7 @@ const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody
       }
     }
   }
+  for (const p of REST) if (heldFolder[top(p)] && !reached.has(p)) heldPaths.add(p);
   const held = {};
   for (const p of REST) {
     const id = heldFolder[top(p)];
@@ -341,7 +312,7 @@ const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody
   const block = `${START}\nconst HELD_BACK = {\n${lines.join('\n')}\n};\n${END}`;
   if (a < 0 || b < 0 || b <= a) {
     console.log('\nFAIL: could not locate the HELD_BACK markers in sw.js (markers moved?)');
-    manifestFailed = true;
+    heldFailed = true;
   } else if (src.slice(a, b + END.length) !== block) {
     writeFileSync(SW_PATH, src.slice(0, a) + block + src.slice(b + END.length));
     console.log(`ok   HELD_BACK rewritten (${ids.map((id) => `${id} ${held[id].length}`).join(', ')}) - commit sw.js`);
@@ -349,6 +320,69 @@ const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody
     console.log('ok   HELD_BACK matches the registry and the import graph');
   }
 }
+
+let manifestFailed = false;
+{
+  const { REST } = new Function(`${buildSrc}\nreturn { SHELL, REST };`)();
+  const expected = {};
+  for (const entry of REST) {
+    // A held-back file carries no hash (2026-10-14): editing an unreleased game must leave sw.js
+    // byte-identical, so no phone is sent an update for it. sw.js serves those files network-first.
+    if (heldPaths.has(entry)) continue;
+    const rel = resolveAssetPath(entry);
+    const abs = join(ROOT, rel);
+    if (!existsSync(abs)) continue; // already reported as an offender in step 2
+    expected[entry] = hashAsset(abs);
+  }
+  const START = '// __REST_MANIFEST_START__';
+  const END = '// __REST_MANIFEST_END__';
+  const swNow = readFileSync(SW_PATH, 'utf8'); // fresh: the HELD_BACK step above may have rewritten it
+  const a = swNow.indexOf(START);
+  const b = swNow.indexOf(END);
+  if (a < 0 || b < 0 || b <= a) {
+    console.log('\nFAIL: could not locate the REST_MANIFEST markers in sw.js (markers moved?)');
+    manifestFailed = true;
+  } else {
+    let current = {};
+    try {
+      const block = swNow.slice(a, b);
+      current = new Function(`${block.split('\n').filter((l) => !l.startsWith('//')).join('\n')}\nreturn REST_MANIFEST;`)();
+    } catch { /* unparseable block: treat as fully stale and rewrite */ }
+    const changed = REST.filter((p) => !heldPaths.has(p) && current[p] !== expected[p]);
+    const removed = Object.keys(current).filter((p) => !(p in expected));
+    if (changed.length || removed.length) {
+      const lines = REST.filter((p) => p in expected).map((p) => `  '${p}': '${expected[p]}',`);
+      const block = `${START}\nconst REST_MANIFEST = {\n${lines.join('\n')}\n};\n${END}`;
+      writeFileSync(SW_PATH, swNow.slice(0, a) + block + swNow.slice(b + END.length));
+      console.log(`\nok   REST_MANIFEST rewritten: ${changed.length} added/changed, ${removed.length} removed - commit sw.js`);
+    } else {
+      console.log('ok   REST_MANIFEST matches the bytes on disk');
+    }
+  }
+}
+
+// --- A CACHE bump nobody needs (2026-10-14) -----------------------------------------------------
+//
+// Matt: "can we make it so those version updates dont go to regular users?" A change confined to
+// held-back files (an unreleased game) needs NO sw.js change at all - they are network-first and
+// carry no hash - but a session that bumps CACHE out of habit still sends every phone an update.
+// Advisory only: compares this checkout with where it left origin/main, and says so.
+try {
+  const { execSync } = await import('node:child_process');
+  const sh = (c) => execSync(c, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+  const base = sh(`git merge-base HEAD ${process.env.SW_BASE_REF || 'origin/main'}`).trim();
+  const changed = sh(`git diff --name-only ${base}`).split('\n').filter(Boolean);
+  const shipped = new Set(ASSETS.map((e) => resolveAssetPath(e)));
+  const heldRel = new Set([...heldPaths].map((p) => resolveAssetPath(p)));
+  const deployed = changed.filter((f) => shipped.has(f));
+  const swTouched = changed.includes('sw.js');
+  if (deployed.length && deployed.every((f) => heldRel.has(f)) && swTouched) {
+    const mainCache = (/const CACHE = '([^']+)'/.exec(sh(`git show ${base}:sw.js`)) || [])[1];
+    console.log(`\nNOTE: only unreleased (held-back) game files changed since origin/main, yet sw.js changed.`
+      + `\n      Players get NO update for these if sw.js is left as on main: run`
+      + `\n      git checkout ${base.slice(0, 9)} -- sw.js version.json   (CACHE stays ${mainCache})`);
+  }
+} catch { /* no git or no origin/main: nothing to advise */ }
 
 // --- version.json: the version pill's one-line answer (2026-09-01) -----------------------------
 //
@@ -377,4 +411,4 @@ const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody
   }
 }
 
-process.exit(offenders.length || manifestFailed || missingFailed ? 1 : 0);
+process.exit(offenders.length || manifestFailed || heldFailed || missingFailed ? 1 : 0);
