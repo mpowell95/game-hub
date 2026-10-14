@@ -83,5 +83,19 @@ g = G.loadStats().games.gridlock;
 ok('an older store gains an empty gridlock record', g && g.total.played === 0 && g.gl && JSON.stringify(g.gl.lv) === '{}' && P.glPoints(g) === 0);
 ok('...and keeps what it had', G.loadStats().games.snake.total.played === 1);
 
+// --- admin only until Matt has tested it (Matt, 2026-10-14: "make sure it's admin only until I've
+// had time to fully test it"). The code default must stay devOnly with no `released` date; Matt
+// releases it himself from the admin page, which overrides this default without a commit. Change
+// these two checks only on his word.
+{
+  const { readFileSync } = await import('node:fs');
+  const hub = readFileSync(new URL('./js/hub.js', import.meta.url), 'utf8');
+  const at = hub.indexOf("id: 'gridlock'");
+  const entry = at < 0 ? '' : hub.slice(at, hub.indexOf('\n  },', at));
+  ok('hub: Gridlock has a GAMES entry', at >= 0);
+  ok('hub: Gridlock is admin only (devOnly: true)', /\bdevOnly:\s*true\b/.test(entry));
+  ok('hub: Gridlock has no released date (that is the New pill, for release day)', !/\breleased:/.test(entry));
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

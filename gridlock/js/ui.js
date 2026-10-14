@@ -27,6 +27,7 @@ const SAVE_V = 1;
 const TOTAL = LEVELS.length;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
 const LOOKS = ['wood', 'cars'];
+const PAGE = 25;                                 // levels per page of the level list (5 x 5)
 
 /** Ladder level n (1-based): its board string and fewest moves. */
 function levelAt(n) {
@@ -263,9 +264,14 @@ class Gridlock {
 
   render() {
     if (this.ro) { this.ro.disconnect(); this.ro = null; }
+    // A re-render (a language change) mid-drag replaces the block being dragged: drop the drag, or
+    // `this.drag` would stay set with no pointerup ever coming, and no block could be moved again.
+    this.drag = null;
     const modal = '<div class="gh-overlay gl-modal" hidden></div>';
-    this.root.innerHTML = (this.screen === 'play' ? this._playHTML() : this._homeHTML()) + modal;
+    const body = this.screen === 'play' ? this._playHTML() : this.screen === 'levels' ? this._levelsHTML() : this._homeHTML();
+    this.root.innerHTML = body + modal;
     this.root.classList.toggle('is-home', this.screen !== 'play');
+    this.root.classList.toggle('is-levels', this.screen === 'levels');
     for (const k of LOOKS) this.root.classList.toggle('gl-look-' + k, this.settings.look === k);
     this._positionRoot();
     if (this.screen === 'play') {
@@ -322,7 +328,46 @@ class Gridlock {
           </div>
           ${play}
         </div>
-        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="help">${t('how_title')}</button>
+        <div class="gl-home-foot">
+          <button type="button" class="gh-btn gh-btn--ghost" data-act="levels">${t('levels_btn')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost" data-act="help">${t('how_title')}</button>
+        </div>
+      </div>`;
+  }
+
+  /** The level list for the selected difficulty, PAGE levels a page (pages, never a scroll): every
+   *  level cleared shows its best stars and its crown; the next one is open; the rest are locked,
+   *  because a difficulty's levels are played in order. Picking a cleared level replays it. */
+  _levelsHTML() {
+    const band = this.settings.band, next = this.settings.next[band];
+    const first = GL_BAND_START[band], last = bandEnd(band);
+    const pages = Math.max(1, Math.ceil((last - first + 1) / PAGE));
+    this.page = Math.max(0, Math.min(pages - 1, this.page | 0));
+    const a = first + this.page * PAGE, z = Math.min(last, a + PAGE - 1);
+    const cleared = clearedLevels();
+    let tiles = '';
+    for (let n = a; n <= z; n++) {
+      const e = cleared[n];
+      const open = n <= next;
+      const stars = e ? [0, 1, 2].map((k) => `<i class="${k < e.s ? 'is-on' : ''}"></i>`).join('') : '';
+      const label = !open ? t('level_locked_aria', { n }) : e ? t('level_tile_aria', { n, s: e.s }) : t('level_n', { n });
+      tiles += `<button type="button" class="gl-tile${e ? ' is-done' : ''}${n === next ? ' is-next' : ''}" data-act="pick" data-n="${n}" ${open ? '' : 'disabled'} aria-label="${label}">
+        <b>${n}</b>${open ? `<span class="gl-tile-stars" aria-hidden="true">${stars}</span>` : '<span class="gl-lock" aria-hidden="true"></span>'}${e && e.c ? '<span class="gl-tile-crown" aria-hidden="true">&#128081;</span>' : ''}
+      </button>`;
+    }
+    return `
+      <div class="gl-levels">
+        <div class="gl-lv-head">
+          <button type="button" class="gl-iconbtn" data-act="home" aria-label="${t('back_levels')}">${ICON_BACK}</button>
+          <div class="gl-lv-title">${diffShapeSVG(TIER_NUM[band])}<b>${t('tier_' + band)}</b><span>${t('band_range', { a, b: z })}</span></div>
+          <span class="gl-hud-pad" aria-hidden="true"></span>
+        </div>
+        <div class="gl-grid">${tiles}</div>
+        <div class="gl-pager">
+          <button type="button" class="gh-btn" data-act="page" data-step="-1" ${this.page === 0 ? 'disabled' : ''} aria-label="${t('page_prev')}">&lsaquo;</button>
+          <span>${t('page_of', { p: this.page + 1, n: pages })}</span>
+          <button type="button" class="gh-btn" data-act="page" data-step="1" ${this.page >= pages - 1 ? 'disabled' : ''} aria-label="${t('page_next')}">&rsaquo;</button>
+        </div>
       </div>`;
   }
 
@@ -361,6 +406,10 @@ class Gridlock {
       const k = this.settings.band, n = this.settings.next[k];
       if (n <= bandEnd(k)) this._startLevel(k, n);
     } else if (act === 'help') this._openHelp();
+    else if (act === 'levels') { this.screen = 'levels'; this.page = Math.floor((Math.min(this.settings.next[this.settings.band], bandEnd(this.settings.band)) - GL_BAND_START[this.settings.band]) / PAGE); this.render(); }
+    else if (act === 'page') { this.page += +btn.dataset.step; this.render(); }
+    else if (act === 'pick') { const n = +btn.dataset.n; if (n >= 1 && n <= this.settings.next[this.settings.band] && n <= bandEnd(this.settings.band)) this._startLevel(this.settings.band, n); }
+    else if (act === 'home') { this.screen = 'home'; this.render(); }
     else if (act === 'menu') this._toSetup();
     else if (act === 'undo') this._undo();
     else if (act === 'restart') this._restart();
@@ -645,6 +694,14 @@ class Gridlock {
     // Board = 6 cells + a frame of 0.34 cell each side; the exit sticks out 0.5 cell on the right,
     // matched on the left so the board stays centred.
     const cell = Math.max(24, Math.floor(Math.min((w - 12) / 7.68, (h - 8) / 6.68, 76)));
+    // A resize or rotation mid-drag changes the cell size under the finger: end the drag where the
+    // block started (no move) rather than snap it by the old size.
+    if (this.drag && cell !== this.cell) {
+      const d = this.drag;
+      this.drag = null;
+      d.el.classList.remove('is-drag');
+      try { d.el.releasePointerCapture(d.id); } catch { /* fine */ }
+    }
     const frame = Math.round(cell * 0.34);
     this.cell = cell;
     this.frame = frame;
