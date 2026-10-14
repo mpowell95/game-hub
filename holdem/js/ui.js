@@ -537,6 +537,8 @@ class Game {
     const profit = mine.winnings - mine.buyins;
     const sort = this.bankSort === 'won' ? 'won' : 'bank';
     const signed = (v) => (v < 0 ? '-' : '+') + bigMoney(Math.abs(v));
+    // Players are named by their profile name, never "You" (Matt, 2026-10-14).
+    const myName = (loadProfile() || {}).name || '';
     let list = '';
     if (L === 'loading' || L == null) list = `<p class="pk-hint pk-center-text">${esc(t('bank_loading'))}</p>`;
     else if (L === 'offline') list = `<p class="pk-hint pk-center-text">${esc(t('bank_offline'))}</p><button type="button" class="pk-btn pk-btn-sm" data-act="bank-retry">${esc(t('bank_retry'))}</button>`;
@@ -549,7 +551,7 @@ class Game {
           <li class="pk-bkrow${r.me ? ' is-me' : ''}${(picked ? picked.key : 'me') === r.key ? ' is-picked' : ''}" data-me="${r.me ? 1 : 0}" role="button" tabindex="0" data-act="bank-pick" data-k="${esc(r.key)}" aria-pressed="${(picked ? picked.key : 'me') === r.key}">
             <span class="pk-bkrank">${r.review ? '-' : i + 1}</span>
             <span class="pk-lav">${esc(r.emoji || '\u{1F642}')}</span>
-            <span class="pk-bkname">${esc(r.me ? t('you') : r.name)}</span>
+            <span class="pk-bkname">${esc(r.me ? myName || r.name : r.name)}</span>
             ${r.review ? `<span class="pk-bkval is-review">${esc(t('bank_review'))}</span>` : `<span class="pk-bkval"><b>${esc(bigMoney(sort === 'won' ? r.won : r.bank))}</b><small>${esc(sort === 'won' ? t('bankroll') + ' ' + bigMoney(r.bank) : t('bank_won_short') + ' ' + bigMoney(r.won))}</small></span>`}
           </li>`).join('')}</ol>`;
     }
@@ -560,7 +562,7 @@ class Game {
           <h2 class="pk-bktitle">${esc(t('bank_title'))}</h2>
         </div>
         <div class="pk-bkme">
-          <div class="pk-bkwho"><span class="pk-lav">${esc((picked ? picked.emoji : (loadProfile() || {}).emoji) || '\u{1F642}')}</span><span class="pk-bkwhoname">${esc(picked ? picked.name : t('you'))}</span></div>
+          <div class="pk-bkwho"><span class="pk-lav">${esc((picked ? picked.emoji : (loadProfile() || {}).emoji) || '\u{1F642}')}</span><span class="pk-bkwhoname">${esc(picked ? picked.name : myName)}</span></div>
           ${picked && picked.review ? `<p class="pk-bkreview">${esc(t('bank_review'))}</p>` : ''}
           <div class="pk-bknums"${picked && picked.review ? ' aria-hidden="true"' : ''}>
           <div class="pk-bkbig"><span class="pk-bankicon" aria-hidden="true">$</span><span>${esc(t('bankroll'))}</span><b>${esc(bigMoney(Math.max(0, holdemBalance(mine))))}</b></div>
@@ -641,7 +643,7 @@ class Game {
     const dealt = humans.filter(pays).length + bots.length;
     const rows = humans.map((h) => `
         <li class="pk-lrow"><span class="pk-lav">${esc(h.avatar || '\u{1F642}')}</span><span class="pk-lname">${esc(h.name)}</span>
-          ${h.seat === 0 ? `<span class="pk-badge">${esc(t('host'))}</span>` : ''}${h.seat === mp.seat ? `<span class="pk-badge is-you">${esc(t('you'))}</span>` : ''}${pays(h) ? '' : `<span class="pk-badge is-short">${esc(t('cant_cover_badge'))}</span>`}</li>`).join('')
+          ${h.seat === 0 ? `<span class="pk-badge">${esc(t('host'))}</span>` : ''}${pays(h) ? '' : `<span class="pk-badge is-short">${esc(t('cant_cover_badge'))}</span>`}</li>`).join('')
       + bots.map((b, i) => `
         <li class="pk-lrow"><span class="pk-lav">${esc(b.emoji)}</span><span class="pk-lname">${esc(b.name)}</span>
           <span class="pk-shape" title="${esc(t(SKILL_ID[b.bot]))}">${diffShapeSVG(b.bot)}</span>
@@ -907,13 +909,13 @@ class Game {
       if (iWon) {
         const pop = this.winPopped !== `${pub.gid || ''}:${pub.handNo}`;
         this.winPopped = `${pub.gid || ''}:${pub.handNo}`;
-        winStamp = `<span class="pk-mywin${pop ? ' is-pop' : ''}">${esc(t(soloWin.has(this.myIdx) ? 'st_you_win' : 'st_split'))}</span>`;
+        winStamp = `<span class="pk-mywin${pop ? ' is-pop' : ''}">${esc(t(soloWin.has(this.myIdx) ? 'st_win' : 'st_split'))}</span>`;
       }
       mine.innerHTML = this.hole.map((c) => this._card(c, 'is-big' + (dim ? ' is-dim' : (bestSet.size ? (bestSet.has(c) ? ' is-best' : ' is-dim') : '')))).join('') + winStamp;
     } else if (!meP) {
       mine.innerHTML = `<p class="pk-note">${esc(t('next_game_wait'))}</p>`;
     } else if (meP.out) {
-      mine.innerHTML = `<p class="pk-note">${esc(t('you_are_out', { place: placeText(meP.place) }))}</p>`;
+      mine.innerHTML = `<p class="pk-note">${esc(t('you_are_out', { name: meP.name, place: placeText(meP.place) }))}</p>`;
     } else mine.innerHTML = '';
     q('.pk-stackline').innerHTML = meP ? (iWon ? `<b class="pk-mygain">+${esc(money(won[this.myIdx] || 0))}</b>` : '') + esc(t('stack_n', { n: money(meP.chips) })) : '';
 
@@ -942,15 +944,16 @@ class Game {
       const mine = p.winners.includes(this.myIdx);
       const w = p.winners[0];
       let text;
-      if (res.noShow) text = w === this.myIdx ? t('msg_you_take', { n: fmt(p.amount) }) : t('msg_takes', { name: name(w), n: fmt(p.amount) });
+      // Every line names the player, this one included (never "You", Matt 2026-10-14).
+      if (res.noShow) text = t('msg_takes', { name: name(w), n: fmt(p.amount) });
       else if (p.winners.length > 1) {
-        const names = (mine ? [t('msg_you')] : []).concat(p.winners.filter((j) => j !== this.myIdx).map(name));
+        const names = (mine ? [name(this.myIdx)] : []).concat(p.winners.filter((j) => j !== this.myIdx).map(name));
         text = t('msg_split_names', { names: joinNames(names), n: fmt(p.amount) });
-      } else if (res.scores[w] == null) text = w === this.myIdx ? t('msg_you_take', { n: fmt(p.amount) }) : t('msg_takes', { name: name(w), n: fmt(p.amount) });
-      else if (k > 0) text = w === this.myIdx ? t('msg_you_win_n', { n: fmt(p.amount) }) : t('msg_wins_n', { name: name(w), n: fmt(p.amount) });
+      } else if (res.scores[w] == null) text = t('msg_takes', { name: name(w), n: fmt(p.amount) });
+      else if (k > 0) text = t('msg_wins_n', { name: name(w), n: fmt(p.amount) });
       else {
         const hand = handName(res.scores[w]);
-        text = w === this.myIdx ? t('msg_you_win', { n: fmt(p.amount), hand }) : t('msg_wins', { name: name(w), n: fmt(p.amount), hand });
+        text = t('msg_wins', { name: name(w), n: fmt(p.amount), hand });
       }
       if (k > 0) text = t('side_pot') + ': ' + text;
       return { text, mine };
@@ -1136,7 +1139,7 @@ class Game {
       const pub = this.pub;
       const ranked = pub.players.slice().sort((a, b) => (a.place || 99) - (b.place || 99));
       const meP = this.myIdx >= 0 ? pub.players[this.myIdx] : null;
-      const title = meP ? (pub.winner === this.myIdx ? t('you_win') : t('you_place', { place: placeText(meP.place) })) : t('winner_is', { name: pub.players[pub.winner] ? pub.players[pub.winner].name : '' });
+      const title = meP ? (pub.winner === this.myIdx ? t('you_win', { name: meP.name }) : t('you_place', { name: meP.name, place: placeText(meP.place) })) : t('winner_is', { name: pub.players[pub.winner] ? pub.players[pub.winner].name : '' });
       let btns;
       // Solo (2026-10-13, Matt: the way back read "Settings"): play again, the casino floor (the
       // table picker), or the game's own menu (the setup screen).
@@ -1148,7 +1151,7 @@ class Game {
           <h2 class="pk-over-title">${esc(title)}</h2>
           ${this._myPrize() ? `<p class="pk-prize">${esc(t('prize_won', { n: bigMoney(this._myPrize()) }))}</p>` : ''}
           ${pub.cfg && (pub.cfg.buyin > 0 || pub.cfg.tier === ALLEY.id) ? `<p class="pk-hint">${esc(t('bankroll'))}: ${esc(bigMoney(this.bank()))}</p>` : ''}
-          <ol class="pk-final">${ranked.map((p) => `<li class="${p.id === pub.winner ? 'is-first' : ''}"><span class="pk-fplace">${esc(placeText(p.place || 0))}</span><span class="pk-lav">${esc(p.emoji)}</span><span class="pk-lname">${esc(p.id === this.myIdx ? t('you') : p.name)}</span></li>`).join('')}</ol>
+          <ol class="pk-final">${ranked.map((p) => `<li class="${p.id === pub.winner ? 'is-first' : ''}"><span class="pk-fplace">${esc(placeText(p.place || 0))}</span><span class="pk-lav">${esc(p.emoji)}</span><span class="pk-lname">${esc(p.name)}</span></li>`).join('')}</ol>
           <div class="pk-actrow">${btns}</div>
         </div>`;
     }
@@ -1767,18 +1770,18 @@ class Game {
   _lastHandHTML() {
     const L = this.lastHand;
     if (!L) return `<div class="pk-modal pk-modal-sm" role="dialog" aria-modal="true"><button type="button" class="pk-x" data-act="close" aria-label="${esc(t('done'))}">&#x2715;</button><p>${esc(t('last_none'))}</p></div>`;
-    const nm = (i) => (i === L.my ? t('last_you') : ((L.names[i] || {}).name || '?'));
+    const nm = (i) => (L.names[i] || {}).name || '?';   // profile names, never "You" (2026-10-14)
     const tiny = (cs) => cs.map((c) => cardHTML(c, 'is-tiny')).join('');
     const results = L.pots.map((p, k) => {
       const who = p.winners.map(nm);
       let line;
-      if (p.back) line = p.winners[0] === L.my ? t('last_you_back', { n: money(p.amount) }) : t('last_back', { name: who[0], n: money(p.amount) });
+      if (p.back) line = t('last_back', { name: who[0], n: money(p.amount) });
       else if (p.winners.length > 1) line = t('last_split', { names: who.join(', '), n: money(p.amount) });
       else if (L.noShow || p.score < 0 || L.scores[p.winners[0]] == null) {
-        line = p.winners[0] === L.my ? t('last_you_take', { n: money(p.amount) }) : t('last_takes', { name: who[0], n: money(p.amount) });
+        line = t('last_takes', { name: who[0], n: money(p.amount) });
       } else {
         const hand = handName(L.scores[p.winners[0]]);
-        line = p.winners[0] === L.my ? t('last_you_win', { n: money(p.amount), hand }) : t('last_wins', { name: who[0], n: money(p.amount), hand });
+        line = t('last_wins', { name: who[0], n: money(p.amount), hand });
       }
       return `<li>${k && !p.back ? `<small>${esc(t('last_side'))}</small> ` : ''}${esc(line)}</li>`;
     }).join('');
@@ -1798,7 +1801,7 @@ class Game {
       const rows = L.log.filter((e) => e.st === st);
       const cards = boardAt[st];
       if (!rows.length && !cards.length) return '';
-      const lines = rows.map((e) => `<li><b>${esc(nm(e.i))}</b> ${esc(t((e.i === L.my ? 'lgy_' : 'lg_') + e.a, { n: money(e.amt) }))}</li>`).join('');
+      const lines = rows.map((e) => `<li><b>${esc(nm(e.i))}</b> ${esc(t('lg_' + e.a, { n: money(e.amt) }))}</li>`).join('');
       return `<div class="pk-lstreet"><div class="pk-lsthead"><span>${esc(t('street_' + st))}</span>${cards.length ? `<span class="pk-lcards">${tiny(cards)}</span>` : ''}</div>${lines ? `<ol class="pk-lacts">${lines}</ol>` : ''}</div>`;
     }).join('');
     return `<div class="pk-modal pk-last" role="dialog" aria-modal="true" aria-label="${esc(t('last_hand'))}">
