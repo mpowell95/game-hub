@@ -262,6 +262,94 @@ let manifestFailed = false;
   }
 }
 
+// --- HELD_BACK: an admin-only game is not warmed onto a phone that cannot see it (2026-10-14) ---
+//
+// Matt: "we have the users phone download everything... Should we change this?" Measured that day:
+// ~4.8 MB of the ~16 MB every phone warmed belonged to games only Matt could see (Baseball alone
+// 2.7 MB) or to no game at all (pinball2). This writes the GENERATED `HELD_BACK` block in sw.js:
+// per `devOnly` hub id (plus pinball2, which has no registry entry), the REST files in that game's
+// folder that NOTHING outside a held-back folder can reach. warmRest() skips them unless the hub
+// has told the worker this phone can see that game (`SHOWN_GAMES`, from the launcher's own
+// visibility rule, so an admin-page release with no commit still warms on the phones it reaches).
+//
+// REACHABLE files are never held back, however deep in a held-back folder they sit: the hub
+// imports every challenge game's `alerts` module on EVERY phone (and Skeeball's challenges import
+// hoops4/js/mp.js), so those must stay warm for the launcher to work offline. Reachability follows
+// literal `import`/`export from`/`import()` specifiers and `new URL('…', import.meta.url)` (a
+// trailing-slash base covers its whole folder). Over-matching (a specifier in a comment) only warms
+// more, which is the safe direction. A computed path cannot be followed: a reachable module that
+// builds a URL at run time would fetch that file on demand instead, online only.
+const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody's launcher shows it
+{
+  const src = readFileSync(SW_PATH, 'utf8');
+  const { SHELL, REST } = new Function(`${buildSrc}\nreturn { SHELL, REST };`)();
+  const hub = readFileSync(join(ROOT, 'js', 'hub.js'), 'utf8');
+  const g0 = hub.indexOf('export const GAMES = [');
+  const reg = hub.slice(g0, hub.indexOf('\n];', g0));
+  const heldFolder = {}; // folder -> hub id
+  // One chunk per entry, cut at each top-level `id:` (entries are not always one per `{` line:
+  // `},  {` happens). A chunk runs to the next entry's id, so it can carry that entry's leading
+  // comments, never its fields.
+  for (const e of reg.split(/\n(?= {4}id: ')/).slice(1)) {
+    const id = (/^\s*id: '([^']+)'/m.exec(e) || [])[1];
+    const dir = (/^\s*(?:module|href): ['"`](?:\.\.\/)?([^/'"`?]+)\//m.exec(e) || [])[1];
+    if (id && dir && /^\s*devOnly: true,/m.test(e)) heldFolder[dir] = id;
+  }
+  for (const dir of HELD_FOLDERS_UNLISTED) heldFolder[dir] = dir;
+  const top = (p) => p.replace(/^\.\//, '').split('/')[0];
+  const all = [...SHELL, ...REST];
+  const known = new Set(all);
+  const reached = new Set();
+  const queue = all.filter((p) => !(top(p) in heldFolder));
+  const reach = (p) => { if (known.has(p) && !reached.has(p)) { reached.add(p); queue.push(p); } };
+  queue.forEach((p) => reached.add(p));
+  const SPEC = [
+    /(?:import|export)\s[^'"`;]*?from\s*['"]([^'"]+)['"]/g,
+    /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /import\s+['"]([^'"]+)['"]/g,
+    /new URL\(\s*['"]([^'"]+)['"]\s*,\s*import\.meta\.url/g,
+    /<(?:script|link)\b[^>]*?(?:src|href)=["']([^"']+)["']/g,
+  ];
+  while (queue.length) {
+    const p = queue.shift();
+    if (!/\.(m?js|html)$/.test(p)) continue;
+    const rel = resolveAssetPath(p);
+    let text;
+    try { text = readFileSync(join(ROOT, rel), 'utf8'); } catch { continue; }
+    const base = new URL(rel, 'https://x/');
+    for (const re of SPEC) {
+      for (const m of text.matchAll(re)) {
+        if (/^(?:[a-z]+:)?\/\//i.test(m[1])) continue; // another origin (CDN, data:)
+        let target;
+        try { target = './' + new URL(m[1], base).pathname.slice(1); } catch { continue; }
+        if (target.endsWith('/')) { for (const q of known) if (q.startsWith(target)) reach(q); }
+        else reach(target);
+      }
+    }
+  }
+  const held = {};
+  for (const p of REST) {
+    const id = heldFolder[top(p)];
+    if (id && !reached.has(p)) (held[id] = held[id] || []).push(p);
+  }
+  const ids = Object.keys(held).sort();
+  const START = '// __HELD_BACK_START__';
+  const END = '// __HELD_BACK_END__';
+  const a = src.indexOf(START);
+  const b = src.indexOf(END);
+  const lines = ids.map((id) => `  '${id}': [\n${held[id].map((p) => `    '${p}',`).join('\n')}\n  ],`);
+  const block = `${START}\nconst HELD_BACK = {\n${lines.join('\n')}\n};\n${END}`;
+  if (a < 0 || b < 0 || b <= a) {
+    console.log('\nFAIL: could not locate the HELD_BACK markers in sw.js (markers moved?)');
+    manifestFailed = true;
+  } else if (src.slice(a, b + END.length) !== block) {
+    writeFileSync(SW_PATH, src.slice(0, a) + block + src.slice(b + END.length));
+    console.log(`ok   HELD_BACK rewritten (${ids.map((id) => `${id} ${held[id].length}`).join(', ')}) - commit sw.js`);
+  } else {
+    console.log('ok   HELD_BACK matches the registry and the import graph');
+  }
+}
+
 // --- version.json: the version pill's one-line answer (2026-09-01) -----------------------------
 //
 // js/hub.js's _latestVersion() used to fetch the whole of sw.js (52 KB, ~17 KB gzipped) on every

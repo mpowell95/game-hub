@@ -39,6 +39,7 @@ export const STRINGS = {
     help_aria: 'How to play',
     cell_aria_hidden: 'Row {r}, column {c}, not opened',
     cell_aria_flag: 'Row {r}, column {c}, flagged',
+    cell_aria_wrong: 'Row {r}, column {c}, flagged, no mine here',
     cell_aria_open: 'Row {r}, column {c}, {n} mines touching',
     cell_aria_empty: 'Row {r}, column {c}, empty',
     // Results
@@ -48,6 +49,7 @@ export const STRINGS = {
     stat_time: 'Time',
     stat_cleared: 'Cleared',
     stat_flags: 'Flags right',
+    stat_flags_wrong: 'Flags wrong',
     stat_old_best: 'Old best',
     stat_wins: 'Wins',
     new_best: 'New best time',
@@ -93,6 +95,7 @@ export const STRINGS = {
     help_aria: 'Cómo se juega',
     cell_aria_hidden: 'Fila {r}, columna {c}, sin abrir',
     cell_aria_flag: 'Fila {r}, columna {c}, marcada',
+    cell_aria_wrong: 'Fila {r}, columna {c}, marcada, aquí no había mina',
     cell_aria_open: 'Fila {r}, columna {c}, {n} minas alrededor',
     cell_aria_empty: 'Fila {r}, columna {c}, vacía',
     // Results
@@ -102,6 +105,7 @@ export const STRINGS = {
     stat_time: 'Tiempo',
     stat_cleared: 'Despejado',
     stat_flags: 'Marcas correctas',
+    stat_flags_wrong: 'Marcas incorrectas',
     stat_old_best: 'Récord anterior',
     stat_wins: 'Victorias',
     new_best: 'Nuevo mejor tiempo',
