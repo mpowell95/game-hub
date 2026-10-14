@@ -399,14 +399,20 @@ class WayOut {
   }
 
   /** Same technique as murdoku/js/ui.js: a fixed root measured against the mount point, and in the
-   *  hub's immersive mode the top bar shares a row with the hub's floating back button. */
+   *  hub's immersive mode the top bar shares a row with the hub's floating back button.
+   *
+   *  The BOTTOM is `bottom: 0`, never a height measured from the viewport (2026-10-14, Matt's
+   *  screenshot: the setup screen cut off in the middle of "How to play", the picture pushed up
+   *  beside the Hub button). On an iPhone a viewport height read at mount can land mid-transition,
+   *  short, and nothing re-measures it for the rest of the visit. Minesweeper hit exactly this on
+   *  2026-10-11 and fixed it the same way: `bottom: 0` follows the real screen edge. */
   _positionRoot() {
     if (!this.root || !this.container) return;
     const r = this.container.getBoundingClientRect();
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
-    if (!vh) return;
     this.root.style.left = Math.round(r.left) + 'px';
     this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
+    this.root.style.bottom = '0px';
+    this.root.style.height = 'auto';
     const back = document.querySelector('.hub-top-immersive .hub-back');
     const b = back && back.getBoundingClientRect();
     if (b && b.width && b.height) {
@@ -415,14 +421,12 @@ class WayOut {
       this.root.style.left = '0px';
       this.root.style.width = (document.documentElement.clientWidth || window.innerWidth || 0) + 'px';
       this.root.style.top = '0px';
-      this.root.style.height = Math.max(200, Math.round(vh)) + 'px';
       this.root.style.setProperty('--wo-top', Math.max(0, Math.round(b.top + (b.height - 44) / 2)) + 'px');
       this.root.style.setProperty('--wo-inset', Math.max(0, Math.round(b.right + 6)) + 'px');
       return;
     }
     this.root.classList.remove('is-immersive');
-    this.root.style.top = Math.round(r.top) + 'px';
-    this.root.style.height = Math.max(200, Math.round(vh - r.top)) + 'px';
+    this.root.style.top = Math.max(0, Math.round(r.top)) + 'px';
   }
 
   // --- rendering --------------------------------------------------------------------------------

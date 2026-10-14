@@ -197,6 +197,13 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
   390x844 and 430x932: every button, the board and the popups on screen, none overlapping each other
   or the hub's back button, no page scroll. Expert's board pitch is ~11px at 320 wide, ~13-14px on
   ordinary phones (it was ~2px less before the hint moved).
+- **The root's BOTTOM is `bottom: 0`, never a height measured from the viewport (2026-10-14).** Matt's
+  iPhone showed the setup screen cut off in the middle of "How to play" with the picture pushed up
+  beside the Hub button: `_positionRoot()` set `height = visualViewport.height` once, an iPhone can
+  report a short height mid-transition (535 instead of 874), and nothing re-measured it. Reproduced in
+  Chromium by faking that short height; Minesweeper had the same bug and fix on 2026-10-11. The setup
+  column also centres with auto margins (`.wo-home > :first-child/:last-child`) and scrolls inside
+  itself if a phone is ever too short, so it can never ride up under the Hub button or be clipped.
 - **The phones that matter, measured 2026-10-13** (`node read-install-state.mjs --screens`, sizes
   in CSS px from the 10 most active players): 402x874 (King of Games, Matt, Natalia), 414x896
   (Anita), 390x844 (Ele), 360x804 Android in a browser tab (Unai, a 360x724 page). Still unreported:
