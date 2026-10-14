@@ -265,7 +265,10 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   the Ready popup (`.wo-ready`: seconds carried, the two rules as chips with sign and word, **Ready**
   button, no X, Escape does nothing), then **3, 2, 1, Go!** (`.wo-count`) over the cleared board; the
   next board appears and the clock restarts only at Go!. Stored `ms` is PLAY time
-  (`_rushBoardDone`, `_showRushReady`, `_rushReady`, `_rushGo`). **Popup buttons are `button.wo-*`**
+  (`_rushBoardDone`, `_showRushReady`, `_rushReady`, `_rushGo`). **The FIRST board gets the same
+  3, 2, 1, Go!** (Matt, 2026-10-14: *"it's instant. It needs a countdown"*): the run opens paused,
+  the board veiled (`rush.veil`, `.wo-stage.is-veiled`), taps and Enter refused, clock at Go
+  (`_rushCountdown`, shared). **Popup buttons are `button.wo-*`**
   (`.wo-root button:not(.gh-btn)` resets every game button and outranks a plain class rule).
 - **Boards keep coming**, harder: `buildRush(mode, i, seed)` builds board `i` like ladder level
   `rushLevel(mode, i)` (Easy 3, 9, 15 .. up to 50; Hard 51, 59, 67 .. up to 120), with a **random seed

@@ -544,3 +544,17 @@ Moved here word for word from the `CLAUDE.md` edit made on main the same day:
      "Resets in N days" (`_rushStandingText`; everyone's rows are the Results read, done in the
      background at most once a minute; this phone's own best is always its fresh local one; until
      the read lands, or offline, only the reset shows). `woWeekEnd()` is the next Monday 00:00 UTC.
+
+## Rush: a countdown before the first board (2026-10-14)
+
+Matt, with a screenshot of the between-boards Ready popup: *"When you first click start on a rush
+game it's instant. It needs a countdown just like we have between maps."* `_startRush` now opens the
+run paused and counting, with the board hidden (`rush.veil` -> `.wo-stage.is-veiled .wo-canvas
+{visibility: hidden}`) so nobody plans before the clock starts, and taps (`_tap`) and Enter refused
+while `rush.paused`. The 3, 2, 1, Go! loop moved out of `_rushReady` into `_rushCountdown(r, done)`,
+used by both. Clock starts at Go (10.0 held through the count). No Ready popup before the first
+board (the Play button already is that tap). Browser-checked: count 3/2/1/Go with the canvas
+hidden and the clock at 10.0, a tap during the count sends nothing, clock runs after Go; board 1
+cleared by real taps -> Ready -> countdown -> board 2 with the clock running. Held-back game: no
+CACHE bump.
+

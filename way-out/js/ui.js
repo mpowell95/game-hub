@@ -481,7 +481,7 @@ class WayOut {
       if (step) { ev.preventDefault(); this._kbMove(step); }
       else if ((ev.key === 'Enter' || ev.key === ' ') && this.kbSel >= 0) {
         ev.preventDefault();
-        if (!this.won && !this.failed && !this.gone[this.kbSel] && !this.busy[this.kbSel]) {
+        if (!this.won && !this.failed && !(this.rush && this.rush.paused) && !this.gone[this.kbSel] && !this.busy[this.kbSel]) {
           const id = this.kbSel;
           this._send(id);
           this._kbMove(1);
@@ -1031,6 +1031,7 @@ class WayOut {
    *  arrow wins, so a tap anywhere close still lands, the dots-boxes approach (way-out/CLAUDE.md). */
   _tap(ev) {
     if (this.won || this.failed || this.screen !== 'play') return;
+    if (this.rush && this.rush.paused) return;      // the countdown before a Rush board: not yet
     if (ev.button !== undefined && ev.button !== 0) return;   // primary button / touch / pen only
     ev.preventDefault();
     const r = this.canvas.getBoundingClientRect();
@@ -1321,7 +1322,7 @@ class WayOut {
           <span class="wo-rushscore"></span>
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
-        <div class="wo-stage"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
+        <div class="wo-stage${this.rush.veil ? ' is-veiled' : ''}"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
         <div class="wo-banner" aria-live="polite"><span></span><b></b></div>
         <div class="wo-count" aria-live="assertive"></div>
       </div>`;
@@ -1333,15 +1334,28 @@ class WayOut {
     this.tier = mode;
     this.clock = null;
     this._helpPaused = false;
-    this.rush = { mode, seed, i: 0, arrows: 0, boards: 0, mistakes: 0, bank: RUSH_START_MS, t0: 0, playMs: 0, over: null, next: null,
-      paused: false, counting: false, prevBest: woRushBest(this._myWayout(), mode) };
+    // THE FIRST BOARD GETS THE COUNTDOWN TOO (Matt, 2026-10-14: "When you first click start on a
+    // rush game it's instant. It needs a countdown just like we have between maps"). The run opens
+    // PAUSED and counting, with the board veiled (`veil`, .wo-stage.is-veiled) and taps refused;
+    // 3, 2, 1, Go! (the same _rushCountdown the boards after it use), and the clock starts at Go.
+    const r = { mode, seed, i: 0, arrows: 0, boards: 0, mistakes: 0, bank: RUSH_START_MS, t0: 0, playMs: 0, over: null, next: null,
+      paused: true, counting: true, veil: true, prevBest: woRushBest(this._myWayout(), mode) };
+    this.rush = r;
     this._rushSetBoard(buildRush(mode, 0, seed));
     this.screen = 'play';
     this.render();
-    this.rush.t0 = performance.now();
     this.rushTick = setInterval(() => this._rushTickFn(), 100);
     this._rushPaint();
     this._rushPrebuild();
+    this._rushCountdown(r, () => {
+      r.veil = false;
+      const st = this.root && this.root.querySelector('.wo-stage');
+      if (st) st.classList.remove('is-veiled');
+      r.paused = false;
+      r.counting = false;
+      r.t0 = performance.now();
+      this._rushPaint();
+    });
   }
   _rushSetBoard(lvl) {
     this.lvl = lvl;
@@ -1446,6 +1460,11 @@ class WayOut {
     this._closeModal();
     const b = this.root.querySelector('.wo-banner');
     if (b) b.classList.remove('is-on');
+    this._rushCountdown(r, () => this._rushGo());
+  }
+  /** 3, 2, 1, Go! over the board (`.wo-count`), then `done` (which clears it). Abandoned if the run
+   *  ends or a new one starts. */
+  _rushCountdown(r, done) {
     const steps = ['3', '2', '1', t('rush_go')];
     const show = (k) => {
       if (this.rush !== r || r.over) return;
@@ -1454,7 +1473,12 @@ class WayOut {
         el.innerHTML = `<b class="${k === steps.length - 1 ? 'is-go' : ''}">${steps[k]}</b>`;
         el.classList.add('is-on');
       }
-      if (k === steps.length - 1) this._later(() => this._rushGo(), 550);
+      if (k === steps.length - 1) this._later(() => {
+        if (this.rush !== r || r.over) return;
+        const c = this.root.querySelector('.wo-count');
+        if (c) { c.classList.remove('is-on'); c.innerHTML = ''; }
+        done();
+      }, 550);
       else this._later(() => show(k + 1), 750);
     };
     show(0);

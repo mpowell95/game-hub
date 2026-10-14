@@ -287,6 +287,8 @@
   transition: transform .25s ease-out;
 }
 .wo-root .wo-stage { flex: 1; min-height: 0; position: relative; margin-bottom: env(safe-area-inset-bottom, 0px); }
+/* The first Rush board is hidden behind its 3, 2, 1, Go! (no planning before the clock starts). */
+.wo-root .wo-stage.is-veiled .wo-canvas { visibility: hidden; }
 /* EASY only (Matt's mock-up, 2026-10-14): counters under the bar, a How to play pill under the board. */
 .wo-root .wo-counts {
   flex: none;
