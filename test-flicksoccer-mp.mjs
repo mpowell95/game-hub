@@ -296,6 +296,27 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
   ok('both phones replay the same pitch', JSON.stringify(MP.buildMatch(await MP.readGame(c.id)).b) === JSON.stringify(MP.buildMatch(f1.game).b));
   ok('Matt cannot pick Ana\'s line-up', (await MP.pickLineup(c.id, 'attack')).reason === 'not-your-game');
 
+  // Offense and defense line-ups (2026-10-14): each side sets both; whoever kicks off stands in
+  // their offense line-up, the other in their defense one, at the start and after every goal.
+  {
+    use('A');
+    const c2 = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, goals: 2, pair: ['attack', 'defend'] });
+    const raw2 = getAt(`flicksoccer/games/${c2.id}`);
+    ok('a challenge stores the challenger\'s offense and defense line-ups', c2.ok && raw2.pairs.a.join() === 'attack,defend');
+    ok('...and Ana kicks off, so Matt stands in his DEFENSE line-up', c2.game.forms[0] === 'defend' && c2.game.pick === 'b');
+    use('B');
+    const p2 = await MP.pickLineup(c2.id, ['diamond', 'balanced']);
+    ok('Ana adds hers, and stands in her OFFENSE line-up to kick off', p2.ok && p2.game.forms.join() === 'defend,diamond'
+      && JSON.stringify(p2.game.pairs) === JSON.stringify([['attack', 'defend'], ['diamond', 'balanced']]));
+    const m2 = MP.buildMatch(p2.game);
+    E.settle(m2, 1);   // Ana scores: Matt kicks off in HIS offense line-up, Ana in her defense one
+    ok('after a goal the line-ups follow the kick-off', m2.forms.join() === 'attack,balanced' && m2.b[4].y === E.FORMATIONS.attack[3][1]);
+    const f2 = await MP.appendLog(c2.id, 0, [straight('b')]);
+    ok('a flick is accepted and replays the same on both phones', f2.ok && JSON.stringify(MP.buildMatch(await MP.readGame(c2.id)).b) === JSON.stringify(MP.buildMatch(f2.game).b));
+    ok('a match from before line-up pairs reads none', MP.pairsOfGame({ forms: ['attack', 'defend'] }) === null);
+    use('A');
+  }
+
   // Declined (or called off) before anybody flicked: counts for nobody, listed for nobody, no push.
   const d = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, form: 'diamond' });
   use('B');

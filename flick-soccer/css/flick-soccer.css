@@ -253,9 +253,71 @@
 .fs-root .fs-seg .fs-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fs-root .fs-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
 /* Line-ups: a little picture of the five discs over the word, so four fit across a narrow phone. */
-.fs-root .fs-seg-form .fs-seg-item { flex-direction: column; gap: 1px; min-height: 44px; padding: 3px 2px; font-size: 12px; }
-.fs-root .fs-seg-form .fs-seg-item::after { inset: 0; }
-.fs-root .fs-seg-form .fs-form-ico { width: 24px; height: 21px; flex: 0 0 auto; }
+/* Offense and defense line-ups (2026-10-14): two buttons, each its role, its little pitch and its
+   name; a tap opens the picker. On the start menu and both challenge cards. */
+.fs-root .fs-lus { display: flex; gap: 8px; }
+.fs-root .fs-lu {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 6px;
+  border: 2px solid var(--fs-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--fs-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.fs-root .fs-lu .fs-form-ico { width: 46px; height: 40px; flex: 0 0 auto; pointer-events: none; }
+.fs-root .fs-lu-txt { display: flex; flex-direction: column; min-width: 0; pointer-events: none; }
+.fs-root .fs-lu-role { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fs-muted); }
+.fs-root .fs-lu-name { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The picker: the four line-ups as real little pitches, two by two, over the card that opened it. */
+.fs-root .fs-lupick { z-index: 9; }
+.fs-root .fs-lupick-sub { margin: -6px 0 2px; text-align: center; font-size: 14px; font-weight: 600; color: var(--fs-muted); }
+.fs-root .fs-lupick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fs-root .fs-lupick-opt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 8px 8px;
+  border: 2px solid var(--fs-line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--fs-ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.fs-root .fs-lupick-opt > * { pointer-events: none; }
+.fs-root .fs-lupick-opt .fs-form-ico { width: 100%; max-width: 112px; height: auto; }
+/* The chosen one: a green ring AND a tick, never colour alone. */
+.fs-root .fs-lupick-opt[aria-pressed="true"] { border-color: var(--fs-green); box-shadow: 0 0 0 1px var(--fs-green) inset; }
+.fs-root .fs-lupick-tick {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--fs-green);
+  color: #fff;
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 900;
+}
 .fs-root .fs-go { font-size: 17px; font-weight: 800; }
 .fs-root .fs-alt { background: #fff; color: var(--fs-ink); border-color: var(--fs-line); }
 .fs-root .fs-h2 { margin: 0 40px 4px; text-align: center; font-size: 22px; font-weight: 900; color: var(--fs-ink); }
@@ -328,7 +390,7 @@
 /* Clear of the hub's floating back button (top-left, ~54-90px down): the card starts below it. */
 .fs-root .fs-ov-mp { align-items: flex-start; padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
 .fs-root .fs-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
-.fs-root .fs-mp-top { display: flex; align-items: center; gap: 6px; }
+.fs-root .fs-mp-top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 6px; }
 .fs-root .fs-mp-back {
   flex: 0 0 auto;
   width: 44px;
@@ -341,7 +403,7 @@
   color: var(--fs-ink);
 }
 .fs-root .fs-mp-back svg { width: 22px; height: 22px; }
-.fs-root .fs-mp-title { margin: 0; text-align: left; flex: 1 1 auto; min-width: 0; }
+.fs-root .fs-mp-title { margin: 0; text-align: center; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fs-root .fs-mp-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
 .fs-root .fs-mp-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
 .fs-root .fs-mp-h {
@@ -358,8 +420,6 @@
 .fs-root .fs-mp-h span { padding: 1px 7px; border-radius: 999px; background: var(--fs-green); color: #fff; font-size: 11px; }
 .fs-root .fs-mp-note { margin: 0; text-align: center; font-size: 14px; font-weight: 600; color: var(--fs-muted); }
 .fs-root .fs-mp-err { color: #a3161b; font-weight: 800; }
-.fs-root .fs-mp-vs { margin: 6px 0 0; text-align: center; font-size: 22px; font-weight: 900; color: var(--fs-ink); }
-.fs-root .fs-mp-vs span { font-size: 30px; margin-right: 4px; }
 .fs-root .fs-mp-search { font-size: 16px; }
 .fs-root .fs-mrow {
   display: flex;
@@ -448,10 +508,11 @@
 @media (prefers-reduced-motion: reduce) {
   .fs-root .fs-banner.is-show { animation: fs-still 1.6s linear forwards; }
 }
-/* Own-lineup challenges: the other side's pick, shown with its picture, and your role. */
-.fs-root .fs-mp-pick-theirs { margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 800; color: var(--fs-ink); }
-.fs-root .fs-mp-pick-theirs .fs-form-ico { width: 30px; height: 26px; flex: 0 0 auto; }
-.fs-root .fs-mp-role { color: var(--fs-ink); font-weight: 700; }
+/* A challenge card: who it is with, then its terms in one line. */
+.fs-root .fs-mp-who { margin: 2px 0 0; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; font-size: 22px; color: var(--fs-ink); }
+.fs-root .fs-mp-who b { font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-root .fs-mp-face { flex: 0 0 auto; font-size: 32px; line-height: 1; }
+.fs-root .fs-mp-terms { margin: -4px 0 2px; text-align: center; font-size: 15px; font-weight: 700; color: var(--fs-muted); }
 /* "+N more" on the online home is a button: the next page of matches. */
 .fs-root button.fs-mp-more { min-height: 44px; border: 0; background: transparent; color: var(--fs-green); text-decoration: underline; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; }
 
@@ -470,6 +531,8 @@
 :root.gh-dark .fs-root .fs-seg { background: #0d1711; }
 :root.gh-dark .fs-root .fs-seg .fs-seg-item[aria-pressed="true"] { background: #24392c; }
 :root.gh-dark .fs-root .fs-alt,
+:root.gh-dark .fs-root .fs-lu,
+:root.gh-dark .fs-root .fs-lupick-opt,
 :root.gh-dark .fs-root .fs-mprow,
 :root.gh-dark .fs-root .fs-mrow { background: #1d2d23; }
 :root.gh-dark .fs-root .fs-x,
@@ -477,6 +540,7 @@
 :root.gh-dark .fs-root .fs-help-line { color: #c3d6c8; }
 :root.gh-dark .fs-root .fs-danger { background: #1d2d23; color: #ff9b9b; border-color: #6e3434; }
 :root.gh-dark .fs-root .fs-mp-err { color: #ff9b9b; }
+:root.gh-dark .fs-root .fs-lupick-tick,
 :root.gh-dark .fs-root .fs-mprow-badge,
 :root.gh-dark .fs-root .fs-mp-h span { background: #1f7a3a; color: #fff; }
 /* css/hub.css carries this too, but the standalone page does not load hub.css. */
@@ -487,3 +551,14 @@
    root's user-select: none (iOS Safari will not type into an input that has it). */
 .fs-root .ghc-panel { touch-action: pan-y; }
 .fs-root .ghc-input { -webkit-user-select: text; user-select: text; }
+
+/* A narrower phone (360 wide and less): a smaller line-up picture, so the whole name fits
+   ("Balanced", never "Bala..."), and a challenge card's title keeps to one line. Last in the file,
+   so it wins over the rules above. Measured: no name or title cut at 320, 360 and 390, EN and ES. */
+@media (max-width: 379px) {
+  .fs-root .fs-lu { gap: 5px; padding: 6px 6px 6px 5px; }
+  .fs-root .fs-lu .fs-form-ico { width: 34px; height: 30px; }
+  .fs-root .fs-lu-name { font-size: 15px; }
+  .fs-root .fs-mp-top { grid-template-columns: 44px 1fr 24px; gap: 4px; }
+  .fs-root .fs-mp-title { font-size: 19px; }
+}

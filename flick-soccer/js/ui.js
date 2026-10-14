@@ -10,7 +10,7 @@
 // written the moment it is made, so leaving one loses nothing either.
 
 import {
-  newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, lineUp, restScorer,
+  newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, restScorer,
   ballPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
 } from './engine.js';
 import { planShot, DIFFS } from './ai.js';
@@ -70,7 +70,10 @@ function loadSettings() {
     difficulty,
     goals: GOAL_OPTIONS.includes(s.goals) ? s.goals : 2,
     first: FIRSTS.includes(s.first) ? s.first : 'alt',
-    lineup: FORM_IDS.includes(s.lineup) ? s.lineup : 'balanced',
+    lineup: FORM_IDS.includes(s.lineup) ? s.lineup : 'balanced',   // the single line-up of 2026-10-11, kept
+    // Offense and defense line-ups (2026-10-14): a player who had one line-up starts with it as both.
+    offense: FORM_IDS.includes(s.offense) ? s.offense : FORM_IDS.includes(s.lineup) ? s.lineup : 'attack',
+    defense: FORM_IDS.includes(s.defense) ? s.defense : FORM_IDS.includes(s.lineup) ? s.lineup : 'defend',
     nextStarter: s.nextStarter === 1 ? 1 : 0,
   };
 }
@@ -82,9 +85,20 @@ const MENU_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
 const teamChip = (seat) => `<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="9" fill="${TEAM[seat].fill}" stroke="#fff" stroke-width="1.5"/>${seat === 0
   ? '<path d="M10 4.6 L15 13.4 L5 13.4 Z" fill="#fff"/>'
   : '<rect x="6" y="6" width="8" height="8" fill="#fff"/>'}</svg>`;
-/** A line-up's little picture: its five discs as dots on a half pitch, goal at the bottom. */
-export const formSVG = (id) => `<svg class="fs-form-ico" viewBox="0 0 30 26" aria-hidden="true" focusable="false"><rect x="1" y="1" width="28" height="24" rx="2" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>${
-  FORMATIONS[id].map(([x, y]) => `<circle cx="${(1 + (x / W) * 28).toFixed(1)}" cy="${(1 + ((y - H / 2) / (H / 2)) * 24).toFixed(1)}" r="2.3" fill="currentColor"/>`).join('')}</svg>`;
+/** A line-up's little picture: your half of a real pitch (grass, the halfway line and centre
+ *  circle at the top, your goal at the bottom) with its five discs in your colour. It used to be
+ *  dots in a grey box, which read as a die (Matt, 2026-10-14). */
+export const formSVG = (id) => `<svg class="fs-form-ico" viewBox="0 0 60 52" aria-hidden="true" focusable="false">`
+  + '<rect x="0" y="0" width="60" height="52" rx="4" fill="#2f8a3e"/>'
+  + '<g fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1"><rect x="2" y="2" width="56" height="48"/><path d="M21 2a9 9 0 0 0 18 0"/><rect x="19" y="41" width="22" height="9"/></g>'
+  + (FORMATIONS[id] || FORMATIONS.balanced).map(([x, y]) => `<circle cx="${(2 + (x / W) * 56).toFixed(1)}" cy="${(2 + ((y - H / 2) / (H / 2)) * 48).toFixed(1)}" r="4" fill="${TEAM[0].fill}" stroke="#fff" stroke-width="1.2"/>`).join('')
+  + '</svg>';
+/** The two line-up buttons (Offense, Defense) for the start menu and both challenge cards: each
+ *  says its role, draws its line-up and names it, and opens the picker (`_luPicker`). */
+export const lineupsRowHTML = (s) => `<div class="fs-lus" data-role="lineups">${['off', 'def'].map((r) => {
+  const id = r === 'off' ? s.offense : s.defense;
+  return `<button type="button" class="fs-lu" data-lu="${r}" aria-label="${esc(t('lu_' + r) + ': ' + t('form_' + id))}">${formSVG(id)}<span class="fs-lu-txt"><span class="fs-lu-role">${esc(t('lu_' + r))}</span><b class="fs-lu-name">${esc(t('form_' + id))}</b></span></button>`;
+}).join('')}</div>`;
 /** How much aiming help each difficulty gets (Matt, 2026-10-11): Easy shows the power ring, the
  *  aim arrow and the ball's bounce line; Medium the power ring and the arrow; Hard the power ring
  *  only. Pass and play and online are Medium. */
@@ -148,7 +162,9 @@ class FlickSoccerUI {
     this._ensureCss();
     this._build();
     this.r = createRenderer(this.canvas);
-    this.preview = lineUp([this.settings.lineup, this.settings.lineup]);   // drawn behind the setup screen
+    // Nothing stands on the pitch behind a card: discs half hidden by it looked broken (Matt,
+    // 2026-10-14). The line-up buttons draw their own pictures.
+    this.preview = null;
 
     this._onVis = () => {
       if (document.hidden) { this.drag = null; if (this.phase === 'aim') this.aim = null; this._stop(); this._save(); }
@@ -234,10 +250,7 @@ class FlickSoccerUI {
               <span class="fs-label" data-l="goals"></span>
               <div class="gh-seg fs-seg" role="group" data-role="goalsSeg"></div>
             </div>
-            <div class="fs-field">
-              <span class="fs-label" data-l="lineup"></span>
-              <div class="gh-seg fs-seg fs-seg-form" role="group" data-role="forms"></div>
-            </div>
+            <div class="fs-field" data-role="lineupsField"></div>
             <div class="fs-field">
               <span class="fs-label" data-l="first"></span>
               <div class="gh-seg fs-seg" role="group" data-role="firsts"></div>
@@ -337,8 +350,7 @@ class FlickSoccerUI {
     };
     seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
     seg('goalsSeg', 'goals', GOAL_OPTIONS.map(String), String(s.goals), (id) => id);
-    seg('forms', 'lineup', FORM_IDS, s.lineup, (id) => t('form_' + id), formSVG);
-    this.preview = lineUp([s.lineup, s.lineup]);
+    this._paintLineups();
     seg('firsts', 'first', FIRSTS, s.first, (id) => (id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t('first_them_cpu')));
     this.root.querySelector('[data-role="continueBtn"]').hidden = !this._savedMatch();
     this._paintOnlineNote();
@@ -425,6 +437,48 @@ class FlickSoccerUI {
     this._draw();
   }
 
+  // --- offense and defense line-ups (2026-10-14) -------------------------------------------------
+  /** Every pair of line-up buttons on screen (start menu, challenge cards) shows the saved pair. */
+  _paintLineups() {
+    const field = this.root.querySelector('[data-role="lineupsField"]');
+    if (field) field.innerHTML = lineupsRowHTML(this.settings);
+    this.root.querySelectorAll('.fs-ov-mp .fs-lus').forEach((el) => { el.outerHTML = lineupsRowHTML(this.settings); });
+  }
+
+  /** Choose the offense (`role` 'off') or defense ('def') line-up: the four as real little pitches,
+   *  two by two, over whatever card is showing; a pick is saved at once and closes it. */
+  _luPicker(role) {
+    this.root.querySelector('.fs-lupick')?.remove();
+    const s = this.settings;
+    const cur = role === 'off' ? s.offense : s.defense;
+    const el = document.createElement('div');
+    el.className = 'fs-ov fs-lupick';
+    el.innerHTML = `
+      <div class="fs-card fs-card-sm" role="dialog" aria-modal="true" aria-label="${esc(t('lu_pick_' + role))}">
+        <button type="button" class="fs-x" data-lux aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
+        <h2 class="fs-h2">${esc(t('lu_pick_' + role))}</h2>
+        <p class="fs-lupick-sub">${esc(t('lu_when_' + role))}</p>
+        <div class="fs-lupick-grid">${FORM_IDS.map((id) => `
+          <button type="button" class="fs-lupick-opt" data-lupick="${id}" aria-pressed="${cur === id}">${formSVG(id)}<span>${esc(t('form_' + id))}</span>${cur === id ? '<i class="fs-lupick-tick" aria-hidden="true">✓</i>' : ''}</button>`).join('')}
+        </div>
+      </div>`;
+    const close = () => el.remove();
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const b = e.target.closest('[data-lupick]');
+      if (b) {
+        if (role === 'off') s.offense = b.dataset.lupick; else s.defense = b.dataset.lupick;
+        writeJSON(SETTINGS_KEY, s);
+        this._paintLineups();
+        close();
+        return;
+      }
+      if (e.target === el || e.target.closest('[data-lux]')) close();
+    });
+    this.root.appendChild(el);
+    el.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
+  }
+
   // --- the match -------------------------------------------------------------------------------
   _seatsFor(mode, diff) {
     const p = profile();
@@ -445,9 +499,12 @@ class FlickSoccerUI {
     else if (s.first === 'them') starter = 1;
     else { starter = s.nextStarter; s.nextStarter = starter ^ 1; }
     writeJSON(SETTINGS_KEY, s);
-    // Vs the computer it picks its own line-up; pass and play is one choice for both teams.
-    const theirs = s.mode === 'cpu' ? FORM_IDS[Math.floor(Math.random() * FORM_IDS.length)] : s.lineup;
-    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(s.goals, starter, [s.lineup, theirs]) });
+    // Offense and defense line-ups (2026-10-14). Vs the computer it picks its own pair; pass and
+    // play is one pair for both teams.
+    const pick = () => FORM_IDS[Math.floor(Math.random() * FORM_IDS.length)];
+    const mine = [s.offense, s.defense];
+    const theirs = s.mode === 'cpu' ? [pick(), pick()] : mine;
+    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(s.goals, starter, null, [mine, theirs]) });
   }
 
   _continue() {
@@ -747,12 +804,13 @@ class FlickSoccerUI {
 
   // --- input -----------------------------------------------------------------------------------
   _click(e) {
-    const seg = e.target.closest('[data-diffs], [data-goalsseg], [data-forms], [data-firsts]');
+    const lu = e.target.closest('[data-lu]');
+    if (lu) { this._luPicker(lu.dataset.lu); return; }
+    const seg = e.target.closest('[data-diffs], [data-goalsseg], [data-firsts]');
     if (seg) {
       const s = this.settings;
       if (seg.dataset.diffs) s.difficulty = seg.dataset.diffs;
       else if (seg.dataset.goalsseg) s.goals = Number(seg.dataset.goalsseg);
-      else if (seg.dataset.forms) s.lineup = seg.dataset.forms;
       else s.first = seg.dataset.firsts;
       writeJSON(SETTINGS_KEY, s);
       this._relabel();
@@ -777,7 +835,7 @@ class FlickSoccerUI {
     else if (act === 'resign') { this._paintResign(); this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
     else if (act === 'again') {
-      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals, this.match.forms[this.mp.mySeat]);
+      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals);   // your offense and defense line-ups
       else this._newMatch();
     }
     else if (act === 'toSetup') { if (this.mode === 'mp') this._openOnline(); else this._showSetup(); }
@@ -845,7 +903,7 @@ class FlickSoccerUI {
 
   async _openOnline(pickFor = null) {
     this._mpLeave();
-    this.preview = lineUp([this.settings.lineup, this.settings.lineup]);
+    this.preview = null;
     this._drainAll();                  // after leaving: the match just left may be the one waiting
     this._setFlip(false);
     this.match = null; this.seats = null; this.mode = null;
@@ -919,13 +977,13 @@ class FlickSoccerUI {
   }
 
   /** A new challenge: created now, delivered when your first turn is over. */
-  async _sendChallenge(them, goals = this.settings.goals, form = this.settings.lineup) {
+  async _sendChallenge(them, goals = this.settings.goals, lineups = [this.settings.offense, this.settings.defense]) {
     if (this._challenging) return { ok: false, reason: 'busy' };      // a double tap makes ONE match
     this._challenging = true;
     let res;
     try {
       const MP = await this._loadMP();
-      res = await MP.createGame({ them, goals, form });
+      res = await MP.createGame({ them, goals, pair: lineups });
     } finally { this._challenging = false; }
     if (instance !== this) return res;
     if (!res.ok) {

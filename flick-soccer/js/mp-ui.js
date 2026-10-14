@@ -9,8 +9,7 @@
 import { makeT, getLang } from '../../js/i18n.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { STRINGS } from './strings.js';
-import { formSVG } from './ui.js';
-import { FORM_IDS, lineUp } from './engine.js';
+import { lineupsRowHTML } from './ui.js';
 
 const t = makeT(STRINGS);
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -189,38 +188,24 @@ async function picker(ui, MP) {
   });
 }
 
-/** The four line-ups as a row of pills (the setup card's own look). */
-const formRow = (cur) => `<div class="gh-seg fs-seg fs-seg-form" role="group" aria-label="${esc(t('lineup'))}">${
-  FORM_IDS.map((id) => `<button type="button" class="gh-seg__item fs-seg-item" data-mpform="${id}" aria-pressed="${cur === id}">${formSVG(id)}<span>${esc(t('form_' + id))}</span></button>`).join('')}</div>`;
-const wireFormRow = (body, onPick) => body.querySelector('.fs-seg-form').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-mpform]');
-  if (!b) return;
-  body.querySelectorAll('[data-mpform]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-  onPick(b.dataset.mpform);
-});
+/** Who the challenge is with, as a heading: their face and name. */
+const whoHTML = (them) => `<p class="fs-mp-who"><span class="fs-mp-face" aria-hidden="true">${esc(them.emoji || '🙂')}</span><b>${esc(them.name || '?')}</b></p>`;
 
-/** Who, your role, your line-up, send (own-lineup challenges, 2026-10-13). The role is said BEFORE
- *  the pick: they kick off, so you start on defense. Exported for the hub's Challenges screen. */
+/** Who, the terms, your two line-ups, send (2026-10-14: offense and defense line-ups replaced the
+ *  one line-up you picked per challenge, and the card lost its role paragraph). Exported for the
+ *  hub's Challenges screen. */
 export function challengeTo(ui, MP, them) { confirm(ui, MP, them); }
 function confirm(ui, MP, them) {
-  let form = ui.settings.lineup;
-  const body = page(ui, t('mp_challenge'), 'home', `
-    <p class="fs-mp-vs"><span aria-hidden="true">${esc(them.emoji)}</span> ${esc(them.name)}</p>
-    <p class="fs-mp-note">${esc(t('mp_game_note', { n: ui.settings.goals, name: them.name }))}</p>
-    <div class="fs-field"><span class="fs-label">${esc(t('mp_your_lineup'))}</span>${formRow(form)}</div>
-    <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-mp="send">${esc(t('mp_send', { name: them.name }))}</button>
+  const body = page(ui, t('mp_new_ch'), 'home', `
+    ${whoHTML(them)}
+    <p class="fs-mp-terms">${esc(t('mp_terms_they', { n: ui.settings.goals }))}</p>
+    <div class="fs-field"><span class="fs-label">${esc(t('mp_your_lineups'))}</span>${lineupsRowHTML(ui.settings)}</div>
+    <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-mp="send">${esc(t('mp_send_ch'))}</button>
     <p class="fs-mp-note fs-mp-err" aria-live="polite" hidden></p>`);
-  ui.preview = lineUp([form, form]);
-  wireFormRow(body, (f) => {
-    form = f;
-    ui.settings.lineup = f;
-    ui._saveSettings();
-    ui.preview = lineUp([f, f]);
-  });
   const send = body.querySelector('[data-mp="send"]');
   send.addEventListener('click', async () => {
     send.disabled = true;
-    const res = await ui._sendChallenge(them, ui.settings.goals, form);
+    const res = await ui._sendChallenge(them, ui.settings.goals);
     if (res && !res.ok && body.isConnected) {
       const err = body.querySelector('.fs-mp-err');
       err.textContent = reasonText(res.reason);
@@ -230,26 +215,20 @@ function confirm(ui, MP, them) {
   });
 }
 
-/** Side b of an own-lineup challenge: what they picked, your role, then yours. Kick off saves it and
- *  starts the match with you to flick. */
+/** Side b, opening a new challenge: who, the terms, your two line-ups (change them here or not),
+ *  Kick off. Kick off writes your pair into the match (MP.pickLineup) and starts it. */
 export function pickLineup(ui, MP, game) {
   const them = MP.themOf(game, MP.myCode());
-  const theirs = game.forms[0];
-  let form = ui.settings.lineup;
-  const body = page(ui, t('mp_pick_title'), 'home', `
-    <p class="fs-mp-vs"><span aria-hidden="true">${esc(them.emoji)}</span> ${esc(them.name)}</p>
-    <p class="fs-mp-pick-theirs">${formSVG(theirs)}<span>${esc(t('mp_they_picked', { name: them.name, form: t('form_' + theirs) }))}</span></p>
-    <p class="fs-mp-note fs-mp-role">${esc(t('mp_pick_role', { name: them.name, n: game.goals }))}</p>
-    <div class="fs-field"><span class="fs-label">${esc(t('mp_your_lineup'))}</span>${formRow(form)}</div>
+  const body = page(ui, t('mp_new_ch'), 'home', `
+    ${whoHTML(them)}
+    <p class="fs-mp-terms">${esc(t('mp_terms_you', { n: game.goals }))}</p>
+    <div class="fs-field"><span class="fs-label">${esc(t('mp_your_lineups'))}</span>${lineupsRowHTML(ui.settings)}</div>
     <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-mp="kick">${esc(t('mp_kickoff'))}</button>
     <p class="fs-mp-note fs-mp-err" aria-live="polite" hidden></p>`);
-  const show = (f) => { ui.preview = lineUp([theirs, f]); };
-  show(form);
-  wireFormRow(body, (f) => { form = f; ui.settings.lineup = f; ui._saveSettings(); show(f); });
   const kick = body.querySelector('[data-mp="kick"]');
   kick.addEventListener('click', async () => {
     kick.disabled = true;
-    const res = await MP.pickLineup(game.id, form);
+    const res = await MP.pickLineup(game.id, [ui.settings.offense, ui.settings.defense]);
     if (!body.isConnected) return;
     if (res && res.ok) { ui._mpBegin(res.game); return; }
     const err = body.querySelector('.fs-mp-err');
