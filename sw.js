@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1132';
+const CACHE = 'game-hub-v1133';
 
 const ASSETS = [
   './',
@@ -1301,9 +1301,14 @@ self.addEventListener('install', (event) => {
   // Only the shell blocks the install. The new build goes live as soon as the hub itself is safe
   // offline, instead of waiting on every card image of every game.
   //
-  // With the purge on, the shell is fetched with `cache: 'reload'` so the HTTP disk cache cannot
-  // hand back the same stale bytes the SW cache is being purged FOR. A purge that re-imports the
-  // corruption it just deleted is not a recovery.
+  // The shell is ALWAYS fetched with `cache: 'reload'` (2026-10-14). Without it the browser's HTTP
+  // disk cache may answer: GitHub Pages sends `max-age=600`, so a deploy landing within ten minutes
+  // of the last one installed the PREVIOUS build's bytes under the NEW cache name - and a
+  // cache-first shell module then served them for the whole build. Matt's phone showed the old
+  // Arrow Maze tile at v1132 while the server had the new one (js/game-art.js). It costs nothing:
+  // Pages re-stamps every ETag on every deploy, so an expired copy re-downloads in full anyway.
+  // (Same reason with the purge on: a purge that re-imports the corruption it deleted is not a
+  // recovery.)
   event.waitUntil(
     (async () => {
       if (PURGE_ALL_CACHES) {
@@ -1311,7 +1316,7 @@ self.addEventListener('install', (event) => {
         await Promise.all(keys.map((k) => caches.delete(k)));
       }
       const cache = await caches.open(CACHE);
-      await cache.addAll(PURGE_ALL_CACHES ? SHELL.map((u) => new Request(u, { cache: 'reload' })) : SHELL);
+      await cache.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })));
       await self.skipWaiting();
     })()
   );
