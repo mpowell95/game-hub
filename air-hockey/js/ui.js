@@ -116,6 +116,12 @@ const SQ_SVG = '<svg class="ah-mark" viewBox="0 0 12 12" aria-hidden="true" focu
 
 let instance = null;
 
+/** Where the quick-chat button sits (js/match-chat-ui.js `place`): in the score row, in the spot
+ *  the Pause button holds in a vs-computer match (Pause is hidden online and its 44px slot is
+ *  empty, `right: 12px` is the row's own padding), so it overlaps neither the score nor the table,
+ *  where the mallet is dragged. The bubbles come down under the row. */
+const CHAT_PLACE = { top: 'calc(max(env(safe-area-inset-top, 0px), 46px) + 2px)', right: '12px', popsTop: 'calc(max(env(safe-area-inset-top, 0px), 46px) + 56px)' };
+
 class AirHockeyUI {
   constructor(host) {
     this.host = host;
@@ -788,12 +794,43 @@ class AirHockeyUI {
       if (snap.val() === 'ended' && this.online === on && !on.leaving) this._peerLeft();
     });
     this.online = on;
+    this._mountChat(on);
     this._syncOpp();
     this._syncScore();
     this._resetFx();
     this.screen = 'game';
     this._showOnly(null);
     this._start();
+  }
+
+  // --- quick chat inside an online match (2026-10-14) -----------------------------------------
+  // js/match-chat-ui.js is the panel; the line travels as a room REACTION (net.sendReaction into
+  // `rooms/<CODE>/reactions/<role>`, the hub's existing one-slot-per-seat facility) and comes back
+  // through watchRoomReactions. Mounted for the life of the online match (playing, between goals,
+  // the result card, waiting on a quiet opponent) and torn down in _teardownOnline. It lives in
+  // `.ah-root` OUTSIDE the stage, which is where every pointer handler of this game is bound, so a
+  // tap on the button or the panel can never move the mallet. Lazy-imported: a vs-computer player
+  // downloads none of it.
+  async _mountChat(on) {
+    this._unmountChat();
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (instance !== this || this.online !== on || this._chat) return;
+    const chat = UI.createMatchChat({
+      root: this.root,
+      send: async (p) => { await on.net.sendReaction(on.code, on.role, p); return { ok: true }; },
+      them: () => ({ name: on.oppName, emoji: '' }),
+      place: CHAT_PLACE,
+    });
+    this._chat = chat;
+    const stop = await DATA.watchRoomReactions(on.code, (rx) => chat.onReactions(rx, on.role));
+    if (instance !== this || this.online !== on || this._chat !== chat) { try { stop(); } catch { /* detached */ } return; }
+    this._chatStop = stop;
+  }
+
+  _unmountChat() {
+    if (this._chatStop) { try { this._chatStop(); } catch { /* detached */ } this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch { /* gone */ } this._chat = null; }
   }
   _onlineRound() {
     this._syncScore();
@@ -845,6 +882,7 @@ class AirHockeyUI {
     if (!on) return;
     on.leaving = true;
     this.online = null;
+    this._unmountChat();
     this._stop();
     try { if (on.stopStatus) on.stopStatus(); } catch { /* detached */ }
     try { on.channel.close(); } catch { /* closed */ }

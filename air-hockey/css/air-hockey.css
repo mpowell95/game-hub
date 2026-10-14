@@ -211,3 +211,9 @@
   .ah-root .ah-banner.is-pop { animation: none; }
   .ah-root .ah-sc b.is-pop { animation: none; }
 }
+
+/* Quick chat (js/match-chat-ui.js, 2026-10-14). The free-text box must stay typeable under the
+   root's `user-select: none` (iOS Safari will not type into an input that has it), and the panel
+   may scroll on a very short phone under the root's touch-action: none. */
+.ah-root .ghc-input { -webkit-user-select: text; user-select: text; }
+.ah-root .ghc-panel { touch-action: pan-y; }

@@ -397,6 +397,8 @@ surface — lives in `js/CLAUDE.md`, auto-loaded whenever a session works on the
 | `js/challenges.js` | (2026-10-05) the DATA half of the hub's **Challenges** screen: reads the five challenge games' own indexes (Hoops, Skeeball, Cup Pong, Darts, Flick Soccer) through each game's reader and folds them into one list plus records (by person, by game). Writes nothing. See "The Challenges screen" below |
 | `js/challenges-ui.js` | (2026-10-05) the Challenges screen: Live (your turn / their turn), Records (total, by game, by player, recent results), a player's page, and New challenge (person, then game). Opening a match or a challenge is handed to the game (`js/challenges-strings.js` holds its words). Since 2026-10-13 every live row has a Cancel / Decline / Resign button (see "Cancel, decline, resign, expire" below) |
 | `js/challenge-life.js` | (2026-10-13) the few PURE rules all five challenge games share about a challenge that ends without a result: `ANSWER_MS` (3 days), `rowEnding` (cancelled / declined / expired / Skeeball's resign, read off an index row), `rowOpen`, `expiresAt`. No storage, no network |
+| `js/match-chat.js` | (2026-10-14) in-match quick chat, the data half, for EVERY online game: `sendChat`/`watchChat` for a turn-by-turn match at `<node>/chat/<matchId>` (BESIDE the match, never inside it; verified by re-read, deletes nothing), `watchRoomReactions` for a live room, and the "since you were last here" marks (`gamehub.matchChatSeen.v1`). Network-first |
+| `js/match-chat-ui.js` | (2026-10-14) in-match quick chat, the screen half: `createMatchChat({ root, send, them, place })`, Connect 4 Hoops' chat panel made generic. Used by Cup Pong, Darts, Flick Soccer, Skeeball challenges and Air Hockey; a new online game uses it too (`docs/BUILDING-A-GAME.md`) |
 | `js/messages-ui.js` | (2026-08-31) the Messages screen: conversation list, one thread with chat bubbles and a quick-chat preset row, the recipient picker (Matt also gets **Everyone**), and Matt's read-only view of every conversation |
 | `js/bug-report-ui.js` | the report form, Matt's inbox (reply / mark done / delete), and the player's own "what Matt wrote back" screen. The repo's FIRST consumer of `css/ui.css`'s `.gh-*` primitives |
 | `js/error-log.js` | ring buffer of the last 20 uncaught JS errors (`gamehub.errorlog.v1`), installed by `hub.js` at load so a report carries what actually threw |
@@ -463,7 +465,7 @@ a tool's row there before running or changing it. Add a new tool there AND here.
   `test-stats-replay.mjs`, `test-stats-identity.mjs`, `test-stats-corrections.mjs`,
   `test-rate-guard.mjs`, `test-activity.mjs`, `test-leaderboard-rank.mjs`, `test-admin-config.mjs`,
   `test-arrow-maze-time.mjs`, `test-gridlock.mjs`
-- Hub features: `test-new-badge.mjs`, `test-emoji.mjs`, `test-messages.mjs`,
+- Hub features: `test-new-badge.mjs`, `test-emoji.mjs`, `test-messages.mjs`, `test-match-chat.mjs`,
   `test-bug-report.mjs`, `test-career-sync.mjs`, `test-push.mjs`, `test-skee-challenge.mjs`, `test-challenges.mjs`,
   `test-cuppong-mp.mjs`, `test-darts-mp.mjs`, `test-flicksoccer-mp.mjs`
 - Cross-game: `test-game-conventions.mjs`, `test-visual.mjs`, `check-no-scroll.mjs`,
@@ -516,6 +518,7 @@ that only lives in prose is advice, and advice loses to a session that never rea
 | Difficulty markers | `diffShapeSVG()` / `tierOf()` — `js/difficulty-tiers.js` | hand-drawn shapes or hue-only tiers (Matt is red/green colorblind) |
 | The name gate | `await requireName()` in `index.html` **before** `init()` — `js/name-gate.js` | mounting ungated. This is where the leaderboard's ~20 permanent "Unnamed player" rows came from |
 | Multiplayer | `js/net.js` (`rooms/<CODE>`) | a second Firebase app or your own room layer. Read `js/CLAUDE.md`'s lockstep invariants first — five of them each encode a real, fixed bug |
+| Chat in an online match (REQUIRED for every game that plays online, Matt 2026-10-14) | `createMatchChat()` — `js/match-chat-ui.js`, with `js/match-chat.js` (`sendChat`/`watchChat` at `<node>/chat/<matchId>` for turn-by-turn, `net.sendReaction` + `onReactions` for a live room). `docs/BUILDING-A-GAME.md`, "Multiplayer: quick chat is part of the game" | shipping online play without it (five games did; `test-game-conventions.mjs` now fails it), copying Hoops' own chat, or putting chat lines inside the match document or the move log |
 | Hub tile art | `GAME_ART[id]` — `js/game-art.js` | inlining SVG in the `GAMES` entry; the leaderboard reads the same map |
 | Buttons, cards, fields, modals | `css/ui.css`'s `.gh-*` primitives + `--gh-*` tokens | rebuilding chrome from scratch. Skeeball's setup and how-to screens use them; a `snake-v2/` preview (removed 2026-08-18) proved the whole chrome fits in 140 lines of CSS against the real Snake's 279 for the same screens. A new game is the cheapest possible place to adopt it, because there is nothing to migrate |
 
@@ -541,9 +544,9 @@ game files underneath — a permanently mixed build.
 
 ### Adding a game — checklist
 
-The per-axis reference table and the 11-step checklist (setup screen, CSS scoping, settings key,
+The per-axis reference table and the 12-step checklist (setup screen, CSS scoping, settings key,
 `GAMES` entry, `sw.js`/`CACHE`, the sub-counter three-edit rule, `GAME_META`, `<game>/CLAUDE.md`,
-`strings.js`/i18n, running the test suites) moved to `docs/BUILDING-A-GAME.md`, "Part 1 — Building
+`strings.js`/i18n, quick chat in any online game, running the test suites) moved to `docs/BUILDING-A-GAME.md`, "Part 1 — Building
 a game." Read it before creating a new game folder — and read Part 0 of the same file (the UX
 floor) before changing any existing game's UI or CSS, new game or not.
 

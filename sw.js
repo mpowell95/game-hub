@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1140';
+const CACHE = 'game-hub-v1141';
 
 const ASSETS = [
   './',
@@ -104,6 +104,8 @@ const ASSETS = [
   './js/mp-code-copy.js',
   './js/mp-reactions.js',
   './js/mp-reactions-ui.js',
+  './js/match-chat.js',
+  './js/match-chat-ui.js',
   // Profile page (profile project)
   './profile/',
   './profile/index.html',
@@ -689,6 +691,9 @@ const NETWORK_FIRST = [
   // How a challenge ends without a result (cancel, decline, expire; 2026-10-13): every challenge game
   // reads it to decide what a match is, so a stale copy would disagree with its game about a deadline.
   './js/challenge-life.js',
+  // In-match quick chat (2026-10-14): writes `<node>/chat/<id>` and the gamehub.matchChatSeen.v1
+  // marks. Its DOM half, js/match-chat-ui.js, touches no storage and stays cache-first.
+  './js/match-chat.js',
   // leaderboard-rank.js is leaderboard-ui.js's OWN maths, split out only so it can be tested
   // headlessly. Leaving it cache-first while its only caller is network-first means a device can
   // run NEW ranking code against an OLD formatter for one launch - which is what happened on
@@ -827,8 +832,8 @@ const REST_MANIFEST = {
   './gridlock/js/strings.js': '527fc70f6e',
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
-  './flick-soccer/css/flick-soccer.css': 'd886602798',
-  './flick-soccer/js/ui.js': '1a626ba4ca',
+  './flick-soccer/css/flick-soccer.css': 'ea109292e1',
+  './flick-soccer/js/ui.js': '32766d3979',
   './flick-soccer/js/engine.js': 'a44800e5fa',
   './flick-soccer/js/ai.js': 'c7ff2b0f5b',
   './flick-soccer/js/render.js': 'e9222e7e77',
@@ -838,8 +843,8 @@ const REST_MANIFEST = {
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
   './darts/': '20312df57d',
   './darts/index.html': '20312df57d',
-  './darts/css/darts.css': '7e813cf12c',
-  './darts/js/ui.js': '6e3068ccea',
+  './darts/css/darts.css': 'd4360f7631',
+  './darts/js/ui.js': '3321bcc4d6',
   './darts/js/engine.js': '2d603f0ee2',
   './darts/js/render.js': 'd05671e727',
   './darts/js/flight.js': '60b3524662',
@@ -912,8 +917,8 @@ const REST_MANIFEST = {
   './brick-blitz/js/strings.js': 'f0c1f0996f',
   './air-hockey/': 'e62c8ea1ee',
   './air-hockey/index.html': 'e62c8ea1ee',
-  './air-hockey/css/air-hockey.css': 'fc438d789e',
-  './air-hockey/js/ui.js': 'd0c5ad7386',
+  './air-hockey/css/air-hockey.css': '4a9868313e',
+  './air-hockey/js/ui.js': 'c58e7bfca7',
   './air-hockey/js/physics.js': 'a8e3192cef',
   './air-hockey/js/ai.js': '05aee99aee',
   './air-hockey/js/render.js': 'b056ca690e',
@@ -959,12 +964,12 @@ const REST_MANIFEST = {
   './skeeball/flick-test.html': 'f310e43bb6',
   './skeeball/trajectory.html': '7b1b56365a',
   './skeeball/trajectory-map.json': 'fd7c177d36',
-  './skeeball/css/skeeball.css': 'cceb2e47e7',
-  './skeeball/js/ui.js': '474c6929d0',
+  './skeeball/css/skeeball.css': 'c50f746472',
+  './skeeball/js/ui.js': 'd61994a581',
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': 'bb54739524',
-  './cup-pong/css/cup-pong.css': '1889214737',
-  './cup-pong/js/ui.js': '8c54726314',
+  './cup-pong/css/cup-pong.css': '607ef96858',
+  './cup-pong/js/ui.js': '86abb826fd',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': '6346bceb94',
   './cup-pong/js/physics.js': '68829cc511',
@@ -991,7 +996,7 @@ const REST_MANIFEST = {
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/challenge.js': '39c86ec1d4',
-  './skeeball/js/challenge-ui.js': 'cd94d0083b',
+  './skeeball/js/challenge-ui.js': '3878c8a672',
   './skeeball/js/alert.js': 'c7fc8bef3b',
   './skeeball/js/boards.js': '8cf226684b',
   './skeeball/js/engines.js': '9d1dd1cf73',

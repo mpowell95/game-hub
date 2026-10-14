@@ -125,16 +125,17 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     try { stopWatch(); } catch { /* fine */ }
     if (el.parentNode) el.parentNode.removeChild(el);
     if (ui.overlay === el) ui.overlay = null;
+    if (!ui.challenge) ui._chatUnmount();     // the challenge page is gone and no game of it is running
     ui._paintChallengeBadge();
   };
   el._skClose = close;           // ui._closeOverlay() calls this, so the live watch stops too
 
-  const shell = (title, body, back) => {
+  const shell = (title, body, back, chat = false) => {
     el.innerHTML = `
       <div class="gh-modal sk-ch" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('close'))}">&times;</button>
         ${back ? `<button type="button" class="sk-ch-back" data-role="back" aria-label="${esc(t('ch_back'))}">&#8249;</button>` : ''}
-        <h2 class="sk-ch-title">${esc(title)}</h2>
+        <h2 class="sk-ch-title${chat ? ' sk-ch-title--chat' : ''}">${esc(title)}</h2>
         <div class="sk-ch-body">${body}</div>
       </div>`;
     el.querySelector('[data-role="close"]').addEventListener('click', close);
@@ -175,6 +176,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
 
   const viewList = () => {
     state.view = 'list';
+    if (!ui.challenge) ui._chatUnmount();      // the list is not one challenge: no chat here
     const rows = state.rows;
     let body;
     if (!rows) body = note(t('ch_loading'));
@@ -208,6 +210,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
   };
   const viewPick = async () => {
     state.view = 'pick';
+    if (!ui.challenge) ui._chatUnmount();
     shell(t('ch_pick'), note(t('ch_loading')), viewList);
     const list = await loadPlayers();
     if (closed || state.view !== 'pick') return;
@@ -224,6 +227,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
   const viewTerms = async (them, err = '') => {
     if (!them) return viewList();
     state.view = 'terms';
+    if (!ui.challenge) ui._chatUnmount();
     if (!state.recs) { shell(t('ch_to', { name: them.name }), note(t('ch_loading')), viewPick); await loadPlayers(); }
     if (closed || state.view !== 'terms') return;
     const mine = new Set([...localUnlocked(), ...unlockedFrom(state.recs, CH.myCode())]);
@@ -296,6 +300,8 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     const side = CH.sideOf(g, CH.myCode());
     if (!side) { shell(t('ch_title'), note(t('ch_err_read')), viewList); return; }
     CH.markSeen(id, raw.updated);
+    // QUICK CHAT (2026-10-14): this page is one challenge on screen, so its chat is up while it is.
+    ui._chatMount({ id, side, game: g });
     const them = side === 'a' ? g.b : g.a;
     const expired = CH.isExpired({ over: g.over, expires: g.expires });
     const next = expired ? -1 : CH.nextLeg(g, side, (i) => CH.legPlayed(id, side, i));
@@ -332,7 +338,9 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
       ${play}
       ${endKind ? `<p class="sk-ch-err" role="alert" data-role="enderr" hidden></p>
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="end">${esc(t(`ch_end_${endKind}`))}</button>` : ''}
-      ${g.over ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="again">${esc(t('ch_rematch'))}</button>` : ''}`, viewList);
+      ${g.over ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="again">${esc(t('ch_rematch'))}</button>` : ''}`, viewList, true);
+    // The chat button sits beside this card's own close X (and the title leaves room for it).
+    ui._chatDockTo(el);
     const end = el.querySelector('[data-act="end"]');
     if (end) end.addEventListener('click', async () => {
       // Two taps: the first says what the second will do.
@@ -435,6 +443,7 @@ export function showChallengeOver(ui, result) {
     const done = () => { ui.challenge = null; ui._renderSetup(); };
     el.querySelector('[data-role="close"]').addEventListener('click', done);
     el.querySelector('[data-act="done"]').addEventListener('click', done);
+    ui._chatDockTo(el);        // quick chat sits beside this card's X once the card is on screen
   };
   const note = (x) => `<p class="sk-ch-note">${esc(x)}</p>`;
 

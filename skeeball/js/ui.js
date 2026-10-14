@@ -424,6 +424,10 @@ export class SkeeballUI {
     this.challenge = null;
     this._challengeRows = [];
     this._stopChallengeWatch = null;
+    this._chat = null;                 // { chat, host, stop } while a challenge's quick chat is up
+    this._chatCtx = null;              // { id, side, game } of that challenge
+    this._chatDockEl = null;           // the challenge card the chat button is docked to, if any
+    this._chatToken = 0;
 
     // FIRST PAINT WAITS FOR THE STYLESHEET, and is capped so it can never wait for ever. The
     // root is hidden with an INLINE style on purpose: hub.js sets `.hidden = false` on this same
@@ -509,7 +513,114 @@ export class SkeeballUI {
     const leg = ctx && ctx.game && ctx.game.legs[ctx.leg];
     if (!leg) return;
     this.challenge = { ...ctx, board: leg.board };
+    this._chatDockTo(null);
+    this._chatMount({ id: ctx.id, side: ctx.side, game: ctx.game });
     this._startGame(null, leg.board);
+  }
+
+  // --- quick chat inside a challenge (2026-10-14) ---------------------------------------------
+  // js/match-chat-ui.js is the panel, js/match-chat.js the data (`skeeChallenges/chat/<id>`, BESIDE
+  // the match, never inside it). Mounted while a challenge is on screen: its page (challenge-ui's
+  // viewMatch), a game played as part of it (_startChallengeLeg) and the card after it. Unmounted
+  // when the player is back on the gallery (_renderSetup), when the challenge page closes with no
+  // game running, and in destroy(). `side` is the STORED side from CH.sideOf, never a local frame.
+  //
+  // THE PANEL LIVES IN ITS OWN HOST ON <body>, NOT IN this.root: every screen here is built with
+  // `this.root.innerHTML = ...`, which would take the chat with it on the next repaint, and the
+  // challenge sheets are z-index 60 overlays that would cover a layer inside the root. The host is
+  // fixed, pointer-events: none (only the button, panel and bubbles take a tap), above the game
+  // (z 1) and below the hub's own top bar (z 10). Lazy-imported, so an ordinary rack downloads none.
+  async _chatMount(ctx) {
+    if (this.disposed || !ctx || !ctx.id || !ctx.side) return;
+    if (this._chatCtx && this._chatCtx.id === ctx.id) { this._chatCtx = ctx; return; }   // already up: only the match moved
+    this._chatUnmount();
+    this._chatCtx = ctx;
+    const token = ++this._chatToken;
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (this.disposed || token !== this._chatToken) return;
+    const node = CH.NODE;
+    const { id, side } = ctx;
+    const host = document.createElement('div');
+    host.className = 'sk-chat-host';
+    host.style.cssText = 'position:fixed;inset:0;z-index:5;pointer-events:none;';
+    document.body.appendChild(host);
+    const chat = UI.createMatchChat({
+      root: host,
+      send: (p) => DATA.sendChat({ node, id, side }, p),
+      them: () => {
+        const g = (this._chatCtx && this._chatCtx.game) || {};
+        const o = (side === 'a' ? g.b : g.a) || {};
+        return { name: o.name || t('ch_someone'), emoji: o.emoji || '' };
+      },
+      place: this._chatPlace(),
+    });
+    const mounted = { chat, host, stop: null };
+    this._chat = mounted;
+    const seenAt = DATA.readChatSeen(node, id);
+    const stop = await DATA.watchChat({ node, id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === side;
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(node, id, newest);
+    });
+    if (this.disposed || token !== this._chatToken) { try { stop(); } catch { /* detached */ } return; }
+    mounted.stop = stop;
+  }
+
+  _chatUnmount() {
+    this._chatToken++;
+    const c = this._chat;
+    this._chat = null;
+    this._chatCtx = null;
+    this._chatDockEl = null;
+    if (!c) return;
+    if (c.stop) { try { c.stop(); } catch { /* detached */ } }
+    try { c.chat.destroy(); } catch { /* gone */ }
+    if (c.host.parentNode) c.host.parentNode.removeChild(c.host);
+  }
+
+  /** The chat button's spot, CSS lengths for js/match-chat-ui.js.
+   *  ON THE LANE (and the pause card, which is short and centred): the top row is the one strip
+   *  every Skeeball screen leaves empty between the hub's chip (left) and the menu button (right,
+   *  44px at right: 12px), so the default spot, left of the menu, is used; the bubbles start BELOW
+   *  the live rack (machine name, score, balls), never over the score.
+   *  ON A CARD (the challenge page, the card after a game): those are tall centred modals with a
+   *  close X in their own top right, and on a short phone the card's top edge is the top row's
+   *  height (measured: 320x568, modal top 50, X at x 252-296, which the default spot overlapped by
+   *  4px). So the button DOCKS beside the X, 4px left of it, and moves with the card. */
+  _chatPlace() {
+    // The dock target is the card's OVERLAY (it outlives a repaint of the card's innerHTML); the
+    // card itself is looked up each time.
+    const d = this._chatDockEl;
+    const m = d && d.isConnected ? d.querySelector('.gh-modal') : null;
+    if (m) {
+      const r = m.getBoundingClientRect();
+      if (r.width > 0) {
+        return { top: `${Math.round(r.top + 8)}px`, right: `${Math.round(window.innerWidth - r.right + 8 + 44 + 4)}px`, popsTop: `${Math.round(r.top + 60)}px` };
+      }
+    }
+    return { top: 'max(10px, env(safe-area-inset-top, 0px))', right: '64px', popsTop: 'calc(max(10px, env(safe-area-inset-top, 0px)) + 132px)' };
+  }
+
+  /** Dock the chat button to a challenge card (pass the card's overlay element), or release it back
+   *  to the lane spot with null. Safe before the chat has mounted: _chatMount reads _chatPlace() itself. */
+  _chatDockTo(modal) {
+    this._chatDockEl = modal || null;
+    const c = this._chat;
+    if (!c) return;
+    const apply = () => {
+      if (this._chat !== c) return;
+      const p = this._chatPlace();
+      c.chat.el.style.setProperty('--ghc-top', p.top);
+      c.chat.el.style.setProperty('--ghc-right', p.right);
+      c.chat.el.style.setProperty('--ghc-pops-top', p.popsTop);
+    };
+    apply();
+    requestAnimationFrame(apply);   // the card has just been inserted: measure it once it has laid out
   }
 
   /** One line beside the machine name on the HUD, so a challenge game never looks like any other. */
@@ -757,6 +868,7 @@ export class SkeeballUI {
     this.screen = 'setup';
     this._stopLoop();
     this._closeOverlay();
+    if (!this.challenge) this._chatUnmount();   // back on the gallery: no challenge on screen
     this.game = null;
     releaseRenderer(this.renderer);
     this.renderer = null;
@@ -2394,6 +2506,7 @@ export class SkeeballUI {
     }
     if (this.disposed || this.screen !== 'play') return;
     this.root.appendChild(el);
+    if (this.challenge) this._chatDockTo(el);   // beside the card's own X
   }
 
   // --- overlays --------------------------------------------------------------------------------
@@ -2447,6 +2560,7 @@ export class SkeeballUI {
     try { this._abandonRack(); } catch (err) { console.error('[skeeball] could not record on leave', err); }
     this._stopHpDemo();
     this._closeOverlay();
+    this._chatUnmount();
     if (this._stopChallengeWatch) { try { this._stopChallengeWatch(); } catch { /* fine */ } this._stopChallengeWatch = null; }
     this.root.removeEventListener('click', this._onDefTap);
     this.root.removeEventListener('keydown', this._onDefKey);

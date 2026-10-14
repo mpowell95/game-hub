@@ -395,3 +395,10 @@ Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with th
 
 - **A series (best of 3/5) for online challenges** - Matt wants it (2026-10-05), in its own session.
 - **No sound, and none is ever to be added** unless Matt asks for it himself (root `CLAUDE.md`, "No sound, ever").
+
+
+## Quick chat (2026-10-14)
+
+A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down in `_mpLeave`; never in vs-computer, pass and play or practice). Panel and bubbles are `js/match-chat-ui.js`, the data is `js/match-chat.js`, lazy-imported.
+- **Where it sits and why:** on the top row, LEFT of the darts-left icons and the menu button (`CHAT_PLACE`, `right: 118px` = row margin 10 + menu 44 + gap 10 + icons 42 + gap 12). Measured with a 59px top inset: 390x844 at [228, 59, 44, 44], 320x568 at [158, 59, 44, 44]; it overlaps no control and the board starts below it. Bubbles come down under that row.
+- **Node:** `darts/chat/<matchId>/<key>`, beside `darts/games/<id>`. It sends with the STORED side (`mp.side`, the same one `mySeat` comes from), so it is right whichever seat the left-hand plaque is.

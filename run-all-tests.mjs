@@ -65,6 +65,7 @@ const SUITES = [
   { file: 'test-bug-report.mjs' },
   { file: 'test-admin-config.mjs' },
   { file: 'test-messages.mjs' },
+  { file: 'test-match-chat.mjs' },
   { file: 'test-challenges.mjs' },
   { file: 'test-career-sync.mjs' },
   // R15-A: the career loop's own rules (pure, no engine) plus its persistence round trip against
