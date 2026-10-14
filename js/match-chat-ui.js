@@ -137,6 +137,9 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
   function setOpen(on) {
     open = !!on;
     panel.hidden = !open;
+    // The panel already lists the newest lines, so the cards step aside while it is open: a card
+    // under a translucent panel read as a ghost of the same words (seen in the first screenshots).
+    layer.classList.toggle('is-open', open);
     if (open) { unread = 0; err = ''; paintPanel(); }
     paintBtn();
   }
@@ -290,7 +293,7 @@ function injectCss() {
 .ghc { position: absolute; inset: 0; pointer-events: none; z-index: 40;
   --ghc-top: max(10px, env(safe-area-inset-top, 0px)); --ghc-right: 64px;
   --ghc-pops-top: calc(var(--ghc-top) + 54px);
-  --ghc-bg: rgba(20, 22, 28, 0.96); --ghc-ink: #f4f5f7; --ghc-dim: #b9bec8;
+  --ghc-bg: rgb(20, 22, 28); --ghc-ink: #f4f5f7; --ghc-dim: #b9bec8;
   --ghc-edge: rgba(255, 255, 255, 0.24); --ghc-accent: #ffce3a;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .ghc[hidden] { display: none; }
@@ -334,6 +337,7 @@ function injectCss() {
   cursor: pointer; touch-action: manipulation; }
 .ghc-err { margin: 6px 0 0; font-size: 13px; font-weight: 700; }
 .ghc-err::before { content: "⚠ "; }
+.ghc.is-open .ghc-pops { display: none; }
 .ghc-pops { position: absolute; top: var(--ghc-pops-top); left: 12px; right: 12px;
   display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
 .ghc-pop { position: relative; pointer-events: auto; cursor: pointer; touch-action: manipulation;
