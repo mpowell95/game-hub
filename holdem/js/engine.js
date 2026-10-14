@@ -173,7 +173,7 @@ export function newGame(players, cfg = {}) {
   const scale = cfg.scale > 0 ? +cfg.scale : START_SCALE;
   return {
     v: 1,
-    cfg: { speed, chips, scale, buyin: cfg.buyin > 0 ? Math.floor(cfg.buyin) : 0, tier: cfg.tier || null },
+    cfg: { speed, chips, scale, buyin: cfg.buyin > 0 ? Math.floor(cfg.buyin) : 0, tier: cfg.tier || null, pv: PAYOUT_V },
     players: players.slice(0, MAX_PLAYERS).map((p, i) => ({
       id: i,
       name: String(p.name || 'Player').slice(0, 20),
@@ -216,6 +216,14 @@ function nextIdx(state, from, pred) {
 }
 
 /** Deal the next hand: move the button, post blinds, deal two cards each. */
+// The cards still to come are shuffled again before each street is dealt (2026-10-13), so a copy of
+// a saved game (a second tab, a copied save) cannot know the board in advance: the deck in the save
+// says nothing about the flop, turn or river. A rigged hand keeps the run-out rigDeal chose; that
+// mark lives only in memory (a WeakSet, never in the state), so a save still carries no trace of
+// it, and a hand resumed after a reload is simply dealt fair. RAND keeps a test's seeded rand.
+const FIXED = new WeakSet();
+const RAND = new WeakMap();
+
 export function startHand(state, rand = cryptoRand, opts = {}) {
   if (state.over) return state;
   const live = alive(state);
@@ -267,7 +275,8 @@ export function startHand(state, rand = cryptoRand, opts = {}) {
     }
   }
 
-  if (opts && Number.isInteger(opts.rig) && h.holes[opts.rig]) rigDeal(state, opts.rig, rand, opts.boards || 3);
+  RAND.set(h, rand);
+  if (opts && Number.isInteger(opts.rig) && h.holes[opts.rig]) { rigDeal(state, opts.rig, rand, opts.boards || 3); FIXED.add(h); }
 
   post(state, sbIdx, sb, 'sb');
   post(state, bbIdx, bb, 'bb');
@@ -453,6 +462,10 @@ function nextStreet(state) {
   h.canRaise = h.canRaise.map(() => true);
   h.last = h.last.map((l, j) => (h.folded[j] ? l : (h.allIn[j] ? { a: 'allin' } : null)));
   if (h.street === 'river') return showdown(state);
+  if (!FIXED.has(h)) {
+    const rand = RAND.get(h) || cryptoRand, d = h.deck;
+    for (let k = d.length - 1; k > 0; k--) { const j = Math.floor(rand() * (k + 1)); const x = d[k]; d[k] = d[j]; d[j] = x; }
+  }
   if (h.street === 'preflop') { h.deck.pop(); h.board.push(h.deck.pop(), h.deck.pop(), h.deck.pop()); h.street = 'flop'; }
   else if (h.street === 'flop') { h.deck.pop(); h.board.push(h.deck.pop()); h.street = 'turn'; }
   else if (h.street === 'turn') { h.deck.pop(); h.board.push(h.deck.pop()); h.street = 'river'; }
@@ -630,11 +643,18 @@ export function publicView(state) {
  *  Everyone at the table (computers too) puts the buy-in in the pot; with three or more players 1st
  *  takes 65% and 2nd the rest, heads-up the winner takes it all. Whole dollars; nothing is lost to
  *  rounding (1st + 2nd == the pot exactly). */
-export function payout(place, n, buyin) {
+/** Prize rules version, stamped on every new game (cfg.pv). v2 (2026-10-13, Matt: "the payout
+ *  shouldn't be the full payout if you play against only 1 person"): a heads-up winner gets
+ *  HEADS_UP_SHARE of the pot, 1.5x the buy-in, instead of all of it. A game saved before then has no
+ *  cfg.pv and still pays what it promised when it was dealt (v1). */
+export const PAYOUT_V = 2;
+export const HEADS_UP_SHARE = 0.75;
+
+export function payout(place, n, buyin, v = PAYOUT_V) {
   const b = Math.max(0, Math.floor(buyin || 0));
   if (!b || n < 2 || place < 1) return 0;
   const pot = b * n;
-  if (n === 2) return place === 1 ? pot : 0;
+  if (n === 2) return place === 1 ? (v >= 2 ? Math.round(pot * HEADS_UP_SHARE) : pot) : 0;
   const first = Math.round(pot * 0.65);
   if (place === 1) return first;
   if (place === 2) return pot - first;

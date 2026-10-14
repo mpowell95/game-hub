@@ -124,8 +124,8 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
 - **Money moves at exactly two moments**: the buy-in when the cards are dealt (solo `_newSolo`;
   online `_stake`, once per game per device, keyed `code:gid:stake`), and the prize when this
   player's place is decided - `payout()` in `engine.js`: everyone at the table (computers too)
-  puts the buy-in in the pot, 1st 65% and 2nd the rest with 3+ players, winner takes all
-  heads-up. It rides the same once-per-game dedupe as the win/loss result (`state.rec` solo,
+  puts the buy-in in the pot, 1st 65% and 2nd the rest with 3+ players; heads-up the winner
+  gets 1.5x the buy-in (whole pot until 2026-10-13, see "Heads-up pays less" below). It rides the same once-per-game dedupe as the win/loss result (`state.rec` solo,
   `code:gid` online), so a reload can never pay twice. Walking away pays nothing.
 - **Online**: the host picks the table in the lobby (only ones they can afford, or "no buy-in").
   **No seat at a money table is free** (2026-10-08, see "No free seats" below): a guest whose
@@ -139,6 +139,24 @@ Matt: *"You should have a pile of money you can grow too."* Defaults he approved
 - **Visible**: the setup screen and table picker, the end-of-game card ("+$X to your
   bankroll"), My Stats (Bankroll, Biggest prize, Won in prizes, Paid in buy-ins), and the
   leaderboard's Texas Hold'em records (Bankroll, Biggest prize).
+
+## Heads-up pays less (2026-10-13)
+
+Matt: *"the payout shouldn't be the full payout if you play against only 1 person."* A heads-up
+winner now gets **75% of the pot = 1.5x the buy-in** (`HEADS_UP_SHARE` in `engine.js`); the loser
+still gets nothing, and 3+ player tables are unchanged. So a fair heads-up game now loses money on
+average, and the money is at full tables.
+
+- **Versioned, so nothing already promised changes**: every new game is stamped `cfg.pv = 2`
+  (`PAYOUT_V`); `_prizeFor` passes `pub.cfg.pv || 1`, so a tournament saved before this (no `pv`)
+  still pays the whole pot when it finishes.
+- **`js/game-stats.js`'s valid-prize set accepts BOTH rules for ever** (THE LAW rule 1): every
+  ledger already holding an old heads-up prize (King of Games' $20M) must never read "Under
+  review", and a phone on an older cached build still pays v1 for a while. `HOLDEM_MAX_PRIZE` is
+  computed from v1. Checked against all 20 live ledgers on the day: none flagged before or after.
+- Asked first: *"Can you check how many times he's done this?"* It cannot be counted: no record
+  stores a game's table size (the ledger is totals; `gamehub.activity.v1` only began 10-11). His
+  ledger did show 60 cashes for 59 wins, so 2nd-place money at most once.
 
 ## Bigger tables, tougher computers (2026-10-08)
 
@@ -313,7 +331,10 @@ and the computer has raised and I end up clicking Call on accident."*
 
 - **A gear at the felt's top-left** (`.pk-gear`, mirroring the red X) opens `overlay = 'tset'`:
   - **Separate Check / Fold button** (on/off switch, the word ON/OFF on it, not colour alone),
-    `settings.cfSplit` in `gamehub.holdem.v1`, **off by default** (the old one-button layout).
+    `settings.cfSplit` in `gamehub.holdem.v1`. **ON by default since 2026-10-14** (Matt: *"make it
+    on by default"*); it was off for the first day. Stored as `cfMode: 'split' | 'one'`, because the
+    first build's `cfSplit: false` was saved by every device that changed any setting that day,
+    chosen or not; `cfSplit` in storage is ignored.
     On: the big button never turns into CHECK / FOLD; a small 44px `.pk-cfbtn` under it is the
     tick-box instead. It is live ONLY while it is someone else's turn and you are in the hand
     (`this.canPre`), and disabled on your own turn, so a finger aimed at it can never land on CALL.
@@ -426,6 +447,23 @@ readable from `rooms/` with developer tools. What exists:
    touched (THE LAW). It reaches every device of that person, and the game's own `bank()` applies
    it too, so voided money cannot be spent.
 
+5. **The two-tab trick is closed (2026-10-13).** Matt asked *"Is there a way to abuse this
+   game?"*; the worst answer needed no skill: open Hold'em in a second tab. The save holds the whole
+   deck, so the copy dealt the same board (tested: identical five cards), letting a player call in
+   one tab, watch the cards, then choose in the other; and each copy kept its own "already paid"
+   flag (`state.rec`), so two winning copies paid two prizes for one buy-in. Two fixes:
+   - **One window per tournament**: `gamehub.holdem.tab.v1 = { id, at }`. `_startSolo` (and giving
+     up a saved tournament) claims it; the newest window wins. Any other copy, on the `storage`
+     event or on its next change, stops at once (`_yieldTab`) WITHOUT saving or recording, and goes
+     to the menu with "This tournament was opened in another window" and Resume tournament, which
+     re-reads the save. Checked in Chromium with two tabs: the old copy stopped, the ledger was
+     unchanged, Resume took it back the other way.
+   - **The cards still to come are reshuffled before every street** (`nextStreet` in `engine.js`),
+     so a save says nothing about the flop, turn or river. A rigged hand (`RIGGED_CODES`) keeps the
+     run-out `rigDeal` chose; that mark is a WeakSet in memory, never in the state. `test.js`: two
+     copies of one hand deal different flops.
+   Still open, and needing developer tools: reading the computers' hole cards in the save.
+
 Bankroll maths no longer uses `| 0` anywhere on the money path: the top table pays $52M a win,
 so a bankroll can pass 2^31, where `| 0` wraps negative.
 
@@ -466,6 +504,8 @@ under the computers' skill (`easy`/`medium`/`hard`), online under `'mp'`. Dedupe
 - `gamehub.holdem.hands.v1` - the last 40 hands already counted in the hand stats (dedupe)
 - `gamehub.holdem.save.v1` - the solo game in progress (full engine state)
 - `gamehub.holdem.mp.v1` - the online seat for "Back to table" (+ host's state)
+- `gamehub.holdem.tab.v1` - `{ id, at }`, which window is playing the solo tournament (2026-10-13;
+  a lock, not history)
 - `gamehub.holdem.caps.v1` - `{ at }`, the bottle caps for Behind the Dumpster (2026-10-08;
   device-local, a refilling allowance, not history)
 

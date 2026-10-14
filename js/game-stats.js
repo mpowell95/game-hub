@@ -2387,10 +2387,13 @@ export const HOLDEM_REFILL = HOLDEM_BUYINS[0];
 export const HOLDEM_ALLEY_PRIZE = HOLDEM_BUYINS[0] / 2;
 const HOLDEM_MAX_SEATS = 8;
 const HOLDEM_PRIZE_MAX = 20;           // prizes per minute: a heads-up game takes a person >= 10 s
-function holdemPayout(place, n, b) {
+// A copy of holdem/js/engine.js payout(). `v` is its rules version: v1 paid a heads-up winner the
+// whole pot, v2 (2026-10-13) pays 75% of it. BOTH stay valid here for ever - every ledger already
+// holding a v1 prize must never read "Under review", and a game dealt under v1 still pays v1.
+function holdemPayout(place, n, b, v = 2) {
   if (!b || n < 2 || place < 1) return 0;
   const pot = b * n;
-  if (n === 2) return place === 1 ? pot : 0;
+  if (n === 2) return place === 1 ? (v >= 2 ? Math.round(pot * 0.75) : pot) : 0;
   const first = Math.round(pot * 0.65);
   return place === 1 ? first : place === 2 ? pot - first : 0;
 }
@@ -2399,14 +2402,14 @@ let _prizeSet = null;
 export function holdemValidPrize(prize) {
   if (!_prizeSet) {
     _prizeSet = new Set();
-    for (const b of HOLDEM_BUYINS) for (let n = 2; n <= HOLDEM_MAX_SEATS; n++) for (const pl of [1, 2]) {
-      const v = holdemPayout(pl, n, b);
+    for (const b of HOLDEM_BUYINS) for (let n = 2; n <= HOLDEM_MAX_SEATS; n++) for (const pl of [1, 2]) for (const ver of [1, 2]) {
+      const v = holdemPayout(pl, n, b, ver);
       if (v > 0) _prizeSet.add(v);
     }
   }
   return _prizeSet.has(prize);
 }
-const HOLDEM_MAX_PRIZE = Math.max(...HOLDEM_BUYINS.map((b) => Math.max(...[2, 3, 4, 5, 6, 7, 8].map((n) => holdemPayout(1, n, b)))));
+const HOLDEM_MAX_PRIZE = Math.max(...HOLDEM_BUYINS.map((b) => Math.max(...[2, 3, 4, 5, 6, 7, 8].map((n) => holdemPayout(1, n, b, 1)))));
 
 /** Why a ledger could not have come from real play, or '' when it could. Pure; works on one
  *  device's ledger or a person's combined one (every check survives adding two real ledgers). A

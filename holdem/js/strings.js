@@ -124,6 +124,7 @@ export default {
     pace: 'Computer speed', pace_slow: 'Slow', pace_normal: 'Normal', pace_fast: 'Fast',
     // Table settings (2026-10-13)
     tset: 'Settings', on: 'On', off: 'Off', casino_floor: 'Go to casino floor',
+    tab_elsewhere: 'This tournament was opened in another window, so it stopped here. Tap Resume tournament to play it here.',
     floor: 'Casino floor', menu: 'Menu', tiers_saved: 'Finish or give up your tournament to start a new one.',
     cf_split: 'Separate Check / Fold button', cf_split_hint: 'A small button of its own, so a raise can never turn it into Call.',
     // Last hand replay (2026-09-28)
@@ -166,7 +167,7 @@ export default {
     tier_alley: 'Behind the Dumpster', alley_buy: '1 bottle cap', alley_wins: 'Win {n}',
     cap_next: 'next cap in {t}', caps_n: '{n} of {max} bottle caps',
     broke_hint: 'Broke? Win {n} behind the dumpster. Win twice to buy back in.',
-    prize_rule: 'Everyone at the table pays the buy-in. With {n} players, 1st takes 65% of the pot and 2nd the rest (heads-up, the winner takes it all).',
+    prize_rule: 'Everyone at the table pays the buy-in. With {n} players, 1st takes 65% of the pot and 2nd the rest (heads-up, the winner gets 1.5x the buy-in).',
     prize_won: '+{n} to your bankroll',
     no_buyin: 'No buy-in (just for fun)',
     cant_cover: 'Your bankroll does not cover this buy-in, so you will watch this game.',
@@ -295,6 +296,7 @@ export default {
     pace: 'Velocidad del ordenador', pace_slow: 'Lenta', pace_normal: 'Normal', pace_fast: 'Rápida',
     // Ajustes de la mesa (2026-10-13)
     tset: 'Ajustes', on: 'Sí', off: 'No', casino_floor: 'Ir a la sala del casino',
+    tab_elsewhere: 'Este torneo se abrió en otra ventana, así que se detuvo aquí. Toca Seguir torneo para jugarlo aquí.',
     floor: 'Sala del casino', menu: 'Menú', tiers_saved: 'Termina o abandona tu torneo para empezar otro.',
     cf_split: 'Botón Pasar / No ir aparte', cf_split_hint: 'Un botón pequeño propio, para que una subida nunca lo convierta en Igualar.',
     // Última mano (2026-09-28)
@@ -336,7 +338,7 @@ export default {
     tier_alley: 'Detrás del contenedor', alley_buy: '1 chapa', alley_wins: 'Gana {n}',
     cap_next: 'otra chapa en {t}', caps_n: '{n} de {max} chapas',
     broke_hint: '¿Sin dinero? Gana {n} detrás del contenedor. Gana dos veces para volver a entrar.',
-    prize_rule: 'Todos en la mesa pagan la entrada. Con {n} jugadores, el 1.º se lleva el 65% del bote y el 2.º el resto (mano a mano, el ganador se lo lleva todo).',
+    prize_rule: 'Todos en la mesa pagan la entrada. Con {n} jugadores, el 1.º se lleva el 65% del bote y el 2.º el resto (mano a mano, el ganador recibe 1,5 veces la entrada).',
     prize_won: '+{n} a tu banca',
     no_buyin: 'Sin entrada (solo por diversión)',
     cant_cover: 'Tu banca no cubre esta entrada, así que verás esta partida.',

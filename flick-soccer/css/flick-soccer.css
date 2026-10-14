@@ -386,6 +386,25 @@
 .fs-root .fs-hmark { flex: 0 0 auto; width: 34px; text-align: center; font-size: 20px; font-weight: 900; color: var(--fs-muted); }
 .fs-root .fs-mrow.is-won .fs-hmark { color: var(--fs-green); }
 
+.fs-root .fs-skip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 7;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  background: rgba(4, 20, 10, 0.88);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.fs-root .fs-skip[hidden] { display: none; }
 .fs-root .fs-toast {
   position: absolute;
   left: 50%;

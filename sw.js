@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1119';
+const CACHE = 'game-hub-v1123';
 
 const ASSETS = [
   './',
@@ -808,12 +808,12 @@ const REST_MANIFEST = {
   './way-out/js/strings.js': '06e49ce555',
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
-  './flick-soccer/css/flick-soccer.css': 'b4a306008b',
-  './flick-soccer/js/ui.js': '5e381318e6',
+  './flick-soccer/css/flick-soccer.css': 'd886602798',
+  './flick-soccer/js/ui.js': '1a626ba4ca',
   './flick-soccer/js/engine.js': 'a44800e5fa',
   './flick-soccer/js/ai.js': 'c7ff2b0f5b',
   './flick-soccer/js/render.js': 'e9222e7e77',
-  './flick-soccer/js/strings.js': '6aaab8cc38',
+  './flick-soccer/js/strings.js': 'b4b2149051',
   './flick-soccer/js/mp.js': '78ec67335f',
   './flick-soccer/js/mp-ui.js': '252c1dd686',
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
@@ -905,12 +905,12 @@ const REST_MANIFEST = {
   './holdem/': 'db36df9867',
   './holdem/index.html': 'db36df9867',
   './holdem/css/holdem.css': '55f4c43748',
-  './holdem/js/ui.js': '7cd6e2ee3d',
-  './holdem/js/engine.js': '8ac5eaad71',
+  './holdem/js/ui.js': 'e997e12a61',
+  './holdem/js/engine.js': 'b9e54a0c01',
   './holdem/js/ai.js': '3d8353f25c',
   './holdem/js/table.js': '1bd3d97111',
   './holdem/js/net-table.js': '287aa65964',
-  './holdem/js/strings.js': 'd71670b8f1',
+  './holdem/js/strings.js': 'c4df23b45d',
   './pinball2/index.html': '6d09047aef',
   './pinball2/editor/index.html': 'd85ed3028b',
   './pinball2/editor/editor.js': '9c0e423d33',

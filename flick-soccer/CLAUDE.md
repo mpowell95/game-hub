@@ -258,6 +258,15 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   run on the pitch (their aim arrow grows, then the flick rolls), reusing the computer's path
   (`this.cpu` with `replay: true`). While it is their turn the match is watched, so their flick plays
   as it lands.
+- **The replay plays EVERY time you open the match while it is your turn (2026-10-13)**, Matt: *"I
+  wanted to screen record it and text it to him, so i left our match, went back to the hub, then went
+  back into the challenge assuming it'd replay. but it didn't."* `_mpBegin` ignores the shown mark
+  (`gamehub.flicksoccer.shown.v1`) when the stored log leaves it your turn; while it is THEIR turn
+  (or the match is over, or flicks of yours are still queued) a run already shown is still not shown
+  twice. **Skip replay** (`_mpSkip`, a pill at the bottom, only while `mp.replaying`) jumps to the
+  position after their run by rebuilding the pitch from the stored log (`buildMatch`), which is the
+  exact position the replay ends on. Checked in Chromium: replays on the first, second and third
+  open; Skip lands on the same pitch, bit for bit; their turn shows no replay.
 - **"SENT!" (2026-10-13)**, Matt: *"Need a 'turn sent' or something after I play and send it to
   whoever I'm playing"*. When your turn passes to them, a SENT! banner ("Ana's turn now") shows over
   the pitch, once per hand-over, only for a turn played on this phone, and only once the server HAS
