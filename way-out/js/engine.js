@@ -455,6 +455,32 @@ export function buildLadder(n, gen = LADDER_GEN) {
   return best.lvl;
 }
 
+// --- RUSH (2026-10-14) --------------------------------------------------------------------------
+//
+// Rush's boards (js/arrow-maze-time.js, "RUSH"): board i of a run is built to the spec of a ladder
+// level that climbs as the run goes on, Easy through the Easy band's boards and Hard from the
+// Medium band's (the Hard band's would leave the first board unfinishable in the time). A RANDOM seed
+// per run, so a run cannot be learned by heart; the same seed always gives the same boards. Fewer
+// candidates than the ladder (a board must be ready while the clock runs; it is built ahead).
+/** The ladder level whose board Rush's board `i` (0 = the first) is built like. */
+export function rushLevel(mode, i) {
+  const k = Math.max(0, i | 0);
+  return mode === 'hard' ? Math.min(120, 51 + 8 * k) : Math.min(50, 3 + 6 * k);
+}
+/** Rush board `i` of the run with seed `seed`. Deterministic. */
+export function buildRush(mode, i, seed) {
+  const { spec, target } = ladderSpec(rushLevel(mode, i), LADDER_GEN);
+  let best = null;
+  for (let k = 0; k < 3; k++) {
+    const s = ((seed >>> 0) + (i | 0) * 104729 + k * 7919) >>> 0;
+    const lvl = generate(spec, s);
+    const m = harden(lvl.cols, lvl.rows, lvl.arrows, s, 8, true, target);
+    if (m && (!best || Math.abs(m.layers - target) < Math.abs(best.layers - target))) best = { lvl, layers: m.layers };
+    if (best && best.layers >= target) break;
+  }
+  return best.lvl;
+}
+
 /** Point -> arrow id for the arrows still on the board (`gone[id]` true = already sent out). */
 export function occupancy(lvl, gone) {
   const occ = new Int16Array(lvl.cols * lvl.rows).fill(-1);

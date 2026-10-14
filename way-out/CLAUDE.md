@@ -452,3 +452,51 @@ levels in and keep expert as expert? You came up with the bands so you should ju
   "Hard complete" (-> Hard 151 playable), and a new player (1 / 51 / 101 / 201). The old keys were
   byte-identical afterwards.
 
+## Rush (2026-10-14)
+
+Matt: *"a new game mode where you only have a second or two ... Like those chess games where you
+start with a few seconds and get a second back for every move"*, then: *"don't stop the clock. If
+someone leaves the app, they lose that round"*, *"try getting just half a second"*, *"10 seconds is
+fine to start, but it feels like way too long"*, *"boards keep coming? ... Go ahead with this and
+we'll see"*, mistakes 3 s ("Ok"), *"a separate game mode"*, *"a weekly game and have a history tab
+where you can look at results from previous weeks"*, Easy/Hard ("Sure"). He also said no game should
+ever take minutes: the times logged are seconds per board.
+
+- **Where:** a **Levels / Rush** switch under the title on the setup screen (settings `mode`,
+  `rushMode`: remembered choices). Rush has Easy and Hard, **Play Rush**, the rules line, and
+  **Results**.
+- **The clock** (`js/arrow-maze-time.js`, `RUSH_*`): starts at **10 s** and counts DOWN; every arrow
+  sent off gives **+0.5 s**, every bump **-3 s** (the arrow turns red; no hearts, no hint, no
+  restart). **It never pauses.** When it reaches zero the run ends ("Time's up!").
+- **Leaving loses the run:** the menu button, the hub's back button (`destroy()`), or the app going
+  to the background (`visibilitychange`) ends it as `left`. It is STORED (THE LAW) and never counted.
+- **Boards keep coming:** clear one and the next is on screen at once, the clock still running.
+  `buildRush(mode, i, seed)` in `engine.js`: board `i` is built like ladder level `rushLevel(mode, i)`
+  (Easy 3, 9, 15 ... up to 50; Hard 51, 59, 67 ... up to 120, i.e. from the MEDIUM band: Hard-band
+  boards start at ~56 arrows, more than a first board can hold at this clock), with a **random seed
+  per run** so a run cannot be learned by heart (the seed is stored with the run; same seed, same
+  boards). The next board is built while the current one is played (builds < 25 ms on a desktop).
+- **Score = arrows cleared in the run.** Its own branch, **`wo.rush`** (`recordWayOutRush` in
+  `js/game-stats.js`): `runs[mode]` = EVERY run raw `{s, b, ms, m, d, w, sd, left?}`, and
+  `best[mode][<Monday>]` = the best COUNTED run of each week (Math.max only). A run is not a level:
+  `total` / `byDiff` / points are untouched. The three-edit rule is done: the recorder, My Stats
+  (`wayoutScreen`: this week, best week, runs per version; a player with only Rush runs is no longer
+  "empty"), and `js/players-agg.js` (a week's best = the best on any of the person's phones; the
+  longest run list).
+- **Weeks** (`woWeekKey`): the Monday's date in **UTC**, one clock for everyone (Sunday evening in the
+  US, early Monday in Spain). Stamped on each run when it ends.
+- **Results** (inside the game, not the hub leaderboard): Easy / Hard, **This week** and **Past
+  weeks** (each past week with its winner; tap for the full table). Read once per opening from
+  `players/` (`readPlayersOnce`), this phone's own fresh store standing in for itself, combined per
+  person by `aggregatePlayers`; test accounts hidden as on the leaderboard, except from themselves.
+  Ties share a place. Offline it shows only this phone's runs and says so.
+- **Tuning:** 10 s / 0.5 s / 3 s and the board steps are a first guess; every run is stored raw so
+  they can be set from real runs. At ~1 arrow a second a run lasts ~20 s; at 1.5 a second, ~40 s.
+- Tests: `way-out/js/test.js` (Rush boards: well formed, solvable, seeded, climbing), `node
+  test-arrow-maze-time.mjs` (weeks, the recorder: every run kept, a left run never counts, a new
+  week starts its own best, a run is not a level), `players-agg.test.mjs` (the two-phone merge).
+  Checked in Chromium: a whole run (+0.5 s, -3 s, board 2 arriving with the clock running, time
+  running out, the popup, the stored run and week best), leaving by the menu and by backgrounding
+  (stored as `left`, not counted), the results screen, and the setup and play screens in the hub at
+  402x874, 360x724, 390x664 and 375x667 (no scroll, clear of the Hub button).
+

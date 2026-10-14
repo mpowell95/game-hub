@@ -91,5 +91,26 @@ g = G.loadStats().games.wayout;
 ok('the recorder stores the ladder level, generator and date', g.wo.log.medium[0].l === 61 && g.wo.log.medium[0].g === 5 && g.wo.log.medium[0].d > 0);
 ok('and counts it in its band', g.byDiff.medium.won === 1 && T.woPoints(g) === 2);
 
+// --- Rush (2026-10-14) ---
+ok('week key: the Monday, in UTC', T.woWeekKey(Date.UTC(2026, 9, 14, 3)) === '2026-10-12' && T.woWeekKey(Date.UTC(2026, 9, 12, 0)) === '2026-10-12'
+  && T.woWeekKey(Date.UTC(2026, 9, 11, 23, 59)) === '2026-10-05' && T.woWeekKey(Date.UTC(2026, 9, 18, 23)) === '2026-10-12');
+store.clear();
+G.recordWayOut('easy', { timeMs: 20000, penaltyMs: 0, arrows: 12, rounds: 4, timed: true, level: 2, gen: 6 });
+const mon = Date.UTC(2026, 9, 13, 12);
+G.recordWayOutRush('easy', { arrows: 25, boards: 1, ms: 31000, mistakes: 1, seed: 77, at: mon });
+G.recordWayOutRush('easy', { arrows: 40, boards: 2, ms: 45000, mistakes: 0, seed: 78, at: mon + 1000, left: true });
+G.recordWayOutRush('easy', { arrows: 18, boards: 1, ms: 25000, mistakes: 2, seed: 79, at: mon + 2000 });
+G.recordWayOutRush('hard', { arrows: 9, boards: 0, ms: 15000, mistakes: 0, seed: 80, at: mon + 3000 });
+G.recordWayOutRush('easy', { arrows: 3, boards: 0, ms: 9000, mistakes: 0, seed: 81, at: Date.UTC(2026, 9, 20, 9) });
+g = G.loadStats().games.wayout;
+ok('rush: every run is kept raw, the lost one too', g.wo.rush.runs.easy.length === 4 && g.wo.rush.runs.easy[1].left === 1 && g.wo.rush.runs.easy[0].sd === 77);
+ok('rush: a week\'s best is the best COUNTED run (the left one never counts)', T.woRushBest(g, 'easy', '2026-10-12') === 25 && T.woRushBest(g, 'hard', '2026-10-12') === 9);
+ok('rush: a new week starts its own best', T.woRushBest(g, 'easy', '2026-10-19') === 3 && T.woRushBest(g, 'hard', '2026-10-19') === null);
+ok('rush: the weeks, newest first', T.woRushWeeks(g).join() === '2026-10-19,2026-10-12');
+ok('rush: a run is not a level (no play, no points)', g.total.played === 1 && g.byDiff.easy.won === 1 && T.woPoints(g) === 1);
+ok('rush: the level log is untouched', g.wo.log.easy.length === 1 && g.wo.timed.easy === 1);
+ok('rush: an unknown mode records nothing', G.recordWayOutRush('expert', { arrows: 5 }) === null);
+ok('rush: a malformed run list is cleaned, not crashed on', T.woRushRuns([null, { s: 'x' }, { s: 4, d: 5, w: 'nope' }, { s: 4, d: 5, w: '2026-10-12' }]).length === 1);
+
 console.log(`\nArrow Maze timer tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
