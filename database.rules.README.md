@@ -28,12 +28,26 @@ branch had to be listed explicitly with the permissions it always had. **Every b
 **So: if you add a top-level node, you must add it to this file, or it is unreadable and
 unwritable.** That is the one new obligation this shape creates.
 
+## Admin-only writes (2026-10-14)
+
+Matt, on learning that any signed-in device could write `adminConfig`: *"that must be fixed NOW.
+NOBODY should have that power other than me."* Until then anyone with developer tools could flip a
+game live, void anyone's scores, take someone off online play, or write
+`adminConfig/v1/deviceResets/<statsId>`, which makes that player's phone ERASE its own stats store
+on its next load (THE LAW). `bugReplies/` was the same: anyone could plant a "reply from Matt" in a
+player's inbox. Both now need the writer's uid in `admins/` (console-only, three of Matt's devices
+on 2026-10-14). Every writer in the app already ran only on those devices (the Admin page and the
+bug inbox are gated on `isAdminDevice()`, which asks `admins/` the same question), so nothing Matt
+uses changes. **`delete-device-record.mjs` signs in anonymously, so its device-reset write is now
+refused**: a reset has to come from the Admin page or the console.
+
 ## Current branches
 
 | Branch | Rule |
 |---|---|
-| `players`, `usernames`, `rooms`, `adminConfig`, `archive` | `auth != null` read + write (unchanged) |
-| `bugReports`, `bugReportShots`, `bugReplies`, `deviceReports` | `auth != null` read + write (unchanged) |
+| `players`, `usernames`, `rooms`, `archive` | `auth != null` read + write (unchanged) |
+| `bugReports`, `bugReportShots`, `deviceReports` | `auth != null` read + write (unchanged) |
+| `adminConfig`, `bugReplies` | readable by anyone signed in; **writable only by a uid in `admins/`** (2026-10-14) |
 | `skeeballThrows`, `challenge`, `flight`, `selfies` | `auth != null` read + write (unchanged) |
 | `admins` | readable by anyone signed in, **writable by nobody** - console only |
 | `msgAuth/<uid>` | readable and writable only by that same `auth.uid` |

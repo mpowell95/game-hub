@@ -2394,11 +2394,13 @@ case in `test-admin-config.mjs` (including the structural check that the READER 
 in — the resolvers are only worth anything if a caller consults them). Keep the new branch absent by
 default, and keep "absent means the code default" true; every safety property above rests on it.
 
-**Rules:** `database.rules.json` is `auth != null` for read and write across the whole DB, so no
-rules change was needed. That also means the node is not cryptographically Matt-only — the admin
-button is gated on `isAdmin()` (a profile-name hash, like the bug inbox), which is a screen, not a
-lock. This is the family's app on a wide-open database; if that ever changes, this node needs a rule
-of its own before anything else does.
+**Rules (locked 2026-10-14):** `adminConfig` is readable by anyone signed in and **writable only by a
+uid in `admins/`** (`database.rules.json`; `database.rules.README.md`, "Admin-only writes"). Until
+then it was `auth != null`, so any device with developer tools could flip games, void scores, or
+write a device reset that erases a player's stats on their own phone. Matt: *"NOBODY should have
+that power other than me."* The Admin page already only appears on `admins/` devices
+(`isAdminDevice()`), so its writes are unaffected; `delete-device-record.mjs` (anonymous) is now
+refused.
 
 ## Score corrections: "that machine was broken" (2026-08-24)
 
@@ -3568,11 +3570,13 @@ case in `test-admin-config.mjs` (including the structural check that the READER 
 in — the resolvers are only worth anything if a caller consults them). Keep the new branch absent by
 default, and keep "absent means the code default" true; every safety property above rests on it.
 
-**Rules:** `database.rules.json` is `auth != null` for read and write across the whole DB, so no
-rules change was needed. That also means the node is not cryptographically Matt-only — the admin
-button is gated on `isAdmin()` (a profile-name hash, like the bug inbox), which is a screen, not a
-lock. This is the family's app on a wide-open database; if that ever changes, this node needs a rule
-of its own before anything else does.
+**Rules (locked 2026-10-14):** `adminConfig` is readable by anyone signed in and **writable only by a
+uid in `admins/`** (`database.rules.json`; `database.rules.README.md`, "Admin-only writes"). Until
+then it was `auth != null`, so any device with developer tools could flip games, void scores, or
+write a device reset that erases a player's stats on their own phone. Matt: *"NOBODY should have
+that power other than me."* The Admin page already only appears on `admins/` devices
+(`isAdminDevice()`), so its writes are unaffected; `delete-device-record.mjs` (anonymous) is now
+refused.
 
 ## Score corrections: "that machine was broken" (2026-08-24)
 
