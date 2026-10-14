@@ -152,7 +152,6 @@ const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width
 const ICON_BACK = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const ICON_UNDO = `<svg ${SVGA}><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>`;
 const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 4v4.5h4.5"/></svg>`;
-const ICON_MENU = `<svg ${SVGA}><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>`;
 const ICON_BULB = `<svg ${SVGA}><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>`;
 
 function star(cx, cy, r) {
@@ -380,12 +379,12 @@ class Gridlock {
           <div class="gl-hud-mid">${diffShapeSVG(TIER_NUM[this.band])}<b>${t('level_n', { n: this.n })}</b><span>${t('tier_' + this.band)}</span></div>
         </div>
         <div class="gl-strip">
+          <button type="button" class="gl-back" data-act="menu" aria-label="${t('menu_aria')}">${ICON_BACK}</button>
           <div class="gl-chip"><small>${t('moves')}</small><b class="gl-moves">0</b></div>
           <div class="gl-chip"><small>${t('fewest')}</small><b>${this.fewest}</b></div>
         </div>
         <div class="gl-stage"><div class="gl-board" role="group"></div></div>
         <div class="gl-tools">
-          <button type="button" class="gl-tool" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}<span>${t('menu')}</span></button>
           <button type="button" class="gl-tool" data-act="undo">${ICON_UNDO}<span>${t('undo')}</span></button>
           <button type="button" class="gl-tool" data-act="restart">${ICON_RESTART}<span>${t('restart')}</span></button>
           <button type="button" class="gl-tool gl-tool-hint" data-act="hint">${ICON_BULB}<span>${t('hint')}</span></button>

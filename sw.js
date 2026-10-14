@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1144';
+const CACHE = 'game-hub-v1145';
 
 const ASSETS = [
   './',
@@ -827,8 +827,8 @@ const REST_MANIFEST = {
   './way-out/js/strings.js': '7dcbff09c2',
   './gridlock/': '0c0b6bd30e',
   './gridlock/index.html': '0c0b6bd30e',
-  './gridlock/css/gridlock.css': 'bac319bed3',
-  './gridlock/js/ui.js': '8ab23428d5',
+  './gridlock/css/gridlock.css': '2414e7d81d',
+  './gridlock/js/ui.js': '57624d902c',
   './gridlock/js/engine.js': 'bc7b7b12e0',
   './gridlock/js/art.js': 'a53e8b878b',
   './gridlock/js/levels.js': '68ee3200cb',
