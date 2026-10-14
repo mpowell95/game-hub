@@ -739,7 +739,6 @@
 .wo-root .wo-seg-bar { display: block; width: 72%; height: 4px; margin-top: 4px; border-radius: 2px; background: var(--gh-border, rgba(16, 36, 58, .14)); overflow: hidden; }
 .wo-root .wo-seg-bar i { display: block; height: 100%; border-radius: 2px; background: #178a7a; }
 .gh-dark .wo-root .wo-seg-bar i { background: #3fd6bd; }
-.wo-root .wo-seg-bar.is-open { background: repeating-linear-gradient(90deg, var(--gh-border-strong, rgba(16, 36, 58, .28)) 0 6px, transparent 6px 10px); }
 /* Both Play buttons are the same shape: Levels in the hub's blue, Rush in its teal. */
 .wo-root button.wo-play { min-height: 52px; font-weight: 900; font-size: 18px; box-shadow: 0 6px 16px rgba(23, 105, 212, .28), inset 0 -3px 0 rgba(0, 0, 0, .15); }
 /* Under the card: this week's leader of the selected version, and See all results. */

@@ -22,6 +22,8 @@ import { loadProfile } from '../../js/profile-store.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.wayout.v1';
+/** Expert's progress bar fills over this many levels, then starts over. */
+const EXPERT_LAP = 50;
 // ONE save PER TIER (2026-10-11 QA: with one shared slot, playing Easy wiped an unfinished
 // Medium level). `gamehub.wayout.saves.v1` = { easy: save|null, ..., migrated: 1 }. The first
 // key, `gamehub.wayout.save.v1` (a single save), is read ONCE into its tier's slot and then left
@@ -580,15 +582,17 @@ class WayOut {
     const done = level > bandEnd(tier);
     const resume = !done && hasProgress(tier, level);
     // Each difficulty: its name, the level it is on, and a thin bar of how far through its stretch
-    // of the ladder that is (none for Expert, which never ends).
+    // of the ladder that is. Expert never ends, so its bar fills every 50 levels and starts over
+    // (Matt, 2026-10-14: a solid line like the others, not a dashed one).
     const segs = TIERS.map((k) => {
       const n = this.settings.ladder[k], end = bandEnd(k), fin = n > end;
-      const pct = k === 'expert' ? 0 : Math.round(100 * Math.min(1, (n - BAND_START[k]) / (end - BAND_START[k] + 1)));
+      const pct = k === 'expert' ? Math.round(100 * (((n - BAND_START[k]) % EXPERT_LAP) / EXPERT_LAP))
+        : Math.round(100 * Math.min(1, (n - BAND_START[k]) / (end - BAND_START[k] + 1)));
       return `
       <button type="button" class="wo-seg${k === tier ? ' is-selected' : ''}" data-act="tier" data-tier="${k}" role="radio" aria-checked="${k === tier}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b></span>
         <span class="wo-seg-sub">${fin ? t('band_done') : t('level_n', { n })}</span>
-        ${k === 'expert' ? `<span class="wo-seg-bar is-open" aria-hidden="true"></span>` : `<span class="wo-seg-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>`}
+        <span class="wo-seg-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>
       </button>`;
     }).join('');
     const tiles = this._tilesHTML([
