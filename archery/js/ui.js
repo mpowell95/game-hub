@@ -27,9 +27,10 @@ const SAVE_KEY = 'gamehub.archery.save.v1';
 const FIRSTS = ['alt', 'me', 'them'];
 const HIT_POP = 0.6;           // seconds from the cut to the target to the number popping
 const HIT_HOLD = 2.0;          // seconds on the target after a hit
-const DRAW_T = 0.18;           // seconds to bring the bow up
+const DRAW_T = 0.25;           // seconds to bring the bow up (the recording, frame by frame)
 const PANIC_T = 0.6;           // seconds of shaking before a panicked arrow goes
-const JOLT_T = 0.1;            // seconds of the bow's kick as the arrow leaves it, before the flight
+const BOW_IN_T = 0.2;          // seconds for the bow to slide up into view on the line
+const JOLT_T = 0.06;           // seconds of the bow's kick as the arrow leaves it, before the flight
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function writeJSON(k, v) {
@@ -58,7 +59,7 @@ function loadSettings() {
 
 const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
 const MENU_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
-const WIND_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M6 20 H28" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><path d="M21 9 L34 20 L21 31 Z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>';
+const WIND_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><defs><linearGradient id="ar-windg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4aa6ff"/><stop offset="1" stop-color="#1557d4"/></linearGradient></defs><path d="M4 15.5 H20 V7 L37 20 L20 33 V24.5 H4 Z" fill="url(#ar-windg)" stroke="#0e3f9e" stroke-width="1.5" stroke-linejoin="round"/></svg>';
 const PAD_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2.5" y="6.5" width="19" height="11" rx="5.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M7 10v4M5 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="11" r="1.3" fill="currentColor"/><circle cx="18" cy="13.3" r="1.3" fill="currentColor"/></svg>';
 const STAR_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7L12 17.3 5.8 21l1.6-7L2 9.2l7.1-.6z" fill="currentColor"/></svg>';
 const LEAF_SVG = '<svg viewBox="0 0 30 16" aria-hidden="true" focusable="false"><path d="M1 8 C8 -1 22 -1 29 8 C22 17 8 17 1 8 Z" fill="currentColor"/><path d="M2 8 H27" stroke="rgba(0,0,0,0.2)" stroke-width="1"/></svg>';
@@ -71,15 +72,15 @@ const HAND_SVG = '<svg viewBox="0 0 40 48" aria-hidden="true" focusable="false">
 // same place and size, so the ring, the 3D sight housing and the magnified view always line up.
 const SCOPE_IN = 46;
 function ringSVG() {
-  const C = 2 * Math.PI * 53;
+  const C = 2 * Math.PI * 52.5;
   return `<svg class="ar-bow-svg" viewBox="-70 -70 140 140" width="140" height="140" aria-hidden="true" focusable="false">
     <g class="ar-scope-ring">
-      <circle r="53" fill="none" stroke="#1d2128" stroke-width="15"/>
-      <circle r="${SCOPE_IN}" fill="none" stroke="#090a0d" stroke-width="2.5"/>
-      <circle r="53" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="7"/>
-      <circle class="ar-gauge" r="53" fill="none" stroke="#2fdc4a" stroke-width="7" stroke-linecap="round" transform="rotate(-90)" stroke-dasharray="${C.toFixed(1)} ${C.toFixed(1)}" data-c="${C.toFixed(2)}"/>
-      <path d="M-43,0 H-13 M13,0 H43 M0,-43 V-13 M0,13 V43" stroke="#ff2d2d" stroke-width="2.6" stroke-linecap="round"/>
-      <path d="M-30,-4 V4 M30,-4 V4 M-4,-30 H4 M-4,30 H4" stroke="#ff2d2d" stroke-width="2"/>
+      <circle r="57" fill="none" stroke="#3b3f45" stroke-width="13"/>
+      <circle r="57" fill="none" stroke="#6b7078" stroke-width="5" transform="translate(-1 -1.5)" opacity="0.55"/>
+      <circle r="52.5" fill="none" stroke="#15171a" stroke-width="7"/>
+      <circle class="ar-gauge" r="52.5" fill="none" stroke="#2fdc4a" stroke-width="6" transform="rotate(-90)" stroke-dasharray="${C.toFixed(1)} ${C.toFixed(1)}" data-c="${C.toFixed(2)}"/>
+      <circle r="${SCOPE_IN + 1}" fill="none" stroke="#08090b" stroke-width="3"/>
+      <path d="M-45,0 H-15 M15,0 H45 M0,-45 V-15 M0,15 V45" stroke="#ff2b2b" stroke-width="3.6"/>
     </g>
   </svg>`;
 }
@@ -189,7 +190,7 @@ class ArcheryUI {
         <div class="ar-side" data-role="side">
           <div class="ar-wind" data-role="wind" role="img"><i data-role="windArrow">${WIND_SVG}</i><b data-role="windText"></b></div>
           <div class="ar-score ar-score-them" data-role="scoreThem"><span class="ar-score-ava" data-role="avaThem"></span><b data-role="totThem">0</b></div>
-          <span class="ar-vs" aria-hidden="true">VS</span>
+          <span class="ar-vs" aria-hidden="true"><i>V</i><i>S</i></span>
           <div class="ar-score ar-score-me" data-role="scoreMe"><span class="ar-score-ava" data-role="avaMe"></span><b data-role="totMe">0</b></div>
         </div>
         <div class="ar-banner" data-role="banner" aria-hidden="true"><b data-role="bannerMain"></b><span data-role="bannerSub"></span></div>
@@ -401,8 +402,8 @@ class ArcheryUI {
     this._size = w + 'x' + h;
     this.r.layout(w, h);
     this.w = w; this.h = h;
-    // The bow's scale: the sight's inner radius is about an eighth of the screen width (the recording).
-    this.k = Math.min((0.082 * w) / SCOPE_IN, (0.045 * h) / SCOPE_IN);
+    // The bow's scale: the sight's outer ring is a tenth of the screen width (the recording).
+    this.k = Math.min((0.072 * w) / SCOPE_IN, (0.0405 * h) / SCOPE_IN);
     this._draw();
   }
 
@@ -483,7 +484,7 @@ class ArcheryUI {
     // Wind.
     const w = this._wind();
     const arrowEl = this.root.querySelector('[data-role="windArrow"]');
-    arrowEl.style.transform = `rotate(${-w.dir * 45}deg)`;
+    arrowEl.firstElementChild.style.transform = `rotate(${-w.dir * 45}deg)`;
     this.root.querySelector('[data-role="windText"]').textContent = t('wind', { n: w.mph.toFixed(1) });
     this.root.querySelector('[data-role="wind"]').setAttribute('aria-label', t('aria_wind', { mph: w.mph.toFixed(1) }));
     // Totals: you (blue) below, them (red) above.
@@ -750,6 +751,17 @@ class ArcheryUI {
       }
     }
     this.fx.appendChild(el);
+    // The ring it scored flashes yellow (the recording), seen at the close-up's angle.
+    if (onBoss && s > 0) {
+      const rr = (11 - s) / 10;
+      const c = this.r.faceToScreen(0, 0), ex = this.r.faceToScreen(rr, 0), ey = this.r.faceToScreen(0, rr);
+      const rx = Math.abs(ex.x - c.x), ry = Math.abs(ey.y - c.y);
+      const ring = document.createElement('div');
+      ring.className = 'ar-ringflash' + (this.reduce ? ' is-still' : '');
+      Object.assign(ring.style, { left: (c.x - rx).toFixed(1) + 'px', top: (c.y - ry).toFixed(1) + 'px', width: (2 * rx).toFixed(1) + 'px', height: (2 * ry).toFixed(1) + 'px' });
+      this.fx.appendChild(ring);
+      setTimeout(() => ring.remove(), 950);
+    }
   }
 
   // --- your shot ---------------------------------------------------------------------------------
@@ -823,7 +835,7 @@ class ArcheryUI {
       this._save();
       if (this.mode === 'mp') { this.mp.applied++; this._mpRecord(this.shot.hit.x, this.shot.hit.y); }
     }
-    if (panicked) this._say(t('say_panic', { name: this.mode === 'practice' ? t('you') : this.seats[seat].name }));
+    if (panicked) this._say(t('say_panic', { name: this.mode === 'practice' ? this._myName() : this.seats[seat].name }));
   }
 
   /** The arrow arrives: cut to the target. */
@@ -887,7 +899,7 @@ class ArcheryUI {
     this.tileView.vals.push(s);
     this._pop(sh.hit, s);
     this._hud();
-    this._say(s ? t('say_score', { name: t('you'), n: s }) : t('say_miss', { name: t('you') }));
+    this._say(s ? t('say_score', { name: this._myName(), n: s }) : t('say_miss', { name: this._myName() }));
     if (p.arrows.length < 3) { this._after(HIT_HOLD - HIT_POP, () => this._practiceLine(false)); return; }
     const total = p.arrows.reduce((n, a) => n + a.s, 0);
     p.best = Math.max(p.best, total);
@@ -929,11 +941,11 @@ class ArcheryUI {
     const mp = this.mode === 'mp' ? this.mp : null;
     const iWon = mp ? m.winner === mp.mySeat : m.winner === 0;
     this.root.querySelector('[data-role="resAva"]').textContent = w.emoji;
-    this.root.querySelector('[data-role="resTitle"]').textContent = this.mode === 'pass' ? t('win_name', { name: w.name }) : t(iWon ? 'win_you' : 'lose_you');
+    this.root.querySelector('[data-role="resTitle"]').textContent = t('win_name', { name: w.name });
     const tot = totals(m);
     const a = tot[m.winner], b = tot[m.winner ^ 1];
     let line = t(isShootOff(m.stage) ? 'result_so' : 'result_line', { a, b });
-    if (mp && mp.resigned) line = iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
+    if (mp && mp.resigned) line = t('mp_they_resigned', { name: (iWon ? mp.them : this.seats[mp.mySeat]).name });
     this.root.querySelector('[data-role="resLine"]').textContent = line;
     this.root.querySelector('[data-role="againLabel"]').textContent = t(mp ? 'mp_again' : 'play_again');
     this.root.querySelector('[data-role="toSetupLabel"]').textContent = t(mp ? 'mp_back' : 'menu');
@@ -1234,7 +1246,7 @@ class ArcheryUI {
     const iSent = side !== MP.recipientOf(game);
     const mine = why === 'cancelled' ? iSent : !iSent;
     const them = MP.themOf(game, MP.myCode());
-    return t(mine ? `mp_you_${why}` : `mp_they_${why}`, { name: (them && them.name) || '?' });
+    return t(mine ? `mp_you_${why}` : `mp_they_${why}`, { name: (them && them.name) || '?', me: this._myName() });
   }
   _mpEndedNoResult(text) {
     const mp = this.mp;
@@ -1392,6 +1404,9 @@ class ArcheryUI {
     const showBow = (this.screen === 'play' || this.screen === 'menu' || this.screen === 'help' || this.screen === 'resign' || this.screen === 'setup' || this.screen === 'mp')
       && this.r.view === 'line' && (jolt || this.phase === 'line' || this.phase === 'ready' || this.phase === 'draw' || this.phase === 'panic' || this.screen === 'setup' || this.screen === 'mp' || this.phase === 'idle');
     this.bowEl.style.visibility = showBow ? 'visible' : 'hidden';
+    // Back on the line the bow slides up into view from below (the recording, about 0.2 s).
+    if (showBow && !this._bowShown) this._bowInAt = performance.now();
+    this._bowShown = showBow;
     if (showBow) {
       const T = this.r.faceToScreen(0, 0);
       const ease = (p) => p * p * (3 - 2 * p);
@@ -1399,7 +1414,7 @@ class ArcheryUI {
       // Down: the sight small, right of the target, the bow lower. Drawn: the sight on the aim.
       const aimP = this.phase === 'draw' || this.phase === 'panic' ? this._aimNow() : jolt ? this.shot.aim : { x: 0, y: 0 };
       const A = this.r.faceToScreen(aimP.x, aimP.y);
-      const idle = { x: T.x + this.w * 0.143, y: T.y + this.h * 0.015, k: this.k * 0.64, rot: 3 };
+      const idle = { x: T.x + this.w * 0.143, y: T.y + this.h * 0.015, k: this.k * 0.6, rot: 3 };
       const drawn = { x: A.x, y: A.y, k: this.k, rot: 0 };
       let x = idle.x + (drawn.x - idle.x) * p, y = idle.y + (drawn.y - idle.y) * p;
       const k = idle.k + (drawn.k - idle.k) * p;
@@ -1419,6 +1434,10 @@ class ArcheryUI {
         rot -= 4 * j;
         fly = j;
       }
+      if (!this.reduce && this._bowInAt) {
+        const q = Math.min(1, (performance.now() - this._bowInAt) / (BOW_IN_T * 1000));
+        if (q < 1) { const e = 1 - (1 - q) * (1 - q); y += (1 - e) * this.h * 0.45; x += (1 - e) * this.w * 0.12; }
+      }
       this.bowEl.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${rot.toFixed(2)}deg) scale(${k.toFixed(4)})`;
       this.r.setBow({ x, y, r: SCOPE_IN * k, rot, p, fly }, this._bowColor());
       // The ring: how much hold is left, green, then yellow below a third.
@@ -1430,11 +1449,14 @@ class ArcheryUI {
       // The hint dot sits left of the hand, on the bow at rest.
       if (this.hintDot.classList.contains('is-show')) {
         const kk = idle.k;
-        this.hintDot.style.transform = `translate(${(idle.x - 70 * kk).toFixed(1)}px, ${(idle.y + 300 * kk).toFixed(1)}px)`;
+        this.hintDot.style.transform = `translate(${(idle.x + 10 * kk).toFixed(1)}px, ${(idle.y + 360 * kk).toFixed(1)}px)`;
       }
     } else { this.r.setScope(null); this.r.setBow(null); }
     this.r.render();
   }
+
+  /** This phone's player, by profile name (never "You"). */
+  _myName() { const p = loadProfile(); return (p && p.name) || t('you'); }
 
   /** The colour of the arrow on the bow: the shooter's. */
   _bowColor() {

@@ -136,11 +136,11 @@
 .ar-root:not(.is-playing) .ar-side,
 .ar-root:not(.is-playing) .ar-menubtn { visibility: hidden; }
 .ar-root .ar-round {
-  padding: 6px 16px;
+  padding: 7px 18px;
   border-radius: 999px;
   background: #fff;
   color: #111;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 900;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -148,23 +148,23 @@
 }
 .ar-root .ar-tiles {
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 8px;
-  background: #0f4fae;
+  gap: 5px;
+  padding: 5px;
+  border-radius: 9px;
+  background: linear-gradient(#3a8cff, #1f6ee8);
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .ar-root .ar-tiles.is-red { background: #a3161b; }
 .ar-root .ar-tile {
-  width: 36px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 5px;
-  background: var(--ar-blue);
-  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  background: linear-gradient(#1a5fd4, #0f4bb8);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.18), inset 0 -2px 0 rgba(0, 0, 0, 0.2);
   color: #fff;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 900;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -194,7 +194,7 @@
 /* The wind card and the two totals, down the left side (the recording). */
 .ar-root .ar-side {
   position: absolute;
-  left: 8px;
+  left: 0;
   top: 47%;
   display: flex;
   flex-direction: column;
@@ -204,9 +204,9 @@
   pointer-events: none;
 }
 .ar-root .ar-wind {
-  width: 64px;
-  margin: 0 0 12px 4px;
-  padding: 6px 4px 4px;
+  width: 76px;
+  margin: 0 0 14px 16px;
+  padding: 7px 4px 5px;
   border-radius: 10px;
   background: rgba(16, 22, 34, 0.85);
   display: flex;
@@ -216,50 +216,62 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 .ar-root .ar-wind i {
-  width: 40px;
-  height: 40px;
+  width: 52px;
+  height: 52px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
+  border-radius: 8px;
   background: #fff;
-  color: #2d8cf0;
 }
-.ar-root .ar-wind i svg { width: 30px; height: 30px; display: block; }
-.ar-root .ar-wind b { font-size: 12px; font-weight: 900; letter-spacing: 0.02em; color: #fff; white-space: nowrap; }
+.ar-root .ar-wind i svg { width: 40px; height: 40px; display: block; }
+.ar-root .ar-wind b { font-size: 14px; font-weight: 900; letter-spacing: 0.02em; color: #fff; white-space: nowrap; }
 .ar-root .ar-score {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 92px;
+  min-width: 124px;
   height: 40px;
-  padding: 0 18px 0 6px;
-  clip-path: polygon(0 0, 100% 0, 86% 100%, 0 100%);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  padding: 0 22px 0 4px;
 }
-.ar-root .ar-score-them { background: var(--ar-red); }
-.ar-root .ar-score-me { background: var(--ar-blue); }
+.ar-root .ar-score::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ar-bar);
+  clip-path: polygon(0 0, 100% 0, 86% 100%, 0 100%);
+}
+.ar-root .ar-score-them { --ar-bar: var(--ar-red); }
+.ar-root .ar-score-me { --ar-bar: var(--ar-blue); }
 .ar-root .ar-score-ava {
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 42px;
+  margin: -8px 0 -2px 2px;
   display: grid;
   place-items: center;
-  font-size: 22px;
+  font-size: 28px;
   line-height: 1;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
-.ar-root .ar-score b { font-size: 22px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); }
+.ar-root .ar-score b { font-size: 26px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); }
 .ar-root .ar-vs {
-  margin: -6px 0 -6px 34px;
+  margin: -8px 0 -8px 38px;
   position: relative;
   z-index: 1;
-  font-size: 14px;
+  font-size: 19px;
   font-weight: 900;
   font-style: italic;
-  color: #fff;
-  -webkit-text-stroke: 1px #0f2a55;
+  -webkit-text-stroke: 3px #fff;
   paint-order: stroke fill;
+  letter-spacing: -0.04em;
 }
+.ar-root .ar-vs i { font-style: italic; }
+.ar-root .ar-vs i:first-child { color: #e3242b; }
+.ar-root .ar-vs i:last-child { color: #1f6fe8; position: relative; top: 4px; }
 
 /* The yellow Your Turn button, and the waiting line, along the bottom. */
 .ar-root .ar-bottom {
@@ -336,6 +348,21 @@
   100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
 }
 .ar-root .ar-pop.is-still { animation: none; }
+.ar-root .ar-ringflash {
+  position: absolute;
+  box-sizing: border-box;
+  border: 5px solid #ffd21f;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3), inset 0 0 0 2px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  animation: ar-ringflash 0.9s ease-out forwards;
+}
+.ar-root .ar-ringflash.is-still { animation: none; }
+@keyframes ar-ringflash {
+  0% { opacity: 1; transform: scale(1.12); }
+  45% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
 .ar-root .ar-star {
   position: absolute;
   left: 50%;
