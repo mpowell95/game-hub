@@ -520,9 +520,9 @@ class WayOut {
 
   _playHTML() {
     const tier = this.tier;
-    // EASY (Matt's mock-up, 2026-10-14): counters under the bar and a How to play pill at the
-    // bottom. Easy boards are small, so the room is there; Hard and Expert keep every pixel for
-    // the board (way-out/CLAUDE.md, "Fitting the screen").
+    // The arrow counters sit under the bar on EVERY difficulty (Matt, 2026-10-14: "I feel the
+    // counters can fit on all these screens pretty easily"; a portrait phone's board is limited by
+    // its WIDTH, so the row costs it nothing). The How to play pill is EASY only (his mock-up).
     const easy = tier === 'easy';
     return `
       <div class="wo-game${easy ? ' is-easy' : ''}">
@@ -541,7 +541,7 @@ class WayOut {
           <button type="button" class="wo-hint" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
-        ${easy ? '<div class="wo-counts" aria-hidden="true"><span class="wo-count-left"></span><span class="wo-count-done"></span></div>' : ''}
+        <div class="wo-counts" aria-hidden="true"><span class="wo-count-left"></span><span class="wo-count-done"></span></div>
         <div class="wo-stage"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
         ${easy ? `<div class="wo-playfoot"><button type="button" class="gh-btn wo-howbtn" data-act="help">${t('how_title')}</button></div>` : ''}
         <div class="wo-banner" aria-live="polite"><span></span><b></b></div>

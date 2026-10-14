@@ -180,8 +180,10 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
   (`.wo-hero-go` / `wo-hero-fx`, 3.6 s loop, CSS only). Reduced motion: it stands still.
 - **The Easy play screen, per Matt's mock-up (2026-10-14):** "Arrows remaining: N" and "Arrows
   cleared: N" under the progress bar (`.wo-counts`), and a How to play pill under the board
-  (`.wo-playfoot`) that PAUSES THE CLOCK while it is open (`_helpPaused`). **Easy only** (`.is-easy`):
-  Hard and Expert keep every pixel for the board. Small boards may now grow to fill the width (the
+  (`.wo-playfoot`) that PAUSES THE CLOCK while it is open (`_helpPaused`). **The counters went on
+  every difficulty the same day** (Matt: *"I feel the counters can fit on all these screens pretty
+  easily"*): a portrait board is width-limited, so the row costs nothing at 390x844 and up (measured);
+  at 375x667 Expert's dot spacing drops ~3%. **The pill stays Easy only** (`.is-easy`). Small boards may now grow to fill the width (the
   pitch cap went 40 -> 72px), and every arrow is thicker (`lw = pitch x 0.092`, 1.7-6px; heads
   `pitch x 0.28`, 5-17px), Matt: *"Make the arrows a little thicker too"*.
 - **The setup screen is in the hub's own style, not the reference's** (Matt, 2026-10-11: *"Make the
