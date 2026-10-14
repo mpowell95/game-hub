@@ -5,7 +5,7 @@
 // and a player who only ever taps clear arrows clears it (engine.js's header says why that greedy
 // check is a proof of solvability, not a sample of it).
 import { createHash } from 'node:crypto';
-import { TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel, buildLadder, bandOf, bandEnd, BAND_START } from './engine.js';
+import { TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel, buildLadder, bandOf, bandEnd, BAND_START, buildRush, rushLevel } from './engine.js';
 
 let fails = 0;
 const ok = (label, cond) => { if (!cond) { fails++; console.log('FAIL ', label); } };
@@ -214,6 +214,31 @@ function checkLadder(gen, from, to) {
   for (const n of [101, 125, 150, 175, 200, 201, 225, 260, 300]) h.update(JSON.stringify(buildLadder(n, 6)));
   const pin = h.digest('hex').slice(0, 16);
   ok(`ladder g6 unchanged (${pin})`, pin === '5b8571064bfd2397');
+}
+
+// RUSH (2026-10-14): a run's boards are well formed, solvable, the same for the same seed, different
+// for another seed, and climb with the board number up to their cap.
+{
+  let good = true, worst = 0;
+  for (const mode of ['easy', 'hard']) {
+    for (const seed of [1, 987654321, 4294967295]) {
+      for (let i = 0; i < 14; i++) {
+        const t0 = performance.now();
+        const lvl = buildRush(mode, i, seed);
+        worst = Math.max(worst, performance.now() - t0);
+        if (JSON.stringify(lvl) !== JSON.stringify(buildRush(mode, i, seed))) good = false;
+        const gone = new Array(lvl.arrows.length).fill(false);
+        let left = lvl.arrows.length, guard = 0;
+        while (left && guard++ < 100000) { const id = hintArrow(lvl, gone, null); if (id < 0) break; gone[id] = true; left--; }
+        if (left || lvl.arrows.some((c) => c.length < 2)) good = false;
+      }
+    }
+  }
+  ok('rush: boards well formed, solvable and the same for the same seed', good);
+  ok('rush: another seed, other boards', JSON.stringify(buildRush('easy', 0, 1)) !== JSON.stringify(buildRush('easy', 0, 2)));
+  ok('rush: boards climb, then hold', rushLevel('easy', 0) === 3 && rushLevel('easy', 1) > 3 && rushLevel('easy', 50) === 50
+    && rushLevel('hard', 0) === 51 && rushLevel('hard', 50) === 120);
+  ok(`rush: a board builds fast enough to be ready while the clock runs (slowest ${worst.toFixed(0)} ms)`, worst < 120);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall way-out engine checks passed');

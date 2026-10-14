@@ -219,6 +219,13 @@
 //                                                   // Levels cleared before the timer, or resumed
 //                                                   // from a save made before it, count in
 //                                                   // total/byDiff only.
+//         wo.rush: { runs: { easy: [run], hard: [run] }, best: { easy: { <Monday>: s }, hard } }
+//                                                   // (2026-10-14) RUSH, its own mode: EVERY run
+//                                                   // stored raw (js/arrow-maze-time.js woRushRuns:
+//                                                   // s arrows, b boards, ms, m mistakes, d, w week,
+//                                                   // sd seed, left = lost by leaving); best = the
+//                                                   // best COUNTED run per week, Math.max only. A run
+//                                                   // is not a level: total/byDiff are untouched.
 //       gridlock: {
 //         total, byDiff,                           // byDiff keyed easy|medium|hard|expert; one
 //                                                   // play+won per level solved (replays too)
@@ -245,7 +252,7 @@
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
-import { WO_TIERS, woList } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woWeekKey } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
@@ -1699,6 +1706,35 @@ export function recordWayOut(tier, f = {}) {
     e.d = Date.now();
     g.wo.log[d] = g.wo.log[d].concat([e]);
   }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Arrow Maze RUSH: one run ended (2026-10-14). Its own branch, `wo.rush`, created on the first run;
+ *  nothing else in the record moves (a run is not a level cleared, so no points and no play count).
+ *  Every run is kept raw; a run lost by LEAVING the app (`left`) is kept and never counted (Matt:
+ *  "If someone leaves the app, they lose that round"); a counted run can only RAISE its week's best.
+ *
+ *  `run` = { arrows, boards, ms, mistakes, seed, left, at } (`at` = when it ended, default now). */
+export function recordWayOutRush(mode, run = {}) {
+  if (!RUSH_MODES.includes(mode)) return null;
+  if (tooFast('wayout')) return null;
+  const st = loadStats();
+  const g = st.games.wayout;
+  ensureWo(g);
+  if (!g.wo.rush || typeof g.wo.rush !== 'object' || Array.isArray(g.wo.rush)) g.wo.rush = {};
+  const r = g.wo.rush;
+  if (!r.runs || typeof r.runs !== 'object' || Array.isArray(r.runs)) r.runs = {};
+  if (!r.best || typeof r.best !== 'object' || Array.isArray(r.best)) r.best = {};
+  for (const m of RUSH_MODES) { r.runs[m] = woRushRuns(r.runs[m]); r.best[m] = woRushBestMap(r.best[m]); }
+  const d = Math.floor(+run.at) > 0 ? Math.floor(+run.at) : Date.now();
+  const e = { s: Math.max(0, run.arrows | 0), b: Math.max(0, run.boards | 0), ms: Math.max(0, Math.round(+run.ms || 0)),
+    m: Math.max(0, run.mistakes | 0), d, w: woWeekKey(d) };
+  if (Number.isFinite(+run.seed)) e.sd = +run.seed;
+  if (run.left) e.left = 1;
+  r.runs[mode] = r.runs[mode].concat([e]);
+  if (!e.left) r.best[mode][e.w] = Math.max(r.best[mode][e.w] ?? -1, e.s);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

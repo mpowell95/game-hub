@@ -95,3 +95,68 @@ export function woPoints(rec, band = null) {
   const one = (b) => woBandPoints(b, ((byDiff[b] || {}).won) | 0);
   return band ? (WO_TIERS.includes(band) ? one(band) : 0) : WO_TIERS.reduce((n, b) => n + one(b), 0);
 }
+
+// --- RUSH (2026-10-14) ------------------------------------------------------------------------------
+//
+// A separate mode (Matt: "a new game mode where you only have a second or two ... Like those chess
+// games where you start with a few seconds and get a second back for every move"). The clock starts
+// at RUSH_START_MS and counts DOWN; every arrow sent off gives RUSH_GAIN_MS back, every bump costs
+// RUSH_MISS_MS. Boards keep coming, each a little harder, until the clock reaches zero. The clock is
+// never paused: leaving the app loses the run (Matt: "If someone leaves the app, they lose that
+// round"). Score = arrows cleared in the run. Two versions, Easy and Hard (different boards, same
+// clock). The board ranks each person's BEST run of the WEEK; past weeks stay viewable.
+//
+// The numbers are a first guess to be tuned on real runs (every run is stored raw for that): Matt
+// asked for half a second back per arrow and a 10 s start; the 3 s mistake was agreed.
+export const RUSH_MODES = ['easy', 'hard'];
+export const RUSH_START_MS = 10000;
+export const RUSH_GAIN_MS = 500;
+export const RUSH_MISS_MS = 3000;
+
+/** The week a moment belongs to: the date of its MONDAY, in UTC ("2026-10-12"). One clock for
+ *  everybody, wherever they play: the week turns over at Monday 00:00 UTC (Sunday evening in the
+ *  US, early Monday in Spain). */
+export function woWeekKey(ms = Date.now()) {
+  const d = new Date(+ms || 0);
+  const back = (d.getUTCDay() + 6) % 7;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - back)).toISOString().slice(0, 10);
+}
+const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A list of runs in array or Firebase-object form; anything that is not a run is left out. A run is
+ *  { s, b, ms, m, d, w, sd?, left? }: s = arrows cleared, b = boards cleared, ms = how long it
+ *  lasted, m = mistakes, d = when it ended (epoch ms), w = its week, sd = the boards' seed, left = 1
+ *  when it was lost by leaving the app (kept, never counted). */
+export function woRushRuns(raw) {
+  const arr = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.keys(raw).sort((a, b) => a - b).map((k) => raw[k]) : [];
+  const out = [];
+  for (const r of arr) {
+    if (!r || typeof r !== 'object') continue;
+    const s = Math.floor(+r.s), d = Math.floor(+r.d);
+    if (!(s >= 0) || !(d > 0) || !WEEK_RE.test(r.w)) continue;
+    const e = { s, b: Math.max(0, r.b | 0), ms: Math.max(0, Math.floor(+r.ms) || 0), m: Math.max(0, r.m | 0), d, w: r.w };
+    if (Number.isFinite(+r.sd)) e.sd = +r.sd;
+    if (r.left) e.left = 1;
+    out.push(e);
+  }
+  return out;
+}
+/** A best-per-week map ({ "<Monday>": arrows }) with anything malformed left out. */
+export function woRushBestMap(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const k of Object.keys(raw)) { const v = Math.floor(+raw[k]); if (WEEK_RE.test(k) && v >= 0) out[k] = v; }
+  return out;
+}
+/** A record's best Rush run in one week (`games.wayout`), or null when it has none that counted. */
+export function woRushBest(rec, mode, week = woWeekKey()) {
+  const best = woRushBestMap(((((rec || {}).wo || {}).rush || {}).best || {})[mode]);
+  return Object.prototype.hasOwnProperty.call(best, week) ? best[week] : null;
+}
+/** Every week a record has a counted Rush run in, either mode, newest first. */
+export function woRushWeeks(rec) {
+  const best = ((((rec || {}).wo || {}).rush || {}).best) || {};
+  const set = new Set();
+  for (const m of RUSH_MODES) for (const k of Object.keys(woRushBestMap(best[m]))) set.add(k);
+  return [...set].sort().reverse();
+}

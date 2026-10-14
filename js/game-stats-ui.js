@@ -22,7 +22,7 @@ import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
 import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
-import { woPoints } from './arrow-maze-time.js';
+import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
 
 const t = makeT(STRINGS);
@@ -387,7 +387,21 @@ function murdokuScreen(rec, titleKey = 'game_title_murdoku') {
  *  per difficulty. */
 function wayoutScreen(rec) {
   const solved = ((rec && rec.total) || {}).won | 0;
-  if (!solved) return emptyState(t('game_title_wayout'));
+  const rush = (((rec && rec.wo) || {}).rush) || null;
+  const rushRuns = (m) => woRushRuns(((rush || {}).runs || {})[m]).length;
+  const hasRush = RUSH_MODES.some((m) => rushRuns(m) > 0);
+  if (!solved && !hasRush) return emptyState(t('game_title_wayout'));
+  // Rush (2026-10-14): its own table, this week's best and the best week per version, and how many
+  // runs (a run lost by leaving is a run too).
+  const rushTable = !hasRush ? '' : `
+    <h4 class="gs-tbl-h">${t('gs_wo_rush_h')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_rush_week')}</th><th scope="col">${t('gs_wo_rush_best')}</th><th scope="col">${t('gs_wo_rush_runs')}</th></tr></thead>
+      <tbody>${RUSH_MODES.map((m) => {
+        const wk = woRushBest(rec, m), all = Object.values(woRushBestMap(((rush || {}).best || {})[m]));
+        return `<tr><th scope="row">${t(m === 'hard' ? 'gs_diff_hard' : 'gs_diff_easy')}</th><td>${wk == null ? '-' : wk}</td><td>${all.length ? Math.max(...all) : '-'}</td><td>${rushRuns(m)}</td></tr>`;
+      }).join('')}</tbody>
+    </table>`;
   const byDiff = rec.byDiff || {};
   const timed = ((rec && rec.wo) || {}).timed || {};
   const rows = SD_DIFFS.map(([k, labelKey]) =>
@@ -401,7 +415,7 @@ function wayoutScreen(rec) {
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_cleared')}</th><th scope="col">${t('lb_sort_points')}</th><th scope="col">${t('gs_wo_timed')}</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>${rushTable}`;
 }
 
 /** Gridlock (2026-10-14): points, distinct levels cleared, three-star and no-hint levels, per
