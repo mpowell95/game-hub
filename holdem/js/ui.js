@@ -197,8 +197,11 @@ function loadSettings() {
     skill: [1, 2, 3].includes(s.skill) ? s.skill : profSkill,
     speed: SPEEDS[s.speed] ? s.speed : 'normal',
     pace: PACES[s.pace] ? s.pace : 'normal',
-    // Check / Fold as its own small button under the big one (2026-10-13), off unless chosen.
-    cfSplit: s.cfSplit === true,
+    // Check / Fold as its own small button under the big one (2026-10-13). ON by default since
+    // 2026-10-14 (Matt). Read from `cfMode` ('split' | 'one'), not the first build's `cfSplit`:
+    // every device that saved any setting in between stored cfSplit: false without choosing it.
+    cfSplit: s.cfMode !== 'one',
+    cfMode: s.cfMode === 'one' ? 'one' : 'split',
     netBots: Math.max(0, Math.min(7, s.netBots | 0)),
     netSkill: [1, 2, 3].includes(s.netSkill) ? s.netSkill : 2,
     netTier: typeof s.netTier === 'string' ? s.netTier : null,
@@ -1280,6 +1283,7 @@ class Game {
       case 'tset': this.overlay = 'tset'; return this._renderOverlay();
       case 'cfsplit':
         this.settings.cfSplit = !this.settings.cfSplit;
+        this.settings.cfMode = this.settings.cfSplit ? 'split' : 'one';
         this._saveSettings();
         this.actSig = '';
         this._paintActions();

@@ -331,7 +331,10 @@ and the computer has raised and I end up clicking Call on accident."*
 
 - **A gear at the felt's top-left** (`.pk-gear`, mirroring the red X) opens `overlay = 'tset'`:
   - **Separate Check / Fold button** (on/off switch, the word ON/OFF on it, not colour alone),
-    `settings.cfSplit` in `gamehub.holdem.v1`, **off by default** (the old one-button layout).
+    `settings.cfSplit` in `gamehub.holdem.v1`. **ON by default since 2026-10-14** (Matt: *"make it
+    on by default"*); it was off for the first day. Stored as `cfMode: 'split' | 'one'`, because the
+    first build's `cfSplit: false` was saved by every device that changed any setting that day,
+    chosen or not; `cfSplit` in storage is ignored.
     On: the big button never turns into CHECK / FOLD; a small 44px `.pk-cfbtn` under it is the
     tick-box instead. It is live ONLY while it is someone else's turn and you are in the hand
     (`this.canPre`), and disabled on your own turn, so a finger aimed at it can never land on CALL.
