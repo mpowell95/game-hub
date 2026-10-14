@@ -18,6 +18,7 @@ import { recordWayOut, recordWayOutRush, loadStats, statsId } from '../../js/gam
 import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
+import { loadProfile } from '../../js/profile-store.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.wayout.v1';
@@ -635,9 +636,18 @@ class WayOut {
     const top = rows.reduce((m, r) => Math.max(m, r.pts), 0);
     const lead = rows.filter((r) => r.pts === top);
     return this._leadHTML(`🏆 ${t('lv_leader_label')}`,
-      lead.length ? lead.map((r) => (r.me ? t('rush_you') : `${esc(r.emoji || '')} ${esc(r.name || '')}`.trim())).join(' & ') : '-',
+      lead.length ? lead.map((r) => this._leadName(r)).join(' & ') : '-',
       lead.length ? String(top) : '-',
       `<button type="button" class="wo-rl-all" data-act="help">${t('how_title')}</button>`);
+  }
+  /** A leader's name on the footer card: emoji and username, this phone's own person included
+   *  (Matt, 2026-10-14: "it shouldn't say You"). Before the combined read lands, this phone's own
+   *  row has no name yet, so it comes from the profile; "You" only if there is no name at all. */
+  _leadName(r) {
+    let name = r.name || '', emoji = r.emoji || '';
+    if (r.me && !name) { const p = loadProfile() || {}; name = p.name || ''; emoji = emoji || p.emoji || ''; }
+    if (!name && r.me) return t('rush_you');
+    return `${esc(emoji)} ${esc(name)}`.trim();
   }
   _leadHTML(label, name, score, button) {
     return `
@@ -1269,7 +1279,7 @@ class WayOut {
     const topS = rows.reduce((m, r) => Math.max(m, r.s), -1);
     const top = rows.filter((r) => r.s === topS);
     return this._leadHTML(`🏆 ${t('rush_leader_label', { name: t('tier_' + mode) })}`,
-      top.length ? top.map((r) => (r.me ? t('rush_you') : `${esc(r.emoji || '')} ${esc(r.name || '')}`.trim())).join(' & ') : '-',
+      top.length ? top.map((r) => this._leadName(r)).join(' & ') : '-',
       top.length ? String(topS) : '-',
       `<button type="button" class="wo-rl-all is-more" data-act="rush-board" data-rmode="${mode}">${t('rush_see_all')}</button>`);
   }
