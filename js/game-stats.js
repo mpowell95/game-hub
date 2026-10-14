@@ -1652,7 +1652,8 @@ export function recordMinesweeper(level, won, extras = {}) {
  *  true) always counted (one play and one win, in total and in that tier's bucket), and, when the
  *  level was TIMED from its first tap, appends the finish to that tier's `log`.
  *
- *  `f` = { timeMs, penaltyMs, arrows, rounds, mistakes, hints, timed }. A level resumed from a save
+ *  `f` = { timeMs, penaltyMs, arrows, rounds, mistakes, hints, timed, level, gen } (`level` = the
+ *  ladder level and `gen` its board generator, since 2026-10-14). A level resumed from a save
  *  made before the timer existed has no honest time, so `timed` is false and only the solve counts
  *  (rule 4: never invent a number). */
 export function recordWayOut(tier, f = {}) {
@@ -1669,7 +1670,13 @@ export function recordWayOut(tier, f = {}) {
     g.wo.timed[d] += 1;
     g.wo.mistakes += m;
     g.wo.hints += h;
-    g.wo.log[d] = g.wo.log[d].concat([{ t, a, r, m, h }]);
+    const e = { t, a, r, m, h };
+    // Since the ladder (2026-10-14): which ladder level it was, on which board generator, and when.
+    // Additive fields; kept so time can come back into the score once there is enough of it (Matt).
+    if ((f.level | 0) > 0) e.l = f.level | 0;
+    if ((f.gen | 0) > 0) e.g = f.gen | 0;
+    e.d = Date.now();
+    g.wo.log[d] = g.wo.log[d].concat([e]);
   }
   st.updatedAt = new Date().toISOString();
   persist(st);

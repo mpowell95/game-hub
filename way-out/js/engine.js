@@ -20,6 +20,8 @@
 // the board fill up densely: a middle arrow's way out runs through the still-empty outer ring, and
 // the outer arrows placed later are the ones that block it.
 
+import { BAND_SIZE, BAND_START, bandOf, bandEnd } from '../../js/arrow-maze-time.js';
+
 export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 export const SAVE_V = 1;
 
@@ -353,6 +355,79 @@ export function buildLevel(tier, level, gen = GEN_LATEST) {
     const lvl = generate(spec, s);
     const m = harden(lvl.cols, lvl.rows, lvl.arrows, s, passes);
     if (m && (!best || hardness(m) > best.score)) best = { lvl, score: hardness(m) };
+  }
+  return best.lvl;
+}
+
+// --- THE LADDER (2026-10-14) -----------------------------------------------------------------------
+//
+// Matt: *"do it more like other apps and games do it ... Easy are levels 1-25, medium 26-50, hard
+// 51-75, and expert 76-100"* (with 50 each in the real game: Easy 1-50, Medium 51-100, Hard 101-150,
+// Expert 151 on), *"You can start anywhere"*, and *"I want easy level 50 to be basically medium
+// level 51. There shouldn't be a big jump between individual levels."*
+//
+// So the four tiers are no longer four separate generators that each start small: they are four
+// stretches of ONE ladder, numbered 1, 2, 3 ... for ever, and every number on it is one board. Each
+// of a board's settings is interpolated between the KEYFRAMES below by ladder number, so neighbours
+// differ by at most one dot of grid and about one round, and the four bands meet where the ladder
+// passes 50, 100 and 150 with no step at all. The keyframes sit on the old tiers' own sizes (Easy's
+// 10x13 by 13, Hard's 24x32 and Expert's 28x38 at the far end) so the ladder covers the same range
+// of boards the four tiers did. From level LADDER_TOP the board stops growing and stops deepening.
+//
+// Level 1 is still the gentle 8x4 first board (generator 1's Easy level 1). Each board aims at a
+// ROUNDS TARGET (generator 4's mechanism: flip arrows until the board needs that many waves, then
+// stop), so a level is no harder than its place on the ladder.
+//
+// Its own seeds (`seedOf('ladder', n)`), so it shares no board with the tier generators, which are
+// kept unchanged for levels already in progress on them (ui.js carries those through).
+export const LADDER_GEN = 5;
+// The bands themselves (where each starts, where it ends) live in js/arrow-maze-time.js, beside the
+// points, because the stats screens and the leaderboard need them and must not import the game.
+export { BAND_SIZE, BAND_START, bandOf, bandEnd };
+export const LADDER_TOP = 200;
+// n, cols, rows, minLen, maxLen, density, straight, jitter, target rounds
+const KEYS = [
+  [2, 6, 6, 2, 4, 0.85, 0.6, 0.3, 4],
+  [13, 10, 13, 2, 8, 0.88, 0.6, 0.3, 9],
+  [50, 12, 16, 2, 8, 0.92, 0.55, 0.25, 13],
+  [100, 17, 23, 2, 10, 0.95, 0.5, 0.22, 19],
+  [150, 23, 30, 3, 12, 0.97, 0.45, 0.2, 25],
+  [LADDER_TOP, 28, 38, 3, 12, 0.98, 0.3, 0.1, 31],
+];
+function ladderKey(n) {
+  const x = Math.max(KEYS[0][0], Math.min(LADDER_TOP, n));
+  let i = 0;
+  while (i < KEYS.length - 2 && x > KEYS[i + 1][0]) i++;
+  const a = KEYS[i], b = KEYS[i + 1], u = (x - a[0]) / (b[0] - a[0]);
+  return a.map((v, k) => v + (b[k] - v) * u);
+}
+/** The spec and rounds target of ladder level n (n >= 2; level 1 is the gentle first board). */
+export function ladderSpec(n) {
+  const [, cols, rows, minLen, maxLen, density, straight, jitter, target] = ladderKey(n | 0);
+  return {
+    spec: { cols: Math.round(cols), rows: Math.round(rows), minLen: Math.round(minLen), maxLen: Math.round(maxLen),
+      density: +density.toFixed(3), straight: +straight.toFixed(3), jitter: +jitter.toFixed(3) },
+    target: Math.round(target),
+  };
+}
+/** Ladder level n, the board a player plays. Deterministic: the same board on every device. */
+export function buildLadder(n) {
+  const L = Math.max(1, n | 0);
+  if (L === 1) return generate(levelSpec('easy', 1), seedOf('easy', 1));
+  const { spec, target } = ladderSpec(L);
+  const seed = seedOf('ladder', L);
+  const K = spec.cols * spec.rows > 600 ? 6 : 8;
+  // The candidate nearest the target wins: short of it counts double, so a board is deeper than its
+  // place on the ladder only when no candidate lands on it (a candidate can come out of `generate`
+  // already past it). Stops at the first one that lands on the target or one above.
+  const miss = (layers) => (layers < target ? (target - layers) * 2 : layers - target);
+  let best = null;
+  for (let i = 0; i < K; i++) {
+    const s = (seed + i * 7919) >>> 0;
+    const lvl = generate(spec, s);
+    const m = harden(lvl.cols, lvl.rows, lvl.arrows, s, 8, true, target);
+    if (m && (!best || miss(m.layers) < miss(best.layers))) best = { lvl, layers: m.layers };
+    if (best && best.layers >= target && best.layers <= target + 1) break;
   }
   return best.lvl;
 }

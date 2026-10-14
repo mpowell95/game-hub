@@ -22,6 +22,7 @@ import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
 import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
+import { woPoints } from './arrow-maze-time.js';
 
 const t = makeT(STRINGS);
 
@@ -96,7 +97,7 @@ const HUB_ID = {
   wayout: 'way-out', flicksoccer: 'flick-soccer',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_solved', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -380,22 +381,23 @@ function murdokuScreen(rec, titleKey = 'game_title_murdoku') {
     </table>`;
 }
 
-/** Arrow Maze (2026-10-13): levels solved, as Murdoku's screen shows them, plus how many of them
- *  were timed, per difficulty. */
+/** Arrow Maze: points (the ladder, 2026-10-14) and levels solved, plus how many of them were timed,
+ *  per difficulty. */
 function wayoutScreen(rec) {
   const solved = ((rec && rec.total) || {}).won | 0;
   if (!solved) return emptyState(t('game_title_wayout'));
   const byDiff = rec.byDiff || {};
   const timed = ((rec && rec.wo) || {}).timed || {};
   const rows = SD_DIFFS.map(([k, labelKey]) =>
-    `<tr><th scope="row">${t(labelKey)}</th><td>${((byDiff[k] || {}).won) | 0}</td><td>${timed[k] | 0}</td></tr>`).join('');
+    `<tr><th scope="row">${t(labelKey)}</th><td>${((byDiff[k] || {}).won) | 0}</td><td>${woPoints(rec, k)}</td><td>${timed[k] | 0}</td></tr>`).join('');
   return `
     <div class="gs-tallies">
+      <div class="gs-tally"><b>${woPoints(rec)}</b><span>${t('lb_unit_points')}</span></div>
       <div class="gs-tally"><b>${solved}</b><span>${t('lb_tex_wo_cleared')}</span></div>
     </div>
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">
-      <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_cleared')}</th><th scope="col">${t('gs_wo_timed')}</th></tr></thead>
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_cleared')}</th><th scope="col">${t('lb_sort_points')}</th><th scope="col">${t('gs_wo_timed')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -1292,6 +1294,8 @@ function headlineOf(id, rec) {
   if (id === 'nutsbolts') return { n: (rec.nb && rec.nb.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'sudoku') return { n: (rec.sd && rec.sd.solved) | 0, unitKey: unitKeyOf(id) };
   if (id === 'minesweeper') return { n: (rec.ms && rec.ms.cleared) | 0, unitKey: unitKeyOf(id) };
+  // Arrow Maze: points for levels cleared (the ladder, 2026-10-14), the leaderboard's own number.
+  if (id === 'wayout') return { n: woPoints(rec), unitKey: unitKeyOf(id) };
   // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
   // stated explicitly rather than left to the generic fallback below, since this list is read as
   // the contract for what each game's headline number means.

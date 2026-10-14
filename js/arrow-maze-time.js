@@ -1,4 +1,5 @@
-// js/arrow-maze-time.js - Arrow Maze's timer penalties and its stored finish lists (2026-10-13).
+// js/arrow-maze-time.js - Arrow Maze's timer penalties, its stored finish lists (2026-10-13), and
+// since 2026-10-14 its LADDER and POINTS: the four bands, and what each level is worth.
 // Pure: no imports, no storage, no DOM. (The game's folder, hub id and stats id are still
 // `way-out` / `wayout`, its first name; those keep it because they key stored player data.)
 //
@@ -19,7 +20,8 @@ export function woHintMs(tier) {
 }
 
 /** One stored finish, or null when it is not one: t = ms including penalties, a = arrows,
- *  r = rounds, m = hearts lost, h = hints (m and h only on finishes from the log). */
+ *  r = rounds, m = hearts lost, h = hints (m and h only on finishes from the log); since
+ *  2026-10-14 also l = the ladder level, g = the board generator, d = when (epoch ms). */
 function asFinish(f) {
   if (!f || typeof f !== 'object') return null;
   const t = Number(f.t), a = Number(f.a), r = Number(f.r);
@@ -27,6 +29,7 @@ function asFinish(f) {
   const out = { t: Math.round(t), a: Math.round(a), r: Math.round(r) };
   if (Number.isFinite(Number(f.m))) out.m = Math.max(0, Math.round(Number(f.m)));
   if (Number.isFinite(Number(f.h))) out.h = Math.max(0, Math.round(Number(f.h)));
+  for (const k of ['l', 'g', 'd']) if (Number(f[k]) > 0) out[k] = Math.round(Number(f[k]));
   return out;
 }
 /** A finish list. Firebase hands arrays back as objects keyed 0..n, so it may arrive either way. */
@@ -39,4 +42,55 @@ export function woList(x) {
 export function woClock(ms) {
   const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// --- THE LADDER AND ITS POINTS (2026-10-14) -----------------------------------------------------------
+//
+// Matt replaced the timed score with the shape most level apps use: ONE ladder of levels, cut into
+// four difficulties of 50 (Easy 1-50, Medium 51-100, Hard 101-150, Expert 151 on, for ever), any of
+// which a player may start, and a leaderboard of POINTS for levels cleared. Each level is worth more
+// the further up the ladder it is (Matt: "Since they get progressively harder and harder, maybe points
+// should do something"): 1 for levels 1-25, then 1 more every 25 levels, up to WO_POINTS_MAX, where
+// the boards stop getting harder (way-out/js/engine.js, LADDER_TOP). Ties stay tied.
+//
+// Inside a band a player always plays the next level, so HOW MANY levels of a band they have cleared
+// says exactly WHICH: the first `cleared` of it. The points are therefore read from the per-band
+// cleared counts the stats store has kept since the game shipped (byDiff[band].won), which covers
+// every level ever cleared, timed or not. Levels cleared before the ladder (2026-10-14) were the old
+// tiers' levels and count as that band's levels in order; nothing is lost and nothing is invented.
+// The timed finish log (`wo.log`) is kept, untouched by any of this, for when time comes back in.
+export const BAND_SIZE = 50;
+/** Where each band starts on the ladder. Expert never ends. */
+export const BAND_START = { easy: 1, medium: 51, hard: 101, expert: 151 };
+/** The band (tier name) a ladder level belongs to. */
+export function bandOf(n) {
+  return n >= BAND_START.expert ? 'expert' : n >= BAND_START.hard ? 'hard' : n >= BAND_START.medium ? 'medium' : 'easy';
+}
+/** The last ladder level of a band, or Infinity for Expert. */
+export function bandEnd(band) {
+  return band === 'expert' ? Infinity : BAND_START[band] + BAND_SIZE - 1;
+}
+export const WO_POINTS_STEP = 25;
+export const WO_POINTS_MAX = 8;
+/** What ladder level n is worth. */
+export function woLevelPoints(n) {
+  const L = Math.max(1, Math.floor(Number(n) || 1));
+  return Math.min(WO_POINTS_MAX, 1 + Math.floor((L - 1) / WO_POINTS_STEP));
+}
+/** Points for the first `cleared` levels of a band. A count past the band's 50 (possible only from
+ *  the old endless tiers) keeps earning the band's last level's points: never dropped, never more. */
+export function woBandPoints(band, cleared) {
+  const c = Math.max(0, Math.floor(Number(cleared) || 0));
+  const start = BAND_START[band];
+  if (!start || !c) return 0;
+  const last = bandEnd(band);
+  let pts = 0;
+  for (let i = 0; i < c; i++) pts += woLevelPoints(Math.min(start + i, last));
+  return pts;
+}
+/** A player's Arrow Maze points from their stats record (`games.wayout`): one band, or all four. */
+export function woPoints(rec, band = null) {
+  const byDiff = (rec && rec.byDiff) || {};
+  const one = (b) => woBandPoints(b, ((byDiff[b] || {}).won) | 0);
+  return band ? (WO_TIERS.includes(band) ? one(band) : 0) : WO_TIERS.reduce((n, b) => n + one(b), 0);
 }

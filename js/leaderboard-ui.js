@@ -58,7 +58,7 @@ import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, com
   boardRankTier, formatBoardMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
-import { WO_TIERS } from './arrow-maze-time.js';
+import { WO_TIERS, woPoints } from './arrow-maze-time.js';
 import { loadFavorites } from './favorites.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
@@ -584,6 +584,9 @@ function gameMetricAt(g, id, tier) {
   // clear the highest level of difficulty").
   if (id === 'minesweeper') return msBestAt(g, tier);
   if (id === 'holdem') return hbBankOf(g);
+  // Arrow Maze ranks on POINTS for levels cleared (2026-10-14, the ladder: js/arrow-maze-time.js),
+  // all four difficulties added together; at a tier, that difficulty's own points.
+  if (id === 'wayout') return woPoints(g.games.wayout, tier == null ? null : WO_TIERS[tier - 1]);
   return winsAtTier(g, [id], tier);
 }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
@@ -662,6 +665,10 @@ function boardPlaysOf(g, id) {
  *  pure score board it always was. */
 function boardTierOf(g, id) {
   if (id === 'holdem') return null;                          // ranked by bankroll alone
+  // Arrow Maze: ONE number across all four difficulties, never hardest-difficulty-first (Matt,
+  // 2026-10-14: a slow Expert player must not outrank a good Hard one; the points already make a
+  // harder level worth more). A filter still shows one difficulty's own points.
+  if (id === 'wayout' && _tier == null) return null;
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
   // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
