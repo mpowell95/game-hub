@@ -8,7 +8,7 @@
 // points are identical in both.
 //
 // THE MODULE CONTRACT: init / destroy / isInProgress (docs/BUILDING-A-GAME.md).
-// isInProgress() RETURNS FALSE, DELIBERATELY: the level is written to `gamehub.gridlock.save.v1`
+// isInProgress() RETURNS FALSE, DELIBERATELY: the level is written to `gamehub.gridlock.save.v2`
 // after every move, so leaving is lossless.
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone page themes too
 import { onViewportResize } from '../../js/viewport.js';
@@ -152,7 +152,6 @@ const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width
 const ICON_BACK = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const ICON_UNDO = `<svg ${SVGA}><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>`;
 const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 4v4.5h4.5"/></svg>`;
-const ICON_MENU = `<svg ${SVGA}><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>`;
 const ICON_BULB = `<svg ${SVGA}><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>`;
 
 function star(cx, cy, r) {
@@ -380,12 +379,12 @@ class Gridlock {
           <div class="gl-hud-mid">${diffShapeSVG(TIER_NUM[this.band])}<b>${t('level_n', { n: this.n })}</b><span>${t('tier_' + this.band)}</span></div>
         </div>
         <div class="gl-strip">
+          <button type="button" class="gl-back" data-act="menu" aria-label="${t('menu_aria')}">${ICON_BACK}</button>
           <div class="gl-chip"><small>${t('moves')}</small><b class="gl-moves">0</b></div>
           <div class="gl-chip"><small>${t('fewest')}</small><b>${this.fewest}</b></div>
         </div>
         <div class="gl-stage"><div class="gl-board" role="group"></div></div>
         <div class="gl-tools">
-          <button type="button" class="gl-tool" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}<span>${t('menu')}</span></button>
           <button type="button" class="gl-tool" data-act="undo">${ICON_UNDO}<span>${t('undo')}</span></button>
           <button type="button" class="gl-tool" data-act="restart">${ICON_RESTART}<span>${t('restart')}</span></button>
           <button type="button" class="gl-tool gl-tool-hint" data-act="hint">${ICON_BULB}<span>${t('hint')}</span></button>
@@ -629,7 +628,7 @@ class Gridlock {
     const now = clearedLevels()[this.n], hintAt = hintTimes()[this.n];
     const crown = glCrowned(now, hintAt);
     const gained = now ? glPointsFor(this.n, now, hintAt) - prevPts : 0;
-    this.result = { moves, stars, crown, hinted: !crown, gained, first: !this.prevBest, better: !!(this.prevBest && (moves < this.prevBest.m || stars > this.prevBest.s)) };
+    this.result = { moves, stars, crown, hinted: this.hints > 0 || hintAt > 0 || this.prevHint > 0, gained, first: !this.prevBest, better: !!(this.prevBest && (moves < this.prevBest.m || stars > this.prevBest.s)) };
     // The red block leaves through the exit, then the popup.
     this._place(0, false);
     this._paintHud();
@@ -639,17 +638,17 @@ class Gridlock {
   _showWin() {
     const r = this.result || { moves: this.hist.length, stars: 1, crown: false, first: false };
     const starRow = [0, 1, 2].map((k) => `<svg viewBox="0 0 46 46" class="gl-star${k < r.stars ? ' is-on' : ''}" aria-hidden="true"><path d="${star(23, 24, 20)}"/></svg>`).join('');
-    const end = this.n >= bandEnd(this.band);
+    const end = this.n >= bandEnd(this.band) && this.settings.next[this.band] > bandEnd(this.band);
     const third = r.gained > 0
       ? `<div><small>${t('points')}</small><b>+${r.gained}</b></div>`
-      : `<div><small>${r.better ? t('new_best') : t('fewest')}</small><b>${r.better ? r.moves : this.fewest}</b></div>`;
+      : `<div><small>${r.better ? t('new_best') : t('your_best')}</small><b>${r.better || !this.prevBest || !this.prevBest.m ? r.moves : this.prevBest.m}</b></div>`;
     const m = this.root.querySelector('.gl-modal');
     m.innerHTML = `
       <div class="gh-modal gl-dialog gl-win" role="dialog" aria-modal="true" aria-labelledby="gl-win-h">
         <button type="button" class="gh-modal__close" data-act="win-close" aria-label="${t('close_aria')}">&times;</button>
         <h2 class="gh-modal__title" id="gl-win-h">${t('cleared', { n: this.n })}</h2>
         <div class="gl-stars" role="img" aria-label="${t('stars_aria', { n: r.stars })}">${starRow}</div>
-        ${r.crown ? `<div class="gl-crown"><span aria-hidden="true">&#128081;</span>${t('no_hints')}</div>` : `<p class="gl-hint-note">${t('hint_half')}</p>`}
+        ${r.crown ? `<div class="gl-crown"><span aria-hidden="true">&#128081;</span>${t('no_hints')}</div>` : r.hinted ? `<p class="gl-hint-note">${t('hint_half')}</p>` : ''}
         ${end ? `<p class="gl-how-txt">${this.band === 'expert' ? t('all_done') : t('band_finished', { name: t('tier_' + this.band) })}</p>` : ''}
         <div class="gl-nums">
           <div><small>${t('moves')}</small><b>${r.moves}</b></div>
@@ -664,10 +663,15 @@ class Gridlock {
     this._openModal();
   }
 
+  /** The level after this one, if it is open (cleared, or the band's next); otherwise the band's
+   *  next level. Replaying a cleared level that sits past the next one (a ladder 1 level carried
+   *  over) must not open the locked level after it: a band is played in order. */
   _next() {
     this._closeModal();
-    const n = this.n + 1;
-    if (n > bandEnd(this.band)) { this._toSetup(); return; }
+    const end = bandEnd(this.band), next = this.settings.next[this.band];
+    let n = this.n + 1;
+    if (!(n <= next || clearedLevels()[n])) n = next;
+    if (n > end) { this._toSetup(); return; }
     this._startLevel(this.band, n);
   }
 

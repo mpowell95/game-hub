@@ -239,8 +239,10 @@
   padding: calc(var(--gl-top, 0px) + 6px) 12px 4px;
 }
 /* In the hub the title shares the floating Hub button's row, centred on the screen. The game's own
-   way back to its menu is NOT on this row (Matt, 2026-10-14: "The back (to the setup screen) is on
-   the same row and basically touching the Hub back button"): it is Menu, in the bottom bar. */
+   back button (to its menu) is NOT on this row (Matt, 2026-10-14: "The back ... is on the same row
+   and basically touching the Hub back button"): it is top left on the NEXT row, under the Hub button
+   (.gl-back). Matt, same day: "Give me a back button on the top left again. I don't want it in the
+   normal location. I didn't want you to remove it." */
 .gl-root.is-immersive .gl-hud { padding-top: var(--gl-top, 6px); }
 .gl-root .gl-hud-mid {
   display: grid;
@@ -257,7 +259,26 @@
 .gl-root .gl-hud-mid b { font-size: 18px; font-weight: 800; }
 .gl-root .gl-hud-mid span { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: var(--gl-play-muted); line-height: 1; }
 
-.gl-root .gl-strip { flex: none; display: flex; justify-content: center; gap: 10px; padding: 6px 12px 4px; }
+.gl-root .gl-strip { flex: none; display: flex; justify-content: center; gap: 10px; padding: 6px 12px 4px; position: relative; }
+.gl-root .gl-back {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--gl-chip);
+  color: var(--gl-play-ink);
+  box-shadow: 0 1px 3px rgba(16, 30, 54, .15);
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.gl-root .gl-back svg { width: 22px; height: 22px; }
 .gl-root .gl-chip {
   min-width: 96px;
   padding: 5px 14px;

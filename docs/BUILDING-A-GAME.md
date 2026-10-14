@@ -104,9 +104,11 @@ anywhere a Skeeball session would see it. That is the whole thesis of this file.
   2026-10-14, on Gridlock: *"I do not like how you've been doing this recently. The back (to the
   setup screen) is on the same row and basically touching the Hub back button."*). In immersive mode
   the Hub button's row holds the Hub button and the screen's title, nothing else of the game's on that
-  side. A way back to the game's own menu goes in the bottom bar as a LABELLED button (Gridlock's
-  **Menu**), or at the bottom of a screen (Gridlock's Levels screen: **Back** under the pager). Two
-  back arrows side by side read as one control with two meanings.
+  side. **The game's own back button stays TOP LEFT, on the NEXT row, under the Hub button** (Gridlock's
+  play screen: a 44px back arrow at the left of the Moves/Fewest row, 16px below the Hub button). Matt,
+  when it was moved to the bottom bar instead: *"Give me a back button on the top left again. I don't
+  want it in the normal location. I didn't want you to remove it."* Move it down a row; never remove it
+  or move it to the bottom. Two back arrows side by side read as one control with two meanings.
 - **A game screen that scrolls at all is a bug** (`dominoes/CLAUDE.md`). If content doesn't fit,
   that's a layout problem to fix, not something to let the page scroll around.
 

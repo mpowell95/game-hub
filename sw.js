@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1142';
+const CACHE = 'game-hub-v1146';
 
 const ASSETS = [
   './',
@@ -821,18 +821,18 @@ const REST_MANIFEST = {
   './murdoku/js/strings.js': 'e744e28e32',
   './way-out/': 'dc6c9178ea',
   './way-out/index.html': 'dc6c9178ea',
-  './way-out/css/way-out.css': 'ffdf65236e',
-  './way-out/js/ui.js': '7629100c7b',
+  './way-out/css/way-out.css': 'e72148a898',
+  './way-out/js/ui.js': 'c8b1205fb9',
   './way-out/js/engine.js': 'eca564b673',
-  './way-out/js/strings.js': '4e851ff730',
+  './way-out/js/strings.js': '373df5ec69',
   './gridlock/': '0c0b6bd30e',
   './gridlock/index.html': '0c0b6bd30e',
-  './gridlock/css/gridlock.css': 'bac319bed3',
-  './gridlock/js/ui.js': 'a27e5a1793',
+  './gridlock/css/gridlock.css': '2414e7d81d',
+  './gridlock/js/ui.js': '57624d902c',
   './gridlock/js/engine.js': 'bc7b7b12e0',
   './gridlock/js/art.js': 'a53e8b878b',
   './gridlock/js/levels.js': '68ee3200cb',
-  './gridlock/js/strings.js': '0532c0ae55',
+  './gridlock/js/strings.js': '086b6a7847',
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
   './flick-soccer/css/flick-soccer.css': 'ea109292e1',

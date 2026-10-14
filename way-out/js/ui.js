@@ -434,6 +434,7 @@ class WayOut {
         // On Out of lives, Escape is its X: hiding the popup alone left a board nobody could play.
         if (m.querySelector('[data-act="fail-close"]')) this._toSetup(true);
         else if (m.querySelector('[data-act="rush-close"]')) this._toSetup(false);
+        else if (m.querySelector('[data-act="rush-ready"]')) { /* the Ready screen waits for Ready */ }
         else this._closeModal();
       } else if (ev.key === 'Tab') {
         const f = [...m.querySelectorAll('button:not([disabled])')];
@@ -543,7 +544,11 @@ class WayOut {
     this._positionRoot();
     if (this.screen === 'play') {
       this._bindBoard();
-      if (this.rush) { this._rushPaint(); if (this.rush.over) this._showRushEnd(); }
+      if (this.rush) {
+        this._rushPaint();
+        if (this.rush.over) this._showRushEnd();
+        else if (this.rush.paused && !this.rush.counting && !this.timers.length) this._showRushReady();
+      }
       else if (this.failed && !this.timers.length) this._showFail();
     } else {
       try { delete window.__woTest; } catch { /* no window */ }
@@ -633,6 +638,7 @@ class WayOut {
     } else if (act === 'rush-play') this._startRush(this.settings.rushMode);
     else if (act === 'rush-again') { const m = this.rush ? this.rush.mode : this.settings.rushMode; this._closeModal(); this._startRush(m); }
     else if (act === 'rush-close') this._toSetup(false);
+    else if (act === 'rush-ready') this._rushReady();
     else if (act === 'rush-board') this._openRushBoard();
     else if (act === 'rb-back') { this.screen = 'home'; this.render(); }
     else if (act === 'rb-tab') { this.rb.tab = btn.dataset.tab; this.rb.week = null; this.render(); }
@@ -881,7 +887,8 @@ class WayOut {
     try {
       window.__woTest = {
         state: () => ({ left: this._left(), lives: this.lives, level: this.level, tier: this.tier,
-          rush: this.rush ? { arrows: this.rush.arrows, boards: this.rush.boards, mistakes: this.rush.mistakes, over: this.rush.over, msLeft: Math.round(this._rushLeft()) } : null }),
+          rush: this.rush ? { arrows: this.rush.arrows, boards: this.rush.boards, mistakes: this.rush.mistakes, over: this.rush.over, msLeft: Math.round(this._rushLeft()),
+            paused: this.rush.paused, counting: this.rush.counting } : null }),
         clearId: () => hintArrow(this.lvl, this.gone, null, this.busy),
         blockedId: () => this.lvl.arrows.findIndex((c, id) => !this.gone[id] && blockerOf(c, this.occ, this.lvl.cols, this.lvl.rows, id)),
         pointOf: (id) => {
@@ -1080,21 +1087,11 @@ class WayOut {
   }
 
   _celebrate(now) {
-    // Rush: no celebration, the next board at once (the clock is still running).
-    if (this.rush) { if (!this.rush.over) this._rushCleared(); return; }
-    this.wave = { t0: now };
+    // Rush: the same finish (green wave, confetti, the word), with the clock PAUSED, then the Ready
+    // screen and a 3-2-1 before the next board (Matt, 2026-10-14).
+    if (this.rush) { if (!this.rush.over && !this.rush.paused) this._rushBoardDone(now); return; }
+    this._confetti(now);
     const motion = !reduceMotion();
-    if (motion) {
-      const hues = ['#f5c330', '#e0353f', '#2f7fd8', '#33c46e', '#ff8a2a', '#5fe0ff', '#ffffff'];
-      for (let i = 0; i < 70; i++) {
-        const ang = Math.random() * Math.PI * 2, sp = 120 + Math.random() * 380;
-        this.parts.push({
-          x: this.cw / 2, y: this.ch / 2, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 120, g: 520,
-          r: 2.5 + Math.random() * 4, c: hues[i % hues.length], t0: now + Math.random() * 120, life: 1300 + Math.random() * 600, conf: true,
-          rot: Math.random() * 6,
-        });
-      }
-    }
     // Record once, then move the player on (the level number only ever goes up). The clock stops
     // at the last arrow; its time (penalties in) is recorded with the finish.
     this._clockPause();
@@ -1120,6 +1117,21 @@ class WayOut {
     // (it says so there). Otherwise on to the next level.
     if (this.level + 1 > bandEnd(this.tier)) this._later(() => this._toSetup(false), motion ? 2300 : 1500);
     else this._later(() => this._startLevel(this.tier, this.level + 1), motion ? 2300 : 1500);
+  }
+
+  /** The win's green wave and confetti (the wave is drawn by _draw, the confetti by _frame). */
+  _confetti(now) {
+    this.wave = { t0: now };
+    if (reduceMotion()) return;
+    const hues = ['#f5c330', '#e0353f', '#2f7fd8', '#33c46e', '#ff8a2a', '#5fe0ff', '#ffffff'];
+    for (let i = 0; i < 70; i++) {
+      const ang = Math.random() * Math.PI * 2, sp = 120 + Math.random() * 380;
+      this.parts.push({
+        x: this.cw / 2, y: this.ch / 2, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 120, g: 520,
+        r: 2.5 + Math.random() * 4, c: hues[i % hues.length], t0: now + Math.random() * 120, life: 1300 + Math.random() * 600, conf: true,
+        rot: Math.random() * 6,
+      });
+    }
   }
 
   _banner() {
@@ -1207,6 +1219,8 @@ class WayOut {
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
         <div class="wo-stage"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
+        <div class="wo-banner" aria-live="polite"><span></span><b></b></div>
+        <div class="wo-count" aria-live="assertive"></div>
       </div>`;
   }
 
@@ -1216,8 +1230,8 @@ class WayOut {
     this.tier = mode;
     this.clock = null;
     this._helpPaused = false;
-    this.rush = { mode, seed, i: 0, arrows: 0, boards: 0, mistakes: 0, bank: RUSH_START_MS, t0: 0, over: null, next: null,
-      prevBest: woRushBest(this._myWayout(), mode) };
+    this.rush = { mode, seed, i: 0, arrows: 0, boards: 0, mistakes: 0, bank: RUSH_START_MS, t0: 0, playMs: 0, over: null, next: null,
+      paused: false, counting: false, prevBest: woRushBest(this._myWayout(), mode) };
     this._rushSetBoard(buildRush(mode, 0, seed));
     this.screen = 'play';
     this.render();
@@ -1248,10 +1262,11 @@ class WayOut {
     const r = this.rush;
     if (!r) return 0;
     if (r.over) return Math.max(0, r.leftAtEnd || 0);
+    if (r.paused) return r.bank;
     return r.bank - (r.t0 ? performance.now() - r.t0 : 0);
   }
   _rushTickFn() {
-    if (!this.rush || this.rush.over) return;
+    if (!this.rush || this.rush.over || this.rush.paused) return;
     if (this._rushLeft() <= 0) this._rushEnd('time'); else this._rushPaint();
   }
   _rushPaint() {
@@ -1281,16 +1296,82 @@ class WayOut {
     this._rushPaint();
     if (this._rushLeft() <= 0) this._rushEnd('time');
   }
-  _rushCleared() {
+  /** A board cleared: stop the clock where it is, play the normal finish, then the Ready screen. */
+  _rushBoardDone(now) {
     const r = this.rush;
+    r.bank = this._rushLeft();
+    if (r.t0) r.playMs += performance.now() - r.t0;
+    r.t0 = 0;
+    r.paused = true;
     r.boards += 1;
+    this._rushPaint();
+    this._confetti(now);
+    const motion = !reduceMotion();
+    this.winSub = t('rush_board_cleared', { n: r.boards });
+    this._later(() => this._banner(), motion ? 650 : 100);
+    this._later(() => this._showRushReady(), motion ? 2000 : 700);
+  }
+  /** The Ready popup, in the play screen's own look (Matt, 2026-10-14: "More on theme"): the dark
+   *  board colours, the seconds in the leaving-arrow teal, the two rules as arrow chips (teal arrow
+   *  +0.5s, red arrow -3s: a sign and a word, never colour alone), then Ready. */
+  _showRushReady() {
+    const r = this.rush, m = this.root && this.root.querySelector('.wo-modal');
+    if (!r || r.over || !r.paused || r.counting || !m) return;
+    const secs = (Math.floor(r.bank / 100) / 10).toFixed(1);
+    const arrow = (c) => `<svg viewBox="0 0 28 16" aria-hidden="true"><path d="M3 12V5h15" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 5l-7-4.5v9z" fill="${c}"/></svg>`;
+    m.innerHTML = `
+      <div class="wo-ready" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
+        <p class="wo-ready-done" id="wo-ready-h"><span aria-hidden="true">✓</span>${t('rush_board_cleared', { n: r.boards })}</p>
+        <p class="wo-ready-secs"><b>${secs}</b><i>s</i></p>
+        <p class="wo-ready-sub">${t('rush_next_secs')}</p>
+        <ul class="wo-ready-rules">
+          <li class="is-gain">${arrow('#3fd6bd')}<span>${t('rush_rule_gain', { gain: RUSH_GAIN_MS / 1000 })}</span><b>+${RUSH_GAIN_MS / 1000}s</b></li>
+          <li class="is-miss">${arrow('#e0484f')}<span>${t('rush_rule_miss', { miss: RUSH_MISS_MS / 1000 })}</span><b>-${RUSH_MISS_MS / 1000}s</b></li>
+        </ul>
+        <p class="wo-ready-stats">${t('rush_arrows', { n: r.arrows })}</p>
+        <p class="wo-ready-ask">${t('rush_ready_q')}</p>
+        <button type="button" class="wo-ready-btn" data-act="rush-ready">${t('rush_ready_btn')}</button>
+      </div>`;
+    m.hidden = false;
+    m.querySelector('.wo-ready-btn').focus({ preventScroll: true });
+  }
+  /** Ready: 3, 2, 1, Go!, then the next board and the clock again. The board stays hidden until Go. */
+  _rushReady() {
+    const r = this.rush;
+    if (!r || r.over || !r.paused || r.counting) return;
+    r.counting = true;
+    this._closeModal();
+    const b = this.root.querySelector('.wo-banner');
+    if (b) b.classList.remove('is-on');
+    const steps = ['3', '2', '1', t('rush_go')];
+    const show = (k) => {
+      if (this.rush !== r || r.over) return;
+      const el = this.root.querySelector('.wo-count');
+      if (el) {
+        el.innerHTML = `<b class="${k === steps.length - 1 ? 'is-go' : ''}">${steps[k]}</b>`;
+        el.classList.add('is-on');
+      }
+      if (k === steps.length - 1) this._later(() => this._rushGo(), 550);
+      else this._later(() => show(k + 1), 750);
+    };
+    show(0);
+  }
+  _rushGo() {
+    const r = this.rush;
+    if (!r || r.over) return;
+    const el = this.root.querySelector('.wo-count');
+    if (el) { el.classList.remove('is-on'); el.innerHTML = ''; }
     r.i += 1;
     const lvl = r.next && r.next.i === r.i ? r.next.lvl : buildRush(r.mode, r.i, r.seed);
     r.next = null;
     this._rushSetBoard(lvl);
+    this.parts = [];
     this.pts = null;
     this._layout();
     this._paintHud(false);
+    r.paused = false;
+    r.counting = false;
+    r.t0 = performance.now();
     this._rushPaint();
     this._rushPrebuild();
   }
@@ -1303,7 +1384,8 @@ class WayOut {
   _rushEnd(why, quiet = false) {
     const r = this.rush;
     if (!r || r.over) return;
-    const ms = r.t0 ? Math.round(performance.now() - r.t0) : 0;
+    // How long the run was PLAYED: the pauses between boards are not in it.
+    const ms = Math.round(r.playMs + (r.t0 && !r.paused ? performance.now() - r.t0 : 0));
     r.leftAtEnd = why === 'time' ? 0 : Math.max(0, this._rushLeft());
     r.over = why;
     if (this.rushTick) { clearInterval(this.rushTick); this.rushTick = 0; }
