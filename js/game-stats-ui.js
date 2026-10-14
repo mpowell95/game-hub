@@ -23,6 +23,7 @@ import { GAME_ART } from './game-art.js';
 import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 import { woPoints } from './arrow-maze-time.js';
+import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
 
 const t = makeT(STRINGS);
 
@@ -41,6 +42,7 @@ const TABS = [
   { id: 'contexto', labelKey: 'game_title_contexto' },
   { id: 'murdoku', labelKey: 'game_title_murdoku' },
   { id: 'wayout', labelKey: 'game_title_wayout' },
+  { id: 'gridlock', labelKey: 'game_title_gridlock' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -97,7 +99,7 @@ const HUB_ID = {
   wayout: 'way-out', flicksoccer: 'flick-soccer',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -398,6 +400,29 @@ function wayoutScreen(rec) {
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_cleared')}</th><th scope="col">${t('lb_sort_points')}</th><th scope="col">${t('gs_wo_timed')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/** Gridlock (2026-10-14): points, distinct levels cleared, three-star and no-hint levels, per
+ *  difficulty. Every number comes from the per-level map (js/gridlock-points.js), so a replay is
+ *  never counted twice; total.won (every solve, replays included) gates the empty state. */
+function gridlockScreen(rec) {
+  const solved = ((rec && rec.total) || {}).won | 0;
+  const gl = (rec && rec.gl) || {};
+  if (!solved && !Object.keys(gl.lv || {}).length) return emptyState(t('game_title_gridlock'));
+  const rows = SD_DIFFS.filter(([k]) => GL_TIERS.includes(k)).map(([k, labelKey]) =>
+    `<tr><th scope="row">${t(labelKey)}</th><td>${glCleared(rec, k)}</td><td>${glPoints(rec, k)}</td><td>${glThreeStars(rec, k)}</td></tr>`).join('');
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${glPoints(rec)}</b><span>${t('lb_unit_points')}</span></div>
+      <div class="gs-tally"><b>${glCleared(rec)}</b><span>${t('lb_tex_gl_cleared')}</span></div>
+      <div class="gs-tally"><b>${glThreeStars(rec)}</b><span>${t('gs_gl_three')}</span></div>
+      <div class="gs-tally"><b>${glNoHint(rec)}</b><span>${t('gs_gl_nohint')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_cleared')}</th><th scope="col">${t('lb_sort_points')}</th><th scope="col">${t('gs_gl_three')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -1296,6 +1321,7 @@ function headlineOf(id, rec) {
   if (id === 'minesweeper') return { n: (rec.ms && rec.ms.cleared) | 0, unitKey: unitKeyOf(id) };
   // Arrow Maze: points for levels cleared (the ladder, 2026-10-14), the leaderboard's own number.
   if (id === 'wayout') return { n: woPoints(rec), unitKey: unitKeyOf(id) };
+  if (id === 'gridlock') return { n: glPoints(rec), unitKey: unitKeyOf(id) };
   // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
   // stated explicitly rather than left to the generic fallback below, since this list is read as
   // the contract for what each game's headline number means.
@@ -1588,6 +1614,7 @@ function screenFor(id, st) {
   if (id === 'contexto') return contextoScreen(rec);
   if (id === 'murdoku') return murdokuScreen(rec);
   if (id === 'wayout') return wayoutScreen(rec);
+  if (id === 'gridlock') return gridlockScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);

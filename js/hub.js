@@ -616,6 +616,25 @@ export const GAMES = [
     // King of Games (3VN33) was held back from it with `hideFrom` 2026-10-13 to 10-14; Matt lifted
     // it ("unblock him from Arrow Maze too. Keep arrow maze admin only still though").
   },
+  {
+    // Gridlock (2026-10-14): the sliding-block "traffic jam" puzzle (Unblock Me, Rush Hour): slide
+    // the blocks out of the way so the red one can leave through the exit (gridlock/CLAUDE.md). One
+    // numbered ladder like Arrow Maze's, a player-chosen look (wood blocks or cars), stars against
+    // the fewest moves. IMMERSIVE: the board wants the width, and the top bar shares the floating
+    // back button's row.
+    id: 'gridlock',
+    added: '2026-10-14',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Gridlock', es: 'Atasco' },
+    blurb: { en: 'Slide the blocks out of the way and get the red one out. Fewest moves wins the stars.',
+      es: 'Desliza los bloques y saca el rojo. Con los mínimos movimientos ganas las estrellas.' },
+    module: '../gridlock/js/ui.js',
+    immersive: true,
+    accent: '#a5672e',
+    art: GAME_ART['gridlock'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
+  },
 ];
 
 /** A game held back from this player's code (a `GAMES` entry's `hideFrom`, 2026-10-13). Never for

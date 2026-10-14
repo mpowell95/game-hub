@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1133';
+const CACHE = 'game-hub-v1134';
 
 const ASSETS = [
   './',
@@ -97,6 +97,7 @@ const ASSETS = [
   './js/leaderboard-ui.js',
   './js/leaderboard-rank.js',
   './js/arrow-maze-time.js',
+  './js/gridlock-points.js',
   './js/difficulty-tiers.js',
   './js/net.js',
   './js/online-gate.js',
@@ -210,6 +211,13 @@ const ASSETS = [
   './way-out/js/ui.js',
   './way-out/js/engine.js',
   './way-out/js/strings.js',
+  './gridlock/',
+  './gridlock/index.html',
+  './gridlock/css/gridlock.css',
+  './gridlock/js/ui.js',
+  './gridlock/js/engine.js',
+  './gridlock/js/levels.js',
+  './gridlock/js/strings.js',
   './flick-soccer/',
   './flick-soccer/index.html',
   './flick-soccer/css/flick-soccer.css',
@@ -691,6 +699,8 @@ const NETWORK_FIRST = [
   './js/leaderboard-rank.js',
   // Arrow Maze's score (2026-10-13): what is stored, merged and SHOWN for every timed level.
   './js/arrow-maze-time.js',
+  // Gridlock's ladder, stars and points (2026-10-14): what is stored, merged and SHOWN per level.
+  './js/gridlock-points.js',
   './js/admin-ui.js',
   // Retired, lazily loaded, and it clears `gamehub.challenge` on its tester-only reset path. Free
   // to keep fresh (nothing imports it at load) and it is a gamehub.* write, so the structural
@@ -806,6 +816,13 @@ const REST_MANIFEST = {
   './way-out/js/ui.js': '96090e537f',
   './way-out/js/engine.js': '5aafbb5a5b',
   './way-out/js/strings.js': '528bd22998',
+  './gridlock/': '0c0b6bd30e',
+  './gridlock/index.html': '0c0b6bd30e',
+  './gridlock/css/gridlock.css': 'cb5de8b96d',
+  './gridlock/js/ui.js': '2a1212d412',
+  './gridlock/js/engine.js': 'bc7b7b12e0',
+  './gridlock/js/levels.js': 'f618257e5f',
+  './gridlock/js/strings.js': 'c9ead46f54',
   './flick-soccer/': 'fe417867a0',
   './flick-soccer/index.html': 'fe417867a0',
   './flick-soccer/css/flick-soccer.css': 'd886602798',
