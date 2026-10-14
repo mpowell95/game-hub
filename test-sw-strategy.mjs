@@ -777,6 +777,7 @@ console.log('\n--- the REST_MANIFEST matches the deployed bytes ---');
   const TEXT_EXT = new Set(['.js', '.mjs', '.css', '.html', '.htm', '.json', '.txt', '.svg', '.md', '.webmanifest']);
   const stale = [];
   for (const entry of REST) {
+    if (HELD_BACK_OWNER.has(entry)) continue; // held back: no hash, by design (see below)
     let rel = entry.replace(/^\.\//, '');
     if (rel === '' || rel.endsWith('/')) rel += 'index.html';
     const abs = join(ROOT, rel);
@@ -806,12 +807,20 @@ console.log('\n--- held back: admin-only games warm only where they are shown --
   ok('there IS a held-back tier to test', ids.length > 0);
   const held = [...HELD_BACK_OWNER.keys()];
   ok('every held-back path is a non-lazy REST path', held.every((p) => REST.includes(p) && !LAZY.includes(p) && !SHELL.includes(p)));
-  ok('every held-back path carries a content hash (so it is carried forward)', held.every((p) => !!REST_MANIFEST[p]));
-  // The hub imports every challenge game's alerts module on EVERY phone, and Skeeball's challenges
-  // import hoops4/js/mp.js: those must stay warm or the launcher breaks offline.
-  for (const p of ['./hoops4/js/mp.js', './hoops4/js/alert.js', './cup-pong/js/alert.js', './darts/js/alert.js',
-    './flick-soccer/js/alert.js', './archery/js/alert.js', './archery/js/mp.js']) {
-    ok(`an always-imported module is never held back (${p})`, !HELD_BACK_OWNER.has(p));
+  // [KNOWN-BUG PROBE] Matt: "can we make it so those version updates dont go to regular users?"
+  // A hash in sw.js for a held-back file meant every edit to an unreleased game changed sw.js, so
+  // every phone installed a new worker and reloaded. No hash = an edit leaves sw.js byte-identical.
+  ok('[KNOWN-BUG PROBE] no held-back path has a REST_MANIFEST hash (an edit to one sends no update)',
+    held.every((p) => !REST_MANIFEST[p]), held.filter((p) => REST_MANIFEST[p]).slice(0, 5).join(', '));
+  // Skeeball's challenges statically import hoops4/js/mp.js, so that stays warm for everyone.
+  ok('a module a released game imports is never held back (./hoops4/js/mp.js)', !HELD_BACK_OWNER.has('./hoops4/js/mp.js'));
+  // The hub imports a challenge game's alerts module only for games on the launcher, so an
+  // unreleased game's alerts module is held back with the rest of it.
+  ok('an unreleased game\'s alerts module is held back (./archery/js/alert.js)', HELD_BACK_OWNER.has('./archery/js/alert.js'));
+  const hubSrc = readFileSync(join(ROOT, 'js', 'hub.js'), 'utf8');
+  for (const fn of ['_checkGameAlerts', '_watchGameAlerts']) {
+    const body = hubSrc.slice(hubSrc.indexOf(`async ${fn}() {`), hubSrc.indexOf(`async ${fn}() {`) + 1200);
+    ok(`js/hub.js ${fn} imports alerts only for games on this launcher`, /!onLauncher\.has\(g\.id\)/.test(body));
   }
   // Every admin-only game in js/hub.js today has an entry (a stale block: run validate-sw-assets.mjs).
   for (const id of ['air-hockey', 'archery', 'baseball', 'cuppong', 'darts', 'flick-soccer', 'gridlock', 'hoops4', 'way-out']) {
@@ -868,6 +877,19 @@ console.log('\n--- held back: admin-only games warm only where they are shown --
   const r = await w3.fire('fetch', { request: new FakeRequest(p0) });
   eq(`opening a held-back game still loads it (${p0})`, r.body, 'GAME');
   ok('...and caches it for next time', w3.caches.get(CACHE_NAME).map.has(keyOf(p0)));
+
+  // Served NETWORK-FIRST: with no hash, a cached copy can never be known to be current, so the
+  // network wins whenever it answers (Matt sees each edit on the next open), and the cached copy is
+  // still the offline fallback.
+  const w4 = bootWorker({ net: async () => new FakeResponse('NEW') });
+  await w4.fire('install');
+  await w4.fire('activate');
+  await drainWarm(w4, CACHE_NAME);
+  await w4.caches.get(CACHE_NAME).put(p0, new FakeResponse('OLD'));
+  eq('[KNOWN-BUG PROBE] a held-back file is served fresh from the network, not a stale cached copy',
+    (await w4.fire('fetch', { request: new FakeRequest(p0) })).body, 'NEW');
+  const w5 = bootWorker({ net: async () => { throw new Error('offline'); } , existingCaches: w4.caches });
+  eq('...and offline it falls back to the cached copy', (await w5.fire('fetch', { request: new FakeRequest(p0) })).body, 'NEW');
 }
 
 // --- [KNOWN-BUG PROBE] a tool under active development is never served stale ----------------------
@@ -879,19 +901,14 @@ console.log('\n--- held back: admin-only games warm only where they are shown --
 // several times an hour and judged by how it plays.
 {
   const src = SW_SRC;
-  const devFresh = src.match(/const DEV_FRESH = (\/.*\/);/);
-  ok('sw.js keeps a DEV_FRESH exclusion from the cache-first set', !!devFresh);
-  if (devFresh) {
-    const re = new RegExp(devFresh[1].slice(1, devFresh[1].lastIndexOf('/')), devFresh[1].slice(devFresh[1].lastIndexOf('/') + 1));
-    const assets = [...src.matchAll(/'(\.\/[^']+)'/g)].map((m) => m[1]);
-    const pb2 = assets.filter((a) => a.startsWith('./pinball2/'));
-    ok('pinball2 files are in ASSETS at all', pb2.length > 0);
-    ok('every pinball2 file is excluded from cache-first', pb2.every((a) => re.test(a)),
-      pb2.filter((a) => !re.test(a)).join(', '));
-    // The original pinball was archived 2026-09-28 (archive/pinball/): nothing of it ships.
-    ok('the archived pinball has no files in ASSETS',
-      !assets.some((a) => a.startsWith('./pinball/')));
-  }
+  // (2026-10-14) DEV_FRESH became every held-back file; pinball2 is one of them.
+  ok('sw.js keeps a DEV_FRESH exclusion from the cache-first set', /const DEV_FRESH_PATHS = /.test(src));
+  const pb2 = ASSETS.filter((a) => a.startsWith('./pinball2/'));
+  ok('pinball2 files are in ASSETS at all', pb2.length > 0);
+  ok('every pinball2 file is excluded from cache-first (held back)', pb2.every((a) => HELD_BACK_OWNER.has(a)),
+    pb2.filter((a) => !HELD_BACK_OWNER.has(a)).join(', '));
+  // The original pinball was archived 2026-09-28 (archive/pinball/): nothing of it ships.
+  ok('the archived pinball has no files in ASSETS', !ASSETS.some((a) => a.startsWith('./pinball/')));
 }
 
 // --- summary -----------------------------------------------------------------------------------

@@ -153,8 +153,11 @@ Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HI
 - **HELD BACK (2026-10-14): an admin-only game warms only onto phones that show it.** GENERATED
   `HELD_BACK` (by `validate-sw-assets.mjs`): per `devOnly` hub id (+ `pinball2`), its files that
   nothing outside held-back folders imports. The hub posts `SHOWN_GAMES` (its visible list) after
-  each launcher paint; the warm skips the rest, BELOW the carry-forward. Challenge games' alert/mp
-  modules stay warm (the hub imports them on every phone). Saves ~4.3 MB per phone.
+  each launcher paint; the warm skips the rest, BELOW the carry-forward. Saves ~4.3 MB per phone.
+  **Held-back files carry no hash and are network-first, so editing an unreleased game sends
+  players NO update: do not bump CACHE or touch sw.js for it** (the validator NOTEs a needless
+  bump). Adding/removing a file or touching shared files still does. The hub imports `alerts`
+  modules only for games on that launcher, so those are held back too.
 - **Network-first with a deadline** (`NET_TIMEOUT_MS` 2.5 s) plus a `SLOW_LATCH_MS` (10 s) "network
   is bad" latch. A request with nothing cached is never short-circuited.
 - **Unchanged files are carried forward across a CACHE bump** via the GENERATED `REST_MANIFEST`
@@ -288,7 +291,7 @@ game's mount/unmount lifecycle.
 - **Never put a `touchmove` listener on `document` or `window`**; bind it to the game's root.
 - Swipe surface: `touch-action: none`; tappable control: `touch-action: manipulation`.
 
-**Bump `CACHE` in `sw.js` past what is on `main` RIGHT NOW**, not past your working copy (two
+**Bump `CACHE` in `sw.js` past what is on `main` RIGHT NOW** (never for edits confined to an unreleased game's files), not past your working copy (two
 branches computing the same number leave devices on a permanently mixed build).
 
 ### Adding a game — checklist

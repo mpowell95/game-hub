@@ -266,6 +266,10 @@ When restructuring an old game, migrate it toward the reference for each axis in
    and **bump `CACHE`** (`game-hub-vN` → `vN+1`, past what's on `origin/main` right now — a
    concurrent session may have bumped it since you last checked) — or the new files won't be
    cached for offline. Run `node validate-sw-assets.mjs` before committing.
+   **While the game is `devOnly`, an EDIT to its own files needs no CACHE bump and no sw.js change**
+   (they are held back: network-first, no hash), so players get no update mid-build. Only adding or
+   removing a file, or touching shared files (`js/`, `css/`, tile art), changes sw.js. The validator
+   prints a NOTE if sw.js changed when only held-back files did.
 7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs`/`sk`/`pb`/`gf`/`bb`/`sd`/`bz`/`ah`/`cp`/`wo`/`gl` —
    anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
    third is a THE LAW rule 1 bug that is invisible on a single device:
