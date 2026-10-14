@@ -169,6 +169,10 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
 
 ## Look
 
+- **The setup screen's look, per Matt's mock-up (2026-10-14):** the board picture is the headline,
+  `clamp(96px, 23vh, 200px)` square, with the title straight under it and **no tagline**; **How to
+  play is a real pill** (css/ui.css's plain `.gh-btn`, centred, `.wo-howbtn`), not the ghost text link
+  it was. Measured with no clipping and clear of the Hub button at 402x874, 375x667 and 360x724.
 - **The setup screen is in the hub's own style, not the reference's** (Matt, 2026-10-11: *"Make the
   setup screen look more gamehub themed. Match other games."*). The reference's teal banner, mascot
   faces and slider were replaced by the Sudoku / Minesweeper layout built from `css/ui.css`: a small
