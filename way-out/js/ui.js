@@ -19,6 +19,7 @@ import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, RUSH_MODES, RU
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { isAdminDevice } from '../../js/admin-config.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.wayout.v1';
@@ -403,8 +404,15 @@ class WayOut {
     document.addEventListener('keydown', this._onKey);
     // The clock stops while the app is in the background (phone locked, another app in front).
     // Rush's clock is never paused: leaving the app loses the run (Matt, 2026-10-14).
+    // ...EXCEPT ON MATT'S DEVICES (2026-10-14): "keep this rule for everyone else, but get rid of
+    // it for me. I need to be able to screenshot, send it to you for edits, then go back into the
+    // game to keep testing." There the run HOLDS instead (_rushHold): the clock stops while the app
+    // is away and runs again on return. The menu and the hub back button still end it.
     this._onVis = () => {
-      if (document.hidden && this.rush && !this.rush.over) this._rushEnd('left');
+      if (this.rush && !this.rush.over) {
+        if (isAdminDevice()) this._rushHold(document.hidden);
+        else if (document.hidden) this._rushEnd('left');
+      }
       if (document.hidden) this._clockPause(); else this._clockRun();
     };
     document.addEventListener('visibilitychange', this._onVis);
@@ -558,7 +566,7 @@ class WayOut {
       if (this.rush) {
         this._rushPaint();
         if (this.rush.over) this._showRushEnd();
-        else if (this.rush.paused && !this.rush.counting && !this.timers.length) this._showRushReady();
+        else if (this.rush.paused && !this.rush.counting && !this.rush.heldFroze && !this.timers.length) this._showRushReady();
       }
       else if (this.failed && !this.timers.length) this._showFail();
     } else {
@@ -1354,9 +1362,38 @@ class WayOut {
       r.paused = false;
       r.counting = false;
       r.t0 = performance.now();
+      this._rushFreezeIfHeld(r);
       this._rushPaint();
     });
   }
+  /** Matt's devices only (see _onVis): the app went away (`away`) or came back. Away: a running
+   *  clock stops where it is (`held`, `heldFroze`); a countdown or Ready screen is left as it is,
+   *  and if a countdown finishes while away, _rushFreezeIfHeld stops the clock at once. Back: a
+   *  clock this stopped runs again from the same number. */
+  _rushHold(away) {
+    const r = this.rush;
+    if (!r || r.over) return;
+    if (away) {
+      r.held = true;
+      if (!r.paused) this._rushFreeze(r);
+    } else {
+      r.held = false;
+      if (r.heldFroze) {
+        r.heldFroze = false;
+        r.paused = false;
+        r.t0 = performance.now();
+      }
+      this._rushPaint();
+    }
+  }
+  _rushFreeze(r) {
+    r.bank = this._rushLeft();
+    if (r.t0) r.playMs += performance.now() - r.t0;
+    r.t0 = 0;
+    r.paused = true;
+    r.heldFroze = true;
+  }
+  _rushFreezeIfHeld(r) { if (r.held && !r.paused) this._rushFreeze(r); }
   _rushSetBoard(lvl) {
     this.lvl = lvl;
     const n = lvl.arrows.length;
@@ -1433,7 +1470,7 @@ class WayOut {
    *  +0.5s, red arrow -3s: a sign and a word, never colour alone), then Ready. */
   _showRushReady() {
     const r = this.rush, m = this.root && this.root.querySelector('.wo-modal');
-    if (!r || r.over || !r.paused || r.counting || !m) return;
+    if (!r || r.over || !r.paused || r.counting || r.heldFroze || !m) return;
     const secs = (Math.floor(r.bank / 100) / 10).toFixed(1);
     const arrow = RUSH_ARROW;
     m.innerHTML = `
@@ -1499,6 +1536,7 @@ class WayOut {
     r.paused = false;
     r.counting = false;
     r.t0 = performance.now();
+    this._rushFreezeIfHeld(r);
     this._rushPaint();
     this._rushPrebuild();
   }

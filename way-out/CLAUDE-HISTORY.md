@@ -558,3 +558,17 @@ hidden and the clock at 10.0, a tap during the count sends nothing, clock runs a
 cleared by real taps -> Ready -> countdown -> board 2 with the clock running. Held-back game: no
 CACHE bump.
 
+## Rush: leaving the app no longer loses Matt's run (2026-10-14)
+
+Matt, with a "Run lost" screenshot: *"keep this rule for everyone else, but get rid of it for me. I
+need to be able to screenshot, send it to you for edits, then go back into the game to keep testing.
+I can't start from scratch every time that's too annoying."* `_onVis` now asks `isAdminDevice()`
+(`js/admin-config.js`, the cached `admins/` allowlist): on Matt's devices `_rushHold(away)` stops a
+running clock (`held`, `heldFroze`, bank and playMs settled like a board end) and restarts it on
+return; a countdown or Ready screen is left alone, and a countdown that finishes while away is
+frozen immediately (`_rushFreezeIfHeld` in the first-board and `_rushGo` paths). `render()` and
+`_showRushReady` skip the Ready popup while `heldFroze`. Menu and the hub back button still end the
+run for everyone. Browser-checked: Matt mid-board 8.79 s -> away 4 s -> 8.79 s, then counts down;
+Matt hidden during the opening countdown -> 10.0 held -> runs on return; another player -> "Run
+lost" (`left`). Matt's held runs still count on the weekly board.
+
