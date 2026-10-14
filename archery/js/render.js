@@ -317,7 +317,7 @@ export class Renderer {
     this.cam.updateProjectionMatrix();
     this.hudCam.left = 0; this.hudCam.right = w; this.hudCam.top = 0; this.hudCam.bottom = -h;
     this.hudCam.updateProjectionMatrix();
-    if (this.view === 'line') this.setView('line');
+    if (this.view === 'line' || this.view === 'close') this.setView(this.view);
   }
 
   setView(view) {
@@ -328,7 +328,7 @@ export class Renderer {
       // The target sits a little above the middle of the screen, as in the recording.
       this.cam.lookAt(T.x, T.y - 2.2, T.z);
     } else if (view === 'close') {
-      this.cam.position.set(T.x - 0.95, T.y + 0.05, T.z + 3.7);
+      this.cam.position.set(T.x - 0.75, T.y + 0.05, T.z + 4.6);
       this.cam.lookAt(T.x + 0.14, T.y - 0.12, T.z);
     }
   }
