@@ -1158,3 +1158,15 @@ player-to-player, so a hub sender had to be built.)
   opened the game in ~2.4 s with Arrow Maze's files in the new cache.
 - Not done: a phone notification (needs a Cloud Function Matt deploys).
 
+### Read receipt for Game Hub messages (2026-10-14)
+
+Matt: *"Make sure there's a way for me to tell if he's read it."* `markHubSeen` now also stamps
+`read[<id>] = {code, at}` (first open only) in `gamehub.hubMessages.v1`, and the first open triggers
+a sync. `js/stats-net.js` mirrors `hubReadReport()` as `players/<id>/hubMsgs` (additive REPORT,
+omitted while empty, read only by the admin page). A message opened on v1165 (before receipts)
+left only `seen`; it is reported as read with `at: 0` and shown as "Read" with no time rather than
+a made-up one. Admin page section **Game Hub messages**: per message, each recipient Read <time> /
+Not yet (Not yet also covers a phone that has not synced since). Browser-checked with `stats-net.js`
+stubbed (no database): King of Games' phone reports `{code: '3VN33', at}`; the admin section shows
+"Read 14 Oct, 22:52" and "Not yet".
+

@@ -191,6 +191,31 @@ eq(missingFromRules.join(','), '', 'every backed-up branch has a rule (or it is 
     ok(!/\u2014/.test(m.text.en + m.text.es), `hub ${m.id}: no em dash`);
     if (m.play) eq(H.playOf(m), m.play, `hub ${m.id}: Play id is well formed`);
   }
+  // The read receipt (Matt: "Make sure there's a way for me to tell if he's read it").
+  const mem = new Map();
+  globalThis.localStorage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
+  const real = H.HUB_MESSAGES[0];
+  const who = real.to[0];
+  eq(H.hubReadReport(), null, 'receipt: nothing to report before anything is opened');
+  ok(H.markHubSeen(who, real.atMs, 5555), 'receipt: first open stamps it');
+  eq(JSON.stringify(H.hubReadReport().read[real.id]), JSON.stringify({ code: who, at: 5555 }), 'receipt: reports who and when');
+  ok(!H.markHubSeen(who, real.atMs, 9999), 'receipt: a second open changes nothing');
+  eq(H.hubReadReport().read[real.id].at, 5555, 'receipt: keeps the FIRST open time');
+  // Opened on the build before receipts: only `seen` was stored. Reported as read, time unknown.
+  mem.set('gamehub.hubMessages.v1', JSON.stringify({ seen: { [who]: real.atMs } }));
+  eq(JSON.stringify(H.hubReadReport().read[real.id]), JSON.stringify({ code: who, at: 0 }), 'receipt: an older read is still reported, time unknown');
+  const players = {
+    a: { hubMsgs: { read: { [real.id]: { code: who, at: 700 } } } },
+    b: { hubMsgs: { read: { [real.id]: { code: who, at: 500 } } } },
+    c: { hubMsgs: { read: { [real.id]: { code: 'ABCDE', at: 100 } } } },
+  };
+  eq(JSON.stringify(H.readStatusFor(players, real.id, who)), JSON.stringify({ read: true, at: 500 }), 'receipt: earliest of two phones');
+  eq(JSON.stringify(H.readStatusFor({ x: {} }, real.id, who)), JSON.stringify({ read: false, at: 0 }), 'receipt: Not yet without a report');
+  eq(JSON.stringify(H.readStatusFor({ x: { hubMsgs: { read: { [real.id]: { code: who, at: 0 } } } } }, real.id, who)),
+    JSON.stringify({ read: true, at: 0 }), 'receipt: read, time unknown');
+  delete globalThis.localStorage;
+  const statsNet = readFileSync(new URL('./js/stats-net.js', import.meta.url), 'utf8');
+  ok(statsNet.includes('rec.hubMsgs = hubRead'), 'receipt: the mirror carries hubMsgs');
   const sw = readFileSync(new URL('./sw.js', import.meta.url), 'utf8');
   ok(sw.includes("type === 'WARM_GAME'"), 'hub: the worker answers WARM_GAME (Play loads the newest files)');
 }

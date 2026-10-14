@@ -688,7 +688,14 @@ function renderHubThread(card) {
   card.querySelectorAll('[data-play]').forEach((b) => b.addEventListener('click', () => playFresh(b.dataset.play, b)));
   const scroll = card.querySelector('.msg-scroll');
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
-  if (msgs.length) { markHubSeen(me, msgs[msgs.length - 1].atMs); announceChange(); }
+  if (msgs.length) {
+    // A first open sends the read receipt now (js/stats-net.js `hubMsgs`), not at the next sync.
+    if (markHubSeen(me, msgs[msgs.length - 1].atMs)) {
+      import('./stats-net.js').then((m) => m.syncMyStats())
+        .catch((err) => console.warn('[messages] read receipt waits for the next sync', err));
+    }
+    announceChange();
+  }
 }
 
 /** Play: the newest build and the game's newest files first, then the game (js/hub.js

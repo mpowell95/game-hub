@@ -78,7 +78,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `install-state.js` | dependency-free on purpose; checks both `display-mode` and `navigator.standalone` |
 | `error-log.js` | `gamehub.errorlog.v1`, installed at LOAD so it catches a failing game import |
 | `messages.js` | no hard delete; `myCode()`/`ensureAuthClaim()` reused by career-store and push |
-| `hub-messages.js` | `HUB_MESSAGES` append-only (never reuse an id or edit sent words); merged into `readMyThreads()` as the `HUB` row; `HUB` is never a player code |
+| `hub-messages.js` | `HUB_MESSAGES` append-only (never reuse an id or edit sent words); merged into `readMyThreads()` as the `HUB` row; `HUB` is never a player code; read receipt `players/<id>/hubMsgs` (report only, omitted when empty; `at: 0` = read before receipts existed) |
 | `challenges.js`, `challenge-life.js` | read-only fold of games' indexes (Cancel/Decline/Resign call the GAME's own writer via `endAction`/`endMatch`); `ANSWER_MS` 3 days; called-off rows stored `over:false` so push stays silent |
 | `match-chat.js` | chat at `<node>/chat/<matchId>`, BESIDE the match, never in it; verified; nothing deleted; `gamehub.matchChatSeen.v1` |
 | `push.js` | `pushSubs/<CODE>/<sha256(endpoint)>`; permission asked inside the tap; `gamehub.push.v1` = write only on change |
