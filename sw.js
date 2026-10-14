@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1161';
+const CACHE = 'game-hub-v1162';
 
 const ASSETS = [
   './',
@@ -1596,7 +1596,7 @@ self.addEventListener('push', (event) => {
     renotify: true,
     data: { url: String(d.url || './'), game: String(d.game || ''), with: String(d.with || ''), name: String(d.name || ''), match: String(d.match || '') },
   };
-  event.waitUntil(self.registration.showNotification(title, opts));
+  event.waitUntil(self.registration.showNotification(title, opts).then(syncBadge));
 });
 
 // TAP: bring the hub forward, onto the game the notification is about. An open window is told by
@@ -1604,6 +1604,7 @@ self.addEventListener('push', (event) => {
 // `?open=<game>`, which js/hub.js reads once after the launcher paints.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  syncBadge();
   const data = event.notification.data || {};
   // WHICH MATCH (2026-09-24). Matt: "when i click on the connect 4 hoops notification, it takes me
   // to the setup screen... It should take me directly to that game." The payload never named the
@@ -1638,6 +1639,23 @@ self.addEventListener('notificationclick', (event) => {
     await self.clients.openWindow(url);
   })());
 });
+
+// APP ICON BADGE (2026-10-14). Matt: "Can we get badge notifications on the app icon when there's
+// a notification?" The number is how many of our notifications are showing. Set only AFTER the
+// notification is shown, and never throws, so a badge failure can never cost a notification.
+// Supported: iPhone Home Screen app (iOS 16.4+), installed desktop Chrome/Edge; elsewhere a no-op.
+// js/push.js clearShownNotifications() clears it when the hub opens.
+async function syncBadge() {
+  try {
+    const nav = self.navigator;
+    if (!nav || typeof nav.setAppBadge !== 'function') return;
+    const shown = await self.registration.getNotifications().catch(() => null);
+    // An unknown count (no getNotifications) after a push still badges: 1, never nothing.
+    const n = shown ? shown.length : 1;
+    if (n > 0) await nav.setAppBadge(n);
+    else if (typeof nav.clearAppBadge === 'function') await nav.clearAppBadge();
+  } catch { /* a badge is a nicety; the notification already showed */ }
+}
 
 self.addEventListener('activate', (event) => {
   // Old caches are NOT deleted here any more (2026-08-23). They are warmRest()'s copy source for
