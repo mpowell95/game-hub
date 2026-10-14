@@ -234,14 +234,19 @@ A separate timed mode (Matt: start with a few seconds, a bit back per move; *"do
 someone leaves the app, they lose that round"*; a weekly game with a history tab). Easy/Hard.
 
 - **Where:** a **Levels / Rush** switch under the title (settings `mode`, `rushMode`). Rush has
-  Easy/Hard, the rules, **Play Rush**, where you stand, **Results**.
-- **Rush setup card (Matt's review, 2026-10-14):** rules as **three tiles** (10s to start, +0.5s per
-  arrow, −3s per mistake; `.wo-rush-tiles`, sign + word on each, a real minus sign); "Smaller boards"
-  / "Bigger boards"; dark mode's selected difficulty = lifted dark surface + yellow outline; the
-  switch's BRIGHTEST tab is the chosen one; Play Rush is the Ready button's teal, stopwatch badge on
-  the picture; a standing line under Play plus "Resets in N days" (`_rushStandingText`, Results read
-  in the background at most once a minute, own best always the fresh local one; offline only the
-  reset shows). `woWeekEnd()` = next Monday 00:00 UTC.
+  Easy/Hard, the rules, **Play Rush**, and a leader card with **See all results**.
+- **Rush setup card (Matt's two reviews, 2026-10-14):** dark switch track whose BRIGHTEST tab is the
+  chosen one; dark mode's selected difficulty = lifted dark surface + yellow outline (Levels too);
+  teal **Play Rush**; a stopwatch badge on the picture whose **hand spins** (`.wo-watch-hand`, 3 s a
+  turn, still under reduced motion). Second review: **no "Difficulty" label, nothing under Easy /
+  Hard** (`.wo-seg--slim`); the rules are **three short lines with the number in a pill**
+  (`.wo-rush-rules`: "You start with [10s]", "Each arrow [+0.5s]", "Each mistake [−3s]"; he did not
+  like numbers with small labels under them, the earlier tiles); **no standing / reset line**; the
+  Results pill became a **leader card** (`_rushLeaderHTML`): "🏆 Easy leader this week", emoji, name
+  and score (ties all named, "You" for this phone's person, "No runs yet this week") and a **See all
+  results** pill that opens Results on that version; it follows the Easy / Hard choice. Rows are the
+  Results read, in the background at most once a minute; own best always the fresh local one.
+  `woWeekEnd()` (next Monday 00:00 UTC) stays in `js/arrow-maze-time.js`, tested, unused for now.
 - **Clock** (`js/arrow-maze-time.js`, `RUSH_*`): starts **10 s**, counts DOWN; every arrow sent off
   **+0.5 s**, every bump **-3 s** (arrow turns red; no hearts, hint or restart). Zero ends the run
   ("Time's up!"). **It pauses only between boards.**
