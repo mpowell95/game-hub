@@ -175,8 +175,8 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
   it was. Measured with no clipping and clear of the Hub button at 402x874, 375x667 and 360x724.
 - **The picture plays itself (2026-10-14, Matt: "Make the top image thing cooler and better"):**
   `HERO_SVG` in `ui.js` is a 7x7 board built from grid points, its arrows locked the way a real level
-  is (the red one has bumped the teal one's body, two lavender ones wait on others), and the only free
-  arrow, the teal one, glows, slides off the right edge with a trail and sparks, and fades back in
+  is (the red one has bumped the teal one's body, two lavender ones wait on others), and the free
+  teal arrow glows, slides off the right edge with a trail and sparks, and fades back in
   (`.wo-hero-go` / `wo-hero-fx`, 3.6 s loop, CSS only). Reduced motion: it stands still.
 - **The setup screen is in the hub's own style, not the reference's** (Matt, 2026-10-11: *"Make the
   setup screen look more gamehub themed. Match other games."*). The reference's teal banner, mascot

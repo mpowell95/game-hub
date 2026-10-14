@@ -803,7 +803,7 @@ const REST_MANIFEST = {
   './way-out/': 'dc6c9178ea',
   './way-out/index.html': 'dc6c9178ea',
   './way-out/css/way-out.css': '65d6822454',
-  './way-out/js/ui.js': '1dcfd31956',
+  './way-out/js/ui.js': 'a2a996ae30',
   './way-out/js/engine.js': '5aafbb5a5b',
   './way-out/js/strings.js': '97f3a93987',
   './flick-soccer/': 'fe417867a0',

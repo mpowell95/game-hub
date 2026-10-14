@@ -234,7 +234,7 @@ const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21L2.6 1
 /** The setup screen's header picture (2026-10-14, Matt: "Make the top image thing cooler and
  *  better"): a little board that plays itself. A 7x7 grid of dots, arrows locked into each other the
  *  way a real level is (the red one has bumped into the teal one's body, the lavender one at the top
- *  left waits for it too), and the teal arrow, the only one free, glows, slides off the edge with a
+ *  left waits for it too), and the free teal arrow glows, slides off the edge with a
  *  trail and sparks, and comes back. Pure SVG + CSS (`.wo-hero-go` in way-out.css); reduced motion
  *  shows it standing still. Built from grid points so every arrow sits on the dots. */
 const HERO_SVG = (() => {
