@@ -596,7 +596,7 @@ class WayOut {
       </button>`;
     }).join('');
     const tiles = this._tilesHTML([
-      { cls: 'is-pts', icon: ICON_STAR, v: done ? '-' : `+${woLevelPoints(level)}`, l: t('lv_tile_worth') },
+      { cls: 'is-pts', icon: ICON_STAR, v: done ? '-' : t('lv_pts', { n: woLevelPoints(level) }), l: t('lv_tile_worth') },
       { cls: 'is-mine', icon: ICON_CUP, v: String(this._myPoints()), l: t('lv_tile_mine') },
       { cls: 'is-lives', icon: HEART, v: String(LIVES), l: t('lv_tile_lives') },
     ], t('lv_tiles_aria'));
