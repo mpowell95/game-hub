@@ -344,6 +344,12 @@ Each game's full docs: `<game>/CLAUDE.md`.
 
 Prefix cells verified against the CSS on 2026-07-23 (`.ttt-`, `.filler`, `.mancala` are real).
 devOnly is only a DEFAULT: the admin page can make a game live without a commit.
+**Releasing a game = the admin switch AND a release commit, together (Matt, 2026-10-14).** When
+Matt says "release X", set it live for everyone on the admin page AND, in the same change, remove
+`devOnly: true` from its `GAMES` entry (add `released`), run `validate-sw-assets.mjs` (it drops X
+from `HELD_BACK` and gives its files hashes), bump `CACHE`, deploy. Players get ONE update and the
+game is saved cache-first like any other. A game left `devOnly` but switched live re-downloads its
+files on every open (held back: network-first, no hash).
 
 ## Archived games (2026-09-28)
 
