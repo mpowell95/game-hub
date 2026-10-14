@@ -633,11 +633,8 @@ export const GAMES = [
     // No `released` date on purpose: it is the only input to the launcher's New pill and must be
     // the day Matt releases it, which he does from the admin page with no commit.
     devOnly: true,
-    // King of Games (3VN33) was held back from it with `hideFrom` 2026-10-13 to 10-14; Matt lifted
-    // it ("unblock him from Arrow Maze too. Keep arrow maze admin only still though"), then put it
-    // back the same evening ("first make it invisible to king of games again") while the bands are
-    // reworked. Delete this line to give it back.
-    hideFrom: ['3VN33'],
+    // King of Games (3VN33) was held back with `hideFrom` on 2026-10-13 and again 10-14 while the
+    // bands were reworked; given back 2026-10-14 (Matt: "Let king of games see and play arrows").
   },
   {
     // Gridlock (2026-10-14): the sliding-block "traffic jam" puzzle (Unblock Me, Rush Hour): slide
