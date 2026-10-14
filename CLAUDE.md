@@ -333,7 +333,10 @@ session doesn't "simplify" it back:
   warm.
 
 `cache: 'reload'` is untouched — the fifth-playthrough HTTP-disk-cache fix it exists for is
-orthogonal and still needed.
+orthogonal and still needed. **(2026-10-14) The SHELL install uses it too, always** (it used to only
+with `PURGE_ALL_CACHES`): Pages sends `max-age=600`, so two deploys ten minutes apart installed the
+previous build's `js/game-art.js` under the new cache name, and cache-first kept it for the whole
+build (Matt's phone showed the old Arrow Maze tile at v1132). `test-sw-strategy.mjs` probes it.
 
 Full incident narrative and measured before/after numbers for every bullet above:
 `docs/CLAUDE-HISTORY.md#the-service-workers-caching-strategy-rewritten-2026-08-02`
