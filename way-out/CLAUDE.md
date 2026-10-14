@@ -243,7 +243,7 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   either. Play buttons share one shape (`.wo-play`): Levels blue, Rush teal.
   - **Levels:** each difficulty shows its name, "Level N" and a thin bar of progress through its
     stretch of the ladder (Expert never ends: its solid bar fills every 50 levels and starts over,
-    Matt 2026-10-14; it was a dashed track); tiles **+N "this level"** (star),
+    Matt 2026-10-14; it was a dashed track); tiles **+N pts "this level"** (star; "pts" added, Matt 2026-10-14),
     **N "your points"** (cup; from the combined read once it lands, this phone's own until then),
     **3 "lives"** (heart); footer **"🏆 Points leader"** with name and points, and **How to play**.
   - **Rush:** Easy / Hard with nothing under them; tiles **10s "to start"** (stopwatch), **+0.5s
