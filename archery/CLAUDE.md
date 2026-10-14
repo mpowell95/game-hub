@@ -37,7 +37,7 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 |---|---|
 | `js/engine.js` | the rules, pure: scoring, the match (rounds, turn order, shoot-off), the wind, the ring and sway, panic, the computer. `node archery/js/test.js` |
 | `js/render.js` | the range in three.js (`skeeball/js/vendor`): stadium, lane, target, arrows, the three cameras, the sight's magnified view; draws the bow's scene over the range |
-| `js/bow3d.js` | the bow, left hand, sleeve and nocked arrow as lit 3D models (a first-person view model), built from code |
+| `js/bow3d.js` | the bow, left hand, sleeve and nocked arrow as lit 3D models (a first-person view model), built from code, laid out from grid measurements of the recording |
 | `js/ui.js` | DOM: setup, HUD, the sight's ring SVG (gauge + crosshair), hold-to-draw input, the turn flow, replays, menus, autosave, stats, the online match |
 | `js/mp.js` / `js/mp-ui.js` / `js/alert.js` | online challenges (data, list screens, launcher bubble). `node test-archery-mp.mjs` |
 | `js/strings.js` | every word, EN/ES |
@@ -65,49 +65,45 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
   is my best reading of two arrows' worth of frames, not a certainty; tune `GAUGE` if it feels off.
 - **The sight sways** on its own, more as the ring drains (`swayAt`).
 
-## The turn (timed off the recording; docs/ARCHERY-BRIEF.md section 2)
+## The turn (timed off the recording at 30 fps)
 
-Touch and hold anywhere on the range: the bow comes up in 0.18 s with the target magnified in the
-sight (a second camera drawn into a disc under the ring). Drag to aim (about a ring per 6 px of
-finger at phone width). Let go: the bow kicks (0.1 s), the camera glides to the target with the
-arrow for 0.75 s (below), the number pops 0.6 s later with stars, and the target stays up 2 s. After the other player's round
-(the computer's, or the other person's online), their arrows land in the target one by one with red
-tiles, then the yellow **Your Turn** button takes you to the line, as in the recording. Pass and
-play hands over with a **Pass to <name>** card instead.
+Touch and hold: the bow comes up in 0.25 s (`DRAW_T`). Drag to aim (about a ring per 6 px). Let go:
+the bow kicks 0.06 s (`JOLT_T`), then the flight, 0.8 s (`FLIGHT_T`): the camera holds still for the
+first fifth while the arrow climbs up and right, then glides to the close-up as the arrow drops in
+from the right (`render.js` `_camAt` / `_tipAt`, framed from the camera, not simulated). The number
+pops 0.6 s later with stars and the scored ring flashes yellow (`_pop`, `.ar-ringflash`); the target
+stays up 2 s. Back on the line the view cuts and the bow slides up into place (`BOW_IN_T` 0.2 s).
+After the other player's round their arrows land one by one with red tiles, then the yellow **Your
+Turn** button. Pass and play hands over with a **Pass to <name>** card.
 
-## The look, matched to the recording (2026-10-14, Matt: *"yes fix all"*)
+## The look (matched to the recording, 2026-10-14)
 
-A side-by-side pass against the video's frames. Original art, the recording's proportions, colours,
-positions and motion:
+Matt: *"I shouldn't be able to tell the images apart"*, *"Do the 3d rebuild"*, then *"keep working
+until you are satisfied"*. Every position below was measured on a grid over the recording's frames,
+compared at the recording's own game-area shape (402 x 718 CSS px; the recording's card is wider than
+a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
 
-- **The flight is ONE shot, no cut**: the bow kicks up and the arrow leaps off it (`JOLT_T` 0.1 s,
-  `ui.js`), then the camera glides down the lane from the line into the close-up in `FLIGHT_T`
-  (`render.js setFlight`, `CLOSE_POS` / `CLOSE_LOOK`). The arrow is placed FROM THE CAMERA
-  (`_tipAt`): it shows big at the top right, rides up and right of the target and drops onto it from
-  the right, with a white trail; its arc varies a little shot to shot. It is framed like a film, not
-  simulated; the rules decided where it lands before it left.
-- **The close-up**: the board (drawn 1.2x taller than wide, `BOARD_TALL`; drawing only, scoring is
-  unchanged) about half the screen's width, seen a little from the left and above, stands behind.
-  Arrows arrive from the right (`inDir`), so they stick out long, up and to the right. The board and
-  face are unlit (bright white). The sun casts a real shadow of the board and easel (not on a
-  software-GL device).
-- **The sight** shows the face at about a third of its radius, the board round it (zoom `/0.34`).
-  The sight's inner radius is 0.082 of the screen width (`this.k`).
-- **The bow, hand, sleeve and nocked arrow are 3D (2026-10-14, Matt: *"I shouldn't be able to tell
-  the images apart"*, then *"Do the 3d rebuild"*)**: `bow3d.js`, lit and reflecting a small sky
-  environment, drawn in their own scene over the range (`render.js setBow`). `ui.js` still decides
-  where the sight sits and how big (the same numbers as before) and keeps only the ring (gauge and
-  crosshair) as SVG; `setPose` works out how far from the eye the bow must be for that, so the ring,
-  the 3D sight housing and the magnified view line up. The bow: a chunky metallic-blue riser with
-  black parts and a fork at the top, a thick black sight bar with a small foot, a blue shelf, the
-  black grip BELOW the shelf and left of the riser (as in the recording), the lower limb blue. The
-  hand is a fist round the grip. The arrow runs from a nock point by the face (`NOCK`) through the
-  rest (`REST`), so it is flatter with the bow down and steeper drawn. The sleeve runs from the
-  wrist to a fixed shoulder below-left of the eye (`SHOULDER`): long and straight down, short and
-  puffy drawn. The bow tilts and swings left on the way up; on release it kicks and the arrow leaps.
-- **The stadium**: a sky dome with clouds, the far end of a bowl (`BOWL_Z`): a curved blue barrier,
-  two tiers of crowd (the upper one in the roof's shade) and a canopy roof seen from below
-  (`_buildRoof`): pale panels, white steel ribs, each bay arching at a white front tube, sky above.
+- **The sight's outer ring is a tenth of the screen width** (`this.k`); the zoom shows the face at
+  about two fifths of the sight (`/0.5`). The ring is SVG (`ringSVG`: grey housing, green gauge
+  inside it, red crosshair).
+- **The bow, hand, sleeve and nocked arrow are 3D** (`bow3d.js`, a lit view model drawn over the
+  range; `render.js setBow`). `setPose` puts the bow at the depth that makes its sight match the
+  ring. Its layout is in units where the ring's outer radius is 0.635 (`BODY_S` 0.85 converts the
+  measured layout to that ring): the blue limb in a black cage on a pocket block at the top, a blue
+  fork and column right of the sight, the shelf below-left of the column, the black grip under the
+  shelf, the hand round it, the sleeve to a fixed shoulder (`SHOULDER`). The arrow runs from a
+  nock by the face (`NOCK`) through the rest (`REST`). No lettering is copied from the recording.
+- **The close-up**: the board half-width is 1.14 face radii as DRAWN (`BOARD_HALF`; the rules'
+  `BOSS` stays 1.3, which only matters for arrows that score 0), 1.2x taller than wide, about half
+  the screen wide, seen from the left. Arrows arrive from the right, nearly level (`inDir`); blue in
+  front, black behind. Sun shadow of the board (not on software GL).
+- **The stadium**: sky with clouds; a pale canopy roof with dark slanted ribs, its front edge at
+  about a quarter of the screen height and its back meeting a pale rim at about a third; one deep
+  tier of blue-and-yellow seats down to the blue barrier (`_buildRoof`, `paintCrowd`).
+- **HUD sizes** match the recording (round pill 18 px, 40 px tiles, 76 px wind card with a square
+  white icon, 26 px totals, avatars overlapping the bars, a red V and blue S).
+- **Names, never "You"** on the result card and match lists (root `CLAUDE.md`): `win_name`,
+  `{me}` in `mp_scores`, `mp_you_*`.
 
 **The point under the sight's crosshair IS the aim.** `render.js setScope` draws the zoomed view
 at the screen point `ui.js` puts the ring at, from the same numbers, so they cannot disagree.

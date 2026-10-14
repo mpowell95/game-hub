@@ -7,8 +7,11 @@
 import { makeT } from '../../js/i18n.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { STRINGS } from './strings.js';
+import { loadProfile } from '../../js/profile-store.js';
 
 const t = makeT(STRINGS);
+/** This phone's player by profile name (never "You"). */
+const myName = () => { const p = loadProfile(); return (p && p.name) || t('you'); };
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const BACK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
 const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
@@ -76,7 +79,7 @@ const rowHTML = (r) => `
   <button type="button" class="ar-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
     <span class="ar-mrow-face" aria-hidden="true">${esc(r.emoji)}</span>
     <span class="ar-mrow-text"><span class="ar-mrow-name">${esc(r.name)}</span>
-      <span class="ar-mrow-sub">${esc(t('mp_scores', { r: Math.min(r.round, 3), a: r.mine, b: r.theirs, name: r.name }))}</span></span>
+      <span class="ar-mrow-sub">${esc(t('mp_scores', { r: Math.min(r.round, 3), a: r.mine, b: r.theirs, name: r.name, me: myName() }))}</span></span>
     <span class="ar-mrow-chev" aria-hidden="true">›</span>
   </button>`;
 
@@ -199,7 +202,7 @@ async function history(ui, MP) {
       <div class="ar-mrow is-static${r.result === 'won' ? ' is-won' : ''}">
         <span class="ar-hmark" aria-hidden="true">${mark(r)}</span>
         <span class="ar-mrow-text"><span class="ar-mrow-name">${esc(r.name)}</span>
-          <span class="ar-mrow-sub">${esc([word(r), t('mp_scores_done', { a: r.mine, b: r.theirs, name: r.name }), new Date(r.updated).toLocaleDateString()].join(' · '))}</span></span>
+          <span class="ar-mrow-sub">${esc([word(r), t('mp_scores_done', { a: r.mine, b: r.theirs, name: r.name, me: myName() }), new Date(r.updated).toLocaleDateString()].join(' · '))}</span></span>
       </div>`).join('');
   fitList(cardOf(list), list, finished.length - fin.length);
 }
@@ -217,8 +220,8 @@ export function showUnseen(ui, MP, rows) {
     <div class="ar-card ar-card-sm" role="dialog" aria-modal="true" aria-label="${esc(t('mp_game_over'))}">
       <button type="button" class="ar-x" data-mp="close" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
       <p class="ar-res-ava" aria-hidden="true">${esc(r.emoji)}</p>
-      <h2 class="ar-h2">${esc(won ? t('win_you') : t('lose_you'))}</h2>
-      <p class="ar-res-line">${esc(t(won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name }))}${r.why === 'resign' ? ` · ${esc(won ? t('mp_they_resigned', { name: r.name }) : t('mp_you_resigned'))}` : ` · ${esc(t('result_line', { a: r.mine, b: r.theirs }))}`}</p>
+      <h2 class="ar-h2">${esc(t('win_name', { name: won ? myName() : r.name }))}</h2>
+      <p class="ar-res-line">${esc(t(won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name, me: myName() }))}${r.why === 'resign' ? ` · ${esc(t('mp_they_resigned', { name: won ? r.name : myName() }))}` : ` · ${esc(t('result_line', { a: r.mine, b: r.theirs }))}`}</p>
       ${ended.length > 1 ? `<p class="ar-res-line">${esc(t('mp_more', { n: ended.length - 1 }))}</p>` : ''}
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-mp="ok">${esc(t('mp_ok'))}</button>
     </div>`;
