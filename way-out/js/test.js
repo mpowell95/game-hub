@@ -5,7 +5,7 @@
 // and a player who only ever taps clear arrows clears it (engine.js's header says why that greedy
 // check is a proof of solvability, not a sample of it).
 import { createHash } from 'node:crypto';
-import { TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel } from './engine.js';
+import { TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel, buildLadder, bandOf, bandEnd, BAND_START } from './engine.js';
 
 let fails = 0;
 const ok = (label, cond) => { if (!cond) { fails++; console.log('FAIL ', label); } };
@@ -132,6 +132,63 @@ for (const tier of TIERS) {
   ok(`${tier}: the ramp never goes down`, up && rampTarget(tier, 13) === null);
 }
 ok('easy 1 stays the gentle generator-1 board', JSON.stringify(buildLevel('easy', 1)) === JSON.stringify(buildLevel('easy', 1, 1)));
+
+// THE LADDER (2026-10-14, Matt: "I want easy level 50 to be basically medium level 51. There
+// shouldn't be a big jump between individual levels"). Every ladder level 1-230: well formed,
+// deterministic, solvable by the player's own hint; the grid never shrinks and grows by at most one
+// dot a level; neighbouring levels differ by at most 4 rounds; and the band edges are seamless.
+{
+  const info = [];
+  let worstMs = 0;
+  for (let n = 1; n <= 230; n++) {
+    const t0 = performance.now();
+    const lvl = buildLadder(n);
+    worstMs = Math.max(worstMs, performance.now() - t0);
+    const { cols: W, rows: H, arrows } = lvl;
+    const seen = new Set();
+    let formed = arrows.length > 0;
+    for (const cells of arrows) {
+      if (cells.length < 2) formed = false;
+      for (let k = 0; k < cells.length; k++) {
+        if (seen.has(cells[k])) formed = false;
+        seen.add(cells[k]);
+        if (k && Math.abs((cells[k - 1] % W) - (cells[k] % W)) + Math.abs(((cells[k - 1] / W) | 0) - ((cells[k] / W) | 0)) !== 1) formed = false;
+      }
+    }
+    ok(`ladder ${n}: well formed`, formed);
+    ok(`ladder ${n}: deterministic`, JSON.stringify(buildLadder(n)) === JSON.stringify(lvl));
+    const gone = new Array(arrows.length).fill(false);
+    let left = arrows.length, guard = 0;
+    while (left && guard++ < 100000) { const id = hintArrow(lvl, gone, null); if (id < 0) break; gone[id] = true; left--; }
+    ok(`ladder ${n}: solvable`, left === 0);
+    info.push({ n, W, H, a: arrows.length, r: peel(W, H, arrows).layers });
+  }
+  let grow = true, roundsClose = true;
+  for (let i = 2; i < info.length; i++) {   // from level 2: level 1 is the special 8x4 first board
+    const p = info[i - 1], q = info[i];
+    if (i > 2 && (q.W < p.W || q.H < p.H || q.W - p.W > 1 || q.H - p.H > 1)) grow = false;
+    if (Math.abs(q.r - p.r) > 4) roundsClose = false;
+  }
+  ok('ladder: the grid never shrinks, and grows by at most one dot a level', grow);
+  ok('ladder: neighbouring levels are within 4 rounds', roundsClose);
+  for (const edge of [50, 100, 150]) {
+    const a = info[edge - 1], b = info[edge];
+    ok(`ladder: ${edge} -> ${edge + 1} is seamless`, Math.abs(a.W - b.W) <= 1 && Math.abs(a.H - b.H) <= 1 && Math.abs(a.r - b.r) <= 3);
+  }
+  const avg = (lo, hi) => { const s = info.slice(lo - 1, hi); return s.reduce((x, y) => x + y.r, 0) / s.length; };
+  ok('ladder: each band is deeper than the one before', avg(41, 50) < avg(91, 100) && avg(91, 100) < avg(141, 150) && avg(141, 150) < avg(191, 200));
+  ok('ladder: it stops getting harder at the top', avg(201, 230) <= avg(191, 200) + 1.5);
+  ok('ladder: level 1 is the gentle first board', JSON.stringify(buildLadder(1)) === JSON.stringify(buildLevel('easy', 1, 1)));
+  ok('ladder: bands', bandOf(50) === 'easy' && bandOf(51) === 'medium' && bandOf(151) === 'expert' && BAND_START.hard === 101 && bandEnd('hard') === 150);
+  console.log(`ladder: 230 levels ok-checked; rounds ${info[1].r} at 2, ${avg(41, 50).toFixed(1)} at 41-50, ${avg(91, 100).toFixed(1)} at 91-100, ${avg(141, 150).toFixed(1)} at 141-150, ${avg(191, 200).toFixed(1)} at 191-200; slowest build ${worstMs.toFixed(0)} ms`);
+  // A level in progress must rebuild to the SAME board, so the ladder is pinned the day it shipped.
+  // Never change it without a new ladder generator and keeping this one (see engine.js).
+  const h = createHash('sha256');
+  for (let n = 1; n <= 60; n++) h.update(JSON.stringify(buildLadder(n)));
+  for (const n of [101, 151, 200]) h.update(JSON.stringify(buildLadder(n)));
+  const pin = h.digest('hex').slice(0, 16);
+  ok(`ladder unchanged (${pin})`, pin === 'a3349c761be93816');
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nall way-out engine checks passed');
 process.exit(fails ? 1 : 0);

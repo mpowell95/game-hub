@@ -207,9 +207,13 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
 
 ## Persistence and stats
 
-- Settings `gamehub.wayout.v1`: `{ tier, levels: { easy, medium, hard, expert } }`, the NEXT level
-  per tier. Saved on selection; `levels` only ever go up (`Math.max`), capped at 1,000,000 (a
-  corrupt value once read "Level 1e+21").
+- Settings `gamehub.wayout.v1`: `{ tier, levels: { easy, medium, hard, expert }, ladder: { ... } }`.
+  `ladder` (since 2026-10-14) is the NEXT LADDER level per difficulty and is what the game reads;
+  `levels` is the old tiers' next level, FROZEN as stored (written back unchanged, never changed).
+  Both only ever go up (`Math.max`), capped at 1,000,000 (a corrupt value once read "Level 1e+21").
+- **Since the ladder, the progress and clock keys below (`saves.v1`, `clocks.v1`) are READ ONLY.**
+  The ladder's own are `gamehub.wayout.ladder.saves.v1` / `gamehub.wayout.ladder.clocks.v1`, see
+  "The ladder and points".
 - Progress `gamehub.wayout.saves.v1` (since the 2026-10-11 QA pass): ONE SAVE PER TIER,
   `{ easy: save|null, medium, hard, expert, migrated: 1 }`, each save `{ v, tier, level, gen, gone[],
   red[], lives }` (`gen`: the board generator it was played on, none = 1), written after every tap that changes the level, set to null on a win, a restart
@@ -249,8 +253,10 @@ it's +15, +30, hard +20, +40, expert +30s, +60s"*); a hint costs **the same as a
   arrows, rounds, hearts lost, hints. Nothing is computed from it yet. `wo.recent` / `wo.best` are
   lists the first timed build wrote; they are no longer written and are kept as stored (rule 5);
   `log` was seeded from `recent` on the first write after this change.
-- **Score and leaderboard: NOT DECIDED.** Arrow Maze's board is the default board (levels cleared,
-  hardest difficulty first) until Matt decides.
+- **The score is POINTS, not time** (decided 2026-10-14, see "The ladder and points" below). The
+  clock and the log stay: every finish is kept so time can come back into the score once there is
+  enough of it (Matt: *"Save the time and we can switch back to the time being factored into the
+  score when we know how long things typically take"*).
 - **Not timed, honestly:** a level resumed from a save made before the timer shipped has no honest
   time (`partial`), and levels cleared before it have none either. Both still count as solved
   everywhere (rule 4: never invent a number).
@@ -296,3 +302,73 @@ page's `/favicon.ico` 404 is shared with every game's standalone page.
 - `node test-visual.mjs way-out` has a PLAY probe: Play, tap a clear arrow (it leaves), tap a
   blocked one (it bounces and a heart goes), through real touch.
 - `node check-no-scroll.mjs way-out`, `node test-game-conventions.mjs`.
+
+## The ladder and points (2026-10-14)
+
+Matt, after three rounds of timed-score formulas (every one of them had a real problem: see the
+session's reasoning in the commit): *"What if we throw out all of this and do it more like other apps
+and games do it? ... it's just about who has completed the most levels or who has completed the
+highest level"*, then *"You can start anywhere"*, *"I like tiered. Since they get progressively harder
+and harder, maybe points should do something"*, *"I want easy level 50 to be basically medium level
+51. There shouldn't be a big jump between individual levels"*, *"Just keep them tied"*, and *"Save the
+time ... keep all data from all plays by everyone."*
+
+**One ladder, four difficulties.** Levels are numbered 1, 2, 3 ... for ever. Easy is 1-50, Medium
+51-100, Hard 101-150, Expert 151 on (never ends). A player picks any difficulty and plays its levels
+in order; each difficulty remembers its own next level (`ladder[band]`). Finishing level 50, 100 or
+150 completes that difficulty: back to the setup screen, which says "Complete" and disables Play.
+
+**Why not "highest level" on the leaderboard:** with "start anywhere", a new player picks Expert,
+clears 151 and passes everyone who climbed 1-150. So the board counts POINTS for levels cleared.
+
+**Points** (`js/arrow-maze-time.js`, `woLevelPoints`): 1 for levels 1-25, then 1 more every 25 levels,
+up to 8 (levels 176 on), where the boards stop getting harder. Never more than +1 between neighbours.
+A player's points = the sum over every level they have cleared. **They are read from the per-band
+cleared counts** (`byDiff[band].won`), not from a per-level log: inside a band levels are always
+played in order, so "cleared 27 of Hard" means exactly ladder 101-127. That covers every level ever
+cleared, timed or not, from the day the game shipped. Old-tier levels count as their band's levels in
+order (old Hard 27 = ladder 101-127). A count past a band's 50 (only possible from the old endless
+tiers) keeps earning the band's last level's points. **Ties stay tied.** The board (`js/leaderboard-
+ui.js`) is ONE number across all four difficulties and is **deliberately not hardest-difficulty-first**
+(Matt: a slow Expert player must not outrank a good Hard one); `boardTierOf` returns null for
+`wayout` unless a filter is picked, and a filter shows that difficulty's own points. On 2026-10-14
+(real synced data): King of Games 164, Anita Bonita 57, MattyIce 56, Ele 27.
+
+**The boards: generator 5, "the ladder"** (`buildLadder(n)` in `engine.js`). Every setting of a
+board (grid size, arrow lengths, density, straightness, the rounds target) is interpolated by ladder
+number between six KEYFRAMES (levels 2, 13, 50, 100, 150, 200) sitting on the old tiers' own sizes, so
+the ladder covers the same range of boards: 6x6 at 2, 10x13 at 13, 12x16 at 50, 17x23 at 100, 23x30
+at 150, 28x38 from 200. Each board flips arrows toward its rounds target (generator 4's mechanism)
+and the candidate nearest the target wins. Level 1 is still the gentle 8x4 first board. Measured:
+the grid never shrinks and grows at most one dot a level, neighbours are within 4 rounds, 50/51,
+100/101 and 150/151 are seamless; rounds average ~4 at 2, 12.7 at 41-50, 18.7 at 91-100, 24.8 at
+141-150, 30.4 at 191-200, then hold. Slowest build ~90 ms on a desktop. `test.js` checks all of that
+for levels 1-230 and **pins the ladder by hash**: never change it without a new generator.
+
+**Nothing a player had is lost** (THE LAW):
+- Every old cleared level still counts (points from the counts, above), and every old timed finish
+  is still in `wo.log`.
+- Each difficulty's ladder position starts where the old tier was (old Medium next level 11 =
+  ladder 61). Written into `ladder` the first time the game opens (`migrateToLadder()`).
+- **A level that was in progress on an old tier is finished on its own old board first**, with its
+  arrows already gone and its clock, as that band's current ladder level. The ladder save names its
+  board (`src`: `{k:'L', n}` or `{k:'T', tier, level, gen}`), so Restart and Out of lives keep that
+  board. After it is cleared the band moves on to ladder boards.
+- The old `saves.v1` / `clocks.v1` keys are only READ (once), never written again; the old `levels`
+  field is written back exactly as stored.
+
+**Every finish is kept, with more than before:** `wo.log` entries gained `l` (the ladder level), `g`
+(the board generator: 5 ladder, 1-4 an old board) and `d` (when, epoch ms). Additive, so time can
+come back into the score later with real numbers. **Not changed:** `js/players-agg.js` still keeps
+the log of the device with the most timed finishes per difficulty in the MERGED view (each device's
+own log is whole on that device and in its `players/<id>` node); points come from the counters,
+which add across devices.
+
+**The setup screen** shows each difficulty's next level and its range ("Levels 51-100"), Play
+level N, and "This level is worth N points". How to play's third page says every level earns points.
+
+Tests: `node way-out/js/test.js` (the ladder, plus the old generators unchanged), `node
+test-arrow-maze-time.mjs` (bands, points, the real players' totals, the recorder's new fields).
+Checked in Chromium (402x874, light and dark): the carried-over old level (its board, its gone arrow,
+its 12 s clock), the move onto ladder boards, Easy 50 completing the band, a new player starting at
+Expert 151, and the leaderboard with the real synced data.
