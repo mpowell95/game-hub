@@ -648,6 +648,22 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('wayout: a first-build record offers its recent list', wo.log.medium.length, 1);
   ok('wayout counts as a SOLO game', SOLO.has('wayout'));
 }
+// Rush (2026-10-14): a week's best is the best on any device (max, never a sum); the run list is the
+// longest device's; a phone with no Rush yet changes nothing.
+{
+  const run = (s, w) => ({ s, b: 1, ms: 20000, m: 0, d: 1760000000000, w });
+  const all = {
+    d1: rec({ playerId: 'WO222', name: 'Rusher' }, { wayout: { total: { played: 0, won: 0, lost: 0 }, byDiff: {},
+      wo: { timed: {}, mistakes: 0, hints: 0, log: {}, rush: { runs: { easy: [run(30, '2026-10-12'), run(12, '2026-10-05')] }, best: { easy: { '2026-10-12': 30, '2026-10-05': 12 } } } } } }, 100),
+    d2: rec({ playerId: 'WO222', name: 'Rusher' }, { wayout: { total: { played: 0, won: 0, lost: 0 }, byDiff: {},
+      wo: { timed: {}, mistakes: 0, hints: 0, log: {}, rush: { runs: { easy: { 0: run(41, '2026-10-12') }, hard: [run(9, '2026-10-12')] }, best: { easy: { '2026-10-12': 41 }, hard: { '2026-10-12': 9 } } } } } }, 200),
+    d3: rec({ playerId: 'WO222', name: 'Rusher' }, { wayout: { total: { played: 2, won: 2, lost: 0 }, byDiff: { easy: { played: 2, won: 2, lost: 0 } },
+      wo: { timed: { easy: 2 }, mistakes: 0, hints: 0, log: {} } } }, 300),
+  };
+  const r = aggregatePlayers(all)[0].games.wayout.wo.rush;
+  eq('wayout rush: a week\'s best is the best on any device', [r.best.easy['2026-10-12'], r.best.easy['2026-10-05'], r.best.hard['2026-10-12']], [41, 12, 9]);
+  eq('wayout rush: runs come from the device with the most', [r.runs.easy.length, r.runs.hard.length], [2, 1]);
+}
 
 // ---- Cup Pong's cp (solo racks) survives the cross-device combine (THE LAW rule 1) ----
 // 2026-09-28. soloBest is a FEWEST with 0 = never cleared: d2 has matches but no clear, and must

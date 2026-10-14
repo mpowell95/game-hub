@@ -12,7 +12,7 @@
 import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats } from './stats-corrections.js';
-import { WO_TIERS, woList } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 
 export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock']);  // solo: win-only (no loss axis) or score-based
@@ -238,6 +238,18 @@ export function aggregatePlayers(all, corrections) {
           dst.wo.timed[tier] = (dst.wo.timed[tier] | 0) + n;
           const log = woList(((src.wo.log || src.wo.recent) || {})[tier]);
           if (n > (dst.wo._n[tier] | 0)) { dst.wo._n[tier] = n; dst.wo.log[tier] = log; }
+        }
+        // RUSH (2026-10-14): each week's best is the best on ANY of the person's devices (Math.max,
+        // never a sum); the run lists are each phone's own sequence, so the person keeps the longest.
+        if (src.wo.rush && typeof src.wo.rush === 'object') {
+          if (!dst.wo.rush) dst.wo.rush = { runs: {}, best: {} };
+          for (const m of RUSH_MODES) {
+            const best = woRushBestMap((src.wo.rush.best || {})[m]);
+            const into = dst.wo.rush.best[m] || (dst.wo.rush.best[m] = {});
+            for (const [w, v] of Object.entries(best)) into[w] = Math.max(into[w] ?? -1, v);
+            const runs = woRushRuns((src.wo.rush.runs || {})[m]);
+            if (runs.length > (dst.wo.rush.runs[m] || []).length) dst.wo.rush.runs[m] = runs;
+          }
         }
       } else if (g === 'gridlock' && src.gl) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it Gridlock's

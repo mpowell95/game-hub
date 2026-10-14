@@ -481,3 +481,9 @@
 :root.gh-dark .fs-root .fs-mp-h span { background: #1f7a3a; color: #fff; }
 /* css/hub.css carries this too, but the standalone page does not load hub.css. */
 :root.gh-dark .fs-root .lb-dshape-t3, :root.gh-dark .fs-root .lb-dshape-t4 { fill: #e6e9f0; }
+
+/* Quick chat (js/match-chat-ui.js, 2026-10-14). The root is touch-action: none, which would stop
+   the panel scrolling on a very short phone; the free-text box must stay typeable under the
+   root's user-select: none (iOS Safari will not type into an input that has it). */
+.fs-root .ghc-panel { touch-action: pan-y; }
+.fs-root .ghc-input { -webkit-user-select: text; user-select: text; }

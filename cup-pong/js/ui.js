@@ -106,6 +106,12 @@ const CUSTOM_ICON = `<svg viewBox="0 0 56 56" width="56" height="56" aria-hidden
   [[10, 14], [28, 14], [19, 30], [37, 30]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"/>`).join('')
 }<circle cx="46" cy="14" r="8"/><circle cx="28" cy="46" r="8"/><path d="M40 22 L32 38" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>`;
 
+/** Where the quick-chat button sits (js/match-chat-ui.js `place`): directly UNDER the Menu button,
+ *  so it overlaps neither the Menu (top right) nor the status line, whose second line runs wide
+ *  ("Cups 10-10 vs Ana · Game 2 of 3 · Straight up") and is centred in the bar. It lands on the
+ *  table's far wall, which is nothing to touch; the flick pad is the lower 60%. */
+const CHAT_PLACE = { top: 'calc(max(10px, env(safe-area-inset-top, 0px)) + 52px)', right: '12px', popsTop: 'calc(max(10px, env(safe-area-inset-top, 0px)) + 104px)' };
+
 const escapeHTML = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const reducedMotion = () => {
@@ -578,6 +584,7 @@ class CupPong {
     this.mp = { id: game.id, side, game, themName: them.name || '?', themEmoji: them.emoji || '🙂', them,
       base: game.log.length, applied: from, pending: [], sending: false, stop: null, finished: false };
     this.match = MP.buildLocal(game, side, from);
+    this.mpMountChat();
     // STRAIGHT UP has to be impossible to miss (Matt, 2026-10-01): the words on the felt for the
     // whole match, and a banner across the screen every time it is opened.
     const su = !!(game.rules && game.rules.su);
@@ -599,6 +606,47 @@ class CupPong {
     if (!this.mp || this.mp.id !== game.id) { try { stop(); } catch {} return; }
     this.mp.stop = stop;
     this.later(() => this.mpCatchUp(), 500);
+  }
+
+  // --- quick chat inside a challenge (2026-10-14) ---------------------------------------------
+  // js/match-chat-ui.js is the panel, js/match-chat.js the data (`cuppong/chat/<id>`, BESIDE the
+  // match, never inside it, so watchGame and validateGame never see a chat line). Mounted while a
+  // stored match is on screen (playing, watching their replay, a finished one, the Game Over card)
+  // and torn down with the match in teardownEngine. `side` is the STORED side (mp.side), never the
+  // local-frame 'a'. Lazy-imported: a solo or vs-computer player downloads none of it.
+  async mpMountChat() {
+    this.mpUnmountChat();
+    const mp = this.mp;
+    if (!mp) return;
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (this.disposed || this.mp !== mp || this._chat) return;
+    const node = 'cuppong';
+    const side = mp.side;
+    const seenAt = DATA.readChatSeen(node, mp.id);
+    const chat = UI.createMatchChat({
+      root: this.root,
+      send: (p) => DATA.sendChat({ node, id: mp.id, side }, p),
+      them: () => ({ name: mp.themName, emoji: mp.themEmoji }),
+      place: CHAT_PLACE,
+    });
+    this._chat = chat;
+    const stop = await DATA.watchChat({ node, id: mp.id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === side;
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(node, mp.id, newest);
+    });
+    if (this.disposed || this.mp !== mp || this._chat !== chat) { try { stop(); } catch {} return; }
+    this._chatStop = stop;
+  }
+
+  mpUnmountChat() {
+    if (this._chatStop) { try { this._chatStop(); } catch {} this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch {} this._chat = null; }
   }
 
   /** Show whatever the board has not shown yet, then play on (or wait). */
@@ -1556,6 +1604,7 @@ class CupPong {
     this.stopLoop();
     this.clearTimers();
     if (this.mp && this.mp.stop) { try { this.mp.stop(); } catch {} }
+    this.mpUnmountChat();
     this.mp = null;
     this.replaying = false;
     if (this.offViewport) { try { this.offViewport(); } catch {} this.offViewport = null; }

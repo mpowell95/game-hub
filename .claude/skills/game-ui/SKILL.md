@@ -16,9 +16,13 @@ a shipped one, not a new build.
 
 **If you are creating a new game folder** (not just editing an existing one), also read
 `docs/BUILDING-A-GAME.md`'s Parts 1-2 in full — the module contract, the "Adding a game" checklist,
-and the screen patterns (how-to-play screens, setup-screen defaults, the MP save-key convention) —
+and the screen patterns (how-to-play screens, setup-screen defaults, the MP save-key convention,
+and quick chat in every online game) —
 plus root `CLAUDE.md`'s "Before you build: USE WHAT EXISTS" table, which stays in the always-loaded
 root file on purpose.
+
+**If you are adding online play to any game, new or old**, read `docs/BUILDING-A-GAME.md`'s
+"Multiplayer: quick chat is part of the game" first: in-match chat ships in the same change.
 
 Do not summarize the UX floor here instead of reading it — a summary is a second copy that drifts
 from the source. This file is a pointer, nothing more.

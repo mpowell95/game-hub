@@ -244,6 +244,27 @@ check(
   + 'the next game, so a leaked listener keeps firing over an unrelated game.'
 );
 
+// --- 5b. every multiplayer game has quick chat -------------------------------------------------
+// Matt, 2026-10-14: "Why don't the new games with multiplayer have the quick chat stuff?" Cup Pong,
+// Darts, Flick Soccer, Skeeball challenges and Air Hockey all shipped online play without it,
+// because chat lived inside one game's folder and nothing told the next game it existed. A game is
+// MULTIPLAYER here if any of its files reaches the network (js/net.js, or firebase-boot.js for a
+// challenge node); it HAS CHAT if any of its files uses js/match-chat-ui.js (or the older
+// js/mp-reactions-ui.js / js/mp-reactions.js palette that the live-room games use).
+
+check(
+  'every multiplayer game has quick chat inside a match',
+  GAMES.filter((g) => {
+    const files = gameJs(g).map(({ src }) => stripComments(src));
+    const online = files.some((s) => /js\/net\.js|firebase-boot\.js/.test(s));
+    const chat = files.some((s) => /match-chat-ui\.js|mp-reactions(?:-ui)?\.js/.test(s));
+    return online && !chat;
+  }).map((g) => `${g}/js/`),
+  'use js/match-chat-ui.js (the panel) + js/match-chat.js (sendChat/watchChat for a turn-by-turn '
+  + 'match at `<node>/chat/<matchId>`, or net.sendReaction + watchRoomReactions for a live room). '
+  + 'See docs/BUILDING-A-GAME.md, "Multiplayer: quick chat is part of the game".'
+);
+
 // --- 6. every game is documented ---------------------------------------------------------------
 
 check(
