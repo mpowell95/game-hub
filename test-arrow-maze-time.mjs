@@ -71,28 +71,25 @@ ok('bands: Easy 1-50, Medium 51-100, Hard 101-150, Expert 151 on', T.bandOf(1) =
   && T.bandOf(51) === 'medium' && T.bandOf(100) === 'medium' && T.bandOf(101) === 'hard' && T.bandOf(150) === 'hard'
   && T.bandOf(151) === 'expert' && T.bandOf(9999) === 'expert');
 ok('band ends', T.bandEnd('easy') === 50 && T.bandEnd('hard') === 150 && T.bandEnd('expert') === Infinity);
-ok('points: 1 for 1-25, +1 every 25 levels', T.woLevelPoints(1) === 1 && T.woLevelPoints(25) === 1 && T.woLevelPoints(26) === 2
-  && T.woLevelPoints(50) === 2 && T.woLevelPoints(51) === 3 && T.woLevelPoints(151) === 7);
-ok('points stop at 8, where the boards stop getting harder', T.woLevelPoints(176) === 8 && T.woLevelPoints(200) === 8 && T.woLevelPoints(5000) === 8);
-{
-  let up = true;
-  for (let n = 1; n < 400; n++) { const d = T.woLevelPoints(n + 1) - T.woLevelPoints(n); if (d < 0 || d > 1) up = false; }
-  ok('points never drop and never jump by more than 1 between neighbours', up);
-}
-ok('a band\'s points are its first levels in order', T.woBandPoints('easy', 26) === 25 + 2 && T.woBandPoints('medium', 1) === 3
-  && T.woBandPoints('expert', 2) === 14 && T.woBandPoints('easy', 0) === 0);
-ok('an old count past a band\'s 50 keeps earning its last level\'s points', T.woBandPoints('easy', 52) === T.woBandPoints('easy', 50) + 4);
+ok('points per level: Easy 1, Medium 2, Hard 4, Expert 6', T.woLevelPoints(1) === 1 && T.woLevelPoints(50) === 1
+  && T.woLevelPoints(51) === 2 && T.woLevelPoints(100) === 2 && T.woLevelPoints(101) === 4 && T.woLevelPoints(150) === 4
+  && T.woLevelPoints(151) === 6 && T.woLevelPoints(5000) === 6);
+ok('a band\'s points are its cleared count times its points', T.woBandPoints('easy', 26) === 26 && T.woBandPoints('medium', 1) === 2
+  && T.woBandPoints('hard', 27) === 108 && T.woBandPoints('expert', 2) === 12 && T.woBandPoints('easy', 0) === 0 && T.woBandPoints('nope', 5) === 0);
+ok('an old count past a band\'s 50 keeps earning the same per level', T.woBandPoints('easy', 52) === 52);
 // The real players' cleared counts on 2026-10-14 (read from players/, see way-out/CLAUDE.md).
 const rec = (e, m, h, x) => ({ byDiff: { easy: { won: e }, medium: { won: m }, hard: { won: h }, expert: { won: x } } });
-ok('King of Games 20 Easy, 27 Hard, 1 Expert = 164', T.woPoints(rec(20, 0, 27, 1)) === 164);
-ok('one difficulty alone', T.woPoints(rec(20, 0, 27, 1), 'hard') === 137 && T.woPoints(rec(20, 0, 27, 1), 'nope') === 0);
+ok('King of Games 20 Easy, 27 Hard, 1 Expert = 134', T.woPoints(rec(20, 0, 27, 1)) === 134);
+ok('Anita 23 Easy, 9 Medium, 1 Expert = 47; MattyIce 1, 10, 5 = 41; Ele 26 Easy = 26', T.woPoints(rec(23, 9, 0, 1)) === 47
+  && T.woPoints(rec(1, 10, 5, 0)) === 41 && T.woPoints(rec(26, 0, 0, 0)) === 26);
+ok('one difficulty alone', T.woPoints(rec(20, 0, 27, 1), 'hard') === 108 && T.woPoints(rec(20, 0, 27, 1), 'nope') === 0);
 ok('no record, no points', T.woPoints(null) === 0 && T.woPoints({}) === 0);
 ok('the log keeps ladder level, generator and date', (() => { const f = T.woList([{ t: 9, a: 3, r: 2, l: 61, g: 5, d: 1760000000000 }])[0]; return f.l === 61 && f.g === 5 && f.d === 1760000000000; })());
 store.clear();
 G.recordWayOut('medium', { timeMs: 30000, penaltyMs: 0, arrows: 40, rounds: 14, timed: true, level: 61, gen: 5 });
 g = G.loadStats().games.wayout;
 ok('the recorder stores the ladder level, generator and date', g.wo.log.medium[0].l === 61 && g.wo.log.medium[0].g === 5 && g.wo.log.medium[0].d > 0);
-ok('and counts it in its band', g.byDiff.medium.won === 1 && T.woPoints(g) === 3);
+ok('and counts it in its band', g.byDiff.medium.won === 1 && T.woPoints(g) === 2);
 
 console.log(`\nArrow Maze timer tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
