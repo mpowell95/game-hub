@@ -860,6 +860,24 @@ class FlickSoccerUI {
   }
 
   /** Open one stored match. Flicks still waiting on this phone go first, so none is lost. */
+  /** A notification for a challenge was tapped while Flick Soccer is ALREADY open (2026-10-14, the
+   *  hub's `openArmed` hand-over): open that match if nothing is in the way. Matt: "when i click a
+   *  notification that it's my turn... it brings me to the hub, but doesn't necessarily open the
+   *  challenge." Never pulls the player out of a game against the computer or two players on one
+   *  phone, or out of a shot still rolling; a match already on screen is left alone (its own watch
+   *  plays their flick). The armed id is always taken, so a declined one cannot pop up later. */
+  openArmed() {
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || instance !== this) return;
+      if (o.kind === 'pick') { if (!this.match || this.mp) this._openOnline(o.them); return; }
+      if (this.mp && this.mp.id === o.id) return;
+      if (this.phase === 'moving' || this.phase === 'goal') return;
+      if (!this.mp && this.match && !this.match.over && this.phase !== 'idle') return;
+      this._openMatch(o.id);
+    }).catch(() => {});
+  }
+
   async _openMatch(id) {
     const MP = await this._loadMP();
     if (MP.pendingFor(id)) await MP.drainOutbox(id);
@@ -1423,4 +1441,6 @@ export function destroy() {
 }
 /** Autosave meaning: the match is saved at every rest and resumes, so leaving loses nothing. */
 export function isInProgress() { return false; }
-export default { init, destroy, isInProgress };
+/** The hub armed a match (alert.js armOpen) while this game is open: take it (see openArmed). */
+export function openArmed() { if (instance) instance.openArmed(); }
+export default { init, destroy, isInProgress, openArmed };
