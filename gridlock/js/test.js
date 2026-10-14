@@ -89,8 +89,8 @@ ok('hint: the slowest solve stays under 150 ms', worst < 150);
 // --- the pin: shipped levels never change ----------------------------------------------------
 // PINNED = how many ladder 2 levels have shipped. To add Expert levels, APPEND (keep every existing
 // line) and leave this hash alone; it covers only the first PINNED lines.
-const PINNED = 0;
-const PIN_HASH = '';
+const PINNED = 4000;
+const PIN_HASH = '3643f90571206dbd';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).join('\n')).digest('hex').slice(0, 16);
   ok(`pin: the first ${PINNED} shipped levels are unchanged (${h})`, h === PIN_HASH);

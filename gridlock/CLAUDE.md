@@ -165,6 +165,15 @@ change what they cleared. `gridlock/js/test.js` re-solves every level (its fewes
 exact), checks every ladder 1 board is where the map says, and pins the shipped lines by hash
 (`PINNED`). Expert can grow by appending; Easy to Hard are full.
 
+**Measured (ladder 2, shipped 2026-10-14):** two searches (15 and 40 minutes on 4 CPUs) found about
+100,000 distinct puzzles; the longest 51 moves without walls and 55 with walls. Fewest moves per 250
+levels: Easy 3-5, 6-8, 8-10, 10-12; Medium 12-14 ... 18-20; Hard 20-22 ... 26-28; Expert 28-30,
+30-33, 33-37, 37-55. **Only the last 165 Expert levels (3836 on) are 40 moves or more** (Matt's
+worry: "half of the expert ones are basically unsolvable by normal people" was true of ladder 1,
+where Expert reached 40+ by level ~340 of 400). No level is more than 1 move easier than the one
+before it, nor more than 2 harder. Walls: Hard 661, Expert 630 of 1000. The slowest hint ~47 ms on a
+desktop. `levels.js` is 168 KB.
+
 **Measured (ladder 1, the first 400, kept for the record):** a 15-minute search on 4 CPUs (one without walls, three
 with) found ~42,000 distinct puzzles, the longest 51 moves without walls (the known maximum for a
 wall-free 6x6, Fogleman) and 47 with walls. Fewest moves by band: Easy 3-14 (average 9.5), Medium
