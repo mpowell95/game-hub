@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1131';
+const CACHE = 'game-hub-v1132';
 
 const ASSETS = [
   './',
@@ -803,7 +803,7 @@ const REST_MANIFEST = {
   './way-out/': 'dc6c9178ea',
   './way-out/index.html': 'dc6c9178ea',
   './way-out/css/way-out.css': 'ccb19f4dea',
-  './way-out/js/ui.js': '823f774b6f',
+  './way-out/js/ui.js': '96090e537f',
   './way-out/js/engine.js': '5aafbb5a5b',
   './way-out/js/strings.js': '528bd22998',
   './flick-soccer/': 'fe417867a0',
