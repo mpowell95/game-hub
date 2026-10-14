@@ -370,7 +370,7 @@ let manifestFailed = false;
 try {
   const { execSync } = await import('node:child_process');
   const sh = (c) => execSync(c, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
-  const base = sh('git merge-base HEAD origin/main').trim();
+  const base = sh(`git merge-base HEAD ${process.env.SW_BASE_REF || 'origin/main'}`).trim();
   const changed = sh(`git diff --name-only ${base}`).split('\n').filter(Boolean);
   const shipped = new Set(ASSETS.map((e) => resolveAssetPath(e)));
   const heldRel = new Set([...heldPaths].map((p) => resolveAssetPath(p)));
