@@ -1009,6 +1009,7 @@ class Hub {
     const myCode = (prof && prof.playerId) || '';
     const visible = GAMES.filter((g) => (isGameLive(g.id, !g.devOnly) || dev || isGameAllowed(g.id, myCode))
       && !hiddenFromPlayer(g, myCode, dev));
+    this._tellWorkerShown(visible.map((g) => g.id));
     const storedFavIds = loadFavorites();
     const favIdSet = new Set(storedFavIds);
     // FAVORITES ARE NEVER TOUCHED BY THE SORT. They stay above, in the player's own custom order
@@ -1814,6 +1815,23 @@ class Hub {
   _shortVersion(cache) {
     const m = /game-hub-(v\d+)/.exec(cache || '');
     return m ? m[1] : null;
+  }
+
+  /** Tell the service worker which games this launcher shows (2026-10-14). sw.js warms an
+   *  admin-only game's files (its generated HELD_BACK list) only onto a phone whose launcher shows
+   *  that game, so a release from the admin page warms on the phones it reaches with no commit.
+   *  Sent only when the list changes; posted to the ACTIVE worker, so it works before this page is
+   *  controlled (first install). Silent on failure: the cost is a game fetched on first open. */
+  _tellWorkerShown(ids) {
+    const key = ids.slice().sort().join(',');
+    if (key === this._shownSent) return;
+    this._shownSent = key;
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.ready
+        .then((reg) => { if (reg.active) reg.active.postMessage({ type: 'SHOWN_GAMES', ids }); })
+        .catch(() => {});
+    } catch { /* no worker: nothing is warmed anyway */ }
   }
 
   /** Ask the ACTIVE service worker which cache version it runs. Null when unknown. */
