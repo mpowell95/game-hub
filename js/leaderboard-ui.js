@@ -2427,6 +2427,10 @@ function ensureCss() {
     '.lb-tile2.is-sel{border-color:var(--lb-pill-color,#1c2430);color:var(--lb-ink);background:var(--lb-surface)}',
     ':root.gh-dark .lb-tile2.is-sel{border-color:var(--lb-ink)}',
     '.lb-tile2.is-empty{opacity:.55}',
+    // The YOU row (.lb-pcard.is-me) is itself --lb-surface-2, so its tiles flip to --lb-surface
+    // with a hairline, or they melt into the row (Matt, 2026-10-14).
+    '.lb-pcard.is-me .lb-tile2{background:var(--lb-surface);border-color:var(--lb-line)}',
+    '.lb-pcard.is-me .lb-tile2.is-sel{border-color:var(--lb-pill-color,#1c2430)}',
     '.lb-tile-mp .lb-mp-tag{font-style:normal;font-size:11px;font-weight:900;letter-spacing:.04em;color:var(--lb-muted)}',
     '.lb-dshape{width:11px;height:11px;display:block}',
     '.lb-dshape-x2{width:19px;height:11px}',
