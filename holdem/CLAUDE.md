@@ -179,8 +179,11 @@ rigged deal is one real 52-card deck). Nothing about it is saved in state. His $
   who ever played for money (`entries || grants`) via `readPlayersOnce` -> hidden prefixes ->
   `aggregatePlayers(all, corrections())` -> `isHiddenName`; sort Bankroll or Lifetime winnings;
   **never scrolls** (`_fitBank` drops rows from the bottom, never yours or the picked one); empty
-  read = offline with **Try again**; read-only. Tapping a row (`this.bankPick`) shows their numbers;
-  rows are `role="button"` divs.
+  read = offline with **Try again**; read-only. Tapping a row (`this.bankPick`) shows their numbers
+  (tap it again, or your own row, to go back); rows are `role="button"` divs. **No "Show mine"
+  button and one fixed card height since 2026-10-14** (Matt: *"useless and is a waste of space"*;
+  the card moved when switching players): an "Under review" card keeps the numbers' space hidden
+  (`.pk-bknums`) with the label laid over it. Measured 173px for every row.
 
 ## Hand stats (2026-09-28)
 

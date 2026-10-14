@@ -526,8 +526,10 @@ class Game {
    *  it reads the same ledgers the hub leaderboard does and writes nothing. */
   _renderBank() {
     // Whose numbers the card shows (2026-10-06, Matt: "When I click on another player, show me
-    // their stats there"). Yours unless a row was tapped; tapping it again, or your own row, or
-    // "Show mine", comes back to you.
+    // their stats there"). Yours unless a row was tapped; tapping it again, or your own row, comes
+    // back to you. No "Show mine" button since 2026-10-14 (Matt: "useless and a waste of space"),
+    // and the card is the same height for everyone so it never jumps when you switch players: an
+    // "Under review" ledger keeps the numbers' space (hidden) with the label laid over it.
     const L = this.bankList;
     const picked = this.bankPick && Array.isArray(L) ? L.find((r) => r.key === this.bankPick && !r.me) : null;
     if (!picked) this.bankPick = null;
@@ -558,15 +560,16 @@ class Game {
           <h2 class="pk-bktitle">${esc(t('bank_title'))}</h2>
         </div>
         <div class="pk-bkme">
-          <div class="pk-bkwho"><span class="pk-lav">${esc((picked ? picked.emoji : (loadProfile() || {}).emoji) || '\u{1F642}')}</span><span class="pk-bkwhoname">${esc(picked ? picked.name : t('you'))}</span>${picked ? `<button type="button" class="pk-btn pk-btn-sm" data-act="bank-pick" data-k="me">${esc(t('bank_mine'))}</button>` : ''}</div>
-          ${picked && picked.review ? `<p class="pk-bkreview">${esc(t('bank_review'))}</p>` : `
+          <div class="pk-bkwho"><span class="pk-lav">${esc((picked ? picked.emoji : (loadProfile() || {}).emoji) || '\u{1F642}')}</span><span class="pk-bkwhoname">${esc(picked ? picked.name : t('you'))}</span></div>
+          ${picked && picked.review ? `<p class="pk-bkreview">${esc(t('bank_review'))}</p>` : ''}
+          <div class="pk-bknums"${picked && picked.review ? ' aria-hidden="true"' : ''}>
           <div class="pk-bkbig"><span class="pk-bankicon" aria-hidden="true">$</span><span>${esc(t('bankroll'))}</span><b>${esc(bigMoney(Math.max(0, holdemBalance(mine))))}</b></div>
           <div class="pk-bkgrid">
             <div><small>${esc(t('bank_lifetime'))}</small><b>${esc(bigMoney(mine.winnings))}</b></div>
             <div><small>${esc(t('bank_profit'))}</small><b class="${profit < 0 ? 'is-neg' : 'is-pos'}">${esc(signed(profit))}</b></div>
             <div><small>${esc(t('bank_best'))}</small><b>${esc(bigMoney(mine.best))}</b></div>
             <div><small>${esc(t('bank_prizes'))}</small><b>${esc(t('bank_prizes_n', { a: mine.cashes, b: mine.entries }))}</b></div>
-          </div>`}
+          </div></div>
         </div>
         <div class="pk-seg pk-bksort" role="radiogroup">
           <button type="button" role="radio" aria-checked="${sort === 'bank'}" class="pk-segbtn${sort === 'bank' ? ' is-on' : ''}" data-act="bank-sort" data-v="bank">${esc(t('bankroll'))}</button>
