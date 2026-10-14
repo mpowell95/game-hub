@@ -164,7 +164,7 @@ Mancala" — Dots and Boxes is the fifth). `js/net.js` itself is untouched.
   auto-starting the next game** — `_tryRestoreMP` calls `this.finish()` on a non-`midGame` save,
   same shape as `mancala/js/ui.js`'s restore, deliberately NOT `tic-tac-toe/js/ui.js`'s
   auto-`_mpStartNextGame()`-on-restore shape (there is no settled convention here — see
-  `HANDOFF-MP-WEB-SESSION.md`'s save-key note, which applies equally to this choice). The host
+  `docs/archive/HANDOFF-MP-WEB-SESSION.md`'s save-key note, which applies equally to this choice). The host
   sees "Play again" and decides when game N+1 starts, exactly as if it had never left; the guest
   just waits. `finish()`'s own `_statsCommitted` guard (already restored from the save) keeps
   this idempotent, so there is no separate `_mpAwaitNextGame()`/`_mpStartNextGame()` restore
@@ -212,7 +212,7 @@ Mancala" — Dots and Boxes is the fifth). `js/net.js` itself is untouched.
 
 **Status line (web-session pass): protocol proven headlessly against `FakeRoom`, all six DB-series
 probes green (`test-mp-lockstep.mjs`); real-room behaviour is unverified.** Real devices are
-required for `HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment cannot reach
+required for `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment cannot reach
 Firebase at all. **The per-edge move granularity under real chain-capture latency (Large board,
 many rapid edges in one turn) is the one thing this pass could not de-risk and is flagged
 explicitly for that pass** — see the handoff entry there. Nothing here has been played on a real

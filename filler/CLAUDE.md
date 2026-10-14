@@ -45,7 +45,7 @@ A confirm-guarded **Restart** button (`data-role="restart"`) sits in the mid-gam
 and on confirm calls `startGame()` directly (same board size, same settings, counts as a new game
 for the alternation above) rather than returning to setup.
 
-### Autosave/resume (2026-07-23, batch 9, `HANDOFF-FB-RESUME.md`)
+### Autosave/resume (2026-07-23, batch 9, `docs/archive/HANDOFF-FB-RESUME.md`)
 
 `gamehub.filler.save.v1` (new key, separate from the settings key above) holds at most one
 in-progress game: board colors, owners, whose turn, both players' current colors/counts, move
@@ -74,7 +74,7 @@ inherently 2-player).
 **Status line (web-session pass): protocol proven headlessly against `FakeRoom`
 (`test-mp-lockstep.mjs`, F1-F6, all five `js/CLAUDE.md:271` invariants ported and green). No real
 room has ever been created - a cloud session cannot reach Firebase. Real-room behaviour is
-unverified** until `HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass runs on two real devices.
+unverified** until `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass runs on two real devices.
 
 ### Seats
 
@@ -94,7 +94,7 @@ is set.
 `generateColors(rng)`/`newGame(rng)` already took an injectable `rng` before this pass (used for
 the corner-neighbor fairness debias), so no new engine hook was needed - only a seeded PRNG
 (`mulberry32`, in `ui.js`) and a place to transmit the seed. **Deviation from the handoff doc's
-literal wording, stated explicitly**: `HANDOFF-MP-WEB-SESSION.md` said "transmit the SEED in room
+literal wording, stated explicitly**: `docs/archive/HANDOFF-MP-WEB-SESSION.md` said "transmit the SEED in room
 config", but this room hosts a REMATCH SERIES (a new board seed every game, not one for the whole
 room) and `room.config` is fixed once at `createRoom` - so the seed rides `round.deck` instead,
 the exact field Chinchón uses for its own per-round deck order. The board itself is NEVER
@@ -213,7 +213,7 @@ after every one - confirmed red against the pre-fix code (stuck at `played=1`), 
 - A move appended while offline advances the local seq with nothing written to the room, leaving
   a gap the peer waits on; recovery is the backstop. Flagged for the local pass.
 - The 4-character room code is not case- or lookalike-proofed beyond `net.js`'s own alphabet.
-- **Unverified without a real network** (flagged for `HANDOFF-MP-LOCAL-MACHINE.md`): the
+- **Unverified without a real network** (flagged for `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`): the
   `MP_DELIVER_SETTLE_MS` pacing beat's real-world feel over actual latency, and the seed-based
   board-generation round trip over a real Firebase round-trip (proven correct offline against
   the real engine, never against a real room).

@@ -5,7 +5,7 @@
 > which is always loaded alongside this file (full rule rationale: `js/CLAUDE.md`).
 
 A pixel-exact reproduction of a mobile Yahtzee UI, built from a standalone spec
-(`BUILD_INSTRUCTIONS.md` / `YAHTZEE_CLONE_SPEC.md` at the repo root, plus the reference images
+(`docs/archive/BUILD_INSTRUCTIONS.md` / `docs/archive/YAHTZEE_CLONE_SPEC.md` at the repo root, plus the reference images
 `yahtzee.png` / `yahtzee_ref_409x729.png`, still at the repo root) across three phases: a diffed static reference frame,
 full game logic, then the full animation spec. Originally built and verified as a fully
 self-contained `yahtzee-clone/index.html`, then wired into the hub as a proper module

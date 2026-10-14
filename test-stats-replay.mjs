@@ -1,9 +1,9 @@
-// test-stats-replay.mjs - LAW rule 7 made runnable (CLAUDE.md "THE LAW", ARCH-REVIEW.md S7-3):
+// test-stats-replay.mjs - LAW rule 7 made runnable (CLAUDE.md "THE LAW", docs/archive/ARCH-REVIEW.md S7-3):
 // real historical gamehub.stats shapes, written by the ACTUAL old writer code, loaded with the
 // CURRENT js/game-stats.js, then checked against the ACTUAL visibility gates the UIs use.
 //
 // This test failing means someone's history just went invisible - the month-scale failure in
-// ARCH-REVIEW.md S6, and the exact class of the July 2026 Ball Run incident (commits d7f284b
+// docs/archive/ARCH-REVIEW.md S6, and the exact class of the July 2026 Ball Run incident (commits d7f284b
 // through a5571f3).
 //
 // FIXTURE PROVENANCE - these are NOT hand-invented shapes (rule 7: "a migration test that seeds

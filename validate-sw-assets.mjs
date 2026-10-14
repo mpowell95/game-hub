@@ -1,5 +1,5 @@
 // validate-sw-assets.mjs - fails if the root sw.js's ASSETS precache list references a path that
-// doesn't exist on disk (ARCH-REVIEW.md S4-5/S5-4/S6-day: `cache.addAll` is atomic, so ONE 404'd
+// doesn't exist on disk (docs/archive/ARCH-REVIEW.md S4-5/S5-4/S6-day: `cache.addAll` is atomic, so ONE 404'd
 // path silently kills the new worker's install and offline serves the previous build forever,
 // with no visible symptom besides the version pill never advancing). Also warns (non-fatal) about
 // deployed .js/.css/.html files that AREN'T in ASSETS, so a future addition isn't forgotten the
@@ -127,7 +127,7 @@ const EXCLUDED = [
   { re: /(^|\/)js\/sim\.js$/, why: "headless match simulation (node-only, not deployed) - e.g. chinchon/js/sim.js's own header comment" },
   // "Reference screenshots in mancala/reference/ (gitignored)" - CLAUDE.md, Mancala row.
   { re: /^mancala\/reference\//, why: 'design reference screenshots, gitignored - CLAUDE.md Mancala row' },
-  { re: /^hole-editor\//, why: 'Matt-only desktop design tool, never deployed - HANDOFF-GOLF-HOLE-EDITOR.md' },
+  { re: /^hole-editor\//, why: 'Matt-only desktop design tool, never deployed - docs/archive/HANDOFF-GOLF-HOLE-EDITOR.md' },
   // Monopoly Deal is a LAUNCH-OUT game with its OWN nested service worker (root CLAUDE.md, the
   // games table) - its files are precached by that worker, not by this one.
   { re: /^business-deal\//, why: "launch-out game with its own nested service worker - root CLAUDE.md's games table" },

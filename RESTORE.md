@@ -83,7 +83,7 @@ The safe order:
 
 ## (c) Backing up `players/` (do this monthly)
 
-There is no export automation in this repo (deliberately out of scope — see ARCH-REVIEW.md S7-1).
+There is no export automation in this repo (deliberately out of scope — see docs/archive/ARCH-REVIEW.md S7-1).
 The whole insurance policy is a manual, dated export, kept **outside the repo** (never commit
 player names/history to a public repo):
 

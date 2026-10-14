@@ -9,7 +9,7 @@
 
 Built 2026-07-24 per `HANDOFF-UNO.md` (root, kept for the ruleset rationale). 2-4 players, solo vs AI.
 In-hub `module:`, not immersive. `isInProgress()` is always `false` (autosave/resume built in).
-Visual rebuild 2026-07-25 per `UNO-DESIGN-SPEC.md` + `HANDOFF-UNO-VISUAL.md`; computer speed, hand
+Visual rebuild 2026-07-25 per `docs/archive/UNO-DESIGN-SPEC.md` + `docs/archive/HANDOFF-UNO-VISUAL.md`; computer speed, hand
 sort and card travel 2026-09-28. Never click-tested end to end: the wild-colour chooser and win
 overlay (manual pass if a report suggests that flow is broken); not yet checked by eye on a phone.
 

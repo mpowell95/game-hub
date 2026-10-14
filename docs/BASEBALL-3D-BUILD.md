@@ -1,7 +1,7 @@
 # Baseball 3D characters: the build document
 
 Written 2026-09-19 by the orchestrating session for the SUB-AGENT sessions that build it. It
-supersedes `HANDOFF-BASEBALL-3C.md`'s section 1 (the Mixamo route, which Matt has NOT taken) and
+supersedes `docs/archive/HANDOFF-BASEBALL-3C.md`'s section 1 (the Mixamo route, which Matt has NOT taken) and
 carries its sections 0 and 2 forward in more detail. Where the two disagree, this file wins.
 
 Matt's decisions that shape it (2026-09-15 to 09-19, his words where quoted):
@@ -656,7 +656,7 @@ when a stage's pictures fail review twice.
 | **2 The swing** | `poses.js` `Idle`, `Swing`, `Miss`; the batter's facing constant; the dev screen's clip buttons and scrubber | Pose keys matched to `batter-home-1..8.png` with `render-actor.mjs --beside` | A sheet, 3D over sprite, for frames 1 to 8 where every frame's silhouette agrees in lean, arm height, leg spread and bat angle (the orchestrator judges); `node test-baseball-actors.mjs` | Sonnet, Opus after two failed reviews |
 | **3 The pitch, the bat, the colours** | `poses.js` `Set`, `Pitch`; `BAT` offsets; `TEAM` hexes and the recolour; the pitcher's facing | Matched to `Pitcher-home-1..4.png`; bat in both hands through the whole `Swing`; home white / away navy | Sheets as stage 2 for the pitch (4 frames) and for the swing WITH the bat (8 frames); a still of home and away side by side; `node test-baseball-actors.mjs` | Sonnet, Opus after two failed reviews |
 | **4 The switch** | `ui.js` (3.6), `field.js` exports + `noFigures`, `strings.js` `load_model`, CSS, the `setBatter`/`setPitcher`/`setBall` bodies in `actors.js` | The live play screen on 3D, ball from the hand, load state, pause/resume, dispose | `node test-baseball-device.mjs` with r2-cadence inside 6219-6225 ms; `node test-baseball-actors.mjs` both halves; `node test-visual.mjs baseball` (open the sheet); `node check-no-scroll.mjs baseball`; `node test-game-conventions.mjs`; `node test-i18n-strings.mjs`; a screen recording substitute: 10 stills 100 ms apart through one pitch and one swing | Sonnet |
-| **5 Delete, document, ship** | sprite-path deletion (3.10), `sw.js` `ASSETS`, `baseball/CLAUDE.md`, root `CLAUDE.md`, `HANDOFF-BASEBALL-3C.md` marked superseded by this file | | `node validate-sw-assets.mjs`; `node test-sw-strategy.mjs`; every stage 4 check again; `grep -c "batterFrame" baseball/js/ui.js` is 0 | Sonnet |
+| **5 Delete, document, ship** | sprite-path deletion (3.10), `sw.js` `ASSETS`, `baseball/CLAUDE.md`, root `CLAUDE.md`, `docs/archive/HANDOFF-BASEBALL-3C.md` marked superseded by this file | | `node validate-sw-assets.mjs`; `node test-sw-strategy.mjs`; every stage 4 check again; `grep -c "batterFrame" baseball/js/ui.js` is 0 | Sonnet |
 
 Stage 1 is done (commit 5bc2694, against the scaffold; `rig.js` now carries the Kenney names). Stages 2 to 5 run against `baseball/models/player.glb`.
 

@@ -1757,7 +1757,7 @@ console.log('\n--- C7: recovery fan-out (KNOWN-BUG PROBE: one shared recovery fi
 
 
 // ==================================================================================
-// TIC TAC TOE (phase 1, HANDOFF-MP-ROADMAP.md). T1/T3 are ordinary lockstep coverage;
+// TIC TAC TOE (phase 1, docs/archive/HANDOFF-MP-ROADMAP.md). T1/T3 are ordinary lockstep coverage;
 // T2/T4/T5/T6/T7 are the five js/CLAUDE.md:271 invariants ported into this game's own
 // vocabulary. Invariant 3 is the one that does not map literally - its reason is in
 // T5's own message, not silently dropped.
@@ -1785,7 +1785,7 @@ console.log('\n--- T1: Tic Tac Toe Classic full game, lockstep, hash-verified ev
       JSON.stringify([host.statsCommits, guest.statsCommits]));
     ok('T1: the guest recorded ITS OWN result, not the host\'s (X won, so host=true / guest=false)\n' +
        '      (THE LAW rule 2: a loss written as a win is not additive-safe. This is the headless\n' +
-       '      half of HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
+       '      half of docs/archive/HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
       hc.won === true && gc.won === false, `host.won=${hc.won} guest.won=${gc.won} winner=${host.state.winner}`);
   } catch (e) { fail++; console.log(`FAIL  T1 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }
@@ -2422,7 +2422,7 @@ console.log('\n--- M1: Mancala full match, lockstep, hash-verified every applied
       JSON.stringify([host.statsCommits, guest.statsCommits]));
     ok('M1: the guest recorded ITS OWN result, not the host\'s\n' +
        '      (THE LAW rule 2: a loss written as a win is not additive-safe. This is the headless\n' +
-       '      half of HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
+       '      half of docs/archive/HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
       hc.won === (host.state.winner === mP1) && gc.won === (guest.state.winner === mP2) && hc.won !== gc.won,
       `host.won=${hc.won} guest.won=${gc.won} winner=${host.state.winner}`);
   } catch (e) { fail++; console.log(`FAIL  M1 did not complete: ${e.message}`); }
@@ -3052,7 +3052,7 @@ console.log('\n--- F1: Filler full match, lockstep, hash-verified every applied 
       JSON.stringify([host.statsCommits, guest.statsCommits]));
     ok('F1: the guest recorded ITS OWN result, not the host\'s\n' +
        '      (THE LAW rule 2: a loss written as a win is not additive-safe. This is the headless\n' +
-       '      half of HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
+       '      half of docs/archive/HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
       hc.won === (host.state.winner === fP1) && gc.won === (guest.state.winner === fP2) && hc.won !== gc.won,
       `host.won=${hc.won} guest.won=${gc.won} winner=${host.state.winner}`);
   } catch (e) { fail++; console.log(`FAIL  F1 did not complete: ${e.message}`); }
@@ -3679,7 +3679,7 @@ console.log('\n--- DB1: Dots and Boxes full match, lockstep, hash-verified every
       JSON.stringify([host.statsCommits, guest.statsCommits]));
     ok('DB1: the guest recorded ITS OWN result, not the host\'s\n' +
        '      (THE LAW rule 2: a loss written as a win is not additive-safe. This is the headless\n' +
-       '      half of HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
+       '      half of docs/archive/HANDOFF-MP-LOCAL-MACHINE.md\'s B2 check - the other half needs two real devices)',
       hc.won !== gc.won, `host.won=${hc.won} guest.won=${gc.won}`);
   } catch (e) { fail++; console.log(`FAIL  DB1 did not complete: ${e.message}`); }
   finally { cleanup(room, host, guest); }

@@ -45,7 +45,7 @@ visible button, undiscoverable-ness was never the problem), and the harder-level
 trivia bullet was deleted. `help_li_1`-`help_li_4` in `strings.js` now cover: move mechanic
 (merged), bolt completion/lock, hidden "?" nuts, and press-and-hold color names.
 
-**Auto-resume (2026-07-23, batch 9, HANDOFF-FB-RESUME.md)**: mount now checks
+**Auto-resume (2026-07-23, batch 9, docs/archive/HANDOFF-FB-RESUME.md)**: mount now checks
 `this.savedBoard` in the `NutsBoltsUI` constructor and, if an in-progress board exists, calls
 `startTier(this.savedBoard.difficulty)` directly instead of rendering the menu - skipping straight
 to the game screen for that board's tier, silently, no "resume?" dialog. This reuses the SAME

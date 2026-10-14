@@ -8,7 +8,7 @@ Running list. Newest asks at the top of each section. Delete a line when it ship
   Scope decided by Matt the same day: **async / play-by-mail, on the direct 2-player games** -
   Connect Four, Battleship, Mancala and the like. Explicitly **NOT** the card games (Uno,
   Chinchon, Escoba, Monopoly Deal) and **not** the N-seat path-B roadmap in
-  `HANDOFF-MP-ROADMAP.md`, which stays parked.
+  `docs/archive/HANDOFF-MP-ROADMAP.md`, which stays parked.
   - Also wanted: **Skeeball as a challenge.** One round vs one round, or three vs three. This is
     a different shape from the board games - it is solo play whose RESULT is compared, so it
     needs no move-by-move protocol, only a posted score and a deadline. Likely the cheapest of

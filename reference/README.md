@@ -11,7 +11,7 @@ When Matt says "clone this game" or "make it look like this" and sends screensho
 ## Why this folder exists
 
 Four rounds were spent on Battleship's cannon, and three of them were built by a session that had
-never seen the thing it was cloning. `HANDOFF-BATTLESHIP-REDESIGN.md` said, in writing:
+never seen the thing it was cloning. `docs/archive/HANDOFF-BATTLESHIP-REDESIGN.md` said, in writing:
 
 > Matt supplied a screenshot grid of a polished mobile Battleship. **You will not have the image.**
 > Everything you need is described below; build to this description.
@@ -111,7 +111,7 @@ git checkout <sha>^ -- 'reference/yahtzee/'                    # get them all ba
 ```
 
 Removed 2026-08-26 and recoverable that way: `reference/{Skeeball,mancala,yahtzee,ball-run}/`
-(48 MB of recordings), `filler/`'s ~30 playtest screenshots (14 MB), `3am 7.22/`'s 22 annotated
+(48 MB of recordings), `filler/`'s ~30 playtest screenshots (14 MB), `docs/archive/3am 7.22/`'s 22 annotated
 screenshots (its `.md` notes stayed), the root's `dpad*`/`yahtzee*`/`Leaderboard` images, and
 `skeeball/ScreenRecording_08-26-2026...mp4` (the 10 fps clip, already read - see
 `skeeball/CLAUDE.md`, "Frame rate"). Tracked repo: **100.7 MB -> 34.4 MB**.

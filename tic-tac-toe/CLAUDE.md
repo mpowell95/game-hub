@@ -89,7 +89,7 @@ Both chances are deliberately below 1: at 1.0 the tier collapses into intermedia
 numbers came from a sweep of block x good-cell over 600 games per cell; do not raise them without
 re-measuring, and do not "simplify" beginner back to win-or-random.
 
-### Autosave/resume (2026-07-23, batch 9, HANDOFF-FB-RESUME.md)
+### Autosave/resume (2026-07-23, batch 9, docs/archive/HANDOFF-FB-RESUME.md)
 
 Silent autosave/resume, same pattern as `mancala/js/ui.js`'s `saveGame`/`loadGame`/`clearGame`.
 Key `gamehub.tictactoe.save.v1` (separate from the frozen settings key above — never touched by
@@ -109,7 +109,7 @@ flipped to the "autosave/resume built in" meaning (root `CLAUDE.md`): it always 
 now, so the hub's "leave game?" confirm no longer appears for this game. Stats recording is
 untouched — a resumed match records exactly as an uninterrupted one, including ties.
 
-## Multiplayer (2026-07-27, HANDOFF-MP-ROADMAP.md phase 1)
+## Multiplayer (2026-07-27, docs/archive/HANDOFF-MP-ROADMAP.md phase 1)
 
 Two human devices over the shared `js/net.js` room protocol, both variants. **Phase 1 of the
 roadmap: this is the game the repo's MP conventions were settled in**, so phases 2-4 copy from
@@ -119,7 +119,7 @@ to 2-4 players is roadmap phase 3 and is not part of this.
 **Status: the protocol is proven headlessly against `FakeRoom` (`test-mp-lockstep.mjs`, T1-T7,
 all five invariant probes green). No real room has ever been created — a cloud session cannot
 reach Firebase. Real-room behaviour is unverified** until
-`HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass runs on two real devices; B2 (guest seat
+`docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass runs on two real devices; B2 (guest seat
 identity) is the priority.
 
 ### Seats

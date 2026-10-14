@@ -6,7 +6,7 @@
 
 **Keep this file short.** A new rule goes here in one or two lines; the story behind it goes in `CLAUDE-HISTORY.md` (append a dated section). Full original text: `CLAUDE-HISTORY.md`.
 
-Build spec: `HANDOFF-GOLF-HOLE-EDITOR.md` (repo root). Mobile spec: `docs/HANDOFF-GOLF-COURSE-CREATOR-MOBILE.md`.
+Build spec: `docs/archive/HANDOFF-GOLF-HOLE-EDITOR.md` (repo root). Mobile spec: `docs/HANDOFF-GOLF-COURSE-CREATOR-MOBILE.md`.
 Objects spec: `docs/HANDOFF-GOLF-OBJECTS.md`. Power lines: `docs/HANDOFF-GOLF-POWER-LINES.md`.
 
 ## What it is, and where it stands (2026-09-24)
