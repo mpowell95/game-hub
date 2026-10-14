@@ -1132,3 +1132,29 @@ Full incident narrative and quotes: `docs/CLAUDE-HISTORY.md#the-admin-control-pa
 - **The rest of this repo's UX/UI rules — minimum text size, tap targets, safe-area handling,
   animation/reduced-motion rules, and more — live in `docs/BUILDING-A-GAME.md`'s "Part 0 — The UX
   floor."** Read it whenever you touch a game's UI or CSS, not just these three bullets.
+
+## Messages from the Game Hub, and a Play button that loads the newest build first (2026-10-14)
+
+Matt asked for "an inbox message to king of games from the gamehub saying the arrows game is live
+again", then: "Say it's back with a new game mode", "add a link ... that opens the game. It should
+make sure the newest code/data is loaded, then open it", and "No reply box. Just a notification from
+the hub." (A first draft wrongly came from Matt's own account; every Messages message is
+player-to-player, so a hub sender had to be built.)
+
+- `js/hub-messages.js` holds the messages IN CODE (`HUB_MESSAGES`): no Firebase node, no rules to
+  publish, no function to deploy, and nothing a device can write. Addressed by player code. The
+  first: `arrow-maze-rush-3vn33` to King of Games (3VN33), "Arrow Maze is back, with a new mode:
+  Rush!", Play opens `way-out`.
+- `readMyThreads()` merges a `HUB` row shaped like an index row, so the Messages badge, the inbox and
+  the profile card count and show it with no other changes (offline too). The thread view
+  (`renderHubThread`) has the hub's own icon (`icons/icon.svg`), no composer and no Hide.
+- Play (`hub.openGameFresh`): queue the open (survives a reload, `fresh` flag), `_ensureNewestBuild`
+  (ask for an update, wait up to 20 s for it to take over, reload if this page is older than the
+  worker), then `_warmGame` (sw.js `WARM_GAME`: warmRest's carry-forward/fetch for one game folder,
+  additive), then the push-open path. Every step is bounded, so a bad connection still ends in the
+  game. From the profile page it goes to `../?open=<id>&fresh=1`.
+- Verified in Chromium as King of Games with Firebase blocked: badge 1, row, thread, Play opens Arrow
+  Maze, badge clears; and with a newer build "deployed" mid-session, Play reloaded once onto it and
+  opened the game in ~2.4 s with Arrow Maze's files in the new cache.
+- Not done: a phone notification (needs a Cloud Function Matt deploys).
+
