@@ -473,7 +473,6 @@ class WayOut {
         <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
         <div class="wo-head">
           <h1>${t('title')}</h1>
-          <p>${t('tagline')}</p>
         </div>
         <div class="gh-card wo-menu-card">
           <div class="gh-field">
@@ -482,7 +481,7 @@ class WayOut {
           </div>
           ${play}
         </div>
-        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="help">${t('how_title')}</button>
+        <button type="button" class="gh-btn wo-howbtn" data-act="help">${t('how_title')}</button>
       </div>`;
   }
 
