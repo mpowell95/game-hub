@@ -705,29 +705,45 @@
 .gh-dark .wo-root .wo-modes { background: rgba(0, 0, 0, .32); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
 .gh-dark .wo-root button.wo-mode { color: #9aa8bf; }
 .gh-dark .wo-root button.wo-mode.is-on { background: #3a4660; color: #fff; }
-/* The rules as two short lines, the numbers in pills (2026-10-14, Matt's second review: no labels
-   under numbers). Sign and word in each pill, colour third. */
+/* Three tiles in a row, on BOTH setup screens (Rush: 10s / +0.5s / −3s; Levels: this level's points,
+   your points, lives). Icon, number, word: never colour alone. */
 .wo-root .wo-segs--two .wo-seg--slim { min-height: 50px; }
-.wo-root .wo-rush-rules { display: flex; flex-direction: column; gap: 5px; text-align: center; font-size: 15px; font-weight: 600; color: var(--gh-ink, #16243a); }
-.wo-root .wo-rush-rules p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 6px; }
-.wo-root .wo-rp {
-  display: inline-flex;
+.wo-root .wo-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.wo-root .wo-tiles li {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 3px 10px 3px 8px;
-  border-radius: 999px;
+  gap: 1px;
+  padding: 8px 4px 7px;
+  border-radius: 12px;
   background: var(--gh-surface-2, #eef2f8);
-  white-space: nowrap;
+  text-align: center;
+  line-height: 1.1;
 }
-.wo-root .wo-rp b { font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; }
-.wo-root .wo-rp svg { width: 20px; height: 13px; flex: none; }
-.wo-root .wo-rp.is-start svg { width: 15px; height: 15px; }
-.wo-root .wo-rp.is-gain { color: #178a7a; }
-.wo-root .wo-rp.is-miss { color: #c2412a; }
-.gh-dark .wo-root .wo-rp.is-gain { color: #3fd6bd; }
-.gh-dark .wo-root .wo-rp.is-miss { color: #ff7a7f; }
+.wo-root .wo-tiles svg { width: 26px; height: 16px; flex: none; margin-bottom: 2px; }
+.wo-root .wo-tiles .is-start svg, .wo-root .wo-tiles .is-pts svg, .wo-root .wo-tiles .is-mine svg, .wo-root .wo-tiles .is-lives svg { width: 18px; height: 18px; }
+.wo-root .wo-tiles b { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.wo-root .wo-tiles span { font-size: 12px; color: var(--gh-muted, #5b6b82); }
+.wo-root .wo-tiles .is-start, .wo-root .wo-tiles .is-mine { color: var(--gh-ink, #16243a); }
+.wo-root .wo-tiles .is-gain { color: #178a7a; }
+.wo-root .wo-tiles .is-miss { color: #c2412a; }
+.wo-root .wo-tiles .is-pts { color: #a87a00; }
+.wo-root .wo-tiles .is-lives { color: #c22a33; }
+.wo-root .wo-tiles .is-lives svg { fill: currentColor; }
+.gh-dark .wo-root .wo-tiles .is-gain { color: #3fd6bd; }
+.gh-dark .wo-root .wo-tiles .is-miss { color: #ff7a7f; }
+.gh-dark .wo-root .wo-tiles .is-pts { color: #f2c94c; }
+.gh-dark .wo-root .wo-tiles .is-lives { color: #ff6b72; }
+/* Levels' difficulty buttons: a thin bar of how far through that stretch of the ladder you are
+   (Expert never ends: a dashed track). */
+.wo-root .wo-seg-bar { display: block; width: 72%; height: 4px; margin-top: 4px; border-radius: 2px; background: var(--gh-border, rgba(16, 36, 58, .14)); overflow: hidden; }
+.wo-root .wo-seg-bar i { display: block; height: 100%; border-radius: 2px; background: #178a7a; }
+.gh-dark .wo-root .wo-seg-bar i { background: #3fd6bd; }
+.wo-root .wo-seg-bar.is-open { background: repeating-linear-gradient(90deg, var(--gh-border-strong, rgba(16, 36, 58, .28)) 0 6px, transparent 6px 10px); }
+/* Both Play buttons are the same shape: Levels in the hub's blue, Rush in its teal. */
+.wo-root button.wo-play { min-height: 52px; font-weight: 900; font-size: 18px; box-shadow: 0 6px 16px rgba(23, 105, 212, .28), inset 0 -3px 0 rgba(0, 0, 0, .15); }
 /* Under the card: this week's leader of the selected version, and See all results. */
-.wo-root .wo-rush-leader {
+.wo-root .wo-lead {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -740,7 +756,6 @@
 .wo-root .wo-rl-label { font-size: 12px; font-weight: 700; color: var(--gh-muted, #5b6b82); }
 .wo-root .wo-rl-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .wo-root .wo-rl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 800; }
-.wo-root .wo-rl-name.is-muted { font-weight: 600; color: var(--gh-muted, #5b6b82); font-size: 14px; }
 .wo-root .wo-rl-score { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; color: #178a7a; }
 .gh-dark .wo-root .wo-rl-score { color: #3fd6bd; }
 .wo-root button.wo-rl-all {
@@ -757,7 +772,7 @@
   white-space: nowrap;
   touch-action: manipulation;
 }
-.wo-root button.wo-rl-all::after { content: ' ›'; }
+.wo-root button.wo-rl-all.is-more::after { content: ' ›'; }
 .wo-root button.wo-rl-all:focus-visible { outline: 3px solid #ffce3a; outline-offset: 2px; }
 /* Play Rush is the Ready button's teal, so the mode looks like itself. */
 .wo-root button.wo-rush-play {
@@ -789,4 +804,32 @@
 .wo-root .wo-hero-badge .wo-watch-hand { transform-box: view-box; transform-origin: 12px 13.5px; animation: wo-watch 3s linear infinite; }
 @keyframes wo-watch { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .wo-root .wo-hero-badge .wo-watch-hand { animation: none; } }
+/* ONE layout for Levels and Rush (2026-10-14, Matt: "switching back and forth is weird because things
+   move around slightly"): the column is TOP-aligned, not centred, so the picture, title, switch and
+   the card's top edge stand exactly still when the mode changes; only what is below them differs. */
+.wo-root .wo-home > :first-child { margin-top: 0; }
+.wo-root .wo-home > :last-child { margin-bottom: 0; }
+.wo-root .wo-home { padding-top: calc(var(--wo-top, 0px) + 24px); }
+.wo-root.is-immersive .wo-home { padding-top: calc(var(--wo-top, 0px) + 60px); }
+/* Short phones (measured 2026-10-14 with the shared layout: Levels' four buttons with bars needed
+   29px more at 360x724 and 38px at 390x664). The picture and the gaps give it back first. */
+@media (max-height: 760px) {
+  .wo-root .wo-hero { width: clamp(80px, 13.5vh, 200px); height: clamp(80px, 13.5vh, 200px); }
+  .wo-root .wo-home { gap: 10px; }
+  .wo-root .wo-menu-card { gap: 10px; }
+}
+@media (max-height: 700px) {
+  .wo-root .wo-hero { width: 72px; height: 72px; }
+  .wo-root .wo-head h1 { font-size: 24px; }
+  .wo-root .wo-seg { min-height: 50px; }
+  .wo-root .wo-tiles li { padding: 6px 4px 5px; }
+  .wo-root button.wo-play { min-height: 48px; }
+  .wo-root .wo-lead { padding-top: 7px; padding-bottom: 7px; }
+  .wo-root.is-immersive .wo-home { padding-top: calc(var(--wo-top, 0px) + 54px); }
+  .wo-root .wo-menu-card { padding-top: 12px; padding-bottom: 12px; }
+}
 
+/* Narrow and not tall (360x804, Unai's Android in a browser tab): the picture a little smaller. */
+@media (max-width: 380px) and (max-height: 840px) and (min-height: 761px) {
+  .wo-root .wo-hero { width: 20vh; height: 20vh; }
+}
