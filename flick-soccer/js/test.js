@@ -87,6 +87,23 @@ const ok = (label, cond, extra = '') => { if (!cond) { fails++; console.log('FAI
     ok('a match saved before line-ups lines up balanced', E.validMatch(old) && (E.settle(old, 1), old.b[4].y === E.FORMATIONS.balanced[3][1]));
     ok('an unknown line-up reads as balanced', E.cleanForms(['constructor', 'nope']).join() === 'balanced,balanced');
   }
+  // Offense and defense line-ups (2026-10-14): whoever kicks off stands in their offense line-up.
+  {
+    const y = (m, i) => m.b[i].y;
+    const off = (f, k) => E.FORMATIONS[f][k][1], top = (f, k) => E.H - E.FORMATIONS[f][k][1];
+    const m = E.newMatch(3, 1, null, [['attack', 'defend'], ['diamond', 'balanced']]);
+    ok('kick-off: the kicker in its offense line-up, the other side in its defense one',
+      m.forms.join() === 'defend,diamond' && y(m, 4) === off('defend', 3) && y(m, 9) === top('diamond', 3));
+    E.settle(m, 1);   // seat 1 scores: seat 0 kicks off now
+    ok('after a goal the side that conceded kicks off in ITS offense line-up',
+      m.turn === 0 && m.forms.join() === 'attack,balanced' && y(m, 4) === off('attack', 3) && y(m, 9) === top('balanced', 3));
+    E.settle(m, 0);
+    ok('...and back again', m.turn === 1 && m.forms.join() === 'defend,diamond');
+    const saved = JSON.parse(JSON.stringify(m));
+    E.settle(saved, 1);
+    ok('a saved match keeps its offense and defense line-ups', saved.forms.join() === 'attack,balanced' && E.validMatch(saved));
+    ok('no line-up pairs: the fixed line-ups, as every match before', !('lineups' in E.newMatch(2, 0, ['attack', 'defend'])) && E.cleanLineups(['attack', 'defend']) === null);
+  }
   // A ball that STOPS more than halfway into the net is a goal (2026-10-11).
   {
     const L = E.lineUp();

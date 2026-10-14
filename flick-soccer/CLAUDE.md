@@ -73,6 +73,24 @@ Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap gam
   A phone still on the build before line-ups replays a non-Balanced challenge from the Balanced
   start, so the two pitches differ until it updates (the hub applies a new build on its own on the
   launcher); harmless while the game is admin only, and gone once both phones are current.
+- **Offense and defense line-ups (2026-10-14)**, Matt, after a rematch kept the defensive line-up
+  he had picked for a match he no longer started on defense: *"we have two different types of
+  lineups that you have to assign in the start menu. Offense and defense. You can choose any option
+  for either, but that will be your lineup every time."* Every player now sets an **Offense** and a
+  **Defense** line-up (`settings.offense` / `settings.defense`), and **whoever kicks off stands in
+  their offense line-up while the other side stands in its defense one**, at the start AND after
+  every goal (the side that conceded kicks off in ITS offense). Engine: `newMatch(goals, starter,
+  forms, lineups)` with `lineups` [[seat 0 off, def], [seat 1 off, def]] (`cleanLineups`,
+  `roleForms`); `settle` re-lines up by role. Without `lineups` (every match and save before) a match
+  plays on its fixed `forms`, exactly as it did, and `test.js` pins both. Vs the computer it picks a
+  random pair; pass and play uses your pair for both teams. **The screens:** one row of two buttons
+  (Offense, Defense; each its little pitch and name) on the start menu and on both challenge cards; a
+  tap opens a picker (`_luPicker`) with the four line-ups as real little pitches, two by two, the
+  chosen one ringed AND ticked; a pick is saved at once. The single line-up row is gone; the old
+  `lineup` setting is kept and seeds both on a phone that had one.
+- **Nothing is drawn on the pitch behind a card any more** (2026-10-14): discs half hidden by the
+  card read as broken. The line-up pictures moved into the buttons (`formSVG`, a half pitch with
+  your goal at the bottom; the old dots in a grey box read as a die).
 - Kick-off follows the repo convention: **Alternate** by default (`nextStarter` flips each match), or
   You / Computer (Blue / Red in two-player).
 
@@ -177,7 +195,7 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
 
 | Key | What |
 |---|---|
-| `gamehub.flicksoccer.v1` | `{ mode: 'cpu'|'pass', difficulty, goals: 1|2|3, first: 'alt'|'me'|'them', lineup, nextStarter }`, saved the moment a control changes (`lineup` added 2026-10-11, absent reads Balanced) |
+| `gamehub.flicksoccer.v1` | `{ mode: 'cpu'|'pass', difficulty, goals: 1|2|3, first: 'alt'|'me'|'them', lineup, offense, defense, nextStarter }`, saved the moment a control changes (`lineup` added 2026-10-11, absent reads Balanced; `offense`/`defense` 2026-10-14, absent read as `lineup`, else Attack/Defend; `lineup` itself is no longer read for play but is kept) |
 | `gamehub.flicksoccer.save.v1` | `{ mode, diff, match, shot? }` at rest; removed once the match is won. `shot` (`{i, dx, dy, power}`, 2026-10-11) is written the moment a flick is taken: an app killed, reloaded or backgrounded while it rolls (or during the GOAL! banner) replays that same flick on Continue, so a shot can never be taken back. Menu > Save and quit still plays it out on the spot (`_settleNow`) |
 
 The difficulty default follows the shared profile's first opponent skill (1/2/3 -> Easy/Medium/Hard)
@@ -210,7 +228,22 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   Darts and Cup Pong. Behind it: Challenge someone, **Pass & play** (two people, this phone; it used
   to be the setup card's Opponent row, which is gone), the notify row, Your turn, Their turn,
   History. A challenge uses the Goals to win chosen on the setup card.
-- **Own-lineup challenges (2026-10-13)**, Matt: *"When I challenge someone, can I pick my lineup?
+- **Offense and defense line-ups online (2026-10-14; this REPLACES the per-challenge line-up pick
+  below).** The challenge card is: who, "First to 2 · They kick off", YOUR LINEUPS (the two buttons,
+  changeable there), Send challenge. The challenged player's card is: who, "First to 2 · You kick
+  off", YOUR LINEUPS, Kick off. The document carries an OPTIONAL `lineups: { a: {off, def}, b: {off,
+  def} }`: `createGame({ lineups })` writes side a's pair (and `forms[0]` = a's DEFENSE line-up, as it
+  stands at kick-off); `pickLineup(id, [off, def])` adds side b's (and `forms[1]` = b's offense
+  line-up). `lineupsOfGame` reads it as null until BOTH pairs are there, and every reader goes
+  through `startOf(game)` (validateGame, buildMatch, appendLog), so a match from before plays on its
+  fixed `forms` exactly as it did. "Challenge again" sends your current pair, and the other person
+  kicks off, as before. **A phone still on the build before** replays such a match on its fixed
+  `forms` and disagrees after the first goal until it updates (admin only, so harmless). Tested in
+  `test-flicksoccer-mp.mjs` (87 checks); the old string forms of `createGame`/`pickLineup` still
+  work. The card was also rebuilt (Matt: *"horrific"*): its title centred between the back button
+  and the card's edge on one line, no role paragraph, nothing half drawn behind it; measured with no
+  name or title cut at 320, 360 and 390 wide, EN and ES.
+- **Own-lineup challenges (2026-10-13, superseded the next day by the bullet above)**, Matt: *"When I challenge someone, can I pick my lineup?
   Can they?"* then *"Make sure they know their role before selecting"*. The challenger picks THEIR
   line-up on the challenge screen, which says the role first ("Ana sees your lineup, picks theirs and
   kicks off, so you start on defense"). The other person opens it to a **Pick your lineup** card
@@ -287,8 +320,8 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   `result: 'cancelled'` still read as cancelled. A challenge made from 2026-10-13 (`lapse: true`)
   **expires 3 days after it was made** if the receiver never flicked (`pickLineup` and `appendLog`
   refuse with `'expired'`, which is in `NEVER_SENDABLE`).
-- "Challenge again" keeps the finished match's goals and line-up, and a double tap makes one match,
-  not two.
+- "Challenge again" keeps the finished match's goals (line-ups: your current offense and defense
+  pair, since 2026-10-14), and a double tap makes one match, not two.
 - **Notifications:** `flickSoccerTurnPush` in `functions/index.js` (`decideFlickSoccer` in
   `functions/decide.js`): a challenge ("challenged you, first to 2"), your turn coming back (with the
   score), a match the other person ended (resigning, or **their own goal ending it**, which told
@@ -332,8 +365,7 @@ balls or discs in a goal). Fixed, beyond the rules and online items above:
   every live match is reachable without the card scrolling. History dates follow the hub language.
 
 **Looked at and left alone, on purpose:** Play with a saved match starts a new one (Continue is the
-button that keeps it, as in the other games); the setup card covers most of the line-up drawn
-behind it (each Lineup pill draws its own five discs); a long name is cut short on the scoreboard
+button that keeps it, as in the other games); a long name is cut short on the scoreboard
 at 320px (the team chip, avatar and score are what that space is for).
 
 ## Not built yet
