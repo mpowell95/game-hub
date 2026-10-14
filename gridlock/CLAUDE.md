@@ -106,6 +106,14 @@ Easy 1-1000, Medium 1001-2000, Hard 2001-3000, Expert 3001-4000** (Expert can gr
 Shaped like Arrow Maze's ladder (numbered levels, bands, start anywhere), ten times bigger. Each
 difficulty's NEXT level is not stored: it is the lowest level of that band not yet cleared (a band is
 played in order), and any cleared level stays playable from the Levels screen.
+**"Next level" after a REPLAY** (2026-10-14 bug pass) plays the level after it only if that one is
+open (cleared, or the band's next); otherwise it plays the band's next level. Before this, replaying a
+ladder 1 level that sits far past the next one (say 700 while the next is 5) opened the LOCKED 701,
+and replaying the band's last level said "You finished Easy!" while level 5 was still open. The win
+popup's third box is points gained, else "New best", else "Your best" (it used to repeat "Fewest").
+**Progress does not follow a player to a second phone**: the next level and the Levels screen read
+this phone's own store, so a new phone starts at level 1 (points on the leaderboard are merged, so
+they are never lost or doubled). Known, not fixed.
 
 **Ladder 1** (the first build: 400 levels in bands of 50, shipped admin only the same morning) is
 FROZEN in `gridlock/data/levels-v1.txt`. **Every one of its boards is on ladder 2**, and
