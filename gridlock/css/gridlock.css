@@ -85,10 +85,8 @@
 .gl-root.is-immersive .gl-home { padding-top: calc(var(--gl-top, 0px) + 52px); }
 .gl-root .gl-head { text-align: center; }
 .gl-root .gl-head h1 { margin: 0 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -.2px; }
-.gl-root .gl-head p { margin: 0 auto; max-width: 320px; color: var(--gh-muted, #5b6b82); font-size: 14px; line-height: 1.35; }
-.gl-root .gl-points { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; }
-.gl-root .gl-points span { font-weight: 700; color: var(--gh-muted, #5b6b82); font-size: 15px; }
-.gl-root .gl-points b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.gl-root .gl-head .gl-pts { margin: 0; color: var(--gh-muted, #5b6b82); font-size: 15px; font-weight: 700; }
+.gl-root .gl-head .gl-pts b { color: var(--gh-ink, inherit); font-size: 20px; font-variant-numeric: tabular-nums; }
 .gl-root .gl-menu-card { display: flex; flex-direction: column; gap: 12px; }
 .gl-root .gl-looks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .gl-root .gl-look {
@@ -140,9 +138,6 @@
 .gl-root .gl-seg-top b { font-weight: 800; }
 .gl-root .gl-seg-top svg { width: 14px; height: 14px; flex: none; }
 .gl-root .gl-seg-top svg.lb-dshape-x2 { width: 24px; }
-.gl-root .gl-seg-sub { font-size: 12px; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; }
-.gl-root .gl-seg-range { font-size: 12px; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; opacity: .8; }
-.gl-root .gl-worth { margin: -4px 0 0; text-align: center; font-size: 13px; color: var(--gh-muted, #5b6b82); }
 
 /* Levels and How to play share one row under the card. */
 .gl-root .gl-home-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
