@@ -81,6 +81,14 @@ button on the top left again. I don't want it in the normal location. I didn't w
 it."* The bottom bar is Undo · Restart · Hint. The Levels screen's Back is a full-width button under
 its pager. The rule is in docs/BUILDING-A-GAME.md, Part 0.
 
+## The setup screen: few words (Matt, 2026-10-14)
+
+Title, the player's points, the two looks, the four difficulties (shape + name only), Play level N,
+then Levels and How to play. Nothing else: no tagline, no "Look" / "Difficulty" labels (they are
+`aria-label`s on the groups), no level ranges or current level on the difficulty buttons, no "worth N
+points" line. Matt: *"There are WAY too many words."* The root CLAUDE.md now carries this as a rule
+for every game.
+
 ## The two looks (Matt, 2026-10-14)
 
 **Wood** (default: Unblock Me is the best-known version) and **Cars** (Rush Hour's parking lot).

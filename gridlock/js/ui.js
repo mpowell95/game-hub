@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordGridlock, recordGridlockHint, loadStats } from '../../js/game-stats.js';
-import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glLevelPoints, glStars, glLevels, glHints, glCrowned, glPointsFor, glPoints } from '../../js/gridlock-points.js';
+import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glStars, glLevels, glHints, glCrowned, glPointsFor, glPoints } from '../../js/gridlock-points.js';
 import { V1_TO_V2 } from '../../js/gridlock-v1map.js';
 import { N, EXIT_ROW, SOLVED_POS, parse, positions, range, solve, isSolved, cellOf } from './engine.js';
 import { LEVELS } from './levels.js';
@@ -287,6 +287,10 @@ class Gridlock {
     }
   }
 
+  /** The setup screen. AS FEW WORDS AS POSSIBLE (Matt, 2026-10-14: "There are WAY too many words.
+   *  This is the same comment you force me to make 10 times per day."): the title, the points, the two
+   *  looks, the four difficulties (shape + name), Play, Levels and How to play. No tagline, no field
+   *  labels, no level ranges, no "worth N points" line. */
   _homeHTML() {
     const s = this.settings;
     const band = s.band, n = s.next[band];
@@ -294,38 +298,26 @@ class Gridlock {
     const resume = !done && hasProgress(band, n);
     let pts = 0;
     try { pts = glPoints(loadStats().games.gridlock); } catch { pts = 0; }
-    const range = (k) => t('band_range', { a: GL_BAND_START[k], b: bandEnd(k) });
     const segs = GL_TIERS.map((k) => `
       <button type="button" class="gl-seg${k === band ? ' is-selected' : ''}" data-act="band" data-band="${k}" role="radio" aria-checked="${k === band}">
         <span class="gl-seg-top">${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b></span>
-        <span class="gl-seg-sub">${s.next[k] > bandEnd(k) ? t('band_done') : t('level_n', { n: s.next[k] })}</span>
-        <span class="gl-seg-range">${range(k)}</span>
       </button>`).join('');
     const looks = LOOKS.map((k) => `
       <button type="button" class="gl-look${k === s.look ? ' is-selected' : ''}" data-act="look" data-look="${k}" role="radio" aria-checked="${k === s.look}">
         ${lookThumb(k)}<b>${t('look_' + k)}</b>${k === s.look ? '<span class="gl-check" aria-hidden="true">&#10003;</span>' : ''}
       </button>`).join('');
-    const worth = glLevelPoints(n);
     const play = done
       ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" disabled>${band === 'expert' ? t('all_done') : t('band_done_play', { name: t('tier_' + band) })}</button>`
-      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play">${t(resume ? 'continue_level' : 'play_level', { n })}</button>
-          <p class="gl-worth">${worth === 1 ? t('worth_one') : t('worth', { p: worth })}</p>`;
+      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play">${t(resume ? 'continue_level' : 'play_level', { n })}</button>`;
     return `
       <div class="gl-home">
         <div class="gl-head">
           <h1>${t('title')}</h1>
-          <p>${t('tagline')}</p>
+          <p class="gl-pts"><b>${pts}</b> ${t('pts_word')}</p>
         </div>
-        <div class="gh-card gl-points"><span>${t('points_label')}</span><b>${pts}</b></div>
         <div class="gh-card gl-menu-card">
-          <div class="gh-field">
-            <span class="gh-field__label" id="gl-looklabel">${t('look_label')}</span>
-            <div class="gl-looks" role="radiogroup" aria-labelledby="gl-looklabel">${looks}</div>
-          </div>
-          <div class="gh-field">
-            <span class="gh-field__label" id="gl-difflabel">${t('diff_label')}</span>
-            <div class="gl-segs" role="radiogroup" aria-labelledby="gl-difflabel">${segs}</div>
-          </div>
+          <div class="gl-looks" role="radiogroup" aria-label="${t('look_label')}">${looks}</div>
+          <div class="gl-segs" role="radiogroup" aria-label="${t('diff_label')}">${segs}</div>
           ${play}
         </div>
         <div class="gl-home-foot">

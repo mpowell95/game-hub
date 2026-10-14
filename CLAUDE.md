@@ -119,6 +119,16 @@ This applies to every artifact, mockup, plan page and diagram, in every session.
 
 Full incident: `docs/CLAUDE-HISTORY.md#mockups-are-sketches-not-pitches`
 
+## Game screens: as few words as possible (Matt, 2026-10-14)
+
+Matt, on Gridlock's setup screen: *"There are WAY too many words. This is the same comment you force
+me to make 10 times per day."* **Every screen you build or touch ships with the fewest words that
+still work.** No tagline under the title, no labels above controls that already say what they are
+("Look", "Difficulty"), no second or third line on a button (level ranges, "Level 4"), no "this is
+worth N points" footnotes, no explanatory sentences. Names, numbers and one action word per button.
+Explanations belong in How to play, nowhere else. Before showing Matt any screen, delete every word
+you can and look again. Worked example: `gridlock/js/ui.js` `_homeHTML`.
+
 ## Send the Claude.ai handoff files WITHOUT being asked
 
 He runs a second Claude.ai conversation alongside this one and feeds it the work for review. **A
