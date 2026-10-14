@@ -13,7 +13,10 @@
 //   - An entry can carry `play: '<hubId>'`: the bubble gets a Play button that loads the newest
 //     build and that game's newest files first, then opens the game (js/hub.js `openGameFresh`).
 //   - Read state is a PREFERENCE (THE LAW rule 2's carve-out): `gamehub.hubMessages.v1` =
-//     `{ seen: { <CODE>: <newest message's own atMs> } }`, on this device only.
+//     `{ seen: { <CODE>: <newest message's own atMs> }, read: { <id>: { code, at } } }`. `read`
+//     is WHEN each message was first opened, kept for Matt's read receipt: js/stats-net.js mirrors
+//     it to `players/<id>/hubMsgs` (a REPORT, never read back by any phone) and the admin page's
+//     "Game Hub messages" section shows Read <time> / Not yet per recipient.
 //
 // APPEND ONLY. Never reuse or renumber an `id`; never edit a sent message's words (someone has read
 // them). Times are fixed epoch ms, never Date.now() (a message's time is when it was SENT).
@@ -73,9 +76,12 @@ export function hubMessagesFor(code, list = HUB_MESSAGES) {
 function readStore() {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (v && typeof v === 'object' && v.seen && typeof v.seen === 'object') return v;
+    if (v && typeof v === 'object' && v.seen && typeof v.seen === 'object') {
+      if (!v.read || typeof v.read !== 'object') v.read = {};
+      return v;
+    }
   } catch { /* unreadable: treat as nothing seen */ }
-  return { seen: {} };
+  return { seen: {}, read: {} };
 }
 
 /** When this code last read the Game Hub conversation (its newest message's own time), else 0. */
@@ -84,17 +90,59 @@ export function hubSeenAt(code) {
   return me ? Number(readStore().seen[me]) || 0 : 0;
 }
 
-/** Mark the Game Hub conversation read up to `atMs`. Only ever moves forward. Logged, never thrown. */
-export function markHubSeen(code, atMs) {
+/** Mark the Game Hub conversation read up to `atMs`, and stamp WHEN each message in it was first
+ *  opened (the read receipt). Only ever moves forward. Returns true when something new was stamped.
+ *  Logged, never thrown. */
+export function markHubSeen(code, atMs, now = Date.now()) {
   const me = asCode(code);
   const at = Number(atMs) || 0;
-  if (!me || !at) return;
+  if (!me || !at) return false;
   try {
     const store = readStore();
-    if ((Number(store.seen[me]) || 0) >= at) return;
-    store.seen[me] = at;
+    let changed = false;
+    if ((Number(store.seen[me]) || 0) < at) { store.seen[me] = at; changed = true; }
+    for (const m of hubMessagesFor(me)) {
+      if (Number(m.atMs) <= at && !store.read[m.id]) { store.read[m.id] = { code: me, at: now }; changed = true; }
+    }
+    if (!changed) return false;
     localStorage.setItem(KEY, JSON.stringify(store));
-  } catch (err) { console.error('[hub-messages] could not save read state', err); }
+    return true;
+  } catch (err) { console.error('[hub-messages] could not save read state', err); return false; }
+}
+
+/** The read receipt this device reports (js/stats-net.js `hubMsgs`), or null when it has opened
+ *  none - null is OMITTED from the mirror, so a cleared phone never blanks an earlier report. */
+export function hubReadReport(list = HUB_MESSAGES) {
+  const { seen, read } = readStore();
+  const out = {};
+  for (const id of Object.keys(read)) {
+    const r = read[id];
+    if (r && asCode(r.code) && Number(r.at) > 0) out[id] = { code: asCode(r.code), at: Number(r.at) };
+  }
+  // Opened on a build from before the receipt existed: `seen` says it was read, nobody wrote down
+  // when. Reported as read with `at: 0` (time unknown) rather than not at all, or as a made-up time.
+  for (const code of Object.keys(seen)) {
+    for (const m of hubMessagesFor(code, list)) {
+      if (!out[m.id] && Number(seen[code]) >= Number(m.atMs)) out[m.id] = { code: asCode(code), at: 0 };
+    }
+  }
+  return Object.keys(out).length ? { read: out, at: Date.now() } : null;
+}
+
+/** Has `code` opened message `id`, and when, across a set of mirrored player records (the admin
+ *  page's read of `players/`): `{ read, at }`, `at` 0 when the time is unknown. The earliest
+ *  reported time wins (two phones). Pure. */
+export function readStatusFor(players, id, code) {
+  const c = asCode(code);
+  let read = false, at = 0;
+  for (const rec of Object.values(players || {})) {
+    const r = rec && rec.hubMsgs && rec.hubMsgs.read && rec.hubMsgs.read[id];
+    if (!r || asCode(r.code) !== c) continue;
+    read = true;
+    const t = Number(r.at) || 0;
+    if (t > 0 && (!at || t < at)) at = t;
+  }
+  return { read, at };
 }
 
 /**

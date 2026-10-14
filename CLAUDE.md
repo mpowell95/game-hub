@@ -383,7 +383,9 @@ never crash.
   player code; sending = appending an entry + deploying. One "Game Hub" conversation with the hub
   icon, no reply box, no Hide; read state local (`gamehub.hubMessages.v1`). `play: '<hubId>'` adds a
   Play button: newest build, then that game's newest files (`sw.js` `WARM_GAME`), then the game
-  (`hub.openGameFresh`). No phone notification (would need a Cloud Function).
+  (`hub.openGameFresh`). No phone notification (would need a Cloud Function). **Read receipt**:
+  first open stamps the time, mirrored as `players/<id>/hubMsgs` (a report); Admin → **Game Hub
+  messages** shows Read <time> / Not yet per recipient.
 
 ## The profile page's structure (2026-08-31)
 

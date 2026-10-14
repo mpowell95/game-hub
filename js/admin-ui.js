@@ -34,6 +34,7 @@ import { statsId, statsKey, holdemBalance, holdemSuspect } from './game-stats.js
 import { dayKey } from './arcade-scores.js';
 import { aggregatePlayers, buildIdentity } from './players-agg.js';
 import { ANNOUNCEMENTS, textFor } from './announce.js';
+import { HUB_MESSAGES, hubText, readStatusFor } from './hub-messages.js';
 import { isHiddenName, isHiddenDeviceId } from './hidden-players.js';
 import {
   readCachedConfig, refreshAdminConfig, resolveGameLive, resolveBoardMode, setGameLive,
@@ -263,6 +264,7 @@ function render(card, opts = {}) {
       ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
       ${sec('poker', t('adm_hb_title'), pokerSectionHTML(cfg))}
       ${sec('announce', t('adm_ann_title'), announceSectionHTML())}
+      ${sec('hubmsgs', t('adm_hm_title'), hubMessagesSectionHTML())}
       ${sec('device', t('adm_device_title'), deviceSectionHTML())}
     </div>
     <p class="adm-msg${opts.offline ? ' is-err' : ''}" data-role="msg">${opts.offline ? esc(t('adm_offline')) : ''}</p>`;
@@ -493,6 +495,35 @@ function announceSectionHTML() {
         <summary><span class="adm-annlbl">${esc(t('adm_ann_notyet'))} <b>${no.length}</b></span></summary>
         ${names(no)}
       </details>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// --- Game Hub messages: has each recipient read it (2026-10-14) ----------------------------------
+
+/**
+ * Matt: "Make sure there's a way for me to tell if he's read it." Per message in
+ * js/hub-messages.js, newest first: each recipient, and when they first opened it. The time comes
+ * from `players/<id>/hubMsgs`, which a phone reports the moment the message is opened (and on every
+ * sync after). A phone that has not reported is "Not yet" - which may also mean it has not been
+ * online since; the same honest fold as the announcements above.
+ */
+function hubMessagesSectionHTML() {
+  const people = new Map(codedPeople().map((p) => [p.code, p.name]));
+  const lang = getLang();
+  const when = (ms) => new Date(ms).toLocaleString(lang === 'es' ? 'es-ES' : 'en-GB',
+    { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  const list = HUB_MESSAGES.slice().sort((a, b) => b.atMs - a.atMs);
+  if (!list.length) return `<p class="adm-note">${esc(t('adm_ann_none'))}</p>`;
+  return list.map((m) => {
+    const rows = (m.to || []).map((code) => {
+      const st = readStatusFor(_players, m.id, code);
+      const word = !st.read ? t('adm_ann_notyet') : st.at ? t('adm_hm_read', { when: when(st.at) }) : t('adm_hm_read_any');
+      return `<li>${esc(people.get(String(code).toUpperCase()) || code)}: <b>${esc(word)}</b></li>`;
+    }).join('');
+    return `<div class="adm-ann">
+      <div class="adm-annhead"><span class="adm-annttl">${esc(hubText(m, lang))}</span></div>
+      <ul class="adm-annlist">${rows}</ul>
     </div>`;
   }).join('');
 }

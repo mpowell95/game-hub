@@ -17,6 +17,7 @@ import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
 import { loadSeen } from './announce.js';
+import { hubReadReport } from './hub-messages.js';
 
 let _db = null, _api = null;
 
@@ -222,6 +223,11 @@ export async function syncMyStats() {
     // this player has nothing local yet, so a fresh or cleared phone cannot blank what is there.
     const activity = activityReport();
     if (activity) rec.activity = activity;
+    // WHICH GAME HUB MESSAGES THIS PHONE HAS OPENED, AND WHEN (2026-10-14, js/hub-messages.js).
+    // Matt: "Make sure there's a way for me to tell if he's read it." Same additive REPORT shape:
+    // read only by the admin page, never by a phone, and omitted while there is nothing to report.
+    const hubRead = hubReadReport();
+    if (hubRead) rec.hubMsgs = hubRead;
     await _api.update(_api.ref(_db, 'players/' + id), rec);
     // Verify by fresh re-read (THE LAW rule 6's reference pattern, as used by game-stats.js persist()).
     const snap = await _api.get(_api.ref(_db, 'players/' + id));
