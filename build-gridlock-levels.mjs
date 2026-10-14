@@ -15,14 +15,19 @@
 //      runs one process per CPU for --minutes, so two runs do not make the same file: the file is
 //      the record, and once shipped it is only ever appended to (below).
 //
-// THE LADDER is fixed by fewest moves: each level has a TARGET (rising smoothly through the
-// keyframes below) and takes the unused puzzle nearest to it. Levels are numbered 1, 2, 3...
-// Easy 1-50, Medium 51-100, Hard 101-150, Expert 151 on (with walls).
+// LADDER 2 (2026-10-14, Matt: "Add more levels. If other games have 18,000+, we should have more
+// than 400"): Easy 1-1000 (3 -> 12 moves), Medium 1001-2000 (12 -> 20), Hard 2001-3000 (20 -> 28,
+// walls allowed), Expert 3001 on (28 -> 51). Easy to Hard: each level takes the unused puzzle nearest
+// a target that rises smoothly; Expert: the longest puzzles, spread by the square root of supply (see
+// below). EVERY BOARD OF THE FIRST LADDER (the 400 of gridlock/data/levels-v1.txt) is placed in the
+// new one, and js/gridlock-v1map.js records where, so a level cleared on the first ladder is read
+// as the same board on this one (js/gridlock-points.js). Ladder 1 is frozen: never edit that file.
 //
-// THE OUTPUT IS APPEND-ONLY once shipped. A player's progress is "cleared levels 1..n", so changing
-// level 37 after release would silently change what they cleared. gridlock/js/test.js pins the
-// first SHIPPED levels by hash; to add more, run with --append, which keeps every existing line and
-// adds new ones after it.
+// Run: node build-gridlock-levels.mjs --pools <dir>[,<dir>...] --v1 gridlock/data/levels-v1.txt
+// (or without --pools to search first: --minutes, one process per CPU).
+//
+// THE OUTPUT IS APPEND-ONLY once shipped: a player's progress is per level number, so a changed line
+// would change what they cleared. gridlock/js/test.js pins it by hash. Expert can grow at the end.
 
 import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdtempSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -33,9 +38,7 @@ import { parse, positions, moves, isSolved, keyOf, serialize, solve, N, EXIT_ROW
 
 const args = process.argv.slice(2);
 const arg = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
-const COUNT = +arg('--count', 400);
 const SEED = +arg('--seed', 1);
-const APPEND = args.includes('--append');
 const WORKER = arg('--worker', '');        // internal: "<walls 0|1>,<seconds>,<out file>"
 const MINUTES = +arg('--minutes', 12);
 const POOLS = arg('--pools', '');          // a folder of pool-*.txt from an earlier search: assemble only
@@ -54,17 +57,6 @@ function rng(seed) {
 }
 const R = rng(SEED);
 const ri = (n) => (R() * n) | 0;
-
-// Target fewest-moves per ladder level, linear between keyframes, held after the last.
-const KEYS = [[1, 3], [10, 7], [50, 14], [100, 22], [150, 30], [200, 36], [300, 41], [400, 44]];
-export function target(n) {
-  if (n <= KEYS[0][0]) return KEYS[0][1];
-  for (let k = 1; k < KEYS.length; k++) {
-    const [a, ta] = KEYS[k - 1], [b, tb] = KEYS[k];
-    if (n <= b) return ta + (tb - ta) * (n - a) / (b - a);
-  }
-  return KEYS[KEYS.length - 1][1];
-}
 
 // ---- boards as editable lists of blocks -------------------------------------------------------
 // A "layout" = { walls: [cell...], blocks: [{h, len, line, pos}] } with blocks[0] red.
@@ -280,27 +272,27 @@ if (WORKER) {
   process.exit(0);
 }
 
-// ---- main ---------------------------------------------------------------------------------------
-const existing = [];
-if (APPEND && existsSync(OUT)) {
-  const m = readFileSync(OUT, 'utf8').match(/'([A-Zox]{36}) (\d+)'/g) || [];
-  for (const line of m) { const [b, d] = line.slice(1, -1).split(' '); existing.push([b, +d]); sigs.add(signature(b)); }
-}
-const first = existing.length + 1;
+// ---- main: ladder 2 -----------------------------------------------------------------------------
+const BAND = 1000;                     // levels per difficulty; Expert carries on past 3000
+const WALLS_FROM = 2 * BAND + 1;       // walls appear from Hard on
+const EXPERT_FROM = 3 * BAND + 1;
+const EXPERT_COUNT = +arg('--expert', 1000);
+const V1 = arg('--v1', '');
 const t0 = Date.now();
-const WALLS_FROM = 151;
+const KEYS2 = [[1, 3], [BAND, 12], [2 * BAND, 20], [3 * BAND, 28]];
+function target2(n) {
+  for (let k = 1; k < KEYS2.length; k++) {
+    const [a, ta] = KEYS2[k - 1], [b, tb] = KEYS2[k];
+    if (n <= b) return ta + (tb - ta) * (n - a) / (b - a);
+  }
+  return KEYS2[KEYS2.length - 1][1];
+}
 
-// What each level wants, so the search can spend its time where the ladder needs puzzles.
-const need = [];
-for (let n = first; n <= COUNT; n++) need.push({ n, aim: Math.round(target(n)), walls: n >= WALLS_FROM });
-
-// Search: one process per CPU for MINUTES. One searches boards without walls, the rest boards with
-// walls. Each writes what it finds to its own file; this process reads them. --pools <dir> skips the
-// search and re-reads an earlier one's files (the folder is printed at the start of every search).
+// The pools: an earlier search's files (--pools a,b) or a fresh search.
 let files = [];
 if (POOLS) {
-  files = readdirSync(POOLS).filter((f) => /^pool-\d+\.txt$/.test(f)).map((f) => join(POOLS, f));
-  console.log(`assembling from ${files.length} pool files in ${POOLS}`);
+  for (const dir of POOLS.split(',')) files.push(...readdirSync(dir).filter((f) => /^pool-\d+\.txt$/.test(f)).map((f) => join(dir, f)));
+  console.log(`assembling from ${files.length} pool files`);
 } else {
   const tmp = mkdtempSync(join(tmpdir(), 'gridlock-'));
   const cpus = Math.max(2, Math.min(8, availableParallelism()));
@@ -308,7 +300,7 @@ if (POOLS) {
   for (let w = 0; w < cpus; w++) {
     const file = join(tmp, `pool-${w}.txt`);
     writeFileSync(file, '');
-    const walls = w === 0 ? 0 : 1;
+    const walls = w % 2;            // half the processes without walls (they reach the longest puzzles), half with
     jobs.push(new Promise((done) => {
       const ch = spawn(process.execPath, [fileURLToPath(import.meta.url), '--seed', String(SEED * 100 + w), '--worker', `${walls},${MINUTES * 60},${file}`], { stdio: 'inherit' });
       ch.on('exit', () => done(file));
@@ -317,6 +309,10 @@ if (POOLS) {
   console.log(`searching on ${cpus} processes for ${MINUTES} min, pools in ${tmp}`);
   files = await Promise.all(jobs);
 }
+// Ladder 1's boards first, so the de-duplication by block set can never drop one of them.
+const v1 = V1 ? readFileSync(V1, 'utf8').split('\n').map((l) => l.trim().split(' ')).filter(([b]) => b && b.length === N * N).map(([b, d]) => [b, +d]) : [];
+const isV1 = new Set(v1.map(([b]) => b));
+for (const [b, d] of v1) { pool.set(b, d); sigs.add(signature(b)); }
 for (const file of files) {
   for (const line of readFileSync(file, 'utf8').split('\n')) {
     const [b, d] = line.split(' ');
@@ -326,20 +322,9 @@ for (const file of files) {
 const h = histogram();
 for (const w of [false, true]) console.log(`pool, ${w ? 'walls' : 'no walls'}: ` + h[w].map((c, d) => (c ? `${d}:${c}` : '')).filter(Boolean).join(' '));
 
-// Assign. Easy to Hard (levels 1-150, no walls): each level takes the unused puzzle nearest its
-// target. Expert (151 on): the hardest puzzles found, walls or not, in rising order. Long puzzles
-// are rare, so a fixed target curve would run out of them; instead each fewest-moves value gets a
-// share of Expert's levels in proportion to the SQUARE ROOT of how many puzzles have it (capped at
-// how many there are). Plain proportion would spend the first fifty levels on the commonest value;
-// the square root keeps Expert climbing about one move every twenty levels, then faster at the top,
-// to the longest puzzle found, and it never steps back.
-const used = new Set(existing.map(([b]) => b));
-const out = existing.slice();
-const easyToHard = need.filter((x) => x.n < WALLS_FROM);
-// Early levels should LOOK simple too (Unblock Me's first boards are nearly empty), so among the
-// puzzles at the right length a level prefers about `want` blocks: 5 at level 1 rising to 12 at 150.
-// Boards with a row filled by sideways blocks or a column filled by upright ones are skipped
-// (Fogleman's filter: those blocks can never move, so they are clutter, not puzzle).
+// Candidates, by fewest moves. Boards with a row or column of blocks that can never move are
+// skipped (Fogleman's filter: clutter, not puzzle). Within a length: ladder 1's boards first, then a
+// fixed shuffle (a hash of the board), so neighbours do not come from one corner of the search.
 const blocksOf = (b) => new Set(b.replace(/[ox]/g, '')).size;
 function cluttered(b) {
   const pz = parse(b);
@@ -347,49 +332,67 @@ function cluttered(b) {
   for (let col = 0; col < N; col++) { let c = 0; for (const p of pz.pieces) if (!p.h && p.line === col) c += p.len; if (c === N) return true; }
   return false;
 }
-const clean = [...pool].filter(([b]) => !b.includes('x') && !cluttered(b));
-for (const x of easyToHard) {
-  const t = target(x.n);
-  const want = 5 + 7 * (x.n - 1) / (WALLS_FROM - 2);
-  let best = null, bd = Infinity;
-  for (const [b, d] of clean) {
-    if (used.has(b)) continue;
-    const e = Math.abs(d - t) * 10 + Math.abs(blocksOf(b) - want);
-    if (e < bd || (e === bd && b < best)) { bd = e; best = b; }
-  }
-  if (!best) { console.log(`ran out of puzzles at level ${x.n}`); break; }
-  used.add(best);
-  out.push([best, pool.get(best)]);
+const hash = (b) => { let x = 2166136261; for (let i = 0; i < b.length; i++) { x ^= b.charCodeAt(i); x = Math.imul(x, 16777619); } return x >>> 0; };
+const byDepth = new Map();      // depth -> [{ b, d, walls, blocks, v1 }]
+for (const [b, d] of pool) {
+  if (!isV1.has(b) && cluttered(b)) continue;
+  (byDepth.get(d) || byDepth.set(d, []).get(d)).push({ b, d, walls: b.includes('x'), blocks: blocksOf(b), v1: isV1.has(b), h: hash(b) });
 }
-const expertNeed = need.filter((x) => x.n >= WALLS_FROM).length;
-if (expertNeed) {
-  const floor = out.length ? out[out.length - 1][1] : Math.round(target(WALLS_FROM));
-  const byDepth = new Map();
-  for (const [b, d] of pool) if (!used.has(b) && d >= floor) (byDepth.get(d) || byDepth.set(d, []).get(d)).push(b);
-  const depths = [...byDepth.keys()].sort((x, y) => x - y);
-  for (const d of depths) byDepth.get(d).sort();
-  const supply = depths.reduce((n, d) => n + byDepth.get(d).length, 0);
-  if (supply < expertNeed) console.log(`only ${supply} Expert puzzles for ${expertNeed} levels`);
-  const want = Math.min(expertNeed, supply);
-  const weight = depths.map((d) => Math.sqrt(byDepth.get(d).length));
+for (const list of byDepth.values()) list.sort((x, y) => (y.v1 - x.v1) || (x.h - y.h));
+const used = new Set();
+const out = [];
+
+// Easy, Medium, Hard: the unused puzzle nearest the target, about `want` blocks (5 at level 1 to 13
+// at 3000), ladder 1's boards first when they are the right length.
+for (let n = 1; n < EXPERT_FROM; n++) {
+  const t = target2(n), want = 5 + 8 * (n - 1) / (EXPERT_FROM - 2);
+  let best = null, bs = Infinity;
+  for (let d = Math.floor(t) - 1; d <= Math.ceil(t) + 1; d++) {
+    const list = byDepth.get(d) || [];
+    let seen = 0;
+    for (const c of list) {
+      if (used.has(c.b) || (c.walls && n < WALLS_FROM)) continue;
+      const sc = Math.abs(d - t) * 10 + Math.abs(c.blocks - want) - (c.v1 && Math.abs(d - t) <= 0.75 ? 100 : 0);
+      if (sc < bs) { bs = sc; best = c; }
+      if (++seen > 80) break;
+    }
+  }
+  if (!best) throw new Error(`ran out of puzzles at level ${n} (target ${t.toFixed(1)})`);
+  used.add(best.b);
+  out.push([best.b, best.d]);
+}
+
+// Expert: the longest puzzles, each length's share in proportion to the SQUARE ROOT of how many there
+// are (capped at how many), so Expert climbs steadily to the longest one and never steps back, and
+// every ladder 1 board of that length is in.
+{
+  const floor = out[out.length - 1][1];
+  const depths = [...byDepth.keys()].filter((d) => d >= floor).sort((x, y) => x - y);
+  const avail = (d) => byDepth.get(d).filter((c) => !used.has(c.b));
+  const weight = depths.map((d) => Math.sqrt(avail(d).length));
   const wsum = weight.reduce((x, y) => x + y, 0);
-  const quota = depths.map((d, k) => Math.min(byDepth.get(d).length, Math.floor(weight[k] * want / wsum)));
-  // Hand out what rounding left over, lowest depths first, where there is room.
-  let left = want - quota.reduce((x, y) => x + y, 0);
-  for (let k = 0; left > 0 && k < depths.length; k = (k + 1) % depths.length) {
-    if (quota[k] < byDepth.get(depths[k]).length) { quota[k]++; left--; }
-    if (k === depths.length - 1 && quota.every((q, j) => q >= byDepth.get(depths[j]).length)) break;
+  const quota = depths.map((d, k) => Math.max(avail(d).filter((c) => c.v1).length, Math.min(avail(d).length, Math.floor(weight[k] * EXPERT_COUNT / wsum))));
+  let left = EXPERT_COUNT - quota.reduce((x, y) => x + y, 0);
+  for (let guard = 0; left > 0 && guard < 100000; guard++) {
+    const k = guard % depths.length;
+    if (quota[k] < avail(depths[k]).length) { quota[k]++; left--; }
   }
   depths.forEach((d, k) => {
-    const list = byDepth.get(d);
-    // Spread the picks through the (sorted) list so they are not all from one corner of the search.
-    for (let j = 0; j < quota[k]; j++) {
-      const b = list[quota[k] === 1 ? 0 : Math.round(j * (list.length - 1) / (quota[k] - 1))];
-      used.add(b);
-      out.push([b, d]);
-    }
+    const list = avail(d);
+    const v1s = list.filter((c) => c.v1), rest = list.filter((c) => !c.v1);
+    const picks = v1s.slice();
+    const more = quota[k] - picks.length;
+    for (let j = 0; j < more; j++) picks.push(rest[more === 1 ? 0 : Math.round(j * (rest.length - 1) / (more - 1))]);
+    // A fixed shuffle within the length, so ladder 1's boards are not all bunched together.
+    picks.sort((x, y) => x.h - y.h);
+    for (const c of picks) { if (used.has(c.b)) continue; used.add(c.b); out.push([c.b, d]); }
   });
 }
+
+// Every ladder 1 board must be in, exactly once.
+const index = new Map(out.map(([b], i) => [b, i + 1]));
+const missing = v1.filter(([b]) => !index.has(b));
+if (missing.length) throw new Error(`${missing.length} ladder 1 boards were not placed`);
 
 // Every level is re-solved from scratch by the game's own solver before it is written.
 for (const [b, d] of out) {
@@ -398,21 +401,29 @@ for (const [b, d] of out) {
   if (!p || p.length !== d) throw new Error(`level ${b} claims ${d}, solver says ${p && p.length}`);
 }
 
-const lines = out.map(([b, d], i) => `  '${b} ${d}',${(i + 1) % 10 === 0 ? ` // ${i + 1}` : ''}`);
 writeFileSync(OUT, `// gridlock/js/levels.js - GENERATED by build-gridlock-levels.mjs. NEVER HAND-EDIT.
-// One line per ladder level (level 1 first): the board (gridlock/js/engine.js's notation) and its
-// fewest moves. APPEND-ONLY once shipped: a player's progress is "levels 1..n", so a changed line
-// would change what they cleared (gridlock/js/test.js pins it).
+// LADDER 2: one line per level (level 1 first), the board (gridlock/js/engine.js's notation) and its
+// fewest moves. Easy 1-${BAND}, Medium ${BAND + 1}-${2 * BAND}, Hard ${2 * BAND + 1}-${3 * BAND}, Expert ${EXPERT_FROM} on. APPEND-ONLY once
+// shipped: progress is per level number, so a changed line would change what a player cleared
+// (gridlock/js/test.js pins it).
 export const LEVELS = [
-${lines.join('\n')}
+${out.map(([b, d]) => `'${b} ${d}'`).join(',\n')},
 ];
 `);
+if (v1.length) {
+  writeFileSync(new URL('./js/gridlock-v1map.js', import.meta.url), `// js/gridlock-v1map.js - GENERATED by build-gridlock-levels.mjs. NEVER HAND-EDIT.
+// Where each board of Gridlock's FIRST ladder (400 levels, 2026-10-14, frozen in
+// gridlock/data/levels-v1.txt) sits on ladder 2: V1_TO_V2[k] is the ladder 2 level of ladder 1 level
+// k + 1. Read by js/gridlock-points.js, so a level cleared on ladder 1 counts as the same board.
+export const V1_TO_V2 = [${v1.map(([b]) => index.get(b)).join(',')}];
+`);
+}
 const depths = out.map(([, d]) => d);
 console.log(`wrote ${out.length} levels in ${((Date.now() - t0) / 1000).toFixed(0)}s; fewest moves by band:`);
-for (const [name, a, b] of [['easy', 1, 50], ['medium', 51, 100], ['hard', 101, 150], ['expert', 151, out.length]]) {
+for (const [name, a, b] of [['easy', 1, BAND], ['medium', BAND + 1, 2 * BAND], ['hard', 2 * BAND + 1, 3 * BAND], ['expert', EXPERT_FROM, out.length]]) {
   const ds = depths.slice(a - 1, b);
-  if (ds.length) console.log(`  ${name} ${a}-${b}: ${Math.min(...ds)}..${Math.max(...ds)}`);
+  if (ds.length) console.log(`  ${name} ${a}-${b}: ${Math.min(...ds)}..${Math.max(...ds)}, average ${(ds.reduce((x, y) => x + y, 0) / ds.length).toFixed(1)}`);
 }
-let jump = 0;
-for (let i = 1; i < depths.length; i++) jump = Math.max(jump, Math.abs(depths[i] - depths[i - 1]));
-console.log(`  biggest step between neighbours: ${jump}`);
+let jump = 0, drop = 0;
+for (let i = 1; i < depths.length; i++) { jump = Math.max(jump, depths[i] - depths[i - 1]); drop = Math.max(drop, depths[i - 1] - depths[i]); }
+console.log(`  biggest rise between neighbours: ${jump}, biggest drop: ${drop}`);

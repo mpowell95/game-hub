@@ -255,14 +255,24 @@ export function aggregatePlayers(all, corrections) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it Gridlock's
         // levels, stars and points read as nothing the moment a second device syncs (THE LAW rule
         // 1). A level cleared on two phones is ONE level: per level the best of each field
-        // (fewest moves, most stars, no-hint), never a sum. Hints add.
-        if (!dst.gl) dst.gl = { lv: {}, hints: 0 };
+        // (fewest moves, most stars, the crown and the EARLIEST time it was earned), never a sum.
+        // Hint times keep the earliest. Ladder 1 (`lv`) and ladder 2 (`lv2`) merge separately;
+        // js/gridlock-points.js reads them together. Hints counts add.
+        if (!dst.gl) dst.gl = { lv: {}, lv2: {}, hint: {}, hints: 0 };
         dst.gl.hints += src.gl.hints | 0;
-        const lv = (src.gl.lv && typeof src.gl.lv === 'object') ? src.gl.lv : {};
-        for (const k of Object.keys(lv)) {
-          if (!/^L\d+$/.test(k)) continue;
-          const best = glBest(dst.gl.lv[k], lv[k]);
-          if (best) dst.gl.lv[k] = best;
+        for (const key of ['lv', 'lv2']) {
+          const lv = (src.gl[key] && typeof src.gl[key] === 'object') ? src.gl[key] : {};
+          for (const k of Object.keys(lv)) {
+            if (!/^L\d+$/.test(k)) continue;
+            const best = glBest(dst.gl[key][k], lv[k]);
+            if (best) dst.gl[key][k] = best;
+          }
+        }
+        const hint = (src.gl.hint && typeof src.gl.hint === 'object') ? src.gl.hint : {};
+        for (const k of Object.keys(hint)) {
+          const v = Number(hint[k]);
+          if (!/^L\d+$/.test(k) || !(v > 0)) continue;
+          dst.gl.hint[k] = dst.gl.hint[k] > 0 ? Math.min(dst.gl.hint[k], v) : v;
         }
       } else if (g === 'contexto' && src.ct) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it every Contexto

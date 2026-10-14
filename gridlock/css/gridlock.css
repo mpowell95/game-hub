@@ -217,10 +217,10 @@
   border-bottom: 0;
   border-radius: 5px 5px 0 0;
 }
-.gl-root .gl-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.gl-root .gl-pager .gh-btn { min-width: 64px; font-size: 22px; font-weight: 800; }
+.gl-root .gl-pager { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.gl-root .gl-pager .gh-btn { min-width: 48px; padding-left: 0; padding-right: 0; font-size: 22px; font-weight: 800; }
 .gl-root .gl-pager .gh-btn:disabled { opacity: .4; }
-.gl-root .gl-pager span { font-size: 14px; font-weight: 700; color: var(--gh-muted, #5b6b82); }
+.gl-root .gl-pager span { flex: 1; text-align: center; white-space: nowrap; font-size: 14px; font-weight: 700; color: var(--gh-muted, #5b6b82); }
 
 /* --- PLAY ------------------------------------------------------------------------------------ */
 .gl-root .gl-game {
@@ -461,6 +461,7 @@
   font-size: 14px;
   font-weight: 800;
 }
+.gl-root .gl-hint-note { margin: 0; font-size: 14px; font-weight: 700; color: var(--gh-muted, #5b6b82); }
 .gl-root .gl-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .gl-root .gl-nums div { padding: 6px 4px; border-radius: 12px; background: var(--gh-surface-2, #eef2f8); }
 .gl-root .gl-nums small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--gh-muted, #5b6b82); }
