@@ -49,14 +49,14 @@ class FakeResponse {
 class FakeRequest {
   constructor(input, init = {}) {
     if (input instanceof FakeRequest) {
-      this.url = input.url; this.method = input.method; this.mode = input.mode;
+      this.url = input.url; this.method = input.method; this.mode = input.mode; this.cache = input.cache;
     } else {
       this.url = new URL(String(input), ORIGIN + '/').href;
       this.method = 'GET'; this.mode = 'no-cors';
     }
     if (init.method) this.method = init.method;
     if (init.mode) this.mode = init.mode;
-    this.cache = init.cache || 'default';
+    this.cache = init.cache || this.cache || 'default';
   }
 }
 
@@ -190,6 +190,17 @@ for (const heavy of ['./boggle/data/words.txt', './ball-run/vendor/three.module.
   eq('install caches exactly the shell', cache.map.size, new Set(SHELL.map(keyOf)).size);
   ok('install never requested the Boggle dictionary', !requested.some((p) => p.includes('words.txt')));
   ok('install never requested three.js', !requested.some((p) => p.includes('three.module')));
+}
+
+// [KNOWN-BUG PROBE] (2026-10-14) The shell install must bypass the HTTP disk cache. It used
+// `cache: 'default'`, Pages sends max-age=600, and two deploys ten minutes apart installed v1131's
+// js/game-art.js under v1132's name on Matt's phone; cache-first, it then stuck for the build.
+{
+  const modes = [];
+  const w = bootWorker({ net: async (req) => { modes.push(req.cache); return new FakeResponse('x'); } });
+  await w.fire('install');
+  ok('[KNOWN-BUG PROBE] every shell request at install bypasses the HTTP cache',
+    modes.length > 0 && modes.every((m) => m === 'reload'), [...new Set(modes)].join(','));
 }
 
 // --- 2. [KNOWN-BUG PROBE] one 404 in the heavy tier no longer strands the whole deploy ----------
