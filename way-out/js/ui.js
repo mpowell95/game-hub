@@ -231,13 +231,46 @@ const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 
 const ICON_BULB = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 28c-3-2.4-4.6-5.6-4.6-9a11.6 11.6 0 0 1 23.2 0c0 3.4-1.6 6.6-4.6 9v4H17z"/><path d="M19 37h10"/><path d="M24 2.5v3M8 9l2.2 2.2M40 9l-2.2 2.2M3.5 19h3M41.5 19h3"/></g></svg>`;
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21L2.6 11.6A5.6 5.6 0 0 1 12 3.9a5.6 5.6 0 0 1 9.4 7.7z"/></svg>';
 
-/** The setup screen's header tile: a corner of the game's own board, in the game's own colours
- *  (the Sudoku / Minesweeper pattern of a small tinted picture over the title). */
-const HERO_SVG = `<svg viewBox="0 0 88 88" aria-hidden="true"><rect width="88" height="88" rx="14" fill="#1f1f2d"/>`
-  + `<g fill="none" stroke="#b3b4e0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">`
-  + `<path d="M16 72V18H40V30"/><path d="M28 60V40"/><path d="M52 72V56H70V40"/><path d="M40 72H30"/><path d="M58 18H74"/></g>`
-  + `<g fill="#b3b4e0"><path d="M40 37l-4.5-7h9z"/><path d="M28 34l-4.5 7h9z"/><path d="M70 33l-4.5 7h9z"/><path d="M24 72l7-4.5v9z"/><path d="M80 18l-7-4.5v9z"/></g>`
-  + `<path d="M28 48H62" fill="none" stroke="#3fd6bd" stroke-width="3.2" stroke-linecap="round"/><path d="M70 48l-8-5v10z" fill="#3fd6bd"/></svg>`;
+/** The setup screen's header picture (2026-10-14, Matt: "Make the top image thing cooler and
+ *  better"): a little board that plays itself. A 7x7 grid of dots, arrows locked into each other the
+ *  way a real level is (the red one has bumped into the teal one's body, the lavender one at the top
+ *  left waits for it too), and the free teal arrow glows, slides off the edge with a
+ *  trail and sparks, and comes back. Pure SVG + CSS (`.wo-hero-go` in way-out.css); reduced motion
+ *  shows it standing still. Built from grid points so every arrow sits on the dots. */
+const HERO_SVG = (() => {
+  const P = (i) => 18 + i * 14;                       // grid index -> coordinate
+  const pts = (cells) => cells.map(([x, y]) => [P(x), P(y)]);
+  const arrow = (cells, color, w = 4.2) => {
+    const q = pts(cells);
+    const [hx, hy] = q[q.length - 1], [px, py] = q[q.length - 2];
+    const dx = Math.sign(hx - px), dy = Math.sign(hy - py);
+    const tip = [hx + dx * 7, hy + dy * 7], b = [hx - dx * 1.5, hy - dy * 1.5];
+    const head = `M${tip[0]} ${tip[1]}L${b[0] - dy * 5.5} ${b[1] + dx * 5.5}L${b[0] + dy * 5.5} ${b[1] - dx * 5.5}Z`;
+    return `<path d="M${q.map((p) => p.join(' ')).join('L')}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`
+      + `<path d="${head}" fill="${color}"/>`;
+  };
+  let dots = '';
+  for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) dots += `<circle cx="${P(x)}" cy="${P(y)}" r="1.6"/>`;
+  const lav = '#b3b4e0';
+  return `<svg viewBox="0 0 120 120" aria-hidden="true">`
+    + `<defs><radialGradient id="woHeroBg" cx="30%" cy="22%" r="95%"><stop offset="0" stop-color="#30324f"/><stop offset=".55" stop-color="#1f2033"/><stop offset="1" stop-color="#131420"/></radialGradient>`
+    + `<linearGradient id="woHeroTrail" x1="0" x2="1"><stop offset="0" stop-color="#3fd6bd" stop-opacity="0"/><stop offset="1" stop-color="#3fd6bd" stop-opacity=".55"/></linearGradient>`
+    + `<filter id="woHeroGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`
+    + `<rect width="120" height="120" fill="url(#woHeroBg)"/>`
+    + `<g fill="#4a4c70">${dots}</g>`
+    + arrow([[0, 5], [0, 4], [0, 3], [0, 2], [0, 1], [1, 1], [2, 1], [2, 2]], lav)
+    + arrow([[2, 0], [3, 0], [4, 0], [5, 0], [6, 0]], lav)
+    + arrow([[4, 6], [5, 6], [6, 6], [6, 5], [6, 4]], lav)
+    + arrow([[3, 2], [4, 2], [4, 1]], lav)
+    + arrow([[1, 6], [2, 6], [3, 6], [3, 5], [3, 4]], '#e0484f')
+    + `<g class="wo-hero-go" filter="url(#woHeroGlow)">`
+    + `<rect class="wo-hero-trail" x="-30" y="${P(3) - 2.5}" width="${P(1) + 30}" height="5" rx="2.5" fill="url(#woHeroTrail)"/>`
+    + arrow([[1, 3], [2, 3], [3, 3], [4, 3]], '#3fd6bd', 4.8)
+    + `<g class="wo-hero-spark" fill="#c9fff4"><circle cx="${P(4) - 6}" cy="${P(3) - 6}" r="1.4"/><circle cx="${P(3) + 2}" cy="${P(3) + 6}" r="1.1"/><circle cx="${P(2)}" cy="${P(3) - 5}" r=".9"/></g>`
+    + `</g>`
+    + `<rect x=".75" y=".75" width="118.5" height="118.5" rx="26" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1.5"/>`
+    + `</svg>`;
+})();
 
 /** A small board for How to play, drawn in SVG from the same geometry as the game. `arrows`:
  *  [{ cells, kind: 'idle' | 'go' | 'red' | 'block' }]. Meaning is carried by shape too (a dashed
@@ -399,14 +432,20 @@ class WayOut {
   }
 
   /** Same technique as murdoku/js/ui.js: a fixed root measured against the mount point, and in the
-   *  hub's immersive mode the top bar shares a row with the hub's floating back button. */
+   *  hub's immersive mode the top bar shares a row with the hub's floating back button.
+   *
+   *  The BOTTOM is `bottom: 0`, never a height measured from the viewport (2026-10-14, Matt's
+   *  screenshot: the setup screen cut off in the middle of "How to play", the picture pushed up
+   *  beside the Hub button). On an iPhone a viewport height read at mount can land mid-transition,
+   *  short, and nothing re-measures it for the rest of the visit. Minesweeper hit exactly this on
+   *  2026-10-11 and fixed it the same way: `bottom: 0` follows the real screen edge. */
   _positionRoot() {
     if (!this.root || !this.container) return;
     const r = this.container.getBoundingClientRect();
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
-    if (!vh) return;
     this.root.style.left = Math.round(r.left) + 'px';
     this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
+    this.root.style.bottom = '0px';
+    this.root.style.height = 'auto';
     const back = document.querySelector('.hub-top-immersive .hub-back');
     const b = back && back.getBoundingClientRect();
     if (b && b.width && b.height) {
@@ -415,14 +454,12 @@ class WayOut {
       this.root.style.left = '0px';
       this.root.style.width = (document.documentElement.clientWidth || window.innerWidth || 0) + 'px';
       this.root.style.top = '0px';
-      this.root.style.height = Math.max(200, Math.round(vh)) + 'px';
       this.root.style.setProperty('--wo-top', Math.max(0, Math.round(b.top + (b.height - 44) / 2)) + 'px');
       this.root.style.setProperty('--wo-inset', Math.max(0, Math.round(b.right + 6)) + 'px');
       return;
     }
     this.root.classList.remove('is-immersive');
-    this.root.style.top = Math.round(r.top) + 'px';
-    this.root.style.height = Math.max(200, Math.round(vh - r.top)) + 'px';
+    this.root.style.top = Math.max(0, Math.round(r.top)) + 'px';
   }
 
   // --- rendering --------------------------------------------------------------------------------
@@ -469,7 +506,6 @@ class WayOut {
         <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
         <div class="wo-head">
           <h1>${t('title')}</h1>
-          <p>${t('tagline')}</p>
         </div>
         <div class="gh-card wo-menu-card">
           <div class="gh-field">
@@ -478,14 +514,18 @@ class WayOut {
           </div>
           ${play}
         </div>
-        <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="help">${t('how_title')}</button>
+        <button type="button" class="gh-btn wo-howbtn" data-act="help">${t('how_title')}</button>
       </div>`;
   }
 
   _playHTML() {
     const tier = this.tier;
+    // The arrow counters sit under the bar on EVERY difficulty (Matt, 2026-10-14: "I feel the
+    // counters can fit on all these screens pretty easily"; a portrait phone's board is limited by
+    // its WIDTH, so the row costs it nothing). The How to play pill is EASY only (his mock-up).
+    const easy = tier === 'easy';
     return `
-      <div class="wo-game">
+      <div class="wo-game${easy ? ' is-easy' : ''}">
         <div class="wo-hud">
           <button type="button" class="wo-iconbtn" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}</button>
           <div class="wo-hud-mid">
@@ -501,7 +541,9 @@ class WayOut {
           <button type="button" class="wo-hint" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
+        <div class="wo-counts" aria-hidden="true"><span class="wo-count-left"></span><span class="wo-count-done"></span></div>
         <div class="wo-stage"><canvas class="wo-canvas" tabindex="0" role="application"></canvas></div>
+        ${easy ? `<div class="wo-playfoot"><button type="button" class="gh-btn wo-howbtn" data-act="help">${t('how_title')}</button></div>` : ''}
         <div class="wo-banner" aria-live="polite"><span></span><b></b></div>
       </div>`;
   }
@@ -568,6 +610,8 @@ class WayOut {
         </div>
       </div>`;
     if (m.hidden) this._opener = document.activeElement;
+    // Opened from a level (Easy's How to play pill): the clock stops while the rules are read.
+    if (m.hidden && this.screen === 'play' && !this.won && !this.failed) { this._clockPause(); this._helpPaused = true; }
     m.hidden = false;
     const go = m.querySelector('.gh-btn--primary');
     if (go) go.focus({ preventScroll: true });
@@ -577,6 +621,7 @@ class WayOut {
     const m = this.root.querySelector('.wo-modal');
     m.hidden = true;
     m.innerHTML = '';
+    if (this._helpPaused) { this._helpPaused = false; this._clockRun(); }
     const back = this._opener;
     this._opener = null;
     if (back && back.isConnected && back.focus) back.focus({ preventScroll: true });
@@ -590,6 +635,7 @@ class WayOut {
   _startLevel(tier, level) {
     this.tier = tier;
     this.level = level;
+    this._helpPaused = false;
     const pre = readSave(tier, level, 1e6);
     this.src = pre ? pre.src : { k: 'L', n: level };
     this.gen = this.src.k === 'T' ? this.src.gen : LADDER_GEN;
@@ -654,7 +700,7 @@ class WayOut {
     return this.clock.ms + (this.clockT0 ? performance.now() - this.clockT0 : 0);
   }
   _clockRun() {
-    if (!this.clock || this.clockT0 || this.screen !== 'play' || this.won || this.failed) return;
+    if (!this.clock || this.clockT0 || this.screen !== 'play' || this.won || this.failed || this._helpPaused) return;
     if (typeof document !== 'undefined' && document.hidden) return;
     this.clockT0 = performance.now();
     if (!this.tick) this.tick = setInterval(() => this._paintClock(), 250);
@@ -713,6 +759,9 @@ class WayOut {
       bar.setAttribute('aria-valuenow', String(done));
       bar.setAttribute('aria-label', t('progress_aria', { n: done, total }));
     }
+    const left = this.root.querySelector('.wo-count-left'), cleared = this.root.querySelector('.wo-count-done');
+    if (left) left.textContent = t('count_left', { n: total - done });
+    if (cleared) cleared.textContent = t('count_done', { n: done });
     const restart = this.root.querySelector('.wo-restart');
     if (restart) restart.classList.toggle('is-idle', done === 0 && this.lives === LIVES && !this.red.some(Boolean));
     if (this.canvas) this.canvas.setAttribute('aria-label', t('board_aria', { n: total - done }));
@@ -768,12 +817,15 @@ class WayOut {
     const { cols: W, rows: H } = this.lvl;
     // The reference leaves a margin either side on small boards (the 40px cap) and runs edge to
     // edge on big ones.
-    const pitch = Math.min((r.width - 10) / W, (r.height - 10) / H, 40);
+    // Small boards may grow to fill the width (Matt's Easy mock-up, 2026-10-14; the cap was 40px).
+    const pitch = Math.min((r.width - 10) / W, (r.height - 10) / H, 72);
     this.pitch = pitch;
     this.ox = (r.width - W * pitch) / 2 + pitch / 2;
     this.oy = (r.height - H * pitch) / 2 + pitch / 2;
-    this.lw = Math.max(1.3, Math.min(3.4, pitch * 0.078));
-    this.headL = Math.max(4.5, Math.min(11, pitch * 0.27));
+    // Thicker arrows (Matt, 2026-10-14: "a little thicker"); still scaled to the pitch so a dense
+    // Expert board stays readable.
+    this.lw = Math.max(1.7, Math.min(6, pitch * 0.092));
+    this.headL = Math.max(5, Math.min(17, pitch * 0.28));
     // Only a real change of geometry counts (a ResizeObserver also calls once on observe).
     const geom = `${pitch}|${this.ox}|${this.oy}`, moved = this.geomWas && this.geomWas !== geom;
     this.geomWas = geom;

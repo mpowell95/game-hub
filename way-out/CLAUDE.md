@@ -28,6 +28,9 @@ Monopoly Deal's `business-deal/` split. A directory name is not a display name.
 - **Admin only** (`devOnly: true`, no `released` date: that is the New pill's input and must be the
   day Matt releases it from the admin page). Its `GAME_META` row shipped with the game, so the board
   and every level already cleared appear the moment it is released.
+- **Lifted 2026-10-14** (Matt: *"unblock him from Arrow Maze too. Keep arrow maze admin only still
+  though"*): the `hideFrom` line is gone; the game stays admin only for everyone (`devOnly`, and the
+  live admin config's `way-out` is `live: false`). Before that:
 - **Held back from King of Games (3VN33) since 2026-10-13** (Matt: *"Leave it open for everyone else
   but make it admin only for him rn. Until we decide on this calculation"*): `hideFrom: ['3VN33']`
   on the `GAMES` entry hides his tile and makes `launch()` refuse it (deep links, pushes, the
@@ -166,6 +169,23 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
 
 ## Look
 
+- **The setup screen's look, per Matt's mock-up (2026-10-14):** the board picture is the headline,
+  `clamp(96px, 23vh, 200px)` square, with the title straight under it and **no tagline**; **How to
+  play is a real pill** (css/ui.css's plain `.gh-btn`, centred, `.wo-howbtn`), not the ghost text link
+  it was. Measured with no clipping and clear of the Hub button at 402x874, 375x667 and 360x724.
+- **The picture plays itself (2026-10-14, Matt: "Make the top image thing cooler and better"):**
+  `HERO_SVG` in `ui.js` is a 7x7 board built from grid points, its arrows locked the way a real level
+  is (the red one has bumped the teal one's body, two lavender ones wait on others), and the free
+  teal arrow glows, slides off the right edge with a trail and sparks, and fades back in
+  (`.wo-hero-go` / `wo-hero-fx`, 3.6 s loop, CSS only). Reduced motion: it stands still.
+- **The Easy play screen, per Matt's mock-up (2026-10-14):** "Arrows remaining: N" and "Arrows
+  cleared: N" under the progress bar (`.wo-counts`), and a How to play pill under the board
+  (`.wo-playfoot`) that PAUSES THE CLOCK while it is open (`_helpPaused`). **The counters went on
+  every difficulty the same day** (Matt: *"I feel the counters can fit on all these screens pretty
+  easily"*): a portrait board is width-limited, so the row costs nothing at 390x844 and up (measured);
+  at 375x667 Expert's dot spacing drops ~3%. **The pill stays Easy only** (`.is-easy`). Small boards may now grow to fill the width (the
+  pitch cap went 40 -> 72px), and every arrow is thicker (`lw = pitch x 0.092`, 1.7-6px; heads
+  `pitch x 0.28`, 5-17px), Matt: *"Make the arrows a little thicker too"*.
 - **The setup screen is in the hub's own style, not the reference's** (Matt, 2026-10-11: *"Make the
   setup screen look more gamehub themed. Match other games."*). The reference's teal banner, mascot
   faces and slider were replaced by the Sudoku / Minesweeper layout built from `css/ui.css`: a small
@@ -197,6 +217,13 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
   390x844 and 430x932: every button, the board and the popups on screen, none overlapping each other
   or the hub's back button, no page scroll. Expert's board pitch is ~11px at 320 wide, ~13-14px on
   ordinary phones (it was ~2px less before the hint moved).
+- **The root's BOTTOM is `bottom: 0`, never a height measured from the viewport (2026-10-14).** Matt's
+  iPhone showed the setup screen cut off in the middle of "How to play" with the picture pushed up
+  beside the Hub button: `_positionRoot()` set `height = visualViewport.height` once, an iPhone can
+  report a short height mid-transition (535 instead of 874), and nothing re-measured it. Reproduced in
+  Chromium by faking that short height; Minesweeper had the same bug and fix on 2026-10-11. The setup
+  column also centres with auto margins (`.wo-home > :first-child/:last-child`) and scrolls inside
+  itself if a phone is ever too short, so it can never ride up under the Hub button or be clipped.
 - **The phones that matter, measured 2026-10-13** (`node read-install-state.mjs --screens`, sizes
   in CSS px from the 10 most active players): 402x874 (King of Games, Matt, Natalia), 414x896
   (Anita), 390x844 (Ele), 360x804 Android in a browser tab (Unai, a 360x724 page). Still unreported:

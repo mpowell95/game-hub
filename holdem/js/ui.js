@@ -72,7 +72,8 @@ const tierById = (id) => TIERS.find((x) => x.id === id) || null;
 // (holdem/js/ai.js, `commit`). Against these player codes the computers play Brutal and read the
 // player's cards, and the deck is dealt against them (engine.js rigDeal). Matt's call, per player;
 // remove a code here to make that player's games fair again.
-const RIGGED_CODES = new Set(['3VN33']);   // *King of Games*
+// Empty since 2026-10-14 (Matt: "Take off the fix against the king of games"); 3VN33 was rigged 10-10 to 10-14.
+const RIGGED_CODES = new Set([]);
 const isRigged = (code) => RIGGED_CODES.has(String(code || '').trim().toUpperCase());
 
 // Behind the Dumpster (2026-10-08, Matt): "an illegal game between homeless people in an alley or

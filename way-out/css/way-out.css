@@ -81,19 +81,44 @@
   gap: 12px;
   padding: calc(var(--wo-top, 0px) + 12px) 16px calc(12px + env(safe-area-inset-bottom, 0px));
 }
+/* Centred when it fits, never pushed UP past its own top padding when it does not (a flex column's
+   plain `justify-content: center` overflows both ways, which put the picture beside the hub's back
+   button on Matt's iPhone, 2026-10-14). The auto margins do the centring; if the screen is ever too
+   short, the menu scrolls inside itself instead of being cut off. */
+.wo-root .wo-home { justify-content: flex-start; overflow-y: auto; overscroll-behavior: contain; }
+.wo-root .wo-home > :first-child { margin-top: auto; }
+.wo-root .wo-home > :last-child { margin-bottom: auto; }
 /* In the hub the floating back button sits at the top left; the picture must clear it. */
 .wo-root.is-immersive .wo-home { padding-top: calc(var(--wo-top, 0px) + 52px); }
+/* The picture is the screen's headline (Matt's mock-up, 2026-10-14): as big as the phone allows, up
+   to 200px, with the title straight under it and no tagline. */
 .wo-root .wo-hero {
   align-self: center;
   flex: none;
-  width: 88px;
-  height: 88px;
-  border-radius: 16px;
+  width: clamp(96px, 23vh, 200px);
+  height: clamp(96px, 23vh, 200px);
+  border-radius: 22%;
+  overflow: hidden;
   box-shadow: 0 4px 14px rgba(16, 24, 40, .18);
 }
 .wo-root .wo-hero svg { display: block; width: 100%; height: 100%; }
+.wo-root .wo-hero { box-shadow: 0 10px 30px rgba(63, 214, 189, .16), 0 4px 14px rgba(0, 0, 0, .35); }
+/* The picture plays itself (2026-10-14): the free teal arrow waits, slides off the right edge with a
+   trail and sparks, vanishes, and fades back in. CSS px on an SVG element are user units here. */
+.wo-root .wo-hero-go { animation: wo-hero-go 3.6s infinite; }
+.wo-root .wo-hero-trail, .wo-root .wo-hero-spark { opacity: 0; animation: wo-hero-fx 3.6s infinite; }
+@keyframes wo-hero-go {
+  0%, 38% { transform: translateX(0); opacity: 1; animation-timing-function: cubic-bezier(.55, 0, .85, .35); }
+  70% { transform: translateX(104px); opacity: 1; }
+  70.5% { transform: translateX(104px); opacity: 0; }
+  71%, 84% { transform: translateX(0); opacity: 0; animation-timing-function: ease-out; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes wo-hero-fx { 0%, 40% { opacity: 0; } 52%, 68% { opacity: 1; } 71%, 100% { opacity: 0; } }
 .wo-root .wo-head { text-align: center; }
-.wo-root .wo-head h1 { margin: 0 0 4px; font-size: 24px; font-weight: 800; letter-spacing: -.2px; }
+.wo-root .wo-head h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -.2px; }
+/* How to play is a real pill (css/ui.css's plain .gh-btn: outlined, rounded), centred under the card. */
+.wo-root .wo-howbtn { align-self: center; min-width: 180px; }
 .wo-root .wo-head p { margin: 0 auto; max-width: 320px; color: var(--gh-muted, #5b6b82); font-size: 13px; line-height: 1.35; }
 .wo-root .wo-menu-card { display: flex; flex-direction: column; gap: 12px; }
 .wo-root .wo-segs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -259,6 +284,32 @@
   transition: transform .25s ease-out;
 }
 .wo-root .wo-stage { flex: 1; min-height: 0; position: relative; margin-bottom: env(safe-area-inset-bottom, 0px); }
+/* EASY only (Matt's mock-up, 2026-10-14): counters under the bar, a How to play pill under the board. */
+.wo-root .wo-counts {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--wo-ink);
+}
+.wo-root .wo-game.is-easy .wo-stage { margin-bottom: 0; }
+.wo-root .wo-playfoot {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.wo-root .wo-playfoot .wo-howbtn {
+  min-width: 180px;
+  background: rgba(255, 255, 255, .06);
+  border: 1.5px solid rgba(255, 255, 255, .45);
+  color: var(--wo-ink);
+  box-shadow: none;
+}
 .wo-root .wo-canvas { position: absolute; left: 0; top: 0; display: block; touch-action: manipulation; outline: none; }
 /* The hint sits at the right end of the hearts row. It used to have a row of its own under the
    board, which cost every phone ~70px of board (Matt, 2026-10-11: make sure the game fits). */
@@ -370,12 +421,13 @@
 /* Short phones: the setup screen tightens rather than scrolls. */
 @media (max-height: 640px) {
   .wo-root .wo-home { gap: 8px; }
-  .wo-root .wo-hero { width: 64px; height: 64px; }
+  .wo-root .wo-hero { width: 96px; height: 96px; }
   .wo-root .wo-seg { min-height: 50px; }
 }
 
 @keyframes wo-pen-still { 0% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
+  .wo-root .wo-hero-go, .wo-root .wo-hero-trail, .wo-root .wo-hero-spark { animation: none; }
   .wo-root .wo-heart.is-pop { animation: none; }
   .wo-root .wo-pen.is-on { animation: wo-pen-still 1.6s step-end forwards; }
   .wo-root .wo-progress i { transition: none; }

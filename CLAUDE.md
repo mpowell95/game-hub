@@ -705,7 +705,7 @@ devices** · **Help** · **Reset profile**, alone at the bottom.
   outline on transparent against solid filled rows everywhere else. Only their widths still differ.
 
 **`messages/` is the ONE node in this database with real security rules on it** (only admin can
-see every thread; everyone else only their own). Everything else is `auth != null`. A device
+see every thread; everyone else only their own). **`adminConfig/` and `bugReplies/` are writable only by a uid in `admins/`** (2026-10-14, Matt: *"NOBODY should have that power other than me"*; `database.rules.README.md`, "Admin-only writes"). Everything else is `auth != null`. A device
 claims `msgAuth/<auth.uid> = <its player code>`, and the rules scope every read to threads that
 code is in; `admins/<auth.uid>` (which already existed, set by hand in the console) grants Matt
 the read-all. **It does not survive somebody who has another player's 5-character code and opens
@@ -1050,7 +1050,8 @@ screen needs it.
 - **A game can be held back from NAMED PLAYERS too (2026-10-13)**: `hideFrom: ['<CODE>']` on a
   `GAMES` entry in `js/hub.js` (`hiddenFromPlayer()`), a code edit rather than an admin switch.
   Hides the tile and makes `launch()` refuse the game; never applies to Matt's devices or a dev
-  profile; touches no data. First use: Arrow Maze held back from King of Games (`way-out/CLAUDE.md`).
+  profile; touches no data. First use: Arrow Maze held back from King of Games, 2026-10-13 to 10-14 (`way-out/CLAUDE.md`);
+  no game uses it now.
 - **A hidden game can be opened to NAMED PLAYERS (2026-09-24, the Course Creator).**
   `games/<id>/allow/<PLAYER CODE> = true`, written by `setGameAllowed` (verified re-read, no
   `at`/`by` stamp inside the map), read by `isGameAllowed(id, code)`; the launcher shows a tile when

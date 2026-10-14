@@ -1120,35 +1120,12 @@ export const GAME_ART = {
             <circle cx="145" cy="44" r="5" fill="#fbfbfb" stroke="#222" stroke-width="0.8"/>
             <path d="M145 41.6 l2 1.4 -0.8 2.4 h-2.4 l-0.8 -2.4 z" fill="#222"/>
           </svg>`,
-  // Arrow Maze (2026-10-11, hub id 'way-out'): the game's own board - lavender arrows on navy over a dot grid, one
-  // arrow sliding out to the right in teal with its trail of sparks. No two arrows touch or cross, as in the game
-  // (2026-10-13: the first drawing had one arrow through the teal one and another through a third).
-  'way-out': `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#1f1f2d"/>
-            <g fill="#3a3b55">
-              <circle cx="34" cy="12" r="1.3"/><circle cx="46" cy="12" r="1.3"/><circle cx="58" cy="12" r="1.3"/><circle cx="70" cy="12" r="1.3"/><circle cx="82" cy="12" r="1.3"/><circle cx="94" cy="12" r="1.3"/><circle cx="106" cy="12" r="1.3"/>
-              <circle cx="34" cy="78" r="1.3"/><circle cx="46" cy="78" r="1.3"/><circle cx="58" cy="78" r="1.3"/><circle cx="70" cy="78" r="1.3"/><circle cx="82" cy="78" r="1.3"/><circle cx="94" cy="78" r="1.3"/><circle cx="106" cy="78" r="1.3"/>
-            </g>
-            <g fill="none" stroke="#b3b4e0" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M34 66V24H58V38"/>
-              <path d="M46 52V36"/>
-              <path d="M70 66V52H94"/>
-              <path d="M58 66H46"/>
-              <path d="M106 66V52H118"/>
-              <path d="M82 24H118"/>
-            </g>
-            <g fill="#b3b4e0">
-              <path d="M58 45l-4-7h8z"/>
-              <path d="M46 29l-4 7h8z"/>
-              <path d="M101 52l-7-4v8z"/>
-              <path d="M39 66l7-4v8z"/>
-              <path d="M125 52l-7-4v8z"/>
-              <path d="M125 24l-7-4v8z"/>
-            </g>
-            <path d="M70 38H136" fill="none" stroke="#3fd6bd" stroke-width="2.8" stroke-linecap="round"/>
-            <path d="M144 38l-8-4.6v9.2z" fill="#3fd6bd"/>
-            <g fill="#2fd3c0"><circle cx="65" cy="34" r="1.6"/><circle cx="66" cy="42" r="1.1"/><circle cx="62" cy="30" r="1.3"/></g>
-          </svg>`,
+  // Arrow Maze (hub id 'way-out'). Redrawn 2026-10-14 (Matt: "Make the thumbnail look more like the image you
+  // just made for the setup screen"): the setup picture's style in the 160x90 frame - the same gradient board, dot
+  // grid, thick lavender arrows with real heads, the red one that bumped (bottom right: the tile's title covers the
+  // bottom left), and the glowing teal arrow caught
+  // mid-slide with its trail and sparks. Static (the setup picture is the one that moves). Built from grid points.
+  'way-out': `<svg viewBox="0 0 160 90" aria-hidden="true"><defs><radialGradient id="woTileBg" cx="28%" cy="20%" r="95%"><stop offset="0" stop-color="#30324f"/><stop offset=".55" stop-color="#1f2033"/><stop offset="1" stop-color="#131420"/></radialGradient><linearGradient id="woTileTrail" x1="0" x2="1"><stop offset="0" stop-color="#3fd6bd" stop-opacity="0"/><stop offset="1" stop-color="#3fd6bd" stop-opacity=".55"/></linearGradient><filter id="woTileGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect width="160" height="90" fill="url(#woTileBg)"/><g fill="#4a4c70"><circle cx="17" cy="10" r="1.3"/><circle cx="31" cy="10" r="1.3"/><circle cx="45" cy="10" r="1.3"/><circle cx="59" cy="10" r="1.3"/><circle cx="73" cy="10" r="1.3"/><circle cx="87" cy="10" r="1.3"/><circle cx="101" cy="10" r="1.3"/><circle cx="115" cy="10" r="1.3"/><circle cx="129" cy="10" r="1.3"/><circle cx="143" cy="10" r="1.3"/><circle cx="17" cy="24" r="1.3"/><circle cx="31" cy="24" r="1.3"/><circle cx="45" cy="24" r="1.3"/><circle cx="59" cy="24" r="1.3"/><circle cx="73" cy="24" r="1.3"/><circle cx="87" cy="24" r="1.3"/><circle cx="101" cy="24" r="1.3"/><circle cx="115" cy="24" r="1.3"/><circle cx="129" cy="24" r="1.3"/><circle cx="143" cy="24" r="1.3"/><circle cx="17" cy="38" r="1.3"/><circle cx="31" cy="38" r="1.3"/><circle cx="45" cy="38" r="1.3"/><circle cx="59" cy="38" r="1.3"/><circle cx="73" cy="38" r="1.3"/><circle cx="87" cy="38" r="1.3"/><circle cx="101" cy="38" r="1.3"/><circle cx="115" cy="38" r="1.3"/><circle cx="129" cy="38" r="1.3"/><circle cx="143" cy="38" r="1.3"/><circle cx="17" cy="52" r="1.3"/><circle cx="31" cy="52" r="1.3"/><circle cx="45" cy="52" r="1.3"/><circle cx="59" cy="52" r="1.3"/><circle cx="73" cy="52" r="1.3"/><circle cx="87" cy="52" r="1.3"/><circle cx="101" cy="52" r="1.3"/><circle cx="115" cy="52" r="1.3"/><circle cx="129" cy="52" r="1.3"/><circle cx="143" cy="52" r="1.3"/><circle cx="17" cy="66" r="1.3"/><circle cx="31" cy="66" r="1.3"/><circle cx="45" cy="66" r="1.3"/><circle cx="59" cy="66" r="1.3"/><circle cx="73" cy="66" r="1.3"/><circle cx="87" cy="66" r="1.3"/><circle cx="101" cy="66" r="1.3"/><circle cx="115" cy="66" r="1.3"/><circle cx="129" cy="66" r="1.3"/><circle cx="143" cy="66" r="1.3"/><circle cx="17" cy="80" r="1.3"/><circle cx="31" cy="80" r="1.3"/><circle cx="45" cy="80" r="1.3"/><circle cx="59" cy="80" r="1.3"/><circle cx="73" cy="80" r="1.3"/><circle cx="87" cy="80" r="1.3"/><circle cx="101" cy="80" r="1.3"/><circle cx="115" cy="80" r="1.3"/><circle cx="129" cy="80" r="1.3"/><circle cx="143" cy="80" r="1.3"/></g><path d="M17 80L17 66L17 52L17 38L17 24L31 24L45 24L45 38" fill="none" stroke="#b3b4e0" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M45 44.5L39.93 36.7L50.07 36.7Z" fill="#b3b4e0"/><path d="M59 10L73 10L87 10L101 10L115 10" fill="none" stroke="#b3b4e0" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M121.5 10L113.7 15.07L113.7 4.93Z" fill="#b3b4e0"/><path d="M59 38L73 38L73 24" fill="none" stroke="#b3b4e0" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M73 17.5L78.07 25.3L67.93 25.3Z" fill="#b3b4e0"/><path d="M101 24L101 38L115 38L115 24" fill="none" stroke="#b3b4e0" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M115 17.5L120.07 25.3L109.93 25.3Z" fill="#b3b4e0"/><path d="M87 80L101 80L115 80L129 80L129 66" fill="none" stroke="#e0484f" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M129 59.5L134.07 67.3L123.93 67.3Z" fill="#e0484f"/><path d="M143 10L143 24L143 38" fill="none" stroke="#b3b4e0" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M143 44.5L148.07 36.7L137.93 36.7Z" fill="#b3b4e0"/><path d="M31 80L45 80L59 80L59 66" fill="none" stroke="#b3b4e0" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M59 59.5L64.07 67.3L53.93 67.3Z" fill="#b3b4e0"/><g filter="url(#woTileGlow)"><rect x="31" y="49.8" width="48" height="4.4" rx="2.2" fill="url(#woTileTrail)"/><path d="M77 52H119" fill="none" stroke="#3fd6bd" stroke-width="4.2" stroke-linecap="round"/><path d="M126.5 52L117.5 46.4L117.5 57.6Z" fill="#3fd6bd"/><g fill="#c9fff4"><circle cx="113" cy="46" r="1.3"/><circle cx="103" cy="57.5" r="1"/><circle cx="92" cy="47" r=".8"/></g></g></svg>`,
   // Gridlock (2026-10-14): the game's wood look - a 6x6 board of sliding blocks, the red one leaving through
   // the exit gap on the right, white arrow on it (the red block is marked by shape, never colour alone).
   'gridlock': `<svg viewBox="0 0 160 90" aria-hidden="true">
