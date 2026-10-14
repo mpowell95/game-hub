@@ -5,423 +5,166 @@
 > loaded alongside this file (full rule rationale: `js/CLAUDE.md`). Settings keys, saves, and stats written by this game are governed by
 > it: writes additive, keys never repurposed, no silent write failures.
 
-Hub integration: in-hub `module:`.
+**Keep this file short.** A new rule goes here in one or two lines; the story behind it goes in `CLAUDE-HISTORY.md` (append a dated section). Full original text: `CLAUDE-HISTORY.md`.
+
+Hub integration: in-hub `module:`. `isInProgress()` is the autosave/resume meaning (always `false`) for
+solo; **MP returns `true` while a room is joined** (lobby, live round, reveal screen).
 
 ## Notes
 
-Timed word search vs AI on a 4x4 grid shaken from the real 16 classic Boggle dice (`boggle/js/game.js`'s `DICE`, shuffled into position then one random face each; random-letter boards are frequently unplayable, so this repo does not generate one). **The solver is the AI, not a separate opponent**: one exhaustive DFS against the dictionary trie (`boggle/js/solver.js`) produces the scoring word list, the end-of-round reveal, AND the opponent all from a single algorithm — `boggle/js/ai.js` has no search of its own, it just samples a difficulty-scaled slice of the solver's own output (beginner ~20% biased toward short words, intermediate ~45% unbiased, pro ~70% biased toward long/high-scoring words), so every AI word is provably a genuine board find, never invented. Dictionary is the public-domain **ENABLE** word list, ~170k words (`boggle/data/words.txt` + `boggle/data/CREDITS.md`) — joined 2026-09-11 by a generated **Spanish** list of the same shape and size (`words-es.txt`, 159,778 words; see "Spanish gameplay" below, and note the dice are per-language too) — **the first game in this repo to ship a large non-image data asset**; like any code file it must be in `sw.js`'s `ASSETS` precache list or the game silently breaks offline, and any future word game following this pattern should precache its own word list the same way. Fetched once, lazily, on first game start, and parsed into a trie of nested `Map`s (deliberately not a `Set` of every prefix, which would duplicate ~170k strings many times over) cached in module scope so hub navigation never re-fetches or rebuilds it (`boggle/js/dict.js`). The `Qu` tile is a single tile worth two letters and must advance the trie by both in one board step — the classic Boggle solver bug is getting this wrong, and `boggle/js/test.js` asserts it directly (a board with the Qu tile must find "QUIT" and must never produce a malformed "QIT"). A round is a shared-board timed sprint (2/3/5 minute settings, not turn-based): both sides score independently against the same board with no duplicate cancellation (real Boggle cancels words both sides found; against a solver-backed opponent that would gut the human's score every round), higher total wins, and ties are real. **Input is swipe-to-trace** (drag through the letters without lifting, release to submit, slide back over the previous tile to undo a letter): tapping each letter then pressing a submit button was too slow to be worth playing against a clock (Matt, 2026-07-22). Tap-to-select is kept alongside it, not as a dead fallback but as the path that keeps the board usable by keyboard and screen reader, since every tile is still a real `<button>`. Three things make the swipe work and are easy to break: the board sets `touch-action: none` (without it a drag scrolls the page instead of spelling), tracing hit-tests against tile rects **cached at gesture start** rather than `elementFromPoint` (so backtracking still works over tiles that are `disabled` for being illegal next steps), and a drag patches the board in place via `_updateBoardVisuals()` instead of re-rendering (an `innerHTML` rebuild mid-drag destroys the element under the finger and breaks pointer capture). The synthetic `click` a browser fires after a tap is ignored by **timestamp**, never by a boolean flag: ending a trace can re-render the board, leaving that click aimed at a detached node the delegated handler never sees, which would strand a flag `true` and silently swallow the next keyboard activation. The tracing rules themselves live in `game.js`'s pure `pathAction()` so they unit-test with no DOM. **Boards are quality-gated** (`solver.js`'s `shakePlayableBoard`/`BOARD_QUALITY`, the same regenerate-rather-than-ship-a-bad-one idea as `nuts-bolts/js/generator.js`): the authentic dice are kept, but a shake is rejected and re-rolled if it falls under 60 findable words, 35 short words, or 4 vowels. Measured over 3000 real shakes, the rare letters are NOT over-represented (J/X/Q/Z/K each sit on exactly one face of one die, so ~60% of authentic boards carry one and that is correct) — the actual problem was vowel-starved boards with nothing findable, ~9% of shakes. Gating clears in 1.39 shakes on average (~0.8ms, a solve is ~0.6ms) and drops boards under 40 words from 7.4% to 0%. Settings in `gamehub.boggle.v1`. Results via `recordBoggle(difficulty, won, extras)`: maintains the shared `total`/`byDiff` bucket AND a `bg` breakdown (`{played,won,lost,tied,words,bestScore,longestWord}`) — `tied` is explicit (a round can genuinely tie), `words` is the human's cumulative found-word count (additive), `bestScore` is `Math.max` only, and `longestWord` (`{word,len}`) is replaced only when strictly longer, never by a shorter word even on a winning round. `isInProgress()` is the autosave/resume meaning (Escoba/Mancala's) since the 2026-07-23 resume batch below: leaving mid-round is lossless, so it always returns `false`.
+Timed word search vs AI on a 4x4 grid shaken from the real 16 classic Boggle dice (`game.js` `DICE`).
+Random-letter boards are frequently unplayable, so this repo does not generate one.
 
-## Autosave/resume (2026-07-23, batch 9 of the feedback arc)
+- **The solver is the AI**: one exhaustive DFS against the dictionary trie (`solver.js`) produces the
+  scoring list, the end-of-round reveal AND the opponent. `ai.js` has no search; it samples a
+  difficulty-scaled slice of the solver's output (beginner ~20% biased short, intermediate ~45%, pro ~70%
+  biased long/high-scoring), so every AI word is a genuine board find.
+- **Dictionary**: public-domain **ENABLE**, ~170k words (`boggle/data/words.txt` + `CREDITS.md`), plus a
+  generated Spanish list (below). Must be in `sw.js` `ASSETS` or the game breaks offline (it is in the
+  `LAZY` tier). Fetched once, lazily, on first game start, parsed into a trie of nested `Map`s cached in
+  module scope (`dict.js`).
+- **The `Qu` tile is one tile worth two letters** and advances the trie by both in one step;
+  `boggle/js/test.js` asserts "QUIT" is found and "QIT" never produced.
+- A round is a shared-board timed sprint, not turn-based; **no duplicate cancellation** (it would gut the
+  human's score against a solver-backed opponent); higher total wins, ties are real.
+- **Input is swipe-to-trace** (Matt, 2026-07-22): drag through letters, release to submit, slide back to
+  undo. Tap-to-select is kept for keyboard/screen-reader use (every tile is a real `<button>`). Easy to
+  break: the board sets `touch-action: none`; tracing hit-tests tile rects **cached at gesture start**,
+  not `elementFromPoint` (backtracking must work over `disabled` tiles); a drag patches the board in
+  place via `_updateBoardVisuals()` (an `innerHTML` rebuild mid-drag breaks pointer capture); the
+  synthetic `click` after a tap is ignored by **timestamp**, never a boolean flag. Tracing rules live in
+  `game.js`'s pure `pathAction()`.
+- **Boards are quality-gated** (`solver.js` `shakePlayableBoard`/`BOARD_QUALITY`): a shake is rejected
+  if under 60 findable words, 35 short words or 4 vowels (~1.39 shakes on average, ~0.8ms). Rare letters
+  are NOT over-represented (that is correct); the problem was vowel-starved boards (~9%).
+- Settings `gamehub.boggle.v1`. `recordBoggle(difficulty, won, extras)` maintains `total`/`byDiff` AND
+  the `bg` breakdown `{played,won,lost,tied,words,bestScore,longestWord}`: `tied` explicit, `words`
+  additive, `bestScore` `Math.max` only, `longestWord` replaced only when strictly longer.
+- **Timers 1 / 1.5 / 2 minutes, default 1.5** (Matt: "5 min seems crazy long"; `TIMERS`/`TIMER_LABEL_KEY`
+  in `ui.js`). Stored as numeric minutes; an old `3`/`5` falls back to the default (a preference).
+  `loadGame()` caps `remainingSec` at `Math.max(...TIMERS) * 60`.
 
-Boggle is the special case among the "every game defaults to resumable" batch
-(`HANDOFF-FB-RESUME.md`): a round is a live countdown, so pausing the clock
-across a hub navigation would be wrong. `gamehub.boggle.save.v1` (new key,
-separate from settings) saves `{faces, found, remainingSec, timerMinutes,
-difficulty}` after every scored word and on `destroy()` (belt and braces, so
-backgrounding mid-word-entry is covered too). Deliberately NOT saved: the
-solver's full word list, which `resumeGame()` recomputes from the saved board
-letters once the dictionary trie is loaded again (`solveBoard`), since that is
-cheap and deterministic. On mount, a valid save restores straight onto the
-live board (no setup screen, no "resume?" dialog) with the found-words list
-intact, then **`_endsAt` is recomputed fresh as `Date.now() + remainingSec *
-1000`** -- the clock is paused while away, on purpose, favoring the player.
-Cleared on round end (`finish()`), on starting a fresh round, and on explicit
-"give up" from the game screen; never on hub navigation. A malformed or
-non-4x4-of-letters save is treated as no save (`loadGame()`'s hard validation)
-and never crashes the mount. `isInProgress()` flipped to the Escoba/Mancala
-meaning (always `false`) since leaving is now lossless.
+## Autosave/resume (2026-07-23)
+
+`gamehub.boggle.save.v1` (separate from settings) saves `{faces, found, remainingSec, timerMinutes,
+difficulty, wordLang}` after every scored word and on `destroy()`. The solver's word list is NOT saved:
+`resumeGame()` recomputes it (`solveBoard`). A valid save restores straight onto the live board (no
+dialog) and **`_endsAt` is recomputed as `Date.now() + remainingSec * 1000`** (clock paused while away,
+on purpose, favoring the player). Cleared on round end (`finish()`), a fresh round and "give up"; never
+on hub navigation. A malformed or non-4x4-of-letters save is treated as no save.
 
 ## Difficulty display (2026-07-24)
 
-The setup screen's difficulty row (Easy/Medium/Hard as of 2026-07-24, was Beginner/Intermediate/
-Pro — Matt's reversal of batch 8's rename, label-only) shows the shared COLORED ski-slope shape
-(`diffShapeSVG`/`tierOf`, `js/difficulty-tiers.js` — the shape carries an inline `fill` per tier)
-before each label, same shapes the leaderboard uses, sized ~1em via `.bg-root .lb-dshape`. **The
-per-tier prose hint** ("Finds close to half the
-words on the board...") that used to sit under the segmented control was deleted per Matt's
-standing rule against difficulty-explanation prose — the row now shows only shape + name. The
-`bg-hint` DOM element, its CSS rule, and the `hint_diff_*` keys (both `en`/`es` in `strings.js`)
-are gone; difficulty ids (`beginner`/`intermediate`/`pro`) are untouched.
+Easy/Medium/Hard labels (label-only; ids `beginner`/`intermediate`/`pro` untouched) with the shared
+colored shape (`diffShapeSVG`/`tierOf`, sized via `.bg-root .lb-dshape`). **No per-tier prose hint**
+(Matt's standing rule); the `bg-hint` element and `hint_diff_*` keys are gone.
 
-## Haptics + shorter timers (2026-07-24, batch 11 of the feedback arc)
+## Haptics (2026-07-24)
 
-Matt asked for a small vibration while tracing and shorter round timers
-(`HANDOFF-FB-BOGGLE.md`). Two feature-detected `navigator.vibrate()` calls,
-wrapped in a tiny `haptic(ms)` helper in `ui.js` — real timed pulses on
-Android Chrome. **iOS Safari/PWAs expose no vibration API at all.** An
-undocumented "switch hack" fallback (programmatically clicking a hidden
-native `<input type="checkbox" switch>` to fire the iOS 17.4+ Taptic tick)
-was added the same day, then **tested on Matt's real iPhone 2026-07-24 and
-did not fire.** Verdict is final: web apps cannot produce haptics on iOS.
-The switch hack (`ensureHapticSwitch`/`removeHapticSwitch`/`hapticSwitch`)
-was removed from `ui.js`; `haptic(ms)` is back to a plain feature-detected
-`navigator.vibrate()` call that does nothing when the API is absent. **Do
-not re-try an iOS haptics workaround** — the gold visual cue below is the
-answer for platforms with no vibration API. No settings row for haptics.
+Two feature-detected `navigator.vibrate()` calls via `haptic(ms)` in `ui.js`: **trigger 1** `vibrate(12)`
+when the trace first becomes a submittable NEW word (in `_updateWordBar()`, swipe path only), **trigger
+2** `vibrate(25)` on a successful submit. **iOS web apps expose no vibration API. The "switch hack" was
+tested on Matt's real iPhone 2026-07-24 and did not fire: the verdict is final, do not re-try an iOS
+haptics workaround** (the gold cue below is the answer). No settings row for haptics.
 
-- **Trigger 1** (`_updateWordBar()`, the same place the current word is
-  already derived per pointer move — no second dictionary walk):
-  `navigator.vibrate(12)` the moment the current trace first becomes a
-  submittable NEW word (length ≥ `MIN_WORD_LEN`, in the trie, not already in
-  `_found`). Edge-triggered per word string via `_lastCueWord` (shared with
-  the visual cue below, see `_cueState()`): extending to a longer valid new
-  word fires again, shrinking back to a word already signaled this trace
-  does not, and already-found words never fire. Only wired into the
-  pointer/swipe path (`_updateWordBar`), not the keyboard tap path
-  (`_onKeyboardTile` → full `renderGame()`) — a keyboard user has no
-  vibration motor to feel it anyway.
-- **Trigger 2**: `navigator.vibrate(25)` on a successful submit only
-  (`onSubmitWord`'s valid branch). Duplicate and invalid submits: nothing.
-- Timers changed from **2/3/5 minutes** to **1 / 1.5 / 2 minutes, default
-  1.5** (closer to GamePigeon's 1:20 than the old 5-minute default — Matt:
-  "5 min seems crazy long"). `TIMERS`/`TIMER_LABEL_KEY` in `ui.js` and the
-  `timer_1`/`timer_1_5`/`timer_2` keys in `strings.js` carry the new values;
-  stored values are still plain numeric minutes in `gamehub.boggle.v1`, so an
-  old saved `3` or `5` simply fails `TIMERS.includes()` and falls back to the
-  new default — a preference, allowed to reset (THE LAW rule 2's carve-out).
-  `loadGame()`'s in-progress-save validator caps `remainingSec` at
-  `Math.max(...TIMERS) * 60` rather than a hardcoded 5 minutes, so it tracks
-  the timer set instead of drifting out of sync with it.
+## The gold word-is-valid cue (2026-07-24)
 
-## The gold word-is-valid cue (2026-07-24, batch C of the 2026-07-24 feedback arc)
-
-Replaces the removed iOS haptic switch hack above as the way an iPhone player (or anyone,
-Android included) sees that the current trace is a real, new word. Trigger predicate is
-identical to haptic trigger 1: `_isCueWord(word)` — length ≥ `MIN_WORD_LEN`, in the trie, not
-already in `_found`. Shared edge-tracking (`_cueState()`, `_lastCueWord`) drives both the cue
-and, on the swipe path only, the Android vibration — the same variable that used to be called
-`_lastHapticWord` now names both jobs.
-
-- While the predicate holds: the word bar text and the traced path polyline get an `is-word`
-  class (gold, `--bg-gold`), and the current last tile's border goes gold too
-  (`.bg-tile.is-last.is-word`). A single quick scale/glow pulse (`bg-cue-pulse` class, ~200ms
-  `bg-cue-pop` keyframe) fires on the word bar text only, only at the moment the state is
-  ENTERED for a given word string — not on every pointermove while it stays true, and not
-  again on backtrack-then-reforward to an already-signaled word.
-- `_updateWordCue(word, {allowHaptic})` is the one shared apply-point for both input paths:
-  the swipe path (`_updateWordBar`, called from `_updateBoardVisuals`'s in-place DOM patch)
-  passes `allowHaptic: true`; the keyboard tap path (`renderGame()`, which rebuilds the whole
-  shell on every tap) passes no options, so it gets the same visual cue with no vibration —
-  same reasoning as trigger 1 always having been swipe-only.
-- The swipe path's elements persist across many patches per second, so a CSS class toggle
-  alone won't replay the pulse animation on a repeat entry; `_pulseCue()` does the standard
-  remove-class → force reflow (`el.offsetWidth`) → re-add-class restart. Harmless to call on
-  the tap path's fresh nodes too (a freshly inserted node plays the animation regardless).
-- Already-found words: never gold, never pulse (the predicate excludes them structurally).
-  Invalid or too-short traces: normal styling. `prefers-reduced-motion`: the color/weight
-  change stays, only the `bg-cue-pop` animation is suppressed.
-- Colorblind rule: gold vs. the normal ink is a brightness change (paired with the cue only
-  ever showing up alongside the already-bold word-bar weight), not a hue-only pair — never
-  red/green regardless.
+While the trace is a real new word (`_isCueWord(word)`: length >= `MIN_WORD_LEN`, in the trie, not in
+`_found`), the word bar text and traced path get `is-word` (gold `--bg-gold`), the last tile's border
+goes gold, and the word bar pulses (`bg-cue-pulse`, ~200ms) once per entered word string
+(`_cueState()`/`_lastCueWord`, edge-triggered, shared with trigger 1). `_updateWordCue(word,
+{allowHaptic})` is the one apply-point: the swipe path passes `allowHaptic: true`, the keyboard tap path
+(full `renderGame()`) gets the visual cue only. `_pulseCue()` does remove-class / force reflow / re-add.
+Already-found words never gold. Reduced motion: colour stays, animation suppressed. Gold is a brightness
+change, never red/green.
 
 ## Multiplayer (2026-07-28)
 
-Two human devices race the SAME shaken board over the shared `js/net.js` room protocol.
-`isInProgress()` gained a SECOND meaning here (see root CLAUDE.md's "two legitimate meanings,
-exception within the exception"): solo is unchanged (always `false`, autosave/resume, see above);
-**MP returns `true` for as long as a room is joined** — lobby, a live round, or the between-rounds
-reveal screen all count, since leaving during any of them strands the opponent exactly the same
-way. `gamehub.boggle.mp.v1` is a THIRD storage key, never touching the solo settings key
-(`gamehub.boggle.v1`) or the solo autosave (`gamehub.boggle.save.v1`) — THE LAW rule 5.
+Two humans race the SAME shaken board over `js/net.js`. `isInProgress()` is `true` for the whole room
+life. `gamehub.boggle.mp.v1` is a THIRD key (never touching `gamehub.boggle.v1` or `.save.v1`; rule 5).
 
-**The key design call: this is NOT the lockstep move-log protocol the other six MP games share**
-(Chinchón, Escoba, Tic Tac Toe, Mancala, Filler, Dots and Boxes). A Boggle round has no shared
-mutable state during play at all — this game already has no duplicate-word cancellation between
-the human and the AI (see the top of this file), and that stays true against a second human: both
-sides play the identical board completely independently against their own copy of the clock, and
-nothing either player does can affect the other's board or score. There is nothing to diverge on
-and nothing to hash-verify, so building a move log here would test a protocol this game does not
-run. The full reasoning, and the new `js/net.js` function this needed, is written up in
-`js/CLAUDE.md`'s "Nth consumer: Boggle" section (in the "Multiplayer lockstep — invariants" area,
-even though this game isn't lockstep — that's where every MP consumer's write-up lives, precedent
-included).
+**This is NOT the lockstep move-log protocol** the other MP games share: a round has no shared mutable
+state during play, so there is nothing to diverge on or hash (write-up: `js/CLAUDE.md`, "Nth consumer:
+Boggle"). Do not force it into `test-mp-lockstep.mjs`.
 
-- **Room vocabulary**: `round.deck` carries the 16 shaken board FACES
-  (`grid.map(row => row.map(t => t.face))`, the exact same shape `boggle/js/ui.js`'s solo
-  `boardFromFaces()`/save already uses) — a third re-use of this field for a third game's own
-  payload (Chinchón's per-round deck order, Filler's rng seed; see js/CLAUDE.md's "fifth
-  consumer: Filler" section for that precedent). `round.dealer` is repurposed as the round's
-  START TIMESTAMP (epoch ms), not a seat — Boggle has no "who opens" concept, but both sides DO
-  need to agree on exactly when the shared clock started, including after a rejoin, and deriving
-  the end time from this one number (`boggle/js/mp-round.js`'s `roundEndsAt`) means NEITHER side
-  ever needs to persist its own `remainingSec` — a rejoin just recomputes from the room record.
-  This is the third re-use of `round.dealer` too (Tic Tac Toe: the seat that plays X; Pool: the
-  seat that breaks; here: a timestamp, not a seat at all).
-- **`reportRoundResult(code, role, result)`**, the one new `js/net.js` function this game needed
-  (see its own JSDoc there): writes `hostResult`/`guestResult` as siblings of `result`, since BOTH
-  peers — not just the host — need to publish an outcome, and neither is authoritative over "the"
-  result the way a host is everywhere else. `writeResult` (host-only, sets `status:'ended'`) does
-  not fit for two reasons: a bare host call would silently drop the guest's own outcome, and
-  `status:'ended'` would kill a room meant to host the next round — `status:'ended'` means exactly
-  one thing here too: somebody abandoned the room. Each reported result carries its OWN round
-  number (`n`) precisely because `startRound` never clears `hostResult`/`guestResult` — without
-  that per-result stamp, a rematch's fresh round would read as "both results already in" the
-  instant it started, using the previous round's still-present entries
-  (`boggle/js/mp-round.js`'s `bothResultsIn` is the guard, and `test-boggle-mp.mjs` has a
-  dedicated case for exactly this).
-- **Both sides start their own local countdown** the moment a round record arrives
-  (`_mpApplyRoundRecord`), derived from `roundEndsAt(round.dealer, config.timerMinutes)` — never
-  from "when I personally saw the board." A rejoin mid-round (the 30-minute `gamehub.boggle.mp.v1`
-  window) recomputes the same way and, if the round already ended while this device was away,
-  calls `finish()` immediately instead of rendering a live timer.
-- **No AI, no difficulty setting.** The MP setup screen (mode segment: Solo/Host/Join, same
-  pattern as Tic Tac Toe's) hides the difficulty row entirely while hosting or joined — there is
-  no opponent tier to set against a real person. `finish()`'s MP branch skips `selectAiWords`/
-  `totalScore` completely and instead reports the human's own score via `reportRoundResult`,
-  waiting (via the room's already-open `onRoom` subscription) for both `hostResult` and
-  `guestResult` to land before showing the reveal card — a plain "waiting for {opp}" card shows
-  in between, with a Leave button (an explicit abandon; the reveal/waiting cards' own top-right ×
-  only dismisses the card, per the standing win/lose-popup rule, it never forces a decision).
-- **Stats**: `recordBoggle(difficulty, won, extras)` is called with `MP_DIFFICULTY = 'mp'`,
-  exactly the convention `js/CLAUDE.md`'s "third consumer: Tic Tac Toe" section established —
-  `tierOf('mp')` is null, so it claims no difficulty pill but still counts in every total. MP
-  results feed the SAME `bg` sub-counter (`played`/`won`/`lost`/`tied`/`words`/`bestScore`/
-  `longestWord`) solo does, additively — no new counter shape, no `players-agg.js` change needed
-  (that branch already sums whatever `bg` holds regardless of bucket). `recordHeadToHead('boggle',
-  opp, won)` runs alongside it; the opponent identity is captured into `this.mp.opp` and refreshed
-  on every room update (`_mpOnRoomUpdate`), never left null at commit time — see js/CLAUDE.md's
-  "Head-to-head capture" convention.
-- **Rematch series, one room**: `round.n` increments per rematch, same convention as Tic Tac
-  Toe/Filler/Dots and Boxes. Only the HOST can start the next round (`_mpRematch`), mirroring how
-  those games decide who starts the next game.
-- **Tests**: `boggle/js/mp-round.js` holds the pure, DOM-free timing/comparison helpers both
-  peers share (`roundEndsAt`, `remainingMs`, `wonFor`, `bothResultsIn`); `test-boggle-mp.mjs`
-  (repo root, registered in `run-all-tests.mjs`) exercises them headlessly. This is deliberately
-  NOT a `test-mp-lockstep.mjs` block — there is no move log to replay against a `FakeRoom`, so
-  forcing this game into that harness would test a protocol it does not run; a smaller, honest,
-  dedicated test file covers what actually needs a regression tripwire instead.
-- **Status: unverified beyond inline reasoning and the headless pure-logic tests above.** Like
-  Pool's first pass (`pool/CLAUDE.md`), nothing has been played on two real devices, and there is
-  no `FakeRoom`-driven integration test the way the six lockstep games have — Boggle's protocol
-  has no move log for such a harness to replay. Flagged honestly rather than claimed proven.
-
-### Fix: opponent's actual words were invisible (first real two-device play, 2026-07-28)
-
-The one real-device playtest above surfaced exactly what "unverified" was warning about: Matt
-reported "I couldn't see her words and she couldn't see the words I got." Root cause: the initial
-build's `reportRoundResult` payload (`_mpFinishRound`) only ever sent `words: humanWords.length`
-— a COUNT, never the words themselves — so there was no data on either device to show what the
-other side actually found, even though the reveal screen already had tally numbers. Solo mode's
-equivalent screen never had this problem because it never needed to transmit anything: the AI's
-word list comes from a local, already-known `selectAiWords` sample of the same solve.
-
-Fixed by adding a `foundWords` array (plain word strings) to the `reportRoundResult` payload
-alongside the existing `words` count (kept, since `recordBoggle`'s `extras.words` and the tally
-numbers both still read the count, not the array — additive, not a replacement). The reveal card
-gained the same "Browse words" expandable list solo's `openEndOverlay` already has
-(`_mpFullSolveHtml`, a straight MP twin of `_fullSolveHtml`): every word `this._solved` found on
-the shared board, marked with whichever side's emoji found it, built from both peers' `foundWords`
-sets. `foundWords || []` guards a result restored from a pre-fix in-flight MP save/room record, so
-an old match already underway when this shipped can't throw. The `toggle-solve` click handler,
-previously hardcoded to solo's `openEndOverlay()`, now re-opens whichever overlay is live
-(`this._mpRevealResults`, stashed by `_mpOpenReveal` for exactly this re-render).
+- **Room vocabulary**: `round.deck` = the 16 board FACES (`grid.map(row => row.map(t => t.face))`);
+  `round.dealer` = the round's START TIMESTAMP (epoch ms), not a seat; `mp-round.js` `roundEndsAt`
+  derives the end time so NEITHER side persists `remainingSec`; a rejoin recomputes and calls `finish()`
+  at once if the round already ended.
+- **`reportRoundResult(code, role, result)`** (the one new `js/net.js` function) writes
+  `hostResult`/`guestResult` as siblings of `result`. `writeResult` does not fit (host-only, sets
+  `status:'ended'`, which here means exactly "somebody abandoned the room"). **Each reported result
+  carries its OWN round number `n`** because `startRound` never clears them; `bothResultsIn` in
+  `mp-round.js` is the guard (`test-boggle-mp.mjs` has a case).
+- Both sides start their own local countdown when a round record arrives (`_mpApplyRoundRecord`).
+- **No AI, no difficulty setting** (the MP setup hides the difficulty row). `finish()`'s MP branch
+  reports the human's own score and waits for both results (Leave button on the waiting card; the
+  card's top-right X only dismisses it).
+- **The payload carries the actual `foundWords` array** alongside the `words` count (an early build sent
+  only the count: "I couldn't see her words"). `foundWords || []` guards pre-fix records. The reveal card
+  has "Browse words" (`_mpFullSolveHtml`); `toggle-solve` re-opens whichever overlay is live
+  (`this._mpRevealResults`).
+- **Stats**: `recordBoggle(difficulty, won, extras)` with `MP_DIFFICULTY = 'mp'` (`tierOf('mp')` null),
+  the same `bg` sub-counter, no `players-agg.js` change; `recordHeadToHead('boggle', opp, won)`
+  alongside, the opponent captured into `this.mp.opp` and refreshed on every room update
+  (`_mpOnRoomUpdate`).
+- Rematch series in one room: `round.n` increments; only the HOST starts the next round (`_mpRematch`).
+- Tests: `boggle/js/mp-round.js` (pure helpers `roundEndsAt`, `remainingMs`, `wonFor`, `bothResultsIn`)
+  and `test-boggle-mp.mjs`. **Status: played once on two real devices; no `FakeRoom` integration test
+  exists.**
 
 ## Spanish gameplay (2026-09-11) — the dictionary is now a SETTING
 
-Matt: *"Can we make boggle available in Spanish?"* The section below this one records the
-2026-07-23 decision that gameplay stays English — **that decision is superseded.** The UI half of
-it still stands and is still the fix for Ana's report; what changed is that a round can now be
-PLAYED in Spanish, with its own word list and its own dice.
+Matt: *"Can we make boggle available in Spanish?"* (This superseded the 2026-07-23 "gameplay stays
+English" decision; the UI half stands.) **UI language and GAMEPLAY language are two separate choices.**
+The setup row **Dictionary / Diccionario** sets the word list and dice; the hub language is only the
+DEFAULT until the player has chosen once; a stored `wordLang` always wins.
 
-**UI language and GAMEPLAY language are two separate choices, and conflating them would be a worse
-answer to both.** The hub's language (`js/i18n.js`) sets the chrome; the setup screen's new
-**Dictionary / Diccionario** row sets which word list and dice the round runs on. The hub language
-supplies only the DEFAULT, and only until this player has chosen once — a stored `wordLang` always
-wins, so switching the hub to English never moves somebody off the Spanish board they have been
-playing. A Spanish-speaking player may reasonably want an English board (to play someone who does
-not read Spanish), and the reverse is just as reasonable.
+- **The list is GENERATED**: `build-boggle-es.mjs` fetches **RLA-ES** (LibreOffice es_ES hunspell,
+  tri-licensed GPL-3+/LGPL-3+/**MPL 1.1+**; the MPL notice is in `boggle/data/CREDITS.md`) and expands
+  the Boggle subset into `words-es.txt` (149,873 words per the generator; 159,778 in the first count).
+  Re-run, then `validate-sw-assets.mjs`, commit both. Never hand-edit.
+- **Matt's scope calls**: verbs carry **infinitive, gerund and participle only** (no conjugations);
+  participles inflect (hablado/a/os/as); nouns/adjectives carry plural (flag `S`) and both genders
+  (flag `G`); no proper nouns. **No accents, N stands in for Ñ** (words folded to A-Z), so dice, trie,
+  solver, `Qu` tile and scoring are identical to English; the fold MERGES words, never invents them.
+  `test-boggle-es.mjs` asserts the edges (HABLO/HABLASTE/COMEREMOS absent).
+- **Two bugs found by asking a different question** (printing real solver output, measuring the
+  opponent): (1) the generator ran PLURAL rules over FEMININE output (ROJASES, ALTASES): 9,934 bogus
+  words, now a `[KNOWN-BUG PROBE]` paired with an assertion that real `-ases` plurals (CLASES, FASES)
+  survive; **anything that looks like it needs a second affix pass almost certainly does not**. (2)
+  `ai.js` took a fixed percentage, but scoring is superlinear in length and Spanish words are longer:
+  AI averaged 37/115/204 vs English 27/76/129. Fixed with `TIER_PCT_BY_LANG` (`es` 0.16/0.33/0.44, `en`
+  0.20/0.45/0.70). **`node tune-boggle-es.mjs --ai` is the measurement; re-run after any change to
+  dice, gate, word list or `scoreForWord`, and for any future language.**
+- **Dictionaries download on FIRST PLAY, not install** (Matt, 2026-09-11): the two lists are 3.23 MB of
+  an 11.92 MB REST tier. `sw.js`'s `LAZY` tier (root `CLAUDE.md`) holds only them; still in `ASSETS`
+  (hash-tracked, cache-first, validated), just not fetched by the warm; carried forward once present.
+  **Cost: a device that never opened Boggle cannot play it OFFLINE** (`renderLoadError` /
+  `load_error`). If that bites, the fix is an explicit download feature, NOT un-lazying the tier.
+- **`DICE_ES`** is derived (96 faces by letter frequency, 3-6 letter words weighted, vowels spread) and
+  measured (`tune-boggle-es.mjs`, 2000 shakes: median 111 words vs English 104). `Qu` carries over; **no
+  K/W face, no Ñ face**. **`BOARD_QUALITY_ES`** is its own gate calibrated on Spanish's own 25th
+  percentile (no conjugations means fewer short words).
+- **Threading**: `dict.js` caches PER LANGUAGE (`dictLang()` maps unknowns to English; a
+  `[KNOWN-BUG PROBE]` guards the one-promise bug). The autosave carries the round's `wordLang` (a save
+  without one reads as English, rule 3). **In MP the HOST's dictionary decides the match** (in the room
+  config beside `timerMinutes`; lobbies show it before the round; a pre-existing room reads English).
+  The invalid-word feedback **names the real dictionary** (`{lang}` parameter, never hardcode it).
+  **Stats are ONE bucket, deliberately not split by language** (a split `bestScore` that stopped
+  counting the other language would break rule 1).
 
-- **The word list is GENERATED, not found.** English ships ENABLE, already a flat public-domain
-  list of exactly the forms a word game wants. Spanish has no equivalent. `build-boggle-es.mjs`
-  (repo root) fetches **RLA-ES** — the LibreOffice/OpenOffice es_ES spelling dictionary, 57k
-  hunspell lemmas plus an affix rule file — and expands the subset Boggle plays with. Licence is
-  the reason this source and not another: RLA-ES is tri-licensed GPL-3+/LGPL-3+/**MPL 1.1+**, and
-  we ship under the MPL, whose notice lives in `boggle/data/CREDITS.md`. Re-run the generator to
-  pick up a newer RLA-ES release, then `validate-sw-assets.mjs`, then commit both files.
-- **What is in it, which is MATT'S SCOPE CALL and not a shortcut taken quietly.** Verbs carry the
-  **infinitive, gerund and participle only** — no conjugated forms at all. Expanding hunspell's four
-  verb paradigms (2,183 rules) would roughly triple the list with forms nobody traces on a 4x4
-  board, and every one of them is a word the solver must search and the reveal screen must list.
-  Participles DO inflect, because they are adjectives (hablado/hablada/hablados/habladas,
-  roto/rota/rotos/rotas). Nouns and adjectives carry their plural (hunspell flag `S`) and both
-  genders (flag `G`). Proper nouns are excluded, matching ENABLE. `test-boggle-es.mjs` asserts both
-  edges: the everyday words are present AND `HABLO`/`HABLASTE`/`COMEREMOS` are absent, so a future
-  change that quietly widens the scope fails loudly rather than tripling the download.
-- **No accents, and N stands in for Ñ** (also Matt's call). Every word is folded to A-Z on the way
-  in: `canción` → `CANCION`, `mañana` → `MANANA`. That keeps the alphabet at 26 letters, which
-  means the dice, the trie, the solver, the `Qu` tile and the scoring are all **identical** to
-  English's — the Spanish support adds a data file and a dice table, not a second engine. The
-  accepted cost: a few thousand distinct Spanish spellings collapse onto the same board word. The
-  fold MERGES words, it never invents them.
-- **Result: 149,873 words, 1.49 MB** — comparable to ENABLE's 170,398 / 1.70 MB, so the phone cost
-  of the second list is about the same as the first's. Trie build measured at **~75-95ms** in a real
-  browser, the same as English's ~76ms.
+## i18n (2026-07-23) — UI translates; gameplay language is now a setting
 
-### Two bugs the first release shipped, and how they were found (2026-09-11)
+- `boggle/js/strings.js` (`{ en, es }`) covers every visible string and tile aria-label; `t = makeT(
+  STRINGS)` at render time; no `onLangChange` (it re-renders constantly).
+- **`.bg-root` carries `translate="no"` (set in `mount()`). Do not remove it.** Ana's phone auto-
+  translated single-letter tiles ("A" -> "UN") and showed "several letters or even a word" on a tile.
+- Difficulty ids and timer values are storage vocabulary and stay canonical; title stays "Boggle".
+- `js/i18n.js` stamps `document.documentElement.lang` at module load (a Spanish hub declaring
+  `lang="en"` invited translation prompts hub-wide).
 
-Both were found by ASKING A DIFFERENT QUESTION than the one the tests answered — not by a failing
-test, but by printing the words the solver actually finds on a real board and reading them, and by
-measuring the opponent rather than the board. **The board measurements were all correct and all
-beside the point.** Worth remembering the next time a language or a word list is added.
+## Tests
 
-- **9,934 words that do not exist in Spanish (6% of the list).** The generator ran the PLURAL rules
-  over the output of the FEMININE rules — but the feminine rule set already emits both feminine
-  forms, so every feminine plural was pluralised a second time: `rojas` → ROJASES, `altas` →
-  ALTASES, `arenosas` → ARENOSASES. The hunspell rule doing it is real and correct in its place
-  (`autobús` → `autobuses`); it was being applied to a word that was already a plural. It passed
-  every assertion in `test-boggle-es.mjs` because the list still contained every real word and
-  still looked like Spanish. **Anything that looks like it needs a second affix pass almost
-  certainly does not.** Now a `[KNOWN-BUG PROBE]`, paired with an assertion that the genuine
-  `-ases` plurals (CLASES, FASES, ENVASES) are still there, so the fix can never become a blunt
-  filter on the ending.
-- **The AI was a completely different difficulty in Spanish.** `ai.js` takes a fixed PERCENTAGE of
-  the solver's output, and Boggle's scoring is **superlinear in word length** (3-4 letters 1 point,
-  7 gets 5, 8+ gets 11). Spanish words are longer, so the same fraction of a board is worth far
-  more: measured at **37 / 115 / 204** average AI score against English's **27 / 76 / 129** —
-  Spanish *Medium* was a harder opponent than English *Hard*, and Spanish *Hard* was 58% above it.
-  Board word COUNT was not the reason (129 vs 121 per board, near-identical), which is why the dice
-  measurements showed nothing. Fixed with per-language tier percentages
-  (`TIER_PCT_BY_LANG` in `ai.js`: `es` is 0.16 / 0.33 / 0.44 against `en`'s 0.20 / 0.45 / 0.70),
-  solved numerically against the English averages. Now within 1-5% at every tier.
-  **`node tune-boggle-es.mjs --ai` is the measurement**; re-run it after any change to the dice,
-  the gate, the word list or `scoreForWord`, and note that ANY future language will hit this —
-  a flat percentage is a promise about how much of the board the AI takes, and a difficulty label
-  is a promise about how hard it plays. Those are different promises.
-
-### The dictionaries download on FIRST PLAY, not on install (2026-09-11)
-
-Matt, straight after the Spanish list shipped: *"Can we make the dictionary only download when you
-go to play the game? Seems like a lot for most people to download when they'll never use it ever."*
-
-He was right about the size. The two word lists are **3.23 MB of an 11.92 MB REST tier — 27% of
-everything a device precaches**, for one game, paid by every install whether or not anyone ever
-taps Boggle. **The fetch was always lazy at the JS level** (`loadDictionary()` runs on first game
-start, not on mount); what was not lazy was the SERVICE WORKER, which warmed both lists into the
-cache on every install.
-
-`sw.js` grew a third tier for it — `LAZY`, alongside `SHELL` and `REST`; full rationale in the root
-`CLAUDE.md`'s service-worker section and in `sw.js`'s own comment. The two word lists are its only
-members. They stay in `ASSETS` (so they are still hash-tracked, still cache-first, still guarded by
-`validate-sw-assets.mjs`) and simply are not fetched by the warm. Once a device has one, every
-later deploy carries it forward for free.
-
-**The cost, and it is real: a device that has never opened Boggle can no longer play it OFFLINE.**
-The first round needs a connection; after that the list is cached like anything else. The screen
-this produces is the one that already existed — `renderLoadError` and the translated `load_error`
-string — because a failed dictionary fetch was always possible. It just becomes reachable for a
-first-time offline player. **If that ever bites someone, the fix is not to un-lazy the tier**
-(that puts 3.3 MB back on every install); it is to offer the download explicitly, which is a
-different feature.
-
-A player who only ever plays one language only ever downloads that one: switching to Spanish for
-the first time fetches `words-es.txt` at that moment, and an English-only player never has it at
-all. Verified in a real browser — a full hub load and warm caches 418 entries with **zero**
-word-list requests; opening Boggle then fetches exactly one list, once.
-
-### The Spanish dice (`DICE_ES`), derived and then measured
-
-There is no authentic Spanish Boggle distribution this repo can cite the way the English 1987 set
-is cited, so `DICE_ES` was **derived** — 96 faces allocated by letter frequency in the generated
-word list, weighted toward the 3-6 letter words that carry a round, dealt so every die gets its
-share of vowels — and then **measured**, because a derived distribution is a guess until it is.
-`tune-boggle-es.mjs` is that measurement and the tool to re-run after any change to the dice, the
-gate or the generator. It reports English in the same run on purpose: the Spanish numbers mean
-nothing on their own, only beside the set already known to play well.
-
-Measured over 2000 real shakes each, AFTER the playability gate (which is what a player actually
-gets — the gate re-shakes a bad board, so the raw distribution never reaches a screen):
-
-| | words p10 | p25 | median | p90 | under 40 words | shakes needed | cost |
-|---|---|---|---|---|---|---|---|
-| English (authentic dice) | 68 | 81 | 104 | 171 | 0.0% | 1.40 | 0.54ms |
-| Spanish (`DICE_ES`) | 69 | 84 | 111 | 195 | 0.0% | 1.31 | 0.64ms |
-
-Three Spanish facts are baked into the set. **The `Qu` tile carries over unchanged** (Q never
-appears without U in Spanish, so the English tile is already correct). **K and W get no face at
-all** — they occur in essentially nothing but loanwords, and a K face would be a dead tile wherever
-it landed. **Ñ gets no face**, per the folding above.
-
-**Spanish has its own quality gate, `BOARD_QUALITY_ES`, and the difference is real rather than
-cosmetic.** Spanish words are longer on average, and this dictionary deliberately carries no
-conjugations — which is exactly where a language's SHORT words live ("come", "vive", "canta" are
-all conjugated). So a Spanish board finds fewer short words at the same quality: measured p25 is
-53 against English's 57-60. Reusing English's `minShortWords: 35`… would have been fine, but the
-threshold is set from the Spanish distribution's own 25th percentile (the same rule that set the
-English numbers), because a gate calibrated on the wrong distribution either fires on everything —
-which is the same as no gate, only slower, since `maxAttempts` then ships whatever it had — or on
-nothing.
-
-### What had to thread through the app
-
-- **`dict.js` caches PER LANGUAGE.** It used to hold ONE module-scope promise; with two lists that
-  hands whichever language loaded first to every round afterwards, so a Spanish board would be
-  solved and scored against ENABLE with nothing on screen to say so. `test-boggle-es.mjs` carries
-  a `[KNOWN-BUG PROBE]` for exactly this. `dictLang()` maps any unrecognised value onto English —
-  a round that cannot start is worse than a round in the wrong language.
-- **The autosave carries the round's OWN language** (`gamehub.boggle.save.v1` gained a `wordLang`
-  field, additively). Resuming has to rebuild the same board against the same dictionary it was
-  scored against, or every word already found reads as invalid. **A save written before this
-  shipped has no `wordLang` and is read as English** rather than failing validation (THE LAW rule
-  3). Same for the settings key and the MP snapshot: new field, nothing renamed, nothing
-  repurposed (rule 5).
-- **In MP the HOST's dictionary decides the match.** It travels in the room config beside
-  `timerMinutes`, for the same reason the timer does: the guest must score against the identical
-  word list, or each side's words look invalid on the other's reveal card and the two scores are
-  not comparable at all. The guest plays the host's language whatever its own setup row says, and
-  both lobbies show which dictionary is in play *before* the round starts rather than at the first
-  rejected word. A room record written before this shipped carries no `wordLang` and reads as
-  English everywhere.
-- **The invalid-word feedback NAMES the dictionary the round is on.** It used to hardcode *"las
-  palabras válidas son en inglés"* — which was the right fix in 2026-07-23 and would now be a lie
-  on a Spanish board. It takes a `{lang}` parameter. Keep it naming the real one.
-- **Stats are ONE bucket, deliberately not split by language.** A Spanish win is a Boggle win.
-  Splitting would mean a new sub-counter, a `players-agg.js` branch and a My Stats renderer
-  (checklist item 7) for no benefit anyone asked for, and a `bestScore` that silently stopped
-  counting the other language's history would be a rule 1 failure.
-
-**Verified in a real browser, not just headless**: hub set to Spanish, setup row reads
-*Diccionario / Español*, the Spanish list loads (159,778 words), a board shakes in one attempt with
-110 words findable, a real pointer trace of `EROSIONADO` (a participle — the form Matt asked for)
-scores 11 points, and an invalid trace reports *"MSA" no está en el diccionario (Español)*. English
-is unchanged end to end: default row reads English, ENABLE loads, a full round plays out to the AI
-result card.
-
-## i18n (2026-07-23) — UI translates, gameplay stays English (gameplay half SUPERSEDED 2026-09-11)
-
-Ana reported two things the same afternoon: garbled board tiles ("sometimes instead of one
-letter you have several or even a word") and an all-English screen despite her hub language
-being set to Spanish. The second was true by original design (Boggle was the one standing
-i18n exclusion); the first could not come from this repo's code — a tile renders exactly one
-die face, nothing here ever writes a word onto one — and was diagnosed as the phone's browser
-auto-translating the page, which rewrites TEXT NODES including single-letter tiles ("A" → "UN").
-An all-English screen inside an otherwise-Spanish app is exactly what invites that. Both reports
-trace to one root cause, fixed together:
-
-- **`boggle/js/strings.js`** (`{ en, es }`) covers every user-visible string in `ui.js` —
-  setup, loading, the game screen, feedback, the end overlay, the how-to-play sheet, and every
-  tile aria-label. `ui.js` builds `const t = makeT(STRINGS)` and calls it at RENDER time, same
-  pattern as every other bilingual game (reference: `snake/`). No `onLangChange` subscription:
-  Boggle re-renders constantly on its own, so the next render is enough.
-- **Gameplay stayed English on purpose** — until 2026-09-11, when the "separate, larger project"
-  named here was actually done; see the section above. The rest of this bullet is kept as written
-  because it is the record of why the exclusion existed, and the invalid-word feedback it describes
-  is still live, just parameterised by the round's language instead of hardcoded to English. The Spanish UI says so explicitly where it matters: the invalid-word
-  feedback names the dictionary language (`"{word}" no está en el diccionario (las palabras
-  válidas son en inglés)` — this is the fix for a likely silent third symptom, a Spanish-minded
-  player tracing Spanish words the ENABLE dictionary was always going to reject with no
-  explanation. (The how-to-play sheet's own English-dictionary bullet was deleted 2026-07-24,
-  HANDOFF-FB2-HOWTO2 item 4, per Matt: "get rid of that nonsense" — the invalid-word feedback
-  above is now the only place that surfaces it, and still does.)
-- **`.bg-root` carries `translate="no"`** (set in `mount()`) so no machine translator can ever
-  rewrite the board again, hub-mounted or standalone. **Do not remove this** — it is the direct
-  fix for what Ana hit, verified by re-reading the tile-rendering code (a tile can only ever show
-  one die face; nothing in this file can put a word on it) but not reproduced live on her device,
-  so the attribute is cheap insurance against the same failure mode even if the auto-translate
-  diagnosis turns out to be incomplete.
-- Difficulty ids (`beginner|intermediate|pro`) and the timer values (`2|3|5`) are storage
-  vocabulary and stay canonical; only their display labels translate.
-- Title stays **"Boggle"** in both languages (a proper name, same as Filler/Mancala/Escoba).
-- `js/i18n.js` now also stamps `document.documentElement.lang` from the stored preference at
-  MODULE LOAD, not only inside `setLang()` — a hub rendering Spanish while declaring `lang="en"`
-  (the prior behavior on any load before the toggle was tapped that session) was itself inviting
-  translation prompts hub-wide, a contributing factor independent of Boggle specifically.
+`node boggle/js/test.js` · `node test-boggle-mp.mjs` · `node test-boggle-es.mjs` · `node
+tune-boggle-es.mjs [--ai]`.
