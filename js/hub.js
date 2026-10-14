@@ -614,7 +614,10 @@ export const GAMES = [
     // the day Matt releases it, which he does from the admin page with no commit.
     devOnly: true,
     // King of Games (3VN33) was held back from it with `hideFrom` 2026-10-13 to 10-14; Matt lifted
-    // it ("unblock him from Arrow Maze too. Keep arrow maze admin only still though").
+    // it ("unblock him from Arrow Maze too. Keep arrow maze admin only still though"), then put it
+    // back the same evening ("first make it invisible to king of games again") while the bands are
+    // reworked. Delete this line to give it back.
+    hideFrom: ['3VN33'],
   },
   {
     // Gridlock (2026-10-14): the sliding-block "traffic jam" puzzle (Unblock Me, Rush Hour): slide

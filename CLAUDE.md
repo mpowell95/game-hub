@@ -1053,8 +1053,8 @@ screen needs it.
 - **A game can be held back from NAMED PLAYERS too (2026-10-13)**: `hideFrom: ['<CODE>']` on a
   `GAMES` entry in `js/hub.js` (`hiddenFromPlayer()`), a code edit rather than an admin switch.
   Hides the tile and makes `launch()` refuse the game; never applies to Matt's devices or a dev
-  profile; touches no data. First use: Arrow Maze held back from King of Games, 2026-10-13 to 10-14 (`way-out/CLAUDE.md`);
-  no game uses it now.
+  profile; touches no data. First use: Arrow Maze held back from King of Games since 2026-10-13 (lifted for part of 10-14,
+  then back on; `way-out/CLAUDE.md`).
 - **A hidden game can be opened to NAMED PLAYERS (2026-09-24, the Course Creator).**
   `games/<id>/allow/<PLAYER CODE> = true`, written by `setGameAllowed` (verified re-read, no
   `at`/`by` stamp inside the map), read by `isGameAllowed(id, code)`; the launcher shows a tile when
