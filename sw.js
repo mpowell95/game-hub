@@ -239,6 +239,7 @@ const ASSETS = [
   './archery/js/ui.js',
   './archery/js/engine.js',
   './archery/js/render.js',
+  './archery/js/bow3d.js',
   './archery/js/strings.js',
   './archery/js/mp.js',
   './archery/js/mp-ui.js',

@@ -1,8 +1,8 @@
 // archery/js/render.js - the range on screen, three.js. Everything here is drawn from code (no
 // images, no models): a stadium with a crowd, a striped grass lane with white lines, a target on a
-// wooden easel, and the arrows. The bow and the arm are NOT here: they are an SVG in ui.js, laid
-// over this canvas, because they move with the finger and a DOM transform is the cheapest way to
-// keep the sight's ring exactly over the magnified view drawn here.
+// wooden easel, and the arrows. The bow, hand, sleeve and nocked arrow are 3D too, but in their
+// own small scene (bow3d.js) drawn over the range each frame, so they stay sharp and lit the same
+// wherever the sight goes; only the sight's ring (gauge and crosshair) is an SVG in ui.js.
 //
 // THREE CAMERAS, as in the recording (docs/ARCHERY-BRIEF.md section 2):
 //   'line'   - the shooter's eye on the line, the target small and far off;
@@ -16,6 +16,7 @@
 // disposed with its material.
 import * as THREE from '../../skeeball/js/vendor/three.module.min.js';
 import { BOSS } from './engine.js';
+import { BowView } from './bow3d.js';
 
 let _softGL = null;
 function isSoftGL() {
@@ -40,17 +41,18 @@ const FACE_Z = TARGET.z + 0.09;                 // the front of the boss
 export const ARROW_COLORS = { me: '#1f6fe5', them: '#e0362b', plain: '#f0c419' };
 const FLIGHT_T = 0.75;                          // seconds, measured off the recording
 const BOWL_Z = 10;                              // the centre of the stadium's curve
+const BOARD_TALL = 1.2;                         // the board's height over its width (drawing only)
 const LINE_LOOK = new THREE.Vector3(TARGET.x, TARGET.y - 2.2, TARGET.z);
 // The close-up: the board about 45% of the screen's width, right of the middle, stands behind it.
-const CLOSE_POS = new THREE.Vector3(TARGET.x - 0.9, TARGET.y + 0.1, TARGET.z + 7.6);
-const CLOSE_LOOK = new THREE.Vector3(TARGET.x - 0.12, TARGET.y - 0.2, TARGET.z);
+const CLOSE_POS = new THREE.Vector3(TARGET.x - 1.7, TARGET.y + 0.55, TARGET.z + 7.2);
+const CLOSE_LOOK = new THREE.Vector3(TARGET.x - 0.3, TARGET.y - 0.25, TARGET.z);
 /** The way an arrow travels into the face at (x, y): from the right and a little above, so in the
  *  close-up it sticks out long, up and to the right (the recording). */
-function inDir(x, y) { return new THREE.Vector3(-0.42 - x * 0.04, -0.15 - y * 0.03, -1).normalize(); }
+function inDir(x, y) { return new THREE.Vector3(-0.62 - x * 0.04, -0.13 - y * 0.03, -1).normalize(); }
 export { FLIGHT_T };
 
 const LOOK = {
-  grassA: '#3fa83a', grassB: '#4bb945', line: '#ffffff', wall: '#1d5fb8', wallTop: '#3b86e0',
+  grassA: '#3db335', grassB: '#53c947', line: '#ffffff', wall: '#1d5fb8', wallTop: '#3b86e0',
   seat: '#1c3f78', wood: '#9a6a3a', woodDark: '#6d4724', boss: '#fbfbf8',
   ring: ['#fbfbf8', '#fbfbf8', '#202020', '#202020', '#2ea7e8', '#2ea7e8', '#e8342b', '#e8342b', '#ffd21f', '#ffd21f'],
 };
@@ -79,6 +81,37 @@ export class Renderer {
     this._build();
     this.scene.add(this.stuck, this.loose);
     this.setView('line');
+    // The bow, hand, arm and arrow in your hands: their own small lit scene, drawn over the range.
+    this.env = this._envMap();
+    this.bow = new BowView(THREE, { g: (x) => this._g(x), m: (x) => this._m(x) }, { env: this.env, color: ARROW_COLORS.me });
+    this._bowPose = null;
+  }
+
+  /** A soft environment for the shiny parts to reflect: sky above, grass below, a sun. */
+  _envMap() {
+    const env = new THREE.Scene();
+    const tex = this._canvasTex(16, 256, (c, w, h) => {
+      const gr = c.createLinearGradient(0, 0, 0, h);
+      gr.addColorStop(0, '#3f86e0'); gr.addColorStop(0.45, '#d8ecfb'); gr.addColorStop(0.52, '#9fbf8a'); gr.addColorStop(1, '#3f8a34');
+      c.fillStyle = gr; c.fillRect(0, 0, w, h);
+    });
+    env.add(new THREE.Mesh(this._g(new THREE.SphereGeometry(10, 32, 16)), this._m(new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide }))));
+    const sunM = new THREE.Mesh(this._g(new THREE.SphereGeometry(1.2, 16, 8)), this._m(new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 6, 5.5) })));
+    sunM.position.set(-4, 7, 4);
+    env.add(sunM);
+    const pm = new THREE.PMREMGenerator(this.renderer);
+    const rt = pm.fromScene(env, 0.03);
+    pm.dispose();
+    this._envRT = rt;
+    return rt.texture;
+  }
+
+  /** The bow in your hands: { x, y, r, rot, p, fly } (see bow3d.js setPose), or null to hide it. */
+  setBow(pose, color) {
+    this._bowPose = pose;
+    if (!pose) return;
+    if (color && color !== this._bowColor) { this._bowColor = color; this.bow.setColor(color); }
+    this.bow.setPose(pose);
   }
 
   // --- bookkeeping: everything made here is freed in dispose() --------------------------------
@@ -108,21 +141,37 @@ export class Renderer {
     S.fog = new THREE.Fog('#cfe6f8', 90, 260);
     S.add(new THREE.HemisphereLight(0xffffff, 0x5f8a45, 1.15));
     const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-    sun.position.set(-30, 60, 25);
-    S.add(sun);
+    // The sun's shadow covers only the target and its easel (the one thing near enough to show it).
+    sun.position.set(TARGET.x - 30, 60, TARGET.z + 25);
+    sun.target.position.set(TARGET.x, 0, TARGET.z);
+    if (!this.soft) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 40, far: 110 });
+      sun.shadow.bias = -0.0008;
+    }
+    S.add(sun, sun.target);
 
     // Grass: wide mowing bands across the lane, a finer check on top.
-    const grass = this._canvasTex(256, 256, (c, w, h) => {
+    const grass = this._canvasTex(512, 512, (c, w, h) => {
       c.fillStyle = LOOK.grassA; c.fillRect(0, 0, w, h);
       c.fillStyle = LOOK.grassB; c.fillRect(0, 0, w, h / 2);
-      for (let i = 0; i < 2600; i++) {
-        c.fillStyle = `rgba(${20 + Math.random() * 40},${90 + Math.random() * 70},${20 + Math.random() * 30},0.35)`;
-        c.fillRect(Math.random() * w, Math.random() * h, 1.5, 3);
+      let seed = 3;
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      // Blades: short strokes, light and dark, so the mown bands read crisp, not blurred.
+      for (let i = 0; i < 16000; i++) {
+        const x = rnd() * w, y = rnd() * h, light = rnd() < 0.5;
+        c.fillStyle = light ? `rgba(${110 + rnd() * 60},${200 + rnd() * 40},${70 + rnd() * 40},0.35)` : `rgba(${20 + rnd() * 30},${100 + rnd() * 50},${20 + rnd() * 20},0.4)`;
+        c.fillRect(x, y, 1.2, 2.5 + rnd() * 2.5);
       }
     }, [24, 50]);
+    grass.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const ground = new THREE.Mesh(this._g(new THREE.PlaneGeometry(240, 300)), this._m(new THREE.MeshLambertMaterial({ map: grass })));
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(0, 0, -100);
+    ground.receiveShadow = true;
     S.add(ground);
 
     // White lane lines, converging on the target.
@@ -156,30 +205,91 @@ export class Renderer {
     board.rotation.y = -Math.asin(9 / 46);
     S.add(board);
 
-    // The stands: a narrow band of seats and people from the barrier up and back (z -36.5 to -50),
-    // soft at this distance, then the roof.
-    const crowd = this._canvasTex(512, 256, (c, w, h) => paintCrowd(c, w, h), [8, 2.4]);
-    arc(46.5, 60, 1.4, 6.3, this._m(new THREE.MeshLambertMaterial({ map: crowd, side: THREE.BackSide })), 96);
-    // The shadowed back of the stand, under the roof.
-    arc(60, 61, 6.3, 7.6, this._m(new THREE.MeshLambertMaterial({ color: '#25344d', side: THREE.BackSide })));
-    // The roof: white steel ribs and pale glass, seen from below, rising to its inner edge (12.6 m
-    // up, 42 m out), with sky above it. Unlit so it reads bright.
-    const lattice = this._canvasTex(256, 256, (c, w, h) => {
-      const g = c.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, '#a9c2da'); g.addColorStop(1, '#d6e3ef');
-      c.fillStyle = g; c.fillRect(0, 0, w, h);
-      c.strokeStyle = '#ffffff'; c.lineWidth = 12;
-      c.beginPath(); c.moveTo(w / 2, 0); c.lineTo(w / 2, h); c.stroke();
-      c.lineWidth = 4; c.strokeStyle = 'rgba(255,255,255,0.9)';
-      c.beginPath(); c.moveTo(0, h); c.lineTo(w / 2, 0); c.lineTo(w, h); c.stroke();
-      c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,0.7)';
-      for (const j of [h * 0.34, h * 0.68]) { c.beginPath(); c.moveTo(0, j); c.lineTo(w, j); c.stroke(); }
-    }, [44, 1]);
-    arc(61, 52, 7.6, 12.6, this._m(new THREE.MeshBasicMaterial({ map: lattice, side: THREE.DoubleSide, fog: false })), 128);
-    // The white ring beam along the roof's inner edge.
-    arc(52.2, 51.8, 12.4, 13.3, this._m(new THREE.MeshBasicMaterial({ color: '#f7f9fb', side: THREE.DoubleSide, fog: false })), 128);
+    // The stands, two tiers from the barrier up to the roof: the lower one in the sun, a dark
+    // walkway, the upper one in the roof's shade.
+    const crowd = this._canvasTex(512, 256, (c, w, h) => paintCrowd(c, w, h), [7.5, 1.5]);
+    arc(46.5, 55, 1.4, 5.4, this._m(new THREE.MeshLambertMaterial({ map: crowd, side: THREE.BackSide })), 96);
+    arc(55, 55.6, 5.4, 6.1, this._m(new THREE.MeshLambertMaterial({ color: '#22324c', side: THREE.BackSide })));
+    const crowdHi = this._canvasTex(512, 256, (c, w, h) => paintCrowd(c, w, h), [8, 1.2]);
+    arc(55.6, 62, 6.1, 9.6, this._m(new THREE.MeshLambertMaterial({ map: crowdHi, color: '#8f9cb8', side: THREE.BackSide })), 96);
+    arc(62, 63, 9.6, 10.6, this._m(new THREE.MeshLambertMaterial({ color: '#1e2a40', side: THREE.BackSide })));
+    this._buildRoof();
 
     this._buildTarget();
+  }
+
+  /** The roof: a canopy of pale panels seen from below, rising from the top of the stands to
+   *  its inner edge (about 12.6 m up, 40 m out), each bay between two white steel ribs arching up
+   *  at its front edge, a white tube along that edge, and sky above it (the recording). */
+  _buildRoof() {
+    const S = this.scene;
+    const A0 = Math.PI - 0.9, A1 = Math.PI + 0.9, BAYS = 46;
+    const at = (th, sv) => {
+      // sv 0 = the back (on the stands), 1 = the inner edge; arches between ribs at the front.
+      const frac = ((th - A0) / (A1 - A0)) * BAYS % 1;
+      const r = 63 - 13 * sv;
+      const y = 10.6 + 2 * sv + 0.7 * Math.sin(Math.PI * frac) * sv * sv;
+      return new THREE.Vector3(Math.sin(th) * r, y, BOWL_Z + Math.cos(th) * r);
+    };
+    // The canopy: a grid of quads, lit, so its underside reads in shade as in the recording.
+    const NT = BAYS * 6, NS = 6, pos = [], uv = [], idx = [];
+    for (let i = 0; i <= NT; i++) {
+      const th = A0 + ((A1 - A0) * i) / NT;
+      for (let j = 0; j <= NS; j++) {
+        const p = at(th, j / NS);
+        pos.push(p.x, p.y, p.z);
+        uv.push((i / NT) * BAYS, j / NS);
+      }
+    }
+    for (let i = 0; i < NT; i++) for (let j = 0; j < NS; j++) {
+      const k = i * (NS + 1) + j;
+      idx.push(k, k + NS + 1, k + 1, k + 1, k + NS + 1, k + NS + 2);
+    }
+    const geo = this._g(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const panels = this._canvasTex(128, 256, (c, w, h) => {
+      const g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#7f949f'); g.addColorStop(1, '#c4d2da');
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+      // Cushion panels between purlins: lighter middles, a pale seam between.
+      for (let j = 0; j < h; j += 32) {
+        const gg = c.createLinearGradient(0, j, 0, j + 32);
+        gg.addColorStop(0, 'rgba(255,255,255,0.0)'); gg.addColorStop(0.5, 'rgba(255,255,255,0.35)'); gg.addColorStop(1, 'rgba(255,255,255,0.0)');
+        c.fillStyle = gg; c.fillRect(0, j, w, 32);
+        c.fillStyle = 'rgba(240,245,250,0.9)'; c.fillRect(0, j, w, 2);
+      }
+      c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(0, h); c.lineTo(w / 2, 0); c.lineTo(w, h); c.stroke();
+    });
+    panels.wrapS = THREE.RepeatWrapping;
+    const canopy = new THREE.Mesh(geo, this._m(new THREE.MeshLambertMaterial({ map: panels, side: THREE.DoubleSide, emissive: '#6f8290', emissiveIntensity: 0.3 })));
+    S.add(canopy);
+    // The ribs: white steel under each bay line, and the tube along the arched front edge.
+    const steel = this._m(new THREE.MeshLambertMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 0.55 }));
+    const rib = this._g(new THREE.CylinderGeometry(0.1, 0.14, 1, 6));
+    const up = new THREE.Vector3(0, 1, 0);
+    const ribs = new THREE.InstancedMesh(rib, steel, BAYS + 1);
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion();
+    for (let i = 0; i <= BAYS; i++) {
+      const th = A0 + ((A1 - A0) * i) / BAYS;
+      const p0 = at(th, 0).add(new THREE.Vector3(0, -0.25, 0)), p1 = at(th, 1).add(new THREE.Vector3(0, -0.25, 0));
+      const d = p1.clone().sub(p0);
+      q.setFromUnitVectors(up, d.clone().normalize());
+      mtx.compose(p0.clone().add(p1).multiplyScalar(0.5), q, new THREE.Vector3(1, d.length(), 1));
+      ribs.setMatrixAt(i, mtx);
+    }
+    S.add(ribs);
+    const edge = [];
+    for (let i = 0; i <= BAYS * 8; i++) edge.push(at(A0 + ((A1 - A0) * i) / (BAYS * 8), 1));
+    const tube = new THREE.Mesh(this._g(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge), BAYS * 8, 0.32, 6)), steel);
+    S.add(tube);
+    // A second, lower purlin across the bays, and the dark back of the stand under the roof.
+    const mid = [];
+    for (let i = 0; i <= 64; i++) mid.push(at(A0 + ((A1 - A0) * i) / 64, 0.5).add(new THREE.Vector3(0, -0.3, 0)));
+    S.add(new THREE.Mesh(this._g(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(mid), 64, 0.14, 5)), steel));
   }
 
   _buildTarget() {
@@ -188,10 +298,11 @@ export class Renderer {
     const g = new THREE.Group();
     // The boss: a white square board with a dark edge.
     const bossSide = T.face * BOSS * 2 * 1.04;
-    const boss = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide, bossSide, 0.16)), this._m(new THREE.MeshBasicMaterial({ color: LOOK.boss })));
+    const bossH = bossSide * BOARD_TALL;              // a little taller than wide (the recording)
+    const boss = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide, bossH, 0.16)), this._m(new THREE.MeshBasicMaterial({ color: LOOK.boss })));
     boss.position.set(T.x, T.y, T.z);
     g.add(boss);
-    const edge = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide + 0.05, bossSide + 0.05, 0.12)), this._m(new THREE.MeshLambertMaterial({ color: '#5a3c22' })));
+    const edge = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide + 0.05, bossH + 0.05, 0.12)), this._m(new THREE.MeshLambertMaterial({ color: '#5a3c22' })));
     edge.position.set(T.x, T.y, T.z - 0.03);
     g.add(edge);
     // The face: ten rings, painted.
@@ -221,7 +332,7 @@ export class Renderer {
     const wood = this._m(new THREE.MeshLambertMaterial({ color: LOOK.wood }));
     const woodDark = this._m(new THREE.MeshLambertMaterial({ color: LOOK.woodDark }));
     const leg = (x, zTop, zBot, mat) => {
-      const top = new THREE.Vector3(T.x + x, T.y + bossSide * 0.42, T.z + zTop);
+      const top = new THREE.Vector3(T.x + x, T.y + bossH * 0.42, T.z + zTop);
       const bot = new THREE.Vector3(T.x + x * 1.05, 0, T.z + zBot);
       const len = top.distanceTo(bot);
       const m = new THREE.Mesh(this._g(new THREE.BoxGeometry(0.09, len, 0.09)), mat);
@@ -233,7 +344,7 @@ export class Renderer {
     leg(-bossSide * 0.47, 0.12, 0.42, wood); leg(bossSide * 0.47, 0.12, 0.42, wood);
     leg(-bossSide * 0.3, -0.12, -0.9, woodDark); leg(bossSide * 0.3, -0.12, -0.9, woodDark);
     const ledge = new THREE.Mesh(this._g(new THREE.BoxGeometry(bossSide * 0.95, 0.07, 0.24)), wood);
-    ledge.position.set(T.x, T.y - bossSide / 2 - 0.04, T.z + 0.1);
+    ledge.position.set(T.x, T.y - bossH / 2 - 0.04, T.z + 0.1);
     g.add(ledge);
     // A soft shadow on the grass.
     const shadowTex = this._canvasTex(128, 128, (c, w) => {
@@ -244,6 +355,8 @@ export class Renderer {
     const shadow = new THREE.Mesh(this._g(new THREE.PlaneGeometry(2.6, 1.6)), this._m(new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })));
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.set(T.x + 0.3, 0.02, T.z - 0.2);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    shadow.castShadow = false;
     g.add(shadow);
     S.add(g);
   }
@@ -252,8 +365,8 @@ export class Renderer {
   /** An arrow pointing along -z with its tip at the origin. */
   _arrow(color) {
     const g = new THREE.Group();
-    const L = 0.95, r = 0.018;
-    const shaftMat = this._m(new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.45 }));
+    const L = 1.0, r = 0.024;
+    const shaftMat = this._m(new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.55 }));
     const shaft = new THREE.Mesh(this._g(new THREE.CylinderGeometry(r, r, L, 10)), shaftMat);
     shaft.rotation.x = Math.PI / 2;
     shaft.position.z = L / 2;
@@ -267,14 +380,14 @@ export class Renderer {
     nock.position.z = L + 0.02;
     g.add(nock);
     const vaneShape = new THREE.Shape();
-    vaneShape.moveTo(0, 0); vaneShape.lineTo(0.15, 0); vaneShape.lineTo(0.15, 0.055); vaneShape.quadraticCurveTo(0.06, 0.05, 0, 0.014); vaneShape.lineTo(0, 0);
+    vaneShape.moveTo(0, 0); vaneShape.lineTo(0.2, 0); vaneShape.lineTo(0.2, 0.075); vaneShape.quadraticCurveTo(0.08, 0.068, 0, 0.018); vaneShape.lineTo(0, 0);
     const vaneGeo = this._g(new THREE.ShapeGeometry(vaneShape));
-    const vaneMats = [this._m(new THREE.MeshLambertMaterial({ color: '#ffffff', side: THREE.DoubleSide })), this._m(new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }))];
+    const vaneMats = [this._m(new THREE.MeshLambertMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 0.35, side: THREE.DoubleSide })), this._m(new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.4, side: THREE.DoubleSide }))];
     for (let i = 0; i < 3; i++) {
       const v = new THREE.Mesh(vaneGeo, vaneMats[i === 0 ? 1 : 0]);
       const holder = new THREE.Group();
       v.rotation.y = -Math.PI / 2;
-      v.position.set(0, r, L - 0.18);
+      v.position.set(0, r, L - 0.24);
       holder.add(v);
       holder.rotation.z = (i * 2 * Math.PI) / 3;
       g.add(holder);
@@ -289,7 +402,7 @@ export class Renderer {
   setStuck(list) {
     this.stuck.clear();
     for (const a of list || []) {
-      if (Math.max(Math.abs(a.x), Math.abs(a.y)) > BOSS) continue;
+      if (Math.abs(a.x) > BOSS || Math.abs(a.y) > BOSS * BOARD_TALL) continue;
       const m = this._arrow(a.color);
       const tip = this.facePoint(a.x, a.y, FACE_Z - 0.05);
       const dir = a.dir ? a.dir.clone().normalize() : inDir(a.x, a.y);
@@ -309,6 +422,7 @@ export class Renderer {
     this.cam.updateProjectionMatrix();
     this.hudCam.left = 0; this.hudCam.right = w; this.hudCam.top = 0; this.hudCam.bottom = -h;
     this.hudCam.updateProjectionMatrix();
+    if (this.bow) this.bow.layout(w, h);
     if (this.view === 'line' || this.view === 'close') this.setView(this.view);
   }
 
@@ -421,7 +535,7 @@ export class Renderer {
     const pos = t.geo.attributes.position;
     const len = 2.6 * Math.min(1, u * 6 + 0.25) * (1 - 0.5 * u);
     const camP = this.cam.position;
-    const tail = p.clone().sub(dir.clone().multiplyScalar(0.95));
+    const tail = p.clone().sub(dir.clone().multiplyScalar(1.0));
     for (let i = 0; i < t.N; i++) {
       const k = i / (t.N - 1);
       const q = tail.clone().sub(dir.clone().multiplyScalar(len * k));
@@ -492,10 +606,10 @@ export class Renderer {
     }
     r.autoClear = true;
     r.render(this.scene, this.cam);
-    if (s && this.view === 'line') {
+    if (this._bowPose || (s && this.view === 'line')) {
       r.autoClear = false;
-      r.clearDepth();
-      r.render(this.hud, this.hudCam);
+      if (this._bowPose) { r.clearDepth(); r.render(this.bow.scene, this.bow.cam); }
+      if (s && this.view === 'line') { r.clearDepth(); r.render(this.hud, this.hudCam); }
       r.autoClear = true;
     }
   }
@@ -506,6 +620,7 @@ export class Renderer {
       for (const g of this._geo) g.dispose();
       for (const m of this._mat) m.dispose();
       this.rt.dispose();
+      if (this._envRT) this._envRT.dispose();
       this.renderer.dispose();
       this.renderer.forceContextLoss();
     } catch { /* already gone */ }
@@ -534,7 +649,7 @@ function paintCrowd(c, w, h) {
     }
   }
   // Soft at this distance: a thin wash of the seats' blue over everyone.
-  c.fillStyle = 'rgba(28, 63, 120, 0.22)'; c.fillRect(0, 0, w, h);
+  c.fillStyle = 'rgba(28, 63, 120, 0.1)'; c.fillRect(0, 0, w, h);
 }
 
 /** The sky dome's picture (an equirectangular strip): deep blue overhead, pale at the horizon,
@@ -545,9 +660,9 @@ function paintSky(c, w, h) {
   c.fillStyle = g; c.fillRect(0, 0, w, h);
   let seed = 11;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  for (let i = 0; i < 70; i++) {
-    const cx = rnd() * w, cy = h * (0.3 + rnd() * 0.17), sw = 20 + rnd() * 50;
-    for (let j = 0; j < 7; j++) {
+  for (let i = 0; i < 150; i++) {
+    const cx = rnd() * w, cy = h * (0.27 + rnd() * 0.2), sw = 24 + rnd() * 70;
+    for (let j = 0; j < 9; j++) {
       const x = cx + (rnd() - 0.5) * sw * 1.6, y = cy + (rnd() - 0.6) * sw * 0.35, r = sw * (0.25 + rnd() * 0.3);
       const gr = c.createRadialGradient(x, y, 0, x, y, r);
       gr.addColorStop(0, 'rgba(255,255,255,0.85)'); gr.addColorStop(0.6, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
