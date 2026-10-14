@@ -100,6 +100,13 @@ anywhere a Skeeball session would see it. That is the whole thesis of this file.
   for a fact** (use the real event - `online`, `controllerchange`, a store's change hook), and **a
   one-shot paint of something asynchronous** (subscribe, or repaint when the answer lands).
 
+- **Never put a game's own back / menu button beside the hub's floating Hub button** (Matt,
+  2026-10-14, on Gridlock: *"I do not like how you've been doing this recently. The back (to the
+  setup screen) is on the same row and basically touching the Hub back button."*). In immersive mode
+  the Hub button's row holds the Hub button and the screen's title, nothing else of the game's on that
+  side. A way back to the game's own menu goes in the bottom bar as a LABELLED button (Gridlock's
+  **Menu**), or at the bottom of a screen (Gridlock's Levels screen: **Back** under the pager). Two
+  back arrows side by side read as one control with two meanings.
 - **A game screen that scrolls at all is a bug** (`dominoes/CLAUDE.md`). If content doesn't fit,
   that's a layout problem to fix, not something to let the page scroll around.
 

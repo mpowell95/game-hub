@@ -18,6 +18,7 @@ import { recordGridlock, loadStats } from '../../js/game-stats.js';
 import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glLevelPoints, glStars, glLevels, glPoints } from '../../js/gridlock-points.js';
 import { N, EXIT_ROW, SOLVED_POS, parse, positions, range, solve, isSolved, cellOf } from './engine.js';
 import { LEVELS } from './levels.js';
+import { pieceArt, RED, WOOD_TONES, CAR_COLORS } from './art.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -121,11 +122,8 @@ const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width
 const ICON_BACK = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const ICON_UNDO = `<svg ${SVGA}><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>`;
 const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 4v4.5h4.5"/></svg>`;
+const ICON_MENU = `<svg ${SVGA}><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>`;
 const ICON_BULB = `<svg ${SVGA}><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>`;
-
-const WOOD = ['#d9a866', '#c98f4e', '#e2b878', '#b97f45', '#d49c5c', '#c5904f', '#deb070', '#bf8a4c', '#d6a160', '#cc965a', '#e0b474', '#c08747', '#d2a56a', '#b88445'];
-const CARS = ['#1F5FA8', '#F2B705', '#178A7A', '#7a52b3', '#e8e8ea', '#3f9be0', '#8fbf3a', '#f08a24', '#6b7a90', '#c94fa0', '#2aa7a0', '#a8743c', '#4d5bd1', '#d9d36a'];
-const RED = '#d23b2a';
 
 function star(cx, cy, r) {
   let d = '';
@@ -134,33 +132,6 @@ function star(cx, cy, r) {
     d += (i ? 'L' : 'M') + (cx + rr * Math.cos(a)).toFixed(1) + ' ' + (cy + rr * Math.sin(a)).toFixed(1);
   }
   return d + 'Z';
-}
-
-/** A car or truck, drawn lying horizontally in a (len*100) x 100 box, facing right. */
-function carSVG(len, fill, isRed) {
-  const L = len * 100, T = 100;
-  let g = '';
-  if (len === 3) {
-    g += `<rect x="4" y="8" width="${L - 92}" height="${T - 16}" rx="10" fill="${fill}"/>`;
-    g += `<rect x="16" y="20" width="${L - 116}" height="${T - 40}" rx="6" fill="rgba(255,255,255,.2)"/>`;
-    g += `<rect x="${L - 84}" y="8" width="80" height="${T - 16}" rx="18" fill="${fill}"/>`;
-    g += `<rect x="${L - 44}" y="18" width="16" height="${T - 36}" rx="5" fill="#9fd3ee"/>`;
-  } else {
-    g += `<rect x="4" y="8" width="${L - 8}" height="${T - 16}" rx="26" fill="${fill}"/>`;
-    g += `<rect x="${L - 62}" y="18" width="20" height="${T - 36}" rx="6" fill="#9fd3ee"/>`;
-    g += `<rect x="22" y="20" width="14" height="${T - 40}" rx="5" fill="#7fb3cf"/>`;
-    g += `<rect x="46" y="20" width="${L - 116}" height="${T - 40}" rx="8" fill="rgba(0,0,0,.12)"/>`;
-  }
-  g += `<rect x="${L - 12}" y="14" width="6" height="14" rx="2" fill="#fff6c8"/><rect x="${L - 12}" y="${T - 28}" width="6" height="14" rx="2" fill="#fff6c8"/>`;
-  if (isRed) g += `<path d="${star(L / 2 - 14, 50, 24)}" fill="#fff" stroke="${RED}" stroke-width="3" stroke-linejoin="round"/>`;
-  return g;
-}
-function pieceSVG(p, look, color, isRed) {
-  if (look !== 'cars') return '';
-  const inner = carSVG(p.len, color, isRed);
-  if (p.h) return `<svg class="gl-art" viewBox="0 0 ${p.len * 100} 100" preserveAspectRatio="none" aria-hidden="true">${inner}</svg>`;
-  // Vertical: the same drawing turned to face down.
-  return `<svg class="gl-art" viewBox="0 0 100 ${p.len * 100}" preserveAspectRatio="none" aria-hidden="true"><g transform="translate(100 0) rotate(90)">${inner}</g></svg>`;
 }
 
 /** The how-to-play picture: a small board, a block that slides up and down, red heading out. */
@@ -358,9 +329,7 @@ class Gridlock {
     return `
       <div class="gl-levels">
         <div class="gl-lv-head">
-          <button type="button" class="gl-iconbtn" data-act="home" aria-label="${t('back_levels')}">${ICON_BACK}</button>
           <div class="gl-lv-title">${diffShapeSVG(TIER_NUM[band])}<b>${t('tier_' + band)}</b><span>${t('band_range', { a, b: z })}</span></div>
-          <span class="gl-hud-pad" aria-hidden="true"></span>
         </div>
         <div class="gl-grid">${tiles}</div>
         <div class="gl-pager">
@@ -368,6 +337,7 @@ class Gridlock {
           <span>${t('page_of', { p: this.page + 1, n: pages })}</span>
           <button type="button" class="gh-btn" data-act="page" data-step="1" ${this.page >= pages - 1 ? 'disabled' : ''} aria-label="${t('page_next')}">&rsaquo;</button>
         </div>
+        <button type="button" class="gh-btn gh-btn--block gl-lv-back" data-act="home">${ICON_BACK}<span>${t('back_setup')}</span></button>
       </div>`;
   }
 
@@ -375,9 +345,7 @@ class Gridlock {
     return `
       <div class="gl-game">
         <div class="gl-hud">
-          <button type="button" class="gl-iconbtn" data-act="menu" aria-label="${t('menu_aria')}">${ICON_BACK}</button>
           <div class="gl-hud-mid">${diffShapeSVG(TIER_NUM[this.band])}<b>${t('level_n', { n: this.n })}</b><span>${t('tier_' + this.band)}</span></div>
-          <span class="gl-hud-pad" aria-hidden="true"></span>
         </div>
         <div class="gl-strip">
           <div class="gl-chip"><small>${t('moves')}</small><b class="gl-moves">0</b></div>
@@ -385,6 +353,7 @@ class Gridlock {
         </div>
         <div class="gl-stage"><div class="gl-board" role="group"></div></div>
         <div class="gl-tools">
+          <button type="button" class="gl-tool" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}<span>${t('menu')}</span></button>
           <button type="button" class="gl-tool" data-act="undo">${ICON_UNDO}<span>${t('undo')}</span></button>
           <button type="button" class="gl-tool" data-act="restart">${ICON_RESTART}<span>${t('restart')}</span></button>
           <button type="button" class="gl-tool gl-tool-hint" data-act="hint">${ICON_BULB}<span>${t('hint')}</span></button>
@@ -673,11 +642,12 @@ class Gridlock {
     let k = 0;
     this.pz.pieces.forEach((p, i) => {
       const red = i === 0;
-      const color = red ? RED : (look === 'cars' ? CARS : WOOD)[k++ % 14];
+      const pal = look === 'cars' ? CAR_COLORS : WOOD_TONES;
+      const color = red ? RED : pal[(k++ + this.n * 3) % pal.length];
       const what = red ? t('piece_red') : t('piece_other');
       html += `<div class="gl-piece${red ? ' is-red' : ''}${p.h ? ' is-h' : ' is-v'}" data-i="${i}" tabindex="0" role="button"
         aria-label="${t('piece_aria', { what, dir: t(p.h ? 'dir_h' : 'dir_v') })}" style="--gl-c:${color}">
-        ${pieceSVG(p, look, color, red)}${look !== 'cars' && red ? '<span class="gl-mark" aria-hidden="true"></span>' : ''}
+        ${pieceArt(p, look, color, red, this.n * 97 + i * 13, `glp${i}`)}
       </div>`;
     });
     board.innerHTML = html;

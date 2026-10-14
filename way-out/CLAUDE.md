@@ -169,6 +169,12 @@ from the 44px floor (docs/BUILDING-A-GAME.md, the dots-boxes model). Every other
 
 ## Look
 
+- **Known, not yet changed (2026-10-14):** the play screen's menu button (back to the setup screen)
+  sits on the Hub button's row right beside it, which Matt rejected on Gridlock the same day (*"The
+  back (to the setup screen) is on the same row and basically touching the Hub back button"*); the
+  rule is now in docs/BUILDING-A-GAME.md, Part 0. Gridlock's fix: a labelled Menu button in the
+  bottom bar. Arrow Maze needs the same when someone works on it.
+
 - **The setup screen's look, per Matt's mock-up (2026-10-14):** the board picture is the headline,
   `clamp(96px, 23vh, 200px)` square, with the title straight under it and **no tagline**; **How to
   play is a real pill** (css/ui.css's plain `.gh-btn`, centred, `.wo-howbtn`), not the ghost text link
