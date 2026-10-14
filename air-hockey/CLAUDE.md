@@ -281,3 +281,10 @@ phone with no scroll (it overflowed by 17px there at a fixed size).
 the three levels in order against a new player, speed cap, swipe-to-shot, stuck puck; ~2 s),
 `node players-agg.test.mjs` (the GAME_META row), `node test-game-conventions.mjs`,
 `node validate-sw-assets.mjs`, `node check-no-scroll.mjs` (needs `node server.mjs`).
+
+
+## Quick chat (2026-10-14)
+
+A chat button during an ONLINE match (`_mountChat` in `js/ui.js`, torn down in `_teardownOnline`; never in the lobby or vs the computer). Panel and bubbles are `js/match-chat-ui.js`, the data is `js/match-chat.js` (`watchRoomReactions`), lazy-imported.
+- **Where it sits and why:** in the score row, in the 44px slot the Pause button holds in a vs-computer match (Pause is hidden online; `CHAT_PLACE`, `right: 12px`, `top` = row top + 2px). Measured with a 59px top inset: 390x844 at [334, 61, 44, 44], 320x568 at [264, 61, 44, 44]. It is outside `.ah-stage`, which is where every pointer handler of this game is bound, so a tap on the button or the panel never moves the mallet (checked: 0 stage pointerdowns from a tap on either, 3 from a tap on the table).
+- **Transport:** `rooms/<CODE>/reactions/<role>` (`role` is `'host'` or `'guest'`) through `net.sendReaction`, one slot per seat, overwritten by that seat's newest line; read back with `watchRoomReactions`. Nothing is stored beyond the room's own life.

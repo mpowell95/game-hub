@@ -2349,3 +2349,11 @@ outstanding. A later change to `functions/` still needs his `firebase deploy --o
 
 Tests: `node test-skee-challenge.mjs` (70: the rules, one attempt, the bubble, shared machines, the
 push decision, the hub's pills, the wiring).
+
+
+## Quick chat (2026-10-14)
+
+A chat button on every challenge (`_chatMount` / `_chatUnmount` / `_chatPlace` / `_chatDockTo` in `js/ui.js`; `viewMatch` in `js/challenge-ui.js` mounts it on the challenge page). It is up on the challenge page, during a game played for a challenge, and on the card after that game; gone on the gallery, the list and in an ordinary rack. Panel and bubbles are `js/match-chat-ui.js`, the data is `js/match-chat.js`, lazy-imported.
+- **It lives in its own host on `<body>`** (`.sk-chat-host`, fixed, z 5, `pointer-events: none`), NOT in `this.root`: every screen here is rebuilt with `root.innerHTML`, which would take the chat with it, and the challenge sheets are z 60 overlays above anything inside the root.
+- **Where it sits and why:** on the lane, in the empty top row left of the menu button (`right: 64px`): 390x844 at [282, 59, 44, 44], 320x568 at [212, 59, 44, 44] (59px top inset), bubbles under the live rack. On a challenge card it DOCKS beside the card's own close X (4px left of it, `_chatDockTo`), because on 320x568 the card's top edge is 44-50px and the default spot overlapped its X by 4px: 390x844 [274, 217], 320x568 [204, 52]. The card titles leave room for it (`sk-ch-title--chat`, `.sk-ch-over .sk-over-title`).
+- **Node:** `skeeChallenges/chat/<challengeId>/<key>` (`CH.NODE`), beside `skeeChallenges/games/<id>`. It sends with the STORED side from `CH.sideOf`.
