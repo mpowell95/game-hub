@@ -20,6 +20,10 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
 - **Admin only** (`devOnly: true`, an `added` date for the Newest sort, no `released` date: that is
   the New pill's input and must be the day Matt releases it from the admin page). Its `GAME_META`
   row shipped with the game, so the board appears the moment it is released.
+- **KEEP IT ADMIN ONLY until Matt says otherwise** (Matt, 2026-10-14: *"make sure it's admin only
+  until I've had time to fully test it"*). He releases it himself from the admin page (Games ->
+  Gridlock), which overrides the code default with no commit. `test-gridlock.mjs` fails if the
+  `GAMES` entry loses `devOnly: true` or gains a `released` date; change those checks only on his word.
 - `isInProgress()` is always `false`: every move autosaves, so leaving is lossless.
 - Immersive layout is Arrow Maze's `_positionRoot()` (a fixed root measured against the mount
   point; in the hub it runs edge to edge and the top bar starts right of the floating back button).
@@ -50,6 +54,10 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
   hint count is saved with the attempt, so leaving and coming back does not clear it). Tapping Hint
   again on the same position does not count twice.
 - Restart puts every block back (moves 0); the hint count stays.
+- **Levels** (the setup screen, beside How to play): the selected difficulty's levels, 25 a page
+  (5 x 5, pager underneath, never a scroll). A cleared level shows its best stars and its crown and
+  can be replayed for more stars; the next level wears the `#ffce3a` outline; later ones are locked,
+  because a difficulty is played in order. Replaying never adds points (they count distinct levels).
 - Expert levels (151 on) may contain fixed **walls** (metal plates on wood, a striped barrier in the
   car park).
 
@@ -138,6 +146,17 @@ faster at the top, and ends on the 51-move puzzle at level 400.
 - Checked in Chromium (2026-10-14), standalone and in the hub, light and dark, English and Spanish,
   at 402x874, 375x667 and 360x724: setup, play and the win popup all on screen, nothing under the
   hub's back button, no page scroll; a real touch drag moves a block one move.
+
+## The QA pass (2026-10-14)
+
+A scripted pass in Chromium (402x874, hard and medium levels): 150 random real drags (every block's
+position on screen matched the game's state after each batch), undo all the way back, hint tapped
+five times on one position (counted once), a language change mid-drag, a resize mid-drag (the drag
+ends with no move and the next drag works), two fingers at once (at most one move), a reload during
+the slide-out (the solve counted once, Play offers the next level), corrupt settings / save / stats
+(the level starts fresh, no errors), Escape on the win popup (back to the levels), and keyboard play
+(arrow presses on one block are one move). Found and fixed before it: a re-render or a resize in the
+middle of a drag now drops the drag, so a lost pointerup can never leave every block frozen.
 
 ## Layout notes
 

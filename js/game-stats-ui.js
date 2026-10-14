@@ -414,9 +414,11 @@ function gridlockScreen(rec) {
   const rows = SD_DIFFS.filter(([k]) => GL_TIERS.includes(k)).map(([k, labelKey]) =>
     `<tr><th scope="row">${t(labelKey)}</th><td>${glCleared(rec, k)}</td><td>${glPoints(rec, k)}</td><td>${glThreeStars(rec, k)}</td></tr>`).join('');
   return `
-    <div class="gs-tallies is-4">
+    <div class="gs-tallies">
       <div class="gs-tally"><b>${glPoints(rec)}</b><span>${t('lb_unit_points')}</span></div>
       <div class="gs-tally"><b>${glCleared(rec)}</b><span>${t('lb_tex_gl_cleared')}</span></div>
+    </div>
+    <div class="gs-tallies">
       <div class="gs-tally"><b>${glThreeStars(rec)}</b><span>${t('gs_gl_three')}</span></div>
       <div class="gs-tally"><b>${glNoHint(rec)}</b><span>${t('gs_gl_nohint')}</span></div>
     </div>

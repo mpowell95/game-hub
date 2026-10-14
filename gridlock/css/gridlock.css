@@ -144,6 +144,84 @@
 .gl-root .gl-seg-range { font-size: 12px; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; opacity: .8; }
 .gl-root .gl-worth { margin: -4px 0 0; text-align: center; font-size: 13px; color: var(--gh-muted, #5b6b82); }
 
+/* Levels and How to play share one row under the card. */
+.gl-root .gl-home-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* --- LEVELS: the level list, 25 a page (pages, never a scroll) -------------------------------- */
+.gl-root .gl-levels {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: calc(var(--gl-top, 0px) + 6px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.gl-root.is-immersive .gl-levels { padding-top: var(--gl-top, 6px); }
+.gl-root.is-immersive .gl-lv-head { padding-left: calc(var(--gl-inset, 12px) - 16px); }
+.gl-root .gl-lv-head { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.gl-root .gl-lv-head .gl-iconbtn { background: var(--gh-surface, #fff); color: var(--gh-ink, #16243a); }
+.gl-root .gl-lv-title { flex: 1; display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center; column-gap: 6px; }
+.gl-root .gl-lv-title svg { width: 15px; height: 15px; }
+.gl-root .gl-lv-title svg.lb-dshape-x2 { width: 26px; }
+.gl-root .gl-lv-title b { font-size: 18px; font-weight: 800; }
+.gl-root .gl-lv-title span { grid-column: 1 / -1; text-align: center; font-size: 12px; font-weight: 600; color: var(--gh-muted, #5b6b82); }
+/* Grid and pager sit together in the middle of the screen (auto margins), not at opposite ends. */
+.gl-root .gl-grid { flex: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: auto; }
+.gl-root .gl-pager { margin-bottom: auto; }
+.gl-root .gl-tile {
+  position: relative;
+  min-height: 64px;
+  border: 1px solid var(--gh-border, rgba(16, 36, 58, .14));
+  border-radius: 12px;
+  background: var(--gh-surface, #fff);
+  color: var(--gh-ink, #16243a);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 2px;
+}
+.gl-root .gl-tile b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.gl-root .gl-tile:disabled { opacity: .45; cursor: default; }
+/* The next level: the standing accent with a thicker outline (never colour alone). */
+.gl-root .gl-tile.is-next { outline: 2px solid var(--gl-sel); border-color: var(--gl-sel); background: rgba(255, 206, 58, .18); }
+.gl-root .gl-tile-stars { display: flex; gap: 2px; height: 11px; }
+.gl-root .gl-tile-stars i {
+  width: 11px;
+  height: 11px;
+  background: var(--gh-border-strong, rgba(16, 36, 58, .28));
+  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+.gl-root .gl-tile-stars i.is-on { background: #e0a400; }
+.gl-root .gl-tile-crown { position: absolute; top: -7px; right: -5px; font-size: 13px; line-height: 1; }
+.gl-root .gl-lock {
+  width: 12px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--gh-muted, #5b6b82);
+  position: relative;
+  margin-top: 3px;
+}
+.gl-root .gl-lock::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  bottom: 8px;
+  width: 8px;
+  height: 6px;
+  border: 2px solid var(--gh-muted, #5b6b82);
+  border-bottom: 0;
+  border-radius: 5px 5px 0 0;
+}
+.gl-root .gl-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gl-root .gl-pager .gh-btn { min-width: 64px; font-size: 22px; font-weight: 800; }
+.gl-root .gl-pager .gh-btn:disabled { opacity: .4; }
+.gl-root .gl-pager span { font-size: 14px; font-weight: 700; color: var(--gh-muted, #5b6b82); }
+
 /* --- PLAY ------------------------------------------------------------------------------------ */
 .gl-root .gl-game {
   flex: 1;
