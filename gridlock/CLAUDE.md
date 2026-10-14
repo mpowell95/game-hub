@@ -73,11 +73,13 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
 ## The play screen's controls (Matt, 2026-10-14)
 
 The top row holds only the level title, centred (in the hub it shares the floating Hub button's row).
-**The way back to the setup screen is Menu, the first button of the bottom bar** (Menu · Undo ·
-Restart · Hint). It used to be a back arrow on the top row, right beside the Hub button; Matt: *"I do
-not like how you've been doing this recently. The back (to the setup screen) is on the same row and
-basically touching the Hub back button."* The Levels screen's Back is a full-width button under its
-pager for the same reason. The rule is in docs/BUILDING-A-GAME.md, Part 0.
+**The way back to the setup screen is a back arrow TOP LEFT on the second row** (left of the Moves /
+Fewest chips, 16px under the Hub button, 44px). It first sat on the top row right beside the Hub
+button; Matt: *"The back (to the setup screen) is on the same row and basically touching the Hub back
+button."* It was then moved to the bottom bar as Menu, which was wrong too; Matt: *"Give me a back
+button on the top left again. I don't want it in the normal location. I didn't want you to remove
+it."* The bottom bar is Undo · Restart · Hint. The Levels screen's Back is a full-width button under
+its pager. The rule is in docs/BUILDING-A-GAME.md, Part 0.
 
 ## The two looks (Matt, 2026-10-14)
 
