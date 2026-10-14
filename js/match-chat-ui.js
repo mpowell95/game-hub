@@ -199,8 +199,14 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
     if (el._t) { clearTimeout(el._t); timers.delete(el._t); el._t = null; }
     el.remove();
   }
-  listen(pops, 'click', (ev) => { const el = ev.target.closest('.ghc-pop'); if (el) dismiss(el); });
-  listen(pops, 'pointerdown', (ev) => { if (ev.target.closest('.ghc-pop')) ev.stopPropagation(); });
+  // SEE-THROUGH AND TAP-THROUGH (2026-10-14). Matt, with a screenshot of a "Bum" card over his
+  // Flick Soccer pitch: "Please make this pop up transparent. I was in the middle of my move." A
+  // card no longer takes a touch at all: the drag that was under it reaches the game. Only its ✕
+  // (a real 44px button) is tappable, so it can still be closed by hand.
+  listen(pops, 'click', (ev) => { const x = ev.target.closest('.ghc-pop-x'); if (x) dismiss(x.closest('.ghc-pop')); });
+  for (const ty of ['pointerdown', 'touchstart', 'mousedown']) {
+    listen(pops, ty, (ev) => { if (ev.target.closest('.ghc-pop-x')) ev.stopPropagation(); }, { passive: true });
+  }
 
   function popBubble(e) {
     const text = textOf(e);
@@ -219,15 +225,12 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
     const who = e.mine ? { name: t('you'), emoji: '' } : (themFn() || {});
     const el = document.createElement('div');
     el.className = 'ghc-pop' + (e.mine ? ' is-mine' : '') + (e.t === 'e' ? ' is-emoji' : '');
-    el.setAttribute('role', 'button');
-    el.setAttribute('aria-label', `${text}. ${t('dismiss')}`);
-    el.title = t('dismiss');
     el._sig = sig;
     el._n = 1;
     el.innerHTML = `<span class="ghc-pop-who">${who.emoji ? `<span aria-hidden="true">${esc(who.emoji)}</span> ` : ''}${esc(who.name || '?')}</span>`
       + `<span class="ghc-pop-text">${esc(text)}</span>`
       + '<span class="ghc-pop-n" hidden></span>'
-      + '<span class="ghc-pop-x" aria-hidden="true">✕</span>';
+      + (e.mine ? '' : `<button type="button" class="ghc-pop-x" aria-label="${esc(t('close'))}">✕</button>`);
     pops.appendChild(el);
     while (pops.children.length > MAX_POPS) dismiss(pops.firstChild);
     arm(el, ms);
@@ -293,7 +296,7 @@ function injectCss() {
 .ghc { position: absolute; inset: 0; pointer-events: none; z-index: 40;
   --ghc-top: max(10px, env(safe-area-inset-top, 0px)); --ghc-right: 64px;
   --ghc-pops-top: calc(var(--ghc-top) + 54px);
-  --ghc-bg: rgb(20, 22, 28); --ghc-ink: #f4f5f7; --ghc-dim: #b9bec8;
+  --ghc-bg: rgb(20, 22, 28); --ghc-see: rgba(20, 22, 28, 0.42); --ghc-ink: #f4f5f7; --ghc-dim: #b9bec8;
   --ghc-edge: rgba(255, 255, 255, 0.24); --ghc-accent: #ffce3a;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .ghc[hidden] { display: none; }
@@ -340,10 +343,11 @@ function injectCss() {
 .ghc.is-open .ghc-pops { display: none; }
 .ghc-pops { position: absolute; top: var(--ghc-pops-top); left: 12px; right: 12px;
   display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
-.ghc-pop { position: relative; pointer-events: auto; cursor: pointer; touch-action: manipulation;
+.ghc-pop { position: relative; pointer-events: none;
   display: inline-flex; align-items: center; gap: 8px; max-width: 100%; box-sizing: border-box;
-  padding: 6px 12px; border-radius: 14px 4px 14px 14px; background: var(--ghc-bg); color: var(--ghc-ink);
-  border: 1px solid var(--ghc-edge); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); font-size: 15px; font-weight: 600;
+  padding: 6px 12px; border-radius: 14px 4px 14px 14px; background: var(--ghc-see); color: var(--ghc-ink);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--ghc-edge); font-size: 15px; font-weight: 600;
   transition: opacity 240ms ease; }
 .ghc-pop.is-off { opacity: 0; }
 .ghc-pop.is-mine { align-self: flex-end; }
@@ -351,12 +355,14 @@ function injectCss() {
 .ghc-pop-text { white-space: normal; overflow-wrap: anywhere; }
 .ghc-pop.is-emoji .ghc-pop-text { font-size: 22px; }
 .ghc-pop-n { font-size: 14px; font-weight: 800; opacity: .85; }
-.ghc-pop-n[hidden], .ghc-pop-x { display: none; }
+.ghc-pop-n[hidden] { display: none; }
 .ghc-pop:not(.is-mine) { flex-direction: column; gap: 4px; width: min(92%, 420px); padding: 14px 18px;
-  border-radius: 16px; border: 2px solid var(--ghc-ink); font-size: 24px; line-height: 1.25; text-align: center; }
+  border-radius: 16px; border: 2px solid rgba(255, 255, 255, 0.55); font-size: 24px; line-height: 1.25; text-align: center; }
 .ghc-pop:not(.is-mine) .ghc-pop-who { font-size: 16px; }
 .ghc-pop.is-emoji:not(.is-mine) .ghc-pop-text { font-size: 44px; }
-.ghc-pop:not(.is-mine) .ghc-pop-x { display: block; position: absolute; top: 6px; right: 10px; font-size: 16px; line-height: 1; opacity: .7; }
+.ghc-pop-x { appearance: none; pointer-events: auto; position: absolute; top: 0; right: 0; width: 44px; height: 44px;
+  border: 0; background: transparent; color: var(--ghc-ink); font: inherit; font-size: 16px; line-height: 1;
+  opacity: .85; cursor: pointer; touch-action: manipulation; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
 `;
   document.head.appendChild(s);
 }
