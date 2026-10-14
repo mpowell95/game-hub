@@ -25,11 +25,9 @@ keep the first name on purpose**: the stats id keys every level already cleared 
 - **Admin only** (`devOnly: true`, no `released` date: that is the New pill's input and must be the day
   Matt releases it from the admin page). Its `GAME_META` row shipped with the game. The live admin
   config has `way-out` `live: true`.
-- **Hidden from King of Games (3VN33) since the evening of 2026-10-14** (Matt: *"first make it invisible
-  to king of games again"*, while the Hard/Expert bands are reworked): `hideFrom: ['3VN33']` on the
-  `GAMES` entry hides his tile and makes `launch()` refuse it (deep links, pushes, Challenges); Matt's
-  devices and dev profiles are exempt; his solves and timed levels are untouched and still on the
-  leaderboard. **Delete that line to give it back.** (Held back 2026-10-13, lifted part of 10-14.)
+- **King of Games (3VN33) can see and play it again since 2026-10-14** (Matt: *"Let king of games see
+  and play arrows"*). He was hidden with `hideFrom: ['3VN33']` on the `GAMES` entry 2026-10-13 and
+  again the evening of 10-14 while the bands were reworked; re-add that line to hide it from him.
 - `isInProgress()` is always `false` (every level-changing tap autosaves).
 - Immersive layout copies Murdoku's `_positionRoot()`: a `position: fixed` root measured against the
   mount point, **edge to edge** in the hub; the top bar shares the floating back button's row; the
