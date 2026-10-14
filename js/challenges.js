@@ -5,10 +5,10 @@
 // challenges - if it's your turn vs theirs, more info on your records total and against specific
 // players, etc. You should also be able to send challenges and jump into games from this page."
 //
-// EVERY GAME KEEPS ITS OWN CHALLENGES. Five games have turn-by-turn challenges, each in its own
+// EVERY GAME KEEPS ITS OWN CHALLENGES. Six games have turn-by-turn challenges, each in its own
 // Firebase node, each with a per-player index (`<node>/index/<CODE>/<id>`): Connect 4 Hoops
-// (`hoops/`), Skeeball (`skeeChallenges/`), Cup Pong (`cuppong/`), Darts (`darts/`) and Flick Soccer
-// (`flicksoccer/`, 2026-10-11). This module READS those indexes through each game's own reader and folds them into one list. It writes
+// (`hoops/`), Skeeball (`skeeChallenges/`), Cup Pong (`cuppong/`), Darts (`darts/`), Flick Soccer
+// (`flicksoccer/`, 2026-10-11) and Archery (`archery/`, 2026-10-14). This module READS those indexes through each game's own reader and folds them into one list. It writes
 // nothing itself - no Firebase node, no `gamehub.*` key. Opening a match or starting a challenge is
 // handed to the game (its alerts module's armOpen / armChallenge), and CANCEL / DECLINE / RESIGN
 // (2026-10-13, Matt: "a way to cancel sent challenge requests, and a way to resign/forfeit") call
@@ -89,6 +89,14 @@ export const SOURCES = {
   },
   'flick-soccer': {
     load: () => import('../flick-soccer/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
+  },
+  // Archery (2026-10-14): archery/js/mp.js, the same log-game shape as Darts.
+  archery: {
+    load: () => import('../archery/js/mp.js'),
     read: (M) => M.readMyGames(),
     watch: (M, cb) => M.watchMyGames(cb),
     action: logGameAction,

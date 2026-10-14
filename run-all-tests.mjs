@@ -33,6 +33,8 @@ const SUITES = [
   { file: 'gridlock/js/test.js' },
   { file: 'test-gridlock.mjs' },
   { file: 'darts/js/test.js' },
+  { file: 'archery/js/test.js' },
+  { file: 'test-archery-mp.mjs' },
   { file: 'contexto/js/test.js' },
   { file: 'tic-tac-toe/js/test.js' },
   { file: 'dots-boxes/js/test.js' },

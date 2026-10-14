@@ -15,12 +15,15 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
-import { woMistakeMs, woHintMs, woClock, woLevelPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, woRushBest, woRushBestMap, woWeekKey } from '../../js/arrow-maze-time.js';
+import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
+import { loadProfile } from '../../js/profile-store.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.wayout.v1';
+/** Expert's progress bar fills over this many levels, then starts over. */
+const EXPERT_LAP = 50;
 // ONE save PER TIER (2026-10-11 QA: with one shared slot, playing Easy wiped an unfinished
 // Medium level). `gamehub.wayout.saves.v1` = { easy: save|null, ..., migrated: 1 }. The first
 // key, `gamehub.wayout.save.v1` (a single save), is read ONCE into its tier's slot and then left
@@ -277,6 +280,14 @@ const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width
 const ICON_MENU = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 4v4.5h4.5"/></svg>`;
 const ICON_BULB = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 28c-3-2.4-4.6-5.6-4.6-9a11.6 11.6 0 0 1 23.2 0c0 3.4-1.6 6.6-4.6 9v4H17z"/><path d="M19 37h10"/><path d="M24 2.5v3M8 9l2.2 2.2M40 9l-2.2 2.2M3.5 19h3M41.5 19h3"/></g></svg>`;
+// Rush's rule icons (2026-10-14): the same marks on the setup card and the Ready popup. A teal arrow
+// for "+0.5s", a red arrow for "-3s" (always with the sign and the word, never colour alone), a
+// stopwatch for the start.
+const RUSH_ARROW = (c) => `<svg viewBox="0 0 28 16" aria-hidden="true"><path d="M3 12V5h15" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 5l-7-4.5v9z" fill="${c}"/></svg>`;
+// The hand is its own element so the picture's stopwatch can spin it (`.wo-watch-hand`).
+const RUSH_WATCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M9.5 2.5h5M12 2.5v3M18.5 6.5l1.6-1.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path class="wo-watch-hand" d="M12 13.5V8.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="13.5" r="1.4" fill="currentColor"/></svg>';
+const ICON_STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z" fill="currentColor"/></svg>';
+const ICON_CUP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10v5a5 5 0 0 1-10 0z M7 5.5H4v1.5a3 3 0 0 0 3 3 M17 5.5h3v1.5a3 3 0 0 1-3 3 M12 13.5v3.5 M8 20.5h8 M9.5 17h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21L2.6 11.6A5.6 5.6 0 0 1 12 3.9a5.6 5.6 0 0 1 9.4 7.7z"/></svg>';
 
 /** The setup screen's header picture (2026-10-14, Matt: "Make the top image thing cooler and
@@ -558,25 +569,40 @@ class WayOut {
   /** The setup screen, in the hub's own style (the Sudoku / Minesweeper layout and css/ui.css's
    *  .gh-* primitives): picture, title, a Difficulty card whose four buttons each show the level
    *  that tier is on, then Play and How to play. */
+  /** The setup screen. Levels and Rush share ONE layout (Matt, 2026-10-14: "switching back and forth
+   *  is weird because things move around"): the picture, the title, the switch, a card of
+   *  [difficulty buttons, three tiles, Play], and a footer card of [a leader, a pill]. The column is
+   *  TOP-aligned, so everything down to the card's top edge stands still when the mode changes. */
   _homeHTML() {
+    const modeTabs = `<div class="wo-modes" role="tablist">${['levels', 'rush'].map((m) => `
+      <button type="button" class="wo-mode${m === this.settings.mode ? ' is-on' : ''}" role="tab" aria-selected="${m === this.settings.mode}" data-act="mode" data-mode="${m}">${t('mode_' + m)}</button>`).join('')}</div>`;
+    if (this.settings.mode === 'rush') return this._rushHomeHTML(modeTabs);
     const tier = this.settings.tier;
     const level = this.settings.ladder[tier];
     const done = level > bandEnd(tier);
     const resume = !done && hasProgress(tier, level);
-    const range = (k) => (k === 'expert' ? t('band_from', { a: BAND_START[k] }) : t('band_range', { a: BAND_START[k], b: bandEnd(k) }));
-    const segs = TIERS.map((k) => `
+    // Each difficulty: its name, the level it is on, and a thin bar of how far through its stretch
+    // of the ladder that is. Expert never ends, so its bar fills every 50 levels and starts over
+    // (Matt, 2026-10-14: a solid line like the others, not a dashed one).
+    const segs = TIERS.map((k) => {
+      const n = this.settings.ladder[k], end = bandEnd(k), fin = n > end;
+      const pct = k === 'expert' ? Math.round(100 * (((n - BAND_START[k]) % EXPERT_LAP) / EXPERT_LAP))
+        : Math.round(100 * Math.min(1, (n - BAND_START[k]) / (end - BAND_START[k] + 1)));
+      return `
       <button type="button" class="wo-seg${k === tier ? ' is-selected' : ''}" data-act="tier" data-tier="${k}" role="radio" aria-checked="${k === tier}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b></span>
-        <span class="wo-seg-sub">${this.settings.ladder[k] > bandEnd(k) ? t('band_done') : t('level_n', { n: this.settings.ladder[k] })}</span>
-        <span class="wo-seg-range">${range(k)}</span>
-      </button>`).join('');
+        <span class="wo-seg-sub">${fin ? t('band_done') : t('level_n', { n })}</span>
+        <span class="wo-seg-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>
+      </button>`;
+    }).join('');
+    const tiles = this._tilesHTML([
+      { cls: 'is-pts', icon: ICON_STAR, v: done ? '-' : t('lv_pts', { n: woLevelPoints(level) }), l: t('lv_tile_worth') },
+      { cls: 'is-mine', icon: ICON_CUP, v: String(this._myPoints()), l: t('lv_tile_mine') },
+      { cls: 'is-lives', icon: HEART, v: String(LIVES), l: t('lv_tile_lives') },
+    ], t('lv_tiles_aria'));
     const play = done
-      ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" disabled>${t('band_done_play', { name: t('tier_' + tier) })}</button>`
-      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play">${t(resume ? 'continue_level' : 'play_level', { n: level })}</button>
-          <p class="wo-worth">${t('worth', { p: woLevelPoints(level) })}</p>`;
-    const modeTabs = `<div class="wo-modes" role="tablist">${['levels', 'rush'].map((m) => `
-      <button type="button" class="wo-mode${m === this.settings.mode ? ' is-on' : ''}" role="tab" aria-selected="${m === this.settings.mode}" data-act="mode" data-mode="${m}">${t('mode_' + m)}</button>`).join('')}</div>`;
-    if (this.settings.mode === 'rush') return this._rushHomeHTML(modeTabs);
+      ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" disabled>${t('band_done_play', { name: t('tier_' + tier) })}</button>`
+      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t(resume ? 'continue_level' : 'play_level', { n: level })}</button>`;
     return `
       <div class="wo-home">
         <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
@@ -585,14 +611,54 @@ class WayOut {
         </div>
         ${modeTabs}
         <div class="gh-card wo-menu-card">
-          <div class="gh-field">
-            <span class="gh-field__label" id="wo-difflabel">${t('diff_label')}</span>
-            <div class="wo-segs" role="radiogroup" aria-labelledby="wo-difflabel">${segs}</div>
-          </div>
+          <div class="wo-segs" role="radiogroup" aria-label="${t('diff_label')}">${segs}</div>
+          ${tiles}
           ${play}
         </div>
-        <button type="button" class="gh-btn wo-howbtn" data-act="help">${t('how_title')}</button>
+        <div class="wo-lead">${this._levelsLeaderHTML()}</div>
       </div>`;
+  }
+
+  /** Three tiles in a row: an icon, a number, a word. Shared by Levels and Rush. */
+  _tilesHTML(items, label) {
+    return `<ul class="wo-tiles" aria-label="${label}">${items.map((x) =>
+      `<li class="${x.cls}">${x.icon}<b>${x.v}</b><span>${x.l}</span></li>`).join('')}</ul>`;
+  }
+  /** This person's points: from the combined read once it lands (every phone they play on), this
+   *  phone's own until then. */
+  _myPoints() {
+    const st = this.rushStanding, me = st && st.rows && st.rows.find((r) => r.me);
+    const local = woPoints(this._myWayout());
+    return me && Number.isFinite(me.pts) ? Math.max(me.pts, local) : local;
+  }
+  /** Levels' footer: the points leader (ties all named) and How to play. "-" until known. */
+  _levelsLeaderHTML() {
+    const st = this.rushStanding;
+    if (!st || Date.now() - st.at > 60000) this._loadRushStanding();
+    const rows = ((st && st.rows) || []).map((r) => ({ ...r, pts: r.me ? Math.max(r.pts || 0, woPoints(this._myWayout())) : (r.pts || 0) }))
+      .filter((r) => r.pts > 0);
+    const top = rows.reduce((m, r) => Math.max(m, r.pts), 0);
+    const lead = rows.filter((r) => r.pts === top);
+    return this._leadHTML(`🏆 ${t('lv_leader_label')}`,
+      lead.length ? lead.map((r) => this._leadName(r)).join(' & ') : '-',
+      lead.length ? String(top) : '-',
+      `<button type="button" class="wo-rl-all" data-act="help">${t('how_title')}</button>`);
+  }
+  /** A leader's name on the footer card: emoji and username, this phone's own person included
+   *  (Matt, 2026-10-14: "it shouldn't say You"). Before the combined read lands, this phone's own
+   *  row has no name yet, so it comes from the profile; "You" only if there is no name at all. */
+  _leadName(r) {
+    let name = r.name || '', emoji = r.emoji || '';
+    if (r.me && !name) { const p = loadProfile() || {}; name = p.name || ''; emoji = emoji || p.emoji || ''; }
+    if (!name && r.me) return t('rush_you');
+    return `${esc(emoji)} ${esc(name)}`.trim();
+  }
+  _leadHTML(label, name, score, button) {
+    return `
+      <div class="wo-rl-who">
+        <span class="wo-rl-label">${label}</span>
+        <span class="wo-rl-row"><span class="wo-rl-name">${name}</span><b class="wo-rl-score">${score}</b></span>
+      </div>${button}`;
   }
 
   _playHTML() {
@@ -639,7 +705,7 @@ class WayOut {
     else if (act === 'rush-again') { const m = this.rush ? this.rush.mode : this.settings.rushMode; this._closeModal(); this._startRush(m); }
     else if (act === 'rush-close') this._toSetup(false);
     else if (act === 'rush-ready') this._rushReady();
-    else if (act === 'rush-board') this._openRushBoard();
+    else if (act === 'rush-board') this._openRushBoard(btn.dataset.rmode || (this.rush && this.rush.mode));
     else if (act === 'rb-back') { this.screen = 'home'; this.render(); }
     else if (act === 'rb-tab') { this.rb.tab = btn.dataset.tab; this.rb.week = null; this.render(); }
     else if (act === 'rb-mode') { this.rb.mode = btn.dataset.rmode; this.render(); }
@@ -1171,33 +1237,70 @@ class WayOut {
     try { return loadStats().games.wayout; } catch { return null; }
   }
 
+  /** The Rush setup card (2026-10-14, after Matt's reviews): Easy / Hard with nothing under them,
+   *  the three rule tiles (the same tiles as Levels), Play Rush, and the footer card: the selected
+   *  version's leader this week and See all results. */
   _rushHomeHTML(modeTabs) {
-    const rm = this.settings.rushMode, mine = this._myWayout();
-    const segs = RUSH_MODES.map((m) => {
-      const b = woRushBest(mine, m);
-      return `
-      <button type="button" class="wo-seg${m === rm ? ' is-selected' : ''}" data-act="rush-mode" data-rmode="${m}" role="radio" aria-checked="${m === rm}">
+    const rm = this.settings.rushMode;
+    const segs = RUSH_MODES.map((m) => `
+      <button type="button" class="wo-seg wo-seg--slim${m === rm ? ' is-selected' : ''}" data-act="rush-mode" data-rmode="${m}" role="radio" aria-checked="${m === rm}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[m])}<b>${t('tier_' + m)}</b></span>
-        <span class="wo-seg-sub">${b == null ? t('rush_week_none') : t('rush_week_best', { n: b })}</span>
-      </button>`;
-    }).join('');
+      </button>`).join('');
+    const tiles = this._tilesHTML([
+      { cls: 'is-start', icon: RUSH_WATCH, v: `${RUSH_START_MS / 1000}s`, l: t('rush_tile_start') },
+      { cls: 'is-gain', icon: RUSH_ARROW('currentColor'), v: `+${RUSH_GAIN_MS / 1000}s`, l: t('rush_tile_gain') },
+      { cls: 'is-miss', icon: RUSH_ARROW('currentColor'), v: `\u2212${RUSH_MISS_MS / 1000}s`, l: t('rush_tile_miss') },
+    ], t('rush_rules_aria'));
     return `
-      <div class="wo-home">
-        <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
+      <div class="wo-home is-rush">
+        <div class="wo-hero is-rush" aria-hidden="true">${HERO_SVG}<span class="wo-hero-badge">${RUSH_WATCH}</span></div>
         <div class="wo-head">
           <h1>${t('title')}</h1>
         </div>
         ${modeTabs}
         <div class="gh-card wo-menu-card">
-          <div class="gh-field">
-            <span class="gh-field__label" id="wo-rushlabel">${t('diff_label')}</span>
-            <div class="wo-segs wo-segs--two" role="radiogroup" aria-labelledby="wo-rushlabel">${segs}</div>
-          </div>
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="rush-play">${t('rush_play')}</button>
-          <p class="wo-worth">${t('rush_rules', { start: RUSH_START_MS / 1000, gain: RUSH_GAIN_MS / 1000, miss: RUSH_MISS_MS / 1000 })}</p>
+          <div class="wo-segs wo-segs--two" role="radiogroup" aria-label="${t('diff_label')}">${segs}</div>
+          ${tiles}
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play wo-rush-play" data-act="rush-play">${t('rush_play')}</button>
         </div>
-        <button type="button" class="gh-btn wo-howbtn" data-act="rush-board">${t('rush_results')}</button>
+        <div class="wo-lead">${this._rushLeaderHTML(rm)}</div>
       </div>`;
+  }
+
+  /** The leader of the selected version this week, read in the background (the Results read, at
+   *  most once a minute); this phone's own best is always its fresh local one. Ties are all named;
+   *  nobody yet (or not read yet) is "-" and "-" (Matt). Then See all results, on that version. */
+  _rushLeaderHTML(mode) {
+    const st = this.rushStanding;
+    if (!st || Date.now() - st.at > 60000) this._loadRushStanding();
+    const week = woWeekKey(), mine = woRushBest(this._myWayout(), mode);
+    const rows = ((st && st.rows) || []).map((r) => {
+      let v = r.best[mode] && r.best[mode][week];
+      if (r.me && mine != null) v = Math.max(v == null ? -1 : v, mine);
+      return { ...r, s: v == null ? null : v };
+    }).filter((r) => r.s != null);
+    if (!rows.some((r) => r.me) && mine != null) rows.push({ me: true, s: mine, name: '', emoji: '' });
+    const topS = rows.reduce((m, r) => Math.max(m, r.s), -1);
+    const top = rows.filter((r) => r.s === topS);
+    return this._leadHTML(`🏆 ${t('rush_leader_label', { name: t('tier_' + mode) })}`,
+      top.length ? top.map((r) => this._leadName(r)).join(' & ') : '-',
+      top.length ? String(topS) : '-',
+      `<button type="button" class="wo-rl-all is-more" data-act="rush-board" data-rmode="${mode}">${t('rush_see_all')}</button>`);
+  }
+  _loadRushStanding() {
+    if (this._standingBusy) return;
+    this._standingBusy = true;
+    const done = (rows) => {
+      this._standingBusy = false;
+      this.rushStanding = { at: Date.now(), rows };
+      if (this.root && this.screen === 'home') {
+        const el = this.root.querySelector('.wo-lead');
+        if (el) el.innerHTML = this.settings.mode === 'rush' ? this._rushLeaderHTML(this.settings.rushMode) : this._levelsLeaderHTML();
+        const mine = this.root.querySelector('.wo-tiles .is-mine b');
+        if (mine) mine.textContent = String(this._myPoints());
+      }
+    };
+    this._loadRushRows().then((res) => done(res.rows || []), () => done([]));
   }
 
   _rushPlayHTML() {
@@ -1292,7 +1395,7 @@ class WayOut {
     this.red[id] = true;
     r.mistakes += 1;
     r.bank -= RUSH_MISS_MS;
-    this._flashPen(`-${RUSH_MISS_MS / 1000}s`, true);
+    this._flashPen(`\u2212${RUSH_MISS_MS / 1000}s`, true);
     this._rushPaint();
     if (this._rushLeft() <= 0) this._rushEnd('time');
   }
@@ -1311,22 +1414,29 @@ class WayOut {
     this._later(() => this._banner(), motion ? 650 : 100);
     this._later(() => this._showRushReady(), motion ? 2000 : 700);
   }
+  /** The Ready popup, in the play screen's own look (Matt, 2026-10-14: "More on theme"): the dark
+   *  board colours, the seconds in the leaving-arrow teal, the two rules as arrow chips (teal arrow
+   *  +0.5s, red arrow -3s: a sign and a word, never colour alone), then Ready. */
   _showRushReady() {
     const r = this.rush, m = this.root && this.root.querySelector('.wo-modal');
     if (!r || r.over || !r.paused || r.counting || !m) return;
     const secs = (Math.floor(r.bank / 100) / 10).toFixed(1);
+    const arrow = RUSH_ARROW;
     m.innerHTML = `
-      <div class="gh-modal wo-dialog" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
-        <h2 class="gh-modal__title" id="wo-ready-h">${t('rush_board_cleared', { n: r.boards })}</h2>
-        <p class="wo-rush-big"><b>${secs}</b><span>${t('rush_next_secs')}</span></p>
-        <p class="wo-fail-txt">${t('rush_reminder', { gain: RUSH_GAIN_MS / 1000, miss: RUSH_MISS_MS / 1000 })}</p>
-        <p class="wo-rush-ask">${t('rush_ready_q')}</p>
-        <div class="gh-modal__actions">
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="rush-ready">${t('rush_ready_btn')}</button>
-        </div>
+      <div class="wo-ready" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
+        <p class="wo-ready-done" id="wo-ready-h"><span aria-hidden="true">✓</span>${t('rush_board_cleared', { n: r.boards })}</p>
+        <p class="wo-ready-secs"><b>${secs}</b><i>s</i></p>
+        <p class="wo-ready-sub">${t('rush_next_secs')}</p>
+        <ul class="wo-ready-rules">
+          <li class="is-gain">${arrow('#3fd6bd')}<span>${t('rush_rule_gain', { gain: RUSH_GAIN_MS / 1000 })}</span><b>+${RUSH_GAIN_MS / 1000}s</b></li>
+          <li class="is-miss">${arrow('#e0484f')}<span>${t('rush_rule_miss', { miss: RUSH_MISS_MS / 1000 })}</span><b>\u2212${RUSH_MISS_MS / 1000}s</b></li>
+        </ul>
+        <p class="wo-ready-stats">${t('rush_arrows', { n: r.arrows })}</p>
+        <p class="wo-ready-ask">${t('rush_ready_q')}</p>
+        <button type="button" class="wo-ready-btn" data-act="rush-ready">${t('rush_ready_btn')}</button>
       </div>`;
     m.hidden = false;
-    m.querySelector('.gh-btn--primary').focus({ preventScroll: true });
+    m.querySelector('.wo-ready-btn').focus({ preventScroll: true });
   }
   /** Ready: 3, 2, 1, Go!, then the next board and the clock again. The board stays hidden until Go. */
   _rushReady() {
@@ -1421,12 +1531,12 @@ class WayOut {
   // per PERSON by js/players-agg.js (a week's best is the best on any of their phones). Read once
   // per opening. Offline: only this phone's own runs.
 
-  _openRushBoard() {
+  _openRushBoard(mode) {
     if (this.rush && !this.rush.over) return;
     this._stopLevel();
     this.rush = null;
     const keep = this.rb || {};
-    this.rb = { tab: 'week', mode: keep.mode || this.settings.rushMode, week: null, rows: null, offline: false };
+    this.rb = { tab: 'week', mode: (mode && RUSH_MODES.includes(mode)) ? mode : (keep.mode || this.settings.rushMode), week: null, rows: null, offline: false };
     this.screen = 'rushboard';
     this.render();
     const rb = this.rb;
@@ -1459,7 +1569,7 @@ class WayOut {
       const isMe = (g) => g.key === myKey;
       // Test accounts are hidden as on the leaderboard, except from themselves.
       rows = aggregatePlayers(merged).filter((g) => isMe(g) || !isHiddenName(g.name)).map((g) => ({
-        name: g.name, emoji: g.emoji, me: isMe(g),
+        name: g.name, emoji: g.emoji, me: isMe(g), pts: woPoints(g.games.wayout),
         best: Object.fromEntries(RUSH_MODES.map((m) => [m, woRushBestMap(((((g.games.wayout || {}).wo || {}).rush || {}).best || {})[m])])),
       }));
     } catch (err) {

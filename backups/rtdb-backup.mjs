@@ -78,6 +78,9 @@ export const BRANCHES = [
   // flicksoccer/ (flick-soccer/js/mp.js, 2026-10-11): Flick Soccer's turn-by-turn challenges and
   // their per-player index. Same auth shape as hoops/.
   'flicksoccer',
+  // archery/ (archery/js/mp.js, 2026-10-14): Archery's turn-by-turn challenges, their per-player
+  // index and quick chat.
+  'archery',
   // pushSubs/ (2026-09-23, js/push.js): each device's push-notification address, by player code.
   // Readable by any signed-in session; written only by the device that claimed that code.
   'pushSubs',

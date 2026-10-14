@@ -358,7 +358,27 @@ export const GAMES = [
     // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
     // input to the launcher's New pill and must be the day Matt releases it from the admin page.
     devOnly: true,
+  },  {
+    // Archery (2026-10-14): a clone of the archery game in Snapchat's Games (Matt's recording,
+    // docs/ARCHERY-BRIEF.md). 3 rounds of 3 arrows; touch and hold to draw, drag to aim through
+    // the sight, let go; the wind gets stronger each round. Vs the computer, two players on one
+    // phone, or turn-by-turn challenges (archery/CLAUDE.md). Owns the whole viewport: a stadium.
+    id: 'archery',
+    added: '2026-10-14',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Archery', es: 'Tiro con arco' },
+    blurb: { en: 'Hold to draw, aim through the sight and let fly. Mind the wind. Most points in three rounds wins.',
+      es: 'Mantén para tensar, apunta con el visor y suelta. Ojo con el viento. Gana quien más puntos haga en tres rondas.' },
+    module: '../archery/js/ui.js',
+    // Online challenges: a new one, your turn, or a result you missed, on the launcher.
+    alerts: () => import('../archery/js/alert.js'),
+    immersive: true,
+    accent: '#1f6fe5',
+    art: GAME_ART['archery'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
   },
+
   {
     id: 'hoops4',
     added: '2026-09-21',            // sort-only (the launcher's Newest order); never the New pill
@@ -652,6 +672,10 @@ function hiddenFromPlayer(g, code, dev) {
  *  and forth costs nothing; short enough that a phone kept alive all day still catches the day's
  *  deploys. See `_checkForNewBuild`. */
 const UPDATE_ASK_MS = 5 * 60 * 1000;
+// A tapped notification, kept across a reload (_queuePushOpen). sessionStorage, not a gamehub.* key.
+const PUSH_OPEN_KEY = 'hub.pushOpen';
+const PUSH_OPEN_MS = 2 * 60 * 1000;
+const PUSH_GRACE_MS = 1200;
 
 class Hub {
   constructor(root) {
@@ -717,7 +741,12 @@ class Hub {
     this._onMessagesChanged = () => this._paintReplyBadge();
     window.addEventListener('gamehub:messages', this._onMessagesChanged);
     this._afterPaint(() => this._maybeAnnounce());
-    this._afterPaint(() => this._checkGameAlerts().then(() => this._openFromUrl()));
+    // A tapped notification is taken STRAIGHT AFTER PAINT, not after the alert check (2026-10-14):
+    // that check reads every challenge game's index over the network, and a Firebase read on a bad
+    // connection never settles, so a cold start from a notification could sit on the launcher for
+    // ever. Opening a named match needs nothing from it.
+    this._afterPaint(() => this._openFromUrl());
+    this._afterPaint(() => this._checkGameAlerts());
     // PUSH NOTIFICATIONS (2026-09-23, js/push.js): keep this device's stored address current, and
     // take a tapped notification to its game. Both lazy; neither can break the launcher.
     this._afterPaint(() => { import('./push.js').then((m) => m.refreshPush()).catch(() => {}); });
@@ -739,7 +768,12 @@ class Hub {
     this._afterPaint(this._clearPushes);
     document.addEventListener('visibilitychange', this._clearPushes);
     this._onSwMessage = (e) => {
-      if (e && e.data && e.data.type === 'OPEN_GAME') this._openPushedGame(e.data.game, e.data);
+      if (e && e.data && e.data.type === 'OPEN_GAME') {
+        // Written down FIRST, so a reload that lands before the game is open (a new build applying
+        // itself on resume) cannot swallow the tap: the next page load takes it (_openFromUrl).
+        this._queuePushOpen(e.data.game, e.data);
+        this._openPushedGame(e.data.game, e.data);
+      }
     };
     try { navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', this._onSwMessage); } catch {}
     // Subscribe to the service worker's lifecycle so the version chip can never go stale again,
@@ -1386,7 +1420,8 @@ class Hub {
   }
 
   /** A notification tapped with no hub open arrives as `?open=<game>`: take it once, then drop the
-   *  parameter so a reload does not re-open the game. */
+   *  parameter so a reload does not re-open the game. A tap that arrived as a message just before
+   *  this page reloaded (see _queuePushOpen) is taken here too. */
   _openFromUrl() {
     let id = null; let extra = {};
     try {
@@ -1396,10 +1431,37 @@ class Hub {
       if (id) {
         u.searchParams.delete('open'); u.searchParams.delete('with'); u.searchParams.delete('match');
         history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+        this._queuePushOpen(id, extra);
       }
-    } catch { return; }
-    if (id) this._openPushedGame(id, extra);
+    } catch { /* no URL to read */ }
+    const q = this._peekPushOpen();
+    if (q) this._openPushedGame(q.id, q.extra);
   }
+
+  // --- A TAPPED NOTIFICATION SURVIVES A RELOAD (2026-10-14) ----------------------------------------
+  // Matt: "lately when i click a notification that it's my turn in whatever challenge i'm playing,
+  // it brings me to the hub, but doesn't necessarily open the challenge." Tapping a notification
+  // brings the app back to the front, which is also the moment `_onResume` notices a new build and
+  // reloads the launcher onto it (several deploys a day, so most taps). The OPEN_GAME message was
+  // handled in memory, so the reload threw it away. Now the tap is written to sessionStorage (which a
+  // reload keeps) before anything else, read again on the next load, and cleared only once the
+  // game has actually been launched. A tap older than PUSH_OPEN_MS is ignored, so a stale one can
+  // never open a game by surprise later. A one-tap convenience, never player data.
+  _queuePushOpen(id, extra = {}) {
+    try {
+      sessionStorage.setItem(PUSH_OPEN_KEY, JSON.stringify({ id: String(id || ''), at: Date.now(),
+        extra: { with: String(extra.with || ''), name: String(extra.name || ''), match: String(extra.match || '') } }));
+    } catch { /* no sessionStorage: the in-memory path still runs */ }
+  }
+  _peekPushOpen() {
+    try {
+      const q = JSON.parse(sessionStorage.getItem(PUSH_OPEN_KEY) || 'null');
+      if (q && q.id && Date.now() - (+q.at || 0) < PUSH_OPEN_MS) return q;
+      sessionStorage.removeItem(PUSH_OPEN_KEY);
+    } catch { /* nothing queued */ }
+    return null;
+  }
+  _clearPushOpen() { try { sessionStorage.removeItem(PUSH_OPEN_KEY); } catch { /* fine */ } }
 
   /**
    * A TAPPED NOTIFICATION, onto its game (2026-09-23). Only from the launcher: a player in the
@@ -1407,19 +1469,42 @@ class Hub {
    * With the game already open, its own live watch has the new turn on the board.
    */
   async _openPushedGame(id, extra = {}) {
-    if (this.current) return;
+    // One at a time: the same tap can arrive twice (the message, and its queued copy read after
+    // paint), and two launches racing would mount the game twice.
+    if (this._pushOpening) return;
+    this._pushOpening = true;
+    try { await this._openPushedGameNow(id, extra); } finally { this._pushOpening = false; }
+  }
+
+  async _openPushedGameNow(id, extra = {}) {
+    if (this.current) {
+      this._clearPushOpen();
+      // THE SAME GAME IS ALREADY OPEN (2026-10-14): hand it the match instead of doing nothing,
+      // if the game knows how (`openArmed`, Flick Soccer first). Another game is never interrupted.
+      const m = /^[A-Za-z0-9_-]{4,40}$/.test(String(extra.match || '')) ? String(extra.match) : '';
+      const g0 = GAMES.find((x) => x.id === id);
+      const mod0 = this.current.module;
+      if (m && g0 && this.current.id === id && typeof g0.alerts === 'function' && mod0 && typeof mod0.openArmed === 'function') {
+        try {
+          const al = await g0.alerts();
+          if (typeof al.armOpen === 'function' && this.current && this.current.id === id) { al.armOpen(m); mod0.openArmed(); }
+        } catch (err) { console.warn('[hub] could not hand the notified match to the open game', err); }
+      }
+      return;
+    }
     // (2026-09-24) Not every notification is a game: a message opens that conversation, a bug
     // report opens Matt's inbox. Same rule - only from the launcher, never over a game.
     if (id === 'messages') {
+      this._clearPushOpen();
       const to = /^[A-Z2-9]{5}$/.test(String(extra.with || '')) ? extra.with : '';
       import('./messages-ui.js')
         .then((m) => m.openMessages(to ? { to, toName: String(extra.name || '') } : {}))
         .catch((err) => console.error('[hub] messages failed to load', err));
       return;
     }
-    if (id === 'bugs') { this.openBugInbox(); return; }
+    if (id === 'bugs') { this._clearPushOpen(); this.openBugInbox(); return; }
     const g = GAMES.find((x) => x.id === id);
-    if (!g) return;
+    if (!g) { this._clearPushOpen(); return; }
     // A game released from the admin page is only on the launcher once the config has landed, and
     // on a cold start (the notification opened the app) it may not have yet. Wait for it, briefly.
     if (!this.games.some((x) => x.id === id)) {
@@ -1427,7 +1512,7 @@ class Hub {
         const stop = onAdminConfig(() => { stop(); clearTimeout(tm); setTimeout(resolve, 0); });
         const tm = setTimeout(() => { stop(); resolve(); }, 6000);
       });
-      if (this.current || !this.games.some((x) => x.id === id)) return;
+      if (this.current || !this.games.some((x) => x.id === id)) { this._clearPushOpen(); return; }
     }
     // STRAIGHT INTO THE MATCH THE NOTIFICATION IS ABOUT (2026-09-24), when it names one and the
     // game's alerts module can open a match directly (hoops4 `armOpen`). Before this a tap only
@@ -1442,16 +1527,19 @@ class Hub {
           // Any bubble for this game is answered by opening it, so it goes, like a bubble tap.
           const st = this._alertFor(id);
           if (st && st.alert.kind !== 'over') this._dismissGameAlert(id);
-          this.launch(id);
+          // Cleared only once the game is MOUNTED: a reload while it downloads must still find it.
+          await this.launch(id);
+          if (this.current && this.current.id === id) this._clearPushOpen();
           return;
         }
       } catch (err) { console.warn('[hub] could not open the notified match', err); }
       if (this.current) return;
     }
     await this._checkGameAlerts();
-    if (this.current) return;
-    if (this._alertFor(id)) this._openAlertGame(id);
-    else this.launch(id);
+    if (this.current) { this._clearPushOpen(); return; }
+    if (this._alertFor(id)) await this._openAlertGame(id);
+    else await this.launch(id);
+    this._clearPushOpen();
   }
 
   /** The grid cell holding a game's tile. A favourited game is drawn twice; the first is the
@@ -1713,8 +1801,16 @@ class Hub {
   _applyUpdate() {
     if (this._destroyed || this._reloaded || this.current) return;
     this._reloaded = true;
-    noteLifecycle('refreshing onto the new build');
-    location.reload();
+    // A notification tap and a new build often arrive TOGETHER (both on resume). Give the tap a
+    // moment to open its game first; if it did, the refresh waits for the launcher like any other
+    // (showLauncher takes _updateWaiting). Either way the tap is also queued (_queuePushOpen), so a
+    // reload that does go ahead hands it to the next page.
+    setTimeout(() => {
+      if (this._destroyed) return;
+      if (this.current) { this._reloaded = false; this._updateWaiting = true; noteLifecycle('holding the refresh: a game opened'); return; }
+      noteLifecycle('refreshing onto the new build');
+      location.reload();
+    }, PUSH_GRACE_MS);
   }
 
   /** 'game-hub-v108' -> 'v108' (null passes through). */

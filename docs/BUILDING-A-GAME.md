@@ -426,6 +426,16 @@ The rules that make it safe, each from a real game:
   on a swipe or drag surface, and be tested with a simulated 59px top inset (a headless browser
   has none; see `hoops4/CLAUDE.md`, "Two buttons in one place").
 
+**The other player's card is SEE-THROUGH and TAP-THROUGH** (2026-10-14, Matt with a screenshot of a
+card over his Flick Soccer pitch: *"Please make this pop up transparent. I was in the middle of my
+move."*). It takes no touch at all, so a drag under it reaches the game; only its 44px ✕ is
+tappable. Never make the card catch taps again: a chat line must never block a move.
+
+**The panel is the CONVERSATION first** (2026-10-14, Matt: *"You can't even tell there are messages
+because the quick chat options take up almost all the space"*): a titled, scrolling thread of the
+last 20 lines takes the room, and the palette is two thin rows that swipe sideways (emojis, then
+phrases). Do not grow the palette back into a grid.
+
 **Connect 4 Hoops keeps its own older copy** (`hoops4/js/mp-ui.js` `createMatchChat`, chat inside
 `hoops/games/<id>/chat`): it came first and works. Do not copy it; use the shared pair. The
 live-room card games (Chinchón, Escoba, Tic Tac Toe and the rest) use `js/mp-reactions-ui.js`'s

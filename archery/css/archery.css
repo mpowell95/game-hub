@@ -1,0 +1,636 @@
+/* archery/css/archery.css - every rule descendant-scoped under .ar-root (Mancala's discipline,
+   docs/BUILDING-A-GAME.md "CSS scoping"). A fixed daylight-stadium look in both hub themes, so
+   .gh-dark changes nothing here (the Hard shape is a black diamond and needs the light card). */
+
+.ar-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+  background: #8cc4f2;
+  color: #fff;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --ar-ink: #14213a;
+  --ar-card: #f7faff;
+  --ar-blue: #1f6fe5;
+  --ar-red: #e0362b;
+  --ar-yellow: #ffe23b;
+  --gh-accent: #1f6fe5;
+}
+.ar-root,
+.ar-root * {
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ar-root button { font: inherit; cursor: pointer; touch-action: manipulation; }
+.ar-root button > span,
+.ar-root button > b,
+.ar-root button > svg { pointer-events: none; }
+.ar-root :focus-visible { outline: 3px solid #ffce3a; outline-offset: 3px; }
+.ar-root [hidden] { display: none !important; }
+
+.ar-root .ar-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ------------------------------------------------------------------ the bow and the arm --- */
+/* An SVG laid over the canvas; ui.js moves its origin (the sight's centre) onto the aim point. */
+.ar-root .ar-arm {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+.ar-root .ar-arm-svg { position: absolute; left: 0; top: 0; display: block; }
+.ar-root .ar-bow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+  z-index: 1;
+  will-change: transform;
+}
+.ar-root .ar-bow-svg {
+  position: absolute;
+  left: -260px;
+  top: -1000px;
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25));
+}
+.ar-root .ar-leaves { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.ar-root .ar-leaf {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 14px;
+  display: block;
+  opacity: 0.9;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+.ar-root .ar-leaf svg { width: 100%; height: 100%; display: block; }
+
+/* The "touch and hold" hint: a pulsing dot under a pointing hand, left of the grip. */
+.ar-root .ar-hintdot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.ar-root .ar-hintdot.is-show { opacity: 1; }
+.ar-root .ar-hintdot i {
+  position: absolute;
+  left: -26px;
+  top: -26px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 238, 60, 0.95) 0 45%, rgba(255, 238, 60, 0.35) 46% 100%);
+  animation: ar-dot 1.9s ease-in-out infinite;
+}
+.ar-root .ar-hintdot svg { position: absolute; left: -6px; top: -4px; width: 40px; height: 48px; animation: ar-tap 1.9s ease-in-out infinite; }
+@keyframes ar-dot {
+  0% { transform: scale(0.2); opacity: 0; }
+  30% { transform: scale(0.9); opacity: 1; }
+  55% { transform: scale(1.1); opacity: 0.9; }
+  80%, 100% { transform: scale(1.15); opacity: 0; }
+}
+@keyframes ar-tap {
+  0%, 100% { transform: translate(6px, 8px); }
+  30%, 60% { transform: translate(0, 0); }
+}
+
+/* ------------------------------------------------------------------ the HUD --- */
+/* The round pill and the arrow tiles, top centre. Clear of the hub's floating back button
+   (top-left) and of the menu button (top-right). */
+.ar-root .ar-top {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 50px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 3;
+  pointer-events: none;
+}
+.ar-root.is-setup .ar-top,
+.ar-root.is-setup .ar-side,
+.ar-root.is-setup .ar-menubtn { visibility: hidden; }
+.ar-root:not(.is-playing) .ar-top,
+.ar-root:not(.is-playing) .ar-side,
+.ar-root:not(.is-playing) .ar-menubtn { visibility: hidden; }
+.ar-root .ar-round {
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.ar-root .ar-tiles {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: #0f4fae;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.ar-root .ar-tiles.is-red { background: #a3161b; }
+.ar-root .ar-tile {
+  width: 36px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--ar-blue);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+.ar-root .ar-tiles.is-red .ar-tile { background: var(--ar-red); }
+.ar-root .ar-tile.is-set { animation: ar-tile 0.35s ease-out; }
+@keyframes ar-tile { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+.ar-root .ar-ibtn {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 50px);
+  right: 10px;
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(10, 30, 60, 0.7);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.ar-root .ar-ibtn svg { width: 22px; height: 22px; }
+
+/* The wind card and the two totals, down the left side (the recording). */
+.ar-root .ar-side {
+  position: absolute;
+  left: 8px;
+  top: 47%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.ar-root .ar-wind {
+  width: 64px;
+  margin: 0 0 12px 4px;
+  padding: 6px 4px 4px;
+  border-radius: 10px;
+  background: rgba(16, 22, 34, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.ar-root .ar-wind i {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #fff;
+  color: #2d8cf0;
+}
+.ar-root .ar-wind i svg { width: 30px; height: 30px; display: block; }
+.ar-root .ar-wind b { font-size: 12px; font-weight: 900; letter-spacing: 0.02em; color: #fff; white-space: nowrap; }
+.ar-root .ar-score {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 92px;
+  height: 40px;
+  padding: 0 18px 0 6px;
+  clip-path: polygon(0 0, 100% 0, 86% 100%, 0 100%);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.ar-root .ar-score-them { background: var(--ar-red); }
+.ar-root .ar-score-me { background: var(--ar-blue); }
+.ar-root .ar-score-ava {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+}
+.ar-root .ar-score b { font-size: 22px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); }
+.ar-root .ar-vs {
+  margin: -6px 0 -6px 34px;
+  position: relative;
+  z-index: 1;
+  font-size: 14px;
+  font-weight: 900;
+  font-style: italic;
+  color: #fff;
+  -webkit-text-stroke: 1px #0f2a55;
+  paint-order: stroke fill;
+}
+
+/* The yellow Your Turn button, and the waiting line, along the bottom. */
+.ar-root .ar-bottom {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.ar-root .ar-bottom > * { pointer-events: auto; }
+.ar-root .ar-go {
+  width: min(420px, 100%);
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ar-yellow);
+  color: #111;
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: 0 4px 0 #c9ad16, 0 6px 16px rgba(0, 0, 0, 0.3);
+  animation: ar-glow 1.6s ease-in-out infinite;
+}
+.ar-root .ar-go svg { width: 22px; height: 22px; }
+@keyframes ar-glow {
+  0%, 100% { box-shadow: 0 4px 0 #c9ad16, 0 6px 16px rgba(0, 0, 0, 0.3); }
+  50% { box-shadow: 0 4px 0 #c9ad16, 0 0 0 6px rgba(255, 226, 59, 0.45), 0 6px 16px rgba(0, 0, 0, 0.3); }
+}
+.ar-root .ar-wait {
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(10, 20, 40, 0.78);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.ar-root .ar-waitback { min-width: 200px; }
+
+/* ------------------------------------------------------------------ effects --- */
+.ar-root .ar-fx { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.ar-root .ar-pop {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  animation: ar-pop 0.45s ease-out both;
+}
+.ar-root .ar-pop b {
+  position: relative;
+  z-index: 1;
+  display: block;
+  font-size: 64px;
+  font-weight: 900;
+  line-height: 1;
+  color: #ffd21f;
+  -webkit-text-stroke: 4px #1a1a1a;
+  paint-order: stroke fill;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+}
+@keyframes ar-pop {
+  0% { opacity: 0; transform: translate(-50%, -60%) scale(0.3); }
+  60% { opacity: 1; transform: translate(-50%, -100%) scale(1.25); }
+  100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+}
+.ar-root .ar-pop.is-still { animation: none; }
+.ar-root .ar-star {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  color: #ffe23b;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+  animation: ar-star 0.8s ease-out both;
+}
+.ar-root .ar-star svg { width: 100%; height: 100%; display: block; }
+@keyframes ar-star {
+  0% { opacity: 1; transform: translate(0, 0) scale(0.4) rotate(0deg); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) rotate(160deg); }
+}
+
+.ar-root .ar-banner {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  opacity: 0;
+  max-width: calc(100% - 24px);
+  text-align: center;
+}
+.ar-root .ar-banner b {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #fff;
+  -webkit-text-stroke: 3px #10284f;
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+.ar-root .ar-banner span {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+.ar-root .ar-banner span:empty { display: none; }
+.ar-root .ar-banner[data-kind="miss"] b { color: #ffd21f; -webkit-text-stroke-color: #1a1a1a; }
+.ar-root .ar-banner.is-show { animation: ar-banner 1.4s ease-out forwards; }
+@keyframes ar-banner {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  25% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.ar-root .ar-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  margin: 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 0.3s;
+}
+.ar-root .ar-hint.is-show { opacity: 1; }
+
+/* ------------------------------------------------------------------ overlays --- */
+.ar-root .ar-ov {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(env(safe-area-inset-top, 0px), 50px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: rgba(8, 20, 40, 0.45);
+  overscroll-behavior: contain;
+}
+.ar-root .ar-ov-setup { align-items: flex-start; background: rgba(8, 20, 40, 0.25); }
+.ar-root .ar-ov-setup > .ar-card { margin-block: auto; }
+.ar-root .ar-card {
+  position: relative;
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 18px 16px 16px;
+  border-radius: 18px;
+  background: var(--ar-card);
+  color: var(--ar-ink);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.4);
+  border: 3px solid #d6e4f7;
+}
+.ar-root .ar-card-sm { width: min(320px, 100%); align-items: stretch; text-align: center; }
+.ar-root .ar-logo {
+  margin: 0;
+  text-align: center;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--ar-blue);
+  letter-spacing: 0.02em;
+}
+.ar-root .ar-tag { margin: -4px 0 2px; text-align: center; font-size: 14px; font-weight: 600; color: #4a5a76; }
+.ar-root .ar-field { display: flex; flex-direction: column; gap: 4px; }
+.ar-root .ar-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #4f6080; }
+.ar-root .ar-seg { display: flex; width: 100%; padding: 2px; background: #e3ecf8; border-color: #cbd9ee; }
+/* The pills are DRAWN 32px tall and TAP 44px tall (Darts' documented exception): the ::after
+   reaches 6px above and below, into the label and the gap, which hold nothing tappable. */
+.ar-root .ar-seg .ar-seg-item { position: relative; flex: 1 1 0; min-width: 0; min-height: 32px; padding: 0 6px; color: #3e4d68; font-size: 14px; }
+.ar-root .ar-seg .ar-seg-item::after { content: ''; position: absolute; inset: -6px 0; }
+.ar-root .ar-seg .ar-seg-item[aria-pressed="true"] { background: #fff; color: var(--ar-ink); box-shadow: 0 0 0 2px var(--ar-blue); }
+.ar-root .ar-seg .ar-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-root .ar-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
+.ar-root .ar-gobtn { font-size: 17px; font-weight: 800; }
+.ar-root .ar-go-row { display: flex; gap: 8px; }
+.ar-root .ar-go-row > .ar-alt { flex: 0 0 auto; width: auto; white-space: nowrap; padding-inline: 16px; }
+.ar-root .ar-go-row > .ar-gobtn { flex: 1 1 0; min-width: 0; }
+.ar-root .ar-alt { background: #fff; color: var(--ar-ink); border-color: #c9d6ea; }
+.ar-root .ar-h2 { margin: 0 40px 4px; text-align: center; font-size: 22px; font-weight: 900; color: var(--ar-ink); }
+.ar-root .ar-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #e3ecf8;
+  color: #3e4d68;
+}
+.ar-root .ar-x svg { width: 20px; height: 20px; }
+.ar-root .ar-q { font-family: inherit; font-size: 22px; font-weight: 900; line-height: 1; color: #3e4d68; }
+.ar-root .ar-res-ava { margin: 4px 0 0; font-size: 46px; line-height: 1; }
+.ar-root .ar-res-line { margin: -4px 0 4px; font-size: 14px; font-weight: 700; color: #4a5a76; }
+.ar-root .ar-pass {
+  min-height: 170px;
+  justify-content: center;
+  align-items: center;
+  font-family: inherit;
+  cursor: pointer;
+}
+.ar-root .ar-pass-ava { font-size: 40px; line-height: 1; }
+.ar-root .ar-pass b { font-size: 22px; font-weight: 900; color: var(--ar-ink); }
+.ar-root .ar-pass span { font-size: 14px; font-weight: 700; color: #4a5a76; }
+.ar-root .ar-danger { background: #fff; color: #a3161b; border-color: #e3b9b9; }
+
+/* How to play: one line per rule, each kept to a single row (docs/BUILDING-A-GAME.md). */
+.ar-root .ar-help { width: min(360px, 100%); gap: 8px; text-align: center; }
+.ar-root .ar-help-goal { margin: 0; font-size: 14px; font-weight: 800; white-space: nowrap; }
+.ar-root .ar-help-svg { display: block; width: 100%; max-width: 280px; margin: 0 auto; background: #3fa83a; border-radius: 12px; }
+.ar-root .ar-help-lines { display: flex; flex-direction: column; gap: 7px; }
+.ar-root .ar-help-line { margin: 0; font-size: 12.5px; font-weight: 600; color: #2c3a52; white-space: nowrap; }
+
+/* Multiplayer, the setup card's first row (Cup Pong, Hoops and Darts have the same row). */
+.ar-root .ar-mprow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid #cbd9ee;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ar-ink);
+  text-align: left;
+}
+.ar-root .ar-mprow b { flex: 1 1 auto; font-size: 17px; font-weight: 800; }
+.ar-root .ar-mprow-badge { flex: 0 0 auto; padding: 3px 9px; border-radius: 999px; background: var(--ar-blue); color: #fff; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.ar-root .ar-mprow-chev { flex: 0 0 auto; font-size: 24px; line-height: 1; color: var(--ar-blue); }
+
+/* Clear of the hub's floating back button (top-left): the card starts below it. */
+.ar-root .ar-ov-mp { align-items: flex-start; padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.ar-root .ar-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
+.ar-root .ar-mp-top { display: flex; align-items: center; gap: 6px; }
+.ar-root .ar-mp-back {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #e3ecf8;
+  color: var(--ar-ink);
+}
+.ar-root .ar-mp-back svg { width: 22px; height: 22px; }
+.ar-root .ar-mp-title { margin: 0; text-align: left; flex: 1 1 auto; min-width: 0; }
+.ar-root .ar-mp-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.ar-root .ar-mp-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.ar-root .ar-mp-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4f6080;
+}
+.ar-root .ar-mp-h span { padding: 1px 7px; border-radius: 999px; background: var(--ar-blue); color: #fff; font-size: 11px; }
+.ar-root .ar-mp-note { margin: 0; text-align: center; font-size: 14px; font-weight: 600; color: #4a5a76; }
+.ar-root .ar-mp-err { color: #a3161b; font-weight: 800; }
+.ar-root .ar-mp-vs { margin: 6px 0 0; text-align: center; font-size: 22px; font-weight: 900; color: var(--ar-ink); }
+.ar-root .ar-mp-vs span { font-size: 30px; margin-right: 4px; }
+.ar-root .ar-mp-search { font-size: 16px; -webkit-user-select: text; user-select: text; }
+.ar-root .ar-mrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 2px solid #d6e4f7;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ar-ink);
+  font: inherit;
+  text-align: left;
+}
+.ar-root .ar-mrow.is-mine { border-color: var(--ar-blue); box-shadow: 0 0 0 1px var(--ar-blue) inset; }
+.ar-root .ar-mrow.is-static { cursor: default; }
+.ar-root .ar-mrow-face { flex: 0 0 auto; width: 34px; font-size: 26px; line-height: 1; text-align: center; }
+.ar-root .ar-mrow-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.ar-root .ar-mrow-name { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-root .ar-mrow-sub { font-size: 12px; font-weight: 600; color: #4a5a76; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-root .ar-mrow-chev { flex: 0 0 auto; font-size: 24px; color: var(--ar-blue); }
+.ar-root .ar-rec { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ar-root .ar-hmark { flex: 0 0 auto; width: 34px; text-align: center; font-size: 20px; font-weight: 900; color: #4a5a76; }
+.ar-root .ar-mrow.is-won .ar-hmark { color: #1f6b3a; }
+
+.ar-root .ar-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(10, 20, 40, 0.9);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+.ar-root .ar-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Quick chat (js/match-chat-ui.js): the panel must scroll on a short phone and its free-text box
+   must stay typeable under the root's user-select: none. */
+.ar-root .ghc-panel { touch-action: pan-y; }
+.ar-root .ghc-input { -webkit-user-select: text; user-select: text; }
+
+/* Reduced motion thins the garnish (the hint's pulse, the glow, stars, the banner's bounce), never
+   the game: the arrow still flies and the sight still sways. Nothing structural is hidden. */
+@media (prefers-reduced-motion: reduce) {
+  .ar-root .ar-hintdot i,
+  .ar-root .ar-hintdot svg,
+  .ar-root .ar-go,
+  .ar-root .ar-tile.is-set { animation: none; }
+  .ar-root .ar-star { display: none; }
+  .ar-root .ar-banner.is-show { animation: ar-banner-still 1.4s linear forwards; }
+  .ar-root .ar-hint, .ar-root .ar-hintdot { transition: none; }
+}
+@keyframes ar-banner-still { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }

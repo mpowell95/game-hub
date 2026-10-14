@@ -1,0 +1,406 @@
+> **Not auto-loaded.** This is the full text of `darts/CLAUDE.md` as it stood on 2026-10-14, moved here word for word when that file was trimmed. `CLAUDE.md` holds the current rules in short form; this file holds the incidents, measurements and reasoning behind them. Read the relevant section here before changing anything it covers in depth. Section headings are unchanged, so references like `darts/CLAUDE.md, "Some heading"` can be found here.
+
+# Darts — darts/CLAUDE.md
+
+> **THE LAW** (root `CLAUDE.md`): player data is never deleted, never lost, never put at risk.
+> Read it there before touching anything that records or stores. The working rules are in
+> `js/CLAUDE.md`.
+
+A clone of GamePigeon's Darts (Matt, 2026-10-01: *"create a darts game for the game hub. I just
+uploaded the game pigeon version to dropbox for you to clone"*). The reference is a 66 s screen
+recording, `Claude Code Refs/Video Sep 30 2026, 11 54 01 PM.mp4` in Matt's Dropbox.
+
+What the recording showed, and what was copied: a wooden wall, a full-width board (black and cream
+beds, red and green rings, white numbers on a black frame), a big red dart waiting at the bottom
+with its flights turning, swipe up to throw, three darts a turn (tiny dart icons count them down),
+the points popping up at the hit with the bed flashing, "MISS!" off the scoring area, avatars and
+green score plaques in the bottom corners, a menu button top right, 301 counting down.
+
+## Hub integration
+
+- In-hub `module: '../darts/js/ui.js'`, **immersive** (the wall is full bleed; the top row keeps
+  right of the hub's floating back button). Hub id and stats id are both `darts`. Prefix
+  `.dt-root` / `.dt-`.
+- **ADMIN ONLY at first** (`devOnly: true`, no `released` date; still admin only on 2026-10-01). Matt releases it from the admin
+  page with no commit; its `GAME_META` row, My Stats tab and leaderboard wiring already ship, so
+  every result recorded before the release shows the moment it is released.
+- `isInProgress()` is always `false`: the match autosaves after every dart and every hand-over
+  (`gamehub.darts.save.v1`) and the setup screen offers **Continue match**. Leaving is lossless.
+
+## The games (2026-10-01)
+
+Matt, after the first build: *"Please add 201 and 101. And add cricket. With options of in order or
+any order."* Setup has a **Game** row (301 / 201 / 101 / Cricket) and, for Cricket, an **Order** row
+(Any order / In order); both persist in `gamehub.darts.v1` (`game`, `order`). The match carries
+`kind` (engine.js `KINDS`: `'301' | '201' | '101' | 'cricket' | 'cricket-order'`). **A match with no
+`kind` is 301**: every save and every online match made before this has none, and `validMatch` /
+`mp.js kindOfGame` read it that way, so nothing saved is lost or misread.
+
+- **201 and 101**: 301's rules from a lower start.
+- **Cricket** (`throwCricket`): 20 down to 15 and the bull. A single is one mark, a double two, a
+  treble three; the outer bull one, the bullseye two. Three marks close a number. Marks past the
+  third score the number's value (the bull 25) while the other player has it open. **Win: every
+  number closed and at least as many points**, checked after every dart (so a player who closes
+  everything while behind keeps throwing to score). No bust in Cricket.
+- **In order** (`cricket-order`): only the number you are on takes marks, 20, 19, 18, 17, 16, 15,
+  then the bull (`cricketNext`). A number you have already closed still scores points. **This
+  reading was my choice** (in-order cricket has several house rules); if Matt plays it another way,
+  it is `cricketCounts` in engine.js.
+- **Points: On / Off** (2026-10-05, Matt: *"Points are on by default? Is there a setting to turn them
+  off?"* then *"Add the on/off option"*): a third Cricket choice beside Order on the setup card (the
+  two share one row, `.dt-pair`, so the card still fits a short phone). Off makes the kind
+  `cricket-np` / `cricket-order-np` (`noPoints`, `inOrder` in engine.js): marks past the third count
+  for nothing and the first to close all seven wins. The plaques then show numbers closed instead of a
+  points total that would always read 0 (`_plaques`). Carried online like any kind (old matches and
+  saves are untouched: a kind they never had cannot appear in them).
+- **The chalkboard** (`_marksHud`): each seat's marks (/ X circled X) above its own plaque, either
+  side of the dart; in order, the number each player is on is ringed in `#ffce3a`; a number both
+  have closed is struck through. The plaques show points. On a short phone the board shrinks a
+  little so seven rows of at least 15px fit (`_layout`).
+- **A dart on a bed that counts for nothing** (7, or 19 while 20 is open in order) pops up dimmed
+  with no flash; a counting dart pops up its bed (T20, D16, BULL) and `+points` if it scored.
+- **The computer** (`chooseCricketTarget`): behind on points with a number it can score on, it
+  scores there; otherwise it goes for its next number (in order: the one it is on; any order: the
+  highest open). Easy aims at singles and never chases points. Hard vs hard: ~18 turns a game.
+- **Stats**: every game records into the same `recordResult('darts', ...)` buckets (one Darts record;
+  no per-game split). Online: the challenger's setup choice is sent as the match's `kind`; a rematch
+  is the same game; the match rows and the push say which game it is.
+
+## Rules (engine.js, pure, tested by `node darts/js/test.js`)
+
+- **301 (and 201, 101), down to exactly zero. No double-out**: any dart that lands on zero wins. **Below zero is
+  a bust**: the score goes back to where that turn started and the turn ends. I could not confirm
+  from the recording whether GamePigeon requires a double to finish (no finish was filmed); no
+  double-out is the simpler rule and the one GamePigeon is generally described with. If Matt says
+  otherwise, it is one branch in `throwDart()`.
+- **Equal turns (2026-10-08)**, on every match made from that day (`eq: true` on the match; absent =
+  the old rules, so every older save and online match replays unchanged). When the player who threw
+  FIRST finishes (x01 zero, or Cricket closed out level or ahead), the engine returns `'out'` instead
+  of `'win'`: the turn passes and the other player gets one last turn ("Last turn" banner). Finish
+  too = **a draw** (`m.winner === DRAW`, -1); bust or three darts without finishing = the first
+  player wins (the event stays `'bust'`/`'end'` with `m.winner` set, so BUST still shows). The
+  SECOND player finishing first wins at once. Online a draw is stored as
+  `over: { winner: 'draw', why: 'tie' }`, rows say `result: 'draw'`, and it counts as a played game
+  in the `mp` bucket with no win or loss. **Since 2026-10-13 a new match never draws: see Overtime
+  below**; the draw rules above still apply to every match made before then (no `ot`). **Push gap:** `decideDarts` (functions/) only notifies on
+  the other person's loss or a resign, so a win on the other's last turn, or a draw, sends no push.
+- **Overtime (2026-10-13)**, Matt: *"Draws shouldn't be allowed. It should go over time"*. On every
+  match made from that day (`ot: true`, only with `eq`; absent = a tie stays a draw, so older saves
+  and online matches replay unchanged), the tie that used to be a draw returns `'tie'`, sets
+  `m.bo = [null, null]` and hands the board to the player who threw first. **Overtime is one dart
+  each, closest to the middle of the bull wins** (`throwOvertime`; a dart off the wall still has a
+  distance, so it loses to anything on the board). Exactly level throws again ("Still tied").
+  Scores and marks are frozen; every overtime turn is one dart (`dartsPerTurn`); the computer aims
+  at the bull. The first thrower's dart stays drawn in the board while the second throws. **This
+  rule was my choice** (Matt asked for overtime, not its form): it is the standard darts tiebreak
+  (the bull throw), works for every game, and ends in two darts. Online it is stored as
+  `over.why: 'overtime'`; the result says "Won in overtime". Pinned by `darts/js/test.js` 3b3 and
+  `test-darts-mp.mjs`.
+- `VOIDED_MATCHES` (`js/stats-corrections.js`) is honoured by `mp.js` (left out of every list, never
+  counted; a phone that had counted one notes `games.darts.vd[<id>]` and `correctStats` subtracts it).
+- Board geometry is the standard board in units of R (the double's outer wire): bull 50 inside
+  0.0374R, 25 inside 0.0935R, treble 0.5824-0.6294R, double 0.9529-1R. `RING.frame` (1.27R) is
+  the black number ring: a dart there sticks and scores nothing ("MISS!"); beyond it the dart
+  falls off the wall.
+- **The computer** (`computerThrow`) aims (`chooseTarget`) and then misses by a 2D gaussian
+  (`SPREAD`: easy 0.36R, medium 0.24R, hard 0.10R; until 2026-10-02 0.30 / 0.17 / 0.085, when
+  Matt lost at Cricket to Medium, who "basically didn't miss": it made 1.5 marks a turn, now ~1.0;
+  Hard ~2.7, Easy ~0.4, pinned by `darts/js/test.js`). Aim: an exact one-dart finish if there is one
+  (single, then double, then treble or bull); otherwise treble 20 above 80; otherwise a single
+  that leaves 20 or less. Easy has no plan and throws at the bull. Measured averages per dart
+  aimed at the treble 20 (seeded): easy 12.0, medium 12.2, hard 19.4 (medium's edge in 301 is its
+  finishing plan, not its aim).
+
+## The throw (the one thing to tune on a real phone)
+
+`flickLanding()`: touch anywhere below the board (or on the dart), the dart follows the finger,
+let go moving upward.
+
+- **Left/right**: from where the dart is let go, it carries on in the direction of the WHOLE swipe
+  (touch-down to release), so swiping toward a number aims at it. Until 2026-10-05 the direction was
+  the last ~90 ms of the finger; a swipe straightens at the very end, so Matt's diagonal swipes
+  "moved right only until I take my finger off the screen. Then it goes straight from there."
+  Measured with real drags in Chromium: drift right then finish straight up, 1.43 -> 1.89 R right;
+  a steady diagonal and a straight-up swipe unchanged. The price: a sideways reposition before an
+  upward flick now counts as aim. (Anchoring the line at touch-down instead was tried and rejected
+  the same day: a long swipe ends past the landing height, so the dart came back toward the middle.)
+- **Height**: the flick's upward speed alone, in screen heights per second, measured over the last
+  ~90 ms before release. `FLICK_MID` (3.1; 2.3 until 2026-10-02, when Matt found the bottom of the board too hard to reach: *"I think the dart needs to feel heavier"*) lands at the height of the bull; `FLICK_GAIN` (1.45R per
+  doubling of speed) is logarithmic, so a soft flick and a hard one are equally forgiving. Below
+  `FLICK_MIN` (0.55) or a drag shorter than 24 px it is not a throw and the dart drops back.
+- A tiny random wobble (gaussian, 0.02R) so two identical flicks do not land on the same pixel.
+- These constants started from reasoning and a synthetic flick in headless Chromium; **since then
+  Matt has tuned them on his own phone after real games** (confirmed 2026-10-05: "we've been playing
+  real games. I've been tuning it after games on my phone"). If throws all land high, raise
+  `FLICK_MID`; all low, lower it; too twitchy, lower `FLICK_GAIN`.
+
+### Matt's aim help on 19, 17, 16 and 15 (2026-10-06, MATT ONLY)
+
+Matt: *"leave it as is for everyone other than me. BUT why is it so difficult for me to hit the 19
+and 17? make it easier"*, then *"same with 16 and 15 too"*.
+
+- **Why they were hard (his own in-order Cricket darts, read from the live `darts/games`):** 19 hit
+  35% (15/43), 17 25% (11/44), 16 26% (7/28), 15 13% (4/30), against 20 at 35% and 18 at 43%. Two
+  causes: (1) the dart in the hand stops at 0.76 R below the bull (`_pointerMove`'s clamp), level
+  with those numbers, so the swipe's angle has almost no lever there and left/right is simply where
+  the finger is let go, which is on top of the numbers being aimed at; (2) a flick a touch too soft
+  runs past the bottom edge: 23 of his darts went off the bottom into the frame, 8 off the top.
+- **What it does:** `assistLanding()` in `engine.js`. In Cricket only, a dart of HIS that lands
+  within 9 degrees (half a bed) either side of a bottom number he still needs (`assistTargets`: in
+  order, the current number; any order, every one he has not closed) is moved just inside that
+  number's edge, keeping its ring; one in the frame beside it comes back onto the outer single.
+  The bull, darts off the board, 20 and 18, x01 games, the computer, the second seat in pass and
+  play and every other player are untouched. Replayed on his real darts: 19 to 60%, 17 to 59%, 16
+  to 65%, 15 to 47%. Real-browser check: the same throw (0.40 R right, speed 2.2) counted 17 for
+  MattyIce and 2 for test1.
+- **Who:** `_aimHelp()` in `ui.js`, gated on `isAdmin(profile name)` (the same check as the hub's
+  Admin button) and on the dart being his seat (online: `mySeat`; otherwise seat 0).
+- **Online it applies too**, to his darts only: the moved point is what is thrown and logged, so
+  `validateGame` replays it like any other dart, and the opponent sees it land in the number.
+
+## How the dart FLIES (2026-10-01, `js/flight.js`)
+
+Three models in one day. Matt, after the first build: *"The darts go more like a line drive than in
+the example video."* Then, after a "bigger arc": *"Something has gone horribly wrong."* He asked for
+a side view of every throw in both videos, then *"make it match game pigeon"*. What ships now is
+COPIED from GamePigeon's video, not reasoned out.
+
+- **A 3D dart seen through a pinhole camera** at 2.37 m (the regulation oche), focal length set so
+  the board lands exactly where it is drawn. Every dart (in the hand, in flight, falling off the
+  wall, stuck in the board) is a world tip point plus an axis, projected to a screen tip and tail;
+  `render.js drawDart` draws from those two points and blends the flights to an end-on cross as the
+  projected length shrinks below the dart's width.
+- **The flight, measured.** Twelve GamePigeon throws were tracked at 60 fps (the dart's position on
+  screen, and its size, which gives its depth). Every one takes about 0.47 s (`FLIGHT_T`) and does
+  two things. **Climb** (first 60%, `CLIMB`): it rushes up the screen and slows (1-(1-k)^3) to a
+  point ABOVE its target, `APEX` (0.33) board radii above plus `APEX_SLOPE` (0.128) per radius the
+  target sits below the bull (measured: 0.24R aimed high, 0.33R mid, 0.43R low, 0.52R very low);
+  its depth starts slow and speeds up (k^1.8), so it stays big off the hand. **Settle** (last 40%):
+  small and end-on, nearly at the board, it drops straight down onto its target, gathering speed.
+  Physically impossible (it slides down the face of the board) and exactly what the video shows.
+  Both halves are written in screen terms (x/z, y/z) plus a depth, then lifted into the world.
+- **Every throw climbs first, wherever it is let go** (2026-10-02, Matt: *"If I drag the dart up
+  instead of doing a very quick flick, it reverts to do that weird impossible trajectory"*). A dart
+  dragged up the screen could be let go ABOVE the point it climbs to, so the climb ran DOWN into the
+  board. `makeFlight` now makes the climb end at least `MIN_RISE` (0.3R) above the release point and
+  lets the settle drop the rest. Also: the dart in the hand stops following the finger at 60% down
+  the board (`_pointerMove`; the finger's speed still throws), and a flick too soft or too hard to
+  reach the board lands just past its edge (`FLICK_CAP`, 1.5R) rather than far down the wall, which
+  read as a long slide down the wall. Both are misses either way.
+- **The axis turns steadily, it is never derived from the path**: side-on in the hand (`REST_AXIS`)
+  to end-on (`STUCK_AXIS`) by 42% of the flight (`TURN`), slow at first. Neither axis has a sideways
+  part, so the dart only ever leans the way perspective leans it.
+- **What went "horribly wrong" (v1041), so nobody brings it back:** a lob solved on screen with the
+  axis STEERED along the screen path. At the top of the lob the screen path reversed, the steered
+  axis swung through it, and for a frame the dart was drawn as a big sideways cross by the bull, then
+  popped up by the 20 pointing down before falling onto its target. The side view also showed the
+  "bigger arc" was the wrong fix: GamePigeon's real path is a gentle climb with almost no arc; the
+  lob is what a camera behind the thrower makes of it.
+- **End-on flights are drawn the size GamePigeon draws them**: the cross spans about what the
+  flights span side-on (`a = u * 0.24` in `drawDart`, was 0.34, which made the stuck dart and the
+  last half of every flight look too big).
+- **It never decides where the dart lands.** The flight always ends exactly on the point the rules
+  already chose (flick, computer, or an online log entry), so scoring and online replay are
+  untouched; every stuck dart sits on `STUCK_AXIS`, so a replayed or restored dart looks the same as
+  a fresh one. Tests in `darts/js/test.js` section 5 (lands exactly, climbs to the measured apex,
+  climb then settle with no reversal, upright early, end-on by `TURN`, never sideways).
+- How it was checked: GamePigeon frames and Game Hub frames (headless Chromium, `_tick(1/60)`)
+  side by side, every second frame, same target. The tracking scripts are not in the repo; the
+  method is: red pixels that are not red in the still frames, blob centre and width per frame.
+- Online search for a reusable darts engine (2026-10-01) found only three.js/cannon physics demos,
+  nothing that fits a no-dependency canvas game. **Searched again 2026-10-05** at Matt's request, code
+  read, not just READMEs: `erandybcepeda67/golden-dart` (the only swipe-to-throw one; flat 2D, the
+  dart moves along the swipe vector with fake gravity and shrinks, no perspective, NO LICENSE so not
+  reusable), `raulr/darts` (MIT, Pixi.js; tap to stop moving crosshairs, no swipe),
+  `opensand3/DartsClone` (Unity, click to fire). None is closer to GamePigeon than this one.
+
+## Screens
+
+- Setup (a cream card CENTRED on the screen over a light scrim, since 2026-10-08, Matt: *"the whole
+  setup card is weirdly on the bottom. It should fit comfortably, not be crammed at the bottom"*;
+  it used to sit on the bottom edge. Centred by auto margins, so a card taller than the screen
+  starts at the top padding rather than being cut off at both ends): **Multiplayer ›**, Game (301 / 201 /
+  101 / Cricket, plus Order for Cricket), Play the computer Easy/Medium/Hard (with the shared shape
+  markers), Computer speed Slow/Normal/Fast (see below), First throw Alternate/Me/Computer (Alternate
+  is the default and flips every match, `nextStarter`), Continue match, then **Practice** and Play
+  side by side. How to play is the **?** circle in the card's top-right corner (since 2026-10-08,
+  when its button gave its place to Practice; the in-game menu still has it as a labelled button).
+  Settings persist on every tap
+  (`gamehub.darts.v1`; its `mode` is now only the LOCAL kind, 'cpu' or 'pass', and an old 'online'
+  reads as 'cpu').
+- Play: canvas board and darts (`render.js`, wall and board cached per layout), DOM for the
+  plaques, darts-left icons, popups and banners. Banners sit in the gap between board and dart, or
+  over the board's lower edge on a short screen. Seat colours red/blue, never red/green, and the
+  active seat also carries a triangle marker.
+- Pass and play: a "Pass to <name>" card between turns, tap when ready. Not recorded in stats.
+- Result: winner's emoji, You win / You lose (or "<name> wins!"), the winner's turn count, a close
+  X, Play again, Menu.
+- How to play: one goal line, a ring diagram (x2, x3, 25/50), one-line rules, each measured to fit
+  one row (`_fitHelp`, 11px floor).
+
+## Practice (2026-10-08)
+
+Matt: *"add a practice mode. where you can play against yourself or just keep throwing as many darts
+in a row as you want. make it fit nicely on the setup screen"*.
+
+- **Where:** Practice sits beside Play on the setup card (How to play moved to a "?" in the card's
+  corner to make the room, so the card's height did not change: 587px with Continue match showing on
+  a short phone, as before). It opens a small card with two choices.
+- **Against yourself** (`mode: 'self'`): the game chosen on the setup card (301 / 201 / 101 /
+  Cricket with its Order and Points), you on both seats ("Tester" and "Tester 2", same emoji), no
+  pass card between turns. The result names the winner; Play again is another practice game.
+  Matt's aim help applies to both seats, since every dart is his.
+- **Free throw** (`mode: 'free'`, `_landFree`): no rules and no end. Three darts a round; each dart
+  pops up its bed (T20, D16, BULL) and points; after the third the round's total shows, the board
+  clears and the next round starts. The plaques show **3-dart avg** (points per dart x 3) and
+  **Best round**. It runs on a 301 match as a container; `throwDart` is never called. Leave from
+  the menu.
+- **Nothing recorded, nothing saved.** Neither mode calls `recordResult`, and `_save()` returns at
+  once for both, because the one save slot (`gamehub.darts.save.v1`) holds the match vs the computer:
+  a practice game that saved, or that FINISHED (a finished match clears the slot), would wipe it.
+  Verified in Chromium with a seeded computer match: after a whole "against yourself" game and seven
+  free-throw darts, the save and `gamehub.stats` were byte-identical and Continue match still showed.
+- `check-no-scroll.mjs darts` measures the practice chooser and the free-throw screen too.
+
+## Computer speed (2026-10-08)
+
+Matt: *"add a new setting to Darts for the computer. Computer Speed. Just like the computer player
+speed setting in texas hold em. I want the computer to play on fast forward so i don't have to wait"*.
+
+- **Slow / Normal / Fast** (`PACES` in `ui.js`: 0.6x, 1x, 3x), stored as `pace` in
+  `gamehub.darts.v1` (absent = Normal, the pace the game shipped with). On the setup card under
+  "Play the computer", and in the in-game menu during a match vs the computer (hidden in pass and
+  play and online), so it can be changed mid-match. One setting; both rows show it.
+- **How:** `_pace()` scales GAME TIME (`_tick(dt * pace)`) only while it is the computer's turn in a
+  vs-computer match: its pause before each dart, the flight, the gaps, the hand-over. Your own turn,
+  pass and play and online always run at real time. A score popup thrown during it gets a matching
+  `animationDuration`, since popups are removed on game time. Where the computer aims and lands is
+  untouched (same `computerThrow`), so stats and difficulty mean the same at every speed.
+- **Measured** (headless Chromium, real frames, one hard computer turn): Slow 10.3 s, Normal 6.2 s,
+  Fast 2.1 s.
+- **Smaller pills (2026-10-08, the same day):** Matt: *"the pills are all prettttttyyy big... the
+  pills are WAY larger than the text inside them"*. Every option pill is now DRAWN 32px tall (14px
+  text), and still TAPS 44px tall: a `::after` on each reaches 6px above and below, into the label
+  and the gap, where nothing is tappable. That is this game's documented exception to the 44px
+  floor (docs/BUILDING-A-GAME.md, Part 0): verified by `elementFromPoint` at every visible pill's
+  centre and +-15/21px, on the setup card in Cricket and in the in-game menu, 0 misses. The setup
+  card went from 594px to 534px tall on a short phone.
+- **Room for it (before the smaller pills):** the setup card was already the full height of a short phone (390x664) in
+  Cricket. How to play now sits beside Play (`.dt-go-row`), the option bars have 2px inner padding
+  (buttons still 44px) and the card gap is 9px; the card measures the same height as before in
+  every case, and `check-no-scroll.mjs darts` passes. (With Continue match showing, in Cricket, on a
+  short phone, the card reached the top of the screen; since the smaller pills it fits, top at
+  55px of 664.)
+
+## How often the computer hits trebles (measured 2026-10-08, nothing changed)
+
+Matt, playing Medium Cricket: *"he just got triple 18 and triple 17 in 2 throws. don't change the
+skill of the computer, but tell me how likely that is"*. Monte Carlo through the real
+`computerThrow` + `scoreAt` (400,000 darts per number; 20,000 computer-vs-computer games per level,
+any order, points on). The computer aims at the treble of its number (Easy at the single):
+
+| | Easy | Medium | Hard |
+|---|---|---|---|
+| treble with one dart, going for 18 (or 17) | 0.8% | 2.4% | 12.2% |
+| hits the 18 at all (any ring), going for 18 | 11.5% | 28.0% | 65.6% |
+| T18 then T17, back to back | 1 in 14,600 | 1 in 1,700 | 1 in 68 |
+| games with two trebles in a row at least once | 2.6% | 3.6% | 17.4% |
+
+So it was rare luck for Medium, not a bug: Matt's aim help (`_aimHelp`) runs only in the flick path
+for his own seat, never on `_cpuThrow`.
+
+## Stats
+
+`recordResult('darts', difficulty, won)`, total/byDiff only (no sub-counter), recorded exactly
+once per won match (`match.recorded`), vs computer only. My Stats draws it with the generic screen.
+It is a competitive game, so it is NOT in `js/players-agg.js`'s `SOLO` set.
+
+## Tests
+
+- `node darts/js/test.js`: geometry (every target scores its value, wedge edges), the match (bust,
+  win, no double-out, hand-over), 201 and 101, Cricket (marks, scoring, winning while behind does
+  not count, in order, the computer finishing every game), the flick mapping, the flight.
+- `node check-no-scroll.mjs darts`: setup, how to play, play screen, result, the practice chooser,
+  free throw, both hosts, both phone heights.
+- `window.__dtTest.ui` is the test seam (`_launch(from, x, y)` throws a dart at board point x, y).
+
+## Online challenges (2026-10-01)
+
+Matt, after the first build: *"yes"* to turn-by-turn online play, GamePigeon's iMessage way. Cup
+Pong's challenges (`cup-pong/js/mp.js`) are the model; no code is shared with them.
+
+- **Where (2026-10-03):** the setup card's first row, **Multiplayer ›** (with a "N waiting on you"
+  badge), the same row Cup Pong and Hoops have. Matt: *"Why is darts so confusing? there's 2 player
+  and online? where's the challenge button like all the other apps?"* - the first build hid it behind
+  a Play: Computer / 2 players / Online segment, now gone. Behind it: Challenge someone, **Pass &
+  play** (two people, this phone), the notify row, Your turn, Their turn, History. A challenge and a
+  pass-and-play match use the Game chosen on the setup card. Files: `js/mp.js` (data), `js/mp-ui.js` (the list screens, lazily
+  imported), `js/alert.js` (the launcher bubble; `alerts:` on the hub entry).
+- **Which game:** `kind` on the match and on both index rows (optional; absent = 301). `validateGame`
+  replays the log with that game's rules.
+- **The node:** `darts/games/<id>` + `darts/index/<CODE>/<id>`, addressed by PLAYER CODE. Added to
+  `database.rules.json` and `backups/rtdb-backup.mjs`'s `BRANCHES`. **PUBLISHED by Matt on
+  2026-10-01** (he pasted the whole file; verified the same day: `darts/` reads, where it was
+  refused before, and every other branch reads exactly as it did that morning, same 289 device
+  records and 8597 plays).
+- **A match is a LOG of darts**, each the point it landed on (x, y in R units, rounded to 1/10000),
+  never a snapshot. `validateGame` replays it through `engine.js` and refuses the whole document if
+  one dart does not replay (a dart out of turn, a claimed win the darts never produced). The phone
+  rounds its own landing point the same way BEFORE scoring it (`_launch`), so a dart on a wire scores
+  the same on both phones.
+- **Written dart by dart** (`appendLog`, verified by re-read, idempotent on retry, a stale base is a
+  conflict and never an overwrite), and kept in an outbox (`gamehub.darts.outbox.v1`) until the
+  server has it. The index rows change only when the turn passes or the match ends.
+- **The challenge is delivered when the challenger's first turn ends**: the other person's row is
+  written only once it is their turn.
+- **Opening a match** replays the log silently up to the other person's latest run, then FLIES that
+  run one dart at a time to where each landed (`_mpCatchUp`). While it is their turn the match is
+  watched, so their darts arrive live. You always sit on the LEFT (`.is-flip` when you are side 'b').
+- **The launcher's "Your turn" bubble stays up for as long as it IS your turn** (2026-10-04, Matt: *"I
+  don't see the 'your turn' badge inside the hub after King of Games plays me back"*). The match data
+  was right (read from the live database: his row said `yourTurn`). What hid the bubble: watching the
+  other person's darts land (`_mpCatchUp`) and throwing a single dart (`appendLog`) both marked the
+  turn as seen. Now only a FINISHED turn (or the bubble's X, or opening the game from the bubble) does.
+  Pinned in `test-darts-mp.mjs`. Same seen-map design as Cup Pong and Hoops, which were not changed.
+- **Counting:** each finished match is recorded once per phone (`gamehub.darts.counted.v1`) as
+  `recordResult('darts', 'mp', won)`, whoever ended it. A match that ended while you were away
+  gets a Game Over popup the next time you open online play.
+- **Resign:** menu, Resign. The other person wins. Nothing is ever deleted.
+- **Cancel, decline, expire (2026-10-13)**, root `CLAUDE.md`, "Cancel, decline, resign, expire":
+  until the receiver throws their first dart the menu button reads **Cancel challenge** (the
+  sender) or **Decline challenge** (the receiver) and calls it off for nobody (`cancelGame`; Resign
+  on such a match does the same, `{ cancelled: true }`). Until that date a sender quitting before
+  delivering it took a loss. A match made from 2026-10-13 carries `lapse: true` and **expires 3 days
+  after it was delivered** if the receiver never threw (`lifeOf`; `appendLog` refuses a late dart
+  with `'expired'`). The receiver's first dart rewrites both rows at once so they stop saying
+  `open`. Opening a called-off or expired match says so and goes back to the list.
+- **No series yet** (Cup Pong and Hoops have 1/3/5); GamePigeon Darts is one game. Easy to add from
+  Cup Pong's `seriesAfter` / `nextInSeries` if Matt asks.
+- **No scrolling:** every list is drawn, then trimmed by measurement to what the card holds, with
+  "+N more" (`fitList` in `mp-ui.js`). Matches beyond the cut are reached as the ones above them
+  finish. The player picker narrows by search instead of growing.
+- **Notifications:** `dartsTurnPush` in `functions/index.js` (decided by `decideDarts` in
+  `functions/decide.js`): a challenge, your turn coming back (with the score), and a match the other
+  person ended; a challenge names the game ("challenged you to Cricket (in order)"). **Written
+  2026-10-01, DEPLOYED by Matt on 2026-10-03.** **Cricket wording (2026-10-04, redeployed by Matt on 2026-10-11):**
+  Matt got "Your turn vs aa King of Games. You 0, aa King of Games 0" mid-game - Cricket points stay 0
+  until somebody scores past a closed number. Rows now carry `mineClosed`/`theirsClosed` (numbers
+  closed, from `validateGame`'s `closed`), and a Cricket turn reads "Closed: you 3, them 2", adding
+  "Points: ..." once either has some; the match list rows say the same. A row with no counts gets the
+  old line. The app half needed no change: `sw.js` opens any match
+  a payload names (`data.match`), and the hub hands it to `alert.js`'s `armOpen`.
+- **Tests:** `node test-darts-mp.mjs` (39 checks, including a 101 and a whole in-order Cricket match, two phones against an in-memory database);
+  `node test-push.mjs` (the `decideDarts` cases). The screens were checked in headless Chromium with
+  two browser "phones" against a stand-in database server, a whole match played to zero.
+
+## Not built yet
+
+- **A series (best of 3/5) for online challenges** - Matt wants it (2026-10-05), in its own session.
+- **No sound, and none is ever to be added** unless Matt asks for it himself (root `CLAUDE.md`, "No sound, ever").
+
+
+## Quick chat (2026-10-14)
+
+A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down in `_mpLeave`; never in vs-computer, pass and play or practice). Panel and bubbles are `js/match-chat-ui.js`, the data is `js/match-chat.js`, lazy-imported.
+- **Where it sits and why:** on the top row, LEFT of the darts-left icons and the menu button (`CHAT_PLACE`, `right: 118px` = row margin 10 + menu 44 + gap 10 + icons 42 + gap 12). Measured with a 59px top inset: 390x844 at [228, 59, 44, 44], 320x568 at [158, 59, 44, 44]; it overlaps no control and the board starts below it. Bubbles come down under that row.
+- **Node:** `darts/chat/<matchId>/<key>`, beside `darts/games/<id>`. It sends with the STORED side (`mp.side`, the same one `mySeat` comes from), so it is right whichever seat the left-hand plaque is.

@@ -1061,6 +1061,31 @@ export const GAME_ART = {
             <circle cx="100" cy="45" r="12.5" fill="#162033" stroke="#ffce3a" stroke-width="2.4"/>
             <text x="100" y="50.5" text-anchor="middle" font-size="16" font-weight="900" fill="#ffce3a" font-family="system-ui,-apple-system,'Segoe UI',sans-serif">?</text>
             </svg>`,
+  // Archery (2026-10-14): the target on its easel on striped grass, a blue arrow in the gold and the
+  // stands behind. Original drawing.
+  archery: `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#8cc4f2"/>
+            <rect y="0" width="160" height="12" fill="#dfe9f2"/>
+            <path d="M0 12H160" stroke="#ffffff" stroke-width="2"/>
+            <rect y="16" width="160" height="30" fill="#1c3f78"/>
+            <g fill="#f7d23c"><circle cx="8" cy="22" r="1.6"/><circle cx="30" cy="27" r="1.6"/><circle cx="52" cy="21" r="1.6"/><circle cx="118" cy="24" r="1.6"/><circle cx="141" cy="29" r="1.6"/></g>
+            <g fill="#ffffff"><circle cx="19" cy="31" r="1.6"/><circle cx="44" cy="35" r="1.6"/><circle cx="129" cy="33" r="1.6"/><circle cx="150" cy="20" r="1.6"/><circle cx="97" cy="22" r="1.6"/></g>
+            <g fill="#e94b3c"><circle cx="13" cy="40" r="1.6"/><circle cx="62" cy="29" r="1.6"/><circle cx="108" cy="37" r="1.6"/><circle cx="136" cy="41" r="1.6"/></g>
+            <rect y="44" width="160" height="5" fill="#1d5fb8"/>
+            <rect y="49" width="160" height="41" fill="#3fa83a"/>
+            <path d="M0 58H160M0 70H160M0 83H160" stroke="#4bb945" stroke-width="5"/>
+            <path d="M80 90 L80 62 M40 90 L66 62 M120 90 L94 62" stroke="#ffffff" stroke-width="1.6"/>
+            <path d="M68 66 L64 84 M92 66 L96 84" stroke="#9a6a3a" stroke-width="3" stroke-linecap="round"/>
+            <rect x="57" y="19" width="46" height="46" rx="2" fill="#f4f2ec" stroke="#3a3a3a" stroke-width="1.4"/>
+            <circle cx="80" cy="42" r="20" fill="#f6f6f4" stroke="#1a1a1a" stroke-width="0.8"/>
+            <circle cx="80" cy="42" r="16" fill="#202020"/>
+            <circle cx="80" cy="42" r="12" fill="#2ea7e8"/>
+            <circle cx="80" cy="42" r="8" fill="#e8342b"/>
+            <circle cx="80" cy="42" r="4" fill="#ffd21f"/>
+            <path d="M82 41 L118 22" stroke="#1f6fe5" stroke-width="2.6" stroke-linecap="round"/>
+            <path d="M112 25 L120 17 L123 21 Z M113 26 L124 26 L121 30 Z" fill="#ffffff"/>
+            <path d="M82 41 L118 22" stroke="#174fae" stroke-width="0.8" stroke-linecap="round" opacity="0.6"/>
+          </svg>`,
   // Darts (2026-10-01): the board on the wooden wall with a red dart in the treble 20 and another
   // flying in, its flights crossed.
   darts: `<svg viewBox="0 0 160 90" aria-hidden="true">
