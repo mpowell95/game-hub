@@ -19,7 +19,7 @@ const BODY_S = 0.85;                     // the bow against its sight (the sight
 const HAND = [1.3, -3.62, 0.02];         // bow space: the hand's centre, on the grip under the shelf
 const HAND_S = 1.45;
 const WRIST = [HAND[0] - 1.15 * HAND_S, HAND[1] - 0.85 * HAND_S, 0.38];   // bow space: where the hand meets the forearm
-const REST = [1.19, -2.28, 0.3];         // bow space: where the arrow lies on the shelf
+const REST = [0.82, -2.28, 0.3];         // bow space: where the arrow lies on the shelf
 // The arrow's back end (view space), at the drawing hand by the face; with the bow down it is
 // lower and further right. The arrow points from here through the rest.
 const NOCK = { idle: [5.2, -5.0, -3.0], drawn: [1.7, -3.4, -1.6] };
@@ -192,14 +192,21 @@ export class BowView {
       return c;
     };
     cap(0.3, [-1.15, -0.85, 0.32], [-0.55, -0.4, 0.36], 0.75);           // the wrist into the hand
-    const back = new THREE.Mesh(g(new THREE.SphereGeometry(0.5, 20, 14)), M.skin);  // the back of the hand
-    back.scale.set(1.0, 0.85, 0.5);
-    back.rotation.z = 0.35;
-    back.position.set(-0.3, -0.3, 0.38);
+    // The back of the hand: a smooth, flattish slab facing the eye, knuckle edge toward the grip.
+    const bs = new THREE.Shape();
+    const bw = 0.42, bh = 0.36, br = 0.18;
+    bs.moveTo(-bw + br, -bh); bs.lineTo(bw - br, -bh); bs.quadraticCurveTo(bw, -bh, bw, -bh + br);
+    bs.lineTo(bw, bh - br); bs.quadraticCurveTo(bw, bh, bw - br, bh); bs.lineTo(-bw + br, bh);
+    bs.quadraticCurveTo(-bw, bh, -bw, bh - br); bs.lineTo(-bw, -bh + br); bs.quadraticCurveTo(-bw, -bh, -bw + br, -bh);
+    const backGeo = g(new THREE.ExtrudeGeometry(bs, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.14, bevelSize: 0.14, bevelSegments: 6, curveSegments: 10 }));
+    backGeo.translate(0, 0, -0.08);
+    const back = new THREE.Mesh(backGeo, M.skin);
+    back.rotation.set(-0.15, -0.55, 0.4);
+    back.position.set(-0.32, -0.3, 0.36);
     hand.add(back);
-    cap(0.27, [-0.38, 0.06, 0.34], [0.12, -0.04, 0.02], 0.85);           // fingers, round the front of the grip
-    cap(0.25, [-0.4, -0.3, 0.32], [0.08, -0.4, 0.0], 0.85);
-    cap(0.22, [-0.42, -0.6, 0.28], [0.02, -0.7, 0.0], 0.85);
+    cap(0.25, [-0.3, -0.02, 0.3], [0.12, -0.1, 0.02], 0.85);            // fingers, round the front of the grip
+    cap(0.24, [-0.34, -0.34, 0.3], [0.08, -0.44, 0.0], 0.85);
+    cap(0.21, [-0.38, -0.62, 0.26], [0.02, -0.72, 0.0], 0.85);
     cap(0.14, [-0.12, 0.26, 0.4], [0.24, 0.32, 0.12], 1);                // the thumb, along the top
 
     // Everything but the sight's housing, so its parts can be found in one frame.
