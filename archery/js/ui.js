@@ -64,82 +64,15 @@ const STAR_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
 const LEAF_SVG = '<svg viewBox="0 0 30 16" aria-hidden="true" focusable="false"><path d="M1 8 C8 -1 22 -1 29 8 C22 17 8 17 1 8 Z" fill="currentColor"/><path d="M2 8 H27" stroke="rgba(0,0,0,0.2)" stroke-width="1"/></svg>';
 const HAND_SVG = '<svg viewBox="0 0 40 48" aria-hidden="true" focusable="false"><path d="M14 4 C14 1.5 18 1.5 18 4 V22 L18.5 14 C18.8 11.5 22.4 11.6 22.4 14.2 V22 L23 16 C23.3 13.6 26.8 13.7 26.8 16.3 V23 L27.4 19 C27.8 16.8 31 17 31 19.4 V31 C31 39 26 45 19 45 C13 45 10.5 41 8 36 L3.5 27 C2.3 24.7 5 22.6 7 24.4 L14 31 Z" fill="#ffffff" stroke="#3a3a3a" stroke-width="2" stroke-linejoin="round"/></svg>';
 
-// --- the bow and the arm --------------------------------------------------------------------------
-// Drawn in a frame where the sight's centre is (0, 0) and its inner radius 46 units. ui.js places
-// the whole drawing by moving (0, 0) onto the aim point and scaling it to the screen, so the ring
-// is always exactly over the magnified view render.js draws. An original drawing in the recording's
-// proportions: a chunky metallic-blue riser with black parts and an opening at the top, the sight
-// on a thick black bar, a blue arrow shelf, a thick black grip, the left hand a fist seen from the
-// back (thumb over the top, under the shelf), and the arrow resting on the shelf. The sleeve is a
-// separate drawing in screen pixels (armSVG), because it runs to the corner of the screen.
+// --- the sight's ring ------------------------------------------------------------------------------
+// The bow, hand, arm and arrow are 3D (bow3d.js, drawn by render.js). This SVG is only the ring
+// round the sight: the hold gauge and the crosshair, in a frame where the sight's centre is (0, 0)
+// and its inner radius 46 units. ui.js moves (0, 0) onto the aim point and tells render.js the
+// same place and size, so the ring, the 3D sight housing and the magnified view always line up.
 const SCOPE_IN = 46;
-/** Where the arrow rests on the shelf, and its angle down to the right: flatter with the bow
- *  down, steeper drawn (the recording). */
-const REST = [124, 186];
-const ARROW_DEG = { idle: 37, drawn: 60 };
-/** The wrist, where the sleeve meets the hand. */
-const WRIST = [26, 352];
-function bowSVG() {
-  // The arrow, drawn along +x from the rest (tip ahead at -x, the near end off screen at +x),
-  // wider as it comes toward the eye. ui.js rotates it about the rest.
-  const at = (x, w) => [x, w];
-  const wid = (x) => 3.2 + Math.max(0, x + 120) * 0.0145;
-  const quad = (x0, x1) => [at(x0, -wid(x0)), at(x1, -wid(x1)), at(x1, wid(x1)), at(x0, wid(x0))].map((p) => p.map((v) => v.toFixed(1)).join(',')).join(' ');
+function ringSVG() {
   const C = 2 * Math.PI * 53;
-  return `<svg class="ar-bow-svg" viewBox="-260 -1000 780 2000" width="780" height="2000" aria-hidden="true" focusable="false">
-    <defs>
-      <linearGradient id="ar-blue" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#174fb8"/><stop offset="0.32" stop-color="#4da6ff"/><stop offset="0.55" stop-color="#2d7bea"/><stop offset="1" stop-color="#123f9a"/></linearGradient>
-      <linearGradient id="ar-black" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#0c0e12"/><stop offset="0.4" stop-color="#3a414c"/><stop offset="1" stop-color="#0c0e12"/></linearGradient>
-      <linearGradient id="ar-skin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6d2b2"/><stop offset="1" stop-color="#dba37c"/></linearGradient>
-      <linearGradient id="ar-shaft" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#59a8ff"/><stop offset="0.5" stop-color="#2a7ef0"/><stop offset="1" stop-color="#1350b8"/></linearGradient>
-      <linearGradient id="ar-metal" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f4f7fa"/><stop offset="0.55" stop-color="#b7c0cb"/><stop offset="1" stop-color="#6e7884"/></linearGradient>
-    </defs>
-    <path d="M40,-1000 L224,-1000 L220,-300 C218,-282 204,-272 188,-272 L70,-272 C54,-272 42,-284 40,-302 Z" fill="url(#ar-black)"/>
-    <rect x="44" y="-1000" width="16" height="702" fill="url(#ar-blue)"/>
-    <rect x="94" y="-900" width="78" height="300" rx="10" fill="#2c323c"/>
-    <rect x="94" y="-530" width="78" height="200" rx="10" fill="#2c323c"/>
-    <rect x="114" y="-512" width="38" height="164" rx="7" fill="#07080a"/>
-    <rect x="98" y="-322" width="70" height="10" rx="4" fill="#d7dde4"/>
-    <path d="M44,-284 L94,-284 L152,-104 L116,-90 Z" fill="url(#ar-blue)"/>
-    <path d="M174,-284 L222,-284 L196,-90 L156,-104 Z" fill="url(#ar-blue)"/>
-    <path d="M112,-112 L198,-112 C196,-20 194,80 192,190 L116,190 C116,80 114,-20 112,-112 Z" fill="url(#ar-blue)"/>
-    <path d="M182,-112 L198,-112 C196,-20 194,80 192,190 L178,190 C180,80 182,-20 182,-112 Z" fill="#0e1116"/>
-    <path d="M150,-70 L166,-70 L162,-52 L146,-52 Z M148,-40 L164,-40 L160,-22 L144,-22 Z M146,-10 L162,-10 L158,8 L142,8 Z" fill="#ffffff" opacity="0.85"/>
-    <rect x="40" y="24" width="84" height="22" rx="4" fill="#14171c"/>
-    <rect x="40" y="24" width="84" height="6" rx="3" fill="#4b5563"/>
-    <rect x="38" y="16" width="20" height="40" rx="5" fill="#0d1014"/>
-    <rect x="-12" y="50" width="26" height="14" rx="4" fill="#0d1014"/>
-    <circle cx="1" cy="57" r="3" fill="#59616d"/>
-    <path d="M40,178 L198,178 L198,192 L46,192 Z" fill="#6fb6ff"/>
-    <path d="M46,192 L198,192 L198,210 L52,210 Z" fill="url(#ar-blue)"/>
-    <path d="M52,210 L198,210 L194,232 L60,232 Z" fill="#111317"/>
-    <path d="M84,232 L178,232 L174,444 C152,458 104,458 86,444 C76,384 72,292 84,232 Z" fill="url(#ar-black)"/>
-    <path d="M150,240 L162,240 L160,436 L148,440 Z" fill="#ffffff" opacity="0.08"/>
-    <path d="M90,440 L170,440 L176,1000 L82,1000 Z" fill="url(#ar-blue)"/>
-    <path d="M160,440 L170,440 L176,1000 L164,1000 Z" fill="#0e1116"/>
-    <rect x="86" y="600" width="86" height="34" fill="#0e1116"/>
-    <circle cx="124" cy="520" r="10" fill="#0b0d10"/><circle cx="124" cy="520" r="4" fill="#5d6570"/>
-    <g class="ar-hand">
-      <path d="M2,330 C10,292 42,256 72,240 L146,236 C160,238 168,252 162,268 L150,304 C138,334 108,362 62,380 C34,388 8,374 2,352 Z" fill="url(#ar-skin)"/>
-      <rect x="108" y="256" width="66" height="28" rx="14" fill="url(#ar-skin)"/>
-      <rect x="104" y="282" width="68" height="28" rx="14" fill="url(#ar-skin)"/>
-      <rect x="98" y="308" width="68" height="27" rx="13.5" fill="url(#ar-skin)"/>
-      <rect x="88" y="333" width="68" height="25" rx="12.5" fill="url(#ar-skin)"/>
-      <path d="M116,283 H168 M112,309 H164 M104,334 H154" stroke="#b67e5a" stroke-width="2.5" opacity="0.6"/>
-      <ellipse cx="118" cy="269" rx="9" ry="7" fill="#fbe2cc" opacity="0.8"/>
-      <ellipse cx="114" cy="295" rx="9" ry="7" fill="#fbe2cc" opacity="0.7"/>
-      <ellipse cx="108" cy="321" rx="8" ry="6" fill="#fbe2cc" opacity="0.6"/>
-      <path d="M50,252 C76,232 128,228 172,234 C182,236 184,252 172,256 C130,258 92,262 62,272 C48,274 42,262 50,252 Z" fill="url(#ar-skin)"/>
-      <ellipse cx="168" cy="245" rx="10" ry="7" fill="#f7d9d0"/>
-      <path d="M30,300 C46,286 62,280 82,278" stroke="#c78f6a" stroke-width="3" fill="none" opacity="0.5" stroke-linecap="round"/>
-    </g>
-    <g class="ar-arrow" data-role="bowArrow">
-      <polygon points="${quad(-118, 1100)}" fill="url(#ar-shaft)"/>
-      <polygon points="${quad(-118, 1100)}" fill="none" stroke="#0f3f96" stroke-width="1.5" opacity="0.5"/>
-      <polygon points="${quad(200, 1100)}" fill="#14171c"/>
-      <polygon points="${[[-156, 0], at(-118, -wid(-118) - 2.4), at(-112, -wid(-112) - 1), at(-112, wid(-112) + 1), at(-118, wid(-118) + 2.4)].map((p) => p.map((v) => v.toFixed(1)).join(',')).join(' ')}" fill="url(#ar-metal)"/>
-      <rect x="-112" y="${(-wid(-112) - 1).toFixed(1)}" width="12" height="${(2 * wid(-112) + 2).toFixed(1)}" fill="#c9d0d8"/>
-    </g>
+  return `<svg class="ar-bow-svg" viewBox="-70 -70 140 140" width="140" height="140" aria-hidden="true" focusable="false">
     <g class="ar-scope-ring">
       <circle r="53" fill="none" stroke="#1d2128" stroke-width="15"/>
       <circle r="${SCOPE_IN}" fill="none" stroke="#090a0d" stroke-width="2.5"/>
@@ -148,19 +81,6 @@ function bowSVG() {
       <path d="M-43,0 H-13 M13,0 H43 M0,-43 V-13 M0,13 V43" stroke="#ff2d2d" stroke-width="2.6" stroke-linecap="round"/>
       <path d="M-30,-4 V4 M30,-4 V4 M-4,-30 H4 M-4,30 H4" stroke="#ff2d2d" stroke-width="2"/>
     </g>
-  </svg>`;
-}
-
-/** The sleeve and forearm, in screen pixels: from the wrist to past the bottom-left corner. ui.js
- *  rewrites the paths every frame (_drawArm). */
-function armSVG() {
-  return `<svg class="ar-arm-svg" aria-hidden="true" focusable="false">
-    <defs><linearGradient id="ar-sleeve" gradientUnits="userSpaceOnUse" data-role="sleeveGrad"><stop offset="0" stop-color="#c3dbf6"/><stop offset="0.45" stop-color="#9dbfe9"/><stop offset="1" stop-color="#6f95cc"/></linearGradient></defs>
-    <path data-role="forearm" fill="#e9b892"/>
-    <path data-role="sleeve" fill="url(#ar-sleeve)"/>
-    <path data-role="folds" fill="none" stroke="#5f86bf" stroke-width="5" stroke-linecap="round" opacity="0.45"/>
-    <path data-role="shine" fill="none" stroke="#e4effb" stroke-width="7" stroke-linecap="round" opacity="0.5"/>
-    <path data-role="cuff" fill="none" stroke="#7d9fd0" stroke-width="5" stroke-linecap="round"/>
   </svg>`;
 }
 
@@ -258,8 +178,7 @@ class ArcheryUI {
       <div class="ar-root">
         <canvas class="ar-canvas" role="img"></canvas>
         <div class="ar-leaves" data-role="leaves" aria-hidden="true"></div>
-        <div class="ar-arm" data-role="arm" aria-hidden="true">${armSVG()}</div>
-        <div class="ar-bow" data-role="bow" aria-hidden="true">${bowSVG()}</div>
+        <div class="ar-bow" data-role="bow" aria-hidden="true">${ringSVG()}</div>
         <div class="ar-hintdot" data-role="hintdot" aria-hidden="true"><i></i>${HAND_SVG}</div>
         <div class="ar-fx" data-role="fx" aria-hidden="true"></div>
         <div class="ar-top" data-role="top">
@@ -373,11 +292,6 @@ class ArcheryUI {
     this.canvas = q('.ar-canvas');
     this.fx = q('[data-role="fx"]');
     this.bowEl = q('[data-role="bow"]');
-    this.armEl = q('[data-role="arm"]');
-    this.armSvg = this.armEl.querySelector('svg');
-    this.armParts = {};
-    for (const k of ['forearm', 'sleeve', 'folds', 'shine', 'cuff', 'sleeveGrad']) this.armParts[k] = this.armEl.querySelector(`[data-role="${k}"]`);
-    this.bowArrow = q('[data-role="bowArrow"]');
     this.gaugeEl = q('.ar-gauge');
     this.gaugeC = parseFloat(this.gaugeEl.dataset.c);
     this.leavesEl = q('[data-role="leaves"]');
@@ -489,8 +403,6 @@ class ArcheryUI {
     this.w = w; this.h = h;
     // The bow's scale: the sight's inner radius is about an eighth of the screen width (the recording).
     this.k = Math.min((0.082 * w) / SCOPE_IN, (0.045 * h) / SCOPE_IN);
-    this.armSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    this.armSvg.setAttribute('width', w); this.armSvg.setAttribute('height', h);
     this._draw();
   }
 
@@ -1480,7 +1392,6 @@ class ArcheryUI {
     const showBow = (this.screen === 'play' || this.screen === 'menu' || this.screen === 'help' || this.screen === 'resign' || this.screen === 'setup' || this.screen === 'mp')
       && this.r.view === 'line' && (jolt || this.phase === 'line' || this.phase === 'ready' || this.phase === 'draw' || this.phase === 'panic' || this.screen === 'setup' || this.screen === 'mp' || this.phase === 'idle');
     this.bowEl.style.visibility = showBow ? 'visible' : 'hidden';
-    this.armEl.style.visibility = showBow ? 'visible' : 'hidden';
     if (showBow) {
       const T = this.r.faceToScreen(0, 0);
       const ease = (p) => p * p * (3 - 2 * p);
@@ -1509,10 +1420,7 @@ class ArcheryUI {
         fly = j;
       }
       this.bowEl.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${rot.toFixed(2)}deg) scale(${k.toFixed(4)})`;
-      const deg = ARROW_DEG.idle + (ARROW_DEG.drawn - ARROW_DEG.idle) * p;
-      this.bowArrow.setAttribute('transform', `translate(${REST[0]} ${REST[1]}) rotate(${deg.toFixed(2)}) translate(${(-900 * fly).toFixed(1)} 0)`);
-      this.bowArrow.style.opacity = fly > 0.75 ? String(Math.max(0, (1 - fly) * 4)) : '1';
-      this._drawArm(x, y, k, rot, p);
+      this.r.setBow({ x, y, r: SCOPE_IN * k, rot, p, fly }, this._bowColor());
       // The ring: how much hold is left, green, then yellow below a third.
       const g = this.phase === 'draw' || this.phase === 'panic' ? this.gauge : 1;
       this.gaugeEl.setAttribute('stroke-dasharray', `${(g * this.gaugeC).toFixed(1)} ${this.gaugeC.toFixed(1)}`);
@@ -1524,42 +1432,14 @@ class ArcheryUI {
         const kk = idle.k;
         this.hintDot.style.transform = `translate(${(idle.x - 70 * kk).toFixed(1)}px, ${(idle.y + 300 * kk).toFixed(1)}px)`;
       }
-    } else this.r.setScope(null);
+    } else { this.r.setScope(null); this.r.setBow(null); }
     this.r.render();
   }
 
-  /** The sleeve: from the wrist (where the bow's drawing puts it) to past the bottom-left corner.
-   *  Lowered, the forearm shows and the sleeve is a long straight band; drawn, the sleeve comes up
-   *  to the wrist, big and puffy (the recording). */
-  _drawArm(bx, by, k, rot, p) {
-    const W = this.w, H = this.h, P = this.armParts;
-    const r = (rot * Math.PI) / 180, cs = Math.cos(r), sn = Math.sin(r);
-    const wx = bx + (WRIST[0] * cs - WRIST[1] * sn) * k, wy = by + (WRIST[0] * sn + WRIST[1] * cs) * k;
-    const shx = -0.25 * W, shy = 1.18 * H;
-    let dx = shx - wx, dy = shy - wy;
-    const len = Math.hypot(dx, dy) || 1;
-    dx /= len; dy /= len;
-    const nx = -dy, ny = dx;                       // across the arm (toward the bottom right)
-    const lerp = (a, b) => a + (b - a) * p;
-    const fore = lerp(0.1, 0.015) * W;            // forearm showing between hand and cuff
-    const hw0 = lerp(0.07, 0.115) * W, hw1 = lerp(0.12, 0.21) * W, puff = lerp(0.015, 0.04) * W;
-    const ww = 30 * k;
-    const cx = wx + dx * fore, cy = wy + dy * fore;
-    const fx = cx + dx * len * 1.2, fy = cy + dy * len * 1.2;
-    const mx = (cx + fx) / 2, my = (cy + fy) / 2;
-    const f = (v) => v.toFixed(1);
-    const pt = (x, y, m, s = 1) => `${f(x + nx * m * s)},${f(y + ny * m * s)}`;
-    P.forearm.setAttribute('d', `M${pt(wx - dx * 8 * k, wy - dy * 8 * k, ww, -1)} L${pt(wx - dx * 8 * k, wy - dy * 8 * k, ww)} L${pt(cx, cy, ww * 1.15)} L${pt(cx, cy, ww * 1.15, -1)} Z`);
-    const midW = (hw0 + hw1) / 2 + puff;
-    P.sleeve.setAttribute('d', `M${pt(cx, cy, hw0, -1)} Q${pt(mx, my, midW, -1)} ${pt(fx, fy, hw1, -1)} L${pt(fx, fy, hw1)} Q${pt(mx, my, midW)} ${pt(cx, cy, hw0)} Q${f(cx - dx * hw0 * 0.45)},${f(cy - dy * hw0 * 0.45)} ${pt(cx, cy, hw0, -1)} Z`);
-    // Folds: creases along the sleeve near the cuff, and one long shine on its upper side.
-    const at = (t, m) => { const x = cx + dx * len * t, y = cy + dy * len * t; return pt(x, y, m); };
-    P.folds.setAttribute('d', `M${at(0.08, -hw0 * 0.3)} Q${at(0.2, -hw0 * 0.05)} ${at(0.34, -hw0 * 0.35)} M${at(0.06, hw0 * 0.45)} Q${at(0.18, hw0 * 0.15)} ${at(0.3, hw0 * 0.55)} M${at(0.4, hw0 * 0.1)} Q${at(0.52, hw0 * 0.4)} ${at(0.66, hw0 * 0.05)}`);
-    P.shine.setAttribute('d', `M${at(0.05, -hw0 * 0.68)} Q${at(0.3, -midW * 0.9)} ${at(0.7, -hw1 * 0.82)}`);
-    P.cuff.setAttribute('d', `M${pt(cx + dx * 6, cy + dy * 6, hw0 * 0.92, -1)} Q${f(cx - dx * hw0 * 0.3)},${f(cy - dy * hw0 * 0.3)} ${pt(cx + dx * 6, cy + dy * 6, hw0 * 0.92)}`);
-    const g = P.sleeveGrad;
-    g.setAttribute('x1', f(cx - nx * hw0)); g.setAttribute('y1', f(cy - ny * hw0));
-    g.setAttribute('x2', f(cx + nx * hw0)); g.setAttribute('y2', f(cy + ny * hw0));
+  /** The colour of the arrow on the bow: the shooter's. */
+  _bowColor() {
+    if (this.mode === 'practice' || !this.match) return ARROW_COLORS.me;
+    return this._colorOf(this.match.turn);
   }
 
   destroy() {

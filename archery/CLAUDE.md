@@ -12,7 +12,9 @@ every timing read off that video at 0.25 s and Matt's answers to the open questi
 `docs/ARCHERY-BRIEF.md`. **Read it first**: it is the spec this game was built to.
 
 **Copied: the game, the screens, the timing. Not copied: the art, the name, the faces.** Everything
-on screen is drawn from code here (the stadium, the target, the bow and arm SVG, the tile art). The
+on screen is drawn from code here (the stadium, the target, the 3D bow and arm, the tile art). Matt
+asked for it to be indistinguishable; the line held is that it matches the recording's look,
+layout, colours and motion with our own models, and never traces or lifts their artwork. The
 game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CLAUDE.md`).
 
 ## Hub integration
@@ -34,8 +36,9 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 | File | What |
 |---|---|
 | `js/engine.js` | the rules, pure: scoring, the match (rounds, turn order, shoot-off), the wind, the ring and sway, panic, the computer. `node archery/js/test.js` |
-| `js/render.js` | the range in three.js (`skeeball/js/vendor`): stadium, lane, target, arrows, the three cameras, the sight's magnified view |
-| `js/ui.js` | DOM: setup, HUD, the bow SVG, hold-to-draw input, the turn flow, replays, menus, autosave, stats, the online match |
+| `js/render.js` | the range in three.js (`skeeball/js/vendor`): stadium, lane, target, arrows, the three cameras, the sight's magnified view; draws the bow's scene over the range |
+| `js/bow3d.js` | the bow, left hand, sleeve and nocked arrow as lit 3D models (a first-person view model), built from code |
+| `js/ui.js` | DOM: setup, HUD, the sight's ring SVG (gauge + crosshair), hold-to-draw input, the turn flow, replays, menus, autosave, stats, the online match |
 | `js/mp.js` / `js/mp-ui.js` / `js/alert.js` | online challenges (data, list screens, launcher bubble). `node test-archery-mp.mjs` |
 | `js/strings.js` | every word, EN/ES |
 
@@ -83,20 +86,28 @@ positions and motion:
   (`_tipAt`): it shows big at the top right, rides up and right of the target and drops onto it from
   the right, with a white trail; its arc varies a little shot to shot. It is framed like a film, not
   simulated; the rules decided where it lands before it left.
-- **The close-up**: the board about 45% of the width, a little right of the middle, stands behind.
+- **The close-up**: the board (drawn 1.2x taller than wide, `BOARD_TALL`; drawing only, scoring is
+  unchanged) about half the screen's width, seen a little from the left and above, stands behind.
   Arrows arrive from the right (`inDir`), so they stick out long, up and to the right. The board and
-  face are unlit (bright white).
+  face are unlit (bright white). The sun casts a real shadow of the board and easel (not on a
+  software-GL device).
 - **The sight** shows the face at about a third of its radius, the board round it (zoom `/0.34`).
   The sight's inner radius is 0.082 of the screen width (`this.k`).
-- **The bow** (`bowSVG`): a chunky metallic-blue riser with black parts and an opening at the top, a
-  thick black sight bar with a small foot, a blue shelf, a thick black grip, the lower limb blue. The
-  hand is a fist seen from the back, thumb over the top under the shelf. The arrow (thick blue, dark
-  rear, silver point) rests on the shelf and turns about `REST`: flatter with the bow down
-  (`ARROW_DEG.idle` 37), steeper drawn (60). The bow tilts and swings left on the way up.
-- **The sleeve** (`armSVG` / `_drawArm`) is drawn in screen pixels from the wrist to past the
-  bottom-left corner: long and straight with the forearm showing when down, big and puffy drawn.
-- **The stadium**: a sky dome with clouds, the far end of a bowl (`BOWL_Z`): a curved blue barrier, a
-  narrow soft band of crowd (no stairways), and a curved white steel-and-glass roof with sky above it.
+- **The bow, hand, sleeve and nocked arrow are 3D (2026-10-14, Matt: *"I shouldn't be able to tell
+  the images apart"*, then *"Do the 3d rebuild"*)**: `bow3d.js`, lit and reflecting a small sky
+  environment, drawn in their own scene over the range (`render.js setBow`). `ui.js` still decides
+  where the sight sits and how big (the same numbers as before) and keeps only the ring (gauge and
+  crosshair) as SVG; `setPose` works out how far from the eye the bow must be for that, so the ring,
+  the 3D sight housing and the magnified view line up. The bow: a chunky metallic-blue riser with
+  black parts and a fork at the top, a thick black sight bar with a small foot, a blue shelf, the
+  black grip BELOW the shelf and left of the riser (as in the recording), the lower limb blue. The
+  hand is a fist round the grip. The arrow runs from a nock point by the face (`NOCK`) through the
+  rest (`REST`), so it is flatter with the bow down and steeper drawn. The sleeve runs from the
+  wrist to a fixed shoulder below-left of the eye (`SHOULDER`): long and straight down, short and
+  puffy drawn. The bow tilts and swings left on the way up; on release it kicks and the arrow leaps.
+- **The stadium**: a sky dome with clouds, the far end of a bowl (`BOWL_Z`): a curved blue barrier,
+  two tiers of crowd (the upper one in the roof's shade) and a canopy roof seen from below
+  (`_buildRoof`): pale panels, white steel ribs, each bay arching at a white front tube, sky above.
 
 **The point under the sight's crosshair IS the aim.** `render.js setScope` draws the zoomed view
 at the screen point `ui.js` puts the ring at, from the same numbers, so they cannot disagree.
