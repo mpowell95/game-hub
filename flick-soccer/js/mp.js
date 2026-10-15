@@ -108,6 +108,11 @@ export const formsOfGame = (raw) => cleanForms(raw && raw.forms);
 /** Who kicks off (optional field, 2026-10-13): 1 = side b. Absent reads 0, the challenger, which is
  *  how every match before own-lineup challenges was played. */
 export const starterOfGame = (raw) => (raw && +raw.starter === 1 ? 1 : 0);
+/** Aiming help for both players (optional field, 2026-10-15, Matt: "We only assigned those by
+ *  difficulty. But I want to be able to choose"): chosen by the challenger. Absent reads 'medium',
+ *  what every challenge before it had. Display only: it never touches the physics or the log. */
+export const AID_IDS = ['easy', 'medium', 'hard'];
+export const aidsOfGame = (raw) => (raw && AID_IDS.includes(raw.aids) ? raw.aids : 'medium');
 /** Each side's two line-ups (optional field, 2026-10-14): `pairs: { a: [kick-off, defending], b: [...] }`,
  *  as [[side a], [side b]] for engine.js, or null for a match without it (one line-up per side for
  *  the whole match, `forms`). Side b's is written when b first opens the match (`pickLineup`); until
@@ -217,7 +222,7 @@ export function validateGame(raw) {
   // the first flick: nobody can flick until it is done, so a log with entries has no pick pending.
   const pick = raw.pick === 'b' && !log.length && !over ? 'b' : null;
   return {
-    v: 1, id, goals, forms, starter, pick, ...(pairs ? { pairs } : {}),
+    v: 1, id, goals, forms, starter, pick, ...(pairs ? { pairs } : {}), aids: aidsOfGame(raw),
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -549,7 +554,7 @@ async function writeRows(api, db, game, writer, only = null) {
  * (`form`); the other person sees it, picks theirs (pickLineup) and KICKS OFF. So the match is
  * theirs from the start and both rows are written now. Returns { ok, id, game } or a failure.
  */
-export async function createGame({ them, goals = 2, form, pair }) {
+export async function createGame({ them, goals = 2, form, pair, aids }) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
@@ -568,6 +573,7 @@ export async function createGame({ them, goals = 2, form, pair }) {
     // Since 2026-10-14 each side brings TWO line-ups (`pair`: [kicking off, defending]); side b kicks
     // off, so side a starts on its defending one. A caller with one `form` uses it for both.
     v: 1, id, goals: +goals, forms: cleanForms([myPair[1], 'balanced']), pairs: { a: myPair }, starter: 1, pick: 'b',
+    aids: AID_IDS.includes(aids) ? aids : 'medium',
     by: me, created: now, updated: now, lapse: true,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },

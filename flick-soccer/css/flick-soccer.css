@@ -508,6 +508,12 @@
 @media (prefers-reduced-motion: reduce) {
   .fs-root .fs-banner.is-show { animation: fs-still 1.6s linear forwards; }
 }
+/* A challenge's aiming help (2026-10-15): pills, then what the chosen level shows. */
+.fs-root .fs-aids { display: flex; flex-direction: column; gap: 6px; }
+.fs-root .fs-aid-note { margin: 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--fs-muted); }
+.fs-root .fs-mp-aid { margin: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; font-weight: 800; color: var(--fs-ink); }
+.fs-root .fs-mp-aid svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.fs-root .fs-mp-aid-note { margin-top: -6px; }
 /* A challenge card: who it is with, then its terms in one line. */
 .fs-root .fs-mp-who { margin: 2px 0 0; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; font-size: 22px; color: var(--fs-ink); }
 .fs-root .fs-mp-who b { font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
