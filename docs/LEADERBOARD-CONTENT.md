@@ -79,11 +79,13 @@ The games with standing records are Connect 4, Chinchón, Escoba, Nuts & Bolts, 
 Boxes, Boggle, Snake, Hill Climb, Skeeball and Tic Tac Toe. Elsewhere the section is simply absent —
 as it is on those games too, until somebody has a non-zero value for at least one of their records.
 
-**Most boards use tabs (2026-10-15).** Every board except Tic Tac Toe, Snake, Skeeball, Cup Pong,
-Texas Hold'em, Contexto, Golf, Arrow Maze and Gridlock: tabs All, each difficulty somebody has played,
-and MP once anyone has played online. All ranks hardest difficulty first, the row's number with its
-difficulty shape; a difficulty tab is that difficulty's number; MP is wins against real people. Each
-row says how many games that person played; the unit is named once above the list. No sorts.
+**Every board uses tabs (2026-10-15).** Tabs All, each difficulty somebody has played, and MP once
+anyone has played online. All ranks hardest difficulty first (Arrow Maze and Gridlock: total points),
+the row's number with its difficulty shape; a difficulty tab is that difficulty's number; MP is wins
+against real people. Each row says how many games that person played; the unit is named once above
+the list. No sorts. Game-specific tabs: Tic Tac Toe Ultimate / Classic (no difficulty tabs), Snake
+Walls off / Walls on, Skeeball a machine row over Points / High score, Cup Pong Solo (fewest throws,
+with racks cleared), Texas Hold'em Bankroll / Wins.
 
 **Minesweeper's board is its own shape (2026-10-15).** Tabs All, Easy, Med, Hard, Expert, opening on
 All. All shows one result per person: the hardest level they solved and their best time there, or, if

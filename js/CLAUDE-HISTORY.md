@@ -3825,3 +3825,8 @@ Same day, Matt: *"Yes, do the same for every game. If a game's leaderboard shows
 game or something, make a note of it and ask me before changing it."* Every plain board moved to the
 tabbed layout (`plainBoardHTML`); the VS/MP tile became an MP tab. Nine boards with game-specific
 shapes were left on the old layout and listed for Matt (`SPECIAL_BOARDS`).
+
+Same day, Matt answered the nine with *"Yes to all"*: each game-specific board kept its own numbers
+as tabs (`boardView`): Tic Tac Toe Ultimate/Classic, Snake Walls off/on, Skeeball machines over
+Points/High score, Cup Pong Solo, Hold'em Bankroll/Wins; Contexto, Golf, Arrow Maze, Gridlock in the
+plain shape. Contexto's average guesses left the row (it cut names short); it still breaks ties.

@@ -395,8 +395,10 @@ then % high to low, then dashes. `youBadge()` returns '' everywhere (root rule: 
 **Every other board, same shape** (`plainBoardHTML`, same day): tabs All + the difficulties the field
 played + MP (online wins) when anyone played online; one number per row (All: `boardMetricCmp` order,
 tier shape beside it), games played under it, the unit once above the list; standing records unchanged.
-**`SPECIAL_BOARDS` keep the old layout until Matt decides each**: Tic Tac Toe, Snake, Skeeball, Cup
-Pong, Hold'em, Contexto, Golf, Arrow Maze, Gridlock.
+**The game-specific boards keep their own numbers as TABS** (Matt: "Yes to all"; `boardView`):
+Tic Tac Toe All / Ultimate / Classic / MP; Snake + Walls off / Walls on; Skeeball machine row over
+Points / High score; Cup Pong + Solo (fewest throws); Hold'em Bankroll / Wins; Contexto, Golf, Arrow
+Maze, Gridlock plain. `_view` holds a non-difficulty tab, reset with `_tier`. Old sort/filter code stays.
 
 ### The leaderboard's spacing (2026-10-11)
 
