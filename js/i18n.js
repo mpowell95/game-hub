@@ -24,6 +24,8 @@
 // "Monopoly Deal's must-stay-synced duplicates"), so extending it drags in files this feature
 // deliberately doesn't touch — and a profile reset shouldn't change the device's language.
 
+import { loadProfile, isPlaceholderName } from './profile-store.js';
+
 const KEY = 'gamehub.lang.v1';
 export const LANGS = ['en', 'es'];
 const EVENT = 'gamehub:lang';
@@ -50,6 +52,15 @@ export function onLangChange(cb) {
   return () => window.removeEventListener(EVENT, h);
 }
 
+/** The local player's PROFILE NAME, for labels that used to say "You" (Matt, 2026-10-15: "It must
+ *  use profile names everywhere always"). Never throws. A blank or placeholder name (every entry
+ *  point is name-gated, so this is only a safety net) reads as 'Player' / 'Jugador'. */
+export function myName() {
+  let n = '';
+  try { const p = loadProfile(); n = p && typeof p.name === 'string' ? p.name.trim() : ''; } catch { n = ''; }
+  return n && !isPlaceholderName(n) ? n : (getLang() === 'es' ? 'Jugador' : 'Player');
+}
+
 /** Build a t() over a `{ en: {...}, es: {...} }` dictionary. Parchís's exact semantics:
  *  chosen language -> English -> the key itself, then `{name}` placeholder substitution.
  *  Reads getLang() on every call, so render-time t() picks up a switch automatically. */
@@ -60,8 +71,12 @@ export function makeT(dict) {
       : (dict.en && dict.en[key] != null) ? dict.en[key]
         : key;
     if (typeof s === 'function') { try { s = s(params || {}); } catch { s = key; } }
-    if (params) for (const k of Object.keys(params)) s = String(s).split('{' + k + '}').join(params[k]);
-    return String(s);
+    s = String(s);
+    // `{me}` is always the local player's profile name, filled here so no call site has to pass it.
+    // An explicit `me` param wins (a game that holds its own player object).
+    if (s.includes('{me}') && !(params && params.me != null)) s = s.split('{me}').join(myName());
+    if (params) for (const k of Object.keys(params)) s = s.split('{' + k + '}').join(params[k]);
+    return s;
   };
 }
 
@@ -72,4 +87,4 @@ export function makeT(dict) {
 // headlessly with no `document`, same guard as setLang's.
 try { document.documentElement.lang = getLang(); } catch { /* not in a DOM */ }
 
-export default { getLang, setLang, onLangChange, makeT, LANGS };
+export default { getLang, setLang, onLangChange, makeT, myName, LANGS };
