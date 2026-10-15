@@ -121,6 +121,13 @@ function bestTimes() {
     return ms.bestTimeMs && typeof ms.bestTimeMs === 'object' ? ms.bestTimeMs : {};
   } catch { return {}; }
 }
+/** Best % cleared per level (2026-10-15), shown where a level has no best time yet. */
+function bestCleared() {
+  try {
+    const ms = ((loadStats().games || {}).minesweeper || {}).ms || {};
+    return ms.bestClearedPct && typeof ms.bestClearedPct === 'object' ? ms.bestClearedPct : {};
+  } catch { return {}; }
+}
 function winsSoFar() {
   try { return ((loadStats().games || {}).minesweeper || {}).total.won | 0; } catch { return 0; }
 }
@@ -215,6 +222,7 @@ class MinesweeperUI {
     this._clearTimers();
     const s = this.settings;
     const bests = bestTimes();
+    const closest = bestCleared();
     const saved = loadSave();
     const diffs = LEVEL_ORDER.map((id) => {
       const L = LEVELS[id];
@@ -228,7 +236,8 @@ class MinesweeperUI {
     }).join('');
     const bestCells = LEVEL_ORDER.map((id) => {
       const v = bests[id] | 0;
-      return `<div><b>${v > 0 ? fmtTime(v) : esc(t('no_time'))}</b><span>${esc(t(id))}</span></div>`;
+      const pct = closest[id] | 0;
+      return `<div><b>${v > 0 ? fmtTime(v) : pct > 0 ? pct + '%' : esc(t('no_time'))}</b><span>${esc(t(id))}</span></div>`;
     }).join('');
     // A SETTING THAT CANNOT WORK IS NOT OFFERED. iOS Safari has no navigator.vibrate at all, so on
     // every iPhone here this row was a switch that flipped and then did nothing for ever, which is

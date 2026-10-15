@@ -499,7 +499,10 @@ function minesweeperScreen(rec) {
   const rows = MS_LEVELS_UI.map(([k, labelKey]) => {
     const b = byDiff[k] || {};
     const best = bestTimeMs[k] | 0;
-    return `<tr><th scope="row">${t(labelKey)}</th><td>${b.played | 0}</td><td>${b.won | 0}</td><td>${best > 0 ? fmtMmSs(best) : '&mdash;'}</td></tr>`;
+    // Never cleared: the closest it got, as a % of the board (2026-10-15), else a dash.
+    const pct = ((ms.bestClearedPct || {})[k] | 0);
+    const cell = best > 0 ? fmtMmSs(best) : pct > 0 ? `${pct}%` : '&mdash;';
+    return `<tr><th scope="row">${t(labelKey)}</th><td>${b.played | 0}</td><td>${b.won | 0}</td><td>${cell}</td></tr>`;
   }).join('');
   return `
     <div class="gs-tallies is-4">

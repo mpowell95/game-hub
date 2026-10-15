@@ -224,6 +224,12 @@ export function aggregatePlayers(all, corrections) {
           const val = mbt[k] | 0;
           if (val > 0) dst.ms.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
         }
+        // Best % cleared per level (2026-10-15): higher-is-better, so the best device wins.
+        const mbc = src.ms.bestClearedPct || {};
+        if (!dst.ms.bestClearedPct) dst.ms.bestClearedPct = {};
+        for (const k of Object.keys(mbc)) {
+          dst.ms.bestClearedPct[k] = Math.max(dst.ms.bestClearedPct[k] | 0, mbc[k] | 0);
+        }
       } else if (g === 'wayout' && src.wo) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it Arrow Maze's
         // timed counts read as nothing the moment a second device syncs (THE LAW rule 1). Counters
