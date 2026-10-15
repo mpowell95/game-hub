@@ -487,15 +487,21 @@ function msCellHTML(c) {
   if (c.pct != null) return `<span class="lb-mspct"><span class="lb-msbar" aria-hidden="true"><i style="width:${c.pct}%"></i></span>${c.pct}%</span>`;
   return '<span class="lb-msnone">&mdash;</span>';
 }
-function msTabsHTML() {
-  const tabs = [null, 1, 2, 3, 4].map((tier) => {
-    const sel = _tier === tier;
+/** A board's tabs: All, then each difficulty in `tiers` (shape + word), then MP when `withMp`.
+ *  Six tabs do not fit a phone with words, so past five the difficulty tabs drop to their shape. */
+function boardTabsHTML(tiers, withMp) {
+  const narrow = tiers.length + (withMp ? 2 : 1) > 5;
+  const tabs = [null, ...tiers].map((tier) => {
+    const sel = !_vs && _tier === tier;
     const word = tier == null ? t('lb_diff_all') : tier === 2 ? tx('lb_tab_med', 'Med') : t(TIER_LABEL_KEY[tier]);
     const shapeHtml = tier ? `<span class="lb-mstab-sh" style="--lb-pill-color:${TIER_COLOR[tier]}">${diffShapeSVG(tier)}</span>` : '';
-    return `<button type="button" class="lb-pill lb-mstab${sel ? ' is-sel' : ''}" data-mstier="${tier == null ? '' : tier}" aria-pressed="${sel}">${shapeHtml}${esc(word)}</button>`;
+    const label = tier && narrow ? '' : esc(word);
+    return `<button type="button" class="lb-pill lb-mstab${sel ? ' is-sel' : ''}" data-mstier="${tier == null ? '' : tier}" aria-pressed="${sel}" aria-label="${esc(word)}">${shapeHtml}${label}</button>`;
   });
+  if (withMp) tabs.push(`<button type="button" class="lb-pill lb-mstab${_vs ? ' is-sel' : ''}" data-lbvs="1" aria-pressed="${_vs}">${esc(t('lb_mp_short'))}</button>`);
   return `<div class="lb-pills lb-mstabs" role="group">${tabs.join('')}</div>`;
 }
+function msTabsHTML() { return boardTabsHTML([1, 2, 3, 4], false); }
 function msBoardHTML(list) {
   const tier = _tier;
   const rows = tier == null
@@ -512,6 +518,45 @@ function msBoardHTML(list) {
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf('minesweeper') }));
   return msTabsHTML() + cards;
+}
+
+// --- EVERY OTHER PLAIN BOARD, SAME SHAPE (2026-10-15) ---------------------------------------------
+// Matt: "Yes, do the same for every game. If a game's leaderboard shows specific info to that game,
+// make a note of it and ask me before changing it." So every board EXCEPT `SPECIAL_BOARDS` gets
+// Minesweeper's layout: tabs (All, the difficulties the field has played, MP when anyone played
+// online), one number per row (All: the hardest-difficulty-first number with its shape), games
+// played under it, the unit named once above the list. No sort pills, no tier tiles, no note.
+// The ranking itself is the board's own, unchanged (boardMetricCmp). The special boards keep the
+// old layout until Matt decides each one; standing records stay under every board as before.
+const SPECIAL_BOARDS = new Set(['tictactoe', 'snake', 'skeeball', 'cuppong', 'holdem', 'contexto', 'golf', 'wayout', 'gridlock']);
+function plainBoardHTML(list, id) {
+  const tiers = fieldTiersPresent(list, [id]);
+  const withMp = anyMpPlays(list, id);
+  if (_vs && !withMp) _vs = false;
+  const tabs = tiers.length || withMp ? boardTabsHTML(tiers, withMp) : '';
+  let rows;
+  let cmp;
+  if (_vs) {
+    rows = list.filter((g) => mpPlaysOf(g, id) > 0);
+    cmp = (a, b) => mpWinsOf(b, id) - mpWinsOf(a, id);
+    rows.sort((a, b) => cmp(a, b) || (mpPlaysOf(a, id) - mpPlaysOf(b, id)) || rankName(a).localeCompare(rankName(b)));
+  } else {
+    rows = list.filter((g) => boardPlaysOf(g, id) > 0);
+    cmp = boardMetricCmp(id);
+    sortRows(rows, id, 'wins');
+  }
+  const { rankOf, tiedAt } = rankMap(rows, () => 0, cmp);
+  const unit = _vs ? t('lb_unit_wins') : unitTextOf(id, null);
+  const cards = rows.length
+    ? `<div class="lb-unith">${esc(unit)}</div><div class="lb-plist is-board">${rows.map((g) => {
+        const val = _vs ? String(mpWinsOf(g, id))
+          : `${_tier == null ? tierMarkHTML(boardTierOf(g, id)) : ''}<span>${esc(metricText(boardMetricOf(g, id), id))}</span>`;
+        const played = _vs ? mpPlaysOf(g, id) : boardPlaysOf(g, id);
+        const big = { cls: 'lb-msval', val, unit: t('lb_played_count', { n: played }) };
+        return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', '', '');
+      }).join('')}</div>`
+    : emptyState(t('lb_empty_game', { label: labelOf(id) }));
+  return tabs + cards;
 }
 
 function snBestAt(g, tier) {
@@ -1829,6 +1874,7 @@ function gameDetail(list, id) {
     </div>
   </div>`;
   if (id === 'minesweeper') return head + msBoardHTML(list);
+  if (!SPECIAL_BOARDS.has(id)) return head + plainBoardHTML(list, id) + recordsHTML(list, id);
   const controls = boardControlsHTML(id, fieldTiers, machineIds);
   const showMp = anyMpPlays(list, id);
   const bSort0 = effectiveSort(id);
@@ -2039,6 +2085,7 @@ let _player = null;         // non-null (a group key) => showing that player's d
 let _playerGame = null;     // non-null => drilled into that game from WITHIN player detail
 let _cat = 'all';           // 'all' | 1-4 | 'NT' | 'VS' - By Player's category filter (opens on the saved default)
 let _tier = null;           // null (All) | 1-4 - a GAME BOARD's own difficulty filter, reset per board
+let _vs = false;            // a game board's MP tab (online wins), reset with _tier
 let _machine = 'all';       // 'all' | a Skeeball machine id - that board's filter, deliberately not persisted
 let _sort = 'wins';         // 'alpha' | 'played' | 'wins' (or a game's own metric on a game board) - persisted, see loadView/saveView
 let _gameSort = 'popular';  // 'alpha' | 'popular' | 'fav' - By Game's own order; the leaderboard OPENS on this
@@ -2115,7 +2162,7 @@ function stepBack() {
   if (_playerGame) { _playerGame = null; rerender(); return true; }
   if (_player) { _player = null; rerender(); return true; }
   if (_game && _game === _entryGame) return false;   // came in from that game: back = close
-  if (_game) { _game = null; _tier = null; _machine = 'all'; rerender(); return true; }
+  if (_game) { _game = null; _tier = null; _vs = false; _machine = 'all'; rerender(); return true; }
   return false;
 }
 
@@ -2159,7 +2206,8 @@ function onClick(e) {
     return;
   }
   const msTab = e.target.closest('[data-mstier]');
-  if (msTab) { _tier = msTab.dataset.mstier === '' ? null : Number(msTab.dataset.mstier); rerender(); return; }
+  if (msTab) { _tier = msTab.dataset.mstier === '' ? null : Number(msTab.dataset.mstier); _vs = false; rerender(); return; }
+  if (e.target.closest('[data-lbvs]')) { _tier = null; _vs = true; rerender(); return; }
   const opt = e.target.closest('.lb-opt');
   if (opt) {
     if (opt.dataset.cat !== undefined) _cat = catFromStored(opt.dataset.cat);
@@ -2199,13 +2247,13 @@ function onClick(e) {
   // Leaving a board drops that board's own filters: they belong to the visit, not to the overlay.
   if (e.target.closest('[data-role="lb-back"]')) {
     if (_game && _game === _entryGame) { closeLeaderboard(); return; }
-    _game = null; _tier = null; _machine = 'all'; rerender(); return;
+    _game = null; _tier = null; _vs = false; _machine = 'all'; rerender(); return;
   }
   const seg = e.target.closest('.lb-seg');
   if (seg && seg.dataset.seg) {
     const next = seg.dataset.seg;
     if (next === _seg && !_game && !_player) return;
-    _seg = next; _game = null; _player = null; _playerGame = null; _tier = null; _machine = 'all'; rerender();
+    _seg = next; _game = null; _player = null; _playerGame = null; _tier = null; _vs = false; _machine = 'all'; rerender();
     return;
   }
   const card = e.target.closest('.lb-pcard[data-pkey]');
@@ -2226,7 +2274,7 @@ function onClick(e) {
     // Always the game's own number - Longest, Points, Wins, whatever that board calls it. See
     // effectiveSort for why this is read off the pill list rather than hardcoded.
     _boardSort = sortItemsFor(_game)[0].sort;
-    _tier = null; _machine = 'all'; rerender();
+    _tier = null; _vs = false; _machine = 'all'; rerender();
   }
 }
 
@@ -2265,6 +2313,7 @@ export async function openLeaderboard(opts = {}) {
   _cat = view.cat;
   _saved = { sort: view.sort, cat: view.cat };
   _tier = null;
+  _vs = false;
   _machine = 'all';
   _panel = null;
   if (opts && typeof opts.game === 'string' && isGameOnLauncher(opts.game)) {
@@ -2607,6 +2656,7 @@ function ensureCss() {
     '.lb-note{margin:0 0 12px;font-size:13px;line-height:1.4;color:var(--lb-muted)}',
     // Minesweeper's own board (2026-10-15): level tabs, a time or a best-% bar per row.
     '.lb-mstabs{margin:0 0 12px}',
+    '.lb-unith{text-align:right;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--lb-muted);margin:0 16px 6px}',
     '.lb-mstab{flex:1 1 auto;padding:0 6px}',
     '.lb-mstab-sh{display:inline-flex}.lb-mstab-sh .lb-dshape{width:11px;height:11px;fill:var(--lb-pill-color)}.lb-mstab-sh .lb-dshape-x2{width:19px}',
     ':root .lb-mstab.is-sel .lb-dshape-t3,:root .lb-mstab.is-sel .lb-dshape-t4{fill:var(--lb-sel-ink)}',

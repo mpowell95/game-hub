@@ -3820,3 +3820,8 @@ Built as a Minesweeper-only renderer (`msBoardHTML`) so no other board's ranking
 exists for boards finished since `bestClearedPct` was added the same morning; a level played only
 before that shows a dash, never an estimate (rule 4). Matt accepted that. Mockup:
 https://claude.ai/artifact/5NnrNK7Zq2e8r32EDTXukx.
+
+Same day, Matt: *"Yes, do the same for every game. If a game's leaderboard shows specific info to that
+game or something, make a note of it and ask me before changing it."* Every plain board moved to the
+tabbed layout (`plainBoardHTML`); the VS/MP tile became an MP tab. Nine boards with game-specific
+shapes were left on the old layout and listed for Matt (`SPECIAL_BOARDS`).
