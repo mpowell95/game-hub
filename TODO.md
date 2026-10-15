@@ -6,6 +6,7 @@ One list, by game. One line per item. When an item ships, delete its line in the
 
 - The emoji does not appear everywhere the name does: shared `chipHTML({name, emoji})` plus a sweep, immersive games last; paused by Matt (root CLAUDE.md, "The shared profile").
 - Leaderboard: a best-metric board should rank on that best by default, not on the last-picked sort (check; branch `claude/skeeball-leaderboard-ui-9y2b8r` was deleted, head `e11818d`).
+- **Matt:** say "release X" for any admin-only game already switched on for players on the admin page (e.g. Arrow Maze?), so it is saved on phones instead of re-downloaded each open (root CLAUDE.md, "Releasing a game").
 - **Matt:** play online on two real phones for Battleship, Chinchón, Dots and Boxes, Filler, Mancala, Tic Tac Toe (check; each game's CLAUDE.md, "unverified"; `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`).
 
 ## Air Hockey
@@ -101,5 +102,5 @@ One list, by game. One line per item. When an item ships, delete its line in the
 ## Housekeeping (Matt's PC)
 
 - Sam / Sam1 player records need merging when Sam is online; `fix-sam-merge.mjs` was untracked in the repo root (check).
-- About 47 MB untracked: `skeeball/Machines/` and `skeeball/References/` should be gitignored not deleted; `.gitignore`'s `.claude/*` is root-anchored so `skeeball/.claude/` slips past; about 30 finished July handoff docs belong in the sibling `Game-Hub-Docs/` (check).
+- About 47 MB untracked: `skeeball/Machines/` and `skeeball/References/` should be gitignored not deleted; `.gitignore`'s `.claude/*` is root-anchored so `skeeball/.claude/` slips past (check).
 - Ten dead July branches and three orphaned git worktrees (`gh-lb-wt`, `gh-main-check`, `gh-strip`) that `git worktree prune` cannot remove (check).
