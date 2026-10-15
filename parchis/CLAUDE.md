@@ -43,3 +43,8 @@ and rebuild.
 ## Hub notes
 
 Parchís: launch-out `href:` — Spanish Parchís vs AI. Single-file build from the sibling `../Parchís/` project (`node recombine.mjs` → `parchis/index.html`). See the rest of this file.
+
+
+## No zoom (2026-10-15)
+
+`parchis/index.html` carries `maximum-scale=1, user-scalable=no` and `<script src="../js/no-zoom.js"></script>` (root CLAUDE.md, scroll and touch rules). **It is a BUILT file: add the same two lines to the `../Parchís/` source**, or the next rebuild drops them (`tools/test-game-conventions.mjs` will then fail).

@@ -43,6 +43,10 @@
 [hidden] { display: none !important; } /* must win over .hub-grid { display: grid } etc. */
 .hub-card, .hub-back { touch-action: manipulation; }
 html, body { margin: 0; min-height: 100%; }
+/* While a game is mounted the page itself cannot scroll or rubber-band (Matt, 2026-10-15: "no
+ * gameplay screen should scroll"). Set and cleared by js/hub.js (_enterGameChrome / showLauncher).
+ * A game's own screens must already fit (tools/check-no-scroll.mjs); this only stops the page. */
+html.gh-ingame, html.gh-ingame body { overflow: hidden; overscroll-behavior: none; }
 body {
   background: var(--hub-bg);
   color: var(--hub-ink);

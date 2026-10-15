@@ -154,6 +154,25 @@ check(
 
 // --- 2. touch ---------------------------------------------------------------------------------
 
+// No page zooms or selects (Matt, 2026-10-15: "No screens should be able to zoom in or select").
+// Every page a player can open loads js/no-zoom.js and caps its viewport; a game's standalone page
+// is one of them, so a new game is covered the day its folder appears.
+{
+  const pages = ['index.html', 'profile/index.html', 'business-deal/index.html', 'parchis/index.html', 'hole-editor/index.html',
+    ...GAMES.map((g) => `${g}/index.html`)];
+  check(
+    'every page loads js/no-zoom.js and has maximum-scale=1, user-scalable=no',
+    pages.filter((f) => existsSync(join(ROOT, f))).filter((f) => {
+      const html = readFileSync(join(ROOT, f), 'utf8');
+      const vp = (html.match(/<meta name="viewport" content="([^"]*)"/) || [])[1] || '';
+      return !/js\/no-zoom\.js/.test(html) || !/maximum-scale=1/.test(vp) || !/user-scalable=no/.test(vp);
+    }),
+  'add `maximum-scale=1, user-scalable=no` to the viewport meta and `<script src="../js/no-zoom.js"></script>` '
+  + 'right after it (root CLAUDE.md, scroll and touch rules). Without it a fast double tap zooms the page.'
+  );
+}
+
+
 check(
   'no game puts a touchmove listener on document or window',
   GAMES.flatMap((g) => gameJs(g)
