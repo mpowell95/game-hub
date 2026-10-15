@@ -201,8 +201,14 @@ the Boom popup dimmed it. Mockup (dark): https://claude.ai/artifact/SbNC6XWSy8b2
 `recordMinesweeper(level, won, extras)` in `js/game-stats.js`. Sub-counter `ms`:
 
 ```
-ms = { cleared, flagsRight, bestTimeMs: { easy, medium, hard, expert } }
+ms = { cleared, flagsRight, bestTimeMs: { easy, medium, hard, expert },
+       bestClearedPct: { easy, medium, hard, expert } }
 ```
+
+- **`bestClearedPct` (2026-10-15)**: the closest a player got on each level, as % of the board
+  (a win is 100). Higher-is-better, `Math.max` in the writer and in `players-agg.js`; 0 = none yet.
+  Nothing before that date exists (the lose screen's % used to be dropped). Shown where a level
+  has no best time: the setup screen's "Your best" cells and My Stats' "Best" column.
 
 - **`bestTimeMs` is LOWER-is-better and improves with `Math.min`.** That is not an exception to
   rule 2, it is what improving means for a time; golf's `bestRoundByCourse` is the existing

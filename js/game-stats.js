@@ -489,6 +489,10 @@ function ensureMs(g) {
   if (!Number.isFinite(g.ms.flagsRight)) g.ms.flagsRight = 0;
   if (!g.ms.bestTimeMs || typeof g.ms.bestTimeMs !== 'object') g.ms.bestTimeMs = {};
   for (const lv of MS_LEVELS) if (!Number.isFinite(g.ms.bestTimeMs[lv])) g.ms.bestTimeMs[lv] = 0;
+  // (2026-10-15) Best % of the board cleared per level, higher-is-better (Math.max), 0 = none yet.
+  // ADDED, nothing before that date exists: a lost board's % used to be shown and dropped.
+  if (!g.ms.bestClearedPct || typeof g.ms.bestClearedPct !== 'object') g.ms.bestClearedPct = {};
+  for (const lv of MS_LEVELS) if (!Number.isFinite(g.ms.bestClearedPct[lv])) g.ms.bestClearedPct[lv] = 0;
 }
 
 /** Arrow Maze's timed finishes (2026-10-13). Lists may come back from Firebase as objects keyed
@@ -1675,6 +1679,11 @@ export function recordMinesweeper(level, won, extras = {}) {
       const cur = g.ms.bestTimeMs[lv] | 0;
       g.ms.bestTimeMs[lv] = cur > 0 ? Math.min(cur, timeMs) : timeMs;
     }
+    // How close a board got (Matt, 2026-10-15: "What's the closest Ana has gotten to beating
+    // hard?"). A win is 100. Only ever improves (rule 2).
+    const pct = won ? 100 : Math.min(100, Math.max(0, Math.round(+extras.cleared || 0)));
+    if (!g.ms.bestClearedPct || typeof g.ms.bestClearedPct !== 'object') g.ms.bestClearedPct = {};
+    g.ms.bestClearedPct[lv] = Math.max(g.ms.bestClearedPct[lv] | 0, pct);
   }
   st.updatedAt = new Date().toISOString();
   persist(st);

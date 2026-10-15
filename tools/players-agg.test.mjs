@@ -900,5 +900,18 @@ const OFF_THE_BOARD = {};
   for (const id of metaIds) ok(`GAME_META id "${id}" is a real stats id`, statsIds.includes(id));
 }
 
+// Minesweeper's best % cleared (2026-10-15): the best device wins per level, and a device that
+// predates the field (no bestClearedPct at all) neither breaks the merge nor lowers it.
+{
+  const all = {
+    m1: rec({ playerId: 'MS111', name: 'Sweeper' }, { minesweeper: { total: { played: 3, won: 0, lost: 3 }, ms: { cleared: 0, flagsRight: 4, bestTimeMs: {}, bestClearedPct: { hard: 62, easy: 40 } } } }, 1),
+    m2: rec({ playerId: 'ms111', name: 'Sweeper' }, { minesweeper: { total: { played: 2, won: 1, lost: 1 }, ms: { cleared: 1, flagsRight: 2, bestTimeMs: { easy: 90000 }, bestClearedPct: { hard: 48, easy: 100 } } } }, 2),
+    m3: rec({ playerId: 'MS111', name: 'Sweeper' }, { minesweeper: { total: { played: 1, won: 0, lost: 1 }, ms: { cleared: 0, flagsRight: 0, bestTimeMs: {} } } }, 3),
+  };
+  const ms = aggregatePlayers(all)[0].games.minesweeper.ms;
+  eq('minesweeper: bestClearedPct is the max per level across devices', [ms.bestClearedPct.hard, ms.bestClearedPct.easy], [62, 100]);
+  eq('minesweeper: counters still add with an old-shape device present', [ms.cleared, ms.flagsRight], [1, 6]);
+}
+
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
 process.exit(fail ? 1 : 0);
