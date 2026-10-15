@@ -1,7 +1,7 @@
 // match-chat-ui.js - QUICK CHAT INSIDE A MATCH, the screen half, for EVERY multiplayer game
 // (2026-10-14). The data half is js/match-chat.js; its header says why this exists.
 //
-// A 💬 button opens a panel: the last few lines of this match ("You:" / "Anita:" in bold, each on
+// A 💬 button opens a panel: the last few lines of this match ("Matt:" / "Anita:" in bold, the player's own profile name), each on
 // its own side), the player's own quick-chat palette (js/mp-reactions.js - the emojis and phrases
 // they chose on the profile page), and one free-text line. What the other person says pops as a
 // BIG card naming them, tap to close; the same line again bumps a "×5" instead of stacking (Matt,
@@ -30,18 +30,18 @@
 //
 // No storage, no network: this file can be cache-first in sw.js.
 
-import { getLang, makeT } from './i18n.js';
+import { getLang, makeT, myName } from './i18n.js';
 import { loadPalette, paletteItems, reactionText } from './mp-reactions.js';
 import { cleanChat, CHAT_MAXLEN } from './match-chat.js';
 
 const t = makeT({
   en: {
-    chat: 'Chat', with: 'Chat with {name}', ph: 'Say something', send: 'Send', you: 'You', none: 'Nothing said yet.',
+    chat: 'Chat', with: 'Chat with {name}', ph: 'Say something', send: 'Send', none: 'Nothing said yet.',
     notSent: 'Message not sent. Try again.', offline: 'No connection. Try again.',
     blocked: 'Chat is off on a test server.', dismiss: 'Tap to close', close: 'Close',
   },
   es: {
-    chat: 'Chat', with: 'Chat con {name}', ph: 'Di algo', send: 'Enviar', you: 'Tú', none: 'Nadie ha dicho nada.',
+    chat: 'Chat', with: 'Chat con {name}', ph: 'Di algo', send: 'Enviar', none: 'Nadie ha dicho nada.',
     notSent: 'Mensaje no enviado. Inténtalo otra vez.', offline: 'Sin conexión. Inténtalo otra vez.',
     blocked: 'El chat está apagado en un servidor de pruebas.', dismiss: 'Toca para cerrar', close: 'Cerrar',
   },
@@ -98,7 +98,7 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
   // A typed line shows WHOLE up to CHAT_MAXLEN; reactionText() would cut it at the 24-character
   // floating-bubble cap that js/mp-reactions-ui.js uses.
   const textOf = (e) => (e.t === 'c' ? cleanChat(e.v) : reactionText({ t: e.t, v: e.v }, getLang()));
-  const whoOf = (e) => (e.mine ? t('you') : ((themFn() || {}).name || '?'));
+  const whoOf = (e) => (e.mine ? myName() : ((themFn() || {}).name || '?'));
 
   function paintBtn() {
     btn.setAttribute('aria-label', t('chat') + (unread ? ` (${unread})` : ''));
@@ -230,7 +230,7 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
       arm(same, ms);
       return;
     }
-    const who = e.mine ? { name: t('you'), emoji: '' } : (themFn() || {});
+    const who = e.mine ? { name: myName(), emoji: '' } : (themFn() || {});
     const el = document.createElement('div');
     el.className = 'ghc-pop' + (e.mine ? ' is-mine' : '') + (e.t === 'e' ? ' is-emoji' : '');
     el._sig = sig;

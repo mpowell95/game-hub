@@ -335,7 +335,7 @@
            leaderboard page. Colour, theme and quick chat used to live in here too, which is what
            made this card a grab-bag - they are settings, and they moved. -->
       <section class="pf-section">
-        <h2 data-i18n="pf_you_h">You</h2>
+        <h2 id="pf-you-h"></h2>
         <div class="pf-you-row">
           <button type="button" class="pf-emoji-btn" id="pf-you-emoji" aria-label="Choose your emoji" data-i18n-aria="pf_you_emoji_aria">🙂</button>
           <div class="pf-name-wrap">
@@ -640,6 +640,7 @@
     const els = {
       youEmoji: $('#pf-you-emoji'),
       youName: $('#pf-you-name'),
+      youH: $('#pf-you-h'),
       youMsg: $('#pf-you-msg'),
       colors: $('#pf-colors'),
       themeSeg: $('#pf-theme-seg'),
@@ -1095,7 +1096,9 @@
 
     // -- You fields --------------------------------------------------------------
     els.youEmoji.addEventListener('click', () => openPicker('you', state.emoji));
-    els.youName.addEventListener('input', () => { state.name = els.youName.value; scheduleSave(); });
+    // The heading IS the profile name (Matt, 2026-10-15: never "You"). Blank mid-edit keeps the old word.
+    function paintYouHead() { els.youH.textContent = (state.name || '').trim() || t('pf_you_h'); }
+    els.youName.addEventListener('input', () => { state.name = els.youName.value; paintYouHead(); scheduleSave(); });
     els.youMsg.addEventListener('input', () => {
       state.message = els.youMsg.value;
       state.messageAt = Date.now();
@@ -1295,6 +1298,7 @@
     function hydrate() {
       els.youEmoji.textContent = state.emoji;
       els.youName.value = state.name;
+      paintYouHead();
       els.youMsg.value = state.message || '';
       els.code.textContent = state.playerId || '—————';
       renderColors();

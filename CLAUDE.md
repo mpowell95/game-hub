@@ -539,6 +539,9 @@ Full contract: `js/CLAUDE.md`, "The admin config".
   sessions: *"Stop using 'You'. Use profile names. Don't make me tell you again"*): lists, rankings,
   badges, result lines, logs and results cards print the player's own name like anyone else's.
   Instructions spoken TO the player ("Tap the table...") are not names and are fine.
+  `{me}` in any `makeT` string is filled with the profile name (`myName()`, `js/i18n.js`, 2026-10-15);
+  the hub (Challenges, alerts, Messages, match chat, profile heading) uses it. Matt, same day: in-game
+  lines like "Your turn" may stay; the leaderboard and shared screens must not say "You".
 - **No em dashes** in user-facing game or profile copy.
 - **Every "you win / you lose" popup gets a close (X) top-right.**
 - Text size, tap targets, safe areas, motion: `docs/BUILDING-A-GAME.md`, "Part 0 — The UX floor".

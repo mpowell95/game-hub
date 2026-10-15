@@ -20,7 +20,7 @@ import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 // The first-run "choose a name" gate lives in name-gate.js (2026-07-31) so the hub and every
 // standalone game page run the same one; the profile/code/username plumbing it used to do inline
 // here moved with it.
-import { getLang, setLang, makeT } from './i18n.js';
+import { getLang, setLang, makeT, myName } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { GAME_ART } from './game-art.js';
@@ -1611,9 +1611,9 @@ class Hub {
       : `${swords}<span>${t('hub_alert_head')}</span>${swords}`;
     const line = a.kind === 'over'
       ? t(a.result === 'won' ? 'hub_alert_won_vs' : a.result === 'lost' ? 'hub_alert_lost_vs' : 'hub_alert_draw_vs',
-        { who: esc(a.name || t('hub_alert_someone')) })
+        { who: esc(a.name || t('hub_alert_someone')), me: esc(myName()) })
       : a.kind === 'challenge'
-      ? t('hub_alert_challenged', { who: a.name ? String(a.name).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : t('hub_alert_someone') })
+      ? t('hub_alert_challenged', { me: esc(myName()), who: a.name ? String(a.name).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : t('hub_alert_someone') })
       : this._turnLine(a.names);
     const el = document.createElement('div');
     // role=status + aria-live: this appears without the player doing anything, so it has to be
@@ -1645,11 +1645,11 @@ class Hub {
     // Other players' names, going into innerHTML: escaped.
     const e = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const n = Array.isArray(names) ? names.filter(Boolean).map(e) : [];
-    if (!n.length) return t('hub_alert_your_turn');
+    if (!n.length) return t('hub_alert_your_turn', { me: e(myName()) });
     const who = n.length === 1 ? n[0]
       : n.length === 2 ? t('hub_and', { a: n[0], b: n[1] })
         : t('hub_and', { a: n.slice(0, 2).join(', '), b: t('hub_n_more', { n: n.length - 2 }) });
-    return t('hub_alert_your_turn_vs', { who });
+    return t('hub_alert_your_turn_vs', { who, me: e(myName()) });
   }
 
   /** Tapping the bubble (or the tile it points at) arms the full-screen card and opens the game. */
