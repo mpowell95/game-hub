@@ -139,10 +139,29 @@ it enumerates every mine layout the numbers allow and guesses only when nothing 
 | Hard | 25% | 1.7 | 63% |
 | Expert | 10% | 2.9 | 43% |
 
-Real players (live records, 2026-10-15): Easy 13%, Medium 11%, Hard 0 of 70, Expert 0 of 13.
+Real players (live records, 2026-10-15, `tools/read-minesweeper.mjs`): Easy ~13%, Medium ~11%, Hard 1 of 82 (Anita, 7:00), Expert 0 of 22. (An earlier same-day read said Hard 0 of 70; that was stale.)
 
-**No-guess boards are explicitly out of scope.** A classic Minesweeper position can require a coin
-flip. Generating only logically-solvable boards is a much larger job and nothing here assumes it.
+**Those numbers were checked three ways (2026-10-15, after Matt asked whether the test was broken):**
+every square's centre and edges map to the right square on all four levels at three phone sizes;
+the solver never died on a move it called certain (1,600 boards); and the same solver playing through
+the real screen with real taps won 29 of 40 Hard boards.
+
+**No-guess boards (2026-10-15, Matt's devices only while he tests them).** Option "No guessing"
+(`noGuess` setting, shown only when `isAdminDevice()`). `E.generateNoGuess()` deals a board only if
+the engine's logic (`deduce()`: the cheap rules, then an exact count of every mine layout per group of
+numbers, then the mine count; node cap 200k) clears it from the first tap with no guess; it retries
+within 2.5 s, then keeps the last board and sets `noGuessOk: false`. Measured (desktop, 100 boards a
+level): all passed; deal time median 0 / 1 / 5 / 41 ms, slowest 8 / 12 / 128 / 1038 ms; an
+independent solver confirmed 0 of 400 needed a guess. The board carries `noGuess` (saved; old saves
+read as ordinary) and an **NG** tag on the level button. **Its rounds count for NOTHING**: recorded
+to `ms.practice[level]` = {played, won} only (no total, tier, best or leaderboard).
+
+**Why each board is lost (2026-10-15, Matt: "record why people lose"):** `E.lossCause(state, how)`
+judges the fatal square from what the player could see (open numbers only, never their flags):
+`slip` (provably a mine with a provably safe square beside it), `misread` (provably a mine),
+`rushed` (a guess while a safe square existed), `forced` (a guess the board demanded), `chord` (a
+wrong flag), `unknown` (logic capped). Stored as `ms.lossBy[level][cause]` counters (a report: nothing
+in the game reads them). **Read them with `node tools/read-minesweeper.mjs`.**
 
 ## The play screen (rebuilt 2026-10-15)
 
@@ -244,7 +263,9 @@ the Boom popup dimmed it. Mockup (dark): https://claude.ai/artifact/SbNC6XWSy8b2
 
 ```
 ms = { cleared, flagsRight, bestTimeMs: { easy, medium, hard, expert },
-       bestClearedPct: { easy, medium, hard, expert } }
+       bestClearedPct: { easy, medium, hard, expert },
+       lossBy: { <level>: { slip, misread, rushed, forced, chord, unknown } },   // 2026-10-15
+       practice: { <level>: { played, won } } }                                // no-guess tests
 ```
 
 - **`bestClearedPct` (2026-10-15)**: the closest a player got on each level, as % of the board
