@@ -1389,9 +1389,29 @@ function legendHTML() {
 function tieMark() { return tx('lb_tie_mark', 'T'); }
 /** t() with an English fallback for a key added after the cached dictionary (see tieMark). */
 function tx(key, fallback, params) { const v = t(key, params); return v === key ? fallback : v; }
+// THE PODIUM GETS MEDALS (Matt, 2026-10-15, after the old square / rounded / circle chips: "You
+// have things to differentiate between 1, 2, 3, etc. But barely. Ana is the current leader. She's
+// in first. Act like it." - with his office Skeeball board's ribboned medals as the reference).
+// Gold, silver and bronze carry the number on their face, so the rank never rests on hue alone.
+const MEDAL = {
+  1: { face: '#f5c842', rim: '#c9971c', ink: '#5a4106' },
+  2: { face: '#e3e7ec', rim: '#9aa3ae', ink: '#3b4450' },
+  3: { face: '#d9925a', rim: '#9c5a2a', ink: '#ffffff' },
+};
+function medalSVG(rank) {
+  const m = MEDAL[rank];
+  return `<svg class="lb-medal" viewBox="0 0 40 48" aria-hidden="true">
+    <path d="M11 30 L5 46 L11 43 L14 48 L19 33 Z" fill="#d6452f"/><path d="M29 30 L35 46 L29 43 L26 48 L21 33 Z" fill="#e8762c"/>
+    <circle cx="20" cy="19" r="17" fill="${m.rim}"/><circle cx="20" cy="19" r="13.5" fill="${m.face}"/>
+    <circle cx="20" cy="19" r="13.5" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="1.2"/>
+    <text x="20" y="24.5" text-anchor="middle" font-size="15" font-weight="800" fill="${m.ink}" font-family="system-ui,-apple-system,sans-serif">${rank}</text>
+  </svg>`;
+}
 function rankChipHTML(rank, tie) {
-  const cls = rank === 1 ? ' is-r1' : rank === 2 ? ' is-r2' : rank === 3 ? ' is-r3' : '';
-  return `<span class="lb-chip${cls}${tie ? ' is-tie' : ''}">${tie ? esc(tieMark()) : ''}${rank}</span>`;
+  if (rank >= 1 && rank <= 3) {
+    return `<span class="lb-chip lb-medalchip is-r${rank}" role="img" aria-label="${tie ? esc(tieMark()) : ''}${rank}">${medalSVG(rank)}</span>`;
+  }
+  return `<span class="lb-chip${tie ? ' is-tie' : ''}">${tie ? esc(tieMark()) : ''}${rank}</span>`;
 }
 
 /** Standard competition ranking over `list` by `valueOf`, with ties sharing a rank and the next
@@ -1449,11 +1469,13 @@ function metaLine(games, runs) {
 // byte-identical to before.
 function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml, tierHtml) {
   const me = g.key === _meKey ? ' is-me' : '';
+  const podium = (/lb-medalchip is-r([123])/.exec(chip || '') || [])[1];
+  const pod = podium ? ` is-pod${podium}` : '';
   // Row 2 is the breakdown alone; the OTHER number moved under the name (row 1) in the 2026-08-25
   // handoff, so the card reads name / what they played on one line and the breakdown below it.
   const footer = tilesHtml ? `<div class="lb-pfoot">${tilesHtml}</div>` : '';
   const sub = subHtml || esc(subText || '');
-  return `<button type="button" class="lb-pcard${me}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
+  return `<button type="button" class="lb-pcard${me}${pod}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
@@ -2565,6 +2587,15 @@ function ensureCss() {
     // "This is you" is a LABEL (the YOU badge) plus an accent rail, never colour alone.
     '.lb-pcard.is-me{border-left:3px solid var(--lb-accent);background:var(--lb-surface-2)}',
     '.lb-pcard.is-skel{opacity:.65;cursor:default}',
+    // The podium (2026-10-15): a metal rail down the left edge, and first place lit gold.
+    '.lb-pcard.is-pod1{border-left:6px solid #f5c842;background:linear-gradient(90deg,rgba(245,200,66,.22),rgba(245,200,66,.06) 70%),var(--lb-surface);border-color:rgba(245,200,66,.55);border-left-color:#f5c842}',
+    '.lb-pcard.is-pod2{border-left:6px solid #b9c0c9}',
+    '.lb-pcard.is-pod3{border-left:6px solid #c27a42}',
+    '.lb-pcard.is-pod1 .lb-pname{font-weight:800;font-size:1.08em}',
+    '.lb-pcard.is-pod1 .lb-pnum b{font-size:27px}',
+    '.lb-chip.lb-medalchip.lb-medalchip{width:40px;height:48px;border:0;background:none;padding:0;border-radius:0}',
+    '.lb-medal{width:40px;height:48px;display:block}',
+    '.lb-pcard.is-pod1 .lb-medal{filter:drop-shadow(0 0 6px rgba(245,200,66,.55))}',
     '.lb-pcard-row{display:flex;align-items:center;gap:11px}',
     // Rank chips: shape first, so the podium survives greyscale (see rankChipHTML).
     '.lb-chip{flex:none;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--lb-muted);background:transparent;border:1px solid transparent;border-radius:5px}',
