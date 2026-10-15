@@ -277,14 +277,14 @@ class MinesweeperUI {
     </button>`;
 
     // A paused board on ANOTHER level (Matt, 2026-10-15: "I am halfway through a hard game... I want
-    // to switch to medium. But there's only a resume button"): Resume is halved and New game sits
-    // beside it, for the level now selected. Resume carries the paused board's level shape. Starting
+    // to switch to medium. But there's only a resume button"): New game (left, for the level now
+    // selected) and Resume (right) share the row (Matt asked for that order). Resume carries the paused board's level shape. Starting
     // the new game replaces the paused one (there is one save slot).
     const savedLevel = saved && saved.state && saved.state.level;
     const ctaHTML = (saved && savedLevel !== s.level && LEVELS[savedLevel])
       ? `<div class="ms-cta ms-ctarow">
-          <button type="button" class="gh-btn gh-btn--block" data-act="play" aria-label="${esc(t('resume'))}, ${esc(t(savedLevel))}">${diffShapeSVG(LEVELS[savedLevel].tier)}<span>${esc(t('resume'))}</span></button>
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="newsel">${esc(t('new_game'))}</button>
+          <button type="button" class="gh-btn gh-btn--block" data-act="play" aria-label="${esc(t('resume'))}, ${esc(t(savedLevel))}">${diffShapeSVG(LEVELS[savedLevel].tier)}<span>${esc(t('resume'))}</span></button>
         </div>`
       : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="play">${esc(t(saved ? 'resume' : 'play'))}</button>`;
     this._positionRoot();

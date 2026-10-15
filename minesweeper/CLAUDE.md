@@ -158,7 +158,7 @@ flag button then died."* Top to bottom:
 - **Dig / Flag**, the full width and 64px tall (each half ~180 x 56px; was ~105 x 40 between the
   back arrow and ?).
 
-**A paused board on ANOTHER level halves Resume (2026-10-15, Matt: "I am halfway through a hard game... I want to switch to medium. But there's only a resume button").** Select a different level and the setup screen shows Resume (with the paused level's shape) and New game (the selected level) side by side. New game replaces the paused board (one save slot); same level keeps the single Resume.
+**A paused board on ANOTHER level halves Resume (2026-10-15, Matt: "I am halfway through a hard game... I want to switch to medium. But there's only a resume button").** Select a different level and the setup screen shows New game (left, the selected level) and Resume (right, with the paused level's shape) side by side. New game replaces the paused board (one save slot); same level keeps the single Resume.
 
 **The setup cards are centred between the title row and Play** (`.ms-setup > .ms-top { margin-bottom: auto }` plus Play's own `margin-top: auto`), so going immersive did not slide them up (2026-10-15).
 
