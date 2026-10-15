@@ -324,6 +324,46 @@ console.log('\n--- minesLeft / clearedPct / correctFlags ---');
 }
 
 // =================================================================================================
+console.log('\n--- ? marks (2026-10-15) ---');
+{
+  const g = winBoard(); // mine at (1,1)
+  E.cycleMark(g, 0, 0, true);
+  ok('cycleMark: blank -> flag', g.cell[0] === E.FLAGGED && g.flags === 1);
+  E.cycleMark(g, 0, 0, true);
+  ok('cycleMark: flag -> ? (marks on), flag count back to 0', g.cell[0] === E.QUESTION && g.flags === 0);
+  E.cycleMark(g, 0, 0, true);
+  ok('cycleMark: ? -> blank', g.cell[0] === E.HIDDEN);
+  E.cycleMark(g, 0, 0, false); E.cycleMark(g, 0, 0, false);
+  ok('cycleMark with marks off: flag -> blank, never ?', g.cell[0] === E.HIDDEN && g.flags === 0);
+  g.cell[0] = E.QUESTION;
+  E.openCell(g, 0, 0);
+  ok('a ? cell opens like a hidden one', g.cell[0] === E.OPEN);
+  eq('minesLeft ignores ? marks', E.minesLeft(g), 1);
+}
+{
+  const g = winBoard();
+  g.cell[E_idx(2, 1, 1)] = E.QUESTION; // ? on the mine
+  E.openCell(g, 1, 1);
+  ok('opening a ? on a mine kills', g.dead === true);
+  const h = winBoard(); h.cell[E_idx(2, 1, 1)] = E.QUESTION; h.dead = true;
+  E.revealAll(h);
+  ok('revealAll shows a mine under a ?', h.cell[E_idx(2, 1, 1)] === E.OPEN);
+}
+{
+  // Chord treats a ? like a hidden neighbour: opens it.
+  const g = chordBoard();
+  E.toggleFlag(g, 0, 0); E.toggleFlag(g, 2, 0);
+  g.cell[E_idx(3, 1, 0)] = E.QUESTION;
+  E.chord(g, 1, 1);
+  ok('chord opens a ?-marked neighbour', g.cell[E_idx(3, 1, 0)] === E.OPEN && !g.dead);
+}
+{
+  const g = E.createGame('easy'); E.openCell(g, 4, 5); const q = g.cell.indexOf(E.HIDDEN); g.cell[q] = E.QUESTION;
+  const back = E.deserialize(E.serialize(g));
+  ok('a save holding a ? round-trips', back && back.cell[q] === E.QUESTION);
+}
+
+// =================================================================================================
 console.log('\n--- deserialize: never throws, garbage in -> null ---');
 const GARBAGE = [
   ['undefined', undefined],

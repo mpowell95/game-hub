@@ -14,7 +14,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordMinesweeper } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
-import E, { LEVELS, OPEN, FLAGGED } from './engine.js';
+import E, { LEVELS, OPEN, FLAGGED, QUESTION } from './engine.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -52,11 +52,11 @@ const fill = (str, vals) => String(str).replace(/\{(\w+)\}/g, (m, k) => (k in va
 const FLAG_SVG = (c) => `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 22V3" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/><path d="M6.6 4.2 19 8.4 6.6 12.6Z" fill="${c}"/></svg>`;
 const MINE_SVG = (c) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="${c}"><rect x="11" y="1.5" width="2" height="21" rx="1"/><rect x="1.5" y="11" width="21" height="2" rx="1"/><rect x="4" y="4" width="2" height="16" rx="1" transform="rotate(-45 5 12)"/><rect x="18" y="4" width="2" height="16" rx="1" transform="rotate(45 19 12)"/><circle cx="12" cy="12" r="6.2"/><circle cx="9.7" cy="9.7" r="1.5" fill="rgba(255,255,255,.85)"/></svg>`;
 const WRONG_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V3" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M6.6 4.2 19 8.4 6.6 12.6Z" fill="currentColor" opacity=".35"/><path class="ms-wx" d="M3 3 21 21M21 3 3 21" stroke="#e0532f" stroke-width="2.8" stroke-linecap="round"/></svg>`;
+const BRAND_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="11" y="1" width="2" height="22" rx="1" fill="currentColor"/><rect x="1" y="11" width="22" height="2" rx="1" fill="currentColor"/><rect x="4" y="4" width="2" height="16" rx="1" transform="rotate(-45 5 12)" fill="currentColor"/><rect x="18" y="4" width="2" height="16" rx="1" transform="rotate(45 19 12)" fill="currentColor"/><circle cx="12" cy="12" r="6.6" fill="currentColor"/><circle cx="9.6" cy="9.6" r="1.7" fill="#ffffff" opacity=".85"/></svg>`;
 const CLOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="2"/><path d="M12 6.8V12l3.6 2.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 const X_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>`;
 const TICK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12.6 9.6 18 20 6.4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const SHOVEL_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.5 3.2 20.8 10.5M17.2 6.9 8.4 15.7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M8.4 15.7 5.6 12.9 2.6 19.2c-.3.7.4 1.4 1.1 1.1Z" fill="currentColor"/></svg>`;
-const BACK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ARROW_SVG = `<svg viewBox="0 0 40 24" width="40" height="24" fill="none" aria-hidden="true"><path d="M4 12h30M27 5l7 7-7 7" stroke="#1769d4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const FACE_SVG = (kind) => {
   const eyes = kind === 'dead'
@@ -82,11 +82,15 @@ function loadSettings() {
     return {
       version: 1,
       level: LEVEL_ORDER.includes(v.level) ? v.level : 'easy',
+      // safeFirst is carried, never shown (2026-10-15): its switch did nothing (the first tap is
+      // always an opening), so it was removed; the stored value is kept as it was (rule 5).
       safeFirst: v.safeFirst !== false,
       longPress: v.longPress !== false,
       vibrate: v.vibrate === true,
+      // "?" marks in Flag mode (2026-10-15): flag -> ? -> blank. On unless turned off.
+      marks: v.marks !== false,
     };
-  } catch { return { version: 1, level: 'easy', safeFirst: true, longPress: true, vibrate: false }; }
+  } catch { return { version: 1, level: 'easy', safeFirst: true, longPress: true, vibrate: false, marks: true }; }
 }
 function saveSettings(patch) {
   const next = { ...loadSettings(), ...(patch || {}) };
@@ -165,6 +169,9 @@ class MinesweeperUI {
 
     this._positionRoot();
     this.renderMenu();
+    // The hub switches its header to the immersive button around the same moment it mounts us;
+    // measure again once that has painted.
+    requestAnimationFrame(() => { if (this.root) { this._positionRoot(); this._fit(); } });
   }
 
   /* ---- layout ------------------------------------------------------------------------------ */
@@ -184,9 +191,29 @@ class MinesweeperUI {
     const r = this.container.getBoundingClientRect();
     this.root.style.left = Math.round(r.left) + 'px';
     this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
-    this.root.style.top = Math.max(0, Math.round(r.top)) + 'px';
     this.root.style.bottom = '0px';
     this.root.style.height = 'auto';
+    // IMMERSIVE in the hub (2026-10-15, Matt wanted a real title, not the hub's plain header): the
+    // hub's header collapses to its floating "Hub" button and this game's own title row sits
+    // BESIDE it. Measured, as murdoku/js/ui.js does: the button's size and the top inset differ by
+    // device and language. Standalone there is no button and the row simply starts at the top.
+    const back = document.querySelector('.hub-top-immersive .hub-back');
+    const b = back && back.getBoundingClientRect();
+    if (b && b.width && b.height) {
+      this.root.classList.add('is-immersive');
+      this.root.style.top = '0px';
+      this.root.style.setProperty('--ms-top', Math.max(0, Math.round(b.top + (b.height - 44) / 2)) + 'px');
+      this.root.style.setProperty('--ms-inset', Math.max(0, Math.round(b.right - r.left + 6)) + 'px');
+      return;
+    }
+    this.root.classList.remove('is-immersive');
+    this.root.style.top = Math.max(0, Math.round(r.top)) + 'px';
+  }
+
+  /** The title row every screen opens with: the wordmark, centred on the screen, with an optional
+   *  button on the right. In the hub the left of the row is the hub's own floating Hub button. */
+  _topbar(right = '') {
+    return `<div class="ms-top"><span></span><div class="ms-brand">${BRAND_SVG}<span>${esc(t('title'))}</span></div><div class="ms-topr">${right}</div></div>`;
   }
 
   // Cell size is MEASURED, never a vh formula: the wrap is the flex child that owns whatever is
@@ -251,11 +278,11 @@ class MinesweeperUI {
 
     this._positionRoot();
     this.root.innerHTML = `<div class="ms-screen ms-setup">
-      <h2 class="ms-title">${esc(t('title'))}</h2>
+      ${this._topbar()}
       <div class="ms-card"><h3>${esc(t('difficulty'))}</h3><div class="ms-diffs">${diffs}</div></div>
       <div class="ms-card"><h3>${esc(t('your_best'))}</h3><div class="ms-bests">${bestCells}</div></div>
       <div class="ms-card"><h3>${esc(t('options'))}</h3><div class="ms-opts">
-        ${opt('safeFirst', 'safe_first', '')}
+        ${opt('marks', 'marks_opt', '')}
         ${opt('longPress', 'long_press', '')}
         ${canVibrate ? opt('vibrate', 'vibrate', '') : ''}
       </div></div>
@@ -308,6 +335,9 @@ class MinesweeperUI {
   // commit-on-release targeting. Everybody already knows what a mine is
   // (docs/BUILDING-A-GAME.md Part 2, "Explain only the one genuinely non-obvious mechanic").
   renderHowTo() {
+    // Opened from a board (the ? at the top right), its close goes back to that board.
+    this._helpFrom = (this.screen === 'play' && this.game) ? 'play' : 'menu';
+    if (this._helpFrom === 'play') { this._stopTimer(); this._persist(); }
     this.screen = 'howto';
     this._stopTimer();
     this._clearTimers();
@@ -330,10 +360,7 @@ class MinesweeperUI {
     // Anchored in a fixed-height header it cannot be pushed anywhere by anything below it.
     this._positionRoot();
     this.root.innerHTML = `<div class="ms-screen ms-help">
-      <div class="ms-hhead">
-        <button type="button" class="gh-btn gh-btn--sm ms-hback" data-act="back">${esc(t('back'))}</button>
-        <h2 class="ms-htitle">${esc(t('how_to_play'))}</h2>
-      </div>
+      <div class="ms-top"><span></span><h2 class="ms-htitle">${esc(t('how_to_play'))}</h2><div class="ms-topr"><button type="button" class="gh-btn gh-btn--icon ms-hback" data-act="back" aria-label="${esc(t('close'))}">${X_SVG}</button></div></div>
       <p class="ms-lead">${esc(t('help_lead'))}</p>
       <div class="ms-dia">
         <div class="ms-diarow">${before}${ARROW_SVG}${after}</div>
@@ -351,7 +378,10 @@ class MinesweeperUI {
         </div>
       </div>
     </div>`;
-    this.root.onclick = (ev) => { if (ev.target.closest('[data-act="back"]')) this.renderMenu(); };
+    this.root.onclick = (ev) => {
+      if (!ev.target.closest('[data-act="back"]')) return;
+      if (this._helpFrom === 'play' && this.game) this.renderGame(); else this.renderMenu();
+    };
   }
 
   /* ---- play --------------------------------------------------------------------------------- */
@@ -378,8 +408,11 @@ class MinesweeperUI {
     this.screen = 'play';
     const g = this.game;
     this._positionRoot();
+    const L = LEVELS[g.level] || LEVELS.easy;
     this.root.innerHTML = `<div class="ms-screen ms-play">
+      ${this._topbar(`<button type="button" class="gh-btn gh-btn--icon ms-helpbtn" data-act="howto" aria-label="${esc(t('help_aria'))}">?</button>`)}
       <div class="ms-hdr">
+        <button type="button" class="ms-level" data-act="tomenu" aria-label="${esc(t('change_difficulty'))}">${diffShapeSVG(L.tier)}<span>${esc(t(g.level))}</span></button>
         <div class="ms-readout" data-role="mines" aria-live="off">${FLAG_SVG('#e0532f')}<span data-role="mines-n">000</span></div>
         <button type="button" class="ms-face" data-act="new" aria-label="${esc(t('new_game'))}">${FACE_SVG('ok')}</button>
         <div class="ms-readout" data-role="clock">${CLOCK_SVG}<span data-role="clock-n">00:00</span></div>
@@ -389,12 +422,10 @@ class MinesweeperUI {
         <div class="ms-loupe" hidden><div class="ms-zc"></div><span class="ms-lbadge" aria-hidden="true">${FLAG_SVG('#ffffff')}</span></div>
       </div>
       <div class="ms-bar">
-        <button type="button" class="gh-btn gh-btn--icon ms-backbtn" data-act="tomenu" aria-label="${esc(t('back'))}">${BACK_SVG}</button>
         <div class="gh-seg" role="group">
           <button type="button" class="gh-seg__item" data-mode="dig" aria-pressed="${this.mode === 'dig'}">${SHOVEL_SVG}<span>${esc(t('dig'))}</span></button>
           <button type="button" class="gh-seg__item" data-mode="flag" aria-pressed="${this.mode === 'flag'}">${FLAG_SVG('currentColor')}<span>${esc(t('flag'))}</span></button>
         </div>
-        <button type="button" class="gh-btn gh-btn--icon ms-helpbtn" data-act="howto" aria-label="${esc(t('help_aria'))}">?</button>
       </div>
     </div>`;
 
@@ -515,6 +546,10 @@ class MinesweeperUI {
       if (wrong) cls += ' is-wrong';
       inner = wrong ? WRONG_SVG : FLAG_SVG(g.won ? '#178a7a' : '#e0532f');
       aria = fill(t(wrong ? 'cell_aria_wrong' : 'cell_aria_flag'), { r: y + 1, c: x + 1 });
+    } else if (st === QUESTION) {
+      cls += ' is-q';
+      inner = '?';
+      aria = fill(t('cell_aria_q'), { r: y + 1, c: x + 1 });
     } else {
       aria = fill(t('cell_aria_hidden'), { r: y + 1, c: x + 1 });
     }
@@ -797,7 +832,7 @@ class MinesweeperUI {
   }
 
   _doFlag(i) {
-    const res = E.toggleFlag(this.game, i % this.game.w, (i / this.game.w) | 0);
+    const res = E.cycleMark(this.game, i % this.game.w, (i / this.game.w) | 0, this.settings.marks);
     for (const k of res.changed) this._paintCell(k);
     this._syncHud();
     this._persist();

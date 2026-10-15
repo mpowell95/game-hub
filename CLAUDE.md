@@ -330,7 +330,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Gridlock | module, immersive, devOnly; 4,000-level ladder, Wood/Cars looks; levels GENERATED (append-only) | `.gl-root` / `.gl-` | `gamehub.gridlock.v1` (+ `.save.v2`; `.save.v1` read once) | `recordGridlock` + `recordGridlockHint` (`gl`) |
 | Hill Climb | module, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | module, immersive, multiplayer (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
-| Minesweeper | module, grid puzzle (not immersive) | `.ms-root` / `.ms-` | `gamehub.minesweeper.v1` (+ `.save.v1`) | `recordMinesweeper` |
+| Minesweeper | module, immersive (own title row), grid puzzle | `.ms-root` / `.ms-` | `gamehub.minesweeper.v1` (+ `.save.v1`) | `recordMinesweeper` |
 | Monopoly Deal | launch-out (`business-deal/`, own nested SW) | own page | own keys | `window.__ghStats` → `'business'` |
 | Murdoku | module, immersive, solo logic puzzle | `.mu-root` / `.mu-` | `gamehub.murdoku.v1` (+ `.save.v1`) | `recordResult('murdoku', …)` |
 | Nuts & Bolts | module | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |

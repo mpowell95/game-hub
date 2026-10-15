@@ -19,7 +19,7 @@ export const STRINGS = {
     your_best: 'Your best',
     no_time: '--:--',
     options: 'Options',
-    safe_first: 'Safe first tap',
+    marks_opt: '? marks',
     long_press: 'Long press to flag',
     vibrate: 'Vibrate on flag',
     play: 'Play',
@@ -39,6 +39,7 @@ export const STRINGS = {
     help_aria: 'How to play',
     cell_aria_hidden: 'Row {r}, column {c}, not opened',
     cell_aria_flag: 'Row {r}, column {c}, flagged',
+    cell_aria_q: 'Row {r}, column {c}, marked ?',
     cell_aria_wrong: 'Row {r}, column {c}, flagged, no mine here',
     cell_aria_open: 'Row {r}, column {c}, {n} mines touching',
     cell_aria_empty: 'Row {r}, column {c}, empty',
@@ -61,7 +62,6 @@ export const STRINGS = {
     help_lead: 'Open every square that is not a mine.',
     help_chord_cap: 'Tap a number that already has all its flags to open the rest.',
     help_loupe_cap: 'The bubble shows the square you are on. Your tap lands when you lift.',
-    back: 'Back',
   },
   es: {
     // Setup screen
@@ -75,7 +75,7 @@ export const STRINGS = {
     your_best: 'Tu mejor marca',
     no_time: '--:--',
     options: 'Opciones',
-    safe_first: 'Primer toque seguro',
+    marks_opt: 'Marcas ?',
     long_press: 'Mantén presionado para marcar',
     vibrate: 'Vibrar al marcar',
     play: 'Jugar',
@@ -95,6 +95,7 @@ export const STRINGS = {
     help_aria: 'Cómo se juega',
     cell_aria_hidden: 'Fila {r}, columna {c}, sin abrir',
     cell_aria_flag: 'Fila {r}, columna {c}, marcada',
+    cell_aria_q: 'Fila {r}, columna {c}, con ?',
     cell_aria_wrong: 'Fila {r}, columna {c}, marcada, aquí no había mina',
     cell_aria_open: 'Fila {r}, columna {c}, {n} minas alrededor',
     cell_aria_empty: 'Fila {r}, columna {c}, vacía',
@@ -117,7 +118,6 @@ export const STRINGS = {
     help_lead: 'Abre cada casilla que no sea una mina.',
     help_chord_cap: 'Toca un numero que ya tenga todas sus marcas para abrir el resto.',
     help_loupe_cap: 'La burbuja muestra la casilla donde estas. Tu toque se aplica al levantar.',
-    back: 'Atrás',
   },
 };
 
