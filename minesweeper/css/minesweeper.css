@@ -268,6 +268,12 @@
 .ms-root .ms-opt[aria-pressed="true"] .ms-sw i { transform: translateX(22px); background: #fff; }
 
 .ms-root .ms-cta { margin-top: auto; }
+/* The cards sit CENTRED between the title row and Play (2026-10-15, Matt: "It feels like you
+ * shifted everything on the setup screen up"). Going immersive freed the hub header's height, and
+ * with only Play's auto margin all of it piled up above Play. Two auto margins split it, which puts
+ * the cards back near where they were (top ~160px vs 172 before, 393x852); on a short phone there is
+ * no spare height and nothing moves. */
+.ms-root .ms-setup > .ms-top { margin-bottom: auto; }
 .ms-root .ms-linkrow { display: flex; gap: 9px; flex: 0 0 auto; }
 .ms-root .ms-linkrow .gh-btn { flex: 1; }
 
