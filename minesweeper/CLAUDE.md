@@ -158,6 +158,8 @@ flag button then died."* Top to bottom:
 - **Dig / Flag**, the full width and 64px tall (each half ~180 x 56px; was ~105 x 40 between the
   back arrow and ?).
 
+**The setup cards are centred between the title row and Play** (`.ms-setup > .ms-top { margin-bottom: auto }` plus Play's own `margin-top: auto`), so going immersive did not slide them up (2026-10-15).
+
 **Setup's second button is Leaderboard, not My stats (2026-10-15, Matt: "It should be a
 leaderboard button instead and show you everyone who's played").** It and the win popup's button
 call `openLeaderboard({ game: 'minesweeper' })`, which opens straight on this game's board; its
