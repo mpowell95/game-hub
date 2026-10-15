@@ -40,6 +40,16 @@ export const HUB_MESSAGES = [
     },
     play: 'way-out',
   },
+  {
+    id: 'arrow-maze-rush-new-mode',
+    to: ['K99MB', '89N3N', '3G2EC'],                 // Anita Bonita (two codes), Ele
+    atMs: Date.UTC(2026, 9, 15, 0, 10),
+    text: {
+      en: 'New Arrow Maze mode: Rush! ⏱️',
+      es: '¡Nuevo en Laberinto: Rush! ⏱️',
+    },
+    play: 'way-out',
+  },
 ];
 
 const KEY = 'gamehub.hubMessages.v1';
