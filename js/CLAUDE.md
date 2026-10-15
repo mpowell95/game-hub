@@ -401,6 +401,8 @@ Points / High score; Cup Pong + Solo (fewest throws); Hold'em Bankroll / Wins; C
 Maze, Gridlock plain. `_view` holds a non-difficulty tab, reset with `_tier`. Old sort/filter code stays.
 On All views the row's difficulty is a bordered pill under the name (`tierPillHTML`, shape + word; Matt:
 "more obvious"), not a shape beside the number.
+Ranks 1-3 are ribboned medals (`medalSVG`, number on the face) with a metal rail; #1's row is lit gold
+(Matt: "She's in first. Act like it.").
 
 ### The leaderboard's spacing (2026-10-11)
 
