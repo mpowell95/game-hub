@@ -130,18 +130,41 @@
   gap: 10px;
 }
 
+/* IMMERSIVE (2026-10-15): the first row of every screen sits level with the hub's floating Hub
+ * button (--ms-top / --ms-inset, measured in ui.js _positionRoot). */
+.ms-root.is-immersive .ms-screen { padding-top: var(--ms-top, 54px); }
+
+/* The title row. Three columns, the outer two the same width, so the wordmark is centred on the
+ * SCREEN and can never run under the Hub button on the left or the button on the right. */
+.ms-root .ms-top {
+  --ms-side: max(44px, calc(var(--ms-inset, 0px) - 12px));
+  flex: 0 0 auto;
+  height: 44px;
+  display: grid;
+  grid-template-columns: var(--ms-side) minmax(0, 1fr) var(--ms-side);
+  align-items: center;
+}
+.ms-root .ms-topr { display: flex; justify-content: flex-end; }
+/* The wordmark (Matt, 2026-10-15: the plain hub title was "pretty lackluster"). */
+.ms-root .ms-brand {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-width: 0;
+  font-size: 20px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase;
+  line-height: 1; white-space: nowrap;
+  color: var(--ms-ink);
+}
+.ms-root .ms-brand span { overflow: hidden; text-overflow: clip; }
+.ms-root .ms-brand svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--ms-flag); }
+.ms-root .ms-helpbtn,
+.ms-root .ms-hback { width: 44px; height: 44px; flex: 0 0 auto; border-radius: 50%; font-size: 20px; font-weight: 800; }
+.ms-root .ms-hback svg { width: 16px; height: 16px; }
+
 /* ---------------- setup ---------------- */
 /* Sized for a real iPhone with the hub header above it and the home-indicator inset below: the
  * whole menu, How to play and My stats included, must fit 393x852 with ~118px of hub chrome and a
  * 34px bottom inset. Rows are 44px (the Part 0 tap floor), not more; at 52px the bottom row was
  * pushed off the screen (Matt, 2026-10-11). */
 .ms-root .ms-setup { gap: 6px; padding-top: 6px; }
-.ms-root .ms-title {
-  font-size: 23px;
-  font-weight: 800;
-  letter-spacing: -.01em;
-  margin: 0 0 1px;
-}
 .ms-root .ms-card {
   background: var(--ms-surface);
   border: 1px solid var(--ms-border);
@@ -249,7 +272,7 @@
 .ms-root .ms-linkrow .gh-btn { flex: 1; }
 
 /* ---------------- game HUD ---------------- */
-.ms-root .ms-hdr { height: 52px; display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.ms-root .ms-hdr { height: 52px; display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .ms-root .ms-readout {
   flex: 1 1 0;
   height: 44px;
@@ -262,6 +285,11 @@
   font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .ms-root .ms-readout svg { width: 17px; height: 17px; flex: 0 0 auto; }
+/* Four items share the row since the level button joined it (2026-10-15): the readouts may
+ * shrink, and the digits step down a size so "00:00" fits a 360px phone beside "Experto". */
+.ms-root .ms-hdr .ms-readout { min-width: 0; gap: 5px; font-size: 17px; }
+.ms-root .ms-hdr .ms-readout svg { width: 15px; height: 15px; }
+.ms-root .ms-hdr .ms-face { width: 46px; }
 .ms-root .ms-face {
   width: 52px; height: 44px; flex: 0 0 auto;
   border-radius: 12px;
@@ -272,6 +300,21 @@
   padding: 0; cursor: pointer;
 }
 .ms-root .ms-face svg { width: 28px; height: 28px; }
+/* The level, and the way to change it (it replaced the back arrow that sat bottom-left). */
+.ms-root .ms-level {
+  height: 44px; flex: 0 0 auto;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  box-shadow: 0 1px 2px rgba(16, 30, 54, .08);
+  color: inherit; font: inherit; font-size: 14px; font-weight: 800;
+  cursor: pointer; touch-action: manipulation;
+}
+.ms-root .ms-level svg { width: 16px; height: 16px; flex: 0 0 auto; }
+/* A "?" mark: a note to self, quieter than a flag. */
+.ms-root .ms-c.is-q { color: var(--ms-muted); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 
 /* ---------------- board ---------------- */
 .ms-root .ms-boardwrap {
@@ -378,13 +421,12 @@
 .ms-root .ms-loupe[hidden] { display: none; }
 
 /* ---------------- bottom bar ---------------- */
-.ms-root .ms-bar { height: 64px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
-.ms-root .ms-bar .gh-seg { flex: 1 1 0; height: 48px; }
-.ms-root .ms-bar .gh-seg__item { gap: 7px; font-size: 15px; font-weight: 700; }
-.ms-root .ms-bar .gh-seg__item svg { width: 18px; height: 18px; }
-.ms-root .ms-helpbtn,
-.ms-root .ms-backbtn { width: 48px; height: 48px; flex: 0 0 auto; touch-action: manipulation; }
-.ms-root .ms-backbtn svg { width: 22px; height: 22px; }
+/* Dig / Flag: the whole width and 64px tall (Matt, 2026-10-15: "a couple times i was moving too
+ * fast and missed the flag button then died"). Each half is ~180 x 56px. */
+.ms-root .ms-bar { flex: 0 0 auto; display: flex; align-items: center; }
+.ms-root .ms-bar .gh-seg { flex: 1 1 0; height: 64px; border-radius: 32px; padding: 4px; }
+.ms-root .ms-bar .gh-seg__item { flex: 1 1 0; height: 100%; gap: 9px; font-size: 19px; font-weight: 800; border-radius: 28px; }
+.ms-root .ms-bar .gh-seg__item svg { width: 24px; height: 24px; }
 
 /* ---------------- overlay ---------------- */
 .ms-root .ms-ov {
@@ -467,19 +509,13 @@
 /* The header is a FIXED-HEIGHT flex-none row, so the Back button cannot be pushed off the bottom
    by content below it. That is exactly how the first version shipped without a reachable way out:
    the button sat under the diagrams, the diagrams were a little too tall, and it was clipped. */
-.ms-root .ms-hhead {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 44px;
-}
-.ms-root .ms-hback { flex: 0 0 auto; min-height: 44px; touch-action: manipulation; }
 .ms-root .ms-htitle {
   margin: 0;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -.01em;
+  text-align: center;
+  white-space: nowrap; overflow: hidden;
 }
 /* The loupe demo needs room for the bubble ABOVE the little board, and the bubble is absolutely
    positioned, so the box reserves that height itself rather than letting it overlap the caption. */

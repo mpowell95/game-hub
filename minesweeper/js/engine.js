@@ -16,6 +16,10 @@ export const LEVELS = {
 
 // Cell states.
 export const HIDDEN = 0, OPEN = 1, FLAGGED = 2;
+// (2026-10-15) The classic "?" mark: a note to self. It is NOT a flag (no count, no chord) and
+// opens like a hidden cell. Saves made before it simply never contain a 3.
+export const QUESTION = 3;
+const closed = (c) => c === HIDDEN || c === QUESTION;
 
 /** Flat index for (x, y) in this board's own width. */
 export function idx(state, x, y) {
@@ -132,13 +136,13 @@ function floodOpen(state, i) {
   const stack = [i];
   while (stack.length) {
     const j = stack.pop();
-    if (state.cell[j] !== HIDDEN) continue;   // already opened via another path in this same fill
+    if (!closed(state.cell[j])) continue;   // opened via another path in this same fill, or flagged
     state.cell[j] = OPEN;
     state.opened++;
     changed.push(j);
     if (state.num[j] === 0) {
       for (const nb of neighborIndices(state, j)) {
-        if (state.cell[nb] === HIDDEN) stack.push(nb);
+        if (closed(state.cell[nb])) stack.push(nb);
       }
     }
   }
@@ -171,12 +175,12 @@ export function openCell(state, x, y, rnd) {
   return { changed, hitMine: false };
 }
 
-/** Flags a HIDDEN cell or clears a FLAGGED one; an OPEN cell can't be flagged (there is nothing
+/** Flags a HIDDEN (or ?-marked) cell or clears a FLAGGED one; an OPEN cell can't be flagged (there is nothing
  *  left to protect). Never touches `won` — flagging is bookkeeping, not a way to win. */
 export function toggleFlag(state, x, y) {
   if (!inBounds(state, x, y)) return { changed: [] };
   const i = idx(state, x, y);
-  if (state.cell[i] === HIDDEN) {
+  if (closed(state.cell[i])) {
     state.cell[i] = FLAGGED;
     state.flags++;
     return { changed: [i] };
@@ -186,6 +190,22 @@ export function toggleFlag(state, x, y) {
     state.flags--;
     return { changed: [i] };
   }
+  return { changed: [] };
+}
+
+/** Flag mode's tap: blank -> flag -> ? -> blank, the classic right-click cycle. With `marks` off
+ *  it is exactly toggleFlag (blank <-> flag); a ? left over from when marks were on clears. */
+export function cycleMark(state, x, y, marks) {
+  if (!inBounds(state, x, y) || state.dead || state.won) return { changed: [] };
+  const i = idx(state, x, y);
+  const c = state.cell[i];
+  if (c === HIDDEN) return toggleFlag(state, x, y);
+  if (c === FLAGGED) {
+    toggleFlag(state, x, y);
+    if (marks) state.cell[i] = QUESTION;
+    return { changed: [i] };
+  }
+  if (c === QUESTION) { state.cell[i] = HIDDEN; return { changed: [i] }; }
   return { changed: [] };
 }
 
@@ -213,7 +233,7 @@ export function chord(state, x, y, rnd) {
   const changed = [];
   let hitMine = false;
   for (const nb of neighbors) {
-    if (state.cell[nb] !== HIDDEN) continue;   // already open, or flagged and left alone
+    if (!closed(state.cell[nb])) continue;   // already open, or flagged and left alone (a ? opens)
     if (state.mine[nb]) {
       state.cell[nb] = OPEN;
       state.opened++;
@@ -250,7 +270,7 @@ export function isWon(state) {
 export function revealAll(state) {
   const total = state.w * state.h;
   for (let i = 0; i < total; i++) {
-    if (state.mine[i] && state.cell[i] === HIDDEN) {
+    if (state.mine[i] && closed(state.cell[i])) {
       state.cell[i] = OPEN;
       state.opened++;
     }
@@ -334,7 +354,7 @@ export function deserialize(obj) {
     if (!Array.isArray(num) || num.length !== total) return null;
     if (!Array.isArray(cell) || cell.length !== total) return null;
     for (let i = 0; i < total; i++) {
-      if (cell[i] !== HIDDEN && cell[i] !== OPEN && cell[i] !== FLAGGED) return null;
+      if (cell[i] !== HIDDEN && cell[i] !== OPEN && cell[i] !== FLAGGED && cell[i] !== QUESTION) return null;
     }
 
     return {
@@ -356,9 +376,9 @@ export function deserialize(obj) {
 }
 
 export default {
-  LEVELS, HIDDEN, OPEN, FLAGGED,
+  LEVELS, HIDDEN, OPEN, FLAGGED, QUESTION,
   idx, inBounds,
   createGame, generate, openCell, toggleFlag, chord,
-  isWon, revealAll, minesLeft, clearedPct, correctFlags, wrongFlags,
+  isWon, revealAll, minesLeft, clearedPct, correctFlags, wrongFlags, cycleMark,
   serialize, deserialize,
 };

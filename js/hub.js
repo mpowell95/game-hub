@@ -187,9 +187,11 @@ export const GAMES = [
     // `games.minesweeper.live = false` in adminConfig/v1 would still hide it even now. Setting it
     // back to Live on the admin page writes `true` and they agree again.
     //
-    // NOT immersive: this is a grid puzzle like Sudoku, and the vertical budget its cell sizes
-    // are derived from assumes the hub's ordinary header is there (reference/minesweeper/SPEC.md).
+    // IMMERSIVE since 2026-10-15 (Matt: the plain hub title was "pretty lackluster"): the game draws
+    // its own title row beside the floating Hub button. Cell sizes are measured, so the board just
+    // gets the header's height back (minesweeper/CLAUDE.md, "Hub integration").
     id: 'minesweeper',
+    immersive: true,
     title: { en: 'Minesweeper', es: 'Buscaminas' },
     blurb: { en: 'Open every square that is not a mine. Four sizes, best times, flags.',
       es: 'Abre cada casilla que no sea una mina. Cuatro tamanos, mejores tiempos, marcas.' },

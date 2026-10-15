@@ -23,9 +23,11 @@ Built 2026-09-21. Design artifacts: `reference/minesweeper/mockup.html` (all eig
   Yahtzee shipped). `tools/players-agg.test.mjs`'s `OFF_THE_BOARD` stays empty.
 - **No `released` date**, deliberately. The "New" pill belongs to the day this goes live for
   everyone, which is a decision made in the app, not here.
-- **NOT immersive.** This is a grid puzzle like Sudoku, and the whole cell-size ladder is derived
-  from a vertical budget that assumes the hub's ordinary header is present. Making it immersive
-  would silently give every board more room than it was measured for.
+- **Immersive since 2026-10-15** (Matt: the hub's plain "Minesweeper" title was "pretty
+  lackluster"). Every screen opens with its own title row (`_topbar()`: the MINESWEEPER wordmark,
+  centred on the screen, a button on the right) level with the hub's floating Hub button, measured
+  in `_positionRoot()` (`--ms-top`, `--ms-inset`) the way Murdoku does. Cell sizes were always
+  measured, so the board simply got the header's height back. (It was "not immersive" before.)
 - **`isInProgress()` returns `false`, even mid-board.** Autosave/resume is built in and the clock
   is banked with it, so leaving is lossless. Root `CLAUDE.md`'s second `isInProgress()` meaning,
   the Sudoku / Nuts & Bolts class, not the Ball Run class.
@@ -36,11 +38,11 @@ Built 2026-09-21. Design artifacts: `reference/minesweeper/mockup.html` (all eig
 |---|---|
 | `js/engine.js` | pure board logic: generation, flood fill, flags, chording, win detection, serialize/deserialize. No DOM, no storage, no timers, no imports |
 | `js/ui.js` | the DOM shell, input, timer, the three screens, the module contract |
-| `js/strings.js` | EN/ES, 53 keys |
+| `js/strings.js` | EN/ES, 50 keys |
 | `css/minesweeper.css` | `.ms-root` / `.ms-` prefix, every rule descendant-scoped |
 | `index.html` | the standalone page, name-gated before `init()` |
 
-Tests: `tools/test-minesweeper-engine.mjs` (88 assertions, headless, no browser).
+Tests: `tools/test-minesweeper-engine.mjs` (98 assertions, headless, no browser).
 
 ## The board ladder, and why it is not the classic one
 
@@ -95,8 +97,8 @@ leaves the board still deliver its move and up events.
 | Action | Result |
 |---|---|
 | Tap in Dig mode | opens the cell, on lift |
-| Tap in Flag mode | places or removes a flag |
-| Long press (450ms), either mode | flags. Optional, on by default |
+| Tap in Flag mode | blank -> flag -> ? -> blank (`E.cycleMark`); with "? marks" off, flag <-> blank |
+| Long press (450ms), either mode | the same cycle. Optional, on by default |
 | Tap an already-open number | CHORD: opens every remaining neighbour, if its flags match its count |
 | Drag before lifting | retargets; the loupe shows which cell is live |
 | First tap of a game | never a mine |
@@ -110,6 +112,11 @@ In Flag mode the Flag button turns vermilion (Dig stays blue), the board gets a 
 `_syncMode()` sets `.is-flagmode` on `.ms-play`; `renderGame()` calls it, so a resumed board in
 Flag mode shows it too. Matt chose this over a "safe hold" and a "forgive one mine" option.
 
+**"?" marks (2026-10-15, Matt: "add a ? feature i guess")**: the classic note-to-self. Engine
+state `QUESTION = 3`: not a flag (no mine count, chord ignores it as a flag and OPENS it), opens
+like a hidden cell, revealed if it hid a mine. Setup option "? marks" (`marks`, default on). Old
+saves never contain a 3, so they load unchanged.
+
 **Chording can kill you**, and that is correct — a flag in the wrong place is the player's own
 mistake, and the engine test covers exactly that case. Do not "fix" it.
 
@@ -122,16 +129,38 @@ area, on every level, measured at 100% over 800 seeded runs. `generate()` still 
 40-attempt retry loop for the zero; under the current levels it never runs past attempt 0, and its
 comment says so rather than leaving a future reader to assume it is load-bearing.
 
+**How much guessing each level needs** (2026-10-15, an exact solver over 1,000 boards a level:
+it enumerates every mine layout the numbers allow and guesses only when nothing is certain):
+
+| Level | Boards with no guess | Average guesses | Solver win % |
+|---|---|---|---|
+| Easy | 81% | 0.3 | 95% |
+| Medium | 65% | 0.5 | 89% |
+| Hard | 25% | 1.7 | 63% |
+| Expert | 10% | 2.9 | 43% |
+
+Real players (live records, 2026-10-15): Easy 13%, Medium 11%, Hard 0 of 70, Expert 0 of 13.
+
 **No-guess boards are explicitly out of scope.** A classic Minesweeper position can require a coin
 flip. Generating only logically-solvable boards is a much larger job and nothing here assumes it.
 
+## The play screen (rebuilt 2026-10-15)
+
+Matt: *"I do not like how the back arrow is on the bottom left. and I don't love where the ? how to
+play button is"*, and *"make the flag and dig buttons larger... i was moving too fast and missed the
+flag button then died."* Top to bottom:
+
+- **Title row**: Hub (the hub's), the wordmark, **?** (How to play; its X returns to the BOARD,
+  not the menu, `_helpFrom`).
+- **HUD**: a **level button** (shape + "Hard", `data-act="tomenu"`) that replaced the back arrow:
+  it shows which level you are on AND is the way to change it; then mines left, the face, the clock.
+- **Board.**
+- **Dig / Flag**, the full width and 64px tall (each half ~180 x 56px; was ~105 x 40 between the
+  back arrow and ?).
+
 ## Getting out of a game
 
-The play screen has a back arrow at the left of the bottom bar (`data-act="tomenu"`), added
-2026-09-22: the only way back to setup had been the hub's own back button, which leaves the game
-entirely.
-
-**It does not confirm, and it should not.** `_backToMenu()` stops the clock, writes the save (which
+**The level button does not confirm, and it should not.** `_backToMenu()` stops the clock, writes the save (which
 banks the elapsed time with it) and renders the menu, where the button now reads **Resume**. The
 board comes back exactly as it was. That is the same property `isInProgress()` returns `false` for:
 leaving this game costs nothing, so a confirm would be asking about a risk that does not exist.
@@ -267,7 +296,7 @@ should have been: texture, not the headline.
 
 | Key | What |
 |---|---|
-| `gamehub.minesweeper.v1` | settings: level, safeFirst, longPress, vibrate |
+| `gamehub.minesweeper.v1` | settings: level, longPress, vibrate, marks (2026-10-15); `safeFirst` is still read and carried but has no switch: it never did anything (the first tap is always an opening), so the switch was removed 2026-10-15 |
 | `gamehub.minesweeper.save.v1` | the in-progress board plus its banked clock and mode |
 
 Both readers try/catch and treat anything malformed as absent: a corrupt save reads as "no save",
