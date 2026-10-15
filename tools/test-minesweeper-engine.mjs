@@ -364,6 +364,38 @@ console.log('\n--- ? marks (2026-10-15) ---');
 }
 
 // =================================================================================================
+console.log('\n--- why a board was lost, and no-guess boards (2026-10-15) ---');
+{
+  const mk = (w, h, mines) => { const total = w * h; const mine = new Array(total).fill(false); mines.forEach((i) => { mine[i] = true; });
+    return { level: 'easy', w, h, mines: mines.length, mine, num: recomputeNum(w, h, mine), cell: new Array(total).fill(E.HIDDEN),
+      generated: true, dead: false, won: false, boom: -1, opened: 0, flags: 0, elapsedMs: 0 }; };
+  // 4x1, mine at 2: tapping 0 opens 0 and 1; "1" proves 2 is a mine, and the count proves 3 safe.
+  let g = mk(4, 1, [2]); E.openCell(g, 0, 0); E.openCell(g, 2, 0);
+  eq('lossCause: provable mine beside a provably safe square = slip', E.lossCause(g, 'dig'), 'slip');
+  // 5x1, mines at 2 and 4: "1" proves 2; square 3 is safe but nothing PROVES it.
+  g = mk(5, 1, [2, 4]); E.openCell(g, 0, 0); E.openCell(g, 2, 0);
+  eq('lossCause: provable mine, nothing safe beside it = misread', E.lossCause(g, 'dig'), 'misread');
+  // 3x2, mine at top-right: the two closed squares are a true 50/50.
+  g = mk(3, 2, [2]); E.openCell(g, 0, 0); E.openCell(g, 2, 0);
+  eq('lossCause: a true 50/50 = forced', E.lossCause(g, 'dig'), 'forced');
+  eq('lossCause: a chord = chord', E.lossCause(g, 'chord'), 'chord');
+  eq('lossCause: a live board = unknown', E.lossCause(mk(3, 1, [2]), 'dig'), 'unknown');
+}
+{
+  let passed = 0;
+  for (const lv of ['easy', 'medium', 'hard', 'expert']) for (let n = 0; n < 5; n++) {
+    const g = E.createGame(lv, { noGuess: true }); E.openCell(g, (g.w / 2) | 0, (g.h / 2) | 0);
+    if (g.generated && g.noGuessOk && g.noGuess) passed++;
+  }
+  eq('generateNoGuess: 20 boards over all four levels pass the no-guess check', passed, 20);
+  const g = E.createGame('hard', { noGuess: true });
+  const back = E.deserialize(E.serialize(g));
+  ok('a no-guess board keeps its flag through a save', back && back.noGuess === true);
+  const old = E.serialize(E.createGame('hard')); delete old.noGuess;
+  ok('a save from before no-guess loads as an ordinary board', E.deserialize(old).noGuess === false);
+}
+
+// =================================================================================================
 console.log('\n--- deserialize: never throws, garbage in -> null ---');
 const GARBAGE = [
   ['undefined', undefined],

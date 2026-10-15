@@ -224,6 +224,17 @@ export function aggregatePlayers(all, corrections) {
           const val = mbt[k] | 0;
           if (val > 0) dst.ms.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
         }
+        // Loss reasons and no-guess test rounds (2026-10-15): plain counters, so they add.
+        for (const key of ['lossBy', 'practice']) {
+          const srcMap = src.ms[key];
+          if (!srcMap || typeof srcMap !== 'object') continue;
+          if (!dst.ms[key] || typeof dst.ms[key] !== 'object') dst.ms[key] = {};
+          for (const [lv, counts] of Object.entries(srcMap)) {
+            if (!counts || typeof counts !== 'object') continue;
+            const d = dst.ms[key][lv] || (dst.ms[key][lv] = {});
+            for (const [k, v] of Object.entries(counts)) d[k] = (d[k] | 0) + (v | 0);
+          }
+        }
         // Best % cleared per level (2026-10-15): higher-is-better, so the best device wins.
         const mbc = src.ms.bestClearedPct || {};
         if (!dst.ms.bestClearedPct) dst.ms.bestClearedPct = {};

@@ -47,7 +47,7 @@ function neighborIndices(state, i) {
 
 /** A fresh, ungenerated state for `levelId`. An unknown id falls back to 'medium' rather than
  *  crashing a setup screen that read a stale or hand-edited settings key. */
-export function createGame(levelId) {
+export function createGame(levelId, opts = {}) {
   const level = LEVELS[levelId] ? levelId : 'medium';
   const { w, h, mines } = LEVELS[level];
   const total = w * h;
@@ -63,6 +63,7 @@ export function createGame(levelId) {
     opened: 0,
     flags: 0,
     elapsedMs: 0,   // owned by ui.js; the engine only carries it so a save survives a reload
+    noGuess: !!opts.noGuess,   // (2026-10-15) deal only boards logic alone can clear
   };
 }
 
@@ -157,7 +158,7 @@ function floodOpen(state, i) {
 export function openCell(state, x, y, rnd) {
   if (!inBounds(state, x, y)) return { changed: [], hitMine: false };
   if (state.dead || state.won) return { changed: [], hitMine: false };
-  if (!state.generated) generate(state, x, y, rnd);
+  if (!state.generated) (state.noGuess ? generateNoGuess : generate)(state, x, y, rnd);
 
   const i = idx(state, x, y);
   if (state.cell[i] === FLAGGED || state.cell[i] === OPEN) return { changed: [], hitMine: false };
@@ -310,6 +311,140 @@ export function wrongFlags(state) {
   return n;
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * LOGIC (2026-10-15): what can be PROVED from the open numbers alone. Two uses:
+ *   - no-guess boards: deal a board only if logic, from the first tap, clears it with no guess;
+ *   - why a board was lost: was the square that killed you provably a mine, a forced guess, a guess
+ *     while a safe square was on offer, or a provable mine right beside a provable safe square
+ *     (which reads as a finger slip)?
+ * It sees ONLY what a player sees (open cells and their numbers, the mine count) and never the
+ * player's flags, which may be wrong. Exact: every mine layout each group of numbers allows is
+ * counted, so "provably safe" means safe in every layout. A node cap keeps a phone responsive;
+ * hitting it returns `capped`, never a wrong answer.
+ * ------------------------------------------------------------------------------------------- */
+const NODE_CAP = 200000;
+
+/** `open[i]` true = a number the player can see. Returns { safe:Set, mine:Set, capped }. */
+function deduce(w, h, mines, num, open) {
+  const total = w * h;
+  const nb = (i) => { const x = i % w, y = (i / w) | 0, o = []; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const a = x + dx, b = y + dy; if ((dx || dy) && a >= 0 && b >= 0 && a < w && b < h) o.push(b * w + a); } return o; };
+  const known = new Set();      // proved mines
+  const safe = new Set();
+  let capped = false;
+  for (let round = 0; round < total; round++) {
+    let changed = false;
+    const cons = [];
+    for (let i = 0; i < total; i++) {
+      if (!open[i] || num[i] <= 0) continue;
+      const vars = [], around = nb(i); let need = num[i];
+      for (const j of around) { if (open[j]) continue; if (known.has(j)) need--; else if (!safe.has(j)) vars.push(j); }
+      if (vars.length) cons.push({ vars, need });
+    }
+    // the cheap rules first
+    for (const c of cons) {
+      if (c.need === 0) for (const v of c.vars) { if (!safe.has(v)) { safe.add(v); changed = true; } }
+      else if (c.need === c.vars.length) for (const v of c.vars) { if (!known.has(v)) { known.add(v); changed = true; } }
+    }
+    if (changed) continue;
+    // exact count, one connected group of numbers at a time
+    const front = [...new Set(cons.flatMap((c) => c.vars))];
+    const comp = new Map(); let k = 0;
+    for (const v of front) {
+      if (comp.has(v)) continue;
+      const st = [v]; comp.set(v, k);
+      while (st.length) { const u = st.pop(); for (const c of cons) if (c.vars.includes(u)) for (const x of c.vars) if (!comp.has(x)) { comp.set(x, k); st.push(x); } }
+      k++;
+    }
+    for (let q = 0; q < k; q++) {
+      const vars = front.filter((v) => comp.get(v) === q);
+      const cs = cons.filter((c) => comp.get(c.vars[0]) === q);
+      const at = new Map(vars.map((v, i) => [v, i]));
+      const a = new Int8Array(vars.length).fill(-1), cnt = new Float64Array(vars.length);
+      let tot = 0, nodes = 0;
+      const ok = () => { for (const c of cs) { let m = 0, u = 0; for (const v of c.vars) { const x = a[at.get(v)]; if (x === 1) m++; else if (x === -1) u++; } if (m > c.need || m + u < c.need) return false; } return true; };
+      const rec = (d) => { if (++nodes > NODE_CAP) return; if (d === vars.length) { tot++; for (let i = 0; i < vars.length; i++) if (a[i] === 1) cnt[i]++; return; } for (const val of [0, 1]) { a[d] = val; if (ok()) rec(d + 1); } a[d] = -1; };
+      rec(0);
+      if (nodes > NODE_CAP) { capped = true; continue; }
+      if (!tot) continue;
+      for (let i = 0; i < vars.length; i++) {
+        if (cnt[i] === 0 && !safe.has(vars[i])) { safe.add(vars[i]); changed = true; }
+        else if (cnt[i] === tot && !known.has(vars[i])) { known.add(vars[i]); changed = true; }
+      }
+    }
+    if (changed) continue;
+    // the mine count: every mine proved means every other closed square is safe, and vice versa
+    let closedLeft = 0; const rest = [];
+    for (let i = 0; i < total; i++) if (!open[i] && !known.has(i) && !safe.has(i)) { closedLeft++; rest.push(i); }
+    const minesLeft = mines - known.size;
+    if (rest.length && minesLeft === 0) { for (const i of rest) safe.add(i); changed = true; }
+    else if (rest.length && minesLeft === closedLeft) { for (const i of rest) known.add(i); changed = true; }
+    if (!changed) break;
+  }
+  return { safe, mine: known, capped };
+}
+
+/** True if, from opening `start`, logic alone opens every safe square. */
+function clearsWithoutGuessing(w, h, mines, mine, num, start) {
+  const total = w * h;
+  const open = new Uint8Array(total);
+  const nb = (i) => { const x = i % w, y = (i / w) | 0, o = []; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const a = x + dx, b = y + dy; if ((dx || dy) && a >= 0 && b >= 0 && a < w && b < h) o.push(b * w + a); } return o; };
+  let opened = 0;
+  const flood = (s) => { const st = [s]; while (st.length) { const j = st.pop(); if (open[j] || mine[j]) continue; open[j] = 1; opened++; if (num[j] === 0) for (const n of nb(j)) if (!open[n]) st.push(n); } };
+  flood(start);
+  const safeTotal = total - mines;
+  for (let guard = 0; guard < total; guard++) {
+    if (opened >= safeTotal) return true;
+    const r = deduce(w, h, mines, num, open);
+    if (r.capped) return false;
+    let moved = false;
+    for (const s of r.safe) if (!open[s]) { flood(s); moved = true; }
+    if (!moved) return false;
+  }
+  return opened >= safeTotal;
+}
+
+/** Like generate(), but only keeps a board logic clears from the first tap with no guess. Tries
+ *  until a board passes or `budgetMs` runs out; then keeps the last one and marks it, so a slow
+ *  phone is never left hanging (`state.noGuessOk` says which). */
+export function generateNoGuess(state, safeX, safeY, rnd = Math.random, budgetMs = 2500) {
+  const start = idx(state, safeX, safeY);
+  const t0 = Date.now();
+  let picked = null, ok = false;
+  for (let attempt = 0; attempt < 2000; attempt++) {
+    const p = attemptPlacement(state, safeX, safeY, rnd);
+    picked = p;
+    if (clearsWithoutGuessing(state.w, state.h, state.mines, p.mine, p.num, start)) { ok = true; break; }
+    if (Date.now() - t0 > budgetMs) break;
+  }
+  state.mine = picked.mine;
+  state.num = picked.num;
+  state.generated = true;
+  state.noGuessOk = ok;
+  return state;
+}
+
+/** Why a lost board was lost, from what the player could see just before the fatal tap.
+ *  `how` is 'chord' when a chord opened the mine. Returns one of:
+ *  'chord'   - a chord, so a flag was wrong;
+ *  'slip'    - the square was provably a mine and a provably safe square was right beside it;
+ *  'misread' - the square was provably a mine, with no safe square beside it;
+ *  'rushed'  - a guess, while a provably safe square was on the board somewhere;
+ *  'forced'  - a guess with no provably safe square anywhere (the board demanded it);
+ *  'unknown' - the logic ran out of time (a very tangled board). */
+export function lossCause(state, how) {
+  if (!state || !state.dead || state.boom < 0) return 'unknown';
+  if (how === 'chord') return 'chord';
+  const total = state.w * state.h;
+  const open = new Uint8Array(total);
+  for (let i = 0; i < total; i++) if (state.cell[i] === OPEN && !state.mine[i]) open[i] = 1;
+  const r = deduce(state.w, state.h, state.mines, state.num, open);
+  if (r.capped) return 'unknown';
+  const f = state.boom;
+  if (r.mine.has(f)) return neighborIndices(state, f).some((j) => r.safe.has(j) && !open[j]) ? 'slip' : 'misread';
+  for (const s of r.safe) if (!open[s]) return 'rushed';
+  return 'forced';
+}
+
 /** A plain, JSON-safe snapshot. The state object is already built entirely from plain values, so
  *  this just copies the arrays (never hand the live arrays out — a caller mutating the "snapshot"
  *  must not mutate the real game). */
@@ -326,6 +461,7 @@ export function serialize(state) {
     opened: state.opened,
     flags: state.flags,
     elapsedMs: state.elapsedMs,
+    noGuess: !!state.noGuess,
   };
 }
 
@@ -343,7 +479,7 @@ function isPlainObject(o) {
 export function deserialize(obj) {
   try {
     if (!isPlainObject(obj)) return null;
-    const { level, w, h, mines, mine, num, cell, generated, dead, won, boom, opened, flags, elapsedMs } = obj;
+    const { level, w, h, mines, mine, num, cell, generated, dead, won, boom, opened, flags, elapsedMs, noGuess } = obj;
 
     if (typeof level !== 'string' || !LEVELS[level]) return null;
     const L = LEVELS[level];
@@ -369,6 +505,7 @@ export function deserialize(obj) {
       opened: Number.isFinite(opened) ? opened : 0,
       flags: Number.isFinite(flags) ? flags : 0,
       elapsedMs: Number.isFinite(elapsedMs) ? elapsedMs : 0,
+      noGuess: noGuess === true,   // a save from before 2026-10-15 has none: an ordinary board
     };
   } catch {
     return null;
@@ -380,5 +517,6 @@ export default {
   idx, inBounds,
   createGame, generate, openCell, toggleFlag, chord,
   isWon, revealAll, minesLeft, clearedPct, correctFlags, wrongFlags, cycleMark,
+  generateNoGuess, lossCause,
   serialize, deserialize,
 };
