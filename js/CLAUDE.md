@@ -391,7 +391,12 @@ All read-time display; nothing stored or migrated.
 no note. All = one number per person: hardest level SOLVED (fastest), else hardest level with a best %
 (`ms.bestClearedPct`, first written 2026-10-15), else a dash. A level tab = everyone who PLAYED it: times,
 then % high to low, then dashes. `youBadge()` returns '' everywhere (root rule: profile names, never
-"You"); the own row keeps its highlight. Other boards unchanged.
+"You"); the own row keeps its highlight.
+**Every other board, same shape** (`plainBoardHTML`, same day): tabs All + the difficulties the field
+played + MP (online wins) when anyone played online; one number per row (All: `boardMetricCmp` order,
+tier shape beside it), games played under it, the unit once above the list; standing records unchanged.
+**`SPECIAL_BOARDS` keep the old layout until Matt decides each**: Tic Tac Toe, Snake, Skeeball, Cup
+Pong, Hold'em, Contexto, Golf, Arrow Maze, Gridlock.
 
 ### The leaderboard's spacing (2026-10-11)
 
