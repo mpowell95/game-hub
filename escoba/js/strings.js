@@ -26,7 +26,7 @@ export const STRINGS = {
     aria_table: 'Table cards',
     lasthand_chip: 'Last hand',
     vs: 'vs',
-    you: 'You',
+    you: '{me}',
 
     // Settings summary card
     lbl_players: 'Players',
@@ -90,7 +90,7 @@ export const STRINGS = {
     lbl_players_filled: 'Players ({filled}/{total})',
     mp_host_label: 'Host',
     mp_seat_n: 'Player {n}',
-    mp_seat_you: 'you',
+    mp_seat_you: '✓',
     mp_seat_waiting: 'Waiting…',
     mp_waiting_players: 'Waiting for {n} more',
 
@@ -174,7 +174,7 @@ export const STRINGS = {
     aria_table: 'Cartas de la mesa',
     lasthand_chip: 'Última mano',
     vs: 'vs',
-    you: 'Tú',
+    you: '{me}',
 
     lbl_players: 'Jugadores',
     lbl_difficulty: 'Dificultad',
@@ -232,7 +232,7 @@ export const STRINGS = {
     lbl_players_filled: 'Jugadores ({filled}/{total})',
     mp_host_label: 'Anfitrión',
     mp_seat_n: 'Jugador {n}',
-    mp_seat_you: 'tú',
+    mp_seat_you: '✓',
     mp_seat_waiting: 'Esperando…',
     mp_waiting_players: 'Faltan {n}',
 

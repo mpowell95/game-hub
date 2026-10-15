@@ -1170,3 +1170,19 @@ Not yet (Not yet also covers a phone that has not synced since). Browser-checked
 stubbed (no database): King of Games' phone reports `{code: '3VN33', at}`; the admin section shows
 "Read 14 Oct, 22:52" and "Not yet".
 
+
+
+## 2026-10-15: "You" labels replaced by the profile name, everywhere
+
+Matt: *"Make sure that NOWHERE does it say 'You' or anything like that. It must use profile names
+everywhere always."* Every label that identified the local player (turn lines, win/lose lines,
+scoreboard and seat labels, chat author, first-mover choice, challenge rows, hub alert bubbles, the
+profile page heading, Monopoly Deal's whole log) now prints the profile name. Mechanism: `makeT`
+fills `{me}` (and `{myname}`, for strings that already use `{me}` as a count, the series lines)
+with `myName()` from `js/i18n.js`; an explicit `me` param still wins (Archery passes its own).
+A blank name reads `Player` / `Jugador` (every entry point is name-gated). Left on purpose:
+sentences spoken TO the player, form labels ("Your name"), How to play text, the push texts in
+`functions/decide.js` (separate deploy), Baseball's stored team id `'You'` (`season.js` keys on it,
+rule 5), and `profile-store.js`'s blank-name default `'You'` (stored data, filtered as a placeholder).
+Monopoly Deal now seats the human under the profile name, so its engine log lines read "Matt pays
+Betty 5M" and the five log regexes in `business-deal/js/ui.js` match the escaped name.

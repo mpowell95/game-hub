@@ -152,7 +152,7 @@ export class Renderer {
     // setScoreboard(); the renderer only draws what it is handed, and never reads storage or the
     // network itself. Labels come in the same way so they stay translated.
     this.scoreboard = { allTime: null, best: 0, today: 0, last: null };
-    this.sbLabels = { allTime: 'All Time', best: 'Your Best', today: 'Today', last: 'Last Game' };
+    this.sbLabels = { allTime: 'All Time', best: 'Best', today: 'Today', last: 'Last Game' };
     this._backMat = null;
     this._sbArcade = true;   // LED scoreboard; false falls back to the painted-sign version
     this._celebrateT = 0;

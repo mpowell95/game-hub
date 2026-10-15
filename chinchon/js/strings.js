@@ -11,7 +11,7 @@
 export const STRINGS = {
   en: {
     title: 'Chinchón',
-    you: 'You',
+    you: '{me}',
     menu_btn_aria: 'Game menu',
     mode_light: 'Light mode',
     mode_dark: 'Dark mode',
@@ -92,7 +92,7 @@ export const STRINGS = {
     // table-agnostic. "Opponent left/disconnected" became "A player ..." for
     // the same reason -- at a table of four it named nobody in particular.
     mp_seat_n: 'Player {n}',
-    mp_seat_you: 'you',
+    mp_seat_you: '✓',
     mp_seat_waiting: 'Waiting…',
     mp_players_label: 'Players {filled}/{total}',
     mp_waiting_players: 'Waiting for {n} more',
@@ -194,7 +194,7 @@ export const STRINGS = {
   },
   es: {
     title: 'Chinchón',
-    you: 'Tú',
+    you: '{me}',
     menu_btn_aria: 'Menú del juego',
     mode_light: 'Modo claro',
     mode_dark: 'Modo oscuro',
@@ -272,7 +272,7 @@ export const STRINGS = {
     mp_opponent_label: 'Rival',
     mp_host_label: 'Anfitrión',
     mp_seat_n: 'Jugador {n}',
-    mp_seat_you: 'tú',
+    mp_seat_you: '✓',
     mp_seat_waiting: 'Esperando…',
     mp_players_label: 'Jugadores {filled}/{total}',
     mp_waiting_players: 'Faltan {n}',

@@ -57,7 +57,7 @@ const STRINGS = {
     conn_ended: 'Connection ended',
 
     // --- players ---
-    you: 'You',
+    you: '{me}',
     computer: 'Computer',
     player2: 'Player 2',
 
@@ -139,7 +139,7 @@ const STRINGS = {
     conn_lost: 'Se perdió la conexión. La partida no pudo continuar.',
     conn_ended: 'Conexión terminada',
 
-    you: 'Tú',
+    you: '{me}',
     computer: 'Computadora',
     player2: 'Jugador 2',
 

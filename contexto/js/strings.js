@@ -124,7 +124,7 @@ const STRINGS = {
     status_new: 'Sin jugar',
     status_progress: 'En curso ({n} intentos)',
     status_solved: 'Resuelta en {n}',
-    status_gave: 'Te rendiste',
+    status_gave: 'Rendido',
     random_btn: 'Al azar sin jugar',
     play_btn: 'Jugar',
     loading: 'Cargando palabras, solo la primera vez',
