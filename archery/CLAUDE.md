@@ -68,12 +68,11 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 ## The turn (timed off the recording at 30 fps)
 
 Touch and hold: the bow comes up in 0.25 s (`DRAW_T`). Drag to aim (about a ring per 6 px). Let go:
-the bow kicks 0.06 s (`JOLT_T`), then the flight, 0.8 s (`FLIGHT_T`): the camera holds still for the
-first fifth while the arrow climbs up and right, then glides to the close-up as the arrow drops in
-from the right (`render.js` `_camAt` / `_tipAt`, framed from the camera, not simulated). The number
+the bow kicks 0.033 s (`JOLT_T`, two frames), then the flight, 0.8 s (`FLIGHT_T`): the camera glides from the first frame at a near-steady speed and stops dead at the hit
+(measured at 60 fps on Matt's phone recording against the original, 2026-10-15), while the arrow
+climbs up and right for the first fifth (`ARROW_CLIMB`) then drops in from the right (`render.js` `_camAt` / `_tipAt`, framed from the camera, not simulated). The number
 pops 0.6 s later with stars and the scored ring flashes yellow (`_pop`, `.ar-ringflash`); the target
-stays up 2 s; the camera eases back about 5% over the first 0.55 s (`SETTLE_T`, `render.settle`).
-Back on the line the view cuts and the bow slides up into place (`BOW_IN_T` 0.2 s).
+stays up 2 s. Back on the line the view cuts and the bow slides up into place (`BOW_IN_T` 0.2 s).
 After the other player's round their arrows land one by one with red tiles, then the yellow **Your
 Turn** button. Pass and play hands over with a **Pass to <name>** card.
 

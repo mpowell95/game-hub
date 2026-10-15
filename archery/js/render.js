@@ -39,7 +39,7 @@ const EYE = new THREE.Vector3(0, 1.62, 0);
 const FACE_Z = TARGET.z + 0.09;                 // the front of the boss
 export const ARROW_COLORS = { me: '#1f6fe5', them: '#e0362b', plain: '#f0c419' };
 const FLIGHT_T = 0.8;                           // seconds, release to hit (the recording, at 30 fps)
-const FLIGHT_HOLD = 0.2;                        // of it, the camera still while the arrow climbs
+const ARROW_CLIMB = 0.2;                        // of the flight, the arrow climbing up and right before it drops in
 const BOWL_Z = 10;                              // the centre of the stadium's curve
 const BOARD_TALL = 1.06;                        // the board's height over its width (drawing only)
 // The board's half-width in face radii, as drawn: the recording's face nearly fills it. Narrower
@@ -49,8 +49,6 @@ const LINE_LOOK = new THREE.Vector3(TARGET.x, TARGET.y - 1.45, TARGET.z);
 // The close-up: the board about 45% of the screen's width, right of the middle, stands behind it.
 const CLOSE_POS = new THREE.Vector3(TARGET.x - 1.2, TARGET.y + 0.4, TARGET.z + 4.8);
 const CLOSE_LOOK = new THREE.Vector3(TARGET.x - 0.1, TARGET.y - 0.08, TARGET.z);
-// Where the flight's camera is when the arrow hits: a little closer than CLOSE_POS, so it can ease back.
-const ARRIVE_POS = CLOSE_POS.clone().lerp(new THREE.Vector3(TARGET.x, TARGET.y, TARGET.z), 0.05);
 /** The way an arrow travels into the face at (x, y): from the right and a little above, so in the
  *  close-up it sticks out long, up and to the right (the recording). */
 function inDir(x, y) { return new THREE.Vector3(-0.62 - x * 0.04, -0.1 - y * 0.03, -1).normalize(); }
@@ -449,17 +447,6 @@ export class Renderer {
     }
   }
 
-  /** Just after a hit the camera is still easing back the last few centimetres into the close-up
-   *  (the recording: the board shrinks about 5% over half a second, then holds). k: 0 at the hit,
-   *  1 settled. */
-  settle(k) {
-    k = Math.max(0, Math.min(1, k));
-    const e = 1 - (1 - k) * (1 - k);
-    this.view = 'close';
-    this.cam.position.copy(ARRIVE_POS).lerp(CLOSE_POS, e);
-    this.cam.lookAt(CLOSE_LOOK);
-  }
-
   /** A world point on screen (CSS px), from the current camera. */
   toScreen(v) {
     const p = v.clone().project(this.cam);
@@ -504,10 +491,10 @@ export class Renderer {
   }
   /** The flight camera at u, into `cam`: quick off the line, easing into the close-up. */
   _camAt(u, cam) {
-    // Still while the arrow climbs (FLIGHT_HOLD), then a glide that speeds up and settles.
-    const k = u <= FLIGHT_HOLD ? 0 : (u - FLIGHT_HOLD) / (1 - FLIGHT_HOLD);
-    const c = k + 0.3 * k * (1 - k);                 // near steady, easing in, as measured off the recording
-    cam.position.copy(EYE).lerp(ARRIVE_POS, c);
+    // The glide starts the moment the arrow leaves and runs at a near-steady speed to the
+    // close-up, stopping dead at the hit (the recording at 60 fps).
+    const c = u + 0.3 * u * (1 - u);
+    cam.position.copy(EYE).lerp(CLOSE_POS, c);
     cam.lookAt(LINE_LOOK.clone().lerp(CLOSE_LOOK, c));
     cam.updateMatrixWorld();
   }
@@ -525,12 +512,12 @@ export class Renderer {
     const hn = new THREE.Vector2(hc.x / (-hc.z * tx), hc.y / (-hc.z * ty));
     const apex = new THREE.Vector2(0.26, 0.3 + f.arc);
     let n, d;
-    if (u <= FLIGHT_HOLD) {
-      const k = u / FLIGHT_HOLD, e = 1 - (1 - k) * (1 - k);
+    if (u <= ARROW_CLIMB) {
+      const k = u / ARROW_CLIMB, e = 1 - (1 - k) * (1 - k);
       n = f.n0.clone().lerp(apex, e);
       d = 3 + (2 - 3) * e;
     } else {
-      const k = (u - FLIGHT_HOLD) / (1 - FLIGHT_HOLD);
+      const k = (u - ARROW_CLIMB) / (1 - ARROW_CLIMB);
       n = apex.clone().lerp(hn, Math.pow(k, 1.25));
       n.y += 0.05 * Math.sin(Math.PI * k);
       d = 2 + (-hc.z - 2) * Math.pow(k, 1.6);
@@ -541,7 +528,7 @@ export class Renderer {
    *  from the right (dIn), so it is seen from the side as it drops in. */
   _dirAt(u) {
     const d0 = new THREE.Vector3(-0.32, -0.06, -1);
-    const k = u <= FLIGHT_HOLD ? 0 : (u - FLIGHT_HOLD) / (1 - FLIGHT_HOLD);
+    const k = u <= ARROW_CLIMB ? 0 : (u - ARROW_CLIMB) / (1 - ARROW_CLIMB);
     return d0.lerp(this.flight.dIn, k).normalize();
   }
   /** A white ribbon that follows the path behind the arrow, fading to nothing. */
