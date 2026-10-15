@@ -37,7 +37,7 @@ keep the first name on purpose**: the stats id keys every level already cleared 
 
 `js/engine.js` the whole puzzle (level sizes, seeded generators, `blockerOf` the one rule, `hintArrow`,
 `buildLadder`, `buildRush`; pure) · `js/test.js` (`node way-out/js/test.js`; skipped by
-`validate-sw-assets.mjs`) · `js/ui.js` screens, canvas board, input, animation, autosave, module
+`tools/validate-sw-assets.mjs`) · `js/ui.js` screens, canvas board, input, animation, autosave, module
 contract, the `window.__woTest` seam · `js/strings.js` EN/ES · `../js/arrow-maze-time.js` the timer's
 penalties, clock format, finish-list reader, ladder bands and points, Rush numbers and weeks (shared
 with the stats store and the merge; network-first) · `css/way-out.css` · `index.html` standalone (name
@@ -118,7 +118,7 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
   iPhone reported a short `visualViewport` height mid-transition and the setup screen was cut off;
   Minesweeper had the same fix). The setup column centres with auto margins
   (`.wo-home > :first-child/:last-child`) and scrolls inside itself if a phone is too short.
-- **Design floor: 360px wide, ~724px tall** (`node read-install-state.mjs --screens`, 2026-10-13);
+- **Design floor: 360px wide, ~724px tall** (`node tools/read-install-state.mjs --screens`, 2026-10-13);
   nobody active has a 320-wide phone, so 320x568 checks are dropped. 375x667 stays a check until
   Lili's phone reports.
 
@@ -159,7 +159,7 @@ mistake.
   time and we can switch back..."*).
 - **Not timed, honestly**: a level resumed from a pre-timer save (`partial`) and levels cleared before it
   have no time but still count as solved (rule 4). The win banner shows the time.
-- Tests: `test-arrow-maze-time.mjs`, `players-agg.test.mjs`.
+- Tests: `tools/test-arrow-maze-time.mjs`, `tools/players-agg.test.mjs`.
 
 ## QA pass (2026-10-11): rules that came out of it
 
@@ -173,9 +173,9 @@ keyboard** (arrow keys pick an arrow, yellow halo, Enter/Space sends it).
 
 ## Tests
 
-`node way-out/js/test.js` (engine, ladder, Rush boards) · `node test-arrow-maze-time.mjs` (bands, points,
-the real players' totals, recorder, weeks) · `node test-visual.mjs way-out` (PLAY probe with real touch)
-· `node check-no-scroll.mjs way-out` · `node test-game-conventions.mjs` · `players-agg.test.mjs`.
+`node way-out/js/test.js` (engine, ladder, Rush boards) · `node tools/test-arrow-maze-time.mjs` (bands, points,
+the real players' totals, recorder, weeks) · `node tools/test-visual.mjs way-out` (PLAY probe with real touch)
+· `node tools/check-no-scroll.mjs way-out` · `node tools/test-game-conventions.mjs` · `tools/players-agg.test.mjs`.
 
 ## The ladder and points (2026-10-14)
 

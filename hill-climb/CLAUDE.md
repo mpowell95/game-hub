@@ -282,7 +282,7 @@ with the game rather than after a bug report:
    `UNIT_KEY` entries. Stored is not enough (rule 1).
 3. `js/players-agg.js` — the `else if (g === 'hillclimb' && src.hc)` combine branch. Without it the
    Stats screen reads zeroes the moment a person's second device syncs. Counters add; every
-   distance best and `bestCoins` take `Math.max`. Regression case: `players-agg.test.mjs`.
+   distance best and `bestCoins` take `Math.max`. Regression case: `tools/players-agg.test.mjs`.
 
 Leaderboard: `hillclimb` is in `SOLO` (`players-agg.js`), so its plays count as RUNS, not wins.
 `hcBestAt()` in `leaderboard-ui.js` is the per-tier metric (keyed by STAGE id, not a difficulty
@@ -291,7 +291,7 @@ same shape as Ball Run and Snake.
 
 ## Tests
 
-`node hill-climb/js/test.js` (also inside `node run-all-tests.mjs`). 162 assertions covering
+`node hill-climb/js/test.js` (also inside `node tools/run-all-tests.mjs`). 162 assertions covering
 terrain determinism/continuity/pad, world-object determinism and lazy chunking, the physics rest
 state, the throttle-tilt coupling (measured on the flat pad, where terrain slope cannot be the
 cause), upgrades and stage surfaces changing the outcome, both end conditions, distance never
@@ -399,7 +399,7 @@ independent of the play loop.
 Matt: *"I've told you several times before that I don't want any game in the gamehub to be
 scrollable at all. Everything MUST fit on a single screen. Always."*
 
-Measured by `check-no-scroll.mjs` at 390x664, standalone AND in the hub: `.hc-body` scrolled INSIDE
+Measured by `tools/check-no-scroll.mjs` at 390x664, standalone AND in the hub: `.hc-body` scrolled INSIDE
 ITSELF by 137px - four 107px cards, 453px of them, in a 324px box. Both 852px screens fit, so the
 block in `hill-climb.css` is scoped `@media (max-height: 720px)`.
 
@@ -411,8 +411,8 @@ grid the existing 620px-wide rule already switches to, asked for by height inste
 ## Every garage tab fits, on a 360-wide phone too (2026-10-13)
 
 Matt asked whether every game works on Unai's phone (Android, 360x804 screen, 360x724 page: the
-narrowest an active player uses, from `node read-install-state.mjs --screens`). Hill Climb did not,
-and neither did three of its four tabs on phones it had been "checked" on: `check-no-scroll.mjs`
+narrowest an active player uses, from `node tools/read-install-state.mjs --screens`). Hill Climb did not,
+and neither did three of its four tabs on phones it had been "checked" on: `tools/check-no-scroll.mjs`
 only ever measured the default Vehicle tab, so Shop, Stage and Tune were never looked at.
 
 Measured `.hc-body` overflow before the fix: Vehicle 34px (360x804) and 95px (360x724); Shop 14-159px
@@ -428,5 +428,5 @@ at EVERY size tested, including 393x852; Stage 69px at 393x852; Tune 56px at 390
 - The short-screen block (`max-height: 720px`) also applies at `max-width: 380px` now, and tightens
   the tune tiles and shop headings.
 
-`check-no-scroll.mjs` now measures all three other tabs (`EXTRA_SCREENS['hill-climb']`) and both
+`tools/check-no-scroll.mjs` now measures all three other tabs (`EXTRA_SCREENS['hill-climb']`) and both
 360-wide sizes, so none of this can come back unnoticed.

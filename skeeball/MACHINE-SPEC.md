@@ -9,7 +9,7 @@ own colours.
 **Part 4** is colour. Different every time.
 **Part 5** is wiring it in and checking it.
 
-Rule ids in headings are the ids `test-skeeball-machine-spec.mjs` reports and the keys a waiver
+Rule ids in headings are the ids `tools/test-skeeball-machine-spec.mjs` reports and the keys a waiver
 uses. Waivers are section 20.
 
 ---
@@ -94,7 +94,7 @@ humpAngles: [0.1862, 0.3723, 0.5585, 0.7447, 0.9308, 1.117],
 Converting the rounded degrees back does not reproduce them — `10.7°` is `0.18675` rad, and the
 file says `0.1862`.
 
-Re-run `node sight.mjs` after changing the ramp, the cabinet or the camera.
+Re-run `node tools/sight.mjs` after changing the ramp, the cabinet or the camera.
 
 ## 6 · Trough — `trough.dims`
 
@@ -250,7 +250,7 @@ and no written `value`, because the value comes from the cup sitting in the slot
 of the sweep — a position it occupies for an instant twice per period — so `holes.inside` tests
 BOTH ends of the travel and `holes.spacing` tests the closest the two centres ever come. A face
 that clears its neighbour at the centre of a sweep and drives through it at the end is not a
-spaced face; it is a collision nobody measured. `test-skeeball-machine-spec.mjs` does this from
+spaced face; it is a collision nobody measured. `tools/test-skeeball-machine-spec.mjs` does this from
 the board's own `geom.mover`, so a fixed hole is checked exactly as it always was.
 - A hole id that has shipped is frozen. Never delete one, never change its `value` — the ids are
   written into saved games. To retire a hole, leave it where it is. — `holes.frozen`
@@ -302,7 +302,7 @@ spaced `h(n+1) = h(n) + ringD(n)`, which makes hole spacing a consequence of rin
 than a free number.
 
 **Nothing tests rules 2 or 3.** There is no tangency assertion in `skeeball/js/test.js`,
-`test-skeeball-machine-spec.mjs` or `test-skeeball-rings.mjs`. (`boards.js`'s header says
+`tools/test-skeeball-machine-spec.mjs` or `tools/test-skeeball-rings.mjs`. (`boards.js`'s header says
 `skeeball/js/test.js` asserts all three. It does not.) So a new machine may space its column
 however Matt asks, and nothing will object — and equally, nothing is guarding THE CLASSIC's stack
 from drifting if someone edits a diameter without moving the holes above it.
@@ -461,7 +461,7 @@ Per-machine objectives are supported (2026-08-22): add the machine's three to th
 game-over tiles and the fireworks are board-generic from there. A goal that needs a counter the
 store does not keep yet (POPONGO's color sweep needed `sk.colorSweeps`) means the root
 checklist's three-edit rule: `ensureSk`/`recordSkeeball` in `js/game-stats.js`, the sk branch in
-`js/players-agg.js`, and a case in `players-agg.test.mjs` — miss the agg branch and the counter
+`js/players-agg.js`, and a case in `tools/players-agg.test.mjs` — miss the agg branch and the counter
 zeroes the moment a second device syncs.
 
 ---
@@ -513,7 +513,7 @@ it); `unlocksEarned()` in `boards.js` handles only score unlocks.
 ## 15 · The hub tile
 
 ```bash
-node gen-skeeball-tile.mjs
+node tools/gen-skeeball-tile.mjs
 ```
 
 Regenerate it after adding a board. The tile is drawn from `boards.js`, never by hand.
@@ -548,12 +548,12 @@ Run all four.
 
 ```bash
 node skeeball/js/test.js --full
-node test-skeeball-machine-spec.mjs
-node test-skeeball-rings.mjs
-node test-game-conventions.mjs
+node tools/test-skeeball-machine-spec.mjs
+node tools/test-skeeball-rings.mjs
+node tools/test-game-conventions.mjs
 ```
 
-`test-skeeball-machine-spec.mjs` also carries **Part 7**, the performance rules, and reads your
+`tools/test-skeeball-machine-spec.mjs` also carries **Part 7**, the performance rules, and reads your
 machine's own `render.js` and `physics.js` to do it. It will tell you if the machine you just built
 is going to make the whole hub sluggish. It cannot tell you it is FAST — for that, Part 7 says what
 to measure and how.
@@ -702,8 +702,8 @@ the two-axis grid in `skeeball/js/test.js` measures one arbitrary frozen phase a
 moving hole as unreachable or as trivial at random.
 
 ```bash
-node sweep-mover.mjs <boardId>            # power x aim x phase
-node sweep-mover.mjs <boardId> --full     # 41 x 21 x 12
+node tools/sweep-mover.mjs <boardId>            # power x aim x phase
+node tools/sweep-mover.mjs <boardId> --full     # 41 x 21 x 12
 ```
 
 Sample phases over a FULL period, not a half: the sine is symmetric in position but not in

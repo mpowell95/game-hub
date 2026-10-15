@@ -93,15 +93,15 @@ This tool is served by the hub's service worker, and that has caused two separat
    Two branches open at once both compute the same next number. That has happened here: another
    session took v776 mid-session and the collision had to be caught by hand.
 
-2. **Run `node validate-sw-assets.mjs` after ANY file change and commit `sw.js`.** It rewrites the
+2. **Run `node tools/validate-sw-assets.mjs` after ANY file change and commit `sw.js`.** It rewrites the
    generated `REST_MANIFEST` (a content hash per file) and writes `version.json`. A stale manifest
-   fails `test-sw-strategy.mjs` and makes every device re-download the whole game tier.
+   fails `tools/test-sw-strategy.mjs` and makes every device re-download the whole game tier.
 
 3. **`pinball2/` is deliberately excluded from cache-first serving**, by `DEV_FRESH` in `sw.js`.
    Released games are cache-first for speed; this tool is network-first so a build you just shipped
    is the build that runs. Matt found this the hard way: the Claude app showed the new build and
    Chrome showed the old one, same URL, because Chrome had the service worker and the Claude app did
-   not. `test-sw-strategy.mjs` has four assertions locking it down. **If you add a file under
+   not. `tools/test-sw-strategy.mjs` has four assertions locking it down. **If you add a file under
    `pinball2/`, it is covered automatically by the path prefix. If you ever move this tool, move
    `DEV_FRESH` with it.**
 
@@ -862,7 +862,7 @@ positions through `playable()` before you believe a word of its output.**
 
 1. **Never touch `pinball/`.** Different game, real player records, separate engine.
 2. **Bump `CACHE` past `origin/main`, not past your working copy.**
-3. **Run `validate-sw-assets.mjs` and commit `sw.js`** after any file change under `pinball2/`.
+3. **Run `tools/validate-sw-assets.mjs` and commit `sw.js`** after any file change under `pinball2/`.
 4. **A new shape kind is a five-place edit in the engine plus seven in the editor.** `distToShape`
    throws if you forget it, which is the only one that fails loudly.
 5. **Do not put the flipper back in the swept contact set.**

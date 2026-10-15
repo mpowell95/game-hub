@@ -32,7 +32,7 @@ is the artifact (see `reference/README.md`).
 
 Every geometry figure below is a fraction of the game root's own rectangle, with the pixel value at
 the reference phone beside it. Reference phone: 393 by 852, mounted in the hub with
-`immersive: true`. Short phone: the short height `test-visual.mjs` uses for its fit check. The root
+`immersive: true`. Short phone: the short height `tools/test-visual.mjs` uses for its fit check. The root
 fills from under the hub's floating back button to the viewport bottom, measured by probe exactly as
 Golf's `_fit()` does (Part 3). W and H below are that root's width and height.
 
@@ -48,7 +48,7 @@ swing"); fixed geometry, with space reserved for anything that appears or disapp
 the player is already looking; the viewport is a budget spent deliberately, no dead zones; red-green
 colorblind safe, the `#ffce3a` attention color always paired with a non-color cue; no em dashes;
 12-hour time. Part 0's floor: 11 px text minimum, 44 by 44 tap targets, `safe-area-inset-bottom`, no
-scrolling anywhere (tested by `check-no-scroll.mjs`), animate only transform, opacity, filter and
+scrolling anywhere (tested by `tools/check-no-scroll.mjs`), animate only transform, opacity, filter and
 box-shadow, reduced motion thins garnish but gameplay motion continues (the pitch still flies), and
 the iOS rapid-tap fix on the Swing button.
 

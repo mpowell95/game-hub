@@ -22,7 +22,7 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
   row shipped with the game, so the board appears the moment it is released.
 - **KEEP IT ADMIN ONLY until Matt says otherwise** (Matt, 2026-10-14: *"make sure it's admin only
   until I've had time to fully test it"*). He releases it himself from the admin page (Games ->
-  Gridlock), which overrides the code default with no commit. `test-gridlock.mjs` fails if the
+  Gridlock), which overrides the code default with no commit. `tools/test-gridlock.mjs` fails if the
   `GAMES` entry loses `devOnly: true` or gains a `released` date; change those checks only on his word.
 - `isInProgress()` is always `false`: every move autosaves, so leaving is lossless.
 - Immersive layout is Arrow Maze's `_positionRoot()` (a fixed root measured against the mount
@@ -33,7 +33,7 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
 | File | Role |
 |---|---|
 | `js/engine.js` | the whole puzzle, pure: board notation, legal slides (`range`, `moves`), the solver (`solve`, breadth-first, one slide = one move). Used by the game, the level maker and the tests |
-| `js/levels.js` | **GENERATED** by `build-gridlock-levels.mjs` (repo root). One line per ladder level: board + fewest moves. **APPEND-ONLY once shipped**, never hand-edited |
+| `js/levels.js` | **GENERATED** by `tools/build-gridlock-levels.mjs` (repo root). One line per ladder level: board + fewest moves. **APPEND-ONLY once shipped**, never hand-edited |
 | `js/art.js` | the drawings: wooden blocks (grain, knots, bevel, shine; eight wood tones) and cars (sedan, sports, hatch, sunroof, taxi) and trucks (box truck, bus, tanker), top-down with tyres, glass, lights and mirrors. Pure, returns SVG |
 | `js/ui.js` | setup and play screens, the board (DOM blocks moved by `transform`), dragging, undo / restart / hint, the win popup, autosave, the module contract, the `window.__glTest` seam |
 | `js/strings.js` | EN/ES, every visible string and aria-label |
@@ -165,7 +165,7 @@ shows that difficulty's points. Standing records: levels cleared, three-star lev
 - The recorder runs FIRST in `_win()`, before the slide-out animation and the popup, so a solve is
   counted even if the app closes the instant it happens.
 
-## The levels (`build-gridlock-levels.mjs`)
+## The levels (`tools/build-gridlock-levels.mjs`)
 
 Every level is the **hardest start of its own set of blocks**: the generator lays out blocks, finds
 every arrangement they can slide into (the "cluster"), and breadth-first searches out from every
@@ -209,11 +209,11 @@ faster at the top, and ends on the 51-move puzzle at level 400.
 
 ## Tests
 
-- `node gridlock/js/test.js` (engine, every shipped level, the pin), `node test-gridlock.mjs`
+- `node gridlock/js/test.js` (engine, every shipped level, the pin), `node tools/test-gridlock.mjs`
   (points, stars, the recorder, the two-phone merge).
-- `node test-visual.mjs gridlock` has a PLAY probe: Play, then a real touch drag of the first block
+- `node tools/test-visual.mjs gridlock` has a PLAY probe: Play, then a real touch drag of the first block
   of the solution (one move).
-- `node check-no-scroll.mjs gridlock`, `node test-game-conventions.mjs`.
+- `node tools/check-no-scroll.mjs gridlock`, `node tools/test-game-conventions.mjs`.
 - Checked in Chromium (2026-10-14), standalone and in the hub, light and dark, English and Spanish,
   at 402x874, 375x667 and 360x724: setup, play and the win popup all on screen, nothing under the
   hub's back button, no page scroll; a real touch drag moves a block one move.

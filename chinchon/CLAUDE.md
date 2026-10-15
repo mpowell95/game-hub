@@ -115,7 +115,7 @@ Roadmap (not built): unify pip style with the court cards; one-undo; sound.
 ```
 node chinchon/js/test.js   # engine unit assertions (deck + meld), incl. shouldAutoClose and M2c turnEnd resume
 node chinchon/js/sim.js    # 30 all-AI matches
-node test-mp-lockstep.mjs  # C1-C7
+node tools/test-mp-lockstep.mjs  # C1-C7
 ```
 Needs Node >= 22.7 (no package.json).
 
@@ -128,7 +128,7 @@ fields stay canonical; only display labels translate. Suit terms, the gallery's 
 ## An online match records under 'mp', not under an AI tier (2026-09-09)
 
 `_commitStats` writes `MP_DIFFICULTY` ('mp') whenever `this.mp` is set (it used to file every online match
-as a Medium win over a non-existent AI); solo still reads the opponent AI's tier. `test-mp-lockstep.mjs`'s
+as a Medium win over a non-existent AI); solo still reads the opponent AI's tier. `tools/test-mp-lockstep.mjs`'s
 C1 block mirrors the branch and fails if reverted. **NOT RETROACTIVE, deliberately** (rule 5): earlier
 matches stay in `normal`.
 
@@ -177,7 +177,7 @@ layer and this file's MP glue.
   only that seat (`net.vacateSeat`); only the host leaving takes the room.
 - Two `js/net.js` fixes (transactional `joinSeat`, seat-addressed recovery): `js/CLAUDE.md`, "The ninth
   consumer".
-- Tests: `test-mp-lockstep.mjs` C5 (four-seat match, hashes identical), C6 (desync -> recovery to the
+- Tests: `tools/test-mp-lockstep.mjs` C5 (four-seat match, hashes identical), C6 (desync -> recovery to the
   authoring seat), C7 (per-seat recovery records cannot clobber each other). **Not verified on real
   devices.**
 
@@ -199,9 +199,9 @@ screen. Always."*
 - **Height** (hub at 390x664, 141px over): the two foot buttons share one row (Start game / How to play)
   on a short screen, tighter panel gaps/padding, mode chips and settings labels held to one line. **The
   seven summary rows stay at 42px** (tap targets). Scoped to `max-height: 760px` AND (since 2026-10-13,
-  360x804 Unai's Android) `max-width: 380px` inside `.hub-main`. `check-no-scroll.mjs` measures both.
+  360x804 Unai's Android) `max-width: 380px` inside `.hub-main`. `tools/check-no-scroll.mjs` measures both.
 - `.cc-game` (the hand and the mat) is a separate screen and still measures over in the hub
-  (`test-visual.mjs` known gaps); that needs a card-size pass with eyes on screenshots.
+  (`tools/test-visual.mjs` known gaps); that needs a card-size pass with eyes on screenshots.
 
 ## Computer speed, face-down hands and card travel (2026-09-28)
 

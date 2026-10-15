@@ -76,12 +76,12 @@ Stage estimates are rough (I believe, not measured): each is roughly one focused
 
 ## 5. How to test it
 
-- `test-hole-editor-ui.mjs` must stay green at desktop size (it is the no-regression proof).
-- A new `test-hole-editor-mobile.mjs`: 390x844, `hasTouch`, drive with `page.touchscreen.tap` and
+- `tools/test-hole-editor-ui.mjs` must stay green at desktop size (it is the no-regression proof).
+- A new `tools/test-hole-editor-mobile.mjs`: 390x844, `hasTouch`, drive with `page.touchscreen.tap` and
   CDP touch events for pinch/drag. Cover: open the setup screen, name + terrain, open Add, place a
   bunker, drag it, delete it from the sheet, draw a lake with Finish, bend the route with a
   long-press dot, switch holes, Play, the walkthrough start to finish, Report bug opens.
-- `check-no-scroll.mjs`-style check: the page itself never scrolls sideways at 390 px.
+- `tools/check-no-scroll.mjs`-style check: the page itself never scrolls sideways at 390 px.
 - Stills at 390x844 of every stage, looked at, sent to Matt with the image + HTML rule in the root
   `CLAUDE.md` ("Send the Claude.ai handoff files").
 - Real device: ask Matt to open the live link on his own phone after stage 2; a headless touch

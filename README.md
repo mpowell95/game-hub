@@ -63,5 +63,5 @@ cd connect-four && node js/test.js     # or: npm test
 Regenerate PWA icons:
 
 ```bash
-node generate-icons.mjs
+node tools/generate-icons.mjs
 ```

@@ -40,7 +40,7 @@ assumed). Fix: `startGame()` now sets `this._statsCommitted = false` right along
 its per-game reset block (`_lastCaptured`/`_lastEdge`/`_humanChainRun`/etc.), mirroring
 `_mpApplyRoundRecord`. No stored data changed, no migration — this is a write-path bug fix, not a
 display fix; games played before this landed were never recorded and cannot be recovered (there
-was nothing stored to carry forward). `node run-all-tests.mjs` stays green (no test exercised a
+was nothing stored to carry forward). `node tools/run-all-tests.mjs` stays green (no test exercised a
 second solo `startGame()` call in one session before this, which is exactly how the bug went
 unnoticed by every existing suite).
 
@@ -183,7 +183,7 @@ Mancala" — Dots and Boxes is the fifth). `js/net.js` itself is untouched.
   existing `db` branch needs no MP-specific change, since it already sums/maxes generically
   regardless of which difficulty bucket the play landed under.
 - **Invariant coverage**: all five `js/CLAUDE.md` invariants are ported into Dots and Boxes' own
-  vocabulary in `test-mp-lockstep.mjs`'s DB1-DB6 block, on a small fast 2x2 test board (12 edges,
+  vocabulary in `tools/test-mp-lockstep.mjs`'s DB1-DB6 block, on a small fast 2x2 test board (12 edges,
   4 boxes) so the whole block runs quickly:
   - **Invariant 1 has no literal `winner` field to gate on in the first place** — `isOver(s)` is
     purely `drawnEdges >= totalEdges`, so DB2's probe states that non-mapping explicitly rather
@@ -211,7 +211,7 @@ Mancala" — Dots and Boxes is the fifth). `js/net.js` itself is untouched.
   move claims nothing.
 
 **Status line (web-session pass): protocol proven headlessly against `FakeRoom`, all six DB-series
-probes green (`test-mp-lockstep.mjs`); real-room behaviour is unverified.** Real devices are
+probes green (`tools/test-mp-lockstep.mjs`); real-room behaviour is unverified.** Real devices are
 required for `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment cannot reach
 Firebase at all. **The per-edge move granularity under real chain-capture latency (Large board,
 many rapid edges in one turn) is the one thing this pass could not de-risk and is flagged
@@ -219,7 +219,7 @@ explicitly for that pass** — see the handoff entry there. Nothing here has bee
 phone yet.
 ## The page scrolled SIDEWAYS by 5px, and it was a missing `box-sizing` (2026-09-08)
 
-Found by `check-no-scroll.mjs` (repo root): standalone, at both phone heights, the page overflowed
+Found by `tools/check-no-scroll.mjs` (repo root): standalone, at both phone heights, the page overflowed
 its own width by 5px. Not a layout that is too wide - nothing in this game needs more than the
 screen - but `.db-vscard`, which is `width: 100%` of a padded shell.
 

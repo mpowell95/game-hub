@@ -20,7 +20,7 @@ Built 2026-09-21. Design artifacts: `reference/minesweeper/mockup.html` (all eig
   lock: the admin control page can release it to everyone with no commit and no deploy. Which is
   exactly why it HAS a `GAME_META` row in `js/leaderboard-ui.js` — a game released that way gets no
   release commit to add one, and a missing row counts every play on it as zero (rule 1, and how
-  Yahtzee shipped). `players-agg.test.mjs`'s `OFF_THE_BOARD` stays empty.
+  Yahtzee shipped). `tools/players-agg.test.mjs`'s `OFF_THE_BOARD` stays empty.
 - **No `released` date**, deliberately. The "New" pill belongs to the day this goes live for
   everyone, which is a decision made in the app, not here.
 - **NOT immersive.** This is a grid puzzle like Sudoku, and the whole cell-size ladder is derived
@@ -40,7 +40,7 @@ Built 2026-09-21. Design artifacts: `reference/minesweeper/mockup.html` (all eig
 | `css/minesweeper.css` | `.ms-root` / `.ms-` prefix, every rule descendant-scoped |
 | `index.html` | the standalone page, name-gated before `init()` |
 
-Tests: `test-minesweeper-engine.mjs` (88 assertions, headless, no browser).
+Tests: `tools/test-minesweeper-engine.mjs` (88 assertions, headless, no browser).
 
 ## The board ladder, and why it is not the classic one
 
@@ -169,7 +169,7 @@ a ring at a time. About 1.15s before the result screen arrives.
   instead of ~1.6s, no layer, no fragments, all mines shown. Nothing structural is `display:
   none`d; the elements that remain settle at their final pose.
 
-**`test-visual.mjs`'s `MOTION` probe is what keeps it honest.** It samples a fragment's real
+**`tools/test-visual.mjs`'s `MOTION` probe is what keeps it honest.** It samples a fragment's real
 on-screen position frame by frame and fails if the debris is too brief to follow or barely travels
 (measured: 113px over 1135ms, 70 frames). Verified born red by making `_explode` a no-op. A static
 check cannot see any of this - the board screenshots identically a second later, which is exactly
@@ -247,7 +247,7 @@ moment you clear a board. It now rides the repo's existing DIFFICULTY-OUTRANKS-S
 **`msBestAt` MUST RETURN NULL FOR THE 0 SENTINEL, NEVER 0.** `bestTimeMs` stores 0 for "never
 cleared this level", and `hasBoardMetric` treats a lower-is-better value as present whenever it has
 one (golf's to-par is legitimately 0). A raw 0 would read as an instant clear and top the board for
-ever. `test-leaderboard-rank.mjs` carries this as a `[KNOWN-BUG PROBE]` plus the behavioural cases
+ever. `tools/test-leaderboard-rank.mjs` carries this as a `[KNOWN-BUG PROBE]` plus the behavioural cases
 around it.
 
 **The per-level tiles print times too (2026-10-11).** The tiles under each row went through

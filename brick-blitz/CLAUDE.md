@@ -104,5 +104,5 @@ the same way. The rules live at the end of `css/brick-blitz.css`.
 
 ## Tests
 
-`node test-game-conventions.mjs`, `node players-agg.test.mjs` (the `bz` cross-device case),
-`node test-recorder-contract.mjs`, `node check-no-scroll.mjs` (needs `node server.mjs`).
+`node tools/test-game-conventions.mjs`, `node tools/players-agg.test.mjs` (the `bz` cross-device case),
+`node tools/test-recorder-contract.mjs`, `node tools/check-no-scroll.mjs` (needs `node server.mjs`).

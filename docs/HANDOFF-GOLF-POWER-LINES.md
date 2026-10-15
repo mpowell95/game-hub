@@ -74,9 +74,9 @@ line is Opus's.
 
 - Opus: `golf/js/test.js` - a shot crossing the wire inside the band is blocked where it crosses;
   the same line with a high apex is clear; a putt under it is clear; a pole trunk blocks; each
-  validator refusal. `test-hole-editor.mjs` - the four mutators, export prints `lines`, the built
+  validator refusal. `tools/test-hole-editor.mjs` - the four mutators, export prints `lines`, the built
   hole validates. `golf/CLAUDE.md`, "The hole-data format": `lines`.
-- Sonnet: `test-hole-editor-ui.mjs` - the Power line tile + three clicks + Enter makes a line with
+- Sonnet: `tools/test-hole-editor-ui.mjs` - the Power line tile + three clicks + Enter makes a line with
   3 points and 3 poles; selecting it and pressing Delete removes it. `hole-editor/CLAUDE.md`.
 
 ## 6. File ownership
@@ -85,7 +85,7 @@ line is Opus's.
 |---|---|
 | `golf/js/obstacles.js`, `shot.js`, `holegen.js`, `holes.js`, `strings.js`, `ui.js` (message only) | `golf/js/render.js` |
 | `hole-editor/js/model.js`, `export.js`, `main.js` (tool wiring) | `hole-editor/js/canvas.js`, `panels.js`, `palette.js`, `editor.css` |
-| `golf/js/test.js`, `test-hole-editor.mjs`, `golf/CLAUDE.md` | `test-hole-editor-ui.mjs`, `hole-editor/CLAUDE.md`, a still under `reference/golf/` |
+| `golf/js/test.js`, `tools/test-hole-editor.mjs`, `golf/CLAUDE.md` | `tools/test-hole-editor-ui.mjs`, `hole-editor/CLAUDE.md`, a still under `reference/golf/` |
 
 The contract neither changes alone: the catalogue entry above, `hole.lines[i] = { pts, lo, hi }`,
 the recipe field `lines: [{ pts, h }]`, the tool name `'line'`, the mutator names in section 3.

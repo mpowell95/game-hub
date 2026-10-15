@@ -176,7 +176,7 @@ moment. He also said to keep ignoring reduced motion for this game (it has none,
   card is seen arriving before the sheet covers the board; nothing else waits on a flight.
 - Verified in Chromium: full games at every speed with 1-4 opponents (the human seat driven by the
   AI), hand taps and banking by hand, the speed saved from both screens, no card left hidden,
-  `check-no-scroll.mjs business-deal` clean. Not yet by eye on a phone.
+  `tools/check-no-scroll.mjs business-deal` clean. Not yet by eye on a phone.
 
 ## Notes
 

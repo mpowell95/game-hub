@@ -133,7 +133,7 @@ clears two hard rules at once:
    one MOVE is the worst case the rule describes. **Measured, and it is clean**: a moving `lowC`
    over 924 throws gives **0 walkouts**, and so does the three-mover endgame (`lowC` + `midC` +
    `topR` at its fastest rung) over another 924. The rule is a threshold; the sweep is the
-   evidence, and `node sweep-mover.mjs runaway --stage rows` is what re-measures it. Check it
+   evidence, and `node tools/sweep-mover.mjs runaway --stage rows` is what re-measures it. Check it
    before touching any of the three inputs: the mouths, `collarThick`, or the amplitude.
 
    **The top row's margin is 0.005X, and that is the number to watch.** It was `0.0675X` at the 3.50in mouth
@@ -151,9 +151,9 @@ clears two hard rules at once:
    half-width.
 
 **Both numbers have to be re-derived if the amplitude, the mouth or the collar thickness ever
-change.** `test-skeeball-machine-spec.mjs` tests `holes.inside` and `holes.spacing` over the whole
+change.** `tools/test-skeeball-machine-spec.mjs` tests `holes.inside` and `holes.spacing` over the whole
 travel rather than at a resting `u`, so getting it wrong fails loudly — but the 0.78X rail rule is
-a *sweep* result, not a spec assertion, and only `sweep-mover.mjs` will catch it.
+a *sweep* result, not a spec assertion, and only `tools/sweep-mover.mjs` will catch it.
 
 **The travel is ABSOLUTE, not relative to the mark.** The survivor runs between `-amp` and `+amp`
 wherever it started; it does not run `u +/- amp` around its own mark. The spec test's envelope was
@@ -166,7 +166,7 @@ the envelope and fails a machine that is fine.
 last rung holds for every catch after it. 6.0s is Matt's shipped number (2026-08-25, "instead of
 7s, make it 6s"); the rest is **measured, not guessed**.
 
-`node sweep-mover.mjs runaway --ladder --powers 21 --aims 11 --phases 4` — 924 throws per rung,
+`node tools/sweep-mover.mjs runaway --ladder --powers 21 --aims 11 --phases 4` — 924 throws per rung,
 one 100 capped and the other sweeping:
 
 | rung | period | peak m/s | catching cells | share | jams | slowest settle |
@@ -217,7 +217,7 @@ no sweep measures: deliberately timing a release against a 2.7s sweep is a diffe
 timing one against a 6s sweep, even when the same fraction of blind `(power, aim)` pairs happen to
 land. That is a real difference and it is the one Matt asked for — but it is a playtest claim, not
 a measured one, and this file will not pretend otherwise. **Never state which way a rung moved the
-difficulty without running `sweep-mover.mjs --ladder`, and do not over-read it when you have.**
+difficulty without running `tools/sweep-mover.mjs --ladder`, and do not over-read it when you have.**
 
 **A sinusoid, not a triangle.** A triangle wave reverses instantaneously at each end, handing any
 ball touching the rim a step change in wall velocity out of nowhere. The cosine eases through both
@@ -242,7 +242,7 @@ captured.
 **Closing a basket is NOT "capture turned off", and that distinction is the whole of it.** Leaving
 the collar standing and refusing to capture turns a cup into a **bowl**: the ball drops in, cannot
 be taken, and sits there until the watchdog walks it out twelve seconds later. That is precisely
-BRICK CITY's parked-ball failure (`test-brickcity-stall.mjs`, 2026-08-26) rebuilt on purpose, one
+BRICK CITY's parked-ball failure (`tools/test-brickcity-stall.mjs`, 2026-08-26) rebuilt on purpose, one
 file over.
 
 So closing a basket is **two things, and it needs both**:
@@ -268,7 +268,7 @@ feel, but it costs two things this machine cannot pay:
    as the rack goes on, so the face would get progressively more hostile to the 100 — exactly when
    the 100 is the only thing left to throw at. The machine's whole arc working against itself.
 
-Raise it and **re-run `test-runaway-capped.mjs`**, which sweeps the face with every basket closed
+Raise it and **re-run `tools/test-runaway-capped.mjs`**, which sweeps the face with every basket closed
 and fails on a parked ball. A raised cap has a flat apex, and a tread is tilted 0.10 rad (5.7
 degrees) against a board friction angle of `atan(0.12)` = 6.8 degrees — a ball balanced exactly on
 an apex has less slope than grip.
@@ -405,7 +405,7 @@ lower row's last one standing. It is a lifetime counter in `js/game-stats.js`, f
 `result().runaways`, and it took the full three-edit rule:
 `game-stats.js` (the counter), `js/players-agg.js` (the cross-device branch — without it, a
 person's second device syncing would zero it, THE LAW rule 1), and `js/game-stats-ui.js` (the My
-Stats row). `players-agg.test.mjs`'s structural probe enforces exactly that.
+Stats row). `tools/players-agg.test.mjs`'s structural probe enforces exactly that.
 
 A global counter is safe here in a way it would not be for most objectives: **RUNAWAY is the only
 machine with a moving basket, so it is the only machine that can ever write to it.**
@@ -504,7 +504,7 @@ which is the same shape BRICK CITY uses (baskets x3 + perfect rounds + net total
 
 ### The opening face (ball 1 — nothing closed, nothing moving)
 
-`node sweep-mover.mjs runaway --stage open` — 231 cells:
+`node tools/sweep-mover.mjs runaway --stage open` — 231 cells:
 
 | hole | captures | share |
 |---|---|---|
@@ -524,7 +524,7 @@ which is the arc.
 
 ### The endgame face (everything closed but the runaway, at the last rung)
 
-`node test-runaway-capped.mjs` — 693 closed-face throws plus a 231-throw open baseline:
+`node tools/test-runaway-capped.mjs` — 693 closed-face throws plus a 231-throw open baseline:
 
 | | median settle | p90 | max | walkouts |
 |---|---|---|---|---|
@@ -575,7 +575,7 @@ three seconds is simply what a ball costs, and a borrowed constant cannot know t
    Both are real changes to the machine and belong to a playtest, not a guess.
 4. **`capRise` is 0.** A raised cap on rows 1 and 2 would give a closed basket some physical
    feedback (the ball visibly deflects) at the cost of making the top row harder to reach late in
-   a rack. Deferred deliberately, and measurable: raise it and run `test-runaway-capped.mjs`.
+   a rack. Deferred deliberately, and measurable: raise it and run `tools/test-runaway-capped.mjs`.
 5. **The travel does not reach the literal edges** (-/+2.07X of a -/+3.4375X face, so the basket
    covers the middle 60% of the width). The 0.78X rail rule is what stops it, and going wider means
    solving the pinch a different way (a sloped outer collar face, or a recessed rail pocket) rather

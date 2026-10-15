@@ -158,12 +158,12 @@ small board; flagpole: a pole with a triangular pennant), the palette tiles for 
 
 ## 6. Tests and docs
 
-- Opus: `golf/js/test.js` (swamp), `test-hole-editor.mjs` (migration, swamp/decor mutators,
+- Opus: `golf/js/test.js` (swamp), `tools/test-hole-editor.mjs` (migration, swamp/decor mutators,
   export prints them), `golf/CLAUDE.md` (the catalogue and swamp, under "The hole-data format").
-- Sonnet: `test-hole-editor-ui.mjs` (a swamp tile places a swamp; a bench tile places a bench;
+- Sonnet: `tools/test-hole-editor-ui.mjs` (a swamp tile places a swamp; a bench tile places a bench;
   the palette shows every catalogue entry), `hole-editor/CLAUDE.md` (the palette sections).
-- Both: `node test-hole-editor.mjs` and `node test-game-conventions.mjs` green before reporting.
-  Sonnet also runs `node test-hole-editor-ui.mjs` (needs the agent's own server port; it reads
+- Both: `node tools/test-hole-editor.mjs` and `node tools/test-game-conventions.mjs` green before reporting.
+  Sonnet also runs `node tools/test-hole-editor-ui.mjs` (needs the agent's own server port; it reads
   `HOLE_EDITOR_URL`).
 
 ## 7. File ownership
@@ -172,8 +172,8 @@ small board; flagpole: a pole with a triangular pennant), the palette tiles for 
 |---|---|
 | `golf/js/obstacles.js` (new) | `golf/js/render.js` |
 | `golf/js/holes.js`, `clubs.js`, `shot.js`, `holegen.js`, `strings.js` | `hole-editor/js/palette.js`, `canvas.js`, `panels.js`, `editor.css` |
-| `hole-editor/js/model.js`, `starter.js`, `course.js`, `export.js` | `test-hole-editor-ui.mjs`, `hole-editor/CLAUDE.md` |
-| `golf/js/test.js`, `test-hole-editor.mjs`, `golf/CLAUDE.md` | `reference/golf/obstacles-*.png` |
+| `hole-editor/js/model.js`, `starter.js`, `course.js`, `export.js` | `tools/test-hole-editor-ui.mjs`, `hole-editor/CLAUDE.md` |
+| `golf/js/test.js`, `tools/test-hole-editor.mjs`, `golf/CLAUDE.md` | `reference/golf/obstacles-*.png` |
 
 `hole-editor/js/main.js` is nobody's unless a one-line wiring change is unavoidable; say so in the
 report. `sw.js`, `version.json`, `golf/courses/*` are untouchable. Do not push.

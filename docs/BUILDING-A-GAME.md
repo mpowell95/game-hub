@@ -8,7 +8,7 @@ game's UI/CSS/input handling (a `.claude/skills/` trigger does the loading; see 
 
 **How this relates to the other two process docs**: this file holds *rules a screen or a game
 must satisfy*. `VISUAL-PROCESS.md` holds the *procedure for finding out whether it does*
-(`test-visual.mjs`, screenshots, reference specs) — read it alongside this one for anything
+(`tools/test-visual.mjs`, screenshots, reference specs) — read it alongside this one for anything
 visual. `js/CLAUDE.md` holds the *deep mechanics of the shared modules themselves* (THE LAW's
 full rules, the multiplayer lockstep invariants, Firebase/data governance) — read it when working
 inside `js/` or on stats/sync/MP code specifically, not for general game-building conventions.
@@ -43,7 +43,7 @@ anywhere a Skeeball session would see it. That is the whole thesis of this file.
   pinned to the bottom edge can render under the home-indicator bar on notched devices without it.
 - **Nothing stays in the accessibility tree, invisible, after it's done.** An element faded to
   `opacity: 0` (or otherwise hidden by decoration rather than removed) is still there for a screen
-  reader. This is currently a doc-only rule — `test-game-conventions.mjs`'s "no class is both a
+  reader. This is currently a doc-only rule — `tools/test-game-conventions.mjs`'s "no class is both a
   layout container and something decoration hides" check catches one specific shape of this bug
   (a decorative class name colliding with a structural one, the exact way Battleship shipped a
   blank screen twice — see `battleship/CLAUDE.md`), but does not catch every case. Don't rely on
@@ -122,7 +122,7 @@ anywhere a Skeeball session would see it. That is the whole thesis of this file.
   **It is not enough for the PAGE to fit.** Every immersive game here pins itself to the viewport
   with `position: absolute; inset: 0`, so a game can scroll INSIDE ITSELF while the page does not
   overflow by a pixel - and every page-level fit check in this repo passed all of them. Run
-  **`node check-no-scroll.mjs`** (repo root, needs `node server.mjs` up): every game, both hosts,
+  **`node tools/check-no-scroll.mjs`** (repo root, needs `node server.mjs` up): every game, both hosts,
   both phone heights, page overflow AND any scrollable element inside the game's own root, in about
   a minute. Snake had `max-height: calc(100dvh - 150px); overflow-y: auto` on its setup screen with
   a comment calling it the correct reading of this rule. It was not.
@@ -153,7 +153,7 @@ export default { init, destroy, isInProgress };
 - The game must also run **standalone** from its own `<game>/index.html`, which links its
   CSS and calls `init(document.getElementById('<game>'))`. Same `init` either way. Every
   module game's `index.html` must also be in `sw.js`'s `ASSETS` list (run
-  `node validate-sw-assets.mjs` to check) — Connect Four's was missing for a long time before
+  `node tools/validate-sw-assets.mjs` to check) — Connect Four's was missing for a long time before
   a July 2026 fix, which silently broke offline standalone play with no other symptom.
 - **A standalone page must gate on the name before it mounts** (2026-07-31). Its inline module is
   `import { requireName } from '../js/name-gate.js';` then `await requireName();` **before**
@@ -246,7 +246,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
      input to the launcher's "New" pill (`js/new-badge.js`): the tile wears it for
      `NEW_DAYS` (7) days and then stops on its own — no follow-up commit, nothing stored, no
      cleanup. Omitting it is not a crash, it just means the game ships unannounced, which is
-     why `test-new-badge.mjs` exists. Pre-existing games deliberately carry NO date (they were
+     why `tools/test-new-badge.mjs` exists. Pre-existing games deliberately carry NO date (they were
      already live when the badge shipped, 2026-08-02) — do not backfill git commit dates, they
      are not release dates.
    - **Array position affects only the favorites group.** Non-favorited games render
@@ -265,7 +265,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
 6. Add the game's files (including its `index.html`) to the `ASSETS` precache list in `sw.js`
    and **bump `CACHE`** (`game-hub-vN` → `vN+1`, past what's on `origin/main` right now — a
    concurrent session may have bumped it since you last checked) — or the new files won't be
-   cached for offline. Run `node validate-sw-assets.mjs` before committing.
+   cached for offline. Run `node tools/validate-sw-assets.mjs` before committing.
    **While the game is `devOnly`, an EDIT to its own files needs no CACHE bump and no sw.js change**
    (they are held back: network-first, no hash), so players get no update mid-build. Only adding or
    removing a file, or touching shared files (`js/`, `css/`, tile art), changes sw.js. The validator
@@ -282,9 +282,9 @@ When restructuring an old game, migrate it toward the reference for each axis in
      is intact. Counters add; **bests take `Math.max`, never a sum**; a paired value (Boggle's
      `longestWord: {word,len}`) must move as a UNIT so the text always matches its own length.
    This was missed twice in a row (Dots and Boxes, then Boggle), both caught only by opening
-   My Stats in a browser. `players-agg.test.mjs` now has a per-game regression case for each,
+   My Stats in a browser. `tools/players-agg.test.mjs` now has a per-game regression case for each,
    and reads the sub-counter keys straight out of `game-stats.js`, so a forgotten surface fails
-   `node run-all-tests.mjs` instead of waiting to be noticed in a browser.
+   `node tools/run-all-tests.mjs` instead of waiting to be noticed in a browser.
 8. **Add the game to `GAME_META` in `js/leaderboard-ui.js`** — `{ id: '<statsId>', labelKey:
    'game_title_<statsId>' }`, using the STATS id, not the hub id. This is a **separate registry
    from item 5's**, in a different file, and it is the one that gets forgotten. `ALL_IDS`,
@@ -293,7 +293,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
    while its own Stats screen shows them correctly. Yahtzee shipped like that until a player
    reported it (2026-08-11) — 14 wins stored, synced and invisible, THE LAW rule 1. The only
    legitimate reason to leave a game off is `devOnly` (an unreleased game has no business on the
-   shared bragging wall); say so in `players-agg.test.mjs`'s `OFF_THE_BOARD`, which checks the
+   shared bragging wall); say so in `tools/players-agg.test.mjs`'s `OFF_THE_BOARD`, which checks the
    claim against `js/hub.js` and fails the day the game is released.
 9. **Create `<game>/CLAUDE.md`** — the game's own documentation, auto-loaded only when a session
    works inside that folder. Open it with the THE-LAW pointer block (copy it from any existing
@@ -312,8 +312,8 @@ When restructuring an old game, migrate it toward the reference for each axis in
     full mechanism doc is in `js/CLAUDE.md` ("Language support").
 11. **If the game plays online in ANY way, it has quick chat inside a match** (Matt, 2026-10-14).
     Not optional, not a later polish item: see "Multiplayer: quick chat is part of the game" in
-    Part 2. `test-game-conventions.mjs` fails an online game without it.
-12. **Run `node test-game-conventions.mjs`, then `node run-all-tests.mjs`.** It discovers game
+    Part 2. `tools/test-game-conventions.mjs` fails an online game without it.
+12. **Run `node tools/test-game-conventions.mjs`, then `node tools/run-all-tests.mjs`.** It discovers game
     folders from disk, so your new game is checked automatically — listener hygiene, the module
     contract, translation plumbing, folder layout, quick chat in every online game, and (as of this file) the 11px text-size floor
     from Part 0. **If it fails, fix the game — do not add the game to its `KNOWN_GAPS` list.**
@@ -400,7 +400,7 @@ it to whatever documentation you need to add it to so that it's automatically bu
 multiplayer games going forward."* Five games (Cup Pong, Darts, Flick Soccer, Skeeball challenges,
 Air Hockey) shipped online play without chat, because the chat lived inside `hoops4/` and nothing
 told the next game it existed. **Every game that plays online has in-match quick chat, built in
-the same change as the online play.** `test-game-conventions.mjs` enforces it: a game whose files
+the same change as the online play.** `tools/test-game-conventions.mjs` enforces it: a game whose files
 reach `js/net.js` or `js/firebase-boot.js` must use the chat.
 
 **Use the shared pair, never a copy:** `js/match-chat-ui.js` (`createMatchChat`: the 💬 button,
@@ -473,7 +473,7 @@ Reinvented independently in Dominoes and Battleship, and stated as a rule (witho
 - **Out-of-flow children (absolutely positioned, `display: none`) pollute a height measurement**
   unless explicitly skipped.
 - **Test at two viewport heights, not one.** Browser toolbars eat 100-190px on a real phone; a
-  layout can pass at a tall viewport and fail at a short one. `test-visual.mjs`'s `fit` check
+  layout can pass at a tall viewport and fail at a short one. `tools/test-visual.mjs`'s `fit` check
   covers both, standalone and mounted in the hub's real chrome.
 
 ### The `.hub-game` height trap

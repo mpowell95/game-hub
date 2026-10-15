@@ -183,7 +183,7 @@ The **Resume** button (shown only when a save exists, next to a fresh **Start**)
 `Resume · <tier> · <mm:ss>` instead of a bare "Resume" - the tier and elapsed time were already on
 `SudokuGame`, just not surfaced. No new settings/save fields, no new stats, no new strings beyond
 what already existed (`resume`, the tier labels, `fmtTime()`). Verified at both phone heights
-(`node check-no-scroll.mjs sudoku`, `node test-visual.mjs sudoku`) in both hosts and both themes -
+(`node tools/check-no-scroll.mjs sudoku`, `node tools/test-visual.mjs sudoku`) in both hosts and both themes -
 still one screen, still zero scroll.
 
 ## The in-game HUD was rendering invisible in the hub (fixed 2026-09-13)
@@ -220,8 +220,8 @@ answer has no way to see. Runs on every render (menu/how-to/play) and on `onView
 board, now also driving the whole screen's position. `inset: 0` stays in the CSS as the one-frame
 fallback before that inline style lands (never actually visible; same render pass).
 
-Verified: `node check-no-scroll.mjs sudoku` (0 scroll, both hosts, both heights) and
-`node test-visual.mjs sudoku` (14/14, incl. the fit checks) both still pass, and the launcher grid
+Verified: `node tools/check-no-scroll.mjs sudoku` (0 scroll, both hosts, both heights) and
+`node tools/test-visual.mjs sudoku` (14/14, incl. the fit checks) both still pass, and the launcher grid
 was re-measured at its normal width after the abandoned `.hub-main` flex attempt was reverted.
 
 ## How to play: cut to the diagram and one caption (2026-09-13)
@@ -293,8 +293,8 @@ The fix keeps the same tint but layers it over an opaque surface:
 A `background-image` composites over the element's own `background-color`, so the tint now sits on
 white (or `#17233b` in dark) and the lines read exactly as they do on an unhighlighted cell. **Never
 give a `.sd-cell` a bare translucent `background`** - the board's own fill is behind it, not the
-page. Verified in Chromium at 393x852 in both themes, plus `node check-no-scroll.mjs sudoku` (4
-screens, 0 scroll) and `node test-visual.mjs sudoku` (14/14).
+page. Verified in Chromium at 393x852 in both themes, plus `node tools/check-no-scroll.mjs sudoku` (4
+screens, 0 scroll) and `node tools/test-visual.mjs sudoku` (14/14).
 
 ## Timer
 
@@ -315,9 +315,9 @@ fallback-on-exhaustion tolerance described above, generation time under budget, 
 cap); the technique grader against a known easy puzzle (singles-only) and a known expert puzzle
 (stalls); and `game.js`'s placement/conflict/notes/undo/hint/win/save-round-trip behaviour.
 
-**Not covered by any headless test**: the DOM layer (`ui.js`) beyond `test-visual.mjs`'s one PLAY
+**Not covered by any headless test**: the DOM layer (`ui.js`) beyond `tools/test-visual.mjs`'s one PLAY
 probe (start a puzzle, tap an empty cell, tap a digit, confirm it landed) and the fit/scroll checks
-(`check-no-scroll.mjs`, `test-visual.mjs`'s `fit` probe). Nothing here exercises real multi-device
+(`tools/check-no-scroll.mjs`, `tools/test-visual.mjs`'s `fit` probe). Nothing here exercises real multi-device
 sync of `sd.bestTimeMs` against a live Firebase project — the zero-sentinel guard is proven by the
-`players-agg.js` merge logic and by `players-agg.test.mjs`'s structural probe, not by an
+`players-agg.js` merge logic and by `tools/players-agg.test.mjs`'s structural probe, not by an
 end-to-end sync test.

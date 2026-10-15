@@ -39,7 +39,7 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 | `js/render.js` | the range in three.js (`skeeball/js/vendor`): stadium, lane, target, arrows, the three cameras, the sight's magnified view; draws the bow's scene over the range |
 | `js/bow3d.js` | the bow, left hand, sleeve and nocked arrow as lit 3D models (a first-person view model), built from code, laid out from grid measurements of the recording |
 | `js/ui.js` | DOM: setup, HUD, the sight's ring SVG (gauge + crosshair), hold-to-draw input, the turn flow, replays, menus, autosave, stats, the online match |
-| `js/mp.js` / `js/mp-ui.js` / `js/alert.js` | online challenges (data, list screens, launcher bubble). `node test-archery-mp.mjs` |
+| `js/mp.js` / `js/mp-ui.js` / `js/alert.js` | online challenges (data, list screens, launcher bubble). `node tools/test-archery-mp.mjs` |
 | `js/strings.js` | every word, EN/ES |
 
 ## The rules (Matt's answers, 2026-10-14)
@@ -149,11 +149,11 @@ The sixth challenge game. Darts' design, copied (`darts/CLAUDE.md`, "Online chal
 - `node archery/js/test.js` (46): scoring at every ring and line, the wind (same on both phones,
   in range, never weaker round to round), the match and its turn order, shoot-offs, save
   validation, the ring and sway, panic always 0, the computer's averages.
-- `node test-archery-mp.mjs` (42): a whole challenge between two "phones" against an in-memory
+- `node tools/test-archery-mp.mjs` (42): a whole challenge between two "phones" against an in-memory
   database, delivery, rounds, a shoot-off, whole-document rejection, cancel / decline / resign /
   expire, the outbox, the rules file and backup list.
-- `node test-push.mjs` (the `decideArchery` cases), `node test-challenges.mjs`,
-  `node test-admin-config.mjs` (the online gate), `node check-no-scroll.mjs archery` (56 screens).
+- `node tools/test-push.mjs` (the `decideArchery` cases), `node tools/test-challenges.mjs`,
+  `node tools/test-admin-config.mjs` (the online gate), `node tools/check-no-scroll.mjs archery` (56 screens).
 - **Checked in headless Chromium (2026-10-14)**: a whole match vs the computer, a pass-and-play
   match that went to a shoot-off, practice, and a whole ONLINE match through the real UI with two
   players taking turns against an in-page stand-in database (replays, Your Turn, waiting, result,

@@ -42,7 +42,7 @@ message, not one per rule). Ask him for a screen recording of GamePigeon if the 
 
 Every row of the "Use what exists" table applies (`onViewportResize`, `js/theme.js`,
 `requireName()`, `css/ui.css` primitives for setup/menus, colorblind shape markers, no em dashes,
-X on the win/lose popup). Run `node test-game-conventions.mjs` before every commit.
+X on the win/lose popup). Run `node tools/test-game-conventions.mjs` before every commit.
 
 ## 3. Base rules (GamePigeon) — CONFIRM WITH MATT BEFORE BUILDING
 
@@ -141,7 +141,7 @@ sim script (Hoops' `test.js` is the pattern). CPU racks: it picks presets only.
   1. `database.rules.json`: add `cuppong` (every branch is enumerated; root is `false`). Matt
      publishes it by hand. Also add it to `backups/rtdb-backup.mjs`'s `BRANCHES`.
   2. `functions/`: a `cupPongTurnPush` trigger + a pure `decideCupPong` in `functions/decide.js`,
-     with tests in `test-push.mjs`. **Live only after Matt runs `firebase deploy --only
+     with tests in `tools/test-push.mjs`. **Live only after Matt runs `firebase deploy --only
      functions`.** Give him the full deploy steps in chat (root `CLAUDE.md` says so).
   3. Run `backups/rtdb-backup.mjs` before any rules change.
   Record each of those as "not yet done, dated" in `cup-pong/CLAUDE.md` and close the line the
@@ -186,8 +186,8 @@ Opus-level; screens and CSS can go to Sonnet.
 
 ## 7. Before calling any stage done
 
-- `node validate-sw-assets.mjs`, `node test-game-conventions.mjs`, the Hoops-style headless test
-  for this game, `players-agg.test.mjs` (the `GAME_META` row).
+- `node tools/validate-sw-assets.mjs`, `node tools/test-game-conventions.mjs`, the Hoops-style headless test
+  for this game, `tools/players-agg.test.mjs` (the `GAME_META` row).
 - Visual check per `VISUAL-PROCESS.md` on a phone-size viewport, light and dark.
 - Bump `CACHE` in `sw.js` past what is on `main` right now.
 - Write `cup-pong/CLAUDE.md` (rule 9) and add the row to the root games table.

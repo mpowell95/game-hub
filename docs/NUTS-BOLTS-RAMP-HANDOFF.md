@@ -85,7 +85,7 @@ So Unai is on roughly Expert level 317 and Lili roughly 219, both 200-300 levels
   levels like `extraHard: 317`, load it with the new code, confirm the levels are unchanged and
   `rampFrom` is set to 317.
 - Screenshots of the top-of-ramp board at 375x667 and 360x640, light and dark (`VISUAL-PROCESS.md`).
-- `node validate-sw-assets.mjs`, bump `CACHE` in `sw.js` past what is on `main` right now, merge,
+- `node tools/validate-sw-assets.mjs`, bump `CACHE` in `sw.js` past what is on `main` right now, merge,
   confirm the Pages deploy run succeeded.
 - Replace the "OPEN: difficulty stops rising" section of `nuts-bolts/CLAUDE.md` with what shipped
   (rule 9), and delete nothing else there.

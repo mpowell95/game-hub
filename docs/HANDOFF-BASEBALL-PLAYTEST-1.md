@@ -23,16 +23,16 @@ do not read whole files. No subagents unless they clearly cut usage (root `CLAUD
   setting"). Do not propose one.
 - **Ship it live**: PR, merge, confirm the `pages build and deployment` run succeeds, then tell Matt
   it is live (root `CLAUDE.md`). Bump `CACHE` in `sw.js` past what is on `main` RIGHT BEFORE merging
-  (re-fetch main first), run `node validate-sw-assets.mjs`, commit `sw.js` + `version.json`.
+  (re-fetch main first), run `node tools/validate-sw-assets.mjs`, commit `sw.js` + `version.json`.
 - **Economy or difficulty changes are measured, never guessed**:
-  `node sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400` (~1 min), all 8
+  `node tools/sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400` (~1 min), all 8
   assertions must pass. Exception, Matt's own words: the batch 1 changeup change does NOT need it.
 - **Suites** (start `node server.mjs` first): `node baseball/js/test.js`,
-  `node test-baseball-career.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`,
-  `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
-  `node test-game-conventions.mjs`. All green at v929.
+  `node tools/test-baseball-career.mjs`, `BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`,
+  `node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball`,
+  `node tools/test-game-conventions.mjs`. All green at v929.
 - **Fit**: career home and the play screen must fit 390x664 in the hub with no scroll
-  (`check-no-scroll.mjs`). Career home had ~25px spare at v929.
+  (`tools/check-no-scroll.mjs`). Career home had ~25px spare at v929.
 - **Saved games**: a season in progress keeps the rules it started with (see how `standingsModel`
   and `parks` are snapshotted in `startSeason`, `engine/career.js`). Anything that changes how a
   game plays out must be snapshotted the same way, or a mid-season save changes under the player.
@@ -125,7 +125,7 @@ All of these are presentation; the engine and the game result do not change. All
 5. **Half-inning and end-of-inning swap**: the fielding team jogs to its dugout, the other team
    jogs out. Replaces today's cross-fade (`_crossFadeSwap`). Short; tap skips.
 6. Measure how much each adds to a full game and report the total to Matt.
-- Check the device test's timing probes (`test-baseball-device.mjs`); they may need the new beats.
+- Check the device test's timing probes (`tools/test-baseball-device.mjs`); they may need the new beats.
 
 ## Batch 4: live plays, engine and visuals (probably two sessions)
 
@@ -191,7 +191,7 @@ What exists: `baseball/js/engine/liveplay.js` (`resolveLivePlay`, `ballPath`, `f
 `liveSettings`); `game.js` takes `livePlays` (constructor + snapshot) and emits the whole play on
 'atBatEnd' as `payload.play` (plus `fielder`, `doublePlay`); `career.js` snapshots
 `season.livePlays` and builds a live season's CPU rosters from `LIVE_PLAY.cpuRosterLevel`;
-`sim-baseball-career.mjs --live` measures it (all 8 assertions pass). A bunt keeps its own rule
+`tools/sim-baseball-career.mjs --live` measures it (all 8 assertions pass). A bunt keeps its own rule
 book (`resolveBunt`), even in a live season.
 
 **Matt, 2026-09-24, after 4a: home runs are 2-3 per 3-INNING game in the Majors (both teams),
@@ -227,7 +227,7 @@ find the change and fix the game or the probe, whichever is wrong.
    reuse today's words (`bases` 1-4 = Single..Home run).
 3. **Quick Play**: pass `livePlays: LIVE_PLAY.on` to its `new Game` (ui.js ~1650) and build its CPU
    league with `makeLeague(league, { rosterLevel: LIVE_PLAY.cpuRosterLevel[league] })` (ui.js ~1628).
-4. **Flip `LIVE_PLAY.on` to `true`**, re-run `sim-baseball-career.mjs --all-tiers --careers 200
+4. **Flip `LIVE_PLAY.on` to `true`**, re-run `tools/sim-baseball-career.mjs --all-tiers --careers 200
    --assert --perfect 400` (now live by default), the device suite and the visual suite; then ship.
 
 ## Batch 5: the player runs the bases (one or two sessions, after batch 4)

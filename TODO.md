@@ -30,7 +30,7 @@ Running list. Newest asks at the top of each section. Delete a line when it ship
     `game-ui` skill and `docs/BUILDING-A-GAME.md` before any UI, `onViewportResize`, `makeT` with
     an `{en, es}` dictionary, a stats recorder plus a `GAME_META` row, `js/game-art.js` tile art,
     `css/ui.css` `.gh-*` primitives (a new game is the cheapest place to adopt them), a
-    `pipes/CLAUDE.md`, and `node test-game-conventions.mjs` before the commit.
+    `pipes/CLAUDE.md`, and `node tools/test-game-conventions.mjs` before the commit.
   - **The water ANIMATES along the path on a solve - decided by Matt, 2026-08-29, and it is not a
     nice-to-have.** "Animations are what really impresses people playing the games. the king of
     games is really WOWed by the key animation. Stuff like that is valuable to me." Budget the
@@ -107,7 +107,7 @@ Running list. Newest asks at the top of each section. Delete a line when it ship
   branch (head was `e11818d`, recoverable by SHA if wanted):
   - a best-metric board should default to ranking on that best, not on the device's last-picked
     sort (the branch called it `effSort`);
-  - `test-skeeball-machine-spec.mjs` should assert `SK_MACHINES` in `js/game-stats-ui.js` still
+  - `tools/test-skeeball-machine-spec.mjs` should assert `SK_MACHINES` in `js/game-stats-ui.js` still
     matches `skeeball/js/boards.js`, so a new machine cannot leak a raw i18n key onto the player
     screen. ~20 lines, and two machines have been added since.
 - **Ten dead July branches** plus three orphaned git worktrees (`gh-lb-wt`, `gh-main-check`,

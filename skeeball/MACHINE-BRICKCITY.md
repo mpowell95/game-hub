@@ -126,7 +126,7 @@ mouth. A ball balanced on a rim is on the wall, not in the basket.
 | balls arriving over the mouth that score | 3 of 3 | 3 of 3 |
 | points per throw (rack-of-9 equivalent) | 6.6 (59) | 5.9 (53) |
 
-The shot the corner-100 fix existed for is untouched: `test-brickcity-corner100.mjs` still measures
+The shot the corner-100 fix existed for is untouched: `tools/test-brickcity-corner100.mjs` still measures
 20 of 26 over-the-mouth arrivals scoring, against 25% before that fix.
 
 **The probe that would have caught it.** That suite's behavioural checks ALL PASSED while this was
@@ -183,7 +183,7 @@ thing that moved it.
 a 0). Shortening the window while KEEPING the pops is worse still: 63 outcomes move and 44 go
 against the player, because a pop near the bottom row mostly knocks the ball into a penalty cup.
 
-`test-brickcity-stall.mjs` pins all of it and was born red against the pre-fix engine. **BRICK CITY
+`tools/test-brickcity-stall.mjs` pins all of it and was born red against the pre-fix engine. **BRICK CITY
 only** - the other four machines keep their pops, and THE CLASSIC has the slope that makes them
 harmless.
 
@@ -415,7 +415,7 @@ involved, and each change is the smallest one that makes the machine honest:
   U+2212 is proven to render there; the basket label is canvas text in a system font on a phone,
   where a missing glyph would be a tofu box on the board itself. A hyphen beside a digit reads as
   a minus in context, and it cannot fail to render. Both were checked on a real render at 393 px.
-- **`test-skeeball-machine-spec.mjs`'s `holes.frozen` rule** tested `h.value >= 0`, which read as
+- **`tools/test-skeeball-machine-spec.mjs`'s `holes.frozen` rule** tested `h.value >= 0`, which read as
   "has a numeric value" but also silently banned penalty baskets. It tests `Number.isFinite` now.
   `skeeball/MACHINE-SPEC.md` section 11 says so.
 
@@ -497,7 +497,7 @@ played since:
 
 `game.js`'s `result()` reports `slotsHit` and `slotCounts` (real holes only - the trough's `gutter`
 and `corner0` are outcomes, not baskets, so no objective here can be completed by missing), plus
-`cleanRack` and `perfectRack`. `test-stats-replay.mjs` scenario G covers the first pair and
+`cleanRack` and `perfectRack`. `tools/test-stats-replay.mjs` scenario G covers the first pair and
 scenario H the second: the union, the sums, that a board record written before either pair existed
 loads with every number intact and no progress it did not earn, and that two hits on every basket
 with two perfect rounds and 29,999 points completes nothing.
@@ -573,7 +573,7 @@ only - the hump turned the sideways spin into a lateral kick and a 4.5 deg serve
 right of the axis instead of 1-2). The perspective ratio does differ by row (1.41 top, 1.59 middle,
 1.89 bottom); one proportion cannot serve all three, and it is set for the row that has to be aimed.
 
-`test-brickcity-corner100.mjs` pins all of it: 90 throws over the band, at least 70% of
+`tools/test-brickcity-corner100.mjs` pins all of it: 90 throws over the band, at least 70% of
 over-the-mouth arrivals must score (born red at 25%), plus structural checks that the four rules
 and the two aim numbers are still in the files.
 
@@ -597,10 +597,10 @@ reachability and the jam rate are properties of the WHOLE layout, not of one bas
 
 ```bash
 node skeeball/js/test.js --full        # the sweep and soak
-node test-skeeball-machine-spec.mjs    # every MACHINE-SPEC rule, every board
-node test-stats-replay.mjs             # scenario G: the chain move took nothing from anyone
-node run-all-tests.mjs                 # everything
-node test-visual.mjs skeeball          # the only suite that LOOKS at it
+node tools/test-skeeball-machine-spec.mjs    # every MACHINE-SPEC rule, every board
+node tools/test-stats-replay.mjs             # scenario G: the chain move took nothing from anyone
+node tools/run-all-tests.mjs                 # everything
+node tools/test-visual.mjs skeeball          # the only suite that LOOKS at it
 ```
 
 **The reachability sweep is NOT automatic for a new board** (MACHINE-SPEC section 19: the heavy
@@ -617,7 +617,7 @@ The shipped sweep, 41 x 21 = 861 throws:
 | where all 55 are | corner-parked against riser 1, nearest rim 5.8 in away — **not one is in a basket, and not one is a collar wedge**. This is HOT SHOT's own failure mode, and HOT SHOT measures **13.36%** on the same grid (THE CLASSIC 0.00%, POPONGO 0.46%) |
 | slowest settle | 5.74 s, under the 12 s cap |
 | shared-file guard | the 41 x 21 grid AND a fixed nine-ball rack replayed on classic, basketball and popongo before and after every shared-file change: **all three byte-identical** |
-| THE LAW rule 2 | `test-stats-replay.mjs` scenario G, against the real synced records of the only two devices holding POPONGO: both keep it |
+| THE LAW rule 2 | `tools/test-stats-replay.mjs` scenario G, against the real synced records of the only two devices holding POPONGO: both keep it |
 
 The jam rate rose from 3.25% to 6.39% when the rows were swapped, and that is the trade being
 made knowingly: big penalty baskets stop more balls short, and a ball stopped short on tread 1 has

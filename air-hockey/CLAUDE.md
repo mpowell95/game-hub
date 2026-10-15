@@ -68,7 +68,7 @@ it should not make any sound ever."*
   `streak` is the one field a loss sets to 0 (live state; the earned part is `bestStreak`, and
   `players-agg` does not add it up). All three sub-counter surfaces are wired: `ensureAh` +
   recorder, `airHockeyScreen` in My Stats, the `ah` branch in `js/players-agg.js`
-  (`players-agg.test.mjs` has its case). **A match left before 7 records nothing** (quit, Back,
+  (`tools/players-agg.test.mjs` has its case). **A match left before 7 records nothing** (quit, Back,
   hub back): it was neither won nor lost. A refused write logs loudly (rule 6).
 - Wired in all four registries: `GAMES` in `js/game-stats.js`, `TABS` in `js/game-stats-ui.js`
   (**`devOnly: true`**, Pinball's reasoning: admin-only since birth, so nobody else can have plays)
@@ -84,8 +84,8 @@ it should not make any sound ever."*
 - In-hub `module:` (`air-hockey/js/ui.js`), **immersive**, **`devOnly: true`, no `released` date**
   (the admin page's live switch releases it; a `released` date goes on the day it really does).
 - **Hub id `air-hockey`, not `airhockey`.** The brief said `airhockey` for both ids; the hub id was
-  made the FOLDER name instead, as every other game does, because the dev tools (`check-no-scroll.mjs`,
-  `test-visual.mjs`) launch a game by its folder name. The stats id stays `airhockey` (Brick
+  made the FOLDER name instead, as every other game does, because the dev tools (`tools/check-no-scroll.mjs`,
+  `tools/test-visual.mjs`) launch a game by its folder name. The stats id stays `airhockey` (Brick
   Breaker's split: hub `brick-blitz`, stats `brickblitz`), so stage 2 maps it in `HUB_ID`
   (`js/game-stats-ui.js`). Tile art is `GAME_ART['air-hockey']`.
 - `isInProgress()`: the LITERAL meaning (no mid-game resume, Snake/Hoops class): true while a
@@ -279,8 +279,8 @@ phone with no scroll (it overflowed by 17px there at a fixed size).
 
 `node air-hockey/js/test.js` (tunnelling, puck stays on the table, matches end, both sides score,
 the three levels in order against a new player, speed cap, swipe-to-shot, stuck puck; ~2 s),
-`node players-agg.test.mjs` (the GAME_META row), `node test-game-conventions.mjs`,
-`node validate-sw-assets.mjs`, `node check-no-scroll.mjs` (needs `node server.mjs`).
+`node tools/players-agg.test.mjs` (the GAME_META row), `node tools/test-game-conventions.mjs`,
+`node tools/validate-sw-assets.mjs`, `node tools/check-no-scroll.mjs` (needs `node server.mjs`).
 
 
 ## Quick chat (2026-10-14)

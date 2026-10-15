@@ -20,12 +20,12 @@ Bench tools, repo root, no browser needed:
 
 | Tool | Answers |
 |---|---|
-| `tune-ladder.mjs` | power → score across all 101 steps; bands, flips, dead zones, touch rate |
-| `measure-arc.mjs` | is the ball airborne, peak clearance, where it first lands |
-| `measure-reach.mjs` | how far up the face each power gets, holes removed |
-| `sight.mjs` | can the camera see the board's bottom edge over the ramp crest |
+| `tools/tune-ladder.mjs` | power → score across all 101 steps; bands, flips, dead zones, touch rate |
+| `tools/measure-arc.mjs` | is the ball airborne, peak clearance, where it first lands |
+| `tools/measure-reach.mjs` | how far up the face each power gets, holes removed |
+| `tools/sight.mjs` | can the camera see the board's bottom edge over the ramp crest |
 
-Run `measure-arc.mjs` after any ramp/board change. `tune-ladder.mjs` alone cannot see a ball
+Run `tools/measure-arc.mjs` after any ramp/board change. `tools/tune-ladder.mjs` alone cannot see a ball
 that never leaves the ramp — that is how a no-arc build shipped 2026-08-14.
 
 ## Debug overlay

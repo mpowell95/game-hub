@@ -98,7 +98,7 @@ Standard 10-ring face: yellow 10/9, red 8/7, blue 6/5, black 4/3, white 2/1, off
 | Strings | `archery/js/strings.js` `{en, es}` via `makeT` |
 | Engine | three.js from `skeeball/js/vendor/three.module.min.js`, as Cup Pong. **No physics engine**: arrow flight is a ballistic curve plus wind, solved in closed form |
 
-Every row of "Use what exists" applies. Run `node test-game-conventions.mjs` before every commit.
+Every row of "Use what exists" applies. Run `node tools/test-game-conventions.mjs` before every commit.
 
 ### Files (Darts' split)
 

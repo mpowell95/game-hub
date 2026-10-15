@@ -175,7 +175,7 @@ not do. A real cup would funnel it; this one does not. Named, not quietly added.
   will not move when you change its supposed cause means the cause is elsewhere. `flipPower` is the
   tripwire.
 - **Build chip / stale builds.** `DEV_FRESH` in `sw.js` excludes `./pinball2/` from the cache-first set,
-  so this tool is network-first (cache as offline fallback); `test-sw-strategy.mjs` asserts both
+  so this tool is network-first (cache as offline fallback); `tools/test-sw-strategy.mjs` asserts both
   halves, and the released `pinball/` stays cache-first. The editor header chip compares the worker's
   cache version to `version.json` (`v777 -> v778`; tap updates). **`pinball2/editor/index.html`
   fetches `version.json` (`cache: 'no-store'`), installs an IMPORT MAP stamping `?v=<build>` onto every
@@ -191,7 +191,7 @@ not do. A real cup would funnel it; this one does not. Named, not quietly added.
   nulled** (`fromJSON` writing `launchV: null` made `tableIsFinite` reject every save).
 - **A built-in table is code, not a file on a phone.** BOARDWALK ships in `BUILTINS`, never stored
   (seeding it into the library rebuilds the stale-table bug); selector values are prefixed
-  (`builtin:BOARDWALK`). **`validate-sw-assets.mjs`'s `SCAN_DIRS` now includes `pinball2`**; keep it
+  (`builtin:BOARDWALK`). **`tools/validate-sw-assets.mjs`'s `SCAN_DIRS` now includes `pinball2`**; keep it
   there (it was blind to this folder).
 - **The ramp tool** lays CONTROL POINTS and generates the rest through `buildRamp` in `table.js`, the
   SAME function the shipped table calls (so editor and table cannot drift). Resampling is by

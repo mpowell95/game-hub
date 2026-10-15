@@ -22,7 +22,7 @@ lane: swipe speed is power, angle is aim. Nine balls to a rack. Five machines: *
 - **ADMIN ONLY (`devOnly: true`, no `released` date) since 2026-08-23** (Matt's ask), after work for one
   machine changed another. Re-releasing is four edits and three stop it being silently broken: drop
   `devOnly` in `js/hub.js`; add a FRESH `released` date (only input to the New pill); put the
-  `GAME_META` row back in `js/leaderboard-ui.js`; take `skeeball` out of `players-agg.test.mjs`'s
+  `GAME_META` row back in `js/leaderboard-ui.js`; take `skeeball` out of `tools/players-agg.test.mjs`'s
   `OFF_THE_BOARD`. Miss the row and every Skeeball win counts as ZERO (how Yahtzee shipped).
 - The stats id has REAL family history (live a few hours on 2026-08-11 under the previous build, which
   recorded into the same `skeeball` id and board id `classic`). `skeeball_old/` was removed 2026-08-18.
@@ -60,7 +60,7 @@ folder cannot affect another; the isolation is the filesystem. Gating by flag is
   files to `sw.js`'s `ASSETS` and bump `CACHE`; add the `boards.js` entry (frozen `id`, marquee `name`
   untranslated, `taglineKey` + `{en,es}`, `look`, `geom`, `unlock: { board: '<previous id>', ... }`).
   Obey `geom`'s spacing rule, re-run the sweep. **Read `MACHINE-SPEC.md` Part 7 first**;
-  `test-skeeball-machine-spec.mjs` enforces `perf.context`, `perf.probe`, `perf.shadow`,
+  `tools/test-skeeball-machine-spec.mjs` enforces `perf.context`, `perf.probe`, `perf.shadow`,
   `perf.textures`, `perf.broadphase`. **Keep your `THREE.WebGLRenderer` in `this.renderer`**
   (`releaseRenderer()` calls `r.renderer.forceContextLoss()` by that name or you leak a context per rack).
   `ui.js` needs nothing; update this file's header.
@@ -135,7 +135,7 @@ not unify them. Machine names are proper nouns, untranslated.
   FLAT wall is a pocket even at zero gap: keep >= 0.78X wall gaps.
 - **The watchdog** is displacement-anchored (never speed alone); speed is only a veto.
 - Deterministic: fixed 1/240 step, fixed iterations, no rng; one fresh world per throw. Run `node
-  skeeball/js/test.js` (see Testing) and `tune-ladder.mjs` after touching `geom`; `measure-reach.mjs`
+  skeeball/js/test.js` (see Testing) and `tools/tune-ladder.mjs` after touching `geom`; `tools/measure-reach.mjs`
   places holes on the measured reach curve (do not guess).
 - If a future machine wants scatter, "thread a seeded rng through startThrow and keep simulateThrow
   deterministic - the test suite depends on it" (Hoops does exactly this).
@@ -147,14 +147,14 @@ not unify them. Machine names are proper nouns, untranslated.
 - **The ball FLIES. Read this before touching the ramp.** Launch angle must EXCEED `boardTilt` (range
   `R = 2 v² cos(t) sin(t − a) / (g cos²(a))`). Shape: launch 0.88 rad, six ramp segments (followable),
   ramp stays 0.30 long, and the BOARD is raised (`boardLipY` 0.07 -> 0.20) or the crest hides the 20 and
-  10 (`sight.mjs` must stay positive). **"Touched the scoring face" is not a virtue**; a metric pointing
-  the wrong way was once optimised to 100%. Run `measure-arc.mjs` after touching it.
+  10 (`tools/sight.mjs` must stay positive). **"Touched the scoring face" is not a virtue**; a metric pointing
+  the wrong way was once optimised to 100%. Run `tools/measure-arc.mjs` after touching it.
 - **Every number is painted on the BOARD** (stencilled into the field texture up-slope of its mouth,
   pre-stretched 1.9 along v); never a flat plate inside a curved wall.
 - **The ball settles first, then the score**: `capture` only lights the rim; `+N`, burst and marquee wait
   for `ballDone`. **On a collared board the capture can be WRONG** (HOT SHOT breaks its prediction on
   28.8% of captures): `gutter` drops the pending capture, and a popup is drawn only when the ball
-  finished in the hole it was predicted for, printing `ballDone`'s own value. `test-skeeball-popup.mjs`.
+  finished in the hole it was predicted for, printing `ballDone`'s own value. `tools/test-skeeball-popup.mjs`.
 - **The 2026-08-14 board rebuild (batches 3a/3b/3f) supersedes "The dial is a ladder"**: everything is a
   multiple of `X` (hole diameter); board 6.875x by 9.5x; three tangency rules (each hole touches its ring
   at ONE point, its bottom; 30-ring top touches 40-ring bottom; 40-ring top, 50-ring bottom, 20-ring top
@@ -227,7 +227,7 @@ not unify them. Machine names are proper nouns, untranslated.
 `js/arcade-scores.js` per-board record, additive, default empty, per board on purpose: `slots` (SET of hole ids, merged by
 union), `cleanRacks` (sum), `slotHits` (per-hole counts, sum), `perfectRacks` (sum). `game.js result()`
 feeds them as `slotsHit`/`slotCounts`/`cleanRack`/`perfectRack`; slot fields list REAL holes only;
-`cleanRack` gated on a penalty basket existing, `perfectRack` is not. `test-stats-replay.mjs` scenarios
+`cleanRack` gated on a penalty basket existing, `perfectRack` is not. `tools/test-stats-replay.mjs` scenarios
 G and H prove old records load unchanged. BRICK CITY reads `slotHits`/`perfectRacks`; HOT SHOT reads `slots`.
 
 ## Where the three objectives sit (2026-08-24: one per rail, the total above the machine)
@@ -281,7 +281,7 @@ compares against what stood BEFORE the rack was recorded.
 ## Persistence and THE LAW
 
 - **The Skeeball data in the store was TEST DATA (Matt, 2026-08-20) and was cleared 2026-08-22** by his
-  request (`clear-skeeball-stats.mjs`, full backup, re-read verified; every node with plays was Matt or
+  request (`tools/clear-skeeball-stats.mjs`, full backup, re-read verified; every node with plays was Matt or
   MattyIce). **This does not license deleting anything**: never delete player data without Matt asking in
   so many words. The server half is not the whole job (`syncMyStats()` re-uploads any device's local
   store); the dev-only "Reset Skeeball stats" button is the device half.
@@ -293,7 +293,7 @@ compares against what stood BEFORE the rack was recorded.
 - Per-machine records and unlocks ride `sk.boards`/`sk.unlocked` via `js/arcade-scores.js` (counters add,
   bests `Math.max`, each DAY the max, unlocks union). Frozen vs-computer fields `sk.won/lost/tied`:
   never incremented, never cleared, still shown by My Stats when non-zero.
-- This game's own keys hold nothing earned. Item 7's three edits predate the rewrite; `players-agg.test.mjs`
+- This game's own keys hold nothing earned. Item 7's three edits predate the rewrite; `tools/players-agg.test.mjs`
   carries the regression case. The My Stats tab is deliberately PRESENT and not devOnly (rule 1: family
   may have real plays from the hours the old build was live). The leaderboard row is OUT (no `GAME_META`
   entry; `skeeball` in `OFF_THE_BOARD`) while admin-only; nothing was lost, every play stays in each
@@ -309,7 +309,7 @@ DEFAULT for Testing, resolved by `isBoardTesting(b.id, !!b.adminOnly)`. **Both u
 || earned || (!testing && isBoardReleased(b.id))`. **It is an OR and the earned half is the player's own
 store**: a release grants nothing permanent; Testing DECLINES TO HONOR an unlock while set and never
 deletes it (rule 2). It never writes (`unlockSkeeballBoard()` only from real objective completion), and is
-separate from the dev bypass. `test-admin-config.mjs` asserts the three sites, both writers, no direct
+separate from the dev bypass. `tools/test-admin-config.mjs` asserts the three sites, both writers, no direct
 `b.adminOnly` read, and no `isBoardReleased` near an unlock write.
 
 ## The unlock chain
@@ -325,7 +325,7 @@ and POPONGO swapped 2026-08-27 (Matt: *"Make runaway before popongo, duh"*; POPO
 machine, `_goalsSpent()` asks whether a machine opens anything). **The GALLERY order is the `BOARDS`
 array's order** (fixed 2026-09-02; `SK_MACHINES` in `js/game-stats-ui.js` is in the same order); nothing
 derives an unlock from either list. Re-pointing the chain took nothing from anyone (rule 2: `sk.unlocked`
-is an additive union set); `test-stats-replay.mjs` scenario G carries the chain as data and replays real
+is an additive union set); `tools/test-stats-replay.mjs` scenario G carries the chain as data and replays real
 records.
 
 ## The moving basket, and the one-shot face (2026-08-25, rebuilt 2026-08-26, HOT SHOT: RUNAWAY)
@@ -347,8 +347,8 @@ while its twin sweeps the width, and every basket landed in then closes too. Ful
   sims and the renderer: mutate in place, never swap in a fresh one while a ball is live. `game.js` stays
   pure (accumulates the `dt` handed to `update()`). All three ride the autosave as ADDITIVE keys, inert on
   other machines; an old save resumes with a fresh face; `closed` is read back against the board's holes.
-- **Reachability needs THREE axes** (power x aim x phase): `sweep-mover.mjs` (`--stage open|run|endgame`,
-  `--rung N`, `--ladder`, `--stage rows`) and `test-runaway-capped.mjs`; re-run both after ANY change to
+- **Reachability needs THREE axes** (power x aim x phase): `tools/sweep-mover.mjs` (`--stage open|run|endgame`,
+  `--rung N`, `--ladder`, `--stage rows`) and `tools/test-runaway-capped.mjs`; re-run both after ANY change to
   that face, amplitude, ladder or materials.
 - A moving basket needs its shelf to itself (a row's survivor moves only once every other basket in the
   row has CLOSED, and a closed basket has no collar). **The spec test's spacing rule exempts a pair only
@@ -407,7 +407,7 @@ across the throat of every -20/-10/-20 basket, invisible (render skips `cupSeg` 
 u, v, h)` / `worldToFaceIn(fr, p)`; collar loop resolves `frameAt(H.v)` once per hole; `physics.js`
 sections 1 and 2 use the hole's frame). **On a staircase, cross-check in world coordinates.** The 0.6 s
 stall watchdog stays (it covers a ball parked on a TREAD); shortening it was the wrong fix. 10 of 12 moved
-outcomes were against the player (the fix working). `node test-brickcity-stall.mjs` (structural +
+outcomes were against the player (the fix working). `node tools/test-brickcity-stall.mjs` (structural +
 behavioural, born red).
 
 ## BRICK CITY: nothing held a ball in the basket it fell into (2026-09-04)
@@ -419,15 +419,15 @@ RIM down, skipped by render); (2) rimout handed the floor back under a ball stil
 (+10.4 m/s in one step): a rimout now needs the ball **wholly above the rim** (`fc.h > collarH + ballR *
 1.05`), plus a **solver-artefact ceiling at `1.5 x maxSpeed`** (`st.clamped` should stay zero); (3) the
 watchdog killed rolling balls: displacement anchor stays primary, **speed is only a VETO**, `anchor.t0`
-bounds it (kills 77 -> 8). BRICK CITY only; no basket moved or resized. `node test-brickcity-throat.mjs`
-(born red 13/16; deliberately NOT in `run-all-tests.mjs`, ~3.5 min), `test-brickcity-corner100.mjs`,
-`test-brickcity-stall.mjs`, `test-skeeball-capture-frame.mjs` stay green.
+bounds it (kills 77 -> 8). BRICK CITY only; no basket moved or resized. `node tools/test-brickcity-throat.mjs`
+(born red 13/16; deliberately NOT in `tools/run-all-tests.mjs`, ~3.5 min), `tools/test-brickcity-corner100.mjs`,
+`tools/test-brickcity-stall.mjs`, `tools/test-skeeball-capture-frame.mjs` stay green.
 
 ## The capture blind spot, closed on every machine (2026-08-26)
 
 The `worldToFace` nearest-segment blind spot hit every stepped machine; HOT SHOT and RUNAWAY were fixed
 separately per the HARD RULE (adds `worldToFaceIn` to `machine.js`, four lines in `physics.js` sections 1-2).
-`test-skeeball-capture-frame.mjs` is geometric (not a sweep), discovers machines from `BOARDS`, and has an
+`tools/test-skeeball-capture-frame.mjs` is geometric (not a sweep), discovers machines from `BOARDS`, and has an
 EMPTY `KNOWN_GAPS` (fails if an entry outlives its bug). RUNAWAY's mover still measures against
 `holeU(G, id, t)` and the latched `st.capturedU`.
 
@@ -436,7 +436,7 @@ EMPTY `KNOWN_GAPS` (fails if an entry outlives its bug). RUNAWAY's mover still m
 `_startGame` must resolve its board from the snapshot: `boardById(snap && snap.board ? snap.board :
 this.settings.board)`; `restore()` resolves through the same `boardById`. A mount that throws lands on the
 gallery (`_startGameInner`, caller catches, logs loudly, `_renderSetup()`). `skeeball/js/test.js` has a
-`[KNOWN-BUG PROBE]` pair; `test-visual.mjs` re-mounts in place (a reload would wipe `*.save.*` keys).
+`[KNOWN-BUG PROBE]` pair; `tools/test-visual.mjs` re-mounts in place (a reload would wipe `*.save.*` keys).
 
 ## The gallery drew each machine only when you reached it (2026-09-01)
 
@@ -450,8 +450,8 @@ gallery (`_startGameInner`, caller catches, logs loudly, `_renderSetup()`). `ske
   records, nothing scores/records/unlocks from it; **the live answer REPLACES it with deliberately no
   `Math.max`** (an admin void must be able to bring a record DOWN); an unanswered read (`answered` =
   `rows.length > 0`) never overwrites or is written back.
-- `measure-gallery.mjs` counts renders (1 of 5 slides painted -> 3; swiping 1 -> 0 renders; re-entry
-  1 -> 0). Guarantee is ONE MACHINE AHEAD. `test-visual.mjs` asserts a second slide is drawn without
+- `tools/measure-gallery.mjs` counts renders (1 of 5 slides painted -> 3; swiping 1 -> 0 renders; re-entry
+  1 -> 0). Guarantee is ONE MACHINE AHEAD. `tools/test-visual.mjs` asserts a second slide is drawn without
   touching the carousel (bar `>= 2`).
 
 ## The machine picture survives the page now (2026-09-02)
@@ -470,8 +470,8 @@ carousel's settle handler warms physics); **the gallery draws ONE machine at a t
 resolves when stylesheets have parsed** (root hidden by INLINE `visibility`, capped at `CSS_WAIT_CAP_MS`;
 a 404 must never leave a blank rectangle; matches an existing `<link>` by resolved href); **`sw.js` serves
 the REST tier cache-first** (root `CLAUDE.md`). Six node scripts `await loadEngine(...)` before `engineFor`
-at module scope (`js/test.js`, `sweep-mover.mjs`, `test-brickcity-stall.mjs`, `test-runaway-capped.mjs`,
-`test-skeeball-capture-frame.mjs`, `test-skeeball-machine-spec.mjs`); a new one must too. Caveat,
+at module scope (`js/test.js`, `tools/sweep-mover.mjs`, `tools/test-brickcity-stall.mjs`, `tools/test-runaway-capped.mjs`,
+`tools/test-skeeball-capture-frame.mjs`, `tools/test-skeeball-machine-spec.mjs`); a new one must too. Caveat,
 accepted: the first hub load after a deploy may run the PREVIOUS build of a game opened before
 `warmRest()` reaches it (~15 s).
 
@@ -479,7 +479,7 @@ accepted: the first hub load after a deploy may run the PREVIOUS build of a game
 
 - `node skeeball/js/test.js` — 50 assertions at `--full`, 20 without. Heavy blocks are grouped:
   ```bash
-  node skeeball/js/test.js          # cheap half only (what run-all-tests.mjs runs)
+  node skeeball/js/test.js          # cheap half only (what tools/run-all-tests.mjs runs)
   node skeeball/js/test.js --auto   # groups from what differs from origin/main
   node skeeball/js/test.js --mat    # or --reach --dial --ramp --holes
   node skeeball/js/test.js --full   # everything, minutes
@@ -488,13 +488,13 @@ accepted: the first hub load after a deploy may run the PREVIOUS build of a game
   ramp/lane/throw speeds; `mat` to bounce and grip; `holes` (statistical symmetry) to hole positions.
   Always run: determinism, nine-ball rules, recorder payload, snapshot/restore, unlock chain.
   **The old "harder-goes-further quarter-by-quarter" assertion was deleted 2026-08-21: do not re-add it.**
-- `node test-game-conventions.mjs`; `node test-visual.mjs skeeball` (PLAY probe swipes real racks).
+- `node tools/test-game-conventions.mjs`; `node tools/test-visual.mjs skeeball` (PLAY probe swipes real racks).
   **The PLAY probe is FLAKY, measured (2 of 3 on untouched main): "threw a full rack and the rack-over
   sheet never appeared" — re-run before believing it; a DIFFERENT failure message is real.**
-- Others: `test-skeeball-popup.mjs`, `test-skeeball-capture-frame.mjs`, `test-skeeball-machine-spec.mjs`,
-  `test-brickcity-*.mjs`, `test-runaway-capped.mjs`, `sweep-mover.mjs`, `measure-gallery.mjs`,
-  `tune-ladder.mjs`, `measure-arc.mjs`, `sight.mjs`, `measure-reach.mjs`, `test-skee-challenge.mjs`,
-  `test-admin-config.mjs`, `test-stats-replay.mjs`.
+- Others: `tools/test-skeeball-popup.mjs`, `tools/test-skeeball-capture-frame.mjs`, `tools/test-skeeball-machine-spec.mjs`,
+  `test-brickcity-*.mjs`, `tools/test-runaway-capped.mjs`, `tools/sweep-mover.mjs`, `tools/measure-gallery.mjs`,
+  `tools/tune-ladder.mjs`, `tools/measure-arc.mjs`, `tools/sight.mjs`, `tools/measure-reach.mjs`, `tools/test-skee-challenge.mjs`,
+  `tools/test-admin-config.mjs`, `tools/test-stats-replay.mjs`.
 
 ## Things a future session will want to know
 
@@ -573,7 +573,7 @@ map, per-game outbox; reuses `hoops4/js/mp.js` player-code helpers and `opponent
   challenge raises no bubble; per-turn 3-day expiry unchanged.
 - **Rules PUBLISHED by Matt 2026-09-24; `skeeChallengePush` DEPLOYED by Matt 2026-09-25.** Nothing
   outstanding; a later `functions/` change needs his `firebase deploy --only functions`.
-- Tests: `node test-skee-challenge.mjs` (70).
+- Tests: `node tools/test-skee-challenge.mjs` (70).
 
 ## Quick chat (2026-10-14)
 

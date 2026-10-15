@@ -211,7 +211,7 @@ file, and the one that gets forgotten; Yahtzee shipped without it and 14 wins co
 
 ## 5. Tests
 
-`pipes/js/test.js`, headless, run by `run-all-tests.mjs`:
+`pipes/js/test.js`, headless, run by `tools/run-all-tests.mjs`:
 
 - **every generated board is solvable**, at every tier, over many seeds - the one that matters
 - no board starts already solved, or within N rotations of solved
@@ -220,7 +220,7 @@ file, and the one that gets forgotten; Yahtzee shipped without it and 14 wins co
 - the win check accepts the intended solution and rejects a leaking one (variant b)
 - the solver's move count is sane at each tier (a difficulty smoke test)
 
-Plus `node test-game-conventions.mjs`, which discovers game folders from disk and so covers Pipes
+Plus `node tools/test-game-conventions.mjs`, which discovers game folders from disk and so covers Pipes
 the day the folder appears: listener hygiene, the module contract, i18n plumbing, the 11px floor.
 
 ---
@@ -261,7 +261,7 @@ From `docs/BUILDING-A-GAME.md` Part 0 - the ones a grid puzzle runs into specifi
 5. Setup + how-to screens on `.gh-*` primitives.
 6. Hub wiring, stats (all three edits), `GAME_META`, `sw.js` + `CACHE`, `strings.js`,
    `pipes/CLAUDE.md`.
-7. `test-game-conventions.mjs`, then play it in a real browser before calling it done.
+7. `tools/test-game-conventions.mjs`, then play it in a real browser before calling it done.
 
 **Step 7 is not optional.** Pinball shipped four times on green headless tests while being
 completely unplayable, because every fault lived in the DOM and renderer glue that headless tests
