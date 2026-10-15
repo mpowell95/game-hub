@@ -385,10 +385,18 @@ All read-time display; nothing stored or migrated.
   **Add a per-machine counter to the writer before showing one; never derive.** `colorSweeps` stays
   stored and on My Stats.
 
+### Minesweeper's own board, and no "YOU" (2026-10-15)
+
+`msBoardHTML()`: tabs All / Easy / Med / Hard / Expert (all four always), opening on All; no sort pills,
+no note. All = one number per person: hardest level SOLVED (fastest), else hardest level with a best %
+(`ms.bestClearedPct`, first written 2026-10-15), else a dash. A level tab = everyone who PLAYED it: times,
+then % high to low, then dashes. `youBadge()` returns '' everywhere (root rule: profile names, never
+"You"); the own row keeps its highlight. Other boards unchanged.
+
 ### The leaderboard's spacing (2026-10-11)
 
-Scale 4/8/12/16/24; menu controls 40px (Matt's override), back buttons 44px via `backBtnHTML`; name,
-YOU and tier chip on one no-wrap line.
+Scale 4/8/12/16/24; menu controls 40px (Matt's override), back buttons 44px via `backBtnHTML`; name
+and tier chip on one no-wrap line.
 
 ### The leaderboard's blind-review pass (2026-10-11)
 
