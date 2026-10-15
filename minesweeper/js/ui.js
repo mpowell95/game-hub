@@ -19,7 +19,8 @@ import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.minesweeper.v1';
-const SAVE_KEY = 'gamehub.minesweeper.save.v1';
+const SAVE_KEY = 'gamehub.minesweeper.save.v1';     // the first build's ONE slot: read once, never written again
+const SAVES_KEY = 'gamehub.minesweeper.saves.v1';   // one paused board per level (2026-10-15)
 const LEVEL_ORDER = ['easy', 'medium', 'hard', 'expert'];
 
 // How long a press has to be held before it flags instead of digs. 450ms is above the ~300ms a
@@ -53,6 +54,7 @@ const FLAG_SVG = (c) => `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"
 const MINE_SVG = (c) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="${c}"><rect x="11" y="1.5" width="2" height="21" rx="1"/><rect x="1.5" y="11" width="21" height="2" rx="1"/><rect x="4" y="4" width="2" height="16" rx="1" transform="rotate(-45 5 12)"/><rect x="18" y="4" width="2" height="16" rx="1" transform="rotate(45 19 12)"/><circle cx="12" cy="12" r="6.2"/><circle cx="9.7" cy="9.7" r="1.5" fill="rgba(255,255,255,.85)"/></svg>`;
 const WRONG_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V3" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M6.6 4.2 19 8.4 6.6 12.6Z" fill="currentColor" opacity=".35"/><path class="ms-wx" d="M3 3 21 21M21 3 3 21" stroke="#e0532f" stroke-width="2.8" stroke-linecap="round"/></svg>`;
 const BRAND_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="11" y="1" width="2" height="22" rx="1" fill="currentColor"/><rect x="1" y="11" width="22" height="2" rx="1" fill="currentColor"/><rect x="4" y="4" width="2" height="16" rx="1" transform="rotate(-45 5 12)" fill="currentColor"/><rect x="18" y="4" width="2" height="16" rx="1" transform="rotate(45 19 12)" fill="currentColor"/><circle cx="12" cy="12" r="6.6" fill="currentColor"/><circle cx="9.6" cy="9.6" r="1.7" fill="#ffffff" opacity=".85"/></svg>`;
+const PAUSE_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>`;
 const CLOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="2"/><path d="M12 6.8V12l3.6 2.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 const X_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>`;
 const TICK_SVG = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12.6 9.6 18 20 6.4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -97,22 +99,49 @@ function saveSettings(patch) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch (err) { console.error('[minesweeper] settings', err); }
   return next;
 }
-function loadSave() {
+/** ONE PAUSED BOARD PER LEVEL (Matt, 2026-10-15: "keep a paused board for each level"):
+ *  `gamehub.minesweeper.saves.v1` = { easy?, medium?, hard?, expert? }, each the old save's shape.
+ *  The first build kept a single slot in `gamehub.minesweeper.save.v1`; the first time the map is
+ *  missing, that board is carried into it at its own level and the old key is left exactly as it is
+ *  (rule 5: never deleted, never repurposed; once the map exists it is simply not read again). */
+function readSaves() {
+  let map = null;
+  try { map = JSON.parse(localStorage.getItem(SAVES_KEY) || 'null'); } catch { map = null; }
+  if (map && typeof map === 'object' && !Array.isArray(map)) return map;
+  map = {};
   try {
     const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    const st = raw && typeof raw === 'object' ? E.deserialize(raw.state) : null;
+    if (st && st.generated && !st.dead && !st.won) map[st.level] = raw;
+  } catch { /* nothing to carry */ }
+  try { localStorage.setItem(SAVES_KEY, JSON.stringify(map)); } catch (err) { console.error('[minesweeper] saves', err); }
+  return map;
+}
+function loadSave(level) {
+  try {
+    const raw = readSaves()[level];
     if (!raw || typeof raw !== 'object') return null;
     const state = E.deserialize(raw.state);
-    if (!state || state.dead || state.won) return null;   // a finished board is not a resume
-    if (!state.generated) return null;                    // an untouched board is not worth resuming
+    if (!state || state.level !== level) return null;
+    if (state.dead || state.won) return null;   // a finished board is not a resume
+    if (!state.generated) return null;          // an untouched board is not worth resuming
     return { state, mode: raw.mode === 'flag' ? 'flag' : 'dig' };
   } catch { return null; }
 }
 function writeSave(state, mode) {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, state: E.serialize(state), mode })); }
-  catch (err) { console.error('[minesweeper] save', err); }
+  try {
+    const map = readSaves();
+    map[state.level] = { v: 1, state: E.serialize(state), mode };
+    localStorage.setItem(SAVES_KEY, JSON.stringify(map));
+  } catch (err) { console.error('[minesweeper] save', err); }
 }
-function clearSave() {
-  try { localStorage.removeItem(SAVE_KEY); } catch { /* a save we cannot clear is harmless: loadSave() rejects a finished board anyway */ }
+function clearSave(level) {
+  try {
+    const map = readSaves();
+    if (!(level in map)) return;
+    delete map[level];
+    localStorage.setItem(SAVES_KEY, JSON.stringify(map));
+  } catch { /* a save we cannot clear is harmless: loadSave() rejects a finished board anyway */ }
 }
 
 /** Best times per level, read straight out of the shared stats store so the setup screen and My
@@ -250,14 +279,18 @@ class MinesweeperUI {
     const s = this.settings;
     const bests = bestTimes();
     const closest = bestCleared();
-    const saved = loadSave();
+    const saved = loadSave(s.level);
     const diffs = LEVEL_ORDER.map((id) => {
       const L = LEVELS[id];
-      const meta = fill(t('board_fmt'), { w: L.w, h: L.h, n: L.mines });
+      // A level with a paused board shows a pause mark and its clock instead of its size.
+      const paused = loadSave(id);
+      const meta = paused
+        ? `<span class="ms-dmeta is-paused">${PAUSE_SVG}${esc(fmtTime(paused.state.elapsedMs | 0))}</span>`
+        : `<span class="ms-dmeta">${esc(fill(t('board_fmt'), { w: L.w, h: L.h, n: L.mines }))}</span>`;
       return `<button type="button" class="ms-diff" data-level="${id}" aria-pressed="${s.level === id}">
         <span class="ms-dshape">${diffShapeSVG(L.tier)}</span>
         <span class="ms-dname">${esc(t(id))}</span>
-        <span class="ms-dmeta">${esc(meta)}</span>
+        ${meta}
         <span class="ms-dtick">${TICK_SVG}</span>
       </button>`;
     }).join('');
@@ -276,17 +309,15 @@ class MinesweeperUI {
       <span class="ms-sw"><i></i></span>
     </button>`;
 
-    // A paused board on ANOTHER level (Matt, 2026-10-15: "I am halfway through a hard game... I want
-    // to switch to medium. But there's only a resume button"): New game (left, for the level now
-    // selected) and Resume (right) share the row (Matt asked for that order). Resume carries the paused board's level shape. Starting
-    // the new game replaces the paused one (there is one save slot).
-    const savedLevel = saved && saved.state && saved.state.level;
-    const ctaHTML = (saved && savedLevel !== s.level && LEVELS[savedLevel])
+    // The selected level has a paused board: New game (left) and Resume (right), Matt's order
+    // (2026-10-15). New game replaces THAT level's board only; every other level keeps its own.
+    // No paused board here: one Play button.
+    const ctaHTML = saved
       ? `<div class="ms-cta ms-ctarow">
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="newsel">${esc(t('new_game'))}</button>
-          <button type="button" class="gh-btn gh-btn--block" data-act="play" aria-label="${esc(t('resume'))}, ${esc(t(savedLevel))}">${diffShapeSVG(LEVELS[savedLevel].tier)}<span>${esc(t('resume'))}</span></button>
+          <button type="button" class="gh-btn gh-btn--block" data-act="newsel">${esc(t('new_game'))}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play">${esc(t('resume'))}</button>
         </div>`
-      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="play">${esc(t(saved ? 'resume' : 'play'))}</button>`;
+      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="play">${esc(t('play'))}</button>`;
     this._positionRoot();
     this.root.innerHTML = `<div class="ms-screen ms-setup">
       ${this._topbar()}
@@ -392,7 +423,7 @@ class MinesweeperUI {
   /* ---- play --------------------------------------------------------------------------------- */
 
   startOrResume() {
-    const saved = loadSave();
+    const saved = loadSave(this.settings.level);
     if (saved) { this.game = saved.state; this.mode = saved.mode; this.elapsedMs = saved.state.elapsedMs | 0; }
     else { this.game = E.createGame(this.settings.level); this.mode = 'dig'; this.elapsedMs = 0; }
     this._result = null;
@@ -401,8 +432,9 @@ class MinesweeperUI {
 
   newGame(level) {
     this._clearTimers();
-    clearSave();
-    this.game = E.createGame(level || this.settings.level);
+    const lv = level || (this.game && this.game.level) || this.settings.level;
+    clearSave(lv);
+    this.game = E.createGame(lv);
     this.mode = 'dig';
     this.elapsedMs = 0;
     this._result = null;
@@ -860,7 +892,7 @@ class MinesweeperUI {
   _persist() {
     if (!this.game) return;
     this.game.elapsedMs = this.elapsedMs;
-    if (this.game.dead || this.game.won || !this.game.generated) clearSave();
+    if (this.game.dead || this.game.won || !this.game.generated) clearSave(this.game.level);
     else writeSave(this.game, this.mode);
   }
 
@@ -897,7 +929,7 @@ class MinesweeperUI {
 
   _finish(won) {
     this._stopTimer();
-    clearSave();
+    clearSave(this.game.level);
     const g = this.game;
     const level = g.level;
     const prevBest = bestTimes()[level] | 0;
