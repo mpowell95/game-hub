@@ -74,7 +74,9 @@ export function makeT(dict) {
     s = String(s);
     // `{me}` is always the local player's profile name, filled here so no call site has to pass it.
     // An explicit `me` param wins (a game that holds its own player object).
+    // `{myname}` is the same, for a string that already uses `{me}` as a count (the series lines).
     if (s.includes('{me}') && !(params && params.me != null)) s = s.split('{me}').join(myName());
+    if (s.includes('{myname}') && !(params && params.myname != null)) s = s.split('{myname}').join(myName());
     if (params) for (const k of Object.keys(params)) s = s.split('{' + k + '}').join(params[k]);
     return s;
   };

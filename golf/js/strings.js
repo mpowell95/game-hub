@@ -36,7 +36,7 @@ export const STRINGS = {
     tutorial_cta: 'Start the tutorial',
     tutorial_again: 'tutorial',
     tut_ok: 'got it',
-    tut_your_turn: 'your turn',
+    tut_your_turn: '{me}’s turn',
     // FIVE CARDS, 25 WORDS IN TOTAL, and none is on screen during a swing (golf/js/tutorial.js).
     // Matt, twice: "it is WAY too wordy (per usual)", then "still way too much text. I'm not
     // reviewing all of it." A card is read in the half second before a tap, so anything past a
@@ -124,7 +124,7 @@ export const STRINGS = {
     tot: 'tot',
     hole_abbr: 'hole',
     par_abbr: 'par',
-    you: 'you',
+    you: '{me}',
     saved_best: 'New best round',
     not_counted: 'Practice holes are not scored.',
     // hud
@@ -292,7 +292,7 @@ export const STRINGS = {
     tutorial_cta: 'Empezar el tutorial',
     tutorial_again: 'tutorial',
     tut_ok: 'entendido',
-    tut_your_turn: 'te toca',
+    tut_your_turn: 'turno de {me}',
     tut_aim: 'Toca una flecha para apuntar.',
     tut_club: 'Toca las flechas para cambiar de palo.',
     tut_good_h: 'Un buen golpe',
@@ -367,7 +367,7 @@ export const STRINGS = {
     tot: 'tot',
     hole_abbr: 'hoyo',
     par_abbr: 'par',
-    you: 'tú',
+    you: '{me}',
     saved_best: 'Nueva mejor vuelta',
     not_counted: 'Los hoyos sueltos no puntúan.',
     picked_up: 'Recogida',
