@@ -30,6 +30,7 @@ const HIT_HOLD = 2.0;          // seconds on the target after a hit
 const DRAW_T = 0.25;           // seconds to bring the bow up (the recording, frame by frame)
 const PANIC_T = 0.6;           // seconds of shaking before a panicked arrow goes
 const BOW_IN_T = 0.2;          // seconds for the bow to slide up into view on the line
+const SETTLE_T = 0.55;         // seconds the camera eases back after a hit
 const JOLT_T = 0.06;           // seconds of the bow's kick as the arrow leaves it, before the flight
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -843,7 +844,8 @@ class ArcheryUI {
     const sh = this.shot;
     const dir = this.r.flightDir();
     this.r.endFlight();
-    this.r.setView('close');
+    this.r.settle(this.reduce ? 1 : 0);
+    this.settleT = 0;
     this.r.setStuck(this.turnArrows);
     this.phase = 'hit';
     this._after(HIT_POP, () => {
@@ -1351,6 +1353,10 @@ class ArcheryUI {
       const u = (this.shot.t - this._joltT()) / FLIGHT_T;
       if (u >= 0) this.r.setFlight(u);
       if (u >= 1) this._arrive();
+    }
+    if (this.phase === 'hit' && this.settleT != null && this.settleT < SETTLE_T) {
+      this.settleT += dt;
+      this.r.settle(this.settleT / SETTLE_T);
     }
     const inc = this._inc;
     if (inc) {

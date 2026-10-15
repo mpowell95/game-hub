@@ -41,7 +41,7 @@ export class BowView {
     this.scene.add(rim);
 
     const M = {
-      blue: m(new THREE.MeshStandardMaterial({ color: '#2f7ff2', metalness: 0.55, roughness: 0.28, envMapIntensity: 1.2 })),
+      blue: m(new THREE.MeshStandardMaterial({ color: '#2c7cf0', metalness: 0.7, roughness: 0.2, envMapIntensity: 1.9 })),
       blueDark: m(new THREE.MeshStandardMaterial({ color: '#1d5cc4', metalness: 0.55, roughness: 0.32 })),
       black: m(new THREE.MeshStandardMaterial({ color: '#2a2f36', metalness: 0.6, roughness: 0.32 })),
       rubber: m(new THREE.MeshStandardMaterial({ color: '#202328', metalness: 0.3, roughness: 0.5 })),
@@ -51,6 +51,8 @@ export class BowView {
       sleeve: m(new THREE.MeshStandardMaterial({ color: '#79a3dc', metalness: 0, roughness: 0.95, side: THREE.DoubleSide, envMapIntensity: 0.6, flatShading: true })),
       shaft: m(new THREE.MeshStandardMaterial({ color, metalness: 0.25, roughness: 0.35 })),
       metal: m(new THREE.MeshStandardMaterial({ color: '#e3e8ee', metalness: 0.95, roughness: 0.18 })),
+      blade: m(new THREE.MeshStandardMaterial({ color: '#f4f6f8', emissive: '#c9d0d8', emissiveIntensity: 0.45, metalness: 0.2, roughness: 0.35, side: THREE.DoubleSide })),
+      blueHi: m(new THREE.MeshStandardMaterial({ color: '#6db4ff', metalness: 0.5, roughness: 0.2, envMapIntensity: 1.6 })),
       glass: m(new THREE.MeshStandardMaterial({ color: '#3d4f62', metalness: 0.4, roughness: 0.15, emissive: '#1c2b3a' })),
       pale: m(new THREE.MeshStandardMaterial({ color: '#e9dcd3', metalness: 0.1, roughness: 0.5 })),
       slot: m(new THREE.MeshStandardMaterial({ color: '#1f6fe0', emissive: '#1a5fd6', emissiveIntensity: 0.6, roughness: 0.4 })),
@@ -62,11 +64,11 @@ export class BowView {
     const rig = new THREE.Group();
     this.rig = rig;
     this.scene.add(rig);
-    const ext = (pts, depth, mat, z = 0, bevel = 0.06) => {
+    const ext = (pts, depth, mat, z = 0, bevel = 0.09) => {
       const s = new THREE.Shape();
       pts.forEach(([x, y], i) => (i ? s.lineTo(x, y) : s.moveTo(x, y)));
       s.closePath();
-      const geo = g(new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 8 }));
+      const geo = g(new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4, curveSegments: 8 }));
       geo.translate(0, 0, -depth / 2 + z);
       const mesh = new THREE.Mesh(geo, mat);
       rig.add(mesh);
@@ -117,25 +119,28 @@ export class BowView {
       strut(X(1.05), 7.0, X(1.05), 16);
     }
     // The fork: two blue arms down to the column, the sky showing between them.
-    ext([[0.9, 2.75], [1.4, 2.75], [2.02, 1.3], [1.68, 1.3]], 0.66, M.blue);
-    ext([[1.85, 2.75], [2.4, 2.75], [2.44, 1.3], [2.1, 1.3]], 0.66, M.blue);
+    // A Y: the left arm slants in from the pocket's left corner, the right one runs straight down.
+    ext([[0.8, 2.75], [1.3, 2.75], [2.1, 1.3], [1.78, 1.3]], 0.66, M.blue);
+    ext([[0.8, 2.75], [0.95, 2.75], [1.86, 1.3], [1.78, 1.3]], 0.7, M.blueHi);
+    ext([[2.0, 2.75], [2.33, 2.75], [2.33, 1.3], [2.0, 1.3]], 0.66, M.blue);
     // The column, blue with a black strip down its far edge, a dark slot and three white marks.
-    ext([[1.68, 1.32], [2.44, 1.32], [2.44, -2.35], [1.68, -2.35]], 0.7, M.blue);
-    ext([[2.28, 1.32], [2.46, 1.32], [2.46, -2.35], [2.26, -2.35]], 0.74, M.black);
+    ext([[1.78, 1.32], [2.33, 1.32], [2.33, -2.35], [1.78, -2.35]], 0.7, M.blue);
+    ext([[1.78, 1.32], [1.88, 1.32], [1.88, -2.35], [1.78, -2.35]], 0.74, M.blueHi);
+    ext([[2.2, 1.32], [2.35, 1.32], [2.35, -2.35], [2.18, -2.35]], 0.74, M.black);
     const slot = new THREE.Shape();
-    slot.absarc(1.94, 0.55, 0.13, 0, Math.PI, false);
-    slot.absarc(1.94, -0.75, 0.13, Math.PI, Math.PI * 2, false);
+    slot.absarc(2.0, -0.95, 0.11, 0, Math.PI, false);
+    slot.absarc(2.0, -1.75, 0.11, Math.PI, Math.PI * 2, false);
     slot.closePath();
     const slotMesh = new THREE.Mesh(g(new THREE.ShapeGeometry(slot, 10)), M.rubber);
     slotMesh.position.z = 0.42;
     rig.add(slotMesh);
-    for (let i = 0; i < 3; i++) box(0.12, 0.15, 0.04, 2.15, 0.7 - i * 0.28, 0.42, M.white);
+    for (let i = 0; i < 3; i++) box(0.08, 0.13, 0.04, 2.08, 0.75 - i * 0.24, 0.42, M.white);
     // The sight: a thick black bar from the riser hooking down to the ring, a small foot under it.
-    box(1.1, 0.22, 0.24, 1.13, -0.36, 0.05, M.black);
-    const hook = new THREE.Mesh(g(new THREE.TorusGeometry(0.26, 0.09, 8, 14, Math.PI / 2)), M.black);
-    hook.position.set(0.58, -0.1, 0.05);
-    hook.rotation.z = -Math.PI / 2;
-    rig.add(hook);
+    // The bar runs in from the column below the ring's middle and hooks up into its lower right.
+    box(1.3, 0.24, 0.26, 1.15, -0.72, 0.05, M.black);
+    const post = box(0.22, 0.42, 0.26, 0.5, -0.56, 0.05, M.black);
+    post.rotation.z = 0.6;
+    box(0.2, 0.3, 0.3, 1.72, -0.72, 0.05, M.rubber);
     box(0.3, 0.14, 0.24, 0.0, -0.68, 0.02, M.black);
     box(0.1, 0.12, 0.26, -0.1, -0.78, 0.02, M.black);
     box(0.1, 0.12, 0.26, 0.1, -0.78, 0.02, M.black);
@@ -213,6 +218,7 @@ export class BowView {
     const body = new THREE.Group();
     this.body = body;
     for (const ch of [...rig.children]) if (ch !== housing && ch !== tube) body.add(ch);
+    mergeByMaterial(THREE, body, g);                // ~50 parts drawn as one mesh per material
     body.scale.setScalar(BODY_S);
     rig.add(body);
 
@@ -229,18 +235,18 @@ export class BowView {
       c.position.z = (z0 + z1) / 2;
       arrow.add(c);
     };
-    seg(0.42, 1.05, r * 1.04, M.black);
-    seg(1.05, L * 0.42, r, M.shaft);
+    seg(0.9, 1.8, r * 1.15, M.black);
+    seg(1.8, L * 0.42, r, M.shaft);
     seg(L * 0.42, L, r * 1.04, M.black);
-    const point = new THREE.Mesh(g(new THREE.ConeGeometry(r * 1.2, 0.42, 14)), M.metal);
+    const point = new THREE.Mesh(g(new THREE.ConeGeometry(r * 1.6, 0.9, 14)), M.blade);
     point.rotation.x = -Math.PI / 2;
-    point.position.z = 0.21;
+    point.position.z = 0.45;
     arrow.add(point);
     const bladeShape = new THREE.Shape();
-    bladeShape.moveTo(0, 0.02); bladeShape.lineTo(0.3, 0.04); bladeShape.lineTo(0.42, 0.2); bladeShape.lineTo(0.42, 0.02); bladeShape.closePath();
+    bladeShape.moveTo(0, 0.02); bladeShape.lineTo(0.6, 0.12); bladeShape.lineTo(0.9, 0.5); bladeShape.lineTo(0.9, 0.02); bladeShape.closePath();
     const bladeGeo = g(new THREE.ShapeGeometry(bladeShape));
     for (let i = 0; i < 3; i++) {
-      const bl = new THREE.Mesh(bladeGeo, M.white);
+      const bl = new THREE.Mesh(bladeGeo, M.blade);
       const h = new THREE.Group();
       bl.rotation.y = -Math.PI / 2;
       h.add(bl);
@@ -289,7 +295,7 @@ export class BowView {
     b.set(...REST);
     this.body.localToWorld(b);
     c.copy(b).sub(a).normalize();                  // nock -> rest: the way it points
-    d.copy(b).addScaledVector(c, 2.4 + fly * 60);   // the point
+    d.copy(b).addScaledVector(c, 4.0 + fly * 60);   // the point
     this.arrow.position.copy(d);
     this.arrow.lookAt(d.clone().sub(c));             // +z back toward the nock
     this.arrow.visible = fly < 0.9;
@@ -312,6 +318,43 @@ export class BowView {
     this.cuff.lookAt(b);
     const cr = 0.5 * puff;
     this.cuff.scale.set(cr, cr, 1);
+  }
+}
+
+/** Replace every mesh under `group` with one mesh per material, in the group's own frame (they
+ *  never move relative to each other), so the bow costs a handful of draw calls, not fifty. */
+function mergeByMaterial(THREE, group, g) {
+  group.updateMatrixWorld(true);
+  const inv = group.matrixWorld.clone().invert();
+  const byMat = new Map();
+  const meshes = [];
+  group.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  for (const o of meshes) {
+    let geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    geo.applyMatrix4(inv.clone().multiply(o.matrixWorld));
+    if (!byMat.has(o.material)) byMat.set(o.material, []);
+    byMat.get(o.material).push(geo);
+  }
+  for (const ch of [...group.children]) group.remove(ch);
+  for (const [mat, geos] of byMat) {
+    const withUv = !!mat.map;
+    let n = 0;
+    for (const x of geos) n += x.attributes.position.count;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = withUv ? new Float32Array(n * 2) : null;
+    let k = 0;
+    for (const x of geos) {
+      const c = x.attributes.position.count;
+      pos.set(x.attributes.position.array, k * 3);
+      if (x.attributes.normal) nor.set(x.attributes.normal.array, k * 3);
+      if (uv && x.attributes.uv) uv.set(x.attributes.uv.array, k * 2);
+      k += c;
+      x.dispose();
+    }
+    const out = g(new THREE.BufferGeometry());
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    if (uv) out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    group.add(new THREE.Mesh(out, mat));
   }
 }
 
