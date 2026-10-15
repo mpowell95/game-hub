@@ -321,6 +321,19 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
     use('A');
   }
 
+  // Aiming help chosen by the challenger (2026-10-15): stored on the match, read by both phones.
+  {
+    use('A');
+    const h = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, goals: 2, pair: ['attack', 'defend'], aids: 'easy' });
+    ok('a challenge stores its aiming help', h.ok && h.game.aids === 'easy' && getAt(`flicksoccer/games/${h.id}`).aids === 'easy');
+    use('B');
+    ok('...and Ana\'s phone reads the same', (await MP.readGame(h.id)).aids === 'easy');
+    use('A');
+    const j = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, aids: 'cheat' });
+    ok('a junk aiming help is stored as Medium', j.ok && j.game.aids === 'medium');
+    ok('a match from before reads Medium, as it played', MP.aidsOfGame({}) === 'medium' && MP.aidsOfGame({ aids: 'hard' }) === 'hard');
+  }
+
   // Declined (or called off) before anybody flicked: counts for nobody, listed for nobody, no push.
   const d = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, form: 'diamond' });
   use('B');

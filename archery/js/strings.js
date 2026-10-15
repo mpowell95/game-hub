@@ -3,7 +3,6 @@
 export const STRINGS = {
   en: {
     title: 'Archery',
-    tagline: '3 rounds, 3 arrows. Most points wins.',
     multiplayer: 'Multiplayer',
     online_waiting1: '1 waiting on you',
     online_waiting: '{n} waiting on you',
@@ -34,9 +33,7 @@ export const STRINGS = {
     your_turn_banner: 'Your turn',
     turn_of: '{name}\'s turn',
     round_banner: 'Round {n}',
-    round_sub: 'Wind {mph} mph',
     shootoff_banner: 'Shoot-off!',
-    shootoff_sub: 'One arrow each. Closest to the middle wins a tie.',
     shootoff_again: 'Still level',
     miss: 'MISS',
     panic: 'PANIC!',
@@ -127,7 +124,6 @@ export const STRINGS = {
   },
   es: {
     title: 'Tiro con arco',
-    tagline: '3 rondas, 3 flechas. Gana quien más puntos haga.',
     multiplayer: 'Multijugador',
     online_waiting1: '1 te espera',
     online_waiting: '{n} te esperan',
@@ -158,9 +154,7 @@ export const STRINGS = {
     your_turn_banner: 'Te toca',
     turn_of: 'Turno de {name}',
     round_banner: 'Ronda {n}',
-    round_sub: 'Viento {mph} mph',
     shootoff_banner: '¡Desempate!',
-    shootoff_sub: 'Una flecha cada uno. Si empatan, gana la más centrada.',
     shootoff_again: 'Siguen empatados',
     miss: 'FALLO',
     panic: '¡PÁNICO!',
