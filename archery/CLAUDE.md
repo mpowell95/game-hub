@@ -162,7 +162,5 @@ The sixth challenge game. Darts' design, copied (`darts/CLAUDE.md`, "Online chal
 
 ## Not built / open
 
-- Real-phone feel: the drag gain, the ring's drain and the sway were set from the video, not from
-  a thumb. Expect Matt to tune them.
-- No series (best of 3/5) online.
+Open items: see the root TODO.md, "Archery".
 - No sound, and none is ever to be added unless Matt asks (root `CLAUDE.md`).

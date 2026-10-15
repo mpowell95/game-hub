@@ -13,13 +13,7 @@
 - **Only Pine Valley is open** (`COURSE_OPEN_BY_DEFAULT` `{ pinevalley: true }`). Matt: *"Pine Valley ONLY."* Red Mesa and Oasis Sands are finished and unreleased: a test or difficulty failure on ONLY those is no reason to hold a deploy. **Coral Keys (2026-09-29)**: 4th course, 9 holes, ADMIN ONLY (end of file).
 - **Swing physics were rebuilt 2026-09-10.** Before changing a number in `swing.js`/`clubs.js`, read "Swing and meter" below and the four 2026-09-10 history sections: each reversed something a session did without asking.
 
-**Open, each is Matt's call:**
-1. **Leaderboard comparability**: scores set before 2026-09-10 came from physics that no longer exist. Leave, label, or void per player via `js/stats-corrections.js` (no golf path yet). Nothing deleted; nothing should be without him saying so.
-2. **Oasis Sands hole 4** (par 5, 451 yd, reachable in two) is a NAMED GAP in `test.js` 15c, printed every run, as is Oasis' easier closing three (delete those branches when re-cut). Fix before that course opens.
-3. **HUD top row (`.gf-tl`/`.gf-tc`) overlaps on phones <= 360 px.** Untouched.
-4. **Club upgrade tiers** designed, NOT built (`clubs.js` `upgraded`; spec §21.3); must not turn every par 5 into an eagle look.
-5. Only 2 of 5 aim-ladder dots show at address with a driver (feel call). Red Mesa 1 is a `bowl` with the pin at the low point (move the pin, par untouched); seven Red Mesa greens (Oasis worse) force a putt over 60 ft (needs redrawn greens).
-6. Left alone: flight is played off wall clock (a stall teleports the ball; fix = the loop's clamped `dt`); `LOCK_MS` (1.4 s) also swallows the first tap after a ball comes to REST; unbuilt: the result screen's AI-opponent board, a walking golfer; Oasis palms have no `TREE_FILL` colour and Oasis no greenside bunkers.
+Open items: see the root TODO.md, "Golf".
 
 **How Matt wants changes made.** For any feel change (swing, meter, distance, difficulty): *propose with numbers, agree, show a mockup, then build.* **An APPROVED table in `docs/archive/golf-reference-spec.md` is a decision, not a starting point**: a disagreeing measurement goes in the doc and the decision goes to Matt. **A measurement nobody asked to act on goes in the docs, not the build** (*"I did NOT instruct you to change anything about tempo"*). Measure rather than argue: `test.js` 15c plays every hole 24x vs par; a BEFORE/AFTER of the same robot is real evidence.
 

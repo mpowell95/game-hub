@@ -108,6 +108,4 @@ Objects spec: `docs/HANDOFF-GOLF-OBJECTS.md`. Power lines: `docs/HANDOFF-GOLF-PO
 
 ## Open items
 
-- A true L-shaped green or a deliberate ring of sand cannot be drawn by the editor (two-outline feature, not a drawing trick).
-- Matt's browser copy of Red Mesa held the pre-repair shapes of holes 6/7/9 after the first fold-back (editor loads from `localStorage`, not the file): reset or re-import.
-- Mountain/Swamp done; further looks only if Matt asks. Agreed next list (look-only objects: fountain, lighthouse, windmill, ducks/deer, waterfall; walls/buildings/cliffs; hills) - Matt said "only flower beds" from the look-only list and "no bridges".
+Open items: see the root TODO.md, "Course Creator".

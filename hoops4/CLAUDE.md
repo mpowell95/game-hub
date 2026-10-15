@@ -396,16 +396,9 @@ squeeze the outer columns). **`aimDiv` is the first number to tune if Matt finds
 
 ## Still open
 
-**This is the list.** Track it here or nowhere (mid-file "still to come" paragraphs go stale).
+Open items: see the root TODO.md, "Connect 4 Hoops".
 - Done: quick chat (2026-09-22), challenge history (2026-09-22), `hoops` rules published (2026-09-22),
   "50-50" bounce CLOSED (2026-09-23, "leave the hoops as is"), scoring rate CLOSED.
-- **The two bounce gaps `test.js` owes** (41% of misses bounce vs a 50% bar; 0.45 m/s vs 0.50) stay red
-  in `KNOWN_GAPS`. **Ask Matt before spending anything here**: every lever that restores bounce costs
-  scoring.
-- **Whether a human swipe has the precision seven columns need:** `check-display.mjs` is a scripted
-  thumb on SwiftShader; only a playtest answers it. One red run is not evidence of a regression.
-- **The outer columns are easier than the middle** (walls return wide balls into them). Arguably right
-  (centre columns carry most winning lines); confirm it reads as skill.
 - Shipped-twice reminder: v953 was shipped twice by two PRs; bump CACHE past what is on `main` NOW.
 
 ## Testing

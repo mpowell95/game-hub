@@ -343,8 +343,7 @@ explicit Leave or an opponent's own `destroy()` ends a room here, there is no pa
   (also not yet on the shared `js/i18n.js` layer). The stats screen's own strings (Won/Lost/
   Tied/Played/Yahtzees/Best score, the game title) DO go through `js/strings.js`/`t()` — see
   "Stats" below — since that infrastructure is shared with every other game, not this game's own.
-- Add a `### The Nth consumer: Yahtzee` entry to `js/CLAUDE.md`'s multiplayer-lockstep section
-  (per the documentation convention every prior MP game followed) — not yet done as of this note.
+- Open items: see the root TODO.md, "Yahtzee".
 
 ## Stats (2026-07-28)
 

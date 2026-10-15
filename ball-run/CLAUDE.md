@@ -164,10 +164,7 @@ Orbital only. A pickup is never its own event type: `maybePlacePickup()` runs at
 
 ## Build status and open items
 
-Complete (2026-07-29). Open, awaiting Matt's playtest: every tuning number (cadences, gap lengths,
-apex cap, pickup cadences/values, the Orbital colour set); whether Splits/Jumps should count toward the
-speed tier like tunnels; whether a missed-Jump-landing fall should read differently from a normal edge
-fall; a wider variant map (mentioned once in the spec, never scoped). The real-browser life-pickup
+Complete (2026-07-29). Open items: see the root TODO.md, "Ball Run". The real-browser life-pickup
 collection path was verified only by direct `Sim.step()` runs. Tests: `node run-all-tests.mjs` only
 when Matt asks; the relevant suites are `test-stats-replay.mjs`, `players-agg.test.mjs`,
 `node validate-sw-assets.mjs`.

@@ -293,6 +293,5 @@ Every band and constant in `engine/settings.js` is Draft and adjustable from tha
 
 ## Open items
 
-- Contact-grid `ratio`/`cross`/`ceiling` status since R16/live plays. `lineDriveCenterDeg` vs `CARRY_PEAK_DEG`: sloppy timing has a better shot at the best launch angle than perfect (needs a joint re-derivation with `CARRY_SCALE`). Pitch Accuracy and the Speed lever (`runSpeedV2`/`runFtSPerPt`): Matt's calls.
-- Cosmetic: Crouch (R12); `Walk` clip unmeasured; `hub.js` blurb; `careers` rules publication unconfirmed.
+Open items: see the root TODO.md, "Baseball".
 - Code comments also cite, by name (CLAUDE-HISTORY.md only): "BB-2a report" and "History: Phase 2b" (schedule/bracket diagnosis, the `repeatMiddle` proposal block), the BB-2d commit 7 retune.
