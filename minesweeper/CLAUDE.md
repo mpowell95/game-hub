@@ -129,19 +129,26 @@ area, on every level, measured at 100% over 800 seeded runs. `generate()` still 
 40-attempt retry loop for the zero; under the current levels it never runs past attempt 0, and its
 comment says so rather than leaving a future reader to assume it is load-bearing.
 
-**How much guessing each level needs** (2026-10-15, an exact solver over 1,000 boards a level:
-it enumerates every mine layout the numbers allow and guesses only when nothing is certain):
+**How much guessing each level needs** (redone 2026-10-15 after Matt: "your numbers are wrong";
+`node tools/minesweeper-odds.mjs`). A perfect player (exact mine odds for every square, guesses the
+safest square only when nothing is certain), our first-tap opening, 20,000 boards a level (Expert 4,000):
 
-| Level | Boards with no guess | Average guesses | Solver win % |
+| Level | Boards with no guess | Average guesses | Perfect-player win % |
 |---|---|---|---|
-| Easy | 81% | 0.3 | 95% |
-| Medium | 65% | 0.5 | 89% |
-| Hard | 25% | 1.7 | 63% |
-| Expert | 10% | 2.9 | 43% |
+| Easy | 88% | 0.2 | 96% |
+| Medium | 74% | 0.4 | 90% |
+| Hard | 33% | 1.7 | 67% |
+| Expert | 15% | 2.9 | 48% |
+
+**Calibrated against an outside source:** the same tool under classic rules reproduces Minesweepr's
+published 100,000-game figures (mrgris.com/projects/minesweepr, "None" strategy): 9×9/10 84.9 vs 84.8,
+8×8/10 74.1 vs 74.1, 16×16/40 69.7 vs 69.2, 30×16/99 32.4 vs 33.1. The first table (same day, an
+older script whose guesses used rough odds) said 81 / 65 / 25 / 10% no-guess and 95 / 89 / 63 / 43%
+wins: it overstated guessing everywhere and understated Hard and Expert.
 
 Real players (live records, 2026-10-15, `tools/read-minesweeper.mjs`): Easy ~13%, Medium ~11%, Hard 1 of 82 (Anita, 7:00), Expert 0 of 22. (An earlier same-day read said Hard 0 of 70; that was stale.)
 
-**Those numbers were checked three ways (2026-10-15, after Matt asked whether the test was broken):**
+**The board and the screen were checked three ways (2026-10-15, after Matt asked whether the test was broken):**
 every square's centre and edges map to the right square on all four levels at three phone sizes;
 the solver never died on a move it called certain (1,600 boards); and the same solver playing through
 the real screen with real taps won 29 of 40 Hard boards.
