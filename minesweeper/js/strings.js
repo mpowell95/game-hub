@@ -25,7 +25,6 @@ export const STRINGS = {
     play: 'Play',
     resume: 'Resume',
     how_to_play: 'How to play',
-    my_stats: 'My stats',
     // Game screen
     dig: 'Dig',
     flag: 'Flag',
@@ -81,7 +80,6 @@ export const STRINGS = {
     play: 'Jugar',
     resume: 'Continuar',
     how_to_play: 'Cómo se juega',
-    my_stats: 'Mis estadísticas',
     // Game screen
     dig: 'Cavar',
     flag: 'Marcar',

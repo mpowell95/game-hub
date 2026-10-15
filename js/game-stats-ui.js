@@ -1703,6 +1703,9 @@ function onKey(e) {
 
 function onClick(e) {
   if (e.target.closest('[data-role="gs-close"]')) { closeStats(); return; }
+  // The top-left back (Matt, 2026-10-15: "there's no back button... only an X on the top right"):
+  // up one level, a game's page to the list, and from the list out.
+  if (e.target.closest('[data-role="gs-up"]')) { if (_game) { _game = null; rerender(); } else closeStats(); return; }
   if (e.target.closest('[data-role="gs-back"]')) { _game = null; rerender(); return; }
   const row = e.target.closest('.gs-grow[data-game]');
   if (row) { _game = row.dataset.game; rerender(); }
@@ -1728,6 +1731,7 @@ export function openStatsOverlay() {
     <div class="gs-panel">
       <header class="gs-top">
         <div class="gs-top-row">
+          <button type="button" class="gs-hback" data-role="gs-up" aria-label="${STRINGS.en.gs_back_aria ? t('gs_back_aria') : 'Back'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
           <h2>${t('gs_title')}</h2>
           <button type="button" class="gs-x" data-role="gs-close" aria-label="${t('gs_close_aria')}">&times;</button>
         </div>
@@ -1755,7 +1759,9 @@ function ensureCss() {
     '.gs-panel{position:relative;width:100%;max-width:560px;margin:0 auto;min-height:100%;background:var(--hub-bg,#f4f6fb);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
     '.gs-top{position:sticky;top:0;z-index:2;padding:max(env(safe-area-inset-top,0px),8px) 18px 0;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--hub-surface-2,#eef2f8)}',
     '.gs-top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:var(--gh-band-title,44px)}',
-    '.gs-top h2{margin:0;font-size:17px;font-weight:600;color:var(--hub-ink,#16243a)}',
+    '.gs-top h2{margin:0;font-size:17px;font-weight:600;color:var(--hub-ink,#16243a);flex:1 1 auto;min-width:0}',
+    '.gs-hback{appearance:none;flex:none;width:44px;height:44px;margin-left:-10px;display:flex;align-items:center;justify-content:center;background:none;border:0;padding:0;color:var(--hub-ink,#16243a);cursor:pointer;touch-action:manipulation}',
+    '.gs-hback svg{width:24px;height:24px}',
     '.gs-x{appearance:none;border:1px solid var(--hub-surface-2,#eef2f8);background:var(--hub-surface,#fff);color:var(--hub-ink,#16243a);font-size:1.4rem;line-height:1;width:38px;height:38px;border-radius:10px;cursor:pointer}',
     '.gs-body{padding:14px 16px 8px;display:grid;gap:14px}',
     '.gs-overview{display:grid;gap:10px}',
