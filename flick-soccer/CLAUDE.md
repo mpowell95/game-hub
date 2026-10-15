@@ -149,8 +149,12 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   | Medium | yes | yes | no |
   | Hard | yes | no | no |
 
-  **Pass and play and online are Medium** (there is no difficulty there, and online both players
-  should get the same help). The thin pull string from the disc to the finger shows on every level:
+  **Pass and play is Medium. A challenge uses the aiming help its SENDER chose (2026-10-15)**, Matt:
+  *"We only assigned those by difficulty. But I want to be able to choose"*: an **Aiming help** row
+  (Easy / Medium / Hard, with what each shows) on the challenge card, saved as `settings.aimHelp`,
+  stored on the match as the OPTIONAL `aids` field (`aidsOfGame`: absent or junk reads Medium, which
+  every earlier challenge had), shown to the other player on their card ("Aiming help: Easy"), and
+  kept by Challenge again. Both players get the same help. Display only: never on the physics path. The thin pull string from the disc to the finger shows on every level:
   it is the drag itself. The **guide** is a dotted line from the disc to the first thing it will
   touch and a ghost circle there; the **bounce line** (`ballPath` in `engine.js`) is where the ball
   heads from that touch, reflected off the walls up to twice, ending at the first disc in its way or
@@ -197,7 +201,7 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
 
 | Key | What |
 |---|---|
-| `gamehub.flicksoccer.v1` | `{ mode: 'cpu'|'pass', difficulty, goals: 1|2|3, first: 'alt'|'me'|'them', lineup, offense, defense, nextStarter }`, saved the moment a control changes (`lineup` added 2026-10-11, absent reads Balanced; `offense`/`defense` 2026-10-14, absent read as `lineup`, else Attack/Defend; `lineup` itself is no longer read for play but is kept) |
+| `gamehub.flicksoccer.v1` | `{ mode: 'cpu'|'pass', difficulty, goals: 1|2|3, first: 'alt'|'me'|'them', lineup, offense, defense, aimHelp, nextStarter }` (`aimHelp` 2026-10-15, a challenge's aiming help, absent reads Medium), saved the moment a control changes (`lineup` added 2026-10-11, absent reads Balanced; `offense`/`defense` 2026-10-14, absent read as `lineup`, else Attack/Defend; `lineup` itself is no longer read for play but is kept) |
 | `gamehub.flicksoccer.save.v1` | `{ mode, diff, match, shot? }` at rest; removed once the match is won. `shot` (`{i, dx, dy, power}`, 2026-10-11) is written the moment a flick is taken: an app killed, reloaded or backgrounded while it rolls (or during the GOAL! banner) replays that same flick on Continue, so a shot can never be taken back. Menu > Save and quit still plays it out on the spot (`_settleNow`) |
 
 The difficulty default follows the shared profile's first opponent skill (1/2/3 -> Easy/Medium/Hard)

@@ -75,6 +75,7 @@ function loadSettings() {
     offense: FORM_IDS.includes(s.offense) ? s.offense : FORM_IDS.includes(s.lineup) ? s.lineup : 'attack',
     defense: FORM_IDS.includes(s.defense) ? s.defense : FORM_IDS.includes(s.lineup) ? s.lineup : 'defend',
     nextStarter: s.nextStarter === 1 ? 1 : 0,
+    aimHelp: DIFFS.includes(s.aimHelp) ? s.aimHelp : 'medium',   // a challenge's aiming help (2026-10-15)
   };
 }
 
@@ -93,6 +94,11 @@ export const formSVG = (id) => `<svg class="fs-form-ico" viewBox="0 0 60 52" ari
   + '<g fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1"><rect x="2" y="2" width="56" height="48"/><path d="M21 2a9 9 0 0 0 18 0"/><rect x="19" y="41" width="22" height="9"/></g>'
   + (FORMATIONS[id] || FORMATIONS.balanced).map(([x, y]) => `<circle cx="${(2 + (x / W) * 56).toFixed(1)}" cy="${(2 + ((y - H / 2) / (H / 2)) * 48).toFixed(1)}" r="4" fill="${TEAM[0].fill}" stroke="#fff" stroke-width="1.2"/>`).join('')
   + '</svg>';
+/** A challenge's aiming help (2026-10-15): Easy / Medium / Hard as pills with the difficulty
+ *  shapes, and one line under them saying what that level shows. */
+export const aidsRowHTML = (cur) => `<div class="fs-aids"><div class="gh-seg fs-seg" role="group" aria-label="${esc(t('aim_help'))}">${
+  DIFFS.map((id) => `<button type="button" class="gh-seg__item fs-seg-item" data-aid="${id}" aria-pressed="${cur === id}">${diffShapeSVG(tierOf(id))}<span>${esc(t('diff_' + id))}</span></button>`).join('')
+}</div><p class="fs-aid-note">${esc(t('aid_' + cur))}</p></div>`;
 /** The two line-up buttons (Offense, Defense) for the start menu and both challenge cards: each
  *  says its role, draws its line-up and names it, and opens the picker (`_luPicker`). */
 export const lineupsRowHTML = (s) => `<div class="fs-lus" data-role="lineups">${['off', 'def'].map((r) => {
@@ -806,6 +812,13 @@ class FlickSoccerUI {
   _click(e) {
     const lu = e.target.closest('[data-lu]');
     if (lu) { this._luPicker(lu.dataset.lu); return; }
+    const aid = e.target.closest('[data-aid]');
+    if (aid) {
+      this.settings.aimHelp = aid.dataset.aid;
+      writeJSON(SETTINGS_KEY, this.settings);
+      this.root.querySelectorAll('.fs-aids').forEach((el) => { el.outerHTML = aidsRowHTML(this.settings.aimHelp); });
+      return;
+    }
     const seg = e.target.closest('[data-diffs], [data-goalsseg], [data-firsts]');
     if (seg) {
       const s = this.settings;
@@ -835,7 +848,8 @@ class FlickSoccerUI {
     else if (act === 'resign') { this._paintResign(); this.screen = 'resign'; this._showOnly('resign'); }
     else if (act === 'resignYes') this._mpResign();
     else if (act === 'again') {
-      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals);   // your offense and defense line-ups
+      // The same goals and aiming help; your offense and defense line-ups.
+      if (this.mode === 'mp') this._sendChallenge(this.mp.them, this.match.goals, undefined, this.mp.game.aids);
       else this._newMatch();
     }
     else if (act === 'toSetup') { if (this.mode === 'mp') this._openOnline(); else this._showSetup(); }
@@ -977,13 +991,13 @@ class FlickSoccerUI {
   }
 
   /** A new challenge: created now, delivered when your first turn is over. */
-  async _sendChallenge(them, goals = this.settings.goals, lineups = [this.settings.offense, this.settings.defense]) {
+  async _sendChallenge(them, goals = this.settings.goals, lineups = [this.settings.offense, this.settings.defense], aids = this.settings.aimHelp) {
     if (this._challenging) return { ok: false, reason: 'busy' };      // a double tap makes ONE match
     this._challenging = true;
     let res;
     try {
       const MP = await this._loadMP();
-      res = await MP.createGame({ them, goals, pair: lineups });
+      res = await MP.createGame({ them, goals, pair: lineups, aids });
     } finally { this._challenging = false; }
     if (instance !== this) return res;
     if (!res.ok) {
@@ -1404,7 +1418,9 @@ class FlickSoccerUI {
     if (len < PULL_DEAD) { this.aim = { i: this.drag.i, dx: 0, dy: -1, power: 0, fx: p.x, fy: p.y, contact: null, idle: true }; return; }
     const dx = px / len, dy = py / len;
     const power = Math.min(1, (len - PULL_DEAD) / (PULL_MAX - PULL_DEAD));
-    const aids = AIDS[this.mode === 'cpu' ? this.diff : 'medium'] || AIDS.medium;
+    // Vs the computer: its difficulty. A challenge: the aiming help its sender chose (2026-10-15).
+    const level = this.mode === 'cpu' ? this.diff : this.mode === 'mp' && this.mp && this.mp.game ? this.mp.game.aids : 'medium';
+    const aids = AIDS[level] || AIDS.medium;
     const contact = aids.guide ? aimContact(m.b, this.drag.i, dx, dy) : null;
     const path = contact && contact.hit === BALL ? ballPath(m.b, this.drag.i, contact, 30 + 90 * power) : null;
     this.aim = { i: this.drag.i, dx, dy, power, fx: p.x, fy: p.y, contact, path, arrow: aids.arrow };

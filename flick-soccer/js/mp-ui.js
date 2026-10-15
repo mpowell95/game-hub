@@ -9,7 +9,8 @@
 import { makeT, getLang } from '../../js/i18n.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { STRINGS } from './strings.js';
-import { lineupsRowHTML } from './ui.js';
+import { lineupsRowHTML, aidsRowHTML } from './ui.js';
+import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
 const t = makeT(STRINGS);
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -199,6 +200,7 @@ function confirm(ui, MP, them) {
   const body = page(ui, t('mp_new_ch'), 'home', `
     ${whoHTML(them)}
     <p class="fs-mp-terms">${esc(t('mp_terms_they', { n: ui.settings.goals }))}</p>
+    <div class="fs-field"><span class="fs-label">${esc(t('aim_help'))}</span>${aidsRowHTML(ui.settings.aimHelp)}</div>
     <div class="fs-field"><span class="fs-label">${esc(t('mp_your_lineups'))}</span>${lineupsRowHTML(ui.settings)}</div>
     <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-mp="send">${esc(t('mp_send_ch'))}</button>
     <p class="fs-mp-note fs-mp-err" aria-live="polite" hidden></p>`);
@@ -222,6 +224,8 @@ export function pickLineup(ui, MP, game) {
   const body = page(ui, t('mp_new_ch'), 'home', `
     ${whoHTML(them)}
     <p class="fs-mp-terms">${esc(t('mp_terms_you', { n: game.goals }))}</p>
+    <p class="fs-mp-aid">${diffShapeSVG(tierOf(game.aids))}<span>${esc(t('mp_aid_line', { level: t('diff_' + game.aids) }))}</span></p>
+    <p class="fs-aid-note fs-mp-aid-note">${esc(t('aid_' + game.aids))}</p>
     <div class="fs-field"><span class="fs-label">${esc(t('mp_your_lineups'))}</span>${lineupsRowHTML(ui.settings)}</div>
     <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-mp="kick">${esc(t('mp_kickoff'))}</button>
     <p class="fs-mp-note fs-mp-err" aria-live="polite" hidden></p>`);
