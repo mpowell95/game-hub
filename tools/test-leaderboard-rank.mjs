@@ -548,7 +548,8 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   // Since 2026-09-08 the board's order is ONE function, boardMetricCmp(id): the rows, the rank
   // badges and By Game's leader row all sort through it, which is what stops them disagreeing.
   eq('the rows, the badges and the By Game leader all use the board\'s one order',
-    (src.match(/(?<!function )boardMetricCmp\((?:id|meta\.id)\)/g) || []).length, 3);
+    // 4 since 2026-10-15: the tabbed board (plainBoardHTML) numbers its badges through it too.
+    (src.match(/(?<!function )boardMetricCmp\((?:id|meta\.id)\)/g) || []).length, 4);
   ok('[KNOWN-BUG PROBE] Tic Tac Toe\'s bespoke order lives INSIDE that one function',
     /function boardMetricCmp\(id\) \{\s*\n\s*if \(id === 'tictactoe'\)/.test(src)
     && !/if \(id === 'tictactoe'\) \{\s*\n\s*rows\.sort/.test(src),
