@@ -49,6 +49,8 @@ const LINE_LOOK = new THREE.Vector3(TARGET.x, TARGET.y - 1.45, TARGET.z);
 // The close-up: the board about 45% of the screen's width, right of the middle, stands behind it.
 const CLOSE_POS = new THREE.Vector3(TARGET.x - 1.2, TARGET.y + 0.4, TARGET.z + 4.8);
 const CLOSE_LOOK = new THREE.Vector3(TARGET.x - 0.1, TARGET.y - 0.08, TARGET.z);
+// Where the flight's camera is when the arrow hits: a little closer than CLOSE_POS, so it can ease back.
+const ARRIVE_POS = CLOSE_POS.clone().lerp(new THREE.Vector3(TARGET.x, TARGET.y, TARGET.z), 0.05);
 /** The way an arrow travels into the face at (x, y): from the right and a little above, so in the
  *  close-up it sticks out long, up and to the right (the recording). */
 function inDir(x, y) { return new THREE.Vector3(-0.62 - x * 0.04, -0.05 - y * 0.03, -1).normalize(); }
@@ -447,6 +449,17 @@ export class Renderer {
     }
   }
 
+  /** Just after a hit the camera is still easing back the last few centimetres into the close-up
+   *  (the recording: the board shrinks about 5% over half a second, then holds). k: 0 at the hit,
+   *  1 settled. */
+  settle(k) {
+    k = Math.max(0, Math.min(1, k));
+    const e = 1 - (1 - k) * (1 - k);
+    this.view = 'close';
+    this.cam.position.copy(ARRIVE_POS).lerp(CLOSE_POS, e);
+    this.cam.lookAt(CLOSE_LOOK);
+  }
+
   /** A world point on screen (CSS px), from the current camera. */
   toScreen(v) {
     const p = v.clone().project(this.cam);
@@ -494,7 +507,7 @@ export class Renderer {
     // Still while the arrow climbs (FLIGHT_HOLD), then a glide that speeds up and settles.
     const k = u <= FLIGHT_HOLD ? 0 : (u - FLIGHT_HOLD) / (1 - FLIGHT_HOLD);
     const c = k + 0.3 * k * (1 - k);                 // near steady, easing in, as measured off the recording
-    cam.position.copy(EYE).lerp(CLOSE_POS, c);
+    cam.position.copy(EYE).lerp(ARRIVE_POS, c);
     cam.lookAt(LINE_LOOK.clone().lerp(CLOSE_LOOK, c));
     cam.updateMatrixWorld();
   }

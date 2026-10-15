@@ -72,7 +72,8 @@ the bow kicks 0.06 s (`JOLT_T`), then the flight, 0.8 s (`FLIGHT_T`): the camera
 first fifth while the arrow climbs up and right, then glides to the close-up as the arrow drops in
 from the right (`render.js` `_camAt` / `_tipAt`, framed from the camera, not simulated). The number
 pops 0.6 s later with stars and the scored ring flashes yellow (`_pop`, `.ar-ringflash`); the target
-stays up 2 s. Back on the line the view cuts and the bow slides up into place (`BOW_IN_T` 0.2 s).
+stays up 2 s; the camera eases back about 5% over the first 0.55 s (`SETTLE_T`, `render.settle`).
+Back on the line the view cuts and the bow slides up into place (`BOW_IN_T` 0.2 s).
 After the other player's round their arrows land one by one with red tiles, then the yellow **Your
 Turn** button. Pass and play hands over with a **Pass to <name>** card.
 
@@ -93,6 +94,8 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   fork and column right of the sight, the shelf below-left of the column, the black grip under the
   shelf, the hand round it, the sleeve to a fixed shoulder (`SHOULDER`). The arrow runs from a
   nock by the face (`NOCK`) through the rest (`REST`). No lettering is copied from the recording.
+- **Draw calls**: the bow's static parts are merged into one mesh per material (`mergeByMaterial`):
+  about 97 a frame while aiming, the bow 23 of them.
 - **The close-up**: the board half-width is 1.14 face radii as DRAWN (`BOARD_HALF`; the rules'
   `BOSS` stays 1.3, which only matters for arrows that score 0), 1.2x taller than wide, about half
   the screen wide, seen from the left. Arrows arrive from the right, nearly level (`inDir`); blue in
