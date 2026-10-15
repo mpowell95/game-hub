@@ -14,6 +14,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordMinesweeper } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
+import { isAdminDevice } from '../../js/admin-config.js';
 import E, { LEVELS, OPEN, FLAGGED, QUESTION } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -91,6 +92,9 @@ function loadSettings() {
       vibrate: v.vibrate === true,
       // "?" marks in Flag mode (2026-10-15): flag -> ? -> blank. On unless turned off.
       marks: v.marks !== false,
+      // NO-GUESS boards (2026-10-15): Matt's devices only while he tests them; their rounds count
+      // for nothing (js/game-stats.js `ms.practice`).
+      noGuess: v.noGuess === true,
     };
   } catch { return { version: 1, level: 'easy', safeFirst: true, longPress: true, vibrate: false, marks: true }; }
 }
@@ -324,6 +328,7 @@ class MinesweeperUI {
       <div class="ms-card"><h3>${esc(t('difficulty'))}</h3><div class="ms-diffs">${diffs}</div></div>
       <div class="ms-card"><h3>${esc(t('your_best'))}</h3><div class="ms-bests">${bestCells}</div></div>
       <div class="ms-card"><h3>${esc(t('options'))}</h3><div class="ms-opts">
+        ${isAdminDevice() ? opt('noGuess', 'no_guess_opt', '') : ''}
         ${opt('marks', 'marks_opt', '')}
         ${opt('longPress', 'long_press', '')}
         ${canVibrate ? opt('vibrate', 'vibrate', '') : ''}
@@ -425,16 +430,19 @@ class MinesweeperUI {
   startOrResume() {
     const saved = loadSave(this.settings.level);
     if (saved) { this.game = saved.state; this.mode = saved.mode; this.elapsedMs = saved.state.elapsedMs | 0; }
-    else { this.game = E.createGame(this.settings.level); this.mode = 'dig'; this.elapsedMs = 0; }
+    else { this.game = E.createGame(this.settings.level, { noGuess: this._noGuessOn() }); this.mode = 'dig'; this.elapsedMs = 0; }
     this._result = null;
     this.renderGame();
   }
+
+  /** No-guess boards are dealt only on Matt's devices, and only with the switch on. */
+  _noGuessOn() { return !!this.settings.noGuess && isAdminDevice(); }
 
   newGame(level) {
     this._clearTimers();
     const lv = level || (this.game && this.game.level) || this.settings.level;
     clearSave(lv);
-    this.game = E.createGame(lv);
+    this.game = E.createGame(lv, { noGuess: this._noGuessOn() });
     this.mode = 'dig';
     this.elapsedMs = 0;
     this._result = null;
@@ -449,7 +457,7 @@ class MinesweeperUI {
     this.root.innerHTML = `<div class="ms-screen ms-play">
       ${this._topbar(`<button type="button" class="gh-btn gh-btn--icon ms-helpbtn" data-act="howto" aria-label="${esc(t('help_aria'))}">?</button>`)}
       <div class="ms-hdr">
-        <button type="button" class="ms-level" data-act="tomenu" aria-label="${esc(t('change_difficulty'))}">${diffShapeSVG(L.tier)}<span>${esc(t(g.level))}</span></button>
+        <button type="button" class="ms-level" data-act="tomenu" aria-label="${esc(t('change_difficulty'))}">${diffShapeSVG(L.tier)}<span>${esc(t(g.level))}</span>${g.noGuess ? '<i class="ms-ng">NG</i>' : ''}</button>
         <div class="ms-readout" data-role="mines" aria-live="off">${FLAG_SVG('#e0532f')}<span data-role="mines-n">000</span></div>
         <button type="button" class="ms-face" data-act="new" aria-label="${esc(t('new_game'))}">${FACE_SVG('ok')}</button>
         <div class="ms-readout" data-role="clock">${CLOCK_SVG}<span data-role="clock-n">00:00</span></div>
@@ -880,10 +888,11 @@ class MinesweeperUI {
     const x = i % g.w, y = (i / g.w) | 0;
     const wasGenerated = g.generated;
     // A tap on an already-open number is a CHORD, the shortcut this game is actually played with.
-    const res = (g.cell[i] === OPEN && g.num[i] > 0) ? E.chord(g, x, y) : E.openCell(g, x, y);
+    const isChord = g.cell[i] === OPEN && g.num[i] > 0;
+    const res = isChord ? E.chord(g, x, y) : E.openCell(g, x, y);
     if (!wasGenerated && g.generated) this._startTimer();   // the clock starts on the first dig
     if (res.changed.length) for (const k of res.changed) this._paintCell(k);
-    if (g.dead) { E.revealAll(g); this._finish(false); return; }
+    if (g.dead) { E.revealAll(g); this._finish(false, isChord ? 'chord' : 'dig'); return; }
     if (g.won) { this._paintAll(); this._finish(true); return; }
     this._syncHud();
     this._persist();
@@ -927,7 +936,7 @@ class MinesweeperUI {
 
   /* ---- finishing ----------------------------------------------------------------------------- */
 
-  _finish(won) {
+  _finish(won, how) {
     this._stopTimer();
     clearSave(this.game.level);
     const g = this.game;
@@ -939,7 +948,10 @@ class MinesweeperUI {
     const flagsWrong = E.wrongFlags(g);
     // Record BEFORE reading the wins total back, so the number on the screen includes this game.
     try {
-      recordMinesweeper(level, won, { timeMs, cleared, flagsRight, mines: g.mines });
+      // A loss records WHY (engine lossCause), and a no-guess board records as a test round only.
+      let cause;
+      if (!won) { try { cause = E.lossCause(g, how); } catch (err) { cause = 'unknown'; console.error('[minesweeper] lossCause', err); } }
+      recordMinesweeper(level, won, { timeMs, cleared, flagsRight, mines: g.mines, cause, practice: !!g.noGuess });
     } catch (err) { console.error('[minesweeper] record', err); }
     const isBest = won && timeMs > 0 && (prevBest <= 0 || timeMs < prevBest);
     this._result = { won, timeMs, cleared, flagsRight, flagsWrong, level, prevBest, isBest, wins: winsSoFar() };

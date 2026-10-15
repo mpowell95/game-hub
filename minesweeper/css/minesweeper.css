@@ -331,6 +331,8 @@
   cursor: pointer; touch-action: manipulation;
 }
 .ms-root .ms-level svg { width: 16px; height: 16px; flex: 0 0 auto; }
+/* A no-guess board (Matt's test mode, 2026-10-15): its rounds count for nothing, so say so. */
+.ms-root .ms-ng { font-style: normal; font-size: 11px; font-weight: 900; letter-spacing: .04em; padding: 2px 4px; border-radius: 5px; background: var(--ms-wrong, #ffce3a); color: #16243a; }
 /* A "?" mark: a note to self, quieter than a flag. */
 .ms-root .ms-c.is-q { color: var(--ms-muted); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 

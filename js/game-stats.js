@@ -313,6 +313,7 @@ export const SD_TIERS = ['easy', 'medium', 'hard', 'expert'];
  *  two different games' vocabularies that happen to coincide, and coupling them would make a
  *  change to one silently change the other. */
 export const MS_LEVELS = ['easy', 'medium', 'hard', 'expert'];
+const MS_LOSS_CAUSES = ['slip', 'misread', 'rushed', 'forced', 'chord', 'unknown'];
 // Ball Run difficulties (easy|medium|hard, no expert tier).
 export const BR_DIFFS = ['easy', 'medium', 'hard'];
 // Snake difficulties (easy|medium|hard — speed tiers; same axis shape as Ball Run, own constant
@@ -1663,6 +1664,21 @@ export function recordMinesweeper(level, won, extras = {}) {
   const st = loadStats();
   const g = st.games.minesweeper;
   ensureMs(g);
+  const lvKey = MS_LEVELS.indexOf(normDiff(level)) >= 0 ? normDiff(level) : null;
+  // A NO-GUESS TEST ROUND (2026-10-15, Matt testing it before anyone else gets it: "I'll need a way
+  // to cancel or ignore certain rounds"): kept in its own bucket, `ms.practice[level]` = {played,
+  // won}, and counted by NOTHING else (no total, no tier, no best, no leaderboard).
+  if (extras.practice) {
+    if (!g.ms.practice || typeof g.ms.practice !== 'object') g.ms.practice = {};
+    if (lvKey) {
+      const b = g.ms.practice[lvKey] || (g.ms.practice[lvKey] = { played: 0, won: 0 });
+      b.played = (b.played | 0) + 1;
+      if (won) b.won = (b.won | 0) + 1;
+    }
+    st.updatedAt = new Date().toISOString();
+    persist(st);
+    return st;
+  }
   const timeMs = Math.max(0, extras.timeMs | 0);
   const flagsRight = Math.max(0, extras.flagsRight | 0);
   const lv = MS_LEVELS.indexOf(normDiff(level)) >= 0 ? normDiff(level) : null;
@@ -1681,6 +1697,14 @@ export function recordMinesweeper(level, won, extras = {}) {
     }
     // How close a board got (Matt, 2026-10-15: "What's the closest Ana has gotten to beating
     // hard?"). A win is 100. Only ever improves (rule 2).
+    // WHY A BOARD WAS LOST (2026-10-15, Matt: "record why people lose"): `ms.lossBy[level][cause]`,
+    // additive counters, cause from minesweeper/js/engine.js lossCause(). A report: nothing in the
+    // game reads it; tools/read-minesweeper.mjs does.
+    if (!won && MS_LOSS_CAUSES.includes(extras.cause)) {
+      if (!g.ms.lossBy || typeof g.ms.lossBy !== 'object') g.ms.lossBy = {};
+      const m = g.ms.lossBy[lv] || (g.ms.lossBy[lv] = {});
+      m[extras.cause] = (m[extras.cause] | 0) + 1;
+    }
     const pct = won ? 100 : Math.min(100, Math.max(0, Math.round(+extras.cleared || 0)));
     if (!g.ms.bestClearedPct || typeof g.ms.bestClearedPct !== 'object') g.ms.bestClearedPct = {};
     g.ms.bestClearedPct[lv] = Math.max(g.ms.bestClearedPct[lv] | 0, pct);
