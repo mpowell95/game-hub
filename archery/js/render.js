@@ -41,7 +41,7 @@ export const ARROW_COLORS = { me: '#1f6fe5', them: '#e0362b', plain: '#f0c419' }
 const FLIGHT_T = 0.8;                           // seconds, release to hit (the recording, at 30 fps)
 const FLIGHT_HOLD = 0.2;                        // of it, the camera still while the arrow climbs
 const BOWL_Z = 10;                              // the centre of the stadium's curve
-const BOARD_TALL = 1.2;                         // the board's height over its width (drawing only)
+const BOARD_TALL = 1.06;                        // the board's height over its width (drawing only)
 // The board's half-width in face radii, as drawn: the recording's face nearly fills it. Narrower
 // than the rules' BOSS (1.3), which only matters for arrows that score 0 either way.
 const BOARD_HALF = 1.14;
@@ -53,7 +53,7 @@ const CLOSE_LOOK = new THREE.Vector3(TARGET.x - 0.1, TARGET.y - 0.08, TARGET.z);
 const ARRIVE_POS = CLOSE_POS.clone().lerp(new THREE.Vector3(TARGET.x, TARGET.y, TARGET.z), 0.05);
 /** The way an arrow travels into the face at (x, y): from the right and a little above, so in the
  *  close-up it sticks out long, up and to the right (the recording). */
-function inDir(x, y) { return new THREE.Vector3(-0.62 - x * 0.04, -0.05 - y * 0.03, -1).normalize(); }
+function inDir(x, y) { return new THREE.Vector3(-0.62 - x * 0.04, -0.1 - y * 0.03, -1).normalize(); }
 export { FLIGHT_T };
 
 const LOOK = {

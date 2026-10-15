@@ -534,8 +534,9 @@ class ArcheryUI {
 
   _hint(key) {
     if (!key) { this.hintEl.classList.remove('is-show'); this.hintDot.classList.remove('is-show'); return; }
-    this.hintEl.textContent = t(key);
-    this.hintEl.classList.add('is-show');
+    // No words on the range (the recording has none; How to play explains it): only the pulsing
+    // dot and hand on the bow at rest. Screen readers still hear it, through the live region.
+    this._say(t(key));
     this.hintDot.classList.toggle('is-show', key === 'hint_hold');
   }
 
@@ -586,6 +587,7 @@ class ArcheryUI {
       if (turnChanged && (this.mode === 'cpu' || this.mode === 'mp')) {
         // Their round is on the target: the yellow button takes you to the line.
         this.phase = 'yourturn';
+        for (const el of this.fx.querySelectorAll('.ar-pop')) el.remove();   // the recording: no number left up
         this._goNext = () => this._toLine(stageStart, event);
         this._bottom('go');
         this._say(t('say_turn', { name: this.seats[m.turn].name }));
@@ -1455,7 +1457,7 @@ class ArcheryUI {
       // The hint dot sits left of the hand, on the bow at rest.
       if (this.hintDot.classList.contains('is-show')) {
         const kk = idle.k;
-        this.hintDot.style.transform = `translate(${(idle.x + 10 * kk).toFixed(1)}px, ${(idle.y + 360 * kk).toFixed(1)}px)`;
+        this.hintDot.style.transform = `translate(${(idle.x - 22 + 10 * kk).toFixed(1)}px, ${(idle.y + 360 * kk).toFixed(1)}px)`;
       }
     } else { this.r.setScope(null); this.r.setBow(null); }
     this.r.render();

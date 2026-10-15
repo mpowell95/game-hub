@@ -97,7 +97,7 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
 - **Draw calls**: the bow's static parts are merged into one mesh per material (`mergeByMaterial`):
   about 97 a frame while aiming, the bow 23 of them.
 - **The close-up**: the board half-width is 1.14 face radii as DRAWN (`BOARD_HALF`; the rules'
-  `BOSS` stays 1.3, which only matters for arrows that score 0), 1.2x taller than wide, about half
+  `BOSS` stays 1.3, which only matters for arrows that score 0), 1.06x taller than wide, about half
   the screen wide, seen from the left. Arrows arrive from the right, nearly level (`inDir`); blue in
   front, black behind. Sun shadow of the board (not on software GL).
 - **The stadium**: sky with clouds; a pale canopy roof with dark slanted ribs, its front edge at
@@ -105,6 +105,9 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   tier of blue-and-yellow seats down to the blue barrier (`_buildRoof`, `paintCrowd`).
 - **HUD sizes** match the recording (round pill 18 px, 40 px tiles, 76 px wind card with a square
   white icon, 26 px totals, avatars overlapping the bars, a red V and blue S).
+- **No words on the range** (the recording has none): the hint is only the pulsing dot and hand;
+  the text goes to screen readers through the live region (`_hint`). The last score number is
+  cleared when the Your Turn button shows. The button is 44 px tall, 14 px text.
 - **Names, never "You"** on the result card and match lists (root `CLAUDE.md`): `win_name`,
   `{me}` in `mp_scores`, `mp_you_*`.
 

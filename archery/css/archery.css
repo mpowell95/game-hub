@@ -289,7 +289,7 @@
 .ar-root .ar-bottom > * { pointer-events: auto; }
 .ar-root .ar-go {
   width: min(420px, 100%);
-  min-height: 52px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -298,7 +298,7 @@
   border-radius: 999px;
   background: var(--ar-yellow);
   color: #111;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 800;
   box-shadow: 0 4px 0 #c9ad16, 0 6px 16px rgba(0, 0, 0, 0.3);
   animation: ar-glow 1.6s ease-in-out infinite;
