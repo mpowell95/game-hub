@@ -326,3 +326,6 @@ The digit is the shape, so hue is redundant and nothing depends on telling two c
 classic 2-green / 3-red pair is teal and vermilion here, this repo's own colorblind-safe pair. Flag
 is a pennant, mine is a spiked disc, a wrong flag is the pennant struck through: all three read with
 no colour at all.
+
+**Its leaderboard board is its own (2026-10-15):** tabs All / Easy / Med / Hard / Expert, best time
+or best % per person. `js/CLAUDE.md`, "Minesweeper's own board, and no \"YOU\"".

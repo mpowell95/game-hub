@@ -3803,3 +3803,20 @@ The order now is: **import, then chrome, then `init()`**. The import stays in fr
 not an empty frame, is what a player looks at while a game downloads; only the mount moved. The
 chrome itself is one method, `_enterGameChrome(game)`, shared with the load-failure path so the two
 cannot drift apart.
+
+
+## Minesweeper's own board, and no "YOU" (2026-10-15)
+
+Matt, on a screenshot of the Minesweeper board: *"I hate the leaderboard... It's terrible."* The board
+was 4 cards to a screen, each with four tier pills, a YOU badge that cut his name to "Mat...", a
+"BEST TIME" label per row and a "Ranked by hardest difficulty first..." sentence. Mockups (A tabs, B
+podium, C table) went to him; he chose A with changes: *"The default should be All. Not easy. And we
+should show everybody's best % complete on difficulties they haven't finished... If you click on hard,
+it should show Ana's time on her complete round, my best completion % and anyone else who has tried
+hard."* Then: *"The All view should only show individual [bests]. Not the time for every level."*,
+Expert tab always shown, "Med" for Medium.
+
+Built as a Minesweeper-only renderer (`msBoardHTML`) so no other board's ranking moved. The % only
+exists for boards finished since `bestClearedPct` was added the same morning; a level played only
+before that shows a dash, never an estimate (rule 4). Matt accepted that. Mockup:
+https://claude.ai/artifact/5NnrNK7Zq2e8r32EDTXukx.

@@ -20,7 +20,7 @@ a shared player profile and a synced record of every game anyone plays on any of
 ## By Player shows, per person
 
 - Rank number (people who tie share a rank)
-- Name and emoji avatar, with a "You" marker on the viewer's own row
+- Name and emoji avatar; the viewer's own row is highlighted (no "You" word since 2026-10-15)
 - One number: their total in the selected category, or their total games played. It is labelled
   "wins" in the four difficulties and in Everything, "runs" in No tier, and "vs wins" in Versus
 - A breakdown by category — only as many as fit the line, chosen biggest-first with the selected
@@ -78,6 +78,12 @@ time; Chinchón has chinchóns, closes and minus tens.
 The games with standing records are Connect 4, Chinchón, Escoba, Nuts & Bolts, Ball Run, Dots and
 Boxes, Boggle, Snake, Hill Climb, Skeeball and Tic Tac Toe. Elsewhere the section is simply absent —
 as it is on those games too, until somebody has a non-zero value for at least one of their records.
+
+**Minesweeper's board is its own shape (2026-10-15).** Tabs All, Easy, Med, Hard, Expert, opening on
+All. All shows one result per person: the hardest level they solved and their best time there, or, if
+they have solved none, the hardest level they have a best % cleared at. A level tab lists everyone who
+played that level: times first (fastest), then best % (highest), then a dash for plays from before %
+was saved (2026-10-15). Each row also says how many games that person played.
 
 ## A player's own page (opened from either view)
 

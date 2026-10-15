@@ -442,6 +442,78 @@ function msBestAt(g, tier) {
   return v > 0 ? v : null;
 }
 
+// --- MINESWEEPER'S OWN BOARD (2026-10-15) --------------------------------------------------------
+// Matt: "The default view should show everyone's score. Regardless of what level. But it should
+// be clear that Ana solved a hard puzzle... and it should show the % complete Natalia and Unai
+// achieved when they tried easy. If you click on hard, it should show Ana's time on her complete
+// round, my best completion % and anyone else who has tried hard."
+//
+// So: tabs All / Easy / Med / Hard / Expert (all four always), All first. All = ONE number per
+// person, their best: the hardest level they SOLVED (fastest time), else the hardest level with a
+// best % cleared. A level tab = everyone who PLAYED it: times first (fastest), then best % (highest).
+// `ms.bestClearedPct` was first written 2026-10-15, so a level played only before then has plays
+// and no % - it prints a dash, never a guess (THE LAW rule 4).
+function msPctAt(g, tier) {
+  const ms = (g.games.minesweeper || {}).ms;
+  const pc = ms && ms.bestClearedPct;
+  const key = MS_TIER_KEYS[tier - 1];
+  return pc && typeof pc === 'object' && key ? Math.max(0, Math.min(100, pc[key] | 0)) : 0;
+}
+/** One player's result at one level: {ms} solved, {pct} best % on a board never solved, {} played
+ *  with no % kept, or null when that level was never played. */
+function msCellAt(g, tier) {
+  if (playsAtTier(g, ['minesweeper'], tier) <= 0) return null;
+  const ms = msBestAt(g, tier);
+  if (ms != null) return { ms };
+  const pct = msPctAt(g, tier);
+  return pct > 0 ? { pct } : {};
+}
+function msCellRank(c) { return c.ms != null ? [0, c.ms] : c.pct != null ? [1, -c.pct] : [2, 0]; }
+function msCellCmp(a, b) { const x = msCellRank(a); const y = msCellRank(b); return x[0] - y[0] || x[1] - y[1]; }
+/** All's one number: hardest level solved, else hardest level with a %, else hardest played. */
+function msHeadline(g) {
+  const cells = [4, 3, 2, 1].map((tier) => ({ tier, c: msCellAt(g, tier) })).filter((x) => x.c);
+  return cells.find((x) => x.c.ms != null) || cells.find((x) => x.c.pct != null) || cells[0] || null;
+}
+function msAllCmp(a, b) {
+  const x = msHeadline(a); const y = msHeadline(b);
+  if (!x || !y) return (x ? 0 : 1) - (y ? 0 : 1);
+  const sx = x.c.ms != null ? 0 : x.c.pct != null ? 1 : 2;
+  const sy = y.c.ms != null ? 0 : y.c.pct != null ? 1 : 2;
+  return sx - sy || y.tier - x.tier || msCellCmp(x.c, y.c);
+}
+function msCellHTML(c) {
+  if (c.ms != null) return `<span class="lb-mstime">${esc(formatBoardMetric(c.ms, 'minesweeper', ''))}</span>`;
+  if (c.pct != null) return `<span class="lb-mspct"><span class="lb-msbar" aria-hidden="true"><i style="width:${c.pct}%"></i></span>${c.pct}%</span>`;
+  return '<span class="lb-msnone">&mdash;</span>';
+}
+function msTabsHTML() {
+  const tabs = [null, 1, 2, 3, 4].map((tier) => {
+    const sel = _tier === tier;
+    const word = tier == null ? t('lb_diff_all') : tier === 2 ? tx('lb_tab_med', 'Med') : t(TIER_LABEL_KEY[tier]);
+    const shapeHtml = tier ? `<span class="lb-mstab-sh" style="--lb-pill-color:${TIER_COLOR[tier]}">${diffShapeSVG(tier)}</span>` : '';
+    return `<button type="button" class="lb-pill lb-mstab${sel ? ' is-sel' : ''}" data-mstier="${tier == null ? '' : tier}" aria-pressed="${sel}">${shapeHtml}${esc(word)}</button>`;
+  });
+  return `<div class="lb-pills lb-mstabs" role="group">${tabs.join('')}</div>`;
+}
+function msBoardHTML(list) {
+  const tier = _tier;
+  const rows = tier == null
+    ? list.filter((g) => msHeadline(g))
+    : list.filter((g) => msCellAt(g, tier));
+  const cmp = tier == null ? msAllCmp : (a, b) => msCellCmp(msCellAt(a, tier), msCellAt(b, tier));
+  rows.sort((a, b) => cmp(a, b) || rankName(a).localeCompare(rankName(b)));
+  const { rankOf, tiedAt } = rankMap(rows, () => 0, cmp);
+  const cards = rows.length
+    ? `<div class="lb-plist is-board">${rows.map((g) => {
+        const h = tier == null ? msHeadline(g) : { tier: null, c: msCellAt(g, tier) };
+        const big = { cls: 'lb-msval', val: `${h.tier ? tierMarkHTML(h.tier) : ''}${msCellHTML(h.c)}`, unit: t('lb_played_count', { n: playsAtTier(g, ['minesweeper'], tier) }) };
+        return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', '', '');
+      }).join('')}</div>`
+    : emptyState(t('lb_empty_game', { label: labelOf('minesweeper') }));
+  return msTabsHTML() + cards;
+}
+
 function snBestAt(g, tier) {
   const sn = (g.games.snake || {}).sn;
   if (!sn) return 0;
@@ -1219,7 +1291,9 @@ function rankMap(list, valueOf, cmp) {
 
 /** The "this is you" marker, which is a LABEL, not a color: a filled YOU badge beside the name
  *  plus the row's own accent rail (see .lb-pcard.is-me). Never hue alone. */
-function youBadge(g) { return g.key === _meKey ? `<i class="lb-you">${esc(t('lb_you'))}</i>` : ''; }
+// RETIRED 2026-10-15 (root CLAUDE.md: name every player by their profile name, never "You"). The
+// viewer's own row keeps its highlight (.lb-pcard.is-me); the word cut names short ("Mat...").
+function youBadge(g) { return ''; }
 
 /** The card's OLD sub-line ("N games · N runs"). Unused since 2026-07-29 (Matt: "Remove the N
  *  games N runs line... just don't show it on this screen") — left in place, along with its two
@@ -1252,7 +1326,7 @@ function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml, tierHtml) {
       ${chip}
       ${avatarHTML(g)}
       <span class="lb-pid"><span class="lb-pline"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierHtml || ''}</span><span class="lb-psubline">${sub}</span></span>
-      <span class="lb-pnum"><b>${big.val}</b><span>${esc(big.unit)}</span></span>
+      <span class="lb-pnum"><b${big.cls ? ` class="${big.cls}"` : ''}>${big.val}</b><span>${esc(big.unit)}</span></span>
     </div>
     ${footer}
   </button>`;
@@ -1754,6 +1828,7 @@ function gameDetail(list, id) {
       <span class="lb-board-n"><b>${totalPlays}</b><span>${esc(t('lb_games_unit'))}</span></span>
     </div>
   </div>`;
+  if (id === 'minesweeper') return head + msBoardHTML(list);
   const controls = boardControlsHTML(id, fieldTiers, machineIds);
   const showMp = anyMpPlays(list, id);
   const bSort0 = effectiveSort(id);
@@ -2083,6 +2158,8 @@ function onClick(e) {
     rerender();
     return;
   }
+  const msTab = e.target.closest('[data-mstier]');
+  if (msTab) { _tier = msTab.dataset.mstier === '' ? null : Number(msTab.dataset.mstier); rerender(); return; }
   const opt = e.target.closest('.lb-opt');
   if (opt) {
     if (opt.dataset.cat !== undefined) _cat = catFromStored(opt.dataset.cat);
@@ -2528,6 +2605,18 @@ function ensureCss() {
     '.lb-pgame{margin-top:8px}',
     '.lb-panel .gs-grow{min-height:56px}',
     '.lb-note{margin:0 0 12px;font-size:13px;line-height:1.4;color:var(--lb-muted)}',
+    // Minesweeper's own board (2026-10-15): level tabs, a time or a best-% bar per row.
+    '.lb-mstabs{margin:0 0 12px}',
+    '.lb-mstab{flex:1 1 auto;padding:0 6px}',
+    '.lb-mstab-sh{display:inline-flex}.lb-mstab-sh .lb-dshape{width:11px;height:11px;fill:var(--lb-pill-color)}.lb-mstab-sh .lb-dshape-x2{width:19px}',
+    ':root .lb-mstab.is-sel .lb-dshape-t3,:root .lb-mstab.is-sel .lb-dshape-t4{fill:var(--lb-sel-ink)}',
+    '.lb-pnum b.lb-msval{display:inline-flex;align-items:center;gap:6px}',
+    '.lb-pnum b.lb-msval span{font-size:inherit;font-weight:inherit;text-transform:none;letter-spacing:inherit;margin:0;color:inherit}',
+    '.lb-pnum b.lb-msval .lb-tiermark{margin:0}',
+    '.lb-pnum b.lb-msval .lb-mspct{display:inline-flex;align-items:center;gap:6px;font-size:19px;color:var(--lb-muted)}',
+    '.lb-pnum b.lb-msval .lb-msnone{color:var(--lb-muted)}',
+    '.lb-msbar{display:block;width:40px;height:6px;border-radius:3px;background:var(--lb-line);overflow:hidden}',
+    '.lb-msbar i{display:block;height:100%;background:var(--lb-muted)}',
     '.lb-legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;margin:0 0 12px;font-size:12px;font-weight:700;color:var(--lb-muted)}',
     '.lb-legend-i{display:inline-flex;align-items:center;gap:5px}',
     '.lb-legend-i .lb-dshape{width:12px;height:12px;fill:var(--lb-pill-color,#5b6b82)}',
