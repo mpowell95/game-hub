@@ -281,6 +281,7 @@
   font-family: var(--gh-font);
   font-size: var(--gh-fs-sm);
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--gh-dur-fast) var(--gh-ease), color var(--gh-dur-fast) var(--gh-ease);
 }

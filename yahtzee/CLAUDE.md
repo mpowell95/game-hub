@@ -25,6 +25,10 @@ root CLAUDE.md's explicit instruction for this decision).
 
 ## Full-bleed sizing (position:fixed, not flowed)
 
+**`#screenHost` centres with `place-items` AND `place-content: unsafe center`** (2026-10-15): the
+410px stage is wider than most phones until `fitStage()` scales it, and plain `center` fell back to
+the left edge, so the board sat 25px right on a 360px phone with its right edge cut off.
+
 `.yz-root` is `position:fixed; inset:0; height:100dvh`, exactly the pattern `ball-run/css/
 ball-run.css` documents: the hub's own `.hub-main` is a padded, `max-width:720px` box, so a game
 that needs true edge-to-edge full-bleed (this one's fixed 410×730 stage, centered and scaled to
@@ -163,11 +167,12 @@ if it is open (rebuilding it would throw away the running timeline). Both unsubs
 `destroy()`.
 
 Not translated on purpose: **Yahtzee** itself (a proper noun in both languages, same rule the repo
-applies to card-suit and figure names), and the ROLL/PLAY/SMALL/LARGE faces, which are drawn
-artwork from the original pixel clone rather than text this game sets.
+applies to card-suit and figure names), and the SMALL/LARGE faces, which are drawn artwork from the
+original pixel clone. **ROLL / PLAY / BACK are text and DO translate (2026-10-15, Spanish review):
+TIRAR / JUGAR / ATRÁS** (`btn_roll`, `btn_play`, `btn_back`), on the board and in How to play.
 
-Verified in the browser with `gamehub.lang.v1` set to `es`: setup reads *Vs Computadora / Crear
-Partida / Unirse / Jugar / Cómo se juega*, the sheet reads *CÓMO SE JUEGA* over *"Lanza los dados
+Verified in the browser with `gamehub.lang.v1` set to `es`: setup reads *Vs máquina / Crear
+partida / Unirse / Jugar / Cómo se juega* (shortened 2026-10-15: "Vs Computadora" wrapped to three lines), the sheet reads *CÓMO SE JUEGA* over *"Lanza los dados
 al empezar cada turno"*, the pods read *Tú* and *Computadora*, and holding the house symbol gives
 *Full — Puntos: 25*. The longer Spanish bonus label (*BONO DE SECCIÓN*) was measured rather than
 eyeballed: 52px, no overflow, no collision with the progress pill.

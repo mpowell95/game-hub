@@ -433,8 +433,8 @@
 }
 
 /* ---------- Setup / lobby screen (not part of the pixel-exact spec; functional only) ---------- */
-.yz-root #screenHost{
-  width:100%; height:100%; display:grid; place-items:center; overflow:auto;
+.yz-root #screenHost{ /* UNSAFE center: the 410px stage sat 25px right on a 360px phone (yahtzee/CLAUDE.md) */
+  width:100%; height:100%; display:grid; place-items:unsafe center; place-content:unsafe center; overflow:auto;
 }
 .yz-root .yz-setup{
   width:min(360px, 92vw); display:flex; flex-direction:column; align-items:stretch; gap:14px;

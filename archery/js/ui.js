@@ -104,7 +104,7 @@ function helpSvg() {
     <g transform="translate(176 40)" fill="#ffffff">
       <path d="M30 0 H4" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
       <path d="M10 -9 L-2 0 L10 9 Z"/>
-      <text x="14" y="26" font-size="12" font-weight="800" text-anchor="middle">WIND</text>
+      <text x="14" y="26" font-size="12" font-weight="800" text-anchor="middle">${t('wind', { n: '' }).trim()}</text>
     </g>
   </svg>`;
 }

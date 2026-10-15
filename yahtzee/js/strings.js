@@ -30,6 +30,7 @@ const STRINGS = {
     room_code: 'Room code',
     join: 'Join',
     back: 'Back',
+    btn_roll: 'ROLL', btn_play: 'PLAY', btn_back: 'BACK',
     host: 'Host',
     opponent: 'Opponent',
     start_match: 'Start Match',
@@ -105,8 +106,8 @@ const STRINGS = {
   es: {
     title: 'Yahtzee',
 
-    mode_solo: 'Vs Computadora',
-    mode_host: 'Crear Partida',
+    mode_solo: 'Vs máquina',
+    mode_host: 'Crear partida',
     mode_join: 'Unirse',
     play: 'Jugar',
     howto: 'Cómo se juega',
@@ -114,6 +115,7 @@ const STRINGS = {
     room_code: 'Código de sala',
     join: 'Unirse',
     back: 'Atrás',
+    btn_roll: 'TIRAR', btn_play: 'JUGAR', btn_back: 'ATRÁS',
     host: 'Anfitrión',
     opponent: 'Rival',
     start_match: 'Empezar partida',

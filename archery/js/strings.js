@@ -172,7 +172,7 @@ export const STRINGS = {
     practice_avg: 'Por flecha',
     help_goal: '3 rondas de 3 flechas. Gana quien más puntos haga.',
     help_rings: 'El centro vale 10, cada anillo hacia fuera uno menos.',
-    help_hold: 'Mantén pulsado para tensar. Arrastra para apuntar. Suelta para tirar.',
+    help_hold: 'Mantén para tensar. Arrastra y apunta. Suelta y tira.',
     help_wind: 'El viento empuja la flecha. Apunta contra él.',
     help_wind2: 'Sopla más fuerte en cada ronda.',
     help_ring: 'El anillo del visor se gasta mientras tensas.',

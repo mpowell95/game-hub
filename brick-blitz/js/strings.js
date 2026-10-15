@@ -66,7 +66,7 @@ export const STRINGS = {
   },
   es: {
     title: 'Brick Breaker',
-    tagline: 'Rompeladrillos de neón. Rómpelos todos.',
+    tagline: 'Ladrillos de neón. Rómpelos todos.',
     difficulty: 'Dificultad',
     diff_easy: 'Fácil',
     diff_medium: 'Normal',

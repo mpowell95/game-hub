@@ -82,7 +82,7 @@ export const STRINGS = {
     play_again: 'Jugar otra vez',
     change_setup: 'Ajustes',
     close: 'Cerrar',
-    help_goal: 'Come la comida y crece todo lo que puedas.',
+    help_goal: 'Come y crece todo lo que puedas.',
     help_controls: 'Gira deslizando el dedo por el tablero, con las flechas en pantalla, o con las flechas del teclado.',
     help_walls: 'Chocar con tu propio cuerpo termina la partida. Las paredes también, a menos que las hayas desactivado.',
     aria_board: 'Tablero de Snake',

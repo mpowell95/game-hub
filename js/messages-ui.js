@@ -148,7 +148,7 @@ function ensureCss() {
                 margin: 0 calc(var(--gh-sp-4) * -1); padding: 0 var(--gh-sp-4); }
   .msg-lead { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.5; }
   .msg-push { margin: var(--gh-sp-2) 0 var(--gh-sp-3); }
-  .msg-push .gh-btn { margin-bottom: var(--gh-sp-2); }
+  .msg-push .gh-btn { margin-bottom: var(--gh-sp-2); padding: 0 var(--gh-sp-3); }
   .msg-back { margin-right: var(--gh-sp-2); }
   .gh-modal__title .msg-sub { display: block; font-size: var(--gh-fs-xs); font-weight: 600;
                               color: var(--gh-muted); margin-top: 2px; }

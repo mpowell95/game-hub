@@ -141,6 +141,7 @@
 
 /* Levels and How to play share one row under the card. */
 .gl-root .gl-home-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gl-root .gl-home-foot .gh-btn { padding: 0 8px; white-space: nowrap; }
 
 /* --- LEVELS: the level list, 25 a page (pages, never a scroll) -------------------------------- */
 .gl-root .gl-levels {

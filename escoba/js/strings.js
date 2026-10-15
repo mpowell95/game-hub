@@ -240,7 +240,7 @@ export const STRINGS = {
     btn_close: 'Cerrar',
     aria_avatar: 'Avatar {av}',
 
-    howto_title: 'Cómo se juega a la Escoba',
+    howto_title: 'Cómo se juega',
     btn_done: 'Hecho',
     howto_goal: 'Captura cartas que sumen 15.',
     howto_caption: 'En tu turno juega una carta; si suma 15 con cartas de la mesa, las capturas. Una escoba despeja toda la mesa.',

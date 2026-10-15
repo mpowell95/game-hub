@@ -77,7 +77,7 @@ export const STRINGS = {
     options: 'Opciones',
     marks_opt: 'Marcas ?',
     no_guess_opt: 'Sin adivinar',
-    long_press: 'Mantén presionado para marcar',
+    long_press: 'Mantener para marcar',
     vibrate: 'Vibrar al marcar',
     play: 'Jugar',
     resume: 'Continuar',
@@ -116,7 +116,7 @@ export const STRINGS = {
     close: 'Cerrar',
     // How to play
     help_lead: 'Abre cada casilla que no sea una mina.',
-    help_chord_cap: 'Toca un numero que ya tenga todas sus marcas para abrir el resto.',
+    help_chord_cap: 'Toca un número que ya tenga todas sus marcas para abrir el resto.',
     help_loupe_cap: 'La burbuja muestra la casilla donde estas. Tu toque se aplica al levantar.',
   },
 };

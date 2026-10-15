@@ -74,7 +74,7 @@ export const STRINGS = {
   },
   es: {
     title: 'Uno',
-    tagline: 'Combina color o número. Sé el primero en quedarte sin cartas.',
+    tagline: 'Combina color o número. Vacía tu mano primero.',
     you: 'Tú',
     computer_n: 'Ordenador {n}',
     players: 'Jugadores',
