@@ -24,7 +24,7 @@ every device that shares a player code into one person's view of Leaderboards an
 stats are never merged at rest, only when read. This means a brand-new device that links to the
 lost player's existing code **immediately shows that person's full combined history**, including
 everything the old device ever synced, with zero risk and zero manual data entry. This exact
-scenario is covered by `players-agg.test.mjs`'s "aggregateForViewer: fresh device with my code
+scenario is covered by `tools/players-agg.test.mjs`'s "aggregateForViewer: fresh device with my code
 shows my other devices' history" test.
 
 1. Find the lost player's 5-character code (they saw it on their own Profile page under "Your

@@ -30,7 +30,7 @@ since 2026-09-22 (rules PUBLISHED by Matt 2026-09-22). Open items: "Still open" 
 - **`devOnly: true` and NO `released` date**, deliberately (`released` drives the New pill and must
   announce the day it goes live). Releasing needs no commit: the admin page's live switch overrides.
 - It **has** a `GAME_META` row in `js/leaderboard-ui.js` even while admin-only (`OFF_THE_BOARD` in
-  `players-agg.test.mjs` is empty and must stay empty); `isGameOnLauncher` hides it from the board.
+  `tools/players-agg.test.mjs` is empty and must stay empty); `isGameOnLauncher` hides it from the board.
 - **Difficulties are `Easy / Medium / Hard`** (the hub's words). Never invent new terminology.
 
 ## The three things it does NOT own
@@ -276,7 +276,7 @@ name or simulate the inset (~59px).** The probe asks `elementFromPoint` whether 
   **`js/hub.js` knows only that a registry entry may declare an `alerts` module**, imports it lazily
   AFTER the launcher has painted, guarded (a tile must never break the launcher).
 - **alert.js is in `hoops4/` and not `js/`** because it writes a `gamehub.*` key (a cache-first SHELL
-  module may not; `test-sw-strategy.mjs`).
+  module may not; `tools/test-sw-strategy.mjs`).
 - The two states are told apart by WORDS ("{who} challenged you!" / "Your Turn!"), not colour. Bubble
   anchors by `is-col-left`/`is-col-right`, flips under on the top row (`is-below`).
 - **The ceremony** (`showCeremony` in `ui.js`) is ARMED by the launcher and taken once on mount, never
@@ -288,7 +288,7 @@ name or simulate the inset (~59px).** The probe asks `elementFromPoint` whether 
   `hoops/index/<you>`; `js/hub.js _watchGameAlerts` subscribes ONCE per game for the hub's life.
 - **`_dismissGameAlert`/`showLauncher()` must re-render/re-ask**: `launch()` only HIDES the grid, so the
   bubble element came back; `_checkGameAlerts` must clear an alert that stopped being true. Three
-  `[KNOWN-BUG PROBE]`s in `test-hoops4-mp.mjs`.
+  `[KNOWN-BUG PROBE]`s in `tools/test-hoops4-mp.mjs`.
 - **Delivery moves to the FIRST SHOT:** shooting first, `createGame` writes only the sender's row
   (`writeRows(..., only)`); the first `pushMove` writes both (a first-shot miss under one-shot is a
   `passed` entry, so it delivers). `first: 'them'` is told at once. `armTurn(id, updated)` stamps the
@@ -321,7 +321,7 @@ Picking an opponent opens a TERMS screen (shots per turn defaulting to the chall
 single / best of 3 / best of 5, optional caption); a failed send keeps the form. **`seriesAfter(game)`
 is pure and the ONLY place the rules live** (best of 3 needs two wins, best of 5 three; **a drawn board
 gives nobody a win**, so a series also ends when it runs out of games). **The next game is started by a
-BUTTON, never automatically** (`test-hoops4-mp.mjs` asserts `pushMove`'s body never calls it). Sides
+BUTTON, never automatically** (`tools/test-hoops4-mp.mjs` asserts `pushMove`'s body never calls it). Sides
 swap (`first: 'them'`). Terms shown on the accept card (read from the MATCH), as "Game 2 of 3" on HUD
 and active rows, and the running score on the game-over card. Terms screen reuses `.h4-opt` WITH its
 checkmark (selection never by tint alone); caption box is NOT `.h4-mp-input` (room-code style).
@@ -396,24 +396,17 @@ squeeze the outer columns). **`aimDiv` is the first number to tune if Matt finds
 
 ## Still open
 
-**This is the list.** Track it here or nowhere (mid-file "still to come" paragraphs go stale).
+Open items: see the root TODO.md, "Connect 4 Hoops".
 - Done: quick chat (2026-09-22), challenge history (2026-09-22), `hoops` rules published (2026-09-22),
   "50-50" bounce CLOSED (2026-09-23, "leave the hoops as is"), scoring rate CLOSED.
-- **The two bounce gaps `test.js` owes** (41% of misses bounce vs a 50% bar; 0.45 m/s vs 0.50) stay red
-  in `KNOWN_GAPS`. **Ask Matt before spending anything here**: every lever that restores bounce costs
-  scoring.
-- **Whether a human swipe has the precision seven columns need:** `check-display.mjs` is a scripted
-  thumb on SwiftShader; only a playtest answers it. One red run is not evidence of a regression.
-- **The outer columns are easier than the middle** (walls return wide balls into them). Arguably right
-  (centre columns carry most winning lines); confirm it reads as skill.
 - Shipped-twice reminder: v953 was shipped twice by two PRs; bump CACHE past what is on `main` NOW.
 
 ## Testing
 
 - `node hoops4/js/test.js` — engine probe, headless, ~2 min (`POWERS`/`AIMS` env set the grid). Probes: see the cabinet section.
-- `node test-game-conventions.mjs` — shared checklist; `node check-no-scroll.mjs hoops4` — **no game in
-  this hub may scroll**; `node test-visual.mjs hoops4` — the only suite that LOOKS at it.
-- `node test-hoops4-mp.mjs` — the PURE halves of turn-by-turn multiplayer: whole-document rejection, the
+- `node tools/test-game-conventions.mjs` — shared checklist; `node tools/check-no-scroll.mjs hoops4` — **no game in
+  this hub may scroll**; `node tools/test-visual.mjs hoops4` — the only suite that LOOKS at it.
+- `node tools/test-hoops4-mp.mjs` — the PURE halves of turn-by-turn multiplayer: whole-document rejection, the
   replay (position AND shot counts), turn rules under both shot modes, listing order and badge count,
   structural checks (every write verified, dev origin cannot write, `hoops` in `database.rules.json` and
   the backup script's list, `mp.js` has no delete, `pushMove` never calls `createGame`), the chat field

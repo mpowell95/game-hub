@@ -80,7 +80,7 @@ loads `yahtzee/CLAUDE.md` — the same reason the root file carries the "USE WHA
    frame ("base circle = 37.5% of screen width", "black band = 0.15 × radius"), never as raw
    pixels. Screens differ; ratios do not. Your session ends and your eyes go with it; `SPEC.md` is
    what the next one inherits instead of your prose.
-3. **Screenshot your own build and put it next to theirs.** `node test-visual.mjs` writes a contact
+3. **Screenshot your own build and put it next to theirs.** `node tools/test-visual.mjs` writes a contact
    sheet to `.visual-out/`. Comparing two pictures takes ten seconds; guessing takes four rounds.
 
 Full process: `VISUAL-PROCESS.md`.

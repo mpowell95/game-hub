@@ -5,7 +5,7 @@
 `darts/index/<code>/<id>`; since 2026-10-11, `flickSoccerTurnPush` on `flicksoccer/index/<code>/<id>`; since 2026-10-14, `archeryTurnPush` on `archery/index/<code>/<id>`). The first watches `hoops/index/<code>/<gameId>` and, when the
 other person has just done something you need to answer (a challenge, your turn, they won or
 resigned), sends a Web Push to every phone you turned notifications on for (`pushSubs/<code>`).
-The decision is `decide.js` (pure; `node test-push.mjs` at the repo root tests it).
+The decision is `decide.js` (pure; `node tools/test-push.mjs` at the repo root tests it).
 
 The app half is `js/push.js` (turn on / off) and `sw.js` (show it, open the game on tap).
 

@@ -175,7 +175,7 @@ not do. A real cup would funnel it; this one does not. Named, not quietly added.
   will not move when you change its supposed cause means the cause is elsewhere. `flipPower` is the
   tripwire.
 - **Build chip / stale builds.** `DEV_FRESH` in `sw.js` excludes `./pinball2/` from the cache-first set,
-  so this tool is network-first (cache as offline fallback); `test-sw-strategy.mjs` asserts both
+  so this tool is network-first (cache as offline fallback); `tools/test-sw-strategy.mjs` asserts both
   halves, and the released `pinball/` stays cache-first. The editor header chip compares the worker's
   cache version to `version.json` (`v777 -> v778`; tap updates). **`pinball2/editor/index.html`
   fetches `version.json` (`cache: 'no-store'`), installs an IMPORT MAP stamping `?v=<build>` onto every
@@ -191,7 +191,7 @@ not do. A real cup would funnel it; this one does not. Named, not quietly added.
   nulled** (`fromJSON` writing `launchV: null` made `tableIsFinite` reject every save).
 - **A built-in table is code, not a file on a phone.** BOARDWALK ships in `BUILTINS`, never stored
   (seeding it into the library rebuilds the stale-table bug); selector values are prefixed
-  (`builtin:BOARDWALK`). **`validate-sw-assets.mjs`'s `SCAN_DIRS` now includes `pinball2`**; keep it
+  (`builtin:BOARDWALK`). **`tools/validate-sw-assets.mjs`'s `SCAN_DIRS` now includes `pinball2`**; keep it
   there (it was blind to this folder).
 - **The ramp tool** lays CONTROL POINTS and generates the rest through `buildRamp` in `table.js`, the
   SAME function the shipped table calls (so editor and table cannot drift). Resampling is by
@@ -254,11 +254,7 @@ not do. A real cup would funnel it; this one does not. Named, not quietly added.
 
 ## Open items
 
-- BOARDWALK is Matt's to tune: three probes red on it (flippers move the ball under 300 mm on half
-  the power range; r42's mouth takes no shot weak enough to roll back out; tunnel probe's 6 of 2325
-  "OFF TABLE" most likely the probe, see `HANDOFF.md`).
-- Remaining object types, one at a time with panel + probe: drop targets, spinner, rollover lanes,
-  kicker/saucer, plunger (some exist on PIER NINE as sensors).
+Open items: see the root TODO.md, "Pinball 2".
+
 - Two levels are real geometry (a ramp is a ribbon with floor height and slope), never a transition.
 - The editor overhaul is finished (2026-09-11, five steps); what is left is the GAME, not the tool.
-- Robot player (phase 8); stats/hub entry only after Matt judges it, with a NEW id.

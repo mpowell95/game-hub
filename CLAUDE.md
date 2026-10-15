@@ -126,10 +126,10 @@ It sends `Cache-Control: no-store`.
 
 Two causes that look identical; separate them in this order:
 1. **The pill is not listening** (fixed 2026-09-01, `_watchForUpdates` in `js/hub.js`): is a
-   `controllerchange` listener wired up? `test-sw-update.mjs` is the probe.
+   `controllerchange` listener wired up? `tools/test-sw-update.mjs` is the probe.
 2. **The shell install failed** (one 404 in the atomic SHELL aborts `cache.addAll`): pull the
    deployed `sw.js`, evaluate `ASSETS` + `isShellAsset`, request every SHELL entry live. All 200
-   rules this out. Prevention: `validate-sw-assets.mjs`, `test-sw-strategy.mjs`.
+   rules this out. Prevention: `tools/validate-sw-assets.mjs`, `tools/test-sw-strategy.mjs`.
 
 A new build applies itself silently on the launcher (never while a game is mounted). An arrow that
 persists is a bug.
@@ -138,7 +138,7 @@ persists is a bug.
 
 A 404/503 during a Pages redeploy used to reach the page. Fixed in `sw.js`: `if (!res || !res.ok)
 return cached;` on the network-first path; with nothing cached the error passes through honestly.
-`test-sw-strategy.mjs` pins it.
+`tools/test-sw-strategy.mjs` pins it.
 
 ### The service worker's caching strategy (rewritten 2026-08-02)
 
@@ -151,7 +151,7 @@ Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HI
   large, single-game DATA goes in LAZY, never game code.** The `isLazyAsset` check sits BELOW the
   carry-forward in the warm loop (a `[KNOWN-BUG PROBE]` pins it).
 - **HELD BACK (2026-10-14): an admin-only game warms only onto phones that show it.** GENERATED
-  `HELD_BACK` (by `validate-sw-assets.mjs`): per `devOnly` hub id (+ `pinball2`), its files that
+  `HELD_BACK` (by `tools/validate-sw-assets.mjs`): per `devOnly` hub id (+ `pinball2`), its files that
   nothing outside held-back folders imports. The hub posts `SHOWN_GAMES` (its visible list) after
   each launcher paint; the warm skips the rest, BELOW the carry-forward. Saves ~4.3 MB per phone.
   **Held-back files carry no hash and are network-first, so editing an unreleased game sends
@@ -161,7 +161,7 @@ Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HI
 - **Network-first with a deadline** (`NET_TIMEOUT_MS` 2.5 s) plus a `SLOW_LATCH_MS` (10 s) "network
   is bad" latch. A request with nothing cached is never short-circuited.
 - **Unchanged files are carried forward across a CACHE bump** via the GENERATED `REST_MANIFEST`
-  (content hashes, written by `validate-sw-assets.mjs`; HTTP validators cannot do it because Pages
+  (content hashes, written by `tools/validate-sw-assets.mjs`; HTTP validators cannot do it because Pages
   re-stamps every ETag).
 - **REST is cache-first; the shell is split**: `NETWORK_FIRST` (hand-listed modules that read or
   write player data or gate its visibility, Matt: *"keep the stats code fresh"*) vs
@@ -199,7 +199,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `new-badge.js` | the "New" pill, pure date maths over each entry's `released` |
 | `i18n.js` | EN/ES: `getLang`/`setLang` (`gamehub.lang.v1`), `makeT(dict)`, `onLangChange` |
 | `theme.js` | light/dark/auto (`gamehub.theme.v1`), `.gh-dark` on `<html>` |
-| `emoji.js` / `emoji-data.js` | `isEmoji()` gate at the moment of choosing only (never in `glyph()`); GENERATED emoji set (`build-emoji-data.mjs`); search keywords `emoji-search-{en,es}.js` kept out of SHELL |
+| `emoji.js` / `emoji-data.js` | `isEmoji()` gate at the moment of choosing only (never in `glyph()`); GENERATED emoji set (`tools/build-emoji-data.mjs`); search keywords `emoji-search-{en,es}.js` kept out of SHELL |
 | `viewport.js` | `onViewportResize(cb)`: the ONE way to re-fit on resize |
 | `game-stats.js` | unified per-player stats; one recorder per game; failed writes queued (`gamehub.pendingResults.v1`); rate gate; play activity (`gamehub.activity.v1`, mirrored to `players/<id>/activity`) |
 | `game-stats-global.js` | non-ESM recorder for Monopoly Deal/Parchís (`window.__ghStats`) |
@@ -215,7 +215,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `net.js` | multiplayer rooms (`rooms/<CODE>`), incl. N-seat (`joinSeat`/`vacateSeat`) |
 | `online-gate.js` | who may play online (see "Online play needs an account Matt has let in") |
 | `a2hs.js` | add-to-home-screen sheet |
-| `device-report.js` / `install-state.js` | device dump used by every bug report; installed-vs-tab plus phone size (`read-install-state.mjs --screens`) |
+| `device-report.js` / `install-state.js` | device dump used by every bug report; installed-vs-tab plus phone size (`tools/read-install-state.mjs --screens`) |
 | `bug-report.js` / `bug-report-ui.js` | Report a bug, offline outbox, Matt's replies (`bugReplies/<deviceId>/`), soft delete |
 | `messages.js` / `messages-ui.js` | player-to-player Messages (see "Messages") |
 | `hub-messages.js` | messages FROM the Game Hub (`HUB_MESSAGES`, in code; see "Messages") |
@@ -242,17 +242,17 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
   `js/CLAUDE.md`, "Multiplayer on the leaderboard: on the GAME'S page, per game" before adding
   anything h2h-shaped. The `h2h` data stays (rule 5).
 
-### Dev tooling (repo root, not deployed)
+### Dev tooling (`tools/`, not deployed; run from the repo root, e.g. `node tools/validate-sw-assets.mjs`)
 
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
-- **Run `node validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and
+- **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and
   `version.json`. Commit `sw.js` after changing any game file.
-- **Never run `run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
-- **`test-visual.mjs`: never `--all` without asking Matt.**
+- **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
+- **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
-- **Firebase-writing scripts are Matt-only, dry-run by default** (`clear-skeeball-stats.mjs`,
-  `delete-test-players.mjs`, `delete-device-record.mjs`, `fix-natalia-record.mjs`). Never `--write`
+- **Firebase-writing scripts are Matt-only, dry-run by default** (`tools/clear-skeeball-stats.mjs`,
+  `tools/delete-test-players.mjs`, `tools/delete-device-record.mjs`, `tools/fix-natalia-record.mjs`). Never `--write`
   on your own judgement.
 - **Never hand-edit generated files** (`js/emoji-data.js`, `js/emoji-search-*.js`,
   `boggle/data/words-es.txt`, `contexto/data/*`, `baseball/models/*`, `gridlock/js/levels.js`,
@@ -271,7 +271,7 @@ game's mount/unmount lifecycle.
 
 ### Before you build: USE WHAT EXISTS (read this before writing a line of a new game)
 
-**`node test-game-conventions.mjs` enforces most of this; run it before committing a game.**
+**`node tools/test-game-conventions.mjs` enforces most of this; run it before committing a game.**
 
 | Need | Use | Never |
 |---|---|---|
@@ -317,7 +317,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Chinchón | module | `.cc-root` / `.cc-` (many bare rules) | `chinchon-settings` (frozen) | `recordChinchon` |
 | Connect Four | module | `.cf-root` / `.cf-` (many bare rules) | `gamehub.connect4.v1` (+ `.save.v1`) | `recordConnect4` |
 | Connect 4 Hoops | module, immersive, devOnly; live rooms + turn-by-turn (`hoops/games/<id>`) | `.h4-root` / `.h4-` | `gamehub.hoops4.v1` | `recordResult('hoops4', …)` |
-| Contexto | module, solo, EN/ES; data GENERATED by `build-contexto-data.mjs` (LAZY) | `.ct-root` / `.ct-` | `gamehub.contexto.v1` (+ `.save.v1`) | `recordContexto` |
+| Contexto | module, solo, EN/ES; data GENERATED by `tools/build-contexto-data.mjs` (LAZY) | `.ct-root` / `.ct-` | `gamehub.contexto.v1` (+ `.save.v1`) | `recordContexto` |
 | Course Creator | launch-out (`hole-editor/?course=new`), devOnly, opened to chosen codes from the admin page; no stats | own page | `golf.holeEditor.*` | none |
 | Cup Pong | module, immersive, devOnly; vs computer, Solo, challenges (`cuppong/`); folder `cup-pong/`, ids `cuppong` | `.cp-root` / `.cp-` | `gamehub.cuppong.v1` | `recordResult('cuppong', …)` |
 | Darts | module, immersive, devOnly; vs computer, pass and play, challenges (`darts/`) | `.dt-root` / `.dt-` | `gamehub.darts.v1` (+ `.save.v1`) | `recordResult('darts', …)` |
@@ -347,7 +347,7 @@ Prefix cells verified against the CSS on 2026-07-23 (`.ttt-`, `.filler`, `.manca
 devOnly is only a DEFAULT: the admin page can make a game live without a commit.
 **Releasing a game = the admin switch AND a release commit, together (Matt, 2026-10-14).** When
 Matt says "release X" (or has switched it live on the admin page), remove `devOnly: true` from its
-`GAMES` entry (add `released`), run `validate-sw-assets.mjs` (it drops X from `HELD_BACK` and gives
+`GAMES` entry (add `released`), run `tools/validate-sw-assets.mjs` (it drops X from `HELD_BACK` and gives
 its files hashes), bump `CACHE`, deploy. That alone makes it live for everyone unless the admin
 page holds an explicit "hidden" override for it; a session never writes the admin config. Players get ONE update and the
 game is saved cache-first like any other. A game left `devOnly` but switched live re-downloads its
@@ -370,8 +370,7 @@ never crash.
 
 - **Any emoji can be chosen, only emoji are selectable** (validation at choosing time,
   `js/emoji.js`; `glyph()` stays permissive on read). Recent picks: `gamehub.emojiRecent.v1`.
-- **Open (paused by Matt, 2026-08-25):** the emoji does not appear everywhere the name does; the
-  fix is a shared `chipHTML({name, emoji})` plus a sweep, immersive games last.
+- Open items: see the root TODO.md, "Hub (shared)".
 - Contract and Monopoly Deal's must-stay-synced duplicates: `js/CLAUDE.md`.
 
 ## Messages (2026-08-31)
@@ -417,7 +416,7 @@ moment he confirms** (a stale "OUTSTANDING" line was once repeated back to him).
 are for YOU."* A session must still **never delete player data on its own judgement**; only when
 Matt asks, personally, per incident.
 
-1. **Server-side delete**: `delete-device-record.mjs` (Matt-only).
+1. **Server-side delete**: `tools/delete-device-record.mjs` (Matt-only).
 2. **Device reset** (`adminConfig/v1/deviceResets/<statsId>`; `applyDeviceReset()` runs INSIDE
    `syncMyStats()` before the record is built, otherwise the device re-uploads its store). A stamp
    compared against a local ack, acted on once; clears only the active player's stats store.
@@ -439,7 +438,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`. **`archeryTurnPush` and the `archery`
   rules branch are NOT yet deployed/published (as of 2026-10-14).**
 - **The VAPID private key is a Firebase secret; never in this repo.** Its public half is in
-  `js/push.js` and `functions/index.js`; `test-push.mjs` fails if they differ.
+  `js/push.js` and `functions/index.js`; `tools/test-push.mjs` fails if they differ.
 - iPhone: only the Home Screen app (iOS 16.4+) can receive them; `pushState()` returns `'install'`.
 - Never notify about your own action (`by` on the match). No push to a device with the hub open
   (`activeAt` heartbeat, decided on the SERVER in `isActive`). Opening the hub clears shown
@@ -472,7 +471,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   / Resign call the game's own writer.
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
-  (`test-challenges.mjs` checks).
+  (`tools/test-challenges.mjs` checks).
 
 ## Cancel, decline, resign, expire (2026-10-13)
 
@@ -489,7 +488,7 @@ verified by re-read, deleting nothing.
 - Called-off rows are stored `over: false, yourTurn: false, ended: <why>` **on purpose**: the
   deployed push functions do not know "cancelled", so this shape sends no push. Rows also carry
   `open`, `expires`, `sent`.
-- Tests: `test-challenges.mjs` plus each game's `test-*-mp.mjs` / `test-skee-challenge.mjs`.
+- Tests: `tools/test-challenges.mjs` plus each game's `test-*-mp.mjs` / `tools/test-skee-challenge.mjs`.
 
 ## Skeeball challenges (2026-09-24)
 
@@ -515,7 +514,7 @@ no Default buttons.
 - `hideFrom: ['<CODE>']` on a `GAMES` entry hides a game from named players (never Matt/dev).
   `games/<id>/allow/<CODE>` opens a hidden game to named players (`ALLOW_PICKER`); it hides the
   tile, not the URL.
-- **Every admin-only game needs a `GAME_META` row**; `players-agg.test.mjs`'s `OFF_THE_BOARD` must
+- **Every admin-only game needs a `GAME_META` row**; `tools/players-agg.test.mjs`'s `OFF_THE_BOARD` must
   stay empty (a missing row zeroes every win, how Yahtzee shipped).
 - Score voids (per player, per machine) and Hold'em bankroll voids
   (`adminConfig/v1/corrections/holdem/<statsId>`) are read-time overlays; raw data untouched.

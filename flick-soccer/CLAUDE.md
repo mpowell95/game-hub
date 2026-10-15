@@ -219,7 +219,7 @@ sub-counter, so the generic My Stats screen draws it and `players-agg.js` needs 
   goal, never overlap at rest and always end; a shot replays identically; the rules (turns, own
   goal, kick-off after a goal, the win); a ball rolled over the line is a goal and a disc driven at
   the mouth stops at the line; whole computer-vs-computer matches finish and the stronger level wins.
-- `node check-no-scroll.mjs flick-soccer`: setup, how to play, play screen and result, standalone and
+- `node tools/check-no-scroll.mjs flick-soccer`: setup, how to play, play screen and result, standalone and
   in the hub, at two phone heights (16 screens, 0 scroll on 2026-10-11).
 - Driven by hand in Chromium at 390x844 and 320x568: a real drag-and-flick, the computer's turn,
   a whole match to the result (recorded as one Easy win), two players, quitting mid-shot (the shot
@@ -245,7 +245,7 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   `forms` entry. "Challenge again" sends your current pair, and the other person
   kicks off, as before. **A phone still on the build before** replays such a match on its fixed
   `forms` and disagrees after the first goal until it updates (admin only, so harmless). Tested in
-  `test-flicksoccer-mp.mjs` (87 checks); the old string forms of `createGame`/`pickLineup` still
+  `tools/test-flicksoccer-mp.mjs` (87 checks); the old string forms of `createGame`/`pickLineup` still
   work. The card was also rebuilt (Matt: *"horrific"*): its title centred between the back button
   and the card's edge on one line, no role paragraph, nothing half drawn behind it; measured with no
   name or title cut at 320, 360 and 390 wide, EN and ES.
@@ -275,7 +275,7 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
 - **Why replay is safe across phones:** the physics path uses only + - * / and `Math.sqrt`, which
   IEEE 754 requires to round exactly, so JavaScriptCore (iPhone) and V8 (Android, Chrome) produce the
   same bits. `Math.hypot` was taken off the physics path for this (it is not required to agree).
-  `test-flicksoccer-mp.mjs` fails if any other `Math.` function appears there. **Proven in one engine
+  `tools/test-flicksoccer-mp.mjs` fails if any other `Math.` function appears there. **Proven in one engine
   (V8) only: both "phones" in the tests ran Chromium.** An iPhone against an Android phone is the
   real check, and a divergence would show as the two phones disagreeing about a goal.
 - **Written at the moment of the flick** (`appendLog`, verified by re-read, idempotent on retry, a
@@ -342,13 +342,13 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   "Push notifications", "A tap must survive a reload").
 - **The hub:** the registry entry has `alerts:` (launcher bubble, Challenges button count), and
   `js/challenges.js` lists `flick-soccer`, so the hub's Challenges screen shows these matches.
-- **Tests:** `node test-flicksoccer-mp.mjs` (58 checks, including the 2026-10-11 bug hunt's: rows
+- **Tests:** `node tools/test-flicksoccer-mp.mjs` (58 checks, including the 2026-10-11 bug hunt's: rows
   rewritten on retry, resign retried, an undelivered challenge called off, the outbox keeping
   phone-side failures; also stored-shot rounding, a whole computer-played
   match replayed to the same pitch on both phones, delivery, retries, conflicts, own goal, resign,
   counting once, the outbox, the launcher bubble, rules/backup/push wiring, the determinism guard);
-  `node test-push.mjs` (the `decideFlickSoccer` cases); `test-challenges.mjs` and
-  `test-admin-config.mjs` (the online gate) include it. Driven in two Chromium "phones" against a
+  `node tools/test-push.mjs` (the `decideFlickSoccer` cases); `tools/test-challenges.mjs` and
+  `tools/test-admin-config.mjs` (the online gate) include it. Driven in two Chromium "phones" against a
   shared stand-in database: challenge, Ana's phone replays Matt's flick on a turned-round pitch, her
   reply reaches Matt, both pitches identical after two flicks, resign, the win counted as `mp`.
 

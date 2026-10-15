@@ -48,17 +48,17 @@ Your session ends and your eyes go with it. Convert the picture into something d
 
 ## 3. While building
 
-`node test-visual.mjs` drives a game in a real Chromium at 393x852 in light, dark and
+`node tools/test-visual.mjs` drives a game in a real Chromium at 393x852 in light, dark and
 reduced-motion, and writes a contact sheet to `.visual-out/`.
 
 **It looks at what CHANGED, not at every game every time.** Matt's rule, and it is the right one:
 a finished game re-checked on every unrelated run is 90 seconds of nothing, forever.
 
 ```
-node test-visual.mjs                 the games whose own folder has changes. Nothing changed,
+node tools/test-visual.mjs                 the games whose own folder has changes. Nothing changed,
                                      nothing run - it exits in under a second.
-node test-visual.mjs escoba boggle   exactly those, whatever state they are in
-node test-visual.mjs --all           every game (a first run, or an occasional sweep)
+node tools/test-visual.mjs escoba boggle   exactly those, whatever state they are in
+node tools/test-visual.mjs --all           every game (a first run, or an occasional sweep)
 ```
 
 **A full sweep is never automatic.** Matt's rule: *"Always ask before testing all games."* When
@@ -81,10 +81,10 @@ It fails on the things that are wrong no matter what the design is:
 
 A **motion probe** drives a game to the point where something moves, then samples that element's
 real on-screen position frame by frame and fails if it is too brief to follow or barely travels.
-If your game has a signature animation, add one to `MOTION` in `test-visual.mjs`. It is about
+If your game has a signature animation, add one to `MOTION` in `tools/test-visual.mjs`. It is about
 fifteen lines and it is the only automated thing in this repo that can catch "too fast to see".
 
-**`KNOWN_GAPS`** works exactly like the one in `test-game-conventions.mjs`: pre-existing debt is
+**`KNOWN_GAPS`** works exactly like the one in `tools/test-game-conventions.mjs`: pre-existing debt is
 listed, printed on every run, and a stale entry fails the suite. **A game you just wrote does not
 go on that list. Fix the game.**
 
@@ -103,7 +103,7 @@ the drag, which I only learned by measuring.)
 
 So:
 
-- **`PLAY` probes in `test-visual.mjs` drive a game through its real UI with real touch** and
+- **`PLAY` probes in `tools/test-visual.mjs` drive a game through its real UI with real touch** and
   assert something only playing could change: the cue ball crossed the table, the shot resolved to
   a marker, the opponent replied. Not "the button exists."
 - **Every run prints `NEVER PLAYED BY ANYTHING`** listing games with no probe. For those, this
@@ -154,7 +154,7 @@ debugging a similar failure:
 - **If self-capturing fails, ask Matt for a screenshot rather than concluding from numbers alone.**
   As of 2026-08-21, on the machine this session ran on, three self-capture methods all failed: the
   preview pane's `screenshot` action (times out), reading a canvas via `toDataURL` and
-  reassembling base64 in slices (produced unprocessable images), and `test-visual.mjs` itself
+  reassembling base64 in slices (produced unprocessable images), and `tools/test-visual.mjs` itself
   (SKIPs without `playwright-core`/Chromium installed). This is an environment observation, not a
   permanent law — a different session's `HANDOFF-SKEEBALL-BOARD.md` documents the `toDataURL`
   method working elsewhere — so try the normal path first, but don't burn a long stretch of time

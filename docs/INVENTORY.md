@@ -90,7 +90,7 @@ it was found in.
 | `docs/archive/HUB-HANDOFF-1.md` | 96 | HISTORY | Completed build record for the shared profile page; contract now in root's "shared profile" section. |
 | `docs/archive/HUB-HANDOFF-2.md` | 105 | REFERENCE | Completed wiring record; still-accurate per-game profile precedence table (CF/Chinchón/Business Deal). |
 | `docs/archive/HUB-HANDOFF-3.md` | 58 | HISTORY | Completed copy-pass/QA/deploy record for the profile feature. |
-| `docs/archive/HANDOFF-LEADERBOARD-CORRECTION.md` | 338 | HISTORY | The Ana/Natalia incident; matches root's pointer, already applied via `fix-natalia-record.mjs`. |
+| `docs/archive/HANDOFF-LEADERBOARD-CORRECTION.md` | 338 | HISTORY | The Ana/Natalia incident; matches root's pointer, already applied via `tools/fix-natalia-record.mjs`. |
 | `docs/archive/HANDOFF-LEADERBOARD-REDESIGN.md` | 219 | BINDING (partly superseded) | Approved 2026-07-23 redesign: unified chrome band spec (`--gh-band-*`) still binding; its Beginner/Intermediate/Pro pill labels were superseded by the Easy/Medium/Hard/Expert reversal — see §4. |
 | `docs/archive/HANDOFF-LB-SOLO-RUNS.md` | 377 | BINDING | 2026-07-28 follow-on: solo games (Ball Run/Snake/Nuts & Bolts) count as "runs," not "wins" — see §4. |
 | `HANDOFF-LB-FILTER-SORT.md` | 503 | HISTORY | Leaderboard filter/sort redesign — confirmed shipped in `js/leaderboard-ui.js` today. |

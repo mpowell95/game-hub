@@ -1,0 +1,141 @@
+import { fileURLToPath as __toolsF2P } from 'node:url';
+// Moved from the repo root to tools/ (2026-10-15): paths below resolve from the repo root.
+const __ROOT_URL = new URL('../', import.meta.url).href;
+const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
+// test-i18n-strings.mjs — the drift tripwire for every i18n dictionary in the repo.
+// Run: node tools/test-i18n-strings.mjs  (no deps)
+//
+// For each dictionary (js/strings.js + every <game>/js/strings.js — add a new game's here
+// as its phase lands), asserts:
+//   - no key is declared TWICE inside one language block (a duplicate is legal JavaScript and
+//     silently wins, so five Spanish lines pasted into the `en` block parse fine and shadow the
+//     English - shipped 2026-09-09, and every EN reader got Spanish while `es` had nothing)
+//   - every `es` key also exists in `en` (no orphaned Spanish)
+//   - for every key present in both, the set of {placeholder} tokens matches
+//   - no value is an empty string
+// and logs (informational only) the count of `en` keys missing from `es`.
+
+import { readFileSync } from 'node:fs';
+
+const DICTS = [
+  { name: 'js/strings.js', path: './js/strings.js' },
+  { name: 'js/challenges-strings.js', path: './js/challenges-strings.js' },
+  { name: 'snake/js/strings.js', path: './snake/js/strings.js' },
+  { name: 'filler/js/strings.js', path: './filler/js/strings.js' },
+  { name: 'mancala/js/strings.js', path: './mancala/js/strings.js' },
+  { name: 'tic-tac-toe/js/strings.js', path: './tic-tac-toe/js/strings.js' },
+  { name: 'dots-boxes/js/strings.js', path: './dots-boxes/js/strings.js' },
+  { name: 'nuts-bolts/js/strings.js', path: './nuts-bolts/js/strings.js' },
+  { name: 'minesweeper/js/strings.js', path: './minesweeper/js/strings.js' },
+  { name: 'sudoku/js/strings.js', path: './sudoku/js/strings.js' },
+  { name: 'ball-run/js/strings.js', path: './ball-run/js/strings.js' },
+  { name: 'connect-four/js/strings.js', path: './connect-four/js/strings.js' },
+  { name: 'escoba/js/strings.js', path: './escoba/js/strings.js' },
+  { name: 'chinchon/js/strings.js', path: './chinchon/js/strings.js' },
+  { name: 'boggle/js/strings.js', path: './boggle/js/strings.js' },
+  { name: 'uno/js/strings.js', path: './uno/js/strings.js' },
+  { name: 'dominoes/js/strings.js', path: './dominoes/js/strings.js' },
+  { name: 'hill-climb/js/strings.js', path: './hill-climb/js/strings.js' },
+  { name: 'battleship/js/strings.js', path: './battleship/js/strings.js' },
+  { name: 'yahtzee/js/strings.js', path: './yahtzee/js/strings.js' },
+  { name: 'skeeball/js/strings.js', path: './skeeball/js/strings.js' },
+  { name: 'golf/js/strings.js', path: './golf/js/strings.js' },
+  { name: 'baseball/js/strings.js', path: './baseball/js/strings.js' },
+  { name: 'contexto/js/strings.js', path: './contexto/js/strings.js' },
+  { name: 'murdoku/js/strings.js', path: './murdoku/js/strings.js' },
+  { name: 'way-out/js/strings.js', path: './way-out/js/strings.js' },
+  { name: 'gridlock/js/strings.js', path: './gridlock/js/strings.js' },
+  { name: 'darts/js/strings.js', path: './darts/js/strings.js' },
+  { name: 'flick-soccer/js/strings.js', path: './flick-soccer/js/strings.js' },
+  { name: 'archery/js/strings.js', path: './archery/js/strings.js' },
+];
+
+const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;
+
+// A duplicate key cannot be seen after the module is parsed - the second one has already replaced
+// the first - so this reads the SOURCE. Each language block is `  <lang>: {` at two spaces of
+// indent, and its keys sit at four; anything deeper belongs to a nested value, not to the block.
+const BLOCK_RE = /^ {2}([a-z]{2}): \{$/;
+const KEY_RE = /^ {4}([A-Za-z0-9_$]+):/;
+
+function duplicateKeys(src) {
+  const out = [];
+  let lang = null, seen = null;
+  for (const line of src.split(/\r?\n/)) {
+    const b = BLOCK_RE.exec(line);
+    if (b) { lang = b[1]; seen = new Set(); continue; }
+    if (!lang) continue;
+    if (/^ {2}\}/.test(line)) { lang = null; continue; }
+    const k = KEY_RE.exec(line);
+    if (!k) continue;
+    if (seen.has(k[1])) out.push(`${lang}.${k[1]}`);
+    seen.add(k[1]);
+  }
+  return out;
+}
+
+function placeholders(s) {
+  if (typeof s !== 'string') return new Set();
+  return new Set([...s.matchAll(PLACEHOLDER_RE)].map((m) => m[1]));
+}
+
+function sameSet(a, b) {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+let fail = 0, missingTotal = 0;
+
+for (const { name, path } of DICTS) {
+  console.log(`\n=== ${name} ===`);
+  for (const dup of duplicateKeys(readFileSync(new URL(path, __ROOT_URL), 'utf8'))) {
+    fail++;
+    console.log(`FAIL duplicate key declared twice in one block: ${dup}`);
+  }
+
+  const mod = await import(new URL(path, __ROOT_URL).href);
+  const dict = mod.STRINGS || mod.default;
+  const en = dict.en || {};
+  const es = dict.es || {};
+
+  // orphaned Spanish keys
+  for (const key of Object.keys(es)) {
+    if (!(key in en)) {
+      fail++;
+      console.log(`FAIL orphaned es key not in en: ${key}`);
+    }
+  }
+
+  // placeholder mismatch + empty values
+  for (const key of Object.keys(en)) {
+    const enVal = en[key];
+    if (typeof enVal === 'string' && enVal === '') {
+      fail++;
+      console.log(`FAIL empty en value: ${key}`);
+    }
+    if (key in es) {
+      const esVal = es[key];
+      if (typeof esVal === 'string' && esVal === '') {
+        fail++;
+        console.log(`FAIL empty es value: ${key}`);
+      }
+      const pEn = placeholders(enVal);
+      const pEs = placeholders(esVal);
+      if (!sameSet(pEn, pEs)) {
+        fail++;
+        console.log(`FAIL placeholder mismatch for ${key}: en={${[...pEn]}} es={${[...pEs]}}`);
+      }
+    } else {
+      missingTotal++;
+    }
+  }
+
+  const enCount = Object.keys(en).length;
+  const missing = enCount - Object.keys(es).filter((k) => k in en).length;
+  console.log(`ok   ${enCount} en keys, ${missing} missing from es (fallback covers these)`);
+}
+
+console.log(`\n==================================================`);
+console.log(`${fail} failure(s)`);
+process.exit(fail ? 1 : 0);

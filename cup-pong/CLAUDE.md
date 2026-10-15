@@ -130,7 +130,7 @@ of the soft-throw sweep).
 - **Stored in the `cp` sub-counter** of `games.cuppong`: `{ soloRacks, soloThrows, soloBest }`;
   `soloBest` is a FEWEST with **0 = never cleared** (a real clear is >= 10). The three-edit rule:
   `ensureCp`/`recordCupPongSolo` (game-stats.js), `cupPongScreen` (My Stats), the `cuppong` branch in
-  `js/players-agg.js` (min of NON-ZERO bests only; `players-agg.test.mjs` pins it). A solo clear is
+  `js/players-agg.js` (min of NON-ZERO bests only; `tools/players-agg.test.mjs` pins it). A solo clear is
   not a win over anyone.
 - **Leaderboard**: first sort **Fewest throws** (`'fewest'` in `js/leaderboard-ui.js`), so the board
   OPENS on it; equal bests share a rank; no tier chip/difficulty filter. Wins / Games / Name list
@@ -140,7 +140,7 @@ of the soft-throw sweep).
 
 Hoops' layout: **Your turn** card (only when a match waits), **Multiplayer**, **Play the computer**
 (difficulty, Gentleman's, Reracks, Play), **Solo** (best on the right). Must fit 390x664
-(`check-no-scroll.mjs cup-pong`); Your turn can scroll inside itself, contained.
+(`tools/check-no-scroll.mjs cup-pong`); Your turn can scroll inside itself, contained.
 
 ## Challenges: turn by turn, by player code (2026-09-28)
 
@@ -181,7 +181,7 @@ Files: `js/mp.js` (data), `js/mp-ui.js` (screens), `js/alert.js` (launcher), the
   `takeOpen`, sessionStorage `gamehub.cuppong.open.v1`). **Push**: `cupPongTurnPush` on
   `cuppong/index/{code}/{id}` (`decideCupPong`, from the row alone; never your own write via
   `lastBy`); payload carries `match`; `sw.js` also reads a `cuppong-<id>` tag.
-- Tested by `node test-cuppong-mp.mjs` (49 checks incl. a straight-up game and a series). Real phones
+- Tested by `node tools/test-cuppong-mp.mjs` (49 checks incl. a straight-up game and a series). Real phones
   on real Firebase have been played on by Matt and family.
 
 ## Hub integration
@@ -257,8 +257,8 @@ screenshot probe (the game never sets it).
 
 ## Tests
 
-- `node cup-pong/js/test.js`; `node test-cuppong-mp.mjs`; `node test-game-conventions.mjs`;
-  `node check-no-scroll.mjs cup-pong`.
+- `node cup-pong/js/test.js`; `node tools/test-cuppong-mp.mjs`; `node tools/test-game-conventions.mjs`;
+  `node tools/check-no-scroll.mjs cup-pong`.
 
 ## The Tuesday question (a joke for one player, 2026-10-03)
 

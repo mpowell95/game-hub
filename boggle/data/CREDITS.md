@@ -21,7 +21,7 @@ carries no attribution requirement, but is credited here for provenance.
 
 # Dictionary (Spanish) — RLA-ES
 
-`words-es.txt` is GENERATED, not copied: `build-boggle-es.mjs` (repo root)
+`words-es.txt` is GENERATED, not copied: `tools/build-boggle-es.mjs` (repo root)
 fetches the **RLA-ES** Spanish spelling dictionary and expands the subset of it
 that Boggle plays with. Re-run that script to rebuild it.
 
@@ -42,5 +42,5 @@ that Boggle plays with. Re-run that script to rebuild it.
   sorted, one word per line. No words were invented: every entry is an RLA-ES
   form or a regular inflection of one.
 
-The full rationale for each of those choices is in `build-boggle-es.mjs`'s
-header, and the effect on real boards is measured by `tune-boggle-es.mjs`.
+The full rationale for each of those choices is in `tools/build-boggle-es.mjs`'s
+header, and the effect on real boards is measured by `tools/tune-boggle-es.mjs`.

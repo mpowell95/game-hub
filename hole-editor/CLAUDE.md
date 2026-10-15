@@ -15,7 +15,7 @@ Objects spec: `docs/HANDOFF-GOLF-OBJECTS.md`. Power lines: `docs/HANDOFF-GOLF-PO
   `/hole-editor/?course=new` = the **Course Creator**, a blank 18-hole course (key `golf.holeEditor.custom.v1`, ids `h-NN`, exports `<slug>.js`).
   `?course=tutorial` = the Help guided practice run (throwaway course, wiped on every open, never reaches the cloud).
 - It is a **Game Hub tile** (`course-creator` in `js/hub.js` `GAMES`): launch-out `href: 'hole-editor/?course=new'`, `devOnly`, opened to chosen players by player code from the admin page (`adminConfig/v1/games/course-creator/allow`; root `CLAUDE.md`, "The admin control page"). No stats, no `GAME_META` row. The tile hides the TILE, not the page.
-- **`hole-editor/` is OUTSIDE the service worker on purpose** (`validate-sw-assets.mjs` `EXCLUDED`; a stale cached `render.js` was the reason). So editing here needs no CACHE bump, but the tile does not open offline, and GitHub Pages caches ~10 min (a hard refresh may be needed). Anything under `js/` that is in the shell DOES need a bump (Report bug did).
+- **`hole-editor/` is OUTSIDE the service worker on purpose** (`tools/validate-sw-assets.mjs` `EXCLUDED`; a stale cached `render.js` was the reason). So editing here needs no CACHE bump, but the tile does not open offline, and GitHub Pages caches ~10 min (a hard refresh may be needed). Anything under `js/` that is in the shell DOES need a bump (Report bug did).
 - **R5, the root rule of the tool: the editor never builds a hole itself.** It always calls the game's real `makeHole`/`buildMap`/`validateHole` and uses the real built hole as judge; it never re-derives holegen geometry. It never writes the game's files; the fold-back is a separate session step.
 
 ## File map
@@ -28,9 +28,9 @@ Objects spec: `docs/HANDOFF-GOLF-OBJECTS.md`. Power lines: `docs/HANDOFF-GOLF-PO
 
 ## Tests
 
-- `node test-hole-editor.mjs` (headless; 58/58 at last count) - round-trip, export, structural checks. `node test-hole-editor-ui.mjs` (Playwright, needs `node server.mjs`; 112/112) - NOT in `run-all-tests.mjs`. `node test-hole-editor-mobile.mjs` (390x844 touch + iPhone safe areas; 61/61). `node test-hole-editor-play.mjs` (Play override reaches the setup screen).
-- Also run `node golf/js/test.js` after any engine-side change, and `node validate-sw-assets.mjs` after touching a game file.
-- `test-hole-editor.mjs` is in `run-all-tests.mjs`. Each defect found by driving the tool is kept as a `[KNOWN-BUG PROBE]` in the UI suite.
+- `node tools/test-hole-editor.mjs` (headless; 58/58 at last count) - round-trip, export, structural checks. `node tools/test-hole-editor-ui.mjs` (Playwright, needs `node server.mjs`; 112/112) - NOT in `tools/run-all-tests.mjs`. `node tools/test-hole-editor-mobile.mjs` (390x844 touch + iPhone safe areas; 61/61). `node tools/test-hole-editor-play.mjs` (Play override reaches the setup screen).
+- Also run `node golf/js/test.js` after any engine-side change, and `node tools/validate-sw-assets.mjs` after touching a game file.
+- `tools/test-hole-editor.mjs` is in `tools/run-all-tests.mjs`. Each defect found by driving the tool is kept as a `[KNOWN-BUG PROBE]` in the UI suite.
 
 ## A decision the spec's formula didn't survive contact with: normalise() does NOT round `yd`
 
@@ -77,7 +77,7 @@ Objects spec: `docs/HANDOFF-GOLF-OBJECTS.md`. Power lines: `docs/HANDOFF-GOLF-PO
 - `palette.js` imports `OBSTACLE_CATALOG` from `golf/js/obstacles.js` (labels `t('obst_' + name)`; capitalised-name fallback only for an older course's own type with no catalogue entry, e.g. Oasis Sands' `tall palm`). **The catalogue order is FROZEN - append only** (55 entries now; engine side: `golf/CLAUDE.md`, "The obstacle catalogue (2026-09-22)"). The one re-index ever allowed is `migrateDocument` (`catalog: 1`).
 - A single's tile is drawn at one common size (`SINGLE_R = 7` yd); stand tiles keep relative scale. Decor sprites are painted over the tile at tile resolution (`drawDecorSprite`). Swamp sampler is a real `kind: 'swamp'` recipe. Benches/signs/flagpoles are not offered on the phone (Matt) but still exist on desktop and still draw.
 - A wide variety of trees (2026-09-23, CACHE v937): 35 entries appended; twelve new renderer shapes (top-down in `render.js`, standing in `iso.js` `drawIsoTree`); an ACCENT colour is `TREE_FILL`'s optional third entry (paint only; nothing may rely on red-vs-green; autumn trees are gold). Grasses/reeds are short (1-2.5 yd): every club flies them.
-- **Wildflowers** (decor `kind: 'flowerbed'`, id kept; sprite or drawn shape): decor only, never touches play (`test-hole-editor.mjs` proves the lie under one is unchanged).
+- **Wildflowers** (decor `kind: 'flowerbed'`, id kept; sprite or drawn shape): decor only, never touches play (`tools/test-hole-editor.mjs` proves the lie under one is unchanged).
 
 ## Power lines: the drawing half (2026-09-22, `docs/HANDOFF-GOLF-POWER-LINES.md`)
 
@@ -108,6 +108,4 @@ Objects spec: `docs/HANDOFF-GOLF-OBJECTS.md`. Power lines: `docs/HANDOFF-GOLF-PO
 
 ## Open items
 
-- A true L-shaped green or a deliberate ring of sand cannot be drawn by the editor (two-outline feature, not a drawing trick).
-- Matt's browser copy of Red Mesa held the pre-repair shapes of holes 6/7/9 after the first fold-back (editor loads from `localStorage`, not the file): reset or re-import.
-- Mountain/Swamp done; further looks only if Matt asks. Agreed next list (look-only objects: fountain, lighthouse, windmill, ducks/deer, waterfall; walls/buildings/cliffs; hills) - Matt said "only flower beds" from the look-only list and "no bridges".
+Open items: see the root TODO.md, "Course Creator".

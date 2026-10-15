@@ -1,151 +1,112 @@
 # TODO
 
-Running list. Newest asks at the top of each section. Delete a line when it ships.
+One list, by game. One line per item. When an item ships, delete its line in the same change.
 
-## Asked for
+## Hub (shared)
 
-- **Turn-based multiplayer.** Matt, 2026-08-29: "finally create the turn based multiplayer mode."
-  Scope decided by Matt the same day: **async / play-by-mail, on the direct 2-player games** -
-  Connect Four, Battleship, Mancala and the like. Explicitly **NOT** the card games (Uno,
-  Chinchon, Escoba, Monopoly Deal) and **not** the N-seat path-B roadmap in
-  `docs/archive/HANDOFF-MP-ROADMAP.md`, which stays parked.
-  - Also wanted: **Skeeball as a challenge.** One round vs one round, or three vs three. This is
-    a different shape from the board games - it is solo play whose RESULT is compared, so it
-    needs no move-by-move protocol, only a posted score and a deadline. Likely the cheapest of
-    the set to ship, and a good first slice.
-  - The real work: `js/net.js` today is a LIVE room. It pings presence every ~10s so peers can
-    detect a peer going away, and nothing persists a game for a player who is not there. Async
-    needs the game state to survive both players being gone, plus an "it's your turn" surface on
-    the launcher (there is no push notification story in this app yet).
-  - THE LAW applies to any stored game state: a half-finished challenge is player data.
+- The emoji does not appear everywhere the name does: shared `chipHTML({name, emoji})` plus a sweep, immersive games last; paused by Matt (root CLAUDE.md, "The shared profile").
+- Leaderboard: a best-metric board should rank on that best by default, not on the last-picked sort (check; branch `claude/skeeball-leaderboard-ui-9y2b8r` was deleted, head `e11818d`).
+- **Matt:** say "release X" for any admin-only game already switched on for players on the admin page (e.g. Arrow Maze?), so it is saved on phones instead of re-downloaded each open (root CLAUDE.md, "Releasing a game").
+- **Matt:** play online on two real phones for Battleship, Chinchón, Dots and Boxes, Filler, Mancala, Tic Tac Toe (check; each game's CLAUDE.md, "unverified"; `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`).
+- `tools/test-match-chat.mjs` (in-match chat) fails about 1 run in 5 on main: "the other side can answer" verify race (check).
 
-- **New game: Pipes.** Matt, 2026-08-29: water flows in one end, a grid of pipe pieces sits
-  misrotated, rotate them to build an unbroken path to the exit. "similar puzzle vibe as nuts and
-  bolts."
-  - Closest existing model is `nuts-bolts/` (~1,960 lines): a **generator** that builds a
-    guaranteed-solvable board, a small pure game core, a UI, and headless tests. Copy that shape.
-  - The generator is the whole game: build the solution path FIRST, then scatter rotations, and
-    assert solvability in `test.js` rather than trusting it.
-  - Standing rules that apply from line one: full hub module-contract wiring by default, the
-    `game-ui` skill and `docs/BUILDING-A-GAME.md` before any UI, `onViewportResize`, `makeT` with
-    an `{en, es}` dictionary, a stats recorder plus a `GAME_META` row, `js/game-art.js` tile art,
-    `css/ui.css` `.gh-*` primitives (a new game is the cheapest place to adopt them), a
-    `pipes/CLAUDE.md`, and `node test-game-conventions.mjs` before the commit.
-  - **The water ANIMATES along the path on a solve - decided by Matt, 2026-08-29, and it is not a
-    nice-to-have.** "Animations are what really impresses people playing the games. the king of
-    games is really WOWed by the key animation. Stuff like that is valuable to me." Budget the
-    solve animation as a first-class feature, not polish at the end, and let it drive the render
-    approach. Look at Nuts & Bolts' key animation as the bar to clear.
+## Air Hockey
 
-- **Skeeball: see where everyone stands on the objectives.** Matt, 2026-08-29: "on the
-  leaderboard or on my admin page, I want to be able to see where everyone is in skeeball,
-  their progress on the objectives. Just out of curiosity."
-  - Partly built already: the admin page's **Player scores** section renders each person's three
-    objectives per machine with `now / target` and a met tick (`js/admin-ui.js` `goalsHTML()` ->
-    `skeeball/js/goals.js` `readGoals()`).
-  - The gap: `playerBlocks()` filters to machines a person has actually PLAYED, so a player who
-    has not reached a machine shows nothing for it. You cannot see who is stuck one objective
-    short of the next unlock, which is the question being asked.
-  - Decide where it lives: extend the admin section, or put a read-only version on the
-    leaderboard (public means everyone sees everyone's progress).
+- **Matt:** check online play on two real phones (air-hockey/CLAUDE.md, "Not yet verified on two real phones") (check).
 
-- **Skeeball: consider making the objectives easier.** Matt, 2026-08-29: King of Games has
-  cleared everything up to RUNAWAY while nobody else has unlocked much, so the unlock chain may
-  be gated too hard for the rest of the family. Do the progress view above FIRST - it is the
-  data this decision needs. Note the standing rule: Matt's goal numbers get beaten far sooner
-  than expected, so the current bars were deliberately set high; the fix may be pacing, not
-  lower numbers.
+## Archery
 
-- **Pinball: get it working.** Matt, 2026-08-29: "It'd be nice to get pinball to work too" and
-  "our pinball is FAR from being finished... they don't work." Matt's judgement on the 08-22
-  pitch/friction commits: "You tried, but it didn't make the game better." Treat the game as
-  UNFIXED regardless of what those commit messages claim. Still `devOnly: true`.
-  - **Outside engines, checked 2026-08-29. None are adoptable:**
-    - VPE / VisualPinball.Engine - genuinely excellent and actively developed (release
-      v0.0.1-preview.194, 2026-08-23), but C# on Unity + HDRP, GPL-3.0, desktop targets only,
-      and Unity WebGL is unsupported on mobile browsers.
-    - Mission Pinball Framework - Python that drives REAL hardware (coils, switches, FAST /
-      P-ROC / Stern SPIKE). No ball physics to borrow. Wrong category.
-    - Future Pinball - closed source, Windows only, last release 2010-12-31.
-    - **vpx-js - DEAD.** Last real commit and last release (v1.3.4) are both 2020-11-12; all 30
-      branches since are dependabot. 60 stars, GPLv2, scripting engine left WIP, wants a `.vpx`
-      table file.
-    - The hobby HTML5 pinball games (pinball-wizard, Astro-Pinball, pinballjs) are all dead
-      2011-2018, tiny, and carry **no LICENSE file at all** - legally unusable, and all worse
-      than what we have.
-  - **The recommendation: replace the SOLVER, not the game.** `pinball/js/physics.js` is 340
-    hand-rolled lines of contact resolution, and that is where the badness lives - sticking,
-    mushy flippers, tunnelling. The other ~3,600 lines (`table.js`, `game.js`, `render.js`,
-    `ui.js`) are hub-specific work no outside project supplies: the module contract, immersive
-    layout, DMD, missions, i18n, stats.
-    - **planck.js** (MIT, 5.3k stars, last commit 2026-04-07) is a Box2D port and the strongest
-      fit: continuous collision detection kills ball tunnelling outright, and a flipper becomes a
-      motorised revolute joint with a torque limit - which is what a real flipper IS - instead of
-      a hand-swung kinematic bat.
-    - matter.js (MIT, 18.4k stars) is the better-known alternative but has been quiet since
-      2024-06 and lacks planck's continuous collision.
-    - Cost: one vendored ESM file in the REST cache tier. It IS a dependency, which the repo has
-      none of by design - Matt's call to make, and worth making for this one game.
-  - `claude/pinball-physics-layout-vf9z5q` (08-14) is stale; mine `flipperGap()` out of it, then
-    delete it. `pinball-friction-wip` becomes moot if the solver is replaced.
+- **Matt:** publish the `archery` rules from `database.rules.json` (console, Realtime Database, Rules); until then online screens say so (archery/CLAUDE.md, "Online challenges").
+- **Matt:** run `firebase deploy --only functions` for `archeryTurnPush` (root CLAUDE.md, "Push notifications").
+- Real-phone feel: drag gain, ring drain and sway were set from video, not a thumb; expect Matt to tune.
+- No best-of-3/5 series online.
 
-## Already open, carried
+## Arrow Maze
 
-- **The emoji does not follow the player everywhere.** Paused by Matt 2026-08-25. Needs a shared
-  `chipHTML({name, emoji})` primitive plus a sweep; the immersive games go last. See the shared
-  profile section of the root CLAUDE.md.
-- **POPONGO is the only Skeeball machine still admin-only.** Everything else is Open or
-  Unlockable. Releasing it is one control on the admin page, no commit.
-- **Sam / Sam1 player records need merging.** Waiting on Sam being online when he next opens the
-  app. `fix-sam-merge.mjs` is untracked in the repo root.
-- **Desk clutter.** ~47 MB untracked in the working tree: `skeeball/Machines/` (36 MB) and
-  `skeeball/References/` (5.7 MB) are the reference media PR #244 deliberately untracked and
-  should be gitignored, not deleted; `.gitignore`'s `.claude/*` is root-anchored so
-  `skeeball/.claude/` slips past it; ~30 finished July handoff docs belong in the sibling
-  `Game-Hub-Docs/` archive.
-- **Two small leaderboard residuals** from the deleted `claude/skeeball-leaderboard-ui-9y2b8r`
-  branch (head was `e11818d`, recoverable by SHA if wanted):
-  - a best-metric board should default to ranking on that best, not on the device's last-picked
-    sort (the branch called it `effSort`);
-  - `test-skeeball-machine-spec.mjs` should assert `SK_MACHINES` in `js/game-stats-ui.js` still
-    matches `skeeball/js/boards.js`, so a new machine cannot leak a raw i18n key onto the player
-    screen. ~20 lines, and two machines have been added since.
-- **Ten dead July branches** plus three orphaned git worktrees (`gh-lb-wt`, `gh-main-check`,
-  `gh-strip`) that `git worktree prune` cannot remove (permission denied every fetch).
+- Play-screen menu button touches the Hub button: back arrow stays top left, one row down under the Hub button, like Gridlock (`docs/BUILDING-A-GAME.md`, Part 0).
 
-## Maybes - pinball, if the gravity fix is not enough
+## Ball Run
 
-Checked 2026-08-29. In rough order of how much they change.
+- **Matt:** playtest every tuning number (cadences, gap lengths, apex cap, pickups, Orbital colours); should Splits/Jumps count toward the speed tier; should a missed-Jump fall read differently; a wider variant map was never scoped.
 
-- **Replace the SOLVER, keep the game.** `pinball/js/physics.js` is 340 hand-rolled lines of
-  contact resolution and that is where sticking, mushy flippers and tunnelling live. The other
-  ~3,600 lines (`table.js`, `game.js`, `render.js`, `ui.js`) are hub-specific work nothing
-  external supplies. **planck.js** (MIT, 5.3k stars, last commit 2026-04-07) is a Box2D port with
-  continuous collision detection and motorised revolute joints - which is what a real flipper IS.
-  matter.js (MIT, 18.4k stars) is better known but quiet since 2024-06 and has no continuous
-  collision. Cost: one vendored ESM file in the REST cache tier. Offline is unaffected - it is a
-  committed file like any other. The real cost is that it breaks the root CLAUDE.md's opening
-  line ("no build step, no dependencies, no framework") and leaves us with 150 KB we cannot
-  easily debug.
+## Baseball
 
-- **GDevelop, the way Car Race was done.** `8e0af58` added `car-race/` as an admin-only launch-out
-  game on 2026-08-16; `c93fad2` removed it four days later, and that message says the demo
-  "served its purpose (proving the GDevelop -> export -> hub workflow); recoverable from history
-  if wanted." GDevelop is open source, has a Box2D physics behavior, and exports a self-contained
-  static HTML5 bundle. Trade-offs: it lands as a **launch-out** game, not an in-hub module, so
-  stats need `window.__ghStats` glue like Monopoly Deal and Parchis; and because it is authored
-  in a visual editor, Matt iterates on the feel directly instead of describing it.
+- Contact-grid `ratio`/`cross`/`ceiling` since R16; `lineDriveCenterDeg` vs `CARRY_PEAK_DEG` (sloppy timing beats perfect); Pitch Accuracy and the run-speed lever (`runSpeedV2`/`runFtSPerPt`): Matt's calls (needs a joint re-derivation with `CARRY_SCALE`).
+- Cosmetic: Crouch (R12), `Walk` clip unmeasured, `hub.js` blurb, `careers` rules publication unconfirmed (check).
 
-- **Flipper correction curves (nFozzy).** The thing Visual Pinball has that no physics library
-  gives you. Two curves - corrected velocity magnitude, and corrected x-velocity - indexed by
-  where along the bat the ball struck and normalised to flipper length, plus a millisecond cutoff
-  after the flipper fires. VPE ships three profiles measured off real solid-state machines. This
-  is why VP flippers feel right: a bare rigid-body flipper is physically correct and still feels
-  wrong. Worth doing whatever solver we end up on.
+## Battleship
 
-- **Physics rate.** Visual Pinball runs at **1000 Hz** (`PhysicsStepTime = 1000` usec). We run at
-  480. Not obviously the problem, but it is the gap most likely to matter for flipper contact.
+- Turn-by-turn (play by mail) challenges like Darts, if still wanted (check; asked 2026-08-29, scope Connect Four, Battleship, Mancala).
 
-- **Ball rotation is not simulated at all.** `ball.spin` is advanced from `vx` for the renderer
-  and never fed back. Every rolling behaviour - the 5/7, spin off a rubber, English round the
-  orbit - is therefore absent or faked. A real solver gives this for free.
+## Connect 4 Hoops
+
+- Two bounce gaps in `test.js` `KNOWN_GAPS` stay red (41% of misses bounce vs 50%; 0.45 vs 0.50 m/s): ask Matt first, every lever costs scoring.
+- Does a human swipe have the precision seven columns need? Only a playtest answers.
+- Outer columns are easier than the middle (walls return wide balls into them): confirm it reads as skill.
+
+## Connect Four
+
+- Turn-by-turn (play by mail) challenges like Darts, if still wanted (check; asked 2026-08-29).
+
+## Course Creator
+
+- A true L-shaped green or ring of sand cannot be drawn (needs a two-outline feature).
+- **Matt:** reset or re-import Red Mesa in your browser copy, it held pre-repair holes 6/7/9 (check; the editor loads from `localStorage`, not the file).
+- Further look-only objects (fountain, lighthouse, windmill, ducks/deer, waterfall, walls, hills) only if Matt asks (Matt: flower beds only, no bridges).
+
+## Escoba
+
+- `TypeError ... (reading 'avatar')` in `_renderMatchModal` seen once on a synthetic snapshot (`this.game.winner` null); if it recurs, `checkMatchEnd()` fires `matchEnd` without a winner.
+- **Matt:** watch the broom sweep by eye, only checked by geometry and code.
+
+## Flick Soccer
+
+- **Matt:** redeploy functions (`firebase deploy --only functions`) for the own-goal wording and "Your turn!" (check; flick-soccer/CLAUDE.md, "Notifications").
+- **Matt:** confirm a real challenge push arrives on a phone (flick-soccer/CLAUDE.md, "Notifications").
+
+## Golf
+
+- **Matt:** decide old leaderboard scores (set before 2026-09-10, physics since rebuilt): leave, label or void per player via `js/stats-corrections.js` (golf/CLAUDE.md, "Status").
+- Oasis Sands hole 4 (par 5, 451 yd, reachable in two) is a named gap in `test.js` 15c, as are Oasis' easier closing three; fix before that course opens.
+- HUD top row (`.gf-tl`/`.gf-tc`) overlaps on phones 360 px and narrower.
+- Club upgrade tiers designed, not built (`clubs.js` `upgraded`; spec 21.3); must not turn every par 5 into an eagle look.
+- Only 2 of 5 aim-ladder dots show with a driver (feel call); Red Mesa 1 pin sits at the bowl's low point; seven Red Mesa greens (Oasis worse) force a putt over 60 ft and need redrawing.
+- Left alone: flight runs off wall clock (a stall teleports the ball), `LOCK_MS` swallows the first tap after a ball rests; unbuilt: AI-opponent result board, walking golfer, Oasis palm colour and greenside bunkers.
+
+## Mancala
+
+- Turn-by-turn (play by mail) challenges like Darts, if still wanted (check; asked 2026-08-29).
+
+## Pinball 2
+
+- BOARDWALK is Matt's to tune: three probes red (flippers move the ball under 300 mm on half the power range; r42 mouth takes no shot weak enough to roll out; tunnel probe's 6 of 2325 OFF TABLE, see `HANDOFF.md`).
+- Remaining object types, one at a time with panel and probe: drop targets, spinner, rollover lanes, kicker/saucer, plunger.
+- Robot player (phase 8); hub and stats entry only after Matt judges it, with a new id.
+
+## Skeeball
+
+- Show everyone's progress on the objectives, including machines not yet played: `playerBlocks()` in `js/admin-ui.js` skips them; admin page or leaderboard (asked 2026-08-29).
+- Consider easier objectives, after the progress view; pacing may matter more than lower numbers (asked 2026-08-29).
+- **Matt:** BRICK CITY, RUNAWAY and POPONGO are Testing by code default; release from the admin page when ready (check; the admin page may already override) (`skeeball/js/boards.js`).
+- `tools/test-skeeball-machine-spec.mjs` should assert `SK_MACHINES` in `js/game-stats-ui.js` matches `skeeball/js/boards.js` (about 20 lines).
+- `tools/test-visual.mjs skeeball` fails "CANNOT BE PLAYED": resuming a rack banked on another machine leaves the playfield dead (canvas 0x0); reproduced on main 2026-10-15 (check if real or a test gap).
+- POPONGO: 84% of throws roll back to the trough (skeeball/CLAUDE.md, "POPONGO and the arrangement layer").
+
+## Tic Tac Toe
+
+- Hub at 390x664 with browser toolbars: the screen is 16px too tall and scrolls (`tools/test-visual.mjs tic-tac-toe`, reproduced on main 2026-10-15).
+
+## Texas Hold'em
+
+- Computers' hole cards can still be read in the save with developer tools (holdem/CLAUDE.md, "Two-tab trick closed").
+- **Matt:** play online on real phones; only proven against a local stand-in (holdem/CLAUDE.md, "Verification status") (check).
+
+## Yahtzee
+
+- Add the "Nth consumer: Yahtzee" entry to `js/CLAUDE.md`'s lockstep section (yahtzee/CLAUDE.md, "Known gaps"; `js/CLAUDE.md` table, `net.js` row).
+
+## Housekeeping (Matt's PC)
+
+- Sam / Sam1 player records need merging when Sam is online; `fix-sam-merge.mjs` was untracked in the repo root (check).
+- About 47 MB untracked: `skeeball/Machines/` and `skeeball/References/` should be gitignored not deleted; `.gitignore`'s `.claude/*` is root-anchored so `skeeball/.claude/` slips past (check).
+- Ten dead July branches and three orphaned git worktrees (`gh-lb-wt`, `gh-main-check`, `gh-strip`) that `git worktree prune` cannot remove (check).

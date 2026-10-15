@@ -116,7 +116,7 @@ roadmap: this is the game the repo's MP conventions were settled in**, so phases
 here. `js/net.js` itself is untouched — 2 human seats, host 0 / guest 1. Extending the protocol
 to 2-4 players is roadmap phase 3 and is not part of this.
 
-**Status: the protocol is proven headlessly against `FakeRoom` (`test-mp-lockstep.mjs`, T1-T7,
+**Status: the protocol is proven headlessly against `FakeRoom` (`tools/test-mp-lockstep.mjs`, T1-T7,
 all five invariant probes green). No real room has ever been created — a cloud session cannot
 reach Firebase. Real-room behaviour is unverified** until
 `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass runs on two real devices; B2 (guest seat
@@ -172,7 +172,7 @@ what makes a network-driven seat safe.
   Written after every settled move and again at a game's end; 30-minute rejoin window.
 - Room `config` carries only `{ variant }`.
 
-### Which invariant checks apply (`js/CLAUDE.md:271`, probes T1-T7 in `test-mp-lockstep.mjs`)
+### Which invariant checks apply (`js/CLAUDE.md:271`, probes T1-T7 in `tools/test-mp-lockstep.mjs`)
 
 1. **Decide the game end on `state.over`, never `state.winner`** — `winner` is null at the exact
    moment a DRAW ends, and Classic is draw-heavy by construction. T2.

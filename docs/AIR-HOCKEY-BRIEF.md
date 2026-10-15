@@ -43,7 +43,7 @@ air hockey table, not a variant.
 
 Every row of the "Use what exists" table applies (`onViewportResize`, `js/theme.js`,
 `requireName()`, `css/ui.css` for setup and menus, shape markers, not color alone, for anything
-colored, no em dashes, X on the win/lose popup). Run `node test-game-conventions.mjs` before every
+colored, no em dashes, X on the win/lose popup). Run `node tools/test-game-conventions.mjs` before every
 commit.
 
 ## 3. The game
@@ -121,8 +121,8 @@ screens and CSS can go to Sonnet.
 
 ## 7. Before calling any stage done
 
-- `node validate-sw-assets.mjs`, `node test-game-conventions.mjs`, this game's headless test,
-  `players-agg.test.mjs`.
+- `node tools/validate-sw-assets.mjs`, `node tools/test-game-conventions.mjs`, this game's headless test,
+  `tools/players-agg.test.mjs`.
 - Visual check per `VISUAL-PROCESS.md` on a phone-size screen, light and dark.
 - Bump `CACHE` in `sw.js` past what is on `main` right now.
 - Write `air-hockey/CLAUDE.md` (rule 9) and add the row to the root games table.

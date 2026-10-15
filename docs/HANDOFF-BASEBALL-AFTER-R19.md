@@ -18,7 +18,7 @@ You are continuing work on the Baseball game in the Game Hub repo (`baseball/`).
   - Hit Speed matters: wider/stronger grounder beat-outs, gap hits stretch, steals 0.02/pt.
   - **Majors points are spent after the season** (`SPEND_AFTER_SEASON`, `career.js` `spendLocked`). Matt chose this.
   - Majors rosters 23.0 / ceiling 26; a Majors loss pays 1 point.
-- Simulated careers (`node sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400`, ~1 min): all 8 assertions pass.
+- Simulated careers (`node tools/sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400`, ~1 min): all 8 assertions pass.
   - Strong player, first-try World Series: 30.5% (was 60%).
   - Median player, first title: 11 seasons. Perfect Season: 3.8%.
 - The career simulator's player now steals (`HUMAN_STEAL`) and works the corners (`paint` per tier).
@@ -35,8 +35,8 @@ You are continuing work on the Baseball game in the Game Hub repo (`baseball/`).
 ## Rules that bit last session
 
 - **Bump `CACHE` in `sw.js` past what's on `main` RIGHT BEFORE merging.** Another session shipped v913 minutes before ours; it had to be fixed with v914. Re-fetch `main` just before the PR.
-- Run `node validate-sw-assets.mjs` after any game-file change, and commit `sw.js` + `version.json`.
+- Run `node tools/validate-sw-assets.mjs` after any game-file change, and commit `sw.js` + `version.json`.
 - Deploy = PR → merge → confirm the `pages build and deployment` run succeeds → tell Matt it's live.
-- Any economy or difficulty change: measure it with `sim-baseball-career.mjs`, never guess. The doc's locked rule: a win must always pay at least as much as a loss.
-- Baseball suites: `node baseball/js/test.js`, `node test-baseball-career.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` (start `node server.mjs` first). All green at v914.
+- Any economy or difficulty change: measure it with `tools/sim-baseball-career.mjs`, never guess. The doc's locked rule: a win must always pay at least as much as a loss.
+- Baseball suites: `node baseball/js/test.js`, `node tools/test-baseball-career.mjs`, `BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`, `node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball` (start `node server.mjs` first). All green at v914.
 - Matt's style: succinct, plain words, PC only.

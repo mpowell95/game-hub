@@ -122,13 +122,13 @@ All of these drive the REAL engine. None of them needs a browser unless noted.
 | `node reference/hoops/probe-hole-radius.mjs` | Scoring vs the hoop mouth radius (the nested per-hole `r`, which `probe-bounce`'s flat `--set` cannot reach). Widening only. |
 | `node reference/hoops/sweep-speed.mjs --scan` / `--band=min,max` | The launch speed band. Re-derive it after ANY change to the board's height or the hoop row's. |
 | `node reference/hoops/check-display.mjs` | The machine as the PLAYER sees it, in a real browser. 11 checks. Needs `node server.mjs`. |
-| `node test-hoops4-mp.mjs` | The pure halves of turn-by-turn multiplayer. |
-| `node check-no-scroll.mjs hoops4` | No game in this hub may scroll. |
-| `node test-visual.mjs hoops4` | The only suite that LOOKS at it. Writes a contact sheet — open it. |
-| `node test-game-conventions.mjs` | The shared checklist. |
+| `node tools/test-hoops4-mp.mjs` | The pure halves of turn-by-turn multiplayer. |
+| `node tools/check-no-scroll.mjs hoops4` | No game in this hub may scroll. |
+| `node tools/test-visual.mjs hoops4` | The only suite that LOOKS at it. Writes a contact sheet — open it. |
+| `node tools/test-game-conventions.mjs` | The shared checklist. |
 
-**Do NOT run `run-all-tests.mjs`** unless Matt asks for it by name (his instruction). Run the
-suites covering what you changed, plus `validate-sw-assets.mjs` before every deploy.
+**Do NOT run `tools/run-all-tests.mjs`** unless Matt asks for it by name (his instruction). Run the
+suites covering what you changed, plus `tools/validate-sw-assets.mjs` before every deploy.
 
 ### A COARSE GRID LIES
 
@@ -158,7 +158,7 @@ pre-authorised and does not need re-confirming:
 
 Before the push: bump `CACHE` in `sw.js` **past what is on `main` right now**, not past your
 working copy (two open branches otherwise both compute the same number and produce a permanently
-mixed build), then run `node validate-sw-assets.mjs`, which also rewrites `REST_MANIFEST` and
+mixed build), then run `node tools/validate-sw-assets.mjs`, which also rewrites `REST_MANIFEST` and
 `version.json` — commit those.
 
 ## 8. Working habits Matt has asked for

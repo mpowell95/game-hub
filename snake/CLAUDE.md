@@ -29,7 +29,7 @@ across a hub navigation; do not "finish" this by adding a save key.
 snake/js/game.js     pure engine: grid, tick step(), growth, collisions, input queue; no DOM/timers
 snake/js/ui.js       DOM shell: setup, canvas render, swipe+keyboard input, pause, modal, stats
 snake/js/strings.js  every user-visible string, { en, es } — the per-game dictionary REFERENCE
-snake/js/test.js     headless engine assertions (node snake/js/test.js), in run-all-tests.mjs
+snake/js/test.js     headless engine assertions (node snake/js/test.js), in tools/run-all-tests.mjs
 snake/css/snake.css  all styles, .sn- prefixed, every rule descendant-scoped under .sn-root
 snake/index.html     standalone host (same init() as in-hub)
 ```
@@ -75,7 +75,7 @@ mirrors Ball Run): every finished run counts played+won; `sn: { runs, bestLen, b
 with Math.max-only bests (`bestLen` = final snake length, start 3 + food eaten). Recorded once
 per run in `_endRun()` BEFORE the modal shows, so a fast "play again" can't skip it. The three
 mandatory sub-counter surfaces all exist (root checklist item 7): the `sn` branch in
-`js/players-agg.js` (regression case in players-agg.test.mjs), `snakeScreen` in
+`js/players-agg.js` (regression case in tools/players-agg.test.mjs), `snakeScreen` in
 `js/game-stats-ui.js`, and `snakeRows`/tile/headline in `js/leaderboard-ui.js`. Snake is in
 players-agg's `SOLO` set and joins `soloRating()`'s best-relative-to-field axis in
 `js/leaderboard-rank.js` (guarded — pre-Snake remote records have no `snake` key).
@@ -174,7 +174,7 @@ node snake/js/test.js
 49 assertions: construction, movement, the reversal guard and queue cap, both wall axes, eating
 and growth, self-collision via a closed 2x2 loop at length 7, the legal tail-chase at length 4,
 wrap mode at all four walls plus wrap self-collision still being fatal, and food-spawn integrity
-over 50 seeded random runs. Wired into run-all-tests.mjs.
+over 50 seeded random runs. Wired into tools/run-all-tests.mjs.
 ## Nothing on the setup screen scrolls, and the D-pad previews follow the swatch (2026-09-08)
 
 Matt: *"I've told you several times before that I don't want any game in the gamehub to be
@@ -185,7 +185,7 @@ decision: `.hub-main .sn-root .sn-setup` carried `max-height: calc(100dvh - 150p
 `overflow-y: auto`, with a comment saying *"the OPTIONS scroll rather than the page: the page never
 scrolls, which is the actual rule."* That is not the rule. The rule is that everything fits.
 
-The scroll is gone and the 124px it was hiding is paid for by measurement. `check-no-scroll.mjs`
+The scroll is gone and the 124px it was hiding is paid for by measurement. `tools/check-no-scroll.mjs`
 (repo root) is what finds this class of bug now - it walks the game's own root for any element that
 CAN scroll and does, so a fixed box quietly scrolling inside a page that fits is no longer
 invisible.

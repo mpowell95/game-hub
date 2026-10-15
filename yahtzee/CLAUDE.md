@@ -110,7 +110,7 @@ Entry points: a **How to play** link on the setup screen, and the header **kebab
 kebab was previously three inert dots with no handler at all; it is a real `<button>` now with a
 thumb-sized hit area around the same 8px dots.
 
-`test-visual.mjs`'s `MOTION` probe for this game watches `.yz-ht-hand` travel (339px over ~6s). A
+`tools/test-visual.mjs`'s `MOTION` probe for this game watches `.yz-ht-hand` travel (339px over ~6s). A
 frozen hand would screenshot perfectly and teach nothing, which is precisely what a static check
 cannot see.
 
@@ -142,7 +142,7 @@ leave), never `document`, and all four come off in `destroy()` alongside the hol
 Matt, straight after the carousel shipped: *"confirm that these instructions display in Spanish
 too. Everything must also work in Spanish."* They did not — **not one string in this game
 translated.** Yahtzee had shipped with no i18n at all and had been
-`test-game-conventions.mjs`'s one standing `KNOWN_GAPS` entry ever since.
+`tools/test-game-conventions.mjs`'s one standing `KNOWN_GAPS` entry ever since.
 
 `js/strings.js` now covers **all 68 keys**: setup, lobby, every MP error and status, player names,
 game-over, the section-bonus label, the combo-info popover and all six how-to captions. **That
@@ -201,7 +201,7 @@ Matt, on a player's leaderboard record of 18 wins in 20 games:
 random()*6)`, per die, respecting held flags. It takes no player argument and has no branch on
 `state.current`; `aiTakeTurn()` calls that same `doRoll()` the player's ROLL button does (the
 comment above it explains why it deliberately isn't re-gated per seat). 6,000,000 sampled rolls
-came out within **0.013 percentage points** of uniform. `test-yahtzee-ai.mjs` now asserts the
+came out within **0.013 percentage points** of uniform. `tools/test-yahtzee-ai.mjs` now asserts the
 distribution permanently, so the question never has to be re-litigated from memory.
 
 **The opponent was the problem, and it was never good rather than dumbed down.** Profiled over
@@ -233,7 +233,7 @@ scratched 36.7% (from 89.7%). A 200-scoring player now wins ~43% instead of ~88%
 
 **Deliberate limits.** Still a heuristic, not a solver — one reroll of lookahead even when two
 remain, no expectimax, no endgame planning. The goal is an opponent worth beating, not one that
-cannot be beaten, and `test-yahtzee-ai.mjs` asserts a BAND (185–235) so a future change that makes
+cannot be beaten, and `tools/test-yahtzee-ai.mjs` asserts a BAND (185–235) so a future change that makes
 it hopeless again fails just as loudly as one that makes it unbeatable. Yahtzee gets scratched
 *more* now (72% vs 58%) — that is correct, not a regression: it is the right box to give up when
 the alternative is burning Large Straight.
@@ -326,7 +326,7 @@ after Tic Tac Toe (who plays X), Dots and Boxes (who opens), Pool (who breaks), 
 (round-start timestamp) and Filler (an rng seed via `round.deck` instead).
 
 **Status: verified against real Firebase, two real browser contexts** (not a `FakeRoom` mock —
-this game has no `test-mp-lockstep.mjs` entry yet, see Tests below). Confirmed: room
+this game has no `tools/test-mp-lockstep.mjs` entry yet, see Tests below). Confirmed: room
 create/join/start, real random dice rolls syncing byte-identical between devices, a hold+reroll
 staying in sync, category commits agreeing on score on both sides, turn passing correctly,
 `localSeat()`-relative rendering (the perspective-flip described above) holding on BOTH screens
@@ -343,8 +343,7 @@ explicit Leave or an opponent's own `destroy()` ends a room here, there is no pa
   (also not yet on the shared `js/i18n.js` layer). The stats screen's own strings (Won/Lost/
   Tied/Played/Yahtzees/Best score, the game title) DO go through `js/strings.js`/`t()` — see
   "Stats" below — since that infrastructure is shared with every other game, not this game's own.
-- Add a `### The Nth consumer: Yahtzee` entry to `js/CLAUDE.md`'s multiplayer-lockstep section
-  (per the documentation convention every prior MP game followed) — not yet done as of this note.
+- Open items: see the root TODO.md, "Yahtzee".
 
 ## Stats (2026-07-28)
 
@@ -376,23 +375,23 @@ path regardless of who made it.
   in both My Stats and the Leaderboard's player detail, since both share `gameListHTML`/
   `screenFor`), and an explicit `g === 'yahtzee' && src.yz` branch in `js/players-agg.js` so the
   `yz` sub-counter survives a cross-device combine instead of blanking to zero — verified by a
-  dedicated `players-agg.test.mjs` case (counters sum, `bestScore` takes the max, not the sum).
+  dedicated `tools/players-agg.test.mjs` case (counters sum, `bestScore` takes the max, not the sum).
 - `game_title_yahtzee`/`gs_yz_yahtzees`/`gs_yz_best` added to `js/strings.js` (EN+ES) —
-  `test-i18n-strings.mjs` green.
+  `tools/test-i18n-strings.mjs` green.
 - Verified: a real headless 13-round game recorded correctly to `localStorage['gamehub.stats']`
   (`total`/`byDiff.ai`/`yz` all populated, `won`/`yahtzees`/`bestScore` matching the actual game),
   and the My Stats overlay renders the drill-down screen with real numbers after seeding a fixture.
 
 ## Tests
 
-**`test-yahtzee-ai.mjs`** (2026-08-13) is this game's first real suite, and the only one in the
+**`tools/test-yahtzee-ai.mjs`** (2026-08-13) is this game's first real suite, and the only one in the
 repo that PLAYS a game rather than looking at one. It drives a full 13-round match against the
 live AI in a real Chromium through `window.__yzTest` — the actual `endTurn()` →
 `scheduleTimeout(aiTakeTurn, 700)` chain, animations and awaits included — then profiles the
 opponent over N games and pins the die's distribution. Four things it exists to catch:
 
 1. **A throw inside the AI's turn**, which leaves the opponent frozen with the board painted
-   perfectly. `test-visual.mjs` prints "NEVER PLAYED BY ANYTHING: yahtzee" precisely because a
+   perfectly. `tools/test-visual.mjs` prints "NEVER PLAYED BY ANYTHING: yahtzee" precisely because a
    screenshot cannot see that.
 2. **An opponent that got weak again** (the 185 floor) — the incident above, permanently.
 3. **An opponent that got unbeatable** (the 235 ceiling), which is the same mistake pointing the
@@ -407,12 +406,12 @@ tripped on an honest game and read as a stall.
 Everything else for this game (scoring coverage, animation timing, `prefers-reduced-motion`,
 module lifecycle/leak checks, the real two-device MP test, the stats-recording check) was still
 run ad hoc from a scratch directory during development and is not committed —
-`players-agg.test.mjs`'s Yahtzee case above IS committed and wired into `run-all-tests.mjs`.
+`tools/players-agg.test.mjs`'s Yahtzee case above IS committed and wired into `tools/run-all-tests.mjs`.
 Everything else (scoring coverage, a full 13-round game, animation timing, `prefers-reduced-
 motion`, module lifecycle/leak checks, the real two-device MP test, and the stats-recording
 check described above) were run ad hoc from a scratch directory during development, not
 committed. If this game gains real regression coverage, follow the pattern of
-`test-mp-lockstep.mjs`/`test-stats-identity.mjs` etc. — a checked-in, `run-all-tests.mjs`-wired
+`tools/test-mp-lockstep.mjs`/`tools/test-stats-identity.mjs` etc. — a checked-in, `tools/run-all-tests.mjs`-wired
 suite — rather than leaving verification to a session's own scratch scripts again. A
 `FakeRoom`-backed lockstep test (matching the seven reference games' own suite) would also let
 the recovery/divergence path finally be exercised, which the real-Firebase pass above could not

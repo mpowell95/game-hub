@@ -20,7 +20,7 @@ uno/js/game.js     pure engine (no DOM, no Math.random, injected rng, presetDeck
 uno/js/ai.js        pure AI: easy/medium/hard, samples only from the engine's legal-move list
 uno/js/ui.js        DOM, setup screen, render loop, hub init/destroy contract
 uno/js/strings.js   { en, es } - every user-visible string
-uno/js/test.js      headless engine assertions (node uno/js/test.js), in run-all-tests.mjs
+uno/js/test.js      headless engine assertions (node uno/js/test.js), in tools/run-all-tests.mjs
 uno/css/uno.css     all styles, .un- prefixed, every rule descendant-scoped under .un-root
 uno/index.html      standalone host (same init() as in-hub)
 ```
@@ -248,7 +248,7 @@ until Uno gets a multiplayer pass.
 
 ```
 node uno/js/test.js          # 99 assertions incl. AI win-rate harness (~10s extra)
-node test-i18n-strings.mjs; node test-game-conventions.mjs; node check-no-scroll.mjs uno
+node tools/test-i18n-strings.mjs; node tools/test-game-conventions.mjs; node tools/check-no-scroll.mjs uno
 ```
 Covers deck composition, +2 stacking, penalty lump vs draw-until-playable, reshuffle total, Reverse as
 Skip at 2p vs flip at 3+, every first-card rule **re-proven relative to a non-zero `startPlayer`**

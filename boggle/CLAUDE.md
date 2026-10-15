@@ -85,7 +85,7 @@ life. `gamehub.boggle.mp.v1` is a THIRD key (never touching `gamehub.boggle.v1` 
 
 **This is NOT the lockstep move-log protocol** the other MP games share: a round has no shared mutable
 state during play, so there is nothing to diverge on or hash (write-up: `js/CLAUDE.md`, "Nth consumer:
-Boggle"). Do not force it into `test-mp-lockstep.mjs`.
+Boggle"). Do not force it into `tools/test-mp-lockstep.mjs`.
 
 - **Room vocabulary**: `round.deck` = the 16 board FACES (`grid.map(row => row.map(t => t.face))`);
   `round.dealer` = the round's START TIMESTAMP (epoch ms), not a seat; `mp-round.js` `roundEndsAt`
@@ -95,7 +95,7 @@ Boggle"). Do not force it into `test-mp-lockstep.mjs`.
   `hostResult`/`guestResult` as siblings of `result`. `writeResult` does not fit (host-only, sets
   `status:'ended'`, which here means exactly "somebody abandoned the room"). **Each reported result
   carries its OWN round number `n`** because `startRound` never clears them; `bothResultsIn` in
-  `mp-round.js` is the guard (`test-boggle-mp.mjs` has a case).
+  `mp-round.js` is the guard (`tools/test-boggle-mp.mjs` has a case).
 - Both sides start their own local countdown when a round record arrives (`_mpApplyRoundRecord`).
 - **No AI, no difficulty setting** (the MP setup hides the difficulty row). `finish()`'s MP branch
   reports the human's own score and waits for both results (Leave button on the waiting card; the
@@ -110,7 +110,7 @@ Boggle"). Do not force it into `test-mp-lockstep.mjs`.
   (`_mpOnRoomUpdate`).
 - Rematch series in one room: `round.n` increments; only the HOST starts the next round (`_mpRematch`).
 - Tests: `boggle/js/mp-round.js` (pure helpers `roundEndsAt`, `remainingMs`, `wonFor`, `bothResultsIn`)
-  and `test-boggle-mp.mjs`. **Status: played once on two real devices; no `FakeRoom` integration test
+  and `tools/test-boggle-mp.mjs`. **Status: played once on two real devices; no `FakeRoom` integration test
   exists.**
 
 ## Spanish gameplay (2026-09-11) — the dictionary is now a SETTING
@@ -120,22 +120,22 @@ English" decision; the UI half stands.) **UI language and GAMEPLAY language are 
 The setup row **Dictionary / Diccionario** sets the word list and dice; the hub language is only the
 DEFAULT until the player has chosen once; a stored `wordLang` always wins.
 
-- **The list is GENERATED**: `build-boggle-es.mjs` fetches **RLA-ES** (LibreOffice es_ES hunspell,
+- **The list is GENERATED**: `tools/build-boggle-es.mjs` fetches **RLA-ES** (LibreOffice es_ES hunspell,
   tri-licensed GPL-3+/LGPL-3+/**MPL 1.1+**; the MPL notice is in `boggle/data/CREDITS.md`) and expands
   the Boggle subset into `words-es.txt` (149,873 words per the generator; 159,778 in the first count).
-  Re-run, then `validate-sw-assets.mjs`, commit both. Never hand-edit.
+  Re-run, then `tools/validate-sw-assets.mjs`, commit both. Never hand-edit.
 - **Matt's scope calls**: verbs carry **infinitive, gerund and participle only** (no conjugations);
   participles inflect (hablado/a/os/as); nouns/adjectives carry plural (flag `S`) and both genders
   (flag `G`); no proper nouns. **No accents, N stands in for Ñ** (words folded to A-Z), so dice, trie,
   solver, `Qu` tile and scoring are identical to English; the fold MERGES words, never invents them.
-  `test-boggle-es.mjs` asserts the edges (HABLO/HABLASTE/COMEREMOS absent).
+  `tools/test-boggle-es.mjs` asserts the edges (HABLO/HABLASTE/COMEREMOS absent).
 - **Two bugs found by asking a different question** (printing real solver output, measuring the
   opponent): (1) the generator ran PLURAL rules over FEMININE output (ROJASES, ALTASES): 9,934 bogus
   words, now a `[KNOWN-BUG PROBE]` paired with an assertion that real `-ases` plurals (CLASES, FASES)
   survive; **anything that looks like it needs a second affix pass almost certainly does not**. (2)
   `ai.js` took a fixed percentage, but scoring is superlinear in length and Spanish words are longer:
   AI averaged 37/115/204 vs English 27/76/129. Fixed with `TIER_PCT_BY_LANG` (`es` 0.16/0.33/0.44, `en`
-  0.20/0.45/0.70). **`node tune-boggle-es.mjs --ai` is the measurement; re-run after any change to
+  0.20/0.45/0.70). **`node tools/tune-boggle-es.mjs --ai` is the measurement; re-run after any change to
   dice, gate, word list or `scoreForWord`, and for any future language.**
 - **Dictionaries download on FIRST PLAY, not install** (Matt, 2026-09-11): the two lists are 3.23 MB of
   an 11.92 MB REST tier. `sw.js`'s `LAZY` tier (root `CLAUDE.md`) holds only them; still in `ASSETS`
@@ -143,7 +143,7 @@ DEFAULT until the player has chosen once; a stored `wordLang` always wins.
   **Cost: a device that never opened Boggle cannot play it OFFLINE** (`renderLoadError` /
   `load_error`). If that bites, the fix is an explicit download feature, NOT un-lazying the tier.
 - **`DICE_ES`** is derived (96 faces by letter frequency, 3-6 letter words weighted, vowels spread) and
-  measured (`tune-boggle-es.mjs`, 2000 shakes: median 111 words vs English 104). `Qu` carries over; **no
+  measured (`tools/tune-boggle-es.mjs`, 2000 shakes: median 111 words vs English 104). `Qu` carries over; **no
   K/W face, no Ñ face**. **`BOARD_QUALITY_ES`** is its own gate calibrated on Spanish's own 25th
   percentile (no conjugations means fewer short words).
 - **Threading**: `dict.js` caches PER LANGUAGE (`dictLang()` maps unknowns to English; a
@@ -166,5 +166,5 @@ DEFAULT until the player has chosen once; a stored `wordLang` always wins.
 
 ## Tests
 
-`node boggle/js/test.js` · `node test-boggle-mp.mjs` · `node test-boggle-es.mjs` · `node
-tune-boggle-es.mjs [--ai]`.
+`node boggle/js/test.js` · `node tools/test-boggle-mp.mjs` · `node tools/test-boggle-es.mjs` · `node
+tools/tune-boggle-es.mjs [--ai]`.

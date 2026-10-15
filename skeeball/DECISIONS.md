@@ -42,7 +42,7 @@ cabinet rather than a narrower part bolted onto the end of it.
 
 The hump (the rising ramp segment) is kept short in length as well as steep in angle. A longer
 hump raises the height of its own crest, and a tall crest sitting between the camera (behind the
-ball) and the board blocks the view of the lower-value holes. Checked with `sight.mjs`; re-run it
+ball) and the board blocks the view of the lower-value holes. Checked with `tools/sight.mjs`; re-run it
 if the ramp, board, or camera move.
 
 ### Launch angle
@@ -60,8 +60,8 @@ face" scored this as a full pass, because a ball that never leaves the ground st
 face — the metric couldn't see the missing arc. It shipped anyway and was only caught by playing
 the game. The fix (launch angle raised well above board tilt, ramp broken into six segments
 instead of four so the ball tracks the surface smoothly on exit) is what's in code now. A
-follow-up script, `measure-arc.mjs`, checks actual airborne clearance and landing spread — run it
-after touching ramp angle or segment count, since `tune-ladder.mjs` alone cannot detect a ramp
+follow-up script, `tools/measure-arc.mjs`, checks actual airborne clearance and landing spread — run it
+after touching ramp angle or segment count, since `tools/tune-ladder.mjs` alone cannot detect a ramp
 that fails to launch the ball.
 
 ### Trough and lip
@@ -875,7 +875,7 @@ A moving hole makes `(power, aim)` an incomplete description of a throw: the sam
 somewhere different depending on where the basket was at release. `skeeball/js/test.js`'s 41x21
 grid measures one frozen phase, and which phase it freezes is arbitrary.
 
-`sweep-mover.mjs` walks power x aim x PHASE, over a FULL period rather than a half - the sine is
+`tools/sweep-mover.mjs` walks power x aim x PHASE, over a FULL period rather than a half - the sine is
 symmetric in position but not in direction, and a basket sweeping toward the ball is not the same
 shot as one sweeping away.
 

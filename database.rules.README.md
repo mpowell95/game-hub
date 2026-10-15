@@ -38,7 +38,7 @@ on its next load (THE LAW). `bugReplies/` was the same: anyone could plant a "re
 player's inbox. Both now need the writer's uid in `admins/` (console-only, three of Matt's devices
 on 2026-10-14). Every writer in the app already ran only on those devices (the Admin page and the
 bug inbox are gated on `isAdminDevice()`, which asks `admins/` the same question), so nothing Matt
-uses changes. **`delete-device-record.mjs` signs in anonymously, so its device-reset write is now
+uses changes. **`tools/delete-device-record.mjs` signs in anonymously, so its device-reset write is now
 refused**: a reset has to come from the Admin page or the console.
 
 ## Current branches

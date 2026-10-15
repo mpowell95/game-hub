@@ -72,7 +72,7 @@ Mancala" - Filler is the fifth). `js/net.js` itself is untouched - 2 human seats
 inherently 2-player).
 
 **Status line (web-session pass): protocol proven headlessly against `FakeRoom`
-(`test-mp-lockstep.mjs`, F1-F6, all five `js/CLAUDE.md:271` invariants ported and green). No real
+(`tools/test-mp-lockstep.mjs`, F1-F6, all five `js/CLAUDE.md:271` invariants ported and green). No real
 room has ever been created - a cloud session cannot reach Firebase. Real-room behaviour is
 unverified** until `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass runs on two real devices.
 
@@ -160,7 +160,7 @@ and burn the recovery-attempt budget before the host's answer could arrive.
   separate-key choice, not Escoba's mp-sub-object shape. Permanent (THE LAW rule 5).
 - Room `config` carries nothing (`{}`); the per-game seed rides `round.deck` instead (see above).
 
-### Which invariant checks apply (`js/CLAUDE.md:271`, probes F1-F6 in `test-mp-lockstep.mjs`)
+### Which invariant checks apply (`js/CLAUDE.md:271`, probes F1-F6 in `tools/test-mp-lockstep.mjs`)
 
 1. **Decide the game end on `state.over`, never `state.winner`** - `winner` is `0` (no real seat)
    at the exact moment a stalemate-guard TIE ends, and this policy space is tie-prone (a
@@ -202,7 +202,7 @@ bug in Dots and Boxes (see `dots-boxes/CLAUDE.md`). Solo `startGame()` never res
 every game after the first one played in a session (Play again, Restart, and New game all call
 this same `startGame()` on the same instance, never a fresh one) silently recorded nothing at all,
 win, loss or tie. Fixed by adding the same reset `startGame()`'s MP counterpart already had.
-`test-filler-stats.mjs` (repo root) is the regression tripwire: plays three consecutive solo games
+`tools/test-filler-stats.mjs` (repo root) is the regression tripwire: plays three consecutive solo games
 in one mounted session via the real engine and asserts the stats store's `played` count increments
 after every one - confirmed red against the pre-fix code (stuck at `played=1`), green with the fix.
 

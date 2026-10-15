@@ -92,7 +92,7 @@ Matt approved: start **$25,000**, **1st takes 65% and 2nd 35%**, **online tables
   is decided (`payout()`: everyone puts the buy-in in; 3+ players 1st 65% / 2nd rest; heads-up see
   below). It rides the same once-per-game dedupe as the result (`state.rec` solo, `code:gid`
   online), so a reload can never pay twice. Walking away pays nothing.
-- **Not behind the rate gate** (`test-rate-guard.mjs` EXEMPT): a refused buy-in is a free game, a
+- **Not behind the rate gate** (`tools/test-rate-guard.mjs` EXEMPT): a refused buy-in is a free game, a
   refused prize is lost money. A failed write is queued and replayed (`persistOrQueue`).
 - Visible: setup screen, table picker, end card ("+$X to your bankroll"), My Stats, leaderboard.
 - Bankroll maths never uses `| 0` on the money path (top table pays $52M a win; 2^31 wraps).
@@ -297,5 +297,5 @@ in the MP save.
 
 `node holdem/js/test.js` passes. Online was proven in three browser profiles against a local RTDB
 stand-in (only `js/firebase-boot.js` swapped); **real Firebase on real phones is not yet proven.**
-Related suites: `players-agg.test.mjs`, `test-rate-guard.mjs`, `test-admin-config.mjs`,
-`test-leaderboard-rank.mjs`, `test-stats-corrections.mjs`.
+Related suites: `tools/players-agg.test.mjs`, `tools/test-rate-guard.mjs`, `tools/test-admin-config.mjs`,
+`tools/test-leaderboard-rank.mjs`, `tools/test-stats-corrections.mjs`.

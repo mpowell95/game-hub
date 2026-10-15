@@ -198,7 +198,7 @@ Measured board squares after the immersive change (hub, 3 people placed): Expert
 **Tap-target exception** (`docs/BUILDING-A-GAME.md` Part 0, the dots-boxes precedent): Expert and
 Hard squares on small phones are a few px under 44, because 64 squares, eight suspect rows and a
 header cannot all be 44px on a 667px screen with no scrolling. The suspect rows' HEIGHT (19-40px)
-is also under; their width, and every button, is 44px+. `node check-no-scroll.mjs murdoku` passes
+is also under; their width, and every button, is 44px+. `node tools/check-no-scroll.mjs murdoku` passes
 all 24 screens.
 
 ### Save details
@@ -217,14 +217,14 @@ The timer pauses when the page is hidden, while How to play is open, and on `des
 
 ## Tests
 
-- `node test-game-conventions.mjs`, `node test-i18n-strings.mjs`, and `node check-no-scroll.mjs
+- `node tools/test-game-conventions.mjs`, `node tools/test-i18n-strings.mjs`, and `node tools/check-no-scroll.mjs
   murdoku` (needs `node server.mjs`; it adds the devOnly entry to the hub list itself before
   mounting): setup, how to play, an Easy board, an Expert board full of warnings, a how-to inside
   a case and the result panel, standalone and mounted, both phone heights.
 - `window.__muTest = { puzzle, pos, ui, place(p, cell), solve() }` goes through the real placement
   path (so `solve()` triggers the win and the recording); `place(p, -1)` lifts.
 
-`node murdoku/js/test.js` (in `run-all-tests.mjs`): 40 seeds per tier, each checked for shape,
+`node murdoku/js/test.js` (in `tools/run-all-tests.mjs`): 40 seeds per tier, each checked for shape,
 rules, uniqueness by search, solvable by the human solver at its level, the murderer shape, a
 clue for everyone and the difficulty floor; plus determinism, save round trip, `checkBoard`, and
 an expert speed budget.

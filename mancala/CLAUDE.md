@@ -121,7 +121,7 @@ differently — the capture page starts a pit empty and rendered `5` where it sh
 It keeps a real `counts[]` model now. Derived-from-assumption arithmetic is the trap in any
 animation that reuses one routine across differently-arranged setups.
 
-`test-visual.mjs`'s `MOTION` probe watches `.mc-ht-stone` travel (250px over ~6s). The sow IS the
+`tools/test-visual.mjs`'s `MOTION` probe watches `.mc-ht-stone` travel (250px over ~6s). The sow IS the
 rule this sheet teaches, and a still diagram of it is precisely what the old sheet already had.
 
 i18n from the first line: all captions are `ht_*` keys in `strings.js`, both languages, verified
@@ -188,7 +188,7 @@ input over the network instead of the same screen.
   stale cache — the entry would then sit undelivered until some UNRELATED room update happened
   to trigger a new drain, which might never come. Fixed with an `mp.redeliverRequested` flag,
   set whenever `_mpOnRoomUpdate` refreshes the move-log cache, checked by the drain loop before
-  it actually releases `mp.delivering` — see the comments on both. `test-mp-lockstep.mjs`'s M1
+  it actually releases `mp.delivering` — see the comments on both. `tools/test-mp-lockstep.mjs`'s M1
   reproduced this reliably (a fast, decisive game) before the fix; all M-series tests are green
   after it.
 - **The divergence latch is explicit**, same reasoning as every flag-driven game on the roadmap:
@@ -206,7 +206,7 @@ input over the network instead of the same screen.
   Toe (`js/CLAUDE.md`) — not the local setup's last AI-tier setting. `recordHeadToHead('mancala',
   opp, won)` runs alongside, guarded so it can never block the ordinary result.
 - **Invariant coverage**: all five `js/CLAUDE.md` invariants are ported into Mancala's own
-  vocabulary in `test-mp-lockstep.mjs`'s M1-M6 block. **Invariant 3 (a per-round consumption
+  vocabulary in `tools/test-mp-lockstep.mjs`'s M1-M6 block. **Invariant 3 (a per-round consumption
   queue) is now ported DIRECTLY, not by analogy** (corrected 2026-07-27 alongside the rematch
   series fix above — the earlier "no literal analogue, Mancala hosts exactly one game per room"
   reasoning no longer holds now that it doesn't): M4 mirrors Tic Tac Toe's T5, asserting game 2
@@ -226,13 +226,13 @@ reset `this._statsCommitted` back to `false` — only `_mpApplyRoundRecord` (the
 did. So every game after the first one played in a session (Play again, Restart, and New game all
 call this same `startGame()` on the same instance, never a fresh one) silently recorded nothing at
 all, win, loss or tie — `finish()`'s `if (!this._statsCommitted)` guard just skipped the write.
-Fixed by adding the same reset `startGame()`'s MP counterpart already had. `test-mancala-stats.mjs`
+Fixed by adding the same reset `startGame()`'s MP counterpart already had. `tools/test-mancala-stats.mjs`
 (repo root) is the regression tripwire: plays three consecutive solo games in one mounted session
 via the real (pure) engine and asserts the stats store's `played` count increments after every one
 — confirmed red against the pre-fix code (stuck at `played=1`), green with the fix.
 
 **Status line (2026-07-27, web-session pass): protocol proven headlessly against `FakeRoom`, all
-six M-series probes green (`test-mp-lockstep.mjs`); real-room behaviour is unverified.** Real
+six M-series probes green (`tools/test-mp-lockstep.mjs`); real-room behaviour is unverified.** Real
 devices are required for `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`'s Category B pass — this environment
 cannot reach Firebase at all (see that doc's "why these four categories can't move to the
 cloud"). Nothing here has been played on a real phone yet.
@@ -241,7 +241,7 @@ cloud"). Nothing here has been played on a real phone yet.
 Matt: *"I've told you several times before that I don't want any game in the gamehub to be
 scrollable at all. Everything MUST fit on a single screen. Always."*
 
-The worst of the nine: measured by `check-no-scroll.mjs`, the setup column stood 748px - **34px
+The worst of the nine: measured by `tools/check-no-scroll.mjs`, the setup column stood 748px - **34px
 over in the hub even at 393x852**, 160px over standalone at 390x664 and 222px over in the hub at
 390x664.
 

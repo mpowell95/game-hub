@@ -77,7 +77,7 @@ ported; `js/net.js` and the engine needed **zero** changes (`game.js` loops `thi
   without divergence). Backing out of the LOBBY frees only that seat (`net.vacateSeat`); only the host
   leaving takes the room.
 - `.eb-opp-n3` re-lays the opponent pill at 3 opponents (name on its own line, hand-count fan dropped).
-- Tests: `test-mp-lockstep.mjs` E5 (four-seat full match, hashes identical, each device owns its seat,
+- Tests: `tools/test-mp-lockstep.mjs` E5 (four-seat full match, hashes identical, each device owns its seat,
   whole-deck check) and E6 (desync -> recovery to the pleading seat only). **Not verified on real
   devices.**
 
@@ -92,13 +92,13 @@ Matt: *"Make it so that is impossible. Nothing should ever be able to be lost. T
    verified by re-read, pre-migration numbers archived on `escoba.esMpSplit`, never pruned. **Matches
    older than head-to-head capture are deliberately left alone** (cannot be told apart; splitting would
    be fabrication, rule 4). Verified on the REAL records of the five devices with h2h history
-   (`test-stats-replay.mjs` scenario D, rule 7).
+   (`tools/test-stats-replay.mjs` scenario D, rule 7).
 3. **Structural**: `game.js`'s `checkMatchEnd()` fires a synchronous **`onDecided`** hook in the same
    statement that sets `winner`, before any `emit`/await/abort check; `_bindGame` points it at
    `_commitStats`. The escoba tally lives in the engine (`player.matchEscobas`, folded in `scoreRound()`);
    `_matchEscobasNow()` reads it, `_seedMatchEscobas()` carries an older save's number. A failed WRITE is
    queued (`persistOrQueue` -> `gamehub.pendingResults.v1`), wired into `recordEscoba` and
-   `recordHeadToHead`. Probes: `test-mp-lockstep.mjs` E7/E8, `test-stats-replay.mjs` D/E/F.
+   `recordHeadToHead`. Probes: `tools/test-mp-lockstep.mjs` E7/E8, `tools/test-stats-replay.mjs` D/E/F.
 
 **Where it shows**: My Stats has an Escoba **Multiplayer** block (reads `byDiff.mp`, hidden for a
 solo-only player); the leaderboard's Escoba board shows an **MP** chip per player (`js/CLAUDE.md`,
@@ -170,7 +170,7 @@ solo-only player); the leaderboard's Escoba board shows an **MP** chip per playe
   role, seq, at }`; `snap` is `Game.snapshot()` plus `midRound`. Cleared on `matchEnd` and "Quit to
   setup"/"New game"; **never** by `destroy()`.
 - **MP invariants** (full list `js/CLAUDE.md`, "Multiplayer lockstep — invariants"; tripwires in
-  `test-mp-lockstep.mjs`): the `'play'` hook saves AFTER `_mpAfterPlay`; `_mpApplyRecovery` remaps
+  `tools/test-mp-lockstep.mjs`): the `'play'` hook saves AFTER `_mpAfterPlay`; `_mpApplyRecovery` remaps
   `isHuman` by seat (`mp.seat`); a guest restoring from a round-BOUNDARY snapshot (`midRound:false`)
   awaits the host's round record (`_mpAwaitNextRound`).
 - **`recordEscoba(difficulty, won, { escobas })`** (tab `escoba`); `difficulty` is the AI tier solo and
@@ -191,18 +191,14 @@ compress `scoreRound()`'s 8 items (escobas 1 each; most cards 1, +2 under-10 bon
 
 ## Known open items
 
-- A `TypeError: Cannot read properties of null (reading 'avatar')` in `_renderMatchModal` was seen once
-  with a hand-built synthetic snapshot (`showMatchModal()` reached with `this.game.winner` null). Not
-  reproduced from a normal game or the 25k-check suite; if it recurs in ordinary play it means
-  `checkMatchEnd()` let `matchEnd` fire without a winner under a reachable condition.
-- The broom sweep's feel is confirmed only by geometry and code review, never by eye.
+Open items: see the root TODO.md, "Escoba".
 - Roadmap (not built): 4-player TEAM play is a rules change, out of scope; no sound.
 
 ## Tests
 
 ```
 node escoba/js/test.js
-node test-mp-lockstep.mjs        # E1-E8
+node tools/test-mp-lockstep.mjs        # E1-E8
 ```
 Deck construction (both modes), ~85 full AI-vs-AI matches of capture/escoba/scoring invariants, and a
 JSON-serialized kill-and-resume round-trip (up to 3 resumes per match). Needs Node >= 22.7 (no package.json).

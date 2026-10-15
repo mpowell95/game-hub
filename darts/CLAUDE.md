@@ -64,7 +64,7 @@ order), persisted in `gamehub.darts.v1` (`game`, `order`). The match carries `ki
   has a distance and loses to anything on the board); level throws again ("Still tied"). Scores/marks
   frozen; every overtime turn is one dart (`dartsPerTurn`); the computer aims at the bull. **The form
   was my choice** (standard bull tiebreak). Online `over.why: 'overtime'` ("Won in overtime"). Pinned by
-  `darts/js/test.js` 3b3 and `test-darts-mp.mjs`.
+  `darts/js/test.js` 3b3 and `tools/test-darts-mp.mjs`.
 - `VOIDED_MATCHES` (`js/stats-corrections.js`) is honoured by `mp.js` (never counted; a phone that had
   counted one notes `games.darts.vd[<id>]`, `correctStats` subtracts it).
 - Board geometry in units of R (the double's outer wire): bull 50 inside 0.0374R, 25 inside 0.0935R,
@@ -141,7 +141,7 @@ Beside Play; opens a card with **Against yourself** (`mode: 'self'`: the chosen 
 `_landFree`: no rules, three darts a round, the round total, the plaques show **3-dart avg** and **Best
 round**; runs on a 301 container, `throwDart` never called). **Nothing recorded, nothing saved**: neither
 calls `recordResult`, and `_save()` returns at once because the single save slot holds the match vs the
-computer (a finished practice match would clear it). `check-no-scroll.mjs darts` measures both.
+computer (a finished practice match would clear it). `tools/check-no-scroll.mjs darts` measures both.
 
 ## Computer speed (2026-10-08)
 
@@ -163,8 +163,8 @@ never `_cpuThrow`.)
 ## Tests
 
 - `node darts/js/test.js` (geometry, match, 201/101, Cricket, flick mapping, flight);
-  `node check-no-scroll.mjs darts` (setup, how to play, play, result, practice, both hosts, both
-  heights); `node test-darts-mp.mjs` (39 checks); `node test-push.mjs` (`decideDarts`).
+  `node tools/check-no-scroll.mjs darts` (setup, how to play, play, result, practice, both hosts, both
+  heights); `node tools/test-darts-mp.mjs` (39 checks); `node tools/test-push.mjs` (`decideDarts`).
 - `window.__dtTest.ui` is the test seam (`_launch(from, x, y)`).
 
 ## Online challenges (2026-10-01)
@@ -190,7 +190,7 @@ model; no code shared.
   while their turn the match is watched live. You sit on the LEFT (`.is-flip` when side 'b').
 - **The launcher's "Your turn" bubble stays up for as long as it IS your turn** (2026-10-04): only a
   FINISHED turn (or the bubble's X, or opening from the bubble) marks it seen, not watching
-  (`_mpCatchUp`) or throwing a single dart. Pinned in `test-darts-mp.mjs`.
+  (`_mpCatchUp`) or throwing a single dart. Pinned in `tools/test-darts-mp.mjs`.
 - **Counting**: each finished match once per phone (`gamehub.darts.counted.v1`) as
   `recordResult('darts', 'mp', won)`; a match ended while away gets a Game Over popup. **Resign**: the
   other person wins; nothing deleted.

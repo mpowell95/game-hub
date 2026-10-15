@@ -78,7 +78,7 @@ and "New game" mid-battle. **Placement is not autosaved** (nothing earned at ris
   up under the finger).
 - **Rotate = tap the ship** everywhere (tap tray chip to select, again to rotate; tap a placed ship;
   `R`). No rotate buttons (they sat dead centre and blocked the drag).
-- `test-visual.mjs`'s battleship PLAY probe drags all five ships with real touches and fails if the
+- `tools/test-visual.mjs`'s battleship PLAY probe drags all five ships with real touches and fails if the
   board's box changes. A screenshot cannot catch this.
 - Board sizes use `svh` under `@supports (height: 1svh)` (plain `vh` shifts with the iOS toolbar).
 
@@ -90,7 +90,7 @@ region (`.bs-sr`). **MP status messages stay words** (failures), as do the MISS 
 
 ## The battle screen, made legible (2026-08-11, second pass)
 
-Lesson: **play it and look at it**; `test-visual.mjs` was green throughout.
+Lesson: **play it and look at it**; `tools/test-visual.mjs` was green throughout.
 
 - **AIM, THEN FIRE**: first tap parks a gold crosshair (`this._aimCell`) and raises a red **FIRE**
   button; same square or FIRE shoots; `_confirmFire()` clears the aim first. **Pulse is a GLOW,
@@ -152,7 +152,7 @@ box for sides, the shell for top/bottom), or it undoes itself every second rende
 **A decorative/animated class must never share a name with a structural/layout one.** `.bs-shell`
 was both the layout container and a flying shell ending at `opacity: 0`: the whole game rendered
 invisible twice. Ornaments live in their own namespace (`.bs-cannon`, `.bs-cannon-pill`,
-`.bs-bubble`, `.bs-splash-ring`, `.bs-flash`, `.bs-smoke`). `node test-game-conventions.mjs` fails
+`.bs-bubble`, `.bs-splash-ring`, `.bs-flash`, `.bs-smoke`). `node tools/test-game-conventions.mjs` fails
 the build on this shape.
 
 - **Every animation needs a `prefers-reduced-motion: reduce` branch that is an instant state
@@ -255,7 +255,7 @@ tier pill). `_commitStats()` resolves win/loss through `_localSeat()` (recording
 on a guest breaks THE LAW rule 2). `_statsCommitted` is set before any write (several paths reach
 game-end). `recordHeadToHead('battleship', opp, won)` runs in MP only, in its own try/catch.
 
-### Invariant coverage (`test-mp-lockstep.mjs`, BS1-BS7)
+### Invariant coverage (`tools/test-mp-lockstep.mjs`, BS1-BS7)
 
 BS1-BS5 port invariants 1-5 (BS3 has **no analogue**: no randomness queue); BS6 the
 `redeliverRequested` race via a `bonusShotOnHit` chain; BS7 wrong-seat answer and out-of-turn shot
@@ -276,7 +276,7 @@ AHEAD of the state. A recovery snapshot must publish **`_mpStateSeq()`** (`pendi
 - 1 : appliedSeq`), never `appliedSeq`; **any code answering "where am I in the log" for someone
 else to sync to must use it.** Also: `_mpOnDivergence`'s host branch **clears `pendingShot`**; and
 `_mpApplyRecovery` **re-derives `lastShotSeat`/`lastShotRC` from the move log** (a stale pair
-rejects the next good answer). All mirrored into `test-mp-lockstep.mjs`'s `BattleshipSide`. BS2 was
+rejects the next good answer). All mirrored into `tools/test-mp-lockstep.mjs`'s `BattleshipSide`. BS2 was
 never "flaky": it was this deadlock.
 
 ### Nothing in the lobby may wait forever (`_withNetTimeout`, 2026-08-11)
@@ -297,9 +297,9 @@ snapshot disarms it, otherwise the save is cleared and setup returns. Cleared in
 
 ```
 node battleship/js/test.js          # engine, fleet, AI no-cheat, hash, full solo playthroughs
-node test-mp-lockstep.mjs           # BS1-BS7
-node test-visual.mjs battleship
-node check-no-scroll.mjs battleship
+node tools/test-mp-lockstep.mjs           # BS1-BS7
+node tools/test-visual.mjs battleship
+node tools/check-no-scroll.mjs battleship
 ```
 
 ## The mode screen fits a short phone in the hub (2026-09-08)

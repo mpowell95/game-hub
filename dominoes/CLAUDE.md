@@ -400,7 +400,7 @@ rather than after somebody reports a loss they did not take.
 
 All three mandatory sub-counter surfaces exist (root checklist item 7): the `ensureDm`/
 `recordDominoes` pair in `js/game-stats.js`, `dominoesScreen` in `js/game-stats-ui.js`, and the
-`dm` branch in `js/players-agg.js` with its own regression case in `players-agg.test.mjs`.
+`dm` branch in `js/players-agg.js` with its own regression case in `tools/players-agg.test.mjs`.
 Dominoes is a COMPETITIVE game (not in players-agg's `SOLO` set), so the leaderboard shows it on
 the ordinary wins metric with no extra wiring.
 
@@ -430,13 +430,13 @@ totals crossing in one settle producing a real match end with the higher total w
 The final block is the **`+N` badge coupling probe** (see "A tile is never a `<button>`" above) —
 a regression tripwire for the one bug in this game that reached a player silently. Reintroducing
 the v258 mistake trips it four ways.
-Wired into `run-all-tests.mjs`.
+Wired into `tools/run-all-tests.mjs`.
 ## The setup screen fits a short phone in the hub (2026-09-08)
 
 Matt: *"I've told you several times before that I don't want any game in the gamehub to be
 scrollable at all. Everything MUST fit on a single screen. Always."*
 
-Measured by `check-no-scroll.mjs`: `.dm-setup` stands 556px against the 493px the hub leaves at
+Measured by `tools/check-no-scroll.mjs`: `.dm-setup` stands 556px against the 493px the hub leaves at
 390x664 (87px over at 360x640). **Standalone fits at every size tested** - the hub spends ~138px on
 its own chrome, and no height media query can see that, which is why the trim in `dominoes.css` is
 scoped `.hub-main` rather than by height alone. Snake, battleship, chinchon and mancala all carry

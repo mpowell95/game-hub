@@ -17,7 +17,7 @@ Matt's decisions that shape it (2026-09-15 to 09-19, his words where quoted):
 - No em dashes in anything written. No helper text in the UI. No swing cue of any kind.
 - Every BB-3b requirement still holds: **R1** the wind-up is a real 1400 ms delivery before
   release; **R2** verdict to next release = resultMs + betweenMs + windupMs, pinned by
-  `test-baseball-device.mjs`'s `r2-cadence` (6219 to 6225 ms measured); **R3** the 44 px popup.
+  `tools/test-baseball-device.mjs`'s `r2-cadence` (6219 to 6225 ms measured); **R3** the 44 px popup.
   The v843 flight rule holds too: the ball follows `field.js`'s exported `plateBallPos` and crosses
   at the zone's centre, and the batter moves across the box with the pad (`batterAimX`).
 - "Asking for a change means LIVE" (root `CLAUDE.md`). The ORCHESTRATOR ships. A sub-agent never
@@ -43,7 +43,7 @@ Rules for every sub-agent, all of them hard:
 3. **Never touch `baseball/js/engine/`.** Presentation only.
 4. **Never push, never open or merge a PR, never bump `CACHE` in `sw.js`** (the orchestrator does
    that last, past whatever is on `main` at that moment). Commit locally with a clear message.
-5. **Never run `run-all-tests.mjs`.** Run the checks your stage lists, nothing wider.
+5. **Never run `tools/run-all-tests.mjs`.** Run the checks your stage lists, nothing wider.
 6. **Screenshots are the deliverable of every visual stage**, not descriptions of them. Write them
    under `/tmp/claude-0/-home-user-game-hub/095ae74e-dae2-559f-bba8-3be6914d286b/scratchpad/3d/`
    and put the absolute paths in your report. Full page or a stated crop, never a description.
@@ -64,16 +64,16 @@ Rules for every sub-agent, all of them hard:
 | `examples/jsm/loaders/GLTFLoader.js` (114,959 B), `examples/jsm/utils/SkeletonUtils.js` (11,535 B), `examples/jsm/utils/BufferGeometryUtils.js` (37,621 B) are fetchable from `https://cdn.jsdelivr.net/npm/three@0.185.0/...` (200 on 2026-09-15). They import bare `'three'` and each other by relative path | jsdelivr |
 | `raw.githubusercontent.com` and `cdn.jsdelivr.net` work from the container; `github.com` pages and `api.github.com` return 403 through the proxy; `poly.pizza` 403 | measured |
 | No GLTFLoader, no import map, no build step anywhere in the repo. A bare `import 'three'` is a 404 at runtime | grep |
-| Chromium: `/opt/pw-browsers/chromium`; `playwright-core` resolves only when a script runs from the repo root (`node_modules/playwright-core` is a gitignored symlink there). Headless WebGL works with `--use-gl=swiftshader` (`measure-gallery.mjs` does this) | repo |
+| Chromium: `/opt/pw-browsers/chromium`; `playwright-core` resolves only when a script runs from the repo root (`node_modules/playwright-core` is a gitignored symlink there). Headless WebGL works with `--use-gl=swiftshader` (`tools/measure-gallery.mjs` does this) | repo |
 | `baseball/js/ui.js`: `BaseballPlayScreen` class; `_sizeCanvas` (~line 320) sizes `.bb-field-canvas` with DPR; `_drawStaticField` (~349) calls `drawPlateView` with `{pitcherFrame, pitcherFlip, batterFrame, batterFlip, batterAimX}`; `SWING_TIMELINE = [[0,3],[40,4],[80,5],[120,6],[160,7],[200,8]]` (~61); `_startSwingTimeline` (~395); `_stepWindup` (~418, frames 1,2,3 over `WINDUP_MS`); `_schedulePitcherFollowThrough` (~437, frame 4 at +120 ms); `_animatePitchFlight` (~855, sets `this._flightActive`); `HumanAgent.decidePitch` (~1104, its own flight loop ~1190-1225, `state.pitcherFrame` 1/2 during hold, 3 at release, 4 after) and `decideSwing` (~1240, charge loop sets `batterFrame` 1/2, `_startSwingTimeline()` on release); `this.dev = isDevProfile()` (~116) gates the Tune panel and the Frames check (`_openFrameCheck`, ~1030); `destroy()` cancels `_rafBall`, `_pitchRaf`, `_flightRaf` (~158) | ui.js |
 | `baseball/js/field.js` exports `PLATE_ANCHORS` (`plate {0.500,0.879}`, `mound {0.500,0.505}`, `release {0.493,0.454}`, `nearBoxLeft {0.250,0.922}`, `nearBoxRight {0.750,0.922}`), `zoneRect(w, cover)`, `plateBallPos(w, h, cover, xFt, yFt)`, `drawPlateView`, `drawPlateBall`. Module-private today: `plateCover(w, h)`, `anchorPx(frac, cover)`, `NEAR_BATTER_HEIGHT_FRAC = 0.50`, `MOUND_PITCHER_HEIGHT_FRAC = 0.11`, `BATTER_AIM_TRAVEL_FRAC = 0.06`, `PLATE_CAMERA_FT = 24` | field.js |
 | The reference swing and delivery, frame by frame: `reference/baseball/batter-home-1..8.png` (idle 1, load 2, frames 3..8 the swing, contact at 5), `batter-away-1..8.png` (same poses, navy), `Pitcher-home-1..4.png` / `Pitcher-away-1..4.png` (set 1, leg lift 2, release 3, follow-through 4). Shipped copies: `baseball/img/*.webp` | reference/ |
 | The painted backdrop the figures stand on: `baseball/img/plate.webp` (1200x1585), fitted `cover, bottom center` by `plateCover` | img/ |
 | Team art: home is white jersey with navy trim; away is navy jersey with grey pants (from the sprite sets) | reference/ |
 | Load-error pattern to copy: `boggle/js/ui.js` `renderLoadError()` with strings `load_error` in EN and ES | boggle/ |
-| Service worker tiers: `sw.js` `ASSETS` list (REST tier for game files, ~line 363 for baseball's block), `LAZY_REST` regex at ~548 (`/^\.\/boggle\/data\/words[a-z-]*\.txt$/`), `validate-sw-assets.mjs` regenerates `REST_MANIFEST` + `version.json`, `test-sw-strategy.mjs` pins the tiers | sw.js |
-| Test runners that already bind: `node test-baseball-device.mjs` (needs `node server.mjs` up; r2-cadence, plate-camera, plate-flight probes), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`, `node test-game-conventions.mjs`, `node test-i18n-strings.mjs`, `node baseball/js/test.js`, `node test-sw-strategy.mjs` | root |
-| `js/viewport.js` `onViewportResize(cb)` is the ONLY allowed resize subscription; `test-game-conventions.mjs` fails a raw `resize` listener | js/ |
+| Service worker tiers: `sw.js` `ASSETS` list (REST tier for game files, ~line 363 for baseball's block), `LAZY_REST` regex at ~548 (`/^\.\/boggle\/data\/words[a-z-]*\.txt$/`), `tools/validate-sw-assets.mjs` regenerates `REST_MANIFEST` + `version.json`, `tools/test-sw-strategy.mjs` pins the tiers | sw.js |
+| Test runners that already bind: `node tools/test-baseball-device.mjs` (needs `node server.mjs` up; r2-cadence, plate-camera, plate-flight probes), `node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball`, `node tools/test-game-conventions.mjs`, `node tools/test-i18n-strings.mjs`, `node baseball/js/test.js`, `node tools/test-sw-strategy.mjs` | root |
+| `js/viewport.js` `onViewportResize(cb)` is the ONLY allowed resize subscription; `tools/test-game-conventions.mjs` fails a raw `resize` listener | js/ |
 
 ---
 
@@ -93,7 +93,7 @@ LICENCE         CC0 1.0, from the pack's License.txt ("You can use this content 
                 educational, and commercial purposes")
 SHIPPED         baseball/models/player.glb (544,936 B) + baseball/models/skins/{skaterMaleA,
                 criminalMaleA, skaterFemaleA, cyborgFemaleA}.png (35 to 52 KB each, 1024x1024)
-BUILT BY        node convert-kenney.mjs (repo root; FBX -> glb through three's own FBXLoader +
+BUILT BY        node tools/convert-kenney.mjs (repo root; FBX -> glb through three's own FBXLoader +
                 GLTFExporter in headless Chromium, no Blender). Re-run it, never hand-edit the glb.
 BODY            ONE mesh, "characterMedium", 4,812 vertices, one material named "Skin" with NO
                 texture in the file. The four skins are painted textures for that one body: the
@@ -150,12 +150,12 @@ for later casting at no cost (same body, same skeleton).
 | `upperArmL` / `upperArmR` | `LeftArm` / `RightArm` | | | |
 | `lowerArmL` / `lowerArmR` | `LeftForeArm` / `RightForeArm` | | | |
 
-Every REQUIRED entry resolves against the shipped glb (`node test-baseball-actors.mjs`, node half).
+Every REQUIRED entry resolves against the shipped glb (`node tools/test-baseball-actors.mjs`, node half).
 
 ### 2.4 Scaffold asset (no longer needed)
 
 Stage 1 was built against three.js's RobotExpressive.glb before the pick. It is not used by any
-later stage; `render-actor.mjs --model` still accepts any file.
+later stage; `tools/render-actor.mjs --model` still accepts any file.
 
 ## 3. The code, module by module
 
@@ -188,18 +188,18 @@ Check: from the repo root,
 prints `[ 'GLTFLoader' ]`. All three add-ons import in node with no error. Add all five files to
 `sw.js` `ASSETS` inside baseball's block (REST tier, plain entries; they are game code, never LAZY).
 
-### 3.2 `glb-info.mjs` (repo root, stage 1; dev tooling, not deployed)
+### 3.2 `tools/glb-info.mjs` (repo root, stage 1; dev tooling, not deployed)
 
 A no-dependency reader of any `.glb`: header (magic `glTF`, version 2), the JSON chunk, then
 prints: byte size, `asset.generator`, `extensionsRequired`, skins (joint count), the joint node
 names, every node name, mesh count, material names, animation names with durations (from the
-sampler input accessor max), and whether images are embedded. `node glb-info.mjs <file> [--json]`.
+sampler input accessor max), and whether images are embedded. `node tools/glb-info.mjs <file> [--json]`.
 The test in 3.9 imports its `readGlb(path)` export. It is also how stage 1 fills `RIG`.
 
 Skeleton:
 
 ```js
-// glb-info.mjs
+// tools/glb-info.mjs
 import { readFileSync } from 'node:fs';
 export function readGlb(path) {
   const buf = readFileSync(path);
@@ -233,7 +233,7 @@ export function summarize({ json, bytes }) {
 }
 if (import.meta.url === `file://${process.argv[1]}`) {
   const file = process.argv[2];
-  if (!file) { console.error('usage: node glb-info.mjs <file.glb> [--json]'); process.exit(2); }
+  if (!file) { console.error('usage: node tools/glb-info.mjs <file.glb> [--json]'); process.exit(2); }
   const s = summarize(readGlb(file));
   if (process.argv.includes('--json')) console.log(JSON.stringify(s, null, 2));
   else {
@@ -337,7 +337,7 @@ export const CLIPS = {
 };
 ```
 
-Pose authoring is done by rendering, never by imagination. Stage 2 and 3 use `render-actor.mjs`
+Pose authoring is done by rendering, never by imagination. Stage 2 and 3 use `tools/render-actor.mjs`
 (3.8) to draw the 3D figure at a given clip time beside the sprite frame it must match and iterate
 until the silhouettes agree: same lean, same arm height, same leg spread, same bat angle. The
 sprite frames are the target; the numbers in `CLIPS` are whatever makes the pictures agree.
@@ -585,15 +585,15 @@ a time (so a pose can be compared against a sprite frame on the phone), and for 
 nudge buttons per axis whose current values print to the console as a `BAT` literal to paste back.
 Nothing on it is reachable without the dev profile.
 
-### 3.8 `render-actor.mjs` (repo root, stage 1; dev tooling)
+### 3.8 `tools/render-actor.mjs` (repo root, stage 1; dev tooling)
 
 The pose-authoring loop's instrument. Serves the repo (needs `node server.mjs` up), opens a
 minimal page that imports `actors.js` directly, loads a given glb, places one actor at a given
 height, plays a clip to a given time, and writes a PNG. Options:
 
 ```
-node render-actor.mjs --model <path-or-url> --clip Swing --t 0.30 --height 400 --facing 80 --out x.png
-node render-actor.mjs --model ... --clip Swing --sheet 0,0.1,0.2,0.3,0.4,0.5,0.6 --beside reference/baseball/batter-home-3.png,...  --out sheet.png
+node tools/render-actor.mjs --model <path-or-url> --clip Swing --t 0.30 --height 400 --facing 80 --out x.png
+node tools/render-actor.mjs --model ... --clip Swing --sheet 0,0.1,0.2,0.3,0.4,0.5,0.6 --beside reference/baseball/batter-home-3.png,...  --out sheet.png
 ```
 
 `--sheet` renders several times and lays them in one row; `--beside` puts the named sprite frames
@@ -601,11 +601,11 @@ under them, scaled to the same height, so the agent (and the orchestrator) compa
 one picture. Chromium flags: `['--no-sandbox', '--use-gl=swiftshader']`; `preserveDrawingBuffer`
 on; read back via `canvas.toDataURL()`. Runs from the repo root.
 
-### 3.9 `test-baseball-actors.mjs` (repo root, stage 1, extended per stage)
+### 3.9 `tools/test-baseball-actors.mjs` (repo root, stage 1, extended per stage)
 
 Two halves, and the header says which is which.
 
-1. **Node, no browser** (add to `run-all-tests.mjs`): `readGlb('baseball/models/player.glb')`
+1. **Node, no browser** (add to `tools/run-all-tests.mjs`): `readGlb('baseball/models/player.glb')`
    parses; not Draco; under 4 MB; every `RIG_REQUIRED` name is a node in the file; the four
    skin PNGs in section 2.1 exist and are 1024x1024; `CLIPS.Swing` and `CLIPS.Pitch` have keys and a `mark`
    inside `[0, lastKey.t]`; `buildClip` over a fake bones/restQ object yields one quaternion track
@@ -615,22 +615,22 @@ Two halves, and the header says which is which.
    `state.batterFrame`/`state.pitcherFrame` writes remain" was NOT checkable at stage 4 - those
    writes are the required sprite-path fallback (section 3.6's own "if `initGL()` returns false,
    the sprite path keeps running unchanged"), and cannot work without them, and
-   `test-baseball-device.mjs`'s r2-cadence probe watched `state.pitcherFrame` reach 3 as its
+   `tools/test-baseball-device.mjs`'s r2-cadence probe watched `state.pitcherFrame` reach 3 as its
    release signal until stage 5. The literal zero-writes check only becomes true, and is only
    checked, once stage 5 deletes the sprite path (section 3.10) and replaces the release signal
    with `actors.play('pitcher', 'Pitch', ...)`'s own call time + `markAtMs`.
-2. **Chromium under swiftshader** (SKIPs without playwright-core; NOT in `run-all-tests.mjs`):
+2. **Chromium under swiftshader** (SKIPs without playwright-core; NOT in `tools/run-all-tests.mjs`):
    mount Baseball in the real hub at 393x852 dpr3 with `window.__bbTest = true` set in an init
    script, start Quick Play, wait for `actors.ready`, then: the actor canvas exists and sits above
    the field canvas; a pixel block around the batter anchor is non-transparent in idle; a second
    read-back 150 ms into `Swing` differs from the idle read-back; the `r2-cadence` numbers from
-   `test-baseball-device.mjs` still hold (re-run that suite; do not reimplement it); after
+   `tools/test-baseball-device.mjs` still hold (re-run that suite; do not reimplement it); after
    `destroy()` the actor canvas is gone and `renderer.info` is not reachable.
 
 ### 3.10 Service worker and docs (stage 5)
 
 - `baseball/models/player.glb` and `baseball/models/skins/*.png` into `ASSETS` (plain REST tier, see
-  section 3.6's loading note). `node test-sw-strategy.mjs`.
+  section 3.6's loading note). `node tools/test-sw-strategy.mjs`.
 - Delete the sprite path: `drawBatterFigure`, `drawPitcherFigure`, `FRAME_Y_OFFSET_FRAC`,
   `PITCHER_FRAME_Y_OFFSET_FRAC`, `drawFrameCheck`, `SWING_TIMELINE`, `_startSwingTimeline`,
   `_schedulePitcherFollowThrough`, the `batterFrame`/`pitcherFrame` state, the 32 frame images
@@ -639,8 +639,8 @@ Two halves, and the header says which is which.
 - `baseball/CLAUDE.md`: a new top entry in the repo's voice with the decision, the model and its
   licence, the anchor/ortho mapping, the mark-time rule, the hand rule, what stays 2D, and the
   measured cadence. Root `CLAUDE.md`: the Baseball row and a
-  `test-baseball-actors.mjs` row in the tooling table, plus `glb-info.mjs` and `render-actor.mjs`.
-- The orchestrator bumps `CACHE`, runs `validate-sw-assets.mjs`, pushes, PRs, merges, verifies
+  `tools/test-baseball-actors.mjs` row in the tooling table, plus `tools/glb-info.mjs` and `tools/render-actor.mjs`.
+- The orchestrator bumps `CACHE`, runs `tools/validate-sw-assets.mjs`, pushes, PRs, merges, verifies
   the Pages run, and tells Matt it is live.
 
 ---
@@ -652,11 +652,11 @@ when a stage's pictures fail review twice.
 
 | Stage | Owns | Builds | Checks that must pass | Model |
 |---|---|---|---|---|
-| **1 Foundation** (done) | `baseball/js/vendor/*`, `glb-info.mjs`, `rig.js`, `actors.js` (skeleton as in 3.5, `load`/`resize`/`_place`/`start`/`pause`/`dispose` working, `play` working with any clip the FILE carries), `render-actor.mjs`, `test-baseball-actors.mjs` (node half + the load/dispose browser half), CSS for the actor canvas, the dev screen (3.7) mounted from `_openFrameCheck` showing both figures idle at the real anchors over the real backdrop | Built against the scaffold; verified against `player.glb` by the orchestrator | vendor import check (3.1); `node glb-info.mjs baseball/models/player.glb` prints the rig; `node test-baseball-actors.mjs`; `node render-actor.mjs` produces a PNG with a visible figure; `node test-game-conventions.mjs`; `node test-baseball-device.mjs` unchanged; no console error on mount | Sonnet |
-| **2 The swing** | `poses.js` `Idle`, `Swing`, `Miss`; the batter's facing constant; the dev screen's clip buttons and scrubber | Pose keys matched to `batter-home-1..8.png` with `render-actor.mjs --beside` | A sheet, 3D over sprite, for frames 1 to 8 where every frame's silhouette agrees in lean, arm height, leg spread and bat angle (the orchestrator judges); `node test-baseball-actors.mjs` | Sonnet, Opus after two failed reviews |
-| **3 The pitch, the bat, the colours** | `poses.js` `Set`, `Pitch`; `BAT` offsets; `TEAM` hexes and the recolour; the pitcher's facing | Matched to `Pitcher-home-1..4.png`; bat in both hands through the whole `Swing`; home white / away navy | Sheets as stage 2 for the pitch (4 frames) and for the swing WITH the bat (8 frames); a still of home and away side by side; `node test-baseball-actors.mjs` | Sonnet, Opus after two failed reviews |
-| **4 The switch** | `ui.js` (3.6), `field.js` exports + `noFigures`, `strings.js` `load_model`, CSS, the `setBatter`/`setPitcher`/`setBall` bodies in `actors.js` | The live play screen on 3D, ball from the hand, load state, pause/resume, dispose | `node test-baseball-device.mjs` with r2-cadence inside 6219-6225 ms; `node test-baseball-actors.mjs` both halves; `node test-visual.mjs baseball` (open the sheet); `node check-no-scroll.mjs baseball`; `node test-game-conventions.mjs`; `node test-i18n-strings.mjs`; a screen recording substitute: 10 stills 100 ms apart through one pitch and one swing | Sonnet |
-| **5 Delete, document, ship** | sprite-path deletion (3.10), `sw.js` `ASSETS`, `baseball/CLAUDE.md`, root `CLAUDE.md`, `docs/archive/HANDOFF-BASEBALL-3C.md` marked superseded by this file | | `node validate-sw-assets.mjs`; `node test-sw-strategy.mjs`; every stage 4 check again; `grep -c "batterFrame" baseball/js/ui.js` is 0 | Sonnet |
+| **1 Foundation** (done) | `baseball/js/vendor/*`, `tools/glb-info.mjs`, `rig.js`, `actors.js` (skeleton as in 3.5, `load`/`resize`/`_place`/`start`/`pause`/`dispose` working, `play` working with any clip the FILE carries), `tools/render-actor.mjs`, `tools/test-baseball-actors.mjs` (node half + the load/dispose browser half), CSS for the actor canvas, the dev screen (3.7) mounted from `_openFrameCheck` showing both figures idle at the real anchors over the real backdrop | Built against the scaffold; verified against `player.glb` by the orchestrator | vendor import check (3.1); `node tools/glb-info.mjs baseball/models/player.glb` prints the rig; `node tools/test-baseball-actors.mjs`; `node tools/render-actor.mjs` produces a PNG with a visible figure; `node tools/test-game-conventions.mjs`; `node tools/test-baseball-device.mjs` unchanged; no console error on mount | Sonnet |
+| **2 The swing** | `poses.js` `Idle`, `Swing`, `Miss`; the batter's facing constant; the dev screen's clip buttons and scrubber | Pose keys matched to `batter-home-1..8.png` with `tools/render-actor.mjs --beside` | A sheet, 3D over sprite, for frames 1 to 8 where every frame's silhouette agrees in lean, arm height, leg spread and bat angle (the orchestrator judges); `node tools/test-baseball-actors.mjs` | Sonnet, Opus after two failed reviews |
+| **3 The pitch, the bat, the colours** | `poses.js` `Set`, `Pitch`; `BAT` offsets; `TEAM` hexes and the recolour; the pitcher's facing | Matched to `Pitcher-home-1..4.png`; bat in both hands through the whole `Swing`; home white / away navy | Sheets as stage 2 for the pitch (4 frames) and for the swing WITH the bat (8 frames); a still of home and away side by side; `node tools/test-baseball-actors.mjs` | Sonnet, Opus after two failed reviews |
+| **4 The switch** | `ui.js` (3.6), `field.js` exports + `noFigures`, `strings.js` `load_model`, CSS, the `setBatter`/`setPitcher`/`setBall` bodies in `actors.js` | The live play screen on 3D, ball from the hand, load state, pause/resume, dispose | `node tools/test-baseball-device.mjs` with r2-cadence inside 6219-6225 ms; `node tools/test-baseball-actors.mjs` both halves; `node tools/test-visual.mjs baseball` (open the sheet); `node tools/check-no-scroll.mjs baseball`; `node tools/test-game-conventions.mjs`; `node tools/test-i18n-strings.mjs`; a screen recording substitute: 10 stills 100 ms apart through one pitch and one swing | Sonnet |
+| **5 Delete, document, ship** | sprite-path deletion (3.10), `sw.js` `ASSETS`, `baseball/CLAUDE.md`, root `CLAUDE.md`, `docs/archive/HANDOFF-BASEBALL-3C.md` marked superseded by this file | | `node tools/validate-sw-assets.mjs`; `node tools/test-sw-strategy.mjs`; every stage 4 check again; `grep -c "batterFrame" baseball/js/ui.js` is 0 | Sonnet |
 
 Stage 1 is done (commit 5bc2694, against the scaffold; `rig.js` now carries the Kenney names). Stages 2 to 5 run against `baseball/models/player.glb`.
 
@@ -708,13 +708,13 @@ of result + between is re-partitioned by `ui.js`, not changed.
 **Stage 6 (Opus): motion.** Owns `poses.js` and the facing constants only. Deliverables: (a) each
 clip rendered at 15 fps at its REAL on-screen height (batter 214 px, pitcher 47 px, plus 4x
 enlargements for review) as one sheet per clip; (b) the measured numbers in the table, from a
-new chromium check in `test-baseball-actors.mjs` that plays each clip and samples bone world
+new chromium check in `tools/test-baseball-actors.mjs` that plays each clip and samples bone world
 positions at the real heights; (c) the batter sheet against `batter-home-1..8.png` and the
 pitcher sheet against `Pitcher-home-1..4.png` still agree at the marks (contact, release). Bigger
 than the sprites is the point; the sprites are the pose reference, not the motion budget.
 
 **Stage 7 (Sonnet): flow.** Owns `ui.js`, `actors.js`'s `play()` fade option and a `toSet()`
-helper, `test-baseball-device.mjs` and `test-baseball-actors.mjs`'s cutaway probe. Deliverables:
+helper, `tools/test-baseball-device.mjs` and `tools/test-baseball-actors.mjs`'s cutaway probe. Deliverables:
 the cutaway state flag with the probe extended (a pad move during the cutaway must NOT re-show
 the layer; the plate view must return on its own before the next wind-up); the contact hold; the
 re-partitioned overhead; the set return; the preload; r2-cadence unchanged at 6.2 s; ten stills
@@ -744,7 +744,7 @@ clips was read; the causes, each with its fix:
 handlers, `_animateBattedBall`, `_animatePitchFlight` and the human pitch's `finishFlight`,
 `decideSwing`'s strip push), `actors.js` (`holdAtMark` on `play()` and a `release(role)`),
 `field.js` (`drawBall` arc/trail, `drawLandingMarker`), `strings.js`, a new `test-baseball-ring.mjs`
-(node, in `run-all-tests.mjs`), and `test-baseball-device.mjs` (a tap-tap pitching probe). Nothing
+(node, in `tools/run-all-tests.mjs`), and `tools/test-baseball-device.mjs` (a tap-tap pitching probe). Nothing
 in `settings.js` changes. Deliverables: (a) the ring/engine agreement test, born red against the
 shipped `ring.js`; (b) a device probe that drives the human pitching turn with two taps and asserts
 the ring was idle before the first tap, filling after it, and that the release came on the second
@@ -835,15 +835,15 @@ runners, chase logic beyond the offset follow; no verdict re-layout; no bunt/pow
 
 **Deliverables.** (a) Stills at 393x852 mounted in the hub: batting idle, pitching idle, the
 pitch mid-flight from each camera, a batted ball mid-chase, the landing marker, a home run
-clearing the fence, in light mode. (b) `test-baseball-device.mjs`: the plate-flight and homography
+clearing the fence, in light mode. (b) `tools/test-baseball-device.mjs`: the plate-flight and homography
 probes replaced by world-space ones (crossing lands in the zone rectangle; `x = +1/-1` lands on
 the zone's edges; the ball's projected radius grows monotonically toward the batter camera; the
 fence wall passes through each league's five named distances within 1 ft); r2-cadence and the
-tap-tap probe unchanged and green. (c) `test-baseball-actors.mjs`: motion floors re-measured
+tap-tap probe unchanged and green. (c) `tools/test-baseball-actors.mjs`: motion floors re-measured
 through the batter camera's projection at the on-screen sizes R1 produces (report the new px
 numbers; floors scale with the new sizes, ratios kept). (d) The frame time on the container's
 software renderer for each camera, and the scene's triangle count. (e) All suites in section 5
-green, `validate-sw-assets.mjs` clean.
+green, `tools/validate-sw-assets.mjs` clean.
 ### R1 record (shipped v861, 2026-09-20)
 
 Where the R1 spec was wrong against the real files, from the stage's report: the batter and the
@@ -872,7 +872,7 @@ The horizontal offset adds to pull/opposite direction exactly as `aimX` did; the
 sets the batted-ball kind (ball above the centre by more than 0.3 = fly or pop, below by more
 than 0.3 = grounder, between = line drive), replacing the sweet-spot centred/off-centre rule.
 The charged swing (hold) is removed; POWER mode replaces it (exit velocity x1.12, circle 0.35).
-CPU agents aim in 2-D with the same scatter model in `y` as in `x`. `sim-baseball.mjs` must run
+CPU agents aim in 2-D with the same scatter model in `y` as in `x`. `tools/sim-baseball.mjs` must run
 and its scoreboard is pasted into `baseball/CLAUDE.md`, passing or not.
 
 **Pitching.** Idle: pitcher on Set, the zone box drawn in the world at the plate through
@@ -1063,7 +1063,7 @@ at-bat outcome word). `_zoneBoxPx()` is the one true unscaled box and `_zoneMap(
 camera pixel from field.js alone is off by 1.6x. `_pitchWorldPoint(xNorm, yNorm, frac)` is the
 one pitch-to-world function the ball and the fire trail share. `timingWord` is set on every real
 swing, so the `'foul'` pop branch was already dead; "Foul" and "Swing and a miss" are said by the
-swing line only. The reduced-motion check in `test-visual.mjs` is structural (source regex), not
+swing line only. The reduced-motion check in `tools/test-visual.mjs` is structural (source regex), not
 a call-count probe. r2-cadence watches `_showPop` now, not Line 1.
 
 ### R5: contact and carry, so a Perfect swing is never an out at the plate
@@ -1108,7 +1108,7 @@ CPU its new plays and nothing was re-tuned.
    swing with the ball in the outer half is a hit at least 30%; a swing at the edge of the timing
    window (q near 0) is still in play and a hit at most 25%. The existing contact-grid checks
    (TIMING_OVER_POWER and the ceiling) must stay green: timing beats power is the doc's own lock.
-5. **The season scoreboard.** `node sim-baseball.mjs --quick --assert` before any change, pasted;
+5. **The season scoreboard.** `node tools/sim-baseball.mjs --quick --assert` before any change, pasted;
    then the full `--assert` after. Every league's SEASON_WINRATE_BAND and SEASONS_TO_GOLD are the
    targets. Knobs allowed: `CPU`, `CPU_LEVEL_SHORTFALL`, `SKILL_EFFECT`, the exit-velocity and
    carry constants above, `LEAGUE_POWER_SCALE`, `zones.js`'s depths if the report says why. Not
@@ -1125,8 +1125,8 @@ and its exit velocity is inside [70, 115] at every league; (c) with the same see
 40 ft; (f) the eight existing contact-quality tests updated, none deleted. The sim scoreboard
 before and after, the contact-grid lines, and the rule-4 census, all pasted into
 `baseball/CLAUDE.md` exactly as run, passing or not. Every suite the stage touches green:
-`node baseball/js/test.js`, `node sim-baseball.mjs --contact-grid`, `node sim-baseball.mjs
---assert`, `node test-baseball-device.mjs` (with `BB_DEVICE_QUICK=1`), `node test-visual.mjs
+`node baseball/js/test.js`, `node tools/sim-baseball.mjs --contact-grid`, `node tools/sim-baseball.mjs
+--assert`, `node tools/test-baseball-device.mjs` (with `BB_DEVICE_QUICK=1`), `node tools/test-visual.mjs
 baseball`. Stills: the pop and strip after a real homer showing a broadcast-looking mph, and a
 grounder chase ending in the infield, not at the plate.
 
@@ -1154,15 +1154,15 @@ beat change, no camera change (R7 owns the cameras).
   RIGHT. Swap the two. Check `_paintDiamondWidget`'s moving dot follows (it positions by cell, so
   it should for free) and that no test pins the old sides.
 
-**Deliverables.** Two probes in `test-baseball-device.mjs`: `sides-match` (mount, force each
+**Deliverables.** Two probes in `tools/test-baseball-device.mjs`: `sides-match` (mount, force each
 half through `__bbForceHalfNext`, read every visible actor's `side` from `inst.actors` and assert
 the batter, the runners and the fielders agree with the half, at both halves) and `one-batter`
 (force a short out at home through the dev seams, wait for the next at-bat's first pitch, assert
 exactly one visible figure inside 4 ft of the batter's box and that `rb` is hidden). Stills: the
 batting state and the pitching state with a runner on base, showing the colours agree; the
-widget with a runner on first, dot on the right. `node test-baseball-device.mjs` (with
-`BB_DEVICE_QUICK=1`), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
-`node test-game-conventions.mjs` green.
+widget with a runner on first, dot on the right. `node tools/test-baseball-device.mjs` (with
+`BB_DEVICE_QUICK=1`), `node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball`,
+`node tools/test-game-conventions.mjs` green.
 
 ### R7: camera and presentation, what the recording showed against the reference
 
@@ -1211,11 +1211,11 @@ the frames).
 "Perfect" fully on screen; the first chase frame after a short grounder (no catcher); the ball
 mid-flight from the pitcher camera with the trail; the batting idle with the square marker; the
 pitcher camera with stands behind the plate; the batter camera unchanged. Probes in
-`test-baseball-device.mjs`: `pop-onscreen` (a left-handed batter, the pop's bounding rect
+`tools/test-baseball-device.mjs`: `pop-onscreen` (a left-handed batter, the pop's bounding rect
 inside the band), `chase-start` (the chase camera's first position at least the minimum height
 and distance from the ball), `ball-visible-pitcher` (the ball's projected radius on the pitcher
-camera at 60 ft is at least `BALL_MIN_PX`). `node test-baseball-device.mjs` (with
-`BB_DEVICE_QUICK=1`), `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green.
+camera at 60 ft is at least `BALL_MIN_PX`). `node tools/test-baseball-device.mjs` (with
+`BB_DEVICE_QUICK=1`), `node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball` green.
 
 ### R5 record (shipped v866, 2026-09-20)
 
@@ -1321,8 +1321,8 @@ top-LEFT and the cursor is top-RIGHT of the zone). No engine change, no beat cha
 
 Deliverables: stills beside the reference frames: pitching idle (framing), a drag right on the
 pad with the cursor right of centre, the batting view with the marker at release, the scoreboard,
-the batting strip as chips. Probes as above. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`,
-`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`, `node test-game-conventions.mjs`,
+the batting strip as chips. Probes as above. `BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`,
+`node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball`, `node tools/test-game-conventions.mjs`,
 `node baseball/js/test.js` green.
 
 ### R9: figures and stadium, from the same recording
@@ -1343,14 +1343,14 @@ start.
 2. **The CPU team is red.** The `home` colour keys in `actors.js` (both skins) send the shirt to
    a red (about #c62828), pants to white, trim to a darker red; the human stays navy. Runners,
    fielders, batter, pitcher and catcher all follow, since every figure reads its side from the
-   half (R6). `test-baseball-actors.mjs`'s colour-key check (never a skin tone) must stay green.
+   half (R6). `tools/test-baseball-actors.mjs`'s colour-key check (never a skin tone) must stay green.
 3. **Baseball caps.** A low-poly cap per figure, parented to the head bone from `rig.js` so it
    rides every clip: a dome (a sphere cut at about 45% height) plus a brim (a flattened short
    cylinder segment forward of the face), in the figure's team colour, black for the umpire,
-   scaled and offset by measuring the head bone once (`render-actor.mjs --sheet` against
+   scaled and offset by measuring the head bone once (`tools/render-actor.mjs --sheet` against
    Idle, Swing, Pitch, Run, Crouch: the cap sits on the head in all five, never floats, never
    sinks). Shared geometry, one material per colour. The catcher keeps his cap (backwards is a
-   bonus, not required). Structural check in `test-baseball-actors.mjs`: every placed actor has
+   bonus, not required). Structural check in `tools/test-baseball-actors.mjs`: every placed actor has
    a child named `cap` under its head bone.
 4. **The stadium reads like a ballpark, not a diagram.** Today: flat green, a grey ribbon of
    stands whose crowd texture renders near-black, a bare sky. Build, with merged geometry and
@@ -1362,9 +1362,9 @@ start.
    unchanged in position; only what it looks at changes. Take stills from all three cameras
    beside the reference's; the pitcher camera still shows stands behind the plate.
 
-Deliverables: stills of each camera before and after, a cap sheet from `render-actor.mjs`,
-the probes above. `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs baseball`,
-`node test-baseball-actors.mjs`, `node check-no-scroll.mjs baseball` green.
+Deliverables: stills of each camera before and after, a cap sheet from `tools/render-actor.mjs`,
+the probes above. `BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`, `node tools/test-visual.mjs baseball`,
+`node tools/test-baseball-actors.mjs`, `node tools/check-no-scroll.mjs baseball` green.
 
 ### R8 record (shipped v870, 2026-09-21)
 
@@ -1438,7 +1438,7 @@ those and must not move).
    simply longer, by however long the play took.
 4. **The stats strip under HOME RUN stays for the trot.** Keep it up until the return to the plate.
 
-Deliverables. Probe `play-clock` in `test-baseball-device.mjs`, driving `_settleAtBat` with
+Deliverables. Probe `play-clock` in `tools/test-baseball-device.mjs`, driving `_settleAtBat` with
 synthetic payloads the way `homerun-strip` does: a 420 ft homer shows no outcome word at contact +
 300 ms, shows HOME RUN no earlier than 3.0 s after contact, and returns to the plate no earlier
 than the last runner's real arrival; a 120 ft groundout shows no outcome word at contact + 300 ms
@@ -1446,8 +1446,8 @@ and shows Out between 1.8 and 4.5 s after contact; a 250 ft fly out shows Out on
 `r2-cadence`, `runners-move` (run it once without `BB_DEVICE_QUICK`, it is the real-play check),
 `one-batter`, `homerun-strip` and the PLAY probe stay green. Stills: contact + 300 ms with no word,
 the ball mid-flight on a homer with the runners underway, HOME RUN at the wall.
-`BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs baseball`,
-`node check-no-scroll.mjs baseball` green.
+`BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`, `node tools/test-visual.mjs baseball`,
+`node tools/check-no-scroll.mjs baseball` green.
 
 ### R11: the league ladder is real in Quick Play (2026-09-21)
 
@@ -1474,8 +1474,8 @@ exists and stays.
    (`swing.js`, both places `F.timingWindow` is read) and the CPU's `timingSigmaMs` is untouched.
 4. **Tests.** `baseball/js/test.js` section 33: Quick Play at Little League unlocks only the
    fastball and Majors its six; travel time is monotone in readout mph and equals today's value
-   at Majors; the window multipliers apply. `node sim-baseball.mjs --quick --assert` before and
-   after, pasted (Little League will move; report it, do not tune). `test-baseball-device.mjs`:
+   at Majors; the window multipliers apply. `node tools/sim-baseball.mjs --quick --assert` before and
+   after, pasted (Little League will move; report it, do not tune). `tools/test-baseball-device.mjs`:
    `actions-live (d)` asserts the ladder instead of eight unlocked; any probe that throws a
    curveball on the human's turn (`pitch-drag`, `target-marker`) picks a league where it is
    unlocked or uses the dev seam, and says which.
@@ -1507,7 +1507,7 @@ the hats do not look like hats; and the baseball bat should be improved."*
    sheet's fifth figure shows it: knees splayed, feet off the ground line). A real squat: feet
    flat and about shoulder width, knees bent forward and out a little, thighs near horizontal,
    torso upright and leaning slightly forward, glove arm forward at knee height, throwing hand
-   behind the back. Tune it with `render-actor.mjs --sheet` against the reference frame's catcher
+   behind the back. Tune it with `tools/render-actor.mjs --sheet` against the reference frame's catcher
    (`scratchpad/ref/reference-key-frames.jpg`, top row).
 4. **Caps that read as caps.** The R9 cap is a dome with a stub; it reads as a beanie. A cap: a
    crown that sits down over the hair line (not floating on the crown of the head), slightly
@@ -1518,10 +1518,10 @@ the hats do not look like hats; and the baseball bat should be improved."*
    barrel, a rounded end; wood colour with a darker grip band on the handle. Same `BAT.length`,
    same hand attachment, same `swing.js` contact point.
 
-Deliverables: `render-actor.mjs --sheet` sheets of the batter (Idle, Swing), the catcher (Crouch)
+Deliverables: `tools/render-actor.mjs --sheet` sheets of the batter (Idle, Swing), the catcher (Crouch)
 and the pitcher (Set, Pitch) with the new caps and bat beside the reference crops; a full-screen
-batting still showing the feet; the scoreboard still. `node test-baseball-actors.mjs`,
-`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green, and the device suite's
+batting still showing the feet; the scoreboard still. `node tools/test-baseball-actors.mjs`,
+`node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball` green, and the device suite's
 `zone-world`, `zone-scale`, `pop-anchor`, `hud-legible`, `pitcher-frame` re-measured against the
 new batter camera.
 
@@ -1554,7 +1554,7 @@ bind poses are not mirrors of each other past about 35 deg of flexion. Caps: a d
 the equator, a wider tilted darker bill, a top button, the catcher's backwards. The bat is a
 `LatheGeometry` profile (knob, thin handle, taper, rounded barrel, grip band). Ship review: the
 catcher is drawn on the pitcher camera only, the same rule as the umpire, because his cap filled
-the bottom of the batting frame once caps arrived. `render-actor.mjs` honours `BB_BASE`.
+the bottom of the batting frame once caps arrived. `tools/render-actor.mjs` honours `BB_BASE`.
 
 ### R11 record (shipped v882, 2026-09-21)
 
@@ -1595,7 +1595,7 @@ And can you see that the batter's feet are below the ground? That's a problem."*
    density is one number per league. Every camera is checked at every league.
 3. **The pitcher's legs.** The `Set` clip stands the pitcher with locked knees and splayed feet.
    A real set: feet under the hips, a slight knee bend, weight even, glove up at the chest. Tune
-   with `render-actor.mjs --sheet` against the reference frame's pitcher; the rig's legs are not
+   with `tools/render-actor.mjs --sheet` against the reference frame's pitcher; the rig's legs are not
    mirrors of each other past about 35 deg (R12's finding), so probe the foot bones' world
    positions, never trust symmetric inputs.
 4. **Feet on the ground, every clip.** From the mound the batter's feet are below the grass.
@@ -1603,12 +1603,12 @@ And can you see that the batter's feet are below the ground? That's a problem."*
    pushes the feet under the ground plane. Fix it at the source: measure the lowest foot bone's
    world y per clip and correct the hips offset (or a per-clip ground offset) so the lowest foot
    sits on y = 0 within 0.1 ft in Idle, Set, Swing, Run, Bunt, Pickoff, Crouch. Add the check to
-   `test-baseball-actors.mjs` (sample each clip at five times).
+   `tools/test-baseball-actors.mjs` (sample each clip at five times).
 
 Deliverables: stills from all three cameras at Little League and at Majors beside the reference
 frames, the pitcher Set sheet, a foot-height table per clip before and after, the probes above.
-`node test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`,
-`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball` green.
+`node tools/test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`,
+`node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball` green.
 
 ### R13 record (shipped v885, 2026-09-22)
 
@@ -1676,10 +1676,10 @@ sections 6 and 7 are the contract; `settings.js` already holds `PRESETS`, `CAPS`
    `1 + pitchSpin * breakPerPt` for the curveball, slider, screwball and cutter (never the
    knuckleball's random break, never the fastball). The changeup gap already reads
    `changeupGapPerPt`. A `test.js` assertion pins that Spin 10 breaks more than Spin 0 and Spin 0
-   equals today's table. `sim-baseball.mjs --quick --assert` is re-run and its scoreboard pasted
+   equals today's table. `tools/sim-baseball.mjs --quick --assert` is re-run and its scoreboard pasted
    into the record; a change in the season bands is reported, not tuned here.
 6. **A dev seam for the probes.** `window.__bbTest.setBuild({presetId, hand, skills})` under the
-   existing dev gate, so `test-baseball-device.mjs` can start a game with a known build. New
+   existing dev gate, so `tools/test-baseball-device.mjs` can start a game with a known build. New
    device probes: `player-screen` (opens from the chip, all six rows and both pills present, every
    control at least 44 px, no scroll), `player-budget` (tapping plus until the pill reads 0 leaves
    the sum at the budget; a plus at the cap is a no-op), `player-persists` (the choice survives a
@@ -1687,9 +1687,9 @@ sections 6 and 7 are the contract; `settings.js` already holds `PRESETS`, `CAPS`
 
 Deliverables: stills of the setup screen and the player screen at 393x852 and at the short phone
 height in both hosts, light and dark; the budget table as measured by the test; the sim
-scoreboard. `node baseball/js/test.js`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`,
-`node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
-`node test-game-conventions.mjs` green.
+scoreboard. `node baseball/js/test.js`, `BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`,
+`node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball`,
+`node tools/test-game-conventions.mjs` green.
 
 ### R15: the career (2026-09-22)
 
@@ -1702,7 +1702,7 @@ the screens.
 
 **A. `baseball/js/engine/career.js`, pure and headless-tested (Opus).** No DOM, no Firebase, no
 `Math.random`: every function takes the career `state` and returns a new one, so
-`test-baseball-career.mjs` can play whole careers in node.
+`tools/test-baseball-career.mjs` can play whole careers in node.
 
 1. **The document's `state`**, frozen once shipped, `rulesV` from `settings.js`:
    ```
@@ -1758,13 +1758,13 @@ the screens.
    counters, and the season's trophy rides on the last game of the season). Every write verifies
    or logs loudly. `pagehide`/`visibilitychange` hidden triggers a push. Sync health words from
    the doc's table are the only sync copy the screens show, each with a glyph.
-6. **Tests.** `test-baseball-career.mjs` (node, in `run-all-tests.mjs`): a full career played
+6. **Tests.** `tools/test-baseball-career.mjs` (node, in `tools/run-all-tests.mjs`): a full career played
    with scripted results reaches the Majors, a missed playoff replays the league, Bronze and
    Silver replay, points and caps bind exactly as the doc's table says (a 9-3 Gold season at
    Little League earns 38, room 30, 8 lost), unspent never exceeds room, a season snapshot
    survives a changed `POINTS`, a resumed mid-at-bat game restores the count (through the real
    engine's `fromSnapshot`), forfeit is a loss, Retire produces the frozen history row, and a
-   career document round-trips `validateCareer`. Extend `sim-baseball.mjs` to drive
+   career document round-trips `validateCareer`. Extend `tools/sim-baseball.mjs` to drive
    `career.js` for its seasons instead of its own loop only if that is a small change;
    otherwise leave the sim alone and say so.
 
@@ -1792,17 +1792,17 @@ the screens.
    it rebuilds the game with `Game.fromSnapshot(snap, agents)` and the same CPU team (rebuilt from
    the season seed and `opponentIndex`). The hub's `isInProgress()` stays true for a career game
    in play; leaving the hub mid-game is allowed because the game resumes.
-5. **Probes.** `test-baseball-device.mjs`: `career-home` (all blocks present, one screen, no
+5. **Probes.** `tools/test-baseball-device.mjs`: `career-home` (all blocks present, one screen, no
    scroll), `career-resume` (start a game, take two pitches, remount, Resume, the count is the
    same), `career-forfeit` (forfeit records a loss and the record updates),
    `career-season` (scripted through a dev seam `__bbTest.scriptSeason(results)` that plays the
    regular season with given results, then the standings and the trophy modal read right).
 
 Deliverables: stills of career home at start, mid-season, in the playoffs, after a Gold, and of
-the season modal; the points table as measured by the test; `node test-baseball-career.mjs`,
-`node test-career-sync.mjs`, `node baseball/js/test.js`, `BB_DEVICE_QUICK=1 node
-test-baseball-device.mjs`, `node test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`,
-`node players-agg.test.mjs`, `node test-game-conventions.mjs` green. `database.rules.json`'s
+the season modal; the points table as measured by the test; `node tools/test-baseball-career.mjs`,
+`node tools/test-career-sync.mjs`, `node baseball/js/test.js`, `BB_DEVICE_QUICK=1 node
+tools/test-baseball-device.mjs`, `node tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball`,
+`node tools/players-agg.test.mjs`, `node tools/test-game-conventions.mjs` green. `database.rules.json`'s
 `careers` branch must be published by Matt before a push can land; until then every push records
 `HEALTH_DENIED` and the career plays locally, which is the designed state.
 
@@ -1838,7 +1838,7 @@ in section 6). Sim after the Spin wiring, reported not tuned: Gold at Minors/Maj
 (the one file that touches `js/career-store.js` and `js/game-stats.js`: `loadCareer`,
 `startCareer`, `saveCheckpoint`, `saveAtBat`, `saveGameEnd`, `recordGameResult`, `retire`,
 `installLifecycle`/`uninstallLifecycle`). The state adds `cap` (the live per-skill cap, Math.max
-only), `pointsEarned` and `pointsLost` to the spec's block. Measured by `test-baseball-career.mjs`
+only), `pointsEarned` and `pointsLost` to the spec's block. Measured by `tools/test-baseball-career.mjs`
 (293 assertions): gross yield for a 9-3 season with a Gold is 38 / 27 / 15 / 13 / 12 by league,
 Little League's 38 against a room of 30 loses 8, exactly the design doc's worked example, because
 the trophy bonus is paid against the old league's cap and the cap rises afterwards. The playoff
@@ -1846,7 +1846,7 @@ cut sits at more than 4 wins because `scriptedStandings` breaks every tie agains
 Playoff wins pay nothing; Majors Gold counts a title and stays in Majors; a perfect season needs
 every regular and playoff game won in a Majors season. `js/career-store.js` gained
 `newCareerDoc`; `js/game-stats.js` gained `recordBaseballCareerStarted` (additive, exempt from the
-rate gate as a lifecycle event). `sim-baseball.mjs` was left on its own loop: re-seeding it from
+rate gate as a lifecycle event). `tools/sim-baseball.mjs` was left on its own loop: re-seeding it from
 the careerId would invalidate every recorded scoreboard while measuring nothing new.
 
 ### R15-B record (shipped v888, 2026-09-22)
@@ -1876,7 +1876,7 @@ the standings; CPU teams show one proper noun per style (Aces, Sluggers, Flames,
 Tricksters, Owls, Sparrows, Generals) instead of their generator key, until the real list of
 team names (design doc open item 12) is decided. Standings still use the `rawWins7` model, so a
 CPU record tops out at 7-0 beside the player's 12-game record. Suites: device 48 of 48, visual
-20 of 20, `check-no-scroll` 16 of 16, `baseball/js/test.js` 2799, `test-baseball-career.mjs`
+20 of 20, `check-no-scroll` 16 of 16, `baseball/js/test.js` 2799, `tools/test-baseball-career.mjs`
 293.
 
 ### R16: the career economy, rebuilt from measurement (2026-09-22)
@@ -1891,7 +1891,7 @@ every measured number, is the proposal file sent on 2026-09-22 (revision 3); its
 
 What the study found: played as a real career, the shipped economy is trivially easy (median
 player, first-attempt Gold 99 / 97 / 79 / 68 / 51 percent, a World Series in six seasons, every
-time), because `sim-baseball.mjs` always tested a player 2 to 11 points per skill weaker than a
+time), because `tools/sim-baseball.mjs` always tested a player 2 to 11 points per skill weaker than a
 real career player, `teams.js` generates CPU rosters at half their stated level (a literal 0.5 in
 `allocateSkills`), the contact circle at high skill is wider than the strike zone, and four of six
 skills do nothing.
@@ -1924,17 +1924,17 @@ skills do nothing.
    swing decision, bunt included). Accuracy: the corner aim resolves inside the zone (item 4).
    Spin: the pitch is aimed at `target minus break` so the break lands on the aim, and the strike
    call is unchanged in meaning; the batting-side target marker keeps showing the real crossing.
-6. **The simulator tells the truth.** `sim-baseball.mjs`: the player's skills per league become
+6. **The simulator tells the truth.** `tools/sim-baseball.mjs`: the player's skills per league become
    the career ARRIVAL levels (5 / 10 / 14 / 18 / 22 per skill), one agent per game, the model
    batter gets `skills` so power mode exists, `seasonsToCap` against the real room, runs per game
    reported, the Perfect Season gate two-sided (2 to 10 percent), `--quick` never decides a band.
-   The career driver joins the repo as `sim-baseball-career.mjs` (plays whole careers through the
+   The career driver joins the repo as `tools/sim-baseball-career.mjs` (plays whole careers through the
    real engine and the real `career.js`, not a mirror; N and tier as arguments; prints first-attempt
    Gold per league with intervals, seasons per league, seasons and games to the first title, the
    Perfect Season rate) with a root CLAUDE.md row. Its assertion form pins: median first-attempt
    Gold little >= 90, highschool 70 to 90, college 40 to 65, minors 25 to 45, majors <= 15; median
    seasons to the first title 8 to 13; Majors seasons before it >= 2; Perfect Season 2 to 12.
-7. **Tests and docs.** `test-baseball-career.mjs` fixtures move to the new shape (the worked
+7. **Tests and docs.** `tools/test-baseball-career.mjs` fixtures move to the new shape (the worked
    example becomes a 3-0 Little League sweep plus Gold paying 30, all 30 fitting); `baseball/js/
    test.js` contact fixtures recalibrated, a test for the flight-time window and the aim
    compensation; `season.js` tests for the generator at every length and the 4-team bracket;
@@ -1944,13 +1944,13 @@ skills do nothing.
    season line names the playoff round; nothing else changes. The device probes' `career-season`
    fixture moves to the new season shape.
 
-Deliverables: `node sim-baseball-career.mjs --assert` green at the median tier with N >= 150, the
-suites in item 7, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node test-visual.mjs
-baseball`, `node check-no-scroll.mjs baseball` green; stills of career home at Little League.
+Deliverables: `node tools/sim-baseball-career.mjs --assert` green at the median tier with N >= 150, the
+suites in item 7, `BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`, `node tools/test-visual.mjs
+baseball`, `node tools/check-no-scroll.mjs baseball` green; stills of career home at Little League.
 
 ### R16 record (shipped v894, 2026-09-22)
 
-Built as specified, with three ship-review changes. As built, `sim-baseball-career.mjs` read
+Built as specified, with three ship-review changes. As built, `tools/sim-baseball-career.mjs` read
 College 47 and Minors 37 percent first-attempt Gold at N=200 (a flat spot, the Minors no step up),
 because the corner-aim fix hands the batter more hittable strikes exactly where `cornerBias` is
 highest, and the roster lever is exhausted at the Minors (`CPU_ROSTER_CEILING.minors` is 22, the
@@ -1970,8 +1970,8 @@ is read by nothing (game.js resolves pitchAcc against the league cap), so what m
 matter is `aimScatter` and the corner aim. `RULES_V` 3 to 4 refuses a mid-at-bat engine snapshot
 taken under the old rules (one game's progress, no history); a pre-R16 season document keeps its
 own 12-game, eight-team, top-4 shape through the frozen fallbacks. Suites: `baseball/js/test.js`
-3000, `test-baseball-career.mjs` 309, device 48 of 48, visual 20 of 20, `check-no-scroll` 16 of
-16, `test-sw-strategy.mjs` 107.
+3000, `tools/test-baseball-career.mjs` 309, device 48 of 48, visual 20 of 20, `check-no-scroll` 16 of
+16, `tools/test-sw-strategy.mjs` 107.
 
 ### R17: each league looks and feels different (2026-09-22)
 
@@ -2019,17 +2019,17 @@ checked at every league.
    on the ground, the bat and cap scaled with the figure, the batter-camera framing re-measured
    so the zone box and the batter keep their bands; `foot-on-ground` and `pitcher-frame` probes
    pass at Little League).
-6. **Probes.** `test-baseball-device.mjs`: `league-look` reads, per league, the sky band's mean
+6. **Probes.** `tools/test-baseball-device.mjs`: `league-look` reads, per league, the sky band's mean
    colour at the batter camera, the grass mean colour and the CPU shirt colour, and asserts all
    five leagues differ from each other by a measured distance, and that the night leagues are
-   darker than the day ones; `test-baseball-actors.mjs`: every style palette stays outside the
+   darker than the day ones; `tools/test-baseball-actors.mjs`: every style palette stays outside the
    skin-tone family and the Little League scale keeps feet at y = 0. Draw calls per camera per
    league reported (stay under 40).
 
 Deliverables: stills from all three cameras at all five leagues in one contact sheet beside the
 v888 sheet, the per-league tables as implemented, draw-call counts, and the suites green:
-`node test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node test-baseball-device.mjs`, `node
-test-visual.mjs baseball`, `node check-no-scroll.mjs baseball`.
+`node tools/test-baseball-actors.mjs`, `BB_DEVICE_QUICK=1 node tools/test-baseball-device.mjs`, `node
+tools/test-visual.mjs baseball`, `node tools/check-no-scroll.mjs baseball`.
 
 ### R18: the career start screen (2026-09-22)
 
@@ -2114,15 +2114,15 @@ season** (`SPEND_AFTER_SEASON`, `career.js` `spendLocked`; nothing is lost, the 
 `unspent`; the player screen says "spend after the season"). With it, `CPU_ROSTER_LEVEL.majors`
 22.1 to 23.0, `CPU_ROSTER_CEILING.majors` 25 to 26, `POINTS.majors.loss` 0 to 1.
 
-Found on the way: R18 renamed the `twoWayStar` preset and `sim-baseball-career.mjs` and
-`test-baseball-career.mjs` still asked for it, so both started careers at zero skills and the
+Found on the way: R18 renamed the `twoWayStar` preset and `tools/sim-baseball-career.mjs` and
+`tools/test-baseball-career.mjs` still asked for it, so both started careers at zero skills and the
 career test failed 15 checks on `main`. Fixed to `balanced`.
 
 ### R19 record (2026-09-23)
 
-`sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400`, all eight assertions
+`tools/sim-baseball-career.mjs --all-tiers --careers 200 --assert --perfect 400`, all eight assertions
 pass. First-attempt Gold, median 100 / 93.5 / 44.5 / 29.5 / 2.0; first title median 11 seasons,
 Majors median 4; strong 100 / 96 / 86.5 / 87.5 / **30.5** (was 60.0), strong Majors seasons median
 2; weak 94.5 / 65 / 5 / 1 / 0; Perfect Season 3.8% [2.3, 6.1]. `baseball/js/test.js` 2996 (the
 Perfect Season smoke test now plays the simulator's own maxed player, 150 seasons),
-`test-baseball-career.mjs` 315.
+`tools/test-baseball-career.mjs` 315.

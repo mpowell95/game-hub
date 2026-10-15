@@ -60,11 +60,11 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `favorites.js` | `gamehub.favorites.v1`, HUB ids (never stats keys); a preference |
 | `new-badge.js` | pure dates, no storage/DOM |
 | `game-stats.js` | the only door to stats storage (`loadStats`/`persist`); per-player keys; sub-counters (`grid`,`cc`,`es`,`nb`,`tt`,`db`,`bg`,`yz`,`dm`,`hc`,`sk`,`ah`,`wo`,`gl`…); `tt/db/bg/yz/dm/sk` store `tied`; bests Math.max-only; rate gate `tooFast`; pending queue; activity log |
-| `game-stats-global.js` | `window.__ghStats` for Monopoly Deal/Parchís; BD copy is verbatim-after-header (15-line header + marker), `test-recorder-contract.mjs` |
+| `game-stats-global.js` | `window.__ghStats` for Monopoly Deal/Parchís; BD copy is verbatim-after-header (15-line header + marker), `tools/test-recorder-contract.mjs` |
 | `firebase-boot.js` | the ONE boot of the named `'stats'` app (`getStatsApp()`, returns `uid`) |
 | `stats-net.js` | `players/<statsId>` mirror, `usernames/`, `syncHealth()`, `writesAllowed()`, `applyDeviceReset()` |
-| `arcade-scores.js` | daily best is a MAP by local day, never a resetting value; no `highscores/` node (`test-arcade-scores.mjs`) |
-| `hidden-players.js` | `isHiddenName`/`isHiddenDeviceId`; dependency-free; mirrored by hand in `test-leaderboard-rank.mjs` on purpose |
+| `arcade-scores.js` | daily best is a MAP by local day, never a resetting value; no `highscores/` node (`tools/test-arcade-scores.mjs`) |
+| `hidden-players.js` | `isHiddenName`/`isHiddenDeviceId`; dependency-free; mirrored by hand in `tools/test-leaderboard-rank.mjs` on purpose |
 | `players-agg.js` | identity graph (code ∪ name). **A sub-counter needs an explicit branch here or is silently dropped.** Holds `SOLO`, `ARCHIVED_GAMES`, `NAME_ALIAS`, `DISPLAY_NAME` |
 | `game-stats-ui.js` | owns `gameListHTML`, `hubIdOf`, `unitKeyOf`, `gameChoices`, `isGameOnLauncher`, `visibleTabs` (more permissive, on purpose) |
 | `leaderboard-ui.js` | read-only on data; owns `GAME_META`, `gamehub.lb.sort.v1` |
@@ -101,7 +101,7 @@ ownership, by convention: stats-net `players/` `usernames/`; net `rooms/`; devic
 - Not a profile field (profile has inlined copies in Monopoly Deal/Parchís; a reset must not change
   language). A preference.
 - Per-game `<game>/js/strings.js` `{en, es}`, in `sw.js` ASSETS. **Call `t()` at RENDER time, never at
-  module scope.** Add each new dictionary to `test-i18n-strings.mjs`'s `DICTS`.
+  module scope.** Add each new dictionary to `tools/test-i18n-strings.mjs`'s `DICTS`.
 - Only display labels translate; ids, stats keys, byDiff buckets, events stay canonical.
 - Exclusions: Monopoly Deal, Parchís (own `parchis_r2_prefs.lang`; wiring needs the `../Parchís/`
   rebuild), `js/challenge/`, card suit/rank and proper names.
@@ -119,7 +119,7 @@ ownership, by convention: stats-net `players/` `usernames/`; net `rooms/`; devic
 
 Pure read of `GAMES[].released` (`isNewGame`, 7 days, UTC); nothing stored. Future date = new;
 malformed = not new. **Only genuinely new games get `released`; never backfill.** `added` feeds only the
-Newest sort (`sortMsOf()` in `js/launcher-sort.js`), never the pill (`test-new-badge.mjs`). Pill is
+Newest sort (`sortMsOf()` in `js/launcher-sort.js`), never the pill (`tools/test-new-badge.mjs`). Pill is
 `aria-hidden`; `aria-label` starts "New game.". NEW does not reorder the launcher; sorting new games
 first would be Matt's call.
 
@@ -137,7 +137,7 @@ first would be Matt's call.
 
 Lockstep games share `rooms/<CODE>` (seq-keyed move log, per-round `round`, `recovery`), apply the same
 decisions and verify an FNV-1a hash (`<game>/js/hash.js`) after each remote move; the host is
-authoritative. Each invariant is a fixed bug with a `[KNOWN-BUG PROBE]` in `test-mp-lockstep.mjs`; all
+authoritative. Each invariant is a fixed bug with a `[KNOWN-BUG PROBE]` in `tools/test-mp-lockstep.mjs`; all
 hold at N seats.
 
 1. **Decide the match end BEFORE emitting `roundScored`**; gate on the engine's pre-emit decision.
@@ -181,7 +181,7 @@ rematch series** (one game per room) is valid.
 
 No shared state, so no log/hash/recovery. Host publishes the board; each side self-reports via
 **`reportRoundResult`**; round over when BOTH results, stamped with the round number, are in
-(`bothResultsIn`). `round.deck` = faces, `round.dealer` = start time. `test-boggle-mp.mjs`.
+(`bothResultsIn`). `round.deck` = faces, `round.dealer` = start time. `tools/test-boggle-mp.mjs`.
 
 ### The ninth consumer: Chinchón at 3-4 seats (2026-07-28) — the N-player extension
 
@@ -245,7 +245,7 @@ shot stamps `shotError` instead of failing the send.
 
 ### How Matt is notified
 
-Matt's in-app inbox (`gamehub.bugadmin.v1`), `node read-bug-reports.mjs` (`--shots`, `--deleted`), and
+Matt's in-app inbox (`gamehub.bugadmin.v1`), `node tools/read-bug-reports.mjs` (`--shots`, `--deleted`), and
 since 2026-09-24 `bugReportPush` (root "Push notifications").
 
 ### Replying, and clearing the inbox (2026-08-13)
@@ -263,7 +263,7 @@ Seen-list `gamehub.announce.v1` (a preference). `until` retires an entry; a malf
 (shown). **Append a NEW id; never reuse or renumber.** Text `{en, es}` on the entry. `shots` = whole
 screens per theme (`resolvedTheme()`) × language in `img/`, neutral profile with code/device id
 blanked; `tile: {art, name}` for a new game. Never over the name gate or a game; once per load.
-`adminOnly: true` previews to Matt only (checked before `showAnnouncement`). `test-bug-report.mjs`
+`adminOnly: true` previews to Matt only (checked before `showAnnouncement`). `tools/test-bug-report.mjs`
 checks paths/tiles and NOTEs gated entries.
 
 ### Privacy, stated plainly
@@ -275,11 +275,11 @@ Reports carry name, code, device id, the local store and screenshots into an `au
 
 **A badge goes where the thing it counts is REACHED.** `_paintReplyBadge` sums `adminUnreadCount` into
 the Messages button on **`isAdminDevice()`** devices only; `openBugInbox` fires `gamehub:messages` to
-repaint. When a button moves, move its count with it (`test-bug-report.mjs` probe).
+repaint. When a button moves, move its count with it (`tools/test-bug-report.mjs` probe).
 
 ### What is NOT covered by a test
 
-DOM and Firebase halves of bug reports were only hand-driven; `test-bug-report.mjs` covers pure logic.
+DOM and Firebase halves of bug reports were only hand-driven; `tools/test-bug-report.mjs` covers pure logic.
 
 ## Course drafts (2026-09-22)
 
@@ -327,12 +327,12 @@ Not proof against someone with a (public) code and devtools — never oversell. 
 
 ### What is NOT covered by a test
 
-`test-messages.mjs` covers the pure halves only.
+`tools/test-messages.mjs` covers the pure halves only.
 
 ## Who is on the installed app, and who is in a browser tab (2026-08-11)
 
 `syncMyStats()` mirrors `installState()` + `build` to `players/<id>/device` (additive, never read by
-gameplay). `read-install-state.mjs`. **"Not seen yet" is missing data, never "browser tab".**
+gameplay). `tools/read-install-state.mjs`. **"Not seen yet" is missing data, never "browser tab".**
 `a2hsDismissed` separates "asked and declined" from "never asked".
 
 ## The Device details button, retired (2026-08-11)
@@ -349,12 +349,12 @@ or play count; hide a name only when Matt names it.
 ### Nameless devices — the gate, and why hiding them is not rule 1 again (2026-07-31)
 
 Every entry point is name-gated, so nameless (and `'You'`) rows, hidden, are pre-gate history that
-reattaches once named (`test-leaderboard-rank.mjs` asserts the round trip). **Removing the gate requires first restoring the labelled "Unnamed player" rows.** Parchís: add the
+reattaches once named (`tools/test-leaderboard-rank.mjs` asserts the round trip). **Removing the gate requires first restoring the labelled "Unnamed player" rows.** Parchís: add the
 gate tag to the `../Parchís/` source too. Monopoly Deal: the gate graph must be in `business-deal/sw.js`.
 
 ## `GAME_META` is a registry, and a missing row zeroes a whole game (2026-08-11)
 
-A game without a `GAME_META` row counts ZERO on the leaderboard. `players-agg.test.mjs` enforces a row
+A game without a `GAME_META` row counts ZERO on the leaderboard. `tools/players-agg.test.mjs` enforces a row
 per stats id; **`OFF_THE_BOARD` stays empty** (admin-only games get a row from day one). Mode buckets
 (`ai`, `mp`) count under All only; never map a mode onto a tier.
 
@@ -406,14 +406,14 @@ has its own drill state `_playerGame`; Esc backs out game → player → close.
 
 **Scrolling fixed overlays get `overscroll-behavior: contain`. Never raw `resize` listeners (use
 `onViewportResize`, unsubscribe in `destroy()`). Never `touchmove` on `document`.** Skip identical
-re-renders; keep scrollTop on data pushes. Enforced by `test-game-conventions.mjs`; mirror changes into
+re-renders; keep scrollTop on data pushes. Enforced by `tools/test-game-conventions.mjs`; mirror changes into
 root's "USE WHAT EXISTS" table.
 
 ### When each game is played: the activity log (2026-10-11)
 
 `gamehub.activity.v1` per store key, per game `{first, last, w:{<Monday>: plays}}`; stamped only in
 `tooFast()`'s allowed branch; own key; additive, never pruned; mirrored as `players/<id>/activity`,
-OMITTED when empty. `test-activity.mjs`.
+OMITTED when empty. `tools/test-activity.mjs`.
 
 ### Sync health, and why a leaderboard absence is not proof of anything (2026-07-22)
 
@@ -424,7 +424,7 @@ remotePlays`), logs failures loudly, verifies by re-read, retries on load/hide/l
 
 Localhost never writes (stats, usernames, messages, admin config, careers); reads stay on; logged as
 `dev-origin-blocked`. Opt-in: `gamehub.devAllowSync.v1`. LAN-by-IP dev servers are not covered.
-Leaked test players: `delete-test-players.mjs` (Matt-only, dry run by default).
+Leaked test players: `tools/delete-test-players.mjs` (Matt-only, dry run by default).
 
 **Diagnosing "my history is missing":** on their device, `JSON.parse(localStorage['gamehub.syncHealth.v1'])`;
 `ok:false` or `localPlays` ≫ `remotePlays` = sync problem, data safe locally.
@@ -435,13 +435,13 @@ every load). Seed offline or in headless tests only.
 ### A code's name is its NEWEST record's name (2026-09-24)
 
 A record joins its code always, its name only if that is the code's current name (or it has no code).
-**Rerun a whole-database before/after diff before changing the graph** (`test-stats-identity.mjs`).
+**Rerun a whole-database before/after diff before changing the graph** (`tools/test-stats-identity.mjs`).
 
 ### Name aliases, and why a rename in Firebase does not stick (2026-07-31)
 
 `NAME_ALIAS` (`matt → mattyice`, `lill → lili`), `DISPLAY_NAME` (`lili → 'Lili'`). A server rename never
 sticks (devices re-mirror); durable fixes are an alias here, a rename ON the device, or linking devices
-to one code. Every alias needs a test in `players-agg.test.mjs` (a wrong alias merges two people).
+to one code. Every alias needs a test in `tools/players-agg.test.mjs` (a wrong alias merges two people).
 
 ### The Ana/Natalia correction (2026-07-23) — what was done, and how certain it actually is
 
@@ -459,7 +459,7 @@ previous name to `claimUsername`; `adminReleaseUsername(name)` repairs stranded 
 identity. Legacy stores (`chinchon-stats`, `bd-stats`) are never folded into a fork.
 `game-stats-global.js` resolves the same key and never claims. The first-run gate reuses the owner's
 code when the typed name matches the owner's, else mints a new one. Known gap: same person, new code,
-different name forks away (data untouched; aggregation unions by name). `test-stats-identity.mjs`.
+different name forks away (data untouched; aggregation unions by name). `tools/test-stats-identity.mjs`.
 
 ### Head-to-head capture
 
@@ -509,7 +509,7 @@ and is gated by `writesAllowed()`. Documents are built with `newCareerDoc()`; th
 - `online/<CODE>` overrides `ONLINE_BEFORE`; `js/online-gate.js` is the only gate caller.
 - `allow` only adds viewers. `deviceResets` is Matt-only (root "Deleting a device's history").
 - **Adding a switch:** resolver + reader, `setX()` on `writeOverride()`, admin-ui section,
-  `test-admin-config.mjs` case incl. a wiring check.
+  `tools/test-admin-config.mjs` case incl. a wiring check.
 - **Writable only by `admins/` uids (2026-10-14).** Matt: *"NOBODY should have that power other than me."*
 
 ## Score corrections: "that machine was broken" (2026-08-24)
@@ -565,11 +565,11 @@ Order: import, then `_enterGameChrome(game)`, then `init()`; the load-failure pa
 
 ## How to test
 
-Stats/identity: `test-stats-replay.mjs`, `test-stats-identity.mjs`, `test-recorder-contract.mjs`,
-`test-rate-guard.mjs`, `test-activity.mjs`. Leaderboard: `players-agg.test.mjs`,
-`test-leaderboard-rank.mjs`. Admin/corrections: `test-admin-config.mjs`, `test-stats-corrections.mjs`.
-MP: `test-mp-lockstep.mjs`, `test-boggle-mp.mjs`, per-game challenge suites, `test-challenges.mjs`.
-Hub: `test-messages.mjs`, `test-match-chat.mjs`, `test-bug-report.mjs`, `test-push.mjs`,
-`test-career-sync.mjs`, `test-i18n-strings.mjs`, `test-new-badge.mjs`, `test-arcade-scores.mjs`.
-Conventions: `test-game-conventions.mjs`. Run only what covers your change; never `run-all-tests.mjs`
+Stats/identity: `tools/test-stats-replay.mjs`, `tools/test-stats-identity.mjs`, `tools/test-recorder-contract.mjs`,
+`tools/test-rate-guard.mjs`, `tools/test-activity.mjs`. Leaderboard: `tools/players-agg.test.mjs`,
+`tools/test-leaderboard-rank.mjs`. Admin/corrections: `tools/test-admin-config.mjs`, `tools/test-stats-corrections.mjs`.
+MP: `tools/test-mp-lockstep.mjs`, `tools/test-boggle-mp.mjs`, per-game challenge suites, `tools/test-challenges.mjs`.
+Hub: `tools/test-messages.mjs`, `tools/test-match-chat.mjs`, `tools/test-bug-report.mjs`, `tools/test-push.mjs`,
+`tools/test-career-sync.mjs`, `tools/test-i18n-strings.mjs`, `tools/test-new-badge.mjs`, `tools/test-arcade-scores.mjs`.
+Conventions: `tools/test-game-conventions.mjs`. Run only what covers your change; never `tools/run-all-tests.mjs`
 unless Matt asks.
