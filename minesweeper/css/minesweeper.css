@@ -188,8 +188,8 @@
   background: var(--ms-surface-2);
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 0 13px;
+  gap: 9px;
+  padding: 0 11px;
   color: inherit;
   font: inherit;
   text-align: left;
@@ -202,9 +202,10 @@
   box-shadow: 0 2px 8px rgba(16, 30, 54, .10);
 }
 .ms-root .ms-diff .ms-dshape { width: 26px; flex: 0 0 auto; display: flex; align-items: center; }
-.ms-root .ms-diff .ms-dname { font-size: 17px; font-weight: 700; flex: 1; }
+.ms-root .ms-diff .ms-dname { font-size: 17px; font-weight: 700; flex: 1; min-width: 0; }
 .ms-root .ms-diff .ms-dmeta {
   font-size: 13px;
+  white-space: nowrap;   /* the selected row's 2px border used to wrap "20 mines" onto a 2nd line */
   color: var(--ms-muted);
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -268,6 +269,10 @@
 .ms-root .ms-opt[aria-pressed="true"] .ms-sw i { transform: translateX(22px); background: #fff; }
 
 .ms-root .ms-cta { margin-top: auto; }
+/* Resume | New game, half each, when the paused board is on another level (2026-10-15). */
+.ms-root .ms-ctarow { display: flex; gap: 8px; }
+.ms-root .ms-ctarow > .gh-btn { flex: 1 1 0; min-width: 0; gap: 7px; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+.ms-root .ms-ctarow svg { width: 16px; height: 16px; flex: 0 0 auto; }
 /* The cards sit CENTRED between the title row and Play (2026-10-15, Matt: "It feels like you
  * shifted everything on the setup screen up"). Going immersive freed the hub header's height, and
  * with only Play's auto margin all of it piled up above Play. Two auto margins split it, which puts
@@ -275,7 +280,7 @@
  * no spare height and nothing moves. */
 .ms-root .ms-setup > .ms-top { margin-bottom: auto; }
 .ms-root .ms-linkrow { display: flex; gap: 9px; flex: 0 0 auto; }
-.ms-root .ms-linkrow .gh-btn { flex: 1; }
+.ms-root .ms-linkrow .gh-btn { flex: 1; min-width: 0; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
 
 /* ---------------- game HUD ---------------- */
 .ms-root .ms-hdr { height: 52px; display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
