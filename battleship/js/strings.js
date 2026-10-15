@@ -146,7 +146,7 @@ export const STRINGS = {
   },
   es: {
     title: 'Hundir la Flota',
-    tagline: 'Hunde la flota enemiga antes de que hundan la tuya.',
+    tagline: 'Hunde su flota antes de que hundan la tuya.',
     play_vs_bot: 'Jugar vs. Bot',
     play_vs_friend: 'Jugar vs. Amigo',
     options_label: 'Opciones',

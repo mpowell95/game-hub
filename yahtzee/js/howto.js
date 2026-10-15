@@ -105,10 +105,10 @@ function boardHtml() {
   for (let i = 0; i < 5; i++) h += `<span class="yz-ht-die" data-die="${i}"></span>`;
   h += '</div>';
   // the two buttons
-  h += '<div class="yz-ht-roll" data-role="roll">ROLL'
+  h += '<div class="yz-ht-roll" data-role="roll">' + t('btn_roll')
     + '<i class="yz-ht-pip" data-pip="1">1</i><i class="yz-ht-pip" data-pip="2">2</i><i class="yz-ht-pip" data-pip="3">3</i>'
     + '</div>';
-  h += '<div class="yz-ht-play" data-role="play">PLAY</div>';
+  h += '<div class="yz-ht-play" data-role="play">' + t('btn_play') + '</div>';
   // the things only some pages use
   h += '<div class="yz-ht-dim" data-role="dim"></div>';
   h += '<div class="yz-ht-tip" data-role="tip"><b data-role="tipname"></b><span data-role="tipscore"></span></div>';

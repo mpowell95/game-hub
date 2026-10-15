@@ -1622,7 +1622,8 @@ function gameListHTML(list) {
       : `<span class="lb-glead lb-glead-empty">${esc(t('lb_no_games_yet'))}</span>`;
     const metric = lead
       ? `<span class="lb-gnum"><b>${esc(metricText(boardMetricOf(lead, meta.id), meta.id))}</b><span>${esc(unitTextOf(meta.id, boardMetricOf(lead, meta.id)))}</span></span>`
-      : `<span class="lb-gnum is-empty"><b>&mdash;</b><span>${esc(t('lb_no_games_yet'))}</span></span>`;
+      // A dash only: "No games yet" already sits under the title (said twice, it crushed the title).
+      : `<span class="lb-gnum is-empty"><b>&mdash;</b></span>`;
     return `<button type="button" class="lb-grow${lead ? '' : ' is-empty'}" data-game="${meta.id}">
       <span class="lb-gart">${art}</span>
       <span class="lb-gmain">
@@ -2727,6 +2728,9 @@ function ensureCss() {
     '.lb-gnum b{font-size:19px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em}',
     '.lb-gnum span{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--lb-muted);margin-top:3px}',
     '.lb-gnum.is-empty b{color:var(--lb-muted)}',
+    // Spanish units run long (VICTORIAS, MEJOR TIEMPO) and squeezed the leader's name to "*King of Ga...".
+    'html[lang="es"] .lb-gnum span,html[lang="es"] .lb-pnum span,html[lang="es"] .lb-tt-val span,html[lang="es"] .lb-board-n span,html[lang="es"] .lb-unith{letter-spacing:.02em;font-size:11px}',
+    'html[lang="es"] .lb-grow{gap:9px}',
     // --- a game board (screen 3) ----------------------------------------------------------------
     '.lb-board-head{display:flex;align-items:center;gap:4px;margin:0 0 12px}',
     '.lb-back{align-self:flex-start;appearance:none;cursor:pointer;min-height:44px;display:flex;align-items:center;gap:6px;background:none;border:0;padding:0 8px 0 0;color:var(--lb-accent-text);font-size:14px;font-weight:600}',

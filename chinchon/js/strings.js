@@ -249,7 +249,7 @@ export const STRINGS = {
     place_auto_full: 'Colocación automática',
     place_manual_full: 'Colocación manual',
     place_off_full: 'Sin colocación',
-    closing_summary: 'Cierre ≤{max} · figuras {fig} · {place}',
+    closing_summary: 'Cierre ≤{max} · Figuras: {fig} · {place}',
     label_use_48: 'Usar 8s y 9s (48 cartas)',
     label_play_joker: 'Jugar con comodín',
     label_ace_wild: 'El as de oros es comodín',

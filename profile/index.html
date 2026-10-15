@@ -163,20 +163,31 @@
     .pf-seg button.is-on { background: var(--hub-surface); color: var(--hub-ink); box-shadow: 0 1px 3px rgba(20,40,80,.14); }
     .pf-seg .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
     .pf-seg .lb-dshape-x2 { width: 1.7em; }
+    /* A computer player's row is a grid (2026-10-15): the three levels run under the name AND the
+       remove button, so "Hard" / "Difícil" no longer spill past the card on a 360px phone. */
+    .pf-opp { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 10px; row-gap: 8px; }
+    .pf-opp-main { display: contents; }
+    .pf-opp > .pf-emoji-btn { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+    .pf-opp .pf-opp-name { grid-column: 2; grid-row: 1; }
+    .pf-opp > .pf-remove { grid-column: 3; grid-row: 1; align-self: center; }
+    .pf-opp .pf-seg { grid-column: 2 / 4; grid-row: 2; display: flex; }
+    .pf-opp .pf-seg button { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
 
     /* Quick chat. The top row of each kind IS your chat, in game order; "Add more" is what you
        have not picked. A picked-up item is lifted, gets a thick ink border and the bar below
        names it in words (colorblind rule: never colour alone). */
     .pf-qc-label { font-weight: 800; font-size: .8rem; color: var(--hub-ink); margin: 16px 0 8px; }
     .pf-qc-sublabel { font-weight: 700; font-size: .74rem; color: var(--hub-muted); margin: 12px 0 6px; }
-    .pf-qc-emojis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    /* minmax(0, 1fr): a plain 1fr column will not shrink below the emoji's own width, which pushed the
+       sixth emoji off the card on a 360px phone (2026-10-15). */
+    .pf-qc-emojis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
     .pf-qc-emojis button {
       font-size: 26px; line-height: 1; min-height: 50px; border-radius: 12px; cursor: pointer;
       touch-action: manipulation; border: 2px solid var(--hub-surface-2); background: var(--hub-surface-2);
       transition: transform .12s ease, box-shadow .12s ease;
     }
     .pf-qc-emojis button.pf-qc-add { font-size: 24px; font-weight: 800; color: var(--hub-muted); border: 2px dashed var(--hub-muted); background: transparent; }
-    .pf-qc-more-e { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+    .pf-qc-more-e { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; }
     .pf-qc-more-e button {
       font-size: 20px; line-height: 1; min-height: 44px; border-radius: 10px; cursor: pointer;
       touch-action: manipulation; border: 1px dashed var(--hub-muted); background: transparent;

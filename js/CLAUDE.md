@@ -112,6 +112,9 @@ ownership, by convention: stats-net `players/` `usernames/`; net `rooms/`; devic
   fallback (`tf`/`tx`).
 - Live switch applies to newly rendered UI; games MAY subscribe via `onLangChange` (Snake does), not
   required. Reference implementation: `snake/`.
+- **Spanish runs longer: check every screen you touch at 360px wide in BOTH languages** (2026-10-15
+  review: tile names, unit labels, button rows and help lines overflowed only in Spanish). Spanish-only
+  tightening is scoped `html[lang="es"]` (i18n stamps it); shorten the Spanish words before shrinking.
 - **Boggle has TWO separate language choices — never merge them**: hub language = chrome; setup
   Dictionary = word list + dice (a stored `wordLang` always wins). `boggle/CLAUDE.md`.
 

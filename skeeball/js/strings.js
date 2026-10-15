@@ -265,7 +265,7 @@ const STRINGS = {
     d_pg_colors: 'Encesta en los cuatro colores que puntúan en una sola ronda.',
     d_bb_baskets: 'Encesta al menos una vez en cada una de las nueve canastas.',
     d_ra_hoop: 'Atrapa una canasta mientras se desliza, en cualquier fila. Una fila echa a correr cuando le queda una sola canasta.',
-    d_ra_full: 'Mete la pelota en todas las canastas de la maquina en una sola ronda. Cada una se cierra al acertarla, asi que tienes un solo intento en cada una.',
+    d_ra_full: 'Mete la pelota en todas las canastas de la máquina en una sola ronda. Cada una se cierra al acertarla, asi que tienes un solo intento en cada una.',
     d_bc_baskets: 'Encesta tres veces en cada una de las nueve canastas. Se acumula entre rondas.',
     d_bc_perfect: 'Una ronda en la que las nueve bolas puntúan: sin ceros ni canastas de castigo. Tres veces.',
     d_bc_net: 'Todas las rondas en esta máquina sumadas, tras el descuento de las canastas de castigo.',
@@ -296,7 +296,7 @@ const STRINGS = {
 
     hud_ball: 'Bola',
     hud_score_aria: 'Puntos',
-    msg_gutter: 'FALLO!',
+    msg_gutter: '¡FALLO!',
     quit: 'Volver a la pantalla inicial',
 
     over_h: 'Fin de la partida',

@@ -155,6 +155,8 @@
 }
 .ms-root .ms-brand span { overflow: hidden; text-overflow: clip; }
 .ms-root .ms-brand svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--ms-flag); }
+/* Narrow phones in the hub: "MINESWEEPER" was cut to "MINESWEEPEI" beside the floating back button. */
+@media (max-width: 380px) { .ms-root .ms-brand { font-size: 17px; letter-spacing: .02em; gap: 6px; } }
 .ms-root .ms-helpbtn,
 .ms-root .ms-hback { width: 44px; height: 44px; flex: 0 0 auto; border-radius: 50%; font-size: 20px; font-weight: 800; }
 .ms-root .ms-hback svg { width: 16px; height: 16px; }
@@ -188,7 +190,7 @@
   background: var(--ms-surface-2);
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   padding: 0 11px;
   color: inherit;
   font: inherit;
@@ -202,9 +204,11 @@
   box-shadow: 0 2px 8px rgba(16, 30, 54, .10);
 }
 .ms-root .ms-diff .ms-dshape { width: 26px; flex: 0 0 auto; display: flex; align-items: center; }
-.ms-root .ms-diff .ms-dname { font-size: 17px; font-weight: 700; flex: 1; min-width: 0; }
+/* The name never gives way to the size beside it (2026-10-15: "Medium", "Experto" ran under "10×13"
+   in the hub on a 360px phone). */
+.ms-root .ms-diff .ms-dname { font-size: 17px; font-weight: 700; flex: 1 0 auto; white-space: nowrap; }
 .ms-root .ms-diff .ms-dmeta {
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;   /* the selected row's 2px border used to wrap "20 mines" onto a 2nd line */
   color: var(--ms-muted);
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;

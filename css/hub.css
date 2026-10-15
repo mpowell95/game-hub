@@ -193,11 +193,10 @@ body {
 .hub-top.hub-top-immersive .hub-themetoggle { display: none; }
 
 /* Three controls pinned left / center / right. */
-.hub-top-right { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; min-height: var(--gh-band-controls, 36px); }
-.hub-top-right > :nth-child(1) { justify-self: start; }
-.hub-top-right > :nth-child(2) { justify-self: center; }
-.hub-top-right > :nth-child(3) { justify-self: end; }
-.hub-top-right .hub-profile { margin-left: 0; max-width: 100%; }
+.hub-top-right { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-height: var(--gh-band-controls, 36px); }
+/* Content-sized, not 1fr columns (2026-10-15): equal outer columns cut "My Profile" to "My Prof..."
+   on a 360px phone although all three buttons fit. Only the profile pill may shrink (ellipsis). */
+.hub-top-right .hub-profile { margin-left: 0; max-width: none; min-width: 0; flex: 0 1 auto; }
 .hub-statsbtn {
   appearance: none; border: 1px solid var(--hub-surface-2); background: var(--hub-surface);
   color: var(--hub-ink); font: inherit; font-size: 0.85rem; font-weight: 700;
@@ -336,13 +335,16 @@ body {
 .hub-card-label {
   position: absolute;
   left: 10px; bottom: 7px;
-  right: auto;
+  right: 10px;
   padding: 0;
   font-weight: 800;
   font-size: 1rem;
+  line-height: 1.15;
   letter-spacing: -0.01em;
   text-align: left;
-  white-space: nowrap;
+  /* Wraps rather than running off the tile (2026-10-15: "Tuercas y Tornillos" on a 360px phone). */
+  white-space: normal;
+  text-wrap: balance;
   color: #fff;
   /* No scrim: the four-way outline below carries contrast on its own, so the
      gradient that used to cover the bottom third of every tile is gone. */

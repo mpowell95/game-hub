@@ -124,11 +124,11 @@ const gameMarkup = () => `
   <div class="yz-die" id="dieWrap3" style="left:256px"><div class="yz-die-shadow"></div><div class="yz-cube" id="cube3"></div></div>
   <div class="yz-die" id="dieWrap4" style="left:335px"><div class="yz-die-shadow"></div><div class="yz-cube" id="cube4"></div></div>
 
-  <button class="yz-roll-btn" id="rollBtn"><span class="yz-label">ROLL</span></button>
+  <button class="yz-roll-btn" id="rollBtn"><span class="yz-label">${t('btn_roll')}</span></button>
   <div class="yz-roll-pip yz-lit" id="rollPip1" style="left:178px">1</div>
   <div class="yz-roll-pip yz-lit" id="rollPip2" style="left:208px">2</div>
   <div class="yz-roll-pip yz-dim" id="rollPip3" style="left:238px">3</div>
-  <button class="yz-play-btn yz-off" id="playBtn"><span class="yz-label">PLAY</span></button>
+  <button class="yz-play-btn yz-off" id="playBtn"><span class="yz-label">${t('btn_play')}</span></button>
 
   <button type="button" class="yz-mp-leave" id="mpLeaveBtn" hidden>${t('leave')}</button>
 
@@ -917,7 +917,7 @@ function renderMpEndOverlay(message){
     <div class="yz-overlay-card">
       <div class="yz-overlay-title">${t('conn_ended')}</div>
       <div class="yz-overlay-scores">${esc(message)}</div>
-      <button class="yz-play-btn yz-on" id="mpBackToSetupBtn"><span class="yz-label">BACK</span></button>
+      <button class="yz-play-btn yz-on" id="mpBackToSetupBtn"><span class="yz-label">${t('btn_back')}</span></button>
     </div>`;
   overlay.classList.add('yz-show');
   $('mpBackToSetupBtn').addEventListener('click', () => { returnToSetup(); });

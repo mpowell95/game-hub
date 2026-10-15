@@ -743,6 +743,9 @@
   animation: nb-backdrop-fade 0.2s ease;
 }
 .nb-overlay[hidden] { display: none; }
+/* How to play opens from the difficulty menu too, whose root is only as tall as its buttons: an
+   absolute overlay there clipped the title, the last tip and OK (2026-10-15). Fixed = whole screen. */
+.nb-overlay[data-role="help-overlay"] { position: fixed; }
 .nb-overlay[data-role="restart-overlay"] { animation-duration: 0.12s; }
 @keyframes nb-backdrop-fade {
   0% { opacity: 0; }
@@ -755,8 +758,9 @@
   padding: 24px;
   max-width: 520px;
   width: 100%;
-  max-height: 90vh;
+  max-height: min(90vh, 100%);
   overflow-y: auto;
+  overscroll-behavior: contain;
   text-align: center;
   box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);

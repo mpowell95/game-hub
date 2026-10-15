@@ -241,6 +241,8 @@
 /* The logo row is at least as tall as the "?" in the card's corner, so the tagline under it is never
    covered by that button (it was, at 320px wide). */
 .fs-root .fs-ov-setup .fs-logo { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+/* "Fútbol de Chapas" is twice as long as "Flick Soccer": smaller, so it stays on one line (2026-10-15). */
+html[lang="es"] .fs-root .fs-logo { font-size: 23px; letter-spacing: 0; }
 .fs-root .fs-tag { margin: -4px 0 2px; text-align: center; font-size: 14px; font-weight: 600; color: var(--fs-muted); }
 .fs-root .fs-field { display: flex; flex-direction: column; gap: 4px; }
 .fs-root .fs-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fs-muted); }

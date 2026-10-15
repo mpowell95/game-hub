@@ -113,7 +113,7 @@
   .hub-main .cc-root .cc-summary-row { padding: 11px 12px; }
   .hub-main .cc-root .cc-summary-label { white-space: nowrap; }
   .hub-main .cc-root .cc-setup-foot { flex-direction: row; gap: 8px; }
-  .hub-main .cc-root .cc-setup-foot .cc-btn { flex: 1; }
+  .hub-main .cc-root .cc-setup-foot .cc-btn { flex: 1; padding-left: 6px; padding-right: 6px; white-space: nowrap; }
 }
 
 /* Avatar picker (popup grid) */
@@ -582,7 +582,7 @@
 }
 .cc-summary-row:hover { background: var(--cc-surface-2); }
 .cc-summary-item.is-open .cc-summary-row { background: var(--cc-surface-2); }
-.cc-summary-label { font-weight: 700; color: var(--cc-ink); font-size: 0.9rem; }
+.cc-summary-label { font-weight: 700; color: var(--cc-ink); font-size: 0.9rem; white-space: nowrap; }
 .cc-summary-value {
   color: var(--cc-muted); font-weight: 600; font-size: 0.86rem; text-align: right;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62%;

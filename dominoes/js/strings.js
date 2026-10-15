@@ -74,7 +74,7 @@ export const STRINGS = {
   },
   es: {
     title: 'Dominó',
-    tagline: 'All Fives, a 300. Cada cinco sobre la mesa son puntos.',
+    tagline: 'Cincos, a 300. Los múltiplos de cinco en la mesa puntúan.',
     difficulty: 'Dificultad',
     diff_easy: 'Fácil',
     diff_medium: 'Medio',
