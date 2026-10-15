@@ -289,7 +289,7 @@ class MinesweeperUI {
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block ms-cta" data-act="play">${esc(t(saved ? 'resume' : 'play'))}</button>
       <div class="ms-linkrow">
         <button type="button" class="gh-btn" data-act="howto">${esc(t('how_to_play'))}</button>
-        <button type="button" class="gh-btn" data-act="stats">${esc(t('my_stats'))}</button>
+        <button type="button" class="gh-btn" data-act="board">${esc(t('leaderboard'))}</button>
       </div>
     </div>`;
 
@@ -316,18 +316,11 @@ class MinesweeperUI {
       if (!act) return;
       if (act.dataset.act === 'play') this.startOrResume();
       else if (act.dataset.act === 'howto') this.renderHowTo();
-      else if (act.dataset.act === 'stats') this._openStats();
+      else if (act.dataset.act === 'board') this._openLeaderboard();
     };
   }
 
-  async _openStats() {
-    // Lazy: My Stats pulls in the whole stats UI and nobody opening Minesweeper has asked for it
-    // yet. A failure here must never take the game down with it. Same shape as skeeball/js/ui.js.
-    try {
-      const m = await import('../../js/game-stats-ui.js');
-      m.openStatsOverlay();
-    } catch (err) { console.error('[minesweeper] stats', err); }
-  }
+
 
   /* ---- how to play -------------------------------------------------------------------------- */
 
@@ -987,7 +980,8 @@ class MinesweeperUI {
   async _openLeaderboard() {
     try {
       const m = await import('../../js/leaderboard-ui.js');
-      await m.openLeaderboard();
+      // Straight onto Minesweeper's board; its back chevron returns here (2026-10-15).
+      await m.openLeaderboard({ game: 'minesweeper' });
     } catch (err) { console.error('[minesweeper] leaderboard', err); }
   }
 

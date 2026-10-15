@@ -1959,6 +1959,7 @@ function currentBody() {
 let _host = null;
 let _seg = 'players';       // 'players' | 'games'
 let _game = null;           // non-null => showing that game's detail board
+let _entryGame = null;      // the board openLeaderboard({game}) opened on: backing out of it closes
 let _player = null;         // non-null (a group key) => showing that player's detail screen
 let _playerGame = null;     // non-null => drilled into that game from WITHIN player detail
 let _cat = 'all';           // 'all' | 1-4 | 'NT' | 'VS' - By Player's category filter (opens on the saved default)
@@ -2038,6 +2039,7 @@ function stepBack() {
   if (_panel) { _panel = null; rerender(); return true; }
   if (_playerGame) { _playerGame = null; rerender(); return true; }
   if (_player) { _player = null; rerender(); return true; }
+  if (_game && _game === _entryGame) return false;   // came in from that game: back = close
   if (_game) { _game = null; _tier = null; _machine = 'all'; rerender(); return true; }
   return false;
 }
@@ -2118,7 +2120,10 @@ function onClick(e) {
   }
   if (e.target.closest('[data-role="lb-player-back"]')) { _player = null; _playerGame = null; rerender(); return; }
   // Leaving a board drops that board's own filters: they belong to the visit, not to the overlay.
-  if (e.target.closest('[data-role="lb-back"]')) { _game = null; _tier = null; _machine = 'all'; rerender(); return; }
+  if (e.target.closest('[data-role="lb-back"]')) {
+    if (_game && _game === _entryGame) { closeLeaderboard(); return; }
+    _game = null; _tier = null; _machine = 'all'; rerender(); return;
+  }
   const seg = e.target.closest('.lb-seg');
   if (seg && seg.dataset.seg) {
     const next = seg.dataset.seg;
@@ -2158,7 +2163,11 @@ export function closeLeaderboard() {
   _connected = false;
 }
 
-export async function openLeaderboard() {
+/** `opts.game` (a stats id, 2026-10-15): open straight onto that game's board, the way a game's own
+ *  Leaderboard button does (Matt: Minesweeper's "My stats" "should be a leaderboard button instead
+ *  and show you everyone who's played"). The board's back chevron, Esc and the phone's Back then
+ *  return to the GAME, not to the every-game list it never passed through. */
+export async function openLeaderboard(opts = {}) {
   ensureCss();
   ensureStatsCss();   // the player detail screen reuses My Stats' gs-* renderers/markup verbatim
   closeLeaderboard();
@@ -2169,6 +2178,7 @@ export async function openLeaderboard() {
   _seg = 'games';
   _gameSort = 'popular';
   _game = null;
+  _entryGame = null;
   _player = null;
   _playerGame = null;
   // The saved default view (2026-08-25) still owns BY PLAYER's sort + category, which is what it
@@ -2180,6 +2190,10 @@ export async function openLeaderboard() {
   _tier = null;
   _machine = 'all';
   _panel = null;
+  if (opts && typeof opts.game === 'string' && isGameOnLauncher(opts.game)) {
+    _game = _entryGame = opts.game;
+    _boardSort = sortItemsFor(_game)[0].sort;
+  }
   _all = {};
   _connected = false;
   _meKey = '';   // resolved in currentBody() once records load (identity needs the whole graph)

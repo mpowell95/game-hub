@@ -158,6 +158,12 @@ flag button then died."* Top to bottom:
 - **Dig / Flag**, the full width and 64px tall (each half ~180 x 56px; was ~105 x 40 between the
   back arrow and ?).
 
+**Setup's second button is Leaderboard, not My stats (2026-10-15, Matt: "It should be a
+leaderboard button instead and show you everyone who's played").** It and the win popup's button
+call `openLeaderboard({ game: 'minesweeper' })`, which opens straight on this game's board; its
+back chevron returns to the game. The player's own record is still at profile -> My Stats and
+Leaderboards -> their row (rule 1).
+
 ## Getting out of a game
 
 **The level button does not confirm, and it should not.** `_backToMenu()` stops the clock, writes the save (which
