@@ -8,6 +8,7 @@ One list, by game. One line per item. When an item ships, delete its line in the
 - Leaderboard: a best-metric board should rank on that best by default, not on the last-picked sort (check; branch `claude/skeeball-leaderboard-ui-9y2b8r` was deleted, head `e11818d`).
 - **Matt:** say "release X" for any admin-only game already switched on for players on the admin page (e.g. Arrow Maze?), so it is saved on phones instead of re-downloaded each open (root CLAUDE.md, "Releasing a game").
 - **Matt:** play online on two real phones for Battleship, Chinchón, Dots and Boxes, Filler, Mancala, Tic Tac Toe (check; each game's CLAUDE.md, "unverified"; `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`).
+- `tools/test-match-chat.mjs` (in-match chat) fails about 1 run in 5 on main: "the other side can answer" verify race (check).
 
 ## Air Hockey
 
@@ -88,7 +89,12 @@ One list, by game. One line per item. When an item ships, delete its line in the
 - Consider easier objectives, after the progress view; pacing may matter more than lower numbers (asked 2026-08-29).
 - **Matt:** BRICK CITY, RUNAWAY and POPONGO are Testing by code default; release from the admin page when ready (check; the admin page may already override) (`skeeball/js/boards.js`).
 - `tools/test-skeeball-machine-spec.mjs` should assert `SK_MACHINES` in `js/game-stats-ui.js` matches `skeeball/js/boards.js` (about 20 lines).
+- `tools/test-visual.mjs skeeball` fails "CANNOT BE PLAYED": resuming a rack banked on another machine leaves the playfield dead (canvas 0x0); reproduced on main 2026-10-15 (check if real or a test gap).
 - POPONGO: 84% of throws roll back to the trough (skeeball/CLAUDE.md, "POPONGO and the arrangement layer").
+
+## Tic Tac Toe
+
+- Hub at 390x664 with browser toolbars: the screen is 16px too tall and scrolls (`tools/test-visual.mjs tic-tac-toe`, reproduced on main 2026-10-15).
 
 ## Texas Hold'em
 
