@@ -370,8 +370,7 @@ never crash.
 
 - **Any emoji can be chosen, only emoji are selectable** (validation at choosing time,
   `js/emoji.js`; `glyph()` stays permissive on read). Recent picks: `gamehub.emojiRecent.v1`.
-- **Open (paused by Matt, 2026-08-25):** the emoji does not appear everywhere the name does; the
-  fix is a shared `chipHTML({name, emoji})` plus a sweep, immersive games last.
+- Open items: see the root TODO.md, "Hub (shared)".
 - Contract and Monopoly Deal's must-stay-synced duplicates: `js/CLAUDE.md`.
 
 ## Messages (2026-08-31)

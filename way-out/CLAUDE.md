@@ -88,10 +88,7 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
 
 ## Look (rules in force)
 
-- **Known, not yet changed (2026-10-14):** the play screen's menu button (back to setup) sits on the
-  Hub button's row, touching it; Matt rejected that on Gridlock. Gridlock's fix (rule in
-  docs/BUILDING-A-GAME.md, Part 0): back arrow stays top left, one row DOWN, under the Hub button (not
-  the bottom bar). Arrow Maze needs the same when someone works on it.
+- Open items: see the root TODO.md, "Arrow Maze".
 - **Setup screen** is in the hub's own style (Sudoku/Minesweeper layout from `css/ui.css`), not the
   reference's: board picture as headline `clamp(96px, 23vh, 200px)` with the title under it and **no
   tagline**, a **Difficulty** card of four buttons (shape marker, name, current level; selected wears

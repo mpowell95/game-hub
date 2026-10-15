@@ -254,11 +254,7 @@ not do. A real cup would funnel it; this one does not. Named, not quietly added.
 
 ## Open items
 
-- BOARDWALK is Matt's to tune: three probes red on it (flippers move the ball under 300 mm on half
-  the power range; r42's mouth takes no shot weak enough to roll back out; tunnel probe's 6 of 2325
-  "OFF TABLE" most likely the probe, see `HANDOFF.md`).
-- Remaining object types, one at a time with panel + probe: drop targets, spinner, rollover lanes,
-  kicker/saucer, plunger (some exist on PIER NINE as sensors).
+Open items: see the root TODO.md, "Pinball 2".
+
 - Two levels are real geometry (a ramp is a ribbon with floor height and slope), never a transition.
 - The editor overhaul is finished (2026-09-11, five steps); what is left is the GAME, not the tool.
-- Robot player (phase 8); stats/hub entry only after Matt judges it, with a NEW id.

@@ -191,11 +191,7 @@ compress `scoreRound()`'s 8 items (escobas 1 each; most cards 1, +2 under-10 bon
 
 ## Known open items
 
-- A `TypeError: Cannot read properties of null (reading 'avatar')` in `_renderMatchModal` was seen once
-  with a hand-built synthetic snapshot (`showMatchModal()` reached with `this.game.winner` null). Not
-  reproduced from a normal game or the 25k-check suite; if it recurs in ordinary play it means
-  `checkMatchEnd()` let `matchEnd` fire without a winner under a reachable condition.
-- The broom sweep's feel is confirmed only by geometry and code review, never by eye.
+Open items: see the root TODO.md, "Escoba".
 - Roadmap (not built): 4-player TEAM play is a rules change, out of scope; no sound.
 
 ## Tests
