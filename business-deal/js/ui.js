@@ -146,7 +146,7 @@
       const glyph = (s) => ((typeof s === 'string' && s.trim()) ? s.trim() : null);
       const opps = Array.isArray(p.opponents) ? p.opponents.slice(0, 4) : [];
       return {
-        name: clean(p.name, 'You'),
+        name: clean(p.name, 'Player'),
         emoji: glyph(p.emoji) || '🧑',
         opponents: opps.map((o, i) => ({
           name: clean(o && o.name, 'Computer ' + (i + 1)),
@@ -156,6 +156,12 @@
       };
     } catch { return null; }
   }
+
+  /** The local player's PROFILE NAME (Matt, 2026-10-15: never "You"). It is also the human's name
+   *  inside the engine, so the engine's log lines name the human like anyone else. */
+  function myName() { const p = readHubProfile(); return (p && p.name) || 'Player'; }
+  /** A name as a regex literal (the engine log lines are matched against it). */
+  const reEsc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const ACTION_ICON = {
     deal_breaker: '💥', just_say_no: '🚫', pass_go: '➡️', forced_deal: '↔️',
@@ -318,7 +324,7 @@
    * HumanAgent — delegates each decision to the UI.
    * ========================================================================*/
   class HumanAgent {
-    constructor(ui) { this.ui = ui; this.name = 'You'; }
+    constructor(ui) { this.ui = ui; this.name = myName(); }
     chooseMove(view, legal) { return this.ui.promptMove(view, legal); }
     // MD-4: when the human is the one who'd pay (defender, and the action has a
     // known cash amount - rent/debt/birthday), show the normal pay screen with
@@ -553,12 +559,12 @@
       this._lastNumAI = numAI; this._lastDiff = this.difficulty;   // for Play Again
 
       // Opponent identity comes from the hub profile (roster order), falling back
-      // to Monopoly Deal's built-in flavor. The human keeps the id-based "You" that
-      // the UI uses throughout; only the human's avatar is profile-driven.
+      // to Monopoly Deal's built-in flavor. The human is id 0 and carries the profile name
+      // (never "You"), so the engine's own log lines name the human like anyone else.
       const prof = readHubProfile();
       const aiName = (i) => (prof && prof.opponents[i] && prof.opponents[i].name) || AI_NAMES[i % AI_NAMES.length];
       const aiAvatar = (i) => (prof && prof.opponents[i] && prof.opponents[i].emoji) || AI_AVATARS[i % AI_AVATARS.length];
-      const players = [{ name: 'You', agent: new HumanAgent(this) }];
+      const players = [{ name: myName(), agent: new HumanAgent(this) }];
       for (let i = 0; i < numAI; i++) {
         players.push({
           name: aiName(i),
@@ -575,7 +581,7 @@
         this._bubbles = {}; this._seenLogs = this.game.logs.length; this.render();
         if (pl.id === 0) {
           const m = this._lastLog().match(/draws (\d+)/);
-          this.toast(m ? `Your turn — you drew ${m[1]}` : 'Your turn — tap a card');
+          this.toast(m ? `${pl.name}'s turn — drew ${m[1]}` : `${pl.name}'s turn — tap a card`);
         } else {
           // A clear "AI's turn" beat so attacks don't land on you with no warning,
           // and a moment to review your board after your own turn ends.
@@ -601,7 +607,7 @@
           const aggressive = act === A.DEAL_BREAKER || act === A.SLY_DEAL || act === A.FORCED_DEAL;
           if (msg && aggressive) {
             await this._flightsLanded();
-            await this._beat(ACTION_LABEL[act] || 'Your move', msg, this._cardOfMove(mv));
+            await this._beat(ACTION_LABEL[act] || `${pl.name}'s move`, msg, this._cardOfMove(mv));
           } else if (msg) {
             this.toast(msg); await delay(1100);
           }
@@ -610,7 +616,7 @@
       // Narrate every Just Say No so the player understands why their JSN did
       // (or didn't) stick — e.g. the AI silently countering with its own JSN.
       this.game.onJsnPlayed = async (info) => {
-        const who = info.responder.id === 0 ? 'You' : info.responder.name;
+        const who = info.responder.name;
         this.toast(`${who} played Just Say No — ${info.actionCard.name} ${info.proceeds ? 'proceeds' : 'is cancelled'}!`);
         this.render();
         await delay(info.responder.id === 0 ? 1500 : this._aiMs(1500));
@@ -656,6 +662,8 @@
       // me area
       this.$('me-area').classList.toggle('active', myTurn);
       this.$('me-avatar').textContent = this.meta[0].avatar;
+      this.$('me-name').textContent = me.name;
+      this.$('me-bank').title = me.name + "'s bank"; this.$('me-props').title = me.name + "'s properties";
       this.$('me-stats').innerHTML =
         `<span><span class="coin">M</span> ${this._bank(me)}M</span>` +
         `<span>🂠${me.hand.length}</span>`;
@@ -913,7 +921,7 @@
       const cur = setRentUI(me.properties, color);
       const sheet = this._sheet(
         `<h3>${esc(colorLabel(color))} — rent</h3>` +
-        `<p>You own ${owned}/${REQ[color]}${owned ? ` · charging ${cur}M now` : ''}</p>` +
+        `<p>${esc(me.name)} owns ${owned}/${REQ[color]}${owned ? ` · charging ${cur}M now` : ''}</p>` +
         `<div class="rent-levels">${rows}${buildRows}</div>` +
         '<button class="cta" id="rl-close">Close</button>');
       sheet.querySelector('#rl-close').addEventListener('click', () => this._closeOverlay());
@@ -928,7 +936,7 @@
       const root = this.$('overlay');
       root.innerHTML = '<div class="scrim"></div>';
       const sheet = elNew('div', 'sheet props-large');
-      sheet.append(elNew('h3', null, 'Your properties'));
+      sheet.append(elNew('h3', null, esc(me.name) + "'s properties"));
       const body = elNew('div', 'plarge-body');
       let any = false;
       Deck.allPropertyColors().forEach(color => {
@@ -1156,7 +1164,7 @@
       logs = logs || [];
       // Total money paid TO you across all targets this move.
       const collected = logs.reduce((s, l) => {
-        const m = l.match(/pays You (\d+)M/); return s + (m ? +m[1] : 0);
+        const m = l.match(new RegExp('pays ' + reEsc(this.game.players[0].name) + ' (\\d+)M')); return s + (m ? +m[1] : 0);
       }, 0);
       const someoneOwed = logs.some(l => /(plays|charges|asking|demanding)/.test(l)) ||
                           /rent|action/.test(move.type);
@@ -1188,16 +1196,17 @@
      *  frames; everything else is a brief toast + the usual AI pause. */
     async _announceAIMove(pl, mv, fresh) {
       const atk = pl.name;
+      const me = this.game.players[0].name, meRe = reEsc(me);
       let beat = null, m;
       for (const l of fresh) {
-        if ((m = l.match(/steals (.+?) from You\b/))) beat = `${atk} played Sly Deal and took your ${m[1]}.`;
-        else if ((m = l.match(/DEAL BREAKS You's (.+?) set/))) beat = `${atk} played Deal Breaker and took your ${m[1]} set!`;
-        else if ((m = l.match(/swaps with You: takes (.+?), gives (.+?)\./))) beat = `${atk} played Forced Deal — took your ${m[1]} and gave you ${m[2]}.`;
+        if ((m = l.match(new RegExp('steals (.+?) from ' + meRe + '\\.$')))) beat = `${atk} played Sly Deal and took your ${m[1]}.`;
+        else if ((m = l.match(new RegExp('DEAL BREAKS ' + meRe + "'s (.+?) set")))) beat = `${atk} played Deal Breaker and took your ${m[1]} set!`;
+        else if ((m = l.match(new RegExp('swaps with ' + meRe + ': takes (.+?), gives (.+?)\\.')))) beat = `${atk} played Forced Deal — took your ${m[1]} and gave you ${m[2]}.`;
       }
-      if (beat) { await this._flightsLanded(); return this._beat('You were attacked!', beat, this._cardOfMove(mv)); }
-      // Charged you (rent/debt/birthday)? You already saw the payment screen.
-      const paid = fresh.reduce((s, l) => { const x = l.match(/You pays .+? (\d+)M/); return s + (x ? +x[1] : 0); }, 0);
-      if (paid > 0) { this.toast(`You paid ${paid}M to ${atk}`); return delay(this._aiMs(this.aiDelay)); }
+      if (beat) { await this._flightsLanded(); return this._beat(`${me} was attacked!`, beat, this._cardOfMove(mv)); }
+      // Charged the human (rent/debt/birthday)? The payment screen was already seen.
+      const paid = fresh.reduce((s, l) => { const x = l.match(new RegExp('^\\s*' + meRe + ' pays .+? (\\d+)M')); return s + (x ? +x[1] : 0); }, 0);
+      if (paid > 0) { this.toast(`${me} paid ${paid}M to ${atk}`); return delay(this._aiMs(this.aiDelay)); }
       this.toast(this._lastLog());
       return delay(this._aiMs(this.aiDelay));
     }
@@ -1857,8 +1866,8 @@
         root.innerHTML = '';
 
         if (!all.length) {
-          const sheet = this._sheet(`<h3>You owe ${ctx.amount}M to ${esc(creditor)}</h3>` +
-            '<p>You have nothing on the table — you pay nothing</p>' +
+          const sheet = this._sheet(`<h3>${esc(this.game.players[0].name)} owes ${ctx.amount}M to ${esc(creditor)}</h3>` +
+            `<p>${esc(this.game.players[0].name)} has nothing on the table, so pays nothing</p>` +
             '<button class="cta" id="ok">OK</button>' + (opts.jsn ? '<button class="cta ghost-cta" id="ok-jsn">Just Say No instead</button>' : ''));
           sheet.querySelector('#ok').addEventListener('click', () => { this._closeOverlay(); resolve(opts.jsn ? { jsn: false, ids: [] } : []); });
           const jsnAlt = sheet.querySelector('#ok-jsn');
@@ -1943,7 +1952,7 @@
       return new Promise(resolve => {
         const selected = new Set();
         const sheet = this._sheet(
-          `<h3>Discard ${count} card${count === 1 ? '' : 's'}</h3><p>You are over the 7-card limit.</p>` +
+          `<h3>Discard ${count} card${count === 1 ? '' : 's'}</h3><p>${esc(this.game.players[0].name)} is over the 7-card limit.</p>` +
           '<div class="row" id="d-row"></div><button class="cta" id="d-go" disabled>Discard</button>');
         const row = sheet.querySelector('#d-row');
         const go = sheet.querySelector('#d-go');
@@ -1971,7 +1980,7 @@
         const sheet = elNew('div', 'sheet swatch-sheet');
         // Framed as an INCOMING card (this only fires when you acquire a wild via
         // payment / Sly Deal / Forced Deal) so it never looks like a stray bug.
-        sheet.append(elNew('h3', null, 'You received a wildcard'));
+        sheet.append(elNew('h3', null, esc(this.game.players[0].name) + ' received a wildcard'));
         sheet.append(elNew('p', null, `Assign your new ${what} wildcard to a set:`));
         const grid = elNew('div', 'swatch-grid');
         const scored = valid.map(color => {
@@ -2016,7 +2025,7 @@
       root.innerHTML =
         '<div class="scrim"></div><div class="win-card">' +
         '<button type="button" class="win-x" id="win-close" aria-label="Close">✕</button>' +
-        `<h1>${w.id === 0 ? 'You Win! 🎉' : esc(w.name) + ' wins'}</h1>` +
+        `<h1>${esc(w.name)} wins${w.id === 0 ? ' 🎉' : ''}</h1>` +
         `<p>Winning sets: ${esc(sets)}</p>` +
         `<p class="win-stats">Record: ${s.won}W – ${s.lost}L</p>` +
         '<button class="cta" id="again">' + (window.__bdChallenge && window.__bdChallenge.live() ? 'Retry Challenge' : 'Play Again') + '</button>' +
@@ -2076,7 +2085,7 @@
       const rate = s.played ? Math.round(100 * s.won / s.played) : 0;
       const cell = (n, l) => `<div class="stat"><div class="stat-n">${n}</div><div class="stat-l">${l}</div></div>`;
       const sheet = this._sheet(
-        '<h3>Your Stats</h3><div class="stats-grid">' +
+        `<h3>${esc(myName())}'s Stats</h3><div class="stats-grid">` +
         cell(s.played, 'Played') + cell(s.won, 'Won') + cell(s.lost, 'Lost') + cell(rate + '%', 'Win rate') +
         '</div><button class="cta" id="stats-back">← Back</button>');
       sheet.querySelector('#stats-back').addEventListener('click', () => this._statsBack(origin));
