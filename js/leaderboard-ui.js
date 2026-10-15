@@ -1618,7 +1618,7 @@ function gameListHTML(list) {
   const cards = rows.map(({ meta, lead, fav }) => {
     const art = GAME_ART[hubIdOf(meta.id)] || '';
     const body = lead
-      ? `<span class="lb-glead"><span class="lb-gmedal" role="img" aria-label="1">${medalSVG(1)}</span>${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span>${tierMarkHTML(boardTierOf(lead, meta.id))}</span>`
+      ? `<span class="lb-glead">${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span>${tierMarkHTML(boardTierOf(lead, meta.id))}</span>`
       : `<span class="lb-glead lb-glead-empty">${esc(t('lb_no_games_yet'))}</span>`;
     const metric = lead
       ? `<span class="lb-gnum"><b>${esc(metricText(boardMetricOf(lead, meta.id), meta.id))}</b><span>${esc(unitTextOf(meta.id, boardMetricOf(lead, meta.id)))}</span></span>`
@@ -2720,8 +2720,8 @@ function ensureCss() {
     '.lb-glead-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.lb-glead-k{flex:none;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--lb-muted)}',
     '.lb-glead-empty{font-style:italic}',
-    // The leader wears the same gold medal as #1 on the board (Matt, 2026-10-15), in place of "Top".
-    '.lb-gmedal{flex:none;display:inline-flex}.lb-gmedal .lb-medal{width:20px;height:24px;filter:drop-shadow(0 0 4px rgba(245,200,66,.5))}',
+    // No medal and no "Top" here (Matt, 2026-10-15): a list of leaders makes that obvious; medals
+    // belong only on lists of every player.
     '.lb-glead:not(.lb-glead-empty) .lb-glead-nm{color:var(--lb-ink);font-weight:800;font-size:13px}',
     '.lb-gnum{flex:none;display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1}',
     '.lb-gnum b{font-size:19px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em}',
