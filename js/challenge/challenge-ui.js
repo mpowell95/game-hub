@@ -660,7 +660,7 @@ class ChallengeUI {
         if (g === 'connect4' && gr.grid) {
           const sum = (side) => DIFFS.reduce((a, d) => { const c = side[d] || {}; a.w += c.w | 0; a.l += c.l | 0; return a; }, { w: 0, l: 0 });
           const p = sum(gr.grid.player), c = sum(gr.grid.computer);
-          sub = `first move: you ${p.w}-${p.l}, computer ${c.w}-${c.l}`;
+          sub = `first move: player ${p.w}-${p.l}, computer ${c.w}-${c.l}`;
         } else if (g === 'chinchon' && gr.cc) {
           sub = `closed ${gr.cc.closed} &middot; chinch&oacute;n ${gr.cc.chinchons} &middot; minus-ten ${gr.cc.minusTen}`;
         } else if (g === 'escoba' && gr.es) {
