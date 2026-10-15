@@ -158,7 +158,10 @@ flag button then died."* Top to bottom:
 - **Dig / Flag**, the full width and 64px tall (each half ~180 x 56px; was ~105 x 40 between the
   back arrow and ?).
 
-**A paused board on ANOTHER level halves Resume (2026-10-15, Matt: "I am halfway through a hard game... I want to switch to medium. But there's only a resume button").** Select a different level and the setup screen shows New game (left, the selected level) and Resume (right, with the paused level's shape) side by side. New game replaces the paused board (one save slot); same level keeps the single Resume.
+**One paused board per level (2026-10-15, Matt: "keep a paused board for each level").** A level
+with a paused board shows a pause mark and its clock in place of its size on the setup screen;
+selecting it gives New game (left, replaces THAT level's board only) and Resume (right). A level
+with none gives Play. (Earlier the same day there was one slot and a New game | Resume-other split.)
 
 **The setup cards are centred between the title row and Play** (`.ms-setup > .ms-top { margin-bottom: auto }` plus Play's own `margin-top: auto`), so going immersive did not slide them up (2026-10-15).
 
@@ -307,7 +310,8 @@ should have been: texture, not the headline.
 | Key | What |
 |---|---|
 | `gamehub.minesweeper.v1` | settings: level, longPress, vibrate, marks (2026-10-15); `safeFirst` is still read and carried but has no switch: it never did anything (the first tap is always an opening), so the switch was removed 2026-10-15 |
-| `gamehub.minesweeper.save.v1` | the in-progress board plus its banked clock and mode |
+| `gamehub.minesweeper.saves.v1` | (2026-10-15) one paused board per level `{easy?, medium?, hard?, expert?}`, each the old save's shape (board, banked clock, mode) |
+| `gamehub.minesweeper.save.v1` | the first build's single slot. Read ONCE: when `saves.v1` is missing its board is carried in at its own level; never written or deleted after that (rule 5) |
 
 Both readers try/catch and treat anything malformed as absent: a corrupt save reads as "no save",
 never as a crash. `deserialize()` rejects a save whose dimensions disagree with its level — this
