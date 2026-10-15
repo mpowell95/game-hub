@@ -517,8 +517,8 @@ function msBoardHTML(list) {
   const cards = rows.length
     ? `<div class="lb-plist is-board">${rows.map((g) => {
         const h = tier == null ? msHeadline(g) : { tier: null, c: msCellAt(g, tier) };
-        const big = { cls: 'lb-msval', val: `${h.tier ? tierMarkHTML(h.tier) : ''}${msCellHTML(h.c)}`, unit: t('lb_played_count', { n: playsAtTier(g, ['minesweeper'], tier) }) };
-        return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', '', '');
+        const big = { cls: 'lb-msval', val: msCellHTML(h.c), unit: t('lb_played_count', { n: playsAtTier(g, ['minesweeper'], tier) }) };
+        return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', tierPillHTML(h.tier), '');
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf('minesweeper') }));
   return msTabsHTML() + cards;
@@ -570,10 +570,10 @@ function boardView(list, id) {
     return {
       rows, cmp, unit,
       val: (g) => {
-        const mark = _tier == null ? tierMarkHTML(boardTierOf(g, id)) : '';
         const txt = id === 'holdem' && hbReview(g) ? t('lb_hb_review') : metricText(boardMetricOf(g, id), id);
-        return `${mark}<span>${esc(txt)}</span>`;
+        return `<span>${esc(txt)}</span>`;
       },
+      tier: (g) => (_tier == null ? boardTierOf(g, id) : null),
       sub: (g) => t('lb_played_count', { n: boardPlaysOf(g, id) }),
     };
   };
@@ -618,7 +618,8 @@ function boardView(list, id) {
     const cmp = (a, b) => { const x = snWallsCell(a, w); const y = snWallsCell(b, w); return ((y.tier || 0) - (x.tier || 0)) || (y.v - x.v); };
     rows.sort((a, b) => cmp(a, b) || recent(a, b));
     v = { rows, cmp, unit: unitTextOf('snake', null),
-      val: (g) => { const c = snWallsCell(g, w); return `${tierMarkHTML(c.tier)}<span>${c.v}</span>`; },
+      val: (g) => `<span>${snWallsCell(g, w).v}</span>`,
+      tier: (g) => snWallsCell(g, w).tier,
       sub: (g) => t('lb_played_count', { n: boardPlaysOf(g, id) }) };
   } else {
     v = plain();
@@ -632,7 +633,7 @@ function plainBoardHTML(list, id) {
   const cards = v.rows.length
     ? `<div class="lb-unith">${esc(v.unit)}</div><div class="lb-plist is-board">${v.rows.map((g) => {
         const big = { cls: 'lb-msval', val: v.val(g), unit: v.sub(g) };
-        return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', '', '');
+        return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', v.tier ? tierPillHTML(v.tier(g)) : '', '');
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
   return v.tabs + cards;
@@ -956,6 +957,13 @@ function tierChipHTML(tier) {
  *  marker that row reads as the game's all-time record and is off by however much easier the
  *  record-holder's tier was. Shape, not hue (the colorblind rule); the word is one tap away on the
  *  board itself. */
+/** The row's difficulty, said LOUD (Matt, 2026-10-15: "Make the difficulty played more obvious.
+ *  Rn it's just a tiny symbol"): a bordered pill under the name, shape + word, on All views. */
+function tierPillHTML(tier) {
+  if (!tier) return '';
+  const word = esc(t(TIER_LABEL_KEY[tier]));
+  return `<span class="lb-tierpill" style="--lb-pill-color:${TIER_COLOR[tier]}">${diffShapeSVG(tier)}<span>${word}</span></span>`;
+}
 function tierMarkHTML(tier) {
   if (!tier) return '';
   const label = esc(t(TIER_LABEL_KEY[tier]));
@@ -2579,6 +2587,9 @@ function ensureCss() {
     // the row says the 6 is a Hard score - and it must not sit beside the plays count, which is the
     // one number here that difficulty never touches.
     // Shape first, hue second (the colorblind rule); the word carries it on its own if neither reads.
+    '.lb-tierpill{display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:3px 9px 3px 7px;border-radius:999px;border:1.5px solid var(--lb-pill-color);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--lb-ink);line-height:1.2}',
+    '.lb-tierpill .lb-dshape{width:13px;height:13px;fill:var(--lb-pill-color)}.lb-tierpill .lb-dshape-x2{width:23px}',
+    ':root.gh-dark .lb-tierpill .lb-dshape-t3,:root.gh-dark .lb-tierpill .lb-dshape-t4{fill:#e6e9f0}:root.gh-dark .lb-tierpill{border-color:color-mix(in srgb,var(--lb-pill-color) 60%,#e6e9f0)}',
     '.lb-tierchip{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--lb-ink);text-transform:uppercase}',
     '.lb-tierchip .lb-dshape{width:12px;height:12px;fill:var(--lb-pill-color,#5b6b82)}',
     '.lb-tierchip .lb-dshape-x2{width:21px}',

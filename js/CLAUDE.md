@@ -399,6 +399,8 @@ tier shape beside it), games played under it, the unit once above the list; stan
 Tic Tac Toe All / Ultimate / Classic / MP; Snake + Walls off / Walls on; Skeeball machine row over
 Points / High score; Cup Pong + Solo (fewest throws); Hold'em Bankroll / Wins; Contexto, Golf, Arrow
 Maze, Gridlock plain. `_view` holds a non-difficulty tab, reset with `_tier`. Old sort/filter code stays.
+On All views the row's difficulty is a bordered pill under the name (`tierPillHTML`, shape + word; Matt:
+"more obvious"), not a shape beside the number.
 
 ### The leaderboard's spacing (2026-10-11)
 
