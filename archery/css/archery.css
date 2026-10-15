@@ -171,6 +171,7 @@
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
 .ar-root .ar-tiles.is-red .ar-tile { background: var(--ar-red); }
+.ar-root .ar-tile.is-two { font-size: 21px; letter-spacing: -0.06em; }
 .ar-root .ar-tile.is-set { animation: ar-tile 0.35s ease-out; }
 @keyframes ar-tile { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
 
@@ -477,7 +478,6 @@
   color: var(--ar-blue);
   letter-spacing: 0.02em;
 }
-.ar-root .ar-tag { margin: -4px 0 2px; text-align: center; font-size: 14px; font-weight: 600; color: #4a5a76; }
 .ar-root .ar-field { display: flex; flex-direction: column; gap: 4px; }
 .ar-root .ar-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #4f6080; }
 .ar-root .ar-seg { display: flex; width: 100%; padding: 2px; background: #e3ecf8; border-color: #cbd9ee; }

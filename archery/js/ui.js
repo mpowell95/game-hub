@@ -30,8 +30,7 @@ const HIT_HOLD = 2.0;          // seconds on the target after a hit
 const DRAW_T = 0.25;           // seconds to bring the bow up (the recording, frame by frame)
 const PANIC_T = 0.6;           // seconds of shaking before a panicked arrow goes
 const BOW_IN_T = 0.2;          // seconds for the bow to slide up into view on the line
-const SETTLE_T = 0.55;         // seconds the camera eases back after a hit
-const JOLT_T = 0.06;           // seconds of the bow's kick as the arrow leaves it, before the flight
+const JOLT_T = 0.033;           // seconds of the bow's kick as the arrow leaves it, before the flight
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function writeJSON(k, v) {
@@ -206,14 +205,12 @@ class ArcheryUI {
           <div class="ar-card">
             <button type="button" class="ar-x ar-q" data-act="howto" data-la="howto">?</button>
             <h2 class="ar-logo" data-l="title"></h2>
-            <p class="ar-tag" data-l="tagline"></p>
             <button type="button" class="ar-mprow" data-act="multi">
               <b data-l="multiplayer"></b>
               <span class="ar-mprow-badge" data-role="onlineNote" hidden></span>
               <span class="ar-mprow-chev" aria-hidden="true">›</span>
             </button>
             <div class="ar-field">
-              <span class="ar-label" data-l="difficulty"></span>
               <div class="gh-seg ar-seg" role="group" data-role="diffs"></div>
             </div>
             <div class="ar-field">
@@ -375,7 +372,7 @@ class ArcheryUI {
     this.r.endFlight();
     this.r.clearIncoming();
     this.r.setStuck([]);
-    this.r.setView('line');
+    this._lineView();
     this.turnArrows = [];
     this.banner.classList.remove('is-show');
     this._hint(null);
@@ -527,7 +524,7 @@ class ArcheryUI {
     el.classList.toggle('is-red', red);
     el.innerHTML = Array.from({ length: n }, (_, i) => {
       const v = tv.vals[i];
-      return `<span class="ar-tile${v != null ? ' is-set' : ''}">${v == null ? '?' : v === 0 ? 'M' : v}</span>`;
+      return `<span class="ar-tile${v != null ? ' is-set' : ''}${v >= 10 ? ' is-two' : ''}">${v == null ? '?' : v === 0 ? 'M' : v}</span>`;
     }).join('');
     el.setAttribute('aria-label', t('aria_tiles', { list: tv.vals.length ? tv.vals.join(', ') : '-' }));
   }
@@ -607,9 +604,9 @@ class ArcheryUI {
     this._hud();
     const w = windFor(m.seed, m.stage);
     if (isShootOff(m.stage)) {
-      this._bannerShow(event === 'tie' && m.stage > ROUNDS ? t('shootoff_again') : t('shootoff_banner'), t('shootoff_sub'), 'turn', 1800);
+      this._bannerShow(event === 'tie' && m.stage > ROUNDS ? t('shootoff_again') : t('shootoff_banner'), '', 'turn', 1800);
     } else {
-      this._bannerShow(t('round_banner', { n: m.stage + 1 }), t('round_sub', { mph: w.mph.toFixed(1) }), 'turn', 1400);
+      this._bannerShow(t('round_banner', { n: m.stage + 1 }), '', 'turn', 1400);
     }
   }
 
@@ -619,7 +616,7 @@ class ArcheryUI {
     this._bottom(null);
     this.fx.innerHTML = '';
     this.r.clearIncoming();
-    this.r.setView('line');
+    this._lineView();
     this.r.setStuck([]);
     this.screen = 'play';
     this._showOnly(null);
@@ -674,7 +671,7 @@ class ArcheryUI {
       this._after(0.5, () => this._cpuArrow());
     };
     if (stageStart) {
-      this.r.setView('line');
+      this._lineView();
       this.r.setStuck([]);
       this._stageBanner(event);
       this._after(1.3, go);
@@ -846,8 +843,7 @@ class ArcheryUI {
     const sh = this.shot;
     const dir = this.r.flightDir();
     this.r.endFlight();
-    this.r.settle(this.reduce ? 1 : 0);
-    this.settleT = 0;
+    this.r.setView('close');
     this.r.setStuck(this.turnArrows);
     this.phase = 'hit';
     this._after(HIT_POP, () => {
@@ -884,12 +880,12 @@ class ArcheryUI {
     const p = this.practice;
     this._bottom(null);
     this.fx.innerHTML = '';
-    this.r.setView('line');
+    this._lineView();
     this.r.setStuck([]);
     this.turnArrows = p.arrows.map((a) => ({ x: a.x, y: a.y, color: ARROW_COLORS.me }));
     this.tileView = { seat: 0, stage: 0, vals: p.arrows.map((a) => a.s) };
     this._hud();
-    if (newRound) this._bannerShow(t('practice'), t('round_sub', { mph: this._wind().mph.toFixed(1) }), 'turn', 1300);
+    if (newRound) this._bannerShow(t('practice'), '', 'turn', 1300);
     this.phase = 'line';
     this._after(newRound ? 0.9 : 0, () => this._ready());
   }
@@ -1112,7 +1108,7 @@ class ArcheryUI {
         const stageStart = m.inTurn === 0 && m.turn === m.starter;
         this._bottom('watch', mp.them.name);
         const go = () => { this._closeUp(seat); this._after(0.5, () => this._mpReplayNext()); };
-        if (stageStart && m.stage > 0) { this.r.setView('line'); this.r.setStuck([]); this._stageBanner(null); this._after(1.3, go); }
+        if (stageStart && m.stage > 0) { this._lineView(); this.r.setStuck([]); this._stageBanner(null); this._after(1.3, go); }
         else go();
       }
       return;
@@ -1356,10 +1352,6 @@ class ArcheryUI {
       if (u >= 0) this.r.setFlight(u);
       if (u >= 1) this._arrive();
     }
-    if (this.phase === 'hit' && this.settleT != null && this.settleT < SETTLE_T) {
-      this.settleT += dt;
-      this.r.settle(this.settleT / SETTLE_T);
-    }
     const inc = this._inc;
     if (inc) {
       inc.t += dt;
@@ -1465,6 +1457,13 @@ class ArcheryUI {
 
   /** This phone's player, by profile name (never "You"). */
   _myName() { const p = loadProfile(); return (p && p.name) || t('you'); }
+
+  /** Back to the shooting line. A score number (or ring flash) from the close-up never follows
+   *  the view there (Matt's phone recording: a "10" was left floating over the round banner). */
+  _lineView() {
+    this.r.setView('line');
+    if (this.fx) for (const el of this.fx.querySelectorAll('.ar-pop, .ar-ringflash')) el.remove();
+  }
 
   /** The colour of the arrow on the bow: the shooter's. */
   _bowColor() {
