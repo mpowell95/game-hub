@@ -1170,3 +1170,16 @@ Not yet (Not yet also covers a phone that has not synced since). Browser-checked
 stubbed (no database): King of Games' phone reports `{code: '3VN33', at}`; the admin section shows
 "Read 14 Oct, 22:52" and "Not yet".
 
+
+
+## No "You" on shared screens (2026-10-15)
+
+Matt: *"Make sure that NOWHERE does it say 'You'... It must use profile names everywhere always."*
+then, mid-work: *"that's fine. I just didn't want it to say You on the leaderboard and stuff like
+that."* The leaderboard's YOU badge went first; then `makeT` gained `{me}` (`myName()` in
+`js/i18n.js`) and the hub's shared screens (Challenges pill and rows, launcher alerts, Messages list
+prefix, match chat author, the profile page heading, the admin reply label) print the profile name.
+A per-game pass (about 40 game files incl. Monopoly Deal and the Parchís build) was done on branch
+`worktree-agent-a1088a54bd77c574b` and NOT shipped, per Matt's clarification; it is there if wanted
+(note: Monopoly Deal needs its own `business-deal/sw.js` CACHE bump, Parchís edits are overwritten by
+the next `../Parchís/` rebuild, and `functions/decide.js` push text still says "you").
