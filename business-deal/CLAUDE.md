@@ -186,3 +186,8 @@ The three must-stay-synced duplicates this game carries (profile reader, challen
 mirror, stats recorder) are documented in the root `CLAUDE.md` under "Monopoly Deal's
 must-stay-synced duplicates" — the canonical halves live in root `js/`, so that list stays
 root-side.
+
+
+## No zoom (2026-10-15)
+
+`index.html` loads `../js/no-zoom.js` (root CLAUDE.md, scroll and touch rules); it is in this folder's own `sw.js` ASSETS (CACHE bumped to v36).

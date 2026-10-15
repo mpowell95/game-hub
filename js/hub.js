@@ -2266,6 +2266,9 @@ class Hub {
   /** Put the shell into its in-game state: launcher away, game area shown and MEASURABLE, top bar
    *  in its in-game form. Called before a game's `init()` so the first thing it measures is real. */
   _enterGameChrome(game) {
+    // NO GAMEPLAY SCREEN SCROLLS (Matt, 2026-10-15): while a game is mounted the PAGE behind it is
+    // locked too (css/hub.css, `html.gh-ingame`), so a fast tap or flick can never pan or bounce it.
+    document.documentElement.classList.add('gh-ingame');
     this.el.title.textContent = titleText(game);
     this.el.back.hidden = false;
     this.el.grid.hidden = true;
@@ -2303,6 +2306,7 @@ class Hub {
 
   async showLauncher() {
     await this.unmount();
+    document.documentElement.classList.remove('gh-ingame');
     this.el.game.hidden = true;
     this.el.grid.hidden = false;
     if (this.el.extra) this.el.extra.hidden = false;

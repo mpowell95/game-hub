@@ -6,7 +6,7 @@
  * builds until they manually cleared the cache). The cache is only a fallback
  * for offline play. Bump CACHE on any asset change.
  * ===========================================================================*/
-const CACHE = 'business-deal-hub-v35';
+const CACHE = 'business-deal-hub-v36';
 
 // Paths are relative so the app works from a GitHub Pages subfolder
 // (e.g. /business-deal/) as well as the domain root.
@@ -30,6 +30,7 @@ const ASSETS = [
   // have to live in THIS cache to survive offline. Firebase's own SDK is a dynamic CDN import that
   // is expected to fail offline; the gate handles that (a name entered offline is claimed later).
   '../js/name-gate-auto.js',
+  '../js/no-zoom.js',
   '../js/name-gate.js',
   '../js/profile-store.js',
   '../js/game-stats.js',

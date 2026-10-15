@@ -201,6 +201,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `theme.js` | light/dark/auto (`gamehub.theme.v1`), `.gh-dark` on `<html>` |
 | `emoji.js` / `emoji-data.js` | `isEmoji()` gate at the moment of choosing only (never in `glyph()`); GENERATED emoji set (`tools/build-emoji-data.mjs`); search keywords `emoji-search-{en,es}.js` kept out of SHELL |
 | `viewport.js` | `onViewportResize(cb)`: the ONE way to re-fit on resize |
+| `no-zoom.js` | classic script on every page: no double-tap/pinch zoom, no text selection (inputs excepted) |
 | `game-stats.js` | unified per-player stats; one recorder per game; failed writes queued (`gamehub.pendingResults.v1`); rate gate; play activity (`gamehub.activity.v1`, mirrored to `players/<id>/activity`) |
 | `game-stats-global.js` | non-ESM recorder for Monopoly Deal/Parchís (`window.__ghStats`) |
 | `firebase-boot.js` | the ONE bootstrap for the `'stats'` Firebase app |
@@ -288,6 +289,11 @@ game's mount/unmount lifecycle.
 | Buttons, cards, fields, modals | `css/ui.css` `.gh-*` + `--gh-*` tokens | chrome from scratch |
 
 **Scroll and touch rules:**
+- **No page zooms or selects, and no game screen scrolls (Matt, 2026-10-15).** Every page's viewport
+  meta has `maximum-scale=1, user-scalable=no` and loads `js/no-zoom.js` right after it (a `*`
+  `touch-action: pan-x pan-y` + `user-select: none`, inputs excepted, + Safari's `gesturestart`
+  cancelled); `tools/test-game-conventions.mjs` fails a page without it. While a game is mounted the
+  hub sets `html.gh-ingame` (page `overflow: hidden`, no bounce).
 - A scrolling `position: fixed` overlay needs `overscroll-behavior: contain`.
 - **Never put a `touchmove` listener on `document` or `window`**; bind it to the game's root.
 - Swipe surface: `touch-action: none`; tappable control: `touch-action: manipulation`.
