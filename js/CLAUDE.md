@@ -402,7 +402,7 @@ Maze, Gridlock plain. `_view` holds a non-difficulty tab, reset with `_tier`. Ol
 On All views the row's difficulty is a bordered pill under the name (`tierPillHTML`, shape + word; Matt:
 "more obvious"), not a shape beside the number.
 Ranks 1-3 are ribboned medals (`medalSVG`, number on the face) with a metal rail; #1's row is lit gold
-(Matt: "She's in first. Act like it."). By Game: each leader wears the gold medal in place of "Top".
+(Matt: "She's in first. Act like it."). Medals only on lists of every player; By Game (leaders only) has no medal and no "Top" label.
 
 ### The leaderboard's spacing (2026-10-11)
 
