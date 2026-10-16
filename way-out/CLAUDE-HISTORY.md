@@ -585,3 +585,16 @@ higher, zero-point players left out, ties share a place, offline note. **How to 
 gets the same row without the "?", so the picture is pixel-identical in both modes (measured). No
 overlap with the picture and no overflow at 360x724 / 375x667. Held-back game: no CACHE bump.
 
+## Big arrows, Matt only (2026-10-16)
+
+Matt: *"For just me for rn, make a bigger arrow version. I keep hitting the wrong ones and dying."*
+On an Expert board (28 x 38) a 393px phone gives ~13px between dots, so a fingertip lands on the
+neighbour. Bigger arrows cannot fit the screen, so the board pans: `_layout()` uses
+`max(fit, BIG_PITCH = 30)` when `_big()` (admin device AND `gamehub.wayout.big.v1`), sizes the canvas
+to the board, and `.wo-stage.is-big` scrolls with `touch-action: pan-x pan-y`. Taps move from
+`pointerdown` to `click` in this mode so a drag never sends an arrow. A new board starts scrolled to
+its middle (`bigWas`); `_bigShow` scrolls the hint's arrow into view. Arrows thicker (lw 0.15, head
+0.36 x pitch). Browser-checked: Expert 201 canvas 393x708 -> 730x970, a press without release sends
+nothing, a tap sends one arrow (94 -> 93, lives 3), hint scrolls, page itself does not overflow,
+toggling off restores the exact fit; another player has no magnifier. Held-back game: no CACHE bump.
+

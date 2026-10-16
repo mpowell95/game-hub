@@ -280,6 +280,15 @@ function writeClock(band, c) {
 const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
 const ICON_MENU = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const ICON_RESTART = `<svg ${SVGA}><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M4 4v4.5h4.5"/></svg>`;
+// BIG ARROWS (Matt's devices only, 2026-10-16: "For just me for rn, make a bigger arrow version. I
+// keep hitting the wrong ones and dying"). A magnifier beside the hint turns it on and off
+// (`gamehub.wayout.big.v1`, a preference). On, the dots are at least BIG_PITCH apart, the board can
+// be bigger than the screen, the stage scrolls (drag to move around), and a TAP sends an arrow on
+// `click`, which a drag never fires; off, everything is exactly as before (pointerdown).
+const BIG_KEY = 'gamehub.wayout.big.v1';
+const BIG_PITCH = 30;
+const ICON_ZOOM = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"><circle cx="21" cy="21" r="13"/><path d="M31 31l11 11M15 21h12M21 15v12"/></g></svg>`;
+const ICON_UNZOOM = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"><circle cx="21" cy="21" r="13"/><path d="M31 31l11 11M15 21h12"/></g></svg>`;
 const ICON_BULB = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 28c-3-2.4-4.6-5.6-4.6-9a11.6 11.6 0 0 1 23.2 0c0 3.4-1.6 6.6-4.6 9v4H17z"/><path d="M19 37h10"/><path d="M24 2.5v3M8 9l2.2 2.2M40 9l-2.2 2.2M3.5 19h3M41.5 19h3"/></g></svg>`;
 // Rush's rule icons (2026-10-14): the same marks on the setup card and the Ready popup. A teal arrow
 // for "+0.5s", a red arrow for "-3s" (always with the sign and the word, never colour alone), a
@@ -435,6 +444,7 @@ class WayOut {
       this.root.removeEventListener('click', this._onClick);
     }
     if (this.canvas && this._onDown) this.canvas.removeEventListener('pointerdown', this._onDown);
+    if (this.canvas && this._onBigTap) this.canvas.removeEventListener('click', this._onBigTap);
     if (this.ro) { this.ro.disconnect(); this.ro = null; }
     if (this.offResize) this.offResize();
     if (this.offLang) this.offLang();
@@ -553,6 +563,7 @@ class WayOut {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     if (this.canvas && this._onDown) this.canvas.removeEventListener('pointerdown', this._onDown);
+    if (this.canvas && this._onBigTap) this.canvas.removeEventListener('click', this._onBigTap);
     if (this.ro) { this.ro.disconnect(); this.ro = null; }
     this.canvas = null;
     const modal = '<div class="gh-overlay wo-modal" hidden></div>';
@@ -696,6 +707,7 @@ class WayOut {
           <span class="wo-timer" role="timer" aria-label="${t('timer_aria')}">0:00</span>
           <span class="wo-pen" aria-hidden="true"></span>
           <div class="wo-hearts" role="img"></div>
+          ${isAdminDevice() ? `<button type="button" class="wo-zoom" data-act="zoom" aria-pressed="${this._big()}" aria-label="${t('zoom_aria')}">${this._big() ? ICON_UNZOOM : ICON_ZOOM}</button>` : ''}
           <button type="button" class="wo-hint" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
         </div>
         <div class="wo-progress" role="progressbar" aria-valuemin="0"><i></i></div>
@@ -736,6 +748,7 @@ class WayOut {
     else if (act === 'menu') this._toSetup(false);
     else if (act === 'restart') this._restart();
     else if (act === 'hint') this._hint();
+    else if (act === 'zoom') this._toggleBig(btn);
     else if (act === 'how-prev') { this.helpPage = Math.max(0, this.helpPage - 1); this._openHelp(); }
     else if (act === 'how-next') { this.helpPage = Math.min(2, this.helpPage + 1); this._openHelp(); }
     else if (act === 'close') this._closeModal();
@@ -952,8 +965,10 @@ class WayOut {
   _bindBoard() {
     this.canvas = this.root.querySelector('.wo-canvas');
     this.ctx = this.canvas.getContext('2d');
-    this._onDown = (ev) => this._tap(ev);
+    this._onDown = (ev) => { if (!this.isBig) this._tap(ev); };
+    this._onBigTap = (ev) => { if (this.isBig) this._tap(ev); };
     this.canvas.addEventListener('pointerdown', this._onDown);
+    this.canvas.addEventListener('click', this._onBigTap);
     this._paintHud(false);
     // A ResizeObserver as well as onViewportResize: the stage also changes size when the
     // stylesheet lands after the first paint, or a flex settle moves it (docs/BUILDING-A-GAME.md,
@@ -989,26 +1004,41 @@ class WayOut {
     const r = stage.getBoundingClientRect();
     if (!r.width || !r.height) return;   // the ResizeObserver calls again once it has a size
     const dpr = Math.min(3, window.devicePixelRatio || 1);
-    this.cw = r.width; this.ch = r.height;
-    this.canvas.width = Math.round(r.width * dpr);
-    this.canvas.height = Math.round(r.height * dpr);
-    this.canvas.style.width = r.width + 'px';
-    this.canvas.style.height = r.height + 'px';
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const { cols: W, rows: H } = this.lvl;
     // The reference leaves a margin either side on small boards (the 40px cap) and runs edge to
     // edge on big ones.
     // Small boards may grow to fill the width (Matt's Easy mock-up, 2026-10-14; the cap was 40px).
-    const pitch = Math.min((r.width - 10) / W, (r.height - 10) / H, 72);
+    const fit = Math.min((r.width - 10) / W, (r.height - 10) / H, 72);
+    // Big arrows: never closer than BIG_PITCH, so the board may be bigger than the stage, which
+    // then scrolls (see BIG_KEY). The canvas is the board's size, at least the stage's.
+    const big = this._big() && fit < BIG_PITCH;
+    const pitch = big ? BIG_PITCH : fit;
+    const cw = big ? Math.max(r.width, W * pitch + 10) : r.width;
+    const ch = big ? Math.max(r.height, H * pitch + 10) : r.height;
+    this.isBig = big;
+    stage.classList.toggle('is-big', big);
+    this.cw = cw; this.ch = ch;
+    this.canvas.width = Math.round(cw * dpr);
+    this.canvas.height = Math.round(ch * dpr);
+    this.canvas.style.width = cw + 'px';
+    this.canvas.style.height = ch + 'px';
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.pitch = pitch;
-    this.ox = (r.width - W * pitch) / 2 + pitch / 2;
-    this.oy = (r.height - H * pitch) / 2 + pitch / 2;
+    this.ox = (cw - W * pitch) / 2 + pitch / 2;
+    this.oy = (ch - H * pitch) / 2 + pitch / 2;
     // Thicker arrows (Matt, 2026-10-14: "a little thicker"); still scaled to the pitch so a dense
     // Expert board stays readable.
-    this.lw = Math.max(1.7, Math.min(6, pitch * 0.092));
-    this.headL = Math.max(5, Math.min(17, pitch * 0.28));
+    this.lw = big ? pitch * 0.15 : Math.max(1.7, Math.min(6, pitch * 0.092));
+    this.headL = big ? pitch * 0.36 : Math.max(5, Math.min(17, pitch * 0.28));
     // Only a real change of geometry counts (a ResizeObserver also calls once on observe).
     const geom = `${pitch}|${this.ox}|${this.oy}`, moved = this.geomWas && this.geomWas !== geom;
+    // A new big board (or big just turned on) starts scrolled to its middle.
+    if (big && this.bigWas !== `${W}x${H}|${this.level}|${cw}`) {
+      this.bigWas = `${W}x${H}|${this.level}|${cw}`;
+      stage.scrollLeft = (cw - r.width) / 2;
+      stage.scrollTop = (ch - r.height) / 2;
+    }
+    if (!big) this.bigWas = null;
     this.geomWas = geom;
     this.pts = this.lvl.arrows.map((cells) => cells.map((c) => this._xy(c)));
     if (moved && this.anims.length) {
@@ -1106,9 +1136,34 @@ class WayOut {
     if (id < 0) return;
     this.hintId = id;
     this.hintT0 = performance.now();
+    this._bigShow(id);
     if (this.clock) this.clock.hints += 1;
     this._penalty(woHintMs(this.tier));
     this._kick();
+  }
+
+  /** Big arrows on? Matt's devices only (isAdminDevice), and only while switched on. */
+  _big() {
+    if (!isAdminDevice()) return false;
+    try { return localStorage.getItem(BIG_KEY) === '1'; } catch { return false; }
+  }
+  _toggleBig(btn) {
+    const on = !this._big();
+    try { if (on) localStorage.setItem(BIG_KEY, '1'); else localStorage.removeItem(BIG_KEY); }
+    catch (err) { console.warn('[way-out] big arrows setting not saved', err); }
+    if (btn) { btn.setAttribute('aria-pressed', String(on)); btn.innerHTML = on ? ICON_UNZOOM : ICON_ZOOM; }
+    this.bigWas = null;
+    this._layout();
+  }
+  /** Big arrows: bring arrow `id` on screen (the hint may point at a part of the board out of view). */
+  _bigShow(id) {
+    if (!this.isBig || !this.pts || !this.pts[id]) return;
+    const stage = this.root.querySelector('.wo-stage');
+    if (!stage) return;
+    const p = this.pts[id][this.pts[id].length - 1];
+    const vw = stage.clientWidth, vh = stage.clientHeight, m = this.pitch * 2;
+    if (p.x < stage.scrollLeft + m || p.x > stage.scrollLeft + vw - m) stage.scrollLeft = p.x - vw / 2;
+    if (p.y < stage.scrollTop + m || p.y > stage.scrollTop + vh - m) stage.scrollTop = p.y - vh / 2;
   }
 
   _kick() {

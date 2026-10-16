@@ -104,6 +104,17 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
   (`lw = pitch x 0.092`, heads `pitch x 0.28`); pitch cap 72px.
 - The reference's "Extra Hard" is **Expert** here. No sound (root rule). No ads, rate-us, favourite star.
 
+## Big arrows (Matt's devices only, 2026-10-16)
+
+Matt: *"For just me for rn, make a bigger arrow version. I keep hitting the wrong ones and dying."* A
+magnifier left of the hint (`.wo-zoom`, `isAdminDevice()` only) toggles `gamehub.wayout.big.v1` (a
+preference). On: dots at least `BIG_PITCH` 30px apart, arrows thicker (`pitch x 0.15`, heads x 0.36),
+the canvas the board's size and the stage scrolls (`.wo-stage.is-big`, drag to move; a new board
+starts centred; the hint scrolls its arrow into view). **A tap sends on `click`, never `pointerdown`,
+in this mode** (a drag fires no click). Off = exactly as before. Applies to Rush boards too (the
+toggle lives on the Levels play screen). The deliberate departure from "no game screen scrolls",
+for Matt only, on his request.
+
 ## Fitting the screen
 
 - **The hint lives at the right end of the hearts row** (a row of its own cost ~70px of board).

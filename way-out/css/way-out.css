@@ -310,6 +310,25 @@
 .wo-root .wo-stage { flex: 1; min-height: 0; position: relative; margin-bottom: env(safe-area-inset-bottom, 0px); }
 /* The first Rush board is hidden behind its 3, 2, 1, Go! (no planning before the clock starts). */
 .wo-root .wo-stage.is-veiled .wo-canvas { visibility: hidden; }
+/* Big arrows (Matt's devices): the board may be bigger than the stage; drag to move around it. */
+.wo-root .wo-stage.is-big { overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.wo-root .wo-stage.is-big .wo-canvas { touch-action: pan-x pan-y; }
+.wo-root button.wo-zoom {
+  position: absolute;
+  right: 62px;              /* just left of the hint (right: 10px, 44px wide) */
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+  touch-action: manipulation;
+}
+.wo-root button.wo-zoom[aria-pressed="true"] { border: 2px solid #ffce3a; color: #ffce3a; }
+.wo-root button.wo-zoom svg { display: block; width: 100%; height: 100%; }
 /* EASY only (Matt's mock-up, 2026-10-14): counters under the bar, a How to play pill under the board. */
 .wo-root .wo-counts {
   flex: none;
