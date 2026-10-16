@@ -169,26 +169,30 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   **The zoom follows the finger (second version, same day)**, Matt on the first: *"make it zoom in
   and out depending on how hard you're pulling? Right now I don't see a way to zoom back in"* (the
   first version zoomed out once the finger neared an edge and stayed out for the whole drag).
-  `_edgeCam` in `ui.js` makes the camera a function of the finger's position alone. **Third version
-  (2026-10-16)**, Matt, with a screenshot from the bottom-left corner: *"I can't get full power"*
-  (measured: 79% where his finger stopped, ~40px from the side and 26px above the home bar; full power
-  then needed the finger within 12px of the edge). Now a full pull lands **`EDGE_M` (36px) inside the
-  screen, the bottom adding the home bar**, or `EDGE_MIN_TRAVEL` (28px) past a disc already that near
-  the edge, never past `EDGE_HARD` (10px). The pull grows **evenly** with the finger along the line of
-  the pull, full at that point (`pull = (F - D) * full / (lim - D)`), and the zoom is whatever makes
-  that true (`k = F / (D + pull)`, never below `ZOOM_MIN` 0.6), so it starts with the finger's first
-  move (even inside the dead zone: a pull leaving it used to jump 0 to 37% in 2px) and zooms back in
-  as the finger comes back. A disc whose full pull fits never zooms. It zooms about the point where
-  that line, run back through the disc, leaves the pitch's box, so the aim keeps its direction and
-  the whole pitch stays in its box. Measured at 402x874 with a 34px home bar: his shot 100% (full 38px
-  above the home bar); every edge case 100%, zoom 0.77-0.91; no power jump over 25% in a 2px step.
-  `_camTick` eases back to the fitted layout once the finger lifts (instantly under reduced motion).
+  **Fourth version (2026-10-16, the current one)**, Matt on the third: *"it seems super sensitive
+  now? like if i move the angle at all, the whole board and board size moves a lot, which actually
+  makes the angle i'm aimed at move even more"*. Every earlier version moved the pitch to make room,
+  and the aim was read through that moving camera, so turning the aim moved the board, which turned
+  the aim again (measured: the disc jumped up to 7.5px per 2° turn). Now the **aim is read on
+  SCREEN** (`_aimFrom`): the flick goes from the finger through the disc, and the strength is the
+  finger's distance over a full pull's, which `_fullPull` sets to `PULL_MAX` or, where the screen
+  runs out first, the room there is: **`EDGE_M` (36px) inside the edge, the bottom adding the home
+  bar** (Matt the same morning, *"I can't get full power"*: 79% where his finger stopped in the
+  bottom-left corner), at least `EDGE_MIN_TRAVEL` (28px), never into the bottom strip. So near an
+  edge the same finger travel is a harder pull (the dead zone shrinks with it). The zoom is now a
+  **look only** (`_edgeCam`): about the disc being pulled, down to `ZOOM_LOOK` (0.88) with the pull
+  near an edge, gliding (`CAM_RATE_DRAG`), never zooming back in because the aim turned, only because
+  the pull eased off; the disc, the finger and the aim never move with it. Measured at 402x874 with a
+  34px home bar: per 2° turn the disc moves 0px (was up to 7.5) and the board 0-2px (was up to 6);
+  his corner shot 100% (full 38px above the home bar); every edge case 100%. `_camTick` eases back
+  once the finger lifts (instantly under reduced motion). The first three versions:
+  `CLAUDE-HISTORY.md` if it exists, else git history of this file.
 - **No flick from the bottom strip (2026-10-16)**, Matt, with a screenshot of the iPhone's
   Reachability slide: *"I was aiming a piece and this happened and it shot automatically."* A pull
   dragged into the home bar's corner sets off the phone's own swipe-down gestures, and the phone still
   reported the finger lifting. Within `NO_SHOT_STRIP` (24px) above the home bar the aim is dropped
   (drawn as nothing, as if pulled back onto the disc), a release there (or with the app hidden) is not
-  a flick, and moving back up restores the aim. `_edgeCam` never asks a full pull into that strip.
+  a flick, and moving back up restores the aim. `_fullPull` never asks a full pull into that strip.
   **Strength is still pitch units (`PULL_MAX`)**, so every flick is as strong as before and online
   replays are untouched; the camera is pixels only (`render.js` `setCam`, `s0/ox0/oy0` is the
   fitted layout). Measured after: 100% in every one of those cases, zoom 0.80-0.94 at 402 wide with
