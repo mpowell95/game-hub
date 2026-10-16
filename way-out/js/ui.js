@@ -557,7 +557,8 @@ class WayOut {
     this.canvas = null;
     const modal = '<div class="gh-overlay wo-modal" hidden></div>';
     const body = this.screen === 'play' ? (this.rush ? this._rushPlayHTML() : this._playHTML())
-      : this.screen === 'rushboard' ? this._rushBoardHTML() : this._homeHTML();
+      : this.screen === 'rushboard' ? this._rushBoardHTML()
+      : this.screen === 'lvboard' ? this._lvBoardHTML() : this._homeHTML();
     this.root.innerHTML = body + modal;
     this.root.classList.toggle('is-home', this.screen !== 'play');
     this._positionRoot();
@@ -613,7 +614,10 @@ class WayOut {
       : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t(resume ? 'continue_level' : 'play_level', { n: level })}</button>`;
     return `
       <div class="wo-home">
-        <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
+        <div class="wo-herorow">
+          <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
+          <button type="button" class="wo-howq" data-act="help" aria-label="${t('how_title')}" title="${t('how_title')}">?</button>
+        </div>
         <div class="wo-head">
           <h1>${t('title')}</h1>
         </div>
@@ -639,7 +643,10 @@ class WayOut {
     const local = woPoints(this._myWayout());
     return me && Number.isFinite(me.pts) ? Math.max(me.pts, local) : local;
   }
-  /** Levels' footer: the points leader (ties all named) and How to play. "-" until known. */
+  /** Levels' footer: the points leader (ties all named) and See all results, in the same place as
+   *  Rush's (Matt, 2026-10-16: "The leaderboard button should be included on that screen and should
+   *  be in about the same area as it is on the rush screen"). It was How to play, which moved to the
+   *  "?" beside the picture. "-" until known. */
   _levelsLeaderHTML() {
     const st = this.rushStanding;
     if (!st || Date.now() - st.at > 60000) this._loadRushStanding();
@@ -650,7 +657,7 @@ class WayOut {
     return this._leadHTML(`🏆 ${t('lv_leader_label')}`,
       lead.length ? lead.map((r) => this._leadName(r)).join(' & ') : '-',
       lead.length ? String(top) : '-',
-      `<button type="button" class="wo-rl-all" data-act="help">${t('how_title')}</button>`);
+      `<button type="button" class="wo-rl-all is-more" data-act="lv-board">${t('rush_see_all')}</button>`);
   }
   /** A leader's name on the footer card: emoji and username, this phone's own person included
    *  (Matt, 2026-10-14: "it shouldn't say You"). Before the combined read lands, this phone's own
@@ -715,6 +722,7 @@ class WayOut {
     else if (act === 'rush-ready') this._rushReady();
     else if (act === 'rush-board') this._openRushBoard(btn.dataset.rmode || (this.rush && this.rush.mode));
     else if (act === 'rb-back') { this.screen = 'home'; this.render(); }
+    else if (act === 'lv-board') this._openLvBoard();
     else if (act === 'rb-tab') { this.rb.tab = btn.dataset.tab; this.rb.week = null; this.render(); }
     else if (act === 'rb-mode') { this.rb.mode = btn.dataset.rmode; this.render(); }
     else if (act === 'rb-week') { this.rb.week = btn.dataset.week; this.render(); }
@@ -1262,7 +1270,9 @@ class WayOut {
     ], t('rush_rules_aria'));
     return `
       <div class="wo-home is-rush">
-        <div class="wo-hero is-rush" aria-hidden="true">${HERO_SVG}<span class="wo-hero-badge">${RUSH_WATCH}</span></div>
+        <div class="wo-herorow">
+          <div class="wo-hero is-rush" aria-hidden="true">${HERO_SVG}<span class="wo-hero-badge">${RUSH_WATCH}</span></div>
+        </div>
         <div class="wo-head">
           <h1>${t('title')}</h1>
         </div>
@@ -1592,6 +1602,49 @@ class WayOut {
   // Everyone's synced records (players/), with this phone's own fresh store for itself, combined
   // per PERSON by js/players-agg.js (a week's best is the best on any of their phones). Read once
   // per opening. Offline: only this phone's own runs.
+
+  /** Levels results: everyone's points, most first, from the same combined read as Rush's results
+   *  (`_loadRushRows`, whose rows carry `pts`). This phone's own points are its fresh local ones
+   *  when higher. Ties share a place. Back (`rb-back`) returns to setup. */
+  _openLvBoard() {
+    if (this.rush && !this.rush.over) return;
+    this._stopLevel();
+    this.rush = null;
+    const lb = this.lb = { rows: null, offline: false };
+    this.screen = 'lvboard';
+    this.render();
+    this._loadRushRows().then((res) => {
+      if (this.lb !== lb) return;
+      lb.rows = res.rows;
+      lb.offline = res.offline;
+      if (this.screen === 'lvboard') this.render();
+    });
+  }
+  _lvBoardHTML() {
+    const lb = this.lb || { rows: null };
+    const mine = woPoints(this._myWayout());
+    let body;
+    if (!lb.rows) body = `<p class="wo-rb-empty">${t('rush_loading')}</p>`;
+    else {
+      const rows = lb.rows.map((r) => ({ ...r, s: r.me ? Math.max(r.pts || 0, mine) : (r.pts || 0) }))
+        .filter((r) => r.s > 0)
+        .sort((a, b) => b.s - a.s || String(a.name).localeCompare(String(b.name)));
+      let place = 0, prev = null;
+      const ranked = rows.map((r, i) => { if (r.s !== prev) { place = i + 1; prev = r.s; } return { ...r, place }; });
+      body = !ranked.length ? `<p class="wo-rb-empty">${t('lv_nobody')}</p>`
+        : `<ol class="wo-rb-list">${ranked.map((r) => `
+        <li class="${r.me ? 'is-me' : ''}"><span class="wo-rb-place">${r.place}</span><span class="wo-rb-name">${this._leadName(r)}</span><b class="wo-rb-score">${r.s}</b></li>`).join('')}</ol>`;
+    }
+    return `
+      <div class="wo-rb">
+        <div class="wo-rb-top-row">
+          <button type="button" class="wo-iconbtn" data-act="rb-back" aria-label="${t('back_aria')}">${ICON_MENU}</button>
+          <h2>${t('lv_results_title')}</h2>
+        </div>
+        ${lb.offline && lb.rows ? `<p class="wo-rb-note">${t('lv_offline')}</p>` : ''}
+        <div class="wo-rb-body">${body}</div>
+      </div>`;
+  }
 
   _openRushBoard(mode) {
     if (this.rush && !this.rush.over) return;
