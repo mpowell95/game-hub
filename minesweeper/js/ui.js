@@ -504,9 +504,23 @@ class MinesweeperUI {
     this._paintAll();
     this._bindBoard();
 
+    // Dig / Flag switch on the TOUCH, not on click (Matt, 2026-10-16: "Somehow I still miss them").
+    // A click is dropped when the finger slides a few pixels before lifting, which a fast thumb
+    // does; and the empty strip between the board and the bar was dead. So everything below the
+    // board (16px clear of its last row) is one Dig | Flag zone, split where the two buttons split.
+    // Changing mode is all it ever does, never a dig. The click below stays for the keyboard.
+    this.root.onpointerdown = (ev) => {
+      const bar = this.root && this.root.querySelector('.ms-bar');
+      if (!bar || !this.boardEl || ev.button > 0) return;
+      if (ev.target.closest('.ms-ov, .ms-board, [data-act]')) return;
+      if (ev.clientY < this.boardEl.getBoundingClientRect().bottom + 16) return;
+      const seg = bar.querySelector('.gh-seg').getBoundingClientRect();
+      this._setMode(ev.clientX < seg.left + seg.width / 2 ? 'dig' : 'flag');
+    };
+
     this.root.onclick = (ev) => {
       const md = ev.target.closest('[data-mode]');
-      if (md) { this.mode = md.dataset.mode; this._syncMode(); this._persist(); return; }
+      if (md) { this._setMode(md.dataset.mode); return; }
       const act = ev.target.closest('[data-act]');
       if (!act) return;
       if (act.dataset.act === 'tomenu') this._backToMenu();
@@ -629,6 +643,13 @@ class MinesweeperUI {
   // flagging): the board gets a vermilion frame, the Flag button turns vermilion instead of the
   // Dig button's blue, and the loupe under the finger carries a flag badge. Shape and label go
   // with every colour, never colour alone.
+  _setMode(mode) {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    this._syncMode();
+    this._persist();
+  }
+
   _syncMode() {
     this.root.querySelectorAll('[data-mode]').forEach((b) => {
       b.setAttribute('aria-pressed', String(b.dataset.mode === this.mode));
@@ -1058,7 +1079,7 @@ class MinesweeperUI {
     document.removeEventListener('visibilitychange', this._onVisibility);
     if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     if (this._offLang) { this._offLang(); this._offLang = null; }
-    if (this.root) { this.root.onclick = null; this.root.remove(); }
+    if (this.root) { this.root.onclick = null; this.root.onpointerdown = null; this.root.remove(); }
     this.root = null;
     this.boardEl = null;
     this.loupeEl = null;
