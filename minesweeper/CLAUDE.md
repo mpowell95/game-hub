@@ -181,8 +181,12 @@ flag button then died."* Top to bottom:
 - **HUD**: a **level button** (shape + "Hard", `data-act="tomenu"`) that replaced the back arrow:
   it shows which level you are on AND is the way to change it; then mines left, the face, the clock.
 - **Board.**
-- **Dig / Flag**, the full width and 64px tall (each half ~180 x 56px; was ~105 x 40 between the
-  back arrow and ?).
+- **Dig / Flag**, the full width and 72px tall (64px 2026-10-15; was ~105 x 40 between the back
+  arrow and ?). **It switches on the TOUCH (`pointerdown`), not on click, and the whole strip below
+  the board is its hit zone** (2026-10-16, Matt: *"Somehow I still miss them"*): a click is dropped
+  when a fast thumb slides before lifting, and the gap between board and bar was dead. Left of the
+  split = Dig, right = Flag; nothing within 16px of the board's last row counts; it only ever
+  changes mode, never digs. Click stays for the keyboard.
 
 **One paused board per level (2026-10-15, Matt: "keep a paused board for each level").** A level
 with a paused board shows a pause mark and its clock in place of its size on the setup screen;

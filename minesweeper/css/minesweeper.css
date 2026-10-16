@@ -444,9 +444,13 @@
 /* Dig / Flag: the whole width and 64px tall (Matt, 2026-10-15: "a couple times i was moving too
  * fast and missed the flag button then died"). Each half is ~180 x 56px. */
 .ms-root .ms-bar { flex: 0 0 auto; display: flex; align-items: center; }
-.ms-root .ms-bar .gh-seg { flex: 1 1 0; height: 64px; border-radius: 32px; padding: 4px; }
-.ms-root .ms-bar .gh-seg__item { flex: 1 1 0; height: 100%; gap: 9px; font-size: 19px; font-weight: 800; border-radius: 28px; }
-.ms-root .ms-bar .gh-seg__item svg { width: 24px; height: 24px; }
+/* 2026-10-16 ("Somehow I still miss them"): 72px, and the mode now switches on the touch with the
+ * whole strip below the board as the hit zone (ui.js, `onpointerdown`). The label text takes no
+ * pointer events so a tap on the word is a tap on the button. */
+.ms-root .ms-bar .gh-seg { flex: 1 1 0; height: 72px; border-radius: 36px; padding: 4px; }
+.ms-root .ms-bar .gh-seg__item { flex: 1 1 0; height: 100%; gap: 10px; font-size: 20px; font-weight: 800; border-radius: 32px; }
+.ms-root .ms-bar .gh-seg__item > * { pointer-events: none; }
+.ms-root .ms-bar .gh-seg__item svg { width: 26px; height: 26px; }
 
 /* ---------------- overlay ---------------- */
 .ms-root .ms-ov {

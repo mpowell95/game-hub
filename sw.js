@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1185';
+const CACHE = 'game-hub-v1186';
 
 const ASSETS = [
   './',
@@ -997,8 +997,8 @@ const REST_MANIFEST = {
   './nuts-bolts/index.html': '7ab25eee1d',
   './minesweeper/': '122a4290ea',
   './minesweeper/index.html': '122a4290ea',
-  './minesweeper/css/minesweeper.css': 'b7ee567d5b',
-  './minesweeper/js/ui.js': '22bd6e4377',
+  './minesweeper/css/minesweeper.css': '2e3b6c93d5',
+  './minesweeper/js/ui.js': '87e0b0886b',
   './minesweeper/js/engine.js': '764025ec21',
   './minesweeper/js/strings.js': 'db62f643f8',
   './contexto/': 'b0c9ee8e9d',
