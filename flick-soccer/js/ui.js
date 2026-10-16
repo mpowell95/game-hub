@@ -33,11 +33,11 @@ const FIRSTS = ['alt', 'me', 'them'];
 /** How far back (pitch units) a full-strength pull goes, and the dead zone round the disc. */
 const PULL_MAX = 34;
 const PULL_DEAD = DISC_R * 0.5;
-/** The edge zoom (`_edgeCam`): where a full pull lands, this far inside the screen's edge (px; the
- *  bottom adds the home bar), a thumb's width, since a finger stops short of the very edge (Matt,
- *  2026-10-16: "I can't get full power", from the bottom-left corner, his finger ~60px up); the
- *  least finger travel a full pull may take (px), however near the edge the disc sits; the edge a
- *  finger is never asked to pass (px); and the furthest the view zooms out. */
+/** Pulling near the edge (`_fullPull`): where a full pull lands, this far inside the screen's edge
+ *  (px; the bottom adds the home bar), a thumb's width, since a finger stops short of the very edge
+ *  (Matt, 2026-10-16: "I can't get full power", from the bottom-left corner, his finger ~60px up);
+ *  the least finger travel a full pull may take (px), however near the edge the disc sits; and the
+ *  edge a finger is never asked to pass (px). */
 const EDGE_M = 36;
 const EDGE_MIN_TRAVEL = 28;
 const EDGE_HARD = 10;
@@ -48,8 +48,12 @@ const EDGE_HARD = 10;
  *  this strip the aim is dropped (as if pulled back onto the disc); moving back up brings it back.
  *  A full pull always lands above it (`_edgeCam`). */
 const NO_SHOT_STRIP = 24;
-const ZOOM_MIN = 0.6;
+/** How far the view eases out (a look only, `_edgeCam`) while a pull near an edge is at full power. */
+const ZOOM_LOOK = 0.88;
 const CAM_RATE = 14;
+/** How quickly the look-only zoom follows a pull (per s): slow, so a wiggle of the finger does not
+ *  move the board. */
+const CAM_RATE_DRAG = 4;
 /** The weakest flick that counts; anything less is a cancelled aim. */
 const MIN_POWER = 0.04;
 /** Physics steps allowed per frame, so a stalled tab cannot teleport anything (Part 3). */
@@ -1346,17 +1350,17 @@ class FlickSoccerUI {
     e.preventDefault();
     try { this.canvas.setPointerCapture(e.pointerId); } catch { /* not supported: moves still arrive */ }
     this.drag = { id: e.pointerId, i, cx: e.clientX, cy: e.clientY };
-    this._aimFrom(p);
+    this._setCam(null);      // the disc where it really is, so the pull is read from it
+    this.camTo = null;
+    this._aimFrom();
   }
 
   _pointerMove(e) {
     if (!this.drag || e.pointerId !== this.drag.id) return;
     e.preventDefault();
     this.drag.cx = e.clientX; this.drag.cy = e.clientY;
-    this._aimFrom(this._pt(e));
-    // The camera follows the finger, then the aim is read again under it.
-    this._setCam(this._edgeCam());
-    this._aimFrom(this._pt(e));
+    this._aimFrom();
+    this.camTo = this._edgeCam();   // the view glides there (_camTick); the aim never depends on it
     if (this._inNoShotStrip(e.clientY) && this.aim) this.aim.idle = true;
   }
 
@@ -1366,58 +1370,43 @@ class FlickSoccerUI {
     return clientY - rc.top > rc.height - (this._safe || 0) - NO_SHOT_STRIP;
   }
 
-  /** The edge zoom (Matt, 2026-10-13: a disc near the side of the phone could not be pulled back far
-   *  enough for a full-strength flick, because the finger ran off the screen first; then, on the
-   *  first version: "make it zoom in and out depending on how hard you're pulling"). The zoom is a
-   *  function of where the finger is, nothing else: along the line of the pull, from ZOOM_FROM of
-   *  the way between the disc and the screen's edge, it zooms out evenly until, with the finger at
-   *  the edge, a FULL pull fits exactly. Pull back less and it zooms back in; a disc whose full pull
-   *  already fits never zooms. It zooms about the point where that line, run back through the disc,
-   *  leaves the pitch's box, so the aim keeps its direction, the whole pitch stays in its box, and a
-   *  further finger always means a harder flick. Strength is still measured in pitch units
-   *  (PULL_MAX), so a flick is exactly as strong as it always was. Returns the camera, or null for
-   *  the fitted layout. */
-  _edgeCam() {
-    const a = this.aim, d = this.drag, r = this.r;
-    if (!a || a.fx == null || !d || !this.match || !r.box) return null;
-    const o = this.match.b[a.i];
-    // The pull's direction, even inside the dead zone round the disc: the zoom starts with the
-    // finger's first move, so the power cannot jump the moment the pull leaves the dead zone.
-    const px = o.x - a.fx, py = o.y - a.fy, pl = Math.sqrt(px * px + py * py);
-    if (!(pl > 0.3)) return null;
-    const bo = r.toPxBase(o.x, o.y);
-    const bF = r.toPxBase(o.x - (px / pl) * PULL_MAX, o.y - (py / pl) * PULL_MAX);   // the full pull, fitted layout
-    const full = Math.sqrt((bF.x - bo.x) ** 2 + (bF.y - bo.y) ** 2);
-    if (!(full > 0)) return null;
-    const ux = (bF.x - bo.x) / full, uy = (bF.y - bo.y) / full, B = r.box;   // toward the finger
-    // The anchor: back from the disc, away from the finger, to the edge of the pitch's box.
-    let t = Infinity;
-    if (ux < 0) t = Math.min(t, (B.x + B.w - bo.x) / -ux); else if (ux > 0) t = Math.min(t, (bo.x - B.x) / ux);
-    if (uy < 0) t = Math.min(t, (B.y + B.h - bo.y) / -uy); else if (uy > 0) t = Math.min(t, (bo.y - B.y) / uy);
-    t = Math.max(0, Number.isFinite(t) ? t : 0);
-    const ax = bo.x - ux * t, ay = bo.y - uy * t;
-    // Distances along the line from the anchor: the disc (D), where a full pull lands (lim), the
-    // finger (F). `lim` is EDGE_M inside the screen, or EDGE_MIN_TRAVEL past the disc for a disc
-    // already that near the edge, never past EDGE_HARD.
-    const along = (m, bottom) => {
+  /** Pulling near the edge (Matt, 2026-10-13 to 10-16: a disc near the side could not be pulled back
+   *  to full strength; then "make it zoom in and out depending on how hard you're pulling"; then "I
+   *  can't get full power"; then "it seems super sensitive now... the whole board and board size
+   *  moves a lot, which actually makes the angle i'm aimed at move even more"). The finger's distance
+   *  from the disc, on screen, that is a FULL pull in the direction (ux, uy) it is pulling: the usual
+   *  PULL_MAX, or, where the screen runs out first, the room there is, EDGE_M inside the edge (the
+   *  bottom adding the home bar), at least EDGE_MIN_TRAVEL, never into the bottom strip. So near an
+   *  edge the same finger travel is a harder pull. Read off the FITTED layout from the disc's own
+   *  place, so nothing the view does can change it. */
+  _fullPull(bo, ux, uy) {
+    const r = this.r, safe = this._safe || 0;
+    const room = (m, bottom) => {
       let e = Infinity;
-      if (ux > 0) e = Math.min(e, (r.w - m - ax) / ux); else if (ux < 0) e = Math.min(e, (m - ax) / ux);
-      if (uy > 0) e = Math.min(e, (r.h - bottom - ay) / uy); else if (uy < 0) e = Math.min(e, (m - ay) / uy);
+      if (ux > 0) e = Math.min(e, (r.w - m - bo.x) / ux); else if (ux < 0) e = Math.min(e, (m - bo.x) / ux);
+      if (uy > 0) e = Math.min(e, (r.h - bottom - bo.y) / uy); else if (uy < 0) e = Math.min(e, (m - bo.y) / uy);
       return e;
     };
-    const safe = this._safe || 0;
-    const D = t;
-    const lim = Math.min(Math.max(along(EDGE_M, EDGE_M + safe), D + EDGE_MIN_TRAVEL), along(EDGE_HARD, NO_SHOT_STRIP + 4 + safe));
-    if (!(lim > D + 1) || lim - D >= full) return null;       // a full pull fits without zooming
-    const rc = this.canvas.getBoundingClientRect();
-    const F = Math.min(lim, (d.cx - rc.left - ax) * ux + (d.cy - rc.top - ay) * uy);
-    if (F <= D) return null;
-    // The pull grows EVENLY with the finger, full at `lim`: pull = (F - D) * full / (lim - D). The
-    // zoom that makes the finger's place mean exactly that pull is k = F / (D + pull); it falls
-    // smoothly from 1 as the finger moves out, so it zooms back in as the finger comes back.
-    const pull = (F - D) * full / (lim - D);
-    const k = Math.max(ZOOM_MIN, Math.min(1, F / (D + pull)));
-    return { k, ox: ax + (r.ox0 - ax) * k, oy: ay + (r.oy0 - ay) * k };
+    const full = PULL_MAX * r.s0;
+    const fit = Math.min(Math.max(room(EDGE_M, EDGE_M + safe), EDGE_MIN_TRAVEL), room(EDGE_HARD, NO_SHOT_STRIP + 4 + safe));
+    return Math.max(8, Math.min(full, fit));
+  }
+
+  /** The view eases out a little as a pull near an edge grows, and back in as it eases off: a LOOK
+   *  only. It zooms about the disc being pulled, so that disc, the finger and the aim between them
+   *  stay exactly where they are; it never moves anything the aim is read from. */
+  _edgeCam() {
+    const a = this.aim, r = this.r, d = this.drag;
+    if (!a || a.idle || !d || !this.match || !r.box) return null;
+    // How much the edge squeezes this pull, at most so far in this drag: turning the aim never zooms
+    // the view back in, only pulling less does.
+    d.amp = Math.max(d.amp || 0, a.amp || 0);
+    if (!(d.amp > 0)) return null;
+    const k = 1 - (1 - ZOOM_LOOK) * d.amp * a.power;
+    if (k > 0.999) return null;
+    const o = this.match.b[a.i];
+    const bo = r.toPxBase(o.x, o.y);
+    return { k, ox: bo.x + (r.ox0 - bo.x) * k, oy: bo.y + (r.oy0 - bo.y) * k };
   }
 
   _setCam(c) {
@@ -1429,27 +1418,48 @@ class FlickSoccerUI {
   /** Once the finger is lifted, eases the view back to the fitted layout (at once under reduced
    *  motion). While it is down the camera is set straight from the finger (`_pointerMove`). */
   _camTick(dt) {
-    const c = this.cam, r = this.r;
-    if (this.drag || !c || !r || !r.box) return;
-    const f = this.reduce ? 1 : 1 - Math.exp(-dt * CAM_RATE);
-    const n = { k: c.k + (1 - c.k) * f, ox: c.ox + (r.ox0 - c.ox) * f, oy: c.oy + (r.oy0 - c.oy) * f };
-    this._setCam(Math.abs(1 - n.k) < 0.001 && Math.abs(n.ox - r.ox0) < 0.3 && Math.abs(n.oy - r.oy0) < 0.3 ? null : n);
+    const r = this.r;
+    if (!r || !r.box) return;
+    const base = { k: 1, ox: r.ox0, oy: r.oy0 };
+    const to = (this.drag && this.camTo) || base, c = this.cam || base;
+    if (c.k === to.k && c.ox === to.ox && c.oy === to.oy) return;
+    const f = this.reduce ? 1 : 1 - Math.exp(-dt * (this.drag ? CAM_RATE_DRAG : CAM_RATE));
+    let n = { k: c.k + (to.k - c.k) * f, ox: c.ox + (to.ox - c.ox) * f, oy: c.oy + (to.oy - c.oy) * f };
+    if (Math.abs(n.k - to.k) < 0.001 && Math.abs(n.ox - to.ox) < 0.3 && Math.abs(n.oy - to.oy) < 0.3) n = to;
+    this._setCam(n === base ? null : n);
+    if (this.drag && this.aim) {
+      // Keep the string's end under the finger as the view glides (direction and power do not move).
+      const idle = this.aim.idle;
+      this._aimFrom();
+      if (idle && this._inNoShotStrip(this.drag.cy)) this.aim.idle = true;
+    }
   }
 
-  _aimFrom(p) {
-    const m = this.match;
-    const o = m.b[this.drag.i];
-    const px = o.x - p.x, py = o.y - p.y;
-    const len = Math.hypot(px, py);
-    if (len < PULL_DEAD) { this.aim = { i: this.drag.i, dx: 0, dy: -1, power: 0, fx: p.x, fy: p.y, contact: null, idle: true }; return; }
-    const dx = px / len, dy = py / len;
-    const power = Math.min(1, (len - PULL_DEAD) / (PULL_MAX - PULL_DEAD));
+  /** The aim, read from where the finger is ON SCREEN against where the disc is: the flick goes from
+   *  the finger through the disc, and the strength is the finger's distance over a full pull's
+   *  (`_fullPull`). The view's zoom is about the disc, so neither depends on it. */
+  _aimFrom() {
+    const m = this.match, d = this.drag, r = this.r;
+    const o = m.b[d.i];
+    const rc = this.canvas.getBoundingClientRect();
+    const sx = d.cx - rc.left, sy = d.cy - rc.top;
+    const bo = r.toPxBase(o.x, o.y);
+    const fp = r.toPitch(sx, sy);                       // the string's end, under the finger
+    const vx = sx - bo.x, vy = sy - bo.y, len = Math.sqrt(vx * vx + vy * vy);
+    const reach = PULL_MAX * r.s0;
+    const full = len > 0 ? this._fullPull(bo, vx / len, vy / len) : reach;
+    const dead = PULL_DEAD * r.s0 * (full / reach);     // the dead zone shrinks with the pull
+    const px = o.x - fp.x, py = o.y - fp.y, pl = Math.sqrt(px * px + py * py);
+    if (len < dead || !(pl > 0)) { this.aim = { i: d.i, dx: 0, dy: -1, power: 0, fx: fp.x, fy: fp.y, contact: null, idle: true }; return; }
+    const dx = px / pl, dy = py / pl;
+    const power = Math.min(1, (len - dead) / (full - dead));
+    const amp = Math.max(0, Math.min(1, (reach - full) / (reach * 0.5)));   // how much the edge squeezes this pull
     // Vs the computer: its difficulty. A challenge: the aiming help its sender chose (2026-10-15).
     const level = this.mode === 'cpu' ? this.diff : this.mode === 'mp' && this.mp && this.mp.game ? this.mp.game.aids : 'medium';
     const aids = AIDS[level] || AIDS.medium;
-    const contact = aids.guide ? aimContact(m.b, this.drag.i, dx, dy) : null;
-    const path = contact && contact.hit === BALL ? ballPath(m.b, this.drag.i, contact, 30 + 90 * power) : null;
-    this.aim = { i: this.drag.i, dx, dy, power, fx: p.x, fy: p.y, contact, path, arrow: aids.arrow };
+    const contact = aids.guide ? aimContact(m.b, d.i, dx, dy) : null;
+    const path = contact && contact.hit === BALL ? ballPath(m.b, d.i, contact, 30 + 90 * power) : null;
+    this.aim = { i: d.i, dx, dy, power, fx: fp.x, fy: fp.y, contact, path, arrow: aids.arrow, amp };
   }
 
   _pointerUp(e, cancel) {
