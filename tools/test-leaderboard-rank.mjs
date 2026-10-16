@@ -696,6 +696,10 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
 
   ok('a time is printed as a clock, not as milliseconds',
     formatBoardMetric(300000, 'minesweeper') === '5:00' && formatBoardMetric(9400, 'minesweeper') === '0:09');
+  // [KNOWN-BUG PROBE] (2026-10-16) The board rounded while the game floors: a 24.6s clear read 0:24
+  // on the result card and 0:25 here. Matt: "Why is my time different?"
+  ok('the board floors a time exactly like the game clock (24.6s = 0:24, 59.9s = 0:59)',
+    formatBoardMetric(24600, 'minesweeper') === '0:24' && formatBoardMetric(59900, 'minesweeper') === '0:59');
   ok('golf still prints to par, so the new branch did not swallow it',
     formatBoardMetric(-3, 'golf') === '-3' && formatBoardMetric(0, 'golf', 'E') === 'E');
   ok('a smaller time is the better one', LOWER_IS_BETTER.has('minesweeper'));
