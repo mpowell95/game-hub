@@ -169,14 +169,19 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   **The zoom follows the finger (second version, same day)**, Matt on the first: *"make it zoom in
   and out depending on how hard you're pulling? Right now I don't see a way to zoom back in"* (the
   first version zoomed out once the finger neared an edge and stayed out for the whole drag).
-  `_edgeCam` in `ui.js` makes the camera a function of the finger's position alone: along the line of
-  the pull, from `ZOOM_FROM` (35%) of the way between the disc and the screen's edge, the view zooms
-  out evenly until, with the finger at the edge (`EDGE_M`, 12px in; the bottom edge also clears the
-  home bar), a FULL pull fits exactly. Ease off and it zooms back in; a disc whose full pull already
-  fits never zooms; never further out than `ZOOM_MIN` (0.6). It zooms about the point where that
-  line, run back through the disc, leaves the pitch's box, so the aim keeps its direction, the whole
-  pitch stays in its box, and a further finger is always a harder flick (pull length is F/k, F up
-  and k down). Set straight from the finger on every move, so the power shown is the power flicked;
+  `_edgeCam` in `ui.js` makes the camera a function of the finger's position alone. **Third version
+  (2026-10-16)**, Matt, with a screenshot from the bottom-left corner: *"I can't get full power"*
+  (measured: 79% where his finger stopped, ~40px from the side and 26px above the home bar; full power
+  then needed the finger within 12px of the edge). Now a full pull lands **`EDGE_M` (36px) inside the
+  screen, the bottom adding the home bar**, or `EDGE_MIN_TRAVEL` (28px) past a disc already that near
+  the edge, never past `EDGE_HARD` (10px). The pull grows **evenly** with the finger along the line of
+  the pull, full at that point (`pull = (F - D) * full / (lim - D)`), and the zoom is whatever makes
+  that true (`k = F / (D + pull)`, never below `ZOOM_MIN` 0.6), so it starts with the finger's first
+  move (even inside the dead zone: a pull leaving it used to jump 0 to 37% in 2px) and zooms back in
+  as the finger comes back. A disc whose full pull fits never zooms. It zooms about the point where
+  that line, run back through the disc, leaves the pitch's box, so the aim keeps its direction and
+  the whole pitch stays in its box. Measured at 402x874 with a 34px home bar: his shot 100% (full 38px
+  above the home bar); every edge case 100%, zoom 0.77-0.91; no power jump over 25% in a 2px step.
   `_camTick` eases back to the fitted layout once the finger lifts (instantly under reduced motion).
   **Strength is still pitch units (`PULL_MAX`)**, so every flick is as strong as before and online
   replays are untouched; the camera is pixels only (`render.js` `setCam`, `s0/ox0/oy0` is the

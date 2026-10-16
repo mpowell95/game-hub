@@ -33,11 +33,14 @@ const FIRSTS = ['alt', 'me', 'them'];
 /** How far back (pitch units) a full-strength pull goes, and the dead zone round the disc. */
 const PULL_MAX = 34;
 const PULL_DEAD = DISC_R * 0.5;
-/** The edge zoom (`_edgeCam`): how close to the screen's edge a finger may be asked to reach (px),
- *  how far from the disc toward that edge the finger goes before the view starts zooming out (a
- *  share of the way), the furthest it zooms out, and how quickly it eases back on release (per s). */
-const EDGE_M = 12;
-const ZOOM_FROM = 0.35;
+/** The edge zoom (`_edgeCam`): where a full pull lands, this far inside the screen's edge (px; the
+ *  bottom adds the home bar), a thumb's width, since a finger stops short of the very edge (Matt,
+ *  2026-10-16: "I can't get full power", from the bottom-left corner, his finger ~60px up); the
+ *  least finger travel a full pull may take (px), however near the edge the disc sits; the edge a
+ *  finger is never asked to pass (px); and the furthest the view zooms out. */
+const EDGE_M = 36;
+const EDGE_MIN_TRAVEL = 28;
+const EDGE_HARD = 10;
 const ZOOM_MIN = 0.6;
 const CAM_RATE = 14;
 /** The weakest flick that counts; anything less is a cancelled aim. */
@@ -1362,12 +1365,14 @@ class FlickSoccerUI {
    *  the fitted layout. */
   _edgeCam() {
     const a = this.aim, d = this.drag, r = this.r;
-    if (!a || a.idle || !d || !this.match || !r.box) return null;
-    const x0 = EDGE_M, y0 = EDGE_M, x1 = r.w - EDGE_M, y1 = r.h - EDGE_M - (this._safe || 0);
+    if (!a || a.fx == null || !d || !this.match || !r.box) return null;
     const o = this.match.b[a.i];
+    // The pull's direction, even inside the dead zone round the disc: the zoom starts with the
+    // finger's first move, so the power cannot jump the moment the pull leaves the dead zone.
+    const px = o.x - a.fx, py = o.y - a.fy, pl = Math.sqrt(px * px + py * py);
+    if (!(pl > 0.3)) return null;
     const bo = r.toPxBase(o.x, o.y);
-    const bF = r.toPxBase(o.x - a.dx * PULL_MAX, o.y - a.dy * PULL_MAX);   // the full pull, fitted layout
-    if (bF.x >= x0 && bF.x <= x1 && bF.y >= y0 && bF.y <= y1) return null;
+    const bF = r.toPxBase(o.x - (px / pl) * PULL_MAX, o.y - (py / pl) * PULL_MAX);   // the full pull, fitted layout
     const full = Math.sqrt((bF.x - bo.x) ** 2 + (bF.y - bo.y) ** 2);
     if (!(full > 0)) return null;
     const ux = (bF.x - bo.x) / full, uy = (bF.y - bo.y) / full, B = r.box;   // toward the finger
@@ -1377,20 +1382,27 @@ class FlickSoccerUI {
     if (uy < 0) t = Math.min(t, (B.y + B.h - bo.y) / -uy); else if (uy > 0) t = Math.min(t, (bo.y - B.y) / uy);
     t = Math.max(0, Number.isFinite(t) ? t : 0);
     const ax = bo.x - ux * t, ay = bo.y - uy * t;
-    // Distances along the line from the anchor: the disc (D), the screen's edge (E), the finger (F).
-    let e = Infinity;
-    if (ux > 0) e = Math.min(e, (x1 - ax) / ux); else if (ux < 0) e = Math.min(e, (x0 - ax) / ux);
-    if (uy > 0) e = Math.min(e, (y1 - ay) / uy); else if (uy < 0) e = Math.min(e, (y0 - ay) / uy);
+    // Distances along the line from the anchor: the disc (D), where a full pull lands (lim), the
+    // finger (F). `lim` is EDGE_M inside the screen, or EDGE_MIN_TRAVEL past the disc for a disc
+    // already that near the edge, never past EDGE_HARD.
+    const along = (m, bottom) => {
+      let e = Infinity;
+      if (ux > 0) e = Math.min(e, (r.w - m - ax) / ux); else if (ux < 0) e = Math.min(e, (m - ax) / ux);
+      if (uy > 0) e = Math.min(e, (r.h - bottom - ay) / uy); else if (uy < 0) e = Math.min(e, (m - ay) / uy);
+      return e;
+    };
+    const safe = this._safe || 0;
     const D = t;
-    if (!(e > D + 1)) return null;
-    const kFull = Math.max(ZOOM_MIN, Math.min(1, e / (D + full)));
-    if (kFull >= 1) return null;
+    const lim = Math.min(Math.max(along(EDGE_M, EDGE_M + safe), D + EDGE_MIN_TRAVEL), along(EDGE_HARD, EDGE_HARD + safe));
+    if (!(lim > D + 1) || lim - D >= full) return null;       // a full pull fits without zooming
     const rc = this.canvas.getBoundingClientRect();
-    const F = (d.cx - rc.left - ax) * ux + (d.cy - rc.top - ay) * uy;
-    const from = D + ZOOM_FROM * (e - D);
-    const f = Math.max(0, Math.min(1, (F - from) / (e - from)));
-    if (f <= 0) return null;
-    const k = 1 - (1 - kFull) * f;
+    const F = Math.min(lim, (d.cx - rc.left - ax) * ux + (d.cy - rc.top - ay) * uy);
+    if (F <= D) return null;
+    // The pull grows EVENLY with the finger, full at `lim`: pull = (F - D) * full / (lim - D). The
+    // zoom that makes the finger's place mean exactly that pull is k = F / (D + pull); it falls
+    // smoothly from 1 as the finger moves out, so it zooms back in as the finger comes back.
+    const pull = (F - D) * full / (lim - D);
+    const k = Math.max(ZOOM_MIN, Math.min(1, F / (D + pull)));
     return { k, ox: ax + (r.ox0 - ax) * k, oy: ay + (r.oy0 - ay) * k };
   }
 
