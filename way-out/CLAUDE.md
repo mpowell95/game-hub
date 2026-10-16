@@ -101,7 +101,10 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
   `--gh-*` tokens the hub's dark values under `.gh-dark`.
 - "Arrows remaining / cleared" counters (`.wo-counts`) on every difficulty; the How to play pill under
   the board is Easy only (`.is-easy`) and PAUSES THE CLOCK while open (`_helpPaused`). Arrows are thick
-  (`lw = pitch x 0.092`, heads `pitch x 0.28`); pitch cap 72px.
+  (`lw = pitch x 0.092`, heads `pitch x 0.28`); pitch cap 72px. **On Matt's devices only
+  (`isAdminDevice()`, 2026-10-16) arrows are THICK: `lw = pitch x 0.3`, heads `pitch x 0.52`**, from his
+  own edit of a Hard board (*"I want all the arrows to be more like this one"*). He rejected a zoom/pan
+  "big arrows" mode the same day (*"I do not like the magnifier. remove it"*); it was reverted whole.
 - The reference's "Extra Hard" is **Expert** here. No sound (root rule). No ads, rate-us, favourite star.
 
 ## Fitting the screen

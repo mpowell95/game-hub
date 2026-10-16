@@ -1005,8 +1005,16 @@ class WayOut {
     this.oy = (r.height - H * pitch) / 2 + pitch / 2;
     // Thicker arrows (Matt, 2026-10-14: "a little thicker"); still scaled to the pitch so a dense
     // Expert board stays readable.
-    this.lw = Math.max(1.7, Math.min(6, pitch * 0.092));
-    this.headL = Math.max(5, Math.min(17, pitch * 0.28));
+    // THICK ARROWS on Matt's devices (2026-10-16): he drew one over a Hard board, *"I want all the
+    // arrows to be more like this one"* (shaft about a third of the dot gap, head about two thirds
+    // wide), to make the right one easier to pick out and hit. Everyone else keeps the thin ones.
+    if (isAdminDevice()) {
+      this.lw = pitch * 0.3;
+      this.headL = pitch * 0.52;
+    } else {
+      this.lw = Math.max(1.7, Math.min(6, pitch * 0.092));
+      this.headL = Math.max(5, Math.min(17, pitch * 0.28));
+    }
     // Only a real change of geometry counts (a ResizeObserver also calls once on observe).
     const geom = `${pitch}|${this.ox}|${this.oy}`, moved = this.geomWas && this.geomWas !== geom;
     this.geomWas = geom;

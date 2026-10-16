@@ -585,3 +585,14 @@ higher, zero-point players left out, ties share a place, offline note. **How to 
 gets the same row without the "?", so the picture is pixel-identical in both modes (measured). No
 overlap with the picture and no overflow at 360x724 / 375x667. Held-back game: no CACHE bump.
 
+## Thick arrows for Matt; the magnifier is gone (2026-10-16)
+
+The "big arrows" magnifier (zoom + drag to pan, same morning) was the wrong reading. Matt: *"no, i do
+not like the magnifier. remove it. I meant make the arrows thicker - easier to select."* He sent a
+Hard level 106 screenshot with one arrow redrawn: shaft about a third of the dot gap, head about two
+thirds wide and a little over half a gap long. PR #1084 was reverted whole (`git revert -m 1`;
+`gamehub.wayout.big.v1` is now read by nothing, a preference). `_layout()` sets `lw = pitch x 0.3`,
+`headL = pitch x 0.52` (head width = 1.24 x headL) on `isAdminDevice()`; everyone else is unchanged.
+Taps still pick the nearest segment (unchanged). Browser-checked Easy 1, Hard 101, Expert 201: real
+taps send the hinted arrow, no magnifier for anyone. Held-back game: no CACHE bump.
+
