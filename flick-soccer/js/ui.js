@@ -48,8 +48,12 @@ const EDGE_HARD = 10;
  *  this strip the aim is dropped (as if pulled back onto the disc); moving back up brings it back.
  *  A full pull always lands above it (`_edgeCam`). */
 const NO_SHOT_STRIP = 24;
-/** How far the view eases out (a look only, `_edgeCam`) while a pull near an edge is at full power. */
+/** How far the view eases out (a look only, `_edgeCam`) while a pull near an edge is at full power,
+ *  and how close (px) the finger must get to running out of room before it starts (Matt, 2026-10-16:
+ *  "before i've run out of room, the whole board begins to move... There's no need for a zoom out
+ *  here. i have the whole field to drag my finger that direction"). */
 const ZOOM_LOOK = 0.88;
+const ZOOM_NEAR = 60;
 const CAM_RATE = 14;
 /** How quickly the look-only zoom follows a pull (per s): slow, so a wiggle of the finger does not
  *  move the board. */
@@ -1397,12 +1401,13 @@ class FlickSoccerUI {
    *  stay exactly where they are; it never moves anything the aim is read from. */
   _edgeCam() {
     const a = this.aim, r = this.r, d = this.drag;
-    if (!a || a.idle || !d || !this.match || !r.box) return null;
-    // How much the edge squeezes this pull, at most so far in this drag: turning the aim never zooms
-    // the view back in, only pulling less does.
-    d.amp = Math.max(d.amp || 0, a.amp || 0);
-    if (!(d.amp > 0)) return null;
-    const k = 1 - (1 - ZOOM_LOOK) * d.amp * a.power;
+    if (!a || a.idle || !d || !this.match || !r.box || !(a.amp > 0)) return null;
+    // Only for the direction pulled NOW, and only once the finger is within ZOOM_NEAR of running
+    // out of room (where full power lands): a pull with the field in front of it never zooms.
+    // (the last third of the room, where the room itself is short).
+    const zone = Math.min(ZOOM_NEAR, (a.gap + a.len) / 3);
+    const near = Math.max(0, Math.min(1, 1 - a.gap / zone));
+    const k = 1 - (1 - ZOOM_LOOK) * a.amp * near;
     if (k > 0.999) return null;
     const o = this.match.b[a.i];
     const bo = r.toPxBase(o.x, o.y);
@@ -1459,7 +1464,7 @@ class FlickSoccerUI {
     const aids = AIDS[level] || AIDS.medium;
     const contact = aids.guide ? aimContact(m.b, d.i, dx, dy) : null;
     const path = contact && contact.hit === BALL ? ballPath(m.b, d.i, contact, 30 + 90 * power) : null;
-    this.aim = { i: d.i, dx, dy, power, fx: fp.x, fy: fp.y, contact, path, arrow: aids.arrow, amp };
+    this.aim = { i: d.i, dx, dy, power, fx: fp.x, fy: fp.y, contact, path, arrow: aids.arrow, amp, gap: full - len, len };
   }
 
   _pointerUp(e, cancel) {
