@@ -180,9 +180,15 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   bar** (Matt the same morning, *"I can't get full power"*: 79% where his finger stopped in the
   bottom-left corner), at least `EDGE_MIN_TRAVEL` (28px), never into the bottom strip. So near an
   edge the same finger travel is a harder pull (the dead zone shrinks with it). The zoom is now a
-  **look only** (`_edgeCam`): about the disc being pulled, down to `ZOOM_LOOK` (0.88) with the pull
-  near an edge, gliding (`CAM_RATE_DRAG`), never zooming back in because the aim turned, only because
-  the pull eased off; the disc, the finger and the aim never move with it. Measured at 402x874 with a
+  **look only** (`_edgeCam`): about the disc being pulled, down to `ZOOM_LOOK` (0.88), gliding
+  (`CAM_RATE_DRAG`); the disc, the finger and the aim never move with it. **When it zooms (same day,
+  with a recording)**, Matt: *"before i've run out of room, the whole board begins to move... when i
+  drag my finger to the left (from the bottom right piece...) There's no need for a zoom out here"*:
+  only for the direction pulled NOW (it used to keep the most squeezed direction of the whole drag),
+  only when that direction is short of room, and only in the last stretch before the finger runs out
+  (`ZOOM_NEAR` 60px, or the last third of a shorter room). Measured from the bottom-right disc: left
+  across the field never zooms; down or right zooms only from about 75% power; down then swung left
+  zooms back to 1.00 (was stuck at 0.88). Measured at 402x874 with a
   34px home bar: per 2° turn the disc moves 0px (was up to 7.5) and the board 0-2px (was up to 6);
   his corner shot 100% (full 38px above the home bar); every edge case 100%. `_camTick` eases back
   once the finger lifts (instantly under reduced motion). The first three versions:
