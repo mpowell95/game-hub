@@ -47,7 +47,19 @@ Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap gam
   the bottom attacks the top goal; red (seat 1, the computer or player 2) the reverse.
 - **One flick a turn**, then the turn passes, whatever happened. Drag back from one of your discs and
   let go: the further back, the harder (full strength at `PULL_MAX`, 34 pitch units). A pull inside
-  the dead zone, or weaker than `MIN_POWER`, is a cancelled aim, not a shot.
+  the safe zone, or weaker than `MIN_POWER` (4%), is a cancelled aim, not a shot.
+- **The safe zone is the whole disc and a little more (2026-10-16)**, Matt: *"we aim a piece, then
+  try to let go of that piece to try aiming a different one. but we don't let go perfectly in the
+  middle... it shoots and moves a tiny bit... it should never happen by accident"* (it was half the
+  disc's radius, ~11px; a fingertip is wider than the disc). `PULL_SAFE` is 1.3 disc radii (~30px on
+  a 402-wide phone), the same everywhere; strength counts from its edge, so a full pull is as far as
+  ever and a small flick still goes once the finger has clearly left the disc (Matt kept `MIN_POWER`:
+  *"if you want to flick a piece a few centimeters, you should be able to"*). The aim is not drawn
+  inside it. **Never less than the disc itself**: for a disc against a side wall pulled toward it, the
+  room is too short for the full margin, so the zone is the disc and its full pull sits nearer the
+  edge (`EDGE_HARD` 4px). Measured (released 14-30px from the centre after aiming): open field and
+  near the bottom, no shot anywhere on or just off the disc (was a shot from 20px); against the wall,
+  none on the disc, a shot only past its wall-side edge.
 - **A goal is the ball wholly over the line** (`ball.y + BALL_R < 0`, or past `H`), **or a ball that
   STOPS more than halfway over it** (its centre past the line: `restScorer`, applied when a shot comes
   to rest or its clock runs out, in `runToRest` and the screen's own loop alike). The second half was
