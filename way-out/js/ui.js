@@ -247,6 +247,15 @@ function hasProgress(band, n) {
   const s = readSave(band, n, 1e6);
   return !!s && (s.gone.length > 0 || s.red.length > 0 || s.lives < LIVES);
 }
+/** A level is PAUSED (Matt, 2026-10-16, after a Hard level opened with its clock already at 3:19):
+ *  real progress, or at least a second on its clock. The setup screen then offers New game | Resume,
+ *  as Minesweeper does. */
+function isPaused(band, n) {
+  if (hasProgress(band, n)) return true;
+  const s = readSave(band, n, 1e6);
+  const c = loadClock(band);
+  return !!c && c.n === n && c.key === srcKey(s ? s.src : { k: 'L', n, g: LADDER_GEN }) && c.ms + c.pen >= 1000;
+}
 function writeSave(o) {
   const map = readJSON(LSAVES2_KEY);
   map[o.band] = { v: 3, ...o };
@@ -589,7 +598,7 @@ class WayOut {
     const tier = this.settings.tier;
     const level = this.settings.ladder[tier];
     const done = level > bandEnd(tier);
-    const resume = !done && hasProgress(tier, level);
+    const paused = !done && isPaused(tier, level);
     // Each difficulty: its name, the level it is on, and a thin bar of how far through its stretch
     // of the ladder that is. Expert never ends, so its bar fills every 50 levels and starts over
     // (Matt, 2026-10-14: a solid line like the others, not a dashed one).
@@ -611,7 +620,13 @@ class WayOut {
     ], t('lv_tiles_aria'));
     const play = done
       ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" disabled>${t('band_done_play', { name: t('tier_' + tier) })}</button>`
-      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t(resume ? 'continue_level' : 'play_level', { n: level })}</button>`;
+      // A paused level: New game (left, the same board from nothing, clock at 0:00) and Resume
+      // (right), Minesweeper's order (Matt, 2026-10-16). Otherwise one Play button.
+      : paused ? `<div class="wo-playrow">
+          <button type="button" class="gh-btn gh-btn--block wo-play" data-act="new-level">${t('new_game')}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t('resume')}</button>
+        </div>`
+      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t('play_level', { n: level })}</button>`;
     return `
       <div class="wo-home">
         <div class="wo-herorow">
@@ -731,6 +746,9 @@ class WayOut {
     } else if (act === 'play') {
       const k = this.settings.tier, n = this.settings.ladder[k];
       if (n <= bandEnd(k)) this._startLevel(k, n);
+    } else if (act === 'new-level') {
+      const k = this.settings.tier, n = this.settings.ladder[k];
+      if (n <= bandEnd(k)) this._newLevel(k, n);
     }
     else if (act === 'help') { this.helpPage = 0; this._openHelp(); }
     else if (act === 'menu') this._toSetup(false);
@@ -853,6 +871,17 @@ class WayOut {
     // still sliding out, so the win was never counted. Count it now instead of showing an empty
     // board with nothing left to tap.
     if (!this._left()) { this.won = true; this._kick(); }
+  }
+
+  /** New game on a paused level: the same board (an old-tier board stays that board) with every
+   *  arrow back, three hearts and the clock at 0:00. Only this level's in-progress save and clock
+   *  are reset; every finished level's time is already in `wo.log`. */
+  _newLevel(tier, level) {
+    const s = readSave(tier, level, 1e6);
+    const src = s ? s.src : { k: 'L', n: level, g: LADDER_GEN };
+    resetSave(tier, level, src);
+    writeClock(tier, { n: level, key: srcKey(src), ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false });
+    this._startLevel(tier, level);
   }
 
   _restart() {

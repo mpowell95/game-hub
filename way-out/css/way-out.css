@@ -763,6 +763,10 @@
 .wo-root .wo-seg-bar i { display: block; height: 100%; border-radius: 2px; background: #178a7a; }
 .gh-dark .wo-root .wo-seg-bar i { background: #3fd6bd; }
 /* Both Play buttons are the same shape: Levels in the hub's blue, Rush in its teal. */
+/* A paused level: New game | Resume share Play's row (2026-10-16). */
+.wo-root .wo-playrow { display: flex; gap: 8px; }
+.wo-root .wo-playrow > .gh-btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+.wo-root .wo-playrow > .gh-btn:not(.gh-btn--primary) { box-shadow: none; }
 .wo-root button.wo-play { min-height: 52px; font-weight: 900; font-size: 18px; box-shadow: 0 6px 16px rgba(23, 105, 212, .28), inset 0 -3px 0 rgba(0, 0, 0, .15); }
 /* Under the card: this week's leader of the selected version, and See all results. */
 .wo-root .wo-lead {
