@@ -193,11 +193,8 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   reported the finger lifting. Within `NO_SHOT_STRIP` (24px) above the home bar the aim is dropped
   (drawn as nothing, as if pulled back onto the disc), a release there (or with the app hidden) is not
   a flick, and moving back up restores the aim. `_fullPull` never asks a full pull into that strip.
-  **Strength is still pitch units (`PULL_MAX`)**, so every flick is as strong as before and online
-  replays are untouched; the camera is pixels only (`render.js` `setCam`, `s0/ox0/oy0` is the
-  fitted layout). Measured after: 100% in every one of those cases, zoom 0.80-0.94 at 402 wide with
-  the finger at the edge, back to 1.00 by a quarter of the way back, and none at all for a disc away
-  from the edges.
+- **A flick is stored exactly as before** (a direction and a 0-1 strength), so online replays are
+  untouched; the camera is pixels only (`render.js` `setCam`, `s0/ox0/oy0` is the fitted layout).
 - **Teams carry a SHAPE as well as a colour** (colourblind rule): blue discs a white triangle, red
   discs a white square, and the same chips sit on the scoreboard and the result line.
 - **Whose turn** is shown three ways: the scoreboard side gets an accent border and underline bar,
