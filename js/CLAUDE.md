@@ -402,6 +402,9 @@ tier shape beside it), games played under it, the unit once above the list; stan
 Tic Tac Toe All / Ultimate / Classic / MP; Snake + Walls off / Walls on; Skeeball machine row over
 Points / High score; Cup Pong + Solo (fewest throws); Hold'em Bankroll / Wins; Contexto, Golf, Arrow
 Maze, Gridlock plain. `_view` holds a non-difficulty tab, reset with `_tier`. Old sort/filter code stays.
+**Arrow Maze's board is Levels | Rush (2026-10-16)**: `woModesHTML`, `woRushHTML` (`_woMode`, `_woRush`,
+set from `openLeaderboard({game:'wayout', woMode, woRush})`); Rush = Easy | Hard over This week / Weeks won
+/ Past weeks, read from the merged `wo.rush.best`. It replaced the game's own Results screens.
 On All views the row's difficulty is a bordered pill under the name (`tierPillHTML`, shape + word; Matt:
 "more obvious"), not a shape beside the number.
 Ranks 1-3 are ribboned medals (`medalSVG`, number on the face) with a metal rail; #1's row is lit gold

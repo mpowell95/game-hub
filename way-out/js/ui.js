@@ -111,7 +111,10 @@ function loadSettings() {
   // remembered choice, not progress.
   const mode = v.mode === 'rush' ? 'rush' : 'levels';
   const rushMode = RUSH_MODES.includes(v.rushMode) ? v.rushMode : 'easy';
-  return { tier: TIERS.includes(v.tier) ? v.tier : 'easy', levels, ladder, stored, mode, rushMode };
+  // Thick arrows (2026-10-16, Matt: "make thick arrows an optional setting"): a preference. Never
+  // chosen = on for Matt's devices (they had them first), off for everyone else.
+  const thick = typeof v.thick === 'boolean' ? v.thick : null;
+  return { tier: TIERS.includes(v.tier) ? v.tier : 'easy', levels, ladder, stored, mode, rushMode, thick };
 }
 function saveSettings(patch) {
   const raw = readSettingsRaw(), cur = loadSettings();
@@ -119,6 +122,7 @@ function saveSettings(patch) {
   // `ladder` included); only `tier` and `ladder2` change.
   const next = { ...raw, tier: (patch && patch.tier) || cur.tier, ladder2: { ...cur.ladder },
     mode: (patch && patch.mode) || cur.mode, rushMode: (patch && patch.rushMode) || cur.rushMode };
+  if (patch && typeof patch.thick === 'boolean') next.thick = patch.thick;
   if (patch && patch.ladder) {
     for (const k of TIERS) {
       const n = Math.floor(Number(patch.ladder[k]) || 0);
@@ -298,6 +302,9 @@ const RUSH_ARROW = (c) => `<svg viewBox="0 0 28 16" aria-hidden="true"><path d="
 const RUSH_WATCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M9.5 2.5h5M12 2.5v3M18.5 6.5l1.6-1.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path class="wo-watch-hand" d="M12 13.5V8.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="13.5" r="1.4" fill="currentColor"/></svg>';
 const ICON_STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z" fill="currentColor"/></svg>';
 const ICON_CUP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10v5a5 5 0 0 1-10 0z M7 5.5H4v1.5a3 3 0 0 0 3 3 M17 5.5h3v1.5a3 3 0 0 1-3 3 M12 13.5v3.5 M8 20.5h8 M9.5 17h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// The thick-arrows switch (2026-10-16): a thin or a thick arrow, the way the board will draw them.
+const ICON_THIN = '<svg class="wo-thick-ic" viewBox="0 0 40 18" aria-hidden="true"><path d="M3 9H31" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M29 3.5L38 9L29 14.5Z" fill="currentColor"/></svg>';
+const ICON_THICK = '<svg class="wo-thick-ic" viewBox="0 0 40 18" aria-hidden="true"><path d="M3 9H27" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><path d="M24 1L38 9L24 17Z" fill="currentColor"/></svg>';
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21L2.6 11.6A5.6 5.6 0 0 1 12 3.9a5.6 5.6 0 0 1 9.4 7.7z"/></svg>';
 
 /** The setup screen's header picture (2026-10-14, Matt: "Make the top image thing cooler and
@@ -565,9 +572,7 @@ class WayOut {
     if (this.ro) { this.ro.disconnect(); this.ro = null; }
     this.canvas = null;
     const modal = '<div class="gh-overlay wo-modal" hidden></div>';
-    const body = this.screen === 'play' ? (this.rush ? this._rushPlayHTML() : this._playHTML())
-      : this.screen === 'rushboard' ? this._rushBoardHTML()
-      : this.screen === 'lvboard' ? this._lvBoardHTML() : this._homeHTML();
+    const body = this.screen === 'play' ? (this.rush ? this._rushPlayHTML() : this._playHTML()) : this._homeHTML();
     this.root.innerHTML = body + modal;
     this.root.classList.toggle('is-home', this.screen !== 'play');
     this._positionRoot();
@@ -613,10 +618,13 @@ class WayOut {
         <span class="wo-seg-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>
       </button>`;
     }).join('');
+    // Two tiles with no words under them, and the thick-arrows switch where "3 lives" was (Matt,
+    // 2026-10-16: the lives tile "is just there"; fewer words). The words stay for screen readers.
+    const thick = this._thick();
     const tiles = this._tilesHTML([
-      { cls: 'is-pts', icon: ICON_STAR, v: done ? '-' : t('lv_pts', { n: woLevelPoints(level) }), l: t('lv_tile_worth') },
-      { cls: 'is-mine', icon: ICON_CUP, v: String(this._myPoints()), l: t('lv_tile_mine') },
-      { cls: 'is-lives', icon: HEART, v: String(LIVES), l: t('lv_tile_lives') },
+      { cls: 'is-pts', icon: ICON_STAR, v: done ? '-' : t('lv_pts', { n: woLevelPoints(level) }), l: t('lv_tile_worth'), quiet: true },
+      { cls: 'is-mine', icon: ICON_CUP, v: String(this._myPoints()), l: t('lv_tile_mine'), quiet: true },
+      { cls: 'is-thick', html: `<button type="button" class="wo-thick${thick ? ' is-on' : ''}" data-act="thick" role="switch" aria-checked="${thick}" aria-label="${t('thick_aria')}">${thick ? ICON_THICK : ICON_THIN}<i class="wo-thick-sw" aria-hidden="true"></i></button>` },
     ], t('lv_tiles_aria'));
     const play = done
       ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" disabled>${t('band_done_play', { name: t('tier_' + tier) })}</button>`
@@ -628,7 +636,7 @@ class WayOut {
         </div>`
       : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t('play_level', { n: level })}</button>`;
     return `
-      <div class="wo-home">
+      <div class="wo-home is-levels">
         <div class="wo-herorow">
           <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
           <button type="button" class="wo-howq" data-act="help" aria-label="${t('how_title')}" title="${t('how_title')}">?</button>
@@ -649,7 +657,8 @@ class WayOut {
   /** Three tiles in a row: an icon, a number, a word. Shared by Levels and Rush. */
   _tilesHTML(items, label) {
     return `<ul class="wo-tiles" aria-label="${label}">${items.map((x) =>
-      `<li class="${x.cls}">${x.icon}<b>${x.v}</b><span>${x.l}</span></li>`).join('')}</ul>`;
+      (x.html ? `<li class="${x.cls}">${x.html}</li>`
+        : `<li class="${x.cls}">${x.icon}<b>${x.v}</b><span${x.quiet ? ' class="wo-sr"' : ''}>${x.l}</span></li>`)).join('')}</ul>`;
   }
   /** This person's points: from the combined read once it lands (every phone they play on), this
    *  phone's own until then. */
@@ -672,7 +681,7 @@ class WayOut {
     return this._leadHTML(`🏆 ${t('lv_leader_label')}`,
       lead.length ? lead.map((r) => this._leadName(r)).join(' & ') : '-',
       lead.length ? String(top) : '-',
-      `<button type="button" class="wo-rl-all is-more" data-act="lv-board">${t('rush_see_all')}</button>`);
+      `<button type="button" class="wo-rl-all is-more" data-act="lv-board">${t('leaderboard')}</button>`);
   }
   /** A leader's name on the footer card: emoji and username, this phone's own person included
    *  (Matt, 2026-10-14: "it shouldn't say You"). Before the combined read lands, this phone's own
@@ -735,12 +744,21 @@ class WayOut {
     else if (act === 'rush-again') { const m = this.rush ? this.rush.mode : this.settings.rushMode; this._closeModal(); this._startRush(m); }
     else if (act === 'rush-close') this._toSetup(false);
     else if (act === 'rush-ready') this._rushReady();
-    else if (act === 'rush-board') this._openRushBoard(btn.dataset.rmode || (this.rush && this.rush.mode));
-    else if (act === 'rb-back') { this.screen = 'home'; this.render(); }
-    else if (act === 'lv-board') this._openLvBoard();
-    else if (act === 'rb-tab') { this.rb.tab = btn.dataset.tab; this.rb.week = null; this.render(); }
-    else if (act === 'rb-mode') { this.rb.mode = btn.dataset.rmode; this.render(); }
-    else if (act === 'rb-week') { this.rb.week = btn.dataset.week; this.render(); }
+    else if (act === 'rush-board') {
+      // From the end-of-run popup: back to setup first, then the leaderboard over it.
+      const m = btn.dataset.rmode || (this.rush && this.rush.mode) || this.settings.rushMode;
+      if (this.screen === 'play') { this._closeModal(); this._toSetup(false); }
+      this._openLeaderboard('rush', m);
+    }
+    else if (act === 'lv-board') this._openLeaderboard('levels');
+    else if (act === 'thick') {
+      this.settings = saveSettings({ thick: !this._thick() });
+      const on = this._thick(), b = btn.closest('.wo-thick') || btn;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-checked', String(on));
+      const svg = b.querySelector('svg');
+      if (svg) svg.outerHTML = on ? ICON_THICK : ICON_THIN;
+    }
     else if (act === 'tier') {
       if (btn.dataset.tier !== this.settings.tier) { this.settings = saveSettings({ tier: btn.dataset.tier }); this.render(); }   // saved on selection
     } else if (act === 'play') {
@@ -1036,8 +1054,9 @@ class WayOut {
     // Expert board stays readable.
     // THICK ARROWS on Matt's devices (2026-10-16): he drew one over a Hard board, *"I want all the
     // arrows to be more like this one"* (shaft about a third of the dot gap, head about two thirds
-    // wide), to make the right one easier to pick out and hit. Everyone else keeps the thin ones.
-    if (isAdminDevice()) {
+    // wide), to make the right one easier to pick out and hit. Since the same day it is a switch
+    // on the Levels screen for everyone (`_thick()`: Matt's devices default on); Rush draws the same.
+    if (this._thick()) {
       this.lw = pitch * 0.3;
       this.headL = pitch * 0.52;
     } else {
@@ -1341,7 +1360,7 @@ class WayOut {
     return this._leadHTML(`🏆 ${t('rush_leader_label', { name: t('tier_' + mode) })}`,
       top.length ? top.map((r) => this._leadName(r)).join(' & ') : '-',
       top.length ? String(topS) : '-',
-      `<button type="button" class="wo-rl-all is-more" data-act="rush-board" data-rmode="${mode}">${t('rush_see_all')}</button>`);
+      `<button type="button" class="wo-rl-all is-more" data-act="rush-board" data-rmode="${mode}">${t('leaderboard')}</button>`);
   }
   _loadRushStanding() {
     if (this._standingBusy) return;
@@ -1635,70 +1654,11 @@ class WayOut {
     m.querySelector('.gh-btn--primary').focus({ preventScroll: true });
   }
 
-  // --- Rush results: this week, and past weeks --------------------------------------------------
+  // --- the footers' leaders --------------------------------------------------------------------------
   // Everyone's synced records (players/), with this phone's own fresh store for itself, combined
   // per PERSON by js/players-agg.js (a week's best is the best on any of their phones). Read once
   // per opening. Offline: only this phone's own runs.
 
-  /** Levels results: everyone's points, most first, from the same combined read as Rush's results
-   *  (`_loadRushRows`, whose rows carry `pts`). This phone's own points are its fresh local ones
-   *  when higher. Ties share a place. Back (`rb-back`) returns to setup. */
-  _openLvBoard() {
-    if (this.rush && !this.rush.over) return;
-    this._stopLevel();
-    this.rush = null;
-    const lb = this.lb = { rows: null, offline: false };
-    this.screen = 'lvboard';
-    this.render();
-    this._loadRushRows().then((res) => {
-      if (this.lb !== lb) return;
-      lb.rows = res.rows;
-      lb.offline = res.offline;
-      if (this.screen === 'lvboard') this.render();
-    });
-  }
-  _lvBoardHTML() {
-    const lb = this.lb || { rows: null };
-    const mine = woPoints(this._myWayout());
-    let body;
-    if (!lb.rows) body = `<p class="wo-rb-empty">${t('rush_loading')}</p>`;
-    else {
-      const rows = lb.rows.map((r) => ({ ...r, s: r.me ? Math.max(r.pts || 0, mine) : (r.pts || 0) }))
-        .filter((r) => r.s > 0)
-        .sort((a, b) => b.s - a.s || String(a.name).localeCompare(String(b.name)));
-      let place = 0, prev = null;
-      const ranked = rows.map((r, i) => { if (r.s !== prev) { place = i + 1; prev = r.s; } return { ...r, place }; });
-      body = !ranked.length ? `<p class="wo-rb-empty">${t('lv_nobody')}</p>`
-        : `<ol class="wo-rb-list">${ranked.map((r) => `
-        <li class="${r.me ? 'is-me' : ''}"><span class="wo-rb-place">${r.place}</span><span class="wo-rb-name">${this._leadName(r)}</span><b class="wo-rb-score">${r.s}</b></li>`).join('')}</ol>`;
-    }
-    return `
-      <div class="wo-rb">
-        <div class="wo-rb-top-row">
-          <button type="button" class="wo-iconbtn" data-act="rb-back" aria-label="${t('back_aria')}">${ICON_MENU}</button>
-          <h2>${t('lv_results_title')}</h2>
-        </div>
-        ${lb.offline && lb.rows ? `<p class="wo-rb-note">${t('lv_offline')}</p>` : ''}
-        <div class="wo-rb-body">${body}</div>
-      </div>`;
-  }
-
-  _openRushBoard(mode) {
-    if (this.rush && !this.rush.over) return;
-    this._stopLevel();
-    this.rush = null;
-    const keep = this.rb || {};
-    this.rb = { tab: 'week', mode: (mode && RUSH_MODES.includes(mode)) ? mode : (keep.mode || this.settings.rushMode), week: null, rows: null, offline: false };
-    this.screen = 'rushboard';
-    this.render();
-    const rb = this.rb;
-    this._loadRushRows().then((res) => {
-      if (this.rb !== rb) return;
-      rb.rows = res.rows;
-      rb.offline = res.offline;
-      if (this.screen === 'rushboard') this.render();
-    });
-  }
   async _loadRushRows() {
     let all = {}, offline = false;
     const local = this._myWayout();
@@ -1731,60 +1691,19 @@ class WayOut {
     }
     return { rows, offline };
   }
-  /** One week's table for one version: everyone with a counted run that week, best first. Ties stay
-   *  tied (the same place number). */
-  _rushTable(mode, week) {
-    const rows = (this.rb.rows || []).filter((r) => r.best[mode] && r.best[mode][week] != null)
-      .map((r) => ({ ...r, s: r.best[mode][week] }))
-      .sort((a, b) => b.s - a.s || String(a.name).localeCompare(String(b.name)));
-    let place = 0, prev = null;
-    return rows.map((r, i) => { if (r.s !== prev) { place = i + 1; prev = r.s; } return { ...r, place }; });
+  /** The hub's leaderboard on Arrow Maze (2026-10-16, Matt: "for Minesweeper, we linked the
+   *  Leaderboard. Let's do that instead"), opened on Levels or on one Rush version. It replaced this
+   *  game's own Levels results and Rush results screens. */
+  /** Thick arrows on? The player's own choice; never chosen = on for Matt's devices only. */
+  _thick() {
+    const v = this.settings && this.settings.thick;
+    return typeof v === 'boolean' ? v : isAdminDevice();
   }
-  _rushWeekLabel(week) {
-    const [y, mo, d] = week.split('-').map(Number);
-    let txt = week;
-    try { txt = new Date(Date.UTC(y, mo - 1, d)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }); } catch { /* keep the ISO date */ }
-    return t('rush_week_of', { d: txt });
-  }
-  _rushBoardHTML() {
-    const rb = this.rb, mode = rb.mode, thisWeek = woWeekKey();
-    const modeSegs = RUSH_MODES.map((m) => `<button type="button" class="wo-mode${m === mode ? ' is-on' : ''}" data-act="rb-mode" data-rmode="${m}" aria-pressed="${m === mode}">${t('tier_' + m)}</button>`).join('');
-    const tabs = ['week', 'past'].map((k) => `<button type="button" class="wo-mode${rb.tab === k ? ' is-on' : ''}" role="tab" aria-selected="${rb.tab === k}" data-act="rb-tab" data-tab="${k}">${t(k === 'week' ? 'rush_this_week' : 'rush_past')}</button>`).join('');
-    const table = (week) => {
-      const rows = this._rushTable(mode, week);
-      if (!rows.length) return `<p class="wo-rb-empty">${t('rush_nobody')}</p>`;
-      return `<ol class="wo-rb-list">${rows.map((r) => `
-        <li class="${r.me ? 'is-me' : ''}"><span class="wo-rb-place">${r.place}</span><span class="wo-rb-name">${esc(r.emoji || '')} ${esc(r.name || t('rush_you'))}</span><b class="wo-rb-score">${r.s}</b></li>`).join('')}</ol>`;
-    };
-    let body;
-    if (!rb.rows) body = `<p class="wo-rb-empty">${t('rush_loading')}</p>`;
-    else if (rb.tab === 'week') body = table(thisWeek);
-    else if (rb.week) body = `<h3 class="wo-rb-h">${this._rushWeekLabel(rb.week)}</h3>${table(rb.week)}
-      <button type="button" class="gh-btn wo-rb-weekback" data-act="rb-tab" data-tab="past">${t('rush_all_weeks')}</button>`;
-    else {
-      const weeks = new Set();
-      for (const r of rb.rows) for (const w of Object.keys(r.best[mode] || {})) if (w < thisWeek) weeks.add(w);
-      const list = [...weeks].sort().reverse();
-      body = !list.length ? `<p class="wo-rb-empty">${t('rush_no_past')}</p>` : `<ul class="wo-rb-weeks">${list.map((w) => {
-        const top = this._rushTable(mode, w).filter((r) => r.place === 1);
-        return `<li><button type="button" class="wo-rb-week" data-act="rb-week" data-week="${w}">
-          <span>${this._rushWeekLabel(w)}</span>
-          <span class="wo-rb-top">${top.map((r) => `${esc(r.emoji || '')} ${esc(r.name || t('rush_you'))}`).join(', ')} <b>${top.length ? top[0].s : ''}</b></span>
-        </button></li>`;
-      }).join('')}</ul>`;
-    }
-    return `
-      <div class="wo-rb">
-        <div class="wo-rb-top-row">
-          <button type="button" class="wo-iconbtn" data-act="rb-back" aria-label="${t('back_aria')}">${ICON_MENU}</button>
-          <h2>${t('rush_results_title')}</h2>
-        </div>
-        <div class="wo-modes" role="group">${modeSegs}</div>
-        <div class="wo-modes" role="tablist">${tabs}</div>
-        ${rb.offline && rb.rows ? `<p class="wo-rb-note">${t('rush_offline')}</p>` : ''}
-        <div class="wo-rb-body">${body}</div>
-        <p class="wo-rb-note">${t('rush_turnover')}</p>
-      </div>`;
+  async _openLeaderboard(woMode, woRush) {
+    try {
+      const m = await import('../../js/leaderboard-ui.js');
+      await m.openLeaderboard({ game: 'wayout', woMode, woRush });
+    } catch (err) { console.error('[way-out] leaderboard', err); }
   }
 
   // --- drawing ------------------------------------------------------------------------------------
