@@ -42,6 +42,7 @@ for (const [id, rec] of Object.entries(all)) {
     const t = (ms.bestTimeMs || {})[l] | 0; if (t > 0) p.best[l] = p.best[l] ? Math.min(p.best[l], t) : t;
     const pc = (ms.bestClearedPct || {})[l] | 0; if (pc > 0) p.pct[l] = Math.max(p.pct[l] | 0, pc);
     const pr = (ms.practice || {})[l]; if (pr) { const q = p.prac[l] || (p.prac[l] = { played: 0, won: 0 }); q.played += pr.played | 0; q.won += pr.won | 0; }
+    const ng = (ms.noGuess || {})[l]; if (ng) { p.ng = p.ng || {}; const q = p.ng[l] || (p.ng[l] = { played: 0, won: 0 }); q.played += ng.played | 0; q.won += ng.won | 0; }
   }
 }
 const fmt = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
@@ -54,7 +55,7 @@ for (const p of [...people.values()].filter((x) => Object.keys(x.lv).length || O
     p.shown = true;
     const why = lb ? CAUSES.filter((c) => lb[c]).map((c) => `${c} ${lb[c]}`).join(', ') : '';
     if (lb) { const t = total[l] || (total[l] = {}); for (const c of CAUSES) t[c] = (t[c] | 0) + (lb[c] | 0); }
-    console.log(`  ${l.padEnd(6)} ${q ? `${q.won}/${q.played} won` : '-'}${p.best[l] ? `, best ${fmt(p.best[l])}` : ''}${p.pct[l] ? `, closest ${p.pct[l]}%` : ''}${why ? ` | losses since 15 Oct: ${why}` : ''}${pr ? ` | no-guess test ${pr.won}/${pr.played}` : ''}`);
+    console.log(`  ${l.padEnd(6)} ${q ? `${q.won}/${q.played} won` : '-'}${p.best[l] ? `, best ${fmt(p.best[l])}` : ''}${p.pct[l] ? `, closest ${p.pct[l]}%` : ''}${why ? ` | losses since 15 Oct: ${why}` : ''}${pr ? ` | no-guess test (uncounted) ${pr.won}/${pr.played}` : ''}${p.ng && p.ng[l] ? ` | of which no-guess ${p.ng[l].won}/${p.ng[l].played}` : ''}`);
   }
 }
 console.log('\nLoss reasons, everyone (since 2026-10-15):');

@@ -160,8 +160,12 @@ numbers, then the mine count; node cap 200k) clears it from the first tap with n
 within 2.5 s, then keeps the last board and sets `noGuessOk: false`. Measured (desktop, 100 boards a
 level): all passed; deal time median 0 / 1 / 5 / 41 ms, slowest 8 / 12 / 128 / 1038 ms; an
 independent solver confirmed 0 of 400 needed a guess. The board carries `noGuess` (saved; old saves
-read as ordinary) and an **NG** tag on the level button. **Its rounds count for NOTHING**: recorded
-to `ms.practice[level]` = {played, won} only (no total, tier, best or leaderboard).
+read as ordinary) and an **NG** tag on the level button. **Since 2026-10-16 its rounds COUNT like any
+board** (Matt: *"Keep the no guesses only available to me. Make my games count"*): totals, tier,
+best time, leaderboard. Each is also tallied in `ms.noGuess[level]` = {played, won} (a report, so
+they can always be told apart). Rounds played 2026-10-15/16 before that went to `ms.practice[level]`
+and still count for nothing; they stay there (rule 5). The recorder still honours `practice` for a
+phone on the old build.
 
 **Why each board is lost (2026-10-15, Matt: "record why people lose"):** `E.lossCause(state, how)`
 judges the fatal square from what the player could see (open numbers only, never their flags):
@@ -276,7 +280,8 @@ the Boom popup dimmed it. Mockup (dark): https://claude.ai/artifact/SbNC6XWSy8b2
 ms = { cleared, flagsRight, bestTimeMs: { easy, medium, hard, expert },
        bestClearedPct: { easy, medium, hard, expert },
        lossBy: { <level>: { slip, misread, rushed, forced, chord, unknown } },   // 2026-10-15
-       practice: { <level>: { played, won } } }                                // no-guess tests
+       practice: { <level>: { played, won } },        // no-guess test rounds, uncounted (to 2026-10-16)
+       noGuess:  { <level>: { played, won } } }       // counted no-guess plays (2026-10-16)
 ```
 
 - **`bestClearedPct` (2026-10-15)**: the closest a player got on each level, as % of the board

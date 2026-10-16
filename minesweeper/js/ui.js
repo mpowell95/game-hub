@@ -92,8 +92,8 @@ function loadSettings() {
       vibrate: v.vibrate === true,
       // "?" marks in Flag mode (2026-10-15): flag -> ? -> blank. On unless turned off.
       marks: v.marks !== false,
-      // NO-GUESS boards (2026-10-15): Matt's devices only while he tests them; their rounds count
-      // for nothing (js/game-stats.js `ms.practice`).
+      // NO-GUESS boards (2026-10-15): Matt's devices only. Since 2026-10-16 they COUNT like any
+      // board (Matt: "Make my games count"), tallied as well in `ms.noGuess` (js/game-stats.js).
       noGuess: v.noGuess === true,
     };
   } catch { return { version: 1, level: 'easy', safeFirst: true, longPress: true, vibrate: false, marks: true }; }
@@ -969,10 +969,11 @@ class MinesweeperUI {
     const flagsWrong = E.wrongFlags(g);
     // Record BEFORE reading the wins total back, so the number on the screen includes this game.
     try {
-      // A loss records WHY (engine lossCause), and a no-guess board records as a test round only.
+      // A loss records WHY (engine lossCause). A no-guess board counts like any other and is tallied
+      // in ms.noGuess too (2026-10-16; before that it went to ms.practice and counted for nothing).
       let cause;
       if (!won) { try { cause = E.lossCause(g, how); } catch (err) { cause = 'unknown'; console.error('[minesweeper] lossCause', err); } }
-      recordMinesweeper(level, won, { timeMs, cleared, flagsRight, mines: g.mines, cause, practice: !!g.noGuess });
+      recordMinesweeper(level, won, { timeMs, cleared, flagsRight, mines: g.mines, cause, noGuess: !!g.noGuess });
     } catch (err) { console.error('[minesweeper] record', err); }
     const isBest = won && timeMs > 0 && (prevBest <= 0 || timeMs < prevBest);
     this._result = { won, timeMs, cleared, flagsRight, flagsWrong, level, prevBest, isBest, wins: winsSoFar() };
