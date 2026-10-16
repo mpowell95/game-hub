@@ -200,7 +200,7 @@ export const STRINGS = {
     mode_dark: 'Modo oscuro',
     theme_toggle_aria: 'Cambiar modo oscuro',
     mode_solo: 'Solo',
-    mode_host: 'Alojar online',
+    mode_host: 'Crear',
     mode_join: 'Unirse',
     action_host_game: 'Alojar partida',
     action_begin_challenge: 'Empezar desafío',

@@ -209,7 +209,7 @@ export const STRINGS = {
     stats_line: '{played} jugadas · {won} ganadas · {escobas} escobas',
     btn_resume: 'Reanudar partida',
     mode_solo: 'Solo',
-    mode_host: 'Alojar en línea',
+    mode_host: 'Crear',
     mode_join: 'Unirse',
     btn_host_game: 'Alojar partida',
     btn_new_game: 'Nueva partida',
