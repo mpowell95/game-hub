@@ -41,6 +41,13 @@ const PULL_DEAD = DISC_R * 0.5;
 const EDGE_M = 36;
 const EDGE_MIN_TRAVEL = 28;
 const EDGE_HARD = 10;
+/** The bottom strip (px above the home bar) where letting go never shoots (Matt, 2026-10-16: "I was
+ *  aiming a piece and this happened and it shot automatically", with a screenshot of the iPhone's
+ *  Reachability slide). A pull dragged down into the home bar's corner sets off the phone's own
+ *  swipe-down gestures, and the phone still reported the finger lifting, so the flick went. Inside
+ *  this strip the aim is dropped (as if pulled back onto the disc); moving back up brings it back.
+ *  A full pull always lands above it (`_edgeCam`). */
+const NO_SHOT_STRIP = 24;
 const ZOOM_MIN = 0.6;
 const CAM_RATE = 14;
 /** The weakest flick that counts; anything less is a cancelled aim. */
@@ -1350,6 +1357,13 @@ class FlickSoccerUI {
     // The camera follows the finger, then the aim is read again under it.
     this._setCam(this._edgeCam());
     this._aimFrom(this._pt(e));
+    if (this._inNoShotStrip(e.clientY) && this.aim) this.aim.idle = true;
+  }
+
+  /** Is this screen height (clientY) inside the bottom strip where a release never shoots? */
+  _inNoShotStrip(clientY) {
+    const rc = this.canvas.getBoundingClientRect();
+    return clientY - rc.top > rc.height - (this._safe || 0) - NO_SHOT_STRIP;
   }
 
   /** The edge zoom (Matt, 2026-10-13: a disc near the side of the phone could not be pulled back far
@@ -1393,7 +1407,7 @@ class FlickSoccerUI {
     };
     const safe = this._safe || 0;
     const D = t;
-    const lim = Math.min(Math.max(along(EDGE_M, EDGE_M + safe), D + EDGE_MIN_TRAVEL), along(EDGE_HARD, EDGE_HARD + safe));
+    const lim = Math.min(Math.max(along(EDGE_M, EDGE_M + safe), D + EDGE_MIN_TRAVEL), along(EDGE_HARD, NO_SHOT_STRIP + 4 + safe));
     if (!(lim > D + 1) || lim - D >= full) return null;       // a full pull fits without zooming
     const rc = this.canvas.getBoundingClientRect();
     const F = Math.min(lim, (d.cx - rc.left - ax) * ux + (d.cy - rc.top - ay) * uy);
@@ -1444,6 +1458,9 @@ class FlickSoccerUI {
     this.drag = null;
     this.aim = null;
     if (cancel || !a || a.idle || a.power < MIN_POWER || this.phase !== 'aim' || this.screen !== 'play') return;
+    // Lifted in the bottom strip (the phone's own gestures live there), or with the app no longer in
+    // front: not a flick.
+    if (this._inNoShotStrip(e.clientY) || document.hidden) return;
     this._shoot(a.i, a.dx, a.dy, a.power);
   }
 

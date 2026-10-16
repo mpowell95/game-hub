@@ -183,6 +183,12 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   the whole pitch stays in its box. Measured at 402x874 with a 34px home bar: his shot 100% (full 38px
   above the home bar); every edge case 100%, zoom 0.77-0.91; no power jump over 25% in a 2px step.
   `_camTick` eases back to the fitted layout once the finger lifts (instantly under reduced motion).
+- **No flick from the bottom strip (2026-10-16)**, Matt, with a screenshot of the iPhone's
+  Reachability slide: *"I was aiming a piece and this happened and it shot automatically."* A pull
+  dragged into the home bar's corner sets off the phone's own swipe-down gestures, and the phone still
+  reported the finger lifting. Within `NO_SHOT_STRIP` (24px) above the home bar the aim is dropped
+  (drawn as nothing, as if pulled back onto the disc), a release there (or with the app hidden) is not
+  a flick, and moving back up restores the aim. `_edgeCam` never asks a full pull into that strip.
   **Strength is still pitch units (`PULL_MAX`)**, so every flick is as strong as before and online
   replays are untouched; the camera is pixels only (`render.js` `setCam`, `s0/ox0/oy0` is the
   fitted layout). Measured after: 100% in every one of those cases, zoom 0.80-0.94 at 402 wide with
