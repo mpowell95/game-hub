@@ -224,8 +224,9 @@ export function aggregatePlayers(all, corrections) {
           const val = mbt[k] | 0;
           if (val > 0) dst.ms.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
         }
-        // Loss reasons and no-guess test rounds (2026-10-15): plain counters, so they add.
-        for (const key of ['lossBy', 'practice']) {
+        // Loss reasons, no-guess test rounds (2026-10-15) and counted no-guess plays (2026-10-16):
+        // plain counters, so they add.
+        for (const key of ['lossBy', 'practice', 'noGuess']) {
           const srcMap = src.ms[key];
           if (!srcMap || typeof srcMap !== 'object') continue;
           if (!dst.ms[key] || typeof dst.ms[key] !== 'object') dst.ms[key] = {};

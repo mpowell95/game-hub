@@ -1668,6 +1668,9 @@ export function recordMinesweeper(level, won, extras = {}) {
   // A NO-GUESS TEST ROUND (2026-10-15, Matt testing it before anyone else gets it: "I'll need a way
   // to cancel or ignore certain rounds"): kept in its own bucket, `ms.practice[level]` = {played,
   // won}, and counted by NOTHING else (no total, no tier, no best, no leaderboard).
+  // The game stopped sending `practice` on 2026-10-16 (Matt: "Make my games count"; no-guess boards
+  // now take the normal path below, plus `ms.noGuess`). Kept for a phone still on the old build,
+  // and the bucket stays where it is (rule 5).
   if (extras.practice) {
     if (!g.ms.practice || typeof g.ms.practice !== 'object') g.ms.practice = {};
     if (lvKey) {
@@ -1704,6 +1707,14 @@ export function recordMinesweeper(level, won, extras = {}) {
       if (!g.ms.lossBy || typeof g.ms.lossBy !== 'object') g.ms.lossBy = {};
       const m = g.ms.lossBy[lv] || (g.ms.lossBy[lv] = {});
       m[extras.cause] = (m[extras.cause] | 0) + 1;
+    }
+    // NO-GUESS boards (2026-10-16): they count above like any board; this only says how many of a
+    // level's plays were no-guess, so they can always be told apart later. Additive, a report.
+    if (extras.noGuess) {
+      if (!g.ms.noGuess || typeof g.ms.noGuess !== 'object') g.ms.noGuess = {};
+      const n = g.ms.noGuess[lv] || (g.ms.noGuess[lv] = { played: 0, won: 0 });
+      n.played = (n.played | 0) + 1;
+      if (won) n.won = (n.won | 0) + 1;
     }
     const pct = won ? 100 : Math.min(100, Math.max(0, Math.round(+extras.cleared || 0)));
     if (!g.ms.bestClearedPct || typeof g.ms.bestClearedPct !== 'object') g.ms.bestClearedPct = {};
