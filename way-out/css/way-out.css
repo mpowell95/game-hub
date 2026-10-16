@@ -541,63 +541,7 @@
 .wo-root .wo-rush-new { margin: 0; text-align: center; font-weight: 800; color: var(--gh-ink, #16243a); }
 .wo-root .wo-rush-new::before { content: '★ '; color: #f2b705; }
 
-/* Results: this week, past weeks. Scrolls inside itself. */
-.wo-root .wo-rb {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-width: 460px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: calc(var(--wo-top, 0px) + 12px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-.wo-root.is-immersive .wo-rb { padding-left: 16px; }
-.wo-root .wo-rb-top-row { display: flex; align-items: center; gap: 10px; min-height: 48px; }
-.wo-root.is-immersive .wo-rb-top-row { padding-left: calc(var(--wo-inset, 0px) - 16px); }
-.wo-root .wo-rb-top-row .wo-iconbtn { background: var(--gh-surface-2, #e6ebf3); color: var(--gh-ink, #16243a); }
-.wo-root .wo-rb-top-row h2 { margin: 0; font-size: 20px; font-weight: 800; }
-.wo-root .wo-rb-body { display: flex; flex-direction: column; gap: 8px; }
-.wo-root .wo-rb-h { margin: 4px 0 0; font-size: 16px; font-weight: 800; }
-.wo-root .wo-rb-list, .wo-root .wo-rb-weeks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.wo-root .wo-rb-list li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 6px 12px;
-  border-radius: 12px;
-  background: var(--gh-surface, #fff);
-  border: 1px solid var(--gh-border, rgba(16, 36, 58, .14));
-}
-.wo-root .wo-rb-list li.is-me { border: 2px solid #ffce3a; }
-.wo-root .wo-rb-place { min-width: 22px; font-weight: 800; color: var(--gh-muted, #5b6b82); font-variant-numeric: tabular-nums; }
-.wo-root .wo-rb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.wo-root .wo-rb-score { font-size: 18px; font-variant-numeric: tabular-nums; }
-.wo-root button.wo-rb-week {
-  width: 100%;
-  min-height: 52px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--gh-border, rgba(16, 36, 58, .14));
-  background: var(--gh-surface, #fff);
-  color: var(--gh-ink, #16243a);
-  font: inherit;
-  text-align: left;
-  touch-action: manipulation;
-}
-.wo-root .wo-rb-week > span:first-child { font-weight: 800; }
-.wo-root .wo-rb-top { font-size: 13px; color: var(--gh-muted, #5b6b82); }
-.wo-root .wo-rb-top::before { content: '🏆 '; }
-.wo-root .wo-rb-empty, .wo-root .wo-rb-note { margin: 0; text-align: center; font-size: 13px; color: var(--gh-muted, #5b6b82); }
-.wo-root .wo-rb-weekback { align-self: center; }
+/* (The game's own Results screens, .wo-rb-*, were removed 2026-10-16: the hub leaderboard replaced them.) */
 @media (prefers-reduced-motion: reduce) {
   .wo-root .wo-rushclock.is-low { animation: none; text-decoration: underline; }
 }
@@ -850,3 +794,53 @@
 @media (max-width: 380px) and (max-height: 840px) and (min-height: 761px) {
   .wo-root .wo-hero { width: 20vh; height: 20vh; }
 }
+
+/* LEVELS SETUP, LESS CROWDED (2026-10-16, Matt: "everything is slightly crammed onto the bottom half
+   of the screen"; mock-up approved the same day). Levels only: Matt kept Rush as it was. A smaller
+   picture, taller difficulty buttons and tiles, no words under the tile numbers (they stay for
+   screen readers), and the leader card at the bottom of the screen. */
+.wo-root .wo-sr { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
+.wo-root .wo-home.is-levels { gap: clamp(10px, 2.2vh, 20px); }
+.wo-root .wo-home.is-levels .wo-hero { width: clamp(80px, 15.5vh, 150px); height: clamp(80px, 15.5vh, 150px); }
+.wo-root .wo-home.is-levels > .wo-lead { margin-top: auto; }
+.wo-root .wo-home.is-levels .wo-menu-card { gap: clamp(10px, 1.8vh, 16px); padding: clamp(12px, 1.8vh, 16px); }
+.wo-root .wo-home.is-levels .wo-seg { min-height: clamp(54px, 8.4vh, 76px); }
+.wo-root .wo-home.is-levels .wo-tiles li { justify-content: center; gap: 5px; padding: 10px 4px; min-height: clamp(52px, 7.6vh, 68px); }
+.wo-root .wo-home.is-levels .wo-tiles b { font-size: 20px; }
+.wo-root .wo-home.is-levels button.wo-play { min-height: clamp(50px, 6.8vh, 60px); }
+@media (max-height: 760px) {
+  .wo-root .wo-home.is-levels { gap: 10px; }
+  .wo-root .wo-home.is-levels .wo-hero { width: clamp(72px, 11vh, 120px); height: clamp(72px, 11vh, 120px); }
+  .wo-root .wo-home.is-levels .wo-seg { min-height: 56px; }
+  .wo-root .wo-home.is-levels .wo-tiles li { min-height: 54px; }
+  .wo-root .wo-home.is-levels button.wo-play { min-height: 50px; }
+}
+/* The thick-arrows switch fills its tile: the arrow as the board will draw it, and a switch whose
+   knob position (not only its colour) says on or off. On = #ffce3a ring. */
+.wo-root .wo-home.is-levels .wo-tiles li.is-thick { padding: 0; }
+.wo-root button.wo-thick {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #9b97d8;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.gh-dark .wo-root button.wo-thick { color: #b9b4f0; }
+.wo-root button.wo-thick.is-on { box-shadow: inset 0 0 0 2px #ffce3a; }
+.wo-root button.wo-thick:focus-visible { outline: 3px solid #ffce3a; outline-offset: 2px; }
+.wo-root .wo-tiles svg.wo-thick-ic { width: 40px; height: 18px; margin: 0; }
+.wo-root .wo-thick-sw { position: relative; display: block; width: 34px; height: 18px; border-radius: 9px; background: var(--gh-border-strong, rgba(16, 36, 58, .28)); }
+.gh-dark .wo-root .wo-thick-sw { background: rgba(255, 255, 255, .18); }
+.wo-root .wo-thick-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+.wo-root .wo-thick.is-on .wo-thick-sw { background: #ffce3a; }
+.wo-root .wo-thick.is-on .wo-thick-sw::after { left: 18px; background: #16243a; }

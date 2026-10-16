@@ -556,6 +556,10 @@ export const STRINGS = {
     gs_bs_no_wins_yet: 'Not yet',
 
     lb_title: 'Leaderboard',
+    lb_wo_levels: 'Levels', lb_wo_rush: 'Rush', lb_wo_easy: 'Easy', lb_wo_hard: 'Hard',
+    lb_wo_week: 'This week', lb_wo_won: 'Weeks won', lb_wo_past: 'Past weeks',
+    lb_wo_arrows: 'arrows', lb_wo_runs_unit: 'runs', lb_wo_won_unit: 'weeks won', lb_wo_of: 'of {n}', lb_wo_winner: 'winner',
+    lb_wo_none_week: 'No runs this week yet', lb_wo_none_past: 'No finished weeks yet',
     lb_dialog_aria: 'Leaderboard',
     lb_segs_aria: 'By player or by game',
     lb_by_player: 'By Player',
@@ -1284,6 +1288,10 @@ export const STRINGS = {
     gs_bs_no_wins_yet: 'Aún no',
 
     lb_title: 'Clasificación',
+    lb_wo_levels: 'Niveles', lb_wo_rush: 'Contrarreloj', lb_wo_easy: 'Fácil', lb_wo_hard: 'Difícil',
+    lb_wo_week: 'Esta semana', lb_wo_won: 'Ganadas', lb_wo_past: 'Anteriores',
+    lb_wo_arrows: 'flechas', lb_wo_runs_unit: 'partidas', lb_wo_won_unit: 'semanas ganadas', lb_wo_of: 'de {n}', lb_wo_winner: 'ganador',
+    lb_wo_none_week: 'Aún no hay partidas esta semana', lb_wo_none_past: 'Aún no hay semanas terminadas',
     lb_dialog_aria: 'Clasificación',
     lb_segs_aria: 'Por jugador o por juego',
     lb_by_player: 'Por jugador',

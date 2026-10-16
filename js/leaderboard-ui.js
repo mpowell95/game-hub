@@ -58,7 +58,7 @@ import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, com
   boardRankTier, formatBoardMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
-import { WO_TIERS, woPoints } from './arrow-maze-time.js';
+import { WO_TIERS, woPoints, RUSH_MODES, woRushBestMap, woRushRuns, woWeekKey } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.js';
 import { loadFavorites } from './favorites.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
@@ -625,6 +625,82 @@ function boardView(list, id) {
     v = plain();
   }
   return { tabs, ...v };
+}
+
+// --- ARROW MAZE: LEVELS | RUSH (2026-10-16) -------------------------------------------------------
+// Matt: "for Minesweeper, we linked the Leaderboard. Let's do that instead. We should do the same on
+// the Rush tab... it should rank players for the current week, and show a weeks won leaderboard."
+// The game's own Results screens were replaced by this. Levels is the plain points board, unchanged.
+// Rush: Easy | Hard, then This week (each person's best run this week, from the per-person merged
+// `wo.rush.best`, so the best on any of their phones), Weeks won (finished weeks only; ties all win)
+// and Past weeks (each finished week's winner). Read-only, like every board here.
+function woModesHTML() {
+  const pill = (m, label) => `<button type="button" class="lb-pill lb-mstab lb-wohalf${_woMode === m ? ' is-sel' : ''}" data-lbwomode="${m}" aria-pressed="${_woMode === m}">${esc(label)}</button>`;
+  return `<div class="lb-pills lb-mstabs" role="group">${pill('levels', tx('lb_wo_levels', 'Levels'))}${pill('rush', tx('lb_wo_rush', 'Rush'))}</div>`;
+}
+const woRushOf = (g) => ((((g.games || {}).wayout || {}).wo || {}).rush) || {};
+function woBestMapOf(g, mode) { return woRushBestMap((woRushOf(g).best || {})[mode]); }
+/** Counted runs in one version (left runs are kept but never counted). The merged record keeps the
+ *  run list of the person's phone with the most runs, so this is a size for the header, not a total. */
+function woRunsOf(g, mode) { return woRushRuns((woRushOf(g).runs || {})[mode]).filter((r) => !r.left).length; }
+/** "Oct 12 – 18" / "Sep 28 – Oct 4" for the week starting Monday `key` (UTC, as the weeks are). */
+function woWeekRange(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  const a = new Date(Date.UTC(y, m - 1, d)), b = new Date(Date.UTC(y, m - 1, d + 6));
+  const lang = (document.documentElement.lang || 'en').slice(0, 2) === 'es' ? 'es' : 'en';
+  const fmt = (dt, o) => { try { return dt.toLocaleDateString(lang, Object.assign({ timeZone: 'UTC' }, o)); } catch { return dt.toISOString().slice(5, 10); } };
+  const md = { month: 'short', day: 'numeric' };
+  if (a.getUTCMonth() !== b.getUTCMonth()) return `${fmt(a, md)} – ${fmt(b, md)}`;
+  // Same month: "Oct 12 – 18" in English, "12 – 18 oct" in Spanish (the day comes first).
+  return lang === 'es' ? `${fmt(a, { day: 'numeric' })} – ${fmt(b, md)}` : `${fmt(a, md)} – ${fmt(b, { day: 'numeric' })}`;
+}
+function woRushHTML(list) {
+  const mode = _woRush;
+  const view = _view === 'won' || _view === 'past' ? _view : 'week';
+  const thisWeek = woWeekKey();
+  const sh = (tier) => `<span class="lb-mstab-sh" style="--lb-pill-color:${TIER_COLOR[tier]}">${diffShapeSVG(tier)}</span>`;
+  const mpill = (m, tier) => `<button type="button" class="lb-pill lb-mstab lb-wohalf${mode === m ? ' is-sel' : ''}" data-lbworush="${m}" aria-pressed="${mode === m}">${sh(tier)}${esc(tx('lb_wo_' + m, m === 'easy' ? 'Easy' : 'Hard'))}</button>`;
+  const vpill = (v, label) => `<button type="button" class="lb-pill lb-mstab lb-wothird${view === v ? ' is-sel' : ''}" data-lbview="${v}" aria-pressed="${view === v}">${esc(label)}</button>`;
+  const tabs = `<div class="lb-pills lb-mstabs" role="group">${mpill('easy', 1)}${mpill('hard', 3)}</div>`
+    + `<div class="lb-pills lb-mstabs" role="group">${vpill('week', tx('lb_wo_week', 'This week'))}${vpill('won', tx('lb_wo_won', 'Weeks won'))}${vpill('past', tx('lb_wo_past', 'Past weeks'))}</div>`;
+  const best = new Map(list.map((g) => [g.key, woBestMapOf(g, mode)]));
+  const arrows = tx('lb_wo_arrows', 'arrows');
+  // Every finished week anyone has a counted run in, newest first, with its best score and winners.
+  const weeks = [...new Set(list.flatMap((g) => Object.keys(best.get(g.key)).filter((w) => w < thisWeek)))].sort().reverse()
+    .map((w) => {
+      const top = list.reduce((m, g) => Math.max(m, best.get(g.key)[w] ?? -1), -1);
+      return { w, top, winners: top > 0 ? list.filter((g) => best.get(g.key)[w] === top) : [] };
+    });
+  let body;
+  if (view === 'week') {
+    const rows = list.filter((g) => best.get(g.key)[thisWeek] != null);
+    const val = (g) => best.get(g.key)[thisWeek];
+    rows.sort((a, b) => val(b) - val(a) || rankName(a).localeCompare(rankName(b)));
+    const { rankOf, tiedAt } = rankMap(rows, val);
+    body = `<div class="lb-unith lb-wounith"><span>${esc(woWeekRange(thisWeek))}</span><span>${esc(arrows)}</span></div>`
+      + (rows.length ? `<div class="lb-plist is-board">${rows.map((g) => playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)),
+        { cls: 'lb-msval', val: `<span>${val(g)}</span>`, unit: '' }, '', '', '', '')).join('')}</div>`
+        : emptyState(tx('lb_wo_none_week', 'No runs this week yet')));
+  } else if (view === 'won') {
+    const won = {}, played = {};
+    for (const wk of weeks) {
+      for (const g of list) if (best.get(g.key)[wk.w] != null) played[g.key] = (played[g.key] || 0) + 1;
+      for (const g of wk.winners) won[g.key] = (won[g.key] || 0) + 1;
+    }
+    const rows = list.filter((g) => won[g.key] > 0);
+    const val = (g) => won[g.key];
+    rows.sort((a, b) => val(b) - val(a) || (played[a.key] - played[b.key]) || rankName(a).localeCompare(rankName(b)));
+    const { rankOf, tiedAt } = rankMap(rows, val);
+    body = rows.length ? `<div class="lb-unith">${esc(tx('lb_wo_won_unit', 'weeks won'))}</div><div class="lb-plist is-board">${rows.map((g) => playerCardHTML(g,
+      rankChipHTML(rankOf[g.key], tiedAt(g.key)), { cls: 'lb-msval', val: `<span>${val(g)}</span>`, unit: tx('lb_wo_of', 'of {n}', { n: played[g.key] }) }, '', '', '', '')).join('')}</div>`
+      : emptyState(tx('lb_wo_none_past', 'No finished weeks yet'));
+  } else {
+    const cards = weeks.flatMap((wk) => wk.winners.map((g) => playerCardHTML(g, '<span class="lb-chip"></span>',
+      { cls: 'lb-msval', val: `<span>${wk.top}</span>`, unit: arrows }, woWeekRange(wk.w), '', '', '')));
+    body = cards.length ? `<div class="lb-unith">${esc(tx('lb_wo_winner', 'winner'))}</div><div class="lb-plist is-board lb-wopast">${cards.join('')}</div>`
+      : emptyState(tx('lb_wo_none_past', 'No finished weeks yet'));
+  }
+  return tabs + body;
 }
 
 function plainBoardHTML(list, id) {
@@ -1971,7 +2047,8 @@ function backBtnHTML(role, label, iconOnly) {
 function gameDetail(list, id) {
   const fieldTiers = id === 'skeeball' || id === 'holdem' ? [] : fieldTiersPresent(list, [id]);
   const machineIds = id === 'skeeball' ? skMachinesPresent(list) : [];
-  const totalPlays = list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
+  const woRush = id === 'wayout' && _woMode === 'rush';
+  const totalPlays = woRush ? list.reduce((a, g) => a + woRunsOf(g, _woRush), 0) : list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
   // Screen 3's header: the way back, the game's name at full size, and how much this game has
   // been played by everyone, which is the one number that says whether the board means anything.
   // One row (2026-10-11 spacing pass): the back chevron sits beside the title instead of on a row
@@ -1980,10 +2057,11 @@ function gameDetail(list, id) {
     ${backBtnHTML('lb-back', esc(t('lb_by_game')), true)}
     <div class="lb-board-id">
       <h3 class="lb-board-h">${esc(labelOf(id))}</h3>
-      <span class="lb-board-n"><b>${totalPlays}</b><span>${esc(t('lb_games_unit'))}</span></span>
+      <span class="lb-board-n"><b>${totalPlays}</b><span>${esc(woRush ? tx('lb_wo_runs_unit', 'runs') : t('lb_games_unit'))}</span></span>
     </div>
   </div>`;
   if (id === 'minesweeper') return head + msBoardHTML(list);
+  if (id === 'wayout') return head + woModesHTML() + (woRush ? woRushHTML(list) : plainBoardHTML(list, id) + recordsHTML(list, id));
   return head + plainBoardHTML(list, id) + recordsHTML(list, id);
   const controls = boardControlsHTML(id, fieldTiers, machineIds);
   const showMp = anyMpPlays(list, id);
@@ -2197,6 +2275,8 @@ let _cat = 'all';           // 'all' | 1-4 | 'NT' | 'VS' - By Player's category 
 let _tier = null;           // null (All) | 1-4 - a GAME BOARD's own difficulty filter, reset per board
 let _view = '';            // a game board's non-difficulty tab ('mp', 'solo', 'high', 'ultimate', 'off'...), reset with _tier
 let _machine = 'all';       // 'all' | a Skeeball machine id - that board's filter, deliberately not persisted
+let _woMode = 'levels';     // Arrow Maze's board: 'levels' | 'rush' (2026-10-16), per visit
+let _woRush = 'easy';       // which Rush version (RUSH_MODES), per visit
 let _sort = 'wins';         // 'alpha' | 'played' | 'wins' (or a game's own metric on a game board) - persisted, see loadView/saveView
 let _gameSort = 'popular';  // 'alpha' | 'popular' | 'fav' - By Game's own order; the leaderboard OPENS on this
 let _boardSort = 'wins';    // a game board's own sort, reset to that board's leftmost pill on every entry
@@ -2321,6 +2401,10 @@ function onClick(e) {
   if (viewTab) { _tier = null; _view = viewTab.dataset.lbview; rerender(); return; }
   const machTab = e.target.closest('[data-lbmachine]');
   if (machTab) { _machine = machTab.dataset.lbmachine; rerender(); return; }
+  const woModeTab = e.target.closest('[data-lbwomode]');
+  if (woModeTab) { _woMode = woModeTab.dataset.lbwomode === 'rush' ? 'rush' : 'levels'; _tier = null; _view = ''; rerender(); return; }
+  const woRushTab = e.target.closest('[data-lbworush]');
+  if (woRushTab) { if (RUSH_MODES.includes(woRushTab.dataset.lbworush)) _woRush = woRushTab.dataset.lbworush; rerender(); return; }
   const opt = e.target.closest('.lb-opt');
   if (opt) {
     if (opt.dataset.cat !== undefined) _cat = catFromStored(opt.dataset.cat);
@@ -2429,6 +2513,9 @@ export async function openLeaderboard(opts = {}) {
   _view = '';
   _machine = 'all';
   _panel = null;
+  // Arrow Maze's own Leaderboard buttons open on the tab they were pressed from (Levels or a Rush version).
+  _woMode = opts && opts.woMode === 'rush' ? 'rush' : 'levels';
+  _woRush = opts && RUSH_MODES.includes(opts.woRush) ? opts.woRush : 'easy';
   if (opts && typeof opts.game === 'string' && isGameOnLauncher(opts.game)) {
     _game = _entryGame = opts.game;
     _boardSort = sortItemsFor(_game)[0].sort;
@@ -2789,6 +2876,9 @@ function ensureCss() {
     '.lb-mstabs{margin:0 0 12px}',
     '.lb-mstabs.is-wrap{flex-wrap:wrap}.lb-mstabs.is-wrap .lb-mstab{flex:1 1 auto;min-width:0}',
     '.lb-unith{text-align:right;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--lb-muted);margin:0 16px 6px}',
+    // Arrow Maze's Levels | Rush and Rush's tabs share the row evenly (2026-10-16); the week's dates sit left of the unit.
+    '.lb-pill.lb-wohalf,.lb-pill.lb-wothird{flex:1 1 0;justify-content:center;min-width:0}',
+    '.lb-unith.lb-wounith{display:flex;justify-content:space-between}',
     '.lb-mstab{flex:1 1 auto;padding:0 6px}',
     '.lb-mstab-sh{display:inline-flex}.lb-mstab-sh .lb-dshape{width:11px;height:11px;fill:var(--lb-pill-color)}.lb-mstab-sh .lb-dshape-x2{width:19px}',
     ':root .lb-mstab.is-sel .lb-dshape-t3,:root .lb-mstab.is-sel .lb-dshape-t4{fill:var(--lb-sel-ink)}',
