@@ -430,19 +430,20 @@ class MinesweeperUI {
   startOrResume() {
     const saved = loadSave(this.settings.level);
     if (saved) { this.game = saved.state; this.mode = saved.mode; this.elapsedMs = saved.state.elapsedMs | 0; }
-    else { this.game = E.createGame(this.settings.level, { noGuess: this._noGuessOn() }); this.mode = 'dig'; this.elapsedMs = 0; }
+    else { this.game = E.createGame(this.settings.level, { noGuess: this._noGuessOn(this.settings.level) }); this.mode = 'dig'; this.elapsedMs = 0; }
     this._result = null;
     this.renderGame();
   }
 
-  /** No-guess boards are dealt only on Matt's devices, and only with the switch on. */
-  _noGuessOn() { return !!this.settings.noGuess && isAdminDevice(); }
+  /** EASY IS ALWAYS NO-GUESS, for everyone (Matt, 2026-10-16: "Easy MUST be NO GUESS EVER", after
+   *  an Easy board ended in a forced 50/50). Other levels: only on Matt's devices, switch on. */
+  _noGuessOn(level) { return level === 'easy' || (!!this.settings.noGuess && isAdminDevice()); }
 
   newGame(level) {
     this._clearTimers();
     const lv = level || (this.game && this.game.level) || this.settings.level;
     clearSave(lv);
-    this.game = E.createGame(lv, { noGuess: this._noGuessOn() });
+    this.game = E.createGame(lv, { noGuess: this._noGuessOn(lv) });
     this.mode = 'dig';
     this.elapsedMs = 0;
     this._result = null;
@@ -457,7 +458,7 @@ class MinesweeperUI {
     this.root.innerHTML = `<div class="ms-screen ms-play">
       ${this._topbar(`<button type="button" class="gh-btn gh-btn--icon ms-helpbtn" data-act="howto" aria-label="${esc(t('help_aria'))}">?</button>`)}
       <div class="ms-hdr">
-        <button type="button" class="ms-level" data-act="tomenu" aria-label="${esc(t('change_difficulty'))}">${diffShapeSVG(L.tier)}<span>${esc(t(g.level))}</span>${g.noGuess ? '<i class="ms-ng">NG</i>' : ''}</button>
+        <button type="button" class="ms-level" data-act="tomenu" aria-label="${esc(t('change_difficulty'))}">${diffShapeSVG(L.tier)}<span>${esc(t(g.level))}</span>${g.noGuess && g.level !== 'easy' ? '<i class="ms-ng">NG</i>' : ''}</button>
         <div class="ms-readout" data-role="mines" aria-live="off">${FLAG_SVG('#e0532f')}<span data-role="mines-n">000</span></div>
         <button type="button" class="ms-face" data-act="new" aria-label="${esc(t('new_game'))}">${FACE_SVG('ok')}</button>
         <div class="ms-readout" data-role="clock">${CLOCK_SVG}<span data-role="clock-n">00:00</span></div>

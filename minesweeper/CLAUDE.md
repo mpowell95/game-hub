@@ -153,7 +153,14 @@ every square's centre and edges map to the right square on all four levels at th
 the solver never died on a move it called certain (1,600 boards); and the same solver playing through
 the real screen with real taps won 29 of 40 Hard boards.
 
-**No-guess boards (2026-10-15, Matt's devices only while he tests them).** Option "No guessing"
+**EASY IS ALWAYS NO-GUESS, FOR EVERYONE (2026-10-16, Matt: *"Easy MUST be NO GUESS EVER"*, after an
+Easy board ended in a forced 50/50).** `_noGuessOn(level)` returns true for `easy` on every device;
+no NG tag on Easy (it is simply how Easy is). A paused Easy board dealt before this finishes as
+dealt. Measured: 3,000 Easy deals, 0 fell back to an ordinary board, median 0.2 ms, worst 26 ms
+(desktop), so the 2.5 s fallback is not expected to fire even on a slow phone. Those plays count
+normally and are tallied in `ms.noGuess.easy`.
+
+**No-guess boards on Medium, Hard, Expert (2026-10-15, Matt's devices only).** Option "No guessing"
 (`noGuess` setting, shown only when `isAdminDevice()`). `E.generateNoGuess()` deals a board only if
 the engine's logic (`deduce()`: the cheap rules, then an exact count of every mine layout per group of
 numbers, then the mine count; node cap 200k) clears it from the first tap with no guess; it retries
