@@ -243,7 +243,7 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   word), Play], and a footer card `.wo-lead` of [a leader, a pill]. The column is **TOP-aligned**
   (it was centred), so the picture, title, switch and the card's top edge do not move when the mode
   changes (measured identical at 402x874, 360x724, 390x664, 375x667). No "Difficulty" label on
-  either. Play buttons share one shape (`.wo-play`): Levels blue, Rush teal.
+  either. Play buttons share one shape and the hub's blue (`.wo-play`; Rush was teal until 2026-10-16, Matt: *"Make it the same blue"*).
   - **Levels:** each difficulty shows its name, "Level N" and a thin bar of progress through its
     stretch of the ladder (Expert never ends: its solid bar fills every 50 levels and starts over,
     Matt 2026-10-14; it was a dashed track); tiles **+N pts "this level"** (star; "pts" added, Matt 2026-10-14),

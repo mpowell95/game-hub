@@ -762,7 +762,7 @@
 .wo-root .wo-seg-bar { display: block; width: 72%; height: 4px; margin-top: 4px; border-radius: 2px; background: var(--gh-border, rgba(16, 36, 58, .14)); overflow: hidden; }
 .wo-root .wo-seg-bar i { display: block; height: 100%; border-radius: 2px; background: #178a7a; }
 .gh-dark .wo-root .wo-seg-bar i { background: #3fd6bd; }
-/* Both Play buttons are the same shape: Levels in the hub's blue, Rush in its teal. */
+/* Both Play buttons are the same: the hub's blue (Rush was teal until 2026-10-16, Matt: "Make it the same blue"). */
 /* A paused level: New game | Resume share Play's row (2026-10-16). */
 .wo-root .wo-playrow { display: flex; gap: 8px; }
 .wo-root .wo-playrow > .gh-btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
@@ -800,15 +800,6 @@
 }
 .wo-root button.wo-rl-all.is-more::after { content: ' ›'; }
 .wo-root button.wo-rl-all:focus-visible { outline: 3px solid #ffce3a; outline-offset: 2px; }
-/* Play Rush is the Ready button's teal, so the mode looks like itself. */
-.wo-root button.wo-rush-play {
-  background: linear-gradient(180deg, #4fe6cc 0%, #2fbfa7 100%);
-  border-color: transparent;
-  color: #0f2a26;
-  font-weight: 900;
-  box-shadow: 0 6px 16px rgba(47, 191, 167, .3), inset 0 -3px 0 rgba(0, 0, 0, .15);
-}
-.wo-root button.wo-rush-play:focus-visible { outline: 3px solid #ffce3a; outline-offset: 3px; }
 /* A stopwatch on the picture in Rush. */
 .wo-root .wo-hero { position: relative; }
 .wo-root .wo-hero-badge {
