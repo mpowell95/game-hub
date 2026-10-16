@@ -572,3 +572,16 @@ run for everyone. Browser-checked: Matt mid-board 8.79 s -> away 4 s -> 8.79 s, 
 Matt hidden during the opening countdown -> 10.0 held -> runs on return; another player -> "Run
 lost" (`left`). Matt's held runs still count on the weekly board.
 
+## Levels gets See all results; How to play moves to a "?" (2026-10-16)
+
+Matt, with screenshots of both setup screens: *"I've been checking the leaderboard on rush by using
+the leaderboard button. I tried to check levels and the how to play opened. The leaderboard button
+should be included on that screen and should be in about the same area as it is on the rush
+screen."* The Levels footer's pill is now **See all results ›** (the Rush pill, `is-more`), opening
+an in-game **Levels results** screen (`_openLvBoard` / `_lvBoardHTML`, reusing `.wo-rb`): everyone's
+points from `_loadRushRows` (rows already carried `pts`), this phone's own fresh local points when
+higher, zero-point players left out, ties share a place, offline note. **How to play** moved to a
+44px round **?** at the right end of a new row around the picture (`.wo-herorow` / `.wo-howq`); Rush
+gets the same row without the "?", so the picture is pixel-identical in both modes (measured). No
+overlap with the picture and no overflow at 360x724 / 375x667. Held-back game: no CACHE bump.
+

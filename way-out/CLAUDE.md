@@ -92,8 +92,8 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
 - **Setup screen** is in the hub's own style (Sudoku/Minesweeper layout from `css/ui.css`), not the
   reference's: board picture as headline `clamp(96px, 23vh, 200px)` with the title under it and **no
   tagline**, a **Difficulty** card of four buttons (shape marker, name, current level; selected wears
-  `#ffce3a` + thicker outline), **Play level N** / **Continue level N**, **How to play** as a real
-  `.gh-btn` pill (`.wo-howbtn`). Follows the hub's light/dark theme; How to play and Out of lives are
+  `#ffce3a` + thicker outline), **Play level N** / **Continue level N**; How to play is the "?"
+  beside the picture (see Rush, "The setup screens"). Follows the hub's light/dark theme; How to play and Out of lives are
   `.gh-overlay`/`.gh-modal` popups with the required X. The picture plays itself (`HERO_SVG`, CSS-only
   loop, still under reduced motion).
 - **Play screen keeps the reference's dark board in both themes**; colours listed at the top of
@@ -240,7 +240,11 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
     stretch of the ladder (Expert never ends: its solid bar fills every 50 levels and starts over,
     Matt 2026-10-14; it was a dashed track); tiles **+N pts "this level"** (star; "pts" added, Matt 2026-10-14),
     **N "your points"** (cup; from the combined read once it lands, this phone's own until then),
-    **3 "lives"** (heart); footer **"🏆 Points leader"** with name and points, and **How to play**.
+    **3 "lives"** (heart); footer **"🏆 Points leader"** with name and points, and **See all results ›**
+    (2026-10-16, Matt: *"should be in about the same area as it is on the rush screen"*), which opens
+    **Levels results** (`lvboard`, `_lvBoardHTML`: everyone's points, most first, ties share a place,
+    same read as Rush's). **How to play is the round "?" at the top right of the picture's row**
+    (`.wo-herorow`, `.wo-howq`; Levels only; Rush has the same row without it, so nothing moves).
   - **Rush:** Easy / Hard with nothing under them; tiles **10s "to start"** (stopwatch), **+0.5s
     "per arrow"** (teal arrow), **−3s "per mistake"** (red arrow; Matt went back to these after
     trying sentence lines with pills: *"i liked the horizontal layout"*); footer **"🏆 Easy leader
