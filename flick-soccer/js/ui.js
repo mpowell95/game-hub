@@ -53,8 +53,9 @@ const EDGE_HARD = 4;
  *  Reachability slide). A pull dragged down into the home bar's corner sets off the phone's own
  *  swipe-down gestures, and the phone still reported the finger lifting, so the flick went. Inside
  *  this strip the aim is dropped (as if pulled back onto the disc); moving back up brings it back.
- *  A full pull always lands above it (`_edgeCam`). */
-const NO_SHOT_STRIP = 24;
+ *  A full pull always lands above it (`_edgeCam`). It was 24px; Matt, same day: "too sensitive... I
+ *  need to be able to pull farther down". Now only the home bar itself (`_safe`) is the strip. */
+const NO_SHOT_STRIP = 0;
 /** How far the view eases out (a look only, `_edgeCam`) while a pull near an edge is at full power,
  *  and how close (px) the finger must get to running out of room before it starts (Matt, 2026-10-16:
  *  "before i've run out of room, the whole board begins to move... There's no need for a zoom out

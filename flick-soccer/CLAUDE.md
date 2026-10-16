@@ -208,7 +208,8 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
 - **No flick from the bottom strip (2026-10-16)**, Matt, with a screenshot of the iPhone's
   Reachability slide: *"I was aiming a piece and this happened and it shot automatically."* A pull
   dragged into the home bar's corner sets off the phone's own swipe-down gestures, and the phone still
-  reported the finger lifting. Within `NO_SHOT_STRIP` (24px) above the home bar the aim is dropped
+  reported the finger lifting. Inside the home bar (`NO_SHOT_STRIP`, 0px above it; it was 24px until
+  Matt, same day: *"too sensitive... I need to be able to pull farther down"*) the aim is dropped
   (drawn as nothing, as if pulled back onto the disc), a release there (or with the app hidden) is not
   a flick, and moving back up restores the aim. `_fullPull` never asks a full pull into that strip.
 - **A flick is stored exactly as before** (a direction and a 0-1 strength), so online replays are
