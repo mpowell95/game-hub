@@ -336,6 +336,11 @@ moment you clear a board. It now rides the repo's existing DIFFICULTY-OUTRANKS-S
   cleared, so a 5-minute Expert clear beats an 8-second Easy one, and somebody who grinds Expert
   without ever clearing it ranks at the level they did clear.
 
+**Every screen FLOORS a time to the second** (2026-10-16, Matt: *"Why is my time different?"*: a
+24.6s clear read 0:24 on the result card and 0:25 on the board, which rounded). The game clock,
+result card, setup screen, My Stats and `formatTimeMetric` (leaderboard) all floor; a probe in
+`tools/test-leaderboard-rank.mjs` pins it. Stored times are untouched.
+
 **`msBestAt` MUST RETURN NULL FOR THE 0 SENTINEL, NEVER 0.** `bestTimeMs` stores 0 for "never
 cleared this level", and `hasBoardMetric` treats a lower-is-better value as present whenever it has
 one (golf's to-par is legitimately 0). A raw 0 would read as an instant clear and top the board for

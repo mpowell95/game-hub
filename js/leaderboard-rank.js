@@ -336,11 +336,12 @@ export const LOWER_IS_BETTER = new Set(['golf', 'minesweeper']);
  *  golf's to-par is also lower-is-better and is emphatically not a time. */
 export const TIME_METRIC = new Set(['minesweeper']);
 
-/** A duration in ms as m:ss. Rounded, not floored: a 59.7s clear reading "0:59" while the game's
- *  own screen said 1:00 is the kind of one-second disagreement between two screens that reads as
- *  a bug. */
+/** A duration in ms as m:ss, FLOORED, exactly like the game's own clock and result card
+ *  (minesweeper/js/ui.js fmtTime) and My Stats (game-stats-ui.js fmtMmSs). It used to round, so a
+ *  24.6s clear read 0:24 in the game and 0:25 here (Matt, 2026-10-16: "Why is my time different?").
+ *  Every screen that shows a time must agree with the clock the player watched. */
 export function formatTimeMetric(ms) {
-  const total = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  const total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
