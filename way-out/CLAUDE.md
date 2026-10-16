@@ -92,7 +92,7 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
 - **Setup screen** is in the hub's own style (Sudoku/Minesweeper layout from `css/ui.css`), not the
   reference's: board picture as headline `clamp(96px, 23vh, 200px)` with the title under it and **no
   tagline**, a **Difficulty** card of four buttons (shape marker, name, current level; selected wears
-  `#ffce3a` + thicker outline), **Play level N** / **Continue level N**; How to play is the "?"
+  `#ffce3a` + thicker outline), **Play level N** / **New game | Resume**; How to play is the "?"
   beside the picture (see Rush, "The setup screens"). Follows the hub's light/dark theme; How to play and Out of lives are
   `.gh-overlay`/`.gh-modal` popups with the required X. The picture plays itself (`HERO_SVG`, CSS-only
   loop, still under reduced motion).
@@ -133,7 +133,11 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
   `{ v, tier, level, gen, gone[], red[], lives }`), `gamehub.wayout.ladder.saves.v1` / `.ladder.clocks.v1`
   (first ladder). **Live:** `gamehub.wayout.ladder2.saves.v1` / `.ladder2.clocks.v1`. A save is
   trusted only for the exact level being opened; malformed = fresh.
-- "Continue level N" shows only for real progress. **A save with every arrow gone is a win that was
+- **A paused level gets New game | Resume** (2026-10-16, Matt, after Hard 106 opened at 3:19 with
+  nothing cleared: *"If there is a saved game at that difficulty, there are two buttons: New Game and
+  Resume"*, as Minesweeper). Paused = real progress or 1 s+ on its clock (`isPaused`). New game
+  (`_newLevel`) = same board, all arrows, 3 hearts, clock 0:00; otherwise one **Play level N**
+  ("Continue level N" is no longer shown). **A save with every arrow gone is a win that was
   never counted**: opening it runs the win sequence and records it.
 - Stats: **`recordWayOut(tier, finish)`** once per level cleared (was `recordResult('wayout', tier,
   true)` and still counts exactly that), also feeding the **`wo` sub-counter**; the three-edit rule is
@@ -149,7 +153,8 @@ mistake.
 
 - The clock (left end of the hearts row) shows time WITH penalties, runs only while a level is on
   screen, unfinished and the app in front. **It lives in its own key, not the save**: Restart and Out of
-  lives clear the save but not the clock; a level's time runs from first open to clear.
+  lives clear the save but not the clock; a level's time runs from first open to clear, unless the
+  player taps **New game** on the setup screen (2026-10-16), which sets it to 0.
 - `WO_PENALTY_S`: first heart lost costs the tier's base, second double; the third ends the attempt with
   no extra charge. A hint costs the base once (tapping the bulb again while the same hint pulses does
   not charge again).
