@@ -17,7 +17,7 @@ export const STRINGS = {
     mode_dark: 'Dark mode',
     theme_toggle_aria: 'Toggle dark mode',
     mode_solo: 'Solo',
-    mode_host: 'Host online',
+    mode_host: 'Host',
     mode_join: 'Join',
     action_host_game: 'Host game',
     action_begin_challenge: 'Begin challenge',

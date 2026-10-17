@@ -64,7 +64,7 @@ export const STRINGS = {
     stats_line: '{played} played · {won} won · {escobas} escobas',
     btn_resume: 'Resume game',
     mode_solo: 'Solo',
-    mode_host: 'Host online',
+    mode_host: 'Host',
     mode_join: 'Join',
     btn_host_game: 'Host game',
     btn_new_game: 'New game',
