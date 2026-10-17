@@ -1214,3 +1214,15 @@ theme x language). The tips are a new step: five bubbles in the launcher's bubbl
 tap to advance, X to skip; recorded as `compact-tour-2026-10-17` in the announcement seen-list, which
 the existing players/<id>/announce report and Admin > Announcements already carry. Admin already
 listed every announcement's seen/not-yet names, so "who has seen it" needed no new screen.
+
+## Messages: off the profile page, and in-game chat inside conversations (2026-10-17)
+
+Matt: "Now that messages has its own tab, we should remove it from the profile page, right?" Yes: both
+launcher layouts open Messages directly, so the profile card (renderProfileMessages + its reserved-height
+hint gamehub.pfMsgsHeight.v1, left in storage unread) was a third door. And: "in game quick chats should be
+included here. Like they should appear within your convo with that person. It should be obvious which
+chats happen in game and in which game they occurred." js/game-chat-history.js folds each challenge
+game's index (via js/challenges.js loadAll) and each match's chat into the conversation, read only. A
+chat line only says `by: 'a'|'b'`, so the match is read for this player's side, and only when it has chat.
+Air Hockey / Hold'em / other live-room games store just the newest line per seat, so there is no history
+to show for them; making that history exist would be a write-side change, not done here.
