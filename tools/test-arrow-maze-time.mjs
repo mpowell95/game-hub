@@ -118,5 +118,26 @@ ok('rush: the level log is untouched', g.wo.log.easy.length === 1 && g.wo.timed.
 ok('rush: an unknown mode records nothing', G.recordWayOutRush('expert', { arrows: 5 }) === null);
 ok('rush: a malformed run list is cleaned, not crashed on', T.woRushRuns([null, { s: 'x' }, { s: 4, d: 5, w: 'nope' }, { s: 4, d: 5, w: '2026-10-12' }]).length === 1);
 
+// --- Hints and lost lives cost points (2026-10-17) ---
+ok('slip table: Expert 6, 4, 2, 1; Hard 4, 3, 2, 1; Medium 2, 1; Easy 1',
+  [0, 1, 2, 3, 9].map((n) => T.woEarnedPoints('expert', n)).join() === '6,4,2,1,1'
+  && [0, 1, 2, 3, 4].map((n) => T.woEarnedPoints('hard', n)).join() === '4,3,2,1,1'
+  && [0, 1, 5].map((n) => T.woEarnedPoints('medium', n)).join() === '2,1,1'
+  && [0, 3].map((n) => T.woEarnedPoints('easy', n)).join() === '1,1' && T.woEarnedPoints('nope', 0) === 0);
+store.clear();
+G.recordWayOut('expert', { timeMs: 90000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 1, hints: 1, timed: true, level: 201, gen: 6 });
+G.recordWayOut('expert', { timeMs: 80000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 0, hints: 0, timed: true, level: 202, gen: 6 });
+g = G.loadStats().games.wayout;
+ok('a hint and a lost life on Expert earn 2, a clean Expert level 6', g.wo.pts.expert === 8 && g.wo.ptsN.expert === 2 && T.woPoints(g) === 8 && T.woPoints(g, 'expert') === 8);
+G.recordWayOut('hard', { timeMs: 0, arrows: 60, rounds: 20, mistakes: 3, hints: 0, timed: false, level: 101, gen: 6 });
+g = G.loadStats().games.wayout;
+ok('an untimed level (slips unknown) keeps its full points', g.byDiff.hard.won === 1 && g.wo.ptsN.hard === 0 && T.woPoints(g, 'hard') === 4 && T.woPoints(g) === 12);
+const stripped = JSON.parse(JSON.stringify(g)); delete stripped.wo.pts; delete stripped.wo.ptsN;
+ok('a record from before this (no pts counters) scores every level in full, as it always did', T.woPoints(stripped) === 6 * 2 + 4);
+ok('counters out of range are clamped: never more than full, never under 1 a level',
+  T.woPoints({ byDiff: { expert: { won: 2 } }, wo: { pts: { expert: 99 }, ptsN: { expert: 2 } } }) === 12
+  && T.woPoints({ byDiff: { expert: { won: 2 } }, wo: { pts: { expert: 0 }, ptsN: { expert: 2 } } }) === 2
+  && T.woPoints({ byDiff: { expert: { won: 1 } }, wo: { pts: { expert: 6 }, ptsN: { expert: 5 } } }) === 6);
+
 console.log(`\nArrow Maze timer tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

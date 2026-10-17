@@ -207,6 +207,13 @@ no point. **Ties stay tied.** The leaderboard (`js/leaderboard-ui.js`) is ONE nu
 difficulties and **deliberately not hardest-difficulty-first**; `boardTierOf` returns null for `wayout`
 unless a filter is picked (then that difficulty's own points).
 
+**Hints and lost lives cost points (2026-10-17)**, Matt's table: Expert 6, 4, 2, 1; Hard 4, 3, 2, 1;
+Medium 2, 1; Easy 1 (`WO_SLIP_POINTS`, `woEarnedPoints`); a slip = a hint or a heart lost on that level,
+across Restart / Try again (New game resets). **From that day only**: a timed level adds what it earned
+to `wo.pts[band]` and counts in `wo.ptsN[band]` (counters, added across phones in `js/players-agg.js`);
+every other cleared level keeps full points (`woPoints`). Matt: *"Let's wait on going back and
+recalculating... once we have enough data we can use averages."* The win banner shows `time · +N pts`.
+
 **Boards**: generator 5 `buildLadder(n)` interpolates every setting (grid, arrow lengths, density,
 straightness, rounds target) by ladder number between keyframes; level 1 is still the gentle 8x4. **The
 bands moved (same evening) to Hard 101-200, Expert 201+ with generator 6** (`buildLadder(n, gen)`,
