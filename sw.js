@@ -27,6 +27,7 @@ const ASSETS = [
   './js/new-badge.js',
   './js/i18n.js',
   './js/theme.js',
+  './js/layout.js',
   './js/viewport.js',
   './js/strings.js',
   './js/profile-store.js',

@@ -199,6 +199,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `new-badge.js` | the "New" pill, pure date maths over each entry's `released` |
 | `i18n.js` | EN/ES: `getLang`/`setLang` (`gamehub.lang.v1`), `makeT(dict)`, `onLangChange` |
 | `theme.js` | light/dark/auto (`gamehub.theme.v1`), `.gh-dark` on `<html>` |
+| `layout.js` | launcher Comfortable/Compact (`gamehub.layout.v1`), `.gh-compact` on `<html>`; see "The compact layout" |
 | `emoji.js` / `emoji-data.js` | `isEmoji()` gate at the moment of choosing only (never in `glyph()`); GENERATED emoji set (`tools/build-emoji-data.mjs`); search keywords `emoji-search-{en,es}.js` kept out of SHELL |
 | `viewport.js` | `onViewportResize(cb)`: the ONE way to re-fit on resize |
 | `no-zoom.js` | classic script on every page: no double-tap/pinch zoom, no text selection (inputs excepted) |
@@ -399,6 +400,14 @@ never crash.
   (`hub.openGameFresh`). No phone notification (would need a Cloud Function). **Read receipt**:
   first open stamps the time, mirrored as `players/<id>/hubMsgs` (a report); Admin → **Game Hub
   messages** shows Read <time> / Not yet per recipient.
+
+## The compact layout (2026-10-17)
+
+A per-device choice (Profile > Settings > Layout; default Comfortable). Compact = one title row, 3-across
+tiles with the name under the art, no heart on favorites (the edit button moves AND removes them), and
+an icons-only bottom tab bar (Games, Challenges, Messages, Leaderboards, Profile) carrying the same
+badges. CSS is `html.gh-compact:not(.gh-ingame)` so games mount identically. Each tab calls the comfortable
+layout's own button, so the two cannot drift. Announced by `compact-layout-2026-10-17` (Try it = switch).
 
 ## The profile page's structure (2026-08-31)
 

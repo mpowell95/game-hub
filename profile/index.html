@@ -411,6 +411,13 @@
               <div class="pf-seg" id="pf-lang-seg" role="group" data-i18n-aria="pf_lang_h" aria-label="Language"></div>
             </div>
           </details>
+          <!-- LAYOUT (2026-10-17, js/layout.js): the launcher's Comfortable / Compact choice. -->
+          <details class="pf-collapse" id="pf-layout">
+            <summary data-i18n="pf_layout_h">Layout</summary>
+            <div class="pf-rowbody">
+              <div class="pf-seg" id="pf-layout-seg" role="group" data-i18n-aria="pf_layout_h" aria-label="Layout"></div>
+            </div>
+          </details>
           <!-- NOTIFICATIONS (2026-09-23, js/push.js): per DEVICE, because a permission is. -->
           <details class="pf-collapse" id="pf-notify">
             <summary data-i18n="pf_notify_h">Notifications</summary>
@@ -544,6 +551,7 @@
     // Validation only (~2 KB). The browsable set itself is imported lazily when the picker opens.
     import { isEmoji, firstEmoji } from '../js/emoji.js';
     import { getTheme, setTheme } from '../js/theme.js';
+    import { getLayout, setLayout } from '../js/layout.js';
     import { diffShapeSVG } from '../js/difficulty-tiers.js';
     import { loadPalette, savePalette, ALL_EMOJIS, EMOJI_MAX, PHRASES, CUSTOM_MAX, CUSTOM_MAXLEN, reactionText } from '../js/mp-reactions.js';
     import STRINGS from '../js/strings.js';
@@ -569,7 +577,7 @@
     // paintReplyCount last: applyI18n resets every [data-i18n] textContent, which would drop the
     // "(2 new)" off the replies button on a language switch.
     onLangChange(() => {
-      applyI18n(); renderColors(); renderOpps(); renderTheme(); renderLang(); renderQuickChat();
+      applyI18n(); renderColors(); renderOpps(); renderTheme(); renderLang(); renderLayout(); renderQuickChat();
       paintReplyCount(); paintMessageCount(); paintNotify();
       // The emoji picker's category tabs are rendered, not [data-i18n] markup, and its search
       // keywords are a per-language file - so both have to be dropped and rebuilt, not just relabelled.
@@ -964,6 +972,25 @@
       });
     }
 
+    // -- Layout ---------------------------------------------------------------------
+    // The launcher's Comfortable / Compact choice (gamehub.layout.v1 via js/layout.js). A device
+    // preference like theme and language; the hub reads it on its next paint.
+    function renderLayout() {
+      const layoutSeg = document.getElementById('pf-layout-seg');   // looked up here: called before this line runs
+      if (!layoutSeg) return;
+      const cur = getLayout();
+      layoutSeg.innerHTML = [['comfortable', 'Comfortable'], ['compact', 'Compact']].map(([v, fb]) =>
+        `<button type="button" data-layout="${v}" class="${cur === v ? 'is-on' : ''}">${tf('pf_layout_' + v, fb)}</button>`).join('');
+    }
+    if (document.getElementById('pf-layout-seg')) {
+      document.getElementById('pf-layout-seg').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-layout]');
+        if (!btn) return;
+        setLayout(btn.dataset.layout);
+        renderLayout();
+      });
+    }
+
     // -- My Stats -------------------------------------------------------------------
     // The same overlay the launcher's own button opens. Here because the top bar has room for
     // three controls and Messages took the third: this is where My Stats now lives, one tap
@@ -1316,6 +1343,7 @@
       renderOpps();
       renderTheme();
       renderLang();
+      renderLayout();
       renderQuickChat();
     }
     // Support identifier. Reads gamehub.deviceId RAW rather than importing deviceId() from

@@ -58,6 +58,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 |---|---|
 | `profile-store.js` | `loadProfile`/`saveProfile`/`clearProfile`, `hasName()`; see "The shared profile" |
 | `favorites.js` | `gamehub.favorites.v1`, HUB ids (never stats keys); a preference |
+| `layout.js` | `gamehub.layout.v1` (`comfortable`/`compact`), stamps `.gh-compact` at load; a preference; the hub re-renders on `onLayoutChange` (never under a mounted game) |
 | `new-badge.js` | pure dates, no storage/DOM |
 | `game-stats.js` | the only door to stats storage (`loadStats`/`persist`); per-player keys; sub-counters (`grid`,`cc`,`es`,`nb`,`tt`,`db`,`bg`,`yz`,`dm`,`hc`,`sk`,`ah`,`wo`,`gl`…); `tt/db/bg/yz/dm/sk` store `tied`; bests Math.max-only; rate gate `tooFast`; pending queue; activity log |
 | `game-stats-global.js` | `window.__ghStats` for Monopoly Deal/Parchís; BD copy is verbatim-after-header (15-line header + marker), `tools/test-recorder-contract.mjs` |
