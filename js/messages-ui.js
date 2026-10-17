@@ -748,7 +748,14 @@ async function renderThread(card, who) {
   };
   const draw = (msgs) => {
     lastMsgs = msgs;
-    const items = msgs.map((m) => ({ atMs: Number(m.atMs) || 0, m }))
+    // A live-room line saved by js/messages.js logGameChat carries `game`; it draws as a game bubble.
+    const items = msgs.map((m) => {
+      const atMs = Number(m.atMs) || 0;
+      const gm = m.game && typeof m.game === 'object' ? m.game : null;
+      return gm && gm.id && gm.t
+        ? { atMs, g: { atMs, mine: m.from === me, t: gm.t, v: gm.v, game: String(gm.id), statsId: String(gm.s || gm.id), matchId: `room:${gm.room || ''}:${gm.id}` } }
+        : { atMs, m };
+    })
       .concat(gameLines.map((g) => ({ atMs: g.atMs, g })))
       .sort((x, y) => x.atMs - y.atMs);
     const body = items.length

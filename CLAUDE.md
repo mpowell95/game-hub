@@ -396,8 +396,11 @@ never crash.
   code. Full contract: `js/CLAUDE.md`, "Messages".
 - **In-game quick chat shows in the conversation (2026-10-17)**: `js/game-chat-history.js` reads your
   challenge matches with that code (each game's index) and their `<node>/chat/<id>` (Hoops: the match's
-  own `chat`), merged by time under a tile-art + game-name header, DASHED bubbles. Read only. Live-room
-  games keep no chat history (one overwritten slot per seat), so they cannot appear.
+  own `chat`), merged by time under a tile-art + game-name header, DASHED bubbles. Read only.
+  **Live-room games** (Hold'em, Air Hockey, Escoba...): `js/net.js` `sendReaction` also saves each line
+  into the sender's thread with every other seat (`messages.js` `logGameChat`, `game: {id, s, room, t, v}`
+  + plain `text`). THREAD ONLY, never the index: no push, no unread, no inbox row. Lines before
+  2026-10-17 were never stored, so they cannot appear.
 - **Messages from the Game Hub (2026-10-14)**: `js/hub-messages.js` `HUB_MESSAGES`, append-only, by
   player code; sending = appending an entry + deploying. One "Game Hub" conversation with the hub
   icon, no reply box, no Hide; read state local (`gamehub.hubMessages.v1`). `play: '<hubId>'` adds a

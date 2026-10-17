@@ -1226,3 +1226,14 @@ game's index (via js/challenges.js loadAll) and each match's chat into the conve
 chat line only says `by: 'a'|'b'`, so the match is read for this player's side, and only when it has chat.
 Air Hockey / Hold'em / other live-room games store just the newest line per seat, so there is no history
 to show for them; making that history exist would be a write-side change, not done here.
+
+### Live-room chat saved into Messages (2026-10-17, same day)
+
+Matt said "Yes" to saving live games' chat so it can appear in conversations. `rooms/<CODE>/reactions`
+keeps one overwritten slot per seat, so there was nothing to read back; the history now starts here.
+`js/net.js` `sendReaction`, after its unchanged reaction write, reads the room's `game` and seat codes
+(cached 30 s) and calls `js/messages.js` `logGameChat`, which pushes one child per other player into
+`messages/threads/<pairKey>/msgs` with `game: {id, s, room, t, v}` and a plain `text` for older apps.
+It never writes `messages/index`, because `messagePush` and the unread badge both key off the index:
+a quick chat must not buzz a phone that is already in the game. No rules change (threads accept any
+child for a claimed code). Fire and forget, so a slow write can never stall play.
