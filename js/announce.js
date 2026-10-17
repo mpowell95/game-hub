@@ -115,14 +115,35 @@ export const ANNOUNCEMENTS = [
     id: 'compact-layout-2026-10-17',
     from: '2026-10-17',
     until: '2026-11-30',
+    // SAME ID after the 2026-10-17 redesign (Matt: "Don't resend it to anyone"): a device that
+    // dismissed the first version never sees this one.
     badge: true,
     title: { en: 'New layout', es: 'Nuevo diseño' },
-    body: {
-      en: ['Compact fits more games on one screen. Switch back any time in My Profile > Settings > Layout.'],
-      es: ['El diseño compacto muestra más juegos en una pantalla. Puedes volver cuando quieras en Mi perfil > Ajustes > Diseño.'],
-    },
+    body: { en: ['More games on one screen.'], es: ['Más juegos en una pantalla.'] },
+    shots: [
+      {
+        img: { en: 'img/layout-comfortable.jpg', es: 'img/layout-comfortable-es.jpg' },
+        imgDark: { en: 'img/layout-comfortable-dark.jpg', es: 'img/layout-comfortable-es-dark.jpg' },
+        caption: { en: 'Comfortable', es: 'Cómodo' },
+      },
+      {
+        img: { en: 'img/layout-compact.jpg', es: 'img/layout-compact-es.jpg' },
+        imgDark: { en: 'img/layout-compact-dark.jpg', es: 'img/layout-compact-es-dark.jpg' },
+        caption: { en: 'Compact', es: 'Compacto' },
+      },
+    ],
     cta: { en: 'Try it', es: 'Pruébalo' },
     action: 'try-compact',
+  },
+  {
+    // NOT a popup: the compact layout's bottom-bar tips (js/hub.js `_maybeTour`), the first time a
+    // device shows Compact. Listed here only so its seen-stamp rides the same report
+    // (players/<id>/announce) and Matt's Admin > Announcements shows who has seen it.
+    id: 'compact-tour-2026-10-17',
+    from: '2026-10-17',
+    until: '2026-11-30',
+    tour: true,
+    title: { en: 'Bottom bar tips', es: 'Consejos de la barra' },
   },
 ];
 
@@ -164,6 +185,7 @@ export function pendingAnnouncement(now = Date.now(), seen = loadSeen(), list = 
   for (const a of list) {
     if (!a || !a.id) continue;
     if (seen.includes(a.id)) continue;
+    if (a.tour) continue;   // shown by the hub's own tour, never as a popup
     if (!isLive(a, now)) continue;
     return a;
   }

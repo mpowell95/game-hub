@@ -1202,3 +1202,15 @@ answering Matt's "Without the heart on the favorite games, how do you expect peo
 unfavorite games?". The open tab is coloured AND underlined (colorblind rule). The title is 21px only
 from 385px wide (at 360px it ellipsized). The "your turn" bubble gained `is-col-mid` because the
 3-across grid has a middle column, where a left-anchored 290px bubble ran off the screen.
+
+### Bottom-bar tips and the popup redesign (2026-10-17, same day)
+
+Matt: the popup "looked weird on my phone" and "just says oh hey new thing. I want things to pop up
+that look like the 'your turn' things but for the bottom menu bar. And say what each thing is."
+Also: "Don't resend it to anyone tho. And I wanna be able to see who has seen it." The popup kept its
+id (so nobody who dismissed it sees it again), lost the left-aligned paragraph with a dangling
+"> Layout." line, and gained two whole-screen pictures, Comfortable and Compact (img/layout-*.jpg,
+theme x language). The tips are a new step: five bubbles in the launcher's bubble style, one per tab,
+tap to advance, X to skip; recorded as `compact-tour-2026-10-17` in the announcement seen-list, which
+the existing players/<id>/announce report and Admin > Announcements already carry. Admin already
+listed every announcement's seen/not-yet names, so "who has seen it" needed no new screen.

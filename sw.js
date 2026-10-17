@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1192';
+const CACHE = 'game-hub-v1193';
 
 const ASSETS = [
   './',
@@ -94,6 +94,14 @@ const ASSETS = [
   './img/where-profile-dark.jpg',
   './img/where-profile-es.jpg',
   './img/where-profile-es-dark.jpg',
+  './img/layout-comfortable.jpg',
+  './img/layout-comfortable-dark.jpg',
+  './img/layout-comfortable-es.jpg',
+  './img/layout-comfortable-es-dark.jpg',
+  './img/layout-compact.jpg',
+  './img/layout-compact-dark.jpg',
+  './img/layout-compact-es.jpg',
+  './img/layout-compact-es-dark.jpg',
   './js/players-agg.js',
   './js/game-art.js',
   './js/hidden-players.js',
@@ -948,6 +956,14 @@ const REST_MANIFEST = {
   './img/where-profile-dark.jpg': '649eb0d5cb',
   './img/where-profile-es.jpg': '58ef56a483',
   './img/where-profile-es-dark.jpg': 'c8a436d45f',
+  './img/layout-comfortable.jpg': '2ad7fa312c',
+  './img/layout-comfortable-dark.jpg': 'baa363bdad',
+  './img/layout-comfortable-es.jpg': 'a65f1f4a83',
+  './img/layout-comfortable-es-dark.jpg': 'cb3a059591',
+  './img/layout-compact.jpg': 'db98bcc07f',
+  './img/layout-compact-dark.jpg': '242273151d',
+  './img/layout-compact-es.jpg': '24e941516f',
+  './img/layout-compact-es-dark.jpg': '00c18403ea',
   './connect-four/index.html': '7af02d64d6',
   './connect-four/js/ui.js': '07654b024d',
   './connect-four/js/worker.js': 'fee47efdaa',

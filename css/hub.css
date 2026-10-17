@@ -883,3 +883,33 @@ html.gh-compact:not(.gh-ingame) .hub-tabs {
 .hub-tab-badge[hidden] { display: none; }
 :root.gh-dark.gh-compact:not(.gh-ingame) .hub-tabs { background: rgba(18, 26, 40, 0.97); }
 :root.gh-dark .hub-tab.is-on { color: #ffce3a; }
+
+/* The compact layout's bottom-bar tips (js/hub.js `_runTour`, 2026-10-17): the launcher's "your
+   turn" bubble look (black outline, hard shadow, tail), one tab at a time, over a dimmed page. The
+   tab being described stays lit; the rest fade. Words say what it is, never colour alone. */
+.hub-tour { position: fixed; inset: 0; z-index: 25; background: rgba(5, 10, 20, 0.5); touch-action: none; overscroll-behavior: contain; cursor: pointer; }
+html.gh-touring .hub-tabs { z-index: 26; pointer-events: none; }
+html.gh-touring .hub-tab { opacity: 0.3; transition: opacity 0.2s; }
+html.gh-touring .hub-tab.is-tip { opacity: 1; }
+.hub-tour-skip {
+  position: absolute; top: max(env(safe-area-inset-top, 0px), 54px); right: 16px; width: 44px; height: 44px;
+  border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.92); color: #111; font-size: 24px; line-height: 1;
+  cursor: pointer; touch-action: manipulation;
+}
+.hub-tip {
+  position: fixed; z-index: 27; width: max-content; max-width: min(290px, calc(100vw - 24px));
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 18px 10px;
+  background: #ffce3a; color: #111; border: 3px solid #000; border-radius: 14px; text-align: center;
+  box-shadow: 0 4px 0 #000, 0 8px 18px rgba(0, 0, 0, 0.3); pointer-events: none;
+}
+.hub-tip::after {
+  content: ''; position: absolute; bottom: -10px; left: var(--tail, 50%); width: 16px; height: 16px;
+  background: inherit; border-right: 3px solid #000; border-bottom: 3px solid #000;
+  transform: rotate(45deg); border-bottom-right-radius: 3px;
+}
+.hub-tip-head { font-size: 18px; font-weight: 900; letter-spacing: 0.02em; }
+.hub-tip-line { font-size: 14px; font-weight: 700; }
+.hub-tip-step { margin-top: 4px; font-size: 11px; font-weight: 800; opacity: 0.65; }
+.hub-tip.is-in { animation: hub-tip-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes hub-tip-in { from { opacity: 0; transform: translateY(8px) scale(0.85); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .hub-tip.is-in { animation: none; } }

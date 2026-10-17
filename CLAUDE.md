@@ -408,6 +408,9 @@ tiles with the name under the art, no heart on favorites (the edit button moves 
 an icons-only bottom tab bar (Games, Challenges, Messages, Leaderboards, Profile) carrying the same
 badges. CSS is `html.gh-compact:not(.gh-ingame)` so games mount identically. Each tab calls the comfortable
 layout's own button, so the two cannot drift. Announced by `compact-layout-2026-10-17` (Try it = switch).
+**Bottom-bar tips** (`_runTour`): the first time a device shows Compact, one "your turn"-style bubble per
+tab says what it is; seen-stamp `compact-tour-2026-10-17` (an ANNOUNCEMENTS entry with `tour: true`, never a
+popup) so Admin > Announcements lists who has seen it. The popup was redesigned under the SAME id (not resent).
 
 ## The profile page's structure (2026-08-31)
 
