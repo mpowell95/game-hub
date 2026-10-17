@@ -58,6 +58,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 |---|---|
 | `profile-store.js` | `loadProfile`/`saveProfile`/`clearProfile`, `hasName()`; see "The shared profile" |
 | `favorites.js` | `gamehub.favorites.v1`, HUB ids (never stats keys); a preference |
+| `layout.js` | `gamehub.layout.v1` (`comfortable`/`compact`), stamps `.gh-compact` at load; a preference; the hub re-renders on `onLayoutChange` (never under a mounted game) |
 | `new-badge.js` | pure dates, no storage/DOM |
 | `game-stats.js` | the only door to stats storage (`loadStats`/`persist`); per-player keys; sub-counters (`grid`,`cc`,`es`,`nb`,`tt`,`db`,`bg`,`yz`,`dm`,`hc`,`sk`,`ah`,`wo`,`gl`…); `tt/db/bg/yz/dm/sk` store `tied`; bests Math.max-only; rate gate `tooFast`; pending queue; activity log |
 | `game-stats-global.js` | `window.__ghStats` for Monopoly Deal/Parchís; BD copy is verbatim-after-header (15-line header + marker), `tools/test-recorder-contract.mjs` |
@@ -402,6 +403,9 @@ tier shape beside it), games played under it, the unit once above the list; stan
 Tic Tac Toe All / Ultimate / Classic / MP; Snake + Walls off / Walls on; Skeeball machine row over
 Points / High score; Cup Pong + Solo (fewest throws); Hold'em Bankroll / Wins; Contexto, Golf, Arrow
 Maze, Gridlock plain. `_view` holds a non-difficulty tab, reset with `_tier`. Old sort/filter code stays.
+**Arrow Maze's board is Levels | Rush (2026-10-16)**: `woModesHTML`, `woRushHTML` (`_woMode`, `_woRush`,
+set from `openLeaderboard({game:'wayout', woMode, woRush})`); Rush = Easy | Hard over This week / Weeks won
+/ Past weeks, read from the merged `wo.rush.best`. It replaced the game's own Results screens.
 On All views the row's difficulty is a bordered pill under the name (`tierPillHTML`, shape + word; Matt:
 "more obvious"), not a shape beside the number.
 Ranks 1-3 are ribboned medals (`medalSVG`, number on the face) with a metal rail; #1's row is lit gold

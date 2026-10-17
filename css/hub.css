@@ -712,6 +712,7 @@ body {
 .hub-alert.is-over      { background: #f0a24a; }   /* GAME OVER, a match that ended while away (2026-09-24) */
 .hub-alert.is-col-right { right: 6px; left: auto; }
 .hub-alert.is-col-left  { left: 6px; right: auto; }
+.hub-alert.is-col-mid   { left: calc(50% - min(145px, 37vw)); right: auto; }
 /* The tail: a rotated square with the same border, showing only the two sides that face out. It
    sits over the TILE, which is on the anchored side, so it follows the anchor. */
 .hub-alert::after {
@@ -727,6 +728,7 @@ body {
 }
 .hub-alert.is-col-right::after { right: 46px; }
 .hub-alert.is-col-left::after  { left: 46px; }
+.hub-alert.is-col-mid::after   { left: calc(50% - 8px); }
 /* NO ROOM ABOVE (the tile is on the top row): flip under it and turn the tail over, rather than
    drawing the bubble off the top of the page where nobody can read it. */
 .hub-alert.is-below { bottom: auto; top: calc(100% - 30px); }
@@ -795,3 +797,89 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .hub-alert.is-mini { animation: none; opacity: 1; transform: translateX(-50%); }
 }
+
+/* ===== The compact layout (js/layout.js, 2026-10-17; Matt's mockup C) =========================
+   Chosen in Profile > Settings > Layout; `.gh-compact` on <html> is the only switch. Everything is
+   scoped to the LAUNCHER (`:not(.gh-ingame)`), so a mounted game measures exactly the room it has
+   in the comfortable layout. One title row (title + language + theme + version), 3-across tiles
+   with the name under the art, and a bottom tab bar instead of the button row and Challenges bar. */
+.hub-tabs { display: none; }
+html.gh-compact:not(.gh-ingame) .hub-top-right,
+html.gh-compact:not(.gh-ingame) .hub-chbar { display: none; }
+html.gh-compact:not(.gh-ingame) .hub-top { gap: 0; padding-bottom: 4px; border-bottom: 0; }
+html.gh-compact:not(.gh-ingame) .hub-top-title { font-weight: 700; }
+/* Bigger only where it fits beside the three pills (a 360px phone cut it to "Matt's Game ..."). */
+@media (min-width: 385px) { html.gh-compact:not(.gh-ingame) .hub-top-title { font-size: 21px; } }
+html.gh-compact:not(.gh-ingame) .hub-main { padding: 0 16px calc(104px + env(safe-area-inset-bottom, 0px)); }
+html.gh-compact:not(.gh-ingame) .hub-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
+
+/* A tile: the art is the rounded box, the name sits under it in the page's own ink. */
+html.gh-compact .hub-card {
+  aspect-ratio: auto; overflow: visible; display: flex; flex-direction: column; gap: 5px;
+  background: none; border: 0; border-radius: 0; box-shadow: none; text-align: left;
+}
+html.gh-compact .hub-card:hover, html.gh-compact .hub-card.is-soon:hover { transform: none; box-shadow: none; }
+html.gh-compact .hub-card-art {
+  position: relative; inset: auto; width: 100%; aspect-ratio: 16 / 9; overflow: hidden;
+  border-radius: 10px; border: 1px solid var(--hub-surface-2); background: var(--card-accent, var(--hub-surface));
+}
+html.gh-compact .hub-card-label {
+  position: static; font-size: 0.8rem; font-weight: 600; line-height: 1.2; color: var(--hub-ink);
+  text-shadow: none; text-wrap: balance;
+  /* Two lines at most ("Tuercas y Tornillos"), never off the tile. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+html.gh-compact .hub-tags { top: 5px; left: 5px; gap: 4px; }
+html.gh-compact .hub-soon-tag, html.gh-compact .hub-new-tag { font-size: 0.55rem; padding: 2px 6px; }
+html.gh-compact .hub-fav { top: 0; right: 0; width: 36px; height: 36px; font-size: 1rem; }
+
+/* Section heads: FAVORITES + edit button, ALL GAMES + sort. No rule line. */
+html.gh-compact .hub-listhead { min-height: 48px; margin: 0; }
+html.gh-compact .hub-listhead-label { font-size: 0.75rem; letter-spacing: 0.12em; }
+html.gh-compact .hub-listhead-label::after { display: none; }
+.hub-fav-edit {
+  appearance: none; flex: none; width: 44px; height: 44px; border-radius: 50%; padding: 0;
+  border: 1px solid var(--hub-surface-2); background: none; color: var(--hub-muted);
+  display: grid; place-items: center; cursor: pointer; touch-action: manipulation;
+}
+.hub-fav-edit svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.hub-fav-edit.is-on { background: var(--hub-accent); border-color: var(--hub-accent); color: #fff; }
+
+/* Favorites edit mode: move left, remove (filled heart), move right, over the tile's art. */
+.hub-fav-tools {
+  position: absolute; top: 0; left: 0; right: 0; aspect-ratio: 16 / 9; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between; padding: 0 3px;
+  background: rgba(0, 0, 0, 0.42); border-radius: 10px; pointer-events: none;
+}
+.hub-fav-tools > button {
+  pointer-events: auto; position: static; width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.78); border: 1.5px solid rgba(255, 255, 255, 0.65); font-size: 1rem;
+}
+.hub-fav-tools > .hub-fav.is-fav { color: #f2b705; }
+
+/* The tab bar. Icons only; the open tab is coloured AND underlined (never hue alone). */
+html.gh-compact:not(.gh-ingame) .hub-tabs {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+  background: rgba(255, 255, 255, 0.96); backdrop-filter: saturate(1.2) blur(6px);
+  border-top: 1px solid var(--hub-surface-2);
+}
+.hub-tab {
+  position: relative; appearance: none; border: 0; background: none; font: inherit; padding: 6px 0 0;
+  color: var(--hub-muted); display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-height: 52px; cursor: pointer; touch-action: manipulation; text-decoration: none;
+}
+.hub-tab::after { content: ''; width: 20px; height: 3px; border-radius: 2px; }
+.hub-tab.is-on { color: var(--hub-accent); }
+.hub-tab.is-on::after { background: currentColor; }
+.hub-tab-ico { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hub-tab-av { font-size: 27px; line-height: 30px; height: 30px; }
+.hub-tab-badge {
+  position: absolute; top: 0; left: calc(50% + 6px); min-width: 20px; height: 20px; padding: 0 5px;
+  box-sizing: border-box; border-radius: 10px; display: grid; place-items: center;
+  background: #ffce3a; color: #16243a; font-size: 12px; font-weight: 800; line-height: 1;
+}
+.hub-tab-badge[hidden] { display: none; }
+:root.gh-dark.gh-compact:not(.gh-ingame) .hub-tabs { background: rgba(18, 26, 40, 0.97); }
+:root.gh-dark .hub-tab.is-on { color: #ffce3a; }

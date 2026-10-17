@@ -92,7 +92,7 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
 - **Setup screen** is in the hub's own style (Sudoku/Minesweeper layout from `css/ui.css`), not the
   reference's: board picture as headline `clamp(96px, 23vh, 200px)` with the title under it and **no
   tagline**, a **Difficulty** card of four buttons (shape marker, name, current level; selected wears
-  `#ffce3a` + thicker outline), **Play level N** / **Continue level N**; How to play is the "?"
+  `#ffce3a` + thicker outline), **Play level N** / **New game | Resume**; How to play is the "?"
   beside the picture (see Rush, "The setup screens"). Follows the hub's light/dark theme; How to play and Out of lives are
   `.gh-overlay`/`.gh-modal` popups with the required X. The picture plays itself (`HERO_SVG`, CSS-only
   loop, still under reduced motion).
@@ -101,9 +101,10 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
   `--gh-*` tokens the hub's dark values under `.gh-dark`.
 - "Arrows remaining / cleared" counters (`.wo-counts`) on every difficulty; the How to play pill under
   the board is Easy only (`.is-easy`) and PAUSES THE CLOCK while open (`_helpPaused`). Arrows are thick
-  (`lw = pitch x 0.092`, heads `pitch x 0.28`); pitch cap 72px. **On Matt's devices only
-  (`isAdminDevice()`, 2026-10-16) arrows are THICK: `lw = pitch x 0.3`, heads `pitch x 0.52`**, from his
-  own edit of a Hard board (*"I want all the arrows to be more like this one"*). He rejected a zoom/pan
+  (`lw = pitch x 0.092`, heads `pitch x 0.28`); pitch cap 72px. **Thick arrows** (`lw = pitch x 0.3`,
+  heads `pitch x 0.52`, from Matt's own edit of a Hard board: *"I want all the arrows to be more like this
+  one"*) are a **switch on the Levels screen** since 2026-10-16 (settings `thick`, a preference; never
+  chosen = on for `isAdminDevice()`, off for everyone else; `_thick()`); Rush draws the same. He rejected a zoom/pan
   "big arrows" mode the same day (*"I do not like the magnifier. remove it"*); it was reverted whole.
 - The reference's "Extra Hard" is **Expert** here. No sound (root rule). No ads, rate-us, favourite star.
 
@@ -128,12 +129,17 @@ other control is 44px+. Taps fire on `pointerdown` (instant, as in the reference
   (old tiers' next level) and `ladder` (first ladder) are **FROZEN, written back exactly as stored**;
   **`ladder2`** is the NEXT LADDER level per difficulty and is what the game reads. All only go up
   (`Math.max`), capped at 1,000,000 (a corrupt value once read "Level 1e+21").
+- Settings also hold `thick` (2026-10-16, boolean, absent = default above).
 - **Read-only keys** (rule 5, never written or deleted): `gamehub.wayout.save.v1` (first build's single
   slot, read once into its tier's slot), `gamehub.wayout.saves.v1` / `.clocks.v1` (one save per tier,
   `{ v, tier, level, gen, gone[], red[], lives }`), `gamehub.wayout.ladder.saves.v1` / `.ladder.clocks.v1`
   (first ladder). **Live:** `gamehub.wayout.ladder2.saves.v1` / `.ladder2.clocks.v1`. A save is
   trusted only for the exact level being opened; malformed = fresh.
-- "Continue level N" shows only for real progress. **A save with every arrow gone is a win that was
+- **A paused level gets New game | Resume** (2026-10-16, Matt, after Hard 106 opened at 3:19 with
+  nothing cleared: *"If there is a saved game at that difficulty, there are two buttons: New Game and
+  Resume"*, as Minesweeper). Paused = real progress or 1 s+ on its clock (`isPaused`). New game
+  (`_newLevel`) = same board, all arrows, 3 hearts, clock 0:00; otherwise one **Play level N**
+  ("Continue level N" is no longer shown). **A save with every arrow gone is a win that was
   never counted**: opening it runs the win sequence and records it.
 - Stats: **`recordWayOut(tier, finish)`** once per level cleared (was `recordResult('wayout', tier,
   true)` and still counts exactly that), also feeding the **`wo` sub-counter**; the three-edit rule is
@@ -149,7 +155,8 @@ mistake.
 
 - The clock (left end of the hearts row) shows time WITH penalties, runs only while a level is on
   screen, unfinished and the app in front. **It lives in its own key, not the save**: Restart and Out of
-  lives clear the save but not the clock; a level's time runs from first open to clear.
+  lives clear the save but not the clock; a level's time runs from first open to clear, unless the
+  player taps **New game** on the setup screen (2026-10-16), which sets it to 0.
 - `WO_PENALTY_S`: first heart lost costs the tier's base, second double; the third ends the attempt with
   no extra charge. A hint costs the base once (tapping the bulb again while the same hint pulses does
   not charge again).
@@ -200,6 +207,13 @@ no point. **Ties stay tied.** The leaderboard (`js/leaderboard-ui.js`) is ONE nu
 difficulties and **deliberately not hardest-difficulty-first**; `boardTierOf` returns null for `wayout`
 unless a filter is picked (then that difficulty's own points).
 
+**Hints and lost lives cost points (2026-10-17)**, Matt's table: Expert 6, 4, 2, 1; Hard 4, 3, 2, 1;
+Medium 2, 1; Easy 1 (`WO_SLIP_POINTS`, `woEarnedPoints`); a slip = a hint or a heart lost on that level,
+across Restart / Try again (New game resets). **From that day only**: a timed level adds what it earned
+to `wo.pts[band]` and counts in `wo.ptsN[band]` (counters, added across phones in `js/players-agg.js`);
+every other cleared level keeps full points (`woPoints`). Matt: *"Let's wait on going back and
+recalculating... once we have enough data we can use averages."* The win banner shows `time · +N pts`.
+
 **Boards**: generator 5 `buildLadder(n)` interpolates every setting (grid, arrow lengths, density,
 straightness, rounds target) by ladder number between keyframes; level 1 is still the gentle 8x4. **The
 bands moved (same evening) to Hard 101-200, Expert 201+ with generator 6** (`buildLadder(n, gen)`,
@@ -238,21 +252,26 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   word), Play], and a footer card `.wo-lead` of [a leader, a pill]. The column is **TOP-aligned**
   (it was centred), so the picture, title, switch and the card's top edge do not move when the mode
   changes (measured identical at 402x874, 360x724, 390x664, 375x667). No "Difficulty" label on
-  either. Play buttons share one shape (`.wo-play`): Levels blue, Rush teal.
-  - **Levels:** each difficulty shows its name, "Level N" and a thin bar of progress through its
+  either. Play buttons share one shape and the hub's blue (`.wo-play`; Rush was teal until 2026-10-16, Matt: *"Make it the same blue"*).
+  - **Levels was re-laid out 2026-10-16 (Matt's approved mock-up; Rush kept as it was: *"Now is better
+    leave it"*)**, scoped to `.wo-home.is-levels`: smaller picture, taller buttons and tiles, the tiles'
+    words only for screen readers (`.wo-sr`), the third tile is the **thick-arrows switch** (was "3
+    lives": *"this one is just there"*), and the leader card sits at the bottom. So the picture is a
+    different size on the two tabs (accepted). `tools/check-no-scroll.mjs way-out` fits all 8 screens.
+  - **Levels (as first built):** each difficulty shows its name, "Level N" and a thin bar of progress through its
     stretch of the ladder (Expert never ends: its solid bar fills every 50 levels and starts over,
     Matt 2026-10-14; it was a dashed track); tiles **+N pts "this level"** (star; "pts" added, Matt 2026-10-14),
     **N "your points"** (cup; from the combined read once it lands, this phone's own until then),
-    **3 "lives"** (heart); footer **"🏆 Points leader"** with name and points, and **See all results ›**
-    (2026-10-16, Matt: *"should be in about the same area as it is on the rush screen"*), which opens
-    **Levels results** (`lvboard`, `_lvBoardHTML`: everyone's points, most first, ties share a place,
-    same read as Rush's). **How to play is the round "?" at the top right of the picture's row**
+    **3 "lives"** (heart, replaced by the switch above); footer **"🏆 Points leader"** with name and points,
+    and a pill (Matt: *"should be in about the same area as it is on the rush screen"*) that is now
+    **Leaderboard ›**: the hub leaderboard on Arrow Maze (`_openLeaderboard`; Matt: *"for Minesweeper, we
+    linked the Leaderboard. Let's do that instead"*). The game's own Levels results screen is gone. **How to play is the round "?" at the top right of the picture's row**
     (`.wo-herorow`, `.wo-howq`; Levels only; Rush has the same row without it, so nothing moves).
   - **Rush:** Easy / Hard with nothing under them; tiles **10s "to start"** (stopwatch), **+0.5s
     "per arrow"** (teal arrow), **−3s "per mistake"** (red arrow; Matt went back to these after
     trying sentence lines with pills: *"i liked the horizontal layout"*); footer **"🏆 Easy leader
     this week"** (follows the Easy / Hard choice) with name and score, **"-" and "-" when nobody has
-    a run** (not "No runs yet"), and **See all results ›**, which opens Results on that version.
+    a run** (not "No runs yet"), and **Leaderboard ›**, which opens the hub leaderboard on Rush, that version.
   - **Both footers name the leader by emoji + username, never "You"** (Matt, 2026-10-14; `_leadName`,
     profile name until the combined read lands). Font sizes are the same on both; the score sits
     further left on Rush only because See all results is a wider pill (equal widths truncated names).
@@ -287,8 +306,11 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   untouched. Three-edit rule done (recorder, My Stats `wayoutScreen`, `js/players-agg.js`: a week's best
   = best on any of the person's phones).
 - **Weeks** (`woWeekKey`): the Monday's date in **UTC**, stamped on each run when it ends.
-- **Results** (inside the game): Easy/Hard, **This week**, **Past weeks** (each with its winner); read
-  once per opening from `players/` (`readPlayersOnce`) combined by `aggregatePlayers`; test accounts
-  hidden except from themselves; ties share a place; offline shows this phone only and says so.
+- **Results live on the hub leaderboard since 2026-10-16** (the in-game Results screens were removed):
+  Arrow Maze's board has **Levels | Rush**; Rush has Easy | Hard and **This week** (best run this week),
+  **Weeks won** (finished weeks only; ties all win; "of N" = finished weeks they played) and **Past
+  weeks** (each finished week's winner). `js/leaderboard-ui.js` `woModesHTML` / `woRushHTML`; opened with
+  `openLeaderboard({ game: 'wayout', woMode, woRush })`. The end-of-run popup's Results button opens it
+  too. The footers' leaders still come from `_loadRushRows`.
 - Tuning (10 s / 0.5 s / 3 s, board steps) is a first guess; every run is stored raw so it can be set
   from real runs.

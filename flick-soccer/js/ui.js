@@ -30,9 +30,16 @@ const SETTINGS_KEY = 'gamehub.flicksoccer.v1';
 const SAVE_KEY = 'gamehub.flicksoccer.save.v1';
 const MODES = ['cpu', 'pass'];
 const FIRSTS = ['alt', 'me', 'them'];
-/** How far back (pitch units) a full-strength pull goes, and the dead zone round the disc. */
+/** How far back (pitch units) a full-strength pull goes, and the SAFE zone round the disc: letting go
+ *  anywhere in it never flicks (Matt and King of Games, several times each, 2026-10-16: they aimed a
+ *  disc, went back to it to aim another, let go a little off its centre and it flicked a tiny bit,
+ *  ending the turn). It is the whole disc and a little more (it was half the disc's radius), the same
+ *  everywhere; strength counts from its edge, so a full pull is as far as ever, and a small flick
+ *  still goes when the finger has clearly left the disc. Only where the room is too short for both
+ *  (a disc against a side wall, pulled toward it) does it give way, keeping PULL_RAMP of travel. */
 const PULL_MAX = 34;
-const PULL_DEAD = DISC_R * 0.5;
+const PULL_SAFE = DISC_R * 1.3;
+const PULL_RAMP = 18;
 /** Pulling near the edge (`_fullPull`): where a full pull lands, this far inside the screen's edge
  *  (px; the bottom adds the home bar), a thumb's width, since a finger stops short of the very edge
  *  (Matt, 2026-10-16: "I can't get full power", from the bottom-left corner, his finger ~60px up);
@@ -40,14 +47,15 @@ const PULL_DEAD = DISC_R * 0.5;
  *  edge a finger is never asked to pass (px). */
 const EDGE_M = 36;
 const EDGE_MIN_TRAVEL = 28;
-const EDGE_HARD = 10;
+const EDGE_HARD = 4;
 /** The bottom strip (px above the home bar) where letting go never shoots (Matt, 2026-10-16: "I was
  *  aiming a piece and this happened and it shot automatically", with a screenshot of the iPhone's
  *  Reachability slide). A pull dragged down into the home bar's corner sets off the phone's own
  *  swipe-down gestures, and the phone still reported the finger lifting, so the flick went. Inside
  *  this strip the aim is dropped (as if pulled back onto the disc); moving back up brings it back.
- *  A full pull always lands above it (`_edgeCam`). */
-const NO_SHOT_STRIP = 24;
+ *  A full pull always lands above it (`_edgeCam`). It was 24px; Matt, same day: "too sensitive... I
+ *  need to be able to pull farther down". Now only the home bar itself (`_safe`) is the strip. */
+const NO_SHOT_STRIP = 0;
 /** How far the view eases out (a look only, `_edgeCam`) while a pull near an edge is at full power,
  *  and how close (px) the finger must get to running out of room before it starts (Matt, 2026-10-16:
  *  "before i've run out of room, the whole board begins to move... There's no need for a zoom out
@@ -1392,7 +1400,10 @@ class FlickSoccerUI {
       return e;
     };
     const full = PULL_MAX * r.s0;
-    const fit = Math.min(Math.max(room(EDGE_M, EDGE_M + safe), EDGE_MIN_TRAVEL), room(EDGE_HARD, NO_SHOT_STRIP + 4 + safe));
+    // At least the disc plus PULL_RAMP of travel past it, so the disc itself is always the safe zone,
+    // even for a disc against a side wall pulled toward it (its full pull then sits nearer the edge).
+    const least = Math.max(EDGE_MIN_TRAVEL, DISC_R * r.s0 + PULL_RAMP);
+    const fit = Math.min(Math.max(room(EDGE_M, EDGE_M + safe), least), room(EDGE_HARD, NO_SHOT_STRIP + 4 + safe));
     return Math.max(8, Math.min(full, fit));
   }
 
@@ -1453,7 +1464,8 @@ class FlickSoccerUI {
     const vx = sx - bo.x, vy = sy - bo.y, len = Math.sqrt(vx * vx + vy * vy);
     const reach = PULL_MAX * r.s0;
     const full = len > 0 ? this._fullPull(bo, vx / len, vy / len) : reach;
-    const dead = PULL_DEAD * r.s0 * (full / reach);     // the dead zone shrinks with the pull
+    // The safe zone (px): the disc and a little more; never less than the disc itself.
+    const dead = Math.min(PULL_SAFE * r.s0, Math.max(DISC_R * r.s0 + 1, full - PULL_RAMP));
     const px = o.x - fp.x, py = o.y - fp.y, pl = Math.sqrt(px * px + py * py);
     if (len < dead || !(pl > 0)) { this.aim = { i: d.i, dx: 0, dy: -1, power: 0, fx: fp.x, fy: fp.y, contact: null, idle: true }; return; }
     const dx = px / pl, dy = py / pl;

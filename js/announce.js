@@ -109,6 +109,21 @@ export const ANNOUNCEMENTS = [
     cta: { en: 'Try it', es: 'Pruébalo' },
     action: 'bug-report',
   },
+  {
+    // The compact launcher (js/layout.js, 2026-10-17). Matt: "show an announcement saying a new
+    // layout is available and telling people to test it out". Try it switches this device to it.
+    id: 'compact-layout-2026-10-17',
+    from: '2026-10-17',
+    until: '2026-11-30',
+    badge: true,
+    title: { en: 'New layout', es: 'Nuevo diseño' },
+    body: {
+      en: ['Compact fits more games on one screen. Switch back any time in My Profile > Settings > Layout.'],
+      es: ['El diseño compacto muestra más juegos en una pantalla. Puedes volver cuando quieras en Mi perfil > Ajustes > Diseño.'],
+    },
+    cta: { en: 'Try it', es: 'Pruébalo' },
+    action: 'try-compact',
+  },
 ];
 
 /** Ids this device has dismissed. Never throws; a malformed or missing store reads as "none". */

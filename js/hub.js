@@ -23,6 +23,7 @@ import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 import { getLang, setLang, makeT, myName } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
+import { isCompact, setLayout, onLayoutChange } from './layout.js';
 import { GAME_ART } from './game-art.js';
 import { isNewGame, sortMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
@@ -32,6 +33,20 @@ import { isGameLive, isGameAllowed, gameLiveAt, refreshAdminConfig, onAdminConfi
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
+// js/strings.js is cache-first, so a key added with a feature can be missing for one visit.
+const tf = (k, fb, p) => { const v = t(k, p); return v === k ? fb : v; };
+
+// The compact layout's tab bar icons (js/layout.js). Outline, 24-unit grid, drawn by currentColor.
+const TAB_ICON = {
+  games: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
+  challenges: '<path d="M4 4l10 10M14 18l4-4M16 16l4 4M20 4L10 14M10 18l-4-4M8 16l-4 4"/>',
+  messages: '<path d="M4 5h16v11H9l-5 4z"/>',
+  leaderboard: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3M12 14v4M8 20h8"/>',
+  profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  sort: '<path d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+};
+const tabSvg = (k) => `<svg class="hub-tab-ico" viewBox="0 0 24 24" aria-hidden="true">${TAB_ICON[k]}</svg>`;
 
 // Record uncaught errors from load, not from the Hub constructor: the most interesting throws
 // happen while a game module is loading or mounting. Idempotent; see js/error-log.js.
@@ -712,6 +727,9 @@ class Hub {
     // preference change while the stored mode is 'auto' (not only on an explicit tap) -
     // subscribed once here (not per render(), which rebinds the button itself).
     this._themeUnsub = onThemeChange(() => this._paintThemeToggle());
+    // Comfortable <-> Compact (js/layout.js): repaint the launcher, never under a mounted game
+    // (render() rewrites the game area too); the class on <html> is already stamped either way.
+    this._layoutUnsub = onLayoutChange(() => { if (!this.current && this.root) { this.render(); this._paintReplyBadge(); } });
     // EVERYTHING BELOW WAITS FOR THE LAUNCHER TO PAINT (2026-09-01).
     //
     // These all fire dynamic imports, and firing them here - synchronously, immediately after
@@ -869,6 +887,9 @@ class Hub {
           // ...and a game announcement opens the game, so "Play" lands on it rather than leaving
           // the player to find the tile they were just told about.
           else if (action === 'play-golf') this.launch('golf');
+          // "Try it" on the new-layout announcement switches this device to Compact; the
+          // onLayoutChange listener repaints the launcher.
+          else if (action === 'try-compact') setLayout('compact');
         },
       });
     } catch (err) { console.warn('[hub] announcement could not be shown', err); }
@@ -955,7 +976,11 @@ class Hub {
     const mine = await count('./messages-ui.js', 'myUnreadMessages');
     const inbox = isAdminDevice() ? await count('./bug-report-ui.js', 'adminUnreadCount') : 0;
     badge(this.el && this.el.messages, mine + inbox);
-    badge(this.el && this.el.profile, await count('./bug-report-ui.js', 'myUnreadReplies'));
+    const replies = await count('./bug-report-ui.js', 'myUnreadReplies');
+    badge(this.el && this.el.profile, replies);
+    // The same two counts on the compact layout's tabs (a badge goes where the thing is reached).
+    this._tabBadge('messages', mine + inbox);
+    this._tabBadge('profile', replies);
   }
 
   /** Run `fn` once the launcher has had its chance to paint. Idle time if the browser offers it,
@@ -1030,15 +1055,26 @@ class Hub {
     this._favOrder = favGames.map((g) => g.id);
     // The reorder ghost button needs 2+ favorites to mean anything; if a reorder/removal
     // drops it below 2, fall out of edit mode gracefully rather than leaving a dangling toggle.
-    if (favGames.length < 2) this._favEdit = false;
+    const compact = isCompact();
+    this._compact = compact;
+    // Compact edit mode also REMOVES favorites (its tiles carry no heart), so one is enough there.
+    if (favGames.length < (compact ? 1 : 2)) this._favEdit = false;
     // The divider only earns its place between two non-empty groups; with zero favorites
     // (the common first-run case) or with every visible game favorited, the grid is a plain
     // single list (custom-ordered) and no divider renders.
     const showDividerLabel = favGames.length > 0 && restGames.length > 0;
     const showReorder = favGames.length >= 2;
-    const favHeaderHTML = showReorder
+    let favHeaderHTML = showReorder
       ? `<div class="hub-fav-header"><button type="button" class="hub-fav-reorder" data-role="fav-reorder">${t(this._favEdit ? 'hub_fav_done' : 'hub_fav_reorder')}</button></div>`
       : '';
+    // Compact: a FAVORITES label with one icon button (edit: move and remove), Matt's mockup C.
+    if (compact) {
+      favHeaderHTML = favGames.length
+        ? `<div class="hub-listhead hub-favhead"><span class="hub-listhead-label">${tf('hub_fav_label', 'Favorites')}</span>`
+          + `<button type="button" class="hub-fav-edit${this._favEdit ? ' is-on' : ''}" data-role="fav-reorder" aria-pressed="${!!this._favEdit}"`
+          + ` aria-label="${tf('hub_fav_edit_aria', 'Edit favorites')}">${tabSvg(this._favEdit ? 'check' : 'sort')}</button></div>`
+        : '';
+    }
     const gridHTML = favHeaderHTML
       + favGames.map((g) => this.cardHTML(g, true)).join('')
       + (restGames.length
@@ -1100,6 +1136,7 @@ class Hub {
           </section>
           <section class="hub-game" data-role="game" hidden></section>
         </main>
+        ${compact ? this._tabsHTML(prof, chGames.length > 0) : ''}
         <div class="hub-confirm" data-role="confirm" hidden>
           <div class="hub-confirm-scrim" data-role="confirm-cancel"></div>
           <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="${t('hub_confirm_dialog_aria')}">
@@ -1224,6 +1261,22 @@ class Hub {
     });
 
     if (this.el.chbar) this.el.chbar.addEventListener('click', () => this.openChallenges());
+
+    // The compact layout's tab bar. Each tab is the SAME action as the comfortable layout's button,
+    // so the two layouts can never drift apart in what they open.
+    const tabs = this.root.querySelector('[data-role="tabs"]');
+    if (tabs) {
+      tabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('[data-tab]');
+        if (!tab) return;
+        const k = tab.dataset.tab;
+        if (k === 'games') { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { window.scrollTo(0, 0); } }
+        else if (k === 'challenges') this.openChallenges();
+        else if (k === 'messages') this.el.messages.click();
+        else if (k === 'leaderboard') this.el.leaderboard.click();
+        // 'profile' is a real link to profile/, like the comfortable layout's pill.
+      });
+    }
 
     this.el.leaderboard.addEventListener('click', () => {
       import('./leaderboard-ui.js').then((m) => m.openLeaderboard()).catch(() => {});
@@ -1355,6 +1408,31 @@ class Hub {
     }
   }
 
+  // --- the compact layout's tab bar (js/layout.js, 2026-10-17) --------------------------------------
+  /** Games / Challenges / Messages / Leaderboards / Profile, icons only (Matt: "Most apps wouldn't
+   *  have those words there"). The open tab is yellow AND underlined by a bar, never hue alone.
+   *  Challenges only when this launcher has a challenge game, like the comfortable layout's bar. */
+  _tabsHTML(prof, hasChallenges) {
+    const badge = (k) => `<span class="hub-tab-badge" data-role="tab-badge-${k}" hidden></span>`;
+    const emoji = prof && prof.emoji ? String(prof.emoji) : '';
+    const face = emoji ? `<span class="hub-tab-av" aria-hidden="true">${emoji.replace(/[<>&"]/g, '')}</span>` : tabSvg('profile');
+    return `<nav class="hub-tabs" data-role="tabs" aria-label="${tf('hub_tabs_aria', 'Sections')}">
+        <button type="button" class="hub-tab is-on" data-tab="games" aria-current="page" aria-label="${t('hub_games_aria')}">${tabSvg('games')}</button>
+        ${hasChallenges ? `<button type="button" class="hub-tab" data-tab="challenges" aria-label="${t('hub_challenges_btn')}">${tabSvg('challenges')}${badge('challenges')}</button>` : ''}
+        <button type="button" class="hub-tab" data-tab="messages" aria-label="${t('msg_title')}">${tabSvg('messages')}${badge('messages')}</button>
+        <button type="button" class="hub-tab" data-tab="leaderboard" aria-label="${t('hub_leaderboard_aria')}">${tabSvg('leaderboard')}</button>
+        <a class="hub-tab" data-tab="profile" href="profile/" aria-label="${t('hub_profile_btn')}">${face}${badge('profile')}</a>
+      </nav>`;
+  }
+
+  /** A count on one tab; a number in a pill (never hue alone), "9+" past nine. */
+  _tabBadge(k, n) {
+    const el = this.root && this.root.querySelector(`[data-role="tab-badge-${k}"]`);
+    if (!el) return;
+    el.hidden = !(n > 0);
+    el.textContent = n > 9 ? '9+' : (n > 0 ? String(n) : '');
+  }
+
   // --- the Challenges screen (2026-10-05, js/challenges-ui.js) -------------------------------------
   /** The games on THIS player's launcher that have challenges: every registry entry with an
    *  `alerts` module (Connect 4 Hoops, Skeeball, Cup Pong, Darts). In registry order, named. */
@@ -1367,15 +1445,16 @@ class Hub {
   /** "2 your turn" on the Challenges button: summed from each game's alerts module, off the rows
    *  its own check()/watch() already read. No read of its own. */
   _paintChallengeCount() {
-    const el = this.root && this.root.querySelector('[data-role="challenges-count"]');
-    if (!el) return;
     let n = 0;
     for (const g of this._challengeGames()) {
       const mod = this._alertMods && this._alertMods[g.id];
       try { if (mod && typeof mod.myTurnCount === 'function') n += mod.myTurnCount() | 0; } catch { /* that game adds nothing */ }
     }
+    const el = this.root && this.root.querySelector('[data-role="challenges-count"]');
+    if (!el) { this._tabBadge('challenges', n); return; }
     el.hidden = n <= 0;
     el.textContent = n > 0 ? t('hub_challenges_turns', { n }) : '';
+    this._tabBadge('challenges', n);
     if (this.el && this.el.chbar) this.el.chbar.classList.toggle('is-turn', n > 0);
   }
 
@@ -1623,9 +1702,13 @@ class Hub {
     // grow into, so it flips underneath. Both are read off the real layout - a two-column grid
     // today, but nothing here hard-codes two columns or a row height.
     const grid = this.el.grid;
-    const rightHalf = cell.offsetLeft + cell.offsetWidth / 2 > grid.clientWidth / 2;
+    const mid = cell.offsetLeft + cell.offsetWidth / 2;
+    const rightHalf = mid > grid.clientWidth / 2;
+    // The compact layout's 3-across grid has a MIDDLE column: neither edge has room for a bubble
+    // wider than the tile, so it centres over the tile instead (css/hub.css, is-col-mid).
+    const middle = Math.abs(mid - grid.clientWidth / 2) < cell.offsetWidth / 2;
     const noRoomAbove = cell.offsetTop < 120;
-    el.className = `hub-alert is-${a.kind} ${rightHalf ? 'is-col-right' : 'is-col-left'}`
+    el.className = `hub-alert is-${a.kind} ${middle ? 'is-col-mid' : rightHalf ? 'is-col-right' : 'is-col-left'}`
       + (noRoomAbove ? ' is-below' : '');
     el.dataset.game = state.game;
     el.setAttribute('role', 'status');
@@ -2194,7 +2277,22 @@ class Hub {
     // of .hub-card - see .hub-cell/.hub-fav in hub.css.
     const favored = this._favIds.has(g.id);
     let overlay;
-    if (favGroup && this._favEdit) {
+    if (favGroup && this._compact) {
+      // COMPACT: a favorite tile carries no heart (they are all favorites). Edit mode puts move
+      // left / move right and a filled heart (tap = remove) on it instead.
+      if (this._favEdit) {
+        const idx = this._favOrder.indexOf(g.id);
+        overlay = `
+        <span class="hub-fav-tools">
+          <button type="button" class="hub-fav-move" data-fav-id="${g.id}" data-dir="up" ${idx <= 0 ? 'disabled' : ''}
+                  aria-label="${tf('hub_fav_move_left', `Move ${titleText(g)} left`, { title: titleText(g) })}">‹</button>
+          <button type="button" class="hub-fav is-fav" data-fav-id="${g.id}" aria-pressed="true"
+                  aria-label="${t('hub_fav_remove', { title: titleText(g) })}">♥</button>
+          <button type="button" class="hub-fav-move" data-fav-id="${g.id}" data-dir="down" ${idx >= this._favOrder.length - 1 ? 'disabled' : ''}
+                  aria-label="${tf('hub_fav_move_right', `Move ${titleText(g)} right`, { title: titleText(g) })}">›</button>
+        </span>`;
+      } else overlay = '';
+    } else if (favGroup && this._favEdit) {
       const idx = this._favOrder.indexOf(g.id);
       const upLabel = t('hub_fav_move_up', { title: titleText(g) });
       const downLabel = t('hub_fav_move_down', { title: titleText(g) });
@@ -2348,6 +2446,7 @@ class Hub {
       window.removeEventListener('pageshow', this._onResume);
     }
     if (this._themeUnsub) this._themeUnsub();
+    if (this._layoutUnsub) this._layoutUnsub();
     this.root.innerHTML = '';
   }
 }

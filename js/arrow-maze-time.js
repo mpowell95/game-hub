@@ -89,10 +89,37 @@ export function woBandPoints(band, cleared) {
   const c = Math.max(0, Math.floor(Number(cleared) || 0));
   return WO_BAND_POINTS[band] ? c * WO_BAND_POINTS[band] : 0;
 }
-/** A player's Arrow Maze points from their stats record (`games.wayout`): one band, or all four. */
+// HINTS AND LOST LIVES COST POINTS (2026-10-17). Matt: "Using a hint or losing a life should reduce
+// the number of points you get for that level. You should not be able to use a hint and lose a life
+// and still get 6 points for completing an expert level round." A SLIP is a hint used or a heart lost
+// on the level, across every Restart and Try again of it (they ride its clock; New game starts it
+// over). The table is Matt's: Expert "6, 4, 2, and one"; Hard 4, 3, 2, 1; Medium 2, 1; Easy 1 (it
+// has nothing to take away). A cleared level is always worth at least 1.
+// From that day only: a level is SCORED this way when its slips are known (a timed level); the
+// recorder adds what it earned to `wo.pts[band]` and counts it in `wo.ptsN[band]`, both plain
+// counters that add across a person's phones. Every other cleared level (before this, untimed, or
+// from a phone on an older build) keeps its difficulty's full points, as before. Matt: "Let's wait on
+// going back and recalculating... once we have enough data we can use averages."
+export const WO_SLIP_POINTS = { easy: [1], medium: [2, 1], hard: [4, 3, 2, 1], expert: [6, 4, 2, 1] };
+/** What a cleared level of `band` earns after `slips` hints and lost lives. */
+export function woEarnedPoints(band, slips) {
+  const row = WO_SLIP_POINTS[band];
+  if (!row) return 0;
+  const n = Math.max(0, Math.floor(Number(slips) || 0));
+  return row[Math.min(n, row.length - 1)];
+}
+/** A player's Arrow Maze points from their stats record (`games.wayout`): one band, or all four.
+ *  Levels scored with their slips count what they earned; every other cleared level its full points. */
 export function woPoints(rec, band = null) {
   const byDiff = (rec && rec.byDiff) || {};
-  const one = (b) => woBandPoints(b, ((byDiff[b] || {}).won) | 0);
+  const wo = (rec && rec.wo) || {};
+  const one = (b) => {
+    const won = ((byDiff[b] || {}).won) | 0;
+    const n = Math.min(won, Math.max(0, ((wo.ptsN || {})[b]) | 0));
+    const earned = Math.max(0, Math.floor(Number((wo.pts || {})[b]) || 0));
+    // A scored level earns between 1 and its full points; a count out of that range is clamped.
+    return woBandPoints(b, won - n) + (n ? Math.min(n * (WO_BAND_POINTS[b] || 0), Math.max(n, earned)) : 0);
+  };
   return band ? (WO_TIERS.includes(band) ? one(band) : 0) : WO_TIERS.reduce((n, b) => n + one(b), 0);
 }
 

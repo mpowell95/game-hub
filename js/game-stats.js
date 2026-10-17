@@ -255,7 +255,7 @@
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
-import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woWeekKey } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woWeekKey, woEarnedPoints } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
@@ -503,10 +503,14 @@ function ensureWo(g) {
   if (!g.wo || typeof g.wo !== 'object') g.wo = { timed: {}, mistakes: 0, hints: 0, log: {} };
   for (const k of ['mistakes', 'hints']) if (!Number.isFinite(g.wo[k])) g.wo[k] = 0;
   if (!g.wo.timed || typeof g.wo.timed !== 'object' || Array.isArray(g.wo.timed)) g.wo.timed = {};
+  // (2026-10-17) Points earned by levels scored with their hints and lost lives, and how many levels
+  // that is, per difficulty (js/arrow-maze-time.js, woPoints). Plain counters: they only go up.
+  for (const k of ['pts', 'ptsN']) if (!g.wo[k] || typeof g.wo[k] !== 'object' || Array.isArray(g.wo[k])) g.wo[k] = {};
   const seed = !g.wo.log || typeof g.wo.log !== 'object' || Array.isArray(g.wo.log);
   if (seed) g.wo.log = {};
   for (const tier of WO_TIERS) {
     if (!Number.isFinite(g.wo.timed[tier])) g.wo.timed[tier] = 0;
+    for (const k of ['pts', 'ptsN']) if (!Number.isFinite(g.wo[k][tier])) g.wo[k][tier] = 0;
     g.wo.log[tier] = woList(seed ? (g.wo.recent || {})[tier] : g.wo.log[tier]);
   }
 }
@@ -1754,6 +1758,10 @@ export function recordWayOut(tier, f = {}) {
     if ((f.gen | 0) > 0) e.g = f.gen | 0;
     e.d = Date.now();
     g.wo.log[d] = g.wo.log[d].concat([e]);
+    // Hints and lost lives cost points from 2026-10-17 (woEarnedPoints): a timed level's slips are
+    // known, so it is scored with them. An untimed one keeps its full points (nothing invented).
+    g.wo.pts[d] += woEarnedPoints(d, m + h);
+    g.wo.ptsN[d] += 1;
   }
   st.updatedAt = new Date().toISOString();
   persist(st);
