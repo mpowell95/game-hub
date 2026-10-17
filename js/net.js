@@ -356,7 +356,42 @@ export async function sendReaction(code, seatKey, payload) {
   if (!v) return;
   try {
     await _api.set(_api.ref(_db, `rooms/${code}/reactions/${slot}`), { t: payload.t, v, at: Date.now() });
-  } catch { /* best-effort: a reaction that fails to send is never worth an error */ }
+  } catch { /* best-effort: a reaction that fails to send is never worth an error */ return; }
+  // And keep it (2026-10-17): the line is also saved into this player's Messages conversation with
+  // each other player in the room (js/messages.js logGameChat; thread only, no push). Fire and
+  // forget, AFTER the reaction itself, so it can never slow or break the game. The room protocol
+  // is untouched: this only READS the room's game and seat codes.
+  saveChatToMessages(code, { t: payload.t, v }).catch(() => { /* logged inside */ });
+}
+
+// Room game -> hub id and stats id, for the conversation's game label and tile art.
+const ROOM_GAME_IDS = {
+  hoops4: ['hoops4', 'hoops4'], battleship: ['battleship', 'battleship'], boggle: ['boggle', 'boggle'],
+  chinchon: ['chinchon', 'chinchon'], dotsboxes: ['dots-boxes', 'dotsboxes'], escoba: ['escoba', 'escoba'],
+  filler: ['filler', 'filler'], holdem: ['holdem', 'holdem'], mancala: ['mancala', 'mancala'],
+  tictactoe: ['tic-tac-toe', 'tictactoe'], yahtzee: ['yahtzee', 'yahtzee'],
+  airhockey: ['air-hockey', 'airhockey'], 'airhockey-test': ['air-hockey', 'airhockey'],
+};
+const _roomPeople = new Map();   // code -> { at, game, codes }: who is at the table, re-read every 30 s
+async function roomPeople(code) {
+  const hit = _roomPeople.get(code);
+  if (hit && Date.now() - hit.at < 30_000) return hit;
+  const val = async (path) => { const sn = await _api.get(_api.ref(_db, `rooms/${code}/${path}`)); return sn && sn.exists() ? sn.val() : null; };
+  const [game, host, guest, seats] = await Promise.all([val('game'), val('host/code'), val('guest/code'), val('seats')]);
+  const codes = [host, guest];
+  if (seats && typeof seats === 'object') for (const k of Object.keys(seats)) codes.push(seats[k] && seats[k].code);
+  const out = { at: Date.now(), game: String(game || ''), codes: codes.filter((c) => typeof c === 'string' && c) };
+  _roomPeople.set(code, out);
+  return out;
+}
+async function saveChatToMessages(code, payload) {
+  const ids = ROOM_GAME_IDS[(await roomPeople(code)).game];
+  if (!ids) return;
+  const { codes } = await roomPeople(code);
+  const [msgs, rx] = await Promise.all([import('./messages.js'), import('./mp-reactions.js')]);
+  let text = payload.v;
+  try { text = payload.t === 'c' ? payload.v : rx.reactionText(payload, (await import('./i18n.js')).getLang()); } catch { /* the raw value */ }
+  await msgs.logGameChat({ toCodes: codes, game: ids[0], stats: ids[1], room: code, payload, text });
 }
 
 /** Host only: publish a full-state recovery snapshot after a hash mismatch.
