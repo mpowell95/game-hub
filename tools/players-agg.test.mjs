@@ -4,6 +4,7 @@ const __ROOT_URL = new URL('../', import.meta.url).href;
 const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
 // Headless unit tests for js/players-agg.js. Run: node tools/players-agg.test.mjs
 import { aggregatePlayers, identityKey, aggregateForViewer, COMPETITIVE, SOLO } from '../js/players-agg.js';
+import { woPoints } from '../js/arrow-maze-time.js';
 
 let fail = 0;
 const eq = (label, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) { fail++; console.log(`FAIL ${label}\n  got:  ${JSON.stringify(got)}\n  want: ${JSON.stringify(want)}`); } else console.log(`ok   ${label}`); };
@@ -667,6 +668,21 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   const r = aggregatePlayers(all)[0].games.wayout.wo.rush;
   eq('wayout rush: a week\'s best is the best on any device', [r.best.easy['2026-10-12'], r.best.easy['2026-10-05'], r.best.hard['2026-10-12']], [41, 12, 9]);
   eq('wayout rush: runs come from the device with the most', [r.runs.easy.length, r.runs.hard.length], [2, 1]);
+}
+// Points earned with hints and lost lives counted (2026-10-17): counters, so two phones add; a phone
+// on an older build (no counters) still counts its levels in full.
+{
+  const all = {
+    d1: rec({ playerId: 'WO333', name: 'Slipper' }, { wayout: { total: { played: 2, won: 2, lost: 0 }, byDiff: { expert: { played: 2, won: 2, lost: 0 } },
+      wo: { timed: { expert: 2 }, mistakes: 1, hints: 1, log: {}, pts: { expert: 8 }, ptsN: { expert: 2 } } } }, 100),
+    d2: rec({ playerId: 'WO333', name: 'Slipper' }, { wayout: { total: { played: 1, won: 1, lost: 0 }, byDiff: { expert: { played: 1, won: 1, lost: 0 } },
+      wo: { timed: { expert: 1 }, mistakes: 2, hints: 0, log: {}, pts: { expert: 2 }, ptsN: { expert: 1 } } } }, 200),
+    d3: rec({ playerId: 'WO333', name: 'Slipper' }, { wayout: { total: { played: 1, won: 1, lost: 0 }, byDiff: { expert: { played: 1, won: 1, lost: 0 } },
+      wo: { timed: { expert: 1 }, mistakes: 0, hints: 0, log: {} } } }, 300),
+  };
+  const w = aggregatePlayers(all)[0].games.wayout;
+  eq('wayout points: earned counters add across phones', [w.wo.pts.expert, w.wo.ptsN.expert], [10, 3]);
+  eq('wayout points: 10 earned + 1 level from an older build in full', woPoints(w), 16);
 }
 
 // ---- Cup Pong's cp (solo racks) survives the cross-device combine (THE LAW rule 1) ----

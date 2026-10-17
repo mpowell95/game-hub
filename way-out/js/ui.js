@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
-import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
+import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -1245,8 +1245,10 @@ class WayOut {
       console.error('[way-out] recordWayOut failed - the level was NOT recorded', err);
     }
     this._paintClock();
-    // Shown under the win word: the level's time, penalties in.
-    this.winSub = woClock(c.ms + c.pen);
+    // Shown under the win word: the level's time, penalties in, and what the level earned (hints and
+    // lost lives cost points since 2026-10-17; an untimed level keeps its full points).
+    const earned = c.partial ? woLevelPoints(this.level) : woEarnedPoints(this.tier, (c.mistakes | 0) + (c.hints | 0));
+    this.winSub = `${woClock(c.ms + c.pen)} · ${t('lv_pts', { n: earned })}`;
     writeClock(this.tier, null);
     this.clock = null;
     clearSave(this.tier);

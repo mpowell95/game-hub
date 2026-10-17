@@ -251,9 +251,14 @@ export function aggregatePlayers(all, corrections) {
         if (!dst.wo) dst.wo = { timed: {}, mistakes: 0, hints: 0, log: {}, _n: {} };
         dst.wo.mistakes += src.wo.mistakes | 0;
         dst.wo.hints += src.wo.hints | 0;
+        if (!dst.wo.pts) dst.wo.pts = {};
+        if (!dst.wo.ptsN) dst.wo.ptsN = {};
         for (const tier of WO_TIERS) {
           const n = ((src.wo.timed || {})[tier]) | 0;
           dst.wo.timed[tier] = (dst.wo.timed[tier] | 0) + n;
+          // Points earned with hints and lost lives counted (2026-10-17): counters, so they add.
+          dst.wo.pts[tier] = (dst.wo.pts[tier] | 0) + (((src.wo.pts || {})[tier]) | 0);
+          dst.wo.ptsN[tier] = (dst.wo.ptsN[tier] | 0) + (((src.wo.ptsN || {})[tier]) | 0);
           const log = woList(((src.wo.log || src.wo.recent) || {})[tier]);
           if (n > (dst.wo._n[tier] | 0)) { dst.wo._n[tier] = n; dst.wo.log[tier] = log; }
         }
