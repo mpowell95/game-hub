@@ -50,7 +50,7 @@ function ensureCss() {
               background: var(--gh-surface-2); }
   .ann-tile svg { width: 100%; height: 100%; display: block; }
   .ann-tilename { margin: 0 0 var(--gh-sp-4); font-size: var(--gh-fs-lg); font-weight: 800; }
-  .ann-body { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.55; text-align: left; }
+  .ann-body { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); line-height: 1.55; text-align: center; }
   /* Two whole phone screens, side by side. Each column is half the modal, so the pictures stay
      tall-and-narrow (which is what they are) instead of being letterboxed. */
   .ann-shots { display: flex; gap: var(--gh-sp-2); margin: 0 0 var(--gh-sp-3); }

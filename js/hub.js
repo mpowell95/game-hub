@@ -28,7 +28,7 @@ import { GAME_ART } from './game-art.js';
 import { isNewGame, sortMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
-import { pendingAnnouncement } from './announce.js';
+import { pendingAnnouncement, loadSeen, markSeen } from './announce.js';
 import { isGameLive, isGameAllowed, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice } from './admin-config.js';
 import STRINGS from './strings.js';
 
@@ -45,6 +45,16 @@ const TAB_ICON = {
   profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   sort: '<path d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+};
+// The compact layout's bottom-bar tips (2026-10-17): one "your turn"-style bubble per tab, in order.
+// English fallbacks for a visit where the cache-first js/strings.js is a build behind.
+const TOUR_ID = 'compact-tour-2026-10-17';
+const TOUR_FB = {
+  games: ['GAMES', 'All your games'],
+  challenges: ['CHALLENGES', 'Your turns and invites'],
+  messages: ['MESSAGES', 'Chat with other players'],
+  leaderboard: ['LEADERBOARDS', "See who's winning"],
+  profile: ['PROFILE', 'Settings, stats and layout'],
 };
 const tabSvg = (k) => `<svg class="hub-tab-ico" viewBox="0 0 24 24" aria-hidden="true">${TAB_ICON[k]}</svg>`;
 
@@ -1004,6 +1014,7 @@ class Hub {
   }
 
   render() {
+    if (this._endTour) this._endTour();   // the tabs it points at are about to be replaced
     // Gate the hidden challenge entry on a hashed name match (inert for everyone else).
     const prof = loadProfile();
     // M3b: the hidden challenge/gift is complete and retired. Task badges, the hidden
@@ -1316,6 +1327,7 @@ class Hub {
     // check is separate (_checkGameAlerts) and only runs on the launcher; this is pure DOM.
     this._paintGameAlert();
     this._paintChallengeCount();
+    if (compact) this._maybeTour();
   }
 
   // --- a game saying somebody is waiting on you -------------------------------------------------
@@ -1423,6 +1435,75 @@ class Hub {
         <button type="button" class="hub-tab" data-tab="leaderboard" aria-label="${t('hub_leaderboard_aria')}">${tabSvg('leaderboard')}</button>
         <a class="hub-tab" data-tab="profile" href="profile/" aria-label="${t('hub_profile_btn')}">${face}${badge('profile')}</a>
       </nav>`;
+  }
+
+  /** The bottom-bar tips, once per device, the first time it shows Compact (Matt: "things to pop up
+   *  that look like the 'your turn' things but for the bottom menu bar. And say what each thing is").
+   *  Waits for any popup or overlay to close; never over a game. Tap anywhere = next, X = skip; the
+   *  end (or a skip) records it in the announcement seen-list, which is what reports it to Admin. */
+  _maybeTour() {
+    if (this._touring || this._tourTimer) return;
+    this._tourTimer = setTimeout(() => {
+      this._tourTimer = 0;
+      if (this._destroyed || this.current || !this._compact || !hasName()) return;
+      if (document.querySelector('.ann-overlay, .gh-overlay')) return;   // asked again on the next paint
+      if (loadSeen().includes(TOUR_ID)) return;
+      const tabs = [...this.root.querySelectorAll('.hub-tabs [data-tab]')];
+      if (tabs.length) this._runTour(tabs);
+    }, 700);
+  }
+
+  _runTour(tabs) {
+    this._touring = true;
+    const html = document.documentElement;
+    html.classList.add('gh-touring');
+    const scrim = document.createElement('div');
+    scrim.className = 'hub-tour';
+    scrim.innerHTML = `<button type="button" class="hub-tour-skip" aria-label="${tf('hub_tip_skip', 'Skip tips')}">&times;</button>`
+      + '<div class="hub-tip" role="status" aria-live="polite"></div>';
+    document.body.appendChild(scrim);
+    const tip = scrim.querySelector('.hub-tip');
+    let i = 0;
+    const onKey = (e) => { if (e.key === 'Escape') end(); };
+    const end = () => {
+      if (!this._touring) return;
+      this._touring = false;
+      this._endTour = null;
+      markSeen(TOUR_ID);
+      scrim.remove();
+      html.classList.remove('gh-touring');
+      tabs.forEach((el) => el.classList.remove('is-tip'));
+      window.removeEventListener('keydown', onKey);
+    };
+    this._endTour = end;
+    const show = () => {
+      tabs.forEach((el, j) => el.classList.toggle('is-tip', j === i));
+      const k = tabs[i].dataset.tab;
+      const fb = TOUR_FB[k] || [k, ''];
+      tip.innerHTML = `<span class="hub-tip-head">${tf('hub_tip_' + k, fb[0])}</span>`
+        + `<span class="hub-tip-line">${tf('hub_tip_' + k + '_line', fb[1])}</span>`
+        + `<span class="hub-tip-step">${i + 1}/${tabs.length} ›</span>`;
+      // Above its tab, kept on screen, the tail pointing at the tab's centre.
+      tip.classList.remove('is-in');
+      tip.style.left = '0px';
+      const r = tabs[i].getBoundingClientRect();
+      const w = tip.offsetWidth;
+      const vw = html.clientWidth;
+      const cx = r.left + r.width / 2;
+      const left = Math.max(12, Math.min(vw - 12 - w, cx - w / 2));
+      tip.style.left = `${left}px`;
+      tip.style.bottom = `${window.innerHeight - r.top + 14}px`;
+      tip.style.setProperty('--tail', `${Math.round(cx - left - 10)}px`);
+      void tip.offsetWidth;   // restart the pop-in for each step
+      tip.classList.add('is-in');
+    };
+    scrim.addEventListener('click', (e) => {
+      if (e.target.closest('.hub-tour-skip')) { end(); return; }
+      i += 1;
+      if (i >= tabs.length) end(); else show();
+    });
+    window.addEventListener('keydown', onKey);
+    show();
   }
 
   /** A count on one tab; a number in a pill (never hue alone), "9+" past nine. */
@@ -2447,6 +2528,8 @@ class Hub {
     }
     if (this._themeUnsub) this._themeUnsub();
     if (this._layoutUnsub) this._layoutUnsub();
+    if (this._endTour) this._endTour();
+    clearTimeout(this._tourTimer);
     this.root.innerHTML = '';
   }
 }
