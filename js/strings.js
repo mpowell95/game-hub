@@ -1069,7 +1069,7 @@ export const STRINGS = {
     bug_mine_btn: '📬 Respuestas a tus reportes',
     bug_mine_btn_new: '📬 Respuestas a tus reportes ({n} nuevas)',
     bug_mine_from: 'Matt respondió, {when}',
-    bug_mine_empty: 'Todavía no hay respuestas. Lo que reportes aparecerá aquí cuando se conteste.',
+    bug_mine_empty: 'Aún no hay respuestas. Lo que reportes saldrá aquí al contestarse.',
     bug_mine_offline: 'No se pudo comprobar si hay respuestas. Estás sin conexión.',
 
     // --- Messages (js/messages-ui.js) ---

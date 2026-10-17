@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1191';
+const CACHE = 'game-hub-v1192';
 
 const ASSETS = [
   './',
@@ -965,7 +965,7 @@ const REST_MANIFEST = {
   './chinchon/js/hash.js': '9bbf5d8385',
   './chinchon/js/ai.js': 'd69864fbc2',
   './chinchon/js/ui.js': '0cd05fcba9',
-  './chinchon/js/strings.js': '422d9d321f',
+  './chinchon/js/strings.js': '408386915e',
   './parchis/': 'ee4e32987e',
   './parchis/index.html': 'ee4e32987e',
   './filler/': '12eb5af876',
@@ -984,7 +984,7 @@ const REST_MANIFEST = {
   './escoba/js/hash.js': '032dbfed1a',
   './escoba/js/ai.js': '66a7d1f37a',
   './escoba/js/ui.js': 'bf7bc93ffb',
-  './escoba/js/strings.js': 'd2f7bba4e8',
+  './escoba/js/strings.js': 'afccb92f86',
   './escoba/img/broom-sprite.webp': 'c1a0f8a912',
   './mancala/index.html': 'bddd26c9cf',
   './mancala/css/mancala.css': 'b9f63a0db8',

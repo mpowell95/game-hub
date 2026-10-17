@@ -178,7 +178,7 @@ export const STRINGS = {
     difficulty: 'Dificultad',
     multiplayer: 'Multijugador',
     mpHome: 'Multijugador',
-    mpChallengeBig: 'Retar a alguien', mpHostShort: 'Crear', mpJoinShort: 'Unirse', mpPassShort: 'Pasar y jugar',
+    mpChallengeBig: 'Retar a alguien', mpHostShort: 'Crear', mpJoinShort: 'Unirse', mpPassShort: 'Un móvil',
     vsName: 'contra {name}', mpSecYours: 'Te toca', mpSecTheirs: 'Esperando al rival', mpWaiting2: 'Esperando',
     mpQuit: 'Abandonar', mpQuitAria: 'Abandonar la partida con {who}', mpQuitQ: '¿Abandonar esta partida?',
     mpQuitBody: 'Tu partida con {who} termina y cuenta como derrota.',
