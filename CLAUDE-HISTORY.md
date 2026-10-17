@@ -1183,3 +1183,22 @@ A per-game pass (about 40 game files incl. Monopoly Deal and the Parchís build)
 `worktree-agent-a1088a54bd77c574b` and NOT shipped, per Matt's clarification; it is there if wanted
 (note: Monopoly Deal needs its own `business-deal/sw.js` CACHE bump, Parchís edits are overwritten by
 the next `../Parchís/` rebuild, and `functions/decide.js` push text still says "you").
+
+## The compact layout (2026-10-17)
+
+Matt asked whether the launcher was "efficient or clean". Measured: 8 games on the first screen, the
+first one ~300px down (two rows of top-bar buttons, a Challenges bar, a Reorder row, big 2-across
+tiles). Mockups A (top icons) and B (bottom tab bar) were drawn with the real tile art; Matt edited B
+into "C" in Mockup Pad: B's tab bar and tiles with the comfortable header (title, En, theme, version).
+He then asked for bigger tab icons with no words ("Most apps wouldn't have those words there either"),
+a tighter gap under the title, and for it to be a player OPTION, not a replacement: "A comfortable and
+a compact layout. The new one is the compact. They can toggle between either whenever they want", with
+an announcement telling people to try it.
+
+Built as `js/layout.js` (same shape as theme.js) + a Profile > Settings > Layout row + CSS keyed off
+`.gh-compact`. Comfortable renders exactly as before. Compact details: favorites carry no heart; the
+FAVORITES head's icon button opens edit mode with ‹ ♥ › on each favorite (move left, remove, move right),
+answering Matt's "Without the heart on the favorite games, how do you expect people to favorite and
+unfavorite games?". The open tab is coloured AND underlined (colorblind rule). The title is 21px only
+from 385px wide (at 360px it ellipsized). The "your turn" bubble gained `is-col-mid` because the
+3-across grid has a middle column, where a left-anchored 290px bubble ran off the screen.
