@@ -810,7 +810,7 @@ html.gh-compact:not(.gh-ingame) .hub-top { gap: 0; padding-bottom: 4px; border-b
 html.gh-compact:not(.gh-ingame) .hub-top-title { font-weight: 700; }
 /* Bigger only where it fits beside the three pills (a 360px phone cut it to "Matt's Game ..."). */
 @media (min-width: 385px) { html.gh-compact:not(.gh-ingame) .hub-top-title { font-size: 21px; } }
-html.gh-compact:not(.gh-ingame) .hub-main { padding: 0 16px calc(104px + env(safe-area-inset-bottom, 0px)); }
+html.gh-compact:not(.gh-ingame) .hub-main { padding: 0 16px calc(84px + env(safe-area-inset-bottom, 0px)); }
 html.gh-compact:not(.gh-ingame) .hub-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
 
 /* A tile: the art is the rounded box, the name sits under it in the page's own ink. */
@@ -861,14 +861,16 @@ html.gh-compact .hub-listhead-label::after { display: none; }
 html.gh-compact:not(.gh-ingame) .hub-tabs {
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+  /* Icons sit just above the iPhone home bar, like a native tab bar: the safe-area inset is mostly
+     the home bar's own clearance, so only part of it is added (Matt: a gap under the icons "is weird"). */
+  padding: 4px max(8px, env(safe-area-inset-right, 0px)) max(6px, calc(env(safe-area-inset-bottom, 0px) - 16px)) max(8px, env(safe-area-inset-left, 0px));
   background: rgba(255, 255, 255, 0.96); backdrop-filter: saturate(1.2) blur(6px);
   border-top: 1px solid var(--hub-surface-2);
 }
 .hub-tab {
   position: relative; appearance: none; border: 0; background: none; font: inherit; padding: 6px 0 0;
   color: var(--hub-muted); display: flex; flex-direction: column; align-items: center; gap: 6px;
-  min-height: 52px; cursor: pointer; touch-action: manipulation; text-decoration: none;
+  min-height: 48px; cursor: pointer; touch-action: manipulation; text-decoration: none;
 }
 .hub-tab::after { content: ''; width: 20px; height: 3px; border-radius: 2px; }
 .hub-tab.is-on { color: var(--hub-accent); }
