@@ -9,7 +9,7 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, isActive, ACTIVE_WINDOW_MS } from '../functions/decide.js';
+import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, isActive, ACTIVE_WINDOW_MS } from '../functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -228,6 +228,25 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('archery: a called-off row (over:false, ended) says nothing', decideArchery({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ ended: 'cancelled' }) }) === null);
   check('archery: Spanish wording', decideArchery({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Tiro con arco');
   check('archery: the trigger watches archery/index and names the match', /ref: '\/archery\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'archery', match: id \}/.test(fnSrc));
+}
+
+// --- Chinchón challenges (2026-10-18) --------------------------------------------------------------
+{
+  const row = (x) => ({ name: 'Ana', yourTurn: false, over: false, lastBy: 'them', mine: 0, theirs: 0, kind: 'hand', round: 1, ...x });
+  const body = (n) => n && n.text('en').body;
+  check('chinchon: a new row that is your turn is a challenge, naming the length', body(decideChinchon({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, kind: '50' }) })) === 'Ana challenged you to Chinchón, to 50. Your turn!');
+  check('chinchon: one hand says so', /one hand/.test(body(decideChinchon({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }))));
+  check('chinchon: the challenger\'s own new row is not news', decideChinchon({ code: 'MATTA', id: 'x', before: null, after: row({ lastBy: 'me' }) }) === null);
+  check('chinchon: the turn coming back says the score', body(decideChinchon({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true, mine: 12, theirs: -10 }) })) === 'Your turn vs Ana. You 12, Ana -10');
+  check('chinchon: already your turn is not news again', decideChinchon({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ yourTurn: true }) }) === null);
+  check('chinchon: your own moves (turn going away) say nothing', decideChinchon({ code: 'MATTA', id: 'x', before: row({ yourTurn: true, lastBy: 'me' }), after: row({ lastBy: 'me' }) }) === null);
+  check('chinchon: they won', body(decideChinchon({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'lost', mine: 61, theirs: 20 }) })) === 'Ana won, 20 to 61.');
+  check('chinchon: their close ended it and you won', body(decideChinchon({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', mine: 4, theirs: 9 }) })) === 'You beat Ana, 4 to 9!');
+  check('chinchon: a draw says so', /draw/.test(body(decideChinchon({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'draw', mine: 7, theirs: 7 }) }))));
+  check('chinchon: they resigned, you won', /resigned/.test(body(decideChinchon({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
+  check('chinchon: a called-off row (over:false, ended) says nothing', decideChinchon({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ ended: 'cancelled' }) }) === null);
+  check('chinchon: Spanish wording', /retado al Chinchón, a 100/.test(decideChinchon({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, kind: '100' }) }).text('es').body));
+  check('chinchon: the trigger watches chinchon/index and names the match', /ref: '\/chinchon\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'chinchon', match: id \}/.test(fnSrc));
 }
 
 // --- Flick Soccer challenges (2026-10-11) ----------------------------------------------------------

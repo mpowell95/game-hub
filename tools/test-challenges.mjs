@@ -64,14 +64,16 @@ ok('someone waiting on you sorts first', S.opponents[0].code === 'LILIC');
 ok('a person with only live games is still listed', S.opponents.some((o) => o.code === 'UNAID' && o.live === 1 && o.played === 0));
 ok('finished newest first', S.finished[0].updated >= S.finished[S.finished.length - 1].updated);
 ok('summarize does not mutate its input', rows[0].id === 'd1' && rows.length === 7);
-ok('every registry source is one of the six challenge games',
-  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'cuppong', 'darts', 'flick-soccer', 'hoops4', 'skeeball']));
+// Chinchón joined 2026-10-18 (turn-by-turn challenges beside its live rooms).
+ok('every registry source is one of the challenge games',
+  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'chinchon', 'cuppong', 'darts', 'flick-soccer', 'hoops4', 'skeeball']));
 
 // --- the handoff contract, per game ---------------------------------------------------------------
 const them = { code: 'ANABB', name: 'Ana', emoji: '🦊' };
 for (const [game, path, take] of [
   ['darts', './darts/js/alert.js', 'takeOpen'],
   ['archery', './archery/js/alert.js', 'takeOpen'],
+  ['chinchon', './chinchon/js/alert.js', 'takeOpen'],
   ['flick-soccer', './flick-soccer/js/alert.js', 'takeOpen'],
   ['cuppong', './cup-pong/js/alert.js', 'takeOpen'],
   ['hoops4', './hoops4/js/alert.js', 'takeCeremony'],

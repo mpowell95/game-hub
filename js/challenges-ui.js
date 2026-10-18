@@ -235,6 +235,7 @@ function subLine(r, gameName) {
   const i = r.info || {};
   const bits = [gameName(r.game)];
   if (r.game === 'darts' && i.kind) bits.push(i.kind === 'cricket' ? t('cx_cricket') : i.kind === 'cricket-order' ? t('cx_cricket_order') : i.kind);
+  if (r.game === 'chinchon' && i.kind) bits.push(i.kind === 'hand' ? t('cx_one_hand') : t('cx_to_n', { n: i.kind }));
   if (r.game === 'skeeball') {
     if (i.all) bits.push(t('cx_all_machines'));
     else if (i.n > 1) bits.push(t('cx_n_games', { n: i.n }));

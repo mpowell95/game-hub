@@ -125,6 +125,9 @@ export const GAMES = [
     blurb: { en: 'Spanish rummy vs. smart AI. Melds, cuts & chinchón. 2–4 players.',
       es: 'Rummy español contra una IA inteligente. Ligadas, cortes y chinchón. 2-4 jugadores.' },
     module: '../chinchon/js/ui.js',
+    // Turn-by-turn challenges (2026-10-18): a new one, your turn, or a result you missed, on the
+    // launcher. Live rooms are unchanged.
+    alerts: () => import('../chinchon/js/alert.js'),
     accent: '#d4a017',
     // A held FAN of five cards is naturally wide, so it suits 16:9 far better than the
     // two-card stack the square frame forced. Centers arc up toward the middle card.

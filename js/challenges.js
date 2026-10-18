@@ -102,6 +102,15 @@ export const SOURCES = {
     action: logGameAction,
     end: logGameEnd,
   },
+  // Chinchón (2026-10-18): chinchon/js/mp.js, the same log-game shape (a log of draws, discards and
+  // closes). Also a live-room game: js/mp-records.js counts its Games row from 'mp' once.
+  chinchon: {
+    load: () => import('../chinchon/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
+  },
 };
 
 /** What may be done to a live match right now ('cancel' | 'decline' | 'resign' | null). Never rejects. */
