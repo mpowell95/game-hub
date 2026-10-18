@@ -65,6 +65,7 @@ const ASSETS = [
   './js/challenges-ui.js',
   './js/challenge-life.js',
   './js/challenges-strings.js',
+  './js/mp-records.js',
   './js/push.js',
   // Baseball's career sync (BB-0-phase-0-handoff.md step 9). SHELL for the same reason: it must be
   // reachable offline the moment a career-mode game imports it, on the same device that just
@@ -896,6 +897,9 @@ const NETWORK_FIRST = [
   './js/hub-messages.js',
   // The Challenges screen (2026-10-05): shows every challenge record; lazily imported, so fresh is free.
   './js/challenges.js', './js/challenges-ui.js', './js/challenges-strings.js',
+  // The Multiplayer screen's Records for the live-room games (2026-10-18): reads players/ and the
+  // local store's h2h; a stale copy would show a different record from the leaderboard.
+  './js/mp-records.js',
   // How a challenge ends without a result (cancel, decline, expire; 2026-10-13): every challenge game
   // reads it to decide what a match is, so a stale copy would disagree with its game about a deadline.
   './js/challenge-life.js',
