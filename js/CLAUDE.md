@@ -80,6 +80,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `error-log.js` | `gamehub.errorlog.v1`, installed at LOAD so it catches a failing game import |
 | `messages.js` | no hard delete; `myCode()`/`ensureAuthClaim()` reused by career-store and push; `logGameChat` (live-room chat copied into threads, NEVER the index, so no push) |
 | `hub-messages.js` | `HUB_MESSAGES` append-only (never reuse an id or edit sent words); merged into `readMyThreads()` as the `HUB` row; `HUB` is never a player code; read receipt `players/<id>/hubMsgs` (report only, omitted when empty; `at: 0` = read before receipts existed) |
+| `mp-records.js` | READ-only: live-room games' `byDiff.mp` (via players-agg, all your devices) + `h2h` folded onto the opponent's code; `LIVE_GAMES` must match hub.js `LIVE_MP_GAMES` (`tools/test-challenges.mjs`) |
 | `challenges.js`, `challenge-life.js` | read-only fold of games' indexes (Cancel/Decline/Resign call the GAME's own writer via `endAction`/`endMatch`); `ANSWER_MS` 3 days; called-off rows stored `over:false` so push stays silent |
 | `match-chat.js` | chat at `<node>/chat/<matchId>`, BESIDE the match, never in it; verified; nothing deleted; `gamehub.matchChatSeen.v1` |
 | `push.js` | `pushSubs/<CODE>/<sha256(endpoint)>`; permission asked inside the tap; `gamehub.push.v1` = write only on change |
@@ -490,11 +491,15 @@ different name forks away (data untouched; aggregation unions by name). `tools/t
 ### Head-to-head capture
 
 `recordHeadToHead` writes `h2h[game][opponentDeviceId] = {name, w, l}`. **Keep the writer** (it is evidence).
+**One reader since 2026-10-18 (Matt: "Yes? Sure?")**: `js/mp-records.js`, the Multiplayer screen's
+Records. It sums your devices' rows, maps the opponent DEVICE id to their `players/` record (a shared
+phone's `<dev>-<CODE>` node picked by the row's name) and that record to a person; no record = own row,
+no code, never guessed. Multi-seat `won` = beat the whole table (counted against each opponent).
 
 ### Multiplayer on the leaderboard: on the GAME'S page, per game (2026-08-11)
 
-**Read this before adding anything h2h-shaped again.** Cross-game h2h display was removed by Matt; nothing
-reads `h2h`, by decision. Instead: the per-game **VS chip** (`mpTileHTML`, `byDiff.mp.won`, a word, only
+**Read this before adding anything h2h-shaped again.** Cross-game h2h display was removed by Matt from
+the LEADERBOARD; its only reader is the Multiplayer screen's Records (above, 2026-10-18). Instead: the per-game **VS chip** (`mpTileHTML`, `byDiff.mp.won`, a word, only
 where online plays exist). Every MP game files online results under `'mp'`.
 
 ### Extracting multiplayer plays back out of the AI bucket (2026-08-11)

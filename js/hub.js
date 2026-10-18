@@ -39,7 +39,8 @@ const tf = (k, fb, p) => { const v = t(k, p); return v === k ? fb : v; };
 // The compact layout's tab bar icons (js/layout.js). Outline, 24-unit grid, drawn by currentColor.
 const TAB_ICON = {
   games: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
-  challenges: '<path d="M4 4l10 10M14 18l4-4M16 16l4 4M20 4L10 14M10 18l-4-4M8 16l-4 4"/>',
+  // Multiplayer (was Challenges' crossed swords until 2026-10-18): two people.
+  challenges: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.6A5 5 0 0 1 21 18.5"/>',
   messages: '<path d="M4 5h16v11H9l-5 4z"/>',
   leaderboard: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3M12 14v4M8 20h8"/>',
   profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
@@ -51,11 +52,16 @@ const TAB_ICON = {
 const TOUR_ID = 'compact-tour-2026-10-17';
 const TOUR_FB = {
   games: ['GAMES', 'All your games'],
-  challenges: ['CHALLENGES', 'Your turns and invites'],
+  challenges: ['MULTIPLAYER', 'Your turns and online games'],
   messages: ['MESSAGES', 'Chat with other players'],
   leaderboard: ['LEADERBOARDS', "See who's winning"],
   profile: ['PROFILE', 'Settings, stats and layout'],
 };
+// The live-room multiplayer games (hub ids), listed on the Multiplayer screen beside the challenge
+// games. MUST match js/mp-records.js LIVE_GAMES' keys (tools/test-challenges.mjs checks); kept here
+// so the launcher does not import players-agg just to draw a button.
+const LIVE_MP_GAMES = new Set(['air-hockey', 'battleship', 'boggle', 'chinchon', 'dots-boxes', 'escoba',
+  'filler', 'holdem', 'mancala', 'tic-tac-toe', 'yahtzee']);
 const tabSvg = (k) => `<svg class="hub-tab-ico" viewBox="0 0 24 24" aria-hidden="true">${TAB_ICON[k]}</svg>`;
 
 // Record uncaught errors from load, not from the Hub constructor: the most interesting throws
@@ -1098,6 +1104,7 @@ class Hub {
         : '')
       + restGames.map((g) => this.cardHTML(g, false)).join('');
     const chGames = this._challengeGames();
+    const hasMp = chGames.length > 0 || this._liveGames().length > 0;
     this.root.innerHTML = `
       <div class="hub">
         <header class="hub-top">
@@ -1125,10 +1132,9 @@ class Hub {
                challenges". Its own row above the games, not a fourth top-bar button: four buttons
                wrap to a second row on a phone (measured, 2026-08-31). Shown only when a game the
                player can see has challenges (an alerts module in the registry). -->
-          ${chGames.length ? `<button type="button" class="hub-chbar" data-role="challenges">
+          ${hasMp ? `<button type="button" class="hub-chbar" data-role="challenges">
             <svg class="hub-chbar-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
-                 stroke-width="2.4" stroke-linecap="round"><path d="M5 4 L16 16"/><path d="M19 4 L8 16"/>
-                 <path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>
+                 stroke-width="2.2" stroke-linecap="round">${TAB_ICON.challenges}</svg>
             <span class="hub-chbar-label">${t('hub_challenges_btn')}</span>
             <span class="hub-chbar-count" data-role="challenges-count" hidden></span>
             <span class="hub-chbar-chev" aria-hidden="true">›</span>
@@ -1147,7 +1153,7 @@ class Hub {
           </section>
           <section class="hub-game" data-role="game" hidden></section>
         </main>
-        ${compact ? this._tabsHTML(prof, chGames.length > 0) : ''}
+        ${compact ? this._tabsHTML(prof, hasMp) : ''}
         <div class="hub-confirm" data-role="confirm" hidden>
           <div class="hub-confirm-scrim" data-role="confirm-cancel"></div>
           <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="${t('hub_confirm_dialog_aria')}">
@@ -1281,6 +1287,8 @@ class Hub {
         const tab = e.target.closest('[data-tab]');
         if (!tab) return;
         const k = tab.dataset.tab;
+        // The Multiplayer screen sits UNDER the bar (2026-10-18), so another tab puts it away first.
+        if (k !== 'challenges') this._closeMultiplayer();
         if (k === 'games') { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { window.scrollTo(0, 0); } }
         else if (k === 'challenges') this.openChallenges();
         else if (k === 'messages') this.el.messages.click();
@@ -1539,15 +1547,47 @@ class Hub {
     if (this.el && this.el.chbar) this.el.chbar.classList.toggle('is-turn', n > 0);
   }
 
+  /** The live-room multiplayer games on THIS launcher (js/mp-records.js LIVE_GAMES), named. They
+   *  sit in the Multiplayer screen's games grid beside the challenge games and open the game. */
+  _liveGames() {
+    const shown = new Set((this.games || []).map((g) => g.id));
+    return GAMES.filter((g) => LIVE_MP_GAMES.has(g.id) && shown.has(g.id) && typeof g.alerts !== 'function')
+      .map((g) => ({ id: g.id, name: titleText(g) }));
+  }
+
+  /** The Multiplayer screen (2026-10-18; the Challenges screen before). Full screen; in the compact
+   *  layout it sits under the tab bar, whose Multiplayer tab is lit while it is open. */
   openChallenges() {
     if (this.current) return;
+    this._mpTabOn(true);
     import('./challenges-ui.js')
-      .then((m) => m.openChallenges({
-        games: this._challengeGames(),
-        onOpen: (game, id) => this.openChallengeMatch(game, id),
-        onChallenge: (game, them) => this.challengeIn(game, them),
-      }))
-      .catch((err) => console.error('[hub] challenges failed to load', err));
+      .then((m) => {
+        this._mpMod = m;
+        return m.openChallenges({
+          games: this._challengeGames(),
+          live: this._liveGames(),
+          onOpen: (game, id) => this.openChallengeMatch(game, id),
+          onChallenge: (game, them) => this.challengeIn(game, them),
+          onLaunch: (game) => { if (!this.current) this.launch(game); },
+          onClose: () => this._mpTabOn(false),
+        });
+      })
+      .catch((err) => { this._mpTabOn(false); console.error('[hub] multiplayer screen failed to load', err); });
+  }
+
+  _closeMultiplayer() {
+    try { if (this._mpMod) this._mpMod.closeChallenges(); } catch { /* already gone */ }
+  }
+
+  /** Light the Multiplayer tab (yellow AND the underline bar) or hand it back to Games. */
+  _mpTabOn(on) {
+    const tabs = this.root && this.root.querySelector('[data-role="tabs"]');
+    if (!tabs) return;
+    for (const el of tabs.querySelectorAll('[data-tab]')) {
+      const lit = on ? el.dataset.tab === 'challenges' : el.dataset.tab === 'games';
+      el.classList.toggle('is-on', lit);
+      if (lit) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
+    }
   }
 
   /** Straight into one match: the game's alerts module arms it, the game opens it on mount (the same

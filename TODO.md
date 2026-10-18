@@ -4,6 +4,8 @@ One list, by game. One line per item. When an item ships, delete its line in the
 
 ## Hub (shared)
 
+- **Turn-by-turn challenges in every multiplayer game** (Matt, 2026-10-18; order agreed): Battleship, Tic Tac Toe, Dots and Boxes, Mancala, Filler, Yahtzee; then Boggle (same letters, higher score); then Chinchón and Escoba (2 players first). Not Air Hockey or Hold'em. Each = challenge, cancel/decline/resign/expire, chat, alerts, push (Matt deploys), rules branch (Matt publishes). The Multiplayer screen picks each up via `SOURCES`.
+
 - The emoji does not appear everywhere the name does: shared `chipHTML({name, emoji})` plus a sweep, immersive games last; paused by Matt (root CLAUDE.md, "The shared profile").
 - Leaderboard: a best-metric board should rank on that best by default, not on the last-picked sort (check; branch `claude/skeeball-leaderboard-ui-9y2b8r` was deleted, head `e11818d`).
 - **Matt:** say "release X" for any admin-only game already switched on for players on the admin page (e.g. Arrow Maze?), so it is saved on phones instead of re-downloaded each open (root CLAUDE.md, "Releasing a game").

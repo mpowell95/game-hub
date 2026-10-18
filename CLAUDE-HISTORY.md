@@ -1237,3 +1237,20 @@ keeps one overwritten slot per seat, so there was nothing to read back; the hist
 It never writes `messages/index`, because `messagePush` and the unread badge both key off the index:
 a quick chat must not buzz a phone that is already in the game. No rules change (threads accept any
 child for a claimed code). Fire and forget, so a slow write can never stall play.
+
+## 2026-10-18: Challenges became the Multiplayer screen
+
+Matt asked to revamp the Challenges pop-up. Three mockups (List / By player / Cards); he chose the
+List, then asked: "should we change the Challenges tab to a Multiplayer tab? It could show the
+challenges and stuff like in A. Then it could also show all the multiplayer games you can challenge
+people to play." Mockup rounds: "I don't like the 'live' or 'anytime'" (one A-Z grid), "It should say
+'your turn' not 'Matt's turn'" (his own exception to the profile-name rule), "The 'their turn' section
+should take up less space... They're too tall" (one-line rows), "I'd prefer the full name fit".
+Records: he asked how to reach them (the record chip) and whether live games' head-to-head should
+show ("Yes? Sure?"), reversing the 2026-08-11 decision that nothing reads `h2h` - for this screen only.
+What `h2h` holds was checked first: written by Chinchón, Escoba (from 2026-07-22), Filler, Mancala,
+Dots and Boxes, Tic Tac Toe (07-27), Boggle (07-28), Battleship (08-04); never by Air Hockey,
+Hold'em, Yahtzee. Keyed by the opponent's DEVICE id, so `js/mp-records.js` maps it to a person.
+He then asked for turn-by-turn challenges in every multiplayer game; agreed order: this screen first,
+then Battleship, Tic Tac Toe, Dots and Boxes, Mancala, Filler, Yahtzee, then Boggle, then Chinchón
+and Escoba (2 players first). Air Hockey and Hold'em cannot be turn by turn (real-time / whole table).
