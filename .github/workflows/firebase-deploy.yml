@@ -1,0 +1,57 @@
+# Deploys the Firebase half of the Game Hub (push notification Cloud Functions + Realtime Database
+# rules) whenever a merge to main changes it. The app itself is GitHub Pages and deploys on its own.
+#
+# Matt (2026-10-18): "i'd much prefer you be able to do it automatically" - this replaces the
+# PowerShell steps in functions/README.md (cd game-hub-deploy, git pull, npm install, firebase deploy)
+# and pasting database.rules.json into the console by hand.
+#
+# NEEDS ONE SECRET: FIREBASE_SERVICE_ACCOUNT (repo Settings > Secrets and variables > Actions), the JSON
+# key of a Google Cloud service account allowed to deploy (steps: functions/README.md). Without it the
+# job fails at "Sign in" and deploys nothing.
+name: Firebase deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'database.rules.json'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/firebase-deploy.yml'
+  workflow_dispatch:
+
+# One deploy at a time, in merge order; a queued one waits rather than cancelling a running one.
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The last check Matt's manual step used to be: nothing goes out if the rules are not valid
+      # JSON or the push tests fail (they also pin the VAPID key and the rules' pushSubs branch).
+      - name: Check before deploying
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8')); console.log('rules: valid JSON')"
+          node tools/test-push.mjs
+
+      - name: Install function dependencies
+        run: npm install --prefix functions
+
+      - name: Sign in
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      # --force: answer the CLI's yes/no prompts (the container-image cleanup policy) without a person.
+      - name: Deploy functions and database rules
+        run: npx --yes firebase-tools@14 deploy --only functions,database --project game-hub-5b91c --non-interactive --force

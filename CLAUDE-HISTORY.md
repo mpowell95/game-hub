@@ -1254,3 +1254,15 @@ Hold'em, Yahtzee. Keyed by the opponent's DEVICE id, so `js/mp-records.js` maps 
 He then asked for turn-by-turn challenges in every multiplayer game; agreed order: this screen first,
 then Battleship, Tic Tac Toe, Dots and Boxes, Mancala, Filler, Yahtzee, then Boggle, then Chinchón
 and Escoba (2 players first). Air Hockey and Hold'em cannot be turn by turn (real-time / whole table).
+
+## 2026-10-18: Firebase deploys automatically
+
+Matt, after pasting rules and running the PowerShell deploy for Chinchón/Escoba challenges: "Why do we
+have to do this every time?... i'd much prefer you be able to do it automatically." The app is GitHub
+Pages (deploys on merge); functions and rules live in his Firebase project, which no session can log
+in to. `.github/workflows/firebase-deploy.yml` now deploys `functions` + `database` on merges that
+touch them, behind a check step (rules JSON, `tools/test-push.mjs`), signed in with a service-account
+key held only as the repo secret `FIREBASE_SERVICE_ACCOUNT` (one-time setup in `functions/README.md`).
+`firebase.json` gained `"database": { "rules": "database.rules.json" }` so the CLI knows the file.
+Same day: Matt published the full rules file (archery, chinchon, escoba branches went live) and started
+the manual functions deploy (chinchonTurnPush, escobaTurnPush; archeryTurnPush with them).

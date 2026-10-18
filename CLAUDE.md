@@ -430,10 +430,11 @@ full-width row buttons use `.pf-linkbtn`.
 **Firebase rules:** root `.read`/`.write` are `false` and every branch is enumerated in
 `database.rules.json`; **add a new top-level node there or it is unreachable**, and add it to
 `backups/rtdb-backup.mjs`'s `BRANCHES` (which cannot read `messages/`; export that from the
-console). `messages/` is scoped by `msgAuth/<uid>` → code; `admins/<uid>` grants Matt read-all.
+console). **Rules deploy with the merge** once the Firebase workflow has its secret (see "Push
+notifications"); until then Matt pastes the WHOLE file. `messages/` is scoped by `msgAuth/<uid>` → code; `admins/<uid>` grants Matt read-all.
 **`adminConfig/` and `bugReplies/` are writable only by a uid in `admins/`** (2026-10-14). It does
-not stop someone with another player's code and dev tools. **Rules are published by hand**
-(console → Realtime Database → Rules): deploy the app first, the rules second.
+not stop someone with another player's code and dev tools. Rules reach Firebase with the merge
+(the workflow) or, as a fallback, by Matt pasting the whole file (console → Realtime Database → Rules).
 **When a step is "Matt pastes this into a console", record it with the date and close the line the
 moment he confirms** (a stale "OUTSTANDING" line was once repeated back to him).
 
@@ -457,14 +458,15 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **Pieces:** `js/push.js` (permission asked INSIDE the tap; subscriptions at
   `pushSubs/<PLAYER CODE>/<key>`), Cloud Functions in `functions/` (decisions in the pure
   `functions/decide.js`), and `sw.js` (shows every push, never silently; opens the game on tap).
-- **A change to `functions/` is live only after Matt runs `firebase deploy --only functions`**;
-  merging does nothing. Needs the Blaze plan. Deploy from `C:\Users\powel\game-hub-deploy` (his
-  local `Game-Hub/` is stale). **Give Matt deploy steps in the chat as ONE numbered list of exact
-  commands, one per line, no "if X" branches up front.** Secrets via `--data-file`, not paste.
+- **Functions AND database rules deploy automatically on merge (2026-10-18, Matt: "i'd much prefer you
+  be able to do it automatically")**: `.github/workflows/firebase-deploy.yml`, once the repo secret
+  `FIREBASE_SERVICE_ACCOUNT` exists (setup: `functions/README.md`). Check its run like the Pages run
+  before saying "live". Fallback only if it is broken: Matt runs `firebase deploy --only functions` from
+  `C:\Users\powel\game-hub-deploy`; **give those steps as one copy-paste block per command.** Blaze plan.
 - **Deployed triggers:** `hoopsTurnPush`, `messagePush`, `bugReportPush`, `skeeChallengePush`,
   `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`. **`archeryTurnPush` and the `archery`
-  rules branch are NOT yet deployed/published (as of 2026-10-14). `chinchonTurnPush`, `escobaTurnPush`
-  and the `chinchon` / `escoba` rules branches are NOT yet deployed/published (2026-10-18).**
+  rules branch, and `chinchonTurnPush`, `escobaTurnPush` with the `chinchon` / `escoba` rules: rules
+  PUBLISHED by Matt 2026-10-18; functions deploy started by Matt 2026-10-18 (success not yet confirmed).**
 - **The VAPID private key is a Firebase secret; never in this repo.** Its public half is in
   `js/push.js` and `functions/index.js`; `tools/test-push.mjs` fails if they differ.
 - iPhone: only the Home Screen app (iOS 16.4+) can receive them; `pushState()` returns `'install'`.
