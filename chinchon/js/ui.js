@@ -86,6 +86,9 @@ const MP_RECOVERY_MAX_ATTEMPTS = 3;
 // 'normal' and stay exactly where they are. Nothing is moved, rewritten or deleted - only what
 // FUTURE matches record changes.
 const MP_DIFFICULTY = 'mp';
+// Where a challenge's quick-chat button sits (js/match-chat-ui.js `place`): on the top bar, just
+// LEFT of the ☰ menu button, centred on the bar (measured in the hub: bar 36px, button 44px).
+const CH_CHAT_PLACE = { top: '0px', right: '54px', popsTop: '52px' };
 // Solo autosave (batch 9, HANDOFF-FB-RESUME; extended to mid-round in batch C,
 // HANDOFF-FB3-SETTINGS-RESUME): mirrors STORE_MP_SAVE's shape (v/at/snap) minus
 // the MP-only code/role/seq fields -- a solo match has no room to rejoin. Same
@@ -207,6 +210,9 @@ class ChinchonUI {
     // Multiplayer (M2b). null in solo -- every MP code path is gated behind
     // this single field so solo play is byte-identical to before.
     this.mp = null;
+    // Turn-by-turn challenges (2026-10-18). null outside a challenge, the same way `mp` gates live
+    // rooms; see "turn-by-turn challenges" below.
+    this.ch = null;
     this._screen = 'setup';      // 'setup' | 'host-lobby' | 'join-lobby'
     this._mpBusy = false;
     this._mpError = '';
@@ -249,6 +255,9 @@ class ChinchonUI {
     // if it claims the mount (a fresh, valid solo save existed) the MP restore
     // is skipped -- the two keys are separate and never both apply to one mount.
     if (!this._trySoloRestore()) this._tryRestoreMP();
+    // A tapped launcher bubble or notification names a challenge match; the hub's Multiplayer
+    // screen can hand over a person to challenge instead (chinchon/js/alert.js takeOpen).
+    this._takeArmed();
   }
 
   // --- settings persistence -------------------------------------------------
@@ -286,7 +295,7 @@ class ChinchonUI {
       config: Object.assign({}, DEFAULT_CONFIG, saved.config || {}),
       // Last-used setup-screen mode (M2b). Additive: absent on an older save
       // simply defaults to 'solo', same as today's only screen.
-      mode: ['solo', 'host', 'join'].includes(saved.mode) ? saved.mode : 'solo',
+      mode: ['solo', 'host', 'join', 'turns'].includes(saved.mode) ? saved.mode : 'solo',
       // Which seat deals the FIRST round of the next fresh SOLO match (solo-vs-AI
       // only - see startGame()). Alternates 0/1 each match, banked immediately so
       // it survives leaving mid-match. Additive; absent on an older save defaults
@@ -392,7 +401,8 @@ class ChinchonUI {
     // destroy()/hub navigation, which leaves the autosave in place for a
     // silent resume) -- clear it so re-entering the game doesn't restore a
     // match the player just walked away from on purpose.
-    if (this.game && !this.mp) this._soloClearSave();
+    if (this.game && !this.mp && !this.ch) this._soloClearSave();
+    this._chLeave();
     if (this.game) { this.game.abort(); this.game = null; }
     this._pending = null; this._selectedCardId = null; this.activePlayerId = null;
     this._modalResolve = null; this._placeResolve = null; this._chartView = false;
@@ -575,7 +585,15 @@ class ChinchonUI {
     // challenge mode (that hidden feature is solo-only by construction, and
     // MP would only complicate its locked/qualifying setup for no benefit).
     const mpMode = this.challengeActive ? 'solo' : (s.mode || 'solo');
-    const modeSeg = this.challengeActive ? '' : this._seg('set-mode', mpMode, [['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')]]);
+    const modeSeg = this.challengeActive ? '' : this._seg('set-mode', mpMode, [['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')], ['turns', t('mode_turns')]]);
+
+    // Turn-by-turn challenges (2026-10-18): the list, the picker and the lengths live here, under
+    // the same switch, painted by chinchon/js/ch-ui.js.
+    if (mpMode === 'turns') {
+      this.el.setup.innerHTML = `<div class="cc-card-panel cc-ch-panel">${modeSeg}<div class="cc-ch" data-role="ch"></div></div>`;
+      this._chPaint();
+      return;
+    }
 
     if (mpMode === 'join') {
       this.el.setup.innerHTML = `<div class="cc-card-panel">${statsLine}${modeSeg}${this._renderMpJoinBody()}</div>`;
@@ -934,7 +952,7 @@ class ChinchonUI {
         // This is in addition to the existing 'roundScored' save below, so a match
         // abandoned before round 1's first round boundary (or mid-round in any later
         // round) still restores instead of dropping back to a fresh deal.
-        if (!this.mp) this._soloSaveSnapshot();
+        if (!this.mp && !this.ch) this._soloSaveSnapshot();
         break;
       case 'draw': {
         if (p && p.isHuman) this._newCardId = payload.card.id;
@@ -971,6 +989,8 @@ class ChinchonUI {
           else if (this.game.closeType === 'doubleMeld') this._matchMinusTens++;   // a -10 close (menos diez)
         }
         this._chartView = false;
+        // A challenge never touches either autosave; a hand already played out is not shown again.
+        if (this.ch) { if (!this.ch.replay) await this.showRoundModal(); break; }
         // Turn boundary: safe autosave point (see snapshot() doc comment). Never
         // save a CONCLUDED match: matchEnd is about to clear the save anyway, and
         // a crash in between would otherwise leave a restorable save for a match
@@ -990,6 +1010,8 @@ class ChinchonUI {
         break;
       case 'matchEnd':
         this._matchEnded = true;
+        // A challenge counts through its own ledger (chinchon/js/mp.js countResult), never here.
+        if (this.ch) { this._chartView = false; await this._chFinishNatural(); break; }
         this._commitStats();
         this._chartView = false;
         if (this.mp) {
@@ -1008,6 +1030,7 @@ class ChinchonUI {
   }
 
   beat(ms) {
+    if (this.ch && this.ch.replay) return Promise.resolve();
     const scaled = this.mp && this.mp.replayMode ? ms * 0.25 : ms;
     return new Promise((resolve) => { this._beatTimer = setTimeout(resolve, scaled); });
   }
@@ -1015,7 +1038,7 @@ class ChinchonUI {
   /** A computer's beat in a solo match, scaled by the chosen Computer speed. Online,
    *  every seat is a person, so nothing is scaled. */
   _paceMs(ms, p) {
-    if (this.mp || !p || p.isHuman) return ms;
+    if (this.mp || this.ch || !p || p.isHuman) return ms;
     return Math.round(ms * (PACE_MULT[this._setup.pace] || 1));
   }
 
@@ -1029,7 +1052,7 @@ class ChinchonUI {
 
   _flightsOn() {
     return !this._dead && !!this.el.flight && typeof Element.prototype.animate === 'function'
-      && !(this.mp && this.mp.replayMode);
+      && !(this.mp && this.mp.replayMode) && !(this.ch && this.ch.replay);
   }
 
   /** Fly a copy of `visual` (an element) from rect `from` to rect `to`; resolves on landing. */
@@ -1208,6 +1231,7 @@ class ChinchonUI {
 
   render() {
     if (this._dead || !this.game || this.el.game.hidden) return;
+    if (this.ch && this.ch.replay) return;         // a challenge catching up draws once, at the end
     const nOpp = this.game.players.filter((p) => !p.isHuman).length;
     this.el.opponents.className = 'cc-opponents cc-opp-n' + nOpp;
     this.el.opponents.innerHTML = this.renderOpponents();
@@ -1298,6 +1322,7 @@ class ChinchonUI {
     // holds a strings.js KEY (not display text), resolved here at render
     // time so it can also be compared by key elsewhere without translating.
     if (this._mpStatusMsg) return t(this._mpStatusMsg);
+    if (this.ch && this.ch.waiting && !this.ch.finished) return t('ch_waiting', { name: this.ch.them.name || '?' });
     if (this._pending) {
       // No draw prompt text: the glowing name chip + highlighted piles say it.
       if (this._pending.kind === 'discard') return '';
@@ -1666,7 +1691,7 @@ class ChinchonUI {
     if (this._chartView) {
       body = this.renderChartBlock();
     } else {
-      body = `<ol class="cc-standings">${standings.map((p, i) => `<li class="${p === winner ? 'is-winner' : ''}">
+      body = `<ol class="cc-standings">${standings.map((p, i) => `<li class="${p === winner && !(this.ch && this.ch.draw) ? 'is-winner' : ''}">
         <span class="cc-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('')}</ol>`;
     }
     const humanWon = winner && winner.id === this._human().id;
@@ -1676,18 +1701,24 @@ class ChinchonUI {
           <p class="cc-betty-cap">${humanWon ? t('betty_win_caption') : t('betty_loss_caption')}</p>
         </div>`
       : '';
-    const titleText = isChinchonWin
+    const draw = !!(this.ch && this.ch.draw);
+    const titleText = draw ? esc(t('ch_draw')) : isChinchonWin
       ? t('match_title_chinchon', { winner: esc(winner.name) })
       : t('match_title_plain', { winner: esc(winner.name) });
-    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="close-match"></div><div class="cc-sheet">
-      <button class="cc-sheet-x" data-action="close-match" aria-label="${t('close_word')}">✕</button>
+    // A challenge's card: the X goes back to the list, the button is a rematch.
+    const closeAct = this.ch ? 'ch-close-result' : 'close-match';
+    const mainBtn = this.ch
+      ? `<button class="cc-btn cc-btn-primary" data-action="ch-rematch">${t('ch_rematch')}</button>`
+      : `<button class="cc-btn cc-btn-primary" data-action="new-game">${this.challengeLive ? t('retry_challenge_btn') : t('new_game_btn')}</button>`;
+    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="${closeAct}"></div><div class="cc-sheet">
+      <button class="cc-sheet-x" data-action="${closeAct}" aria-label="${t('close_word')}">✕</button>
       ${banner}
-      <h2 class="cc-sheet-title">${winner.avatar} ${titleText}</h2>
-      ${betty}
+      <h2 class="cc-sheet-title">${draw ? '' : winner.avatar + ' '}${titleText}</h2>
+      ${draw ? '' : betty}
       ${body}
       <div class="cc-sheet-actions">
         <button class="cc-btn cc-btn-ghost" data-action="toggle-chart">${this._chartView ? t('standings_word') : '📈 ' + t('scoreboard_word')}</button>
-        <button class="cc-btn cc-btn-primary" data-action="new-game">${this.challengeLive ? t('retry_challenge_btn') : t('new_game_btn')}</button>
+        ${mainBtn}
       </div>
     </div>`;
     this.el.modal.hidden = false;
@@ -1749,6 +1780,7 @@ class ChinchonUI {
 
   toast(msg) {
     if (this._dead || !this.el || !this.el.toast) return;
+    if (this.ch && this.ch.replay) return;
     this.el.toast.textContent = msg;
     this.el.toast.hidden = false;
     clearTimeout(this._toastTimer);
@@ -1778,6 +1810,9 @@ class ChinchonUI {
   // --- input ----------------------------------------------------------------
 
   onClick(e) {
+    // The challenge screens (chinchon/js/ch-ui.js) mark their buttons data-ch.
+    const c = e.target.closest('[data-ch]');
+    if (c && this._onChClick(c)) return;
     const a = e.target.closest('[data-action]');
     if (!a) return;
     const act = a.dataset.action;
@@ -1826,7 +1861,7 @@ class ChinchonUI {
       case 'menu-help': this._closeMenu(); this._openHelp(); break;
       case 'close-help': this._closeHelp(); break;
       // multiplayer lobby (M2b)
-      case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
+      case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._chView = 'home'; this._saveSetup(); this.renderSetup(); break;
       case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
       case 'mp-join-submit': this._mpJoinSubmit(); break;
       case 'mp-start': this._mpHostStart(); break;
@@ -1857,6 +1892,11 @@ class ChinchonUI {
       case 'close-menu': case 'menu-resume': this._closeMenu(); break;
       case 'menu-newgame': this._menuAction('newgame'); break;
       case 'menu-quit': this._menuAction('quit'); break;
+      // turn-by-turn challenges
+      case 'menu-chend': this._menuAction('chend'); break;
+      case 'menu-chhome': this._closeMenu(); this._chGo('home'); break;
+      case 'ch-close-result': this.el.modal.hidden = true; this.el.modal.innerHTML = ''; this._chGo('home'); break;
+      case 'ch-rematch': this._chRematch(); break;
     }
   }
 
@@ -1928,6 +1968,7 @@ class ChinchonUI {
   _closeMenu() { this.el.menu.hidden = true; this._menuConfirm = null; }
 
   _renderMenu() {
+    if (this.ch) { this._chRenderMenu(); return; }
     const btn = (which, label) => {
       const confirming = this._menuConfirm === which;
       return `<button class="cc-btn cc-btn-ghost ${confirming ? 'cc-confirm' : ''}" data-action="menu-${which}">${
@@ -1949,6 +1990,12 @@ class ChinchonUI {
    *  restart -- rehosting isn't automatic), which also ends the room for
    *  the opponent, unlike backgrounding (destroy()), which preserves it. */
   _menuAction(which) {
+    if (which === 'chend') {
+      if (this._menuConfirm !== which) { this._menuConfirm = which; this._renderMenu(); return; }
+      this._closeMenu();
+      this._chResign();
+      return;
+    }
     if (this._inProgress() && this._menuConfirm !== which) {
       this._menuConfirm = which;
       this._renderMenu();
@@ -2786,6 +2833,421 @@ class ChinchonUI {
     }
   }
 
+  // --- turn-by-turn challenges (2026-10-18) -----------------------------------------------------
+  // chinchon/js/mp.js keeps the match (a seed + a log of decisions); chinchon/js/ch-ui.js draws the
+  // lists. Everything here is reached only through `this.ch`, null outside a challenge, so solo play
+  // and live rooms run exactly as before. What happens when a match is opened:
+  //   - the engine (game.js, unchanged) is built from the match's seed and REPLAYS its log through
+  //     two log agents. Everything before the other person's latest run is replayed silently
+  //     (`ch.replay`: no beats, flights, toasts, renders or round cards); their latest run then
+  //     plays out at the normal pace, like a computer's turn;
+  //   - on your turn the log agent hands over to the ordinary prompts, and every decision is
+  //     appended to the log the moment it is made (_chRecord -> _chFlush), so a closed app loses
+  //     nothing and cannot take a discard back;
+  //   - on their turn the match is WATCHED, so their moves arrive while you look at it.
+  // Never written here: chinchon-settings' stats line, either autosave, head-to-head.
+
+  async _chLoad() {
+    if (!this._chMods) {
+      const [MP, CH] = await Promise.all([import('./mp.js'), import('./ch-ui.js')]);
+      this._chMods = { MP, CH };
+    }
+    return this._chMods;
+  }
+
+  /** A match or a person handed over by the launcher, a notification or the Multiplayer screen. */
+  _takeArmed() {
+    import('./alert.js').then((A) => {
+      if (this._dead) return;
+      const o = A.takeOpen();
+      if (!o || this.mp) return;
+      if (o.kind === 'pick') { this._chFromHub = true; this._chGo('len', o.them); } else this._chOpen(o.id);
+    }).catch(() => {});
+  }
+
+  /** Paint the Challenge pane inside the setup card: 'home' | 'pick' | 'len'. */
+  async _chPaint() {
+    const box = this.el.setup.querySelector('[data-role="ch"]');
+    if (!box) return;
+    const gen = (this._chPaintGen = (this._chPaintGen || 0) + 1);
+    let mods;
+    try { mods = await this._chLoad(); } catch (err) { console.error('[chinchon] challenge screens failed to load', err); return; }
+    if (this._dead || gen !== this._chPaintGen || !box.isConnected) return;
+    const { MP, CH } = mods;
+    const view = this._chView || 'home';
+    if (view === 'pick') CH.picker(this, MP, box);
+    else if (view === 'len' && this._chThem) CH.lengths(this, MP, box, this._chThem);
+    else CH.home(this, MP, box);
+  }
+
+  /** Go to one of the challenge screens (from setup, or out of a match). */
+  _chGo(view, them) {
+    this._chView = view;
+    if (them !== undefined) this._chThem = them;
+    if (view === 'home') this._chFromHub = false;
+    this._setup.mode = 'turns';
+    this._saveSetup();
+    if (this.ch || this.game || this.el.setup.hidden) this.showSetup(); else this.renderSetup();
+  }
+
+  _onChClick(el) {
+    switch (el.dataset.ch) {
+      case 'new': this._chGo('pick'); return true;
+      case 'back': this._chGo(this._chView === 'len' && !this._chFromHub ? 'pick' : 'home'); return true;
+      case 'pick': {
+        const o = (this._chPeople || []).find((x) => x.code === el.dataset.code);
+        if (o) this._chGo('len', o);
+        return true;
+      }
+      case 'len': this._chSend(el.dataset.v); return true;
+      case 'open': this._chOpen(el.dataset.id); return true;
+      default: return false;
+    }
+  }
+
+  /** A new challenge: created now, delivered when your first turn is over. */
+  async _chSend(len, them = this._chThem) {
+    const { MP, CH } = await this._chLoad();
+    if (!them || this._dead) return;
+    const box = this.el.setup.hidden ? null : this.el.setup.querySelector('[data-role="ch"]');
+    if (box) for (const b of box.querySelectorAll('[data-ch="len"]')) b.disabled = true;
+    const res = await MP.createGame({ them, len });
+    if (this._dead) return;
+    if (!res.ok) {
+      if (!CH.showError(box, res.reason)) this.toast(CH.reasonText(res.reason));
+      return;
+    }
+    this._chBegin(res.game);
+  }
+
+  /** Open one stored match. Moves still waiting on this phone go first, so none is lost. */
+  async _chOpen(id) {
+    const { MP } = await this._chLoad();
+    if (MP.pendingFor(id)) await MP.drainOutbox(id);
+    const game = await MP.readGame(id);
+    if (this._dead) return;
+    if (!game) { this._chGo('home'); this.toast(t('ch_not_found')); return; }
+    this._chBegin(game);
+  }
+
+  /** What to say about a match that ended with no result ('' for one that did not). */
+  _chEndText(game, side) {
+    const MP = this._chMods && this._chMods.MP;
+    if (!game || !MP) return '';
+    if (MP.lifeOf(game).expired) return t('ch_expired');
+    if (!MP.isCalledOff(game)) return '';
+    const why = game.over.why === 'declined' ? 'declined' : 'cancelled';
+    const iSent = side !== MP.recipientOf(game);
+    const mine = why === 'cancelled' ? iSent : !iSent;
+    const them = MP.themOf(game, MP.myCode());
+    return mine ? t(`ch_${why}`) : t(`ch_they_${why}`, { name: (them && them.name) || '?' });
+  }
+
+  _chBegin(game) {
+    const { MP } = this._chMods;
+    const me = MP.myCode();
+    const side = MP.sideOf(game, me);
+    if (!side) { this._chGo('home'); return; }
+    const endText = this._chEndText(game, side);
+    if (endText) { this._chGo('home'); this.toast(endText); return; }
+    // Off the table goes whatever was on it. A solo match keeps its own autosave (never cleared here).
+    this._chLeave();
+    if (this.game) { this.game.abort(); this.game = null; }
+    this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
+    this._modalResolve = null; this._placeResolve = null; this._chartView = false; this._closeMenu();
+    this._manualOrder = null; this._handBreak = null;
+    const theirSide = side === 'a' ? 'b' : 'a';
+    let from = game.log.length ? MP.lastRunStart(game, theirSide) : 0;
+    const shown = MP.readShown(game.id);
+    if (shown > from) from = Math.min(shown, game.log.length);
+    const seat = side === 'b' ? 1 : 0;
+    const ch = { id: game.id, side, seat, game, log: game.log.slice(), them: MP.themOf(game, me), cursor: 0, from,
+      base: game.log.length, pending: [], sending: false, stop: null, finished: false, replay: from > 0,
+      waiting: false, wake: null, draw: false, resyncs: 0 };
+    this.ch = ch;
+    this.game = MP.makeEngine(game, (s) => this._chAgent(ch, s));
+    this.game.players[seat].isHuman = true;
+    this.game.onEvent = (type, payload) => this.onEvent(type, payload);
+    this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = true;
+    this._matchEnded = false;
+    this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
+    this.el.modal.hidden = true; this.el.modal.innerHTML = '';
+    this._ccCompact = false;
+    this.root.classList.remove('cc-compact');
+    this.root.classList.add('cc-ch-on');
+    this._buildPiles();
+    this.render();
+    this._chMountChat(ch);
+    MP.watchGame(game.id, (g) => this._chOnGame(ch, g)).then((stop) => {
+      if (this.ch === ch) ch.stop = stop; else { try { stop(); } catch { /* detached */ } }
+    });
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Chinchón challenge error', err); });
+  }
+
+  /** The engine's agent for one seat: the next logged decision if there is one; otherwise the
+   *  ordinary prompts (your seat) or the watched match (theirs). */
+  _chAgent(ch, seat) {
+    const ui = this;
+    const MP = this._chMods.MP;
+    const side = seat === 1 ? 'b' : 'a';
+    const never = () => new Promise(() => {});
+    const caughtUp = () => {
+      if (!ch.replay) return;
+      ch.replay = false;
+      ui._buildPiles();
+      ui.render();
+    };
+    const ask = async (kind, view) => {
+      for (;;) {
+        if (ui._dead || ui.ch !== ch) return never();
+        if (ch.cursor < ch.log.length) {
+          const i = ch.cursor;
+          const v = MP.answerOf(ch.log[i], side, kind, view);
+          if (v === undefined) { ui._chResync(ch); return never(); }
+          ch.cursor++;
+          // Entries before `from` were seen already: no show. From `from` on, they play out.
+          if (i >= ch.from) caughtUp(); else ch.replay = true;
+          return v;
+        }
+        caughtUp();
+        MP.markShown(ch.id, ch.log.length);
+        // A resigned match stops where it was given up: nobody is asked for another move.
+        if (ch.game.over && ch.game.over.why === 'resign') { ui._chFinishResign(ch.game); return never(); }
+        if (seat === ch.seat) {
+          if (ch.waiting) { ch.waiting = false; ui.render(); }
+          let v = await (kind === 'draw' ? ui.promptDraw() : kind === 'discard' ? ui.promptDiscard() : ui.promptClose());
+          if (ui._dead || ui.ch !== ch || v == null || ch.finished) return never();
+          if (kind === 'draw' && v === 'discard' && !view.discardTop) v = 'stock';
+          const e = kind === 'draw' ? { by: side, k: 'draw', src: v } : kind === 'discard' ? { by: side, k: 'discard', card: v } : { by: side, k: 'close', yes: !!v };
+          ch.log.push(e);
+          ch.cursor++;
+          ui._chRecord(ch, e);
+          return v;
+        }
+        ch.waiting = true;
+        ui.render();
+        await new Promise((r) => { ch.wake = r; });
+        ch.waiting = false;
+      }
+    };
+    return {
+      isHuman: seat === ch.seat,
+      chooseDraw: (view) => ask('draw', view),
+      chooseDiscard: (view) => ask('discard', view),
+      decideClose: (view) => ask('close', view),
+      choosePlacements: async (view, locked, attachable) => attachable.map((c) => c.id),
+    };
+  }
+
+  /** The watched match changed: their new moves go to the waiting agent, our own echoes are ignored. */
+  _chOnGame(ch, g) {
+    if (this.ch !== ch || g.id !== ch.id || this._dead) return;
+    const MP = this._chMods.MP;
+    if (g.log.length < ch.game.log.length) return;
+    const n = Math.min(g.log.length, ch.log.length);
+    for (let i = 0; i < n; i++) if (!MP.sameEntry(g.log[i], ch.log[i])) { this._chResync(ch); return; }
+    ch.game = g;
+    if (g.log.length > ch.log.length) ch.log.push(...g.log.slice(ch.log.length));
+    if (MP.isCalledOff(g) && !ch.finished) { this._chEndedNoResult(this._chEndText(g, ch.side)); return; }
+    if (g.over && g.over.why === 'resign' && !ch.finished && ch.cursor >= g.log.length) { this._chFinishResign(g); return; }
+    if (ch.wake) { const w = ch.wake; ch.wake = null; w(); }
+  }
+
+  /** The two phones disagree (another phone of yours played the same turn): start again from the
+   *  server's match. A second time in a row, back to the list instead of looping. */
+  _chResync(ch) {
+    if (this.ch !== ch) return;
+    const n = (ch.resyncs || 0) + 1;
+    this.toast(t('ch_resync'));
+    const id = ch.id;
+    this._chLeave();
+    if (n > 2) { this._chGo('home'); return; }
+    setTimeout(() => { if (!this._dead && !this.ch) this._chOpen(id).then(() => { if (this.ch) this.ch.resyncs = n; }); }, 400);
+  }
+
+  /** One of your decisions, into the log. */
+  _chRecord(ch, e) {
+    // Where it sits in the log. Set only when nothing is queued, so a run of queued moves stays
+    // contiguous (the flush moves `base` on as each batch lands).
+    if (!ch.pending.length && !ch.sending) ch.base = ch.log.length - 1;
+    ch.pending.push(e);
+    this._chFlush(ch);
+  }
+
+  async _chFlush(ch) {
+    const MP = this._chMods.MP;
+    if (this.ch !== ch || ch.sending || !ch.pending.length) return;
+    ch.sending = true;
+    const list = ch.pending.slice();
+    const base = ch.base;
+    MP.savePending(ch.id, base, ch.pending);          // kept on the phone until the server has it
+    const res = await MP.appendLog(ch.id, base, list);
+    ch.sending = false;
+    if (res.ok) {
+      ch.pending.splice(0, list.length);
+      ch.base = base + list.length;
+      ch.game = res.game;
+      MP.savePending(ch.id, ch.base, ch.pending);
+      MP.markShown(ch.id, ch.base);
+      if (ch.pending.length && this.ch === ch) this._chFlush(ch);
+      return;
+    }
+    if (this.ch !== ch) return;                       // left: the outbox still has them
+    if (res.retryable) {
+      this.toast(t('ch_not_sent'));
+      setTimeout(() => { if (this.ch === ch) this._chFlush(ch); }, 4000);
+    } else if (res.reason === 'expired') {
+      MP.savePending(ch.id, ch.base, []);
+      this._chEndedNoResult(t('ch_expired'));
+    } else if (res.reason === 'moved-on' || res.reason === 'rules-refused' || res.reason === 'already-over') {
+      console.error('[chinchon] a move could not be sent:', res.reason);
+      MP.savePending(ch.id, ch.base, []);
+      this._chResync(ch);
+    } else {
+      console.error('[chinchon] a move could not be sent:', res.reason);
+      this.toast(this._chMods.CH.reasonText(res.reason));
+    }
+  }
+
+  /** The engine ended the match: count it once on this phone, then the result card. */
+  async _chFinishNatural() {
+    const ch = this.ch;
+    if (!ch || ch.finished) return;
+    ch.finished = true;
+    const MP = this._chMods.MP;
+    const w = MP.winnerOfEngine(this.game);
+    ch.draw = w === 'draw';
+    MP.countResult(ch.id, w === 'draw' ? null : w === ch.side, {
+      closed: this._matchCloses || 0, chinchons: this._matchChinchons || 0, minusTen: this._matchMinusTens || 0,
+    });
+    MP.markResultSeen(ch.id);
+    MP.markShown(ch.id, ch.log.length);
+    if (ch.replay) { ch.replay = false; this._buildPiles(); this.render(); }
+    await this.showMatchModal();
+  }
+
+  /** Somebody resigned: the other person won. Counted once, then a small result card. */
+  _chFinishResign(g) {
+    const ch = this.ch;
+    if (!ch || ch.finished) return;
+    ch.finished = true;
+    const MP = this._chMods.MP;
+    const won = g.over.winner === ch.side;
+    MP.countResult(ch.id, won);
+    MP.markResultSeen(ch.id);
+    MP.markSeen(ch.id, g.updated);
+    if (ch.replay) { ch.replay = false; this._buildPiles(); }
+    this._pending = null;
+    this.render();
+    const meP = this.game.players[ch.seat], themP = this.game.players[1 - ch.seat];
+    const winner = won ? meP : themP, loser = won ? themP : meP;
+    this.el.modal.innerHTML = `<div class="cc-scrim" data-action="ch-close-result"></div><div class="cc-sheet">
+      <button class="cc-sheet-x" data-action="ch-close-result" aria-label="${t('close_word')}">✕</button>
+      <h2 class="cc-sheet-title">${winner.avatar} ${t('match_title_plain', { winner: esc(winner.name) })}</h2>
+      <p class="cc-sheet-sub">${esc(t('ch_resigned', { name: loser.name }))}</p>
+      <p class="cc-ch-score">${esc(`${meP.name} ${meP.totalScore} · ${themP.name} ${themP.totalScore}`)}</p>
+      <div class="cc-sheet-actions"><button class="cc-btn cc-btn-primary" data-action="ch-rematch">${t('ch_rematch')}</button></div>
+    </div>`;
+    this.el.modal.hidden = false;
+  }
+
+  async _chResign() {
+    const ch = this.ch;
+    if (!ch) return;
+    const { MP, CH } = this._chMods;
+    const res = await MP.resignGame(ch.id);
+    if (this.ch !== ch) return;
+    if (!res.ok) { this.toast(CH.reasonText(res.reason)); return; }
+    ch.game = res.game;
+    if (res.cancelled) { this._chEndedNoResult(this._chEndText(res.game, ch.side)); return; }
+    this._chFinishResign(res.game);
+  }
+
+  /** Leave a match that ended with no result, saying so. */
+  _chEndedNoResult(text) {
+    const ch = this.ch;
+    if (ch) { ch.finished = true; try { this._chMods.MP.markSeen(ch.id, ch.game && ch.game.updated); } catch { /* bubble again */ } }
+    this._chGo('home');
+    if (text) this.toast(text);
+  }
+
+  /** The same person, the same length, one tap. */
+  _chRematch() {
+    const ch = this.ch;
+    if (!ch) { this._chGo('home'); return; }
+    const them = { code: ch.them.code, name: ch.them.name, emoji: ch.them.emoji };
+    const len = ch.game.len;
+    this._chThem = them;
+    this._chView = 'len';
+    this._chSend(len, them).then(() => { if (!this.ch || this.ch.id === ch.id) this._chGo('len', them); });
+  }
+
+  /** The in-game menu during a challenge: Resign (or Cancel / Decline while unanswered), Matches. */
+  _chRenderMenu() {
+    const ch = this.ch;
+    const MP = this._chMods.MP;
+    const life = MP.lifeOf(ch.game);
+    const kind = ch.finished || ch.game.over ? null : !life.open ? 'resign' : ch.side === MP.recipientOf(ch.game) ? 'decline' : 'cancel';
+    const confirming = this._menuConfirm === 'chend';
+    const endBtn = kind ? `<button class="cc-btn cc-btn-ghost ${confirming ? 'cc-confirm' : ''}" data-action="menu-chend">${esc(t('ch_' + kind))}${confirming ? '?' : ''}</button>` : '';
+    this.el.menu.innerHTML = `<div class="cc-scrim" data-action="close-menu"></div>
+      <div class="cc-sheet cc-menu-sheet">
+        <h2 class="cc-sheet-title">${t('menu_title')}</h2>
+        <button class="cc-btn cc-btn-ghost" data-action="toggle-theme">${resolvedTheme() === 'dark' ? '☀️ ' + t('mode_light') : '🌙 ' + t('mode_dark')}</button>
+        <button class="cc-btn cc-btn-ghost" data-action="menu-help">${t('howto')}</button>
+        <button class="cc-btn cc-btn-ghost" data-action="menu-chhome">${t('ch_matches')}</button>
+        ${endBtn}
+        <button class="cc-btn cc-btn-primary" data-action="menu-resume">${t('menu_resume')}</button>
+      </div>`;
+  }
+
+  // Quick chat inside a challenge: js/match-chat-ui.js is the panel, js/match-chat.js the data
+  // (`chinchon/chat/<id>`, BESIDE the match, never inside it, so watchGame and validateGame never
+  // see a chat line). Mounted while a match is on the table, torn down in _chLeave.
+  async _chMountChat(ch) {
+    this._chUnmountChat();
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (this._dead || this.ch !== ch || this._chat) return;
+    const node = 'chinchon';
+    const side = ch.side;
+    const seenAt = DATA.readChatSeen(node, ch.id);
+    const chat = UI.createMatchChat({
+      root: this.root,
+      send: (p) => DATA.sendChat({ node, id: ch.id, side }, p),
+      them: () => ({ name: ch.them.name || '?', emoji: ch.them.emoji || '' }),
+      place: CH_CHAT_PLACE,
+    });
+    this._chat = chat;
+    const stop = await DATA.watchChat({ node, id: ch.id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === side;
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(node, ch.id, newest);
+    });
+    if (this._dead || this.ch !== ch || this._chat !== chat) { try { stop(); } catch { /* detached */ } return; }
+    this._chatStop = stop;
+  }
+
+  _chUnmountChat() {
+    if (this._chatStop) { try { this._chatStop(); } catch { /* detached */ } this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch { /* gone */ } this._chat = null; }
+  }
+
+  /** Stop watching the open challenge (moves not yet sent stay in the outbox). */
+  _chLeave() {
+    this._chUnmountChat();
+    const ch = this.ch;
+    if (this.root) this.root.classList.remove('cc-ch-on');
+    if (!ch) return;
+    this.ch = null;
+    if (ch.wake) { ch.wake = null; }
+    if (ch.stop) { try { ch.stop(); } catch { /* detached */ } }
+  }
+
   // --- teardown -------------------------------------------------------------
 
   destroy() {
@@ -2802,6 +3264,7 @@ class ChinchonUI {
     this._resolveModal();       // unblock any awaiting round modal
     net.disconnect();
     this.mp = null;
+    this._chLeave();               // moves not yet sent stay in the outbox
     if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
     if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
     if (this.root) { this.root.removeEventListener('click', this._onClick); this.root.removeEventListener('input', this._onInput); }
@@ -2825,6 +3288,8 @@ let instance = null;
 export function init(container) {
   if (instance) instance.destroy();
   instance = new ChinchonUI(container);
+  // Test seam (like Darts' window.__dtTest): lets the headless checks open a challenge match.
+  if (typeof window !== 'undefined') window.__ccTest = { ui: instance };
   return instance;
 }
 
@@ -2846,4 +3311,7 @@ export function isInProgress() {
   return !!(instance && instance.mp && instance._inProgress());
 }
 
-export default { init, destroy, isInProgress };
+/** The hub hands an open Chinchón a notified match (js/hub.js `_openPushedGameNow`). */
+export function openArmed() { if (instance) instance._takeArmed(); }
+
+export default { init, destroy, isInProgress, openArmed };

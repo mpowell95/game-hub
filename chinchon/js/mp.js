@@ -182,11 +182,11 @@ export function cleanEntry(e) {
   if (e.k === 'close' && typeof e.yes === 'boolean') return { by: e.by, k: 'close', yes: e.yes, at };
   return null;
 }
-const sameEntry = (x, y) => !!x && !!y && x.by === y.by && x.k === y.k && x.src === y.src && x.card === y.card && x.yes === y.yes;
+export const sameEntry = (x, y) => !!x && !!y && x.by === y.by && x.k === y.k && x.src === y.src && x.card === y.card && x.yes === y.yes;
 
 /** What the engine gets from a logged entry when it asks seat `side` for a `kind` decision, or
  *  undefined when the entry is not an answer to that question (the log is then invalid). */
-function answerOf(e, side, kind, view) {
+export function answerOf(e, side, kind, view) {
   if (!e || e.by !== side || e.k !== kind) return undefined;
   if (kind === 'draw') return e.src === 'stock' || (e.src === 'discard' && view.discardTop) ? e.src : undefined;
   if (kind === 'discard') return view.hand.some((c) => c.id === e.card) ? e.card : undefined;
