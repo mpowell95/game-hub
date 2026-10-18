@@ -141,6 +141,15 @@ class EscobaUI {
     this._mpJoinCode = '';       // retained across a failed join attempt
     this._mpStatusMsg = '';
 
+    // Turn-by-turn CHALLENGES (2026-10-18, escoba/js/mp.js + mp-ui.js, both lazily loaded). A
+    // separate thing from the live room above: `this.ch` is set only while a challenge is on the
+    // table, and `this.mp` stays null for it, so no live-room path ever runs for a challenge.
+    this.ch = null;
+    this.MP = null;
+    this.CH = null;
+    this._chv = { screen: 'home', rows: null, opps: null, q: '', them: null, msg: '', busy: false, from: 'home' };
+    this._chTurns = 0;
+
     this._setup = this._loadSetup();
 
     const ui = this;
@@ -157,6 +166,24 @@ class EscobaUI {
     { const img = new Image(); img.src = BROOM_URL; }   // warm the sweep sprite so the first escoba doesn't flash
     this.mount();
     this._tryRestoreMP();
+    // A tapped launcher bubble or notification names a challenge match; the hub's Multiplayer
+    // screen can also hand over a person to challenge ('pick'). Taken once.
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || instance !== this || this._dead || this.mp) return;
+      if (o.kind === 'pick') this._chOpenLen(o.them, 'home'); else this._chOpenMatch(o.id);
+    }).catch(() => {});
+  }
+
+  /** The hub armed a match (alert.js armOpen) while this game is already open: take it. */
+  openArmed() {
+    if (this._dead || this.mp) return;
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || instance !== this || this._dead || this.mp) return;
+      if (o.kind === 'pick') this._chOpenLen(o.them, 'home');
+      else if (!(this.ch && this.ch.id === o.id)) this._chOpenMatch(o.id);
+    }).catch(() => {});
   }
 
   // --- settings persistence -------------------------------------------------
@@ -232,7 +259,9 @@ class EscobaUI {
    *  that changes state; cheap at this size, and means backgrounding the tab
    *  or tapping the hub's back button never loses progress. */
   _saveSnapshot() {
-    if (!this.game) return;
+    // A challenge is kept by its LOG on the server (escoba/js/mp.js), never in this slot: writing it
+    // here would overwrite the solo match "Resume game" offers.
+    if (!this.game || this.ch) return;
     try {
       const payload = {
         v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobasNow(), assist: this._matchAssist,
@@ -259,7 +288,10 @@ class EscobaUI {
     return (raw && raw.v === SAVE_SCHEMA_V && raw.snap) ? raw : null;
   }
 
-  _clearSave() { try { localStorage.removeItem(STORE_SAVE); } catch { /* ignore */ } }
+  _clearSave() {
+    if (this.ch) return;   // a challenge never touches the solo save (see _saveSnapshot)
+    try { localStorage.removeItem(STORE_SAVE); } catch { /* ignore */ }
+  }
 
   // --- DOM construction -----------------------------------------------------
 
@@ -272,6 +304,7 @@ class EscobaUI {
           <div class="eb-topbar">
             <div class="eb-opponents" data-role="opponents"></div>
             <div class="eb-matchinfo" data-role="matchinfo"></div>
+            <span class="eb-chat-slot" data-role="chatslot" aria-hidden="true" hidden></span>
             <button class="eb-menu-btn" data-action="open-menu" aria-label="${esc(t('aria_menu'))}">☰</button>
           </div>
           <div class="eb-announce-row">
@@ -303,7 +336,7 @@ class EscobaUI {
       header: q('header'), setup: q('setup'), game: q('game'),
       opponents: q('opponents'), matchinfo: q('matchinfo'), stock: q('stock'), stockcount: q('stockcount'),
       mat: q('mat'), table: q('table'), announce: q('announce'), lasthand: q('lasthand'), sumchip: q('sumchip'), broom: q('broom'),
-      self: q('self'), hand: q('hand'), actions: q('actions'),
+      self: q('self'), hand: q('hand'), actions: q('actions'), chatslot: q('chatslot'),
       modal: q('modal'), menu: q('menu'), banner: q('banner'), flight: q('flight'),
     };
 
@@ -334,6 +367,7 @@ class EscobaUI {
 
   showSetup() {
     if (this._dead) return;
+    if (this.ch) this._chLeave();
     if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
     if (this.game) { this.game.abort(); this.game = null; }
     this._resolvePending(null);
@@ -351,6 +385,7 @@ class EscobaUI {
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
     this.renderSetup();
+    this._chCountTurns();
   }
 
   /** Shared `.eb-segmented` builder, used by the mode selector, every
@@ -493,6 +528,7 @@ class EscobaUI {
   }
 
   renderSetup() {
+    if (this._screen === 'ch') { if (this.CH) this.CH.paint(this); return; }
     if (this._screen === 'host-lobby' || this._screen === 'join-lobby') {
       this.el.setup.innerHTML = `<div class="eb-panel">${this._renderMpLobby()}</div>`;
       return;
@@ -511,17 +547,23 @@ class EscobaUI {
 
     const modeSeg = this._seg('set-mode', s.mode, [['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')]]);
 
+    // How to play and Challenges share ONE row, so the turn-by-turn challenges (2026-10-18) cost the
+    // setup screen no height: it had 6px to spare at 390x664 in the hub.
+    const linkRow = `<div class="eb-link-row">
+        <button class="eb-howto-link" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>
+        ${this._chEntryHTML()}
+      </div>`;
     let body;
     if (s.mode === 'join') {
       body = `${this._renderJoinModeBody()}
-        <button class="eb-howto-link" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>`;
+        ${linkRow}`;
     } else {
       const isHost = s.mode === 'host';
       const actionBtn = isHost
         ? `<button class="eb-btn eb-btn-ghost" data-action="mp-host">${esc(t('btn_host_game'))}</button>`
         : `<button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? esc(t('btn_new_game')) : esc(t('btn_start_game'))}</button>`;
       body = `${this._renderSettingsCard(isHost)}
-        <button class="eb-howto-link" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>
+        ${linkRow}
         ${actionBtn}`;
     }
 
@@ -844,6 +886,7 @@ class EscobaUI {
         // and desynced immediately (test-mp-lockstep.mjs E4). Solo is unaffected
         // (this.mp is null, the save is the only step either way).
         if (this.mp) await this._mpAfterPlay(p, payload);
+        if (this.ch) this._chAfterPlay(p, payload);
         this._saveSnapshot();
         if (payload.escoba) await this.showBanner('¡ESCOBA!', t('banner_clears_table', { name: p.name }));
         break;
@@ -855,6 +898,9 @@ class EscobaUI {
         break;
       case 'roundScored':
         this._chartView = false;
+        // A challenge deals every round from its seed (escoba/js/mp.js deckIds), so the next deck is
+        // known here, before the engine's own loop deals it.
+        if (this.ch && !this.game.winner) this.game.config.presetDeck = this.MP.deckIds(this.ch.seed, this.game.round + 1, this.ch.deck);
         if (!this.game.winner) this._saveSnapshot();   // a won boundary isn't resumable; matchEnd clears it
         // Belt to the engine's braces: by the time this hook runs the result is already
         // recorded (game.js's onDecided fired inside checkMatchEnd, before this emit). Kept
@@ -862,6 +908,8 @@ class EscobaUI {
         // property being defended, and _commitStats is idempotent so this costs nothing.
         else this._commitStats();
         await this.showRoundModal();
+        // A one-hand challenge level on points is a DRAW: the engine knows no draw, so it is ended here.
+        if (this.ch && !this.game.winner && this.ch.len === '1') { this._chEndDraw(); break; }
         // Guest only: the next round's deck can't be dealt locally until the
         // host has shuffled it and published it (see the 'roundStart' hook
         // above). Wait here -- between the modal closing and the engine's
@@ -871,6 +919,7 @@ class EscobaUI {
         break;
       case 'matchEnd':
         this._matchEnded = true;
+        if (this.ch) { this._chCount(); this.render(); this._chShowResult(); break; }
         this._clearSave();
         this._commitStats();
         this._chartView = false;
@@ -1016,6 +1065,9 @@ class EscobaUI {
    *  never record the host's result as its own (THE LAW rule 2 -- a loss
    *  written as a win is not additive-safe). */
   _commitStats() {
+    // A challenge counts ONCE PER PHONE through its own ledger (escoba/js/mp.js countResult), from the
+    // match's log, and never writes head-to-head. Called from the same synchronous onDecided hook.
+    if (this.ch) { this._chCount(); return; }
     if (this._statsCommitted || !this.game) return;
     this._statsCommitted = true;
     const human = this._human();
@@ -1047,7 +1099,7 @@ class EscobaUI {
   /** The local human's seat: always 0 in solo. In MP, the host is seat 0 and
    *  the guest is seat 1 -- every "self" lookup must go through this rather
    *  than assume seat 0, since a guest's local human sits at seat 1. */
-  _localSeat() { return this.mp ? this.mp.localSeat : 0; }
+  _localSeat() { return this.ch ? this.ch.seat : this.mp ? this.mp.localSeat : 0; }
   _human() { return this.game.byId(this._localSeat()); }
 
   /** This device's escoba count for the whole match, straight off the engine (game.js's
@@ -1122,8 +1174,9 @@ class EscobaUI {
    *  _syncLastHand). Always renders both lines so the slot never shifts. */
   renderMatchInfo() {
     const g = this.game;
+    const goal = this.ch && this.ch.len === '1' ? t('ch_len_1') : t('first_to_n', { n: g.config.targetScore });
     return `<span class="eb-mi-line">${esc(t('round_n', { n: g.round }))}</span>
-      <span class="eb-mi-line">${esc(t('first_to_n', { n: g.config.targetScore }))}</span>`;
+      <span class="eb-mi-line">${esc(goal)}</span>`;
   }
 
   /** The last-hand flag is a persistent state chip on the mat (Task C), not
@@ -1514,6 +1567,10 @@ class EscobaUI {
    *  Fixed min-width and tabular numerals keep the button from resizing as
    *  its label changes ("Capture 9/15" building up to "Capture"). */
   renderActions() {
+    if (this._matchEnded && this.ch) {
+      return `<button class="eb-btn eb-btn-ghost" data-action="ch-results">${esc(t('btn_results'))}</button>
+        <button class="eb-btn eb-btn-primary" data-action="ch-home">${esc(t('ch_matches'))}</button>`;
+    }
     if (this._matchEnded) {
       return `<button class="eb-btn eb-btn-ghost" data-action="show-results">${esc(t('btn_results'))}</button>
         <button class="eb-btn eb-btn-primary" data-action="new-game">${esc(t('btn_new_game'))}</button>`;
@@ -1916,6 +1973,20 @@ class EscobaUI {
       case 'close-menu': case 'menu-resume': this._closeMenu(); break;
       case 'menu-newgame': this._menuAction('newgame'); break;
       case 'menu-quit': this._menuAction('quit'); break;
+      // turn-by-turn challenges
+      case 'ch-open-home': this.syncSetupInputs(); this._saveSetup(); this._chOpenHome(); break;
+      case 'ch-back': this._chBack(); break;
+      case 'ch-new': this._chOpenPick(); break;
+      case 'ch-pick': this._chPickPerson(a.dataset.code); break;
+      case 'ch-len': this._chSend(a.dataset.v); break;
+      case 'ch-open': this._chOpenMatch(a.dataset.id); break;
+      case 'ch-home': this._closeModal(); this._chOpenHome(); break;
+      case 'ch-rematch': this._chRematch(); break;
+      case 'ch-results': this._chShowResult(); break;
+      case 'ch-close-result': this._closeModal(); this.render(); break;
+      case 'ch-unseen-ok': this._chUnseenDone(); break;
+      case 'menu-chend': this._menuAction('chend'); break;
+      case 'menu-chhome': this._closeMenu(); this._chOpenHome(); break;
     }
   }
 
@@ -1928,6 +1999,11 @@ class EscobaUI {
    *  mid-keystroke. */
   onInput(e) {
     const el = e.target;
+    if (el && el.dataset && el.dataset.role === 'ch-search') {
+      this._chv.q = el.value;
+      if (this.CH) this.CH.repaintPeople(this);
+      return;
+    }
     if (!(el && el.dataset && el.dataset.role === 'mp-code-input')) return;
     const clean = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, MP_CODE_LEN);
     if (clean !== el.value) el.value = clean;
@@ -1957,6 +2033,7 @@ class EscobaUI {
   _closeMenu() { if (this.el && this.el.menu) { this.el.menu.hidden = true; } this._menuConfirm = null; }
 
   _renderMenu() {
+    if (this.ch) { this._chRenderMenu(); return; }
     const btn = (which, label) => {
       const confirming = this._menuConfirm === which;
       return `<button class="eb-btn eb-btn-ghost ${confirming ? 'eb-confirm' : ''}" data-action="menu-${which}">${
@@ -1979,6 +2056,12 @@ class EscobaUI {
    *  restart -- rehosting isn't automatic), which also ends the room for
    *  the opponent, unlike backgrounding (destroy()), which preserves it. */
   _menuAction(which) {
+    if (this.ch && which === 'chend') {
+      if (this._menuConfirm !== which) { this._menuConfirm = which; this._renderMenu(); return; }
+      this._closeMenu();
+      this._chEnd();
+      return;
+    }
     if (this._inProgress() && this._menuConfirm !== which) {
       this._menuConfirm = which;
       this._renderMenu();
@@ -2612,10 +2695,562 @@ class EscobaUI {
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba MP restore error', err); });
   }
 
+  // --- turn-by-turn challenges (2026-10-18) -------------------------------------
+  // escoba/js/mp.js keeps the match (a LOG of plays on the server); escoba/js/mp-ui.js draws the
+  // lists. The match is played on the SAME table with the SAME engine: the other person's seat is an
+  // agent fed from the log (like a live room's remote agent), ours is the ordinary human agent, and
+  // every play of ours is appended to the log as it is made (_chAfterPlay -> _chFlush). Opening a
+  // match rebuilds the engine at the start of the other person's latest run of plays (mp.js
+  // replayTo), so their last card(s), the broom and the round-end table play out on this phone too.
+  // Nothing here touches js/net.js, rooms/, the solo save or head-to-head.
+
+  async _chLoad() {
+    if (!this.MP || !this.CH) [this.MP, this.CH] = await Promise.all([import('./mp.js'), import('./mp-ui.js')]);
+    return this.MP;
+  }
+
+  /** The "Challenges" link beside How to play, with how many matches are waiting on this player. */
+  _chEntryHTML() {
+    const n = this._chTurns | 0;
+    return `<button type="button" class="eb-howto-link eb-ch-entry" data-action="ch-open-home">
+      <svg class="eb-ch-entry-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.6A5 5 0 0 1 21 18.5"/></svg>
+      <span>${esc(t('ch_entry'))}</span>
+      <span class="eb-ch-count" data-role="ch-count" ${n ? '' : 'hidden'}>${n}</span>
+    </button>`;
+  }
+
+  /** Re-read how many challenge matches are waiting on this player (and count any that finished
+   *  while this phone was away). Paints the setup row's number in place, never re-rendering it. */
+  async _chCountTurns() {
+    if (this._chCounting) return;
+    this._chCounting = true;
+    try {
+      const MP = await this._chLoad();
+      if (this._dead || !MP.myCode()) return;
+      const rows = await MP.readMyGames();
+      if (this._dead) return;
+      try { MP.recordFinished(rows); } catch (err) { console.warn('[escoba] recordFinished', err); }
+      this._chTurns = rows.filter((r) => !r.over && r.yourTurn).length;
+      const el = this.el && this.el.setup && this.el.setup.querySelector('[data-role="ch-count"]');
+      if (el) { el.textContent = String(this._chTurns); el.hidden = !this._chTurns; }
+    } catch { /* offline: no number */ } finally { this._chCounting = false; }
+  }
+
+  /** Show one challenge screen ('home' | 'pick' | 'len') in the setup panel. */
+  _chScreen(screen, patch = {}) {
+    if (this._screen !== 'ch' || !this.el.game.hidden) { this.showSetup(); this._screen = 'ch'; }
+    Object.assign(this._chv, { screen, msg: '', busy: false }, patch);
+    this.renderSetup();
+  }
+
+  async _chOpenHome(msg = '') {
+    await this._chLoad();
+    if (this._dead) return;
+    this._chLeave();
+    this._chScreen('home', { rows: null, q: '', them: null, msg });
+    const MP = this.MP;
+    if (!MP.myCode()) { this._chv.rows = []; this.renderSetup(); this.CH.say(this, t('ch_no_code')); return; }
+    try { await MP.drainOutbox(); } catch { /* sent next time */ }
+    const rows = await MP.readMyGames();
+    if (this._dead || this._screen !== 'ch' || this._chv.screen !== 'home') return;
+    try { MP.recordFinished(rows); } catch (err) { console.warn('[escoba] recordFinished', err); }
+    this._chv.rows = rows;
+    this._chTurns = rows.filter((r) => !r.over && r.yourTurn).length;
+    this.renderSetup();
+    if (msg) this.CH.say(this, msg);
+    this._chShowUnseen(rows);
+  }
+
+  _chBack() {
+    const v = this._chv;
+    if (v.screen === 'len') { if (v.from === 'pick') this._chScreen('pick'); else this._chOpenHome(); return; }
+    if (v.screen === 'pick') { this._chOpenHome(); return; }
+    this.showSetup();
+  }
+
+  async _chOpenPick() {
+    await this._chLoad();
+    this._chScreen('pick', { q: '' });
+    if (!this._chv.opps) {
+      const opps = await this.MP.readOpponents();
+      if (this._dead) return;
+      this._chv.opps = opps;
+      if (this._screen === 'ch' && this._chv.screen === 'pick') this.CH.repaintPeople(this);
+    }
+  }
+
+  _chPickPerson(code) {
+    const them = (this._chv.opps || []).find((o) => o.code === code);
+    if (them) this._chOpenLen(them, 'pick');
+  }
+
+  /** Pick the length, for `them` ({code, name, emoji}). `from` says where Back goes. */
+  async _chOpenLen(them, from = 'home') {
+    if (!them || !them.code) return;
+    await this._chLoad();
+    if (this._dead) return;
+    this._chLeave();
+    this._chScreen('len', { them: { code: String(them.code), name: String(them.name || ''), emoji: String(them.emoji || '🙂') }, from });
+  }
+
+  /** Create the challenge (the sender's deck numbering rides along) and open it on the table. */
+  async _chSend(len) {
+    const v = this._chv;
+    if (v.busy || !v.them) return;
+    v.busy = true; this.renderSetup();
+    const res = await this.MP.createGame({ them: v.them, len, deck: this._setup.deckMode });
+    if (this._dead) return;
+    if (!res.ok) { v.busy = false; this.renderSetup(); this.CH.say(this, this.CH.reasonText(res.reason)); return; }
+    this._chBegin(res.game);
+  }
+
+  async _chRematch() {
+    const ch = this.ch;
+    if (!ch) return;
+    const them = { code: ch.them.code, name: ch.them.name, emoji: ch.them.emoji };
+    const len = ch.len, deck = ch.deck;
+    this._closeModal();
+    const res = await this.MP.createGame({ them, len, deck });
+    if (this._dead) return;
+    if (!res.ok) { this._chOpenHome(this.CH.reasonText(res.reason)); return; }
+    this._chBegin(res.game);
+  }
+
+  /** Open one stored match. Plays still waiting on this phone go first, so none is lost. */
+  async _chOpenMatch(id) {
+    const MP = await this._chLoad();
+    if (this._dead) return;
+    if (MP.pendingFor(id)) { try { await MP.drainOutbox(id); } catch { /* still queued */ } }
+    const game = await MP.readGame(id);
+    if (this._dead) return;
+    if (!game) { this._chOpenHome(t('ch_not_found')); return; }
+    this._chBegin(game);
+  }
+
+  /** What to say about a match that ended with no result ('' for one that did not). */
+  _chEndText(game) {
+    const MP = this.MP;
+    if (!game || !MP) return '';
+    if (MP.lifeOf(game).expired) return t('ch_expired');
+    if (!MP.isCalledOff(game)) return '';
+    const to = MP.recipientOf(game);
+    const sender = to === 'a' ? game.b : game.a;
+    return game.over.why === 'declined' ? t('ch_declined', { name: game[to].name || '?' }) : t('ch_cancelled', { name: sender.name || '?' });
+  }
+
+  _chBegin(game) {
+    const MP = this.MP;
+    const side = MP.sideOf(game, MP.myCode());
+    if (!side) { this._chOpenHome(t('ch_not_found')); return; }
+    const endText = this._chEndText(game);
+    if (endText) { this._chOpenHome(endText); return; }
+    this._chLeave();
+    if (this.game) { this.game.abort(); this.game = null; }
+    this._resolvePending(null);
+    this._resolveModal();
+    const seat = side === 'a' ? 0 : 1;
+    const theirSide = side === 'a' ? 'b' : 'a';
+    const done = !!game.over;
+    // Where to start SHOWING: the start of their latest run of plays, unless this phone already
+    // showed them (mp.js readShown). A finished match opens on its final position.
+    let from = MP.lastRunStart(game, theirSide);
+    const shown = MP.readShown(game.id);
+    if (shown > from) from = Math.min(shown, game.log.length);
+    if (done && from > 0) {
+      // A finished match whose last plays this phone has seen opens on the end; otherwise those
+      // plays are shown first and the result follows from the engine.
+      if (from >= game.log.length) from = game.log.length;
+    }
+    const names = [{ name: game.a.name, avatar: game.a.emoji }, { name: game.b.name, avatar: game.b.emoji }];
+    const them = side === 'a' ? game.b : game.a;
+    this.ch = {
+      id: game.id, side, seat, them, game, len: game.len, deck: game.deck, seed: game.seed,
+      log: game.log.slice(), applied: from, pending: [], base: game.log.length, sending: false,
+      want: null, fromLog: false, waiting: false, stop: null, counted: false, finished: false,
+    };
+    const ch = this.ch;
+    const agents = { [seat]: this._chMyAgent(), [1 - seat]: this._chTheirAgent() };
+    if (done && from >= game.log.length) {
+      // Nothing left to show: the final position, and the result.
+      const d = MP.replayTo(game, game.log.length, names);
+      d.g.players.forEach((p) => { p.isHuman = p.id === seat; });
+      this.game = d.g;
+      this._bindGame();
+      this._matchAssist = !!this._setup.assist;
+      this._matchEnded = true;
+      this._enterGameScreen();
+      this._chShowChatSlot();
+      this._chCount();
+      this._chShowResult();
+      this._chMountChat();
+      return;
+    }
+    if (from === 0) {
+      // From the very first deal, so it is dealt on screen.
+      const players = [0, 1].map((id) => makePlayer({ id, name: names[id].name, avatar: names[id].avatar, isHuman: id === seat, agent: agents[id] }));
+      const target = { 1: 1, 11: 11, 21: 21 }[game.len];
+      this.game = new Game({ players, config: { targetScore: target, deckMode: game.deck, presetDeck: MP.deckIds(game.seed, 1, game.deck) } });
+      this.game.dealer = 1;
+    } else {
+      const snap = MP.replayTo(game, from, names).g.snapshot();
+      for (const sp of snap.players) sp.isHuman = sp.id === seat;
+      this.game = Game.fromSnapshot(snap, agents);
+    }
+    this._bindGame();
+    this._matchAssist = !!this._setup.assist;
+    this._enterGameScreen();
+    this._chShowChatSlot();
+    this._chMountChat();
+    MP.watchGame(game.id, (g) => this._chOnGame(g)).then((stop) => {
+      if (this.ch === ch) ch.stop = stop; else { try { stop(); } catch { /* detached */ } }
+    });
+    this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba challenge error', err); });
+  }
+
+  /** Our seat: a play already in the log (made on another phone of ours) is replayed; otherwise the
+   *  ordinary human prompt. A match that ended while we were looking (resigned) asks nothing. */
+  _chMyAgent() {
+    const ui = this;
+    return {
+      isHuman: true,
+      chooseMove() {
+        const ch = ui.ch;
+        if (!ch) return new Promise(() => {});
+        if (ch.applied < ch.log.length) {
+          const e = ch.log[ch.applied++];
+          ch.fromLog = true;
+          return Promise.resolve(ui.MP.moveOf(e));
+        }
+        if (ch.game.over) { ui._chEndedWhileOpen(); return new Promise(() => {}); }
+        ch.waiting = false;
+        ui._clearMpStatus();
+        return ui.promptMove();
+      },
+    };
+  }
+
+  /** Their seat: fed from the log, waiting (and saying whose turn it is) until their play arrives. */
+  _chTheirAgent() {
+    const ui = this;
+    return {
+      isHuman: false,
+      chooseMove() {
+        return new Promise((resolve) => {
+          if (!ui.ch) return;
+          ui.ch.want = resolve;
+          ui._chDeliver();
+        });
+      },
+    };
+  }
+
+  _chDeliver() {
+    const ch = this.ch;
+    if (!ch || !ch.want) return;
+    if (ch.applied < ch.log.length) {
+      const e = ch.log[ch.applied++];
+      const resolve = ch.want;
+      ch.want = null;
+      ch.fromLog = true;
+      ch.waiting = false;
+      this._clearMpStatus();
+      resolve(this.MP.moveOf(e));
+      return;
+    }
+    if (ch.game.over) { this._chEndedWhileOpen(); return; }
+    ch.waiting = true;
+    if (!ch.sending || !ch.pending.length) this._setMpStatus(t('ch_their_turn', { name: ch.them.name || '?' }));
+    this.MP.markShown(ch.id, ch.log.length);
+  }
+
+  /** After every play on the table: ours goes into the log (and to the server); a replayed one is
+   *  only marked as shown. */
+  _chAfterPlay(p, payload) {
+    const ch = this.ch;
+    if (!ch) return;
+    if (ch.fromLog) {
+      ch.fromLog = false;
+      if (p.id !== ch.seat) this.MP.markShown(ch.id, ch.applied);
+      return;
+    }
+    if (p.id !== ch.seat) return;
+    const e = this.MP.entryOf(ch.side, payload.card, payload.captured);
+    if (!ch.pending.length && !ch.sending) ch.base = ch.log.length;
+    ch.log.push(e);
+    ch.applied = ch.log.length;
+    ch.pending.push(e);
+    this._chFlush();
+  }
+
+  async _chFlush() {
+    const ch = this.ch;
+    const MP = this.MP;
+    if (!ch || ch.sending || !ch.pending.length) return;
+    ch.sending = true;
+    const list = ch.pending.slice();
+    const base = ch.base;
+    MP.savePending(ch.id, base, ch.pending);          // kept on the phone until the server has it
+    const res = await MP.appendLog(ch.id, base, list);
+    if (this.ch !== ch) return;                        // left: the outbox keeps whatever is unsent
+    ch.sending = false;
+    if (res.ok) {
+      ch.pending.splice(0, list.length);
+      ch.base = base + list.length;
+      if (res.game.log.length >= ch.log.length) ch.game = res.game;
+      MP.savePending(ch.id, ch.base, ch.pending);
+      MP.markShown(ch.id, ch.base);
+      if (ch.pending.length) { this._chFlush(); return; }
+      if (ch.waiting) this._setMpStatus(t('ch_their_turn', { name: ch.them.name || '?' }));
+      return;
+    }
+    if (res.retryable) {
+      this._setMpStatus(t('ch_not_sent'));
+      setTimeout(() => { if (this.ch === ch) this._chFlush(); }, 4000);
+    } else if (res.reason === 'expired') {
+      MP.savePending(ch.id, ch.base, []);
+      this._chOpenHome(t('ch_expired'));
+    } else {
+      // The server's match is not where this phone left it (played on another phone, called off):
+      // show the server's version. The unsent play stays in the outbox, and is dropped loudly
+      // there if it can never be sent.
+      console.error('[escoba] a play could not be sent:', res.reason);
+      this._chOpenMatch(ch.id);
+    }
+  }
+
+  /** The watched match changed: new plays from them are shown, our own echoes are ignored. */
+  _chOnGame(g) {
+    const ch = this.ch;
+    if (!ch || g.id !== ch.id) return;
+    if (this.MP.isCalledOff(g) || this.MP.lifeOf(g).expired) { if (!this._matchEnded) this._chOpenHome(this._chEndText(g)); return; }
+    if (g.log.length < ch.log.length) {
+      // Our own play is still on its way. Only a resignation can arrive meanwhile.
+      if (g.over && g.over.why === 'resign') { ch.game = g; this._chEndedWhileOpen(); }
+      return;
+    }
+    const same = (x, y) => x.by === y.by && x.c === y.c && x.k === y.k;
+    if (ch.log.some((e, i) => !same(e, g.log[i]))) { this._chOpenMatch(ch.id); return; }
+    ch.game = g;
+    ch.log = g.log.slice();
+    this._chDeliver();
+    if (g.over && g.over.why === 'resign' && ch.applied >= ch.log.length) this._chEndedWhileOpen();
+  }
+
+  /** The match ended without the engine deciding it (a resignation) while it was on screen. */
+  _chEndedWhileOpen() {
+    const ch = this.ch;
+    if (!ch || this._matchEnded) return;
+    if (this.MP.isCalledOff(ch.game)) { this._chOpenHome(this._chEndText(ch.game)); return; }
+    if (!ch.game.over) return;
+    if (this.game) this.game.abort();
+    this._resolvePending(null);
+    this._matchEnded = true;
+    this._clearMpStatus();
+    this._chCount();
+    this.render();
+    this._chShowResult();
+  }
+
+  /** A one-hand challenge level on points (the engine has no draw). */
+  _chEndDraw() {
+    if (this.game) this.game.abort();
+    this._matchEnded = true;
+    this._clearMpStatus();
+    this._chCount();
+    this.render();
+    this._chShowResult();
+  }
+
+  /** The result, from this phone's own replay of the log (which can be a play ahead of the server)
+   *  or, for a resignation, from the stored match. { winner: 'a'|'b'|'draw', why, scores, escobas }. */
+  _chOutcome() {
+    const ch = this.ch;
+    if (!ch) return null;
+    const d = this.MP.replayTo({ len: ch.len, deck: ch.deck, seed: ch.seed, log: ch.log });
+    const g = d.g;
+    const scores = { a: g.players[0].totalScore, b: g.players[1].totalScore };
+    const escobas = { a: g.players[0].matchEscobas | 0, b: g.players[1].matchEscobas | 0 };
+    const over = d.over || (ch.game.over && ch.game.over.winner !== 'none' ? ch.game.over : null);
+    return over ? { winner: over.winner, why: over.why, scores, escobas } : null;
+  }
+
+  /** Count the finished match on this phone, once (mp.js countResult's ledger makes it once even
+   *  across reopenings and the launcher's own count). */
+  _chCount() {
+    const ch = this.ch;
+    if (!ch || ch.counted) return;
+    const o = this._chOutcome();
+    if (!o) return;
+    ch.counted = true;
+    const won = o.winner === 'draw' ? null : o.winner === ch.side;
+    try { this.MP.countResult(ch.id, won, o.escobas[ch.side]); } catch (err) { console.error('[escoba] could not count the challenge', err); }
+    try { this.MP.markResultSeen(ch.id); } catch { /* the popup shows once more */ }
+  }
+
+  _chShowResult() {
+    const ch = this.ch;
+    const o = this._chOutcome();
+    if (!ch || !o) return;
+    const g = ch.game;
+    const who = { a: { avatar: g.a.emoji, name: g.a.name }, b: { avatar: g.b.emoji, name: g.b.name } };
+    const players = ['a', 'b'].map((s) => ({ ...who[s], pts: o.scores[s], win: o.winner === s }))
+      .sort((x, y) => (y.win - x.win) || (y.pts - x.pts));
+    const loser = o.winner === 'a' ? 'b' : 'a';
+    const title = o.winner === 'draw' ? t('ch_draw') : `${who[o.winner].avatar} ${t('wins_headline', { name: who[o.winner].name })}`;
+    const sub = o.why === 'resign' ? t('ch_resigned', { name: who[loser].name })
+      : o.why === 'whitewash' ? t('ch_whitewash', { name: who[loser].name }) : '';
+    this.el.modal.innerHTML = this.CH.resultHTML({
+      title, sub, players,
+      actions: [{ action: 'ch-home', label: t('ch_matches') }, { action: 'ch-rematch', label: t('ch_rematch'), primary: true }],
+    });
+    this.el.modal.hidden = false;
+    if (o.winner === ch.side && !ch.finished) this._celebrate();
+    ch.finished = true;
+  }
+
+  /** GAME OVER for a match that ended while this phone was away (Darts' and Hoops' lesson: a match
+   *  must never just disappear). Shown on the Challenges home, once. */
+  _chShowUnseen(rows) {
+    const MP = this.MP;
+    const ids = MP.readUnseen();
+    const ended = (rows || []).filter((r) => r.over && ids.includes(r.id) && MP.RESULTS.includes(r.result))
+      .sort((a, b) => b.updated - a.updated);
+    if (!ended.length || !this.el.modal.hidden) return;
+    const r = ended[0];
+    const me = MP.meLabel();
+    const mine = { avatar: me.emoji, name: me.name, pts: r.mine, win: r.result === 'won' };
+    const theirs = { avatar: r.emoji, name: r.name, pts: r.theirs, win: r.result === 'lost' };
+    const players = [mine, theirs].sort((x, y) => (y.win - x.win) || (y.pts - x.pts));
+    const title = r.result === 'draw' ? t('ch_draw')
+      : r.result === 'won' ? `${me.emoji} ${t('wins_headline', { name: me.name })}` : `${r.emoji} ${t('wins_headline', { name: r.name })}`;
+    const sub = r.why === 'resign' ? t('ch_resigned', { name: r.result === 'won' ? r.name : me.name })
+      : r.why === 'whitewash' ? t('ch_whitewash', { name: r.result === 'won' ? r.name : me.name }) : '';
+    this._chUnseenIds = ended.map((x) => x.id);
+    this.el.modal.innerHTML = this.CH.resultHTML({
+      title, sub, players, close: 'ch-unseen-ok',
+      actions: [{ action: 'ch-unseen-ok', label: t('ch_ok'), primary: true }],
+    });
+    this.el.modal.hidden = false;
+  }
+
+  _chUnseenDone() {
+    for (const id of this._chUnseenIds || []) { try { this.MP.markResultSeen(id); } catch { /* shows again */ } }
+    this._chUnseenIds = null;
+    this._closeModal();
+  }
+
+  /** Cancel, decline or resign (js/challenge-life.js), whichever this match allows right now. */
+  _chEndKind() {
+    const ch = this.ch;
+    if (!ch || !this.MP || ch.game.over || this._matchEnded) return null;
+    const life = this.MP.lifeOf(ch.game);
+    // Our own first play may still be on its way: the server's match is a play behind.
+    if (!life.open || ch.log.some((e) => e.by === this.MP.recipientOf(ch.game))) return 'resign';
+    return ch.side === this.MP.recipientOf(ch.game) ? 'decline' : 'cancel';
+  }
+
+  _chRenderMenu() {
+    const kind = this._chEndKind();
+    const confirming = this._menuConfirm === 'chend';
+    const endBtn = kind ? `<button class="eb-btn eb-btn-ghost ${confirming ? 'eb-confirm' : ''}" data-action="menu-chend">${
+      esc(confirming ? t(`ch_confirm_${kind}`) : t(`ch_${kind}`))}</button>` : '';
+    this.el.menu.innerHTML = `<div class="eb-scrim" data-action="close-menu"></div>
+      <div class="eb-sheet eb-menu-sheet">
+        <h2 class="eb-sheet-title">${esc(t('menu_title'))}</h2>
+        <button class="eb-btn eb-btn-ghost" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>
+        ${endBtn}
+        <button class="eb-btn eb-btn-ghost" data-action="menu-chhome">${esc(t('ch_matches'))}</button>
+        <button class="eb-btn eb-btn-primary" data-action="menu-resume">${esc(t('btn_resume'))}</button>
+      </div>`;
+  }
+
+  async _chEnd() {
+    const ch = this.ch;
+    if (!ch) return;
+    // A play of ours still on its way goes first, so the server's match is the one on screen.
+    if (ch.pending.length) { await this._chFlush(); if (this.ch !== ch || ch.pending.length) return; }
+    const res = await this.MP.resignGame(ch.id);
+    if (this.ch !== ch) return;
+    if (!res.ok) { this.announce(this.CH.reasonText(res.reason)); return; }
+    ch.game = res.game;
+    if (res.cancelled) { this._chOpenHome(this._chEndText(res.game)); return; }
+    this._chEndedWhileOpen();
+  }
+
+  _chShowChatSlot() { if (this.el.chatslot) this.el.chatslot.hidden = false; }
+
+  // --- quick chat inside a challenge (REQUIRED in every online match, root CLAUDE.md) -------------
+  // js/match-chat-ui.js is the panel, js/match-chat.js the data (`escoba/chat/<id>`, BESIDE the
+  // match, never inside it, so watchGame and validateGame never see a chat line). The button sits in
+  // the top bar's reserved slot (`.eb-chat-slot`), placed by measuring that slot.
+  async _chMountChat() {
+    this._chUnmountChat();
+    const ch = this.ch;
+    if (!ch) return;
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (this._dead || this.ch !== ch || this._chat) return;
+    const node = 'escoba';
+    const side = ch.side;
+    const seenAt = DATA.readChatSeen(node, ch.id);
+    const chat = UI.createMatchChat({
+      root: this.el.game,
+      send: (p) => DATA.sendChat({ node, id: ch.id, side }, p),
+      them: () => ({ name: ch.them.name || '?', emoji: ch.them.emoji || '' }),
+      place: this._chChatPlace(),
+    });
+    this._chat = chat;
+    const stop = await DATA.watchChat({ node, id: ch.id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === side;
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(node, ch.id, newest);
+    });
+    if (this._dead || this.ch !== ch || this._chat !== chat) { try { stop(); } catch { /* detached */ } return; }
+    this._chatStop = stop;
+  }
+
+  /** Where the chat button goes: exactly over the top bar's reserved slot, inside `.eb-game`. */
+  _chChatPlace() {
+    const slot = this.el.chatslot, box = this.el.game;
+    if (!slot || !box) return {};
+    const s = slot.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (!s.width) return {};
+    const top = Math.round(s.top - b.top + (s.height - 44) / 2);
+    const right = Math.round(b.right - s.right + (s.width - 44) / 2);
+    return { top: `${top}px`, right: `${right}px`, popsTop: `${top + 54}px` };
+  }
+
+  _chUnmountChat() {
+    if (this._chatStop) { try { this._chatStop(); } catch { /* detached */ } this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch { /* gone */ } this._chat = null; }
+  }
+
+  /** Stop showing the challenge (its plays are on the server, or in the outbox until they are). */
+  _chLeave() {
+    this._chUnmountChat();
+    if (this.el && this.el.chatslot) this.el.chatslot.hidden = true;
+    const ch = this.ch;
+    if (!ch) return;
+    this.ch = null;
+    if (ch.stop) { try { ch.stop(); } catch { /* detached */ } }
+    ch.want = null;
+    if (this.game) { this.game.abort(); this.game = null; }
+    this._resolvePending(null);
+    this._clearMpStatus();
+    this._matchEnded = false;
+  }
+
   // --- teardown -------------------------------------------------------------
 
   destroy() {
     this._dead = true;
+    // A challenge on the table is only stopped watching: every play is already on the server, or
+    // in the outbox (gamehub.escoba.outbox.v1) until it is.
+    this._chLeave();
     // Deliberately do NOT clear the resumable save here: destroy() runs when
     // the hub tears the module down for ANY reason, including the player
     // just navigating back to the launcher mid-match, which is exactly the
@@ -2682,4 +3317,7 @@ export function isInProgress() {
   return !!(instance && instance.mp && !instance._matchEnded);
 }
 
-export default { init, destroy, isInProgress };
+/** The hub armed a challenge match (alert.js armOpen) while Escoba is open: take it. */
+export function openArmed() { if (instance) instance.openArmed(); }
+
+export default { init, destroy, isInProgress, openArmed };

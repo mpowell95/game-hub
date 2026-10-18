@@ -125,6 +125,9 @@ export const GAMES = [
     blurb: { en: 'Spanish rummy vs. smart AI. Melds, cuts & chinchón. 2–4 players.',
       es: 'Rummy español contra una IA inteligente. Ligadas, cortes y chinchón. 2-4 jugadores.' },
     module: '../chinchon/js/ui.js',
+    // Turn-by-turn challenges (2026-10-18): a new one, your turn, or a result you missed, on the
+    // launcher. Live rooms are unchanged.
+    alerts: () => import('../chinchon/js/alert.js'),
     accent: '#d4a017',
     // A held FAN of five cards is naturally wide, so it suits 16:9 far better than the
     // two-card stack the square frame forced. Centers arc up toward the middle card.
@@ -171,6 +174,9 @@ export const GAMES = [
     blurb: { en: 'Spanish fishing card game. Capture cards that add up to 15. 2-3 players.',
       es: 'Juego de cartas español de pesca. Captura cartas que sumen 15. 2-3 jugadores.' },
     module: '../escoba/js/ui.js',
+    // Turn-by-turn challenges (2026-10-18), beside its live rooms: a new one, your turn, or a
+    // result you missed, on the launcher (escoba/CLAUDE.md, "Turn-by-turn challenges").
+    alerts: () => import('../escoba/js/alert.js'),
     // Escoba's own screens (setup + game mat) already show its title and back
     // affordance; the hub's own header row is pure wasted vertical space for
     // this one. Opt-in only, so every other game's chrome is untouched.

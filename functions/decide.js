@@ -424,3 +424,114 @@ export function decideArchery({ code, id, before, after }) {
   if (round > 3) return mk('turn', (s) => s.shootoff(who));
   return mk('turn', (s) => s.turn(who, round, n(after.mine), n(after.theirs)));
 }
+
+// --- CHINCHÓN CHALLENGES (2026-10-18) ---------------------------------------------------------------
+// chinchon/js/mp.js writes chinchon/index/<code>/<id> from each person's side, with `lastBy` saying
+// whose write it was ('me' = this row's owner) and `kind` the match length ('hand' | '50' | '100').
+// Darts' rules:
+//   - a NEW row that is your turn           -> a challenge (the challenger's first turn is done)
+//   - your turn coming back                 -> "your turn", with the score (lowest wins)
+//   - the match ending by THEIR hand         -> they won / you won / a draw
+// Your own writes (lastBy 'me') never notify you. A called-off row is over:false and says nothing.
+const CHINCHON_TEXT = {
+  en: {
+    title: 'Chinchón',
+    len: (k) => (k === '50' || k === '100' ? `to ${k}` : 'one hand'),
+    challenge: (w, l) => `${w} challenged you to Chinchón, ${l}. Your turn!`,
+    turn: (w, a, b) => `Your turn vs ${w}. You ${a}, ${w} ${b}`,
+    theyWon: (w, a, b) => `${w} won, ${b} to ${a}.`,
+    youWon: (w) => `You won! ${w} resigned.`,
+    youBeat: (w, a, b) => `You beat ${w}, ${a} to ${b}!`,
+    draw: (w, a) => `A draw with ${w}, ${a} each.`,
+  },
+  es: {
+    title: 'Chinchón',
+    len: (k) => (k === '50' || k === '100' ? `a ${k}` : 'una mano'),
+    challenge: (w, l) => `${w} te ha retado al Chinchón, ${l}. ¡Te toca!`,
+    turn: (w, a, b) => `Te toca contra ${w}. Tú ${a}, ${w} ${b}`,
+    theyWon: (w, a, b) => `${w} ganó, ${b} a ${a}.`,
+    youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+    youBeat: (w, a, b) => `¡Has ganado a ${w}, ${a} a ${b}!`,
+    draw: (w, a) => `Empate con ${w}, ${a} cada uno.`,
+  },
+};
+
+export function decideChinchon({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = CHINCHON_TEXT[lang] || CHINCHON_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  // Scores can be below zero (a -10 close), so they are rounded, never clamped.
+  const n = (v) => (Number.isFinite(+v) ? Math.round(+v) : 0);
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    if (after.result === 'won') return mk('over', (s) => s.youBeat(who, n(after.mine), n(after.theirs)));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who, n(after.mine), n(after.theirs)));
+    if (after.result === 'draw') return mk('over', (s) => s.draw(who, n(after.mine)));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  if (!before) return mk('challenge', (s) => s.challenge(who, s.len(after.kind)));
+  if (before.yourTurn && !before.over) return null;             // it was already your turn
+  return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
+}
+
+// --- ESCOBA CHALLENGES (2026-10-18) ------------------------------------------------------------------
+// escoba/js/mp.js writes escoba/index/<code>/<id> from each person's side, with `lastBy` saying whose
+// write it was ('me' = this row's owner). Darts' rules:
+//   - a NEW row that is your turn           -> a challenge (the challenger's first play is done),
+//                                              naming the length ('1' one hand, '11' / '21')
+//   - your turn coming back                 -> "your turn", with the score
+//   - the match ending by THEIR hand         -> they won / you won (their last card, or they
+//                                              resigned) / a draw (one hand, level on points)
+// Your own writes (lastBy 'me') never notify you.
+const ESCOBA_TEXT = {
+  en: {
+    title: 'Escoba',
+    len: (l) => (l === '1' ? 'one hand' : `to ${l}`),
+    challenge: (w, l) => `${w} challenged you to Escoba, ${l}. Your turn!`,
+    turn: (w, a, b) => `Your turn vs ${w}. You ${a}, ${w} ${b}`,
+    theyWon: (w, a, b) => `${w} won, ${b} to ${a}.`,
+    youWon: (w) => `You won! ${w} resigned.`,
+    youBeat: (w, a, b) => `You beat ${w}, ${a} to ${b}!`,
+    draw: (w, a, b) => `Draw with ${w}, ${a} to ${b}.`,
+  },
+  es: {
+    title: 'Escoba',
+    len: (l) => (l === '1' ? 'a una mano' : `a ${l}`),
+    challenge: (w, l) => `${w} te ha retado a la Escoba, ${l}. ¡Te toca!`,
+    turn: (w, a, b) => `Te toca contra ${w}. Tú ${a}, ${w} ${b}`,
+    theyWon: (w, a, b) => `${w} ganó, ${b} a ${a}.`,
+    youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+    youBeat: (w, a, b) => `¡Has ganado a ${w}, ${a} a ${b}!`,
+    draw: (w, a, b) => `Empate con ${w}, ${a} a ${b}.`,
+  },
+};
+
+export function decideEscoba({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = ESCOBA_TEXT[lang] || ESCOBA_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    if (after.result === 'won') return mk('over', (s) => s.youBeat(who, n(after.mine), n(after.theirs)));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who, n(after.mine), n(after.theirs)));
+    if (after.result === 'draw') return mk('over', (s) => s.draw(who, n(after.mine), n(after.theirs)));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  const len = ['1', '11', '21'].includes(String(after.len)) ? String(after.len) : '21';
+  if (!before) return mk('challenge', (s) => s.challenge(who, s.len(len)));
+  if (before.yourTurn && !before.over) return null;             // it was already your turn
+  return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
+}

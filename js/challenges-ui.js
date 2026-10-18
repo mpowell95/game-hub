@@ -171,6 +171,7 @@ function ensureCss() {
   .cx-sh .cx-thumb { width: 58px; height: 36px; }
   .cx-sh-t { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--gh-fs-lg); font-weight: 900;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cx-openg { flex: 0 0 auto; min-height: 40px; }
   .cx-x { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--gh-surface-2);
           color: var(--gh-muted); font-size: 24px; line-height: 1; cursor: pointer; touch-action: manipulation; }
   .cx-search { width: 100%; margin: 12px 0 10px; }
@@ -234,11 +235,13 @@ function subLine(r, gameName) {
   const i = r.info || {};
   const bits = [gameName(r.game)];
   if (r.game === 'darts' && i.kind) bits.push(i.kind === 'cricket' ? t('cx_cricket') : i.kind === 'cricket-order' ? t('cx_cricket_order') : i.kind);
+  if (r.game === 'chinchon' && i.kind) bits.push(i.kind === 'hand' ? t('cx_one_hand') : t('cx_to_n', { n: i.kind }));
   if (r.game === 'skeeball') {
     if (i.all) bits.push(t('cx_all_machines'));
     else if (i.n > 1) bits.push(t('cx_n_games', { n: i.n }));
     else if (i.boardName) bits.push(i.boardName);
   }
+  if (r.game === 'escoba' && i.len) bits.push(i.len === '1' ? t('cx_eb_one_hand') : t('cx_eb_to', { n: i.len }));
   if (i.su) bits.push(t('cx_straight_up'));
   if (i.series > 1) bits.push(t('cx_game_of', { n: i.seriesNo, m: i.series }));
   const left = untilText(r.expires);
@@ -447,6 +450,7 @@ export async function openChallenges(opts = {}) {
     sheet.setAttribute('role', 'dialog');
     sheet.setAttribute('aria-label', nameOf(game));
     sheet.innerHTML = `<div class="cx-sh">${thumb(game)}<h3 class="cx-sh-t">${esc(nameOf(game))}</h3>
+        <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm cx-openg" data-role="opengame">${esc(t('cx_open'))}</button>
         <button type="button" class="cx-x" data-role="x" aria-label="${esc(t('cx_close'))}">&times;</button></div>
       <input type="search" class="gh-input cx-search" placeholder="${esc(t('cx_search'))}" aria-label="${esc(t('cx_search'))}" autocomplete="off">
       <div class="cx-people" data-role="people"><p class="cx-note">${esc(t('cx_loading'))}</p></div>
@@ -456,6 +460,8 @@ export async function openChallenges(opts = {}) {
     const shut = () => { dim.remove(); sheet.remove(); };
     dim.addEventListener('click', shut);
     sheet.querySelector('[data-role="x"]').addEventListener('click', shut);
+    // The game itself (vs the computer, live rooms): the same as its launcher tile.
+    sheet.querySelector('[data-role="opengame"]').addEventListener('click', () => launch(game));
     if (!S.people) S.people = await readOpponents();
     if (sheetGen !== _view || !sheet.isConnected) return;
     // Your record against each person in THIS game, beside their name.

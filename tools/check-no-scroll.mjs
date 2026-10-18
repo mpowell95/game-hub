@@ -58,6 +58,19 @@ const TOL = 2;      // sub-pixel rounding; the same tolerance test-visual's fit 
  *  a screen that grows until it breaks - and, if the way OFF it lives at the bottom, breaks
  *  silently. */
 const EXTRA_SCREENS = {
+  // Chinchón: the Challenge pane (2026-10-18), the fourth choice on the setup switch. With this
+  // run's profile (no player code) it is the New challenge button and "No matches"; the lists with
+  // rows cut themselves to fit (chinchon/js/ch-ui.js fitList).
+  chinchon: [
+    {
+      name: 'challenge home',
+      async open(page) {
+        await page.click('[data-action="set-mode"][data-v="turns"]');
+        await page.waitForSelector('[data-role="ch"] [data-ch="new"]', { timeout: 8000 });
+        await page.waitForTimeout(400);
+      },
+    },
+  ],
   // Murdoku: the setup screen is the default one; the four below are the ones a player reaches by
   // tapping. Each runs on the SAME page as the one before it (see the note above), so each starts by
   // closing whatever overlay is up and going back to the setup screen. The board screens are the
@@ -158,6 +171,18 @@ const EXTRA_SCREENS = {
       async open(page) {
         await page.evaluate(() => { const u = window.__arTest.ui; u._showSetup(); u._practiceStart(); });
         await page.waitForTimeout(1200);
+      },
+    },
+  ],
+  // Escoba (2026-10-18): the Challenges home reached from the setup screen's link. (The test profile
+  // has no player code, so it reads nothing; the full lists are trimmed to fit by measurement.)
+  escoba: [
+    {
+      name: 'challenges',
+      async open(page) {
+        await page.click('.eb-ch-entry');
+        await page.waitForSelector('.eb-panel.eb-ch', { timeout: 8000 });
+        await page.waitForTimeout(400);
       },
     },
   ],

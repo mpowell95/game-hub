@@ -773,3 +773,44 @@
 .cc-dark .cc-btn-ghost:hover:not(:disabled) { background: #333f54; }
 .cc-dark .cc-toast { background: #060c16; }
 .cc-dark .cc-pile-count { background: #060c16; }
+
+/* ---- Turn-by-turn challenges (2026-10-18, js/ch-ui.js) ----
+   Inside the setup card, under the mode switch. Rows are 52px tap targets; "your turn" is an
+   accent border AND a ▶ (never colour alone). Nothing scrolls: ch-ui.js cuts lists to fit. */
+.cc-root .cc-ch { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cc-root .cc-ch-go { width: 100%; }
+.cc-root .cc-ch-top { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.cc-root .cc-ch-back {
+  appearance: none; flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; border: 0; cursor: pointer;
+  background: var(--cc-surface-2); color: var(--cc-ink); display: flex; align-items: center; justify-content: center;
+  touch-action: manipulation;
+}
+.cc-root .cc-ch-back svg { width: 22px; height: 22px; }
+.cc-root .cc-ch-title { margin: 0; flex: 1 1 auto; min-width: 0; font-size: 1.15rem; font-weight: 800;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-root .cc-ch-list { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cc-root .cc-ch-h { margin: 4px 0 0; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cc-muted); }
+.cc-root .cc-ch-h span { color: var(--cc-ink); }
+.cc-root .cc-ch-row {
+  appearance: none; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 6px 12px;
+  border: 2px solid transparent; border-radius: 12px; background: var(--cc-surface-2); color: var(--cc-ink);
+  font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.cc-root .cc-ch-row.is-mine { border-color: var(--cc-accent); }
+.cc-root .cc-ch-face { flex: 0 0 auto; font-size: 1.5rem; line-height: 1; }
+.cc-root .cc-ch-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cc-root .cc-ch-name { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-root .cc-ch-sub { font-size: 0.82rem; color: var(--cc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-root .cc-ch-chev { flex: 0 0 auto; font-size: 1.1rem; font-weight: 800; color: var(--cc-muted); }
+.cc-root .cc-ch-row.is-mine .cc-ch-chev { color: var(--cc-accent); }
+.cc-root .cc-ch-note { margin: 4px 0; text-align: center; color: var(--cc-muted); font-size: 0.9rem; }
+.cc-root .cc-ch-err { color: var(--cc-bad); font-weight: 700; }
+.cc-root .cc-ch-search {
+  width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--cc-surface-2);
+  background: var(--cc-surface); color: var(--cc-ink); font: inherit; font-size: 16px;
+}
+.cc-root .cc-ch-lens { display: flex; flex-direction: column; gap: 10px; }
+.cc-root .cc-ch-len { width: 100%; min-height: 52px; font-size: 1.05rem; }
+.cc-root .cc-ch-score { margin: -4px 0 0; text-align: center; font-weight: 700; }
+/* The quick-chat layer (js/match-chat-ui.js) is absolutely placed in the root. */
+.cc-root.cc-ch-on { position: relative; }

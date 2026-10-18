@@ -217,3 +217,35 @@ screen. Always."*
   draw/discard awaits flight + beat together (`Promise.all`); the SOLO first turn waits for the deal;
   online never waits on a flight; a rejoining guest's `replayMode` skips them. No engine, save or
   protocol change. Not yet checked by eye on a phone or in a real online match.
+
+## Turn-by-turn challenges (2026-10-18)
+
+Matt: *"You should be able to challenge someone to turn by turn games in all multiplayer games too."*
+Darts' challenges are the model (structure only). Story: `CLAUDE-HISTORY.md`, same heading.
+
+- **Where**: the setup switch's fourth choice, **Challenge** (`mode: 'turns'` in `chinchon-settings`):
+  New challenge, Your turn, Waiting (lists cut to fit). New challenge -> person -> length (**1 hand /
+  50 points / 100 points**, one tap sends). Live rooms (Host / Join) are unchanged. Files:
+  `js/mp.js` (data), `js/ch-ui.js` (screens, lazy), `js/alert.js` (launcher; `alerts:` on the hub
+  entry), the `this.ch` block in `js/ui.js`. 2 players only.
+- **Length on the engine, honestly**: 1 hand = `victoryCondition 'rounds'`, `roundsLimit 1`; 50/100 =
+  the engine's own points ending (`scoreLimit`): the match ends once somebody is OVER it, lowest total
+  wins. There is no "first to 50" in Chinchón. Equal totals (no chinchón) = a draw. Rules are the
+  standard `DEFAULT_CONFIG` ones, STORED on the match (`rules`); placing cards is automatic.
+- **A match is a seed + a log**: `chinchon/games/<id>` holds `seed`, `len`, `rules` and every decision
+  (`{by, k:'draw', src}`, `{by, k:'discard', card}`, `{by, k:'close', yes}`); both phones replay
+  `game.js` (UNCHANGED) with `seededRng(seed)` and the log; `validateGame` (async) refuses anything
+  that does not replay. Seat 0 = the challenger (side a) and plays first (`startDealerIndex 1`).
+  Written one decision at a time (`appendLog`, verified, outbox `gamehub.chinchon.ch.outbox.v1`);
+  index rows change only when the turn passes or the match ends.
+- **Hidden cards are NOT secret**: both hands follow from the stored seed, so dev tools can read the
+  other hand. Accepted (Hold'em has the same limit); never describe it as hidden.
+- **Stats**: once per phone through the ledger (`gamehub.chinchon.ch.counted.v1`) as
+  `recordChinchon('mp', won|null, {closed, minusTen, chinchons})`, the live rooms' bucket. **Never
+  `recordHeadToHead`** (the Multiplayer screen's Records reads challenges from the index; Games counts
+  Chinchón's `mp` bucket once, `js/mp-records.js`). Never touches `chinchon-stats` or either autosave.
+- Cancel / Decline / Resign / 3-day expiry per `js/challenge-life.js`; online gate like Darts. Quick
+  chat at `chinchon/chat/<id>` (`CH_CHAT_PLACE`, left of the menu). `chinchonTurnPush` and the
+  `chinchon` rules branch are **NOT yet deployed / published**.
+- Tests: `node tools/test-chinchon-mp.mjs`; `tools/check-no-scroll.mjs chinchon` measures the
+  challenge home. **Not played on two real phones yet.**

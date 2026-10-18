@@ -457,3 +457,50 @@ In the hub at 360x804 (Unai's Android) the page stood 12px over: at that width "
 "Closing rules" wrap, and the trims above were scoped to `max-height: 760px`, which an 804px screen
 never reaches. The same block now also applies at `max-width: 380px`; nothing else changed.
 `check-no-scroll.mjs` measures both 360-wide sizes now.
+
+
+## Turn-by-turn challenges (2026-10-18)
+
+Matt, 2026-10-18: *"You should be able to challenge someone to turn by turn games in all
+multiplayer games too."* For Chinchón: two players, the sender picks the length.
+
+**The length.** Matt asked for 1 hand / first to 50 / first to 100. Chinchón is lowest-score-wins:
+the engine's `points` ending (`checkMatchEnd`) ends the match as soon as somebody's total is OVER
+`scoreLimit`, and the lowest total wins. "First to 50" does not exist in those rules, so 50 and 100
+are that elimination line (`scoreLimit` 50 / 100), labelled "50 points" / "100 points". One hand is
+`victoryCondition: 'rounds'`, `roundsLimit: 1`. A chinchón still wins outright. Equal totals with no
+chinchón are recorded as a DRAW (the engine's `finalizeStandings` would otherwise hand a tie to
+seat 0 by sort order, which is not a result anyone earned).
+
+**Why a seed and not stored deck orders.** `game.js` already takes an injectable `rng` and only
+draws from it to shuffle a hand's deck and to reshuffle the discard pile (`tryResetStock`). A seeded
+generator (`seededRng`, mulberry32) on both phones therefore deals every hand and every reshuffle
+identically, with no change to the engine and no `presetDeck` / `presetStockResets` plumbing (those
+stay the live rooms'). The rules are stored on the match too, so a later change to `DEFAULT_CONFIG`
+can never change how an old match replays.
+
+**Why it replays through `playMatch()`.** The engine is agent-driven; a log agent answers each
+question with the next logged decision and refuses one that does not fit (wrong side, wrong kind, a
+card not in that hand, the discard pile when it is empty). Nothing else re-implements a turn, so
+there is exactly one set of rules. `validateGame` became async (it runs the engine); every caller
+was already async. The UI uses the same agents: before the other person's latest run it replays
+silently (`ch.replay`), from there it plays their moves at the normal pace, and on your turn it
+hands over to the ordinary prompts and appends each decision as it is made.
+
+**What a turn is.** Everything one player does until the other must act: a draw and a discard,
+plus the close decision when the engine asks for one. When a player closes and also starts the
+next hand (the deal rotates), their turn runs on into that hand; the other person's row changes
+when it is finally theirs.
+
+**Hidden cards.** Both hands follow from the stored seed. Anyone with dev tools and the match id
+could work out the other hand. Accepted, the same honest limit as Texas Hold'em's hole cards.
+
+**Stats.** Counted once per phone through a ledger as `recordChinchon('mp', ...)`, the bucket a live
+room's match already uses, with this side's closes / -10s / chinchones from the replay (the row
+carries `cl` / `cn` / `m10` so a match counted from the list gets them too). Head-to-head is never
+written: the Multiplayer screen's Records reads challenges from the index, and since 25a6f3aa its
+Games row for a game with both live rooms and challenges is the `mp` bucket alone, so a challenge is
+not counted twice there.
+
+**Deliberately left alone.** `chinchon/js/hash.js` (the live rooms' lockstep hash) throws on a
+finished hand's locked melds; live rooms never hash at that point, so it was not touched.

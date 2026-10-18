@@ -104,6 +104,48 @@ Matt: *"Make it so that is impossible. Nothing should ever be able to be lost. T
 solo-only player); the leaderboard's Escoba board shows an **MP** chip per player (`js/CLAUDE.md`,
 "Multiplayer on the leaderboard").
 
+## Turn-by-turn challenges (2026-10-18)
+
+(Full story: CLAUDE-HISTORY.md.) Matt: *"You should be able to challenge someone to turn by turn games
+in all multiplayer games too."* Two players, Darts' model; live rooms are untouched (no `js/net.js` change).
+
+- **Files**: `js/mp.js` (data + the replay), `js/mp-ui.js` (screens, lazy), `js/alert.js` (launcher;
+  `alerts:` on the hub entry). Entry: the **Challenges** link beside How to play (same row: the setup
+  screen had 6px to spare at 390x664). Home (New challenge, your matches, "▶ Play" on yours), pick a
+  person (search), pick the length (**1 hand / To 11 / To 21**, the sender's choice), then the table.
+- **Node** `escoba/games/<id>` + `escoba/index/<CODE>/<id>` + `escoba/chat/<id>`; in
+  `database.rules.json` and the backup `BRANCHES`. **Rules NOT yet published, `escobaTurnPush` NOT yet
+  deployed.**
+- **A match is a LOG**: `len`, `deck` (the sender's numbering), a random `seed`, and each play `{by, c,
+  k}` (card, captured ids sorted). Each round's deck is `deckIds(seed, round, deck)` (mp.js's own
+  shuffle, never deck.js's). `validateGame` replays it through `game.js`'s own Game (sync driver
+  `applyPlay`, mirroring `runTurnLoop`/`playTurn`/`finishRoundAfterPlay`) and refuses the whole document
+  if one play is illegal (card not in hand, a lay that had to capture, a capture the rules do not allow,
+  out of turn). `tools/test-escoba-mp.mjs` pins the driver to the async engine at every turn.
+- **Who leads**: the challenger (side `a`, seat 0); the engine's dealer starts at seat 1 and moves on
+  each round, so the last card of a round and the first of the next can be the same player's.
+- **One hand** = target 1 in the engine; level on points after the round is a **draw** (`over.winner:
+  'draw'`), ended by the UI after the round table (`_chEndDraw`; the engine has no draw).
+- **The table**: the SAME engine and UI. Opening a match rebuilds it at the start of the other person's
+  latest run of plays (`replayTo` + `Game.fromSnapshot`; from the first deal when nothing is played), so
+  their card, the broom and the round table play out on this phone too; their seat is an agent fed from
+  the log and watched live. Our plays go into the log as they happen (`_chAfterPlay` -> `_chFlush`,
+  outbox `gamehub.escoba.outbox.v1`). `this.ch` gates every path; `this.mp` stays null.
+- **Never touches the solo save** (`_saveSnapshot`/`_clearSave` return while `this.ch`).
+  `isInProgress()` stays false for a challenge: every play is already written (or queued).
+- **Counted once per phone** (`gamehub.escoba.counted.v1`) as `recordEscoba('mp', won|null, {escobas})`,
+  the live-room bucket. **NEVER `recordHeadToHead`** (h2h is live rooms only, and `splitEscobaMp` reads
+  it as evidence). The Multiplayer screen counts challenge People from the index.
+- Cancel / Decline / Resign / 3-day expiry exactly per `js/challenge-life.js` (menu, two taps). Online
+  gate as Darts. Quick chat in the top bar's reserved `.eb-chat-slot`.
+- **Honest limit**: both hands are derivable from the stored seed, so a player with dev tools could read
+  the other hand (Hold'em has the same limit). Never call it cheat-proof.
+- **Known gap (pre-existing, not from this)**: the game screen itself scrolls in the hub at 390x664
+  (165px) and 360x724 (77px), solo and challenge alike; `check-no-scroll` only measures Escoba's setup
+  and Challenges screens.
+- Tests: `node tools/test-escoba-mp.mjs`; the browser flow was driven against an in-page fake database.
+  **Not verified on real devices or the real Firebase.**
+
 ## Rules engine notes (correctness-critical)
 
 - Capture value vs printed rank diverges only in `spanish`: `captureValue(rank, mode)`; every other rule
@@ -199,6 +241,7 @@ Open items: see the root TODO.md, "Escoba".
 ```
 node escoba/js/test.js
 node tools/test-mp-lockstep.mjs        # E1-E8
+node tools/test-escoba-mp.mjs          # challenges: replay == engine, the write path, life cycle
 ```
 Deck construction (both modes), ~85 full AI-vs-AI matches of capture/escoba/scoring invariants, and a
 JSON-serialized kill-and-resume round-trip (up to 3 resumes per match). Needs Node >= 22.7 (no package.json).
