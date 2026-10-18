@@ -240,6 +240,7 @@ function subLine(r, gameName) {
     else if (i.n > 1) bits.push(t('cx_n_games', { n: i.n }));
     else if (i.boardName) bits.push(i.boardName);
   }
+  if (r.game === 'escoba' && i.len) bits.push(i.len === '1' ? t('cx_eb_one_hand') : t('cx_eb_to', { n: i.len }));
   if (i.su) bits.push(t('cx_straight_up'));
   if (i.series > 1) bits.push(t('cx_game_of', { n: i.seriesNo, m: i.series }));
   const left = untilText(r.expires);

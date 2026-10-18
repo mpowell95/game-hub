@@ -26,6 +26,7 @@ const GAMES = {
   darts: { stats: 'darts', node: 'darts' },
   'flick-soccer': { stats: 'flicksoccer', node: 'flicksoccer' },
   archery: { stats: 'archery', node: 'archery' },
+  escoba: { stats: 'escoba', node: 'escoba' },        // challenges only; live-room lines reach the thread via logGameChat
 };
 const LOADERS = {
   hoops4: () => import('../hoops4/js/mp.js'),
@@ -34,6 +35,7 @@ const LOADERS = {
   darts: () => import('../darts/js/mp.js'),
   'flick-soccer': () => import('../flick-soccer/js/mp.js'),
   archery: () => import('../archery/js/mp.js'),
+  escoba: () => import('../escoba/js/mp.js'),
 };
 const MATCH_CAP = 30;
 
