@@ -286,7 +286,9 @@ export async function readOpponents() {
   catch (err) { console.warn('[challenges] could not read the player list', err); return []; }
 }
 
-/** This device's player code, or '' (the screen needs one to show anything). */
+/** This device's player code, or '' (the screen needs one to show anything). Straight from the
+ *  shared profile (2026-10-18): it used to import Connect 4 Hoops' mp.js just to ask, a network
+ *  fetch on every phone that does not show Hoops (its files are held back, sw.js HELD_BACK). */
 export async function myCode() {
-  try { return (await import('../hoops4/js/mp.js')).myCode() || ''; } catch { return ''; }
+  try { const { loadProfile, canonicalizeCode } = await import('./profile-store.js'); const p = loadProfile(); return canonicalizeCode(p && p.playerId) || ''; } catch { return ''; }
 }
