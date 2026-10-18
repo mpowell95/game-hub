@@ -38,6 +38,19 @@ let _onKey = null;
 let _unwatch = null;
 let _onClose = null;
 let _view = 0;                    // bumped on every render; an async render that lost the race stops
+// WHAT WAS LAST READ, so the screen opens on it at once and catches up (2026-10-18). Matt: "sometimes
+// it takes a while to display the multiplayer screen". Filled by prime() (the hub, after its alert
+// check) and by every open; read only by this screen. Nothing stored.
+let _cache = null;                // { key, rows, failed }
+let _liveCache = null;
+const keyOf = (ids) => ids.slice().sort().join(',');
+
+/** Read the challenge lists ahead of a tap, so the screen opens with them. Never throws. */
+export async function prime(gameIds) {
+  const ids = (Array.isArray(gameIds) ? gameIds : []).filter(Boolean);
+  if (!ids.length || !(await myCode())) return;
+  try { const { rows, failed } = await loadAll(ids); _cache = { key: keyOf(ids), rows, failed }; } catch { /* the screen reads for itself */ }
+}
 
 function current(gen) { return gen === _view && !!_host; }
 
@@ -342,7 +355,8 @@ export async function openChallenges(opts = {}) {
   const card = mountOverlay();
   _onClose = typeof opts.onClose === 'function' ? opts.onClose : null;
   const gen0 = _view;
-  const S = { rows: null, failed: [], live: null, view: 'home', opp: null, people: null, flash: '' };
+  const hit = _cache && _cache.key === keyOf(ids) ? _cache : null;
+  const S = { rows: hit ? hit.rows : null, failed: hit ? hit.failed : [], live: _liveCache, view: 'home', opp: null, people: null, flash: '' };
 
   const open = (game, id) => { closeChallenges(); if (opts.onOpen) opts.onOpen(game, id); };
   const challenge = (game, them) => { closeChallenges(); if (opts.onChallenge) opts.onChallenge(game, them); };
@@ -635,8 +649,9 @@ export async function openChallenges(opts = {}) {
 
   renderHome();
   // The live-room records come from players/ (one read); they only feed the record chip and Records.
-  loadLiveRecords().then((live) => { if (!_host) return; S.live = live; repaint(); });
+  loadLiveRecords().then((live) => { _liveCache = live; if (!_host) return; S.live = live; repaint(); });
   const { rows, failed } = await loadAll(ids);
+  _cache = { key: keyOf(ids), rows, failed };
   if (!_host) return;
   S.rows = rows; S.failed = failed;
   repaint();
@@ -644,6 +659,7 @@ export async function openChallenges(opts = {}) {
     // Replace only the games this update speaks for; the rest keep what was read.
     const covered = new Set(heard);
     S.rows = (S.rows || []).filter((r) => !covered.has(r.game)).concat(live);
+    _cache = { key: keyOf(ids), rows: S.rows, failed };
     repaint();
   });
   if (!_host) { try { stop(); } catch { /* fine */ } } else _unwatch = stop;

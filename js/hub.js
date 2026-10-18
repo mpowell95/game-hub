@@ -1407,6 +1407,7 @@ class Hub {
     this._paintGameAlert();
     this._paintChallengeCount();
     this._watchGameAlerts();
+    this._primeMultiplayer();
     // A tile the player cannot see is not "super obvious". Bring it into view ONCE per alert,
     // gently, and never fight a scroll they have already started.
     const first = found[0];
@@ -1600,6 +1601,16 @@ class Hub {
         });
       })
       .catch((err) => { this._mpTabOn(false); console.error('[hub] multiplayer screen failed to load', err); });
+  }
+
+  /** Load the Multiplayer screen and read its lists BEFORE the tap (2026-10-18). Matt: "Sometimes it
+   *  takes two taps to switch from the games tab to the multiplayer tab. And sometimes it takes a
+   *  while to display the multiplayer screen". Its modules are network-first and its lists a
+   *  network read, so a tap used to wait on both with nothing on screen. Never while a game runs. */
+  _primeMultiplayer() {
+    if (this.current || (!this._challengeGames().length && !this._liveGames().length)) return;
+    const ids = this._challengeGames().map((g) => g.id);
+    import('./challenges-ui.js').then((m) => { if (!this.current && typeof m.prime === 'function') return m.prime(ids); }).catch(() => {});
   }
 
   _closeMultiplayer() {
