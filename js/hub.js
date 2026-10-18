@@ -1363,22 +1363,33 @@ class Hub {
     // on both games, can we switch to a smaller 'your turn' bubbles so you can see both? But so it
     // doesn't take up the entire screen?" One alert draws the big bubble; two or more draw a small
     // pill on each tile (_paintGameAlert).
-    const found = [];
     // Only games on THIS launcher (2026-10-14): a game the player cannot see has nothing to show,
     // and importing its alerts module would make an unreleased game's code part of every phone's
     // launcher (so every edit to it would update every phone; sw.js HELD_BACK).
     const onLauncher = new Set((this.games || []).map((g) => g.id));
-    for (const g of GAMES) {
-      if (typeof g.alerts !== 'function' || !onLauncher.has(g.id)) continue;
+    const list = GAMES.filter((g) => typeof g.alerts === 'function' && onLauncher.has(g.id));
+    // ALL AT ONCE, NOT ONE AFTER ANOTHER (2026-10-18). Matt: "sometimes it takes 3-5 seconds for the
+    // 'your turn' notifications to appear." Each check is a network read; in a row they added up.
+    // A bubble found is drawn the moment its game answers; the full list (which also clears a
+    // bubble that stopped being true) is assigned once every game has answered.
+    const results = new Array(list.length).fill(null);
+    await Promise.all(list.map(async (g, i) => {
       try {
         const mod = await g.alerts();
         const alert = await mod.check();
         (this._alertMods = this._alertMods || {})[g.id] = mod;
-        if (alert) found.push({ game: g.id, alert, mod });
+        if (!alert) return;
+        results[i] = { game: g.id, alert, mod };
+        const rest = (this._gameAlerts || []).filter((x) => x.game !== g.id);
+        rest.push(results[i]);
+        this._gameAlerts = GAMES.map((x) => rest.find((r) => r.game === x.id)).filter(Boolean);
+        this._paintGameAlert();
+        this._paintChallengeCount();
       } catch (err) {
         console.warn('[hub] alert check failed for', g.id, err);
       }
-    }
+    }));
+    const found = results.filter(Boolean);
     // ASSIGNED EVERY TIME, INCLUDING TO NULL. The first version only assigned when it FOUND
     // something and returned early, so an alert that had stopped being true was never cleared -
     // half of why Matt's bubble survived him playing the turn.
