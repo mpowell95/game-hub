@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1194';
+const CACHE = 'game-hub-v1196';
 
 const ASSETS = [
   './',
@@ -119,6 +119,7 @@ const ASSETS = [
   './js/mp-reactions-ui.js',
   './js/match-chat.js',
   './js/match-chat-ui.js',
+  './js/game-chat-history.js',
   // Profile page (profile project)
   './profile/',
   './profile/index.html',
@@ -707,11 +708,9 @@ const HELD_BACK = {
     './archery/index.html',
     './archery/css/archery.css',
     './archery/js/ui.js',
-    './archery/js/engine.js',
     './archery/js/render.js',
     './archery/js/bow3d.js',
     './archery/js/strings.js',
-    './archery/js/mp.js',
     './archery/js/mp-ui.js',
     './archery/js/alert.js',
   ],
@@ -756,13 +755,9 @@ const HELD_BACK = {
     './cup-pong/index.html',
     './cup-pong/css/cup-pong.css',
     './cup-pong/js/ui.js',
-    './cup-pong/js/geom.js',
-    './cup-pong/js/rack.js',
     './cup-pong/js/physics.js',
     './cup-pong/js/render.js',
     './cup-pong/js/strings.js',
-    './cup-pong/js/match.js',
-    './cup-pong/js/mp.js',
     './cup-pong/js/mp-ui.js',
     './cup-pong/js/alert.js',
     './cup-pong/js/cpu.js',
@@ -772,11 +767,9 @@ const HELD_BACK = {
     './darts/index.html',
     './darts/css/darts.css',
     './darts/js/ui.js',
-    './darts/js/engine.js',
     './darts/js/render.js',
     './darts/js/flight.js',
     './darts/js/strings.js',
-    './darts/js/mp.js',
     './darts/js/mp-ui.js',
     './darts/js/alert.js',
   ],
@@ -785,11 +778,9 @@ const HELD_BACK = {
     './flick-soccer/index.html',
     './flick-soccer/css/flick-soccer.css',
     './flick-soccer/js/ui.js',
-    './flick-soccer/js/engine.js',
     './flick-soccer/js/ai.js',
     './flick-soccer/js/render.js',
     './flick-soccer/js/strings.js',
-    './flick-soccer/js/mp.js',
     './flick-soccer/js/mp-ui.js',
     './flick-soccer/js/alert.js',
   ],
@@ -895,6 +886,8 @@ const NETWORK_FIRST = [
   // Messages from the Game Hub itself (2026-10-14): the list of what was sent, and its read state
   // (gamehub.hubMessages.v1). Fresh, so a message sent by a deploy reaches the next open.
   './js/hub-messages.js',
+  // In-game quick chat shown inside a Messages conversation (2026-10-17): reads match chat.
+  './js/game-chat-history.js',
   // The Challenges screen (2026-10-05): shows every challenge record; lazily imported, so fresh is free.
   './js/challenges.js', './js/challenges-ui.js', './js/challenges-strings.js',
   // The Multiplayer screen's Records for the live-room games (2026-10-18): reads players/ and the
@@ -1038,6 +1031,12 @@ const REST_MANIFEST = {
   './murdoku/js/ui.js': '49446a4207',
   './murdoku/js/engine.js': '46518c0de8',
   './murdoku/js/strings.js': 'e744e28e32',
+  './flick-soccer/js/engine.js': '25217d5cb7',
+  './flick-soccer/js/mp.js': '8026c6b507',
+  './archery/js/engine.js': '3ed3c62225',
+  './archery/js/mp.js': 'eed6eb18c5',
+  './darts/js/engine.js': '2d603f0ee2',
+  './darts/js/mp.js': '5aaaed429c',
   './sudoku/': '39055429fc',
   './sudoku/index.html': '39055429fc',
   './sudoku/css/sudoku.css': '146887ebaf',
@@ -1128,6 +1127,10 @@ const REST_MANIFEST = {
   './skeeball/css/skeeball.css': 'c50f746472',
   './skeeball/js/ui.js': 'd61994a581',
   './skeeball/js/swipe.js': 'c596f565de',
+  './cup-pong/js/geom.js': 'b4007cdf47',
+  './cup-pong/js/rack.js': '6346bceb94',
+  './cup-pong/js/match.js': 'd85c85e179',
+  './cup-pong/js/mp.js': '2cb2a15e12',
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/mp.js': '8fc702be8a',
   './skeeball/js/game.js': '47f5932aaf',

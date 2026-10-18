@@ -222,6 +222,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `messages.js` / `messages-ui.js` | player-to-player Messages (see "Messages") |
 | `hub-messages.js` | messages FROM the Game Hub (`HUB_MESSAGES`, in code; see "Messages") |
 | `challenges.js` / `challenges-ui.js` / `challenge-life.js` | the Challenges screen (reads only) and the shared cancel/expire rules (`ANSWER_MS` 3 days) |
+| `game-chat-history.js` | READ ONLY: your in-game quick chat with one person (challenge games), merged into that Messages conversation |
 | `match-chat.js` / `match-chat-ui.js` | in-match quick chat for EVERY online game, at `<node>/chat/<matchId>` (beside the match, never inside) |
 | `error-log.js` | last 20 uncaught errors (`gamehub.errorlog.v1`) |
 | `admin-config.js` / `admin-ui.js` | `adminConfig/v1` resolvers (offline-safe, absent = code default) and the admin page; also the device reset |
@@ -393,6 +394,13 @@ never crash.
   profile pill badge = bug-report replies.
 - "Send message" on a leaderboard detail screen; hidden on your own row and on records with no
   code. Full contract: `js/CLAUDE.md`, "Messages".
+- **In-game quick chat shows in the conversation (2026-10-17)**: `js/game-chat-history.js` reads your
+  challenge matches with that code (each game's index) and their `<node>/chat/<id>` (Hoops: the match's
+  own `chat`), merged by time under a tile-art + game-name header, DASHED bubbles. Read only.
+  **Live-room games** (Hold'em, Air Hockey, Escoba...): `js/net.js` `sendReaction` also saves each line
+  into the sender's thread with every other seat (`messages.js` `logGameChat`, `game: {id, s, room, t, v}`
+  + plain `text`). THREAD ONLY, never the index: no push, no unread, no inbox row. Lines before
+  2026-10-17 were never stored, so they cannot appear.
 - **Messages from the Game Hub (2026-10-14)**: `js/hub-messages.js` `HUB_MESSAGES`, append-only, by
   player code; sending = appending an entry + deploying. One "Game Hub" conversation with the hub
   icon, no reply box, no Hide; read state local (`gamehub.hubMessages.v1`). `play: '<hubId>'` adds a
@@ -414,8 +422,8 @@ popup) so Admin > Announcements lists who has seen it. The popup was redesigned 
 
 ## The profile page's structure (2026-08-31)
 
-**You** · **Messages** · **Settings** (one list of collapsible rows, one level deep) · **Your
-devices** · **Help** · **Reset profile** at the bottom. Every block is a `.pf-section` card;
+**You** · **Settings** (one list of collapsible rows, one level deep) · **Your devices** · **Help**
+· **Reset profile** at the bottom. (Messages left this page 2026-10-17: both launcher layouts open it.) Every block is a `.pf-section` card;
 full-width row buttons use `.pf-linkbtn`.
 
 **Firebase rules:** root `.read`/`.write` are `false` and every branch is enumerated in

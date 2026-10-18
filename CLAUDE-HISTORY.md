@@ -1214,3 +1214,26 @@ theme x language). The tips are a new step: five bubbles in the launcher's bubbl
 tap to advance, X to skip; recorded as `compact-tour-2026-10-17` in the announcement seen-list, which
 the existing players/<id>/announce report and Admin > Announcements already carry. Admin already
 listed every announcement's seen/not-yet names, so "who has seen it" needed no new screen.
+
+## Messages: off the profile page, and in-game chat inside conversations (2026-10-17)
+
+Matt: "Now that messages has its own tab, we should remove it from the profile page, right?" Yes: both
+launcher layouts open Messages directly, so the profile card (renderProfileMessages + its reserved-height
+hint gamehub.pfMsgsHeight.v1, left in storage unread) was a third door. And: "in game quick chats should be
+included here. Like they should appear within your convo with that person. It should be obvious which
+chats happen in game and in which game they occurred." js/game-chat-history.js folds each challenge
+game's index (via js/challenges.js loadAll) and each match's chat into the conversation, read only. A
+chat line only says `by: 'a'|'b'`, so the match is read for this player's side, and only when it has chat.
+Air Hockey / Hold'em / other live-room games store just the newest line per seat, so there is no history
+to show for them; making that history exist would be a write-side change, not done here.
+
+### Live-room chat saved into Messages (2026-10-17, same day)
+
+Matt said "Yes" to saving live games' chat so it can appear in conversations. `rooms/<CODE>/reactions`
+keeps one overwritten slot per seat, so there was nothing to read back; the history now starts here.
+`js/net.js` `sendReaction`, after its unchanged reaction write, reads the room's `game` and seat codes
+(cached 30 s) and calls `js/messages.js` `logGameChat`, which pushes one child per other player into
+`messages/threads/<pairKey>/msgs` with `game: {id, s, room, t, v}` and a plain `text` for older apps.
+It never writes `messages/index`, because `messagePush` and the unread badge both key off the index:
+a quick chat must not buzz a phone that is already in the game. No rules change (threads accept any
+child for a claimed code). Fire and forget, so a slow write can never stall play.

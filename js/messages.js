@@ -222,8 +222,11 @@ export async function ensureAuthClaim(boot) {
 }
 
 /** Boot Firebase AND make sure this device has claimed its code. null when either is unavailable. */
+// TEST SEAM: tools/test-game-chat-log.mjs hands in an in-memory database. No screen calls it.
+let bootFn = getStatsApp;
+export function __setBootForTest(fn) { bootFn = fn || getStatsApp; _claimed = null; }
 async function ready() {
-  const boot = await getStatsApp();
+  const boot = await bootFn();
   if (!boot) return null;
   await ensureAuthClaim(boot);
   return boot;
@@ -297,6 +300,52 @@ export async function sendMessage({ toCode, toName, toEmoji, text, invite }) {
     console.error('[messages] send failed', err);
     return { ok: false, reason: String((err && err.message) || err), retryable: true };
   }
+}
+
+/**
+ * A LIVE-ROOM quick-chat line, saved into the sender's conversation with each other player at the
+ * table (2026-10-17). Matt asked for in-game chat to appear in Messages; live rooms only keep the
+ * newest line per seat (`rooms/<CODE>/reactions`), so this is the only place the history can exist.
+ *
+ * THREAD ONLY, never the index: no index row means no push (messagePush watches the index), no
+ * unread badge and no new inbox row, so in-game banter never buzzes anyone's phone twice. The line
+ * carries `game: { id, s, room, t, v }` (hub id, stats id, room code, the chat payload) for the
+ * conversation's game bubble, and an ordinary `text` so an older app shows it as a plain message.
+ * ADDITIVE (one pushed child per conversation) and VERIFIED by re-read (rule 6); a failure is
+ * logged, never thrown into the game. Called by js/net.js sendReaction, fire and forget.
+ */
+const GAME_CHAT_ID = /^[a-z0-9-]{2,24}$/;
+export async function logGameChat({ toCodes, game, stats, room, payload, text }) {
+  const me = myCode();
+  const t = payload && payload.t;
+  const v = String((payload && payload.v) == null ? '' : payload.v).slice(0, 120);
+  if (!me || !['e', 'p', 'c'].includes(t) || !v || !GAME_CHAT_ID.test(String(game || ''))) return { ok: false, sent: 0 };
+  const tos = [...new Set((Array.isArray(toCodes) ? toCodes : []).map(asCode).filter((c) => c && c !== me))];
+  if (!tos.length) return { ok: true, sent: 0 };
+  if (!writesAllowed('logGameChat')) return { ok: false, sent: 0 };
+  let sent = 0;
+  try {
+    const boot = await ready();
+    if (!boot) return { ok: false, sent: 0 };
+    const { db, api } = boot;
+    const atMs = Date.now();
+    const line = {
+      from: me, text: normalizeText(text) || v, atMs,
+      game: { id: String(game), s: GAME_CHAT_ID.test(String(stats || '')) ? String(stats) : String(game), room: String(room || '').slice(0, 12), t, v },
+    };
+    for (const to of tos) {
+      const key = pairKey(me, to);
+      if (!key) continue;
+      try {
+        const ref = api.push(api.ref(db, `messages/threads/${key}/msgs`));
+        await api.set(ref, line);
+        const back = await api.get(api.ref(db, `messages/threads/${key}/msgs/${ref.key}/atMs`));
+        if (back && back.exists()) sent += 1;
+        else console.error(`[messages] game chat VERIFY FAILED for messages/threads/${key}/msgs/${ref.key} - nothing landed.`);
+      } catch (err) { console.error('[messages] could not save a game chat line for', to, err); }
+    }
+  } catch (err) { console.error('[messages] could not save a game chat line', err); }
+  return { ok: sent === tos.length, sent };
 }
 
 /** Matt's broadcast: the same words to every recipient, each in their OWN thread. No separate node

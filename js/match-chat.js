@@ -162,6 +162,22 @@ export async function watchChat({ node, id }, cb) {
   } catch { return () => {}; }
 }
 
+/** One turn-by-turn match's chat, read once (the Messages conversation's in-game lines,
+ *  js/game-chat-history.js). READ ONLY; `chatFrom`'s cleaned list, or [] on any failure. */
+export async function readChat({ node, id }) {
+  const path = chatPath(node, id);
+  if (!path) return [];
+  try {
+    const boot = await ready();
+    if (!boot) return [];
+    const snap = await boot.api.get(boot.api.ref(boot.db, path));
+    return chatFrom(snap && snap.exists() ? snap.val() : null);
+  } catch (err) {
+    console.warn('[match-chat] could not read', path, err);
+    return [];
+  }
+}
+
 /** LIVE ROOM: watch `rooms/<code>/reactions` (one slot per seat) for a game that does not already
  *  receive the whole room (Air Hockey's lobby listens narrowly). READ ONLY. `cb(reactions)` gets
  *  the raw `{ <seat>: { t, v, at } }` object, which match-chat-ui's `onReactions` understands. */
@@ -207,5 +223,5 @@ export function markChatSeen(node, id, at) {
 
 export default {
   CHAT_MAXLEN, MAX_CHAT, cleanChat, cleanPayload, chatFrom, unseenChat, chatPath,
-  sendChat, watchChat, watchRoomReactions, readChatSeen, markChatSeen, SEEN_KEY,
+  sendChat, watchChat, readChat, watchRoomReactions, readChatSeen, markChatSeen, SEEN_KEY,
 };

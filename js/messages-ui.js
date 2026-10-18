@@ -20,7 +20,8 @@ import {
 } from './messages.js';
 import { loadProfile } from './profile-store.js';
 import { HUB_CODE, hubMessagesFor, hubText, playOf, markHubSeen } from './hub-messages.js';
-import { loadPalette, PHRASES } from './mp-reactions.js';
+import { loadPalette, PHRASES, reactionText } from './mp-reactions.js';
+import { GAME_ART } from './game-art.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -222,6 +223,14 @@ function ensureCss() {
   .msg-join { display: flex; width: 100%; margin-top: var(--gh-sp-2); min-height: 44px; }
   /* A time under EVERY bubble was three stamps a minute apart repeating down the screen. The
      divider below carries it instead, only where there is a real gap. */
+  /* In-game quick chat inside a conversation (js/game-chat-history.js, 2026-10-17): a small
+     header with the game's own tile art and name over each run of lines from one match, and the
+     lines themselves DASHED, so a game line never reads as an ordinary message (shape, not hue). */
+  .msg-gamehead { align-self: center; display: flex; align-items: center; gap: 6px; margin-top: var(--gh-sp-2);
+                  font-size: var(--gh-fs-xs); font-weight: 800; color: var(--gh-muted); letter-spacing: .04em; }
+  .msg-gamehead-art { width: 30px; height: 17px; border-radius: 4px; overflow: hidden; flex: none; display: block; }
+  .msg-gamehead-art svg { width: 100%; height: 100%; display: block; }
+  .msg-bubble.msg-bubble--game { border-style: dashed; border-width: 1.5px; background: transparent; }
   .msg-daysplit { align-self: center; font-size: var(--gh-fs-xs); color: var(--gh-muted);
                   padding: var(--gh-sp-1) 0; }
   /* --- composer ---------------------------------------------------------------------------- */
@@ -727,11 +736,40 @@ async function renderThread(card, who) {
     if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
     renderList(card);
   };
+  // IN-GAME QUICK CHAT with this person (js/game-chat-history.js), merged into the conversation
+  // by time. Loaded once, after the messages paint, so the conversation never waits on it.
+  let gameLines = [];
+  let lastMsgs = null;
+  const gameText = (g) => (g.t === 'c' ? String(g.v || '') : reactionText({ t: g.t, v: g.v }, getLang()));
+  const gameHead = (g) => {
+    const name = t(`game_title_${g.statsId}`);
+    return `<li class="msg-gamehead"><span class="msg-gamehead-art" aria-hidden="true">${GAME_ART[g.game] || ''}</span>`
+      + `${esc(name === `game_title_${g.statsId}` ? g.game : name)}</li>`;
+  };
   const draw = (msgs) => {
-    const body = msgs.length
-      ? `<ul class="msg-thread">${msgs.map((m, i) => `
-          ${splitBefore(m, msgs[i - 1]) ? `<li class="msg-daysplit">${esc(splitText(m.atMs))}</li>` : ''}
-          <li class="msg-bubble msg-bubble--${m.from === me ? 'mine' : 'theirs'}">${esc(m.text || '')}${inviteButton(m, me)}</li>`).join('')}</ul>`
+    lastMsgs = msgs;
+    // A live-room line saved by js/messages.js logGameChat carries `game`; it draws as a game bubble.
+    const items = msgs.map((m) => {
+      const atMs = Number(m.atMs) || 0;
+      const gm = m.game && typeof m.game === 'object' ? m.game : null;
+      return gm && gm.id && gm.t
+        ? { atMs, g: { atMs, mine: m.from === me, t: gm.t, v: gm.v, game: String(gm.id), statsId: String(gm.s || gm.id), matchId: `room:${gm.room || ''}:${gm.id}` } }
+        : { atMs, m };
+    })
+      .concat(gameLines.map((g) => ({ atMs: g.atMs, g })))
+      .sort((x, y) => x.atMs - y.atMs);
+    const body = items.length
+      ? `<ul class="msg-thread">${items.map((it, i) => {
+        const prev = items[i - 1];
+        const split = splitBefore(it, prev) ? `<li class="msg-daysplit">${esc(splitText(it.atMs))}</li>` : '';
+        if (it.m) {
+          const m = it.m;
+          return `${split}<li class="msg-bubble msg-bubble--${m.from === me ? 'mine' : 'theirs'}">${esc(m.text || '')}${inviteButton(m, me)}</li>`;
+        }
+        const g = it.g;
+        const newRun = split || !prev || !prev.g || prev.g.matchId !== g.matchId;
+        return `${split}${newRun ? gameHead(g) : ''}<li class="msg-bubble msg-bubble--game msg-bubble--${g.mine ? 'mine' : 'theirs'}">${esc(gameText(g))}</li>`;
+      }).join('')}</ul>`
       : `<p class="msg-lead">${esc(t('msg_thread_empty', { name: title }))}</p>`;
     const box = card.querySelector('#msg-text');
     const draft = box ? box.value : '';
@@ -769,6 +807,14 @@ async function renderThread(card, who) {
   if (!current(gen)) return;
   draw(first);
   if (first.length) markSeen(who.code, first[first.length - 1].atMs);
+  import('./game-chat-history.js')
+    .then((h) => h.readGameChatsWith(me, who.code))
+    .then((lines) => {
+      if (!current(gen) || !lines || !lines.length) return;
+      gameLines = lines;
+      if (lastMsgs) draw(lastMsgs);
+    })
+    .catch((err) => console.warn('[messages] in-game chat could not be read', err));
 
   // Live while the screen is open, so a reply lands in front of the person waiting for it.
   if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
