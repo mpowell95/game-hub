@@ -131,7 +131,13 @@ export function mergeRecords(sum, live) {
     return dst;
   };
   const byGame = {};
-  for (const [g, o] of Object.entries((sum && sum.byGame) || {})) add(byGame[g] || (byGame[g] = blank()), o);
+  // A game with BOTH live rooms and challenges (Chinchón, Escoba from 2026-10-18) files both under
+  // 'mp', so its Games row is that bucket alone; adding its challenge index too would count every
+  // challenge twice. People stay separate sources: challenges never write h2h.
+  for (const [g, o] of Object.entries((sum && sum.byGame) || {})) {
+    if (LIVE_GAMES[g]) continue;
+    add(byGame[g] || (byGame[g] = blank()), o);
+  }
   for (const [g, o] of Object.entries((live && live.byGame) || {})) add(byGame[g] || (byGame[g] = blank()), o);
   const total = blank();
   for (const o of Object.values(byGame)) add(total, o);

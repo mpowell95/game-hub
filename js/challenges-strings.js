@@ -94,6 +94,7 @@ export const STRINGS = {
     cx_now: 'Now',
     cx_challenge: 'Challenge',
     cx_ended: 'Ended',
+    cx_open: 'Open',
   },
   es: {
     cx_title: 'Multijugador',
@@ -181,6 +182,7 @@ export const STRINGS = {
     cx_now: 'Ahora',
     cx_challenge: 'Retar',
     cx_ended: 'Terminado',
+    cx_open: 'Abrir',
   },
 };
 

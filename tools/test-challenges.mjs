@@ -205,7 +205,13 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
   const hubLive = (src('./js/hub.js').match(/const LIVE_MP_GAMES = new Set\(\[([^\]]*)\]/) || [, ''])[1]
     .match(/'[^']+'/g).map((x) => x.slice(1, -1)).sort();
   ok('hub LIVE_MP_GAMES matches mp-records LIVE_GAMES', JSON.stringify(liveIds) === JSON.stringify(hubLive), hubLive.join());
-  ok('no challenge game is also a live-room game (no double count)', !liveIds.some((g) => C.CHALLENGE_GAMES.includes(g)));
+  // A game in both (Chinchón, Escoba): Games reads its 'mp' bucket only, never the index too.
+  {
+    const dual = R.mergeRecords(C.summarize([C.normalizeRow('escoba', { id: 'e1', with: 'ANA22', name: 'Ana', over: true, result: 'won', updated: 1 })]),
+      { byGame: { escoba: { won: 3, lost: 1, draw: 0, other: 0, played: 4 } }, people: [] });
+    ok('a game with live rooms AND challenges is counted once (its mp bucket)', dual.byGame.escoba.won === 3 && dual.total.won === 3
+      && dual.people.find((p) => p.code === 'ANA22').won === 1);
+  }
 
   const stats = (games, h2h) => ({ games, h2h });
   const mp = (played, won, lost) => ({ total: { played, won, lost }, byDiff: { mp: { played, won, lost } } });
