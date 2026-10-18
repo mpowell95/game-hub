@@ -785,7 +785,9 @@ class Hub {
     // connection never settles, so a cold start from a notification could sit on the launcher for
     // ever. Opening a named match needs nothing from it.
     this._afterPaint(() => this._openFromUrl());
-    this._afterPaint(() => this._checkGameAlerts());
+    // NOT idle time (2026-10-18): requestIdleCallback could hold the "your turn" check up to 2 s
+    // behind the rest of startup (Matt: "3-5 seconds"). One frame, then straight away.
+    this._rightAfterPaint(() => this._checkGameAlerts());
     // PUSH NOTIFICATIONS (2026-09-23, js/push.js): keep this device's stored address current, and
     // take a tapped notification to its game. Both lazy; neither can break the launcher.
     this._afterPaint(() => { import('./push.js').then((m) => m.refreshPush()).catch(() => {}); });
@@ -1011,6 +1013,14 @@ class Hub {
   _afterPaint(fn) {
     const go = () => { if (!this._destroyed) { try { fn(); } catch (err) { console.error('[hub] deferred startup step failed', err); } } };
     if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 2000 });
+    else setTimeout(go, 0);
+  }
+
+  /** Run `fn` straight after the launcher's next frame: still off the first paint, but never left
+   *  waiting for idle time. For the one startup step the player is watching for. */
+  _rightAfterPaint(fn) {
+    const go = () => { if (!this._destroyed) { try { fn(); } catch (err) { console.error('[hub] deferred startup step failed', err); } } };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(go, 0));
     else setTimeout(go, 0);
   }
 
