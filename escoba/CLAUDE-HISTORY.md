@@ -513,3 +513,56 @@ Deck construction (both numbering modes), ~85 full AI-vs-AI matches' worth of ca
 escoba/scoring invariants, and a kill-and-resume round-trip (JSON-serialized, mirroring
 `localStorage`, up to 3 resumes per match). Run requires Node >= 22.7 (ESM syntax
 detection; there is no package.json), same as Chinchón's `test.js`/`sim.js`.
+
+## Turn-by-turn challenges (2026-10-18)
+
+Matt, 2026-10-18: *"You should be able to challenge someone to turn by turn games in all multiplayer
+games too."* For Escoba: two players only; the sender picks the length on the challenge screen (one
+hand, first to 11, first to 21) and their card numbering rides along. Built by a helper session in
+parallel with the same work for Chinchón; Darts' challenges were the model (structure, not shared code).
+
+**Why a log replayed through the engine, not a stored table.** Every challenge game here stores a log
+and refuses a document that does not replay (Hoops' rule). Escoba's engine is async and agent-driven, so
+it cannot validate a document synchronously. Rather than change `game.js`, `mp.js` drives a real `Game`
+through the engine's own synchronous parts (`dealHands`, `scoreRound`, `checkMatchEnd`) in exactly the
+order `runTurnLoop`, `playTurn` and `finishRoundAfterPlay` use them. The risk is drift between that
+driver and the engine; `tools/test-escoba-mp.mjs` runs the real async engine beside it on 60 random
+matches (every length, both decks) and compares full snapshots at every turn, so any future engine
+change that the driver does not mirror fails there first. One wrinkle found while writing it: at the
+moment an agent is asked for a move the engine's `_nextTurn` already points at the NEXT player (it is
+the checkpoint for after the play), while the driver's "ready" state points at the player due to act,
+which is what a resumable snapshot needs. The test compares everything but that field and checks the
+seat separately.
+
+**The deal.** Each round's deck order is derived from the stored random seed with `mp.js`'s own
+Fisher-Yates and PRNG over the sorted card ids, never `deck.js`'s `shuffle`, so a stored match keeps
+replaying even if that helper changes. The UI hands the engine the next round's order in the
+`roundScored` hook (`config.presetDeck`), which is the same seam the live-room guest already uses.
+
+**Hidden cards.** Both hands follow from the seed, so a player with dev tools could compute the other
+hand. Accepted and documented (Hold'em has the same limit); not hidden, never oversold.
+
+**Who leads.** The engine's first leader is the player after the dealer, so the dealer starts at seat 1
+and the challenger (seat 0, side `a`) plays first, which is what makes "delivered when the challenger's
+first turn ends" work. The dealer moves on each round, so the player who plays the last card of a round
+also plays the first card of the next: two plays in a row by one side, which the index rows simply
+reflect (they are rewritten when the turn passes).
+
+**One hand and draws.** One hand is the engine with target 1: whoever leads after the round wins, a
+whitewash still wins outright, and level points stays undecided in the engine, which the challenge
+reads as a draw (`over.winner: 'draw'`, `why: 'tie'`) and the UI ends after the round table. Draws count
+as played in `mp` with no win or loss (`recordEscoba('mp', null)`), as Darts' draws do.
+
+**Stats, and what it must not touch.** A finished challenge counts once per phone through its own
+ledger as `recordEscoba('mp', ...)` with that player's escobas: the same bucket as a live online match,
+so the Multiplayer screen's Games row (which reads `byDiff.mp` for a live-room game, 25a6f3aa) counts it
+once. It never writes head-to-head: h2h is live rooms only (the Multiplayer screen reads challenge People
+from the index) and `splitEscobaMp` uses h2h as evidence, so writing it would feed that migration's
+evidence with matches it was never about. The UI also never writes the solo save slot while a challenge
+is on the table: the engine hooks save after every event, and a challenge in `escoba-save` would have
+overwritten (and on its end, cleared) the solo match Resume offers.
+
+**The setup screen had no room.** A full-width Challenges row cost 66px and the setup screen had 6px to
+spare at 390x664 in the hub, so the link shares How to play's row instead (no added height). Measured,
+not guessed: the game screen itself already overflows there (165px at 390x664, 77px at 360x724), solo
+and challenge alike; that predates this work and is left for its own change.
