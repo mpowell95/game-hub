@@ -2861,6 +2861,9 @@ class ChinchonUI {
       if (this._dead) return;
       const o = A.takeOpen();
       if (!o || this.mp) return;
+      // A solo match restored on this mount is set aside, its autosave KEPT (showSetup would clear
+      // it): the next mount without a handover restores it again.
+      if (this.game && !this.ch) { this.game.abort(); this.game = null; }
       if (o.kind === 'pick') { this._chFromHub = true; this._chGo('len', o.them); } else this._chOpen(o.id);
     }).catch(() => {});
   }
