@@ -866,6 +866,62 @@
    reads as a status rather than a move description. */
 .eb-mat-announce.is-mp-status { background: rgba(74, 50, 0, 0.92); border: 1.5px solid var(--eb-attn); }
 
+/* --- turn-by-turn challenges (2026-10-18) -----------------------------------------------------
+   The setup row into them, their three screens (home, pick a person, pick the length) inside the
+   ordinary .eb-panel, and the in-match chat slot. Lists never scroll: mp-ui.js trims them to what
+   fits ("+N more"). Your-turn rows carry a "▶ Play" pill (shape + word), never colour alone. */
+.eb-game { position: relative; }   /* the match chat layer (js/match-chat-ui.js) sits inside it */
+.eb-chat-slot { flex: none; width: 44px; height: 44px; align-self: center; }
+/* How to play and Challenges side by side, in the row How to play always had (no added height).
+   Each link's tap area reaches 44px with a negative margin, inside the gaps around the row. */
+.eb-link-row { display: flex; justify-content: center; align-items: center; gap: 6px 10px; flex-wrap: wrap; }
+.eb-link-row .eb-howto-link { min-height: 44px; margin: -8px 0; padding: 4px; touch-action: manipulation; white-space: nowrap; }
+.eb-ch-entry { display: inline-flex; align-items: center; gap: 6px; }
+.eb-ch-entry-ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.eb-ch-count {
+  flex: none; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px;
+  background: var(--eb-attn); color: #2a2000; font-weight: 900; font-size: 0.85rem;
+  display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
+}
+.eb-ch-chev { flex: none; font-size: 1.4rem; line-height: 1; color: var(--eb-muted); }
+
+.eb-panel.eb-ch { gap: 12px; }
+.eb-ch-head { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.eb-ch-back {
+  appearance: none; flex: none; width: 44px; height: 44px; border-radius: 12px; border: 0; cursor: pointer;
+  background: var(--eb-surface-2); color: var(--eb-ink); display: flex; align-items: center; justify-content: center;
+  touch-action: manipulation;
+}
+.eb-ch-back svg { width: 22px; height: 22px; }
+.eb-ch-title { margin: 0; flex: 1; min-width: 0; font-size: 1.15rem; font-weight: 800;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-ch .eb-mp-msg:empty { min-height: 0; }
+.eb-ch-list { display: flex; flex-direction: column; gap: 8px; }
+.eb-ch-row {
+  appearance: none; font: inherit; color: var(--eb-ink); display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 56px; padding: 6px 12px; border-radius: 12px; cursor: pointer; text-align: left;
+  background: var(--eb-surface); border: 1px solid var(--eb-surface-2); touch-action: manipulation;
+}
+.eb-ch-row.is-mine { border: 2px solid var(--eb-accent); }
+.eb-ch-face { flex: none; font-size: 1.5rem; line-height: 1; }
+.eb-ch-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.eb-ch-name { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-ch-sub { font-size: 0.8rem; font-weight: 700; color: var(--eb-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.eb-ch-pill {
+  flex: none; padding: 7px 12px; border-radius: 999px; background: var(--eb-accent); color: #fff;
+  font-weight: 800; font-size: 0.85rem; white-space: nowrap;
+}
+.eb-ch-wait { flex: none; font-size: 1.1rem; opacity: 0.75; }
+.eb-ch-note { margin: 4px 0 0; text-align: center; color: var(--eb-muted); font-weight: 700; font-size: 0.88rem; }
+.eb-ch-search {
+  width: 100%; font: inherit; font-size: 1rem; padding: 11px 14px; border-radius: 12px;
+  border: 1px solid var(--eb-surface-2); background: var(--eb-surface); color: var(--eb-ink);
+}
+.eb-ch-search:focus { outline: 2px solid var(--eb-accent); outline-offset: -1px; }
+.eb-ch-lens { display: flex; flex-direction: column; gap: 10px; }
+.eb-ch-len { width: 100%; min-height: 56px; font-size: 1.1rem; }
+.eb-ch-result .eb-sheet-title { padding: 0 34px; }
+
 /* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
    js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom
    properties. --eb-felt/--eb-felt-edge (the table) and --eb-gold/--eb-attn (the colorblind-

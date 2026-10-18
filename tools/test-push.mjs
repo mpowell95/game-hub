@@ -9,7 +9,7 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, isActive, ACTIVE_WINDOW_MS } from '../functions/decide.js';
+import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, isActive, ACTIVE_WINDOW_MS } from '../functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -247,6 +247,27 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('chinchon: a called-off row (over:false, ended) says nothing', decideChinchon({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ ended: 'cancelled' }) }) === null);
   check('chinchon: Spanish wording', /retado al Chinchón, a 100/.test(decideChinchon({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, kind: '100' }) }).text('es').body));
   check('chinchon: the trigger watches chinchon/index and names the match', /ref: '\/chinchon\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'chinchon', match: id \}/.test(fnSrc));
+}
+
+// --- Escoba challenges (2026-10-18) -----------------------------------------------------------------
+{
+  const row = (x) => ({ name: 'Ana', yourTurn: false, over: false, lastBy: 'them', mine: 0, theirs: 0, len: '21', ...x });
+  const body = (n) => n && n.text('en').body;
+  check('escoba: a new row that is your turn is a challenge, naming the length', body(decideEscoba({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, len: '11' }) })) === 'Ana challenged you to Escoba, to 11. Your turn!');
+  check('escoba: ...one hand says so', body(decideEscoba({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, len: '1' }) })) === 'Ana challenged you to Escoba, one hand. Your turn!');
+  check('escoba: the challenger\'s own new row is not news', decideEscoba({ code: 'MATTA', id: 'x', before: null, after: row({ lastBy: 'me' }) }) === null);
+  check('escoba: the turn coming back says the score', body(decideEscoba({ code: 'MATTA', id: 'x', before: row(), after: row({ yourTurn: true, mine: 5, theirs: 7 }) })) === 'Your turn vs Ana. You 5, Ana 7');
+  check('escoba: already your turn is not news again', decideEscoba({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ yourTurn: true }) }) === null);
+  check('escoba: your own play (turn going away) says nothing', decideEscoba({ code: 'MATTA', id: 'x', before: row({ yourTurn: true, lastBy: 'me' }), after: row({ lastBy: 'me' }) }) === null);
+  check('escoba: they won', body(decideEscoba({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'lost', mine: 15, theirs: 21 }) })) === 'Ana won, 21 to 15.');
+  check('escoba: their last card ended it in your favour', body(decideEscoba({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', mine: 22, theirs: 18 }) })) === 'You beat Ana, 22 to 18!');
+  check('escoba: a one-hand draw', body(decideEscoba({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'draw', mine: 4, theirs: 4 }) })) === 'Draw with Ana, 4 to 4.');
+  check('escoba: they resigned, you won', /resigned/.test(body(decideEscoba({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
+  check('escoba: your own last card does not notify you', decideEscoba({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
+  check('escoba: a called-off row (over:false, ended) says nothing', decideEscoba({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ ended: 'cancelled' }) }) === null);
+  check('escoba: Spanish wording', body(decideEscoba({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, len: '1' }) })).length > 0
+    && decideEscoba({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true, len: '1' }) }).text('es').body === 'Ana te ha retado a la Escoba, a una mano. ¡Te toca!');
+  check('escoba: the trigger watches escoba/index and names the match', /ref: '\/escoba\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'escoba', match: id \}/.test(fnSrc));
 }
 
 // --- Flick Soccer challenges (2026-10-11) ----------------------------------------------------------

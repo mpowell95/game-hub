@@ -18,6 +18,7 @@
 //   flickSoccerTurnPush flicksoccer/index/<code>/<id> a Flick Soccer challenge, your turn, the end (2026-10-11)
 //   archeryTurnPush archery/index/<code>/<id>        an Archery challenge, your turn, the end (2026-10-14)
 //   chinchonTurnPush chinchon/index/<code>/<id>      a Chinchón challenge, your turn, the end (2026-10-18)
+//   escobaTurnPush  escoba/index/<code>/<id>         an Escoba challenge, your turn, the end (2026-10-18)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
@@ -27,7 +28,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, isActive } from './decide.js';
 
 initializeApp();
 
@@ -168,4 +169,12 @@ export const chinchonTurnPush = onValueWritten({ ref: '/chinchon/index/{code}/{i
   const after = event.data.after.exists() ? event.data.after.val() : null;
   const note = decideChinchon({ code, id, before, after });
   if (note) await sendTo(getDatabase(), code, note, `chinchon-${id}`, { game: 'chinchon', match: id });
+});
+
+export const escobaTurnPush = onValueWritten({ ref: '/escoba/index/{code}/{id}', ...OPTS }, async (event) => {
+  const { code, id } = event.params;
+  const before = event.data.before.exists() ? event.data.before.val() : null;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  const note = decideEscoba({ code, id, before, after });
+  if (note) await sendTo(getDatabase(), code, note, `escoba-${id}`, { game: 'escoba', match: id });
 });

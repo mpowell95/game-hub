@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1197';
+const CACHE = 'game-hub-v1198';
 
 const ASSETS = [
   './',
@@ -163,6 +163,9 @@ const ASSETS = [
   './chinchon/js/hash.js',
   './chinchon/js/ai.js',
   './chinchon/js/ui.js',
+  './chinchon/js/mp.js',
+  './chinchon/js/alert.js',
+  './chinchon/js/ch-ui.js',
   './chinchon/js/strings.js',
   // Parchís (self-contained single file)
   './parchis/',
@@ -185,6 +188,9 @@ const ASSETS = [
   './escoba/js/hash.js',
   './escoba/js/ai.js',
   './escoba/js/ui.js',
+  './escoba/js/mp.js',
+  './escoba/js/mp-ui.js',
+  './escoba/js/alert.js',
   './escoba/js/strings.js',
   './escoba/img/broom-sprite.webp',
   // Mancala module
@@ -970,15 +976,18 @@ const REST_MANIFEST = {
   './connect-four/js/strings.js': 'c75da9ca32',
   './connect-four/css/connect-four.css': '14251ccb03',
   './chinchon/index.html': '077ad16ca0',
-  './chinchon/css/chinchon.css': 'cd3a013f19',
+  './chinchon/css/chinchon.css': '6b230da17e',
   './chinchon/js/deck.js': '2260c3f606',
   './chinchon/js/meld.js': '5166c4b913',
   './chinchon/js/cards.js': '8345ff44a9',
   './chinchon/js/game.js': 'ff23b6d017',
   './chinchon/js/hash.js': '9bbf5d8385',
   './chinchon/js/ai.js': 'd69864fbc2',
-  './chinchon/js/ui.js': '0cd05fcba9',
-  './chinchon/js/strings.js': '408386915e',
+  './chinchon/js/ui.js': '7343d50a8a',
+  './chinchon/js/mp.js': 'dd1dc4c17e',
+  './chinchon/js/alert.js': '81226691f9',
+  './chinchon/js/ch-ui.js': '9be86bf54a',
+  './chinchon/js/strings.js': 'f20532e8b5',
   './parchis/': 'ee4e32987e',
   './parchis/index.html': 'ee4e32987e',
   './filler/': '12eb5af876',
@@ -990,14 +999,17 @@ const REST_MANIFEST = {
   './filler/js/hash.js': '3491931082',
   './filler/js/strings.js': '979ddc00fc',
   './escoba/index.html': '83eeab5af3',
-  './escoba/css/escoba.css': '775b3769cb',
+  './escoba/css/escoba.css': 'd9cecbd6c8',
   './escoba/js/deck.js': '82f42af6d3',
   './escoba/js/cards.js': 'bff122678a',
   './escoba/js/game.js': 'd86364718a',
   './escoba/js/hash.js': '032dbfed1a',
   './escoba/js/ai.js': '66a7d1f37a',
-  './escoba/js/ui.js': 'bf7bc93ffb',
-  './escoba/js/strings.js': 'afccb92f86',
+  './escoba/js/ui.js': '8228059455',
+  './escoba/js/mp.js': '467faf7ea4',
+  './escoba/js/mp-ui.js': '528aefa2f7',
+  './escoba/js/alert.js': 'e82a10d729',
+  './escoba/js/strings.js': 'f77944680f',
   './escoba/img/broom-sprite.webp': 'c1a0f8a912',
   './mancala/index.html': 'bddd26c9cf',
   './mancala/css/mancala.css': 'b9f63a0db8',
@@ -1599,7 +1611,7 @@ self.addEventListener('notificationclick', (event) => {
   // Cup Pong's payload names its match outright (`match`, 2026-09-28) and tags it `cuppong-<id>`.
   // Every challenge game's tag is `<node>-<matchId>` (2026-10-14: Darts, Flick Soccer and the rest
   // too, as a fallback should a payload ever arrive without `match`).
-  const tagged = /^(?:hoops|cuppong|darts|flicksoccer|archery|skee)-([A-Za-z0-9_-]{4,40})$/.exec(tag);
+  const tagged = /^(?:hoops|cuppong|darts|flicksoccer|archery|chinchon|escoba|skee)-([A-Za-z0-9_-]{4,40})$/.exec(tag);
   const match = String(data.match || (tagged ? tagged[1] : ''));
   const u0 = new URL(data.url || './', self.registration.scope);
   if (match) u0.searchParams.set('match', match);

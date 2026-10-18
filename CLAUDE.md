@@ -332,7 +332,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Darts | module, immersive, devOnly; vs computer, pass and play, challenges (`darts/`) | `.dt-root` / `.dt-` | `gamehub.darts.v1` (+ `.save.v1`) | `recordResult('darts', …)` |
 | Dominoes | module | `.dm-root` / `.dm-` | `gamehub.dominoes.v1` | `recordDominoes` |
 | Dots and Boxes | module, multiplayer (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
-| Escoba | module, immersive, multiplayer 2-4 seats (`escoba-save`) | `.eb-root` / `.eb-` | `escoba-settings` (frozen) | `recordEscoba` |
+| Escoba | module, immersive, multiplayer 2-4 seats (`escoba-save`) + 2-player turn-by-turn challenges (`escoba/`, 2026-10-18; rules + push NOT yet published/deployed) | `.eb-root` / `.eb-` | `escoba-settings` (frozen) | `recordEscoba` (challenges: `'mp'`, never h2h) |
 | Filler | module, multiplayer (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Flick Soccer | module, immersive, devOnly; vs computer, 2 players, challenges (`flicksoccer/`); hub id `flick-soccer`, stats id `flicksoccer` | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` (+ `.save.v1`) | `recordResult('flicksoccer', …)` |
 | Golf | module, immersive | `.gf-root` / `.gf-` | `gamehub.golf.v1` (+ `.save.v1`) | `recordGolf` |
@@ -463,8 +463,8 @@ None of this makes the hub cheat-proof; never describe it that way.
   commands, one per line, no "if X" branches up front.** Secrets via `--data-file`, not paste.
 - **Deployed triggers:** `hoopsTurnPush`, `messagePush`, `bugReportPush`, `skeeChallengePush`,
   `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`. **`archeryTurnPush` and the `archery`
-  rules branch are NOT yet deployed/published (as of 2026-10-14). `chinchonTurnPush` and the
-  `chinchon` rules branch are NOT yet deployed/published (2026-10-18).**
+  rules branch are NOT yet deployed/published (as of 2026-10-14). `chinchonTurnPush`, `escobaTurnPush`
+  and the `chinchon` / `escoba` rules branches are NOT yet deployed/published (2026-10-18).**
 - **The VAPID private key is a Firebase secret; never in this repo.** Its public half is in
   `js/push.js` and `functions/index.js`; `tools/test-push.mjs` fails if they differ.
 - iPhone: only the Home Screen app (iOS 16.4+) can receive them; `pushState()` returns `'install'`.

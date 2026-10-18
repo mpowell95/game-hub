@@ -5,10 +5,10 @@
 // challenges - if it's your turn vs theirs, more info on your records total and against specific
 // players, etc. You should also be able to send challenges and jump into games from this page."
 //
-// EVERY GAME KEEPS ITS OWN CHALLENGES. Six games have turn-by-turn challenges, each in its own
+// EVERY GAME KEEPS ITS OWN CHALLENGES. Seven games have turn-by-turn challenges, each in its own
 // Firebase node, each with a per-player index (`<node>/index/<CODE>/<id>`): Connect 4 Hoops
 // (`hoops/`), Skeeball (`skeeChallenges/`), Cup Pong (`cuppong/`), Darts (`darts/`), Flick Soccer
-// (`flicksoccer/`, 2026-10-11) and Archery (`archery/`, 2026-10-14). This module READS those indexes through each game's own reader and folds them into one list. It writes
+// (`flicksoccer/`, 2026-10-11), Archery (`archery/`, 2026-10-14) and Escoba (`escoba/`, 2026-10-18). This module READS those indexes through each game's own reader and folds them into one list. It writes
 // nothing itself - no Firebase node, no `gamehub.*` key. Opening a match or starting a challenge is
 // handed to the game (its alerts module's armOpen / armChallenge), and CANCEL / DECLINE / RESIGN
 // (2026-10-13, Matt: "a way to cancel sent challenge requests, and a way to resign/forfeit") call
@@ -111,6 +111,15 @@ export const SOURCES = {
     action: logGameAction,
     end: logGameEnd,
   },
+  // Escoba (2026-10-18): escoba/js/mp.js, the same log-game shape as Darts. Escoba also has live
+  // rooms; its challenge results are counted in the same 'mp' bucket and never in head-to-head.
+  escoba: {
+    load: () => import('../escoba/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
+  },
 };
 
 /** What may be done to a live match right now ('cancel' | 'decline' | 'resign' | null). Never rejects. */
@@ -167,6 +176,7 @@ export function normalizeRow(game, r, expired = false) {
       all: !!r.all,
       n: ms(r.n),
       boardName: String(r.boardName || ''),
+      len: typeof r.len === 'string' ? r.len : '',          // Escoba: '1' one hand, '11' / '21'
     },
   };
 }

@@ -174,6 +174,18 @@ const EXTRA_SCREENS = {
       },
     },
   ],
+  // Escoba (2026-10-18): the Challenges home reached from the setup screen's link. (The test profile
+  // has no player code, so it reads nothing; the full lists are trimmed to fit by measurement.)
+  escoba: [
+    {
+      name: 'challenges',
+      async open(page) {
+        await page.click('.eb-ch-entry');
+        await page.waitForSelector('.eb-panel.eb-ch', { timeout: 8000 });
+        await page.waitForTimeout(400);
+      },
+    },
+  ],
   darts: [
     {
       name: 'how to play',

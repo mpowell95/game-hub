@@ -59,6 +59,7 @@
     "flicksoccer":    { ".read": "auth != null", ".write": "auth != null" },
     "archery":        { ".read": "auth != null", ".write": "auth != null" },
     "chinchon":       { ".read": "auth != null", ".write": "auth != null" },
+    "escoba":         { ".read": "auth != null", ".write": "auth != null" },
     "hoops":          { ".read": "auth != null", ".write": "auth != null" },
     "players":        { ".read": "auth != null", ".write": "auth != null" },
     "pushSubs": {
