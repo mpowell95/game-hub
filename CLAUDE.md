@@ -221,7 +221,8 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `bug-report.js` / `bug-report-ui.js` | Report a bug, offline outbox, Matt's replies (`bugReplies/<deviceId>/`), soft delete |
 | `messages.js` / `messages-ui.js` | player-to-player Messages (see "Messages") |
 | `hub-messages.js` | messages FROM the Game Hub (`HUB_MESSAGES`, in code; see "Messages") |
-| `challenges.js` / `challenges-ui.js` / `challenge-life.js` | the Challenges screen (reads only) and the shared cancel/expire rules (`ANSWER_MS` 3 days) |
+| `challenges.js` / `challenges-ui.js` / `challenge-life.js` | the Multiplayer screen (was Challenges; reads only) and the shared cancel/expire rules (`ANSWER_MS` 3 days) |
+| `mp-records.js` | the Multiplayer screen's Records for live-room games: `byDiff.mp` + `h2h`, read only |
 | `game-chat-history.js` | READ ONLY: your in-game quick chat with one person (challenge games), merged into that Messages conversation |
 | `match-chat.js` / `match-chat-ui.js` | in-match quick chat for EVERY online game, at `<node>/chat/<matchId>` (beside the match, never inside) |
 | `error-log.js` | last 20 uncaught errors (`gamehub.errorlog.v1`) |
@@ -241,9 +242,9 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 - Old handoffs and specs: `docs/archive/` (moved from the root 2026-10-14; code comments may name them bare).
 - `<game>/CLAUDE.md`: each game. `docs/BUILDING-A-GAME.md`: the UX floor, module contract, "Adding
   a game" checklist. `VISUAL-PROCESS.md`: how to verify a screen looks and plays right.
-- **Head-to-head is still RECORDED, deliberately not DISPLAYED** (decision, not a gap). Read
-  `js/CLAUDE.md`, "Multiplayer on the leaderboard: on the GAME'S page, per game" before adding
-  anything h2h-shaped. The `h2h` data stays (rule 5).
+- **Head-to-head is DISPLAYED in ONE place: the Multiplayer screen's Records** (`js/mp-records.js`;
+  Matt, 2026-10-18, reversing 2026-08-11). Nowhere else; the leaderboard stays per game. Read
+  `js/CLAUDE.md`, "Head-to-head capture" first. The `h2h` data stays (rule 5).
 
 ### Dev tooling (`tools/`, not deployed; run from the repo root, e.g. `node tools/validate-sw-assets.mjs`)
 
@@ -413,7 +414,7 @@ never crash.
 
 A per-device choice (Profile > Settings > Layout; default Comfortable). Compact = one title row, 3-across
 tiles with the name under the art, no heart on favorites (the edit button moves AND removes them), and
-an icons-only bottom tab bar (Games, Challenges, Messages, Leaderboards, Profile) carrying the same
+an icons-only bottom tab bar (Games, Multiplayer, Messages, Leaderboards, Profile) carrying the same
 badges. CSS is `html.gh-compact:not(.gh-ingame)` so games mount identically. Each tab calls the comfortable
 layout's own button, so the two cannot drift. Announced by `compact-layout-2026-10-17` (Try it = switch).
 **Bottom-bar tips** (`_runTour`): the first time a device shows Compact, one "your turn"-style bubble per
@@ -489,10 +490,18 @@ None of this makes the hub cheat-proof; never describe it that way.
 - It does not stop collusion between two real approved players or dev-tools tampering. A new
   family member cannot play online until Matt taps them in.
 
-## The Challenges screen (2026-10-05)
+## The Multiplayer screen (2026-10-18; the Challenges screen 2026-10-05)
 
-- A full-width **Challenges** button above the grid (shown only if a launcher game has an `alerts`
-  module), "N your turn" from each module's `myTurnCount()`.
+- Matt's mockup, built: a FULL screen (compact: under the tab bar, its tab lit). Your turn (Play),
+  their turn as one-line rows, Cancel/Decline/Resign behind **⋯**, then every multiplayer game on the
+  launcher in ONE A-Z grid (no "Live"/"Anytime" labels, Matt). A challenge game opens a pick-a-person
+  sheet; a live-room game (`LIVE_MP_GAMES` in hub.js = `LIVE_GAMES` in `js/mp-records.js`) opens the
+  game. The record chip ("12-5") opens **Records** (People, Games, Recent; a person's page).
+- Records count live-room games from `byDiff.mp` (Games) and `h2h` (People; from 2026-07-22 to 08-04
+  per game; Air Hockey, Hold'em, Yahtzee have none; a 3-4 seat Chinchón/Escoba loss counts against
+  every opponent at that table). Hoops counts from its challenge index only (its 'mp' bucket mixes both).
+- The full-width button and the tab are both "Multiplayer" (shown if any challenge OR live game is on
+  the launcher), "Your turn: N" from each alerts module's `myTurnCount()`.
 - `js/challenges.js` only READS each game's index through the game's own reader; Cancel / Decline
   / Resign call the game's own writer.
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
@@ -560,8 +569,9 @@ Full contract: `js/CLAUDE.md`, "The admin config".
   badges, result lines, logs and results cards print the player's own name like anyone else's.
   Instructions spoken TO the player ("Tap the table...") are not names and are fine.
   `{me}` in any `makeT` string is filled with the profile name (`myName()`, `js/i18n.js`, 2026-10-15);
-  the hub (Challenges, alerts, Messages, match chat, profile heading) uses it. Matt, same day: in-game
+  the hub (alerts, Messages, match chat, profile heading) uses it. Matt, same day: in-game
   lines like "Your turn" may stay; the leaderboard and shared screens must not say "You".
+  **Exception (Matt, 2026-10-18): the Multiplayer screen's heading and button say "Your turn".**
 - **No em dashes** in user-facing game or profile copy.
 - **Every "you win / you lose" popup gets a close (X) top-right.**
 - Text size, tap targets, safe areas, motion: `docs/BUILDING-A-GAME.md`, "Part 0 — The UX floor".

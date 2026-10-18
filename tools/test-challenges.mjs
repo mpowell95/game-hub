@@ -116,7 +116,8 @@ ok('hub: the count is summed from myTurnCount', /mod\.myTurnCount\(\)/.test(hub)
 const sw = src('./sw.js');
 ok('sw: the three new files are precached and network-first',
   ['challenges.js', 'challenges-ui.js', 'challenges-strings.js'].every((f) => sw.split(`'./js/${f}'`).length >= 3));
-const data = src('./js/challenges.js') + src('./js/challenges-ui.js');
+ok('sw: js/mp-records.js is precached and network-first', sw.split(`'./js/mp-records.js'`).length >= 3);
+const data = src('./js/challenges.js') + src('./js/challenges-ui.js') + src('./js/mp-records.js');
 ok('the Challenges screen writes no gamehub.* key and no Firebase node',
   !/localStorage\.setItem|sessionStorage\.setItem|api\.(set|update|push|remove)\(/.test(data));
 
@@ -191,8 +192,54 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
   ok('a made-up action is refused', (await C.endMatch('darts', g2, 'explode')).ok === false);
 
   const ui = src('./js/challenges-ui.js');
-  ok('the screen puts a Cancel / Decline / Resign button on every live row', /class="cx-end"/.test(ui) && /cx_end_\$\{hint\}/.test(ui));
+  // Since 2026-10-18 it sits behind a ⋯ on every live row (Matt's Multiplayer screen), one word in its menu.
+  ok('every live row has a ⋯ offering Cancel / Decline / Resign', /class="cx-more"/.test(ui) && /cx_end_\$\{hint\}/.test(ui)
+    && (ui.match(/\$\{more\}<\/li>/g) || []).length === 2);
   ok('...and it asks before it does anything (a confirm screen that re-reads the match)', /async function renderEnd/.test(ui) && /await endAction\(game, id\)/.test(ui) && /endMatch\(game, id, action\)/.test(ui));
+}
+
+// --- the Multiplayer screen's live-room records (2026-10-18, js/mp-records.js) ------------------
+{
+  const R = await import('../js/mp-records.js');
+  const liveIds = Object.keys(R.LIVE_GAMES).sort();
+  const hubLive = (src('./js/hub.js').match(/const LIVE_MP_GAMES = new Set\(\[([^\]]*)\]/) || [, ''])[1]
+    .match(/'[^']+'/g).map((x) => x.slice(1, -1)).sort();
+  ok('hub LIVE_MP_GAMES matches mp-records LIVE_GAMES', JSON.stringify(liveIds) === JSON.stringify(hubLive), hubLive.join());
+  ok('no challenge game is also a live-room game (no double count)', !liveIds.some((g) => C.CHALLENGE_GAMES.includes(g)));
+
+  const stats = (games, h2h) => ({ games, h2h });
+  const mp = (played, won, lost) => ({ total: { played, won, lost }, byDiff: { mp: { played, won, lost } } });
+  // Matt has two phones (MATT1 owner node + a tablet), Ana one, Bo one with no code.
+  const all = {
+    phone: { profile: { name: 'Matt', emoji: '🤴', playerId: 'MATT1' }, updatedAt: 5,
+      stats: stats({ battleship: mp(3, 2, 1) }, { battleship: { anaDev: { name: 'Ana', w: 2, l: 1 } } }) },
+    tablet: { profile: { name: 'Matt', emoji: '🤴', playerId: 'MATT1' }, updatedAt: 4,
+      stats: stats({ battleship: mp(1, 1, 0), tictactoe: mp(3, 1, 1) },
+        { battleship: { anaDev: { name: 'Ana', w: 1, l: 0 } }, tictactoe: { boDev: { name: 'Bo', w: 1, l: 1 }, phone: { name: 'Matt', w: 5, l: 0 } } }) },
+    anaDev: { profile: { name: 'Ana', emoji: '🦁', playerId: 'ANA22' }, updatedAt: 3, stats: stats({}, {}) },
+  };
+  // The phone's own store is fresher than its mirror (one more Battleship win, vs Ana).
+  const local = stats({ battleship: mp(4, 3, 1) }, { battleship: { anaDev: { name: 'Ana', w: 3, l: 1 } } });
+  const live = R.liveRecords(all, { name: 'Matt', emoji: '🤴', playerId: 'MATT1' }, 'phone', local);
+  ok('games: online plays summed over both devices, local store fresher than its mirror',
+    live.byGame.battleship.won === 4 && live.byGame.battleship.lost === 1 && live.byGame.battleship.played === 5, JSON.stringify(live.byGame));
+  ok('games: a draw is played minus won minus lost', live.byGame['tic-tac-toe'].draw === 1);
+  const ana = live.people.find((p) => p.code === 'ANA22');
+  ok('people: an opponent device folds onto their player code, both my devices summed', ana && ana.won === 4 && ana.lost === 1 && ana.byGame.battleship.won === 4, JSON.stringify(live.people));
+  const bo = live.people.find((p) => p.name === 'Bo');
+  ok('people: an opponent with no synced record keeps its own row, no code, never guessed', bo && !bo.code && bo.won === 1 && bo.lost === 1);
+  ok('people: a row against my own device is never a person', !live.people.some((p) => p.code === 'MATT1'));
+  ok('liveRecords never mutates players/', JSON.stringify(all.phone.stats.h2h) === JSON.stringify({ battleship: { anaDev: { name: 'Ana', w: 2, l: 1 } } }));
+
+  const sum = C.summarize([
+    C.normalizeRow('darts', { id: 'd1', with: 'ANA22', name: 'Ana', over: true, result: 'won', updated: 9 }),
+    C.normalizeRow('darts', { id: 'd2', with: 'ANA22', name: 'Ana', yourTurn: true, updated: 8 }),
+  ]);
+  const m = R.mergeRecords(sum, live);
+  const anaM = m.people.find((p) => p.code === 'ANA22');
+  ok('merge: one person across challenge and live games', anaM && anaM.won === 5 && anaM.lost === 1 && anaM.byGame.darts.won === 1 && anaM.live === 1);
+  ok('merge: the total is the sum of the games', m.total.won === 4 + 1 + 1 && m.total.lost === 1 + 1, JSON.stringify(m.total));
+  ok('offline: an empty players/ still shows this device', R.liveRecords({}, { name: 'Matt', playerId: 'MATT1' }, 'phone', local).byGame.battleship.won === 3);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
