@@ -14,7 +14,6 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordMinesweeper } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
-import { isAdminDevice } from '../../js/admin-config.js';
 import E, { LEVELS, OPEN, FLAGGED, QUESTION } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -94,6 +93,8 @@ function loadSettings() {
       marks: v.marks !== false,
       // NO-GUESS boards (2026-10-15): Matt's devices only. Since 2026-10-16 they COUNT like any
       // board (Matt: "Make my games count"), tallied as well in `ms.noGuess` (js/game-stats.js).
+      // The switch was removed 2026-10-16 (Matt: "remove the 'No guessing' toggle"); the stored
+      // value is still read and carried, and no longer deals anything.
       noGuess: v.noGuess === true,
     };
   } catch { return { version: 1, level: 'easy', safeFirst: true, longPress: true, vibrate: false, marks: true }; }
@@ -328,7 +329,6 @@ class MinesweeperUI {
       <div class="ms-card"><h3>${esc(t('difficulty'))}</h3><div class="ms-diffs">${diffs}</div></div>
       <div class="ms-card"><h3>${esc(t('your_best'))}</h3><div class="ms-bests">${bestCells}</div></div>
       <div class="ms-card"><h3>${esc(t('options'))}</h3><div class="ms-opts">
-        ${isAdminDevice() ? opt('noGuess', 'no_guess_opt', '') : ''}
         ${opt('marks', 'marks_opt', '')}
         ${opt('longPress', 'long_press', '')}
         ${canVibrate ? opt('vibrate', 'vibrate', '') : ''}
@@ -436,8 +436,9 @@ class MinesweeperUI {
   }
 
   /** EASY IS ALWAYS NO-GUESS, for everyone (Matt, 2026-10-16: "Easy MUST be NO GUESS EVER", after
-   *  an Easy board ended in a forced 50/50). Other levels: only on Matt's devices, switch on. */
-  _noGuessOn(level) { return level === 'easy' || (!!this.settings.noGuess && isAdminDevice()); }
+   *  an Easy board ended in a forced 50/50). Medium, Hard and Expert are always ordinary boards:
+   *  Matt's admin-only switch for them was removed 2026-10-16 ("remove the 'No guessing' toggle"). */
+  _noGuessOn(level) { return level === 'easy'; }
 
   newGame(level) {
     this._clearTimers();
