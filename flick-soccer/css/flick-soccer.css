@@ -337,7 +337,7 @@ html[lang="es"] .fs-root .fs-logo { font-size: 23px; letter-spacing: 0; }
   color: var(--fs-muted);
 }
 .fs-root .fs-x svg { width: 20px; height: 20px; }
-.fs-root .fs-q { font-family: inherit; font-size: 22px; font-weight: 900; line-height: 1; }
+.fs-root .fs-q { right: auto; left: 6px; font-family: inherit; font-size: 22px; font-weight: 900; line-height: 1; }
 .fs-root .fs-res-ava { margin: 4px 0 0; font-size: 46px; line-height: 1; }
 .fs-root .fs-res-line {
   display: flex;

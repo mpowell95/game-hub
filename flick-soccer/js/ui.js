@@ -267,6 +267,7 @@ class FlickSoccerUI {
         <div class="fs-ov fs-ov-setup" data-ov="setup" hidden>
           <div class="fs-card">
             <button type="button" class="fs-x fs-q" data-act="howto" data-la="howto">?</button>
+            <button type="button" class="fs-x" data-act="exit" data-la="aria_close">${X_SVG}</button>
             <h2 class="fs-logo" data-l="title"></h2>
             <p class="fs-tag" data-l="tagline"></p>
             <button type="button" class="fs-mprow" data-act="multi">
@@ -867,6 +868,11 @@ class FlickSoccerUI {
       else this._showSetup();
     }
     else if (act === 'menu') { if (this.screen === 'play' || this.screen === 'resign') { this._paintResign(); this.screen = 'menu'; this.drag = null; if (this.phase === 'aim') this.aim = null; this._showOnly('menu'); } }
+    else if (act === 'exit') {
+      // The setup card's X (Matt, 2026-10-19): leave the way the hub's own back pill does.
+      const back = document.querySelector('.hub-back');
+      if (back && !back.hidden) back.click(); else location.href = '../';
+    }
     else if (act === 'resume') { this.screen = 'play'; this._showOnly(null); }
     else if (act === 'quit') { this._settleNow(); this._save(); if (this.match && this.match.winner != null) this._finish(); else this._showSetup(); }
     else if (act === 'mpHome') this._openOnline();
