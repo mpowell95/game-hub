@@ -324,8 +324,12 @@ function injectCss() {
 .ghc-panel[hidden] { display: none; }
 .ghc-head { display: flex; align-items: center; gap: 8px; min-height: 44px; flex: 0 0 auto; }
 .ghc-title { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ghc-x { appearance: none; flex: 0 0 auto; width: 44px; height: 44px; margin-right: -8px; border: 0;
-  background: transparent; color: var(--ghc-dim); font-size: 16px; cursor: pointer; touch-action: manipulation; }
+/* The close X (Matt, 2026-10-19: "a little easier to select"): a visible 44px disc, plus 10px of
+   invisible tap area all round, so a near miss still closes it. */
+.ghc-x { appearance: none; position: relative; flex: 0 0 auto; width: 44px; height: 44px; margin: 4px -4px 4px 0;
+  border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: var(--ghc-ink);
+  font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; touch-action: manipulation; }
+.ghc-x::after { content: ''; position: absolute; inset: -10px; }
 /* THE THREAD: most of the panel, scrolls inside itself, never the page. */
 .ghc-log { flex: 1 1 auto; min-height: 96px; max-height: 46vh; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 6px; padding: 8px; margin-bottom: 8px; border-radius: 10px;
