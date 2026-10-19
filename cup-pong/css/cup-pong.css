@@ -389,18 +389,6 @@
 }
 @keyframes cp-sweep-fade { 0% { opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
 
-/* The Tuesday question (one player's joke): "No" only shakes its head. */
-.cp-tuesday .cp-tuesday-q { font-size: 30px; text-align: center; }
-.cp-tuesday .is-nope { animation: cp-nope 0.4s ease; }
-@keyframes cp-nope {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-10px); }
-  40% { transform: translateX(10px); }
-  60% { transform: translateX(-6px); }
-  80% { transform: translateX(6px); }
-}
-@media (prefers-reduced-motion: reduce) { .cp-tuesday .is-nope { animation: none; opacity: 0.6; } }
-
 /* Quick chat (js/match-chat-ui.js, 2026-10-14): the free-text box must stay typeable under the
    root's `user-select: none` (iOS Safari will not type into an input that has it). */
 .cp-root .ghc-input { -webkit-user-select: text; user-select: text; }
