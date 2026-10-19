@@ -1408,6 +1408,7 @@ class Hub {
     this._paintChallengeCount();
     this._watchGameAlerts();
     this._primeMultiplayer();
+    this._primeScreens();
     // A tile the player cannot see is not "super obvious". Bring it into view ONCE per alert,
     // gently, and never fight a scroll they have already started.
     const first = found[0];
@@ -1431,12 +1432,14 @@ class Hub {
   async _watchGameAlerts() {
     this._alertWatches = this._alertWatches || {};
     const onLauncher = new Set((this.games || []).map((g) => g.id));
-    for (const g of GAMES) {
-      if (typeof g.alerts !== 'function' || this._alertWatches[g.id] || !onLauncher.has(g.id)) continue;
+    // ALL AT ONCE (2026-10-18), like the check above: one after another, the last game's live
+    // updates waited on every earlier game's connection.
+    const list = GAMES.filter((g) => typeof g.alerts === 'function' && !this._alertWatches[g.id] && onLauncher.has(g.id));
+    await Promise.all(list.map(async (g) => {
       this._alertWatches[g.id] = 'pending';
       try {
         const mod = await g.alerts();
-        if (typeof mod.watch !== 'function') continue;
+        if (typeof mod.watch !== 'function') return;
         (this._alertMods = this._alertMods || {})[g.id] = mod;
         this._alertWatches[g.id] = await mod.watch((alert) => {
           // The Challenges button's count moves with every change, bubble or not.
@@ -1453,7 +1456,7 @@ class Hub {
       } catch (err) {
         console.warn('[hub] alert watch failed for', g.id, err);
       }
-    }
+    }));
   }
 
   // --- the compact layout's tab bar (js/layout.js, 2026-10-17) --------------------------------------
@@ -1611,6 +1614,17 @@ class Hub {
     if (this.current || (!this._challengeGames().length && !this._liveGames().length)) return;
     const ids = this._challengeGames().map((g) => g.id);
     import('./challenges-ui.js').then((m) => { if (!this.current && typeof m.prime === 'function') return m.prime(ids); }).catch(() => {});
+  }
+
+  /** The Leaderboard and Messages screens' code, fetched ONCE per load ahead of the tap (2026-10-18),
+   *  like the Multiplayer screen above. Both are network-first, so a tap used to wait on the network
+   *  before anything showed. Their data is read when they open (Messages opens on the inbox the badge
+   *  already read; the Leaderboard on the last players/ read, js/stats-net.js). */
+  _primeScreens() {
+    if (this._screensPrimed || this.current) return;
+    this._screensPrimed = true;
+    import('./messages-ui.js').catch(() => {});
+    import('./leaderboard-ui.js').catch(() => {});
   }
 
   _closeMultiplayer() {

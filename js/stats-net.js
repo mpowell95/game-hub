@@ -239,6 +239,7 @@ export async function syncMyStats() {
       return false;
     }
     writeSyncHealth({ ok: true, lastOkAt: Date.now(), lastErr: '', localPlays, remotePlays });
+    _playersMemo = null; _playersGen += 1;   // this device's record just changed: the next one-shot read goes to the server
     return true;
   } catch (err) {
     console.error(`[stats-net] sync FAILED for players/${id}: ${localPlays} local plays not mirrored. History is still safe locally; it will retry on the next open or reconnect.`, err);
@@ -247,18 +248,48 @@ export async function syncMyStats() {
   }
 }
 
-/** Live-watch every device's record (Admin Insights + Leaderboard). cb({deviceId: record}). Returns unsubscribe. */
+// ONE COPY OF players/ PER PAGE (2026-10-18). The Leaderboard, the Multiplayer screen's Records and
+// the New message picker each downloaded the whole family's node, every time each was opened. Now
+// the last successful read is kept in memory: a live watch paints from it at once and catches up,
+// and a one-shot read reuses it for READ_REUSE_MS (or shares a read already in flight). Display
+// only; nothing stored, nothing written. `{ fresh: true }` always goes to the server.
+const READ_REUSE_MS = 60 * 1000;
+let _playersMemo = null;          // { val, at }
+let _playersRead = null;          // a read in flight
+let _playersGen = 0;              // bumped by this device's own sync; an older read is not kept
+function rememberPlayers(val, gen = _playersGen) { if (gen === _playersGen) _playersMemo = { val, at: Date.now() }; return copyOf(val); }
+// Every caller gets its OWN copy (each used to get a fresh object per read), so one screen can never
+// change what another is shown.
+function copyOf(v) {
+  try { return structuredClone(v); } catch { try { return JSON.parse(JSON.stringify(v)); } catch { return {}; } }
+}
+
+/** Live-watch every device's record (Admin Insights + Leaderboard). cb({deviceId: record}). Returns
+ *  unsubscribe. Called first with the last copy read on this page, if any, then live. */
 export async function watchPlayers(cb) {
   if (!(await init())) return () => {};
-  try { return _api.onValue(_api.ref(_db, 'players'), (s) => cb(s.val() || {})); }
+  let live = false;
+  if (_playersMemo) {
+    const val = _playersMemo.val;
+    Promise.resolve().then(() => { if (!live) { try { cb(copyOf(val)); } catch (err) { console.warn('[stats-net] watchPlayers', err); } } });
+  }
+  try { return _api.onValue(_api.ref(_db, 'players'), (s) => { live = true; cb(rememberPlayers(s.val() || {})); }); }
   catch { return () => {}; }
 }
 
 /** One-shot read of every device record (for the Stats screen's cross-device aggregation). {} if offline. */
-export async function readPlayersOnce() {
+export async function readPlayersOnce({ fresh = false } = {}) {
   if (!(await init())) return {};
-  try { const s = await _api.get(_api.ref(_db, 'players')); return s.val() || {}; }
-  catch { return {}; }
+  if (!fresh && _playersMemo && Date.now() - _playersMemo.at < READ_REUSE_MS) return copyOf(_playersMemo.val);
+  if (!fresh && _playersRead && _playersRead.gen === _playersGen) return _playersRead.then(copyOf);
+  const gen = _playersGen;
+  const read = (async () => {
+    try { const s = await _api.get(_api.ref(_db, 'players')); return rememberPlayers(s.val() || {}, gen); }
+    catch { return {}; }
+  })();
+  read.gen = gen;
+  if (!fresh) { _playersRead = read; read.finally(() => { if (_playersRead === read) _playersRead = null; }); }
+  return read;
 }
 
 /** Who owns `code`: { name, emoji } from that player's most recently active NAMED device, or null.
@@ -267,7 +298,7 @@ export async function readPlayersOnce() {
 export async function lookupCodeOwner(playerCode) {
   const want = (typeof playerCode === 'string' ? playerCode : '').trim().toUpperCase();
   if (!want) return null;
-  const all = await readPlayersOnce();
+  const all = await readPlayersOnce({ fresh: true });
   let best = null, bestAt = -1;
   for (const id of Object.keys(all)) {
     const rec = all[id] || {}, p = rec.profile || {};

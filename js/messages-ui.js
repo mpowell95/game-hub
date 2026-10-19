@@ -14,7 +14,7 @@
 //   myUnreadMessages()            - the count behind the profile pill's badge
 
 import {
-  MAX_MESSAGE, myCode, readMyThreads, readThread, watchThread, markThreadSeen, hideThread,
+  MAX_MESSAGE, myCode, readMyThreads, cachedThreads, threadReadCount, readThread, watchThread, markThreadSeen, hideThread,
   readContacts, sendMessage, sendBroadcast, unreadMessageCount, readAllThreads,
   queueOutbox, normalizeText, isUnread, authId, asInvite,
 } from './messages.js';
@@ -456,12 +456,23 @@ async function renderList(card) {
   shellHTML(card, { title: t('msg_title'), body: `<p class="msg-lead">${esc(t('msg_loading'))}</p>` });
 
   const me = myCode();
+  // THE LAST LIST AT ONCE (2026-10-18), then the fresh one. A repaint only when it changed, under a
+  // new view number, so the first paint's admin buttons and push row are never added twice.
+  const cached = cachedThreads();
+  let shown = '';
+  if (cached && cached.length) { shown = JSON.stringify(cached); paintList(card, cached, me, gen); }
   // Wait for any read-stamp still in flight. Tapping Back straight after reading used to re-list
   // from the server before that write arrived, so the row just read came back bold.
   await _seenWrite;
+  const reads = threadReadCount();
   const rows = await readMyThreads();
   if (!current(gen)) return;
+  // A read that failed (offline) answers [] - never let it blank a list already on screen.
+  if (shown && (threadReadCount() === reads || JSON.stringify(rows) === shown)) return;
+  paintList(card, rows, me, shown ? ++_view : gen);
+}
 
+function paintList(card, rows, me, gen) {
   const body = rows.length
     ? `<ul class="msg-list">${rows.map((r) => `
         <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}"
