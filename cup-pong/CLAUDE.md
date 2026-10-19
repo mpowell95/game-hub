@@ -260,11 +260,9 @@ screenshot probe (the game never sets it).
 - `node cup-pong/js/test.js`; `node tools/test-cuppong-mp.mjs`; `node tools/test-game-conventions.mjs`;
   `node tools/check-no-scroll.mjs cup-pong`.
 
-## The Tuesday question (a joke for one player, 2026-10-03)
+## The Tuesday question (retired 2026-10-19)
 
-King of Games `3VN33`, only in matches against Matt `QZCC4`: `TUESDAY` in `ui.js`; `mpResume` asks
-before his turn (`askTuesday`), "No" only shakes; nothing is written. To retire it delete `TUESDAY`,
-`tuesdayOwed`, `askTuesday`, the `.cp-tuesday` CSS and the `tuesday*` strings.
+Removed at Matt's request; story in `CLAUDE-HISTORY.md`.
 
 ## Quick chat (2026-10-14)
 

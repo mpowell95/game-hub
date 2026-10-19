@@ -599,3 +599,7 @@ mid-turn reopen). "No" only shakes. Nothing is written anywhere; delete `TUESDAY
 A chat button on every challenge match (`mpMountChat` in `js/ui.js`, torn down in `teardownEngine`; never in solo or vs the computer). Panel and bubbles are `js/match-chat-ui.js`, the data is `js/match-chat.js`, lazy-imported, so a solo player downloads nothing extra.
 - **Where it sits and why:** directly UNDER the Menu button (`CHAT_PLACE`, `right: 12px`, `top` = menu top + 52px). The HUD's second line ("You 10 · 10 Ana · Game 2 of 3 · Straight up") is centred and runs wide, so the default spot left of the Menu would sit on it. Measured with a 59px top inset: 390x844 at [334, 111, 44, 44], 320x568 at [264, 111, 44, 44]; no control overlaps it and `elementFromPoint` at its centre is the button. It lands on the far wall, never on the flick pad (the lower 60%).
 - **Node:** `cuppong/chat/<matchId>/<key>` (a sibling of `cuppong/games/<id>`, so `watchGame` and `validateGame` never see a chat line). It sends with the STORED side (`mp.side`), never the local-frame `'a'`.
+
+## The Tuesday question retired (2026-10-19)
+
+Matt asked for the joke gate removed. It asked King of Games `3VN33` to agree "Tuesdays > Mondays" before each turn against Matt `QZCC4` (added 2026-10-03). Deleted `TUESDAY`, `tuesdayOwed`, `askTuesday`, the `.cp-tuesday` CSS and the `tuesday*` strings. Nothing was ever written, so no data was touched.
