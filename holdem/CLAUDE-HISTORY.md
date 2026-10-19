@@ -629,3 +629,13 @@ in EN and ES (Last hand sheet scrolls inside itself on the short screen, no page
 leaderboard and the admin void against the local RTDB stand-in (void -> $25,000, "Under review"
 gone, raw ledger untouched), and the three-browser online game again (every device counts its own
 hands; host and guest replays agree).
+
+## 2026-10-19: Check / Fold works on your own turn too
+
+Matt: *"I should be able to click check/fold at anytime. If it's check to me, I should be able to
+check by clicking check/fold. If it's a raise to me, I should be able to fold by clicking
+check/fold."* The separate `.pk-cfbtn` was disabled on your own turn (2026-10-14, so a finger aimed
+at it could never land on CALL). It is now live then too and acts at once: `check` when
+`legal().canCheck`, otherwise `fold`; it never calls, so the original protection holds. On someone
+else's turn it still ticks/unticks the pre-action. The 350ms auto check/fold callback now also
+skips while a guest's move is `sending`, so a tap inside that window cannot send twice.

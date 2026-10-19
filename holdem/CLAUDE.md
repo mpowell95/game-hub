@@ -211,9 +211,10 @@ a biggest pot).
 - **Table settings gear** (`.pk-gear`, `overlay = 'tset'`, 2026-10-13): separate **Check / Fold
   button** (`settings.cfMode: 'split' | 'one'`, **ON by default since 2026-10-14**; the first
   build's `cfSplit` is ignored in storage), Computer speed, **Go to casino floor** (CASINO FLOOR =
-  table picker `screen = 'tiers'`; MENU = setup). The split button (`.pk-cfbtn`, 44px) is live ONLY
-  on someone else's turn (`this.canPre`) so a finger can never land on CALL (Matt hit Call after a
-  raise); on your turn the big button stays dead (`mode = 'idle'`) 350ms until the auto check/fold
+  table picker `screen = 'tiers'`; MENU = setup). The split button (`.pk-cfbtn`, 44px) is live AT ANY
+  TIME (Matt, 2026-10-19): someone else's turn = tick/untick (`this.canPre`); your turn = acts at
+  once, check if nothing is owed, else fold (`this.cfNow`). It never calls, so a raise cannot turn it
+  into CALL (Matt hit Call after a raise); on your turn the big button stays dead (`mode = 'idle'`) 350ms until the auto check/fold
   has gone (`this.autoDone`). Online the room-code pill sits at `left: 36px`. Solo end card:
   **Casino floor** / **Menu** over **Play again**.
 - A saved tournament dims the casino floor tables (`.is-held`) and `_newSolo` **refuses to deal over
