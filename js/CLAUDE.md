@@ -63,7 +63,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `game-stats.js` | the only door to stats storage (`loadStats`/`persist`); per-player keys; sub-counters (`grid`,`cc`,`es`,`nb`,`tt`,`db`,`bg`,`yz`,`dm`,`hc`,`sk`,`ah`,`wo`,`gl`…); `tt/db/bg/yz/dm/sk` store `tied`; bests Math.max-only; rate gate `tooFast`; pending queue; activity log |
 | `game-stats-global.js` | `window.__ghStats` for Monopoly Deal/Parchís; BD copy is verbatim-after-header (15-line header + marker), `tools/test-recorder-contract.mjs` |
 | `firebase-boot.js` | the ONE boot of the named `'stats'` app (`getStatsApp()`, returns `uid`) |
-| `stats-net.js` | `players/<statsId>` mirror, `usernames/`, `syncHealth()`, `writesAllowed()`, `applyDeviceReset()` |
+| `stats-net.js` | `players/<statsId>` mirror, `usernames/`, `syncHealth()`, `writesAllowed()`, `applyDeviceReset()`; `readPlayersOnce()` reuses the page's last `players/` read for 60 s (own sync clears it; callers get copies); pass `{fresh: true}` where a write follows the read (admin, code-owner lookup) |
 | `arcade-scores.js` | daily best is a MAP by local day, never a resetting value; no `highscores/` node (`tools/test-arcade-scores.mjs`) |
 | `hidden-players.js` | `isHiddenName`/`isHiddenDeviceId`; dependency-free; mirrored by hand in `tools/test-leaderboard-rank.mjs` on purpose |
 | `players-agg.js` | identity graph (code ∪ name). **A sub-counter needs an explicit branch here or is silently dropped.** Holds `SOLO`, `ARCHIVED_GAMES`, `NAME_ALIAS`, `DISPLAY_NAME` |
@@ -78,7 +78,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `device-report.js` | `gatherDeviceReport()` load-bearing (bug reports); `uploadDeviceReport()` dormant, keep |
 | `install-state.js` | dependency-free on purpose; checks both `display-mode` and `navigator.standalone` |
 | `error-log.js` | `gamehub.errorlog.v1`, installed at LOAD so it catches a failing game import |
-| `messages.js` | no hard delete; `myCode()`/`ensureAuthClaim()` reused by career-store and push; `logGameChat` (live-room chat copied into threads, NEVER the index, so no push) |
+| `messages.js` | `cachedThreads()` = last SUCCESSFUL inbox read (display only, then a fresh read; a failed read never blanks the list); no hard delete; `myCode()`/`ensureAuthClaim()` reused by career-store and push; `logGameChat` (live-room chat copied into threads, NEVER the index, so no push) |
 | `hub-messages.js` | `HUB_MESSAGES` append-only (never reuse an id or edit sent words); merged into `readMyThreads()` as the `HUB` row; `HUB` is never a player code; read receipt `players/<id>/hubMsgs` (report only, omitted when empty; `at: 0` = read before receipts existed) |
 | `mp-records.js` | READ-only: live-room games' `byDiff.mp` (via players-agg, all your devices) + `h2h` folded onto the opponent's code; `LIVE_GAMES` must match hub.js `LIVE_MP_GAMES` (`tools/test-challenges.mjs`) |
 | `challenges.js`, `challenge-life.js` | read-only fold of games' indexes (Cancel/Decline/Resign call the GAME's own writer via `endAction`/`endMatch`); `ANSWER_MS` 3 days; called-off rows stored `over:false` so push stays silent |

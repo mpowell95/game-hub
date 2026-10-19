@@ -212,7 +212,7 @@ let _players = {};
 async function readPlayers() {
   try {
     const net = await import('./stats-net.js');
-    return await net.readPlayersOnce();
+    return await net.readPlayersOnce({ fresh: true });
   } catch { return {}; }
 }
 

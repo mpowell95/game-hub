@@ -371,6 +371,29 @@ export async function readMyThreads() {
   return withHubRow(await readFirebaseThreads(me), hubThreadRow(me));
 }
 
+// THE LAST INBOX READ, so the Messages screen opens on it at once (2026-10-18; Matt: the screens
+// should not sit waiting on the network). The launcher's badge already reads the inbox on every
+// open. Set only by a read that SUCCEEDED (a failed read is [] and must never show as "no
+// messages"); this device's own seen/hide stamps patch it. In memory only; nothing stored.
+let _threadsMemo = null;          // { me, rows } - the Firebase rows, before the hub row is added
+let _threadsReads = 0;            // successful inbox reads on this page
+
+/** How many inbox reads have SUCCEEDED on this page: a read that leaves it unchanged failed. */
+export function threadReadCount() { return _threadsReads; }
+
+/** The last successful inbox read (with the Game Hub row), or null. Display only: always followed
+ *  by a fresh readMyThreads(). */
+export function cachedThreads() {
+  const me = myCode();
+  if (!me || !_threadsMemo || _threadsMemo.me !== me) return null;
+  return withHubRow(visibleThreads(_threadsMemo.rows.map((r) => Object.assign({}, r)), me), hubThreadRow(me));
+}
+
+function patchMemo(code, fields) {
+  if (!_threadsMemo) return;
+  _threadsMemo.rows = _threadsMemo.rows.map((r) => (r.code === code ? Object.assign({}, r, fields) : r));
+}
+
 async function readFirebaseThreads(me) {
   try {
     const boot = await ready();
@@ -378,8 +401,11 @@ async function readFirebaseThreads(me) {
     const { db, api } = boot;
     const snap = await api.get(api.ref(db, `messages/index/${me}`));
     const val = (snap && snap.exists()) ? snap.val() : null;
-    if (!val) return [];
-    return visibleThreads(Object.keys(val).map((k) => Object.assign({ code: k }, val[k])), me);
+    const all = val ? Object.keys(val).map((k) => Object.assign({ code: k }, val[k])) : [];
+    _threadsMemo = { me, rows: all };
+    _threadsReads += 1;
+    if (!all.length) return [];
+    return visibleThreads(all.map((r) => Object.assign({}, r)), me);
   } catch (err) {
     console.error('[messages] could not read the inbox', err);
     return [];
@@ -430,7 +456,9 @@ export async function markThreadSeen(otherCode, atMs) {
     const boot = await ready();
     if (!boot) return false;
     const { db, api } = boot;
-    await api.update(api.ref(db, `messages/index/${me}/${to}`), { seenAt: ms(atMs) || Date.now() });
+    const seenAt = ms(atMs) || Date.now();
+    await api.update(api.ref(db, `messages/index/${me}/${to}`), { seenAt });
+    patchMemo(to, { seenAt });
     return true;
   } catch (err) { console.error('[messages] could not mark the thread read', err); return false; }
 }
@@ -448,7 +476,9 @@ export async function hideThread(otherCode) {
     const boot = await ready();
     if (!boot) return false;
     const { db, api } = boot;
-    await api.update(api.ref(db, `messages/index/${me}/${to}`), { hiddenAt: Date.now() });
+    const hiddenAt = Date.now();
+    await api.update(api.ref(db, `messages/index/${me}/${to}`), { hiddenAt });
+    patchMemo(to, { hiddenAt });
     return true;
   } catch (err) { console.error('[messages] could not hide the thread', err); return false; }
 }
