@@ -160,8 +160,11 @@ dealt. Measured: 3,000 Easy deals, 0 fell back to an ordinary board, median 0.2 
 (desktop), so the 2.5 s fallback is not expected to fire even on a slow phone. Those plays count
 normally and are tallied in `ms.noGuess.easy`.
 
-**No-guess boards on Medium, Hard, Expert (2026-10-15, Matt's devices only).** Option "No guessing"
-(`noGuess` setting, shown only when `isAdminDevice()`). `E.generateNoGuess()` deals a board only if
+**No-guess boards on Medium, Hard, Expert: REMOVED 2026-10-16** (Matt: *"remove the 'No guessing'
+toggle"*). Only Easy deals no-guess now; the stored `noGuess` setting is still read and carried but
+deals nothing, and a paused NG board still finishes as dealt (with its NG tag). History, as it was:
+(2026-10-15, Matt's devices only) option "No guessing" (`noGuess` setting, shown only when
+`isAdminDevice()`). `E.generateNoGuess()` deals a board only if
 the engine's logic (`deduce()`: the cheap rules, then an exact count of every mine layout per group of
 numbers, then the mine count; node cap 200k) clears it from the first tap with no guess; it retries
 within 2.5 s, then keeps the last board and sets `noGuessOk: false`. Measured (desktop, 100 boards a
