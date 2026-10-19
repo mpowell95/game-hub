@@ -995,6 +995,7 @@ class Game {
     const preOn = this.precf === handKey;
     const split = this.settings.cfSplit;
     this.canPre = canPre;
+    this.cfNow = !!L;
     let mode = 'idle';
     if (meP && (meP.sitOut || meP.away) && !meP.out) mode = 'back';
     // Ticked and the turn has come round: it acts by itself in a moment, so the big button stays
@@ -1011,7 +1012,7 @@ class Game {
       this._later(() => {
         this.autoDone = k;
         const L2 = this.pub && this.pub.k === k ? legal(this.pub) : null;
-        if (L2 && L2.i === this.myIdx && this.precf === handKey) this._move({ a: L2.canCheck ? 'check' : 'fold' });
+        if (L2 && L2.i === this.myIdx && this.precf === handKey && !this.sending) this._move({ a: L2.canCheck ? 'check' : 'fold' });
         else if (this.pub) this._paintActions();
       }, 350);
     }
@@ -1050,12 +1051,13 @@ class Game {
     big.classList.toggle('is-pre', mode === 'precf');
     big.setAttribute('aria-pressed', mode === 'precf' ? String(preOn) : 'false');
     big.innerHTML = label;
-    // The separate Check / Fold button (setting): live only while it is someone else's turn, so the
-    // big button changing to CALL under a finger can never be the one that was aimed at.
+    // The separate Check / Fold button (setting): live at any time (Matt, 2026-10-19). On someone
+    // else's turn it ticks/unticks; on your own turn it acts at once, check if nothing is owed,
+    // otherwise fold. It never calls, so a raise landing under a finger cannot turn it into CALL.
     const cf = this.el.querySelector('.pk-cfbtn');
     if (cf) {
       cf.hidden = !split;
-      cf.disabled = !split || !canPre;
+      cf.disabled = !split || !(canPre || L);
       cf.classList.toggle('is-on', split && preOn);
       cf.setAttribute('aria-pressed', String(split && preOn));
       const cfSig = `${preOn}`;
@@ -1286,7 +1288,12 @@ class Game {
         if (mode === 'precf') return this._togglePre();
         return undefined;
       }
-      case 'precf': if (this.canPre) this._togglePre(); return undefined;
+      case 'precf': {
+        const L = this.cfNow ? legal(this.pub) : null;
+        if (L && L.i === this.myIdx && !this.sending) { this.autoK = this.autoDone = this.pub.k; return this._move({ a: L.canCheck ? 'check' : 'fold' }); }
+        if (this.canPre) this._togglePre();
+        return undefined;
+      }
       case 'tset': this.overlay = 'tset'; return this._renderOverlay();
       case 'cfsplit':
         this.settings.cfSplit = !this.settings.cfSplit;
