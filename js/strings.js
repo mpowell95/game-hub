@@ -604,6 +604,7 @@ export const STRINGS = {
     lb_sort_solved: 'Solved',
     lb_sort_cleared: 'Cleared',
     lb_sort_meters: 'Distance',
+    lb_ms_won_of: (p) => `${p.w} of ${p.n} won`,
     lb_played_count: (p) => `${p.n} played`, // a function because es needs '1 jugada'
     lb_wins_count: '{n} wins',
     lb_wins_unit: 'wins',
@@ -1351,6 +1352,7 @@ export const STRINGS = {
     lb_sort_solved: 'Resueltos',
     lb_sort_cleared: 'Despejados',
     lb_sort_meters: 'Distancia',
+    lb_ms_won_of: (p) => `${p.w} de ${p.n} ganadas`,
     lb_played_count: (p) => (Number(p.n) === 1 ? `${p.n} jugada` : `${p.n} jugadas`),
     lb_wins_count: '{n} victorias',
     lb_wins_unit: 'victorias',

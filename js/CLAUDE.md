@@ -395,7 +395,7 @@ All read-time display; nothing stored or migrated.
 `msBoardHTML()`: tabs All / Easy / Med / Hard / Expert (all four always), opening on All; no sort pills,
 no note. All = one number per person: hardest level SOLVED (fastest), else hardest level with a best %
 (`ms.bestClearedPct`, first written 2026-10-15), else a dash. A level tab = everyone who PLAYED it: times,
-then % high to low, then dashes. `youBadge()` returns '' everywhere (root rule: profile names, never
+then % high to low, then dashes. Under each number: "W of N won" (that level; All = every level; 2026-10-20). `youBadge()` returns '' everywhere (root rule: profile names, never
 "You"); the own row keeps its highlight.
 **Every other board, same shape** (`plainBoardHTML`, same day): tabs All + the difficulties the field
 played + MP (online wins) when anyone played online; one number per row (All: `boardMetricCmp` order,
