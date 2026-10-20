@@ -1305,11 +1305,7 @@ class Hub {
         const k = tab.dataset.tab;
         // The Multiplayer screen sits UNDER the bar (2026-10-18), so another tab puts it away first.
         if (k !== 'challenges') this._closeMultiplayer();
-        if (k === 'games') {
-          // Compact scrolls .hub, not the page (css/hub.css, "iPhone keyboard bug", 2026-10-20).
-          const box = this.root.querySelector('.hub');
-          for (const s of [box, window]) { try { s.scrollTo({ top: 0, behavior: 'smooth' }); } catch { try { s.scrollTo(0, 0); } catch {} } }
-        }
+        if (k === 'games') { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { window.scrollTo(0, 0); } }
         else if (k === 'challenges') this.openChallenges();
         else if (k === 'messages') this.el.messages.click();
         else if (k === 'leaderboard') this.el.leaderboard.click();

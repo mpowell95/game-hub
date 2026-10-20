@@ -420,8 +420,8 @@ layout's own button, so the two cannot drift. Announced by `compact-layout-2026-
 **Bottom-bar tips** (`_runTour`): the first time a device shows Compact, one "your turn"-style bubble per
 tab says what it is; seen-stamp `compact-tour-2026-10-17` (an ANNOUNCEMENTS entry with `tour: true`, never a
 popup) so Admin > Announcements lists who has seen it. The popup was redesigned under the SAME id (not resent).
-**The page never scrolls in Compact; `.hub` does (2026-10-20).** An iOS 26 bug (after the keyboard closes)
-put the tab bar and Leaderboard halfway up the screen on page scroll. Do not move scrolling back to the page.
+**The PAGE scrolls in Compact (2026-10-20). Never lock `html`/`body` to the screen height** (v1208 tried it to dodge an
+iOS 26 keyboard bug; on Matt's iPhone it left the tab bar ~65pt above the bottom). Story: `CLAUDE-HISTORY.md`.
 
 ## The profile page's structure (2026-08-31)
 
