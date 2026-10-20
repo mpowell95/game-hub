@@ -1280,3 +1280,13 @@ The gap (~45% of the screen) is about a keyboard's height. One forum reply also 
 Reduce Motion + Prefer Cross-Fade Transitions. Fix: in Compact the page itself never scrolls
 (`html`/`body` `overflow: hidden`), `.hub` is the scroller (`height: 100dvh`); the Games tab
 scrolls `.hub` to the top. Comfortable is unchanged. Not verified on an iPhone by the session.
+
+**Reverted the same day (v1209).** Matt's screenshot on v1208 (12:19, fresh build): the tab bar sat about
+65pt above the bottom of the screen, page background below it, on a fresh load with no keyboard used.
+A page locked to the screen height (`html`/`body` `height: 100%; overflow: hidden`, `.hub` `100dvh`)
+hits a different iOS 26 bug: Apple's Safari 26.1 notes list a fix for "a bottom gap appearing on
+layouts with viewport-sized fixed containers"; Framework7 users reported the same bottom-tabs gap,
+fixed for them in iOS 26.2 beta 3. So the page scrolls again (the v1207 layout, which put the bar at
+the true bottom). The keyboard bug (bar halfway up after typing) can come back on iOS versions that
+still have it; no tested web workaround was found. Do not lock the page again without testing on
+Matt's iPhone.
