@@ -673,7 +673,8 @@ class FlickSoccerUI {
     if (this.phase === 'cpuaim') {
       const k = this.reduce ? 1 : Math.min(1, (this.clock - c.aimAt) / CPU_AIM_SECS);
       const sh = c.shot;
-      this.aim = { i: sh.i, dx: sh.dx, dy: sh.dy, power: sh.power * k, contact: null, arrow: true };
+      // A replayed online flick follows the match's aiming help (Matt, 2026-10-20: no arrow on Hard).
+      this.aim = { i: sh.i, dx: sh.dx, dy: sh.dy, power: sh.power * k, contact: null, arrow: c.replay ? this._aids().arrow : true };
       if (k >= 1) {
         this.aim = null;
         this.cpu = null;
@@ -1477,12 +1478,16 @@ class FlickSoccerUI {
     const dx = px / pl, dy = py / pl;
     const power = Math.min(1, (len - dead) / (full - dead));
     const amp = Math.max(0, Math.min(1, (reach - full) / (reach * 0.5)));   // how much the edge squeezes this pull
-    // Vs the computer: its difficulty. A challenge: the aiming help its sender chose (2026-10-15).
-    const level = this.mode === 'cpu' ? this.diff : this.mode === 'mp' && this.mp && this.mp.game ? this.mp.game.aids : 'medium';
-    const aids = AIDS[level] || AIDS.medium;
+    const aids = this._aids();
     const contact = aids.guide ? aimContact(m.b, d.i, dx, dy) : null;
     const path = contact && contact.hit === BALL ? ballPath(m.b, d.i, contact, 30 + 90 * power) : null;
     this.aim = { i: d.i, dx, dy, power, fx: fp.x, fy: fp.y, contact, path, arrow: aids.arrow, amp, gap: full - len, len };
+  }
+
+  /** Vs the computer: its difficulty. A challenge: the aiming help its sender chose (2026-10-15). */
+  _aids() {
+    const level = this.mode === 'cpu' ? this.diff : this.mode === 'mp' && this.mp && this.mp.game ? this.mp.game.aids : 'medium';
+    return AIDS[level] || AIDS.medium;
   }
 
   _pointerUp(e, cancel) {

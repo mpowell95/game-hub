@@ -171,8 +171,10 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   touch and a ghost circle there; the **bounce line** (`ballPath` in `engine.js`) is where the ball
   heads from that touch, reflected off the walls up to twice, ending at the first disc in its way or
   in a goal mouth, longer the harder the pull. It is a guide for the eye, not a prediction: no spin,
-  friction or follow-through, and it is never on the physics path. The computer's own aim (and a
-  replayed online flick) always draws its arrow, so you can see what it did.
+  friction or follow-through, and it is never on the physics path. The computer's own aim always draws its
+  arrow. **A replayed online flick follows the match's aiming help (2026-10-20)**, Matt: the arrow
+  showed in King of Games' Hard replay though Hard hides it while aiming; now Hard replays show the
+  power ring only (`_aids()` in `ui.js`).
 - **The edge zoom (2026-10-13)**, Matt (with a screen recording of a red disc on the left edge he
   could not pull back to full strength): *"If a player/tile/piece thing is too close to the edge of
   the phone, it's impossible to pull back far enough to achieve full power. Other games achieve this
