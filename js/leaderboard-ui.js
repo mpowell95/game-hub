@@ -517,7 +517,11 @@ function msBoardHTML(list) {
   const cards = rows.length
     ? `<div class="lb-plist is-board">${rows.map((g) => {
         const h = tier == null ? msHeadline(g) : { tier: null, c: msCellAt(g, tier) };
-        const big = { cls: 'lb-msval', val: msCellHTML(h.c), unit: t('lb_played_count', { n: playsAtTier(g, ['minesweeper'], tier) }) };
+        // Wins on that level (All: every level) beside the plays, one line (Matt, 2026-10-20: "how
+        // many times a person has won on a given difficulty without making it too crowded").
+        const n = playsAtTier(g, ['minesweeper'], tier);
+        const w = winsAtTier(g, ['minesweeper'], tier);
+        const big = { cls: 'lb-msval', val: msCellHTML(h.c), unit: tx('lb_ms_won_of', `${w} of ${n} won`, { w, n }) };
         return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', tierPillHTML(h.tier), '');
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf('minesweeper') }));
