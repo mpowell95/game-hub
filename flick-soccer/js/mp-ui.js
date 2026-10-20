@@ -9,7 +9,7 @@
 import { makeT, getLang } from '../../js/i18n.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { STRINGS } from './strings.js';
-import { lineupsRowHTML, aidsRowHTML } from './ui.js';
+import { lineupsRowHTML, aidsRowHTML, goalsRowHTML } from './ui.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
 const t = makeT(STRINGS);
@@ -199,7 +199,8 @@ export function challengeTo(ui, MP, them) { confirm(ui, MP, them); }
 function confirm(ui, MP, them) {
   const body = page(ui, t('mp_new_ch'), 'home', `
     ${whoHTML(them)}
-    <p class="fs-mp-terms">${esc(t('mp_terms_they', { n: ui.settings.goals }))}</p>
+    <p class="fs-mp-terms">${esc(t('mp_they_kick'))}</p>
+    <div class="fs-field"><span class="fs-label">${esc(t('goals'))}</span>${goalsRowHTML(ui.settings.goals)}</div>
     <div class="fs-field"><span class="fs-label">${esc(t('aim_help'))}</span>${aidsRowHTML(ui.settings.aimHelp)}</div>
     <div class="fs-field"><span class="fs-label">${esc(t('mp_your_lineups'))}</span>${lineupsRowHTML(ui.settings)}</div>
     <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-mp="send">${esc(t('mp_send_ch'))}</button>

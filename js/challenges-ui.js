@@ -44,6 +44,7 @@ let _view = 0;                    // bumped on every render; an async render tha
 let _cache = null;                // { key, rows, failed }
 let _liveCache = null;
 const keyOf = (ids) => ids.slice().sort().join(',');
+const FLASH_MS = 6000;               // how long the "Challenge cancelled." line stays up
 
 /** Read the challenge lists ahead of a tap, so the screen opens with them. Never throws. */
 export async function prime(gameIds) {
@@ -356,7 +357,7 @@ export async function openChallenges(opts = {}) {
   _onClose = typeof opts.onClose === 'function' ? opts.onClose : null;
   const gen0 = _view;
   const hit = _cache && _cache.key === keyOf(ids) ? _cache : null;
-  const S = { rows: hit ? hit.rows : null, failed: hit ? hit.failed : [], live: _liveCache, view: 'home', opp: null, people: null, flash: '' };
+  const S = { rows: hit ? hit.rows : null, failed: hit ? hit.failed : [], live: _liveCache, view: 'home', opp: null, people: null, flash: null };
 
   const open = (game, id) => { closeChallenges(); if (opts.onOpen) opts.onOpen(game, id); };
   const challenge = (game, them) => { closeChallenges(); if (opts.onChallenge) opts.onChallenge(game, them); };
@@ -401,12 +402,12 @@ export async function openChallenges(opts = {}) {
     for (const b of root.querySelectorAll('[data-game][data-id]')) b.addEventListener('click', () => open(b.dataset.game, b.dataset.id));
     for (const b of root.querySelectorAll('.cx-more')) b.addEventListener('click', (e) => { e.stopPropagation(); openMenu(b); });
   };
-  /** One line at the top of the screen saying what just happened (a cancel, a resignation), once. */
+  /** One line at the top of the screen saying what just happened (a cancel, a resignation). It
+   *  outlives repaints for FLASH_MS: the cancel's own index write repaints the list a moment later,
+   *  which used to wipe the line before anyone saw it (Matt, 2026-10-20: "no confirmation"). */
   const flashHTML = () => {
-    if (!S.flash) return '';
-    const html = `<p class="cx-flash" role="status">${esc(S.flash)}</p>`;
-    S.flash = '';
-    return html;
+    if (!S.flash || Date.now() > S.flash.until) return '';
+    return `<p class="cx-flash" role="status">${esc(S.flash.text)}</p>`;
   };
   const records = () => mergeRecords(summarize(S.rows || []), S.live || { byGame: {}, people: [] });
 
@@ -608,12 +609,16 @@ export async function openChallenges(opts = {}) {
       const yes = card.querySelector('[data-role="yes"]');
       yes.addEventListener('click', async () => {
         yes.disabled = true;
+        const wait = t('cx_end_wait');
+        yes.textContent = wait === 'cx_end_wait' ? '…' : wait;   // a new key: an older cached dictionary lacks it
         const res = await endMatch(game, id, action);
         if (!current(gen)) return;
         if (res && res.ok) {
           // A resign on a match that turned out to be unanswered was called off instead (mp.js).
           const why = res.cancelled ? String((res.game && res.game.over && res.game.over.why) || (action === 'decline' ? 'declined' : 'cancelled')) : '';
-          S.flash = why ? t(why === 'declined' ? 'cx_end_done_decline' : 'cx_end_done_cancel') : t('cx_end_done_resign', { name });
+          S.flash = { text: why ? t(why === 'declined' ? 'cx_end_done_decline' : 'cx_end_done_cancel') : t('cx_end_done_resign', { name }),
+            until: Date.now() + FLASH_MS };
+          setTimeout(repaint, FLASH_MS + 50);
           // The list catches up from the game's own watch; until then, show it as ended here.
           S.rows = (S.rows || []).map((r) => (r.game === game && r.id === id
             ? { ...r, state: why ? 'cancelled' : 'done', ended: why, result: why ? null : 'lost', resigned: !why,

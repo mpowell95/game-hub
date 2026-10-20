@@ -533,6 +533,8 @@ verified by re-read, deleting nothing.
 - Called-off rows are stored `over: false, yourTurn: false, ended: <why>` **on purpose**: the
   deployed push functions do not know "cancelled", so this shape sends no push. Rows also carry
   `open`, `expires`, `sent`.
+- The "Challenge cancelled." line stays up 6 s across repaints (`FLASH_MS`, 2026-10-20): the cancel's own
+  index write repainted the list and wiped it, so Matt saw no confirmation.
 - Tests: `tools/test-challenges.mjs` plus each game's `test-*-mp.mjs` / `tools/test-skee-challenge.mjs`.
 
 ## Skeeball challenges (2026-09-24)
