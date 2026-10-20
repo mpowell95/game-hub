@@ -14,8 +14,8 @@ Our name is **Flick Soccer** (es *Fútbol de Chapas*, the Spanish bottle-cap gam
 
 - In-hub `module: '../flick-soccer/js/ui.js'`, **immersive** (a full-bleed portrait pitch). Hub id
   `flick-soccer` (the folder); stats id `flicksoccer`. Prefix `.fs-root` / `.fs-`.
-- **Admin only** (`devOnly: true`, no `released` date: that is the New pill's input and must be the
-  day Matt releases it from the admin page). Its `GAME_META` row, My Stats tab and title strings
+- **Released 2026-10-20** (`released: '2026-10-20'`, no `devOnly`; Matt had switched it live on the
+  admin page first). Before that it was admin only. Its `GAME_META` row, My Stats tab and title strings
   shipped with the game, so every result recorded before release shows the moment it is released.
 - `isInProgress()` is always `false`: the match is saved every time the pitch comes to rest
   (`gamehub.flicksoccer.save.v1`) and the setup screen offers **Continue match**. Leaving while a
