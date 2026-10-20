@@ -19,16 +19,18 @@
 //   archeryTurnPush archery/index/<code>/<id>        an Archery challenge, your turn, the end (2026-10-14)
 //   chinchonTurnPush chinchon/index/<code>/<id>      a Chinchón challenge, your turn, the end (2026-10-18)
 //   escobaTurnPush  escoba/index/<code>/<id>         an Escoba challenge, your turn, the end (2026-10-18)
+//   turnReminderPush  every hour: "Reminder: your turn vs X" once a turn has waited 24 h (2026-10-20)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
 import { onValueWritten, onValueCreated } from 'firebase-functions/v2/database';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideReminder, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
 
@@ -177,4 +179,34 @@ export const escobaTurnPush = onValueWritten({ ref: '/escoba/index/{code}/{id}',
   const after = event.data.after.exists() ? event.data.after.val() : null;
   const note = decideEscoba({ code, id, before, after });
   if (note) await sendTo(getDatabase(), code, note, `escoba-${id}`, { game: 'escoba', match: id });
+});
+
+// THE 24-HOUR REMINDER (2026-10-20). Hourly, reads every challenge game's index (a few small nodes)
+// and reminds whoever has had a turn waiting 24 hours, once per turn (decide.js decideReminder).
+// What was sent is remembered in its OWN node, pushReminders/<code>/<node>~<id> = the row's
+// `updated`, never on the index row: a write there would re-run that game's turn trigger. Not player
+// data (a delivery log); clients never read it (root rules are false). Same tag as the game's turn
+// notification, so the reminder replaces it on the phone instead of stacking.
+export const turnReminderPush = onSchedule({
+  schedule: 'every 60 minutes', region: OPTS.region, secrets: OPTS.secrets, retryCount: 0, maxInstances: 1,
+}, async () => {
+  const db = getDatabase();
+  const now = Date.now();
+  const sent = (await db.ref('pushReminders').get()).val() || {};
+  for (const g of REMINDER_GAMES) {
+    let index;
+    try { index = (await db.ref(`${g.node}/index`).get()).val() || {}; }
+    catch (err) { logger.error('reminder: could not read index', { node: g.node, err: String(err) }); continue; }
+    for (const code of Object.keys(index)) {
+      const rows = index[code] || {};
+      for (const id of Object.keys(rows)) {
+        const key = `${g.node}~${id}`;
+        const note = decideReminder({ g, id, row: rows[id], sentFor: sent[code] && sent[code][key], now });
+        if (!note) continue;
+        // Stamp FIRST: a failed send is not retried, a double reminder is worse than a missed one.
+        await db.ref(`pushReminders/${code}/${key}`).set(note.updated);
+        await sendTo(db, code, note, `${g.tag}-${id}`, g.noMatch ? { game: g.game } : { game: g.game, match: id });
+      }
+    }
+  }
 });

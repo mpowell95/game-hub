@@ -9,7 +9,8 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, isActive, ACTIVE_WINDOW_MS } from '../functions/decide.js';
+import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, isActive, ACTIVE_WINDOW_MS,
+  decideReminder, REMINDER_GAMES, REMIND_AFTER_MS, REMIND_UNTIL_MS } from '../functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -284,6 +285,32 @@ check('opening the hub, or coming back to it, clears the notifications already s
   check('flick soccer: your own winning shot does not notify you', decideFlickSoccer({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
   check('flick soccer: Spanish wording', decideFlickSoccer({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Fútbol de Chapas');
   check('flick soccer: the trigger watches flicksoccer/index and names the match', /ref: '\/flicksoccer\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'flick-soccer', match: id \}/.test(fnSrc));
+}
+
+
+console.log('\n24-hour reminder (2026-10-20)');
+{
+  const H = 60 * 60 * 1000;
+  const now = 1_800_000_000_000;
+  const g = REMINDER_GAMES.find((x) => x.node === 'darts');
+  const row = (o = {}) => ({ name: 'Anita Bonita', updated: now - 25 * H, yourTurn: true, over: false, ...o });
+  const r = (o, sentFor = null) => decideReminder({ g, id: 'm1', row: row(o), sentFor, now });
+  check('reminder: 25 h on your turn sends one', r({}) && r({}).text('en').body === 'Reminder: your turn vs Anita Bonita');
+  check('reminder: Spanish wording and title', r({}).text('es').body === 'Recordatorio: te toca contra Anita Bonita' && r({}).text('es').title === 'Dardos');
+  check('reminder: under 24 h, nothing', r({ updated: now - REMIND_AFTER_MS + 1 }) === null);
+  check('reminder: 72 h or older, nothing (old matches never wake up)', r({ updated: now - REMIND_UNTIL_MS }) === null);
+  check('reminder: their turn, nothing', r({ yourTurn: false }) === null);
+  check('reminder: finished, nothing', r({ over: true }) === null);
+  check('reminder: called off, nothing', r({ ended: 'cancelled' }) === null);
+  check('reminder: expired, nothing', r({ expires: now - 1 }) === null);
+  check('reminder: not yet expired still sends', r({ expires: now + H }) !== null);
+  check('reminder: already reminded about this turn, nothing', r({}, now - 25 * H) === null);
+  check('reminder: a new move since the last reminder sends again', r({ updated: now - 30 * H }, now - 60 * H) !== null);
+  check('reminder: no time on the row, nothing', r({ updated: 0 }) === null);
+  check('reminder: every challenge game has a turn trigger on the node it reads',
+    REMINDER_GAMES.length === 8 && REMINDER_GAMES.every((x) => fnSrc.includes(`ref: '/${x.node}/index/{code}/`)));
+  check('reminder: the scheduled function exists and stamps its own node, never the index row',
+    /export const turnReminderPush = onSchedule\(/.test(fnSrc) && /pushReminders\/\$\{code\}\/\$\{key\}/.test(fnSrc));
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
