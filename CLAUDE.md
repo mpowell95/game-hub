@@ -470,6 +470,8 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **24-hour reminder (2026-10-20, Matt: "for every game")**: `turnReminderPush` (hourly `onSchedule`) sends "Reminder: your
   turn vs X" once per turn when a challenge row has waited 24-72 h (`decideReminder`, `REMINDER_GAMES` in
   `functions/decide.js`). Sent-stamps live in `pushReminders/<code>/<node>~<id>` (server-only), NEVER on the index row.
+  **OUTSTANDING (2026-10-20): not deployed.** The workflow failed at Sign in (`FIREBASE_SERVICE_ACCOUNT` secret
+  is missing); Matt was given the manual deploy steps. Close this line when he confirms.
 - **The VAPID private key is a Firebase secret; never in this repo.** Its public half is in
   `js/push.js` and `functions/index.js`; `tools/test-push.mjs` fails if they differ.
 - iPhone: only the Home Screen app (iOS 16.4+) can receive them; `pushState()` returns `'install'`.
