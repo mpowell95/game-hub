@@ -25,7 +25,7 @@ const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.archery.v1';
 const SAVE_KEY = 'gamehub.archery.save.v1';
 const FIRSTS = ['alt', 'me', 'them'];
-const HIT_POP = 0.6;           // seconds from the cut to the target to the number popping
+const HIT_POP = 0.3;           // seconds from an arrow hitting to its number popping (Matt, 2026-10-20: was 0.6, read as a freeze)
 const HIT_HOLD = 2.0;          // seconds on the target after a hit
 const DRAW_T = 0.25;           // seconds to bring the bow up (the recording, frame by frame)
 const PANIC_T = 0.6;           // seconds of shaking before a panicked arrow goes
@@ -706,8 +706,16 @@ class ArcheryUI {
   /** An arrow comes in to the close-up at `p`, then `done()`. */
   _incoming(seat, p, done) {
     const color = this._colorOf(seat);
-    const T = this.reduce ? 0.01 : 0.28;
+    // Matt, 2026-10-20: at 0.28 s it seemed to appear from nowhere; now it flies in with a trail.
+    const T = this.reduce ? 0.01 : 0.5;
     this._inc = { p, color, t: 0, T, done };
+  }
+  /** An arrow has just hit: it is in the target (quivering) at once; its number comes with _landed. */
+  _preStick(p, color, dir) {
+    // The last arrow's number goes as this one hits, so it is never read as this one's.
+    for (const old of this.fx.querySelectorAll('.ar-pop')) old.remove();
+    this._pendingHit = performance.now();
+    this.r.setStuck([...this.turnArrows, { x: p.x, y: p.y, color, dir, hit: this._pendingHit }]);
   }
 
   /** An arrow has landed (any shooter): stick it, pop its number, fill its tile, count the total. */
@@ -715,7 +723,8 @@ class ArcheryUI {
     const m = this.match;
     const s = res ? res.s : scoreAt(p.x, p.y);
     const st = res && (res.event === 'round' || res.event === 'tie') ? m.stage - 1 : m.stage;
-    this.turnArrows.push({ x: p.x, y: p.y, color: this._colorOf(seat), dir });
+    this.turnArrows.push({ x: p.x, y: p.y, color: this._colorOf(seat), dir, hit: this._pendingHit || 0 });
+    this._pendingHit = 0;
     this.r.setStuck(this.turnArrows);
     if (this.tileView && this.tileView.seat === seat) this.tileView.vals.push(s);
     else this._tiles(seat, st, [s]);
@@ -751,17 +760,8 @@ class ArcheryUI {
       }
     }
     this.fx.appendChild(el);
-    // The ring it scored flashes yellow (the recording), seen at the close-up's angle.
-    if (onBoss && s > 0) {
-      const rr = (11 - s) / 10;
-      const c = this.r.faceToScreen(0, 0), ex = this.r.faceToScreen(rr, 0), ey = this.r.faceToScreen(0, rr);
-      const rx = Math.abs(ex.x - c.x), ry = Math.abs(ey.y - c.y);
-      const ring = document.createElement('div');
-      ring.className = 'ar-ringflash' + (this.reduce ? ' is-still' : '');
-      Object.assign(ring.style, { left: (c.x - rx).toFixed(1) + 'px', top: (c.y - ry).toFixed(1) + 'px', width: (2 * rx).toFixed(1) + 'px', height: (2 * ry).toFixed(1) + 'px' });
-      this.fx.appendChild(ring);
-      setTimeout(() => ring.remove(), 950);
-    }
+    // The ring it scored flashes yellow (the recording), drawn on the face itself (render.js).
+    if (onBoss && s > 0) this.r.flashRing(s);
   }
 
   // --- your shot ---------------------------------------------------------------------------------
@@ -856,7 +856,7 @@ class ArcheryUI {
     this.r.setView('close');
     // The arrow stays in the target from the moment it hits; the number pops HIT_POP later. (It used
     // to be left out here and only stuck with the number, so it vanished as it hit: Matt, 2026-10-20.)
-    this.r.setStuck([...this.turnArrows, { x: sh.hit.x, y: sh.hit.y, color: this._colorOf(sh.seat), dir }]);
+    this._preStick(sh.hit, this._colorOf(sh.seat), dir);
     this.phase = 'hit';
     this._after(HIT_POP, () => {
       if (this.mode === 'practice') { this._practiceLanded(sh, dir); return; }
@@ -906,7 +906,8 @@ class ArcheryUI {
     const s = scoreAt(sh.hit.x, sh.hit.y);
     p.arrows.push({ x: sh.hit.x, y: sh.hit.y, s });
     p.sum += s; p.n++;
-    this.turnArrows.push({ x: sh.hit.x, y: sh.hit.y, color: ARROW_COLORS.me, dir });
+    this.turnArrows.push({ x: sh.hit.x, y: sh.hit.y, color: ARROW_COLORS.me, dir, hit: this._pendingHit || 0 });
+    this._pendingHit = 0;
     this.r.setStuck(this.turnArrows);
     this.tileView.vals.push(s);
     this._pop(sh.hit, s);
@@ -1370,7 +1371,12 @@ class ArcheryUI {
     if (inc) {
       inc.t += dt;
       this.r.setIncoming(inc.p, inc.color, inc.t / inc.T);
-      if (inc.t >= inc.T) { this._inc = null; this.r.clearIncoming(); inc.done(); }
+      if (inc.t >= inc.T) {
+        this._inc = null;
+        this.r.clearIncoming();
+        this._preStick(inc.p, inc.color, this.r.incomingDir());
+        this._after(HIT_POP, inc.done);
+      }
     }
   }
 
@@ -1476,7 +1482,8 @@ class ArcheryUI {
    *  the view there (Matt's phone recording: a "10" was left floating over the round banner). */
   _lineView() {
     this.r.setView('line');
-    if (this.fx) for (const el of this.fx.querySelectorAll('.ar-pop, .ar-ringflash')) el.remove();
+    this.r.clearFlash();
+    if (this.fx) for (const el of this.fx.querySelectorAll('.ar-pop')) el.remove();
   }
 
   /** The colour of the arrow on the bow: the shooter's. */
