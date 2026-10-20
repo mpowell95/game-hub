@@ -41,11 +41,14 @@ export const ARROW_COLORS = { me: '#1f6fe5', them: '#e0362b', plain: '#f0c419' }
 const FLIGHT_T = 0.8;                           // seconds, release to hit (the recording, at 30 fps)
 // The arrow leaves from where the bow held it: its point on the sight (Matt, 2026-10-20: it used to
 // jump up and right the moment he let go). FLIGHT_D0 m in front of the eye, rising FLIGHT_ARC of the
-// screen's half-height mid-flight. The camera glides at a steady speed, then slows to a stop over the
-// last CAM_EASE of the flight (it used to stop dead, which read as a jump onto the close-up).
+// screen's half-height mid-flight. The camera glides at a steady speed, then over the last CAM_EASE
+// of the flight slows to CAM_END of that speed before it stops (stopping dead from full speed read as
+// a jump onto the close-up; easing to nothing, Matt: "slows down way too much before hitting").
+// The arrow flies at one steady speed the whole way (about 34 m/s down the lane); as the camera eases
+// off, the arrow pulls away from it, so it hits at full speed.
 const FLIGHT_D0 = 2.6;
 const FLIGHT_ARC = 0.05;
-const CAM_EASE = 0.3;
+const CAM_EASE = 0.2, CAM_END = 0.15;
 const INCOMING_RUN = 3.5;                       // m: how far out a replay arrow is first drawn
 const WOBBLE_T = 0.6, WOBBLE_A = 0.07;          // s, rad: an arrow quivering in the target after it hits
 const FLASH_T = 0.9;                            // s: the scored ring lit on the face
@@ -514,12 +517,19 @@ export class Renderer {
     const trail = this._trail();
     this.loose.add(arrow, trail.mesh);
     this.fc = this.fc || new THREE.PerspectiveCamera();
-    this.flight = { H, dIn, n0, d0, arrow, trail, u: 0 };
+    // The glide's length and how far in front of the camera the hit is when it stops: the arrow's
+    // depth in front of the camera is worked out from them so its own speed never changes.
+    this._camAt(1, this.fc);
+    const gEnd = -(H.clone().applyMatrix4(this.fc.matrixWorldInverse).z);
+    this.flight = { H, dIn, n0, d0, arrow, trail, u: 0, glide: EYE.distanceTo(CLOSE_POS), gEnd };
   }
-  /** The flight camera at u, into `cam`: a steady glide off the line, slowing to a stop at the hit. */
+  /** The flight camera at u, into `cam`: a steady glide off the line, easing off just before the hit. */
+  _glideAt(u) {
+    const E = CAM_EASE, F = CAM_END, v = 1 / (1 - E + (E * (1 + F)) / 2), q = Math.max(0, u - (1 - E));
+    return v * (Math.min(u, 1 - E) + q - ((1 - F) * q * q) / (2 * E));
+  }
   _camAt(u, cam) {
-    const E = CAM_EASE, v = 1 / (1 - E / 2), q = Math.max(0, u - (1 - E));
-    const c = v * (Math.min(u, 1 - E) + q - (q * q) / (2 * E));
+    const c = this._glideAt(u);
     cam.position.copy(EYE).lerp(CLOSE_POS, c);
     cam.lookAt(LINE_LOOK.clone().lerp(CLOSE_LOOK, c));
     cam.updateMatrixWorld();
@@ -535,10 +545,10 @@ export class Renderer {
     const hc = f.H.clone().applyMatrix4(fc.matrixWorldInverse);       // the hit, camera space
     const ty = Math.tan((fc.fov * Math.PI) / 360), tx = ty * fc.aspect;
     const hn = new THREE.Vector2(hc.x / (-hc.z * tx), hc.y / (-hc.z * ty));
-    const e = u * u * (3 - 2 * u);
-    const n = f.n0.clone().lerp(hn, e);
+    const n = f.n0.clone().lerp(hn, u * u);          // speeding up across the screen, never easing in
     n.y += FLIGHT_ARC * Math.sin(Math.PI * u);
-    const d = FLIGHT_D0 + (-hc.z - FLIGHT_D0) * Math.pow(u, 1.5);
+    // Arrow distance down the lane is linear in u; minus where the camera has got to = its depth.
+    const d = FLIGHT_D0 + (f.glide + f.gEnd - FLIGHT_D0) * u - f.glide * this._glideAt(u);
     return new THREE.Vector3(n.x * d * tx, n.y * d * ty, -d).applyMatrix4(fc.matrixWorld);
   }
   /** The way the arrow points at u: as the bow held it, coming round to arrive from the right (dIn),
