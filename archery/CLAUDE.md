@@ -74,9 +74,11 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 Touch and hold: the bow comes up in 0.25 s (`DRAW_T`). Drag to aim (about a ring per 6 px). Let go:
 the bow kicks 0.033 s (`JOLT_T`, two frames), then the flight, 0.8 s (`FLIGHT_T`). Matt, 2026-10-20
 (changed from the 2026-10-15 timing): the arrow starts ON the sight, where the bow pointed it, and
-flies away in a shallow arc (`FLIGHT_D0`, `FLIGHT_ARC`; it used to jump up and right on release); the
-camera glides at a steady speed and slows to a stop over the last 30% (`CAM_EASE`; stopping dead read
-as a jump onto the close-up). Framed from the camera, not simulated (`render.js` `_camAt` / `_tipAt`).
+flies away in a shallow arc (`FLIGHT_D0`, `FLIGHT_ARC`; it used to jump up and right on release) at
+ONE steady speed, about 34 m/s, into the target (Matt: it "slows down way too much before hitting";
+it fell from 50 to 4 m/s). The camera glides at a steady speed and eases off over the last 20% to 15%
+of that (`CAM_EASE`, `CAM_END`; stopping dead read as a jump onto the close-up); the arrow's depth is
+worked out from the camera's glide so the camera's easing never slows the arrow (`_glideAt`). Framed from the camera, not simulated (`render.js` `_camAt` / `_tipAt`).
 **Every arrow is stuck the moment it hits and quivers** (`_preStick`, `WOBBLE_T`); the last number
 clears then; its own number pops `HIT_POP` 0.3 s later with stars, and the ring it scored lights up
 yellow ON the face, under the arrows (`render.js flashRing`; it used to be a screen overlay that popped
