@@ -535,3 +535,48 @@ export function decideEscoba({ code, id, before, after }) {
   if (before.yourTurn && !before.over) return null;             // it was already your turn
   return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
 }
+
+// --- THE 24-HOUR REMINDER (2026-10-20) ------------------------------------------------------------
+// Matt: "Anita is taking a long time to play me back ... have one send automatically", "for every
+// game". A scheduled function (index.js turnReminderPush, hourly) reads every challenge game's index
+// and asks this, per row: has it been this player's turn for 24 hours? ONE reminder per turn: the row's
+// `updated` (the time of the last move) is remembered under pushReminders/<code>/<node>~<id> once
+// sent, and a new move gives a new `updated`. Only inside [24 h, 72 h): a match that went quiet longer
+// ago (old matches from before the 3-day expiry, 2026-10-13) never wakes anybody up on the first run.
+// `noMatch`: that game's own turn push opens the game, not the match (as in index.js).
+// Every challenge game writes the same row shape: {name, updated, yourTurn, over, ended?, expires?}.
+export const REMIND_AFTER_MS = 24 * 60 * 60 * 1000;
+export const REMIND_UNTIL_MS = 72 * 60 * 60 * 1000;
+export const REMINDER_GAMES = [
+  { node: 'hoops', game: 'hoops4', tag: 'hoops', noMatch: true, en: 'Connect 4 Hoops', es: 'Connect 4 Hoops' },
+  { node: 'skeeChallenges', game: 'skeeball', tag: 'skee', noMatch: true, en: 'Skeeball', es: 'Skeeball' },
+  { node: 'cuppong', game: 'cuppong', tag: 'cuppong', en: 'Cup Pong', es: 'Cup Pong' },
+  { node: 'darts', game: 'darts', tag: 'darts', en: 'Darts', es: 'Dardos' },
+  { node: 'flicksoccer', game: 'flick-soccer', tag: 'flicksoccer', en: 'Flick Soccer', es: 'Fútbol de Chapas' },
+  { node: 'archery', game: 'archery', tag: 'archery', en: 'Archery', es: 'Tiro con arco' },
+  { node: 'chinchon', game: 'chinchon', tag: 'chinchon', en: 'Chinchón', es: 'Chinchón' },
+  { node: 'escoba', game: 'escoba', tag: 'escoba', en: 'Escoba', es: 'Escoba' },
+];
+const REMIND_TEXT = {
+  en: (w) => `Reminder: your turn vs ${w}`,
+  es: (w) => `Recordatorio: te toca contra ${w}`,
+};
+
+/** `row` is one index row, `sentFor` the `updated` already reminded about (or null). Returns null
+ *  or a note for sendTo(). PURE. */
+export function decideReminder({ g, id, row, sentFor, now = Date.now() }) {
+  if (!g || !id || !row || typeof row !== 'object') return null;
+  if (!row.yourTurn || row.over || row.ended) return null;
+  const at = Number.isFinite(+row.updated) ? +row.updated : 0;
+  if (!(at > 0)) return null;
+  const age = now - at;
+  if (age < REMIND_AFTER_MS || age >= REMIND_UNTIL_MS) return null;
+  const exp = Number.isFinite(+row.expires) ? +row.expires : 0;
+  if (exp > 0 && now >= exp) return null;                 // expired: nothing left to answer
+  if (sentFor != null && +sentFor === at) return null;    // already reminded about this turn
+  const who = clean(row.name) || 'Someone';
+  return {
+    kind: 'reminder', who, updated: at,
+    text: (lang) => ({ title: lang === 'es' ? g.es : g.en, body: (REMIND_TEXT[lang] || REMIND_TEXT.en)(who) }),
+  };
+}
