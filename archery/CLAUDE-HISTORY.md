@@ -41,3 +41,19 @@ our own, built from code.
 - The bow (then an SVG): a chunky metallic-blue riser with black parts, a thick black sight bar
   with a small foot, a blue shelf, a thick black grip, the hand a fist seen from the back. The
   sleeve was a separate screen-space SVG to the bottom-left corner.
+
+## 2026-10-20: the arrow vanishing at the hit, and the sight's weight
+
+Matt: the arrow "disappears the moment before it hits... like it vanishes and the game freezes for
+a second", then reappears with the score. Cause: `_arrive` removed the flying arrow and re-stuck
+only the earlier arrows; the new one was added in `_landed`, HIT_POP (0.6 s) later, with the number.
+Fix: `_arrive` sticks it at once.
+
+Matt: the sight "pretty much goes exactly where I place it"; in the recording "it floats around a
+bit... if you move your aim in a jerky movement, it overshoots where you want to aim and kind of
+keeps floating that direction until corrected. The more subtle your movement, the more accurate and
+smooth it is". Built as `stepHand` in engine.js: the finger moves a target, the sight follows on an
+under-damped spring (k 55, damping 0.5), and a move faster than 1.5 face radii a second pushes a
+drift (full from 8 r/s) worth up to 0.55 of the move, fading over 0.8 s; a move back against it
+cancels it. Simulated: 0.3 r slowly lands on 0.30 (peak 0.31); a 1 r jerk in 0.1 s floats on to
+about 1.5. In Chromium, a 60 px flick floated on about a quarter ring past the finger's stop.

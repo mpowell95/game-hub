@@ -1,7 +1,7 @@
 // archery/js/test.js - headless checks for Archery's rules (engine.js).  node archery/js/test.js
 import { scoreAt, windFor, driftOf, newMatch, shoot, totals, validMatch, shotOrder, drainGauge, GAUGE,
   swayAt, panicPoint, landing, cpuShot, mulberry32, hashStr, WIND_RANGES, stageScore, arrowsFor, ROUNDS,
-  round4 } from './engine.js';
+  round4, newHand, stepHand } from './engine.js';
 
 let pass = 0, fail = 0;
 const ok = (label, cond, extra = '') => { if (cond) { pass++; console.log('ok  ', label); } else { fail++; console.log('FAIL', label, extra); } };
@@ -97,6 +97,28 @@ const rnd = mulberry32(7);
 let allOver = true;
 for (let i = 0; i < 200; i++) { const p = panicPoint({ x: 0, y: 0 }, rnd); if (scoreAt(p.x, p.y) !== 0 || p.y < 2.5) allOver = false; }
 ok('a panicked arrow always flies over the target and scores 0', allOver);
+
+// 8b. the hand: the sight has weight (Matt, 2026-10-20)
+const handMove = (dist, dur, hold = 2, h = newHand()) => {
+  const dt = 1 / 60, n = Math.max(1, Math.round(dur / dt));
+  let peak = 0, endX = 0;
+  for (let i = 0; i < n; i++) { stepHand(h, dist / n, 0, dt); peak = Math.max(peak, h.x); }
+  endX = h.x;
+  for (let i = 0; i < hold * 60; i++) { stepHand(h, 0, 0, dt); peak = Math.max(peak, h.x); }
+  return { h, peak, endX, rest: h.x };
+};
+const slow = handMove(0.3, 1);
+ok('a slow, small move lands where the finger put it', Math.abs(slow.rest - 0.3) < 0.01 && slow.peak < 0.33, slow);
+ok('the sight lags the finger a little', handMove(0.5, 0.5).endX < 0.45);
+const jerk = handMove(1, 0.1);
+ok('a jerk overshoots and keeps floating that way', jerk.rest > 1.3 && jerk.rest < 1.8, jerk.rest);
+const fixH = handMove(1, 0.1, 0.2).h, driftBefore = Math.hypot(fixH.dx, fixH.dy);
+handMove(-0.4, 0.8, 0, fixH);
+ok('a slow move back stops the floating', driftBefore > 0.1 && Math.hypot(fixH.dx, fixH.dy) < 0.01, [driftBefore, fixH.dx]);
+const big = handMove(30, 0.05);
+ok('it never leaves the range', big.rest <= 3 && big.peak <= 3);
+const lazy = newHand({ x: 0.2, y: -0.1 }); stepHand(lazy, 0, 0, 0.05);
+ok('a long frame does not blow it up', Math.abs(lazy.x - 0.2) < 1e-9 && Math.abs(lazy.y + 0.1) < 1e-9);
 
 // 9. the wind moves a shot, and the landing point is kept to 1/10000
 const L = landing({ x: 0.27, y: 0 }, { mph: 3, dir: 4 });

@@ -64,6 +64,10 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
   0.6 s, jerks up, and the arrow goes over the target (`panicPoint`, always 0). This drain model
   is my best reading of two arrows' worth of frames, not a certainty; tune `GAUGE` if it feels off.
 - **The sight sways** on its own, more as the ring drains (`swayAt`).
+- **The sight has weight** (Matt, 2026-10-20: it must float, not go exactly where the finger puts
+  it). The finger moves a target; the sight chases it on a soft spring (lags, overshoots a quick
+  move). A jerky move also starts a drift that keeps it floating that way until a move back cancels
+  it; slow small moves stay smooth and true (`AIM`, `stepHand` in engine.js; tune `AIM.push`).
 
 ## The turn (timed off the recording at 30 fps)
 
@@ -71,7 +75,8 @@ Touch and hold: the bow comes up in 0.25 s (`DRAW_T`). Drag to aim (about a ring
 the bow kicks 0.033 s (`JOLT_T`, two frames), then the flight, 0.8 s (`FLIGHT_T`): the camera glides from the first frame at a near-steady speed and stops dead at the hit
 (measured at 60 fps on Matt's phone recording against the original, 2026-10-15), while the arrow
 climbs up and right for the first fifth (`ARROW_CLIMB`) then drops in from the right (`render.js` `_camAt` / `_tipAt`, framed from the camera, not simulated). The number
-pops 0.6 s later with stars and the scored ring flashes yellow (`_pop`, `.ar-ringflash`); the target
+pops 0.6 s later with stars (the arrow is stuck in the target from the hit itself, `_arrive`; it
+used to vanish for those 0.6 s, Matt 2026-10-20) and the scored ring flashes yellow (`_pop`, `.ar-ringflash`); the target
 stays up 2 s. Back on the line the view cuts and the bow slides up into place (`BOW_IN_T` 0.2 s).
 After the other player's round their arrows land one by one with red tiles, then the yellow **Your
 Turn** button. Pass and play hands over with a **Pass to <name>** card.
@@ -145,7 +150,7 @@ The sixth challenge game. Darts' design, copied (`darts/CLAUDE.md`, "Online chal
 
 ## Tests
 
-- `node archery/js/test.js` (46): scoring at every ring and line, the wind (same on both phones,
+- `node archery/js/test.js` (52): scoring at every ring and line, the wind (same on both phones,
   in range, never weaker round to round), the match and its turn order, shoot-offs, save
   validation, the ring and sway, panic always 0, the computer's averages.
 - `node tools/test-archery-mp.mjs` (42): a whole challenge between two "phones" against an in-memory
