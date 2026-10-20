@@ -394,9 +394,8 @@ export const GAMES = [
     immersive: true,
     accent: '#1f7a3a',
     art: GAME_ART['flick-soccer'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
-    devOnly: true,
+    // Released 2026-10-20 (Matt switched it live on the admin page; this is the release commit).
+    released: '2026-10-20',
   },  {
     // Archery (2026-10-14): a clone of the archery game in Snapchat's Games (Matt's recording,
     // docs/ARCHERY-BRIEF.md). 3 rounds of 3 arrows; touch and hold to draw, drag to aim through

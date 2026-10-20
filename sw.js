@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1210';
+const CACHE = 'game-hub-v1211';
 
 const ASSETS = [
   './',
@@ -779,17 +779,6 @@ const HELD_BACK = {
     './darts/js/mp-ui.js',
     './darts/js/alert.js',
   ],
-  'flick-soccer': [
-    './flick-soccer/',
-    './flick-soccer/index.html',
-    './flick-soccer/css/flick-soccer.css',
-    './flick-soccer/js/ui.js',
-    './flick-soccer/js/ai.js',
-    './flick-soccer/js/render.js',
-    './flick-soccer/js/strings.js',
-    './flick-soccer/js/mp-ui.js',
-    './flick-soccer/js/alert.js',
-  ],
   'gridlock': [
     './gridlock/',
     './gridlock/index.html',
@@ -1043,8 +1032,17 @@ const REST_MANIFEST = {
   './murdoku/js/ui.js': '49446a4207',
   './murdoku/js/engine.js': '46518c0de8',
   './murdoku/js/strings.js': 'e744e28e32',
+  './flick-soccer/': 'a15237aabc',
+  './flick-soccer/index.html': 'a15237aabc',
+  './flick-soccer/css/flick-soccer.css': 'b3b5c42958',
+  './flick-soccer/js/ui.js': 'a85ce7ec8b',
   './flick-soccer/js/engine.js': '25217d5cb7',
+  './flick-soccer/js/ai.js': 'c7ff2b0f5b',
+  './flick-soccer/js/render.js': 'e9222e7e77',
+  './flick-soccer/js/strings.js': '01e64e159f',
   './flick-soccer/js/mp.js': '8026c6b507',
+  './flick-soccer/js/mp-ui.js': '0be9c195cc',
+  './flick-soccer/js/alert.js': 'a8ca6b0b9e',
   './archery/js/engine.js': '3ed3c62225',
   './archery/js/mp.js': 'eed6eb18c5',
   './darts/js/engine.js': '2d603f0ee2',
