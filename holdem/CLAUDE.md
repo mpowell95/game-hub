@@ -213,7 +213,8 @@ a biggest pot).
   build's `cfSplit` is ignored in storage), Computer speed, **Go to casino floor** (CASINO FLOOR =
   table picker `screen = 'tiers'`; MENU = setup). The split button (`.pk-cfbtn`, 44px) is live AT ANY
   TIME (Matt, 2026-10-19): someone else's turn = tick/untick (`this.canPre`); your turn = acts at
-  once, check if nothing is owed, else fold (`this.cfNow`). It never calls, so a raise cannot turn it
+  once, check if nothing is owed, else fold (`this.cfNow`), AND ticks it for the rest of the hand
+  (Matt, 2026-10-20: keeps checking each street until somebody bets, then folds). It never calls, so a raise cannot turn it
   into CALL (Matt hit Call after a raise); on your turn the big button stays dead (`mode = 'idle'`) 350ms until the auto check/fold
   has gone (`this.autoDone`). Online the room-code pill sits at `left: 36px`. Solo end card:
   **Casino floor** / **Menu** over **Play again**.
