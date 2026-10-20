@@ -68,7 +68,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `hidden-players.js` | `isHiddenName`/`isHiddenDeviceId`; dependency-free; mirrored by hand in `tools/test-leaderboard-rank.mjs` on purpose |
 | `players-agg.js` | identity graph (code ∪ name). **A sub-counter needs an explicit branch here or is silently dropped.** Holds `SOLO`, `ARCHIVED_GAMES`, `NAME_ALIAS`, `DISPLAY_NAME` |
 | `game-stats-ui.js` | top-left back (`gs-up`: game page -> list -> close, 2026-10-15) beside the X; owns `gameListHTML`, `hubIdOf`, `unitKeyOf`, `gameChoices`, `isGameOnLauncher`, `visibleTabs` (more permissive, on purpose) |
-| `leaderboard-ui.js` | read-only on data; owns `GAME_META`, `gamehub.lb.sort.v1`; `openLeaderboard({game})` opens on that board and backing out of it closes (a game's own Leaderboard button, 2026-10-15) |
+| `leaderboard-ui.js` | read-only on data; owns `GAME_META`, `gamehub.lb.sort.v1`; `openLeaderboard({game})` opens on that board and backing out of it closes (a game's own Leaderboard button, 2026-10-15); `{onPlay, canPlay}` (the launcher only) adds Play to a game's board (2026-10-20) |
 | `leaderboard-rank.js` | wins = stored `won`; rating exports dormant, keep; tier comparators |
 | `arrow-maze-time.js`, `gridlock-points.js` | pure point/ladder maths; network-first; `way-out/CLAUDE.md`, `gridlock/CLAUDE.md`. Gridlock keys are `L<n>` (Firebase arrays numeric keys) |
 | `gridlock-v1map.js` | GENERATED; never hand-edit |

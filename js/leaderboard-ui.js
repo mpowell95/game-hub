@@ -2044,6 +2044,15 @@ function backBtnHTML(role, label, iconOnly) {
     + `${iconOnly ? '' : `<span>${text}</span>`}</button>`;
 }
 
+/** PLAY FROM A GAME'S BOARD (Matt, 2026-10-20: "I should be able to click Play from there").
+ *  Only when the launcher handed us `onPlay` and this game is on that launcher; a game's own
+ *  Leaderboard button opens over the running game and passes neither, so no button there. */
+function playBtnHTML(id) {
+  const hub = hubIdOf(id);
+  if (typeof _onPlay !== 'function' || !_canPlay(hub)) return '';
+  return `<button type="button" class="lb-play" data-role="lb-play" data-hub="${esc(hub)}">${esc(tx('lb_play', 'Play'))}</button>`;
+}
+
 function gameDetail(list, id) {
   const fieldTiers = id === 'skeeball' || id === 'holdem' ? [] : fieldTiersPresent(list, [id]);
   const machineIds = id === 'skeeball' ? skMachinesPresent(list) : [];
@@ -2059,6 +2068,7 @@ function gameDetail(list, id) {
       <h3 class="lb-board-h">${esc(labelOf(id))}</h3>
       <span class="lb-board-n"><b>${totalPlays}</b><span>${esc(woRush ? tx('lb_wo_runs_unit', 'runs') : t('lb_games_unit'))}</span></span>
     </div>
+    ${playBtnHTML(id)}
   </div>`;
   if (id === 'minesweeper') return head + msBoardHTML(list);
   if (id === 'wayout') return head + woModesHTML() + (woRush ? woRushHTML(list) : plainBoardHTML(list, id) + recordsHTML(list, id));
@@ -2268,6 +2278,8 @@ function currentBody() {
 let _host = null;
 let _seg = 'players';       // 'players' | 'games'
 let _game = null;           // non-null => showing that game's detail board
+let _onPlay = null;         // openLeaderboard({onPlay}): the launcher's own way to open a game (hub id)
+let _canPlay = () => false; // openLeaderboard({canPlay}): is that hub id on this launcher
 let _entryGame = null;      // the board openLeaderboard({game}) opened on: backing out of it closes
 let _player = null;         // non-null (a group key) => showing that player's detail screen
 let _playerGame = null;     // non-null => drilled into that game from WITHIN player detail
@@ -2440,6 +2452,8 @@ function onClick(e) {
     if (_game) { _player = null; _playerGame = null; } else { _playerGame = null; }
     rerender(); return;
   }
+  const play = e.target.closest('[data-role="lb-play"]');
+  if (play) { const fn = _onPlay, hub = play.dataset.hub; closeLeaderboard(); if (fn) fn(hub); return; }
   if (e.target.closest('[data-role="lb-player-back"]')) { _player = null; _playerGame = null; rerender(); return; }
   // Leaving a board drops that board's own filters: they belong to the visit, not to the overlay.
   if (e.target.closest('[data-role="lb-back"]')) {
@@ -2501,6 +2515,8 @@ export async function openLeaderboard(opts = {}) {
   _gameSort = 'popular';
   _game = null;
   _entryGame = null;
+  _onPlay = opts && typeof opts.onPlay === 'function' ? opts.onPlay : null;
+  _canPlay = opts && typeof opts.canPlay === 'function' ? opts.canPlay : () => false;
   _player = null;
   _playerGame = null;
   // The saved default view (2026-08-25) still owns BY PLAYER's sort + category, which is what it
@@ -2831,6 +2847,7 @@ function ensureCss() {
     '.lb-board-n{flex:none;display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1}',
     '.lb-board-n b{font-size:19px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums}',
     '.lb-board-n span{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--lb-muted);margin-top:3px}',
+    '.lb-play{flex:none;margin-left:10px;min-height:40px;padding:0 14px;border:0;border-radius:999px;cursor:pointer;background:var(--lb-accent);color:#fff;font-size:15px;font-weight:800;touch-action:manipulation}',
     // --- standing records -----------------------------------------------------------------------
     '.lb-h3{margin:24px 0 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:var(--lb-muted)}',
     '.lb-recs{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:10px;overflow:hidden}',

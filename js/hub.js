@@ -1314,7 +1314,16 @@ class Hub {
     }
 
     this.el.leaderboard.addEventListener('click', () => {
-      import('./leaderboard-ui.js').then((m) => m.openLeaderboard()).catch(() => {});
+      import('./leaderboard-ui.js').then((m) => m.openLeaderboard({
+        // Play on a game's board (2026-10-20): the same as tapping that game's tile.
+        canPlay: (id) => this.games.some((g) => g.id === id && !g.comingSoon),
+        onPlay: (id) => {
+          const g = this.games.find((x) => x.id === id);
+          if (!g || this.current) return;
+          if (g.href) window.location.href = g.href;
+          else this.launch(id);
+        },
+      })).catch(() => {});
     });
 
     this.el.version.addEventListener('click', () => this._forceUpdate());
