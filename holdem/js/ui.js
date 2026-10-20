@@ -1290,7 +1290,13 @@ class Game {
       }
       case 'precf': {
         const L = this.cfNow ? legal(this.pub) : null;
-        if (L && L.i === this.myIdx && !this.sending) { this.autoK = this.autoDone = this.pub.k; return this._move({ a: L.canCheck ? 'check' : 'fold' }); }
+        // On your own turn it acts now AND stays ticked, so it keeps checking on later streets
+        // until somebody bets, then folds (Matt, 2026-10-20).
+        if (L && L.i === this.myIdx && !this.sending) {
+          this.precf = `${this.pub.gid || ''}:${this.pub.handNo}`;
+          this.autoK = this.autoDone = this.pub.k;
+          return this._move({ a: L.canCheck ? 'check' : 'fold' });
+        }
         if (this.canPre) this._togglePre();
         return undefined;
       }
