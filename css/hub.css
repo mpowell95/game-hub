@@ -811,6 +811,13 @@ html.gh-compact:not(.gh-ingame) .hub-top-title { font-weight: 700; }
 /* Bigger only where it fits beside the three pills (a 360px phone cut it to "Matt's Game ..."). */
 @media (min-width: 385px) { html.gh-compact:not(.gh-ingame) .hub-top-title { font-size: 21px; } }
 html.gh-compact:not(.gh-ingame) .hub-main { padding: 0 16px calc(84px + env(safe-area-inset-bottom, 0px)); }
+/* The PAGE never scrolls here; .hub does (2026-10-20, Matt's recording). An iOS 26 bug leaves the
+   phone thinking the keyboard is still up after it closes; while the page itself scrolls, every
+   fixed thing (the tab bar, Leaderboard, Messages) then sits at that too-short line, halfway up the
+   screen. With the page held still they stay where they belong (the bug only moves them on page
+   scroll). Apple forum thread 800125, WebKit bug 297779. */
+html.gh-compact:not(.gh-ingame), html.gh-compact:not(.gh-ingame) body { height: 100%; overflow: hidden; }
+html.gh-compact:not(.gh-ingame) .hub { height: 100vh; height: 100dvh; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 html.gh-compact:not(.gh-ingame) .hub-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
 
 /* A tile: the art is the rounded box, the name sits under it in the page's own ink. */
