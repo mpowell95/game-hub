@@ -1266,3 +1266,17 @@ key held only as the repo secret `FIREBASE_SERVICE_ACCOUNT` (one-time setup in `
 `firebase.json` gained `"database": { "rules": "database.rules.json" }` so the CLI knows the file.
 Same day: Matt published the full rules file (archery, chinchon, escoba branches went live) and started
 the manual functions deploy (chinchonTurnPush, escobaTurnPush; archeryTurnPush with them).
+
+
+## Compact layout: the tab bar halfway up the screen (2026-10-20)
+
+Matt's recording (Dropbox, 2026-10-20 11:48): on the Compact launcher, scrolling down carried the
+bottom tab bar up with the tiles until it stuck about 55% of the way down the screen, with tiles
+showing below it; the title bar scrolled away; the Leaderboard opened in only the top ~55%.
+Chromium did not reproduce it. It matches a reported iOS 26 WebKit bug (Apple Developer Forums
+thread 800125, WebKit bug 297779): after the keyboard closes, `visualViewport.height` stays shorter
+than `innerHeight`, and while the PAGE scrolls, fixed elements are placed against that short line.
+The gap (~45% of the screen) is about a keyboard's height. One forum reply also ties it to
+Reduce Motion + Prefer Cross-Fade Transitions. Fix: in Compact the page itself never scrolls
+(`html`/`body` `overflow: hidden`), `.hub` is the scroller (`height: 100dvh`); the Games tab
+scrolls `.hub` to the top. Comfortable is unchanged. Not verified on an iPhone by the session.
