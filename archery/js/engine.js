@@ -190,6 +190,56 @@ export function swayAt(t, g, ph = [0, 1.7, 3.1, 4.4]) {
   };
 }
 
+// --- the hand: the sight has weight -------------------------------------------------------------
+// Matt, 2026-10-20: the sight must not go exactly where the finger puts it; it "floats around a bit",
+// like a person holding a bow. A jerky move overshoots and keeps floating that way until corrected;
+// the slower and smaller the move, the smoother and truer it is.
+//   - The finger moves a TARGET point. The sight chases it on a soft, under-damped spring, so it
+//     lags a little and overshoots a quick move, then settles.
+//   - A move faster than `slow` (face radii a second) also pushes a DRIFT that carries the target on
+//     in that direction and dies away over `tau` seconds, full strength from `fast`. A finger move
+//     back against the drift cancels it (moving back by the distance it has left stops it dead).
+export const AIM = { k: 55, zeta: 0.5, slow: 1.5, fast: 8, push: 0.55, tau: 0.8, lim: 3 };
+
+/** A new hand with the sight resting at `p`. */
+export function newHand(p = { x: 0, y: 0 }) {
+  return { tx: p.x, ty: p.y, x: p.x, y: p.y, vx: 0, vy: 0, dx: 0, dy: 0 };
+}
+
+/** One step of the hand: the finger moved (mx, my) face radii over the last `dt` seconds. */
+export function stepHand(h, mx, my, dt) {
+  if (!(dt > 0)) return h;
+  const A = AIM, cl = (v) => Math.max(-A.lim, Math.min(A.lim, v));
+  const len = Math.hypot(mx, my);
+  if (len > 0) {
+    // Against the drift: take off what it has left to travel, up to the length of the move.
+    const dl = Math.hypot(h.dx, h.dy);
+    const against = dl > 0 ? -(mx * h.dx + my * h.dy) / (len * dl) : 0;
+    if (against > 0) {
+      const left = Math.max(0, dl - (len * against) / A.tau) / dl;
+      h.dx *= left; h.dy *= left;
+    }
+    // A quick move: push the drift its way.
+    const e = Math.max(0, Math.min(1, (len / dt - A.slow) / (A.fast - A.slow)));
+    h.dx += mx * e * A.push / A.tau;
+    h.dy += my * e * A.push / A.tau;
+  }
+  const fade = Math.exp(-dt / A.tau);
+  h.tx = cl(h.tx + mx + h.dx * A.tau * (1 - fade));
+  h.ty = cl(h.ty + my + h.dy * A.tau * (1 - fade));
+  h.dx *= fade; h.dy *= fade;
+  // The spring, in small steps so a slow frame cannot blow it up.
+  const c = 2 * A.zeta * Math.sqrt(A.k);
+  const n = Math.max(1, Math.ceil(dt / 0.008)), s = dt / n;
+  for (let i = 0; i < n; i++) {
+    h.vx += (A.k * (h.tx - h.x) - c * h.vx) * s;
+    h.vy += (A.k * (h.ty - h.y) - c * h.vy) * s;
+    h.x = cl(h.x + h.vx * s);
+    h.y = cl(h.y + h.vy * s);
+  }
+  return h;
+}
+
 /** Where a panicked arrow goes: well over the target. */
 export function panicPoint(aim, rnd = Math.random) {
   return { x: aim.x + (rnd() - 0.5) * 1.4, y: Math.max(aim.y, 0) + 2.8 + rnd() * 1.8 };

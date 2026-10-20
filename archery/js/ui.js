@@ -11,7 +11,7 @@
 // ring round it runs down; let go and the camera chases the arrow for 0.75 s; cut to the target, the
 // number pops 0.6 s later with a burst of stars; 2 s on the target, then back to the line.
 import { newMatch, shoot, totals, stageShots, arrowsFor, isShootOff, windFor, driftOf, landing, panicPoint,
-  drainGauge, swayAt, GAUGE, cpuShot, gauss, DIFFS, ROUNDS, validMatch, scoreAt, hashStr, BOSS } from './engine.js';
+  drainGauge, swayAt, GAUGE, newHand, stepHand, cpuShot, gauss, DIFFS, ROUNDS, validMatch, scoreAt, hashStr, BOSS } from './engine.js';
 import { Renderer, ARROW_COLORS, FLIGHT_T } from './render.js';
 
 import { STRINGS } from './strings.js';
@@ -782,6 +782,8 @@ class ArcheryUI {
     // The sight comes up a little off the middle, as it does in the recording; you bring it in.
     const a = Math.random() * Math.PI * 2, r = 0.35 + Math.random() * 0.35;
     this.aim = { x: Math.cos(a) * r, y: Math.sin(a) * r * 0.7 - 0.15 };
+    this.hand = newHand(this.aim);
+    this.pull = { x: 0, y: 0 };
     this.swayPh = [Math.random() * 6, Math.random() * 6, Math.random() * 6, Math.random() * 6];
     this.swayT = 0;
   }
@@ -794,8 +796,9 @@ class ArcheryUI {
     const gain = 1 / (0.155 * this.w);
     const dx = (p.x - d.x) * gain, dy = (p.y - d.y) * gain;
     d.x = p.x; d.y = p.y;
-    this.aim.x = Math.max(-3, Math.min(3, this.aim.x + dx));
-    this.aim.y = Math.max(-3, Math.min(3, this.aim.y - dy));
+    // The finger moves where the hand is trying to aim; the sight follows with weight (_tick,
+    // engine.js stepHand).
+    this.pull.x += dx; this.pull.y -= dy;
     this.moved += Math.hypot(dx, dy);
   }
   _pointerUp(e) {
@@ -805,6 +808,13 @@ class ArcheryUI {
     if (this.phase !== 'draw') return;
     if (e.type !== 'pointerup') { this.phase = 'ready'; this._hint('hint_hold'); return; }   // cancelled: the bow comes down
     this._release(false);
+  }
+  /** The hand catches up with the finger: the sight lags, overshoots a jerk, then settles. */
+  _steady(dt) {
+    if (!this.hand) return;
+    stepHand(this.hand, this.pull.x, this.pull.y, dt);
+    this.pull.x = 0; this.pull.y = 0;
+    this.aim.x = this.hand.x; this.aim.y = this.hand.y;
   }
   _aimNow() {
     const s = swayAt(this.swayT || 0, this.gauge, this.swayPh);
@@ -844,7 +854,9 @@ class ArcheryUI {
     const dir = this.r.flightDir();
     this.r.endFlight();
     this.r.setView('close');
-    this.r.setStuck(this.turnArrows);
+    // The arrow stays in the target from the moment it hits; the number pops HIT_POP later. (It used
+    // to be left out here and only stuck with the number, so it vanished as it hit: Matt, 2026-10-20.)
+    this.r.setStuck([...this.turnArrows, { x: sh.hit.x, y: sh.hit.y, color: this._colorOf(sh.seat), dir }]);
     this.phase = 'hit';
     this._after(HIT_POP, () => {
       if (this.mode === 'practice') { this._practiceLanded(sh, dir); return; }
@@ -1332,6 +1344,7 @@ class ArcheryUI {
       this.swayT = (this.swayT || 0) + dt;
       const speed = this.moved / Math.max(dt, 1e-3);
       this.moved = 0;
+      this._steady(dt);
       this.gauge = drainGauge(this.gauge, dt, this.held, speed);
       if (this.gauge <= 0) {
         // PANIC (Matt): the arm shakes, jerks up, and the arrow goes over the target.
@@ -1343,6 +1356,7 @@ class ArcheryUI {
     } else if (this.phase === 'panic') {
       this.panicT += dt;
       this.swayT = (this.swayT || 0) + dt;
+      this._steady(dt);
       if (this.panicT >= PANIC_T) this._release(true);
     }
     if (this.phase === 'flight' && this.shot) {
