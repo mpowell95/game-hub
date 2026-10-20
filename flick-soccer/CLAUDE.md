@@ -166,7 +166,9 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   (Easy / Medium / Hard, with what each shows) on the challenge card, saved as `settings.aimHelp`,
   stored on the match as the OPTIONAL `aids` field (`aidsOfGame`: absent or junk reads Medium, which
   every earlier challenge had), shown to the other player on their card ("Aiming help: Easy"), and
-  kept by Challenge again. Both players get the same help. Display only: never on the physics path. The thin pull string from the disc to the finger shows on every level:
+  kept by Challenge again. Both players get the same help. **Goals to win (1/2/3) is a row on the
+  challenge card too (2026-10-20**, Matt: *"I'm never given the option to choose the # of goals"*;
+  `goalsRowHTML`, the same `settings.goals` as the start menu). Display only: never on the physics path. The thin pull string from the disc to the finger shows on every level:
   it is the drag itself. The **guide** is a dotted line from the disc to the first thing it will
   touch and a ghost circle there; the **bounce line** (`ballPath` in `engine.js`) is where the ball
   heads from that touch, reflected off the walls up to twice, ending at the first disc in its way or

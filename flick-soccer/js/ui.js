@@ -125,6 +125,11 @@ export const formSVG = (id) => `<svg class="fs-form-ico" viewBox="0 0 60 52" ari
 export const aidsRowHTML = (cur) => `<div class="fs-aids"><div class="gh-seg fs-seg" role="group" aria-label="${esc(t('aim_help'))}">${
   DIFFS.map((id) => `<button type="button" class="gh-seg__item fs-seg-item" data-aid="${id}" aria-pressed="${cur === id}">${diffShapeSVG(tierOf(id))}<span>${esc(t('diff_' + id))}</span></button>`).join('')
 }</div><p class="fs-aid-note">${esc(t('aid_' + cur))}</p></div>`;
+/** Goals to win (1/2/3) on the challenge card (Matt, 2026-10-20: "I'm never given the option to
+ *  choose the # of goals"); saved as `settings.goals`, the same setting the start menu's row uses. */
+export const goalsRowHTML = (cur) => `<div class="gh-seg fs-seg fs-chgoals" role="group" aria-label="${esc(t('goals'))}">${
+  GOAL_OPTIONS.map((n) => `<button type="button" class="gh-seg__item fs-seg-item" data-chgoal="${n}" aria-pressed="${cur === n}"><span>${n}</span></button>`).join('')
+}</div>`;
 /** The two line-up buttons (Offense, Defense) for the start menu and both challenge cards: each
  *  says its role, draws its line-up and names it, and opens the picker (`_luPicker`). */
 export const lineupsRowHTML = (s) => `<div class="fs-lus" data-role="lineups">${['off', 'def'].map((r) => {
@@ -845,6 +850,14 @@ class FlickSoccerUI {
       this.settings.aimHelp = aid.dataset.aid;
       writeJSON(SETTINGS_KEY, this.settings);
       this.root.querySelectorAll('.fs-aids').forEach((el) => { el.outerHTML = aidsRowHTML(this.settings.aimHelp); });
+      return;
+    }
+    const chg = e.target.closest('[data-chgoal]');
+    if (chg) {
+      this.settings.goals = Number(chg.dataset.chgoal);
+      writeJSON(SETTINGS_KEY, this.settings);
+      this.root.querySelectorAll('.fs-chgoals').forEach((el) => { el.outerHTML = goalsRowHTML(this.settings.goals); });
+      this._relabel();   // the start menu's own Goals row shows the same setting
       return;
     }
     const seg = e.target.closest('[data-diffs], [data-goalsseg], [data-firsts]');
