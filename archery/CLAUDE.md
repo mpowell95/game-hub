@@ -72,14 +72,18 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 ## The turn (timed off the recording at 30 fps)
 
 Touch and hold: the bow comes up in 0.25 s (`DRAW_T`). Drag to aim (about a ring per 6 px). Let go:
-the bow kicks 0.033 s (`JOLT_T`, two frames), then the flight, 0.8 s (`FLIGHT_T`): the camera glides from the first frame at a near-steady speed and stops dead at the hit
-(measured at 60 fps on Matt's phone recording against the original, 2026-10-15), while the arrow
-climbs up and right for the first fifth (`ARROW_CLIMB`) then drops in from the right (`render.js` `_camAt` / `_tipAt`, framed from the camera, not simulated). The number
-pops 0.6 s later with stars (the arrow is stuck in the target from the hit itself, `_arrive`; it
-used to vanish for those 0.6 s, Matt 2026-10-20) and the scored ring flashes yellow (`_pop`, `.ar-ringflash`); the target
-stays up 2 s. Back on the line the view cuts and the bow slides up into place (`BOW_IN_T` 0.2 s).
-After the other player's round their arrows land one by one with red tiles, then the yellow **Your
-Turn** button. Pass and play hands over with a **Pass to <name>** card.
+the bow kicks 0.033 s (`JOLT_T`, two frames), then the flight, 0.8 s (`FLIGHT_T`). Matt, 2026-10-20
+(changed from the 2026-10-15 timing): the arrow starts ON the sight, where the bow pointed it, and
+flies away in a shallow arc (`FLIGHT_D0`, `FLIGHT_ARC`; it used to jump up and right on release); the
+camera glides at a steady speed and slows to a stop over the last 30% (`CAM_EASE`; stopping dead read
+as a jump onto the close-up). Framed from the camera, not simulated (`render.js` `_camAt` / `_tipAt`).
+**Every arrow is stuck the moment it hits and quivers** (`_preStick`, `WOBBLE_T`); the last number
+clears then; its own number pops `HIT_POP` 0.3 s later with stars, and the ring it scored lights up
+yellow ON the face, under the arrows (`render.js flashRing`; it used to be a screen overlay that popped
+out on top of everything). The target stays up 2 s. Back on the line the view cuts and the bow slides
+up into place (`BOW_IN_T` 0.2 s). The other player's arrows fly into the close-up one by one (0.5 s
+with a trail, `INCOMING_RUN`) with red tiles, then the yellow **Your Turn** button. Pass and play
+hands over with a **Pass to <name>** card.
 
 ## The look (matched to the recording, 2026-10-14)
 
@@ -102,7 +106,9 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   about 97 a frame while aiming, the bow 23 of them.
 - **The close-up**: the board half-width is 1.14 face radii as DRAWN (`BOARD_HALF`; the rules'
   `BOSS` stays 1.3, which only matters for arrows that score 0), 1.06x taller than wide, about half
-  the screen wide, seen from the left. Arrows arrive from the right, nearly level (`inDir`); blue in
+  the screen wide, seen from the left. Arrows arrive from the right, nearly level (`inDir`). The arrow model (`_arrow`) is thin
+  (2.2 cm, still thicker than real so it reads), with a steel point and swept vanes (Matt: the old
+  6 cm one looked "like nerf gun bullets"); blue in
   front, black behind. Sun shadow of the board (not on software GL).
 - **The stadium**: sky with clouds; a pale canopy roof with dark slanted ribs, its front edge at
   about a quarter of the screen height and its back meeting a pale rim at about a third; one deep
@@ -161,7 +167,7 @@ The sixth challenge game. Darts' design, copied (`darts/CLAUDE.md`, "Online chal
 - **Checked in headless Chromium (2026-10-14)**: a whole match vs the computer, a pass-and-play
   match that went to a shoot-off, practice, and a whole ONLINE match through the real UI with two
   players taking turns against an in-page stand-in database (replays, Your Turn, waiting, result,
-  the `mp` result recorded). `window.__arTest.ui` is the test seam; `ui.speed` fast-forwards game
+  the `mp` result recorded). `window.__arTest.ui` is the test seam; `ui.speed` fast-forwards game (`0` does NOT pause, it means 1; pause with `1e-9` and step `_tick`)
   time. Not yet played on a real phone.
 
 ## Not built / open

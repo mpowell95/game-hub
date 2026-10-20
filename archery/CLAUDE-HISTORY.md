@@ -57,3 +57,17 @@ under-damped spring (k 55, damping 0.5), and a move faster than 1.5 face radii a
 drift (full from 8 r/s) worth up to 0.55 of the move, fading over 0.8 s; a move back against it
 cancels it. Simulated: 0.3 r slowly lands on 0.30 (peak 0.31); a 1 r jerk in 0.1 s floats on to
 about 1.5. In Chromium, a 60 px flick floated on about a quarter ring past the finger's stop.
+
+## 2026-10-20 (later): Matt's frame-by-frame review of a two-round recording
+
+Matt pointed at frames: the scored-ring flash (a DOM ellipse) "pops out and on top of every other
+thing... looks like a glitch"; the arrows "look more like nerf gun bullets"; a new arrow landing
+beside an old one was hard to tell apart; on release (11.375 to 11.500 s) the arrow jumped up and
+right; the computer's arrows appeared from nowhere (0.28 s) and scored at once while his popped
+0.6 s later; the camera snapped at the end of the glide. Done: the flash is now two yellow rings
+with a dark edge drawn on the face in 3D (under the arrows, at the face's angle); the arrow is 2.2 cm
+thick with a point and swept vanes, parts shared (it used to build 7 new materials per arrow on every
+rebuild); every arrow sticks and quivers the moment it hits and the old number clears; numbers pop
+0.3 s after for both players; the flight starts on the sight (no climb to an apex); the camera eases
+to a stop; the computer's arrows fly in over 0.5 s with a trail. The arm and hand: not changed yet,
+options put to Matt.
