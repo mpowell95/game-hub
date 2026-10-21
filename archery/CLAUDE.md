@@ -109,12 +109,13 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   then "create them as a single 3d object rather than mush them together"). Matt made the picture
   with ChatGPT and the model with Meshy (image-to-3D, Meshy 6 Lite, free tier, CC BY 4.0); source
   `reference/archery/bow-arm-meshy.glb`. A simple blue recurve (black grip, grey tips) replaced the
-  built Olympic bow; the built sight (bar, ring, tube) stays so the aiming ring lines up. `bow3d.js
-  _loadModel`: grip at `MODEL_GRIP`, `MODEL_S` 10.5, +x into the screen, the whole model turned
-  `MODEL_YAW` -0.8 rad so the arm already heads left; the rest of the turn toward `ARM_SHOULDER` is
-  spread along the forearm, nothing at the wrist (per-vertex `bend` 0 at the wrist to 1 at the elbow,
-  a shader turning each vertex by its share; all of it at the wrist read as "a broken wrist", Matt) and the sleeve stretches past `ARM_FROM` so its
-  end never shows. Not mirrored: the back of the hand faces you, fingers round the far side. The
+  built Olympic bow; the built sight (bar, ring, tube) stays so the aiming ring lines up.
+  **The model's shape is never changed** (Matt: "The 3d model is correct... Just don't change it"; a
+  version that bent the arm at the wrist read as "a broken wrist"): `bow3d.js _loadModel` only places
+  it (grip at `MODEL_GRIP`, `MODEL_S` 10.5, +x into the screen) and turns it `MODEL_YAW` -1.1 rad about
+  the bow's upright, so the arm runs off the left edge (turned less, the sleeve's closed end shows
+  with the bow down; checked at 360, 390, 402, 430 wide). Not mirrored: the back of the hand faces you,
+  fingers round the far side. The
   string is two rods from the tips to the nock while drawn, tip to tip when down (`pull`). The arrow
   rests on the hand (`MODEL_REST`). The model has no colours: the converter marks skin / sleeve / bow /
   grip / tips. Until it loads (or if it fails) the built bow and hand stand in. The first try (an arm
