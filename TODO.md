@@ -18,8 +18,6 @@ One list, by game. One line per item. When an item ships, delete its line in the
 
 ## Archery
 
-- **Matt:** publish the `archery` rules from `database.rules.json` (console, Realtime Database, Rules); until then online screens say so (archery/CLAUDE.md, "Online challenges").
-- **Matt:** run `firebase deploy --only functions` for `archeryTurnPush` (root CLAUDE.md, "Push notifications").
 - Real-phone feel: drag gain, ring drain and sway were set from video, not a thumb; expect Matt to tune.
 - No best-of-3/5 series online.
 
@@ -63,7 +61,6 @@ One list, by game. One line per item. When an item ships, delete its line in the
 
 ## Flick Soccer
 
-- **Matt:** redeploy functions (`firebase deploy --only functions`) for the own-goal wording and "Your turn!" (check; flick-soccer/CLAUDE.md, "Notifications").
 - **Matt:** confirm a real challenge push arrives on a phone (flick-soccer/CLAUDE.md, "Notifications").
 
 ## Golf

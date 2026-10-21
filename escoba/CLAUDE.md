@@ -114,8 +114,8 @@ in all multiplayer games too."* Two players, Darts' model; live rooms are untouc
   screen had 6px to spare at 390x664). Home (New challenge, your matches, "▶ Play" on yours), pick a
   person (search), pick the length (**1 hand / To 11 / To 21**, the sender's choice), then the table.
 - **Node** `escoba/games/<id>` + `escoba/index/<CODE>/<id>` + `escoba/chat/<id>`; in
-  `database.rules.json` and the backup `BRANCHES`. **Rules NOT yet published, `escobaTurnPush` NOT yet
-  deployed.**
+  `database.rules.json` and the backup `BRANCHES`. Rules live 2026-10-18; `escobaTurnPush` deployed
+  by the workflow 2026-10-21.
 - **A match is a LOG**: `len`, `deck` (the sender's numbering), a random `seed`, and each play `{by, c,
   k}` (card, captured ids sorted). Each round's deck is `deckIds(seed, round, deck)` (mp.js's own
   shuffle, never deck.js's). `validateGame` replays it through `game.js`'s own Game (sync driver
