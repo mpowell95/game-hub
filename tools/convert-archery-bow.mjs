@@ -11,10 +11,11 @@
 //      source's: +x toward the target (the bow's limbs curve that way), +y up, +z across. --mirror
 //      flips z (left hand <-> right hand).
 //   2. Marks each vertex: 0 skin, 1 sleeve, 2 bow (blue), 3 grip (black), 4 tips (dark grey).
-//   3. Gives each vertex a BEND weight: 0 for the bow and the hand, 1 for the forearm and sleeve
-//      past the wrist, smooth across the wrist. bow3d.js turns weighted vertices about the wrist so
-//      the arm heads for the shoulder (in the source it runs straight back along the bow's plane,
-//      which the eye would see end on).
+//   3. Gives each vertex a BEND weight: 0 for the bow, the hand and the wrist, rising smoothly along
+//      the forearm to 1 at the elbow and staying 1 up the sleeve. bow3d.js turns each vertex about the
+//      wrist by that share of the bend, so the arm curves gently toward the shoulder (in the source it
+//      runs straight back along the bow's plane, which the eye would see end on). All of it at the
+//      wrist read as a broken wrist (Matt, 2026-10-21).
 //   4. Writes it compact: 'BOW1', u32 vertex count, u32 triangle count, f32 step, f32 wrist x, y, z,
 //      f32 top tip x, y, z, f32 bottom tip x, y, z, then int16 x/y/z per vertex (value * step),
 //      u8 part per vertex, u8 bend per vertex (0..255), u16 indices. bow3d.js computes normals.
@@ -35,7 +36,7 @@ const HAND_Y = [-0.115, 0.165];                   // where the hand covers the g
 const BLACK_Y = [-0.14, 0.19];                    // the black grip, a little past the hand each way
 const TIP_Y = 0.865;                              // past this (either way) the limb tips are dark
 const BOW_X = 0.2;                                // the bow never comes nearer the arm than this
-const WRIST_X = 0.29, WRIST_BLEND = 0.05;         // the forearm's thinnest point; the bend fades in across it
+const WRIST_X = 0.29, ELBOW_X = -0.25;            // the bend starts at the wrist and is whole by the elbow
 const CUFF_X = 0.065, CUFF_BAND = 0.025, CUFF_R = 0.092;   // the sleeve's end; past the band, wider = sleeve
 
 const buf = readFileSync(SRC);
@@ -78,7 +79,7 @@ for (let i = 0; i < V; i++) {
     const s = armMid[slot(x)];
     const r = Math.hypot(y - s.y, z - s.z);
     k = x < CUFF_X - CUFF_BAND ? 1 : x < CUFF_X + CUFF_BAND && r > CUFF_R ? 1 : 0;
-    bend[i] = Math.round(255 * smooth((WRIST_X + WRIST_BLEND - x) / (2 * WRIST_BLEND)));
+    bend[i] = Math.round(255 * smooth((WRIST_X - x) / (WRIST_X - ELBOW_X)));
   }
   part[i] = k; count[k]++;
 }

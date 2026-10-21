@@ -110,9 +110,10 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   with ChatGPT and the model with Meshy (image-to-3D, Meshy 6 Lite, free tier, CC BY 4.0); source
   `reference/archery/bow-arm-meshy.glb`. A simple blue recurve (black grip, grey tips) replaced the
   built Olympic bow; the built sight (bar, ring, tube) stays so the aiming ring lines up. `bow3d.js
-  _loadModel`: grip at `MODEL_GRIP`, `MODEL_S` 10.5, +x into the screen; the forearm and sleeve turn
-  about the wrist toward `ARM_SHOULDER` (in the model the arm runs straight back along the bow, seen
-  end on; per-vertex `bend` weights, a shader rotation) and the sleeve stretches past `ARM_FROM` so its
+  _loadModel`: grip at `MODEL_GRIP`, `MODEL_S` 10.5, +x into the screen, the whole model turned
+  `MODEL_YAW` -0.8 rad so the arm already heads left; the rest of the turn toward `ARM_SHOULDER` is
+  spread along the forearm, nothing at the wrist (per-vertex `bend` 0 at the wrist to 1 at the elbow,
+  a shader turning each vertex by its share; all of it at the wrist read as "a broken wrist", Matt) and the sleeve stretches past `ARM_FROM` so its
   end never shows. Not mirrored: the back of the hand faces you, fingers round the far side. The
   string is two rods from the tips to the nock while drawn, tip to tip when down (`pull`). The arrow
   rests on the hand (`MODEL_REST`). The model has no colours: the converter marks skin / sleeve / bow /
