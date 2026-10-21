@@ -36,6 +36,9 @@ const NOCK = { idle: [5.2, -5.0, -3.0], drawn: [1.7, -3.4, -1.6] };
 const MODEL_URL = new URL('../models/bow.bin', import.meta.url);
 const MODEL_GRIP = [1.27, -4.6, 0.02];
 const MODEL_S = 10.5;
+// The whole model turned about the bow's upright (radians): the arm already heads partly left, so the
+// bend along the forearm (below) stays gentle.
+const MODEL_YAW = -0.8;
 const MODEL_REST = [0.6, -2.95, 0.3];     // the arrow lies on the hand, just left of the bow
 const MODEL_COLORS = ['#f1c7a6', '#79a3dc', '#2c7cf0', '#2a2f36', '#3b4048'];   // skin, sleeve, bow, grip, tips
 const ARM_DIR = [-0.98, 0.2, 0];          // the model's arm, wrist to shoulder, before it is turned
@@ -335,18 +338,20 @@ export class BowView {
       geo.computeVertexNormals();
       const mat = m(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.6, envMapIntensity: 0.7 }));
       // The forearm and sleeve (weighted by `bend`) turn about the wrist, the sleeve stretching first.
-      const U = { uBend: { value: new THREE.Matrix3() }, uWrist: { value: wrist }, uStretch: { value: 1 }, uFrom: { value: wrist.x - ARM_FROM } };
+      const U = { uAxis: { value: new THREE.Vector3(0, 0, 1) }, uAngle: { value: 0 }, uWrist: { value: wrist }, uStretch: { value: 1 }, uFrom: { value: wrist.x - ARM_FROM } };
       mat.onBeforeCompile = (sh) => {
         Object.assign(sh.uniforms, U);
-        sh.vertexShader = 'attribute float bend;\nuniform mat3 uBend;\nuniform vec3 uWrist;\nuniform float uStretch;\nuniform float uFrom;\n' + sh.vertexShader
-          .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = normalize(mix(objectNormal, uBend * objectNormal, bend));')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\nif (bend > 0.0 && transformed.x < uFrom) transformed.x = uFrom + (transformed.x - uFrom) * uStretch;\ntransformed = mix(transformed, uBend * (transformed - uWrist) + uWrist, bend);');
+        // Each vertex turns about the wrist by its share (bend) of uAngle, round uAxis (Rodrigues).
+        sh.vertexShader = 'attribute float bend;\nuniform vec3 uAxis;\nuniform float uAngle;\nuniform vec3 uWrist;\nuniform float uStretch;\nuniform float uFrom;\n'
+          + 'vec3 armTurn(vec3 v, float a) { float c = cos(a), s = sin(a); return v * c + cross(uAxis, v) * s + uAxis * dot(uAxis, v) * (1.0 - c); }\n' + sh.vertexShader
+          .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nobjectNormal = armTurn(objectNormal, bend * uAngle);')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nif (bend > 0.0 && transformed.x < uFrom) transformed.x = uFrom + (transformed.x - uFrom) * uStretch;\ntransformed = armTurn(transformed - uWrist, bend * uAngle) + uWrist;');
       };
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;                    // the arm turns and stretches past its own bounds
       mesh.scale.setScalar(MODEL_S);
       mesh.position.set(...MODEL_GRIP);
-      mesh.rotation.y = Math.PI / 2;                 // +x (toward the target) into the screen
+      mesh.rotation.y = Math.PI / 2 + MODEL_YAW;     // +x (toward the target) into the screen, turned a little
       this.body.add(mesh);
       // The string: two thin rods, tip to the nock (or the middle), placed every frame.
       const rodGeo = g(new THREE.CylinderGeometry(0.035, 0.035, 1, 6));
@@ -354,7 +359,7 @@ export class BowView {
       const rods = [new THREE.Mesh(rodGeo, rodMat), new THREE.Mesh(rodGeo, rodMat)];
       for (const r of rods) { r.frustumCulled = false; this.scene.add(r); }
       this.model = { mesh, U, wrist, tipT, tipB, rods, armLen: wrist.x - xMin, dir0: new THREE.Vector3(...ARM_DIR).normalize(),
-        q: new THREE.Quaternion(), m4: new THREE.Matrix4(), v: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] };
+        v: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] };
       for (const ch of this.built) ch.visible = false;
       this.forearm.visible = this.sleeve.visible = this.cuff.visible = false;
       this.rest = MODEL_REST;
@@ -411,8 +416,10 @@ export class BowView {
       M.mesh.worldToLocal(s0);                       // the shoulder, model space
       s0.sub(M.wrist);
       const need = s0.length() * 1.05;
-      M.q.setFromUnitVectors(M.dir0, s0.normalize());
-      M.U.uBend.value.setFromMatrix4(M.m4.makeRotationFromQuaternion(M.q));
+      s0.normalize();
+      M.U.uAngle.value = Math.acos(Math.max(-1, Math.min(1, M.dir0.dot(s0))));
+      M.U.uAxis.value.crossVectors(M.dir0, s0);
+      if (M.U.uAxis.value.lengthSq() < 1e-10) { M.U.uAxis.value.set(0, 0, 1); M.U.uAngle.value = 0; } else M.U.uAxis.value.normalize();
       M.U.uStretch.value = Math.max(1, (need - ARM_FROM) / Math.max(0.05, M.armLen - ARM_FROM));
       const pull = p * (1 - Math.min(1, fly * 4));
       const top = M.mesh.localToWorld(b.copy(M.tipT)), bot = M.mesh.localToWorld(c.copy(M.tipB));
