@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1213';
+const CACHE = 'game-hub-v1214';
 
 const ASSETS = [
   './',
@@ -263,6 +263,7 @@ const ASSETS = [
   './archery/js/mp.js',
   './archery/js/mp-ui.js',
   './archery/js/alert.js',
+  './archery/models/arm.bin',
   './darts/',
   './darts/index.html',
   './darts/css/darts.css',
@@ -719,6 +720,7 @@ const HELD_BACK = {
     './archery/js/strings.js',
     './archery/js/mp-ui.js',
     './archery/js/alert.js',
+    './archery/models/arm.bin',
   ],
   'baseball': [
     './baseball/',
