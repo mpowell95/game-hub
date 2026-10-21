@@ -71,3 +71,14 @@ rebuild); every arrow sticks and quivers the moment it hits and the old number c
 0.3 s after for both players; the flight starts on the sight (no climb to an apex); the camera eases
 to a stop; the computer's arrows fly in over 0.5 s with a trail. The arm and hand: not changed yet,
 options put to Matt.
+
+## 2026-10-21: the arm becomes a real model
+
+Matt: "the arm and hand are still way fucked up... What do you recommend". Options given: drop the
+arm, a ready-made model, or a flat drawing; Matt chose to keep it and asked for a prompt for
+ChatGPT/Gemini. Lesson from three rounds of pictures: the prompt over-asked (three views, an exact
+finger-wide hole); what mattered was one clean cartoony arm on white. Meshy turned the picture into a
+model; its flagship model (7.1) is paid to download, the Lite model was free. The converter
+(`tools/convert-archery-arm.mjs`) measures the gap and cuff off that one source. Fitting it: aimed at
+the stand-in's shoulder the arm was seen end-on and the sleeve hid the hand; a separate
+`ARM_SHOULDER` well down and left shows it from the side, as the recording does.
