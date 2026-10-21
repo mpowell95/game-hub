@@ -367,8 +367,7 @@ Matt, after the offline release: *"Go"* (to stage 2, turn-by-turn online play). 
   `functions/decide.js`): a challenge ("challenged you, first to 2"), your turn coming back (with the
   score), a match the other person ended (resigning, or **their own goal ending it**, which told
   nobody until 2026-10-11: `youWonGoals`). **DEPLOYED by Matt on 2026-10-11** ("done"); **the
-  own-goal-win wording and "Your turn!" in place of "Your kick!" were written later that day and are
-  NOT yet redeployed.**
+  own-goal-win wording and "Your turn!" went live with the Firebase workflow's deploy, 2026-10-21.**
   Not yet seen arriving on a phone; the first real challenge is the test. A tap opens that match (`sw.js` reads `data.match`;
   the hub hands it to `alert.js`'s `armOpen`). **Since 2026-10-14 a tap also works with Flick Soccer
   already open** (the module's `openArmed` export takes the armed match and opens it, unless a

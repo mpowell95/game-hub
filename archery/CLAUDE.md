@@ -156,8 +156,8 @@ at the screen point `ui.js` puts the ring at, from the same numbers, so they can
 The sixth challenge game. Darts' design, copied (`darts/CLAUDE.md`, "Online challenges"):
 
 - **Node**: `archery/games/<id>` + `archery/index/<CODE>/<id>`, chat at `archery/chat/<id>`.
-  `archery` is in `database.rules.json` and `backups/rtdb-backup.mjs`. **NOT YET PUBLISHED**
-  (2026-10-14): until Matt pastes the rules, every read is refused and the online screens say so.
+  `archery` is in `database.rules.json` and `backups/rtdb-backup.mjs`. Rules published
+  2026-10-18 (Matt pasted the whole file).
 - **A match is a LOG of arrows**, each the face point it landed on (x, y, 1/10000 of a radius).
   `validateGame` replays it and refuses the whole document if one arrow does not replay. One
   online turn = one round (3 arrows), written arrow by arrow (`appendLog`), with the offline
@@ -167,8 +167,8 @@ The sixth challenge game. Darts' design, copied (`darts/CLAUDE.md`, "Online chal
 - Cancel / decline / resign / 3-day expiry exactly as root `CLAUDE.md`, "Cancel, decline, resign,
   expire". The hub's Challenges screen reads it through `js/challenges.js` `SOURCES.archery`.
 - **Push**: `archeryTurnPush` in `functions/index.js` (`decideArchery` in `functions/decide.js`):
-  a challenge, your turn (with the round and score; a shoot-off says so), the end. **NOT YET
-  DEPLOYED** (2026-10-14): live only after Matt runs `firebase deploy --only functions`.
+  a challenge, your turn (with the round and score; a shoot-off says so), the end. Deployed by the
+  Firebase workflow 2026-10-21.
 - Quick chat (`js/match-chat-ui.js`): the button sits under the menu button on the right edge
   (`CHAT_PLACE`), clear of the round pill and tiles on a 320 px phone.
 

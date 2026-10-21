@@ -246,6 +246,6 @@ Darts' challenges are the model (structure only). Story: `CLAUDE-HISTORY.md`, sa
   Chinchón's `mp` bucket once, `js/mp-records.js`). Never touches `chinchon-stats` or either autosave.
 - Cancel / Decline / Resign / 3-day expiry per `js/challenge-life.js`; online gate like Darts. Quick
   chat at `chinchon/chat/<id>` (`CH_CHAT_PLACE`, left of the menu). `chinchonTurnPush` and the
-  `chinchon` rules branch are **NOT yet deployed / published**.
+  `chinchon` rules branch are live (rules 2026-10-18, function by the workflow 2026-10-21).
 - Tests: `node tools/test-chinchon-mp.mjs`; `tools/check-no-scroll.mjs chinchon` measures the
   challenge home. **Not played on two real phones yet.**

@@ -15,7 +15,7 @@ A clone of Baseball 9 (mechanics and feel copied; our own art and words): proced
 
 - **Hub: `devOnly` tile** (blurb still the Phase 0 "Coming soon."). Playtest 1 (Matt, 2026-09-23, `docs/HANDOFF-BASEBALL-PLAYTEST-1.md`): all six batches DONE and live.
 - **Live plays are ON** (`LIVE_PLAY.on`); the out-zone model survives only for seasons/snapshots started before batch 4b.
-- **Unconfirmed:** the `careers` branch of `database.rules.json` (Matt publishes rules by hand, app first). Until published every career push records `HEALTH_DENIED` and the career plays/saves locally only. Nothing records him publishing it: check before telling him it is outstanding.
+- The `careers` branch of `database.rules.json` is live: the whole rules file was published 2026-10-18 and released again by the Firebase workflow 2026-10-21.
 
 ## Files
 
