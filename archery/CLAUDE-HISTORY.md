@@ -94,3 +94,10 @@ replaces the built bow; the built sight stays (a Meshy sight would not line up w
 ring). The arm in the model lies in the bow's plane, so seen from the eye it was end on: the
 converter weights the forearm/sleeve and a shader turns them about the wrist toward `ARM_SHOULDER`.
 `arm.bin` and `convert-archery-arm.mjs` were removed (the source `arm-meshy.glb` stays in reference/).
+
+## 2026-10-21 (later still): the model is drawn as made
+
+The wrist bend read as "a broken wrist"; spreading it along the forearm still changed the model.
+Matt: "The 3d model is correct. I just checked. Just don't change it?" The bend weights, the stretch
+and the shader were removed (format BOW2); the model is only placed, scaled and turned (-1.1 rad, the
+smallest turn that keeps the sleeve's closed end off screen with the bow down).
