@@ -82,3 +82,15 @@ model; its flagship model (7.1) is paid to download, the Lite model was free. Th
 (`tools/convert-archery-arm.mjs`) measures the gap and cuff off that one source. Fitting it: aimed at
 the stand-in's shoulder the arm was seen end-on and the sleeve hid the hand; a separate
 `ARM_SHOULDER` well down and left shows it from the side, as the recording does.
+
+## 2026-10-21 (later): one model for the bow and the arm
+
+Matt: the arm-only model's hand "isn't grabbing the bow... The thumb doesn't go around the bow
+handle". Its fist had a see-through slot a finger wide; the built grip is four times that. Opening
+the slot in the converter left the fingers beside the grip, not round it. Matt's call: make the bow
+and arm as one object. ChatGPT refused the first prompt (likely "cut off" next to "bow"; reworded as
+a "toy-style game asset" with a "rounded, closed" sleeve end); Meshy 6 Lite made the model. It
+replaces the built bow; the built sight stays (a Meshy sight would not line up with the aiming
+ring). The arm in the model lies in the bow's plane, so seen from the eye it was end on: the
+converter weights the forearm/sleeve and a shader turns them about the wrist toward `ARM_SHOULDER`.
+`arm.bin` and `convert-archery-arm.mjs` were removed (the source `arm-meshy.glb` stays in reference/).

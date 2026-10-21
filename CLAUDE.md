@@ -260,7 +260,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   on your own judgement.
 - **Never hand-edit generated files** (`js/emoji-data.js`, `js/emoji-search-*.js`,
   `boggle/data/words-es.txt`, `contexto/data/*`, `baseball/models/*`, `gridlock/js/levels.js`,
-  `js/gridlock-v1map.js`, `archery/models/arm.bin`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
+  `js/gridlock-v1map.js`, `archery/models/bow.bin`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
 
 Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
 (`players-agg.test`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`,
