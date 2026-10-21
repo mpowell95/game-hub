@@ -316,7 +316,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Game | Integration | CSS root / prefix | Settings key | Stats recorder |
 |---|---|---|---|---|
 | Air Hockey | module, immersive, devOnly; vs computer + live online (`rooms/<CODE>/ah/`); hub id `air-hockey`, stats id `airhockey` | `.ah-root` / `.ah-` | `gamehub.airhockey.v1` | `recordAirHockey` (`ah`) |
-| Archery | module, immersive, devOnly; vs computer, pass and play, online challenges (`archery/`; rules + push NOT yet published/deployed) | `.ar-root` / `.ar-` | `gamehub.archery.v1` (+ `.save.v1`) | `recordResult('archery', …)` |
+| Archery | module, immersive, devOnly; vs computer, pass and play, online challenges (`archery/`) | `.ar-root` / `.ar-` | `gamehub.archery.v1` (+ `.save.v1`) | `recordResult('archery', …)` |
 | Arrow Maze | module, immersive, devOnly; one ladder, points leaderboard, Rush. **Folder `way-out/`, hub id `way-out`, stats id `wayout`, `gamehub.wayout.*` keep the first name on purpose** (rule 5) | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ several frozen save/clock keys, see `way-out/CLAUDE.md`) | `recordWayOut` + `recordWayOutRush` (`wo`) |
 | Ball Run | module, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen) | `recordBallRun` |
 | Baseball | module, immersive, devOnly; three.js stadium, being rebuilt per `docs/BASEBALL-REFERENCE-B9.md` | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
@@ -332,7 +332,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Darts | module, immersive, devOnly; vs computer, pass and play, challenges (`darts/`) | `.dt-root` / `.dt-` | `gamehub.darts.v1` (+ `.save.v1`) | `recordResult('darts', …)` |
 | Dominoes | module | `.dm-root` / `.dm-` | `gamehub.dominoes.v1` | `recordDominoes` |
 | Dots and Boxes | module, multiplayer (`gamehub.dotsboxes.mp.v1`) | `.db-root` / `.db-` | `gamehub.dotsboxes.v1` | `recordDotsBoxes` |
-| Escoba | module, immersive, multiplayer 2-4 seats (`escoba-save`) + 2-player turn-by-turn challenges (`escoba/`, 2026-10-18; rules + push NOT yet published/deployed) | `.eb-root` / `.eb-` | `escoba-settings` (frozen) | `recordEscoba` (challenges: `'mp'`, never h2h) |
+| Escoba | module, immersive, multiplayer 2-4 seats (`escoba-save`) + 2-player turn-by-turn challenges (`escoba/`, 2026-10-18) | `.eb-root` / `.eb-` | `escoba-settings` (frozen) | `recordEscoba` (challenges: `'mp'`, never h2h) |
 | Filler | module, multiplayer (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Flick Soccer | module, immersive, released 2026-10-20; vs computer, 2 players, challenges (`flicksoccer/`); hub id `flick-soccer`, stats id `flicksoccer` | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` (+ `.save.v1`) | `recordResult('flicksoccer', …)` |
 | Golf | module, immersive | `.gf-root` / `.gf-` | `gamehub.golf.v1` (+ `.save.v1`) | `recordGolf` |
@@ -432,8 +432,7 @@ full-width row buttons use `.pf-linkbtn`.
 **Firebase rules:** root `.read`/`.write` are `false` and every branch is enumerated in
 `database.rules.json`; **add a new top-level node there or it is unreachable**, and add it to
 `backups/rtdb-backup.mjs`'s `BRANCHES` (which cannot read `messages/`; export that from the
-console). **Rules deploy with the merge** once the Firebase workflow has its secret (see "Push
-notifications"); until then Matt pastes the WHOLE file. `messages/` is scoped by `msgAuth/<uid>` → code; `admins/<uid>` grants Matt read-all.
+console). **Rules deploy with the merge** (the Firebase workflow, see "Push notifications"). `messages/` is scoped by `msgAuth/<uid>` → code; `admins/<uid>` grants Matt read-all.
 **`adminConfig/` and `bugReplies/` are writable only by a uid in `admins/`** (2026-10-14). It does
 not stop someone with another player's code and dev tools. Rules reach Firebase with the merge
 (the workflow) or, as a fallback, by Matt pasting the whole file (console → Realtime Database → Rules).
@@ -461,19 +460,17 @@ None of this makes the hub cheat-proof; never describe it that way.
   `pushSubs/<PLAYER CODE>/<key>`), Cloud Functions in `functions/` (decisions in the pure
   `functions/decide.js`), and `sw.js` (shows every push, never silently; opens the game on tap).
 - **Functions AND database rules deploy automatically on merge (2026-10-18, Matt: "i'd much prefer you
-  be able to do it automatically")**: `.github/workflows/firebase-deploy.yml`, once the repo secret
-  `FIREBASE_SERVICE_ACCOUNT` exists (setup: `functions/README.md`). Check its run like the Pages run
+  be able to do it automatically")**: `.github/workflows/firebase-deploy.yml`, signed in with the repo
+  secret `FIREBASE_SERVICE_ACCOUNT` (set up by Matt 2026-10-21; first run green). Check its run like the Pages run
   before saying "live". Fallback only if it is broken: Matt runs `firebase deploy --only functions` from
   `C:\Users\powel\game-hub-deploy`; **give those steps as one copy-paste block per command.** Blaze plan.
-- **Deployed triggers:** `hoopsTurnPush`, `messagePush`, `bugReportPush`, `skeeChallengePush`,
-  `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`. **`archeryTurnPush` and the `archery`
-  rules branch, and `chinchonTurnPush`, `escobaTurnPush` with the `chinchon` / `escoba` rules: rules
-  PUBLISHED by Matt 2026-10-18; functions deploy started by Matt 2026-10-18 (success not yet confirmed).**
+- **Deployed triggers (all, by the workflow 2026-10-21):** `hoopsTurnPush`, `messagePush`, `bugReportPush`,
+  `skeeChallengePush`, `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`, `archeryTurnPush`,
+  `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`; rules incl. `archery`, `chinchon`, `escoba`.
 - **24-hour reminder (2026-10-20, Matt: "for every game")**: `turnReminderPush` (hourly `onSchedule`) sends "Reminder: your
   turn vs X" once per turn when a challenge row has waited 24-72 h (`decideReminder`, `REMINDER_GAMES` in
   `functions/decide.js`). Sent-stamps live in `pushReminders/<code>/<node>~<id>` (server-only), NEVER on the index row.
-  **OUTSTANDING (2026-10-20): not deployed.** The workflow failed at Sign in (`FIREBASE_SERVICE_ACCOUNT` secret
-  is missing); Matt was given the manual deploy steps. Close this line when he confirms.
+  Deployed 2026-10-21 (workflow run, `turnReminderPush` created).
 - **The VAPID private key is a Firebase secret; never in this repo.** Its public half is in
   `js/push.js` and `functions/index.js`; `tools/test-push.mjs` fails if they differ.
 - iPhone: only the Home Screen app (iOS 16.4+) can receive them; `pushState()` returns `'install'`.
