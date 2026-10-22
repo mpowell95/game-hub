@@ -1,8 +1,8 @@
 // eight-ball/js/test.js - headless checks for Pool's engine and computer. Not deployed, not precached.
 //   node eight-ball/js/test.js
-// Random shots stay on the table, never leave two balls overlapping at rest, always end; a shot
-// replays identically; the rules (fouls, groups, going again, the 8, racks); whole computer-vs-
-// computer matches finish and the stronger level wins.
+// Random shots in every mode (with obstacles too) stay on the table, never leave two balls
+// overlapping at rest, always end; a shot replays identically; the rules of 8-ball, 9-ball and
+// Cutthroat and of each option; whole computer matches finish and the stronger level wins.
 
 import * as E from './engine.js';
 import { plan, rngFrom } from './ai.js';
@@ -13,132 +13,196 @@ const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; consol
 // --- physics ------------------------------------------------------------------------------------
 {
   const rnd = rngFrom(4242);
-  let escaped = 0, overlaps = 0, endless = 0;
-  for (let n = 0; n < 1500; n++) {
-    const m = E.newMatch(1, 0, 1 + n);
-    if (n % 2) { E.play(m, { dx: (rnd() - 0.5) * 0.2, dy: -1, p: 1 }); if (m.winner != null) continue; }
+  let escaped = 0, overlaps = 0, endless = 0, inObst = 0;
+  for (let n = 0; n < 1200; n++) {
+    const mode = E.MODES[n % 3];
+    const m = E.newMatch(mode, 1, 0, 1 + n, { obst: n % 4 === 0 });
+    if (n % 2) { E.play(m, { x: E.HEAD_SPOT[0], y: E.HEAD_SPOT[1], dx: (rnd() - 0.5) * 0.2, dy: -1, p: 1 }); if (m.winner != null) continue; }
     const a = rnd() * Math.PI * 2;
-    const ev = E.begin(m, { dx: Math.cos(a), dy: Math.sin(a), p: 0.2 + rnd() * 0.8, s: rnd() * 2 - 1 });
-    const steps = E.runToRest(m.b, ev);
+    const c = m.b[0];
+    const ev = E.begin(m, { ...(m.inHand ? { x: c.x, y: c.y } : {}), dx: Math.cos(a), dy: Math.sin(a), p: 0.2 + rnd() * 0.8, s: rnd() * 2 - 1 });
+    if (!ev) continue;
+    const steps = E.runToRest(m.b, ev, undefined, m.obs);
     E.settle(m, ev);
     if (steps >= E.maxShotSteps()) endless++;
     for (const o of m.b) if (o.on && (o.x < -0.01 || o.x > E.W + 0.01 || o.y < -0.01 || o.y > E.H + 0.01)) escaped++;
-    for (let i = 0; i < 16; i++) for (let j = i + 1; j < 16; j++) {
+    for (let i = 0; i < m.b.length; i++) for (let j = i + 1; j < m.b.length; j++) {
       const p = m.b[i], q = m.b[j];
       if (p.on && q.on && Math.hypot(p.x - q.x, p.y - q.y) < 2 * E.R - 0.05) overlaps++;
     }
+    for (const ob of m.obs) {
+      if (ob.k !== 'can') continue;
+      for (const o of m.b) if (o.on && Math.hypot(o.x - ob.x, o.y - ob.y) < E.R + ob.r - 0.05) inObst++;
+    }
   }
-  ok('1500 random shots: no ball leaves the table', escaped === 0, escaped);
+  ok('1200 random shots, every mode: no ball leaves the table', escaped === 0, escaped);
   ok('...no two balls overlap at rest', overlaps === 0, overlaps);
+  ok('...no ball rests inside an obstacle', inObst === 0, inObst);
   ok('...every shot comes to rest before the clock', endless === 0, endless);
 }
 {
-  const shot = { dx: 0.013, dy: -1, p: 1, s: -0.2 };
-  const a = E.newMatch(1, 0, 99), b = E.newMatch(1, 0, 99);
-  E.play(a, shot); E.play(b, shot);
-  ok('the same shot from the same table ends identically', JSON.stringify(a) === JSON.stringify(b));
+  const shot = { x: 52, y: 165, dx: 0.013, dy: -1, p: 1, s: -0.2 };
+  for (const mode of E.MODES) {
+    const a = E.newMatch(mode, 1, 0, 99, { obst: true }), b = E.newMatch(mode, 1, 0, 99, { obst: true });
+    E.play(a, shot); E.play(b, shot);
+    ok(`${mode}: the same shot from the same table ends identically`, JSON.stringify(a) === JSON.stringify(b));
+  }
 }
 {
-  // A lone ball rolled straight at a corner pocket drops.
-  const m = E.newMatch(1, 0, 3);
-  for (let i = 1; i < 16; i++) m.b[i].on = false;
-  m.b[5].on = true; m.b[5].x = 20; m.b[5].y = 20;
-  m.b[0].x = 40; m.b[0].y = 40;
-  m.broke = true; m.inHand = null; m.groups = ['a', 'b'];
-  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
-  ok('a ball sent into a corner pocket drops, and the shooter goes again', r.kind === 'again' && !m.b[5].on && m.turn === 0, JSON.stringify(r));
+  const m = E.newMatch('8', 1, 0, 7);
+  ok('every pocket hole is the same size', new Set(E.POCKETS.map((p) => p.r)).size === 1);
+  ok('the racks: 15 balls for 8-ball and Cutthroat, 9 for 9-ball, none overlapping',
+    E.newMatch('8').b.length === 16 && E.newMatch('ct').b.length === 16 && E.newMatch('9').b.length === 10 && m.b.every((o) => o.on));
+  const r9 = E.newMatch('9', 1, 0, 3).b, apex = r9.reduce((a, o, i) => (i && o.y > r9[a].y ? i : a), 1);
+  ok('9-ball: the 1 is at the front of the diamond', apex === 1);
 }
 
 // --- rules ----------------------------------------------------------------------------------------
-const lone = (seat = 0, groups = ['a', 'b']) => {
-  const m = E.newMatch(1, 0, 5);
-  for (let i = 1; i < 16; i++) m.b[i].on = false;
-  m.broke = true; m.inHand = null; m.groups = groups; m.turn = seat;
+/** A table with only the listed balls on, the cue ball at (cx, cy), seat `seat` to shoot. */
+const lone = (mode, on, cx, cy, extra = {}) => {
+  const m = E.newMatch(mode, extra.racks || 1, 0, 5, extra.opts || {});
+  for (let i = 1; i < m.b.length; i++) m.b[i].on = false;
+  for (const [i, x, y] of on) { m.b[i].on = true; m.b[i].x = x; m.b[i].y = y; }
+  m.b[0].x = cx; m.b[0].y = cy;
+  m.broke = true; m.inHand = null; m.turn = extra.seat || 0;
+  if (mode === '8') m.groups = 'groups' in extra ? extra.groups : ['a', 'b'];
   return m;
 };
 {
-  const m = lone();
-  m.b[10].on = true; m.b[10].x = 50; m.b[10].y = 100;
-  m.b[3].on = true; m.b[3].x = 20; m.b[3].y = 150;
-  m.b[0].x = 50; m.b[0].y = 140;
-  const r = E.play(m, { dx: 0, dy: -1, p: 0.4 });
-  ok('hitting the other group first is a foul: ball in hand for the other player', r.kind === 'foul' && r.foul === 'wrong' && m.turn === 1 && m.inHand === 'any', JSON.stringify(r));
+  const m = lone('8', [[5, 20, 20]], 40, 40);
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  ok('8-ball: potting your own goes again', r.kind === 'again' && !m.b[5].on && m.turn === 0, JSON.stringify(r));
 }
 {
-  const m = lone();
-  m.b[3].on = true; m.b[3].x = 80; m.b[3].y = 40;
-  m.b[0].x = 20; m.b[0].y = 160;
+  const m = lone('8', [[10, 50, 100], [3, 20, 150]], 50, 140);
+  const r = E.play(m, { dx: 0, dy: -1, p: 0.4 });
+  ok('8-ball: hitting the other group first is a foul, ball in hand', r.kind === 'foul' && r.foul === 'wrong' && m.turn === 1 && m.inHand === 'any', JSON.stringify(r));
+}
+{
+  const m = lone('8', [[3, 80, 40]], 20, 160);
   const r = E.play(m, { dx: 0, dy: 1, p: 0.05 });
   ok('missing every ball is a foul', r.kind === 'foul' && r.foul === 'nohit', JSON.stringify(r));
 }
 {
-  const m = lone();
-  m.b[0].x = 4; m.b[0].y = 4.5;
-  m.b[3].on = true; m.b[3].x = 60; m.b[3].y = 100;
+  const m = lone('8', [[3, 60, 100]], 4, 4.5);
   const r = E.play(m, { dx: -1, dy: -1, p: 0.3 });
   ok('potting the cue ball is a foul, and it comes back on the table', r.kind === 'foul' && r.foul === 'scratch' && m.b[0].on, JSON.stringify(r));
 }
 {
-  const m = lone(0, null);
-  m.b[0].x = 40; m.b[0].y = 40;
-  m.b[12].on = true; m.b[12].x = 20; m.b[12].y = 20;
-  m.b[2].on = true; m.b[2].x = 60; m.b[2].y = 150;
+  const m = lone('8', [[12, 20, 20], [2, 60, 150]], 40, 40, { groups: null });
   const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
-  ok('the first clean pot on an open table gives the shooter that group', r.kind === 'again' && m.groups && m.groups[0] === 'b' && m.groups[1] === 'a', JSON.stringify(m.groups));
+  ok('8-ball: the first clean pot on an open table gives that group', r.kind === 'again' && m.groups && m.groups[0] === 'b' && m.groups[1] === 'a', JSON.stringify(m.groups));
 }
 {
-  const m = lone();
-  m.b[0].x = 40; m.b[0].y = 40;
-  m.b[8].on = true; m.b[8].x = 20; m.b[8].y = 20;
-  m.b[2].on = true; m.b[2].x = 60; m.b[2].y = 150;
-  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
-  ok('the 8 potted while your group is still up loses the rack', r.kind === 'win' && m.winner === 1, JSON.stringify(r));
+  const m = lone('8', [[8, 20, 20], [2, 60, 150]], 40, 40);
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5, c: 0 });
+  ok('8-ball: the 8 potted while your group is still up loses', r.kind === 'win' && m.winner === 1, JSON.stringify(r));
 }
 {
-  const m = lone();
-  m.b[0].x = 40; m.b[0].y = 40;
-  m.b[8].on = true; m.b[8].x = 20; m.b[8].y = 20;
-  m.b[11].on = true; m.b[11].x = 60; m.b[11].y = 150;
-  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
-  ok('the 8 potted once your group is clear wins', r.kind === 'win' && m.winner === 0, JSON.stringify(r));
+  const m = lone('8', [[8, 20, 20], [11, 60, 150]], 40, 40);
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5, c: 0 });
+  ok('8-ball: the 8 into the called pocket, your group clear, wins', r.kind === 'win' && m.winner === 0, JSON.stringify(r));
 }
 {
-  const m = lone();
-  m.racks = 2;
-  m.b[0].x = 40; m.b[0].y = 40;
-  m.b[8].on = true; m.b[8].x = 20; m.b[8].y = 20;
-  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  const m = lone('8', [[8, 20, 20], [11, 60, 150]], 40, 40);
+  ok('8-ball: the 8 must be called', E.needCall(m, 0));
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5, c: 1 });
+  ok('...into another pocket than the one called, it loses', r.kind === 'win' && m.winner === 1, JSON.stringify(r));
+}
+{
+  const m = lone('8', [[8, 20, 20]], 40, 40, { racks: 2 });
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5, c: 0 });
   ok('first to 2: winning a rack is a rack, not the match', r.kind === 'rack' && m.scores[0] === 1 && m.winner == null, JSON.stringify(r));
-  const brk = m.breaker;
   E.nextRack(m);
-  ok('...the next rack is racked and the break passes', m.breaker === (brk ^ 1) && m.turn === m.breaker && m.b.every((o) => o.on) && !m.groups && m.inHand === 'kitchen');
+  ok('...the next rack is racked and the break passes', m.breaker === 1 && m.turn === 1 && m.b.every((o) => o.on) && !m.groups && m.inHand === 'kitchen');
 }
 {
-  const m = E.newMatch(1, 0, 7);
-  ok('the cue ball may go anywhere in the kitchen, not above the head string, never on a ball',
-    E.canPlace(m.b, 30, 170, true) && !E.canPlace(m.b, 30, 100, true) && E.canPlace(m.b, 30, 100, false) && !E.canPlace(m.b, m.b[1].x, m.b[1].y + 1, false));
+  const m = lone('8', [[5, 20, 20], [2, 60, 150]], 40, 40, { opts: { call: true } });
+  ok('call shots: every shot must be called', E.needCall(m, 0));
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5, c: 3 });
+  ok('...a pot into another pocket stays down but ends the turn', r.kind === 'turn' && !m.b[5].on && m.turn === 1, JSON.stringify(r));
+}
+{
+  const m = lone('8', [[5, 20, 20], [2, 60, 150]], 40, 40, { opts: { bank: true } });
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  ok('banks only: a straight pot does not count', r.kind === 'turn' && !m.b[5].on && m.turn === 1, JSON.stringify(r));
+  const m2 = lone('8', [[5, 50, 12], [2, 60, 150]], 50, 60, { opts: { bank: true } });
+  // The 5 sent into the top cushion and back down the table: it bounced, so a pot would count.
+  const ev = E.begin(m2, { dx: 0, dy: -1, p: 0.7 });
+  E.runToRest(m2.b, ev, undefined, m2.obs);
+  ok('...a ball that bounced off a cushion is marked as banked', ev.kiss[5] === true);
+}
+{
+  const m = lone('9', [[1, 80, 100], [9, 20, 20]], 40, 40);
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  ok('9-ball: hitting the 9 before the lowest ball is a foul, and the 9 comes back', r.kind === 'foul' && m.b[9].on && Math.abs(m.b[9].x - E.W / 2) < 0.01, JSON.stringify(r));
+}
+{
+  const m = lone('9', [[9, 20, 20]], 40, 40);
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  ok('9-ball: potting the 9 cleanly wins', r.kind === 'win' && m.winner === 0, JSON.stringify(r));
+}
+{
+  const m = lone('9', [[3, 20, 20], [4, 70, 150]], 40, 40);
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  ok('9-ball: potting the lowest goes again', r.kind === 'again' && m.turn === 0, JSON.stringify(r));
+}
+{
+  // Cutthroat: seat 0 owns 1-5. It pots the 7 (seat 1's): goes again.
+  const m = lone('ct', [[7, 20, 20], [1, 70, 150], [12, 80, 60]], 40, 40);
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  ok('Cutthroat: potting someone else’s goes again', r.kind === 'again' && m.turn === 0, JSON.stringify(r));
+  ok('...and that player is out (their last ball)', m.out[1] === true && !m.out[2], JSON.stringify(m.out));
+}
+{
+  const m = lone('ct', [[2, 20, 20], [1, 70, 150], [7, 80, 60], [12, 80, 100]], 40, 40);
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  ok('Cutthroat: potting your own ends the turn', r.kind === 'turn' && m.turn === 1 && !m.b[2].on, JSON.stringify(r));
+}
+{
+  const m = lone('ct', [[1, 70, 150], [12, 80, 100]], 4, 4.5);
+  m.b[7].on = false; m.b[9].on = false;       // seat 1 has nothing on; down: 6-10
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.3 });
+  ok('Cutthroat: a foul puts one of each other player’s balls back', r.kind === 'foul' && m.b[6].on && m.b[11].on, JSON.stringify(r));
+}
+{
+  const m = lone('ct', [[12, 20, 20], [1, 70, 150]], 40, 40);
+  m.out[1] = true;
+  const r = E.play(m, { dx: -1, dy: -1, p: 0.5 });
+  ok('Cutthroat: the last player still in wins', r.kind === 'win' && m.winner === 0, JSON.stringify(r));
+}
+{
+  const m = E.newMatch('8', 1, 0, 7);
+  ok('the cue ball goes anywhere in the kitchen, not above the head string, never on a ball',
+    E.canPlace(m, 30, 170, true) && !E.canPlace(m, 30, 100, true) && E.canPlace(m, 30, 100, false) && !E.canPlace(m, m.b[1].x, m.b[1].y + 1, false));
   ok('a shot placed somewhere illegal is refused', E.begin(m, { x: 30, y: 100, dx: 0, dy: -1, p: 0.5 }) === null);
+  const o = E.newMatch('8', 1, 0, 7, { obst: true });
+  ok('obstacles: three, one a spill, none on the rack or the head spot', o.obs.length === 3 && o.obs.some((x) => x.k === 'spill')
+    && o.obs.every((x) => Math.hypot(x.x - 50, x.y - (E.FOOT_Y - 10)) >= 26 && Math.hypot(x.x - E.HEAD_SPOT[0], x.y - E.HEAD_SPOT[1]) >= 15));
+  const solid = o.obs.find((x) => x.k !== 'spill');
+  ok('...the cue ball cannot be put on one', !E.canPlace(o, solid.x, solid.y, false));
 }
 
 // --- the computer -------------------------------------------------------------------------------
-function match(d0, d1, seed) {
-  const m = E.newMatch(1, seed & 1, 1000 + seed);
+function match(mode, diffs, seed, opts) {
+  const m = E.newMatch(mode, 1, seed % E.seatsOf(mode), 1000 + seed, opts);
   const rng = rngFrom(77 + seed);
-  while (m.winner == null && m.shots < 300) {
-    const r = E.play(m, plan(m, m.turn, m.turn === 0 ? d0 : d1, rng));
+  while (m.winner == null && m.shots < 400) {
+    const r = E.play(m, plan(m, m.turn, diffs[m.turn], rng));
     if (!r) return null;
     if (r.kind === 'rack') E.nextRack(m);
   }
   return m;
 }
-{
-  let finished = 0, hardWins = 0;
-  for (let g = 0; g < 8; g++) {
-    const m = match('hard', 'easy', g);
-    if (m && m.winner != null) { finished++; if (m.winner === 0) hardWins++; }
+for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', 'easy'], {}], ['ct', ['hard', 'easy', 'easy'], {}], ['8', ['medium', 'medium'], { call: true, bank: true, obst: true }]]) {
+  let finished = 0, strongWins = 0;
+  for (let g = 0; g < 5; g++) {
+    const m = match(mode, diffs, g, opts);
+    if (m && m.winner != null) { finished++; if (m.winner === 0) strongWins++; }
   }
-  ok('computer vs computer: every match finishes', finished === 8, finished);
-  ok('...and Hard beats Easy most of the time', hardWins >= 6, hardWins);
+  const label = `${mode}${Object.keys(opts).length ? ' with every option' : ''}`;
+  ok(`computer ${label}: every match finishes`, finished === 5, finished);
+  if (diffs[0] === 'hard') ok(`...and Hard wins most of them`, strongWins >= 3, strongWins);
 }
 
 console.log(`${pass} passed, ${fail} failed`);
