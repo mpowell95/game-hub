@@ -74,12 +74,18 @@ browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', a
   .catch(() => null);
 if (!browser) { console.log('SKIP: no Chromium at /opt/pw-browsers/chromium'); process.exit(0); }
 
-const newPage = async () => {
+// policy 'now' = an admin device (reloads onto a build at once), 'hold' = everyone else (at a
+// fresh open). midSession: every load is a mid-session one (a reload, not an app launch).
+const newPage = async (policy = 'now', { midSession = false } = {}) => {
   const ctx = await browser.newContext({ viewport: { width: 393, height: 852 } });
   const page = await ctx.newPage();
-  await page.addInitScript(() => {
+  await page.addInitScript(([pol, mid]) => {
     localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'SW Probe', emoji: '🎯' }));
-  });
+    window.__GH_UPDATE_POLICY__ = pol;
+    if (mid && !sessionStorage.getItem('hub.session')) sessionStorage.setItem('hub.session', JSON.stringify({ at: Date.now() }));
+    // An app launch starts with an empty sessionStorage: the next load after this flag is one.
+    if (localStorage.getItem('test.launch') === '1') { localStorage.removeItem('test.launch'); sessionStorage.removeItem('hub.session'); }
+  }, [policy, midSession]);
   return page;
 };
 // GUARD: THE THING UNDER TEST NAVIGATES. The whole point of the fix is that the page reloads
@@ -87,6 +93,15 @@ const newPage = async () => {
 // "Execution context was destroyed". A poll that propagates that failure is testing its own
 // timing, not the app - so a torn-down context reads as "no answer yet" and the poll comes back.
 const settle = (p) => p.catch(() => null);
+/** The current build has finished warming (warmRest stores its manifest last), as on a phone that has
+ *  had its build a while. NOTE (2026-10-22): case 3's takeover is flaky in this headless Chromium on
+ *  main too (2 of 4 runs): the new worker sometimes never activates. Not caused by the app's code. */
+const warmed = (page) => settle(page.evaluate(async () => {
+  for (const k of await caches.keys()) {
+    if (await (await caches.open(k)).match('./__rest-manifest__')) return true;
+  }
+  return false;
+}));
 const chip = (page) => settle(page.evaluate(() => {
   const el = document.querySelector('[data-role="version"]');
   return el && !el.hidden ? el.textContent.trim() : null;
@@ -265,6 +280,54 @@ const until = async (page, fn, ms = 30000, step = 500) => {
   const survived = await settle(page.evaluate(() => window.__mark === 'current-page'));
   ok('a tap on an up-to-date page does NOT reload it', survived === true,
     'the page reloaded with nothing to update - the 2026-09-01 loop is back');
+  await page.context().close();
+}
+
+// --- case 5: a player's phone (not admin) does NOT reload mid-session; a tap on the pill does ----
+// Matt, 2026-10-22: Ana and Moonis saw "an update every time they go back to the hub". The worker
+// still takes the new build at once; the PAGE keeps its build until a fresh open.
+{
+  setVersion(FROM);
+  const page = await newPage('hold', { midSession: true });
+  await page.goto(BASE, { waitUntil: 'load' });
+  await until(page, async () => (await controller(page)) === FROM, 20000);
+  await page.goto(BASE, { waitUntil: 'load' });   // load under the worker
+  await until(page, async () => (await settle(page.evaluate(() => window.__ghHub && window.__ghHub._loadedVersion))) === SHORT(FROM), 20000);
+  await until(page, () => warmed(page), 60000);
+  await settle(page.evaluate(() => { window.__mark = 'player-page'; }));
+  setVersion(TO);                                  // THE DEPLOY
+  await settle(page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())));
+  const swapped = await until(page, async () => (await controller(page)) === TO, 30000);
+  await page.waitForTimeout(6000);
+  ok('the worker still takes the new build at once', swapped >= 0, `controller: ${await controller(page)}`);
+  ok('[KNOWN-BUG PROBE] a player\'s page is NOT reloaded mid-session',
+    (await settle(page.evaluate(() => window.__mark))) === 'player-page', 'the page reloaded');
+  ok('the pill says this page is behind', (await chip(page)) === 'v551 → v552', `chip: ${JSON.stringify(await chip(page))}`);
+  await settle(page.evaluate(() => document.querySelector('[data-role="version"]').click()));
+  const tapped = await until(page, async () => (await settle(page.evaluate(() => window.__mark))) === undefined
+    && (await chip(page)) === 'v552', 30000);
+  ok('a tap on the version pill reloads onto the new build', tapped >= 0, `chip: ${JSON.stringify(await chip(page))}`);
+  await page.context().close();
+}
+
+// --- case 6: a player's phone DOES reload in the first seconds of an app launch -------------------
+{
+  setVersion(FROM);
+  const page = await newPage('hold');
+  await page.goto(BASE, { waitUntil: 'load' });   // first visit: no worker yet
+  await until(page, async () => (await controller(page)) === FROM, 20000);
+  // An app launch starts with an empty sessionStorage (the init script clears it on this flag).
+  await settle(page.evaluate(() => localStorage.setItem('test.launch', '1')));
+  await page.goto(BASE, { waitUntil: 'load' });
+  await until(page, async () => (await settle(page.evaluate(() => window.__ghHub && window.__ghHub._loadedVersion))) === SHORT(FROM), 20000);
+  await until(page, () => warmed(page), 60000);
+  await settle(page.evaluate(() => { window.__mark = 'launched'; }));
+  setVersion(TO);
+  await settle(page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())));
+  const took = await until(page, async () => (await settle(page.evaluate(() => window.__mark))) === undefined
+    && (await chip(page)) === 'v552', 30000);
+  ok('a fresh open reloads onto a build that lands in its first seconds', took >= 0,
+    `chip: ${JSON.stringify(await chip(page))}, controller: ${await controller(page)}`);
   await page.context().close();
 }
 

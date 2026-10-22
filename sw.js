@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1222';
+const CACHE = 'game-hub-v1223';
 
 const ASSETS = [
   './',
@@ -1755,6 +1755,14 @@ const CACHE_FIRST_PATHS = new Set(
   [...REST, ...SHELL_CACHE_FIRST]
     .filter((p) => !HELD_BACK_OWNER.has(p))
     .map((p) => new URL(p, self.location.href).pathname));
+// A NEW FILE IN AN UNRELEASED GAME NEEDS NO ASSETS ENTRY (2026-10-22): adding one to ASSETS changed
+// this file and so sent every phone an update (Archery's 3D models did, three times). The validator
+// lets a file under a held-back game's folder stay out of ASSETS unless something outside held-back
+// folders imports it, and it is network-first here like the listed ones.
+const HELD_DIRS = [...new Set([...HELD_BACK_OWNER.keys()].map((p) => p.replace(/^\.\//, '').split('/')[0]))]
+  .map((d) => new URL(`./${d}/`, self.location.href).pathname);
+const isDevFresh = (path) => DEV_FRESH_PATHS.has(path)
+  || (!CACHE_FIRST_PATHS.has(path) && HELD_DIRS.some((d) => path.startsWith(d)));
 
 // How long a code/markup request waits on the network before the cached copy is served instead.
 // Long enough that a merely-average connection still wins the race (and the player keeps getting
@@ -1813,7 +1821,7 @@ self.addEventListener('fetch', (event) => {
   // runs, the previous deploy's cache is still alive as a fallback, and caches.match searches
   // caches in CREATION order - so without this, an entry already refreshed into the new cache
   // would keep being answered by the older cache's stale copy until the warm finished.
-  if (sameOrigin && req.mode !== 'navigate' && !DEV_FRESH_PATHS.has(url.pathname)
+  if (sameOrigin && req.mode !== 'navigate' && !isDevFresh(url.pathname)
       && (STATIC_RE.test(url.pathname) || CACHE_FIRST_PATHS.has(url.pathname))) {
     event.respondWith((async () => {
       const cur = await caches.open(CACHE);

@@ -139,8 +139,13 @@ Two causes that look identical; separate them in this order:
    deployed `sw.js`, evaluate `ASSETS` + `isShellAsset`, request every SHELL entry live. All 200
    rules this out. Prevention: `tools/validate-sw-assets.mjs`, `tools/test-sw-strategy.mjs`.
 
-A new build applies itself silently on the launcher (never while a game is mounted). An arrow that
-persists is a bug.
+**A player's launcher reloads onto a new build only at a FRESH OPEN (2026-10-22, Matt: Ana and Moonis
+saw "an update every time they go back to the hub").** The worker still takes over at once (unchanged);
+`js/hub.js` reloads the PAGE at once only on an admin device or dev profile, elsewhere only in the first
+30 s of an app launch or of a return after 30+ min away. A tap on the pill always takes it; a game that
+fails to load on the older page reloads onto the new build and opens. On a player's phone a lasting
+`vOld → vNew` pill is normal; on an admin device it is a bug. Do NOT make new workers wait for the page
+(`skipWaiting` on request): tried that day, Chromium sometimes never activated it and a page load then hung.
 
 ### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)
 
@@ -164,7 +169,9 @@ Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HI
   each launcher paint; the warm skips the rest, BELOW the carry-forward. Saves ~4.3 MB per phone.
   **Held-back files carry no hash and are network-first, so editing an unreleased game sends
   players NO update: do not bump CACHE or touch sw.js for it** (the validator NOTEs a needless
-  bump). Adding/removing a file or touching shared files still does. The hub imports `alerts`
+  bump). **A new file in an unreleased game needs no ASSETS entry** (2026-10-22: the validator allows
+  it, `isDevFresh` serves it network-first; add it at the release commit). Removing a listed file or
+  touching shared files still does. The hub imports `alerts`
   modules only for games on that launcher, so those are held back too.
 - **Network-first with a deadline** (`NET_TIMEOUT_MS` 2.5 s) plus a `SLOW_LATCH_MS` (10 s) "network
   is bad" latch. A request with nothing cached is never short-circuited.
