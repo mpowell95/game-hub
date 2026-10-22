@@ -286,6 +286,8 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   Hard 1-3 3 s, 4-6 4 s, 7-9 5 s, 10-12 6 s, then +0.5 s every board (30 = 15 s). Rules 1 = 3 s flat
   (to v1215); rules 2 = v1216 only (Hard +1 s every 3 boards, 7 s cap). Each run stores `rv`. The
   Ready popup shows the NEXT board's cost; the setup tile shows board 1's.
+  Under the Ready popup's seconds: **"−Ns mistakes"** = lost to mistakes on the board just cleared
+  (Matt, 2026-10-22; from `mx`/`mb`; hidden when none).
 - **Tuning data (2026-10-22, Matt: "We need all this data so we know if we need to adjust the
   settings")**: every run also stores `bt` (play ms per board, the last = the board it ended on),
   `ba` (arrows per board), `bc` (clock at each clear), `mx` (each mistake's cost), `mb` (each

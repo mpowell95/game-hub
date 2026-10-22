@@ -1677,10 +1677,13 @@ class WayOut {
     if (!r || r.over || !r.paused || r.counting || r.heldFroze || !m) return;
     const secs = (Math.floor(r.bank / 100) / 10).toFixed(1);
     const arrow = RUSH_ARROW, miss = rushMissMs(r.mode, r.i + 1);   // the NEXT board's cost
+    // Seconds lost to mistakes on the board just cleared (Matt, 2026-10-22). Nothing when none.
+    const lost = r.mx.reduce((n, c, k) => n + (r.mb[k] === r.i + 1 ? c : 0), 0);
     m.innerHTML = `
       <div class="wo-ready" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
         <p class="wo-ready-done" id="wo-ready-h"><span aria-hidden="true">✓</span>${t('rush_board_cleared', { n: r.boards })}</p>
         <p class="wo-ready-secs"><b>${secs}</b><i>s</i><span class="wo-sr">${t('rush_next_secs')}</span></p>
+        ${lost ? `<p class="wo-ready-lost">${t('rush_board_lost', { s: lost / 1000 })}</p>` : ''}
         <ul class="wo-ready-rules">
           <li class="is-gain">${arrow('#3fd6bd')}<span class="wo-sr">${t('rush_rule_gain', { gain: RUSH_GAIN_MS / 1000 })}</span><b aria-hidden="true">+${RUSH_GAIN_MS / 1000}s</b></li>
           <li class="is-miss">${arrow('#e0484f')}<span class="wo-sr">${t('rush_rule_miss', { miss: miss / 1000 })}</span><b aria-hidden="true">\u2212${miss / 1000}s</b></li>
