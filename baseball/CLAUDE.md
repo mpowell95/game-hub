@@ -85,6 +85,8 @@ Shared, network-first, no DOM, no Firebase import at module scope. Full contract
 
 **`docs/BASEBALL-DESIGN-DOC.md`** (v12) is the source of truth for `settings.js` (constants tagged [Locked]/[Tested]/[Draft] + section, or `// Draft [Open item N]` when invented). A new revision updates the doc, `settings.js`, and this pointer together.
 
+Chat archive (2026-10-22): `docs/archive/baseball/README.md` maps every Baseball chat to where its work lives, plus the never-merged mocks (rounds 1-2) and design doc v9.
+
 ## Matt's standing decisions (closed; do not re-propose)
 
 ### No difficulty setting, no help for weaker players (Matt, 2026-09-23) - CLOSED, do not re-propose
