@@ -59,6 +59,14 @@ re-confirming per step, no need for Matt to say "deploy":
 Pause only for a genuinely destructive step (force-push, history rewrite). If something should not
 ship yet, Matt will say so.
 
+## Performance: measure what the phone DOWNLOADS first (Matt, 2026-10-22)
+
+For months every Leaderboard, My Stats, Records and picker downloaded all of `players/` (~930 KB) and grouped it
+on the phone; no session spotted it, despite Matt asking more than once why the hub was slow. Moving it to the
+server (`boards/`, `directory/`) made it instantly faster. **When anything feels slow, check bytes over the network
+before code speed. A new screen must never read all of `players/`**: use `readPeople()`, `readPlayersForMe()`,
+`readOpponentProfiles()` or `watchBoard()` (`js/stats-net.js`). Mention any whole-node read you see, unasked.
+
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 
 A mid-turn message is not a note for the final report. Stop and say where you are, what is left
