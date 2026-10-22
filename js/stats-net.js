@@ -292,6 +292,27 @@ export async function readPlayersOnce({ fresh = false } = {}) {
   return read;
 }
 
+/** THE "PICK A PERSON" READ (2026-10-22): the server's small directory/<CODE> = { name, emoji, at }
+ *  (functions/index.js directoryBuild) instead of all of players/ (~940 KB on a phone signal), in
+ *  the SAME shape readPlayersOnce returns ({ id: { profile, updatedAt } }), so every game's
+ *  opponentsFrom works unchanged. No directory yet, or unreadable: the full read, as before. Names
+ *  only; anything that needs stats (records, unlocks) still calls readPlayersOnce. */
+let _dirMemo = null;
+export async function readOpponentProfiles() {
+  if (!(await init())) return {};
+  if (_dirMemo && Date.now() - _dirMemo.at < READ_REUSE_MS) return copyOf(_dirMemo.val);
+  let dir = null;
+  try { const s = await _api.get(_api.ref(_db, 'directory')); dir = s.val(); } catch { dir = null; }
+  if (!dir || typeof dir !== 'object' || !Object.keys(dir).length) return readPlayersOnce();
+  const out = {};
+  for (const code of Object.keys(dir)) {
+    const d = dir[code] || {};
+    out['dir:' + code] = { profile: { name: String(d.name || ''), emoji: String(d.emoji || ''), playerId: code }, updatedAt: +d.at || 0 };
+  }
+  _dirMemo = { at: Date.now(), val: out };
+  return copyOf(out);
+}
+
 /** Who owns `code`: { name, emoji } from that player's most recently active NAMED device, or null.
  *  Linking a new device to a code adopts this, so a second phone inherits the player's real name
  *  instead of syncing the 'You' placeholder (which would rename the whole player on the board). */

@@ -68,6 +68,8 @@ export const BRANCHES = [
   'courseDrafts',
   // nudges/ (2026-10-22): the Multiplayer screen's Remind bell, { from, t } per match. A request log.
   'nudges',
+  // directory/ (2026-10-22): names + emojis per code, rebuilt from players/ by the server. Derived.
+  'directory',
   // skeeChallenges/ (skeeball/js/challenge.js, 2026-09-24): Skeeball "beat my score" challenges and
   // their per-player index. Same auth shape as hoops/.
   'skeeChallenges',

@@ -34,7 +34,7 @@
 // writes return { ok:false, reason:'denied' }.
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { readPlayersOnce } from '../../js/stats-net.js';
+import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { recordEscoba, noteVoidedResult } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
@@ -130,9 +130,9 @@ function writesAllowed(what) {
 // TEST SEAM: tools/test-escoba-mp.mjs (and the browser checks) hand in an in-memory database.
 let bootFn = getStatsApp;
 let devGuard = true;
-let playersFn = readPlayersOnce;
+let playersFn = readOpponentProfiles;
 export function __setBootForTest(fn, { allowDev = false, players = null } = {}) {
-  bootFn = fn || getStatsApp; devGuard = !allowDev; playersFn = players || readPlayersOnce;
+  bootFn = fn || getStatsApp; devGuard = !allowDev; playersFn = players || readOpponentProfiles;
 }
 async function ready() { try { return await bootFn(); } catch { return null; } }
 const allowed = (what) => !devGuard || writesAllowed(what);

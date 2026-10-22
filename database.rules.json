@@ -62,6 +62,7 @@
     "escoba":         { ".read": "auth != null", ".write": "auth != null" },
     "hoops":          { ".read": "auth != null", ".write": "auth != null" },
     "players":        { ".read": "auth != null", ".write": "auth != null" },
+    "directory":      { ".read": "auth != null", ".write": false },
     "nudges": {
       "$code": {
         "$key": {
