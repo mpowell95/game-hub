@@ -1,0 +1,39 @@
+Read all documentation regarding:
+
+- creating a new game
+- integrating the game into the game hub
+- making sure stats and games are properly recorded in the leaderboard
+- the setup screen
+- the How To Play page
+- the English/Spanish requirements
+- anything else you come across and deem pertinent
+
+START FROM NOTHING.
+
+There is a previous attempt at this game in the repo. It is being thrown away.
+
+- Do not open, read, search, or reference anything under `skeeball/` or
+  `reference/skeeball/`, and do not read this game's entry or art in `js/hub.js`.
+- Delete the `skeeball/` folder before you begin.
+- Do not let any of it influence any decision: not the layout, not the art, not the
+  palette, not the physics, not the file structure, not the naming.
+- If you find yourself citing that build for any reason, stop.
+
+You are to create a realistic arcade style skeeball game.
+
+- Players begin with 1 unlocked board. A classic skeeball machine. Once they hit a
+  certain threshold, the next board will unlock.
+- Each board must have space for the top all time score (by any player), the all time
+  best score (for the current player), the current player's daily best score, and the
+  score they just got.
+- Each machine should have a different name, style, and vibe.
+
+To begin, only create the first, classic skeeball machine. We will create the others
+after we've tuned the mechanics and physics of the board.
+
+Admin only for now, like Pinball.
+
+THE LAW still applies. Players already have recorded skeeball plays. Keep the existing
+stats id and sub-counter so that history is not orphaned by the rewrite.
+
+Do not tell me it's done until you have played it yourself and have found no bugs or errors.

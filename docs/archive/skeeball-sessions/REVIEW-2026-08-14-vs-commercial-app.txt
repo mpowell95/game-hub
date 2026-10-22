@@ -1,0 +1,69 @@
+I watched the recording, then drove the current build on `main` in a real browser (mounted standalone and in the hub, played racks, captured flight frames) and re-ran the benches. One thing to say first:
+
+**That mp4 is the commercial Skee-Ball app, not our game** — tickets, levels, "Tickets to next level", the licensed branding. So I treated it as the target and reviewed our Skeeball against it. (The upload commit today, `603deeb`, is empty — same bytes as the file from 08-13, so nothing new landed.)
+
+---
+
+## Blockers — wrong information shown to the player
+
+**How to play is factually false, on three of its five lines.** Measured against `tune-ladder.mjs` and `skeeball/js/test.js`:
+
+| The sheet says | Measured |
+|---|---|
+| "Half strength = the 50 cup" | 0.50 power is the **40**. The 50 band starts at 0.62 |
+| "The corner 100s take nearly full strength" | first 100 at **power 0.36** with full aim |
+| "Too soft for the hump and the ball rolls back" | **cannot happen** — the softest step on the dial still scores 20 |
+
+The diagram is wrong too: it shows only 20/30/40/50 (no 10, no 100s — half the board), and its "full strength" arc sails clean over everything, which no throw does. Fix `howto.js` + `strings.js` together.
+
+**The hub blurb is wrong**: "Nine balls, five rings, two corner pockets worth 100." The board has four cups, one unlabelled painted ring, and a 10 trough.
+
+## The board does not look like the machine in the footage
+
+This is the biggest gap, and it's all in `render.js` → `_paintField` / `_buildMachine`:
+
+- **Cups are flat black ovals with a hairline rim.** In the footage every ring is a raised white cylinder nested inside the next. Ours reads as spots painted on a plank.
+- **The big painted ellipse is unlabelled and scores nothing.** In the real machine that ring *is* the 10. Ours puts "10" on the flat lip *below* the board, past a black gap.
+- **Every value is printed twice, and none of them is on its own hole.** "100" prints below and outboard of its corner cup, directly under the "40" — a player reads the corner cups as 40s. In the footage each number appears once, on the ring face.
+- **The 100s sit level with the 40.** In the footage they're tubes at the top corners, above the 50.
+- **No backboard art.** The footage has the logo panel above the rings; ours is bare orange, then a black bar.
+- **Black wedges either side of the board's bottom edge** read as holes in the geometry.
+- **The board is ~16% of screen height** (the handoff's own number, against its 32–40% target). The footage gives the board ~45%. Two-thirds of our screen is empty lane with a very large ball on it.
+
+## Rack complete sheet is half-built
+
+`skeeball.css` has **no rules at all** for `.sk-records`, `.sk-rec`, its `dt`/`dd`, `.sk-play` or `.sk-link`. So the three record rows render as a browser-default `<dl>` — value indented on its own line under the label — and both buttons render as unstyled UA buttons. `.sk-tiles` right below them *is* styled, which makes the mismatch obvious.
+
+## HUD
+
+- **TOP / BEST / TODAY never update.** They're written once when the HUD is built. The async top-score fetch only fills the *setup* screen's slots (`data-rec-top`), and `_paintHud()` only touches score and pips. So they show "-" through a first player's whole first rack, and stale values after "Roll again."
+- In the hub, the floating "‹ Hub" pill lands right beside the HUD's ☰ — two leave-controls in the same corner.
+- No ball number. The footage counts "BALL 9 → 1" in the marquee; we have nine 6px dots.
+- The "Swipe up the lane to roll" hint sits on top of the ball.
+
+## Gameplay — there is no downside
+
+Straight-on, the entire dial scores 20/30/40/50. The 10 and 0 are unreachable without aiming into a corner:
+
+- Random swiping averages ~36/ball ≈ **325 for a rack**.
+- 22% of the dial (0.62–0.83) is one continuous 50 band, so "about 70%, straight" is 450 every time. My first-ever rack was **490**; the repo's own play probe scored **450**.
+- The top of the dial is noise: 0.84→1.00 is 17 steps alternating 20/30/40/50/40/50/30/50. That's the failing assertion (`15 of 21 bands are one step wide`) — a hard swipe is a coin flip.
+
+Per your standing ban this has to be fixed in geometry, not by steering the ball, so it needs your call on which way: make the soft end reach the 10/trough, or put a real price back on overshoot. It's the one item here that's a design decision rather than a defect.
+
+## Release mechanics (none done yet)
+
+1. Drop `devOnly: true` from the `skeeball` entry in `js/hub.js`.
+2. Add `released: 'YYYY-MM-DD'` so the New pill fires.
+3. Add the `GAME_META` row in `js/leaderboard-ui.js` **and** remove `skeeball` from `OFF_THE_BOARD` in `players-agg.test.mjs` — without it every skeeball win counts as zero on the leaderboard, which is exactly the Yahtzee bug.
+4. Bump `CACHE` in `sw.js` past whatever is on `main` at merge time.
+5. `node skeeball/js/test.js` is **52/53** — that failure has to be fixed or the assertion re-based, or `run-all-tests.mjs` is red on every deploy from here.
+6. Decide on Skeeball_old: it stays `devOnly` but keeps writing into the same `skeeball` stats bucket. Harmless, but it should be a decision, not a leftover.
+
+## Smaller
+
+- The `+N` popup, burst and gold celebration all fire correctly (including a real one for the 100) — that part is good.
+- Hub tile art shows three centre cups; the game has four.
+- `msg_returned` ("Too soft. Have it back.") is dead code on this machine — nothing rolls back.
+
+Everything else I checked is clean: conventions, sw assets, fit at both phone heights in both hosts, EN/ES complete, no JS errors, and the arc/physics benches are healthy (21/21 airborne, 0 jams in 101 throws).
