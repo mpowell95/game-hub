@@ -52,6 +52,7 @@ One list, by game. One line per item. When an item ships, delete its line in the
 
 - A true L-shaped green or ring of sand cannot be drawn (needs a two-outline feature).
 - **Matt:** reset or re-import Red Mesa in your browser copy, it held pre-repair holes 6/7/9 (check; the editor loads from `localStorage`, not the file).
+- Check: does **Open a draft... > Load** autosave over the loader's OWN cloud course when the course ids match? Offered 2026-09-24, not built: a read-only **View** beside Load, plus a separate "Make a copy" (`docs/archive/GOLF-SESSIONS.md`).
 - Further look-only objects (fountain, lighthouse, windmill, ducks/deer, waterfall, walls, hills) only if Matt asks (Matt: flower beds only, no bridges).
 
 ## Escoba
