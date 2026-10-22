@@ -8,7 +8,7 @@
 // EVERY GAME KEEPS ITS OWN CHALLENGES. Seven games have turn-by-turn challenges, each in its own
 // Firebase node, each with a per-player index (`<node>/index/<CODE>/<id>`): Connect 4 Hoops
 // (`hoops/`), Skeeball (`skeeChallenges/`), Cup Pong (`cuppong/`), Darts (`darts/`), Flick Soccer
-// (`flicksoccer/`, 2026-10-11), Archery (`archery/`, 2026-10-14) and Escoba (`escoba/`, 2026-10-18). This module READS those indexes through each game's own reader and folds them into one list. It writes
+// (`flicksoccer/`, 2026-10-11), Pool (`eightball/`, 2026-10-22), Archery (`archery/`, 2026-10-14) and Escoba (`escoba/`, 2026-10-18). This module READS those indexes through each game's own reader and folds them into one list. It writes
 // nothing itself - no Firebase node, no `gamehub.*` key. Opening a match or starting a challenge is
 // handed to the game (its alerts module's armOpen / armChallenge), and CANCEL / DECLINE / RESIGN
 // (2026-10-13, Matt: "a way to cancel sent challenge requests, and a way to resign/forfeit") call
@@ -118,6 +118,24 @@ export const SOURCES = {
     read: (M) => M.readMyGames(),
     watch: (M, cb) => M.watchMyGames(cb),
     action: logGameAction,
+    end: logGameEnd,
+  },
+  // Pool (2026-10-22): eight-ball/js/mp.js. Two OR THREE players (Cutthroat): a match keeps a list
+  // of seats, not sides, so its own action reader; a row's `with` is one fixed other player (its
+  // records count against that person) and `name` names both.
+  'eight-ball': {
+    load: () => import('../eight-ball/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+    action: async (M, id) => {
+      const g = await M.readGame(id);
+      const seat = g ? M.seatOf(g, M.myCode()) : -1;
+      if (!g || g.over || seat < 0) return null;
+      const life = M.lifeOf(g);
+      if (life.expired) return null;
+      if (!life.open) return 'resign';
+      return seat === 0 ? 'cancel' : 'decline';
+    },
     end: logGameEnd,
   },
 };

@@ -13,7 +13,8 @@
 // and a PLACEMENT the game chooses, because every game's HUD owns a different corner.
 //
 //   const chat = createMatchChat({ root, send, them, place });
-//   chat.add({ key, mine, t, v, at }, { pop })   // a turn-by-turn line (from watchChat)
+//   chat.add({ key, mine, t, v, at, who? }, { pop })   // a turn-by-turn line (from watchChat); `who`
+//                                                     // {name, emoji} names its sender (three players)
 //   chat.onReactions(room.reactions, mySeat)     // a live room's reactions slot
 //   chat.setActive(bool)                         // show / hide everything (e.g. hide on a menu)
 //   chat.destroy()                               // the game's destroy() MUST call this
@@ -98,7 +99,7 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
   // A typed line shows WHOLE up to CHAT_MAXLEN; reactionText() would cut it at the 24-character
   // floating-bubble cap that js/mp-reactions-ui.js uses.
   const textOf = (e) => (e.t === 'c' ? cleanChat(e.v) : reactionText({ t: e.t, v: e.v }, getLang()));
-  const whoOf = (e) => (e.mine ? myName() : ((themFn() || {}).name || '?'));
+  const whoOf = (e) => (e.mine ? myName() : ((e.who || themFn() || {}).name || '?'));
 
   function paintBtn() {
     btn.setAttribute('aria-label', t('chat') + (unread ? ` (${unread})` : ''));
@@ -230,7 +231,7 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
       arm(same, ms);
       return;
     }
-    const who = e.mine ? { name: myName(), emoji: '' } : (themFn() || {});
+    const who = e.mine ? { name: myName(), emoji: '' } : (e.who || themFn() || {});
     const el = document.createElement('div');
     el.className = 'ghc-pop' + (e.mine ? ' is-mine' : '') + (e.t === 'e' ? ' is-emoji' : '');
     el._sig = sig;

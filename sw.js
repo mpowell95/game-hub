@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1220';
+const CACHE = 'game-hub-v1221';
 
 const ASSETS = [
   './',
@@ -272,6 +272,9 @@ const ASSETS = [
   './eight-ball/js/ai.js',
   './eight-ball/js/render.js',
   './eight-ball/js/strings.js',
+  './eight-ball/js/mp.js',
+  './eight-ball/js/mp-ui.js',
+  './eight-ball/js/alert.js',
   './darts/',
   './darts/index.html',
   './darts/css/darts.css',
@@ -794,10 +797,11 @@ const HELD_BACK = {
     './eight-ball/index.html',
     './eight-ball/css/eight-ball.css',
     './eight-ball/js/ui.js',
-    './eight-ball/js/engine.js',
     './eight-ball/js/ai.js',
     './eight-ball/js/render.js',
     './eight-ball/js/strings.js',
+    './eight-ball/js/mp-ui.js',
+    './eight-ball/js/alert.js',
   ],
   'gridlock': [
     './gridlock/',
@@ -1065,6 +1069,8 @@ const REST_MANIFEST = {
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
   './archery/js/engine.js': 'a7a170fc9d',
   './archery/js/mp.js': '4979a37a56',
+  './eight-ball/js/engine.js': '39a92cd1ed',
+  './eight-ball/js/mp.js': 'a31af51666',
   './darts/js/engine.js': '2d603f0ee2',
   './darts/js/mp.js': 'b2bad2b4b5',
   './sudoku/': '39055429fc',

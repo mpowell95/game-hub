@@ -82,7 +82,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `hub-messages.js` | `HUB_MESSAGES` append-only (never reuse an id or edit sent words); merged into `readMyThreads()` as the `HUB` row; `HUB` is never a player code; read receipt `players/<id>/hubMsgs` (report only, omitted when empty; `at: 0` = read before receipts existed) |
 | `mp-records.js` | READ-only: live-room games' `byDiff.mp` (via players-agg, all your devices) + `h2h` folded onto the opponent's code; `LIVE_GAMES` must match hub.js `LIVE_MP_GAMES` (`tools/test-challenges.mjs`) |
 | `challenges.js`, `challenge-life.js` | read-only fold of games' indexes (Cancel/Decline/Resign call the GAME's own writer via `endAction`/`endMatch`); `ANSWER_MS` 3 days; called-off rows stored `over:false` so push stays silent |
-| `match-chat.js` | chat at `<node>/chat/<matchId>`, BESIDE the match, never in it; verified; nothing deleted; `gamehub.matchChatSeen.v1` |
+| `match-chat.js` | chat at `<node>/chat/<matchId>`, BESIDE the match, never in it; verified; nothing deleted; `gamehub.matchChatSeen.v1`; sides `a`/`b`, and `c` for a third player (Pool's Cutthroat, 2026-10-22; `match-chat-ui.js` `add({who})` names the sender) |
 | `push.js` | `pushSubs/<CODE>/<sha256(endpoint)>`; permission asked inside the tap; `gamehub.push.v1` = write only on change |
 | `admin-config.js`, `stats-corrections.js`, `admin-ui.js` | see "The admin config", "Score corrections" |
 | `announce.js` | see "The announcement layer" |

@@ -13,10 +13,10 @@ by difficulty.
 **Stage 1 (live 2026-10-22, Matt's second review the same day):** three games (8-ball, 9-ball,
 Cutthroat for three), three options (call shots, banks only, bar obstacles), a real numbered ball
 set with a simple look, scoreboard trays, ball-in-hand lock-in, real pocket proportions, the
-slingshot pull. **Still to come, in this order (Matt's plan):** Stage 2 turn-based online
-challenges INCLUDING 3-player Cutthroat (a 3-person challenge is new to the hub: every challenge
-today is 2-person), Stage 3 live rooms (3 seats for Cutthroat; `js/net.js` N-seat), Stage 4 push
-notifications. Online quick chat is required (root CLAUDE.md). Ideas offered to Matt, not asked
+slingshot pull. **Stage 2 (live 2026-10-22): turn-based online challenges, two OR THREE players**
+(below, "Online challenges"). **Still to come (Matt's plan):** Stage 3 live rooms (3 seats for
+Cutthroat; `js/net.js` N-seat), Stage 4 push notifications (no push function yet: a challenge
+reaches the other phone through the launcher bubble and the Multiplayer screen only). Online quick chat is required (root CLAUDE.md). Ideas offered to Matt, not asked
 for yet: Killer (2-6 players, lives), trick shot of the day, shot clock, replay of their shot.
 
 ## Not the archived Pool
@@ -47,7 +47,10 @@ black pockets, coral and cyan groups).
 | `js/render.js` | canvas: table (cached), balls, cue stick, aim guide, ball-in-hand marker, pot bursts; `ballSVG` |
 | `js/ui.js` | setup, play screen, input, ball in hand, spin pad, turn flow, menus, autosave, stats, `window.__epTest` |
 | `js/strings.js` | EN/ES |
-| `js/test.js` | `node eight-ball/js/test.js` (~12 s; not precached) |
+| `js/mp.js` | online challenges: the node, validation by replay, verified writes, the outbox, counting once |
+| `js/mp-ui.js` | the online screens (home, picker, challenge card, history, Game Over), lazily imported |
+| `js/alert.js` | what the launcher says about challenges (bubble, Multiplayer count, armOpen/armChallenge) |
+| `js/test.js` | `node eight-ball/js/test.js` (~30 s; not precached) |
 | `css/eight-ball.css` | all styling, `.ep-root`-scoped, dark-mode token block at the end |
 
 ## The games (`settle` in engine.js; seats 2, 2, 3)
@@ -172,3 +175,52 @@ slices. **Not tuned against people yet.**
   with call shots and obstacles (Medium), each recorded once; ball in hand dragged from far away,
   locked with the tick; full power off the bottom and left cushions; a tap never shoots. Not yet
   played on a real phone.
+
+## Online challenges (Stage 2, 2026-10-22)
+
+Matt: *"begin stage 2"* (turn-based online, 3-player Cutthroat included; "#2 is your call" = turn-
+based Cutthroat goes in this stage). Flick Soccer's challenges are the model; no code shared.
+
+- **Where:** the setup card's first row is **Multiplayer ›** ("N waiting on you"). Behind it:
+  Challenge someone, the notify row, Your turn, Their turn, History. Pass and play stays on the
+  setup card's opponent switch.
+- **The challenge card:** who (one face; for Cutthroat a second "+ Add a player" picker), the game
+  (8-Ball / 9-Ball / Cutthroat), racks, the three option chips, **Aiming help** (Easy / Medium /
+  Hard for everybody in the match, stored as `aids`; Easy also frees the ball in hand), Send. Every
+  choice is the setup card's own setting (`settings.game`, `racks`, `opts`, `aimHelp`).
+- **THREE PLAYERS, a first for the hub's challenges:** a match keeps a list of players `p` (seat 0
+  the challenger; seat = engine seat) instead of sides a/b. Every player gets an index row: `with`
+  is the NEXT seat (fixed, so records group by one person), `with2` the other, `name` "Ana & Ben".
+  `js/challenges.js` lists it with its own `action` reader (seats, not sides);
+  `js/game-chat-history.js` reads two-player matches only (`sideOf` is null with three).
+- **The first receiver (seat 1) breaks**, so every row is written at creation and the challenge
+  waits on them at once. **Open** until any receiver has shot: the sender may cancel, any receiver
+  may decline, and a decline calls it off for all three. Expires 3 days unanswered (`lapse`).
+  **Resign** (once answered): you lose; with three, the other player with the most of their own
+  balls on the table wins (`resignWinner`, ties to whoever shoots next).
+- **The node:** `eightball/games/<id>` + `eightball/index/<CODE>/<id>` + `eightball/chat/<id>`. In
+  `database.rules.json` (deployed by the Firebase workflow with the merge) and `backups/rtdb-backup.mjs`.
+- **A match is a LOG of shots** `{ by: seat, dx, dy (6 dp), p (4), s (2), x, y (3, only with the
+  ball in hand), c (pocket, when called) }` replayed from the match's `seed` (`termsOf`: mode, racks,
+  opts, aids, seed). `validateGame` refuses the whole document if one shot does not replay. The
+  shooting phone plays the ROUNDED shot, and **only a shot its own table accepted is ever written**:
+  a ball-in-hand spot is rounded and then checked legal again (`_shoot`), because rounding once
+  nudged a ball touching another a hair into it and every replay refused the shot (found by the
+  three-phone test, 2026-10-22).
+- Written at the moment of the shot (`appendLog`, verified by re-read, idempotent, a stale base is a
+  conflict), kept in an outbox (`gamehub.eightball.outbox.v1`) until the server has it; drained on
+  mount, `online`, leaving a match and every 6 s while anything waits.
+- **Opening a match** replays silently up to the others' latest run, then PLAYS that run (cue placed,
+  pocket called, cue drawn back, the shot rolls) through the computer's path (`this.cpu` with
+  `replay`), every time while it is your turn; **Skip replay** rebuilds from the log. SENT! once per
+  hand-over. Seen/shown/counted/unseen keys: `gamehub.eightball.{seen,shown,counted,unseenResults}.v1`.
+- **Counting:** each finished match once per phone as `recordResult('eightball', 'mp', won)`.
+- **Quick chat:** `js/match-chat.js` takes a third side `'c'` (2026-10-22) and `match-chat-ui.js`
+  lets a line name its sender (`who`), so with three players each bubble says who spoke. Button on
+  the top row left of spin and menu (`CHAT_PLACE`).
+- **Tests:** `node tools/test-eightball-mp.mjs` (44 checks); `tools/test-challenges.mjs`. Driven in
+  three Chromium "phones" on a shared stand-in database: Matt challenges Ana and Ben to Cutthroat,
+  Ana locks her break spot and pulls, Matt's phone replays it, 15 shots later all three tables are
+  identical to the bit, Ben's chat line pops on Matt's phone under Ben's name, Ben resigns and both
+  others land on the result. Proven in one engine (V8) only; an iPhone against an Android phone is
+  the real check.

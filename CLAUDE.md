@@ -344,7 +344,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Murdoku | module, immersive, solo logic puzzle | `.mu-root` / `.mu-` | `gamehub.murdoku.v1` (+ `.save.v1`) | `recordResult('murdoku', …)` |
 | Nuts & Bolts | module | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |
 | Parchís | launch-out (built from sibling `../Parchís/`) | own page | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
-| Pool | module, immersive, devOnly; the Flick Soccer way: 8-ball, 9-ball, Cutthroat (3 players), call / banks / obstacles options, vs computer + pass and play (`eight-ball/`, 2026-10-22; online is Stages 2-4). **Folder/hub id `eight-ball`, stats id `eightball`: NOT the archived Pool's ids** | `.ep-root` / `.ep-` | `gamehub.eightball.v1` (+ `.save.v1`) | `recordResult('eightball', …)` |
+| Pool | module, immersive, devOnly; the Flick Soccer way: 8-ball, 9-ball, Cutthroat (3 players), call / banks / obstacles options, vs computer + pass and play + turn-by-turn challenges for 2 OR 3 players (`eightball/`; the first 3-player challenge game) (`eight-ball/`, 2026-10-22; live rooms and push still to come). **Folder/hub id `eight-ball`, stats id `eightball`: NOT the archived Pool's ids** | `.ep-root` / `.ep-` | `gamehub.eightball.v1` (+ `.save.v1`) | `recordResult('eightball', …)` |
 | Skeeball | module, immersive, solo, unlockable machines, challenges (`skeeChallenges/`) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | module | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Sudoku | module | `.sd-root` / `.sd-` | `gamehub.sudoku.v1` | `recordSudoku` |
