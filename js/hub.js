@@ -2146,7 +2146,7 @@ class Hub {
         const w = reg.installing;
         if (!w || this._destroyed) return;
         noteLifecycle('new build found, installing');
-        if (!this._holdUpdates() || this._inFreshWindow()) this._paintUpdating();
+        if (!this._holdUpdates() || this._inFreshWindow() || this._mustTake()) this._paintUpdating();
         w.addEventListener('statechange', () => {
           if (w.state === 'redundant') { noteLifecycle('install FAILED (worker went redundant)'); this._initVersionPill(); }
         });
@@ -2190,7 +2190,7 @@ class Hub {
     if (this._reloaded) return;
     // GUARD 4 (2026-10-22): a player's phone keeps this page's build until a fresh open. The pill
     // shows "old → new" and a tap takes it (_forceUpdate).
-    if (this._holdUpdates() && !this._inFreshWindow()) {
+    if (this._holdUpdates() && !this._inFreshWindow() && !this._mustTake()) {
       noteLifecycle(`new build ${running} ready; this page stays on ${this._loadedVersion} until a fresh open`);
       return;
     }
@@ -2213,6 +2213,14 @@ class Hub {
   }
 
   _inFreshWindow() { return Date.now() <= (this._freshUntil || 0); }
+
+  /** An IMPORTANT build (sw.js IMPORTANT_SINCE, 2026-10-22): this page loaded a build older than it,
+   *  so the hold does not apply and the launcher takes the new build at its next visit. */
+  _mustTake() {
+    const num = (v) => Number((/v(\d+)/.exec(v || '') || [])[1] || 0);
+    const since = this._importantSince || 0;
+    return since > 0 && num(this._loadedVersion) > 0 && num(this._loadedVersion) < since;
+  }
 
   /** True when the worker runs a newer build than the one this page loaded under. */
   async _pageBehind() {
@@ -2294,7 +2302,13 @@ class Hub {
         if (!ctrl) { resolve(null); return; }
         const ch = new MessageChannel();
         const t = setTimeout(() => resolve(null), 1500);
-        ch.port1.onmessage = (e) => { clearTimeout(t); resolve(this._shortVersion(e.data && e.data.cache)); };
+        ch.port1.onmessage = (e) => {
+          clearTimeout(t);
+          // The worker's IMPORTANT_SINCE rides along (sw.js): remembered for _mustTake.
+          const imp = Number(e.data && e.data.important);
+          if (Number.isFinite(imp) && imp > 0) this._importantSince = imp;
+          resolve(this._shortVersion(e.data && e.data.cache));
+        };
         ctrl.postMessage({ type: 'GET_VERSION' }, [ch.port2]);
       } catch { resolve(null); }
     });

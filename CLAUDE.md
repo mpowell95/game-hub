@@ -144,7 +144,10 @@ saw "an update every time they go back to the hub").** The worker still takes ov
 `js/hub.js` reloads the PAGE at once only on an admin device or dev profile, elsewhere only in the first
 30 s of an app launch or of a return after 30+ min away. A tap on the pill always takes it; a game that
 fails to load on the older page reloads onto the new build and opens. On a player's phone a lasting
-`vOld → vNew` pill is normal; on an admin device it is a bug. Do NOT make new workers wait for the page
+`vOld → vNew` pill is normal; on an admin device it is a bug. **IMPORTANT updates (Matt, 2026-10-22: "flag
+important ones")**: set `IMPORTANT_SINCE` in `sw.js` to the new CACHE number on a deploy every phone should take
+now (performance, data safety, a fix people are waiting on); a page loaded on an older build then takes it at its
+next launcher visit (never mid-game). Leave it for small fixes. `node tools/read-builds.mjs` lists each person's build. Do NOT make new workers wait for the page
 (`skipWaiting` on request): tried that day, Chromium sometimes never activated it and a page load then hung.
 
 ### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)

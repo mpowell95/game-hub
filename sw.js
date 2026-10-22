@@ -1,5 +1,11 @@
 // sw.js — shared service worker for the Game Hub. Precaches the app shell and [docs/SW-NOTES.md #1]
-const CACHE = 'game-hub-v1224';
+// IMPORTANT UPDATES (2026-10-22, Matt: "push this update to everyone. make sure they all download it",
+// then "flag important ones"). A phone whose page loaded a build OLDER than this number takes the new
+// build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
+// (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
+// phone should get now; leave it alone for small fixes.
+const IMPORTANT_SINCE = 1226;
+const CACHE = 'game-hub-v1226';
 
 const ASSETS = [
   './',
@@ -797,7 +803,7 @@ const REST_MANIFEST = {
   './css/hub.css': '2920b5c6a5',
   './css/name-gate.css': '2253567714',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'a5eedc2bf9',
+  './js/hub.js': 'ee8aa59162',
   './js/name-gate.js': '9f3aa22f34',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -1467,7 +1473,7 @@ async function noteShownGames(ids) {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'GET_VERSION') {
     const port = event.ports && event.ports[0];
-    if (port) port.postMessage({ type: 'VERSION', cache: CACHE });
+    if (port) port.postMessage({ type: 'VERSION', cache: CACHE, important: IMPORTANT_SINCE });
   }
   if (event.data && event.data.type === 'SHOWN_GAMES' && Array.isArray(event.data.ids)) {
     event.waitUntil(noteShownGames(event.data.ids).catch((err) => console.warn('[sw] SHOWN_GAMES failed', err)));
