@@ -24,7 +24,7 @@
 // (js/net.js, `rooms/`) is unaffected and needs no rules change.
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { readPlayersOnce } from '../../js/stats-net.js';
+import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { COLS, ROWS } from './game.js';
 import { recordResult } from '../../js/game-stats.js';
@@ -726,7 +726,7 @@ export function opponentsFrom(all, me) {
 export async function readOpponents() {
   try {
     // Only people who may play online (js/online-gate.js): a made-up second account is never offered.
-    return opponentsFrom(await readPlayersOnce(), myCode()).filter((r) => codeMayPlayOnline(r.code));
+    return opponentsFrom(await readOpponentProfiles(), myCode()).filter((r) => codeMayPlayOnline(r.code));
   } catch (err) {
     console.warn('[hoops4] could not read the player list', err);
     return [];

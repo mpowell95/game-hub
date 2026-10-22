@@ -601,3 +601,25 @@ export function decideNudge({ key, from, row, now = Date.now() }) {
     text: (lang) => ({ title: lang === 'es' ? g.es : g.en, body: (REMIND_TEXT[lang] || REMIND_TEXT.en)(who) }),
   };
 }
+
+// THE PLAYER DIRECTORY (2026-10-22, Matt: "loading multiplayer games feels like it's taking longer").
+// Every "pick a person" list used to download all of players/ (~940 KB, every device's stats) to
+// show a few dozen names. directory/<CODE> = { name, emoji, at } is that list, rebuilt on the server
+// (index.js directoryBuild, hourly, and whenever Matt changes who may play online). Per code: the
+// NEWEST record with a real name, the same pick as each game's opponentsFrom. PURE.
+const PLACEHOLDER = (n) => { const s = String(n || '').trim().toLowerCase(); return !s || s === 'you'; };
+export function buildDirectory(players) {
+  const out = {};
+  for (const id of Object.keys(players || {})) {
+    const rec = (players || {})[id] || {};
+    const p = rec.profile || {};
+    const code = typeof p.playerId === 'string' ? p.playerId.trim().toUpperCase() : '';
+    if (!/^[A-Z0-9]{4,8}$/.test(code)) continue;
+    const name = String(p.name || '').trim().slice(0, 40);
+    if (PLACEHOLDER(name)) continue;
+    const at = Number.isFinite(+rec.updatedAt) ? +rec.updatedAt : 0;
+    if (out[code] && out[code].at > at) continue;
+    out[code] = { name, emoji: String(p.emoji || '').slice(0, 16) || '🙂', at };
+  }
+  return out;
+}
