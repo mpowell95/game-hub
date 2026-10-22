@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
-import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, rushMissMs, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
+import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -184,7 +184,8 @@ function readRushSave(mode) {
   if (!s || typeof s !== 'object' || !Number.isFinite(+s.seed) || !(+s.d > 0)) return null;
   const n = (v) => Math.max(0, Math.floor(+v) || 0);
   return { seed: +s.seed >>> 0, i: n(s.i), arrows: n(s.arrows), boards: n(s.boards), mistakes: n(s.mistakes),
-    bank: n(s.bank), playMs: n(s.playMs), d: +s.d, live: !!s.live, end: s.end === 'time' || s.end === 'left' ? s.end : '' };
+    bank: n(s.bank), playMs: n(s.playMs), d: +s.d, live: !!s.live, end: s.end === 'time' || s.end === 'left' ? s.end : '',
+    a0: n(s.a0), p0: n(s.p0), x: woRushExtras(s) };
 }
 function writeRushSave(mode, run) {
   const all = readJSON(RUSH_SAVE_KEY);
@@ -1352,7 +1353,7 @@ class WayOut {
     const tiles = this._tilesHTML([
       { cls: 'is-start', icon: RUSH_WATCH, v: `${RUSH_START_MS / 1000}s`, l: t('rush_tile_start') },
       { cls: 'is-gain', icon: RUSH_ARROW('currentColor'), v: `+${RUSH_GAIN_MS / 1000}s`, l: t('rush_tile_gain') },
-      { cls: 'is-miss', icon: RUSH_ARROW('currentColor'), v: `\u2212${RUSH_MISS_MS / 1000}s`, l: t('rush_tile_miss') },
+      { cls: 'is-miss', icon: RUSH_ARROW('currentColor'), v: rushMissMs(rm, 0) ? `\u2212${rushMissMs(rm, 0) / 1000}s` : '0s', l: t('rush_tile_miss') },
     ], t('rush_rules_aria'));
     return `
       <div class="wo-home is-rush">
@@ -1424,6 +1425,7 @@ class WayOut {
           <span class="wo-iconbtn wo-restart wo-ghost" aria-hidden="true"></span>
         </div>
         <div class="wo-rushbar">
+          <span class="wo-rushtime" aria-label="${t('rush_time_aria')}">${RUSH_WATCH}<b></b></span>
           <span class="wo-rushclock" role="timer" aria-label="${t('rush_clock_aria')}"></span>
           <span class="wo-pen" aria-hidden="true"></span>
           <span class="wo-rushscore"></span>
@@ -1446,7 +1448,7 @@ class WayOut {
     // PAUSED and counting, with the board veiled (`veil`, .wo-stage.is-veiled) and taps refused;
     // 3, 2, 1, Go! (the same _rushCountdown the boards after it use), and the clock starts at Go.
     const r = { mode, seed, i: 0, arrows: 0, boards: 0, mistakes: 0, bank: RUSH_START_MS, t0: 0, playMs: 0, over: null, next: null,
-      paused: true, counting: true, veil: true, prevBest: woRushBest(this._myWayout(), mode) };
+      paused: true, counting: true, veil: true, prevBest: woRushBest(this._myWayout(), mode), ...this._rushData(null) };
     this.rush = r;
     this._rushSetBoard(buildRush(mode, 0, seed));
     this.screen = 'play';
@@ -1465,6 +1467,17 @@ class WayOut {
       this._rushPaint();
     });
   }
+  /** A run's tuning data (see woRushExtras), fresh or from its save `s`. `a0` / `p0` = arrows and
+   *  play ms when the current board began. */
+  _rushData(s) {
+    const x = (s && s.x) || {};
+    return { bt: x.bt || [], ba: x.ba || [], bc: x.bc || [], mx: x.mx || [], mb: x.mb || [], pk: x.pk || RUSH_START_MS,
+      gn: x.gn || 0, pn: x.pn || 0, res: x.res || 0, rv: s ? (x.rv || 2) : RUSH_RULES, a0: s ? s.a0 : 0, p0: s ? s.p0 : 0 };
+  }
+  /** The tuning data to store with a run. */
+  _rushExtras(r) {
+    return { bt: r.bt, ba: r.ba, bc: r.bc, mx: r.mx, mb: r.mb, pk: Math.round(r.pk), gn: r.gn, pn: r.pn, res: r.res, rv: r.rv };
+  }
   /** Back into a run saved between boards: its cleared board (veiled), its clock, the Ready screen. */
   _resumeRush(mode) {
     const s = readRushSave(mode);
@@ -1474,7 +1487,8 @@ class WayOut {
     this.clock = null;
     this._helpPaused = false;
     const r = { mode, seed: s.seed, i: s.i, arrows: s.arrows, boards: s.boards, mistakes: s.mistakes, bank: s.bank, t0: 0, playMs: s.playMs,
-      over: null, next: null, paused: true, counting: false, veil: true, atReady: true, prevBest: woRushBest(this._myWayout(), mode) };
+      over: null, next: null, paused: true, counting: false, veil: true, atReady: true, prevBest: woRushBest(this._myWayout(), mode), ...this._rushData(s) };
+    r.res += 1;
     this.rush = r;
     this._rushSetBoard(buildRush(mode, s.i, s.seed));
     this.screen = 'play';
@@ -1494,7 +1508,7 @@ class WayOut {
     const left = s.end ? s.end === 'left' : s.live;
     let st = null;
     try {
-      st = recordWayOutRush(mode, { arrows: s.arrows, boards: s.boards, ms: s.playMs, mistakes: s.mistakes, seed: s.seed, left, at: s.d });
+      st = recordWayOutRush(mode, { rv: 2, ...s.x, arrows: s.arrows, boards: s.boards, ms: s.playMs, mistakes: s.mistakes, seed: s.seed, left, at: s.d });
     } catch (err) { console.error('[way-out] recordWayOutRush threw - the saved run was NOT recorded', err); }
     if (st) writeRushSave(mode, null);
     else console.error('[way-out] the saved Rush run was NOT recorded; kept', mode, s);
@@ -1575,13 +1589,22 @@ class WayOut {
     if (clock) { clock.textContent = (Math.floor(left / 100) / 10).toFixed(1); clock.classList.toggle('is-low', left < 3000); }
     const sc = this.root.querySelector('.wo-rushscore');
     if (sc) sc.textContent = t('rush_arrows', { n: r.arrows });
+    const tt = this.root.querySelector('.wo-rushtime b');
+    if (tt) tt.textContent = woRushTime(this._rushPlayed());
     const bn = this.root.querySelector('.wo-rush-boardno');
     if (bn) bn.textContent = t('rush_board', { n: r.i + 1 });
+  }
+  /** How long this run has been PLAYED (ms): the pauses between boards are not in it. */
+  _rushPlayed() {
+    const r = this.rush;
+    return r ? r.playMs + (r.t0 && !r.paused ? performance.now() - r.t0 : 0) : 0;
   }
   _rushGain() {
     const r = this.rush;
     r.arrows += 1;
     r.bank += RUSH_GAIN_MS;
+    r.gn += RUSH_GAIN_MS;
+    r.pk = Math.max(r.pk, this._rushLeft());
     this._flashPen(`+${RUSH_GAIN_MS / 1000}s`, false);
     this._rushPaint();
   }
@@ -1591,7 +1614,10 @@ class WayOut {
     r.mistakes += 1;
     const miss = rushMissMs(r.mode, r.i);
     r.bank -= miss;
-    this._flashPen(`\u2212${miss / 1000}s`, true);
+    r.pn += miss;
+    r.mx.push(miss);
+    r.mb.push(r.i + 1);
+    if (miss) this._flashPen(`\u2212${miss / 1000}s`, true);
     this._rushPaint();
     if (this._rushLeft() <= 0) this._rushEnd('time');
   }
@@ -1603,6 +1629,12 @@ class WayOut {
     r.t0 = 0;
     r.paused = true;
     r.boards += 1;
+    r.bt.push(Math.round(r.playMs - r.p0));
+    r.ba.push(r.arrows - r.a0);
+    r.bc.push(Math.round(r.bank));
+    r.pk = Math.max(r.pk, r.bank);
+    r.p0 = r.playMs;
+    r.a0 = r.arrows;
     r.atReady = true;
     this._rushSave(false);
     this._rushPaint();
@@ -1698,7 +1730,8 @@ class WayOut {
   _rushSave(live, end) {
     const r = this.rush;
     writeRushSave(r.mode, { seed: r.seed, i: r.i, arrows: r.arrows, boards: r.boards, mistakes: r.mistakes,
-      bank: Math.max(0, Math.round(r.bank)), playMs: Math.round(r.playMs), d: Date.now(), live: live ? 1 : 0, ...(end ? { end } : {}) });
+      bank: Math.max(0, Math.round(r.bank)), playMs: Math.round(r.playMs), d: Date.now(), live: live ? 1 : 0, ...(end ? { end } : {}),
+      a0: r.a0, p0: Math.round(r.p0), ...this._rushExtras(r) });
   }
   _rushPrebuild() {
     const r = this.rush, i = r.i + 1;
@@ -1713,11 +1746,14 @@ class WayOut {
     const ms = Math.round(r.playMs + (r.t0 && !r.paused ? performance.now() - r.t0 : 0));
     r.leftAtEnd = why === 'time' ? 0 : Math.max(0, this._rushLeft());
     r.over = why;
+    r.totalMs = ms;
+    // The board the run ended on, if any of it was played.
+    if (ms > r.p0 || r.arrows > r.a0) { r.bt.push(Math.max(0, Math.round(ms - r.p0))); r.ba.push(r.arrows - r.a0); }
     if (this.rushTick) { clearInterval(this.rushTick); this.rushTick = 0; }
     this.failed = true;   // no more taps
     let st = null;
     try {
-      st = recordWayOutRush(r.mode, { arrows: r.arrows, boards: r.boards, ms, mistakes: r.mistakes, seed: r.seed, left: why === 'left' });
+      st = recordWayOutRush(r.mode, { ...this._rushExtras(r), arrows: r.arrows, boards: r.boards, ms, mistakes: r.mistakes, seed: r.seed, left: why === 'left' });
     } catch (err) { console.error('[way-out] recordWayOutRush threw - the run was NOT recorded', err); }
     if (!st) console.error('[way-out] the Rush run was NOT recorded', { mode: r.mode, arrows: r.arrows });
     // Recorded: its save slot (if any) is done with. Not recorded: kept, to be recorded next time.
@@ -1738,6 +1774,7 @@ class WayOut {
         <button type="button" class="gh-modal__close" data-act="rush-close" aria-label="${t('close_aria')}">&times;</button>
         <h2 class="gh-modal__title" id="wo-rush-h">${t(lost ? 'rush_lost' : 'rush_over')}</h2>
         <p class="wo-rush-big"><b>${r.arrows}</b><span>${t('rush_arrows_word', { n: r.arrows })}</span></p>
+        <p class="wo-rush-time">${RUSH_WATCH}<b>${woRushTime(r.totalMs)}</b></p>
         ${lost ? `<p class="wo-fail-txt">${t('rush_lost_body')}</p>` : `
         <p class="wo-fail-txt">${t('rush_boards_done', { n: r.boards })}</p>
         ${r.newBest ? `<p class="wo-rush-new">${t('rush_new_best')}</p>` : ''}

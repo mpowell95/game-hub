@@ -139,13 +139,46 @@ export const RUSH_MODES = ['easy', 'hard'];
 export const RUSH_START_MS = 10000;
 export const RUSH_GAIN_MS = 500;
 export const RUSH_MISS_MS = 3000;
-/** The mistake cost on Rush board `i` (0 = the first). Hard grows with its boards (Matt, 2026-10-22,
- *  from Thomas: "increase the penalty for wrong ones as you go further ... definitely not every
- *  round"): 3 s on boards 1-3, +1 s every 3 boards, 7 s from board 13. Easy stays RUSH_MISS_MS for
- *  now (its table is still being decided). */
+/** The mistake cost on Rush board `i` (0 = the first), RULES 3 (Matt, 2026-10-22, after Thomas kept
+ *  an Easy run going 10 minutes with 50 s banked: the cost keeps growing, never capped, so a long run
+ *  gets harder even after the boards stop getting bigger).
+ *    Easy: board 1 0 s, 2 1 s, 3 2 s, 4-6 3 s, 7-9 4 s, 10-12 5 s, then +0.5 s every board (30 = 14 s).
+ *    Hard: boards 1-3 3 s, 4-6 4 s, 7-9 5 s, 10-12 6 s, then +0.5 s every board (30 = 15 s).
+ *  Rules 1 (to v1215): 3 s flat. Rules 2 (v1216 only): Easy 3 s flat; Hard 3 s +1 s every 3 boards,
+ *  capped at 7 s. Each run stores its rules number (`rv`; none = 1, or 2 by date). */
+export const RUSH_RULES = 3;
 export function rushMissMs(mode, i) {
-  if (mode !== 'hard') return RUSH_MISS_MS;
-  return Math.min(7000, RUSH_MISS_MS + 1000 * Math.floor(Math.max(0, i | 0) / 3));
+  const b = Math.max(0, i | 0) + 1;
+  const hard = mode === 'hard';
+  if (b >= 13) return (hard ? 6000 : 5000) + 500 * (b - 12);
+  if (hard) return 3000 + 1000 * Math.max(0, Math.ceil((b - 3) / 3));
+  return b <= 3 ? (b - 1) * 1000 : 2000 + 1000 * Math.ceil((b - 3) / 3);
+}
+/** A run's tuning data (2026-10-22, Matt: "We need all this data so we know if we need to adjust the
+ *  settings"), kept as short number lists so the mirror stays small:
+ *    bt = play ms of each board (the last one is the board the run ended on, if any was played),
+ *    ba = arrows cleared on each board (same order), bc = clock left (ms) when each board was cleared,
+ *    mx = what each mistake cost (ms), mb = the board (1 = first) each mistake was on,
+ *    pk = the highest the clock got (ms), gn / pn = total ms gained / lost to mistakes,
+ *    res = times the run was resumed from its between-boards save, rv = RUSH_RULES it was played on.
+ *  Anything malformed is left out (never crashes a reader). */
+const RUSH_LISTS = ['bt', 'ba', 'bc', 'mx', 'mb'], RUSH_NUMS = ['pk', 'gn', 'pn', 'res', 'rv'];
+export function woRushExtras(src) {
+  const out = {};
+  if (!src || typeof src !== 'object') return out;
+  for (const k of RUSH_LISTS) {
+    const raw = Array.isArray(src[k]) ? src[k] : src[k] && typeof src[k] === 'object' ? Object.keys(src[k]).sort((a, b) => a - b).map((j) => src[k][j]) : null;
+    if (!raw) continue;
+    const v = raw.slice(0, 5000).map((x) => Math.round(+x)).filter((x) => Number.isFinite(x) && x >= 0);
+    if (v.length) out[k] = v;
+  }
+  for (const k of RUSH_NUMS) { const x = Math.round(+src[k]); if (Number.isFinite(x) && x >= 0 && src[k] != null) out[k] = x; }
+  return out;
+}
+/** m:ss (h:mm:ss from an hour) of a number of ms. */
+export function woRushTime(ms) {
+  const s = Math.max(0, Math.floor((+ms || 0) / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
 /** The week a moment belongs to: the date of its MONDAY, in UTC ("2026-10-12"). One clock for
@@ -177,6 +210,7 @@ export function woRushRuns(raw) {
     const e = { s, b: Math.max(0, r.b | 0), ms: Math.max(0, Math.floor(+r.ms) || 0), m: Math.max(0, r.m | 0), d, w: r.w };
     if (Number.isFinite(+r.sd)) e.sd = +r.sd;
     if (r.left) e.left = 1;
+    Object.assign(e, woRushExtras(r));
     out.push(e);
   }
   return out;
