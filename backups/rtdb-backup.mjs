@@ -70,6 +70,8 @@ export const BRANCHES = [
   'nudges',
   // directory/ (2026-10-22): names + emojis per code, rebuilt from players/ by the server. Derived.
   'directory',
+  // boards/ (2026-10-22): the server-built leaderboard package. Derived from players/.
+  'boards',
   // skeeChallenges/ (skeeball/js/challenge.js, 2026-09-24): Skeeball "beat my score" challenges and
   // their per-player index. Same auth shape as hoops/.
   'skeeChallenges',

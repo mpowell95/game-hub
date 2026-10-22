@@ -1688,7 +1688,9 @@ function rerender() {
 async function refreshCombined() {
   try {
     const [net, agg] = await Promise.all([import('./stats-net.js'), import('./players-agg.js')]);
-    const all = await net.readPlayersOnce();
+    // This person's own devices in full + everyone else's name (2026-10-22): a few KB, not all of
+    // players/. Same group either way (tools/test-boards.mjs).
+    const all = await net.readPlayersForMe();
     if (!_host) return;
     // statsId(), not deviceId(): the fresh local store must overlay THIS player's own remote node.
     // Keyed by device, a second player on a shared phone would overlay (and hide) the first player's

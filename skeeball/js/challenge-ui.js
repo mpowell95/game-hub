@@ -9,7 +9,7 @@ import { makeT } from '../../js/i18n.js';
 import { BOARDS, boardById, DEFAULT_BOARD } from './boards.js';
 import { isBoardReleased, isBoardTesting } from '../../js/admin-config.js';
 import { loadStats } from '../../js/game-stats.js';
-import { readPlayersOnce } from '../../js/stats-net.js';
+import { readPlayersForMe } from '../../js/stats-net.js';
 import * as CH from './challenge.js';
 import { onlineGateText, codeMayPlayOnline } from '../../js/online-gate.js';
 
@@ -202,7 +202,9 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
   // --- pick a person ---
   const loadPlayers = async () => {
     if (state.players) return state.players;
-    const all = await readPlayersOnce().catch(() => ({}));
+    // Own devices in full (for this person's unlocked machines) + everyone's name (the pick list),
+    // 2026-10-22: a few KB instead of all of players/.
+    const all = await readPlayersForMe().catch(() => ({}));
     state.recs = all || {};
     // Only people who may play online (js/online-gate.js): a made-up second account is never offered.
     state.players = CH.opponentsFrom(state.recs, CH.myCode()).filter((r) => codeMayPlayOnline(r.code));

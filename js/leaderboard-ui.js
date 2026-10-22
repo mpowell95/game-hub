@@ -2642,7 +2642,8 @@ export async function openLeaderboard(opts = {}) {
     // The server-built board first (a fraction of the download, no grouping on the phone); no board
     // yet, or unreadable: the whole players/ node, as it always was.
     const offBoard = await watchBoard((b) => { _board = b; _connected = true; rerender({ fromData: true }); });
-    _unsub = offBoard || await watchPlayers((all) => { _board = null; _all = all || {}; _connected = true; rerender({ fromData: true }); });
+    if (offBoard) _unsub = offBoard;
+    else _unsub = await watchPlayers((all) => { _board = null; _all = all || {}; _connected = true; rerender({ fromData: true }); });
     if (!_host) { if (typeof _unsub === 'function') _unsub(); return; }
   } catch { renderOffline(); }
 }

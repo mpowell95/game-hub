@@ -475,7 +475,10 @@ None of this makes the hub cheat-proof; never describe it that way.
   generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs
   ~930 KB of `players/`). Rebuilt on a sync (at most every 2 min; `boardsCatchUp` every 5 min). The Leaderboard
   reads it (`stats-net.js` `watchBoard`), falling back to `players/` if absent. `tools/test-boards.mjs <snapshot>`
-  proves every person is deep-equal to the phone's own grouping. Other screens still read `players/` (next).
+  proves every person is deep-equal to the phone's own grouping. **Other screens**: My Stats, Records, Hold'em's own bank,
+  Skeeball's picker use `readPlayersForMe()` (own devices in full + everyone's name from the board); Hold'em's bank list,
+  Skeeball's top records, Messages contacts use `readPeople()` (the board's list). Still on `players/`: Golf's board,
+  Arrow Maze's leaders, admin.
 - **Player directory (2026-10-22, Matt: multiplayer felt slow)**: `directory/<CODE>` = `{name, emoji, at}`,
   rebuilt by the server from `players/` hourly and on any Online play change (`buildDirectory`). Every
   challenge game's "pick a person" reads it via `stats-net.js` `readOpponentProfiles()` (2 KB vs ~930 KB);

@@ -356,6 +356,62 @@ export async function watchBoard(cb) {
   });
 }
 
+/** The board once (not live), reused for READ_REUSE_MS like readPlayersOnce. null = no board. */
+let _boardMemo = null;
+export async function readBoardOnce() {
+  if (!(await init())) return null;
+  if (_boardMemo && Date.now() - _boardMemo.at < READ_REUSE_MS) return _boardMemo.val ? boardList(_boardMemo.val) : null;
+  let parts = null;
+  try { const s = await _api.get(_api.ref(_db, 'boards/v1/lb/z')); parts = await unpackBoard(s.val()); } catch { parts = null; }
+  if (parts && !Object.keys(parts.people).length) parts = null;
+  _boardMemo = { at: Date.now(), val: parts };
+  return parts ? boardList(parts) : null;
+}
+
+/** THIS person's device ids on the board: the group holding this device, else the one with this
+ *  player code. Always includes this device. */
+function myGroupOn(board) {
+  const sid = statsId(), code = String((loadProfile() || {}).playerId || '').trim().toUpperCase();
+  return board.list.find((x) => (board.idsByKey.get(x.key) || []).includes(sid))
+    || (code ? board.list.find((x) => x.playerId === code) : null) || null;
+}
+function myIdsOn(board) {
+  const g = myGroupOn(board);
+  const ids = new Set(g ? board.idsByKey.get(g.key) || [] : []);
+  ids.add(statsId());
+  return [...ids];
+}
+
+/** A players/-shaped map for the screens that need only THIS person's full records and everyone
+ *  else's NAME (My Stats, Records, the Hold'em bank, Arrow Maze's leaders), 2026-10-22: this
+ *  person's own devices read in full (a few KB each), every other device stood in by its person's
+ *  name / emoji / code from the board (no stats). Every grouping question then answers as before,
+ *  for a fraction of the download. No board: the whole players/ node, as before. */
+export async function readPlayersForMe() {
+  const board = await readBoardOnce();
+  if (!board) return readPlayersOnce();
+  const out = {};
+  for (const g of board.list) {
+    for (const id of board.idsByKey.get(g.key) || []) {
+      out[id] = { profile: { name: g.name || '', emoji: g.emoji || '', playerId: g.playerId || '' }, updatedAt: g.updatedAt || 0, stats: {} };
+    }
+  }
+  const ids = myIdsOn(board);
+  const recs = await Promise.all(ids.map((id) => _api.get(_api.ref(_db, 'players/' + id)).then((s) => s.val()).catch(() => null)));
+  ids.forEach((id, i) => { if (recs[i]) out[id] = recs[i]; });
+  return out;
+}
+
+/** Everyone, already grouped by person and corrected (the board's list), for the screens that rank
+ *  everybody (Hold'em's bank list, Skeeball's top records, the Messages contact list). null when
+ *  there is no board: the caller keeps its own old read. `me` = this person's group key. */
+export async function readPeople() {
+  const board = await readBoardOnce();
+  if (!board) return null;
+  const me = myGroupOn(board);
+  return { list: board.list, meKey: me ? me.key : '' };
+}
+
 /** THE "PICK A PERSON" READ (2026-10-22): the server's small directory/<CODE> = { name, emoji, at }
  *  (functions/index.js directoryBuild) instead of all of players/ (~940 KB on a phone signal), in
  *  the SAME shape readPlayersOnce returns ({ id: { profile, updatedAt } }), so every game's
