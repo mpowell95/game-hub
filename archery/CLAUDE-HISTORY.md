@@ -119,3 +119,22 @@ Later the same day Matt: "You can't edit the 3d model just to fix this?" The con
 only the upper sleeve along its own straight run (from just past the elbow, 4.3x), leaving the hand,
 wrist, forearm, cuff and angles as made. Measured: the end sits 300-500 px off the left edge in every
 pose (bow down, sliding back in, drawn, drawn aimed up-right) at 360, 393 and 430 wide.
+
+## 2026-10-22 (later): a smooth flight camera, and the arm lowered
+
+Matt: "watch every frame from the moment before the arrow is released to the moment it hits the
+target. It's really jerky and weird." Frame by frame his recording showed three things: the bow
+jumped and turned for two frames at the release (the `JOLT_T` kick), the camera then looked at the
+arrow so the target slid left across the screen, and in the last 0.1 s it swung back onto the
+close-up. Fixed: no kick (the string still snaps and the arrow still leaves over `JOLT_T`), and
+`_camAt` always looks at the target (its look point eases from the aim line to the close-up's),
+while the camera rides behind the arrow and eases out to the close-up's side late. Checked frame by
+frame headless: the arrow is in view every frame and the target grows steadily in the middle.
+
+Matt, same message: "the arm looks a little strange... the arrow will be at eye level, but the arm
+is angled in such a way that the arrow is below the armpit... it's like your arm is above your
+head." The model's arm is level with the hand, so on screen it ran flat off the left edge. The model
+is now leaned `MODEL_CANT` 0.3 rad about its grip (shape unchanged): the arm rises from low on the
+left up to the hand, and the bow leans a little with it (0.45 lowered the arm more but leaned the
+bow so far the sight looked detached). The sleeve's closed end stays 380-620 px off the left edge at
+360, 393 and 430 wide.
