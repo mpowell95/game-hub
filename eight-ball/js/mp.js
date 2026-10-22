@@ -27,7 +27,7 @@ import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/player
 import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { newMatch, play, nextRack, seatsOf, ballsOf, MODES, RACK_OPTIONS } from './engine.js';
+import { newMatch, play, nextRack, seatsOf, ballsOf, MODES, RACK_OPTIONS, TABLE_NOW } from './engine.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
 
 const NODE = 'eightball';
@@ -107,10 +107,11 @@ export function termsOf(raw) {
     opts: { call: o.call === true, bank: o.bank === true, obst: o.obst === true },
     aids: raw && AID_IDS.includes(raw.aids) ? raw.aids : 'medium',
     seed: raw && Number.isInteger(+raw.seed) && +raw.seed > 0 ? (+raw.seed >>> 0) : 1,
+    tb: raw && +raw.tb === 2 ? 2 : 1,    // the table (engine.js, TABLE VERSIONS); none: the first
   };
 }
 /** A fresh engine match for these terms: what every replay starts from. */
-export function freshMatch(terms) { return newMatch(terms.mode, terms.racks, BREAKER, terms.seed, terms.opts); }
+export function freshMatch(terms) { return newMatch(terms.mode, terms.racks, BREAKER, terms.seed, terms.opts, terms.tb); }
 
 // --- the log --------------------------------------------------------------------------------------
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -594,7 +595,7 @@ export async function createGame({ them, mode = '8', racks = 1, opts = {}, aids 
     v: 1, id, mode: md, racks: +racks,
     opts: { call: !!(opts && opts.call), bank: !!(opts && opts.bank), obst: !!(opts && opts.obst) },
     aids: AID_IDS.includes(aids) ? aids : 'medium',
-    seed: mintSeed(),
+    seed: mintSeed(), tb: TABLE_NOW,
     by: me, created: now, updated: now, lapse: true,
     p: [{ code: me, name: mine.name, emoji: mine.emoji }, ...list.map((x, k) => ({ code: codes[k], name: String(x.name || ''), emoji: String(x.emoji || '🙂') }))],
     log: null, over: null,

@@ -1,5 +1,5 @@
 // eight-ball/js/ui.js - Pool's DOM shell: setup, the play screen (one canvas table under a
-// scoreboard with each player's balls), the pull-back-and-shoot input (Flick Soccer's), ball in hand
+// scoreboard with each player's balls), GamePigeon's input (aim on the table, power on a meter), ball in hand
 // (with a lock-in tick above Easy), calling a pocket, spin, the turn flow for two or three players,
 // the computer, menus, autosave and stats. Rules and physics live in engine.js, the computer in
 // ai.js, pixels in render.js.
@@ -14,7 +14,7 @@
 import {
   newMatch, validMatch, step, atRest, freeze, settle, begin, play, nextRack, runToRest, maxShotSteps,
   aimContact, rayStop, canPlace, nearestPlace, onEight, needCall, targetsOf, cloneBalls, ballsOf,
-  seatsOf, CUE, R, W, H, DT, HEAD_Y, POCKETS, RACK_OPTIONS, MODES,
+  seatsOf, CUE, R, W, H, DT, HEAD_Y, POCKETS, RACK_OPTIONS, MODES, TABLE_NOW, TB, useTable, tableOf,
 } from './engine.js';
 import { planShot, DIFFS } from './ai.js';
 import { createRenderer, ballSVG, ballPaint, LOOKS } from './render.js';
@@ -33,17 +33,20 @@ const SETTINGS_KEY = 'gamehub.eightball.v1';
 const SAVE_KEY = 'gamehub.eightball.save.v2';
 const OPPS = ['cpu', 'pass'];
 const OPTS = ['call', 'bank', 'obst'];
-/** The pull (2026-10-22): a SLINGSHOT from wherever the finger went down. The shot goes the way
- *  the finger was pulled back from that point, so it works the same with the cue ball against a
- *  cushion or the bottom of the screen (Matt: "there won't be enough space to fully pull back on
- *  it"); starting on the cue ball it is exactly Flick Soccer's pull. Inside `PULL_SAFE_PX` of the
- *  start, letting go never shoots (a fingertip is wider than the ball). `PULL_FULL_PX` past it is
- *  full strength, less where the screen's edge comes first (EDGE_M inside it, the bottom adding the
- *  home bar), never under `PULL_MIN_PX`. */
-const PULL_SAFE_PX = 18;
-const PULL_FULL_PX = 130;
-const PULL_MIN_PX = 48;
-const EDGE_M = 24;
+/** GamePigeon's controls (Matt, 2026-10-22, replacing the slingshot, which ran out of screen with
+ *  the cue ball against a cushion): a touch on the table points the cue at the finger; the power is
+ *  a meter beside the table, dragged DOWN, and letting go shoots (back up to the top: no shot).
+ *  The meter (touch area `METER_W` px wide, the bar drawn 26 px wide in its middle) is `METER_K` of
+ *  the table's height, `METER_GAP` px left of it; full power is `METER_TRAVEL` of its height. The table keeps `SIDE_K` of the width free on each side
+ *  (at least `SIDE_MIN` px), as there. */
+const METER_W = 46;
+const METER_K = 0.47;
+const METER_GAP = 0;
+const METER_TRAVEL = 0.8;
+const SIDE_K = 0.115;
+const SIDE_MIN = 44;
+/** The match's table (engine.js, TABLE VERSIONS); the setup screen shows today's. */
+const tbOf = (m) => (m ? tableOf(m) : TABLE_NOW);
 /** The weakest shot that counts; anything less is a cancelled aim. */
 const MIN_POWER = 0.03;
 /** Physics steps allowed per frame, so a stalled tab cannot teleport anything (Part 3). */
@@ -177,7 +180,7 @@ class PoolUI {
     this.r = createRenderer(this.canvas);
 
     this._onVis = () => {
-      if (document.hidden) { this.drag = null; if (this.phase === 'aim') this.aim = null; this._stop(); this._save(); }
+      if (document.hidden) { this._dropAim(); this._stop(); this._save(); }
       else this._start();
     };
     document.addEventListener('visibilitychange', this._onVis);
@@ -230,6 +233,7 @@ class PoolUI {
         <p class="ep-status" data-role="status"></p>
         <div class="ep-banner" data-role="banner" aria-hidden="true"><b data-role="bannerMain"></b><span data-role="bannerSub"></span></div>
         <button type="button" class="ep-ok" data-act="placeOk" data-role="ok" data-la="aria_ok" hidden>${OK_SVG}</button>
+        <div class="ep-meter" data-role="meter" role="slider" data-la="aria_power" hidden><i class="ep-meter-track"><i class="ep-meter-fill"></i><i class="ep-meter-cue"></i></i></div>
         <button type="button" class="ep-skip" data-act="skip" data-role="skip" hidden><span data-l="mp_skip"></span></button>
         <span class="ep-safe" data-role="safe" aria-hidden="true"></span>
 
@@ -325,6 +329,7 @@ class PoolUI {
     this.liveEl = q('[data-role="live"]');
     this.boardEl = q('[data-role="board"]');
     this.okEl = q('[data-role="ok"]');
+    this.meterEl = q('[data-role="meter"]');
     this.ov = {};
     this.root.querySelectorAll('[data-ov]').forEach((el) => { this.ov[el.dataset.ov] = el; });
 
@@ -339,6 +344,8 @@ class PoolUI {
     this.canvas.addEventListener('pointercancel', this._onCancel);
     this.canvas.addEventListener('lostpointercapture', this._onCancel);
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    this._onMeter = (e) => this._meter(e);
+    for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture']) this.meterEl.addEventListener(ev, this._onMeter);
     // The spin pad: a tap or a drag on the cue ball's face sets where the tip strikes it.
     const pad = q('[data-role="spinPad"]');
     this._onPad = (e) => {
@@ -486,12 +493,15 @@ class PoolUI {
     const rootTop = this.root.getBoundingClientRect().top;
     const statusBottom = this.statusEl.getBoundingClientRect().bottom - rootTop;
     const safe = this.root.querySelector('[data-role="safe"]').offsetHeight || 0;
-    const top = Math.max(0, statusBottom) + 4;
-    const box = { x: 4, y: top, w: w - 8, h: Math.max(160, h - top - 6 - safe) };
+    const top = Math.max(0, statusBottom) + 8;
+    const mx = Math.round(Math.max(SIDE_MIN, w * SIDE_K));
+    const box = { x: mx, y: top, w: Math.max(120, w - 2 * mx), h: Math.max(160, h - top - 6 - safe), top: true };
     this._safe = safe;
     this.canvas.style.width = w + 'px';
     this.canvas.style.height = h + 'px';
+    useTable(tbOf(this.match));
     this.r.layout(w, h, box);
+    this._paintMeter();
     const mid = this.r.toPx(W / 2, H / 2);
     this.root.style.setProperty('--ep-banner-y', Math.round(mid.y) + 'px');
     this._paintOk();
@@ -542,6 +552,7 @@ class PoolUI {
     this.mode = g.mode;
     this.diff = g.diff;
     this.match = g.match;
+    useTable(tbOf(this.match));
     freeze(this.match.b);
     this.seats = g.seats || this._seatsFor(g.mode, g.diff, this.match.n);
     this.root.classList.toggle('ep-m9', this.match.mode === '9');
@@ -686,6 +697,8 @@ class PoolUI {
     const m = this.match;
     const s = this.seats[m.turn];
     this.aim = null;
+    this.aimDir = null;
+    this.power = 0;
     this.drag = null;
     this.bad = false;
     this.call = -1;
@@ -1017,6 +1030,8 @@ class PoolUI {
     if (this.drag && this.drag.mode === 'place') this._placeEnd();
     this.drag = null;
     if (this.phase === 'aim') this.aim = null;
+    this.power = 0;
+    this._paintMeter();
   }
 
   // --- online (mp.js keeps the match; mp-ui.js draws the lists) ------------------------------------
@@ -1457,6 +1472,48 @@ class PoolUI {
     return best;
   }
 
+  /** Is it this phone's player's move, with the cue ball ready to be aimed? */
+  _myAim() {
+    const m = this.match;
+    if (this.screen !== 'play' || this.phase !== 'aim' || !m || !this.seats || !this.seats[m.turn].human) return false;
+    if (this.mode === 'mp' && (!this.mp || m.turn !== this.mp.seat)) return false;
+    return !this.placing && !(this.drag && this.drag.mode === 'place');
+  }
+
+  /** The cue's direction this turn: where the finger last pointed, at first the nearest ball the
+   *  player may hit. */
+  _aimDir() {
+    if (this.aimDir) return this.aimDir;
+    const m = this.match, c = m.b[CUE];
+    let best = null, bd = Infinity;
+    for (const i of targetsOf(m, m.turn)) {
+      const o = m.b[i];
+      if (!o || !o.on) continue;
+      const d = (o.x - c.x) ** 2 + (o.y - c.y) ** 2;
+      if (d < bd) { bd = d; best = o; }
+    }
+    const dx = best ? best.x - c.x : 0, dy = best ? best.y - c.y : -1, l = Math.sqrt(dx * dx + dy * dy) || 1;
+    this.aimDir = { dx: dx / l, dy: dy / l };
+    return this.aimDir;
+  }
+
+  /** The aim as drawn: the cue along the direction, drawn back by the meter's power, and the lines
+   *  the level allows. */
+  _humanAim() {
+    const m = this.match;
+    const { dx, dy } = this._aimDir();
+    const a = { dx, dy, power: this.power || 0 };
+    const aids = this._aids();
+    if (aids.line) {
+      a.contact = aimContact(m, dx, dy);
+      if (aids.obj && a.contact && a.contact.hit >= 0) {
+        const q = m.b[a.contact.hit];
+        a.objEnd = rayStop(m, q.x, q.y, a.contact.ox, a.contact.oy, 14 + 22 * a.power, [CUE, a.contact.hit]);
+      }
+    }
+    return a;
+  }
+
   _pointerDown(e) {
     const m = this.match;
     if (e.button !== 0 || this.drag) return;   // the main button / one finger; a second touch is ignored
@@ -1474,23 +1531,32 @@ class PoolUI {
       try { this.canvas.setPointerCapture(e.pointerId); } catch { /* moves still arrive */ }
       this.drag = { id: e.pointerId, mode: 'place', ox: cp.x - lp.x, oy: cp.y - lp.y };
       this._paintOk();
+      this._paintMeter();
       return;
     }
     // Calling a pocket: a touch on one calls it (or changes the call), never on the cue ball.
     if (needCall(m, m.turn) && !onBall) {
       const k = this._pocketAt(lp);
-      if (k >= 0) { this.call = k; this._say(t('say_call', { n: k + 1 })); this._status(); return; }
-      if (this.call < 0) return;            // nothing to shoot at yet
+      if (k >= 0) { this.call = k; this._say(t('say_call', { n: k + 1 })); this._status(); this._paintMeter(); return; }
     }
     try { this.canvas.setPointerCapture(e.pointerId); } catch { /* not supported: moves still arrive */ }
     if (m.inHand && onBall) {
       // Easy: the cue ball can be picked up again until the shot is taken.
       this.drag = { id: e.pointerId, mode: 'place', ox: cp.x - lp.x, oy: cp.y - lp.y };
-      this.aim = null;
+      this._paintMeter();
       return;
     }
-    this.drag = { id: e.pointerId, mode: 'aim', x0: lp.x, y0: lp.y, sx: lp.x, sy: lp.y };
-    this._aimFrom();
+    this.drag = { id: e.pointerId, mode: 'aim' };
+    this._pointAt(lp);
+  }
+
+  /** The cue points from the cue ball at the finger (a finger on the ball itself changes nothing). */
+  _pointAt(lp) {
+    const c = this.match.b[CUE];
+    const p = this.r.toTable(lp.x, lp.y);
+    const dx = p.x - c.x, dy = p.y - c.y, l = Math.sqrt(dx * dx + dy * dy);
+    if (l < R * 1.5) return;
+    this.aimDir = { dx: dx / l, dy: dy / l };
   }
 
   _pointerMove(e) {
@@ -1499,9 +1565,7 @@ class PoolUI {
     e.preventDefault();
     const lp = this._local(e);
     if (d.mode === 'place') { this._placeMove(lp); return; }
-    d.sx = lp.x; d.sy = lp.y;
-    this._aimFrom();
-    if (this._inNoShotStrip(e.clientY) && this.aim) this.aim.idle = true;
+    if (d.mode === 'aim') this._pointAt(lp);
   }
 
   /** The cue ball follows the finger; a spot that is not allowed shows as such, and letting go there
@@ -1523,57 +1587,71 @@ class PoolUI {
     this.bad = false;
   }
 
-  /** Is this screen height (clientY) inside the home bar, where letting go never shoots (Flick
-   *  Soccer, 2026-10-16: the phone's own swipe gestures live there)? */
-  _inNoShotStrip(clientY) {
-    const rc = this.canvas.getBoundingClientRect();
-    return clientY - rc.top > rc.height - (this._safe || 0);
-  }
-
-  /** The aim: a slingshot from where the finger went down. The shot goes the opposite way to the
-   *  pull; the strength is the pull's length past the safe zone over a full pull's travel, which
-   *  shrinks only where the screen's edge comes first in the direction pulled. */
-  _aimFrom() {
-    const m = this.match, d = this.drag, r = this.r;
-    const c = m.b[CUE];
-    const vx = d.x0 - d.sx, vy = d.y0 - d.sy, len = Math.sqrt(vx * vx + vy * vy);
-    if (len < PULL_SAFE_PX) { this.aim = { dx: 0, dy: -1, power: 0, idle: true }; return; }
-    const dx = vx / len, dy = vy / len;
-    // Room behind the start point, in the direction the finger is pulling (-dx, -dy).
-    const ux = -dx, uy = -dy, safe = this._safe || 0;
-    let room = Infinity;
-    if (ux > 0) room = Math.min(room, (r.w - EDGE_M - d.x0) / ux); else if (ux < 0) room = Math.min(room, (EDGE_M - d.x0) / ux);
-    if (uy > 0) room = Math.min(room, (r.h - EDGE_M - safe - d.y0) / uy); else if (uy < 0) room = Math.min(room, (EDGE_M - d.y0) / uy);
-    const travel = Math.max(PULL_MIN_PX, Math.min(PULL_FULL_PX, room - PULL_SAFE_PX));
-    const power = Math.max(0, Math.min(1, (len - PULL_SAFE_PX) / travel));
-    // The pull string: from the cue ball back the way the finger has pulled.
-    const a = { dx, dy, power, fx: c.x - (vx / r.s), fy: c.y - (vy / r.s), idle: power < MIN_POWER };
-    const aids = this._aids();
-    if (aids.line) {
-      a.contact = aimContact(m, dx, dy);
-      if (aids.obj && a.contact && a.contact.hit >= 0) {
-        const q = m.b[a.contact.hit];
-        a.objEnd = rayStop(m, q.x, q.y, a.contact.ox, a.contact.oy, 14 + 22 * power, [CUE, a.contact.hit]);
-      }
-    }
-    this.aim = a;
-  }
-
-  _pointerUp(e, cancel) {
+  _pointerUp(e) {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
     this.drag = null;
-    if (d.mode === 'place') { this._placeEnd(); this._paintOk(); return; }
-    const a = this.aim;
-    this.aim = null;
-    if (cancel || !a || a.idle || a.power < MIN_POWER || this.phase !== 'aim' || this.screen !== 'play') return;
-    if (this._inNoShotStrip(e.clientY) || document.hidden) return;
+    if (d.mode === 'place') { this._placeEnd(); this._paintOk(); }
+    this._paintMeter();
+  }
+
+  /** The power meter: a drag DOWN from wherever the finger lands on it draws the cue back; letting
+   *  go shoots, unless it is back at the top (or the turn has gone). */
+  _meter(e) {
+    const el = this.meterEl;
+    const d = this.drag;
+    if (e.type === 'pointerdown') {
+      if (e.button !== 0 || d || !this._myAim()) return;
+      const m = this.match;
+      if (needCall(m, m.turn) && this.call < 0) { this._say(t('status_call', { name: this.seats[m.turn].name })); return; }
+      e.preventDefault();
+      try { el.setPointerCapture(e.pointerId); } catch { /* moves still arrive */ }
+      this.drag = { id: e.pointerId, mode: 'power', y0: e.clientY, travel: el.clientHeight * METER_TRAVEL };
+      this.power = 0;
+      this._paintMeter();
+      return;
+    }
+    if (!d || d.mode !== 'power' || e.pointerId !== d.id) return;
+    e.preventDefault();
+    if (e.type === 'pointermove') {
+      this.power = Math.max(0, Math.min(1, (e.clientY - d.y0) / Math.max(40, d.travel)));
+      this._paintMeter();
+      return;
+    }
+    this.drag = null;
+    const p = this.power;
+    this.power = 0;
+    this._paintMeter();
+    if (e.type !== 'pointerup' || p < MIN_POWER || !this._myAim() || document.hidden) return;
     const m = this.match;
     if (needCall(m, m.turn) && this.call < 0) return;
-    const shot = { dx: a.dx, dy: a.dy, p: a.power, s: this.spin };
+    const { dx, dy } = this._aimDir();
+    const shot = { dx, dy, p, s: this.spin };
     if (m.inHand) { shot.x = m.b[CUE].x; shot.y = m.b[CUE].y; }
     if (needCall(m, m.turn)) shot.c = this.call;
     this._shoot(shot);
+  }
+
+  /** The meter sits left of the table, half its height, centred on it; lit only when it can shoot. */
+  _paintMeter() {
+    const el = this.meterEl;
+    if (!el) return;
+    const show = this.screen === 'play' && !!this.match && !!this.r && !!this.r.w;
+    const tr = show ? this.r.tableRect() : null;
+    const off = show && !this._myAim();
+    const pow = this.power || 0;
+    const key = show ? [tr.x, tr.y, tr.h, off, pow].join('|') : 'none';
+    if (key === this._meterKey) return;      // painted every frame: touch the DOM only on a change
+    this._meterKey = key;
+    el.hidden = !show;
+    if (!show) return;
+    const h = Math.round(tr.h * METER_K);
+    el.style.left = Math.round(Math.max(4, tr.x - METER_W - METER_GAP)) + 'px';
+    el.style.top = Math.round(tr.y + (tr.h - h) / 2) + 'px';
+    el.style.height = h + 'px';
+    el.style.setProperty('--ep-pow', String(pow));
+    el.classList.toggle('is-off', off);
+    el.setAttribute('aria-valuenow', String(Math.round(pow * 100)));
   }
 
   // --- loop ------------------------------------------------------------------------------------
@@ -1591,6 +1669,7 @@ class PoolUI {
   _stop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
 
   _frame(dt) {
+    useTable(tbOf(this.match));    // the match's own table, whatever else ran since (engine.js)
     const live = this.screen === 'play';
     if (live) {
       this.clock += dt;
@@ -1608,6 +1687,7 @@ class PoolUI {
       this.bursts = this.bursts.filter((bu) => bu.f < 1);
       if (this.placing && !this.okEl.hidden) this._paintOk();
     }
+    this._paintMeter();
     this._draw();
   }
 
@@ -1628,7 +1708,7 @@ class PoolUI {
       look: this.settings.look,
       mode: m ? m.mode : '8',
       halo,
-      aim: this.aim && !this.aim.idle ? this.aim : null,
+      aim: this._myAim() ? this._humanAim() : this.aim && !this.aim.idle ? this.aim : null,
       inHand: inHandShown,
       bad: this.bad,
       t: this.glowT,
