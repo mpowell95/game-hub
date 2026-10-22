@@ -416,6 +416,25 @@ export const GAMES = [
     // input to the launcher's New pill and must be the day Matt releases it from the admin page.
     devOnly: true,
   },
+  {
+    // Pool (2026-10-22): 8-ball, played like Flick Soccer (Matt: "Flick soccer is a great game.
+    // Please make a Pool game that functions similarly"): pull back away from the cue ball and let
+    // go. Vs the computer (Easy/Medium/Hard) or two players on one phone (eight-ball/CLAUDE.md).
+    // NOT the archived Pool (archive/pool/): new folder, hub id `eight-ball`, stats id `eightball`,
+    // so that game's ids and stored history are never reused (THE LAW rule 5).
+    id: 'eight-ball',
+    added: '2026-10-22',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Pool', es: 'Billar' },
+    blurb: { en: 'Pull back on the cue ball and let go. Pot your group, then the 8.',
+      es: 'Tira de la blanca hacia atrás y suelta. Mete tu grupo y luego la 8.' },
+    module: '../eight-ball/js/ui.js',
+    immersive: true,
+    accent: '#0F8A3C',
+    art: GAME_ART['eight-ball'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
+  },
 
   {
     id: 'hoops4',

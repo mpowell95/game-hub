@@ -117,6 +117,45 @@ const EXTRA_SCREENS = {
       },
     },
   ],
+  // Pool (2026-10-22): how to play, the play screen, the spin pad, and the result.
+  'eight-ball': [
+    {
+      name: 'how to play',
+      async open(page) {
+        await page.click('[data-ov="setup"] [data-act="howto"]');
+        await page.waitForSelector('[data-ov="help"]:not([hidden])', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'play screen',
+      async open(page) {
+        await page.click('[data-ov="help"] .ep-x');
+        await page.click('[data-ov="setup"] [data-act="play"]');
+        await page.waitForTimeout(600);
+      },
+    },
+    {
+      name: 'spin',
+      async open(page) {
+        await page.click('[data-act="spin"]');
+        await page.waitForSelector('[data-ov="spin"]:not([hidden])', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'result',
+      async open(page) {
+        await page.click('[data-ov="spin"] .ep-x');
+        await page.evaluate(() => {
+          const ui = window.__epTest.ui;
+          ui.match.winner = 0; ui.match.recorded = true;
+          ui._finish();
+        });
+        await page.waitForSelector('[data-ov="result"]:not([hidden])', { timeout: 8000 });
+      },
+    },
+  ],
   // Hill Climb: the garage's other three tabs. Only Vehicle (the default) was ever measured, and
   // Shop, Stage and Tune each scrolled on some phone until 2026-10-13.
   'hill-climb': ['shop', 'stage', 'tune'].map((tab) => ({

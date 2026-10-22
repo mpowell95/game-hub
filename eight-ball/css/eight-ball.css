@@ -1,0 +1,348 @@
+/* eight-ball/css/eight-ball.css - every rule descendant-scoped under .ep-root (Mancala's discipline,
+   docs/BUILDING-A-GAME.md "CSS scoping"). The friendly look of reference/pool/SPEC.md: the whole
+   surround is a bright pastel that IS the turn indicator (warm for seat 0, sky for seat 1), the
+   table is drawn on the canvas. The cards are light in light mode and dark in dark mode: the whole
+   switch is the token block at the end of this file, `:root.gh-dark .ep-root`. */
+
+.ep-root {
+  /* Fixed to the viewport: full bleed both standalone and mounted (immersive: true in js/hub.js).
+     z-index sits below the hub's floating back button. */
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+  background: var(--ep-bg);
+  transition: background-color 0.35s ease;
+  color: #fff;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --ep-seat0: #F2A183;
+  --ep-seat1: #6BA9CE;
+  --ep-bg: var(--ep-seat0);
+  --ep-ink: #2a1d16;
+  --ep-muted: #6b5548;
+  --ep-card: #fffaf0;
+  --ep-line: #ead9c4;
+  --ep-brand: #0F8A3C;
+  --gh-accent: #0F8A3C;
+  --ep-pill: rgba(28, 22, 18, 0.62);
+  --ep-top: max(env(safe-area-inset-top, 0px), 50px);
+}
+.ep-root.ep-turn-1 { --ep-bg: var(--ep-seat1); }
+.ep-root.is-setup { --ep-bg: var(--ep-seat0); }
+@media (prefers-reduced-motion: reduce) { .ep-root { transition: none; } }
+.ep-root,
+.ep-root * {
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ep-root button { font: inherit; cursor: pointer; touch-action: manipulation; }
+.ep-root button > span,
+.ep-root button > b,
+.ep-root button > svg { pointer-events: none; }
+.ep-root :focus-visible { outline: 3px solid #ffce3a; outline-offset: 3px; }
+.ep-root [hidden] { display: none !important; }
+
+.ep-root .ep-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+/* Measures env(safe-area-inset-bottom) for ui.js _layout. */
+.ep-root .ep-safe {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: env(safe-area-inset-bottom, 0px);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+/* ------------------------------------------------------------------ top row --- */
+/* Shares its row with the hub's floating back button (top-left), so it keeps to the right. */
+.ep-root .ep-top {
+  position: absolute;
+  top: var(--ep-top);
+  right: 10px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 3;
+}
+.ep-root.is-setup .ep-top { visibility: hidden; }
+.ep-root .ep-ibtn {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ep-pill);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.ep-root .ep-ibtn svg { width: 22px; height: 22px; }
+.ep-root .ep-spinbtn svg { width: 28px; height: 28px; }
+/* Spin set: the accent ring as well as the moved dot (never colour alone). */
+.ep-root .ep-spinbtn.is-set { box-shadow: 0 0 0 3px #ffce3a, 0 2px 6px rgba(0, 0, 0, 0.25); }
+
+/* ------------------------------------------------------------------ scoreboard --- */
+.ep-root .ep-board {
+  position: absolute;
+  top: calc(var(--ep-top) + 50px);
+  left: 8px;
+  right: 8px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+  pointer-events: none;
+}
+.ep-root .ep-side {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: var(--ep-pill);
+  border: 2px solid transparent;
+  opacity: 0.78;
+}
+.ep-root .ep-side-1 { justify-content: flex-end; }
+/* Whose turn: the selection accent AS A BORDER plus a thick underline bar (never colour alone). */
+.ep-root .ep-side.is-turn { border-color: #ffce3a; box-shadow: inset 0 -4px 0 #ffce3a; opacity: 1; }
+.ep-root .ep-ava { flex: 0 0 auto; font-size: 20px; line-height: 1; }
+.ep-root .ep-nm {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ep-root .ep-side-1 .ep-nm { text-align: right; }
+.ep-root .ep-grp { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
+.ep-root .ep-grp:empty { display: none; }
+.ep-root .ep-grp i { font-style: normal; font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.ep-root .ep-grp .ep-ball-ico { display: block; }
+.ep-root .ep-sc { flex: 0 0 auto; font-size: 24px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.ep-root.is-setup .ep-board,
+.ep-root.is-setup .ep-status { visibility: hidden; }
+
+.ep-root .ep-status {
+  position: absolute;
+  top: calc(var(--ep-top) + 98px);
+  left: 8px;
+  right: 8px;
+  margin: 0;
+  min-height: 18px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ banner --- */
+.ep-root .ep-banner {
+  position: absolute;
+  left: 50%;
+  top: var(--ep-banner-y, 50%);
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+  max-width: calc(100% - 24px);
+}
+.ep-root .ep-banner b {
+  font-size: 50px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  color: #fff;
+  -webkit-text-stroke: 3px #1d1410;
+  paint-order: stroke fill;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+}
+.ep-root .ep-banner.is-long b { font-size: 28px; -webkit-text-stroke: 2px #1d1410; }
+.ep-root .ep-banner span {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(28, 22, 18, 0.82);
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+.ep-root .ep-banner span:empty { display: none; }
+.ep-root .ep-banner.is-show { animation: ep-banner 1.6s ease-out forwards; }
+@keyframes ep-banner {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+  24% { transform: translate(-50%, -50%) scale(1); }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes ep-still { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ------------------------------------------------------------------ overlays --- */
+.ep-root .ep-ov {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  padding: var(--ep-top) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: rgba(28, 16, 8, 0.4);
+  /* A card taller than the screen (a phone on its side) starts at the top padding and the overlay
+     scrolls to the rest; on a phone held upright every card fits and nothing scrolls. */
+  align-items: flex-start;
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+.ep-root .ep-ov > .ep-card { margin-block: auto; flex-shrink: 0; }
+.ep-root .ep-ov-setup { background: transparent; }
+.ep-root .ep-card {
+  position: relative;
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 16px 16px;
+  border-radius: 18px;
+  background: var(--ep-card);
+  color: var(--ep-ink);
+  box-shadow: 0 16px 44px rgba(60, 30, 10, 0.35);
+  border: 3px solid var(--ep-line);
+}
+.ep-root .ep-card-sm { width: min(320px, 100%); align-items: stretch; text-align: center; }
+.ep-root .ep-logo {
+  margin: 0 40px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.05;
+  color: var(--ep-brand);
+  letter-spacing: 0.01em;
+}
+.ep-root .ep-field { display: flex; flex-direction: column; gap: 4px; }
+.ep-root .ep-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ep-muted); }
+.ep-root .ep-seg { display: flex; width: 100%; padding: 2px; background: #f1e6d6; border-color: var(--ep-line); }
+/* The pills are DRAWN 34px tall and each TAPS 44px tall: the ::after reaches 5px above and below
+   into the gaps, which hold nothing tappable (Darts' measured pattern). */
+.ep-root .ep-seg .ep-seg-item { position: relative; flex: 1 1 0; min-width: 0; min-height: 34px; padding: 0 6px; gap: 5px; color: var(--ep-muted); font-size: 14px; }
+.ep-root .ep-seg .ep-seg-item::after { content: ''; position: absolute; inset: -5px 0; }
+.ep-root .ep-seg .ep-seg-item[aria-pressed="true"] { background: #fff; color: var(--ep-ink); box-shadow: 0 0 0 2px var(--ep-brand); }
+.ep-root .ep-seg .ep-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-seg .ep-seg-item svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.ep-root .ep-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
+.ep-root .ep-seg-big .ep-seg-item { min-height: 44px; font-size: 15px; font-weight: 800; }
+.ep-root .ep-seg-big .ep-seg-item::after { inset: 0; }
+.ep-root .ep-go { font-size: 17px; font-weight: 800; }
+.ep-root .ep-alt { background: #fff; color: var(--ep-ink); border-color: var(--ep-line); }
+.ep-root .ep-h2 { margin: 0 40px 2px; text-align: center; font-size: 22px; font-weight: 900; color: var(--ep-ink); }
+.ep-root .ep-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f1e6d6;
+  color: var(--ep-muted);
+}
+.ep-root .ep-x svg { width: 20px; height: 20px; }
+.ep-root .ep-q { right: auto; left: 6px; font-family: inherit; font-size: 22px; font-weight: 900; line-height: 1; }
+.ep-root .ep-res-ava { margin: 4px 0 0; font-size: 46px; line-height: 1; }
+.ep-root .ep-res-line { margin: -4px 0 4px; font-size: 26px; font-weight: 900; color: var(--ep-ink); font-variant-numeric: tabular-nums; }
+
+/* The spin pad: the cue ball's face, a tap or a drag sets where the tip strikes it. */
+.ep-root .ep-spinpad { width: 170px; height: 170px; margin: 0 auto; touch-action: none; cursor: pointer; }
+.ep-root .ep-spinpad svg { width: 100%; height: 100%; display: block; pointer-events: none; }
+
+/* How to play: one line per rule, each kept to a single row (docs/BUILDING-A-GAME.md). */
+.ep-root .ep-help { width: min(360px, 100%); gap: 7px; text-align: center; }
+.ep-root .ep-help-goal { margin: 0; font-size: 15px; font-weight: 800; white-space: nowrap; }
+.ep-root .ep-help-groups { margin: -2px 0 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 16px; font-weight: 900; color: var(--ep-muted); }
+.ep-root .ep-help-svg { display: block; width: 100%; max-width: 300px; margin: 0 auto; border-radius: 10px; }
+.ep-root .ep-help-line { margin: 0; font-size: 13px; font-weight: 600; color: #4a3a30; white-space: nowrap; }
+.ep-root .ep-help-cap { font-weight: 700; color: var(--ep-ink); }
+.ep-root .ep-help-ex { font-weight: 800; color: var(--ep-brand); }
+
+.ep-root .ep-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Narrow phones: the pills keep their whole word ("Medium", "Computer"). */
+@media (max-width: 360px) {
+  .ep-root .ep-seg .ep-seg-item { padding: 0 4px; font-size: 13px; gap: 3px; }
+  .ep-root .ep-logo { font-size: 28px; }
+}
+/* Short phones: a tighter card so nothing scrolls. */
+@media (max-height: 620px) {
+  .ep-root .ep-card { gap: 8px; padding: 14px 14px 12px; }
+  .ep-root .ep-help { gap: 5px; }
+  .ep-root .ep-help-svg { max-width: 220px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ep-root .ep-banner.is-show { animation: ep-still 1.6s linear forwards; }
+}
+
+/* ---------------------------------------------------------------- dark mode --- */
+/* The surround dims (still the two turn colours), every card goes dark. The table is the same. */
+:root.gh-dark .ep-root {
+  --ep-seat0: #7a4636;
+  --ep-seat1: #2c5873;
+  --ep-ink: #f3e9df;
+  --ep-muted: #c4b1a2;
+  --ep-card: #241b16;
+  --ep-line: #46362c;
+  --ep-brand: #4fc77a;
+}
+:root.gh-dark .ep-root .ep-card { box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6); }
+:root.gh-dark .ep-root .ep-seg { background: #17110e; }
+:root.gh-dark .ep-root .ep-seg .ep-seg-item[aria-pressed="true"] { background: #3a2c23; }
+:root.gh-dark .ep-root .ep-alt { background: #30251e; }
+:root.gh-dark .ep-root .ep-x { background: #30251e; color: #d9c8b9; }
+:root.gh-dark .ep-root .ep-help-line { color: #d9c8b9; }
+/* css/hub.css carries this too, but the standalone page does not load hub.css. */
+:root.gh-dark .ep-root .lb-dshape-t3, :root.gh-dark .ep-root .lb-dshape-t4 { fill: #e6e9f0; }
