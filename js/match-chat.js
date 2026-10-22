@@ -62,7 +62,7 @@ export function chatFrom(raw) {
   const out = [];
   for (const key of Object.keys(raw)) {
     const c = raw[key];
-    if (!c || typeof c !== 'object' || (c.by !== 'a' && c.by !== 'b')) continue;
+    if (!c || typeof c !== 'object' || (c.by !== 'a' && c.by !== 'b' && c.by !== 'c')) continue;
     const p = cleanPayload(c);
     if (!p) continue;
     out.push({ key, by: c.by, t: p.t, v: p.v, at: ms(c.at) });
@@ -114,14 +114,16 @@ const reasonOf = (err) => {
 };
 
 /**
- * Say something in a turn-by-turn match. `side` is the sender's side of THAT match ('a' | 'b'),
+ * Say something in a turn-by-turn match. `side` is the sender's side of THAT match ('a' | 'b', or
+ * 'c' for a third player),
  * which the game already knows from the match it has open. Any time: on either person's turn, and
  * on a finished match. Resolves `{ ok: true, entry }` or `{ ok: false, reason, retryable }`.
  */
 export async function sendChat({ node, id, side }, payload) {
   const path = chatPath(node, id);
   if (!path) return { ok: false, reason: 'not-found', retryable: false };
-  if (side !== 'a' && side !== 'b') return { ok: false, reason: 'not-your-game', retryable: false };
+  // 'c': the third player of a three-player match (Pool's Cutthroat, 2026-10-22).
+  if (side !== 'a' && side !== 'b' && side !== 'c') return { ok: false, reason: 'not-your-game', retryable: false };
   const p = cleanPayload(payload);
   if (!p) return { ok: false, reason: 'empty', retryable: false };
   if (!writesAllowed()) return { ok: false, reason: 'dev-origin-blocked', retryable: false };

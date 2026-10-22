@@ -442,3 +442,132 @@
 :root.gh-dark .ep-root .ep-help-line { color: #d9c8b9; }
 /* css/hub.css carries this too, but the standalone page does not load hub.css. */
 :root.gh-dark .ep-root .lb-dshape-t3, :root.gh-dark .ep-root .lb-dshape-t4 { fill: #e6e9f0; }
+
+/* ---------------------------------------------------------------- online (Stage 2) --- */
+/* Multiplayer, the setup card's first row (Flick Soccer's), with "N waiting on you". */
+.ep-root .ep-mprow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid var(--ep-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ep-ink);
+  text-align: left;
+}
+.ep-root .ep-mprow b { flex: 1 1 auto; font-size: 17px; font-weight: 800; }
+.ep-root .ep-mprow-badge { flex: 0 0 auto; padding: 3px 9px; border-radius: 999px; background: var(--ep-brand); color: #fff; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.ep-root .ep-mprow-chev { flex: 0 0 auto; font-size: 24px; line-height: 1; color: var(--ep-brand); }
+.ep-root .ep-danger { background: #fff; color: #a3161b; border-color: #e3b9b9; }
+/* Clear of the hub's floating back button (top-left): the card starts below it. */
+.ep-root .ep-ov-mp { padding-top: calc(var(--ep-top) + 50px); }
+.ep-root .ep-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
+.ep-root .ep-mp-top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 6px; }
+.ep-root .ep-mp-back {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f1e6d6;
+  color: var(--ep-ink);
+}
+.ep-root .ep-mp-back svg { width: 22px; height: 22px; }
+.ep-root .ep-mp-title { margin: 0; text-align: center; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-mp-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.ep-root .ep-mp-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.ep-root .ep-mp-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ep-muted);
+}
+.ep-root .ep-mp-h span { padding: 1px 7px; border-radius: 999px; background: var(--ep-brand); color: #fff; font-size: 11px; }
+.ep-root .ep-mp-note { margin: 0; text-align: center; font-size: 14px; font-weight: 600; color: var(--ep-muted); }
+.ep-root .ep-mp-err { color: #a3161b; font-weight: 800; }
+.ep-root .ep-mp-search { font-size: 16px; -webkit-user-select: text; user-select: text; }
+.ep-root .ep-mrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 2px solid var(--ep-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ep-ink);
+  font: inherit;
+  text-align: left;
+}
+.ep-root .ep-mrow.is-mine { border-color: var(--ep-brand); box-shadow: 0 0 0 1px var(--ep-brand) inset; }
+.ep-root .ep-mrow.is-static { cursor: default; }
+.ep-root .ep-mrow-face { flex: 0 0 auto; width: 34px; font-size: 26px; line-height: 1; text-align: center; }
+.ep-root .ep-mrow-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.ep-root .ep-mrow-name { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-mrow-sub { font-size: 12px; font-weight: 600; color: var(--ep-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-mrow-chev { flex: 0 0 auto; font-size: 24px; color: var(--ep-brand); }
+.ep-root .ep-mp-add { border-style: dashed; justify-content: center; }
+.ep-root .ep-mp-add .ep-mrow-face { color: var(--ep-brand); font-weight: 900; }
+.ep-root .ep-rec { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ep-root .ep-hmark { flex: 0 0 auto; width: 34px; text-align: center; font-size: 20px; font-weight: 900; color: var(--ep-muted); }
+.ep-root .ep-mrow.is-won .ep-hmark { color: var(--ep-brand); }
+.ep-root button.ep-mp-more { min-height: 44px; border: 0; background: transparent; color: var(--ep-brand); text-decoration: underline; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; }
+.ep-root .ep-mp-whos { display: flex; flex-direction: column; gap: 6px; }
+.ep-root .ep-mp-who { margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; font-size: 20px; color: var(--ep-ink); }
+.ep-root .ep-mp-who b { font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-mp-face { flex: 0 0 auto; font-size: 28px; line-height: 1; }
+.ep-root .ep-aid-note { margin: 2px 0 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--ep-muted); }
+.ep-root .ep-res-small { font-size: 15px; font-weight: 700; }
+.ep-root .ep-skip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 7;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  background: rgba(28, 22, 18, 0.88);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+.ep-root .ep-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(28, 22, 18, 0.92);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+/* Quick chat (js/match-chat-ui.js): the panel scrolls on a short phone; the text box is typeable. */
+.ep-root .ghc-panel { touch-action: pan-y; }
+.ep-root .ghc-input { -webkit-user-select: text; user-select: text; }
+:root.gh-dark .ep-root .ep-mprow,
+:root.gh-dark .ep-root .ep-mrow,
+:root.gh-dark .ep-root .ep-danger { background: #30251e; }
+:root.gh-dark .ep-root .ep-mp-back { background: #3a2c23; }
+:root.gh-dark .ep-root .ep-danger { color: #ff9b9b; border-color: #6e3434; }
+:root.gh-dark .ep-root .ep-mp-err { color: #ff9b9b; }
+:root.gh-dark .ep-root .ep-mprow-badge,
+:root.gh-dark .ep-root .ep-mp-h span { background: #1f6b3d; }

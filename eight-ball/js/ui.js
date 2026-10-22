@@ -8,7 +8,8 @@
 // (gamehub.eightball.save.v2) and the setup screen offers Continue, so leaving is lossless and this
 // returns false. Leaving while a shot is still rolling plays that shot out first (_settleNow), so a
 // pot in flight is never lost and a bad shot can never be taken back by quitting. A match is
-// recorded once it is won, against the computer only.
+// recorded once it is won, against the computer only. An ONLINE challenge (Stage 2, mp.js) lives on
+// the server, every shot written the moment it is taken, so leaving one loses nothing either.
 
 import {
   newMatch, validMatch, step, atRest, freeze, settle, begin, play, nextRack, runToRest, maxShotSteps,
@@ -94,6 +95,7 @@ function loadSettings() {
     racks: RACK_OPTIONS.includes(s.racks) ? s.racks : 1,
     opts: { call: !!o.call, bank: !!o.bank, obst: !!o.obst },
     look: LOOKS.includes(s.look) ? s.look : 'classic',
+    aimHelp: DIFFS.includes(s.aimHelp) ? s.aimHelp : 'medium',   // a challenge's aiming help (Stage 2)
     nextBreaker: Number.isInteger(s.nextBreaker) && s.nextBreaker >= 0 ? s.nextBreaker : 0,
   };
 }
@@ -135,6 +137,12 @@ function helpSvg() {
 }
 
 let instance = null;
+/** Everybody in an online match but this phone's player, as {code, name, emoji} (Challenge again). */
+const othersOfMine = (mp) => mp.game.p.filter((_, k) => k !== mp.seat).map((x) => ({ code: x.code, name: x.name, emoji: x.emoji }));
+/** Where the quick-chat button sits (js/match-chat-ui.js `place`): the top row, left of the spin and
+ *  menu buttons (each 44px, 8px apart, from `right: 10px`); its bubbles come down under the
+ *  scoreboard and the status line, so a line never covers the score or whose turn it is. */
+const CHAT_PLACE = { top: 'var(--ep-top)', right: '114px', popsTop: 'calc(var(--ep-top) + 140px)' };
 
 class PoolUI {
   constructor(container) {
@@ -180,11 +188,25 @@ class PoolUI {
     }) : null;
     if (this._ro) this._ro.observe(this.root);
     this._offLang = onLangChange(() => this._relabel());
+    // Shots queued while offline go out on mount and the moment the connection comes back.
+    this._onOnline = () => this._drainAll();
+    window.addEventListener('online', this._onOnline);
+    setTimeout(() => { if (instance === this) this._drainAll(); }, 0);
 
     this._layout();
     this._showSetup();
     this._start();
+    // A tapped launcher bubble or notification names a match: open it straight away. The hub's
+    // Multiplayer screen can also hand over a person to challenge ('pick').
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || instance !== this) return;
+      if (o.kind === 'pick') this._openOnline(o.them); else this._openMatch(o.id);
+    }).catch(() => {});
   }
+
+  /** An option chip's picture (the challenge card draws them too). */
+  optSVG(k) { return OPT_SVG[k] || ''; }
 
   _ensureCss() {
     for (const href of [new URL('../../css/ui.css', import.meta.url).href, new URL('../css/eight-ball.css', import.meta.url).href]) {
@@ -208,6 +230,7 @@ class PoolUI {
         <p class="ep-status" data-role="status"></p>
         <div class="ep-banner" data-role="banner" aria-hidden="true"><b data-role="bannerMain"></b><span data-role="bannerSub"></span></div>
         <button type="button" class="ep-ok" data-act="placeOk" data-role="ok" data-la="aria_ok" hidden>${OK_SVG}</button>
+        <button type="button" class="ep-skip" data-act="skip" data-role="skip" hidden><span data-l="mp_skip"></span></button>
         <span class="ep-safe" data-role="safe" aria-hidden="true"></span>
 
         <div class="ep-ov ep-ov-setup" data-ov="setup" hidden>
@@ -215,6 +238,11 @@ class PoolUI {
             <button type="button" class="ep-x ep-q" data-act="howto" data-la="howto">?</button>
             <button type="button" class="ep-x" data-act="exit" data-la="aria_close">${X_SVG}</button>
             <h2 class="ep-logo" data-l="title"></h2>
+            <button type="button" class="ep-mprow" data-act="multi">
+              <b data-l="multiplayer"></b>
+              <span class="ep-mprow-badge" data-role="onlineNote" hidden></span>
+              <span class="ep-mprow-chev" aria-hidden="true">›</span>
+            </button>
             <div class="gh-seg ep-seg ep-seg-big" role="group" data-role="games"></div>
             <div class="gh-seg ep-seg" role="group" data-role="modes"></div>
             <div class="gh-seg ep-seg" role="group" data-role="diffs"></div>
@@ -235,7 +263,19 @@ class PoolUI {
             <h2 class="ep-h2" data-l="menu"></h2>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="resume"><span data-l="resume"></span></button>
             <button type="button" class="gh-btn gh-btn--block ep-alt" data-act="howto"><span data-l="howto"></span></button>
-            <button type="button" class="gh-btn gh-btn--block ep-alt" data-act="quit"><span data-l="quit"></span></button>
+            <button type="button" class="gh-btn gh-btn--block ep-alt" data-act="quit" data-local><span data-l="quit"></span></button>
+            <button type="button" class="gh-btn gh-btn--block ep-alt" data-act="mpHome" data-online><span data-l="mp_back"></span></button>
+            <button type="button" class="gh-btn gh-btn--block ep-danger" data-act="resign" data-online><span data-l="mp_resign"></span></button>
+          </div>
+        </div>
+
+        <div class="ep-ov ep-ov-mp" data-ov="mp" hidden></div>
+
+        <div class="ep-ov" data-ov="resign" hidden>
+          <div class="ep-card ep-card-sm" role="dialog" aria-modal="true">
+            <h2 class="ep-h2" data-l="mp_resign_q"></h2>
+            <button type="button" class="gh-btn gh-btn--block ep-danger" data-act="resignYes"><span data-l="mp_resign_yes"></span></button>
+            <button type="button" class="gh-btn gh-btn--block ep-alt" data-act="menu"><span data-l="mp_cancel"></span></button>
           </div>
         </div>
 
@@ -261,8 +301,8 @@ class PoolUI {
             <p class="ep-res-ava" data-role="resAva"></p>
             <h2 class="ep-h2" data-role="resTitle"></h2>
             <p class="ep-res-line" data-role="resLine"></p>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="again"><span data-l="play_again"></span></button>
-            <button type="button" class="gh-btn gh-btn--block ep-alt" data-act="toSetup"><span data-l="to_menu"></span></button>
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="again"><span data-role="againLabel"></span></button>
+            <button type="button" class="gh-btn gh-btn--block ep-alt" data-act="toSetup"><span data-role="toSetupLabel"></span></button>
           </div>
         </div>
 
@@ -274,6 +314,7 @@ class PoolUI {
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="helpClose"><span data-l="help_close"></span></button>
           </div>
         </div>
+        <p class="ep-toast" data-role="toast" role="status" hidden></p>
         <p class="ep-sr" aria-live="polite" data-role="live"></p>
       </div>`;
     const q = (s) => this.host.querySelector(s);
@@ -344,9 +385,13 @@ class PoolUI {
     opts.innerHTML = OPTS.map((k) => `<button type="button" class="ep-opt" data-opt="${k}" aria-pressed="${!!s.opts[k]}">${OPT_SVG[k]}<span>${esc(t('opt_' + k))}</span></button>`).join('');
     this.root.querySelector('[data-role="diffs"]').hidden = s.mode !== 'cpu';
     this.root.querySelector('[data-role="continueBtn"]').hidden = !this._savedMatch();
+    this._paintOnlineNote();
+    const online = this.mode === 'mp';
+    this.root.querySelectorAll('[data-online]').forEach((el) => { el.hidden = !online; });
+    this.root.querySelectorAll('[data-local]').forEach((el) => { el.hidden = online; });
     this._paintHelp();
     this._paintSpin();
-    if (this.seats) { this.seats = this._seatsFor(this.mode, this.diff, this.match.n); this._hud(); }
+    if (this.seats) { if (!online) this.seats = this._seatsFor(this.mode, this.diff, this.match.n); this._hud(); }
     if (this.screen === 'result') this._fillResult();
     if (this.screen === 'help') this._fitHelp();
     if (this.screen === 'play') this._status();
@@ -401,11 +446,14 @@ class PoolUI {
 
   _showOnly(name) {
     for (const k of Object.keys(this.ov)) this.ov[k].hidden = k !== name;
-    this.root.classList.toggle('is-setup', name === 'setup' || (name === 'help' && !this.match));
+    this.root.classList.toggle('is-setup', name === 'setup' || name === 'mp' || (name === 'help' && !this.match));
     this._paintOk();
   }
 
   _showSetup() {
+    const leftOnline = !!this.mp;
+    this._mpLeave();
+    if (leftOnline) this._drainAll();
     this.screen = 'setup';
     this.match = null;
     this.seats = null;
@@ -424,6 +472,7 @@ class PoolUI {
     this._relabel();
     this._showOnly('setup');
     this._draw();
+    this._countOnline();
   }
 
   // --- layout ----------------------------------------------------------------------------------
@@ -494,7 +543,7 @@ class PoolUI {
     this.diff = g.diff;
     this.match = g.match;
     freeze(this.match.b);
-    this.seats = this._seatsFor(g.mode, g.diff, this.match.n);
+    this.seats = g.seats || this._seatsFor(g.mode, g.diff, this.match.n);
     this.root.classList.toggle('ep-m9', this.match.mode === '9');
     this.root.classList.toggle('ep-n3', this.match.n === 3);
     this._buildBoard();
@@ -518,7 +567,7 @@ class PoolUI {
    *  deterministic) instead of handing it back. */
   _save(shot = null) {
     const m = this.match;
-    if (!m || !this.mode) return;
+    if (!m || !this.mode || this.mode === 'mp') return;     // an online match lives on the server
     if (m.winner != null) { try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ } return; }
     if (!atRest(m.b) || this.phase === 'moving') return;
     writeJSON(SAVE_KEY, shot ? { mode: this.mode, diff: this.diff, match: m, shot } : { mode: this.mode, diff: this.diff, match: m });
@@ -539,6 +588,8 @@ class PoolUI {
       </div>`).join('')}${m.mode === '9' ? '<div class="ep-tray9" data-role="tray9"></div>' : ''}`;
     this.sideEls = this.seats.map((_, i) => this.boardEl.querySelector(`[data-side="${i}"]`));
   }
+
+  _saveSettings() { writeJSON(SETTINGS_KEY, this.settings); }
 
   /** A seat's balls: its group (8-ball once decided, Cutthroat always), each shown down (faded,
    *  ticked) or still on the table. */
@@ -594,7 +645,12 @@ class PoolUI {
     if (!m || this.screen === 'setup' || m.winner != null) { this.statusEl.textContent = ''; return; }
     const s = this.seats[m.turn];
     let txt;
+    const mp = this.mode === 'mp' ? this.mp : null;
     if (this.phase === 'moving' || this.phase === 'pause') txt = '';
+    else if (mp && m.turn !== mp.seat) {
+      const sending = this.phase === 'waiting' && (mp.pending.length || mp.sending);
+      txt = t(this.phase !== 'waiting' ? 'status_mp_them' : sending ? 'status_mp_sending' : 'status_mp_wait', { name: s.name });
+    }
     else if (!s.human && (this.phase === 'cpu' || this.phase === 'cpuplace' || this.phase === 'cpuaim')) txt = t('status_cpu', { name: s.name });
     else if (this.placing) txt = t('status_place', { name: s.name });
     else if (!m.broke) txt = t('status_break', { name: s.name });
@@ -605,6 +661,7 @@ class PoolUI {
     else txt = t('status_turn', { name: s.name });
     this.statusEl.textContent = txt;
     this._fitStatus();
+    this._paintSkip();
   }
 
   /** The status line keeps its whole text: shrunk to fit, never below 11px. */
@@ -618,7 +675,11 @@ class PoolUI {
   }
 
   /** Vs the computer: its difficulty. Players sharing a phone: Medium. */
-  _level() { return this.mode === 'cpu' ? this.diff : 'medium'; }
+  _level() {
+    if (this.mode === 'cpu') return this.diff;
+    if (this.mode === 'mp' && this.mp && this.mp.game) return this.mp.game.aids;
+    return 'medium';
+  }
   _aids() { return AIDS[this._level()] || AIDS.medium; }
 
   _startTurn(announce) {
@@ -631,6 +692,7 @@ class PoolUI {
     this.placing = !!m.inHand && s.human && !this._aids().freeHand;
     this._hud();
     if (announce) this._say(t('say_turn', { name: s.name }));
+    if (this.mode === 'mp') { this.placing = false; this._mpCatchUp(); this._paintOk(); return; }
     if (s.human) {
       this.phase = 'aim';
     } else {
@@ -679,24 +741,42 @@ class PoolUI {
       if (k >= 1) {
         this.aim = null;
         this.cpu = null;
-        this._shoot(sh);
+        this._shoot(sh, { replay: !!c.replay });
       }
     }
   }
 
   /** Take a shot ({x?, y?, dx, dy, p, s, c?}). Rounded to fixed decimals first, so the saved shot
    *  (and a future online one) replays exactly what this phone played. */
-  _shoot(raw) {
+  _shoot(raw, opts = {}) {
     const m = this.match;
     if (!m || m.winner != null) return;
+    if (this.mode === 'mp' && m.turn !== this.mp.seat && !opts.replay) return;
     const len = Math.sqrt(raw.dx * raw.dx + raw.dy * raw.dy) || 1;
     const r6 = (v) => Math.round(v * 1e6) / 1e6;
     const shot = { dx: r6(raw.dx / len), dy: r6(raw.dy / len), p: Math.round(Math.max(0, Math.min(1, raw.p)) * 1e4) / 1e4, s: Math.round((raw.s || 0) * 100) / 100 };
-    if (m.inHand && Number.isFinite(raw.x)) { shot.x = Math.round(raw.x * 1000) / 1000; shot.y = Math.round(raw.y * 1000) / 1000; }
+    if (m.inHand && Number.isFinite(raw.x)) {
+      // The cue ball's spot, ROUNDED, must still be a legal spot (rounding can nudge a ball placed
+      // right against another a hair into it, and every replay would then refuse the shot).
+      const r3 = (v) => Math.round(v * 1000) / 1000;
+      const kitchen = m.inHand === 'kitchen';
+      let x = r3(raw.x), y = r3(raw.y);
+      for (let k = 0; k < 24 && !canPlace(m, x, y, kitchen); k++) {
+        const p = nearestPlace(m, x + (k ? 0.02 * k : 0), y, kitchen);
+        x = r3(p.x); y = r3(p.y);
+      }
+      shot.x = x; shot.y = y;
+    }
     if (Number.isInteger(raw.c) && raw.c >= 0) shot.c = raw.c;
     this._save(shot);   // the position the shot was taken from, and the shot
     const ev = begin(m, shot);
     if (!ev) { this._startTurn(false); return; }
+    if (this.mode === 'mp') {
+      // Your shot, written NOW (before it has rolled), exactly as it will be replayed elsewhere.
+      // Only a shot this table accepted is ever written.
+      if (!opts.replay) this._mpRecord({ by: this.mp.seat, ...shot });
+      this.mp.applied++;
+    }
     this.ev = ev;
     this.potSeen = 0;
     this.phase = 'moving';
@@ -806,6 +886,7 @@ class PoolUI {
   _finish() {
     const m = this.match;
     if (!m || m.winner == null) return;
+    if (this.mode === 'mp') { this._mpFinish(m.winner === this.mp.seat, false); return; }
     this._record();
     this._save();
     this._say(t('say_win', { name: this.seats[m.winner].name }));
@@ -823,11 +904,15 @@ class PoolUI {
     const m = this.match;
     if (!m || m.winner == null) return;
     const w = this.seats[m.winner];
+    const mp = this.mode === 'mp' ? this.mp : null;
     this.root.querySelector('[data-role="resAva"]').textContent = w.emoji;
     this.root.querySelector('[data-role="resTitle"]').textContent = t('win_name', { name: w.name });
+    this.root.querySelector('[data-role="againLabel"]').textContent = t(mp ? 'mp_again' : 'play_again');
+    this.root.querySelector('[data-role="toSetupLabel"]').textContent = t(mp ? 'mp_back' : 'to_menu');
     const line = this.root.querySelector('[data-role="resLine"]');
-    line.textContent = m.racks > 1 ? m.scores.join(' – ') : '';
-    line.hidden = m.racks <= 1;
+    const quit = mp && mp.resigned && mp.game.over && Number.isInteger(mp.game.over.by) ? mp.game.p[mp.game.over.by] : null;
+    line.textContent = quit ? t('mp_x_resigned', { name: quit.name || '?' }) : m.racks > 1 ? m.scores.join(' – ') : '';
+    line.hidden = !line.textContent;
   }
 
   // --- effects ---------------------------------------------------------------------------------
@@ -895,13 +980,18 @@ class PoolUI {
     if (!b) return;
     const act = b.dataset.act;
     if (act === 'play') this._newMatch();
+    else if (act === 'multi') this._openOnline();
+    else if (act === 'mpHome') this._openOnline();
+    else if (act === 'skip') this._mpSkip();
+    else if (act === 'resign') { this._paintResign(); this.screen = 'resign'; this._showOnly('resign'); }
+    else if (act === 'resignYes') this._mpResign();
     else if (act === 'continue') this._continue();
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._paintHelp(); this._showOnly('help'); this._fitHelp(); }
     else if (act === 'helpClose') {
       if (this._helpFrom === 'menu') { this.screen = 'menu'; this._showOnly('menu'); }
       else this._showSetup();
     }
-    else if (act === 'menu') { if (this.screen === 'play') { this.screen = 'menu'; this._dropAim(); this._showOnly('menu'); } }
+    else if (act === 'menu') { if (this.screen === 'play' || this.screen === 'resign') { this._paintResign(); this.screen = 'menu'; this._dropAim(); this._showOnly('menu'); } }
     else if (act === 'spin') { if (this.screen === 'play') { this.screen = 'spin'; this._dropAim(); this._paintSpin(); this._showOnly('spin'); } }
     else if (act === 'spinClose') { this.screen = 'play'; this._showOnly(null); }
     else if (act === 'spinZero') { this.spin = 0; this._paintSpin(); this.screen = 'play'; this._showOnly(null); }
@@ -915,8 +1005,11 @@ class PoolUI {
     }
     else if (act === 'resume') { this.screen = 'play'; this._showOnly(null); }
     else if (act === 'quit') { this._settleNow(); this._save(); if (this.match && this.match.winner != null) this._finish(); else this._showSetup(); }
-    else if (act === 'again') this._newMatch();
-    else if (act === 'toSetup') this._showSetup();
+    else if (act === 'again') {
+      if (this.mode === 'mp') this._sendChallenge(othersOfMine(this.mp), this.mp.game);
+      else this._newMatch();
+    }
+    else if (act === 'toSetup') { if (this.mode === 'mp') this._openOnline(); else this._showSetup(); }
   }
 
   /** A menu or the spin pad opened mid-aim: the aim is dropped, a cue ball being placed stays put. */
@@ -924,6 +1017,427 @@ class PoolUI {
     if (this.drag && this.drag.mode === 'place') this._placeEnd();
     this.drag = null;
     if (this.phase === 'aim') this.aim = null;
+  }
+
+  // --- online (mp.js keeps the match; mp-ui.js draws the lists) ------------------------------------
+  // The local match is the STORED one (seat 0 the challenger). Opening a match replays the log up to
+  // the other players' latest run of shots, then PLAYS that run on the table (cue placed, pocket
+  // called, cue drawn back, the shot rolls); every shot of yours is appended the moment you take it
+  // (_mpRecord -> _mpFlush), so a closed app loses nothing and cannot take a shot back; while it is
+  // someone else's turn the match is WATCHED, so their shot plays as it lands.
+  async _loadMP() { if (!this.MP) this.MP = await import('./mp.js'); return this.MP; }
+
+  _toast(msg, ms = 1800) {
+    const el = this.root.querySelector('[data-role="toast"]');
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+  }
+
+  /** "2 waiting on you" on the Multiplayer row. Re-read every time the setup screen shows. */
+  _paintOnlineNote() {
+    const el = this.root.querySelector('[data-role="onlineNote"]');
+    if (!el) return;
+    const n = this._onlineWaiting | 0;
+    el.hidden = !n;
+    el.textContent = n === 1 ? t('online_waiting1') : t('online_waiting', { n });
+  }
+  async _countOnline() {
+    try {
+      const MP = await this._loadMP();
+      const rows = await MP.readMyGames();
+      if (instance !== this) return;
+      try { MP.recordFinished(rows); } catch { /* counted on the next open instead */ }
+      this._onlineWaiting = rows.filter((r) => !r.over && r.yourTurn).length;
+      this._paintOnlineNote();
+    } catch { /* offline: no count */ }
+  }
+
+  /** Send shots still queued on this phone for ANY match, not just the one open. */
+  async _drainAll() {
+    if (this._draining) return;
+    this._draining = true;
+    try {
+      const MP = await this._loadMP();
+      if (!MP.outboxCount()) return;
+      const sent = await MP.drainOutbox(null, this.mp ? this.mp.id : null);
+      if (sent && instance === this && this.screen === 'setup') this._countOnline();
+    } catch (err) { console.warn('[eight-ball] could not send queued shots yet', err); }
+    finally { this._draining = false; }
+    if (instance === this && this.MP && this.MP.outboxCount() > (this.mp && this.MP.pendingFor(this.mp.id) ? 1 : 0)) {
+      clearTimeout(this._drainTimer);
+      this._drainTimer = setTimeout(() => { if (instance === this) this._drainAll(); }, 6000);
+    }
+  }
+
+  /** The Multiplayer home. `pickFor` ({code, name, emoji}, from the hub's Multiplayer screen) opens
+   *  straight onto "challenge them". */
+  async _openOnline(pickFor = null) {
+    this._mpLeave();
+    this._drainAll();
+    this.match = null; this.seats = null; this.mode = null;
+    this.timers = []; this.cpu = null; this.aim = null; this.drag = null; this.placing = false;
+    this.phase = 'idle';
+    this.boardEl.innerHTML = '';
+    this.banner.classList.remove('is-show');
+    const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
+    if (instance !== this) return;
+    this.UI = UI;
+    if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
+    else UI.home(this, MP);
+  }
+
+  /** A notification for a match was tapped while Pool is ALREADY open: open that match unless a
+   *  game against the computer or on one phone is under way, or a shot is rolling. */
+  openArmed() {
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || instance !== this) return;
+      if (o.kind === 'pick') { if (!this.match || this.mp) this._openOnline(o.them); return; }
+      if (this.mp && this.mp.id === o.id) return;
+      if (this.phase === 'moving' || this.phase === 'pause') return;
+      if (!this.mp && this.match && this.match.winner == null && this.phase !== 'idle') return;
+      this._openMatch(o.id);
+    }).catch(() => {});
+  }
+
+  /** Open one stored match. Shots still waiting on this phone go first, so none is lost. */
+  async _openMatch(id) {
+    const MP = await this._loadMP();
+    if (MP.pendingFor(id)) await MP.drainOutbox(id);
+    const game = await MP.readGame(id);
+    if (instance !== this) return;
+    if (!game) { this._toast(t('mp_not_found'), 2200); this._openOnline(); return; }
+    this._mpBegin(game);
+  }
+
+  /** Resign, or CANCEL / DECLINE while nobody it was sent to has shot (js/challenge-life.js). */
+  _paintResign() {
+    const mp = this.mp;
+    if (!mp || !this.MP || !mp.game) return;
+    const life = this.MP.lifeOf(mp.game);
+    const kind = !life.open ? 'resign' : mp.seat === 0 ? 'cancel' : 'decline';
+    const set = (sel, key) => { const el = this.host.querySelector(sel); if (el) el.textContent = t(key); };
+    set('[data-act="resign"] span', kind === 'resign' ? 'mp_resign' : `mp_${kind}_ch`);
+    set('[data-ov="resign"] h2', kind === 'resign' ? 'mp_resign_q' : `mp_${kind}_q`);
+    set('[data-act="resignYes"] span', kind === 'resign' ? 'mp_resign_yes' : `mp_${kind}_ch`);
+    set('[data-ov="resign"] [data-act="menu"] span', kind === 'resign' ? 'mp_cancel' : 'mp_keep');
+  }
+
+  /** What to say about a match that ended with no result (called off, or expired); '' otherwise. */
+  _mpEndText(game, seat) {
+    const MP = this.MP;
+    if (!game || !MP) return '';
+    if (MP.lifeOf(game).expired) return t('mp_expired');
+    if (!MP.isCalledOff(game)) return '';
+    const why = game.over.why === 'declined' ? 'declined' : 'cancelled';
+    const by = Number.isInteger(game.over.by) ? game.over.by : (why === 'cancelled' ? 0 : 1);
+    if (by === seat) return t(`mp_you_${why}`);
+    return t(`mp_they_${why}`, { name: (game.p[by] && game.p[by].name) || '?' });
+  }
+
+  /** A new challenge (`people`: one, or two for Cutthroat; `terms` a finished match's, for Challenge
+   *  again, else the setup card's). The first person breaks, so it goes to them at once. */
+  async _sendChallenge(people, terms = null) {
+    if (this._challenging) return { ok: false, reason: 'busy' };      // a double tap makes ONE match
+    this._challenging = true;
+    const s = this.settings;
+    const tm = terms ? { mode: terms.mode, racks: terms.racks, opts: terms.opts, aids: terms.aids }
+      : { mode: s.game, racks: s.racks, opts: s.opts, aids: s.aimHelp };
+    let res;
+    try {
+      const MP = await this._loadMP();
+      res = await MP.createGame({ them: people, ...tm });
+    } finally { this._challenging = false; }
+    if (instance !== this) return res;
+    if (!res.ok) {
+      if (this.screen !== 'mp') this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400);
+      return res;
+    }
+    this._mpBegin(res.game);
+    this._bannerShow(t('mp_sent'), t('mp_sent_sub', { name: res.game.p[1].name || '?' }), 0);
+    return res;
+  }
+
+  _mpBegin(game) {
+    const MP = this.MP;
+    const me = MP.myCode();
+    const seat = MP.seatOf(game, me);
+    if (seat < 0) { this._openOnline(); return; }
+    const endText = this._mpEndText(game, seat);
+    if (endText) { this._mpLeave(); this._toast(endText, 3200); this._openOnline(); return; }
+    this._mpLeave();
+    let from = game.log.length ? MP.lastRunStart(game, seat) : 0;
+    // Shots this phone took that never reached the server are still this phone's shots: shown on the
+    // table and retried, never re-taken.
+    const q = MP.pendingFor(game.id);
+    const queued = q && q.base === game.log.length && Array.isArray(q.entries) ? q.entries.map((e) => MP.cleanEntry(e, game.n)).filter(Boolean) : [];
+    // The others' last shots replay EVERY time you open the match while it is your turn (Flick
+    // Soccer, 2026-10-13); otherwise a run already shown is not shown twice. Skip jumps past it.
+    const now = from < game.log.length && !queued.length && !game.over ? MP.buildMatch(game) : null;
+    const myTurn = !!now && now.winner == null && now.turn === seat;
+    const shown = MP.readShown(game.id);
+    if (!myTurn && shown > from) from = Math.min(shown, game.log.length);
+    if (q && !queued.length) MP.savePending(game.id, 0, []);
+    this.mp = { id: game.id, seat, game, applied: from, base: game.log.length,
+      pending: queued.slice(), unshown: queued.slice(), sending: false, stop: null, finished: false, resigned: false };
+    const seats = game.p.map((x) => ({ name: x.name || '?', emoji: x.emoji || '🙂', human: true }));
+    const match = MP.buildMatch(game, from);
+    this._begin({ mode: 'mp', diff: 'mp', match, seats });
+    const mp = this.mp;
+    this._mpMountChat({ id: game.id, seat, game });
+    MP.watchGame(game.id, (g) => this._mpOnGame(g)).then((stop) => {
+      if (this.mp === mp) mp.stop = stop; else { try { stop(); } catch { /* detached */ } }
+    });
+    if (mp.pending.length) this._mpFlush();
+  }
+
+  /** The table is at rest: show whatever the log has that this phone has not played yet, then play
+   *  on (your turn) or wait (someone else's). */
+  _mpCatchUp() {
+    const mp = this.mp;
+    if (!mp || this.mode !== 'mp' || mp.finished) return;
+    const g = mp.game;
+    const m = this.match;
+    if (m.winner != null) { this._finish(); return; }
+    if (mp.applied < g.log.length) {
+      const e = g.log[mp.applied];
+      if (e.by === mp.seat) {
+        // Your own shot from another phone (or before a reopen): played out off screen.
+        this.MP.applyEntry(m, e);
+        mp.applied++;
+        this._hud();
+        this._mpCatchUp();
+        return;
+      }
+      // Theirs: placed, called and drawn back on the table, then it rolls for real.
+      mp.replaying = true;
+      this.phase = 'cpu';
+      const shot = { dx: e.dx, dy: e.dy, p: e.p, s: e.s };
+      if (e.x != null) { shot.x = e.x; shot.y = e.y; }
+      if (e.c != null) shot.c = e.c;
+      this.cpu = { started: this.clock - 0.3, shot, replay: true };
+      this._status();
+      return;
+    }
+    mp.replaying = false;
+    if (mp.unshown.length) {
+      for (const e of mp.unshown) this.MP.applyEntry(m, e);
+      mp.applied += mp.unshown.length;
+      mp.unshown = [];
+      this._hud();
+      if (m.winner != null) { this._finish(); return; }
+    }
+    this.MP.markShown(mp.id, g.log.length);
+    if (g.over && (this.MP.isCalledOff(g) || !g.log.length)) { this._mpCalledOff(this._mpEndText(g, mp.seat)); return; }
+    if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.seat, true); return; }
+    if (m.turn === mp.seat) {
+      this.phase = 'aim';
+      this.placing = !!m.inHand && !this._aids().freeHand;
+      this._status();
+      this._paintOk();
+      return;
+    }
+    this.phase = 'waiting';
+    this._status();
+    this._mpSentNote();
+  }
+
+  /** Skip: straight to the table after the others' last shots, rebuilt from the stored log (exactly
+   *  what the replay would have ended on). */
+  _mpSkip() {
+    const mp = this.mp, MP = this.MP;
+    if (!mp || !MP || !mp.replaying || this.mode !== 'mp' || this.screen !== 'play') return;
+    const g = mp.game;
+    mp.replaying = false;
+    this.cpu = null; this.aim = null; this.drag = null; this.ev = null;
+    this.timers = []; this.showB = null; this._showObs = null; this.sinking = []; this.bursts = [];
+    clearTimeout(this._bannerTimer);
+    this.banner.classList.remove('is-show');
+    this.match = MP.buildMatch(g, g.log.length);
+    freeze(this.match.b);
+    mp.applied = g.log.length;
+    this.phase = 'idle';
+    this._startTurn(false);
+  }
+
+  /** The Skip button shows only while the others' shots are being replayed. */
+  _paintSkip() {
+    const el = this.root && this.root.querySelector('[data-role="skip"]');
+    if (!el) return;
+    const on = this.mode === 'mp' && !!this.mp && !!this.mp.replaying && this.screen === 'play';
+    if (el.hidden === on) el.hidden = !on;
+  }
+
+  /** "SENT!" once per hand-over, only for a turn played on THIS phone, only once the server has it. */
+  _mpSentNote() {
+    const mp = this.mp;
+    if (!mp || this.phase !== 'waiting' || !mp.shotHere || mp.pending.length || mp.sending) return;
+    if (mp.sentFor === mp.base) return;
+    mp.sentFor = mp.base;
+    const next = this.seats[this.match.turn];
+    this._bannerShow(t('mp_sent'), t('mp_sent_sub', { name: (next && next.name) || '?' }), this.match.turn);
+    this._say(t('mp_sent_sub', { name: (next && next.name) || '?' }));
+  }
+
+  /** The watched match changed: new shots from the others are played, our own echoes ignored. */
+  _mpOnGame(g) {
+    const mp = this.mp;
+    if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
+    mp.game = g;
+    if (g.over && (this.MP.isCalledOff(g) || !g.log.length) && !mp.finished) { this._mpCalledOff(this._mpEndText(g, mp.seat)); return; }
+    if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length && this.phase !== 'moving') {
+      this._mpFinish(g.over.winner === mp.seat, true);
+      return;
+    }
+    if (mp.applied >= g.log.length) return;
+    if (this.phase === 'waiting') this._mpCatchUp();
+    else if (this.phase === 'aim' && !mp.pending.length && !mp.sending) {
+      // Your turn here, but the log moved: you played it on another phone. Catch up instead of
+      // taking a second, different shot from a table that is no longer the match.
+      this.drag = null; this.aim = null; this.placing = false;
+      this._mpCatchUp();
+    }
+  }
+
+  /** One of your shots, into the log. */
+  _mpRecord(entry) {
+    const mp = this.mp;
+    if (!mp.pending.length && !mp.sending) mp.base = mp.applied;
+    mp.shotHere = true;
+    mp.pending.push(entry);
+    this._mpFlush();
+  }
+
+  async _mpFlush() {
+    const mp = this.mp;
+    const MP = this.MP;
+    if (!mp || mp.sending || !mp.pending.length) return;
+    mp.sending = true;
+    const list = mp.pending.slice();
+    const base = mp.base;
+    MP.savePending(mp.id, base, mp.pending);          // kept on the phone until the server has it
+    const res = await MP.appendLog(mp.id, base, list);
+    if (this.mp !== mp) return;
+    mp.sending = false;
+    if (res.ok) {
+      mp.pending.splice(0, list.length);
+      mp.base = base + list.length;
+      mp.game = res.game;
+      MP.savePending(mp.id, mp.base, mp.pending);
+      MP.markShown(mp.id, mp.base);
+      if (mp.pending.length) { this._mpFlush(); return; }
+      if (this.phase === 'waiting') { this._status(); this._mpSentNote(); }
+      return;
+    }
+    if (res.retryable) {
+      this._toast(t('mp_not_sent'), 1800);
+      setTimeout(() => { if (this.mp === mp) this._mpFlush(); }, 4000);
+    } else {
+      console.error('[eight-ball] a shot could not be sent:', res.reason);
+      if (!MP.NEVER_SENDABLE.includes(res.reason)) {
+        this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2600);
+        return;
+      }
+      mp.pending = [];
+      MP.savePending(mp.id, 0, []);
+      if (res.reason === 'expired') this._mpCalledOff(t('mp_expired'));
+      else if (['moved-on', 'already-over', 'rules-refused'].includes(res.reason)) {
+        this._toast(t('mp_moved_on'), 2600);
+        this._openMatch(mp.id);
+      } else this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2600);
+    }
+  }
+
+  _mpFinish(won, resigned) {
+    const mp = this.mp;
+    if (!mp || mp.finished) return;
+    mp.replaying = false;
+    mp.finished = true;
+    mp.resigned = !!resigned;
+    const m = this.match;
+    if (resigned) m.winner = mp.game.over.winner;
+    this.MP.countResult(mp.id, won);                   // once per phone, whoever ended it
+    this.MP.markResultSeen(mp.id);
+    this._say(t('say_win', { name: this.seats[m.winner].name }));
+    this.screen = 'result';
+    this.phase = 'idle';
+    this.placing = false;
+    this._hud();
+    this._status();
+    this._fillResult();
+    this._showOnly('result');
+  }
+
+  async _mpResign() {
+    const mp = this.mp;
+    if (!mp) return;
+    const res = await this.MP.resignGame(mp.id);
+    if (this.mp !== mp) return;
+    if (!res.ok) { this.screen = 'menu'; this._showOnly('menu'); this._toast(this.UI ? this.UI.reasonText(res.reason) : t('mp_send_failed'), 2400); return; }
+    mp.game = res.game;
+    if (res.cancelled) { this._mpCalledOff(this._mpEndText(res.game, mp.seat)); return; }
+    this._mpFinish(false, true);
+  }
+
+  /** A challenge called off before anybody answered, or expired: counts for nobody, back to the list. */
+  _mpCalledOff(text = t('mp_cancelled')) {
+    const mp = this.mp;
+    if (mp) { mp.finished = true; mp.replaying = false; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    this._toast(text || t('mp_cancelled'), 3200);
+    this._openOnline();
+  }
+
+  // --- quick chat inside a challenge (required for every online game, root CLAUDE.md) -------------
+  // js/match-chat-ui.js is the panel, js/match-chat.js the data (`eightball/chat/<id>`, BESIDE the
+  // match). With three players each line carries its sender (`who`), the third seat writes as 'c'.
+  async _mpMountChat(desc) {
+    this._mpUnmountChat();
+    if (!desc || !desc.id) return;
+    this._chatDesc = desc;
+    let CUI, DATA;
+    try { [CUI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (instance !== this || this._chatDesc !== desc || this._chat) return;
+    const node = 'eightball';
+    const { id, seat, game } = desc;
+    const side = this.MP.sideLetter(seat);
+    const others = game.p.filter((_, k) => k !== seat);
+    const seenAt = DATA.readChatSeen(node, id);
+    const chat = CUI.createMatchChat({
+      root: this.root,
+      send: (pl) => DATA.sendChat({ node, id, side }, pl),
+      them: () => ({ name: others.map((x) => x.name || '?').join(' & '), emoji: (others[0] && others[0].emoji) || '' }),
+      place: CHAT_PLACE,
+    });
+    this._chat = chat;
+    const stop = await DATA.watchChat({ node, id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === side;
+        const from = game.p['abc'.indexOf(c.by)];
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at, ...(from && !mine ? { who: { name: from.name || '?', emoji: from.emoji || '' } } : {}) }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(node, id, newest);
+    });
+    if (instance !== this || this._chatDesc !== desc || this._chat !== chat) { try { stop(); } catch { /* detached */ } return; }
+    this._chatStop = stop;
+  }
+
+  _mpUnmountChat() {
+    this._chatDesc = null;
+    if (this._chatStop) { try { this._chatStop(); } catch { /* detached */ } this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch { /* gone */ } this._chat = null; }
+  }
+
+  /** Stop watching the open online match (shots not yet sent stay in the outbox). */
+  _mpLeave() {
+    this._mpUnmountChat();
+    const mp = this.mp;
+    if (!mp) return;
+    this.mp = null;
+    if (mp.stop) { try { mp.stop(); } catch { /* detached */ } }
   }
 
   _local(e) {
@@ -947,6 +1461,7 @@ class PoolUI {
     const m = this.match;
     if (e.button !== 0 || this.drag) return;   // the main button / one finger; a second touch is ignored
     if (this.screen !== 'play' || this.phase !== 'aim' || !m || !this.seats[m.turn].human) return;
+    if (this.mode === 'mp' && m.turn !== this.mp.seat) return;
     e.preventDefault();
     const lp = this._local(e);
     const c = m.b[CUE];
@@ -1099,10 +1614,11 @@ class PoolUI {
   _draw() {
     if (!this.r || !this.r.w) return;
     const m = this.match;
-    const human = !!m && this.phase === 'aim' && this.seats && this.seats[m.turn].human;
+    const human = !!m && this.phase === 'aim' && this.seats && this.seats[m.turn].human && (this.mode !== 'mp' || m.turn === this.mp.seat);
     const halo = human && !this.placing ? (this.reduce ? 1 : 0.7 + 0.3 * Math.sin(this.glowT * 3.4)) : 0;
     const b = m ? this.showB || m.b : null;
     const inHandShown = m && !this.showB && m.inHand && (human || this.phase === 'cpuplace') ? m.inHand : null;
+    const replayCall = this.cpu && this.cpu.shot && this.phase === 'cpuaim';
     const calling = !!m && !this.showB && human && !this.placing && needCall(m, m.turn);
     let targets = null;
     if (human && !this.placing && this._aids().rings && m.mode !== 'ct' && (m.mode === '9' || m.groups)) targets = targetsOf(m, m.turn);
@@ -1120,12 +1636,16 @@ class PoolUI {
       bursts: this.bursts,
       targets,
       calling,
-      called: m && (calling || this.phase === 'cpuaim' || this.phase === 'moving') && this.call >= 0 ? this.call : null,
+      called: m && (calling || replayCall || this.phase === 'moving') && this.call >= 0 ? this.call : null,
     });
   }
 
   destroy() {
     this._stop();
+    this._mpLeave();
+    clearTimeout(this._toastTimer);
+    clearTimeout(this._drainTimer);
+    window.removeEventListener('online', this._onOnline);
     this._settleNow();
     this._save();
     clearTimeout(this._bannerTimer);
@@ -1153,4 +1673,6 @@ export function destroy() {
 }
 /** Autosave meaning: the match is saved at every rest and resumes, so leaving loses nothing. */
 export function isInProgress() { return false; }
-export default { init, destroy, isInProgress };
+/** The hub armed a match (alert.js armOpen) while this game is open: take it (see openArmed). */
+export function openArmed() { if (instance) instance.openArmed(); }
+export default { init, destroy, isInProgress, openArmed };
