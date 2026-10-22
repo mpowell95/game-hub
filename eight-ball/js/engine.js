@@ -10,16 +10,90 @@
 //
 // Units are "table units": the cloth is W x H, portrait, the breaker's end (the kitchen) at the
 // BOTTOM, the rack at the top. Ball 0 is the cue ball; 1-15 the numbered balls (9-ball uses 1-9).
-// Proportions are a 7-foot bar table's: a 2.25" ball on 39" of cloth, corner mouths about 2.05
-// balls wide, side mouths about 2.2 (real side pockets are a little WIDER than corners).
+// The table's sizes depend on the match's table version (TABLE VERSIONS below).
 
 export const W = 100;
 export const H = 200;
-export const R = 2.8;
-/** A corner pocket's jaws sit this far along each rail from the corner; a side pocket's this far
- *  either side of the middle. A ball whose CENTRE crosses the line between the jaws is in. */
-export const CORNER_G = 8.1;
-export const SIDE_S = 6.2;
+
+/**
+ * TABLE VERSIONS. Every match carries `tb`, the table it was started on, and keeps it to the end:
+ * an online match replays its whole log from the seed, so changing the table under a match in
+ * progress would replay it into a different game (THE LAW). A match with no `tb` is table 1.
+ *  1: the first table (2026-10-22): a 7-foot bar table's proportions, jaws at real WPA mouth widths.
+ *  2: GamePigeon's table, measured off Matt's screenshot (2026-10-22): cloth 717 px x 1444 px, ball
+ *     41 px, cushion 30 px, wood 77 px, pockets 84 px across (2 balls), the corner holes 30 px out
+ *     past the cloth's corner, the side holes touching the cushion line. A ball drops as it reaches
+ *     the black (`rp`), as there.
+ * `useTable(tb)` points the live bindings below at one of them; every function here that takes a
+ * match does it first, and so must anything that steps balls or draws them.
+ */
+export const TABLE_NOW = 2;
+const T1 = (() => {
+  const R = 2.8, G = 8.1, S = 6.2, HOLE = 5.4;
+  return {
+    R, G, S, padPlace: R, cushion: 3.4, wood: 6.4, mitre: 0.6, woodOff: true,
+    pockets: [
+      { cx: 0.25, cy: 0.25, r: HOLE, rp: HOLE, ax: 2.4, ay: 2.4 },
+      { cx: W - 0.25, cy: 0.25, r: HOLE, rp: HOLE, ax: W - 2.4, ay: 2.4 },
+      { cx: -4, cy: H / 2, r: HOLE, rp: HOLE, ax: -1.2, ay: H / 2 },
+      { cx: W + 4, cy: H / 2, r: HOLE, rp: HOLE, ax: W + 1.2, ay: H / 2 },
+      { cx: 0.25, cy: H - 0.25, r: HOLE, rp: HOLE, ax: 2.4, ay: H - 2.4 },
+      { cx: W - 0.25, cy: H - 0.25, r: HOLE, rp: HOLE, ax: W - 2.4, ay: H - 2.4 },
+    ],
+  };
+})();
+const T2 = (() => {
+  const px = W / 717;                         // table units per screenshot pixel
+  const R = 20.5 * px, HOLE = 42 * px;
+  const G = 21 * px, S = 16 * px;             // where the cushions' noses end
+  const CO = -21.5 * px, SO = -42.5 * px;     // the hole centres, past the cloth's edge
+  // Where a ball's centre drops: its edge reaching the black, plus a little more at the corners,
+  // whose jaws are narrower than a ball (as drawn there). Tuned (tools: scratch mouth sweep,
+  // 2026-10-22) so a ball goes in across the same width as on table 1, which has real WPA mouths:
+  // corners 1.3-1.6 balls wide straight in to 40 degrees off, sides 1.45 straight in, 0.7 at 60.
+  const RPC = HOLE + R + 2.8, RPS = HOLE + R + 1.0;
+  return {
+    R, G, S, padPlace: 0.3, cushion: 30 * px, wood: 77 * px, mitre: -0.8, woodOff: false,
+    pockets: [
+      { cx: CO, cy: CO, r: HOLE, rp: RPC, ax: 1.4, ay: 1.4 },
+      { cx: W - CO, cy: CO, r: HOLE, rp: RPC, ax: W - 1.4, ay: 1.4 },
+      { cx: SO, cy: H / 2, r: HOLE, rp: RPS, ax: 0.6, ay: H / 2 },
+      { cx: W - SO, cy: H / 2, r: HOLE, rp: RPS, ax: W - 0.6, ay: H / 2 },
+      { cx: CO, cy: H - CO, r: HOLE, rp: RPC, ax: 1.4, ay: H - 1.4 },
+      { cx: W - CO, cy: H - CO, r: HOLE, rp: RPC, ax: W - 1.4, ay: H - 1.4 },
+    ],
+  };
+})();
+const TABLES = { 1: T1, 2: T2 };
+export const tableOf = (m) => (m && m.tb === 2 ? 2 : 1);
+
+/** The live table: the ball's radius; a corner pocket's jaws sit CORNER_G along each rail from the
+ *  corner, a side pocket's SIDE_S either side of the middle (a ball whose CENTRE crosses the line
+ *  between a corner's jaws is in); the cushions as segments (their end points are the jaws, which a
+ *  ball bounces off like a knuckle); the six pockets: (cx, cy, r) the hole drawn, rp where a ball's
+ *  centre drops, (ax, ay) where the computer aims. TABLE is the whole record (drawing sizes too). */
+export let TB = 0;
+export let TABLE = T1;
+export let R = T1.R;
+export let CORNER_G = T1.G;
+export let SIDE_S = T1.S;
+export let SEGS = [];
+export let POCKETS = T1.pockets;
+let G = T1.G, S = T1.S;
+export function useTable(tb) {
+  const id = tb === 2 ? 2 : 1;
+  if (id === TB) return;
+  TB = id;
+  TABLE = TABLES[id];
+  R = TABLE.R; G = CORNER_G = TABLE.G; S = SIDE_S = TABLE.S; POCKETS = TABLE.pockets;
+  SEGS = [
+    [G, 0, W - G, 0], [G, H, W - G, H],
+    [0, G, 0, H / 2 - S], [0, H / 2 + S, 0, H - G],
+    [W, G, W, H / 2 - S], [W, H / 2 + S, W, H - G],
+  ].map(([ax, ay, bx, by]) => ({ ax, ay, bx, by }));
+}
+useTable(1);
+
 export const HEAD_Y = H * 0.75;              // the head string: the kitchen is below it
 export const FOOT_Y = H * 0.25;              // the foot spot: the rack's apex
 export const HEAD_SPOT = [W / 2, HEAD_Y + 12];
@@ -58,33 +132,11 @@ const SPILL_DAMP = 2.4;
 const SPIN_FOLLOW = 1.25;
 const SPIN_DRAW = 1.3;
 
-/** The cushions, as segments. Their end points are the pocket jaws (a ball meeting one bounces off
- *  it like a knuckle, with no separate code). The gaps between them are the six pockets. */
-const G = CORNER_G, S = SIDE_S;
-export const SEGS = [
-  [G, 0, W - G, 0], [G, H, W - G, H],
-  [0, G, 0, H / 2 - S], [0, H / 2 + S, 0, H - G],
-  [W, G, W, H / 2 - S], [W, H / 2 + S, W, H - G],
-].map(([ax, ay, bx, by]) => ({ ax, ay, bx, by }));
-
-/** The six pockets, all one size: the black hole that is drawn (cx, cy, r) is also where a ball
- *  drops (its CENTRE over it), and so is anywhere past the line between a pocket's jaws, which is
- *  drawn dark too. What a player sees is the rule. (ax, ay) is where the computer aims. */
-const HOLE = 5.4;
-export const POCKETS = [
-  { cx: 0.25, cy: 0.25, r: HOLE, ax: 2.4, ay: 2.4 },
-  { cx: W - 0.25, cy: 0.25, r: HOLE, ax: W - 2.4, ay: 2.4 },
-  { cx: -4, cy: H / 2, r: HOLE, ax: -1.2, ay: H / 2 },
-  { cx: W + 4, cy: H / 2, r: HOLE, ax: W + 1.2, ay: H / 2 },
-  { cx: 0.25, cy: H - 0.25, r: HOLE, ax: 2.4, ay: H - 2.4 },
-  { cx: W - 0.25, cy: H - 0.25, r: HOLE, ax: W - 2.4, ay: H - 2.4 },
-];
-
 /** Which pocket a ball centred at (x, y) is in, or -1. */
 export function pocketOf(x, y) {
   for (let k = 0; k < POCKETS.length; k++) {
     const p = POCKETS[k], dx = x - p.cx, dy = y - p.cy;
-    if (dx * dx + dy * dy < p.r * p.r) return k;
+    if (dx * dx + dy * dy < p.rp * p.rp) return k;
   }
   if (x + y < G) return 0;
   if (W - x + y < G) return 1;
@@ -201,7 +253,9 @@ const solidObs = (obs) => (obs || []).filter((o) => o.k !== 'spill');
 
 /** A new match. `mode` '8' | '9' | 'ct'; first to `racks`; `breaker` breaks the first rack; `seed`
  *  shuffles it; `opts` { call: every shot is called, bank: only banked pots count, obst: obstacles }. */
-export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}) {
+export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}, tb = TABLE_NOW) {
+  const tbl = tb === 1 ? 1 : 2;
+  useTable(tbl);
   const md = MODES.includes(mode) ? mode : '8';
   const n = seatsOf(md);
   const st = Number.isInteger(breaker) && breaker >= 0 && breaker < n ? breaker : 0;
@@ -209,6 +263,7 @@ export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}
   const o = { call: !!opts.call, bank: !!opts.bank, obst: !!opts.obst };
   return {
     v: 2,
+    tb: tbl,
     mode: md,
     n,
     opts: o,
@@ -232,7 +287,7 @@ export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}
 
 /** A saved match is only trusted if it has the shape this engine writes, at rest. */
 export function validMatch(m) {
-  if (!m || m.v !== 2 || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
+  if (!m || m.v !== 2 || (m.tb != null && m.tb !== 1 && m.tb !== 2) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
   if (!Array.isArray(m.b) || m.b.length !== ballCount(m.mode)) return false;
   if (!RACK_OPTIONS.includes(m.racks) || !Array.isArray(m.scores) || m.scores.length !== m.n) return false;
   if (!Number.isInteger(m.turn) || m.turn < 0 || m.turn >= m.n) return false;
@@ -278,11 +333,13 @@ export const needCall = (m, seat) => !!m.broke && (!!m.opts.call || onEight(m, s
 
 /** Is (x, y) a legal place for the cue ball (`kitchen`: behind the head string)? */
 export function canPlace(m, x, y, kitchen) {
+  useTable(m.tb);
   const b = m.b;
   if (!(x >= R && x <= W - R && y >= R && y <= H - R)) return false;
   if (kitchen && y < HEAD_Y) return false;
   if (x + y < G + R || W - x + y < G + R || x + H - y < G + R || W - x + H - y < G + R) return false;
-  for (const p of POCKETS) { const dx = x - p.cx, dy = y - p.cy; if (dx * dx + dy * dy < (p.r + R) * (p.r + R)) return false; }
+  const pad = TABLE.padPlace;
+  for (const p of POCKETS) { const dx = x - p.cx, dy = y - p.cy; if (dx * dx + dy * dy < (p.rp + pad) * (p.rp + pad)) return false; }
   for (let i = 1; i < b.length; i++) {
     const o = b[i];
     if (!o.on) continue;
@@ -298,6 +355,7 @@ export function canPlace(m, x, y, kitchen) {
 
 /** The nearest legal place to (x, y) for the cue ball, searched outward in rings. */
 export function nearestPlace(m, x, y, kitchen) {
+  useTable(m.tb);
   const cx = Math.max(R, Math.min(W - R, x)), cy = Math.max(kitchen ? HEAD_Y : R, Math.min(H - R, y));
   if (canPlace(m, cx, cy, kitchen)) return { x: cx, y: cy };
   for (let rad = 0.5; rad < H; rad += 0.5) {
@@ -325,6 +383,7 @@ const SPOKES = (() => {
 /** Put ball `i` back on the table (a foul in Cutthroat, the 9 potted on a foul): on the foot spot,
  *  or the nearest free point up the long string from it, or down it. */
 export function spotBall(m, i) {
+  useTable(m.tb);
   const o = m.b[i];
   const free = (x, y) => {
     for (let j = 0; j < m.b.length; j++) {
@@ -513,6 +572,7 @@ export function runToRest(b, ev, maxSecs = MAX_SHOT_SECS, obs = null) {
  *  shot needs one. Puts it in motion on `m.b` and returns the event record to step it with. Null if
  *  it is not a shot this position allows. */
 export function begin(m, shot) {
+  useTable(m.tb);
   if (!shot || ![shot.dx, shot.dy, shot.p].every(Number.isFinite)) return null;
   if (m.inHand && Number.isFinite(shot.x) && Number.isFinite(shot.y)) {
     if (!canPlace(m, shot.x, shot.y, m.inHand === 'kitchen')) return null;
@@ -529,6 +589,7 @@ export function begin(m, shot) {
 
 /** Play a whole shot at once (the computer's look-ahead, a save's rolling shot). Returns settle's. */
 export function play(m, shot, maxSecs) {
+  useTable(m.tb);
   const ev = begin(m, shot);
   if (!ev) return null;
   runToRest(m.b, ev, maxSecs, m.obs);
@@ -553,6 +614,7 @@ export function play(m, shot, maxSecs) {
  * Returns { kind: 'again' | 'turn' | 'foul' | 'rack' | 'win', foul, rackWinner, outs }.
  */
 export function settle(m, ev) {
+  useTable(m.tb);
   freeze(m.b);
   relax(m.b);
   m.shots++;
@@ -689,6 +751,7 @@ function endRack(m, w, foul) {
 
 /** The next rack after a rack has ended (`settle` said 'rack'): the break passes to the next seat. */
 export function nextRack(m) {
+  useTable(m.tb);
   m.rack++;
   m.seed = nextSeed(m.seed);
   m.breaker = (m.breaker + 1) % m.n;
@@ -741,6 +804,7 @@ function rayCircle(x, y, dx, dy, cx, cy, rr) {
  * it is a ball, where that ball heads (`ox, oy` unit). Display only, never on the physics path.
  */
 export function aimContact(m, dx, dy, range = 260) {
+  useTable(m.tb);
   const o = m.b[CUE];
   const s = sweep(m.b, m.obs, o.x, o.y, dx, dy, range, [CUE]);
   if (!s) return null;
@@ -758,6 +822,7 @@ export function aimContact(m, dx, dy, range = 260) {
 /** Where a ball at (x, y) rolling along unit (dx, dy) stops within `len`: at the first ball (other
  *  than `skip`), obstacle or cushion. For drawing the object ball's path. */
 export function rayStop(m, x, y, dx, dy, len, skip) {
+  useTable(m.tb);
   const s = sweep(m.b, m.obs, x, y, dx, dy, len, skip);
   const t = s ? s.t : len;
   return { x: x + dx * t, y: y + dy * t };
