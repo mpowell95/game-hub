@@ -51,7 +51,7 @@ const FLIGHT_D0 = 2.6;
 const FLIGHT_ARC = 0.25;
 // The chase: CHASE_UP m above the arrow's line, from FLIGHT_D0 to CHASE_BACK behind it (the close-up's
 // own distance from the target), settling onto the close-up over the last CHASE_SETTLE of the flight.
-const CHASE_UP = 0.3, CHASE_BACK = 4.8, CHASE_SETTLE = 0.18;
+const CHASE_UP = 0.3, CHASE_BACK = 4.8, CHASE_SETTLE = 0.15;
 const INCOMING_RUN = 3.5;                       // m: how far out a replay arrow is first drawn
 const WOBBLE_T = 0.6, WOBBLE_A = 0.07;          // s, rad: an arrow quivering in the target after it hits
 const FLASH_T = 0.9;                            // s: the scored ring lit on the face
@@ -520,23 +520,23 @@ export class Renderer {
     this.loose.add(arrow, trail.mesh);
     this.flight = { S, H, arrow, trail, u: 0 };
   }
-  /** The flight camera at u, into `cam`. It starts as the line camera and follows behind the arrow,
-   *  looking at it, so the arrow is seen flying straight at the target: it drops back from FLIGHT_D0
-   *  to the close-up's distance and drifts out to the close-up's side as it goes, then settles on the
-   *  close-up (position and view) over the last CHASE_SETTLE as the arrow lands. It never catches the
-   *  arrow up (it used to swing in beside it, so the arrow loomed and left the screen). */
+  /** The flight camera at u, into `cam`. It starts as the line camera and follows behind the arrow
+   *  ALWAYS LOOKING AT THE TARGET (Matt's recording, 2026-10-22: turning to follow the arrow slid the
+   *  target off the left edge, then swung back to it in a few frames: "really jerky"). It drops back
+   *  from FLIGHT_D0 to the close-up's distance, rises CHASE_UP above the arrow's line, and drifts out
+   *  to the close-up's side late in the flight (late, so the arrow stays in the picture), easing onto
+   *  the close-up's exact spot as the arrow lands. */
   _camAt(u, cam) {
     const f = this.flight;
-    if (!f) { cam.position.copy(EYE); cam.lookAt(LINE_LOOK); cam.updateMatrixWorld(); return; }
     const sm = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+    const look = LINE_LOOK.clone().lerp(CLOSE_LOOK, sm(u));
+    if (!f) { cam.position.copy(EYE).lerp(CLOSE_POS, sm(u)); cam.lookAt(look); cam.updateMatrixWorld(); return; }
     const tip = this._tipAt(u), dir = this._dirAt(u);
     const back = FLIGHT_D0 + (CHASE_BACK - FLIGHT_D0) * u * u;
     const pos = tip.clone().sub(dir.multiplyScalar(back));
-    pos.y += CHASE_UP * sm(u * 3);
-    pos.x += (CLOSE_POS.x - TARGET.x) * sm(u);
-    const w = sm((u - (1 - CHASE_SETTLE)) / CHASE_SETTLE);
-    cam.position.copy(pos.lerp(CLOSE_POS, w));
-    const look = LINE_LOOK.clone().lerp(tip, sm(u / 0.15)).lerp(CLOSE_LOOK, w);
+    pos.y += CHASE_UP * sm(u * 2);
+    pos.x += (CLOSE_POS.x - TARGET.x) * u * u * u * u;
+    cam.position.copy(pos.lerp(CLOSE_POS, sm((u - (1 - CHASE_SETTLE)) / CHASE_SETTLE)));
     cam.lookAt(look);
     cam.updateMatrixWorld();
   }

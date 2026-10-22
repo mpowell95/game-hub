@@ -73,14 +73,16 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 ## The turn (timed off the recording at 30 fps)
 
 Touch and hold: the bow comes up in 0.25 s (`DRAW_T`). Drag to aim (about a ring per 6 px). Let go:
-the bow kicks 0.033 s (`JOLT_T`, two frames), then the flight, 0.8 s (`FLIGHT_T`). **The flight is a
+the string snaps and the arrow leaves the bow over 0.033 s (`JOLT_T`, two frames; the bow no longer
+kicks: its jump read as a glitch, Matt's recording 2026-10-22), then the flight, 0.8 s (`FLIGHT_T`). **The flight is a
 real straight line in the world** (Matt, 2026-10-22: framed from the moving camera it "curves towards
 the camera then back to the target"): from the sight (`launchAt`: the eye-to-aim line, `FLIGHT_D0` out)
-to the hit at one steady speed (~34 m/s), `FLIGHT_ARC` 0.25 m up at mid-flight. The camera follows
-BEHIND it, looking at it (`_camAt`): it drops back from `FLIGHT_D0` to `CHASE_BACK` (the close-up's own
-distance) and drifts out to the close-up's side, then settles onto the close-up over the last
-`CHASE_SETTLE` as the arrow lands, never catching it up (a swing beside it made the arrow loom and
-leave the screen). Every arrow sticks along that straight line (`inDir`), flown or replayed.
+to the hit at one steady speed (~34 m/s), `FLIGHT_ARC` 0.25 m up at mid-flight. The camera rides behind
+the arrow but **always looks at the target** (`_camAt`; Matt's recording 2026-10-22, "really jerky":
+looking at the arrow slid the target sideways then swung back): it drops back from `FLIGHT_D0` to
+`CHASE_BACK`, eases out to the close-up's side late, and settles onto the close-up over the last
+`CHASE_SETTLE`, so the target grows steadily in the middle of the screen and the arrow stays in view.
+Every arrow sticks along that straight line (`inDir`), flown or replayed.
 **Every arrow is stuck the moment it hits and quivers** (`_preStick`, `WOBBLE_T`); the last number
 clears then; its own number pops `HIT_POP` 0.3 s later with stars, and the ring it scored lights up
 yellow ON the face, under the arrows (`render.js flashRing`; it used to be a screen overlay that popped
@@ -117,7 +119,8 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   the elbow) so the arm is about a bow's height long and its closed end sits 300-500 px off the left
   edge in every pose (as made it showed inside the edge with the bow down). `bow3d.js _loadModel` only places
   it (grip at `MODEL_GRIP`, `MODEL_S` 10.5, +x into the screen) and turns it `MODEL_YAW` -1.1 rad about
-  the bow's upright, so the arm runs off the left edge (turned less, the sleeve's closed end shows
+  the bow's upright, so the arm runs off the left edge, and leans it `MODEL_CANT` 0.3 rad so the arm
+  rises from low on the left up to the hand (flat, it read as an arm held above the head, Matt 2026-10-22) (turned less, the sleeve's closed end shows
   with the bow down; checked at 360, 390, 402, 430 wide). Not mirrored: the back of the hand faces you,
   fingers round the far side. The
   string is two rods from the tips to the nock while drawn, tip to tip when down (`pull`). The arrow
