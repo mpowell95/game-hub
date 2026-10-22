@@ -638,6 +638,7 @@
 }
 .wo-root .wo-ready-secs i { font-style: normal; font-size: 26px; font-weight: 800; color: #3fd6bd; opacity: .85; }
 .wo-root .wo-ready-sub { font-size: 14px; color: #a9abcf; }
+.wo-root .wo-ready-lost { margin-top: 2px !important; font-size: 16px; font-weight: 800; color: #ff7a7f; font-variant-numeric: tabular-nums; }
 .wo-root .wo-ready-rules { list-style: none; margin: 14px 0 4px; padding: 0; width: 100%; display: flex; flex-direction: row; gap: 8px; }
 .wo-root .wo-ready-rules li {
   display: flex;
