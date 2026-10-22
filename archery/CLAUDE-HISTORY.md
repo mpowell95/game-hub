@@ -138,3 +138,7 @@ is now leaned `MODEL_CANT` 0.3 rad about its grip (shape unchanged): the arm ris
 left up to the hand, and the bow leans a little with it (0.45 lowered the arm more but leaned the
 bow so far the sight looked detached). The sleeve's closed end stays 380-620 px off the left edge at
 360, 393 and 430 wide.
+
+Same day, Matt's screenshot ("You messed something up bad"): the lean moved the hand but not the
+arrow's rest point, so the drawn arrow lay across the fingers and ran into the grip. `_loadModel` now
+leans `MODEL_REST` with the model (into the model's frame upright, back out leaned).

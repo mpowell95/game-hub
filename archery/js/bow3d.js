@@ -41,7 +41,7 @@ const MODEL_YAW = -1.1;
 // Leaned MODEL_CANT (radians) so the arm rises from low on the left up to the hand, as from a shoulder
 // below the eye; flat, it read as the arm held above the head (Matt, 2026-10-22). The bow leans with it.
 const MODEL_CANT = 0.3;
-const MODEL_REST = [0.6, -2.95, 0.3];     // the arrow lies on the hand, just left of the bow
+const MODEL_REST = [0.6, -2.95, 0.3];     // the arrow lies on the hand, just left of the bow (before MODEL_CANT)
 const MODEL_COLORS = ['#f1c7a6', '#79a3dc', '#2c7cf0', '#2a2f36', '#3b4048'];   // skin, sleeve, bow, grip, tips
 
 export class BowView {
@@ -345,7 +345,13 @@ export class BowView {
       this.model = { mesh, tipT, tipB, rods, v: [new THREE.Vector3()] };
       for (const ch of this.built) ch.visible = false;
       this.forearm.visible = this.sleeve.visible = this.cuff.visible = false;
-      this.rest = MODEL_REST;
+      // MODEL_REST is where the arrow lies on the hand with the model upright; lean it with the model.
+      mesh.rotation.z = 0;
+      mesh.updateMatrix();
+      const rest = new THREE.Vector3(...MODEL_REST).applyMatrix4(mesh.matrix.clone().invert());
+      mesh.rotation.z = MODEL_CANT;
+      mesh.updateMatrix();
+      this.rest = rest.applyMatrix4(mesh.matrix).toArray();
       if (this._lastPose) this.setPose(this._lastPose);
     } catch (e) {
       console.warn('archery: the bow model did not load; using the built bow', e);
