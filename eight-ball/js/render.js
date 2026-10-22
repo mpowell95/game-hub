@@ -5,7 +5,7 @@
 // based off a real pool table... all have numbers and stripes/solids"): every ball carries its
 // number in a white circle, 9-15 are striped; a "simple" look paints them by group instead.
 
-import { W, H, R, CUE, EIGHT, POCKETS, HEAD_Y, FOOT_Y, CORNER_G, SIDE_S, groupOf } from './engine.js';
+import { W, H, R, CUE, EIGHT, POCKETS, HEAD_Y, FOOT_Y, CORNER_G, SIDE_S, TABLE, TB, groupOf } from './engine.js';
 
 export const TABLE_ART = {
   outline: '#0B0B0B',
@@ -37,11 +37,15 @@ export function ballPaint(i, look = 'classic', mode = '8') {
 }
 
 const ACCENT = '#ffce3a';
-const CUSHION = 3.4;                 // the cushion band, drawn outward from the cloth
-const WOOD = 6.4;                    // the wood frame outside it
-/** The cloth plus the cushion band: the box that must fit on screen (the wood may run off the
- *  sides, as in the reference). Vertically the wood fits too. */
-export const VIEW = { x0: -CUSHION - 1, y0: -CUSHION - WOOD, w: W + 2 * CUSHION + 2, h: H + 2 * (CUSHION + WOOD) };
+/** The box that must fit on screen, for the live table (engine.js, TABLE VERSIONS). Table 1: the
+ *  cloth plus the cushion band (the wood may run off the sides); vertically the wood fits too.
+ *  Table 2 (GamePigeon's): all of it, with room beside it (ui.js _layout). */
+export function viewOf() {
+  const C = TABLE.cushion, ow = C + TABLE.wood;
+  return TABLE.woodOff
+    ? { x0: -C - 1, y0: -ow, w: W + 2 * C + 2, h: H + 2 * ow }
+    : { x0: -ow, y0: -ow, w: W + 2 * ow, h: H + 2 * ow };
+}
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -53,16 +57,23 @@ export function createRenderer(canvas) {
     r.w = cssW; r.h = cssH;
     canvas.width = Math.round(cssW * r.dpr);
     canvas.height = Math.round(cssH * r.dpr);
-    r.s = Math.min(box.w / VIEW.w, box.h / VIEW.h);
-    r.ox = box.x + (box.w - VIEW.w * r.s) / 2 - VIEW.x0 * r.s;
-    r.oy = box.y + (box.h - VIEW.h * r.s) / 2 - VIEW.y0 * r.s;
     r.box = box;
+    r.fit();
+  };
+  /** Place the live table in the box (again when the table version changes: `r.tb`). `box.top`:
+   *  hug the box's top instead of centring. */
+  r.fit = () => {
+    const box = r.box, V = viewOf();
+    r.s = Math.min(box.w / V.w, box.h / V.h);
+    r.ox = box.x + (box.w - V.w * r.s) / 2 - V.x0 * r.s;
+    r.oy = box.y + (box.top ? 0 : (box.h - V.h * r.s) / 2) - V.y0 * r.s;
+    r.tb = TB;
     r._table = null;
   };
   r.toTable = (px, py) => ({ x: (px - r.ox) / r.s, y: (py - r.oy) / r.s });
   r.toPx = (x, y) => ({ x: r.ox + x * r.s, y: r.oy + y * r.s });
   /** The table's on-screen rectangle (CSS px), wood included. */
-  r.tableRect = () => ({ x: r.ox - (CUSHION + WOOD) * r.s, y: r.oy - (CUSHION + WOOD) * r.s, w: (W + 2 * (CUSHION + WOOD)) * r.s, h: (H + 2 * (CUSHION + WOOD)) * r.s });
+  r.tableRect = () => { const ow = TABLE.cushion + TABLE.wood; return { x: r.ox - ow * r.s, y: r.oy - ow * r.s, w: (W + 2 * ow) * r.s, h: (H + 2 * ow) * r.s }; };
 
   function roundRect(g, x, y, w, h, rad) {
     g.beginPath();
@@ -84,6 +95,7 @@ export function createRenderer(canvas) {
     const g = c.getContext('2d');
     g.setTransform(r.dpr * r.s, 0, 0, r.dpr * r.s, r.dpr * r.ox, r.dpr * r.oy);
     const A = TABLE_ART;
+    const CUSHION = TABLE.cushion, WOOD = TABLE.wood, MI = TABLE.mitre;
     const ow = CUSHION + WOOD;
     g.fillStyle = A.outline;
     roundRect(g, -ow - 1.1, -ow - 1.1, W + 2 * ow + 2.2, H + 2 * ow + 2.2, 5.6);
@@ -113,10 +125,10 @@ export function createRenderer(canvas) {
     g.fillStyle = A.cushion;
     polyOn(g, [[G, 0], [W - G, 0], [W - G + C, -C], [G - C, -C]]);
     polyOn(g, [[G, H], [W - G, H], [W - G + C, H + C], [G - C, H + C]]);
-    polyOn(g, [[0, G], [0, H / 2 - S], [-C, H / 2 - S + C * 0.6], [-C, G - C]]);
-    polyOn(g, [[0, H / 2 + S], [0, H - G], [-C, H - G + C], [-C, H / 2 + S - C * 0.6]]);
-    polyOn(g, [[W, G], [W, H / 2 - S], [W + C, H / 2 - S + C * 0.6], [W + C, G - C]]);
-    polyOn(g, [[W, H / 2 + S], [W, H - G], [W + C, H - G + C], [W + C, H / 2 + S - C * 0.6]]);
+    polyOn(g, [[0, G], [0, H / 2 - S], [-C, H / 2 - S + C * MI], [-C, G - C]]);
+    polyOn(g, [[0, H / 2 + S], [0, H - G], [-C, H - G + C], [-C, H / 2 + S - C * MI]]);
+    polyOn(g, [[W, G], [W, H / 2 - S], [W + C, H / 2 - S + C * MI], [W + C, G - C]]);
+    polyOn(g, [[W, H / 2 + S], [W, H - G], [W + C, H - G + C], [W + C, H / 2 + S - C * MI]]);
     g.strokeStyle = A.cushionLit; g.lineWidth = 0.6;
     g.beginPath();
     g.moveTo(G, -0.3); g.lineTo(W - G, -0.3); g.moveTo(G, H + 0.3); g.lineTo(W - G, H + 0.3);
@@ -125,7 +137,8 @@ export function createRenderer(canvas) {
     g.stroke();
     // Cloth: flat colour, no texture. Clipped off the corner throats.
     g.fillStyle = A.cloth;
-    polyOn(g, [[G, 0], [W - G, 0], [W, G], [W, H - G], [W - G, H], [G, H], [0, H - G], [0, G]]);
+    if (TB === 2) g.fillRect(0, 0, W, H);   // the holes cover the corners
+    else polyOn(g, [[G, 0], [W - G, 0], [W, G], [W, H - G], [W - G, H], [G, H], [0, H - G], [0, G]]);
     g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = 0.4;
     g.beginPath(); g.moveTo(0, HEAD_Y); g.lineTo(W, HEAD_Y); g.stroke();
     g.fillStyle = 'rgba(255,255,255,0.3)';
@@ -325,6 +338,7 @@ export function createRenderer(canvas) {
    *  targets (ball indices ringed as the shooter's), calling (pockets pulse), called (pocket) } */
   r.draw = (st) => {
     if (!r.w) return;
+    if (r.tb !== TB) r.fit();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(tableLayer(), 0, 0);

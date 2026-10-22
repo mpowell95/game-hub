@@ -221,6 +221,44 @@
 }
 .ep-root .ep-ok svg { width: 26px; height: 26px; }
 
+/* The power meter (GamePigeon's): left of the table, placed by ui.js _paintMeter. A drag down draws
+   the cue back; --ep-pow is the power, 0-1. The element is the touch area; the bar is the track. */
+.ep-root .ep-meter {
+  position: absolute;
+  z-index: 3;
+  width: 46px;
+  touch-action: none;
+  cursor: grab;
+}
+.ep-root .ep-meter-track {
+  position: absolute;
+  inset: 0 10px;
+  overflow: hidden;
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.32);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+}
+.ep-root .ep-meter-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--ep-pow, 0) * 80%);
+  background: rgba(255, 206, 58, 0.75);
+}
+.ep-root .ep-meter-cue {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  bottom: 8px;
+  width: 7px;
+  margin-left: -3.5px;
+  border-radius: 3px;
+  background: linear-gradient(#3D6FB6 0 4px, #F1D9A6 4px 60%, #fff 60% 62%, #5A3420 62%);
+  transform: translateY(calc(var(--ep-pow, 0) * 80%));
+}
+.ep-root .ep-meter.is-off { opacity: 0.4; cursor: default; }
+
 /* ------------------------------------------------------------------ banner --- */
 .ep-root .ep-banner {
   position: absolute;

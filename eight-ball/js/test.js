@@ -205,5 +205,28 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
   if (diffs[0] === 'hard') ok(`...and Hard wins most of them`, strongWins >= 3, strongWins);
 }
 
+// --- table versions (engine.js, TABLE VERSIONS) ------------------------------------------------------
+{
+  // A match started on table 1 replays exactly as the table-1 engine played it (the fingerprint was
+  // taken from the engine before table 2 existed, commit 77835e6), whatever ran on table 2 between.
+  const m = E.newMatch('8', 1, 0, 77, { obst: true }, 1);
+  let s = 99;
+  const rnd = () => (s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296;
+  for (let k = 0; k < 30 && m.winner == null; k++) {
+    E.newMatch('9', 1, 0, k + 1, {}, 2);
+    const dx = rnd() * 2 - 1, dy = rnd() * 2 - 1, l = Math.sqrt(dx * dx + dy * dy);
+    const shot = { dx: Math.round(dx / l * 1e6) / 1e6, dy: Math.round(dy / l * 1e6) / 1e6, p: Math.round(rnd() * 1e4) / 1e4, s: 0, c: 0 };
+    if (m.inHand) { const p = E.nearestPlace(m, 50, 170, m.inHand === 'kitchen'); shot.x = p.x; shot.y = p.y; }
+    const r = E.play(m, shot); if (r && r.kind === 'rack') E.nextRack(m);
+  }
+  const str = JSON.stringify(m.b.map((o) => [o.x, o.y, o.on])) + m.turn + m.scores;
+  let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619) >>> 0;
+  ok('a table-1 match replays bit for bit as before table 2', h === 1534097046, h);
+  ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 2);
+  ok('a saved match with no table reads as table 1', E.tableOf({}) === 1 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 1), tb: undefined }));
+  E.useTable(2);
+  ok('table 2: a ball of 41 px on 717 px of cloth', Math.abs(E.R * 2 - 41 * 100 / 717) < 1e-9);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -13,7 +13,7 @@ by difficulty.
 **Stage 1 (live 2026-10-22, Matt's second review the same day):** three games (8-ball, 9-ball,
 Cutthroat for three), three options (call shots, banks only, bar obstacles), a real numbered ball
 set with a simple look, scoreboard trays, ball-in-hand lock-in, real pocket proportions, the
-slingshot pull. **Stage 2 (live 2026-10-22): turn-based online challenges, two OR THREE players**
+slingshot pull (since replaced by GamePigeon's table and meter). **Stage 2 (live 2026-10-22): turn-based online challenges, two OR THREE players**
 (below, "Online challenges"). **Still to come (Matt's plan):** Stage 3 live rooms (3 seats for
 Cutthroat; `js/net.js` N-seat), Stage 4 push notifications (no push function yet: a challenge
 reaches the other phone through the launcher bubble and the Multiplayer screen only). Online quick chat is required (root CLAUDE.md). Ideas offered to Matt, not asked
@@ -82,11 +82,21 @@ black pockets, coral and cyan groups).
 - Only `+ - * /` and `Math.sqrt` on the physics path (cross-device determinism for the online
   stages; Flick Soccer's reasoning). The rack shuffle and the obstacles are integer xorshift from
   `m.seed`.
-- **Proportions are a 7-foot bar table's**: `R` 2.8 on 100 wide (2.25" ball on 39" of cloth),
-  corner mouths jaw to jaw 11.5 (2.05 balls), side mouths 12.4 (2.2 balls: real side pockets are a
-  little WIDER). Every hole is drawn the same size (`HOLE` 5.4), and the drawn hole is the rule: a
-  ball whose centre is over it, or past the line between the jaws (drawn dark, the throat), drops.
-  (Matt, 2026-10-22: holes too big for the balls, corners bigger than sides.)
+- **TABLE VERSIONS (2026-10-22).** Every match stores `tb` (none = 1) and keeps it to the end;
+  `useTable(tb)` swaps the live `R`, `CORNER_G`, `SIDE_S`, `SEGS`, `POCKETS`, `TABLE` bindings, and
+  every engine function taking a match calls it first (ui.js also each frame). Never change a
+  table in place: an online match replays its log, so add a version. `test.js` pins a table-1
+  replay to its pre-version fingerprint. Online docs carry `tb` too (`termsOf`; none = 1).
+  - **Table 1** (the first): a 7-foot bar table, `R` 2.8, real WPA mouths (corner 2.05 balls, side
+    2.2), holes `HOLE` 5.4 centred on the cloth's corners; a ball drops when its centre is over the
+    hole or past the jaw line.
+  - **Table 2 = GamePigeon's, measured off Matt's screenshot** (Matt: "measure the game pigeon
+    board and holes and balls and copy it"): cloth 717 x 1444 px, ball 41, cushion 30, wood 77,
+    holes 84 across (2 balls), corner hole centres 21.5 px out past the cloth corner, side holes
+    touching the cushion line, cushion noses ending 21 / 16 px from the pocket. Its jaws are
+    narrower than a ball, so a ball drops a little before its edge is over the black (`rp`: +2.8
+    corners, +1.0 sides), tuned so the catch width matches table 1 (corners 1.3-1.6 balls, sides
+    1.45 straight in). Whole table on screen, `SIDE_K` 11.5% of the width free each side.
 - `DT` 1/240, `MAX_SPEED` 400 (the break x1.35 = 540, ~2.25 a step, under `R`): nothing tunnels.
 - Skid then roll: each ball carries `r` (the speed its spin would roll it at). A centre hit starts
   with no roll and the cloth turns skid into roll (5/7 rule); collisions swap only `v`, so the cue
@@ -99,20 +109,18 @@ black pockets, coral and cyan groups).
 
 ## The screen
 
-- **The pull is a SLINGSHOT from wherever the finger went down** (2026-10-22, replacing "through
-  the cue ball"): the shot goes the opposite way to the pull; strength is the pull past
-  `PULL_SAFE_PX` (18) over `PULL_FULL_PX` (130), shrinking only where the screen edge comes first
-  in the pulled direction (never under 48). Started on the cue ball it is Flick Soccer's pull;
-  started anywhere else it still works with the cue ball against a cushion or the bottom of the
-  screen (measured: full power straight up off the bottom cushion, and right off the left one). A
-  tap is never a shot; letting go in the home bar never shoots.
+- **GamePigeon's controls (2026-10-22, replacing the slingshot):** a touch or drag on the table
+  points the cue at the finger (each turn starts aimed at the nearest legal ball); the power is a
+  meter LEFT of the table (`.ep-meter`, 47% of its height): drag DOWN from anywhere on it, let go to
+  shoot, drag back to the top to cancel. Dimmed when it is not your shot. The cue on the table
+  draws back with the power. Hard still shows the cue (no lines).
 - **Ball in hand:** Easy, a touch ON the cue ball picks it up until the shot. **Medium, Hard and
   players sharing a phone must lock the spot in** with the green tick beside the ball (Matt: "in
   medium or hard you should have to lock in where you put the ball"); until then a drag ANYWHERE
   moves the ball. A spot that is not allowed shows a dotted white ring; letting go snaps to the
   nearest legal one (`nearestPlace`).
 - **Calling:** while a call is needed the pockets pulse; a tap on one (generous: hole + 16px) calls
-  it (yellow ring + arrow), another tap changes it; no aiming until a pocket is called. The
+  it (yellow ring + arrow), another tap changes it; the meter does not shoot until a pocket is called. The
   computer shows its call while it aims.
 - **Aiming help** (`AIDS`, Matt 2026-10-22): Easy = line to the first thing the cue ball meets, a
   ghost ball there, and the hit ball's path, short and FADING out (a hint, not the whole shot);

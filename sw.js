@@ -1,5 +1,5 @@
 // sw.js — shared service worker for the Game Hub. Precaches the app shell and [docs/SW-NOTES.md #1]
-const CACHE = 'game-hub-v1224';
+const CACHE = 'game-hub-v1225';
 
 const ASSETS = [
   './',
@@ -978,8 +978,8 @@ const REST_MANIFEST = {
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
   './archery/js/engine.js': 'a7a170fc9d',
   './archery/js/mp.js': '2d04eae495',
-  './eight-ball/js/engine.js': '39a92cd1ed',
-  './eight-ball/js/mp.js': 'e6a4020546',
+  './eight-ball/js/engine.js': '9e055be16c',
+  './eight-ball/js/mp.js': 'd515bea740',
   './darts/js/engine.js': '2d603f0ee2',
   './darts/js/mp.js': '81e6dd8ba9',
   './sudoku/': '39055429fc',
