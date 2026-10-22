@@ -1,35 +1,42 @@
-// eight-ball/js/engine.js - Pool as data: the table, the balls, the physics and the 8-ball rules.
-// Pure, no DOM, deterministic (the same shot from the same table always ends the same way), so the
-// computer can try shots by simulating them, a save can replay a shot that was still rolling, and a
-// future online mode can send only the shot (Flick Soccer's model, flick-soccer/js/engine.js).
+// eight-ball/js/engine.js - Pool as data: the table, the balls, the physics and the rules of every
+// mode (8-ball, 9-ball, Cutthroat) and option (call every shot, banks only, bar obstacles). Pure, no
+// DOM, deterministic (the same shot from the same table always ends the same way), so the computer
+// can try shots by simulating them, a save can replay a shot that was still rolling, and an online
+// match can send only the shot (Flick Soccer's model, flick-soccer/js/engine.js).
 //
 // CROSS-DEVICE DETERMINISM: the physics path uses only + - * / and Math.sqrt, which IEEE 754
 // requires to be correctly rounded, so every phone steps a shot to the very same bits. Math.hypot,
-// Math.exp, Math.sin/cos never appear on it (the rack's shuffle uses integer maths only).
+// Math.exp, Math.sin/cos never appear on it (the rack shuffle and the obstacles use integer maths).
 //
 // Units are "table units": the cloth is W x H, portrait, the breaker's end (the kitchen) at the
-// BOTTOM, the rack at the top. Ball 0 is the cue ball, 1-7 group 'a', 8 the eight, 9-15 group 'b'.
+// BOTTOM, the rack at the top. Ball 0 is the cue ball; 1-15 the numbered balls (9-ball uses 1-9).
+// Proportions are a 7-foot bar table's: a 2.25" ball on 39" of cloth, corner mouths about 2.05
+// balls wide, side mouths about 2.2 (real side pockets are a little WIDER than corners).
 
 export const W = 100;
 export const H = 200;
-export const R = 2.6;
-/** A corner pocket's jaws sit this far along each rail from the corner; a ball whose CENTRE crosses
- *  the line between them is in. The side pockets' jaws are this far either side of the middle. */
-export const CORNER_G = 7.8;
+export const R = 2.8;
+/** A corner pocket's jaws sit this far along each rail from the corner; a side pocket's this far
+ *  either side of the middle. A ball whose CENTRE crosses the line between the jaws is in. */
+export const CORNER_G = 8.1;
 export const SIDE_S = 6.2;
 export const HEAD_Y = H * 0.75;              // the head string: the kitchen is below it
 export const FOOT_Y = H * 0.25;              // the foot spot: the rack's apex
 export const HEAD_SPOT = [W / 2, HEAD_Y + 12];
 export const CUE = 0;
 export const EIGHT = 8;
-export const N_BALLS = 16;
+export const NINE = 9;
+export const MODES = ['8', '9', 'ct'];
 export const RACK_OPTIONS = [1, 2, 3];
+/** Seats per mode: Cutthroat is three players. */
+export const seatsOf = (mode) => (mode === 'ct' ? 3 : 2);
+/** Balls per mode, the cue ball included. */
+export const ballCount = (mode) => (mode === '9' ? 10 : 16);
 /** The fastest a full-strength shot sends the cue ball. Per-step travel (MAX_SPEED * DT, ~1.7) stays
  *  well under R, the thinnest thing that can be hit, so nothing tunnels (docs/BUILDING-A-GAME.md,
  *  Part 3). Raise it only with the step. */
 export const MAX_SPEED = 400;
-/** The break hits harder than any other shot (a break cue, a full swing): 540 u/s, ~2.25 a step,
- *  still under R. Without it a full rack hardly opens (measured: 0.1 balls potted a break). */
+/** The break hits harder than any other shot: 540 u/s, ~2.25 a step, still under R. */
 const BREAK_BOOST = 1.35;
 export const DT = 1 / 240;
 const MAX_SHOT_SECS = 20;
@@ -43,6 +50,10 @@ const DAMP = 0.5;
 const STOP = 1.0;
 const E_BALL = 0.96;
 const E_RAIL = 0.8;
+const E_OBST = 0.6;
+/** A spill (the obstacles option) drags a ball crossing it this much harder. */
+const SPILL_DRAG = 70;
+const SPILL_DAMP = 2.4;
 /** Top spin / back spin a full tip offset puts on the cue ball, as a multiple of its speed. */
 const SPIN_FOLLOW = 1.25;
 const SPIN_DRAW = 1.3;
@@ -56,21 +67,20 @@ export const SEGS = [
   [W, G, W, H / 2 - S], [W, H / 2 + S, W, H - G],
 ].map(([ax, ay, bx, by]) => ({ ax, ay, bx, by }));
 
-/** The six pockets: the black hole that is drawn (cx, cy, r) is also where a ball drops: a ball
- *  whose CENTRE is over it is in, so what a player sees is the rule. A corner's hole meets the line
- *  between its jaws; a side's sits behind the cushion line. (ax, ay) is where the computer aims. */
+/** The six pockets, all one size: the black hole that is drawn (cx, cy, r) is also where a ball
+ *  drops (its CENTRE over it), and so is anywhere past the line between a pocket's jaws, which is
+ *  drawn dark too. What a player sees is the rule. (ax, ay) is where the computer aims. */
+const HOLE = 5.4;
 export const POCKETS = [
-  { cx: 0.9, cy: 0.9, r: 6.6, ax: 2.2, ay: 2.2 },
-  { cx: W - 0.9, cy: 0.9, r: 6.6, ax: W - 2.2, ay: 2.2 },
-  { cx: -2.2, cy: H / 2, r: 5.0, ax: -1.5, ay: H / 2 },
-  { cx: W + 2.2, cy: H / 2, r: 5.0, ax: W + 1.5, ay: H / 2 },
-  { cx: 0.9, cy: H - 0.9, r: 6.6, ax: 2.2, ay: H - 2.2 },
-  { cx: W - 0.9, cy: H - 0.9, r: 6.6, ax: W - 2.2, ay: H - 2.2 },
+  { cx: 0.25, cy: 0.25, r: HOLE, ax: 2.4, ay: 2.4 },
+  { cx: W - 0.25, cy: 0.25, r: HOLE, ax: W - 2.4, ay: 2.4 },
+  { cx: -4, cy: H / 2, r: HOLE, ax: -1.2, ay: H / 2 },
+  { cx: W + 4, cy: H / 2, r: HOLE, ax: W + 1.2, ay: H / 2 },
+  { cx: 0.25, cy: H - 0.25, r: HOLE, ax: 2.4, ay: H - 2.4 },
+  { cx: W - 0.25, cy: H - 0.25, r: HOLE, ax: W - 2.4, ay: H - 2.4 },
 ];
 
-/** Which pocket a ball centred at (x, y) is in, or -1: over a hole, or past the line between a
- *  pocket's jaws (a ball can only get there through a pocket's mouth: the cushions stop it
- *  anywhere else). */
+/** Which pocket a ball centred at (x, y) is in, or -1. */
 export function pocketOf(x, y) {
   for (let k = 0; k < POCKETS.length; k++) {
     const p = POCKETS[k], dx = x - p.cx, dy = y - p.cy;
@@ -80,7 +90,7 @@ export function pocketOf(x, y) {
   if (W - x + y < G) return 1;
   if (x + (H - y) < G) return 4;
   if (W - x + (H - y) < G) return 5;
-  if (x < 0) return 2;
+  if (x < 0) return 2;          // through a side pocket (the corners were caught above)
   if (x > W) return 3;
   // Never expected, but a ball must never escape the table.
   if (y < -R) return x < W / 2 ? 0 : 1;
@@ -88,8 +98,20 @@ export function pocketOf(x, y) {
   return -1;
 }
 
-export const groupOf = (i) => (i >= 1 && i <= 7 ? 'a' : i >= 9 && i <= 15 ? 'b' : null);
-export const ballsOf = (g) => (g === 'a' ? [1, 2, 3, 4, 5, 6, 7] : [9, 10, 11, 12, 13, 14, 15]);
+/** A ball's group in a mode: 8-ball 'a' (solids 1-7) / 'b' (stripes 9-15); Cutthroat 'l' (1-5),
+ *  'm' (6-10), 'h' (11-15); 9-ball has none. */
+export function groupOf(i, mode = '8') {
+  if (mode === 'ct') return i >= 1 && i <= 5 ? 'l' : i >= 6 && i <= 10 ? 'm' : i >= 11 && i <= 15 ? 'h' : null;
+  if (mode === '9') return null;
+  return i >= 1 && i <= 7 ? 'a' : i >= 9 && i <= 15 ? 'b' : null;
+}
+export const GROUP_BALLS = {
+  a: [1, 2, 3, 4, 5, 6, 7], b: [9, 10, 11, 12, 13, 14, 15],
+  l: [1, 2, 3, 4, 5], m: [6, 7, 8, 9, 10], h: [11, 12, 13, 14, 15],
+};
+export const ballsOf = (g) => GROUP_BALLS[g] || [];
+/** Cutthroat's groups, by seat: fixed from the break (seat 0 low, 1 middle, 2 high). */
+const CT_GROUPS = ['l', 'm', 'h'];
 
 /** A seeded integer RNG (xorshift32), deterministic everywhere. */
 export function rng32(seed) {
@@ -97,123 +119,201 @@ export function rng32(seed) {
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s; };
 }
 const nextSeed = (seed) => ((Math.imul(seed >>> 0, 1103515245) + 12345) >>> 0) || 1;
+const ball = (x, y) => ({ x, y, vx: 0, vy: 0, rx: 0, ry: 0, on: true });
+const shuffle = (list, rnd) => { for (let k = list.length - 1; k > 0; k--) { const j = rnd() % (k + 1); [list[k], list[j]] = [list[j], list[k]]; } return list; };
 
-/** A fresh rack: the 8 in the middle of the third row, one ball of each group in the back corners,
- *  the rest shuffled from `seed`. The cue ball on the head spot. */
-export function rackBalls(seed) {
+/** A fresh rack for `mode`, shuffled from `seed`, the cue ball on the head spot.
+ *  8-ball: the 8 in the middle of row three, a solid and a stripe in the back corners.
+ *  9-ball: a diamond, the 1 at the front, the 9 in the middle.
+ *  Cutthroat: the 1 at the front, the 6 and the 11 in the back corners. */
+export function rackBalls(mode, seed) {
   const rnd = rng32(seed);
-  const pool = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15];
-  for (let k = pool.length - 1; k > 0; k--) { const j = rnd() % (k + 1); [pool[k], pool[j]] = [pool[j], pool[k]]; }
-  // Back corners: the first 'a' and the first 'b' left in the shuffle, sides chosen by the seed.
-  const ca = pool.splice(pool.findIndex((n) => n < 8), 1)[0];
-  const cb = pool.splice(pool.findIndex((n) => n > 8), 1)[0];
-  const [left, right] = rnd() & 1 ? [ca, cb] : [cb, ca];
-  const slots = [];
   const dx = 2 * R + 0.02, dy = dx * Math.sqrt(3) / 2;
-  for (let row = 0; row < 5; row++) {
-    for (let k = 0; k <= row; k++) slots.push({ row, k, x: W / 2 + (k - row / 2) * dx, y: FOOT_Y - row * dy });
-  }
-  const order = [];
-  for (const sl of slots) {
-    if (sl.row === 2 && sl.k === 1) order.push(EIGHT);
-    else if (sl.row === 4 && sl.k === 0) order.push(left);
-    else if (sl.row === 4 && sl.k === 4) order.push(right);
-    else order.push(pool.shift());
-  }
-  const b = new Array(N_BALLS);
+  const b = new Array(ballCount(mode));
   b[CUE] = ball(HEAD_SPOT[0], HEAD_SPOT[1]);
-  slots.forEach((sl, k) => { b[order[k]] = ball(sl.x, sl.y); });
+  if (mode === '9') {
+    const rows = [1, 2, 3, 2, 1];
+    const rest = shuffle([2, 3, 4, 5, 6, 7, 8], rnd);
+    rows.forEach((n, row) => {
+      for (let k = 0; k < n; k++) {
+        const x = W / 2 + (k - (n - 1) / 2) * dx, y = FOOT_Y - row * dy;
+        const id = row === 0 ? 1 : row === 2 && k === 1 ? NINE : rest.shift();
+        b[id] = ball(x, y);
+      }
+    });
+    return b;
+  }
+  const slots = [];
+  for (let row = 0; row < 5; row++) for (let k = 0; k <= row; k++) slots.push({ row, k, x: W / 2 + (k - row / 2) * dx, y: FOOT_Y - row * dy });
+  let fixed;
+  let pool;
+  if (mode === 'ct') {
+    pool = shuffle([2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 15], rnd);
+    const [left, right] = rnd() & 1 ? [6, 11] : [11, 6];
+    fixed = (sl) => (sl.row === 0 ? 1 : sl.row === 4 && sl.k === 0 ? left : sl.row === 4 && sl.k === 4 ? right : null);
+  } else {
+    pool = shuffle([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15], rnd);
+    const ca = pool.splice(pool.findIndex((n) => n < 8), 1)[0];
+    const cb = pool.splice(pool.findIndex((n) => n > 8), 1)[0];
+    const [left, right] = rnd() & 1 ? [ca, cb] : [cb, ca];
+    fixed = (sl) => (sl.row === 2 && sl.k === 1 ? EIGHT : sl.row === 4 && sl.k === 0 ? left : sl.row === 4 && sl.k === 4 ? right : null);
+  }
+  for (const sl of slots) { const f = fixed(sl); b[f != null ? f : pool.shift()] = ball(sl.x, sl.y); }
   return b;
 }
-const ball = (x, y) => ({ x, y, vx: 0, vy: 0, rx: 0, ry: 0, on: true });
 
-/** A new match: first to `racks` racks; `breaker` breaks the first rack; `seed` shuffles it. */
-export function newMatch(racks = 1, breaker = 0, seed = 1) {
-  const st = breaker ? 1 : 0;
+// --- bar obstacles (the obstacles option) -------------------------------------------------------
+/** A beer bottle lying on its side and a cigarette butt (solid capsules), a can standing up (a solid
+ *  circle), and a spill that slows any ball rolling through it. Placed from the rack's seed, clear of the rack, the head
+ *  spot, the pockets and each other, so every phone draws the same table. */
+export const OBSTACLE_KINDS = ['bottle', 'can', 'butt'];
+export function makeObstacles(seed) {
+  const rnd = rng32(nextSeed(seed ^ 0x5bd1e995));
+  const out = [];
+  const far = (x, y, d, list) => list.every((p) => (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y) >= d * d);
+  const keepOff = [{ x: W / 2, y: FOOT_Y - 10 }, { x: HEAD_SPOT[0], y: HEAD_SPOT[1] }, ...POCKETS.map((p) => ({ x: p.cx, y: p.cy }))];
+  const want = ['spill', OBSTACLE_KINDS[rnd() % 3], OBSTACLE_KINDS[rnd() % 3]];
+  for (const k of want) {
+    for (let tries = 0; tries < 200; tries++) {
+      const x = 12 + (rnd() % 7601) / 100, y = 16 + (rnd() % 16801) / 100;
+      if (!far(x, y, 26, keepOff.slice(0, 1)) || !far(x, y, 15, keepOff.slice(1)) || !far(x, y, 17, out)) continue;
+      if (k === 'spill') out.push({ k, x, y, r: 7.5 });
+      else if (k === 'can') out.push({ k, x, y, r: 3.4 });
+      else {
+        const [ux, uy] = SPOKES[rnd() % SPOKES.length];
+        const h = k === 'bottle' ? 5.4 : 3.6, r = k === 'bottle' ? 2.3 : 0.95;
+        out.push({ k, x, y, r, h, ax: x - ux * h, ay: y - uy * h, bx: x + ux * h, by: y + uy * h });
+      }
+      break;
+    }
+  }
+  return out;
+}
+/** The solid point of obstacle `o` nearest (x, y) (a circle's centre; a capsule's nearest point). */
+function obstCore(o, x, y) {
+  if (o.ax == null) return [o.x, o.y];
+  const ex = o.bx - o.ax, ey = o.by - o.ay;
+  let t = ((x - o.ax) * ex + (y - o.ay) * ey) / (ex * ex + ey * ey);
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return [o.ax + ex * t, o.ay + ey * t];
+}
+const solidObs = (obs) => (obs || []).filter((o) => o.k !== 'spill');
+
+/** A new match. `mode` '8' | '9' | 'ct'; first to `racks`; `breaker` breaks the first rack; `seed`
+ *  shuffles it; `opts` { call: every shot is called, bank: only banked pots count, obst: obstacles }. */
+export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}) {
+  const md = MODES.includes(mode) ? mode : '8';
+  const n = seatsOf(md);
+  const st = Number.isInteger(breaker) && breaker >= 0 && breaker < n ? breaker : 0;
   const sd = (seed >>> 0) || 1;
+  const o = { call: !!opts.call, bank: !!opts.bank, obst: !!opts.obst };
   return {
-    v: 1,
+    v: 2,
+    mode: md,
+    n,
+    opts: o,
     racks: RACK_OPTIONS.includes(racks) ? racks : 1,
-    scores: [0, 0],
+    scores: new Array(n).fill(0),
     rack: 1,
     seed: sd,
     breaker: st,
     turn: st,
-    groups: null,          // [seat 0's group, seat 1's] once the table is no longer open
+    groups: md === 'ct' ? CT_GROUPS.slice() : null,   // 8-ball: [seat 0's, seat 1's] once decided
+    out: new Array(n).fill(false),                    // Cutthroat: every ball of theirs is down
     broke: false,          // the break has been played this rack
     inHand: 'kitchen',     // 'kitchen' (behind the head string) | 'any' | null
     shots: 0,
     winner: null,
-    last: null,            // what the last shot did: { foul, pots, again, rack }
-    b: rackBalls(sd),
+    last: null,            // what the last shot did: { foul, pots, again, rack, outs }
+    obs: o.obst ? makeObstacles(sd) : [],
+    b: rackBalls(md, sd),
   };
 }
 
 /** A saved match is only trusted if it has the shape this engine writes, at rest. */
 export function validMatch(m) {
-  if (!m || m.v !== 1 || !Array.isArray(m.b) || m.b.length !== N_BALLS) return false;
-  if (!RACK_OPTIONS.includes(m.racks) || !Array.isArray(m.scores) || m.scores.length !== 2) return false;
-  if (m.turn !== 0 && m.turn !== 1) return false;
-  if (m.groups != null && !(Array.isArray(m.groups) && m.groups.length === 2)) return false;
+  if (!m || m.v !== 2 || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
+  if (!Array.isArray(m.b) || m.b.length !== ballCount(m.mode)) return false;
+  if (!RACK_OPTIONS.includes(m.racks) || !Array.isArray(m.scores) || m.scores.length !== m.n) return false;
+  if (!Number.isInteger(m.turn) || m.turn < 0 || m.turn >= m.n) return false;
+  if (!m.opts || !Array.isArray(m.obs) || !Array.isArray(m.out)) return false;
   return m.b.every((o) => o && Number.isFinite(o.x) && Number.isFinite(o.y)) && m.b[CUE].on;
 }
 
 export function cloneBalls(b) { return b.map((o) => ({ x: o.x, y: o.y, vx: o.vx, vy: o.vy, rx: o.rx, ry: o.ry, on: o.on })); }
 export function cloneMatch(m) {
-  return { ...m, scores: m.scores.slice(), groups: m.groups ? m.groups.slice() : null, last: m.last ? { ...m.last, pots: m.last.pots.slice() } : null, b: cloneBalls(m.b) };
+  return {
+    ...m,
+    scores: m.scores.slice(), out: m.out.slice(), groups: m.groups ? m.groups.slice() : null,
+    last: m.last ? { ...m.last, pots: m.last.pots.slice() } : null, b: cloneBalls(m.b),
+  };
 }
 
 export const atRest = (b) => b.every((o) => !o.on || (o.vx === 0 && o.vy === 0));
 export function freeze(b) { for (const o of b) { o.vx = 0; o.vy = 0; o.rx = 0; o.ry = 0; } }
 
-/** The balls `seat` may hit first: its group, the 8 once that is cleared, any but the 8 while the
- *  table is open. */
+/** The seat after `from` that is still in (Cutthroat skips players with every ball down). */
+export function nextSeat(m, from) {
+  for (let k = 1; k <= m.n; k++) { const s = (from + k) % m.n; if (!m.out[s]) return s; }
+  return from;
+}
+
+/** The balls `seat` may hit first. 8-ball: its group, the 8 once that is cleared, any but the 8
+ *  while the table is open. 9-ball: the lowest number on the table. Cutthroat: any ball. */
 export function targetsOf(m, seat) {
-  const on = (i) => m.b[i].on;
-  if (!m.groups) {
-    const t = [];
-    for (let i = 1; i < N_BALLS; i++) if (i !== EIGHT && on(i)) t.push(i);
-    return t.length ? t : [EIGHT];
-  }
-  const t = ballsOf(m.groups[seat]).filter(on);
+  const on = [];
+  for (let i = 1; i < m.b.length; i++) if (m.b[i].on) on.push(i);
+  if (m.mode === '9') return on.length ? [on[0]] : [];
+  if (m.mode === 'ct') return on;
+  if (!m.groups) { const t = on.filter((i) => i !== EIGHT); return t.length ? t : [EIGHT]; }
+  const t = ballsOf(m.groups[seat]).filter((i) => m.b[i].on);
   return t.length ? t : [EIGHT];
 }
-export const onEight = (m, seat) => { const t = targetsOf(m, seat); return t.length === 1 && t[0] === EIGHT; };
+export const onEight = (m, seat) => m.mode === '8' && !!m.groups && targetsOf(m, seat)[0] === EIGHT;
+/** The balls that are `seat`'s own (8-ball after the groups are decided, Cutthroat always). */
+export const ownBalls = (m, seat) => (m.groups ? ballsOf(m.groups[seat]) : []);
+/** Must this shot name a pocket first? Every shot with the call option (not the break), and the 8
+ *  in 8-ball always. */
+export const needCall = (m, seat) => !!m.broke && (!!m.opts.call || onEight(m, seat));
 
 /** Is (x, y) a legal place for the cue ball (`kitchen`: behind the head string)? */
-export function canPlace(b, x, y, kitchen) {
+export function canPlace(m, x, y, kitchen) {
+  const b = m.b;
   if (!(x >= R && x <= W - R && y >= R && y <= H - R)) return false;
   if (kitchen && y < HEAD_Y) return false;
   if (x + y < G + R || W - x + y < G + R || x + H - y < G + R || W - x + H - y < G + R) return false;
   for (const p of POCKETS) { const dx = x - p.cx, dy = y - p.cy; if (dx * dx + dy * dy < (p.r + R) * (p.r + R)) return false; }
-  for (let i = 1; i < N_BALLS; i++) {
+  for (let i = 1; i < b.length; i++) {
     const o = b[i];
     if (!o.on) continue;
     const dx = o.x - x, dy = o.y - y;
     if (dx * dx + dy * dy < 4 * R * R + 0.01) return false;
   }
+  for (const o of solidObs(m.obs)) {
+    const [cx, cy] = obstCore(o, x, y);
+    if ((x - cx) * (x - cx) + (y - cy) * (y - cy) < (R + o.r + 0.05) * (R + o.r + 0.05)) return false;
+  }
   return true;
 }
 
 /** The nearest legal place to (x, y) for the cue ball, searched outward in rings. */
-export function nearestPlace(b, x, y, kitchen) {
+export function nearestPlace(m, x, y, kitchen) {
   const cx = Math.max(R, Math.min(W - R, x)), cy = Math.max(kitchen ? HEAD_Y : R, Math.min(H - R, y));
-  if (canPlace(b, cx, cy, kitchen)) return { x: cx, y: cy };
+  if (canPlace(m, cx, cy, kitchen)) return { x: cx, y: cy };
   for (let rad = 0.5; rad < H; rad += 0.5) {
     const n = Math.max(8, Math.ceil(rad * 4));
     for (let k = 0; k < n; k++) {
-      // Integer spokes and a fixed table of unit vectors keep this off sin/cos.
       const [ux, uy] = SPOKES[Math.floor((k * SPOKES.length) / n)];
       const px = cx + ux * rad, py = cy + uy * rad;
-      if (canPlace(b, px, py, kitchen)) return { x: px, y: py };
+      if (canPlace(m, px, py, kitchen)) return { x: px, y: py };
     }
   }
   return { x: HEAD_SPOT[0], y: HEAD_SPOT[1] };
 }
+/** Unit vectors without trigonometry: points on a square, normalised. */
 const SPOKES = (() => {
   const out = [];
   for (let k = 0; k < 32; k++) {
-    // Points on a square, normalised: unit vectors without trigonometry.
     const t = (k % 8) / 8, side = Math.floor(k / 8);
     const [x, y] = side === 0 ? [1, -1 + 2 * t] : side === 1 ? [1 - 2 * t, 1] : side === 2 ? [-1, 1 - 2 * t] : [-1 + 2 * t, -1];
     const l = Math.sqrt(x * x + y * y);
@@ -221,6 +321,30 @@ const SPOKES = (() => {
   }
   return out;
 })();
+
+/** Put ball `i` back on the table (a foul in Cutthroat, the 9 potted on a foul): on the foot spot,
+ *  or the nearest free point up the long string from it, or down it. */
+export function spotBall(m, i) {
+  const o = m.b[i];
+  const free = (x, y) => {
+    for (let j = 0; j < m.b.length; j++) {
+      if (j === i || !m.b[j].on) continue;
+      const q = m.b[j];
+      if ((q.x - x) * (q.x - x) + (q.y - y) * (q.y - y) < 4 * R * R + 0.01) return false;
+    }
+    for (const ob of solidObs(m.obs)) {
+      const [cx, cy] = obstCore(ob, x, y);
+      if ((x - cx) * (x - cx) + (y - cy) * (y - cy) < (R + ob.r + 0.05) * (R + ob.r + 0.05)) return false;
+    }
+    return true;
+  };
+  let y = FOOT_Y;
+  for (let k = 0; k < 400; k++) {
+    const yy = k % 2 ? FOOT_Y - ((k + 1) / 2) * 0.5 : FOOT_Y + (k / 2) * 0.5;
+    if (yy > R + G && yy < H - R - G && free(W / 2, yy)) { y = yy; break; }
+  }
+  o.x = W / 2; o.y = y; o.vx = 0; o.vy = 0; o.rx = 0; o.ry = 0; o.on = true;
+}
 
 /** Strike the cue ball: `power` 0-1 along unit-ish (dx, dy); `spin` -1 (draw) .. 1 (follow). The
  *  speed grows faster than the pull, so a soft touch is easy to find. */
@@ -236,12 +360,14 @@ export function strike(b, dx, dy, power, spin = 0, isBreak = false) {
   c.rx = ux * sp * k; c.ry = uy * sp * k;
 }
 
-/** A fresh event record for one shot: what the rules need to know about it. */
-export const newEvents = () => ({ first: -1, rail: false, pots: [], pocketAt: [] });
+/** A fresh event record for one shot: what the rules need to know about it. `kiss[i]`: ball i
+ *  bounced off a cushion, an obstacle or another object ball (a bank, a kiss or a combination);
+ *  `cueRail`: the cue ball did, before it touched a ball (a kick). */
+export const newEvents = (n = 16) => ({ first: -1, rail: false, cueRail: false, pots: [], pocketAt: [], kiss: new Array(n).fill(false), call: -1 });
 
-/** One physics step. `ev` collects the first ball the cue ball touched, whether any ball reached a
- *  cushion after that, and every ball potted (in order). */
-export function step(b, ev) {
+/** One physics step. `ev` collects the first ball the cue ball touched, cushions reached after
+ *  that, bounces (for banks only), and every ball potted (in order, with its pocket). */
+export function step(b, ev, obs) {
   const n = b.length;
   for (let i = 0; i < n; i++) {
     const o = b[i];
@@ -268,11 +394,15 @@ export function step(b, ev) {
         const jm = (-(1 + E_BALL) * vn) / 2;
         p.vx -= jm * nx; p.vy -= jm * ny;
         q.vx += jm * nx; q.vy += jm * ny;
-        if (ev && ev.first < 0 && (i === CUE || j === CUE)) ev.first = i === CUE ? j : i;
+        if (ev) {
+          if (i === CUE || j === CUE) { if (ev.first < 0) ev.first = i === CUE ? j : i; }
+          else { ev.kiss[i] = true; ev.kiss[j] = true; }
+        }
       }
     }
   }
-  // Ball against cushion and jaw.
+  // Ball against cushion, jaw and obstacle.
+  const solid = obs && obs.length ? solidObs(obs) : null;
   for (let i = 0; i < n; i++) {
     const o = b[i];
     if (!o.on || (o.vx === 0 && o.vy === 0)) continue;
@@ -280,29 +410,32 @@ export function step(b, ev) {
       const ex = s.bx - s.ax, ey = s.by - s.ay;
       let tt = ((o.x - s.ax) * ex + (o.y - s.ay) * ey) / (ex * ex + ey * ey);
       tt = tt < 0 ? 0 : tt > 1 ? 1 : tt;
-      const cx = s.ax + ex * tt, cy = s.ay + ey * tt;
-      const dx = o.x - cx, dy = o.y - cy;
-      const d2 = dx * dx + dy * dy;
-      if (d2 >= R * R) continue;
-      let d = Math.sqrt(d2), nx, ny;
-      if (d < 1e-9) {
-        const sp = Math.sqrt(o.vx * o.vx + o.vy * o.vy) || 1;
-        nx = -o.vx / sp; ny = -o.vy / sp; d = 0;
-      } else { nx = dx / d; ny = dy / d; }
-      o.x += nx * (R - d); o.y += ny * (R - d);
-      const vn = o.vx * nx + o.vy * ny;
-      if (vn < 0) {
-        o.vx -= (1 + E_RAIL) * vn * nx; o.vy -= (1 + E_RAIL) * vn * ny;
-        const rn = o.rx * nx + o.ry * ny;
-        if (rn < 0) { o.rx -= (1 + E_RAIL) * rn * nx; o.ry -= (1 + E_RAIL) * rn * ny; }
-        if (ev && ev.first >= 0) ev.rail = true;
+      if (bounce(o, s.ax + ex * tt, s.ay + ey * tt, R, E_RAIL) && ev) {
+        if (ev.first >= 0) ev.rail = true;
+        if (i === CUE) { if (ev.first < 0) ev.cueRail = true; } else ev.kiss[i] = true;
+      }
+    }
+    if (solid) {
+      for (const ob of solid) {
+        const [cx, cy] = obstCore(ob, o.x, o.y);
+        if (bounce(o, cx, cy, R + ob.r, E_OBST) && ev) {
+          if (i === CUE) { if (ev.first < 0) ev.cueRail = true; } else ev.kiss[i] = true;
+        }
       }
     }
   }
-  // Cloth: skid turns into roll, roll slows down.
+  // Cloth: skid turns into roll, roll slows down (harder through a spill).
   for (let i = 0; i < n; i++) {
     const o = b[i];
     if (!o.on || (o.vx === 0 && o.vy === 0 && o.rx === 0 && o.ry === 0)) continue;
+    let extra = 0, extraDamp = 0;
+    if (obs) {
+      for (const ob of obs) {
+        if (ob.k !== 'spill') continue;
+        const dx = o.x - ob.x, dy = o.y - ob.y;
+        if (dx * dx + dy * dy < ob.r * ob.r) { extra = SPILL_DRAG; extraDamp = SPILL_DAMP; }
+      }
+    }
     const sx = o.vx - o.rx, sy = o.vy - o.ry;
     const sl = Math.sqrt(sx * sx + sy * sy);
     if (sl > 0.05) {
@@ -316,10 +449,16 @@ export function step(b, ev) {
         o.rx += ux * a * 2.5; o.ry += uy * a * 2.5;
       }
       const sp = Math.sqrt(o.vx * o.vx + o.vy * o.vy);
-      if (sp < STOP && Math.sqrt((o.vx - o.rx) * (o.vx - o.rx) + (o.vy - o.ry) * (o.vy - o.ry)) < STOP) { o.vx = 0; o.vy = 0; o.rx = 0; o.ry = 0; }
+      if (extra && sp > 0) {
+        const ns = sp - (extra + extraDamp * sp) * DT;
+        const f = ns > 0 ? ns / sp : 0;
+        o.vx *= f; o.vy *= f; o.rx *= f; o.ry *= f;
+      }
+      const sp2 = Math.sqrt(o.vx * o.vx + o.vy * o.vy);
+      if (sp2 < STOP && Math.sqrt((o.vx - o.rx) * (o.vx - o.rx) + (o.vy - o.ry) * (o.vy - o.ry)) < STOP) { o.vx = 0; o.vy = 0; o.rx = 0; o.ry = 0; }
     } else {
       const sp = Math.sqrt(o.vx * o.vx + o.vy * o.vy);
-      const ns = sp - (A_ROLL + DAMP * sp) * DT;
+      const ns = sp - (A_ROLL + extra + (DAMP + extraDamp) * sp) * DT;
       if (ns < STOP) { o.vx = 0; o.vy = 0; o.rx = 0; o.ry = 0; continue; }
       o.vx *= ns / sp; o.vy *= ns / sp;
       o.rx = o.vx; o.ry = o.vy;
@@ -336,13 +475,33 @@ export function step(b, ev) {
   }
 }
 
+/** A moving ball `o` against the solid point (cx, cy) at distance `reach`: pushed out and bounced.
+ *  Returns true when it was moving into it (a real bounce). */
+function bounce(o, cx, cy, reach, e) {
+  const dx = o.x - cx, dy = o.y - cy;
+  const d2 = dx * dx + dy * dy;
+  if (d2 >= reach * reach) return false;
+  let d = Math.sqrt(d2), nx, ny;
+  if (d < 1e-9) {
+    const sp = Math.sqrt(o.vx * o.vx + o.vy * o.vy) || 1;
+    nx = -o.vx / sp; ny = -o.vy / sp; d = 0;
+  } else { nx = dx / d; ny = dy / d; }
+  o.x += nx * (reach - d); o.y += ny * (reach - d);
+  const vn = o.vx * nx + o.vy * ny;
+  if (vn >= 0) return false;
+  o.vx -= (1 + e) * vn * nx; o.vy -= (1 + e) * vn * ny;
+  const rn = o.rx * nx + o.ry * ny;
+  if (rn < 0) { o.rx -= (1 + e) * rn * nx; o.ry -= (1 + e) * rn * ny; }
+  return true;
+}
+
 export const maxShotSteps = () => Math.round(MAX_SHOT_SECS / DT);
 
 /** Run a shot to the end on balls `b` (mutated). Returns the step count. */
-export function runToRest(b, ev, maxSecs = MAX_SHOT_SECS) {
+export function runToRest(b, ev, maxSecs = MAX_SHOT_SECS, obs = null) {
   const max = Math.round(maxSecs / DT);
   for (let k = 1; k <= max; k++) {
-    step(b, ev);
+    step(b, ev, obs);
     if (atRest(b)) { freeze(b); return k; }
   }
   freeze(b);
@@ -350,18 +509,21 @@ export function runToRest(b, ev, maxSecs = MAX_SHOT_SECS) {
 }
 
 /** A shot, as stored: { x, y } where the cue ball is put first (only with the ball in hand), the
- *  direction (dx, dy), the power p 0-1 and the spin s -1..1. Puts it in motion on `m.b` and returns
- *  the event record to step it with. Null if it is not a shot this position allows. */
+ *  direction (dx, dy), the power p 0-1, the spin s -1..1, and c, the pocket called (0-5) when the
+ *  shot needs one. Puts it in motion on `m.b` and returns the event record to step it with. Null if
+ *  it is not a shot this position allows. */
 export function begin(m, shot) {
   if (!shot || ![shot.dx, shot.dy, shot.p].every(Number.isFinite)) return null;
   if (m.inHand && Number.isFinite(shot.x) && Number.isFinite(shot.y)) {
-    if (!canPlace(m.b, shot.x, shot.y, m.inHand === 'kitchen')) return null;
+    if (!canPlace(m, shot.x, shot.y, m.inHand === 'kitchen')) return null;
     m.b[CUE].x = shot.x; m.b[CUE].y = shot.y;
   }
   strike(m.b, shot.dx, shot.dy, shot.p, shot.s || 0, !m.broke);
-  const ev = newEvents();
+  const ev = newEvents(m.b.length);
   ev.targets = targetsOf(m, m.turn);
   ev.isBreak = !m.broke;
+  ev.needCall = needCall(m, m.turn);
+  ev.call = Number.isInteger(shot.c) && shot.c >= 0 && shot.c < 6 ? shot.c : -1;
   return ev;
 }
 
@@ -369,62 +531,118 @@ export function begin(m, shot) {
 export function play(m, shot, maxSecs) {
   const ev = begin(m, shot);
   if (!ev) return null;
-  runToRest(m.b, ev, maxSecs);
+  runToRest(m.b, ev, maxSecs, m.obs);
   return settle(m, ev);
 }
 
 /**
- * A shot has come to rest: the rules (bar-room 8-ball, one rack at a time).
- *  - Foul: the cue ball potted; no ball hit; the first ball hit not one of the shooter's targets;
- *    nothing potted and no ball reaching a cushion after the hit. A foul gives the other player
- *    the ball in hand anywhere. The break only fouls by potting the cue ball or missing everything.
- *  - The 8 potted: on the break, the breaker wins the rack (loses it with a foul); later, the
- *    shooter wins the rack if the 8 was their target and nothing was a foul, and loses it otherwise.
- *  - The table is open until the first ball potted on a clean shot after the break: its group is
- *    the shooter's, the other the opponent's.
- *  - The shooter goes again after potting one of their own group (any ball while the table was
- *    open) with no foul; otherwise the turn passes.
- * Returns { kind: 'again' | 'turn' | 'foul' | 'rack' | 'win', foul, rackWinner }.
+ * A shot has come to rest: the rules.
+ *  Fouls, every mode: the cue ball potted; no ball hit; nothing potted and no ball reaching a
+ *  cushion after the hit. 8-ball and 9-ball also: the first ball hit not the shooter's target (the
+ *  9-ball break must hit the 1 too). A foul gives the next player the ball in hand anywhere; in
+ *  Cutthroat it also brings one potted ball of each other player back onto the table.
+ *  A pot only COUNTS for the shooter (keeps the turn, decides a group, wins with the 8 or 9) when it
+ *  went into the called pocket (when one had to be called) and, with banks only, bounced off
+ *  something on its way (or the cue ball did, first). A ball that drops without counting stays down.
+ *  8-ball: open table until the first counting pot after the break; the 8 wins only as the target,
+ *  clean and counting, and loses the rack otherwise (on the break it wins, unless a scratch).
+ *  9-ball: the 9 wins whenever it counts (on the break too); a 9 that drops on a foul, or without
+ *  counting, comes back to the foot spot.
+ *  Cutthroat: seat 0 keeps 1-5 on the table, seat 1 6-10, seat 2 11-15; a player whose balls are all
+ *  down is out; the last one in wins the rack. The shooter goes again after potting someone else's.
+ * Returns { kind: 'again' | 'turn' | 'foul' | 'rack' | 'win', foul, rackWinner, outs }.
  */
 export function settle(m, ev) {
   freeze(m.b);
   relax(m.b);
   m.shots++;
-  const seat = m.turn, opp = seat ^ 1;
+  const seat = m.turn;
   const pots = ev.pots.filter((i) => i !== CUE);
   const scratch = ev.pots.includes(CUE);
   const isBreak = !!ev.isBreak;
   const targets = ev.targets || targetsOf(m, seat);
+  const counts = (i) => {
+    if (ev.needCall && ev.pocketAt[ev.pots.indexOf(i)] !== ev.call) return false;
+    if (m.opts.bank && !isBreak && !(ev.cueRail || ev.kiss[i])) return false;
+    return true;
+  };
   let foul = null;
   if (scratch) foul = 'scratch';
   else if (ev.first < 0) foul = 'nohit';
-  else if (!isBreak && !targets.includes(ev.first)) foul = 'wrong';
+  else if (m.mode !== 'ct' && (!isBreak || m.mode === '9') && !targets.includes(ev.first)) foul = 'wrong';
   else if (!isBreak && !pots.length && !ev.rail) foul = 'norail';
   m.broke = true;
   m.inHand = null;
-  if (scratch) m.b[CUE].on = true;     // placed by the next shooter (below)
-  const wasOpen = !m.groups;
-  if (pots.includes(EIGHT)) {
-    const wins = isBreak ? !foul : (!foul && targets.length === 1 && targets[0] === EIGHT);
-    return endRack(m, wins ? seat : opp, { foul, pots });
+  if (scratch) m.b[CUE].on = true;
+  const counted = pots.filter(counts);
+  m.last = { foul, pots, again: false, counted };
+
+  if (m.mode === '8') {
+    if (pots.includes(EIGHT)) {
+      const wins = isBreak ? !foul : (!foul && targets.length === 1 && targets[0] === EIGHT && counts(EIGHT));
+      return endRack(m, wins ? seat : seat ^ 1, foul);
+    }
+    if (!foul && !m.groups && !isBreak) {
+      const g = counted.map((i) => groupOf(i, '8')).find(Boolean);
+      if (g) m.groups = seat === 0 ? [g, g === 'a' ? 'b' : 'a'] : [g === 'a' ? 'b' : 'a', g];
+    }
+    const mine = m.groups ? counted.filter((i) => groupOf(i, '8') === m.groups[seat]) : counted;
+    return passOn(m, foul, !foul && mine.length > 0);
   }
-  if (!foul && wasOpen && !isBreak) {
-    const g = pots.map(groupOf).find(Boolean);
-    if (g) m.groups = seat === 0 ? [g, g === 'a' ? 'b' : 'a'] : [g === 'a' ? 'b' : 'a', g];
+
+  if (m.mode === '9') {
+    if (pots.includes(NINE)) {
+      if (!foul && counts(NINE)) return endRack(m, seat, null);
+      spotBall(m, NINE);
+    }
+    return passOn(m, foul, !foul && counted.length > 0);
   }
-  const mine = m.groups ? pots.filter((i) => groupOf(i) === m.groups[seat]) : pots;
+
+  // Cutthroat.
   if (foul) {
-    m.turn = opp;
+    for (let s = 0; s < m.n; s++) {
+      if (s === seat) continue;
+      const down = ballsOf(m.groups[s]).filter((i) => !m.b[i].on);
+      if (down.length) spotBall(m, down[0]);
+    }
+  }
+  const outs = [];
+  for (let s = 0; s < m.n; s++) {
+    const was = m.out[s];
+    m.out[s] = ballsOf(m.groups[s]).every((i) => !m.b[i].on);
+    if (m.out[s] && !was) outs.push(s);
+  }
+  m.last.outs = outs;
+  const left = [];
+  for (let s = 0; s < m.n; s++) if (!m.out[s]) left.push(s);
+  if (left.length <= 1) {
+    // The last one standing; if one shot put out the last two, the shooter's pot decides it.
+    const w = left.length ? left[0] : seat;
+    const r = endRack(m, w, foul);
+    r.outs = outs;
+    return r;
+  }
+  const theirs = counted.filter((i) => groupOf(i, 'ct') !== m.groups[seat]);
+  const r = passOn(m, foul, !foul && !m.out[seat] && theirs.length > 0);
+  r.outs = outs;
+  return r;
+}
+
+/** The turn after a shot: the same player again, or the next one (with the ball in hand after a
+ *  foul, the cue ball back on the table if it went down). */
+function passOn(m, foul, again) {
+  const seat = m.turn;
+  if (foul) {
+    m.turn = nextSeat(m, seat);
     m.inHand = 'any';
     const c = m.b[CUE];
-    if (scratch) { const p = nearestPlace(m.b, HEAD_SPOT[0], HEAD_SPOT[1], false); c.x = p.x; c.y = p.y; }
-    m.last = { foul, pots, again: false };
+    if (!c.on || foul === 'scratch') { c.on = true; const p = nearestPlace(m, HEAD_SPOT[0], HEAD_SPOT[1], false); c.x = p.x; c.y = p.y; }
+    m.last.again = false;
     return { kind: 'foul', foul };
   }
-  const again = mine.length > 0;
-  if (!again) m.turn = opp;
-  m.last = { foul: null, pots, again };
-  return { kind: again ? 'again' : 'turn', foul: null };
+  if (!again || m.out[seat]) m.turn = nextSeat(m, seat);
+  m.last.again = !!again && !m.out[seat];
+  return { kind: m.last.again ? 'again' : 'turn', foul: null };
 }
 
 /** Balls at rest are never left overlapping: a tight cluster resolved one pair at a time can stop
@@ -458,90 +676,89 @@ function relax(b) {
   }
 }
 
-function endRack(m, w, info) {
+function endRack(m, w, foul) {
   m.scores[w]++;
-  m.last = { foul: info.foul, pots: info.pots, again: false, rack: w };
+  m.last = { ...(m.last || { pots: [] }), foul, again: false, rack: w };
   if (m.scores[w] >= m.racks) {
     m.winner = w;
     m.turn = w;
-    return { kind: 'win', foul: info.foul, rackWinner: w };
+    return { kind: 'win', foul, rackWinner: w };
   }
-  return { kind: 'rack', foul: info.foul, rackWinner: w };
+  return { kind: 'rack', foul, rackWinner: w };
 }
 
-/** The next rack after a rack has ended (`settle` said 'rack'): the break alternates. */
+/** The next rack after a rack has ended (`settle` said 'rack'): the break passes to the next seat. */
 export function nextRack(m) {
   m.rack++;
   m.seed = nextSeed(m.seed);
-  m.breaker ^= 1;
+  m.breaker = (m.breaker + 1) % m.n;
   m.turn = m.breaker;
-  m.groups = null;
+  m.groups = m.mode === 'ct' ? CT_GROUPS.slice() : null;
+  m.out = new Array(m.n).fill(false);
   m.broke = false;
   m.inHand = 'kitchen';
-  m.b = rackBalls(m.seed);
+  m.obs = m.opts.obst ? makeObstacles(m.seed) : [];
+  m.b = rackBalls(m.mode, m.seed);
 }
 
-/**
- * The aim guide for the cue ball sent along unit (dx, dy): where it first touches something, as
- * { x, y, hit } (the cue ball's CENTRE there; hit is the ball index, or -1 for a cushion), with,
- * when it is a ball, where that ball heads (`ox, oy` unit) and where the cue ball glances off
- * (`cx, cy` unit, the tangent line). Display only, never on the physics path.
- */
-export function aimContact(b, dx, dy, range = 260) {
-  const o = b[CUE];
-  let best = range, hit = -2;
-  for (let j = 1; j < b.length; j++) {
-    const q = b[j];
-    if (!q.on) continue;
-    const fx = q.x - o.x, fy = q.y - o.y;
-    const along = fx * dx + fy * dy;
-    if (along <= 0) continue;
-    const perp2 = fx * fx + fy * fy - along * along;
-    if (perp2 >= 4 * R * R) continue;
-    const t = along - Math.sqrt(4 * R * R - perp2);
-    if (t >= 0 && t < best) { best = t; hit = j; }
-  }
-  // Cushions: the straight edges are enough for a guide (a pocket mouth reads as open table).
-  const x0 = R, x1 = W - R, y0 = R, y1 = H - R;
-  const tx = dx > 0 ? (x1 - o.x) / dx : dx < 0 ? (x0 - o.x) / dx : Infinity;
-  const ty = dy > 0 ? (y1 - o.y) / dy : dy < 0 ? (y0 - o.y) / dy : Infinity;
-  const tw = Math.max(0, Math.min(tx, ty));
-  if (tw < best) { best = tw; hit = -1; }
-  if (hit === -2) return null;
-  const x = o.x + dx * best, y = o.y + dy * best;
-  const out = { x, y, hit };
-  if (hit >= 0) {
-    const q = b[hit];
-    let nx = q.x - x, ny = q.y - y;
-    const nl = Math.sqrt(nx * nx + ny * ny) || 1; nx /= nl; ny /= nl;
-    out.ox = nx; out.oy = ny;
-    // The cue ball leaves along the tangent: its direction minus the part along the line of centres.
-    const dn = dx * nx + dy * ny;
-    let cx = dx - dn * nx, cy = dy - dn * ny;
-    const cl = Math.sqrt(cx * cx + cy * cy);
-    if (cl > 1e-6) { cx /= cl; cy /= cl; out.cx = cx; out.cy = cy; out.cut = cl; }
-  }
-  return out;
-}
-
-/** A straight line from (x, y) along unit (dx, dy), stopped at the first ball (other than `skip`)
- *  or cushion within `len`, for drawing the object ball's and cue ball's paths. */
-export function rayStop(b, x, y, dx, dy, len, skip) {
-  let best = len;
+/** A ray from (x, y) along unit (dx, dy), as a swept ball: the first thing it touches within `len`,
+ *  as { t, hit } (hit: a ball index, -1 a cushion, -2 an obstacle) or null. */
+function sweep(b, obs, x, y, dx, dy, len, skip) {
+  let best = len, hit = null;
   for (let j = 0; j < b.length; j++) {
     if (skip.includes(j) || !b[j].on) continue;
-    const q = b[j];
-    const fx = q.x - x, fy = q.y - y;
-    const along = fx * dx + fy * dy;
-    if (along <= 0) continue;
-    const perp2 = fx * fx + fy * fy - along * along;
-    if (perp2 >= 4 * R * R) continue;
-    const t = along - Math.sqrt(4 * R * R - perp2);
-    if (t >= 0 && t < best) best = t;
+    const t = rayCircle(x, y, dx, dy, b[j].x, b[j].y, 2 * R);
+    if (t != null && t < best) { best = t; hit = j; }
+  }
+  for (const o of solidObs(obs)) {
+    // A capsule is five circles along it: close enough for a guide.
+    const pts = o.ax != null ? [0, 0.25, 0.5, 0.75, 1].map((f) => [o.ax + (o.bx - o.ax) * f, o.ay + (o.by - o.ay) * f]) : [[o.x, o.y]];
+    for (const [ox, oy] of pts) {
+      const t = rayCircle(x, y, dx, dy, ox, oy, R + o.r);
+      if (t != null && t < best) { best = t; hit = -2; }
+    }
   }
   const x0 = R, x1 = W - R, y0 = R, y1 = H - R;
   const tx = dx > 0 ? (x1 - x) / dx : dx < 0 ? (x0 - x) / dx : Infinity;
   const ty = dy > 0 ? (y1 - y) / dy : dy < 0 ? (y0 - y) / dy : Infinity;
-  best = Math.max(0, Math.min(best, tx, ty));
-  return { x: x + dx * best, y: y + dy * best };
+  const tw = Math.max(0, Math.min(tx, ty));
+  if (tw < best) { best = tw; hit = -1; }
+  return hit == null ? null : { t: best, hit };
+}
+function rayCircle(x, y, dx, dy, cx, cy, rr) {
+  const fx = cx - x, fy = cy - y;
+  const along = fx * dx + fy * dy;
+  if (along <= 0) return null;
+  const perp2 = fx * fx + fy * fy - along * along;
+  if (perp2 >= rr * rr) return null;
+  const t = along - Math.sqrt(rr * rr - perp2);
+  return t >= 0 ? t : null;
+}
+
+/**
+ * The aim guide for the cue ball sent along unit (dx, dy): where it first touches something, as
+ * { x, y, hit } (the cue ball's CENTRE there; hit: a ball, -1 a cushion, -2 an obstacle), with, when
+ * it is a ball, where that ball heads (`ox, oy` unit). Display only, never on the physics path.
+ */
+export function aimContact(m, dx, dy, range = 260) {
+  const o = m.b[CUE];
+  const s = sweep(m.b, m.obs, o.x, o.y, dx, dy, range, [CUE]);
+  if (!s) return null;
+  const x = o.x + dx * s.t, y = o.y + dy * s.t;
+  const out = { x, y, hit: s.hit };
+  if (s.hit >= 0) {
+    const q = m.b[s.hit];
+    let nx = q.x - x, ny = q.y - y;
+    const nl = Math.sqrt(nx * nx + ny * ny) || 1; nx /= nl; ny /= nl;
+    out.ox = nx; out.oy = ny;
+  }
+  return out;
+}
+
+/** Where a ball at (x, y) rolling along unit (dx, dy) stops within `len`: at the first ball (other
+ *  than `skip`), obstacle or cushion. For drawing the object ball's path. */
+export function rayStop(m, x, y, dx, dy, len, skip) {
+  const s = sweep(m.b, m.obs, x, y, dx, dy, len, skip);
+  const t = s ? s.t : len;
+  return { x: x + dx * t, y: y + dy * t };
 }
