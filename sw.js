@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1221';
+const CACHE = 'game-hub-v1222';
 
 const ASSETS = [
   './',
@@ -1133,7 +1133,7 @@ const REST_MANIFEST = {
   './holdem/': '11f6e0e99f',
   './holdem/index.html': '11f6e0e99f',
   './holdem/css/holdem.css': '1f9fda9318',
-  './holdem/js/ui.js': 'dafc1e65cd',
+  './holdem/js/ui.js': '31514ae2d7',
   './holdem/js/engine.js': 'b9e54a0c01',
   './holdem/js/ai.js': '3d8353f25c',
   './holdem/js/table.js': '1bd3d97111',
@@ -1155,7 +1155,7 @@ const REST_MANIFEST = {
   './skeeball/trajectory.html': '7b1b56365a',
   './skeeball/trajectory-map.json': 'fd7c177d36',
   './skeeball/css/skeeball.css': 'c50f746472',
-  './skeeball/js/ui.js': 'd61994a581',
+  './skeeball/js/ui.js': 'd49ab24874',
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': '6346bceb94',
@@ -1166,7 +1166,7 @@ const REST_MANIFEST = {
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/challenge.js': '39c86ec1d4',
-  './skeeball/js/challenge-ui.js': '3878c8a672',
+  './skeeball/js/challenge-ui.js': 'c070feb545',
   './skeeball/js/alert.js': 'c7fc8bef3b',
   './skeeball/js/boards.js': '8cf226684b',
   './skeeball/js/engines.js': '9d1dd1cf73',

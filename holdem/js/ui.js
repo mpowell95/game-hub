@@ -490,7 +490,7 @@ class Game {
   async _refreshBank() {
     try {
       const [net, agg] = await Promise.all([import('../../js/stats-net.js'), import('../../js/players-agg.js')]);
-      const all = await Promise.race([net.readPlayersOnce(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
+      const all = await Promise.race([net.readPlayersForMe(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
       if (!all || this.dead) return;
       const mine = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats(), corrections());
       const hb = mine && mine.games && mine.games.holdem && mine.games.holdem.hb;
@@ -599,17 +599,24 @@ class Game {
     if (this.screen === 'bank') this.render();
     try {
       const [netMod, agg, hidden] = await Promise.all([import('../../js/stats-net.js'), import('../../js/players-agg.js'), import('../../js/hidden-players.js')]);
-      const raw = await Promise.race([netMod.readPlayersOnce(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
+      // The server-built board first (2026-10-22): the same people, hidden devices left out and
+      // corrections applied exactly as below, without downloading players/.
+      const people = await Promise.race([netMod.readPeople(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
       if (this.dead) return;
-      if (!raw || !Object.keys(raw).length) throw new Error('offline');   // readPlayersOnce answers {} when it cannot reach Firebase
-      const all = {};
-      for (const id of Object.keys(raw)) if (!hidden.HIDDEN_DEVICE_PREFIX.some((p) => id.startsWith(p))) all[id] = raw[id];
-      const corr = corrections();
-      let meKey = null;
-      try { meKey = agg.buildIdentity(all).keyFor(loadProfile() || {}, statsId()); } catch { meKey = null; }
+      let groups, meKey = null;
+      if (people) { groups = people.list; meKey = people.meKey || null; }
+      else {
+        const raw = await Promise.race([netMod.readPlayersOnce(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
+        if (this.dead) return;
+        if (!raw || !Object.keys(raw).length) throw new Error('offline');   // readPlayersOnce answers {} when it cannot reach Firebase
+        const all = {};
+        for (const id of Object.keys(raw)) if (!hidden.HIDDEN_DEVICE_PREFIX.some((p) => id.startsWith(p))) all[id] = raw[id];
+        try { meKey = agg.buildIdentity(all).keyFor(loadProfile() || {}, statsId()); } catch { meKey = null; }
+        groups = agg.aggregatePlayers(all, corrections());
+      }
       const rows = [];
       let meSeen = false;
-      for (const g of agg.aggregatePlayers(all, corr)) {
+      for (const g of groups) {
         if (hidden.isHiddenName(g.name)) continue;
         const hb = ((g.games && g.games.holdem) || {}).hb;
         const me = g.key === meKey;

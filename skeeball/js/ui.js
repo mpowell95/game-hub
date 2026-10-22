@@ -24,7 +24,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId, statsId } from '../../js/game-stats.js';
 import { readGoals, readGoalsLive, allGoalsMet } from './goals.js';
 import { getStatsApp } from '../../js/firebase-boot.js';
-import { syncMyStats, readPlayersOnce } from '../../js/stats-net.js';
+import { syncMyStats, readPlayersOnce, readPeople } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
 import { appWideBest, isUnlocked, dayKey } from '../../js/arcade-scores.js';
 import { correctBoard, correctionFor } from '../../js/stats-corrections.js';
@@ -753,7 +753,8 @@ export class SkeeballUI {
    *  its own truth. Async and best-effort: the panel renders with the local answer first. */
   async _refreshTopRecords() {
     let rows = [];
-    try { rows = aggregatePlayers(await readPlayersOnce(), corrections()); }
+    // The server-built board first (2026-10-22): everyone already grouped and corrected, ~60 KB.
+    try { const p = await readPeople(); rows = p ? p.list : aggregatePlayers(await readPlayersOnce(), corrections()); }
     catch { rows = []; /* offline: local merge below still answers */ }
     if (this.disposed) return;
     // DID THE NETWORK ACTUALLY ANSWER? readPlayersOnce() returns {} both when it fails and when it

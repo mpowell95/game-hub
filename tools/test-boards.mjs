@@ -16,6 +16,8 @@ const { aggregatePlayers } = await import('../js/players-agg.js');
 const { resolveCorrections } = await import('../js/admin-config.js');
 const { isHiddenDeviceId } = await import('../js/hidden-players.js');
 const { fillBoardGroup, unpackBoard, boardList } = await import('../js/stats-net.js');
+const { aggregateForViewer, buildIdentity } = await import('../js/players-agg.js');
+const { liveRecords } = await import('../js/mp-records.js');
 
 let pass = 0, fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok   ' + name); } else { fail++; console.log('  FAIL ' + name); } };
@@ -38,6 +40,25 @@ async function compare(label, players, cfg) {
   const ids = [...got.values()].flatMap((r) => r.ids).sort();
   check(`${label}: every visible device belongs to exactly one person`, JSON.stringify(ids) === JSON.stringify(Object.keys(visible).sort()));
   check(`${label}: every key is a legal Firebase key`, Object.keys(board).every((k) => !/[.#$/[\]]/.test(k)));
+  // readPlayersForMe (stats-net.js): this person's devices in full, everyone else by name only.
+  // For EVERY person with a device, My Stats' group and the Records screen must come out the same.
+  const corr = resolveCorrections(cfg);
+  const ident = buildIdentity(visible);
+  let meSame = 0, meDiff = '', recSame = 0, recDiff = '';
+  for (const g of list) {
+    const myIds = got.get(g.key).ids;
+    if (!myIds.length) continue;
+    const sid = myIds[0], prof = (visible[sid] || {}).profile || {}, local = (visible[sid] || {}).stats || {};
+    const synth = {};
+    for (const x of list) for (const id of got.get(x.key).ids) synth[id] = { profile: { name: x.name || '', emoji: x.emoji || '', playerId: x.playerId || '' }, updatedAt: x.updatedAt || 0, stats: {} };
+    for (const id of myIds) synth[id] = visible[id];
+    const a = aggregateForViewer(visible, prof, sid, local, corr), b = aggregateForViewer(synth, prof, sid, local, corr);
+    if (isDeepStrictEqual(a.games, b.games) && a.devices === b.devices) meSame++; else if (!meDiff) meDiff = g.name || g.key;
+    const norm = (r) => JSON.stringify({ byGame: r.byGame, people: r.people.map((p) => ({ ...p, key: undefined })).sort((x, y) => (x.code + x.name).localeCompare(y.code + y.name)) });
+    if (norm(liveRecords(visible, prof, sid, local, corr)) === norm(liveRecords(synth, prof, sid, local, corr))) recSame++; else if (!recDiff) recDiff = g.name || g.key;
+  }
+  check(`${label}: My Stats from own devices + names = from everything (${meSame} people)${meDiff ? ' - first difference: ' + meDiff : ''}`, !meDiff);
+  check(`${label}: Records from own devices + names = from everything (${recSame} people)${recDiff ? ' - first difference: ' + recDiff : ''}`, !recDiff);
   return { board, phone, parts };
 }
 
