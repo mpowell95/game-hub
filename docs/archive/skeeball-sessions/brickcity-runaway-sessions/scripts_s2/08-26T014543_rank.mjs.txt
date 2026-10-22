@@ -1,0 +1,29 @@
+import { readFileSync } from 'node:fs';
+import { aggregatePlayers, COMPETITIVE, SOLO } from '/home/user/game-hub/js/players-agg.js';
+const db = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const all = Object.entries(db.players || {}).map(([id, rec]) => ({ id, ...rec }));
+const rows = aggregatePlayers(all, null).filter((g) => !/^(test|zzz)/i.test((g.name||'').trim()) && (g.name||'').trim());
+const sum = (g, ids, k) => ids.reduce((a, id) => a + (((g.games[id]||{}).total||{})[k]|0), 0);
+const played = (g) => sum(g, [...COMPETITIVE, ...SOLO], 'played');
+const wins   = (g) => sum(g, [...COMPETITIVE], 'won');
+// rankMap, copied in behaviour from js/leaderboard-ui.js
+function rankMap(list, valueOf) {
+  const ranked = list.slice().sort((a,b)=>valueOf(b)-valueOf(a));
+  const rankOf = {}; let prev=null, rank=0;
+  ranked.forEach((g,i)=>{ const v=valueOf(g); if(v!==prev){rank=i+1;prev=v;} rankOf[g.key]=rank; });
+  return rankOf;
+}
+const list = rows.filter((g)=>played(g)>0);
+const bySort = list.slice().sort((a,b)=>played(b)-played(a));
+const before = rankMap(list, wins);        // what shipped
+const after  = rankMap(list, played);      // the fix
+console.log('Sorted by PLAYED — badge before -> after\n');
+console.log('  name              played   wins   OLD  NEW');
+for (const g of bySort.slice(0,8))
+  console.log('  %s %s %s   %s   %s', (g.name||'').padEnd(16), String(played(g)).padStart(6),
+    String(wins(g)).padStart(6), String(before[g.key]).padStart(3), String(after[g.key]).padStart(3));
+const seq = bySort.map((g)=>after[g.key]);
+console.log('\n  NEW badges down the list:', seq.slice(0,8).join(', '));
+console.log('  strictly non-decreasing?', seq.every((v,i)=>i===0||v>=seq[i-1]) ? 'YES' : 'NO');
+const w = list.slice().sort((a,b)=>wins(b)-wins(a)).map((g)=>before[g.key]);
+console.log('  wins sort still 1,2,3...:', w.slice(0,8).join(', '));

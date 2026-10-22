@@ -1,0 +1,63 @@
+import { chromium } from '/tmp/claude-0/-home-user-game-hub/c58349b7-88b2-5a50-8ad3-de08b95a2f47/scratchpad/node_modules/playwright-core/index.js';
+
+const OUT = '/tmp/claude-0/-home-user-game-hub/c58349b7-88b2-5a50-8ad3-de08b95a2f47/scratchpad';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const ctx = await b.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2 });
+const p = await ctx.newPage();
+p.on('console', (m) => { if (m.type() === 'error') console.log('  [console.error]', m.text().slice(0, 160)); });
+
+// localhost only: js/stats-net.js refuses every WRITE from a dev origin, reads stay on. So this
+// reads the family's real leaderboard and cannot put anything into their database.
+await p.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ version: 1, name: 'zzztest', emoji: '🙂',
+    preferredColor: null, opponents: [], message: '', messageAt: 0, updatedAt: Date.now() }));
+  localStorage.setItem('gamehub.theme.v1', JSON.stringify({ version: 1, theme: 'dark', updatedAt: Date.now() }));
+});
+await p.goto('http://localhost:8123/', { waitUntil: 'domcontentloaded' });
+await p.waitForTimeout(2500);
+
+// open Leaderboards
+await p.locator('[data-role="leaderboard"], button:has-text("Leaderboards")').first().click();
+await p.waitForSelector('.lb-pcard', { timeout: 25000 });
+await p.waitForTimeout(3500);          // let the live Firebase subscription settle
+
+async function read(label) {
+  const rows = await p.$$eval('.lb-plist .lb-pcard', (els) => els.map((el) => ({
+    rank: (el.querySelector('.lb-chip') || {}).textContent || '',
+    name: (el.querySelector('.lb-pname') || {}).textContent || '',
+    sub:  (el.querySelector('.lb-psubline') || {}).textContent || '',
+    big:  (el.querySelector('.lb-pnum b') || {}).textContent || '',
+    unit: (el.querySelector('.lb-pnum span') || {}).textContent || '',
+  })));
+  console.log('\n=== ' + label + ' ===');
+  console.log('  rank | name             | BIG      unit    | subline');
+  for (const r of rows.slice(0, 8)) {
+    console.log('  %s | %s | %s %s | %s', r.rank.padStart(4), r.name.trim().padEnd(16),
+      r.big.padStart(7), r.unit.trim().padEnd(7), r.sub.trim());
+  }
+  return rows;
+}
+
+const sortBtns = await p.$$eval('[data-sort], .lb-seg, .lb-pill, button', (els) =>
+  els.map((e) => ({ t: (e.textContent || '').trim(), ds: e.dataset.sort || '' })).filter((x) => x.t && x.t.length < 24));
+console.log('buttons seen:', JSON.stringify(sortBtns.filter((x) => /Wins|Played|Name/i.test(x.t)).slice(0, 6)));
+
+await read('DEFAULT (as opened)');
+await p.screenshot({ path: OUT + '/lb-default.png' });
+
+// click the Played sort
+await p.locator('button:has-text("Played"), [data-sort="played"]').first().click();
+await p.waitForTimeout(1200);
+const played = await read('SORTED BY PLAYED');
+await p.screenshot({ path: OUT + '/lb-played.png' });
+
+const nums = played.map((r) => parseInt(r.sub.replace(/[^0-9]/g, ''), 10)).filter((n) => !isNaN(n));
+const ranks = played.map((r) => parseInt(r.rank.replace(/[^0-9]/g, ''), 10));
+console.log('\n  played values down the list:', nums.slice(0, 8).join(', '));
+console.log('  descending?              ', nums.every((v, i) => i === 0 || v <= nums[i - 1]) ? 'YES' : 'NO');
+console.log('  rank badges:             ', ranks.slice(0, 8).join(', '));
+console.log('  badges in order?         ', ranks.every((v, i) => i === 0 || v >= ranks[i - 1]) ? 'YES' : 'NO');
+console.log('  BIG number unit:         ', JSON.stringify((played[0] || {}).unit));
+
+await b.close();

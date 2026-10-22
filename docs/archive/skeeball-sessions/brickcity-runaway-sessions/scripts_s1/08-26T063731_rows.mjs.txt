@@ -1,0 +1,16 @@
+import { readFileSync } from 'node:fs';
+const SP='/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad';
+const W=96,H=208,FB=W*H,CAP=60;
+const buf=readFileSync(`${SP}/raw/g.raw`); const n=buf.length/FB;
+for(let y0=0;y0<H;y0+=8){
+  const y1=Math.min(H,y0+8), px=(y1-y0)*W;
+  const painted=[];
+  for(let f=1;f<n;f++){ let c=0;
+    for(let y=y0;y<y1;y++){ const a=f*FB+y*W,b=(f-1)*FB+y*W;
+      for(let x=0;x<W;x++) if(Math.abs(buf[a+x]-buf[b+x])>3) c++; }
+    if(c>px*0.004) painted.push(f); }
+  const gaps=[]; for(let i=1;i<painted.length;i++) gaps.push(painted[i]-painted[i-1]);
+  const h=new Map(); for(const g of gaps) h.set(g,(h.get(g)||0)+1);
+  const top=[...h.entries()].sort((a,b)=>b[1]-a[1]).slice(0,3).map(([g,c])=>`${g}x${c}`).join(' ');
+  console.log(`rows ${String(y0).padStart(3)}-${String(y1).padStart(3)} (${(100*y0/H).toFixed(0).padStart(2)}-${(100*y1/H).toFixed(0).padStart(2)}%)  painted ${String(painted.length).padStart(4)} = ${(painted.length/(n/CAP)).toFixed(1).padStart(5)} fps   gaps: ${top}`);
+}

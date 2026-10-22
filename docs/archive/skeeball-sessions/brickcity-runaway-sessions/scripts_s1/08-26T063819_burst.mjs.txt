@@ -1,0 +1,15 @@
+import { readFileSync } from 'node:fs';
+const SP='/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad';
+const W=96,H=208,FB=W*H;
+const buf=readFileSync(`${SP}/raw/g.raw`); const n=buf.length/FB;
+const band=(f,y0,y1)=>{let c=0;for(let y=y0;y<y1;y++){const a=f*FB+y*W,b=(f-1)*FB+y*W;
+  for(let x=0;x<W;x++) if(Math.abs(buf[a+x]-buf[b+x])>3)c++;}return c;};
+// find runs of >=8 consecutive frames where the score band changed
+let run=[],best=[];
+for(let f=1;f<n;f++){ if(band(f,24,40)>16*W*0.004){ run.push(f);} else { if(run.length>best.length)best=run; run=[]; } }
+if(run.length>best.length)best=run;
+console.log('longest consecutive-change run in the score band:', best.length, 'frames, at', best[0], '..', best[best.length-1], `(t=${(best[0]/60).toFixed(2)}s)`);
+// what was the canvas doing during that run?
+let canvasChanged=0; for(const f of best) if(band(f,88,112)>24*W*0.004) canvasChanged++;
+console.log(`during those ${best.length} frames the canvas band changed on ${canvasChanged}`);
+console.log('frames to export:', best.slice(0,12).join(','));

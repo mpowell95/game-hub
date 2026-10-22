@@ -1,0 +1,2 @@
+08-26T02:02:13 TOOL SendUserFile {"caption": "Real browser, live code, sorted by Played. Ranks are right; the big number is still wins.", "display": "render", "files": ["/tmp/claude-0/-home-user-game-hub/c58349b7-88b2-5a50-8ad3-de08b95a2f47/scratchpad/lb-played.png"], "status": "normal"}
+

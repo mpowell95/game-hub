@@ -1,0 +1,31 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+for (const spoof of [false, true]) {
+  const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  if (spoof) await page.addInitScript(() => {
+    const patch = (proto) => { const o = proto.getParameter;
+      proto.getParameter = function (p) { return p === 0x9246 ? 'Apple GPU' : o.call(this, p); }; };
+    patch(WebGLRenderingContext.prototype);
+    if (typeof WebGL2RenderingContext !== 'undefined') patch(WebGL2RenderingContext.prototype);
+  });
+  await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+  const r = await page.evaluate(async () => {
+    const { boardById } = await import('/skeeball/js/boards.js');
+    const { engineFor } = await import('/skeeball/js/engines.js');
+    const out = {};
+    for (const id of ['classic','basketball','brickcity','popongo','runaway']) {
+      const c = document.createElement('canvas');
+      const R = new (engineFor(id).Renderer)(c, boardById(id));
+      out[id] = { softGL: R.softGL, dpr: R.renderer.getPixelRatio(), shadows: R.renderer.shadowMap.enabled };
+      R.dispose(); const gl = R.renderer; if (gl.forceContextLoss) gl.forceContextLoss();
+    }
+    return out;
+  });
+  console.log(spoof ? 'spoofed as a real GPU:' : 'real (software GL headless):');
+  for (const [k,v] of Object.entries(r)) console.log(`   ${k.padEnd(11)} softGL=${v.softGL}  pixelRatio=${v.dpr}  shadows=${v.shadows}`);
+  await ctx.close();
+}
+await browser.close();

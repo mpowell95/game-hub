@@ -1,0 +1,108 @@
+import { chromium } from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+
+const BOARD = process.argv[2] || 'brickcity';
+const BASE = 'http://localhost:8123';
+
+const browser = await chromium.launch({
+  executablePath: '/opt/pw-browsers/chromium/chrome-linux/chrome',
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
+});
+const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.addInitScript((board) => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+  localStorage.setItem('gamehub.lang.v1', 'en');
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: {
+    brickcity: { open: true, testing: false }, basketball: { open: true, testing: false },
+    popongo: { open: true, testing: false }, runaway: { open: true, testing: false },
+  } } }, at: Date.now() }));
+}, BOARD);
+
+await page.goto(`${BASE}/skeeball/`, { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1500);
+
+// find the Play button for the selected slide
+const play = await page.$('[data-role="play"]');
+console.log('play button?', !!play);
+const cdp = await ctx.newCDPSession(page);
+if (play) { await play.click({ force: true }).catch(()=>{}); }
+await page.waitForSelector('.sk-canvas', { timeout: 10000 });
+await page.waitForTimeout(600);
+
+const boardId = await page.evaluate(() => {
+  const ui = window.__skTest && window.__skTest.ui;
+  return ui && ui.game ? ui.game.board.id : '(no game)';
+});
+console.log('board in play:', boardId);
+
+// Instrument
+await page.evaluate(() => {
+  const ui = window.__skTest.ui;
+  const R = ui.renderer;
+  const g = ui.game;
+  const S = window.__prof = { frames: [], upd: 0, ren: 0, n: 0, last: 0 };
+  const origU = g.update.bind(g);
+  g.update = (dt) => { const a = performance.now(); origU(dt); S.upd += performance.now() - a; };
+  const origR = R.render.bind(R);
+  R.render = (game, dt) => { const a = performance.now(); origR(game, dt); S.ren += performance.now() - a; S.n++;
+    const now = performance.now(); if (S.last) S.frames.push(now - S.last); S.last = now; };
+  let objs = 0; R.scene.traverse(() => objs++);
+  S.scene = { objects: objs };
+  S.info0 = JSON.parse(JSON.stringify(R.renderer.info));
+});
+
+const stage = await (await page.$('[data-role="stage"]')).boundingBox();
+const swipe = async (ms) => {
+  const x = stage.x + stage.width / 2, y0 = stage.y + stage.height * 0.94, dist = stage.height * 0.55, steps = 6;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
+  for (let i = 1; i <= steps; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - dist * i / steps, id: 1 }] });
+    await page.waitForTimeout(ms / steps);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+};
+
+// IDLE sample (nothing thrown)
+await page.evaluate(() => { const S = window.__prof; S.frames = []; S.upd = 0; S.ren = 0; S.n = 0; S.last = 0; });
+await page.waitForTimeout(2000);
+const idle = await page.evaluate(() => {
+  const S = window.__prof, R = window.__skTest.ui.renderer;
+  return { n: S.n, upd: S.upd, ren: S.ren, frames: S.frames.slice(), info: JSON.parse(JSON.stringify(R.renderer.info)), scene: S.scene };
+});
+
+// ACTIVE sample (ball in flight)
+await page.evaluate(() => { const S = window.__prof; S.frames = []; S.upd = 0; S.ren = 0; S.n = 0; S.last = 0; });
+await swipe(220);
+await page.waitForTimeout(3000);
+const active = await page.evaluate(() => {
+  const S = window.__prof, R = window.__skTest.ui.renderer;
+  let objs = 0; R.scene.traverse(() => objs++);
+  return { n: S.n, upd: S.upd, ren: S.ren, frames: S.frames.slice(), info: JSON.parse(JSON.stringify(R.renderer.info)), objs };
+});
+
+// throw the rest of the rack, watch texture count
+for (let i = 0; i < 8; i++) { await swipe([220,300,180,260,340,200,240,160][i]); await page.waitForTimeout(3500); }
+const after = await page.evaluate(() => {
+  const R = window.__skTest.ui.renderer;
+  let objs = 0; R.scene.traverse(() => objs++);
+  return { info: JSON.parse(JSON.stringify(R.renderer.info)), objs };
+});
+
+const stat = (a) => { if (!a.length) return {}; const s = [...a].sort((x,y)=>x-y);
+  return { avg: +(a.reduce((p,c)=>p+c,0)/a.length).toFixed(2), p50: +s[s.length>>1].toFixed(2), p95: +s[Math.floor(s.length*0.95)].toFixed(2), max: +s[s.length-1].toFixed(2) }; };
+
+console.log('\n=== BOARD', boardId, '===');
+console.log('scene objects (mount):', idle.scene.objects);
+console.log('\nIDLE  frames=%d  fps=%s', idle.n, (idle.n/2).toFixed(1));
+console.log('  frame interval ms', stat(idle.frames));
+console.log('  update ms/frame', (idle.upd/idle.n).toFixed(2), ' render ms/frame', (idle.ren/idle.n).toFixed(2));
+console.log('  render.info', JSON.stringify(idle.info.render), 'memory', JSON.stringify(idle.info.memory), 'programs', idle.info.programs ? idle.info.programs.length : '?');
+console.log('\nACTIVE frames=%d  fps=%s', active.n, (active.n/3).toFixed(1));
+console.log('  frame interval ms', stat(active.frames));
+console.log('  update ms/frame', (active.upd/active.n).toFixed(2), ' render ms/frame', (active.ren/active.n).toFixed(2));
+console.log('  render.info', JSON.stringify(active.info.render), 'memory', JSON.stringify(active.info.memory));
+console.log('\nAFTER RACK memory', JSON.stringify(after.info.memory), 'scene objs', after.objs, '(mount', idle.scene.objects, ')');
+
+await browser.close();

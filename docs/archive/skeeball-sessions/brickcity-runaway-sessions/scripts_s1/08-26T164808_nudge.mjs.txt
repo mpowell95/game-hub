@@ -1,0 +1,23 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const b = boardById('brickcity'); const P = engineFor('brickcity').physics;
+const rows = [];
+for (let pi = 0; pi <= 40; pi++) for (let ai = 0; ai <= 20; ai++) {
+  const st = P.startThrow(b, { power: pi/40, aim: (ai-10)/10 });
+  let n = 0; while (!st.done && n < 3000) { P.step(b, st, 1/60); n++; }
+  rows.push({ power: pi/40, aim: (ai-10)/10, nudges: st.nudges, emerg: st.emergencyUsed,
+    hole: st.outcome ? st.outcome.hole : 'none', value: st.outcome ? st.outcome.value : 0, t: st.t });
+}
+const nudged = rows.filter(r => r.nudges > 0);
+console.log(`throws that hit the stall watchdog at all: ${nudged.length} of ${rows.length} (${(100*nudged.length/rows.length).toFixed(1)}%)`);
+console.log(`   1 nudge:  ${rows.filter(r=>r.nudges===1).length}`);
+console.log(`   2 nudges: ${rows.filter(r=>r.nudges===2).length}`);
+console.log(`   3+ (declared JAMMED, vanishes for 0): ${rows.filter(r=>r.nudges>=3).length}`);
+console.log(`\nWhat happened to the balls a nudge touched:`);
+const byOut = new Map();
+for (const r of nudged) { const k = r.value === 0 ? `${r.hole} (0)` : `${r.hole} (${r.value})`; byOut.set(k,(byOut.get(k)||0)+1); }
+for (const [k,v] of [...byOut.entries()].sort((a,b)=>b[1]-a[1])) console.log(`   ${String(v).padStart(3)}  ${k}`);
+const rescuedToScore = nudged.filter(r => r.value !== 0);
+console.log(`\nballs a nudge rescued into a SCORING hole: ${rescuedToScore.length}`);
+for (const r of rescuedToScore.slice(0,10)) console.log(`   p${r.power.toFixed(3)} a${r.aim} -> ${r.hole} ${r.value} after ${r.t.toFixed(2)}s (${r.nudges} nudges)`);
+console.log(`\nsettle time for nudged throws: median ${(()=>{const t=nudged.map(r=>r.t).sort((a,b)=>a-b);return t[t.length>>1].toFixed(2);})()}s  worst ${Math.max(...nudged.map(r=>r.t)).toFixed(2)}s`);

@@ -26,6 +26,7 @@ reference media retired 2026-08-26 is still in git history.
 | `memory/` | 5 auto-memory notes from Matt's PC (tuning rules: deploy every tweak, no slow tests for tweaks, one machine per session) | various |
 | `mockups/` | 4 scoreboard / screen mockups | board layout redesign |
 | `other/` | app-speed plan v1-v6 (Batch 2 and 3 never built, in `TODO.md`), per-game load table, launch diagnosis, playtest brief, geometry blank, a corner-basket probe (`.mjs.txt`: known hole, see its header) | launch performance, others |
+| `brickcity-runaway-sessions/` | 4 later-found sessions (Brickcity performance, Leaderboard brickcity filter, Brickcity live readiness, Moving basket): Matt's messages, the sessions' text, probe scripts (`.mjs.txt`), the 861-throw equivalence harness; open offers in `TODO.md` | those four |
 
 Branches kept on purpose (unmerged, do not delete): `claude/brickcity-funnel`,
 `claude/brickcity-collar-split` (measured corner-100 experiments in their commit messages),
@@ -39,6 +40,9 @@ design handoff), Machine 3: Hot Shot Brick City (08-25), classic board measureme
 Remove skeeball_old and snake v2 (08-18), How To Play screen (08-15), game review (08-14),
 arcade game (08-14), game revision (08-12), reference folder (08-15). All merged or chat-only. Not fully read: "Skee-ball machine board designs" before 2026-09-22 19:09
 (thousands of events, mostly autonomous Hoops work; its commits are on `main`).
+
+Found later (titles name a machine, not Skeeball): Brickcity performance issues (08-27), Leaderboard
+brickcity filter stats (08-27), Brickcity live readiness (08-25), Moving basket mechanics (08-25).
 
 Already archived (mostly Remote Control on Matt's PC): physics issues investigation, Brick City
 corner 100 (three sessions), ramp end pieces, Leaderboard Hot Shot board review, launch

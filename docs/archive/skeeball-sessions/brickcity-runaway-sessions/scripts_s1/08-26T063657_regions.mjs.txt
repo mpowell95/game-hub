@@ -1,0 +1,25 @@
+import { readFileSync } from 'node:fs';
+const SP='/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad';
+const W=96,H=208,FB=W*H,CAP=60;
+const buf=readFileSync(`${SP}/raw/g.raw`);
+const n=buf.length/FB;
+const REG = {
+  'status bar (phone clock)': [0, 8],
+  'HUD: score + pips + chips': [9, 30],
+  'marquee + scoreboard': [31, 78],
+  'the board face (baskets)': [79, 110],
+  'the lane (where the ball rolls)': [111, 200],
+};
+for (const [name,[y0,y1]] of Object.entries(REG)) {
+  const painted=[]; const px=(y1-y0)*W;
+  for(let f=1;f<n;f++){
+    let c=0; for(let y=y0;y<y1;y++){ const a=f*FB+y*W, b=(f-1)*FB+y*W;
+      for(let x=0;x<W;x++) if(Math.abs(buf[a+x]-buf[b+x])>3) c++; }
+    if(c>px*0.004) painted.push(f);
+  }
+  const gaps=[]; for(let i=1;i<painted.length;i++) gaps.push(painted[i]-painted[i-1]);
+  const s=[...gaps].sort((a,b)=>a-b);
+  const mode=(()=>{const h=new Map();for(const g of gaps)h.set(g,(h.get(g)||0)+1);
+    return [...h.entries()].sort((a,b)=>b[1]-a[1])[0]||[0,0];})();
+  console.log(`${name.padEnd(32)} painted ${String(painted.length).padStart(4)} frames = ${(painted.length/(n/CAP)).toFixed(1).padStart(5)} fps   median gap ${s.length?s[s.length>>1]:'-'} frames   commonest gap ${mode[0]} (${mode[1]}x)`);
+}

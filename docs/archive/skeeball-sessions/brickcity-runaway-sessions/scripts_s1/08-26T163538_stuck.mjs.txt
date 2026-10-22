@@ -1,0 +1,22 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const b = boardById('brickcity');
+const P = engineFor('brickcity').physics;
+const rows = [];
+for (let pi = 0; pi <= 40; pi++) for (let ai = 0; ai <= 20; ai++) {
+  const power = pi/40, aim = (ai-10)/10;
+  const r = P.simulateThrow(b, { power, aim });
+  rows.push({ power, aim, hole: r.outcome ? r.outcome.hole : 'none', value: r.outcome ? r.outcome.value : 0,
+    t: r.time, emerg: r.emergencyUsed });
+}
+const by = new Map();
+for (const r of rows) { const k = r.hole; if(!by.has(k)) by.set(k, []); by.get(k).push(r); }
+console.log('hole      n    median settle   p90     MAX     emergency-cap fires');
+for (const [k, v] of [...by.entries()].sort((a,b)=>b[1].length-a[1].length)) {
+  const ts = v.map(x=>x.t).sort((a,b)=>a-b);
+  const e = v.filter(x=>x.emerg).length;
+  console.log(`${k.padEnd(9)} ${String(v.length).padStart(4)}   ${ts[ts.length>>1].toFixed(2).padStart(6)}s  ${ts[Math.floor(ts.length*0.9)].toFixed(2).padStart(6)}s  ${ts[ts.length-1].toFixed(2).padStart(6)}s   ${e ? '*** '+e+' of '+v.length : '-'}`);
+}
+const slow = rows.filter(r=>r.t>6).sort((a,b)=>b.t-a.t);
+console.log(`\nthrows taking over 6s to settle: ${slow.length} of ${rows.length}`);
+for (const s of slow.slice(0,12)) console.log(`   power ${s.power.toFixed(2)} aim ${s.aim.toFixed(1)} -> ${s.hole} (${s.value}) after ${s.t.toFixed(2)}s${s.emerg?'  EMERGENCY CAP':''}`);
