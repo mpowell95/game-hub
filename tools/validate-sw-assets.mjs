@@ -168,6 +168,7 @@ for (const d of SCAN_DIRS) {
 }
 
 let missingFailed = false;
+function reportMissing(missingFromAssets) {
 if (missingFromAssets.length) {
   // A FAILURE, NOT A WARNING (2026-09-22). It was a warning with exit 0 for as long as this file
   // has existed, and a warning in a pre-deploy gate is a line of text nobody reads: `hoops4/js/
@@ -205,6 +206,7 @@ if (missingFromAssets.length) {
   missingFailed = true;
 } else {
   console.log('ok   every scanned .js/.css/.html file is in ASSETS (or a documented exclusion)');
+}
 }
 
 // --- 4. The REST content manifest: verify against disk, rewrite in place when stale ------------
@@ -250,13 +252,14 @@ let heldFailed = false;
 // more, which is the safe direction. A computed path cannot be followed: a reachable module that
 // builds a URL at run time would fetch that file on demand instead, online only.
 const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody's launcher shows it
+const heldFolder = {}; // folder -> hub id
+const reachedUnlisted = new Set(); // files outside ASSETS that something every phone loads imports
 {
   const src = readFileSync(SW_PATH, 'utf8');
   const { SHELL, REST } = new Function(`${buildSrc}\nreturn { SHELL, REST };`)();
   const hub = readFileSync(join(ROOT, 'js', 'hub.js'), 'utf8');
   const g0 = hub.indexOf('export const GAMES = [');
   const reg = hub.slice(g0, hub.indexOf('\n];', g0));
-  const heldFolder = {}; // folder -> hub id
   // One chunk per entry, cut at each top-level `id:` (entries are not always one per `{` line:
   // `},  {` happens). A chunk runs to the next entry's id, so it can carry that entry's leading
   // comments, never its fields.
@@ -297,6 +300,7 @@ const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody
         let target;
         try { target = './' + new URL(m[1], base).pathname.slice(1); } catch { continue; }
         if (target.endsWith('/')) { for (const q of known) if (q.startsWith(target)) reach(q); }
+        else if (!known.has(target) && existsSync(join(ROOT, resolveAssetPath(target)))) reachedUnlisted.add(target);
         else reach(target);
       }
     }
@@ -323,6 +327,19 @@ const HELD_FOLDERS_UNLISTED = ['pinball2']; // in ASSETS, no GAMES entry: nobody
   } else {
     console.log('ok   HELD_BACK matches the registry and the import graph');
   }
+}
+
+// --- New files in an unreleased game stay OUT of ASSETS (2026-10-22) ---------------------------
+// Matt: players got an update "every time they go back to the hub". Adding a file to ASSETS changes
+// sw.js, which sends every phone a new build, so Archery's new 3D models did that three times. A
+// file under a held-back game's folder that nothing outside held-back folders imports is not
+// needed in ASSETS: sw.js serves it network-first (isDevFresh). Leave it out until the release
+// commit, where this check fails until it is added.
+{
+  const top = (f) => f.split('/')[0];
+  const left = missingFromAssets.filter((f) => heldFolder[top(f)] && !reachedUnlisted.has('./' + f));
+  reportMissing(missingFromAssets.filter((f) => !left.includes(f)));
+  if (left.length) console.log(`ok   ${left.length} new file(s) in unreleased games left out of ASSETS on purpose (no update for players)`);
 }
 
 let manifestFailed = false;
@@ -378,13 +395,19 @@ try {
   const changed = sh(`git diff --name-only ${base}`).split('\n').filter(Boolean);
   const shipped = new Set(ASSETS.map((e) => resolveAssetPath(e)));
   const heldRel = new Set([...heldPaths].map((p) => resolveAssetPath(p)));
-  const deployed = changed.filter((f) => shipped.has(f));
+  // A file under a held-back folder counts as held whether or not it is in ASSETS (2026-10-22).
+  for (const f of changed) {
+    if (heldFolder[f.split('/')[0]] && !shipped.has(f) && !reachedUnlisted.has('./' + f)) heldRel.add(f);
+  }
+  const added = changed.filter((f) => heldRel.has(f) && !sh(`git ls-tree --name-only ${base} -- "${f}"`).trim());
+  const deployed = changed.filter((f) => shipped.has(f) || heldRel.has(f));
   const swTouched = changed.includes('sw.js');
   if (deployed.length && deployed.every((f) => heldRel.has(f)) && swTouched) {
     const mainCache = (/const CACHE = '([^']+)'/.exec(sh(`git show ${base}:sw.js`)) || [])[1];
     console.log(`\nNOTE: only unreleased (held-back) game files changed since origin/main, yet sw.js changed.`
       + `\n      Players get NO update for these if sw.js is left as on main: run`
-      + `\n      git checkout ${base.slice(0, 9)} -- sw.js version.json   (CACHE stays ${mainCache})`);
+      + `\n      git checkout ${base.slice(0, 9)} -- sw.js version.json   (CACHE stays ${mainCache})`
+      + (added.length ? `\n      New files there need no ASSETS entry until the game is released.` : ''));
   }
 } catch { /* no git or no origin/main: nothing to advise */ }
 

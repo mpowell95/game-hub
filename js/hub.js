@@ -726,6 +726,16 @@ function hiddenFromPlayer(g, code, dev) {
  *  and forth costs nothing; short enough that a phone kept alive all day still catches the day's
  *  deploys. See `_checkForNewBuild`. */
 const UPDATE_ASK_MS = 5 * 60 * 1000;
+// FEWER UPDATES FOR PLAYERS (2026-10-22). Matt: Ana and Moonis see "an update every time they go
+// back to the hub" (~4 builds a day reached every phone, each one reloading the launcher). The
+// service worker still takes a new build at once, exactly as before; what changed is THIS PAGE. On a
+// phone that is not an admin device it reloads onto the new build only at a FRESH OPEN: the first
+// FRESH_MS of an app launch (a new session) or of a return after AWAY_MS away. Otherwise it keeps
+// running the build it loaded until the next launch, a tap on the version pill, or a game that
+// fails to load against the newer files (launch()). Admin devices and dev profiles reload as before.
+const SESSION_KEY = 'hub.session';   // sessionStorage, not a gamehub.* key
+const FRESH_MS = 30 * 1000;
+const AWAY_MS = 30 * 60 * 1000;
 // A tapped notification, kept across a reload (_queuePushOpen). sessionStorage, not a gamehub.* key.
 const PUSH_OPEN_KEY = 'hub.pushOpen';
 const PUSH_OPEN_MS = 2 * 60 * 1000;
@@ -2089,6 +2099,7 @@ class Hub {
     // moves off it - see _onNewBuildActive.
     this._loadedVersion = null;
     this._runningVersion().then((v) => { this._loadedVersion = v; noteLifecycle(`load: ${v || 'no worker'}`); });
+    this._freshUntil = this._isFreshOpen() ? Date.now() + FRESH_MS : 0;
 
     this._onController = () => this._onNewBuildActive();
     navigator.serviceWorker.addEventListener('controllerchange', this._onController);
@@ -2100,7 +2111,11 @@ class Hub {
     // kept drawing the old golf tile while the chip honestly read v815. _onNewBuildActive carries
     // every guard this needs (page must have loaded under a worker, the version must actually have
     // MOVED, once per page, never over a mounted game), so resume just calls it again.
-    this._onResume = () => { if (document.visibilityState === 'visible') this._onNewBuildActive(); };
+    this._onResume = () => {
+      if (document.visibilityState !== 'visible') { this._noteHidden(); return; }
+      this._noteBack();   // back after AWAY_MS: a fresh open (the visibility handler asks for a build)
+      this._onNewBuildActive();
+    };
     document.addEventListener('visibilitychange', this._onResume);
     // pageshow fires for a back-forward-cache restore, which visibilitychange does not cover.
     window.addEventListener('pageshow', this._onResume);
@@ -2115,7 +2130,7 @@ class Hub {
         const w = reg.installing;
         if (!w || this._destroyed) return;
         noteLifecycle('new build found, installing');
-        this._paintUpdating();
+        if (!this._holdUpdates() || this._inFreshWindow()) this._paintUpdating();
         w.addEventListener('statechange', () => {
           if (w.state === 'redundant') { noteLifecycle('install FAILED (worker went redundant)'); this._initVersionPill(); }
         });
@@ -2157,12 +2172,63 @@ class Hub {
     if (!running || running === this._loadedVersion) return;
     // GUARD 3: once per page. Belt and braces against any loop the above does not cover.
     if (this._reloaded) return;
+    // GUARD 4 (2026-10-22): a player's phone keeps this page's build until a fresh open. The pill
+    // shows "old → new" and a tap takes it (_forceUpdate).
+    if (this._holdUpdates() && !this._inFreshWindow()) {
+      noteLifecycle(`new build ${running} ready; this page stays on ${this._loadedVersion} until a fresh open`);
+      return;
+    }
 
     // NEVER INTERRUPT A GAME (Matt's call, 2026-09-01: refresh silently, "but ONLY on the launcher,
     // never while a game is open or mid-rack"). `this.current` is the same gate _adminUnsub uses
     // for the same reason. The flag is picked up by showLauncher when they come back.
     if (this.current) { this._updateWaiting = true; noteLifecycle('holding the refresh: a game is open'); return; }
     this._applyUpdate();
+  }
+
+  /** True when this phone keeps its page's build until a fresh open (everyone but admin devices and
+   *  dev profiles). `window.__GH_UPDATE_POLICY__` ('now' | 'hold') is for tools/test-sw-update.mjs. */
+  _holdUpdates() {
+    const forced = typeof window !== 'undefined' && window.__GH_UPDATE_POLICY__;
+    if (forced) return forced === 'hold';
+    if (isAdminDevice()) return false;
+    try { const p = loadProfile(); if (p && isDevProfile(p.name)) return false; } catch { /* hold */ }
+    return true;
+  }
+
+  _inFreshWindow() { return Date.now() <= (this._freshUntil || 0); }
+
+  /** True when the worker runs a newer build than the one this page loaded under. */
+  async _pageBehind() {
+    if (this._reloaded || !this._loadedVersion) return false;
+    const running = await this._runningVersion();
+    return !!(running && running !== this._loadedVersion);
+  }
+
+  /** Is this page load a fresh open of the app? Yes for a new session (sessionStorage is empty when
+   *  the app is launched) or one hidden for AWAY_MS (a long launch-out game, say). A reload, or a trip
+   *  to the profile page and back, is not. Without sessionStorage every load counts as fresh. */
+  _isFreshOpen() {
+    let fresh = true;
+    try {
+      const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+      if (s) fresh = !!(s.hiddenAt && Date.now() - s.hiddenAt >= AWAY_MS);
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ at: Date.now() }));
+    } catch { /* fresh */ }
+    return fresh;
+  }
+
+  _noteHidden() {
+    this._hiddenAt = Date.now();
+    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ at: this._hiddenAt, hiddenAt: this._hiddenAt })); } catch { /* memory only */ }
+  }
+
+  /** The app is visible again; after AWAY_MS away a fresh-open window starts. */
+  _noteBack() {
+    const away = !!(this._hiddenAt && Date.now() - this._hiddenAt >= AWAY_MS);
+    this._hiddenAt = 0;
+    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ at: Date.now() })); } catch { /* memory only */ }
+    if (away) this._freshUntil = Date.now() + FRESH_MS;
   }
 
   /** Reload onto the new build. Only ever called with the new worker already in charge. */
@@ -2243,7 +2309,14 @@ class Hub {
       const cur = running || latest;
       if (!cur) return;   // no service worker and offline: nothing truthful to show
       el.hidden = false;
-      if (running && latest && latest !== running) {
+      // This PAGE may be older than the worker (a player's phone keeps its build until a fresh open).
+      const page = this._loadedVersion;
+      const newest = latest || running;
+      if (page && newest && page !== newest) {
+        el.textContent = `${page} → ${newest}`;
+        el.classList.add('is-stale');
+        el.setAttribute('aria-label', t('hub_version_update_aria', { latest: newest }));
+      } else if (running && latest && latest !== running) {
         el.textContent = `${running} → ${latest}`;
         el.classList.add('is-stale');
         el.setAttribute('aria-label', t('hub_version_update_aria', { latest }));
@@ -2545,6 +2618,15 @@ class Hub {
     try {
       module = await import(game.module);
     } catch (e) {
+      // THIS PAGE MAY BE BEHIND THE WORKER (2026-10-22, a player's phone keeps its build until a
+      // fresh open): a game's newer files can need a newer shared module than the one loaded. Reload
+      // onto the new build and open the game there (the open is queued, like a notification tap).
+      if (await this._pageBehind()) {
+        console.warn(`[hub] "${id}" did not load on this older page; reloading onto the new build`, e);
+        this._queuePushOpen(id, {});
+        this._applyUpdate();
+        return;
+      }
       console.error(`Failed to load game "${id}"`, e);
       this._enterGameChrome(game);
       this.el.game.innerHTML = `<p class="hub-error">${t('hub_load_error', { title: titleText(game) })}</p>`;
@@ -2556,6 +2638,12 @@ class Hub {
       module.init(this.el.game);
       this.current = { module, id };
     } catch (e) {
+      if (await this._pageBehind()) {
+        console.warn(`[hub] "${id}" did not start on this older page; reloading onto the new build`, e);
+        this._queuePushOpen(id, {});
+        this._applyUpdate();
+        return;
+      }
       console.error(`Failed to start game "${id}"`, e);
       this.el.game.innerHTML = `<p class="hub-error">${t('hub_load_error', { title: titleText(game) })}</p>`;
     }
