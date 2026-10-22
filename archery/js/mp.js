@@ -23,7 +23,7 @@
 // (database.rules.json, pasted by hand). Until then every call fails softly.
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { readPlayersOnce } from '../../js/stats-net.js';
+import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
@@ -412,7 +412,7 @@ export function opponentsFrom(all, me) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 export async function readOpponents() {
-  try { return opponentsFrom(await readPlayersOnce(), myCode()).filter((r) => codeMayPlayOnline(r.code)); }
+  try { return opponentsFrom(await readOpponentProfiles(), myCode()).filter((r) => codeMayPlayOnline(r.code)); }
   catch (err) { console.warn('[archery] could not read the player list', err); return []; }
 }
 

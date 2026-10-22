@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1219';
+const CACHE = 'game-hub-v1220';
 
 const ASSETS = [
   './',
@@ -993,7 +993,7 @@ const REST_MANIFEST = {
   './chinchon/js/hash.js': '9bbf5d8385',
   './chinchon/js/ai.js': 'd69864fbc2',
   './chinchon/js/ui.js': '7343d50a8a',
-  './chinchon/js/mp.js': 'dd1dc4c17e',
+  './chinchon/js/mp.js': '7c5515171c',
   './chinchon/js/alert.js': '81226691f9',
   './chinchon/js/ch-ui.js': '9be86bf54a',
   './chinchon/js/strings.js': 'f20532e8b5',
@@ -1015,7 +1015,7 @@ const REST_MANIFEST = {
   './escoba/js/hash.js': '032dbfed1a',
   './escoba/js/ai.js': '66a7d1f37a',
   './escoba/js/ui.js': '8228059455',
-  './escoba/js/mp.js': '467faf7ea4',
+  './escoba/js/mp.js': '5d8e8a561a',
   './escoba/js/mp-ui.js': '528aefa2f7',
   './escoba/js/alert.js': 'e82a10d729',
   './escoba/js/strings.js': 'f77944680f',
@@ -1060,13 +1060,13 @@ const REST_MANIFEST = {
   './flick-soccer/js/ai.js': 'c7ff2b0f5b',
   './flick-soccer/js/render.js': 'e9222e7e77',
   './flick-soccer/js/strings.js': '01e64e159f',
-  './flick-soccer/js/mp.js': '8026c6b507',
+  './flick-soccer/js/mp.js': 'bd43194403',
   './flick-soccer/js/mp-ui.js': '0be9c195cc',
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
   './archery/js/engine.js': 'a7a170fc9d',
-  './archery/js/mp.js': 'eed6eb18c5',
+  './archery/js/mp.js': '4979a37a56',
   './darts/js/engine.js': '2d603f0ee2',
-  './darts/js/mp.js': '5aaaed429c',
+  './darts/js/mp.js': 'b2bad2b4b5',
   './sudoku/': '39055429fc',
   './sudoku/index.html': '39055429fc',
   './sudoku/css/sudoku.css': '146887ebaf',
@@ -1160,9 +1160,9 @@ const REST_MANIFEST = {
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': '6346bceb94',
   './cup-pong/js/match.js': 'd85c85e179',
-  './cup-pong/js/mp.js': '2cb2a15e12',
+  './cup-pong/js/mp.js': 'd891066581',
   './hoops4/js/game.js': '2e0010da15',
-  './hoops4/js/mp.js': '8fc702be8a',
+  './hoops4/js/mp.js': '3b94da823d',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/challenge.js': '39c86ec1d4',
