@@ -344,9 +344,12 @@ const reachedUnlisted = new Set(); // files outside ASSETS that something every 
 
 let manifestFailed = false;
 {
-  const { REST } = new Function(`${buildSrc}\nreturn { SHELL, REST };`)();
+  const { REST, SHELL } = new Function(`${buildSrc}\nreturn { SHELL, REST };`)();
   const expected = {};
-  for (const entry of REST) {
+  // The SHELL's hashes too (2026-10-22): sw.js's install copies an unchanged shell file from the
+  // previous cache instead of re-downloading it. Documents excluded (always fetched).
+  const isDoc = (e) => e === './' || e.endsWith('/') || e.endsWith('.html');
+  for (const entry of [...SHELL.filter((e) => !isDoc(e)), ...REST]) {
     // A held-back file carries no hash (2026-10-14): editing an unreleased game must leave sw.js
     // byte-identical, so no phone is sent an update for it. sw.js serves those files network-first.
     if (heldPaths.has(entry)) continue;
@@ -369,10 +372,11 @@ let manifestFailed = false;
       const block = swNow.slice(a, b);
       current = new Function(`${block.split('\n').filter((l) => !l.startsWith('//')).join('\n')}\nreturn REST_MANIFEST;`)();
     } catch { /* unparseable block: treat as fully stale and rewrite */ }
-    const changed = REST.filter((p) => !heldPaths.has(p) && current[p] !== expected[p]);
+    const order = [...SHELL, ...REST];
+    const changed = order.filter((p) => p in expected && current[p] !== expected[p]);
     const removed = Object.keys(current).filter((p) => !(p in expected));
     if (changed.length || removed.length) {
-      const lines = REST.filter((p) => p in expected).map((p) => `  '${p}': '${expected[p]}',`);
+      const lines = order.filter((p) => p in expected).map((p) => `  '${p}': '${expected[p]}',`);
       const block = `${START}\nconst REST_MANIFEST = {\n${lines.join('\n')}\n};\n${END}`;
       writeFileSync(SW_PATH, swNow.slice(0, a) + block + swNow.slice(b + END.length));
       console.log(`\nok   REST_MANIFEST rewritten: ${changed.length} added/changed, ${removed.length} removed - commit sw.js`);

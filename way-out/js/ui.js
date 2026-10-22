@@ -1823,12 +1823,31 @@ class WayOut {
   async _loadRushRows() {
     let all = {}, offline = false;
     const local = this._myWayout();
+    let rows = [];
+    // The server-built board first (2026-10-22): everyone else from the ~60 KB package, this person
+    // from their own devices + this phone's fresh store (aggregateForViewer, a few KB). Same people
+    // and the same numbers as the full read below, without downloading all of players/.
+    try {
+      const net = await import('../../js/stats-net.js');
+      const people = await net.readPeople();
+      if (people) {
+        const [{ aggregateForViewer }, { isHiddenName }, { loadProfile }] = await Promise.all([
+          import('../../js/players-agg.js'), import('../../js/hidden-players.js'), import('../../js/profile-store.js')]);
+        const me = aggregateForViewer(await net.readPlayersForMe(), loadProfile() || {}, statsId(), loadStats());
+        const row = (g, mine) => ({
+          name: g.name, emoji: g.emoji, me: mine, pts: woPoints(g.games.wayout),
+          best: Object.fromEntries(RUSH_MODES.map((m) => [m, woRushBestMap(((((g.games.wayout || {}).wo || {}).rush || {}).best || {})[m])])),
+        });
+        rows = people.list.filter((g) => g.key !== people.meKey && !isHiddenName(g.name)).map((g) => row(g, false));
+        if (me) rows.push(row(me, true));
+        return { rows, offline: false };
+      }
+    } catch (err) { console.warn('[way-out] board read failed, using the full read', err); }
     try {
       const net = await import('../../js/stats-net.js');
       all = await net.readPlayersOnce();
       if (!all || !Object.keys(all).length) offline = true;
     } catch { offline = true; }
-    let rows = [];
     try {
       const [{ aggregatePlayers, buildIdentity }, { isHiddenName }, { loadProfile }] = await Promise.all([
         import('../../js/players-agg.js'), import('../../js/hidden-players.js'), import('../../js/profile-store.js')]);

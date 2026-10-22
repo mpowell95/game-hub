@@ -64,10 +64,11 @@ export function toParText(v) {
  * (`buildIdentity(...).keyFor(...)`), which is how every other screen in this app answers "which of
  * these rows is me" - a group carries a device COUNT, not a list of device ids.
  */
-export function boardRows(players, key, meKey) {
+export function boardRows(players, key, meKey, groups = null) {
   if (!hasPar(key)) return [];
   const rows = [];
-  for (const g of aggregatePlayers(players || {})) {
+  // `groups`: the server-built board's people, already grouped (2026-10-22, js/stats-net.js readPeople).
+  for (const g of groups || aggregatePlayers(players || {})) {
     if (isHiddenName(g.name)) continue;
     const v = golfBestAt(g, key);
     if (!Number.isFinite(v)) continue;                    // never played this round: not a zero
@@ -135,8 +136,9 @@ export function openBoard(root, opts = {}) {
   const modes = modesForCourse(course);
   let mode = modes.includes(opts.mode) ? opts.mode : modes[0];
   let round = null;
-  let meKey = '';
-  try { meKey = buildIdentity(players).keyFor(loadProfile() || {}, statsId()); } catch { meKey = ''; }
+  const groups = Array.isArray(opts.groups) ? opts.groups : null;
+  let meKey = groups ? String(opts.meKey || '') : '';
+  if (!groups) { try { meKey = buildIdentity(players).keyFor(loadProfile() || {}, statsId()); } catch { meKey = ''; } }
 
   const host = document.createElement('div');
   host.className = 'gf-board';
@@ -147,7 +149,7 @@ export function openBoard(root, opts = {}) {
     const rounds = roundsForCourse(course, mode);
     if (!round || !rounds.some((r) => r.id === round)) round = rounds.length ? rounds[0].id : null;
     const key = round ? roundKey(course, round) : null;
-    const rows = key ? boardRows(players, key, meKey) : [];
+    const rows = key ? boardRows(players, key, meKey, groups) : [];
     const r = ROUNDS.find((x) => x.id === round);
     host.innerHTML = `
       <div class="gf-board__top">

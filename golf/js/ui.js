@@ -1004,10 +1004,14 @@ class GolfGame {
         import('./board.js'),
         import('../../js/stats-net.js'),
       ]);
-      const players = await net.readPlayersOnce();
+      // The server-built board's people first (2026-10-22, ~60 KB); else all of players/ as before.
+      const people = await net.readPeople();
+      const players = people ? {} : await net.readPlayersOnce();
       if (this.destroyed || !this.rootEl) return;
       openBoard(this.rootEl, {
         players,
+        groups: people ? people.list : null,
+        meKey: people ? people.meKey : '',
         courseId: this.course.id,
         mode: this.settings.lastMode || 3,
       });

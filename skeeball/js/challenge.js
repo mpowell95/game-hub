@@ -35,6 +35,7 @@
 // `skeeChallenges` must be enumerated in database.rules.json and PUBLISHED by hand; until then
 // every write fails softly with reason 'denied' and the screen says so.
 import { getStatsApp } from '../../js/firebase-boot.js';
+import { readPath, watchPath } from '../../js/live-read.js';
 // Player codes, id minting and the per-CODE opponent list are Connect 4 Hoops' own, reused rather
 // than copied (root CLAUDE.md, "USE WHAT EXISTS"). mp.js is pure at load: no side effects.
 import { asCode, myCode, meLabel, mintGameId, opponentsFrom } from '../../hoops4/js/mp.js';
@@ -455,8 +456,7 @@ export async function readMyChallenges() {
   try {
     const boot = await ready();
     if (!boot) return [];
-    const snap = await boot.api.get(boot.api.ref(boot.db, `${NODE}/index/${me}`));
-    return rowsFromIndex(snap && snap.exists() ? snap.val() : null);
+    return rowsFromIndex(await readPath(boot, `${NODE}/index/${me}`));
   } catch (err) {
     console.warn('[skeeball] could not read your challenges', err);
     return [];
@@ -470,8 +470,8 @@ export async function watchMyChallenges(cb) {
   try {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
-    const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/index/${me}`), (snap) => {
-      try { cb(rowsFromIndex(snap && snap.exists() ? snap.val() : null)); }
+    const stop = watchPath(boot, `${NODE}/index/${me}`, (v) => {
+      try { cb(rowsFromIndex(v)); }
       catch (err) { console.warn('[skeeball] challenge-list callback', err); }
     }, () => { /* denied or dropped: keep what was last shown */ });
     return () => { try { stop(); } catch { /* already detached */ } };
