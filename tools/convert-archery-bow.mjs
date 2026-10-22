@@ -14,8 +14,12 @@
 //   3. Writes it compact: 'BOW2', u32 vertex count, u32 triangle count, f32 step, f32 top tip x, y, z,
 //      f32 bottom tip x, y, z, then int16 x/y/z per vertex (value * step), u8 part per vertex (padded
 //      to 2 bytes), u16 indices. bow3d.js computes normals.
-// The shape is never changed (Matt, 2026-10-21: "The 3d model is correct... Just don't change it"):
-// no bending, no stretching. bow3d.js only places and turns it.
+// The shape is kept as made (Matt, 2026-10-21: "The 3d model is correct... Just don't change it"; a
+// bend at the wrist read as "a broken wrist"), with ONE change Matt allowed on 2026-10-22 ("You can't
+// edit the 3d model just to fix this?"): the upper sleeve is lengthened along its own line, past the
+// elbow, so the arm is about as long as the bow is tall and its closed end never shows on screen (as
+// made, the arm is under half the bow's height and its end sat inside the left edge with the bow
+// down). The hand, wrist, forearm, cuff and every angle are untouched. bow3d.js only places and turns it.
 // The numbers below were measured off this one source; a new source needs them measured again.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -55,6 +59,9 @@ const isBow = (x, y, z) => {
   return ((x - GRIP[0]) / GRIP_RX) ** 2 + ((z - GRIP[2]) / GRIP_RZ) ** 2 <= 1.1;
 };
 const ARM_X = 0.29;                               // the hand ends here; nearer the shoulder is forearm and sleeve
+// The upper sleeve's straight run (source coordinates): from SLEEVE_FROM along SLEEVE_AXIS to the end.
+// Everything past SLEEVE_FROM is pushed out along the axis SLEEVE_STRETCH times as far.
+const SLEEVE_FROM = [-0.30, 0.15, 0], SLEEVE_AXIS = [-0.962, 0.272, 0], SLEEVE_STRETCH = 4.3;
 // The arm's middle along x (for the cuff test), from the vertices that are not bow.
 const NS = 40, armMid = Array.from({ length: NS }, () => ({ n: 0, y: 0, z: 0 }));
 const slot = (x) => Math.min(NS - 1, Math.max(0, Math.floor(((x + 0.6) / 1.2) * NS)));
@@ -79,12 +86,23 @@ for (let i = 0; i < V; i++) {
   part[i] = k; count[k]++;
 }
 
+// Lengthen the upper sleeve (arm vertices only; the bow never reaches this far back).
+const Pm = Float32Array.from(P);
+{
+  const L = Math.hypot(...SLEEVE_AXIS), ax = SLEEVE_AXIS.map((v) => v / L);
+  for (let i = 0; i < V; i++) {
+    if (isBow(P[i * 3], P[i * 3 + 1], P[i * 3 + 2])) continue;
+    const d = (P[i * 3] - SLEEVE_FROM[0]) * ax[0] + (P[i * 3 + 1] - SLEEVE_FROM[1]) * ax[1] + (P[i * 3 + 2] - SLEEVE_FROM[2]) * ax[2];
+    if (d <= 0) continue;
+    for (let k = 0; k < 3; k++) Pm[i * 3 + k] = P[i * 3 + k] + ax[k] * d * (SLEEVE_STRETCH - 1);
+  }
+}
 const H = new Float32Array(V * 3);
 const zs = MIRROR ? -1 : 1;
 for (let i = 0; i < V; i++) {
-  H[i * 3] = P[i * 3] - GRIP[0];
-  H[i * 3 + 1] = P[i * 3 + 1] - GRIP[1];
-  H[i * 3 + 2] = (P[i * 3 + 2] - GRIP[2]) * zs;
+  H[i * 3] = Pm[i * 3] - GRIP[0];
+  H[i * 3 + 1] = Pm[i * 3 + 1] - GRIP[1];
+  H[i * 3 + 2] = (Pm[i * 3 + 2] - GRIP[2]) * zs;
 }
 // The two limb tips (for the string), in the same frame.
 let top = 0, bot = 0;

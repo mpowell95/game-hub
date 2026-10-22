@@ -115,3 +115,7 @@ sits 35-55 px inside the left edge on every phone (the Meshy arm is 0.45 bow hei
 needs about 1.0 at 54 deg left, 20 deg down for the end to stay off screen in every pose, including
 the bow sliding back in). Turning the model further only reaches the edge. Waiting on a new model
 from the prompt (long arm).
+Later the same day Matt: "You can't edit the 3d model just to fix this?" The converter now lengthens
+only the upper sleeve along its own straight run (from just past the elbow, 4.3x), leaving the hand,
+wrist, forearm, cuff and angles as made. Measured: the end sits 300-500 px off the left edge in every
+pose (bow down, sliding back in, drawn, drawn aimed up-right) at 360, 393 and 430 wide.
