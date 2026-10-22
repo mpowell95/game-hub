@@ -1,0 +1,14 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+const srv = spawn('node', ['server.mjs'], { cwd: '/home/user/game-hub', stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 1200));
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const pg = await b.newPage({ viewport: { width: 786, height: 1240 }, deviceScaleFactor: 2 });
+await pg.goto('http://localhost:8123/.runaway-probe.html');
+await pg.waitForFunction('window.__ready === true', null, { timeout: 20000 });
+await pg.evaluate(() => { const c = document.getElementById('c'); c.style.width='786px'; c.style.height='1200px'; window.__probe.set(0); });
+for (const [n, t] of [['zoom-centre', 0], ['zoom-right', 1.75], ['zoom-left', 5.25]]) {
+  await pg.evaluate((tt) => window.__probe.set(tt), t);
+  await pg.screenshot({ path: `/home/user/game-hub/.visual-out/${n}.png`, clip: { x: 180, y: 300, width: 440, height: 220 } });
+}
+console.log('ok'); await b.close(); srv.kill();

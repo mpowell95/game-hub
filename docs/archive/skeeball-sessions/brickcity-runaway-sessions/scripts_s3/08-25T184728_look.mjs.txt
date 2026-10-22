@@ -1,0 +1,63 @@
+import { chromium } from 'playwright-core';
+const OUT = '/tmp/claude-0/-home-user-game-hub/0d02ea3d-1ee6-5bae-b77e-b8fedfb9ebcd/scratchpad';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium/chrome-linux/chrome' });
+const ctx = await b.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Look', emoji: '🦖', color: '#1F5FA8' }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  // local-only: mark brickcity OPEN so the gallery lets us in (no Firebase write)
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: {}, skeeball: { boards: { brickcity: { open: true, testing: false } } }, corrections: { skeeball: {} } }));
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${OUT}/1-setup.png` });
+// start a game
+const play = await page.locator('button:has-text("Play"), button:has-text("New game")').first();
+await play.click();
+await page.waitForTimeout(2500);
+await page.screenshot({ path: `${OUT}/2-play.png` });
+
+// geometry: do the rail boxes overlap the swipe surface?
+const geo = await page.evaluate(() => {
+  const r = (sel) => { const el = document.querySelector(sel); if (!el) return null; const b = el.getBoundingClientRect(); return { t: Math.round(b.top), b: Math.round(b.bottom), l: Math.round(b.left), w: Math.round(b.width), h: Math.round(b.height) }; };
+  const boxes = [...document.querySelectorAll('.sk-goal')].map((el) => { const b = el.getBoundingClientRect(); return { t: Math.round(b.top), b: Math.round(b.bottom), w: Math.round(b.width), h: Math.round(b.height), label: el.querySelector('em')?.textContent }; });
+  return { boxes, gtotal: r('.sk-gtotal'), swipe: r('.sk-swipe'), stage: r('.sk-stage'), scroll: document.scrollingElement.scrollWidth <= window.innerWidth };
+});
+console.log(JSON.stringify(geo, null, 1));
+
+// hit-testing: what is on top at each objective's centre, and at the swipe start point
+const hits = await page.evaluate(() => {
+  const at = (x, y) => { const el = document.elementFromPoint(x, y); return el ? (el.className || el.tagName) : 'none'; };
+  const out = {};
+  document.querySelectorAll('[data-def]').forEach((el, i) => {
+    const b = el.getBoundingClientRect();
+    out[`def${i}:${el.getAttribute('data-def')}`] = at(b.left + b.width / 2, b.top + b.height / 2);
+  });
+  const sw = document.querySelector('.sk-swipe').getBoundingClientRect();
+  out.swipeCentre = at(sw.left + sw.width / 2, sw.top + sw.height / 2);
+  out.swipeTopEdge = at(sw.left + sw.width / 2, sw.top + 4);
+  return out;
+});
+console.log('HIT TEST:', JSON.stringify(hits, null, 1));
+
+// tap the left rail objective
+await page.locator('.sk-goal').first().tap();
+await page.waitForTimeout(600);
+await page.screenshot({ path: `${OUT}/3-def-sheet.png` });
+const sheet = await page.evaluate(() => {
+  const m = document.querySelector('.sk-def-modal');
+  if (!m) return null;
+  const rows = [...m.querySelectorAll('.sk-def-row')].map((r) => ({
+    label: r.querySelector('em')?.textContent, prog: r.querySelector('b')?.textContent,
+    def: r.querySelector('.sk-def-text')?.textContent, focus: r.classList.contains('is-focus') }));
+  const x = m.querySelector('.sk-def-x').getBoundingClientRect();
+  return { rows, xBox: { w: Math.round(x.width), h: Math.round(x.height) }, modalH: Math.round(m.getBoundingClientRect().height) };
+});
+console.log('SHEET:', JSON.stringify(sheet, null, 1));
+// close it again
+await page.locator('.sk-def-x').tap();
+await page.waitForTimeout(300);
+console.log('closed:', await page.evaluate(() => !document.querySelector('.sk-def-modal')));
+await b.close();

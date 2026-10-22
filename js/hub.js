@@ -428,6 +428,9 @@ export const GAMES = [
     blurb: { en: 'Pull back on the cue ball and let go. Pot your group, then the 8.',
       es: 'Tira de la blanca hacia atrás y suelta. Mete tu grupo y luego la 8.' },
     module: '../eight-ball/js/ui.js',
+    // Online challenges (Stage 2, 2026-10-22; two or three players): a new one, your turn, or a
+    // result you missed, on the launcher.
+    alerts: () => import('../eight-ball/js/alert.js'),
     immersive: true,
     accent: '#0F8A3C',
     art: GAME_ART['eight-ball'],

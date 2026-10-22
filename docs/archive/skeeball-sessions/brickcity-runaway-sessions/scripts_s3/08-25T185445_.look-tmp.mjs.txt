@@ -1,0 +1,22 @@
+import { chromium } from 'playwright-core';
+const OUT = '/tmp/claude-0/-home-user-game-hub/0d02ea3d-1ee6-5bae-b77e-b8fedfb9ebcd/scratchpad';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox'] });
+const ctx = await b.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Look', emoji: '🦖' }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: {}, skeeball: { boards: { brickcity: { open: true, testing: false } } }, corrections: { skeeball: {} } }));
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForSelector('.sk-slide', { timeout: 30000 });
+await page.waitForTimeout(1000);
+await page.locator('button:has-text("Play")').first().click();
+await page.waitForTimeout(6000);
+await page.screenshot({ path: `${OUT}/diag.png` });
+console.log('classes on root children:', await page.evaluate(() => [...document.querySelector('.sk-root').children].map((c) => c.className)));
+console.log('grails html:', await page.evaluate(() => (document.querySelector('.sk-grails') || {}).innerHTML));
+console.log('gtotal html:', await page.evaluate(() => (document.querySelector('.sk-gtotal-row') || {}).innerHTML));
+await b.close();

@@ -1,0 +1,22 @@
+import { firebaseConfig } from '/home/user/game-hub/js/firebase-config.js';
+import { signInAnonymously, readPath } from '/home/user/game-hub/backups/rtdb-backup.mjs';
+const tok = await signInAnonymously(firebaseConfig.apiKey);
+const players = await readPath(firebaseConfig.databaseURL, 'players', tok);
+const per = {};
+for (const id of Object.keys(players||{})) {
+  const p = players[id]||{}; const g = ((p.stats||{}).games||{}).skeeball; if (!g) continue;
+  const sk = g.sk||{}; const nm = ((p.profile||{}).name||id.slice(0,8)).trim();
+  const r = per[nm] = per[nm] || { hundreds:0, cBest:0, cPts:0, cPlays:0, unlocked:new Set(), lastPlay:'' };
+  r.hundreds += sk.hundreds|0;
+  const c = (sk.boards||{}).classic;
+  if (c) { r.cBest=Math.max(r.cBest,c.best|0); r.cPts+=c.points|0; r.cPlays+=c.plays|0;
+    const days=Object.keys(c.daily||{}).sort(); if (days.length) r.lastPlay = days[days.length-1] > r.lastPlay ? days[days.length-1] : r.lastPlay; }
+  for (const k of Object.keys(sk.unlocked||{})) if (sk.unlocked[k]) r.unlocked.add(k);
+}
+console.log('THE CLASSIC objectives: 5 hundreds ever / 360 single game / 10,000 total  -> unlocks HOT SHOT');
+console.log('person'.padEnd(15),'plays','100s','best','total','   last played','  has');
+for (const [nm,r] of Object.entries(per).sort((a,b)=>b[1].cPts-a[1].cPts)) {
+  if (!r.cPlays) continue;
+  console.log(nm.padEnd(15), String(r.cPlays).padStart(4), String(r.hundreds).padStart(4),
+    String(r.cBest).padStart(5), String(r.cPts).padStart(6), '  '+(r.lastPlay||'-').padEnd(12), [...r.unlocked].join(','));
+}

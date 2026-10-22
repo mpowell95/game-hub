@@ -1,0 +1,17 @@
+import { firebaseConfig } from '/home/user/game-hub/js/firebase-config.js';
+import { signInAnonymously, readPath } from '/home/user/game-hub/backups/rtdb-backup.mjs';
+const tok = await signInAnonymously(firebaseConfig.apiKey);
+const players = await readPath(firebaseConfig.databaseURL, 'players', tok);
+for (const id of Object.keys(players||{})) {
+  const p = players[id]||{};
+  const sk = (((p.stats||{}).games||{}).skeeball||{}).sk||{};
+  const b = (sk.boards||{}).basketball;
+  if (!b || (b.plays|0) < 1) continue;
+  console.log('=== device', id);
+  console.log('  name:', JSON.stringify((p.profile||{}).name), 'code', (p.profile||{}).playerId, 'emoji', (p.profile||{}).emoji);
+  console.log('  device:', JSON.stringify(p.device), 'updated', new Date(p.updatedAt||0).toISOString());
+  console.log('  unlocked:', JSON.stringify(sk.unlocked));
+  console.log('  HOT SHOT plays', b.plays|0, 'best', b.best|0, 'pts', b.points|0, 'slots', Object.keys(b.slots||{}).length, 'daily', JSON.stringify(b.daily));
+  console.log('  boards:', Object.keys(sk.boards||{}).join(','));
+  console.log('  opponents:', JSON.stringify((p.profile||{}).opponents||null));
+}

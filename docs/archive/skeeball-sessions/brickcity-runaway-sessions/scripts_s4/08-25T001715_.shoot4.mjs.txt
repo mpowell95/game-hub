@@ -1,0 +1,16 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+const srv = spawn('node', ['server.mjs'], { cwd: '/home/user/game-hub', stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 1200));
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const pg = await b.newPage({ viewport: { width: 393, height: 620 } });
+await pg.goto('http://localhost:8123/.runaway-probe.html');
+await pg.waitForFunction('window.__ready === true', null, { timeout: 20000 });
+console.log(await pg.evaluate(() => {
+  // walk the scene and report anything sitting near the top tread
+  const R = window.__probe;
+  const out = [];
+  // reach the renderer through the probe's closure is not possible; re-derive from the canvas
+  return 'need-scene';
+}));
+await b.close(); srv.kill();

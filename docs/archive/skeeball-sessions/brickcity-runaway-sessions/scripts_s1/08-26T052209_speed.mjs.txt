@@ -1,0 +1,23 @@
+const NEW='/home/user/game-hub/skeeball/js', OLD=process.argv[2]+'/skeeball/js';
+const load = async (root) => {
+  const { boardById } = await import(`${root}/boards.js`);
+  const { engineFor } = await import(`${root}/engines.js`);
+  return { board: boardById('brickcity'), P: engineFor('brickcity').physics };
+};
+const run = async (root, label) => {
+  const { board, P } = await load(root);
+  // warm
+  for (let i=0;i<3;i++) P.simulateThrow(board,{power:0.6,aim:0});
+  const t0=performance.now(); let frames=0;
+  for (let k=0;k<40;k++){
+    const st=P.startThrow(board,{power:0.3+(k%20)*0.035, aim:((k%9)-4)/8});
+    let n=0; while(!st.done && n<4000){ P.step(board,st,1/60); n++; }
+    frames+=n;
+  }
+  const ms=performance.now()-t0;
+  console.log(`${label}: 40 throws in ${ms.toFixed(0)} ms over ${frames} frames  => ${(ms/frames).toFixed(3)} ms per rendered frame of physics`);
+  return ms/frames;
+};
+const a = await run(OLD,'naive broadphase (was)');
+const b = await run(NEW,'ball broadphase  (now)');
+console.log(`=> ${((1-b/a)*100).toFixed(0)}% less physics time per frame`);

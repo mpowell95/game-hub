@@ -1,0 +1,17 @@
+import { chromium } from 'playwright-core';
+const OUT = '/tmp/claude-0/-home-user-game-hub/0d02ea3d-1ee6-5bae-b77e-b8fedfb9ebcd/scratchpad';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const ctx = await b.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
+page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE ERR:', m.text().slice(0, 200)); });
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Look', emoji: '🦖', color: '#1F5FA8' }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: {}, skeeball: { boards: { brickcity: { open: true, testing: false } } }, corrections: { skeeball: {} } }));
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(3000);
+await page.screenshot({ path: `${OUT}/1-setup.png` });
+console.log('buttons:', await page.evaluate(() => [...document.querySelectorAll('button')].map((x) => (x.textContent || '').trim().slice(0, 24)).filter(Boolean)));
+console.log('slides:', await page.evaluate(() => [...document.querySelectorAll('.sk-slide')].map((s) => `${s.dataset.board}${s.classList.contains('sk-slide-locked') ? ' LOCKED' : ''}`)));

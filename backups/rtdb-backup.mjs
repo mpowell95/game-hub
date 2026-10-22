@@ -84,6 +84,9 @@ export const BRANCHES = [
   // flicksoccer/ (flick-soccer/js/mp.js, 2026-10-11): Flick Soccer's turn-by-turn challenges and
   // their per-player index. Same auth shape as hoops/.
   'flicksoccer',
+  // eightball/ (eight-ball/js/mp.js, 2026-10-22): Pool's turn-by-turn challenges (2 or 3 players),
+  // matches, per-player index rows and chat.
+  'eightball',
   // archery/ (archery/js/mp.js, 2026-10-14): Archery's turn-by-turn challenges, their per-player
   // index and quick chat.
   'archery',

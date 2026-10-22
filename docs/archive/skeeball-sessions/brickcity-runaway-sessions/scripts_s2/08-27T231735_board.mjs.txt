@@ -1,0 +1,49 @@
+import pw from '/tmp/claude-0/-home-user-game-hub/c58349b7-88b2-5a50-8ad3-de08b95a2f47/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pw;
+const OUT='/tmp/claude-0/-home-user-game-hub/c58349b7-88b2-5a50-8ad3-de08b95a2f47/scratchpad';
+const b = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args:['--no-sandbox','--disable-dev-shm-usage'] });
+const ctx = await b.newContext({ viewport:{width:393,height:852}, deviceScaleFactor:2 });
+const p = await ctx.newPage();
+await p.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({version:1,name:'zzztest',emoji:'🙂',
+    preferredColor:null,opponents:[],message:'',messageAt:0,updatedAt:Date.now()}));
+  localStorage.setItem('gamehub.theme.v1', JSON.stringify({version:1,theme:'dark',updatedAt:Date.now()}));
+});
+await p.goto('http://localhost:8123/', { waitUntil:'domcontentloaded' });
+await p.waitForTimeout(2200);
+const ann = await p.$('.ann-overlay');
+if (ann) { const x = await p.$('.ann-overlay [data-role="close"], .ann-overlay .gh-modal__close, .ann-overlay button'); if (x) await x.click(); await p.waitForTimeout(500); }
+await p.locator('[data-role="leaderboard"]').first().click();
+await p.waitForTimeout(2500);
+await p.locator('button:has-text("By Game"), .lb-seg:has-text("By Game")').first().click();
+await p.waitForTimeout(900);
+await p.locator('.lb-grow:has-text("Skeeball")').first().click();
+await p.waitForTimeout(1200);
+
+async function records(label) {
+  const h = await p.$eval('.lb-h3', (e)=>e.textContent).catch(()=>'(no heading)');
+  const cells = await p.$$eval('.lb-rec', (els)=>els.map((e)=>({
+    v:(e.querySelector('b')||{}).textContent||'', l:(e.querySelector('span')||{}).textContent||'',
+    who:(e.querySelector('em')||{}).textContent||'' })));
+  const cards = await p.$$eval('.lb-plist .lb-pcard', (els)=>els.map((e)=>
+    ((e.querySelector('.lb-pname')||{}).textContent||'').trim()+' · '+((e.querySelector('.lb-pnum b')||{}).textContent||'')));
+  console.log('\n=== '+label+' ===');
+  console.log('  heading: '+h);
+  console.log('  cards:   '+JSON.stringify(cards));
+  for (const c of cells) console.log('   %s  %s  (%s)', c.v.padStart(8), c.l.padEnd(16), c.who.trim());
+}
+await records('ALL MACHINES');
+await p.screenshot({path:OUT+'/rec-all.png'});
+
+for (const machine of ['BRICK CITY','RUNAWAY']) {
+  await p.locator('[data-panel="machine"], .lb-ctrls button').first().click();
+  await p.waitForTimeout(500);
+  const opt = p.locator('.lb-panel-list [data-machine]', { hasText: machine }).first();
+  if (await opt.count() === 0) { console.log('\n(no option for '+machine+')'); await p.keyboard.press('Escape'); continue; }
+  await opt.click();
+  await p.waitForTimeout(900);
+  await records('MACHINE: '+machine);
+  await p.screenshot({path:OUT+'/rec-'+machine.replace(/\W/g,'')+'.png'});
+}
+await b.close();

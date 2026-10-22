@@ -1,0 +1,993 @@
+08-26T05:04:19 A: Now the physics broadphase:
+
+08-26T05:56:03 A: I couldn't decode the .mp4 in this container (no working ffmpeg build), so I went at it from the code instead — driving the real BRICK CITY in a headless Chromium and measuring. Four causes, all confirmed with numbers.
+
+## What's actually wrong
+
+**1. You were rendering the game two, three and four times per frame.** This is the answer.
+
+`_startGame` arms a `requestAnimationFrame` chain unconditionally, and two buttons reach it with a chain *already running* — the pause sheet's **New game** and the game-over card's **Play again**. Each one leaves the old chain alive. I counted `_frame` calls against real animation frames:
+
+| | `_frame` calls per frame | browser fps |
+|---|---|---|
+| fresh rack | 1.00 | 22 |
+| after 1 New game | 2.00 | |
+| after 2 | 3.00 | |
+| after 3 | 4.00 | 7.5 |
+| quit to the gallery | **3.00** — orphans still rendering behind the carousel | |
+
+`_stopLoop()` could never clean it up: `this.raf` only holds the *last* chain's id. That's why it's fine when you start and gets worse the longer you play — exactly what the recording shows. `_startLoop()` is now the only way in and is idempotent. After: 1.00 everywhere, 0.00 on the gallery.
+
+**2. The shadow map redrew every frame** — 172 draw calls / 37,206 triangles, on a machine that's a still life while you line up a throw. On demand now: 138 / 26,026 between throws.
+
+**3. Every scoring popup leaked its texture.** `Material.dispose()` doesn't dispose textures, so each 256×128 popup stayed on the GPU forever, ~1 MB a rack. Measured over 27 popups: main goes 17 → 44 → **44**; fixed goes 17 → 44 → **17**. This is the other half of "gets worse the longer you play."
+
+**4. The physics broadphase tested 20,100 pairs to find 200** — 4.8M rejected pair tests a second at the 240 Hz step. Replaced with one that walks the ball's own pairs in the identical order. Proven equal on the same 41×21 grid the reachability tests use, against main's engine side by side: **861 throws, 0 differ** (hole, value, settle time to 6dp, bounces, event sequence). 26% less physics per frame.
+
+Two things came out of it: **the pause sheet now actually pauses** (it said "Paused" and stopped nothing — a ball in the air kept flying, scored and autosaved while you read the menu), and the game-over scrim drops its backdrop blur, which was being recomputed against a live canvas.
+
+I tried turning MSAA off at dpr ≥ 2 and **didn't keep it** — differencing the two frames, 1.5% of the screen changes visibly and all of it is the machine's outline. The reason is commented so it isn't re-derived.
+
+Scope: 2, 3 and 4 are in `machines/brickcity/`, per the rule that every machine owns its engine. The other four still leak popup textures and still run the naive broadphase; `skeeball/CLAUDE.md` records that as real work rather than losing it.
+
+Verified: skeeball engine `--full` 78/1 (the one red is THE CLASSIC's half-aimed-slam assertion — fails identically on a clean `origin/main`, checked), conventions 11/0, sw-strategy 52/0, validate-sw-assets clean, `test-visual skeeball` 14/0 including the probe that throws a real rack to the sheet and confirms the stats write still lands.
+
+Two commits pushed to `claude/brickcity-performance-0hx9j0`, CACHE at v493. **It is not live** — nothing merged to `main`. Say the word and I'll open the PR, merge it and confirm the Pages run goes green.
+
+08-26T06:55:18 A: Got it, decoded it, and it changed the diagnosis. **I found the real cause.**
+
+## What the video actually proves
+
+68s, 1206×2622 @60fps. Decoded and differenced frame by frame:
+
+- The canvas repainted on a **dead-flat 100.0 ms metronome — 10.0 fps in every single five-second window**, start to finish. Unchanged between throws, unchanged across the rack boundary at 27.5s.
+- Meanwhile the phone's own UI beside it ran at **60fps** — the score's `sk-score-hit` animation produced 22 distinct frames in 367 ms, and the canvas changed on 4 of those 22.
+
+A renderer short of CPU or GPU doesn't keep time like that; it wobbles with what's on screen. **Flat is a throttle.** That pointed me at the WebGL context budget instead of at triangle counts, and that's where the bug was.
+
+## The bug: Skeeball leaks a WebGL context every rack, and ten before the first ball
+
+Two leaks, both counted in a browser:
+
+1. **`WebGLRenderer.dispose()` does not release the context** — it frees three.js's buffers and leaves the context alive. Only `forceContextLoss()` hands it back, and nothing called it. Every gallery machine picture, every how-to demo, every rack (`_startGame` rebuilds the DOM, so its canvas is a new element and the old context is orphaned).
+2. **The software-GL probe in each `render.js` constructor took a second one** — `createElement('canvas').getContext('webgl')`, read once, never released, once per Renderer ever built.
+
+Live contexts, and what it does to the frame rate — same six racks, same swipe, same browser:
+
+| | main: contexts | main: fps | fixed: contexts | fixed: fps |
+|---|---|---|---|---|
+| gallery | 12 | | 0 | |
+| rack 1 | 12 | 33.6 | 1 | 35.1 |
+| rack 2 | 14 | 19.8 | 1 | 36.0 |
+| rack 3 | 16 | 13.7 | 1 | 40.3 |
+| rack 4 | 16 *(cap — browser starts evicting)* | 10.4 | 1 | 40.7 |
+| rack 5 | 16 | 8.1 | 1 | 39.8 |
+| rack 6 | 16 | 5.9 | 1 | 40.6 |
+
+From rack 4 on, main's console repeats *"Too many active WebGL contexts. Oldest context will be lost."* The frame rate falls off a cliff with every rack played. The fixed branch is flat.
+
+The fix for the first half (`releaseRenderer`) lives in `ui.js`, not in each machine's `dispose()` — the context budget belongs to the **page**, and the gallery builds a picture with every machine's engine before you ever reach BRICK CITY, so a fix inside one machine's file couldn't fix the screen it's needed on. The probe fix is the same edit in all five `render.js` files; I checked the softGL detection still answers correctly in all five, both ways.
+
+That sits on top of the four things I'd already found and pushed — duplicate render loops (each Play again added one), the shadow map redrawing every frame, leaked popup textures, and the 20,100-pair broadphase.
+
+Nothing in any of it touches a score, a record, a write path, or any machine's geometry, materials or physics.
+
+**Verified:** `test-visual skeeball` 14/0 (the play probe throws a real rack to the sheet and `sk.played` still moves — and that screen builds all five previews, which is exactly what exercises this), skeeball engine 48/0, conventions 11/0, sw-strategy 52/0, validate-sw-assets clean. CACHE v494.
+
+Three commits on `claude/brickcity-performance-0hx9j0`. **Still not live** — nothing merged to `main`. Say the word and I'll PR, merge and confirm the Pages run goes green; then re-record 60 seconds and the metronome should be gone.
+
+One thing to flag: the .mp4 is 3.9 MB and is now in `main`, so it ships with the site and every clone. I left it alone — tell me if you want it pulled back out.
+
+08-26T11:57:01 A: Here it is without the jargon.
+
+## What you filmed
+
+I pulled your video apart frame by frame. Two numbers came out of it:
+
+- **The machine (the 3D part) redrew itself 10 times a second.** Not 9, not 11. Exactly 10, every second, for the whole 68 seconds.
+- **Everything else on the screen — the score, the glow, the animations — was running at 60 times a second**, right next to it.
+
+That second number is the important one. If your phone were just working too hard, *everything* would be slow. It wasn't. Only the machine was. And it was slow at a perfectly steady rhythm, like a metronome — which is not what "working too hard" looks like. Working too hard is uneven and jerky. Perfectly steady means something is deliberately holding it back.
+
+So I stopped looking at "is the machine too complicated to draw" and started looking at "what's holding it back."
+
+## What was holding it back
+
+Think of your phone's browser as handing out **easels**. Any web page gets about 16 of them, total, and you need one to draw 3D.
+
+Skeeball was taking easels and never giving them back:
+
+- Open the machine gallery: it draws a little picture of each of the 5 machines. **Five easels taken, five never returned.**
+- Play a rack: takes another. Finish, hit Play again: takes another. **One per rack, none returned.**
+- On top of that, every single time it drew anything it grabbed a *second* easel just to ask one quick question ("am I on a real phone or a slow test computer?"), then walked away and left it there.
+
+So by the time you'd opened the gallery and played four racks, the browser was out of easels. And when a browser runs out, it doesn't crash — it just starts throttling you and quietly taking old ones away. That's your steady 10 frames a second. That's also why it gets worse the longer you play and why closing the app and reopening it makes it fine again for a while.
+
+I measured it: **12 easels held before you even throw a ball, one more every rack, and from rack four on the browser is printing "too many, taking the oldest back" over and over.**
+
+Now it holds **one**, and gives it back when you leave.
+
+## Three smaller things I fixed while I was in there
+
+1. **The game was drawing itself 2, 3, 4 times per frame.** Every time you hit "Play again" or "New game," it started a *second* copy of the drawing loop without stopping the first. Play four racks, four copies all drawing the same picture on top of each other. Quitting to the gallery only stopped one, so the rest kept running in the background forever.
+
+2. **Shadows were being recalculated constantly**, even when nothing was moving. The machine just sits there while you line up a throw. Now the shadows only get redrawn when something actually moves.
+
+3. **Litter.** Every "+50" that pops up when you score left a little scrap of memory behind on the graphics chip that was never cleaned up, about a megabyte per rack. That's the other reason a long session felt worse than a fresh one.
+
+(And the physics was doing about 4.8 million pointless checks a second — comparing the ball against every part of the machine *and* comparing every part of the machine against every other part, which never move. I cut that out and proved it lands the ball in exactly the same basket 861 out of 861 test throws.)
+
+## Does it work
+
+Same test, six racks in a row, before and after:
+
+| | before | after |
+|---|---|---|
+| rack 1 | 34 fps | 35 fps |
+| rack 3 | 14 fps | 40 fps |
+| rack 6 | **6 fps** | **41 fps** |
+
+Before, it falls off a cliff with every rack. After, it's flat. That's the whole story of your video in one table.
+
+## Where it stands
+
+Three commits on the branch, **not live yet**. Nothing I changed touches scores, records, stats or any machine's physics or geometry — it's all about giving resources back and not doing the same work twice.
+
+Say the word and I'll merge it and confirm the deploy goes green. Then film another 60 seconds and the metronome should be gone.
+
+08-26T12:01:02 A: Fair question, and the honest answer is: **40 is my test rig's ceiling, not your phone's.**
+
+Let me prove that rather than assert it.
+
+08-26T12:02:25 A: Measured it. Short answer: **40 isn't your phone's ceiling, it's my test machine's.**
+
+Here's what the test box can actually do:
+
+```
+empty page, nothing running .......... 60.5 fps   <- so the browser CAN do 60
+the game, WebGL draw removed ......... 59.5 fps   <- the game's own thinking is basically free
+the game, drawing normally ........... 21.6 fps   <- all the cost is painting pixels
+
+renderer in use: SwiftShader  (software)
+```
+
+That last line is the whole thing. **The machine I'm testing on has no graphics chip at all.** It's a cloud container. When a web page asks it to draw 3D, there's no GPU to hand the work to, so it fakes one in software and paints all ~1.1 million pixels with the regular processor, one at a time. That's about the slowest way to draw 3D that exists.
+
+Your iPhone 16 Pro does that same work on a real graphics chip designed for it. Different league entirely.
+
+So the numbers in that table are **the wrong thing to read.** Read the *shape* instead:
+
+```
+             before        after
+rack 1        34            35
+rack 3        14            40
+rack 6         6            41
+```
+
+Before, it degrades every rack. After, it doesn't. That's the finding. The 35 and the 41 are just "as fast as a computer with no GPU can go" — the fact that they're equal to each other across six racks is the point, not what the number is.
+
+## Will it be 60 on your phone?
+
+I don't know, and I'd rather say that than guess. I can't run anything on your device from here.
+
+What I can say is what the evidence points at. Your video showed the game pinned at a flat 10fps while the rest of the screen ran at 60 — that's a phone being *held back*, not a phone that's maxed out. And the "held back" was the leaked drawing slots. Take that away and there's no reason your phone shouldn't run this scene near its refresh rate; it's a fairly simple scene by phone-GPU standards.
+
+If it's still not 60 after this goes live, I already know where I'd look next: the game currently asks the phone to keep a full extra copy of every frame it draws (so bug reports can screenshot it), plus a smoothing pass on the edges. Both cost real time on a phone and both are per-frame. I deliberately left them alone because I couldn't test them from here, and I wasn't going to trade away picture quality on a guess.
+
+**The real test is you.** Merge it, play six racks, record another 60 seconds. I'll pull that apart the same way and we'll have the actual number off your actual phone instead of my guesses off a GPU-less container.
+
+08-26T12:11:29 A: **It's live.**
+
+PR #243 merged to `main` (`ec9ecef`), and the `pages build and deployment` run for that exact commit finished with all three jobs green — build, deploy, report-build-status. I then checked the deployed files themselves, not just the workflow:
+
+```
+live sw.js ......................... game-hub-v494  ✓
+live skeeball/js/ui.js ............. releaseRenderer present  ✓
+live render.js, all five machines .. isSoftGL present  ✓
+```
+
+Everything shipped:
+
+- **The WebGL context leak** — the big one. Contexts are handed back now instead of piling up until the browser starts throttling you.
+- **The duplicate render loops** — one loop, always, however many times you hit Play again.
+- **The pause sheet actually pauses** — a ball in the air no longer flies, scores and saves while you're reading the menu.
+- **Shadows on demand** instead of every frame.
+- **The popup texture litter** cleaned up.
+- **The physics broadphase**, proven to land the ball identically on 861 of 861 test throws.
+
+## What to do on your phone
+
+The service worker needs to roll over to v494. Open the hub and check the version pill in the top bar. If it reads `v493 → v494` with an arrow, reload once and it should settle to plain `v494`. Force-closing and reopening the app is the quickest way to get there.
+
+Then **play six racks in a row** — don't quit back to the gallery between them, use Play again. That's the exact pattern that used to grind it down to 6fps. If it still feels the same at rack six as at rack one, the fix landed.
+
+If you record another 60 seconds I'll pull it apart the same way and give you the real number off your actual phone. And if it's better but still not 60, I already know where I'd look next: the per-frame full-copy of the picture that exists so bug reports can screenshot the canvas. I left that alone deliberately because I couldn't test it from here without trading away picture quality on a guess.
+
+One loose end I didn't touch: the 3.9 MB .mp4 is still in `main`, so it ships with the site. Say the word and I'll pull it out.
+
+08-26T12:12:50 A: That was just the wait timer I'd started for the deploy — it expired after the fact. Nothing new; the deploy was already verified green and live on v494. Standing by for your recording.
+
+08-26T12:14:54 A: Good question, and there are two different answers — let me measure both.
+
+08-26T12:17:11 A: Measured it properly. Short version: **it costs your players nothing.** My earlier line about the .mp4 "shipping with the site" was accurate but misleading — let me be precise.
+
+## What players actually download
+
+```
+service worker precache:  259 files,  8.7 MB
+```
+
+That's the whole app: every game's code, art, and icons. **None of the reference material is in it.** Those files are published to a URL, but nothing ever requests them, so no phone has ever downloaded a single one. They cost zero data, zero load time, zero frames.
+
+## What's in the repo
+
+```
+tracked files total ......... 100.7 MB
+of which reference material .. ~86 MB
+```
+
+| | size | what it is |
+|---|---|---|
+| `reference/` | 47 MB | .MOV/.mp4 clips of real arcade machines, Yahtzee and Mancala how-tos |
+| `js/challenge/assets/` | 19 MB | the retired challenge celebration images and GIFs |
+| `filler/` | 14 MB | ~50 screenshots dumped into the Filler **game folder** |
+| `skeeball/…mp4` | 3.7 MB | the recording from this morning |
+| `3am 7.22/` | 2.1 MB | an old annotated handoff batch |
+| repo root | 0.8 MB | `dpad1-5.png`, `yahtzee.png`, `Leaderboard (2).jpeg`, `dpads.jpeg` |
+
+I checked every one of those against the app's code: **nothing references any of them.** They're inert.
+
+## So what does it actually cost
+
+- **Player data / speed:** nothing. Not precached, never fetched.
+- **Deploy time:** ~30 seconds, and it's been ~30 seconds for the last 600 deploys. No measurable cost.
+- **Clone time:** this is the real one. Every session I start clones ~100 MB of working tree plus a 90 MB `.git`. It's a slow start, not a broken one.
+- **Exposure:** the repo is public, so these are already public on github.com. Pages doesn't add exposure it didn't already have. Worth knowing a few are personal-ish — `moonis comments.PNG`, the iMessage screenshot from Thomas.
+
+One thing worth knowing before you decide anything: **deleting files doesn't shrink the history.** `.git` is 90 MB and stays 90 MB, because every version is already recorded. Only a history rewrite reclaims that, and I'm not doing that to this repo — it would break every existing clone and it's flatly not worth 90 MB.
+
+## My recommendation
+
+**Leave it.** 86 MB of dead weight in a public repo that costs your family nothing is not a problem worth spending a deploy on.
+
+The one thing I'd change is placement, not size: the Filler screenshots and this morning's recording are sitting *inside live game folders*, which makes those directories confusing to work in. If you want, I'll move all the loose reference material into `reference/` where the rest already lives — same total size, but every game folder then contains only game files. That's a one-commit tidy-up whenever you feel like it, not something to interrupt the Skeeball work for.
+
+And if you'd rather just have them gone, say which buckets and I'll delete them — but keep in mind that reclaims disk on future clones only, not on GitHub.
+
+08-26T12:22:24 A: Let me check a couple of things before answering, because the answer hinges on them.
+
+08-26T12:23:20 A: Checked, and there are three facts that decide this. Two of them are gotchas.
+
+## 1. `.gitignore` does nothing to files that are already committed
+
+This is the big one. Gitignore only stops git noticing *new, untracked* files. Everything we're talking about is already tracked, so adding it to `.gitignore` would have **literally zero effect** — the files stay in the repo, stay published, stay in every clone.
+
+To actually stop tracking them you need `git rm --cached`, which records a **deletion**.
+
+## 2. That deletion would remove them from your Windows folder on your next pull
+
+Git doesn't distinguish "stop tracking this" from "delete this." Next time you pull on `C:\...\Game-Hub\`, git would remove those ~50 Filler screenshots, the reference clips, all of it from your actual folder. OneDrive would probably have them in version history, but I wouldn't want to bet your reference library on that.
+
+## 3. If it's not in the repo, I can't see it
+
+This is the one that kills the idea for `reference/` specifically. From `VISUAL-PROCESS.md`, line 21:
+
+> **`ls reference/<game>/`** and open every image with `Read`. A session can read PNGs. Do it.
+
+That folder isn't clutter that happens to be committed — it's how a session doing visual work is *instructed* to work. Gitignore it and every future session goes blind, and you'd be re-uploading the same arcade clips every time we touch a machine.
+
+Same for `js/challenge/assets/` (19 MB) — that's your gift feature's actual content, not reference material.
+
+## Does it help anything measurable?
+
+Some, honestly. My session clones shallow (just the latest snapshot), and that's **86 MB**, nearly all of it this media. Strip it and a session would start on maybe 8 MB. So it's a real speed-up to my startup — but it's a one-time few seconds per session, and I'd be trading away the ability to see your reference material to get it.
+
+Nothing else improves. Deploy is ~30s either way, players download 8.7 MB either way.
+
+## What I'd actually do
+
+**Don't gitignore anything. Do the tidy-up instead.**
+
+Move the loose one-off uploads — `filler/`'s ~50 screenshots (14 MB), this morning's Skeeball recording (3.7 MB), `3am 7.22/` (2.1 MB), and the root `dpad*.png` / `yahtzee.png` / `Leaderboard (2).jpeg` (0.8 MB) — into `reference/` where the rest already lives. Same total size, everything still visible to me, but `filler/` and `skeeball/` become folders that contain only game files. One commit, no deletions, nothing at risk.
+
+**If you genuinely want the repo smaller**, the only honest option is a second repo — reference clips live in `mpowell95/game-hub-reference`, and I attach it on the sessions that need it. Main repo drops to ~8 MB, reference stays available. Cost is that a session has to know to attach it, which means it goes in `CLAUDE.md` and sometimes gets forgotten. I'd only bother if the clone size is actually annoying you.
+
+Want the tidy-up? Say the word and I'll do the move.
+
+08-26T12:26:03 A: You're right, and I overstated it. `VISUAL-PROCESS.md` says `ls reference/<game>/` — one game's folder, when doing visual work on that game. Not a sweep. Let me get the actual numbers on how stale each one is.
+
+08-26T12:26:41 A: You're right — and the repo already proves your point. Look at the sizes:
+
+```
+reference/battleship   12K   (SPEC.md)
+reference/pool         12K   (SPEC.md)
+reference/ball-run    4.0K   (SPEC.md)
+reference/mancala      20M   (7 raw .MOV files, no spec)
+reference/yahtzee      17M   (6 raw .MOV files, no spec)
+reference/Skeeball     11M   (active work)
+```
+
+`VISUAL-PROCESS.md` already has the right idea — *"Write `reference/<game>/SPEC.md` in fractions, not pixels."* Three games did that step and shrank 17 MB of video into 12 KB of text. Mancala and Yahtzee never did, so their raw input is still sitting there. That's the actual problem: **the video is the input, the spec is the artifact, and nobody deleted the input.**
+
+Let me check whether the knowledge actually got written down before I recommend dropping anything.
+
+08-26T12:27:23 A: Direct answer to your question: **this whole session, I opened zero of them.** I read `skeeball/CLAUDE.md`, the code, and the video you sent. Nothing in `reference/` got touched. That's typical — it's a per-game, per-visual-task lookup, not a scan.
+
+And your framing is the right one. `reference/battleship/SPEC.md` even says it out loud:
+
+> *"This file is what survived the session; drop the PNGs in beside it and the next session gets both."*
+
+Battleship turned four screenshots into **5 KB of fractions** and the images are gone. Pool did the same. That's the input being consumed and the artifact being kept. Mancala and Yahtzee never got that step, so 37 MB of raw video is still sitting where the spec should be.
+
+## What I'd drop, and why it's safe
+
+| | size | why it's spent |
+|---|---|---|
+| `reference/yahtzee/` | 17 MB | 6 how-to .MOVs. Shipped; 419 lines of `yahtzee/CLAUDE.md` plus a live-AI test suite carry the knowledge |
+| `reference/mancala/` | 20 MB | 7 .MOVs. Shipped; 238 lines of docs plus lockstep tests |
+| `filler/` screenshots | 14 MB | ~50 playtest screenshots dumped in a live game folder, already acted on |
+| `3am 7.22/` | 2.1 MB | an old annotated handoff batch |
+| root images | 0.8 MB | `dpad1-5.png`, `yahtzee.png`, `Leaderboard (2).jpeg` |
+| `skeeball/…mp4` | 3.7 MB | I've extracted everything from it; the findings are in `skeeball/CLAUDE.md` |
+
+**≈ 57 MB.** My shallow clone drops from 86 MB to about 30 MB.
+
+**Keep:** `reference/Skeeball/` (11 MB — that's live work right now), the three tiny SPEC folders, and `js/challenge/assets/` (19 MB — that's your gift feature's actual content, not reference).
+
+**Nothing is truly deleted.** We're not rewriting history, so every one of those files stays permanently recoverable from any older commit on GitHub. Removing them from the current tree is reversible.
+
+## One thing you have to do first
+
+Your Windows folder will lose them on your next pull — git can't tell "stop shipping this" from "delete this." So before I commit anything: **copy `reference/`, `filler/`'s screenshots and `3am 7.22/` into `Game-Hub-Docs/`.** Your own `CLAUDE.md` already names that sibling folder as the planning/handoff archive and says it's deliberately not a git repo — it's exactly the right home for spent reference material.
+
+## And the rule that stops it recurring
+
+I'd add this to `VISUAL-PROCESS.md`, since prose-only conventions in this repo have a track record of being re-derived:
+
+> Reference media is an **input**. While a game's visual work is open it lives in `reference/<game>/`. When that work closes, distil it into `reference/<game>/SPEC.md` in fractions (or into the game's own `CLAUDE.md`) and **drop the media** — git history keeps it if it's ever needed again.
+
+Say go once you've copied them out and I'll do the removals plus the `VISUAL-PROCESS.md` rule in one commit. Or if you'd rather I write Yahtzee and Mancala a `SPEC.md` from their videos first so nothing is lost in translation, I'll do that pass before deleting — it's an hour of watching, and it's the honest version of "consume the input."
+
+08-26T14:27:17 A: Clear. Deleting them.
+
+08-26T14:31:58 A: **Deleted and live.** PR #244 merged (`3141edc`), Pages run all three jobs green, and I checked the deployed site rather than just the workflow:
+
+```
+404  /reference/yahtzee/Yahtzee how to 1.MOV     gone
+404  /filler/IMG_3238.PNG                        gone
+404  /skeeball/ScreenRecording_08-26-2026….mp4   gone
+200  /reference/battleship/SPEC.md               kept
+200  /  /skeeball/js/ui.js  /sw.js               app fine
+```
+
+**100.7 MB → 34.4 MB tracked.** 66 MB of media gone, 62 files.
+
+| removed | |
+|---|---|
+| `reference/{Skeeball,mancala,yahtzee,ball-run}/` | 48 MB of recordings |
+| `filler/` screenshots | 14 MB |
+| `3am 7.22/` screenshots | 2.1 MB (its 12 `.md` notes stayed) |
+| root `dpad*` / `yahtzee*` / `Leaderboard` | 0.8 MB |
+| this morning's Skeeball clip | 3.7 MB |
+
+Kept the three text files that are the actual output — `reference/README.md` and the two `SPEC.md`s — plus `js/challenge/assets/`, which isn't reference material, it's your gift feature's artwork.
+
+**No CACHE bump.** Not one precached file changed, so nobody's phone re-downloads anything for this. Your family won't notice it happened.
+
+Two things worth knowing:
+
+**They're not actually gone.** We don't rewrite history, so everything is recoverable from the commit that removed it. I put the command in `reference/README.md` instead of leaving it as folklore:
+
+```
+git log --oneline --diff-filter=D -- 'reference/yahtzee/*'
+git checkout <sha>^ -- 'reference/yahtzee/'
+```
+
+**Your Windows folder will lose them on your next pull** — git can't tell "stop shipping this" from "delete this." That's expected given you said you don't need them, just don't be surprised.
+
+And I wrote the rule down in both places a session actually opens (`reference/README.md` "Retention", `VISUAL-PROCESS.md` step 2), so this doesn't quietly rebuild: **the picture is an input, `SPEC.md` is the artifact, and the media gets deleted in the commit that closes the work.** Battleship and Pool already did that — 5 KB each instead of 17 MB. Yahtzee and Mancala just never got the second half.
+
+08-26T14:32:06 A: That was the deploy wait timer expiring — the deploy was already confirmed green and verified against the live site. Nothing pending on my end.
+
+Where things stand: both changes are live (`v494` for the performance fixes, `3141edc` for the cleanup), local `main` is synced, and the working tree is clean. Waiting on your six racks and a recording whenever you get to it.
+
+08-26T16:34:58 A: Not choppy — good. Now the ball sticking. Let me reproduce it rather than guess.
+
+08-26T16:35:28 A: Reading the code I have a suspect. Let me confirm it with a sweep, since nothing has ever checked BRICK CITY's settle times.
+
+08-26T16:37:15 A: Headless sweep says the low row settles in ≤4.5s — no 12-second hang. So it's not the emergency cap. Let me measure how long the ball sits *motionless* before it resolves, because that's what "stuck" looks like.
+
+08-26T16:39:20 A: Physics is clean — zero of 861 throws sit motionless in a cup. So the simulation resolves; what you're seeing is likely the *drawn* ball, not the real one. Let me watch both in a real browser.
+
+08-26T16:42:07 A: My headless swipes never actually score, which is why nothing reproduced. Let me drive known scoring throws through the game's own API instead.
+
+08-26T16:44:16 A: Reproduced it. Throw at power 0.30, straight:
+
+```
+4.97s total, and the ball sat at speed EXACTLY 0 for 31 straight frames
+never captured, phys.sp = 0, position y 0.579 / z -2.289 (up the board)
+```
+
+That's the real physics ball, not a drawing artifact. Let me find out exactly where it's resting relative to the basket, because that decides what the fix should be.
+
+08-26T16:46:09 A: Every stall is at the **same spot** — `z = -2.289`, y either 0.579 or 0.627. That's not random; that's a specific ledge. Let me identify it.
+
+08-26T16:47:26 A: Found it, precisely. Let me confirm the geometry reading and then fix it.
+
+08-26T16:47:56 A: There's already a stall watchdog, and Matt already ruled on this class of bug (2026-08-22: *"Stuck balls should score ZERO. and not be moved. It should vanish."*). The problem is its **timing**: 0.9s before the first nudge, 0.9s before the second, 0.9s before it gives up — 2.7s, which is exactly the stall I measured. Let me check whether shortening it is safe.
+
+08-26T16:49:46 A: Damning: **7.5% of throws hit this**, 57 of 65 go all the way to "jammed" (2.7s+ then vanish), and the two nudges rescue essentially nothing — 64 of 65 end as a zero anyway. The single "rescue" in 861 throws gave the player a **−20**. So the nudges cost ~1.8s of dead time and, once, points.
+
+Let me save a baseline and test shortening it.
+
+08-26T16:52:39 A: A 0.35s window changes **63 outcomes**, 44 of them worse — the nudge itself is knocking balls into the penalty baskets. Not acceptable. Let me test Matt's own stated rule instead: don't move it, just end it.
+
+08-26T16:56:22 A: **No nudge, 0.6s window** is the clear winner:
+
+```
+worst stall      2.62s  ->  0.57s
+outcomes changed 2 of 861, BOTH in your favour (two -20s become 0)
+median settle    2.42s  ->  2.12s
+```
+
+At 0.45s it starts eating real throws (a 100 became a 0). Let me check nothing else depends on the nudge, then implement.
+
+08-26T16:57:28 A: Now a regression probe, born red against the old physics — that's this repo's discipline.
+
+08-26T16:58:53 A: Born red (20 of 231 parked, worst 2.59s, all at the same spot), green after. Let me register it and document.
+
+08-26T17:04:43 A: Deploy hasn't landed yet. Waiting.
+
+08-26T17:06:10 A: **Fixed and live** — CACHE v495, and I checked the deployed file itself (`st.anchor.t > 0.6`, nudge gone from BRICK CITY, still present on THE CLASSIC).
+
+## What was happening
+
+It's geometry, and it's specific to this machine. Every single stall in an 861-throw sweep landed at **the exact same spot**:
+
+```
+bottom cup centre  y 0.439  z -2.235   rim top y 0.585  r 0.109  collar 0.146
+riser behind it    top y 0.620         front face z -2.234
+ball rested at     y 0.579 / 0.627     z -2.289          <- every time
+```
+
+The −20/−10/−20 cups are the widest on the machine (r 0.109 vs the middle row's 0.070) and they sit 3 inches back against the riser behind them — exactly as the face spec calls for. So the cup's back rim and the riser form a **cradle**, and a slow ball can balance in it. It's not in the basket, it's balanced on the wall of it. Capture can't help: that test only reaches 0.104m above the face and a ball perched on a 0.146m collar is at 0.20.
+
+THE CLASSIC never needed a rule for this — one continuous slope means a resting ball always rolls back down. The staircase removed that guarantee and nothing replaced it.
+
+## What was actually broken: the timing
+
+The stall watchdog waited 0.9s, popped the ball, waited 0.9s, popped again, waited 0.9s, gave up. **2.7 seconds of a dead ball, with two visible twitches.** That's what you were watching.
+
+And the pops were worthless. Over 861 throws the watchdog fired on **65 (7.5% — about one ball every other rack)**, 57 went all the way to jammed, and the two pops rescued exactly **one ball in 861 — into a −20.** They bought nothing and cost you the wait.
+
+So now: parked for 0.6s = it's over, scores zero, vanishes. Which is your own rule from Aug 22 — *"Stuck balls should score ZERO. and not be moved. It should vanish."* The pops were the thing that was moving it.
+
+| | before | after |
+|---|---|---|
+| worst dead-still stretch | 2.62s | **0.57s** |
+| median settle | 2.42s | 2.12s |
+| outcomes changed (of 861) | — | **2, both a −20 becoming a 0** |
+
+0.6s is measured, not picked. At 0.45s the sweep starts killing real throws (a 100 turned into a 0). And shortening the window while *keeping* the pops is much worse — 63 outcomes move and 44 go against you, because a pop near the bottom row mostly knocks the ball into a penalty cup.
+
+## One thing worth knowing
+
+BRICK CITY had **no engine test at all** — `skeeball/js/test.js` only sweeps THE CLASSIC, so nothing has ever checked the staircase machines. That's why this shipped. There's now `test-brickcity-stall.mjs` (21×11 grid, ~30s), born red against the old code (20 of 231 parked, worst 2.59s, all at that same z) and green now.
+
+BRICK CITY only, per the hard rule. The other four keep their own physics untouched.
+
+Play a few racks — if a ball still perches anywhere, tell me where and I'll go at that spot the same way.
+
+08-26T17:26:25 A: Two problems, both live now.
+
+## Problem 1 — the game got choppier the longer you played
+
+**What you saw:** BRICK CITY at a flat 10 fps, and worse every rack.
+
+**Cause:** Skeeball was taking WebGL drawing contexts from the browser and never giving them back. A browser hands out about 16 to a page, total. The gallery took 5 (one per machine picture), every rack took another, and every renderer took a second one just to ask "am I on a real phone?" and walked away. By rack 4 the browser was over its limit and throttling. On top of that, "Play again" started a *second* render loop without stopping the first, so by the fourth rack four loops were drawing the same scene.
+
+**Fix:** contexts are released properly, and one render loop, always. Plus three smaller wins — shadows only redraw when something moves, score popups no longer leak a megabyte of texture per rack, and the physics stopped doing 4.8M pointless collision checks a second.
+
+**Measured, six racks:** before 34 → 20 → 14 → 10 → 8 → **6 fps**. After: flat at 40 (my test box's own ceiling — it has no GPU).
+
+## Problem 2 — the ball stuck in the negative baskets
+
+**What you saw:** the ball perched in a −20 instead of falling in.
+
+**Cause:** geometry, and only on this machine. The bottom cups are the widest (r 0.109 vs 0.070) and sit 3in back against the riser, so the cup's back rim and the riser form a cradle a slow ball can balance in. Every stall in an 861-throw sweep was at the identical spot. Capture can't reach it — it's on top of the wall, not in the mouth. THE CLASSIC never needed a rule for this because its continuous slope always rolls a resting ball back down; the staircase removed that and nothing replaced it.
+
+**Fix:** the real defect was the watchdog's timing — 0.9s, poke, 0.9s, poke, 0.9s, give up. 2.7 seconds of dead ball. The pokes rescued **one ball in 861, into a −20**. Now: parked 0.6s = over, scores zero, vanishes, which is your own rule from Aug 22. Worst stall **2.62s → 0.57s**, and only 2 of 861 outcomes moved, both a −20 becoming a 0.
+
+## Also
+
+Trimmed 66 MB of spent reference media from the repo (100.7 → 34.4 MB) with the retention rule written down so it doesn't rebuild. And BRICK CITY now has an engine test — it had none, which is why the stuck ball shipped.
+
+Live at CACHE v495, verified against the deployed files.
+
+08-26T17:29:14 A: You're right and I was wrong — let me correct that properly, because it changes the diagnosis.
+
+I read `y 0.579` as "perched on the back rim." Ball radius is 0.0545 and the cup's rim top is `y 0.585`. So a ball centred at 0.579 has its **equator level with the rim** — that's exactly your "half in, half out." It's sitting *in* the mouth, not on the outside of it. My description was wrong; the coordinates were telling me your version and I misread them.
+
+And that changes what the real bug is. Let me check something specific.
+
+08-26T17:30:57 A: That's against the *fixed* build — those remaining parks are balls resting flat on a tread (h = 0.0545 = exactly ball radius, 32cm from any cup), which is a different thing. I need to look at the build you were actually playing.
+
+08-26T17:32:49 A: That changes things, and I should say so plainly: **the stall I found and fixed is not the one you're describing.**
+
+Every stall I can reproduce headlessly has the ball at `h = 0.0545` — exactly one ball-radius off the surface — and **32 cm from the nearest cup**. That's a ball resting against a riser out on the tread, not in a basket. Real, worth fixing, but not your bug. And your second-ball detail points somewhere I haven't looked.
+
+08-26T17:33:20 A: Now I see something my earlier probes structurally could not catch. Look at the captured branch:
+
+```js
+if (st.captured) { ... return; }        // always returns
+```
+
+A **captured** ball never reaches the stall watchdog or the trough check — its only escape is the 12-second cap. So if it hangs up inside the cup, it sits there. My watchdog fix didn't touch that path at all. Let me measure it.
+
+08-26T17:35:07 A: Three separate headless probes now say it can't happen — captured hangs max out at 0.48s, and nothing parks inside a mouth. But you're watching it happen. So my sweep is missing a variable, and the most likely one is that it steps physics at a perfect 1/60 while your phone doesn't.
+
+08-26T17:42:16 A: Frame rate is irrelevant — identical to two decimals across every regime, so the accumulator makes it deterministic. But I just spotted a real gap in my own sweep. From `startThrow`:
+
+> **GUARD: POWER IS NOT CLAMPED TO 0..1.** … THERE IS NO UPPER BOUND: swipe hard enough and the ball leaves the machine entirely.
+
+My grid stops at power 1.0. You throw harder than that.
+
+08-26T17:44:18 A: One more test before I come back to you — this is the last thing I can check unaided. Real browser, real racks, watching every frame for a *drawn* ball that has no physics ball behind it.
+
+08-26T17:46:05 A: One more — this is testable and it matters. The camera sits low behind the ball looking up the lane, so a ball resting on the tread *behind* a basket could look like it's *in* it. Let me put a ball at the exact stall position and look through the real camera.
+
+08-26T17:46:56 A: That settles it. I parked a ball at the exact position my sweep measured and rendered it through the real play camera:
+
+08-26T17:47:31 A: **You're right about what you saw, and the fix does target it. My *description* was wrong, not the diagnosis.**
+
+The image is a ball placed at the exact coordinates my sweep measured, rendered through the real play camera. It's sitting half in, half out of the −10 — your words exactly. I called that position "perched on the back rim against the riser" because that's what the raw numbers say in the machine's own coordinate system. From where the player actually sits — camera low, behind the ball, looking up the lane — that same position reads as *inside the basket*. You were describing the picture; I was describing the spreadsheet.
+
+Your second-ball detail also checks out: `canThrow()` releases the next ball as soon as the previous one has touched the board end, and **each ball is simulated in its own separate physics world** — so a new ball doesn't collide with the frozen one, it drops straight into the same basket alongside it. Exactly what you saw.
+
+## What I ruled out along the way
+
+I didn't take this on trust — I went looking for a *different* bug because I believed your correction:
+
+- **3,000+ simulated throws** across six frame-rate regimes (60 / 30 / 20 / 10 fps, jittery, hitchy) — identical to two decimals, so the physics is frame-rate independent and can't be freezing on your phone but not here.
+- **Power 1.0 → 2.5** (my earlier grid stopped at 1.0, and hard swipes aren't capped) — 1,281 throws, zero hangs.
+- **Captured-ball hang** — worst 0.48s in 861 throws, and I confirmed a captured ball can't reach the stall watchdog at all.
+- **Renderer ghosts** — real browser, 28 balls, up to 5 live at once, 414 frames: zero frozen meshes, zero balls drawn without a physics ball behind them.
+
+All negative. Which is what sent me back to the one position I *had* measured, and to actually look at it.
+
+## So where that leaves it
+
+The v495 fix bounds that exact event from **2.6s down to 0.57s**. What you'll see now is the ball drop in, sit for about half a second, and clear as a miss instead of hanging around long enough to throw another ball at it.
+
+**One thing worth checking: which build were you on?** v495 only went live about 40 minutes ago. If you were on v494 when you saw it, you haven't seen the fix yet.
+
+## On the laptop offer
+
+Appreciated, but it wouldn't help here — a laptop session runs the same desktop Chromium I already have, and the thing I can't reach is your **iPhone**, which neither of us can put in a test harness. The tests that mattered all ran fine from here.
+
+What *would* help, if it's still happening on v495:
+
+1. **A short clip** — I can decode video now. From ~10 seconds I can tell whether the ball ever moves a pixel, whether the ball counter advances while it sits, and whether it clears when the next one lands. Each answer kills a whole class of cause.
+2. If a clip isn't enough, I'd ship a dev-only probe that records the state whenever a drawn ball hasn't moved for a second, and you play two minutes and file a bug report.
+
+And if it turns out the half-second is still annoying to watch, the deeper fix is to stop the ball being able to rest there at all — but that means moving geometry on a machine you've tuned, so that's your call, not mine.
+
+08-26T18:23:22 A: Fair catch — I contradicted myself, and you're right.
+
+What I said earlier is true: **this cloud container has no GPU at all.** It renders WebGL in software, which is why my frame-rate numbers cap around 40 and why I had to keep saying "that's my rig's ceiling, not your phone's."
+
+What I said just now was too broad. I meant "a laptop wouldn't crack *this specific* bug," and I wrote it as "a laptop wouldn't help." Those aren't the same thing.
+
+**A laptop session is genuinely better than this one for a lot of things:**
+
+- **Real GPU.** Actual frame-rate numbers for the immersive games instead of software-renderer numbers I have to caveat every time. For any future performance work on Skeeball, Pinball, Ball Run, Hill Climb or Pool, that's a real difference.
+- **`test-visual.mjs` runs properly and fast** — right now it's painting every pixel on a CPU.
+- **The full suite is ~4.5 min here**, mostly wasted on software rendering.
+- **Your actual repo folder, your real profile and localStorage, your browser** — no clone, no seeded fake profile.
+
+**Why it wouldn't have changed today's answer specifically:** the tests that cracked the stuck ball were headless physics sweeps — pure JavaScript, no graphics at all — plus checks on render *state* (is a mesh drawn where no ball exists). Those run identically on any machine. The one thing neither a laptop nor this container can do is be **your iPhone**, and that was the actual gap.
+
+So:
+
+**Right now** — the fastest unblock is you, not the session type: play a rack or two on v495 (check the version pill reads v495, force-close and reopen if it's still showing v494) and tell me whether the ball still hangs in the −10. If it does, a 10-second clip and I'll take it apart the way I did the first one.
+
+**Going forward** — yes, switch to a laptop session for performance and visual work. You'd get real numbers instead of me hedging every one of them. I should have said that cleanly the first time instead of waving it off.
+
+08-26T18:32:31 A: **No.** This session runs in a cloud container. Which device you're typing on doesn't change where it executes — I can't reach your laptop's filesystem, browser, or GPU from here. To get a session that runs on your machine you'd start Claude Code in the terminal there.
+
+Writing the handoff now.
+
+08-26T18:35:01 A: **No** — this session runs in a cloud container regardless of what you're typing on. For a session that can touch your laptop, you'd start Claude Code in the terminal there.
+
+`HANDOFF-BRICKCITY-STUCK-BALL.md` is written and merged to `main` (`5b177ce`), so a laptop session sees it after a `git pull`. No code changed.
+
+**Give the new session this:**
+
+> Read `HANDOFF-BRICKCITY-STUCK-BALL.md` and start at section 3.
+
+What's in it:
+
+**Section 3 — do this first.** Confirm the pill reads v495, play 3–4 racks, watch the bottom row. If the hang clears in about half a second it's already fixed and the file gets deleted. That's a 15-minute answer.
+
+**Section 4 — the six dead ends.** Everything I already tested to completion and got a negative on, with the method and the numbers: physics never freezes a ball in a cup across ~3,000 throws; frame rate is irrelevant (identical to two decimals at 60/30/20/10 fps and two jittery patterns); power above 1.0 does nothing; the renderer draws no ghosts. This is the part that saves them an afternoon.
+
+**Section 5 — the four measurements** to take with you sitting there, with paste-ready console snippets. The key one tells them in seconds whether the hung ball is real physics or a drawing.
+
+**The one lead I left deliberately untouched:** capture is gated at `f.h < 0.1036` but the bottom collars are `0.1455` tall — a 4 cm band inside every negative basket that the capture rule can never see. That's a strong candidate for a ball sitting *in* a cup and not falling through. I didn't change it because the stall I could actually measure was 32 cm away from any cup, and touching it alters scoring — a hung ball would start counting as the −20 it's in. That's your call, not a session's.
+
+Also in there: the five-line snippet that reproduces the half-in/half-out picture on demand, the phone-only fallback if it turns out to be iOS-specific, and the landmines — the per-machine engine rule, the frozen basket widths and set-back, and the fact that a captured ball's only escape is a 12-second timeout.
+
+08-26T21:25:04 A: You're right on all three counts. I found the actual bug, and it is not what I shipped a fix for.
+
+**The ball is genuinely inside the mouth.** World coordinates, not face coordinates:
+
+```
+ball centre        (0.0048, 0.579, -2.289)
+lowC cup axis      (0.000,  0.439, -2.235)   mouth radius 0.109
+horizontal distance to the cup axis: 0.0543   <-- less than half the mouth radius
+ball bottom y 0.524 · cup floor y 0.439 · rim top y 0.585 · ball top y 0.634
+```
+
+Equator level with the rim, dead centre of the cup. Half in, half out. Exactly what you said.
+
+**Why it doesn't fall in:** `worldToFace()` assigns that ball to the **riser frame** (v 0.429, inside the 0.300–0.580 riser band), not the tread the cup sits on. In riser coordinates the distance to lowC computes as **0.238** — outside the 0.109 mouth — so capture's `if (d >= rEff) continue;` **skips the very cup the ball is sitting in.** Capture is blind to it.
+
+And it's the bottom row specifically because those cups are the widest: the cup sits at v 0.191 with a 0.109 mouth, so the mouth spans v 0.082 → **0.300** — its back edge lands exactly on the frame boundary. The mid and top rows (r 0.070 / 0.058) don't reach theirs.
+
+So: the ball has nothing to fall through because the code doesn't believe it's in a basket. My "fix" made it disappear faster. That's a band-aid on a blind spot, and step 1.3 and step 2c in that handoff are both measuring the band-aid. You're right to call it.
+
+Let me fix the handoff.
+
+08-26T21:25:28 A: That's the mechanism, exactly. `worldToFace` picks whichever surface the ball is **closest to**:
+
+```
+tread below it:  0.140 away   ->  score 0.140
+riser behind it: 0.054 away   ->  score 0.054   <-- wins
+```
+
+A ball sitting high inside a 14.5cm-deep cup is **nearer the riser wall behind it than the tread beneath it**. So it gets riser coordinates, and capture — which only ever measures in face coordinates — looks for cups on the riser, finds none, and rolls straight past the cup the ball is sitting in.
+
+Rewriting the handoff as a fix spec instead of a test plan.
+
+08-26T21:27:44 A: Handoff rewritten and on `main` (`d0ff9a4`). Your three points, answered:
+
+**"Step 1 part 3 — why this?"** No good reason. It said "if it clears fast, you're done" — which declares the band-aid a success. Deleted.
+
+**"Step 2c huh????"** Same problem. It was timing how fast the ball disappears. That's measuring the band-aid, not the bug. Deleted.
+
+**"You're putting a band-aid on it."** Correct. v495 shortened the wait from 2.62s to 0.57s and did nothing about why the ball is stuck. I should have kept digging instead of shipping the watchdog and calling it done.
+
+## The actual bug
+
+There **is** nothing for the ball to get stuck on — you're right. The ball is sitting in the mouth of the cup and the code doesn't know it's there.
+
+`worldToFace()` decides which surface a ball belongs to by **whichever one it's closest to**. A ball sitting high inside a 14.5cm-deep cup is 0.140 from the tread below it but only 0.054 from the riser behind it — so the riser wins, and the ball gets riser coordinates. Capture then measures the distance to the cup **in riser coordinates**, gets 0.238 against a 0.109 mouth, decides "not in a hole," and moves on.
+
+In world space that ball is 0.0543 from the cup's centre line — **half the mouth radius**, dead in the middle of the basket, equator level with the rim.
+
+Only the bottom row because those cups are the widest: the mouth spans `v 0.082 → 0.300` and the tread ends at `v 0.300`. The back edge of the mouth lands exactly on the frame boundary. The mid and top rows' mouths never reach theirs — which is why you only ever see it in the negatives.
+
+**The fix is to measure the cups in world space instead of in whatever frame the ball happened to be assigned to.** No geometry moves, no basket changes size, nothing shifts forward. The ball falls in, like it should.
+
+One thing you should decide before it ships: right now a stuck ball vanishes for 0. After the fix it falls into the cup it's in and **scores it — usually −20 or −10.** That's the honest outcome and it's what "not stuck" means, but it costs you points where today it costs you nothing. The handoff says to bring you that number before shipping.
+
+I can implement it here — it's contained to `machines/brickcity/physics.js`, plus a probe born red against today's engine, plus the old-vs-new grid so you see exactly how many of 861 outcomes move and which way. Want me to, or keep it for the laptop session?
+
+08-26T21:41:40 A: You're right — you asked for a doc that sends a session to *find* it, and I handed them my conclusion. Which I've already got wrong twice today. Rewriting it as an investigation brief.
+
+08-26T21:43:44 A: Rewritten and on `main` (`ab34f97`). It now sends them to look, not to implement my answer.
+
+**Structure:**
+
+1. **The symptom in your words** — all three quotes, including "there's nothing for them to get stuck on." States plainly that *fixed* means the ball falls in, not that it's deleted faster.
+2. **What is NOT the answer** — v495's watchdog is a band-aid you rejected. Explicitly: don't measure how fast the ball disappears, and if your fix ends with the ball being removed rather than falling in, it's the same mistake again.
+3. **Reproduce it first** — nothing else is worth doing until they've seen it. One console snippet that answers the fork everything hangs off: is the frozen ball a real physics body or just a mesh left drawn?
+4. **The tools** — how to drive the engine headlessly, the geometry helpers, the browser hook, and how to view any world position through the real play camera.
+5. **Experiments already run, as results** — frame rate, hard swipes, ghost meshes, captured hangs, the broadphase, the 12s cap. All negative, with method and numbers, so they don't burn a day. It also tells them the sweep never reproduced it and to treat that as a lead, not a fact, because you watch it happen.
+6. **The trap that got me twice** — I trusted a derived number over what you were looking at. `worldToFace` and world space disagree on a staircase. When a measurement contradicts what you're describing, the measurement is what to re-examine.
+7. **Rules** — per-machine engine, frozen basket widths and set-back, no resting-position scoring, scoring changes need your sign-off with the number.
+8. **What to hand back to you before touching code** — five specific things, including what's physically holding the ball up and why capture doesn't take it.
+
+**One judgment call you should overrule if you disagree:** I didn't delete my hypothesis. The raw measurements behind it are real and re-measuring them costs an hour. It's in an appendix at the very end, behind an explicit "do not read until you've formed your own conclusion," labelled unverified, with a note that the same session was confidently wrong twice before producing it.
+
+If you'd rather they go in completely cold, say so and I'll cut the appendix.
+
+08-27T15:35:20 A: Read it — 712 lines, 28 rule ids, waivers, the lot. **Not one rule is about performance.** Every rule is geometry, materials, colour, scoring or wiring. A machine can be spec-perfect and still ship exactly what made BRICK CITY unplayable, because each machine owns its own `render.js` and `physics.js` — every new machine is a fresh chance to reintroduce all of it.
+
+And that's not hypothetical. Here's where the five stand right now:
+
+```
+machine     shadow on-demand   popup .map disposed   particle disposed   broadphase
+classic          NO                  NO                    NO            Naive
+basketball       NO                  NO                    NO            Naive
+brickcity        yes                 yes                   yes           Ball
+popongo          NO                  NO                    NO            Naive
+runaway          NO                  NO                    NO            Naive
+```
+
+Today's fixes landed on brickcity only (correctly — the HARD RULE). **Four machines still carry three of the four defects.** Only the WebGL-probe fix went everywhere, and only because the gallery builds every machine's preview so it had to.
+
+## Proposal — three changes, ranked by what actually bit today
+
+### 1. A runtime perf probe — `test-skeeball-perf.mjs` (highest value by far)
+
+The two things that caused the 10 fps aren't per-machine and aren't in the spec at all. **One test would have caught the whole thing before you ever saw it.** Mount Skeeball in a real browser, play/abandon six racks, and assert:
+
+| assertion | what it catches | today's numbers |
+|---|---|---|
+| live WebGL contexts ≤ 1 while playing, 0 on the gallery | the leak that throttled the browser | was 12 before the first ball, +1/rack, cap hit at rack 4 |
+| exactly 1 `_frame` call per animation frame, after 6 racks | duplicated render loops | was 1 → 2 → 3 → 4 |
+| GPU texture count returns to baseline after a rack | popup texture leak | ~1 MB/rack, never freed |
+| idle draw calls under a ceiling | shadow map redrawing a still scene | 172 vs 138 |
+
+That's ~30 seconds and it's board-independent — it covers every machine that exists and every one that doesn't yet.
+
+### 2. `PART 7 — THE MACHINE MUST NOT MAKE THE HUB SLUGGISH` in MACHINE-SPEC.md
+
+Rule ids in the existing style, waivable only by you:
+
+- **`perf.context`** — one context per Renderer, exposed as `this.renderer`, released on dispose. **This is currently an undocumented contract**: `ui.js`'s `releaseRenderer` reaches in via `r.renderer.forceContextLoss()`. A machine that renames that field leaks a context per rack and throttles the whole hub, silently. That alone is worth writing down.
+- **`perf.probe`** — no per-instance `getContext('webgl')`; memoise per module, release via `WEBGL_lose_context`.
+- **`perf.shadow`** — `shadowMap.autoUpdate = false`, `needsUpdate` set only when a caster moved.
+- **`perf.textures`** — a texture made per event is disposed with its material (`.map.dispose()` first).
+- **`perf.broadphase`** — a world with one dynamic body doesn't use `NaiveBroadphase`.
+
+Most are greppable from the machine's source, so they go straight into `test-skeeball-machine-spec.mjs`, which already runs over every board automatically — a new machine is covered the day its folder appears.
+
+Also add these to section 19's checklist, which currently sends a new machine off with four checks and none of them perf.
+
+### 3. Backfill the other four machines
+
+Three defects × four machines. Mechanical, and each is verifiable the way brickcity's was (the broadphase one needs the 861-throw equivalence proof per machine). **This needs your explicit go-ahead** — the HARD RULE says I don't touch another machine's engine on my own initiative, and you've been burned by exactly that before.
+
+---
+
+**My recommendation:** do #1 first on its own. It's the one that would have prevented today, it costs nothing per machine, and it can't change how anything plays. Then #2 as documentation. Then #3 only if you want it — those four machines are slower than brickcity now, but none of them is currently unplayable.
+
+Want me to build #1?
+
+08-27T17:59:56 A: Because of how its **rings** are built, not because of anything it does per frame.
+
+## The measurement
+
+```
+machine      collision bodies   ms per frame of physics
+classic            263                1.94
+basketball         200                0.86
+brickcity          200                0.83
+popongo            195                0.73
+runaway            172                0.73
+```
+
+## Where the extra bodies come from
+
+Every machine's cabinet, lane, hump, rails and trough are identical — 48 rail bodies, 6 hump, 4 keep, and so on. The difference is entirely in how the holes are walled:
+
+```
+classic     192 ring segments over 7 holes  =  27.4 per hole
+brickcity   126 cup segments  over 9 holes  =  14.0 per hole
+```
+
+THE CLASSIC is the only machine with **flush ringed holes**, and its ring walls are approximated as a circle of little boxes at a fixed density — one segment per 4 cm of circumference, minimum 20:
+
+```js
+const N = Math.max(20, Math.ceil((2 * Math.PI * Rwall) / 0.04));
+```
+
+So a big ring gets a lot of boxes. The 10's ring is the largest on any machine (large enough that a full circle would cross the 50's mouth, which is why it's built as an arc). The cup machines don't do this — they use a flat `cupSegments: 14` per collar, because a collar is a short wall, not a fine circle.
+
+Seven holes with big rings at 27 segments each beats nine holes with small collars at 14.
+
+## Why 32% more bodies costs 134% more time
+
+The broadphase is `NaiveBroadphase` — it checks **every pair** of bodies, so cost goes with the **square** of the count:
+
+```
+bodies      263 / 200  = 1.32×
+pairs       263² / 200² = 1.73×
+measured    1.94 / 0.83 = 2.34×      (the rest is more contacts to solve near the ball)
+```
+
+## What that means for fixing it
+
+**The broadphase fix helps THE CLASSIC most, precisely because it has the most bodies.** It replaces the pairwise sweep with "just the ball's pairs," which is linear — so classic's 263 bodies stop costing 34,000 pair tests per step and start costing 263. The bigger the machine, the bigger the win.
+
+And it's the safe kind of fix: on brickcity I proved it produces **byte-identical throws** — 861 of 861 matching on hole, value, settle time to six decimals, bounce count and the full event sequence. It changes nothing about how the machine plays.
+
+**What I would not touch:** the 4 cm segment density. Coarsening it would cut bodies faster than anything else, but it changes the shape of the ring the ball actually rolls on — that's a feel change on the machine that must never change feel. Not worth it, and not mine to decide.
+
+One incidental find: `ringSegments: 24` in THE CLASSIC's `boards.js` entry **is dead** — nothing reads it. The ring count is computed from circumference. Worth deleting or wiring up so it doesn't mislead the next person who tries to tune it.
+
+08-27T18:07:30 A: Yes — and it's written down. `DECISIONS.md`, "Ring geometry":
+
+> Ring segment count scales with the ring's own radius rather than using one fixed count for every ring, since these rings range from a 100-hole's small ring up to the 10's much larger arc, and **a single fixed segment count would either facet the big rings into hittable flat corners** or spend far more geometry than needed on the small ones.
+
+That's a deliberate call, and the numbers back it up hard:
+
+```
+classic ring diameters   0.155 .. 1.036 m    6.71x spread
+   100L 0.155  100R 0.155  c50 0.209  c40 0.227  c30 0.264  h20 0.709  h10 1.036
+
+brickcity cup radii      0.058 .. 0.109 m    1.88x spread
+   low 0.109 (x3)   mid 0.071 (x3)   top 0.058/0.064/0.058
+```
+
+THE CLASSIC's 10 ring is **a metre across**. Its 100 rings are 15 cm. Nearly a 7× spread on one face.
+
+The cup machines span less than 2×. A flat `cupSegments: 14` works fine across that narrow a range — every collar ends up with similar-sized chords.
+
+Try the same flat 14 on THE CLASSIC's 10 ring and the arithmetic falls apart: a 1.036 m circle is 3.27 m around, so 14 segments gives chords of about **23 cm**. The ball is **10.9 cm** across. It would be rolling into scallops twice its own diameter and banging off the corners between them. At the 4 cm density it gets ~82 segments and chords the ball physically cannot feel.
+
+So the two machines aren't built differently out of carelessness — they're **different shapes**. THE CLASSIC is a traditional skee-ball face: rings of wildly different sizes, tangent to each other, with a huge low arc. The HOT SHOT family is nine similar baskets. One rule can't serve both, and the rule each uses is right for it.
+
+**Which reinforces where the fix should go.** Don't touch the segment density — those bodies are the honest price of a metre-wide ring the ball can't feel the flats on. Fix the **broadphase**, which removes the quadratic penalty for having many bodies without changing a single one of them. THE CLASSIC has the most bodies, so it has the most to gain, and the change is provably invisible to how the machine plays.
+
+08-27T18:08:35 A: On it. THE CLASSIC is missing four of the five fixes; the broadphase is the big one here. Let me check its structure differs from brickcity's before porting anything.
+
+08-27T18:08:49 A: Same structure as brickcity's pre-fix state. Applying the three render fixes and the broadphase.
+
+08-27T18:09:39 A: Now the equivalence proof — this must produce byte-identical throws or it doesn't ship.
+
+08-27T18:31:01 A: Green: **14 passed, 0 failed**, full rack played. The earlier failure was my own doing — I ran it while the engine suite was saturating the CPU, and that probe drives timed touch gestures. Clean when idle, and the physics is proven identical anyway.
+
+08-27T18:32:40 A: Main has moved — 11 PRs landed since I branched. Merging it in.
+
+08-27T18:32:50 A: Note: another session shipped **RUNAWAY**'s fixes (#258) while I was working. Only `sw.js` conflicts — CACHE and the manifest.
+
+08-27T18:33:25 A: RUNAWAY *is* fully fixed — it uses a `disposeMat()` helper, so my grep was too literal. Let me re-audit properly.
+
+08-27T18:35:39 A: **THE CLASSIC is done and live** — CACHE v506, verified against the deployed files.
+
+## What it got
+
+**The broadphase** — the big one, and the reason it was the heaviest machine. 263 collision bodies (192 ring segments across 7 holes, because a metre-wide ring needs a box every 4 cm so the ball can't feel the flats). `NaiveBroadphase` tested all 34,453 pairs every step; now it walks the ball's own 263.
+
+```
+physics, 861 throws:   261.8s -> 177.5s     32% less
+outcomes that differ:  0 of 861
+```
+
+That zero is the licence for the change — hole, value, settle time to six decimals, bounce count, board contact and the full event sequence, identical throw for throw against `origin/main`. **It plays exactly as it did.**
+
+**The shadow pass on demand** — and this saving is much bigger here than on brickcity, because more bodies means more shadow casters:
+
+```
+idle:           2046 -> 1246 draw calls
+ball in flight: 2046
+```
+
+800 draw calls saved on every frame you spend lining up, which is most of a rack.
+
+**Popup and particle textures disposed** — ~1 MB a rack that was never freed. That's the one that made a long session worse than a fresh one.
+
+## What I left alone
+
+- **The stall watchdog** stays at 0.9s with its two pops. Brickcity's changed because its staircase removed the "a resting ball rolls back down" guarantee; THE CLASSIC's continuous slope is exactly why the pops are harmless there. You asked for less choppy, not different play.
+- **The 4 cm ring density** — those bodies are the price of a ring the ball can't feel corners on, and this machine's feel is frozen.
+
+## Two things worth knowing
+
+**Another session shipped RUNAWAY's fixes while I was working** (#258), and main had moved 11 PRs ahead — I merged it in and resolved the `sw.js` conflict forward to v506 rather than reusing a number already out there.
+
+**Current state of all five:**
+
+```
+classic     shadow yes   popup-tex yes   particle yes   BallBroadphase
+brickcity   shadow yes   popup-tex yes   particle yes   BallBroadphase
+runaway     shadow yes   popup-tex yes   particle yes   BallBroadphase
+basketball  shadow NO    popup-tex NO    particle NO    Naive
+popongo     shadow NO    popup-tex NO    particle NO    Naive
+```
+
+**HOT SHOT and POPONGO are the last two.** Say the word and I'll do them the same way — though neither has THE CLASSIC's ring problem, so the broadphase win will be smaller (~26% rather than 32%).
+
+One caveat on my verification: `test-visual` failed once on the play probe, then passed clean. I'd run it while the full engine suite was saturating the CPU and that probe drives timed touch gestures. The physics equivalence proof is what actually rules out my changes there.
+
+08-27T21:04:48 A: **Done and live — CACHE v507, all five machines verified against the deployed files.**
+
+```
+classic     broadphase ✓  shadow-gate ✓
+basketball  broadphase ✓  shadow-gate ✓
+brickcity   broadphase ✓  shadow-gate ✓
+popongo     broadphase ✓  shadow-gate ✓
+runaway     broadphase ✓  shadow-gate ✓
+```
+
+## HOT SHOT and POPONGO
+
+**Broadphase** — both worlds hold one moving ball among ~200 static bodies, and the old sweep tested every pair to find it:
+
+```
+basketball   129.2s -> 91.9s   29% less   0 of 861 throws differ
+popongo       87.5s -> 61.7s   29% less   0 of 861 throws differ
+```
+
+Those zeros are the whole licence: hole, value, settle time to six decimals, bounce count, board contact, full event sequence — identical throw for throw. Neither machine plays any differently.
+
+**Shadow pass on demand**, measured in a real browser:
+
+```
+basketball   idle 138 draw calls (was 172 always)
+popongo      idle  98 draw calls (was 123 always)
+```
+
+**Popup textures and burst particles disposed** — ~1 MB a rack that used to sit on the GPU forever. That's the one that made a long session worse than a fresh one.
+
+Left alone on both: the stall watchdog, MSAA, all geometry.
+
+## Two things I checked while in there
+
+**The other session found the real stuck-ball bug** — an *invisible ledge* inside every bottom-row basket. Collar segments at v 0.3031 were being built in the riser's frame instead of the tread's, landing 7 cm low and forward as a 5 cm bar straight across the throat of the cup, 60% of the way down. `render.js` draws a smooth wire basket and never draws those boxes, so it was invisible — **"nothing for them to get stuck on", exactly as you said.** My appendix hypothesis turned out to be the second, smaller half of it (latent on its own, 0 of 861 outcomes). Their fix covers both.
+
+**No other machine is at risk of the same thing.** I checked the geometry directly: only BRICK CITY's collars ever reach past a tread edge (by 6 mm). HOT SHOT's and RUNAWAY's cups are too small to reach theirs, and THE CLASSIC and POPONGO aren't staircases at all.
+
+## Where that leaves the whole thing
+
+Every machine now has all four per-machine performance fixes, plus the two shared ones (context release and the single render loop) that caused your original 10 fps. **The skeeball performance work is complete.**
+
+Still on the table from earlier, whenever you want it: the runtime perf probe (`test-skeeball-perf.mjs`) that would catch a regression of any of this automatically, and PART 7 of the machine spec so a sixth machine can't ship without them.
+
+08-27T21:06:31 A: Right — that's the piece that stops a *sixth* machine shipping all of this again. Let me look at how the spec test is wired so the new rules fit its existing shape.
+
+08-27T21:06:50 A: Now the rules. Adding a `PART 7` block to the spec test, inside the per-board loop.
+
+08-27T21:07:29 A: 116 passed (was 86), 0 failed. Now let me prove the rules actually bite — a rule that can't fail is decoration.
+
+08-27T21:07:44 A: All five bite, and popongo is restored byte-for-byte. Now the doc itself.
+
+08-27T21:10:16 A: **Done — `PART 7` is in the spec and enforced.** Merged at `a30023a`. No code changed, no CACHE bump (a `.md` isn't precached).
+
+The gap was real: 712 lines, 28 rules, **not one about performance**. Geometry, materials, colour, scoring, wiring — a sixth machine could pass every rule and still ship everything that made BRICK CITY unplayable.
+
+## Sections 29–34
+
+Written from what actually happened, not from principle:
+
+- **29 · `perf.context` / `perf.probe`** — one context per machine, handed back. The important bit is a **contract that was undocumented until now**: `ui.js`'s `releaseRenderer()` calls `r.renderer.forceContextLoss()` **by that exact field name**. Keep your `THREE.WebGLRenderer` in `this.renderer` or every rack leaks a context until the browser throttles the whole hub.
+- **30 · `perf.shadow`** — the pass on demand, including the `live.length`-not-`used` subtlety that's the difference between it firing and not.
+- **31 · `perf.textures`** — `Material.dispose()` doesn't dispose textures. ~1 MB a rack.
+- **32 · `perf.broadphase`** — with the pair-order requirement and a hard rule: **prove 0 of 861 differ or it doesn't go in.**
+- **33 ·** What Part 7 *can't* check — draw calls and live context count, by hand in a real browser. Source rules prove absence of a known defect, not speed.
+- **34 ·** Two things *not* to do — turning MSAA off, and coarsening ring segment counts. Both tried, both measured, both rejected, with the numbers so nobody re-derives them.
+
+## Enforcement
+
+`test-skeeball-machine-spec.mjs` now reads each machine's own `render.js` and `physics.js` by board id, so **a new machine is covered the day its folder exists**. **86 rules → 116**, all five green.
+
+And I proved each new rule bites — broke them one at a time on POPONGO, confirmed each failed by id, restored byte-for-byte:
+
+```
+perf.context CAUGHT · perf.probe CAUGHT · perf.shadow CAUGHT
+perf.textures CAUGHT · perf.broadphase CAUGHT
+```
+
+A rule that can't fail is decoration.
+
+Also wired the entry points: section 19's checklist says the spec test carries Part 7, and `skeeball/CLAUDE.md`'s "Adding the next machine" now opens by sending you to Part 7 **before you copy a `render.js`** — that's the file a new-machine session actually reads.
+
+**Where the whole thing stands:** all five machines level on every performance item, all five hold the line automatically, and machine six can't ship any of it without either fixing it or writing you a waiver.
+
+The one thing still on the table from my earlier proposal is the runtime probe (`test-skeeball-perf.mjs`) — live context count and loop count after six racks. Part 7 §33 names those as the two things source rules can't catch, so that suite is what would close the last gap. Say the word.
+
+08-27T23:05:31 A: Read it back cold. Honest verdict: it's mostly earned, but there are about 15 lines of the 142 I'd cut, and one small inconsistency.
+
+**What's genuinely superfluous**
+
+1. **The incident paragraph (lines 732–737, 6 lines).** This is the third copy of that story — it's already in `skeeball/CLAUDE.md` and `MACHINE-BRICKCITY.md` at more length. The one fact in it that a machine-builder actually needs is *"flat frame rate is a throttle, not load"*, because that's the diagnostic. The rest ("Matt sent a screen recording…", the 68-second clip) is history, and history has a home. Trim to two sentences.
+
+2. **§33 "What Part 7 cannot check" (11 lines) — the weakest section in the part.** The contexts bullet is concrete and worth keeping (1 while playing, 0 on the gallery, anything climbing is a leak). The draw-calls bullet isn't a rule, it's a shrug: *"a new machine well above 1246 is worth a second look."* No threshold, no owner, no action. Either it becomes a real number in `test-skeeball-perf.mjs` or it shouldn't be in a spec that otherwise only states things you must do.
+
+3. **The BRICK CITY row in §32's table** reads `— | — | 26%`. Two empty cells in a four-row table that exists to show absolute cost. Either fill it or drop the row; 26% without the seconds behind it says nothing the other three rows don't.
+
+**What I'd defend**
+
+- **§34 is the most valuable part of Part 7,** not filler. "MSAA off: tried, measured, 1.5% of pixels, rejected" and "don't coarsen the ring segments" are the two obvious optimisations a future session will reach for, and both are wrong. That section is the only thing that stops someone spending a day rediscovering it.
+- **The `live.length`-not-`used` paragraph in §30** looks like over-explanation and isn't — I wrote that gate wrong the first time and it silently did nothing.
+- **The measurement tables in §30/§32** justify why the rules are worth obeying. A rule without a number gets waived.
+
+**One inconsistency worth knowing:** `perf.files` is a rule id with no section in the doc. That's actually correct — it isn't a design rule, it's the precondition that stops the other four passing vacuously on an empty string when the folder is missing. But if you ever grep rule ids against section headings, that one won't match.
+
+There's also verbatim duplication between Part 7's opening and the comment header I put at the top of the perf block in `test-skeeball-machine-spec.mjs` (lines 290–294). The test file should just point at the doc, which it already does on the last line of that comment.
+
+Want me to make those three cuts? It's about 15 lines out and no rules change, so no CACHE bump and nothing to re-verify beyond the spec suite.
+

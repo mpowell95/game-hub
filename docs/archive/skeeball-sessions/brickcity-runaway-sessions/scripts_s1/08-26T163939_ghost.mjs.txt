@@ -1,0 +1,58 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: { brickcity:{open:true,testing:false} } } }, at: Date.now() }));
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1500);
+await (await page.$('[data-role="play"]')).click({ force: true });
+await page.waitForSelector('.sk-canvas', { timeout: 10000 });
+await page.waitForTimeout(600);
+
+// Watch: physics ball vs drawn mesh, every frame.
+await page.evaluate(() => {
+  const ui = window.__skTest.ui, R = ui.renderer;
+  const L = window.__log = [];
+  const origR = R.render.bind(R);
+  R.render = (game, dt) => {
+    origR(game, dt);
+    const live = (game && game.balls) || [];
+    const meshes = R._balls.filter(m => m.visible).map(m => ({ x:+m.position.x.toFixed(4), y:+m.position.y.toFixed(4), z:+m.position.z.toFixed(4) }));
+    const phys = live.map(s => { const p=s.ball.position, v=s.ball.velocity;
+      return { x:+p.x.toFixed(4), y:+p.y.toFixed(4), z:+p.z.toFixed(4), sp:+Math.hypot(v.x,v.y,v.z).toFixed(3), cap: s.captured || null }; });
+    L.push({ t: +performance.now().toFixed(0), nLive: live.length, phys, meshes, over: !!(game&&game.over) });
+    if (L.length > 4000) L.shift();
+  };
+});
+const cdp = await ctx.newCDPSession(page);
+const stage = await (await page.$('[data-role="stage"]')).boundingBox();
+const swipe = async (ms) => { const x=stage.x+stage.width/2,y0=stage.y+stage.height*0.94,dist=stage.height*0.55,steps=6;
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y:y0,id:1}]});
+  for(let i=1;i<=steps;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y0-dist*i/steps,id:1}]});await page.waitForTimeout(ms/steps);}
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]}); };
+for (const d of [210,250,190,280,230,300,200,240,260]) { await swipe(d); await page.waitForTimeout(4000); }
+const r = await page.evaluate(() => {
+  const L = window.__log;
+  // A "ghost": a mesh drawn while NOTHING is live in the game.
+  let ghostFrames = 0, ghostRuns = [], run = 0;
+  for (const f of L) {
+    const ghost = f.meshes.length > f.nLive;
+    if (ghost) { ghostFrames++; run++; } else { if (run > 5) ghostRuns.push(run); run = 0; }
+  }
+  if (run > 5) ghostRuns.push(run);
+  // longest stretch where a drawn mesh did not move at all
+  let frozen = 0, best = 0, last = '';
+  for (const f of L) { const k = JSON.stringify(f.meshes);
+    if (k === last && f.meshes.length) { frozen++; best = Math.max(best, frozen); } else frozen = 0; last = k; }
+  return { frames: L.length, nLiveMax: Math.max(...L.map(f=>f.nLive)), ghostFrames, ghostRuns,
+    longestFrozenDrawnFrames: best, sample: L.filter(f=>f.meshes.length>f.nLive).slice(0,3) };
+});
+console.log(JSON.stringify(r, null, 1).slice(0, 2500));
+await browser.close();

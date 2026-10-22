@@ -1,0 +1,351 @@
+08-24T23:10:21 A: I'll dig into how Skeeball's boards and physics work before answering.
+
+08-24T23:15:20 A: Let me measure one thing the design hinges on — how long a ball is actually in the air on HOT SHOT.
+
+08-24T23:16:50 A: I read the Skeeball engine stack end to end and measured a couple of things. Short answer: **this is very doable, and much cheaper than it sounds — but it needs one genuinely new engine capability, and it introduces a failure mode nothing in the codebase has hit yet.**
+
+## Why it's cheaper than it looks
+
+**There is no hole to move.** `machine.js` builds the tread as one *solid slab* (`skeeball/js/machines/basketball/machine.js:170-180`). A "hole" is not geometry at all — it's a capture rule plus a collision-mask trick: when `physics.js` decides the ball is in, it sets `ball.collisionFilterMask = GROUP_REST` and the ball falls through the whole slab. So the only physical thing at a basket is its **14 collar boxes** (`machine.js:226-252`). Moving a basket = moving 14 boxes and a mesh. Nothing is cut, nothing is re-triangulated.
+
+**Everything downstream is keyed by hole *id*, not position.** `topC` stays `topC` in the autosave, `cupAt()`, the goals, the recorder, the leaderboard. A moving basket is invisible to all of it.
+
+**Your layout choice already solves the hard constraint.** Stripping the top row to just the 100 removes the `holes.spacing` collision (1.30X minimum) that a mover sweeping past two static 50s would violate at every step.
+
+**cannon-es already supports it.** The vendored build has real `KINEMATIC` bodies (`vendor/cannon-es.js:3892`, `:3519`): they integrate by their own velocity, have infinite solve mass so the ball can't shove them, and the contact solver reads their velocity — so a moving rim imparts a proper impulse instead of teleporting through the ball. That last part is why this must be kinematic bodies and *not* "set `body.position` each step" on a static body, which would penetrate and then explode.
+
+**Engines are already per-machine.** Since 2026-08-23 each machine owns its own `physics.js` / `machine.js` / `render.js` (`engines.js`). A mover machine is a copy of `basketball/`, and the changes cannot reach HOT SHOT, BRICK CITY, THE CLASSIC or POPONGO. That's exactly the isolation this needs.
+
+## What actually has to change
+
+**1. Capture must use velocity *relative to the mouth*.** This is mandatory, not polish. `physics.js:302-338` computes `vFace` as the ball's speed across the face and asks "does it fall in before it crosses the mouth?" With a moving mouth, a ball sitting still on the tread reads `vFace ≈ 0` → captured instantly. The basket would hoover up every dead ball it drove over — which is `MACHINE-SPEC.md` section 9's banned magnetism arriving through the back door. Fix is small: subtract the mouth's u-velocity before taking the magnitude.
+
+**2. The committed-capture branch needs the live u.** `physics.js:265-285` re-measures `d` against `hDef.u` while the ball falls through. If the mouth slides on, the ball is re-scored as a `corner0` gutter mid-drop. Cleanest fix is to latch the mouth's u at capture — physically, the ball is in the basket and rides with it.
+
+**3. One rack clock, because two balls can be live at once.** `canThrow()` (`game.js:83-87`) lets ball 2 launch as soon as ball 1 has `arrived`, and **each throw builds its own world** (`physics.js:33`). Two coexisting worlds plus a renderer that builds its own separate `buildMachine` copy (`render.js:64`) means three things have to agree on where the basket is. Driving the phase off per-throw `st.t` would make them disagree and the hoop would visibly snap when ball 2 launches. It needs a rack-level clock on the `Game` instance, passed into `startThrow`, `step` and `render`, with the offset itself computed by one pure exported function (`moverU(G, t)`) that physics and render both import.
+
+That clock is the **one edit to a shared file** (`game.js`), and it's additive — the other four engines ignore the extra argument. Worth naming explicitly in the commit, per `engines.js`'s rule.
+
+**4. Determinism survives, if the phase is passed explicitly.** `test.js:171-172` asserts two identical `simulateThrow` calls match. Keep `t0` an explicit param and that still holds. But the reachability sweep gains a third axis: today it's 41×21 = 861 throws over (power, aim); a mover makes reachability a function of phase too.
+
+**5. The spec tests would lie.** `holes.inside` and `holes.spacing` (`test-skeeball-machine-spec.mjs:107-131`) test `hole.u` as a single number. A mover passes at rest and tells you nothing about its extremes. Those rules need to test the travel envelope, or the board carries a waiver.
+
+## The new failure mode
+
+**The mover can crush a ball against a rail.** `MACHINE-SPEC.md` section 12 already bans a collar within `0.78X` of a flat wall, because a curved wall converging on a flat one makes a pinch that three-contact-locks the solver — measured on POPONGO's first draft at **12% of all throws ending in the watchdog's walkout**. A *moving* collar is strictly worse: it actively drives a ball into that pinch, with infinite solve mass and nothing to yield.
+
+That sets the travel limit, and the number is concrete. Face half-width 0.500 m; the 100's rim is `X * 0.4375` = 0.0636 m radius, plus `collarThick` 0.012 → outer face 0.0756 m; minus the 0.78X (0.1135 m) rail gap:
+
+> **max |u| ≈ 0.311 m — a 0.62 m stroke on a 1.00 m face.**
+
+So it cannot literally reach the left and right edges. But here's the nice part: the existing `topL` and `topR` sit at `u = ±0.301 m`. **The mover's envelope is almost exactly the span the three top hoops already occupy**, and all three are documented clean-capturable with zero emergencies. So reachability across the sweep is already half-proven by the current machine.
+
+Secondary: a dead ball resting on a tread will get *ploughed* by the passing rim. That's arguably charming and true to a real machine, but it's the mechanism that feeds the pinch above.
+
+## How fast should it move
+
+I ran the real basketball engine to get this. On a top-row-capable throw the ball reaches top-row height **0.40–0.50 s after launch**:
+
+| power | t to top row | settled | landed |
+|---|---|---|---|
+| 0.5 | 0.72 s | 1.27 s | midC |
+| 0.7 | 0.48 s | 1.39 s | **topC** |
+| 0.8 | 0.46 s | 1.24 s | **topC** |
+| 1.0 | 0.40 s | 2.14 s | midC |
+
+So the player is leading the target by roughly half a second. For that lead to be a real skill and not a coin flip, the basket wants to travel maybe 15–25% of its stroke in that window — about 0.22–0.33 m/s. On a sine (smooth, no velocity discontinuity at the ends, free to compute) that's a **round trip of roughly 6–8 seconds**. A triangle wave would snap-reverse against any ball touching the rim, so I'd start with the sine.
+
+## Cost
+
+New machine folder (3 files copied from `basketball/`, ~85 lines of real change across them), a `boards.js` entry, one row in `engines.js`, a `goals.js` entry, `strings.js` EN/ES, the `game.js` clock, `sw.js` ASSETS + `CACHE` bump + `validate-sw-assets.mjs` re-run, `gen-skeeball-tile.mjs`. Plus the two test changes and the 3-axis sweep, which is where most of the *time* goes, not the code.
+
+It's a machine-5 build plus one new engine capability — and that capability is generic. Once a collar can be kinematic, so can a riser, a gate, or a whole tread.
+
+## What I'd want from you before building
+
+1. **The stroke is ±0.311 m, not edge to edge.** Fine as-is, or do you want to look at mitigations (a sloped outer collar face, a recessed rail pocket) to buy more?
+2. **Round trip ~6–8 s** — or do you want it faster and meaner?
+3. **Constant sweep, or does it only move once the rack starts / speed up as balls run down?**
+4. **Reduced-motion:** this is gameplay, not decoration, so it can't be switched off the way the confetti is. It'd be the first thing in Skeeball that keeps moving under `prefers-reduced-motion`.
+5. **New machine, or the top row of an existing HOT SHOT variant?** New id is much safer — a moving basket on `basketball` would change every existing record's meaning.
+
+I haven't built or swept any of this. The pinch/plough failure modes are reasoned from the code plus POPONGO's measured incident, not measured on an actual moving hoop — that's the first thing a build should put a number on.
+
+08-24T23:51:33 A: Building it. Let me load the game-UI conventions skill first, since this touches a game's render layer.
+
+08-24T23:52:45 A: Now let me read the shared `game.js` and the how-to-play demo, which both need the rack clock.
+
+08-24T23:53:26 A: Now I'll build it. Starting with the engine folder.
+
+08-24T23:53:31 A: Now the mover math in `machine.js` — the one pure function physics and render both read.
+
+08-24T23:54:16 A: Now `physics.js` — the kinematic bodies, the rack clock, and the relative-velocity capture fix.
+
+08-24T23:54:37 A: Now the kinematic bodies in `buildWorld`:
+
+08-24T23:54:50 A: Now `startThrow` (take `t0`, seed the movers) and `substep` (drive them, relative-velocity capture, latched u):
+
+08-24T23:56:00 A: Now `render.js` — the moving meshes and a track so it reads as machine furniture.
+
+08-24T23:56:36 A: Now the two new render methods and the per-frame update:
+
+08-24T23:57:14 A: Now the rack clock in the shared `game.js` — the one file outside the machine folder that has to change:
+
+08-24T23:57:47 A: Now the board entry — the data that defines the machine.
+
+08-24T23:59:14 A: Board data is live. Now the goals and strings:
+
+08-24T23:59:48 A: Now the reachability sweep — the tool that proves the moving 100 is actually catchable across all three axes.
+
+08-25T00:02:08 A: Zero jams and everything reachable. Now a finer sweep, plus a HOT SHOT baseline so I can say whether the moving 100 is hard or *too* hard.
+
+08-25T00:04:56 A: While that runs, let me make the spec test honest about a travelling hole.
+
+08-25T00:05:22 A: Let me verify the new envelope check actually bites rather than passing vacuously.
+
+08-25T00:06:04 A: Now the hub tile and the remaining suites:
+
+08-25T00:06:57 A: The full grid shows the 100 is caught at only 4 of 8 sampled phases. Let me find out whether the ends of the travel are genuinely unreachable or just under-sampled — that distinction decides whether the machine has a flaw.
+
+08-25T00:09:07 A: While that runs, the machine documentation:
+
+08-25T00:09:19 A: Now the machine's own doc, the deep one that a future session needs:
+
+08-25T00:10:43 A: The extreme phase **is** reachable — the coarse grid was under-sampling, exactly as the repo's own docs warn about the classic's corner 100s. Adding the section my code comments point at:
+
+08-25T00:11:44 A: Both extremes are reachable and mirror-symmetric. Now the remaining docs:
+
+08-25T00:12:23 A: Now the real test: does it actually render and play in a browser?
+
+08-25T00:14:01 A: The sim is proven. Now I need to actually *see* RUNAWAY render and confirm the basket moves on screen, not just in physics.
+
+08-25T00:14:57 A: The basket visibly moves. Two things to check: the track I drew is barely readable, and the marquee name looks clipped. Let me test whether the clipping is mine or pre-existing.
+
+08-25T00:15:16 A: BRICK CITY splits its long name across two lines; my copy came from basketball's renderer, which has no such handling. That's a real defect in my build. Let me find the sibling's approach.
+
+08-25T00:15:40 A: The basketball painter draws the name at a fixed 104px with no fit-to-width, so any long name clips. Fixing it the way the repo's own convention says — measure and shrink:
+
+08-25T00:16:30 A: The marquee is fixed. Let me look closely at the top shelf to judge the track.
+
+08-25T00:17:05 A: The end stops show but the groove doesn't. Let me find out why rather than guess.
+
+08-25T00:18:25 A: The groove mesh exists and is correctly placed — it just doesn't read, because the top shelf is nearly edge-on to the camera and a near-black stripe on a dark tread has no contrast. The end stops do read. Let me light the rail instead.
+
+08-25T00:19:01 A: Even with the basket off to one side, the rail never shows — the top tread is hidden behind the middle row's riser from the play camera. That makes the groove dead geometry. Removing it and keeping only what reads:
+
+08-25T00:19:26 A: My replacement over-consumed — the loop header was cut, and `node --check` passed because it's a runtime reference error, not a syntax one. Restoring it:
+
+08-25T00:19:49 A: Now an integrated in-browser play test — the full `game.js` → physics → renderer path scoring the moving 100:
+
+08-25T00:20:12 A: The full stack scores the moving 100. Now cleanup and final verification:
+
+08-25T00:21:59 A: A failure in the stats replay suite — that's THE LAW rule 7 territory. Let me see it.
+
+08-25T00:22:07 A: That's a hardcoded chain literal from when BRICK CITY landed — and crucially, the LAW rule 2 assertions right below it (nobody loses an unlock, nobody is silently granted one) all pass against the real records. Let me look before touching it.
+
+08-25T00:22:20 A: The suite is doing its job — it's designed to fail loudly when the chain changes so a session has to think about it. Updating it properly, with an assertion for the new machine:
+
+08-25T00:22:39 A: All green. Updating the doc with the two findings that came out of verification:
+
+08-25T00:24:02 A: The build is complete, tested, and pushed. One decision is yours before I go further:
+
+08-25T00:25:55 A: Merged. Now the part that actually matters — confirming the Pages deploy for that merge commit completes green:
+
+08-25T00:25:59 A: The deploy for the merge commit is queued. Let me wait for it to finish rather than call it done.
+
+08-25T00:26:36 A: Deploy run 582 for the merge commit: `status: completed`, `conclusion: success`. Let me confirm the live site is actually serving the new build.
+
+08-25T00:26:59 A: **HOT SHOT: RUNAWAY is live on the Game Hub.** Deploy run 582 for merge commit `f72264e` completed green, and the live site is serving `game-hub-v469` with all three new engine files at 200.
+
+It's admin-only at ship like its three siblings, so it's on your launcher and nobody else's. Flip it from the in-app Admin page when you want it out — no commit, no deploy.
+
+## What it is
+
+HOT SHOT's cabinet, ball, ramp, staircase and rows 1–2 unchanged. The top shelf is one 100 basket sliding on a sine, **2.07X amplitude, 7s round trip**, phase 0 at dead centre.
+
+A top-row throw is airborne about **0.45s**, and at peak the basket covers **~20% of its stroke** in that time. You're throwing at where it's going to be.
+
+## How it plays, measured
+
+1,848 throws across power × aim × phase:
+
+| | |
+|---|---|
+| every hole reachable | yes |
+| watchdog walkouts | **0** |
+| slowest settle | 6.50s (cap 12s) |
+| moving 100 | 0.43% of the grid |
+| HOT SHOT's *static* 100, same grid | 1.30% |
+
+So it's about **3× harder than the static one** — same band as BRICK CITY's skill row. It's catchable wherever the basket is; hardest at the ends (9 cells at centre, 4 and 5 at the extremes, mirror-symmetric, so neither side is favoured).
+
+## Two things worth knowing
+
+**The travel doesn't quite reach the edges.** You said edge to edge; it's ±2.07X of a ±3.4375X face, so the middle ~60% of the width. The binding constraint is the collar-near-a-rail rule that cost POPONGO 12% of throws to solver jams — and a *moving* collar is the worst case for it, since it can drive a ball into the pinch rather than just sit in one. 2.07X is the widest that clears it. Going wider means solving the pinch differently, not just raising the number. It happens to land exactly where HOT SHOT's top 50s sit, which is why reachability was never a fight.
+
+**The top row is one basket by necessity, not taste.** A static neighbour would break the 1.30X spacing rule at nearly every step of any travel worth having.
+
+## Two defects the visual pass caught
+
+- The marquee **clipped its own name** — HOT SHOT's painter draws it at a hardcoded 104px. RUNAWAY's now measures and shrinks to fit, stacking "HOT SHOT" over a "RUNAWAY" plate. Its siblings are deliberately untouched, but a future machine copying from `basketball/` inherits the bug.
+- I drew a painted rail along the travel and **deleted it** — tread 3 is occluded by the middle row's riser from the play camera, so nothing lying flat up there can be seen at all. Only the two end posts, which have height, read. That finding is in `skeeball/CLAUDE.md` since it applies to any machine on that staircase.
+
+## Your call, when you've played it
+
+The three objectives are mine, not yours: **Catch the 100** / 240 in a game / 2,500 total. Goal 1 is the slow one. If it plays too mean the number to change is in `goals.js` — not the mouth and not the period, which are what the machine is.
+
+Build record with all the numbers: `skeeball/MACHINE-RUNAWAY.md`. Re-run `node sweep-mover.mjs runaway` after any change to that face.
+
+08-25T00:27:07 A: That was just a leftover sleep timer from the deploy wait — nothing to act on. The deploy was already verified green (run 582, `f72264e`) and the live site confirmed serving `game-hub-v469` with RUNAWAY's three engine files.
+
+Nothing is outstanding. HOT SHOT: RUNAWAY is live and admin-only, waiting for you on the Skeeball carousel.
+
+08-25T00:27:37 A: Another leftover deploy-wait timer. Still nothing outstanding — the work is merged, deployed green, and verified live.
+
+08-25T00:28:04 A: Last of the deploy-wait timers. All three have now drained; nothing was pending on any of them.
+
+HOT SHOT: RUNAWAY is live and verified. Standing by for your playtest notes.
+
+08-25T00:52:02 A: Matt's call on a mouth size, so that's the change. 4in diameter = `1.0X` across, so `r = X * 0.5` (up from `X * 0.4375`). Let me check what it does to the rail-gap arithmetic first — that's what bounds the travel.
+
+08-25T00:52:30 A: At 4in the rail-gap margin collapses from `0.0675X` to `0.0050X` — technically still over the rule, but effectively nothing at the ends of travel. Applying Matt's diameter first, then measuring rather than guessing:
+
+08-25T00:52:44 A: RUNAWAY only; its siblings are untouched. Now the sweep — with the rail margin this thin, jams are the thing to check.
+
+08-25T00:52:48 A: While that runs, the doc updates the change requires:
+
+08-25T00:53:29 A: Still running. Let me update the machine doc while I wait.
+
+08-25T00:55:09 A: The sweep is taking far longer than the 218s the 3.5in build took — which is itself a signal (balls running to the settle cap). Let me let it finish and see.
+
+08-25T00:55:19 A: The 4in mouth is applied and the docs updated. I'm waiting on the reachability sweep, which is running much longer than the 3.5in build's 218s — that slowdown usually means balls are running to the settle cap, which is exactly the pinch risk the thinner rail margin creates. I'll report once it lands.
+
+08-25T00:55:42 A: Only ~3 minutes elapsed — my earlier read was wrong; it's about to finish. Let me commit to the branch as the hook asks, without deploying anything unverified.
+
+08-25T00:56:17 A: Committed and pushed to the branch (`7231841`) as the hook asked — but deliberately **not** merged to main, because the sweep hasn't answered yet.
+
+**The change:** RUNAWAY's `topC` only, `r X * 0.4375 → X * 0.5` — 3.50in → 4.00in across. Depth unchanged at the row's `0.875X`, per your rule that a row runs one depth across whatever diameters are on it. HOT SHOT's and BRICK CITY's own 100s are untouched.
+
+**What it cost, and why I'm waiting.** A wider mouth grows the collar's *outer* diameter against a side rail that didn't move, so the gap at the ends of the travel drops:
+
+| | rail gap at the ends | margin over the `0.78X` rule |
+|---|---|---|
+| 3.50in (shipped) | `0.8475X` (3.39in) | `+0.0675X` |
+| **4.00in (now)** | **`0.7850X`** (3.14in) | **`+0.0050X`** |
+
+It still clears — but barely. That's the rule whose violation cost POPONGO's first draft 12% of all throws to solver jams, and RUNAWAY's collar is the worst case for it because it can *drive* a ball into the pinch instead of just sitting in one. So the threshold passing isn't good enough here; the sweep is the actual evidence.
+
+If it comes back with walkouts, amplitude drops to `2.0075X` (restores the old `0.8475X` gap, costs 3% of travel) and I re-sweep before anything reaches main. If it's clean, I'll take it live as you had me do last time.
+
+Both `boards.js` and `MACHINE-RUNAWAY.md` now carry the arithmetic and the formula any future widening has to be paid out of: `amp <= 0.500 - (r + collarThick) - 0.78X`.
+
+Everything else is green: spec 86/0, engine 48/0, sw-strategy 52/0, stats-replay, players-agg, rings, recorder-contract, conventions. CACHE v470.
+
+08-25T00:56:28 A: That was a stale wait timer, not the sweep. The sweep is still running; `b7tx0xprw` is blocking on it and will print the moment it exits. Nothing to report yet.
+
+08-25T00:56:52 A: Sweep is clean — but it also contains a result worth checking before I ship.
+
+08-25T00:57:02 A: The rail margin held — **zero walkouts**. But the sweep also shows the wider mouth didn't measurably make the 100 easier, so I'm running a denser probe before shipping.
+
+08-25T00:57:09 A: Stale timer, not the probe. Still waiting on that.
+
+One correction owed: I said the sweep's long runtime was itself a signal of balls hitting the settle cap. It wasn't — it ran 219.7s against the 3.5in build's 217.9s, effectively identical. I had misread the elapsed time; there was never a slowdown to read anything into.
+
+08-25T00:57:24 A: The only untracked file is a throwaway comparison probe — that belongs in the scratchpad, not the repo. `sweep-mover.mjs` is the committed tool that covers this.
+
+08-25T00:57:32 A: Tree is clean and the branch is pushed and in sync (`7231841`). The untracked file was a throwaway difficulty-comparison probe; I moved it to the scratchpad rather than commit it, since `sweep-mover.mjs` is the committed tool for this and the probe is a one-off at three fixed phases.
+
+Where things stand on the 4in change:
+
+- **Applied and committed** — RUNAWAY's `topC` only, 3.50in → 4.00in, depth unchanged.
+- **Full sweep is clean**: 1,848 throws, **zero watchdog walkouts**, slowest settle 6.55s. The thin `0.005X` rail margin did not bite.
+- **Still checking one thing**: the sweep also showed the wider mouth scoring the 100 at 7/1848 versus 3.50in's 8/1848 — i.e. no measurable gain. A denser probe (2,583 cells across three phases, directly comparable to the 18 the 3.50in build measured) is running to tell whether widening it actually changed the difficulty or not.
+
+I'm not merging until that lands, because if 4in doesn't make the shot easier, that's something you'd want to know before it's the shipped number.
+
+08-25T00:58:01 A: Another stale timer from the earlier polling, not the probe. The dense probe is still running; `bxn2qq33g` is blocking on it and will print when it exits. Nothing new to report.
+
+08-25T01:03:21 A: The dense probe reverses the coarse read — and the detail matters:
+
+| phase | 3.50in | 4.00in |
+|---|---|---|
+| centre | 9 | **10** |
+| + extreme | 4 | **9** |
+| − extreme | 5 | **8** |
+| **total / 2583** | **18** | **27** |
+
+Let me record that and check it visually.
+
+08-25T01:03:47 A: Now a look at the bigger rim on the actual machine — the end-stop posts are sized off the mouth radius, so they moved too.
+
+08-25T01:04:17 A: Renders correctly — the 100 is now visibly wider, on par with the mid-row baskets, and clear of the rail. Shipping it.
+
+08-25T01:05:35 A: Merged as `4178d50`. Waiting on the Pages deploy to actually complete before I call it live.
+
+08-25T01:05:45 A: The deploy for `4178d50` is still building; my poller will report the moment it completes. I'll confirm live rather than assume.
+
+08-25T01:33:28 A: Yes — it's live.
+
+08-25T01:33:42 A: **Live.** Deploy run 583 for merge commit `4178d50` completed `success`, and the deployed site is serving `game-hub-v470` with `topC: r: X * 0.5` — the 4in mouth.
+
+Go open RUNAWAY and throw at it.
+
+**What you'll notice:** the gain isn't spread evenly. Widening it helped most exactly where the shot was hardest — the ends of the travel:
+
+| basket at | 3.50in | 4.00in | |
+|---|---|---|---|
+| centre | 9 / 861 | 10 / 861 | |
+| right end | 4 / 861 | **9 / 861** | +125% |
+| left end | 5 / 861 | **8 / 861** | +60% |
+
+So it's ~50% more catchable overall, but the real change is that it no longer falls off a cliff at the turnarounds. Timing the basket matters more now; getting caught at an awkward phase matters less.
+
+**One thing to know for later:** that's about as wide as the 100 can go without shortening the travel. A bigger mouth grows the collar's outer edge toward the side rail, and the clearance at the ends is now `0.7850X` against a `0.78X` floor — margin of `0.005X`, down from `0.0675X`. The sweep came back with **zero jams** at that size, which is why I shipped it at full travel rather than trimming the amplitude. But if you want it wider still, the travel has to come in to pay for it, and the formula is now written into `boards.js` and `MACHINE-RUNAWAY.md`.
+
+One correction from earlier: I said mid-run that the sweep taking longer was a sign of balls hitting the settle cap. It wasn't — 219.7s vs the 3.50in build's 217.9s, effectively identical. I'd misread the elapsed time; there was no slowdown to read anything into.
+
+08-25T01:38:41 A: Period only — the rail-gap arithmetic is untouched by it, but a faster wall needs re-sweeping.
+
+08-25T01:39:46 A: Period is set to 6s and the docs are updated. Waiting on the sweep before I ship — a faster kinematic wall meets the ball differently, so reachability and jams both need re-measuring.
+
+08-25T01:40:41 A: Committed and pushed (`ff426de`), tree clean. Not merged yet — the sweep at the new period is still running, and that's the check that says whether a faster wall jams or strands a hole.
+
+**The change:** RUNAWAY's mover only, `period 7.0 → 6.0`. Nothing else on the face moved.
+
+| | 7s | **6s** |
+|---|---|---|
+| peak speed | 0.270 m/s | **0.315 m/s** |
+| stroke covered during a 0.45s flight | ~20% | **~24%** |
+
+That percentage is the actual dial — it's how far the basket travels between your release and the ball's arrival, so it's how much lead the shot demands. I wrote that into MACHINE-SPEC section 21 as the way to pick a period, rather than eyeballing the sweep standing still.
+
+**The rail gap is unaffected** — only amplitude, mouth and `collarThick` feed that, so the thin `0.7850X` clearance from the 4in change is unchanged here. But the re-sweep is still required, since reachability is a function of phase and phase is now sampled over 6s.
+
+I'll merge and deploy once it comes back clean.
+
+08-25T01:43:08 A: Clean — zero walkouts. But the coarse grid shows the 100 scoring *more* often at 6s (12 vs 7), which contradicts what I told you about it being harder. Resolving that before I ship.
+
+08-25T01:43:24 A: The 6s sweep passed cleanly — **zero walkouts**, every hole reachable, slowest settle 7.54s against the 12s cap (up from 6.55s, which is the faster wall knocking balls around more, still comfortably inside).
+
+Two things improved that I didn't predict: the 100 now scores at **6 of 8 phases** instead of 4, and the phase profile is smoothly graded (3/2/1/0 each half) rather than all-or-nothing. The faster sweep spreads the shot across the cycle better.
+
+But the coarse grid also puts topC at 12/1848 versus 7/1848 at 7s — i.e. *easier*, not harder as I said. That grid was exactly wrong about the 4in change, so I'm running the dense probe before I tell you which it is.
+
+08-25T01:43:32 A: Same as before — the untracked file is the throwaway probe, not deliverable code. Moving it to the scratchpad rather than committing it.
+
+08-25T01:43:38 A: Tree clean, branch pushed and in sync at `ff426de`. The untracked file was the one-off difficulty probe — same call as last time: it's a throwaway at three fixed phases, while `sweep-mover.mjs` is the committed tool, so it lives in the scratchpad.
+
+The 6s change itself is committed and passing. Still holding the merge on the dense probe, because the coarse grid says the 100 got easier at 6s and I told you the opposite — I want to know which is true before it's the shipped number.
+
+08-25T01:49:32 A: The dense probe settles it — and I had it backwards.
+
+08-25T01:51:04 A: Merge conflict — main moved while I was measuring. Let me bring it in and resolve.
+
+08-25T01:51:24 A: Both conflicts are generated values. Resolving per the repo's rule — CACHE past main's current number, manifest regenerated by its tool rather than hand-merged.
+
+08-25T01:51:33 A: Now I need to confirm main's changes to `boards.js` and `goals.js` auto-merged correctly and didn't disturb RUNAWAY.
+
+08-25T01:51:43 A: Both sides survived — my 6s/4in RUNAWAY changes and main's HOT SHOT sign/goals rework are intact. Full validation before I complete the merge:
+
+08-25T01:52:34 A: Merged as `7074b46`, waiting on the deploy.
+

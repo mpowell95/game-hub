@@ -1,0 +1,16 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox','--autoplay-policy=no-user-gesture-required'] });
+const page = await (await browser.newContext()).newPage();
+await page.goto('about:blank');
+const r = await page.evaluate(() => new Promise((res) => {
+  const v = document.createElement('video');
+  const can = { mp4: v.canPlayType('video/mp4'), h264: v.canPlayType('video/mp4; codecs="avc1.42E01E"') };
+  v.src = 'http://localhost:8130/rec.mp4';
+  v.muted = true;
+  v.onloadedmetadata = () => res({ can, w: v.videoWidth, h: v.videoHeight, dur: v.duration });
+  v.onerror = () => res({ can, error: v.error && v.error.code, msg: v.error && v.error.message });
+  setTimeout(() => res({ can, timeout: true }), 8000);
+}));
+console.log(r);
+await browser.close();

@@ -155,6 +155,15 @@ const EXTRA_SCREENS = {
         await page.waitForSelector('[data-ov="result"]:not([hidden])', { timeout: 8000 });
       },
     },
+    {
+      name: 'multiplayer',
+      async open(page) {
+        await page.click('[data-ov="result"] .ep-x');
+        await page.click('[data-ov="setup"] [data-act="multi"]');
+        await page.waitForSelector('[data-ov="mp"]:not([hidden])', { timeout: 8000 });
+        await page.waitForTimeout(600);
+      },
+    },
   ],
   // Hill Climb: the garage's other three tabs. Only Vehicle (the default) was ever measured, and
   // Shop, Stage and Tune each scrolled on some phone until 2026-10-13.

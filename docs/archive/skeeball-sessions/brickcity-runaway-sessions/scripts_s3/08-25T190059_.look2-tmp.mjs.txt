@@ -1,0 +1,35 @@
+import { chromium } from 'playwright-core';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const ctx = await b.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Look', emoji: '\u{1f996}' }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: {}, skeeball: { boards: { brickcity: { open: true, testing: false } } }, corrections: { skeeball: {} } }));
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForSelector('.sk-slide', { timeout: 30000 });
+await page.waitForTimeout(800);
+await page.locator('[data-role="play"]').click();
+await page.waitForSelector('.sk-goal', { timeout: 60000 });
+// nine balls straight through the game object, then let the rack record itself
+const done = await page.evaluate(async () => {
+  const ui = window.__skTest.ui;
+  const throws = [[0.5, 0], [0.5, 0.1], [0.525, -0.2], [0.65, 0], [0.675, -0.3], [0.675, 0.3], [0.5, 0], [0.5, 0.1], [0.525, -0.2]];
+  for (const [power, aim] of throws) {
+    ui.game.throwBall({ power, aim });
+    const t0 = Date.now();
+    while (ui.game && ui.game.ball && Date.now() - t0 < 20000) await new Promise((r) => setTimeout(r, 60));
+    await new Promise((r) => setTimeout(r, 350));
+  }
+  await new Promise((r) => setTimeout(r, 3000));
+  const st = JSON.parse(localStorage.getItem('gamehub.stats') || '{}');
+  const sk = (((st.games || {}).skeeball || {}).sk) || {};
+  const rails = [...document.querySelectorAll('[data-goal]')].map((el) => `${el.querySelector('em').textContent} ${el.querySelector('b').textContent}`);
+  return { board: (sk.boards || {}).brickcity, rails, plays: sk.played };
+});
+console.log(JSON.stringify(done, null, 1));
+await b.close();
+console.log('done');

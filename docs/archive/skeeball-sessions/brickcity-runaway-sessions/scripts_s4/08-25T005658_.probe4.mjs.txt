@@ -1,0 +1,21 @@
+import { boardById } from './skeeball/js/boards.js';
+import { engineFor } from './skeeball/js/engines.js';
+const board = boardById('runaway');
+const { simulateThrow } = engineFor('runaway').physics;
+const m = board.geom.mover;
+// The SAME dense probe run against the 3.5in build (21 powers x 41 aims = 861 cells at each of
+// three phases), so the two are directly comparable. 3.5in measured 9 / 4 / 5.
+let total = 0;
+for (const [label, t0] of [['centre      t=0.00', 0.0], ['+extreme    t=1.75', 1.75], ['-extreme    t=5.25', 5.25]]) {
+  let hits = 0;
+  for (let p = 0; p <= 20; p++) {
+    for (let a = 0; a <= 40; a++) {
+      const r = simulateThrow(board, { power: 0.55 + (p / 20) * 0.40, aim: -1 + (a / 40) * 2, t0 });
+      if (r.outcome && r.outcome.hole === 'topC') hits++;
+    }
+  }
+  total += hits;
+  const u = m.amp * Math.sin(2 * Math.PI * t0 / m.period);
+  console.log(`${label}  u=${u >= 0 ? '+' : ''}${u.toFixed(3)}m  ->  ${hits} of 861 cells catch the 100`);
+}
+console.log(`\ntotal across the three phases: ${total} of 2583   (the 3.50in build measured 18)`);

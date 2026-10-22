@@ -1,0 +1,30 @@
+import { readFileSync } from 'node:fs';
+const SP='/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad';
+const W=96,H=208,FB=W*H;
+const buf=readFileSync(`${SP}/raw/g.raw`); const n=buf.length/FB;
+// the ball is the brightest compact blob on the dark lane. Track its centroid in the lane band.
+function ball(f){
+  let best=-1,by=0,bx=0,cnt=0,sy=0,sx=0;
+  for(let y=120;y<200;y++) for(let x=26;x<70;x++){ const v=buf[f*FB+y*W+x]; if(v>150){cnt++;sy+=y;sx+=x;} }
+  if(cnt<3) return null;
+  return { y:sy/cnt, x:sx/cnt, n:cnt };
+}
+let prev=null, runs=[], cur=null;
+for(let f=0;f<n;f++){
+  const b=ball(f);
+  if(b){ if(!cur) cur={start:f,pts:[]}; cur.pts.push([f,+b.y.toFixed(1)]); }
+  else { if(cur && cur.pts.length>8) runs.push(cur); cur=null; }
+}
+if(cur&&cur.pts.length>8) runs.push(cur);
+console.log(`${runs.length} stretches with a ball visible on the lane`);
+for(const r of runs.slice(0,6)){
+  const p=r.pts;
+  // keep only frames where y actually moved (the painted ones)
+  const moved=[p[0]]; for(let i=1;i<p.length;i++) if(Math.abs(p[i][1]-moved[moved.length-1][1])>0.4) moved.push(p[i]);
+  if(moved.length<4) continue;
+  const t0=moved[0][0], t1=moved[moved.length-1][0];
+  const dy=moved[0][1]-moved[moved.length-1][1];
+  console.log(`  t=${(t0/60).toFixed(2)}s..${(t1/60).toFixed(2)}s  ${((t1-t0)/60).toFixed(2)}s  y ${moved[0][1]}->${moved[moved.length-1][1]} (${dy.toFixed(1)} rows of 208)  ${moved.length} distinct positions => ${(moved.length/((t1-t0)/60)).toFixed(1)} position updates/sec`);
+  const steps=[]; for(let i=1;i<moved.length;i++) steps.push(moved[i][0]-moved[i-1][0]);
+  console.log(`     frame steps between distinct positions: ${steps.slice(0,20).join(' ')}`);
+}

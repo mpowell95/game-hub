@@ -1,0 +1,58 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: { brickcity:{open:true,testing:false} } } }, at: Date.now() }));
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1500);
+await (await page.$('[data-role="play"]')).click({ force: true });
+await page.waitForSelector('.sk-canvas', { timeout: 10000 });
+await page.waitForTimeout(800);
+// force the phone path so the numbers are the ones a phone sees
+const cfg = await page.evaluate(() => {
+  const R = window.__skTest.ui.renderer;
+  R.renderer.shadowMap.enabled = true;           // soft-GL detection turns it off headless
+  return { autoUpdate: R.renderer.shadowMap.autoUpdate, softGL: R.softGL };
+});
+console.log('shadowMap.autoUpdate =', cfg.autoUpdate, '(softGL:', cfg.softGL + ')');
+const sample = async (label) => {
+  const r = await page.evaluate(() => new Promise(res => {
+    const R = window.__skTest.ui.renderer, ui = window.__skTest.ui;
+    const calls = [], tex = [];
+    let i = 0;
+    const tick = () => {
+      const info = R.renderer.info;
+      calls.push(info.render.calls); tex.push(info.memory.textures);
+      if (++i < 40) requestAnimationFrame(tick);
+      else res({ min: Math.min(...calls), max: Math.max(...calls), tex: tex[tex.length-1] });
+    };
+    requestAnimationFrame(tick);
+  }));
+  console.log(`${label}: draw calls ${r.min}..${r.max}   textures on GPU ${r.tex}`);
+  return r;
+};
+await sample('idle, nothing moving  ');
+const cdp = await ctx.newCDPSession(page);
+const stage = await (await page.$('[data-role="stage"]')).boundingBox();
+const swipe = async (ms) => {
+  const x = stage.x + stage.width/2, y0 = stage.y + stage.height*0.94, dist = stage.height*0.55, steps = 6;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 1 }] });
+  for (let i=1;i<=steps;i++){ await cdp.send('Input.dispatchTouchEvent', { type:'touchMove', touchPoints:[{x, y:y0-dist*i/steps, id:1}] }); await page.waitForTimeout(ms/steps); }
+  await cdp.send('Input.dispatchTouchEvent', { type:'touchEnd', touchPoints: [] });
+};
+await swipe(200);
+await sample('ball in flight        ');
+// texture accounting across a whole rack
+const t0 = await page.evaluate(() => window.__skTest.ui.renderer.renderer.info.memory.textures);
+for (let i=0;i<9;i++){ await swipe([200,260,180,300,340,220,240,170,280][i]); await page.waitForTimeout(3500); }
+await page.waitForTimeout(1500);
+const t1 = await page.evaluate(() => window.__skTest.ui.renderer ? window.__skTest.ui.renderer.renderer.info.memory.textures : 'gone');
+console.log(`textures on GPU: ${t0} before a rack -> ${t1} after`);
+await browser.close();
