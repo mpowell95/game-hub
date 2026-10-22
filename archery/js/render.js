@@ -39,16 +39,19 @@ const EYE = new THREE.Vector3(0, 1.62, 0);
 const FACE_Z = TARGET.z + 0.09;                 // the front of the boss
 export const ARROW_COLORS = { me: '#1f6fe5', them: '#e0362b', plain: '#f0c419' };
 const FLIGHT_T = 0.8;                           // seconds, release to hit (the recording, at 30 fps)
-// The arrow leaves from where the bow held it: its point on the sight (Matt, 2026-10-20: it used to
-// jump up and right the moment he let go). FLIGHT_D0 m in front of the eye, rising FLIGHT_ARC of the
-// screen's half-height mid-flight. The camera glides at a steady speed, then over the last CAM_EASE
-// of the flight slows to CAM_END of that speed before it stops (stopping dead from full speed read as
-// a jump onto the close-up; easing to nothing, Matt: "slows down way too much before hitting").
-// The arrow flies at one steady speed the whole way (about 34 m/s down the lane); as the camera eases
-// off, the arrow pulls away from it, so it hits at full speed.
+// THE FLIGHT IS A REAL STRAIGHT LINE in the world (Matt, 2026-10-22: framed from the moving camera, it
+// "curves towards the camera then back to the target... NOT an arrow flying straight towards a
+// target"). It leaves from where the bow held it, on the line from the eye through the sight,
+// FLIGHT_D0 m out (Matt, 2026-10-20: it used to jump up and right on release), and goes straight to
+// the hit at one steady speed (about 34 m/s), rising FLIGHT_ARC m at mid-flight like a real arrow.
+// Whatever the camera shows is then the truth: the camera follows straight behind the arrow (it used
+// to drift sideways and tilt while the arrow was a couple of metres ahead, so the straight flight
+// swung across the screen), then swings round to the close-up and stops as the arrow hits.
 const FLIGHT_D0 = 2.6;
-const FLIGHT_ARC = 0.05;
-const CAM_EASE = 0.2, CAM_END = 0.15;
+const FLIGHT_ARC = 0.25;
+// The chase: CHASE_UP m above the arrow's line, from FLIGHT_D0 to CHASE_BACK behind it (the close-up's
+// own distance from the target), settling onto the close-up over the last CHASE_SETTLE of the flight.
+const CHASE_UP = 0.3, CHASE_BACK = 4.8, CHASE_SETTLE = 0.18;
 const INCOMING_RUN = 3.5;                       // m: how far out a replay arrow is first drawn
 const WOBBLE_T = 0.6, WOBBLE_A = 0.07;          // s, rad: an arrow quivering in the target after it hits
 const FLASH_T = 0.9;                            // s: the scored ring lit on the face
@@ -61,9 +64,17 @@ const LINE_LOOK = new THREE.Vector3(TARGET.x, TARGET.y - 1.45, TARGET.z);
 // The close-up: the board about 45% of the screen's width, right of the middle, stands behind it.
 const CLOSE_POS = new THREE.Vector3(TARGET.x - 1.2, TARGET.y + 0.4, TARGET.z + 4.8);
 const CLOSE_LOOK = new THREE.Vector3(TARGET.x - 0.1, TARGET.y - 0.08, TARGET.z);
-/** The way an arrow travels into the face at (x, y): from the right and a little above, so in the
- *  close-up it sticks out long, up and to the right (the recording). */
-function inDir(x, y) { return new THREE.Vector3(-0.62 - x * 0.04, -0.1 - y * 0.03, -1).normalize(); }
+/** Where a shot at the face point (x, y) leaves from: on the line from the eye to it, FLIGHT_D0 out. */
+function launchAt(x, y) {
+  const H = new THREE.Vector3(TARGET.x + x * TARGET.face, TARGET.y + y * TARGET.face, FACE_Z - 0.05);
+  return EYE.clone().add(H.clone().sub(EYE).normalize().multiplyScalar(FLIGHT_D0));
+}
+/** The way an arrow travels into the face at (x, y): the straight flight's direction as it lands,
+ *  from the shooting line and a hair downward (the arc). Every arrow, flown or replayed, uses it. */
+function inDir(x, y) {
+  const H = new THREE.Vector3(TARGET.x + x * TARGET.face, TARGET.y + y * TARGET.face, FACE_Z - 0.05);
+  return H.sub(launchAt(x, y)).add(new THREE.Vector3(0, -4 * FLIGHT_ARC, 0)).normalize();
+}
 export { FLIGHT_T };
 
 const LOOK = {
@@ -494,68 +505,54 @@ export class Renderer {
   }
 
   // --- the arrow in flight ----------------------------------------------------------------------
-  // As in the recording: the camera glides down the lane from the shooting line to the close-up of
-  // the target (no cut), while the arrow, seen from the side, leaves big at the top right, arcs
-  // over and drops into the target from the right, a white trail behind it.
+  // The camera glides down the lane from the shooting line to the close-up of the target (no cut)
+  // while the arrow flies its straight line ahead of it, a white trail behind.
   /** Start a shot landing at `hit` (face radii), aimed at `aim`. `color`: the arrow's. Nothing
-   *  moves until setFlight. Call it while the camera is still on the line. */
+   *  moves until setFlight. */
   startFlight(aim, hit, color) {
     this.loose.clear();
     const H = this.facePoint(hit.x, hit.y, FACE_Z - 0.05);
-    const dIn = inDir(hit.x, hit.y);
-    // Where the sight was on the screen (-1..1): the bow's arrow pointed there, so this one starts there.
-    const a = this.facePoint(aim.x, aim.y).project(this.cam);
-    const n0 = new THREE.Vector2(a.x, a.y);
-    // It points from the drawing hand (low, right, by the eye) through the sight, as the bow held it.
-    this.cam.updateMatrixWorld();
-    const ty = Math.tan((this.cam.fov * Math.PI) / 360), tx = ty * this.cam.aspect;
-    const tip0 = new THREE.Vector3(n0.x * FLIGHT_D0 * tx, n0.y * FLIGHT_D0 * ty, -FLIGHT_D0).applyMatrix4(this.cam.matrixWorld);
-    const nock = new THREE.Vector3(0.12, -0.2, -0.1).applyMatrix4(this.cam.matrixWorld);
-    const d0 = tip0.sub(nock).normalize();
+    // From the sight: on the line from the eye through where the sight was.
+    const S = launchAt(aim.x, aim.y);
     const arrow = this._arrow(color);
     arrow.visible = false;
     const trail = this._trail();
     this.loose.add(arrow, trail.mesh);
-    this.fc = this.fc || new THREE.PerspectiveCamera();
-    // The glide's length and how far in front of the camera the hit is when it stops: the arrow's
-    // depth in front of the camera is worked out from them so its own speed never changes.
-    this._camAt(1, this.fc);
-    const gEnd = -(H.clone().applyMatrix4(this.fc.matrixWorldInverse).z);
-    this.flight = { H, dIn, n0, d0, arrow, trail, u: 0, glide: EYE.distanceTo(CLOSE_POS), gEnd };
+    this.flight = { S, H, arrow, trail, u: 0 };
   }
-  /** The flight camera at u, into `cam`: a steady glide off the line, easing off just before the hit. */
-  _glideAt(u) {
-    const E = CAM_EASE, F = CAM_END, v = 1 / (1 - E + (E * (1 + F)) / 2), q = Math.max(0, u - (1 - E));
-    return v * (Math.min(u, 1 - E) + q - ((1 - F) * q * q) / (2 * E));
-  }
+  /** The flight camera at u, into `cam`. It starts as the line camera and follows behind the arrow,
+   *  looking at it, so the arrow is seen flying straight at the target: it drops back from FLIGHT_D0
+   *  to the close-up's distance and drifts out to the close-up's side as it goes, then settles on the
+   *  close-up (position and view) over the last CHASE_SETTLE as the arrow lands. It never catches the
+   *  arrow up (it used to swing in beside it, so the arrow loomed and left the screen). */
   _camAt(u, cam) {
-    const c = this._glideAt(u);
-    cam.position.copy(EYE).lerp(CLOSE_POS, c);
-    cam.lookAt(LINE_LOOK.clone().lerp(CLOSE_LOOK, c));
+    const f = this.flight;
+    if (!f) { cam.position.copy(EYE); cam.lookAt(LINE_LOOK); cam.updateMatrixWorld(); return; }
+    const sm = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+    const tip = this._tipAt(u), dir = this._dirAt(u);
+    const back = FLIGHT_D0 + (CHASE_BACK - FLIGHT_D0) * u * u;
+    const pos = tip.clone().sub(dir.multiplyScalar(back));
+    pos.y += CHASE_UP * sm(u * 3);
+    pos.x += (CLOSE_POS.x - TARGET.x) * sm(u);
+    const w = sm((u - (1 - CHASE_SETTLE)) / CHASE_SETTLE);
+    cam.position.copy(pos.lerp(CLOSE_POS, w));
+    const look = LINE_LOOK.clone().lerp(tip, sm(u / 0.15)).lerp(CLOSE_LOOK, w);
+    cam.lookAt(look);
     cam.updateMatrixWorld();
   }
-  /** The arrow's tip at u, placed from the camera as a film would frame it: it starts on the sight
-   *  just in front of the eye, flies away from you in a shallow arc and comes down on the hit as the
-   *  camera glides in behind it. */
+  /** The arrow's tip at u: straight from S to H at a steady speed, FLIGHT_ARC up at mid-flight. */
   _tipAt(u) {
-    const f = this.flight, fc = this.fc;
-    fc.fov = this.cam.fov; fc.aspect = this.cam.aspect; fc.near = this.cam.near; fc.far = this.cam.far;
-    fc.updateProjectionMatrix();
-    this._camAt(u, fc);
-    const hc = f.H.clone().applyMatrix4(fc.matrixWorldInverse);       // the hit, camera space
-    const ty = Math.tan((fc.fov * Math.PI) / 360), tx = ty * fc.aspect;
-    const hn = new THREE.Vector2(hc.x / (-hc.z * tx), hc.y / (-hc.z * ty));
-    const n = f.n0.clone().lerp(hn, u * u);          // speeding up across the screen, never easing in
-    n.y += FLIGHT_ARC * Math.sin(Math.PI * u);
-    // Arrow distance down the lane is linear in u; minus where the camera has got to = its depth.
-    const d = FLIGHT_D0 + (f.glide + f.gEnd - FLIGHT_D0) * u - f.glide * this._glideAt(u);
-    return new THREE.Vector3(n.x * d * tx, n.y * d * ty, -d).applyMatrix4(fc.matrixWorld);
+    const f = this.flight;
+    const p = f.S.clone().lerp(f.H, u);
+    p.y += 4 * FLIGHT_ARC * u * (1 - u);
+    return p;
   }
-  /** The way the arrow points at u: as the bow held it, coming round to arrive from the right (dIn),
-   *  so it is seen from the side as it drops in. */
+  /** The way the arrow points at u: along its path. */
   _dirAt(u) {
-    const e = u * u * (3 - 2 * u);
-    return this.flight.d0.clone().lerp(this.flight.dIn, e).normalize();
+    const f = this.flight;
+    const d = f.H.clone().sub(f.S);
+    d.y += 4 * FLIGHT_ARC * (1 - 2 * u);
+    return d.normalize();
   }
   /** A white ribbon that follows the path behind the arrow, fading to nothing. */
   _trail() {
@@ -608,7 +605,7 @@ export class Renderer {
     f.arrow.visible = true;
     f.arrow.position.copy(p);
     f.arrow.lookAt(p.clone().sub(dir));
-    f.dir = u >= 1 ? f.dIn.clone() : dir;
+    f.dir = dir;
     this._setTrail(f.trail, p, dir, u);
   }
   /** The direction the flight arrived from (for its stuck arrow). */

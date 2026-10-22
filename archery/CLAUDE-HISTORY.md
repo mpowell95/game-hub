@@ -101,3 +101,17 @@ The wrist bend read as "a broken wrist"; spreading it along the forearm still ch
 Matt: "The 3d model is correct. I just checked. Just don't change it?" The bend weights, the stretch
 and the shader were removed (format BOW2); the model is only placed, scaled and turned (-1.1 rad, the
 smallest turn that keeps the sleeve's closed end off screen with the bow down).
+
+## 2026-10-22: a straight flight, and the arm's end
+
+Matt: the flight "curves towards the camera then back to the target... NOT an arrow flying straight
+towards a target". The arrow was placed from the moving camera (screen-space framing). Now it flies a
+real straight line from the sight to the hit, and the camera chases behind it looking at it, dropping
+back to the close-up's distance and drifting to its side, settling as the arrow lands. Two failed
+tries on the way: a camera that kept drifting sideways while 2 m behind swung the arrow up and right;
+a late swing to the close-up caught the arrow up so it loomed and left the screen.
+Matt also: "i shouldn't see the end of the arm". Measured: with the bow down the sleeve's closed end
+sits 35-55 px inside the left edge on every phone (the Meshy arm is 0.45 bow heights; this camera
+needs about 1.0 at 54 deg left, 20 deg down for the end to stay off screen in every pose, including
+the bow sliding back in). Turning the model further only reaches the edge. Waiting on a new model
+from the prompt (long arm).
