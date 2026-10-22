@@ -63,6 +63,7 @@
     "hoops":          { ".read": "auth != null", ".write": "auth != null" },
     "players":        { ".read": "auth != null", ".write": "auth != null" },
     "directory":      { ".read": "auth != null", ".write": false },
+    "boards":         { "v1": { "lb": { ".read": "auth != null" } }, ".write": false },
     "nudges": {
       "$code": {
         "$key": {
