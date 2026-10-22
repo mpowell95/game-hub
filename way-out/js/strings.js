@@ -98,6 +98,7 @@ export default {
     rush_time_aria: 'Time played',
     rush_ready_q: 'Ready?',
     rush_ready_btn: 'Ready',
+    rush_later: 'Later',
     rush_go: 'Go!',
   },
   es: {
@@ -197,6 +198,7 @@ export default {
     rush_time_aria: 'Tiempo jugado',
     rush_ready_q: '¿Listo?',
     rush_ready_btn: 'Listo',
+    rush_later: 'Más tarde',
     rush_go: '¡Ya!',
   },
 };

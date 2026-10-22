@@ -675,6 +675,19 @@
   touch-action: manipulation;
   animation: wo-ready-pulse 1.6s ease-in-out .6s infinite;
 }
+.wo-root button.wo-ready-later {
+  margin-top: 4px;
+  min-height: 44px;
+  padding: 0 20px;
+  background: none;
+  border: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #a9abcf;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.wo-root .wo-ready-later:focus-visible { outline: 3px solid #ffce3a; outline-offset: 2px; border-radius: 10px; }
 .wo-root .wo-ready-btn:focus-visible { outline: 3px solid #ffce3a; outline-offset: 3px; }
 .wo-root .wo-ready-btn:active { transform: translateY(1px); }
 @keyframes wo-ready-in { from { transform: scale(.9) translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
