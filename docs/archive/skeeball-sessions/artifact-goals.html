@@ -1,0 +1,293 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Skeeball Goals Display</title>
+<style>
+  :root {
+    --ground: #141014; --surface: #1d1720; --line: #3a2e38;
+    --ink: #f6ecda; --dim: #b9a189; --faint: #7c6b60;
+    --amber: #ff9d3d; --cream: #f3e4c2; --used: #52382a;
+    --gh-surface: #161d28; --gh-surface-2: #1e2734; --gh-line: #2c3746;
+    --gh-ink: #e8edf5; --gh-muted: #9aa7b8; --gh-accent: #1769d4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 18px 64px; display: flex; flex-direction: column; gap: 30px; }
+  .eyebrow { font-family: Georgia, serif; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); margin: 0; }
+  h1 { font-family: Georgia, serif; font-size: 27px; font-weight: 400; margin: 6px 0 0; }
+  h2 { font-family: Georgia, serif; font-size: 19px; font-weight: 400; margin: 0; }
+  hr { height: 1px; background: var(--line); border: 0; margin: 0; }
+  .row { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 9px; align-items: center; }
+  .label { font-size: 13px; text-align: center; margin: 0; color: var(--faint); max-width: 250px; }
+  .label b { display: block; font-weight: 600; font-size: 14px; color: var(--ink); }
+
+  .phone {
+    position: relative; width: 250px; aspect-ratio: 375 / 812;
+    border-radius: 24px; overflow: hidden; background: #191019;
+    border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  }
+  .phone svg.board { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .hud {
+    position: absolute; top: 0; left: 0; width: 375px; height: 812px;
+    transform-origin: 0 0; transform: scale(calc(250 / 375)); pointer-events: none;
+  }
+  .rack { position: absolute; top: 56px; left: 0; right: 0; text-align: center; }
+  .nm { font-family: Georgia, serif; font-size: 11px; letter-spacing: .18em; color: var(--dim); margin: 0; }
+  .sc { font-size: 40px; line-height: 1.05; font-weight: 800; font-variant-numeric: tabular-nums;
+        color: var(--amber); text-shadow: 0 0 14px rgba(255,157,61,.5); margin: 2px 0 0; }
+  .pips { display: flex; justify-content: center; gap: 5px; margin-top: 5px; }
+  .pips i { width: 8px; height: 8px; border-radius: 50%; background: var(--cream); box-shadow: 0 0 4px rgba(243,228,194,.5); }
+  .pips i.u { background: var(--used); box-shadow: none; }
+  .burger { position: absolute; top: 10px; right: 12px; width: 44px; height: 44px; border-radius: 10px;
+            border: 1px solid #4a2f1b; background: #241610; color: var(--dim); font-size: 18px; display: grid; place-items: center; }
+
+  /* the goal rail, in the left gutter */
+  .rail { position: absolute; left: 8px; top: 150px; width: 66px; display: flex; flex-direction: column; gap: 7px; }
+  .goal {
+    background: rgba(26, 16, 12, .86); border: 1px solid #4a2f1b;
+    border-radius: 9px; padding: 6px 5px 7px; text-align: center;
+  }
+  .goal em { display: block; font-style: normal; font-size: 11px; font-weight: 700;
+             letter-spacing: .06em; line-height: 1.15; color: var(--dim); }
+  .goal b { display: block; margin-top: 1px; font-size: 15px; font-weight: 800;
+            font-variant-numeric: tabular-nums; color: var(--cream); }
+  .goal.done b { color: var(--amber); }
+  .goal .bar { height: 3px; border-radius: 2px; background: #4a2f1b; margin-top: 4px; overflow: hidden; }
+  .goal .bar i { display: block; height: 100%; background: var(--amber); border-radius: 2px; }
+  .rail.r { left: auto; right: 8px; }
+
+  /* one pip per point value, stacked in the board's own order - 100 at the top, 10 at the
+     bottom - so the column reads against the cups it is naming. Same 8px circle the ball count
+     already uses, so it reads as the same kind of thing. */
+  .vals { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 8px; }
+  .vals i {
+    width: 8px; height: 8px; border-radius: 50%;
+    border: 1px solid #6b5344; background: transparent;
+  }
+  .vals i.hit { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 5px rgba(255, 157, 61, .7); }
+
+  /* the game-over card, in the hub's own primitives */
+  .card {
+    width: 250px; background: var(--gh-surface); border: 1px solid var(--gh-line);
+    border-radius: 16px; padding: 18px 16px 16px; text-align: center; position: relative;
+    box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  }
+  .card .x { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%;
+             background: var(--gh-surface-2); color: var(--gh-muted); display: grid; place-items: center; font-size: 15px; }
+  .card h3 { margin: 0; font-size: 19px; font-weight: 800; color: var(--gh-ink); }
+  .card .mach { margin: 3px 0 0; font-size: 11px; letter-spacing: .1em; color: var(--gh-muted); }
+  .card .score { margin: 5px 0 0; font-size: 40px; font-weight: 800; color: var(--gh-ink); font-variant-numeric: tabular-nums; }
+  .card .rec { margin-top: 10px; background: var(--gh-surface-2); border: 1px solid var(--gh-line); border-radius: 9px; padding: 7px 10px; }
+  .card .rec em { display: block; font-style: normal; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+  .card .rec b { display: block; margin-top: 2px; font-size: 15px; font-weight: 800; color: var(--gh-ink); }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 9px; }
+  .tile b { display: block; font-size: 17px; font-weight: 800; color: var(--gh-ink); font-variant-numeric: tabular-nums; }
+  .tile span { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+  .sep { margin: 13px 0 8px; display: flex; align-items: center; gap: 8px; }
+  .sep hr { flex: 1 1 auto; background: var(--gh-line); }
+  .sep span { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--gh-muted); }
+  .gtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .gtile { background: var(--gh-surface-2); border: 1px solid var(--gh-line); border-radius: 9px; padding: 8px 4px; }
+  .gtile b { display: block; font-size: 15px; font-weight: 800; color: var(--gh-ink); font-variant-numeric: tabular-nums; }
+  .gtile.done b { color: var(--gh-accent); }
+  .gtile span { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--gh-muted); }
+  .gtile.tap { cursor: pointer; position: relative; }
+  .gtile.tap::after { content: "▾"; position: absolute; top: 2px; right: 5px; font-size: 9px; color: var(--gh-muted); }
+  .gtile.tap:focus-visible { outline: 2px solid var(--gh-accent); outline-offset: 2px; }
+  .pop { margin-top: 8px; padding: 10px 8px; background: var(--gh-surface-2);
+         border: 1px solid var(--gh-line); border-radius: 9px; }
+  .pop .prow { display: flex; justify-content: center; gap: 4px; }
+  .pop .prow i {
+    font-style: normal; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums;
+    min-width: 27px; padding: 4px 2px; border-radius: 6px;
+    border: 1px solid var(--gh-line); color: var(--gh-muted);
+  }
+  .pop .prow i.hit { background: var(--gh-accent); border-color: var(--gh-accent); color: #fff; }
+  .pop p { margin: 7px 0 0; font-size: 11px; color: var(--gh-muted); }
+  .btns { display: flex; flex-direction: column; gap: 7px; margin-top: 13px; }
+  .btn { border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 700; }
+  .btn.p { background: var(--gh-accent); color: #fff; }
+  .btn.g { background: transparent; border: 1px solid var(--gh-line); color: var(--gh-ink); }
+
+  .ask { padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  .ask ol { margin: 8px 0 0; padding-left: 20px; color: var(--dim); display: flex; flex-direction: column; gap: 5px; }
+</style>
+
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+  <!-- Hole positions computed from boards.js: a centre column (10/20/30/40/50) plus two 100s at
+       u=+/-0.400, v=0.921. All seven holes are the same size; the rings differ, 0.17 of board
+       width at the 100s up to 1.04 at the 10. Machine extents from frame.mjs. -->
+  <symbol id="board" viewBox="0 0 375 812">
+    <defs><clipPath id="fc"><polygon points="88,455 287,455 263,215 112,215"/></clipPath></defs>
+    <rect width="375" height="812" fill="#191019"/>
+
+    <!-- neighbouring machines, set back and barely lit (render.js _neighbours) -->
+    <g opacity=".38">
+      <rect x="-6" y="196" width="58" height="250" rx="4" fill="#3a1f0f"/>
+      <rect x="2" y="208" width="42" height="120" rx="3" fill="#7a4520"/>
+      <rect x="4" y="186" width="38" height="15" rx="3" fill="#28150b"/>
+      <rect x="323" y="196" width="58" height="250" rx="4" fill="#3a1f0f"/>
+      <rect x="331" y="208" width="42" height="120" rx="3" fill="#7a4520"/>
+      <rect x="333" y="186" width="38" height="15" rx="3" fill="#28150b"/>
+    </g>
+
+    <path d="M18 812 L92 470 L80 470 L0 812 Z" fill="#3a1f0f"/>
+    <path d="M357 812 L283 470 L295 470 L375 812 Z" fill="#3a1f0f"/>
+    <path d="M18 812 L357 812 L283 470 L92 470 Z" fill="#a86f38"/>
+    <path d="M62 618 L313 618 L299 556 L76 556 Z" fill="#b87b41"/>
+    <path d="M76 556 L299 556 L292 522 L83 522 Z" fill="#7c4d22"/>
+    <path d="M92 470 L112 215 L96 213 L74 470 Z" fill="#54301a"/>
+    <path d="M283 470 L263 215 L279 213 L301 470 Z" fill="#54301a"/>
+
+    <rect x="94" y="168" width="187" height="40" rx="6" fill="#28150b"/>
+    <text x="187.5" y="185" text-anchor="middle" fill="#ffd977" font-family="Georgia, serif" font-size="8" letter-spacing="1.2">HUB WIDE RECORD 700</text>
+    <text x="187.5" y="199" text-anchor="middle" fill="#ffd977" font-family="Georgia, serif" font-size="8" letter-spacing="1.2" opacity=".75">YOUR BEST 600</text>
+
+    <polygon points="88,455 287,455 263,215 112,215" fill="#c96f2e"/>
+    <g clip-path="url(#fc)">
+      <ellipse cx="187.5" cy="430" rx="100" ry="55" fill="none" stroke="#f6f5f2" stroke-width="5"/>
+      <ellipse cx="187.5" cy="430" rx="104" ry="57" fill="none" stroke="#2b5ea7" stroke-width="2"/>
+      <ellipse cx="187.5" cy="397" rx="66" ry="36" fill="none" stroke="#f6f5f2" stroke-width="5"/>
+      <ellipse cx="187.5" cy="397" rx="70" ry="38" fill="none" stroke="#2b5ea7" stroke-width="2"/>
+      <ellipse cx="187.5" cy="359" rx="24" ry="13" fill="none" stroke="#f6f5f2" stroke-width="4"/>
+      <ellipse cx="187.5" cy="359" rx="27" ry="15" fill="none" stroke="#2b5ea7" stroke-width="1.6"/>
+      <ellipse cx="187.5" cy="313" rx="19.4" ry="11" fill="none" stroke="#f6f5f2" stroke-width="4"/>
+      <ellipse cx="187.5" cy="313" rx="22" ry="12.6" fill="none" stroke="#2b5ea7" stroke-width="1.6"/>
+      <ellipse cx="187.5" cy="273" rx="17" ry="9.5" fill="none" stroke="#f6f5f2" stroke-width="4"/>
+      <ellipse cx="187.5" cy="273" rx="19.4" ry="11" fill="none" stroke="#2b5ea7" stroke-width="1.6"/>
+      <ellipse cx="126" cy="234" rx="13.4" ry="7.4" fill="none" stroke="#f6f5f2" stroke-width="4"/>
+      <ellipse cx="126" cy="234" rx="15.6" ry="8.7" fill="none" stroke="#2b5ea7" stroke-width="1.6"/>
+      <ellipse cx="249" cy="234" rx="13.4" ry="7.4" fill="none" stroke="#f6f5f2" stroke-width="4"/>
+      <ellipse cx="249" cy="234" rx="15.6" ry="8.7" fill="none" stroke="#2b5ea7" stroke-width="1.6"/>
+      <ellipse cx="187.5" cy="430" rx="14" ry="8" fill="#221a12"/>
+      <ellipse cx="187.5" cy="397" rx="13.6" ry="7.5" fill="#221a12"/>
+      <ellipse cx="187.5" cy="359" rx="13" ry="7" fill="#221a12"/>
+      <ellipse cx="187.5" cy="313" rx="12.4" ry="6.8" fill="#221a12"/>
+      <ellipse cx="187.5" cy="273" rx="11.8" ry="6.5" fill="#221a12"/>
+      <ellipse cx="126" cy="234" rx="11.3" ry="6.2" fill="#221a12"/>
+      <ellipse cx="249" cy="234" rx="11.3" ry="6.2" fill="#221a12"/>
+      <g fill="#221a12" font-family="Georgia, serif" font-weight="bold" text-anchor="middle">
+        <text x="187.5" y="450" font-size="13">10</text>
+        <text x="187.5" y="414" font-size="12">20</text>
+        <text x="187.5" y="376" font-size="11">30</text>
+        <text x="187.5" y="330" font-size="10.5">40</text>
+        <text x="187.5" y="289" font-size="10">50</text>
+        <text x="126" y="250" font-size="9.5">100</text>
+        <text x="249" y="250" font-size="9.5">100</text>
+      </g>
+    </g>
+    <polygon points="88,455 287,455 263,215 112,215" fill="none" stroke="#8f4c1d" stroke-width="3"/>
+    <circle cx="187.5" cy="726" r="17" fill="#f3e4c2"/>
+    <circle cx="182" cy="720" r="6" fill="#fffaf0" opacity=".55"/>
+  </symbol>
+</svg>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Skeeball · item 27</p>
+    <h1>The goals, in the side gutter</h1>
+  </header>
+
+  <hr>
+
+  <div class="row">
+
+    <div class="col">
+      <div class="phone">
+        <svg class="board" aria-label="Play screen with a goal rail in the left gutter"><use href="#board"/></svg>
+        <div class="hud">
+          <div class="burger">☰</div>
+          <div class="rack">
+            <p class="nm">THE CLASSIC</p>
+            <p class="sc">120</p>
+            <div class="pips"><i class="u"></i><i class="u"></i><i class="u"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="rail">
+            <div class="goal">
+              <em>CUPS<br>HIT</em><b>4<span style="color:#8d7a63">/6</span></b>
+              <div class="bar"><i style="width:67%"></i></div>
+            </div>
+            <div class="vals">
+              <i></i><i class="hit"></i><i></i><i class="hit"></i><i class="hit"></i><i class="hit"></i>
+            </div>
+          </div>
+          <div class="rail r">
+            <div class="goal">
+              <em>SINGLE<br>GAME</em><b>120<span style="color:#8d7a63">/300</span></b>
+              <div class="bar"><i style="width:40%"></i></div>
+            </div>
+            <div class="goal">
+              <em>TOTAL<br>POINTS</em><b>1.2k<span style="color:#8d7a63">/2k</span></b>
+              <div class="bar"><i style="width:62%"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="label"><b>Play screen</b>Point values on the left, with a pip per value under them in the board's own order. The two score goals on the right. 66px of dead wall each side.</p>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <div class="x">×</div>
+        <h3>Game over</h3>
+        <p class="mach">THE CLASSIC</p>
+        <p class="score">230</p>
+        <div class="rec"><em>Hub-wide record</em><b>700 · MattyIce</b></div>
+        <div class="tiles">
+          <div class="tile"><b>600</b><span>Your best</span></div>
+          <div class="tile"><b>290</b><span>Today</span></div>
+          <div class="tile"><b>261</b><span>Average</span></div>
+          <div class="tile"><b>240</b><span>Hub avg</span></div>
+        </div>
+        <div class="sep"><hr><span>NEXT MACHINE</span><hr></div>
+        <div class="gtiles">
+          <div class="gtile tap" id="cupsTile" role="button" tabindex="0" aria-expanded="true" aria-controls="pop"><b>4/6</b><span>Cups hit</span></div>
+          <div class="gtile"><b>230/300</b><span>Single game</span></div>
+          <div class="gtile"><b>1.2k/2k</b><span>Total points</span></div>
+        </div>
+        <div class="pop" id="pop">
+          <div class="prow">
+            <i class="hit">10</i><i class="hit">20</i><i class="hit">30</i><i>40</i><i class="hit">50</i><i>100</i>
+          </div>
+          <p>Still to land: the 40 and a 100.</p>
+        </div>
+        <div class="btns">
+          <div class="btn p">Play again</div>
+          <div class="btn g">Back to machines</div>
+        </div>
+      </div>
+      <p class="label"><b>Game over card</b>Tap Cups hit for which values you still owe. Shown open here; tap it to close.</p>
+    </div>
+
+  </div>
+
+  <hr>
+
+  <section class="ask">
+    <h2>Pick</h2>
+    <ol>
+      <li>Pips top-down 100 to 10 as drawn (matching the board), or 10 to 100?</li>
+      <li>Progress bars, or just the numbers?</li>
+    </ol>
+  </section>
+
+</div>
+
+<script>
+  const tile = document.getElementById('cupsTile'), pop = document.getElementById('pop');
+  const toggle = () => {
+    const open = pop.style.display !== 'none';
+    pop.style.display = open ? 'none' : '';
+    tile.setAttribute('aria-expanded', String(!open));
+  };
+  tile.addEventListener('click', toggle);
+  tile.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+</script>
+
+</body></html>

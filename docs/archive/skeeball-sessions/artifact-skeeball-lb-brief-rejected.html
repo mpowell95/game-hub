@@ -1,0 +1,671 @@
+<title>Skeeball Leaderboard Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;800&family=IBM+Plex+Mono:wght@400;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+
+<style>
+  /* ---- tokens: light is the bare :root, dark redefines the same names ------------------ */
+  :root {
+    --paper:      #f3f0e9;   /* warm neutral, biased toward the cabinet wood */
+    --surface:    #fbf9f5;
+    --surface-2:  #ebe6da;
+    --ink:        #1e1912;
+    --ink-2:      #665c50;
+    --rule:       #ddd5c5;
+    --amber:      #8f5d06;   /* marquee bulb, darkened for text on paper */
+    --amber-lit:  #e8a521;   /* the bulb itself: fills, rules, discs */
+    --navy:       #1c3f6b;   /* the ring lip on a real classic board */
+    --lane:       #a84c17;   /* burnt orange lacquer, for emphasis only */
+    --shadow:     0 1px 2px rgba(40,25,10,.06), 0 8px 24px rgba(40,25,10,.06);
+
+    --fs-xs:  .75rem;
+    --fs-sm:  .875rem;
+    --fs-base: 1.0625rem;
+    --measure: 68ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #15110c;
+      --surface:   #1e1913;
+      --surface-2: #2a231a;
+      --ink:       #f2ece1;
+      --ink-2:     #a29684;
+      --rule:      #362d21;
+      --amber:     #f0b83c;
+      --amber-lit: #f0b83c;
+      --navy:      #86b0e2;
+      --lane:      #e58244;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.32);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:     #15110c;
+    --surface:   #1e1913;
+    --surface-2: #2a231a;
+    --ink:       #f2ece1;
+    --ink-2:     #a29684;
+    --rule:      #362d21;
+    --amber:     #f0b83c;
+    --amber-lit: #f0b83c;
+    --navy:      #86b0e2;
+    --lane:      #e58244;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.32);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: var(--fs-base);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 22px 96px; }
+
+  /* ---- masthead ----------------------------------------------------------------------- */
+  .head { padding: 56px 0 34px; border-bottom: 3px double var(--rule); }
+  .eyebrow {
+    font-family: Archivo, system-ui, sans-serif;
+    font-size: var(--fs-xs); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .18em;
+    color: var(--amber); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: Archivo, system-ui, sans-serif;
+    font-weight: 800; font-size: clamp(2.1rem, 6.2vw, 3.3rem);
+    line-height: 1.02; letter-spacing: -.022em;
+    margin: 0 0 20px; text-wrap: balance;
+  }
+  .quote {
+    margin: 0 0 22px; padding: 2px 0 2px 20px;
+    border-left: 4px solid var(--amber-lit);
+    font-style: italic; font-size: 1.15rem; color: var(--ink);
+    max-width: var(--measure);
+  }
+  .quote span { display: block; font-style: normal; font-size: var(--fs-sm); color: var(--ink-2); margin-top: 8px; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 6px 20px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--fs-xs); color: var(--ink-2); margin: 0;
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  /* ---- jump nav ----------------------------------------------------------------------- */
+  .jump { display: flex; flex-wrap: wrap; gap: 8px; padding: 22px 0 0; }
+  .jump a {
+    font-family: Archivo, system-ui, sans-serif;
+    font-size: var(--fs-xs); font-weight: 600; letter-spacing: .04em;
+    text-decoration: none; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 999px; padding: 6px 13px;
+  }
+  .jump a:hover { border-color: var(--amber-lit); color: var(--amber); }
+  .jump a:focus-visible { outline: 2px solid var(--amber-lit); outline-offset: 2px; }
+  .jump a i { font-style: normal; font-family: "IBM Plex Mono", monospace; color: var(--ink-2); margin-right: 6px; }
+
+  /* ---- sections ----------------------------------------------------------------------- */
+  section { padding-top: 54px; scroll-margin-top: 20px; }
+  h2 {
+    font-family: Archivo, system-ui, sans-serif;
+    font-weight: 800; font-size: clamp(1.4rem, 3.6vw, 1.85rem);
+    line-height: 1.12; letter-spacing: -.015em;
+    margin: 0 0 18px; text-wrap: balance;
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  /* The cup ring: these sections really are a sequence, so the number carries information. */
+  .n {
+    flex: 0 0 auto;
+    display: inline-grid; place-items: center;
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 2px solid var(--amber-lit);
+    font-family: "IBM Plex Mono", monospace; font-size: .95rem; font-weight: 600;
+    color: var(--amber); background: var(--surface);
+    transform: translateY(3px);
+  }
+  h3 {
+    font-family: Archivo, system-ui, sans-serif;
+    font-weight: 600; font-size: 1.06rem; letter-spacing: .01em;
+    margin: 34px 0 10px; color: var(--ink);
+  }
+  p, li { max-width: var(--measure); }
+  p { margin: 0 0 16px; }
+  ul { margin: 0 0 16px; padding-left: 20px; }
+  li { margin-bottom: 9px; }
+  strong { font-weight: 600; }
+  a { color: var(--navy); }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .86em;
+  }
+  code {
+    background: var(--surface-2); border-radius: 4px;
+    padding: 1px 5px; color: var(--ink);
+  }
+
+  /* ---- tables ------------------------------------------------------------------------- */
+  .tbl { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr:last-child th, tr:last-child td { border-bottom: 0; }
+  thead th {
+    font-family: Archivo, system-ui, sans-serif; font-weight: 600;
+    font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .09em;
+    color: var(--ink-2); background: var(--surface-2); white-space: nowrap;
+  }
+  td.num, th.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .no { color: var(--lane); font-weight: 600; }
+
+  /* ---- the cabinets ------------------------------------------------------------------- */
+  .cabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 16px; margin: 22px 0 26px; }
+  .cab {
+    border: 1px solid var(--rule); border-radius: 12px; overflow: hidden;
+    background: var(--surface); box-shadow: var(--shadow);
+  }
+  .cab-marquee {
+    background: var(--marq); color: var(--marqtext);
+    font-family: Archivo, system-ui, sans-serif; font-weight: 800;
+    font-size: .82rem; letter-spacing: .09em; text-transform: uppercase;
+    padding: 11px 12px 10px; text-align: center;
+    border-bottom: 3px solid var(--cab);
+  }
+  .bulbs { display: flex; justify-content: center; gap: 5px; margin-top: 7px; }
+  .bulbs i { width: 5px; height: 5px; border-radius: 50%; background: var(--glow); display: block; }
+  .cab-face { background: var(--face); height: 74px; position: relative; border-bottom: 6px solid var(--cab); }
+  .cab-face span {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: 42px; height: 42px; border-radius: 50%;
+    border: 4px solid var(--ring); background: transparent;
+  }
+  .cab-hex { margin: 0; padding: 12px 13px 13px; display: grid; gap: 3px; }
+  .cab-hex div { display: flex; justify-content: space-between; gap: 10px; font-family: "IBM Plex Mono", monospace; font-size: .72rem; }
+  .cab-hex dt { color: var(--ink-2); }
+  .cab-hex dd { margin: 0; color: var(--ink); }
+  .cab-tag { padding: 0 13px 13px; margin: 0; font-size: .84rem; line-height: 1.45; color: var(--ink-2); max-width: none; }
+
+  /* ---- constraints -------------------------------------------------------------------- */
+  .rules { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  .rules > li {
+    max-width: none;
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 5px solid var(--lane); border-radius: 10px;
+    padding: 14px 16px; margin: 0; box-shadow: var(--shadow);
+  }
+  .rules h4 {
+    font-family: Archivo, system-ui, sans-serif; font-weight: 600;
+    font-size: .98rem; margin: 0 0 6px; display: flex; gap: 10px; align-items: baseline;
+  }
+  .rules h4 em {
+    font-style: normal; font-family: "IBM Plex Mono", monospace;
+    font-size: .78rem; color: var(--lane); flex: 0 0 auto;
+  }
+  .rules p:last-child { margin-bottom: 0; }
+  .rules p { max-width: none; font-size: .97rem; }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-top: 4px solid var(--amber-lit); border-radius: 10px;
+    padding: 18px 20px; margin: 0 0 22px; box-shadow: var(--shadow);
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    font-family: Archivo, system-ui, sans-serif; font-size: var(--fs-xs);
+    font-weight: 600; text-transform: uppercase; letter-spacing: .14em;
+    color: var(--amber); display: block; margin-bottom: 8px;
+  }
+
+  .foot { margin-top: 60px; padding-top: 22px; border-top: 3px double var(--rule); color: var(--ink-2); font-size: var(--fs-sm); }
+
+  @media (max-width: 560px) {
+    h2 { gap: 10px; }
+    .n { width: 32px; height: 32px; font-size: .82rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="head">
+    <p class="eyebrow">Design brief &middot; Game Hub</p>
+    <h1>Skeeball Leaderboard Redesign</h1>
+    <blockquote class="quote">
+      The skeeball leaderboard per player looks terrible. And the by game leaderboard is also terrible.
+      <span>Matt, 2026-08-25, from the live board</span>
+    </blockquote>
+    <p class="meta">
+      <span><b>Two screens.</b> Phone first, 393 &times; 852</span>
+      <span><b>Files:</b> js/leaderboard-ui.js, js/game-stats-ui.js</span>
+      <span><b>Branch:</b> claude/skeeball-leaderboard-ui-9y2b8r</span>
+    </p>
+    <nav class="jump">
+      <a href="#s1"><i>1</i>The screens</a>
+      <a href="#s2"><i>2</i>Already fixed</a>
+      <a href="#s3"><i>3</i>The board</a>
+      <a href="#s4"><i>4</i>The player screen</a>
+      <a href="#s5"><i>5</i>The machines</a>
+      <a href="#s6"><i>6</i>Constraints</a>
+      <a href="#s7"><i>7</i>Why it feels dead</a>
+      <a href="#s8"><i>8</i>Hand back</a>
+    </nav>
+  </header>
+
+  <section id="s1">
+    <h2><span class="n">1</span>What you are designing</h2>
+    <p>
+      Two screens inside the Game Hub's <strong>Leaderboard</strong> overlay. The hub is a small,
+      ad free, installable PWA hosting about twenty two self contained games. Roughly six real people
+      use it: one family, on phones, mostly through the installed app rather than a browser tab.
+    </p>
+    <p>
+      Skeeball is one of those games, and it is a <strong>solo arcade cabinet</strong>. No opponent,
+      no wins, no losses. You throw a rack of nine balls at a machine and you get a score. There are
+      five machines, unlocked in a chain.
+    </p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Screen</th><th>Where it lives</th><th>Who sees it</th></tr></thead>
+        <tbody>
+          <tr>
+            <th scope="row">A. The Skeeball board</th>
+            <td>Leaderboard &rarr; By Game &rarr; Skeeball</td>
+            <td>everyone; it is the public ranking</td>
+          </tr>
+          <tr>
+            <th scope="row">B. A player's Skeeball screen</th>
+            <td>Leaderboard &rarr; tap a player &rarr; Skeeball, <em>and</em> the hub's own My Stats &rarr; Skeeball</td>
+            <td>everyone (one piece of code renders both)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Screen B is the one Matt called terrible first. Screen A he called terrible second.</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="n">2</span>What was already fixed</h2>
+    <div class="callout">
+      <span class="label">Do not re design a bug</span>
+      <p>
+        A data pass landed on 2026-08-25. It corrected what the screens <em>said</em> and deliberately
+        left what they <em>look</em> like alone, which is why the reply to it was "these look identical
+        to before". None of the following needs solving again.
+      </p>
+    </div>
+    <ul>
+      <li>
+        Screen B led with <strong>Wins / Losses / Tied / Win rate</strong>, all four reading zero.
+        Skeeball has had no opponent since 2026-08-11, so those counters are frozen wherever they
+        stopped. They now appear only on a device that actually holds a non zero one, labelled as the
+        earlier vs computer era.
+      </li>
+      <li>Machines rendered as raw translation keys: <code>gs_sk_board_basketball</code>, <code>gs_sk_board_popongo</code>.</li>
+      <li>
+        The per machine table was five columns wide and did not fit a phone, so the
+        <strong>whole overlay scrolled sideways</strong>. It is a card list now.
+      </li>
+      <li>A "Record by difficulty" table listed the <em>machines</em> as difficulties, each at a meaningless 100%.</li>
+      <li>
+        Screen A ranked a high score game by <strong>how many racks each person had thrown</strong>, so
+        number one had 502 plays and the scores ran down the list in no order at all
+        (700, 450, 370, 290, 270, 290). It ranks on the best score now.
+      </li>
+    </ul>
+    <p>
+      So the content is right. The layout is still a generic grid of grey tiles and near identical
+      cards. That is the job.
+    </p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="n">3</span>Screen A: the ranking</h2>
+    <p>
+      Today: a vertical list of near identical rounded cards, one per player. Rank number, emoji
+      avatar, name, one big number on the right with its unit stacked underneath, a chevron, and a
+      small muted second number on a second row. Below the list sits a "WHO LEADS WHAT" grid of
+      pastel tinted chips.
+    </p>
+    <ul>
+      <li><strong>Realistic size is six rows.</strong> It has never exceeded eight and will not pass about twelve.</li>
+      <li>Every row is a <strong>button</strong>: tapping it opens that player's screen B. Tap target at least 44px.</li>
+      <li>The viewer's own row is highlighted. Today that is a coloured border, which is not enough on its own (constraint 3).</li>
+      <li>Ranks run 1..N, and today the top three get gold, silver and bronze discs.</li>
+      <li>
+        A <strong>Sort by</strong> control sits above the list: Alphabetical, Games Played, Points.
+        It defaults to Points here. There is deliberately no difficulty filter on Skeeball, because
+        its buckets are machines rather than difficulties.
+      </li>
+    </ul>
+
+    <h3>The real board, 2026-08-25</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th class="num">Rank</th><th>Player</th><th class="num">Best game</th><th class="num">Racks played</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td>🤠 King of Games</td><td class="num">700</td><td class="num">502</td></tr>
+          <tr><td class="num">2</td><td>🦖 MattyIce</td><td class="num">450</td><td class="num">61</td></tr>
+          <tr><td class="num">3</td><td>🧐 *TP*</td><td class="num">370</td><td class="num">26</td></tr>
+          <tr><td class="num">4</td><td>🙂 HDJ, Inc.</td><td class="num">290</td><td class="num">5</td></tr>
+          <tr><td class="num">5</td><td>🦁 Anita Bonita</td><td class="num">290</td><td class="num">6</td></tr>
+          <tr><td class="num">6</td><td>🙂 Unai</td><td class="num">270</td><td class="num">6</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Look at the shape of that data. One player has practised eight times harder than everyone else
+      combined, two players are tied on score, and three have barely started. None of that reads in a
+      list of six identical cards. Names are short but can be odd (<code>*TP*</code>,
+      <code>HDJ, Inc.</code>) and every player carries an emoji avatar. Numbers here are three digits;
+      the lifetime numbers on screen B reach six.
+    </p>
+    <p>
+      The <strong>who leads what</strong> chips underneath name a holder per record: best game 700,
+      best throw 100, 100 cups hit 276, points all time 112730, all four colours 1. They are pastel in
+      both themes today, which makes them the loudest thing on a dark screen.
+    </p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="n">4</span>Screen B: one player</h2>
+    <p>
+      The full inventory. Everything currently shown has to stay visible somewhere (constraint 8), but
+      you may re rank, re group and re weight all of it freely, and there is a lot here that no screen
+      has ever drawn.
+    </p>
+
+    <h3>Lifetime, all machines combined</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Field</th><th>Meaning</th><th class="num">Real example</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">bestGame</td><td>best single rack ever</td><td class="num">700</td></tr>
+          <tr><td class="mono">bestThrow</td><td>best single ball ever</td><td class="num">100</td></tr>
+          <tr><td class="mono">played</td><td>racks thrown</td><td class="num">502</td></tr>
+          <tr><td class="mono">balls</td><td>balls thrown</td><td class="num">4788</td></tr>
+          <tr><td class="mono">points</td><td>lifetime points</td><td class="num">112730</td></tr>
+          <tr><td class="mono">hundreds</td><td>100 cups hit</td><td class="num">276</td></tr>
+          <tr><td class="mono">fifties</td><td>50s hit</td><td class="num">156</td></tr>
+          <tr><td class="mono">tens &hellip; forties</td><td>the same, per point value</td><td><span class="no">shown nowhere today</span></td></tr>
+          <tr><td class="mono">colorSweeps</td><td>racks that hit all four colours (POPONGO)</td><td class="num">1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Per machine: the richest, least used data</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Field</th><th>Meaning</th><th>Drawn today?</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">best</td><td>best rack on this machine</td><td>yes</td></tr>
+          <tr><td class="mono">plays</td><td>racks on this machine</td><td>yes</td></tr>
+          <tr><td class="mono">points</td><td>lifetime points on this machine</td><td><span class="no">no</span></td></tr>
+          <tr><td class="mono">bestThrow</td><td>best single ball on this machine</td><td><span class="no">no</span></td></tr>
+          <tr><td class="mono">daily</td><td>a map of date &rarr; best score that day, kept forever</td><td>only as "best today" and a day count</td></tr>
+          <tr><td class="mono">slots</td><td>which of the nine baskets this player has ever landed</td><td><span class="no">no</span></td></tr>
+          <tr><td class="mono">cleanRacks</td><td>racks that scored without hitting a penalty basket</td><td><span class="no">no</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <code>daily</code> is a real time series, per machine, per player, going back to the day they
+      started. Nothing in the app draws it. A sparkline, a last fourteen days strip, a personal best
+      trend: all available with no new storage and no new writes.
+    </p>
+
+    <h3>Goal progress: three objectives per machine</h3>
+    <p>
+      Derived on demand, never stored. Each machine returns three objects of
+      <code>{ id, label, now, target, met }</code>. THE CLASSIC wants five 100s ever, 360 in one rack,
+      and 10,000 points on the machine. HOT SHOT wants a ball in all nine baskets, 700 in one rack,
+      and 30,000 points. Completing a machine's three is what unlocks the next machine in the chain.
+      The admin page draws these rails; the player's own screen does not.
+    </p>
+
+    <h3>Practice racks</h3>
+    <p>
+      Racks thrown while a machine was in testing. They are kept, they are shown on their own quieter
+      row, and they count towards nothing. They must stay visible and must never read as part of the
+      record.
+    </p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="n">5</span>The five machines</h2>
+    <p>
+      Your best creative material. These are physical arcade cabinets with their own paint, and the
+      engine already draws each one from a full palette. The names are proper nouns and are
+      <strong>never translated</strong>; the ids are frozen forever.
+    </p>
+
+    <div class="cabs">
+      <article class="cab" style="--cab:#54301a;--face:#c96f2e;--marq:#28150b;--marqtext:#ffd977;--glow:#ff9d3d;--ring:#f6f5f2">
+        <div class="cab-marquee">The Classic<div class="bulbs"><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="cab-face"><span></span></div>
+        <dl class="cab-hex">
+          <div><dt>cabinet</dt><dd>#54301a</dd></div>
+          <div><dt>face</dt><dd>#c96f2e</dd></div>
+          <div><dt>marquee</dt><dd>#28150b</dd></div>
+          <div><dt>bulb</dt><dd>#ffd977</dd></div>
+          <div><dt>wood</dt><dd>#a86f38</dd></div>
+        </dl>
+        <p class="cab-tag">The boardwalk original. Nine balls, the cup ladder, two corner 100s. Always open.</p>
+      </article>
+
+      <article class="cab" style="--cab:#f2c526;--face:#2560bd;--marq:#436496;--marqtext:#ffd23f;--glow:#ff3b1f;--ring:#e8541f">
+        <div class="cab-marquee">Hot Shot<div class="bulbs"><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="cab-face"><span></span></div>
+        <dl class="cab-hex">
+          <div><dt>cabinet</dt><dd>#f2c526</dd></div>
+          <div><dt>face</dt><dd>#2560bd</dd></div>
+          <div><dt>marquee</dt><dd>#436496</dd></div>
+          <div><dt>bulb</dt><dd>#ffd23f</dd></div>
+          <div><dt>ring</dt><dd>#e8541f</dd></div>
+        </dl>
+        <p class="cab-tag">Nine orange hoops on three rows. The 100 hangs top center. Earned off THE CLASSIC's three goals.</p>
+      </article>
+
+      <article class="cab" style="--cab:#f2c526;--face:#1e63b8;--marq:#a33427;--marqtext:#ffc53d;--glow:#ff6b2c;--ring:#e8541f">
+        <div class="cab-marquee">Hot Shot: Brick City<div class="bulbs"><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="cab-face"><span></span></div>
+        <dl class="cab-hex">
+          <div><dt>cabinet</dt><dd>#f2c526</dd></div>
+          <div><dt>face</dt><dd>#1e63b8</dd></div>
+          <div><dt>marquee</dt><dd>#a33427</dd></div>
+          <div><dt>bulb</dt><dd>#ffc53d</dd></div>
+          <div><dt>ring</dt><dd>#e8541f</dd></div>
+        </dl>
+        <p class="cab-tag">Two 100s up top, tight as the ball. The bottom row takes points back. Admin only today.</p>
+      </article>
+
+      <article class="cab" style="--cab:#8a6a42;--face:#d9b87f;--marq:#123a5e;--marqtext:#ffd977;--glow:#ffb02e;--ring:#f6f5f2">
+        <div class="cab-marquee">Popongo<div class="bulbs"><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="cab-face"><span></span></div>
+        <dl class="cab-hex">
+          <div><dt>cabinet</dt><dd>#8a6a42</dd></div>
+          <div><dt>face</dt><dd>#d9b87f</dd></div>
+          <div><dt>marquee</dt><dd>#123a5e</dd></div>
+          <div><dt>bulb</dt><dd>#ffd977</dd></div>
+          <div><dt>wood</dt><dd>#c9a36a</dd></div>
+        </dl>
+        <p class="cab-tag">Nine color cups on bare wood. The black cups take back your last ball. Admin only today.</p>
+      </article>
+
+      <article class="cab" style="--cab:#f2c526;--face:#2560bd;--marq:#241a4d;--marqtext:#39e0d0;--glow:#39e0d0;--ring:#39e0d0">
+        <div class="cab-marquee">Hot Shot: Runaway<div class="bulbs"><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="cab-face"><span></span></div>
+        <dl class="cab-hex">
+          <div><dt>cabinet</dt><dd>#f2c526</dd></div>
+          <div><dt>face</dt><dd>#2560bd</dd></div>
+          <div><dt>marquee</dt><dd>#241a4d</dd></div>
+          <div><dt>bulb</dt><dd>#39e0d0</dd></div>
+          <div><dt>ring</dt><dd>#39e0d0</dd></div>
+        </dl>
+        <p class="cab-tag">One 100 up top, and it will not hold still. Throw where it is going. Admin only today.</p>
+      </article>
+    </div>
+
+    <p>
+      The chain runs THE CLASSIC &rarr; HOT SHOT &rarr; BRICK CITY &rarr; POPONGO &rarr; RUNAWAY, each
+      opened by completing the previous machine's three objectives. Three of the five are admin only
+      right now, so most players will only ever see the first two on their screen.
+      <strong>A design that only works with five machines listed is wrong, and one that only works
+      with a single machine is wrong too.</strong>
+    </p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="n">6</span>Constraints</h2>
+    <p>These are not preferences. A design that breaks one of them cannot ship.</p>
+    <ol class="rules">
+      <li>
+        <h4><em>01</em>Phone first, and it has to fit</h4>
+        <p>
+          Design at 393 &times; 852, and survive 360 wide and 667 tall. The overlay is full screen and
+          scrolls vertically; the panel is centred at max-width 620px (screen A) and 560px (screen B),
+          under a sticky header of about 44px plus the device safe area.
+          <strong>Nothing may ever scroll sideways.</strong> That is the exact bug that shipped: wide
+          content scrolls inside its own container or it does not exist.
+        </p>
+      </li>
+      <li>
+        <h4><em>02</em>Light and dark, both, by class</h4>
+        <p>
+          Dark mode is a class on the root element (<code>.gh-dark</code>), never a
+          <code>prefers-color-scheme</code> query, because the player's explicit choice has to win.
+          Every colour needs a value in both. Tokens: <code>--hub-bg</code> #f4f6fb / #0e1420,
+          <code>--hub-surface</code> #ffffff / #1b2333, <code>--hub-surface-2</code> #eef2f8 / #2b3547,
+          <code>--hub-ink</code> #16243a / #e9eef6, <code>--hub-muted</code> #5b6b82 / #9db0c9,
+          <code>--hub-accent</code> #1769d4 in both. A machine's own palette is a brand colour, not a
+          theme colour: if you use it, make it work on both grounds or tint it.
+        </p>
+      </li>
+      <li>
+        <h4><em>03</em>Colourblind safe</h4>
+        <p>
+          Matt is red/green colourblind. Wherever colour carries meaning it is paired with a shape, an
+          icon, a label or a border, never hue alone. That covers rank medals, the viewer's own row,
+          machine identity, and anything reading as good or bad.
+        </p>
+      </li>
+      <li>
+        <h4><em>04</em>#ffce3a is the standing emphasis accent</h4>
+        <p>App wide, for the currently selected or active thing, and always paired with a non colour indicator.</p>
+      </li>
+      <li>
+        <h4><em>05</em>No em dashes in copy</h4>
+        <p>Commas, colons or parentheses. This is a standing rule for every user facing string in the repo.</p>
+      </li>
+      <li>
+        <h4><em>06</em>Text no smaller than 11px, tap targets at least 44px</h4>
+        <p>The UX floor, and it is enforced by a test suite that fails the build.</p>
+      </li>
+      <li>
+        <h4><em>07</em>English and Spanish</h4>
+        <p>
+          Spanish runs 20 to 30% longer ("Puntos totales", "Mejor lanzamiento", "Partidas anteriores
+          (contra la máquina)"). Every label slot has to survive that without truncating or wrapping
+          into a mess. Machine names never translate.
+        </p>
+      </li>
+      <li>
+        <h4><em>08</em>THE LAW: player data is never hidden</h4>
+        <p>
+          The repo's first rule, written after a migration made a player's history invisible. Working
+          rule 1 is "stored is not enough, data must stay visible": a number no screen shows reads to
+          its owner as deleted. So re rank and re group everything in section 4 freely, but do not
+          design a screen that drops one. Working rule 4 is "never fabricate": no averages, rates or
+          per machine numbers that are not actually stored, and a missing value shows a dash, not a zero.
+        </p>
+      </li>
+      <li>
+        <h4><em>09</em>Offline first PWA</h4>
+        <p>
+          No web fonts, no CDN, no external images, no icon library. System font stack only
+          (<code>system-ui, -apple-system, "Segoe UI", Roboto, sans-serif</code>). Artwork is inline
+          SVG or CSS. Every file is precached by a service worker, so a new asset is real weight on
+          every device.
+        </p>
+      </li>
+      <li>
+        <h4><em>10</em>Vanilla CSS, no framework, no build step</h4>
+        <p>
+          The stylesheet for these screens ships as a string inside a JS module and is injected once.
+          Keep selectors flat and prefixed: <code>lb-</code> for the leaderboard, <code>gs-</code> for
+          the stats screens.
+        </p>
+      </li>
+      <li>
+        <h4><em>11</em>Screen B's markup is shared with every other game</h4>
+        <p>
+          The same <code>gs-*</code> classes render Connect Four's, Yahtzee's and Battleship's stats
+          screens. A Skeeball only look has to be scoped under its own wrapper class, not built by
+          editing the shared primitives.
+        </p>
+      </li>
+      <li>
+        <h4><em>12</em>Respect prefers-reduced-motion</h4>
+        <p>Any animation needs a still fallback that loses no information.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="n">7</span>Why it feels dead</h2>
+    <p>Not a spec, just the read on the current screens:</p>
+    <ul>
+      <li>
+        <strong>Everything carries the same weight.</strong> Nine rounded grey tiles, same size, same
+        colour, a big number and a caption in each. 700 (a personal record, hard won) and 4788 (balls
+        thrown, a number that only ever goes up) are drawn identically.
+      </li>
+      <li>
+        <strong>Screen A cannot be scanned.</strong> Six identical cards with one number each. You
+        cannot see that the leader has practised eight times harder than anyone else, that two players
+        are tied, or that anybody is improving.
+      </li>
+      <li>
+        <strong>The game has a strong physical identity and none of it is on these screens.</strong>
+        Skeeball is a wooden cabinet with a lit marquee and a lacquered orange face. The hub's stats
+        chrome is a calm white and blue card grid. The real design question is how much cabinet to
+        bring in: a marquee style header and per machine colour would make these unmistakably
+        Skeeball while the surrounding overlay stays hub.
+      </li>
+      <li>
+        <strong>The unused data is where the life is.</strong> Per machine daily bests going back
+        weeks, three objectives per machine with live progress, which of the nine baskets you have
+        ever hit, clean racks, points per machine. That is a screen with something to say, instead of
+        a wall of counters.
+      </li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <h2><span class="n">8</span>What to hand back</h2>
+    <p>
+      Static HTML and CSS, one file per screen, self contained, no JavaScript needed for the look.
+      Ideally:
+    </p>
+    <ul>
+      <li>both screens at 393px wide, in light <em>and</em> dark;</li>
+      <li>realistic content: the six players from section 3, the two machines a real player has actually played (THE CLASSIC and HOT SHOT), and six digit numbers where they occur;</li>
+      <li>a thin state as well: a player with five racks on one machine and nothing else;</li>
+      <li>colours taken from the <code>--hub-*</code> tokens rather than hard coded greys, so it drops straight into the theme.</li>
+    </ul>
+    <p>
+      It gets ported into <code>js/leaderboard-ui.js</code> (screen A) and
+      <code>js/game-stats-ui.js</code> (screen B), keeping the class prefixes, then checked at
+      393 &times; 852 in both themes with no sideways scroll before it ships.
+    </p>
+  </section>
+
+  <p class="foot">
+    Every fact here was checked against the shipped code on 2026-08-25. The same brief lives in the
+    repo at <code>HANDOFF-SKEEBALL-LB-DESIGN.md</code>.
+  </p>
+
+</div>

@@ -1,0 +1,64 @@
+My mistake on the rules — you published them hours ago and I read a stale doc line instead of the actual history. Corrected in all three places, with a note that a line saying you still owe a manual step goes stale the moment you do it.
+
+Handoff doc is at `docs/HOOPS4-HANDOFF.md`, merged to `main`:
+https://raw.githubusercontent.com/mpowell95/game-hub/main/docs/HOOPS4-HANDOFF.md
+
+---
+
+## Prompt for the new session
+
+```
+Finish Connect 4 Hoops in the Game Hub (mpowell95/game-hub).
+
+Read docs/HOOPS4-HANDOFF.md first, then hoops4/CLAUDE.md. The handoff doc has the
+state of the game, the instruments, and a list of settled questions you must not
+re-open — read that section before you plan anything.
+
+Work on branch claude/skee-ball-board-designs-39u6s7. Main is at CACHE v906.
+
+THREE THINGS ARE LEFT. Build the first two, in this order:
+
+1. QUICK CHAT INSIDE A MATCH
+   Matt asked for this alongside the series and caption that already shipped.
+   - The live half is mostly wiring: js/messages-ui.js already has a quick-chat
+     preset row, js/net.js already carries the room.
+   - The turn-by-turn half needs a field on the match document, and THAT FIELD
+     MUST BE OPTIONAL. validateGame returning null is a refusal to OPEN the
+     match, so a required field makes every match already sitting in
+     hoops/games/ unplayable the moment it ships. Add a hand-written
+     pre-chat document to test-hoops4-mp.mjs that proves it, the way the
+     pre-series one does.
+   - Nothing is ever deleted in js/mp.js. Keep it that way.
+
+2. CHALLENGE HISTORY WITH RECORDS
+   This is a SCREEN, not a schema change. Every finished match already keeps its
+   move list and both index rows; readMyGames() already returns them and the
+   active list just filters them out. Show finished matches and a win/loss record
+   per opponent.
+
+3. The two bounce gaps test.js owes are DEFERRED. Do not touch them, and do not
+   chase the scoring rate — Matt was shown the full measured table and chose to
+   leave the hoops alone. Ask him before spending anything there.
+
+RULES THAT ARE NOT NEGOTIABLE
+- "Finish" means LIVE on the deployed hub, not committed to a branch. Commit,
+  push, open a PR into main, merge it, then VERIFY the pages build and deployment
+  run for that merge SHA reaches completed/success. Only then say it is live.
+- Bump CACHE in sw.js past what is on main RIGHT NOW, not past your working copy,
+  then run validate-sw-assets.mjs and commit sw.js + version.json.
+- Do NOT run run-all-tests.mjs. Run the suites covering what you changed:
+  test-hoops4-mp.mjs, test-game-conventions.mjs, check-no-scroll.mjs hoops4,
+  test-visual.mjs hoops4. Run hoops4/js/test.js only if you touch the engine.
+- Delegate to subagents and pass `model` explicitly on every Agent call (Sonnet
+  for screens and CSS, Opus for engine/architecture judgement). Verify what they
+  report; never paste it.
+- No em dashes in user-facing copy. Matt is red/green colourblind: never signal
+  anything with hue alone.
+- Update hoops4/CLAUDE.md as part of the work, and close the "Still open" entries
+  you finish. Do not add a new "still to come" list anywhere else in the file —
+  two of those went stale within a day and had to be consolidated.
+- If Matt messages you mid-task asking what you're doing, stop and answer him
+  before your next tool call.
+
+When both features are live, tell him plainly what shipped and what you verified.
+```

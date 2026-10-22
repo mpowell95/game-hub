@@ -1,0 +1,560 @@
+[2026-08-14T02:59:09]
+Mostly yes, and the instinct behind it is right. One part of it is backwards, and it happens to be the part that determines whether any of it works.
+
+**First, the scale, so we're both looking at the same thing.** 98 markdown files, 21,241 lines. 38 `HANDOFF-*.md` at the repo root alone, plus `ARCH-REVIEW.md`, `VISUAL-PROCESS.md`, `UNO-DESIGN-SPEC.md`, `YAHTZEE_CLONE_SPEC.md`, `BUILD_INSTRUCTIONS.md`, `game-hub-audit.md`, a Connect Four kickoff prompt from before the hub existed. The setup-screen instruction you care about is written out four separate times, in four different handoff files, in four slightly different wordings, and none of them is the canonical one. So yes, the reorg is real work that needs doing.
+
+## The part that's backwards
+
+You described the master file as "basically a table of contents that directs future Claude sessions to the appropriate .md documents."
+
+A table of contents is a pointer, and pointers are exactly what just failed. The root file already contains `Setup screen | Escoba | the accordion, one row open at a time` and already names `tic-tac-toe/CLAUDE.md` for how-to-play. Both pointers were there. The Skeeball session read both and followed neither. If the root file becomes *nothing but* pointers, you've taken the one file that's guaranteed to load and filled it entirely with the one thing that reliably gets skipped.
+
+But your instinct that the root file is broken is correct. It's just broken for a different reason than length. Right now it mixes three kinds of content that want completely different treatment:
+
+- **Rules you must obey.** THE LAW. No em dashes. Colourblind pairing. "Deploy means live."
+- **Reference you look up when relevant.** The games table. The shared module map.
+- **Narrative history.** Why the service worker caches in two tiers. The version-pill diagnostic.
+
+The narrative and the reference are what make it 539 lines, and they're what trains a session to skim. The *rules* are the part that should stay, and honestly should get more room, not less.
+
+So the reframe I'd suggest: **the root file is a constitution, not a table of contents.** Short because it contains only binding rules stated in full, not short because it delegates. If a session must obey it, it lives there in its entirety. If a session only needs it sometimes, it moves out.
+
+## The thing that actually determines whether a doc gets read
+
+Placement. There are exactly three tiers, and they behave completely differently:
+
+| Tier | Loads when | Use for |
+|---|---|---|
+| Root `CLAUDE.md` | Always, every session | Binding rules, stated in full |
+| `<folder>/CLAUDE.md` | Only when the session touches that folder | Facts about that folder |
+| `docs/anything.md` | **Never automatically** | Depth, rationale, history |
+
+Your topic files land in tier 3. Tier 3 is invisible unless something forces the read. That's fine for "why the leaderboard rating model works this way," which a session should look up when it's relevant. It's fatal for "how a setup screen is built," which a session needs *before* it knows it needs it.
+
+Which means every tier-3 doc needs a forcing function, and there are only three that work:
+
+1. **A hard instruction in the root file.** Not a table row. A block that says: *building a setup screen? Open `docs/setup-screens.md` before you write a line. Do not infer its contents from this sentence.* Soft, but measurably better than a pointer buried in a table.
+2. **A test that fails.** Hard, unskippable, but only covers what's mechanically checkable.
+3. **A scaffold to copy.** This is the one I'd push hardest on, and it's not in your plan.
+
+## The scaffold idea
+
+You already have `css/ui.css` with a fully built `.gh-acc` accordion, `.gh-seg`, `.gh-card`, `.gh-modal`, the whole set. No shipped game uses any of it. Not because sessions disagree with it, but because reading a doc and then building from primitives is more work than inventing something.
+
+A `templates/new-game/` folder containing a working setup screen, a working how-to-play sheet, and a stub `ui.js` with the three exports would get copied, because copying is the lazy path and Claude always takes the lazy path. That converts a documentation problem into a code problem, and code problems stay solved.
+
+I'd want the reorg session to produce that alongside the docs.
+
+## The blind spot to design around explicitly
+
+The worst case in this repo is a brand new game folder, because that's the one place where tier 2 doesn't exist yet. The session has the root file and nothing else, and it's simultaneously making more decisions than at any other moment. Both Skeeball failures and the Hill Climb resize bug all landed in that exact gap.
+
+So the root file needs a "starting a new game? open these, in this order, before writing code" block near the top, and it needs the scaffold, and ideally a `docs/new-game.md` that's the single door into everything else.
+
+## Two rules for the session itself
+
+**Move, don't paraphrase.** The reason THE LAW's nine rules work is that each one is welded to a specific disaster. Rule 3 exists because your Ball Run history vanished. Strip the incident and you get a platitude, and platitudes lose to a session under deadline pressure. The session should relocate wording verbatim, dedupe by picking the best existing version, and only write new prose where nothing exists.
+
+**Archive, never delete.** Those 38 handoff files are the incident record. They go to `docs/archive/` with a note saying they're historical and superseded, not to the bin.
+
+## What I'd actually flag as risky
+
+**It's too big for one session done well.** 21k lines and 98 files. If it runs end to end in one pass you get a finished restructure you cannot verify, and you'll find out it dropped something six weeks from now when a session re-derives a convention. I'd split it: phase one produces an inventory and a proposed structure with nothing moved, you approve or redirect it, phase two executes. That's one extra round trip and it's the difference between a reorg you trust and one you hope about.
+
+**You can't proofread the output.** So the session should produce a mapping table as a deliverable: every source file, what was extracted from it, which new doc it landed in, whether the original was archived. That's a page you can actually scan.
+
+## The topic files I'd expect to fall out
+
+From what's genuinely in the repo: new game (the door), setup screens, how-to-play screens, visual and copy conventions, stats and THE LAW, multiplayer and lockstep, leaderboard, service worker and deploy, testing.
+
+Plus one that doesn't exist today and probably matters most to you: **rejected ideas and permanent bans.** Ball magnetism. Vanishing ball with a star popup. Variable flight speed. Non-rotating ball. Preserve-aspect-ratio cropped tile art. Connect Four's setup screen. Every one of those is something you decided once, and every one of them will come back unless it's written down, because nothing in the repo currently records a decision that was made *against* something.
+
+---
+
+So: the diagnosis is right, the consolidation is right, the topic-file split is right. Change one thing, which is that the master file holds the rules rather than pointing at them, and add the scaffold so the easy path and the correct path are the same path.
+
+Tell me if you want it phased the way I described, and whether you want the scaffold in scope, and I'll write the prompt.
+
+=====
+
+[2026-08-14T03:02:32]
+Honest answer up front: **you can't force reading. You can only make not-reading fail.** Those are different problems and only the second one is solvable.
+
+Here's the ladder, strongest to weakest, and where you actually stand.
+
+## Why reading fails in the first place
+
+Four separate mechanisms, worth separating because they need different fixes.
+
+1. **Only two files auto-load.** Root `CLAUDE.md` and a `CLAUDE.md` in a folder being touched. Everything else requires the session to *decide* to open a file. That decision competes with getting the task done.
+2. **The session already has an answer.** It doesn't feel uncertain about what a setup screen is. Reading feels like confirming something it already knows, which is the easiest thing in the world to skip.
+3. **Distance decays instructions.** Something read at minute 3 is competing with everything that happened by minute 90. The Skeeball session very likely did see "Escoba, the accordion" and then made 300 decisions before it got to the setup screen.
+4. **Prose has no failure state.** "Make it feel like it belongs in the hub" cannot be wrong at the moment of writing. `.gh-acc` either appears in the file or it doesn't.
+
+## The ladder
+
+**1. Put the text in the always-loaded file. Reliability: total, for "was it seen."**
+Not a pointer to it. The words. This is the only mechanism with no failure mode, which is why the root file should hold rules in full rather than delegate them. Doesn't guarantee compliance, but it's the floor everything else builds on.
+
+**2. Hooks. Reliability: total, and this is your biggest unused lever.**
+
+You have no `.claude/` directory at all. No settings, no hooks, nothing. You've been running this entire repo on documentation and tests with zero mechanical enforcement, which explains a lot.
+
+A `PreToolUse` hook intercepts a tool call *before it happens* and can block it with a message. So you can write one that fires when a session tries to Write or Edit a file matching `*/js/ui.js` or `*/js/howto.js`, and blocks it with the actual rules pasted into the block message.
+
+That is fundamentally different from a doc, and the difference is timing. **The instruction arrives at the moment of the action.** There is no gap between reading and doing for the session to forget across. It doesn't matter whether it read `docs/setup-screens.md` at minute 3, because the rules land in its face at minute 90 when it reaches for the file. It cannot be skimmed, cannot decay, cannot be reasoned around.
+
+This is the closest thing to actual force that exists, and you're not using it.
+
+**3. Tests that fail. Reliability: total, for whatever is mechanically checkable.**
+You already know this works. `test-game-conventions.mjs` is why the new Skeeball got the exports, the scoping, the storage key, the stats surfaces and the strings file right. Tests enforce outcomes and completely ignore whether anything was read, which is their whole virtue. The limit is that they only cover what a script can decide.
+
+**4. A scaffold to copy. Reliability: high, by making the correct path the lazy path.**
+`templates/new-game/` with a working setup screen and how-to-play sheet already wired to `.gh-*`. Sessions copy because copying beats inventing. This is the only item on the list that works *with* the model's laziness instead of against it.
+
+**5. Read receipts. Reliability: high, and free.**
+This is the one that makes pointers actually work. Don't say "read `docs/setup-screens.md`." Say:
+
+> Before writing any UI code, open `docs/setup-screens.md` and quote back to me the three whole-screen rules it lists.
+
+You cannot quote a file you didn't open. And the act of quoting forces the content through the model's attention properly rather than as a skim. It converts an unverifiable request into a verifiable one, and you can see the answer in the transcript.
+
+**6. Staged approval. Reliability: high, costs you time.**
+"Show me the setup screen markup before you build the game." Nothing gets 800 lines deep in the wrong direction. Expensive in your attention, so reserve it for the two or three things you know get botched.
+
+**7. A plain pointer in a table. Reliability: near zero.**
+`Setup screen | Escoba | the accordion`. This is what you have now, and it's what failed twice.
+
+## The part you genuinely can't enforce
+
+"Does this look like it belongs in the app" is taste, and no hook or test decides it. But almost every time your taste says "this doesn't belong," there's a mechanical proxy sitting underneath it. Your Skeeball setup screen reaction was real and correct, and the thing underneath it was six lines of CSS: no `:root.gh-dark` branch, no `--gh-*` tokens, hardcoded arcade-dark in both themes.
+
+A test can check for those. It won't catch every ugly screen, but it would have caught this one, and it would have caught it the day it shipped instead of after you played it.
+
+Same for How To Play. "Reads like a textbook" is taste. "Over 120 words, or more than one diagram, or a legend" is checkable, and it would have failed the current sheet.
+
+So the working method is: when something offends you, find the mechanical fingerprint of it and write that check. You won't get all of taste. You'll get most of the recurring failures, because they repeat in the same shape.
+
+## What I'd do for this repo, in order
+
+1. **Root file holds the rules in full.** No delegation for anything binding.
+2. **Create `.claude/settings.json` with PreToolUse hooks** on new-game file paths. This is the highest-leverage single change available to you and it currently doesn't exist.
+3. **Extend `test-game-conventions.mjs`** with the gh-dark branch check, the token check, and a word cap on how-to-play sheets.
+4. **Build `templates/new-game/`.**
+5. **Topic docs in `docs/`,** and every reference to one written as a read receipt, never as a pointer.
+6. **`docs/rejected.md`** for the permanent bans, and a line in the root file saying to read it before changing any game's feel.
+
+Notice the docs are fifth. They're worth doing, but they're the weakest item on the list, and doing them first is what makes a reorg feel productive without changing outcomes.
+
+I can set up the hooks now if you want, separately from the reorg session. It's a small file and it would start working immediately, including on the fresh Skeeball chat.
+
+=====
+
+[2026-08-14T03:10:59]
+**You can't force reading. You can only make skipping fail.**
+
+Ranked by what actually works:
+
+**1. Hooks.** Your biggest unused lever — you have no `.claude/` directory at all. A `PreToolUse` hook blocks a tool call and returns a message. Trigger it on writes to `*/js/ui.js`, `*/js/howto.js`, etc., with the rules pasted into the block message. The instruction arrives *at the moment of the action*, so it can't decay across a long session or be skimmed at minute 3. Closest thing to real force that exists.
+
+**2. Tests.** You already know these work — they're why the new Skeeball got exports, scoping, storage keys and stats surfaces right. They enforce outcomes and ignore whether anything was read. Limited to what a script can decide.
+
+**3. Scaffold.** `templates/new-game/` with a working setup screen and how-to sheet. Sessions copy because copying beats inventing. Works *with* the laziness instead of against it.
+
+**4. Read receipts.** This is what makes pointers work. Not "read `docs/setup-screens.md`" but "quote back the three whole-screen rules it lists." You can't quote what you didn't open, and you can see the answer in the transcript.
+
+**5. Rules in the root file verbatim.** Not pointers to them. The only file guaranteed to load.
+
+**6. Plain pointer in a table.** What you have now. Near zero.
+
+**On taste:** "doesn't belong in the hub" can't be tested. But it almost always has a mechanical fingerprint underneath. Yours here was six lines of CSS: no `:root.gh-dark` branch, no `--gh-*` tokens. That's checkable. "Reads like a textbook" isn't; "over 120 words or more than one diagram" is. When something offends you, find the fingerprint and write that check.
+
+**Order I'd do it:** hooks → extend `test-game-conventions.mjs` → scaffold → root file rules → topic docs → `docs/rejected.md`. Docs are fifth because they're the weakest lever, and doing them first feels productive without changing outcomes.
+
+Hooks now, or the reorg prompt first?
+
+=====
+
+[2026-08-14T03:16:15]
+````
+This is the Game Hub repo. Read `CLAUDE.md` in the repo root first, in full, before
+anything else. It is the project's constitution and it is not optional reading.
+
+This session is TOOLING ONLY. Do not touch any game's code, do not change any game's
+behavior, do not deploy. You are building the enforcement layer that makes the project's
+written conventions unskippable by future sessions.
+
+## Background you need
+
+Conventions in this repo are documented in prose and are routinely ignored, because only
+two files ever auto-load into a session: the root `CLAUDE.md`, and a `CLAUDE.md` inside a
+folder the session happens to touch. Everything else is invisible unless something forces
+the read. A brand-new game folder is the worst case: its own `CLAUDE.md` does not exist
+yet, so the session is flying blind at exactly the moment it makes the most decisions.
+
+This has produced real, shipped defects twice. The root file records one of them (Hill
+Climb shipping a raw resize listener the same day that pattern was removed everywhere
+else). The most recent one is the `skeeball/` folder: its setup screen and How To Play
+screen both ignore documented repo patterns, because the session that built them never
+opened the files those patterns live in.
+
+Your job is to make that structurally impossible going forward.
+
+## Deliverable 1: hooks
+
+There is currently no `.claude/` directory in this repo at all. Create
+`.claude/settings.json` with `PreToolUse` hooks.
+
+Verify the hook schema against the actual Claude Code documentation before writing it.
+Do not guess the JSON shape from memory.
+
+Behavior I want: when a session tries to Write or Edit a file that is part of a game's
+UI layer, the hook fires and delivers the relevant rules INTO the session at that moment.
+The point is timing. A doc read at the start of a session is forgotten by the time it
+matters; a hook message arrives with no gap between reading and acting.
+
+At minimum, cover:
+- any `*/js/ui.js` or `*/js/howto.js`
+- any `*/css/*.css` under a game folder
+- creation of a new top-level game folder
+
+The message each hook delivers should contain the actual rules, not a pointer to them.
+Keep each one short enough to be read, not a wall.
+
+Before you claim this works, PROVE IT FIRES. Trigger it and show me the output.
+A hook that is syntactically valid but never matches is worse than no hook, because it
+looks like protection.
+
+## Deliverable 2: new checks in `test-game-conventions.mjs`
+
+Read that file first. It already enforces most of the "USE WHAT EXISTS" table from the
+root `CLAUDE.md`, discovers game folders from disk, and carries a `KNOWN_GAPS` list for
+pre-existing debt. Follow its existing patterns rather than inventing new ones.
+
+Add checks for these. Each one is the mechanical fingerprint of something a human
+rejected by eye:
+
+1. **Theme integration.** A game's CSS must either use the `--gh-*` / `--hub-*` tokens or
+   define its own palette WITH a `:root.gh-dark` override. A game that hardcodes one
+   palette and renders identically in light and dark mode fails. Concrete case: compare
+   `skeeball_old/css/skeeball_old.css` lines 9-35 (correct: hub-matching values plus a
+   `:root.gh-dark .sko-root` block) against `skeeball/css/skeeball.css` (wrong: hardcoded
+   arcade-dark, explicitly no dark branch). The first looks like it belongs in the app.
+   The second does not. That difference is six lines of CSS and it is checkable.
+
+2. **How To Play length.** Read `tic-tac-toe/CLAUDE.md` lines 211-244 for the documented
+   pattern, then enforce a word cap and at most one diagram per help screen. `skeeball/js/howto.js`
+   should fail this. It technically follows the documented outline but reads like a
+   textbook figure, which is the failure mode the cap is meant to catch.
+
+3. Anything else in the root `CLAUDE.md`'s "USE WHAT EXISTS" table or "Adding a game"
+   checklist that is currently prose-only and mechanically checkable. Tell me what you
+   found before adding it.
+
+Existing games WILL fail the new checks. That is expected. Put those in `KNOWN_GAPS` with
+a one-line reason each, exactly as that file already does for pre-existing debt. New games
+must pass. Do not weaken a check to make an old game pass.
+
+`node run-all-tests.mjs` must be green when you are done.
+
+## Deliverable 3: `docs/rejected.md`
+
+Nothing in this repo records a decision made AGAINST something, so rejected ideas keep
+coming back. Create this file. One line each, plainly worded, no hedging:
+
+- Balls that curve toward scoring holes. No magnetism, no correction, no assist. A ball
+  goes where it was thrown.
+- A ball that vanishes on landing and is replaced by a score popup with stars.
+- Variable flight speed within a single throw (slow on the lane, fast off the ramp).
+  Speed is constant.
+- A rolling ball that does not rotate. Rotation is tied to distance travelled.
+- Hub tile art drawn square and cropped with `preserveAspectRatio="slice"`. Compose for
+  the 160x90 frame given.
+- Connect Four's setup screen as a model for anything.
+
+Add a line to the root `CLAUDE.md` pointing at this file, and phrase it as a required read
+before changing any game's look or feel. Not a table entry.
+
+## Rules for this session
+
+- Read files before citing them. Do not cite a file you have not opened. The `skeeball/js/howto.js`
+  header comment claims to follow `tic-tac-toe/CLAUDE.md` and was written by a session that
+  never read it. Do not do that.
+- Move existing wording verbatim where it already exists. Do not paraphrase rules into
+  platitudes. The specifics are what make them stick.
+- Do not delete any file.
+- Do not deploy, do not merge to `main`, do not open a PR.
+
+## Before you write any code
+
+Report back with:
+1. The three whole-screen rules listed in `tic-tac-toe/CLAUDE.md`'s How-to-play section,
+   quoted.
+2. The `PreToolUse` hook JSON shape you verified, and where you verified it.
+3. The list of file-path patterns you intend to hook, and the rules text each will deliver.
+4. Which existing games will fail each new check.
+
+Then stop and wait for my go-ahead.
+````
+
+The final section is the important part. It's a read receipt: it can't answer #1 without opening the file, and it can't answer #4 without actually running the checks.
+
+=====
+
+[2026-08-14T03:23:21]
+## Prompt A — Skeeball critique
+
+**Model:** Opus 5 · **Effort:** max · **Mode:** auto (default)
+
+Not accept-edits. It will start "fixing" things, and you want the diagnosis clean first.
+
+````
+This is the Game Hub repo, a vanilla-JS PWA of small games. Read the root `CLAUDE.md`
+in full before anything else.
+
+Your job today is to PLAY the Skeeball game in `skeeball/` and review it. You are not
+fixing anything. Do not edit a single line of game code. If you find yourself writing a
+patch, stop.
+
+## Play it for real
+
+`node server.mjs` serves the repo at http://localhost:8123. The game is at
+`/skeeball/` standalone, and mounted in the hub at `/`.
+
+Read `test-visual.mjs` first - it already drives games in a real Chromium at a phone
+viewport with real touch events. Reuse that harness. If playwright-core or Chromium
+isn't available locally, say so immediately rather than reviewing from source code.
+
+Play at least three complete nine-ball games. Vary your throws: weak, hard, straight,
+angled hard both ways. Play it in the hub AND standalone. Play it in light mode and
+dark mode. Capture frames.
+
+Reviewing this game by reading its source instead of playing it is the exact failure
+that produced the build you're looking at. Do not repeat it.
+
+## Review it as a product, harshly
+
+The person who owns this game thinks it is bad and is close to scrapping it. Your job
+is to find out precisely why, in enough detail that a rebuild has a target. Be harsh.
+Do not let anything slide, do not soften a finding, and do not pad the list with things
+that are fine.
+
+Judge it as a thing a person plays, not as code. Specifically:
+
+- Does the throw feel like throwing a ball?
+- Does the ball behave like a physical object from release to rest? Watch the moment it
+  reaches the scoring face frame by frame and describe exactly what happens.
+- Is the layout right for a phone held in one hand? Where does your eye go, and is that
+  where the game is?
+- Does it look like it belongs in this app, or like a different app wedged into it?
+  Compare against two or three other games in the hub. Be specific about what differs.
+- The setup screen and the How To Play screen: judge each on its own.
+- Anything on screen that is illegible, cramped, or ignorable.
+
+## Rules
+
+- Every finding needs evidence: a frame, a measurement, a line of code that explains the
+  behavior you observed. "Feels off" without evidence is not a finding.
+- Do not cite a file you have not opened.
+- Do not read anything in `skeeball_old/` except its CSS and its setup screen. That build
+  was rejected for its gameplay; only its setup screen is a reference.
+- Do not deploy, merge, or open a PR.
+
+## Output
+
+A ranked list, worst first. For each: what's wrong, the evidence, and what the player
+experiences because of it. No fixes, no code, no recommendations section. Just the
+diagnosis.
+````
+
+---
+
+## Prompt B — read-only doc inventory
+
+**Model:** Sonnet 5 · **Effort:** high · **Mode:** auto (default)
+
+Volume work against explicit criteria. Opus is overkill and this is 21k lines of reading.
+
+````
+This is the Game Hub repo. Read the root `CLAUDE.md` first, in full.
+
+This session is READ-ONLY except for ONE file you will create at the end. Do not edit,
+move, delete, or reorganize anything. Do not touch game code. Do not deploy.
+
+## The problem
+
+There are 98 markdown files in this repo totalling ~21,000 lines: 38 `HANDOFF-*.md` at
+the root, plus per-folder `CLAUDE.md` files, one-off specs, audits, and kickoff prompts
+from before the hub existed. Most are single-purpose and disposable. Some contain
+conventions that are still binding and are documented NOWHERE else.
+
+The risk in cleaning this up is throwing away the second kind. Your job is to tell them
+apart. You are producing an inventory, not a reorganization.
+
+## What to do
+
+Read every `.md` file in the repo. Actually read them, do not skim by filename.
+
+Classify each into exactly one bucket:
+
+1. **BINDING** - contains a rule or convention that still governs how work is done, and
+   which is not fully stated in the root `CLAUDE.md`. Example: `tic-tac-toe/CLAUDE.md`
+   lines 211-244 is the ONLY written spec for how-to-play screens in the entire repo.
+2. **REFERENCE** - factual detail about a specific game or subsystem that a future
+   session would need when working on it. Most per-folder `CLAUDE.md` files.
+3. **HISTORY** - a record of work that was done. Superseded, but records an incident,
+   a decision, or a rejected approach worth keeping.
+4. **DISPOSABLE** - served one purpose, completed, nothing in it is referenced elsewhere
+   and nothing in it would change a future decision.
+
+For anything you mark BINDING, quote the specific passage. That is the whole point of
+the exercise, so err toward BINDING when unsure.
+
+Separately, flag **DUPLICATED** content: the same instruction written in several files
+in different wordings. Name every location and say which wording is best. (Known example
+to get you started: the Escoba setup-screen accordion instruction appears in at least
+four handoff files.)
+
+And flag **ORPHANED** rules: a convention stated in a file that no session would ever
+auto-load, i.e. anything outside the root `CLAUDE.md` or a `<folder>/CLAUDE.md`.
+
+## Output
+
+Create exactly one file, `docs/INVENTORY.md`. Nothing else. It contains:
+
+- A table: file path, line count, bucket, one-line summary.
+- A BINDING section: every binding rule found, quoted, with its source file and the
+  topic it belongs to.
+- A DUPLICATED section.
+- An ORPHANED section.
+- A proposed topic-file structure: which topics deserve their own doc, and which
+  binding rules land in each. Proposal only. Move nothing.
+
+Do not write the topic files. Do not edit the root `CLAUDE.md`. Do not delete or archive
+anything, including things you are confident are disposable.
+````
+
+=====
+
+[2026-08-14T05:07:01]
+Right, that's the state I assumed. Just release it and let it fix the gameplay half in the same session. Paste this:
+
+````
+Good. Now fix it, in this session, while you still have the game in front of you.
+
+Scope is GAMEPLAY ONLY. Do not touch the setup screen or the How To Play screen - those
+are being handled separately with tooling that doesn't exist yet.
+
+The core defect: the ball reaches the scoring face, freezes, and is awarded points.
+`physics.js` runs a capture test (`captureVn`), not a simulation, so there is nothing on
+that face for the ball to hit. Fix that structurally. The face needs real geometry -
+rims, dividers, holes a ball can rattle out of, and a 10 at the bottom that physically
+catches everything that hits the board and doesn't go elsewhere. A ball must either go
+straight in, bounce in, or bounce around and roll down into the 10.
+
+Permanent bans. These have all been built before and rejected. Do not reintroduce any of
+them under any justification:
+- No magnetism. Balls never curve toward holes, are never corrected, never assisted.
+  A ball goes where it was thrown.
+- No vanishing ball replaced by a score popup.
+- Constant speed through the throw. Do not slow it on the lane and speed it off the ramp.
+- The ball rotates, tied to distance travelled.
+
+Everything else from your own review that is gameplay or animation, fix it too.
+
+Play it again when you're done - full games, real touch, same harness. Show me frames of
+a ball rattling out of a hole and a ball draining into the 10. Do not report it fixed
+based on the code reading.
+
+Don't deploy, don't merge, don't open a PR.
+````
+
+=====
+
+[2026-08-14T05:09:05]
+Read it. It's better than mine — more evidence, and it found things I missed entirely (ball behind the camera, the number panels z-fighting inside the cup walls, the 130ms window eating slow swipes, the standalone `--hub-surface` fallback).
+
+Two things you should know before deciding anything:
+
+**1. My earlier analysis was of a stale build.** Since I last looked, Skeeball was rebuilt twice more. `a1b4c2f`: *"physics rebuilt on vendored cannon-es, renderer rebuilt on vendored three.js."* So the fix prompt I drafted, which talked about `captureVn` being a capture test with no geometry, is wrong for the current code. The freeze-instead-of-gravity problem is largely gone — the reviewer measured a real 300ms rattle in the collar. The remaining piece of your complaint is that the score is *announced at capture*, before the ball settles.
+
+Also worth registering: your root `CLAUDE.md` says no dependencies, no build step. It now vendors three.js and cannon-es. Still static files, so it's not a crisis, but that's a large architectural change that happened without you weighing in.
+
+**2. The 12 findings collapse to about four jobs.** That matters, because handing back a 12-item list gets you 12 shallow patches.
+
+- **The camera is wrong**, and that alone causes findings 2, 8, and most of 3. It sits at z=−0.34 with the lane running to −1.15, so the resting ball is behind it (screen y = −3875), most of the lane is behind the viewer, and what's left is the 22% dead brown band. Fix the camera and three findings resolve at once.
+- **The throw mapping is broken.** Findings 1 and 7. 43 of 100 adjacent power steps flip the outcome, the softest quarter and hardest tenth are both dead, and a slow deliberate swipe is silently discarded.
+- **The cups are built wrong.** Findings 4 and 5. Flat number panels placed inside curved cylinder walls, and mouths laid flat while tubes are tilted. One geometry fix, and every number on the board stops being sliced.
+- **The ball flies over the board instead of rolling up it.** 31 of 51 throws never touch the face; 18 of ~20 good scores dropped in from the air. That's a launch angle and speed problem, and it's the one that makes it not-skeeball.
+
+Everything else on the list — How To Play, setup screen, the back-button collision, dark mode, the end sheet — is downstream, and is exactly the category the hooks and tests are for.
+
+**My recommendation stands, adjusted:** let Opus fix those four in the same session, in that order, and hold the rest. Want me to rewrite the go-ahead prompt against the real build?
+
+=====
+
+[2026-08-14T05:09:52]
+````
+Good review. Now fix it, in this session, while you have the harness and the build in
+front of you.
+
+Scope: four jobs, in this order. Do not touch anything else. In particular do not touch
+the setup screen (9), How To Play (6), the end-of-rack sheet (12), the hub back-button
+collision (10) or the dark-mode accordion (11) - those are being handled separately with
+tooling that doesn't exist yet.
+
+1. THE CAMERA. Findings 2 and 8, and most of 3, are one defect. The camera at
+   (0, 0.62, -0.34) puts the resting ball behind it (screen y = -3875), puts most of the
+   lane behind the viewer, and leaves the bottom 22% of the screen a flat brown field
+   the player is told to swipe on. Reposition it so the player sees a lane running away
+   from them with the ball sitting on it, ready, before they throw. The ball must be
+   visible and on screen from the moment the rack starts, through release, through the
+   whole roll. No part of a throw is undrawn.
+
+2. THE THROW. Findings 1 and 7. Two problems: the power-to-outcome mapping is chaotic
+   (43 of 100 adjacent 0.01 steps flip the outcome, 30 of 44 bands one step wide), and
+   the 130ms measurement window silently discards a slow deliberate swipe with no ball,
+   no message, nothing. A player must be able to form a theory about this game: harder
+   goes further, and a repeated swipe gives a repeated result. Widen the bands, kill the
+   dead zones at both ends, make the 100 reachable, and make every gesture that is
+   plainly a throw become a throw.
+
+3. THE CUPS. Findings 4 and 5. Flat number panels at z = radius*0.995 inside cylinder
+   walls of that same radius, so every number on the board is bitten in half; mouths laid
+   flat while tubes are tilted, so the black opening slides out from under its own cup;
+   and `if (!H.collarH) continue` leaves h20 with no tube and no number at all. Rebuild
+   the cup construction so a hole reads as a hole in a board and every number is whole
+   and belongs to the hole it labels. Also fix the corner 0 stencils being sliced by the
+   frame edges.
+
+4. THE TRAJECTORY. 31 of 51 throws never touch the scoring face; 18 of ~20 throws scoring
+   30+ dropped in out of the air, and a real 50 spent part of its flight above the
+   backglass casting a shadow on the words NINE BALLS. Skeeball is a ball rolling up a
+   ramp into a hole. Make the ball travel up the board in contact with it. Hitting the
+   back wall should be a rare hard-throw outcome, not 25 of 51.
+
+Also: the score is announced at capture, then the ball rattles in the collar for 300ms
+afterward. The ball settles first, then the score.
+
+PERMANENT BANS. All of these have been built and rejected before. Do not reintroduce any
+of them under any justification, including as a fix for job 2:
+- No magnetism. Balls never curve toward holes, are never corrected, never assisted.
+  A ball goes where it was thrown. Widening the power bands must come from geometry and
+  tuning, never from steering the ball.
+- No vanishing ball replaced by a score popup.
+- Constant speed through a throw. Do not slow it on the lane and speed it off the ramp.
+- The ball rotates, tied to distance travelled.
+
+Do not add any dependency. The two vendored ones are what you have.
+
+## Verification
+
+Do not report anything fixed from reading code. Re-run your own measurements:
+- The power sweep across all 101 steps. Show the new bands.
+- The touched-the-board rate across ~50 throws. Show the new number against 31/51.
+- The projected on-screen position of the ball at t=0 and every frame of a flight.
+- Frames of a whole, unbitten number on each cup.
+- Three full nine-ball games with real touch, and the scores.
+
+Show me the frames. Don't deploy, don't merge, don't open a PR.
+````

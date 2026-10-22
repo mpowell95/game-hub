@@ -1,0 +1,299 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Skeeball Screens</title>
+<style>
+  :root{
+    --pg-ground:#edf0f6; --pg-surface:#ffffff; --pg-ink:#16243a; --pg-muted:#5b6b82;
+    --pg-accent:#1769d4; --pg-line:rgba(16,36,58,.12); --pg-note-bg:#fff6e6; --pg-note-ink:#7a5210;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --pg-ground:#0e1522; --pg-surface:#161f30; --pg-ink:#e8eef7; --pg-muted:#93a2ba;
+      --pg-accent:#5aa0ff; --pg-line:rgba(190,214,244,.14); --pg-note-bg:#2a2213; --pg-note-ink:#e9c07a;
+    }
+  }
+  :root[data-theme="dark"]{
+    --pg-ground:#0e1522; --pg-surface:#161f30; --pg-ink:#e8eef7; --pg-muted:#93a2ba;
+    --pg-accent:#5aa0ff; --pg-line:rgba(190,214,244,.14); --pg-note-bg:#2a2213; --pg-note-ink:#e9c07a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--pg-ground);color:var(--pg-ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:460px;margin:0 auto;padding:30px 18px 56px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--pg-accent);margin:0 0 8px}
+  .lead-h{font-size:26px;font-weight:700;letter-spacing:-.01em;margin:0 0 8px;text-wrap:balance}
+  .lead-p{font-size:15px;line-height:1.55;color:var(--pg-muted);margin:0}
+  .note{margin:16px 0 0;padding:12px 14px;background:var(--pg-note-bg);color:var(--pg-note-ink);
+    border-radius:12px;font-size:13px;line-height:1.5}
+  .screen{margin-top:34px}
+  .screen h2{font-size:18px;font-weight:600;margin:0 0 3px}
+  .screen .desc{font-size:13.5px;line-height:1.5;color:var(--pg-muted);margin:0 0 12px}
+  .divider{height:1px;background:var(--pg-line);border:0;margin:34px 0 0}
+  .footnote{margin-top:34px;font-size:13px;line-height:1.6;color:var(--pg-muted)}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="skBoard" viewBox="0 0 150 200">
+    <rect x="20" y="34" width="110" height="140" rx="30" fill="currentColor" opacity="0.05"/>
+    <path d="M20 174 L20 64 Q20 34 75 34 Q130 34 130 64 L130 174 Z" fill="none" stroke="currentColor" stroke-width="2.4"/>
+    <rect x="14" y="6" width="122" height="22" rx="7" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <text x="75" y="21" font-size="8" fill="currentColor" font-weight="800" text-anchor="middle" letter-spacing="0.5" font-family="system-ui,sans-serif">THE CLASSIC</text>
+    <circle cx="75" cy="150" r="16" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <circle cx="75" cy="120" r="13" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <circle cx="75" cy="95" r="11" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <circle cx="75" cy="73" r="9.5" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <circle cx="40" cy="54" r="8.5" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <circle cx="40" cy="54" r="5" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <circle cx="110" cy="54" r="8.5" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <circle cx="110" cy="54" r="5" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <g fill="currentColor" font-family="system-ui,sans-serif" font-weight="800" text-anchor="middle">
+      <text x="75" y="154" font-size="12">20</text>
+      <text x="75" y="124" font-size="11">30</text>
+      <text x="75" y="99" font-size="10">40</text>
+      <text x="75" y="76" font-size="9">50</text>
+      <text x="40" y="57" font-size="6.5">100</text>
+      <text x="110" y="57" font-size="6.5">100</text>
+    </g>
+    <path d="M58 174 L92 174 L99 198 L51 198 Z" fill="currentColor" opacity="0.05"/>
+    <path d="M58 174 L51 198 M92 174 L99 198" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5"/>
+  </symbol>
+</svg>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Skeeball &middot; batch G</p>
+    <h1 class="lead-h">Screen mockups</h1>
+    <p class="lead-p">Updated with your notes. Theme follows the hub (light shown). The hub-wide record now sits
+      on its own full-width row so a long name fits (sample: Cristobalina). The how-to caption cross-fades to the
+      unlock message.</p>
+    <p class="note"><strong>The board art here is a simplified stand-in.</strong> The real setup and how-to
+      screens render the actual 3D Classic machine (the same one the play screen shows), not a drawing. A
+      static page can't run the 3D engine, so these use a placeholder board.</p>
+  </header>
+
+  <section class="screen">
+    <h2>Game over</h2>
+    <p class="desc">Centered. Hub-wide record renamed. Brag stats swapped for your average and the hub-wide
+      average (both computed from data already stored). Play again, back to machines, X to close.</p>
+
+    <div class="skrc">
+      <h3 class="sronly">Mockup of the Skeeball game-over screen, centered, on the hub's shared components.</h3>
+      <style>
+        .skrc{--sf:#ffffff;--sf2:#eef2f8;--ink:#16243a;--muted:#5b6b82;--accent:#1769d4;
+          --bd:rgba(16,36,58,.14);--bds:rgba(16,36,58,.28);
+          --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-family:var(--font)}
+        .sronly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+        .skrc .frame{position:relative;min-height:560px;border-radius:16px;overflow:hidden;
+          display:flex;align-items:center;justify-content:center;padding:18px;background:#0a1120;border:1px solid #1d2740}
+        .skrc .scene{position:absolute;inset:0}
+        .skrc .board{position:absolute;left:50%;top:16%;width:190px;height:250px;transform:translateX(-50%);
+          border-radius:14px;background:#141d33;border:1px solid #223052}
+        .skrc .ring{position:absolute;left:50%;transform:translateX(-50%);border:2px solid #2b3a5e;border-radius:50%}
+        .skrc .r1{top:22%;width:150px;height:150px}
+        .skrc .r2{top:27%;width:100px;height:100px}
+        .skrc .r3{top:32%;width:56px;height:56px}
+        .skrc .lane{position:absolute;left:50%;bottom:0;width:150px;height:34%;transform:translateX(-50%);
+          background:#101a30;border-top-left-radius:40px;border-top-right-radius:40px;border:1px solid #223052}
+        .skrc .scrim{position:absolute;inset:0;background:rgba(9,16,28,.55)}
+        .skrc .modal{position:relative;width:min(340px,100%);padding:26px 24px 24px;border-radius:16px;
+          background:var(--sf);color:var(--ink);box-shadow:0 16px 44px rgba(0,0,0,.5);text-align:center}
+        .skrc .x{position:absolute;top:8px;right:8px;width:36px;height:36px;display:grid;place-items:center;
+          border:0;border-radius:50%;background:var(--sf2);color:var(--muted);font-size:20px;line-height:1;cursor:pointer}
+        .skrc .title{margin:0;font-size:26px;font-weight:800;letter-spacing:-.01em}
+        .skrc .flabel{margin:14px 0 0;font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+        .skrc .final{margin:2px 0 8px;font-size:60px;font-weight:800;line-height:1;color:var(--ink)}
+        .skrc .pill{display:inline-block;padding:4px 12px;border-radius:999px;background:var(--accent);color:#fff;
+          font-size:12px;font-weight:800;letter-spacing:.04em}
+        .skrc .hubrec{margin:18px 0 0;padding:10px 12px;background:var(--sf2);border:1px solid var(--bd);border-radius:12px}
+        .skrc .hubrec em{display:block;font-style:normal;font-size:11px;font-weight:700;color:var(--muted)}
+        .skrc .hubrec b{display:block;margin-top:2px;font-size:16px;font-weight:800;color:var(--ink);overflow-wrap:anywhere}
+        .skrc .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 0}
+        .skrc .tile{background:var(--sf2);border:1px solid var(--bd);border-radius:12px;padding:11px 6px}
+        .skrc .tile b{display:block;font-size:22px;font-weight:800;color:var(--ink)}
+        .skrc .tile span{display:block;margin-top:3px;font-size:11px;font-weight:700;color:var(--muted)}
+        .skrc .actions{display:flex;flex-direction:column;gap:8px;margin-top:22px}
+        .skrc .btn{min-height:46px;border-radius:999px;font-family:var(--font);font-size:16px;font-weight:600;
+          display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--bds);
+          background:var(--sf);color:var(--ink)}
+        .skrc .btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+        .skrc .btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+      </style>
+      <div class="frame">
+        <div class="scene" aria-hidden="true">
+          <div class="board"></div>
+          <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+          <div class="lane"></div>
+        </div>
+        <div class="scrim" aria-hidden="true"></div>
+        <div class="modal" role="dialog" aria-label="Game over">
+          <button class="x" aria-label="Close">&times;</button>
+          <h4 class="title">Game over</h4>
+          <p class="flabel">THE CLASSIC</p>
+          <p class="final">640</p>
+          <span class="pill">NEW BEST</span>
+          <p class="hubrec"><em>Hub-wide record</em><b>760 &middot; Cristobalina</b></p>
+          <div class="tiles">
+            <div class="tile"><b>640</b><span>Your best</span></div>
+            <div class="tile"><b>640</b><span>Today</span></div>
+            <div class="tile"><b>305</b><span>Your average</span></div>
+            <div class="tile"><b>240</b><span>Hub average</span></div>
+          </div>
+          <div class="actions">
+            <button class="btn primary">Play again</button>
+            <button class="btn ghost">Back to machines</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section class="screen">
+    <h2>Setup &middot; machine carousel</h2>
+    <p class="desc">Skeeball centered. THE CLASSIC above the machine. Extra words gone. The card is centered;
+      swipe or use the arrows to move between machines.</p>
+
+    <div class="sksu">
+      <h3 class="sronly">Mockup of the Skeeball setup screen as a centered swipeable machine carousel.</h3>
+      <style>
+        .sksu{--sf:#fff;--sf2:#eef2f8;--ink:#16243a;--muted:#5b6b82;--accent:#1769d4;--bg:#f4f6fb;
+          --bd:rgba(16,36,58,.14);--bds:rgba(16,36,58,.28);
+          --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-family:var(--font)}
+        .sksu .frame{min-height:600px;border-radius:16px;overflow:hidden;background:var(--bg);border:1px solid var(--bd);padding:18px 16px}
+        .sksu .h1{margin:0 0 16px;font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.01em;text-align:center}
+        .sksu .cwrap{position:relative}
+        .sksu .slide{width:min(300px,100%);margin:0 auto;background:var(--sf);border:1px solid var(--bd);
+          border-radius:18px;padding:16px 16px 18px;box-shadow:0 2px 12px rgba(16,30,54,.10);text-align:center}
+        .sksu .mname{margin:0 0 10px;font-size:22px;font-weight:800;color:var(--ink);letter-spacing:.02em}
+        .sksu .board{display:block;width:130px;height:174px;margin:0 auto 12px;color:var(--ink)}
+        .sksu .recwide{background:var(--sf2);border-radius:10px;padding:9px 10px;margin-bottom:8px}
+        .sksu .recwide em{display:block;font-style:normal;font-size:10.5px;font-weight:700;color:var(--muted)}
+        .sksu .recwide b{display:block;margin-top:2px;font-size:16px;font-weight:800;color:var(--ink);overflow-wrap:anywhere}
+        .sksu .rec3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+        .sksu .rec{background:var(--sf2);border-radius:10px;padding:9px 5px}
+        .sksu .rec em{display:block;font-style:normal;font-size:10px;font-weight:700;color:var(--muted)}
+        .sksu .rec b{display:block;margin-top:2px;font-size:16px;font-weight:800;color:var(--ink)}
+        .sksu .chev{position:absolute;top:44%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;
+          border:1px solid var(--bd);background:var(--sf);color:var(--ink);font-size:18px;line-height:1;
+          display:grid;place-items:center;box-shadow:0 2px 8px rgba(16,30,54,.12);cursor:pointer}
+        .sksu .chev.l{left:0;opacity:.35}
+        .sksu .chev.r{right:0}
+        .sksu .dots{display:flex;justify-content:center;gap:7px;margin:16px 0 4px}
+        .sksu .dots i{width:8px;height:8px;border-radius:50%;background:var(--bds)}
+        .sksu .dots i.on{background:var(--accent);transform:scale(1.15)}
+        .sksu .hint{margin:0;font-size:12px;color:var(--muted);text-align:center}
+        .sksu .howto{margin:16px 0 0;width:100%;min-height:44px;border-radius:999px;border:1px solid var(--bds);
+          background:var(--sf);color:var(--ink);font-family:var(--font);font-size:15px;font-weight:600;
+          display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
+        .sksu .play{margin:10px 0 0;width:100%;min-height:48px;border-radius:999px;border:0;background:var(--accent);
+          color:#fff;font-family:var(--font);font-size:17px;font-weight:700;cursor:pointer}
+      </style>
+      <div class="frame">
+        <h4 class="h1">Skeeball</h4>
+        <div class="cwrap">
+          <div class="slide">
+            <p class="mname">THE CLASSIC</p>
+            <svg class="board" viewBox="0 0 150 200" role="img" aria-label="THE CLASSIC machine"><use href="#skBoard" width="150" height="200"/></svg>
+            <div class="recwide"><em>Hub-wide record</em><b>760 &middot; Cristobalina</b></div>
+            <div class="rec3">
+              <div class="rec"><em>Your best</em><b>640</b></div>
+              <div class="rec"><em>Today</em><b>340</b></div>
+              <div class="rec"><em>Your average</em><b>305</b></div>
+            </div>
+          </div>
+          <button class="chev l" aria-label="Previous machine">&#8249;</button>
+          <button class="chev r" aria-label="Next machine">&#8250;</button>
+        </div>
+        <div class="dots"><i class="on"></i><i></i></div>
+        <p class="hint">Swipe to switch machines</p>
+        <button class="howto">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 6.5c-1.6-1-4.2-1.5-6.2-1.5-1 0-1.8.1-1.8.1v12s.8-.1 1.8-.1c2 0 4.6.5 6.2 1.5 1.6-1 4.2-1.5 6.2-1.5 1 0 1.8.1 1.8.1v-12s-.8-.1-1.8-.1c-2 0-4.6.5-6.2 1.5z"/>
+            <path d="M12 6.5V18.6"/>
+          </svg>
+          How to play
+        </button>
+        <button class="play">Play</button>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section class="screen">
+    <h2>How to play</h2>
+    <p class="desc">Mancala's carousel, but simpler: the machine with a ball rolling up into a cup, and short
+      words. The real card animates the actual machine.</p>
+
+    <div class="skht">
+      <h3 class="sronly">Mockup of the Skeeball how-to-play carousel with a rolling-ball animation.</h3>
+      <style>
+        .skht{--sf:#fff;--font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-family:var(--font)}
+        .skht .frame{position:relative;min-height:540px;border-radius:16px;overflow:hidden;background:#0a1120;
+          border:1px solid #1d2740;display:flex;align-items:center;justify-content:center;padding:18px}
+        .skht .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+        .skht .modal{position:relative;width:min(320px,100%);background:#2A2730;border-radius:22px;
+          padding:16px 14px 14px;box-shadow:0 18px 44px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:12px}
+        .skht .ht-title{color:#fff;font-weight:800;font-size:20px;letter-spacing:.04em;text-align:center;margin:0}
+        .skht .card{background:#fff;border-radius:16px;padding:10px 10px 4px;display:flex;flex-direction:column;gap:8px}
+        .skht .panel{position:relative;border-radius:10px;aspect-ratio:150/200;overflow:hidden;background:#f1e0c2}
+        .skht .panel .board{width:100%;height:100%;color:#2b2016}
+        .skht .ball{position:absolute;left:50%;bottom:3%;width:8%;aspect-ratio:1;border-radius:50%;
+          background:#2b2016;transform:translateX(-50%);animation:skroll 2.8s ease-in-out infinite}
+        @keyframes skroll{
+          0%{bottom:3%;opacity:0;transform:translateX(-50%) scale(.8)}
+          8%{opacity:1}
+          52%{bottom:44%;opacity:1;transform:translateX(-50%) scale(1)}
+          64%{bottom:47%;opacity:1;transform:translateX(-50%) scale(.72)}
+          74%{bottom:47%;opacity:0;transform:translateX(-50%) scale(.45)}
+          100%{bottom:47%;opacity:0}}
+        @media (prefers-reduced-motion: reduce){.skht .ball{animation:none;bottom:44%;opacity:1}}
+        .skht .cap{position:relative;margin:0;padding:2px 6px 8px;min-height:3.2em}
+        .skht .cap span{position:absolute;left:6px;right:6px;top:50%;transform:translateY(-50%);
+          color:#2B3A55;font-weight:700;font-size:15px;line-height:1.3;text-align:center}
+        .skht .cap .c1{animation:capA 6s ease-in-out infinite}
+        .skht .cap .c2{animation:capB 6s ease-in-out infinite}
+        @keyframes capA{0%,36%{opacity:1}44%,94%{opacity:0}100%{opacity:1}}
+        @keyframes capB{0%,36%{opacity:0}44%,94%{opacity:1}100%{opacity:0}}
+        @media (prefers-reduced-motion:reduce){.skht .cap .c1{animation:none;opacity:1}.skht .cap .c2{animation:none;opacity:0}}
+        .skht .dots{display:flex;justify-content:center;gap:8px}
+        .skht .dots i{width:9px;height:9px;border-radius:50%;background:#F3D3B6}
+        .skht .dots i.on{background:#E8763C;transform:scale(1.1)}
+        .skht .nav{display:flex;align-items:center;gap:10px}
+        .skht .ok{flex:1;height:46px;border:0;border-radius:12px;cursor:pointer;background:#E8763C;color:#fff;
+          font-weight:800;font-size:17px;letter-spacing:.04em;box-shadow:0 4px 0 #B4531C;font-family:inherit}
+        .skht .sq{width:46px;height:46px;flex:none;border:0;border-radius:12px;cursor:pointer;background:#E8763C;
+          box-shadow:0 4px 0 #B4531C;padding:0;display:inline-flex;align-items:center;justify-content:center}
+        .skht .sq svg{width:22px;height:22px}
+        .skht .sq svg path{fill:#fff;stroke:#fff;stroke-width:2.6;stroke-linejoin:round}
+        .skht .sq.off{background:#7d8794;box-shadow:0 4px 0 #5a636e}
+        .skht .sq.off svg path{fill:#c3cad4;stroke:#c3cad4}
+      </style>
+      <div class="frame">
+        <div class="scrim" aria-hidden="true"></div>
+        <div class="modal" role="dialog" aria-label="How to play">
+          <p class="ht-title">HOW TO PLAY</p>
+          <div class="card">
+            <div class="panel">
+              <svg class="board" viewBox="0 0 150 200" role="img" aria-label="Swipe up the lane to roll the ball into a cup; hit the target to unlock machines"><use href="#skBoard" width="150" height="200"/></svg>
+              <span class="ball" aria-hidden="true"></span>
+            </div>
+            <p class="cap">
+              <span class="c1">Swipe up to roll</span>
+              <span class="c2">Hit the target to unlock machines</span>
+            </p>
+          </div>
+          <div class="nav">
+            <button class="ok">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">Reminder: the board is a placeholder here; the real screens use the actual 3D Classic
+    machine. Tell me what to change and I'll update this link before anything touches the game.</p>
+</div>
+
+</body></html>
