@@ -128,9 +128,9 @@ export function woPoints(rec, band = null) {
 // A separate mode (Matt: "a new game mode where you only have a second or two ... Like those chess
 // games where you start with a few seconds and get a second back for every move"). The clock starts
 // at RUSH_START_MS and counts DOWN; every arrow sent off gives RUSH_GAIN_MS back, every bump costs
-// RUSH_MISS_MS. Boards keep coming, each a little harder, until the clock reaches zero. The clock is
-// never paused: leaving the app loses the run (Matt: "If someone leaves the app, they lose that
-// round"). Score = arrows cleared in the run. Two versions, Easy and Hard (different boards, same
+// RUSH_MISS_MS (Hard: rushMissMs). Boards keep coming, each a little harder, until the clock reaches
+// zero. The clock never pauses during a board: leaving the app then loses the run (Matt: "If someone
+// leaves the app, they lose that round"); between boards the run is saved (way-out/CLAUDE.md). Score = arrows cleared in the run. Two versions, Easy and Hard (different boards, same
 // clock). The board ranks each person's BEST run of the WEEK; past weeks stay viewable.
 //
 // The numbers are a first guess to be tuned on real runs (every run is stored raw for that): Matt
@@ -139,6 +139,14 @@ export const RUSH_MODES = ['easy', 'hard'];
 export const RUSH_START_MS = 10000;
 export const RUSH_GAIN_MS = 500;
 export const RUSH_MISS_MS = 3000;
+/** The mistake cost on Rush board `i` (0 = the first). Hard grows with its boards (Matt, 2026-10-22,
+ *  from Thomas: "increase the penalty for wrong ones as you go further ... definitely not every
+ *  round"): 3 s on boards 1-3, +1 s every 3 boards, 7 s from board 13. Easy stays RUSH_MISS_MS for
+ *  now (its table is still being decided). */
+export function rushMissMs(mode, i) {
+  if (mode !== 'hard') return RUSH_MISS_MS;
+  return Math.min(7000, RUSH_MISS_MS + 1000 * Math.floor(Math.max(0, i | 0) / 3));
+}
 
 /** The week a moment belongs to: the date of its MONDAY, in UTC ("2026-10-12"). One clock for
  *  everybody, wherever they play: the week turns over at Monday 00:00 UTC (Sunday evening in the

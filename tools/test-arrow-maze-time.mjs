@@ -139,5 +139,10 @@ ok('counters out of range are clamped: never more than full, never under 1 a lev
   && T.woPoints({ byDiff: { expert: { won: 2 } }, wo: { pts: { expert: 0 }, ptsN: { expert: 2 } } }) === 2
   && T.woPoints({ byDiff: { expert: { won: 1 } }, wo: { pts: { expert: 6 }, ptsN: { expert: 5 } } }) === 6);
 
+// Rush mistake cost (2026-10-22): Hard 3 s on boards 1-3, +1 s every 3 boards, 7 s cap; Easy flat.
+ok('Rush: Hard mistake cost grows every 3 boards, capped at 7 s',
+  [0, 2, 3, 5, 6, 9, 12, 40].map((i) => T.rushMissMs('hard', i)).join() === '3000,3000,4000,4000,5000,6000,7000,7000');
+ok('Rush: Easy mistake cost stays 3 s', [0, 5, 40].every((i) => T.rushMissMs('easy', i) === 3000));
+
 console.log(`\nArrow Maze timer tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
