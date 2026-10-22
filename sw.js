@@ -6,7 +6,7 @@
 // manually cleared the cache). The cache is only a fallback when offline.
 //
 // Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1217';
+const CACHE = 'game-hub-v1218';
 
 const ASSETS = [
   './',
@@ -264,6 +264,14 @@ const ASSETS = [
   './archery/js/mp-ui.js',
   './archery/js/alert.js',
   './archery/models/bow.bin',
+  './eight-ball/',
+  './eight-ball/index.html',
+  './eight-ball/css/eight-ball.css',
+  './eight-ball/js/ui.js',
+  './eight-ball/js/engine.js',
+  './eight-ball/js/ai.js',
+  './eight-ball/js/render.js',
+  './eight-ball/js/strings.js',
   './darts/',
   './darts/index.html',
   './darts/css/darts.css',
@@ -780,6 +788,16 @@ const HELD_BACK = {
     './darts/js/strings.js',
     './darts/js/mp-ui.js',
     './darts/js/alert.js',
+  ],
+  'eight-ball': [
+    './eight-ball/',
+    './eight-ball/index.html',
+    './eight-ball/css/eight-ball.css',
+    './eight-ball/js/ui.js',
+    './eight-ball/js/engine.js',
+    './eight-ball/js/ai.js',
+    './eight-ball/js/render.js',
+    './eight-ball/js/strings.js',
   ],
   'gridlock': [
     './gridlock/',
