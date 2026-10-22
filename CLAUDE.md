@@ -155,7 +155,8 @@ return cached;` on the network-first path; with nothing cached the error passes 
 
 ### The service worker's caching strategy (rewritten 2026-08-02)
 
-Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HISTORY.md`.
+Do not "simplify" any of this; full rationale in `docs/SW-NOTES.md` (sw.js's long comments, moved there
+2026-10-22 because every phone downloads sw.js on each open; `[docs/SW-NOTES.md #N]` marks each spot) and `CLAUDE-HISTORY.md`.
 
 - **Three tiers of `ASSETS`.** `SHELL` (`index.html`, `css/`, `js/`, `icons/`, `profile/`) is
   atomic and blocks install. `REST` (every game's files) is warmed after activation by
@@ -177,11 +178,12 @@ Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HI
   is bad" latch. A request with nothing cached is never short-circuited.
 - **Unchanged files are carried forward across a CACHE bump** via the GENERATED `REST_MANIFEST`
   (content hashes, written by `tools/validate-sw-assets.mjs`; HTTP validators cannot do it because Pages
-  re-stamps every ETag).
-- **REST is cache-first; the shell is split**: `NETWORK_FIRST` (hand-listed modules that read or
-  write player data or gate its visibility, Matt: *"keep the stats code fresh"*) vs
-  `SHELL_CACHE_FIRST`. It is an allow-list derived from `ASSETS` (so it can never swallow `sw.js`),
-  per file, never transitive. A test fails if a cache-first shell module writes a `gamehub.*` key.
+  re-stamps every ETag). **Since 2026-10-22 it holds the SHELL's hashes too and the install copies
+  unchanged shell files** (still atomic): a deploy downloads only what changed, not the whole ~1.6 MB shell.
+- **Everything is cache-first except the documents (2026-10-22, Matt: "yes do 1")**: `NETWORK_FIRST` is
+  only `./`, `index.html`, `profile/`. The ~30 data/screen modules that used to re-download on every
+  open (~330 KB on the wire, "keep the stats code fresh") now arrive with each deploy's worker instead.
+  A test fails if a module creeps back into `NETWORK_FIRST`.
 - **Old caches are deleted at the END of the warm**, not at activate; fetches consult the CURRENT
   cache before `caches.match`.
 - `cache: 'reload'` stays, and the SHELL install always uses it (2026-10-14; Pages' `max-age=600`
@@ -235,6 +237,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `device-report.js` / `install-state.js` | device dump used by every bug report; installed-vs-tab plus phone size (`tools/read-install-state.mjs --screens`) |
 | `bug-report.js` / `bug-report-ui.js` | Report a bug, offline outbox, Matt's replies (`bugReplies/<deviceId>/`), soft delete |
 | `messages.js` / `messages-ui.js` | player-to-player Messages (see "Messages") |
+| `live-read.js` | `watchPath`/`readPath`: a watched Firebase path is downloaded once, and a read of it answers from the watch (each challenge game's index, 2026-10-22) |
 | `hub-messages.js` | messages FROM the Game Hub (`HUB_MESSAGES`, in code; see "Messages") |
 | `challenges.js` / `challenges-ui.js` / `challenge-life.js` | the Multiplayer screen (was Challenges; reads only) and the shared cancel/expire rules (`ANSWER_MS` 3 days) |
 | `mp-records.js` | the Multiplayer screen's Records for live-room games: `byDiff.mp` + `h2h`, read only |
@@ -492,8 +495,10 @@ None of this makes the hub cheat-proof; never describe it that way.
   reads it (`stats-net.js` `watchBoard`), falling back to `players/` if absent. `tools/test-boards.mjs <snapshot>`
   proves every person is deep-equal to the phone's own grouping. **Other screens**: My Stats, Records, Hold'em's own bank,
   Skeeball's picker use `readPlayersForMe()` (own devices in full + everyone's name from the board); Hold'em's bank list,
-  Skeeball's top records, Messages contacts use `readPeople()` (the board's list). Still on `players/`: Golf's board,
-  Arrow Maze's leaders, admin.
+  Skeeball's top records, Messages contacts, Golf's board, Arrow Maze's leaders use `readPeople()` (the board's list).
+  Only the admin page still reads all of `players/` (it voids scores per device, so it needs the raw records).
+  Matt's bug-report badge queries only reports newer than his last look (`readBugReportsSince`, indexed on
+  `createdAtMs`). Skeeball's per-throw upload (`skeeballThrows/`) was RETIRED 2026-10-22 (Matt); its data stays.
 - **Player directory (2026-10-22, Matt: multiplayer felt slow)**: `directory/<CODE>` = `{name, emoji, at}`,
   rebuilt by the server from `players/` hourly and on any Online play change (`buildDirectory`). Every
   challenge game's "pick a person" reads it via `stats-net.js` `readOpponentProfiles()` (2 KB vs ~930 KB);

@@ -16,14 +16,13 @@ import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { engineFor, loadEngine } from './engines.js';
 import { BOARDS, boardById, DEFAULT_BOARD } from './boards.js';
 import { readPic, writePic } from './picstore.js';
-import { swipeSpeed, powerOf, launchSpeed } from './swipe.js';
+import { swipeSpeed, powerOf } from './swipe.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
-import { loadStats, recordSkeeball, unlockSkeeballBoard, deviceId, statsId } from '../../js/game-stats.js';
+import { loadStats, recordSkeeball, unlockSkeeballBoard, statsId } from '../../js/game-stats.js';
 import { readGoals, readGoalsLive, allGoalsMet } from './goals.js';
-import { getStatsApp } from '../../js/firebase-boot.js';
 import { syncMyStats, readPlayersOnce, readPeople } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
 import { appWideBest, isUnlocked, dayKey } from '../../js/arcade-scores.js';
@@ -1712,13 +1711,6 @@ export class SkeeballUI {
     // not of what a throw can be, and physics.js extrapolates past both.
     const power = powerOf(perH);
 
-    // The throw's params, logged with their real result at ballDone (see _drainEvents /
-    // _logThrow), so there is measured data (flick -> power -> launch -> actual hole) and not
-    // just the calculation. GUARD: this is RECORDED, never displayed. The on-screen readout of it
-    // came off 2026-08-20 - players have no use for it - but the logging behind it stays, because
-    // it is the only way to check the curve against people who are not Matt. Read it back with
-    // read-skeeball-throws.mjs.
-    const launch = launchSpeed(power, this.game.board.geom.minSpeed, this.game.board.geom.maxSpeed);
 
     // AIM: the direction of the whole swipe, eased so a small wobble stays small and a
     // deliberate diagonal still reaches the corner 100s. This shapes the INPUT only - once
@@ -1737,38 +1729,11 @@ export class SkeeballUI {
     const aim = Math.sign(raw) * Math.pow(Math.abs(raw), curve);
 
     if (this.game.throwBall({ power, aim })) {
-      // Held until the ball settles, then logged with its real result at ballDone.
-      this._lastThrow = { flick: +perH.toFixed(3), power: +power.toFixed(3), aim: +aim.toFixed(3), launch: +launch.toFixed(3) };
-
-      this._throwStats = { bounces: 0, backboard: 0, impact: false, impactSpeed: null, seq: [],
-        t0: (typeof performance !== 'undefined' ? performance.now() : Date.now()) };
+      // The swipe-tuning upload (skeeballThrows/<deviceId>/, 2026-08-20) was retired 2026-10-22
+      // (Matt: "We don't need that anymore"), so nothing about a throw is kept or sent.
     }
   }
 
-  /** THE ONLY THING THIS GAME SENDS ANYWHERE BESIDES A SCORE. One settled throw's inputs and its
-   *  real result, pushed to skeeballThrows/<deviceId>/, so the swipe curve can be checked against
-   *  people who are not Matt rather than against the calculation. Kept deliberately for that
-   *  (2026-08-20); it is what will say whether the 100 is reachable in real hands.
-   *
-   *  Best-effort and fire-and-forget: throwaway instrumentation, not player history, so a failed
-   *  write is dropped rather than queued and never blocks the game. Read it back with
-   *  read-skeeball-throws.mjs.
-   *
-   *  GUARD: NO CONTACT JOURNEY. This used to carry every part the ball touched on the way down -
-   *  up to 300 entries per throw, per player, nine times a game. That existed to chase physics
-   *  bugs which are now fixed, and nothing has read it since. What stays is what calibration
-   *  actually needs: the flick, the power it mapped to, the aim, the launch speed, where it
-   *  landed and how long it took. */
-  async _logThrow(rec) {
-    const full = { ...rec, board: (this.game && this.game.board.id) || this.settings.board,
-      name: (loadProfile() || {}).name || '', at: Date.now() };
-    try {
-      const boot = await getStatsApp();
-      if (!boot) return;
-      const { db, api } = boot;
-      await api.set(api.push(api.ref(db, 'skeeballThrows/' + deviceId())), full);
-    } catch { /* throwaway instrumentation: a dropped write never becomes a player-visible error */ }
-  }
 
   // --- the frame -------------------------------------------------------------------------------
 
@@ -1830,13 +1795,6 @@ export class SkeeballUI {
   _drainEvents() {
     const Rr = this.renderer;
     for (const ev of this.game.takeEvents()) {
-      const ts = this._throwStats;
-      if (ts && ev.type !== 'contact') {
-        ts.seq.push(ev.type);
-        if (ev.type === 'bounce') ts.bounces++;
-        else if (ev.type === 'backboard') ts.backboard++;
-        else if (ev.type === 'impact') { ts.impact = true; if (ts.impactSpeed == null && typeof ev.speed === 'number') ts.impactSpeed = +ev.speed.toFixed(2); }
-      }
       switch (ev.type) {
         // THE BALL SETTLES FIRST, THEN THE SCORE. `capture` fires the instant the ball's centre
         // crosses the mouth, which is ~300ms before it has finished dropping through the collar
@@ -1896,17 +1854,6 @@ export class SkeeballUI {
           }
           this._paintHud();
           this._saveChallengeProgress();
-          if (this._lastThrow) {
-            const ts = this._throwStats || {};
-            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-            this._logThrow({ ...this._lastThrow, value: ev.value | 0, hole: String(ev.hole || '-'),
-              bounces: ts.bounces | 0, backboard: ts.backboard | 0, touchedBoard: !!ts.impact,
-              impactSpeed: (ts.impactSpeed != null ? ts.impactSpeed : null),
-              settleMs: (ts.t0 ? Math.round(now - ts.t0) : null),
-              seq: (ts.seq || []).join(','),
-              drop: (at && at.pos) ? { x: +at.pos.x.toFixed(3), y: +at.pos.y.toFixed(3), z: +at.pos.z.toFixed(3) } : null });
-            this._lastThrow = null; this._throwStats = null;
-          }
           break;
         }
         // WHERE THE BALL HIT THE WALL. Matt, 2026-09-03: "It's impossible to tell where on the

@@ -500,6 +500,22 @@ export async function drainPendingReports() {
 
 // --- admin reads ----------------------------------------------------------------------------------
 
+/** Only the reports filed after `sinceMs` (2026-10-22): the badge's count. It used to download
+ *  every report (~160 KB) each time the badge repainted, several times a session on Matt's
+ *  phones. A query on createdAtMs (indexed in database.rules.json) sends only the new ones,
+ *  usually none. [] offline - never throws. */
+export async function readBugReportsSince(sinceMs) {
+  try {
+    const boot = await getStatsApp();
+    if (!boot) return [];
+    const { db, api } = boot;
+    const q = api.query(api.ref(db, 'bugReports'), api.orderByChild('createdAtMs'), api.startAfter(ms(sinceMs)));
+    const snap = await api.get(q);
+    const val = (snap && snap.exists()) ? snap.val() : null;
+    return val ? Object.keys(val).map((k) => Object.assign({ id: k }, val[k])) : [];
+  } catch { return []; }
+}
+
 /** Every report, newest first. `{}`/[] when offline - never throws. Admin inbox only. */
 export async function readBugReports() {
   try {
@@ -661,7 +677,7 @@ export async function unreadReplyCount() {
 export default {
   gatherEnvironment, prepareScreenshot, buildBugReport, submitBugReport,
   queuePendingReport, drainPendingReports, pendingCount,
-  readBugReports, readBugShots, setBugStatus, deleteBugReport, undeleteBugReport,
+  readBugReports, readBugReportsSince, readBugShots, setBugStatus, deleteBugReport, undeleteBugReport,
   replyToBugReport, readMyReplies, unreadReplyCount, repliesSeenAt, markRepliesSeen,
   normalizeDescription, normalizeReply, fitsShotBudget, summarizeEnvironment,
   sortReportsNewestFirst, sortRepliesNewestFirst, countUnread, countUnreadReplies, visibleInInbox,

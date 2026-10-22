@@ -127,7 +127,9 @@ ok('match-chat.js deletes nothing (no remove, no null write)', !/\.remove\(|set\
 ok('match-chat.js never writes under games/ or index/', !/\/games\/|\/index\//.test(src));
 const sw = readFileSync('./sw.js', 'utf8');
 ok('both modules are precached', sw.includes("'./js/match-chat.js'") && sw.includes("'./js/match-chat-ui.js'"));
-ok('match-chat.js is NETWORK-FIRST (it writes Firebase and a gamehub.* key)', /NETWORK_FIRST = \[[\s\S]*?'\.\/js\/match-chat\.js'[\s\S]*?\];/.test(sw));
+// 2026-10-22: every shell module is cache-first (fresh per deploy, not per open); match-chat.js too.
+ok('match-chat.js is in ASSETS and cache-first (NETWORK_FIRST is documents only)', sw.includes("'./js/match-chat.js'")
+  && !sw.slice(sw.indexOf('const NETWORK_FIRST = ['), sw.indexOf('const SHELL_CACHE_FIRST')).includes("'./js/match-chat.js'"));
 const ui = readFileSync('./js/match-chat-ui.js', 'utf8');
 ok('match-chat-ui.js touches no storage and no network', !/localStorage|getStatsApp|firebase/.test(ui.replace(/^\/\/.*$/gm, '')));
 

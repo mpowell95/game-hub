@@ -1,12 +1,5 @@
-// sw.js — shared service worker for the Game Hub. Precaches the app shell and
-// every game module's assets so the whole hub works offline.
-//
-// NETWORK-FIRST for code: a freshly deployed hub is always served when online
-// (the old cache-first strategy left clients stuck on stale builds until they
-// manually cleared the cache). The cache is only a fallback when offline.
-//
-// Bump CACHE when any precached asset changes to roll the cache over.
-const CACHE = 'game-hub-v1223';
+// sw.js — shared service worker for the Game Hub. Precaches the app shell and [docs/SW-NOTES.md #1]
+const CACHE = 'game-hub-v1224';
 
 const ASSETS = [
   './',
@@ -46,10 +39,7 @@ const ASSETS = [
   './js/stats-net.js',
   './js/firebase-boot.js',
   './js/device-report.js',
-  // Report a bug (2026-08-11) + the launcher announcement that introduces it. All five are shell
-  // assets (they live under js/), so they install atomically with the hub itself - the report form
-  // has to work on the exact device that is having trouble, including offline, where it queues the
-  // report locally and sends it on the next connection.
+  // Report a bug (2026-08-11) + the launcher announcement that introduces it. All five are she... [docs/SW-NOTES.md #2]
   './js/error-log.js',
   './js/bug-report.js',
   './js/bug-report-ui.js',
@@ -59,6 +49,7 @@ const ASSETS = [
   // is imported by the launcher on every load (the profile pill's badge, and the outbox drain), and
   // a message written offline has to be able to queue itself on the device that is offline.
   './js/messages.js',
+  './js/live-read.js',
   './js/messages-ui.js',
   './js/hub-messages.js',
   './js/challenges.js',
@@ -82,11 +73,7 @@ const ASSETS = [
   // Shared by stats-net.js (mirrors it to players/<id>/device on every sync) and bug-report.js,
   // so it is genuinely app-shell: without it the hub cannot boot offline.
   './js/install-state.js',
-  // The announcement's "here is where the button lives" pictures. Deliberately NOT under ./icons/
-  // (which isShellAsset treats as shell): they are a one-time popup's illustrations, so they belong
-  // in the best-effort REST tier where a bad path cannot strand an install. announce-ui.js removes
-  // any figure whose image fails to load, so a device that has not warmed them yet still gets a
-  // working popup.
+  // The announcement's "here is where the button lives" pictures. Deliberately NOT under ./ico... [docs/SW-NOTES.md #3]
   './img/where-hub.jpg',
   './img/where-hub-dark.jpg',
   './img/where-hub-es.jpg',
@@ -136,11 +123,7 @@ const ASSETS = [
   './js/challenge/challenge-net.js',
   './js/challenge/keepsake.js',
   './css/challenge.css',
-  // NOTE: the challenge celebration images (js/challenge/assets/*) are deliberately NOT
-  // precached. They are ~9 MB of one-person gift content; forcing every PWA installer to
-  // download them would violate the "inert for everyone else" guardrail. The fetch handler
-  // below is cache-first for images, so they cache on Ana's first online view and then
-  // replay offline. The challenge redemption still works without them (image hidden on error).
+  // NOTE: the challenge celebration images (js/challenge/assets/*) are deliberately NOT [docs/SW-NOTES.md #4]
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -474,10 +457,7 @@ const ASSETS = [
   './skeeball/js/vendor/three.module.min.js',
   './skeeball/js/vendor/three.core.min.js',
   './skeeball/js/strings.js',
-  // Golf. The 3D stack it used to carry - three.js, cannon-es and the nine modules around them,
-  // ~1.1 MB of this precache - is gone; what is here is the 2D game. golf/js/test.js is the
-  // engine suite and golf/CLAUDE.md is documentation: neither is fetched by a running client, so
-  // neither belongs in this list.
+  // Golf. The 3D stack it used to carry - three.js, cannon-es and the nine modules around them... [docs/SW-NOTES.md #5]
   './golf/',
   './golf/index.html',
   './golf/css/golf.css',
@@ -518,12 +498,7 @@ const ASSETS = [
   './baseball/js/vendor/GLTFLoader.js',
   './baseball/js/vendor/SkeletonUtils.js',
   './baseball/js/vendor/BufferGeometryUtils.js',
-  // stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D model + its four team-skin textures.
-  // Plain REST tier, not LAZY - unlike Boggle's word lists this is the PRIMARY visual for the live
-  // play screen (baseball/js/ui.js loads it the moment the game mounts, at the setup screen, never
-  // waiting for a first play to justify it), so warming it with the rest of the game's files is the
-  // right default. `validate-sw-assets.mjs`/REST_MANIFEST and the CACHE bump are the orchestrator's
-  // job at ship time (docs/BASEBALL-3D-BUILD.md section 0), not this stage's.
+  // stage 4 (docs/BASEBALL-3D-BUILD.md section 3.6): the 3D model + its four team-skin texture... [docs/SW-NOTES.md #6]
   './baseball/models/player.glb',
   './baseball/models/skins/skaterMaleA.png',
   './baseball/models/skins/criminalMaleA.png',
@@ -583,18 +558,9 @@ const ASSETS = [
   './battleship/js/strings.js',
 ];
 
-// NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png,
-// referenced from js/a2hs.js) are deliberately NOT precached here yet — those
-// files don't exist in the repo until real screenshots are supplied. The fetch
-// handler below is cache-first for images, so once the files land, add their
-// paths to ASSETS and bump CACHE (until then a missing image just fails to
-// load and the <img> removes itself; the sheet still works, minus the picture).
+// NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png, [docs/SW-NOTES.md #7]
 
-// Chinchón decks.
-//   baraja-libre  Baraja Española — 48 faces + back (CC BY-SA 3.0, see its CREDITS.md)
-//   anita         Española skin — ships custom pips (all four suits, ranks 1–9) + a
-//                 custom back (Ana's photo); the figures (10–12) fall back to
-//                 baraja-libre at runtime. See chinchon/decks/anita/CREDITS.md.
+// Chinchón decks. [docs/SW-NOTES.md #8]
 for (const s of ['oros', 'copas', 'espadas', 'bastos'])
   for (let r = 1; r <= 12; r++) ASSETS.push(`./chinchon/decks/baraja-libre/${s}-${r}.webp`);
 ASSETS.push('./chinchon/decks/baraja-libre/back.webp');
@@ -606,31 +572,7 @@ ASSETS.push('./chinchon/decks/anita/back.webp');
 // Anita end-of-match "Betty reaction" art (win/loss screens).
 ASSETS.push('./chinchon/decks/anita/betty-win.webp', './chinchon/decks/anita/betty-loss.webp');
 
-// --- two-tier precache -------------------------------------------------------------------------
-// `cache.addAll(ASSETS)` on the whole list was ~8.8 MB across ~272 files, downloaded ATOMICALLY on
-// every single deploy (CACHE is bumped essentially every commit). Two things went wrong with that:
-//
-//   1. Speed. The install storm competes with the foreground page for the same connection. On a
-//      weak mobile signal the hub is visibly sluggish for as long as the storm lasts, because the
-//      launcher's own module requests are queued behind ~272 precache requests, including the
-//      1.6 MB Boggle dictionary and 672 KB of three.js for games the player has not opened.
-//   2. Fragility. `addAll` is atomic, so ONE bad path aborted the whole install and the previous
-//      worker kept serving the old build forever - the "version pill stuck at vN -> vN+1" failure
-//      documented in the root CLAUDE.md. A missing card image could strand an entire deploy.
-//
-// So the list is split. SHELL is the hub itself (app shell + shared js/css + icons + profile): tiny,
-// atomic, and genuinely required for the hub to boot offline. Everything else is warmed AFTER
-// activation, best-effort, one file at a time with bounded concurrency, skipping whatever is already
-// cached. A game whose warm gets interrupted is not broken - the fetch handler caches it on demand
-// the first time it is opened online, and the next activation resumes the warm where it left off.
-//
-// validate-sw-assets.mjs still checks the full ASSETS list, so a 404'd path is still caught before
-// deploy; it just no longer strands the build if one slips through.
-// The emoji picker's per-language keyword indexes are ~65 KB each and are imported only when a
-// player types in the search box. They live under ./js/ because they are modules, but the SHELL is
-// re-downloaded in full on every CACHE bump - i.e. on every deploy - so putting 130 KB of search
-// data in it would re-pay for them a dozen times a day for a feature used a handful of times ever.
-// In REST they carry a content hash and get carried forward untouched across a bump instead.
+// --- two-tier precache --------------------------------------------------------------------... [docs/SW-NOTES.md #9]
 const NON_SHELL_JS = /^\.\/js\/emoji-search-[a-z]{2}\.js$/;
 
 function isShellAsset(p) {
@@ -642,40 +584,7 @@ function isShellAsset(p) {
 const SHELL = ASSETS.filter(isShellAsset);
 const REST = ASSETS.filter((p) => !isShellAsset(p));
 
-// --- the LAZY tier: in ASSETS, but never downloaded until somebody opens the game (2026-09-11) --
-//
-// Matt, on Boggle's two word lists: "Can we make the dictionary only download when you go to play
-// the game? Seems like a lot for most people to download when they'll never use it ever."
-//
-// He is right about the size. Measured against this ASSETS list: the REST tier is 11.92 MB across
-// 255 files, and `boggle/data/words.txt` + `words-es.txt` are 3.23 MB of it - 27% of everything a
-// device warms, for ONE game, paid by every install whether or not anyone ever taps Boggle.
-//
-// A third tier is the honest fix, because the other two both do the wrong thing here. Leaving them
-// in REST downloads 3.23 MB nobody asked for. Taking them OUT OF ASSETS ENTIRELY would stop the
-// download, but it would also drop them out of `REST_MANIFEST` and `CACHE_FIRST_PATHS` - so a
-// player who DOES play Boggle would re-download 1.6 MB on their next open after every single
-// deploy (this repo deploys ~13 times a day), which is worse for them than today.
-//
-// So a LAZY path stays in ASSETS and keeps everything that membership buys - validate-sw-assets.mjs
-// still fails a deploy if the file is missing, it still carries a content hash, it is still served
-// cache-first and cached on demand by the fetch handler - and loses exactly one thing: warmRest()
-// never FETCHES it. It still CARRIES IT FORWARD across a CACHE bump if this device already has a
-// copy, which is the whole point: pay once, on first play, then never again.
-//
-// THE COST, AND IT IS REAL: a device that has never opened Boggle can no longer play it OFFLINE.
-// The first round has to be started with a connection. After that it is cached like anything else.
-// Boggle already renders an honest, translated "couldn't load the dictionary, check your
-// connection" screen (`renderLoadError` / the `load_error` string) because the fetch was always
-// lazy at the JS level, so the failure path this opens up is one that already existed and is
-// already handled - it just becomes reachable for a first-time offline player.
-//
-// ONLY put a file here if it is BOTH large AND useless to anyone not playing that one game. Game
-// CODE must never be lazy: a game's modules are what the launcher tile opens, they are small, and
-// making them lazy would just move the 2026-09-01 cache-first win back off a phone.
-// Contexto's word models (2026-09-28) are the same case: ~3.7 MB per language, useless to anyone
-// not playing it. The game shows its own "couldn't load the words" screen with Retry (and retries
-// on `online`), so a first-time offline player gets an honest answer.
+// --- the LAZY tier: in ASSETS, but never downloaded until somebody opens the game (2026-09-... [docs/SW-NOTES.md #10]
 const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin))$/;
 const isLazyAsset = (p) => LAZY_REST.test(p);
 
@@ -856,88 +765,10 @@ const HELD_BACK_OWNER = new Map();
 for (const [id, paths] of Object.entries(HELD_BACK)) for (const p of paths) HELD_BACK_OWNER.set(p, id);
 const SHOWN_KEY = './__shown-games__';
 
-// --- the shell's own split: always-fresh vs cache-first (2026-09-01) ----------------------------
-//
-// Matt: "fast loads, everywhere in the app". Measured on v546, a warm-cache launch of the hub sent
-// 35 requests and 687 KB (~223 KB gzipped) to the server EVERY TIME, because the whole shell was
-// network-first. Game code stopped doing that on 2026-09-01; this is the same fix for the app
-// itself, with one deliberate carve-out.
-//
-// THE CARVE-OUT IS MATT'S CALL, not an implementation detail. Asked whether to cache the whole
-// shell (which would make a new build reach a phone one launch later, exactly as game code already
-// does) he chose to KEEP THE STATS CODE FRESH. So every module that reads or writes player data,
-// or gates whether it is VISIBLE (THE LAW rule 1), stays network-first and is listed here by hand.
-// Most of them are lazy-imported on a tap anyway, so keeping them fresh costs nothing at launch.
-//
-// GUARD: THIS IS AN ALLOW-LIST DERIVED FROM `ASSETS`, AND IT MUST STAY ONE.
-// `sw.js` is not in ASSETS, so it can never reach the cache-first branch - by construction, not by
-// a rule someone has to remember. Express this as a deny-list over same-origin paths instead and
-// `sw.js` gets swallowed, and the breakage is live rather than theoretical: the network-first
-// branch's background put already writes sw.js into the cache, so a deny-list WOULD find a copy
-// and serve it. js/hub.js's version pill reads the deployed sw.js to learn the latest version, so
-// a cached answer freezes the pill on "up to date" for ever and _forceUpdate() never reloads.
-//
-// GUARD: MEMBERSHIP IS PER FILE, NOT TRANSITIVE, AND THAT IS CORRECT. js/hub.js is cache-first and
-// statically imports js/profile-store.js, which is network-first. ES modules are fetched per URL,
-// so the graph is served from both places at once and each file gets the freshness it asked for.
-// Do not "fix" this into a transitive closure - it would drag hub.js, name-gate.js and announce.js
-// into the fresh list and delete the entire win. test-sw-strategy.mjs pins this.
+// --- the shell's own split: always-fresh vs cache-first (2026-09-01) ----------------------... [docs/SW-NOTES.md #11]
 const NETWORK_FIRST = [
   // Documents. Also excluded by req.mode !== 'navigate' below; belt and braces.
   './', './index.html', './profile/', './profile/index.html',
-  // Reads or writes player data.
-  './js/game-stats.js', './js/game-stats-global.js', './js/stats-net.js', './js/profile-store.js',
-  './js/players-agg.js', './js/stats-corrections.js', './js/arcade-scores.js', './js/messages.js',
-  // Baseball's career sync (BB-0-phase-0-handoff.md step 9): reads/writes players/<code>'s own
-  // careers/ node, same freshness class as every other player-data module above.
-  './js/career-store.js',
-  './js/bug-report.js', './js/device-report.js', './js/admin-config.js', './js/error-log.js',
-  './js/net.js', './js/install-state.js', './js/firebase-boot.js', './js/firebase-config.js',
-  // Who may play online (2026-10-08, the play-yourself cheat): a device on a stale copy would let
-  // an account in that Matt has shut out, or keep out one he has just let in.
-  './js/online-gate.js',
-  // Push notifications: stores this device's delivery address (pushSubs/<CODE>) and keeps a
-  // gamehub.* record of it. Lazily imported, so fresh costs nothing at launch.
-  './js/push.js',
-  // Decides whether that data is SHOWN. A device on an old visibility gate hides history the rest
-  // of the family can see, which is THE LAW rule 1 whether or not a byte was lost.
-  './js/game-stats-ui.js', './js/leaderboard-ui.js', './js/messages-ui.js', './js/bug-report-ui.js',
-  // Messages from the Game Hub itself (2026-10-14): the list of what was sent, and its read state
-  // (gamehub.hubMessages.v1). Fresh, so a message sent by a deploy reaches the next open.
-  './js/hub-messages.js',
-  // In-game quick chat shown inside a Messages conversation (2026-10-17): reads match chat.
-  './js/game-chat-history.js',
-  // The Challenges screen (2026-10-05): shows every challenge record; lazily imported, so fresh is free.
-  './js/challenges.js', './js/challenges-ui.js', './js/challenges-strings.js',
-  // The Multiplayer screen's Records for the live-room games (2026-10-18): reads players/ and the
-  // local store's h2h; a stale copy would show a different record from the leaderboard.
-  './js/mp-records.js',
-  // How a challenge ends without a result (cancel, decline, expire; 2026-10-13): every challenge game
-  // reads it to decide what a match is, so a stale copy would disagree with its game about a deadline.
-  './js/challenge-life.js',
-  // In-match quick chat (2026-10-14): writes `<node>/chat/<id>` and the gamehub.matchChatSeen.v1
-  // marks. Its DOM half, js/match-chat-ui.js, touches no storage and stays cache-first.
-  './js/match-chat.js',
-  // leaderboard-rank.js is leaderboard-ui.js's OWN maths, split out only so it can be tested
-  // headlessly. Leaving it cache-first while its only caller is network-first means a device can
-  // run NEW ranking code against an OLD formatter for one launch - which is what happened on
-  // 2026-09-21: Minesweeper's new best-time metric printed as a raw "34874", because the shipped
-  // formatBoardMetric on that device predated the TIME_METRIC branch. A wrong NUMBER looks
-  // plausible, which makes it worse than a missing label. This is a per-file decision, not the
-  // transitive import-closure the guard forbids: the two are one unit that must not disagree, and
-  // it costs nothing at launch (the leaderboard is lazily imported).
-  './js/leaderboard-rank.js',
-  // Arrow Maze's score (2026-10-13): what is stored, merged and SHOWN for every timed level.
-  './js/arrow-maze-time.js',
-  // Gridlock's ladder, stars and points (2026-10-14): what is stored, merged and SHOWN per level.
-  './js/gridlock-points.js',
-  // ...and where the first ladder's levels sit on ladder 2 (it decides which levels a player SEES as cleared).
-  './js/gridlock-v1map.js',
-  './js/admin-ui.js',
-  // Retired, lazily loaded, and it clears `gamehub.challenge` on its tester-only reset path. Free
-  // to keep fresh (nothing imports it at load) and it is a gamehub.* write, so the structural
-  // guard in test-sw-strategy.mjs is right to insist.
-  './js/challenge/challenge-ui.js',
 ];
 const SHELL_CACHE_FIRST = SHELL.filter((p) => !NETWORK_FIRST.includes(p));
 
@@ -956,12 +787,90 @@ const SHELL_CACHE_FIRST = SHELL.filter((p) => !NETWORK_FIRST.includes(p));
 // across instead of re-fetching them. Measured effect: a no-REST-change deploy went from 12.6 MB
 // re-downloaded to ~1 MB (the shell install plus this file's own churn).
 //
-// If this manifest is STALE (a session edited a game file and deployed without running the
-// validator), the cost is bounded and online play is unaffected: code files are still
-// network-first at request time, so a stale carried copy is only ever served OFFLINE or past the
-// deadline/latch, and the next validator run heals it.
+// It holds the SHELL's hashes too (2026-10-22), for the install's carry-forward. Everything is
+// cache-first now, so a STALE manifest (a session edited a file and deployed without running the
+// validator) would keep a phone on the old copy until that file changes again:
+// tools/test-sw-strategy.mjs fails on any stale entry, shell or rest.
 // __REST_MANIFEST_START__
 const REST_MANIFEST = {
+  './manifest.webmanifest': 'cd3b726da1',
+  './css/hub.css': '2920b5c6a5',
+  './css/name-gate.css': '2253567714',
+  './css/ui.css': '967c4f25e3',
+  './js/hub.js': 'a5eedc2bf9',
+  './js/name-gate.js': '9f3aa22f34',
+  './js/name-gate-auto.js': '2c296ba493',
+  './js/no-zoom.js': 'adf92fcd05',
+  './js/a2hs.js': '0dd98205a9',
+  './js/favorites.js': '42997e1b0d',
+  './js/launcher-sort.js': '5687e93cca',
+  './js/new-badge.js': '5e6fb339ea',
+  './js/i18n.js': '82070fcbe4',
+  './js/theme.js': 'e8b40b1bc2',
+  './js/layout.js': '2517577123',
+  './js/viewport.js': '756ba19ed9',
+  './js/strings.js': 'f285e07381',
+  './js/profile-store.js': '33523b1fdd',
+  './js/emoji.js': 'a60ec09c12',
+  './js/emoji-data.js': '7506ef6d21',
+  './js/firebase-config.js': '66cb4bbdb3',
+  './js/game-stats.js': 'ea82ee45d5',
+  './js/arcade-scores.js': 'a0497ce069',
+  './js/game-stats-global.js': 'd56d2b6377',
+  './js/game-stats-ui.js': '78309b64ee',
+  './js/stats-net.js': '9700e364a7',
+  './js/firebase-boot.js': '5a63920ff7',
+  './js/device-report.js': '22d5aec601',
+  './js/error-log.js': '2ce0a7eaf3',
+  './js/bug-report.js': 'f2c4625238',
+  './js/bug-report-ui.js': '70d7e7b2a6',
+  './js/announce.js': '6cce5c6cc6',
+  './js/announce-ui.js': '0bdfcd673d',
+  './js/messages.js': 'da0ec839d5',
+  './js/live-read.js': '0c8419185d',
+  './js/messages-ui.js': '5349424c2f',
+  './js/hub-messages.js': 'c91ce9936a',
+  './js/challenges.js': '6372caea89',
+  './js/challenges-ui.js': '857219db28',
+  './js/challenge-life.js': '44ab3fcbc6',
+  './js/challenges-strings.js': 'd45ac6cd00',
+  './js/mp-records.js': '46cb0e8739',
+  './js/push.js': '59adfa5053',
+  './js/career-store.js': 'a815a02653',
+  './js/admin-config.js': '8036b5cae4',
+  './js/admin-ui.js': '6e428f64ce',
+  './js/stats-corrections.js': 'cf8c62bb60',
+  './js/install-state.js': '697e4dc90b',
+  './js/players-agg.js': 'f08b76ff98',
+  './js/game-art.js': '0cc3eb4d56',
+  './js/hidden-players.js': '8a870d0456',
+  './js/leaderboard-ui.js': 'b7bfc50854',
+  './js/leaderboard-rank.js': '7d0aed67b8',
+  './js/arrow-maze-time.js': '779bc134df',
+  './js/gridlock-points.js': '8a4fcce246',
+  './js/gridlock-v1map.js': 'f83ca3500e',
+  './js/difficulty-tiers.js': 'b238c3023b',
+  './js/net.js': 'dca2065a19',
+  './js/online-gate.js': '4b30cbdfc2',
+  './js/mp-code-copy.js': '2acdbe0e22',
+  './js/mp-reactions.js': 'ce1900931d',
+  './js/mp-reactions-ui.js': 'dce07d73bf',
+  './js/match-chat.js': '784d478433',
+  './js/match-chat-ui.js': '969116343f',
+  './js/game-chat-history.js': '2e3a36b443',
+  './js/challenge/crypt.js': '8d4c5fe938',
+  './js/challenge/secrets.js': '0ddf67616f',
+  './js/challenge/challenge-store.js': '0b930c4f9e',
+  './js/challenge/hooks.js': '171bc1fe63',
+  './js/challenge/unlock.js': '7594e38568',
+  './js/challenge/reveal.js': 'f9efec6466',
+  './js/challenge/challenge-ui.js': '45978222ae',
+  './js/challenge/challenge-net.js': '96a5b3c1d9',
+  './js/challenge/keepsake.js': '64c10179e7',
+  './css/challenge.css': 'df2abacefe',
+  './icons/icon.svg': '00cbd8397e',
+  './icons/icon-192.png': 'ebd15e9db6',
+  './icons/icon-512.png': 'a248f6c278',
   './js/emoji-search-en.js': 'ee87f858cb',
   './js/emoji-search-es.js': '1594c6f049',
   './img/where-hub.jpg': 'f163453a0f',
@@ -997,7 +906,7 @@ const REST_MANIFEST = {
   './chinchon/js/hash.js': '9bbf5d8385',
   './chinchon/js/ai.js': 'd69864fbc2',
   './chinchon/js/ui.js': '7343d50a8a',
-  './chinchon/js/mp.js': '7c5515171c',
+  './chinchon/js/mp.js': 'd5939c8d37',
   './chinchon/js/alert.js': '81226691f9',
   './chinchon/js/ch-ui.js': '9be86bf54a',
   './chinchon/js/strings.js': 'f20532e8b5',
@@ -1019,7 +928,7 @@ const REST_MANIFEST = {
   './escoba/js/hash.js': '032dbfed1a',
   './escoba/js/ai.js': '66a7d1f37a',
   './escoba/js/ui.js': '8228059455',
-  './escoba/js/mp.js': '5d8e8a561a',
+  './escoba/js/mp.js': '8c6a63f54e',
   './escoba/js/mp-ui.js': '528aefa2f7',
   './escoba/js/alert.js': 'e82a10d729',
   './escoba/js/strings.js': 'f77944680f',
@@ -1064,15 +973,15 @@ const REST_MANIFEST = {
   './flick-soccer/js/ai.js': 'c7ff2b0f5b',
   './flick-soccer/js/render.js': 'e9222e7e77',
   './flick-soccer/js/strings.js': '01e64e159f',
-  './flick-soccer/js/mp.js': 'bd43194403',
+  './flick-soccer/js/mp.js': '31d0046b12',
   './flick-soccer/js/mp-ui.js': '0be9c195cc',
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
   './archery/js/engine.js': 'a7a170fc9d',
-  './archery/js/mp.js': '4979a37a56',
+  './archery/js/mp.js': '2d04eae495',
   './eight-ball/js/engine.js': '39a92cd1ed',
-  './eight-ball/js/mp.js': 'a31af51666',
+  './eight-ball/js/mp.js': 'e6a4020546',
   './darts/js/engine.js': '2d603f0ee2',
-  './darts/js/mp.js': 'b2bad2b4b5',
+  './darts/js/mp.js': '81e6dd8ba9',
   './sudoku/': '39055429fc',
   './sudoku/index.html': '39055429fc',
   './sudoku/css/sudoku.css': '146887ebaf',
@@ -1161,17 +1070,17 @@ const REST_MANIFEST = {
   './skeeball/trajectory.html': '7b1b56365a',
   './skeeball/trajectory-map.json': 'fd7c177d36',
   './skeeball/css/skeeball.css': 'c50f746472',
-  './skeeball/js/ui.js': 'd49ab24874',
+  './skeeball/js/ui.js': 'a2dc23cf10',
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': '6346bceb94',
   './cup-pong/js/match.js': 'd85c85e179',
-  './cup-pong/js/mp.js': 'd891066581',
+  './cup-pong/js/mp.js': '775b7ccfa5',
   './hoops4/js/game.js': '2e0010da15',
-  './hoops4/js/mp.js': '3b94da823d',
+  './hoops4/js/mp.js': '8783f95060',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
-  './skeeball/js/challenge.js': '39c86ec1d4',
+  './skeeball/js/challenge.js': '9fc771ac95',
   './skeeball/js/challenge-ui.js': 'c070feb545',
   './skeeball/js/alert.js': 'c7fc8bef3b',
   './skeeball/js/boards.js': '8cf226684b',
@@ -1199,7 +1108,7 @@ const REST_MANIFEST = {
   './golf/': '457d076497',
   './golf/index.html': '457d076497',
   './golf/css/golf.css': '8264a76361',
-  './golf/js/ui.js': 'c668ae7251',
+  './golf/js/ui.js': 'd9650d21e8',
   './golf/js/strings.js': '1f268783ae',
   './golf/js/holes.js': '6011b2a797',
   './golf/js/obstacles.js': '96c7fbf66c',
@@ -1210,7 +1119,7 @@ const REST_MANIFEST = {
   './golf/js/render.js': 'd9a7f0b4de',
   './golf/js/holegen.js': 'f5ad10ce1d',
   './golf/js/rounds.js': 'b6455879b1',
-  './golf/js/board.js': 'f6c1612123',
+  './golf/js/board.js': '4bdebaa52e',
   './golf/js/save.js': '0126d36c18',
   './golf/js/progress.js': '47d04c9fd5',
   './golf/js/tutorial.js': '750f5299f7',
@@ -1360,21 +1269,9 @@ const REST_MANIFEST = {
 // warm can diff against what is actually in the cache it inherits. Never a real asset path.
 const MANIFEST_KEY = './__rest-manifest__';
 
-// Warm the non-shell tier. Best-effort by design, but never SILENTLY best-effort (THE LAW rule 6):
-// whatever could not be cached is logged with its paths so a broken deploy is diagnosable from the
-// console instead of only showing up as a game that mysteriously fails offline.
-//
-// Old caches are still alive while this runs (activate no longer deletes them - see the activate
-// handler): they are BOTH the copy source for unchanged files AND the fetch handler's fallback,
-// so a game opened mid-warm still serves from cache instead of queueing behind the warm on the
-// network. This function deletes them itself once the new cache is complete.
+// Warm the non-shell tier. Best-effort by design, but never SILENTLY best-effort (THE LAW ru... [docs/SW-NOTES.md #12]
 const WARM_CONCURRENCY = 6;
-// ONE-TIME FORCED REFETCH (2026-09-01). The surgical counterpart to PURGE_ALL_CACHES below: a
-// cached entry that is stale under its CURRENT name is invisible to every check this worker makes
-// (the manifest hash it is stored against is the correct one -- the BYTES are wrong), so it
-// survives deploys indefinitely. Anything listed here is dropped from the current cache at the
-// start of the warm, which then refetches it with `cache: 'reload'`. Cost is one file, not 8.4 MB.
-// Entries can be removed once a deploy carrying them has shipped.
+// ONE-TIME FORCED REFETCH (2026-09-01). The surgical counterpart to PURGE_ALL_CACHES below: ... [docs/SW-NOTES.md #13]
 const FORCE_REFETCH = [
   './tic-tac-toe/css/tic-tac-toe.css',
 ];
@@ -1435,10 +1332,7 @@ async function warmRest() {
           if (copied) continue;
           // No old copy to carry (interrupted previous warm): fall through to a real fetch.
         }
-        // A LAZY asset is never fetched by the warm - it is downloaded by the fetch handler the
-        // first time the game that needs it actually asks for it, and cached on demand there. Note
-        // this sits BELOW the carry-forward above on purpose: a device that already has the file
-        // keeps it across every deploy for free. Not a failure, so it is not reported as one.
+        // A LAZY asset is never fetched by the warm - it is downloaded by the fetch handler the [docs/SW-NOTES.md #14]
         if (isLazyAsset(path)) continue;
         const owner = HELD_BACK_OWNER.get(path);
         if (owner) {
@@ -1463,23 +1357,13 @@ async function warmRest() {
     console.warn(`[sw] ${CACHE}: ${failed.length}/${WARMED.length} non-shell assets could not be precached`
       + ' (they will be cached on demand when first opened online):', failed);
   }
-  // Record what this warm was built against, THEN retire every other cache. Order matters: the
-  // old caches must survive until the new one is complete, or an interrupted warm would leave
-  // devices with no fallback for whatever had not warmed yet - which was exactly the post-deploy
-  // window the old delete-at-activate behaviour opened on every single deploy.
+  // Record what this warm was built against, THEN retire every other cache. Order matters: the [docs/SW-NOTES.md #15]
   try { await cache.put(MANIFEST_KEY, new Response(JSON.stringify(REST_MANIFEST))); } catch { /* next deploy re-fetches */ }
   const keys = await caches.keys();
   await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
 }
 
-// ONE GAME'S FILES, NOW (2026-10-14). A Game Hub message's Play button (js/hub.js openGameFresh)
-// opens a game right after a new build took over, which is exactly when warmRest() above has not
-// reached that game yet: until it does, the game's CHANGED files are answered from the previous
-// build's cache (the fetch handler's caches.match fallback). This does warmRest's job for one game
-// folder, first: same carry-forward by content hash, same `cache: 'reload'`, same skip of LAZY data.
-// Additive only - it puts files into the CURRENT cache and deletes nothing; warmRest later finds
-// them present and skips them. HELD_BACK files are included: the person is opening this very game.
-// Replies {ok, fetched, carried, failed}.
+// ONE GAME'S FILES, NOW (2026-10-14). A Game Hub message's Play button (js/hub.js openGameFr... [docs/SW-NOTES.md #16]
 async function warmGame(dir) {
   const d = String(dir || '');
   if (!/^[a-z0-9-]{2,40}$/.test(d)) return { ok: false, fetched: 0, carried: 0, failed: 0 };
@@ -1518,34 +1402,11 @@ async function warmGame(dir) {
   return { ok: failed === 0, fetched, carried, failed };
 }
 
-// ONE-TIME FULL PURGE (2026-08-04). Normally `activate` deletes only caches whose name DIFFERS
-// from CACHE, which is right: it makes a deploy cheap and lets an interrupted warm resume. But it
-// also means a cache entry that is stale, truncated or half-written under its CURRENT name is
-// never re-fetched -- the worker keeps serving the bad copy forever, and a player whose hub renders
-// nothing has no way to clear it from inside an app that will not start.
-//
-// That is the state Matt's phone reached: a blank hub in Chrome AND from the home-screen icon,
-// while every file on the server returned 200 and the identical build ran fine everywhere it could
-// be tested. So this build purges EVERY cache on activate, current name included, and rebuilds the
-// shell from the network.
-//
-// Set back to false once a purge has shipped and the device is confirmed healthy. Leaving it on
-// permanently would re-download ~8.8 MB on every single deploy, which is exactly the storm the
-// two-tier precache exists to avoid. It is a recovery lever, not the steady state.
+// ONE-TIME FULL PURGE (2026-08-04). Normally `activate` deletes only caches whose name DIFFE... [docs/SW-NOTES.md #17]
 const PURGE_ALL_CACHES = false;
 
 self.addEventListener('install', (event) => {
-  // Only the shell blocks the install. The new build goes live as soon as the hub itself is safe
-  // offline, instead of waiting on every card image of every game.
-  //
-  // The shell is ALWAYS fetched with `cache: 'reload'` (2026-10-14). Without it the browser's HTTP
-  // disk cache may answer: GitHub Pages sends `max-age=600`, so a deploy landing within ten minutes
-  // of the last one installed the PREVIOUS build's bytes under the NEW cache name - and a
-  // cache-first shell module then served them for the whole build. Matt's phone showed the old
-  // Arrow Maze tile at v1132 while the server had the new one (js/game-art.js). It costs nothing:
-  // Pages re-stamps every ETag on every deploy, so an expired copy re-downloads in full anyway.
-  // (Same reason with the purge on: a purge that re-imports the corruption it deleted is not a
-  // recovery.)
+  // Only the shell blocks the install. The new build goes live as soon as the hub itself is sa... [docs/SW-NOTES.md #18]
   event.waitUntil(
     (async () => {
       if (PURGE_ALL_CACHES) {
@@ -1553,16 +1414,38 @@ self.addEventListener('install', (event) => {
         await Promise.all(keys.map((k) => caches.delete(k)));
       }
       const cache = await caches.open(CACHE);
-      await cache.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })));
+      // ONLY THE CHANGED SHELL FILES ARE DOWNLOADED (2026-10-22). A shell file whose content hash [docs/SW-NOTES.md #19]
+      const olds = [];
+      for (const k of await caches.keys()) if (k !== CACHE && k.startsWith('game-hub-')) olds.push(await caches.open(k));
+      let stored = null;
+      for (const c of olds) {
+        try { const res = await c.match(MANIFEST_KEY); if (res) { stored = await res.json(); break; } } catch { /* absent */ }
+      }
+      const carry = [], fetchList = [];
+      for (const p of SHELL) {
+        if (stored && REST_MANIFEST[p] && stored[p] === REST_MANIFEST[p]) {
+          let prev = null;
+          for (const c of olds) { prev = await c.match(p, { ignoreSearch: true }); if (prev) break; }
+          if (prev) { carry.push([p, prev]); continue; }
+        }
+        fetchList.push(p);
+      }
+      // Each body is read as it arrives: a response left unread holds its connection open, and
+      // with ~60 at once the browser's per-host limit stalled the install for ever (found in a
+      // real browser before this shipped). Held in memory (~1.6 MB at most) until all are in.
+      const fetched = await Promise.all(fetchList.map(async (p) => {
+        const res = await fetch(new Request(p, { cache: 'reload' }));
+        if (!res || !res.ok) throw new Error(`[sw] shell install: ${p} answered ${res && res.status}`);
+        const body = await res.blob();
+        return [p, new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers })];
+      }));
+      for (const [p, res] of carry.concat(fetched)) await cache.put(p, res);
       await self.skipWaiting();
     })()
   );
 });
 
-// The hub header's version pill asks the ACTIVE worker which build it runs.
-// Reply over the provided MessageChannel port so the answer reaches the caller
-// even with multiple clients open.
-// One warm at a time: activate starts one, and a SHOWN_GAMES change queues another behind it.
+// The hub header's version pill asks the ACTIVE worker which build it runs. [docs/SW-NOTES.md #20]
 let _warmChain = Promise.resolve();
 function queueWarm() {
   _warmChain = _warmChain.then(() => warmRest()).catch((err) => console.warn('[sw] precache warm failed', err));
@@ -1596,13 +1479,7 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// --- PUSH NOTIFICATIONS (2026-09-23) ------------------------------------------------------------
-// Sent by functions/index.js (a Firebase Cloud Function; the only holder of the private key) to a
-// device that turned them on through js/push.js. The payload is JSON {title, body, tag, url}.
-//
-// EVERY PUSH SHOWS A NOTIFICATION, WITHOUT EXCEPTION. Safari revokes the subscription of a site
-// whose push arrives and shows nothing, and Chrome shows a generic one in its place. So a payload
-// that will not parse still shows something honest rather than nothing.
+// --- PUSH NOTIFICATIONS (2026-09-23) ------------------------------------------------------... [docs/SW-NOTES.md #21]
 self.addEventListener('push', (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch { d = { body: event.data ? event.data.text() : '' }; }
@@ -1626,11 +1503,7 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   syncBadge();
   const data = event.notification.data || {};
-  // WHICH MATCH (2026-09-24). Matt: "when i click on the connect 4 hoops notification, it takes me
-  // to the setup screen... It should take me directly to that game." The payload never named the
-  // match, but the Cloud Function has always TAGGED it `hoops-<gameId>` (skeeball `skee-<id>`), so
-  // the id is read from there - no function redeploy needed. `data.match` wins if a later payload
-  // carries it. The hub validates it before use.
+  // WHICH MATCH (2026-09-24). Matt: "when i click on the connect 4 hoops notification, it take... [docs/SW-NOTES.md #22]
   const tag = String(event.notification.tag || '');
   // Cup Pong's payload names its match outright (`match`, 2026-09-28) and tags it `cuppong-<id>`.
   // Every challenge game's tag is `<node>-<matchId>` (2026-10-14: Darts, Flick Soccer and the rest
@@ -1660,11 +1533,7 @@ self.addEventListener('notificationclick', (event) => {
   })());
 });
 
-// APP ICON BADGE (2026-10-14). Matt: "Can we get badge notifications on the app icon when there's
-// a notification?" The number is how many of our notifications are showing. Set only AFTER the
-// notification is shown, and never throws, so a badge failure can never cost a notification.
-// Supported: iPhone Home Screen app (iOS 16.4+), installed desktop Chrome/Edge; elsewhere a no-op.
-// js/push.js clearShownNotifications() clears it when the hub opens.
+// APP ICON BADGE (2026-10-14). Matt: "Can we get badge notifications on the app icon when th... [docs/SW-NOTES.md #23]
 async function syncBadge() {
   try {
     const nav = self.navigator;
@@ -1678,87 +1547,24 @@ async function syncBadge() {
 }
 
 self.addEventListener('activate', (event) => {
-  // Old caches are NOT deleted here any more (2026-08-23). They are warmRest()'s copy source for
-  // unchanged files AND the fetch handler's fallback while the warm runs, so deleting them at
-  // activate opened a window on EVERY deploy (seconds on wifi, minutes on a phone) where games
-  // had no cache at all and every request queued behind the warm on the network. warmRest()
-  // deletes every non-current cache itself once the new cache is complete; if it is interrupted,
-  // the next activation's warm finishes the job. At most one extra generation (~11 MB) lingers.
+  // Old caches are NOT deleted here any more (2026-08-23). They are warmRest()'s copy source f... [docs/SW-NOTES.md #24]
   event.waitUntil(
     self.clients.claim()
-      // Warm the heavy tier only once the worker is claimed and serving. Deliberately NOT awaited
-      // inside this waitUntil: functional events (every fetch the page makes) wait on the activate
-      // handler's promise, so awaiting the warm here would block the very page load the split was
-      // meant to speed up. Fire-and-forget is correct - if the worker is killed mid-warm, the next
-      // activation resumes it and the fetch handler covers anything still missing.
+      // Warm the heavy tier only once the worker is claimed and serving. Deliberately NOT awaited [docs/SW-NOTES.md #25]
       .then(() => { queueWarm(); })
   );
 });
 
-// Immutable static assets (images, fonts) — served cache-first so re-created
-// <img> elements resolve instantly instead of waiting on a network round-trip
-// (that latency made card boards flash blank on every re-render). These files
-// are versioned by the CACHE bump on each deploy, so cache-first is always safe.
+// Immutable static assets (images, fonts) — served cache-first so re-created [docs/SW-NOTES.md #26]
 const STATIC_RE = /\.(webp|png|jpe?g|gif|svg|woff2?|ttf)$/i;
 
-// The REST tier's own paths, for the cache-first branch below.
-//
-// GAME CODE IS CACHE-FIRST (2026-09-01). Matt, on a screen recording from Anita's phone of
-// opening Skeeball: "Why does it take so long? It needs to be better than this."
-//
-// Measured cause, with the whole game verifiably sitting in this cache already: opening Skeeball
-// still sent 28 requests and 2,188 KB to the server. Network-first is why. `cache: 'reload'`
-// below deliberately bypasses the browser's HTTP cache, and the cached copy is only served if the
-// network LOSES the NET_TIMEOUT_MS race - so on any connection that is not outright bad, every
-// module in a game's graph is re-downloaded in full on every single open. The deadline and the
-// slow latch cap how BAD that gets; they do not stop it happening.
-//
-// The REST tier is exactly the right boundary for fixing it, and the boundary already exists:
-//   - It is per-deploy versioned already. CACHE is bumped on essentially every commit, and
-//     REST_MANIFEST (generated from the bytes on disk by validate-sw-assets.mjs, with
-//     test-sw-strategy.mjs failing the deploy if it is stale) is what decides, file by file,
-//     whether a deploy carries a copy forward or re-fetches it. A content hash is a better
-//     freshness signal than an HTTP validator here - GitHub Pages re-stamps every ETag on every
-//     deploy - so re-asking the network per request buys nothing it does not already have.
-//   - THE SHELL WAS DELIBERATELY LEFT ALONE AT FIRST, AND IS NO LONGER (2026-09-01, same day).
-//     It said here that index.html, css/, js/ and profile/ stay network-first "so every shared
-//     module that touches player data keeps its freshness guarantee". Measuring the hub's own
-//     launch showed what that cost: 35 requests and 687 KB on EVERY open of a warm app. Matt's
-//     call was to split it rather than keep it - the data modules stay fresh by name, the rest is
-//     cache-first. See NETWORK_FIRST above for the list and the two guards that hold it together.
-//     Documents are still network-first either way, so a device still discovers a new deploy on
-//     the very next hub load and the version pill keeps telling the truth.
-//   - Navigations are excluded (see the handler), so a game's standalone index.html is still
-//     fetched honestly.
-//
-// THE COST, ACCEPTED: on the first hub load after a deploy, a game opened before warmRest() has
-// reached its files runs the PREVIOUS build's code for that one visit. That was already true
-// offline and past the deadline; it is now briefly true online too. The warm finishes in seconds
-// and the next open is the new build. Two point two megabytes per open, on a phone, was the worse
-// bargain.
-//
-// pinball2 IS THE EXCEPTION, and it is excluded by path. Matt, 2026-09-11: "It's perfect when I open
-// it within the Claude app. But when I open it in the chrome app it's the old one with the holes."
-// The Claude app has no service worker registered, so it fetched the new build; Chrome had one, and
-// cache-first handed it the previous build's physics from cache. The bargain above is the right one
-// for a RELEASED game, where the code changes rarely and the saving is 2.2 MB per open. It is the
-// wrong one for a tool that is being changed several times an hour and judged by how it plays: a
-// stale build there is not a slower open, it is the wrong answer to "is this fixed yet". It goes
-// back to network-first, which still falls back to the cache offline and past the deadline.
-//
-// (2026-10-14) Generalised: EVERY held-back file (pinball2 is one of them) is network-first, for
-// the same reason - an admin-only game is the one being changed several times an hour. It is also
-// what lets those edits ship with NO sw.js change: a held-back file carries no REST_MANIFEST hash,
-// so a cache-first copy of it could never be told it was stale.
+// The REST tier's own paths, for the cache-first branch below. [docs/SW-NOTES.md #27]
 const DEV_FRESH_PATHS = new Set([...HELD_BACK_OWNER.keys()].map((p) => new URL(p, self.location.href).pathname));
 const CACHE_FIRST_PATHS = new Set(
   [...REST, ...SHELL_CACHE_FIRST]
     .filter((p) => !HELD_BACK_OWNER.has(p))
     .map((p) => new URL(p, self.location.href).pathname));
-// A NEW FILE IN AN UNRELEASED GAME NEEDS NO ASSETS ENTRY (2026-10-22): adding one to ASSETS changed
-// this file and so sent every phone an update (Archery's 3D models did, three times). The validator
-// lets a file under a held-back game's folder stay out of ASSETS unless something outside held-back
-// folders imports it, and it is network-first here like the listed ones.
+// A NEW FILE IN AN UNRELEASED GAME NEEDS NO ASSETS ENTRY (2026-10-22): adding one to ASSETS ... [docs/SW-NOTES.md #28]
 const HELD_DIRS = [...new Set([...HELD_BACK_OWNER.keys()].map((p) => p.replace(/^\.\//, '').split('/')[0]))]
   .map((d) => new URL(`./${d}/`, self.location.href).pathname);
 const isDevFresh = (path) => DEV_FRESH_PATHS.has(path)
@@ -1773,22 +1579,7 @@ function deadline(ms) {
   return new Promise((resolve) => setTimeout(() => resolve(TIMED_OUT), ms));
 }
 
-// "The network is bad right now" latch.
-//
-// The deadline alone is charged PER REQUEST, and a hub cold start is a serial chain: index.html,
-// then hub.js, then the modules hub.js imports, then the modules THEY import. Every hop pays the
-// full deadline again, so on a genuinely bad link the deadline turned a 40s load into a 10s one -
-// better, but still four separate 2.5s stalls for a build already sitting complete in the cache.
-//
-// Once ONE request has proven the connection is slower than the deadline, the rest of that page
-// load should not each re-discover it. While this latch is hot, a request WITH a cached copy is
-// served from cache immediately and revalidated in the background; a request with nothing cached is
-// unaffected and still waits for the network. The latch expires on its own, so a connection that
-// recovers goes straight back to network-first without needing an event to tell it so.
-//
-// Freshness cost is bounded and small: the cache is a coherent one-deploy snapshot (`activate`
-// deletes every other cache), every latched response still revalidates in the background, and the
-// hub's version pill continues to show and force-fix a newer deploy on tap.
+// "The network is bad right now" latch. [docs/SW-NOTES.md #29]
 const SLOW_LATCH_MS = 10000;
 let _slowUntil = 0;
 
@@ -1799,28 +1590,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
 
-  // THE HOLE EDITOR IS NOT PART OF THE APP (2026-09-23). It lives under this worker's scope, so its
-  // page and every golf engine module it imports came through the handlers below - and the golf
-  // engine is REST tier, CACHE-FIRST. A device holding an older render.js served it to a newer
-  // editor, which imports an export that copy does not have: "doesn't provide an export named
-  // 'TREE_FILL'", and the editor could not start. The editor is outside ASSETS, has no offline
-  // promise to keep, and must always build holes with the golf code that is live now - so the
-  // editor's page and everything it loads (a module import's referrer is the importing module)
-  // go straight to the network, untouched by this worker.
+  // THE HOLE EDITOR IS NOT PART OF THE APP (2026-09-23). It lives under this worker's scope, s... [docs/SW-NOTES.md #30]
   if (sameOrigin && (url.pathname.includes('/hole-editor/') || (req.referrer && new URL(req.referrer).pathname.includes('/hole-editor/')))) return;
 
-  // Cache-first for immutable same-origin assets: images and fonts (which are versioned by the
-  // CACHE bump, and whose network round-trip made card boards flash blank on every re-render),
-  // every file in the REST tier - each game's own code and assets - and, since 2026-09-01, the
-  // part of the SHELL that does not touch player data. See CACHE_FIRST_PATHS / NETWORK_FIRST above
-  // for what is in each set and why the fresh half is hand-listed.
-  // A navigation is never answered from here: a standalone game page is a document, and a
-  // document is how a device finds out a new build exists.
-  //
-  // The CURRENT cache is consulted before the global caches.match (2026-08-23): while warmRest()
-  // runs, the previous deploy's cache is still alive as a fallback, and caches.match searches
-  // caches in CREATION order - so without this, an entry already refreshed into the new cache
-  // would keep being answered by the older cache's stale copy until the warm finished.
+  // Cache-first for immutable same-origin assets: images and fonts (which are versioned by the [docs/SW-NOTES.md #31]
   if (sameOrigin && req.mode !== 'navigate' && !isDevFresh(url.pathname)
       && (STATIC_RE.test(url.pathname) || CACHE_FIRST_PATHS.has(url.pathname))) {
     event.respondWith((async () => {
@@ -1829,16 +1602,7 @@ self.addEventListener('fetch', (event) => {
         || (await caches.match(req, { ignoreSearch: true }));
       if (cached) return cached;
       try {
-        // `cache: 'reload'` is LOAD-BEARING, for the same reason it is on the network-first path
-        // below (the "fifth-playthrough fix"): the browser's own HTTP disk cache sits between this
-        // handler and the wire, and Pages serves every file with `max-age=600`. A plain fetch()
-        // here can be answered out of that disk cache with the PREVIOUS deploy's bytes, and this
-        // line then writes them into the NEW cache under the new name -- where warmRest()'s
-        // "already present, skip it" check leaves them for ever, and every later deploy CARRIES
-        // THEM FORWARD, since the manifest hash they are stored against is the correct new one.
-        // The result is a device whose version pill reads the new build while a game renders the
-        // old one, with no way to clear it from inside the app. That shipped on 2026-09-01 with
-        // the cache-first split and stranded Tic Tac Toe's board on one device.
+        // `cache: 'reload'` is LOAD-BEARING, for the same reason it is on the network-first path [docs/SW-NOTES.md #32]
         const res = await fetch(new Request(req, { cache: 'reload' }));
         if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
         return res;
@@ -1852,41 +1616,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith((async () => {
-    // Network-first WITH A DEADLINE, falling back to the cached copy.
-    //
-    // Sixth-playthrough fix (the "sluggish on bad service" report): plain network-first only fell
-    // back to cache when the fetch FAILED. A weak-but-alive mobile signal never fails - it just
-    // takes many seconds per request, and `cache: 'reload'` below deliberately bypasses the
-    // browser's own HTTP cache, so EVERY module in the graph paid that latency on every load. A
-    // hub cold start is 15 blocking module requests plus index.html and hub.css; at a couple of
-    // seconds each, serially resolved as the module graph unfolds, that is the sluggishness.
-    //
-    // Racing a NET_TIMEOUT_MS deadline fixes the bad-network case without touching the good-network
-    // one: on a healthy connection the network still wins every race and freshness is unchanged. On
-    // a slow one the player gets the cached copy immediately while the network response continues in
-    // the background and refreshes the cache for next time.
-    //
-    // Consistency is preserved: `activate` deletes every non-current cache and `install` re-adds the
-    // shell, so the cache this falls back to is a coherent snapshot of one deploy, not a mix. The
-    // hub's version pill still surfaces "a newer build is deployed" and force-updates on tap.
-    //
-    // Requests with nothing cached to fall back on skip the race entirely and just wait - a deadline
-    // would only turn a slow load into a failed one.
-    //
-    // Fifth-playthrough fix: `fetch(req)` alone is NOT enough - the browser's own HTTP disk
-    // cache sits between this handler and the wire, and a GET whose response carried a
-    // cacheable Cache-Control/expiry can be satisfied straight out of that disk cache without
-    // ever reaching the server, even though this code path is labeled "network-first". That is
-    // exactly how a stats/leaderboard regression (a full deploy, CACHE bumped, SW re-activated)
-    // still showed some shared js/ files running old code while other, less-recently-fetched
-    // files picked up the new deploy immediately: whichever files happened to already be sitting
-    // in a given device's HTTP cache with unexpired headers kept being served stale by the
-    // browser itself, invisibly to this SW. `cache: 'reload'` on the Request forces the browser
-    // to bypass its HTTP cache and revalidate with the server on every fetch, while still letting
-    // the response populate that HTTP cache normally for next time.
-    // Kicked off first so the network is already in flight while the cache is consulted. The
-    // background cache refresh is attached HERE rather than at the await site, so it still happens
-    // on the slow path where the deadline fired and nobody is awaiting this promise any more.
+    // Network-first WITH A DEADLINE, falling back to the cached copy. [docs/SW-NOTES.md #33]
     const net = fetch(new Request(req, { cache: 'reload' })).then((res) => {
       if (res && res.ok && new URL(req.url).origin === self.location.origin) {
         const copy = res.clone();
@@ -1930,20 +1660,7 @@ self.addEventListener('fetch', (event) => {
         _slowUntil = Date.now() + SLOW_LATCH_MS;
         return cached;
       }
-      // A 404/503 IS NOT AN ANSWER when we are holding a good copy (2026-08-11).
-      //
-      // Only a THROWN fetch counted as failure here, so an error RESPONSE was handed straight to
-      // the page. GitHub Pages serves a redeploy by swapping the published tree, and a request
-      // landing in that window can 404 for a moment - so opening the hub during a deploy could
-      // hand the page a 404 for css/hub.css while a perfectly good copy sat in the cache one line
-      // away. The result is the launcher rendered as raw unstyled HTML. Matt hit it minutes after
-      // a deploy, on mobile data; a force-close fixed it, which is exactly what a transient
-      // server error looks like.
-      //
-      // Falling back to the cached copy is also the right call for a genuinely removed file: this
-      // is an offline-first app, and the cache is a coherent snapshot of one deploy that rolls
-      // over when CACHE is bumped. `net` has already refreshed the cache above if the response
-      // WAS ok, so nothing goes stale by doing this.
+      // A 404/503 IS NOT AN ANSWER when we are holding a good copy (2026-08-11). [docs/SW-NOTES.md #34]
       if (!res || !res.ok) return cached;
       return res;
     } catch {

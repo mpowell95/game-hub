@@ -1423,9 +1423,14 @@ class Hub {
     // A bubble found is drawn the moment its game answers; the full list (which also clears a
     // bubble that stopped being true) is assigned once every game has answered.
     const results = new Array(list.length).fill(null);
+    // THE LIVE WATCH FIRST (2026-10-22): each game's list then downloads once, through the watch,
+    // and check() reads it from there (js/live-read.js). It used to download twice on every open
+    // (check, then watch) and again on every return to the launcher.
+    this._watchGameAlerts();
     await Promise.all(list.map(async (g, i) => {
       try {
         const mod = await g.alerts();
+        try { await Promise.race([(this._alertWatchReady || {})[g.id], new Promise((r) => setTimeout(r, 6000))]); } catch { /* check() reads on its own */ }
         const alert = await mod.check();
         (this._alertMods = this._alertMods || {})[g.id] = mod;
         if (!alert) return;
@@ -1475,13 +1480,16 @@ class Hub {
     // ALL AT ONCE (2026-10-18), like the check above: one after another, the last game's live
     // updates waited on every earlier game's connection.
     const list = GAMES.filter((g) => typeof g.alerts === 'function' && !this._alertWatches[g.id] && onLauncher.has(g.id));
+    this._alertWatchReady = this._alertWatchReady || {};
     await Promise.all(list.map(async (g) => {
       this._alertWatches[g.id] = 'pending';
+      let ready = () => {};
+      this._alertWatchReady[g.id] = new Promise((res) => { ready = res; });
       try {
         const mod = await g.alerts();
-        if (typeof mod.watch !== 'function') return;
+        if (typeof mod.watch !== 'function') { ready(); return; }
         (this._alertMods = this._alertMods || {})[g.id] = mod;
-        this._alertWatches[g.id] = await mod.watch((alert) => {
+        const pending = mod.watch((alert) => {
           // The Challenges button's count moves with every change, bubble or not.
           this._paintChallengeCount();
           const list = this._gameAlerts || [];
@@ -1493,7 +1501,12 @@ class Hub {
           this._gameAlerts = GAMES.map((x) => rest.find((r) => r.game === x.id)).filter(Boolean);
           this._paintGameAlert();
         });
+        // mod.watch has attached its listener once it resolves (after Firebase boots); the check
+        // above waits for that, not for the data.
+        this._alertWatches[g.id] = await pending;
+        ready();
       } catch (err) {
+        ready();
         console.warn('[hub] alert watch failed for', g.id, err);
       }
     }));

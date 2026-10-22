@@ -19,7 +19,7 @@
 
 import {
   MAX_SHOTS, MAX_REPLY, buildBugReport, submitBugReport, prepareScreenshot, fitsShotBudget,
-  queuePendingReport, pendingCount, readBugReports, readBugShots, setBugStatus, summarizeEnvironment,
+  queuePendingReport, pendingCount, readBugReports, readBugReportsSince, readBugShots, setBugStatus, summarizeEnvironment,
   countUnread, visibleInInbox, deleteBugReport, undeleteBugReport, replyToBugReport,
   readMyReplies, markRepliesSeen, repliesSeenAt, countUnreadReplies,
 } from './bug-report.js';
@@ -353,7 +353,8 @@ function writeSeenAt(ms) {
 /** Reports arrived since this device last opened the inbox. 0 offline, so the hub's button shows
  *  no count rather than claiming there is nothing. Admin only. */
 export async function adminUnreadCount() {
-  return countUnread(await readBugReports(), readSeenAt());
+  const since = readSeenAt();
+  return countUnread(await readBugReportsSince(since), since);
 }
 
 /** `short` for the list, where a wrapped two-line date pushed the reporter's name off its row. */
