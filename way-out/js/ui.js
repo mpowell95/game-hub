@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
-import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
+import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_MISS_MS, rushMissMs, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -170,6 +170,27 @@ function readJSON(key) {
 }
 function writeJSON(key, v, what) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch (err) { console.error(`[way-out] ${what} NOT saved`, err); }
+}
+// THE RUSH SAVE (2026-10-22, Thomas via Matt: "let it be saved between rounds not during"). A run on
+// the Ready screen between boards survives leaving the game: the next board is not on screen until
+// Go!, so nothing can be studied. { easy: run|null, hard: run|null }; run = { seed, i (the board
+// just cleared), arrows, boards, mistakes, bank, playMs, d (when saved), live, end }. `live` = 1
+// once its next board is on screen: a run still live on the next load was left mid-board without
+// the leave being seen, and is recorded as left. A waiting run is recorded (counted, in the week it
+// was saved) when New game replaces it or its week ends.
+const RUSH_SAVE_KEY = 'gamehub.wayout.rush.save.v1';
+function readRushSave(mode) {
+  const s = readJSON(RUSH_SAVE_KEY)[mode];
+  if (!s || typeof s !== 'object' || !Number.isFinite(+s.seed) || !(+s.d > 0)) return null;
+  const n = (v) => Math.max(0, Math.floor(+v) || 0);
+  return { seed: +s.seed >>> 0, i: n(s.i), arrows: n(s.arrows), boards: n(s.boards), mistakes: n(s.mistakes),
+    bank: n(s.bank), playMs: n(s.playMs), d: +s.d, live: !!s.live, end: s.end === 'time' || s.end === 'left' ? s.end : '' };
+}
+function writeRushSave(mode, run) {
+  const all = readJSON(RUSH_SAVE_KEY);
+  all[mode] = run;
+  writeJSON(RUSH_SAVE_KEY, all, 'Rush save');
+  if (run ? !readRushSave(mode) : readRushSave(mode)) console.error('[way-out] the Rush save did NOT read back', mode, run);
 }
 /** Which board a save or clock is for, as one comparable string. (A first-ladder board was
  *  `L:<n>:5` then too, so its clock carries across unchanged.) */
@@ -426,7 +447,10 @@ class WayOut {
     // is away and runs again on return. The menu and the hub back button still end it.
     this._onVis = () => {
       if (this.rush && !this.rush.over) {
-        if (isAdminDevice()) this._rushHold(document.hidden);
+        // Between boards (the Ready screen or its countdown) the run is saved: leaving keeps it,
+        // and a countdown under way goes back to Ready.
+        if (this.rush.atReady) { if (document.hidden) this._rushBackToReady(); }
+        else if (isAdminDevice()) this._rushHold(document.hidden);
         else if (document.hidden) this._rushEnd('left');
       }
       if (document.hidden) this._clockPause(); else this._clockRun();
@@ -438,7 +462,7 @@ class WayOut {
   }
 
   destroy() {
-    if (this.rush && !this.rush.over) this._rushEnd('left');   // leaving mid-run loses it
+    if (this.rush && !this.rush.over && !this.rush.atReady) this._rushEnd('left');   // leaving mid-board loses it
     if (this.rushTick) { clearInterval(this.rushTick); this.rushTick = 0; }
     this._clockPause();
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
@@ -740,8 +764,9 @@ class WayOut {
       if (btn.dataset.mode !== this.settings.mode) { this.settings = saveSettings({ mode: btn.dataset.mode }); this.render(); }
     } else if (act === 'rush-mode') {
       if (btn.dataset.rmode !== this.settings.rushMode) { this.settings = saveSettings({ rushMode: btn.dataset.rmode }); this.render(); }
-    } else if (act === 'rush-play') this._startRush(this.settings.rushMode);
-    else if (act === 'rush-again') { const m = this.rush ? this.rush.mode : this.settings.rushMode; this._closeModal(); this._startRush(m); }
+    } else if (act === 'rush-play') { this._settleRushSave(this.settings.rushMode, true); this._startRush(this.settings.rushMode); }
+    else if (act === 'rush-resume') this._resumeRush(this.settings.rushMode);
+    else if (act === 'rush-again') { const m = this.rush ? this.rush.mode : this.settings.rushMode; this._closeModal(); this._settleRushSave(m, true); this._startRush(m); }
     else if (act === 'rush-close') this._toSetup(false);
     else if (act === 'rush-ready') this._rushReady();
     else if (act === 'rush-board') {
@@ -794,7 +819,8 @@ class WayOut {
   }
   _toSetup(dropSave) {
     // Leaving a Rush run before its clock runs out loses it (Matt: "they lose that round").
-    if (this.rush && !this.rush.over) this._rushEnd('left', true);
+    // Between boards it is saved instead (_rushBoardDone), and waits on the setup screen.
+    if (this.rush && !this.rush.over && !this.rush.atReady) this._rushEnd('left', true);
     const wasRush = !!this.rush;
     this.rush = null;
     this._stopLevel();
@@ -1317,6 +1343,8 @@ class WayOut {
    *  version's leader this week and See all results. */
   _rushHomeHTML(modeTabs) {
     const rm = this.settings.rushMode;
+    for (const m of RUSH_MODES) this._settleRushSave(m, false);
+    const saved = readRushSave(rm);
     const segs = RUSH_MODES.map((m) => `
       <button type="button" class="wo-seg wo-seg--slim${m === rm ? ' is-selected' : ''}" data-act="rush-mode" data-rmode="${m}" role="radio" aria-checked="${m === rm}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[m])}<b>${t('tier_' + m)}</b></span>
@@ -1338,7 +1366,10 @@ class WayOut {
         <div class="gh-card wo-menu-card">
           <div class="wo-segs wo-segs--two" role="radiogroup" aria-label="${t('diff_label')}">${segs}</div>
           ${tiles}
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play wo-rush-play" data-act="rush-play">${t('rush_play')}</button>
+          ${saved ? `<div class="wo-playrow">
+          <button type="button" class="gh-btn gh-btn--block wo-play" data-act="rush-play">${t('new_game')}</button>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play wo-rush-play" data-act="rush-resume">${t('resume')}</button>
+        </div>` : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play wo-rush-play" data-act="rush-play">${t('rush_play')}</button>`}
         </div>
         <div class="wo-lead">${this._rushLeaderHTML(rm)}</div>
       </div>`;
@@ -1434,6 +1465,51 @@ class WayOut {
       this._rushPaint();
     });
   }
+  /** Back into a run saved between boards: its cleared board (veiled), its clock, the Ready screen. */
+  _resumeRush(mode) {
+    const s = readRushSave(mode);
+    if (!s || s.live || woWeekKey(s.d) !== woWeekKey()) { this.render(); return; }
+    this._stopLevel();
+    this.tier = mode;
+    this.clock = null;
+    this._helpPaused = false;
+    const r = { mode, seed: s.seed, i: s.i, arrows: s.arrows, boards: s.boards, mistakes: s.mistakes, bank: s.bank, t0: 0, playMs: s.playMs,
+      over: null, next: null, paused: true, counting: false, veil: true, atReady: true, prevBest: woRushBest(this._myWayout(), mode) };
+    this.rush = r;
+    this._rushSetBoard(buildRush(mode, s.i, s.seed));
+    this.screen = 'play';
+    this.render();   // paused, not counting, no timers: the Ready screen
+    this.rushTick = setInterval(() => this._rushTickFn(), 100);
+    this._rushPaint();
+    this._rushPrebuild();
+  }
+  /** Record a saved run and clear its slot: always when `force` (New game replaces it), else only
+   *  one that was left mid-board (`live`) or whose week is over. A waiting run counts, in the week it
+   *  was saved; a live one is a lost run (kept, never counted), unless it ended on time. The slot is
+   *  cleared only once the record is written. */
+  _settleRushSave(mode, force) {
+    const s = readRushSave(mode);
+    if (!s || this.rush && this.rush.mode === mode && !this.rush.over) return;
+    if (!force && !s.live && woWeekKey(s.d) === woWeekKey()) return;
+    const left = s.end ? s.end === 'left' : s.live;
+    let st = null;
+    try {
+      st = recordWayOutRush(mode, { arrows: s.arrows, boards: s.boards, ms: s.playMs, mistakes: s.mistakes, seed: s.seed, left, at: s.d });
+    } catch (err) { console.error('[way-out] recordWayOutRush threw - the saved run was NOT recorded', err); }
+    if (st) writeRushSave(mode, null);
+    else console.error('[way-out] the saved Rush run was NOT recorded; kept', mode, s);
+  }
+  /** Left the game during the countdown after Ready: stop it, back to the Ready screen. */
+  _rushBackToReady() {
+    const r = this.rush;
+    if (!r || r.over || !r.counting) return;
+    for (const id of this.timers) clearTimeout(id);
+    this.timers = [];
+    r.counting = false;
+    const c = this.root && this.root.querySelector('.wo-count');
+    if (c) { c.classList.remove('is-on'); c.innerHTML = ''; }
+    this._showRushReady();
+  }
   /** Matt's devices only (see _onVis): the app went away (`away`) or came back. Away: a running
    *  clock stops where it is (`held`, `heldFroze`); a countdown or Ready screen is left as it is,
    *  and if a countdown finishes while away, _rushFreezeIfHeld stops the clock at once. Back: a
@@ -1513,8 +1589,9 @@ class WayOut {
     const r = this.rush;
     this.red[id] = true;
     r.mistakes += 1;
-    r.bank -= RUSH_MISS_MS;
-    this._flashPen(`\u2212${RUSH_MISS_MS / 1000}s`, true);
+    const miss = rushMissMs(r.mode, r.i);
+    r.bank -= miss;
+    this._flashPen(`\u2212${miss / 1000}s`, true);
     this._rushPaint();
     if (this._rushLeft() <= 0) this._rushEnd('time');
   }
@@ -1526,6 +1603,8 @@ class WayOut {
     r.t0 = 0;
     r.paused = true;
     r.boards += 1;
+    r.atReady = true;
+    this._rushSave(false);
     this._rushPaint();
     this._confetti(now);
     const motion = !reduceMotion();
@@ -1540,7 +1619,7 @@ class WayOut {
     const r = this.rush, m = this.root && this.root.querySelector('.wo-modal');
     if (!r || r.over || !r.paused || r.counting || r.heldFroze || !m) return;
     const secs = (Math.floor(r.bank / 100) / 10).toFixed(1);
-    const arrow = RUSH_ARROW;
+    const arrow = RUSH_ARROW, miss = rushMissMs(r.mode, r.i + 1);   // the NEXT board's cost
     m.innerHTML = `
       <div class="wo-ready" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
         <p class="wo-ready-done" id="wo-ready-h"><span aria-hidden="true">✓</span>${t('rush_board_cleared', { n: r.boards })}</p>
@@ -1548,7 +1627,7 @@ class WayOut {
         <p class="wo-ready-sub">${t('rush_next_secs')}</p>
         <ul class="wo-ready-rules">
           <li class="is-gain">${arrow('#3fd6bd')}<span>${t('rush_rule_gain', { gain: RUSH_GAIN_MS / 1000 })}</span><b>+${RUSH_GAIN_MS / 1000}s</b></li>
-          <li class="is-miss">${arrow('#e0484f')}<span>${t('rush_rule_miss', { miss: RUSH_MISS_MS / 1000 })}</span><b>\u2212${RUSH_MISS_MS / 1000}s</b></li>
+          <li class="is-miss">${arrow('#e0484f')}<span>${t('rush_rule_miss', { miss: miss / 1000 })}</span><b>\u2212${miss / 1000}s</b></li>
         </ul>
         <p class="wo-ready-stats">${t('rush_arrows', { n: r.arrows })}</p>
         <p class="wo-ready-ask">${t('rush_ready_q')}</p>
@@ -1594,6 +1673,13 @@ class WayOut {
     const el = this.root.querySelector('.wo-count');
     if (el) { el.classList.remove('is-on'); el.innerHTML = ''; }
     r.i += 1;
+    r.atReady = false;
+    this._rushSave(true);   // its next board is on screen: no longer resumable
+    if (r.veil) {
+      r.veil = false;
+      const st = this.root.querySelector('.wo-stage');
+      if (st) st.classList.remove('is-veiled');
+    }
     const lvl = r.next && r.next.i === r.i ? r.next.lvl : buildRush(r.mode, r.i, r.seed);
     r.next = null;
     this._rushSetBoard(lvl);
@@ -1607,6 +1693,12 @@ class WayOut {
     this._rushFreezeIfHeld(r);
     this._rushPaint();
     this._rushPrebuild();
+  }
+  /** This run into its save slot (see RUSH_SAVE_KEY). */
+  _rushSave(live, end) {
+    const r = this.rush;
+    writeRushSave(r.mode, { seed: r.seed, i: r.i, arrows: r.arrows, boards: r.boards, mistakes: r.mistakes,
+      bank: Math.max(0, Math.round(r.bank)), playMs: Math.round(r.playMs), d: Date.now(), live: live ? 1 : 0, ...(end ? { end } : {}) });
   }
   _rushPrebuild() {
     const r = this.rush, i = r.i + 1;
@@ -1628,6 +1720,9 @@ class WayOut {
       st = recordWayOutRush(r.mode, { arrows: r.arrows, boards: r.boards, ms, mistakes: r.mistakes, seed: r.seed, left: why === 'left' });
     } catch (err) { console.error('[way-out] recordWayOutRush threw - the run was NOT recorded', err); }
     if (!st) console.error('[way-out] the Rush run was NOT recorded', { mode: r.mode, arrows: r.arrows });
+    // Recorded: its save slot (if any) is done with. Not recorded: kept, to be recorded next time.
+    if (st) { if (readRushSave(r.mode)) writeRushSave(r.mode, null); }
+    else { r.playMs = ms; this._rushSave(true, why); }
     r.weekBest = woRushBest(st ? st.games.wayout : this._myWayout(), r.mode);
     r.newBest = why === 'time' && r.arrows > 0 && r.arrows > (r.prevBest == null ? -1 : r.prevBest);
     if (quiet || !this.root || this.screen !== 'play') return;

@@ -280,9 +280,21 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   - The Rush picture's stopwatch hand spins (`.wo-watch-hand`, 3 s a turn; stands still under
     reduced motion). Short phones shrink the picture first (max-height 760 / 700, and 360x804).
 - **Clock** (`js/arrow-maze-time.js`, `RUSH_*`): starts **10 s**, counts DOWN; every arrow sent off
-  **+0.5 s**, every bump **-3 s** (arrow turns red; no hearts, hint or restart). Zero ends the run
+  **+0.5 s**, every bump costs `rushMissMs(mode, board)` (arrow turns red; no hearts, hint or restart):
+  Easy **-3 s**; **Hard -3 s on boards 1-3, +1 s every 3 boards, -7 s from board 13** (2026-10-22,
+  Thomas via Matt: bigger boards, bigger penalty, "definitely not every round"; Easy's table is
+  still being decided). The Ready popup shows the NEXT board's cost. Zero ends the run
   ("Time's up!"). **It pauses only between boards.**
-- **Leaving loses the run**: menu button, the hub back button (`destroy()`), or backgrounding
+- **Saved between boards (2026-10-22, Thomas via Matt: "let it be saved between rounds not during")**:
+  from a board's clear until the next board's Go! (`rush.atReady`), leaving (menu, hub back,
+  backgrounding, closing the app) KEEPS the run in `gamehub.wayout.rush.save.v1` (`{ easy, hard }`,
+  written at the clear). Leaving during that countdown drops back to Ready. The Rush setup then
+  shows **New game | Resume** (Levels' row); Resume = the Ready screen over the veiled cleared
+  board. Nothing about the next board is on screen before Go!, so nothing can be studied. At Go!
+  the save is marked `live`; a live save found later (app killed mid-board) is recorded as LEFT.
+  A waiting save is recorded COUNTED (`at` = when saved, so its own week) when New game replaces it
+  or its week ends (`_settleRushSave`). The slot is cleared only after the record is written.
+- **Leaving mid-board loses the run**: menu button, the hub back button (`destroy()`), or backgrounding
   (`visibilitychange`) ends it as `left`: STORED (THE LAW), never counted.
   **Except on Matt's devices** (`isAdminDevice()`, 2026-10-14: *"get rid of it for me. I need to be
   able to screenshot... then go back into the game"*): backgrounding HOLDS the run (`_rushHold`: the
