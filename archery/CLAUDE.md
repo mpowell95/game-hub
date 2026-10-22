@@ -73,13 +73,14 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 ## The turn (timed off the recording at 30 fps)
 
 Touch and hold: the bow comes up in 0.25 s (`DRAW_T`). Drag to aim (about a ring per 6 px). Let go:
-the bow kicks 0.033 s (`JOLT_T`, two frames), then the flight, 0.8 s (`FLIGHT_T`). Matt, 2026-10-20
-(changed from the 2026-10-15 timing): the arrow starts ON the sight, where the bow pointed it, and
-flies away in a shallow arc (`FLIGHT_D0`, `FLIGHT_ARC`; it used to jump up and right on release) at
-ONE steady speed, about 34 m/s, into the target (Matt: it "slows down way too much before hitting";
-it fell from 50 to 4 m/s). The camera glides at a steady speed and eases off over the last 20% to 15%
-of that (`CAM_EASE`, `CAM_END`; stopping dead read as a jump onto the close-up); the arrow's depth is
-worked out from the camera's glide so the camera's easing never slows the arrow (`_glideAt`). Framed from the camera, not simulated (`render.js` `_camAt` / `_tipAt`).
+the bow kicks 0.033 s (`JOLT_T`, two frames), then the flight, 0.8 s (`FLIGHT_T`). **The flight is a
+real straight line in the world** (Matt, 2026-10-22: framed from the moving camera it "curves towards
+the camera then back to the target"): from the sight (`launchAt`: the eye-to-aim line, `FLIGHT_D0` out)
+to the hit at one steady speed (~34 m/s), `FLIGHT_ARC` 0.25 m up at mid-flight. The camera follows
+BEHIND it, looking at it (`_camAt`): it drops back from `FLIGHT_D0` to `CHASE_BACK` (the close-up's own
+distance) and drifts out to the close-up's side, then settles onto the close-up over the last
+`CHASE_SETTLE` as the arrow lands, never catching it up (a swing beside it made the arrow loom and
+leave the screen). Every arrow sticks along that straight line (`inDir`), flown or replayed.
 **Every arrow is stuck the moment it hits and quivers** (`_preStick`, `WOBBLE_T`); the last number
 clears then; its own number pops `HIT_POP` 0.3 s later with stars, and the ring it scored lights up
 yellow ON the face, under the arrows (`render.js flashRing`; it used to be a screen overlay that popped
@@ -124,7 +125,7 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   about 97 a frame while aiming, the bow 23 of them.
 - **The close-up**: the board half-width is 1.14 face radii as DRAWN (`BOARD_HALF`; the rules'
   `BOSS` stays 1.3, which only matters for arrows that score 0), 1.06x taller than wide, about half
-  the screen wide, seen from the left. Arrows arrive from the right, nearly level (`inDir`). The arrow model (`_arrow`) is thin
+  the screen wide, seen from the left. Arrows come straight from the shooting line (`inDir`), so they stick in nearly square to the face. The arrow model (`_arrow`) is thin
   (2.2 cm, still thicker than real so it reads), with a steel point and swept vanes (Matt: the old
   6 cm one looked "like nerf gun bullets"); blue in
   front, black behind. Sun shadow of the board (not on software GL).
