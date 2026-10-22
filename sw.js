@@ -1,5 +1,5 @@
 // sw.js — shared service worker for the Game Hub. Precaches the app shell and [docs/SW-NOTES.md #1]
-const CACHE = 'game-hub-v1223';
+const CACHE = 'game-hub-v1224';
 
 const ASSETS = [
   './',
