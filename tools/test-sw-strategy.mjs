@@ -48,6 +48,7 @@ class FakeResponse {
   constructor(body, { ok: isOk = true, tag = '' } = {}) { this.body = body; this.ok = isOk; this.tag = tag; }
   clone() { return new FakeResponse(this.body, { ok: this.ok, tag: this.tag }); }
   async json() { return JSON.parse(this.body); }
+  async blob() { return this.body; }
 }
 
 class FakeRequest {

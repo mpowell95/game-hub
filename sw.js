@@ -1430,10 +1430,14 @@ self.addEventListener('install', (event) => {
         }
         fetchList.push(p);
       }
+      // Each body is read as it arrives: a response left unread holds its connection open, and
+      // with ~60 at once the browser's per-host limit stalled the install for ever (found in a
+      // real browser before this shipped). Held in memory (~1.6 MB at most) until all are in.
       const fetched = await Promise.all(fetchList.map(async (p) => {
         const res = await fetch(new Request(p, { cache: 'reload' }));
         if (!res || !res.ok) throw new Error(`[sw] shell install: ${p} answered ${res && res.status}`);
-        return [p, res];
+        const body = await res.blob();
+        return [p, new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers })];
       }));
       for (const [p, res] of carry.concat(fetched)) await cache.put(p, res);
       await self.skipWaiting();
