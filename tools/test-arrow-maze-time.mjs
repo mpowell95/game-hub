@@ -139,10 +139,23 @@ ok('counters out of range are clamped: never more than full, never under 1 a lev
   && T.woPoints({ byDiff: { expert: { won: 2 } }, wo: { pts: { expert: 0 }, ptsN: { expert: 2 } } }) === 2
   && T.woPoints({ byDiff: { expert: { won: 1 } }, wo: { pts: { expert: 6 }, ptsN: { expert: 5 } } }) === 6);
 
-// Rush mistake cost (2026-10-22): Hard 3 s on boards 1-3, +1 s every 3 boards, 7 s cap; Easy flat.
-ok('Rush: Hard mistake cost grows every 3 boards, capped at 7 s',
-  [0, 2, 3, 5, 6, 9, 12, 40].map((i) => T.rushMissMs('hard', i)).join() === '3000,3000,4000,4000,5000,6000,7000,7000');
-ok('Rush: Easy mistake cost stays 3 s', [0, 5, 40].every((i) => T.rushMissMs('easy', i) === 3000));
+// Rush mistake cost, rules 3 (2026-10-22): never capped, +0.5 s a board from board 13.
+const costs = (m) => Array.from({ length: 31 }, (_, i) => T.rushMissMs(m, i) / 1000).join(' ');
+ok('Rush: Easy 0,1,2 then 3/4/5 by threes, then +0.5 s a board (board 30 = 14 s)',
+  costs('easy') === '0 1 2 3 3 3 4 4 4 5 5 5 5.5 6 6.5 7 7.5 8 8.5 9 9.5 10 10.5 11 11.5 12 12.5 13 13.5 14 14.5');
+ok('Rush: Hard 3/4/5/6 by threes, then +0.5 s a board (board 30 = 15 s)',
+  costs('hard') === '3 3 3 4 4 4 5 5 5 6 6 6 6.5 7 7.5 8 8.5 9 9.5 10 10.5 11 11.5 12 12.5 13 13.5 14 14.5 15 15.5');
+// The tuning data survives the recorder AND every later record (each one re-cleans the whole list).
+store.clear();
+const xr = { bt: [5000, 7000, 3000], ba: [11, 16, 4], bc: [12000, 15000], mx: [0, 1000], mb: [1, 2], pk: 15500, gn: 15500, pn: 1000, res: 1, rv: 3 };
+G.recordWayOutRush('easy', { ...xr, arrows: 31, boards: 2, ms: 15000, mistakes: 2, seed: 5 });
+G.recordWayOutRush('easy', { arrows: 3, boards: 0, ms: 9000, mistakes: 0, seed: 6 });
+const kept = G.loadStats().games.wayout.wo.rush.runs.easy[0];
+ok('Rush: a run keeps its tuning data through the next record',
+  Object.keys(xr).every((k) => JSON.stringify(kept[k]) === JSON.stringify(xr[k])));
+ok('Rush: tuning data in Firebase object form reads back; junk is left out',
+  JSON.stringify(T.woRushExtras({ bt: { 1: 7, 0: 5 }, mx: [1, 'x', -2], pk: 'no', rv: 3 })) === '{"bt":[5,7],"mx":[1],"rv":3}');
+ok('Rush: time played reads m:ss / h:mm:ss', T.woRushTime(602000) === '10:02' && T.woRushTime(3725000) === '1:02:05' && T.woRushTime(0) === '0:00');
 
 console.log(`\nArrow Maze timer tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

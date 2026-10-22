@@ -255,7 +255,7 @@
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
-import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woWeekKey, woEarnedPoints } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
@@ -1790,6 +1790,7 @@ export function recordWayOutRush(mode, run = {}) {
     m: Math.max(0, run.mistakes | 0), d, w: woWeekKey(d) };
   if (Number.isFinite(+run.seed)) e.sd = +run.seed;
   if (run.left) e.left = 1;
+  Object.assign(e, woRushExtras(run));   // the tuning data (bt, ba, bc, mx, mb, pk, gn, pn, res, rv)
   r.runs[mode] = r.runs[mode].concat([e]);
   if (!e.left) r.best[mode][e.w] = Math.max(r.best[mode][e.w] ?? -1, e.s);
   st.updatedAt = new Date().toISOString();

@@ -280,10 +280,19 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   - The Rush picture's stopwatch hand spins (`.wo-watch-hand`, 3 s a turn; stands still under
     reduced motion). Short phones shrink the picture first (max-height 760 / 700, and 360x804).
 - **Clock** (`js/arrow-maze-time.js`, `RUSH_*`): starts **10 s**, counts DOWN; every arrow sent off
-  **+0.5 s**, every bump costs `rushMissMs(mode, board)` (arrow turns red; no hearts, hint or restart):
-  Easy **-3 s**; **Hard -3 s on boards 1-3, +1 s every 3 boards, -7 s from board 13** (2026-10-22,
-  Thomas via Matt: bigger boards, bigger penalty, "definitely not every round"; Easy's table is
-  still being decided). The Ready popup shows the NEXT board's cost. Zero ends the run
+  **+0.5 s**, every bump costs `rushMissMs(mode, board)` (arrow turns red; no hearts, hint or restart).
+  **RULES 3 (2026-10-22, Matt, after Thomas ran Easy 10 minutes with 50 s banked; never capped):**
+  Easy board 1 0 s, 2 1 s, 3 2 s, 4-6 3 s, 7-9 4 s, 10-12 5 s, then +0.5 s every board (30 = 14 s);
+  Hard 1-3 3 s, 4-6 4 s, 7-9 5 s, 10-12 6 s, then +0.5 s every board (30 = 15 s). Rules 1 = 3 s flat
+  (to v1215); rules 2 = v1216 only (Hard +1 s every 3 boards, 7 s cap). Each run stores `rv`. The
+  Ready popup shows the NEXT board's cost; the setup tile shows board 1's.
+- **Tuning data (2026-10-22, Matt: "We need all this data so we know if we need to adjust the
+  settings")**: every run also stores `bt` (play ms per board, the last = the board it ended on),
+  `ba` (arrows per board), `bc` (clock at each clear), `mx` (each mistake's cost), `mb` (each
+  mistake's board), `pk` (highest clock), `gn` / `pn` (ms gained / lost), `res` (resumes), `rv`.
+  `woRushExtras` keeps them through every later record (each record re-cleans the whole list: a field
+  it does not know would be DROPPED, so a new field goes there first). **Time played** shows live
+  at the bar's left and on the end popup (`woRushTime`; play time only, the pauses are not in it). Zero ends the run
   ("Time's up!"). **It pauses only between boards.**
 - **Saved between boards (2026-10-22, Thomas via Matt: "let it be saved between rounds not during")**:
   from a board's clear until the next board's Go! (`rush.atReady`), leaving (menu, hub back,

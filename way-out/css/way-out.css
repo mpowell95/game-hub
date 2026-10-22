@@ -533,6 +533,22 @@
   color: #d9daf0;
 }
 .wo-root .wo-rushbar .wo-pen { left: calc(50% + 48px); }
+/* Time played (2026-10-22): left of the bar, the score's twin. */
+.wo-root .wo-rushtime {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #d9daf0;
+}
+.wo-root .wo-rushtime svg, .wo-root .wo-rush-time svg { width: 16px; height: 16px; flex: none; }
+.wo-root .wo-rush-time { margin: 8px 0 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .wo-root .wo-pen.is-good { background: #178a7a; }
 .wo-root .wo-ghost { visibility: hidden; }
 .wo-root .wo-rush-big { margin: 0; display: flex; flex-direction: column; align-items: center; line-height: 1; }
