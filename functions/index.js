@@ -265,6 +265,11 @@ async function rebuildBoards(db) {
   const parts = buildBoardParts(players || {}, cfg || null);
   const sum = sumOf(JSON.stringify(parts));
   const patch = { 'meta/builtAt': Date.now(), 'meta/people': Object.keys(parts.people).length };
+  // The pickers' directory/ from the same read (2026-10-22: its own hourly timer had not fired
+  // an hour after deploy). Written only when a name or emoji changed.
+  const dir = buildDirectory(players || {});
+  const dsum = sumOf(JSON.stringify(dir));
+  if ((sums || {}).dir !== dsum) { await db.ref('directory').set(dir); patch['sums/dir'] = dsum; }
   // Unchanged numbers: nothing is rewritten, so a phone watching the board is sent nothing.
   if ((sums || {}).lb !== sum) { const z = packBoard(parts); patch['lb/z'] = z; patch['sums/lb'] = sum; patch['meta/bytes'] = z.length; }
   await db.ref('boards/v1').update(patch);
