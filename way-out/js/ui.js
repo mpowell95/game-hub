@@ -1655,14 +1655,12 @@ class WayOut {
     m.innerHTML = `
       <div class="wo-ready" role="dialog" aria-modal="true" aria-labelledby="wo-ready-h">
         <p class="wo-ready-done" id="wo-ready-h"><span aria-hidden="true">✓</span>${t('rush_board_cleared', { n: r.boards })}</p>
-        <p class="wo-ready-secs"><b>${secs}</b><i>s</i></p>
-        <p class="wo-ready-sub">${t('rush_next_secs')}</p>
+        <p class="wo-ready-secs"><b>${secs}</b><i>s</i><span class="wo-sr">${t('rush_next_secs')}</span></p>
         <ul class="wo-ready-rules">
-          <li class="is-gain">${arrow('#3fd6bd')}<span>${t('rush_rule_gain', { gain: RUSH_GAIN_MS / 1000 })}</span><b>+${RUSH_GAIN_MS / 1000}s</b></li>
-          <li class="is-miss">${arrow('#e0484f')}<span>${t('rush_rule_miss', { miss: miss / 1000 })}</span><b>\u2212${miss / 1000}s</b></li>
+          <li class="is-gain">${arrow('#3fd6bd')}<span class="wo-sr">${t('rush_rule_gain', { gain: RUSH_GAIN_MS / 1000 })}</span><b aria-hidden="true">+${RUSH_GAIN_MS / 1000}s</b></li>
+          <li class="is-miss">${arrow('#e0484f')}<span class="wo-sr">${t('rush_rule_miss', { miss: miss / 1000 })}</span><b aria-hidden="true">\u2212${miss / 1000}s</b></li>
         </ul>
         <p class="wo-ready-stats">${t('rush_arrows', { n: r.arrows })}</p>
-        <p class="wo-ready-ask">${t('rush_ready_q')}</p>
         <button type="button" class="wo-ready-btn" data-act="rush-ready">${t('rush_ready_btn')}</button>
       </div>`;
     m.hidden = false;
