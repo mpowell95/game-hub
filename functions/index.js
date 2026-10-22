@@ -19,6 +19,7 @@
 //   archeryTurnPush archery/index/<code>/<id>        an Archery challenge, your turn, the end (2026-10-14)
 //   chinchonTurnPush chinchon/index/<code>/<id>      a Chinchón challenge, your turn, the end (2026-10-18)
 //   escobaTurnPush  escoba/index/<code>/<id>         an Escoba challenge, your turn, the end (2026-10-18)
+//   nudgePush         the Remind bell on the Multiplayer screen (2026-10-22)
 //   turnReminderPush  every hour: "Reminder: your turn vs X" once a turn has waited 24 h (2026-10-20)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
@@ -30,7 +31,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideReminder, REMINDER_GAMES, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideReminder, decideNudge, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
 
@@ -209,4 +210,21 @@ export const turnReminderPush = onSchedule({
       }
     }
   }
+});
+
+// THE REMIND BELL (2026-10-22): nudges/<code>/<node>~<id> written by the other player (rules: as
+// their own claimed code, once per match per 6 hours). Sent only for a real turn still waiting on
+// <code> in a match with the sender (decide.js decideNudge). Same tag as the game's turn note.
+export const nudgePush = onValueWritten({ ref: '/nudges/{code}/{key}', ...OPTS }, async (event) => {
+  const { code, key } = event.params;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  if (!after || !after.from) return;
+  const db = getDatabase();
+  const [node, id] = key.split('~');
+  if (!node || !id) return;
+  const row = (await db.ref(`${node}/index/${code}/${id}`).get()).val();
+  const note = decideNudge({ key, from: after.from, row });
+  if (!note) { logger.info('nudge refused', { code, key }); return; }
+  const g = note.g;
+  await sendTo(db, code, note, `${g.tag}-${id}`, g.noMatch ? { game: g.game } : { game: g.game, match: id });
 });

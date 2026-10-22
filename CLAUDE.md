@@ -467,7 +467,12 @@ None of this makes the hub cheat-proof; never describe it that way.
   `C:\Users\powel\game-hub-deploy`; **give those steps as one copy-paste block per command.** Blaze plan.
 - **Deployed triggers (all, by the workflow 2026-10-21):** `hoopsTurnPush`, `messagePush`, `bugReportPush`,
   `skeeChallengePush`, `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`, `archeryTurnPush`,
-  `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`; rules incl. `archery`, `chinchon`, `escoba`.
+  `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`, `nudgePush` (2026-10-22); rules incl. `archery`,
+  `chinchon`, `escoba`, `nudges`.
+- **Remind bell (2026-10-22, Matt)**: a bell on each their-turn row of the Multiplayer screen writes
+  `nudges/<THEIR CODE>/<node>~<id>` = `{from, t}` (`js/messages.js` `sendNudge`); rules: only as your own
+  claimed code, once per match per 6 h. `nudgePush` sends "Reminder: your turn vs X" only if it really is
+  their turn in a match with the sender (`decideNudge`).
 - **24-hour reminder (2026-10-20, Matt: "for every game")**: `turnReminderPush` (hourly `onSchedule`) sends "Reminder: your
   turn vs X" once per turn when a challenge row has waited 24-72 h (`decideReminder`, `REMINDER_GAMES` in
   `functions/decide.js`). Sent-stamps live in `pushReminders/<code>/<node>~<id>` (server-only), NEVER on the index row.

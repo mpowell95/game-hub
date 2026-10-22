@@ -28,6 +28,7 @@ import { loadLiveRecords, mergeRecords } from './mp-records.js';
 import { GAME_ART } from './game-art.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './challenges-strings.js';
+import { sendNudge, nudgedAt, NUDGE_NODES } from './messages.js';
 
 const t = makeT(STRINGS);
 const esc = (s) => String(s == null ? '' : s)
@@ -137,6 +138,10 @@ function ensureCss() {
   .cx-more { flex: 0 0 auto; width: 36px; height: 40px; border: 0; padding: 0; border-radius: 10px; background: none;
              color: var(--gh-muted); font-size: 20px; font-weight: 900; letter-spacing: 1px; line-height: 1;
              cursor: pointer; touch-action: manipulation; }
+  .cx-bell { flex: 0 0 auto; width: 40px; height: 40px; border: 0; padding: 9px; border-radius: 10px; background: none;
+             color: var(--gh-muted); cursor: pointer; touch-action: manipulation; }
+  .cx-bell svg { display: block; width: 22px; height: 22px; }
+  .cx-bell.is-sent { color: var(--gh-ink); --bell-fill: #ffce3a; }
   .cx-pop { position: absolute; z-index: 5; min-width: 150px; padding: 6px; border-radius: 14px;
             border: 1px solid var(--gh-border-strong); background: var(--gh-surface-2); box-shadow: var(--gh-sh-4); }
   .cx-pop button { display: block; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px;
@@ -275,6 +280,12 @@ function untilText(at, now = Date.now()) {
  *  it and they have not answered -> cancel; sent to you, unplayed -> decline; else resign. */
 const endHint = (r) => (r.open === 'sent' ? 'cancel' : r.open === 'got' ? 'decline' : 'resign');
 
+// THE REMIND BELL (2026-10-22, Matt): on a their-turn row, one tap asks the server to push them
+// "Reminder: your turn vs <me>" (js/messages.js sendNudge; once per match per 6 hours, enforced by
+// the database rules). A bell this device rang in the last 6 hours is filled (nudgedAt).
+const NUDGE_GAP_MS = 6 * 60 * 60 * 1000;
+const BELL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 2H4.4z" fill="var(--bell-fill, none)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 20.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
 /** A live match. Your turn: two lines and a Play pill. Their turn: ONE short line (Matt: "They're too
  *  tall"), the time left at the end. `showName: false` (a person's own page) names the game instead. */
 function liveRowHTML(r, gameName, { showName = true } = {}) {
@@ -293,11 +304,16 @@ function liveRowHTML(r, gameName, { showName = true } = {}) {
         <span class="cx-pill">${esc(t('cx_play'))}</span>
       </button>${more}</li>`;
   }
+  const sent = Date.now() - nudgedAt(r.game, r.id) < NUDGE_GAP_MS;
+  const bell = NUDGE_NODES[r.game] && r.with
+    ? `<button type="button" class="cx-bell${sent ? ' is-sent' : ''}" data-nudge-game="${esc(r.game)}" data-nudge-id="${esc(r.id)}"
+        data-nudge-to="${esc(r.with)}" data-nudge-name="${esc(who)}" aria-label="${esc(t(sent ? 'cx_remind_sent_aria' : 'cx_remind_aria', { name: who }))}">${BELL}</button>`
+    : '';
   return `<li class="cx-live is-slim"><button type="button" class="cx-open" data-game="${esc(r.game)}" data-id="${esc(r.id)}">
       ${thumb(r.game)}
       <span class="cx-main"><span class="cx-name">${label}</span></span>
       <span class="cx-left">${esc(untilText(r.expires))}</span>
-    </button>${more}</li>`;
+    </button>${bell}${more}</li>`;
 }
 
 function resultRowHTML(r, gameName, { showName = true } = {}) {
@@ -401,7 +417,20 @@ export async function openChallenges(opts = {}) {
   const bindRows = (root) => {
     for (const b of root.querySelectorAll('[data-game][data-id]')) b.addEventListener('click', () => open(b.dataset.game, b.dataset.id));
     for (const b of root.querySelectorAll('.cx-more')) b.addEventListener('click', (e) => { e.stopPropagation(); openMenu(b); });
+    for (const b of root.querySelectorAll('.cx-bell')) b.addEventListener('click', (e) => { e.stopPropagation(); remind(b); });
   };
+  /** The bell: send, then say so at the top for FLASH_MS (the same line as a cancel). */
+  async function remind(btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const { nudgeGame: game, nudgeId: id, nudgeTo: to, nudgeName: name } = btn.dataset;
+    const res = await sendNudge({ toCode: to, game, id });
+    const text = res.ok ? t('cx_remind_sent', { name }) : res.reason === 'too-soon' ? t('cx_remind_soon', { name }) : t('cx_remind_fail');
+    S.flash = { text, until: Date.now() + FLASH_MS };
+    btn.disabled = false;
+    repaint();
+    setTimeout(repaint, FLASH_MS + 50);
+  }
   /** One line at the top of the screen saying what just happened (a cancel, a resignation). It
    *  outlives repaints for FLASH_MS: the cancel's own index write repaints the list a moment later,
    *  which used to wipe the line before anyone saw it (Matt, 2026-10-20: "no confirmation"). */

@@ -580,3 +580,24 @@ export function decideReminder({ g, id, row, sentFor, now = Date.now() }) {
     text: (lang) => ({ title: lang === 'es' ? g.es : g.en, body: (REMIND_TEXT[lang] || REMIND_TEXT.en)(who) }),
   };
 }
+
+// THE REMIND BUTTON (2026-10-22, Matt: "Send Anita a reminder push notification about the flick
+// soccer challenge I sent her"). The Multiplayer screen's bell on a their-turn row writes
+// nudges/<THEIR CODE>/<node>~<id> = { from: <my code>, t }. The database rules allow that only as
+// the device's own claimed code and at most once per match every 6 hours; index.js nudgePush then
+// asks this whether it is a real, still-waiting turn of a match between the two of them.
+// `row` = their index row for that match; `from` = the sender's code. PURE.
+export function decideNudge({ key, from, row, now = Date.now() }) {
+  const [node, id] = String(key || '').split('~');
+  const g = REMINDER_GAMES.find((x) => x.node === node);
+  if (!g || !id || !row || typeof row !== 'object') return null;
+  if (!from || String(row.with || '') !== String(from)) return null;   // only the other player in it
+  if (!row.yourTurn || row.over || row.ended) return null;
+  const exp = Number.isFinite(+row.expires) ? +row.expires : 0;
+  if (exp > 0 && now >= exp) return null;
+  const who = clean(row.name) || 'Someone';
+  return {
+    g, id, kind: 'nudge', who,
+    text: (lang) => ({ title: lang === 'es' ? g.es : g.en, body: (REMIND_TEXT[lang] || REMIND_TEXT.en)(who) }),
+  };
+}
