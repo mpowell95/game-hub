@@ -1,0 +1,193 @@
+<title>Skeeball Cross Section</title>
+<style>
+  :root {
+    --ground: #141014;
+    --surface: #1d1720;
+    --line: #3a2e38;
+    --ink: #f6ecda;
+    --dim: #b9a189;
+    --faint: #7c6b60;
+    --amber: #ff9d3d;
+    --cream: #f3e4c2;
+    --wood: #a86f38;
+    --cabinet: #54301a;
+    --face: #c96f2e;
+    --alarm: #ff5b5b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 28px 18px 60px; display: flex; flex-direction: column; gap: 26px; }
+  .eyebrow { font-family: Georgia, serif; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); margin: 0; }
+  h1 { font-family: Georgia, serif; font-size: 27px; font-weight: 400; margin: 6px 0 0; }
+  h2 { font-family: Georgia, serif; font-size: 19px; font-weight: 400; margin: 0 0 10px; }
+  p { margin: 0; color: var(--dim); max-width: 68ch; }
+  hr { height: 1px; background: var(--line); border: 0; margin: 0; }
+
+  .figure { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; overflow-x: auto; }
+  .figure svg { display: block; width: 100%; min-width: 620px; height: auto; }
+
+  .key { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; font-size: 13px; }
+  .key span { display: inline-flex; align-items: center; gap: 7px; color: var(--dim); }
+  .sw { width: 15px; height: 11px; border-radius: 2px; flex: 0 0 auto; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  td { color: var(--dim); font-variant-numeric: tabular-nums; }
+  td b { color: var(--ink); font-weight: 600; }
+  tr.bad td { color: #ffbdbd; }
+  tr.bad td b { color: var(--alarm); }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Skeeball · side elevation · to scale</p>
+    <h1>The two invisible bodies</h1>
+  </header>
+
+  <p>
+    Cut straight down the middle of the machine, looking from the side. You throw from the right.
+    Every position is read out of <code>machine.js</code>, and both ball paths are real traces from
+    the physics engine, sampled every third step.
+  </p>
+
+  <div class="figure">
+    <!-- world: z +0.55 .. -3.45 across, y -0.35 .. 2.35 up.  200px per metre. -->
+    <svg viewBox="0 0 800 540" role="img"
+         aria-label="Side elevation of the skeeball machine showing an invisible ceiling at 1.60 metres and an invisible pane at the hump crest, with two ball paths">
+      <defs>
+        <pattern id="hatch" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+          <line x1="0" y="0" x2="0" y2="8" stroke="#ff5b5b" stroke-width="2" opacity="0.45"/>
+        </pattern>
+        <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0 0 L9 4.5 L0 9 z" fill="#ff5b5b"/>
+        </marker>
+      </defs>
+
+      <rect width="800" height="540" fill="#191019"/>
+
+      <!-- floor line -->
+      <line x1="0" y1="470" x2="800" y2="470" stroke="#2b1d2b" stroke-width="1"/>
+
+      <!-- ================= the machine, drawn from real coordinates ================= -->
+      <!-- lane: z -1.40..0.00, y -0.06..0.00 -->
+      <rect x="110" y="470" width="280" height="12" fill="#a86f38"/>
+      <!-- laneRail (the low kerb along the lane) z -1.82..0, y 0..0.05 -->
+      <rect x="110" y="460" width="364" height="10" fill="#7c4d22"/>
+      <!-- hump z -1.87..-1.40, rising y -0.05..0.33 -->
+      <path d="M390 482 L484 404 L484 470 L390 482 Z" fill="#b87b41"/>
+      <!-- trough z -2.23..-1.80, y -0.21..-0.15 -->
+      <rect x="476" y="500" width="86" height="12" fill="#3a1f0f"/>
+      <!-- troughWall / kick, the thin end face -->
+      <rect x="522" y="392" width="8" height="114" fill="#54301a"/>
+      <!-- flare z -2.07..-1.80, y 0.33..0.47 -->
+      <rect x="476" y="376" width="54" height="28" fill="#c96f2e" stroke="#8f4c1d" stroke-width="1"/>
+      <!-- the tilted scoring face: bottom (0.42, -2.045) to top (1.397, -3.022) -->
+      <path d="M519 386 L714 191" stroke="#c96f2e" stroke-width="13" stroke-linecap="round"/>
+      <!-- backboard, 0.80 above the board top -->
+      <rect x="706" y="31" width="14" height="164" fill="#54301a"/>
+      <rect x="700" y="18" width="26" height="18" rx="3" fill="#28150b"/>
+
+      <!-- cups on the face, at their real world points -->
+      <g fill="#f3e4c2">
+        <circle cx="600" cy="305" r="5"/><circle cx="627" cy="278" r="5"/>
+        <circle cx="664" cy="241" r="5"/><circle cx="696" cy="209" r="5"/>
+      </g>
+      <text x="592" y="326" fill="#8d7a63" font-size="10">10</text>
+      <text x="686" y="200" fill="#8d7a63" font-size="10">50</text>
+
+      <!-- ================= the two invisible bodies ================= -->
+      <!-- ceiling: y 1.58..1.62, z -3.34..0.47 -->
+      <rect x="16" y="142" width="778" height="8" fill="url(#hatch)" stroke="#ff5b5b" stroke-width="1.5"/>
+      <text x="24" y="134" fill="#ff5b5b" font-size="12" font-weight="700">INVISIBLE CEILING</text>
+      <text x="196" y="134" fill="#ff8d8d" font-size="11">1.60 m — spans the whole machine, end to end</text>
+
+      <!-- glass: y 0.75..1.55, z -1.80..-1.78 -->
+      <rect x="466" y="150" width="6" height="160" fill="url(#hatch)" stroke="#ff5b5b" stroke-width="1.5"/>
+      <text x="352" y="332" fill="#ff5b5b" font-size="12" font-weight="700" text-anchor="end">INVISIBLE PANE</text>
+      <text x="352" y="348" fill="#ff8d8d" font-size="11" text-anchor="end">0.75 – 1.55 m, right at the crest</text>
+      <line x1="356" y1="328" x2="462" y2="240" stroke="#ff5b5b" stroke-width="1" stroke-dasharray="3 3"/>
+
+      <!-- ================= the two real ball paths ================= -->
+      <!-- power 0.70: clears everything -->
+      <polyline fill="none" stroke="#7fd6a0" stroke-width="2.5" stroke-linecap="round"
+        points="144,460 172,460 201,460 229,460 258,460 286,460 314,460 343,460 371,460 399,458 422,443 439,424 452,402 461,380 470,359 480,339 489,320 498,303 507,287 517,272 526,258 535,245 544,234 554,224 563,215 572,207 581,201 590,196 600,192 609,189 618,188 628,187"/>
+      <circle cx="628" cy="187" r="4" fill="#7fd6a0"/>
+      <text x="640" y="184" fill="#7fd6a0" font-size="11" font-weight="600">firm throw — peaks 1.41 m, clears both</text>
+
+      <!-- power 0.85: clips the ceiling and comes back -->
+      <polyline fill="none" stroke="#ff5b5b" stroke-width="2.5" stroke-linecap="round"
+        points="145,460 176,460 207,460 238,460 268,460 299,460 330,460 361,460 392,460 419,448 439,427 453,403 464,378 475,354 486,332 497,311 508,290 519,272 530,254 541,238 552,223 563,209 574,196 585,185 596,175 607,166 608,164"/>
+      <polyline fill="none" stroke="#ff5b5b" stroke-width="2.5" stroke-dasharray="5 4" stroke-linecap="round"
+        marker-end="url(#ar)"
+        points="608,164 603,167 599,171 594,176 590,183 585,190 581,199 576,209 572,220 567,232 563,246 558,260 554,275 549,292 545,310 541,328 540,342 548,346 556,351 564,357 572,364 580,373 588,383 596,394 604,406"/>
+      <circle cx="608" cy="164" r="5" fill="none" stroke="#ff5b5b" stroke-width="2"/>
+      <text x="352" y="120" fill="#ff5b5b" font-size="12" font-weight="700">hard throw — clips the ceiling here</text>
+      <text x="352" y="136" fill="#ff8d8d" font-size="11">and comes straight back down the lane at you</text>
+      <line x1="530" y1="124" x2="602" y2="158" stroke="#ff5b5b" stroke-width="1" stroke-dasharray="3 3"/>
+
+      <!-- scale -->
+      <line x1="24" y1="500" x2="224" y2="500" stroke="#7c6b60" stroke-width="1.5"/>
+      <line x1="24" y1="495" x2="24" y2="505" stroke="#7c6b60" stroke-width="1.5"/>
+      <line x1="224" y1="495" x2="224" y2="505" stroke="#7c6b60" stroke-width="1.5"/>
+      <text x="124" y="518" fill="#7c6b60" font-size="11" text-anchor="middle">1 metre</text>
+      <text x="150" y="440" fill="#8d7a63" font-size="11">you throw from here →</text>
+    </svg>
+
+    <div class="key">
+      <span><i class="sw" style="background:#a86f38"></i>lane and ramp</span>
+      <span><i class="sw" style="background:#c96f2e"></i>scoring face and flare</span>
+      <span><i class="sw" style="background:#54301a"></i>cabinet</span>
+      <span><i class="sw" style="background:#7fd6a0"></i>firm throw</span>
+      <span><i class="sw" style="background:#ff5b5b"></i>hard throw, and the two invisible bodies</span>
+    </div>
+  </div>
+
+  <hr>
+
+  <section>
+    <h2>What each one covers</h2>
+    <table>
+      <thead>
+        <tr><th>body</th><th>height</th><th>reaches</th><th>visible</th><th>what it does</th></tr>
+      </thead>
+      <tbody>
+        <tr class="bad">
+          <td><b>Ceiling</b></td>
+          <td>1.58 – 1.62 m</td>
+          <td>the entire machine, front to back</td>
+          <td>no</td>
+          <td>a firm throw peaks at 1.41 m; a hard one reaches it and is knocked back down the lane</td>
+        </tr>
+        <tr class="bad">
+          <td><b>Pane at the crest</b></td>
+          <td>0.75 – 1.55 m</td>
+          <td>a thin wall right above the ramp crest</td>
+          <td>no</td>
+          <td>a straight throw passes under it at about 0.50 m; a ball deflected upward by the flare hits it</td>
+        </tr>
+        <tr>
+          <td><b>Side walls, back wall</b></td>
+          <td>0 – 1.62 m</td>
+          <td>the outside of the machine</td>
+          <td>no</td>
+          <td>never touched by a normal throw</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Why you only saw it sometimes</h2>
+    <p>
+      The green path is a firm throw. It peaks at 1.41 m, passes under the pane with 0.25 m to
+      spare, and lands on the face. The red path is thrown harder. It climbs past 1.5 m, the top of
+      the ball catches the ceiling at 1.58 m, and it comes straight back down the lane at you.
+      Nothing on screen is there to hit — which is exactly why it read as an invisible object.
+    </p>
+  </section>
+</div>
