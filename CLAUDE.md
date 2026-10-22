@@ -468,7 +468,14 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **Deployed triggers (all, by the workflow 2026-10-21):** `hoopsTurnPush`, `messagePush`, `bugReportPush`,
   `skeeChallengePush`, `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`, `archeryTurnPush`,
   `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`, `nudgePush`, `directoryBuild` +
-  `directoryOnApprove` (2026-10-22); rules incl. `archery`, `chinchon`, `escoba`, `nudges`, `directory`.
+  `directoryOnApprove`, `boardsOnSync` + `boardsOnConfig` + `boardsCatchUp` (2026-10-22); rules incl. `archery`,
+  `chinchon`, `escoba`, `nudges`, `directory`, `boards`.
+- **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
+  `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
+  generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs
+  ~930 KB of `players/`). Rebuilt on a sync (at most every 2 min; `boardsCatchUp` every 5 min). The Leaderboard
+  reads it (`stats-net.js` `watchBoard`), falling back to `players/` if absent. `tools/test-boards.mjs <snapshot>`
+  proves every person is deep-equal to the phone's own grouping. Other screens still read `players/` (next).
 - **Player directory (2026-10-22, Matt: multiplayer felt slow)**: `directory/<CODE>` = `{name, emoji, at}`,
   rebuilt by the server from `players/` hourly and on any Online play change (`buildDirectory`). Every
   challenge game's "pick a person" reads it via `stats-net.js` `readOpponentProfiles()` (2 KB vs ~930 KB);
