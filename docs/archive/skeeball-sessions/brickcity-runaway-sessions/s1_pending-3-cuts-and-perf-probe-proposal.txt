@@ -1,0 +1,70 @@
+=== Session 1 last message (2026-08-27T23:05:31Z), unanswered; none of the 3 cuts were made ===
+08-27T23:05:31 A: Read it back cold. Honest verdict: it's mostly earned, but there are about 15 lines of the 142 I'd cut, and one small inconsistency.
+
+**What's genuinely superfluous**
+
+1. **The incident paragraph (lines 732–737, 6 lines).** This is the third copy of that story — it's already in `skeeball/CLAUDE.md` and `MACHINE-BRICKCITY.md` at more length. The one fact in it that a machine-builder actually needs is *"flat frame rate is a throttle, not load"*, because that's the diagnostic. The rest ("Matt sent a screen recording…", the 68-second clip) is history, and history has a home. Trim to two sentences.
+
+2. **§33 "What Part 7 cannot check" (11 lines) — the weakest section in the part.** The contexts bullet is concrete and worth keeping (1 while playing, 0 on the gallery, anything climbing is a leak). The draw-calls bullet isn't a rule, it's a shrug: *"a new machine well above 1246 is worth a second look."* No threshold, no owner, no action. Either it becomes a real number in `test-skeeball-perf.mjs` or it shouldn't be in a spec that otherwise only states things you must do.
+
+3. **The BRICK CITY row in §32's table** reads `— | — | 26%`. Two empty cells in a four-row table that exists to show absolute cost. Either fill it or drop the row; 26% without the seconds behind it says nothing the other three rows don't.
+
+**What I'd defend**
+
+- **§34 is the most valuable part of Part 7,** not filler. "MSAA off: tried, measured, 1.5% of pixels, rejected" and "don't coarsen the ring segments" are the two obvious optimisations a future session will reach for, and both are wrong. That section is the only thing that stops someone spending a day rediscovering it.
+- **The `live.length`-not-`used` paragraph in §30** looks like over-explanation and isn't — I wrote that gate wrong the first time and it silently did nothing.
+- **The measurement tables in §30/§32** justify why the rules are worth obeying. A rule without a number gets waived.
+
+**One inconsistency worth knowing:** `perf.files` is a rule id with no section in the doc. That's actually correct — it isn't a design rule, it's the precondition that stops the other four passing vacuously on an empty string when the folder is missing. But if you ever grep rule ids against section headings, that one won't match.
+
+There's also verbatim duplication between Part 7's opening and the comment header I put at the top of the perf block in `test-skeeball-machine-spec.mjs` (lines 290–294). The test file should just point at the doc, which it already does on the last line of that comment.
+
+Want me to make those three cuts? It's about 15 lines out and no rules change, so no CACHE bump and nothing to re-verify beyond the spec suite.
+
+
+
+=== Proposal at 2026-08-27T15:35Z ===
+## Proposal — three changes, ranked by what actually bit today
+
+### 1. A runtime perf probe — `test-skeeball-perf.mjs` (highest value by far)
+
+The two things that caused the 10 fps aren't per-machine and aren't in the spec at all. **One test would have caught the whole thing before you ever saw it.** Mount Skeeball in a real browser, play/abandon six racks, and assert:
+
+| assertion | what it catches | today's numbers |
+|---|---|---|
+| live WebGL contexts ≤ 1 while playing, 0 on the gallery | the leak that throttled the browser | was 12 before the first ball, +1/rack, cap hit at rack 4 |
+| exactly 1 `_frame` call per animation frame, after 6 racks | duplicated render loops | was 1 → 2 → 3 → 4 |
+| GPU texture count returns to baseline after a rack | popup texture leak | ~1 MB/rack, never freed |
+| idle draw calls under a ceiling | shadow map redrawing a still scene | 172 vs 138 |
+
+That's ~30 seconds and it's board-independent — it covers every machine that exists and every one that doesn't yet.
+
+### 2. `PART 7 — THE MACHINE MUST NOT MAKE THE HUB SLUGGISH` in MACHINE-SPEC.md
+
+Rule ids in the existing style, waivable only by you:
+
+- **`perf.context`** — one context per Renderer, exposed as `this.renderer`, released on dispose. **This is currently an undocumented contract**: `ui.js`'s `releaseRenderer` reaches in via `r.renderer.forceContextLoss()`. A machine that renames that field leaks a context per rack and throttles the whole hub, silently. That alone is worth writing down.
+- **`perf.probe`** — no per-instance `getContext('webgl')`; memoise per module, release via `WEBGL_lose_context`.
+- **`perf.shadow`** — `shadowMap.autoUpdate = false`, `needsUpdate` set only when a caster moved.
+- **`perf.textures`** — a texture made per event is disposed with its material (`.map.dispose()` first).
+- **`perf.broadphase`** — a world with one dynamic body doesn't use `NaiveBroadphase`.
+
+Most are greppable from the machine's source, so they go straight into `test-skeeball-machine-spec.mjs`, which already runs over every board automatically — a new machine is covered the day its folder appears.
+
+Also add these to section 19's checklist, which currently sends a new machine off with four checks and none of them perf.
+
+### 3. Backfill the other four machines
+
+Three defects × four machines. Mechanical, and each is verifiable the way brickcity's was (the broadphase one needs the 861-throw equivalence proof per machine). **This needs your explicit go-ahead** — the HARD RULE says I don't touch another machine's engine on my own initiative, and you've been burned by exactly that before.
+
+---
+
+**My recommendation:** do #1 first on its own. It's the one that would have prevented today, it costs nothing per machine, and it can't change how anything plays. Then #2 as documentation. Then #3 only if you want it — those four machines are slower than brickcity now, but none of them is currently unplayable.
+
+Want me to build #1?
+=== 2026-08-27T15:35Z proposal #1 (never built, not in repo/TODO): tools/test-skeeball-perf.mjs ===
+Mount Skeeball in a real browser, play/abandon six racks, assert: live WebGL contexts <= 1 while playing and 0 on the gallery
+(was 12 before first ball, +1/rack, cap hit at rack 4); exactly 1 _frame call per animation frame after 6 racks (was 1->2->3->4);
+GPU texture count returns to baseline after a rack (~1 MB/rack leak); idle draw calls under a ceiling (172 vs 138). ~30 s, board-independent.
+(Part 7 section 33 of skeeball/MACHINE-SPEC.md names contexts + draw calls as "things to measure by hand" instead.)
+Also: ringSegments: 24 in skeeball/js/boards.js (classic entry) is dead - nothing reads it (ring count is computed from circumference); offered to delete or wire up.

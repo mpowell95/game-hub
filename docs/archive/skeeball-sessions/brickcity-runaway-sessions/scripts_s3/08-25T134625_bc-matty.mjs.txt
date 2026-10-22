@@ -1,0 +1,14 @@
+import { firebaseConfig } from '/home/user/game-hub/js/firebase-config.js';
+import { signInAnonymously, readPath } from '/home/user/game-hub/backups/rtdb-backup.mjs';
+const tok = await signInAnonymously(firebaseConfig.apiKey);
+const players = await readPath(firebaseConfig.databaseURL, 'players', tok);
+for (const id of Object.keys(players||{})) {
+  const p = players[id]||{};
+  const g = ((p.stats||{}).games||{}).skeeball; if (!g) continue;
+  const sk = g.sk||{};
+  if (!(sk.boards||{}).brickcity) continue;
+  console.log('device', id, 'name', (p.profile||{}).name, 'lastSync', p.updatedAt && new Date(p.updatedAt).toISOString());
+  console.log(JSON.stringify(sk.boards, null, 1));
+  console.log('unlocked:', JSON.stringify(sk.unlocked));
+  console.log('practice:', JSON.stringify(sk.practice));
+}

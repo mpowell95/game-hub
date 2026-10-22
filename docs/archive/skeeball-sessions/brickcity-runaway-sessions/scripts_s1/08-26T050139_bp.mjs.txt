@@ -1,0 +1,52 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--no-sandbox'] });
+const page = await (await browser.newContext()).newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+const out = await page.evaluate(async () => {
+  const CANNON = await import('/skeeball/js/vendor/cannon-es.js');
+  const { boardById } = await import('/skeeball/js/boards.js');
+  const { engineFor } = await import('/skeeball/js/engines.js');
+  const b = boardById('brickcity');
+  const P = engineFor('brickcity').physics;
+
+  const run = (patch) => {
+    const outs = [];
+    const t0 = performance.now();
+    for (let k = 0; k < 60; k++) {
+      const power = 0.35 + (k % 20) * 0.03, aim = ((k % 7) - 3) / 6;
+      const st = P.startThrow(b, { power, aim });
+      if (patch) patch(st.world);
+      let n = 0;
+      while (!st.done && n < 4000) { P.step(b, st, 1/60); n++; }
+      outs.push(`${st.outcome ? st.outcome.hole + ':' + st.outcome.value : 'none'}@${st.t.toFixed(4)}/${st.bounces}`);
+    }
+    return { ms: +(performance.now() - t0).toFixed(0), outs };
+  };
+
+  // A broadphase specialised for "exactly one dynamic body", emitting pairs in NaiveBroadphase's
+  // own order so the solver sees an identical pair list.
+  class OneDynamic extends CANNON.NaiveBroadphase {
+    collisionPairs(world, p1, p2) {
+      const bodies = world.bodies, n = bodies.length;
+      let k = -1, dyn = 0;
+      for (let i = 0; i < n; i++) if (bodies[i].type !== CANNON.Body.STATIC) { k = i; dyn++; }
+      if (dyn !== 1) return super.collisionPairs(world, p1, p2);
+      const ball = bodies[k];
+      for (let j = 0; j < k; j++) { const o = bodies[j];
+        if (this.needBroadphaseCollision(ball, o) && this.intersectionTest) this.intersectionTest(ball, o, p1, p2); }
+      for (let i = k + 1; i < n; i++) { const o = bodies[i];
+        if (this.needBroadphaseCollision(o, ball) && this.intersectionTest) this.intersectionTest(o, ball, p1, p2); }
+    }
+  }
+  const a = run(null);
+  const c = run((w) => { const bp = new OneDynamic(); bp.useBoundingBoxes = w.broadphase.useBoundingBoxes; w.broadphase = bp; bp.setWorld && bp.setWorld(w); });
+  let same = 0; for (let i = 0; i < a.outs.length; i++) if (a.outs[i] === c.outs[i]) same++;
+  return { naive: a.ms, oneDyn: c.ms, identical: `${same}/${a.outs.length}`,
+    firstDiff: a.outs.findIndex((v, i) => v !== c.outs[i]),
+    sampleA: a.outs.slice(0, 4), sampleB: c.outs.slice(0, 4) };
+});
+console.log(out);
+await browser.close();

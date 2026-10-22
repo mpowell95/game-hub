@@ -23,6 +23,7 @@
 // `{ ok:false, reason:'denied' }` - and the screen says so rather than hanging. Live multiplayer
 // (js/net.js, `rooms/`) is unaffected and needs no rules change.
 import { getStatsApp } from '../../js/firebase-boot.js';
+import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
@@ -640,8 +641,8 @@ export async function watchMyGames(cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const { db, api } = boot;
-    const stop = api.onValue(api.ref(db, `hoops/index/${me}`), (snap) => {
-      try { cb(rowsFromIndex(snap && snap.exists() ? snap.val() : null)); }
+    const stop = watchPath({ api, db }, `hoops/index/${me}`, (v) => {
+      try { cb(rowsFromIndex(v)); }
       catch (err) { console.warn('[hoops4] match-list callback', err); }
     }, () => { /* denied or dropped: the launcher keeps what it last showed */ });
     return () => { try { stop(); } catch { /* already detached */ } };
@@ -655,8 +656,7 @@ export async function readMyGames() {
     const boot = await ready();
     if (!boot) return [];
     const { db, api } = boot;
-    const snap = await api.get(api.ref(db, `hoops/index/${me}`));
-    return rowsFromIndex((snap && snap.exists()) ? snap.val() : null);
+    return rowsFromIndex(await readPath({ api, db }, `hoops/index/${me}`));
   } catch (err) {
     console.warn('[hoops4] could not read your games', err);
     return [];

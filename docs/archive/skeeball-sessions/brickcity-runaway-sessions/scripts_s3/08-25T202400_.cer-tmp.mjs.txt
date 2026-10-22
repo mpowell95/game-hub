@@ -1,0 +1,53 @@
+import { chromium } from 'playwright-core';
+const OUT = '/tmp/claude-0/-home-user-game-hub/0d02ea3d-1ee6-5bae-b77e-b8fedfb9ebcd/scratchpad';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const ctx = await b.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Kingtest', emoji: '\u{1f920}' }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'basketball' }));
+  // King of Games' shape: HOT SHOT's three objectives DONE, BRICK CITY not held.
+  const slots = {}; for (const id of ['lowL','lowC','lowR','midL','midC','midR','topL','topC','topR']) slots[id] = true;
+  localStorage.setItem('gamehub.stats', JSON.stringify({
+    v: 1, updatedAt: new Date().toISOString(),
+    games: { skeeball: { byDiff: {}, sk: {
+      played: 198, balls: 1782, points: 91210, bestGame: 860, bestThrow: 100,
+      hundreds: 20, fifties: 10, tens: 0, twenties: 0, thirties: 0, forties: 0, colorSweeps: 0,
+      won: 0, lost: 0, tied: 0,
+      unlocked: { classic: true, basketball: true },
+      boards: { basketball: { plays: 198, points: 91210, best: 860, bestThrow: 100, daily: {}, slots, cleanRacks: 0 } },
+    } } },
+    total: { played: 198, won: 198, lost: 0 },
+  }));
+  // BRICK CITY set to UNLOCKABLE (live, earned the normal way) - what Matt is about to do.
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: {}, skeeball: { boards: { brickcity: { testing: false } } }, corrections: { skeeball: {} } }));
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForSelector('.sk-slide', { timeout: 30000 });
+await page.waitForTimeout(1200);
+console.log('after mount  unlocked:', await page.evaluate(() => JSON.parse(localStorage.getItem('gamehub.stats')).games.skeeball.sk.unlocked));
+console.log('ceremony owed:', await page.evaluate(() => localStorage.getItem('gamehub.skeeball.ceremonyowed.v1')));
+await page.locator('[data-role="play"]').click();
+await page.waitForSelector('.sk-goal', { timeout: 60000 });
+await page.waitForTimeout(1500);
+console.log('rails present (objectives NOT hidden):', await page.evaluate(() => [...document.querySelectorAll('[data-goal]')].map((e) => e.querySelector('em').textContent + ' ' + e.querySelector('b').textContent)));
+// one scoring ball
+const fired = await page.evaluate(async () => {
+  const ui = window.__skTest.ui;
+  ui.game.throwBall({ power: 0.52, aim: 0 });
+  const t0 = Date.now();
+  while (ui.game && ui.game.ball && Date.now() - t0 < 20000) await new Promise((r) => setTimeout(r, 60));
+  await new Promise((r) => setTimeout(r, 1200));
+  return { score: ui.game.score, ceremony: !!ui._ceremony, cerEls: document.querySelectorAll('.sk-cer, .sk-cer-key, [class*="sk-cer"]').length };
+});
+console.log('after one ball:', JSON.stringify(fired));
+await page.waitForTimeout(2500);
+await page.screenshot({ path: `${OUT}/ceremony.png` });
+await page.waitForTimeout(3000);
+await page.screenshot({ path: `${OUT}/ceremony-2.png` });
+console.log('owed flag after:', await page.evaluate(() => localStorage.getItem('gamehub.skeeball.ceremonyowed.v1')));
+console.log('lockpop armed:', await page.evaluate(() => localStorage.getItem('gamehub.skeeball.lockpop.v1')));
+await b.close();
+console.log('done');

@@ -1290,3 +1290,33 @@ fixed for them in iOS 26.2 beta 3. So the page scrolls again (the v1207 layout, 
 the true bottom). The keyboard bug (bar halfway up after typing) can come back on iOS versions that
 still have it; no tested web workaround was found. Do not lock the page again without testing on
 Matt's iPhone.
+
+
+## Fewer updates for players (2026-10-22)
+
+Matt: *"Ana and moonis have commented that every time they go back to the hub, even between games and
+stuff, there's an update."* Measured: ~30 builds reached every phone in the 7 days to 2026-10-22 (about
+4 a day); each one reloaded the hub the next time the player was on the launcher, and phones asked for a
+new build every 5 minutes on resume. About 8 of the 30 were admin-only game work that leaked out:
+Arrow Maze's `js/arrow-maze-time.js` (a shared, network-first file loaded at hub start, so its edits still
+need a CACHE bump or Matt would test stale code; not changed) and new files added to ASSETS (Archery's 3D
+models, three times; the new Pool game).
+
+Matt chose (1) players take a build only at a fresh open, admin phones at once, and (2) close the leaks;
+not (3) batching deploys, because he tests every change as it lands. Players can force one by tapping the
+version pill.
+
+- `js/hub.js`: `_holdUpdates()` (not an admin device, not a dev profile), `_isFreshOpen()` (`hub.session`
+  in sessionStorage: absent = app launch; `hiddenAt` 30+ min ago = back after a while), GUARD 4 in
+  `_onNewBuildActive`, the pill shows the PAGE's version against the newest (`v1218 → v1219`), and
+  `launch()` reloads onto the new build (queuing the open) when a game fails to import or start on a page
+  that is behind its worker. The service worker's lifecycle is untouched.
+- FIRST TRIED AND DROPPED, same day: new workers WAITING (no self-`skipWaiting`) until the hub sent
+  `SKIP_WAITING`. In headless Chromium the waiting worker sometimes never activated after the message,
+  and a reload or navigation during that state hung the page. A hung app on Android was not a risk worth
+  the gain; the page-side hold gets the same result for the player.
+- `tools/validate-sw-assets.mjs`: a file under a held-back game's folder that nothing outside held-back
+  folders imports may stay out of ASSETS; `sw.js` `isDevFresh` serves such files network-first.
+- `tools/test-sw-update.mjs`: case 5 (a player's page is not reloaded; pill shows behind; a tap reloads),
+  case 6 (an app launch reloads onto a build landing in its first seconds). Test hook
+  `window.__GH_UPDATE_POLICY__`. Case 3 is flaky in this sandbox's Chromium on main too (2 of 4 runs).

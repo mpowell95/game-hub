@@ -15,6 +15,16 @@ on:
     branches: [main]
     paths:
       - 'functions/**'
+      - 'js/players-agg.js'
+      - 'js/game-stats.js'
+      - 'js/arcade-scores.js'
+      - 'js/arrow-maze-time.js'
+      - 'js/gridlock-points.js'
+      - 'js/gridlock-v1map.js'
+      - 'js/stats-corrections.js'
+      - 'js/admin-config.js'
+      - 'js/hidden-players.js'
+      - 'tools/sync-functions-shared.mjs'
       - 'database.rules.json'
       - 'firebase.json'
       - '.firebaserc'
@@ -39,8 +49,13 @@ jobs:
 
       # The last check Matt's manual step used to be: nothing goes out if the rules are not valid
       # JSON or the push tests fail (they also pin the VAPID key and the rules' pushSubs branch).
+      # The leaderboard build (functions/boards.js) runs the app's own grouping code: copy it in.
+      - name: Copy shared app modules into functions/
+        run: node tools/sync-functions-shared.mjs
+
       - name: Check before deploying
         run: |
+          node tools/test-boards.mjs
           node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8')); console.log('rules: valid JSON')"
           node tools/test-push.mjs
 

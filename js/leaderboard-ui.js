@@ -50,7 +50,7 @@
 import { isHiddenName, HIDDEN_DEVICE_PREFIX } from './hidden-players.js';
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { corrections } from './admin-config.js';
-import { watchPlayers } from './stats-net.js';
+import { watchPlayers, watchBoard } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
 import { statsId, holdemBalance, holdemSuspect } from './game-stats.js';
 import { ctMedalScore, ctBest, ctAvgGuesses, compareContexto } from './leaderboard-rank.js';
@@ -2264,6 +2264,17 @@ function visibleRecords() {
 }
 
 function currentBody() {
+  // THE SERVER-BUILT BOARD (2026-10-22): when functions/boards.js has published one, the people
+  // come already grouped and corrected (the same aggregatePlayers, run once on the server), and
+  // this phone never downloads players/. Otherwise the old way below.
+  if (_board) {
+    const list = _board.list.filter((g) => !isHiddenRow(g));
+    const sid = statsId(), code = String((loadProfile() || {}).playerId || '').toUpperCase();
+    const mine = _board.list.find((g) => (_board.idsByKey.get(g.key) || []).includes(sid))
+      || (code ? _board.list.find((g) => g.playerId === code) : null);
+    _meKey = mine ? mine.key : '';
+    return bodyFor(list);
+  }
   const recs = visibleRecords();
   // Every real player with any recorded play is listed. Test accounts and nameless devices are not
   // - see isHiddenRow() above for both rules and why the nameless one is safe now.
@@ -2272,6 +2283,10 @@ function currentBody() {
   // most damage, so it reads them like every other surface.
   const list = aggregatePlayers(recs, corrections()).filter((g) => !isHiddenRow(g));
   try { _meKey = buildIdentity(recs).keyFor(loadProfile() || {}, statsId()); } catch { /* keep */ }
+  return bodyFor(list);
+}
+
+function bodyFor(list) {
   if (_player) return playerDetail(list, _player);
   // A board for a game this person cannot see is not rendered: `_game` is only ever set by tapping
   // a row that the filter above already allowed, but a stale value must not become a way in.
@@ -2302,6 +2317,7 @@ let _boardSort = 'wins';    // a game board's own sort, reset to that board's le
 let _saved = { sort: 'wins', cat: 'all' };   // what "Make this my default view" last stored, for the row's own label
 let _panel = null;          // null | 'cat' | 'machine' - which in-place select panel is open
 let _all = {};
+let _board = null;          // the server-built board ({ list, idsByKey }, stats-net.js watchBoard), when there is one
 let _meKey = '';
 let _unsub = null;
 let _connected = false;
@@ -2504,6 +2520,7 @@ export function closeLeaderboard() {
   if (_histArmed) { _histArmed = false; try { history.back(); } catch { /* ignore */ } }
   if (_onLine) { window.removeEventListener('online', _onLine); _onLine = null; }
   _connected = false;
+  _board = null;
 }
 
 /** `opts.game` (a stats id, 2026-10-15): open straight onto that game's board, the way a game's own
@@ -2544,6 +2561,7 @@ export async function openLeaderboard(opts = {}) {
     _boardSort = sortItemsFor(_game)[0].sort;
   }
   _all = {};
+  _board = null;
   _connected = false;
   _meKey = '';   // resolved in currentBody() once records load (identity needs the whole graph)
   _lastSegHTML = '';   // the skip-identical-render cache belongs to one open overlay, never across two
@@ -2621,7 +2639,11 @@ export async function openLeaderboard(opts = {}) {
 
   // Subscribe live. Offline / unconfigured -> the fallback above already covers it; never throws.
   try {
-    _unsub = await watchPlayers((all) => { _all = all || {}; _connected = true; rerender({ fromData: true }); });
+    // The server-built board first (a fraction of the download, no grouping on the phone); no board
+    // yet, or unreadable: the whole players/ node, as it always was.
+    const offBoard = await watchBoard((b) => { _board = b; _connected = true; rerender({ fromData: true }); });
+    if (offBoard) _unsub = offBoard;
+    else _unsub = await watchPlayers((all) => { _board = null; _all = all || {}; _connected = true; rerender({ fromData: true }); });
     if (!_host) { if (typeof _unsub === 'function') _unsub(); return; }
   } catch { renderOffline(); }
 }

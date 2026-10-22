@@ -1,0 +1,50 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const BASE = 'http://localhost:8123';
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: {
+    brickcity: { open: true, testing: false } } } }, at: Date.now() }));
+});
+await page.goto(`${BASE}/skeeball/`, { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1500);
+await (await page.$('[data-role="play"]')).click({ force: true });
+await page.waitForSelector('.sk-canvas', { timeout: 10000 });
+await page.waitForTimeout(500);
+
+// count _frame invocations
+await page.evaluate(() => {
+  const ui = window.__skTest.ui;
+  window.__c = { frames: 0, raf: 0 };
+  const orig = ui._frame.bind(ui);
+  ui._frame = (ts) => { window.__c.frames++; orig(ts); };
+  ui._loop = ui._frame;           // the bound _loop must point at the counted one
+  const tick = () => { window.__c.raf++; requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+});
+const sample = async (label) => {
+  await page.evaluate(() => { window.__c.frames = 0; window.__c.raf = 0; });
+  await page.waitForTimeout(2000);
+  const c = await page.evaluate(() => window.__c);
+  console.log(`${label}: _frame calls=${c.frames} over ${c.raf} rAF ticks  => ${(c.frames/Math.max(1,c.raf)).toFixed(2)} loops/frame`);
+};
+await sample('baseline (1 game started)');
+
+for (let i = 1; i <= 3; i++) {
+  await page.click('[data-role="machines"]');
+  await page.waitForTimeout(400);
+  await page.click('[data-role="new"]');
+  await page.waitForTimeout(800);
+  await sample(`after ${i}x pause->New game`);
+}
+// back to gallery, then play again
+await page.click('[data-role="machines"]'); await page.waitForTimeout(400);
+await page.click('[data-role="gallery"]'); await page.waitForTimeout(900);
+await sample('after Gallery (loop should be 0)');
+await browser.close();

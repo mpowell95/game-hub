@@ -1,0 +1,35 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const b = boardById('brickcity'); const P = engineFor('brickcity').physics;
+const G = b.geom;
+const out = [];
+for (let pi = 0; pi <= 40; pi++) for (let ai = 0; ai <= 20; ai++) {
+  const power = pi/40, aim = (ai-10)/10;
+  const st = P.startThrow(b, { power, aim });
+  const samples = [];
+  let n = 0;
+  while (!st.done && n < 3000) {
+    P.step(b, st, 1/60); n++;
+    const v = st.ball.velocity;
+    samples.push({ t: st.t, sp: Math.hypot(v.x, v.y, v.z), cap: st.captured });
+  }
+  // how long was it essentially motionless at the END, and was it captured while motionless?
+  let still = 0, capturedWhileStill = false;
+  for (let i = samples.length - 1; i >= 0; i--) {
+    if (samples[i].sp > 0.12) break;
+    still = samples[samples.length-1].t - samples[i].t;
+    if (samples[i].cap) capturedWhileStill = true;
+  }
+  out.push({ power, aim, hole: st.outcome ? st.outcome.hole : 'none', still, capturedWhileStill, t: st.t });
+}
+const byHole = new Map();
+for (const r of out) { if(!byHole.has(r.hole)) byHole.set(r.hole, []); byHole.get(r.hole).push(r); }
+console.log('hole       n    median STILL   p90     worst    "sat in the cup" cases');
+for (const [k,v] of [...byHole.entries()].sort((a,b)=>b[1].length-a[1].length)) {
+  const s = v.map(x=>x.still).sort((a,b)=>a-b);
+  const inCup = v.filter(x=>x.capturedWhileStill && x.still > 0.4).length;
+  console.log(`${k.padEnd(9)} ${String(v.length).padStart(4)}   ${s[s.length>>1].toFixed(2).padStart(6)}s ${s[Math.floor(s.length*0.9)].toFixed(2).padStart(6)}s ${s[s.length-1].toFixed(2).padStart(6)}s   ${inCup ? '*** '+inCup : '-'}`);
+}
+const worst = out.filter(r=>r.capturedWhileStill && r.still>0.4).sort((a,b)=>b.still-a.still);
+console.log(`\nballs that sat MOTIONLESS INSIDE a captured cup for >0.4s: ${worst.length} of ${out.length}`);
+for (const w of worst.slice(0,15)) console.log(`   power ${w.power.toFixed(2)} aim ${w.aim.toFixed(1)} -> ${w.hole}  motionless ${w.still.toFixed(2)}s of ${w.t.toFixed(2)}s`);

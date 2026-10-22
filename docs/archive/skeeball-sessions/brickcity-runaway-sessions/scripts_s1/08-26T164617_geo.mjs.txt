@@ -1,0 +1,15 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { buildMachine } = await import('/home/user/game-hub/skeeball/js/machines/brickcity/machine.js');
+const b = boardById('brickcity'), G = b.geom, M = buildMachine(G);
+console.log('rows in world space (u=0 centre of each row):');
+for (const [id,h] of Object.entries(G.holes)) {
+  const w = M.faceToWorld(h.u, h.v, 0);
+  console.log(`  ${id.padEnd(6)} u ${String(h.u).padStart(7)} v ${String(h.v).padStart(7)}  ->  y ${w[1].toFixed(3)}  z ${w[2].toFixed(3)}   rim top y ${(w[1]+(h.collarH||0)).toFixed(3)}`);
+}
+console.log('\nframes / treads (each tread has its own tilt):');
+for (const f of (M.frames||[])) console.log('  ', JSON.stringify({v0:f.v0, v1:f.v1, tilt:f.tilt}));
+console.log('\nsolids whose z is near -2.289 (the resting plane):');
+const near = (M.solids||[]).filter(s => s.pos && Math.abs(s.pos[2] - (-2.289)) < 0.13);
+for (const s of near.slice(0,24)) console.log(`  ${String(s.part).padEnd(10)} pos ${s.pos.map(n=>n.toFixed(3)).join(', ')}  half ${(s.half||[]).map(n=>n.toFixed(3)).join(', ')}`);
+console.log(`  (${near.length} solids within 13cm of that plane)`);
+console.log('\nparts present:', [...new Set((M.solids||[]).map(s=>s.part))].join(', '));

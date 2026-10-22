@@ -1,0 +1,37 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: { brickcity:{open:true,testing:false} } } }, at: Date.now() }));
+  const patch = (proto) => { const o = proto.getParameter;
+    proto.getParameter = function (p) { return p === 0x9246 ? 'Apple GPU' : o.call(this, p); }; };
+  patch(WebGLRenderingContext.prototype);
+  if (typeof WebGL2RenderingContext !== 'undefined') patch(WebGL2RenderingContext.prototype);
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1500);
+await (await page.$('[data-role="play"]')).click({ force: true });
+await page.waitForSelector('.sk-canvas', { timeout: 10000 });
+await page.waitForTimeout(900);
+// Park a ball at each measured stall position and render it through the PLAY camera.
+for (const [tag, y, z] of [['stallA', 0.579, -2.289], ['stallB', 0.627, -2.289]]) {
+  await page.evaluate(([y, z]) => {
+    const ui = window.__skTest.ui, R = ui.renderer;
+    R.render = () => {};                       // freeze the loop's own updates
+    const m = R._balls[0];
+    m.visible = true; m.position.set(0.0048, y, z); m.quaternion.set(0,0,0,1);
+    for (let i = 1; i < R._balls.length; i++) R._balls[i].visible = false;
+    R.renderer.shadowMap.needsUpdate = true;
+    R.renderer.render(R.scene, R.camera);
+  }, [y, z]);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/shots/${tag}.png` });
+  console.log(`${tag}: ball parked at y ${y} z ${z} -> shot written`);
+}
+await browser.close();

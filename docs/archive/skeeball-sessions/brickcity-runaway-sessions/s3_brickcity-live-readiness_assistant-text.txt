@@ -1,0 +1,171 @@
+08-25T13:49:27 A: **Yes — the machine itself is ready, and it's already deployed.** Brick City merged to `main` in PR #233 and is shipping inside `sw.js` v483 right now; it's just `adminOnly`. Making it live is one switch on the in-app **Admin → Skeeball machines** page (Testing → Unlockable or Open). No commit, no deploy.
+
+What I re-verified today, not just read:
+
+- **Reachability, re-swept through `engineFor('brickcity')`** — 41 × 21 = 861 throws: all nine mouths capturable (lowL 55, lowC 73, lowR 59, midL 18, midC 12, midR 22, topL 3, topC 8, topR 3), watchdog/emergency **57 (6.62%)** against HOT SHOT's 13.36% on the same grid, slowest settle 6.24 s under the 12 s cap. Matches the shipped table in `skeeball/MACHINE-BRICKCITY.md` within noise.
+- **The objectives actually record.** A full nine-ball rack played headlessly through the real `SkeeballGame` on `brickcity` returned `score 450`, `slotsHit: [midC, midR, midL, topC, topL, topR]`, `cleanRack: 1`. Both 100s land at p0.675, aim ±0.3.
+- `test-skeeball-machine-spec.mjs` 86 pass / 0 fail (brickcity's three waivers documented), `test-stats-replay.mjs` scenario G green (nobody loses POPONGO to the chain move), `players-agg`, `arcade-scores`, `stats-corrections` green, `validate-sw-assets.mjs` clean including `REST_MANIFEST`.
+- Chain is correct and unblocked: THE CLASSIC (open) → HOT SHOT (live/unlockable since 08-25) → **BRICK CITY** → POPONGO.
+
+Three things worth knowing before you flip it:
+
+1. **Nobody has played it on the finished build.** Firebase has 134 logged Brick City throws, all from your device, 08-24 18:16Z–08-25 03:09Z. The 6 recorded racks all predate the objectives commit (`7e7d3eb`, 19:24Z), so they carry no `slots` and no `cleanRacks`; the other 12 are practice racks, which by design count for nothing. So the objectives have never been exercised by a real hand on a phone — only by the sweep and by my headless rack.
+2. **`topL` has 0 hits in 134 real throws** — every other basket was hit. It's reachable (3 of 861 grid cells, same as topR, which did land twice), but "hit every basket" is gated on the rarest thing on the face, and that's the goal POPONGO hangs off. By design per the machine doc; just don't expect the chain to move quickly.
+3. **Your own 18 racks won't carry over.** Practice racks stay in `sk.practice` forever, and the 6 real ones have no slot progress, so you start the objectives from zero along with everyone else.
+
+One thing I'd fix: **`test-admin-config.mjs` is red** — its structural guard expects ≥3 `isBoardReleased(b.id)` sites in `skeeball/js/ui.js` and finds 1. The wiring is fine (the 08-25 unlock-ceremony commit `0405018` folded all three gates into one `_slideState()` helper, which reads the resolver correctly); the guard just went stale and is no longer protecting the exact switch you'd use to release this machine. Want me to update it to match the helper and push?
+
+08-25T18:25:48 A: Sorry — that was jargon. Plainly:
+
+**Nothing about Brick City is broken.** The thing that's broken is an *alarm*, not the app.
+
+The setup: your Admin page can flip a Skeeball machine between Testing / Unlockable / Open. For that to work, `skeeball/js/ui.js` has to actually *ask* the admin config "is this machine released?" before it draws a machine's slide in the gallery. If someone ever deleted that question, the Admin page's release switch would silently stop working — you'd flip Brick City to Open and nothing would happen on the family's phones.
+
+So `test-admin-config.mjs` has a tripwire for it. It's crude: it opens `skeeball/js/ui.js` as text and **counts how many times the string `isBoardReleased(b.id)` appears**. When it was written (08-24) that question was asked in three separate places, so the test says "fail if you see fewer than 3."
+
+On 08-25, the unlock-ceremony commit tidied that up: all three places now call one small helper, `_slideState()`, which asks the question **once** and hands the answer back to all three callers. Better code, same behavior — I read it and it's correct:
+
+```js
+_slideState(b, sk, devAll) {
+  const testing  = isBoardTesting(b.id, !!b.adminOnly);
+  const earned   = !testing && isUnlocked(sk, b.id, DEFAULT_BOARD);
+  const released = !testing && isBoardReleased(b.id);   // <- the one site now
+  ...
+}
+```
+
+But the tripwire is still counting to 3, and now finds 1. So it fails on every run, for a change that was an improvement.
+
+Two reasons that matters, neither urgent:
+
+- It's a **permanently red test** in the suite covering the exact switch you'd use to release Brick City, so the next session sees a failure and has to re-derive that it's a false alarm.
+- More to the point, it's **no longer guarding anything** — it can't tell the difference between "somebody centralized the check" and "somebody deleted the check." The real regression it exists to catch would now look identical to today's failure.
+
+The fix is to point the tripwire at the helper instead of counting copies: assert `_slideState` exists, calls `isBoardReleased`, and that the gallery gates go through it. Small change, in `test-admin-config.mjs` only — no game code touched. Want it?
+
+08-25T18:28:49 A: Dropping the test thing — you're right that it's not about Brick City.
+
+**Brick City is already set to unlock by beating HOT SHOT.** That's the code today, in `skeeball/js/boards.js`:
+
+```js
+unlock: { board: 'basketball', goals: true },
+```
+
+`goals: true` means HOT SHOT's three objectives, all of them:
+
+| HOT SHOT objective | target |
+|---|---|
+| Every basket | all 9 |
+| Single game | 700 |
+| Total points | 30,000 |
+
+Finish those three and Brick City opens. Nothing to change.
+
+The only thing standing between it and the family right now is that it's set to **Testing**. On the Admin page → Skeeball machines → HOT SHOT: BRICK CITY, pick **Unlockable** — that's live-and-earned-the-normal-way, which is what you just described. (**Open** would hand it to everyone immediately, skipping HOT SHOT — don't pick that one.)
+
+Two notes on what happens when you flip it:
+
+- Your device already holds `sk.unlocked.brickcity`, so you'll keep seeing it either way. Nobody else has earned it yet.
+- Your 12 practice racks and the 6 old ones stay where they are — practice counts for nothing by design, and the 6 predate the objectives, so your Brick City objectives start at zero like everyone else's.
+
+08-25T18:31:20 A: You're right. Let me actually answer it.
+
+08-25T18:32:39 A: Yes — it's ready. Here's the part I should have led with.
+
+**The machine is sound for real hands.** Re-measured today on the shipped build, not read off the doc:
+
+- All nine baskets are scoreable; both corner 100s land at power ≈0.675, aim ±0.3.
+- 6.6% of throws end parked and get walked out as a zero (~1 in 15). HOT SHOT, which is already live, is 13.4% — so Brick City is the best-behaved of the two staircase machines.
+- The objectives record correctly. I played a full nine-ball rack through the real engine: 450 points, six baskets logged, clean-round flag set. Every basket / clean round / net points all track.
+- Nothing in it can hurt anyone's stats — penalties floor a rack at 0 and are counted by nothing.
+
+**But flipping it to Unlockable puts it in front of nobody.** That's the thing worth knowing before you do it:
+
+| person | CLASSIC plays | 100s (need 5) | best (need 360) | total (need 10,000) | has |
+|---|---|---|---|---|---|
+| *TP* | 33 | 8 ✓ | 380 ✓ | 6,390 | classic |
+| Unai | 6 | 0 | 270 | 1,180 | classic |
+| Anita | 6 | 2 | 290 | 1,130 | classic |
+| HDJ | 5 | 0 | 290 | 1,040 | classic |
+
+Nobody outside your two profiles has thrown a single ball on HOT SHOT — and HOT SHOT is Brick City's gate. TP is the closest, and TP needs roughly **19 more CLASSIC racks** to unlock HOT SHOT, then **~95 HOT SHOT racks** to clear its 30,000-point objective. That's ~115 racks before Brick City appears for the first non-you player. Everyone else is further back than that.
+
+So the decision isn't "is it ready," it's which one you want:
+
+- **Unlockable** — chain intact, correct by design, and realistically nobody sees it for weeks.
+- **Open** — the family can play it this week. The chain still reads right on the setup carousel; Brick City just doesn't wait its turn.
+- **Unlockable + drop HOT SHOT's 30,000 total.** That gate is what's actually holding the queue, not anything about Brick City. It's gone from 3,000 → 10,000 → 30,000, and it was set when only you were playing.
+
+If you want people playing Brick City, I'd set it **Open** now and leave the chain to sort itself out as people catch up.
+
+One thing to watch after release: "Every basket" needs both corner 100s, and in your own 134 real Brick City throws, `topL` never landed once (every other basket did). It's reachable — the sweep hits it — but that objective is what unlocks POPONGO, so it may stall there.
+
+08-25T18:35:40 A: I lumped King of Games in with your profiles. That was wrong, and it inverts the answer.
+
+**King of Games is a separate person on their own phone** — player code `3VN33`, 🤠, installed PWA on iOS 18.6.2, build v484, last synced today at 18:26 UTC. Not one of your devices (yours are `QZCC4` 🦖 and the Windows Chrome ones).
+
+**They have already earned Brick City.** All three HOT SHOT objectives, cleared:
+
+| HOT SHOT objective | target | King of Games |
+|---|---|---|
+| Every basket | 9 | **9/9** |
+| Single game | 700 | **860** |
+| Total points | 30,000 | **91,210** |
+
+198 HOT SHOT racks on 08-24 and 08-25. They're your heaviest Skeeball player by a distance — you have 38 racks on that machine to their 198.
+
+The only reason they don't hold it is Testing: both unlock writers skip a machine in testing (`_earnedUnlocks` and `_ensureGoalUnlocks` each `continue` on `isBoardTesting`). Flip it to **Unlockable** and `_ensureGoalUnlocks()` grants it on their very next Skeeball mount — it checks `allGoalsMet('basketball')` against the recorded store, which is already true. No replaying anything.
+
+One detail: it'll just be *there*, open, with no key ceremony. The ceremony is armed only at the moment a live rack completes the goals ("armed, never backfilled"), so a retroactive grant is silent. Their first sight of it will be an unlocked slide on the carousel.
+
+So my earlier "Unlockable puts it in front of nobody" was wrong. Corrected picture:
+
+- **Unlockable** → King of Games gets it immediately, the chain stays honest, and TP/Unai/Anita/HDJ still have the CLASSIC → HOT SHOT climb in front of them. This is the one I'd pick now.
+- **Open** → everyone gets it at once, including people who haven't finished THE CLASSIC.
+
+The machine-quality verdict from before stands: nine baskets all scoreable, 6.6% dud-throw rate (half HOT SHOT's), objectives verified recording end to end. It's ready — release it as Unlockable.
+
+08-25T18:42:52 A: Now the UI change — tappable objectives plus the definition sheet:
+
+08-25T18:57:10 A: Markup is right. Now the geometry and the tap, on two phone sizes:
+
+08-25T19:02:00 A: Now the docs, then the cache bump:
+
+08-25T19:05:57 A: **It's live.** Merged, deployed, Pages run 597 completed successfully, and `sw.js` on the site reads `game-hub-v485`.
+
+Brick City's objectives are now:
+
+| | |
+|---|---|
+| **Baskets x3** | every one of the nine baskets, three times each |
+| **Perfect rounds** | 3 rounds where all nine balls score. No 0s, no negatives |
+| **Net points** | 30,000 |
+
+Tapping any objective (either rail, the bar above the machine, or the tiles on the game-over card) opens a sheet with all three, the tapped one lit, each with a plain sentence. The perfect round reads: *"A round where all nine balls score: no zeros, no penalty baskets. Three of them."*
+
+Two things I had to add to make the first two countable: `slotHits` (per-basket counts) and `perfectRacks`. The old `slots` set couldn't count to three, and the old clean round let a ball miss the face entirely as long as it didn't cost points. Both new counters sit **beside** the old ones, which are still written and still merged — HOT SHOT's own "every basket" reads `slots`, and nothing anyone already recorded changed.
+
+Checked in a real browser at 375x667 and 393x852, not just in tests: a full nine-ball round played through the live app logged `slotHits {midC 2, midR 2, midL 2, topC 1, topL 1, topR 1}`, `perfectRacks 1`, rails reading `Baskets x3 0/9`, `Perfect rounds 1/3`, `Net points 450/30k`. The rails end 193px above the swipe surface, so a tappable rail can't eat a throw.
+
+**What's left is your switch:** Admin → Skeeball machines → HOT SHOT: BRICK CITY → Unlockable. King of Games (3VN33) has already cleared HOT SHOT's three — 9/9 baskets, 860 best, 91,210 points — so Brick City opens on their next visit to Skeeball. The raise doesn't slow that down; it only makes POPONGO further off, which is the machine after.
+
+08-25T19:06:54 A: Pushed — the branch now points at the same commit as `main` (`f811ee3`), nothing unpushed.
+
+That was just a stale pointer: the work went to `main` through PR #237 and was already deployed (Pages run 597, `sw.js` on the site reads `game-hub-v485`). Fast-forwarding my local branch onto the merge commit left the remote branch a commit behind, which is what the hook saw. Nothing about what's live changed.
+
+08-25T20:22:31 A: Good question on the timing — I'll check that after the change. First the code:
+
+08-25T20:27:36 A: Done and live — Pages run 598 succeeded, deployed `sw.js` reads `game-hub-v486`.
+
+**What happens for King of Games now.** On his next fresh open of Skeeball (after you flip the switch), Brick City is banked at mount exactly as before — but that silent grant now arms a debt: "this machine owes its ceremony." The next ball that puts a point on the board during a round on HOT SHOT plays the full animation: his three completed objectives fly in, merge, and hand him the key. Then the gallery shows Brick City with the golden pulsing lock, and tapping it drives the key in.
+
+I replayed his exact stored shape in a browser — HOT SHOT 9/9 baskets, 860 best, 91,210 points, no brickcity, machine set to Unlockable. Mount banked `brickcity` and armed the debt, his three finished objectives stayed on screen (they'd previously have been hidden as "spent"), one 60-point ball fired the ceremony, and the debt cleared with the lock pop armed for the gallery half.
+
+**On your timing question — no, it won't ruin anything, and the ordering is now the safe one.**
+
+- A page he already has open keeps running the old code until it's reloaded. It also keeps its old copy of the admin config: `refreshAdminConfig()` runs once per hub load, so a session that started before your flip can't even see Brick City become Unlockable, let alone bank it. He gets the new code and the new config together on his next real load (reopen, or force-close and reopen).
+- Nothing is lost by that reload. Skeeball snapshots the round after every settled ball, so he lands back on the lane at the same ball; a ball actually in flight is re-served.
+- The sequence that *would* have burned the ceremony is flipping the switch while devices were still loading the old build — a device could then bank Brick City silently with no debt armed, and he'd never see it. That window is closed now: the code is live first.
+
+So flip it whenever you like. Worst case he's mid-round on the old build and the animation waits until his next app open.
+

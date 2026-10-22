@@ -1,0 +1,33 @@
+import { firebaseConfig } from '/home/user/game-hub/js/firebase-config.js';
+import { signInAnonymously, readPath } from '/home/user/game-hub/backups/rtdb-backup.mjs';
+const tok = await signInAnonymously(firebaseConfig.apiKey);
+const players = await readPath(firebaseConfig.databaseURL, 'players', tok);
+// group by person name (a person may have several devices)
+const per = {};
+for (const id of Object.keys(players||{})) {
+  const p = players[id]||{};
+  const g = ((p.stats||{}).games||{}).skeeball; if (!g) continue;
+  const sk = g.sk||{};
+  const nm = ((p.profile||{}).name || id.slice(0,8)).trim();
+  const row = per[nm] = per[nm] || { devices:0, hsPlays:0, hsBest:0, hsPoints:0, hsSlots:new Set(),
+    cPlays:0, cPoints:0, cBest:0, cSlots:new Set(), unlocked:new Set() };
+  row.devices++;
+  for (const k of Object.keys(sk.unlocked||{})) if (sk.unlocked[k]) row.unlocked.add(k);
+  const hs = (sk.boards||{}).basketball;
+  if (hs) { row.hsPlays += hs.plays|0; row.hsBest = Math.max(row.hsBest, hs.best|0);
+    row.hsPoints += hs.points|0; for (const s of Object.keys(hs.slots||{})) if (hs.slots[s]) row.hsSlots.add(s); }
+  const c = (sk.boards||{}).classic;
+  if (c) { row.cPlays += c.plays|0; row.cPoints += c.points|0; row.cBest = Math.max(row.cBest, c.best|0);
+    for (const s of Object.keys(c.slots||{})) if (c.slots[s]) row.cSlots.add(s); }
+}
+const rows = Object.entries(per).sort((a,b)=>b[1].hsPoints-a[1].hsPoints);
+console.log('HOT SHOT progress vs its three objectives (9 baskets / 700 single / 30,000 total)');
+console.log('person'.padEnd(16), 'dev', 'plays', 'baskets', 'best', 'total pts', ' unlocked');
+for (const [nm,r] of rows) {
+  console.log(nm.padEnd(16), String(r.devices).padStart(2),
+    String(r.hsPlays).padStart(5), `   ${r.hsSlots.size}/9  `,
+    String(r.hsBest).padStart(4), String(r.hsPoints).padStart(8),
+    ' ', [...r.unlocked].join(','));
+}
+console.log('\nTHE CLASSIC (its objectives gate HOT SHOT itself):');
+for (const [nm,r] of rows) console.log(' ', nm.padEnd(16), 'plays', String(r.cPlays).padStart(4), 'best', String(r.cBest).padStart(4), 'pts', String(r.cPoints).padStart(6), 'holes', r.cSlots.size);

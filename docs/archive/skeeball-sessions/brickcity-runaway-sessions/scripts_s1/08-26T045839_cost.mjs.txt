@@ -1,0 +1,83 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const BASE = 'http://localhost:8123';
+const BOARD = process.argv[2] || 'brickcity';
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.addInitScript((b) => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: b }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: {
+    brickcity:{open:true,testing:false}, basketball:{open:true,testing:false},
+    popongo:{open:true,testing:false}, runaway:{open:true,testing:false} } } }, at: Date.now() }));
+}, BOARD);
+await page.goto(`${BASE}/skeeball/`, { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1500);
+await (await page.$('[data-role="play"]')).click({ force: true });
+await page.waitForSelector('.sk-canvas', { timeout: 10000 });
+await page.waitForTimeout(600);
+
+const setup = await page.evaluate(() => {
+  const ui = window.__skTest.ui, R = ui.renderer;
+  let objs=0, casters=0, tris=0;
+  R.scene.traverse(o => { objs++; if (o.castShadow) casters++;
+    if (o.geometry && o.geometry.index) tris += o.geometry.index.count/3;
+    else if (o.geometry && o.geometry.attributes && o.geometry.attributes.position) tris += o.geometry.attributes.position.count/3; });
+  const lights = [];
+  R.scene.traverse(o => { if (o.isLight) lights.push({ type: o.type, castShadow: !!o.castShadow,
+    mapSize: o.shadow ? `${o.shadow.mapSize.width}x${o.shadow.mapSize.height}` : null }); });
+  const c = R.renderer.domElement;
+  return { board: ui.game.board.id, objs, casters, tris: Math.round(tris), lights,
+    canvas: `${c.width}x${c.height}`, css: `${c.clientWidth}x${c.clientHeight}`,
+    pixelRatio: R.renderer.getPixelRatio(),
+    antialias: R.renderer.getContext().getContextAttributes().antialias,
+    samples: R.renderer.getContext().getParameter(R.renderer.getContext().SAMPLES),
+    shadowEnabled: R.renderer.shadowMap.enabled, shadowAuto: R.renderer.shadowMap.autoUpdate };
+});
+console.log(JSON.stringify(setup, null, 1));
+
+// measure render() cost with and without the per-frame shadow pass
+const bench = async (label, mutate) => {
+  await page.evaluate((m) => {
+    const R = window.__skTest.ui.renderer;
+    if (m === 'noshadowupdate') { R.renderer.shadowMap.autoUpdate = false; R.renderer.shadowMap.needsUpdate = true; }
+    if (m === 'shadowoff') { R.renderer.shadowMap.enabled = false; }
+    if (m === 'reset') { R.renderer.shadowMap.enabled = true; R.renderer.shadowMap.autoUpdate = true; }
+    window.__b = { n: 0, t: 0 };
+  }, mutate);
+  await page.evaluate(() => new Promise(res => {
+    const R = window.__skTest.ui.renderer, B = window.__b;
+    let i = 0;
+    const tick = () => {
+      const a = performance.now(); R.renderer.render(R.scene, R.camera); B.t += performance.now() - a; B.n++;
+      if (++i < 60) requestAnimationFrame(tick); else res();
+    };
+    requestAnimationFrame(tick);
+  }));
+  const b = await page.evaluate(() => window.__b);
+  const calls = await page.evaluate(() => JSON.parse(JSON.stringify(window.__skTest.ui.renderer.renderer.info.render)));
+  console.log(`${label}: ${(b.t/b.n).toFixed(2)} ms/render   calls=${calls.calls} tris=${calls.triangles}`);
+};
+await bench('shadow map every frame (SHIPPED)', 'reset');
+await bench('shadow map on demand         ', 'noshadowupdate');
+await bench('shadows off entirely         ', 'shadowoff');
+await bench('back to shipped              ', 'reset');
+
+// physics cost under CPU throttle
+const cdp = await ctx.newCDPSession(page);
+for (const rate of [1, 4]) {
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate });
+  const r = await page.evaluate(() => {
+    const ui = window.__skTest.ui;
+    const P = ui.game;
+    const a = performance.now();
+    for (let i = 0; i < 60; i++) P.update(1/60);
+    return performance.now() - a;
+  });
+  console.log(`physics game.update x60 (idle, no ball) @${rate}x throttle: ${r.toFixed(1)} ms total`);
+}
+await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+await browser.close();

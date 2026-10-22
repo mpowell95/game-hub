@@ -34,7 +34,7 @@
 import { loadProfile } from './profile-store.js';
 import { isHiddenName as isTestName } from './hidden-players.js';
 import { getStatsApp } from './firebase-boot.js';
-import { readPlayersOnce } from './stats-net.js';
+import { readPlayersOnce, readPeople } from './stats-net.js';
 import { aggregatePlayers, isPlaceholderName } from './players-agg.js';
 import { hubThreadRow, withHubRow } from './hub-messages.js';
 
@@ -558,8 +558,9 @@ export async function unreadMessageCount() {
 export async function readContacts() {
   const me = myCode();
   try {
-    const all = await readPlayersOnce();
-    return aggregatePlayers(all)
+    // The server-built board's people first (2026-10-22, ~60 KB), else all of players/ as before.
+    const people = await readPeople();
+    return (people ? people.list : aggregatePlayers(await readPlayersOnce()))
       .filter((r) => r && asCode(r.playerId) && asCode(r.playerId) !== me
         && !isPlaceholderName(r.name) && !isTestName(r.name))
       .map((r) => ({ code: asCode(r.playerId), name: r.name, emoji: r.emoji || '🙂' }))

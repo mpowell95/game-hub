@@ -1,0 +1,24 @@
+const SP='/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad';
+const load = async (root) => {
+  const { boardById } = await import(`${root}/skeeball/js/boards.js`);
+  const { engineFor } = await import(`${root}/skeeball/js/engines.js`);
+  return { board: boardById('classic'), P: engineFor('classic').physics };
+};
+const key = (r) => `${r.outcome ? r.outcome.hole + ':' + r.outcome.value : 'none'}|${r.time.toFixed(6)}|${r.bounces}|${r.touchedBoard}|${r.emergencyUsed}|${r.events.join(',')}`;
+const run = async (root, label) => {
+  const { board, P } = await load(root);
+  const keys = []; const t0 = performance.now();
+  for (let pi = 0; pi <= 40; pi++) for (let ai = 0; ai <= 20; ai++)
+    keys.push(key(P.simulateThrow(board, { power: pi/40, aim: (ai-10)/10 })));
+  const ms = performance.now() - t0;
+  console.log(`${label}: 861 throws in ${(ms/1000).toFixed(1)}s`);
+  return { keys, ms };
+};
+const oldE = await run(`${SP}/base3`, 'origin/main (NaiveBroadphase)  ');
+const newE = await run('/home/user/game-hub', 'this branch (BallBroadphase)  ');
+let diff = 0; const firsts = [];
+for (let i = 0; i < oldE.keys.length; i++) if (oldE.keys[i] !== newE.keys[i]) { diff++; if (firsts.length < 5) firsts.push(i); }
+console.log(`\nthrows that differ: ${diff} of ${oldE.keys.length}`);
+for (const i of firsts) console.log(`   idx ${i}\n     was ${oldE.keys[i]}\n     now ${newE.keys[i]}`);
+console.log(`\nphysics time: ${(oldE.ms/1000).toFixed(1)}s -> ${(newE.ms/1000).toFixed(1)}s  (${((1-newE.ms/oldE.ms)*100).toFixed(0)}% less)`);
+process.exit(diff ? 1 : 0);

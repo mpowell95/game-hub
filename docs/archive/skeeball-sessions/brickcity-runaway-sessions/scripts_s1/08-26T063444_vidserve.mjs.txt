@@ -1,0 +1,16 @@
+import http from 'node:http'; import { createReadStream, statSync } from 'node:fs';
+const F = process.argv[2];
+http.createServer((req,res)=>{
+  const st = statSync(F);
+  const range = req.headers.range;
+  if (range) {
+    const m = /bytes=(\d*)-(\d*)/.exec(range);
+    const start = m[1] ? +m[1] : 0, end = m[2] ? +m[2] : st.size-1;
+    res.writeHead(206, { 'Content-Type':'video/mp4', 'Accept-Ranges':'bytes',
+      'Content-Range':`bytes ${start}-${end}/${st.size}`, 'Content-Length': end-start+1 });
+    createReadStream(F,{start,end}).pipe(res);
+  } else {
+    res.writeHead(200, { 'Content-Type':'video/mp4', 'Accept-Ranges':'bytes', 'Content-Length': st.size });
+    createReadStream(F).pipe(res);
+  }
+}).listen(8130, ()=>console.log('vid on 8130'));

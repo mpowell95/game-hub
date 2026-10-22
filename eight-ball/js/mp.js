@@ -21,6 +21,7 @@
 // THE FIRST RECEIVER BREAKS (seat 1), so the challenge waits on them from the moment it is made and
 // every player's row is written at once (Flick Soccer's own-lineup shape, 2026-10-13).
 import { getStatsApp } from '../../js/firebase-boot.js';
+import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
@@ -452,8 +453,7 @@ export async function readMyGames() {
   try {
     const boot = await ready();
     if (!boot) return [];
-    const snap = await boot.api.get(boot.api.ref(boot.db, `${NODE}/index/${me}`));
-    return rowsFromIndex(snap && snap.exists() ? snap.val() : null);
+    return rowsFromIndex(await readPath(boot, `${NODE}/index/${me}`));
   } catch (err) { console.warn('[eight-ball] could not read your matches', err); return []; }
 }
 /** READ-ONLY live listener on your own index. Returns an unsubscribe that is always safe to call. */
@@ -463,8 +463,8 @@ export async function watchMyGames(cb) {
   try {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
-    const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/index/${me}`), (snap) => {
-      try { cb(rowsFromIndex(snap && snap.exists() ? snap.val() : null)); } catch (err) { console.warn('[eight-ball] list watch', err); }
+    const stop = watchPath(boot, `${NODE}/index/${me}`, (v) => {
+      try { cb(rowsFromIndex(v)); } catch (err) { console.warn('[eight-ball] list watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };
   } catch { return () => {}; }

@@ -1,0 +1,38 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const { buildMachine } = await import('/home/user/game-hub/skeeball/js/machines/brickcity/machine.js');
+const b = boardById('brickcity'), G = b.geom, M = buildMachine(G);
+const P = engineFor('brickcity').physics;
+const hangs = [];
+let n = 0;
+for (let p = 1.0; p <= 2.5001; p += 0.025) for (let ai = -10; ai <= 10; ai++) {
+  const st = P.startThrow(b, { power: p, aim: ai/10 });
+  let i = 0, capFrom = -1, capDur = 0, stillFrom = -1, freeze = 0, snap = null;
+  while (!st.done && i < 4000) {
+    P.step(b, st, 1/60); i++;
+    const v = st.ball.velocity, sp = Math.hypot(v.x,v.y,v.z);
+    if (st.captured) {
+      if (capFrom < 0) capFrom = st.t;
+      capDur = Math.max(capDur, st.t - capFrom);
+    } else capFrom = -1;
+    if (sp < 0.05) {
+      if (stillFrom < 0) stillFrom = st.t;
+      if (st.t - stillFrom > freeze) {
+        freeze = st.t - stillFrom;
+        const f = M.worldToFace(st.ball.position);
+        let near = null;
+        for (const [id,h] of Object.entries(G.holes)) { const d = Math.hypot(f.u-h.u, f.v-h.v); if(!near||d<near.d) near={id,d,r:h.r,lip:h.collarH||0}; }
+        snap = { h: +f.h.toFixed(4), near, cap: st.captured };
+      }
+    } else stillFrom = -1;
+  }
+  n++;
+  if (capDur > 0.8 || freeze > 0.8) hangs.push({ p:+p.toFixed(3), aim: ai/10, capDur, freeze, snap, t: st.t, hole: st.outcome?st.outcome.hole:'none' });
+}
+console.log(`swept ${n} throws at power 1.0 - 2.5`);
+console.log(`hangs (>0.8s captured, or >0.8s dead still): ${hangs.length}`);
+for (const h of hangs.sort((a,b)=>Math.max(b.capDur,b.freeze)-Math.max(a.capDur,a.freeze)).slice(0,18)) {
+  const s = h.snap;
+  console.log(`  p${h.p} a${String(h.aim).padStart(4)}  cap ${h.capDur.toFixed(2)}s still ${h.freeze.toFixed(2)}s  total ${h.t.toFixed(2)}s -> ${h.hole}`
+    + (s ? `   h ${s.h}  nearest ${s.near.id} d ${s.near.d.toFixed(3)} (r ${s.near.r.toFixed(3)})  ${s.near.d < s.near.r ? '*** IN THE MOUTH' : 'outside'}${s.cap?' [captured]':''}` : ''));
+}

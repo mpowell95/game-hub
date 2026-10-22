@@ -114,7 +114,8 @@ const pushJs = read('./js/push.js');
 check('opening the hub clears the app icon badge', /clearAppBadge\(\)/.test(pushJs.slice(pushJs.indexOf('export async function clearShownNotifications'))));
 check('sw.js opens or focuses the hub on a tap', /addEventListener\('notificationclick'/.test(sw) && /openWindow\(url\)/.test(sw) && /type: 'OPEN_GAME'/.test(sw));
 const nf = sw.slice(sw.indexOf('const NETWORK_FIRST = ['), sw.indexOf('const SHELL_CACHE_FIRST'));
-check('js/push.js is network-first (it writes a gamehub.* key)', nf.includes("'./js/push.js'"));
+// 2026-10-22: every shell module is cache-first (fresh per deploy, not per open); push.js too.
+check('js/push.js is cache-first like every shell module (sw.js NETWORK_FIRST is documents only)', !nf.includes("'./js/push.js'") && sw.includes("'./js/push.js'"));
 
 const hub = read('./js/hub.js');
 // (2026-10-14) With a game open, the ONLY thing a tap may do is hand a match to that SAME game

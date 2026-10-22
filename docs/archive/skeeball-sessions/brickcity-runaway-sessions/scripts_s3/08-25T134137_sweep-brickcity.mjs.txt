@@ -1,0 +1,27 @@
+import { boardById } from '/home/user/game-hub/skeeball/js/boards.js';
+import { engineFor } from '/home/user/game-hub/skeeball/js/engines.js';
+
+const board = boardById('brickcity');
+const { physics: { simulateThrow } } = engineFor(board.id);
+const AIMS = Array.from({ length: 21 }, (_, i) => +(-1 + i * 0.1).toFixed(2));
+const POWERS = 41;
+const counts = new Map();
+let emerg = 0, slowest = 0, total = 0;
+for (let p = 0; p < POWERS; p++) {
+  const power = +(p / (POWERS - 1)).toFixed(4);
+  for (const aim of AIMS) {
+    const r = simulateThrow(board, { power, aim });
+    total++;
+    if (r.emergencyUsed) emerg++;
+    if (r.time > slowest) slowest = r.time;
+    const h = r.outcome ? r.outcome.hole : 'returned';
+    counts.set(h, (counts.get(h) || 0) + 1);
+  }
+}
+const cups = Object.keys(board.geom.holes);
+console.log('holes on face:', cups.join(' '));
+for (const id of cups) console.log(`  ${id.padEnd(8)} ${counts.get(id) || 0}${(counts.get(id) || 0) === 0 ? '   <-- UNREACHABLE' : ''}`);
+for (const [k, v] of counts) if (!cups.includes(k)) console.log(`  (${k}) ${v}`);
+console.log(`throws ${total}  watchdog/emergency ${emerg} (${(emerg / total * 100).toFixed(2)}%)  slowest ${slowest.toFixed(2)}s`);
+const penalty = cups.filter(id => (board.geom.holes[id].value ?? board.cups?.[id]?.value) < 0);
+console.log('penalty ids:', penalty.join(' '));

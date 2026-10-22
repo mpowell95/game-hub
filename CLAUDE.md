@@ -59,6 +59,14 @@ re-confirming per step, no need for Matt to say "deploy":
 Pause only for a genuinely destructive step (force-push, history rewrite). If something should not
 ship yet, Matt will say so.
 
+## Performance: measure what the phone DOWNLOADS first (Matt, 2026-10-22)
+
+For months every Leaderboard, My Stats, Records and picker downloaded all of `players/` (~930 KB) and grouped it
+on the phone; no session spotted it, despite Matt asking more than once why the hub was slow. Moving it to the
+server (`boards/`, `directory/`) made it instantly faster. **When anything feels slow, check bytes over the network
+before code speed. A new screen must never read all of `players/`**: use `readPeople()`, `readPlayersForMe()`,
+`readOpponentProfiles()` or `watchBoard()` (`js/stats-net.js`). Mention any whole-node read you see, unasked.
+
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 
 A mid-turn message is not a note for the final report. Stop and say where you are, what is left
@@ -131,8 +139,13 @@ Two causes that look identical; separate them in this order:
    deployed `sw.js`, evaluate `ASSETS` + `isShellAsset`, request every SHELL entry live. All 200
    rules this out. Prevention: `tools/validate-sw-assets.mjs`, `tools/test-sw-strategy.mjs`.
 
-A new build applies itself silently on the launcher (never while a game is mounted). An arrow that
-persists is a bug.
+**A player's launcher reloads onto a new build only at a FRESH OPEN (2026-10-22, Matt: Ana and Moonis
+saw "an update every time they go back to the hub").** The worker still takes over at once (unchanged);
+`js/hub.js` reloads the PAGE at once only on an admin device or dev profile, elsewhere only in the first
+30 s of an app launch or of a return after 30+ min away. A tap on the pill always takes it; a game that
+fails to load on the older page reloads onto the new build and opens. On a player's phone a lasting
+`vOld → vNew` pill is normal; on an admin device it is a bug. Do NOT make new workers wait for the page
+(`skipWaiting` on request): tried that day, Chromium sometimes never activated it and a page load then hung.
 
 ### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)
 
@@ -142,7 +155,8 @@ return cached;` on the network-first path; with nothing cached the error passes 
 
 ### The service worker's caching strategy (rewritten 2026-08-02)
 
-Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HISTORY.md`.
+Do not "simplify" any of this; full rationale in `docs/SW-NOTES.md` (sw.js's long comments, moved there
+2026-10-22 because every phone downloads sw.js on each open; `[docs/SW-NOTES.md #N]` marks each spot) and `CLAUDE-HISTORY.md`.
 
 - **Three tiers of `ASSETS`.** `SHELL` (`index.html`, `css/`, `js/`, `icons/`, `profile/`) is
   atomic and blocks install. `REST` (every game's files) is warmed after activation by
@@ -156,17 +170,20 @@ Do not "simplify" any of this; full rationale in `sw.js` comments and `CLAUDE-HI
   each launcher paint; the warm skips the rest, BELOW the carry-forward. Saves ~4.3 MB per phone.
   **Held-back files carry no hash and are network-first, so editing an unreleased game sends
   players NO update: do not bump CACHE or touch sw.js for it** (the validator NOTEs a needless
-  bump). Adding/removing a file or touching shared files still does. The hub imports `alerts`
+  bump). **A new file in an unreleased game needs no ASSETS entry** (2026-10-22: the validator allows
+  it, `isDevFresh` serves it network-first; add it at the release commit). Removing a listed file or
+  touching shared files still does. The hub imports `alerts`
   modules only for games on that launcher, so those are held back too.
 - **Network-first with a deadline** (`NET_TIMEOUT_MS` 2.5 s) plus a `SLOW_LATCH_MS` (10 s) "network
   is bad" latch. A request with nothing cached is never short-circuited.
 - **Unchanged files are carried forward across a CACHE bump** via the GENERATED `REST_MANIFEST`
   (content hashes, written by `tools/validate-sw-assets.mjs`; HTTP validators cannot do it because Pages
-  re-stamps every ETag).
-- **REST is cache-first; the shell is split**: `NETWORK_FIRST` (hand-listed modules that read or
-  write player data or gate its visibility, Matt: *"keep the stats code fresh"*) vs
-  `SHELL_CACHE_FIRST`. It is an allow-list derived from `ASSETS` (so it can never swallow `sw.js`),
-  per file, never transitive. A test fails if a cache-first shell module writes a `gamehub.*` key.
+  re-stamps every ETag). **Since 2026-10-22 it holds the SHELL's hashes too and the install copies
+  unchanged shell files** (still atomic): a deploy downloads only what changed, not the whole ~1.6 MB shell.
+- **Everything is cache-first except the documents (2026-10-22, Matt: "yes do 1")**: `NETWORK_FIRST` is
+  only `./`, `index.html`, `profile/`. The ~30 data/screen modules that used to re-download on every
+  open (~330 KB on the wire, "keep the stats code fresh") now arrive with each deploy's worker instead.
+  A test fails if a module creeps back into `NETWORK_FIRST`.
 - **Old caches are deleted at the END of the warm**, not at activate; fetches consult the CURRENT
   cache before `caches.match`.
 - `cache: 'reload'` stays, and the SHELL install always uses it (2026-10-14; Pages' `max-age=600`
@@ -220,6 +237,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `device-report.js` / `install-state.js` | device dump used by every bug report; installed-vs-tab plus phone size (`tools/read-install-state.mjs --screens`) |
 | `bug-report.js` / `bug-report-ui.js` | Report a bug, offline outbox, Matt's replies (`bugReplies/<deviceId>/`), soft delete |
 | `messages.js` / `messages-ui.js` | player-to-player Messages (see "Messages") |
+| `live-read.js` | `watchPath`/`readPath`: a watched Firebase path is downloaded once, and a read of it answers from the watch (each challenge game's index, 2026-10-22) |
 | `hub-messages.js` | messages FROM the Game Hub (`HUB_MESSAGES`, in code; see "Messages") |
 | `challenges.js` / `challenges-ui.js` / `challenge-life.js` | the Multiplayer screen (was Challenges; reads only) and the shared cancel/expire rules (`ANSWER_MS` 3 days) |
 | `mp-records.js` | the Multiplayer screen's Records for live-room games: `byDiff.mp` + `h2h`, read only |
@@ -468,7 +486,19 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **Deployed triggers (all, by the workflow 2026-10-21):** `hoopsTurnPush`, `messagePush`, `bugReportPush`,
   `skeeChallengePush`, `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`, `archeryTurnPush`,
   `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`, `nudgePush`, `directoryBuild` +
-  `directoryOnApprove` (2026-10-22); rules incl. `archery`, `chinchon`, `escoba`, `nudges`, `directory`.
+  `directoryOnApprove`, `boardsOnSync` + `boardsOnConfig` + `boardsCatchUp` (2026-10-22); rules incl. `archery`,
+  `chinchon`, `escoba`, `nudges`, `directory`, `boards`.
+- **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
+  `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
+  generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs
+  ~930 KB of `players/`). Rebuilt on a sync (at most every 2 min; `boardsCatchUp` every 5 min). The Leaderboard
+  reads it (`stats-net.js` `watchBoard`), falling back to `players/` if absent. `tools/test-boards.mjs <snapshot>`
+  proves every person is deep-equal to the phone's own grouping. **Other screens**: My Stats, Records, Hold'em's own bank,
+  Skeeball's picker use `readPlayersForMe()` (own devices in full + everyone's name from the board); Hold'em's bank list,
+  Skeeball's top records, Messages contacts, Golf's board, Arrow Maze's leaders use `readPeople()` (the board's list).
+  Only the admin page still reads all of `players/` (it voids scores per device, so it needs the raw records).
+  Matt's bug-report badge queries only reports newer than his last look (`readBugReportsSince`, indexed on
+  `createdAtMs`). Skeeball's per-throw upload (`skeeballThrows/`) was RETIRED 2026-10-22 (Matt); its data stays.
 - **Player directory (2026-10-22, Matt: multiplayer felt slow)**: `directory/<CODE>` = `{name, emoji, at}`,
   rebuilt by the server from `players/` hourly and on any Online play change (`buildDirectory`). Every
   challenge game's "pick a person" reads it via `stats-net.js` `readOpponentProfiles()` (2 KB vs ~930 KB);

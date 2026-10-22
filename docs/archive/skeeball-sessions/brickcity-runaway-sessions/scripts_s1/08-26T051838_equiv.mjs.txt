@@ -1,0 +1,25 @@
+// Prove BRICK CITY's new broadphase is outcome-identical to the naive one it replaces,
+// over the same 41x21 power/aim grid skeeball/js/test.js uses for reachability.
+const NEW = '/home/user/game-hub/skeeball/js';
+const OLD = process.argv[2] + '/skeeball/js';
+const load = async (root) => {
+  const { boardById } = await import(`${root}/boards.js`);
+  const { engineFor } = await import(`${root}/engines.js`);
+  return { board: boardById('brickcity'), P: engineFor('brickcity').physics };
+};
+const a = await load(NEW), b = await load(OLD);
+const key = (r) => `${r.outcome ? r.outcome.hole + ':' + r.outcome.value : 'none'}|${r.time.toFixed(6)}|${r.bounces}|${r.touchedBoard}|${r.emergencyUsed}|${r.events.join(',')}`;
+let n = 0, diff = [];
+for (let pi = 0; pi <= 40; pi++) {
+  const power = pi / 40;
+  for (let ai = 0; ai <= 20; ai++) {
+    const aim = (ai - 10) / 10;
+    const ka = key(a.P.simulateThrow(a.board, { power, aim }));
+    const kb = key(b.P.simulateThrow(b.board, { power, aim }));
+    n++;
+    if (ka !== kb) diff.push({ power, aim, now: ka, was: kb });
+  }
+}
+console.log(`brickcity grid: ${n} throws, ${diff.length} differ`);
+for (const d of diff.slice(0, 8)) console.log(JSON.stringify(d));
+process.exit(diff.length ? 1 : 0);

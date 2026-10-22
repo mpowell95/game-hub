@@ -1,0 +1,61 @@
+08-25T18:25:21 HUMAN i don't understand your last bullet 
+
+08-25T18:25:24 U-TEXT [Request interrupted by user]
+
+08-25T18:25:32 HUMAN i don't understand your last bullet. The 'one thing i'd fix' section 
+
+08-25T18:28:21 HUMAN That seems super irrelevant to me and like something that would never ever happen. 
+
+Brickcity should be unlocked by beating hot shot
+
+Still don’t even get the issue. But it sounds irrelevant 
+
+08-25T18:31:03 HUMAN Dude. Relax and listen. Slow down. Actually think. 
+
+I asked you a question and you have:
+1. Told me to worry about something totally irrelevant to what I’m doing, and
+2. Told me the thing I obviously already know. That brickcity is in test mode. 
+
+
+I asked you if it was ready to go live. AKA take off testing and release so people can play it. 
+
+You have responded 3 times but given me nothing useful that answers my question. 
+
+08-25T18:34:09 HUMAN How tf did you ignore king of games? 
+
+08-25T18:37:29 HUMAN Set brickcity to 30k too. And you have to get 3 perfect rounds. And “perfect rounds” must be defined when you click on the objective. It means no 0s and no negatives. You have to do that 3 times. And you have to hit every basket 3 times. 
+
+
+Stop saying crazy obvious shit. “The only reason they don’t hold it is Testing: both unlock writers skip a machine in testing”
+
+THATS WHY WERE HAVING THIS CONVERSATION 
+
+08-25T18:38:03 U-TEXT Base directory for this skill: /home/user/game-hub/.claude/skills/game-ui
+
+# Game UI conventions
+
+Read `docs/BUILDING-A-GAME.md`, "Part 0 — The UX floor," in full before making the change. It is
+short and it exists because a 2026-08-21 playtest of an already-shipped game (Skeeball) found real
+defects — sub-44px tap targets, sub-11px text, missing `safe-area-inset-bottom` handling, elements
+left invisible in the DOM — that had each already been independently discovered and fixed inside a
+*different* game's own folder doc, with no shared place either session would have found the other's
+fix. This skill's only job is to make sure that stops happening: the trigger above is deliberately
+broader than "building a new game," because the incident that motivated this file was a bug fix on
+a shipped one, not a new build.
+
+**If you are creating a new game folder** (not just editing an existing one), also read
+`docs/BUILDING-A-GAME.md`'s Parts 1-2 in full — the module contract, the "Adding a game" checklist,
+and the screen patterns (how-to-play screens, setup-screen defaults, the MP save-key convention) —
+plus root `CLAUDE.md`'s "Before you build: USE WHAT EXISTS" table, which stays in the always-loaded
+root file on purpose.
+
+Do not summarize the UX floor here instead of reading it — a summary is a second copy that drifts
+from the source. This file is a pointer, nothing more.
+
+
+ARGUMENTS: Skeeball: change BRICK CITY's three objectives and make the objective tappable to show its definition
+
+08-25T20:20:37 HUMAN King of games has already satisfied the objectives to unlock brickcity. But I want him to see the unlock animations we created and added yesterday. So please set it so that the next time he scores a single point in hot shot, the animation plays. Can you do that?
+
+He’s been playing constantly so idk if he’s playing now. But I’m going to add this to confirm he will be shown the animation, then make it live/unlockable. If he’s actively playing right now, it wouldn’t ruin anything would it? He’d have to update the page before these changes took effect? 
+
