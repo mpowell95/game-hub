@@ -1,0 +1,34 @@
+import { SkeeballGame, BALLS_PER_GAME } from '/home/user/game-hub/skeeball/js/game.js';
+import { boardById } from '/home/user/game-hub/skeeball/js/boards.js';
+import { engineFor } from '/home/user/game-hub/skeeball/js/engines.js';
+
+const board = boardById('brickcity');
+const { physics: { simulateThrow, STEP } } = engineFor('brickcity');
+// coarse search: first (power, aim) that lands in each non-penalty basket
+const want = ['midL','midC','midR','topL','topC','topR'];
+const found = new Map();
+outer:
+for (let p = 20; p <= 40; p++) {
+  const power = +(p / 40).toFixed(3);
+  for (let a = -10; a <= 10; a++) {
+    const aim = +(a / 10).toFixed(2);
+    const r = simulateThrow(board, { power, aim });
+    const h = r.outcome && r.outcome.hole;
+    if (h && want.includes(h) && !found.has(h)) found.set(h, { power, aim, value: r.outcome.value });
+    if (found.size === want.length) break outer;
+  }
+}
+console.log('scoring throws found:', [...found].map(([h, t]) => `${h}@p${t.power}/a${t.aim}=${t.value}`).join(' '));
+// play a full 9-ball rack using only scoring (non-penalty) throws
+const g = new SkeeballGame('brickcity');
+const list = [...found.values()];
+for (let i = 0; i < BALLS_PER_GAME; i++) {
+  const t = list[i % list.length];
+  g.throwBall({ power: t.power, aim: t.aim });
+  for (let s = 0; s < 240 * 15 && g.ball; s++) g.update(STEP);
+  g.takeEvents();
+}
+const res = g.result();
+console.log('rack over:', g.over, 'balls:', g.ballsUsed, 'score:', res.score);
+console.log('slotsHit:', res.slotsHit, 'cleanRack:', res.cleanRack);
+console.log('throws:', g.throws.map(t => `${t.hole}:${t.value}`).join(' '));

@@ -1,0 +1,41 @@
+// Does the frame-rate PATTERN change whether a ball hangs in a cup?
+// The sweep so far stepped a perfect 1/60. A real phone does not.
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const { buildMachine } = await import('/home/user/game-hub/skeeball/js/machines/brickcity/machine.js');
+const b = boardById('brickcity'), G = b.geom, M = buildMachine(G);
+const P = engineFor('brickcity').physics;
+
+// ui.js clamps dt to 0.05; physics clamps its accumulator to 0.1.
+const REGIMES = {
+  'perfect 60fps      ': () => 1/60,
+  'steady 30fps       ': () => 1/30,
+  'steady 20fps       ': () => 1/20,
+  'clamped 10fps (.05)': () => 0.05,
+  'jittery phone      ': (i) => (i % 17 === 0 ? 0.05 : i % 5 === 0 ? 1/30 : 1/60),
+  'jittery + hitches  ': (i) => (i % 41 === 0 ? 0.05 : i % 11 === 0 ? 0.033 : i % 3 === 0 ? 0.021 : 1/60),
+};
+console.log('regime               captured  worst-in-cup  hangs>0.8s  dead-still-in-mouth  worst-settle');
+for (const [name, dtf] of Object.entries(REGIMES)) {
+  let capN = 0, worstCap = 0, hangs = 0, mouthFreeze = 0, worstT = 0;
+  for (let pi = 0; pi <= 40; pi += 1) for (let ai = 0; ai <= 20; ai += 1) {
+    const st = P.startThrow(b, { power: pi/40, aim: (ai-10)/10 });
+    let i = 0, capFrom = -1, capDur = 0, stillFrom = -1;
+    while (!st.done && i < 4000) {
+      P.step(b, st, dtf(i)); i++;
+      if (st.captured) {
+        if (capFrom < 0) { capFrom = st.t; capN++; }
+        capDur = Math.max(capDur, st.t - capFrom);
+        const v = st.ball.velocity;
+        if (Math.hypot(v.x,v.y,v.z) < 0.05) {
+          if (stillFrom < 0) stillFrom = st.t;
+          if (st.t - stillFrom > 0.7) { mouthFreeze++; stillFrom = st.t; }
+        } else stillFrom = -1;
+      } else { capFrom = -1; stillFrom = -1; }
+    }
+    if (capDur > worstCap) worstCap = capDur;
+    if (capDur > 0.8) hangs++;
+    if (st.t > worstT) worstT = st.t;
+  }
+  console.log(`${name}  ${String(capN).padStart(6)}  ${worstCap.toFixed(2).padStart(11)}s  ${String(hangs).padStart(10)}  ${String(mouthFreeze).padStart(19)}  ${worstT.toFixed(2).padStart(10)}s`);
+}

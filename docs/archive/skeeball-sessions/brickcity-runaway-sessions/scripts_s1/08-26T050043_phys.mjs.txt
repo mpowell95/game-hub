@@ -1,0 +1,30 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const page = await (await browser.newContext()).newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+const out = await page.evaluate(async () => {
+  const { BOARDS, boardById } = await import('/skeeball/js/boards.js');
+  const { engineFor } = await import('/skeeball/js/engines.js');
+  const res = [];
+  for (const b of BOARDS) {
+    const P = engineFor(b.id).physics;
+    const st = P.startThrow(b, { power: 0.62, aim: 0 });
+    const bodies = st.world ? st.world.bodies.length : (st.w ? st.w.bodies.length : -1);
+    // time 1 second of simulated flight
+    const t0 = performance.now();
+    for (let i = 0; i < 60; i++) P.step(b, st, 1/60);
+    const ms = performance.now() - t0;
+    // full throw
+    const st2 = P.startThrow(b, { power: 0.62, aim: 0 });
+    const t1 = performance.now(); let n = 0;
+    while (!st2.done && n < 3000) { P.step(b, st2, 1/60); n++; }
+    res.push({ id: b.id, bodies, msPer60Frames: +ms.toFixed(1), msPerFrame: +(ms/60).toFixed(2),
+      fullThrowMs: +(performance.now()-t1).toFixed(0), frames: n });
+  }
+  return res;
+});
+console.table(out);
+await browser.close();

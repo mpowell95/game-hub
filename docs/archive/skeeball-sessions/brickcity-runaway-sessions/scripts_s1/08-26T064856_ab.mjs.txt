@@ -1,0 +1,60 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+for (const [label, port] of [['origin/main', 8124], ['this branch', 8123]]) {
+  const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  let evicted = 0;
+  page.on('console', m => { if (/Too many active WebGL contexts/i.test(m.text())) evicted++; });
+  await page.addInitScript(() => {
+    localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+    localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+    localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: { brickcity:{open:true,testing:false} } } }, at: Date.now() }));
+  });
+  await page.goto(`http://localhost:${port}/skeeball/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1500);
+  await (await page.$('[data-role="play"]')).click({ force: true });
+  await page.waitForSelector('.sk-canvas', { timeout: 10000 }); await page.waitForTimeout(600);
+  const measure = async () => {
+    // Count REAL canvas frames: hash the canvas each animation frame for 3s and count changes.
+    return page.evaluate(() => new Promise(res => {
+      const c = document.querySelector('.sk-canvas');
+      const t = document.createElement('canvas'); t.width = 40; t.height = 40;
+      const x = t.getContext('2d');
+      let last = '', changes = 0, ticks = 0;
+      const t0 = performance.now();
+      const tick = () => {
+        ticks++;
+        x.drawImage(c, 0, 0, c.width, c.height, 0, 0, 40, 40);
+        const d = t.getContext('2d').getImageData(0,0,40,40).data;
+        let h = 0; for (let i = 0; i < d.length; i += 17) h = (h * 31 + d[i]) | 0;
+        const s = String(h); if (s !== last) { changes++; last = s; }
+        if (performance.now() - t0 < 3000) requestAnimationFrame(tick);
+        else res({ ticks, changes, secs: (performance.now()-t0)/1000 });
+      };
+      requestAnimationFrame(tick);
+    }));
+  };
+  const cdp = await ctx.newCDPSession(page);
+  const stage = await (await page.$('[data-role="stage"]')).boundingBox();
+  const swipe = async (ms) => { const x=stage.x+stage.width/2,y0=stage.y+stage.height*0.94,dist=stage.height*0.55,steps=6;
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y:y0,id:1}]});
+    for(let i=1;i<=steps;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y0-dist*i/steps,id:1}]});await page.waitForTimeout(ms/steps);}
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]}); };
+  await swipe(210);
+  const a = await measure();
+  const rows = [`rack 1: ${(a.ticks/a.secs).toFixed(1)} rAF/s, ${(a.changes/a.secs).toFixed(1)} new canvas frames/s`];
+  for (let i = 2; i <= 6; i++) {
+    await page.click('[data-role="machines"]'); await page.waitForTimeout(300);
+    await page.click('[data-role="new"]'); await page.waitForTimeout(700);
+    await swipe(210);
+    const r = await measure();
+    rows.push(`rack ${i}: ${(r.ticks/r.secs).toFixed(1)} rAF/s, ${(r.changes/r.secs).toFixed(1)} new canvas frames/s`);
+  }
+  console.log(`\n=== ${label} ===`);
+  for (const r of rows) console.log('  ' + r);
+  console.log(`  "Too many active WebGL contexts" warnings: ${evicted}`);
+  await ctx.close();
+}
+await browser.close();

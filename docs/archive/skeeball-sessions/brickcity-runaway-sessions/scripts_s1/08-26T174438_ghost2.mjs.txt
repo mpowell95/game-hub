@@ -1,0 +1,66 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+page.on('pageerror', e => console.log('PAGEERROR', e.message));
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: { brickcity:{open:true,testing:false} } } }, at: Date.now() }));
+});
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1500);
+await (await page.$('[data-role="play"]')).click({ force: true });
+await page.waitForSelector('.sk-canvas', { timeout: 10000 });
+await page.waitForTimeout(600);
+await page.evaluate(() => {
+  const ui = window.__skTest.ui, R = ui.renderer;
+  const S = window.__S = { frames: 0, ghostRun: 0, worstGhost: 0, worstGhostAt: null,
+                           frozenRun: 0, worstFrozen: 0, worstFrozenAt: null, maxLive: 0, lastKey: '' };
+  const SERVE = (m) => Math.abs(m.x) < 1e-6 && Math.abs(m.z + 0.12) < 1e-6;
+  const orig = R.render.bind(R);
+  R.render = (game, dt) => {
+    orig(game, dt);
+    S.frames++;
+    const live = (game && game.balls) || [];
+    S.maxLive = Math.max(S.maxLive, live.length);
+    const drawn = R._balls.filter(m => m.visible).map(m => ({ x:m.position.x, y:m.position.y, z:m.position.z })).filter(m => !SERVE(m));
+    // GHOST: more balls drawn than the game has live
+    if (drawn.length > live.length) { S.ghostRun++;
+      if (S.ghostRun > S.worstGhost) { S.worstGhost = S.ghostRun;
+        S.worstGhostAt = { drawn: drawn.map(d=>({x:+d.x.toFixed(3),y:+d.y.toFixed(3),z:+d.z.toFixed(3)})), live: live.length }; } }
+    else S.ghostRun = 0;
+    // FROZEN: a drawn non-serve ball at an identical position frame after frame
+    const key = JSON.stringify(drawn.map(d=>[+d.x.toFixed(4),+d.y.toFixed(4),+d.z.toFixed(4)]));
+    if (drawn.length && key === S.lastKey) { S.frozenRun++;
+      if (S.frozenRun > S.worstFrozen) { S.worstFrozen = S.frozenRun;
+        S.worstFrozenAt = { pos: {x:+drawn[0].x.toFixed(3),y:+drawn[0].y.toFixed(3),z:+drawn[0].z.toFixed(3)}, live: live.length,
+          phys: live.map(s => ({ y:+s.ball.position.y.toFixed(3), z:+s.ball.position.z.toFixed(3),
+            sp:+Math.hypot(s.ball.velocity.x,s.ball.velocity.y,s.ball.velocity.z).toFixed(3), cap: s.captured||null })) }; } }
+    else S.frozenRun = 0;
+    S.lastKey = key;
+  };
+});
+// throw hard and fast: a second ball goes up while the first is still resolving
+const SHOTS = [];
+for (let k = 0; k < 60; k++) SHOTS.push([0.30 + (k % 14) * 0.05, ((k % 9) - 4) / 5]);
+let thrown = 0;
+for (const [power, aim] of SHOTS) {
+  const ok = await page.evaluate(([p, a]) => {
+    const ui = window.__skTest.ui;
+    if (!ui.game) return 'no game';
+    if (ui.game.over) { ui._startGame(null); return 'new rack'; }
+    if (!ui.game.canThrow()) return false;
+    return ui.game.throwBall({ power: p, aim: a });
+  }, [power, aim]);
+  if (ok === true) thrown++;
+  await page.waitForTimeout(700);          // deliberately SHORT: stack balls in the air
+}
+await page.waitForTimeout(6000);
+const S = await page.evaluate(() => window.__S);
+console.log(`threw ${thrown} balls over ${S.frames} rendered frames; most live at once: ${S.maxLive}`);
+console.log(`longest GHOST run (drawn > live): ${S.worstGhost} frames`, S.worstGhostAt ? JSON.stringify(S.worstGhostAt) : '');
+console.log(`longest FROZEN drawn run: ${S.worstFrozen} frames`, S.worstFrozenAt ? JSON.stringify(S.worstFrozenAt) : '');
+await browser.close();

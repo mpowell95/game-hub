@@ -1,0 +1,31 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const { buildMachine } = await import('/home/user/game-hub/skeeball/js/machines/brickcity/machine.js');
+const b = boardById('brickcity'), G = b.geom, M = buildMachine(G);
+const P = engineFor('brickcity').physics;
+console.log(`ballR ${G.ballR}  captureDrop ${G.captureDrop}`);
+console.log('hole   r(m)     rEff     r-ballR   collarH');
+for (const [id,h] of Object.entries(G.holes)) console.log(`${id.padEnd(6)} ${h.r.toFixed(4)}  ${(h.r-G.ballR*0.28).toFixed(4)}  ${(h.r-G.ballR).toFixed(4)}   ${(h.collarH||0).toFixed(4)}`);
+
+// worldToFace equivalent: use the machine's own mapping via a tiny probe
+const stall = [];
+for (let pi = 0; pi <= 40; pi++) for (let ai = 0; ai <= 20; ai++) {
+  const power = pi/40, aim = (ai-10)/10;
+  const st = P.startThrow(b, { power, aim });
+  let n = 0, stillFrom = -1, best = null;
+  while (!st.done && n < 3000) {
+    P.step(b, st, 1/60); n++;
+    const v = st.ball.velocity, sp = Math.hypot(v.x, v.y, v.z);
+    if (sp < 0.02 && !st.captured) { if (stillFrom < 0) stillFrom = st.t; }
+    else { if (stillFrom >= 0 && st.t - stillFrom > (best ? best.dur : 0.25)) best = { dur: st.t - stillFrom, p: { x: st.ball.position.x, y: st.ball.position.y, z: st.ball.position.z } }; stillFrom = -1; }
+  }
+  if (stillFrom >= 0 && st.t - stillFrom > (best ? best.dur : 0.25)) best = { dur: st.t - stillFrom, p: { x: st.ball.position.x, y: st.ball.position.y, z: st.ball.position.z } };
+  if (best) stall.push({ power, aim, dur: best.dur, pos: best.p, hole: st.outcome ? st.outcome.hole : 'none', t: st.t });
+}
+stall.sort((a,b)=>b.dur-a.dur);
+console.log(`\nthrows where the ball sat DEAD STILL (uncaptured) for >0.25s: ${stall.length} of 861`);
+const buckets = [0.25,0.5,1,1.5,2,3];
+for (let i=0;i<buckets.length;i++){ const lo=buckets[i], hi=buckets[i+1]||99;
+  const n=stall.filter(s=>s.dur>=lo&&s.dur<hi).length; if(n) console.log(`   ${lo}s-${hi===99?'+':hi+'s'}: ${n}`); }
+console.log('\nworst 12:');
+for (const s of stall.slice(0,12)) console.log(`   p${s.power.toFixed(3)} a${String(s.aim).padStart(4)}  still ${s.dur.toFixed(2)}s  of ${s.t.toFixed(2)}s  -> ${s.hole}   at y${s.pos.y.toFixed(3)} z${s.pos.z.toFixed(3)}`);

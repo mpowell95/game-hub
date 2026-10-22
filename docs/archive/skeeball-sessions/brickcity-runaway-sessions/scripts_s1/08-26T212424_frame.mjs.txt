@@ -1,0 +1,23 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { buildMachine } = await import('/home/user/game-hub/skeeball/js/machines/brickcity/machine.js');
+const b = boardById('brickcity'), G = b.geom, M = buildMachine(G);
+const R = G.ballR;
+console.log('frames (v ranges) - tilt 0.1 = a tread, 1.5708 = a vertical riser:');
+for (const f of M.frames) console.log(`   v ${f.v0.toFixed(3)} .. ${f.v1.toFixed(3)}   tilt ${f.tilt.toFixed(4)} ${Math.abs(f.tilt-Math.PI/2)<0.01?'  <-- RISER':'  (tread)'}`);
+const low = G.holes.lowC;
+const cw = M.faceToWorld(low.u, low.v, 0);
+console.log(`\nlowC hole: face (u ${low.u}, v ${low.v})  world (${cw.map(n=>n.toFixed(3)).join(', ')})  r ${low.r}  collar ${low.collarH}`);
+console.log(`the low row's tread spans v 0.000..0.300, so the hole at v ${low.v.toFixed(3)} is ON it\n`);
+for (const [tag, p] of [['parked ball A', {x:0.0048,y:0.579,z:-2.289}], ['parked ball B', {x:0.0048,y:0.627,z:-2.289}]]) {
+  const f = M.worldToFace(p);
+  const frame = M.frames.find(fr => f.v >= fr.v0 && f.v <= fr.v1);
+  const kind = frame ? (Math.abs(frame.tilt - Math.PI/2) < 0.01 ? 'RISER' : 'tread') : '(outside every frame)';
+  // distance in FACE coords (what capture uses) vs plain WORLD distance to the cup axis
+  const dFace = Math.hypot(f.u - low.u, f.v - low.v);
+  const dWorld = Math.hypot(p.x - cw[0], p.z - cw[2]);
+  console.log(`${tag}  world y ${p.y} z ${p.z}`);
+  console.log(`   worldToFace -> u ${f.u.toFixed(4)}  v ${f.v.toFixed(4)}  h ${f.h.toFixed(4)}   frame: ${kind}${frame?` (v ${frame.v0}..${frame.v1})`:''}`);
+  console.log(`   distance to lowC:  in FACE coords ${dFace.toFixed(4)}   in WORLD (horizontal) ${dWorld.toFixed(4)}   mouth radius ${low.r.toFixed(4)}`);
+  console.log(`   => world says ${dWorld < low.r ? 'INSIDE THE MOUTH' : 'outside'};  face says ${dFace < low.r ? 'inside' : 'OUTSIDE'}  <-- capture believes the face`);
+  console.log(`   ball top y ${(p.y+R).toFixed(3)}  bottom y ${(p.y-R).toFixed(3)}   cup rim top y ${(cw[1]+low.collarH).toFixed(3)}  cup floor y ${cw[1].toFixed(3)}\n`);
+}

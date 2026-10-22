@@ -1,0 +1,25 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+const srv = spawn('node', ['server.mjs'], { cwd: '/home/user/game-hub', stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 1200));
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const pg = await b.newPage({ viewport: { width: 393, height: 620 } });
+const errs = []; pg.on('pageerror', (e) => errs.push(String(e)));
+await pg.goto('http://localhost:8123/.runaway-probe.html');
+await pg.waitForFunction('window.__ready === true', null, { timeout: 20000 });
+
+// The full stack, in a real browser: game.throwBall -> startThrow(t0) -> substep -> renderer.
+// power 0.77 / aim 0.15 at phase 0 is a cell sweep-mover found catches the moving 100.
+const r = await pg.evaluate(() => {
+  const P = window.__probe;
+  P.set(0);
+  P.throwOne(0.77, 0.15);
+  let frames = 0;
+  while (frames < 900) { P.step(1 / 60); frames++; }
+  return { score: P.score(), machineT: P.machineT(), frames };
+});
+console.log(`score after one throw at (0.77, 0.15, t0=0): ${r.score}   `
+  + `(machineT ran to ${r.machineT.toFixed(2)}s)`);
+console.log(r.score === 100 ? 'the moving 100 scored through the real game path' : `scored ${r.score}`);
+console.log(errs.length ? 'JS ERRORS: ' + errs.join('; ') : 'no page errors');
+await b.close(); srv.kill();

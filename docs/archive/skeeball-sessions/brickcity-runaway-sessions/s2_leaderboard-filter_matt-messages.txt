@@ -1,0 +1,51 @@
+08-26T00:02:25 HUMAN Sweet. 
+
+Can you explain why it’s choppy sometimes? 
+
+08-26T00:07:50 HUMAN I assume every machine has the same issues rn, right? 
+
+08-26T00:12:33 HUMAN Anything else you see that could improve the quality? 
+I want it to be smooth on every game. And I wanna touch the files the fewest number of times as possible. So find anything else we can do first then let’s do it all at once 
+
+08-26T00:25:04 HUMAN Huh? Chrome? Blur? What? Opaque?MSAA? Pixel cap? Makes things smoother?? 
+
+08-26T00:28:42 HUMAN You said like 50% opaque now or something. I don’t need any effect at all. Is it even faster or easier if we make it 100% opaque so you just don’t even have to render behind it ever?
+
+Will I notice this? 
+
+08-26T00:30:42 HUMAN Well what kind of popup are we talking about? Does it make sense to freeze the game? 
+
+08-26T00:32:55 HUMAN Ok go 
+
+08-26T01:17:06 HUMAN Huh? Yeah why wasn’t the leaderboard deployed? Go 
+
+08-26T01:21:14 HUMAN UNDO UNDO UNDO. YOU LOST DATA !! ALERT ALERT ALERT 
+
+08-26T01:28:35 HUMAN  [{'file_name': 'IMG_4555.PNG', 'file_uuid': 'cf66f188-6391-4fe3-9914-d89a1a221edd', 'is_image': True}]
+
+08-26T01:35:39 HUMAN Why did that break?
+
+STOP ASSUMING EVERYONE IS A TEST ACCOUNT. ONLY TEST1, TEST2, and MATTYICE EVER HAVE TEST ROUNDS. STOP. 
+
+TP IS A REAL ACCOUNT 
+
+08-26T01:44:08 HUMAN Way too much text. Do you understand what you did wrong and how to fix it? 
+
+08-26T01:44:58 HUMAN Fix it. 
+
+Did you undo everything or just the leaderboard? 
+
+08-26T01:56:09 HUMAN Go look at the app. Load the real leaderboard. Tell me if sorting by played is correct. Tell me the played number is what is shown as the large number. 
+
+08-26T02:30:55 HUMAN Listen. Before you touched the leaderboard tonight, it showed the played number when I clicked on played and the wins number when I clicked on wins. 
+
+Then you touched the leaderboard. 
+
+Now it doesn’t do that. 
+
+Fix it 
+
+08-27T23:15:39 HUMAN The main thing I wanted you haven’t fixed. King of games has not ever played a runaway game. The stats in the bottom should not be his skeeball all time stats. If I’m filtering for a single game, the bottom stats just change to reflect only that machine. 
+
+And I told you to get rid of the 4 color stat thing. [{'file_name': 'IMG_4571.PNG', 'file_uuid': '0279ec6e-4ce6-4c6a-bc77-bfb29eddaeb5', 'is_image': True}]
+

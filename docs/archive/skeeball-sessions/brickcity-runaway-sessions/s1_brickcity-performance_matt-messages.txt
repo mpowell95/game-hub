@@ -1,0 +1,77 @@
+08-26T06:33:58 HUMAN Just uploaded the video to GitHub in the skeeball folder 
+
+08-26T06:36:32 U-TEXT [Image: original 1750x2280, displayed at 1535x2000. Multiply coordinates by 1.14 to map to original image.]
+
+08-26T11:56:30 HUMAN Explain this to me in layman’s terms 
+
+08-26T12:00:38 HUMAN Why isn’t it 60fps tho? 
+
+08-26T12:09:31 HUMAN Deploy all fixes 
+
+08-26T12:14:46 HUMAN All the reference videos and pictures and stuff I upload for you to look at ships out with the site? How much extra/wasted space is that taking up? 
+
+08-26T12:22:03 HUMAN Would moving them into the references folder then doing the git ignore thing help? 
+
+08-26T12:25:42 HUMAN 3- it’s how sessions know what to build and how, etc. once that work is done the ref files are obsolete. How often are you looking at all of them? You shouldn’t be scanning them every time 
+
+08-26T14:26:37 HUMAN I don’t even need them at all. They were references for you that were one time use. They can be deleted 
+
+08-26T16:34:31 HUMAN Not choppy now. But the ball sometimes gets stuck IN the negative baskets. Like instead of falling in, it’s just stuck there 
+
+08-26T17:25:58 HUMAN Please sum up the problem and the fix 
+
+08-26T17:28:29 HUMAN Hold on - the ball was NOT perched on the back of the rim against the backboard. It was IN the basket. Half of the ball out and half completely in. I’ve even seen a second ball fall into the same negative basket while one is stuck/frozen. 
+
+This is a cloud session, but I could switch to a laptop one so you can run a bunch of tests if you want 
+
+08-26T17:46:43 U-TEXT [Image: original 1179x2556, displayed at 923x2000. Multiply coordinates by 1.28 to map to original image.]
+
+08-26T18:22:46 HUMAN you said a computer session can run tests and stuff better than a cloud session can.. 
+
+08-26T18:32:14 HUMAN calm down.
+
+Now that I'm talking to you on my laptop, can you access my laptop to run tests? Yes or no
+
+If no, write handoff document telling a new session to test Brickcity. 
+
+08-26T21:41:01 HUMAN i said write a handoff doc for a new session to run tests and find the bug 
+
+08-27T15:33:33 HUMAN We’ve done several things to multiple boards and even more to brickcity. Read the new machine document and propose changes to prevent sluggishness going forward 
+
+08-27T18:06:37 HUMAN Is there a reason it was built different like this? 
+
+08-27T18:08:24 HUMAN Alright. Make the classic machine less choppy 
+
+08-27T21:06:19 HUMAN What about the new machine instructional doc? 
+
+08-27T23:02:21 HUMAN So the instructions document? Is good?  Anything superfluous in there? 
+
+08-27T23:04:41 U-TEXT This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Summary:
+## 1. Primary Request and Intent
+
+The conversation began with Matt reporting that **HOT SHOT: BRICK CITY** (a Skeeball machine in his Game Hub PWA) was slow and choppy in real gameplay, with a screen recording as evidence. It evolved through several distinct requests:
+
+1. **"How can we fix this?"** — diagnose and fix BRICK CITY's choppiness (screen recording attached)
+2. **"Explain this to me in layman's terms"** then **"Why isn't it 60fps tho?"** — plain-English explanations
+3. **"Deploy all fixes"** — merge to main and make live
+4. Video re-uploaded to the repo so I could actually decode it
+5. **Repo size questions** — do uploaded reference videos/pictures ship with the site, how much waste, would gitignore help; concluding with **"I don't even need them at all. They were references for you that were one time use. They can be deleted."**
+6. **"the ball sometimes gets stuck IN the negative baskets"** — a new gameplay bug
+7. **Correction: "the ball was NOT perched on the back of the rim against the backboard. It was IN the basket. Half of the ball out and half completely in. I've even seen a second ball fall into the same negative basket while one is stuck/frozen."**
+8. **"write handoff document telling a new session to test Brickcity"** — rewritten twice after feedback
+9. **"Read the new machine document and propose changes to prevent sluggishness going forward"**
+10. **"Make the classic machine less choppy"** then **"Proceed"** (= do the remaining two machines)
+11. **"What about the new machine instructional doc?"** — implement the proposed spec changes
+12. **Final, unanswered: "So the instructions document? Is good? Anything superfluous in there?"** — a request to critically review my own Part 7 addition for bloat/superfluous content
+
+## 2. Key Technical Concepts
+
+- **Game Hub**: vanilla-JS, no-build PWA deployed via GitHub Pages from `main`
+- **Skeeball machine isolation (HARD RULE)**: each machine owns its own `render.js`, `physics.js`, `machine.js` under `skeeball/js/machines/<id>/`; `engines.js` maps board id → engine; board id and folder name are the same
+- **three.js / WebGL**: `WebGLRenderer`, `shadowMap.autoUpdate`/`needsUpdate`, `Material.dispose()` not disposing `.map`, `forceContextLoss()`, browser global context budget (16 in Chromium, fewer on iOS)
+- **cannon-es physics**: `NaiveBroadphase` O(n²), fixed 1/240 timestep with accumulator, `simulateThrow`/`startThrow`/`step`, deterministic (no rng)
+- **Face vs world coordinates**: `M.faceToWorld(u,v,h)` / `M.worldToFace(pos)` → `{u,v,h,tilt}`; staircase machines have six frames (tilt 0.1 = tread, 1.5708 = riser); `worldToFace` picks the frame by proximity: `score = (inSeg ? 0 : 1000) + |lh|`
+- **Service worker**: two-tier precache (SHELL atomic, REST warmed), `REST_MANIFEST` content hashes maintained by `validate-sw-assets.mj
+

@@ -1,0 +1,14 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+const srv = spawn('node', ['server.mjs'], { cwd: '/home/user/game-hub', stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 1200));
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+for (const id of ['brickcity', 'basketball']) {
+  const pg = await b.newPage({ viewport: { width: 393, height: 620 } });
+  await pg.goto(`http://localhost:8123/.runaway-probe.html?b=${id}`);
+  await pg.waitForFunction('window.__ready === true', null, { timeout: 20000 });
+  await pg.screenshot({ path: `/home/user/game-hub/.visual-out/marquee-${id}.png`, clip: { x: 60, y: 20, width: 280, height: 70 } });
+  await pg.close();
+}
+console.log('done');
+await b.close(); srv.kill();

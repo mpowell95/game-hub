@@ -1,0 +1,48 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+const srv = spawn('node', ['server.mjs'], { cwd: '/home/user/game-hub', stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 1200));
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const pg = await b.newPage({ viewport: { width: 393, height: 620 } });
+const errs = [];
+pg.on('pageerror', (e) => errs.push(String(e)));
+pg.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
+await pg.goto('http://localhost:8123/.runaway-probe.html');
+await pg.waitForFunction('window.__ready === true', null, { timeout: 20000 });
+
+console.log('collar bodies flagged as movers:', await pg.evaluate('__probe.nMovers()'));
+
+// Walk a full period and compare THREE independent things at each sample.
+const rows = [];
+for (const t of [0, 0.875, 1.75, 2.625, 3.5, 4.375, 5.25, 6.125, 7.0]) {
+  const r = await pg.evaluate((tt) => {
+    window.__probe.set(tt);
+    return { t: tt, group: __probe.groupX(), want: __probe.wantX(tt), body: __probe.bodyX() };
+  }, t);
+  rows.push(r);
+}
+console.log('\n  t      moverU()    render group.x   physics body.x   agree?');
+let worst = 0;
+for (const r of rows) {
+  const dg = Math.abs(r.group - r.want);
+  const db = Math.abs(r.body - r.want);
+  worst = Math.max(worst, dg, db);
+  console.log(`  ${r.t.toFixed(3)}  ${r.want.toFixed(6).padStart(10)}  ${r.group.toFixed(6).padStart(14)}  `
+    + `${r.body.toFixed(6).padStart(14)}   ${dg < 1e-9 && db < 1e-9 ? 'yes' : 'NO'}`);
+}
+console.log(`\n  worst disagreement across the period: ${worst.toExponential(2)} m`);
+
+// The clock has to run with nothing in the air.
+await pg.evaluate('__probe.set(0)');
+for (let i = 0; i < 60; i++) await pg.evaluate('__probe.step(1/60)');
+const idle = await pg.evaluate('__probe.machineT()');
+console.log(`  machineT after 60 idle frames (no ball thrown): ${idle.toFixed(3)}s  ${idle > 0.9 ? 'runs' : 'FROZEN'}`);
+
+// Screenshots at three phases, so the basket can be SEEN in three places.
+for (const [name, t] of [['centre', 0], ['right-end', 1.75], ['left-end', 5.25]]) {
+  await pg.evaluate((tt) => window.__probe.set(tt), t);
+  await pg.screenshot({ path: `/home/user/game-hub/.visual-out/runaway-${name}.png` });
+}
+console.log('  screenshots: .visual-out/runaway-{centre,right-end,left-end}.png');
+console.log(errs.length ? `\n  JS ERRORS:\n   ${errs.join('\n   ')}` : '\n  no JS errors');
+await b.close(); srv.kill();

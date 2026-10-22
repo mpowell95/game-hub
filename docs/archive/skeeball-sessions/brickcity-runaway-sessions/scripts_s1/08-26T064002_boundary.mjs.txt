@@ -1,0 +1,20 @@
+import { readFileSync } from 'node:fs';
+const SP='/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad';
+const W=96,H=208,FB=W*H,CAP=60;
+const buf=readFileSync(`${SP}/raw/g.raw`); const n=buf.length/FB;
+const whole=(f)=>{let c=0;const a=f*FB,b=(f-1)*FB;for(let i=0;i<FB;i++) if(Math.abs(buf[a+i]-buf[b+i])>3)c++;return c/FB;};
+const big=[]; for(let f=1;f<n;f++){const d=whole(f); if(d>0.25) big.push([f,+d.toFixed(2)]);}
+console.log('frames where >25% of the screen changed (overlay in/out):');
+console.log(big.map(([f,d])=>`${(f/60).toFixed(1)}s:${d}`).join('  '));
+// canvas paint rate over sliding 10s windows
+const canvas=(f)=>{let c=0;for(let y=72;y<200;y++){const a=f*FB+y*W,b=(f-1)*FB+y*W;
+  for(let x=0;x<W;x++) if(Math.abs(buf[a+x]-buf[b+x])>3)c++;} return c;};
+const th=(200-72)*W*0.004;
+const painted=[]; for(let f=1;f<n;f++) if(canvas(f)>th) painted.push(f);
+console.log('\ncanvas paints per 5s window (only counts while something is moving):');
+for(let s=0;s+300<=n;s+=300){
+  const inWin=painted.filter(f=>f>=s&&f<s+300);
+  const gaps=[]; for(let i=1;i<inWin.length;i++) gaps.push(inWin[i]-inWin[i-1]);
+  const med=gaps.length?[...gaps].sort((a,b)=>a-b)[gaps.length>>1]:null;
+  console.log(`  ${String(s/60).padStart(3)}-${String(s/60+5).padStart(3)}s   ${String(inWin.length).padStart(3)} paints   median gap ${med===null?'-':med+' frames = '+(1000*med/60).toFixed(0)+'ms = '+(60/med).toFixed(1)+' fps'}`);
+}

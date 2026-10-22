@@ -1,0 +1,18 @@
+import { boardById } from './skeeball/js/boards.js';
+import { engineFor } from './skeeball/js/engines.js';
+const board = boardById('basketball');
+const { physics } = engineFor('basketball');
+const { startThrow, STEP } = physics;
+// import substep indirectly: step with exact dt
+let rows = [];
+for (const power of [0.5,0.6,0.7,0.8,0.9,1.0]) {
+  const st = startThrow(board, { power, aim: 0 });
+  let tTop = null, guard = 0;
+  while (!st.done && guard++ < 240*14) {
+    physics.step(board, st, STEP);
+    const f = st.M.worldToFace(st.ball.position);
+    if (tTop === null && f.v > board.geom.boardLen * 0.80) tTop = st.t;
+  }
+  rows.push({ power, tTopRow: tTop === null ? '-' : tTop.toFixed(2), settle: st.t.toFixed(2), hole: st.outcome ? st.outcome.hole : 'returned' });
+}
+console.table(rows);

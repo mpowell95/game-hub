@@ -1,0 +1,17 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const b = boardById('brickcity'); const P = engineFor('brickcity').physics;
+const out = [];
+for (let pi = 0; pi <= 40; pi++) for (let ai = 0; ai <= 20; ai++) {
+  const st = P.startThrow(b, { power: pi/40, aim: (ai-10)/10 });
+  let n = 0, stillRun = 0, worstStill = 0, from = -1;
+  while (!st.done && n < 3000) {
+    P.step(b, st, 1/60); n++;
+    const v = st.ball.velocity;
+    if (Math.hypot(v.x,v.y,v.z) < 0.02 && !st.captured) { if (from < 0) from = st.t; worstStill = Math.max(worstStill, st.t - from); }
+    else from = -1;
+  }
+  out.push([pi, ai, st.outcome ? st.outcome.hole : 'none', st.outcome ? st.outcome.value : 0,
+            +st.t.toFixed(4), st.nudges, +worstStill.toFixed(2)]);
+}
+console.log(JSON.stringify(out));
