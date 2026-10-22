@@ -34,7 +34,7 @@
 import { loadProfile } from './profile-store.js';
 import { isHiddenName as isTestName } from './hidden-players.js';
 import { getStatsApp } from './firebase-boot.js';
-import { readPlayersOnce } from './stats-net.js';
+import { readPlayersOnce, readPeople } from './stats-net.js';
 import { aggregatePlayers, isPlaceholderName } from './players-agg.js';
 import { hubThreadRow, withHubRow } from './hub-messages.js';
 
@@ -351,6 +351,50 @@ export async function logGameChat({ toCodes, game, stats, room, payload, text })
 /** Matt's broadcast: the same words to every recipient, each in their OWN thread. No separate node
  *  and no separate reader - a broadcast is just several ordinary messages, so replying to one is an
  *  ordinary conversation. Returns { sent, failed }. */
+/** THE REMIND BELL (2026-10-22, Matt): ask the server to push "Reminder: your turn vs <me>" to
+ *  `toCode` about challenge match `id` of hub game `game`. Writes nudges/<toCode>/<node>~<id> =
+ *  { from: me, t }; the rules take it only as this device's claimed code and once per match per
+ *  6 hours, and functions/index.js nudgePush checks it is a real waiting turn before sending.
+ *  Returns { ok:true } or { ok:false, reason: 'too-soon'|'offline'|'no-code'|'blocked'|'failed' }. */
+export const NUDGE_NODES = { hoops4: 'hoops', skeeball: 'skeeChallenges', cuppong: 'cuppong', darts: 'darts',
+  'flick-soccer': 'flicksoccer', archery: 'archery', chinchon: 'chinchon', escoba: 'escoba' };
+// When THIS device last rang each match's bell, only to fill the bell in (gamehub.nudges.v1).
+const NUDGED_KEY = 'gamehub.nudges.v1';
+export function nudgedAt(game, id) {
+  try { return Number((JSON.parse(localStorage.getItem(NUDGED_KEY) || '{}') || {})[`${game}~${id}`]) || 0; } catch { return 0; }
+}
+function stampNudged(game, id) {
+  try {
+    const all = JSON.parse(localStorage.getItem(NUDGED_KEY) || '{}') || {};
+    all[`${game}~${id}`] = Date.now();
+    localStorage.setItem(NUDGED_KEY, JSON.stringify(all));
+  } catch { /* only the bell's fill */ }
+}
+export async function sendNudge({ toCode, game, id }) {
+  const me = myCode(), to = asCode(toCode), node = NUDGE_NODES[game];
+  if (!me || !to || !node || !id) return { ok: false, reason: 'no-code' };
+  if (!writesAllowed('Remind')) return { ok: false, reason: 'blocked' };
+  const boot = await ready();
+  if (!boot) return { ok: false, reason: 'offline' };
+  const { db, api } = boot;
+  const ref = api.ref(db, `nudges/${to}/${node}~${id}`);
+  try {
+    await api.set(ref, { from: me, t: api.serverTimestamp() });
+  } catch (err) {
+    // PERMISSION_DENIED here is almost always the 6-hour gap (the rules' own rate limit).
+    const denied = /permission/i.test(String((err && (err.code || err.message)) || err));
+    if (!denied) console.error('[messages] Remind NOT sent', err);
+    return { ok: false, reason: denied ? 'too-soon' : 'failed' };
+  }
+  try {
+    const snap = await api.get(ref);
+    const v = snap && snap.exists() ? snap.val() : null;
+    if (!v || v.from !== me) { console.error('[messages] Remind did not read back', v); return { ok: false, reason: 'failed' }; }
+  } catch (err) { console.error('[messages] Remind could not be re-read', err); }
+  stampNudged(game, id);
+  return { ok: true };
+}
+
 export async function sendBroadcast(recipients, text) {
   let sent = 0; const failed = [];
   for (const r of (Array.isArray(recipients) ? recipients : [])) {
@@ -514,8 +558,9 @@ export async function unreadMessageCount() {
 export async function readContacts() {
   const me = myCode();
   try {
-    const all = await readPlayersOnce();
-    return aggregatePlayers(all)
+    // The server-built board's people first (2026-10-22, ~60 KB), else all of players/ as before.
+    const people = await readPeople();
+    return (people ? people.list : aggregatePlayers(await readPlayersOnce()))
       .filter((r) => r && asCode(r.playerId) && asCode(r.playerId) !== me
         && !isPlaceholderName(r.name) && !isTestName(r.name))
       .map((r) => ({ code: asCode(r.playerId), name: r.name, emoji: r.emoji || '🙂' }))

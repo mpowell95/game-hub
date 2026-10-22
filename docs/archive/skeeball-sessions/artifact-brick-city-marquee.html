@@ -1,0 +1,385 @@
+<title>Brick City Marquee</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --asphalt:      #14161B;
+    --asphalt-lift: #1D2027;
+    --asphalt-line: #2C313B;
+    --brick:        #A33427;
+    --brick-deep:   #6E2018;
+    --ember:        #FF6B2C;
+    --bulb:         #FFC53D;
+    --court:        #1E63B8;
+    --chalk:        #EDE6DA;
+    --chalk-dim:    #9A948A;
+
+    --display: "Bungee", "Impact", system-ui, sans-serif;
+    --cond: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+    --body: "Barlow", system-ui, -apple-system, sans-serif;
+
+    --step: clamp(0.9rem, 0.55rem + 1.4vw, 1.15rem);
+    --gutter: clamp(1.25rem, 4vw, 3rem);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--asphalt);
+    color: var(--chalk);
+    font-family: var(--body);
+    font-size: var(--step);
+    line-height: 1.55;
+    background-image:
+      radial-gradient(120% 70% at 50% -10%, rgba(255,107,44,.10), transparent 60%),
+      repeating-linear-gradient(90deg, transparent 0 62px, rgba(255,255,255,.014) 62px 63px);
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 7vw, 5rem) var(--gutter) 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(3rem, 7vw, 5.5rem);
+  }
+
+  .eyebrow {
+    font-family: var(--cond);
+    text-transform: uppercase;
+    letter-spacing: .22em;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--ember);
+    margin: 0;
+  }
+
+  h1 {
+    font-family: var(--cond);
+    font-weight: 700;
+    font-size: clamp(1.9rem, 1.1rem + 3.4vw, 3.1rem);
+    line-height: 1.02;
+    letter-spacing: .01em;
+    text-wrap: balance;
+    margin: .35rem 0 0;
+  }
+
+  .lede {
+    max-width: 62ch;
+    color: var(--chalk-dim);
+    margin: .9rem 0 0;
+  }
+
+  h2 {
+    font-family: var(--cond);
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--chalk);
+  }
+
+  .head-rule {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    border-bottom: 1px solid var(--asphalt-line);
+    padding-bottom: .6rem;
+    margin-bottom: 1.6rem;
+  }
+  .head-rule .tag {
+    font-family: var(--cond);
+    font-size: .8rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--chalk-dim);
+    margin-left: auto;
+  }
+
+  /* ---------- the sign ---------- */
+
+  .stage {
+    background:
+      radial-gradient(90% 120% at 50% 0%, rgba(255,197,61,.10), transparent 55%),
+      linear-gradient(180deg, var(--asphalt-lift), var(--asphalt));
+    border: 1px solid var(--asphalt-line);
+    border-radius: 4px;
+    padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 3vw, 2.5rem) clamp(2rem, 4vw, 3rem);
+    overflow-x: auto;
+  }
+
+  .sign {
+    --edge: #0D0E12;
+    position: relative;
+    min-width: 320px;
+    margin: 0 auto;
+    max-width: 720px;
+    background: linear-gradient(180deg, var(--brick) 0%, var(--brick-deep) 100%);
+    border: 6px solid var(--bulb);
+    border-radius: 3px;
+    box-shadow:
+      0 0 0 5px var(--edge),
+      0 0 42px rgba(255,107,44,.34),
+      0 26px 60px rgba(0,0,0,.6);
+    padding: clamp(1.6rem, 4vw, 2.4rem) clamp(1rem, 4vw, 2.6rem) clamp(1.1rem, 3vw, 1.7rem);
+    text-align: center;
+    isolation: isolate;
+  }
+
+  /* brick coursing, drawn not painted */
+  .sign::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: .5;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.34) 0 1px, transparent 1px 26px),
+      repeating-linear-gradient(90deg, rgba(0,0,0,.28) 0 1px, transparent 1px 58px);
+    background-position: 0 0, 0 0;
+  }
+  .sign::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: .5;
+    background-image: repeating-linear-gradient(90deg, rgba(0,0,0,.28) 0 1px, transparent 1px 58px);
+    background-position: 29px 13px;
+    -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 26px, transparent 26px 52px);
+    mask-image: repeating-linear-gradient(0deg, #000 0 26px, transparent 26px 52px);
+  }
+
+  .bulbs {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 .35rem;
+    margin-bottom: clamp(.8rem, 2vw, 1.2rem);
+  }
+  .bulbs.bottom { margin: clamp(.9rem, 2vw, 1.3rem) 0 0; }
+
+  .bulb {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--bulb);
+    box-shadow: 0 0 10px 2px rgba(255,197,61,.75), inset 0 -2px 3px rgba(160,105,0,.5);
+    animation: chase 1.6s steps(1, end) infinite;
+  }
+  .bulb:nth-child(3n+2) { animation-delay: .53s; }
+  .bulb:nth-child(3n+3) { animation-delay: 1.06s; }
+
+  @keyframes chase {
+    0%, 66% { opacity: 1; }
+    67%, 100% { opacity: .34; }
+  }
+
+  .hot {
+    font-family: var(--display);
+    font-size: clamp(2.6rem, 1rem + 9vw, 6.4rem);
+    line-height: .92;
+    letter-spacing: .01em;
+    color: var(--bulb);
+    text-shadow:
+      0 0 2px rgba(255,197,61,.9),
+      0 0 18px rgba(255,107,44,.85),
+      0 0 48px rgba(255,107,44,.45),
+      0 5px 0 var(--brick-deep);
+    margin: 0;
+  }
+
+  .plate {
+    margin: clamp(.9rem, 2.4vw, 1.4rem) auto 0;
+    display: inline-flex;
+    align-items: center;
+    gap: clamp(.6rem, 2vw, 1.1rem);
+    background: var(--asphalt);
+    border: 3px solid var(--chalk);
+    border-radius: 2px;
+    padding: clamp(.35rem, 1.4vw, .6rem) clamp(.9rem, 3vw, 1.6rem);
+    box-shadow: 0 6px 0 rgba(0,0,0,.45);
+  }
+  .plate .city {
+    font-family: var(--display);
+    font-size: clamp(1rem, .45rem + 2.3vw, 1.9rem);
+    letter-spacing: .04em;
+    color: var(--chalk);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .plate svg { display: block; flex: none; }
+
+  /* ---------- tokens ---------- */
+
+  .tokens {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .93rem;
+  }
+  .tokens th, .tokens td {
+    text-align: left;
+    padding: .62rem .7rem;
+    border-bottom: 1px solid var(--asphalt-line);
+    vertical-align: middle;
+  }
+  .tokens th {
+    font-family: var(--cond);
+    text-transform: uppercase;
+    letter-spacing: .13em;
+    font-size: .74rem;
+    color: var(--chalk-dim);
+    font-weight: 600;
+  }
+  .tokens code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .87em;
+    font-variant-numeric: tabular-nums;
+    color: var(--chalk);
+  }
+  .swatch {
+    display: inline-block;
+    width: 30px;
+    height: 18px;
+    border-radius: 2px;
+    border: 1px solid rgba(255,255,255,.22);
+    vertical-align: -4px;
+    margin-right: .55rem;
+  }
+  .scroller { overflow-x: auto; }
+
+  .notes { display: flex; flex-direction: column; gap: .85rem; max-width: 68ch; }
+  .notes p { margin: 0; color: var(--chalk-dim); }
+  .notes strong { color: var(--chalk); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bulb { animation: none; opacity: 1; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Skeeball · Machine 3</p>
+    <h1>HOT SHOT: BRICK CITY</h1>
+    <p class="lede">A marquee for the third cabinet, built on HOT SHOT's yellow-and-blue identity but
+      wearing its own face: brick coursing, a chalk-white sub-plate, and an ember glow.</p>
+  </header>
+
+  <section>
+    <div class="head-rule">
+      <h2>The sign</h2>
+      <span class="tag">Selected</span>
+    </div>
+
+    <div class="stage">
+      <div class="sign">
+        <div class="bulbs" aria-hidden="true">
+          <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+          <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+          <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+          <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+        </div>
+
+        <p class="hot">HOT SHOT</p>
+
+        <div class="plate">
+          <svg width="30" height="30" viewBox="0 0 30 30" role="img" aria-label="Basketball dropping through a rim">
+            <circle cx="15" cy="10" r="6.4" fill="#FF6B2C" stroke="#0D0E12" stroke-width="1.4"/>
+            <path d="M8.6 10h12.8M15 3.6v12.8M10.5 5.5c2.6 2.6 2.6 6.4 0 9M19.5 5.5c-2.6 2.6-2.6 6.4 0 9"
+                  fill="none" stroke="#0D0E12" stroke-width="1.1" stroke-linecap="round"/>
+            <ellipse cx="15" cy="19.4" rx="9.6" ry="2.6" fill="none" stroke="#EDE6DA" stroke-width="2"/>
+            <path d="M6.6 20.2 9 26M23.4 20.2 21 26M11 21.2l.8 5.6M19 21.2l-.8 5.6M15 21.6v5.8"
+                  fill="none" stroke="#EDE6DA" stroke-width="1" stroke-linecap="round" opacity=".85"/>
+          </svg>
+          <span class="city">BRICK CITY</span>
+        </div>
+
+        <div class="bulbs bottom" aria-hidden="true">
+          <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+          <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+          <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+          <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="head-rule">
+      <h2>Palette</h2>
+      <span class="tag">boards.js look keys</span>
+    </div>
+
+    <div class="scroller">
+      <table class="tokens">
+        <thead>
+          <tr><th>Color</th><th>Hex</th><th>Maps to</th><th>Where it lands</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="swatch" style="background:#A33427"></span>Brick</td>
+            <td><code>#A33427</code></td>
+            <td><code>marquee</code></td>
+            <td>The sign panel, and the cabinet's side coursing</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:#FFC53D"></span>Bulb yellow</td>
+            <td><code>#FFC53D</code></td>
+            <td><code>marqueeText</code>, <code>bulb</code></td>
+            <td>The HOT SHOT lettering and every bulb in the bar</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:#FF6B2C"></span>Ember</td>
+            <td><code>#FF6B2C</code></td>
+            <td><code>glow</code></td>
+            <td>The halo behind the sign; the ball itself</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:#EDE6DA"></span>Chalk</td>
+            <td><code>#EDE6DA</code></td>
+            <td><code>net</code>, <code>value</code></td>
+            <td>The BRICK CITY plate, the nets, printed values</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:#1E63B8"></span>Court blue</td>
+            <td><code>#1E63B8</code></td>
+            <td><code>face</code></td>
+            <td>Carried over from HOT SHOT, so the two read as siblings</td>
+          </tr>
+          <tr>
+            <td><span class="swatch" style="background:#14161B"></span>Asphalt</td>
+            <td><code>#14161B</code></td>
+            <td><code>cabinetEdge</code>, <code>pocket</code></td>
+            <td>Cabinet trim, the dark inside every basket</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="head-rule">
+      <h2>Notes</h2>
+    </div>
+    <div class="notes">
+      <p><strong>The name is display only.</strong> Whatever you paint on the marquee, the board
+        <code>id</code> stays frozen from the day it is first played (THE LAW rule 5). Pick something
+        short and stable like <code>brickcity</code> and never rename it.</p>
+      <p><strong>Today's marquee is a flat colored bar, not artwork.</strong> In
+        <code>render.js</code> it is one mesh tinted <code>look.marquee</code> with three bulbs above
+        it, so no lettering exists on any machine yet. Any of these signs needs a painted texture
+        drawn onto that panel, the same way the field and lane are painted.</p>
+      <p><strong>The bulbs are already there.</strong> Four are built per cabinet, spaced across
+        <code>boardW</code>. The chase in this mockup is a suggestion, not a requirement, and would
+        need a reduced-motion check the same as everything else in the repo.</p>
+      <p><strong>Contrast is the reason the plate is chalk on asphalt.</strong> Brick red under a
+        yellow bulb bar is a low-contrast pair on its own; the dark plate gives BRICK CITY somewhere
+        to sit without competing with the HOT SHOT glow above it.</p>
+    </div>
+  </section>
+
+</div>

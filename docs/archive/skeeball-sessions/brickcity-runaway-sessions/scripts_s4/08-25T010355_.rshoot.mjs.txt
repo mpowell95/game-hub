@@ -1,0 +1,18 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+const srv = spawn('node', ['server.mjs'], { cwd: '/home/user/game-hub', stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 1200));
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const pg = await b.newPage({ viewport: { width: 786, height: 1240 }, deviceScaleFactor: 2 });
+const errs = []; pg.on('pageerror', (e) => errs.push(String(e)));
+await pg.goto('http://localhost:8123/.rprobe.html');
+await pg.waitForFunction('window.__ready === true', null, { timeout: 20000 });
+await pg.evaluate(() => { const c = document.getElementById('c'); c.style.width='786px'; c.style.height='1200px'; });
+for (const [n, t] of [['4in-centre', 0], ['4in-right', 1.75]]) {
+  await pg.evaluate((tt) => window.__p.set(tt), t);
+  await pg.screenshot({ path: `/home/user/game-hub/.visual-out/${n}.png`, clip: { x: 180, y: 300, width: 440, height: 220 } });
+}
+await pg.evaluate(() => window.__p.set(0));
+await pg.screenshot({ path: '/home/user/game-hub/.visual-out/4in-full.png', clip: { x: 0, y: 0, width: 786, height: 1200 } });
+console.log(errs.length ? 'JS ERRORS: ' + errs.join('; ') : 'no page errors');
+await b.close(); srv.kill();

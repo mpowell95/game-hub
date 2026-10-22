@@ -169,14 +169,15 @@ export function mergeRecords(sum, live) {
 /** The viewer's live-room records, read once. Never rejects; offline = this device's own store. */
 export async function loadLiveRecords() {
   try {
-    const [{ readPlayersOnce }, gs, { loadProfile }, { corrections }] = await Promise.all([
+    const [{ readPlayersForMe }, gs, { loadProfile }, { corrections }] = await Promise.all([
       import('./stats-net.js'), import('./game-stats.js'), import('./profile-store.js'), import('./admin-config.js'),
     ]);
     // An RTDB read on a dead connection never settles (js/CLAUDE.md): give up on it after 8 s and
     // show this device's own store rather than a spinner for ever.
     let all = {};
     try {
-      all = await Promise.race([readPlayersOnce(), new Promise((res) => setTimeout(() => res({}), 8000))]) || {};
+      // Own devices in full + everyone's name (2026-10-22): the same records (tools/test-boards.mjs).
+      all = await Promise.race([readPlayersForMe(), new Promise((res) => setTimeout(() => res({}), 8000))]) || {};
     } catch { all = {}; }
     return liveRecords(all, loadProfile() || {}, gs.statsId(), gs.loadStats(), corrections());
   } catch (err) {

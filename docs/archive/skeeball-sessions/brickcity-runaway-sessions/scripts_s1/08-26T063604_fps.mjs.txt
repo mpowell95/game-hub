@@ -1,0 +1,33 @@
+import { readFileSync } from 'node:fs';
+const SP='/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad';
+const W=96,H=208,FB=W*H, CAP=60;
+const buf=readFileSync(`${SP}/raw/g.raw`);
+const n=buf.length/FB;
+const diffs=new Float64Array(n);
+const changedPx=new Int32Array(n);
+for(let f=1;f<n;f++){
+  const a=f*FB,b=(f-1)*FB; let s=0,c=0;
+  for(let i=0;i<FB;i++){ const d=Math.abs(buf[a+i]-buf[b+i]); s+=d; if(d>3)c++; }
+  diffs[f]=s/FB; changedPx[f]=c;
+}
+// A frame "painted" if a real number of pixels moved (kills encoder noise).
+const painted=[]; for(let f=1;f<n;f++) if(changedPx[f]>FB*0.002) painted.push(f);
+console.log(`capture: ${n} frames at ${CAP}fps = ${(n/CAP).toFixed(1)}s`);
+console.log(`frames where the screen actually changed: ${painted.length}  => ${(painted.length/(n/CAP)).toFixed(1)} fps average over the whole clip`);
+// intervals between painted frames, in capture frames (1 = 60fps, 2 = 30fps, 4 = 15fps...)
+const gaps=[]; for(let i=1;i<painted.length;i++) gaps.push(painted[i]-painted[i-1]);
+const hist=new Map(); for(const g of gaps) hist.set(g,(hist.get(g)||0)+1);
+const rows=[...hist.entries()].sort((a,b)=>a[0]-b[0]).slice(0,14);
+console.log('\ngap between painted frames (capture frames @60fps) -> how often');
+for(const [g,c] of rows) console.log(`  ${String(g).padStart(3)} frames (${(60/g).toFixed(1).padStart(5)} fps)  ${String(c).padStart(5)}  ${'#'.repeat(Math.round(60*c/gaps.length))}`);
+const s=[...gaps].sort((a,b)=>a-b);
+const q=(p)=>s[Math.floor(s.length*p)];
+console.log(`\ngap percentiles: p50 ${q(.5)}  p90 ${q(.9)}  p95 ${q(.95)}  p99 ${q(.99)}  max ${s[s.length-1]} capture frames`);
+console.log(`               = p50 ${(1000*q(.5)/60).toFixed(0)}ms  p90 ${(1000*q(.9)/60).toFixed(0)}ms  p95 ${(1000*q(.95)/60).toFixed(0)}ms  p99 ${(1000*q(.99)/60).toFixed(0)}ms  worst ${(1000*s[s.length-1]/60).toFixed(0)}ms between painted frames`);
+// per-second painted count, to see it get worse over the clip
+console.log('\npainted frames per second of the clip:');
+const per=new Array(Math.ceil(n/CAP)).fill(0);
+for(const f of painted) per[Math.floor(f/CAP)]++;
+let line='';
+per.forEach((v,i)=>{ line += String(v).padStart(3); if((i+1)%20===0){console.log('  s'+String(i-19).padStart(3)+':'+line); line='';} });
+if(line) console.log('  s'+String(per.length-(per.length%20||20)).padStart(3)+':'+line);

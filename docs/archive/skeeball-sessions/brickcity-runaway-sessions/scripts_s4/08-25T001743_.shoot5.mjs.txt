@@ -1,0 +1,15 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+const srv = spawn('node', ['server.mjs'], { cwd: '/home/user/game-hub', stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 1200));
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const pg = await b.newPage({ viewport: { width: 393, height: 620 } });
+await pg.goto('http://localhost:8123/.runaway-probe.html');
+await pg.waitForFunction('window.__ready === true', null, { timeout: 20000 });
+const sc = await pg.evaluate('__probe.scene()');
+console.log('total children:', sc.length);
+console.log('\ngroups with children (the mover group should hold the 100 basket assembly):');
+for (const o of sc) if (o.geo.startsWith('Group(') && o.geo !== 'Group(0)') console.log(' ', o.geo, o.x, o.y, o.z);
+console.log('\neverything above y=1.30 (the top shelf and up):');
+for (const o of sc) if (o.y > 1.30) console.log(`  ${o.geo.padEnd(16)} ${String(o.x).padStart(9)} ${String(o.y).padStart(8)} ${String(o.z).padStart(9)}`);
+await b.close(); srv.kill();

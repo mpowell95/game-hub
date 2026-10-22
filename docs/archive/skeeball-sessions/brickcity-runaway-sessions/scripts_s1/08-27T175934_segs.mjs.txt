@@ -1,0 +1,8 @@
+const { BOARDS } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+for (const b of BOARDS.filter(x => ['classic','brickcity'].includes(x.id))) {
+  const M = engineFor(b.id).buildMachine(b.geom);
+  const n = M.solids.filter(s => s.part === 'ringSeg' || s.part === 'cupSeg').length;
+  const holes = Object.keys(b.geom.holes).length;
+  console.log(`${b.id.padEnd(11)} ${n} ring/cup segments over ${holes} holes = ${(n/holes).toFixed(1)} per hole`);
+}

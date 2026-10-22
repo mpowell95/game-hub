@@ -1,0 +1,17 @@
+import { firebaseConfig } from '/home/user/game-hub/js/firebase-config.js';
+import { signInAnonymously, readPath } from '/home/user/game-hub/backups/rtdb-backup.mjs';
+const tok = await signInAnonymously(firebaseConfig.apiKey);
+const thr = await readPath(firebaseConfig.databaseURL, 'skeeballThrows', tok);
+const rows = [];
+for (const dev of Object.keys(thr||{})) for (const k of Object.keys(thr[dev]||{})) {
+  const r = thr[dev][k]; if (r && r.board === 'brickcity') rows.push({dev, ...r});
+}
+rows.sort((a,b)=>(a.at||0)-(b.at||0));
+console.log('brickcity throws:', rows.length);
+console.log('first', new Date(rows[0].at).toISOString(), 'last', new Date(rows[rows.length-1].at).toISOString());
+const byHole = {}; const byDay = {};
+for (const r of rows) { const h = r.hole || r.outcome || '(none)'; byHole[h]=(byHole[h]||0)+1;
+  const d = new Date(r.at).toISOString().slice(0,10); byDay[d]=(byDay[d]||0)+1; }
+console.log('by hole:', byHole);
+console.log('by day:', byDay);
+console.log('sample:', JSON.stringify(rows[rows.length-1]));

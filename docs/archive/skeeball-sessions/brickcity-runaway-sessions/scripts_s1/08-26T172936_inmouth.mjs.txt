@@ -1,0 +1,44 @@
+// Where exactly is the ball when it parks, in FACE coordinates - the ones capture uses?
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const { buildMachine } = await import('/home/user/game-hub/skeeball/js/machines/brickcity/machine.js');
+const b = boardById('brickcity'), G = b.geom, M = buildMachine(G);
+const P = engineFor('brickcity').physics;
+const GUARD = G.ballR * 1.9;
+console.log(`capture's outer height guard: f.h < ballR*1.9 = ${GUARD.toFixed(4)}`);
+console.log(`bottom-row collar height (the "lip"): ${G.holes.lowC.collarH.toFixed(4)}`);
+console.log(`=> a ball anywhere between h ${GUARD.toFixed(3)} and h ${G.holes.lowC.collarH.toFixed(3)} is INSIDE the cup and invisible to capture\n`);
+
+const hits = [];
+for (let pi = 0; pi <= 40; pi++) for (let ai = 0; ai <= 20; ai++) {
+  const st = P.startThrow(b, { power: pi/40, aim: (ai-10)/10 });
+  let n = 0, from = -1, worst = 0, snap = null;
+  while (!st.done && n < 4000) {
+    P.step(b, st, 1/60); n++;
+    const v = st.ball.velocity;
+    if (!st.captured && Math.hypot(v.x,v.y,v.z) < 0.02) {
+      if (from < 0) from = st.t;
+      if (st.t - from > worst) {
+        worst = st.t - from;
+        const f = M.worldToFace(st.ball.position);
+        let near = null;
+        for (const [id,h] of Object.entries(G.holes)) {
+          const d = Math.hypot(f.u - h.u, f.v - h.v);
+          if (!near || d < near.d) near = { id, d, r: h.r, lip: h.collarH || 0 };
+        }
+        snap = { h: f.h, u: f.u, v: f.v, near };
+      }
+    } else from = -1;
+  }
+  if (worst > 0.25 && snap) hits.push({ power: pi/40, aim: (ai-10)/10, dur: worst, ...snap });
+}
+console.log(`parked throws (>0.25s): ${hits.length}`);
+const inMouth = hits.filter(x => x.near.d < x.near.r);
+const aboveGuard = hits.filter(x => x.h >= GUARD);
+const wouldLipCapture = hits.filter(x => x.near.lip > 0 && x.h < x.near.lip && x.near.d < x.near.r - G.ballR*0.28);
+console.log(`  centre INSIDE the mouth footprint (d < r): ${inMouth.length}`);
+console.log(`  height ABOVE capture's outer guard (invisible to it): ${aboveGuard.length}`);
+console.log(`  would be captured by the collar branch if the guard let it through: ${wouldLipCapture.length}`);
+console.log('\nsample (h = height above the face, r = mouth radius, lip = collar height):');
+for (const x of hits.sort((a,b)=>b.dur-a.dur).slice(0,10))
+  console.log(`  p${x.power.toFixed(3)} a${String(x.aim).padStart(4)}  parked ${x.dur.toFixed(2)}s  h ${x.h.toFixed(4)}  nearest ${x.near.id} d ${x.near.d.toFixed(4)} (r ${x.near.r.toFixed(3)}, lip ${x.near.lip.toFixed(3)})  ${x.near.d < x.near.r ? 'IN THE MOUTH' : 'outside'}`);

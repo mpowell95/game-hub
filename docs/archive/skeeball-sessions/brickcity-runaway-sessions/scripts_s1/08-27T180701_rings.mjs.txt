@@ -1,0 +1,9 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+for (const id of ['classic','brickcity']) {
+  const G = boardById(id).geom;
+  const rows = Object.entries(G.holes).map(([k,h]) => ({ k, ringD: h.ringD, r: h.r }));
+  const key = id === 'classic' ? 'ringD' : 'r';
+  const vals = rows.map(r => r[key]).filter(v => typeof v === 'number');
+  console.log(`${id}: ${key} range ${Math.min(...vals).toFixed(4)} .. ${Math.max(...vals).toFixed(4)}  (${(Math.max(...vals)/Math.min(...vals)).toFixed(2)}x spread)`);
+  console.log('   ' + rows.map(r => `${r.k}:${(r[key]||0).toFixed(3)}`).join('  '));
+}

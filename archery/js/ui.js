@@ -30,7 +30,7 @@ const HIT_HOLD = 2.0;          // seconds on the target after a hit
 const DRAW_T = 0.25;           // seconds to bring the bow up (the recording, frame by frame)
 const PANIC_T = 0.6;           // seconds of shaking before a panicked arrow goes
 const BOW_IN_T = 0.2;          // seconds for the bow to slide up into view on the line
-const JOLT_T = 0.033;           // seconds of the bow's kick as the arrow leaves it, before the flight
+const JOLT_T = 0.033;           // seconds of the arrow leaving the bow (the string snaps), before the flight
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function writeJSON(k, v) {
@@ -1361,7 +1361,7 @@ class ArcheryUI {
       if (this.panicT >= PANIC_T) this._release(true);
     }
     if (this.phase === 'flight' && this.shot) {
-      // The bow jolts and the arrow leaps off it (JOLT_T), then the flight.
+      // The arrow leaves the bow (JOLT_T), then the flight.
       this.shot.t += dt;
       const u = (this.shot.t - this._joltT()) / FLIGHT_T;
       if (u >= 0) this.r.setFlight(u);
@@ -1446,14 +1446,10 @@ class ArcheryUI {
         const s = 6 + this.panicT * 18;
         x += (Math.random() - 0.5) * s; y += (Math.random() - 0.5) * s - this.panicT * 40;
       }
-      // Let go: the bow kicks up and the arrow leaps off it toward the target.
+      // Let go: the string snaps straight and the arrow leaves the bow (no kick: the bow jumping and
+      // turning for two frames before the cut read as a glitch, Matt's recording 2026-10-22).
       let fly = 0;
-      if (jolt) {
-        const j = this.shot.t / this._joltT();
-        y -= this.h * 0.06 * Math.sin(Math.PI * Math.min(1, j * 1.4));
-        rot -= 4 * j;
-        fly = j;
-      }
+      if (jolt) fly = this.shot.t / this._joltT();
       if (!this.reduce && this._bowInAt) {
         const q = Math.min(1, (performance.now() - this._bowInAt) / (BOW_IN_T * 1000));
         if (q < 1) { const e = 1 - (1 - q) * (1 - q); y += (1 - e) * this.h * 0.45; x += (1 - e) * this.w * 0.12; }

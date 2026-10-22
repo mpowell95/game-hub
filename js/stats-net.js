@@ -12,7 +12,7 @@
 // The named app + auth are booted through js/firebase-boot.js, shared with net.js, so there is
 // only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
-import { statsId, statsKey, loadStats, rateReport, activityReport } from './game-stats.js';
+import { statsId, statsKey, loadStats, rateReport, activityReport, GAMES } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
@@ -290,6 +290,147 @@ export async function readPlayersOnce({ fresh = false } = {}) {
   read.gen = gen;
   if (!fresh) { _playersRead = read; read.finally(() => { if (_playersRead === read) _playersRead = null; }); }
   return read;
+}
+
+/** THE SERVER-BUILT LEADERBOARD (2026-10-22, functions/boards.js). Each child of
+ *  boards/v1/lb/people is ONE person's group as a JSON string: aggregatePlayers' own output minus
+ *  game entries that are only the empty default, plus `_ids` (their device ids). This puts the
+ *  empty games back in GAMES order, so the group is deep-equal to computing it on the phone
+ *  (tools/test-boards.mjs). Returns { group, ids } or null for anything malformed. */
+export function fillBoardGroup(json, defaults = {}) {
+  let g;
+  try { g = JSON.parse(json); } catch { return null; }
+  if (!g || typeof g !== 'object' || !g.games || typeof g.games !== 'object') return null;
+  const ids = Array.isArray(g._ids) ? g._ids.map(String) : [];
+  let order = Array.isArray(g._g) ? g._g.map(String) : null;
+  if (!order) { try { order = JSON.parse(defaults._order); } catch { order = null; } }
+  if (!Array.isArray(order)) order = GAMES;
+  delete g._ids; delete g._g;
+  const fresh = (id) => { try { return JSON.parse(defaults[id]); } catch { return null; } };
+  const games = {};
+  for (const id of order) games[id] = g.games[id] || fresh(id) || { total: { played: 0, won: 0, lost: 0 }, byDiff: {} };
+  for (const id of Object.keys(g.games)) if (!(id in games)) games[id] = g.games[id];
+  g.games = games;
+  return { group: g, ids };
+}
+/** boards/v1/lb/z -> { people, defaults }: base64, then gunzip (DecompressionStream: iOS 16.4+,
+ *  every current Chrome). null when it cannot be undone here. */
+export async function unpackBoard(b64) {
+  if (typeof b64 !== 'string' || !b64 || typeof DecompressionStream === 'undefined') return null;
+  try {
+    const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const text = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    const v = JSON.parse(text);
+    return v && typeof v === 'object' && v.people && typeof v.people === 'object' ? v : null;
+  } catch { return null; }
+}
+/** { people, defaults } -> { list, idsByKey } (every person rebuilt by fillBoardGroup). */
+export function boardList(parts) {
+  const list = [], idsByKey = new Map();
+  for (const k of Object.keys(parts.people)) {
+    const r = fillBoardGroup(parts.people[k], parts.defaults || {});
+    if (!r) continue;
+    list.push(r.group);
+    idsByKey.set(r.group.key, r.ids);
+  }
+  return { list, idsByKey };
+}
+/** The board, live: cb({ list, idsByKey }) each time the server republishes it (only when a number
+ *  changed). Resolves to the unsubscribe function, or null when there is no board yet, it cannot be
+ *  read or unpacked: the caller then falls back to watchPlayers, as before. */
+export async function watchBoard(cb) {
+  if (!(await init())) return null;
+  return new Promise((resolve) => {
+    let first = true, off = () => {}, seq = 0;
+    const done = (v) => { if (first) { first = false; resolve(v); } };
+    try {
+      off = _api.onValue(_api.ref(_db, 'boards/v1/lb/z'), async (s) => {
+        const n = ++seq;
+        const parts = await unpackBoard(s.val());
+        if (n !== seq) return;                                   // a newer package already arrived
+        if (!parts || !Object.keys(parts.people).length) { if (first) { off(); done(null); } return; }
+        done(off);
+        try { cb(boardList(parts)); } catch (err) { console.warn('[stats-net] watchBoard', err); }
+      }, () => done(null));
+    } catch { done(null); }
+  });
+}
+
+/** The board once (not live), reused for READ_REUSE_MS like readPlayersOnce. null = no board. */
+let _boardMemo = null;
+export async function readBoardOnce() {
+  if (!(await init())) return null;
+  if (_boardMemo && Date.now() - _boardMemo.at < READ_REUSE_MS) return _boardMemo.val ? boardList(_boardMemo.val) : null;
+  let parts = null;
+  try { const s = await _api.get(_api.ref(_db, 'boards/v1/lb/z')); parts = await unpackBoard(s.val()); } catch { parts = null; }
+  if (parts && !Object.keys(parts.people).length) parts = null;
+  _boardMemo = { at: Date.now(), val: parts };
+  return parts ? boardList(parts) : null;
+}
+
+/** THIS person's device ids on the board: the group holding this device, else the one with this
+ *  player code. Always includes this device. */
+function myGroupOn(board) {
+  const sid = statsId(), code = String((loadProfile() || {}).playerId || '').trim().toUpperCase();
+  return board.list.find((x) => (board.idsByKey.get(x.key) || []).includes(sid))
+    || (code ? board.list.find((x) => x.playerId === code) : null) || null;
+}
+function myIdsOn(board) {
+  const g = myGroupOn(board);
+  const ids = new Set(g ? board.idsByKey.get(g.key) || [] : []);
+  ids.add(statsId());
+  return [...ids];
+}
+
+/** A players/-shaped map for the screens that need only THIS person's full records and everyone
+ *  else's NAME (My Stats, Records, the Hold'em bank, Arrow Maze's leaders), 2026-10-22: this
+ *  person's own devices read in full (a few KB each), every other device stood in by its person's
+ *  name / emoji / code from the board (no stats). Every grouping question then answers as before,
+ *  for a fraction of the download. No board: the whole players/ node, as before. */
+export async function readPlayersForMe() {
+  const board = await readBoardOnce();
+  if (!board) return readPlayersOnce();
+  const out = {};
+  for (const g of board.list) {
+    for (const id of board.idsByKey.get(g.key) || []) {
+      out[id] = { profile: { name: g.name || '', emoji: g.emoji || '', playerId: g.playerId || '' }, updatedAt: g.updatedAt || 0, stats: {} };
+    }
+  }
+  const ids = myIdsOn(board);
+  const recs = await Promise.all(ids.map((id) => _api.get(_api.ref(_db, 'players/' + id)).then((s) => s.val()).catch(() => null)));
+  ids.forEach((id, i) => { if (recs[i]) out[id] = recs[i]; });
+  return out;
+}
+
+/** Everyone, already grouped by person and corrected (the board's list), for the screens that rank
+ *  everybody (Hold'em's bank list, Skeeball's top records, the Messages contact list). null when
+ *  there is no board: the caller keeps its own old read. `me` = this person's group key. */
+export async function readPeople() {
+  const board = await readBoardOnce();
+  if (!board) return null;
+  const me = myGroupOn(board);
+  return { list: board.list, meKey: me ? me.key : '' };
+}
+
+/** THE "PICK A PERSON" READ (2026-10-22): the server's small directory/<CODE> = { name, emoji, at }
+ *  (functions/index.js directoryBuild) instead of all of players/ (~940 KB on a phone signal), in
+ *  the SAME shape readPlayersOnce returns ({ id: { profile, updatedAt } }), so every game's
+ *  opponentsFrom works unchanged. No directory yet, or unreadable: the full read, as before. Names
+ *  only; anything that needs stats (records, unlocks) still calls readPlayersOnce. */
+let _dirMemo = null;
+export async function readOpponentProfiles() {
+  if (!(await init())) return {};
+  if (_dirMemo && Date.now() - _dirMemo.at < READ_REUSE_MS) return copyOf(_dirMemo.val);
+  let dir = null;
+  try { const s = await _api.get(_api.ref(_db, 'directory')); dir = s.val(); } catch { dir = null; }
+  if (!dir || typeof dir !== 'object' || !Object.keys(dir).length) return readPlayersOnce();
+  const out = {};
+  for (const code of Object.keys(dir)) {
+    const d = dir[code] || {};
+    out['dir:' + code] = { profile: { name: String(d.name || ''), emoji: String(d.emoji || ''), playerId: code }, updatedAt: +d.at || 0 };
+  }
+  _dirMemo = { at: Date.now(), val: out };
+  return copyOf(out);
 }
 
 /** Who owns `code`: { name, emoji } from that player's most recently active NAMED device, or null.

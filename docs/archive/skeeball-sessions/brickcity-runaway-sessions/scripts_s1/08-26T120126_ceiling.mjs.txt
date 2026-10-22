@@ -1,0 +1,44 @@
+import pkg from '/tmp/claude-0/-home-user-game-hub/8b63e124-b89f-544b-807c-895261976e7f/scratchpad/node_modules/playwright-core/index.js';
+const { chromium } = pkg;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+await page.addInitScript(() => {
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'Perf', emoji: '🐙', opponents: [] }));
+  localStorage.setItem('gamehub.skeeball.v1', JSON.stringify({ board: 'brickcity' }));
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ v: { skeeball: { boards: { brickcity:{open:true,testing:false} } } }, at: Date.now() }));
+});
+const rafRate = () => page.evaluate(() => new Promise(res => {
+  let n = 0; const t0 = performance.now();
+  const tick = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(tick); else res(n / ((performance.now()-t0)/1000)); };
+  requestAnimationFrame(tick);
+}));
+
+// 1. an EMPTY page: what can this browser do at all?
+await page.goto('about:blank');
+console.log(`empty page, nothing running .......... ${(await rafRate()).toFixed(1)} fps`);
+
+// 2. the game loaded and mounted, but its render call short-circuited
+await page.goto('http://localhost:8123/skeeball/', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1500);
+await (await page.$('[data-role="play"]')).click({ force: true });
+await page.waitForSelector('.sk-canvas', { timeout: 10000 });
+await page.waitForTimeout(700);
+console.log(`the game, drawing normally .......... ${(await rafRate()).toFixed(1)} fps`);
+await page.evaluate(() => { const R = window.__skTest.ui.renderer; R._realRender = R.render.bind(R); R.render = () => {}; });
+console.log(`the game, WebGL draw removed ........ ${(await rafRate()).toFixed(1)} fps   <- the loop's own cost`);
+await page.evaluate(() => { const R = window.__skTest.ui.renderer; R.render = R._realRender; });
+
+// 3. how long does ONE draw take on this rig vs how long a 60fps frame is allowed
+const one = await page.evaluate(() => {
+  const R = window.__skTest.ui.renderer;
+  const a = performance.now(); for (let i=0;i<30;i++) R.renderer.render(R.scene, R.camera);
+  return (performance.now()-a)/30;
+});
+console.log(`\none WebGL draw on this rig .......... ${one.toFixed(1)} ms   (a 60fps frame allows 16.7 ms)`);
+console.log(`renderer in use ..................... ${await page.evaluate(() => {
+  const gl = window.__skTest.ui.renderer.renderer.getContext();
+  const e = gl.getExtension('WEBGL_debug_renderer_info');
+  return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : '(hidden)'; })}`);
+await browser.close();

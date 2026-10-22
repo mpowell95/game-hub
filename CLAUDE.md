@@ -59,6 +59,14 @@ re-confirming per step, no need for Matt to say "deploy":
 Pause only for a genuinely destructive step (force-push, history rewrite). If something should not
 ship yet, Matt will say so.
 
+## Performance: measure what the phone DOWNLOADS first (Matt, 2026-10-22)
+
+For months every Leaderboard, My Stats, Records and picker downloaded all of `players/` (~930 KB) and grouped it
+on the phone; no session spotted it, despite Matt asking more than once why the hub was slow. Moving it to the
+server (`boards/`, `directory/`) made it instantly faster. **When anything feels slow, check bytes over the network
+before code speed. A new screen must never read all of `players/`**: use `readPeople()`, `readPlayersForMe()`,
+`readOpponentProfiles()` or `watchBoard()` (`js/stats-net.js`). Mention any whole-node read you see, unasked.
+
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 
 A mid-turn message is not a note for the final report. Stop and say where you are, what is left
@@ -351,7 +359,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Murdoku | module, immersive, solo logic puzzle | `.mu-root` / `.mu-` | `gamehub.murdoku.v1` (+ `.save.v1`) | `recordResult('murdoku', …)` |
 | Nuts & Bolts | module | `.nb-root` / `.nb-` | `gamehub.nutsbolts.v1` | `recordNutsBolts` |
 | Parchís | launch-out (built from sibling `../Parchís/`) | own page | `parchis_r2_prefs` | `window.__ghStats` → `'parchis'` |
-| Pool | module, immersive, devOnly; 8-ball the Flick Soccer way, vs computer + pass and play (`eight-ball/`, 2026-10-22). **Folder/hub id `eight-ball`, stats id `eightball`: NOT the archived Pool's ids** | `.ep-root` / `.ep-` | `gamehub.eightball.v1` (+ `.save.v1`) | `recordResult('eightball', …)` |
+| Pool | module, immersive, devOnly; the Flick Soccer way: 8-ball, 9-ball, Cutthroat (3 players), call / banks / obstacles options, vs computer + pass and play + turn-by-turn challenges for 2 OR 3 players (`eightball/`; the first 3-player challenge game) (`eight-ball/`, 2026-10-22; live rooms and push still to come). **Folder/hub id `eight-ball`, stats id `eightball`: NOT the archived Pool's ids** | `.ep-root` / `.ep-` | `gamehub.eightball.v1` (+ `.save.v1`) | `recordResult('eightball', …)` |
 | Skeeball | module, immersive, solo, unlockable machines, challenges (`skeeChallenges/`) | `.sk-root` / `.sk-` | `gamehub.skeeball.v1` | `recordSkeeball` |
 | Snake | module | `.sn-root` / `.sn-` | `gamehub.snake.v1` | `recordSnake` |
 | Sudoku | module | `.sd-root` / `.sd-` | `gamehub.sudoku.v1` | `recordSudoku` |
@@ -474,7 +482,26 @@ None of this makes the hub cheat-proof; never describe it that way.
   `C:\Users\powel\game-hub-deploy`; **give those steps as one copy-paste block per command.** Blaze plan.
 - **Deployed triggers (all, by the workflow 2026-10-21):** `hoopsTurnPush`, `messagePush`, `bugReportPush`,
   `skeeChallengePush`, `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`, `archeryTurnPush`,
-  `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`; rules incl. `archery`, `chinchon`, `escoba`.
+  `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`, `nudgePush`, `directoryBuild` +
+  `directoryOnApprove`, `boardsOnSync` + `boardsOnConfig` + `boardsCatchUp` (2026-10-22); rules incl. `archery`,
+  `chinchon`, `escoba`, `nudges`, `directory`, `boards`.
+- **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
+  `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
+  generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs
+  ~930 KB of `players/`). Rebuilt on a sync (at most every 2 min; `boardsCatchUp` every 5 min). The Leaderboard
+  reads it (`stats-net.js` `watchBoard`), falling back to `players/` if absent. `tools/test-boards.mjs <snapshot>`
+  proves every person is deep-equal to the phone's own grouping. **Other screens**: My Stats, Records, Hold'em's own bank,
+  Skeeball's picker use `readPlayersForMe()` (own devices in full + everyone's name from the board); Hold'em's bank list,
+  Skeeball's top records, Messages contacts use `readPeople()` (the board's list). Still on `players/`: Golf's board,
+  Arrow Maze's leaders, admin.
+- **Player directory (2026-10-22, Matt: multiplayer felt slow)**: `directory/<CODE>` = `{name, emoji, at}`,
+  rebuilt by the server from `players/` hourly and on any Online play change (`buildDirectory`). Every
+  challenge game's "pick a person" reads it via `stats-net.js` `readOpponentProfiles()` (2 KB vs ~930 KB);
+  no directory = the old full read. Anything needing stats (Records, Skeeball unlocks) still reads `players/`.
+- **Remind bell (2026-10-22, Matt)**: a bell on each their-turn row of the Multiplayer screen writes
+  `nudges/<THEIR CODE>/<node>~<id>` = `{from, t}` (`js/messages.js` `sendNudge`); rules: only as your own
+  claimed code, once per match per 6 h. `nudgePush` sends "Reminder: your turn vs X" only if it really is
+  their turn in a match with the sender (`decideNudge`).
 - **24-hour reminder (2026-10-20, Matt: "for every game")**: `turnReminderPush` (hourly `onSchedule`) sends "Reminder: your
   turn vs X" once per turn when a challenge row has waited 24-72 h (`decideReminder`, `REMINDER_GAMES` in
   `functions/decide.js`). Sent-stamps live in `pushReminders/<code>/<node>~<id>` (server-only), NEVER on the index row.

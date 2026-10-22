@@ -1,0 +1,155 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Skeeball Machine Blueprint</title>
+<style>
+:root{--paper:#f0ece0;--ink:#173254;--ink-soft:#4a628055;--line:#1c3a5e;--grid:#1c3a5e12;
+  --accent:#c8781e;--accent-2:#2b5ea7;--pit:#d8d0be;--field:#e7dcc8;--hole:#1a130c;
+  --card:#f7f4ea;--edge:#1c3a5e22;--muted:#4a6280;--wood:#cbb896;}
+:root:not([data-theme="light"]){@media (prefers-color-scheme:dark){
+  --paper:#0c2542;--ink:#d7e7fb;--ink-soft:#8fb3dd55;--line:#8fb8e6;--grid:#8fb8e610;
+  --accent:#ffb02e;--accent-2:#6fa8e6;--pit:#0a1c33;--field:#123457;--hole:#050a12;
+  --card:#0f2c4d;--edge:#8fb8e626;--muted:#7f9dc4;--wood:#26456b;}}
+:root[data-theme="dark"]{--paper:#0c2542;--ink:#d7e7fb;--ink-soft:#8fb3dd55;--line:#8fb8e6;--grid:#8fb8e610;
+  --accent:#ffb02e;--accent-2:#6fa8e6;--pit:#0a1c33;--field:#123457;--hole:#050a12;
+  --card:#0f2c4d;--edge:#8fb8e626;--muted:#7f9dc4;--wood:#26456b;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:ui-sans-serif,"Segoe UI",system-ui,sans-serif;line-height:1.5;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:26px 26px}
+.wrap{max-width:1080px;margin:0 auto;padding:38px 20px 80px}
+header{border:2px solid var(--line);border-radius:4px;background:var(--card);display:grid;grid-template-columns:1fr auto;gap:6px 20px;padding:20px 24px}
+h1{font-size:clamp(26px,4vw,40px);margin:0;font-weight:800;text-wrap:balance}
+.sub{margin:4px 0 0;color:var(--muted);max-width:60ch}
+.titleblock{text-align:right;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--muted);align-self:end;line-height:1.7}
+.titleblock b{color:var(--ink)}
+.note{font-size:13px;color:var(--muted);margin:14px 2px 26px;max-width:78ch}
+.note code{color:var(--accent);font-family:ui-monospace,Consolas,monospace}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.capplate{max-width:560px;margin:0 auto}
+.plate-card{border:2px solid var(--line);border-radius:4px;background:var(--card);margin:20px 0;overflow:hidden}
+.plate-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:11px 16px;border-bottom:1px solid var(--edge);background:linear-gradient(0deg,transparent,var(--edge))}
+.plate-head h2{margin:0;font-size:14px;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+.plate-head .pnum{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--accent);letter-spacing:.1em}
+.plate-wrap{overflow-x:auto;padding:12px}
+.plate{display:block;width:100%;height:auto}
+/* fills */
+.fill1{fill:var(--field);stroke:var(--line);stroke-width:1.4}
+.fill2{fill:color-mix(in srgb,var(--field) 78%,var(--line));stroke:var(--line);stroke-width:1.4}
+.fill3{fill:color-mix(in srgb,var(--field) 60%,var(--line));stroke:var(--line);stroke-width:1.2}
+.fillpit{fill:var(--pit);stroke:var(--line);stroke-width:1.1}
+.pfill1{fill:var(--wood);stroke:var(--line);stroke-width:1.2}
+.pfill2{fill:color-mix(in srgb,var(--wood) 74%,var(--line));stroke:var(--line);stroke-width:1.2}
+.pfill3{fill:color-mix(in srgb,var(--wood) 55%,var(--line));stroke:var(--line);stroke-width:1.1}
+.pface{fill:color-mix(in srgb,var(--accent) 30%,var(--field));stroke:var(--accent);stroke-width:1.6}
+.pwall{fill:color-mix(in srgb,var(--field) 50%,var(--line));stroke:var(--line);stroke-width:1;opacity:.85}
+.railtri{fill:var(--accent-2);opacity:.15}
+.railhyp{stroke:var(--accent-2);stroke-width:2.2;opacity:.85}
+.face{stroke:var(--accent);stroke-width:2.4}
+.glass{stroke:var(--accent-2);stroke-width:2;stroke-dasharray:2 4;opacity:.8}
+.ball{fill:var(--accent);stroke:var(--line);stroke-width:1}
+.axis{stroke:var(--ink-soft);stroke-width:1;stroke-dasharray:6 5}
+.axtx{font-family:ui-monospace,Consolas,monospace;fill:var(--muted);font-size:12px}
+.fieldrect{fill:var(--field);stroke:var(--line);stroke-width:2}
+.ring,.pring{fill:none;stroke:var(--accent-2);stroke-width:1.8;opacity:.6}
+.hole,.phole{fill:var(--hole);stroke:var(--accent-2);stroke-width:1.4}
+.val{fill:var(--accent);font-size:19px;font-weight:800;text-anchor:middle;font-family:ui-monospace,Consolas,monospace}
+.wallL{stroke:var(--accent-2);stroke-width:3;opacity:.7;stroke-linecap:round}
+.keep{fill:none;stroke:var(--ink-soft);stroke-width:1.4;stroke-dasharray:7 5}
+.hid{fill:var(--muted);font-family:ui-monospace,Consolas,monospace;font-size:12px}
+/* badges + arrows */
+.arw{stroke:var(--ink);stroke-width:1.5}
+.ah{fill:var(--ink)}
+.bdg{fill:var(--accent);stroke:var(--card);stroke-width:1.5}
+.bdgt{fill:#12100c;font-weight:800;font-family:ui-monospace,Consolas,monospace;font-size:14px;text-anchor:middle}
+/* key */
+h3{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:34px 0 12px;border-bottom:1px solid var(--edge);padding-bottom:6px}
+.keygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px 22px}
+.keyrow{display:flex;align-items:center;gap:10px;font-size:14px}
+.chip{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#12100c;font-weight:800;
+  font-family:ui-monospace,Consolas,monospace;font-size:13px;display:grid;place-items:center}
+.chip2{width:auto;padding:0 9px;border-radius:12px;background:var(--hole);color:var(--accent);border:1px solid var(--accent-2)}
+.kn{flex:1 1 auto;font-weight:600}
+.kc{color:var(--accent);font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:nowrap}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:20px;height:11px;border:1px solid var(--line);border-radius:2px;display:inline-block}
+footer{margin-top:44px;font-size:12px;color:var(--muted);border-top:1px solid var(--edge);padding-top:14px;font-family:ui-monospace,Consolas,monospace}
+</style>
+<div class="wrap">
+  <header>
+    <div><h1>Skeeball &mdash; THE CLASSIC</h1>
+    <p class="sub">Four views of the machine, drawn from its own geometry. Each part carries a letter; the key at the bottom says what every letter is.</p></div>
+    <div class="titleblock">MACHINE&nbsp;&nbsp;<b>classic</b><br>DRAWN&nbsp;FROM&nbsp;&nbsp;<b>machine.js / boards.js</b><br>UNIT&nbsp;x&nbsp;&nbsp;<b>0.146 m</b><br>TILT&nbsp;&nbsp;<b>45&deg;</b></div>
+  </header>
+  <p class="note">Same letter = same part in every view. Holes keep their code ids (<code>100L</code>, <code>c50</code>, <code>h20</code>&hellip;). Coordinates: <code>u</code> across, <code>v</code> up the face, <code>z</code> toward player, <code>y</code> up.</p>
+
+  <div class="plate-card">
+  <div class="plate-head"><h2>Side Elevation</h2><span class="pnum">PLATE 1 / 4</span></div>
+  <div class="plate-wrap">
+<svg viewBox="0 0 1032 697" class="plate" role="img" aria-label="Side elevation">
+  <line class="axis" x1="40.0" y1="597.0" x2="982.0" y2="597.0"/>
+  <text class="axtx" x="36.0" y="601.0" text-anchor="end">y=0</text>
+  <polygon class="fill3" points="809.7,69.1 890.3,69.1 890.3,100.4 809.7,100.4"/>
+  <polygon class="fill2" points="809.7,104.9 825.3,104.9 825.3,284.1 809.7,284.1"/>
+  <polygon class="fill1" points="595.3,503.0 814.1,284.1 823.6,293.6 604.8,512.5"/>
+  <!-- side wall (L, part 'rail'), read straight from machine.js's railProfile so it always
+       matches the game: front-bottom, back-bottom, back-top, front-top. The top edge is the raked
+       hypotenuse; the front no longer tapers to zero (railFrontH), so a wide ball can bank off it. -->
+  <polygon class="railtri" points="595.3,503.0 814.1,284.1 814.1,104.9 595.3,426.8"/>
+  <line class="railhyp" x1="595.3" y1="426.8" x2="814.1" y2="104.9"/>
+  <line class="face" x1="595.3" y1="503.0" x2="814.1" y2="284.1"/>
+  <polygon class="fill3" points="599.8,509.7 599.8,630.6 590.8,630.6 590.8,509.7"/>
+  <polygon class="fillpit" points="544.9,510.5 544.9,630.6 590.8,630.6 590.8,514.2"/>
+  <polygon class="fill2" points="450.8,597.0 466.5,594.1 482.2,588.0 497.8,578.2 513.5,563.7 529.2,542.7 544.9,510.5 544.9,597.0 450.8,597.0"/>
+  <polygon class="fill1" points="74.5,597.0 450.8,597.0 450.8,610.5 74.5,610.5"/>
+  <line class="glass" x1="538.2" y1="249.8" x2="538.2" y2="429.0"/>
+  <circle class="ball" cx="164.1" cy="585.6" r="11.4"/>
+  <line class="arw" x1="276.1" y1="658.0" x2="276.1" y2="601.0"/><polygon class="ah" points="276.1,601.0 281.1,610.0 271.1,610.0"/><circle class="bdg" cx="276.1" cy="671.0" r="12"/><text class="bdgt" x="276.1" y="676.0">A</text>
+  <line class="arw" x1="509.0" y1="671.6" x2="509.0" y2="552.2"/><polygon class="ah" points="509.0,552.2 514.0,561.2 504.0,561.2"/><circle class="bdg" cx="509.0" cy="684.6" r="12"/><text class="bdgt" x="509.0" y="689.6">C</text>
+  <line class="arw" x1="541.2" y1="643.9" x2="570.1" y2="626.2"/><polygon class="ah" points="570.1,626.2 565.0,635.1 559.8,626.6"/><circle class="bdg" cx="530.1" cy="650.6" r="12"/><text class="bdgt" x="530.1" y="655.6">D</text>
+  <line class="arw" x1="559.0" y1="570.5" x2="594.2" y2="523.1"/><polygon class="ah" points="594.2,523.1 592.8,533.3 584.8,527.4"/><circle class="bdg" cx="551.3" cy="581.0" r="12"/><text class="bdgt" x="551.3" y="586.0">F</text>
+  <line class="arw" x1="770.2" y1="385.1" x2="712.7" y2="401.5"/><polygon class="ah" points="712.7,401.5 720.0,394.2 722.7,403.9"/><circle class="bdg" cx="782.7" cy="381.5" r="12"/><text class="bdgt" x="782.7" y="386.5">H</text>
+  <line class="arw" x1="620.9" y1="236.4" x2="700.7" y2="265.8"/><polygon class="ah" points="700.7,265.8 690.5,267.4 694.0,258.0"/><circle class="bdg" cx="608.7" cy="231.8" r="12"/><text class="bdgt" x="608.7" y="236.8">L</text>
+  <line class="arw" x1="861.1" y1="194.5" x2="820.1" y2="194.5"/><polygon class="ah" points="820.1,194.5 829.1,189.5 829.1,199.5"/><circle class="bdg" cx="874.1" cy="194.5" r="12"/><text class="bdgt" x="874.1" y="199.5">M</text>
+  <line class="arw" x1="506.1" y1="315.4" x2="536.2" y2="328.2"/><polygon class="ah" points="536.2,328.2 525.9,329.3 529.8,320.1"/><circle class="bdg" cx="494.2" cy="310.3" r="12"/><text class="bdgt" x="494.2" y="315.3">N</text>
+  <line class="arw" x1="796.8" y1="50.4" x2="804.0" y2="84.7"/><polygon class="ah" points="804.0,84.7 797.2,76.9 807.0,74.9"/><circle class="bdg" cx="794.1" cy="37.7" r="12"/><text class="bdgt" x="794.1" y="42.7">P</text>
+  <line class="arw" x1="164.1" y1="638.6" x2="164.1" y2="597.6"/><polygon class="ah" points="164.1,597.6 169.1,606.6 159.1,606.6"/><circle class="bdg" cx="164.1" cy="651.6" r="12"/><text class="bdgt" x="164.1" y="656.6">Q</text>
+</svg></div><div class="plate-wrap" style="padding-top:0"><div class="legend"><span><i class="sw" style="background:var(--field)"></i>structure</span><span><i class="sw" style="background:var(--pit)"></i>trough</span><span><i class="sw" style="background:var(--accent)"></i>face / ball</span><span><i class="sw" style="background:transparent;border-style:dashed;border-color:var(--accent-2)"></i>glass</span></div></div>
+</div>
+  <div class="grid2">
+    <div class="plate-card">
+  <div class="plate-head"><h2>Board Face</h2><span class="pnum">PLATE 2 / 4</span></div>
+  <div class="plate-wrap">
+<svg viewBox="0 0 408 478" class="plate" role="img" aria-label="Board face">
+  <defs><clipPath id="bd"><rect x="60.0" y="40.0" width="288.0" height="398.0"/></clipPath></defs>
+  <rect class="fieldrect" x="60.0" y="40.0" width="288.0" height="398.0" rx="10"/>
+  <line class="wallL" x1="60.0" y1="438.0" x2="60.0" y2="40.0"/>
+  <line class="wallL" x1="348.0" y1="438.0" x2="348.0" y2="40.0"/>
+  <circle class="ring" cx="88.8" cy="70.1" r="22.3" clip-path="url(#bd)"/><circle class="ring" cx="319.2" cy="70.1" r="22.3" clip-path="url(#bd)"/><circle class="ring" cx="204.0" cy="127.7" r="30.1" clip-path="url(#bd)"/><circle class="ring" cx="204.0" cy="190.5" r="32.7" clip-path="url(#bd)"/><circle class="ring" cx="204.0" cy="261.2" r="38.0" clip-path="url(#bd)"/><circle class="ring" cx="204.0" cy="259.9" r="102.1" clip-path="url(#bd)"/><path class="ring" d="M 54.8 267.8 A 149.2 149.2 0 0 0 353.2 267.8" clip-path="url(#bd)"/><circle class="hole" cx="88.8" cy="71.4" r="20.9"/><text class="val" x="88.8" y="77.4">100</text><circle class="hole" cx="319.2" cy="71.4" r="20.9"/><text class="val" x="319.2" y="77.4">100</text><circle class="hole" cx="204.0" cy="136.9" r="20.9"/><text class="val" x="204.0" y="142.9">50</text><circle class="hole" cx="204.0" cy="202.3" r="20.9"/><text class="val" x="204.0" y="208.3">40</text><circle class="hole" cx="204.0" cy="278.2" r="20.9"/><text class="val" x="204.0" y="284.2">30</text><circle class="hole" cx="204.0" cy="341.1" r="20.9"/><text class="val" x="204.0" y="347.1">20</text><circle class="hole" cx="204.0" cy="396.1" r="20.9"/><text class="val" x="204.0" y="402.1">10</text><text class="hid" x="59.9" y="75.4" text-anchor="end">100L</text><text class="hid" x="348.1" y="75.4" text-anchor="start">100R</text><text class="hid" x="232.9" y="140.9" text-anchor="start">c50</text><text class="hid" x="232.9" y="206.3" text-anchor="start">c40</text><text class="hid" x="232.9" y="282.2" text-anchor="start">c30</text><text class="hid" x="175.1" y="345.1" text-anchor="end">h20</text><text class="hid" x="175.1" y="400.1" text-anchor="end">h10</text>
+  <line class="arw" x1="192.7" y1="26.4" x2="157.9" y2="46.0"/><polygon class="ah" points="157.9,46.0 163.3,37.2 168.2,45.9"/><circle class="bdg" cx="204.0" cy="20.0" r="12"/><text class="bdgt" x="204.0" y="25.0">H</text>
+  <line class="arw" x1="162.3" y1="190.5" x2="173.3" y2="190.5"/><polygon class="ah" points="173.3,190.5 164.3,195.5 164.3,185.5"/><circle class="bdg" cx="149.3" cy="190.5" r="12"/><text class="bdgt" x="149.3" y="195.5">J</text>
+  <line class="arw" x1="233.9" y1="278.2" x2="226.9" y2="278.2"/><polygon class="ah" points="226.9,278.2 235.9,273.2 235.9,283.2"/><circle class="bdg" cx="246.9" cy="278.2" r="12"/><text class="bdgt" x="246.9" y="283.2">K</text>
+  <line class="arw" x1="355.0" y1="318.6" x2="350.0" y2="318.6"/><polygon class="ah" points="350.0,318.6 359.0,313.6 359.0,323.6"/><circle class="bdg" cx="368.0" cy="318.6" r="12"/><text class="bdgt" x="368.0" y="323.6">L</text>
+  <text class="axtx" x="204.0" y="32.0" text-anchor="middle">v = 1.38m (top)</text>
+  <text class="axtx" x="204.0" y="460.0" text-anchor="middle">v = 0 (bottom edge)</text>
+</svg></div><div class="plate-wrap" style="padding-top:0"><div class="legend"><span><i class="sw" style="background:var(--hole)"></i>hole</span><span><i class="sw" style="background:transparent;border-color:var(--accent-2)"></i>ring</span></div></div>
+</div>
+    <div class="plate-card">
+  <div class="plate-head"><h2>Player View</h2><span class="pnum">PLATE 3 / 4</span></div>
+  <div class="plate-wrap"><svg viewBox="0 0 640 720" class="plate" role="img" aria-label="Player view"><polygon class="pfill1" points="56.3,864.3 583.7,864.3 444.1,627.7 195.9,627.7"/><polygon class="pfill2" points="195.9,627.7 444.1,627.7 426.5,481.6 213.5,481.6"/><polygon class="pfill3" points="213.5,481.6 426.5,481.6 460.1,467.7 179.9,467.7"/><polygon class="pwall" points="179.9,467.7 213.0,246.3 214.2,78.6"/><polygon class="pwall" points="460.1,467.7 427.0,246.3 425.8,78.6"/><polygon class="pfill2" points="213.0,246.3 427.0,246.3 425.8,78.6 214.2,78.6"/><polygon class="pface" points="179.9,467.7 460.1,467.7 427.0,246.3 213.0,246.3"/><polygon class="pfill3" points="214.2,78.6 425.8,78.6 448.2,47.1 191.8,47.1"/><ellipse class="pring" cx="232.8" cy="259.4" rx="16.8" ry="10.4"/><ellipse class="pring" cx="407.2" cy="259.4" rx="16.8" ry="10.4"/><ellipse class="pring" cx="320.0" cy="285.7" rx="23.6" ry="14.6"/><ellipse class="pring" cx="320.0" cy="316.6" rx="26.7" ry="16.6"/><ellipse class="pring" cx="320.0" cy="354.6" rx="32.5" ry="20.1"/><ellipse class="pring" cx="320.0" cy="353.8" rx="87.3" ry="54.1"/><path class="pring" d="M 191.8 358.3 A 128.2 128.2 0 0 0 448.2 358.3"/><ellipse class="phole" cx="232.8" cy="259.9" rx="15.9" ry="9.8"/><ellipse class="phole" cx="407.2" cy="259.9" rx="15.9" ry="9.8"/><ellipse class="phole" cx="320.0" cy="290.0" rx="16.5" ry="10.2"/><ellipse class="phole" cx="320.0" cy="322.7" rx="17.2" ry="10.7"/><ellipse class="phole" cx="320.0" cy="364.3" rx="18.1" ry="11.2"/><ellipse class="phole" cx="320.0" cy="402.1" rx="18.9" ry="11.7"/><ellipse class="phole" cx="320.0" cy="438.2" rx="19.7" ry="12.2"/><circle class="ball" cx="320.0" cy="784.7" r="7"/><line class="arw" x1="183.0" y1="854.4" x2="320.0" y2="856.3"/><polygon class="ah" points="320.0,856.3 310.9,861.2 311.1,851.2"/><circle class="bdg" cx="170.0" cy="854.3" r="12"/><text class="bdgt" x="170.0" y="859.3">A</text><line class="arw" x1="180.6" y1="518.4" x2="204.7" y2="554.6"/><polygon class="ah" points="204.7,554.6 195.5,549.9 203.9,544.4"/><circle class="bdg" cx="173.5" cy="507.6" r="12"/><text class="bdgt" x="173.5" y="512.6">C</text><line class="arw" x1="500.5" y1="378.1" x2="392.8" y2="342.2"/><polygon class="ah" points="392.8,342.2 402.9,340.3 399.7,349.8"/><circle class="bdg" cx="512.8" cy="382.2" r="12"/><text class="bdgt" x="512.8" y="387.2">H</text><line class="arw" x1="446.8" y1="162.5" x2="426.4" y2="162.5"/><polygon class="ah" points="426.4,162.5 435.4,157.5 435.4,167.5"/><circle class="bdg" cx="459.8" cy="162.5" r="12"/><text class="bdgt" x="459.8" y="167.5">L</text><line class="arw" x1="454.0" y1="162.5" x2="423.0" y2="162.5"/><polygon class="ah" points="423.0,162.5 432.0,157.5 432.0,167.5"/><circle class="bdg" cx="467.0" cy="162.5" r="12"/><text class="bdgt" x="467.0" y="167.5">M</text><line class="arw" x1="455.3" y1="54.7" x2="437.0" y2="56.9"/><polygon class="ah" points="437.0,56.9 445.4,50.8 446.6,60.8"/><circle class="bdg" cx="468.2" cy="53.1" r="12"/><text class="bdgt" x="468.2" y="58.1">P</text><line class="arw" x1="288.7" y1="789.9" x2="312.0" y2="784.7"/><polygon class="ah" points="312.0,784.7 304.3,791.6 302.1,781.8"/><circle class="bdg" cx="276.0" cy="792.7" r="12"/><text class="bdgt" x="276.0" y="797.7">Q</text><text class="hid" x="209.3" y="251.9">100L/100R</text></svg></div><div class="plate-wrap" style="padding-top:0"><div class="legend"><span>perspective down the lane &mdash; what the player sees</span></div></div>
+</div>
+  </div>
+  <div class="capplate">
+    <div class="plate-card">
+  <div class="plate-head"><h2>Top-Down (Bird&rsquo;s Eye)</h2><span class="pnum">PLATE 4 / 4</span></div>
+  <div class="plate-wrap"><svg viewBox="0 0 583 906" class="plate" role="img" aria-label="Top down"><rect class="keep" x="154.7" y="2.2" width="273.8" height="864.3"/><polygon class="fill1" points="173.6,303.6 409.6,303.6 409.6,73.0 173.6,73.0"/><polygon class="fill3" points="207.9,356.7 173.6,303.6 173.6,303.9 207.9,356.7"/><polygon class="fill3" points="207.9,356.7 173.6,303.6 409.6,303.6 375.3,356.7"/><polygon class="fillpit" points="193.8,356.7 389.4,356.7 389.4,303.6 193.8,303.6"/><polygon class="fill2" points="207.9,455.9 375.3,455.9 375.3,356.7 207.9,356.7"/><polygon class="fill1" points="207.9,786.3 375.3,786.3 375.3,455.9 207.9,455.9"/><line class="wallL" x1="203.2" y1="786.3" x2="203.2" y2="356.7"/><line class="wallL" x1="173.6" y1="303.6" x2="173.6" y2="73.0"/><line class="wallL" x1="380.0" y1="786.3" x2="380.0" y2="356.7"/><line class="wallL" x1="409.6" y1="303.6" x2="409.6" y2="73.0"/><rect class="fill3" x="173.6" y="68.0" width="236.0" height="7"/><ellipse class="ring" cx="197.2" cy="90.5" rx="18.2" ry="12.9"/><ellipse class="ring" cx="386.0" cy="90.5" rx="18.2" ry="12.9"/><ellipse class="ring" cx="291.6" cy="123.9" rx="24.7" ry="17.4"/><ellipse class="ring" cx="291.6" cy="160.3" rx="26.8" ry="19.0"/><ellipse class="ring" cx="291.6" cy="201.2" rx="31.1" ry="22.0"/><ellipse class="ring" cx="291.6" cy="200.5" rx="83.7" ry="59.2"/><path class="ring" d="M 169.3 205.0 A 122.3 86.5 0 0 1 413.9 205.0"/><ellipse class="hole" cx="197.2" cy="91.2" rx="17.2" ry="12.1"/><text class="hid" x="174.0" y="95.2" text-anchor="end">100L</text><ellipse class="hole" cx="386.0" cy="91.2" rx="17.2" ry="12.1"/><text class="hid" x="409.2" y="95.2" text-anchor="start">100R</text><ellipse class="hole" cx="291.6" cy="129.2" rx="17.2" ry="12.1"/><text class="hid" x="314.8" y="133.2" text-anchor="start">c50</text><ellipse class="hole" cx="291.6" cy="167.1" rx="17.2" ry="12.1"/><text class="hid" x="314.8" y="171.1" text-anchor="start">c40</text><ellipse class="hole" cx="291.6" cy="211.1" rx="17.2" ry="12.1"/><text class="hid" x="314.8" y="215.1" text-anchor="start">c30</text><ellipse class="hole" cx="291.6" cy="247.5" rx="17.2" ry="12.1"/><text class="hid" x="314.8" y="251.5" text-anchor="start">h20</text><ellipse class="hole" cx="291.6" cy="279.4" rx="17.2" ry="12.1"/><text class="hid" x="314.8" y="283.4" text-anchor="start">h10</text><circle class="ball" cx="291.6" cy="757.9" r="12.0"/><line class="arw" x1="180.9" y1="621.1" x2="212.6" y2="621.1"/><polygon class="ah" points="212.6,621.1 203.6,626.1 203.6,616.1"/><circle class="bdg" cx="167.9" cy="621.1" r="12"/><text class="bdgt" x="167.9" y="626.1">A</text><line class="arw" x1="401.0" y1="670.6" x2="380.0" y2="670.6"/><polygon class="ah" points="380.0,670.6 389.0,665.6 389.0,675.6"/><circle class="bdg" cx="414.0" cy="670.6" r="12"/><text class="bdgt" x="414.0" y="675.6">B</text><line class="arw" x1="180.9" y1="406.3" x2="212.6" y2="406.3"/><polygon class="ah" points="212.6,406.3 203.6,411.3 203.6,401.3"/><circle class="bdg" cx="167.9" cy="406.3" r="12"/><text class="bdgt" x="167.9" y="411.3">C</text><line class="arw" x1="410.4" y1="330.2" x2="384.7" y2="330.2"/><polygon class="ah" points="384.7,330.2 393.7,325.2 393.7,335.2"/><circle class="bdg" cx="423.4" cy="330.2" r="12"/><text class="bdgt" x="423.4" y="335.2">D</text><line class="arw" x1="172.8" y1="330.2" x2="196.1" y2="330.2"/><polygon class="ah" points="196.1,330.2 187.1,335.2 187.1,325.2"/><circle class="bdg" cx="159.8" cy="330.2" r="12"/><text class="bdgt" x="159.8" y="335.2">E</text><line class="arw" x1="160.0" y1="325.2" x2="183.7" y2="348.8"/><polygon class="ah" points="183.7,348.8 173.8,346.0 180.8,338.9"/><circle class="bdg" cx="150.8" cy="316.0" r="12"/><text class="bdgt" x="150.8" y="321.0">G</text><line class="arw" x1="430.6" y1="235.5" x2="395.4" y2="235.5"/><polygon class="ah" points="395.4,235.5 404.4,230.5 404.4,240.5"/><circle class="bdg" cx="443.6" cy="235.5" r="12"/><text class="bdgt" x="443.6" y="240.5">H</text><line class="arw" x1="152.6" y1="188.3" x2="173.6" y2="188.3"/><polygon class="ah" points="173.6,188.3 164.6,193.3 164.6,183.3"/><circle class="bdg" cx="139.6" cy="188.3" r="12"/><text class="bdgt" x="139.6" y="193.3">L</text><line class="arw" x1="430.8" y1="65.3" x2="397.8" y2="71.0"/><polygon class="ah" points="397.8,71.0 405.8,64.6 407.5,74.4"/><circle class="bdg" cx="443.6" cy="63.0" r="12"/><text class="bdgt" x="443.6" y="68.0">M</text><line class="arw" x1="447.1" y1="809.9" x2="426.1" y2="809.9"/><polygon class="ah" points="426.1,809.9 435.1,804.9 435.1,814.9"/><circle class="bdg" cx="460.1" cy="809.9" r="12"/><text class="bdgt" x="460.1" y="814.9">R</text></svg></div><div class="plate-wrap" style="padding-top:0"><div class="legend"><span><i class="sw" style="background:transparent;border-style:dashed;border-color:var(--ink-soft)"></i>containment (invisible)</span></div></div>
+</div>
+  </div>
+
+  <h3>Key &mdash; parts</h3>
+  <div class="keygrid"><div class="keyrow"><span class="chip">A</span><span class="kn">Lane bed</span><span class="kc">part: 'lane'</span></div><div class="keyrow"><span class="chip">B</span><span class="kn">Lane rail</span><span class="kc">part: 'laneRail'</span></div><div class="keyrow"><span class="chip">C</span><span class="kn">Ramp (hump)</span><span class="kc">part: 'hump'</span></div><div class="keyrow"><span class="chip">D</span><span class="kn">Trough</span><span class="kc">part: 'trough'</span></div><div class="keyrow"><span class="chip">E</span><span class="kn">Trough wall</span><span class="kc">part: 'troughWall'</span></div><div class="keyrow"><span class="chip">F</span><span class="kn">Kick panel</span><span class="kc">part: 'kick'</span></div><div class="keyrow"><span class="chip">G</span><span class="kn">Flare</span><span class="kc">part: 'flare'</span></div><div class="keyrow"><span class="chip">H</span><span class="kn">Board / scoring face</span><span class="kc">part: 'board'</span></div><div class="keyrow"><span class="chip">J</span><span class="kn">Ring</span><span class="kc">part: 'ringSeg'</span></div><div class="keyrow"><span class="chip">K</span><span class="kn">Cup collar</span><span class="kc">part: 'cupSeg'</span></div><div class="keyrow"><span class="chip">L</span><span class="kn">Side wall</span><span class="kc">part: 'rail'</span></div><div class="keyrow"><span class="chip">M</span><span class="kn">Backboard</span><span class="kc">part: 'backboard'</span></div><div class="keyrow"><span class="chip">N</span><span class="kn">Front glass</span><span class="kc">part: 'glass'</span></div><div class="keyrow"><span class="chip">P</span><span class="kn">Marquee</span><span class="kc">render.js</span></div><div class="keyrow"><span class="chip">Q</span><span class="kn">Ball</span><span class="kc">—</span></div><div class="keyrow"><span class="chip">R</span><span class="kn">Containment</span><span class="kc">part: 'keep'</span></div></div>
+  <h3>Key &mdash; holes</h3>
+  <div class="keygrid"><div class="keyrow"><span class="chip chip2">100L</span><span class="kn">the 100</span><span class="kc">holes.100L</span></div><div class="keyrow"><span class="chip chip2">100R</span><span class="kn">the 100</span><span class="kc">holes.100R</span></div><div class="keyrow"><span class="chip chip2">c50</span><span class="kn">the 50</span><span class="kc">holes.c50</span></div><div class="keyrow"><span class="chip chip2">c40</span><span class="kn">the 40</span><span class="kc">holes.c40</span></div><div class="keyrow"><span class="chip chip2">c30</span><span class="kn">the 30</span><span class="kc">holes.c30</span></div><div class="keyrow"><span class="chip chip2">h20</span><span class="kn">the 20</span><span class="kc">holes.h20</span></div><div class="keyrow"><span class="chip chip2">h10</span><span class="kn">the 10</span><span class="kc">holes.h10</span></div></div>
+
+  <footer>Board 1.00 &times; 1.38m &middot; tilt 45&deg; &middot; ball &Oslash; 0.10m &middot; lane 1.40m &middot; ramp 0.42m &middot; backboard 0.80m. Drawn from the live geometry.</footer>
+</div>
+</body></html>

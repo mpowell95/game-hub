@@ -20,6 +20,7 @@
   font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --ep-seat0: #F2A183;
   --ep-seat1: #6BA9CE;
+  --ep-seat2: #7FC9A0;
   --ep-bg: var(--ep-seat0);
   --ep-ink: #2a1d16;
   --ep-muted: #6b5548;
@@ -31,6 +32,7 @@
   --ep-top: max(env(safe-area-inset-top, 0px), 50px);
 }
 .ep-root.ep-turn-1 { --ep-bg: var(--ep-seat1); }
+.ep-root.ep-turn-2 { --ep-bg: var(--ep-seat2); }
 .ep-root.is-setup { --ep-bg: var(--ep-seat0); }
 @media (prefers-reduced-motion: reduce) { .ep-root { transition: none; } }
 .ep-root,
@@ -98,35 +100,44 @@
 .ep-root .ep-spinbtn.is-set { box-shadow: 0 0 0 3px #ffce3a, 0 2px 6px rgba(0, 0, 0, 0.25); }
 
 /* ------------------------------------------------------------------ scoreboard --- */
+/* One card per player (two or three). Row one: face, name, group word, racks won; row two: that
+   player's balls, potted ones faded and ticked (Matt, 2026-10-22: "how many balls you've gotten vs
+   how many you have left"). 9-ball has no groups: one shared row of 1-9 under the cards instead. */
 .ep-root .ep-board {
   position: absolute;
   top: calc(var(--ep-top) + 50px);
   left: 8px;
   right: 8px;
-  height: 44px;
+  height: 58px;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px;
   z-index: 2;
   pointer-events: none;
 }
 .ep-root .ep-side {
   flex: 1 1 0;
   min-width: 0;
-  height: 44px;
+  height: 58px;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 3px 8px;
   border-radius: 12px;
   background: var(--ep-pill);
   border: 2px solid transparent;
   opacity: 0.78;
 }
-.ep-root .ep-side-1 { justify-content: flex-end; }
+.ep-root.ep-m9 .ep-side { height: 36px; }
+.ep-root.ep-m9 .ep-tray { display: none; }
 /* Whose turn: the selection accent AS A BORDER plus a thick underline bar (never colour alone). */
 .ep-root .ep-side.is-turn { border-color: #ffce3a; box-shadow: inset 0 -4px 0 #ffce3a; opacity: 1; }
-.ep-root .ep-ava { flex: 0 0 auto; font-size: 20px; line-height: 1; }
+.ep-root .ep-side.is-out { opacity: 0.45; }
+.ep-root .ep-side.is-out .ep-nm { text-decoration: line-through; }
+.ep-root .ep-side-top { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.ep-root .ep-ava { flex: 0 0 auto; font-size: 18px; line-height: 1; }
 .ep-root .ep-nm {
   flex: 1 1 auto;
   min-width: 0;
@@ -136,18 +147,46 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ep-root .ep-side-1 .ep-nm { text-align: right; }
-.ep-root .ep-grp { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
+.ep-root .ep-grp {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1d1410;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
 .ep-root .ep-grp:empty { display: none; }
-.ep-root .ep-grp i { font-style: normal; font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; }
-.ep-root .ep-grp .ep-ball-ico { display: block; }
-.ep-root .ep-sc { flex: 0 0 auto; font-size: 24px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.ep-root .ep-sc { flex: 0 0 auto; font-size: 20px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.ep-root .ep-tray { display: flex; align-items: center; gap: 1px; height: 16px; min-width: 0; overflow: hidden; }
+.ep-root .ep-tray .ep-ball-ico { flex: 0 0 auto; display: block; }
+.ep-root .ep-tray-8 { margin-left: 4px; padding-left: 4px; border-left: 1px solid rgba(255, 255, 255, 0.4); display: flex; }
+.ep-root .ep-tray9 {
+  flex: 1 0 100%;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.ep-root .ep-t9 { display: flex; border-radius: 50%; }
+.ep-root .ep-t9 .ep-ball-ico { display: block; }
+/* The ball to hit first: a ring AND bigger (never colour alone). */
+.ep-root .ep-t9.is-next { box-shadow: 0 0 0 2px #ffce3a; transform: scale(1.15); }
 .ep-root.is-setup .ep-board,
 .ep-root.is-setup .ep-status { visibility: hidden; }
+/* Three players: a little tighter so all three names fit. */
+.ep-root.ep-n3 .ep-side { padding: 3px 6px; }
+.ep-root.ep-n3 .ep-ava { font-size: 16px; }
+.ep-root.ep-n3 .ep-nm { font-size: 12px; }
+/* ...and no group word: the row of numbered balls under the name already says 1-5. */
+.ep-root.ep-n3 .ep-grp { display: none; }
 
 .ep-root .ep-status {
   position: absolute;
-  top: calc(var(--ep-top) + 98px);
+  top: calc(var(--ep-top) + 114px);
   left: 8px;
   right: 8px;
   margin: 0;
@@ -164,6 +203,23 @@
   z-index: 2;
   pointer-events: none;
 }
+
+/* The ball-in-hand lock-in tick (Medium and Hard): beside the cue ball, placed by ui.js _paintOk. */
+.ep-root .ep-ok {
+  position: absolute;
+  z-index: 4;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #0F8A3C;
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+.ep-root .ep-ok svg { width: 26px; height: 26px; }
 
 /* ------------------------------------------------------------------ banner --- */
 .ep-root .ep-banner {
@@ -268,6 +324,43 @@
 .ep-root .ep-seg-big .ep-seg-item { min-height: 44px; font-size: 15px; font-weight: 800; }
 .ep-root .ep-seg-big .ep-seg-item::after { inset: 0; }
 .ep-root .ep-go { font-size: 17px; font-weight: 800; }
+/* Options: three toggle chips, each its picture and its name; on = filled AND ticked colour ring. */
+.ep-root .ep-opts { display: flex; gap: 6px; }
+.ep-root .ep-opt {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 4px;
+  border: 2px solid var(--ep-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ep-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.ep-root .ep-opt svg { width: 18px; height: 18px; }
+.ep-root .ep-opt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ep-root .ep-opt[aria-pressed="true"] { border-color: var(--ep-brand); background: var(--ep-brand); color: #fff; }
+.ep-root .ep-opt[aria-pressed="true"]::after {
+  content: '✓';
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 12px;
+  font-weight: 900;
+}
+.ep-root .ep-row { display: flex; align-items: center; gap: 8px; }
+.ep-root .ep-row .ep-label { flex: 0 0 auto; }
+.ep-root .ep-seg-racks { flex: 1 1 auto; }
+.ep-root .ep-seg-look { flex: 0 0 auto; width: auto; }
+.ep-root .ep-seg-look .ep-seg-item { flex: 0 0 auto; padding: 0 6px; gap: 1px; }
+.ep-root .ep-seg-look .ep-ball-ico { display: block; }
 .ep-root .ep-alt { background: #fff; color: var(--ep-ink); border-color: var(--ep-line); }
 .ep-root .ep-h2 { margin: 0 40px 2px; text-align: center; font-size: 22px; font-weight: 900; color: var(--ep-ink); }
 .ep-root .ep-x {
@@ -332,6 +425,7 @@
 :root.gh-dark .ep-root {
   --ep-seat0: #7a4636;
   --ep-seat1: #2c5873;
+  --ep-seat2: #2f5e45;
   --ep-ink: #f3e9df;
   --ep-muted: #c4b1a2;
   --ep-card: #241b16;
@@ -341,8 +435,139 @@
 :root.gh-dark .ep-root .ep-card { box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6); }
 :root.gh-dark .ep-root .ep-seg { background: #17110e; }
 :root.gh-dark .ep-root .ep-seg .ep-seg-item[aria-pressed="true"] { background: #3a2c23; }
-:root.gh-dark .ep-root .ep-alt { background: #30251e; }
+:root.gh-dark .ep-root .ep-alt,
+:root.gh-dark .ep-root .ep-opt { background: #30251e; }
+:root.gh-dark .ep-root .ep-opt[aria-pressed="true"] { background: #1f6b3d; border-color: var(--ep-brand); }
 :root.gh-dark .ep-root .ep-x { background: #30251e; color: #d9c8b9; }
 :root.gh-dark .ep-root .ep-help-line { color: #d9c8b9; }
 /* css/hub.css carries this too, but the standalone page does not load hub.css. */
 :root.gh-dark .ep-root .lb-dshape-t3, :root.gh-dark .ep-root .lb-dshape-t4 { fill: #e6e9f0; }
+
+/* ---------------------------------------------------------------- online (Stage 2) --- */
+/* Multiplayer, the setup card's first row (Flick Soccer's), with "N waiting on you". */
+.ep-root .ep-mprow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid var(--ep-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ep-ink);
+  text-align: left;
+}
+.ep-root .ep-mprow b { flex: 1 1 auto; font-size: 17px; font-weight: 800; }
+.ep-root .ep-mprow-badge { flex: 0 0 auto; padding: 3px 9px; border-radius: 999px; background: var(--ep-brand); color: #fff; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.ep-root .ep-mprow-chev { flex: 0 0 auto; font-size: 24px; line-height: 1; color: var(--ep-brand); }
+.ep-root .ep-danger { background: #fff; color: #a3161b; border-color: #e3b9b9; }
+/* Clear of the hub's floating back button (top-left): the card starts below it. */
+.ep-root .ep-ov-mp { padding-top: calc(var(--ep-top) + 50px); }
+.ep-root .ep-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
+.ep-root .ep-mp-top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 6px; }
+.ep-root .ep-mp-back {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f1e6d6;
+  color: var(--ep-ink);
+}
+.ep-root .ep-mp-back svg { width: 22px; height: 22px; }
+.ep-root .ep-mp-title { margin: 0; text-align: center; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-mp-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.ep-root .ep-mp-list { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: hidden; }
+.ep-root .ep-mp-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ep-muted);
+}
+.ep-root .ep-mp-h span { padding: 1px 7px; border-radius: 999px; background: var(--ep-brand); color: #fff; font-size: 11px; }
+.ep-root .ep-mp-note { margin: 0; text-align: center; font-size: 14px; font-weight: 600; color: var(--ep-muted); }
+.ep-root .ep-mp-err { color: #a3161b; font-weight: 800; }
+.ep-root .ep-mp-search { font-size: 16px; -webkit-user-select: text; user-select: text; }
+.ep-root .ep-mrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 2px solid var(--ep-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ep-ink);
+  font: inherit;
+  text-align: left;
+}
+.ep-root .ep-mrow.is-mine { border-color: var(--ep-brand); box-shadow: 0 0 0 1px var(--ep-brand) inset; }
+.ep-root .ep-mrow.is-static { cursor: default; }
+.ep-root .ep-mrow-face { flex: 0 0 auto; width: 34px; font-size: 26px; line-height: 1; text-align: center; }
+.ep-root .ep-mrow-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.ep-root .ep-mrow-name { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-mrow-sub { font-size: 12px; font-weight: 600; color: var(--ep-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-mrow-chev { flex: 0 0 auto; font-size: 24px; color: var(--ep-brand); }
+.ep-root .ep-mp-add { border-style: dashed; justify-content: center; }
+.ep-root .ep-mp-add .ep-mrow-face { color: var(--ep-brand); font-weight: 900; }
+.ep-root .ep-rec { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ep-root .ep-hmark { flex: 0 0 auto; width: 34px; text-align: center; font-size: 20px; font-weight: 900; color: var(--ep-muted); }
+.ep-root .ep-mrow.is-won .ep-hmark { color: var(--ep-brand); }
+.ep-root button.ep-mp-more { min-height: 44px; border: 0; background: transparent; color: var(--ep-brand); text-decoration: underline; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; }
+.ep-root .ep-mp-whos { display: flex; flex-direction: column; gap: 6px; }
+.ep-root .ep-mp-who { margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; font-size: 20px; color: var(--ep-ink); }
+.ep-root .ep-mp-who b { font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-root .ep-mp-face { flex: 0 0 auto; font-size: 28px; line-height: 1; }
+.ep-root .ep-aid-note { margin: 2px 0 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--ep-muted); }
+.ep-root .ep-res-small { font-size: 15px; font-weight: 700; }
+.ep-root .ep-skip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 7;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  background: rgba(28, 22, 18, 0.88);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+.ep-root .ep-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(28, 22, 18, 0.92);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+/* Quick chat (js/match-chat-ui.js): the panel scrolls on a short phone; the text box is typeable. */
+.ep-root .ghc-panel { touch-action: pan-y; }
+.ep-root .ghc-input { -webkit-user-select: text; user-select: text; }
+:root.gh-dark .ep-root .ep-mprow,
+:root.gh-dark .ep-root .ep-mrow,
+:root.gh-dark .ep-root .ep-danger { background: #30251e; }
+:root.gh-dark .ep-root .ep-mp-back { background: #3a2c23; }
+:root.gh-dark .ep-root .ep-danger { color: #ff9b9b; border-color: #6e3434; }
+:root.gh-dark .ep-root .ep-mp-err { color: #ff9b9b; }
+:root.gh-dark .ep-root .ep-mprow-badge,
+:root.gh-dark .ep-root .ep-mp-h span { background: #1f6b3d; }

@@ -1,0 +1,18 @@
+import { readFileSync } from 'node:fs';
+import { aggregatePlayers, COMPETITIVE, SOLO } from '/home/user/game-hub/js/players-agg.js';
+const f = process.argv[2];
+const db = JSON.parse(readFileSync(f, 'utf8'));
+const all = Object.entries(db.players || {}).map(([id, rec]) => ({ id, ...rec }));
+const rows = aggregatePlayers(all, (db.adminConfig && db.adminConfig.v1 && db.adminConfig.v1.corrections) || null);
+const sum = (g, ids, k) => ids.reduce((a, id) => a + (((g.games[id] || {}).total || {})[k] | 0), 0);
+const out = rows.map((g) => ({
+  name: g.name || '(none)',
+  played: sum(g, [...COMPETITIVE, ...SOLO], 'played'),
+  wins: sum(g, [...COMPETITIVE], 'won'),
+}));
+out.sort((a, b) => b.played - a.played);
+console.log('by PLAYED desc  (name, played, wins)');
+for (const r of out.slice(0, 10)) console.log('  %s  played=%d  wins=%d', r.name.padEnd(16), r.played, r.wins);
+const byWins = [...out].sort((a, b) => b.wins - a.wins);
+console.log('\nrank by WINS:');
+byWins.slice(0, 10).forEach((r, i) => console.log('  %d. %s wins=%d played=%d', i + 1, r.name.padEnd(16), r.wins, r.played));

@@ -1,0 +1,35 @@
+08-24T23:10:02 HUMAN Investigate how we could get moving parts in the next machine. Like what if I wanted another machine that’s hot shot, but the top row only has the 100 basket, and it moves fr the left edge of the machine to the right and back and forth during the game? 
+
+08-24T23:51:18 HUMAN New machine, ~7s round trip, build it. New machine = new files and everything 
+
+08-24T23:51:33 U-TEXT Base directory for this skill: /home/user/game-hub/.claude/skills/game-ui
+
+# Game UI conventions
+
+Read `docs/BUILDING-A-GAME.md`, "Part 0 — The UX floor," in full before making the change. It is
+short and it exists because a 2026-08-21 playtest of an already-shipped game (Skeeball) found real
+defects — sub-44px tap targets, sub-11px text, missing `safe-area-inset-bottom` handling, elements
+left invisible in the DOM — that had each already been independently discovered and fixed inside a
+*different* game's own folder doc, with no shared place either session would have found the other's
+fix. This skill's only job is to make sure that stops happening: the trigger above is deliberately
+broader than "building a new game," because the incident that motivated this file was a bug fix on
+a shipped one, not a new build.
+
+**If you are creating a new game folder** (not just editing an existing one), also read
+`docs/BUILDING-A-GAME.md`'s Parts 1-2 in full — the module contract, the "Adding a game" checklist,
+and the screen patterns (how-to-play screens, setup-screen defaults, the MP save-key convention) —
+plus root `CLAUDE.md`'s "Before you build: USE WHAT EXISTS" table, which stays in the always-loaded
+root file on purpose.
+
+Do not summarize the UX floor here instead of reading it — a summary is a second copy that drifts
+from the source. This file is a pointer, nothing more.
+
+
+08-25T00:51:25 HUMAN increase the diameter of the 100 to 4" 
+
+08-25T01:04:11 U-TEXT [Image: original 1572x2400, displayed at 1310x2000. Multiply coordinates by 1.20 to map to original image.]
+
+08-25T01:33:05 HUMAN is it live?? 
+
+08-25T01:38:29 HUMAN instead of 7s, make it 6s 
+

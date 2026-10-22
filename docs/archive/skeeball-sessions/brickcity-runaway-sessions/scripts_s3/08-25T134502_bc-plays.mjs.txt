@@ -1,0 +1,17 @@
+import { firebaseConfig } from '/home/user/game-hub/js/firebase-config.js';
+import { signInAnonymously, readPath } from '/home/user/game-hub/backups/rtdb-backup.mjs';
+const tok = await signInAnonymously(firebaseConfig.apiKey);
+const players = await readPath(firebaseConfig.databaseURL, 'players', tok);
+let rows = [];
+for (const id of Object.keys(players || {})) {
+  const p = players[id] || {};
+  const sk = ((p.stats || {}).games || {}).skeeball;
+  if (!sk) continue;
+  const b = (sk.boards || {}).brickcity;
+  if (!b) continue;
+  rows.push({ who: (p.profile || {}).name || id.slice(0, 8), plays: b.plays | 0, best: b.best | 0,
+    points: b.points | 0, clean: b.cleanRacks | 0, slots: Object.keys(b.slots || {}).filter(k=>b.slots[k]).length });
+}
+rows.sort((a, b) => b.plays - a.plays);
+console.log('devices with brickcity records:', rows.length);
+for (const r of rows) console.log(`  ${r.who.padEnd(14)} plays ${String(r.plays).padStart(3)}  best ${String(r.best).padStart(4)}  netpts ${String(r.points).padStart(5)}  clean ${r.clean}  baskets ${r.slots}/9`);

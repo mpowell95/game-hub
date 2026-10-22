@@ -1,0 +1,22 @@
+import { boardById } from '/home/user/game-hub/skeeball/js/boards.js';
+import { engineFor } from '/home/user/game-hub/skeeball/js/engines.js';
+const board = boardById('runaway');
+const { simulateThrow } = engineFor('runaway').physics;
+const m = board.geom.mover;
+// The two phases the coarse grid scored ZERO at, both ends of the travel, plus one it did score
+// at as a control. Dense aim (the axis that reaches sideways), narrow power band around where the
+// top row is reachable at all.
+for (const [label, t0] of [['+extreme t=1.75', 1.75], ['-extreme t=5.25', 5.25], ['control t=0.00', 0.0]]) {
+  const hits = [];
+  for (let p = 0; p <= 20; p++) {
+    for (let a = 0; a <= 40; a++) {
+      const power = 0.55 + (p / 20) * 0.40;
+      const aim = -1 + (a / 40) * 2;
+      const r = simulateThrow(board, { power, aim, t0 });
+      if (r.outcome && r.outcome.hole === 'topC') hits.push({ power: +power.toFixed(3), aim: +aim.toFixed(3) });
+    }
+  }
+  const u = m.amp * Math.sin(2 * Math.PI * t0 / m.period);
+  console.log(`${label}  u=${u >= 0 ? '+' : ''}${u.toFixed(3)}m  ->  ${hits.length} of 861 cells catch the 100`);
+  for (const h of hits.slice(0, 6)) console.log(`    power ${h.power}  aim ${h.aim}`);
+}

@@ -10,6 +10,8 @@ One list, by game. One line per item. When an item ships, delete its line in the
 - Leaderboard: a best-metric board should rank on that best by default, not on the last-picked sort (check; branch `claude/skeeball-leaderboard-ui-9y2b8r` was deleted, head `e11818d`).
 - **Matt:** say "release X" for any admin-only game already switched on for players on the admin page (e.g. Arrow Maze?), so it is saved on phones instead of re-downloaded each open (root CLAUDE.md, "Releasing a game").
 - **Matt:** play online on two real phones for Battleship, Chinchón, Dots and Boxes, Filler, Mancala, Tic Tac Toe (check; each game's CLAUDE.md, "unverified"; `docs/archive/HANDOFF-MP-LOCAL-MACHINE.md`).
+- App-speed plan, never built (2026-09-01, `docs/archive/skeeball-sessions/other/plan-spicy-dewdrop-v2-2026-09-01T1541.md`): Batch 2 (launch token, CSS gate into `hub.js`, tile pressed state, prefetch on pointerdown) and Batch 3 (no `width`/`height` in transitions, e.g. `escoba/css/escoba.css` `.eb-table-cell`; self-host Yahtzee's Google Fonts, `yahtzee/js/ui.js`) (check).
+- Hub smoothness pass, reverted 2026-08-26 with PR #240 and never redone (commit `ad9f07d1`): drop `backdrop-filter` on `.hub-top`, the back button, `.gs-top`, the `.gh-overlay` scrim; cap Snake's devicePixelRatio (`snake/js/ui.js`); Pinball/Hill Climb cap 2.5 -> 2; Ball Run MSAA off at dpr >= 2 (check).
 - `tools/test-match-chat.mjs` (in-match chat) fails about 1 run in 5 on main: "the other side can answer" verify race (check).
 
 ## Air Hockey
@@ -52,6 +54,7 @@ One list, by game. One line per item. When an item ships, delete its line in the
 
 - A true L-shaped green or ring of sand cannot be drawn (needs a two-outline feature).
 - **Matt:** reset or re-import Red Mesa in your browser copy, it held pre-repair holes 6/7/9 (check; the editor loads from `localStorage`, not the file).
+- Check: does **Open a draft... > Load** autosave over the loader's OWN cloud course when the course ids match? Offered 2026-09-24, not built: a read-only **View** beside Load, plus a separate "Make a copy" (`docs/archive/GOLF-SESSIONS.md`).
 - Further look-only objects (fountain, lighthouse, windmill, ducks/deer, waterfall, walls, hills) only if Matt asks (Matt: flower beds only, no bridges).
 
 ## Escoba
@@ -89,6 +92,8 @@ One list, by game. One line per item. When an item ships, delete its line in the
 - **Matt:** BRICK CITY, RUNAWAY and POPONGO are Testing by code default; release from the admin page when ready (check; the admin page may already override) (`skeeball/js/boards.js`).
 - `tools/test-skeeball-machine-spec.mjs` should assert `SK_MACHINES` in `js/game-stats-ui.js` matches `skeeball/js/boards.js` (about 20 lines).
 - `tools/test-visual.mjs skeeball` fails "CANNOT BE PLAYED": resuming a rack banked on another machine leaves the playfield dead (canvas 0x0); reproduced on main 2026-10-15 (check if real or a test gap).
+- BRICK CITY, Matt's 2026-08-24 asks never built: penalty baskets "very red", best target obvious at a glance (pair colour with shape: colorblind rule); face to match the marquee sign (Matt deferred this one: do not start unasked) (`docs/archive/skeeball-sessions/MATT-2026-08-24-hotshot-brickcity-asks.txt`).
+- Unanswered offers from the 2026-08-25/27 BRICK CITY sessions (`docs/archive/skeeball-sessions/brickcity-runaway-sessions/`): three cuts to `MACHINE-SPEC.md` Part 7 (BRICK CITY 26% table row, the draw-calls bullet, the duplicated comment header in `tools/test-skeeball-machine-spec.mjs`); a `tools/test-skeeball-perf.mjs` (WebGL contexts, one `_frame` per frame, textures back to baseline, idle draw-call ceiling); dead `ringSegments: 24` in the classic entry of `boards.js`; a per-machine "100s hit" counter (check).
 - POPONGO: 84% of throws roll back to the trough (skeeball/CLAUDE.md, "POPONGO and the arrangement layer").
 
 ## Tic Tac Toe

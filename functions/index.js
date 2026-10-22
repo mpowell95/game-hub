@@ -19,6 +19,10 @@
 //   archeryTurnPush archery/index/<code>/<id>        an Archery challenge, your turn, the end (2026-10-14)
 //   chinchonTurnPush chinchon/index/<code>/<id>      a Chinchón challenge, your turn, the end (2026-10-18)
 //   escobaTurnPush  escoba/index/<code>/<id>         an Escoba challenge, your turn, the end (2026-10-18)
+//   boardsOnSync      a device synced: rebuild the leaderboard (at most every 2 min)
+//   boardsCatchUp     every 5 min: a rebuild skipped by that limit, or the first one
+//   directoryBuild    hourly + on an Online play change: the small directory/ the pickers read
+//   nudgePush         the Remind bell on the Multiplayer screen (2026-10-22)
 //   turnReminderPush  every hour: "Reminder: your turn vs X" once a turn has waited 24 h (2026-10-20)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
@@ -30,7 +34,8 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideReminder, REMINDER_GAMES, isActive } from './decide.js';
+import { buildBoardParts, packBoard, sumOf } from './boards.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
 
@@ -209,4 +214,80 @@ export const turnReminderPush = onSchedule({
       }
     }
   }
+});
+
+// THE REMIND BELL (2026-10-22): nudges/<code>/<node>~<id> written by the other player (rules: as
+// their own claimed code, once per match per 6 hours). Sent only for a real turn still waiting on
+// <code> in a match with the sender (decide.js decideNudge). Same tag as the game's turn note.
+export const nudgePush = onValueWritten({ ref: '/nudges/{code}/{key}', ...OPTS }, async (event) => {
+  const { code, key } = event.params;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  if (!after || !after.from) return;
+  const db = getDatabase();
+  const [node, id] = key.split('~');
+  if (!node || !id) return;
+  const row = (await db.ref(`${node}/index/${code}/${id}`).get()).val();
+  const note = decideNudge({ key, from: after.from, row });
+  if (!note) { logger.info('nudge refused', { code, key }); return; }
+  const g = note.g;
+  await sendTo(db, code, note, `${g.tag}-${id}`, g.noMatch ? { game: g.game } : { game: g.game, match: id });
+});
+
+// THE PLAYER DIRECTORY (2026-10-22): directory/<CODE> = { name, emoji, at }, rebuilt from players/
+// (decide.js buildDirectory) so the "pick a person" lists read a few KB instead of every device's
+// stats. Derived data, written only here (rules: clients read, never write); players/ is untouched.
+// Hourly, and at once when Matt lets a code in or out (so a newly allowed person is pickable now).
+async function rebuildDirectory() {
+  const db = getDatabase();
+  const all = (await db.ref('players').get()).val() || {};
+  const dir = buildDirectory(all);
+  await db.ref('directory').set(dir);
+  logger.info('directory rebuilt', { codes: Object.keys(dir).length });
+}
+export const directoryBuild = onSchedule({
+  schedule: 'every 60 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1,
+}, rebuildDirectory);
+export const directoryOnApprove = onValueWritten({ ref: '/adminConfig/v1/online/{code}', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1 },
+  rebuildDirectory);
+
+// THE SERVER-BUILT LEADERBOARD (2026-10-22, boards.js has the why). Phones read the ~60 KB
+// boards/v1/lb/z instead of all of players/ (~930 KB). Rebuilt when a device syncs, at most once every
+// BOARD_GAP_MS (a rebuild reads all of players/ once, so a burst of syncs costs one read, not one
+// each); a sync inside that gap marks the board dirty and boardsCatchUp rebuilds it within 5
+// minutes. The package is rewritten only when a number changed (boards/v1/sums/lb). Derived data: rules let clients read it, never
+// write it, and players/ is only read.
+const BOARD_GAP_MS = 2 * 60 * 1000;
+async function rebuildBoards(db) {
+  await db.ref('boards/v1/meta/dirty').set(false);        // a sync after THIS point marks it again
+  const [players, cfg, sums] = await Promise.all([
+    db.ref('players').get(), db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(),
+  ]).then((s) => s.map((x) => x.val()));
+  const parts = buildBoardParts(players || {}, cfg || null);
+  const sum = sumOf(JSON.stringify(parts));
+  const patch = { 'meta/builtAt': Date.now(), 'meta/people': Object.keys(parts.people).length };
+  // The pickers' directory/ from the same read (2026-10-22: its own hourly timer had not fired
+  // an hour after deploy). Written only when a name or emoji changed.
+  const dir = buildDirectory(players || {});
+  const dsum = sumOf(JSON.stringify(dir));
+  if ((sums || {}).dir !== dsum) { await db.ref('directory').set(dir); patch['sums/dir'] = dsum; }
+  // Unchanged numbers: nothing is rewritten, so a phone watching the board is sent nothing.
+  if ((sums || {}).lb !== sum) { const z = packBoard(parts); patch['lb/z'] = z; patch['sums/lb'] = sum; patch['meta/bytes'] = z.length; }
+  await db.ref('boards/v1').update(patch);
+  logger.info('boards rebuilt', { people: patch['meta/people'], changed: !!patch['lb/z'] });
+}
+async function rebuildIfDue(db) {
+  const now = Date.now();
+  const lock = await db.ref('boards/v1/meta/lockUntil').transaction((cur) => (cur && cur > now ? undefined : now + BOARD_GAP_MS));
+  if (!lock.committed) { await db.ref('boards/v1/meta/dirty').set(true); return; }
+  await rebuildBoards(db);
+}
+export const boardsOnSync = onValueWritten({ ref: '/players/{id}/updatedAt', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 5 },
+  async () => { await rebuildIfDue(getDatabase()); });
+export const boardsOnConfig = onValueWritten({ ref: '/adminConfig/v1/corrections', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1 },
+  async () => { await rebuildBoards(getDatabase()); });
+export const boardsCatchUp = onSchedule({ schedule: 'every 5 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1 }, async () => {
+  const db = getDatabase();
+  const meta = (await db.ref('boards/v1/meta').get()).val() || {};
+  // Also every 30 minutes regardless, in case a sync's trigger was ever dropped.
+  if (meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) await rebuildBoards(db);
 });

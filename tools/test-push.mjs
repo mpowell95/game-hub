@@ -10,7 +10,7 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
 import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, isActive, ACTIVE_WINDOW_MS,
-  decideReminder, REMINDER_GAMES, REMIND_AFTER_MS, REMIND_UNTIL_MS } from '../functions/decide.js';
+  decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, REMIND_AFTER_MS, REMIND_UNTIL_MS } from '../functions/decide.js';
 
 let pass = 0; let fail = 0;
 const check = (name, ok) => { if (ok) { pass++; console.log('  ok  ', name); } else { fail++; console.log('  FAIL', name); } };
@@ -311,6 +311,43 @@ console.log('\n24-hour reminder (2026-10-20)');
     REMINDER_GAMES.length === 8 && REMINDER_GAMES.every((x) => fnSrc.includes(`ref: '/${x.node}/index/{code}/`)));
   check('reminder: the scheduled function exists and stamps its own node, never the index row',
     /export const turnReminderPush = onSchedule\(/.test(fnSrc) && /pushReminders\/\$\{code\}\/\$\{key\}/.test(fnSrc));
+}
+
+console.log('\nRemind bell (2026-10-22)');
+{
+  const now = 1_800_000_000_000;
+  const row = (o = {}) => ({ name: 'Matt', with: 'MATTA', updated: now - 60000, yourTurn: true, over: false, ...o });
+  const n = (o, from = 'MATTA', key = 'flicksoccer~m1') => decideNudge({ key, from, row: row(o), now });
+  check('nudge: the other player on a waiting turn sends one', n({}) && n({}).text('en').body === 'Reminder: your turn vs Matt' && n({}).g.game === 'flick-soccer');
+  check('nudge: someone not in the match, nothing', n({}, 'ZZZZZ') === null);
+  check('nudge: not their turn / over / called off / expired, nothing',
+    n({ yourTurn: false }) === null && n({ over: true }) === null && n({ ended: 'cancelled' }) === null && n({ expires: now - 1 }) === null);
+  check('nudge: an unknown game node or no row, nothing', n({}, 'MATTA', 'rooms~m1') === null && decideNudge({ key: 'darts~m1', from: 'MATTA', row: null, now }) === null);
+  check('nudge: the trigger watches nudges/{code}/{key}', /export const nudgePush = onValueWritten\(\{ ref: '\/nudges\/\{code\}\/\{key\}'/.test(fnSrc));
+  const rules = JSON.parse(readFileSync(new URL('../database.rules.json', import.meta.url), 'utf8')).rules;
+  const w = rules.nudges && rules.nudges.$code && rules.nudges.$code.$key;
+  check('nudge rules: only as your own claimed code, at most once per match per 6 hours',
+    !!w && w['.write'].includes("root.child('msgAuth').child(auth.uid).val()") && w['.write'].includes('21600000'));
+  check('nudge rules: every reminder game node is allowed in the key',
+    REMINDER_GAMES.every((x) => w['.validate'].includes(x.node)));
+}
+
+console.log('\nPlayer directory (2026-10-22)');
+{
+  const dir = buildDirectory({
+    a: { profile: { name: 'Anita Bonita', emoji: '🌸', playerId: 'c5pxn' }, updatedAt: 10 },
+    b: { profile: { name: 'Anita B', emoji: '🌼', playerId: 'C5PXN' }, updatedAt: 5 },
+    c: { profile: { name: 'You', emoji: '🙂', playerId: 'QZCC4' }, updatedAt: 99 },
+    d: { profile: { name: 'Matt', emoji: '👑', playerId: 'QZCC4' }, updatedAt: 50 },
+    e: { profile: { name: 'No code', emoji: '🙂', playerId: '' }, updatedAt: 1 },
+    f: { stats: {} },
+  });
+  check('directory: one row per code, the newest record with a real name',
+    JSON.stringify(dir) === JSON.stringify({ C5PXN: { name: 'Anita Bonita', emoji: '🌸', at: 10 }, QZCC4: { name: 'Matt', emoji: '👑', at: 50 } }));
+  check('directory: rebuilt hourly and on an Online play change',
+    /export const directoryBuild = onSchedule\(/.test(fnSrc) && /ref: '\/adminConfig\/v1\/online\/\{code\}'/.test(fnSrc));
+  const rules = JSON.parse(readFileSync(new URL('../database.rules.json', import.meta.url), 'utf8')).rules;
+  check('directory rules: readable, never written by a client', rules.directory && rules.directory['.write'] === false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

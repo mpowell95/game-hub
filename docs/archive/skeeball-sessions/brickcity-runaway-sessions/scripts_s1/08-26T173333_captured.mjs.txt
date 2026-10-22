@@ -1,0 +1,32 @@
+const { boardById } = await import('/home/user/game-hub/skeeball/js/boards.js');
+const { engineFor } = await import('/home/user/game-hub/skeeball/js/engines.js');
+const { buildMachine } = await import('/home/user/game-hub/skeeball/js/machines/brickcity/machine.js');
+const b = boardById('brickcity'), G = b.geom, M = buildMachine(G);
+const P = engineFor('brickcity').physics;
+const rows = [];
+for (let pi = 0; pi <= 40; pi++) for (let ai = 0; ai <= 20; ai++) {
+  const st = P.startThrow(b, { power: pi/40, aim: (ai-10)/10 });
+  let n = 0, capFrom = -1, capDur = 0, slowInCup = 0, snap = null;
+  while (!st.done && n < 4000) {
+    P.step(b, st, 1/60); n++;
+    if (st.captured) {
+      if (capFrom < 0) capFrom = st.t;
+      capDur = st.t - capFrom;
+      const v = st.ball.velocity, sp = Math.hypot(v.x,v.y,v.z);
+      if (sp < 0.15) {
+        slowInCup++;
+        if (!snap) { const f = M.worldToFace(st.ball.position); snap = { h: +f.h.toFixed(4), sp: +sp.toFixed(3), hole: st.captured }; }
+      }
+    } else { capFrom = -1; }
+  }
+  rows.push({ power: pi/40, aim: (ai-10)/10, capDur, slowInCup, snap,
+    hole: st.outcome ? st.outcome.hole : 'none', t: st.t });
+}
+const cap = rows.filter(r => r.capDur > 0);
+console.log(`throws that got captured at all: ${cap.length} of ${rows.length}`);
+const d = cap.map(r=>r.capDur).sort((a,b)=>a-b);
+console.log(`time spent INSIDE the cup after capture:  median ${d[d.length>>1].toFixed(2)}s  p90 ${d[Math.floor(d.length*0.9)].toFixed(2)}s  worst ${d[d.length-1].toFixed(2)}s`);
+const hung = cap.filter(r => r.capDur > 0.8).sort((a,b)=>b.capDur-a.capDur);
+console.log(`\nballs that sat in the cup for more than 0.8s after capture: ${hung.length}`);
+for (const h of hung.slice(0,15))
+  console.log(`   p${h.power.toFixed(3)} a${String(h.aim).padStart(4)}  in the cup ${h.capDur.toFixed(2)}s of ${h.t.toFixed(2)}s -> ${h.hole}   slow frames ${h.slowInCup}${h.snap?`  first slow: h ${h.snap.h} sp ${h.snap.sp} in ${h.snap.hole}`:''}`);

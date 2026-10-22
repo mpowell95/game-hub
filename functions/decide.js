@@ -580,3 +580,46 @@ export function decideReminder({ g, id, row, sentFor, now = Date.now() }) {
     text: (lang) => ({ title: lang === 'es' ? g.es : g.en, body: (REMIND_TEXT[lang] || REMIND_TEXT.en)(who) }),
   };
 }
+
+// THE REMIND BUTTON (2026-10-22, Matt: "Send Anita a reminder push notification about the flick
+// soccer challenge I sent her"). The Multiplayer screen's bell on a their-turn row writes
+// nudges/<THEIR CODE>/<node>~<id> = { from: <my code>, t }. The database rules allow that only as
+// the device's own claimed code and at most once per match every 6 hours; index.js nudgePush then
+// asks this whether it is a real, still-waiting turn of a match between the two of them.
+// `row` = their index row for that match; `from` = the sender's code. PURE.
+export function decideNudge({ key, from, row, now = Date.now() }) {
+  const [node, id] = String(key || '').split('~');
+  const g = REMINDER_GAMES.find((x) => x.node === node);
+  if (!g || !id || !row || typeof row !== 'object') return null;
+  if (!from || String(row.with || '') !== String(from)) return null;   // only the other player in it
+  if (!row.yourTurn || row.over || row.ended) return null;
+  const exp = Number.isFinite(+row.expires) ? +row.expires : 0;
+  if (exp > 0 && now >= exp) return null;
+  const who = clean(row.name) || 'Someone';
+  return {
+    g, id, kind: 'nudge', who,
+    text: (lang) => ({ title: lang === 'es' ? g.es : g.en, body: (REMIND_TEXT[lang] || REMIND_TEXT.en)(who) }),
+  };
+}
+
+// THE PLAYER DIRECTORY (2026-10-22, Matt: "loading multiplayer games feels like it's taking longer").
+// Every "pick a person" list used to download all of players/ (~940 KB, every device's stats) to
+// show a few dozen names. directory/<CODE> = { name, emoji, at } is that list, rebuilt on the server
+// (index.js directoryBuild, hourly, and whenever Matt changes who may play online). Per code: the
+// NEWEST record with a real name, the same pick as each game's opponentsFrom. PURE.
+const PLACEHOLDER = (n) => { const s = String(n || '').trim().toLowerCase(); return !s || s === 'you'; };
+export function buildDirectory(players) {
+  const out = {};
+  for (const id of Object.keys(players || {})) {
+    const rec = (players || {})[id] || {};
+    const p = rec.profile || {};
+    const code = typeof p.playerId === 'string' ? p.playerId.trim().toUpperCase() : '';
+    if (!/^[A-Z0-9]{4,8}$/.test(code)) continue;
+    const name = String(p.name || '').trim().slice(0, 40);
+    if (PLACEHOLDER(name)) continue;
+    const at = Number.isFinite(+rec.updatedAt) ? +rec.updatedAt : 0;
+    if (out[code] && out[code].at > at) continue;
+    out[code] = { name, emoji: String(p.emoji || '').slice(0, 16) || '🙂', at };
+  }
+  return out;
+}

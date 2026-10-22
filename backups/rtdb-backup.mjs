@@ -66,6 +66,12 @@ export const BRANCHES = [
   // courseDrafts/ (hole-editor/js/drafts.js): golf course designs autosaved by player code. Read
   // by any signed-in session, so it backs up normally.
   'courseDrafts',
+  // nudges/ (2026-10-22): the Multiplayer screen's Remind bell, { from, t } per match. A request log.
+  'nudges',
+  // directory/ (2026-10-22): names + emojis per code, rebuilt from players/ by the server. Derived.
+  'directory',
+  // boards/ (2026-10-22): the server-built leaderboard package. Derived from players/.
+  'boards',
   // skeeChallenges/ (skeeball/js/challenge.js, 2026-09-24): Skeeball "beat my score" challenges and
   // their per-player index. Same auth shape as hoops/.
   'skeeChallenges',
@@ -78,6 +84,9 @@ export const BRANCHES = [
   // flicksoccer/ (flick-soccer/js/mp.js, 2026-10-11): Flick Soccer's turn-by-turn challenges and
   // their per-player index. Same auth shape as hoops/.
   'flicksoccer',
+  // eightball/ (eight-ball/js/mp.js, 2026-10-22): Pool's turn-by-turn challenges (2 or 3 players),
+  // matches, per-player index rows and chat.
+  'eightball',
   // archery/ (archery/js/mp.js, 2026-10-14): Archery's turn-by-turn challenges, their per-player
   // index and quick chat.
   'archery',

@@ -1,0 +1,32 @@
+Matt, 2026-08-24 23:43, session "Skeeball machine 3: Hot Shot Brick City". Verbatim; [bracketed] words fill transcript gaps.
+
+The objectives for hot shot and brickcity need to be updated. And I have a bunch of misc comments. Please evaluate and batch into grounds that make sense to do together. And send them back to me in your proposed order
+
+Hot shot:
+1. hit every basket. Not every point value. Every basket. If we could make them all glow or something to start, and have the glow go away as they hit that basket, that'd be really cool
+2. Single game of 700. (I just got 500 while standing on a train so I feel like 700 might even be easy)
+3. 10k total points again
+
+Brick city
+1. Every basket. Same thing as above. The glow thing if it's possible.
+2. 3 fully clean rounds. No negatives AND no zeros. (Should I make this 5)
+3. Not sure for total points. I'm thinking 5000? I'll have to test more. But use 5k for now
+
+- once all three objectives are reached, AND they've unlocked the next board, they should vanish from that machines screen for that player.
+- say they just finished their third objective. [Fireworks go off.] Immediately after they complete the objective, and BEFORE, the game over screen appears, I want a sick animation to play. Fireworks go off and the 3 objective tiles turn gold and float together in the middle of the screen then they all merge and are like a pulsing blob and they shrink to a point, then a golden key pops out of [it] and can now unlock the next board. I want them to have to actually go the setup screen, scroll over to the board they can unlock, and the lock is glowing and pulsing or something and they have to click it and then the lock falls off and they can play
+
+Unrelated:
+- The MISS is way too big and stays too long. It gets in the way. Change this to be the same size as the +100
+- the ball is slowly rolling over the 50 and 100s in brickcity. Can you investigate? Some of these feel like they absolutely should be in.
+- the ball got stuck between the -20 and -10. That shouldn't be able to happen
+- if I leave a classic game unfinished, and scroll to a hot shot game, the big blue button should be play, not a resume. It's confusing being taken to a different machine.
+- hit shots sign should be the same blue with stats background as the background on the board
+- the negative point baskets should be very red. They're bad. It should be obvious. And vice versa. Idk what colors others should be, but it should be obvious what the best target is without having to read anything. Just by glancing at the design
+- the theme of brickcity board should match the sign we created
+
+Remember: do not do anything. Just think about feasibility and the batches
+
+---
+Status 2026-10-22: shipped except the last two (BRICK CITY penalty cups are still near-black
+'#14161b'; its face is still HOT SHOT blue '#1e63b8'). Both are in TODO.md. Objectives were later
+retuned (see skeeball/CLAUDE.md).
