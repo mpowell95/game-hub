@@ -297,12 +297,13 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
 - **Saved between boards (2026-10-22, Thomas via Matt: "let it be saved between rounds not during")**:
   from a board's clear until the next board's Go! (`rush.atReady`), leaving (menu, hub back,
   backgrounding, closing the app) KEEPS the run in `gamehub.wayout.rush.save.v1` (`{ easy, hard }`,
-  written at the clear). Leaving during that countdown drops back to Ready. The Rush setup then
-  shows **New game | Resume** (Levels' row); Resume = the Ready screen over the veiled cleared
-  board. Nothing about the next board is on screen before Go!, so nothing can be studied. At Go!
+  written at the clear). Leaving during that countdown drops back to Ready. **Later** under Ready
+  (2026-10-22) goes straight to the hub (clicks `.hub-back`; standalone: the setup screen).
+  **A saved run OPENS BY ITSELF and blocks every other Arrow Maze game until finished** (Matt,
+  2026-10-22; `_resumeAnyRush` at mount and before any Play): the Ready screen over the veiled
+  cleared board. Setup with a save shows only Resume. Nothing about the next board is on screen before Go!, so nothing can be studied. At Go!
   the save is marked `live`; a live save found later (app killed mid-board) is recorded as LEFT.
-  A waiting save is recorded COUNTED (`at` = when saved, so its own week) when New game replaces it
-  or its week ends (`_settleRushSave`). The slot is cleared only after the record is written.
+  A waiting save is recorded COUNTED (`at` = when saved, so its own week) when its week ends (`_settleRushSave`). The slot is cleared only after the record is written.
 - **Leaving mid-board loses the run**: menu button, the hub back button (`destroy()`), or backgrounding
   (`visibilitychange`) ends it as `left`: STORED (THE LAW), never counted.
   **Except on Matt's devices** (`isAdminDevice()`, 2026-10-14: *"get rid of it for me. I need to be

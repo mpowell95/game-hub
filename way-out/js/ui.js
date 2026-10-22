@@ -459,7 +459,9 @@ class WayOut {
     document.addEventListener('visibilitychange', this._onVis);
     this.offResize = onViewportResize(() => { this._positionRoot(); this._layout(); });
     this.offLang = onLangChange(() => this.render());
-    this.render();
+    // A Rush run saved between boards opens by itself, and no other Arrow Maze game can be played
+    // until it is finished (Matt, 2026-10-22).
+    if (!this._resumeAnyRush()) this.render();
   }
 
   destroy() {
@@ -765,7 +767,10 @@ class WayOut {
       if (btn.dataset.mode !== this.settings.mode) { this.settings = saveSettings({ mode: btn.dataset.mode }); this.render(); }
     } else if (act === 'rush-mode') {
       if (btn.dataset.rmode !== this.settings.rushMode) { this.settings = saveSettings({ rushMode: btn.dataset.rmode }); this.render(); }
-    } else if (act === 'rush-play') { this._settleRushSave(this.settings.rushMode, true); this._startRush(this.settings.rushMode); }
+    } else if ((act === 'rush-play' || act === 'play' || act === 'new-level') && this._resumeAnyRush()) {
+      // a saved Rush run comes first
+    } else if (act === 'rush-later') this._rushLater();
+    else if (act === 'rush-play') { this._settleRushSave(this.settings.rushMode, true); this._startRush(this.settings.rushMode); }
     else if (act === 'rush-resume') this._resumeRush(this.settings.rushMode);
     else if (act === 'rush-again') { const m = this.rush ? this.rush.mode : this.settings.rushMode; this._closeModal(); this._settleRushSave(m, true); this._startRush(m); }
     else if (act === 'rush-close') this._toSetup(false);
@@ -1367,10 +1372,7 @@ class WayOut {
         <div class="gh-card wo-menu-card">
           <div class="wo-segs wo-segs--two" role="radiogroup" aria-label="${t('diff_label')}">${segs}</div>
           ${tiles}
-          ${saved ? `<div class="wo-playrow">
-          <button type="button" class="gh-btn gh-btn--block wo-play" data-act="rush-play">${t('new_game')}</button>
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play wo-rush-play" data-act="rush-resume">${t('resume')}</button>
-        </div>` : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play wo-rush-play" data-act="rush-play">${t('rush_play')}</button>`}
+          ${saved ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play wo-rush-play" data-act="rush-resume">${t('resume')}</button>` : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play wo-rush-play" data-act="rush-play">${t('rush_play')}</button>`}
         </div>
         <div class="wo-lead">${this._rushLeaderHTML(rm)}</div>
       </div>`;
@@ -1477,6 +1479,29 @@ class WayOut {
   /** The tuning data to store with a run. */
   _rushExtras(r) {
     return { bt: r.bt, ba: r.ba, bc: r.bc, mx: r.mx, mb: r.mb, pk: Math.round(r.pk), gn: r.gn, pn: r.pn, res: r.res, rv: r.rv };
+  }
+  /** If a Rush run is saved between boards, open it (the newest, if both versions have one) and
+   *  return true. Runs left mid-board or from a finished week are recorded first, never opened. */
+  _resumeAnyRush() {
+    if (this.rush && !this.rush.over) return false;
+    for (const m of RUSH_MODES) this._settleRushSave(m, false);
+    const saved = RUSH_MODES.map((m) => ({ m, s: readRushSave(m) })).filter((x) => x.s && !x.s.live).sort((a, b) => b.s.d - a.s.d)[0];
+    if (!saved) return false;
+    if (this.settings.mode !== 'rush' || this.settings.rushMode !== saved.m) this.settings = saveSettings({ mode: 'rush', rushMode: saved.m });
+    this._resumeRush(saved.m);
+    return !!this.rush;
+  }
+  /** "Later" on the Ready screen: the run is already saved (_rushBoardDone); back to the hub. Opened
+   *  on its own page (no hub), back to the setup screen. */
+  _rushLater() {
+    const r = this.rush;
+    if (!r || r.over || !r.atReady || r.counting) return;
+    const back = document.querySelector('.hub-back');
+    if (back && back.getClientRects().length) { back.click(); return; }
+    this.rush = null;
+    this._stopLevel();
+    this.screen = 'home';
+    this.render();
   }
   /** Back into a run saved between boards: its cleared board (veiled), its clock, the Ready screen. */
   _resumeRush(mode) {
@@ -1662,6 +1687,7 @@ class WayOut {
         </ul>
         <p class="wo-ready-stats">${t('rush_arrows', { n: r.arrows })}</p>
         <button type="button" class="wo-ready-btn" data-act="rush-ready">${t('rush_ready_btn')}</button>
+        <button type="button" class="wo-ready-later" data-act="rush-later">${t('rush_later')}</button>
       </div>`;
     m.hidden = false;
     m.querySelector('.wo-ready-btn').focus({ preventScroll: true });
