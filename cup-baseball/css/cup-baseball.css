@@ -1,0 +1,226 @@
+/* cup-baseball/css/cup-baseball.css - CUP BASEBALL.
+ *
+ * EVERY RULE IS DESCENDANT-SCOPED UNDER .cb-root. A module stylesheet is never removed once
+ * injected, so a collision would be permanent for that session (Mancala's discipline).
+ *
+ * The PLAY screen keeps its own dark look in BOTH hub themes (in-game art, like Cup Pong's). The
+ * setup screen and the overlays use css/ui.css's .gh-* primitives, pointed at this file's tokens.
+ *
+ * NOTHING HERE SCROLLS. `node tools/check-no-scroll.mjs cup-baseball` is the safety net.
+ */
+
+.cb-root {
+  --cb-ink: #f3ece1;
+  --cb-dim: #a79c8b;
+  --cb-panel: #232b39;
+  --cb-edge: #3a4558;
+  --cb-bg: #1a2230;
+
+  --cbs-ink: #1d2430;
+  --cbs-muted: #5b6675;
+  --cbs-surface: #ffffff;
+  --cbs-surface-2: #f2f5f9;
+  --cbs-bg: #eef2f7;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1;                 /* under the hub's floating back button */
+  overflow: hidden;
+  background: var(--cb-bg);
+  color: var(--cb-ink);
+  font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cb-root * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+:root.gh-dark .cb-root {
+  --cbs-ink: #e8edf5;
+  --cbs-muted: #9aa7b8;
+  --cbs-surface: #161d28;
+  --cbs-surface-2: #1e2734;
+  --cbs-bg: #10151d;
+}
+.cb-root .gh-overlay {
+  --gh-surface: var(--cbs-surface);
+  --gh-surface-2: var(--cbs-surface-2);
+  --gh-ink: var(--cbs-ink);
+  --gh-muted: var(--cbs-muted);
+  overscroll-behavior: contain;
+}
+
+/* --- play ------------------------------------------------------------------------------------- */
+.cb-root .cb-play {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+}
+/* 96px either side keeps the words clear of the hub's back chip (left) and Menu (right). */
+.cb-root .cb-hud {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 96px;
+  min-height: 44px;
+}
+.cb-root .cb-status { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
+.cb-root .cb-mode { font-size: 17px; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; }
+.cb-root .cb-sub { font-size: 12px; color: var(--cb-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The computer's turn is outlined, the player's plain: a second signal beside the words. */
+.cb-root .cb-mode.is-cpu { padding: 0 10px; border: 2px solid var(--cb-dim); border-radius: 999px; }
+.cb-root .cb-menu {
+  appearance: none;
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  right: 12px;
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--cb-edge);
+  background: var(--cb-panel);
+  color: var(--cb-dim);
+  font: inherit; font-size: 18px; line-height: 1;
+  cursor: pointer; touch-action: manipulation;
+}
+.cb-root .cb-menu:active { color: var(--cb-ink); }
+
+.cb-root .cb-stage { position: relative; flex: 1 1 auto; min-height: 0; }
+.cb-root .cb-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* The flick pad: the lower 60% of the table view, where the ball waits. */
+.cb-root .cb-swipe {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 60%;
+  touch-action: none;
+  cursor: grab;
+}
+/* Bases and outs, top left over the far wall. Filled = on base / an out; outline = empty. */
+.cb-root .cb-diamond {
+  position: absolute;
+  top: 8px; left: 10px;
+  padding: 4px 6px 2px;
+  border-radius: 12px;
+  background: rgba(20, 26, 38, 0.72);
+  pointer-events: none;
+  line-height: 0;
+}
+.cb-root .cb-diamond rect, .cb-root .cb-diamond circle { fill: none; stroke: #fff; stroke-width: 2; }
+.cb-root .cb-diamond .is-on { fill: #ffce3a; stroke: #ffce3a; }
+.cb-root .cb-diamond .cb-home { fill: #fff; stroke: none; }
+.cb-root .cb-toast {
+  position: absolute;
+  left: 0; right: 0; top: 38%;
+  margin: 0;
+  text-align: center;
+  font-size: 30px; font-weight: 900; letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: none;
+}
+.cb-root .cb-toast.is-on { animation: cb-pop 1.4s ease-out both; }
+@keyframes cb-pop {
+  0% { opacity: 0; transform: translateY(8px) scale(0.92); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+.cb-root .cb-hint {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  margin: 0;
+  text-align: center;
+  font-size: 14px; font-weight: 700;
+  color: var(--cb-ink);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  animation: cb-breathe 1.6s ease-in-out infinite;
+}
+.cb-root .cb-hint[hidden] { display: none; }
+@keyframes cb-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+/* Two players: the hand-over card covers the table until the next batter taps. */
+.cb-root .cb-pass {
+  appearance: none;
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border: 0; background: rgba(16, 20, 30, 0.82); color: #fff;
+  font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.cb-root .cb-pass[hidden] { display: none; }
+.cb-root .cb-pass b { font-size: 26px; font-weight: 900; }
+.cb-root .cb-pass span { font-size: 15px; font-weight: 700; color: var(--cb-dim); }
+@media (prefers-reduced-motion: reduce) {
+  .cb-root .cb-toast.is-on { animation: none; opacity: 1; }
+  .cb-root .cb-hint { animation: none; }
+}
+
+/* --- cards ------------------------------------------------------------------------------------ */
+.cb-root .cb-card, .cb-root .cb-pause { text-align: center; }
+.cb-root .cb-card-title { margin: 0 0 8px; font-size: 22px; font-weight: 800; color: var(--gh-ink); }
+.cb-root .cb-line {
+  margin: 0 auto 10px; border-collapse: collapse;
+  font-variant-numeric: tabular-nums; font-size: 15px; color: var(--gh-ink);
+}
+.cb-root .cb-line th, .cb-root .cb-line td { padding: 4px 6px; text-align: center; }
+.cb-root .cb-line tbody th { text-align: left; font-weight: 800; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-root .cb-line thead td { color: var(--gh-muted); font-size: 12px; font-weight: 700; }
+.cb-root .cb-line .cb-r { font-weight: 900; border-left: 2px solid var(--gh-muted); }
+.cb-root .cb-error {
+  height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: 24px; text-align: center;
+}
+
+/* --- setup ------------------------------------------------------------------------------------ */
+.cb-root .cb-setup {
+  --gh-surface: var(--cbs-surface);
+  --gh-surface-2: var(--cbs-surface-2);
+  --gh-ink: var(--cbs-ink);
+  --gh-muted: var(--cbs-muted);
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: calc(56px + env(safe-area-inset-top)) 18px calc(14px + env(safe-area-inset-bottom));
+  background: var(--cbs-bg);
+  color: var(--cbs-ink);
+  text-align: center;
+}
+.cb-root .cb-title { margin: 0; font-size: 30px; font-weight: 900; letter-spacing: 0.01em; }
+.cb-root .cb-setup-card {
+  width: min(380px, 100%);
+  box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px 16px;
+}
+.cb-root .cb-setup-label { margin: 4px 0 0; font-size: 15px; font-weight: 800; }
+.cb-root .cb-setup .gh-seg__item { min-height: 44px; }
+.cb-root .cb-setup .gh-seg__item svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.cb-root .cb-setup-play { min-height: 48px; margin-top: 4px; }
+.cb-root .cb-link {
+  border: 0; background: none; min-height: 44px; padding: 0 12px;
+  font: inherit; font-weight: 800; color: #1769d4; cursor: pointer; touch-action: manipulation;
+}
+:root.gh-dark .cb-root .cb-link { color: #7fb2ff; }
+:root.gh-dark .cb-root .cb-setup .lb-dshape-t3 { fill: #e8edf5; }
+
+/* --- how to play ------------------------------------------------------------------------------ */
+.cb-root .cb-help { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.cb-root .cb-help-goal { margin: 4px 28px 0; font-weight: 900; font-size: 16px; color: var(--gh-ink); }
+.cb-root .cb-help-line { margin: 0; font-size: 14px; color: var(--gh-ink); white-space: nowrap; }
+.cb-root .cb-help-felt { fill: #00a650; stroke: #fff; stroke-width: 2; }
+.cb-root .cb-help-cup { fill: #2346c2; stroke: #fff; stroke-width: 3; }
+.cb-root .cb-help-ball { fill: #fff; stroke: #333; stroke-width: 1; }
+.cb-root .cb-help-txt { fill: #fff; font-size: 13px; font-weight: 900; }

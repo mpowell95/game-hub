@@ -1156,6 +1156,15 @@ export const GAME_ART = {
   // Pool (2026-10-22, eight-ball/): the game's own friendly table (reference/pool/SPEC.md colours) side-on,
   // the cue drawn back on the cream cue ball, a coral solid on its way to the corner pocket, a cyan stripe
   // and the 8 in the pack. The stripe is a SHAPE (a band), never hue alone.
+  // Down the table at the four cups in a line, each hit painted beside it, the ball waiting in front.
+  'cup-baseball': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#1a2230"/>
+            <path d="M62 6 L98 6 L146 90 L14 90 Z" fill="#00a650"/>
+            <path d="M62 6 L98 6 L146 90 L14 90 Z" fill="none" stroke="#f4efe6" stroke-width="2"/>
+            ${[[12,3.6,'HR'],[24,4.4,'3B'],[38,5.3,'2B'],[54,6.4,'1B']].map(([y,w,l])=>`<path d="M${80-w} ${y-w} L${80-w*0.7} ${y+w} L${80+w*0.7} ${y+w} L${80+w} ${y-w} Z" fill="#1f5fa8"/><ellipse cx="80" cy="${y-w}" rx="${w}" ry="${w*0.3}" fill="#f3f0ea"/><text x="${80+w+5}" y="${y+w*0.5}" font-family="system-ui,sans-serif" font-weight="900" font-size="${w*1.6}" fill="#fff">${l}</text>`).join('')}
+            <circle cx="80" cy="76" r="7" fill="#fbfaf6"/>
+            <ellipse cx="80" cy="85" rx="7" ry="2" fill="#000" opacity=".25"/>
+          </svg>`,
   'eight-ball': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#F2A183"/>
             <rect x="6" y="8" width="148" height="74" rx="9" fill="#0B0B0B"/>
