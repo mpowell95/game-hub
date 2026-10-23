@@ -652,3 +652,121 @@ speed setting plus the card-motion gaps a review listed. Reduced motion was left
   sorting mid-game), no top card left hidden at rest, fan backs always matching the count,
   `uno/js/test.js`, `test-i18n-strings.mjs`, `test-game-conventions.mjs`,
   `check-no-scroll.mjs uno`. Not yet by eye on a phone.
+
+
+## 2026-10-23: play-screen overhaul (retired text of the 2026-07-25 visual rebuild)
+
+Matt: "Review UNO. The cards don't move like any other game. They aren't displayed like any other
+game. And most of the gameplay screen is dead space. Do a full overhaul of the game and make it look
+better." Measured before: at 390x760 in the hub the hand (a small rotated fan, 62px cards) sat
+over the footer buttons and ~170px under it was empty; the table was a bare 148px strip. Chinchón and
+Escoba both use a green felt that fills the screen, big straight overlapped hand cards, pills on top
+and a ☰ menu, and Web-Animations card flights (Chinchón `_fly`). Uno now does the same; see the
+"The play screen" section of `CLAUDE.md`. Found while rebuilding: a first-card Wild owned by a
+computer opener froze the hand (reachable since `nextStarter` rotation); fixed.
+
+The sections below were in force from 2026-07-25 to 2026-10-23, kept verbatim.
+
+## Visual rebuild (2026-07-25) — what is in force
+
+### The token system (UN-1)
+
+`uno/css/uno.css` has exactly two token blocks: `.un-root` (all tokens) and `:root.gh-dark .un-root`
+(chrome overrides ONLY). **Every rule outside them consumes tokens: zero literal colours, shadows,
+radii or font-sizes.** Gate after any CSS edit: `grep -nE "rgba?\(|#[0-9a-fA-F]{3,6}" uno/css/uno.css`
+must hit token blocks only.
+
+- Four card hues + `--un-accent` are the locked hub palette. **Theme-invariant by design:
+  `--un-table` and every card token** (rim, edge, medallion, gloss, numeral shade, card ink, back
+  stripe, shadows); dark mode overrides chrome only (`--un-bg/surface/ink/muted/border`). Do not add
+  card tokens to the dark block.
+- Shadows are a three-state stack (`--un-sh-rest/raised/lift`); no component improvises its own.
+- Cards `--un-card-w/h` = 62x92 (`border-box`), small cards 48x71.
+
+### The fan (UN-3, multi-row since UN-8) - geometry
+
+`fanLayout(n, {W=62, H=92, STEP=32, ROW_PITCH=58, A=452, RESERVED_H=150})` in `ui.js` is pure and
+holds every constant. Balanced rows (`PER_ROW = max(1, floor((A-24-W)/STEP)+1)`, 13 cards is 7+6),
+`x=(j-c)*STEP`, `y=r*ROW_PITCH + min(8,(j-c)^2*0.4)`, `z=r*100+j`, `fit=min(1, RESERVED_H/needH)`,
+`needH=H+ROW_PITCH*(rows-1)`. `STEP/W ≈ 51.6%` so at least half of every overlapped card is visible
+at any `fit`.
+
+- `_syncFan` passes the RAW measured `A = min(452, .un-hand clientWidth)`; the 24px breathing room is
+  subtracted INSIDE `fanLayout`, **do not subtract it twice**. A `window` resize listener re-renders
+  (removed in `destroy()`).
+- **Every card's `y` carries `shiftY = RESERVED_H - needH`: load-bearing, do not drop it** (the
+  `scale(fit)` origin is the box bottom; without it a 3-row hand drifted ~42px past the box).
+- `.un-hand` is a fixed 150px box, no scroll container, `overflow-x` banned. `.un-fan .un-card` has
+  `top: 0`; do not add a static top offset without re-deriving `RESERVED_H`.
+- **Display order is the REVERSED engine hand** (newest card at the left end of the TOP row);
+  presentation only, every `data-id`/`play()` uses the real id. `sortedHand()` absorbs it as `draw` mode.
+
+### The card face (UN-2)
+
+- The rim is `box-shadow: inset` stacked onto `--un-sh-rest`, not a `border`. **`.un-card` is a
+  `<button>`: keep the explicit `border: none`**; any card-like `<button>` that swaps a border for a
+  shadow needs the same reset.
+- `medallionHTML(card)` only calls `shapeSVG()` (the one shape function). Wild = four quadrant
+  shapes (`scale(.5)` + translate) **clipped by CSS `clip-path: circle(47.5%)` on
+  `.un-medallion-wild`, NOT an SVG `<clipPath id>`** (flight clones `cloneNode(true)` the card and an
+  id-referenced clip lost its target mid-flight). Do not reintroduce an SVG clipPath for per-card
+  cloned markup.
+- Only the top-left corner mark exists (`.un-corner`, `z-index: 2` above the numeral's 1); a buried
+  card only exposes its left edge. Action glyphs use `.un-glyph-action` (26px). Small cards
+  (`.un-card-sm`, how-to diagram only): numeral and corner hidden, medallion 36px.
+
+### The `_syncFan` render exemption (UN-3c - load-bearing, do not "fix" back)
+
+`renderGame()` does not rewrite the container as one string. `_ensureGameShell()` builds a persistent
+skeleton once per entry into the game view; each render rebuilds the REGION CONTENTS and `_syncFan()`
+reconciles card nodes in place, keyed by `data-id` (a re-inserted node or re-parented ancestor kills
+CSS transitions). Invariants: every call is a FULL stateless reconciliation; card nodes are never
+moved or reparented (position and paint order ride custom properties; DOM order diverges from
+display order, accepted); removal is IMMEDIATE and flights use detached clones in a fixed layer;
+`_syncFan` + `_buildCardEl` are the ONLY code that mutates card DOM outside a template string.
+Consequences: overlays survive re-renders, so `startGame()` calls `closeOverlays()`; `renderSetup()`
+rewrites the whole container and must null `_fanEl`/`_regions`.
+
+### Fixed geometry (UN-5/UN-8/UN-9)
+
+`.un-opponents` (58px since the face-down fans, was 44), `.un-status` (22), `.un-mat` (148),
+`.un-handwrap` (170 = 150 fan + 20 UNO chip slot), `.un-bar` (40) are explicit `height` with
+`box-sizing: border-box`. **`.un-unoslot` has an unconditional `height: 20px`** (it used to grow when
+the chip appeared and shift the fan on the most dramatic moment). `.un-opponents` is `flex-wrap:
+nowrap`; `.un-oppchip { flex: 1 1 0; min-width: 0 }` and `.un-oppname { min-width: 0; overflow: hidden;
+text-overflow: ellipsis; white-space: nowrap }` (ellipsis needs `min-width: 0`).
+
+### Motion system (UN-4) - spec §6
+
+- Every duration/easing is a named token (`--un-dur-*`/`--un-ease-*`); no inline durations or
+  `cubic-bezier(...)` literals. Penalty draws arrive `--un-draw-stagger` (90ms) apart.
+- **Only one `transition` is active on `transform`**: rows 2 (relayout 260ms), 7 (legal lift 180ms)
+  and 11 (press 120ms) are layered by cascade (`:active` > `.is-live` > base); a legal card being
+  relaid-out animates at 180ms. Deliberate approximation.
+- **Non-persistent regions (mat, opponents, UNO slot) use `@keyframes` gated by "did it change"
+  flags**, never transitions: `_lastDiscardId` + `_discardRot` (rows 4/5), `_revealPending` (set by
+  `startGame()`), `_lastPendingDraw` (row 8), `_lastHandLen` (row 10), `_aiPulsePi` (row 12 chip).
+- **Flights (rows 1, 3, 6, 12) are fixed-position clones in `.un-flightlayer`** (built once in
+  `_ensureGameShell()`); `_spawnFlight()` builds/animates/removes one (static inline left/top/size,
+  only `transform` moves; removed on `animationend` with a `FLIGHT_SAFETY_MS` fallback). A newly
+  inserted fan node is hidden (`un-card-entering`) until its clone lands. Row 3: clone the fan node
+  BEFORE `g.play()`. Row 12: clone fresh from `cardHTML()`, capture the chip rect before `g.play()`.
+- **`prefers-reduced-motion`**: blanket 0.01ms override, rows 8/10 keep a 120ms opacity-only fade,
+  `.un-flightlayer` is `display: none`. `_spawnFlight()` checks `matchMedia` FIRST and resolves
+  `onDone` synchronously (a hidden layer never fires `animationend`).
+- Row 13 (sort) needs no code: `_syncFan` is keyed by id, so reordering animates via row 2.
+
+## Computer speed, hand sort and card travel (2026-09-28)
+
+- **Computer speed** Slow/Normal/Fast (`row_speed`), `pace` additive in `gamehub.uno.v1` (absent =
+  Normal). `_aiMs()` scales only a computer's think pause and draw steps (x1.6 / x1 / x0.3).
+- **Hand sort (UN-6)**: `sortedHand(hand, mode)`, modes `draw`/`color`/`rank`, applied to a COPY at
+  render time (engine, `play()` ids and save never see it). Control `.un-sortbtn` (28px drawn,
+  `::before` stretches the target past 44px; a fourth footer button wrapped every label).
+- **A played card does not show on the pile before it lands**: `this._landing` holds ids in the air;
+  `renderGame` draws that top card `visibility:hidden`; `_landDiscard()` reveals it. Every failure
+  path of `_flyToDiscard`/`_flyFromChip` still lands.
+- Discard is a stack (`.un-under` at remembered tilt `_rots`, `.un-top`). Computers' hands are visible
+  face down (`.un-oppfan`, up to 8 backs + count); their draws fly (`_seenCounts` diff, `_flyToChip`),
+  seeded from the snapshot on resume so nothing replays.
+

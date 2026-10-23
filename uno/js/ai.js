@@ -54,7 +54,7 @@ function opponentForcedColors(memory, playerIndex) {
   return avoid;
 }
 
-function pickWildColor(restOfHand, rng, avoid) {
+export function pickWildColor(restOfHand, rng, avoid) {
   const counts = handColorCounts(restOfHand);
   // My own colour strength dominates (weight 2); an opponent-forced colour costs a single
   // point, so `avoid` only ever breaks a tie between equally-strong colours - it never
