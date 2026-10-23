@@ -19,6 +19,7 @@
 //   archeryTurnPush archery/index/<code>/<id>        an Archery challenge, your turn, the end (2026-10-14)
 //   chinchonTurnPush chinchon/index/<code>/<id>      a Chinchón challenge, your turn, the end (2026-10-18)
 //   escobaTurnPush  escoba/index/<code>/<id>         an Escoba challenge, your turn, the end (2026-10-18)
+//   roomsCleanup      every 30 min: delete live-game rooms nobody has been in for an hour
 //   boardsOnSync      a device synced: rebuild the leaderboard (at most every 2 min)
 //   boardsCatchUp     every 5 min: a rebuild skipped by that limit, or the first one
 //   directoryBuild    hourly + on an Online play change: the small directory/ the pickers read
@@ -290,4 +291,21 @@ export const boardsCatchUp = onSchedule({ schedule: 'every 5 minutes', region: O
   const meta = (await db.ref('boards/v1/meta').get()).val() || {};
   // Also every 30 minutes regardless, in case a sync's trigger was ever dropped.
   if (meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) await rebuildBoards(db);
+});
+
+// EMPTY ROOMS ARE CLEARED (2026-10-23, Matt: "something should clear them if they've been empty for
+// like an hour right?"). A live game's room (rooms/<CODE>) is only needed while people are in it:
+// every player's phone stamps `updated` every 10 s (js/net.js heartbeat), results go into each
+// player's own stats and chat lines into Messages. Nothing ever removed one, so 129 dead rooms had
+// piled up. A room whose `updated` is over an hour old (or missing) has had nobody in it for an hour
+// and is deleted. Queried on the indexed `updated`, so only the stale ones are read.
+const ROOM_IDLE_MS = 60 * 60 * 1000;
+export const roomsCleanup = onSchedule({ schedule: 'every 30 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1 }, async () => {
+  const db = getDatabase();
+  const snap = await db.ref('rooms').orderByChild('updated').endAt(Date.now() - ROOM_IDLE_MS).get();
+  const patch = {};
+  snap.forEach((c) => { patch[c.key] = null; });
+  const n = Object.keys(patch).length;
+  if (n) await db.ref('rooms').update(patch);
+  logger.info('rooms cleared', { n });
 });

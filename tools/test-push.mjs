@@ -351,5 +351,14 @@ console.log('\nPlayer directory (2026-10-22)');
   check('directory rules: readable, never written by a client', rules.directory && rules.directory['.write'] === false);
 }
 
+console.log('\nRoom cleanup + retired uploads (2026-10-23)');
+{
+  const rules = JSON.parse(readFileSync(new URL('../database.rules.json', import.meta.url), 'utf8')).rules;
+  check('rooms are indexed on updated (the cleanup reads only stale rooms)', (rules.rooms['.indexOn'] || []).includes('updated'));
+  check('the cleanup deletes rooms idle for an hour, every 30 minutes',
+    /export const roomsCleanup = onSchedule\(\{ schedule: 'every 30 minutes'/.test(fnSrc) && /ROOM_IDLE_MS = 60 \* 60 \* 1000/.test(fnSrc));
+  check('skeeballThrows takes no more writes (retired 2026-10-22)', rules.skeeballThrows['.write'] === false);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

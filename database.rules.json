@@ -81,9 +81,9 @@
         ".write": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()"
       }
     },
-    "rooms":          { ".read": "auth != null", ".write": "auth != null" },
+    "rooms":          { ".read": "auth != null", ".write": "auth != null", ".indexOn": ["updated"] },
     "selfies":        { ".read": "auth != null", ".write": "auth != null" },
-    "skeeballThrows": { ".read": "auth != null", ".write": "auth != null" },
+    "skeeballThrows": { ".read": "auth != null", ".write": false },
     "skeeChallenges": { ".read": "auth != null", ".write": "auth != null" },
     "usernames":      { ".read": "auth != null", ".write": "auth != null" }
   }

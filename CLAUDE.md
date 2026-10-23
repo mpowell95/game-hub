@@ -489,7 +489,8 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **Deployed triggers (all, by the workflow 2026-10-21):** `hoopsTurnPush`, `messagePush`, `bugReportPush`,
   `skeeChallengePush`, `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`, `archeryTurnPush`,
   `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`, `nudgePush`, `directoryBuild` +
-  `directoryOnApprove`, `boardsOnSync` + `boardsOnConfig` + `boardsCatchUp` (2026-10-22); rules incl. `archery`,
+  `directoryOnApprove`, `boardsOnSync` + `boardsOnConfig` + `boardsCatchUp` (2026-10-22), `roomsCleanup` (2026-10-23:
+  deletes `rooms/<CODE>` idle an hour, i.e. no 10 s heartbeat; rooms indexed on `updated`); rules incl. `archery`,
   `chinchon`, `escoba`, `nudges`, `directory`, `boards`.
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
@@ -501,7 +502,10 @@ None of this makes the hub cheat-proof; never describe it that way.
   Skeeball's top records, Messages contacts, Golf's board, Arrow Maze's leaders use `readPeople()` (the board's list).
   Only the admin page still reads all of `players/` (it voids scores per device, so it needs the raw records).
   Matt's bug-report badge queries only reports newer than his last look (`readBugReportsSince`, indexed on
-  `createdAtMs`). Skeeball's per-throw upload (`skeeballThrows/`) was RETIRED 2026-10-22 (Matt); its data stays.
+  `createdAtMs`). Skeeball's per-throw upload (`skeeballThrows/`) was RETIRED 2026-10-22 and its 24,627 throws DELETED
+  2026-10-23 at Matt's request, after an archive (2 zips) was sent to him; the rule now refuses writes.
+  **A sync with nothing new sends nothing** (2026-10-23, `stats-net.js` `syncSignature`, `gamehub.syncSig.v1`): same
+  fingerprint as the last verified sync and under 12 h old = no upload, no re-read. `tools/test-sync-skip.mjs`.
 - **Player directory (2026-10-22, Matt: multiplayer felt slow)**: `directory/<CODE>` = `{name, emoji, at}`,
   rebuilt by the server from `players/` hourly and on any Online play change (`buildDirectory`). Every
   challenge game's "pick a person" reads it via `stats-net.js` `readOpponentProfiles()` (2 KB vs ~930 KB);

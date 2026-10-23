@@ -160,6 +160,26 @@ export async function applyDeviceReset() {
   }
 }
 
+// SKIP A SYNC WITH NOTHING NEW (2026-10-22, Matt: "skip the sync when there's no new data"). Every
+// open, switch-away and return to the launcher re-uploaded the whole record (up to ~43 KB) and read it
+// back to verify (~90 KB a sync for a heavy player), and each one woke the server's leaderboard
+// rebuild. The record minus its clock fields is fingerprinted; the same fingerprint as the last
+// VERIFIED sync of this same node, under SYNC_HEARTBEAT_MS ago, sends nothing. A real change (a play,
+// a profile edit, a new build) always syncs and verifies as before. The heartbeat keeps a phone that
+// is only opened, never played, showing as seen at least twice a day. A report, not player data.
+const SYNC_SIG_KEY = 'gamehub.syncSig.v1';
+const SYNC_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
+export function syncSignature(rec) {
+  // Only the two clocks that change on every sync are left out: the record's own updatedAt and the
+  // announce report's `at`. Everything else, stats included, counts as a change.
+  const s = JSON.stringify({ ...rec, updatedAt: null, announce: rec.announce ? { seen: rec.announce.seen } : null });
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return `${s.length}:${h.toString(36)}`;
+}
+function readSyncSig() { try { return JSON.parse(localStorage.getItem(SYNC_SIG_KEY) || 'null'); } catch { return null; } }
+function writeSyncSig(v) { try { localStorage.setItem(SYNC_SIG_KEY, JSON.stringify(v)); } catch { /* syncs next time */ } }
+
 export async function syncMyStats() {
   // statsId(), not deviceId(): the node is per (device, player). For the device's owner the two are
   // the same string, so every record that already exists keeps its exact key; a SECOND person playing
@@ -228,6 +248,9 @@ export async function syncMyStats() {
     // read only by the admin page, never by a phone, and omitted while there is nothing to report.
     const hubRead = hubReadReport();
     if (hubRead) rec.hubMsgs = hubRead;
+    const sig = syncSignature(rec);
+    const last = readSyncSig();
+    if (last && last.id === id && last.sig === sig && Date.now() - (+last.at || 0) < SYNC_HEARTBEAT_MS) return true;   // nothing new
     await _api.update(_api.ref(_db, 'players/' + id), rec);
     // Verify by fresh re-read (THE LAW rule 6's reference pattern, as used by game-stats.js persist()).
     const snap = await _api.get(_api.ref(_db, 'players/' + id));
@@ -239,6 +262,7 @@ export async function syncMyStats() {
       return false;
     }
     writeSyncHealth({ ok: true, lastOkAt: Date.now(), lastErr: '', localPlays, remotePlays });
+    writeSyncSig({ id, sig, at: Date.now() });
     _playersMemo = null; _playersGen += 1;   // this device's record just changed: the next one-shot read goes to the server
     return true;
   } catch (err) {
