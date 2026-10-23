@@ -9,9 +9,9 @@ import { aimAt } from '../../cup-pong/js/cpu.js';
 import { CUPS } from './field.js';
 
 export const SKILL = {
-  easy:   { sPower: 0.12, sAim: 0.050 },
-  medium: { sPower: 0.075, sAim: 0.028 },
-  hard:   { sPower: 0.045, sAim: 0.018 },
+  easy:   { sPower: 0.16, sAim: 0.068 },
+  medium: { sPower: 0.10, sAim: 0.040 },
+  hard:   { sPower: 0.06, sAim: 0.024 },
 };
 
 /** How often each skill goes for each cup (single, double, triple, home run). A good player swings

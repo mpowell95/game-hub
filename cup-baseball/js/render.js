@@ -19,7 +19,7 @@ export class Renderer extends CupPongRenderer {
     }
   }
 
-  /** The hit painted on the felt to the viewer's right of the cup. Both camera views look down the
+  /** The hit beside the cup, to the viewer's right, flat at rim height. Both camera views look down the
    *  table toward -z, so one orientation reads upright at both ends. */
   _label(side, k) {
     const W = 128, H = 64;
@@ -35,7 +35,9 @@ export class Renderer extends CupPongRenderer {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, w * H / W), mat);
     mesh.rotation.set(-Math.PI / 2, 0, 0);
     const p = this.toWorld(side, k.x, k.z);
-    mesh.position.set(p.x + CUP.topR + 0.075, 0.0015, p.z);
+    // At RIM height, not on the felt: with the cups touching, a label on the felt lines up with the
+    // cup's base, which the eye reads as the NEXT cup's rim.
+    mesh.position.set(p.x + CUP.topR + 0.07, CUP.h, p.z);
     mesh.renderOrder = 1;
     this.scene.add(mesh);
     this._labels.push(mesh);

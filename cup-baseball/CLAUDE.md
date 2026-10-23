@@ -12,7 +12,8 @@ The drinking game "baseball" (beer pong's cousin) on **Cup Pong's table**: `cup-
 ## Matt's rules (2026-10-23)
 
 - Four cups in a line down the middle of each end: **single nearest the shooter, then double,
-  triple, home run** at the back (`js/field.js CUPS`, 17.5 cm apart, not touching).
+  triple, home run** at the back, **TOUCHING, one straight line** (Matt, 2026-10-23; `js/field.js CUPS`,
+  pitch `CUP_D`, Cup Pong's rack pitch).
 - Ball in a cup = that hit; ball in no cup = **an out**. **2 outs and the sides switch.**
 - **No defensive shot back** (Matt said no to that variant).
 - Every runner moves as many bases as the batter (a double moves first to third).
@@ -32,10 +33,10 @@ The drinking game "baseball" (beer pong's cousin) on **Cup Pong's table**: `cup-
   to the far camera (Cup Pong's `defend` view) and throws at the RED cups.
 - **2 players** (one phone): both throw from the near end at the blue cups; a "Pass to {name}" card
   covers the table at every switch. Records nothing.
-- HUD: "{name} up", score and Top/Bot inning; a diamond top left (filled = runner / out, outline =
+- HUD: "{name} up", score and Top/Bot inning; a diamond top left, 110 px (filled = runner / out, outline =
   empty, never colour alone). Line score on the pause sheet and the result card.
 - **Computer** (`node cup-baseball/js/test.js --cpu`, 600 throws, seed 4242): Easy hits 21%, Medium
-  32%, Hard 46%. Easy aims short more often; Hard aims at all four evenly.
+  32%, Hard 49% (re-tuned when the cups went touching). Easy aims short more often; Hard aims at all four evenly.
 
 ## Hub integration
 
