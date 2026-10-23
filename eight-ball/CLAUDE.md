@@ -72,8 +72,10 @@ black pockets, coral and cyan groups).
   own stays down and ends the turn. All 5 down = out (struck through on the scoreboard); last one
   in wins. A foul also brings one potted ball of each OTHER player back (spotted), which can bring
   an out player back in. Rack: 1 front, 6 and 11 in the back corners.
-- **Fouls, every game:** cue ball potted; nothing hit; nothing potted and no ball reaching a
-  cushion after the hit; 8/9-ball also the wrong first ball. A foul = ball in hand anywhere for
+- **Fouls, every game:** cue ball potted; nothing hit; 8/9-ball also the wrong first ball.
+  **No "no cushion" foul since RULES 2 (2026-10-23, Matt: "it shouldn't be a foul... drop it")**:
+  each match keeps its rules version `rv` like its table (`RULES_NOW`; none = 1, where a shot that
+  pots nothing and sends no ball to a cushion after the hit is a foul, WPA 6.3), online docs too. A foul = ball in hand anywhere for
   the next player. Turn order skips players who are out.
 - **A pot only COUNTS** (keeps the turn, decides a group, wins with the 8/9) if it went into the
   called pocket when one was needed, and with banks only if it bounced off something first
