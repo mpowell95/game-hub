@@ -152,10 +152,19 @@ ok('the whole rack area is on the table',
   m = new Match({ first: 'a', reracks: 0 }); m.racks.b = [{ id: 'k3', c: 3, r: 0 }]; m.startTurn();
   ok('one cup off to the side: Center offered with no reracks left', m.canCenter() && !m.canRerack());
   ev = m.centerLast();
-  ok('Center slides it to the middle at the same distance, nothing spent', ev.length === 1 && m.racks.b[0].u === 0 && Math.abs(m.racks.b[0].v) < 1e-9 && m.reracksLeft.a === 0 && !m.canCenter());
+  ok('Center slides it to the middle of the back row, nothing spent', ev.length === 1 && m.racks.b[0].u === 0 && Math.abs(m.racks.b[0].v) < 1e-9 && m.reracksLeft.a === 0 && !m.canCenter());
   m.throwResult(miss);
   m.racks.b = [{ id: 'k3', c: 3, r: 0 }];
   ok('Center is gone after the turn\'s first throw', !m.canCenter());
+  m = new Match({ first: 'a' }); m.racks.b = [{ id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.centerLast();
+  ok('Center puts a near middle cup on the BACK row', m.racks.b[0].u === 0 && m.racks.b[0].v === 0 && !m.canCenter());
+  m = new Match({ first: 'a' }); m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.applyGentlemans();
+  ok('Gentleman\'s stands against the back wall, centred', m.racks.b.every((k) => k.u === 0) && m.racks.b.some((k) => k.v === 0) && !m.canGentlemans());
+  m = new Match({ first: 'a', gentBack: false }); m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.applyGentlemans();
+  ok('an older challenge (no gb) keeps the old Gentleman\'s spot', m.racks.b.every((k) => PRESETS.line2.some((s) => s.u === k.u && s.v === k.v)));
   // STRAIGHT UP (Matt, 2026-09-30): no assists at all.
   m = new Match({ first: 'a', straight: true }); m.streak.a = [2, 2]; m.startTurn();
   ev = m.throwResult({ made: 'k0' }).concat(m.throwResult({ made: 'k1' }));

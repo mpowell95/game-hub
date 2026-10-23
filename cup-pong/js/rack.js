@@ -122,7 +122,7 @@ if (AREA.cMax * CUP_D / 2 + CUP.topR > TABLE.width / 2) {
 // The shape's BACK row stands on the rack's back row, so a rerack can never pull the cups closer to
 // the shooter. Before that (2026-09-28) the FRONT row stood where the triangle's point is; that
 // placement is kept, as `back = false`, only so a challenge made under it still replays the same.
-// The Gentleman's line (PRESETS.line2) is not a rerack and keeps its own placement.
+// The Gentleman's line: PRESETS.line2 only for challenges made before 2026-10-23; since then GENT_BACK.
 const HEX = ROW_H / CUP_D;
 function shape(rows, back = true) {
   let v = 0;
@@ -142,6 +142,8 @@ const R = (n, step, shift) => ({ n, step, shift });
 
 /** A straight line of n touching cups toward the shooter, its back cup on the back row. */
 const backLine = (n) => Array.from({ length: n }, (_, i) => ({ u: 0, v: i }));
+/** The Gentleman's against the back wall (Matt, 2026-10-23: "as far back as possible"), `gentBack`. */
+export const GENT_BACK = backLine(2);
 
 /** Preset shapes by cup count: [{ key, label (EN/ES label keys live in strings.js), spots }]. */
 const buildReracks = (back) => {

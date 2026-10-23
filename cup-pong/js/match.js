@@ -61,8 +61,7 @@
 // is saved and restored whole (`toJSON` / `Match.fromJSON`), and `swapSides` turns a saved match
 // round so the phone playing it is always side 'a'.
 
-import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf, cellXZ } from './rack.js';
-import { CUP_D, RACK_Z0 } from './geom.js';
+import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf, GENT_BACK } from './rack.js';
 
 export const BALLS = 2;
 const other = (s) => (s === 'a' ? 'b' : 'a');
@@ -79,12 +78,13 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false, islandOnly = true } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false, islandOnly = true, gentBack = true } = {}) {
     this.async = !!async;
     this.straight = !!straight;
     if (this.straight) { gentlemans = false; reracks = 0; }
     // Reracks stand against the BACK WALL (Matt, 2026-09-29). Off only for a challenge made before.
     this.backRack = backRack !== false;
+    this.gentBack = gentBack !== false;   // Gentleman's line against the back wall (2026-10-23)
     this.lastCupBack = lastCupBack !== false;
     this.fireBallsBack = fireBallsBack !== false;
     this.islandOnly = islandOnly !== false;
@@ -159,31 +159,32 @@ export class Match {
     if (!when) return false;
     const rack = this.target();
     if (rack.length !== 2) return false;
-    return !rack.every((k) => PRESETS.line2.some((s) => sameSpot(k, s)));
+    return !rack.every((k) => this.gentLine().some((s) => sameSpot(k, s)));
   }
+  gentLine() { return this.gentBack ? GENT_BACK : PRESETS.line2; }
   applyGentlemans() {
     if (!this.canGentlemans()) return [];
-    const to = applyPreset(this.target(), PRESETS.line2);
+    const to = applyPreset(this.target(), this.gentLine());
     this.racks[this.defender] = to;
     return [{ type: 'gentlemans', side: this.defender, to }];
   }
 
   /**
    * CENTER THE LAST CUP (Matt, 2026-10-23: "Why can't I center this?"): one cup left off to the side
-   * can always be slid to the middle, FREE (no rerack spent), at the same distance so it is never
-   * pulled closer or pushed back. When a Gentleman's would be on offer; never in overtime or a Straight up.
+   * can always be slid to the middle of the BACK row ("as far back as possible", same day), FREE (no
+   * rerack spent). When a Gentleman's would be on offer; never in overtime or a Straight up.
    */
   canCenter() {
     if (this.straight || this.over || this.mustPickOwed() || this.lastCup) return false;
     const when = this.phase === 'normal' ? this.turnThrows === 0 : this.phase === 'rebuttal' && this.queue.length > 0;
     if (!when) return false;
     const rack = this.target();
-    return rack.length === 1 && Math.abs(cellXZ(rack[0]).x) > 1e-6;
+    return rack.length === 1 && !sameSpot(rack[0], { u: 0, v: 0 });
   }
   centerLast() {
     if (!this.canCenter()) return [];
     const k = this.target()[0];
-    const to = [{ id: k.id, u: 0, v: (cellXZ(k).z - RACK_Z0) / CUP_D }];
+    const to = [{ id: k.id, u: 0, v: 0 }];
     this.racks[this.defender] = to;
     return [{ type: 'center', side: this.defender, to }];
   }
@@ -438,7 +439,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, islandOnly: this.islandOnly, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, islandOnly: this.islandOnly, gentBack: this.gentBack, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -454,7 +455,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false, islandOnly: o.islandOnly !== false, straight: o.straight === true });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false, islandOnly: o.islandOnly !== false, gentBack: o.gentBack !== false, straight: o.straight === true });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };

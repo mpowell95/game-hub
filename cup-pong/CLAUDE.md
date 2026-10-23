@@ -80,7 +80,7 @@ turn's first throw:
   (`rerackCustom` refuses otherwise); Gentleman's line keeps its own placement. `rules.bk` (written on
   every new challenge) turns it on; older challenges replay the 2026-09-28 placement. `Match({
   backRack })`, `presetsFor(n, back)`.
-- **Center** (Matt, 2026-10-23, "Why can't I center this?"): one cup left off-centre = a FREE Center button (no rerack spent, same distance, `canCenter`/`centerLast`, log `{k:'c'}`), when a Gentleman's would be on offer; not overtime or Straight up. The computer takes it too.
+- **Center** (Matt, 2026-10-23, "Why can't I center this?"): one cup left anywhere but back-centre = a FREE Center button (no rerack spent; to the middle of the BACK row, "as far back as possible"; `canCenter`/`centerLast`, log `{k:'c'}`), when a Gentleman's would be on offer; not overtime or Straight up. The computer takes it too. **Gentleman's against the back wall too** (same day): `GENT_BACK` (back cup on the back row, centred), `Match({ gentBack })`, frozen per challenge as `rules.gb`; older challenges keep `PRESETS.line2`.
 - **The computer**: takes Gentleman's whenever offered, reracks when a preset has >=2 more touching
   pairs, calls the first island and aims at it (`cpuOptions`, `cpuIsland`, `cpuPick`).
 
