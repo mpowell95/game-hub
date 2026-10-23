@@ -197,14 +197,16 @@ function match(mode, diffs, seed, opts) {
   return m;
 }
 for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', 'easy'], {}], ['ct', ['hard', 'easy', 'easy'], {}], ['8', ['medium', 'medium'], { call: true, bank: true, obst: true }]]) {
+  // 8 games each: 9-ball on GamePigeon's pockets (table 5) is luckier (the 9 on a combo), so 5 was
+  // too few to tell the levels apart (2026-10-23: Hard 5 of 8 there, 8 of 8 everywhere else).
   let finished = 0, strongWins = 0;
-  for (let g = 0; g < 5; g++) {
+  for (let g = 0; g < 8; g++) {
     const m = match(mode, diffs, g, opts);
     if (m && m.winner != null) { finished++; if (m.winner === 0) strongWins++; }
   }
   const label = `${mode}${Object.keys(opts).length ? ' with every option' : ''}`;
-  ok(`computer ${label}: every match finishes`, finished === 5, finished);
-  if (diffs[0] === 'hard') ok(`...and Hard wins most of them`, strongWins >= 3, strongWins);
+  ok(`computer ${label}: every match finishes`, finished === 8, finished);
+  if (diffs[0] === 'hard') ok(`...and Hard wins most of them`, strongWins >= 5, strongWins);
 }
 
 // --- table versions (engine.js, TABLE VERSIONS) ------------------------------------------------------
@@ -255,7 +257,24 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
     let h3 = 2166136261; for (let i = 0; i < str3.length; i++) h3 = Math.imul(h3 ^ str3.charCodeAt(i), 16777619) >>> 0;
     ok('a table-3 match replays bit for bit as before table 4', h3 === 207941596, h3);
   }
-  ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 4);
+  {
+    // ...and table 4 as it played before table 5 (fingerprint from commit bafc0f4).
+    const m4 = E.newMatch('8', 1, 0, 77, { obst: true }, 4);
+    let s4 = 99;
+    const rnd4 = () => (s4 = (Math.imul(s4, 1103515245) + 12345) >>> 0) / 4294967296;
+    for (let k = 0; k < 30 && m4.winner == null; k++) {
+      const dx = rnd4() * 2 - 1, dy = rnd4() * 2 - 1, l = Math.sqrt(dx * dx + dy * dy);
+      const shot = { dx: Math.round(dx / l * 1e6) / 1e6, dy: Math.round(dy / l * 1e6) / 1e6, p: Math.round(rnd4() * 1e4) / 1e4, s: 0, c: 0 };
+      if (m4.inHand) { const p = E.nearestPlace(m4, 50, 170, m4.inHand === 'kitchen'); shot.x = p.x; shot.y = p.y; }
+      const r = E.play(m4, shot); if (r && r.kind === 'rack') E.nextRack(m4);
+    }
+    const str4 = JSON.stringify(m4.b.map((o) => [o.x, o.y, o.on])) + m4.turn + m4.scores;
+    let h4 = 2166136261; for (let i = 0; i < str4.length; i++) h4 = Math.imul(h4 ^ str4.charCodeAt(i), 16777619) >>> 0;
+    ok('a table-4 match replays bit for bit as before table 5', h4 === 775933696, h4);
+  }
+  E.useTable(5);
+  ok('table 5: table 4\'s balls, GamePigeon\'s pockets (84 px of 717)', Math.abs(E.R * 2 - 1.25 * 42 * 100 / 717) < 1e-9 && E.POCKETS.every((p) => p.rp === p.r && Math.abs(p.r * 2 - 84 * 100 / 717) < 1e-9));
+  ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 5);
   ok('a saved match with no table reads as table 1', E.tableOf({}) === 1 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 1), tb: undefined }));
   E.useTable(2);
   ok('table 2 is kept as it was: a ball of 41 px on 717 px of cloth', Math.abs(E.R * 2 - 41 * 100 / 717) < 1e-9);
