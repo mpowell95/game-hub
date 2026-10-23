@@ -21,9 +21,11 @@ everyone (local midnight). Seven letters in a honeycomb; every word uses the yel
 
 ## Data (GENERATED, never hand-edit)
 
-`data/bee.json` from `tools/build-spelling-bee-data.mjs` (read its header): SCOWL size ≤40 English +
-American ∩ ENABLE, no S, ≤7 distinct letters, bad words out (14,439 words); 2,000 puzzles from epoch
-2026-10-22, each 20-60 answers and 60-300 points with a pangram. Answers are computed on the phone.
+`data/bee.json` from `tools/build-spelling-bee-data.mjs` (read its header): SCOWL size ≤50 English +
+American ∩ ENABLE, no S, ≤7 distinct letters, bad words out (18,646 words); 2,000 puzzles from epoch
+2026-10-22 (picked when the list was size ≤40: 20-60 answers; now 21-84, median 45), each with a pangram.
+**Size 40 refused ROVER** (Matt, 2026-10-23: "That's a word"); 50 is where everyday words like it are.
+A re-run KEEPS the shipped puzzle order and only appends. Answers are computed on the phone.
 **The puzzle order is append-only** (changing it changes "today" for everyone). Credits: `data/CREDITS.md`.
 `sw.js` already lists `bee.json` in the LAZY regex; **at release add the game's files to ASSETS**
 (none are listed while devOnly) and the data file stays LAZY.
