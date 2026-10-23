@@ -438,6 +438,24 @@ export const GAMES = [
     // input to the launcher's New pill and must be the day Matt releases it from the admin page.
     devOnly: true,
   },
+  {
+    // Cup Baseball (2026-10-23): the drinking-game baseball, on Cup Pong's table. Four cups in a
+    // line (single, double, triple, home run); a miss is an out, 2 outs and the sides switch. Vs the
+    // computer (Easy/Medium/Hard) or two players on one phone (cup-baseball/CLAUDE.md). Hub id is
+    // the folder; stats id is `cupbaseball`.
+    id: 'cup-baseball',
+    added: '2026-10-23',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Cup Baseball', es: 'Béisbol de Vasos' },
+    blurb: { en: 'Flick the ball into the cups for hits. A miss is an out.',
+      es: 'Lanza la pelota a los vasos para batear. Si fallas, es out.' },
+    module: '../cup-baseball/js/ui.js',
+    immersive: true,
+    accent: '#1f5fa8',
+    art: GAME_ART['cup-baseball'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
+  },
 
   {
     id: 'hoops4',
