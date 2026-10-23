@@ -71,7 +71,7 @@ before code speed. A new screen must never read all of `players/`**: use `readPe
 
 *"don't use my code or username ever."* A test, probe or headless browser never sets profile name MattyIce or code
 `QZCC4` (2026-10-22 a perf test did: its "Perf" device re-recorded his challenge results under his code, doubling
-them). Use the dedicated test admin profile, or a made-up code that syncs nothing (`gamehub.devAllowSync.v1` = `'0'`).
+them; both "Perf" records deleted 2026-10-23 at Matt's request). Use the test admin profile **test1, code `DREG5`** (Matt, 2026-10-23), or a made-up code that syncs nothing (`gamehub.devAllowSync.v1` = `'0'`).
 
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 
