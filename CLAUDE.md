@@ -67,6 +67,12 @@ server (`boards/`, `directory/`) made it instantly faster. **When anything feels
 before code speed. A new screen must never read all of `players/`**: use `readPeople()`, `readPlayersForMe()`,
 `readOpponentProfiles()` or `watchBoard()` (`js/stats-net.js`). Mention any whole-node read you see, unasked.
 
+## Tests NEVER use Matt's code or name (Matt, 2026-10-23)
+
+*"don't use my code or username ever."* A test, probe or headless browser never sets profile name MattyIce or code
+`QZCC4` (2026-10-22 a perf test did: its "Perf" device re-recorded his challenge results under his code, doubling
+them). Use the dedicated test admin profile, or a made-up code that syncs nothing (`gamehub.devAllowSync.v1` = `'0'`).
+
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 
 A mid-turn message is not a note for the final report. Stop and say where you are, what is left
