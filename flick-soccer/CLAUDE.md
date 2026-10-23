@@ -194,7 +194,7 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   finger's distance over a full pull's, which `_fullPull` sets to `PULL_MAX` or, where the screen
   runs out first, the room there is: **`EDGE_M` (36px) inside the edge, the bottom adding the home
   bar** (Matt the same morning, *"I can't get full power"*: 79% where his finger stopped in the
-  bottom-left corner), at least `EDGE_MIN_TRAVEL` (28px), never into the bottom strip. So near an
+  bottom-left corner), at least `EDGE_MIN_TRAVEL` (28px), never into the home bar. So near an
   edge the same finger travel is a harder pull (the dead zone shrinks with it). The zoom is now a
   **look only** (`_edgeCam`): about the disc being pulled, down to `ZOOM_LOOK` (0.88), gliding
   (`CAM_RATE_DRAG`); the disc, the finger and the aim never move with it. **When it zooms (same day,
@@ -209,13 +209,9 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   his corner shot 100% (full 38px above the home bar); every edge case 100%. `_camTick` eases back
   once the finger lifts (instantly under reduced motion). The first three versions:
   `CLAUDE-HISTORY.md` if it exists, else git history of this file.
-- **No flick from the bottom strip (2026-10-16)**, Matt, with a screenshot of the iPhone's
-  Reachability slide: *"I was aiming a piece and this happened and it shot automatically."* A pull
-  dragged into the home bar's corner sets off the phone's own swipe-down gestures, and the phone still
-  reported the finger lifting. Inside the home bar (`NO_SHOT_STRIP`, 0px above it; it was 24px until
-  Matt, same day: *"too sensitive... I need to be able to pull farther down"*) the aim is dropped
-  (drawn as nothing, as if pulled back onto the disc), a release there (or with the app hidden) is not
-  a flick, and moving back up restores the aim. `_fullPull` never asks a full pull into that strip.
+- **No bottom-strip cancel (2026-10-23, Matt: "get rid of the cancel from pulling too far down")**: a
+  release anywhere shoots, the home bar included (only a hidden app or `pointercancel` drops it). It
+  was added 2026-10-16 after an iPhone Reachability slide fired a flick; history in git.
 - **A flick is stored exactly as before** (a direction and a 0-1 strength), so online replays are
   untouched; the camera is pixels only (`render.js` `setCam`, `s0/ox0/oy0` is the fitted layout).
 - **Teams carry a SHAPE as well as a colour** (colourblind rule): blue discs a white triangle, red

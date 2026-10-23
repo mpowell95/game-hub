@@ -48,14 +48,6 @@ const PULL_RAMP = 18;
 const EDGE_M = 36;
 const EDGE_MIN_TRAVEL = 28;
 const EDGE_HARD = 4;
-/** The bottom strip (px above the home bar) where letting go never shoots (Matt, 2026-10-16: "I was
- *  aiming a piece and this happened and it shot automatically", with a screenshot of the iPhone's
- *  Reachability slide). A pull dragged down into the home bar's corner sets off the phone's own
- *  swipe-down gestures, and the phone still reported the finger lifting, so the flick went. Inside
- *  this strip the aim is dropped (as if pulled back onto the disc); moving back up brings it back.
- *  A full pull always lands above it (`_edgeCam`). It was 24px; Matt, same day: "too sensitive... I
- *  need to be able to pull farther down". Now only the home bar itself (`_safe`) is the strip. */
-const NO_SHOT_STRIP = 0;
 /** How far the view eases out (a look only, `_edgeCam`) while a pull near an edge is at full power,
  *  and how close (px) the finger must get to running out of room before it starts (Matt, 2026-10-16:
  *  "before i've run out of room, the whole board begins to move... There's no need for a zoom out
@@ -1393,13 +1385,6 @@ class FlickSoccerUI {
     this.drag.cx = e.clientX; this.drag.cy = e.clientY;
     this._aimFrom();
     this.camTo = this._edgeCam();   // the view glides there (_camTick); the aim never depends on it
-    if (this._inNoShotStrip(e.clientY) && this.aim) this.aim.idle = true;
-  }
-
-  /** Is this screen height (clientY) inside the bottom strip where a release never shoots? */
-  _inNoShotStrip(clientY) {
-    const rc = this.canvas.getBoundingClientRect();
-    return clientY - rc.top > rc.height - (this._safe || 0) - NO_SHOT_STRIP;
   }
 
   /** Pulling near the edge (Matt, 2026-10-13 to 10-16: a disc near the side could not be pulled back
@@ -1408,7 +1393,7 @@ class FlickSoccerUI {
    *  moves a lot, which actually makes the angle i'm aimed at move even more"). The finger's distance
    *  from the disc, on screen, that is a FULL pull in the direction (ux, uy) it is pulling: the usual
    *  PULL_MAX, or, where the screen runs out first, the room there is, EDGE_M inside the edge (the
-   *  bottom adding the home bar), at least EDGE_MIN_TRAVEL, never into the bottom strip. So near an
+   *  bottom adding the home bar), at least EDGE_MIN_TRAVEL, never into the home bar. So near an
    *  edge the same finger travel is a harder pull. Read off the FITTED layout from the disc's own
    *  place, so nothing the view does can change it. */
   _fullPull(bo, ux, uy) {
@@ -1423,7 +1408,7 @@ class FlickSoccerUI {
     // At least the disc plus PULL_RAMP of travel past it, so the disc itself is always the safe zone,
     // even for a disc against a side wall pulled toward it (its full pull then sits nearer the edge).
     const least = Math.max(EDGE_MIN_TRAVEL, DISC_R * r.s0 + PULL_RAMP);
-    const fit = Math.min(Math.max(room(EDGE_M, EDGE_M + safe), least), room(EDGE_HARD, NO_SHOT_STRIP + 4 + safe));
+    const fit = Math.min(Math.max(room(EDGE_M, EDGE_M + safe), least), room(EDGE_HARD, 4 + safe));
     return Math.max(8, Math.min(full, fit));
   }
 
@@ -1465,9 +1450,7 @@ class FlickSoccerUI {
     this._setCam(n === base ? null : n);
     if (this.drag && this.aim) {
       // Keep the string's end under the finger as the view glides (direction and power do not move).
-      const idle = this.aim.idle;
       this._aimFrom();
-      if (idle && this._inNoShotStrip(this.drag.cy)) this.aim.idle = true;
     }
   }
 
@@ -1509,9 +1492,9 @@ class FlickSoccerUI {
     this.drag = null;
     this.aim = null;
     if (cancel || !a || a.idle || a.power < MIN_POWER || this.phase !== 'aim' || this.screen !== 'play') return;
-    // Lifted in the bottom strip (the phone's own gestures live there), or with the app no longer in
-    // front: not a flick.
-    if (this._inNoShotStrip(e.clientY) || document.hidden) return;
+    // Lifted with the app no longer in front: not a flick. A release anywhere on screen, the bottom
+    // edge included, shoots (Matt, 2026-10-23: the bottom strip's cancel is gone).
+    if (document.hidden) return;
     this._shoot(a.i, a.dx, a.dy, a.power);
   }
 
