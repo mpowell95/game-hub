@@ -27,7 +27,7 @@ export const H = 200;
  * `useTable(tb)` points the live bindings below at one of them; every function here that takes a
  * match does it first, and so must anything that steps balls or draws them.
  */
-export const TABLE_NOW = 4;
+export const TABLE_NOW = 5;
 const T1 = (() => {
   const R = 2.8, G = 8.1, S = 6.2, HOLE = 5.4;
   return {
@@ -110,9 +110,14 @@ const T4 = (() => {
     ],
   };
 })();
-const TABLES = { 1: T1, 2: T2, 3: T3, 4: T4 };
+/** Table 5 (2026-10-23): table 4's bigger balls and looser rack on table 3's pockets, which are
+ *  GamePigeon's exactly in proportion to the table (Matt: "they seem too big still. measure the
+ *  pockets in proportion to the table"): a hole 84 px of 717 (11.7% of the cloth's width, 1.6 of
+ *  our balls), the same centres and jaws. Table 4 had grown them with the ball, 25% too big. */
+const T5 = (() => ({ ...T3, R: T4.R, rackGap: T4.rackGap, rackMid: T4.rackMid, rackKeep: T4.rackKeep }))();
+const TABLES = { 1: T1, 2: T2, 3: T3, 4: T4, 5: T5 };
 /** A known table id, or null. */
-const knownTable = (tb) => (tb === 1 || tb === 2 || tb === 3 || tb === 4 ? tb : null);
+const knownTable = (tb) => (Number.isInteger(tb) && tb >= 1 && tb <= 5 ? tb : null);
 export const tableOf = (m) => (m && knownTable(m.tb)) || 1;
 
 /** The live table: the ball's radius; a corner pocket's jaws sit CORNER_G along each rail from the
