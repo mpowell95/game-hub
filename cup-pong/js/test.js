@@ -148,6 +148,14 @@ ok('the whole rack area is on the table',
   m = new Match({ first: 'a' }); m.grantExtra('a'); m.startTurn(); m.throwResult(miss);
   ok('a missed bonus throw changes nothing: the pair still comes', m.shooter === 'a' && m.queue.join() === '0,1');
   ok('a saved match keeps a waiting bonus', Match.fromJSON(JSON.parse(JSON.stringify((() => { const x = new Match(); x.grantExtra('b'); return x.toJSON(); })()))).bonus.b === 1);
+  // CENTER THE LAST CUP (Matt, 2026-10-23): free, no rerack spent, same distance, never twice.
+  m = new Match({ first: 'a', reracks: 0 }); m.racks.b = [{ id: 'k3', c: 3, r: 0 }]; m.startTurn();
+  ok('one cup off to the side: Center offered with no reracks left', m.canCenter() && !m.canRerack());
+  ev = m.centerLast();
+  ok('Center slides it to the middle at the same distance, nothing spent', ev.length === 1 && m.racks.b[0].u === 0 && Math.abs(m.racks.b[0].v) < 1e-9 && m.reracksLeft.a === 0 && !m.canCenter());
+  m.throwResult(miss);
+  m.racks.b = [{ id: 'k3', c: 3, r: 0 }];
+  ok('Center is gone after the turn\'s first throw', !m.canCenter());
   // STRAIGHT UP (Matt, 2026-09-30): no assists at all.
   m = new Match({ first: 'a', straight: true }); m.streak.a = [2, 2]; m.startTurn();
   ev = m.throwResult({ made: 'k0' }).concat(m.throwResult({ made: 'k1' }));

@@ -61,7 +61,8 @@
 // is saved and restored whole (`toJSON` / `Match.fromJSON`), and `swapSides` turns a saved match
 // round so the phone playing it is always side 'a'.
 
-import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf } from './rack.js';
+import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf, cellXZ } from './rack.js';
+import { CUP_D, RACK_Z0 } from './geom.js';
 
 export const BALLS = 2;
 const other = (s) => (s === 'a' ? 'b' : 'a');
@@ -165,6 +166,26 @@ export class Match {
     const to = applyPreset(this.target(), PRESETS.line2);
     this.racks[this.defender] = to;
     return [{ type: 'gentlemans', side: this.defender, to }];
+  }
+
+  /**
+   * CENTER THE LAST CUP (Matt, 2026-10-23: "Why can't I center this?"): one cup left off to the side
+   * can always be slid to the middle, FREE (no rerack spent), at the same distance so it is never
+   * pulled closer or pushed back. When a Gentleman's would be on offer; never in overtime or a Straight up.
+   */
+  canCenter() {
+    if (this.straight || this.over || this.mustPickOwed() || this.lastCup) return false;
+    const when = this.phase === 'normal' ? this.turnThrows === 0 : this.phase === 'rebuttal' && this.queue.length > 0;
+    if (!when) return false;
+    const rack = this.target();
+    return rack.length === 1 && Math.abs(cellXZ(rack[0]).x) > 1e-6;
+  }
+  centerLast() {
+    if (!this.canCenter()) return [];
+    const k = this.target()[0];
+    const to = [{ id: k.id, u: 0, v: (cellXZ(k).z - RACK_Z0) / CUP_D }];
+    this.racks[this.defender] = to;
+    return [{ type: 'center', side: this.defender, to }];
   }
 
   canRerack() {
