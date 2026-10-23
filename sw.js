@@ -1,5 +1,11 @@
 // sw.js — shared service worker for the Game Hub. Precaches the app shell and [docs/SW-NOTES.md #1]
-const CACHE = 'game-hub-v1225';
+// IMPORTANT UPDATES (2026-10-22, Matt: "push this update to everyone. make sure they all download it",
+// then "flag important ones"). A phone whose page loaded a build OLDER than this number takes the new
+// build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
+// (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
+// phone should get now; leave it alone for small fixes.
+const IMPORTANT_SINCE = 1226;
+const CACHE = 'game-hub-v1230';
 
 const ASSETS = [
   './',
@@ -797,7 +803,7 @@ const REST_MANIFEST = {
   './css/hub.css': '2920b5c6a5',
   './css/name-gate.css': '2253567714',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'a5eedc2bf9',
+  './js/hub.js': 'ee8aa59162',
   './js/name-gate.js': '9f3aa22f34',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -818,7 +824,7 @@ const REST_MANIFEST = {
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
   './js/game-stats-ui.js': '78309b64ee',
-  './js/stats-net.js': '9700e364a7',
+  './js/stats-net.js': '38b9acf121',
   './js/firebase-boot.js': '5a63920ff7',
   './js/device-report.js': '22d5aec601',
   './js/error-log.js': '2ce0a7eaf3',
@@ -898,14 +904,14 @@ const REST_MANIFEST = {
   './connect-four/js/strings.js': 'c75da9ca32',
   './connect-four/css/connect-four.css': '14251ccb03',
   './chinchon/index.html': '077ad16ca0',
-  './chinchon/css/chinchon.css': '6b230da17e',
+  './chinchon/css/chinchon.css': '73c68eb13e',
   './chinchon/js/deck.js': '2260c3f606',
   './chinchon/js/meld.js': '5166c4b913',
   './chinchon/js/cards.js': '8345ff44a9',
   './chinchon/js/game.js': 'ff23b6d017',
   './chinchon/js/hash.js': '9bbf5d8385',
   './chinchon/js/ai.js': 'd69864fbc2',
-  './chinchon/js/ui.js': '7343d50a8a',
+  './chinchon/js/ui.js': 'e6c4e68852',
   './chinchon/js/mp.js': 'd5939c8d37',
   './chinchon/js/alert.js': '81226691f9',
   './chinchon/js/ch-ui.js': '9be86bf54a',
@@ -1467,7 +1473,7 @@ async function noteShownGames(ids) {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'GET_VERSION') {
     const port = event.ports && event.ports[0];
-    if (port) port.postMessage({ type: 'VERSION', cache: CACHE });
+    if (port) port.postMessage({ type: 'VERSION', cache: CACHE, important: IMPORTANT_SINCE });
   }
   if (event.data && event.data.type === 'SHOWN_GAMES' && Array.isArray(event.data.ids)) {
     event.waitUntil(noteShownGames(event.data.ids).catch((err) => console.warn('[sw] SHOWN_GAMES failed', err)));

@@ -280,6 +280,13 @@ console.log('\n--- [KNOWN-BUG PROBE] a missing game asset must not abort the ins
 console.log('\n--- fetch: network-first with a deadline ---');
 
 const NET_TIMEOUT_MS = Number(/const NET_TIMEOUT_MS = (\d+)/.exec(SW_SRC)[1]);
+{
+  // IMPORTANT UPDATES (2026-10-22): a number above this build's own would mark every phone as
+  // "must take" for ever (harmless thanks to the reload guards, but wrong), so it may never exceed CACHE.
+  const imp = Number((/const IMPORTANT_SINCE = (\d+);/.exec(SW_SRC) || [])[1]);
+  const cur = Number((/const CACHE = 'game-hub-v(\d+)'/.exec(SW_SRC) || [])[1]);
+  ok('IMPORTANT_SINCE exists and is not above this build', imp > 0 && imp <= cur, `IMPORTANT_SINCE=${imp}, CACHE=v${cur}`);
+}
 ok('NET_TIMEOUT_MS is a sane deadline (0.5s-5s)', NET_TIMEOUT_MS >= 500 && NET_TIMEOUT_MS <= 5000, `got ${NET_TIMEOUT_MS}`);
 
 /** Seed a worker whose cache already holds `path` with the given body, then fetch it. */

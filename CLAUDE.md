@@ -67,6 +67,12 @@ server (`boards/`, `directory/`) made it instantly faster. **When anything feels
 before code speed. A new screen must never read all of `players/`**: use `readPeople()`, `readPlayersForMe()`,
 `readOpponentProfiles()` or `watchBoard()` (`js/stats-net.js`). Mention any whole-node read you see, unasked.
 
+## Tests NEVER use Matt's code or name (Matt, 2026-10-23)
+
+*"don't use my code or username ever."* A test, probe or headless browser never sets profile name MattyIce or code
+`QZCC4` (2026-10-22 a perf test did: its "Perf" device re-recorded his challenge results under his code, doubling
+them; both "Perf" records deleted 2026-10-23 at Matt's request). Use the test admin profile **test1, code `DREG5`** (Matt, 2026-10-23), or a made-up code that syncs nothing (`gamehub.devAllowSync.v1` = `'0'`).
+
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 
 A mid-turn message is not a note for the final report. Stop and say where you are, what is left
@@ -144,7 +150,10 @@ saw "an update every time they go back to the hub").** The worker still takes ov
 `js/hub.js` reloads the PAGE at once only on an admin device or dev profile, elsewhere only in the first
 30 s of an app launch or of a return after 30+ min away. A tap on the pill always takes it; a game that
 fails to load on the older page reloads onto the new build and opens. On a player's phone a lasting
-`vOld → vNew` pill is normal; on an admin device it is a bug. Do NOT make new workers wait for the page
+`vOld → vNew` pill is normal; on an admin device it is a bug. **IMPORTANT updates (Matt, 2026-10-22: "flag
+important ones")**: set `IMPORTANT_SINCE` in `sw.js` to the new CACHE number on a deploy every phone should take
+now (performance, data safety, a fix people are waiting on); a page loaded on an older build then takes it at its
+next launcher visit (never mid-game). Leave it for small fixes. `node tools/read-builds.mjs` lists each person's build. Do NOT make new workers wait for the page
 (`skipWaiting` on request): tried that day, Chromium sometimes never activated it and a page load then hung.
 
 ### Diagnostic: the launcher renders as raw unstyled HTML (fixed 2026-08-11)
@@ -486,7 +495,8 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **Deployed triggers (all, by the workflow 2026-10-21):** `hoopsTurnPush`, `messagePush`, `bugReportPush`,
   `skeeChallengePush`, `cupPongTurnPush`, `dartsTurnPush`, `flickSoccerTurnPush`, `archeryTurnPush`,
   `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`, `nudgePush`, `directoryBuild` +
-  `directoryOnApprove`, `boardsOnSync` + `boardsOnConfig` + `boardsCatchUp` (2026-10-22); rules incl. `archery`,
+  `directoryOnApprove`, `boardsOnSync` + `boardsOnConfig` + `boardsCatchUp` (2026-10-22), `roomsCleanup` (2026-10-23:
+  deletes `rooms/<CODE>` idle an hour, i.e. no 10 s heartbeat; rooms indexed on `updated`); rules incl. `archery`,
   `chinchon`, `escoba`, `nudges`, `directory`, `boards`.
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
@@ -498,7 +508,10 @@ None of this makes the hub cheat-proof; never describe it that way.
   Skeeball's top records, Messages contacts, Golf's board, Arrow Maze's leaders use `readPeople()` (the board's list).
   Only the admin page still reads all of `players/` (it voids scores per device, so it needs the raw records).
   Matt's bug-report badge queries only reports newer than his last look (`readBugReportsSince`, indexed on
-  `createdAtMs`). Skeeball's per-throw upload (`skeeballThrows/`) was RETIRED 2026-10-22 (Matt); its data stays.
+  `createdAtMs`). Skeeball's per-throw upload (`skeeballThrows/`) was RETIRED 2026-10-22 and its 24,627 throws DELETED
+  2026-10-23 at Matt's request, after an archive (2 zips) was sent to him; the rule now refuses writes.
+  **A sync with nothing new sends nothing** (2026-10-23, `stats-net.js` `syncSignature`, `gamehub.syncSig.v1`): same
+  fingerprint as the last verified sync and under 12 h old = no upload, no re-read. `tools/test-sync-skip.mjs`.
 - **Player directory (2026-10-22, Matt: multiplayer felt slow)**: `directory/<CODE>` = `{name, emoji, at}`,
   rebuilt by the server from `players/` hourly and on any Online play change (`buildDirectory`). Every
   challenge game's "pick a person" reads it via `stats-net.js` `readOpponentProfiles()` (2 KB vs ~930 KB);
