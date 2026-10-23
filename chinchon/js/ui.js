@@ -93,9 +93,8 @@ const MP_DIFFICULTY = 'mp';
 const CH_CHAT_PLACE = { top: '0px', right: '54px', popsTop: '52px' };
 // Solo autosave (batch 9, HANDOFF-FB-RESUME; extended to mid-round in batch C,
 // HANDOFF-FB3-SETTINGS-RESUME): mirrors STORE_MP_SAVE's shape (v/at/snap) minus
-// the MP-only code/role/seq fields -- a solo match has no room to rejoin. Same
-// 30-minute freshness window as MP (SOLO_RESTORE_MAX_AGE_MS reuses
-// MP_RESTORE_MAX_AGE_MS). Written at every safe snapshot point per snapshot()'s
+// the MP-only code/role/seq fields -- a solo match has no room to rejoin. Kept
+// until the match ends (no age limit since 2026-10-23; it was 30 minutes). Written at every safe snapshot point per snapshot()'s
 // doc comment in game.js -- both the 'turnEnd' AND 'roundScored' onEvent hooks
 // (every turn boundary, not just round boundaries -- solo has no MP lockstep
 // constraint forcing round-granularity), cleared on match end, explicit
@@ -187,7 +186,8 @@ class ChinchonUI {
     this._sortMode = 'suit';        // 'suit' | 'rank' (cycled by the sort button)
     this._highlightSets = false;    // colour-code melds in the hand
     this._manualOrder = null;       // [cardId] once the player drag-reorders
-    this._handBreak = null;         // CH-2: top-row card count once the player drags across rows (null = default split)
+    this._handBreak = null;         // the top row's card count (derived from _topIds each render)
+    this._topIds = null;            // ids of the cards in the TOP row (null = a fresh hand: default split)
     this._displayOrder = [];        // ids in current on-screen order (for drag math)
     this._drag = null;
     this._justDragged = false;
@@ -913,6 +913,7 @@ class ChinchonUI {
       case 'roundStart': {
         this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this._newCardId = null;
         this._newFlown = false; this._dropFrom = null;
+        this._manualOrder = null; this._topIds = null;   // a fresh deal: sorted, default rows
         // The new hands render hidden, then fly out of the stock (below).
         const dealing = this._flightsOn() ? new Set(this._human().hand.map((c) => c.id)) : null;
         this._arriving = dealing;
@@ -1423,16 +1424,37 @@ class ChinchonUI {
       <button class="cc-tool cc-tool-sm ${this._highlightSets ? 'is-on' : ''}" data-action="toggle-highlight" title="${t('highlight_sets_title')}">${t('sets_btn')}</button>`;
   }
 
+  /** Each card keeps the ROW it is in (`_topIds`) until the player drags it to the other one
+   *  (2026-10-23, Matt: "cards shouldn't move between the upper and lower levels unless i move
+   *  them"). The row split used to be a COUNT, so a discard from the top row pulled a bottom card
+   *  up, and a draw into a sorted hand re-sorted every card across the split. A fresh hand (new
+   *  round, sort button) is sorted and split 3 top / 4 bottom; a drawn card joins the shorter
+   *  row (bottom on a tie), in sorted place if that row is still in sort order, else at its end. */
   _computeHandOrder(hand) {
-    if (this._manualOrder) {
-      const byId = new Map(hand.map((c) => [c.id, c]));
-      const kept = this._manualOrder.filter((id) => byId.has(id));
-      const keptSet = new Set(kept);
-      const added = hand.filter((c) => !keptSet.has(c.id)).map((c) => c.id);
-      this._manualOrder = kept.concat(added);
-      return this._manualOrder.map((id) => byId.get(id));
+    const byId = new Map(hand.map((c) => [c.id, c]));
+    if (!this._manualOrder || !this._topIds) {
+      const sorted = sortHand(hand, this._sortMode);
+      this._manualOrder = sorted.map((c) => c.id);
+      this._topIds = new Set(this._manualOrder.slice(0, Math.max(0, sorted.length - 4)));
     }
-    return sortHand(hand, this._sortMode);
+    const top = [], bottom = [];
+    for (const id of this._manualOrder) if (byId.has(id)) (this._topIds.has(id) ? top : bottom).push(id);
+    const placed = new Set(top.concat(bottom));
+    for (const c of hand) if (!placed.has(c.id)) this._placeNew(c, top, bottom, byId);
+    for (const id of [...this._topIds]) if (!byId.has(id)) this._topIds.delete(id);
+    this._manualOrder = top.concat(bottom);
+    this._handBreak = top.length;
+    return this._manualOrder.map((id) => byId.get(id));
+  }
+
+  _placeNew(card, top, bottom, byId) {
+    const intoTop = top.length < bottom.length;
+    const row = intoTop ? top : bottom;
+    if (intoTop) this._topIds.add(card.id);
+    const cards = row.map((id) => byId.get(id));
+    const inOrder = sortHand(cards, this._sortMode).every((c, i) => c === cards[i]);
+    const at = inOrder ? sortHand(cards.concat(card), this._sortMode).indexOf(card) : row.length;
+    row.splice(at, 0, card.id);
   }
 
   /** Build one detached card element from cardFaceHTML (null -> empty slot). */
@@ -1457,11 +1479,7 @@ class ChinchonUI {
     const h = this._human();
     const order = this._computeHandOrder(h.hand);
     this._displayOrder = order.map((c) => c.id);
-    const breakActive = order.length > 4;
-    if (breakActive) {
-      if (this._handBreak == null) this._handBreak = Math.max(0, order.length - 4);
-      this._handBreak = Math.max(0, Math.min(this._handBreak, order.length));
-    }
+    const breakActive = order.length > 4;   // _handBreak = the top row's size, set just above
 
     let colorOf = null;
     if (this._highlightSets) {
@@ -1708,6 +1726,7 @@ class ChinchonUI {
   _applyDrop(id, idx, row) {
     const res = this._dropResult(id, idx, row);
     this._manualOrder = res.order;
+    this._topIds = res.top;
     this._handBreak = res.brk;
   }
 
@@ -1716,13 +1735,11 @@ class ChinchonUI {
     const without = this._displayOrder.filter((x) => x !== id);
     const clamped = Math.max(0, Math.min(idx, without.length));
     without.splice(clamped, 0, id);
-    let brk = this._handBreak;
-    if (row != null && row !== -1 && brk != null && without.length > 4) {
-      const finalIdx = without.indexOf(id);
-      if (row === 0 && finalIdx >= brk) brk = finalIdx + 1;
-      else if (row === 1 && finalIdx < brk) brk = finalIdx;
-    }
-    return { order: without, brk };
+    // Only the dragged card can change row; everything else stays where it is.
+    const top = new Set(this._topIds || []);
+    if (row === 0) top.add(id); else if (row === 1) top.delete(id);
+    const order = without.filter((x) => top.has(x)).concat(without.filter((x) => !top.has(x)));
+    return { order, top, brk: order.filter((x) => top.has(x)).length };
   }
 
   // --- modals ---------------------------------------------------------------
@@ -1995,7 +2012,7 @@ class ChinchonUI {
       case 'card':
         if (this._justDragged) { this._justDragged = false; break; }
         this.onCardTap(a.dataset.id); break;
-      case 'sort-cycle': this._sortMode = this._sortMode === 'suit' ? 'rank' : 'suit'; this._manualOrder = null; this._handBreak = null; this.render(); break;
+      case 'sort-cycle': this._sortMode = this._sortMode === 'suit' ? 'rank' : 'suit'; this._manualOrder = null; this._topIds = null; this._handBreak = null; this.render(); break;
       case 'toggle-highlight': this._highlightSets = !this._highlightSets; this.render(); break;
       case 'discard-confirm': if (pend && pend.kind === 'discard' && this._selectedCardId) this._resolvePending(this._selectedCardId); break;
       case 'close-yes': if (pend && pend.kind === 'close') this._resolvePending(true); break;
@@ -2901,7 +2918,10 @@ class ChinchonUI {
   _soloSaveSnapshot() {
     if (!this.game || this.mp) return;
     try {
-      saveJSON(STORE_SOLO_SAVE, { v: 1, at: Date.now(), snap: this.game.snapshot() });
+      // `counts` (2026-10-23, additive): this match's closes so far, so a resumed match still
+      // records them at its end (a restore used to start them at 0).
+      saveJSON(STORE_SOLO_SAVE, { v: 1, at: Date.now(), snap: this.game.snapshot(),
+        counts: { closes: this._matchCloses || 0, chinchons: this._matchChinchons || 0, minusTens: this._matchMinusTens || 0 } });
     } catch { /* private mode / quota */ }
   }
 
@@ -2923,8 +2943,8 @@ class ChinchonUI {
     try {
       const save = this._soloLoadSave();
       if (!save) return false;
-      const age = Date.now() - (save.at || 0);
-      if (age > MP_RESTORE_MAX_AGE_MS) { this._soloClearSave(); return false; }
+      // No age limit (2026-10-23, Matt: "keep the save until the game is finished, just like all
+      // the other games"); it used to be thrown away after 30 minutes.
       const snap = save.snap;
       if (!snap || !Array.isArray(snap.players) || snap.players.length < 2) { this._soloClearSave(); return false; }
       if (this._dead || this.mp || this.game) return false;   // superseded by a faster user action meanwhile
@@ -2937,7 +2957,10 @@ class ChinchonUI {
       this.game = Game.fromSnapshot(snap, agentsById);
       this.game.onEvent = (type, payload) => this.onEvent(type, payload);
       this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
-      this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
+      const n = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
+      const counts = save.counts || {};
+      this._matchCloses = n(counts.closes); this._matchChinchons = n(counts.chinchons); this._matchMinusTens = n(counts.minusTens);
+      this._statsCommitted = false;
       this._matchEnded = false; this._closeMenu();
       this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
       this._ccCompact = false;
@@ -3079,7 +3102,7 @@ class ChinchonUI {
     if (this.game) { this.game.abort(); this.game = null; }
     this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
     this._modalResolve = null; this._placeResolve = null; this._chartView = false; this._closeMenu();
-    this._manualOrder = null; this._handBreak = null;
+    this._manualOrder = null; this._topIds = null; this._handBreak = null;
     const theirSide = side === 'a' ? 'b' : 'a';
     let from = game.log.length ? MP.lastRunStart(game, theirSide) : 0;
     const shown = MP.readShown(game.id);
