@@ -436,6 +436,10 @@ class CupPong {
         wait = 1300;
       }
     }
+    for (const e of m.centerLast()) {
+      this.engine.rend.slideRack(e.side, cupsXZ(e.to));
+      wait = 1300;
+    }
     this.later(() => this.cpuShoot(), wait);
   }
 
@@ -733,9 +737,10 @@ class CupPong {
     const ev = this.MP.applyEntry(m, e) || [];
     mp.applied++;
     for (const x of ev) {
-      if (x.type === 'gentlemans' || x.type === 'rerack') R.slideRack(x.side, cupsXZ(x.to));
+      if (x.type === 'gentlemans' || x.type === 'rerack' || x.type === 'center') R.slideRack(x.side, cupsXZ(x.to));
     }
     if (e.k === 'g') this.toast(t('theyGentlemans', { name: mp.themName }), 1300);
+    else if (e.k === 'c') this.toast(t('theyCenter', { name: mp.themName }), 1300);
     else if (e.k === 'r') this.toast(t('theyRerack', { name: mp.themName }), 1300);
     else if (e.k === 'i') { R.setMarks('a', [e.id], 'called'); this.toast(t('theyIsland', { name: mp.themName }), 1300); }
     else this.showEvents(ev);
@@ -762,7 +767,7 @@ class CupPong {
   showEventsQuiet(ev) {
     const R = this.engine.rend;
     for (const e of ev) {
-      if (e.type === 'gentlemans' || e.type === 'rerack') R.setRack(e.side, cupsXZ(e.to));
+      if (e.type === 'gentlemans' || e.type === 'rerack' || e.type === 'center') R.setRack(e.side, cupsXZ(e.to));
     }
     R.setRack('a', cupsXZ(this.match.racks.a));
     R.setRack('b', cupsXZ(this.match.racks.b));
@@ -1057,6 +1062,7 @@ class CupPong {
     const btn = (role, label) => `<button type="button" class="cp-opt" data-role="${role}">${label}</button>`;
     let html = '';
     if (mine && m.canGentlemans()) html += btn('gent', t('gentlemansQ'));
+    if (mine && m.canCenter()) html += btn('center', t('centerQ'));
     if (mine && m.canRerack()) {
       const n = m.reracksLeft.a;
       html += btn('rerack', t('rerackQ', { n: Number.isFinite(n) ? n : '∞' }));
@@ -1072,6 +1078,11 @@ class CupPong {
     if (role === 'gent') {
       const ev = m.applyGentlemans();
       if (ev.length) this.mpRecord({ k: 'g' });
+      for (const e of ev) R.slideRack(e.side, cupsXZ(e.to));
+      this.paintOptions();
+    } else if (role === 'center') {
+      const ev = m.centerLast();
+      if (ev.length) this.mpRecord({ k: 'c' });
       for (const e of ev) R.slideRack(e.side, cupsXZ(e.to));
       this.paintOptions();
     } else if (role === 'rerack') {

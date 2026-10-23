@@ -139,6 +139,7 @@ export function cleanEntry(e) {
       return { by: e.by, k: 't', p: Math.round(p * 1e5) / 1e5, a: Math.round(a * 1e5) / 1e5, m, b: e.b ? 1 : 0, at };
     }
     case 'g': return { by: e.by, k: 'g', at };
+    case 'c': return { by: e.by, k: 'c', at };            // the last cup centred (match.centerLast)
     case 'x': return { by: e.by, k: 'x', at };            // a bonus throw Matt granted (match.grantExtra)
     case 'r': case 'i': case 'o': {
       const v = String(e.k === 'r' ? e.key : e.id || '');
@@ -170,6 +171,7 @@ export function applyEntry(match, e) {
   let ev;
   if (e.k === 't') ev = match.throwResult({ made: e.m || null, bounced: !!e.b });
   else if (e.k === 'g') ev = match.applyGentlemans();
+  else if (e.k === 'c') ev = match.centerLast();
   else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.cells) : match.rerack(e.key);
   else if (e.k === 'i') ev = match.callIsland(e.id);
   else if (e.k === 'o') ev = match.pickOwed(e.id);
