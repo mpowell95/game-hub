@@ -28,6 +28,10 @@ export const H = 200;
  * match does it first, and so must anything that steps balls or draws them.
  */
 export const TABLE_NOW = 5;
+/** RULES VERSIONS, kept per match like the table (`m.rv`, none = 1), for the same reason: an online
+ *  match replays its log. 1: a shot that pots nothing and sends no ball to a cushion after the hit
+ *  is a foul (WPA 6.3). 2 (2026-10-23, Matt: "it shouldn't be a foul... drop it"): it is not. */
+export const RULES_NOW = 2;
 const T1 = (() => {
   const R = 2.8, G = 8.1, S = 6.2, HOLE = 5.4;
   return {
@@ -328,7 +332,7 @@ const solidObs = (obs) => (obs || []).filter((o) => o.k !== 'spill');
 
 /** A new match. `mode` '8' | '9' | 'ct'; first to `racks`; `breaker` breaks the first rack; `seed`
  *  shuffles it; `opts` { call: every shot is called, bank: only banked pots count, obst: obstacles }. */
-export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}, tb = TABLE_NOW) {
+export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}, tb = TABLE_NOW, rv = RULES_NOW) {
   const tbl = knownTable(tb) || TABLE_NOW;
   useTable(tbl);
   const md = MODES.includes(mode) ? mode : '8';
@@ -339,6 +343,7 @@ export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}
   return {
     v: 2,
     tb: tbl,
+    rv: rv === 1 ? 1 : 2,
     mode: md,
     n,
     opts: o,
@@ -362,7 +367,7 @@ export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}
 
 /** A saved match is only trusted if it has the shape this engine writes, at rest. */
 export function validMatch(m) {
-  if (!m || m.v !== 2 || (m.tb != null && !knownTable(m.tb)) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
+  if (!m || m.v !== 2 || (m.tb != null && !knownTable(m.tb)) || (m.rv != null && m.rv !== 1 && m.rv !== 2) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
   if (!Array.isArray(m.b) || m.b.length !== ballCount(m.mode)) return false;
   if (!RACK_OPTIONS.includes(m.racks) || !Array.isArray(m.scores) || m.scores.length !== m.n) return false;
   if (!Number.isInteger(m.turn) || m.turn < 0 || m.turn >= m.n) return false;
@@ -707,7 +712,7 @@ export function settle(m, ev) {
   if (scratch) foul = 'scratch';
   else if (ev.first < 0) foul = 'nohit';
   else if (m.mode !== 'ct' && (!isBreak || m.mode === '9') && !targets.includes(ev.first)) foul = 'wrong';
-  else if (!isBreak && !pots.length && !ev.rail) foul = 'norail';
+  else if (!isBreak && !pots.length && !ev.rail && (m.rv || 1) < 2) foul = 'norail';
   m.broke = true;
   m.inHand = null;
   if (scratch) m.b[CUE].on = true;

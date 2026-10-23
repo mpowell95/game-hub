@@ -125,9 +125,9 @@ const spinSVG = (s) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="f
 /** How to play: the cue drawn back from the cue ball, the shot, a ball dropping into a pocket. */
 function helpSvg() {
   return `<svg class="ep-help-svg" viewBox="0 0 240 104" role="img" aria-hidden="true">
-    <rect x="0" y="0" width="240" height="104" rx="10" fill="#8C5A3F"/>
-    <rect x="7" y="7" width="226" height="90" rx="5" fill="#3FBE63"/>
-    <rect x="11" y="11" width="218" height="82" rx="3" fill="#0F8A3C"/>
+    <rect x="0" y="0" width="240" height="104" rx="10" fill="#6B3432"/>
+    <rect x="7" y="7" width="226" height="90" rx="5" fill="#4A84BE"/>
+    <rect x="11" y="11" width="218" height="82" rx="3" fill="#4B87C3"/>
     <circle cx="226" cy="14" r="8" fill="#000"/>
     <path d="M6 96 L58 66" stroke="#5A3420" stroke-width="6" stroke-linecap="round"/>
     <path d="M40 76 L64 62" stroke="#F1D9A6" stroke-width="4" stroke-linecap="round"/>

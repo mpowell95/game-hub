@@ -213,7 +213,7 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
 {
   // A match started on table 1 replays exactly as the table-1 engine played it (the fingerprint was
   // taken from the engine before table 2 existed, commit 77835e6), whatever ran on table 2 between.
-  const m = E.newMatch('8', 1, 0, 77, { obst: true }, 1);
+  const m = E.newMatch('8', 1, 0, 77, { obst: true }, 1, 1);
   let s = 99;
   const rnd = () => (s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296;
   for (let k = 0; k < 30 && m.winner == null; k++) {
@@ -228,7 +228,7 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
   ok('a table-1 match replays bit for bit as before table 2', h === 1534097046, h);
   {
     // ...and table 2 as it played before table 3 (fingerprint from commit cc2abe2).
-    const m2 = E.newMatch('8', 1, 0, 77, { obst: true }, 2);
+    const m2 = E.newMatch('8', 1, 0, 77, { obst: true }, 2, 1);
     let s2 = 99;
     const rnd2 = () => (s2 = (Math.imul(s2, 1103515245) + 12345) >>> 0) / 4294967296;
     for (let k = 0; k < 30 && m2.winner == null; k++) {
@@ -244,7 +244,7 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
   }
   {
     // ...and table 3 as it played before table 4 (fingerprint from commit 262f42c).
-    const m3 = E.newMatch('8', 1, 0, 77, { obst: true }, 3);
+    const m3 = E.newMatch('8', 1, 0, 77, { obst: true }, 3, 1);
     let s3 = 99;
     const rnd3 = () => (s3 = (Math.imul(s3, 1103515245) + 12345) >>> 0) / 4294967296;
     for (let k = 0; k < 30 && m3.winner == null; k++) {
@@ -259,7 +259,7 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
   }
   {
     // ...and table 4 as it played before table 5 (fingerprint from commit bafc0f4).
-    const m4 = E.newMatch('8', 1, 0, 77, { obst: true }, 4);
+    const m4 = E.newMatch('8', 1, 0, 77, { obst: true }, 4, 1);
     let s4 = 99;
     const rnd4 = () => (s4 = (Math.imul(s4, 1103515245) + 12345) >>> 0) / 4294967296;
     for (let k = 0; k < 30 && m4.winner == null; k++) {
@@ -274,6 +274,21 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
   }
   E.useTable(5);
   ok('table 5: table 4\'s balls, GamePigeon\'s pockets (84 px of 717)', Math.abs(E.R * 2 - 1.25 * 42 * 100 / 717) < 1e-9 && E.POCKETS.every((p) => p.rp === p.r && Math.abs(p.r * 2 - 84 * 100 / 717) < 1e-9));
+  {
+    // Rules 2 (2026-10-23): a soft touch that pots nothing and reaches no cushion is not a foul;
+    // rules 1 (every match from before) still calls it one. A match with no `rv` is rules 1.
+    const soft = (rv) => {
+      const m = E.newMatch('8', 1, 0, 5, {}, 5, rv);
+      E.play(m, { x: E.HEAD_SPOT[0], y: E.HEAD_SPOT[1], dx: 0, dy: -1, p: 1 });
+      for (let i = 1; i < m.b.length; i++) m.b[i].on = false;
+      m.b[1].on = true; m.b[1].x = 50; m.b[1].y = 100; m.b[0].x = 50; m.b[0].y = 112;
+      m.inHand = null; m.groups = null; m.broke = true;
+      E.play(m, { dx: 0, dy: -1, p: 0.2, s: 0 });
+      return m.last && m.last.foul;
+    };
+    ok('rules 2: a soft touch with no cushion is not a foul; rules 1 still calls it', soft(2) == null && soft(1) === 'norail', soft(2) + '/' + soft(1));
+    ok('a new match is on today\'s rules; one with none is rules 1', E.newMatch('8').rv === E.RULES_NOW && E.RULES_NOW === 2 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 5, 1), rv: undefined }));
+  }
   ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 5);
   ok('a saved match with no table reads as table 1', E.tableOf({}) === 1 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 1), tb: undefined }));
   E.useTable(2);
