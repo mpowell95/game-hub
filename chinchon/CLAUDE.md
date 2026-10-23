@@ -218,6 +218,17 @@ screen. Always."*
   online never waits on a flight; a rejoining guest's `replayMode` skips them. No engine, save or
   protocol change. Not yet checked by eye on a phone or in a real online match.
 
+## Smooth hand (2026-10-23, Matt: "choppy and rough")
+
+- **Hand cards glide** (`_slideHand`, FLIP on `offsetLeft/Top`, `SLIDE_MS` 220) whenever a render moves
+  them: draw, discard, sort, drag-drop. A dropped card glides from where the finger let go (`_dragLand`).
+- **Drag onto the pile flies from the drop point** (`_dropFrom`); it used to snap back to the hand first.
+- Grabbing a selected card keeps its lift; a yellow bar (`.cc-drop-mark`, in `.cc-flight`) shows where it
+  will land, from the same `_dropResult` that `_applyDrop` applies.
+- A stock draw turns face up on landing (`_turnUp`); a flown card skips the `is-new` bounce (`is-flown`).
+- Hover lifts only under `@media (hover: hover)` (stuck raised on phones). `_setHTML` skips unchanged
+  slots so the your-turn pulse no longer restarts on every tap. Engine, saves, protocol untouched.
+
 ## Turn-by-turn challenges (2026-10-18)
 
 Matt: *"You should be able to challenge someone to turn by turn games in all multiplayer games too."*

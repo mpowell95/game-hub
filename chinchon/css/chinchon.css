@@ -304,7 +304,9 @@
 }
 .cc-pile.is-actionable { cursor: pointer; }
 .cc-pile.is-actionable .cc-card { box-shadow: 0 0 0 3px #ffce3a, 0 2px 8px rgba(0, 0, 0, 0.3); }
-.cc-pile.is-actionable:hover .cc-card { transform: translateY(-3px); }
+/* Hover lifts only where there is a real hover: on a phone :hover sticks after a tap
+   and left the last tapped card or pile raised. */
+@media (hover: hover) { .cc-pile.is-actionable:hover .cc-card { transform: translateY(-3px); } }
 .cc-pile-label { font-size: 0.7rem; font-weight: 700; color: rgba(255, 255, 255, 0.85); letter-spacing: 0.03em; }
 .cc-pile-count {
   position: absolute; top: -8px; right: -8px; background: var(--cc-ink); color: #fff;
@@ -364,6 +366,7 @@
   /* Tunable if cards still overlap too much (acceptable range roughly 1.6em to 2.1em). */
   --cc-hand-overlap: 2.1em;   /* how far each card slides over its left neighbour */
   display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+  position: relative;   /* cards' offsetLeft/Top are measured against the hand (_slideHand) */
   row-gap: 10px;
   padding: 8px 4px 12px; margin: 0 auto; font-size: var(--cc-hand-fs);
   min-height: calc(2 * (4.55em * 61 / 40) + 30px);
@@ -372,7 +375,7 @@
 .cc-hand-break + .cc-card { margin-left: 0; }  /* bottom row starts without overlap */
 .cc-hand .cc-card { font-size: var(--cc-hand-fs); cursor: grab; touch-action: none; }
 .cc-hand .cc-card + .cc-card { margin-left: calc(-1 * var(--cc-hand-overlap)); }
-.cc-hand .cc-card:hover { z-index: 15; transform: translateY(-0.5em); }
+@media (hover: hover) { .cc-hand .cc-card:hover { z-index: 15; transform: translateY(-0.5em); } }
 .cc-hand .cc-card.is-selected { z-index: 20; }
 .cc-hand .cc-card.is-dragging {
   z-index: 30; cursor: grabbing;
@@ -392,6 +395,13 @@
   0%   { transform: translateY(-16px) scale(1.08); }
   60%  { transform: translateY(2px) scale(1); }
   100% { transform: translateY(0) scale(1); }
+}
+/* A card that flew in has already moved; the bounce on top of the landing was a second jolt. */
+.cc-card.is-new.is-flown { animation: none; }
+/* Where a dragged card will land (in the .cc-flight layer, so it never shifts the hand). */
+.cc-drop-mark {
+  position: absolute; width: 5px; margin-left: -2.5px; border-radius: 3px;
+  background: #ffce3a; box-shadow: 0 0 0 1.5px rgba(22, 36, 58, 0.55);
 }
 /* Drag-to-discard affordance */
 .cc-card.is-over-discard { opacity: 0.85; }
