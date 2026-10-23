@@ -293,8 +293,9 @@ function segHTML(name, options, value) {
 
 // --- games --------------------------------------------------------------------------------------
 
-// Games whose admin row also carries a WHO CAN SEE IT picker (2026-09-24, the Course Creator).
-const ALLOW_PICKER = new Set(['course-creator']);
+// Games whose admin row also carries a WHO CAN SEE IT picker (2026-09-24, the Course Creator; Pool
+// 2026-10-23, Matt: "release this for Anita Bonita only. We're going to test play").
+const ALLOW_PICKER = new Set(['course-creator', 'eight-ball']);
 
 /** One row per PERSON with a player code, A-Z by name: {code, name, emoji}. */
 function codedPeople() {
