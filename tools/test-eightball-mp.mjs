@@ -202,7 +202,7 @@ const used = [...new Set((engineSrc.match(/Math\.[a-z0-9]+/gi) || []))].sort();
 ok('engine.js uses only cross-engine-safe Math (sqrt, imul, min, max, round, floor, ceil)', used.every((f) => ['Math.sqrt', 'Math.imul', 'Math.min', 'Math.max', 'Math.round', 'Math.floor', 'Math.ceil'].includes(f)), used.join(','));
 // Table versions (eight-ball/js/engine.js): a new challenge is stored on today's table; one stored
 // before tables had versions (no `tb`) replays on table 1, where it was played.
-ok('a new challenge records its table', (await MP.readGame(id1)).tb === 2);
+ok('a new challenge records its table', (await MP.readGame(id1)).tb === 3 && MP.termsOf({ tb: 2 }).tb === 2);
 ok('a stored match with no table replays on table 1', MP.termsOf({ mode: '8' }).tb === 1 && MP.freshMatch(MP.termsOf({ mode: '8' })).tb === 1);
 ok('the chat accepts a third side', /side !== 'c'/.test(readFileSync(new URL('js/match-chat.js', __ROOT_URL), 'utf8')));
 
