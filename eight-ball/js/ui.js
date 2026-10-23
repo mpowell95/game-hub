@@ -1546,17 +1546,32 @@ class PoolUI {
       this._paintMeter();
       return;
     }
-    this.drag = { id: e.pointerId, mode: 'aim' };
-    this._pointAt(lp);
+    this._aimDir();
+    this.drag = { id: e.pointerId, mode: 'aim', last: this._angleAt(lp) };
   }
 
-  /** The cue points from the cue ball at the finger (a finger on the ball itself changes nothing). */
-  _pointAt(lp) {
+  /** The finger's angle round the cue ball (null on the ball itself, where it means nothing). */
+  _angleAt(lp) {
     const c = this.match.b[CUE];
     const p = this.r.toTable(lp.x, lp.y);
-    const dx = p.x - c.x, dy = p.y - c.y, l = Math.sqrt(dx * dx + dy * dy);
-    if (l < R * 1.5) return;
-    this.aimDir = { dx: dx / l, dy: dy / l };
+    const dx = p.x - c.x, dy = p.y - c.y;
+    return dx * dx + dy * dy < R * R * 2.25 ? null : Math.atan2(dy, dx);
+  }
+
+  /** GamePigeon's aim (Matt's video, 2026-10-23: "you have to spin it around fully so you can drag
+   *  from either side"): a drag anywhere TURNS the cue round the cue ball by as much as the finger
+   *  turns round it, all the way round and from any side; a touch alone never moves it. */
+  _pointAt(lp) {
+    const d = this.drag, a = this._angleAt(lp);
+    if (a == null) return;
+    if (d.last == null) { d.last = a; return; }
+    let da = a - d.last;
+    if (da > Math.PI) da -= 2 * Math.PI; else if (da < -Math.PI) da += 2 * Math.PI;
+    d.last = a;
+    const { dx, dy } = this._aimDir();
+    const c = Math.cos(da), s = Math.sin(da);
+    const nx = dx * c - dy * s, ny = dx * s + dy * c, l = Math.sqrt(nx * nx + ny * ny) || 1;
+    this.aimDir = { dx: nx / l, dy: ny / l };
   }
 
   _pointerMove(e) {
