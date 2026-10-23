@@ -784,6 +784,9 @@ body {
   padding: 5px 14px;
   border-width: 2px; border-radius: 999px;
   box-shadow: 0 3px 0 #000;
+  /* block, not the bubble's flex: a flex box centres its text node and lets it spill past both
+     edges, so the ellipsis never shows (Matt's 2026-10-23 screenshot: "lattyIce's turn"). */
+  display: block; box-sizing: border-box; text-align: center;
   font-size: 14px; font-weight: 900; line-height: 1.2; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
   color: #111;
@@ -812,6 +815,8 @@ html.gh-compact:not(.gh-ingame) .hub-top-title { font-weight: 700; }
 @media (min-width: 385px) { html.gh-compact:not(.gh-ingame) .hub-top-title { font-size: 21px; } }
 html.gh-compact:not(.gh-ingame) .hub-main { padding: 0 16px calc(84px + env(safe-area-inset-bottom, 0px)); }
 html.gh-compact:not(.gh-ingame) .hub-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
+/* 3-across tiles are narrow: a smaller pill so "<name>'s turn!" fits a normal-length name. */
+html.gh-compact:not(.gh-ingame) .hub-alert.is-mini { max-width: calc(100% - 4px); padding: 4px 7px; font-size: 11px; }
 
 /* A tile: the art is the rounded box, the name sits under it in the page's own ink. */
 html.gh-compact .hub-card {
