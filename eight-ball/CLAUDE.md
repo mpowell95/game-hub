@@ -129,7 +129,9 @@ black pockets, coral and cyan groups).
 ## The screen
 
 - **GamePigeon's controls (2026-10-22, replacing the slingshot):** a touch or drag on the table
-  points the cue at the finger (each turn starts aimed at the nearest legal ball); the power is a
+  TURNS the cue round the cue ball by as much as the finger turns round it (2026-10-23, Matt's video
+  of GamePigeon: "spin it around fully so you can drag from either side"; a touch alone never moves
+  it; each turn starts aimed at the nearest legal ball); the power is a
   meter LEFT of the table (`.ep-meter`, 47% of its height): drag DOWN from anywhere on it, let go to
   shoot, drag back to the top to cancel. Dimmed when it is not your shot. The cue on the table
   draws back with the power. Hard still shows the cue (no lines).
