@@ -106,7 +106,15 @@ black pockets, coral and cyan groups).
     segments (`jawSegs`). **A ball drops only when its centre is over the black** (`rp` = `r`); one
     can hang in the darker mouth cloth. Measured catch width (scratch sweep, power 0.35): corners
     0.8-0.9 balls, sides 1.4 straight in, 0.4 at 60 degrees (tighter than table 1's real WPA
-    mouths). `test.js` pins tables 1 and 2 to their old fingerprints. Whole table on screen,
+    mouths).
+  - **Table 4 (2026-10-23, today's)**: table 3 with balls **25% bigger than GamePigeon's** (Anita, test
+    playing: "these balls are very very tiny"; Matt: "do both. Just get it right"): ball 52.5 px of
+    717 (7.3% of the cloth's width, ~13.7 across), holes still 2 balls, mouths and jaws scaled with
+    the ball, cushions/rails/cloth unchanged; the rack has GamePigeon's small gaps (`rackGap`, 6% of
+    a ball), obstacles kept further off it (`rackMid`, `rackKeep`). Catch width in balls is table
+    3's. (Measured both racks at one scale: GamePigeon's ball IS 5.9% of its cloth, its number circle
+    ~57% of the ball like ours; its loose rack made the balls look bigger.)
+  - `test.js` pins tables 1, 2 and 3 to their old fingerprints. Whole table on screen,
     `SIDE_K` 11.5% of the width free each side.
 - `DT` 1/240, `MAX_SPEED` 400 (the break x1.35 = 540, ~2.25 a step, under `R`): nothing tunnels.
 - Skid then roll: each ball carries `r` (the speed its spin would roll it at). A centre hit starts
