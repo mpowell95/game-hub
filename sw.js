@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1226;
-const CACHE = 'game-hub-v1226';
+const CACHE = 'game-hub-v1227';
 
 const ASSETS = [
   './',
@@ -904,14 +904,14 @@ const REST_MANIFEST = {
   './connect-four/js/strings.js': 'c75da9ca32',
   './connect-four/css/connect-four.css': '14251ccb03',
   './chinchon/index.html': '077ad16ca0',
-  './chinchon/css/chinchon.css': '6b230da17e',
+  './chinchon/css/chinchon.css': '73c68eb13e',
   './chinchon/js/deck.js': '2260c3f606',
   './chinchon/js/meld.js': '5166c4b913',
   './chinchon/js/cards.js': '8345ff44a9',
   './chinchon/js/game.js': 'ff23b6d017',
   './chinchon/js/hash.js': '9bbf5d8385',
   './chinchon/js/ai.js': 'd69864fbc2',
-  './chinchon/js/ui.js': '7343d50a8a',
+  './chinchon/js/ui.js': 'd60ed52fe5',
   './chinchon/js/mp.js': 'd5939c8d37',
   './chinchon/js/alert.js': '81226691f9',
   './chinchon/js/ch-ui.js': '9be86bf54a',

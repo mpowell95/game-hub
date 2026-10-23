@@ -55,6 +55,8 @@ const PACES = ['slow', 'normal', 'fast'];
 const PACE_MULT = { slow: 1.6, normal: 1, fast: 0.3 };
 // Card travel (2026-09-28): how long a card takes to fly, and the gap between dealt cards.
 const FLY_MS = 340, FLY_DEAL_GAP_MS = 45;
+// Hand cards glide to their new slot (draw, discard, sort, drag) instead of jumping (2026-10-23).
+const SLIDE_MS = 220, TURN_UP_MS = 160;
 const STORE_SETTINGS = 'chinchon-settings';
 const STORE_STATS = 'chinchon-stats';
 
@@ -910,6 +912,7 @@ class ChinchonUI {
     switch (type) {
       case 'roundStart': {
         this.activePlayerId = null; this._pending = null; this._selectedCardId = null; this._newCardId = null;
+        this._newFlown = false; this._dropFrom = null;
         // The new hands render hidden, then fly out of the stock (below).
         const dealing = this._flightsOn() ? new Set(this._human().hand.map((c) => c.id)) : null;
         this._arriving = dealing;
@@ -955,10 +958,10 @@ class ChinchonUI {
         if (!this.mp && !this.ch) this._soloSaveSnapshot();
         break;
       case 'draw': {
-        if (p && p.isHuman) this._newCardId = payload.card.id;
         // Card travel: where it comes from is read BEFORE the redraw (the discard's top
         // node is replaced by the render); where it lands, after.
         const from = this._drawSource(payload.source);
+        if (p && p.isHuman) { this._newCardId = payload.card.id; this._newFlown = !!from; }
         if (p && p.isHuman && from) this._arriving = new Set([payload.card.id]);
         try { this.render(); } finally { this._arriving = null; }
         const flown = from ? this._flyDraw(p, payload, from) : Promise.resolve();
@@ -969,6 +972,7 @@ class ChinchonUI {
       case 'discard': {
         if (p && p.isHuman) this._newCardId = null;
         const from = this._discardSource(p, payload.card);
+        this._dropFrom = null;
         this.render();
         const flown = from ? this._flyDiscard(payload.card, from) : Promise.resolve();
         if (this.mp) await this._mpAfterDecision(p, { t: 'discard', cardId: payload.card.id });
@@ -1107,7 +1111,10 @@ class ChinchonUI {
       const el = this.el.hand.querySelector(`.cc-card[data-drag="${payload.card.id}"]`);
       if (!el) return Promise.resolve();
       // From the stock it leaves as a back and turns face up as it lands.
-      return this._fly(from.node, from.rect, el.getBoundingClientRect()).then(() => { el.style.visibility = ''; });
+      return this._fly(from.node, from.rect, el.getBoundingClientRect()).then(() => {
+        el.style.visibility = '';
+        if (payload.source !== 'discard') this._turnUp(el);
+      });
     }
     // Into someone else's hand: a card taken off the discard was public, so it travels
     // face up; one from the stock travels face down.
@@ -1119,6 +1126,9 @@ class ChinchonUI {
   _discardSource(p, card) {
     if (!this._flightsOn()) return null;
     if (p && p.isHuman) {
+      // Dropped on the pile by drag: it leaves from where the finger let go, not from its
+      // old slot in the hand (it used to jump back to the hand first, then fly).
+      if (this._dropFrom && this._dropFrom.id === card.id) return { rect: this._dropFrom.rect };
       const el = this.el.hand.querySelector(`.cc-card[data-drag="${card.id}"]`);
       const rect = el && el.getBoundingClientRect();
       return rect && rect.width ? { rect } : null;
@@ -1234,14 +1244,76 @@ class ChinchonUI {
     if (this.ch && this.ch.replay) return;         // a challenge catching up draws once, at the end
     const nOpp = this.game.players.filter((p) => !p.isHuman).length;
     this.el.opponents.className = 'cc-opponents cc-opp-n' + nOpp;
-    this.el.opponents.innerHTML = this.renderOpponents();
+    this._setHTML(this.el.opponents, this.renderOpponents());
     this._syncPiles();
-    this.el.status.innerHTML = this.renderStatus();
-    this.el.self.innerHTML = this.renderSelf();
-    this.el.handbar.innerHTML = this.renderHandbar();
+    this._setHTML(this.el.status, this.renderStatus());
+    this._setHTML(this.el.self, this.renderSelf());
+    this._setHTML(this.el.handbar, this.renderHandbar());
+    const before = this._slideOn() ? this._handSlots() : null;
     this._syncHand();
-    this.el.actions.innerHTML = this.renderActions();
+    this._setHTML(this.el.actions, this.renderActions());
     this.fitToViewport();
+    if (before) this._slideHand(before);
+    else this._dragLand = null;
+  }
+
+  /** Rewrite a slot only when its markup changed. Rebuilding it on every render (each tap)
+   *  restarted the your-turn pulse on the name chips and redrew the buttons. */
+  _setHTML(el, html) {
+    if (el._ccHtml === html) return;
+    el._ccHtml = html;
+    el.innerHTML = html;
+  }
+
+  _slideOn() {
+    if (!this._flightsOn()) return false;
+    try { return !window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return true; }
+  }
+
+  /** Each hand card's layout slot (offsets ignore transforms, so lifts and running slides don't count). */
+  _handSlots() {
+    const m = new Map();
+    for (const el of this.el.hand.querySelectorAll('.cc-card[data-drag]')) m.set(el.dataset.drag, { x: el.offsetLeft, y: el.offsetTop });
+    return m;
+  }
+
+  /** FLIP: every card whose slot moved in this render glides there from where it was; a card
+   *  just dropped from a drag glides from where the finger let go of it. New cards (a draw,
+   *  the deal) arrive by flight instead, and hidden ones are skipped. */
+  _slideHand(before) {
+    const land = this._dragLand;
+    this._dragLand = null;
+    for (const el of this.el.hand.querySelectorAll('.cc-card[data-drag]')) {
+      if (el.style.visibility === 'hidden' || el.classList.contains('is-dragging')) continue;
+      const id = el.dataset.drag;
+      let dx, dy;
+      if (land && land.id === id) {
+        if (el._slide) { el._slide.cancel(); el._slide = null; }
+        const r = el.getBoundingClientRect();
+        dx = land.rect.left - r.left; dy = land.rect.top - r.top;
+      } else {
+        const b = before.get(id);
+        if (!b) continue;
+        dx = b.x - el.offsetLeft; dy = b.y - el.offsetTop;
+      }
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+      if (el._slide) el._slide.cancel();
+      const cs = getComputedStyle(el).transform;
+      const rest = cs && cs !== 'none' ? cs : '';
+      try {
+        el._slide = el.animate([{ transform: `translate(${dx}px,${dy}px) ${rest}` }, { transform: rest || 'none' }],
+          { duration: SLIDE_MS, easing: 'cubic-bezier(.25,.8,.35,1)' });
+        el._slide.onfinish = () => { el._slide = null; };
+      } catch { /* no WAAPI: the card simply sits in its slot */ }
+    }
+  }
+
+  /** A card drawn from the stock lands as a back, then turns face up in place. */
+  _turnUp(el) {
+    if (!this._slideOn() || !el.isConnected) return;
+    const cs = getComputedStyle(el).transform;
+    const rest = cs && cs !== 'none' ? cs : '';
+    try { el.animate([{ transform: `${rest} scaleX(0.05)` }, { transform: rest || 'none' }], { duration: TURN_UP_MS, easing: 'ease-out' }); } catch { /* fine without it */ }
   }
 
   renderOpponents() {
@@ -1412,8 +1484,10 @@ class ChinchonUI {
       if (!el) el = this._cardNode(c, { draggable: true });
       byId.delete(c.id);
       if (this._arriving && this._arriving.has(c.id)) el.style.visibility = 'hidden';   // revealed when its flight lands
+      if (this._dropFrom && this._dropFrom.id === c.id) el.style.visibility = 'hidden'; // its flight to the pile is next
       el.classList.toggle('is-selected', c.id === this._selectedCardId);
       el.classList.toggle('is-new', c.id === this._newCardId);
+      el.classList.toggle('is-flown', c.id === this._newCardId && !!this._newFlown);
       for (const mc of MELD_CLASSES) el.classList.remove(mc);
       const inSet = !!(colorOf && colorOf.has(c.id));
       if (inSet) {
@@ -1509,6 +1583,7 @@ class ChinchonUI {
     const cardEl = e.target.closest('.cc-card[data-drag]');
     if (!cardEl || !this.el.hand.contains(cardEl)) return;
     this._justDragged = false;
+    if (cardEl._slide) { cardEl._slide.cancel(); cardEl._slide = null; }   // a running slide would override the drag's transform
     this._drag = { id: cardEl.dataset.drag, el: cardEl, x0: e.clientX, y0: e.clientY, moved: false, targetIndex: -1 };
     document.addEventListener('pointermove', this._onPointerMove, { passive: false });
     document.addEventListener('pointerup', this._onPointerUp);
@@ -1522,10 +1597,13 @@ class ChinchonUI {
     if (!d.moved) {
       if (Math.hypot(dx, dy) < 8) return;   // still a tap, not a drag
       d.moved = true;
+      // Keep the lift a selected card already has, so grabbing it doesn't drop it 1.2em.
+      const cs = getComputedStyle(d.el).transform;
+      d.base = cs && cs !== 'none' ? cs : '';
       d.el.classList.add('is-dragging');
     }
     e.preventDefault();
-    d.el.style.transform = `translate(${dx}px, ${dy}px) scale(1.04)`;
+    d.el.style.transform = `translate(${dx}px, ${dy}px) ${d.base} scale(1.04)`;
     const over = this._canDropDiscard() && this._overDiscard(e.clientX, e.clientY);
     if (over !== d.overDiscard) {
       d.overDiscard = over;
@@ -1534,6 +1612,7 @@ class ChinchonUI {
     }
     d.targetIndex = over ? -1 : this._dropIndex(e.clientX, e.clientY, d.id);
     d.targetRow = over ? -1 : this._dropRow(e.clientY);
+    this._showDropMark(over ? null : d);
   }
 
   onPointerUp() {
@@ -1542,16 +1621,50 @@ class ChinchonUI {
     document.removeEventListener('pointermove', this._onPointerMove);
     document.removeEventListener('pointerup', this._onPointerUp);
     document.removeEventListener('pointercancel', this._onPointerUp);
+    this._showDropMark(null);
     if (!d) return;
+    // Where the card is on screen at the moment of release (it glides on from here).
+    const rect = d.moved ? d.el.getBoundingClientRect() : null;
     // Nodes persist across renders now, so drag styling must be cleared by hand.
     d.el.classList.remove('is-dragging', 'is-over-discard');
     d.el.style.transform = '';
     if (this._pilesEl) this._pilesEl.discard.classList.remove('is-droptarget');
     if (!d.moved) return;
     this._justDragged = true;        // swallow the click that follows a drag
-    if (d.overDiscard && this._canDropDiscard()) { this._resolvePending(d.id); return; }
+    if (d.overDiscard && this._canDropDiscard()) {
+      if (this._flightsOn()) this._dropFrom = { id: d.id, rect };
+      this._resolvePending(d.id);
+      return;
+    }
     this._applyDrop(d.id, d.targetIndex, d.targetRow);
+    this._dragLand = { id: d.id, rect };
     this.render();
+  }
+
+  /** The yellow bar showing where a dragged card will land: between its two neighbours in
+   *  the row it will join (the same order and row split _applyDrop will produce). */
+  _showDropMark(d) {
+    let mark = this._dropMark;
+    const hide = () => { if (mark) mark.hidden = true; };
+    if (!d || !d.moved || !this.el.flight) return hide();
+    const res = this._dropResult(d.id, d.targetIndex, d.targetRow);
+    const i = res.order.indexOf(d.id);
+    const rowOf = (k) => (res.brk != null && res.order.length > 4 && k >= res.brk ? 1 : 0);
+    const node = (k) => this.el.hand.querySelector(`.cc-card[data-drag="${res.order[k]}"]`);
+    const right = i + 1 < res.order.length && rowOf(i + 1) === rowOf(i) ? node(i + 1) : null;
+    const left = i > 0 && rowOf(i - 1) === rowOf(i) ? node(i - 1) : null;
+    const ref = right || left;
+    if (!ref) return hide();
+    const r = ref.getBoundingClientRect();
+    const box = this.el.flight.getBoundingClientRect();
+    if (!mark) {
+      mark = this._dropMark = document.createElement('div');
+      mark.className = 'cc-drop-mark';
+      this.el.flight.appendChild(mark);
+    }
+    const x = right ? r.left : r.right;
+    Object.assign(mark.style, { left: `${x - box.left}px`, top: `${r.top - box.top}px`, height: `${r.height}px` });
+    mark.hidden = false;
   }
 
   /** Dropping on the discard is only a discard while the engine awaits one. */
@@ -1593,15 +1706,23 @@ class ChinchonUI {
    *  instead of the old fixed "always 4 on the bottom" split silently
    *  overriding wherever the player actually dropped it. */
   _applyDrop(id, idx, row) {
+    const res = this._dropResult(id, idx, row);
+    this._manualOrder = res.order;
+    this._handBreak = res.brk;
+  }
+
+  /** What a drop would produce, without applying it: the new order and top-row count. */
+  _dropResult(id, idx, row) {
     const without = this._displayOrder.filter((x) => x !== id);
     const clamped = Math.max(0, Math.min(idx, without.length));
     without.splice(clamped, 0, id);
-    this._manualOrder = without;
-    if (row != null && row !== -1 && this._handBreak != null && without.length > 4) {
+    let brk = this._handBreak;
+    if (row != null && row !== -1 && brk != null && without.length > 4) {
       const finalIdx = without.indexOf(id);
-      if (row === 0 && finalIdx >= this._handBreak) this._handBreak = finalIdx + 1;
-      else if (row === 1 && finalIdx < this._handBreak) this._handBreak = finalIdx;
+      if (row === 0 && finalIdx >= brk) brk = finalIdx + 1;
+      else if (row === 1 && finalIdx < brk) brk = finalIdx;
     }
+    return { order: without, brk };
   }
 
   // --- modals ---------------------------------------------------------------
