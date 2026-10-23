@@ -34,6 +34,7 @@ const SUITES = [
   { file: 'nuts-bolts/js/test.js' },
   { file: 'sudoku/js/test.js' },
   { file: 'murdoku/js/test.js' },
+  { file: 'spelling-bee/js/test.js' },
   { file: 'gridlock/js/test.js' },
   { file: 'test-gridlock.mjs' },
   { file: 'darts/js/test.js' },

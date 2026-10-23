@@ -86,6 +86,9 @@ const TABS = [
   // Cup Baseball (2026-10-23, cup-baseball/): admin only at first, NOT devOnly here (Darts' reasoning
   // above). total/byDiff only, so the generic screen draws it.
   { id: 'cupbaseball', labelKey: 'game_title_cupbaseball' },
+  // Spelling Bee (2026-10-23, spelling-bee/): admin only at first, NOT devOnly here (Darts' reasoning
+  // above). total/byDiff only (a win = a puzzle taken to Genius), so the generic screen draws it.
+  { id: 'spellingbee', labelKey: 'game_title_spellingbee' },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
@@ -106,7 +109,7 @@ const HUB_ID = {
   dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
   wayout: 'way-out', flicksoccer: 'flick-soccer', eightball: 'eight-ball',
-  cupbaseball: 'cup-baseball',
+  cupbaseball: 'cup-baseball', spellingbee: 'spelling-bee',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
 const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };

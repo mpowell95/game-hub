@@ -50,6 +50,7 @@ const DICTS = [
   { name: 'archery/js/strings.js', path: './archery/js/strings.js' },
   { name: 'eight-ball/js/strings.js', path: './eight-ball/js/strings.js' },
   { name: 'cup-baseball/js/strings.js', path: './cup-baseball/js/strings.js' },
+  { name: 'spelling-bee/js/strings.js', path: './spelling-bee/js/strings.js' },
 ];
 
 const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;

@@ -212,6 +212,9 @@ const GAME_META = [
   // Cup Baseball (2026-10-23, cup-baseball/): admin only at first; the row ships with the game (the
   // Yahtzee lesson above). isGameOnLauncher keeps its board hidden until Matt releases it.
   { id: 'cupbaseball', labelKey: 'game_title_cupbaseball' },
+  // Spelling Bee (2026-10-23, spelling-bee/): admin only at first; the row ships with the game (the
+  // Yahtzee lesson above). isGameOnLauncher keeps its board hidden until Matt releases it.
+  { id: 'spellingbee', labelKey: 'game_title_spellingbee' },
   // Golf is solo (js/players-agg.js's SOLO set) and ranks by lifetime points, same shape as
   // Skeeball - see golfPointsAt below. The row exists from Part 7 even though the one
   // course starts admin-gated to 'testing' (js/admin-config.js): the row costs nothing while nobody but the dev profile can play, and a row added later (after
