@@ -45,6 +45,10 @@ const METER_GAP = 0;
 const METER_TRAVEL = 0.8;
 const SIDE_K = 0.115;
 const SIDE_MIN = 44;
+/** The aim drag (ui.js _pointAt): finger wobble ignored before it counts, and the nearest a finger
+ *  counts as being to the cue ball when turning the cue (closer still does not turn it faster). */
+const AIM_DEAD_PX = 8;
+const AIM_NEAR_PX = 90;
 /** The match's table (engine.js, TABLE VERSIONS); the setup screen shows today's. */
 const tbOf = (m) => (m ? tableOf(m) : TABLE_NOW);
 /** The weakest shot that counts; anything less is a cancelled aim. */
@@ -1547,30 +1551,31 @@ class PoolUI {
       return;
     }
     this._aimDir();
-    this.drag = { id: e.pointerId, mode: 'aim', last: this._angleAt(lp) };
-  }
-
-  /** The finger's angle round the cue ball (null on the ball itself, where it means nothing). */
-  _angleAt(lp) {
-    const c = this.match.b[CUE];
-    const p = this.r.toTable(lp.x, lp.y);
-    const dx = p.x - c.x, dy = p.y - c.y;
-    return dx * dx + dy * dy < R * R * 2.25 ? null : Math.atan2(dy, dx);
+    this.drag = { id: e.pointerId, mode: 'aim', x0: lp.x, y0: lp.y, lx: lp.x, ly: lp.y, live: false };
   }
 
   /** GamePigeon's aim (Matt's video, 2026-10-23: "you have to spin it around fully so you can drag
-   *  from either side"): a drag anywhere TURNS the cue round the cue ball by as much as the finger
-   *  turns round it, all the way round and from any side; a touch alone never moves it. */
+   *  from either side"): a drag anywhere TURNS the cue round the cue ball, never points it at the
+   *  finger. A touch alone never moves it (`AIM_DEAD_PX` of wobble is ignored, Matt: "it's jumping
+   *  all over the place when I tap"). The turn is the finger's movement ACROSS the line to the cue
+   *  ball over its distance from it, but never over less than `AIM_NEAR_PX`: far off, the cue
+   *  follows the finger round; close to the ball, a small move is a small turn. */
   _pointAt(lp) {
-    const d = this.drag, a = this._angleAt(lp);
-    if (a == null) return;
-    if (d.last == null) { d.last = a; return; }
-    let da = a - d.last;
-    if (da > Math.PI) da -= 2 * Math.PI; else if (da < -Math.PI) da += 2 * Math.PI;
-    d.last = a;
+    const d = this.drag;
+    if (!d.live) {
+      if ((lp.x - d.x0) ** 2 + (lp.y - d.y0) ** 2 < AIM_DEAD_PX * AIM_DEAD_PX) return;
+      d.live = true;
+    }
+    const c = this.r.toPx(this.match.b[CUE].x, this.match.b[CUE].y);
+    const rx = d.lx - c.x, ry = d.ly - c.y, rl = Math.sqrt(rx * rx + ry * ry);
+    const mx = lp.x - d.lx, my = lp.y - d.ly;
+    d.lx = lp.x; d.ly = lp.y;
+    if (rl < 1) return;
+    const da = (rx * my - ry * mx) / (rl * Math.max(rl, AIM_NEAR_PX));   // + = clockwise on screen
+    if (!da) return;
     const { dx, dy } = this._aimDir();
-    const c = Math.cos(da), s = Math.sin(da);
-    const nx = dx * c - dy * s, ny = dx * s + dy * c, l = Math.sqrt(nx * nx + ny * ny) || 1;
+    const cs = Math.cos(da), sn = Math.sin(da);
+    const nx = dx * cs - dy * sn, ny = dx * sn + dy * cs, l = Math.sqrt(nx * nx + ny * ny) || 1;
     this.aimDir = { dx: nx / l, dy: ny / l };
   }
 
