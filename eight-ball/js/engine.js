@@ -27,7 +27,7 @@ export const H = 200;
  * `useTable(tb)` points the live bindings below at one of them; every function here that takes a
  * match does it first, and so must anything that steps balls or draws them.
  */
-export const TABLE_NOW = 3;
+export const TABLE_NOW = 4;
 const T1 = (() => {
   const R = 2.8, G = 8.1, S = 6.2, HOLE = 5.4;
   return {
@@ -87,8 +87,33 @@ const T3 = (() => {
     ],
   };
 })();
-const TABLES = { 1: T1, 2: T2, 3: T3 };
-export const tableOf = (m) => (m && TABLES[m.tb] && m.tb !== 1 ? m.tb : 1);
+/** Table 4 (2026-10-23): table 3 with balls 25% BIGGER than GamePigeon's (Anita, test playing it:
+ *  "but these balls are very very tiny"; Matt: "do both. Just get it right"). Everything round a
+ *  pocket grows with the ball (holes still 2 balls, mouths and jaws in the same proportion to it);
+ *  the cushions, the rails and the cloth stay GamePigeon's. The rack has GamePigeon's small gaps
+ *  (2.5 px of 42 between balls, `rackGap`). */
+const T4 = (() => {
+  const px = W / 717, k = 1.25;
+  const R = 21 * px * k, HOLE = 2 * R, C = 30 * px;
+  const G = 47 * px * k, S = 45 * px * k, GB = 30 * px * k, SB = 39 * px * k;
+  const CO = -21.5 * px * k, SO = -42.5 * px * k;
+  return {
+    R, G, S, GB, SB, jaws: true, padPlace: 0.3, cushion: C, wood: 77 * px, woodOff: false, rackGap: 0.06 * 2 * R,
+    rackMid: 13, rackKeep: 34,   // the bigger rack: obstacles kept further off it
+    pockets: [
+      { cx: CO, cy: CO, r: HOLE, rp: HOLE, ax: 1.5, ay: 1.5 },
+      { cx: W - CO, cy: CO, r: HOLE, rp: HOLE, ax: W - 1.5, ay: 1.5 },
+      { cx: SO, cy: H / 2, r: HOLE, rp: HOLE, ax: -0.75, ay: H / 2 },
+      { cx: W - SO, cy: H / 2, r: HOLE, rp: HOLE, ax: W + 0.75, ay: H / 2 },
+      { cx: CO, cy: H - CO, r: HOLE, rp: HOLE, ax: 1.5, ay: H - 1.5 },
+      { cx: W - CO, cy: H - CO, r: HOLE, rp: HOLE, ax: W - 1.5, ay: H - 1.5 },
+    ],
+  };
+})();
+const TABLES = { 1: T1, 2: T2, 3: T3, 4: T4 };
+/** A known table id, or null. */
+const knownTable = (tb) => (tb === 1 || tb === 2 || tb === 3 || tb === 4 ? tb : null);
+export const tableOf = (m) => (m && knownTable(m.tb)) || 1;
 
 /** The live table: the ball's radius; a corner pocket's jaws sit CORNER_G along each rail from the
  *  corner, a side pocket's SIDE_S either side of the middle (a ball whose CENTRE crosses the line
@@ -104,7 +129,7 @@ export let SEGS = [];
 export let POCKETS = T1.pockets;
 let G = T1.G, S = T1.S;
 export function useTable(tb) {
-  const id = tb === 2 || tb === 3 ? tb : 1;
+  const id = knownTable(tb) || 1;
   if (id === TB) return;
   TB = id;
   TABLE = TABLES[id];
@@ -225,7 +250,7 @@ const shuffle = (list, rnd) => { for (let k = list.length - 1; k > 0; k--) { con
  *  Cutthroat: the 1 at the front, the 6 and the 11 in the back corners. */
 export function rackBalls(mode, seed) {
   const rnd = rng32(seed);
-  const dx = 2 * R + 0.02, dy = dx * Math.sqrt(3) / 2;
+  const dx = 2 * R + (TABLE.rackGap || 0.02), dy = dx * Math.sqrt(3) / 2;
   const b = new Array(ballCount(mode));
   b[CUE] = ball(HEAD_SPOT[0], HEAD_SPOT[1]);
   if (mode === '9') {
@@ -268,12 +293,12 @@ export function makeObstacles(seed) {
   const rnd = rng32(nextSeed(seed ^ 0x5bd1e995));
   const out = [];
   const far = (x, y, d, list) => list.every((p) => (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y) >= d * d);
-  const keepOff = [{ x: W / 2, y: FOOT_Y - 10 }, { x: HEAD_SPOT[0], y: HEAD_SPOT[1] }, ...POCKETS.map((p) => ({ x: p.cx, y: p.cy }))];
+  const keepOff = [{ x: W / 2, y: FOOT_Y - (TABLE.rackMid || 10) }, { x: HEAD_SPOT[0], y: HEAD_SPOT[1] }, ...POCKETS.map((p) => ({ x: p.cx, y: p.cy }))];
   const want = ['spill', OBSTACLE_KINDS[rnd() % 3], OBSTACLE_KINDS[rnd() % 3]];
   for (const k of want) {
     for (let tries = 0; tries < 200; tries++) {
       const x = 12 + (rnd() % 7601) / 100, y = 16 + (rnd() % 16801) / 100;
-      if (!far(x, y, 26, keepOff.slice(0, 1)) || !far(x, y, 15, keepOff.slice(1)) || !far(x, y, 17, out)) continue;
+      if (!far(x, y, TABLE.rackKeep || 26, keepOff.slice(0, 1)) || !far(x, y, 15, keepOff.slice(1)) || !far(x, y, 17, out)) continue;
       if (k === 'spill') out.push({ k, x, y, r: 7.5 });
       else if (k === 'can') out.push({ k, x, y, r: 3.4 });
       else {
@@ -299,7 +324,7 @@ const solidObs = (obs) => (obs || []).filter((o) => o.k !== 'spill');
 /** A new match. `mode` '8' | '9' | 'ct'; first to `racks`; `breaker` breaks the first rack; `seed`
  *  shuffles it; `opts` { call: every shot is called, bank: only banked pots count, obst: obstacles }. */
 export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}, tb = TABLE_NOW) {
-  const tbl = tb === 1 || tb === 2 ? tb : 3;
+  const tbl = knownTable(tb) || TABLE_NOW;
   useTable(tbl);
   const md = MODES.includes(mode) ? mode : '8';
   const n = seatsOf(md);
@@ -332,7 +357,7 @@ export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}
 
 /** A saved match is only trusted if it has the shape this engine writes, at rest. */
 export function validMatch(m) {
-  if (!m || m.v !== 2 || (m.tb != null && m.tb !== 1 && m.tb !== 2 && m.tb !== 3) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
+  if (!m || m.v !== 2 || (m.tb != null && !knownTable(m.tb)) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
   if (!Array.isArray(m.b) || m.b.length !== ballCount(m.mode)) return false;
   if (!RACK_OPTIONS.includes(m.racks) || !Array.isArray(m.scores) || m.scores.length !== m.n) return false;
   if (!Number.isInteger(m.turn) || m.turn < 0 || m.turn >= m.n) return false;

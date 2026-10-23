@@ -240,10 +240,28 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
     let h2 = 2166136261; for (let i = 0; i < str2.length; i++) h2 = Math.imul(h2 ^ str2.charCodeAt(i), 16777619) >>> 0;
     ok('a table-2 match replays bit for bit as before table 3', h2 === 4190022641, h2);
   }
-  ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 3);
+  {
+    // ...and table 3 as it played before table 4 (fingerprint from commit 262f42c).
+    const m3 = E.newMatch('8', 1, 0, 77, { obst: true }, 3);
+    let s3 = 99;
+    const rnd3 = () => (s3 = (Math.imul(s3, 1103515245) + 12345) >>> 0) / 4294967296;
+    for (let k = 0; k < 30 && m3.winner == null; k++) {
+      const dx = rnd3() * 2 - 1, dy = rnd3() * 2 - 1, l = Math.sqrt(dx * dx + dy * dy);
+      const shot = { dx: Math.round(dx / l * 1e6) / 1e6, dy: Math.round(dy / l * 1e6) / 1e6, p: Math.round(rnd3() * 1e4) / 1e4, s: 0, c: 0 };
+      if (m3.inHand) { const p = E.nearestPlace(m3, 50, 170, m3.inHand === 'kitchen'); shot.x = p.x; shot.y = p.y; }
+      const r = E.play(m3, shot); if (r && r.kind === 'rack') E.nextRack(m3);
+    }
+    const str3 = JSON.stringify(m3.b.map((o) => [o.x, o.y, o.on])) + m3.turn + m3.scores;
+    let h3 = 2166136261; for (let i = 0; i < str3.length; i++) h3 = Math.imul(h3 ^ str3.charCodeAt(i), 16777619) >>> 0;
+    ok('a table-3 match replays bit for bit as before table 4', h3 === 207941596, h3);
+  }
+  ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 4);
   ok('a saved match with no table reads as table 1', E.tableOf({}) === 1 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 1), tb: undefined }));
   E.useTable(2);
   ok('table 2 is kept as it was: a ball of 41 px on 717 px of cloth', Math.abs(E.R * 2 - 41 * 100 / 717) < 1e-9);
+  E.useTable(3);
+  E.useTable(4);
+  ok('table 4: balls 25% bigger than GamePigeon\'s, holes still 2 balls, drop only over the black', Math.abs(E.R * 2 - 1.25 * 42 * 100 / 717) < 1e-9 && E.POCKETS.every((p) => p.rp === p.r && Math.abs(p.r - 2 * E.R) < 1e-9));
   E.useTable(3);
   ok('table 3: a ball of 42 px, holes of 84 px, a ball drops only over the black', Math.abs(E.R * 2 - 42 * 100 / 717) < 1e-9 && E.POCKETS.every((p) => p.rp === p.r && Math.abs(p.r - 2 * E.R) < 1e-9));
 }
