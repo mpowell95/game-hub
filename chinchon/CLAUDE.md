@@ -61,8 +61,8 @@ chinchon/decks/<id>/  per-deck card-face images (WebP: <suit>-<rank>, back) + CR
 - **Each card keeps its row until the player drags it** (2026-10-23, Matt: "cards shouldn't move between
   the upper and lower levels unless i move them"): `_topIds` holds the TOP row's ids; `_handBreak` is
   derived from it. It was a COUNT, so a top-row discard pulled a bottom card up and a draw into a sorted
-  hand re-sorted across the split. A drawn card joins the shorter row (bottom on a tie), in sorted place
-  if that row is in order, else at its end. Fresh deal or sort button = sorted, 3 top / 4 bottom; a row may
+  hand re-sorted across the split. A drawn card ALWAYS goes on the right end of the bottom row (Matt,
+  same day). Fresh deal or sort button = sorted, 3 top / 4 bottom; a row may
   hold 0-8. `--cc-hand-overlap` is computed per render when a row exceeds 4. A `PHONE_WIDTH_MAX` (699)
   guard keeps a wide desktop out of the row-fit logic.
 - **Highlight-sets groups, it does not paint**: each melded card lifts (`translateY`, no layout shift)

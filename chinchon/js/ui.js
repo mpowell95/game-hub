@@ -1428,8 +1428,8 @@ class ChinchonUI {
    *  (2026-10-23, Matt: "cards shouldn't move between the upper and lower levels unless i move
    *  them"). The row split used to be a COUNT, so a discard from the top row pulled a bottom card
    *  up, and a draw into a sorted hand re-sorted every card across the split. A fresh hand (new
-   *  round, sort button) is sorted and split 3 top / 4 bottom; a drawn card joins the shorter
-   *  row (bottom on a tie), in sorted place if that row is still in sort order, else at its end. */
+   *  round, sort button) is sorted and split 3 top / 4 bottom; a drawn card goes on the right end
+   *  of the bottom row. */
   _computeHandOrder(hand) {
     const byId = new Map(hand.map((c) => [c.id, c]));
     if (!this._manualOrder || !this._topIds) {
@@ -1440,21 +1440,16 @@ class ChinchonUI {
     const top = [], bottom = [];
     for (const id of this._manualOrder) if (byId.has(id)) (this._topIds.has(id) ? top : bottom).push(id);
     const placed = new Set(top.concat(bottom));
-    for (const c of hand) if (!placed.has(c.id)) this._placeNew(c, top, bottom, byId);
+    for (const c of hand) if (!placed.has(c.id)) this._placeNew(c, top, bottom);
     for (const id of [...this._topIds]) if (!byId.has(id)) this._topIds.delete(id);
     this._manualOrder = top.concat(bottom);
     this._handBreak = top.length;
     return this._manualOrder.map((id) => byId.get(id));
   }
 
-  _placeNew(card, top, bottom, byId) {
-    const intoTop = top.length < bottom.length;
-    const row = intoTop ? top : bottom;
-    if (intoTop) this._topIds.add(card.id);
-    const cards = row.map((id) => byId.get(id));
-    const inOrder = sortHand(cards, this._sortMode).every((c, i) => c === cards[i]);
-    const at = inOrder ? sortHand(cards.concat(card), this._sortMode).indexOf(card) : row.length;
-    row.splice(at, 0, card.id);
+  /** A drawn card always goes on the right end of the bottom row (Matt, 2026-10-23). */
+  _placeNew(card, top, bottom) {
+    bottom.push(card.id);
   }
 
   /** Build one detached card element from cardFaceHTML (null -> empty slot). */
