@@ -90,13 +90,19 @@ black pockets, coral and cyan groups).
   - **Table 1** (the first): a 7-foot bar table, `R` 2.8, real WPA mouths (corner 2.05 balls, side
     2.2), holes `HOLE` 5.4 centred on the cloth's corners; a ball drops when its centre is over the
     hole or past the jaw line.
-  - **Table 2 = GamePigeon's, measured off Matt's screenshot** (Matt: "measure the game pigeon
-    board and holes and balls and copy it"): cloth 717 x 1444 px, ball 41, cushion 30, wood 77,
-    holes 84 across (2 balls), corner hole centres 21.5 px out past the cloth corner, side holes
-    touching the cushion line, cushion noses ending 21 / 16 px from the pocket. Its jaws are
-    narrower than a ball, so a ball drops a little before its edge is over the black (`rp`: +2.8
-    corners, +1.0 sides), tuned so the catch width matches table 1 (corners 1.3-1.6 balls, sides
-    1.45 straight in). Whole table on screen, `SIDE_K` 11.5% of the width free each side.
+  - **Table 2** (live 2026-10-22 evening only, kept for matches started on it): a first measure
+    of GamePigeon's that read the cushions' back edge as their end; its jaws were narrower than a
+    ball, so a ball dropped before reaching the black (`rp` +2.8 corners, +1.0 sides). Matt: "make
+    sure the invisible hole of the pocket matches the visual and that it doesn't suck balls in".
+  - **Table 3 = GamePigeon's, measured at full size (2026-10-23)**: cloth 717 x 1444 px, ball 42,
+    holes 84 (exactly 2 balls), cushion 30, wood 77; corner hole centres 21.5 px out past the cloth
+    corner, side holes touching the cushion line; cushion noses end 47 px from a corner and 45 px
+    either side of a side pocket, their backs 30 / 39 px, with the angled jaws between them as
+    segments (`jawSegs`). **A ball drops only when its centre is over the black** (`rp` = `r`); one
+    can hang in the darker mouth cloth. Measured catch width (scratch sweep, power 0.35): corners
+    0.8-0.9 balls, sides 1.4 straight in, 0.4 at 60 degrees (tighter than table 1's real WPA
+    mouths). `test.js` pins tables 1 and 2 to their old fingerprints. Whole table on screen,
+    `SIDE_K` 11.5% of the width free each side.
 - `DT` 1/240, `MAX_SPEED` 400 (the break x1.35 = 540, ~2.25 a step, under `R`): nothing tunnels.
 - Skid then roll: each ball carries `r` (the speed its spin would roll it at). A centre hit starts
   with no roll and the cloth turns skid into roll (5/7 rule); collisions swap only `v`, so the cue
@@ -135,7 +141,13 @@ black pockets, coral and cyan groups).
   how many you have left"): one card per player; row one face, name, a white chip SOLIDS /
   STRIPES / THE 8 (hidden with three players: the numbers say it); row two that player's balls,
   potted ones faded and TICKED, the 8 after a divider. 9-ball: one shared row 1-9 under the cards,
-  the next ball ringed and bigger. Surround = turn colour (salmon, sky, mint).
+  the next ball ringed and bigger. Surround = GamePigeon's soft grey (2026-10-23; was the turn
+  colour), dark grey in dark mode; whose turn it is shows on the scoreboard.
+- **The table's look (2026-10-23, Matt: "copy this one exactly... add texture to the felt")**:
+  `render.js` `tableLayer`, GamePigeon's colours (`TABLE_ART`): grained mahogany rails, cream stone
+  caps, cushions shaded across their width, felt with pixel grain and darker edges, darker cloth in
+  each mouth, shadow under the table; balls lit from the top left with a soft shadow. Every table
+  version is drawn this way.
 - Spin pad (top / back), FOUL / OUT / "X wins the rack" banners. Names are profile names (pass and
   play: "Player 2", "Player 3"; the computers: the profile's first two opponents). No sound.
 

@@ -27,7 +27,7 @@ export const H = 200;
  * `useTable(tb)` points the live bindings below at one of them; every function here that takes a
  * match does it first, and so must anything that steps balls or draws them.
  */
-export const TABLE_NOW = 2;
+export const TABLE_NOW = 3;
 const T1 = (() => {
   const R = 2.8, G = 8.1, S = 6.2, HOLE = 5.4;
   return {
@@ -64,8 +64,31 @@ const T2 = (() => {
     ],
   };
 })();
-const TABLES = { 1: T1, 2: T2 };
-export const tableOf = (m) => (m && m.tb === 2 ? 2 : 1);
+/** Table 3 = GamePigeon's, measured again at full size (Matt, 2026-10-23: "are you sure the balls
+ *  are the same size? ... make sure the invisible hole of the pocket matches the visual and that
+ *  it doesn't suck balls in"). Table 2 read the cushion's BACK edge as its end; the noses stop much
+ *  further out (47 px from a corner, 45 px either side of a side pocket), with angled jaws behind
+ *  them, so a ball fits between them and drops only when its centre is over the black. Ball 42 px. */
+const T3 = (() => {
+  const px = W / 717;
+  const R = 21 * px, HOLE = 42 * px, C = 30 * px;
+  const G = 47 * px, S = 45 * px;             // where the cushions' noses end
+  const GB = 30 * px, SB = 39 * px;           // ...and their backs (the jaws run between)
+  const CO = -21.5 * px, SO = -42.5 * px;
+  return {
+    R, G, S, GB, SB, jaws: true, padPlace: 0.3, cushion: C, wood: 77 * px, woodOff: false,
+    pockets: [
+      { cx: CO, cy: CO, r: HOLE, rp: HOLE, ax: 1.2, ay: 1.2 },
+      { cx: W - CO, cy: CO, r: HOLE, rp: HOLE, ax: W - 1.2, ay: 1.2 },
+      { cx: SO, cy: H / 2, r: HOLE, rp: HOLE, ax: -0.6, ay: H / 2 },
+      { cx: W - SO, cy: H / 2, r: HOLE, rp: HOLE, ax: W + 0.6, ay: H / 2 },
+      { cx: CO, cy: H - CO, r: HOLE, rp: HOLE, ax: 1.2, ay: H - 1.2 },
+      { cx: W - CO, cy: H - CO, r: HOLE, rp: HOLE, ax: W - 1.2, ay: H - 1.2 },
+    ],
+  };
+})();
+const TABLES = { 1: T1, 2: T2, 3: T3 };
+export const tableOf = (m) => (m && TABLES[m.tb] && m.tb !== 1 ? m.tb : 1);
 
 /** The live table: the ball's radius; a corner pocket's jaws sit CORNER_G along each rail from the
  *  corner, a side pocket's SIDE_S either side of the middle (a ball whose CENTRE crosses the line
@@ -81,7 +104,7 @@ export let SEGS = [];
 export let POCKETS = T1.pockets;
 let G = T1.G, S = T1.S;
 export function useTable(tb) {
-  const id = tb === 2 ? 2 : 1;
+  const id = tb === 2 || tb === 3 ? tb : 1;
   if (id === TB) return;
   TB = id;
   TABLE = TABLES[id];
@@ -90,7 +113,20 @@ export function useTable(tb) {
     [G, 0, W - G, 0], [G, H, W - G, H],
     [0, G, 0, H / 2 - S], [0, H / 2 + S, 0, H - G],
     [W, G, W, H / 2 - S], [W, H / 2 + S, W, H - G],
+    ...(TABLE.jaws ? jawSegs(TABLE) : []),
   ].map(([ax, ay, bx, by]) => ({ ax, ay, bx, by }));
+}
+/** The pocket jaws (table 3): from each cushion's nose end back to its back end. */
+function jawSegs(T) {
+  const C = T.cushion, out = [];
+  for (const [sx, cx] of [[1, 0], [-1, W]]) {
+    for (const [sy, cy] of [[1, 0], [-1, H]]) {
+      out.push([cx + sx * T.G, cy, cx + sx * T.GB, cy - sy * C]);
+      out.push([cx, cy + sy * T.G, cx - sx * C, cy + sy * T.GB]);
+    }
+    for (const sy of [1, -1]) out.push([cx, H / 2 - sy * T.S, cx - sx * C, H / 2 - sy * T.SB]);
+  }
+  return out;
 }
 useTable(1);
 
@@ -137,6 +173,15 @@ export function pocketOf(x, y) {
   for (let k = 0; k < POCKETS.length; k++) {
     const p = POCKETS[k], dx = x - p.cx, dy = y - p.cy;
     if (dx * dx + dy * dy < p.rp * p.rp) return k;
+  }
+  if (TABLE.jaws) {
+    // Table 3: only the black is in. A ball that somehow got behind the cushions goes down the
+    // nearest pocket rather than off the table.
+    const C = TABLE.cushion;
+    if (x > -C && x < W + C && y > -C && y < H + C) return -1;
+    let best = 0, bd = Infinity;
+    for (let k = 0; k < POCKETS.length; k++) { const p = POCKETS[k], d = (x - p.cx) * (x - p.cx) + (y - p.cy) * (y - p.cy); if (d < bd) { bd = d; best = k; } }
+    return best;
   }
   if (x + y < G) return 0;
   if (W - x + y < G) return 1;
@@ -254,7 +299,7 @@ const solidObs = (obs) => (obs || []).filter((o) => o.k !== 'spill');
 /** A new match. `mode` '8' | '9' | 'ct'; first to `racks`; `breaker` breaks the first rack; `seed`
  *  shuffles it; `opts` { call: every shot is called, bank: only banked pots count, obst: obstacles }. */
 export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}, tb = TABLE_NOW) {
-  const tbl = tb === 1 ? 1 : 2;
+  const tbl = tb === 1 || tb === 2 ? tb : 3;
   useTable(tbl);
   const md = MODES.includes(mode) ? mode : '8';
   const n = seatsOf(md);
@@ -287,7 +332,7 @@ export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}
 
 /** A saved match is only trusted if it has the shape this engine writes, at rest. */
 export function validMatch(m) {
-  if (!m || m.v !== 2 || (m.tb != null && m.tb !== 1 && m.tb !== 2) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
+  if (!m || m.v !== 2 || (m.tb != null && m.tb !== 1 && m.tb !== 2 && m.tb !== 3) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
   if (!Array.isArray(m.b) || m.b.length !== ballCount(m.mode)) return false;
   if (!RACK_OPTIONS.includes(m.racks) || !Array.isArray(m.scores) || m.scores.length !== m.n) return false;
   if (!Number.isInteger(m.turn) || m.turn < 0 || m.turn >= m.n) return false;
@@ -729,6 +774,15 @@ function relax(b) {
     }
     for (const o of b) {
       if (!o.on) continue;
+      if (TABLE.jaws) {
+        // Table 3: pushed back off a cushion only along its straight run, never inside a mouth.
+        const runY = o.y > G && o.y < H - G && (o.y < H / 2 - S || o.y > H / 2 + S), runX = o.x > G && o.x < W - G;
+        if (runY && o.x < R) o.x = R;
+        if (runY && o.x > W - R) o.x = W - R;
+        if (runX && o.y < R) o.y = R;
+        if (runX && o.y > H - R) o.y = H - R;
+        continue;
+      }
       if (o.x < R && pocketOf(o.x, o.y) < 0 && (o.y < H / 2 - S || o.y > H / 2 + S)) o.x = R;
       if (o.x > W - R && pocketOf(o.x, o.y) < 0 && (o.y < H / 2 - S || o.y > H / 2 + S)) o.x = W - R;
       if (o.y < R && pocketOf(o.x, o.y) < 0) o.y = R;

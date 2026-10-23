@@ -14,14 +14,17 @@
   height: 100dvh;
   overflow: hidden;
   touch-action: none;
-  background: var(--ep-bg);
-  transition: background-color 0.35s ease;
+  /* GamePigeon's surround (Matt, 2026-10-23: "fix the background color behind the table"): a soft
+     grey, lighter in the middle. Whose turn it is shows on the scoreboard, not the surround. */
+  background: radial-gradient(120% 80% at 50% 45%, var(--ep-bg-hi) 0%, var(--ep-bg) 100%);
   color: #fff;
   font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --ep-seat0: #F2A183;
   --ep-seat1: #6BA9CE;
   --ep-seat2: #7FC9A0;
-  --ep-bg: var(--ep-seat0);
+  --ep-bg: #B9B9BD;
+  --ep-bg-hi: #DCDCDF;
+  --ep-status: #2c2c30;
   --ep-ink: #2a1d16;
   --ep-muted: #6b5548;
   --ep-card: #fffaf0;
@@ -31,10 +34,6 @@
   --ep-pill: rgba(28, 22, 18, 0.62);
   --ep-top: max(env(safe-area-inset-top, 0px), 50px);
 }
-.ep-root.ep-turn-1 { --ep-bg: var(--ep-seat1); }
-.ep-root.ep-turn-2 { --ep-bg: var(--ep-seat2); }
-.ep-root.is-setup { --ep-bg: var(--ep-seat0); }
-@media (prefers-reduced-motion: reduce) { .ep-root { transition: none; } }
 .ep-root,
 .ep-root * {
   box-sizing: border-box;
@@ -198,8 +197,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  color: var(--ep-status);
   z-index: 2;
   pointer-events: none;
 }
@@ -464,6 +462,9 @@
   --ep-seat0: #7a4636;
   --ep-seat1: #2c5873;
   --ep-seat2: #2f5e45;
+  --ep-bg: #1c1c1f;
+  --ep-bg-hi: #333338;
+  --ep-status: #ececf0;
   --ep-ink: #f3e9df;
   --ep-muted: #c4b1a2;
   --ep-card: #241b16;

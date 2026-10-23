@@ -1,22 +1,59 @@
 // eight-ball/js/render.js - pixels only: the table, the balls, the obstacles, the cue and the aim
 // guide, drawn on one canvas in table units (engine.js) scaled to fit the room ui.js measured. The
-// table is the friendly one Matt asked for in 2026-08 (reference/pool/SPEC.md): warm wood, a bright
-// cushion, vivid cloth, flat black pockets. The balls are a real set (2026-10-22, Matt: "make it
+// table is GamePigeon's, copied from Matt's screenshot (2026-10-23; before that the friendly flat
+// one from 2026-08, reference/pool/SPEC.md). The balls are a real set (2026-10-22, Matt: "make it
 // based off a real pool table... all have numbers and stripes/solids"): every ball carries its
 // number in a white circle, 9-15 are striped; a "simple" look paints them by group instead.
 
 import { W, H, R, CUE, EIGHT, POCKETS, HEAD_Y, FOOT_Y, CORNER_G, SIDE_S, TABLE, TB, groupOf } from './engine.js';
 
+/** GamePigeon's colours, sampled from Matt's screenshot (2026-10-23). */
 export const TABLE_ART = {
-  outline: '#0B0B0B',
-  wood: '#8C5A3F',
-  woodEdge: '#7A4E36',
-  cushion: '#3FBE63',
-  cushionLit: '#4ACB6E',
-  cloth: '#0F8A3C',
+  wood: '#6B3432',
+  cap: '#D6CFBD',
+  cushionBack: '#3F6E9E',
+  cushion: '#4A84BE',
+  cushionNose: '#3D6D9E',
+  cushionEdge: '#2E5578',
+  cloth: '#4B87C3',
+  throat: '#34618E',
   pocket: '#000000',
-  throat: '#0c140f',
 };
+
+/** A tiny repeatable random sequence, so the grain is the same every time the table is drawn. */
+function seeded(seed) {
+  let s = seed >>> 0;
+  return () => { s = (Math.imul(s ^ (s >>> 15), 2246822507) + 0x9e3779b9) >>> 0; return (s >>> 8) / 16777216; };
+}
+/** A square tile of `base` colour with per-pixel grain of strength `amt` (0-1) and a few fibres. */
+function grainTile(base, amt, fibres = 0) {
+  const n = 96, c = document.createElement('canvas');
+  c.width = n; c.height = n;
+  const g = c.getContext('2d');
+  const im = g.createImageData(n, n), rnd = seeded(base.length * 131 + Math.round(amt * 1000));
+  const [r0, g0, b0] = [1, 3, 5].map((i) => parseInt(base.slice(i, i + 2), 16));
+  for (let i = 0; i < n * n; i++) {
+    const f = 1 + (rnd() - 0.5) * 2 * amt;
+    im.data[i * 4] = Math.min(255, r0 * f); im.data[i * 4 + 1] = Math.min(255, g0 * f); im.data[i * 4 + 2] = Math.min(255, b0 * f); im.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  for (let i = 0; i < fibres; i++) {
+    g.strokeStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)';
+    g.lineWidth = 0.6;
+    const x = rnd() * n, y = rnd() * n, a = rnd() * 6.3, l = 2 + rnd() * 4;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  return c;
+}
+/** A see-through tile: only the grain, for laying over a gradient. */
+function sheenTile(amt) {
+  const n = 96, c = document.createElement('canvas');
+  c.width = n; c.height = n;
+  const g = c.getContext('2d'), im = g.createImageData(n, n), rnd = seeded(99);
+  for (let i = 0; i < n * n; i++) { const v = rnd() < 0.5 ? 0 : 255; im.data[i * 4] = v; im.data[i * 4 + 1] = v; im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = Math.round(rnd() * 255 * amt); }
+  g.putImageData(im, 0, 0);
+  return c;
+}
 /** A real set: 1 yellow, 2 blue, 3 red, 4 purple, 5 orange, 6 green, 7 maroon, 8 black; 9-15 the
  *  same colours, striped. The number is what tells balls apart (colourblind rule: never hue alone). */
 const CLASSIC = ['#F7EFCB', '#F5C518', '#1F4FB8', '#D8262C', '#6A2C91', '#F07C1E', '#1E8A3E', '#8B1E1E', '#141414'];
@@ -84,68 +121,172 @@ export function createRenderer(canvas) {
     g.arcTo(x, y, x + w, y, rad);
     g.closePath();
   }
+  /** A rounded rectangle path; `rad` one radius or [top-left, top-right, bottom-right, bottom-left]. */
+  function roundRectPath(g, x, y, w, h, rad) {
+    const [a, b, c2, d] = Array.isArray(rad) ? rad : [rad, rad, rad, rad];
+    g.moveTo(x + a, y);
+    g.lineTo(x + w - b, y); if (b) g.arcTo(x + w, y, x + w, y + b, b);
+    g.lineTo(x + w, y + h - c2); if (c2) g.arcTo(x + w, y + h, x + w - c2, y + h, c2);
+    g.lineTo(x + d, y + h); if (d) g.arcTo(x, y + h, x, y + h - d, d);
+    g.lineTo(x, y + a); if (a) g.arcTo(x, y, x + a, y, a);
+    g.closePath();
+  }
+  r._tiles = null;
+  const tiles = () => r._tiles || (r._tiles = {
+    cloth: grainTile(TABLE_ART.cloth, 0.07, 160),
+    throat: grainTile(TABLE_ART.throat, 0.07, 60),
+    wood: grainTile(TABLE_ART.wood, 0.05),
+    cap: grainTile(TABLE_ART.cap, 0.06, 40),
+    sheen: sheenTile(0.08),
+  });
   const polyOn = (g, pts) => { g.beginPath(); pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill(); };
 
   // The static table, drawn once per size into an offscreen canvas (transparent around it: the
-  // turn colour behind is CSS on the root).
+  // surround is CSS on the root). GamePigeon's table, copied from Matt's screenshot (2026-10-23):
+  // mahogany rails with grain, cream stone caps round the pockets, blue cushions shaded across
+  // their width with angled jaws, felt with a fine grain and darker edges, black holes with the
+  // darker throat cloth in front of them, white diamonds, a soft shadow under the whole table.
   function tableLayer() {
     if (r._table) return r._table;
+    tiles();
     const c = document.createElement('canvas');
     c.width = canvas.width; c.height = canvas.height;
     const g = c.getContext('2d');
-    g.setTransform(r.dpr * r.s, 0, 0, r.dpr * r.s, r.dpr * r.ox, r.dpr * r.oy);
+    const k = r.dpr * r.s;
+    const unit = () => g.setTransform(k, 0, 0, k, r.dpr * r.ox, r.dpr * r.oy);
+    const device = () => g.setTransform(1, 0, 0, 1, 0, 0);
+    unit();
     const A = TABLE_ART;
-    const CUSHION = TABLE.cushion, WOOD = TABLE.wood, MI = TABLE.mitre;
-    const ow = CUSHION + WOOD;
-    g.fillStyle = A.outline;
-    roundRect(g, -ow - 1.1, -ow - 1.1, W + 2 * ow + 2.2, H + 2 * ow + 2.2, 5.6);
-    g.fill();
-    g.fillStyle = A.woodEdge;
-    roundRect(g, -ow, -ow, W + 2 * ow, H + 2 * ow, 4.6);
-    g.fill();
+    const C = TABLE.cushion, ow = C + TABLE.wood;
+    const G = CORNER_G, S = SIDE_S;
+    const GB = TABLE.GB != null ? TABLE.GB : G - C;
+    const SB = TABLE.SB != null ? TABLE.SB : S - C * TABLE.mitre;
+    const rnd = seeded(7);
+    const path = (pts) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); };
+    // A fill with a pixel-grain tile: the path is built in table units, filled in device pixels.
+    const grainFill = (tile) => { g.save(); device(); g.fillStyle = g.createPattern(tile, 'repeat'); g.fill(); g.restore(); };
+
+    // The shadow under the table, then the wood.
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.38)'; g.shadowBlur = 18 * r.dpr; g.shadowOffsetY = 6 * r.dpr;
     g.fillStyle = A.wood;
-    roundRect(g, -ow + 0.9, -ow + 0.9, W + 2 * ow - 1.8, H + 2 * ow - 1.8, 4);
+    roundRect(g, -ow, -ow, W + 2 * ow, H + 2 * ow, 3.6);
     g.fill();
-    // Diamonds on the wood (the sights along each rail).
-    g.fillStyle = 'rgba(255, 236, 200, 0.75)';
-    const dm = (x, y) => polyOn(g, [[x, y - 0.9], [x + 0.7, y], [x, y + 0.9], [x - 0.7, y]]);
-    const wy = CUSHION + WOOD / 2;
-    for (const k of [1, 2, 3]) { dm((W * k) / 4, -wy); dm((W * k) / 4, H + wy); }
-    for (const k of [1, 2, 3, 5, 6, 7]) { dm(-wy, (H * k) / 8); dm(W + wy, (H * k) / 8); }
-    const C = CUSHION, G = CORNER_G, S = SIDE_S;
-    // The pocket throats: everything past the line between a pocket's jaws is IN, so it is dark.
-    g.fillStyle = A.throat;
-    polyOn(g, [[0, G], [G, 0], [G - C, -C], [-C, -C], [-C, G - C]]);
-    polyOn(g, [[W, G], [W - G, 0], [W - G + C, -C], [W + C, -C], [W + C, G - C]]);
-    polyOn(g, [[0, H - G], [G, H], [G - C, H + C], [-C, H + C], [-C, H - G + C]]);
-    polyOn(g, [[W, H - G], [W - G, H], [W - G + C, H + C], [W + C, H + C], [W + C, H - G + C]]);
-    g.fillRect(-C - 0.1, H / 2 - S, C + 0.1, 2 * S);
-    g.fillRect(W, H / 2 - S, C + 0.1, 2 * S);
-    // Cushion band, mitred away from each pocket.
-    g.fillStyle = A.cushion;
-    polyOn(g, [[G, 0], [W - G, 0], [W - G + C, -C], [G - C, -C]]);
-    polyOn(g, [[G, H], [W - G, H], [W - G + C, H + C], [G - C, H + C]]);
-    polyOn(g, [[0, G], [0, H / 2 - S], [-C, H / 2 - S + C * MI], [-C, G - C]]);
-    polyOn(g, [[0, H / 2 + S], [0, H - G], [-C, H - G + C], [-C, H / 2 + S - C * MI]]);
-    polyOn(g, [[W, G], [W, H / 2 - S], [W + C, H / 2 - S + C * MI], [W + C, G - C]]);
-    polyOn(g, [[W, H / 2 + S], [W, H - G], [W + C, H - G + C], [W + C, H / 2 + S - C * MI]]);
-    g.strokeStyle = A.cushionLit; g.lineWidth = 0.6;
-    g.beginPath();
-    g.moveTo(G, -0.3); g.lineTo(W - G, -0.3); g.moveTo(G, H + 0.3); g.lineTo(W - G, H + 0.3);
-    g.moveTo(-0.3, G); g.lineTo(-0.3, H / 2 - S); g.moveTo(-0.3, H / 2 + S); g.lineTo(-0.3, H - G);
-    g.moveTo(W + 0.3, G); g.lineTo(W + 0.3, H / 2 - S); g.moveTo(W + 0.3, H / 2 + S); g.lineTo(W + 0.3, H - G);
-    g.stroke();
-    // Cloth: flat colour, no texture. Clipped off the corner throats.
-    g.fillStyle = A.cloth;
-    if (TB === 2) g.fillRect(0, 0, W, H);   // the holes cover the corners
-    else polyOn(g, [[G, 0], [W - G, 0], [W, G], [W, H - G], [W - G, H], [G, H], [0, H - G], [0, G]]);
-    g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = 0.4;
+    g.restore();
+    g.save();
+    roundRect(g, -ow, -ow, W + 2 * ow, H + 2 * ow, 3.6);
+    g.clip();
+    grainFill(r._tiles.wood);
+    // Grain: long streaks along each rail.
+    for (const [x0, y0, w, h, along] of [[-ow, -ow, W + 2 * ow, ow, 'x'], [-ow, H, W + 2 * ow, ow, 'x'], [-ow, 0, ow, H, 'y'], [W, 0, ow, H, 'y']]) {
+      g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+      const n = Math.round((along === 'x' ? h : w) * 7);
+      for (let i = 0; i < n; i++) {
+        const dark = rnd() < 0.6;
+        g.strokeStyle = dark ? `rgba(40,10,10,${0.08 + rnd() * 0.22})` : `rgba(190,110,100,${0.05 + rnd() * 0.12})`;
+        g.lineWidth = 0.06 + rnd() * 0.3;
+        const off = rnd() * (along === 'x' ? h : w), amp = rnd() * 0.5, f = 0.02 + rnd() * 0.05, ph = rnd() * 6;
+        g.beginPath();
+        const len = along === 'x' ? w : h;
+        for (let s = 0; s <= len; s += 2) {
+          const d = off + Math.sin(s * f + ph) * amp;
+          const x = along === 'x' ? x0 + s : x0 + d, y = along === 'x' ? y0 + d : y0 + s;
+          if (s) g.lineTo(x, y); else g.moveTo(x, y);
+        }
+        g.stroke();
+      }
+      g.restore();
+    }
+    // The rail's bevel: lit on the outside, a crease where it meets the cushion.
+    g.strokeStyle = 'rgba(255,215,200,0.22)'; g.lineWidth = 0.5;
+    roundRect(g, -ow + 0.35, -ow + 0.35, W + 2 * ow - 0.7, H + 2 * ow - 0.7, 3.3); g.stroke();
+    g.restore();
+    g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 0.35;
+    roundRect(g, -ow, -ow, W + 2 * ow, H + 2 * ow, 3.6); g.stroke();
+
+    // Cream stone caps round the pockets.
+    const cap = (x, y, w, h, rad) => {
+      g.save();
+      g.beginPath(); roundRectPath(g, x, y, w, h, rad); g.clip();
+      g.beginPath(); g.rect(x, y, w, h); grainFill(r._tiles.cap);
+      for (let i = 0; i < 26; i++) {
+        g.fillStyle = rnd() < 0.5 ? `rgba(120,105,80,${0.05 + rnd() * 0.08})` : `rgba(255,252,240,${0.08 + rnd() * 0.12})`;
+        g.beginPath(); g.ellipse(x + rnd() * w, y + rnd() * h, 0.4 + rnd() * 1.4, 0.3 + rnd() * 0.9, rnd() * 3, 0, Math.PI * 2); g.fill();
+      }
+      g.restore();
+      g.strokeStyle = 'rgba(70,55,40,0.35)'; g.lineWidth = 0.25;
+      g.beginPath(); roundRectPath(g, x, y, w, h, rad); g.stroke();
+    };
+    const cs = ow + C;   // a corner cap: from the table's corner to just past the cloth's
+    cap(-ow, -ow, cs, cs, [3.6, 0, 0, 0]);
+    cap(W - C, -ow, cs, cs, [0, 3.6, 0, 0]);
+    cap(-ow, H - C, cs, cs, [0, 0, 0, 3.6]);
+    cap(W - C, H - C, cs, cs, [0, 0, 3.6, 0]);
+    const sh = 62 * TABLE.wood / 77;   // a side cap: the rail's width, 124 px of 717 tall
+    cap(-ow, H / 2 - sh, TABLE.wood, 2 * sh, 0);
+    cap(W + C, H / 2 - sh, TABLE.wood, 2 * sh, 0);
+
+    // Diamonds on the rails.
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    const dm = (x, y) => path([[x, y - 0.75], [x + 0.5, y], [x, y + 0.75], [x - 0.5, y]]);
+    const wy = C + TABLE.wood / 2;
+    for (const q of [1, 2, 3]) { dm((W * q) / 4, -wy); g.fill(); dm((W * q) / 4, H + wy); g.fill(); }
+    for (const q of [1, 2, 3, 5, 6, 7]) { dm(-wy, (H * q) / 8); g.fill(); dm(W + wy, (H * q) / 8); g.fill(); }
+
+    // The cloth, then the darker cloth in each pocket's mouth.
+    g.beginPath(); g.rect(0, 0, W, H); grainFill(r._tiles.cloth);
+    const corners = [[0, 0, 1, 1], [W, 0, -1, 1], [0, H, 1, -1], [W, H, -1, -1]];
+    for (const [cx, cy, sx, sy] of corners) {
+      path([[cx + sx * G, cy], [cx + sx * GB, cy - sy * C], [cx - sx * C, cy - sy * C], [cx - sx * C, cy + sy * GB], [cx, cy + sy * G], [cx, cy]]);
+      grainFill(r._tiles.throat);
+    }
+    for (const [cx, sx] of [[0, 1], [W, -1]]) {
+      path([[cx, H / 2 - S], [cx - sx * C, H / 2 - SB], [cx - sx * C, H / 2 + SB], [cx, H / 2 + S]]);
+      grainFill(r._tiles.throat);
+    }
+    // Felt: darker towards the cushions.
+    const vg = g.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, H * 0.62);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,20,50,0.28)');
+    g.fillStyle = vg; g.fillRect(0, 0, W, H);
+
+    // The holes.
+    for (const p of POCKETS) {
+      g.fillStyle = A.pocket;
+      g.beginPath(); g.arc(p.cx, p.cy, p.r, 0, Math.PI * 2); g.fill();
+      const hg = g.createRadialGradient(p.cx, p.cy, p.r * 0.6, p.cx, p.cy, p.r);
+      hg.addColorStop(0, 'rgba(0,0,0,0)'); hg.addColorStop(1, 'rgba(40,40,40,0.55)');
+      g.fillStyle = hg; g.beginPath(); g.arc(p.cx, p.cy, p.r, 0, Math.PI * 2); g.fill();
+    }
+
+    // Cushions, shaded across their width, each with its two angled jaws.
+    const cushion = (pts, nx0, ny0, nx1, ny1) => {
+      path(pts);
+      const cg = g.createLinearGradient(nx0, ny0, nx1, ny1);   // from the back to the nose
+      cg.addColorStop(0, A.cushionBack); cg.addColorStop(0.45, A.cushion); cg.addColorStop(0.8, A.cushion);
+      cg.addColorStop(0.92, A.cushionNose); cg.addColorStop(1, A.cushionEdge);
+      g.fillStyle = cg; g.fill();
+      g.save(); g.clip(); grainFill(r._tiles.sheen); g.restore();
+      g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 0.22;
+      g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); g.lineTo(pts[3][0], pts[3][1]); g.stroke();
+      g.beginPath(); g.moveTo(pts[1][0], pts[1][1]); g.lineTo(pts[2][0], pts[2][1]); g.stroke();
+    };
+    cushion([[G, 0], [W - G, 0], [W - GB, -C], [GB, -C]], 0, -C, 0, 0);
+    cushion([[W - G, H], [G, H], [GB, H + C], [W - GB, H + C]], 0, H + C, 0, H);
+    for (const [cx, sx] of [[0, 1], [W, -1]]) {
+      cushion([[cx, G], [cx, H / 2 - S], [cx - sx * C, H / 2 - SB], [cx - sx * C, GB]], cx - sx * C, 0, cx, 0);
+      cushion([[cx, H / 2 + S], [cx, H - G], [cx - sx * C, H - GB], [cx - sx * C, H / 2 + SB]], cx - sx * C, 0, cx, 0);
+    }
+    // The cushions' shadow on the felt.
+    for (const [x0, y0, x1, y1, rx, ry, rw, rh] of [[0, 0, 0, 1.4, 0, 0, W, 1.4], [0, H, 0, H - 1.4, 0, H - 1.4, W, 1.4], [0, 0, 1.4, 0, 0, 0, 1.4, H], [W, 0, W - 1.4, 0, W - 1.4, 0, 1.4, H]]) {
+      const sg = g.createLinearGradient(x0, y0, x1, y1);
+      sg.addColorStop(0, 'rgba(0,15,40,0.32)'); sg.addColorStop(1, 'rgba(0,15,40,0)');
+      g.fillStyle = sg; g.fillRect(rx, ry, rw, rh);
+    }
+    // The head string and the foot spot.
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 0.3;
     g.beginPath(); g.moveTo(0, HEAD_Y); g.lineTo(W, HEAD_Y); g.stroke();
-    g.fillStyle = 'rgba(255,255,255,0.3)';
-    g.beginPath(); g.arc(W / 2, FOOT_Y, 0.6, 0, Math.PI * 2); g.fill();
-    // Pockets: flat black, all one size.
-    g.fillStyle = A.pocket;
-    for (const p of POCKETS) { g.beginPath(); g.arc(p.cx, p.cy, p.r, 0, Math.PI * 2); g.fill(); }
+    g.fillStyle = 'rgba(255,255,255,0.35)';
+    g.beginPath(); g.arc(W / 2, FOOT_Y, 0.55, 0, Math.PI * 2); g.fill();
     r._table = c;
     return c;
   }
@@ -154,8 +295,11 @@ export function createRenderer(canvas) {
   function ball(i, x, y, k = 1) {
     const rad = R * k;
     const P = ballPaint(i, r.look, r.mode);
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.beginPath(); ctx.arc(x + 0.45 * k, y + 0.6 * k, rad, 0, Math.PI * 2); ctx.fill();
+    // A soft shadow down and to the right, as under GamePigeon's lights.
+    const sg = ctx.createRadialGradient(x + 0.5 * k, y + 0.8 * k, rad * 0.4, x + 0.5 * k, y + 0.8 * k, rad * 1.15);
+    sg.addColorStop(0, 'rgba(0,10,30,0.45)'); sg.addColorStop(1, 'rgba(0,10,30,0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(x + 0.5 * k, y + 0.8 * k, rad * 1.15, 0, Math.PI * 2); ctx.fill();
     ctx.save();
     ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2);
     ctx.fillStyle = P.stripe ? '#FFFFFF' : P.body;
@@ -170,10 +314,15 @@ export function createRenderer(canvas) {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(P.num, x, y + rad * 0.05);
     }
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.beginPath(); ctx.arc(x - rad * 0.42, y - rad * 0.46, rad * 0.22, 0, Math.PI * 2); ctx.fill();
+    // Round: lit from the top left, darker towards the far edge, one bright highlight.
+    const lg = ctx.createRadialGradient(x - rad * 0.35, y - rad * 0.4, 0, x, y, rad * 1.05);
+    lg.addColorStop(0, 'rgba(255,255,255,0.28)'); lg.addColorStop(0.45, 'rgba(255,255,255,0)');
+    lg.addColorStop(0.8, 'rgba(0,0,0,0.06)'); lg.addColorStop(1, 'rgba(0,0,0,0.38)');
+    ctx.fillStyle = lg; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.beginPath(); ctx.ellipse(x - rad * 0.42, y - rad * 0.5, rad * 0.17, rad * 0.11, -0.6, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.22 * k;
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 0.16 * k;
     ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.stroke();
   }
 
