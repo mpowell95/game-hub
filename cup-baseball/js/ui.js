@@ -80,7 +80,7 @@ function diamondSVG(bases, outs) {
   const base = (x, y, on) => `<rect x="${x - 7}" y="${y - 7}" width="14" height="14" transform="rotate(45 ${x} ${y})"
     class="${on ? 'is-on' : ''}"/>`;
   const out = (x, on) => `<circle cx="${x}" cy="62" r="5" class="${on ? 'is-on' : ''}"/>`;
-  return `<svg viewBox="0 0 64 70" width="64" height="70" aria-hidden="true">
+  return `<svg viewBox="0 0 64 70" width="110" height="120" aria-hidden="true">
     ${base(48, 26, bases[0])}${base(32, 10, bases[1])}${base(16, 26, bases[2])}
     <rect x="27" y="37" width="10" height="10" transform="rotate(45 32 42)" class="cb-home"/>
     ${out(25, outs >= 1)}${out(39, outs >= 2)}</svg>`;

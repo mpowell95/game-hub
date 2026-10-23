@@ -2,16 +2,17 @@
 //
 // Cup Pong's table, cups and ball are reused as they are (cup-pong/js/geom.js, physics.js): same
 // sizes, same throw, same physics. Only the rack is this game's: four cups in a straight line down
-// the middle of the table, single nearest the shooter, home run against the back edge. Cups stand
-// apart (not touching), so a ball that is short of one cup can drop into the cup in front of it.
+// the middle of the table, single nearest the shooter, home run against the back edge. The cups
+// TOUCH, one straight line (Matt, 2026-10-23: "They should be touching. In a straight line.").
 //
 // Positions are in the SHOOTER'S frame, the way cup-pong's physics and render take them: the
 // shooter's ball waits at z = 0 and throws toward -z.
 
-import { RACK_Z0 } from '../../cup-pong/js/geom.js';
+import { RACK_Z0, CUP_D } from '../../cup-pong/js/geom.js';
 
-/** Centre-to-centre gap along the table, metres. A cup is 9.5 cm across, so ~8 cm of felt between. */
-export const GAP = 0.175;
+/** Centre-to-centre along the table: one cup across (+2 mm so the collision walls never overlap,
+ *  Cup Pong's rack pitch). On screen they read as touching. */
+export const GAP = CUP_D;
 
 /** The four cups, far to near: id is the hit it is worth. */
 export const CUPS = [
