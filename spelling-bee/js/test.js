@@ -26,9 +26,9 @@ for (let n = 0; n < data.puzzles.length; n++) {
   const p = puzzleAt(data, n);
   const a = answersFor(data, p);
   const max = totalPoints(a, p);
-  if (p.letters.size !== 7 || !a.some((w) => isPangram(w, p)) || a.length < 20 || a.length > 60 || max < 60 || max > 300) { allFair = false; bad = p.key; break; }
+  if (p.letters.size !== 7 || !a.some((w) => isPangram(w, p)) || a.length < 20 || a.length > 90 || max < 60 || max > 450) { allFair = false; bad = p.key; break; }
 }
-ok('every puzzle: 7 letters, a pangram, 20-60 words, 60-300 points', allFair, bad);
+ok('every puzzle: 7 letters, a pangram, 20-90 words, 60-450 points (size grew with the word list)', allFair, bad);
 
 ok('day 0 is the epoch', dayNumber('2026-10-22', new Date(2026, 9, 22, 23, 59)) === 0);
 ok('day 1 the next local day', dayNumber('2026-10-22', new Date(2026, 9, 23, 0, 1)) === 1);

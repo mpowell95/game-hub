@@ -520,10 +520,10 @@ class SpellingBee {
     const letters = `<div class="sb-yletters" aria-label="${esc([p.center, ...p.outer].join(' ').toUpperCase())}"><span class="is-center">${p.center.toUpperCase()}</span>${p.outer.map((c) => `<span>${c.toUpperCase()}</span>`).join('')}</div>`;
     const list = ans.map((w) => `<li class="${isPangram(w, p) ? 'is-pangram' : ''}${got.has(w) ? ' is-got' : ''}">${got.has(w) ? '<span class="sb-tick" aria-hidden="true">✓</span>' : ''}${esc(cap(w))}${isPangram(w, p) ? ' <span aria-hidden="true">★</span>' : ''}</li>`).join('');
     this._openOverlay('yesterday', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('yesterday'))}</h2>${letters}<ul class="sb-ylist">${list}</ul>`);
-    // No scrolling: up to 60 words, so more columns, then smaller type (11px floor), until it fits.
+    // No scrolling: up to ~90 words, so more columns, then smaller type (11px floor), until it fits.
     const m = this._overlay.querySelector('.gh-modal');
     const ul = this._overlay.querySelector('.sb-ylist');
-    for (const [cols, fs] of [[2, 14], [3, 14], [3, 13], [3, 12], [3, 11]]) {
+    for (const [cols, fs] of [[2, 14], [3, 14], [3, 13], [3, 12], [4, 12], [4, 11]]) {
       ul.style.columnCount = String(cols);
       ul.style.fontSize = fs + 'px';
       if (m.scrollHeight <= m.clientHeight + 1) break;

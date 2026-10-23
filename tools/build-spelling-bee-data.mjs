@@ -5,8 +5,9 @@
 //
 // SOURCES (downloaded, never committed; cached in --cache, default <os tmp>/spelling-bee-cache)
 //   * SCOWL via the npm package wordlist-english 1.2.1 (Kevin Atkinson, permissive licence, notice in
-//     spelling-bee/data/CREDITS.md): English + American words at size 40 and below, i.e. common words,
-//     not the obscure ones a Scrabble list carries.
+//     spelling-bee/data/CREDITS.md): English + American words at size 50 and below, i.e. common words,
+//     not the obscure ones a Scrabble list carries. (Size 40 shipped first and refused ROVER;
+//     Matt, 2026-10-23: "That's a word". 50 is the size where everyday words like it live.)
 //   * boggle/data/words.txt (ENABLE, public domain): a SCOWL word must also be here, which drops
 //     proper nouns, abbreviations and odd spellings.
 //   * LDNOOBW English bad-word list (CC BY 4.0) plus BLOCK below: dropped entirely.
@@ -37,7 +38,7 @@ const DAYS = Number(arg('--days', 2000));
 const EPOCH = '2026-10-22';
 const SCOWL_TGZ = 'https://registry.npmjs.org/wordlist-english/-/wordlist-english-1.2.1.tgz';
 const BAD_URL = 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en';
-const LEVELS = [10, 20, 35, 40];
+const LEVELS = [10, 20, 35, 40, 50];
 
 // Slurs and vulgarities LDNOOBW misses or lists only as phrases. A family hub: when in doubt, out.
 const BLOCK = `nigger nigga negro faggot fagot dyke kike coon chink gook wetback retard retarded tranny whore
@@ -117,8 +118,20 @@ async function main() {
     puzzles.push(String.fromCharCode(97 + centre) + ':' + outer);
   }
 
-  const out = { v: 1, epoch: EPOCH, words: words.join(' '), puzzles };
   const file = path.join(ROOT, 'spelling-bee/data/bee.json');
+  // APPEND-ONLY: the puzzles already shipped keep their days; new ones only fill the end.
+  let kept = [];
+  try { kept = JSON.parse(fs.readFileSync(file, 'utf8')).puzzles || []; } catch { /* first run */ }
+  if (kept.length) {
+    const seen = new Set(kept.map((k) => k.slice(2)));
+    for (const q of puzzles) {
+      if (kept.length >= DAYS) break;
+      if (!seen.has(q.slice(2))) { kept.push(q); seen.add(q.slice(2)); }
+    }
+    puzzles.length = 0;
+    puzzles.push(...kept);
+  }
+  const out = { v: 1, epoch: EPOCH, words: words.join(' '), puzzles };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(out) + '\n');
   console.log(`words ${words.length}, pangram sets ${sets.length}, fair ${candidates.length}, puzzles ${puzzles.length}, ${(fs.statSync(file).size / 1024).toFixed(0)} KB`);
