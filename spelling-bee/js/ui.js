@@ -1,0 +1,609 @@
+// spelling-bee/js/ui.js - SPELLING BEE: a clone of the NYT game. One puzzle a day (the same for
+// everyone), seven letters in a honeycomb, the centre letter in every word. The rules live in
+// engine.js; this file is the DOM, input, autosave and the module contract.
+//
+// THE LAW applies here. `gamehub.spellingbee.save.v1` keeps every puzzle ever played, keyed by its
+// letters, and its found words only ever GROW. Reaching Genius on a puzzle records ONE win,
+// `recordResult('spellingbee', 'daily', true)`, guarded by the save's `recorded` flag.
+//
+// isInProgress() RETURNS FALSE, DELIBERATELY: every found word is saved at once, so leaving is
+// lossless (the Contexto / Sudoku class).
+import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
+import { onViewportResize } from '../../js/viewport.js';
+import { makeT } from '../../js/i18n.js';
+import { recordResult } from '../../js/game-stats.js';
+import {
+  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, puzzleAt, answersFor, totalPoints,
+  rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
+} from './engine.js';
+import STRINGS from './strings.js';
+
+const t = makeT(STRINGS);
+const CSS_MARK = 'data-spellingbee-css';
+const SAVE_KEY = 'gamehub.spellingbee.save.v1';
+const STATS_ID = 'spellingbee';
+let instance = null;
+let DATA_PROMISE = null;   // the word list, fetched once per page
+
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+
+function getData() {
+  if (!DATA_PROMISE) DATA_PROMISE = loadData().catch((err) => { DATA_PROMISE = null; throw err; });
+  return DATA_PROMISE;
+}
+
+function ensureCSS() {
+  const uiHref = new URL('../../css/ui.css', import.meta.url).href;
+  const hasUi = document.head.querySelector('link[data-gh-ui-css="1"]')
+    || [...document.head.querySelectorAll('link[rel="stylesheet"]')].some((l) => l.href === uiHref);
+  if (!hasUi) {
+    const ui = document.createElement('link');
+    ui.rel = 'stylesheet';
+    ui.href = uiHref;
+    ui.setAttribute('data-gh-ui-css', '1');
+    document.head.appendChild(ui);
+  }
+  const href = new URL('../css/spelling-bee.css', import.meta.url).href;
+  if (document.head.querySelector('[' + CSS_MARK + ']')
+    || [...document.head.querySelectorAll('link[rel="stylesheet"]')].some((l) => l.href === href)) {
+    return Promise.resolve();
+  }
+  return new Promise((res) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.setAttribute(CSS_MARK, '1');
+    link.onload = link.onerror = () => res();
+    document.head.appendChild(link);
+    setTimeout(res, 2500);
+  });
+}
+
+// --- save -------------------------------------------------------------------------------------
+// { v:1, games: { "<centre>:<outer>": { day, found: [words in the order found], recorded, seenGenius, seenQueen } } }
+
+function loadSave() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {};
+    return { v: 1, games: (v.games && typeof v.games === 'object' && !Array.isArray(v.games)) ? v.games : {} };
+  } catch { return { v: 1, games: {} }; }
+}
+
+/** Writes, then re-reads to prove it landed (THE LAW rule 6). */
+function writeSave(save) {
+  try {
+    const s = JSON.stringify(save);
+    localStorage.setItem(SAVE_KEY, s);
+    if (localStorage.getItem(SAVE_KEY) !== s) throw new Error('re-read mismatch');
+    return true;
+  } catch (err) { console.error('[spelling-bee] save FAILED - progress may not survive a reload', err); return false; }
+}
+
+function recOf(save, puzzle, day) {
+  let r = save.games[puzzle.key];
+  if (!r || typeof r !== 'object') r = save.games[puzzle.key] = {};
+  if (!Array.isArray(r.found)) r.found = [];
+  r.found = r.found.filter((w) => typeof w === 'string');
+  if (!r.day) r.day = day;
+  return r;
+}
+
+// --- the honeycomb ----------------------------------------------------------------------------
+// Flat-topped hexagons, circumradius 50, a 6-unit gap. Outer order: top, top right, bottom right,
+// bottom, bottom left, top left (the NYT layout).
+const HEX = '-50,0 -25,-43.3 25,-43.3 50,0 25,43.3 -25,43.3';
+const G = 6;
+const DY = 86.6 + G;
+const DX = 75 + G * 0.866;
+const SPOTS = [[0, 0], [0, -DY], [DX, -DY / 2], [DX, DY / 2], [0, DY], [-DX, DY / 2], [-DX, -DY / 2]];
+
+const ICON = {
+  hints: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg>',
+  yesterday: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>',
+  rankings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>',
+  help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.7 2.7 0 0 1 5.1 1.3c0 1.8-2.4 2.1-2.4 4"/><path d="M12 17.6v.01"/></svg>',
+  shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
+};
+
+class SpellingBee {
+  constructor(container) {
+    this.container = container;
+    this.disposed = false;
+    this.data = null;
+    this.input = '';
+    this.open = false;          // the found-words panel
+    this._timers = new Set();
+    this._overlay = null;
+  }
+
+  async mount() {
+    this.container.innerHTML = `<div class="sb-root"><div class="sb-center">${esc(t('loading'))}</div></div>`;
+    this.root = this.container.querySelector('.sb-root');
+    this._positionRoot();
+    this._offResize = onViewportResize(() => { this._positionRoot(); this._layoutPanel(); });
+    this._onKey = (ev) => this._handleKey(ev);
+    document.addEventListener('keydown', this._onKey);
+    this._onVis = () => { if (!document.hidden) this._checkDay(); };
+    document.addEventListener('visibilitychange', this._onVis);
+    this._dayTimer = setInterval(() => this._checkDay(), 60000);
+    await ensureCSS();
+    if (this.disposed) return;
+    this._load();
+  }
+
+  async _load() {
+    try {
+      this.data = await getData();
+    } catch (err) {
+      if (this.disposed) return;
+      console.error('[spelling-bee] data', err);
+      this._renderError();
+      return;
+    }
+    if (this.disposed) return;
+    this._startDay();
+  }
+
+  _renderError() {
+    this.root.innerHTML = `<div class="sb-center"><p>${esc(t('load_error'))}</p>
+      <button type="button" class="gh-btn gh-btn--primary" data-act="retry">${esc(t('try_again'))}</button></div>`;
+    this.root.querySelector('[data-act="retry"]').addEventListener('click', () => this._load());
+  }
+
+  // --- the day's puzzle ------------------------------------------------------------------------
+
+  _startDay() {
+    const now = new Date();
+    this.day = dayKey(now);
+    this.n = dayNumber(this.data.epoch, now);
+    this.puzzle = puzzleAt(this.data, this.n);
+    this.answers = answersFor(this.data, this.puzzle);
+    this.answerSet = new Set(this.answers);
+    this.max = totalPoints(this.answers, this.puzzle);
+    this.save = loadSave();
+    this.rec = recOf(this.save, this.puzzle, this.day);
+    // Keep only words that are still answers for the SCORE, but never drop a stored word (rule 5).
+    this.found = new Set(this.rec.found.filter((w) => this.answerSet.has(w)));
+    this.outer = this.puzzle.outer.slice();
+    this.input = '';
+    this.open = false;
+    this._render();
+    this._maybeRecord();
+    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); } }; } catch { /* ignore */ }
+  }
+
+  _checkDay() {
+    if (!this.data || this.disposed) return;
+    if (dayKey(new Date()) !== this.day) { this._closeOverlay(); this._startDay(); }
+  }
+
+  get score() {
+    let s = 0;
+    for (const w of this.found) s += scoreWord(w, this.puzzle);
+    return s;
+  }
+
+  // --- render ----------------------------------------------------------------------------------
+
+  _render() {
+    this.root.innerHTML = `
+      <div class="sb-hud">
+        <span class="sb-hud-fill"></span>
+        <button type="button" class="sb-iconbtn" data-act="hints" aria-label="${esc(t('hints_aria'))}">${ICON.hints}</button>
+        <button type="button" class="sb-iconbtn" data-act="yesterday" aria-label="${esc(t('yesterday_aria'))}">${ICON.yesterday}</button>
+        <button type="button" class="sb-iconbtn" data-act="rankings" aria-label="${esc(t('rankings_aria'))}">${ICON.rankings}</button>
+        <button type="button" class="sb-iconbtn" data-act="help" aria-label="${esc(t('help_aria'))}">${ICON.help}</button>
+      </div>
+      <button type="button" class="sb-progress" data-act="rankings" data-role="progress"></button>
+      <div class="sb-wordsbar">
+        <button type="button" class="sb-found" data-act="toggle" aria-label="${esc(t('found_aria'))}" aria-expanded="false">
+          <span class="sb-found-list" data-role="recent"></span>
+          <span class="sb-chev">${ICON.chevron}</span>
+        </button>
+      </div>
+      <div class="sb-main">
+        <div class="sb-msg" data-role="msg" aria-live="polite"></div>
+        <div class="sb-input" data-role="input" aria-live="off"></div>
+        <div class="sb-hivewrap">
+          <svg class="sb-hive" data-role="hive" viewBox="-134 -140 268 280" role="group" aria-label="${esc(t('title'))}">
+            ${SPOTS.map(([x, y], i) => `<g class="sb-cell${i === 0 ? ' is-center' : ''}" data-i="${i}" transform="translate(${x} ${y})" role="button" tabindex="0">
+              <g class="sb-cell-in"><polygon points="${HEX}"/><text x="0" y="2" text-anchor="middle" dominant-baseline="central"></text></g></g>`).join('')}
+          </svg>
+        </div>
+        <div class="sb-controls">
+          <button type="button" class="sb-pill" data-act="delete">${esc(t('delete'))}</button>
+          <button type="button" class="sb-pill sb-round" data-act="shuffle" aria-label="${esc(t('shuffle_aria'))}">${ICON.shuffle}</button>
+          <button type="button" class="sb-pill" data-act="enter">${esc(t('enter'))}</button>
+        </div>
+        <div class="sb-panel" data-role="panel" hidden></div>
+      </div>`;
+    this.el = {
+      progress: this.root.querySelector('[data-role="progress"]'),
+      recent: this.root.querySelector('[data-role="recent"]'),
+      toggle: this.root.querySelector('[data-act="toggle"]'),
+      msg: this.root.querySelector('[data-role="msg"]'),
+      input: this.root.querySelector('[data-role="input"]'),
+      hive: this.root.querySelector('[data-role="hive"]'),
+      panel: this.root.querySelector('[data-role="panel"]'),
+      cells: [...this.root.querySelectorAll('.sb-cell')],
+    };
+    if (!this._onClick) {
+      this._onClick = (ev) => this._handleClick(ev);
+      this.root.addEventListener('click', this._onClick);
+      this._onDown = (ev) => this._handleDown(ev);
+      this.root.addEventListener('pointerdown', this._onDown);
+    }
+    this._paintLetters();
+    this._paintInput();
+    this._paintProgress();
+    this._paintFound();
+  }
+
+  _paintLetters() {
+    const letters = [this.puzzle.center, ...this.outer];
+    this.el.cells.forEach((c, i) => {
+      c.querySelector('text').textContent = letters[i].toUpperCase();
+      c.dataset.letter = letters[i];
+      c.setAttribute('aria-label', letters[i].toUpperCase());
+    });
+  }
+
+  _paintInput() {
+    const html = [...this.input].map((ch) => {
+      const cls = ch === this.puzzle.center ? 'is-center' : this.puzzle.letters.has(ch) ? '' : 'is-bad';
+      return `<span class="${cls}">${esc(ch.toUpperCase())}</span>`;
+    }).join('');
+    this.el.input.innerHTML = `<span class="sb-input-text">${html}<span class="sb-caret"></span></span>`;
+    // Long words shrink to fit (NYT does the same).
+    const len = this.input.length;
+    this.el.input.style.setProperty('--sb-in-fs', (len > 14 ? 22 : len > 10 ? 26 : 30) + 'px');
+  }
+
+  _paintProgress() {
+    const sc = this.score;
+    const ri = rankIndex(sc, this.max);
+    const shown = Math.min(ri, GENIUS);
+    const dots = [];
+    for (let i = 0; i <= GENIUS; i++) {
+      const cls = i < shown ? 'is-past' : i === shown ? 'is-now' : '';
+      dots.push(`<span class="sb-dot ${cls}" style="left:calc(16px + (100% - 32px) * ${(i / GENIUS).toFixed(4)})">${i === shown ? `<b>${sc}</b>` : ''}</span>`);
+    }
+    this.el.progress.innerHTML = `<span class="sb-rank">${esc(t('rank_' + RANKS[ri].id))}</span>
+      <span class="sb-track"><span class="sb-line"></span>${dots.join('')}</span>`;
+    this.el.progress.setAttribute('aria-label', `${t('rank_' + RANKS[ri].id)}, ${t('points_n', { n: sc })}`);
+  }
+
+  _paintFound() {
+    const n = this.found.size;
+    const order = this.rec.found.filter((w) => this.answerSet.has(w));
+    this.el.recent.innerHTML = this.open
+      ? `<span class="sb-found-count">${esc(n === 1 ? t('words_1') : t('words_n', { n }))}</span>`
+      : (n ? order.slice().reverse().map((w) => `<span class="${isPangram(w, this.puzzle) ? 'is-pangram' : ''}">${esc(cap(w))}</span>`).join('')
+        : `<span class="sb-found-count">${esc(t('words_n', { n: 0 }))}</span>`);
+    this.el.toggle.setAttribute('aria-expanded', this.open ? 'true' : 'false');
+    this.el.toggle.classList.toggle('is-open', this.open);
+    this.el.panel.hidden = !this.open;
+    if (this.open) this._layoutPanel();
+  }
+
+  /** The open word list: alphabetical, in as many columns as it takes to fit with no scrolling. */
+  _layoutPanel() {
+    if (!this.open || !this.el || !this.el.panel) return;
+    const words = [...this.found].sort();
+    const p = this.el.panel;
+    p.innerHTML = `<ul class="sb-panel-list">${words.map((w) => `<li class="${isPangram(w, this.puzzle) ? 'is-pangram' : ''}">${esc(cap(w))}</li>`).join('')}</ul>`;
+    const ul = p.firstChild;
+    const h = p.clientHeight - 24;
+    const w = p.clientWidth - 24;
+    let fs = 16;
+    let cols = 1;
+    for (; fs >= 12; fs -= 1) {
+      const lineH = Math.round(fs * 1.55);
+      const rows = Math.max(1, Math.floor(h / lineH));
+      cols = Math.max(1, Math.ceil(words.length / rows));
+      if (w / cols >= fs * 6) break;
+    }
+    ul.style.setProperty('--sb-cols', String(Math.max(cols, 2)));
+    ul.style.setProperty('--sb-pfs', fs + 'px');
+  }
+
+  // --- input -----------------------------------------------------------------------------------
+
+  _handleDown(ev) {
+    const cell = ev.target.closest && ev.target.closest('.sb-cell');
+    if (!cell || this._overlay) return;
+    ev.preventDefault();
+    this._press(cell);
+    this.type(cell.dataset.letter);
+  }
+
+  _press(cell) {
+    cell.classList.remove('is-pressed');
+    void cell.getBoundingClientRect();
+    cell.classList.add('is-pressed');
+    this._later(() => cell.classList.remove('is-pressed'), 140);
+  }
+
+  _handleClick(ev) {
+    const btn = ev.target.closest('[data-act]');
+    if (!btn || !this.root.contains(btn)) return;
+    const a = btn.dataset.act;
+    if (a === 'delete') this.backspace();
+    else if (a === 'shuffle') this.shuffle();
+    else if (a === 'enter') this.submit();
+    else if (a === 'toggle') { this.open = !this.open; this._paintFound(); }
+    else if (a === 'hints') this._openHints();
+    else if (a === 'yesterday') this._openYesterday();
+    else if (a === 'rankings') this._openRankings();
+    else if (a === 'help') this._openHelp();
+    else if (a === 'retry') this._load();
+  }
+
+  _handleKey(ev) {
+    if (!this.puzzle || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (this._overlay) { if (ev.key === 'Escape') this._closeOverlay(); return; }
+    const k = ev.key;
+    if (/^[a-zA-Z]$/.test(k)) { this.type(k.toLowerCase()); const i = [this.puzzle.center, ...this.outer].indexOf(k.toLowerCase()); if (i >= 0) this._press(this.el.cells[i]); ev.preventDefault(); }
+    else if (k === 'Backspace') { this.backspace(); ev.preventDefault(); }
+    else if (k === 'Enter') { this.submit(); ev.preventDefault(); }
+    else if (k === ' ') { this.shuffle(); ev.preventDefault(); }
+  }
+
+  type(ch) {
+    if (!this.puzzle || this._busy) return;
+    if (this.open) { this.open = false; this._paintFound(); }
+    if (this.input.length >= MAX_LEN + 1) return;
+    this.input += ch;
+    this._paintInput();
+  }
+
+  backspace() {
+    if (this._busy || !this.input) return;
+    this.input = this.input.slice(0, -1);
+    this._paintInput();
+  }
+
+  shuffle() {
+    if (!this.puzzle) return;
+    this.outer = shuffled(this.outer);
+    if (reduced()) { this._paintLetters(); return; }
+    this.el.hive.classList.add('is-shuffling');
+    this._later(() => { this._paintLetters(); this.el.hive.classList.remove('is-shuffling'); }, 160);
+  }
+
+  submit() {
+    if (!this.puzzle || this._busy || !this.input) return;
+    this._checkDay();
+    const word = this.input;
+    const why = checkWord(word, this.puzzle, this.answerSet, this.found);
+    if (why) { this._reject(why); return; }
+    const before = rankIndex(this.score, this.max);
+    this.found.add(word);
+    this.rec.found.push(word);
+    writeSave(this.save);
+    const pts = scoreWord(word, this.puzzle);
+    const praise = praiseFor(word, this.puzzle);
+    this._toast(t('praise_' + praise), praise === 'pangram' ? 'is-pangram' : 'is-good', pts);
+    this._busy = true;
+    this.el.input.classList.add('is-accepted');
+    this._later(() => {
+      this._busy = false;
+      this.input = '';
+      this.el.input.classList.remove('is-accepted');
+      this._paintInput();
+    }, reduced() ? 0 : 450);
+    this._paintProgress();
+    this._paintFound();
+    this._maybeRecord();
+    const after = rankIndex(this.score, this.max);
+    if (after !== before && after >= GENIUS) this._celebrate(after);
+  }
+
+  _reject(why) {
+    this._toast(t(why), 'is-bad');
+    this._busy = true;
+    if (!reduced()) this.el.input.classList.add('is-shake');
+    this._later(() => {
+      this._busy = false;
+      this.input = '';
+      this.el.input.classList.remove('is-shake');
+      this._paintInput();
+    }, 700);
+  }
+
+  _toast(text, cls, pts) {
+    const m = this.el.msg;
+    m.innerHTML = `<span class="sb-toast ${cls}">${esc(text)}</span>${pts ? `<span class="sb-plus">+${pts}</span>` : ''}`;
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(() => { if (!this.disposed) m.innerHTML = ''; }, 1100);
+  }
+
+  _later(fn, ms) {
+    const id = setTimeout(() => { this._timers.delete(id); if (!this.disposed) fn(); }, ms);
+    this._timers.add(id);
+  }
+
+  // --- stats -----------------------------------------------------------------------------------
+
+  /** One win per puzzle, the first time it reaches Genius. Flag set only once the recorder took it. */
+  _maybeRecord() {
+    if (this.rec.recorded || rankIndex(this.score, this.max) < GENIUS) return;
+    let st = null;
+    try { st = recordResult(STATS_ID, 'daily', true); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
+    if (!st) { console.error('[spelling-bee] Genius not recorded yet; will retry on the next word or open'); return; }
+    this.rec.recorded = true;
+    writeSave(this.save);
+  }
+
+  _celebrate(ri) {
+    const key = ri === QUEEN ? 'seenQueen' : 'seenGenius';
+    if (this.rec[key]) return;
+    this.rec[key] = true;
+    writeSave(this.save);
+    this._later(() => this._openOverlay('win', `
+      <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>
+      <div class="sb-win-bee" aria-hidden="true">${ri === QUEEN ? '👑' : '🐝'}</div>
+      <h2 class="gh-modal__title sb-win-title">${esc(t(ri === QUEEN ? 'queen_title' : 'genius_title'))}</h2>
+      <p class="sb-win-pts">${esc(t('points_n', { n: this.score }))}</p>
+      <div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--block sb-keep" data-ov="close">${esc(t('keep_going'))}</button></div>`), 700);
+  }
+
+  // --- overlays --------------------------------------------------------------------------------
+
+  _openOverlay(kind, html) {
+    this._closeOverlay();
+    const ov = document.createElement('div');
+    ov.className = 'gh-overlay sb-overlay';
+    ov.innerHTML = `<div class="gh-modal sb-modal sb-modal--${kind}" role="dialog" aria-modal="true">${html}</div>`;
+    ov.addEventListener('click', (ev) => {
+      if (ev.target === ov || ev.target.closest('[data-ov="close"]')) this._closeOverlay();
+    });
+    this.root.appendChild(ov);
+    this._overlay = ov;
+    this._fitLines(ov);
+    const c = ov.querySelector('.gh-modal__close');
+    if (c) { try { c.focus({ preventScroll: true }); } catch { /* ignore */ } }
+  }
+
+  _closeOverlay() {
+    if (!this._overlay) return;
+    this._overlay.remove();
+    this._overlay = null;
+  }
+
+  /** Every `.sb-fit` line on one row: shrink until it fits, 11px floor (docs/BUILDING-A-GAME.md). */
+  _fitLines(ov) {
+    ov.querySelectorAll('.sb-fit').forEach((el) => {
+      let fs = parseFloat(getComputedStyle(el).fontSize) || 15;
+      while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 0.5; el.style.fontSize = fs + 'px'; }
+    });
+  }
+
+  _closeBtn() { return `<button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>`; }
+
+  _openRankings() {
+    const th = rankThresholds(this.max);
+    const ri = rankIndex(this.score, this.max);
+    const rows = RANKS.map((r, i) => {
+      if (i === QUEEN && ri < QUEEN) return '';
+      return `<li class="${i === ri ? 'is-now' : ''}"><span class="sb-rk-mark" aria-hidden="true">${i === ri ? '▶' : ''}</span><span class="sb-rk-name">${esc(t('rank_' + r.id))}</span><span class="sb-rk-pts">${th[i]}</span></li>`;
+    }).join('');
+    this._openOverlay('rankings', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('rankings'))}</h2><ol class="sb-ranks">${rows}</ol>`);
+  }
+
+  _openHints() {
+    const h = hintsFor(this.answers, this.found, this.puzzle);
+    const head = `<tr><th></th>${h.lens.map((l) => `<th>${l}</th>`).join('')}<th>Σ</th></tr>`;
+    const colSum = (l) => h.firsts.reduce((s, f) => s + h.grid[f][l], 0);
+    const body = h.firsts.map((f) => {
+      const cells = h.lens.map((l) => h.grid[f][l]);
+      const sum = cells.reduce((a, b) => a + b, 0);
+      return `<tr class="${f === this.puzzle.center ? 'is-center' : ''}"><th>${f.toUpperCase()}</th>${cells.map((c) => `<td>${c || '-'}</td>`).join('')}<td class="sb-sum">${sum || '-'}</td></tr>`;
+    }).join('');
+    const foot = `<tr class="sb-sumrow"><th>Σ</th>${h.lens.map((l) => `<td>${colSum(l) || '-'}</td>`).join('')}<td>${h.words}</td></tr>`;
+    const two = h.two.map(([k, n]) => `<span>${k.toUpperCase()}-${n}</span>`).join('');
+    this._openOverlay('hints', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('hints'))}</h2>
+      <p class="sb-hint-sum sb-fit">${esc(t('hint_words', { n: h.words }))} · ${esc(t('hint_points', { n: h.points }))} · ${esc(t('hint_pangrams', { n: h.pangrams }))}${h.perfect ? ' ' + esc(t('hint_perfect', { n: h.perfect })) : ''}</p>
+      <table class="sb-grid"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
+      <h3 class="sb-h3">${esc(t('hint_two'))}</h3><div class="sb-two">${two}</div>`);
+  }
+
+  _openYesterday() {
+    const p = puzzleAt(this.data, this.n - 1);
+    const ans = answersFor(this.data, p);
+    const save = loadSave();
+    const r = save.games[p.key];
+    const got = new Set(r && Array.isArray(r.found) ? r.found : []);
+    const letters = `<div class="sb-yletters" aria-label="${esc([p.center, ...p.outer].join(' ').toUpperCase())}"><span class="is-center">${p.center.toUpperCase()}</span>${p.outer.map((c) => `<span>${c.toUpperCase()}</span>`).join('')}</div>`;
+    const list = ans.map((w) => `<li class="${isPangram(w, p) ? 'is-pangram' : ''}${got.has(w) ? ' is-got' : ''}">${got.has(w) ? '<span class="sb-tick" aria-hidden="true">✓</span>' : ''}${esc(cap(w))}${isPangram(w, p) ? ' <span aria-hidden="true">★</span>' : ''}</li>`).join('');
+    this._openOverlay('yesterday', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('yesterday'))}</h2>${letters}<ul class="sb-ylist">${list}</ul>`);
+    // No scrolling: up to 60 words, so more columns, then smaller type (11px floor), until it fits.
+    const m = this._overlay.querySelector('.gh-modal');
+    const ul = this._overlay.querySelector('.sb-ylist');
+    for (const [cols, fs] of [[2, 14], [3, 14], [3, 13], [3, 12], [3, 11]]) {
+      ul.style.columnCount = String(cols);
+      ul.style.fontSize = fs + 'px';
+      if (m.scrollHeight <= m.clientHeight + 1) break;
+    }
+  }
+
+  _openHelp() {
+    const mini = SPOTS.map(([x, y], i) => `<g transform="translate(${x} ${y})"><polygon points="${HEX}" class="${i === 0 ? 'is-center' : ''}"/><text x="0" y="2" text-anchor="middle" dominant-baseline="central">${'ATBLERC'[i]}</text></g>`).join('');
+    this._openOverlay('help', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('howto'))}</h2>
+      <p class="sb-help-goal sb-fit"><b>${esc(t('howto_goal'))}</b></p>
+      <svg class="sb-help-hive" viewBox="-134 -140 268 280" aria-hidden="true">${mini}</svg>
+      <p class="sb-fit">${esc(t('howto_r2'))}</p>
+      <p class="sb-fit sb-help-ex">${esc(t('howto_example'))}</p>
+      <p class="sb-fit">${esc(t('howto_r1'))}</p>
+      <p class="sb-fit">${esc(t('howto_r3'))}</p>
+      <p class="sb-fit">${esc(t('howto_p1'))}</p>
+      <p class="sb-fit">${esc(t('howto_p2'))}</p>
+      <p class="sb-fit">${esc(t('howto_p3'))}</p>`);
+  }
+
+  // --- layout ----------------------------------------------------------------------------------
+
+  /** Immersive in the hub: the root takes the whole screen and the HUD sits beside the hub's
+   *  floating back button (murdoku's measured approach). */
+  _positionRoot() {
+    if (!this.root || !this.container) return;
+    const r = this.container.getBoundingClientRect();
+    const vh = window.innerHeight || 0;
+    if (!vh) return;
+    this.root.style.left = Math.round(r.left) + 'px';
+    this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
+    const back = document.querySelector('.hub-top-immersive .hub-back');
+    const b = back && back.getBoundingClientRect();
+    if (b && b.width && b.height) {
+      // Full bleed, like the NYT page: the hub's side margins would show as strips of its colour.
+      this.root.classList.add('is-immersive');
+      this.root.style.left = '0px';
+      this.root.style.width = (document.documentElement.clientWidth || window.innerWidth) + 'px';
+      this.root.style.top = '0px';
+      this.root.style.height = Math.max(300, Math.round(vh)) + 'px';
+      this.root.style.setProperty('--sb-top', Math.max(0, Math.round(b.top + (b.height - 44) / 2)) + 'px');
+      return;
+    }
+    this.root.classList.remove('is-immersive');
+    this.root.style.top = Math.round(Math.max(0, r.top)) + 'px';
+    this.root.style.height = Math.max(300, Math.round(vh - Math.max(0, r.top))) + 'px';
+  }
+
+  destroy() {
+    this.disposed = true;
+    try { if (window.__sbTest && window.__sbTest.ui === this) delete window.__sbTest; } catch { /* ignore */ }
+    document.removeEventListener('keydown', this._onKey);
+    document.removeEventListener('visibilitychange', this._onVis);
+    clearInterval(this._dayTimer);
+    clearTimeout(this._toastT);
+    for (const id of this._timers) clearTimeout(id);
+    this._timers.clear();
+    if (this._offResize) this._offResize();
+    if (this.root && this._onClick) {
+      this.root.removeEventListener('click', this._onClick);
+      this.root.removeEventListener('pointerdown', this._onDown);
+    }
+    this._closeOverlay();
+    this.container.innerHTML = '';
+  }
+}
+
+export function init(container) {
+  if (instance) { try { instance.destroy(); } catch { /* ignore */ } }
+  instance = new SpellingBee(container);
+  instance.mount();
+  return instance;
+}
+
+export function destroy() {
+  if (!instance) return;
+  try { instance.destroy(); } finally { instance = null; }
+}
+
+/** Always false: every found word is saved the moment it is found, so leaving loses nothing. */
+export function isInProgress() { return false; }
+
+export default { init, destroy, isInProgress };

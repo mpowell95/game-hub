@@ -1157,6 +1157,11 @@ export const GAME_ART = {
   // the cue drawn back on the cream cue ball, a coral solid on its way to the corner pocket, a cyan stripe
   // and the 8 in the pack. The stripe is a SHAPE (a band), never hue alone.
   // Down the table at the four cups in a line, each hit painted beside it, the ball waiting in front.
+  // Spelling Bee (2026-10-23, spelling-bee/): the NYT honeycomb, yellow centre, grey cells.
+  'spelling-bee': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#fff6c2"/>
+            ${[[0,0,'A',1],[0,-1,'B',0],[1,-0.5,'E',0],[1,0.5,'L',0],[0,1,'T',0],[-1,0.5,'R',0],[-1,-0.5,'C',0]].map(([x,y,l,c])=>{const cx=80+x*24.6,cy=45+y*27.6;return `<path d="M${cx-16} ${cy} L${cx-8} ${cy-13.86} L${cx+8} ${cy-13.86} L${cx+16} ${cy} L${cx+8} ${cy+13.86} L${cx-8} ${cy+13.86} Z" fill="${c?'#f7da21':'#e6e6e6'}"/><text x="${cx}" y="${cy+5.5}" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="800" font-size="15" fill="#000">${l}</text>`}).join('')}
+          </svg>`,
   'cup-baseball': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#1a2230"/>
             <path d="M62 6 L98 6 L146 90 L14 90 Z" fill="#00a650"/>

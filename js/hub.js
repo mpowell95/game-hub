@@ -676,6 +676,23 @@ export const GAMES = [
     art: GAME_ART['contexto'],
   },
   {
+    // Spelling Bee (2026-10-23): a clone of the NYT game. One puzzle a day for everyone, seven
+    // letters in a honeycomb, every word uses the centre letter (spelling-bee/CLAUDE.md). Hub id is
+    // the folder; stats id is `spellingbee`.
+    id: 'spelling-bee',
+    added: '2026-10-23',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Spelling Bee', es: 'Spelling Bee' },
+    blurb: { en: 'Make words from seven letters. Always use the center one.',
+      es: 'Forma palabras con siete letras. Usa siempre la del centro.' },
+    module: '../spelling-bee/js/ui.js',
+    immersive: true,
+    accent: '#f7da21',
+    art: GAME_ART['spelling-bee'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
+  },
+  {
     // Murdoku (2026-09-29): place every suspect on a floor plan, one per row and column, from
     // their clues; the one left alone with the victim did it. Every case is generated on the
     // device and proved to have exactly one answer (murdoku/CLAUDE.md). IMMERSIVE, unlike Sudoku:

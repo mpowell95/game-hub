@@ -15,7 +15,7 @@ import { correctStats } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };

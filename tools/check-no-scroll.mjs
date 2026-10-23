@@ -58,6 +58,28 @@ const TOL = 2;      // sub-pixel rounding; the same tolerance test-visual's fit 
  *  a screen that grows until it breaks - and, if the way OFF it lives at the bottom, breaks
  *  silently. */
 const EXTRA_SCREENS = {
+  // Spelling Bee (2026-10-23): the open word list with a dozen words, then each sheet.
+  'spelling-bee': [
+    {
+      name: 'word list open',
+      async open(page) {
+        await page.waitForFunction(() => window.__sbTest, null, { timeout: 15000 });
+        await page.evaluate(() => { const s = window.__sbTest; for (const w of s.answers.slice(0, 14)) { s.ui._busy = false; s.submit(w); } });
+        await page.waitForTimeout(600);
+        await page.click('[data-act="toggle"]');
+        await page.waitForTimeout(250);
+      },
+    },
+    ...['hints', 'yesterday', 'rankings', 'help'].map((k) => ({
+      name: k,
+      async open(page) {
+        await page.waitForFunction(() => window.__sbTest, null, { timeout: 15000 });
+        await page.evaluate(() => window.__sbTest.ui._closeOverlay());
+        await page.click(`.sb-hud [data-act="${k}"]`);
+        await page.waitForTimeout(250);
+      },
+    })),
+  ],
   // Chinchón: the Challenge pane (2026-10-18), the fourth choice on the setup switch. With this
   // run's profile (no player code) it is the New challenge button and "No matches"; the lists with
   // rows cut themselves to fit (chinchon/js/ch-ui.js fitList).
