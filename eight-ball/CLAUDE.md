@@ -30,6 +30,11 @@ black pockets, coral and cyan groups).
 
 ## Hub integration
 
+- **Test release (2026-10-23, Matt: "release this for Anita Bonita only"):** the admin page's Pool row
+  has the WHO CAN SEE IT picker (`ALLOW_PICKER` in `js/admin-ui.js`); Matt taps her in
+  (`adminConfig/v1/games/eight-ball/allow/<CODE>`; her codes K99MB, newest, and 89N3N). Still devOnly.
+  Leaderboard stays difficulty-first with MP and level tabs (Matt: "of course differentiate by
+  difficulty and mode").
 - In-hub `module: '../eight-ball/js/ui.js'`, **immersive**, `devOnly: true` (admin only), no
   `released` (that is the release day). `GAME_META`, My Stats tab and `game_title_eightball` ship
   with it, so results recorded before release show the moment it is released.

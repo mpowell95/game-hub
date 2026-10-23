@@ -844,7 +844,7 @@ const REST_MANIFEST = {
   './js/push.js': '59adfa5053',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': '8036b5cae4',
-  './js/admin-ui.js': '6e428f64ce',
+  './js/admin-ui.js': 'b2b8a4ee61',
   './js/stats-corrections.js': 'cf8c62bb60',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': 'f08b76ff98',
