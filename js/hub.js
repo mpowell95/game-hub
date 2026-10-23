@@ -522,6 +522,9 @@ export const GAMES = [
     blurb: { en: 'Match color or number, empty your hand first. 2-4 players vs AI.',
       es: 'Combina color o número, sé el primero en quedarte sin cartas. 2-4 jugadores contra la IA.' },
     module: '../uno/js/ui.js',
+    // Its own full-bleed table since the 2026-10-23 overhaul (felt, pills, a ☰ menu), the
+    // same call as Escoba.
+    immersive: true,
     accent: '#E0532F',
     art: GAME_ART["uno"],
   },

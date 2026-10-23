@@ -71,6 +71,7 @@ export const STRINGS = {
     help_bullet4: 'Uno is called for you automatically.',
     aria_close: 'Close',
     aria_help: 'How to play',
+    aria_menu: 'Menu',
   },
   es: {
     title: 'Uno',
@@ -137,6 +138,7 @@ export const STRINGS = {
     help_bullet4: 'El Uno se canta automáticamente.',
     aria_close: 'Cerrar',
     aria_help: 'Cómo se juega',
+    aria_menu: 'Menú',
   },
 };
 

@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1238;
-const CACHE = 'game-hub-v1238';
+const CACHE = 'game-hub-v1239';
 
 const ASSETS = [
   './',
@@ -803,7 +803,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '2253567714',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '6122b9b959',
+  './js/hub.js': '62c889acf8',
   './js/name-gate.js': '9f3aa22f34',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -1146,11 +1146,11 @@ const REST_MANIFEST = {
   './dominoes/js/strings.js': 'a176750284',
   './uno/': '04dd53b92d',
   './uno/index.html': '04dd53b92d',
-  './uno/css/uno.css': 'c30de5e6ae',
-  './uno/js/ui.js': '56f575413f',
+  './uno/css/uno.css': '4a26c8d78b',
+  './uno/js/ui.js': 'bcb6ff24f6',
   './uno/js/game.js': '6ffaaf31b2',
-  './uno/js/ai.js': '0edaa2fea7',
-  './uno/js/strings.js': 'b9e08ff8e3',
+  './uno/js/ai.js': '8bc802a460',
+  './uno/js/strings.js': 'f3abe15af1',
   './yahtzee/': '8a3981aec3',
   './yahtzee/index.html': '8a3981aec3',
   './yahtzee/css/yahtzee.css': 'c091c6a113',

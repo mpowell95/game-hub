@@ -8,10 +8,10 @@
 **Keep this file short.** A new rule goes here in one or two lines; the story behind it goes in `CLAUDE-HISTORY.md` (append a dated section). Full original text: `CLAUDE-HISTORY.md`.
 
 Built 2026-07-24 per `HANDOFF-UNO.md` (root, kept for the ruleset rationale). 2-4 players, solo vs AI.
-In-hub `module:`, not immersive. `isInProgress()` is always `false` (autosave/resume built in).
-Visual rebuild 2026-07-25 per `docs/archive/UNO-DESIGN-SPEC.md` + `docs/archive/HANDOFF-UNO-VISUAL.md`; computer speed, hand
-sort and card travel 2026-09-28. Never click-tested end to end: the wild-colour chooser and win
-overlay (manual pass if a report suggests that flow is broken); not yet checked by eye on a phone.
+In-hub `module:`, immersive since 2026-10-23. `isInProgress()` is always `false` (autosave/resume built in).
+Play screen overhauled 2026-10-23 (see "The play screen"). Played end to end headless that day: 4 full
+games through the real screen (deal, plays, the wild chooser, draws, win card, rematch) at 2 and 3
+players, in the hub and standalone, no errors; not yet checked by eye on a real phone.
 
 ## Layout & responsibilities
 
@@ -108,106 +108,48 @@ asserted in `test.js`. If you touch `ai.js`, re-run `node uno/js/test.js` and up
   holding a playable `+2`; only then is the draw pile tappable alongside a live card.
 - **Wild colour is collected client-side** (`this._pendingWildId` + chooser overlay, then
   `game.play(HUMAN, id, color)`); `chooseColor()` is invoked from the UI only for the first-card wild
-  (`g.phase === 'chooseColor' && g.pendingWild.isFirstCard`). `_onChooseColor` re-validates turn +
+  (`g.phase === 'chooseColor' && g.pendingWild.isFirstCard`, human opener only). `_onChooseColor` re-validates turn +
   hand membership; hand cards render disabled while a chooser is open; `startGame()` clears a stale
   `_pendingWildId`.
 - **Colorblind-safe cards** (the non-negotiable rule): hub palette (yellow circle, blue triangle,
-  vermilion square, teal diamond), shape in both corners and on the chooser chips, never hue alone.
+  vermilion square, teal diamond), shape in both corners, in the oval and on the chooser, never hue alone.
   Colour names in copy stay Red/Yellow/Green/Blue (Rojo/Amarillo/Verde/Azul).
 - **The chooser blanks `.un-status` while open** (`chooserOpen`; `.un-status` keeps its fixed height).
 - **Penalty-draw toast**: the engine emits `penaltyDraw {playerIndex, amount}`; `_onEngineEvent` sets
-  a transient `this._penaltyToast` (`PENALTY_TOAST_MS` 2200), never snapshotted. The pending badge
-  (`.un-pendingbadge`) is a `.un-mat` child (a stack and a chooser can never coexist).
+  a transient `this._penaltyToast` (`PENALTY_TOAST_MS` 2200), never snapshotted, shown on the felt.
 - **Play-direction arrow** (`dirArrowSVG`) only when `this.seats.length > 2`, off `g.direction`.
 
-## Visual rebuild (2026-07-25) — what is in force
+## The play screen (overhaul 2026-10-23) - what is in force
 
-### The token system (UN-1)
+Matt: *"The cards don't move like any other game. They aren't displayed like any other game. And most
+of the gameplay screen is dead space."* Rebuilt to match Chinchón/Escoba. The 2026-07-25 spec
+(fan, UN-1..UN-9 geometry, keyframe flights) is retired; its text is in `CLAUDE-HISTORY.md`.
 
-`uno/css/uno.css` has exactly two token blocks: `.un-root` (all tokens) and `:root.gh-dark .un-root`
-(chrome overrides ONLY). **Every rule outside them consumes tokens: zero literal colours, shadows,
-radii or font-sizes.** Gate after any CSS edit: `grep -nE "rgba?\(|#[0-9a-fA-F]{3,6}" uno/css/uno.css`
-must hit token blocks only.
-
-- Four card hues + `--un-accent` are the locked hub palette. **Theme-invariant by design:
-  `--un-table` and every card token** (rim, edge, medallion, gloss, numeral shade, card ink, back
-  stripe, shadows); dark mode overrides chrome only (`--un-bg/surface/ink/muted/border`). Do not add
-  card tokens to the dark block.
-- Shadows are a three-state stack (`--un-sh-rest/raised/lift`); no component improvises its own.
-- Cards `--un-card-w/h` = 62x92 (`border-box`), small cards 48x71.
-
-### The fan (UN-3, multi-row since UN-8) - geometry
-
-`fanLayout(n, {W=62, H=92, STEP=32, ROW_PITCH=58, A=452, RESERVED_H=150})` in `ui.js` is pure and
-holds every constant. Balanced rows (`PER_ROW = max(1, floor((A-24-W)/STEP)+1)`, 13 cards is 7+6),
-`x=(j-c)*STEP`, `y=r*ROW_PITCH + min(8,(j-c)^2*0.4)`, `z=r*100+j`, `fit=min(1, RESERVED_H/needH)`,
-`needH=H+ROW_PITCH*(rows-1)`. `STEP/W ≈ 51.6%` so at least half of every overlapped card is visible
-at any `fit`.
-
-- `_syncFan` passes the RAW measured `A = min(452, .un-hand clientWidth)`; the 24px breathing room is
-  subtracted INSIDE `fanLayout`, **do not subtract it twice**. A `window` resize listener re-renders
-  (removed in `destroy()`).
-- **Every card's `y` carries `shiftY = RESERVED_H - needH`: load-bearing, do not drop it** (the
-  `scale(fit)` origin is the box bottom; without it a 3-row hand drifted ~42px past the box).
-- `.un-hand` is a fixed 150px box, no scroll container, `overflow-x` banned. `.un-fan .un-card` has
-  `top: 0`; do not add a static top offset without re-deriving `RESERVED_H`.
-- **Display order is the REVERSED engine hand** (newest card at the left end of the TOP row);
-  presentation only, every `data-id`/`play()` uses the real id. `sortedHand()` absorbs it as `draw` mode.
-
-### The card face (UN-2)
-
-- The rim is `box-shadow: inset` stacked onto `--un-sh-rest`, not a `border`. **`.un-card` is a
-  `<button>`: keep the explicit `border: none`**; any card-like `<button>` that swaps a border for a
-  shadow needs the same reset.
-- `medallionHTML(card)` only calls `shapeSVG()` (the one shape function). Wild = four quadrant
-  shapes (`scale(.5)` + translate) **clipped by CSS `clip-path: circle(47.5%)` on
-  `.un-medallion-wild`, NOT an SVG `<clipPath id>`** (flight clones `cloneNode(true)` the card and an
-  id-referenced clip lost its target mid-flight). Do not reintroduce an SVG clipPath for per-card
-  cloned markup.
-- Only the top-left corner mark exists (`.un-corner`, `z-index: 2` above the numeral's 1); a buried
-  card only exposes its left edge. Action glyphs use `.un-glyph-action` (26px). Small cards
-  (`.un-card-sm`, how-to diagram only): numeral and corner hidden, medallion 36px.
-
-### The `_syncFan` render exemption (UN-3c - load-bearing, do not "fix" back)
-
-`renderGame()` does not rewrite the container as one string. `_ensureGameShell()` builds a persistent
-skeleton once per entry into the game view; each render rebuilds the REGION CONTENTS and `_syncFan()`
-reconciles card nodes in place, keyed by `data-id` (a re-inserted node or re-parented ancestor kills
-CSS transitions). Invariants: every call is a FULL stateless reconciliation; card nodes are never
-moved or reparented (position and paint order ride custom properties; DOM order diverges from
-display order, accepted); removal is IMMEDIATE and flights use detached clones in a fixed layer;
-`_syncFan` + `_buildCardEl` are the ONLY code that mutates card DOM outside a template string.
-Consequences: overlays survive re-renders, so `startGame()` calls `closeOverlays()`; `renderSetup()`
-rewrites the whole container and must null `_fanEl`/`_regions`.
-
-### Fixed geometry (UN-5/UN-8/UN-9)
-
-`.un-opponents` (58px since the face-down fans, was 44), `.un-status` (22), `.un-mat` (148),
-`.un-handwrap` (170 = 150 fan + 20 UNO chip slot), `.un-bar` (40) are explicit `height` with
-`box-sizing: border-box`. **`.un-unoslot` has an unconditional `height: 20px`** (it used to grow when
-the chip appeared and shift the fan on the most dramatic moment). `.un-opponents` is `flex-wrap:
-nowrap`; `.un-oppchip { flex: 1 1 0; min-width: 0 }` and `.un-oppname { min-width: 0; overflow: hidden;
-text-overflow: ellipsis; white-space: nowrap }` (ellipsis needs `min-width: 0`).
-
-### Motion system (UN-4) - spec §6
-
-- Every duration/easing is a named token (`--un-dur-*`/`--un-ease-*`); no inline durations or
-  `cubic-bezier(...)` literals. Penalty draws arrive `--un-draw-stagger` (90ms) apart.
-- **Only one `transition` is active on `transform`**: rows 2 (relayout 260ms), 7 (legal lift 180ms)
-  and 11 (press 120ms) are layered by cascade (`:active` > `.is-live` > base); a legal card being
-  relaid-out animates at 180ms. Deliberate approximation.
-- **Non-persistent regions (mat, opponents, UNO slot) use `@keyframes` gated by "did it change"
-  flags**, never transitions: `_lastDiscardId` + `_discardRot` (rows 4/5), `_revealPending` (set by
-  `startGame()`), `_lastPendingDraw` (row 8), `_lastHandLen` (row 10), `_aiPulsePi` (row 12 chip).
-- **Flights (rows 1, 3, 6, 12) are fixed-position clones in `.un-flightlayer`** (built once in
-  `_ensureGameShell()`); `_spawnFlight()` builds/animates/removes one (static inline left/top/size,
-  only `transform` moves; removed on `animationend` with a `FLIGHT_SAFETY_MS` fallback). A newly
-  inserted fan node is hidden (`un-card-entering`) until its clone lands. Row 3: clone the fan node
-  BEFORE `g.play()`. Row 12: clone fresh from `cardHTML()`, capture the chip rect before `g.play()`.
-- **`prefers-reduced-motion`**: blanket 0.01ms override, rows 8/10 keep a 120ms opacity-only fade,
-  `.un-flightlayer` is `display: none`. `_spawnFlight()` checks `matchMedia` FIRST and resolves
-  `onDone` synchronously (a hidden layer never fires `animationend`).
-- Row 13 (sort) needs no code: `_syncFan` is keyed by id, so reordering animates via row 2.
+- **Immersive** (`js/hub.js`). Column: opponent pills + ☰ menu (52px) / green felt `flex: 1` / your
+  chip + sort (44px) / the hand. `_fit()` sizes `.un-game` to the host by the Dominoes PROBE
+  (2000px, `below = scrollHeight - top - PROBE`) and `_refitSoon()` re-fits after a resume.
+- **Hand = `handLayout(n, {A, cw, maxH})`** (pure, exported): straight cards overlapped left to right,
+  >= 38% of each showing, balanced rows, lower rows in front about half a card down; past two rows the
+  card size steps down so the hand never exceeds `handMaxH`. Card nodes are keyed by id and reused
+  (`_syncHand`), position is `--x/--y` with a 220ms transform transition, so relayout/sort SLIDES.
+  Playable: lifted 14px + gold ring; unplayable on your turn: dimmed (position is the non-colour cue).
+- **Piles** sized per render from the felt's real height (`_sizePiles`), capped by width.
+  Colour in force = a ring round the discard + a chip carrying its SHAPE; `+N` stack badge on the pile.
+- **Card face is all em** (`font-size = --cw / 6`): tilted white oval, italic numeral in the card
+  colour, faint shape in the oval, shape + value in BOTH corners; wild = four-hue oval with the four
+  shapes; back = black card, red oval, "UNO". Cards are `<div role="button">` (Part 0), keyboard via `onKey`.
+- **Card travel = Chinchón's `_fly`**: a copy in `.un-flight` (fixed), translate+scale via Web
+  Animations, `FLY_MS` 340, `cubic-bezier(.25,.8,.35,1)`, deal gap 45ms round the table from the
+  opener, then the first discard turns up. Stock cards fly face down and `_turnUp` on landing. A played
+  card's pile slot stays hidden (`_landing`) until it lands, then a re-render shows it with its ring.
+  A computer's draws fly to its pill (`_seenCounts` diff). Flights run under reduced motion (gameplay
+  motion); only the turn pulse and pops are garnish. A fresh shell (resume) shows the hand silently.
+- Menu (☰ bottom sheet): How to play, Restart (tap-again confirm), New game. Overlays are `position: fixed`.
+- Token discipline still holds: colours only in the two token blocks (gate grep at the top of `uno.css`).
+- **Names, never "You"**: the toast and win title use the profile name (`penalty_draw_opp`, `opp_wins`).
+- **Fixed 2026-10-23: a first-card Wild owned by a COMPUTER froze the hand** (the chooser went to the
+  human, `_onChooseColor` refused it). `_afterStateChange` now lets that computer pick
+  (`pickWildColor`, now exported from `ai.js`; AI behaviour unchanged).
 
 ## Autosave/resume
 
@@ -230,19 +172,12 @@ Generic path only, no sub-counter: `recordResult('uno', difficulty, won)`. `'uno
 `js/leaderboard-ui.js` `GAME_META`. Art: `GAME_ART['uno']`. Head-to-head is MP-only and out of scope
 until Uno gets a multiplayer pass.
 
-## Computer speed, hand sort and card travel (2026-09-28)
+## Computer speed and hand sort (2026-09-28)
 
 - **Computer speed** Slow/Normal/Fast (`row_speed`), `pace` additive in `gamehub.uno.v1` (absent =
   Normal). `_aiMs()` scales only a computer's think pause and draw steps (x1.6 / x1 / x0.3).
-- **Hand sort (UN-6)**: `sortedHand(hand, mode)`, modes `draw`/`color`/`rank`, applied to a COPY at
-  render time (engine, `play()` ids and save never see it). Control `.un-sortbtn` (28px drawn,
-  `::before` stretches the target past 44px; a fourth footer button wrapped every label).
-- **A played card does not show on the pile before it lands**: `this._landing` holds ids in the air;
-  `renderGame` draws that top card `visibility:hidden`; `_landDiscard()` reveals it. Every failure
-  path of `_flyToDiscard`/`_flyFromChip` still lands.
-- Discard is a stack (`.un-under` at remembered tilt `_rots`, `.un-top`). Computers' hands are visible
-  face down (`.un-oppfan`, up to 8 backs + count); their draws fly (`_seenCounts` diff, `_flyToChip`),
-  seeded from the snapshot on resume so nothing replays.
+- **Hand sort**: `sortedHand(hand, mode)`, modes `draw`/`color`/`rank`, applied to a COPY at render
+  time (engine, `play()` ids and save never see it). Button on your row, 44px.
 
 ## Tests
 
