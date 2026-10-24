@@ -341,11 +341,11 @@
   position: relative; display: flex; align-items: center; gap: 3px; margin-top: 1px; padding: 2px 7px 2px 2px; border-radius: 999px;
   background: rgba(10, 6, 4, .78); border: 2px solid rgba(255, 255, 255, .2);
 }
-.ba-root .ba-bar-gem svg { width: 18px; height: 18px; }
-.ba-root .ba-bar-track { display: block; width: calc(var(--ba-art) * .5); height: 9px; border-radius: 5px; background: rgba(255, 255, 255, .14); overflow: hidden; }
+.ba-root .ba-bar-gem svg { width: 30px; height: 30px; margin: -5px 0 -5px -6px; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .55)); }
+.ba-root .ba-bar-track { display: block; width: calc(var(--ba-art) * .5); height: 12px; border-radius: 5px; background: rgba(255, 255, 255, .14); overflow: hidden; }
 .ba-root .ba-bar-fill { display: block; height: 100%; background: var(--ba-el); transform-origin: left; transform: scaleX(0); transition: transform .3s ease-out; }
 .ba-root .ba-mon.is-all .ba-bar-fill { background: linear-gradient(90deg, #E0532F, #F2B705, #2E9E44, #1F5FA8, #7B4FC4); }
-.ba-root .ba-bar-txt { font-size: 12px; font-weight: 900; min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
+.ba-root .ba-bar-txt { font-size: 14px; font-weight: 900; min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
 .ba-root .ba-mon.is-full .ba-bar { border-color: var(--ba-hl); }
 .ba-root .ba-evo-pill {
   position: absolute; top: -4px; z-index: 2; display: flex; gap: 3px; align-items: center; padding: 3px 10px 3px 6px; border-radius: 999px;
