@@ -352,7 +352,6 @@ class BattleArena {
         <div class="ba-card-art${evo ? ' is-evo' : ''}">${monsterSVG(id, evo)}</div>
         <h2 class="ba-card-name">${escapeHTML(monName(id, evo))}</h2>
         <div class="ba-card-stats">
-          <span class="ba-card-stat" aria-label="${t('hp')} ${m.hp}">${ICONS.heart}<b>${m.hp}</b></span>
           <span class="ba-card-stat" aria-label="${t('el_' + m.el)} ${m.cost}">${elementBadge(m.el)}<b>${m.cost}</b></span>
         </div>
         <div class="ba-card-sp">
