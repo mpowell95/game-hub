@@ -70,8 +70,9 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const s = setup(TEAM, BASE);
   const before = JSON.stringify(s);
   const r = apply(s, swap(0, 0, 0, 1));
-  ok('a swap that makes no line is refused', !r.ok && r.error === 'no-match');
-  ok('a refused swap changes nothing', JSON.stringify(r.state) === before && JSON.stringify(s) === before);
+  ok('a swap that makes no line is still a move', r.ok && r.state.movesLeft === 1 && !has(r.events, 'clear'));
+  ok('and the tiles stay swapped (a swap event, no snap back)', has(r.events, 'swap', (e) => e.a === 0 && e.b === 1));
+  ok('apply never mutates its input', JSON.stringify(s) === before);
   ok('a far swap is refused', apply(s, { type: 'swap', a: 0, b: 2 }).error === 'not-adjacent');
   ok('a wrong-side move is refused', apply(s, { ...swap(4, 3, 4, 4), side: 1 }).error === 'not-your-turn');
 }

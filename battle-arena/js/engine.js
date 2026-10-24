@@ -6,8 +6,8 @@
 // the match (`rng`, mulberry32), so the same seed and the same moves always give the same match:
 // phase 2 (live rooms, turn-by-turn challenges) replays moves on every phone and gets one board.
 //
-// Moves: { type: 'swap', a, b } (two orthogonally adjacent cells; illegal = no match = refused,
-// nothing changes), { type: 'evolve', mon } (only while `pendingEvolve` is the mover's side) and
+// Moves: { type: 'swap', a, b } (any two orthogonally adjacent cells; a swap that makes no line
+// still spends the move), { type: 'evolve', mon } (only while `pendingEvolve` is the mover's side) and
 // { type: 'pass' } (the turn timer ran out).
 // `events` is the ordered story of what happened, for the UI to animate (see the EVENTS list at
 // the bottom of this file). Rules: docs/BATTLE-ARENA-SPEC.md; deviations in battle-arena/CLAUDE.md.
@@ -533,7 +533,8 @@ export function apply(state, move) {
   const { a, b } = move;
   if (!adjacent(a, b)) return refuse('not-adjacent');
   swapCells(s.board, a, b);
-  if (!findRuns(s.board).length) return refuse('no-match');
+  // ANY adjacent swap is a move, a line or not (the reference allows it; Matt, 2026-10-24): the
+  // tiles stay swapped and the move is spent.
   s.movesLeft -= 1;
   s.moveNo += 1;
   ev.push({ t: 'swap', side, a, b, ids: [s.board[b].id, s.board[a].id] });
