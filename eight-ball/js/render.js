@@ -463,24 +463,39 @@ export function createRenderer(canvas) {
   }
 
   /** A pocket to call (pulsing white ring) or the one called (thick accent ring and an arrow). */
+  /** A pocket being called, or the one that is. Drawn ONLY on the rail and the cap BEHIND the
+   *  pocket, never over the cloth, the cushions or the mouth (Matt, 2026-10-24, on the old ring and
+   *  arrow: "this makes it WAY harder to sink the 8 ball. All of it is in the way"). The called one:
+   *  a thick yellow ring round the back of the hole and a chevron on the cap pointing at it (shape +
+   *  colour); the others while calling: a pulsing dashed white ring, same place. */
   function pocketMark(k, called, t) {
     const p = POCKETS[k];
-    const pulse = 0.5 + 0.5 * Math.sin(t * 5);
+    const C = TABLE.cushion, ow = C + TABLE.wood;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-ow - 20, -ow - 20, W + 2 * ow + 40, H + 2 * ow + 40);
+    ctx.rect(-C, -C, W + 2 * C, H + 2 * C);
+    ctx.clip('evenodd');
+    // Outward from the pocket: corners along the diagonal, side pockets straight out.
+    let vx = p.cx < W / 2 ? -1 : 1, vy = Math.abs(p.cy - H / 2) < 1 ? 0 : p.cy < H / 2 ? -1 : 1;
+    const vl = Math.sqrt(vx * vx + vy * vy); vx /= vl; vy /= vl;
     if (called) {
-      ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.3;
-      ctx.beginPath(); ctx.arc(p.cx, p.cy, p.r + 1.4, 0, Math.PI * 2); ctx.stroke();
-      // An arrow pointing into it from the cloth.
-      let vx = W / 2 - p.cx, vy = H / 2 - p.cy;
-      const vl = Math.sqrt(vx * vx + vy * vy); vx /= vl; vy /= vl;
-      const tx = p.cx + vx * (p.r + 3.2), ty = p.cy + vy * (p.r + 3.2), px = -vy, py = vx;
+      ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(p.cx, p.cy, p.r + 1.1, 0, Math.PI * 2); ctx.stroke();
+      const d0 = p.r + 1.5, d1 = d0 + 3.6, px = -vy, py = vx;
+      const tx = p.cx + vx * d0, ty = p.cy + vy * d0;
       ctx.fillStyle = ACCENT;
-      poly([[tx, ty], [tx + vx * 3.4 + px * 2, ty + vy * 3.4 + py * 2], [tx + vx * 3.4 - px * 2, ty + vy * 3.4 - py * 2]]);
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 0.3;
+      poly([[tx, ty], [p.cx + vx * d1 + px * 1.6, p.cy + vy * d1 + py * 1.6], [p.cx + vx * d1 - px * 1.6, p.cy + vy * d1 - py * 1.6]]);
+      ctx.stroke();
     } else {
-      ctx.strokeStyle = `rgba(255,255,255,${(0.45 + 0.45 * pulse).toFixed(3)})`; ctx.lineWidth = 0.7;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 5);
+      ctx.strokeStyle = `rgba(255,255,255,${(0.5 + 0.45 * pulse).toFixed(3)})`; ctx.lineWidth = 0.9;
       ctx.setLineDash([1.4, 1]);
-      ctx.beginPath(); ctx.arc(p.cx, p.cy, p.r + 1 + pulse * 0.8, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.cx, p.cy, p.r + 1 + pulse * 0.7, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
     }
+    ctx.restore();
   }
 
   /** state: { b, obs, look, mode, aim, halo (0-1), inHand, bad, t, sinking, bursts,

@@ -153,7 +153,10 @@ black pockets, coral and cyan groups).
   moves the ball. A spot that is not allowed shows a dotted white ring; letting go snaps to the
   nearest legal one (`nearestPlace`).
 - **Calling:** while a call is needed the pockets pulse; a tap on one (generous: hole + 16px) calls
-  it (yellow ring + arrow), another tap changes it; the meter does not shoot until a pocket is called. The
+  it, another tap changes it. **Marks are drawn ONLY on the rail and cap behind a pocket** (clipped
+  outside the cushion line; Matt, 2026-10-24, on the old ring and inward arrow: "all of it is in the
+  way"): the called one a thick yellow ring round the back of the hole + a yellow chevron on the cap
+  pointing at it; the others a pulsing dashed white ring; the meter does not shoot until a pocket is called. The
   computer shows its call while it aims.
 - **Aiming help** (`AIDS`, Matt 2026-10-22): Easy = line to the first thing the cue ball meets, a
   ghost ball there, and the hit ball's path, short and FADING out (a hint, not the whole shot);
