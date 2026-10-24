@@ -27,8 +27,9 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
   the reference shows ("3 🍒" by the counter); ~10% of tiles (2026-10-24, v2). **Bombs**: a match
   orthogonally NEXT TO one sets it off (the reference's stage text). Blast and special-cleared gems
   charge the mover; a bomb at 0 charges nobody.
-- **Turn timer 30 s** for the player (runs only while they can act, paused during animation and
-  with any overlay open); at 0 the engine's `{type:'pass'}` ends the turn. Idle 8 s: a hint wiggles.
+- **Turn timer 30 s: LIVE ONLINE ONLY, never vs the computer** (Matt, 2026-10-24). Built and off
+  (`this.timed`); when on it runs only while the player can act and at 0 sends `{type:'pass'}`.
+  Idle 8 s: a hint wiggles.
 - **Any adjacent swap is a move**, a line or not (Matt, 2026-10-24: "clearly allowed in the original").
 - Extra move: any 4+ line during the move's resolution (cascades included), once per turn.
 - Specials fire after the board settles, seat order; a special that changes the board settles again.
