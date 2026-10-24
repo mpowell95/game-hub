@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<script src="../js/no-zoom.js"></script>
+<title>Battle Arena</title>
+<link rel="stylesheet" href="../css/ui.css">
+<link rel="stylesheet" href="css/battle-arena.css">
+<style>html,body{margin:0;height:100%;background:#23272e;overflow:hidden}</style>
+</head>
+<body>
+<div id="battle-arena"></div>
+<script type="module">
+  // A STANDALONE PAGE IS A DOOR INTO THE HUB LIKE ANY OTHER, so it gates on the name BEFORE it
+  // mounts (the ungated pages are where the leaderboard's "Unnamed player" rows came from).
+  import { requireName } from '../js/name-gate.js';
+  import { init } from './js/ui.js';
+  await requireName();
+  init(document.getElementById('battle-arena'));
+</script>
+</body>
+</html>

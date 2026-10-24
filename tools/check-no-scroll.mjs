@@ -58,6 +58,34 @@ const TOL = 2;      // sub-pixel rounding; the same tolerance test-visual's fit 
  *  a screen that grows until it breaks - and, if the way OFF it lives at the bottom, breaks
  *  silently. */
 const EXTRA_SCREENS = {
+  // Battle Arena (2026-10-24): How to play, the draft, a monster card, the battle. Same page each
+  // time, so each starts from the game's own home screen.
+  'battle-arena': [
+    {
+      name: 'help',
+      async open(page) {
+        await page.waitForFunction(() => window.__baTest, null, { timeout: 15000 });
+        await page.click('.ba-home [data-role="help"]');
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'draft + card',
+      async open(page) {
+        await page.evaluate(() => { document.querySelectorAll('.ba-root .gh-overlay').forEach((o) => o.remove()); window.__baTest.renderDraft(); });
+        await page.click('.ba-pick[data-id="sproutle"]');
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'battle',
+      async open(page) {
+        await page.evaluate(() => { document.querySelectorAll('.ba-root .gh-overlay').forEach((o) => o.remove()); window.__baTest.startMatch(['emberkit', 'zapup']); });
+        await page.waitForSelector('.ba-board .ba-tile', { timeout: 8000 });
+        await page.waitForTimeout(500);
+      },
+    },
+  ],
   // Spelling Bee (2026-10-23): the open word list with a dozen words, then each sheet.
   'spelling-bee': [
     {

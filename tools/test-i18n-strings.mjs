@@ -51,6 +51,7 @@ const DICTS = [
   { name: 'eight-ball/js/strings.js', path: './eight-ball/js/strings.js' },
   { name: 'cup-baseball/js/strings.js', path: './cup-baseball/js/strings.js' },
   { name: 'spelling-bee/js/strings.js', path: './spelling-bee/js/strings.js' },
+  { name: 'battle-arena/js/strings.js', path: './battle-arena/js/strings.js' },
 ];
 
 const PLACEHOLDER_RE = /\{([a-zA-Z0-9_]+)\}/g;

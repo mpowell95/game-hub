@@ -693,6 +693,24 @@ export const GAMES = [
     devOnly: true,
   },
   {
+    // Battle Arena (2026-10-24): a match-3 monster battle vs the computer. Draft two monsters,
+    // swap gems to charge their specials, knock the other team's shared HP to 0 (Boiler Room
+    // bombs, berries to evolve). Spec: docs/BATTLE-ARENA-SPEC.md; game: battle-arena/CLAUDE.md.
+    // Hub id is the folder; stats id is `battlearena`.
+    id: 'battle-arena',
+    added: '2026-10-24',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Battle Arena', es: 'Arena de Batalla' },
+    blurb: { en: 'Match gems to charge your monsters. Knock out the other team.',
+      es: 'Junta gemas para cargar a tus monstruos. Derrota al otro equipo.' },
+    module: '../battle-arena/js/ui.js',
+    immersive: true,
+    accent: '#E0532F',
+    art: GAME_ART['battle-arena'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
+  },
+  {
     // Murdoku (2026-09-29): place every suspect on a floor plan, one per row and column, from
     // their clues; the one left alone with the victim did it. Every case is generated on the
     // device and proved to have exactly one answer (murdoku/CLAUDE.md). IMMERSIVE, unlike Sudoku:

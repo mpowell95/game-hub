@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1238;
-const CACHE = 'game-hub-v1242';
+const CACHE = 'game-hub-v1243';
 
 const ASSETS = [
   './',
@@ -803,7 +803,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '2253567714',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'bffbfdd098',
+  './js/hub.js': '1d2f969001',
   './js/name-gate.js': '9f3aa22f34',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -815,15 +815,15 @@ const REST_MANIFEST = {
   './js/theme.js': 'e8b40b1bc2',
   './js/layout.js': '2517577123',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '5dda71b461',
+  './js/strings.js': '8931da55f6',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '5dbf68418c',
+  './js/game-stats.js': '061a321e01',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
-  './js/game-stats-ui.js': 'a36ec33da8',
+  './js/game-stats-ui.js': 'a560827aab',
   './js/stats-net.js': '38b9acf121',
   './js/firebase-boot.js': '5a63920ff7',
   './js/device-report.js': '22d5aec601',
@@ -848,9 +848,9 @@ const REST_MANIFEST = {
   './js/stats-corrections.js': 'cf8c62bb60',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': '494725a0a5',
-  './js/game-art.js': '3574f613d2',
+  './js/game-art.js': 'ba73866754',
   './js/hidden-players.js': '8a870d0456',
-  './js/leaderboard-ui.js': '7d38c916c1',
+  './js/leaderboard-ui.js': 'd72ca41abf',
   './js/leaderboard-rank.js': '7d0aed67b8',
   './js/arrow-maze-time.js': '779bc134df',
   './js/gridlock-points.js': '8a4fcce246',
