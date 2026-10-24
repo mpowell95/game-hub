@@ -504,6 +504,7 @@ class BattleArena {
     this.buildTiles();
     this.ui = null;
     this.syncAll();
+    this.timed = false;              // the clock is for live online matches only
     this.timerLeft = TURN_SECONDS;
     this.lastAct = Date.now();
     this.startClock(gen);
@@ -778,8 +779,9 @@ class BattleArena {
   hideEvolve() { for (const p of this.root.querySelectorAll('.ba-evo-pill')) p.hidden = true; for (const m of this.root.querySelectorAll('.ba-mon')) m.classList.remove('is-evo-pick'); }
 
   // --- the turn clock and the hint ----------------------------------------------------------------
-  /** 30 s a turn for the player, as in the reference. It only runs while the player can act (it
-   *  stops during animations and with the menu open); at 0 the turn passes (moves left are lost). */
+  /** The turn clock: 30 s a turn, LIVE ONLINE MATCHES ONLY (Matt, 2026-10-24: never vs the
+   *  computer). `this.timed` is false for every match today; when it is on, the clock runs only
+   *  while the player can act and at 0 the turn passes. The same tick drives the idle hint. */
   startClock(gen) {
     let last = Date.now();
     const id = setInterval(() => {
@@ -790,15 +792,15 @@ class BattleArena {
       const clock = this.root.querySelector('.ba-clock');
       if (!s || !clock) return;
       const mine = s.turn === ME && s.winner == null;
-      clock.hidden = !mine;
+      clock.hidden = !mine || !this.timed;
       if (!mine) return;
       const paused = this.busy || !!this.root.querySelector('.gh-overlay');
-      if (!paused) this.timerLeft = Math.max(0, this.timerLeft - dt);
+      if (!paused && this.timed) this.timerLeft = Math.max(0, this.timerLeft - dt);
       const n = Math.ceil(this.timerLeft);
       const label = clock.querySelector('.ba-clock-n');
       if (label.textContent !== String(n)) label.textContent = String(n);
       clock.classList.toggle('is-low', n <= 5);
-      if (this.timerLeft <= 0 && !paused) {
+      if (this.timed && this.timerLeft <= 0 && !paused) {
         this.timerLeft = TURN_SECONDS;
         const res = E.apply(s, { type: 'pass', side: ME });
         if (res.ok) { this.select(null); this.hideEvolve(); this.commit(res); }
