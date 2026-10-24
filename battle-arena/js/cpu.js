@@ -35,7 +35,7 @@ export function scorePreview(state, side, p) {
   if (p.berries && sd.mons.some((m) => !m.evo)) {
     score += p.berries * (sd.berries + p.berries >= BERRIES_TO_EVOLVE ? 7 : 2.5);
   }
-  if (p.maxRun >= 4 && !state.extraUsed) score += 7;
+  if (p.maxRun >= 4) score += 7;
   for (const n of p.bombs) score += 2 + Math.max(0, 4 - n);
   score += p.size * 0.15;
   return score;

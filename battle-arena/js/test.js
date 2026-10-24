@@ -196,11 +196,11 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const s = setup(TEAM, FOUR);
   ok('four board clean', noRuns(s));
   const r = apply(s, swap(3, 2, 4, 2));
-  ok('a match of 4 gives +1 move', has(r.events, 'extra') && r.state.movesLeft === 2 && r.state.extraUsed);
+  ok('a match of 4 gives +1 move', has(r.events, 'extra') && r.state.movesLeft === 2);
   const t = r.state;
   t.board = setup(TEAM, FOUR).board.map((x) => ({ ...x, id: x.id + 5000 }));
   const r2 = apply(t, swap(3, 2, 4, 2));
-  ok('only once per turn', !has(r2.events, 'extra') && r2.state.movesLeft === 1);
+  ok('every 4 gives one: a second 4 the same turn gives another', has(r2.events, 'extra') && r2.state.movesLeft === 2);
 }
 
 // --- berries and evolving -----------------------------------------------------------------------------
@@ -248,7 +248,6 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('an L of 5 is one match of 5', r.ok && r.events.find((e) => e.t === 'extra').five === true);
   ok('a 5 gives an extra move (no cap: cascaded 5s give more)', r.state.movesLeft === 1 + count(r.events, 'extra'));
   ok('a 5 heals the mover 5', has(r.events, 'heal', (e) => e.cause === 'five' && e.n === 5) && r.state.sides[0].hp >= 65);
-  ok('a 5 does not use up the once-a-turn 4', !r.state.extraUsed);
 }
 
 // --- board-clearing specials ----------------------------------------------------------------------------

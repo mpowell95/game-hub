@@ -19,8 +19,8 @@ seeded RNG, so online play can replay it later.
 4. **Turns.** 2 moves per turn. A move = swap two ADJACENT tiles (orthogonal) that makes a
    line of 3+. Illegal swap snaps back, costs nothing. Cascades resolve fully. 30 s turn timer
    vs computer is optional (off by default; it exists for online).
-5. **Extra move.** A straight 4 gives +1 move, **once per turn**; a match of 5+ (straight, L or T)
-   gives +1 move every time and heals 5 (v3, 2026-10-24).
+5. **Extra move.** EVERY match of 4+ tiles (straight, L or T) gives +1 move, no cap; a 5+ also
+   heals 5 (Matt, 2026-10-24).
 6. **Charging.** Every gem cleared (matches, cascades, bombs, specials) adds 1 energy to YOUR
    monster of that element (if you have one). Gems of other elements do nothing. Show "+3 [gem]"
    floating over the monster.

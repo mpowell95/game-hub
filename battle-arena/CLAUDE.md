@@ -32,9 +32,8 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
   2026-10-24; per-move as in the reference). Built and off (`this.timed`); at 0 sends `{type:'pass'}`.
 - **No idle hint** (no wiggling tiles; Matt turned it off, 2026-10-24).
 - **Any adjacent swap is a move**, a line or not (Matt, 2026-10-24: "clearly allowed in the original").
-- **Extra moves** (reference, rec3 1:03 + 1:13): a straight 4 gives one, ONCE per turn; every match
-  of 5+ tiles (a straight 5, or an L/T: same-kind lines sharing a tile, `matchGroups`) gives one with
-  no cap AND heals the mover 5 (`FIVE_HEAL`, amount a guess: the reference team was already full).
+- **Extra moves: EVERY match of 4+ tiles gives one, no cap** (Matt, 2026-10-24: "Every 4+ should give
+  me another turn"; a straight 4/5 or an L/T, `matchGroups`). A 5+ also heals the mover 5 (`FIVE_HEAL`).
 - **Evolving is a MOVE** (rec3 2:49): with 4 berries the mover may tap a monster ("Evolve!"); it costs
   one move, heals nothing, berries back to 0. Never automatic; with no move left it waits.
 - Specials pair damage with a board clear that charges the caster, as the reference's do (Flare: a
