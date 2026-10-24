@@ -19,6 +19,7 @@
 //   archeryTurnPush archery/index/<code>/<id>        an Archery challenge, your turn, the end (2026-10-14)
 //   chinchonTurnPush chinchon/index/<code>/<id>      a Chinchón challenge, your turn, the end (2026-10-18)
 //   escobaTurnPush  escoba/index/<code>/<id>         an Escoba challenge, your turn, the end (2026-10-18)
+//   battleArenaTurnPush battlearena/index/<code>/<id> a Battle Arena challenge, your turn, the end (2026-10-24)
 //   roomsCleanup      every 30 min: delete live-game rooms nobody has been in for an hour
 //   boardsOnSync      a device synced: rebuild the leaderboard (at most every 2 min)
 //   boardsCatchUp     every 5 min: a rebuild skipped by that limit, or the first one
@@ -36,7 +37,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
 import { buildBoardParts, packBoard, sumOf } from './boards.js';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
 
@@ -185,6 +186,14 @@ export const escobaTurnPush = onValueWritten({ ref: '/escoba/index/{code}/{id}',
   const after = event.data.after.exists() ? event.data.after.val() : null;
   const note = decideEscoba({ code, id, before, after });
   if (note) await sendTo(getDatabase(), code, note, `escoba-${id}`, { game: 'escoba', match: id });
+});
+
+export const battleArenaTurnPush = onValueWritten({ ref: '/battlearena/index/{code}/{id}', ...OPTS }, async (event) => {
+  const { code, id } = event.params;
+  const before = event.data.before.exists() ? event.data.before.val() : null;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  const note = decideBattleArena({ code, id, before, after });
+  if (note) await sendTo(getDatabase(), code, note, `battlearena-${id}`, { game: 'battle-arena', match: id });
 });
 
 // THE 24-HOUR REMINDER (2026-10-20). Hourly, reads every challenge game's index (a few small nodes)

@@ -8,7 +8,7 @@
 
 A match-3 monster battle (mechanics only from "Match Monsters"; every creature, name and picture is
 our own). THE SPEC: `docs/BATTLE-ARENA-SPEC.md`. Phase 1 (built 2026-10-24): vs computer, admin only.
-Phase 2 (later): live rooms + turn-by-turn challenges, which is why the engine is what it is.
+Phase 2 (built 2026-10-24): online, turn-by-turn challenges AND live rooms (see "Online").
 
 ## Files
 
@@ -19,7 +19,9 @@ animation · `js/monsters.js` roster, unlock thresholds, `unlockedIds(wins)` · 
 legal swap) / Medium (best first-step clear) / Hard (plays each swap out + follow-up, avoids handing
 over a special); `chooseTeam` · `js/art.js` all SVG: 12 monsters x normal/evolved (120 box, facing
 right, no ids/gradients), gems (shape + icon per element) · `js/ui.js` home, draft, card, battle,
-module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/test.js` (dev only).
+module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/test.js` (dev only) ·
+online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (challenges) · `js/live.js`
+(live rooms over `js/net.js`) · `js/online-ui.js` (screens + the two links, lazy) · `js/alert.js` (launcher).
 
 ## Rules we decided (not in the spec, or changed from it)
 
@@ -29,7 +31,7 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
   orthogonally NEXT TO one sets it off (the reference's stage text). Blast and special-cleared gems
   charge the mover; a bomb at 0 charges nobody.
 - **Move timer 25 s, reset after every move: LIVE ONLINE ONLY, never vs the computer** (Matt,
-  2026-10-24; per-move as in the reference). Built and off (`this.timed`); at 0 sends `{type:'pass'}`.
+  2026-10-24; per-move as in the reference). On only for a live room's link (`this.timed`); at 0 sends `{type:'pass'}`.
 - **No idle hint** (no wiggling tiles; Matt turned it off, 2026-10-24).
 - **Any adjacent swap is a move**, a line or not (Matt, 2026-10-24: "clearly allowed in the original").
 - **Extra moves: EVERY match of 4+ tiles gives one, no cap** (Matt, 2026-10-24: "Every 4+ should give
@@ -72,7 +74,7 @@ arena/board seam, move names blue; steel doors after the stage reveal; the endin
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../battle-arena/js/ui.js'`, `immersive: true`, `devOnly: true`, no `released` |
+| Registry | `module: '../battle-arena/js/ui.js'`, `alerts: alert.js`, `immersive: true`, `devOnly: true`, no `released`; `LIVE_MP_GAMES` / `LIVE_GAMES` / `SOURCES` |
 | Stats id | `battlearena`: `recordResult('battlearena', 'easy'\|'medium'\|'hard', won)` once per finished match. In `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META`, `js/game-stats-ui.js` `TABS` + `HUB_ID`, label `game_title_battlearena` |
 | Unlocks | DERIVED from `loadStats().games.battlearena.total.won` at read time; never stored |
 | CSS | `.ba-root` / `.ba-` (every rule under `.ba-root`); battle screen dark in both themes |
@@ -82,8 +84,37 @@ arena/board seam, move names blue; steel doors after the stage reveal; the endin
 | Tile art | `GAME_ART['battle-arena']` (simplified Emberkit vs Driplet) |
 | Test hook | `window.__baTest` (read by headless drivers only) |
 
+## Online (2026-10-24)
+
+Story: `CLAUDE-HISTORY.md`, same heading. Home's **Online** button (badge = your-turn count) opens:
+Challenge · Host / Join · your challenges. The battle screen is the SAME screen: the other person on the
+LEFT by profile name + emoji, their moves played exactly like the computer's (`ui.js remoteEntry` ->
+`pumpRemote`: tiles light up, then the same `step` + `commit` + `play(events)`).
+
+- **A match online = a seed + two teams + a list of moves** (`online.js`); every phone replays it.
+  Stored frame: side 'a' = engine side 0 (challenger / host). **Side 'b' sees a MIRROR** (`mirror`, teams
+  swapped, board untouched) so its player is always on the right; every rule still runs on the stored
+  frame (`ui.step`). `this.canon` = stored, `this.state` = screen.
+- **Challenges** (`mp.js`, Darts' model): node `battlearena/games|index|chat`. The challenger drafts and
+  moves first; the other drafts on first open (`draftTeam`, own unlocks; not an answer, does not move
+  `updated`). b's monsters are never read on a's first turn (`PLACEHOLDER_TEAM`, proven in the test).
+  Written move by move (`appendLog`, verified, outbox); delivered when a's first turn ends; cancel /
+  decline / resign / 3-day expiry; **no move clock**. `recordResult('battlearena', 'mp', won)`, never h2h.
+  Push `battleArenaTurnPush` (`decideBattleArena`), in `REMINDER_GAMES` and the Remind bell.
+- **Live rooms** (`live.js`): host drafts -> code -> guest types it, drafts, joins with `guest.team`;
+  host publishes `round.deck = {seed, a, b}`, **host moves first**; `moves/<seq>` lockstep with an FNV
+  hash, recovery from the host. **25 s per move, reset each move** (`link.timed`; both phones show it,
+  only the mover's phone passes). **Leaving = resigning** (a `{k:'r'}` move); closing the app is not
+  leaving (`gamehub.battlearena.room.v1` rejoins). "Claim win" after 90 s of silence. Records 'mp' +
+  `recordHeadToHead`, once (`gamehub.battlearena.liveCounted.v1`).
+- **Chat** in both (`createMatchChat`, button in `.ba-chatslot` under the hub chip): challenges at
+  `battlearena/chat/<id>`, live via `net.sendReaction`.
+- Never touches the vs-computer save, settings' `nextFirst` or its clock-free play.
+
 ## Tests
 
 `node battle-arena/js/test.js` (rules, determinism/replay, a 300-match AI soak; `--soak=N`);
 `node tools/check-no-scroll.mjs battle-arena` (help, draft + card, battle via `EXTRA_SCREENS`);
-`node tools/test-game-conventions.mjs`.
+`node tools/test-game-conventions.mjs`; `node tools/test-battlearena-mp.mjs` (online: replay, placeholder,
+mirror, a full challenge and a full live match, cancel/decline/resign/expire, gate, structure). Two-phone
+recording: a mocked Firebase SDK served to two Playwright pages (2026-10-24, see CLAUDE-HISTORY.md).

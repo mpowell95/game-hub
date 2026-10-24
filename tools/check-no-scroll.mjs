@@ -78,6 +78,23 @@ const EXTRA_SCREENS = {
       },
     },
     {
+      // Online (2026-10-24): the online home (Challenge, Host / Join, the list) and the Join code.
+      name: 'online home',
+      async open(page) {
+        await page.evaluate(() => { document.querySelectorAll('.ba-root .gh-overlay').forEach((o) => o.remove()); window.__baTest.openOnline(); });
+        await page.waitForSelector('.ba-online [data-role="join"]', { timeout: 8000 });
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: 'online join',
+      async open(page) {
+        await page.click('.ba-online [data-role="join"]');
+        await page.waitForSelector('.ba-ol-input', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
       name: 'battle',
       async open(page) {
         await page.evaluate(() => { document.querySelectorAll('.ba-root .gh-overlay').forEach((o) => o.remove()); window.__baTest.startMatch(['emberkit', 'zapup']); });

@@ -347,7 +347,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Arrow Maze | module, immersive, devOnly; one ladder, points leaderboard, Rush. **Folder `way-out/`, hub id `way-out`, stats id `wayout`, `gamehub.wayout.*` keep the first name on purpose** (rule 5) | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ several frozen save/clock keys, see `way-out/CLAUDE.md`) | `recordWayOut` + `recordWayOutRush` (`wo`) |
 | Ball Run | module, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen) | `recordBallRun` |
 | Baseball | module, immersive, devOnly; three.js stadium, being rebuilt per `docs/BASEBALL-REFERENCE-B9.md` | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
-| Battle Arena | module, immersive, devOnly; match-3 monster battle vs computer, pure JSON engine + seeded RNG for a later online phase (`docs/BATTLE-ARENA-SPEC.md`, 2026-10-24); hub id `battle-arena`, stats id `battlearena` | `.ba-root` / `.ba-` | `gamehub.battlearena.v1` (+ `.save.v1`) | `recordResult('battlearena', …)` |
+| Battle Arena | module, immersive, devOnly; match-3 monster battle vs computer, pure JSON engine + seeded RNG (`docs/BATTLE-ARENA-SPEC.md`, 2026-10-24); online 2026-10-24: turn-by-turn challenges (`battlearena/`) + live rooms (25 s a move), a seed + teams + moves replayed on both phones; hub id `battle-arena`, stats id `battlearena` | `.ba-root` / `.ba-` | `gamehub.battlearena.v1` (+ `.save.v1`) | `recordResult('battlearena', …)` (online: `'mp'`; live rooms + h2h) |
 | Battleship | module, immersive, multiplayer (`gamehub.battleship.mp.v1`) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` |
 | Boggle | module, multiplayer (`gamehub.boggle.mp.v1`), EN/ES word lists | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
 | Brick Breaker | module, immersive, solo | `.bx-root` / `.bx-` | `gamehub.brickblitz.v1` | `recordBrickBlitz` |
@@ -500,7 +500,8 @@ None of this makes the hub cheat-proof; never describe it that way.
   `chinchonTurnPush`, `escobaTurnPush`, `turnReminderPush`, `nudgePush`, `directoryBuild` +
   `directoryOnApprove`, `boardsOnSync` + `boardsOnConfig` + `boardsCatchUp` (2026-10-22), `roomsCleanup` (2026-10-23:
   deletes `rooms/<CODE>` idle an hour, i.e. no 10 s heartbeat; rooms indexed on `updated`); rules incl. `archery`,
-  `chinchon`, `escoba`, `nudges`, `directory`, `boards`.
+  `chinchon`, `escoba`, `nudges`, `directory`, `boards`. **Not yet deployed (merges with Battle Arena online, 2026-10-24):**
+  `battleArenaTurnPush` and the `battlearena` rules branch (+ `battlearena` in the nudges key pattern).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
   generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs

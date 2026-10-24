@@ -371,6 +371,7 @@ const ROOM_GAME_IDS = {
   filler: ['filler', 'filler'], holdem: ['holdem', 'holdem'], mancala: ['mancala', 'mancala'],
   tictactoe: ['tic-tac-toe', 'tictactoe'], yahtzee: ['yahtzee', 'yahtzee'],
   airhockey: ['air-hockey', 'airhockey'], 'airhockey-test': ['air-hockey', 'airhockey'],
+  battlearena: ['battle-arena', 'battlearena'],
 };
 const _roomPeople = new Map();   // code -> { at, game, codes }: who is at the table, re-read every 30 s
 async function roomPeople(code) {

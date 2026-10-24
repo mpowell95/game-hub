@@ -29,6 +29,7 @@ const GAMES = {
   chinchon: { stats: 'chinchon', node: 'chinchon' },
   escoba: { stats: 'escoba', node: 'escoba' },        // challenges only; live-room lines reach the thread via logGameChat
   'eight-ball': { stats: 'eightball', node: 'eightball' },   // two-player matches only (mp.js sideOf)
+  'battle-arena': { stats: 'battlearena', node: 'battlearena' },   // challenges; live-room lines via logGameChat
 };
 const LOADERS = {
   hoops4: () => import('../hoops4/js/mp.js'),
@@ -40,6 +41,7 @@ const LOADERS = {
   chinchon: () => import('../chinchon/js/mp.js'),
   escoba: () => import('../escoba/js/mp.js'),
   'eight-ball': () => import('../eight-ball/js/mp.js'),
+  'battle-arena': () => import('../battle-arena/js/mp.js'),
 };
 const MATCH_CAP = 30;
 

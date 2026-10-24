@@ -26,6 +26,7 @@ import { buildIdentity, aggregateForViewer, aggregatePlayers } from './players-a
  *  challenges, so Hoops counts from its index alone, never twice). */
 export const LIVE_GAMES = {
   'air-hockey': 'airhockey',
+  'battle-arena': 'battlearena',
   battleship: 'battleship',
   boggle: 'boggle',
   chinchon: 'chinchon',

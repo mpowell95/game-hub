@@ -61,6 +61,7 @@
     "archery":        { ".read": "auth != null", ".write": "auth != null" },
     "chinchon":       { ".read": "auth != null", ".write": "auth != null" },
     "escoba":         { ".read": "auth != null", ".write": "auth != null" },
+    "battlearena":    { ".read": "auth != null", ".write": "auth != null" },
     "hoops":          { ".read": "auth != null", ".write": "auth != null" },
     "players":        { ".read": "auth != null", ".write": "auth != null" },
     "directory":      { ".read": "auth != null", ".write": false },
@@ -70,7 +71,7 @@
         "$key": {
           ".read": "auth != null",
           ".write": "auth != null && newData.exists() && newData.child('from').val() === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || now - data.child('t').val() >= 21600000)",
-          ".validate": "newData.hasChildren(['from', 't']) && newData.child('t').val() === now && $key.matches(/^(hoops|skeeChallenges|cuppong|darts|flicksoccer|archery|chinchon|escoba)~[A-Za-z0-9_-]+$/) && $key.length <= 60"
+          ".validate": "newData.hasChildren(['from', 't']) && newData.child('t').val() === now && $key.matches(/^(hoops|skeeChallenges|cuppong|darts|flicksoccer|archery|chinchon|escoba|battlearena)~[A-Za-z0-9_-]+$/) && $key.length <= 60"
         }
       }
     },

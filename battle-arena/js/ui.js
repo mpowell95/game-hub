@@ -18,13 +18,15 @@ import * as E from './engine.js';
 import { chooseMove, chooseTeam } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, specialOf, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
 import { monsterSVG, gemSVG, elementBadge, arenaSVG } from './art.js';
+import { mirror, mirrorEvents, entryOf, moveOf } from './online.js';
 
 const t = makeT(STRINGS);
 const CSS_MARK = 'data-battlearena-css';
 const SETTINGS_KEY = 'gamehub.battlearena.v1';
 const SAVE_KEY = 'gamehub.battlearena.save.v1';
 const DIFFS = ['easy', 'medium', 'hard'];
-const ME = 0, CPU = 1;
+const ME = 0, CPU = 1;            // SCREEN sides: this phone's player right, the other team left
+
 
 // Timings, from the reference recordings (slower and weightier than a puzzle game).
 const SWAP_MS = 190;
@@ -37,7 +39,8 @@ const TURN_BANNER_MS = 1150;
 const PROJ_MS = 380;
 const CPU_THINK_MS = 650;
 const CPU_SHOW_MS = 450;
-const TURN_SECONDS = 25;          // per MOVE (the reference resets it after every move); online only
+const TURN_SECONDS = 25;          // per MOVE (the reference resets it after every move); live rooms only
+const REMOTE_SHOW_MS = 450;       // the other person's swap: the two tiles light up, as the computer's do
 const MOVE_HEXES = 2;
 
 let instance = null;
@@ -66,6 +69,11 @@ function readSave() {
   if (s.state.sides.some((sd) => !Array.isArray(sd.mons) || sd.mons.some((m) => !BY_ID[m.id]))) return null;
   return { v: 1, diff: DIFFS.includes(s.diff) ? s.diff : 'easy', state: s.state };
 }
+
+/** Is a match handed over to this game's next mount (alert.js armOpen / armChallenge)? */
+function hasArmedOpen() { try { return !!sessionStorage.getItem('gamehub.battlearena.open.v1'); } catch { return false; } }
+/** Was this phone in a live room when the game last closed (live.js ROOM_KEY)? */
+function hasLiveRoom() { try { return !!localStorage.getItem('gamehub.battlearena.room.v1'); } catch { return false; } }
 
 /** Total Battle Arena wins on this device's store: the ONLY input to unlocks. */
 function totalWins() {
@@ -169,6 +177,13 @@ class BattleArena {
     this.ui = null;
     this.offViewport = null;
     this.recorded = false;
+    // ONLINE (2026-10-24, online-ui.js): `link` is the challenge or live room this match belongs to
+    // (null vs the computer). `canon` is the match in the STORED frame (side 0 = 'a'); `state` is
+    // what the screen draws, mirrored when this phone is side 'b' so its player is always on the
+    // right (online.js mirror). Vs the computer the two are the same object.
+    this.link = null;
+    this.canon = null;
+    this.inbox = [];
     this._bound = [];
     this._timers = new Set();
     this._screenBound = [];
@@ -219,13 +234,36 @@ class BattleArena {
     await ensureCSS();
     if (this.disposed) return;
     this.root.classList.add('ba-root');
+    // Read-only hook for headless drivers (Cup Pong's `__cpTest` precedent). Never read by the game.
+    try { window.__baTest = this; } catch {}
+    // ONLINE FIRST: a match handed over by the launcher / Multiplayer screen / a notification
+    // (alert.js armOpen, armChallenge), or a live room this phone was in when it left. Both are
+    // looked up synchronously so a vs-computer player downloads none of the online code.
+    if (hasArmedOpen() || hasLiveRoom()) {
+      const done = await this.openOnline({ armed: true });
+      if (done || this.disposed) return;
+    }
     const save = readSave();
     // A save is always resumed, even one whose last move WON: the match was saved before its
     // animation, so leaving during it means finish() never ran; resuming records it now (once).
     if (save) this.resume(save);
     else this.renderHome();
-    // Read-only hook for headless drivers (Cup Pong's `__cpTest` precedent). Never read by the game.
-    try { window.__baTest = this; } catch {}
+  }
+
+  /** The online screens (online-ui.js, lazily imported). `armed`: only act on a handed-over match or
+   *  a live room to resume; resolves true when it took the screen. */
+  async openOnline(opts = {}) {
+    let O;
+    try { O = await import('./online-ui.js'); } catch (err) { console.error('[battle-arena] online did not load', err); return false; }
+    if (this.disposed) return true;
+    return O.open(this, opts);
+  }
+
+  /** The hub's "same game already open" hand-off (js/hub.js openArmed): a tapped notification or
+   *  the Multiplayer screen names a match while this game is up. */
+  openArmed() {
+    if (this.disposed || (this.link && this.link.kind === 'live')) return;
+    this.openOnline({ armed: true });
   }
 
   // --- home -------------------------------------------------------------------------------------
@@ -243,6 +281,7 @@ class BattleArena {
         <div class="gh-card ba-home-card">
           <div class="gh-seg" role="group" data-role="diff">${seg}</div>
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="play">${t('play')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block ba-online-btn" data-role="online">${t('online')}<span class="ba-badge-n" hidden></span></button>
         </div>
         <button type="button" class="ba-link" data-role="help">${t('help')}</button>
       </div>`;
@@ -255,7 +294,21 @@ class BattleArena {
       writeJSON(SETTINGS_KEY, this.settings);          // persist on selection, not only at start
     });
     this.on(this.root.querySelector('[data-role="play"]'), 'click', () => this.renderDraft());
+    this.on(this.root.querySelector('[data-role="online"]'), 'click', () => this.openOnline());
     this.on(this.root.querySelector('[data-role="help"]'), 'click', () => this.showHelp());
+    this.paintOnlineBadge();
+  }
+
+  /** "Online 2": how many challenges wait on this player (alert.js, one small read). */
+  async paintOnlineBadge() {
+    const gen = this.gen;
+    let n = 0;
+    try { const A = await import('./alert.js'); await A.check(); n = A.myTurnCount(); } catch { return; }
+    if (gen !== this.gen) return;
+    const b = this.root.querySelector('.ba-online-btn .ba-badge-n');
+    if (!b) return;
+    b.hidden = !n;
+    b.textContent = String(n);
   }
 
   showHelp() {
@@ -275,8 +328,11 @@ class BattleArena {
   }
 
   // --- draft ------------------------------------------------------------------------------------
-  renderDraft() {
+  /** The draft. Vs the computer by default; online passes `onFight(team)` (and `onBack`), and the
+   *  player picks from THEIR OWN unlocked monsters either way. */
+  renderDraft(opts = {}) {
     this.newScreen('draft');
+    this.draftOpts = opts;
     const unlocked = unlockedIds(totalWins());
     this.unlocked = unlocked;
     this.picks = this.settings.team.filter((id) => unlocked.includes(id));
@@ -318,7 +374,7 @@ class BattleArena {
       const id = s && this.picks[Number(s.dataset.slot)];
       if (id) this.showCard(id, { draft: true });
     });
-    this.on(this.root.querySelector('[data-role="back"]'), 'click', () => this.renderHome());
+    this.on(this.root.querySelector('[data-role="back"]'), 'click', () => (opts.onBack ? opts.onBack() : this.renderHome()));
     this.on(this.root.querySelector('[data-role="random"]'), 'click', () => {
       const pool = this.unlocked.slice();
       this.picks = [];
@@ -329,7 +385,8 @@ class BattleArena {
       if (this.picks.length !== 2) return;
       this.settings.team = this.picks.slice();
       writeJSON(SETTINGS_KEY, this.settings);
-      this.startMatch(this.picks.slice());
+      if (opts.onFight) opts.onFight(this.picks.slice());
+      else this.startMatch(this.picks.slice());
     });
   }
 
@@ -414,7 +471,8 @@ class BattleArena {
     try { seed = (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0; } catch { seed = Math.floor(Math.random() * 4294967296) >>> 0; }
     const state = E.newMatch({ seed, teams: [team, foe], first: this.settings.nextFirst });
     this.diff = this.settings.diff;
-    this.state = state;
+    this.link = null;
+    this.state = this.canon = state;
     this.recorded = false;
     this.save();
     this.renderBattle();
@@ -422,13 +480,40 @@ class BattleArena {
 
   resume(save) {
     this.diff = save.diff;
-    this.state = save.state;
+    this.link = null;
+    this.state = this.canon = save.state;
     this.recorded = false;
     this.renderBattle();
   }
 
+  /** An ONLINE match (online-ui.js): `canon` is the stored-frame state to start the screen on;
+   *  `queue` the other person's entries still to animate on it (a challenge's latest run). */
+  startOnline(link, canon, queue = []) {
+    if (this.link && this.link !== link) { try { this.link.destroy(); } catch {} }
+    this.link = link;
+    this.diff = 'mp';
+    this.canon = canon;
+    this.state = this.view(canon);
+    this.recorded = false;
+    this.inbox = queue.slice();
+    this.renderBattle();
+  }
+
+  /** What the screen draws: the stored state, mirrored when this phone plays side 'b'. */
+  view(canon) { return this.link && this.link.seat === 1 ? mirror(canon) : canon; }
+
+  /** Apply a move given in SCREEN terms (side ME / CPU) to the stored state. Returns the engine's
+   *  answer with `state`/`events` in screen terms plus `canon` and the stored-frame `move`. */
+  step(move) {
+    const flip = !!(this.link && this.link.seat === 1);
+    const cmove = { ...move, side: flip ? 1 - move.side : move.side };
+    const res = E.apply(this.canon || this.state, cmove);
+    if (!res.ok) return res;
+    return { ok: true, canon: res.state, state: flip ? mirror(res.state) : res.state, events: flip ? mirrorEvents(res.events) : res.events, move: cmove };
+  }
+
   save() {
-    if (!this.state) return;
+    if (!this.state || this.link) return;            // the one save slot is the match vs the computer
     writeJSON(SAVE_KEY, { v: 1, diff: this.diff, state: this.state });
   }
   clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch {} }
@@ -447,9 +532,11 @@ class BattleArena {
   // banner then an attack and a hit, a turn change is a banner across the stage.
   renderBattle() {
     const gen = this.newScreen('battle');
-    this.names = [myName(), this.foeName];
     const prof = (() => { try { return loadProfile(); } catch { return null; } })();
-    this.avatars = [(prof && prof.emoji) || '🙂', '🤖'];
+    // Online: the other person by their PROFILE name and emoji, on the LEFT (never "You").
+    const them = this.link ? this.link.them : null;
+    this.names = [myName(), them ? (them.name || '?') : this.foeName];
+    this.avatars = [(prof && prof.emoji) || '🙂', them ? (them.emoji || '🙂') : '🤖'];
     // The reference's top bar: each side shows its berries over its HP (big), then its avatar with
     // the name under it; the other team LEFT, the player RIGHT; MOVES in the middle under the clock.
     const team = (sd) => `
@@ -473,7 +560,7 @@ class BattleArena {
         <span class="ba-evo-pill" hidden>${ICONS.berry}<b>${t('evolve')}</b></span>
       </div>`;
     this.root.innerHTML = `
-      <div class="ba-battle">
+      <div class="ba-battle${this.link && this.link.foeUnknown ? ' is-foe-unknown' : ''}">
         <div class="ba-arena-bg" aria-hidden="true">${arenaSVG()}</div>
         <div class="ba-floor" aria-hidden="true"></div>
         <div class="ba-scene">
@@ -487,7 +574,7 @@ class BattleArena {
             <button type="button" class="ba-iconbtn ba-menu" aria-label="${t('menu')}">${ICONS.menu}</button>
           </div>
           <div class="ba-subrow">
-            <span></span>
+            <span class="ba-chatslot"><span class="ba-presence" hidden></span></span>
             <div class="ba-movesbox"><div class="ba-moves" aria-live="polite"></div><span class="ba-moves-label">${escapeHTML(t('moves'))}</span></div>
             <button type="button" class="ba-stagebtn">${escapeHTML(t('stage'))}</button>
           </div>
@@ -517,12 +604,13 @@ class BattleArena {
     this.buildTiles();
     this.ui = null;
     this.syncAll();
-    this.timed = false;              // the clock is for live online matches only
+    this.timed = !!(this.link && this.link.timed);   // the clock is for live rooms only (Matt)
     this.timerLeft = TURN_SECONDS;
     this.lastAct = Date.now();
     this.startClock(gen);
     requestAnimationFrame(() => { if (gen === this.gen) { this.fit(); this.placeAll(); } });
-    const fresh = this.state.moveNo === 0 && this.state.turnNo === 1;
+    const fresh = this.state.moveNo === 0 && this.state.turnNo === 1 && !this.inbox.length;
+    if (this.link) { try { this.link.mountChat(this); } catch (err) { console.warn('[battle-arena] chat', err); } }
     this.busy = true;
     (async () => {
       await this.sleep(250);
@@ -710,12 +798,12 @@ class BattleArena {
   async trySwap(a, b) {
     if (!this.canInput()) return;
     this.poke();
-    const res = E.apply(this.state, { type: 'swap', a, b, side: ME });
+    const res = this.step({ type: 'swap', a, b, side: ME });
     if (!res.ok) {
       if (res.error === 'no-match') await this.badSwap(a, b);
       return;
     }
-    await this.commit(res);
+    await this.commit(res, true);
   }
 
   /** An illegal swap: the two tiles trade places and snap back. Costs nothing. */
@@ -731,10 +819,16 @@ class BattleArena {
   }
 
   /** A legal move: keep the new state (saved at once), then tell its story. */
-  async commit(res) {
+  async commit(res, mine = false) {
     const gen = this.gen;
     this.state = res.state;
+    this.canon = res.canon || res.state;
     this.save();
+    // Online: this player's move goes out the moment it is made (before its animation), so the
+    // other phone can start showing it while this one still is.
+    if (mine && this.link && res.move) {
+      try { this.link.send(entryOf(res.move), this.canon); } catch (err) { console.error('[battle-arena] could not send the move', err); }
+    }
     this.busy = true;
     try {
       await this.play(res.events, gen);
@@ -755,8 +849,65 @@ class BattleArena {
     const s = this.state;
     if (!s || this.screen !== 'battle' || this.busy) return;
     if (s.winner != null) { this.finish(); return; }
-    if (s.turn === CPU) { this.cpuTurn(); return; }
+    if (s.turn === CPU) { if (this.link) this.pumpRemote(); else this.cpuTurn(); return; }
     this.syncAll();
+  }
+
+  // --- the other person's moves (online) ----------------------------------------------------------
+  /** One stored entry from the other phone: queued, then played exactly as the computer's moves
+   *  are (the two tiles light up, then the same swap, glow, orbs, specials and banners). */
+  remoteEntry(entry) {
+    this.inbox.push(entry);
+    if (this.screen === 'battle' && !this.busy) this.pumpRemote();
+  }
+
+  async pumpRemote() {
+    const s = this.state;
+    if (!s || this.screen !== 'battle' || this.busy || !this.inbox.length) return;
+    const entry = this.inbox[0];
+    if (entry.k === 'r') { this.inbox.shift(); this.forceEnd(1 - (entry.by === 'b' ? 1 : 0)); return; }
+    if (s.winner != null) return;
+    const mv = moveOf(entry);
+    const flip = this.link && this.link.seat === 1;
+    if (!mv || (flip ? 1 - mv.side : mv.side) !== CPU || s.turn !== CPU) {
+      // Not theirs to play now: the two phones disagree. Start again from the stored match.
+      console.error('[battle-arena] an online move arrived out of turn; reloading the match', entry);
+      this.inbox = [];
+      if (this.link) this.link.resync();
+      return;
+    }
+    this.inbox.shift();
+    const gen = this.gen;
+    this.busy = true;
+    if (mv.type === 'swap') {
+      for (const i of [mv.a, mv.b]) { const el = this.tiles.get(this.state.board[i].id); if (el) el.classList.add('is-cpu'); }
+      await this.sleep(REMOTE_SHOW_MS);
+      if (gen !== this.gen) return;
+      for (const el of this.tiles.values()) el.classList.remove('is-cpu');
+    }
+    const res = this.step({ ...mv, side: CPU });
+    if (!res.ok) {
+      console.error('[battle-arena] an online move did not replay; reloading the match', res.error, entry);
+      this.busy = false;
+      this.inbox = [];
+      if (this.link) this.link.resync();
+      return;
+    }
+    this.busy = false;
+    if (mv.type === 'evolve') this.hideEvolve();
+    await this.commit(res);
+  }
+
+  /** A match decided outside the board (a resignation): `canonWinner` in the stored frame. */
+  forceEnd(canonWinner) {
+    if (!this.canon || this.canon.winner != null) return;
+    this.canon = { ...this.canon, winner: canonWinner, resigned: 1 - canonWinner };
+    this.state = this.view(this.canon);
+    this.inbox = [];
+    if (this.screen !== 'battle') return;
+    this.busy = false;
+    this.syncTiles();
+    this.finish();
   }
 
   async cpuTurn() {
@@ -785,8 +936,8 @@ class BattleArena {
     const s = this.state;
     const m = s.sides[sd].mons[mi];
     if (sd === ME && s.turn === ME && !this.busy && E.evolveOptions(s).includes(mi)) {
-      const res = E.apply(s, { type: 'evolve', mon: mi, side: ME });
-      if (res.ok) { this.poke(); this.select(null); this.hideEvolve(); this.commit(res); }
+      const res = this.step({ type: 'evolve', mon: mi, side: ME });
+      if (res.ok) { this.poke(); this.select(null); this.hideEvolve(); this.commit(res, true); }
       return;
     }
     if (this.busy) return;
@@ -808,19 +959,24 @@ class BattleArena {
       const s = this.state;
       const clock = this.root.querySelector('.ba-clock');
       if (!s || !clock) return;
-      const mine = s.turn === ME && s.winner == null;
-      clock.hidden = !mine || !this.timed;
-      if (!mine) return;
-      const paused = this.busy || !!this.root.querySelector('.gh-overlay');
-      if (!paused && this.timed) this.timerLeft = Math.max(0, this.timerLeft - dt);
+      const live = s.winner == null;
+      const mine = live && s.turn === ME;
+      // Live rooms show the clock on BOTH turns (the other person's runs here too, so it can be
+      // seen ticking); only this phone's own clock ever passes a turn.
+      clock.hidden = !this.timed || !live;
+      if (!this.timed || !live) return;
+      // A menu pauses the clock vs the computer only; online the other person is waiting.
+      const paused = this.busy || (!this.link && !!this.root.querySelector('.gh-overlay'));
+      if (!paused) this.timerLeft = Math.max(0, this.timerLeft - dt);
       const n = Math.ceil(this.timerLeft);
       const label = clock.querySelector('.ba-clock-n');
       if (label.textContent !== String(n)) label.textContent = String(n);
       clock.classList.toggle('is-low', n <= 5);
-      if (this.timed && this.timerLeft <= 0 && !paused) {
+      clock.classList.toggle('is-them', !mine);
+      if (mine && this.timerLeft <= 0 && !paused) {
         this.timerLeft = TURN_SECONDS;
-        const res = E.apply(s, { type: 'pass', side: ME });
-        if (res.ok) { this.select(null); this.hideEvolve(); this.commit(res); }
+        const res = this.step({ type: 'pass', side: ME });
+        if (res.ok) { this.select(null); this.hideEvolve(); this.commit(res, true); }
         return;
       }
       // No idle hint: Matt turned it off (2026-10-24).
@@ -1497,7 +1653,7 @@ class BattleArena {
             for (const a of this.teamArts(e.side)) { a.classList.add('is-frozen'); this.later(() => a.classList.remove('is-frozen'), 1200); }
             await this.sleep(500);
           }
-          if (e.side === ME) this.timerLeft = TURN_SECONDS;
+          this.timerLeft = TURN_SECONDS;
           break;
         }
         case 'suddenDeath': {
@@ -1536,6 +1692,12 @@ class BattleArena {
   // --- the end ----------------------------------------------------------------------------------
   finish() {
     const s = this.state;
+    if (!this.recorded && this.link) {
+      // ONLINE: the link records it ('mp' bucket, once per match through its own ledger; a live
+      // room also writes head-to-head). Never the computer's save slot or who-opens-next.
+      this.recorded = true;
+      try { this.link.finish(this.canon, s.winner === ME); } catch (err) { console.error('[battle-arena] online record failed', err); }
+    }
     if (!this.recorded) {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
@@ -1572,12 +1734,14 @@ class BattleArena {
           <b class="ba-result-big">${escapeHTML(t(w === ME ? 'victory' : 'defeat'))}</b>
         </div>
         <div class="ba-result-strip"><span class="ba-result-av">${escapeHTML(this.avatars[w])}</span><span class="ba-result-title">${escapeHTML(title)}</span></div>
+        ${this.canon && this.canon.resigned != null ? `<p class="ba-result-why">${escapeHTML(t('resigned', { name: this.names[l] }))}</p>` : ''}
         <div class="ba-result-lose">
           <span class="ba-result-luck">${escapeHTML(t('betterLuck', { name: this.names[l] }))}</span>
           <div class="ba-result-losers"><span class="ba-result-av">${escapeHTML(this.avatars[l])}</span>${s.sides[l].mons.map((m, i) => `<div class="ba-result-hex${l === ME ? ' ba-face-left' : ''}"><span class="ba-result-emo">${i ? '😥' : '😭'}</span>${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>
           <div class="ba-result-actions">
+            ${this.link ? `<button type="button" class="gh-btn gh-btn--primary" data-role="done">${t('done')}</button>` : `
             <button type="button" class="gh-btn gh-btn--primary" data-role="again">${t('playAgain')}</button>
-            <button type="button" class="gh-btn gh-btn--ghost" data-role="team">${t('newTeam')}</button>
+            <button type="button" class="gh-btn gh-btn--ghost" data-role="team">${t('newTeam')}</button>`}
           </div>
         </div>
       </div>`;
@@ -1592,11 +1756,13 @@ class BattleArena {
     const team = s.sides[ME].mons.map((m) => m.id);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
     this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.startMatch(team); });
+    this.on(el.querySelector('[data-role="done"]'), 'click', () => { el.remove(); if (this.link) this.link.done(); });
     this.on(el.querySelector('[data-role="team"]'), 'click', () => { el.remove(); this.renderDraft(); });
   }
 
   showPause() {
     if (this.root.querySelector('.ba-pause')) return;
+    if (this.link) { this.showOnlineMenu(); return; }
     const over = this.state && this.state.winner != null;
     const el = document.createElement('div');
     el.className = 'gh-overlay ba-overlay';
@@ -1621,8 +1787,50 @@ class BattleArena {
     this.on(el.querySelector('[data-role="home"]'), 'click', () => { close(); this.clearSave(); this.state = null; this.renderHome(); });
   }
 
+  /** The menu in an online match: Resume, what the link allows (Resign / Cancel / Decline / Claim
+   *  win; live rooms: Resign is leaving), How to play, and back to the online list (challenges). */
+  showOnlineMenu() {
+    const over = this.state && this.state.winner != null;
+    const items = over ? [] : this.link.menuItems();
+    const el = document.createElement('div');
+    el.className = 'gh-overlay ba-overlay';
+    el.innerHTML = `
+      <div class="gh-modal ba-pause" role="dialog" aria-modal="true" aria-label="${t('menu')}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <div class="gh-modal__actions">
+          ${over ? '' : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="resume">${t('resume')}</button>`}
+          ${items.map((it, i) => `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-item="${i}">${escapeHTML(it.label)}</button>`).join('')}
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="help">${t('help')}</button>
+          ${this.link.kind === 'live' && !over ? '' : `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="back">${t('online')}</button>`}
+        </div>
+      </div>`;
+    this.root.appendChild(el);
+    const close = () => el.remove();
+    this.on(el.querySelector('[data-role="close"]'), 'click', close);
+    this.on(el.querySelector('[data-role="resume"]'), 'click', close);
+    this.on(el.querySelector('[data-role="help"]'), 'click', () => { close(); this.showHelp(); });
+    this.on(el.querySelector('[data-role="back"]'), 'click', () => { close(); this.link.done(); });
+    this.on(el.querySelector('.gh-modal__actions'), 'click', (e) => {
+      const b = e.target.closest('[data-item]');
+      if (!b) return;
+      close();
+      const it = items[Number(b.dataset.item)];
+      if (it) it.act();
+    });
+  }
+
+  /** Forget the online match (the screen that comes next is the caller's). */
+  leaveOnline() {
+    if (this.link) { try { this.link.destroy(); } catch {} }
+    this.link = null;
+    this.canon = null;
+    this.state = null;
+    this.inbox = [];
+  }
+
   destroy() {
     this.disposed = true;
+    if (this.link) { try { this.link.destroy(); } catch {} this.link = null; }
     this.gen++;
     try { if (window.__baTest === this) delete window.__baTest; } catch {}
     this.clearTimers();
@@ -1641,6 +1849,11 @@ export function init(container) {
   return instance;
 }
 
+/** The hub hands a notified match to the open game (js/hub.js `openArmed`). */
+export function openArmed() {
+  if (instance) instance.openArmed();
+}
+
 export function destroy() {
   if (!instance) return;
   try { instance.destroy(); } finally { instance = null; }
@@ -1652,4 +1865,4 @@ export function isInProgress() {
   return false;
 }
 
-export default { init, destroy, isInProgress };
+export default { init, destroy, isInProgress, openArmed };
