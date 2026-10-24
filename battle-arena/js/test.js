@@ -111,7 +111,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('heal fires', has(r.events, 'special', (e) => e.id === 'sproutle'));
   ok('heal cannot pass max HP', r.state.sides[0].hp === r.state.sides[0].maxHp);
   ok('the heal event says it was capped', has(r.events, 'heal', (e) => e.capped && e.n === 3));
-  ok('team HP is one shared pool (sum of both)', s.sides[0].maxHp === BY_ID.sproutle.hp + BY_ID.driplet.hp);
+  ok('every team starts at 80, max 80', s.sides[0].maxHp === 80 && s.sides[1].hp === 80 && s.sides[1].maxHp === 80);
 }
 {
   // Shield: Pebbleop's Rock Toss shields; then the other side's Zapup hits through what is left.
@@ -210,7 +210,9 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const hp = r.state.sides[0].hp, max = r.state.sides[0].maxHp;
   const e = apply(r.state, { type: 'evolve', mon: 1 });
   ok('evolve: new form', e.ok && e.state.sides[0].mons[1].evo && !e.state.sides[0].mons[0].evo);
-  ok('evolve: +5 HP and +5 max HP', e.state.sides[0].hp === hp + 5 && e.state.sides[0].maxHp === max + 5);
+  ok('evolve: +5 HP, never past 80', e.state.sides[0].hp === Math.min(80, hp + 5) && e.state.sides[0].maxHp === 80 && max === 80);
+  const low = { ...r.state, sides: r.state.sides.map((x, i) => i ? x : { ...x, hp: 50 }) };
+  ok('evolve heals 5 when hurt', apply(low, { type: 'evolve', mon: 1 }).state.sides[0].hp === 55);
   ok('evolve: berries reset', e.state.sides[0].berries === 0 && e.state.pendingEvolve == null);
   ok('evolve: cannot evolve twice', apply({ ...e.state, pendingEvolve: 0 }, { type: 'evolve', mon: 1 }).error === 'bad-mon');
 }

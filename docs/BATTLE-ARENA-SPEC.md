@@ -25,11 +25,11 @@ seeded RNG, so online play can replay it later.
    floating over the monster.
 7. **Specials fire automatically** the moment a monster's bar is full (after the board settles),
    with a banner (monster + move name). Bar resets to 0. Excess energy is lost.
-8. **Team HP.** Each side has ONE shared HP pool = sum of its two monsters' HP. Heals cannot go
-   above the starting total ("MAX HP" flash).
+8. **Team HP.** Every team starts at 80, and heals can never take it above 80 ("MAX HP" flash).
+   Monsters have no HP of their own (Matt, 2026-10-24). The HP column below is obsolete.
 9. **Berries.** Clearing a Berry tile adds 1 to your berry counter (0/4). At 4: your two
    monsters show "Evolve!", you tap one (computer picks the one closer to full), it evolves:
-   new form, stronger special, +5 team HP (can exceed nothing: max HP rises by 5 too). Counter
+   new form, stronger special, heals 5 (never above 80). Counter
    resets. Each monster evolves once; when both are evolved, berries do nothing.
 10. **Win.** Other team's HP hits 0: "Victory" / "<profile name> wins!" card with an X close.
 

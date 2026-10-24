@@ -11,7 +11,7 @@
 // `events` is the ordered story of what happened, for the UI to animate (see the EVENTS list at
 // the bottom of this file). Rules: docs/BATTLE-ARENA-SPEC.md; deviations in battle-arena/CLAUDE.md.
 import {
-  ELEMENTS, BY_ID, specialOf, BERRIES_TO_EVOLVE, EVOLVE_HP, BOMB_DAMAGE, MAX_BOMBS,
+  ELEMENTS, BY_ID, specialOf, BERRIES_TO_EVOLVE, EVOLVE_HP, TEAM_HP, BOMB_DAMAGE, MAX_BOMBS,
 } from './monsters.js';
 
 export const COLS = 7;
@@ -177,8 +177,7 @@ export function newMatch({ seed = 1, teams, first = 0, arena = 'boiler' }) {
     pendingEvolve: null, winner: null,
     sides: teams.map((ids) => {
       const mons = ids.map((id) => ({ id, evo: false, energy: 0, part: 0 }));
-      const hp = mons.reduce((n, m) => n + (BY_ID[m.id] ? BY_ID[m.id].hp : 0), 0);
-      return { mons, hp, maxHp: hp, shield: 0, berries: 0, curse: { tick: 0, left: 0 }, frozen: false, turns: 0 };
+      return { mons, hp: TEAM_HP, maxHp: TEAM_HP, shield: 0, berries: 0, curse: { tick: 0, left: 0 }, frozen: false, turns: 0 };
     }),
   };
   s.sides[s.turn].turns = 1;
@@ -414,8 +413,7 @@ function evolve(s, ev, side, mi) {
   const sd = s.sides[side];
   sd.mons[mi].evo = true;
   sd.berries = 0;
-  sd.hp += EVOLVE_HP;
-  sd.maxHp += EVOLVE_HP;
+  sd.hp = Math.min(sd.maxHp, sd.hp + EVOLVE_HP);
   ev.push({ t: 'evolve', side, mon: mi, id: sd.mons[mi].id, hp: sd.hp, maxHp: sd.maxHp });
 }
 

@@ -30,9 +30,10 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
 - **Sudden death**: after each side's 20th turn heals do nothing (the soak found two healing teams
   out-healing each other past 3000 moves).
 - Both monsters of one element both charge. The computer never drafts the player's monsters.
-- **Balance (soak-tuned 2026-10-24, from the spec's first guess)**: HP x1.5 (40→60, 45→65, 35→50,
-  50→75); Emberkit cost 7→6; Driplet 5/10→8/14 dmg; Pebbleop shield 5/10→8/12; Thornpaw convert
-  4/6→3/5; Frostling 10/15→8/12 dmg; Prismote cost 12→14. Soak: ~11 turns per side.
+- **Team HP is a flat 80 for every team, max 80 (Matt, 2026-10-24: "everyone starts at 80").
+  Monsters have NO HP of their own.** Evolve heals 5, capped at 80. Soak: ~7.7 turns per side.
+- **Balance (soak-tuned 2026-10-24, from the spec's first guess)**: Emberkit cost 7→6; Driplet 5/10→8/14 dmg; Pebbleop shield 5/10→8/12; Thornpaw convert
+  4/6→3/5; Frostling 10/15→8/12 dmg; Prismote cost 12→14.
 - No turn timer yet (the spec's optional 30 s is for online).
 
 ## Hub integration
