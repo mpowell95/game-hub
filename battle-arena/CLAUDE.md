@@ -29,6 +29,7 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
   charge the mover; a bomb at 0 charges nobody.
 - **Turn timer 30 s** for the player (runs only while they can act, paused during animation and
   with any overlay open); at 0 the engine's `{type:'pass'}` ends the turn. Idle 8 s: a hint wiggles.
+- **Any adjacent swap is a move**, a line or not (Matt, 2026-10-24: "clearly allowed in the original").
 - Extra move: any 4+ line during the move's resolution (cascades included), once per turn.
 - Specials fire after the board settles, seat order; a special that changes the board settles again.
 - **Sudden death**: after each side's 20th turn heals do nothing (the soak found two healing teams
