@@ -347,6 +347,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Arrow Maze | module, immersive, devOnly; one ladder, points leaderboard, Rush. **Folder `way-out/`, hub id `way-out`, stats id `wayout`, `gamehub.wayout.*` keep the first name on purpose** (rule 5) | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ several frozen save/clock keys, see `way-out/CLAUDE.md`) | `recordWayOut` + `recordWayOutRush` (`wo`) |
 | Ball Run | module, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen) | `recordBallRun` |
 | Baseball | module, immersive, devOnly; three.js stadium, being rebuilt per `docs/BASEBALL-REFERENCE-B9.md` | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
+| Battle Arena | module, immersive, devOnly; match-3 monster battle vs computer, pure JSON engine + seeded RNG for a later online phase (`docs/BATTLE-ARENA-SPEC.md`, 2026-10-24); hub id `battle-arena`, stats id `battlearena` | `.ba-root` / `.ba-` | `gamehub.battlearena.v1` (+ `.save.v1`) | `recordResult('battlearena', …)` |
 | Battleship | module, immersive, multiplayer (`gamehub.battleship.mp.v1`) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` |
 | Boggle | module, multiplayer (`gamehub.boggle.mp.v1`), EN/ES word lists | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
 | Brick Breaker | module, immersive, solo | `.bx-root` / `.bx-` | `gamehub.brickblitz.v1` | `recordBrickBlitz` |

@@ -1170,6 +1170,34 @@ export const GAME_ART = {
             <circle cx="80" cy="76" r="7" fill="#fbfaf6"/>
             <ellipse cx="80" cy="85" rx="7" ry="2" fill="#000" opacity=".25"/>
           </svg>`,
+  // Battle Arena (2026-10-24, battle-arena/): the Boiler Room, a fire kitten facing a water drop
+  // (the game's own creatures, simplified), a row of gems below, each its own SHAPE.
+  'battle-arena': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#23272e"/>
+            <rect x="-4" y="14" width="168" height="7" rx="3.5" fill="#4a3b33"/>
+            <rect x="74" y="0" width="12" height="62" rx="6" fill="#4a3b33"/>
+            <circle cx="80" cy="30" r="9" fill="#3a3f47" stroke="#6b5a4c" stroke-width="2.5"/><path d="M80 30l5-6" stroke="#E0532F" stroke-width="2" stroke-linecap="round"/>
+            <ellipse cx="40" cy="62" rx="22" ry="4" fill="#000" opacity=".3"/><ellipse cx="120" cy="62" rx="20" ry="4" fill="#000" opacity=".3"/>
+            <g stroke="#7a2410" stroke-width="2" stroke-linejoin="round">
+              <path d="M26 24 28 8 38 20z" fill="#F07A3A"/><path d="M48 20 58 8 60 26z" fill="#F07A3A"/>
+              <circle cx="44" cy="40" r="20" fill="#F58A45"/>
+            </g>
+            <path d="M30 20 31 13 36 19z M52 19 57 13 58 23z" fill="#FFD27A"/>
+            <ellipse cx="52" cy="48" rx="9" ry="6" fill="#FFE0B8"/>
+            <ellipse cx="42" cy="38" rx="4" ry="4.7" fill="#1d1b2b"/><ellipse cx="55" cy="38" rx="4" ry="4.7" fill="#1d1b2b"/>
+            <circle cx="43.4" cy="36.2" r="1.5" fill="#fff"/><circle cx="56.4" cy="36.2" r="1.5" fill="#fff"/>
+            <path d="M53 45l2 1.5 2-1.5" stroke="#7a2410" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <path d="M120 14c9 14 20 24 20 37a20 20 0 0 1-40 0c0-13 11-23 20-37z" fill="#4A90D9" stroke="#103d70" stroke-width="2"/>
+            <path d="M112 30c-4 6-6 11-6 16" stroke="#fff" stroke-width="3" opacity=".5" fill="none" stroke-linecap="round"/>
+            <ellipse cx="111" cy="44" rx="4" ry="4.7" fill="#1d1b2b"/><ellipse cx="124" cy="44" rx="4" ry="4.7" fill="#1d1b2b"/>
+            <circle cx="109.6" cy="42.2" r="1.5" fill="#fff"/><circle cx="122.6" cy="42.2" r="1.5" fill="#fff"/>
+            <ellipse cx="117" cy="54" rx="3" ry="2.5" fill="#173a63"/>
+            <rect x="12" y="70" width="16" height="16" rx="3.5" fill="#E0532F"/>
+            <path d="M48 70 57 86H39z" fill="#1F5FA8" stroke-linejoin="round"/>
+            <circle cx="80" cy="78" r="8" fill="#F2B705"/>
+            <rect x="105.5" y="72.5" width="11" height="11" rx="2" transform="rotate(45 111 78)" fill="#2E9E44"/>
+            <path d="M142 70 149 74v8L142 86 135 82v-8z" fill="#7B4FC4"/>
+          </svg>`,
   'eight-ball': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <rect width="160" height="90" fill="#F2A183"/>
             <rect x="6" y="8" width="148" height="74" rx="9" fill="#0B0B0B"/>
