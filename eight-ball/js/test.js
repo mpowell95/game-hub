@@ -287,7 +287,14 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
       return m.last && m.last.foul;
     };
     ok('rules 2: a soft touch with no cushion is not a foul; rules 1 still calls it', soft(2) == null && soft(1) === 'norail', soft(2) + '/' + soft(1));
-    ok('a new match is on today\'s rules; one with none is rules 1', E.newMatch('8').rv === E.RULES_NOW && E.RULES_NOW === 2 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 5, 1), rv: undefined }));
+    ok('a new match is on today\'s rules; one with none is rules 1', E.newMatch('8').rv === E.RULES_NOW && E.RULES_NOW === 3 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 5, 1), rv: undefined }));
+  }
+  {
+    // Rules 3 (2026-10-24): a clean break that pots the 11 gives the breaker stripes; rules 2 kept it open.
+    const brk = (rv) => { const m = E.newMatch('8', 1, 0, 7, {}, 5, rv); E.play(m, { x: E.HEAD_SPOT[0], y: E.HEAD_SPOT[1], dx: 0.003, dy: -1, p: 1 }); return m; };
+    const m3 = brk(3), m2 = brk(2);
+    ok('rules 3: a ball potted on the break decides the groups; rules 2 left the table open',
+      m3.last.pots.includes(11) && !m3.last.foul && m3.groups && m3.groups[0] === 'b' && m3.turn === 0 && m2.groups == null, JSON.stringify([m3.groups, m2.groups]));
   }
   ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 5);
   ok('a saved match with no table reads as table 1', E.tableOf({}) === 1 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 1), tb: undefined }));
