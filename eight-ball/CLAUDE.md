@@ -63,7 +63,9 @@ black pockets, coral and cyan groups).
 - **8-ball**: solids 1-7, stripes 9-15. Open table until the first COUNTING pot; that ball's group
   is the shooter's. **Rules 3 (2026-10-24, Matt: Moonis sank a solid off the break, "it says table
   open. Fix"): a clean break that pots a ball decides it too** (the first one in); rules 1-2 matches
-  keep the WPA open table after the break. The 8 must be called (always); it wins only as your target,
+  keep the WPA open table after the break. **Moonis's match** `mvltredyw03dt73j` (rules 2) was hand-fixed the same day (Matt: "just give
+  him solids and the one he sank"): the doc's optional `fix: { after: 2, groups: ['b','a'] }` (`mp.js`
+  `fixAfter`) decides the groups after that many shots, nothing else; backup taken first. The 8 must be called (always); it wins only as your target,
   clean and in the called pocket; otherwise you lose the rack. 8 on the break wins (loses with a
   scratch).
 - **9-ball**: 1-9 in a diamond (1 front, 9 middle). First contact must be the lowest ball (the
