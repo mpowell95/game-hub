@@ -109,8 +109,24 @@ export function termsOf(raw) {
     aids: raw && AID_IDS.includes(raw.aids) ? raw.aids : 'medium',
     seed: raw && Number.isInteger(+raw.seed) && +raw.seed > 0 ? (+raw.seed >>> 0) : 1,
     tb: raw && [2, 3, 4, 5].includes(+raw.tb) ? +raw.tb : 1,    // the table (engine.js, TABLE VERSIONS); none: the first
-    rv: raw && +raw.rv === 2 ? 2 : 1,    // the rules (engine.js, RULES VERSIONS); none: the first
+    rv: raw && [2, 3].includes(+raw.rv) ? +raw.rv : 1,    // the rules (engine.js, RULES VERSIONS); none: the first
+    ...fixOf(raw),
   };
+}
+/** A hand correction to one match (2026-10-24, Matt: Moonis sank the 1 off the break under rules 2,
+ *  "just give him solids and the one he sank"): `fix: { after: N, groups: [seat 0's, seat 1's] }`
+ *  decides the 8-ball groups once N shots have been played, nothing else. Junk reads as none. */
+function fixOf(raw) {
+  const f = raw && raw.fix;
+  if (!f || typeof f !== 'object' || !raw || raw.mode !== '8') return {};
+  const after = +f.after, g = Array.isArray(f.groups) ? f.groups : [];
+  if (!Number.isInteger(after) || after < 1 || g.length !== 2 || !['a', 'b'].includes(g[0]) || g[1] !== (g[0] === 'a' ? 'b' : 'a')) return {};
+  return { fix: { after, groups: [g[0], g[1]] } };
+}
+/** Apply the match's fix once `n` shots have been played (call after every shot settles). */
+export function fixAfter(m, game, n) {
+  const f = game && game.fix;
+  if (f && n === f.after && !m.groups && m.winner == null) m.groups = f.groups.slice();
 }
 /** A fresh engine match for these terms: what every replay starts from. */
 export function freshMatch(terms) { return newMatch(terms.mode, terms.racks, BREAKER, terms.seed, terms.opts, terms.tb, terms.rv); }
@@ -178,7 +194,7 @@ export function applyEntry(m, e) {
 /** Replay the first `upto` shots. */
 export function buildMatch(game, upto = game.log.length) {
   const m = freshMatch(game);
-  for (let i = 0; i < upto; i++) if (!applyEntry(m, game.log[i])) break;   // validateGame proved it replays
+  for (let i = 0; i < upto; i++) { if (!applyEntry(m, game.log[i])) break; fixAfter(m, game, i + 1); }   // validateGame proved it replays
   return m;
 }
 
@@ -231,6 +247,7 @@ export function validateGame(raw) {
     if (!e) return null;
     if (!applyEntry(m, e)) return null;
     log.push(e);
+    fixAfter(m, terms, log.length);
   }
   let over = null;
   const answered = log.some((e) => e.by !== 0);
@@ -654,7 +671,8 @@ export async function appendLog(id, base, entries) {
     if (fresh.over) return fail('already-over');
     if (lifeOf(fresh).expired) return fail('expired');
     const m = freshMatch(fresh);
-    for (const e of fresh.log.concat(todo)) if (!applyEntry(m, e)) return fail('rules-refused');
+    const all = fresh.log.concat(todo);
+    for (let i = 0; i < all.length; i++) { if (!applyEntry(m, all[i])) return fail('rules-refused'); fixAfter(m, fresh, i + 1); }
     const now = Date.now();
     const patch = { updated: now };
     todo.forEach((e, i) => {

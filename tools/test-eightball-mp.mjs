@@ -203,8 +203,20 @@ ok('engine.js uses only cross-engine-safe Math (sqrt, imul, min, max, round, flo
 // Table versions (eight-ball/js/engine.js): a new challenge is stored on today's table; one stored
 // before tables had versions (no `tb`) replays on table 1, where it was played.
 ok('a new challenge records its table', (await MP.readGame(id1)).tb === 5 && MP.termsOf({ tb: 2 }).tb === 2 && MP.termsOf({ tb: 3 }).tb === 3);
-ok('a new challenge records its rules; one with none is rules 1', (await MP.readGame(id1)).rv === 2 && MP.termsOf({ mode: '8' }).rv === 1 && MP.freshMatch(MP.termsOf({ mode: '8' })).rv === 1);
+ok('a new challenge records its rules; one with none is rules 1', (await MP.readGame(id1)).rv === 3 && MP.termsOf({ mode: '8' }).rv === 1 && MP.freshMatch(MP.termsOf({ mode: '8' })).rv === 1);
 ok('a stored match with no table replays on table 1', MP.termsOf({ mode: '8' }).tb === 1 && MP.freshMatch(MP.termsOf({ mode: '8' })).tb === 1);
+// A hand fix (Moonis's match, 2026-10-24): the real log, groups decided after shot 2 and nothing else.
+{
+  const moonis = { mode: '8', racks: 1, opts: {}, aids: 'easy', seed: 1369992693, tb: 5, rv: 2,
+    p: [{ code: 'DREG5', name: 'test1' }, { code: 'ABCDE', name: 'B' }],
+    log: { '0000': { by: 1, dx: 0.253516, dy: -0.967331, p: 1, s: 0, x: 13.978, y: 159.487 }, '0001': { by: 1, dx: -0.969289, dy: 0.245924, p: 0.9593, s: 0 } } };
+  const plain = MP.buildMatch(MP.validateGame(moonis));
+  const fixed = MP.validateGame({ ...moonis, fix: { after: 2, groups: ['b', 'a'] } });
+  const fm = MP.buildMatch(fixed), f1 = MP.buildMatch(fixed, 1);
+  ok('a match fix sets the groups after its shot and changes nothing else', !plain.groups && fm.groups.join() === 'b,a' && !f1.groups
+    && fm.turn === plain.turn && fm.inHand === plain.inHand && fixed.turn === 0 && JSON.stringify(fm.b) === JSON.stringify(plain.b));
+  ok('a junk fix is ignored', !MP.validateGame({ ...moonis, fix: { after: 2, groups: ['b', 'b'] } }).fix && !MP.termsOf({ mode: '9', fix: { after: 1, groups: ['a', 'b'] } }).fix);
+}
 ok('the chat accepts a third side', /side !== 'c'/.test(readFileSync(new URL('js/match-chat.js', __ROOT_URL), 'utf8')));
 
 console.log(`\n${pass} passed, ${fail} failed`);

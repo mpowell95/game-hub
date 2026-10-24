@@ -329,18 +329,16 @@ function settle(s, ev, side) {
     if (!runs.length) return;
     const seed = new Set();
     for (const r of runs) for (const i of r.cells) seed.add(i);
-    // Extra moves (the mover only): every match of 5+ tiles gives one (no cap); a straight 4 gives
-    // one, once per turn (the reference's tip: "Match 4 for extra move (1x per turn)").
+    // Extra moves (the mover only): EVERY match of 4 or more tiles (a straight 4/5, or an L / T) gives
+    // one, no cap (Matt, 2026-10-24: "Every 4+ should give me another turn"); a 5+ also heals.
     let fives = 0;
     if (side != null && side === s.turn) {
       const groups = matchGroups(runs);
       fives = groups.filter((g) => g.cells.size >= 5).length;
-      const four = groups.some((g) => g.cells.size === 4);
-      for (let n = 0; n < fives; n++) { s.movesLeft += 1; ev.push({ t: 'extra', side, moves: s.movesLeft, five: true }); }
-      if (four && !s.extraUsed) {
-        s.extraUsed = true;
+      for (const g of groups) {
+        if (g.cells.size < 4) continue;
         s.movesLeft += 1;
-        ev.push({ t: 'extra', side, moves: s.movesLeft });
+        ev.push({ t: 'extra', side, moves: s.movesLeft, five: g.cells.size >= 5 });
       }
     }
     const { set, blasts } = expand(s.board, seed, runs);

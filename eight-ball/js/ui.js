@@ -839,6 +839,7 @@ class PoolUI {
     this.ev = null;
     freeze(m.b);
     const r = settle(m, ev);
+    if (this.mode === 'mp' && this.mp && this.MP) this.MP.fixAfter(m, this.mp.game, this.mp.applied);
     this.phase = 'idle';
     this.call = -1;
     this._hud();
@@ -878,6 +879,7 @@ class PoolUI {
     if (this.phase === 'moving' && this.ev) {
       runToRest(m.b, this.ev, undefined, m.obs);
       const r = settle(m, this.ev);
+      if (this.mode === 'mp' && this.mp && this.MP) this.MP.fixAfter(m, this.mp.game, this.mp.applied);
       this.ev = null;
       this.phase = 'idle';
       if (r.kind === 'rack') nextRack(m);
@@ -1226,6 +1228,7 @@ class PoolUI {
         // Your own shot from another phone (or before a reopen): played out off screen.
         this.MP.applyEntry(m, e);
         mp.applied++;
+        this.MP.fixAfter(m, g, mp.applied);
         this._hud();
         this._mpCatchUp();
         return;
@@ -1242,8 +1245,7 @@ class PoolUI {
     }
     mp.replaying = false;
     if (mp.unshown.length) {
-      for (const e of mp.unshown) this.MP.applyEntry(m, e);
-      mp.applied += mp.unshown.length;
+      for (const e of mp.unshown) { this.MP.applyEntry(m, e); mp.applied++; this.MP.fixAfter(m, g, mp.applied); }
       mp.unshown = [];
       this._hud();
       if (m.winner != null) { this._finish(); return; }
