@@ -36,3 +36,35 @@ heals nothing (the +5 seen in the bravomike match was a 5-match in the same turn
 of the board; the timer is per move; the board dims on the other side's turn; the HUD, banners, stage
 reveal and ending all looked different. The first two recordings (vs bravomike) were no longer in
 Dropbox, so they could not be re-checked move by move.
+
+
+## 2026-10-24: Online (turn-by-turn challenges and live rooms)
+
+Matt wanted both: challenges like Darts / Chinchón (async) and live rooms like Chinchón's. Built on the
+engine as it was designed: a match is a seed, two teams and a list of moves, and every phone replays it.
+
+Decisions where the brief was open:
+- **Who moves first**: the challenger (Darts' convention, challenge delivered when their first turn ends)
+  and, in a live room, the host (`round.dealer = 0`). One match per room (Pool's precedent: no in-room
+  rematch series); "Done" leaves the room.
+- **The receiver drafts later.** The challenger picks a team when making the challenge; the other person
+  picks on first open, from their own unlocked monsters. That works only because the engine never reads
+  the non-mover's monster ids during the challenger's first turn (charging, specials and evolving are the
+  mover's own); the challenger's turn is played against a placeholder team and replays identically once
+  b drafts. `tools/test-battlearena-mp.mjs` checks it over 300 seeds x 3 teams. Drafting is not an
+  answer (cancel/decline still work) and does not move `updated` (the 3-day expiry runs from delivery).
+- **The mirror instead of a rewritten screen.** ui.js draws its player on the right as side 0 in a
+  hundred places; rather than thread a seat through all of them, side b's phone draws a mirrored copy of
+  the state (teams swapped, board untouched) and every move is applied to the stored state (`step`). The
+  test also proves the engine is symmetric (apply on the mirror = mirror of apply, events included).
+- **Live rooms are lockstep with a hash** (js/CLAUDE.md invariants): each move carries the FNV-1a of the
+  whole match after it; a mismatch makes the guest ask the host for its state.
+- **The clock** shows on both phones in a live room (counting locally, paused while animating); only the
+  mover's own phone passes the turn at 0. A phone that vanishes can be resigned for after 90 s
+  ("Claim win"). Leaving is resigning; closing the app is not (the room code is kept and rejoined).
+- **Records**: challenges `recordResult('battlearena', 'mp', won)` only (the Multiplayer screen reads them
+  from the index); live rooms also `recordHeadToHead` (js/mp-records.js `LIVE_GAMES`), as Chinchón.
+
+Verified with two headless phones (390x844) sharing an in-memory database: the Firebase SDK modules
+were routed to a stand-in, so nothing could reach Firebase. A full live match (incl. a clock run-out and
+chat both ways) and a full challenge were recorded on both phones and read frame by frame.

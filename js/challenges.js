@@ -120,6 +120,15 @@ export const SOURCES = {
     action: logGameAction,
     end: logGameEnd,
   },
+  // Battle Arena (2026-10-24): battle-arena/js/mp.js, the same log-game shape as Darts (a seed, two
+  // teams and a log of moves). Also a live-room game: js/mp-records.js counts its Games row from 'mp'.
+  'battle-arena': {
+    load: () => import('../battle-arena/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
+  },
   // Pool (2026-10-22): eight-ball/js/mp.js. Two OR THREE players (Cutthroat): a match keeps a list
   // of seats, not sides, so its own action reader; a row's `with` is one fixed other player (its
   // records count against that person) and `name` names both.

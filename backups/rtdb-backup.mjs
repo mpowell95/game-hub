@@ -96,6 +96,9 @@ export const BRANCHES = [
   // escoba/ (escoba/js/mp.js, 2026-10-18): Escoba's turn-by-turn challenges, their per-player index
   // and quick chat. Same auth shape as hoops/. (Escoba's LIVE rooms stay under rooms/.)
   'escoba',
+  // battlearena/ (battle-arena/js/mp.js, 2026-10-24): Battle Arena's turn-by-turn challenges, their
+  // per-player index and quick chat. Same auth shape as darts/. (Its LIVE rooms stay under rooms/.)
+  'battlearena',
   // pushSubs/ (2026-09-23, js/push.js): each device's push-notification address, by player code.
   // Readable by any signed-in session; written only by the device that claimed that code.
   'pushSubs',

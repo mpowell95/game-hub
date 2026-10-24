@@ -60,7 +60,7 @@ const TOUR_FB = {
 // The live-room multiplayer games (hub ids), listed on the Multiplayer screen beside the challenge
 // games. MUST match js/mp-records.js LIVE_GAMES' keys (tools/test-challenges.mjs checks); kept here
 // so the launcher does not import players-agg just to draw a button.
-const LIVE_MP_GAMES = new Set(['air-hockey', 'battleship', 'boggle', 'chinchon', 'dots-boxes', 'escoba',
+const LIVE_MP_GAMES = new Set(['air-hockey', 'battle-arena', 'battleship', 'boggle', 'chinchon', 'dots-boxes', 'escoba',
   'filler', 'holdem', 'mancala', 'tic-tac-toe', 'yahtzee']);
 const tabSvg = (k) => `<svg class="hub-tab-ico" viewBox="0 0 24 24" aria-hidden="true">${TAB_ICON[k]}</svg>`;
 
@@ -703,6 +703,9 @@ export const GAMES = [
     blurb: { en: 'Match gems to charge your monsters. Knock out the other team.',
       es: 'Junta gemas para cargar a tus monstruos. Derrota al otro equipo.' },
     module: '../battle-arena/js/ui.js',
+    // Online (2026-10-24): turn-by-turn challenges (a new one, your turn, a result you missed, on the
+    // launcher) and live rooms (battle-arena/js/live.js).
+    alerts: () => import('../battle-arena/js/alert.js'),
     immersive: true,
     accent: '#E0532F',
     art: GAME_ART['battle-arena'],

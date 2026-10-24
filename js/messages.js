@@ -357,7 +357,8 @@ export async function logGameChat({ toCodes, game, stats, room, payload, text })
  *  6 hours, and functions/index.js nudgePush checks it is a real waiting turn before sending.
  *  Returns { ok:true } or { ok:false, reason: 'too-soon'|'offline'|'no-code'|'blocked'|'failed' }. */
 export const NUDGE_NODES = { hoops4: 'hoops', skeeball: 'skeeChallenges', cuppong: 'cuppong', darts: 'darts',
-  'flick-soccer': 'flicksoccer', archery: 'archery', chinchon: 'chinchon', escoba: 'escoba' };
+  'flick-soccer': 'flicksoccer', archery: 'archery', chinchon: 'chinchon', escoba: 'escoba',
+  'battle-arena': 'battlearena' };
 // When THIS device last rang each match's bell, only to fill the bell in (gamehub.nudges.v1).
 const NUDGED_KEY = 'gamehub.nudges.v1';
 export function nudgedAt(game, id) {
